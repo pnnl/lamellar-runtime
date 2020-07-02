@@ -6,12 +6,13 @@ use crate::runtime::Arch;
 use std::env;
 
 #[allow(dead_code)]
-pub(crate) fn print_type_of<T>(_: &T) {
+pub fn print_type_of<T>(_: &T) {
     println!("{}", any::type_name::<T>());
 }
 
 // serialize the trait object F
 // #[flame]
+#[cfg(feature = "nightly")]
 pub(crate) fn ser_closure<
     F: FnOnce() -> T + serde::ser::Serialize + serde::de::DeserializeOwned + 'static,
     T: any::Any + serde::ser::Serialize + serde::de::DeserializeOwned,

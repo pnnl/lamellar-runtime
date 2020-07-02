@@ -17,20 +17,24 @@ Currently two such Lamellae exist, one based on Rust standard libray sockets, an
 
 NEWS
 ----
-Feb 2020: First alpha release
+* July 2020: Second alpha release -- v0.2
+* Feb 2020: First alpha release -- v0.1
 
 BUILD REQUIREMENTS
 ------------------
 Lamellar requires the following dependencies:
 
-* [ROFI](https://github.com/pnnl/rofi)
-* [rofi-sys](https://github.com/pnnl/rofi-sys)
-* RUST nightly compiler with the following features
-    * #![feature(unboxed_closures)]
-    * #![feature(vec_into_raw_parts)]
+* [ROFI](https://gitlab.pnnl.gov/lamellar/rofi)
+* [rofi-sys](https://gitlab.pnnl.gov/lamellar/rofi-sys)
 
 * Crates listed in Cargo.toml
     * Cargo.lock contains tested and working versions of dependencies
+
+
+Optional:
+* RUST nightly compiler with the following features (enables remote closure API)
+    * #![feature(unboxed_closures)]
+    * #![feature(vec_into_raw_parts)]
 
 
 
@@ -93,6 +97,12 @@ where `<test>` in {`all_to_all, array_put, array_static, array, get_bw, put_bw, 
 
 HISTORY
 -------
+- version 0.2:
+  - New user facing API
+  - Registered Active Messages (enabling stable rust)
+  - Remote Closures feature guarded for use with nightly rust
+  - redesigned internal lamellae organization
+  - initial support for world and teams (sub groups of pe)
 - version 0.1:
   - Basic init/finit functionalities
   - Remote Closure Execution

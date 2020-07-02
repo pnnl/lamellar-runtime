@@ -6,10 +6,9 @@ edition = "2018"
 
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }
-bincode = "1.1.3"
-futures = "0.1"
+bincode = "1.2"
+#futures = "0.1"
 lazy_static = "1.3.0"
-serde_closure = "0.1.5"
 crossbeam = "0.7"
 chashmap = "2.2.2"
 rand = "0.7.0"
@@ -17,15 +16,24 @@ parking_lot = "0.9"
 indexmap = "1.3"
 core_affinity = "0.5.9"
 rofisys = { path = "../rofi-sys" }
+log = "0.4"
+simple_logger = "1.6.0"
+lamellar-impl = { path = "impl" }
+proc-macro-hack = "0.5"
+inventory = "0.1"
+serde_closure = { version = "0.1.5", optional = true }
+
+
+[workspace]
+members = ["impl"]
+
 
 
 #features are strictly additive.... can't have mutual exclusitivity
 [features]
-WorkStealingSched = []
-SocketsBackend = []
-RofiBackend = []
-
-default = ["WorkStealingSched","RofiBackend"]
+nightly=["serde_closure"]
+stable=[]
+default=["stable"]
 
 [profile.release]
 opt-level=3
@@ -44,3 +52,8 @@ path="src/lib.rs"
 [[bin]]
 name="test"
 path="src/main.rs"
+
+[[example]]
+name="am_closures_bw"
+path="examples/am_closures_bw.rs"
+required-features = ["nightly"]

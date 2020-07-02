@@ -1,72 +1,247 @@
+use lamellar::{
+    ActiveMessaging, Backend, LamellarAM, LamellarMemoryRegion, RemoteMemoryRegion, SchedulerType,
+};
 use std::time::Instant;
 
-fn main() {
-    let (my_pe, num_pes) = lamellar::init();
-    lamellar::barrier();
-    let s = Instant::now();
-    lamellar::barrier();
-    let b = s.elapsed().as_secs_f64();
-    println!("Barrier latency: {:?}s {:?}us", b, b * 1_000_000 as f64);
+//----------------- Active message returning nothing-----------------//
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
+struct AmNoReturn {
+    my_pe: usize,
+}
 
-    if my_pe == 0 {
-        println!("==================Bandwidth test===========================");
-    }
-    let mut bws = vec![];
-    for i in 0..27 {
-        let num_bytes = 2_u64.pow(i);
-        let _data: std::vec::Vec<u8> = vec![0; num_bytes as usize];
-
-        let old: f64 = lamellar::MB_sent().iter().sum();
-        let mut sum = 0;
-        let mut cnt = 0;
-        let mut exp = 20;
-        if num_bytes <= 8 {
-            exp = 18;
-        } else if num_bytes >= 4096 {
-            exp = 30;
-        }
-
-        let timer = Instant::now();
-        let mut sub_time = 0f64;
-        if my_pe == 0 {
-            for _j in (num_bytes..(2_u64.pow(exp))).step_by(num_bytes as usize) {
-                let _d = _data.clone();
-                let sub_timer = Instant::now();
-                lamellar::exec_on_pe(1, lamellar::FnOnce!([_d] move || {})); //we explicity are captured _data and transfer it even though we do nothing with it
-                sub_time += sub_timer.elapsed().as_secs_f64();
-                sum += num_bytes * 1 as u64;
-                cnt += 1;
-            }
-            println!("issue time: {:?}", timer.elapsed());
-            lamellar::wait_all();
-        }
-        lamellar::barrier();
-        let cur_t = timer.elapsed().as_secs_f64();
-        let cur: f64 = lamellar::MB_sent().iter().sum();
-        if my_pe == 0 {
-            println!(
-                "tx_size: {:?}B num_tx: {:?} num_bytes: {:?}MB time: {:?} (issue time: {:?})
-                throughput (avg): {:?}MB/s (cuml): {:?}MB/s total_bytes (w/ overhead) {:?}MB throughput (w/ overhead){:?} latency: {:?}us",
-                num_bytes, //transfer size
-                cnt,  //num transfers
-                sum as f64/ 1048576.0,
-                cur_t, //transfer time
-                sub_time,
-                (sum as f64 / 1048576.0) / cur_t, // throughput of user payload
-                ((sum*(num_pes-1) as u64) as f64 / 1048576.0) / cur_t,
-                cur - old, //total bytes sent including overhead
-                (cur - old) as f64 / cur_t, //throughput including overhead
-                (cur_t/cnt as f64) * 1_000_000 as f64 ,
-            );
-            bws.push((sum as f64 / 1048576.0) / cur_t);
-        }
-    }
-    if my_pe == 0 {
+#[lamellar::am]
+impl LamellarAM for AmNoReturn {
+    fn exec(&self) {
         println!(
-            "bandwidths: {}",
-            bws.iter()
-                .fold(String::new(), |acc, &num| acc + &num.to_string() + ", ")
+            "in AmNoReturn {:?} on pe {:?} of {:?}",
+            self,
+            lamellar::current_pe,
+            lamellar::num_pes
         );
     }
-    lamellar::finit();
+}
+//-------------------------------------------------------------------//
+
+//----------------- Active message returning data--------------------//
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)] //eventually derive lamellar::Return to automatically implement "LamellarDataReturn"
+struct AmReturnUsize {
+    temp: usize,
+    talk: String,
+}
+
+#[lamellar::am]
+impl LamellarAM for AmReturnUsize {
+    fn exec(&self) -> usize {
+        println!(
+            "in  AmReturnUsize {:?} self {:?} on pe {:?} of {:?}",
+            self,
+            self.talk,
+            lamellar::current_pe,
+            lamellar::num_pes
+        );
+        let mut ret = self.clone();
+        ret.temp = lamellar::current_pe as usize;
+        println!("ret: {:?}", ret);
+        // self.temp
+        ret.temp
+    }
+}
+//-------------------------------------------------------------------//
+
+//--Active message returning an active message that returns nothing--//
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)] //eventually derive lamellar::Return to automatically implement "LamellarDataReturn"
+struct AmReturnAm {
+    temp: usize,
+    talk: String,
+}
+
+#[lamellar::am(return_am = "AmNoReturn")]
+impl LamellarAM for AmReturnAm {
+    fn exec(&self) -> AmNoReturn {
+        println!(
+            "in  AmReturnAm {:?} self {:?} on pe {:?} of {:?}",
+            self,
+            self.talk,
+            lamellar::current_pe,
+            lamellar::num_pes
+        );
+        AmNoReturn {
+            my_pe: lamellar::current_pe as usize,
+        }
+    }
+}
+//-------------------------------------------------------------------//
+
+//----Active message returning an active message that returns data---//
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)] //eventually derive lamellar::Return to automatically implement "LamellarDataReturn"
+struct AmReturnAmUsize {
+    temp: usize,
+    talk: String,
+}
+
+#[lamellar::am(return_am = "AmReturnUsize(usize)")]
+impl LamellarAM for AmReturnAmUsize {
+    fn exec(&self) -> AmReturnUsize {
+        println!(
+            "in  AmReturnAmUsize {:?} self {:?} on pe {:?} of {:?} ",
+            self,
+            self.talk,
+            lamellar::current_pe,
+            lamellar::num_pes
+        );
+        AmReturnUsize {
+            temp: lamellar::current_pe as usize,
+            talk: "auto_executed!!!".to_string(),
+        }
+    }
+}
+//-------------------------------------------------------------------//
+
+//----------------- Active message returning nothing-----------------//
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
+struct AmLMR {
+    lmr: LamellarMemoryRegion<u8>,
+}
+
+#[lamellar::am]
+impl LamellarAM for AmLMR {
+    fn exec(&self) {
+        println!(
+            "in AmLMR {:?} on pe {:?} of {:?}",
+            self,
+            lamellar::current_pe,
+            lamellar::num_pes
+        );
+    }
+}
+//-------------------------------------------------------------------//
+
+fn main() {
+    let world = lamellar::LamellarWorldBuilder::new()
+        .with_lamellae(Backend::Rofi)
+        .with_scheduler(SchedulerType::WorkStealing)
+        .build();
+
+    let my_pe = world.my_pe();
+    let _num_pes = world.num_pes();
+    world.barrier();
+    let s = Instant::now();
+    world.barrier();
+    let b = s.elapsed().as_secs_f64();
+    println!("Barrier latency: {:?}s {:?}us", b, b * 1_000_000 as f64);
+    println!("---------------------------------------------------------------");
+    let lmr: LamellarMemoryRegion<u8> = world.alloc_mem_region(100);
+    println!("lmr: {:?} on {:?}", lmr, my_pe);
+    if my_pe == 0 {
+        println!("Testing local am no return");
+        let res = world
+            .exec_am_pe(0, AmNoReturn { my_pe: my_pe })
+            .am_get_new();
+        println!("no return result: {:?}", res);
+        println!("Testing remote am no return");
+        let res = world
+            .exec_am_pe(1, AmNoReturn { my_pe: my_pe })
+            .am_get_new();
+        println!("no return result: {:?}", res);
+        println!("Testing all am no return");
+        let res = world.exec_am_all(AmNoReturn { my_pe: my_pe }).am_get_all();
+        println!("no return result: {:?}", res);
+        println!("---------------------------------------------------------------");
+        println!("Testing local am usize return");
+        let res = world
+            .exec_am_pe(
+                0,
+                AmReturnUsize {
+                    temp: my_pe,
+                    talk: "hello".to_string(),
+                },
+            )
+            .am_get_new();
+        println!("usize return result: {:?}", res);
+        println!("Testing remote am usize return");
+        let res = world
+            .exec_am_pe(
+                1,
+                AmReturnUsize {
+                    temp: my_pe,
+                    talk: "hello".to_string(),
+                },
+            )
+            .am_get_new();
+        println!("usize return result: {:?}", res);
+        println!("Testing all am usize return");
+        let res = world
+            .exec_am_all(AmReturnUsize {
+                temp: my_pe,
+                talk: "hello".to_string(),
+            })
+            .am_get_all();
+        println!("usize return result: {:?}", res);
+        println!("---------------------------------------------------------------");
+        println!("Testing local am returning an am");
+        let res = world
+            .exec_am_pe(
+                0,
+                AmReturnAm {
+                    temp: my_pe,
+                    talk: "hello".to_string(),
+                },
+            )
+            .am_get_new();
+        println!("am return result: {:?}", res);
+        println!("Testing remote am returning an am");
+        let res = world
+            .exec_am_pe(
+                1,
+                AmReturnAm {
+                    temp: my_pe,
+                    talk: "hello".to_string(),
+                },
+            )
+            .am_get_new();
+        println!("am return result: {:?}", res);
+        println!("Testing all am returning an am");
+        let res = world
+            .exec_am_all(AmReturnAm {
+                temp: my_pe,
+                talk: "hello".to_string(),
+            })
+            .am_get_all();
+        println!("am return result: {:?}", res);
+        println!("---------------------------------------------------------------");
+        println!("Testing local am returning an am returning a usize");
+        let res = world
+            .exec_am_pe(
+                0,
+                AmReturnAmUsize {
+                    temp: my_pe,
+                    talk: "hello".to_string(),
+                },
+            )
+            .am_get_new();
+        println!("am return result: {:?}", res);
+        println!("Testing remote am returning an am returning a usize");
+        let res = world
+            .exec_am_pe(
+                1,
+                AmReturnAmUsize {
+                    temp: my_pe,
+                    talk: "hello".to_string(),
+                },
+            )
+            .am_get_new();
+        println!("am return result: {:?}", res);
+        println!("Testing all am returning an am returning a usize");
+        let res = world
+            .exec_am_all(AmReturnAmUsize {
+                temp: my_pe,
+                talk: "hello".to_string(),
+            })
+            .am_get_all();
+        println!("am return result: {:?}", res);
+        println!("---------------------------------------------------------------");
+
+        let _res = world.exec_am_all(AmLMR { lmr: lmr }).am_get_new();
+    }
+    world.barrier();
 }

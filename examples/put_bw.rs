@@ -1,19 +1,23 @@
+use lamellar::RemoteMemoryRegion;
+use lamellar::ActiveMessaging;
 use std::time::Instant;
 
 const ARRAY_LEN: usize = 512 * 1024 * 1024;
 
 fn main() {
-    let (my_pe, num_pes) = lamellar::init();
+    let world = lamellar::LamellarWorldBuilder::new().build();
+    let my_pe = world.my_pe();
+    let num_pes = world.num_pes();
     if num_pes == 1 {
         println!("WARNING: This example is intended for 2 PEs");
     } else {
-        let array = lamellar::alloc_mem_region::<u8>(ARRAY_LEN);
+        let array = world.alloc_mem_region::<u8>(ARRAY_LEN);
         let init = vec![my_pe as u8; ARRAY_LEN];
 
-        unsafe { array.put(my_pe, 0, &init) };
-        lamellar::barrier();
+        unsafe { array.put(my_pe, 0, &init) }; //copy local array to memory region
+        world.barrier();
         let s = Instant::now();
-        lamellar::barrier();
+        world.barrier();
         let b = s.elapsed().as_secs_f64();
         println!("Barrier latency: {:?}s {:?}us", b, b * 1_000_000 as f64);
 
@@ -24,8 +28,8 @@ fn main() {
         let data: std::vec::Vec<u8> = vec![0; ARRAY_LEN as usize];
         for i in 0..27 {
             let num_bytes = 2_u64.pow(i);
-            let old: f64 = lamellar::MB_sent().iter().sum();
-            let mbs_o = lamellar::MB_sent();
+            let old: f64 = world.MB_sent().iter().sum();
+            let mbs_o = world.MB_sent();
             let mut sum = 0;
             let mut cnt = 0;
             let timer = Instant::now();
@@ -45,7 +49,7 @@ fn main() {
                     cnt += 1;
                 }
                 println!("issue time: {:?}", timer.elapsed());
-                lamellar::wait_all();
+                world.wait_all();
             }
             if my_pe != 0 {
                 for j in (0..2_u64.pow(exp) as usize).step_by(num_bytes as usize) {
@@ -54,13 +58,13 @@ fn main() {
                     }
                 }
             }
-            lamellar::barrier();
+            world.barrier();
             let cur_t = timer.elapsed().as_secs_f64();
-            let cur: f64 = lamellar::MB_sent().iter().sum();
-            let mbs_c = lamellar::MB_sent();
+            let cur: f64 = world.MB_sent().iter().sum();
+            let mbs_c = world.MB_sent();
             if my_pe == 0 {
                 println!(
-                "tx_size: {:?}B num_tx: {:?} num_bytes: {:?}MB time: {:?} ({:?}) throughput (avg): {:?}MB/s (cuml): {:?}MB/s total_bytes (w/ overhead){:?}MB throughput (w/ overhead){:?} ({:?},{:?}) latency: {:?}us",
+                "tx_size: {:?}B num_tx: {:?} num_bytes: {:?}MB time: {:?} ({:?}) throughput (avg): {:?}MB/s (cuml): {:?}MB/s total_bytes (w/ overhead){:?}MB throughput (w/ overhead){:?} ({:?}) latency: {:?}us",
                 num_bytes, //transfer size
                 cnt,  //num transfers
                 sum as f64/ 1048576.0,
@@ -71,15 +75,14 @@ fn main() {
                 cur - old, //total bytes sent including overhead
                 (cur - old) as f64 / cur_t, //throughput including overhead 
                 (mbs_c[0] -mbs_o[0] )/ cur_t,
-                (mbs_c[1] -mbs_o[1] )/ cur_t,
                 (cur_t/cnt as f64) * 1_000_000 as f64 ,
             );
             }
             bws.push((sum as f64 / 1048576.0) / cur_t);
             unsafe { array.put(my_pe, 0, &init) };
-            lamellar::barrier();
+            world.barrier();
         }
-        lamellar::free_memory_region(array);
+        world.free_memory_region(array);
         if my_pe == 0 {
             println!(
                 "bandwidths: {}",
@@ -87,7 +90,6 @@ fn main() {
                     .fold(String::new(), |acc, &num| acc + &num.to_string() + ", ")
             );
         }
-        lamellar::barrier();
+        world.barrier();
     }
-    lamellar::finit();
 }

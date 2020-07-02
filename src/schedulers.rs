@@ -1,75 +1,70 @@
-use crate::lamellae::Lamellae;
+use crate::active_messaging::*;
+use crate::lamellae::{Backend, LamellaeAM};
 use crate::lamellar_request::InternalReq;
-use crate::runtime::LAMELLAR_RT;
-use crate::runtime::*;
+use crate::lamellar_team::LamellarArch;
 
-// mod private_channels;
-mod shared_channels;
-mod work_stealing_sched;
+use std::collections::BTreeMap;
+use std::sync::Arc;
 
-// #[cfg(feature = "PrivateChannelSched")]
-// pub(crate) use private_channels::PrivateChannels;
-#[cfg(feature = "SharedChannelSched")]
-pub(crate) use shared_channels::SharedChannels;
-#[cfg(feature = "WorkStealingSched")]
-pub(crate) use work_stealing_sched::WorkStealing;
+pub(crate) mod work_stealing_sched;
+
+pub enum SchedulerType {
+    WorkStealing,
+}
+
+#[derive(Debug)]
+pub(crate) struct ReqData {
+    pub(crate) team: Arc<dyn LamellarArch + Sync + Send>, //<'a>,
+    pub(crate) pe: Option<usize>,
+    pub(crate) msg: Msg,
+    pub(crate) ireq: InternalReq,
+    pub(crate) func: LamellarAny,
+    pub(crate) backend: Backend,
+    // lamellae: &'a dyn LamellaeAM
+}
+
+pub(crate) trait SchedulerQueue: Sync + Send {
+    fn new() -> Self
+    where
+        Self: Sized;
+    // fn init(&mut self) -> Vec<Box<dyn WorkerThread>>;
+    fn submit_req(
+        &self,
+        pe: Option<usize>,
+        msg: Msg,
+        ireq: InternalReq,
+        func: LamellarAny,
+        team: Arc<dyn LamellarArch + Sync + Send>,
+        backend: Backend,
+    );
+    // fn submit_req_all(&self, msg: Msg, ireq: InternalReq, func: LamellarAny);
+    fn submit_work(&self, msg: std::vec::Vec<u8>, lamellae: Arc<dyn LamellaeAM>);
+}
 
 pub(crate) trait Scheduler {
-    fn new() -> Self;
-    fn first(&self) {
-        // println!("init");
-    }
-    fn submit_req(&self, pe: usize, msg: Msg, ireq: InternalReq, func: LamellarAny);
-    fn submit_req_all(&self, msg: Msg, ireq: InternalReq, func: LamellarAny);
-    fn submit_work(&self, msg: std::vec::Vec<u8>);
-
-    //process user initiated requests (either execute it locally or serialize and send to remote node)
-    fn process_msg(
-        //maybe better to call this process request?
-        (pe, msg, ireq, func): (usize, Msg, InternalReq, LamellarAny),
-        my_pe: usize,
+    fn init(
+        &mut self,
         num_pes: usize,
+        my_pe: usize,
+        lamellaes: BTreeMap<Backend, Arc<dyn LamellaeAM>>,
+    );
+    fn get_queue(&self) -> Arc<dyn SchedulerQueue>;
+}
+impl<T: Scheduler + ?Sized> Scheduler for Box<T> {
+    fn init(
+        &mut self,
+        num_pes: usize,
+        my_pe: usize,
+        lamellaes: BTreeMap<Backend, Arc<dyn LamellaeAM>>,
     ) {
-        //process remote
-        // msg.return_data = ireq.active.load(Ordering::SeqCst);
-        // msg.return_data = false;
-        if msg.return_data {
-            REQUESTS[msg.id % REQUESTS.len()].insert_new(msg.id, ireq.clone());
-        }
-        // let t = std::time::Instant::now();
-        if pe == my_pe || num_pes == 1 {
-            match func.downcast::<LamellarLocal>() {
-                Ok(func) => {
-                    exec_local(msg, func, ireq);
-                }
-                Err(func) => {
-                    let func = func
-                        .downcast::<(LamellarLocal, LamellarClosure)>()
-                        .expect("error in local downcast");
-                    exec_local(msg, func.0, ireq);
-                }
-            }
-        } else if pe == num_pes {
-            // let t = std::time::Instant::now();
-            if let Ok(funcs) = func.downcast::<(LamellarLocal, LamellarClosure)>() {
-                let data = funcs.1();
-                let payload = (msg.clone(), data);
-                let data = bincode::serialize(&payload).unwrap();
-                LAMELLAR_RT.lamellae.send_to_all(data);
-                exec_local(msg, funcs.0, ireq);
-            } else {
-                println!("error in all downcast");
-            }
-        } else {
-            // println!("PE: {:?} {:?} {:?}",pe,my_pe,num_pes);
-            if let Ok(func) = func.downcast::<LamellarClosure>() {
-                let data = func();
-                let payload = (msg, data);
-                let data = bincode::serialize(&payload).unwrap();
-                LAMELLAR_RT.lamellae.send_to_pe(pe, data);
-            } else {
-                println!("error in remote downcast");
-            }
-        }
+        (**self).init(num_pes, my_pe, lamellaes)
     }
+    fn get_queue(&self) -> Arc<dyn SchedulerQueue> {
+        (**self).get_queue()
+    }
+}
+pub(crate) fn create_scheduler(sched: SchedulerType) -> Box<dyn Scheduler> {
+    Box::new(match sched {
+        SchedulerType::WorkStealing => work_stealing_sched::WorkStealingScheduler::new(),
+    })
 }

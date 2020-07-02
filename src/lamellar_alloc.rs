@@ -1,4 +1,5 @@
 use indexmap::IndexSet;
+use log::trace;
 use parking_lot::{Condvar, Mutex};
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -7,7 +8,7 @@ use std::sync::Arc;
 pub(crate) trait LamellarAlloc {
     fn new(id: String) -> Self;
     fn init(&mut self, start_addr: usize, size: usize);
-    fn malloc(&mut self, size: usize) -> usize;
+    fn malloc(&self, size: usize) -> usize;
     fn try_malloc(&self, size: usize) -> Option<usize>;
     fn free(&self, addr: usize);
 }
@@ -29,6 +30,7 @@ pub(crate) struct LinearAlloc {
 
 impl LamellarAlloc for LinearAlloc {
     fn new(id: String) -> LinearAlloc {
+        trace!("new linear alloc: {:?}", id);
         LinearAlloc {
             entries: Arc::new((Mutex::new(Vec::new()), Condvar::new())),
             start_addr: 0,
@@ -39,11 +41,12 @@ impl LamellarAlloc for LinearAlloc {
     }
 
     fn init(&mut self, start_addr: usize, size: usize) {
+        trace!("init: {:?} {:x} {:?}", self.id, start_addr, size);
         self.start_addr = start_addr;
         self.max_size = size;
     }
 
-    fn malloc(&mut self, size: usize) -> usize {
+    fn malloc(&self, size: usize) -> usize {
         let mut val = self.try_malloc(size);
         while let None = val {
             val = self.try_malloc(size);
@@ -135,6 +138,7 @@ pub(crate) struct BTreeAlloc {
 
 impl LamellarAlloc for BTreeAlloc {
     fn new(id: String) -> BTreeAlloc {
+        trace!("new BTreeAlloc: {:?}", id);
         BTreeAlloc {
             free_entries: Arc::new((Mutex::new(FreeEntries::new()), Condvar::new())),
             allocated_addrs: Arc::new((Mutex::new(BTreeMap::new()), Condvar::new())),
@@ -144,6 +148,7 @@ impl LamellarAlloc for BTreeAlloc {
         }
     }
     fn init(&mut self, start_addr: usize, size: usize) {
+        trace!("init: {:?} {:x} {:?}", self.id, start_addr, size);
         self.start_addr = start_addr;
         self.max_size = size;
         let &(ref lock, ref _cvar) = &*self.free_entries;
@@ -154,7 +159,7 @@ impl LamellarAlloc for BTreeAlloc {
         free_entries.addrs.insert(start_addr, size);
     }
 
-    fn malloc(&mut self, size: usize) -> usize {
+    fn malloc(&self, size: usize) -> usize {
         let mut val = self.try_malloc(size);
         while let None = val {
             val = self.try_malloc(size);
@@ -276,6 +281,7 @@ pub(crate) struct ObjAlloc {
 
 impl LamellarAlloc for ObjAlloc {
     fn new(id: String) -> ObjAlloc {
+        trace!("new ObjAlloc: {:?}", id);
         ObjAlloc {
             free_entries: Arc::new((Mutex::new(Vec::new()), Condvar::new())),
             start_addr: 0,
@@ -284,6 +290,7 @@ impl LamellarAlloc for ObjAlloc {
         }
     }
     fn init(&mut self, start_addr: usize, size: usize) {
+        trace!("init: {:?} {:x} {:?}", self.id, start_addr, size);
         self.start_addr = start_addr;
         self.max_size = size;
         let &(ref lock, ref _cvar) = &*self.free_entries;
@@ -293,7 +300,7 @@ impl LamellarAlloc for ObjAlloc {
         }
     }
 
-    fn malloc(&mut self, size: usize) -> usize {
+    fn malloc(&self, size: usize) -> usize {
         let mut val = self.try_malloc(size);
         while let None = val {
             val = self.try_malloc(size);
@@ -360,7 +367,7 @@ mod tests {
             let addr = alloc.malloc(sum);
             println!("{:?} {:?} {:?}", sum, addr, alloc);
             // assert_eq!(addr.unwrap()+sum,sum);
-            sum += addr.unwrap();
+            sum += addr;
         }
         println!("{:?}", alloc);
         assert_eq!(0, 1);
@@ -370,23 +377,23 @@ mod tests {
     fn test_bttreealloc_free() {
         let mut alloc = BTreeAlloc::new("test_malloc_free".to_string());
         alloc.init(0, 1000);
-        assert_eq!(alloc.malloc(50), Some(0));
+        assert_eq!(alloc.malloc(50), 0);
         println!("{:?}", alloc);
-        assert_eq!(alloc.malloc(10), Some(50));
+        assert_eq!(alloc.malloc(10), 50);
         println!("{:?}", alloc);
-        assert_eq!(alloc.malloc(600), Some(60));
+        assert_eq!(alloc.malloc(600), 60);
         println!("{:?}", alloc);
-        assert_eq!(alloc.malloc(10), Some(660));
+        assert_eq!(alloc.malloc(10), 660);
         println!("{:?}", alloc);
         alloc.free(0);
         println!("{:?}", alloc);
-        assert_eq!(alloc.malloc(30), Some(0));
+        assert_eq!(alloc.malloc(30), 0);
         println!("{:?}", alloc);
         alloc.free(50);
         println!("{:?}", alloc);
-        assert_eq!(alloc.malloc(10), Some(30));
+        assert_eq!(alloc.malloc(10), 30);
         println!("{:?}", alloc);
-        assert_eq!(alloc.malloc(10), Some(40));
+        assert_eq!(alloc.malloc(10), 40);
         println!("{:?}", alloc);
         alloc.free(660);
         println!("{:?}", alloc);
@@ -396,7 +403,7 @@ mod tests {
         println!("{:?}", alloc);
         alloc.free(30);
         println!("{:?}", alloc);
-        assert_eq!(alloc.malloc(200), Some(660));
+        assert_eq!(alloc.malloc(200), 660);
         println!("{:?}", alloc);
         alloc.free(60);
         println!("{:?}", alloc);
@@ -415,20 +422,20 @@ mod tests {
         let mut alloc = ObjAlloc::new("test_obj_malloc_free".to_string());
         alloc.init(0, 10);
         for i in 0..10 {
-            println!("alloc: {:?}", alloc.malloc());
+            println!("alloc: {:?}", alloc.malloc(1));
         }
         for i in 0..10 {
             alloc.free(i);
         }
 
         for i in 0..6 {
-            println!("alloc: {:?}", alloc.malloc());
+            println!("alloc: {:?}", alloc.malloc(1));
         }
         alloc.free(8);
         alloc.free(6);
         alloc.free(9);
         for i in 0..6 {
-            println!("alloc: {:?}", alloc.malloc());
+            println!("alloc: {:?}", alloc.malloc(1));
         }
         assert_eq!(0, 1);
     }
