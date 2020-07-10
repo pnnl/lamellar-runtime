@@ -1,6 +1,6 @@
 [package]
 name = "lamellar"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["Ryan D Friese <ryan.friese@pnnl.gov>"]
 edition = "2018"
 
