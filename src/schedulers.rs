@@ -14,8 +14,9 @@ pub enum SchedulerType {
 
 #[derive(Debug)]
 pub(crate) struct ReqData {
-    pub(crate) team: Arc<dyn LamellarArch + Sync + Send>, //<'a>,
-    pub(crate) pe: Option<usize>,
+    pub(crate) team: Arc<dyn LamellarArch>, //<'a>,
+    pub(crate) src: usize,
+    pub(crate) pe: Option<usize>, //team based pe id
     pub(crate) msg: Msg,
     pub(crate) ireq: InternalReq,
     pub(crate) func: LamellarAny,
@@ -28,17 +29,18 @@ pub(crate) trait SchedulerQueue: Sync + Send {
     where
         Self: Sized;
     // fn init(&mut self) -> Vec<Box<dyn WorkerThread>>;
-    fn submit_req(
+    fn submit_req( //unserialized request
         &self,
+        src: usize,
         pe: Option<usize>,
         msg: Msg,
         ireq: InternalReq,
         func: LamellarAny,
-        team: Arc<dyn LamellarArch + Sync + Send>,
+        team: Arc<dyn LamellarArch>,
         backend: Backend,
     );
     // fn submit_req_all(&self, msg: Msg, ireq: InternalReq, func: LamellarAny);
-    fn submit_work(&self, msg: std::vec::Vec<u8>, lamellae: Arc<dyn LamellaeAM>);
+    fn submit_work(&self, msg: std::vec::Vec<u8>, lamellae: Arc<dyn LamellaeAM>); //serialized active message
 }
 
 pub(crate) trait Scheduler {

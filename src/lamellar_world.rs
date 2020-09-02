@@ -2,7 +2,7 @@ use crate::active_messaging::*;
 use crate::lamellae::{create_lamellae, Backend, Lamellae, LamellaeAM};
 use crate::lamellar_memregion::{LamellarMemoryRegion, RemoteMemoryRegion};
 use crate::lamellar_request::LamellarRequest;
-use crate::lamellar_team::LamellarTeam;
+use crate::lamellar_team::{LamellarArch,LamellarTeam};
 use crate::schedulers::{create_scheduler, Scheduler, SchedulerType};
 use log::trace;
 use std::collections::{BTreeMap, HashSet};
@@ -10,8 +10,8 @@ use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-pub struct LamellarWorld<'a> {
-    team: LamellarTeam<'a>,
+pub struct LamellarWorld {
+    team: Arc<LamellarTeam>,
     counters: Arc<AMCounters>,
     _scheduler: Arc<dyn Scheduler>,
     lamellaes: BTreeMap<Backend, Arc<dyn Lamellae>>,
@@ -19,7 +19,7 @@ pub struct LamellarWorld<'a> {
     num_pes: usize,
 }
 
-impl ActiveMessaging for LamellarWorld<'_> {
+impl ActiveMessaging for LamellarWorld {
     fn wait_all(&self) {
         let mut temp_now = Instant::now();
         while self.counters.outstanding_reqs.load(Ordering::SeqCst) > 0 {
@@ -27,7 +27,7 @@ impl ActiveMessaging for LamellarWorld<'_> {
             if temp_now.elapsed() > Duration::new(60, 0) {
                 println!(
                     "in world wait_all mype: {:?} cnt: {:?} {:?}",
-                    self.team.arch.my_pe(),
+                    self.my_pe,
                     self.counters.send_req_cnt.load(Ordering::SeqCst),
                     self.counters.outstanding_reqs.load(Ordering::SeqCst),
                     // self.counters.recv_req_cnt.load(Ordering::SeqCst),
@@ -49,8 +49,8 @@ impl ActiveMessaging for LamellarWorld<'_> {
         F: LamellarActiveMessage
             + LamellarAM
             + Send
-            + serde::de::DeserializeOwned
-            + std::clone::Clone
+            // + serde::de::DeserializeOwned
+            // + std::clone::Clone
             + 'static,
     {
         self.team.exec_am_all(am)
@@ -61,7 +61,7 @@ impl ActiveMessaging for LamellarWorld<'_> {
             + LamellarAM
             + Send
             + serde::de::DeserializeOwned
-            + std::clone::Clone
+            // + std::clone::Clone
             + 'static,
     {
         assert!(pe < self.num_pes(), "invalid pe: {:?}", pe);
@@ -73,7 +73,7 @@ impl ActiveMessaging for LamellarWorld<'_> {
 #[cfg(feature = "nightly")]
 use crate::active_messaging::remote_closures::ClosureRet;
 #[cfg(feature = "nightly")]
-impl RemoteClosures for LamellarWorld<'_> {
+impl RemoteClosures for LamellarWorld {
     fn exec_closure_all<
         F: FnOnce() -> T
             + Send
@@ -132,7 +132,7 @@ impl RemoteClosures for LamellarWorld<'_> {
     }
 }
 
-impl RemoteMemoryRegion for LamellarWorld<'_> {
+impl RemoteMemoryRegion for LamellarWorld {
     /// allocate a remote memory region from the symmetric heap
     ///
     /// # Arguments
@@ -151,6 +151,7 @@ impl RemoteMemoryRegion for LamellarWorld<'_> {
         &self,
         size: usize,
     ) -> LamellarMemoryRegion<T> {
+        self.barrier();
         self.team.alloc_mem_region::<T>(size)
     }
 
@@ -176,7 +177,7 @@ impl RemoteMemoryRegion for LamellarWorld<'_> {
     }
 }
 
-impl LamellarWorld<'_> {
+impl  LamellarWorld {
     pub fn my_pe(&self) -> usize {
         self.my_pe
     }
@@ -191,13 +192,24 @@ impl LamellarWorld<'_> {
         }
         sent
     }
+
+    pub fn team_barrier(&self){
+        self.team.barrier();
+    }
+
+    pub fn create_team_from_arch<L>(&self, arch: L ) -> Arc<LamellarTeam>
+    where L: LamellarArch + 'static{
+        LamellarTeam::create_subteam_from_arch(self.team.clone(),arch)
+    }
 }
 
-impl Drop for LamellarWorld<'_> {
+impl Drop for LamellarWorld {
     fn drop(&mut self) {
         trace!("[{:?}] world dropping", self.my_pe);
         self.wait_all();
         self.barrier();
+        self.team.destroy();
+        self.lamellaes.clear();
 
         // im not sure we want to explicitly call lamellae.finit(). instead we should let
         // have the lamellae instances do that in their own drop implementations.
@@ -220,7 +232,7 @@ impl LamellarWorldBuilder {
         // simple_logger::init().unwrap();
         trace!("New world builder");
         LamellarWorldBuilder {
-            primary_lamellae: Backend::Rofi,
+            primary_lamellae: Default::default(),
             secondary_lamellae: HashSet::new(),
             scheduler: SchedulerType::WorkStealing,
         }
@@ -237,7 +249,7 @@ impl LamellarWorldBuilder {
         self.scheduler = sched;
         self
     }
-    pub fn build<'a>(self) -> LamellarWorld<'a> {
+    pub fn build(self) -> LamellarWorld {
         // for exec in inventory::iter::<TestAm> {
         //     println!("{:#?}", exec);
         // }
@@ -259,13 +271,13 @@ impl LamellarWorldBuilder {
         sched.init(num_pes, my_pe, lamellaes);
         let counters = Arc::new(AMCounters::new());
         let mut world = LamellarWorld {
-            team: LamellarTeam::new(
+            team: Arc::new(LamellarTeam::new(
                 num_pes,
                 my_pe,
                 sched.get_queue().clone(),
                 counters.clone(),
                 lamellae.clone(),
-            ),
+            )),
             counters: counters,
             _scheduler: Arc::new(sched),
             lamellaes: BTreeMap::new(),
@@ -273,6 +285,7 @@ impl LamellarWorldBuilder {
             num_pes: num_pes,
         };
         world.lamellaes.insert(lamellae.backend(), lamellae.clone());
+        // println!("Lamellar world created with {:?}",lamellae.backend());
         world
     }
 }

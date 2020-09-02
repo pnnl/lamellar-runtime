@@ -15,7 +15,7 @@ lazy_static! {
     pub(crate) static ref AMS_EXECS: BTreeMap<String, fn(Vec<u8>, isize, isize) -> Option<LamellarReturn>> = {
         let mut temp = BTreeMap::new();
         for exec in crate::inventory::iter::<RegisteredAm> {
-            println!("{:#?}", exec);
+            trace!("{:#?}", exec);
             temp.insert(exec.name.clone(), exec.exec);
         }
         temp
@@ -97,9 +97,14 @@ pub(crate) fn process_am_request(
         .func
         .downcast::<LamellarBoxedAm>()
         .expect("LAMELLAR RUNTIME ERROR: error in remote am downcast");
-    let my_pe = Some(req_data.team.my_pe());
+    let my_pe = if let Ok(my_pe) = req_data.team.team_pe_id(&req_data.src){
+        Some(my_pe)
+    }
+    else{
+        None
+    };
 
-    if req_data.pe == my_pe {
+    if req_data.pe == my_pe && my_pe != None{
         trace!("[{:?}] single local request ", my_pe);
         exec_local(ame, req_data.msg, *func, req_data.ireq)
     } else {
@@ -110,7 +115,7 @@ pub(crate) fn process_am_request(
         let payload = (req_data.msg, ser_func);
         let data = bincode::serialize(&payload).unwrap();
         lamellaes[&req_data.backend].send_to_pes(req_data.pe, req_data.team.clone(), data);
-        if req_data.pe == None {
+        if req_data.pe == None && my_pe != None {
             exec_local(ame, req_data.msg, *func, req_data.ireq);
         }
     }

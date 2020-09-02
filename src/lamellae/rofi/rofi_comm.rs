@@ -39,6 +39,9 @@ impl RofiComm {
         rofi_barrier();
         let _res = rofi_finit();
     }
+    pub(crate) fn mype(&self) -> usize{
+        self.my_pe
+    }
     pub(crate) fn barrier(&self) {
         rofi_barrier();
     }
@@ -88,6 +91,34 @@ impl RofiComm {
             unsafe { rofi_put(src_addr, dst_addr, pe).expect("error in rofi put") };
         } else {
             unsafe {
+                // println!("[{:?}] memcopy {:?}",pe,src_addr.as_ptr());
+                std::ptr::copy_nonoverlapping(
+                    src_addr.as_ptr(),
+                    dst_addr as *mut T,
+                    src_addr.len(),
+                );
+            }
+        }
+    }
+
+    pub(crate) fn iput<
+        T: serde::ser::Serialize
+            + serde::de::DeserializeOwned
+            + std::clone::Clone
+            + Send
+            + Sync
+            + 'static,
+    >(
+        &self,
+        pe: usize,
+        src_addr: &[T],
+        dst_addr: usize,
+    ) {
+        if pe != self.my_pe {
+            rofi_iput(src_addr, dst_addr, pe).expect("error in rofi put");
+        } else {
+            unsafe {
+                // println!("[{:?}] memcopy {:?}",pe,src_addr.as_ptr());
                 std::ptr::copy_nonoverlapping(
                     src_addr.as_ptr(),
                     dst_addr as *mut T,
@@ -199,9 +230,11 @@ impl RofiComm {
             let ret = rofi_iget(*self.rofi_base_address.read() + src_addr, dst_addr, pe); //.expect("error in rofi get")
             if let Err(_) = ret {
                 println!(
-                    "Error in get from {:?} src {:x} base_addr{:x} size{:x}",
+                    "[{:?}] Error in get from {:?} src_addr {:x} dst_addr {:?} base_addr {:x} size {:x}",
+                    self.my_pe,
                     pe,
                     src_addr,
+                    dst_addr.as_ptr(),
                     *self.rofi_base_address.read(),
                     dst_addr.len()
                 );

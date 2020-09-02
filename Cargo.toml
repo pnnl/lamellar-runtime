@@ -1,8 +1,15 @@
 [package]
 name = "lamellar"
-version = "0.2.0"
-authors = ["Ryan D Friese <ryan.friese@pnnl.gov>"]
+version = "0.2.1"
+authors = ["Ryan D. Friese <ryan.friese@pnnl.gov>", " Mark V Raugas <mark.raugas@pnnl.gov>", "Roberto Gioiosa <roberto.gioiosa@pnnl.gov>"]
 edition = "2018"
+description = "Lamellar is an asynchronous tasking runtime for HPC systems developed in RUST."
+readme = "README.md"
+repository = "https://github.com/pnnl/lamellar-runtime"
+homepage = "https://github.com/pnnl/lamellar-runtime"
+license-file = "LICENSE"
+keywords = ["hpc","runtime","pgas","distributed","asynchronous"]
+categories = ["asynchronous","concurrency", "network-programming","science"]
 
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }
@@ -11,18 +18,19 @@ bincode = "1.2"
 lazy_static = "1.3.0"
 crossbeam = "0.7"
 chashmap = "2.2.2"
-rand = "0.7.0"
+rand = "0.7.3"
 parking_lot = "0.9"
 indexmap = "1.3"
 core_affinity = "0.5.9"
-rofisys = { git="https://github.com/pnnl/rofi-sys" }
+rofisys = { version ="0.1.1", optional = true  }
 log = "0.4"
 simple_logger = "1.6.0"
-lamellar-impl = { path = "impl" }
+lamellar-impl = { version = "=0.2.1", path = "impl" }
 proc-macro-hack = "0.5"
 inventory = "0.1"
 serde_closure = { version = "0.1.5", optional = true }
-
+hostname = "0.3"
+rayon = "1.1"
 
 [workspace]
 members = ["impl"]
@@ -33,7 +41,10 @@ members = ["impl"]
 [features]
 nightly=["serde_closure"]
 stable=[]
-default=["stable"]
+enable-rofi=["rofisys"]
+enable-local=[]
+default=[]
+
 
 [profile.release]
 opt-level=3

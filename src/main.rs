@@ -1,10 +1,10 @@
 use lamellar::{
-    ActiveMessaging, Backend, LamellarAM, LamellarMemoryRegion, RemoteMemoryRegion, SchedulerType,
+    ActiveMessaging,  LamellarAM, LamellarMemoryRegion, RemoteMemoryRegion, SchedulerType,StridedArch
 };
 use std::time::Instant;
 
 //----------------- Active message returning nothing-----------------//
-#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
+#[derive(serde::Serialize, serde::Deserialize,  Debug)]
 struct AmNoReturn {
     my_pe: usize,
 }
@@ -13,17 +13,18 @@ struct AmNoReturn {
 impl LamellarAM for AmNoReturn {
     fn exec(&self) {
         println!(
-            "in AmNoReturn {:?} on pe {:?} of {:?}",
+            "in AmNoReturn {:?} on pe {:?} of {:?} ({:?})",
             self,
             lamellar::current_pe,
-            lamellar::num_pes
+            lamellar::num_pes,
+            hostname::get().unwrap()
         );
     }
 }
 //-------------------------------------------------------------------//
 
 //----------------- Active message returning data--------------------//
-#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)] //eventually derive lamellar::Return to automatically implement "LamellarDataReturn"
+ #[derive(serde::Serialize, serde::Deserialize,  Clone, Debug)] //eventually derive lamellar::Return to automatically implement "LamellarDataReturn"
 struct AmReturnUsize {
     temp: usize,
     talk: String,
@@ -33,11 +34,12 @@ struct AmReturnUsize {
 impl LamellarAM for AmReturnUsize {
     fn exec(&self) -> usize {
         println!(
-            "in  AmReturnUsize {:?} self {:?} on pe {:?} of {:?}",
+            "in  AmReturnUsize {:?} self {:?} on pe {:?} of {:?} ({:?})",
             self,
             self.talk,
             lamellar::current_pe,
-            lamellar::num_pes
+            lamellar::num_pes,
+            hostname::get().unwrap()
         );
         let mut ret = self.clone();
         ret.temp = lamellar::current_pe as usize;
@@ -59,11 +61,12 @@ struct AmReturnAm {
 impl LamellarAM for AmReturnAm {
     fn exec(&self) -> AmNoReturn {
         println!(
-            "in  AmReturnAm {:?} self {:?} on pe {:?} of {:?}",
+            "in  AmReturnAm {:?} self {:?} on pe {:?} of {:?} ({:?})",
             self,
             self.talk,
             lamellar::current_pe,
-            lamellar::num_pes
+            lamellar::num_pes,
+            hostname::get().unwrap()
         );
         AmNoReturn {
             my_pe: lamellar::current_pe as usize,
@@ -83,11 +86,12 @@ struct AmReturnAmUsize {
 impl LamellarAM for AmReturnAmUsize {
     fn exec(&self) -> AmReturnUsize {
         println!(
-            "in  AmReturnAmUsize {:?} self {:?} on pe {:?} of {:?} ",
+            "in  AmReturnAmUsize {:?} self {:?} on pe {:?} of {:?} ({:?}) ",
             self,
             self.talk,
             lamellar::current_pe,
-            lamellar::num_pes
+            lamellar::num_pes,
+            hostname::get().unwrap()
         );
         AmReturnUsize {
             temp: lamellar::current_pe as usize,
@@ -107,44 +111,38 @@ struct AmLMR {
 impl LamellarAM for AmLMR {
     fn exec(&self) {
         println!(
-            "in AmLMR {:?} on pe {:?} of {:?}",
+            "in AmLMR {:?} on pe {:?} of {:?} ({:?})",
             self,
             lamellar::current_pe,
-            lamellar::num_pes
+            lamellar::num_pes,
+            hostname::get().unwrap()
         );
     }
 }
 //-------------------------------------------------------------------//
 
-fn main() {
-    let world = lamellar::LamellarWorldBuilder::new()
-        .with_lamellae(Backend::Rofi)
-        .with_scheduler(SchedulerType::WorkStealing)
-        .build();
 
+
+fn world_based_tests(world: &lamellar::LamellarWorld){
     let my_pe = world.my_pe();
-    let _num_pes = world.num_pes();
-    world.barrier();
-    let s = Instant::now();
-    world.barrier();
-    let b = s.elapsed().as_secs_f64();
-    println!("Barrier latency: {:?}s {:?}us", b, b * 1_000_000 as f64);
-    println!("---------------------------------------------------------------");
+    let num_pes = world.num_pes();
+    println!("starting world tests");
+    
     let lmr: LamellarMemoryRegion<u8> = world.alloc_mem_region(100);
     println!("lmr: {:?} on {:?}", lmr, my_pe);
     if my_pe == 0 {
         println!("Testing local am no return");
         let res = world
             .exec_am_pe(0, AmNoReturn { my_pe: my_pe })
-            .am_get_new();
+            .get();
         println!("no return result: {:?}", res);
         println!("Testing remote am no return");
         let res = world
-            .exec_am_pe(1, AmNoReturn { my_pe: my_pe })
-            .am_get_new();
+            .exec_am_pe(num_pes-1, AmNoReturn { my_pe: my_pe })
+            .get();
         println!("no return result: {:?}", res);
         println!("Testing all am no return");
-        let res = world.exec_am_all(AmNoReturn { my_pe: my_pe }).am_get_all();
+        let res = world.exec_am_all(AmNoReturn { my_pe: my_pe }).get_all();
         println!("no return result: {:?}", res);
         println!("---------------------------------------------------------------");
         println!("Testing local am usize return");
@@ -156,18 +154,18 @@ fn main() {
                     talk: "hello".to_string(),
                 },
             )
-            .am_get_new();
+            .get();
         println!("usize return result: {:?}", res);
         println!("Testing remote am usize return");
         let res = world
             .exec_am_pe(
-                1,
+                num_pes-1,
                 AmReturnUsize {
                     temp: my_pe,
                     talk: "hello".to_string(),
                 },
             )
-            .am_get_new();
+            .get();
         println!("usize return result: {:?}", res);
         println!("Testing all am usize return");
         let res = world
@@ -175,7 +173,7 @@ fn main() {
                 temp: my_pe,
                 talk: "hello".to_string(),
             })
-            .am_get_all();
+            .get_all();
         println!("usize return result: {:?}", res);
         println!("---------------------------------------------------------------");
         println!("Testing local am returning an am");
@@ -187,18 +185,18 @@ fn main() {
                     talk: "hello".to_string(),
                 },
             )
-            .am_get_new();
+            .get();
         println!("am return result: {:?}", res);
         println!("Testing remote am returning an am");
         let res = world
             .exec_am_pe(
-                1,
+                num_pes-1,
                 AmReturnAm {
                     temp: my_pe,
                     talk: "hello".to_string(),
                 },
             )
-            .am_get_new();
+            .get();
         println!("am return result: {:?}", res);
         println!("Testing all am returning an am");
         let res = world
@@ -206,7 +204,7 @@ fn main() {
                 temp: my_pe,
                 talk: "hello".to_string(),
             })
-            .am_get_all();
+            .get_all();
         println!("am return result: {:?}", res);
         println!("---------------------------------------------------------------");
         println!("Testing local am returning an am returning a usize");
@@ -218,18 +216,18 @@ fn main() {
                     talk: "hello".to_string(),
                 },
             )
-            .am_get_new();
+            .get();
         println!("am return result: {:?}", res);
         println!("Testing remote am returning an am returning a usize");
         let res = world
             .exec_am_pe(
-                1,
+                num_pes-1,
                 AmReturnAmUsize {
                     temp: my_pe,
                     talk: "hello".to_string(),
                 },
             )
-            .am_get_new();
+            .get();
         println!("am return result: {:?}", res);
         println!("Testing all am returning an am returning a usize");
         let res = world
@@ -237,11 +235,81 @@ fn main() {
                 temp: my_pe,
                 talk: "hello".to_string(),
             })
-            .am_get_all();
+            .get_all();
         println!("am return result: {:?}", res);
         println!("---------------------------------------------------------------");
 
-        let _res = world.exec_am_all(AmLMR { lmr: lmr }).am_get_new();
+        let res = world.exec_am_all(AmLMR { lmr: lmr.clone() }).get_all();
+        println!("am return result: {:?}",res);
+        println!("---------------------------------------------------------------");
+        
     }
     world.barrier();
+    world.free_memory_region(lmr);
+    println!("leaving world tests");
+   
+}
+
+fn team_based_tests(world: &mut lamellar::LamellarWorld){
+    let my_pe = world.my_pe();
+    let num_pes = world.num_pes();
+    println!("starting team tests");
+    let team = world.create_team_from_arch(StridedArch::new(
+       0,num_pes-1,2,num_pes
+    )); // should be a team consisting of the even nodes
+    println!("team pes: {:?}",team.get_pes());
+    println!("Testing team local am no return");
+    let res = team
+        .exec_am_pe(0, AmNoReturn { my_pe: my_pe })
+        .get();
+    println!("team no return result: {:?}", res);
+    team.barrier();
+    println!("---------------------------------------------------------------");
+    println!("Testing team remote am no return");
+    let res = team
+        .exec_am_pe(team.num_pes()-1, AmNoReturn { my_pe: my_pe })
+        .get();
+    println!("team no return result: {:?}", res);
+    team.barrier();
+    println!("---------------------------------------------------------------");
+    println!("Testing team all am no return");
+    let res = team.exec_am_all(AmNoReturn { my_pe: my_pe }).get_all();
+    println!("team no return result: {:?}", res);
+    println!("---------------------------------------------------------------");
+    team.barrier();
+    println!("leaving  team tests");
+}
+
+
+
+fn main() { 
+    let mut world = lamellar::LamellarWorldBuilder::new()
+        .with_lamellae( Default::default() ) //if enable-rofi feature is active defaul is rofi, otherwise local
+        //.with_lamellae( Backend::Rofi ) //explicity set the lamellae backend
+        //.with_lamellae( Backend::Local )
+        .with_scheduler(SchedulerType::WorkStealing)
+        .build();
+
+    let _my_pe = world.my_pe();
+    let _num_pes = world.num_pes();
+    world.barrier();
+    let s = Instant::now();
+    world.barrier();
+    let b = s.elapsed().as_secs_f64();
+    println!("Barrier latency: {:?}s {:?}us", b, b * 1_000_000 as f64);
+    println!("---------------------------------------------------------------");
+    world.barrier();
+    let s = Instant::now();
+    world.team_barrier();
+    let b = s.elapsed().as_secs_f64();
+    println!("Team Barrier latency: {:?}s {:?}us", b, b * 1_000_000 as f64);
+    println!("---------------------------------------------------------------");
+    world.team_barrier();
+    world.team_barrier();
+    world.team_barrier();
+    world_based_tests(&world);
+
+    team_based_tests(&mut world);
+    world.barrier();
+    println!("tests done!!!");
 }

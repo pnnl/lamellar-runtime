@@ -13,7 +13,7 @@ const NUM_REQ_SLOTS: usize = 100000;
 const DATA_SIZE: usize = 200_000_000;
 const FINI_STATUS: RofiReqStatus = RofiReqStatus::Fini;
 
-static GARBAGE_COLLECT_TIMEOUT: std::time::Duration = std::time::Duration::from_millis(1);
+static GARBAGE_COLLECT_TIMEOUT: std::time::Duration = std::time::Duration::from_millis(10000);
 
 lazy_static! {
     static ref DATA_COUNTS: Vec<AtomicUsize> = {
@@ -299,12 +299,16 @@ impl RecvThread {
         }))
     }
     fn shutdown(&mut self) {
+        // trace!(
+        //     "[{:?}] shutting down command queue recv thread",
+        //     self.cmd_queue.my_pe
+        // );
+        self.active.store(false, Ordering::SeqCst);
+        let _res = self.thread.take().expect("error joining thread").join();
         trace!(
             "[{:?}] shutting down command queue recv thread",
             self.cmd_queue.my_pe
         );
-        self.active.store(false, Ordering::SeqCst);
-        let _res = self.thread.take().expect("error joining thread").join();
     }
 }
 
@@ -331,6 +335,7 @@ struct RofiCommandQueueInternal {
 
 impl Drop for RofiCommandQueueInternal {
     fn drop(&mut self) {
+        trace!("[{:?}] RofiCommandQueueInternal Dropping", self.my_pe);
         let mut string = String::new();
         for item in self.timers.iter() {
             string.push_str(&format!(

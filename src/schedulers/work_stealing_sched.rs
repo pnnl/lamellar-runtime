@@ -141,15 +141,17 @@ impl SchedulerQueue for WorkStealingQueue {
     }
     fn submit_req(
         &self,
+        src: usize,
         pe: Option<usize>,
         msg: Msg,
         ireq: InternalReq,
         func: LamellarAny,
-        team: Arc<dyn LamellarArch + Sync + Send>,
+        team: Arc<dyn LamellarArch>,
         backend: Backend,
     ) {
         let req_data = ReqData {
             team: team,
+            src: src,
             pe: pe,
             msg: msg,
             ireq: ireq,

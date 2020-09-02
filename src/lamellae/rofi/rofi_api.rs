@@ -47,6 +47,7 @@ pub(crate) unsafe fn rofi_put<T>(src: &[T], dst: usize, pe: usize) -> Result<(),
     //FI_EAGAIN should this be handled here, at c-rofi layer, or application layer?
     while ret == -11 {
         ret = rofisys::rofi_put(dst as *mut std::ffi::c_void, src_addr, size, pe as u32, 0);
+        // println!("src_addr {:?} {:?}",src.as_ptr(),ret);
     }
     if ret == 0 {
         Ok(())
@@ -65,6 +66,7 @@ pub(crate) fn rofi_iput<T>(src: &[T], dst: usize, pe: usize) -> Result<(), i32> 
         ret = unsafe {
             rofisys::rofi_iput(dst as *mut std::ffi::c_void, src_addr, size, pe as u32, 0)
         };
+        // println!("src_addr {:?} {:?}",src.as_ptr(),ret);
     }
     if ret == 0 {
         Ok(())

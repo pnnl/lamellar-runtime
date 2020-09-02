@@ -193,7 +193,7 @@ impl LamellaeAM for RofiLamellaeAM {
     fn send_to_pes(
         &self,
         pe: Option<usize>,
-        team: Arc<dyn LamellarArch + Sync + Send>,
+        team: Arc<dyn LamellarArch>,
         data: std::vec::Vec<u8>,
     ) {
         if let Some(pe) = pe {
@@ -222,6 +222,9 @@ impl LamellaeRDMA for RofiLamellaeRDMA{
     fn put(&self, pe: usize, src: &[u8], dst: usize) {
         self.rofi_comm.put(pe, src, dst);
     }
+    fn iput(&self, pe: usize, src: &[u8], dst: usize) {
+        self.rofi_comm.iput(pe, src, dst);
+    }
     fn put_all(&self, src: &[u8], dst: usize) {
         self.rofi_comm.put_all(src, dst);
     }
@@ -237,13 +240,18 @@ impl LamellaeRDMA for RofiLamellaeRDMA{
     fn base_addr(&self) -> usize {
         self.rofi_comm.base_addr()
     }
+    fn mype(&self) -> usize {
+        self.rofi_comm.mype()
+    }
 }
 
 impl Drop for RofiLamellae {
     fn drop(&mut self) {
+        
         while let Some(mut iothread) = self.threads.pop() {
             iothread.shutdown();
         }
         trace!("[{:?}] RofiLamellae Dropping", self.my_pe);
+        
     }
 }

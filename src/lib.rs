@@ -38,6 +38,8 @@ pub use crate::schedulers::SchedulerType;
 
 pub use crate::lamellar_world::*;
 
+pub use crate::lamellar_team::{LamellarTeam,LamellarArch,StridedArch};
+
 
 extern crate lamellar_impl;
 pub use lamellar_impl::am;

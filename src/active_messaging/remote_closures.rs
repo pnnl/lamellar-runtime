@@ -211,80 +211,115 @@ pub(crate) fn exec_closure(ame: &ActiveMessageEngine, data: &[u8]) -> (RetType, 
 
 pub (crate) fn process_closure_request(ame: &ActiveMessageEngine, req_data: ReqData,lamellaes: &Arc<BTreeMap<Backend, Arc<dyn LamellaeAM>>>,){
     let func = req_data.func;
-    let my_pe = req_data.team.my_pe();
-    if let Some(pe) = req_data.pe {
-        if pe == my_pe || req_data.team.num_pes() == 1 {
-            trace!("[{:?}] local closure request ", my_pe);
-            match func.downcast::<LamellarLocal>() {          
-                Ok(func) => {
-                    // let it = Instant::now();
-                    exec_local(ame,req_data.msg, func, req_data.ireq);
-                    // (timers.get("local_closure").unwrap())
-                    //     .fetch_add(it.elapsed().as_millis() as usize, Ordering::Relaxed);
+    let my_pe = if let Ok(my_pe) = req_data.team.team_pe_id(&req_data.src){
+        Some(my_pe)
+    }
+    else{
+        None
+    };
+
+    match func.downcast::<LamellarLocal>(){
+    
+        Ok(func) =>{
+            exec_local(ame,req_data.msg, func, req_data.ireq);
+        }
+        Err(func) => {
+            match func.downcast::<LamellarClosure>(){
+                Ok(func) =>{
+                    let data = func();
+                    let payload = (req_data.msg, data);
+                    let data = bincode::serialize(&payload).unwrap();
+                    lamellaes[&req_data.backend].send_to_pes(req_data.pe, req_data.team.clone(), data);
                 }
                 Err(func) => {
-                    // let it = Instant::now();
-                    let func = func
-                        .downcast::<(LamellarLocal, LamellarClosure)>()
-                        .expect("LAMELLAR RUNTIME ERROR: error in local closure downcast");
-                    exec_local(ame,req_data.msg, func.0, req_data.ireq);
-                    // (timers.get("local_closure").unwrap())
-                    //     .fetch_add(it.elapsed().as_millis() as usize, Ordering::Relaxed);
+                    match func.downcast::<(LamellarLocal, LamellarClosure)>(){
+                        Ok(func) => {
+                            let data = func.1();
+                            let payload = (req_data.msg.clone(), data);
+                            let data = bincode::serialize(&payload).unwrap();
+                            lamellaes[&req_data.backend].send_to_pes(req_data.pe, req_data.team.clone(), data);
+                            if req_data.pe == None && my_pe != None {
+                                exec_local(ame, req_data.msg, func.0, req_data.ireq);
+                            }
+                        }
+                        Err(_) => panic!("error! unknown closure type")
+                    }
                 }
             }
-        } else {
-            // remote request
-            trace!("[{:?}] remote closure request ", my_pe);
+        }
+    }
+
+
+
+
+    // if let Some(pe) = req_data.pe {
+    //     if pe == my_pe || req_data.team.num_pes() == 1 {
+    //         trace!("[{:?}] local closure request ", my_pe);
+    //     match func.downcast::<LamellarLocal>() {          
+    //         Ok(func) => {
+    //             exec_local(ame,req_data.msg, func, req_data.ireq);
+    //         }
+    //         Err(func) => {
+    //             let func = func
+    //                 .downcast::<(LamellarLocal, LamellarClosure)>()
+    //                 .expect("LAMELLAR RUNTIME ERROR: error in local closure downcast");
+    //             exec_local(ame,req_data.msg, func.0, req_data.ireq);
+    //         }
+    //     }
             
-            let func = func
-                .downcast::<LamellarClosure>()
-                .expect("LAMELLAR RUNTIME ERROR: error in remote closure downcast");
-            // let it = Instant::now();
-            let data = func();
-            // (timers.get("serde_1").unwrap())
-            //     .fetch_add(it.elapsed().as_millis() as usize, Ordering::Relaxed);
-            let payload = (req_data.msg, data);
+    //     } else {
+    //         // remote request
+    //         trace!("[{:?}] remote closure request ", my_pe);
+            
+    //         let func = func
+    //             .downcast::<LamellarClosure>()
+    //             .expect("LAMELLAR RUNTIME ERROR: error in remote closure downcast");
+    //         // let it = Instant::now();
+    //         let data = func();
+    //         // (timers.get("serde_1").unwrap())
+    //         //     .fetch_add(it.elapsed().as_millis() as usize, Ordering::Relaxed);
+    //         let payload = (req_data.msg, data);
                 
             
-            // let it = Instant::now();
-            let data = bincode::serialize(&payload).unwrap();
-            // (timers.get("serde_2").unwrap())
-            //     .fetch_add(it.elapsed().as_millis() as usize, Ordering::Relaxed);
-            // (timers.get("network_cnt").unwrap()).fetch_add(1, Ordering::Relaxed);
-            // (timers.get("network_size").unwrap()).fetch_add(data.len(), Ordering::Relaxed);
-            // let it = Instant::now();
-            lamellaes[&req_data.backend].send_to_pes(Some(pe), req_data.team.clone(), data);
-            // (timers.get("network").unwrap())
-            //     .fetch_add(it.elapsed().as_millis() as usize, Ordering::Relaxed);
-        }
-    } else {
-        //all pe request
-        trace!("[{:?}] all closure request exec", my_pe);
+    //         // let it = Instant::now();
+    //         let data = bincode::serialize(&payload).unwrap();
+    //         // (timers.get("serde_2").unwrap())
+    //         //     .fetch_add(it.elapsed().as_millis() as usize, Ordering::Relaxed);
+    //         // (timers.get("network_cnt").unwrap()).fetch_add(1, Ordering::Relaxed);
+    //         // (timers.get("network_size").unwrap()).fetch_add(data.len(), Ordering::Relaxed);
+    //         // let it = Instant::now();
+    //         lamellaes[&req_data.backend].send_to_pes(Some(pe), req_data.team.clone(), data);
+    //         // (timers.get("network").unwrap())
+    //         //     .fetch_add(it.elapsed().as_millis() as usize, Ordering::Relaxed);
+    //     }
+    // } else {
+    //     //all pe request
+    //     trace!("[{:?}] all closure request exec", my_pe);
         
-        // let it = Instant::now();
-        let funcs = func
-            .downcast::<(LamellarLocal, LamellarClosure)>()
-            .expect("LAMELLAR RUNTIME ERROR: error in all am downcast");
-        let data = funcs.1();
-        // (timers.get("serde_1").unwrap())
-        //     .fetch_add(it.elapsed().as_millis() as usize, Ordering::Relaxed);
-        // let it = Instant::now();
-        let payload = (req_data.msg.clone(), data);
-        let data = bincode::serialize(&payload).unwrap();
-        // (timers.get("serde_2").unwrap())
-        //     .fetch_add(it.elapsed().as_millis() as usize, Ordering::Relaxed);
-        // (timers.get("network_cnt").unwrap()).fetch_add(1, Ordering::Relaxed);
-        // (timers.get("network_size").unwrap()).fetch_add(data.len(), Ordering::Relaxed);
-        // let it = Instant::now();
-        lamellaes[&req_data.backend].send_to_pes(None, req_data.team.clone(), data);
-        // (timers.get("network").unwrap())
-        //     .fetch_add(it.elapsed().as_millis() as usize, Ordering::Relaxed);
-        // let it = Instant::now();
-        exec_local(ame,req_data.msg, funcs.0, req_data.ireq);
-        // (timers.get("local_closure").unwrap())
-        //     .fetch_add(it.elapsed().as_millis() as usize, Ordering::Relaxed);
+    //     // let it = Instant::now();
+    //     let funcs = func
+    //         .downcast::<(LamellarLocal, LamellarClosure)>()
+    //         .expect("LAMELLAR RUNTIME ERROR: error in all am downcast");
+    //     let data = funcs.1();
+    //     // (timers.get("serde_1").unwrap())
+    //     //     .fetch_add(it.elapsed().as_millis() as usize, Ordering::Relaxed);
+    //     // let it = Instant::now();
+    //     let payload = (req_data.msg.clone(), data);
+    //     let data = bincode::serialize(&payload).unwrap();
+    //     // (timers.get("serde_2").unwrap())
+    //     //     .fetch_add(it.elapsed().as_millis() as usize, Ordering::Relaxed);
+    //     // (timers.get("network_cnt").unwrap()).fetch_add(1, Ordering::Relaxed);
+    //     // (timers.get("network_size").unwrap()).fetch_add(data.len(), Ordering::Relaxed);
+    //     // let it = Instant::now();
+    //     lamellaes[&req_data.backend].send_to_pes(None, req_data.team.clone(), data);
+    //     // (timers.get("network").unwrap())
+    //     //     .fetch_add(it.elapsed().as_millis() as usize, Ordering::Relaxed);
+    //     // let it = Instant::now();
+    //     exec_local(ame,req_data.msg, funcs.0, req_data.ireq);
+    //     // (timers.get("local_closure").unwrap())
+    //     //     .fetch_add(it.elapsed().as_millis() as usize, Ordering::Relaxed);
             
-    }
+    // }
 
 }
 

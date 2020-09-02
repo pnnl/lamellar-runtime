@@ -158,8 +158,8 @@ pub trait ActiveMessaging {
         F: LamellarActiveMessage
             + LamellarAM
             + Send
-            + serde::de::DeserializeOwned
-            + std::clone::Clone
+            // + serde::de::DeserializeOwned
+            // + std::clone::Clone
             + 'static;
     fn exec_am_pe<F>(&self, pe: usize, am: F) -> LamellarRequest<F::Output>
     where
@@ -167,7 +167,7 @@ pub trait ActiveMessaging {
             + LamellarAM
             + Send
             + serde::de::DeserializeOwned
-            + std::clone::Clone
+            // + std::clone::Clone
             + 'static;
 }
 
@@ -211,6 +211,7 @@ fn create_cmd_timers() -> BTreeMap<Cmd, AtomicUsize> {
 
 impl Drop for ActiveMessageEngine {
     fn drop(&mut self) {
+        trace!("[{:?}] AME dropping", self.my_pe); 
         let mut string = String::new();
         for item in self.timers.iter() {
             string.push_str(&format!(
@@ -225,7 +226,7 @@ impl Drop for ActiveMessageEngine {
 
 impl ActiveMessageEngine {
     pub(crate) fn new(num_pes: usize, my_pe: usize, scheduler: Arc<dyn SchedulerQueue>) -> Self {
-        println!("registered funcs {:?}", AMS_EXECS.len(),);
+        trace!("registered funcs {:?}", AMS_EXECS.len(),);
         let (dummy_s, _) = crossbeam::channel::unbounded();
         ActiveMessageEngine {
             pending_active: CHashMap::new(),
@@ -242,7 +243,7 @@ impl ActiveMessageEngine {
                 team_outstanding_reqs: Arc::new(AtomicUsize::new(0usize)),
                 world_outstanding_reqs: Arc::new(AtomicUsize::new(0usize)),
             },
-            fake_arch: Arc::new(StridedArch::new(my_pe, my_pe, my_pe, 1, num_pes)),
+            fake_arch: Arc::new(StridedArch::new( my_pe, my_pe, 1, num_pes)),
             timers: create_cmd_timers(),
         }
     }
@@ -418,6 +419,7 @@ impl ActiveMessageEngine {
                         return_data: false,
                     };
                     self.scheduler.submit_req(
+                        self.my_pe,
                         Some(self.my_pe),
                         msg,
                         self.fake_ireq.clone(),
