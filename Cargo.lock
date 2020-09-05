@@ -512,7 +512,7 @@ dependencies = [
 
 [[package]]
 name = "lamellar"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "bincode",
  "chashmap",
@@ -536,7 +536,7 @@ dependencies = [
 
 [[package]]
 name = "lamellar-impl"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "proc-macro-hack",
  "proc-macro2 1.0.19",

@@ -171,6 +171,8 @@ Note, if running on a single node, simple execute the binaries directly, no need
 
 HISTORY
 -------
+- version 0.2.2:
+  - Provide examples in readme
 - version 0.2.1:
   - Provide the local lamellae as the default lamellae
   - feature guard rofi lamellae so that lamellar can build on systems without libfabrics and ROFI
