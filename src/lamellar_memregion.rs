@@ -1,16 +1,95 @@
-use crate::lamellae::{Backend, Lamellae,LamellaeRDMA};
+use crate::lamellae::{Backend, Lamellae, LamellaeRDMA};
+// use crate::lamellar_array::{LamellarLocalArray};
 use core::marker::PhantomData;
-
-use std::hash::{Hash, Hasher};
+#[cfg(feature = "enable-prof")]
+use lamellar_prof::*;
 use parking_lot::RwLock;
 use std::collections::HashMap;
+use std::hash::{Hash, Hasher};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
-use std::sync::atomic::{AtomicUsize,Ordering};
 
-lazy_static! {
-    static ref ACTIVE: CountedHashMap =CountedHashMap::new();
+use std::ops::{Bound, RangeBounds};
+
+#[derive(Debug, Clone)]
+pub struct MemNotLocalError;
+
+type MemResult<T> = Result<T, MemNotLocalError>;
+
+impl std::fmt::Display for MemNotLocalError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "mem region not local",)
+    }
 }
 
+impl std::error::Error for MemNotLocalError {}
+
+pub trait RegisteredMemoryRegion {
+    type Output: std::clone::Clone + Send + Sync + 'static;
+    fn len(&self) -> usize;
+    fn addr(&self) -> MemResult<usize>;
+    fn as_slice(&self) -> MemResult<&[Self::Output]>;
+    unsafe fn as_mut_slice(&self) -> MemResult<&mut [Self::Output]>;
+    fn as_ptr(&self) -> MemResult<*const Self::Output>;
+    fn as_mut_ptr(&self) -> MemResult<*mut Self::Output>;
+    fn sub_region<R: std::ops::RangeBounds<usize>>(&self, range: R) -> Self;
+}
+
+impl<T: std::clone::Clone + Send + Sync + 'static> RegisteredMemoryRegion
+    for LamellarMemoryRegion<T>
+{
+    type Output = T;
+    fn len(&self) -> usize {
+        self.size
+    }
+    fn addr(&self) -> MemResult<usize> {
+        Ok(self.addr)
+    }
+    fn as_slice(&self) -> MemResult<&[T]> {
+        Ok(unsafe { std::slice::from_raw_parts(self.addr as *const T, self.size) })
+    }
+    unsafe fn as_mut_slice(&self) -> MemResult<&mut [T]> {
+        Ok(std::slice::from_raw_parts_mut(
+            self.addr as *mut T,
+            self.size,
+        ))
+    }
+    fn as_ptr(&self) -> MemResult<*const T> {
+        Ok(self.addr as *const T)
+    }
+    fn as_mut_ptr(&self) -> MemResult<*mut T> {
+        Ok(self.addr as *mut T)
+    }
+    fn sub_region<R: RangeBounds<usize>>(&self, range: R) -> LamellarMemoryRegion<T> {
+        let start = match range.start_bound() {
+            //inclusive
+            Bound::Included(idx) => *idx,
+            Bound::Excluded(idx) => *idx + 1,
+            Bound::Unbounded => 0,
+        };
+        let end = match range.end_bound() {
+            //exclusive
+            Bound::Included(idx) => *idx + 1,
+            Bound::Excluded(idx) => *idx,
+            Bound::Unbounded => self.size,
+        };
+        self.cnt.fetch_add(1, Ordering::SeqCst);
+        // println!("subregion {:?} {:?} {:?} {:x?} {:x?}",start,end,end-start,self.addr+start,self.addr+(start+(end-start)-1)*std::mem::size_of::<T>());
+        LamellarMemoryRegion {
+            addr: self.addr + (start * std::mem::size_of::<T>()),
+            pe: self.pe,
+            size: (end - start),
+            backend: self.backend,
+            rdma: self.rdma.clone(),
+            cnt: self.cnt.clone(),
+            phantom: self.phantom,
+        }
+    }
+}
+
+lazy_static! {
+    static ref ACTIVE: CountedHashMap = CountedHashMap::new();
+}
 
 struct CountedHashMap {
     lock: RwLock<CountedHashMapInner>,
@@ -19,9 +98,10 @@ struct CountedHashMap {
 
 struct CountedHashMapInner {
     cnts: HashMap<Backend, usize>,
-    lamellaes: HashMap<Backend, (Arc<dyn Lamellae + Send + Sync>,Arc<AtomicUsize>)>,
+    lamellaes: HashMap<Backend, (Arc<dyn Lamellae + Send + Sync>, Arc<AtomicUsize>)>,
 }
 
+//#[prof]
 impl CountedHashMap {
     pub fn new() -> CountedHashMap {
         CountedHashMap {
@@ -32,15 +112,20 @@ impl CountedHashMap {
         }
     }
 
-    pub fn insert(&self, backend: Backend, lamellae: Arc<dyn Lamellae + Send + Sync>, cnt: Arc<AtomicUsize>) {
+    pub fn insert(
+        &self,
+        backend: Backend,
+        lamellae: Arc<dyn Lamellae + Send + Sync>,
+        cnt: Arc<AtomicUsize>,
+    ) {
         let mut map = self.lock.write();
         let mut insert = false;
         *map.cnts.entry(backend).or_insert_with(|| {
             insert = true;
             0
         }) += 1;
-        if insert{
-            map.lamellaes.insert(backend, (lamellae,cnt));
+        if insert {
+            map.lamellaes.insert(backend, (lamellae, cnt));
         }
     }
 
@@ -57,20 +142,20 @@ impl CountedHashMap {
         }
     }
 
-    pub fn get(&self, backend: Backend) -> (Arc<dyn Lamellae  + Send + Sync>,Arc<AtomicUsize>) {
+    pub fn get(&self, backend: Backend) -> (Arc<dyn Lamellae + Send + Sync>, Arc<AtomicUsize>) {
         let map = self.lock.read();
         map.lamellaes.get(&backend).expect("invalid key").clone()
     }
 }
 
 pub trait RemoteMemoryRegion {
-    /// allocate a remote memory region from the symmetric heap
+    /// allocate a shared memory region from the asymmetric heap
     ///
     /// # Arguments
     ///
     /// * `size` - number of elements of T to allocate a memory region for -- (not size in bytes)
     ///
-    fn alloc_mem_region<
+    fn alloc_shared_mem_region<
         T: serde::ser::Serialize
             + serde::de::DeserializeOwned
             + std::clone::Clone
@@ -79,17 +164,38 @@ pub trait RemoteMemoryRegion {
             + std::fmt::Debug
             + std::marker::Sized
             + 'static,
-    >(&self,
+    >(
+        &self,
         size: usize,
     ) -> LamellarMemoryRegion<T>;
 
-    /// release a remote memory region from the symmetric heap
+    /// allocate a shared memory region from the asymmetric heap
+    ///
+    /// # Arguments
+    ///
+    /// * `size` - number of elements of T to allocate a memory region for -- (not size in bytes)
+    ///
+    fn alloc_local_mem_region<
+        T: serde::ser::Serialize
+            + serde::de::DeserializeOwned
+            + std::clone::Clone
+            + Send
+            + Sync
+            + std::fmt::Debug
+            + std::marker::Sized
+            + 'static,
+    >(
+        &self,
+        size: usize,
+    ) -> LamellarLocalMemoryRegion<T>;
+
+    /// release a shared memory region from the asymmetric heap
     ///
     /// # Arguments
     ///
     /// * `region` - the region to free
     ///
-    fn free_memory_region<
+    fn free_shared_memory_region<
         T: serde::ser::Serialize
             + serde::de::DeserializeOwned
             + std::clone::Clone
@@ -97,180 +203,201 @@ pub trait RemoteMemoryRegion {
             + Sync
             + std::fmt::Debug
             + 'static,
-    >(&self,
+    >(
+        &self,
         region: LamellarMemoryRegion<T>,
+    );
+
+    /// release a shared memory region from the asymmetric heap
+    ///
+    /// # Arguments
+    ///
+    /// * `region` - the region to free
+    ///
+    fn free_local_memory_region<
+        T: serde::ser::Serialize
+            + serde::de::DeserializeOwned
+            + std::clone::Clone
+            + Send
+            + Sync
+            + std::fmt::Debug
+            + 'static,
+    >(
+        &self,
+        region: LamellarLocalMemoryRegion<T>,
     );
 }
 
-pub(crate) trait MemoryRegion{
-   fn id(&self) -> usize;
+pub trait MemoryRegion {
+    fn id(&self) -> usize;
 }
 
+//#[prof]
 impl Hash for Box<dyn MemoryRegion> {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.id().hash(state);
     }
 }
 
-impl PartialEq  for Box<dyn MemoryRegion> {
+//#[prof]
+impl PartialEq for Box<dyn MemoryRegion> {
     fn eq(&self, other: &Box<dyn MemoryRegion>) -> bool {
         self.id() == other.id()
     }
 }
 
+//#[prof]
 impl Eq for Box<dyn MemoryRegion> {}
 
 #[derive(serde::Serialize, serde::Deserialize, Clone, Copy)]
-pub struct __NetworkLamellarMemoryRegion<
-    T: serde::ser::Serialize + serde::de::DeserializeOwned + std::clone::Clone + Send + Sync + 'static,
-> {
+pub struct __NetworkLamellarMemoryRegion<T: std::clone::Clone + Send + Sync + 'static> {
     addr: usize,
+    pe: usize,
     size: usize,
     backend: Backend,
     phantom: PhantomData<T>,
 }
 
-impl<
-T: serde::ser::Serialize + serde::de::DeserializeOwned + std::clone::Clone + Send + Sync + 'static,
-> From<LamellarMemoryRegion<T>> for __NetworkLamellarMemoryRegion<T> {
-    fn from(reg: LamellarMemoryRegion<T>) -> Self{
-        let nlmr = __NetworkLamellarMemoryRegion{
-            addr: reg.addr - ACTIVE.get(reg.backend).0.get_rdma().base_addr() ,
+//#[prof]
+impl<T: std::clone::Clone + Send + Sync + 'static> From<LamellarMemoryRegion<T>>
+    for __NetworkLamellarMemoryRegion<T>
+{
+    fn from(reg: LamellarMemoryRegion<T>) -> Self {
+        let nlmr = __NetworkLamellarMemoryRegion {
+            addr: reg.addr, //- ACTIVE.get(reg.backend).0.get_rdma().local_addr(reg.key), //.base_addr(), //remove if we are able to use two separate memory regions
+            pe: reg.pe,
             size: reg.size,
             backend: reg.backend,
-            phantom: reg.phantom
+            phantom: reg.phantom,
         };
-        // println!("lmr: addr: {:?} size: {:?} backend {:?}, nlmr: addr: {:?} size: {:?} backend {:?}",reg.addr,reg.size,reg.backend,nlmr.addr,nlmr.size,nlmr.backend);
+        // println!("lmr: addr: {:x} pe: {:?} size: {:?} backend {:?}, nlmr: addr: {:x} pe: {:?} size: {:?} backend {:?}",reg.addr,reg.pe,reg.size,reg.backend,nlmr.addr,nlmr.pe,nlmr.size,nlmr.backend);
         nlmr
     }
 }
 
 #[derive(serde::Serialize, serde::Deserialize)]
-#[serde(into = "__NetworkLamellarMemoryRegion<T>", from = "__NetworkLamellarMemoryRegion<T>")]
-pub struct LamellarMemoryRegion<
-    T: serde::ser::Serialize + serde::de::DeserializeOwned + std::clone::Clone + Send + Sync + 'static,
-> {
+#[serde(
+    into = "__NetworkLamellarMemoryRegion<T>",
+    from = "__NetworkLamellarMemoryRegion<T>"
+)]
+pub struct LamellarMemoryRegion<T: std::clone::Clone + Send + Sync + 'static> {
     addr: usize,
+    pe: usize,
     size: usize,
     backend: Backend,
-    // lamellae: Arc<dyn Lamellae + Sync + Send>,
     rdma: Arc<dyn LamellaeRDMA>,
     cnt: Arc<AtomicUsize>,
     phantom: PhantomData<T>,
 }
 
-impl<
-T: serde::ser::Serialize + serde::de::DeserializeOwned + std::clone::Clone + Send + Sync + 'static,
-> MemoryRegion for LamellarMemoryRegion<T> {
-    fn id(&self)-> usize{
-        self.addr
+//#[prof]
+impl<T: std::clone::Clone + Send + Sync + 'static> MemoryRegion for LamellarMemoryRegion<T> {
+    fn id(&self) -> usize {
+        self.addr //probably should be key
     }
 }
 
-impl<
-T: serde::ser::Serialize + serde::de::DeserializeOwned + std::clone::Clone + Send + Sync + 'static,
-> From<__NetworkLamellarMemoryRegion<T>> for LamellarMemoryRegion<T> {
-    fn from(reg: __NetworkLamellarMemoryRegion<T>) -> Self{
+//#[prof]
+impl<T: std::clone::Clone + Send + Sync + 'static> From<__NetworkLamellarMemoryRegion<T>>
+    for LamellarMemoryRegion<T>
+{
+    fn from(reg: __NetworkLamellarMemoryRegion<T>) -> Self {
         let temp = ACTIVE.get(reg.backend);
-        temp.1.fetch_add(1,Ordering::SeqCst);
-        let lmr = LamellarMemoryRegion{
-            addr: reg.addr + temp.0.get_rdma().base_addr(),
+        temp.1.fetch_add(1, Ordering::SeqCst);
+        let rdma = temp.0.get_rdma();
+        let lmr = LamellarMemoryRegion {
+            addr: rdma.local_addr(reg.pe, reg.addr),
+            pe: rdma.mype(),
             size: reg.size,
             backend: reg.backend,
-            rdma: temp.0.get_rdma(),
+            rdma: rdma,
             cnt: temp.1.clone(),
-            phantom: reg.phantom
+            phantom: reg.phantom,
         };
-        // println!("nlmr: addr: {:?} size: {:?} backend {:?}, lmr: addr: {:?} size: {:?} backend {:?}",reg.addr,reg.size,reg.backend,lmr.addr,lmr.size,lmr.backend);
+        // println!("nlmr: addr {:x} pe: {:?} size: {:?} backend {:?}, lmr: addr: {:x} pe: {:?} size: {:?} backend {:?} cnt {:?}",reg.addr,reg.pe,reg.size,reg.backend,lmr.addr,lmr.pe,lmr.size,lmr.backend, lmr.cnt.load(Ordering::SeqCst));
         lmr
     }
 }
 
-impl<
-        T: serde::ser::Serialize
-            + serde::de::DeserializeOwned
-            + std::clone::Clone
-            + Send
-            + Sync
-            + 'static,
-    > LamellarMemoryRegion<T>
-{
-    pub(crate) fn new(size: usize, lamellae: Arc<dyn Lamellae + Sync + Send>) -> LamellarMemoryRegion<T> {
+//#[prof]
+impl<T: std::clone::Clone + Send + Sync + 'static> LamellarMemoryRegion<T> {
+    pub(crate) fn new(
+        size: usize,
+        lamellae: Arc<dyn Lamellae + Sync + Send>,
+    ) -> LamellarMemoryRegion<T> {
         let cnt = Arc::new(AtomicUsize::new(1));
-        ACTIVE.insert(lamellae.backend(),lamellae.clone(),cnt.clone());
+        ACTIVE.insert(lamellae.backend(), lamellae.clone(), cnt.clone());
+        let rdma = lamellae.get_rdma();
+        let addr = rdma.alloc(size * std::mem::size_of::<T>()).unwrap();
         let temp = LamellarMemoryRegion {
-            addr: lamellae
-                .get_rdma()
-                .alloc(size * std::mem::size_of::<T>())
-                .unwrap() + lamellae
-                .get_rdma().base_addr(), //TODO: out of memory...
+            addr: addr,
+            pe: rdma.mype(),
             size: size,
             backend: lamellae.backend(),
-            rdma: lamellae.get_rdma(),
+            rdma: rdma,
             cnt: cnt,
             phantom: PhantomData,
         };
-        // println!("new memregion {:?}",temp);
+        // println!(
+        //     "new memregion {:x} {:x}",
+        //     temp.addr,
+        //     size * std::mem::size_of::<T>()
+        // );
         temp
     }
 
-    // pub(crate) fn delete(self, lamellae: Arc<dyn Lamellae>) {
-    //     assert!(
-    //         lamellae.backend() == self.backend,
-    //         "free mem region associated with wrong backend"
-    //     );
-
-    //     if ACTIVE.get(self.backend).1.load(Ordering::SeqCst) == 0{
-    //         ACTIVE.remove(lamellae.backend());
-    //         self.rdma.free(self.addr-self.rdma.base_addr());
-    //     }
-    // }
-    //currently unsafe because user must ensure data exists utill put is finished
-    pub unsafe fn put(&self, pe: usize, index: usize, data: &[T]) {
+    /// copy data from local memory location into a remote memory localtion
+    ///
+    /// # Arguments
+    ///
+    /// * `pe` - id of remote PE to grab data from
+    /// * `index` - offset into the remote memory window
+    /// * `data` - address (which is "registered" with network device) of local input buffer that will be put into the remote memory
+    pub unsafe fn put(&self, pe: usize, index: usize, data: &impl RegisteredMemoryRegion) {
+        //todo make return a result?
         if index + data.len() <= self.size {
-            let num_bytes = data.len()*std::mem::size_of::<T>();
-            let bytes = std::slice::from_raw_parts(data.as_ptr() as *const u8,num_bytes);
-            // ACTIVE.get(self.backend).get_rdma().put(pe, bytes, self.addr + index * std::mem::size_of::<T>());
-            // self.lamellae.get_rdma().put(pe, bytes, self.addr + index * std::mem::size_of::<T>());
-            self.rdma.put(pe, bytes, self.addr + index * std::mem::size_of::<T>())
+            let num_bytes = data.len() * std::mem::size_of::<T>();
+            if let Ok(ptr) = data.as_ptr() {
+                let bytes = std::slice::from_raw_parts(ptr as *const u8, num_bytes);
+                self.rdma
+                    .put(pe, bytes, self.addr + index * std::mem::size_of::<T>())
+            } else {
+                panic!("ERROR: put data src is not local");
+            }
+        } else {
+            println!("{:?} {:?} {:?}", self.size, index, data.len());
+            panic!("index out of bounds");
+        }
+    }
+
+    pub(crate) unsafe fn put_slice(&self, pe: usize, index: usize, data: &[T]) {
+        //todo make return a result?
+        if index + data.len() <= self.size {
+            let num_bytes = data.len() * std::mem::size_of::<T>();
+            let bytes = std::slice::from_raw_parts(data.as_ptr() as *const u8, num_bytes);
+            self.rdma
+                .put(pe, bytes, self.addr + index * std::mem::size_of::<T>())
         } else {
             println!(
-                "{:?} {:?} {:?}",
+                "mem region len: {:?} index: {:?} data len{:?}",
                 self.size,
                 index,
-                std::mem::size_of_val(data)
+                data.len()
             );
             panic!("index out of bounds");
         }
     }
-    
-    pub  fn iput(&self, pe: usize, index: usize, data: &[T]) {
-        if index + data.len() <= self.size {
-            let num_bytes = data.len()*std::mem::size_of::<T>();
-            let bytes = unsafe {std::slice::from_raw_parts(data.as_ptr() as *const u8,num_bytes)};
-            // ACTIVE.get(self.backend).get_rdma().put(pe, bytes, self.addr + index * std::mem::size_of::<T>());
-            // self.lamellae.get_rdma().put(pe, bytes, self.addr + index * std::mem::size_of::<T>());
-            // println!("[{:?}] put: {:?} {:?} {:?} {:?}",self.rdma.mype(),pe,self.addr,self.addr+index* std::mem::size_of::<T>(),bytes);
 
-            self.rdma.iput(pe, bytes, self.addr + index * std::mem::size_of::<T>())
-        } else {
-            println!(
-                "{:?} {:?} {:?}",
-                self.size,
-                index,
-                std::mem::size_of_val(data)
-            );
-            panic!("index out of bounds");
-        }
-    }
-    //currently unsafe because user must ensure data exists utill put is finished
-    pub unsafe fn put_all(&self, index: usize, data: &[T]) {
+    pub unsafe fn put_all(&self, index: usize, data: &impl RegisteredMemoryRegion) {
         if index + data.len() <= self.size {
-            let num_bytes = data.len()*std::mem::size_of::<T>();
-            let bytes = std::slice::from_raw_parts(data.as_ptr() as *const u8,num_bytes);
-            // ACTIVE.get(self.backend).get_rdma().put_all(bytes, self.addr + index * std::mem::size_of::<T>());
-            // self.lamellae.get_rdma().put_all(bytes, self.addr + index * std::mem::size_of::<T>());
-            self.rdma.put_all(bytes, self.addr + index * std::mem::size_of::<T>());
+            let num_bytes = data.len() * std::mem::size_of::<T>();
+            if let Ok(ptr) = data.as_ptr() {
+                let bytes = std::slice::from_raw_parts(ptr as *const u8, num_bytes);
+                self.rdma
+                    .put_all(bytes, self.addr + index * std::mem::size_of::<T>());
+            } else {
+                panic!("ERROR: put data src is not local");
+            }
         } else {
             panic!("index out of bounds");
         }
@@ -285,113 +412,243 @@ impl<
     ///
     /// * `pe` - id of remote PE to grab data from
     /// * `index` - offset into the remote memory window
-    /// * `dst` - address of destination buffer
-    ///
-    pub unsafe fn get(&self, pe: usize, index: usize, data: &mut [T]) {
+    /// * `data` - address (which is "registered" with network device) of destination buffer to store result of the get
+    pub unsafe fn get(&self, pe: usize, index: usize, data: &impl RegisteredMemoryRegion) {
         if index + data.len() <= self.size {
-            let num_bytes = data.len()*std::mem::size_of::<T>();
-            let bytes = std::slice::from_raw_parts_mut(data.as_mut_ptr() as *mut u8,num_bytes);
-            // ACTIVE.get(self.backend).get_rdma().get(pe, self.addr + index * std::mem::size_of::<T>(), bytes); //(remote pe, src, dst)
-            // self.lamellae.get_rdma().get(pe, self.addr + index * std::mem::size_of::<T>(), bytes); //(remote pe, src, dst)
-            // println!("[{:?}] get: {:?} {:?} {:?} {:?}",self.rdma.mype(),pe,self.addr,self.addr+index* std::mem::size_of::<T>(),bytes);
-            self.rdma.get(pe, self.addr + index * std::mem::size_of::<T>(), bytes); //(remote pe, src, dst)
+            let num_bytes = data.len() * std::mem::size_of::<T>();
+            if let Ok(ptr) = data.as_mut_ptr() {
+                let bytes = std::slice::from_raw_parts_mut(ptr as *mut u8, num_bytes);
+                self.rdma
+                    .get(pe, self.addr + index * std::mem::size_of::<T>(), bytes);
+            //(remote pe, src, dst)
+            // println!("getting {:?} {:?} [{:?}] {:?} {:?} {:?}",pe,self.addr + index * std::mem::size_of::<T>(),index,data.addr(),data.len(),num_bytes);
+            } else {
+                panic!("ERROR: get data dst is not local");
+            }
         } else {
-            println!(
-                "{:?} {:?} {:?} {:?}",
-                self.size,
-                index,
-                data.len(),
-                std::mem::size_of_val(data)
-            );
+            println!("{:?} {:?} {:?}", self.size, index, data.len(),);
             panic!("index out of bounds");
         }
     }
 
-    // pub fn as_bytes(&self) -> &[u8] {
-    //     let pointer = self as *const T as *const u8;
-    //     let size = std::mem::size_of::<T>();
-    //     let slice: &[u8] = unsafe { std::slice::from_raw_parts(pointer, size) };
-    //     slice
+    // pub fn as_slice(&self) -> &[T] {
+    //     unsafe { std::slice::from_raw_parts(self.addr as *const T, self.size) }
     // }
-    pub fn as_slice(&self) -> &[T] {
-        unsafe { std::slice::from_raw_parts(self.addr as *const T, self.size) }
-    }
 
-    pub unsafe fn as_mut_slice(&self) -> &mut [T] {
-        std::slice::from_raw_parts_mut(self.addr as *mut T, self.size)
-    }
-}
+    // pub unsafe fn as_mut_slice(&self) -> &mut [T] {
+    //     std::slice::from_raw_parts_mut(self.addr as *mut T, self.size)
+    // }
 
-impl<
-T:    serde::ser::Serialize
-    + serde::de::DeserializeOwned
-    + std::clone::Clone
-    + Send
-    + Sync
-    + 'static,
-> Clone for LamellarMemoryRegion<T> {
-    fn clone(&self) -> Self {
-        self.cnt.fetch_add(1,Ordering::SeqCst);
-        let lmr = LamellarMemoryRegion{
-            addr: self.addr,
+    pub unsafe fn as_base<
+        B: serde::ser::Serialize
+            + serde::de::DeserializeOwned
+            + std::clone::Clone
+            + Send
+            + Sync
+            + 'static,
+    >(
+        self,
+    ) -> LamellarMemoryRegion<B> {
+        self.cnt.fetch_add(1, Ordering::SeqCst);
+        LamellarMemoryRegion {
+            addr: self.addr, //TODO: out of memory...
+            pe: self.pe,
             size: self.size,
             backend: self.backend,
             rdma: self.rdma.clone(),
             cnt: self.cnt.clone(),
-            phantom: self.phantom
+            phantom: PhantomData,
+        }
+    }
+}
+
+//#[prof]
+impl<T: std::clone::Clone + Send + Sync + 'static> Clone for LamellarMemoryRegion<T> {
+    fn clone(&self) -> Self {
+        self.cnt.fetch_add(1, Ordering::SeqCst);
+        let lmr = LamellarMemoryRegion {
+            addr: self.addr,
+            pe: self.pe,
+            size: self.size,
+            backend: self.backend,
+            rdma: self.rdma.clone(),
+            cnt: self.cnt.clone(),
+            phantom: self.phantom,
         };
+        // println!("clone: {:?}",lmr);
         // println!("nlmr: addr: {:?} size: {:?} backend {:?}, lmr: addr: {:?} size: {:?} backend {:?}",reg.addr,reg.size,reg.backend,lmr.addr,lmr.size,lmr.backend);
         lmr
     }
 }
 
-impl<
-T:    serde::ser::Serialize
-    + serde::de::DeserializeOwned
-    + std::clone::Clone
-    + Send
-    + Sync
-    + 'static,
-> Drop for LamellarMemoryRegion<T> {
+//#[prof]
+impl<T: std::clone::Clone + Send + Sync + 'static> Drop for LamellarMemoryRegion<T> {
     fn drop(&mut self) {
-        let cnt = self.cnt.fetch_sub(1,Ordering::SeqCst);
-        if cnt == 1{
+        let cnt = self.cnt.fetch_sub(1, Ordering::SeqCst);
+        // println!("drop: {:?} {:?}",self,cnt);
+
+        if cnt == 1 {
             ACTIVE.remove(self.backend);
             // println!("trying to dropping mem region {:?}",self);
-            self.rdma.free(self.addr-self.rdma.base_addr());
-            // println!("dropping mem region {:?}",self);
+            self.rdma.free(self.addr); // - self.rdma.base_addr());
+                                       //    println!("dropping mem region {:?}",self);
         }
     }
 }
 
-impl<
-        T:  serde::ser::Serialize
-            + serde::de::DeserializeOwned
-            + std::clone::Clone
-            + Send
-            + Sync
-            + 'static,
-    > std::fmt::Debug for LamellarMemoryRegion<T>
-{
+//#[prof]
+impl<T: std::clone::Clone + Send + Sync + 'static> std::fmt::Debug for LamellarMemoryRegion<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         // let slice = unsafe { std::slice::from_raw_parts(self.addr as *const T, self.size) };
         // write!(f, "{:?}", slice)
-        write!(f,"addr {:?} size {:?} backend {:?}",self.addr,self.size,self.backend)
+        write!(
+            f,
+            "addr {:#x} size {:?} backend {:?} cnt: {:?}",
+            self.addr,
+            self.size,
+            self.backend,
+            self.cnt.load(Ordering::SeqCst)
+        )
     }
 }
 
-impl<
-        T:  serde::ser::Serialize
+//#[prof]
+impl<T: std::clone::Clone + Send + Sync + 'static> std::fmt::Debug
+    for __NetworkLamellarMemoryRegion<T>
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // let slice = unsafe { std::slice::from_raw_parts(self.addr as *const T, self.size) };
+        // write!(f, "{:?}", slice)
+        write!(
+            f,
+            "pe {:?} size {:?} backend {:?} ",
+            self.pe, self.size, self.backend,
+        )
+    }
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
+pub struct LamellarLocalMemoryRegion<T: std::clone::Clone + Send + Sync + 'static> {
+    lmr: LamellarMemoryRegion<T>,
+    pe: usize,
+}
+
+impl<T: std::clone::Clone + Send + Sync + 'static> LamellarLocalMemoryRegion<T> {
+    pub(crate) fn new(
+        size: usize,
+        lamellae: Arc<dyn Lamellae + Sync + Send>,
+    ) -> LamellarLocalMemoryRegion<T> {
+        let lmr = LamellarMemoryRegion::new(size, lamellae);
+        let pe = lmr.pe;
+        LamellarLocalMemoryRegion { lmr: lmr, pe: pe }
+    }
+
+    pub unsafe fn put(&self, index: usize, data: &impl RegisteredMemoryRegion) {
+        self.lmr.put(self.pe, index, data)
+    }
+
+    pub unsafe fn get(&self, index: usize, data: &impl RegisteredMemoryRegion) {
+        self.lmr.get(self.pe, index, data)
+    }
+
+    pub unsafe fn as_base<
+        B: serde::ser::Serialize
             + serde::de::DeserializeOwned
             + std::clone::Clone
             + Send
             + Sync
             + 'static,
-    > std::fmt::Debug for __NetworkLamellarMemoryRegion<T>
-{
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        // let slice = unsafe { std::slice::from_raw_parts(self.addr as *const T, self.size) };
-        // write!(f, "{:?}", slice)
-        write!(f,"addr {:?} size {:?} backend {:?}",self.addr,self.size,self.backend)
+    >(
+        self,
+    ) -> LamellarLocalMemoryRegion<B> {
+        LamellarLocalMemoryRegion {
+            lmr: self.lmr.as_base::<B>(),
+            pe: self.pe,
+        }
     }
 }
+
+impl<T: std::clone::Clone + Send + Sync + 'static> RegisteredMemoryRegion
+    for LamellarLocalMemoryRegion<T>
+{
+    type Output = T;
+    fn len(&self) -> usize {
+        if self.pe == self.lmr.pe {
+            self.lmr.len()
+        } else {
+            0
+        }
+    }
+    fn addr(&self) -> MemResult<usize> {
+        if self.pe == self.lmr.pe {
+            self.lmr.addr()
+        } else {
+            Err(MemNotLocalError {})
+        }
+    }
+
+    fn as_slice(&self) -> MemResult<&[T]> {
+        if self.pe == self.lmr.pe {
+            self.lmr.as_slice()
+        } else {
+            Err(MemNotLocalError {})
+        }
+    }
+
+    unsafe fn as_mut_slice(&self) -> MemResult<&mut [T]> {
+        if self.pe == self.lmr.pe {
+            self.lmr.as_mut_slice()
+        } else {
+            Err(MemNotLocalError {})
+        }
+    }
+    fn as_ptr(&self) -> MemResult<*const T> {
+        if self.pe == self.lmr.pe {
+            self.lmr.as_ptr()
+        } else {
+            Err(MemNotLocalError {})
+        }
+    }
+    fn as_mut_ptr(&self) -> MemResult<*mut T> {
+        if self.pe == self.lmr.pe {
+            self.lmr.as_mut_ptr()
+        } else {
+            Err(MemNotLocalError {})
+        }
+    }
+
+    fn sub_region<R: RangeBounds<usize>>(&self, range: R) -> LamellarLocalMemoryRegion<T> {
+        let lmr = self.lmr.sub_region(range);
+        LamellarLocalMemoryRegion {
+            lmr: lmr,
+            pe: self.pe,
+        }
+    }
+}
+
+impl<T: std::clone::Clone + Send + Sync + 'static> MemoryRegion for LamellarLocalMemoryRegion<T> {
+    fn id(&self) -> usize {
+        self.lmr.addr //probably should be key
+    }
+}
+
+// impl<
+//         T: std::clone::Clone
+//             + Send
+//             + Sync
+//             + 'static,
+//     > std::fmt::Debug for LamellarLocalMemoryRegion<T>
+// {
+//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+//         // let slice = unsafe { std::slice::from_raw_parts(self.addr as *const T, self.size) };
+//         // write!(f, "{:?}", slice)
+//         write!(
+//             f,
+//             "local mem region:  {:?} ",se;f,
+//             self.addr,
+//             self.size,
+//             self.backend,
+//             self.cnt.load(Ordering::SeqCst)
+//         )
+//     }
+// }

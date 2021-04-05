@@ -1,11 +1,14 @@
+use crate::lamellae::rofi::command_queues::RofiCommandQueue;
 use crate::lamellae::rofi::rofi_api::*;
 use crate::lamellar_alloc::{BTreeAlloc, LamellarAlloc};
+#[cfg(feature = "enable-prof")]
+use lamellar_prof::*;
 use log::trace;
-use parking_lot::RwLock;
-use std::sync::atomic::AtomicBool;
+use parking_lot::{Mutex, RwLock};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 
-const MEM_SIZE: usize = 10 * 1024 * 1024 * 1024;
+const ROFI_MEM: usize = 20 * 1024 * 1024 * 1024;
 
 pub(crate) struct RofiComm {
     pub(crate) rofi_base_address: Arc<RwLock<usize>>,
@@ -13,52 +16,102 @@ pub(crate) struct RofiComm {
     _init: AtomicBool,
     pub(crate) num_pes: usize,
     pub(crate) my_pe: usize,
+    pub(crate) put_amt: Arc<AtomicUsize>,
+    pub(crate) get_amt: Arc<AtomicUsize>,
+    comm_mutex: Arc<Mutex<()>>,
 }
 
+//#[prof]
 impl RofiComm {
     pub(crate) fn new() -> RofiComm {
         rofi_init().expect("error in rofi init");
         trace!("rofi initialized");
         rofi_barrier();
+        let num_pes = rofi_get_size();
+        let cmd_q_mem = RofiCommandQueue::mem_per_pe() * num_pes;
+        let total_mem = cmd_q_mem + ROFI_MEM;
+        let addr = rofi_alloc(total_mem);
         let mut rofi = RofiComm {
-            rofi_base_address: Arc::new(RwLock::new(rofi_alloc(MEM_SIZE) as usize)),
+            rofi_base_address: Arc::new(RwLock::new(addr as usize)),
             alloc: BTreeAlloc::new("rofi_mem".to_string()),
             _init: AtomicBool::new(true),
-            num_pes: rofi_get_size(),
+            num_pes: num_pes,
             my_pe: rofi_get_id(),
+            put_amt: Arc::new(AtomicUsize::new(0)),
+            get_amt: Arc::new(AtomicUsize::new(0)),
+            comm_mutex: Arc::new(Mutex::new(())),
         };
         trace!(
             "[{:?}] Rofi base addr 0x{:x}",
             rofi.my_pe,
             *rofi.rofi_base_address.read()
         );
-        rofi.alloc.init(0, MEM_SIZE);
+        rofi.alloc.init(0, total_mem);
         rofi
     }
     pub(crate) fn finit(&self) {
         rofi_barrier();
         let _res = rofi_finit();
     }
-    pub(crate) fn mype(&self) -> usize{
+    pub(crate) fn mype(&self) -> usize {
         self.my_pe
     }
     pub(crate) fn barrier(&self) {
+        // println!("[{:?}]-({:?}) barrier entry",self.my_pe,thread::current().id());
         rofi_barrier();
+        // println!("[{:?}]-({:?}) barrier exit",self.my_pe,thread::current().id());
     }
-    pub(crate) fn alloc(&self, size: usize) -> Option<usize> {
+    pub(crate) fn rt_alloc(&self, size: usize) -> Option<usize> {
+        // println!("[{:?}]-({:?}) rt_alloc entry",self.my_pe,thread::current().id());
         if let Some(addr) = self.alloc.try_malloc(size) {
+            // println!("[{:?}]-({:?}) rt_alloc exit",self.my_pe,thread::current().id());
             Some(addr)
         } else {
+            println!("out of memory? {:?} {:?}", size, self.alloc.space_avail());
+            // println!("[{:?}]-({:?}) rt_alloc exit",self.my_pe,thread::current().id());
             None
         }
     }
     #[allow(dead_code)]
-    pub(crate) fn free(&self, addr: usize) {
-        self.alloc.free(addr)
+    pub(crate) fn rt_free(&self, addr: usize) {
+        // println!("[{:?}]-({:?}) rt_free entry",self.my_pe,thread::current().id());
+        self.alloc.free(addr);
+        // println!("[{:?}]-({:?}) rt_free exit",self.my_pe,thread::current().id());
+        // println!("free addr {:?} free space {:?} (before: {:?}   {:?})", addr, self.alloc.space_avail(), b, self.alloc.space_avail()-b);
     }
+    pub(crate) fn alloc(&self, size: usize) -> Option<usize> {
+        // println!("[{:?}]-({:?}) alloc entry",self.my_pe,thread::current().id());
+        // let (addr,key) =rofi_alloc(size);//
+        // Some((addr as usize,key))
+        if let Some(addr) = self.rt_alloc(size) {
+            // println!("[{:?}]-({:?}) alloc exit",self.my_pe,thread::current().id());
+            Some(addr + self.base_addr())
+        } else {
+            // println!("[{:?}]-({:?}) alloc exit",self.my_pe,thread::current().id());
+            None
+        }
+        // Some(rofi_alloc(size) as usize)
+    }
+    #[allow(dead_code)]
+    pub(crate) fn free(&self, addr: usize) {
+        // println!("[{:?}]-({:?}) free entry",self.my_pe,thread::current().id());
+        self.rt_free(addr - self.base_addr());
+        // println!("[{:?}]-({:?}) free exit",self.my_pe,thread::current().id());
+        // rofi_release(addr);
+        // println!("free addr {:?} free space {:?} (before: {:?}   {:?})", addr, self.alloc.space_avail(), b, self.alloc.space_avail()-b);
+    }
+
     #[allow(dead_code)]
     pub(crate) fn base_addr(&self) -> usize {
         *self.rofi_base_address.read()
+    }
+
+    pub(crate) fn local_addr(&self, remote_pe: usize, remote_addr: usize) -> usize {
+        rofi_local_addr(remote_pe, remote_addr)
+    }
+
+    pub(crate) fn remote_addr(&self, pe: usize, local_addr: usize) -> usize {
+        rofi_remote_addr(pe, local_addr)
     }
 
     //dst_addr relative to rofi_base_addr, need to calculate the real address
@@ -88,10 +141,14 @@ impl RofiComm {
         dst_addr: usize,
     ) {
         if pe != self.my_pe {
+            let _lock = self.comm_mutex.lock();
+            // println!("[{:?}]-({:?}) put [{:?}] entry",self.my_pe,thread::current().id(),pe);
+
             unsafe { rofi_put(src_addr, dst_addr, pe).expect("error in rofi put") };
+            self.put_amt.fetch_add(src_addr.len(), Ordering::SeqCst);
         } else {
             unsafe {
-                // println!("[{:?}] memcopy {:?}",pe,src_addr.as_ptr());
+                // println!("[{:?}]-({:?}) memcopy {:?}",pe,src_addr.as_ptr());
                 std::ptr::copy_nonoverlapping(
                     src_addr.as_ptr(),
                     dst_addr as *mut T,
@@ -99,6 +156,7 @@ impl RofiComm {
                 );
             }
         }
+        // println!("[{:?}]-({:?}) put [{:?}] exit",self.my_pe,thread::current().id(),pe);
     }
 
     pub(crate) fn iput<
@@ -114,11 +172,14 @@ impl RofiComm {
         src_addr: &[T],
         dst_addr: usize,
     ) {
+        // println!("[{:?}]-({:?}) iput entry",self.my_pe,thread::current().id());
         if pe != self.my_pe {
+            let _lock = self.comm_mutex.lock();
             rofi_iput(src_addr, dst_addr, pe).expect("error in rofi put");
+            self.put_amt.fetch_add(src_addr.len(), Ordering::SeqCst);
         } else {
             unsafe {
-                // println!("[{:?}] memcopy {:?}",pe,src_addr.as_ptr());
+                // println!("[{:?}]-({:?}) memcopy {:?}",pe,src_addr.as_ptr());
                 std::ptr::copy_nonoverlapping(
                     src_addr.as_ptr(),
                     dst_addr as *mut T,
@@ -126,6 +187,7 @@ impl RofiComm {
                 );
             }
         }
+        // println!("[{:?}]-({:?}) iput exit",self.my_pe,thread::current().id());
     }
 
     pub(crate) fn put_all<
@@ -140,15 +202,21 @@ impl RofiComm {
         src_addr: &[T],
         dst_addr: usize,
     ) {
+        // println!("[{:?}]-({:?}) put all entry",self.my_pe,thread::current().id());
         for pe in 0..self.my_pe {
+            let _lock = self.comm_mutex.lock();
             unsafe { rofi_put(src_addr, dst_addr, pe).expect("error in rofi put") };
         }
         for pe in self.my_pe + 1..self.num_pes {
+            let _lock = self.comm_mutex.lock();
             unsafe { rofi_put(src_addr, dst_addr, pe).expect("error in rofi put") };
         }
         unsafe {
             std::ptr::copy_nonoverlapping(src_addr.as_ptr(), dst_addr as *mut T, src_addr.len());
         }
+        self.put_amt
+            .fetch_add(src_addr.len() * (self.num_pes - 1), Ordering::SeqCst);
+        // println!("[{:?}]-({:?}) put all exit",self.my_pe,thread::current().id());
     }
 
     pub(crate) fn get<
@@ -159,21 +227,26 @@ impl RofiComm {
         src_addr: usize,
         dst_addr: &mut [T],
     ) {
+        // println!("[{:?}]-({:?}) get entry",self.my_pe,thread::current().id());
         if pe != self.my_pe {
             unsafe {
+                let _lock = self.comm_mutex.lock();
                 let ret = rofi_get(src_addr, dst_addr, pe); //.expect("error in rofi get")
                 if let Err(_) = ret {
                     println!(
-                        "Error in get from {:?} src {:x} base_addr{:x} size{:x}",
+                        "Error in get from {:?} src {:x} base_addr {:x} dst_addr {:p} size {:?}",
                         pe,
                         src_addr,
                         *self.rofi_base_address.read(),
+                        dst_addr,
                         dst_addr.len()
                     );
                     panic!();
                 }
+                self.get_amt.fetch_add(dst_addr.len(), Ordering::SeqCst);
             };
         } else {
+            // println!("[{:?}]-{:?} {:?} {:?}",self.my_pe,src_addr as *const T,dst_addr.as_mut_ptr(),dst_addr.len());
             unsafe {
                 std::ptr::copy_nonoverlapping(
                     src_addr as *const T,
@@ -182,6 +255,7 @@ impl RofiComm {
                 );
             }
         }
+        // println!("[{:?}]-({:?}) get exit",self.my_pe,thread::current().id());
     }
     #[allow(dead_code)]
     fn iget<
@@ -192,20 +266,24 @@ impl RofiComm {
         src_addr: usize,
         dst_addr: &mut [T],
     ) {
+        // println!("[{:?}]-({:?}) iget entry",self.my_pe,thread::current().id());
         if pe != self.my_pe {
-            // unsafe {
-            let ret = rofi_iget(src_addr, dst_addr, pe); //.expect("error in rofi get")
-            if let Err(_) = ret {
-                println!(
-                    "Error in get from {:?} src {:x} base_addr{:x} size{:x}",
-                    pe,
-                    src_addr,
-                    *self.rofi_base_address.read(),
-                    dst_addr.len()
-                );
-                panic!();
+            unsafe {
+                let _lock = self.comm_mutex.lock();
+                let ret = rofi_get(src_addr, dst_addr, pe); //.expect("error in rofi get")
+                if let Err(_) = ret {
+                    println!(
+                        "Error in iget from {:?} src {:x} base_addr {:x} dst_addr {:p} size {:x}",
+                        pe,
+                        src_addr,
+                        *self.rofi_base_address.read(),
+                        dst_addr,
+                        dst_addr.len()
+                    );
+                    panic!();
+                }
+                self.get_amt.fetch_add(dst_addr.len(), Ordering::SeqCst);
             }
-        // };
         } else {
             unsafe {
                 std::ptr::copy_nonoverlapping(
@@ -215,6 +293,7 @@ impl RofiComm {
                 );
             }
         }
+        // println!("[{:?}]-({:?}) iget exit",self.my_pe,thread::current().id());
     }
     //src address is relative to rofi base addr
     pub(crate) fn iget_relative<
@@ -227,21 +306,26 @@ impl RofiComm {
     ) {
         if pe != self.my_pe {
             // unsafe {
+            let _lock = self.comm_mutex.lock();
+            // println!("[{:?}]-({:?}) iget_relative [{:?}] entry",self.my_pe,thread::current().id(),pe);
+
             let ret = rofi_iget(*self.rofi_base_address.read() + src_addr, dst_addr, pe); //.expect("error in rofi get")
             if let Err(_) = ret {
                 println!(
-                    "[{:?}] Error in get from {:?} src_addr {:x} dst_addr {:?} base_addr {:x} size {:x}",
+                    "[{:?}] Error in iget_relative from {:?} src_addr {:?} ({:x}) dst_addr {:?} base_addr {:x} size {:?}",
                     self.my_pe,
                     pe,
                     src_addr,
+                    src_addr+*self.rofi_base_address.read() ,
                     dst_addr.as_ptr(),
                     *self.rofi_base_address.read(),
                     dst_addr.len()
                 );
                 panic!();
             }
-        // }
-        // };
+            // self.get_amt.fetch_add(dst_addr.len(),Ordering::SeqCst);
+            // }
+            // };
         } else {
             unsafe {
                 std::ptr::copy_nonoverlapping(
@@ -251,9 +335,11 @@ impl RofiComm {
                 );
             }
         }
+        // println!("[{:?}]-({:?}) iget relative [{:?}] exit",self.my_pe,thread::current().id(),pe);
     }
 }
 
+//#[prof]
 impl Drop for RofiComm {
     fn drop(&mut self) {
         rofi_barrier();

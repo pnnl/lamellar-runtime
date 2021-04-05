@@ -20,6 +20,7 @@ Currently two such Lamellae exist, one used for single node development purposed
 
 NEWS
 ----
+* April 2021: Alpha release -- v0.3
 * September 2020: Add support for "local" lamellae, prep for crates.io release -- v0.2.1
 * July 2020: Second alpha release -- v0.2
 * Feb 2020: First alpha release -- v0.1
@@ -74,6 +75,8 @@ fn main(){
 }
 ```
 
+A number of more complete examples can be found in the examples folder. Sub directories loosely group examples by the feature they are illustrating
+
 
 
 BUILD REQUIREMENTS
@@ -81,7 +84,6 @@ BUILD REQUIREMENTS
 
 
 * Crates listed in Cargo.toml
-    * Cargo.lock contains tested and working versions of dependencies
 
 
 Optional:
@@ -107,8 +109,9 @@ At the time of release, Lamellar has been tested with the following external pac
 |--------:|----------:|----------:|----------:|--------------:|--------------:|----------:|
 | 7.1.0   | 8.0.1     | 0.1.0     | 1.9.0     | 1.13          | mvapich2/2.3a | 17.02.7   |
 
-The OFI_DIR environment variable must be specified with the location of the OFI installation.
+The OFI_DIR environment variable must be specified with the location of the OFI (libfabrics) installation.
 The ROFI_DIR environment variable must be specified with the location of the ROFI installation.
+(See https://github.com/pnnl/rofi for instructions installing ROFI (and libfabrics))
 
 BUILDING PACKAGE
 ----------------
@@ -121,18 +124,18 @@ In the following, assume a root directory ${ROOT}
 
 1. Select Lamellae to use
 
-    In Cargo.toml add "enable-rofi" feature in wanting to use rofi, otherwise local lamellae will be used
-    it may also be necessary to adjust the symmetric heap size (const MEM_SIZE) in rofi_lamellae.rs on the available memory in your system
+    In Cargo.toml add "enable-rofi" feature in wanting to use rofi (or pass --features enable-rofi to your cargo build command ), otherwise local lamellae will be used
+    it may also be necessary to adjust the heap size (const ROFI_MEM) in rofi_comm.rs on the available memory in your system
 
 2. Compile Lamellar lib and test executable (feature flags can be passed to command line instead of specifying in cargo.toml)
 
-`cargo build (--release) (--features enable-rofi) (--features nightly)`
+`cargo build (--release) (--features enable-rofi) (--features nightly) (--features experimental)`
 
     executables located at ./target/debug(release)/test
 
 3. Compile Examples
 
-`cargo build --examples (--release) (--features enable-rofi) (--features nightly)`
+`cargo build --examples (--release) (--features enable-rofi) (--features nightly) (--features experimental)`
 
     executables located at ./target/debug(release)/examples/
 
@@ -141,36 +144,38 @@ In the following, assume a root directory ${ROOT}
 
 TESTING
 -------
-The examples are designed to be run with on at least two compute nodes, but they will work on a single node using the "local" lamellae. Here is a simple proceedure to run the tests that assume a compute cluster and [SLURM](https://slurm.schedmd.com) job manager. Please, refer to the job manager documentaiton for details on how to run command on different clusters. Lamellar grabs job information (size, distribution, etc.) from the jbo manager and runtime launcher (e.g., MPI, please refer to the BUILING REQUIREMENTS section for a list of tested software versions).
+The examples are designed to be run  on at least two compute nodes, but most will work on a single node using the "local" lamellae. Here is a simple proceedure to run the tests that assume a compute cluster and [SLURM](https://slurm.schedmd.com) job manager. Please, refer to the job manager documentation for details on how to run command on different clusters. Lamellar grabs job information (size, distribution, etc.) from the job manager and runtime launcher (e.g., MPI, please refer to the BUILDING REQUIREMENTS section for a list of tested software versions).
 
 1. Allocates two compute nodes on the cluster:
 
 `salloc -N 2 -p partition_name`
 
-2. Run Lamellar test using `mpiexec` launcher.
-
-`mpiexec -n 2 ./target/release/test` 
-runs a simple acitve message based bandwidth test
-
-3. Run lamellar examples
+2. Run lamellar examples
 
 `mpiexec -n 2 ./target/release/examples/{example}` 
-where `<test>` in {`all_to_all, array_put, array_static, array, get_bw, put_bw, hello, return`}. 
+where `<test>` is the same name as the Rust filenames in each subdirectory in the examples folder (e.g. "am_no_return")
 
 or alternatively:
 
 `srun -N 2 -p partition_name -mpi=pmi2 ./target/release/examples/{example}` 
-where `<test>` in {`all_to_all, array_put, array_static, array, get_bw, put_bw, hello, return, dft_proxy`}
+where `<test>` is the same name as the Rust filenames in each subdirectory in the examples folder  (e.g. "am_no_return")
 
-Finally, the number of worker threads used within lamellar is controlled by setting and environment variable: LAMELLAR_THREADS
+Finally, the number of worker threads used within lamellar is controlled by setting an environment variable: LAMELLAR_THREADS
 
 e.g. `export LAMELLAR_THREADS=10`
 
-Note, if running on a single node, simple execute the binaries directly, no need to use mpiexec or srun.
+Note, if running on a single node, simply execute the binaries directly, no need to use mpiexec or srun.
 
 
 HISTORY
 -------
+- version 0.3.0
+  - recursive active messages
+  - subteam support
+  - support for custom team architectures (Examples/team_examples/custom_team_arch.rs)
+  - initial support of LamellarArray (Am based collectives on distributed arrays)
+  - integration with Rofi 0.2
+  - revamped examples
 - version 0.2.2:
   - Provide examples in readme
 - version 0.2.1:
@@ -208,7 +213,7 @@ Mark Raugas     - mark.raugas@pnnl.gov
 
 ## License
 
-This project is licensed under the BSD License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the BSD License - see the [LICENSE.md](LICENSE.md) file for details.
 
 ## Acknowledgments
 

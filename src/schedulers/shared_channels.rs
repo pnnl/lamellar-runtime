@@ -69,7 +69,7 @@ impl SharedChannels {
                 recv(work_rx) -> msg => {
                     let m = msg.expect("error in exec_work recv");
                     // let t = std::time::Instant::now();
-                    let (msg,ser_data): (Msg,Vec<u8>) = bincode::deserialize(&m).unwrap();
+                    let (msg,ser_data): (Msg,Vec<u8>) = crate::deserialize(&m).unwrap();
                     // let mut msec = t.elapsed().as_secs()*1000;
                     // msec += t.elapsed().subsec_millis() as u64;
                     // LAMELLAR_RT.counters.time1.fetch_add(msec,Ordering::SeqCst);

@@ -97,7 +97,7 @@ impl WorkStealingThread {
                 if let Some((msg, lamellae)) = omsg {
                     let it = Instant::now();
                     debug!("msg len: {:?}", msg.len());
-                    let (msg, ser_data): (Msg, Vec<u8>) = bincode::deserialize(&msg).unwrap();
+                    let (msg, ser_data): (Msg, Vec<u8>) = crate::deserialize(&msg).unwrap();
                     debug!("ser_Data: {:?}", ser_data.len());
                     ame.exec_msg(msg, ser_data, lamellae);
                     (*worker.timers.get("exec_msg_inner").unwrap())

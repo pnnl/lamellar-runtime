@@ -1,4 +1,6 @@
+use core::marker::PhantomData;
 use indexmap::IndexSet;
+use lamellar_prof::*;
 use log::trace;
 use parking_lot::{Condvar, Mutex};
 use std::collections::BTreeMap;
@@ -7,10 +9,11 @@ use std::sync::Arc;
 
 pub(crate) trait LamellarAlloc {
     fn new(id: String) -> Self;
-    fn init(&mut self, start_addr: usize, size: usize);
+    fn init(&mut self, start_addr: usize, size: usize); //size in bytes
     fn malloc(&self, size: usize) -> usize;
     fn try_malloc(&self, size: usize) -> Option<usize>;
     fn free(&self, addr: usize);
+    fn space_avail(&self) -> usize;
 }
 
 #[derive(Debug)]
@@ -26,8 +29,10 @@ pub(crate) struct LinearAlloc {
     max_size: usize,
     last_idx: Arc<AtomicUsize>,
     id: String,
+    free_space: Arc<AtomicUsize>,
 }
 
+#[prof]
 impl LamellarAlloc for LinearAlloc {
     fn new(id: String) -> LinearAlloc {
         trace!("new linear alloc: {:?}", id);
@@ -37,6 +42,7 @@ impl LamellarAlloc for LinearAlloc {
             max_size: 0,
             last_idx: Arc::new(AtomicUsize::new(0)),
             id: id,
+            free_space: Arc::new(AtomicUsize::new(0)),
         }
     }
 
@@ -44,6 +50,7 @@ impl LamellarAlloc for LinearAlloc {
         trace!("init: {:?} {:x} {:?}", self.id, start_addr, size);
         self.start_addr = start_addr;
         self.max_size = size;
+        self.free_space.store(size, Ordering::SeqCst);
     }
 
     fn malloc(&self, size: usize) -> usize {
@@ -75,9 +82,12 @@ impl LamellarAlloc for LinearAlloc {
                     size: size,
                 };
                 entries.insert(idx, n_vma);
+                self.free_space.fetch_sub(size, Ordering::SeqCst);
                 return Some(prev_end);
             } else {
-                cvar.wait(&mut entries);
+                prof_start!(waiting);
+                cvar.wait_for(&mut entries, std::time::Duration::from_millis(1));
+                prof_end!(waiting);
                 return None;
             }
         } else {
@@ -87,9 +97,12 @@ impl LamellarAlloc for LinearAlloc {
                     size: size,
                 };
                 entries.push(n_vma);
+                self.free_space.fetch_sub(size, Ordering::SeqCst);
                 return Some(self.start_addr);
             } else {
-                cvar.wait(&mut entries);
+                prof_start!(waiting);
+                cvar.wait_for(&mut entries, std::time::Duration::from_millis(1));
+                prof_end!(waiting);
                 return None;
             }
         }
@@ -100,6 +113,7 @@ impl LamellarAlloc for LinearAlloc {
         let mut entries = lock.lock();
         for i in 0..entries.len() {
             if addr as usize == entries[i].addr as usize {
+                self.free_space.fetch_add(entries[i].size, Ordering::SeqCst);
                 entries.remove(i);
                 let last_idx = self.last_idx.load(Ordering::SeqCst);
                 if last_idx >= entries.len() && last_idx != 0 {
@@ -111,6 +125,9 @@ impl LamellarAlloc for LinearAlloc {
             }
         }
     }
+    fn space_avail(&self) -> usize {
+        self.free_space.load(Ordering::SeqCst)
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -118,6 +135,7 @@ struct FreeEntries {
     sizes: BTreeMap<usize, IndexSet<usize>>, //<size,<Vec<addr>>
     addrs: BTreeMap<usize, usize>,           //<addr,size>
 }
+//#[prof]
 impl FreeEntries {
     fn new() -> FreeEntries {
         FreeEntries {
@@ -134,8 +152,10 @@ pub(crate) struct BTreeAlloc {
     start_addr: usize,
     max_size: usize,
     id: String,
+    free_space: Arc<AtomicUsize>,
 }
 
+#[prof]
 impl LamellarAlloc for BTreeAlloc {
     fn new(id: String) -> BTreeAlloc {
         trace!("new BTreeAlloc: {:?}", id);
@@ -145,10 +165,11 @@ impl LamellarAlloc for BTreeAlloc {
             start_addr: 0,
             max_size: 0,
             id: id,
+            free_space: Arc::new(AtomicUsize::new(0)),
         }
     }
     fn init(&mut self, start_addr: usize, size: usize) {
-        trace!("init: {:?} {:x} {:?}", self.id, start_addr, size);
+        // println!("init: {:?} {:x} {:?}", self.id, start_addr, size);
         self.start_addr = start_addr;
         self.max_size = size;
         let &(ref lock, ref _cvar) = &*self.free_entries;
@@ -157,19 +178,27 @@ impl LamellarAlloc for BTreeAlloc {
         temp.insert(start_addr);
         free_entries.sizes.insert(size, temp);
         free_entries.addrs.insert(start_addr, size);
+        self.free_space.store(size, Ordering::SeqCst);
     }
 
     fn malloc(&self, size: usize) -> usize {
         let mut val = self.try_malloc(size);
+        let mut timer = std::time::Instant::now();
         while let None = val {
             val = self.try_malloc(size);
+            if timer.elapsed().as_secs_f64() > 10.0 {
+                println!("probably out of memory");
+                timer = std::time::Instant::now();
+            }
         }
         val.unwrap()
     }
 
     fn try_malloc(&self, size: usize) -> Option<usize> {
+        prof_start!(locking);
         let &(ref lock, ref cvar) = &*self.free_entries;
         let mut free_entries = lock.lock();
+        prof_end!(locking);
         let mut addr: Option<usize> = None;
         let mut remove_size: Option<usize> = None;
         //find smallest memory segment greater than or equal to size
@@ -200,7 +229,9 @@ impl LamellarAlloc for BTreeAlloc {
                 }
             }
         } else {
-            cvar.wait(&mut free_entries);
+            prof_start!(waiting);
+            cvar.wait_for(&mut free_entries, std::time::Duration::from_millis(1));
+            prof_end!(waiting);
         }
         if let Some(rsize) = remove_size {
             free_entries.sizes.remove(&rsize);
@@ -210,6 +241,7 @@ impl LamellarAlloc for BTreeAlloc {
             let &(ref lock, ref _cvar) = &*self.allocated_addrs;
             let mut allocated_addrs = lock.lock();
             allocated_addrs.insert(a, size);
+            self.free_space.fetch_sub(size, Ordering::SeqCst);
         }
         addr
     }
@@ -218,6 +250,7 @@ impl LamellarAlloc for BTreeAlloc {
         let &(ref lock, ref _cvar) = &*self.allocated_addrs;
         let mut allocated_addrs = lock.lock();
         if let Some(size) = allocated_addrs.remove(&addr) {
+            self.free_space.fetch_add(size, Ordering::SeqCst);
             drop(allocated_addrs);
             let mut temp_addr = addr;
             let mut temp_size = size;
@@ -269,24 +302,31 @@ impl LamellarAlloc for BTreeAlloc {
             )
         }
     }
+
+    fn space_avail(&self) -> usize {
+        self.free_space.load(Ordering::SeqCst)
+    }
 }
 
 #[derive(Clone)]
-pub(crate) struct ObjAlloc {
+pub(crate) struct ObjAlloc<T: Copy> {
     free_entries: Arc<(Mutex<Vec<usize>>, Condvar)>,
     start_addr: usize,
     max_size: usize,
     id: String,
+    phantom: PhantomData<T>,
 }
 
-impl LamellarAlloc for ObjAlloc {
-    fn new(id: String) -> ObjAlloc {
+#[prof]
+impl<T: Copy> LamellarAlloc for ObjAlloc<T> {
+    fn new(id: String) -> ObjAlloc<T> {
         trace!("new ObjAlloc: {:?}", id);
         ObjAlloc {
             free_entries: Arc::new((Mutex::new(Vec::new()), Condvar::new())),
             start_addr: 0,
             max_size: 0,
             id: id,
+            phantom: PhantomData,
         }
     }
     fn init(&mut self, start_addr: usize, size: usize) {
@@ -295,9 +335,9 @@ impl LamellarAlloc for ObjAlloc {
         self.max_size = size;
         let &(ref lock, ref _cvar) = &*self.free_entries;
         let mut free_entries = lock.lock();
-        for i in start_addr..(start_addr + size) {
-            free_entries.push(i);
-        }
+        *free_entries = (start_addr..(start_addr + size))
+            .step_by(std::mem::size_of::<T>())
+            .collect();
     }
 
     fn malloc(&self, size: usize) -> usize {
@@ -313,12 +353,16 @@ impl LamellarAlloc for ObjAlloc {
             size, 1,
             "ObjAlloc does not currently support multiobject allocations"
         );
+        prof_start!(locking);
         let &(ref lock, ref cvar) = &*self.free_entries;
         let mut free_entries = lock.lock();
+        prof_end!(locking);
         if let Some(addr) = free_entries.pop() {
             return Some(addr);
         } else {
-            cvar.wait(&mut free_entries);
+            prof_start!(waiting);
+            cvar.wait_for(&mut free_entries, std::time::Duration::from_millis(1));
+            prof_end!(waiting);
             return None;
         }
     }
@@ -329,114 +373,140 @@ impl LamellarAlloc for ObjAlloc {
         free_entries.push(addr);
         cvar.notify_all();
     }
+
+    fn space_avail(&self) -> usize {
+        let &(ref lock, ref _cvar) = &*self.free_entries;
+        let free_entries = lock.lock();
+        free_entries.len()
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rand::seq::SliceRandom;
+    use rand::{rngs::StdRng, Rng, SeedableRng};
 
-    #[test]
-    fn test_linear_malloc() {
-        let mut alloc = LinearAlloc::new("test_linear_malloc".to_string());
-        alloc.init(0, 10);
+    fn test_malloc(alloc: &mut impl LamellarAlloc) {
+        alloc.init(0, 100);
+        let mut rng = StdRng::seed_from_u64(0 as u64);
+        let mut shuffled: Vec<usize> = (1..11).collect();
+        shuffled.shuffle(&mut rng);
 
-        // for i in 0..10{
-        //     assert_eq!(alloc.malloc_fast(1),Some(i));
-        // }
+        let mut cnt = 0;
+        for i in shuffled {
+            assert_eq!(alloc.malloc(i), cnt);
+            cnt += i;
+        }
+        for i in (cnt..100).step_by(5) {
+            assert_eq!(alloc.malloc(5), i);
+        }
+    }
+
+    fn stress<T: 'static + LamellarAlloc + Clone + Sync + Send>(alloc: T) {
+        let mut threads = Vec::new();
+        let start = std::time::Instant::now();
+        for _i in 0..10 {
+            let mut alloc_clone = alloc.clone();
+            let t = std::thread::spawn(move || {
+                let mut rng = rand::thread_rng();
+                let mut addrs: Vec<usize> = Vec::new();
+                let mut i = 0;
+                while i < 100000 {
+                    if rng.gen_range(0, 2) == 0 || addrs.len() == 0 {
+                        if let Some(addr) = alloc_clone.try_malloc(1) {
+                            addrs.push(addr);
+                            i += 1;
+                        }
+                    } else {
+                        let index = rng.gen_range(0, addrs.len());
+                        let addr = addrs.remove(index);
+                        alloc_clone.free(addr);
+                    }
+                }
+                for addr in addrs {
+                    alloc_clone.free(addr);
+                }
+            });
+            threads.push(t);
+        }
+        for t in threads {
+            t.join().unwrap();
+        }
+        let time = start.elapsed().as_secs_f64();
+
+        println!("time: {:?}", time);
     }
 
     #[test]
-    fn test_malloc_free() {
-        let mut alloc = LinearAlloc::new("test_malloc_free".to_string());
-        alloc.init(0, 10);
-        // assert_eq!(alloc.malloc_fast(5),Some(0));
-        // assert_eq!(alloc.malloc_fast(1),Some(5));
-        // assert_eq!(alloc.malloc_fast(1),Some(6));
-        // alloc.free(0);
-        // assert_eq!(alloc.malloc_fast(3),Some(0));
-        // assert_eq!(alloc.malloc_fast(3),Some(7));
-        // assert_eq!(alloc.malloc_fast(2),Some(3));
+    fn test_linear_malloc() {
+        let mut alloc = LinearAlloc::new("linear_malloc".to_string());
+        test_malloc(&mut alloc);
+    }
+
+    #[test]
+    fn test_linear_stress() {
+        let mut alloc = LinearAlloc::new("linear_stress".to_string());
+        alloc.init(0, 100000);
+        stress(alloc.clone());
+        let &(ref lock, ref _cvar) = &*alloc.entries;
+        let entries = lock.lock();
+        assert_eq!(entries.len(), 0);
     }
 
     #[test]
     fn test_bttreealloc_malloc() {
-        let mut alloc = BTreeAlloc::new("test_bttree_malloc".to_string());
-        alloc.init(0, 1024);
-        let mut sum = 1;
-        for i in 0..10 {
-            let addr = alloc.malloc(sum);
-            println!("{:?} {:?} {:?}", sum, addr, alloc);
-            // assert_eq!(addr.unwrap()+sum,sum);
-            sum += addr;
-        }
-        println!("{:?}", alloc);
-        assert_eq!(0, 1);
+        let mut alloc = BTreeAlloc::new("bttree_malloc".to_string());
+        test_malloc(&mut alloc);
     }
 
     #[test]
-    fn test_bttreealloc_free() {
-        let mut alloc = BTreeAlloc::new("test_malloc_free".to_string());
-        alloc.init(0, 1000);
-        assert_eq!(alloc.malloc(50), 0);
-        println!("{:?}", alloc);
-        assert_eq!(alloc.malloc(10), 50);
-        println!("{:?}", alloc);
-        assert_eq!(alloc.malloc(600), 60);
-        println!("{:?}", alloc);
-        assert_eq!(alloc.malloc(10), 660);
-        println!("{:?}", alloc);
-        alloc.free(0);
-        println!("{:?}", alloc);
-        assert_eq!(alloc.malloc(30), 0);
-        println!("{:?}", alloc);
-        alloc.free(50);
-        println!("{:?}", alloc);
-        assert_eq!(alloc.malloc(10), 30);
-        println!("{:?}", alloc);
-        assert_eq!(alloc.malloc(10), 40);
-        println!("{:?}", alloc);
-        alloc.free(660);
-        println!("{:?}", alloc);
-        alloc.free(30);
-        println!("{:?}", alloc);
-        alloc.malloc(10);
-        println!("{:?}", alloc);
-        alloc.free(30);
-        println!("{:?}", alloc);
-        assert_eq!(alloc.malloc(200), 660);
-        println!("{:?}", alloc);
-        alloc.free(60);
-        println!("{:?}", alloc);
-        alloc.free(660);
-        println!("{:?}", alloc);
-        alloc.free(40);
-        println!("{:?}", alloc);
-        alloc.free(0);
-        println!("{:?}", alloc);
-        assert_eq!(0, 1);
-        // assert_eq!(alloc.malloc_fast(2),Some(3));
+    fn test_bttreealloc_stress() {
+        let mut alloc = BTreeAlloc::new("bttree_stress".to_string());
+        alloc.init(0, 100000);
+        stress(alloc.clone());
+        let &(ref lock, ref _cvar) = &*alloc.free_entries;
+        let free_entries = lock.lock();
+        assert_eq!(free_entries.sizes.len(), 1);
+        assert_eq!(free_entries.addrs.len(), 1);
+        assert_eq!(free_entries.addrs.get(&0), Some(&100000usize));
+        let &(ref lock, ref _cvar) = &*alloc.allocated_addrs;
+        let allocated_addrs = lock.lock();
+        assert_eq!(allocated_addrs.len(), 0);
     }
 
     #[test]
-    fn test_obj_malloc_free() {
-        let mut alloc = ObjAlloc::new("test_obj_malloc_free".to_string());
+    fn test_obj_malloc() {
+        let mut alloc = ObjAlloc::<u8>::new("obj_malloc_u8".to_string());
         alloc.init(0, 10);
         for i in 0..10 {
-            println!("alloc: {:?}", alloc.malloc(1));
-        }
-        for i in 0..10 {
-            alloc.free(i);
+            assert_eq!(alloc.malloc(1), 9 - i); //object allocator returns last address first...
         }
 
-        for i in 0..6 {
-            println!("alloc: {:?}", alloc.malloc(1));
+        let mut alloc = ObjAlloc::<u16>::new("obj_malloc_u16".to_string());
+        alloc.init(0, 10); //only 5 slots
+        for i in 0..5 {
+            assert_eq!(alloc.malloc(1), 8 - (i * std::mem::size_of::<u16>()));
         }
-        alloc.free(8);
-        alloc.free(6);
-        alloc.free(9);
-        for i in 0..6 {
-            println!("alloc: {:?}", alloc.malloc(1));
-        }
-        assert_eq!(0, 1);
+        assert_eq!(alloc.try_malloc(1), None);
+    }
+
+    #[test]
+    fn test_obj_u8_stress() {
+        let mut alloc = ObjAlloc::<u8>::new("obj_malloc_u8".to_string());
+        alloc.init(0, 100000);
+        stress(alloc.clone());
+        let &(ref lock, ref _cvar) = &*alloc.free_entries;
+        let free_entries = lock.lock();
+        assert_eq!(free_entries.len(), 100000 / std::mem::size_of::<u8>());
+    }
+    #[test]
+    fn test_obj_f64_stress() {
+        let mut alloc = ObjAlloc::<f64>::new("obj_malloc_u8".to_string());
+        alloc.init(0, 100000);
+        stress(alloc.clone());
+        let &(ref lock, ref _cvar) = &*alloc.free_entries;
+        let free_entries = lock.lock();
+        assert_eq!(free_entries.len(), 100000 / std::mem::size_of::<f64>());
     }
 }

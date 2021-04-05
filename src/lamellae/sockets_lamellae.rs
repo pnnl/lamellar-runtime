@@ -172,7 +172,7 @@ impl Lamellae for Runtime {
             }
         ));
         let payload = (msg, func);
-        self.send_to_all(bincode::serialize(&payload).unwrap());
+        self.send_to_all(crate::serialize(&payload)).unwrap();
         while self.barrier_cnts.recv.load(Ordering::SeqCst) < self.arch.num_pes-1 //account for myself
             || self.barrier_cnts.send.load(Ordering::SeqCst) < self.arch.num_pes-1
         //account for myself
@@ -195,7 +195,7 @@ impl Lamellae for Runtime {
         ));
         let payload = (msg, func);
 
-        self.send_to_all(bincode::serialize(&payload).unwrap());
+        self.send_to_all(crate::serialize(&payload)).unwrap();
 
         while self.barrier_cnts.recv2.load(Ordering::SeqCst) < self.arch.num_pes - 1 {
             std::thread::yield_now();
@@ -307,7 +307,7 @@ impl Lamellae for Runtime {
                 return_data: false,
             };
             let payload = (msg, func);
-            self.send_to_pe(pe, bincode::serialize(&payload).unwrap());
+            self.send_to_pe(pe, crate::serialize(&payload)).unwrap();
         } else {
             unsafe {
                 std::ptr::copy_nonoverlapping(src as *mut T, dst.as_mut_ptr(), dst.len());
@@ -610,7 +610,7 @@ fn send_thread(
                             }
                         ));
                         let payload = (msg, func);
-                        send_data(bincode::serialize(&payload).unwrap(), &senders[&dst]);
+                        send_data(crate::serialize(&payload), &senders[&dst]).unwrap();
                         agg_buf.insert(dst, vec![]);
                         agg_buf_size[dst] = 0;
                     }

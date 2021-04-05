@@ -1,11 +1,14 @@
-use crate::lamellae::{Backend,LamellaeAM};
-use crate::active_messaging::{ActiveMessageEngine,Cmd,RetType,Msg,REQUESTS,ExecType};
+use crate::active_messaging::{
+    ActiveMessageEngine, Cmd, ExecType, LamellarAny, Msg, RetType, REQUESTS,
+};
+use crate::lamellae::{Backend, LamellaeAM};
 use crate::lamellar_request::*;
+use crate::lamellar_team::LamellarTeamRT;
 use crate::schedulers::ReqData;
 
 use log::trace;
 use std::collections::BTreeMap;
-use std::sync::atomic::{Ordering};
+use std::sync::atomic::Ordering;
 use std::sync::Arc;
 // use std::time::Instant;
 
@@ -18,16 +21,13 @@ pub struct ClosureRet {
     pub(crate) data: std::vec::Vec<u8>,
 }
 
- 
-
-
-    /// a remote closure returning a handle to capture any resulting data (used internally)
+/// a remote closure returning a handle to capture any resulting data (used internally)
 ///
 /// # Arguments
 ///
 /// * `func` - a serializable closure to execute automatically when the parent request returns
 ///
-pub (crate) fn lamellar_closure<
+pub(crate) fn lamellar_closure<
     F: std::clone::Clone
         + Send
         + Sync
@@ -43,14 +43,14 @@ pub (crate) fn lamellar_closure<
         + serde::ser::Serialize
         + serde::de::DeserializeOwned
         + std::clone::Clone,
-    >(
+>(
     func: F,
-    ) -> LamellarClosure {
+) -> LamellarClosure {
     Box::new(move || {
-        let arg: Vec<u8> = bincode::serialize(&func).unwrap();
+        let arg: Vec<u8> = crate::serialize(&func).unwrap();
         let start: serde_closure::FnOnce<(Vec<u8>,), fn((Vec<u8>,), ()) -> _> = FnOnce!([arg]move||{
             let arg: Vec<u8> = arg;
-            let closure: F = bincode::deserialize(&arg).unwrap();
+            let closure: F = crate::deserialize(&arg).unwrap();
             let ret: T=closure();
             let box_any_ret: Box<dyn std::any::Any> = Box::new(ret.clone());
             if let Some(_x) = box_any_ret.downcast_ref::<()>(){
@@ -63,10 +63,10 @@ pub (crate) fn lamellar_closure<
             }
             else{
                 // println!("returning some other type");
-                (RetType::Data,Some(bincode::serialize(&ret).unwrap()))
+                (RetType::Data,Some(crate::serialize(&ret).unwrap()))
             }
         });
-        bincode::serialize(&start).unwrap()
+        crate::serialize(&start).unwrap()
     })
 }
 
@@ -92,9 +92,9 @@ pub(crate) fn lamellar_local<
         + serde::ser::Serialize
         + serde::de::DeserializeOwned
         + std::clone::Clone,
-    >(
+>(
     func: F,
-    ) -> LamellarLocal {
+) -> LamellarLocal {
     Box::new(move || {
         let ret: T = func();
         let box_any_ret: Box<dyn std::any::Any> = Box::new(ret.clone());
@@ -106,11 +106,11 @@ pub(crate) fn lamellar_local<
             (RetType::Closure, Some(x.data.clone()))
         } else {
             // println!("returning some other type");
-            (RetType::Data, Some(bincode::serialize(&ret).unwrap()))
+            (RetType::Data, Some(crate::serialize(&ret).unwrap()))
         }
     })
 }
-pub trait RemoteClosures{
+pub trait RemoteClosures {
     fn exec_closure_all<
         F: FnOnce() -> T
             + Send
@@ -159,24 +159,49 @@ pub trait RemoteClosures{
     ) -> ClosureRet;
 }
 
-pub(crate) fn exec_closure_cmd(ame: &ActiveMessageEngine,cmd: Cmd, msg: Msg, ser_data: Vec<u8>, lamellae: Arc<dyn LamellaeAM>) {
+pub(crate) fn exec_closure_cmd(
+    ame: &ActiveMessageEngine,
+    cmd: Cmd,
+    msg: Msg,
+    ser_data: Vec<u8>,
+    lamellae: Arc<dyn LamellaeAM>,
+    world: Arc<LamellarTeamRT>,
+    team: Arc<LamellarTeamRT>,
+) -> Option<ReqData> {
     match cmd {
         Cmd::Exec => {
             // let t = std::time::Instant::now();
-            let (ret_type, data) = exec_closure(ame,&ser_data);
+            let (ret_type, data) = exec_closure(ame, &ser_data);
             // ame.send_response(Cmd::BatchedUnitResp, None, msg, lamellae);
 
             if msg.return_data {
                 match ret_type {
-                    RetType::Closure => {
-                        ame.send_response(ExecType::Closure(Cmd::ExecReturn), data, msg, lamellae)
+                    RetType::Closure => ame.send_response(
+                        ExecType::Closure(Cmd::ExecReturn),
+                        data,
+                        msg,
+                        lamellae,
+                        team.my_hash,
+                    ),
+                    RetType::Data => ame.send_response(
+                        ExecType::Runtime(Cmd::DataReturn),
+                        data,
+                        msg,
+                        lamellae,
+                        team.my_hash,
+                    ),
+                    RetType::Unit => ame.send_response(
+                        ExecType::Runtime(Cmd::BatchedUnitReturn),
+                        None,
+                        msg,
+                        lamellae,
+                        team.my_hash,
+                    ),
+                    _ => {
+                        println!("unexpected return type");
+                        None
                     }
-                    RetType::Data => ame.send_response(ExecType::Runtime(Cmd::DataReturn), data, msg, lamellae),
-                    RetType::Unit => {
-                        ame.send_response(ExecType::Runtime(Cmd::BatchedUnitReturn), None, msg, lamellae)
-                    }
-                    _ => println!("unexpected return type"),
-                };
+                }
             } else {
                 // match ret_type {
                 //     RetType::Closure => {
@@ -186,76 +211,122 @@ pub(crate) fn exec_closure_cmd(ame: &ActiveMessageEngine,cmd: Cmd, msg: Msg, ser
                 //     RetType::Unit => ame.send_response(Cmd::NoHandleResp, None, msg, lamellae),
                 //     _ => println!("unexpected return type"),
                 // }
+                None
             }
         }
-    
+
         Cmd::ExecReturn => {
-            exec_closure(ame,&ser_data); //remote closures can't capture result of returning closure
+            exec_closure(ame, &ser_data); //remote closures can't capture result of returning closure
             ame.send_data_to_user_handle(msg.req_id, msg.src, None);
+            None
         }
         _ => {
-            println!("unexpected cmd in closure request: {:?}",msg.cmd);
+            println!("unexpected cmd in closure request: {:?}", msg.cmd);
+            None
         }
     }
 }
 
-pub(crate) fn exec_closure(ame: &ActiveMessageEngine, data: &[u8]) -> (RetType, Option<std::vec::Vec<u8>>) {
+pub(crate) fn exec_closure(
+    ame: &ActiveMessageEngine,
+    data: &[u8],
+) -> (RetType, Option<std::vec::Vec<u8>>) {
     trace!("[{:?}] exec_closure", ame.my_pe);
     let closure: serde_closure::FnOnce<
         (std::vec::Vec<u8>,),
         fn((std::vec::Vec<u8>,), ()) -> (RetType, Option<std::vec::Vec<u8>>),
-    > = bincode::deserialize(&data).unwrap();
+    > = crate::deserialize(&data).unwrap();
     closure()
 }
 
-
-pub (crate) fn process_closure_request(ame: &ActiveMessageEngine, req_data: ReqData,lamellaes: &Arc<BTreeMap<Backend, Arc<dyn LamellaeAM>>>,){
+pub(crate) fn process_closure_request(
+    ame: &ActiveMessageEngine,
+    req_data: ReqData,
+    world: Arc<LamellarTeamRT>,
+    team: Arc<LamellarTeamRT>,
+) -> Option<(Vec<u8>, ReqData)> {
+    //,lamellaes: &Arc<BTreeMap<Backend, Arc<dyn LamellaeAM>>>,){
     let func = req_data.func;
-    let my_pe = if let Ok(my_pe) = req_data.team.team_pe_id(&req_data.src){
+    let my_pe = if let Ok(my_pe) = team.arch.team_pe(req_data.src) {
         Some(my_pe)
-    }
-    else{
+    } else {
         None
     };
 
-    match func.downcast::<LamellarLocal>(){
-    
-        Ok(func) =>{
-            exec_local(ame,req_data.msg, func, req_data.ireq);
+    match func.downcast::<LamellarLocal>() {
+        Ok(func) => {
+            exec_local(ame, req_data.msg, func, req_data.ireq);
+            None
         }
         Err(func) => {
-            match func.downcast::<LamellarClosure>(){
-                Ok(func) =>{
+            match func.downcast::<LamellarClosure>() {
+                Ok(func) => {
                     let data = func();
-                    let payload = (req_data.msg, data);
-                    let data = bincode::serialize(&payload).unwrap();
-                    lamellaes[&req_data.backend].send_to_pes(req_data.pe, req_data.team.clone(), data);
+                    let payload = (req_data.msg, data, req_data.team_hash);
+                    let data = crate::serialize(&payload).unwrap();
+                    //lamellaes[&req_data.backend].send_to_pes(
+                    req_data
+                        .lamellae
+                        .send_to_pes(req_data.pe, team.arch.clone(), data);
+                    None
                 }
                 Err(func) => {
-                    match func.downcast::<(LamellarLocal, LamellarClosure)>(){
+                    match func.downcast::<(LamellarLocal, LamellarClosure)>() {
                         Ok(func) => {
                             let data = func.1();
-                            let payload = (req_data.msg.clone(), data);
-                            let data = bincode::serialize(&payload).unwrap();
-                            lamellaes[&req_data.backend].send_to_pes(req_data.pe, req_data.team.clone(), data);
+                            let payload = (req_data.msg.clone(), data, req_data.team_hash);
+                            let data = crate::serialize(&payload).unwrap();
+                            // lamellaes[&req_data.backend].
+
                             if req_data.pe == None && my_pe != None {
-                                exec_local(ame, req_data.msg, func.0, req_data.ireq);
+                                exec_local(ame, req_data.msg, func.0, req_data.ireq.clone());
+                            }
+                            if data.len() > 10_000 {
+                                req_data
+                                    .lamellae
+                                    .send_to_pes(req_data.pe, team.arch.clone(), data);
+                                None
+                            } else {
+                                let id = if let Some(pe) = req_data.pe {
+                                    team.arch.global_pe(pe).expect("invalid pe") as u64
+                                // aggregate to same pe across team boundaries
+                                } else {
+                                    req_data.team_hash //use this to represent we want to send to all pes in the team
+                                };
+
+                                let my_any: LamellarAny = Box::new(0);
+                                let msg = Msg {
+                                    cmd: ExecType::Runtime(Cmd::ExecBatchMsgSend),
+                                    src: req_data.src as u16, //fake that this is from the original sender
+                                    req_id: 0,
+                                    team_id: id as usize, // we use this as the lookup id int the hashmaps
+                                    return_data: false,
+                                };
+                                let new_req = ReqData {
+                                    // team_arch: req_data,
+                                    src: req_data.src,
+                                    pe: req_data.pe,
+                                    msg: msg,
+                                    ireq: req_data.ireq.clone(),
+                                    func: my_any,
+                                    // backend: lamellae.backend(),
+                                    lamellae: req_data.lamellae.clone(),
+                                    team_hash: req_data.team_hash, // fake hash,
+                                };
+                                Some((data, new_req))
                             }
                         }
-                        Err(_) => panic!("error! unknown closure type")
+                        Err(_) => panic!("error! unknown closure type"),
                     }
                 }
             }
         }
     }
 
-
-
-
     // if let Some(pe) = req_data.pe {
     //     if pe == my_pe || req_data.team.num_pes() == 1 {
     //         trace!("[{:?}] local closure request ", my_pe);
-    //     match func.downcast::<LamellarLocal>() {          
+    //     match func.downcast::<LamellarLocal>() {
     //         Ok(func) => {
     //             exec_local(ame,req_data.msg, func, req_data.ireq);
     //         }
@@ -266,11 +337,11 @@ pub (crate) fn process_closure_request(ame: &ActiveMessageEngine, req_data: ReqD
     //             exec_local(ame,req_data.msg, func.0, req_data.ireq);
     //         }
     //     }
-            
+
     //     } else {
     //         // remote request
     //         trace!("[{:?}] remote closure request ", my_pe);
-            
+
     //         let func = func
     //             .downcast::<LamellarClosure>()
     //             .expect("LAMELLAR RUNTIME ERROR: error in remote closure downcast");
@@ -279,10 +350,9 @@ pub (crate) fn process_closure_request(ame: &ActiveMessageEngine, req_data: ReqD
     //         // (timers.get("serde_1").unwrap())
     //         //     .fetch_add(it.elapsed().as_millis() as usize, Ordering::Relaxed);
     //         let payload = (req_data.msg, data);
-                
-            
+
     //         // let it = Instant::now();
-    //         let data = bincode::serialize(&payload).unwrap();
+    //         let data = crate::serialize(&payload).unwrap();
     //         // (timers.get("serde_2").unwrap())
     //         //     .fetch_add(it.elapsed().as_millis() as usize, Ordering::Relaxed);
     //         // (timers.get("network_cnt").unwrap()).fetch_add(1, Ordering::Relaxed);
@@ -295,7 +365,7 @@ pub (crate) fn process_closure_request(ame: &ActiveMessageEngine, req_data: ReqD
     // } else {
     //     //all pe request
     //     trace!("[{:?}] all closure request exec", my_pe);
-        
+
     //     // let it = Instant::now();
     //     let funcs = func
     //         .downcast::<(LamellarLocal, LamellarClosure)>()
@@ -305,7 +375,7 @@ pub (crate) fn process_closure_request(ame: &ActiveMessageEngine, req_data: ReqD
     //     //     .fetch_add(it.elapsed().as_millis() as usize, Ordering::Relaxed);
     //     // let it = Instant::now();
     //     let payload = (req_data.msg.clone(), data);
-    //     let data = bincode::serialize(&payload).unwrap();
+    //     let data = crate::serialize(&payload).unwrap();
     //     // (timers.get("serde_2").unwrap())
     //     //     .fetch_add(it.elapsed().as_millis() as usize, Ordering::Relaxed);
     //     // (timers.get("network_cnt").unwrap()).fetch_add(1, Ordering::Relaxed);
@@ -318,18 +388,14 @@ pub (crate) fn process_closure_request(ame: &ActiveMessageEngine, req_data: ReqD
     //     exec_local(ame,req_data.msg, funcs.0, req_data.ireq);
     //     // (timers.get("local_closure").unwrap())
     //     //     .fetch_add(it.elapsed().as_millis() as usize, Ordering::Relaxed);
-            
-    // }
 
+    // }
 }
 
-
-
-
-fn exec_local(ame: &ActiveMessageEngine , msg: Msg, func: LamellarLocal, ireq: InternalReq) {
+fn exec_local(ame: &ActiveMessageEngine, msg: Msg, func: LamellarLocal, ireq: InternalReq) {
     // let s = Instant::now();
     trace!("[{:?}] exec_local: {:?}", ame.my_pe, msg);
-    if let ExecType::Closure(cmd) = msg.cmd.clone(){
+    if let ExecType::Closure(cmd) = msg.cmd.clone() {
         match cmd {
             Cmd::Exec => {
                 let (ret_type, data) = func();
@@ -338,7 +404,7 @@ fn exec_local(ame: &ActiveMessageEngine , msg: Msg, func: LamellarLocal, ireq: I
                         if msg.return_data {
                             if let Ok(_) = ireq
                                 .data_tx
-                                .send((msg.src as usize, Some(bincode::serialize(&()).unwrap())))
+                                .send((msg.src as usize, Some(crate::serialize(&()).unwrap())))
                             {
                             }
                             let cnt = ireq.cnt.fetch_sub(1, Ordering::SeqCst);
@@ -348,7 +414,7 @@ fn exec_local(ame: &ActiveMessageEngine , msg: Msg, func: LamellarLocal, ireq: I
                         }
                     }
                     RetType::Closure => {
-                        exec_closure(ame,&data.expect("error executing return closure"));
+                        exec_closure(ame, &data.expect("error executing return closure"));
                         ame.send_data_to_user_handle(msg.req_id, msg.src, None);
                     }
                     RetType::Data => {
@@ -371,13 +437,18 @@ fn exec_local(ame: &ActiveMessageEngine , msg: Msg, func: LamellarLocal, ireq: I
                 ireq.team_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
                 ireq.world_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
             }
-            _ => println!("[LAMELLAR WARNING]local  am unknown(or unhandled) command {:?}", msg.cmd),
+            _ => println!(
+                "[LAMELLAR WARNING]local  am unknown(or unhandled) command {:?}",
+                msg.cmd
+            ),
         }
+    } else {
+        println!(
+            "[LAMELLAR WARNING] shouldn't have an exectype of {:?} in remote closure",
+            msg.cmd
+        )
     }
-    else{
-        println!("[LAMELLAR WARNING] shouldn't have an exectype of {:?} in remote closure", msg.cmd)
-    }
-    
+
     // let b = s.elapsed().as_millis() as usize;
     // (*ame.timers.get(&msg.cmd).unwrap()).fetch_add(b, Ordering::Relaxed);
 }

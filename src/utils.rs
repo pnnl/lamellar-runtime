@@ -19,13 +19,13 @@ pub(crate) fn ser_closure<
 >(
     start: F,
 ) -> Vec<u8> {
-    let arg: Vec<u8> = bincode::serialize(&start).unwrap();
+    let arg: Vec<u8> = crate::serialize(&start).unwrap();
     let start: serde_closure::FnOnce<(Vec<u8>,), fn((Vec<u8>,), ()) -> _> = FnOnce!([arg]move||{
         let arg: Vec<u8> = arg;
-        let closure: F = bincode::deserialize(&arg).unwrap();
+        let closure: F = crate::deserialize(&arg).unwrap();
         closure()
     });
-    bincode::serialize(&start).unwrap()
+    crate::serialize(&start).unwrap()
 }
 
 #[cfg(feature = "SocketsBackend")]

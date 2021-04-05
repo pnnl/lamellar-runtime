@@ -1,16 +1,17 @@
-use lamellar::RemoteMemoryRegion;
 use lamellar::ActiveMessaging;
+use lamellar::{RegisteredMemoryRegion, RemoteMemoryRegion};
 use std::time::Instant;
 
-const ARRAY_LEN: usize = 512 * 1024 * 1024;
+const ARRAY_LEN: usize = 1024 * 1024 * 1024;
 
 fn main() {
     let world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();
     let num_pes = world.num_pes();
-    let array = world.alloc_mem_region::<u8>(ARRAY_LEN);
-    let init = vec![num_pes as u8; ARRAY_LEN];
-    unsafe { array.put(my_pe, 0, &init) };
+    let array = world.alloc_shared_mem_region::<u8>(ARRAY_LEN);
+    let data = world.alloc_local_mem_region::<u8>(ARRAY_LEN);
+    // let data_slice = unsafe{ data.as_mut_slice().unwrap() };
+    // unsafe { array.put(my_pe, 0, &data) };
     world.barrier();
     let s = Instant::now();
     world.barrier();
@@ -21,8 +22,13 @@ fn main() {
         println!("==================Bandwidth test===========================");
     }
     let mut bws = vec![];
-    let mut data: std::vec::Vec<u8> = vec![my_pe as u8; ARRAY_LEN as usize];
-    for i in 0..27 {
+    for j in 0..ARRAY_LEN as usize {
+        unsafe {
+            data.as_mut_slice().unwrap()[j] = my_pe as u8;
+            array.as_mut_slice().unwrap()[j] = num_pes as u8;
+        }
+    }
+    for i in 0..30 {
         let num_bytes = 2_u64.pow(i);
         // println!("data ptr {:p}",data.as_ptr());
         let old: f64 = world.MB_sent().iter().sum();
@@ -30,17 +36,23 @@ fn main() {
         let mut sum = 0;
         let mut cnt = 0;
         let mut exp = 20;
-        if num_bytes <= 8 {
-            exp = 18;
+        if num_bytes <= 2048 {
+            exp = 18 + i;
         } else if num_bytes >= 4096 {
-            exp = 29;
+            exp = 30;
         }
         let timer = Instant::now();
         let mut sub_time = 0f64;
         if my_pe == 0 {
             for j in (0..2_u64.pow(exp) as usize).step_by(num_bytes as usize) {
                 let sub_timer = Instant::now();
-                unsafe { array.get(num_pes-1, j, &mut data[j..(j + num_bytes as usize)]) };
+                unsafe {
+                    array.get(
+                        num_pes - 1,
+                        0,
+                        &data.sub_region(j..(j + num_bytes as usize)),
+                    )
+                };
                 sub_time += sub_timer.elapsed().as_secs_f64();
                 sum += num_bytes * 1 as u64;
                 cnt += 1;
@@ -48,9 +60,10 @@ fn main() {
             println!("issue time: {:?}", timer.elapsed());
             world.wait_all();
         }
+        let data_slice = data.as_slice().unwrap();
         if my_pe == 0 {
             for j in (0..2_u64.pow(exp) as usize).step_by(num_bytes as usize) {
-                while data[(j + num_bytes as usize) - 1] == my_pe as u8 {
+                while data_slice[(j + num_bytes as usize) - 1] == my_pe as u8 {
                     std::thread::yield_now()
                 }
             }
@@ -60,9 +73,9 @@ fn main() {
         let cur: f64 = world.MB_sent().iter().sum();
         let mbs_c = world.MB_sent();
         if my_pe == 0 {
-            for j in 0..ARRAY_LEN as usize {
-                if data[j] == my_pe as u8 {
-                    println!("Error: {:?} {:?}", j, data[j]);
+            for j in 0..2_u64.pow(exp) as usize {
+                if data_slice[j] == my_pe as u8 {
+                    println!("Error: {:?} {:?}", j, data_slice[j]);
                     break;
                 }
             }
@@ -82,12 +95,15 @@ fn main() {
         );
         }
         bws.push((sum as f64 / 1048576.0) / cur_t);
-        for j in 0..ARRAY_LEN as usize {
-            data[j] = my_pe as u8;
+        unsafe {
+            for j in data.as_mut_slice().unwrap().iter_mut() {
+                *j = my_pe as u8;
+            }
         }
         world.barrier();
     }
-    world.free_memory_region(array);
+    world.free_shared_memory_region(array);
+    world.free_local_memory_region(data);
     if my_pe == 0 {
         println!(
             "bandwidths: {}",
@@ -96,5 +112,4 @@ fn main() {
         );
     }
     world.barrier();
-    
 }

@@ -1,17 +1,22 @@
-use lamellar::RemoteMemoryRegion;
 use lamellar::ActiveMessaging;
+use lamellar::{RegisteredMemoryRegion, RemoteMemoryRegion};
 use std::time::Instant;
 
-const ARRAY_LEN: usize = 512 * 1024 * 1024;
+const ARRAY_LEN: usize = 1024 * 1024 * 1024;
 
 fn main() {
     let world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();
     let num_pes = world.num_pes();
-    let array = world.alloc_mem_region::<u8>(ARRAY_LEN);
-    let init = vec![my_pe as u8; ARRAY_LEN];
+    let array = world.alloc_shared_mem_region::<u8>(ARRAY_LEN);
+    let data = world.alloc_local_mem_region::<u8>(ARRAY_LEN);
+    unsafe {
+        for i in data.as_mut_slice().unwrap() {
+            *i = my_pe as u8;
+        }
+    }
 
-    unsafe { array.put(my_pe, 0, &init) }; //copy local array to memory region
+    unsafe { array.put(my_pe, 0, &data) }; //copy local array to memory region
     world.barrier();
     let s = Instant::now();
     world.barrier();
@@ -22,7 +27,6 @@ fn main() {
         println!("==================Bandwidth test===========================");
     }
     let mut bws = vec![];
-    let data: std::vec::Vec<u8> = vec![0; ARRAY_LEN as usize];
     for i in 0..27 {
         let num_bytes = 2_u64.pow(i);
         let old: f64 = world.MB_sent().iter().sum();
@@ -32,15 +36,16 @@ fn main() {
         let timer = Instant::now();
         let mut sub_time = 0f64;
         let mut exp = 20;
-        if num_bytes <= 8 {
-            exp = 18;
+        if num_bytes <= 2048 {
+            exp = 18 + i;
         } else if num_bytes >= 4096 {
-            exp = 29;
+            exp = 30;
         }
         if my_pe == 0 {
             for j in (0..2_u64.pow(exp) as usize).step_by(num_bytes as usize) {
                 let sub_timer = Instant::now();
-                unsafe { array.put(num_pes-1, j, &data[..num_bytes as usize]) };
+                unsafe { array.put(num_pes - 1, j, &data.sub_region(..num_bytes as usize)) };
+                // unsafe { array.put_slice(num_pes - 1, j, &data[..num_bytes as usize]) };
                 sub_time += sub_timer.elapsed().as_secs_f64();
                 sum += num_bytes * 1 as u64;
                 cnt += 1;
@@ -49,8 +54,9 @@ fn main() {
             world.wait_all();
         }
         if my_pe != 0 {
+            let array_slice = array.as_slice().unwrap();
             for j in (0..2_u64.pow(exp) as usize).step_by(num_bytes as usize) {
-                while *(&array.as_slice()[(j + num_bytes as usize) - 1]) == my_pe as u8 {
+                while *(&array_slice[(j + num_bytes as usize) - 1]) == my_pe as u8 {
                     std::thread::yield_now()
                 }
             }
@@ -76,10 +82,11 @@ fn main() {
         );
         }
         bws.push((sum as f64 / 1048576.0) / cur_t);
-        unsafe { array.put(my_pe, 0, &init) };
+        unsafe { array.put(my_pe, 0, &data) };
         world.barrier();
     }
-    world.free_memory_region(array);
+    world.free_shared_memory_region(array);
+    world.free_local_memory_region(data);
     if my_pe == 0 {
         println!(
             "bandwidths: {}",

@@ -1,17 +1,30 @@
 use crate::active_messaging::*;
 use crate::lamellae::{create_lamellae, Backend, Lamellae, LamellaeAM};
-use crate::lamellar_memregion::{LamellarMemoryRegion, RemoteMemoryRegion};
+use crate::lamellar_arch::LamellarArch;
+#[cfg(feature = "experimental")]
+use crate::lamellar_array::LamellarArray;
+use crate::lamellar_memregion::{
+    LamellarLocalMemoryRegion, LamellarMemoryRegion, RemoteMemoryRegion,
+};
 use crate::lamellar_request::LamellarRequest;
-use crate::lamellar_team::{LamellarArch,LamellarTeam};
+use crate::lamellar_team::{LamellarTeam, LamellarTeamRT};
 use crate::schedulers::{create_scheduler, Scheduler, SchedulerType};
+use lamellar_prof::*;
 use log::trace;
+use parking_lot::RwLock;
+use std::collections::HashMap;
 use std::collections::{BTreeMap, HashSet};
 use std::sync::atomic::Ordering;
-use std::sync::Arc;
+use std::sync::{Arc, Weak};
 use std::time::{Duration, Instant};
 
+lazy_static! {
+    static ref LAMELLAES: HashMap<Backend, Arc<dyn Lamellae + Send + Sync>> = HashMap::new();
+}
+
 pub struct LamellarWorld {
-    team: Arc<LamellarTeam>,
+    pub team: Arc<LamellarTeamRT>,
+    teams: Arc<RwLock<HashMap<u64, Weak<LamellarTeamRT>>>>,
     counters: Arc<AMCounters>,
     _scheduler: Arc<dyn Scheduler>,
     lamellaes: BTreeMap<Backend, Arc<dyn Lamellae>>,
@@ -19,6 +32,7 @@ pub struct LamellarWorld {
     num_pes: usize,
 }
 
+//#[prof]
 impl ActiveMessaging for LamellarWorld {
     fn wait_all(&self) {
         let mut temp_now = Instant::now();
@@ -38,31 +52,26 @@ impl ActiveMessaging for LamellarWorld {
         }
     }
     fn barrier(&self) {
-        trace!("[{:?}] world barrier", self.my_pe);
+        // println!("[{:?}] world barrier", self.my_pe);
         for (backend, lamellae) in &self.lamellaes {
             trace!("[{:?}] {:?} barrier", self.my_pe, backend);
             lamellae.barrier();
+            // println!("world barrier!!!!!!!!!!!!");
         }
     }
-    fn exec_am_all<F>(&self, am: F) -> LamellarRequest<F::Output>
+    fn exec_am_all<F>(&self, am: F) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync>
     where
-        F: LamellarActiveMessage
-            + LamellarAM
-            + Send
-            // + serde::de::DeserializeOwned
-            // + std::clone::Clone
-            + 'static,
+        F: LamellarActiveMessage + LamellarAM + Send + Sync + 'static,
     {
         self.team.exec_am_all(am)
     }
-    fn exec_am_pe<F>(&self, pe: usize, am: F) -> LamellarRequest<F::Output>
+    fn exec_am_pe<F>(
+        &self,
+        pe: usize,
+        am: F,
+    ) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync>
     where
-        F: LamellarActiveMessage
-            + LamellarAM
-            + Send
-            + serde::de::DeserializeOwned
-            // + std::clone::Clone
-            + 'static,
+        F: LamellarActiveMessage + LamellarAM + Send + Sync + 'static,
     {
         assert!(pe < self.num_pes(), "invalid pe: {:?}", pe);
         self.team.exec_am_pe(pe, am)
@@ -73,6 +82,7 @@ impl ActiveMessaging for LamellarWorld {
 #[cfg(feature = "nightly")]
 use crate::active_messaging::remote_closures::ClosureRet;
 #[cfg(feature = "nightly")]
+//#[prof]
 impl RemoteClosures for LamellarWorld {
     fn exec_closure_all<
         F: FnOnce() -> T
@@ -132,14 +142,15 @@ impl RemoteClosures for LamellarWorld {
     }
 }
 
+//#[prof]
 impl RemoteMemoryRegion for LamellarWorld {
-    /// allocate a remote memory region from the symmetric heap
+    /// allocate a shared memory region from the asymmetric heap
     ///
     /// # Arguments
     ///
     /// * `size` - number of elements of T to allocate a memory region for -- (not size in bytes)
     ///
-    fn alloc_mem_region<
+    fn alloc_shared_mem_region<
         T: serde::ser::Serialize
             + serde::de::DeserializeOwned
             + std::clone::Clone
@@ -152,16 +163,37 @@ impl RemoteMemoryRegion for LamellarWorld {
         size: usize,
     ) -> LamellarMemoryRegion<T> {
         self.barrier();
-        self.team.alloc_mem_region::<T>(size)
+        self.team.alloc_shared_mem_region::<T>(size)
     }
 
-    /// release a remote memory region from the symmetric heap
+    /// allocate a local memory region from the asymmetric heap
+    ///
+    /// # Arguments
+    ///
+    /// * `size` - number of elements of T to allocate a memory region for -- (not size in bytes)
+    ///
+    fn alloc_local_mem_region<
+        T: serde::ser::Serialize
+            + serde::de::DeserializeOwned
+            + std::clone::Clone
+            + Send
+            + Sync
+            + std::fmt::Debug
+            + 'static,
+    >(
+        &self,
+        size: usize,
+    ) -> LamellarLocalMemoryRegion<T> {
+        self.team.alloc_local_mem_region::<T>(size)
+    }
+
+    /// release a remote memory region from the asymmetric heap
     ///
     /// # Arguments
     ///
     /// * `region` - the region to free
     ///
-    fn free_memory_region<
+    fn free_shared_memory_region<
         T: serde::ser::Serialize
             + serde::de::DeserializeOwned
             + std::clone::Clone
@@ -173,11 +205,33 @@ impl RemoteMemoryRegion for LamellarWorld {
         &self,
         region: LamellarMemoryRegion<T>,
     ) {
-        self.team.free_memory_region::<T>(region)
+        self.team.free_shared_memory_region(region)
+    }
+
+    /// release a remote memory region from the asymmetric heap
+    ///
+    /// # Arguments
+    ///
+    /// * `region` - the region to free
+    ///
+    fn free_local_memory_region<
+        T: serde::ser::Serialize
+            + serde::de::DeserializeOwned
+            + std::clone::Clone
+            + Send
+            + Sync
+            + std::fmt::Debug
+            + 'static,
+    >(
+        &self,
+        region: LamellarLocalMemoryRegion<T>,
+    ) {
+        self.team.free_local_memory_region(region)
     }
 }
 
-impl  LamellarWorld {
+//#[prof]
+impl LamellarWorld {
     pub fn my_pe(&self) -> usize {
         self.my_pe
     }
@@ -193,23 +247,72 @@ impl  LamellarWorld {
         sent
     }
 
-    pub fn team_barrier(&self){
+    pub fn team_barrier(&self) {
         self.team.barrier();
+        println!("team barrier!!!!!!!!!!!!");
     }
 
-    pub fn create_team_from_arch<L>(&self, arch: L ) -> Arc<LamellarTeam>
-    where L: LamellarArch + 'static{
-        LamellarTeam::create_subteam_from_arch(self.team.clone(),arch)
+    pub fn create_team_from_arch<L>(&self, arch: L) -> Option<Arc<LamellarTeam>>
+    where
+        L: LamellarArch + std::hash::Hash + 'static,
+    {
+        if let Some(team) = LamellarTeamRT::create_subteam_from_arch(self.team.clone(), arch) {
+            self.teams
+                .write()
+                .insert(team.my_hash, Arc::downgrade(&team));
+            Some(Arc::new(LamellarTeam {
+                team: team,
+                teams: self.teams.clone(),
+            }))
+        } else {
+            None
+        }
     }
+
+    #[cfg(feature = "experimental")]
+    pub fn new_array<
+        T: serde::ser::Serialize
+            + serde::de::DeserializeOwned
+            + std::clone::Clone
+            + Send
+            + Sync
+            + std::fmt::Debug
+            + 'static,
+    >(
+        &self,
+        size: usize,
+    ) -> LamellarArray<T> {
+        self.barrier();
+        LamellarArray::new(self.team.clone(), size, self.counters.clone())
+    }
+
+    // #[cfg(feature = "experimental")]
+    // pub fn local_array<
+    //     T: serde::ser::Serialize
+    //         + serde::de::DeserializeOwned
+    //         + std::clone::Clone
+    //         + Send
+    //         + Sync
+    //         + 'static,
+    // >(
+    //     &self,
+    //     size: usize,
+    //     init: T,
+    // ) -> LamellarLocalArray<T> {
+    //     LamellarLocalArray::new(size, init, self.team.lamellae.get_rdma().clone())
+    // }
 }
 
+//#[prof]
 impl Drop for LamellarWorld {
     fn drop(&mut self) {
         trace!("[{:?}] world dropping", self.my_pe);
         self.wait_all();
+        self.team.barrier();
         self.barrier();
         self.team.destroy();
         self.lamellaes.clear();
+        fini_prof!();
 
         // im not sure we want to explicitly call lamellae.finit(). instead we should let
         // have the lamellae instances do that in their own drop implementations.
@@ -227,6 +330,7 @@ pub struct LamellarWorldBuilder {
     scheduler: SchedulerType,
 }
 
+//#[prof]
 impl LamellarWorldBuilder {
     pub fn new() -> LamellarWorldBuilder {
         // simple_logger::init().unwrap();
@@ -254,38 +358,47 @@ impl LamellarWorldBuilder {
         //     println!("{:#?}", exec);
         // }
         // let mut sched = WorkStealingScheduler::new();
-        let mut sched = create_scheduler(self.scheduler);
-        let mut lamellae = create_lamellae(self.primary_lamellae, sched.get_queue().clone());
+        let teams = Arc::new(RwLock::new(HashMap::new()));
+        let mut lamellae = create_lamellae(self.primary_lamellae);
+        let (num_pes, my_pe) = lamellae.init_fabric();
+        let mut sched = create_scheduler(self.scheduler, num_pes, my_pe, teams.clone());
+        lamellae.init_lamellae(sched.get_queue().clone());
+
         // let mut lamellae = RofiLamellae::new(sched.get_queue().clone());
-        let (num_pes, my_pe) = lamellae.init();
-        trace!(
-            "[{:?}] lamellae initialized: num_pes {:?} my_pe {:?}",
-            my_pe,
-            num_pes,
-            my_pe
-        );
+
+        // println!(
+        //     "[{:?}] lamellae initialized: num_pes {:?} my_pe {:?}",
+        //     my_pe, num_pes, my_pe
+        // );
         let lamellae = Arc::new(lamellae);
 
         let mut lamellaes: BTreeMap<Backend, Arc<dyn LamellaeAM>> = BTreeMap::new();
         lamellaes.insert(lamellae.backend(), lamellae.get_am());
         sched.init(num_pes, my_pe, lamellaes);
         let counters = Arc::new(AMCounters::new());
+        lamellae.get_am().barrier();
+        // println!("world gen barrier!!!!!!!!!!!!");
         let mut world = LamellarWorld {
-            team: Arc::new(LamellarTeam::new(
+            team: Arc::new(LamellarTeamRT::new(
                 num_pes,
                 my_pe,
                 sched.get_queue().clone(),
                 counters.clone(),
                 lamellae.clone(),
             )),
+            teams: teams.clone(),
             counters: counters,
             _scheduler: Arc::new(sched),
             lamellaes: BTreeMap::new(),
             my_pe: my_pe,
             num_pes: num_pes,
         };
+        world
+            .teams
+            .write()
+            .insert(world.team.my_hash, Arc::downgrade(&world.team));
         world.lamellaes.insert(lamellae.backend(), lamellae.clone());
-        // println!("Lamellar world created with {:?}",lamellae.backend());
+        // println!("Lamellar world created with {:?}", lamellae.backend());
         world
     }
 }

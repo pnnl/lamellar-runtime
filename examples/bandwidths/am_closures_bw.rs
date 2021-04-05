@@ -1,15 +1,5 @@
-use lamellar::{ActiveMessaging, LamellarAM};
+use lamellar::{ActiveMessaging, RemoteClosures};
 use std::time::Instant;
-
-#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
-struct DataAM {
-    data: Vec<u8>,
-}
-
-#[lamellar::am]
-impl LamellarAM for DataAM {
-    fn exec() {}
-}
 
 fn main() {
     let world = lamellar::LamellarWorldBuilder::new().build();
@@ -46,9 +36,9 @@ fn main() {
         let mut sub_time = 0f64;
         if my_pe == 0 {
             for _j in (num_bytes..(2_u64.pow(exp))).step_by(num_bytes as usize) {
-                let d = _data.clone();
+                let _d = _data.clone();
                 let sub_timer = Instant::now();
-                world.exec_am_pe(num_pes-1, DataAM { data: d }); //we explicity  captured _data and transfer it even though we do nothing with it
+                world.exec_closure_pe(num_pes - 1, lamellar::FnOnce!([_d] move || {} )); //we explicity are captured _data and transfer it even though we do nothing with it
                 sub_time += sub_timer.elapsed().as_secs_f64();
                 sum += num_bytes * 1 as u64;
                 cnt += 1;
