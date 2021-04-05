@@ -703,9 +703,9 @@ impl RemoteClosures for LamellarTeamRT {
     >(
         &self,
         func: F,
-    ) -> LamellarRequest<T> {
+    ) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
         trace!("[{:?}] team exec closure all request", self.my_pe);
-        let (my_req, ireq) = LamellarRequest::new(
+        let (my_req, ireq) = LamellarRequestHandle::new(
             self.num_pes,
             AmType::RemoteClosure,
             self.arch.clone(),
@@ -731,7 +731,7 @@ impl RemoteClosures for LamellarTeamRT {
             self.lamellae.get_am(),
             self.my_hash,
         );
-        my_req
+        Box::new(my_req)
     }
 
     fn exec_closure_pe<
@@ -752,10 +752,10 @@ impl RemoteClosures for LamellarTeamRT {
         &self,
         pe: usize,
         func: F,
-    ) -> LamellarRequest<T> {
+    ) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
         trace!("[{:?}] team exec_closure_pe [{:?}]", self.my_pe, pe);
         assert!(pe < self.arch.num_pes());
-        let (my_req, mut ireq) = LamellarRequest::new(
+        let (my_req, mut ireq) = LamellarRequestHandle::new(
             1,
             AmType::RemoteClosure,
             self.arch.clone(),
@@ -786,7 +786,7 @@ impl RemoteClosures for LamellarTeamRT {
             self.lamellae.get_am(),
             self.my_hash,
         );
-        my_req
+        Box::new(my_req)
     }
 
     fn exec_closure_on_return<

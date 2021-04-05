@@ -5,8 +5,6 @@ use crate::lamellar_memregion::{LamellarMemoryRegion,  RemoteMemoryRegion};
 use crate::lamellar_request::{AmType, LamellarRequest, LamellarRequestHandle};
 use crate::lamellar_team::LamellarTeamRT;
 use crate::schedulers::SchedulerQueue;
-#[cfg(feature = "nightly")]
-use crate::utils::ser_closure;
 
 use log::trace;
 use std::hash::{Hash, Hasher};

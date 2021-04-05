@@ -139,7 +139,6 @@ fn main() {
 
             world.barrier();
             let cur_t = timer.elapsed().as_secs_f64();
-            let cur: f64 = world.MB_sent().iter().sum();
             let tot_flop: usize = reqs
                 .iter()
                 .map(|r| r.get_all().iter().map(|r| r.unwrap()).sum::<usize>())

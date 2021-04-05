@@ -101,7 +101,7 @@ impl RemoteClosures for LamellarWorld {
     >(
         &self,
         func: F,
-    ) -> LamellarRequest<T> {
+    ) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync> {
         trace!("[{:?}] exec closure all", self.my_pe);
         self.team.exec_closure_all(func)
     }
@@ -125,7 +125,7 @@ impl RemoteClosures for LamellarWorld {
         &self,
         pe: usize,
         func: F,
-    ) -> LamellarRequest<T> {
+    ) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync> {
         assert!(pe < self.num_pes(), "invalid pe: {:?}", pe);
         trace!("[{:?}] world exec_closure_pe: [{:?}]", self.my_pe, pe);
         self.team.exec_closure_pe(pe, func)

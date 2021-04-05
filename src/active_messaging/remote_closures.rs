@@ -1,13 +1,12 @@
 use crate::active_messaging::{
     ActiveMessageEngine, Cmd, ExecType, LamellarAny, Msg, RetType, REQUESTS,
 };
-use crate::lamellae::{Backend, LamellaeAM};
+use crate::lamellae::{LamellaeAM};
 use crate::lamellar_request::*;
 use crate::lamellar_team::LamellarTeamRT;
 use crate::schedulers::ReqData;
 
 use log::trace;
-use std::collections::BTreeMap;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 // use std::time::Instant;
@@ -128,7 +127,7 @@ pub trait RemoteClosures {
     >(
         &self,
         func: F,
-    ) -> LamellarRequest<T>;
+    ) -> Box<dyn LamellarRequest<Output = T> + Send + Sync>;
 
     fn exec_closure_pe<
         F: FnOnce() -> T
@@ -148,7 +147,7 @@ pub trait RemoteClosures {
         &self,
         pe: usize,
         func: F,
-    ) -> LamellarRequest<T>;
+    ) -> Box<dyn LamellarRequest<Output = T> + Send + Sync>;
 
     fn exec_closure_on_return<
         F: FnOnce() -> T + serde::ser::Serialize + serde::de::DeserializeOwned + 'static,
@@ -165,7 +164,7 @@ pub(crate) fn exec_closure_cmd(
     msg: Msg,
     ser_data: Vec<u8>,
     lamellae: Arc<dyn LamellaeAM>,
-    world: Arc<LamellarTeamRT>,
+    _world: Arc<LamellarTeamRT>,
     team: Arc<LamellarTeamRT>,
 ) -> Option<ReqData> {
     match cmd {
@@ -242,7 +241,7 @@ pub(crate) fn exec_closure(
 pub(crate) fn process_closure_request(
     ame: &ActiveMessageEngine,
     req_data: ReqData,
-    world: Arc<LamellarTeamRT>,
+    _world: Arc<LamellarTeamRT>,
     team: Arc<LamellarTeamRT>,
 ) -> Option<(Vec<u8>, ReqData)> {
     //,lamellaes: &Arc<BTreeMap<Backend, Arc<dyn LamellaeAM>>>,){
