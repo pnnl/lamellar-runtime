@@ -132,7 +132,7 @@ impl LamellarAM for NaiveMM {
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
-    let dim = args
+    let elem_per_pe = args
         .get(1)
         .and_then(|s| s.parse::<usize>().ok())
         .unwrap_or_else(|| 2000);
@@ -140,6 +140,8 @@ fn main() {
     let world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();
     let num_pes = world.num_pes();
+
+    let dim = elem_per_pe *num_pes;
 
     //for example purposes we are multiplying square matrices
     let m = dim; //a & c rows

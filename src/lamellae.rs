@@ -17,6 +17,10 @@ pub(crate) mod shmem_lamellae;
 pub enum Backend {
     #[cfg(feature = "enable-rofi")]
     Rofi,
+    #[cfg(feature = "enable-rofi")]
+    RofiShm,
+    #[cfg(feature = "enable-rofi")]
+    RofiVerbs,
     Local,
     Shmem,
 }
@@ -119,7 +123,21 @@ impl<T: Lamellae + ?Sized> Lamellae for Box<T> {
 pub(crate) fn create_lamellae(backend: Backend) -> Box<dyn Lamellae> {
     match backend {
         #[cfg(feature = "enable-rofi")]
-        Backend::Rofi => Box::new(rofi_lamellae::RofiLamellae::new()),
+        Backend::Rofi => {
+            let provider = match std::env::var("LAMELLAR_ROFI_PROVIDER") {
+                Ok(p) => { match p.as_str() {
+                    "verbs" => "verbs",
+                    "shm" => "shm",
+                    _ => "verbs",
+                }},
+                Err(_) => "verbs",
+            };
+            Box::new(rofi_lamellae::RofiLamellae::new(provider))
+        },
+        #[cfg(feature = "enable-rofi")]
+        Backend::RofiShm => Box::new(rofi_lamellae::RofiLamellae::new("shm")),
+        #[cfg(feature = "enable-rofi")]
+        Backend::RofiVerbs => Box::new(rofi_lamellae::RofiLamellae::new("verbs")),
         Backend::Shmem => Box::new(shmem_lamellae::ShmemLamellae::new()),
         Backend::Local => Box::new(local_lamellae::LocalLamellae::new()),
     }

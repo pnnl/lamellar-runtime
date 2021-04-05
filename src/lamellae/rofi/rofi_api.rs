@@ -2,8 +2,8 @@ extern crate libc;
 
 use std::ffi::CString;
 
-pub(crate) fn rofi_init() -> Result<(), &'static str> {
-    let c_str = CString::new("verbs").unwrap();
+pub(crate) fn rofi_init(provider: &str) -> Result<(), &'static str> {
+    let c_str = CString::new(provider).unwrap();
     let retval = unsafe { rofisys::rofi_init(c_str.as_ptr() as *mut _) as i32 };
     if retval == 0 {
         Ok(())

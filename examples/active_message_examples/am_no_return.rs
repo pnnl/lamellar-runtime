@@ -24,7 +24,9 @@ impl LamellarAM for AmNoReturn {
 fn main() {
     let world = lamellar::LamellarWorldBuilder::new()
         //.with_lamellae(Default::default()) //if enable-rofi feature is active default is rofi, otherwise local
-        //.with_lamellae( Backend::Rofi ) //explicity set the lamellae backend
+        //.with_lamellae( Backend::Rofi ) //explicity set the lamellae backend to rofi, with the default provider
+        //.with_lamellae( Backend::RofiShm ) //explicity set the lamellae backend to rofi, specifying the shm provider
+        //.with_lamellae( Backend::RofiVerbs ) //explicity set the lamellae backend to rofi, specifying the verbs provider
         //.with_lamellae( Backend::Local )
         //.with_scheduler(SchedulerType::WorkStealing) //currently the only type of thread scheduler
         .build();

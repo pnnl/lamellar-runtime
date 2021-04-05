@@ -34,8 +34,9 @@ use lamellar::Backend;
 fn main(){
  let mut world = lamellar::LamellarWorldBuilder::new()
         .with_lamellae( Default::default() ) //if "enable-rofi" feature is active default is rofi, otherwise  default is local
-        //.with_lamellae( Backend::Rofi ) //explicity set the lamellae backend
-        //.with_lamellae( Backend::Local )
+        //.with_lamellae( Backend::Rofi ) //explicity set the lamellae backend to rofi, using the provider specified by the LAMELLAR_ROFI_PROVIDER env var ("verbs" or "shm")
+        //.with_lamellae( Backend::RofiShm ) //explicity set the lamellae backend to rofi, specifying the shm provider
+        //.with_lamellae( Backend::RofiVerbs ) //explicity set the lamellae backend to rofi, specifying the verbs provider
         .build();
 }
 ```
@@ -160,11 +161,19 @@ or alternatively:
 `srun -N 2 -p partition_name -mpi=pmi2 ./target/release/examples/{example}` 
 where `<test>` is the same name as the Rust filenames in each subdirectory in the examples folder  (e.g. "am_no_return")
 
-Finally, the number of worker threads used within lamellar is controlled by setting an environment variable: LAMELLAR_THREADS
+The number of worker threads used within lamellar is controlled by setting an environment variable: LAMELLAR_THREADS
 
 e.g. `export LAMELLAR_THREADS=10`
 
-Note, if running on a single node, simply execute the binaries directly, no need to use mpiexec or srun.
+The rofi backend provider can be set by explicitly setting using the world builder:
+e.g. `lamellar::LamellarWorldBuilder::new().with_lamellar(Backend::Rofi)`
+currently three Rofi options exist: 
+`Backend::RofiVerbs` -- to use the verbs provider (enabling distributed execution)
+`Backend::RofiShm` -- to use the shm provider (enabling smp execution)
+`Backend::Rofi` -- uses the provider specified by `LAMELLAR_ROFI_PROVIDER` environment variable if defined, else allows libfabrics to select the provider.
+Current possible values for `LAMELLAR_ROFI_PROVIDER` include `verbs` and `shm`
+
+Note, if running on a single node, you can use the `local` lamellaer e.g. `Backend::Local` to simply execute the binaries directly, no need to use mpiexec or srun.
 
 
 HISTORY

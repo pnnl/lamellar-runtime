@@ -92,10 +92,10 @@ pub(crate) struct RofiLamellae {
 
 //#[prof]
 impl RofiLamellae {
-    pub(crate) fn new() -> RofiLamellae {
+    pub(crate) fn new(provider: &str) -> RofiLamellae {
         let (lamellar_msg_q_tx, lamellar_msg_q_rx) = crossbeam::channel::unbounded();
         let (cmd_q_tx, cmd_q_rx) = crossbeam::channel::unbounded();
-        let rofi_comm = Arc::new(RofiComm::new());
+        let rofi_comm = Arc::new(RofiComm::new(provider));
         let cq = RofiCommandQueue::new(cmd_q_tx, rofi_comm.clone());
         let num_pes = cq.num_pes();
         let my_pe = cq.my_pe();

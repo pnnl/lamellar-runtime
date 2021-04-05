@@ -23,8 +23,8 @@ pub(crate) struct RofiComm {
 
 //#[prof]
 impl RofiComm {
-    pub(crate) fn new() -> RofiComm {
-        rofi_init().expect("error in rofi init");
+    pub(crate) fn new(provider: &str) -> RofiComm {
+        rofi_init(provider).expect("error in rofi init");
         trace!("rofi initialized");
         rofi_barrier();
         let num_pes = rofi_get_size();
