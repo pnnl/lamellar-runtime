@@ -13,14 +13,13 @@ fn main() {
     let num_pes = world.num_pes();
 
     if num_pes > 1 {
-
         // instatiates a shared memory region on every PE in world
         // all other pes can put/get into this region
         let array = world.alloc_shared_mem_region::<u8>(ARRAY_LEN);
         let array_slice = array.as_slice().unwrap(); //we can unwrap because we know array is local
-                                                    // instatiates a local array whos memory is registered with
-                                                    // the underlying network device, so that it can be used
-                                                    // as the src buffer in a put or as the dst buffer in a get
+                                                     // instatiates a local array whos memory is registered with
+                                                     // the underlying network device, so that it can be used
+                                                     // as the src buffer in a put or as the dst buffer in a get
         let data = world.alloc_local_mem_region::<u8>(ARRAY_LEN);
         let data_slice = unsafe { data.as_mut_slice().unwrap() }; //we can unwrap because we know data is local
         for elem in data_slice.iter_mut() {
@@ -44,7 +43,9 @@ fn main() {
                 std::thread::yield_now();
             } // wait for data to show up
             println!("[{:?}] After {:?}", my_pe, array_slice);
-            println!("-------------------------------------------------------------------------------");
+            println!(
+                "-------------------------------------------------------------------------------"
+            );
             unsafe { array.put(my_pe, 0, &data) }; //reset our local segment
         }
 
@@ -52,7 +53,9 @@ fn main() {
 
         //we can "get" from  another nodes shared mem region into a local_array
         if my_pe == 0 {
-            println!("----------------- testing shared mem region get to local_array ----------------");
+            println!(
+                "----------------- testing shared mem region get to local_array ----------------"
+            );
             println!("[{:?}] Before {:?}", my_pe, data_slice);
             unsafe {
                 array.get(num_pes - 1, 0, &data);
@@ -61,14 +64,18 @@ fn main() {
                 std::thread::yield_now();
             } // local arrays suppore direct indexing, wait for data to show up
             println!("[{:?}] After {:?}", my_pe, data_slice);
-            println!("-------------------------------------------------------------------------------");
+            println!(
+                "-------------------------------------------------------------------------------"
+            );
             unsafe {
                 array.get(my_pe, 0, &data);
             } // reset local_array;
         }
         world.barrier();
         if my_pe == 0 {
-            println!("--------------- testing local_array put_all to shared mem region --------------");
+            println!(
+                "--------------- testing local_array put_all to shared mem region --------------"
+            );
         }
         world.barrier();
         println!("[{:?}] Before {:?}", my_pe, data_slice);
@@ -92,12 +99,13 @@ fn main() {
         println!("[{:?}] After {:?}", my_pe, data.as_slice());
         world.barrier();
         if my_pe == 0 {
-            println!("-------------------------------------------------------------------------------");
+            println!(
+                "-------------------------------------------------------------------------------"
+            );
         }
         world.free_local_memory_region(data);
         world.free_shared_memory_region(array);
-    }
-    else {
+    } else {
         println!("this example is intended for multi pe executions");
     }
 }

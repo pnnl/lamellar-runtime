@@ -55,11 +55,16 @@ impl LamellarAM for AsyncSleepAM {
 * the async sleep will place the tasks back in the task pool while they are sleeping, the std sleep will block for the entire time
 */
 fn main() {
-    match std::env::var("LAMELLAR_THREADS"){
-        Ok(num) => if num.parse::<usize>().expect("NOTE: to highlight the effect of async tasks please set LAMELLAR_THREADS env var to 1") > 1 {
+    match std::env::var("LAMELLAR_THREADS") {
+        Ok(num) => if num.parse::<usize>().expect(
+            "NOTE: to highlight the effect of async tasks please set LAMELLAR_THREADS env var to 1",
+        ) > 1
+        {
             println!(" NOTE: to highlight the effect of async tasks please set LAMELLAR_THREADS env var to 1");
         },
-        Err(_) => { println!(" NOTE: to highlight the effect of async tasks please set LAMELLAR_THREADS env var to 1"); }
+        Err(_) => {
+            println!(" NOTE: to highlight the effect of async tasks please set LAMELLAR_THREADS env var to 1");
+        }
     }
     let world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();

@@ -29,7 +29,6 @@ impl LamellarAM for FlopAM {
     }
 }
 
-
 // #[cfg(feature = "nightly")]
 // #[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
 // struct SimdAM {

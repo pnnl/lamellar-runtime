@@ -1,7 +1,7 @@
 use crate::active_messaging::{
     ActiveMessageEngine, Cmd, ExecType, LamellarAny, Msg, RetType, REQUESTS,
 };
-use crate::lamellae::{LamellaeAM};
+use crate::lamellae::LamellaeAM;
 use crate::lamellar_request::*;
 use crate::lamellar_team::LamellarTeamRT;
 use crate::schedulers::ReqData;

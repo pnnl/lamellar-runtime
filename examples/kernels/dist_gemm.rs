@@ -71,7 +71,7 @@ async fn get_sub_mat(mat: &SubMatrix, sub_mat: &LamellarLocalMemoryRegion<f32>) 
             mat.mat.get(mat.pe, offset, &data);
         }
     }
-    
+
     while sub_mat_slice[sub_mat.len() - 1].is_nan() {
         async_std::task::yield_now().await;
         // std::thread::yield_now();
@@ -119,16 +119,20 @@ impl LamellarAM for MatMulAM {
             c.row_block = row;
             let sub_a = lamellar::world.alloc_local_mem_region::<f32>(a.block_size * a.block_size);
             get_sub_mat(&a, &sub_a).await; //this should be local copy so returns immediately
-            do_gemm(&sub_a,&b,c,self.block_size);
+            do_gemm(&sub_a, &b, c, self.block_size);
             lamellar::world.free_local_memory_region(sub_a);
         }
         lamellar::world.free_local_memory_region(b);
     }
 }
 
-fn do_gemm(a: &LamellarLocalMemoryRegion<f32>, b: &LamellarLocalMemoryRegion<f32>, c: SubMatrix, block_size: usize,){
-   
-                                    // let b = self.b.as_slice();
+fn do_gemm(
+    a: &LamellarLocalMemoryRegion<f32>,
+    b: &LamellarLocalMemoryRegion<f32>,
+    c: SubMatrix,
+    block_size: usize,
+) {
+    // let b = self.b.as_slice();
     let mut res = vec![f32::NAN; a.len()];
     unsafe {
         sgemm(
@@ -201,18 +205,21 @@ fn main() {
     let world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();
     let num_pes = world.num_pes();
-    if let Ok(size) = std::env::var("LAMELLAR_ROFI_MEM_SIZE"){
-        let size = size.parse::<usize>().expect("invalid memory size, please supply size in bytes");
-        if size < 300*1024*1024 * num_pes {
+    if let Ok(size) = std::env::var("LAMELLAR_ROFI_MEM_SIZE") {
+        let size = size
+            .parse::<usize>()
+            .expect("invalid memory size, please supply size in bytes");
+        if size < 300 * 1024 * 1024 * num_pes {
             println!("This example requires ~300 MB x Num_PEs of 'local' space, please set LAMELLAR_ROFI_MEM_SIZE env var appropriately ");
             std::process::exit(1);
         }
-    }else if 1*1024*1024*1024 < 300*1024*1024 * num_pes{ //1GB is the default space allocated for 'local' buffers
+    } else if 1 * 1024 * 1024 * 1024 < 300 * 1024 * 1024 * num_pes {
+        //1GB is the default space allocated for 'local' buffers
         println!("This example requires ~300 MB x Num_PEs of 'local' space, please set LAMELLAR_ROFI_MEM_SIZE env var appropriately ");
         std::process::exit(1);
     }
 
-    let dim = elem_per_pe *num_pes;
+    let dim = elem_per_pe * num_pes;
 
     //only doing square matrices currently
     let m = dim; //a & c rows
@@ -239,7 +246,7 @@ fn main() {
             *elem = 0.0;
         }
     }
-    let num_gops =((2 * dim * dim * dim) - dim*dim) as f64 / 1_000_000_000.0; // accurate for square matrices
+    let num_gops = ((2 * dim * dim * dim) - dim * dim) as f64 / 1_000_000_000.0; // accurate for square matrices
 
     if my_pe == 0 {
         println!("starting");

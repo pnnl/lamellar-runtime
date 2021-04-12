@@ -727,7 +727,7 @@ fn create_reduction(
     let reduction = quote::format_ident!("{:}", reduction);
     let lamellar = quote::format_ident!("{}", crate_header.clone());
     let exec = quote! {
-       
+
         if self.start_pe == self.end_pe{
             // println!("[{:?}] {:?}",__lamellar_current_pe,self);
             let timer = std::time::Instant::now();
@@ -749,8 +749,6 @@ fn create_reduction(
             res
         }
     };
-
-    
 
     let expanded = quote! {
         #[allow(non_camel_case_types)]

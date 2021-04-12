@@ -74,11 +74,6 @@ name="lamellar"
 path="src/lib.rs"
 
 
-#[[bin]]
-#name="test"
-#path="src/main.rs"
-
-
 ##------------ Bandwidth Examples -----------------##
 [[example]]
 name="am_closures_bw"

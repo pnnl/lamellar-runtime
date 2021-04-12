@@ -53,7 +53,7 @@ fn main() {
             println!("issue time: {:?}", timer.elapsed());
             world.wait_all();
         }
-        if my_pe == num_pes-1 {
+        if my_pe == num_pes - 1 {
             let array_slice = array.as_slice().unwrap();
             for j in (0..2_u64.pow(exp) as usize).step_by(num_bytes as usize) {
                 while *(&array_slice[(j + num_bytes as usize) - 1]) == my_pe as u8 {

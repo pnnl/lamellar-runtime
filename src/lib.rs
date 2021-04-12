@@ -41,7 +41,6 @@ pub use crate::active_messaging::LamellarActiveMessage;
 pub use crate::active_messaging::remote_closures::RemoteClosures;
 pub use crate::active_messaging::{ActiveMessaging, LamellarAM};
 
-
 #[cfg(feature = "experimental")]
 pub use crate::lamellar_array::{LamellarArray, ReduceKey};
 pub use crate::lamellar_memregion::{

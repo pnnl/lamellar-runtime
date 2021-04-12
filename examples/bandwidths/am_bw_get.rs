@@ -32,13 +32,15 @@ impl LamellarAM for DataAM {
 }
 
 fn main() {
-    if let Ok(size) = std::env::var("LAMELLAR_ROFI_MEM_SIZE"){
-        let size = size.parse::<usize>().expect("invalid memory size, please supply size in bytes");
-        if size < 8*1024*1024*1024 {
+    if let Ok(size) = std::env::var("LAMELLAR_ROFI_MEM_SIZE") {
+        let size = size
+            .parse::<usize>()
+            .expect("invalid memory size, please supply size in bytes");
+        if size < 8 * 1024 * 1024 * 1024 {
             println!("This example requires 8GB of 'local' space, please set LAMELLAR_ROFI_MEM_SIZE env var to at least 8589934592 (8GB)");
             std::process::exit(1);
         }
-    }else{
+    } else {
         println!("This example requires 8GB of 'local' space, please set LAMELLAR_ROFI_MEM_SIZE env var to at least 8589934592 (8GB)");
         std::process::exit(1);
     }
@@ -76,7 +78,7 @@ fn main() {
         }
         let timer = Instant::now();
         let mut sub_time = 0f64;
-        if my_pe == num_pes-1 {
+        if my_pe == num_pes - 1 {
             for _j in (0..(2_u64.pow(exp))).step_by(num_bytes as usize) {
                 let sub_timer = Instant::now();
                 world.exec_am_pe(
@@ -98,7 +100,7 @@ fn main() {
         world.barrier();
         let cur_t = timer.elapsed().as_secs_f64();
         let cur: f64 = world.MB_sent().iter().sum();
-        if my_pe == num_pes-1 {
+        if my_pe == num_pes - 1 {
             println!(
                 "tx_size: {:?}B num_tx: {:?} num_bytes: {:?}MB time: {:?} (issue time: {:?})
                 throughput (avg): {:?}MB/s (cuml): {:?}MB/s total_bytes (w/ overhead) {:?}MB throughput (w/ overhead){:?} latency: {:?}us",
@@ -125,7 +127,7 @@ fn main() {
     }
     world.free_shared_memory_region(array);
     world.free_local_memory_region(data);
-    if my_pe == num_pes-1 {
+    if my_pe == num_pes - 1 {
         println!(
             "bandwidths: {}",
             bws.iter()

@@ -1,7 +1,7 @@
 use crate::active_messaging::*; //{ActiveMessaging,AMCounters,Cmd,Msg,LamellarAny,LamellarLocal};
-use crate::lamellae::{Lamellae};
+use crate::lamellae::Lamellae;
 use crate::lamellar_arch::LamellarArchRT;
-use crate::lamellar_memregion::{LamellarMemoryRegion,  RemoteMemoryRegion};
+use crate::lamellar_memregion::{LamellarMemoryRegion, RemoteMemoryRegion};
 use crate::lamellar_request::{AmType, LamellarRequest, LamellarRequestHandle};
 use crate::lamellar_team::LamellarTeamRT;
 use crate::schedulers::SchedulerQueue;
@@ -11,7 +11,7 @@ use std::hash::{Hash, Hasher};
 // use std::any;
 // use core::marker::PhantomData;
 use std::collections::HashMap;
-use std::sync::atomic::{ Ordering};
+use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -46,7 +46,6 @@ crate::inventory::collect!(ReduceKey);
 lamellar_impl::generate_reductions_for_type_rt!(u8, u16, u32, u64, u128, usize);
 lamellar_impl::generate_reductions_for_type_rt!(i8, i16, i32, i64, i128, isize);
 // lamellar_impl::generate_reductions_for_type_rt!(f32,f64);
-
 
 pub struct LamellarArray<
     T: serde::ser::Serialize + serde::de::DeserializeOwned + std::clone::Clone + Send + Sync + 'static,
@@ -95,7 +94,7 @@ impl<
         world_counters: Arc<AMCounters>,
     ) -> LamellarArray<T> {
         LamellarArray {
-            rmr: team.alloc_shared_mem_region(array_size), 
+            rmr: team.alloc_shared_mem_region(array_size),
             // global_length: array_size,
             scheduler: team.scheduler.clone(),
             lamellae: team.lamellae.clone(),
@@ -110,7 +109,7 @@ impl<
         }
     }
 
-    pub fn get_raw_mem_region(&self) -> &LamellarMemoryRegion<T>{
+    pub fn get_raw_mem_region(&self) -> &LamellarMemoryRegion<T> {
         &self.rmr
     }
 

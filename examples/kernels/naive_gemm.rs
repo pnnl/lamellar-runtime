@@ -142,7 +142,7 @@ fn main() {
     let my_pe = world.my_pe();
     let num_pes = world.num_pes();
 
-    let dim = elem_per_pe *num_pes;
+    let dim = elem_per_pe * num_pes;
 
     //for example purposes we are multiplying square matrices
     let m = dim; //a & c rows
@@ -165,8 +165,8 @@ fn main() {
             *elem = 0.0;
         }
     }
-    
-    let num_gops =((2 * dim * dim * dim) - dim*dim) as f64 / 1_000_000_000.0; // accurate for square matrices
+
+    let num_gops = ((2 * dim * dim * dim) - dim * dim) as f64 / 1_000_000_000.0; // accurate for square matrices
 
     if my_pe == 0 {
         println!("starting");
@@ -223,11 +223,10 @@ fn main() {
         let elapsed = start.elapsed().as_secs_f64();
         if my_pe == 0 {
             println!(
-                "blocksize {:?} elapsed {:?} Gflops: {:?} {:?} MB: {:?} ({:?}, {:?}) tasks {:?}",
+                "blocksize {:?} elapsed {:?} Gflops: {:?} MB: {:?} ({:?}, {:?}) tasks {:?}",
                 block_size,
                 elapsed,
                 num_gops / elapsed,
-                num_gops2/ elapsed,
                 world.MB_sent()[0] - tot_mb,
                 world.MB_sent()[0],
                 tot_mb,

@@ -148,7 +148,7 @@ fn main() {
     let world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();
     let num_pes = world.num_pes();
-    if num_pes > 1{
+    if num_pes > 1 {
         world.barrier();
         let rand_arch = RandomArch::new(0, num_pes, num_pes);
         let random_team = world
@@ -179,7 +179,7 @@ fn main() {
             println!("launching {:?} to pe {:?}", d, i);
             team.exec_am_pe(i, d);
         }
-        
+
         let p = rand_arch.team_id(my_pe);
         let t = if let Some(p) = p {
             team_arch.team_id(p)
@@ -197,8 +197,7 @@ fn main() {
             }
             world.barrier();
         }
-    }
-    else{
+    } else {
         println!("Random team example is intended for multi pe execution");
     }
 }

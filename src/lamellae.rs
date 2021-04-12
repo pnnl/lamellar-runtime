@@ -125,15 +125,15 @@ pub(crate) fn create_lamellae(backend: Backend) -> Box<dyn Lamellae> {
         #[cfg(feature = "enable-rofi")]
         Backend::Rofi => {
             let provider = match std::env::var("LAMELLAR_ROFI_PROVIDER") {
-                Ok(p) => { match p.as_str() {
+                Ok(p) => match p.as_str() {
                     "verbs" => "verbs",
                     "shm" => "shm",
                     _ => "verbs",
-                }},
+                },
                 Err(_) => "verbs",
             };
             Box::new(rofi_lamellae::RofiLamellae::new(provider))
-        },
+        }
         #[cfg(feature = "enable-rofi")]
         Backend::RofiShm => Box::new(rofi_lamellae::RofiLamellae::new("shm")),
         #[cfg(feature = "enable-rofi")]

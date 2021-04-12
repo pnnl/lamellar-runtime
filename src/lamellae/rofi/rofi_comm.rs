@@ -9,7 +9,7 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 
 static ROFI_MEM: AtomicUsize = AtomicUsize::new(1 * 1024 * 1024 * 1024);
-const RT_MEM: usize = 100*1024*1024; // we add this space for things like team barrier buffers, but will work towards having teams get memory from rofi allocs
+const RT_MEM: usize = 100 * 1024 * 1024; // we add this space for things like team barrier buffers, but will work towards having teams get memory from rofi allocs
 pub(crate) struct RofiComm {
     pub(crate) rofi_base_address: Arc<RwLock<usize>>,
     alloc: BTreeAlloc,
@@ -25,8 +25,10 @@ pub(crate) struct RofiComm {
 //#[prof]
 impl RofiComm {
     pub(crate) fn new(provider: &str) -> RofiComm {
-        if let Ok(size) = std::env::var("LAMELLAR_ROFI_MEM_SIZE"){
-            let size = size.parse::<usize>().expect("invalid memory size, please supply size in bytes");
+        if let Ok(size) = std::env::var("LAMELLAR_ROFI_MEM_SIZE") {
+            let size = size
+                .parse::<usize>()
+                .expect("invalid memory size, please supply size in bytes");
             ROFI_MEM.store(size, Ordering::SeqCst);
         }
         rofi_init(provider).expect("error in rofi init");
@@ -35,7 +37,6 @@ impl RofiComm {
         let num_pes = rofi_get_size();
         let cmd_q_mem = RofiCommandQueue::mem_per_pe() * num_pes;
 
-        
         let total_mem = cmd_q_mem + RT_MEM + ROFI_MEM.load(Ordering::SeqCst);
         let addr = rofi_alloc(total_mem);
         let mut rofi = RofiComm {
@@ -81,7 +82,6 @@ impl RofiComm {
             // println!("[{:?}]-({:?}) rt_alloc exit",self.my_pe,thread::current().id());
             None
         }
-        
     }
     #[allow(dead_code)]
     pub(crate) fn rt_free(&self, addr: usize) {

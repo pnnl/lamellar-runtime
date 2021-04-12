@@ -161,8 +161,10 @@ or alternatively:
 `srun -N 2 -p partition_name -mpi=pmi2 ./target/release/examples/{example}` 
 where `<test>` is the same name as the Rust filenames in each subdirectory in the examples folder  (e.g. "am_no_return")
 
-The number of worker threads used within lamellar is controlled by setting an environment variable: LAMELLAR_THREADS
 
+ENVIRONMENT VARIABLES
+---------------------
+The number of worker threads used within lamellar is controlled by setting an environment variable: LAMELLAR_THREADS
 e.g. `export LAMELLAR_THREADS=10`
 
 The rofi backend provider can be set by explicitly setting using the world builder:
@@ -174,6 +176,11 @@ currently three Rofi options exist:
 Current possible values for `LAMELLAR_ROFI_PROVIDER` include `verbs` and `shm`
 
 Note, if running on a single node, you can use the `local` lamellaer e.g. `Backend::Local` to simply execute the binaries directly, no need to use mpiexec or srun.
+
+
+Currently, Lamellar utilizes a large static allocatio of RDMAable memory for internal Runtime data structures and buffers (work is currently in progress on a more scalable approach), this allocation pool is also used to construct `LamellarLocalMemRegions` (as this operation should not require communication with other PE's).
+The size of this allocation pool is set through the `LAMELLAR_ROFI_MEM_SIZE` environment variable, which can be set to a given number of bytes. The default size is 1GB.
+For examples setting to 20GB could be accomplished with `LAMELLAR_ROFI_MEM_SIZE=$((20*1024*1024*1024))`.
 
 
 HISTORY

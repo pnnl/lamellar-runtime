@@ -11,7 +11,7 @@ fn main() {
     let world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();
     let num_pes = world.num_pes();
-    
+
     if num_pes > 1 {
         // instatiates a shared memory region on every PE in world
         // all other pes can put/get into this region
@@ -48,7 +48,9 @@ fn main() {
             } // wait for put to show up
             println!("[{:?}] After {:?}", my_pe, array_slice);
             unsafe { array.put(my_pe, 0, &data) };
-            println!("-------------------------------------------------------------------------------");
+            println!(
+                "-------------------------------------------------------------------------------"
+            );
         } else {
             world.barrier();
         }
@@ -56,7 +58,9 @@ fn main() {
 
         //we can "put" from our local_array into another nodes shared mem region
         if my_pe == 0 {
-            println!("----------------- testing local_array put to shared mem region ----------------");
+            println!(
+                "----------------- testing local_array put to shared mem region ----------------"
+            );
             world.barrier();
             unsafe {
                 array.put(num_pes - 1, 0, &data);
@@ -69,13 +73,17 @@ fn main() {
             } // wait for put to show up
             println!("[{:?}] After {:?}", my_pe, array_slice);
             unsafe { array.put(my_pe, 0, &data) };
-            println!("-------------------------------------------------------------------------------");
+            println!(
+                "-------------------------------------------------------------------------------"
+            );
         } else {
             world.barrier();
         }
         world.barrier();
         if my_pe == 0 {
-            println!("--------------- testing local_array put_all to shared mem region --------------");
+            println!(
+                "--------------- testing local_array put_all to shared mem region --------------"
+            );
         }
         world.barrier();
         println!("[{:?}] Before {:?}", my_pe, array_slice);
@@ -104,12 +112,13 @@ fn main() {
         println!("[{:?}] After {:?}", my_pe, array_slice);
         world.barrier();
         if my_pe == 0 {
-            println!("-------------------------------------------------------------------------------");
+            println!(
+                "-------------------------------------------------------------------------------"
+            );
         }
         world.free_local_memory_region(data);
         world.free_shared_memory_region(array);
-    }
-    else {
+    } else {
         println!("this example is intended for multi pe executions");
     }
 }

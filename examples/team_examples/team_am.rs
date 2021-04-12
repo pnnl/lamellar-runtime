@@ -99,7 +99,7 @@ fn main() {
 
     test_team(&world, even_team, "even team");
     // we can also create sub teams
-    if num_pes > 3{
+    if num_pes > 3 {
         if let Some(team) = first_half_team {
             let second_half_sub_team = team.create_team_from_arch(BlockedArch::new(
                 (team.num_pes() as f64 / 2.0).ceil() as usize, //start pe

@@ -333,15 +333,14 @@ impl<T: std::clone::Clone + Send + Sync + 'static> LamellarMemoryRegion<T> {
     pub(crate) fn new(
         size: usize,
         lamellae: Arc<dyn Lamellae + Sync + Send>,
-        local: bool
+        local: bool,
     ) -> LamellarMemoryRegion<T> {
         let cnt = Arc::new(AtomicUsize::new(1));
         ACTIVE.insert(lamellae.backend(), lamellae.clone(), cnt.clone());
         let rdma = lamellae.get_rdma();
         let addr = if local {
-            rdma.rt_alloc(size * std::mem::size_of::<T>()).unwrap()+rdma.base_addr()
-        }
-        else{
+            rdma.rt_alloc(size * std::mem::size_of::<T>()).unwrap() + rdma.base_addr()
+        } else {
             rdma.alloc(size * std::mem::size_of::<T>()).unwrap()
         };
         let temp = LamellarMemoryRegion {
@@ -519,12 +518,12 @@ impl<T: std::clone::Clone + Send + Sync + 'static> Drop for LamellarMemoryRegion
         if cnt == 1 {
             ACTIVE.remove(self.backend);
             // println!("trying to dropping mem region {:?}",self);
-            if self.local{
+            if self.local {
                 self.rdma.rt_free(self.addr - self.rdma.base_addr()); // - self.rdma.base_addr());
-            }else{
+            } else {
                 self.rdma.free(self.addr);
             }
-                                       //    println!("dropping mem region {:?}",self);
+            //    println!("dropping mem region {:?}",self);
         }
     }
 }
@@ -571,7 +570,7 @@ impl<T: std::clone::Clone + Send + Sync + 'static> LamellarLocalMemoryRegion<T> 
         size: usize,
         lamellae: Arc<dyn Lamellae + Sync + Send>,
     ) -> LamellarLocalMemoryRegion<T> {
-        let lmr = LamellarMemoryRegion::new(size, lamellae,true);
+        let lmr = LamellarMemoryRegion::new(size, lamellae, true);
         let pe = lmr.pe;
         LamellarLocalMemoryRegion { lmr: lmr, pe: pe }
     }
