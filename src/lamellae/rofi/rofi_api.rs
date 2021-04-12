@@ -38,6 +38,7 @@ pub(crate) fn rofi_alloc(size: usize) -> *mut u8 {
     let base_ptr_ptr = (&mut base_ptr as *mut _) as *mut *mut std::ffi::c_void;
     // let mut key = 0u64;
     // let key_ptr = &mut key as *mut c_ulonglong;
+    // println!("rofi_alloc");
     unsafe {
         if rofisys::rofi_alloc(size, 0x0, base_ptr_ptr) != 0 {
             panic!("unable to allocate memory region");
@@ -46,13 +47,14 @@ pub(crate) fn rofi_alloc(size: usize) -> *mut u8 {
     // trace!("[{:?}] ({:?}:{:?}) rofi_alloc addr: {:x} size {:?}",rofi_get_id(),file!(),line!(),base_ptr as usize, size);
 
     // let _rofi_slice = unsafe { std::slice::from_raw_parts(base_ptr as *const u8, size) };
-    rofi_barrier();
+    // rofi_barrier();
     base_ptr
 }
 
 #[allow(dead_code)]
 pub(crate) fn rofi_release(addr: usize) {
     let base_ptr = addr as *mut u8;
+    // println!("rofi_release");
     unsafe {
         if rofisys::rofi_release(base_ptr as *mut std::ffi::c_void) != 0 {
             panic!("unable to release memory region");
@@ -140,7 +142,7 @@ pub(crate) unsafe fn rofi_get<T>(src: usize, dst: &mut [T], pe: usize) -> Result
     let size = dst.len() * std::mem::size_of::<T>();
     // let mut ret = -11;
     // while ret == -11 {
-    let ret = rofisys::rofi_iget(dst_addr, src_addr, size, pe as u32, 0);
+    let ret = rofisys::rofi_get(dst_addr, src_addr, size, pe as u32, 0);
     // }
     if ret == 0 {
         Ok(())

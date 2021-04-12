@@ -275,7 +275,7 @@ fn am_without_return(input: syn::ItemImpl) -> TokenStream {
 
         impl LamellarAM for #orig_name {
             type Output = ();
-            fn exec(&self,__lamellar_world: std::sync::Arc<lamellar::LamellarTeamRT>, __lamellar_team: std::sync::Arc<lamellar::LamellarTeamRT>) -> Self::Output {
+            fn exec(self,__lamellar_world: std::sync::Arc<lamellar::LamellarTeamRT>, __lamellar_team: std::sync::Arc<lamellar::LamellarTeamRT>) -> Self::Output {
                 let __lamellar_current_pe = 0;
                 let __lamellar_num_pes = 0;
 
@@ -358,7 +358,7 @@ fn am_with_return(input: syn::ItemImpl, output: syn::Type, crate_header: String)
 
         impl LamellarAM for #orig_name {
             type Output = #output;
-            fn exec(&self,__lamellar_world: std::sync::Arc<#lamellar::LamellarTeamRT>, __lamellar_team: std::sync::Arc<#lamellar::LamellarTeamRT>) -> Self::Output {
+            fn exec(self,__lamellar_world: std::sync::Arc<#lamellar::LamellarTeamRT>, __lamellar_team: std::sync::Arc<#lamellar::LamellarTeamRT>) -> Self::Output {
                 panic!("not valid to execute an active message on a non worker thread");
                 // let __lamellar_current_pe = 0;
                 // let __lamellar_num_pes = 0;
@@ -438,7 +438,7 @@ fn am_with_return_am(input: syn::ItemImpl, _output: syn::Type, args: String) -> 
         quote! {
             impl LamellarAM for #orig_name {
                 type Output = #return_type;
-                fn exec(&self, __lamellar_world: std::sync::Arc<lamellar::LamellarTeamRT>, __lamellar_team: std::sync::Arc<lamellar::LamellarTeamRT>) -> Self::Output {
+                fn exec(self, __lamellar_world: std::sync::Arc<lamellar::LamellarTeamRT>, __lamellar_team: std::sync::Arc<lamellar::LamellarTeamRT>) -> Self::Output {
                     panic!("not valid to execute an active message on a non worker thread");
                     // let __lamellar_current_pe = -1;
                     // let __lamellar_num_pes = -1;
@@ -457,7 +457,7 @@ fn am_with_return_am(input: syn::ItemImpl, _output: syn::Type, args: String) -> 
         quote! {
             impl LamellarAM for #orig_name {
                 type Output = ();
-                fn exec(&self, __lamellar_world: std::sync::Arc<lamellar::LamellarTeamRT>, __lamellar_team: std::sync::Arc<lamellar::LamellarTeamRT>) -> Self::Output {
+                fn exec(self, __lamellar_world: std::sync::Arc<lamellar::LamellarTeamRT>, __lamellar_team: std::sync::Arc<lamellar::LamellarTeamRT>) -> Self::Output {
                     panic!("not valid to execute an active message on a non worker thread");
                     // let __lamellar_current_pe = -1;
                     // let __lamellar_num_pes = -1;
@@ -658,7 +658,7 @@ fn reduction_with_return(input: syn::ItemImpl, output: syn::Type) -> TokenStream
 
         impl LamellarAM for #orig_name {
             type Output = #output;
-            fn exec(&self,__lamellar_world: std::sync::Arc<lamellar::LamellarTeamRT>, __lamellar_team: std::sync::Arc<lamellar::LamellarTeamRT>) -> Self::Output {
+            fn exec(self,__lamellar_world: std::sync::Arc<lamellar::LamellarTeamRT>, __lamellar_team: std::sync::Arc<lamellar::LamellarTeamRT>) -> Self::Output {
                 let __lamellar_current_pe = -1;
                 let __lamellar_num_pes = -1;
                 lamellar::async_std::task::block_on(async move {
@@ -782,7 +782,7 @@ fn create_reduction(
 
         impl LamellarAM for #reduction_name {
             type Output = #typeident;
-            fn exec(&self,__lamellar_world: std::sync::Arc<#lamellar::LamellarTeamRT>, __lamellar_team: std::sync::Arc<#lamellar::LamellarTeamRT>) -> Self::Output {
+            fn exec(self,__lamellar_world: std::sync::Arc<#lamellar::LamellarTeamRT>, __lamellar_team: std::sync::Arc<#lamellar::LamellarTeamRT>) -> Self::Output {
                 let __lamellar_current_pe = -1;
                 let __lamellar_num_pes = -1;
                 #lamellar::async_std::task::block_on(async move {

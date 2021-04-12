@@ -82,6 +82,7 @@ impl<T: std::clone::Clone + Send + Sync + 'static> RegisteredMemoryRegion
             backend: self.backend,
             rdma: self.rdma.clone(),
             cnt: self.cnt.clone(),
+            local: self.local,
             phantom: self.phantom,
         }
     }
@@ -251,10 +252,12 @@ impl Eq for Box<dyn MemoryRegion> {}
 
 #[derive(serde::Serialize, serde::Deserialize, Clone, Copy)]
 pub struct __NetworkLamellarMemoryRegion<T: std::clone::Clone + Send + Sync + 'static> {
+    // orig_addr: usize,
     addr: usize,
     pe: usize,
     size: usize,
     backend: Backend,
+    local: bool,
     phantom: PhantomData<T>,
 }
 
@@ -264,10 +267,12 @@ impl<T: std::clone::Clone + Send + Sync + 'static> From<LamellarMemoryRegion<T>>
 {
     fn from(reg: LamellarMemoryRegion<T>) -> Self {
         let nlmr = __NetworkLamellarMemoryRegion {
+            // orig_addr: reg.orig_addr,
             addr: reg.addr, //- ACTIVE.get(reg.backend).0.get_rdma().local_addr(reg.key), //.base_addr(), //remove if we are able to use two separate memory regions
             pe: reg.pe,
             size: reg.size,
             backend: reg.backend,
+            local: reg.local,
             phantom: reg.phantom,
         };
         // println!("lmr: addr: {:x} pe: {:?} size: {:?} backend {:?}, nlmr: addr: {:x} pe: {:?} size: {:?} backend {:?}",reg.addr,reg.pe,reg.size,reg.backend,nlmr.addr,nlmr.pe,nlmr.size,nlmr.backend);
@@ -281,12 +286,14 @@ impl<T: std::clone::Clone + Send + Sync + 'static> From<LamellarMemoryRegion<T>>
     from = "__NetworkLamellarMemoryRegion<T>"
 )]
 pub struct LamellarMemoryRegion<T: std::clone::Clone + Send + Sync + 'static> {
+    // orig_addr: usize,
     addr: usize,
     pe: usize,
     size: usize,
     backend: Backend,
     rdma: Arc<dyn LamellaeRDMA>,
     cnt: Arc<AtomicUsize>,
+    local: bool,
     phantom: PhantomData<T>,
 }
 
@@ -306,12 +313,14 @@ impl<T: std::clone::Clone + Send + Sync + 'static> From<__NetworkLamellarMemoryR
         temp.1.fetch_add(1, Ordering::SeqCst);
         let rdma = temp.0.get_rdma();
         let lmr = LamellarMemoryRegion {
+            // orig_addr: rdma.local_addr(reg.pe, reg.orig_addr),
             addr: rdma.local_addr(reg.pe, reg.addr),
             pe: rdma.mype(),
             size: reg.size,
             backend: reg.backend,
             rdma: rdma,
             cnt: temp.1.clone(),
+            local: reg.local,
             phantom: reg.phantom,
         };
         // println!("nlmr: addr {:x} pe: {:?} size: {:?} backend {:?}, lmr: addr: {:x} pe: {:?} size: {:?} backend {:?} cnt {:?}",reg.addr,reg.pe,reg.size,reg.backend,lmr.addr,lmr.pe,lmr.size,lmr.backend, lmr.cnt.load(Ordering::SeqCst));
@@ -324,11 +333,17 @@ impl<T: std::clone::Clone + Send + Sync + 'static> LamellarMemoryRegion<T> {
     pub(crate) fn new(
         size: usize,
         lamellae: Arc<dyn Lamellae + Sync + Send>,
+        local: bool
     ) -> LamellarMemoryRegion<T> {
         let cnt = Arc::new(AtomicUsize::new(1));
         ACTIVE.insert(lamellae.backend(), lamellae.clone(), cnt.clone());
         let rdma = lamellae.get_rdma();
-        let addr = rdma.alloc(size * std::mem::size_of::<T>()).unwrap();
+        let addr = if local {
+            rdma.rt_alloc(size * std::mem::size_of::<T>()).unwrap()+rdma.base_addr()
+        }
+        else{
+            rdma.alloc(size * std::mem::size_of::<T>()).unwrap()
+        };
         let temp = LamellarMemoryRegion {
             addr: addr,
             pe: rdma.mype(),
@@ -336,6 +351,7 @@ impl<T: std::clone::Clone + Send + Sync + 'static> LamellarMemoryRegion<T> {
             backend: lamellae.backend(),
             rdma: rdma,
             cnt: cnt,
+            local: local,
             phantom: PhantomData,
         };
         // println!(
@@ -375,6 +391,17 @@ impl<T: std::clone::Clone + Send + Sync + 'static> LamellarMemoryRegion<T> {
         if index + data.len() <= self.size {
             let num_bytes = data.len() * std::mem::size_of::<T>();
             let bytes = std::slice::from_raw_parts(data.as_ptr() as *const u8, num_bytes);
+            // println!(
+            //     "mem region len: {:?} index: {:?} data len{:?} num_bytes {:?}  from {:?} to {:x} ({:x} [{:?}])",
+            //     self.size,
+            //     index,
+            //     data.len(),
+            //     num_bytes,
+            //     data.as_ptr(),
+            //     self.addr,
+            //     self.addr + index * std::mem::size_of::<T>(),
+            //     pe,
+            // );
             self.rdma
                 .put(pe, bytes, self.addr + index * std::mem::size_of::<T>())
         } else {
@@ -457,6 +484,7 @@ impl<T: std::clone::Clone + Send + Sync + 'static> LamellarMemoryRegion<T> {
             backend: self.backend,
             rdma: self.rdma.clone(),
             cnt: self.cnt.clone(),
+            local: self.local,
             phantom: PhantomData,
         }
     }
@@ -473,6 +501,7 @@ impl<T: std::clone::Clone + Send + Sync + 'static> Clone for LamellarMemoryRegio
             backend: self.backend,
             rdma: self.rdma.clone(),
             cnt: self.cnt.clone(),
+            local: self.local,
             phantom: self.phantom,
         };
         // println!("clone: {:?}",lmr);
@@ -490,7 +519,11 @@ impl<T: std::clone::Clone + Send + Sync + 'static> Drop for LamellarMemoryRegion
         if cnt == 1 {
             ACTIVE.remove(self.backend);
             // println!("trying to dropping mem region {:?}",self);
-            self.rdma.free(self.addr); // - self.rdma.base_addr());
+            if self.local{
+                self.rdma.rt_free(self.addr - self.rdma.base_addr()); // - self.rdma.base_addr());
+            }else{
+                self.rdma.free(self.addr);
+            }
                                        //    println!("dropping mem region {:?}",self);
         }
     }
@@ -538,7 +571,7 @@ impl<T: std::clone::Clone + Send + Sync + 'static> LamellarLocalMemoryRegion<T> 
         size: usize,
         lamellae: Arc<dyn Lamellae + Sync + Send>,
     ) -> LamellarLocalMemoryRegion<T> {
-        let lmr = LamellarMemoryRegion::new(size, lamellae);
+        let lmr = LamellarMemoryRegion::new(size, lamellae,true);
         let pe = lmr.pe;
         LamellarLocalMemoryRegion { lmr: lmr, pe: pe }
     }

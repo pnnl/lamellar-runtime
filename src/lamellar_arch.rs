@@ -37,6 +37,7 @@ impl std::error::Error for IdError {}
 pub(crate) enum LamellarArchEnum {
     GlobalArch(GlobalArch),
     StridedArch(StridedArch),
+    BlockedArch(BlockedArch),
     Dynamic(Arc<dyn LamellarArch>),
 }
 
@@ -49,6 +50,8 @@ impl LamellarArchEnum {
         let any_arch = &arch as &dyn std::any::Any;
         let arch_enum = if let Some(strided) = any_arch.downcast_ref::<StridedArch>() {
             LamellarArchEnum::StridedArch(*strided)
+        } else if let Some(blocked) = any_arch.downcast_ref::<BlockedArch>() {
+            LamellarArchEnum::BlockedArch(*blocked)
         } else if let Some(global) = any_arch.downcast_ref::<GlobalArch>() {
             LamellarArchEnum::GlobalArch(*global)
         } else {
@@ -65,6 +68,7 @@ impl LamellarArch for LamellarArchEnum {
         match self {
             LamellarArchEnum::GlobalArch(arch) => arch.num_pes(),
             LamellarArchEnum::StridedArch(arch) => arch.num_pes(),
+            LamellarArchEnum::BlockedArch(arch) => arch.num_pes(),
             LamellarArchEnum::Dynamic(arch) => arch.num_pes(),
         }
     }
@@ -72,6 +76,7 @@ impl LamellarArch for LamellarArchEnum {
         match self {
             LamellarArchEnum::GlobalArch(arch) => arch.start_pe(),
             LamellarArchEnum::StridedArch(arch) => arch.start_pe(),
+            LamellarArchEnum::BlockedArch(arch) => arch.start_pe(),
             LamellarArchEnum::Dynamic(arch) => arch.start_pe(),
         }
     }
@@ -79,6 +84,7 @@ impl LamellarArch for LamellarArchEnum {
         match self {
             LamellarArchEnum::GlobalArch(arch) => arch.end_pe(),
             LamellarArchEnum::StridedArch(arch) => arch.end_pe(),
+            LamellarArchEnum::BlockedArch(arch) => arch.end_pe(),
             LamellarArchEnum::Dynamic(arch) => arch.end_pe(),
         }
     }
@@ -86,6 +92,7 @@ impl LamellarArch for LamellarArchEnum {
         match self {
             LamellarArchEnum::GlobalArch(arch) => arch.parent_pe_id(team_pe),
             LamellarArchEnum::StridedArch(arch) => arch.parent_pe_id(team_pe),
+            LamellarArchEnum::BlockedArch(arch) => arch.parent_pe_id(team_pe),
             LamellarArchEnum::Dynamic(arch) => arch.parent_pe_id(team_pe),
         }
     }
@@ -93,6 +100,7 @@ impl LamellarArch for LamellarArchEnum {
         match self {
             LamellarArchEnum::GlobalArch(arch) => arch.team_pe_id(world_pe),
             LamellarArchEnum::StridedArch(arch) => arch.team_pe_id(world_pe),
+            LamellarArchEnum::BlockedArch(arch) => arch.team_pe_id(world_pe),
             LamellarArchEnum::Dynamic(arch) => arch.team_pe_id(world_pe),
         }
     }

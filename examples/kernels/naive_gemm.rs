@@ -71,7 +71,8 @@ async fn get_sub_mat(mat: &SubMatrix, sub_mat: &LamellarLocalMemoryRegion<f32>) 
         }
     }
     while sub_mat_slice[sub_mat.len() - 1].is_nan() {
-        async_std::task::yield_now().await;
+        // async_std::task::yield_now().await;
+        std::thread::yield_now();
     }
 }
 
@@ -164,8 +165,13 @@ fn main() {
             *elem = 0.0;
         }
     }
-    let num_gops = (2 * dim * dim * dim) as f32 / 1_000_000_000.0;
+    
+    let num_gops =((2 * dim * dim * dim) - dim*dim) as f64 / 1_000_000_000.0; // accurate for square matrices
 
+    if my_pe == 0 {
+        println!("starting");
+    }
+    let mut tot_mb = 0.0f64;
     for bs in [2000, 1000, 500].iter() {
         let block_size = *bs;
         let m_blocks = m / block_size;
@@ -177,6 +183,7 @@ fn main() {
         let b_pe_col_blks = p_blocks;
 
         //A iteration:
+        let mut tasks = 0;
         let start = std::time::Instant::now();
         for i in 0..a_pe_row_blks {
             //iterate over rows of A, (all tiles in a row are local)
@@ -207,19 +214,26 @@ fn main() {
                             block_size: block_size,
                         },
                     );
+                    tasks += 1;
                 }
             }
         }
         world.wait_all();
         world.barrier();
-        let elapsed = start.elapsed().as_secs_f32();
+        let elapsed = start.elapsed().as_secs_f64();
         if my_pe == 0 {
             println!(
-                "blocksize {:?} elapsed {:?} Gflops: {:?}",
+                "blocksize {:?} elapsed {:?} Gflops: {:?} {:?} MB: {:?} ({:?}, {:?}) tasks {:?}",
                 block_size,
                 elapsed,
-                num_gops / elapsed
+                num_gops / elapsed,
+                num_gops2/ elapsed,
+                world.MB_sent()[0] - tot_mb,
+                world.MB_sent()[0],
+                tot_mb,
+                tasks
             );
         }
+        tot_mb = world.MB_sent()[0];
     }
 }

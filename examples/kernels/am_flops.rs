@@ -1,8 +1,8 @@
 use lamellar::{ActiveMessaging, LamellarAM};
 use std::time::Instant;
 
-#[cfg(feature = "nightly")]
-use packed_simd::{f64x8, Simd};
+// #[cfg(feature = "nightly")]
+//use packed_simd::{f64x8, Simd};
 
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
 struct FlopAM {
@@ -29,33 +29,34 @@ impl LamellarAM for FlopAM {
     }
 }
 
-#[cfg(feature = "nightly")]
-#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
-struct SimdAM {
-    iterations: usize,
-}
-#[cfg(feature = "nightly")]
-#[lamellar::am]
-impl LamellarAM for SimdAM {
-    fn exec(&self) -> usize {
-        let mut a: [Simd<[f64; 8]>; 16] = [f64x8::new(
-            1.2345, 1.2345, 1.2345, 1.2345, 1.2345, 1.2345, 1.2345, 1.2345,
-        ); 16];
-        for _i in 0..self.iterations {
-            for a_i in a.iter_mut() {
-                *a_i = (*a_i) * (*a_i) + (*a_i);
-            }
-        }
-        let temp_ops = self.iterations * a.len() * 8 * 2;
-        let num_ops = if temp_ops > a.len() * 2 {
-            temp_ops as usize
-        } else {
-            //this should never actually happen but should prevent optimizing A away
-            a[0].extract(1) as usize
-        };
-        num_ops
-    }
-}
+
+// #[cfg(feature = "nightly")]
+// #[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
+// struct SimdAM {
+//     iterations: usize,
+// }
+// #[cfg(feature = "nightly")]
+// #[lamellar::am]
+// impl LamellarAM for SimdAM {
+//     fn exec(&self) -> usize {
+//         let mut a: [Simd<[f64; 8]>; 16] = [f64x8::new(
+//             1.2345, 1.2345, 1.2345, 1.2345, 1.2345, 1.2345, 1.2345, 1.2345,
+//         ); 16];
+//         for _i in 0..self.iterations {
+//             for a_i in a.iter_mut() {
+//                 *a_i = (*a_i) * (*a_i) + (*a_i);
+//             }
+//         }
+//         let temp_ops = self.iterations * a.len() * 8 * 2;
+//         let num_ops = if temp_ops > a.len() * 2 {
+//             temp_ops as usize
+//         } else {
+//             //this should never actually happen but should prevent optimizing A away
+//             a[0].extract(1) as usize
+//         };
+//         num_ops
+//     }
+// }
 
 fn main() {
     let world = lamellar::LamellarWorldBuilder::new()
@@ -120,45 +121,45 @@ fn main() {
             flops.push(((tot_flop as f64) / cur_t) / 1_000_000_000f64);
         }
 
-        #[cfg(feature = "nightly")]
-        {
-            reqs.clear();
-            let timer = Instant::now();
-            let mut sub_time = 0f64;
-            if my_pe == 0 {
-                for _j in 0..num_tasks {
-                    let sub_timer = Instant::now();
-                    reqs.push(world.exec_am_all(SimdAM {
-                        iterations: num_iterations,
-                    }));
-                    sub_time += sub_timer.elapsed().as_secs_f64();
-                }
-                println!("issue time: {:?}", timer.elapsed().as_secs_f64());
-                world.wait_all();
-            }
+        // #[cfg(feature = "nightly")]
+        // {
+        //     reqs.clear();
+        //     let timer = Instant::now();
+        //     let mut sub_time = 0f64;
+        //     if my_pe == 0 {
+        //         for _j in 0..num_tasks {
+        //             let sub_timer = Instant::now();
+        //             reqs.push(world.exec_am_all(SimdAM {
+        //                 iterations: num_iterations,
+        //             }));
+        //             sub_time += sub_timer.elapsed().as_secs_f64();
+        //         }
+        //         println!("issue time: {:?}", timer.elapsed().as_secs_f64());
+        //         world.wait_all();
+        //     }
 
-            world.barrier();
-            let cur_t = timer.elapsed().as_secs_f64();
-            let tot_flop: usize = reqs
-                .iter()
-                .map(|r| r.get_all().iter().map(|r| r.unwrap()).sum::<usize>())
-                .sum();
-            let task_granularity = ((cur_t * 24f64) / num_tasks as f64) * 1000.0f64;
-            if my_pe == 0 {
-                println!(
-                    "nightly iter size: {:?} tot_flop: {:?} time: {:?} (issue time: {:?})
-                    GFLOPS (avg): {:?} ({:?}%) task_gran: {:?}(ms)",
-                    num_iterations, //transfer size
-                    tot_flop,       //num transfers
-                    cur_t,          //transfer time
-                    sub_time,
-                    ((tot_flop as f64) / cur_t) / 1_000_000_000f64, // throughput of user payload
-                    (((tot_flop as f64) / cur_t) / 1_000_000_000f64) / 2800f64,
-                    task_granularity,
-                );
-                flops.push(((tot_flop as f64) / cur_t) / 1_000_000_000f64);
-            }
-        }
+        //     world.barrier();
+        //     let cur_t = timer.elapsed().as_secs_f64();
+        //     let tot_flop: usize = reqs
+        //         .iter()
+        //         .map(|r| r.get_all().iter().map(|r| r.unwrap()).sum::<usize>())
+        //         .sum();
+        //     let task_granularity = ((cur_t * 24f64) / num_tasks as f64) * 1000.0f64;
+        //     if my_pe == 0 {
+        //         println!(
+        //             "nightly iter size: {:?} tot_flop: {:?} time: {:?} (issue time: {:?})
+        //             GFLOPS (avg): {:?} ({:?}%) task_gran: {:?}(ms)",
+        //             num_iterations, //transfer size
+        //             tot_flop,       //num transfers
+        //             cur_t,          //transfer time
+        //             sub_time,
+        //             ((tot_flop as f64) / cur_t) / 1_000_000_000f64, // throughput of user payload
+        //             (((tot_flop as f64) / cur_t) / 1_000_000_000f64) / 2800f64,
+        //             task_granularity,
+        //         );
+        //         flops.push(((tot_flop as f64) / cur_t) / 1_000_000_000f64);
+        //     }
+        // }
     }
     if my_pe == 0 {
         println!(

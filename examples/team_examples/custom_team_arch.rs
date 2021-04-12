@@ -136,6 +136,7 @@ fn test_team(world: &LamellarWorld, team: Option<Arc<LamellarTeam>>, label: &str
     } else {
         0.0
     };
+    println!("done");
     world.barrier();
     //time will be approx 2 for team members, 1 for non members
     for i in 0..world.num_pes() {
@@ -148,6 +149,7 @@ fn test_team(world: &LamellarWorld, team: Option<Arc<LamellarTeam>>, label: &str
     if my_pe == 0 {
         println!("--------------------------------------------------------");
     }
+    world.barrier();
 }
 
 fn main() {

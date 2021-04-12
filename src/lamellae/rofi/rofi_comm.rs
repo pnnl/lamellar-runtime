@@ -8,8 +8,8 @@ use parking_lot::{Mutex, RwLock};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 
-const ROFI_MEM: usize = 20 * 1024 * 1024 * 1024;
-
+static ROFI_MEM: AtomicUsize = AtomicUsize::new(1 * 1024 * 1024 * 1024);
+const RT_MEM: usize = 100*1024*1024; // we add this space for things like team barrier buffers, but will work towards having teams get memory from rofi allocs
 pub(crate) struct RofiComm {
     pub(crate) rofi_base_address: Arc<RwLock<usize>>,
     alloc: BTreeAlloc,
@@ -19,17 +19,24 @@ pub(crate) struct RofiComm {
     pub(crate) put_amt: Arc<AtomicUsize>,
     pub(crate) get_amt: Arc<AtomicUsize>,
     comm_mutex: Arc<Mutex<()>>,
+    alloc_mutex: Arc<Mutex<()>>,
 }
 
 //#[prof]
 impl RofiComm {
     pub(crate) fn new(provider: &str) -> RofiComm {
+        if let Ok(size) = std::env::var("LAMELLAR_ROFI_MEM_SIZE"){
+            let size = size.parse::<usize>().expect("invalid memory size, please supply size in bytes");
+            ROFI_MEM.store(size, Ordering::SeqCst);
+        }
         rofi_init(provider).expect("error in rofi init");
         trace!("rofi initialized");
         rofi_barrier();
         let num_pes = rofi_get_size();
         let cmd_q_mem = RofiCommandQueue::mem_per_pe() * num_pes;
-        let total_mem = cmd_q_mem + ROFI_MEM;
+
+        
+        let total_mem = cmd_q_mem + RT_MEM + ROFI_MEM.load(Ordering::SeqCst);
         let addr = rofi_alloc(total_mem);
         let mut rofi = RofiComm {
             rofi_base_address: Arc::new(RwLock::new(addr as usize)),
@@ -40,6 +47,7 @@ impl RofiComm {
             put_amt: Arc::new(AtomicUsize::new(0)),
             get_amt: Arc::new(AtomicUsize::new(0)),
             comm_mutex: Arc::new(Mutex::new(())),
+            alloc_mutex: Arc::new(Mutex::new(())),
         };
         trace!(
             "[{:?}] Rofi base addr 0x{:x}",
@@ -63,41 +71,45 @@ impl RofiComm {
     }
     pub(crate) fn rt_alloc(&self, size: usize) -> Option<usize> {
         // println!("[{:?}]-({:?}) rt_alloc entry",self.my_pe,thread::current().id());
+        // let b =self.alloc.space_avail();
         if let Some(addr) = self.alloc.try_malloc(size) {
             // println!("[{:?}]-({:?}) rt_alloc exit",self.my_pe,thread::current().id());
+            // println!("alloc addr {:?} free space {:?} (before: {:?}   alloc size {:?} ({:?}))", addr, self.alloc.space_avail(), b, b - self.alloc.space_avail(), size);
             Some(addr)
         } else {
-            println!("out of memory? {:?} {:?}", size, self.alloc.space_avail());
+            println!("[WARNING] out of memory: (work in progress on a scalable solution, as a work around try setting the LAMELLAR_ROFI_MEM_SIZE envrionment variable (current size = {:?} -- Note: LamellarLocalArrays are currently allocated out of this pool",ROFI_MEM.load(Ordering::SeqCst));
             // println!("[{:?}]-({:?}) rt_alloc exit",self.my_pe,thread::current().id());
             None
         }
+        
     }
     #[allow(dead_code)]
     pub(crate) fn rt_free(&self, addr: usize) {
         // println!("[{:?}]-({:?}) rt_free entry",self.my_pe,thread::current().id());
+        // let b =self.alloc.space_avail();
         self.alloc.free(addr);
         // println!("[{:?}]-({:?}) rt_free exit",self.my_pe,thread::current().id());
         // println!("free addr {:?} free space {:?} (before: {:?}   {:?})", addr, self.alloc.space_avail(), b, self.alloc.space_avail()-b);
     }
     pub(crate) fn alloc(&self, size: usize) -> Option<usize> {
         // println!("[{:?}]-({:?}) alloc entry",self.my_pe,thread::current().id());
-        // let (addr,key) =rofi_alloc(size);//
-        // Some((addr as usize,key))
-        if let Some(addr) = self.rt_alloc(size) {
-            // println!("[{:?}]-({:?}) alloc exit",self.my_pe,thread::current().id());
-            Some(addr + self.base_addr())
-        } else {
-            // println!("[{:?}]-({:?}) alloc exit",self.my_pe,thread::current().id());
-            None
-        }
-        // Some(rofi_alloc(size) as usize)
+        // if let Some(addr) = self.rt_alloc(size) {
+        //     // println!("[{:?}]-({:?}) alloc exit",self.my_pe,thread::current().id());
+        //     Some(addr + self.base_addr())
+        // } else {
+        //     // println!("[{:?}]-({:?}) alloc exit",self.my_pe,thread::current().id());
+        //     None
+        // }
+        let _lock = self.alloc_mutex.lock();
+        Some(rofi_alloc(size) as usize)
     }
     #[allow(dead_code)]
     pub(crate) fn free(&self, addr: usize) {
         // println!("[{:?}]-({:?}) free entry",self.my_pe,thread::current().id());
-        self.rt_free(addr - self.base_addr());
+        // self.rt_free(addr - self.base_addr());
         // println!("[{:?}]-({:?}) free exit",self.my_pe,thread::current().id());
-        // rofi_release(addr);
+        let _lock = self.alloc_mutex.lock();
+        rofi_release(addr);
         // println!("free addr {:?} free space {:?} (before: {:?}   {:?})", addr, self.alloc.space_avail(), b, self.alloc.space_avail()-b);
     }
 
@@ -148,7 +160,7 @@ impl RofiComm {
             self.put_amt.fetch_add(src_addr.len(), Ordering::SeqCst);
         } else {
             unsafe {
-                // println!("[{:?}]-({:?}) memcopy {:?}",pe,src_addr.as_ptr());
+                // println!("[{:?}]-({:?}) memcopy {:?}",pe,src_addr.as_ptr(),src_addr.len());
                 std::ptr::copy_nonoverlapping(
                     src_addr.as_ptr(),
                     dst_addr as *mut T,
@@ -343,7 +355,9 @@ impl RofiComm {
 impl Drop for RofiComm {
     fn drop(&mut self) {
         rofi_barrier();
+        std::thread::sleep(std::time::Duration::from_millis(1000));
         let _res = rofi_finit();
+        std::thread::sleep(std::time::Duration::from_millis(1000));
         trace!("[{:?}] dropping rofi comm", self.my_pe);
     }
 }

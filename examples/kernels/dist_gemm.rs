@@ -63,6 +63,7 @@ async fn get_sub_mat(mat: &SubMatrix, sub_mat: &LamellarLocalMemoryRegion<f32>) 
     let start_col = mat.col_block * mat.block_size;
     let sub_mat_slice = unsafe { sub_mat.as_mut_slice().unwrap() };
     sub_mat_slice[sub_mat.len() - 1] = f32::NAN;
+    // println!("getting {:?}",mat);
     for row in 0..mat.block_size {
         let offset = (row + start_row) * mat.cols + (start_col);
         let data = sub_mat.sub_region(row * mat.block_size..(row + 1) * mat.block_size);
@@ -70,8 +71,10 @@ async fn get_sub_mat(mat: &SubMatrix, sub_mat: &LamellarLocalMemoryRegion<f32>) 
             mat.mat.get(mat.pe, offset, &data);
         }
     }
+    
     while sub_mat_slice[sub_mat.len() - 1].is_nan() {
         async_std::task::yield_now().await;
+        // std::thread::yield_now();
     }
 }
 
@@ -108,30 +111,45 @@ impl LamellarAM for MatMulAM {
         //     b.put(lamellar::current_pe as usize, 0, &b_vec);
         // }
 
-        let mut reqs = vec![];
+        // let mut reqs = vec![];
         for row in 0..self.a_pe_rows {
             let mut a = self.a.clone();
             a.row_block = row;
             let mut c = self.c.clone();
             c.row_block = row;
-            reqs.push(
-                lamellar::world
-                    .exec_am_pe(
-                        //this is where tasks groups would be nice...
-                        self.c.pe,
-                        CachedMM {
-                            a: a,
-                            b: b.clone(),
-                            c: c,
-                            block_size: self.block_size,
-                        },
-                    )
-                    .into_future(),
-            );
+            let sub_a = lamellar::world.alloc_local_mem_region::<f32>(a.block_size * a.block_size);
+            get_sub_mat(&a, &sub_a).await; //this should be local copy so returns immediately
+            do_gemm(&sub_a,&b,c,self.block_size);
+            lamellar::world.free_local_memory_region(sub_a);
         }
-        futures::future::join_all(reqs).await;
         lamellar::world.free_local_memory_region(b);
     }
+}
+
+fn do_gemm(a: &LamellarLocalMemoryRegion<f32>, b: &LamellarLocalMemoryRegion<f32>, c: SubMatrix, block_size: usize,){
+   
+                                    // let b = self.b.as_slice();
+    let mut res = vec![f32::NAN; a.len()];
+    unsafe {
+        sgemm(
+            block_size,
+            block_size,
+            block_size,
+            1.0,
+            a.as_ptr().unwrap(),
+            block_size as isize,
+            1,
+            b.as_ptr().unwrap(),
+            block_size as isize,
+            1,
+            0.0,
+            res.as_mut_ptr(),
+            block_size as isize,
+            1,
+        );
+    }
+    c.add_mat(&res);
+    // lamellar::world.free_local_memory_region(a);
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
@@ -183,6 +201,16 @@ fn main() {
     let world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();
     let num_pes = world.num_pes();
+    if let Ok(size) = std::env::var("LAMELLAR_ROFI_MEM_SIZE"){
+        let size = size.parse::<usize>().expect("invalid memory size, please supply size in bytes");
+        if size < 300*1024*1024 * num_pes {
+            println!("This example requires ~300 MB x Num_PEs of 'local' space, please set LAMELLAR_ROFI_MEM_SIZE env var appropriately ");
+            std::process::exit(1);
+        }
+    }else if 1*1024*1024*1024 < 300*1024*1024 * num_pes{ //1GB is the default space allocated for 'local' buffers
+        println!("This example requires ~300 MB x Num_PEs of 'local' space, please set LAMELLAR_ROFI_MEM_SIZE env var appropriately ");
+        std::process::exit(1);
+    }
 
     let dim = elem_per_pe *num_pes;
 
@@ -211,7 +239,7 @@ fn main() {
             *elem = 0.0;
         }
     }
-    let num_gops = (2 * dim * dim * dim) as f64 / 1_000_000_000.0;
+    let num_gops =((2 * dim * dim * dim) - dim*dim) as f64 / 1_000_000_000.0; // accurate for square matrices
 
     if my_pe == 0 {
         println!("starting");
@@ -261,9 +289,9 @@ fn main() {
                 ));
                 tasks += 1;
             }
-            for req in reqs {
-                req.get();
-            }
+            // for req in reqs {
+            //     req.get();
+            // }
         }
 
         world.wait_all();

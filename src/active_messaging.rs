@@ -63,7 +63,7 @@ pub(crate) type LamellarBoxedAm = Box<dyn LamellarActiveMessage + Send + Sync>;
 // #[async_trait]
 pub trait LamellarAM {
     type Output: serde::ser::Serialize + serde::de::DeserializeOwned + Sync + Send;
-    fn exec(&self, world: Arc<LamellarTeamRT>, team: Arc<LamellarTeamRT>) -> Self::Output;
+    fn exec(self, world: Arc<LamellarTeamRT>, team: Arc<LamellarTeamRT>) -> Self::Output;
 }
 
 pub trait LamellarDataReturn: std::fmt::Debug + std::any::Any {
