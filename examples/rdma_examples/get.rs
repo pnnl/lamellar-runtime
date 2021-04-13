@@ -1,3 +1,9 @@
+/// ------------Lamellar Example: RDMA get -------------------------
+/// this example highlights constructing a lamellar memory region
+/// and performing an RDMA get of remote data from the region into
+/// a local buffer
+///----------------------------------------------------------------
+
 use lamellar::ActiveMessaging; //for barrier
 use lamellar::{RegisteredMemoryRegion, RemoteMemoryRegion};
 

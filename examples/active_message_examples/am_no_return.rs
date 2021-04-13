@@ -1,3 +1,11 @@
+/// ------------Lamellar Example: AM no return-------------------------
+/// This example highlights how to create a Lamellar Active message
+/// the active message consists of a single input value (the pe id of the originating pe)
+/// when executed it will print the active message data and return no data
+/// it tests executing the AM localy, executing remotely, and executing on all PEs
+/// finally it performs a ring like pattern where each pe sends an AM to its right neigbor (wrapping to 0 for the last pe)
+/// --------------------------------------------------------------------
+
 use lamellar::{ActiveMessaging, LamellarAM};
 // use lamellar::{Backend, SchedulerType};
 

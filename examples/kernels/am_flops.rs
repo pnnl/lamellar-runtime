@@ -1,3 +1,10 @@
+/// ------------Lamellar Bandwidth: AM flops  -------------------------
+/// similar to the AM bandwidth tests but instead of transferring data
+/// each active message performs some number of dummy multiply add operations
+/// Not to be used as a true measure of the flops of a system but can be
+/// useful to compare multiple systems and/or perform worksize to 
+/// RT latency analyses
+/// --------------------------------------------------------------------
 use lamellar::{ActiveMessaging, LamellarAM};
 use std::time::Instant;
 

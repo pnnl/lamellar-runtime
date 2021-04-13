@@ -1,3 +1,7 @@
+/// ------------Lamellar Bandwidth: RDMA Put  -------------------------
+/// Test the bandwidth between two PEs using an RDMA Put of N bytes 
+/// from a local array into a remote PE.
+/// --------------------------------------------------------------------
 use lamellar::ActiveMessaging;
 use lamellar::{RegisteredMemoryRegion, RemoteMemoryRegion};
 use std::time::Instant;

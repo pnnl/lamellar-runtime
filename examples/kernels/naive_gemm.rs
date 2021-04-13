@@ -1,3 +1,16 @@
+/// ----------------Lamellar Gemm 1---------------------------------------------------
+/// This naive GEMM implementation performs blockwise (tiled) mat mults
+/// it does not perform any optimzation for reusing a given block
+/// a.k.a remote blocks are transfered for every sub matrix multiplication
+/// we launch active messages so that the result of a tiled mat mult
+/// is stored to the local portion of the C matrix. That is, we never transfer
+/// mat mult results over the network. To view the final matrix on a single node,
+/// we would transfer the data after the multiplication
+///
+/// matrices use row-wise distribution (i.e. all elements of a row are local to a pe,
+/// conversely this means elements of a column are distributed across pes)
+///----------------------------------------------------------------------------------
+
 use futures::future;
 use lamellar::{ActiveMessaging, LamellarAM};
 use lamellar::{
@@ -76,17 +89,7 @@ async fn get_sub_mat(mat: &SubMatrix, sub_mat: &LamellarLocalMemoryRegion<f32>) 
     }
 }
 
-//-----------------------------------------------------------------------------------//
-// This naive implementation performs blockwise (tiled) mat mults
-// it does not perform any optimzation for reusing a given block
-// a.k.a remote blocks are transfered for every sub matrix multiplication
-// we launch active messages so that the result of a tiled mat mult
-// is stored to the local portion of the C matrix. That is, we never transfer
-// mat mult results over the network. To view the final matrix on a single node,
-// we would transfer the data after the multiplication
-//
-// matrices use row-wise distribution (i.e. all elements of a row are local to a pe,
-// conversely this means elements of a column are distributed across pes)
+
 
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
 struct NaiveMM {

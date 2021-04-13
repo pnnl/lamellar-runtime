@@ -1,3 +1,14 @@
+/// ------------Lamellar Example: ASYNC Comparison -------------------------
+/// This example highlights Lamellars integration with Rusts async/await framework
+/// To show this we implement two active messages where the "work" both messages
+/// perform is the sleep for some number of seconds.
+/// One active message uses std::thread::sleep which blocks the calling thread
+/// the other uses async_std::task::sleep which will not block the calling thread,
+/// instead placing the task to the back of a work queue and processing the next one.
+/// For this example we recommend setting the LAMELLAR_THREADS envrionment variable to 1.
+/// E.g. export LAMELLAR_THREADS=1
+/// this will show the blocking vs non-blocking nature of the the two active message types
+/// --------------------------------------------------------------------
 use lamellar::{ActiveMessaging, LamellarAM};
 
 use std::time::{Duration, Instant};

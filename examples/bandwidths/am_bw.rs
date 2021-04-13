@@ -1,3 +1,8 @@
+/// ------------Lamellar Bandwidth: AM  -------------------------
+/// Test the bandwidth between two PEs using an active message which
+/// contains a vector of N bytes
+/// the active message simply returns immediately.
+/// --------------------------------------------------------------------
 use lamellar::{ActiveMessaging, LamellarAM};
 use std::time::Instant;
 

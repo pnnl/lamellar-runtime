@@ -1,3 +1,10 @@
+///---------------Lamellar Example: Simple PTP---------------------------------
+/// a very simple implementation of Orecision Time Protocol for synchronizing clocks in a network
+/// highlights using active messages which themselves return other active messages (which return the final result)
+/// DISCLAIMER: this code is intended for learning and illustrative purposes,
+/// we make no claims to the accuracy or resolution of the resulting clock offsets
+/// this should not be used in production codes as is.
+/// --------------------------------------------------------------------------
 use lamellar::{ActiveMessaging, LamellarAM};
 use std::time::SystemTime;
 

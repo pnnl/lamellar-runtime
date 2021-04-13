@@ -1,3 +1,10 @@
+/// ------------Lamellar Example: RDMA get -------------------------
+/// this example highlights constructing a lamellar memory region
+/// an then embedding and using it within a Lamellar Active message.
+/// Within the AM, the memory handle can be used to get data from the
+/// a remote pes or put data into a remote pes. In the example,
+/// the handles are used on remote pes to access data on the PE which launched the AM
+///----------------------------------------------------------------
 use lamellar::{
     ActiveMessaging, LamellarAM, LamellarMemoryRegion, RegisteredMemoryRegion, RemoteMemoryRegion,
 };

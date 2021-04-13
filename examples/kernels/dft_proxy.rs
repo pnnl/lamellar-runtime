@@ -1,3 +1,10 @@
+/// ------------Lamellar Bandwidth: DFT Proxy  -------------------------
+/// This example is inspired from peforming a naive DFT
+/// it does not actually calculate a DFT as we simply perform the transform
+/// using f64s, rather than using complex representations.
+/// we include the distributed Lamellar Implemtation
+/// as well as a (single process) shared memory version using Rayon.
+/// --------------------------------------------------------------------
 use lamellar::{ActiveMessaging, LamellarAM, LamellarWorld};
 use lamellar::{LamellarMemoryRegion, RegisteredMemoryRegion, RemoteMemoryRegion};
 use parking_lot::Mutex;
@@ -183,17 +190,14 @@ fn main() {
     // let num_pes = 1;
     let global_len = num_pes * array_len;
     let mut rng = StdRng::seed_from_u64(10);
-    // let full_signal: Vec<f64> = (0..global_len).map(|_| rng.gen_range(0.0, 1.0)).collect();
 
-    // let mut full_signal = world.local_array(global_len,0.0f64);
     let full_signal = world.alloc_local_mem_region::<f64>(global_len);
     unsafe {
         for i in full_signal.as_mut_slice().unwrap() {
             *i = rng.gen_range(0.0, 1.0);
         }
     }
-    // let mut full_spectrum: Vec<f64> = vec![0.0; global_len];
-    // let full_spectrum = world.local_array(global_len,0.0f64);
+
     let full_spectrum = world.alloc_local_mem_region::<f64>(global_len);
     let magic = world.alloc_local_mem_region::<f64>(num_pes);
     unsafe {

@@ -1,3 +1,7 @@
+/// ------------Lamellar Example: Team based AM -------------------------
+/// this example highlights creating and using LamellarTeams
+/// to launch and execute active messages. 
+///----------------------------------------------------------------
 use lamellar::{
     ActiveMessaging, BlockedArch, LamellarAM, LamellarTeam, LamellarWorld, StridedArch,
 };

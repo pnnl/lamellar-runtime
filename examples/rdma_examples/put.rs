@@ -1,3 +1,8 @@
+/// ------------Lamellar Example: RDMA put -------------------------
+/// this example highlights constructing a lamellar memory region
+/// and performing an RDMA put of local data into the region located
+/// on a remote PE.
+///----------------------------------------------------------------
 use lamellar::ActiveMessaging; //for barrier
 use lamellar::{RegisteredMemoryRegion, RemoteMemoryRegion};
 

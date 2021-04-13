@@ -1,9 +1,5 @@
-use lamellar::{ActiveMessaging, LamellarAM, LamellarTeam, LamellarWorld};
-use lamellar::{IdError, LamellarArch};
-use std::sync::Arc;
-use std::time::{Duration, Instant};
-
-//This example shows how to implement a custom team layout using the LamellarArch trait:
+///-------------------Lamellar Example: Custom Team Arch-----------------------------
+/// This example shows how to implement a custom team layout using the LamellarArch trait:
 /*
 pub trait LamellarArch: Sync + Send +  std::fmt::Debug {
     fn num_pes(&self) -> usize;
@@ -13,6 +9,15 @@ pub trait LamellarArch: Sync + Send +  std::fmt::Debug {
     fn team_pe_id(&self, parent_pe: &usize) -> Result<usize, IdError>; // team id is for user convenience, ids == 0..num_team_pes-1
 }
 */
+/// Lamellar currently provides a Block (sequential) layout, as well as a strided layout.
+/// this example shows how to implement a block+strided layout architecture.
+///-------------------------------------------------------------------------------
+use lamellar::{ActiveMessaging, LamellarAM, LamellarTeam, LamellarWorld};
+use lamellar::{IdError, LamellarArch};
+use std::sync::Arc;
+use std::time::{Duration, Instant};
+
+
 
 #[derive(Debug, Hash, Clone)]
 struct BlockStridedArch {

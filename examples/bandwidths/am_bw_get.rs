@@ -1,3 +1,11 @@
+/// ------------Lamellar Bandwidth: AM +RDMA -------------------------
+/// Test the bandwidth between two PEs using an active message which
+/// contians a handle to a LamellarMemoryRegion, the active message
+/// then "gets" N bytes into a local array.
+/// This allows us to have multiple data transfers occuring in parallel
+/// and reduces the need to copy + serialize/deserialize larges amounts 
+/// of data (on the critical path)
+/// --------------------------------------------------------------------
 use lamellar::{
     ActiveMessaging, LamellarAM, LamellarMemoryRegion, RegisteredMemoryRegion, RemoteMemoryRegion,
 };

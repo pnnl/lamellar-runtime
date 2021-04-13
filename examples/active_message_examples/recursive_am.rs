@@ -1,3 +1,10 @@
+/// ------------Lamellar Example: Recursive active messages -------------------------
+/// This example highlights the ability for active messages to launch
+/// and wait on other active messages as part for their execution.
+/// We can conver our Active Message request handles into futures
+/// and then await the result of the future in a non blocking fashion.
+/// e.g. request.as_future().await
+/// --------------------------------------------------------------------
 use lamellar::{ActiveMessaging, LamellarAM};
 
 //----------------- Recursive Active Message -----------------//

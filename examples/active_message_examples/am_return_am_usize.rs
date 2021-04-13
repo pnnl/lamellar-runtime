@@ -1,3 +1,11 @@
+/// ------------Lamellar Example: AM returm Am return usize-------------------------
+/// This example highlights how to create a Lamellar Active message 
+/// with multiple input types which returns as a result another active message.
+/// This returned active message is executed automatically upon arrival at the original
+/// PE and itself retuns a usize as the final result.
+/// it tests executing the AM localy, executing remotely, and executing on all PEs
+/// --------------------------------------------------------------------
+
 use lamellar::{ActiveMessaging, LamellarAM};
 // use lamellar::{Backend, SchedulerType};
 

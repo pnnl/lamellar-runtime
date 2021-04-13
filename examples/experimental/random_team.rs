@@ -1,12 +1,15 @@
+/// ----------------------Lamellar Example: Random Team----------------------
+/// an experimental example that implements a custom lamellar arch
+/// which "scrambles" the pe id of the compute nodes. It uses
+/// recursive ams to visit and print out a path of pes visted
+/// also experiments with sub_teams
+///------------------------------------------------------------------------
 use lamellar::{ActiveMessaging, IdError, LamellarAM, LamellarArch};
 use rand::seq::SliceRandom;
 // use rand::thread_rng;
 use rand::{rngs::StdRng, SeedableRng};
 
-// an experimental example that implements a custom lamellar arch
-// which "scrambles" the pe id of the compute nodes. It uses
-// recursive ams to visit and print out a path of pes visted
-// also experiments with sub_teams
+
 
 //----------------- Recursive Active Message -----------------//
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]

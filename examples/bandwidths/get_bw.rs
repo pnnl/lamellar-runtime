@@ -1,3 +1,7 @@
+/// ------------Lamellar Bandwidth: RDMA Get  -------------------------
+/// Test the bandwidth between two PEs using an RDMA get of N bytes 
+/// from a remote PE to a local array.
+/// --------------------------------------------------------------------
 use lamellar::ActiveMessaging;
 use lamellar::{RegisteredMemoryRegion, RemoteMemoryRegion};
 use std::time::Instant;
@@ -10,8 +14,7 @@ fn main() {
     let num_pes = world.num_pes();
     let array = world.alloc_shared_mem_region::<u8>(ARRAY_LEN);
     let data = world.alloc_local_mem_region::<u8>(ARRAY_LEN);
-    // let data_slice = unsafe{ data.as_mut_slice().unwrap() };
-    // unsafe { array.put(my_pe, 0, &data) };
+
     world.barrier();
     let s = Instant::now();
     world.barrier();
@@ -30,7 +33,6 @@ fn main() {
     }
     for i in 0..30 {
         let num_bytes = 2_u64.pow(i);
-        // println!("data ptr {:p}",data.as_ptr());
         let old: f64 = world.MB_sent().iter().sum();
         let mbs_o = world.MB_sent();
         let mut sum = 0;

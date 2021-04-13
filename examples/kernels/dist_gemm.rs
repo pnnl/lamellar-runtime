@@ -1,4 +1,15 @@
-// use futures::future;
+///----------------------------Lamellar GEMM 2 --------------------------------------
+/// Similar to the naive implementation (in naive_gemm.rs) this algorithm
+/// performs blockwise (sub matrix) mat mults.
+/// the key difference is that this version has a small optimization to
+/// reuse a remote block so that it only needs to be transfered once.
+/// we launch active messages so that the result of a (blockwise) mat mult
+/// is stored to the local portion of the C matrix. That is, we never transfer
+/// mat mult results over the network
+///
+/// matrices use row-wise distribution (i.e. all elements of a row are local to a pe,
+/// conversely this means elements of a column are distributed across pes)
+///---------------------------------------------------------------------------------
 use lamellar::{ActiveMessaging, LamellarAM};
 use lamellar::{
     LamellarLocalMemoryRegion, LamellarMemoryRegion, RegisteredMemoryRegion, RemoteMemoryRegion,
@@ -78,17 +89,7 @@ async fn get_sub_mat(mat: &SubMatrix, sub_mat: &LamellarLocalMemoryRegion<f32>) 
     }
 }
 
-//---------------------------------------------------------------------------------//
-// Similar to the naive implementation (in naive_gemm.rs) this algorithm
-// performs blockwise (sub matrices) mat mults.
-// the key difference is that this version has a small optimization to
-// reuse a remote block so that it only needs to be transfered once
-// we launch active messages so that the result of a (blockwise) mat mult
-// is stored to the local portion of the C matrix. That is, we never transfer
-// mat mult results over the network
-//
-// matrices use row-wise distribution (i.e. all elements of a row are local to a pe,
-// conversely this means elements of a column are distributed across pes)
+
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
 struct MatMulAM {
     a: SubMatrix,     // a is always local

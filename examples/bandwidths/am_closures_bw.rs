@@ -1,3 +1,8 @@
+/// ------------Lamellar Bandwidth: Remote Closures  -------------------------
+/// Test the bandwidth between two PEs using remote closures which
+/// contains a vector of N bytes
+/// this example requires nightly rust
+/// --------------------------------------------------------------------
 use lamellar::{ActiveMessaging, RemoteClosures};
 use std::time::Instant;
 
@@ -38,7 +43,7 @@ fn main() {
             for _j in (num_bytes..(2_u64.pow(exp))).step_by(num_bytes as usize) {
                 let _d = _data.clone();
                 let sub_timer = Instant::now();
-                world.exec_closure_pe(num_pes - 1, lamellar::FnOnce!([_d] move || {} )); //we explicity are captured _data and transfer it even though we do nothing with it
+                world.exec_closure_pe(num_pes - 1, lamellar::FnOnce!([_d] move || {} )); //we explicity are capturing _data and transfer it even though we do nothing with it
                 sub_time += sub_timer.elapsed().as_secs_f64();
                 sum += num_bytes * 1 as u64;
                 cnt += 1;
