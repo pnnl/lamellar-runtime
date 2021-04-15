@@ -63,7 +63,7 @@ pub(crate) type LamellarBoxedAm = Box<dyn LamellarActiveMessage + Send + Sync>;
 // #[async_trait]
 pub trait LamellarAM {
     type Output: serde::ser::Serialize + serde::de::DeserializeOwned + Sync + Send;
-    fn exec(self, world: Arc<LamellarTeamRT>, team: Arc<LamellarTeamRT>) -> Self::Output;
+    // fn exec(self, world: Arc<LamellarTeamRT>, team: Arc<LamellarTeamRT>) -> Self::Output;
 }
 
 pub trait LamellarDataReturn: std::fmt::Debug + std::any::Any {
@@ -176,14 +176,20 @@ pub trait ActiveMessaging {
 
     fn exec_am_all<F>(&self, am: F) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync>
     where
-        F: LamellarActiveMessage + LamellarAM + Send + Sync + 'static;
+        F: LamellarActiveMessage + LamellarAM + Send + Sync + serde::ser::Serialize + serde::de::DeserializeOwned + 'static;
     fn exec_am_pe<F>(
         &self,
         pe: usize,
         am: F,
     ) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync>
     where
-        F: LamellarActiveMessage + LamellarAM + Send + Sync + 'static;
+        F: LamellarActiveMessage + LamellarAM + Send + Sync + serde::ser::Serialize + serde::de::DeserializeOwned + 'static;
+    fn exec_am_local<F>(
+            &self,
+            am: F,
+        ) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync>
+        where
+            F: LamellarActiveMessage + Send + Sync + 'static;
 }
 
 //maybe make this a struct then we could hold the pending counters...

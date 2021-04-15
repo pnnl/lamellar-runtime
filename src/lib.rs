@@ -60,7 +60,7 @@ pub use crate::lamellar_team::LamellarTeamRT;
 pub use crate::lamellar_team::LamellarTeam;
 
 extern crate lamellar_impl;
-pub use lamellar_impl::{am, generate_reductions_for_type, reduction, register_reduction};
+pub use lamellar_impl::{am, local_am, generate_reductions_for_type, reduction, register_reduction};
 
 #[doc(hidden)]
 pub use inventory;

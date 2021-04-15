@@ -111,7 +111,7 @@ impl ActiveMessaging for LamellarTeam {
 
     fn exec_am_all<F>(&self, am: F) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync>
     where
-        F: LamellarActiveMessage + LamellarAM + Send + Sync + 'static, // R: LamellarDataReturn + serde::de::DeserializeOwned
+        F: LamellarActiveMessage + LamellarAM + Send + Sync + serde::ser::Serialize + serde::de::DeserializeOwned + 'static, // R: LamellarDataReturn + serde::de::DeserializeOwned
     {
         trace!("[{:?}] team exec am all request", self.team.my_pe);
         self.team.exec_am_all(am)
@@ -123,9 +123,19 @@ impl ActiveMessaging for LamellarTeam {
         am: F,
     ) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync>
     where
-        F: LamellarActiveMessage + LamellarAM + Send + Sync + 'static,
+        F: LamellarActiveMessage + LamellarAM + Send + Sync + serde::ser::Serialize + serde::de::DeserializeOwned + 'static,
     {
         self.team.exec_am_pe(pe, am)
+    }
+
+    fn exec_am_local<F>(
+        &self,
+        am: F,
+    ) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync>
+    where
+        F: LamellarActiveMessage + Send + Sync + 'static,
+    {
+        self.team.exec_am_local(am)
     }
 }
 
@@ -629,7 +639,7 @@ impl ActiveMessaging for LamellarTeamRT {
 
     fn exec_am_all<F>(&self, am: F) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync>
     where
-        F: LamellarActiveMessage + LamellarAM + Send + Sync + 'static,
+        F: LamellarActiveMessage + LamellarAM + Send + Sync + serde::ser::Serialize + serde::de::DeserializeOwned + 'static,
         // R: LamellarRequest
         // R: LamellarDataReturn + serde::de::DeserializeOwned
     {
@@ -669,7 +679,7 @@ impl ActiveMessaging for LamellarTeamRT {
         am: F,
     ) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync>
     where
-        F: LamellarActiveMessage + LamellarAM + Send + Sync + 'static,
+        F: LamellarActiveMessage + LamellarAM + Send + Sync + serde::ser::Serialize + serde::de::DeserializeOwned + 'static,
     {
         prof_start!(pre);
         trace!("[{:?}] team exec am pe request", self.my_pe);
@@ -704,6 +714,55 @@ impl ActiveMessaging for LamellarTeamRT {
         self.scheduler.submit_req(
             self.my_pe,
             Some(pe),
+            msg,
+            ireq,
+            my_any,
+            self.lamellae.get_am(),
+            self.my_hash,
+        );
+        prof_end!(sub);
+        Box::new(my_req)
+    }
+
+    fn exec_am_local<F>(
+        &self,
+        am: F,
+    ) -> Box<dyn LamellarRequest<Output =()> + Send + Sync>
+    where
+        F: LamellarActiveMessage  + Send + Sync + 'static,
+    {
+        prof_start!(pre);
+        trace!("[{:?}] team exec am pe request", self.my_pe);
+        prof_end!(pre);
+        prof_start!(req);
+        let (my_req, ireq) = LamellarRequestHandle::new(
+            1,
+            AmType::RegisteredFunction,
+            self.arch.clone(),
+            self.team_counters.outstanding_reqs.clone(),
+            self.world_counters.outstanding_reqs.clone(),
+        );
+        prof_end!(req);
+        prof_start!(msg);
+        let msg = Msg {
+            cmd: ExecType::Am(Cmd::Exec),
+            src: self.my_pe as u16,
+            req_id: my_req.id,
+            team_id: self.id,
+            return_data: true,
+        };
+        prof_end!(msg);
+        prof_start!(counters);
+        self.world_counters.add_send_req(1);
+        self.team_counters.add_send_req(1);
+        prof_end!(counters);
+        prof_start!(any);
+        let my_any: LamellarAny = Box::new(Box::new(am) as LamellarBoxedAm);
+        prof_end!(any);
+        prof_start!(sub);
+        self.scheduler.submit_req(
+            self.my_pe,
+            Some(self.my_pe),
             msg,
             ireq,
             my_any,

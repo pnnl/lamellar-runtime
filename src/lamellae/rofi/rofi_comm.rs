@@ -17,7 +17,9 @@ pub(crate) struct RofiComm {
     pub(crate) num_pes: usize,
     pub(crate) my_pe: usize,
     pub(crate) put_amt: Arc<AtomicUsize>,
+    put_cnt: Arc<AtomicUsize>,
     pub(crate) get_amt: Arc<AtomicUsize>,
+    get_cnt: Arc<AtomicUsize>,
     comm_mutex: Arc<Mutex<()>>,
     alloc_mutex: Arc<Mutex<()>>,
 }
@@ -46,7 +48,9 @@ impl RofiComm {
             num_pes: num_pes,
             my_pe: rofi_get_id(),
             put_amt: Arc::new(AtomicUsize::new(0)),
+            put_cnt: Arc::new(AtomicUsize::new(0)),
             get_amt: Arc::new(AtomicUsize::new(0)),
+            get_cnt:  Arc::new(AtomicUsize::new(0)),
             comm_mutex: Arc::new(Mutex::new(())),
             alloc_mutex: Arc::new(Mutex::new(())),
         };
@@ -158,6 +162,7 @@ impl RofiComm {
 
             unsafe { rofi_put(src_addr, dst_addr, pe).expect("error in rofi put") };
             self.put_amt.fetch_add(src_addr.len(), Ordering::SeqCst);
+            self.put_cnt.fetch_add(1, Ordering::SeqCst);
         } else {
             unsafe {
                 // println!("[{:?}]-({:?}) memcopy {:?}",pe,src_addr.as_ptr(),src_addr.len());
@@ -168,6 +173,7 @@ impl RofiComm {
                 );
             }
         }
+        println!("[{:?}]- gc: {:?} pc: {:?} put exit",self.my_pe,self.get_cnt.load(Ordering::SeqCst),self.put_cnt.load(Ordering::SeqCst));
         // println!("[{:?}]-({:?}) put [{:?}] exit",self.my_pe,thread::current().id(),pe);
     }
 
@@ -189,6 +195,7 @@ impl RofiComm {
             let _lock = self.comm_mutex.lock();
             rofi_iput(src_addr, dst_addr, pe).expect("error in rofi put");
             self.put_amt.fetch_add(src_addr.len(), Ordering::SeqCst);
+            self.put_cnt.fetch_add(1, Ordering::SeqCst);
         } else {
             unsafe {
                 // println!("[{:?}]-({:?}) memcopy {:?}",pe,src_addr.as_ptr());
@@ -200,6 +207,8 @@ impl RofiComm {
             }
         }
         // println!("[{:?}]-({:?}) iput exit",self.my_pe,thread::current().id());
+
+        println!("[{:?}]- gc: {:?} pc: {:?} iput exit",self.my_pe,self.get_cnt.load(Ordering::SeqCst),self.put_cnt.load(Ordering::SeqCst));
     }
 
     pub(crate) fn put_all<
@@ -228,7 +237,10 @@ impl RofiComm {
         }
         self.put_amt
             .fetch_add(src_addr.len() * (self.num_pes - 1), Ordering::SeqCst);
+        self.put_cnt
+            .fetch_add(1, Ordering::SeqCst);
         // println!("[{:?}]-({:?}) put all exit",self.my_pe,thread::current().id());
+        println!("[{:?}]- gc: {:?} pc: {:?} put_all exit",self.my_pe,self.get_cnt.load(Ordering::SeqCst),self.put_cnt.load(Ordering::SeqCst));
     }
 
     pub(crate) fn get<
@@ -256,6 +268,7 @@ impl RofiComm {
                     panic!();
                 }
                 self.get_amt.fetch_add(dst_addr.len(), Ordering::SeqCst);
+                self.get_cnt.fetch_add(1, Ordering::SeqCst);
             };
         } else {
             // println!("[{:?}]-{:?} {:?} {:?}",self.my_pe,src_addr as *const T,dst_addr.as_mut_ptr(),dst_addr.len());
@@ -267,7 +280,7 @@ impl RofiComm {
                 );
             }
         }
-        // println!("[{:?}]-({:?}) get exit",self.my_pe,thread::current().id());
+        println!("[{:?}]- gc: {:?} pc: {:?} get exit",self.my_pe,self.get_cnt.load(Ordering::SeqCst),self.put_cnt.load(Ordering::SeqCst));
     }
     #[allow(dead_code)]
     fn iget<
@@ -295,6 +308,7 @@ impl RofiComm {
                     panic!();
                 }
                 self.get_amt.fetch_add(dst_addr.len(), Ordering::SeqCst);
+                self.get_cnt.fetch_add(1, Ordering::SeqCst);
             }
         } else {
             unsafe {
@@ -305,6 +319,7 @@ impl RofiComm {
                 );
             }
         }
+        println!("[{:?}]- gc: {:?} pc: {:?} iget exit",self.my_pe,self.get_cnt.load(Ordering::SeqCst),self.put_cnt.load(Ordering::SeqCst));
         // println!("[{:?}]-({:?}) iget exit",self.my_pe,thread::current().id());
     }
     //src address is relative to rofi base addr
@@ -335,6 +350,7 @@ impl RofiComm {
                 );
                 panic!();
             }
+            self.get_cnt.fetch_add(1, Ordering::SeqCst);
             // self.get_amt.fetch_add(dst_addr.len(),Ordering::SeqCst);
             // }
             // };
@@ -347,6 +363,7 @@ impl RofiComm {
                 );
             }
         }
+        println!("[{:?}]- gc: {:?} pc: {:?} iget_relative exit",self.my_pe,self.get_cnt.load(Ordering::SeqCst),self.put_cnt.load(Ordering::SeqCst));
         // println!("[{:?}]-({:?}) iget relative [{:?}] exit",self.my_pe,thread::current().id(),pe);
     }
 }

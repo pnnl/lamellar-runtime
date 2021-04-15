@@ -61,7 +61,7 @@ impl ActiveMessaging for LamellarWorld {
     }
     fn exec_am_all<F>(&self, am: F) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync>
     where
-        F: LamellarActiveMessage + LamellarAM + Send + Sync + 'static,
+        F: LamellarActiveMessage + LamellarAM + Send + Sync + serde::ser::Serialize + serde::de::DeserializeOwned + 'static,
     {
         self.team.exec_am_all(am)
     }
@@ -71,10 +71,19 @@ impl ActiveMessaging for LamellarWorld {
         am: F,
     ) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync>
     where
-        F: LamellarActiveMessage + LamellarAM + Send + Sync + 'static,
+        F: LamellarActiveMessage + LamellarAM + Send + Sync + serde::ser::Serialize + serde::de::DeserializeOwned + 'static,
     {
         assert!(pe < self.num_pes(), "invalid pe: {:?}", pe);
         self.team.exec_am_pe(pe, am)
+    }
+    fn exec_am_local<F>(
+        &self,
+        am: F,
+    ) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync>
+    where
+        F: LamellarActiveMessage  + Send + Sync + 'static,
+    {
+        self.team.exec_am_local(am)
     }
 }
 
@@ -268,6 +277,14 @@ impl LamellarWorld {
             None
         }
     }
+
+    pub fn team(&self) -> Arc<LamellarTeam>{
+        Arc::new(LamellarTeam {
+            team: self.team.clone(),
+            teams: self.teams.clone(),
+        })
+    }
+
 
     #[cfg(feature = "experimental")]
     pub fn new_array<
