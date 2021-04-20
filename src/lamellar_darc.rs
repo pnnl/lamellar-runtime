@@ -216,3 +216,48 @@ impl<T: ?Sized + fmt::Debug> fmt::Debug for Darc<'_,T> {
         fmt::Debug::fmt(&**self, f)
     }
 }
+
+
+// #[derive(serde::Serialize, serde::Deserialize, Clone, Copy)]
+// pub struct __NetworkLamellarDarc<T: std::clone::Clone + Send + Sync + 'static> {
+//     // orig_addr: usize,
+//     addr: usize,
+//     pe: usize,
+//     size: usize,
+//     backend: Backend,
+//     local: bool,
+//     phantom: PhantomData<T>,
+// }
+#[derive(serde::Serialize, serde::Deserialize, Clone, Copy)]
+pub struct __NetworkLamellarDarc<'a,T: ?Sized>{
+    inner_addr: usize,
+    phantom: PhantomData<DarcInner<'a,T>>,
+}
+
+//#[prof]
+impl<'a, T: ?Sized> From<LamellarDarc<'a,T>>
+    for __NetworkLamellarDarc<'a,T>
+{
+    fn from(reg: LamellarDarc<T>) -> Self {
+        let ndarc = __NetworkLamellarDarc {
+            inner_addr: reg.inner as usize, 
+            phantom: reg.phantom
+        };
+        // println!("lmr: addr: {:x} pe: {:?} size: {:?} backend {:?}, nlmr: addr: {:x} pe: {:?} size: {:?} backend {:?}",reg.addr,reg.pe,reg.size,reg.backend,nlmr.addr,nlmr.pe,nlmr.size,nlmr.backend);
+        ndarc
+    }
+}
+
+
+
+impl<'a, T: ?Sized> From<__NetworkLamellarDarc<'a,T>>
+    for LamellarDarc<'a,T>
+{
+    fn from(reg: __NetworkLamellarDarc<T>) -> Self {
+        darc = Darc{
+            inner: reg.inner_addr as *mut DarcInner<T>,
+            phantom: reg.phantom
+        }
+        darc
+    }
+}
