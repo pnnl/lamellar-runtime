@@ -1,4 +1,4 @@
-use crate::lamellae::{Backend, Lamellae, LamellaeAM, LamellaeRDMA};
+use crate::lamellae::{AllocationType, Backend, Lamellae, LamellaeAM, LamellaeRDMA};
 use crate::lamellar_alloc::{BTreeAlloc, LamellarAlloc};
 use crate::lamellar_arch::LamellarArchRT;
 use crate::schedulers::SchedulerQueue;
@@ -789,7 +789,7 @@ impl LamellaeRDMA for ShmemLamellaeRDMA {
     fn rt_free(&self, addr: usize) {
         self.alloc.free(addr)
     }
-    fn alloc(&self, size: usize) -> Option<usize> {
+    fn alloc(&self, size: usize, _alloc: AllocationType) -> Option<usize> {
         if let Some(addr) = self.alloc.try_malloc(size) {
             println!("[{:?}] addr: {:?} size: {:?}", self.my_pe, addr, size);
             Some(addr)

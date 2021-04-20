@@ -183,3 +183,7 @@ path="examples/experimental/random_team.rs"
 name="dist_array_reduce"
 path="examples/experimental/dist_array_reduce.rs"
 required-features = ["experimental"]
+
+[[example]]
+name="darc"
+path="examples/experimental/darc.rs"

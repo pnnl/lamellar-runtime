@@ -9,6 +9,8 @@ pub use serde_closure::FnOnce;
 #[macro_use]
 extern crate lazy_static;
 
+// TODO: maybe make a barrier trait?
+
 // #[macro_use]
 // extern crate crossbeam;
 
@@ -18,6 +20,10 @@ mod lamellar_alloc;
 mod lamellar_arch;
 #[cfg(feature = "experimental")]
 mod lamellar_array;
+#[cfg(feature = "experimental")]
+mod lamellar_darc;
+
+mod barrier;
 
 mod lamellar_memregion;
 mod lamellar_request;
@@ -47,6 +53,9 @@ pub use crate::lamellar_memregion::{
     LamellarLocalMemoryRegion, LamellarMemoryRegion, RegisteredMemoryRegion, RemoteMemoryRegion,
 };
 
+#[cfg(feature = "experimental")]
+pub use crate::lamellar_darc::Darc;
+
 pub use crate::lamellae::Backend;
 pub use crate::schedulers::SchedulerType;
 
@@ -58,6 +67,8 @@ pub use crate::lamellar_arch::{BlockedArch, IdError, LamellarArch, StridedArch};
 pub use crate::lamellar_team::LamellarTeamRT;
 
 pub use crate::lamellar_team::LamellarTeam;
+
+
 
 extern crate lamellar_impl;
 pub use lamellar_impl::{am, local_am, generate_reductions_for_type, reduction, register_reduction};

@@ -99,7 +99,7 @@ impl<
             scheduler: team.scheduler.clone(),
             lamellae: team.lamellae.clone(),
             arch: team.arch.clone(),
-            my_pe: team.my_pe,
+            my_pe: team.world_pe,
             num_pes: team.num_pes,
             team_counters: AMCounters::new(),
             world_counters: world_counters,

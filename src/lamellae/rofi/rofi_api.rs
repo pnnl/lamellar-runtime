@@ -1,6 +1,7 @@
 extern crate libc;
 
 use std::ffi::CString;
+use crate::lamellae::AllocationType;
 
 pub(crate) fn rofi_init(provider: &str) -> Result<(), &'static str> {
     let c_str = CString::new(provider).unwrap();
@@ -33,16 +34,23 @@ pub(crate) fn rofi_barrier() {
     unsafe { rofisys::rofi_barrier() };
 }
 
-pub(crate) fn rofi_alloc(size: usize) -> *mut u8 {
+pub(crate) fn rofi_alloc(size: usize, alloc: AllocationType) -> *mut u8 {
     let mut base_ptr: *mut u8 = std::ptr::null_mut();
     let base_ptr_ptr = (&mut base_ptr as *mut _) as *mut *mut std::ffi::c_void;
     // let mut key = 0u64;
     // let key_ptr = &mut key as *mut c_ulonglong;
     // println!("rofi_alloc");
     unsafe {
-        if rofisys::rofi_alloc(size, 0x0, base_ptr_ptr) != 0 {
+        let ret = match alloc {
+            AllocationType::Sub(pes) => rofisys::rofi_sub_alloc(size, 0x0, base_ptr_ptr, pes.as_ptr() as *mut _, pes.len() as u64),
+            AllocationType::Global => rofisys::rofi_alloc(size, 0x0, base_ptr_ptr),
+            _ => panic!("unexpected allocation type {:?} in rofi_alloc",alloc),
+        };
+        
+        if ret != 0 {
             panic!("unable to allocate memory region");
         }
+        
     }
     // trace!("[{:?}] ({:?}:{:?}) rofi_alloc addr: {:x} size {:?}",rofi_get_id(),file!(),line!(),base_ptr as usize, size);
 

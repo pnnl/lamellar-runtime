@@ -1,6 +1,7 @@
 use crate::active_messaging::*; //{ActiveMessaging,AMCounters,Cmd,Msg,LamellarAny,LamellarLocal};
-use crate::lamellae::Lamellae;
+use crate::lamellae::{AllocationType,Lamellae};
 use crate::lamellar_arch::{GlobalArch, IdError, LamellarArch, LamellarArchEnum, LamellarArchRT};
+use crate::barrier::Barrier;
 // #[cfg(feature = "experimental")]
 // use crate::lamellar_array::{LamellarArray, LamellarSubArray};
 use crate::lamellar_memregion::{
@@ -38,7 +39,7 @@ impl LamellarTeam {
     #[allow(dead_code)]
     pub(crate) fn new(
         num_pes: usize,
-        my_pe: usize,
+        world_pe: usize,
         scheduler: Arc<dyn SchedulerQueue>,
         world_counters: Arc<AMCounters>,
         lamellae: Arc<dyn Lamellae + Sync + Send>,
@@ -47,7 +48,7 @@ impl LamellarTeam {
         LamellarTeam {
             team: Arc::new(LamellarTeamRT::new(
                 num_pes,
-                my_pe,
+                world_pe,
                 scheduler,
                 world_counters,
                 lamellae,
@@ -62,11 +63,11 @@ impl LamellarTeam {
     pub fn num_pes(&self) -> usize {
         self.team.arch.num_pes()
     }
-    pub fn global_pe_id(&self) -> usize {
-        self.team.my_pe
+    pub fn world_pe_id(&self) -> usize {
+        self.team.world_pe
     }
     pub fn team_pe_id(&self) -> Result<usize, IdError> {
-        self.team.arch.team_pe(self.team.my_pe)
+        self.team.arch.team_pe(self.team.world_pe)
     }
     pub fn create_team_from_arch<L>(&self, arch: L) -> Option<Arc<LamellarTeam>>
     where
@@ -111,9 +112,9 @@ impl ActiveMessaging for LamellarTeam {
 
     fn exec_am_all<F>(&self, am: F) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync>
     where
-        F: LamellarActiveMessage + LamellarAM + Send + Sync + serde::ser::Serialize + serde::de::DeserializeOwned + 'static, // R: LamellarDataReturn + serde::de::DeserializeOwned
+        F: LamellarActiveMessage + LamellarAM + Send + Sync + serde::ser::Serialize + serde::de::DeserializeOwned + 'static, 
     {
-        trace!("[{:?}] team exec am all request", self.team.my_pe);
+        trace!("[{:?}] team exec am all request", self.team.world_pe);
         self.team.exec_am_all(am)
     }
 
@@ -147,18 +148,16 @@ pub struct LamellarTeamRT {
     pub(crate) scheduler: Arc<dyn SchedulerQueue>,
     pub(crate) lamellae: Arc<dyn Lamellae + Send + Sync>,
     pub(crate) arch: Arc<LamellarArchRT>,
-    pub(crate) my_pe: usize,
+    pub(crate) world_pe: usize,   
+    pub(crate) num_world_pes: usize,
+    pub(crate) team_pe: Result<usize, IdError>,
     pub(crate) num_pes: usize,
-    world_pes: usize,
     team_counters: AMCounters,
     pub(crate) world_counters: Arc<AMCounters>, // can probably remove this?
     id: usize,
     sub_team_id_cnt: AtomicUsize,
-    barrier_cnt: AtomicUsize,
-    barrier1: LamellarMemoryRegion<usize>,
-    barrier2: LamellarMemoryRegion<usize>,
-    barrier3: LamellarMemoryRegion<usize>,
-    dropped: LamellarMemoryRegion<u8>,
+    barrier: Barrier,
+    dropped: LamellarMemoryRegion<usize>,
     pub(crate) my_hash: u64,
 }
 
@@ -174,101 +173,46 @@ impl LamellarTeamRT {
     pub(crate) fn new(
         //creates a new root team
         num_pes: usize,
-        my_pe: usize,
+        world_pe: usize,
         scheduler: Arc<dyn SchedulerQueue>,
         world_counters: Arc<AMCounters>,
         lamellae: Arc<dyn Lamellae + Sync + Send>,
     ) -> LamellarTeamRT {
-        // let backend = lamellae.backend();
         let arch = Arc::new(LamellarArchRT {
             parent: None,
             arch: LamellarArchEnum::GlobalArch(GlobalArch::new(num_pes)),
             num_pes: num_pes,
         });
 
-        // let data_buf = LamellarMemoryRegion::new(num_pes*3+3, lamellae.clone(),true);
-
+        let alloc = AllocationType::Global;
         let team = LamellarTeamRT {
             parent: None,
             sub_teams: RwLock::new(HashMap::new()),
             mem_regions: RwLock::new(HashMap::new()),
             scheduler: scheduler,
             lamellae: lamellae.clone(),
-            // backend: backend,
-            arch: arch,
-            my_pe: my_pe,
+            arch: arch.clone(),
+            world_pe: world_pe,
+            team_pe: Ok(world_pe),
+            num_world_pes: num_pes,
             num_pes: num_pes,
-            world_pes: num_pes,
             team_counters: AMCounters::new(),
             world_counters: world_counters,
             id: 0,
             my_hash: 0, //easy id to look up for global
             sub_team_id_cnt: AtomicUsize::new(0),
-            barrier_cnt: AtomicUsize::new(0),
-            // barrier1: data_buf.sub_region(0..num_pes),
-            barrier1: LamellarMemoryRegion::new(num_pes, lamellae.clone(), true),
-            // barrier2: data_buf.sub_region(num_pes..num_pes*2),
-            barrier2: LamellarMemoryRegion::new(num_pes, lamellae.clone(), true),
-            // barrier3: data_buf.sub_region(num_pes*2..(num_pes*2 + 3)),
-            barrier3: LamellarMemoryRegion::new(3, lamellae.clone(), true),
-            // dropped: data_buf.sub_region((num_pes*2 + 3)..),
-            dropped: LamellarMemoryRegion::new(num_pes, lamellae.clone(), true),
+            barrier: Barrier::new(world_pe, num_pes, lamellae.clone(),arch.clone()),
+            dropped: LamellarMemoryRegion::new(num_pes, lamellae.clone(), alloc.clone()),
         };
         unsafe {
-            // let mut temp_array = LamellarLocalArray::new(std::cmp::max(team.num_pes,2),0usize,lamellae.get_rdma().clone());
-            let temp_array = LamellarLocalMemoryRegion::<usize>::new(
-                std::cmp::max(team.num_pes, 3),
-                lamellae.clone(),
-            );
-
-            let temp_array_slice = temp_array.as_mut_slice().unwrap();
-            for e in temp_array_slice.iter_mut() {
-                *e = 0;
-            }
-            team.barrier1
-                .put_slice(team.my_pe, 0, &temp_array_slice[..team.num_pes]);
-            team.barrier2
-                .put_slice(team.my_pe, 0, &temp_array_slice[..team.num_pes]);
-            temp_array_slice[0] = 10;
-            team.barrier3
-                .put_slice(team.my_pe, 0, &temp_array_slice[0..3]);
-            for i in 0..team.num_pes {
-                temp_array_slice[i] = 1;
-            }
-            // team.dropped
-            //     .put_slice(team.my_pe, 0, &temp_array_slice[..team.num_pes]);
 
             for e in team.dropped.as_mut_slice().unwrap().iter_mut() {
                 *e = 0;
             }
         }
         lamellae.get_am().barrier(); //this is a noop currently
-                                     // println!(
-                                     //     "[{:?}] new lamellar team: {:?} {:?} {:?} {:?} {:?}",
-                                     //     my_pe,
-                                     //     team.id,
-                                     //     team.arch.team_iter().collect::<Vec<usize>>(),
-                                     //     team.barrier1.as_slice(),
-                                     //     team.barrier2.as_slice(),
-                                     //     team.barrier3.as_slice(),
-                                     // );
-                                     // team.bar_print("init".to_string());
         team
     }
-
-    // pub(crate) fn bar_print(&self, tag: String) {
-    // println!(
-    //     "[{:?}] {:?} ({:?}) {:?} ({:?}) {:?} ({:?}) {:?}",
-    //     self.my_pe,
-    //     tag,
-    //     self.barrier1.as_slice().as_ptr(),
-    //     self.barrier1.as_slice(),
-    //     self.barrier2.as_slice().as_ptr(),
-    //     self.barrier2.as_slice(),
-    //     self.barrier3.as_slice().as_ptr(),
-    //     self.barrier3.as_slice(),
-    // );
-    // }
 
     pub(crate) fn destroy(&self) {
         // println!("destroying team?");
@@ -286,11 +230,11 @@ impl LamellarTeamRT {
     pub fn get_pes(&self) -> Vec<usize> {
         self.arch.team_iter().collect::<Vec<usize>>()
     }
-    pub fn global_pe_id(&self) -> usize {
-        self.my_pe
+    pub fn world_pe_id(&self) -> usize {
+        self.world_pe
     }
     pub fn team_pe_id(&self) -> Result<usize, IdError> {
-        self.arch.team_pe(self.my_pe)
+        self.arch.team_pe(self.world_pe)
     }
 
     pub fn create_subteam_from_arch<L>(
@@ -311,95 +255,74 @@ impl LamellarTeamRT {
             let archrt = Arc::new(LamellarArchRT::new(parent.arch.clone(), arch));
             // println!("subteam: hash: {:?} arch{:?}",hash,archrt);
             parent.barrier();
+            println!("[{:?}][LAMELLAR] creating team: {:?}",parent.world_pe,archrt.team_iter().collect::<Vec<usize>>());
+
             // ------ ensure team is being constructed synchronously and in order across all pes in parent ------ //
+            let parent_alloc = AllocationType::Sub(parent.arch.team_iter().collect::<Vec<usize>>());
             let temp_buf =
-                LamellarMemoryRegion::<usize>::new(parent.num_pes, parent.lamellae.clone(), true);
-            // let temp_array = LamellarLocalArray::new(parent.num_pes,0usize,parent.lamellae.get_rdma().clone());
-            // let temp_array = parent.local_array(parent.num_pes,0usize);
+                LamellarMemoryRegion::<usize>::new(parent.num_pes, parent.lamellae.clone(), parent_alloc);
+           
             let temp_array = LamellarLocalMemoryRegion::<usize>::new(
-                std::cmp::max(parent.num_pes, 3),
+                parent.num_pes,
                 parent.lamellae.clone(),
             );
-            unsafe {
-                for e in temp_array.as_mut_slice().unwrap() {
-                    *e = 0;
-                }
+            let temp_array_slice = unsafe { temp_array.as_mut_slice().unwrap()};
+            for e in  temp_array_slice.iter_mut() {
+                *e = 0;
             }
-            let temp_array_slice = temp_array.as_slice().unwrap();
             unsafe {
-                temp_buf.put_slice(parent.my_pe, 0, &temp_array_slice[..parent.num_pes]);
+                temp_buf.put_slice(parent.world_pe, 0, &temp_array_slice[..parent.num_pes]);
             }
             // println!("new team hash: {:?}",hash);
             let s = Instant::now();
             parent.barrier();
             let timeout = Instant::now() - s;
-            let hash_slice = unsafe { parent.barrier3.as_mut_slice().unwrap() };
-            hash_slice[2] = hash as usize;
-            // unsafe { parent.barrier3.as_mut_slice().unwrap()[2]  };
-
-            // let hash_slice = parent.local_array(1,parent.barrier3.as_slice()[2]);
-            parent.put_barrier_val(parent.my_pe, &hash_slice[2..], &temp_buf);
-
+            temp_array_slice[0] = hash as usize;
+            if let Ok(parent_world_pe) = parent.arch.team_pe(parent.world_pe){
+                for world_pe in parent.arch.team_iter(){
+                    unsafe { temp_buf.put_slice(world_pe,parent_world_pe,&temp_array_slice[0..1]); }
+                }
+            }
             parent.check_hash_vals(hash as usize, &temp_buf, timeout);
             // ------------------------------------------------------------------------------------------------- //
 
-            unsafe {
-                for e in temp_array.as_mut_slice().unwrap() {
-                    *e = 0;
-                }
+            for e in temp_array_slice.iter_mut() {
+                *e = 0;
             }
-            // parent.barrier();
-            // let backend = parent.lamellae.backend();
             let num_pes = archrt.num_pes();
-
             let team = LamellarTeamRT {
                 parent: Some(parent.clone()),
                 sub_teams: RwLock::new(HashMap::new()),
                 mem_regions: RwLock::new(HashMap::new()),
                 scheduler: parent.scheduler.clone(),
                 lamellae: parent.lamellae.clone(),
-                // backend: backend,
-                arch: archrt,
-                my_pe: parent.my_pe,
+                arch: archrt.clone(),
+                world_pe: parent.world_pe,
+                num_world_pes: parent.num_world_pes,
+                team_pe: archrt.team_pe(parent.world_pe),
                 num_pes: num_pes,
-                world_pes: parent.world_pes,
                 team_counters: AMCounters::new(),
                 world_counters: parent.world_counters.clone(),
                 id: id,
                 sub_team_id_cnt: AtomicUsize::new(0),
-                barrier_cnt: AtomicUsize::new(0),
-                barrier1: LamellarMemoryRegion::new(num_pes, parent.lamellae.clone(), true),
-                barrier2: LamellarMemoryRegion::new(num_pes, parent.lamellae.clone(), true),
-                barrier3: LamellarMemoryRegion::new(3, parent.lamellae.clone(), true),
+                barrier: Barrier::new(parent.world_pe,parent.num_world_pes,parent.lamellae.clone(),archrt),
                 my_hash: hash,
-                dropped: LamellarMemoryRegion::new(parent.num_pes, parent.lamellae.clone(), true),
-                // barrier_buf0: RwLock::new(vec![10;num_pes]),
-                // barrier_buf1: RwLock::new(vec![10;num_pes]),
+                dropped: temp_buf, 
             };
-            // println!("new  team 1 {:?} {:?} {:?}",hash, team.dropped.as_slice(),temp_array_slice);
             unsafe {
-                team.barrier1
-                    .put_slice(team.my_pe, 0, &temp_array_slice[0..team.num_pes]);
-                team.barrier2
-                    .put_slice(team.my_pe, 0, &temp_array_slice[0..team.num_pes]);
-                team.barrier3
-                    .put_slice(team.my_pe, 0, &temp_array_slice[0..3]);
-                // team.dropped
-                //     .put_slice(team.my_pe, 0, &temp_array_slice[0..parent.num_pes]);
-
                 for e in team.dropped.as_mut_slice().unwrap().iter_mut() {
                     *e = 0;
                 }
             }
             let team = Arc::new(team);
-            // println!("new  team 1 {:?} {:?} {:?}",hash, team.dropped.as_slice(),temp_array_slice);
+            // println!("[LAMELLAR] new  team 1 {:?} {:?} {:?}",hash, team.dropped.as_slice(),temp_array_slice);
             let mut sub_teams = parent.sub_teams.write();
-            // sub_teams.insert(team.id,Arc::downgrade(&team));
             sub_teams.insert(team.id, team.clone());
             parent.barrier();
-            // println!("[{:?}] entering team barrier ", team.my_pe);
+
+            // println!("[{:?}][LAMELLAR] entering team barrier ", team.world_pe);
             team.barrier();
-            // println!("new  team 2 {:?} {:?}",hash, team.dropped.as_slice());
+            // println!("[LAMELLAR] new  team 2 {:?} {:?}",hash, team.dropped.as_slice());
             Some(team)
         } else {
             None
@@ -428,7 +351,7 @@ impl LamellarTeamRT {
                 if s.elapsed().as_secs_f64() > 5.0 {
                     println!(
                         "[{:?}] ({:?})  hash: {:?}",
-                        self.my_pe,
+                        self.world_pe,
                         hash,
                         hash_buf.as_slice()
                     );
@@ -438,7 +361,7 @@ impl LamellarTeamRT {
             if *pe != hash && Instant::now() - s > timeout {
                 println!(
                     "[{:?}] ({:?})  hash: {:?}",
-                    self.my_pe,
+                    self.world_pe,
                     hash,
                     hash_buf.as_slice()
                 );
@@ -450,57 +373,12 @@ impl LamellarTeamRT {
         }
     }
 
-    fn check_barrier_vals(&self, barrier_id: usize, barrier_buf: &LamellarMemoryRegion<usize>) {
-        let mut s = Instant::now();
-        for pe in barrier_buf.as_slice().unwrap() {
-            while *pe != barrier_id {
-                std::thread::yield_now();
-                if s.elapsed().as_secs_f64() > 60.0 {
-                    println!(
-                        "[{:?}] ({:?})  b before: {:?} {:?}",
-                        self.my_pe,
-                        barrier_id,
-                        self.barrier1.as_slice(),
-                        self.barrier2.as_slice()
-                    );
-                    s = Instant::now();
-                }
-            }
-        }
-    }
-
-    fn put_barrier_val(
-        &self,
-        my_index: usize,
-        barrier_id: &[usize],
-        // barrier_id: &LamellarLocalMemoryRegion<usize>,
-        barrier_buf: &LamellarMemoryRegion<usize>,
-    ) {
-        for world_pe in self.arch.team_iter() {
-            unsafe {
-                barrier_buf.put_slice(world_pe, my_index, barrier_id);
-            }
-            // println!(
-            //     "[{:?}] (bid: {:?}) putting b: {:?} {:?} {:?} {:?} {:?}",
-            //     self.my_pe,
-            //     barrier_id,
-            //     world_pe,
-            //     my_index,
-            //     &[barrier_id],
-            //     self.barrier1.as_slice(),
-            //     self.barrier2.as_slice()
-            // );
-        }
-    }
-
     fn put_dropped(&self) {
         if let Some(parent) = &self.parent {
-            // let temp_slice = unsafe { self.barrier3.as_mut_slice().unwrap() };
             let temp_slice = unsafe { self.dropped.as_mut_slice().unwrap() };
 
-            let my_index = parent.arch.team_pe(self.my_pe).expect("invalid parent pe");
-            temp_slice[my_index] = 1 as u8;
-            // let  temp_array = parent.local_array(1,self.barrier3.as_slice().unwrap()[2]);
+            let my_index = parent.arch.team_pe(self.world_pe).expect("invalid parent pe");
+            temp_slice[my_index] = 1;
             for world_pe in self.arch.team_iter() {
                 if world_pe != my_index {
                     // println!("putting into dropped {:?} {:?} {:?}",world_pe, my_index, & temp_slice[my_index..=my_index]);
@@ -522,7 +400,7 @@ impl LamellarTeamRT {
             while *pe != 1 {
                 std::thread::yield_now();
                 if s.elapsed().as_secs_f64() > 5.0 {
-                    println!("[{:?}] ({:?})  ", self.my_pe, self.dropped.as_slice());
+                    println!("[{:?}] ({:?})  ", self.world_pe, self.dropped.as_slice());
                     s = Instant::now();
                 }
             }
@@ -551,7 +429,7 @@ impl LamellarTeamRT {
         let mut team = format!("");
         for i in 0..self.arch.num_pes() {
             let mut width = (i as f64).log10() as usize + 1;
-            if let Ok(id) = self.arch.global_pe(i) {
+            if let Ok(id) = self.arch.world_pe(i) {
                 width = std::cmp::max(width, (id as f64).log10() as usize + 1);
                 parent = format!("{} {:width$}", parent, id, width = width);
             }
@@ -562,7 +440,7 @@ impl LamellarTeamRT {
         println!("-----mapping of parent pe ids to team pe ids-----");
         parent = format!("");
         team = format!("");
-        for i in 0..self.world_pes {
+        for i in 0..self.num_world_pes {
             let mut width = (i as f64).log10() as usize + 1;
             if let Ok(id) = self.arch.team_pe(i) {
                 width = std::cmp::max(width, (id as f64).log10() as usize + 1);
@@ -587,7 +465,7 @@ impl ActiveMessaging for LamellarTeamRT {
             if temp_now.elapsed() > Duration::new(60, 0) {
                 println!(
                     "in world wait_all mype: {:?} cnt: {:?} {:?}",
-                    self.my_pe,
+                    self.world_pe,
                     self.team_counters.send_req_cnt.load(Ordering::SeqCst),
                     self.team_counters.outstanding_reqs.load(Ordering::SeqCst),
                     // self.counters.recv_req_cnt.load(Ordering::SeqCst),
@@ -599,51 +477,15 @@ impl ActiveMessaging for LamellarTeamRT {
     }
 
     fn barrier(&self) {
-        #[cfg(test)]
-        if self.lamellae.backend() == crate::lamellae::Backend::Local {
-            return;
-        }
-        // println!("[{:?}] in team barrier {:?}",self.barrier_cnt.load(Ordering::SeqCst),self.my_hash);
-        if self.num_pes > 1 {
-            if let Ok(my_index) = self.arch.team_pe(self.my_pe) {
-                // self.bar_print("bar_init".to_string());
-                let mut barrier_id = self.barrier_cnt.fetch_add(1, Ordering::SeqCst);
-                // println!("[{:?}] checking barrier entry ({:?}) {:?}",self.my_pe,barrier_id,&[barrier_id].as_ptr());
-                // self.bar_print("0".to_string());
-
-                self.check_barrier_vals(barrier_id, &self.barrier2);
-                barrier_id += 1;
-                let barrier3_slice = unsafe { self.barrier3.as_mut_slice().unwrap() };
-                barrier3_slice[0] = barrier_id;
-                let barrier_slice = &[barrier_id];
-                // self.bar_print("1".to_string());
-                // println!("[{:?}] putting new barrier val ({:?}) {:?}",self.my_pe,barrier_id,barrier_slice.as_ptr());
-
-                self.put_barrier_val(my_index, barrier_slice, &self.barrier1);
-                // self.bar_print("2".to_string());
-                // println!("[{:?}] checking new barrier val ({:?})",self.my_pe,barrier_id);
-                self.check_barrier_vals(barrier_id, &self.barrier1);
-                // self.bar_print("3".to_string());
-                // println!("[{:?}] setting barrier exit val ({:?})",self.my_pe,barrier_id);
-                barrier3_slice[1] = barrier_id;
-                // self.bar_print("4".to_string());
-
-                let barrier_slice = &barrier3_slice[1..2];
-
-                self.put_barrier_val(my_index, barrier_slice, &self.barrier2);
-                // self.bar_print("5".to_string());
-                // println!("[{:?}] checking barrier exit ({:?})",self.my_pe,barrier_id);
-            }
-        }
+        self.barrier.barrier();
+        
     }
 
     fn exec_am_all<F>(&self, am: F) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync>
     where
         F: LamellarActiveMessage + LamellarAM + Send + Sync + serde::ser::Serialize + serde::de::DeserializeOwned + 'static,
-        // R: LamellarRequest
-        // R: LamellarDataReturn + serde::de::DeserializeOwned
     {
-        trace!("[{:?}] team exec am all request", self.my_pe);
+        trace!("[{:?}] team exec am all request", self.world_pe);
         let (my_req, ireq) = LamellarRequestHandle::new(
             self.num_pes,
             AmType::RegisteredFunction,
@@ -653,7 +495,7 @@ impl ActiveMessaging for LamellarTeamRT {
         );
         let msg = Msg {
             cmd: ExecType::Am(Cmd::Exec),
-            src: self.my_pe as u16,
+            src: self.world_pe as u16,
             req_id: my_req.id,
             team_id: self.id,
             return_data: true,
@@ -662,7 +504,7 @@ impl ActiveMessaging for LamellarTeamRT {
         self.team_counters.add_send_req(self.num_pes);
         let my_any: LamellarAny = Box::new(Box::new(am) as LamellarBoxedAm);
         self.scheduler.submit_req(
-            self.my_pe,
+            self.world_pe,
             None,
             msg,
             ireq,
@@ -682,7 +524,7 @@ impl ActiveMessaging for LamellarTeamRT {
         F: LamellarActiveMessage + LamellarAM + Send + Sync + serde::ser::Serialize + serde::de::DeserializeOwned + 'static,
     {
         prof_start!(pre);
-        trace!("[{:?}] team exec am pe request", self.my_pe);
+        trace!("[{:?}] team exec am pe request", self.world_pe);
         assert!(pe < self.arch.num_pes());
         prof_end!(pre);
         prof_start!(req);
@@ -697,7 +539,7 @@ impl ActiveMessaging for LamellarTeamRT {
         prof_start!(msg);
         let msg = Msg {
             cmd: ExecType::Am(Cmd::Exec),
-            src: self.my_pe as u16,
+            src: self.world_pe as u16,
             req_id: my_req.id,
             team_id: self.id,
             return_data: true,
@@ -712,7 +554,7 @@ impl ActiveMessaging for LamellarTeamRT {
         prof_end!(any);
         prof_start!(sub);
         self.scheduler.submit_req(
-            self.my_pe,
+            self.world_pe,
             Some(pe),
             msg,
             ireq,
@@ -732,7 +574,7 @@ impl ActiveMessaging for LamellarTeamRT {
         F: LamellarActiveMessage  + Send + Sync + 'static,
     {
         prof_start!(pre);
-        trace!("[{:?}] team exec am pe request", self.my_pe);
+        trace!("[{:?}] team exec am pe request", self.world_pe);
         prof_end!(pre);
         prof_start!(req);
         let (my_req, ireq) = LamellarRequestHandle::new(
@@ -746,7 +588,7 @@ impl ActiveMessaging for LamellarTeamRT {
         prof_start!(msg);
         let msg = Msg {
             cmd: ExecType::Am(Cmd::Exec),
-            src: self.my_pe as u16,
+            src: self.world_pe as u16,
             req_id: my_req.id,
             team_id: self.id,
             return_data: true,
@@ -761,8 +603,8 @@ impl ActiveMessaging for LamellarTeamRT {
         prof_end!(any);
         prof_start!(sub);
         self.scheduler.submit_req(
-            self.my_pe,
-            Some(self.my_pe),
+            self.world_pe,
+            Some(self.world_pe),
             msg,
             ireq,
             my_any,
@@ -798,7 +640,7 @@ impl RemoteClosures for LamellarTeamRT {
         &self,
         func: F,
     ) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
-        trace!("[{:?}] team exec closure all request", self.my_pe);
+        trace!("[{:?}] team exec closure all request", self.world_pe);
         let (my_req, ireq) = LamellarRequestHandle::new(
             self.num_pes,
             AmType::RemoteClosure,
@@ -808,7 +650,7 @@ impl RemoteClosures for LamellarTeamRT {
         );
         let msg = Msg {
             cmd: ExecType::Closure(Cmd::Exec),
-            src: self.my_pe as u16,
+            src: self.world_pe as u16,
             req_id: my_req.id,
             team_id: self.id,
             return_data: true,
@@ -817,7 +659,7 @@ impl RemoteClosures for LamellarTeamRT {
         self.team_counters.add_send_req(self.num_pes);
         let my_any: LamellarAny = Box::new((lamellar_local(func.clone()), lamellar_closure(func)));
         self.scheduler.submit_req(
-            self.my_pe,
+            self.world_pe,
             None,
             msg,
             ireq,
@@ -847,7 +689,7 @@ impl RemoteClosures for LamellarTeamRT {
         pe: usize,
         func: F,
     ) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
-        trace!("[{:?}] team exec_closure_pe [{:?}]", self.my_pe, pe);
+        trace!("[{:?}] team exec_closure_pe [{:?}]", self.world_pe, pe);
         assert!(pe < self.arch.num_pes());
         let (my_req, mut ireq) = LamellarRequestHandle::new(
             1,
@@ -858,7 +700,7 @@ impl RemoteClosures for LamellarTeamRT {
         );
         let msg = Msg {
             cmd: ExecType::Closure(Cmd::Exec),
-            src: self.my_pe as u16,
+            src: self.world_pe as u16,
             req_id: my_req.id,
             team_id: self.id,
             return_data: true,
@@ -866,13 +708,13 @@ impl RemoteClosures for LamellarTeamRT {
         self.world_counters.add_send_req(1);
         self.team_counters.add_send_req(1);
         ireq.start = Instant::now();
-        let my_any: LamellarAny = if self.my_pe == pe {
+        let my_any: LamellarAny = if self.world_pe == pe {
             Box::new(lamellar_local(func))
         } else {
             Box::new(lamellar_closure(func))
         };
         self.scheduler.submit_req(
-            self.my_pe,
+            self.world_pe,
             Some(pe),
             msg,
             ireq,
@@ -930,7 +772,7 @@ impl RemoteMemoryRegion for LamellarTeam {
         &self,
         size: usize,
     ) -> LamellarMemoryRegion<T> {
-        // println!("alloc_mem_reg: {:?}",self.my_pe);
+        // println!("alloc_mem_reg: {:?}",self.world_pe);
         self.team.alloc_shared_mem_region(size)
     }
 
@@ -952,7 +794,7 @@ impl RemoteMemoryRegion for LamellarTeam {
         &self,
         size: usize,
     ) -> LamellarLocalMemoryRegion<T> {
-        // println!("alloc_mem_reg: {:?}",self.my_pe);
+        // println!("alloc_mem_reg: {:?}",self.world_pe);
         self.team.alloc_local_mem_region(size)
     }
 
@@ -1019,10 +861,13 @@ impl RemoteMemoryRegion for LamellarTeamRT {
         &self,
         size: usize,
     ) -> LamellarMemoryRegion<T> {
-        // println!("alloc_mem_reg: {:?}",self.my_pe);
         self.barrier();
-        let lmr = LamellarMemoryRegion::new(size, self.lamellae.clone(), false);
-        // println!("adding region {:?} {:?}",lmr,lmr.id());
+        let lmr = if self.num_world_pes == self.num_pes{
+            LamellarMemoryRegion::new(size, self.lamellae.clone(), AllocationType::Global)
+        }
+        else{
+            LamellarMemoryRegion::new(size, self.lamellae.clone(), AllocationType::Sub(self.arch.team_iter().collect::<Vec<usize>>()))
+        };
         self.mem_regions
             .write()
             .insert(lmr.id(), Box::new(lmr.clone()));
@@ -1048,9 +893,7 @@ impl RemoteMemoryRegion for LamellarTeamRT {
         &self,
         size: usize,
     ) -> LamellarLocalMemoryRegion<T> {
-        // println!("alloc_mem_reg: {:?}",self.my_pe);
         let llmr = LamellarLocalMemoryRegion::new(size, self.lamellae.clone());
-        // println!("adding region {:?} {:?}",lmr,lmr.id());
         self.mem_regions
             .write()
             .insert(llmr.id(), Box::new(llmr.clone()));
@@ -1077,8 +920,6 @@ impl RemoteMemoryRegion for LamellarTeamRT {
     ) {
         self.barrier();
         self.mem_regions.write().remove(&region.id());
-        // println!("freed region {:?} {:?}",region, self.mem_regions.read().len());
-        // region.delete(self.lamellae.clone());
     }
 
     /// release a remote memory region from the symmetric heap
@@ -1100,45 +941,42 @@ impl RemoteMemoryRegion for LamellarTeamRT {
         region: LamellarLocalMemoryRegion<T>,
     ) {
         self.mem_regions.write().remove(&region.id());
-        // println!("freed region {:?} {:?}",region, self.mem_regions.read().len());
-        // region.delete(self.lamellae.clone());
     }
 }
 
 //#[prof]
-impl Drop for LamellarTeamRT {
-    fn drop(&mut self) {
-        // println!("[{:?}] team dropping {:?}", self.my_pe, self.get_pes());
-        // self.wait_all();
-        // self.barrier();
-        // self.put_dropped();
-        // if let Ok(my_index) = self.arch.team_pe_id(&self.my_pe){
-        //     self.drop_barrier();
-        // }
-        // if let Some(parent) = &self.parent{
-        //     parent.sub_teams.write().remove(&self.id);
-        // }
-        // println!("[{:?}] team dropped {:?}", self.my_pe, self.get_pes());
-        // self.barrier1.delete(self.lamellae.clone());
-        // self.barrier2.delete(self.lamellae.clone());
-        // self.barrier3.delete(self.lamellae.clone());
-        // if let Some(parent) = &self.parent{
-        //     parent.sub_teams.write().remove(&self.id);
-        // }
-        //TODO: what happends when we have sub_teams present?
-        // does the recursive drop manage it properly for us or
-        // do we need to manually remove those teams from the map?
-    }
-}
+// impl Drop for LamellarTeamRT {
+//     fn drop(&mut self) {
+//         // println!("[{:?}] team dropping {:?}", self.world_pe, self.get_pes());
+//         // self.wait_all();
+//         // self.barrier();
+//         // self.put_dropped();
+//         // if let Ok(my_index) = self.arch.team_pe_id(&self.world_pe){
+//         //     self.drop_barrier();
+//         // }
+//         // if let Some(parent) = &self.parent{
+//         //     parent.sub_teams.write().remove(&self.id);
+//         // }
+//         // println!("[{:?}] team dropped {:?}", self.world_pe, self.get_pes());
+//         // self.barrier1.delete(self.lamellae.clone());
+//         // self.barrier2.delete(self.lamellae.clone());
+//         // self.barrier3.delete(self.lamellae.clone());
+//         // if let Some(parent) = &self.parent{
+//         //     parent.sub_teams.write().remove(&self.id);
+//         // }
+//         //TODO: what happends when we have sub_teams present?
+//         // does the recursive drop manage it properly for us or
+//         // do we need to manually remove those teams from the map?
+//     }
+// }
 
 //#[prof]
 impl Drop for LamellarTeam {
     fn drop(&mut self) {
         if let Some(parent) = &self.team.parent {
-            // parent.barrier();
             // println!(
             //     "[{:?}] {:?} team handle dropping {:?} {:?}",
-            //     self.team.my_pe,
+            //     self.team.world_pe,
             //     self.team.my_hash,
             //     self.team.get_pes(),
             //     self.team.dropped.as_slice()
@@ -1146,18 +984,18 @@ impl Drop for LamellarTeam {
             self.team.wait_all();
             self.team.barrier();
             self.team.put_dropped();
-            if let Ok(_my_index) = self.team.arch.team_pe(self.team.my_pe) {
+            // if let Ok(_my_index) = self.team.arch.team_pe(self.team.world_pe) {
+            if self.team.team_pe.is_ok(){
                 self.team.drop_barrier();
             }
 
             parent.sub_teams.write().remove(&self.team.id);
-            // parent.barrier();
         }
         self.teams.write().remove(&self.team.my_hash);
 
         // println!(
         //     "[{:?}] {:?} team handle dropped {:?} {:?}",
-        //     self.team.my_pe,
+        //     self.team.world_pe,
         //     self.team.my_hash,
         //     self.team.get_pes(),
         //     self.team.dropped.as_slice()
@@ -1176,21 +1014,21 @@ mod tests {
     #[test]
     fn multi_team_unique_hash() {
         let num_pes = 10;
-        let my_pe = 0;
+        let world_pe = 0;
         let mut lamellae = create_lamellae(Backend::Local);
         let teams = Arc::new(RwLock::new(HashMap::new()));
 
         let mut sched =
-            create_scheduler(SchedulerType::WorkStealing, num_pes, my_pe, teams.clone());
+            create_scheduler(SchedulerType::WorkStealing, num_pes, world_pe, teams.clone());
         lamellae.init_lamellae(sched.get_queue().clone());
         let lamellae = Arc::new(lamellae);
         let mut lamellaes: BTreeMap<Backend, Arc<dyn LamellaeAM>> = BTreeMap::new();
         lamellaes.insert(lamellae.backend(), lamellae.get_am());
-        sched.init(num_pes, my_pe, lamellaes);
+        sched.init(num_pes, world_pe, lamellaes);
         let counters = Arc::new(AMCounters::new());
         let root_team = Arc::new(LamellarTeamRT::new(
             num_pes,
-            my_pe,
+            world_pe,
             sched.get_queue().clone(),
             counters.clone(),
             lamellae.clone(),
@@ -1247,17 +1085,17 @@ mod tests {
     #[test]
     fn multi_team_unique_hash2() {
         let num_pes = 10;
-        let my_pe = 0;
+        let world_pe = 0;
         let mut lamellae = create_lamellae(Backend::Local);
         let teams = Arc::new(RwLock::new(HashMap::new()));
 
         let mut sched =
-            create_scheduler(SchedulerType::WorkStealing, num_pes, my_pe, teams.clone());
+            create_scheduler(SchedulerType::WorkStealing, num_pes, world_pe, teams.clone());
         lamellae.init_lamellae(sched.get_queue().clone());
         let lamellae = Arc::new(lamellae);
         let mut lamellaes: BTreeMap<Backend, Arc<dyn LamellaeAM>> = BTreeMap::new();
         lamellaes.insert(lamellae.backend(), lamellae.get_am());
-        sched.init(num_pes, my_pe, lamellaes);
+        sched.init(num_pes, world_pe, lamellaes);
         let counters = Arc::new(AMCounters::new());
 
         let mut root_teams = Vec::new();

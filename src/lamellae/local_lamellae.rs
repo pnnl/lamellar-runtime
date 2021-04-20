@@ -1,4 +1,4 @@
-use crate::lamellae::{Backend, Lamellae, LamellaeAM, LamellaeRDMA};
+use crate::lamellae::{AllocationType, Backend, Lamellae, LamellaeAM, LamellaeRDMA};
 use crate::lamellar_arch::LamellarArchRT;
 use crate::schedulers::SchedulerQueue;
 #[cfg(feature = "enable-prof")]
@@ -121,7 +121,7 @@ impl LamellaeRDMA for LocalLamellaeRDMA {
             unsafe { Box::from_raw(data_ptr.ptr) }; //it will free when dropping from scope
         }
     }
-    fn alloc(&self, size: usize) -> Option<usize> {
+    fn alloc(&self, size: usize, _alloc: AllocationType) -> Option<usize> {
         let data = vec![0u8; size].into_boxed_slice();
         let data_ptr = Box::into_raw(data);
         let data_addr = data_ptr as *const u8 as usize;

@@ -1,4 +1,4 @@
-use crate::lamellae::{Backend, Lamellae, LamellaeRDMA};
+use crate::lamellae::{AllocationType, Backend, Lamellae, LamellaeRDMA};
 // use crate::lamellar_array::{LamellarLocalArray};
 use core::marker::PhantomData;
 #[cfg(feature = "enable-prof")]
@@ -333,15 +333,18 @@ impl<T: std::clone::Clone + Send + Sync + 'static> LamellarMemoryRegion<T> {
     pub(crate) fn new(
         size: usize,
         lamellae: Arc<dyn Lamellae + Sync + Send>,
-        local: bool,
+        alloc: AllocationType,
     ) -> LamellarMemoryRegion<T> {
         let cnt = Arc::new(AtomicUsize::new(1));
         ACTIVE.insert(lamellae.backend(), lamellae.clone(), cnt.clone());
         let rdma = lamellae.get_rdma();
-        let addr = if local {
+        
+        let mut local = false;
+        let addr = if let AllocationType::Local = alloc{
+            local = true;
             rdma.rt_alloc(size * std::mem::size_of::<T>()).unwrap() + rdma.base_addr()
         } else {
-            rdma.alloc(size * std::mem::size_of::<T>()).unwrap()
+            rdma.alloc(size * std::mem::size_of::<T>(), alloc).unwrap()
         };
         let temp = LamellarMemoryRegion {
             addr: addr,
@@ -570,7 +573,7 @@ impl<T: std::clone::Clone + Send + Sync + 'static> LamellarLocalMemoryRegion<T> 
         size: usize,
         lamellae: Arc<dyn Lamellae + Sync + Send>,
     ) -> LamellarLocalMemoryRegion<T> {
-        let lmr = LamellarMemoryRegion::new(size, lamellae, true);
+        let lmr = LamellarMemoryRegion::new(size, lamellae, AllocationType::Local);
         let pe = lmr.pe;
         LamellarLocalMemoryRegion { lmr: lmr, pe: pe }
     }

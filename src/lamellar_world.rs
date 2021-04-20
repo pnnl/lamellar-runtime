@@ -18,9 +18,11 @@ use std::sync::atomic::Ordering;
 use std::sync::{Arc, Weak};
 use std::time::{Duration, Instant};
 
-lazy_static! {
-    static ref LAMELLAES: HashMap<Backend, Arc<dyn Lamellae + Send + Sync>> = HashMap::new();
-}
+
+
+// lazy_static! {
+//     static ref LAMELLAES: HashMap<Backend, Arc<dyn Lamellae + Send + Sync>> = HashMap::new();
+// }
 
 pub struct LamellarWorld {
     pub team: Arc<LamellarTeamRT>,

@@ -1,6 +1,6 @@
 use crate::lamellae::rofi::command_queues::RofiCommandQueue;
 use crate::lamellae::rofi::rofi_comm::RofiComm;
-use crate::lamellae::{Backend, Lamellae, LamellaeAM, LamellaeRDMA};
+use crate::lamellae::{AllocationType, Backend, Lamellae, LamellaeAM, LamellaeRDMA};
 use crate::lamellar_arch::LamellarArchRT;
 use crate::schedulers::SchedulerQueue;
 use lamellar_prof::*;
@@ -235,8 +235,8 @@ impl LamellaeRDMA for RofiLamellaeRDMA {
     fn rt_free(&self, addr: usize) {
         self.rofi_comm.rt_free(addr)
     }
-    fn alloc(&self, size: usize) -> Option<usize> {
-        self.rofi_comm.alloc(size)
+    fn alloc(&self, size: usize, alloc: AllocationType) -> Option<usize> {
+        self.rofi_comm.alloc(size,alloc)
     }
     fn free(&self, addr: usize) {
         self.rofi_comm.free(addr)

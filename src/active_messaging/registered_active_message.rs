@@ -168,7 +168,7 @@ pub(crate) async fn process_am_request(
                 .await;
             }
             let id = if let Some(pe) = req_data.pe {
-                team.arch.global_pe(pe).expect("invalid pe") as u64 // aggregate to same pe across team boundaries
+                team.arch.world_pe(pe).expect("invalid pe") as u64 // aggregate to same pe across team boundaries
             } else {
                 req_data.team_hash //use this to represent we want to send to all pes in the team
             };

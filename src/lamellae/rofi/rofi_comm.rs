@@ -1,5 +1,6 @@
 use crate::lamellae::rofi::command_queues::RofiCommandQueue;
 use crate::lamellae::rofi::rofi_api::*;
+use crate::lamellae::AllocationType;
 use crate::lamellar_alloc::{BTreeAlloc, LamellarAlloc};
 #[cfg(feature = "enable-prof")]
 use lamellar_prof::*;
@@ -40,7 +41,7 @@ impl RofiComm {
         let cmd_q_mem = RofiCommandQueue::mem_per_pe() * num_pes;
 
         let total_mem = cmd_q_mem + RT_MEM + ROFI_MEM.load(Ordering::SeqCst);
-        let addr = rofi_alloc(total_mem);
+        let addr = rofi_alloc(total_mem, AllocationType::Global);
         let mut rofi = RofiComm {
             rofi_base_address: Arc::new(RwLock::new(addr as usize)),
             alloc: BTreeAlloc::new("rofi_mem".to_string()),
@@ -95,7 +96,7 @@ impl RofiComm {
         // println!("[{:?}]-({:?}) rt_free exit",self.my_pe,thread::current().id());
         // println!("free addr {:?} free space {:?} (before: {:?}   {:?})", addr, self.alloc.space_avail(), b, self.alloc.space_avail()-b);
     }
-    pub(crate) fn alloc(&self, size: usize) -> Option<usize> {
+    pub(crate) fn alloc(&self, size: usize, alloc: AllocationType) -> Option<usize> {
         // println!("[{:?}]-({:?}) alloc entry",self.my_pe,thread::current().id());
         // if let Some(addr) = self.rt_alloc(size) {
         //     // println!("[{:?}]-({:?}) alloc exit",self.my_pe,thread::current().id());
@@ -105,7 +106,7 @@ impl RofiComm {
         //     None
         // }
         let _lock = self.alloc_mutex.lock();
-        Some(rofi_alloc(size) as usize)
+        Some(rofi_alloc(size,alloc) as usize)
     }
     #[allow(dead_code)]
     pub(crate) fn free(&self, addr: usize) {
@@ -165,7 +166,7 @@ impl RofiComm {
             self.put_cnt.fetch_add(1, Ordering::SeqCst);
         } else {
             unsafe {
-                // println!("[{:?}]-({:?}) memcopy {:?}",pe,src_addr.as_ptr(),src_addr.len());
+                // println!("[{:?}]-({:?}) memcopy {:?} into {:x}",pe,src_addr.as_ptr(),src_addr.len(),dst_addr);
                 std::ptr::copy_nonoverlapping(
                     src_addr.as_ptr(),
                     dst_addr as *mut T,
@@ -173,7 +174,7 @@ impl RofiComm {
                 );
             }
         }
-        println!("[{:?}]- gc: {:?} pc: {:?} put exit",self.my_pe,self.get_cnt.load(Ordering::SeqCst),self.put_cnt.load(Ordering::SeqCst));
+        // println!("[{:?}]- gc: {:?} pc: {:?} put exit",self.my_pe,self.get_cnt.load(Ordering::SeqCst),self.put_cnt.load(Ordering::SeqCst));
         // println!("[{:?}]-({:?}) put [{:?}] exit",self.my_pe,thread::current().id(),pe);
     }
 

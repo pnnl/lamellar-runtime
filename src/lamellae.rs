@@ -25,6 +25,13 @@ pub enum Backend {
     Shmem,
 }
 
+#[derive(Debug,Clone)]
+pub(crate) enum  AllocationType{
+    Local,
+    Global,
+    Sub(Vec<usize>),
+}
+
 //#[prof]
 impl Default for Backend {
     fn default() -> Self {
@@ -60,7 +67,7 @@ pub(crate) trait LamellaeRDMA: Send + Sync {
     fn get(&self, pe: usize, src: usize, dst: &mut [u8]);
     fn rt_alloc(&self, size: usize) -> Option<usize>;
     fn rt_free(&self, addr: usize);
-    fn alloc(&self, size: usize) -> Option<usize>;
+    fn alloc(&self, size: usize, alloc: AllocationType) -> Option<usize>;
     fn free(&self, addr: usize);
     fn base_addr(&self) -> usize;
     fn local_addr(&self, remote_pe: usize, remote_addr: usize) -> usize;
