@@ -20,9 +20,10 @@ use std::time::{Duration, Instant};
 
 
 
-// lazy_static! {
-//     static ref LAMELLAES: HashMap<Backend, Arc<dyn Lamellae + Send + Sync>> = HashMap::new();
-// }
+lazy_static! {
+    pub(crate) static ref LAMELLAES: RwLock<HashMap<Backend, Arc<dyn Lamellae + Send + Sync>>> = RwLock::new(HashMap::new());
+}
+
 
 pub struct LamellarWorld {
     pub team: Arc<LamellarTeamRT>,
@@ -417,6 +418,7 @@ impl LamellarWorldBuilder {
             .write()
             .insert(world.team.my_hash, Arc::downgrade(&world.team));
         world.lamellaes.insert(lamellae.backend(), lamellae.clone());
+        LAMELLAES.write().insert(lamellae.backend(), lamellae.clone());
         // println!("Lamellar world created with {:?}", lamellae.backend());
         world
     }

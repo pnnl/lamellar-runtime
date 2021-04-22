@@ -233,7 +233,7 @@ fn replace_lamellar_dsl(mut stmt: syn::Stmt) -> syn::Stmt {
     stmt
 }
 
-fn am_without_return(input: syn::ItemImpl, local: bool) -> TokenStream {
+fn am_without_return(input: syn::ItemImpl,  crate_header: String, local: bool) -> TokenStream {
     // println!("{:#?}", input);
     let name = type_name(&input.self_ty).expect("unable to find name");
     let exec_fn =
@@ -257,6 +257,7 @@ fn am_without_return(input: syn::ItemImpl, local: bool) -> TokenStream {
     // new_stmttln!("name: {:?}", name + "Result");
     let orig_name = syn::Ident::new(&name, Span::call_site());
     let orig_name_exec = quote::format_ident!("{}_exec", orig_name.clone());
+    let lamellar = quote::format_ident!("{}", crate_header.clone());
 
     let ser = if local{
         quote!{
@@ -268,14 +269,14 @@ fn am_without_return(input: syn::ItemImpl, local: bool) -> TokenStream {
     else{
         quote!{
             fn ser(&self) -> Vec<u8> {
-                lamellar::serialize(self).unwrap()
+                #lamellar::serialize(self).unwrap()
             }
         }
     };
 
     let mut expanded = quote! {
-        impl lamellar::LamellarActiveMessage for #orig_name {
-            fn exec(mut self: Box<Self>,__lamellar_current_pe: usize,__lamellar_num_pes: usize, __local: bool, __lamellar_world: std::sync::Arc<lamellar::LamellarTeamRT>, __lamellar_team: std::sync::Arc<lamellar::LamellarTeamRT>) -> std::pin::Pin<Box<dyn std::future::Future<Output=Option<lamellar::LamellarReturn>> + Send>>{
+        impl #lamellar::LamellarActiveMessage for #orig_name {
+            fn exec(mut self: Box<Self>,__lamellar_current_pe: usize,__lamellar_num_pes: usize, __local: bool, __lamellar_world: std::sync::Arc<#lamellar::LamellarTeamRT>, __lamellar_team: std::sync::Arc<#lamellar::LamellarTeamRT>) -> std::pin::Pin<Box<dyn std::future::Future<Output=Option<#lamellar::LamellarReturn>> + Send>>{
 
                 Box::pin( async move {
                 #temp
@@ -295,14 +296,14 @@ fn am_without_return(input: syn::ItemImpl, local: bool) -> TokenStream {
     };
     if !local{
         expanded.extend( quote!{
-            fn #orig_name_exec(bytes: Vec<u8>,__lamellar_current_pe: usize,__lamellar_num_pes: usize, __lamellar_world: std::sync::Arc<lamellar::LamellarTeamRT>, __lamellar_team: std::sync::Arc<lamellar::LamellarTeamRT>) -> std::pin::Pin<Box<dyn std::future::Future<Output=Option<lamellar::LamellarReturn>> + Send>> {
-                let __lamellar_data: Box<#orig_name> = Box::new(lamellar::deserialize(&bytes).unwrap());
-                <#orig_name as lamellar::LamellarActiveMessage>::exec(__lamellar_data,__lamellar_current_pe,__lamellar_num_pes,false,__lamellar_world,__lamellar_team)
+            fn #orig_name_exec(bytes: Vec<u8>,__lamellar_current_pe: usize,__lamellar_num_pes: usize, __lamellar_world: std::sync::Arc<#lamellar::LamellarTeamRT>, __lamellar_team: std::sync::Arc<#lamellar::LamellarTeamRT>) -> std::pin::Pin<Box<dyn std::future::Future<Output=Option<#lamellar::LamellarReturn>> + Send>> {
+                let __lamellar_data: Box<#orig_name> = Box::new(#lamellar::deserialize(&bytes).unwrap());
+                <#orig_name as #lamellar::LamellarActiveMessage>::exec(__lamellar_data,__lamellar_current_pe,__lamellar_num_pes,false,__lamellar_world,__lamellar_team)
             }
 
-            lamellar::inventory::submit! {
-                #![crate = lamellar]
-                lamellar::RegisteredAm{
+            #lamellar::inventory::submit! {
+                #![crate = #lamellar]
+                #lamellar::RegisteredAm{
                     exec: #orig_name_exec,
                     name: stringify!(#orig_name).to_string()
                 }
@@ -562,7 +563,7 @@ pub fn local_am(args: TokenStream, input: TokenStream) -> TokenStream {
                         #[lamellar::am] only accepts an (optional) argument of the form:
                         #[lamellar::am(return_am = \"<am to exec upon return>\")]");
                     }
-                    am_without_return(input,true)
+                    am_without_return(input,"lamellar".to_string(),true)
                 }
             }
         }
@@ -607,7 +608,7 @@ pub fn am(args: TokenStream, input: TokenStream) -> TokenStream {
                         #[lamellar::am] only accepts an (optional) argument of the form:
                         #[lamellar::am(return_am = \"<am to exec upon return>\")]");
                     }
-                    am_without_return(input,false)
+                    am_without_return(input,"lamellar".to_string(),false)
                 }
             }
         }
@@ -654,7 +655,7 @@ pub fn rt_am(args: TokenStream, input: TokenStream) -> TokenStream {
                         #[lamellar::am] only accepts an (optional) argument of the form:
                         #[lamellar::am(return_am = \"<am to exec upon return>\")]");
                     }
-                    am_without_return(input,false)
+                    am_without_return(input,"crate".to_string(),false)
                 }
             }
         }
