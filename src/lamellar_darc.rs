@@ -5,6 +5,7 @@ use std::sync::atomic::{AtomicUsize,AtomicU8,Ordering};
 use std::ops::Deref;
 use std::pin::Pin;
 use futures::Future;
+use serde::{Serializer,Deserializer,Serialize,Deserialize};
 
 
 use crate::lamellar_world::LAMELLAES;
@@ -15,7 +16,8 @@ use crate::lamellae::{AllocationType,Backend};
 use crate::active_messaging::ActiveMessaging;
 use crate::IdError;
 
-#[derive(serde::Serialize, serde::Deserialize, Clone)]
+// #[derive(serde::Serialize, serde::Deserialize, Clone)]
+#[lamellar_impl::AmDataRT]
 struct FinishedAm{
     cnt: usize,
     orig_pe: usize,
@@ -25,9 +27,9 @@ struct FinishedAm{
 impl LamellarAM for FinishedAm {
     fn exec() {
         let inner = unsafe {&*(self.inner_addr as *mut DarcInner<()>)}; //we dont actually care about the "type" we wrap here, we just need access to the meta data for the darc
-        println!("addr: {:x} {:p}",self.inner_addr,inner);
+        // println!("addr: {:x} {:p}",self.inner_addr,inner);
         inner.dist_cnt.fetch_sub(self.cnt,Ordering::SeqCst);
-        println!("in finished am: dropped {:?} {:?}",self.cnt,inner);
+        // println!("in finished am: dropped {:?} {:?}",self.cnt,inner);
     }
 }
 
@@ -47,11 +49,7 @@ T: ?Sized,
 unsafe impl<T: ?Sized + Sync + Send > Send for DarcInner<T> {}
 unsafe impl<T: ?Sized + Sync + Send > Sync for DarcInner<T> {}
 
-#[derive(serde::Serialize, serde::Deserialize)]
-#[serde(
-    into = "__NetworkDarc<T>",
-    from = "__NetworkDarc<T>"
-)]
+
 pub struct Darc<T: ?Sized>{
     inner: *mut DarcInner<T>,
     orig_pe: usize,
@@ -72,12 +70,12 @@ impl <T: ?Sized> DarcInner<T>{
         let ref_cnt = unsafe{((self.ref_cnt_addr+team_pe*std::mem::size_of::<AtomicUsize>()) as *mut AtomicUsize).as_ref().unwrap()};
         ref_cnt.fetch_add(amt,Ordering::SeqCst)
     }
-    fn dec_pe_ref_count(&self, pe: usize,amt: usize) -> usize {
-        // println!("decrementing");
-        let team_pe = pe; 
-        let  ref_cnt = unsafe{((self.ref_cnt_addr+team_pe*std::mem::size_of::<AtomicUsize>()) as *mut AtomicUsize).as_ref().unwrap()};
-        ref_cnt.fetch_sub(amt,Ordering::SeqCst)
-    }
+    // fn dec_pe_ref_count(&self, pe: usize,amt: usize) -> usize {
+    //     // println!("decrementing");
+    //     let team_pe = pe; 
+    //     let  ref_cnt = unsafe{((self.ref_cnt_addr+team_pe*std::mem::size_of::<AtomicUsize>()) as *mut AtomicUsize).as_ref().unwrap()};
+    //     ref_cnt.fetch_sub(amt,Ordering::SeqCst)
+    // }
     
     fn send_finished(&self) -> Vec<Pin<Box<dyn Future<Output = Option<()>> + Send>>>{
         let ref_cnts =  unsafe{std::slice::from_raw_parts_mut(self.ref_cnt_addr as *mut AtomicUsize,self.num_pes ) };
@@ -88,11 +86,11 @@ impl <T: ?Sized> DarcInner<T>{
             let cnt = ref_cnts[pe].swap(0,Ordering::SeqCst);
             
             if cnt > 0 {
-                println!("pe {:?} ref_cnt {:?} {:?}",pe,cnt,ref_cnts[pe].load(Ordering::SeqCst));
+                // println!("pe {:?} ref_cnt {:?} {:?}",pe,cnt,ref_cnts[pe].load(Ordering::SeqCst));
                 let my_addr = &*self as *const DarcInner<T>  as usize;
-                println!("my_addr {:x}",my_addr);
+                // println!("my_addr {:x}",my_addr);
                 let pe_addr = team.lamellae.get_rdma().remote_addr( team.arch.world_pe(pe).unwrap(),my_addr);
-                println!("pe_addr {:x}",pe_addr);
+                // println!("pe_addr {:x}",pe_addr);
                 reqs.push(team.exec_am_pe(pe,FinishedAm{cnt: cnt, orig_pe: pe, inner_addr: pe_addr }).into_future()); 
             }
         
@@ -100,20 +98,6 @@ impl <T: ?Sized> DarcInner<T>{
         reqs
     }
 }
-
-// impl<T: ?Sized + fmt::Display> fmt::Display for DarcInner<T> {
-//     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-//         write!(
-//             f,
-//             "[{}/{}] lc: {} dc: {}\nref_cnt: {}\ndropped {}\n {}",
-//             self.my_pe, self.num_pes, self.local_cnt.load(Ordering::SeqCst), self.dist_cnt.load(Ordering::SeqCst),
-//             &std::slice::from_raw_parts_mut(self.ref_cnt_addr as *mut usize,self.num_pes ),
-//             &std::slice::from_raw_parts_mut(self.dropped_addr as *mut u8,self.num_pes ),
-//             &*self.item
-//         )
-//     }
-// }
-
 
 impl<T: ?Sized> fmt::Debug for DarcInner<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -144,13 +128,16 @@ impl <T: ?Sized> Darc< T>{
         unsafe{std::slice::from_raw_parts_mut(inner.dropped_addr as *mut u8,inner.num_pes ) }
     }
 
+    pub fn serialize_update_cnts(&self, cnt: usize){
+        self.inner().dist_cnt.fetch_add(cnt,std::sync::atomic::Ordering::SeqCst);
+    }
+
+    pub fn deserialize_update_cnts(&self){
+        self.inner().inc_pe_ref_count(self.orig_pe,1);// we need to increment by 2 cause bincode calls the serialize function twice when serializing...
+        self.inner().local_cnt.fetch_add(1,Ordering::SeqCst);
+    }
+
     pub fn print(&self){
-        // let inner = self.inner();
-        // let size = std::mem::size_of::<DarcInner<T>>() + inner.num_pes*std::mem::size_of::<usize>()+inner.num_pes;
-        // let ref_cnts = self.ref_cnts_as_mut_slice();
-        // let dropped = self.dropped_as_mut_slice();
-        // let memslice = unsafe{std::slice::from_raw_parts(self.inner as *const u8,size+20)};
-        // println!("mem: {:?}",memslice);
         println!("--------\norig: {:?} {:?}\n--------",self.orig_pe,self.inner());
     }
     
@@ -184,7 +171,7 @@ impl <T>  Darc<T>{
         let size = std::mem::size_of::<DarcInner<T>>() + team.num_pes*std::mem::size_of::<usize>()+team.num_pes;
         // println!("size of darc: {:?}",size);
         let addr = rdma.alloc(size,alloc).unwrap();
-        println!("DARC Addr: {:x}",addr);
+        // println!("DARC Addr: {:x}",addr);
         
         let darc_temp=DarcInner{
             my_pe: my_pe,
@@ -226,7 +213,7 @@ impl <T>  Darc<T>{
 
 impl<T: ?Sized> Clone for Darc<T> {
     fn clone(&self) -> Self {
-        println!("cloning");
+        // println!("cloning");
         // self.print();
         self.inner().local_cnt.fetch_add(1,Ordering::SeqCst);
         Darc{
@@ -237,7 +224,8 @@ impl<T: ?Sized> Clone for Darc<T> {
     }
 }
 
-#[derive(serde::Serialize,serde::Deserialize)]
+
+#[lamellar_impl::AmDataRT]
 struct DroppedWaitAM{
     inner_addr: usize,
     dropped_addr: usize,
@@ -247,19 +235,19 @@ struct DroppedWaitAM{
 #[lamellar_impl::rt_am]
 impl LamellarAM for DroppedWaitAM{
     fn exec(self){
-        println!("in DroppedWaitAM");
+        // println!("in DroppedWaitAM");
         let dropped_refs =   unsafe{std::slice::from_raw_parts_mut(self.dropped_addr as *mut u8,self.num_pes ) };
         let mut timeout = std::time::Instant::now();
         for pe in dropped_refs.iter(){
             while *pe != 1 {
                 async_std::task::yield_now().await;
                 if timeout.elapsed().as_secs_f64() > 5.0{
-                    println!("DroppedWaitAM: {:?}",dropped_refs);
+                    // println!("DroppedWaitAM: {:?}",dropped_refs);
                     timeout = std::time::Instant::now();
                 }
             }
         }
-        println!("in DarcDropAM");
+        // println!("in DarcDropAM");
         let inner = unsafe {&*(self.inner_addr as *mut DarcInner<dyn std::any::Any + Send>)}; //we dont actually care about the "type" we wrap here, we just need access to the meta data for the darc
         //at this point everyone is ready to drop and we can reclaim the memory.
         let team = unsafe { Arc::from_raw(inner.team) }; //return to rust to drop appropriately
@@ -269,7 +257,8 @@ impl LamellarAM for DroppedWaitAM{
     }
 }
 
-#[derive(serde::Serialize,serde::Deserialize)]
+// #[derive(serde::Serialize,serde::Deserialize)]
+#[lamellar_impl::AmDataRT]
 struct DarcDropAM{
     inner_addr: usize,
 }
@@ -277,7 +266,7 @@ struct DarcDropAM{
 #[lamellar_impl::rt_am]
 impl LamellarAM for DarcDropAM{
     fn exec(self){
-        println!("in DarcDropAM");
+        // println!("in DarcDropAM");
         let inner = unsafe {&*(self.inner_addr as *mut DarcInner<dyn std::any::Any + Send>)}; //we dont actually care about the "type" we wrap here, we just need access to the meta data for the darc
         //at this point everyone is ready to drop and we can reclaim the memory.
         let team = unsafe { Arc::from_raw(inner.team) }; //return to rust to drop appropriately
@@ -288,19 +277,19 @@ impl LamellarAM for DarcDropAM{
 
 impl<T: ?Sized> Drop for Darc<T> {
     fn drop(&mut self) {
-        println!("dropping Darc");
+        // println!("dropping Darc");
         // self.print();
         let inner = self.inner();
         let cnt = inner.local_cnt.fetch_sub(1,Ordering::SeqCst);
         if cnt == 1{ //we are currently the last local ref, if it increases again it must mean someone else has come in and we can probably let them worry about cleaning up...
-            print!("im the last local: ");
-            self.print();
+            // print!("im the last local: ");
+            // self.print();
             let pe_ref_cnts = self.ref_cnts_as_mut_slice();
             if pe_ref_cnts.iter().any(|&x| x > 0){ //if we have received and accesses from remote pes, send we are finished
                 inner.send_finished();
                 // async_std::task::block_on(futures::future::join_all(inner.send_finished()));
-                print!("sent finished ams: ");
-                self.print();
+                // print!("sent finished ams: ");
+                // self.print();
             }
         }
         if inner.dist_cnt.load(Ordering::SeqCst) == 0 && inner.local_cnt.load(Ordering::SeqCst) == 0{ // we have no more current references so lets try to launch our garbage collecting am
@@ -311,44 +300,11 @@ impl<T: ?Sized> Drop for Darc<T> {
                 inner.team().exec_am_pe(inner.my_pe,DroppedWaitAM{inner_addr: self.inner as *const u8 as usize, dropped_addr: inner.dropped_addr,my_pe: inner.my_pe, num_pes: inner.num_pes });
                 let rdma = inner.team().lamellae.get_rdma();
                 for pe in inner.team().arch.team_iter(){
-                    println!("putting dropped {:?} into: {:?}",&dropped_refs[inner.my_pe..=inner.my_pe],pe);
+                    // println!("putting dropped {:?} into: {:?}",&dropped_refs[inner.my_pe..=inner.my_pe],pe);
                     rdma.put(pe, &dropped_refs[inner.my_pe..=inner.my_pe], inner.dropped_addr + inner.my_pe * std::mem::size_of::<u8>());
                 }
             }
         }
-
-        // }
-        //     let mut timeout = std::time::Instant::now();
-        //     while inner.dist_cnt.load(Ordering::SeqCst) > 0{
-        //         if timeout.elapsed().as_secs_f64() > 5.0{
-        //             print!("waiting for dist cnt: {:?} {:?}",inner.local_cnt.load(Ordering::SeqCst),inner.dist_cnt.load(Ordering::SeqCst));
-        //             self.print();
-        //             timeout = std::time::Instant::now();
-        //         }
-        //         // if inner.local_cnt.load(Ordering::SeqCst) > 0 {
-        //         //     print!("some new thing came in, let them deal with dropping");
-        //         //     self.print();
-        //         //     return
-        //         // }
-        //         std::thread::yield_now();
-        //     }
-    
-        //     print!("sent finished ams: ");
-        //     self.print();
-            
-        //     // at this point we know all local and distributed references to our local handle have been dropped
-        //     // further we know that we will not be creating anymore clones initiating from this pe.
-        //     // It is still possible for clones from other pes to arrive though        
-
-        //     //we only want to send that we are ready to drop once, and only want one garabage collecting task. assuming we do garbage collection
-        //     if local_dropped == Ok(0){ 
-        //         let rdma = inner.team().lamellae.get_rdma();
-        //         for pe in inner.team().arch.team_iter(){
-        //             println!("putting dropped {:?} into: {:?}",&dropped_refs[inner.my_pe..=inner.my_pe],pe);
-        //             rdma.put(pe, &dropped_refs[inner.my_pe..=inner.my_pe], inner.dropped_addr + inner.my_pe * std::mem::size_of::<u8>());
-        //         }                
-        //     }
-        // }
     }
 }
 
@@ -415,11 +371,30 @@ pub struct __NetworkDarc<T: ?Sized>{
 //     }
 // }
 
-impl< T: ?Sized> From<Darc<T>>
+
+
+
+pub fn darc_serialize<S,T>(darc: &Darc<T>, s: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+    T: ?Sized, {
+        __NetworkDarc::from(darc).serialize(s)
+        // Serialize::serialize(ndar)?
+        // s.serialize(ndarc)
+}
+
+pub fn from_ndarc<'de, D, T> (deserializer: D) -> Result<Darc<T>, D::Error>
+where
+    D: Deserializer<'de>,
+    T: ?Sized, {
+        let ndarc: __NetworkDarc<T> = Deserialize::deserialize(deserializer)?;
+        Ok(Darc::from(ndarc))
+    }
+
+impl< T: ?Sized > From<&Darc<T>>
     for __NetworkDarc<T>
 {
-    fn from(darc: Darc<T>) -> Self {
-        darc.inner().dist_cnt.fetch_add(1,Ordering::SeqCst);
+    fn from(darc: &Darc<T>) -> Self {
         let ndarc = __NetworkDarc {
             inner_addr: darc.inner as *const u8 as usize, 
             backend: darc.inner().team().lamellae.backend(),
@@ -427,14 +402,11 @@ impl< T: ?Sized> From<Darc<T>>
             orig_team_pe: darc.orig_pe,
             phantom: PhantomData
         };
-        // crate::utils::print_type_of(&ndarc);
-        println!("serialized darc");
-        darc.print();
         ndarc
     }
 }
 
-impl< T > From<__NetworkDarc<T>>
+impl< T: ?Sized > From<__NetworkDarc<T>>
     for Darc<T>
 {
     fn from(ndarc: __NetworkDarc<T>) -> Self {
@@ -445,11 +417,6 @@ impl< T > From<__NetworkDarc<T>>
                 orig_pe: ndarc.orig_team_pe,
                 phantom: PhantomData
             };
-            crate::utils::print_type_of(&darc);
-            darc.inner().inc_pe_ref_count(darc.orig_pe,2);// we need to increment by 2 cause bincode calls the serialize function twice when serializing...
-            darc.inner().local_cnt.fetch_add(1,Ordering::SeqCst);
-            println!("deserialized darc");
-            darc.print();
             darc
         }
         else{

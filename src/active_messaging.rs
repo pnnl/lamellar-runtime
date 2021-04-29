@@ -45,8 +45,12 @@ pub(crate) enum ExecType {
     Runtime(Cmd),
 }
 
+pub trait LamellarSerde {
+    fn ser(&self,num_pes: usize) -> Vec<u8>;
+    fn des(&self);
+}
 // #[async_trait]
-pub trait LamellarActiveMessage {
+pub trait LamellarActiveMessage: LamellarSerde {
     fn exec(
         self: Box<Self>,
         my_pe: usize,
@@ -56,8 +60,8 @@ pub trait LamellarActiveMessage {
         team: Arc<LamellarTeamRT>,
     ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Option<LamellarReturn>> + Send>>;
     fn get_id(&self) -> String;
-    fn ser(&self) -> Vec<u8>;
 }
+
 pub(crate) type LamellarBoxedAm = Box<dyn LamellarActiveMessage + Send + Sync>;
 
 // #[async_trait]
@@ -176,14 +180,14 @@ pub trait ActiveMessaging {
 
     fn exec_am_all<F>(&self, am: F) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync>
     where
-        F: LamellarActiveMessage + LamellarAM + Send + Sync + serde::ser::Serialize + serde::de::DeserializeOwned + 'static;
+        F: LamellarActiveMessage + LamellarAM + Send + Sync + 'static;
     fn exec_am_pe<F>(
         &self,
         pe: usize,
         am: F,
     ) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync>
     where
-        F: LamellarActiveMessage + LamellarAM + Send + Sync + serde::ser::Serialize + serde::de::DeserializeOwned + 'static;
+        F: LamellarActiveMessage + LamellarAM + Send + Sync + 'static;
     fn exec_am_local<F>(
             &self,
             am: F,

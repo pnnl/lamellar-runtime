@@ -64,7 +64,7 @@ impl ActiveMessaging for LamellarWorld {
     }
     fn exec_am_all<F>(&self, am: F) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync>
     where
-        F: LamellarActiveMessage + LamellarAM + Send + Sync + serde::ser::Serialize + serde::de::DeserializeOwned + 'static,
+        F: LamellarActiveMessage + LamellarAM + Send + Sync + 'static,
     {
         self.team.exec_am_all(am)
     }
@@ -74,7 +74,7 @@ impl ActiveMessaging for LamellarWorld {
         am: F,
     ) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync>
     where
-        F: LamellarActiveMessage + LamellarAM + Send + Sync + serde::ser::Serialize + serde::de::DeserializeOwned + 'static,
+        F: LamellarActiveMessage + LamellarAM + Send + Sync + 'static,
     {
         assert!(pe < self.num_pes(), "invalid pe: {:?}", pe);
         self.team.exec_am_pe(pe, am)

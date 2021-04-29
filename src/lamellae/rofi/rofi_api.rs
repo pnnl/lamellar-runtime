@@ -79,7 +79,7 @@ pub(crate) fn rofi_local_addr(remote_pe: usize, remote_addr: usize) -> usize {
             remote_pe as u32,
         ) as usize
     };
-    println!("local addr: {:x}",addr);
+    // println!("local addr: {:x}",addr);
     if addr == 0 {
         panic!("unable to locate local memory addr");
     }
@@ -102,7 +102,7 @@ pub(crate) fn rofi_remote_addr(pe: usize, local_addr: usize) -> usize {
         rofisys::rofi_get_remote_addr((local_addr as *mut u8) as *mut std::ffi::c_void, pe as u32)
             
     };
-    println!("remote addr {:?} 0x{:x}", addr as *mut u8 ,addr as usize);
+    // println!("remote addr {:?} 0x{:x}", addr as *mut u8 ,addr as usize);
     if addr as usize == 0 {
         panic!("unable to locate local memory addr");
     }

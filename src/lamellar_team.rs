@@ -112,7 +112,7 @@ impl ActiveMessaging for LamellarTeam {
 
     fn exec_am_all<F>(&self, am: F) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync>
     where
-        F: LamellarActiveMessage + LamellarAM + Send + Sync + serde::ser::Serialize + serde::de::DeserializeOwned + 'static, 
+        F: LamellarActiveMessage + LamellarAM + Send + Sync + 'static, 
     {
         trace!("[{:?}] team exec am all request", self.team.world_pe);
         self.team.exec_am_all(am)
@@ -124,7 +124,7 @@ impl ActiveMessaging for LamellarTeam {
         am: F,
     ) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync>
     where
-        F: LamellarActiveMessage + LamellarAM + Send + Sync + serde::ser::Serialize + serde::de::DeserializeOwned + 'static,
+        F: LamellarActiveMessage + LamellarAM + Send + Sync + 'static,
     {
         self.team.exec_am_pe(pe, am)
     }
@@ -483,7 +483,7 @@ impl ActiveMessaging for LamellarTeamRT {
 
     fn exec_am_all<F>(&self, am: F) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync>
     where
-        F: LamellarActiveMessage + LamellarAM + Send + Sync + serde::ser::Serialize + serde::de::DeserializeOwned + 'static,
+        F: LamellarActiveMessage + LamellarAM + Send + Sync + 'static,
     {
         trace!("[{:?}] team exec am all request", self.world_pe);
         let (my_req, ireq) = LamellarRequestHandle::new(
@@ -521,7 +521,7 @@ impl ActiveMessaging for LamellarTeamRT {
         am: F,
     ) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync>
     where
-        F: LamellarActiveMessage + LamellarAM + Send + Sync + serde::ser::Serialize + serde::de::DeserializeOwned + 'static,
+        F: LamellarActiveMessage + LamellarAM + Send + Sync + 'static,
     {
         prof_start!(pre);
         trace!("[{:?}] team exec am pe request", self.world_pe);

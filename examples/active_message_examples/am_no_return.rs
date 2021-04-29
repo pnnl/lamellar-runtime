@@ -10,7 +10,7 @@ use lamellar::{ActiveMessaging, LamellarAM};
 // use lamellar::{Backend, SchedulerType};
 
 //----------------- Active message returning nothing-----------------//
-#[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone,lamellar::AmData)]
 struct AmNoReturn {
     my_pe: usize,
 }

@@ -133,7 +133,14 @@ pub(crate) async fn process_am_request(
         // ame.msgs.fetch_add(1,Ordering::SeqCst);
         trace!("[{:?}] remote request ", my_pe);
         let id = func.get_id();
-        let ser_func = func.ser();
+    
+        let ser_func = if req_data.pe.is_none() {
+            func.ser(team.num_pes())
+        }
+        else{
+            func.ser(1)
+        };
+
         let ser_func = crate::serialize(&(&id, ser_func)).unwrap();
         let payload = (req_data.msg, ser_func, req_data.team_hash);
         let data = crate::serialize(&payload).unwrap();
@@ -218,7 +225,7 @@ async fn exec_am(
             LamellarReturn::RemoteData(res) => (RetType::Data, Some(res)),
             LamellarReturn::RemoteAm(am) => {
                 let id = am.get_id();
-                let data = am.ser();
+                let data = am.ser(1);
                 let data = crate::serialize(&(&id, data)).unwrap();
                 (RetType::Am, Some(data))
             }

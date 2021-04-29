@@ -41,7 +41,7 @@ init_prof!();
 pub use crate::active_messaging::{registered_active_message::RegisteredAm, LamellarReturn};
 
 #[doc(hidden)]
-pub use crate::active_messaging::LamellarActiveMessage;
+pub use crate::active_messaging::{LamellarActiveMessage,LamellarSerde};
 
 #[cfg(feature = "nightly")]
 pub use crate::active_messaging::remote_closures::RemoteClosures;
@@ -55,6 +55,10 @@ pub use crate::lamellar_memregion::{
 
 #[cfg(feature = "experimental")]
 pub use crate::lamellar_darc::Darc;
+#[cfg(feature = "experimental")]
+#[doc(hidden)]
+pub use crate::lamellar_darc::{darc_serialize,from_ndarc};
+
 
 pub use crate::lamellae::Backend;
 pub use crate::schedulers::SchedulerType;
@@ -71,7 +75,7 @@ pub use crate::lamellar_team::LamellarTeam;
 
 
 extern crate lamellar_impl;
-pub use lamellar_impl::{am, local_am, generate_reductions_for_type, reduction, register_reduction};
+pub use lamellar_impl::{am, local_am, generate_reductions_for_type, reduction, register_reduction,AmData};
 
 #[doc(hidden)]
 pub use inventory;
