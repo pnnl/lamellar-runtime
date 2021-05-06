@@ -47,7 +47,7 @@ fn default_backend() -> Backend {
 
 pub(crate) trait LamellaeAM: Send + Sync + std::fmt::Debug {
     fn send_to_pe(&self, pe: usize, data: std::vec::Vec<u8>); //should never send to self... this is short circuited before request is serialized in the active message layer
-    fn send_to_all(&self, data: std::vec::Vec<u8>); //should never send to self... this is short circuited before request is serialized in the active message layer
+    // fn send_to_all(&self, data: std::vec::Vec<u8>); //should never send to self... this is short circuited before request is serialized in the active message layer
     fn send_to_pes(
         //should never send to self... this is short circuited before request is serialized in the active message layer
         &self,
@@ -58,6 +58,38 @@ pub(crate) trait LamellaeAM: Send + Sync + std::fmt::Debug {
     //this probably has to be an active message based barrier (unless hardware supports barrier groups?)
     fn barrier(&self);
     fn backend(&self) -> Backend;
+}
+
+// #[derive(Clone)]
+struct SerializedData{
+    addr: usize,
+    len: usize,
+    rdma: Arc<dyn LamellaeRDMA>
+}
+
+impl Drop for SerializedData{
+    fn drop(&mut self){
+        self.rdma.rt_free(self.addr);
+    }
+}
+
+async fn serialize<T: ?Sized>(obj: &T,rdma: Arc<dyn LamellaeRDMA>) -> Result<SerializedData,anyhow::Error> 
+where
+    T: serde::Serialize {
+    let size = bincode::serialized_size(obj)? as usize;
+    let mut mem = rdma.rt_alloc(size);
+    while mem.is_none(){
+        async_std::task::yield_now().await;
+        mem = rdma.rt_alloc(size);
+    }
+    let addr = mem.unwrap();
+    let mem_slice = unsafe {std::slice::from_raw_parts_mut(addr as *mut u8, size)};
+    bincode::serialize_into(mem_slice,obj)?;
+    Ok(SerializedData{
+        addr: addr,
+        len: size,
+        rdma: rdma.clone()
+    })
 }
 
 pub(crate) trait LamellaeRDMA: Send + Sync {
@@ -73,6 +105,7 @@ pub(crate) trait LamellaeRDMA: Send + Sync {
     fn local_addr(&self, remote_pe: usize, remote_addr: usize) -> usize;
     fn remote_addr(&self, remote_pe: usize, local_addr: usize) -> usize;
     fn mype(&self) -> usize;
+    
 }
 
 pub(crate) trait Lamellae: Send + Sync {

@@ -12,7 +12,7 @@
 ///----------------------------------------------------------------------------------
 
 use futures::future;
-use lamellar::{ActiveMessaging, LamellarAM};
+use lamellar::{ActiveMessaging};
 use lamellar::{
     LamellarLocalMemoryRegion, LamellarMemoryRegion, RegisteredMemoryRegion, RemoteMemoryRegion,
 };
@@ -24,7 +24,7 @@ lazy_static! {
     static ref LOCK: Mutex<()> = Mutex::new(());
 }
 
-#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
+#[lamellar::AmData( Clone, Debug)]
 struct SubMatrix {
     name: String,
     mat: LamellarMemoryRegion<f32>, //handle to underlying data
@@ -91,7 +91,7 @@ async fn get_sub_mat(mat: &SubMatrix, sub_mat: &LamellarLocalMemoryRegion<f32>) 
 
 
 
-#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
+#[lamellar::AmData( Clone, Debug)]
 struct NaiveMM {
     a: SubMatrix, // will always be local
     b: SubMatrix, // can possibly be remote

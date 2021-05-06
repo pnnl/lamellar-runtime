@@ -5,7 +5,7 @@
 /// This example shows how to create a user defined reduction operation
 /// it is very similar to our registered active message interface.
 ///----------------------------------------------------------------
-use lamellar::{ActiveMessaging, LamellarAM, LamellarArray, RegisteredMemoryRegion};
+use lamellar::{ActiveMessaging, LamellarAM,LocalAM, LamellarArray, RegisteredMemoryRegion};
 use std::time::Instant;
 
 lamellar::register_reduction!(

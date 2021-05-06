@@ -6,12 +6,12 @@
 /// the handles are used on remote pes to access data on the PE which launched the AM
 ///----------------------------------------------------------------
 use lamellar::{
-    ActiveMessaging, LamellarAM, LamellarMemoryRegion, RegisteredMemoryRegion, RemoteMemoryRegion,
+    ActiveMessaging, LamellarMemoryRegion, RegisteredMemoryRegion, RemoteMemoryRegion,
 };
 
 const ARRAY_LEN: usize = 100;
 
-#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
+#[lamellar::AmData( Clone, Debug)]
 struct RdmaAM {
     array: LamellarMemoryRegion<u8>,
     orig_pe: usize,

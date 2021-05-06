@@ -7,13 +7,13 @@
 /// of data (on the critical path)
 /// --------------------------------------------------------------------
 use lamellar::{
-    ActiveMessaging, LamellarAM, LamellarMemoryRegion, RegisteredMemoryRegion, RemoteMemoryRegion,
+    ActiveMessaging, LamellarMemoryRegion, RegisteredMemoryRegion, RemoteMemoryRegion,
 };
 use std::time::Instant;
 
 const ARRAY_LEN: usize = 1 * 1024 * 1024 * 1024;
 
-#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
+#[lamellar::AmData(Clone, Debug)]
 struct DataAM {
     array: LamellarMemoryRegion<u8>,
     index: usize,

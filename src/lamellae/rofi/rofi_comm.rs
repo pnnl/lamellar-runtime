@@ -209,7 +209,7 @@ impl RofiComm {
         }
         // println!("[{:?}]-({:?}) iput exit",self.my_pe,thread::current().id());
 
-        println!("[{:?}]- gc: {:?} pc: {:?} iput exit",self.my_pe,self.get_cnt.load(Ordering::SeqCst),self.put_cnt.load(Ordering::SeqCst));
+        // println!("[{:?}]- gc: {:?} pc: {:?} iput exit",self.my_pe,self.get_cnt.load(Ordering::SeqCst),self.put_cnt.load(Ordering::SeqCst));
     }
 
     pub(crate) fn put_all<
@@ -281,7 +281,7 @@ impl RofiComm {
                 );
             }
         }
-        println!("[{:?}]- gc: {:?} pc: {:?} get exit",self.my_pe,self.get_cnt.load(Ordering::SeqCst),self.put_cnt.load(Ordering::SeqCst));
+        // println!("[{:?}]- gc: {:?} pc: {:?} get exit",self.my_pe,self.get_cnt.load(Ordering::SeqCst),self.put_cnt.load(Ordering::SeqCst));
     }
     #[allow(dead_code)]
     fn iget<
@@ -320,7 +320,7 @@ impl RofiComm {
                 );
             }
         }
-        println!("[{:?}]- gc: {:?} pc: {:?} iget exit",self.my_pe,self.get_cnt.load(Ordering::SeqCst),self.put_cnt.load(Ordering::SeqCst));
+        // println!("[{:?}]- gc: {:?} pc: {:?} iget exit",self.my_pe,self.get_cnt.load(Ordering::SeqCst),self.put_cnt.load(Ordering::SeqCst));
         // println!("[{:?}]-({:?}) iget exit",self.my_pe,thread::current().id());
     }
     //src address is relative to rofi base addr

@@ -26,7 +26,8 @@ lazy_static! {
 
 
 pub struct LamellarWorld {
-    pub team: Arc<LamellarTeamRT>,
+    team: Arc<LamellarTeam>,
+    team_rt: Arc<LamellarTeamRT>,
     teams: Arc<RwLock<HashMap<u64, Weak<LamellarTeamRT>>>>,
     counters: Arc<AMCounters>,
     _scheduler: Arc<dyn Scheduler>,
@@ -66,7 +67,7 @@ impl ActiveMessaging for LamellarWorld {
     where
         F: LamellarActiveMessage + LamellarAM + Send + Sync + 'static,
     {
-        self.team.exec_am_all(am)
+        self.team_rt.exec_am_all(am)
     }
     fn exec_am_pe<F>(
         &self,
@@ -77,16 +78,16 @@ impl ActiveMessaging for LamellarWorld {
         F: LamellarActiveMessage + LamellarAM + Send + Sync + 'static,
     {
         assert!(pe < self.num_pes(), "invalid pe: {:?}", pe);
-        self.team.exec_am_pe(pe, am)
+        self.team_rt.exec_am_pe(pe, am)
     }
     fn exec_am_local<F>(
         &self,
         am: F,
-    ) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync>
+    ) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync>
     where
-        F: LamellarActiveMessage  + Send + Sync + 'static,
+        F: LamellarActiveMessage + LocalAM + Send + Sync + 'static,
     {
-        self.team.exec_am_local(am)
+        self.team_rt.exec_am_local(am)
     }
 }
 
@@ -115,7 +116,7 @@ impl RemoteClosures for LamellarWorld {
         func: F,
     ) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync> {
         trace!("[{:?}] exec closure all", self.my_pe);
-        self.team.exec_closure_all(func)
+        self.team_rt.exec_closure_all(func)
     }
 
     #[cfg(feature = "nightly")]
@@ -140,7 +141,7 @@ impl RemoteClosures for LamellarWorld {
     ) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync> {
         assert!(pe < self.num_pes(), "invalid pe: {:?}", pe);
         trace!("[{:?}] world exec_closure_pe: [{:?}]", self.my_pe, pe);
-        self.team.exec_closure_pe(pe, func)
+        self.team_rt.exec_closure_pe(pe, func)
     }
     #[cfg(feature = "nightly")]
     fn exec_closure_on_return<
@@ -150,7 +151,7 @@ impl RemoteClosures for LamellarWorld {
         &self,
         func: F,
     ) -> ClosureRet {
-        self.team.exec_closure_on_return(func)
+        self.team_rt.exec_closure_on_return(func)
     }
 }
 
@@ -175,7 +176,7 @@ impl RemoteMemoryRegion for LamellarWorld {
         size: usize,
     ) -> LamellarMemoryRegion<T> {
         self.barrier();
-        self.team.alloc_shared_mem_region::<T>(size)
+        self.team_rt.alloc_shared_mem_region::<T>(size)
     }
 
     /// allocate a local memory region from the asymmetric heap
@@ -196,7 +197,7 @@ impl RemoteMemoryRegion for LamellarWorld {
         &self,
         size: usize,
     ) -> LamellarLocalMemoryRegion<T> {
-        self.team.alloc_local_mem_region::<T>(size)
+        self.team_rt.alloc_local_mem_region::<T>(size)
     }
 
     /// release a remote memory region from the asymmetric heap
@@ -217,7 +218,7 @@ impl RemoteMemoryRegion for LamellarWorld {
         &self,
         region: LamellarMemoryRegion<T>,
     ) {
-        self.team.free_shared_memory_region(region)
+        self.team_rt.free_shared_memory_region(region)
     }
 
     /// release a remote memory region from the asymmetric heap
@@ -238,7 +239,7 @@ impl RemoteMemoryRegion for LamellarWorld {
         &self,
         region: LamellarLocalMemoryRegion<T>,
     ) {
-        self.team.free_local_memory_region(region)
+        self.team_rt.free_local_memory_region(region)
     }
 }
 
@@ -260,7 +261,7 @@ impl LamellarWorld {
     }
 
     pub fn team_barrier(&self) {
-        self.team.barrier();
+        self.team_rt.barrier();
         println!("team barrier!!!!!!!!!!!!");
     }
 
@@ -268,7 +269,7 @@ impl LamellarWorld {
     where
         L: LamellarArch + std::hash::Hash + 'static,
     {
-        if let Some(team) = LamellarTeamRT::create_subteam_from_arch(self.team.clone(), arch) {
+        if let Some(team) = LamellarTeamRT::create_subteam_from_arch(self.team_rt.clone(), arch) {
             self.teams
                 .write()
                 .insert(team.my_hash, Arc::downgrade(&team));
@@ -282,10 +283,7 @@ impl LamellarWorld {
     }
 
     pub fn team(&self) -> Arc<LamellarTeam>{
-        Arc::new(LamellarTeam {
-            team: self.team.clone(),
-            teams: self.teams.clone(),
-        })
+        self.team.clone()
     }
 
 
@@ -303,7 +301,7 @@ impl LamellarWorld {
         size: usize,
     ) -> LamellarArray<T> {
         self.barrier();
-        LamellarArray::new(self.team.clone(), size, self.counters.clone())
+        LamellarArray::new(self.team_rt.clone(), size, self.counters.clone())
     }
 
     // #[cfg(feature = "experimental")]
@@ -319,7 +317,7 @@ impl LamellarWorld {
     //     size: usize,
     //     init: T,
     // ) -> LamellarLocalArray<T> {
-    //     LamellarLocalArray::new(size, init, self.team.lamellae.get_rdma().clone())
+    //     LamellarLocalArray::new(size, init, self.team_rt.lamellae.get_rdma().clone())
     // }
 }
 
@@ -328,9 +326,9 @@ impl Drop for LamellarWorld {
     fn drop(&mut self) {
         trace!("[{:?}] world dropping", self.my_pe);
         self.wait_all();
-        self.team.barrier();
+        // self.team_rt.barrier();
         self.barrier();
-        self.team.destroy();
+        self.team_rt.destroy();
         self.lamellaes.clear();
         fini_prof!();
 
@@ -397,15 +395,20 @@ impl LamellarWorldBuilder {
         sched.init(num_pes, my_pe, lamellaes);
         let counters = Arc::new(AMCounters::new());
         lamellae.get_am().barrier();
+        let team_rt = Arc::new(LamellarTeamRT::new(
+            num_pes,
+            my_pe,
+            sched.get_queue().clone(),
+            counters.clone(),
+            lamellae.clone(),
+        ));
         // println!("world gen barrier!!!!!!!!!!!!");
         let mut world = LamellarWorld {
-            team: Arc::new(LamellarTeamRT::new(
-                num_pes,
-                my_pe,
-                sched.get_queue().clone(),
-                counters.clone(),
-                lamellae.clone(),
-            )),
+            team: Arc::new(LamellarTeam {
+                team: team_rt.clone(),
+                teams: teams.clone(),
+            }),
+            team_rt: team_rt,
             teams: teams.clone(),
             counters: counters,
             _scheduler: Arc::new(sched),
@@ -416,7 +419,7 @@ impl LamellarWorldBuilder {
         world
             .teams
             .write()
-            .insert(world.team.my_hash, Arc::downgrade(&world.team));
+            .insert(world.team_rt.my_hash, Arc::downgrade(&world.team_rt));
         world.lamellaes.insert(lamellae.backend(), lamellae.clone());
         LAMELLAES.write().insert(lamellae.backend(), lamellae.clone());
         // println!("Lamellar world created with {:?}", lamellae.backend());

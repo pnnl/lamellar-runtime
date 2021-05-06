@@ -3,12 +3,12 @@
 /// to launch and execute active messages. 
 ///----------------------------------------------------------------
 use lamellar::{
-    ActiveMessaging, BlockedArch, LamellarAM, LamellarTeam, LamellarWorld, StridedArch,
+    ActiveMessaging, BlockedArch, LamellarTeam, LamellarWorld, StridedArch,
 };
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-#[derive(serde::Serialize, serde::Deserialize, Clone)]
+#[lamellar::AmData( Clone)]
 struct TeamAM {
     secs: u64,
 }

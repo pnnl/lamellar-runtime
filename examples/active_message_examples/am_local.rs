@@ -5,7 +5,7 @@
 /// (although currently outputs still need to be)
 /// --------------------------------------------------------------------
 
-use lamellar::{ActiveMessaging, LamellarAM};
+use lamellar::{ActiveMessaging};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize,Ordering};
@@ -13,7 +13,7 @@ use std::time::Duration;
 // use lamellar::{Backend, SchedulerType};
 
 //----------------- Active message returning nothing-----------------//
-#[derive(Debug, Clone)]
+#[lamellar::AmLocalData(Debug, Clone)]
 struct AmNoReturn {
     my_id: usize,
     data: Arc<HashMap<usize,Vec<usize>>>,
@@ -43,7 +43,7 @@ impl LamellarAM for AmNoReturn {
 }
 //-----------------------------------------------------------------//
 //----------------- Active message returning usize-----------------//
-#[derive(Debug, Clone)]
+#[lamellar::AmLocalData(Debug, Clone)]
 struct AmReturnUsize {
     my_id: usize,
     data: Arc<HashMap<usize,Vec<usize>>>,

@@ -5,7 +5,7 @@
 /// we include the distributed Lamellar Implemtation
 /// as well as a (single process) shared memory version using Rayon.
 /// --------------------------------------------------------------------
-use lamellar::{ActiveMessaging, LamellarAM, LamellarWorld};
+use lamellar::{ActiveMessaging, LamellarWorld};
 use lamellar::{LamellarMemoryRegion, RegisteredMemoryRegion, RemoteMemoryRegion};
 use parking_lot::Mutex;
 use rand::rngs::StdRng;
@@ -23,7 +23,7 @@ lazy_static! {
     static ref LOCK: Mutex<()> = Mutex::new(());
 }
 
-#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
+#[lamellar::AmData( Clone, Debug)]
 struct ReduceAM {
     spectrum: LamellarMemoryRegion<f64>,
 }
@@ -35,7 +35,7 @@ impl LamellarAM for ReduceAM {
     }
 }
 
-#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
+#[lamellar::AmData( Clone, Debug)]
 struct LocalSumAM {
     spectrum: LamellarMemoryRegion<f64>,
     signal: LamellarMemoryRegion<f64>,
@@ -63,7 +63,7 @@ impl LamellarAM for LocalSumAM {
     }
 }
 
-#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
+#[lamellar::AmData( Clone, Debug)]
 struct RemoteSumAM {
     spectrum: LamellarMemoryRegion<f64>,
     add_spec: Vec<f64>,

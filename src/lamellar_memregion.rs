@@ -229,7 +229,7 @@ pub trait RemoteMemoryRegion {
     );
 }
 
-pub trait MemoryRegion {
+pub trait MemoryRegion: std::fmt::Debug {
     fn id(&self) -> usize;
 }
 
@@ -562,7 +562,7 @@ impl<T: std::clone::Clone + Send + Sync + 'static> std::fmt::Debug
     }
 }
 
-#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
 pub struct LamellarLocalMemoryRegion<T: std::clone::Clone + Send + Sync + 'static> {
     lmr: LamellarMemoryRegion<T>,
     pe: usize,
@@ -608,11 +608,11 @@ impl<T: std::clone::Clone + Send + Sync + 'static> RegisteredMemoryRegion
 {
     type Output = T;
     fn len(&self) -> usize {
-        if self.pe == self.lmr.pe {
+        // if self.pe == self.lmr.pe {
             self.lmr.len()
-        } else {
-            0
-        }
+        // } else {
+            // 0
+        // }
     }
     fn addr(&self) -> MemResult<usize> {
         if self.pe == self.lmr.pe {
@@ -667,23 +667,21 @@ impl<T: std::clone::Clone + Send + Sync + 'static> MemoryRegion for LamellarLoca
     }
 }
 
-// impl<
-//         T: std::clone::Clone
-//             + Send
-//             + Sync
-//             + 'static,
-//     > std::fmt::Debug for LamellarLocalMemoryRegion<T>
-// {
-//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-//         // let slice = unsafe { std::slice::from_raw_parts(self.addr as *const T, self.size) };
-//         // write!(f, "{:?}", slice)
-//         write!(
-//             f,
-//             "local mem region:  {:?} ",se;f,
-//             self.addr,
-//             self.size,
-//             self.backend,
-//             self.cnt.load(Ordering::SeqCst)
-//         )
-//     }
-// }
+impl<
+        T: std::clone::Clone
+            + Send
+            + Sync
+            + 'static,
+    > std::fmt::Debug for LamellarLocalMemoryRegion<T>
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // let slice = unsafe { std::slice::from_raw_parts(self.addr as *const T, self.size) };
+        // write!(f, "{:?}", slice)
+        write!(
+            f,
+            "[{:?}] local mem region:  {:?} ",self.pe,self.lmr,
+        )
+    }
+}
+
+

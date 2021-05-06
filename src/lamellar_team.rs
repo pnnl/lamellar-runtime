@@ -132,9 +132,9 @@ impl ActiveMessaging for LamellarTeam {
     fn exec_am_local<F>(
         &self,
         am: F,
-    ) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync>
+    ) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync>
     where
-        F: LamellarActiveMessage + Send + Sync + 'static,
+        F: LamellarActiveMessage + LocalAM + Send + Sync + 'static,
     {
         self.team.exec_am_local(am)
     }
@@ -144,7 +144,7 @@ pub struct LamellarTeamRT {
     #[allow(dead_code)]
     parent: Option<Arc<LamellarTeamRT>>,
     sub_teams: RwLock<HashMap<usize, Arc<LamellarTeamRT>>>,
-    mem_regions: RwLock<HashMap<usize, Box<dyn MemoryRegion + Sync + Send>>>,
+    mem_regions: RwLock<HashMap<usize, Box<dyn MemoryRegion + Sync + Send >>>,
     pub(crate) scheduler: Arc<dyn SchedulerQueue>,
     pub(crate) lamellae: Arc<dyn Lamellae + Send + Sync>,
     pub(crate) arch: Arc<LamellarArchRT>,
@@ -215,8 +215,9 @@ impl LamellarTeamRT {
     }
 
     pub(crate) fn destroy(&self) {
-        // println!("destroying team?");
+        println!("destroying team? {:?}",self.mem_regions.read().len());
         for _lmr in self.mem_regions.read().iter() {
+            println!("lmr {:?}",_lmr);
             //TODO: i have a gut feeling we might have an issue if a mem region was destroyed on one node, but not another
             // add a barrier method that takes a message so if we are stuck in the barrier for a long time we can say that
             // this is probably mismatched frees.
@@ -569,9 +570,9 @@ impl ActiveMessaging for LamellarTeamRT {
     fn exec_am_local<F>(
         &self,
         am: F,
-    ) -> Box<dyn LamellarRequest<Output =()> + Send + Sync>
+    ) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync>
     where
-        F: LamellarActiveMessage  + Send + Sync + 'static,
+        F: LamellarActiveMessage + LocalAM  + Send + Sync + 'static,
     {
         prof_start!(pre);
         trace!("[{:?}] team exec am pe request", self.world_pe);
@@ -604,7 +605,7 @@ impl ActiveMessaging for LamellarTeamRT {
         prof_start!(sub);
         self.scheduler.submit_req(
             self.world_pe,
-            Some(self.world_pe),
+            Some(self.team_pe.unwrap()),
             msg,
             ireq,
             my_any,
@@ -816,6 +817,7 @@ impl RemoteMemoryRegion for LamellarTeam {
         &self,
         region: LamellarMemoryRegion<T>,
     ) {
+        
         self.team.free_shared_memory_region(region)
     }
 
@@ -897,6 +899,7 @@ impl RemoteMemoryRegion for LamellarTeamRT {
         self.mem_regions
             .write()
             .insert(llmr.id(), Box::new(llmr.clone()));
+            // println!("alloc_mem_reg: {:?}",llmr);
         llmr
     }
 
@@ -940,6 +943,8 @@ impl RemoteMemoryRegion for LamellarTeamRT {
         &self,
         region: LamellarLocalMemoryRegion<T>,
     ) {
+        
+        // println!("free_mem_reg: {:?}",region);
         self.mem_regions.write().remove(&region.id());
     }
 }
@@ -974,13 +979,13 @@ impl RemoteMemoryRegion for LamellarTeamRT {
 impl Drop for LamellarTeam {
     fn drop(&mut self) {
         if let Some(parent) = &self.team.parent {
-            // println!(
-            //     "[{:?}] {:?} team handle dropping {:?} {:?}",
-            //     self.team.world_pe,
-            //     self.team.my_hash,
-            //     self.team.get_pes(),
-            //     self.team.dropped.as_slice()
-            // );
+            println!(
+                "[{:?}] {:?} team handle dropping {:?} {:?}",
+                self.team.world_pe,
+                self.team.my_hash,
+                self.team.get_pes(),
+                self.team.dropped.as_slice()
+            );
             self.team.wait_all();
             self.team.barrier();
             self.team.put_dropped();

@@ -5,14 +5,14 @@
 /// and then await the result of the future in a non blocking fashion.
 /// e.g. request.as_future().await
 /// --------------------------------------------------------------------
-use lamellar::{ActiveMessaging, LamellarAM};
+use lamellar::{ActiveMessaging};
 
 //----------------- Recursive Active Message -----------------//
 // in this example we launch new active messages from within
 // a currently executing active message. Specifically we visit
 // each PE in the allocation returning a list of their
 // host names in reverse order of how we visited them.
-#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
+#[lamellar::AmData( Clone, Debug)]
 struct RecursiveAM {
     next: usize,
     orig: usize,
@@ -35,7 +35,8 @@ impl LamellarAM for RecursiveAM {
             res.push(hostname::get().unwrap().into_string().unwrap()); //add my hostname as first in the list
             res
         } else {
-            let next = lamellar::team.exec_am_pe(
+            std::thread::sleep(std::time::Duration::from_millis(1000 as u64));
+            let next = lamellar::world.exec_am_pe(
                 next_pe,
                 RecursiveAM {
                     next: next_pe,
@@ -54,7 +55,6 @@ fn main() {
     let world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();
     world.barrier();
-    world.team.barrier();
     if my_pe == 0 {
         println!("---------------------------------------------------------------");
         println!("testing recursive am");
@@ -66,9 +66,10 @@ fn main() {
                     orig: my_pe,
                 },
             )
-            .get_all();
+            .get();
         println!("visit paths: {:?}", res);
         println!("---------------------------------------------------------------");
     }
-    world.team.barrier();
+    std::thread::sleep(std::time::Duration::from_millis(100000 as u64));
+    world.barrier();
 }

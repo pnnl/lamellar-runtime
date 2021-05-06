@@ -45,7 +45,7 @@ pub use crate::active_messaging::{LamellarActiveMessage,LamellarSerde};
 
 #[cfg(feature = "nightly")]
 pub use crate::active_messaging::remote_closures::RemoteClosures;
-pub use crate::active_messaging::{ActiveMessaging, LamellarAM};
+pub use crate::active_messaging::{ActiveMessaging, LamellarAM,LocalAM};
 
 #[cfg(feature = "experimental")]
 pub use crate::lamellar_array::{LamellarArray, ReduceKey};
@@ -54,10 +54,10 @@ pub use crate::lamellar_memregion::{
 };
 
 #[cfg(feature = "experimental")]
-pub use crate::lamellar_darc::Darc;
+pub use crate::lamellar_darc::{Darc,LocalRwDarc};
 #[cfg(feature = "experimental")]
 #[doc(hidden)]
-pub use crate::lamellar_darc::{darc_serialize,from_ndarc};
+pub use crate::lamellar_darc::{darc_serialize,darc_from_ndarc,localrw_serialize,localrw_from_ndarc};
 
 
 pub use crate::lamellae::Backend;
@@ -75,7 +75,7 @@ pub use crate::lamellar_team::LamellarTeam;
 
 
 extern crate lamellar_impl;
-pub use lamellar_impl::{am, local_am, generate_reductions_for_type, reduction, register_reduction,AmData};
+pub use lamellar_impl::{am, local_am, generate_reductions_for_type, reduction, register_reduction,AmData,AmLocalData};
 
 #[doc(hidden)]
 pub use inventory;
@@ -94,6 +94,27 @@ where
     // Ok(postcard::to_stdvec(obj)?)
     // Ok(rmp_serde::to_vec(obj)?)
 }
+
+
+// #[doc(hidden)]
+// async fn serialize_with<T: ?Sized>(obj: &T,rdma: std::sync::Arc<dyn LamellaeRDMA>) -> Result<Vec<u8>, anyhow::Error>
+// where
+//     T: serde::Serialize,
+// {
+//     let size = bincode::serialize_size(obj)?;
+//     let mut mem = rdma.rt_alloc(size)?;
+//     while mem.is_none(){
+//         async_std::task::yield_now().await;
+//     }
+//     let mut mem_slice = std::slice::from_raw_parts_mut(mem.unwrap() as *mut u8, size);
+//     Ok(bincode::serialize_into(mem_slice,obj)?)
+
+//     // let mut buf = Vec::new();
+//     // obj.serialize(&mut rmp_serde::Serializer::new(&mut buf)).unwrap()
+//     // Ok(bincode::serialize(obj)?)
+//     // Ok(postcard::to_stdvec(obj)?)
+//     // Ok(rmp_serde::to_vec(obj)?)
+// }
 
 #[doc(hidden)]
 pub fn deserialize<'a, T>(bytes: &'a [u8]) -> Result<T, anyhow::Error>

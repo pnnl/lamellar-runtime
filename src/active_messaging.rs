@@ -65,10 +65,14 @@ pub trait LamellarActiveMessage: LamellarSerde {
 pub(crate) type LamellarBoxedAm = Box<dyn LamellarActiveMessage + Send + Sync>;
 
 // #[async_trait]
+pub trait LocalAM{
+    type Output: serde::ser::Serialize + serde::de::DeserializeOwned + Sync + Send;
+}
 pub trait LamellarAM {
     type Output: serde::ser::Serialize + serde::de::DeserializeOwned + Sync + Send;
     // fn exec(self, world: Arc<LamellarTeamRT>, team: Arc<LamellarTeamRT>) -> Self::Output;
 }
+
 
 pub trait LamellarDataReturn: std::fmt::Debug + std::any::Any {
     fn as_any(&self) -> &dyn std::any::Any;
@@ -191,9 +195,9 @@ pub trait ActiveMessaging {
     fn exec_am_local<F>(
             &self,
             am: F,
-        ) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync>
+        ) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync>
         where
-            F: LamellarActiveMessage + Send + Sync + 'static;
+            F: LamellarActiveMessage + LocalAM + Send + Sync + 'static;
 }
 
 //maybe make this a struct then we could hold the pending counters...
@@ -248,6 +252,7 @@ impl ActiveMessageEngine {
     }
 
     pub(crate) async fn process_msg(&self, req_data: ReqData) -> Option<ReqData> {
+        trace!("[{:?}] process msg: {:?}",self.my_pe, &req_data);
         if req_data.msg.return_data {
             REQUESTS[req_data.msg.req_id % REQUESTS.len()]
                 .insert_new(req_data.msg.req_id, req_data.ireq.clone());
@@ -614,7 +619,7 @@ impl ActiveMessageEngine {
                 None
             }
             _ => {
-                println!("send_resp unknown command {:#?}", cmd);
+                trace!("send_resp unknown command {:#?}", cmd);
                 None
             }
         }

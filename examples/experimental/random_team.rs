@@ -4,7 +4,7 @@
 /// recursive ams to visit and print out a path of pes visted
 /// also experiments with sub_teams
 ///------------------------------------------------------------------------
-use lamellar::{ActiveMessaging, IdError, LamellarAM, LamellarArch};
+use lamellar::{ActiveMessaging, IdError, LamellarArch};
 use rand::seq::SliceRandom;
 // use rand::thread_rng;
 use rand::{rngs::StdRng, SeedableRng};
@@ -12,7 +12,7 @@ use rand::{rngs::StdRng, SeedableRng};
 
 
 //----------------- Recursive Active Message -----------------//
-#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
+#[lamellar::AmData( Clone, Debug)]
 struct RecursiveAM {
     next: usize,
     orig: usize,
@@ -59,7 +59,7 @@ impl LamellarAM for RecursiveAM {
     }
 }
 
-#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
+#[lamellar::AmData(Clone, Debug)]
 struct DataAM0 {
     global_pe: usize,
     parent_pe: Option<usize>,

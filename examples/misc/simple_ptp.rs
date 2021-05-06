@@ -5,7 +5,7 @@
 /// we make no claims to the accuracy or resolution of the resulting clock offsets
 /// this should not be used in production codes as is.
 /// --------------------------------------------------------------------------
-use lamellar::{ActiveMessaging, LamellarAM};
+use lamellar::{ActiveMessaging};
 use std::time::SystemTime;
 
 fn get_time_as_nsec() -> i128 {
@@ -15,13 +15,13 @@ fn get_time_as_nsec() -> i128 {
     }
 }
 
-#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
+#[lamellar::AmData( Clone, Debug)]
 struct SyncAM {}
-#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
+#[lamellar::AmData( Clone, Debug)]
 struct RespAM {
     time: i128,
 }
-#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
+#[lamellar::AmData( Clone, Debug)]
 struct FollowUpAM {}
 
 #[lamellar::am(return_am = "RespAM -> i128")]

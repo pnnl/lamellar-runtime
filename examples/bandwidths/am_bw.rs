@@ -3,10 +3,10 @@
 /// contains a vector of N bytes
 /// the active message simply returns immediately.
 /// --------------------------------------------------------------------
-use lamellar::{ActiveMessaging, LamellarAM};
+use lamellar::{ActiveMessaging};
 use std::time::Instant;
 
-#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
+#[lamellar::AmData(Clone, Debug)]
 struct DataAM {
     data: Vec<u8>,
 }

@@ -14,6 +14,13 @@ const CMD_Q_LEN: usize = 10000; // this is the number of slots for each PE
 
 const FINI_STATUS: RofiReqStatus = RofiReqStatus::Fini;
 
+
+//TODO: probably need to rewrite this to ensure everything is stored in rofi memory...
+//actually should probably write an async rofi lamellae
+//the we reduce can remove to communication threads? (or at least the sending thread) 
+// we can actually do something like a double buffering scheme, in this case we only need 1 RofiCmd per pe to indicate there is data ready to transfer
+// because all the RofiCmd will actually be buffered in a rofi memory segment (can we get rid of the extra roficmds?)
+
 #[repr(u8)]
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone, Copy, PartialEq)]
 pub(crate) enum RofiReqStatus {
@@ -35,7 +42,7 @@ impl RofiReqStatus {
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
-struct RofiCmd {
+struct RofiCmd { // we send this to remote nodes
     daddr: usize, // std::ffi::c_void,
     dsize: usize,
     data_hash: usize,

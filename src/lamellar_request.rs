@@ -23,7 +23,7 @@ pub(crate) struct InternalReq {
 
 #[async_trait]
 pub trait LamellarRequest {
-    type Output: serde::ser::Serialize + serde::de::DeserializeOwned;
+    type Output;//: serde::ser::Serialize + serde::de::DeserializeOwned;
     async fn into_future(self: Box<Self>) -> Option<Self::Output>;
     // fn future(&self) -> impl Future<Output=Option<Self::Output>>;
     fn get(&self) -> Option<Self::Output>;

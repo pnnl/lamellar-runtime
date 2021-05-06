@@ -135,7 +135,7 @@ pub(crate) async fn process_am_request(
         let id = func.get_id();
     
         let ser_func = if req_data.pe.is_none() {
-            func.ser(team.num_pes())
+            func.ser(team.num_pes()-1)
         }
         else{
             func.ser(1)
@@ -212,7 +212,8 @@ async fn exec_am(
     trace!("[{:?}] exec_am {:?}", ame.my_pe, data.len());
     let (name, ser_data): (String, Vec<u8>) = crate::deserialize(&data).unwrap();
     // ame.cmds.fetch_add(1,Ordering::SeqCst);
-    if let Some(res) =
+    trace!("exec am {:?}",name);
+    if let Some(res) =        
         AMS_EXECS.get(&name).unwrap()(ser_data, ame.my_pe, ame.num_pes, world.clone(), team).await
     {
         match res {
@@ -362,9 +363,7 @@ pub(crate) async fn exec_return_am(
                     }
                 } else {
                     if msg.return_data {
-                        ireq.data_tx
-                            .send((msg.src as usize, None))
-                            .expect("error returning none data");
+                        if let Ok(_) = ireq.data_tx.send((msg.src as usize, None)) {} //if this returns an error it means the user has dropped the handle
                         let cnt = ireq.cnt.fetch_sub(1, Ordering::SeqCst);
                         if cnt == 1 {
                             REQUESTS[msg.req_id % REQUESTS.len()].remove(&msg.req_id);

@@ -6,11 +6,11 @@
 /// finally it performs a ring like pattern where each pe sends an AM to its right neigbor (wrapping to 0 for the last pe)
 /// --------------------------------------------------------------------
 
-use lamellar::{ActiveMessaging, LamellarAM};
+use lamellar::{ActiveMessaging};
 // use lamellar::{Backend, SchedulerType};
 
 //----------------- Active message returning nothing-----------------//
-#[derive(serde::Serialize, serde::Deserialize, Debug, Clone,lamellar::AmData)]
+#[lamellar::AmData(Debug, Clone)]
 struct AmNoReturn {
     my_pe: usize,
 }
@@ -42,30 +42,34 @@ fn main() {
     let num_pes = world.num_pes();
     world.barrier();
     let am = AmNoReturn { my_pe: my_pe };
-    if my_pe == 0 {
-        println!("---------------------------------------------------------------");
-        println!("Testing local am no return");
-        let res = world.exec_am_pe(my_pe, am.clone()).get();
-        assert_eq!(res, None);
-        println!("no return result: {:?}", res);
-        println!("-----------------------------------");
-        println!("Testing remote am no return");
-        let res = world.exec_am_pe(num_pes - 1, am.clone()).get();
-        assert_eq!(res, None);
-        println!("no return result: {:?}", res);
-        println!("-----------------------------------");
-        println!("Testing all am no return");
-        println!("[{:?}] exec on all", my_pe);
-        let res = world.exec_am_all(am.clone()).get_all();
-        assert!(res.iter().all(|x| x.is_none()));
-        println!("no return result: {:?}", res);
-        println!("---------------------------------------------------------------");
-    }
-
+    // if my_pe == 0 {
+    //     println!("---------------------------------------------------------------");
+    //     println!("Testing local am no return");
+    //     let res = world.exec_am_pe(my_pe, am.clone()).get();
+    //     assert_eq!(res, None);
+    //     println!("no return result: {:?}", res);
+    //     println!("-----------------------------------");
+    //     println!("Testing remote am no return");
+    //     let res = world.exec_am_pe(num_pes - 1, am.clone()).get();
+    //     assert_eq!(res, None);
+    //     println!("no return result: {:?}", res);
+    //     println!("-----------------------------------");
+    //     println!("Testing all am no return");
+    //     println!("[{:?}] exec on all", my_pe);
+    //     let res = world.exec_am_all(am.clone()).get_all();
+    //     assert!(res.iter().all(|x| x.is_none()));
+    //     println!("no return result: {:?}", res);
+    //     println!("---------------------------------------------------------------");
+    // }
+    let start  = std::time::Instant::now();
+    // std::thread::sleep(std::time::Duration::from_millis(1*my_pe as u64));
     println!("---------------------------------------------------------------");
     println!("Testing ring pattern am no return");
     let res = world.exec_am_pe((my_pe + 1) % num_pes, am.clone()).get();
+    // std::thread::sleep(std::time::Duration::from_millis(20000));
     assert_eq!(res, None);
     println!("no return result: {:?}", res);
     println!("-----------------------------------");
+    // std::thread::sleep(std::time::Duration::from_millis(1000));
+    println!("elapsed {:?}",start.elapsed().as_secs_f64());
 }

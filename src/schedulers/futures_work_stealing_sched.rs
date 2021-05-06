@@ -144,7 +144,7 @@ impl SchedulerQueue for WorkStealingQueue {
         let work_inj = self.work_inj.clone();
         // println!("submitting_req");
         let future = async move {
-            // println!("in submit_req");
+            trace!("in submit_req {:?} {:?} {:?} ", pe.clone(), req_data.src, req_data.pe);
             if let Some(req_data) = ame.process_msg(req_data).await {
                 let future = async move {
                     ame.process_msg(req_data).await;
