@@ -16,6 +16,7 @@ extern crate lazy_static;
 
 mod active_messaging;
 mod lamellae;
+mod lamellae_new;
 mod lamellar_alloc;
 mod lamellar_arch;
 #[cfg(feature = "experimental")]
@@ -30,6 +31,7 @@ mod lamellar_request;
 mod lamellar_team;
 mod lamellar_world;
 mod schedulers;
+mod scheduler;
 mod utils;
 pub use utils::*;
 

@@ -141,12 +141,16 @@ pub(crate) async fn process_am_request(
             func.ser(1)
         };
 
-        let ser_func = crate::serialize(&(&id, ser_func)).unwrap();
+        let ser_func = crate::serialize(&(&id, ser_func)).unwrap(); //we dont need this in RMA 
         let payload = (req_data.msg, ser_func, req_data.team_hash);
+        // let data = crate::lamellae::serialize(&payload,req_data.lamellae.get_rdma()).await.unwrap(); //we do want this in RMA so we dont have to copy
         let data = crate::serialize(&payload).unwrap();
 
-        if data.len() > 0 {
+        // if data.len > 0 {
             //1000 { // need to see if there is a better way to figure out when to do aggregation
+            // req_data
+            //     .lamellae
+            //     .send_to_pes(req_data.pe, team.arch.clone(), data);
             req_data
                 .lamellae
                 .send_to_pes(req_data.pe, team.arch.clone(), data);
@@ -162,43 +166,43 @@ pub(crate) async fn process_am_request(
                 .await;
             }
             None
-        } else {
-            if req_data.pe == None && my_pe != None {
-                exec_local(
-                    ame,
-                    req_data.msg,
-                    *func,
-                    req_data.ireq.clone(),
-                    world,
-                    team.clone(),
-                )
-                .await;
-            }
-            let id = if let Some(pe) = req_data.pe {
-                team.arch.world_pe(pe).expect("invalid pe") as u64 // aggregate to same pe across team boundaries
-            } else {
-                req_data.team_hash //use this to represent we want to send to all pes in the team
-            };
+        // } else {
+        //     if req_data.pe == None && my_pe != None {
+        //         exec_local(
+        //             ame,
+        //             req_data.msg,
+        //             *func,
+        //             req_data.ireq.clone(),
+        //             world,
+        //             team.clone(),
+        //         )
+        //         .await;
+        //     }
+        //     let id = if let Some(pe) = req_data.pe {
+        //         team.arch.world_pe(pe).expect("invalid pe") as u64 // aggregate to same pe across team boundaries
+        //     } else {
+        //         req_data.team_hash //use this to represent we want to send to all pes in the team
+        //     };
 
-            let my_any: LamellarAny = Box::new(0);
-            let msg = Msg {
-                cmd: ExecType::Runtime(Cmd::ExecBatchMsgSend),
-                src: req_data.src as u16, //fake that this is from the original sender
-                req_id: 0,
-                team_id: id as usize, // we use this as the lookup id int the hashmaps
-                return_data: false,
-            };
-            let new_req = ReqData {
-                src: req_data.src,
-                pe: req_data.pe,
-                msg: msg,
-                ireq: req_data.ireq.clone(),
-                func: my_any,
-                lamellae: req_data.lamellae.clone(),
-                team_hash: req_data.team_hash, // fake hash,
-            };
-            Some((data, new_req))
-        }
+        //     let my_any: LamellarAny = Box::new(0);
+        //     let msg = Msg {
+        //         cmd: ExecType::Runtime(Cmd::ExecBatchMsgSend),
+        //         src: req_data.src as u16, //fake that this is from the original sender
+        //         req_id: 0,
+        //         team_id: id as usize, // we use this as the lookup id int the hashmaps
+        //         return_data: false,
+        //     };
+        //     let new_req = ReqData {
+        //         src: req_data.src,
+        //         pe: req_data.pe,
+        //         msg: msg,
+        //         ireq: req_data.ireq.clone(),
+        //         func: my_any,
+        //         lamellae: req_data.lamellae.clone(),
+        //         team_hash: req_data.team_hash, // fake hash,
+        //     };
+        //     Some((data, new_req))
+        // }
     }
 }
 

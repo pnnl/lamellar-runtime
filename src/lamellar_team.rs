@@ -1,5 +1,7 @@
 use crate::active_messaging::*; //{ActiveMessaging,AMCounters,Cmd,Msg,LamellarAny,LamellarLocal};
 use crate::lamellae::{AllocationType,Lamellae};
+use crate::lamellae_new::Lamellae as LamellaeNew;
+use crate::lamellae_new::LamellaeComm;
 use crate::lamellar_arch::{GlobalArch, IdError, LamellarArch, LamellarArchEnum, LamellarArchRT};
 use crate::barrier::Barrier;
 // #[cfg(feature = "experimental")]
@@ -10,6 +12,7 @@ use crate::lamellar_memregion::{
 };
 use crate::lamellar_request::{AmType, LamellarRequest, LamellarRequestHandle};
 use crate::schedulers::SchedulerQueue;
+use crate::scheduler::{Scheduler,SchedulerQueue as SchedulerQueueNew};
 #[cfg(feature = "nightly")]
 use crate::utils::ser_closure;
 
@@ -41,8 +44,10 @@ impl LamellarTeam {
         num_pes: usize,
         world_pe: usize,
         scheduler: Arc<dyn SchedulerQueue>,
+        scheduler_new: Arc<Scheduler>,
         world_counters: Arc<AMCounters>,
         lamellae: Arc<dyn Lamellae + Sync + Send>,
+        lamellae_new: Arc<LamellaeNew>,
         teams: Arc<RwLock<HashMap<u64, Weak<LamellarTeamRT>>>>,
     ) -> LamellarTeam {
         LamellarTeam {
@@ -50,8 +55,10 @@ impl LamellarTeam {
                 num_pes,
                 world_pe,
                 scheduler,
+                scheduler_new,
                 world_counters,
                 lamellae,
+                lamellae_new,
             )),
             teams: teams,
         }
@@ -146,7 +153,9 @@ pub struct LamellarTeamRT {
     sub_teams: RwLock<HashMap<usize, Arc<LamellarTeamRT>>>,
     mem_regions: RwLock<HashMap<usize, Box<dyn MemoryRegion + Sync + Send >>>,
     pub(crate) scheduler: Arc<dyn SchedulerQueue>,
+    pub(crate) scheduler_new: Arc<Scheduler>,
     pub(crate) lamellae: Arc<dyn Lamellae + Send + Sync>,
+    pub(crate) lamellae_new: Arc<LamellaeNew>,
     pub(crate) arch: Arc<LamellarArchRT>,
     pub(crate) world_pe: usize,   
     pub(crate) num_world_pes: usize,
@@ -175,8 +184,10 @@ impl LamellarTeamRT {
         num_pes: usize,
         world_pe: usize,
         scheduler: Arc<dyn SchedulerQueue>,
+        scheduler_new: Arc<Scheduler>,
         world_counters: Arc<AMCounters>,
         lamellae: Arc<dyn Lamellae + Sync + Send>,
+        lamellae_new: Arc<LamellaeNew>,
     ) -> LamellarTeamRT {
         let arch = Arc::new(LamellarArchRT {
             parent: None,
@@ -190,7 +201,9 @@ impl LamellarTeamRT {
             sub_teams: RwLock::new(HashMap::new()),
             mem_regions: RwLock::new(HashMap::new()),
             scheduler: scheduler,
+            scheduler_new: scheduler_new,
             lamellae: lamellae.clone(),
+            lamellae_new: lamellae_new.clone(),
             arch: arch.clone(),
             world_pe: world_pe,
             team_pe: Ok(world_pe),
@@ -211,6 +224,7 @@ impl LamellarTeamRT {
             }
         }
         lamellae.get_am().barrier(); //this is a noop currently
+        lamellae_new.barrier();
         team
     }
 
@@ -296,7 +310,9 @@ impl LamellarTeamRT {
                 sub_teams: RwLock::new(HashMap::new()),
                 mem_regions: RwLock::new(HashMap::new()),
                 scheduler: parent.scheduler.clone(),
+                scheduler_new: parent.scheduler_new.clone(),
                 lamellae: parent.lamellae.clone(),
+                lamellae_new: parent.lamellae_new.clone(),
                 arch: archrt.clone(),
                 world_pe: parent.world_pe,
                 num_world_pes: parent.num_world_pes,
@@ -513,6 +529,15 @@ impl ActiveMessaging for LamellarTeamRT {
             self.lamellae.get_am(),
             self.my_hash,
         );
+        // self.scheduler_new.submit_req(
+        //     self.world_pe,
+        //     None,
+        //     msg,
+        //     ireq,
+        //     my_any,
+        //     self.lamellae_new.clone(),
+        //     self.my_hash,
+        // );
         Box::new(my_req)
     }
 

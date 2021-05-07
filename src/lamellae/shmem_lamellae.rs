@@ -1,4 +1,4 @@
-use crate::lamellae::{AllocationType, Backend, Lamellae, LamellaeAM, LamellaeRDMA};
+use crate::lamellae::{AllocationType, Backend, Lamellae, LamellaeAM, LamellaeRDMA, SerializedData};
 use crate::lamellar_alloc::{BTreeAlloc, LamellarAlloc};
 use crate::lamellar_arch::LamellarArchRT;
 use crate::schedulers::SchedulerQueue;
@@ -14,6 +14,8 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 // use std::time::Duration;
 use std::env;
+
+use async_trait::async_trait;
 
 use crossbeam::utils::{Backoff, CachePadded};
 
@@ -650,12 +652,12 @@ impl ShmemLamellaeAM {
 }
 
 //#[prof]
+#[async_trait]
 impl LamellaeAM for ShmemLamellaeAM {
     fn send_to_pe(&self, pe: usize, data: std::vec::Vec<u8>) {
         // println!("{:?} sending to {:?}",self.my_pe, pe);
         self.buffers[pe].push(&data);
     }
-    fn send_to_all(&self, _data: std::vec::Vec<u8>) {}
     fn send_to_pes(&self, pe: Option<usize>, team: Arc<LamellarArchRT>, data: std::vec::Vec<u8>) {
         if let Some(pe) = pe {
             // println!("{:?} sending to {:?} {:?}",self.my_pe, pe, data.len());
@@ -669,6 +671,7 @@ impl LamellaeAM for ShmemLamellaeAM {
             }
         }
     }
+    async fn send_to_pes_async(&self,pe: Option<usize>, team: Arc<LamellarArchRT>, data: SerializedData) {}
     fn barrier(&self) {
         self.barrier.exec();
     }

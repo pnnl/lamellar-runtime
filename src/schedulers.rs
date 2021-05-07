@@ -9,6 +9,7 @@ use parking_lot::RwLock;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::sync::{Arc, Weak};
+use futures::Future;
 
 pub(crate) mod futures_work_stealing_sched;
 
@@ -51,6 +52,7 @@ pub(crate) trait SchedulerQueue: Sync + Send {
     );
     // fn submit_req_all(&self, msg: Msg, ireq: InternalReq, func: LamellarAny);
     fn submit_work(&self, msg: std::vec::Vec<u8>, lamellae: Arc<dyn LamellaeAM>); //serialized active message
+    
     fn as_any(&self) -> &dyn std::any::Any;
 }
 

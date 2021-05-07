@@ -1,4 +1,5 @@
 use crate::lamellae::rofi::rofi_comm::RofiComm;
+use crate::lamellae::SerializedData;
 use crate::lamellar_alloc::{LamellarAlloc, ObjAlloc};
 use lamellar_prof::*;
 use log::trace;
@@ -348,6 +349,10 @@ impl Drop for RofiCommandQueueInternal {
     }
 }
 
+enum DataType{
+    Vec(Vec<u8>),
+    Ser(SerializedData),
+}
 #[prof]
 impl RofiCommandQueueInternal {
     pub(crate) fn init(&mut self) {
@@ -364,28 +369,39 @@ impl RofiCommandQueueInternal {
     }
     pub(crate) fn send_data(
         &self,
-        data: Vec<u8>,
+        data: DataType,
         team_iter: Box<dyn Iterator<Item = usize> + Send>,
     ) -> Vec<usize> {
         // allocate memory in our local data segment
         prof_start!(data_alloc);
-        let daddr = self
-            .rofi_comm
-            .rt_alloc(data.len() + 1)
-            .expect("error allocating rt_memory");
-        prof_end!(data_alloc);
-        prof_start!(data_copy);
-        self.rofi_comm.local_store(&data, daddr);
-        let dummy = [27u8];
-        self.rofi_comm.local_store(&dummy, daddr + data.len());
-        prof_end!(data_copy);
+        let (daddr,dsize,dhash) = match data {
+            DataType::Vec(data) => {
+                let daddr = self
+                .rofi_comm
+                .rt_alloc(data.len())// + 1)
+                .expect("error allocating rt_memory");
+                prof_end!(data_alloc);
+                prof_start!(data_copy);
+                self.rofi_comm.local_store(&data, daddr);
+                // let dummy = [27u8];
+                // self.rofi_comm.local_store(&dummy, daddr + data.len());
+                prof_end!(data_copy);
+                let dhash = data.iter().fold(0usize, |a, b| a + (*b as usize));// + dummy[0] as usize;
+                (daddr,data.len(),dhash)
+            }
+            DataType::Ser(data) => {
+                let dhash = unsafe{std::slice::from_raw_parts(data.addr as *const u8,data.len).iter().fold(0usize, |a, b| a + (*b as usize))};
+                (data.addr,data.len,dhash)
+            }
+        };
+        
         // println!("past allocs");
         //-----------------
         // allocate a data_count object
         let data_cnt_idx = self.data_counts_alloc.malloc(1);
         //----------------------
-        let dhash = data.iter().fold(0usize, |a, b| a + (*b as usize)) + dummy[0] as usize;
-        let dsize = data.len() + 1;
+        
+        // let dsize = data.len() + 1;
         let mut status_indices = vec![];
         prof_start!(data_send);
         for dst in team_iter {
@@ -482,7 +498,7 @@ impl RofiCommandQueueInternal {
                                 self.req_buffer.get_status_addr(cmd.status_idx as usize),
                             );
                             let mut dvec = data.to_vec();
-                            dvec.pop();
+                            // dvec.pop();
                             let advec = Arc::new(dvec);
                             self.msg_tx.send(advec).expect("error in sending rofi msg");
 
@@ -601,7 +617,15 @@ impl RofiCommandQueue {
         data: Vec<u8>,
         team_iter: Box<dyn Iterator<Item = usize> + Send>,
     ) -> Vec<usize> {
-        self.internal.send_data(data, team_iter)
+        self.internal.send_data(DataType::Vec(data), team_iter)
+    }
+
+    pub(crate) fn send_data_2(
+        &self,
+        data: SerializedData,
+        team_iter: Box<dyn Iterator<Item = usize> + Send>,
+    ) -> Vec<usize> {
+        self.internal.send_data(DataType::Ser(data), team_iter)
     }
 
     pub(crate) fn my_pe(&self) -> usize {

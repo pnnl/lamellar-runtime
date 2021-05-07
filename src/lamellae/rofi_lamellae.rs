@@ -1,6 +1,6 @@
 use crate::lamellae::rofi::command_queues::RofiCommandQueue;
 use crate::lamellae::rofi::rofi_comm::RofiComm;
-use crate::lamellae::{AllocationType, Backend, Lamellae, LamellaeAM, LamellaeRDMA};
+use crate::lamellae::{AllocationType, Backend, Lamellae, LamellaeAM, LamellaeRDMA, SerializedData};
 use crate::lamellar_arch::LamellarArchRT;
 use crate::schedulers::SchedulerQueue;
 use lamellar_prof::*;
@@ -9,10 +9,14 @@ use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::thread;
 
+use async_trait::async_trait;
+
 struct IOThread {
     thread: Option<thread::JoinHandle<()>>,
     lamellar_msg_q_rx:
         crossbeam::channel::Receiver<(Vec<u8>, Box<dyn Iterator<Item = usize> + Send>)>,
+    lamellar_msg_q_rx_2:
+        crossbeam::channel::Receiver<(SerializedData, Box<dyn Iterator<Item = usize> + Send>)>,
     cmd_q_rx: crossbeam::channel::Receiver<Arc<Vec<u8>>>,
     am: Arc<RofiLamellaeAM>,
     cmd_q: Arc<RofiCommandQueue>,
@@ -28,6 +32,7 @@ impl IOThread {
         trace!("[{:?}] Test Lamellae IO Thread running", self.am.my_pe);
         let am = self.am.clone();
         let lamellar_msg_q_rx = self.lamellar_msg_q_rx.clone();
+        let lamellar_msg_q_rx_2 = self.lamellar_msg_q_rx_2.clone();
         let cmd_q_rx = self.cmd_q_rx.clone();
         let cmd_q = self.cmd_q.clone();
         let active_notify = self.active_notify.1.clone();
@@ -37,13 +42,20 @@ impl IOThread {
             let q1 = sel.recv(&lamellar_msg_q_rx);
             let q2 = sel.recv(&cmd_q_rx);
             let q3 = sel.recv(&active_notify);
-            while active || !(lamellar_msg_q_rx.is_empty() && cmd_q_rx.is_empty()) {
+            let q4 = sel.recv(&lamellar_msg_q_rx_2);
+            while active || !(lamellar_msg_q_rx.is_empty() && lamellar_msg_q_rx_2.is_empty()  && cmd_q_rx.is_empty()) {
                 let oper = sel.select();
                 let q = oper.index();
                 match q {
                     q if q == q1 => {
                         if let Ok((data, team_iter)) = oper.recv(&lamellar_msg_q_rx) {
                             cmd_q.send_data(data, team_iter);
+                            trace!("[{:?}] data sent", am.my_pe);
+                        }
+                    }
+                    q if q == q4 => {
+                        if let Ok((data, team_iter)) = oper.recv(&lamellar_msg_q_rx_2) {
+                            cmd_q.send_data_2(data, team_iter);
                             trace!("[{:?}] data sent", am.my_pe);
                         }
                     }
@@ -94,6 +106,7 @@ pub(crate) struct RofiLamellae {
 impl RofiLamellae {
     pub(crate) fn new(provider: &str) -> RofiLamellae {
         let (lamellar_msg_q_tx, lamellar_msg_q_rx) = crossbeam::channel::unbounded();
+        let (lamellar_msg_q_tx_2, lamellar_msg_q_rx_2) = crossbeam::channel::unbounded();
         let (cmd_q_tx, cmd_q_rx) = crossbeam::channel::unbounded();
         let rofi_comm = Arc::new(RofiComm::new(provider));
         let cq = RofiCommandQueue::new(cmd_q_tx, rofi_comm.clone());
@@ -103,6 +116,7 @@ impl RofiLamellae {
 
         let am = Arc::new(RofiLamellaeAM {
             lamellar_msg_q_tx: lamellar_msg_q_tx,
+            lamellar_msg_q_tx_2: lamellar_msg_q_tx_2,
             my_pe: my_pe,
         });
         trace!("[{:}] new RofiLamellaeAM", my_pe);
@@ -124,6 +138,7 @@ impl RofiLamellae {
         for _i in 0..1 {
             let thread = IOThread {
                 lamellar_msg_q_rx: lamellar_msg_q_rx.clone(),
+                lamellar_msg_q_rx_2: lamellar_msg_q_rx_2.clone(),
                 cmd_q_rx: cmd_q_rx.clone(),
                 thread: None,
                 am: am.clone(),
@@ -177,10 +192,13 @@ impl Lamellae for RofiLamellae {
 pub(crate) struct RofiLamellaeAM {
     lamellar_msg_q_tx:
         crossbeam::channel::Sender<(Vec<u8>, Box<dyn Iterator<Item = usize> + Send>)>,
+    lamellar_msg_q_tx_2:
+        crossbeam::channel::Sender<(SerializedData, Box<dyn Iterator<Item = usize> + Send>)>,
     my_pe: usize,
 }
 
 //#[prof]
+#[async_trait]
 impl LamellaeAM for RofiLamellaeAM {
     fn send_to_pe(&self, pe: usize, data: std::vec::Vec<u8>) {
         let v = vec![pe];
@@ -188,7 +206,6 @@ impl LamellaeAM for RofiLamellaeAM {
             .send((data, Box::new(v.into_iter())))
             .expect("error in send to pe");
     }
-    fn send_to_all(&self, _data: std::vec::Vec<u8>) {}
     fn send_to_pes(&self, pe: Option<usize>, team: Arc<LamellarArchRT>, data: std::vec::Vec<u8>) {
         if let Some(pe) = pe {
             self.lamellar_msg_q_tx
@@ -200,6 +217,7 @@ impl LamellaeAM for RofiLamellaeAM {
                 .expect("error in send to pes");
         }
     }
+    async fn send_to_pes_async(&self,pe: Option<usize>, team: Arc<LamellarArchRT>, data: SerializedData) {}
     fn barrier(&self) {
         error!(
             "need to //#[prof]

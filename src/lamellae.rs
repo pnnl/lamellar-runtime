@@ -4,6 +4,8 @@ use crate::schedulers::SchedulerQueue;
 use lamellar_prof::*;
 use std::sync::Arc;
 
+use async_trait::async_trait;
+
 pub(crate) mod local_lamellae;
 #[cfg(feature = "enable-rofi")]
 mod rofi;
@@ -45,6 +47,7 @@ fn default_backend() -> Backend {
     return Backend::Local;
 }
 
+#[async_trait]
 pub(crate) trait LamellaeAM: Send + Sync + std::fmt::Debug {
     fn send_to_pe(&self, pe: usize, data: std::vec::Vec<u8>); //should never send to self... this is short circuited before request is serialized in the active message layer
     // fn send_to_all(&self, data: std::vec::Vec<u8>); //should never send to self... this is short circuited before request is serialized in the active message layer
@@ -55,16 +58,18 @@ pub(crate) trait LamellaeAM: Send + Sync + std::fmt::Debug {
         team: Arc<LamellarArchRT>,
         data: std::vec::Vec<u8>,
     );
+    async fn send_to_pes_async(&self,pe: Option<usize>, team: Arc<LamellarArchRT>, data: SerializedData);
+
     //this probably has to be an active message based barrier (unless hardware supports barrier groups?)
     fn barrier(&self);
     fn backend(&self) -> Backend;
 }
 
 // #[derive(Clone)]
-struct SerializedData{
-    addr: usize,
-    len: usize,
-    rdma: Arc<dyn LamellaeRDMA>
+pub(crate) struct SerializedData{
+    pub(crate) addr: usize,
+    pub(crate) len: usize,
+    pub(crate) rdma: Arc<dyn LamellaeRDMA>
 }
 
 impl Drop for SerializedData{
@@ -73,7 +78,7 @@ impl Drop for SerializedData{
     }
 }
 
-async fn serialize<T: ?Sized>(obj: &T,rdma: Arc<dyn LamellaeRDMA>) -> Result<SerializedData,anyhow::Error> 
+pub(crate) async fn serialize<T: ?Sized>(obj: &T,rdma: Arc<dyn LamellaeRDMA>) -> Result<SerializedData,anyhow::Error> 
 where
     T: serde::Serialize {
     let size = bincode::serialized_size(obj)? as usize;

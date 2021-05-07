@@ -13,6 +13,7 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicU8, AtomicUsize, Ordering};
 use std::sync::{Arc, Weak};
 use std::thread;
+use futures::Future;
 // use std::time::Instant;
 
 pub(crate) struct WorkStealingThread {
@@ -20,7 +21,6 @@ pub(crate) struct WorkStealingThread {
     work_stealers: Vec<crossbeam::deque::Stealer<async_task::Runnable>>,
     work_q: crossbeam::deque::Worker<async_task::Runnable>,
     work_flag: Arc<AtomicU8>,
-    // ame: Arc<ActiveMessageEngine>,
     active: Arc<AtomicBool>,
     timers: BTreeMap<String, AtomicUsize>,
 }
@@ -63,21 +63,6 @@ impl WorkStealingThread {
                 if let Some(runnable) = omsg {
                     runnable.run();
                 }
-                // (*worker.timers.get("exec_msg_outer").unwrap())
-                //     .fetch_add(ot.elapsed().as_millis() as usize, Ordering::Relaxed);
-
-                // if temptime.elapsed().as_millis() > 5*1000{
-                //     println!("tid:{:?} wq: {:?} wi {:?} msgs: {:?} bi {:?} bp {:?} bs {:?} br {:?} c: {:?} r {:?} rp{:?} bri {:?} brp {:?} brs{:?} brr {:?}"
-                //     ,std::thread::current().id(),worker.work_q.is_empty(), worker.work_inj.is_empty(),
-                //     worker.ame.msgs.load(Ordering::SeqCst),worker.ame.batches_init.load(Ordering::SeqCst),
-                //     worker.ame.batches_proc.load(Ordering::SeqCst),worker.ame.batches_sent.load(Ordering::SeqCst),
-                //     worker.ame.batches_recv.load(Ordering::SeqCst), worker.ame.cmds.load(Ordering::SeqCst),
-                //     worker.ame.returns.load(Ordering::SeqCst),worker.ame.returns_proc.load(Ordering::SeqCst),
-                //     worker.ame.batched_return_init.load(Ordering::SeqCst),worker.ame.batched_return_proc.load(Ordering::SeqCst),
-                //     worker.ame.batched_return_sent.load(Ordering::SeqCst), worker.ame.batched_return_recv.load(Ordering::SeqCst),);
-
-                //     temptime = Instant::now();
-                // }
             }
             let mut string = String::new();
             for item in worker.timers.iter() {
@@ -196,6 +181,7 @@ impl SchedulerQueue for WorkStealingQueue {
         runnable.schedule();
         task.detach();
     }
+
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }
