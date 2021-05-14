@@ -1,6 +1,6 @@
 use crate::lamellae::rofi::command_queues::RofiCommandQueue;
 use crate::lamellae::rofi::rofi_api::*;
-use crate::lamellae::AllocationType;
+use crate::lamellae::{Des,AllocationType,SerializeHeader};
 use crate::lamellar_alloc::{BTreeAlloc, LamellarAlloc};
 #[cfg(feature = "enable-prof")]
 use lamellar_prof::*;
@@ -41,6 +41,7 @@ impl RofiComm {
         let cmd_q_mem = RofiCommandQueue::mem_per_pe() * num_pes;
 
         let total_mem = cmd_q_mem + RT_MEM + ROFI_MEM.load(Ordering::SeqCst);
+        // println!("rofi comm total_mem {:?}",total_mem);
         let addr = rofi_alloc(total_mem, AllocationType::Global);
         let mut rofi = RofiComm {
             rofi_base_address: Arc::new(RwLock::new(addr as usize)),
@@ -71,51 +72,33 @@ impl RofiComm {
         self.my_pe
     }
     pub(crate) fn barrier(&self) {
-        // println!("[{:?}]-({:?}) barrier entry",self.my_pe,thread::current().id());
         rofi_barrier();
-        // println!("[{:?}]-({:?}) barrier exit",self.my_pe,thread::current().id());
     }
     pub(crate) fn rt_alloc(&self, size: usize) -> Option<usize> {
-        // println!("[{:?}]-({:?}) rt_alloc entry",self.my_pe,thread::current().id());
-        // let b =self.alloc.space_avail();
+        
         if let Some(addr) = self.alloc.try_malloc(size) {
-            // println!("[{:?}]-({:?}) rt_alloc exit",self.my_pe,thread::current().id());
-            // println!("alloc addr {:?} free space {:?} (before: {:?}   alloc size {:?} ({:?}))", addr, self.alloc.space_avail(), b, b - self.alloc.space_avail(), size);
+            // println!("got mem: {:?}",addr);
+            // println!("in rt_alloc {:?} addr {:?} in use {:?}",size,addr,self.alloc.occupied());
             Some(addr)
         } else {
             println!("[WARNING] out of memory: (work in progress on a scalable solution, as a work around try setting the LAMELLAR_ROFI_MEM_SIZE envrionment variable (current size = {:?} -- Note: LamellarLocalArrays are currently allocated out of this pool",ROFI_MEM.load(Ordering::SeqCst));
-            // println!("[{:?}]-({:?}) rt_alloc exit",self.my_pe,thread::current().id());
             None
         }
+        
     }
     #[allow(dead_code)]
     pub(crate) fn rt_free(&self, addr: usize) {
-        // println!("[{:?}]-({:?}) rt_free entry",self.my_pe,thread::current().id());
-        // let b =self.alloc.space_avail();
         self.alloc.free(addr);
-        // println!("[{:?}]-({:?}) rt_free exit",self.my_pe,thread::current().id());
-        // println!("free addr {:?} free space {:?} (before: {:?}   {:?})", addr, self.alloc.space_avail(), b, self.alloc.space_avail()-b);
+        // println!("in rt_free addr {:?} in use {:?}",addr,self.alloc.occupied());
     }
     pub(crate) fn alloc(&self, size: usize, alloc: AllocationType) -> Option<usize> {
-        // println!("[{:?}]-({:?}) alloc entry",self.my_pe,thread::current().id());
-        // if let Some(addr) = self.rt_alloc(size) {
-        //     // println!("[{:?}]-({:?}) alloc exit",self.my_pe,thread::current().id());
-        //     Some(addr + self.base_addr())
-        // } else {
-        //     // println!("[{:?}]-({:?}) alloc exit",self.my_pe,thread::current().id());
-        //     None
-        // }
         let _lock = self.alloc_mutex.lock();
         Some(rofi_alloc(size,alloc) as usize)
     }
     #[allow(dead_code)]
     pub(crate) fn free(&self, addr: usize) {
-        // println!("[{:?}]-({:?}) free entry",self.my_pe,thread::current().id());
-        // self.rt_free(addr - self.base_addr());
-        // println!("[{:?}]-({:?}) free exit",self.my_pe,thread::current().id());
         let _lock = self.alloc_mutex.lock();
         rofi_release(addr);
-        // println!("free addr {:?} free space {:?} (before: {:?}   {:?})", addr, self.alloc.space_avail(), b, self.alloc.space_avail()-b);
     }
 
     #[allow(dead_code)]
@@ -159,7 +142,7 @@ impl RofiComm {
     ) {
         if pe != self.my_pe {
             let _lock = self.comm_mutex.lock();
-            // println!("[{:?}]-({:?}) put [{:?}] entry",self.my_pe,thread::current().id(),pe);
+            // println!("[{:?}]-({:?}) put [{:?}] entry",self.my_pe,0,pe);
 
             unsafe { rofi_put(src_addr, dst_addr, pe).expect("error in rofi put") };
             self.put_amt.fetch_add(src_addr.len(), Ordering::SeqCst);
@@ -241,7 +224,7 @@ impl RofiComm {
         self.put_cnt
             .fetch_add(1, Ordering::SeqCst);
         // println!("[{:?}]-({:?}) put all exit",self.my_pe,thread::current().id());
-        println!("[{:?}]- gc: {:?} pc: {:?} put_all exit",self.my_pe,self.get_cnt.load(Ordering::SeqCst),self.put_cnt.load(Ordering::SeqCst));
+        // println!("[{:?}]- gc: {:?} pc: {:?} put_all exit",self.my_pe,self.get_cnt.load(Ordering::SeqCst),self.put_cnt.load(Ordering::SeqCst));
     }
 
     pub(crate) fn get<
@@ -257,14 +240,15 @@ impl RofiComm {
             unsafe {
                 let _lock = self.comm_mutex.lock();
                 let ret = rofi_get(src_addr, dst_addr, pe); //.expect("error in rofi get")
-                if let Err(_) = ret {
+                if let Err(ret) = ret {
                     println!(
-                        "Error in get from {:?} src {:x} base_addr {:x} dst_addr {:p} size {:?}",
+                        "Error in get from {:?} src {:x} base_addr {:x} dst_addr {:p} size {:?} ret {:?}",
                         pe,
                         src_addr,
                         *self.rofi_base_address.read(),
                         dst_addr,
-                        dst_addr.len()
+                        dst_addr.len(),
+                        ret,
                     );
                     panic!();
                 }
@@ -340,7 +324,7 @@ impl RofiComm {
             let ret = rofi_iget(*self.rofi_base_address.read() + src_addr, dst_addr, pe); //.expect("error in rofi get")
             if let Err(_) = ret {
                 println!(
-                    "[{:?}] Error in iget_relative from {:?} src_addr {:?} ({:x}) dst_addr {:?} base_addr {:x} size {:?}",
+                    "[{:?}] Error in iget_relative from {:?} src_addr {:x} ({:x}) dst_addr {:?} base_addr {:x} size {:?}",
                     self.my_pe,
                     pe,
                     src_addr,
@@ -374,8 +358,97 @@ impl Drop for RofiComm {
     fn drop(&mut self) {
         rofi_barrier();
         std::thread::sleep(std::time::Duration::from_millis(1000));
+        println!("dropping rofi -- memory in use {:?}",self.alloc.occupied());
         let _res = rofi_finit();
         std::thread::sleep(std::time::Duration::from_millis(1000));
-        trace!("[{:?}] dropping rofi comm", self.my_pe);
+        // trace!("[{:?}] dropping rofi comm", self.my_pe);
+    }
+}
+
+pub(crate) struct RofiData{
+    pub(crate) addr: usize,
+    pub(crate) relative_addr: usize,
+    pub(crate) len: usize,
+    pub(crate) rofi_comm: Arc<RofiComm>,
+}
+
+impl RofiData{
+    pub async fn new(rofi_comm: Arc<RofiComm>, size: usize )->RofiData{
+        let ref_cnt_size = std::mem::size_of::<AtomicUsize>();
+        // let data_size = header_size+serialized_size+1; //plus one is our transfer flag
+        let alloc_size = size + ref_cnt_size +1;
+        let mut mem = rofi_comm.rt_alloc(alloc_size);
+        while mem.is_none(){
+            async_std::task::yield_now().await;
+            mem = rofi_comm.rt_alloc(alloc_size);
+        }
+        let relative_addr =  mem.unwrap();
+        let addr = relative_addr + rofi_comm.base_addr();
+        let mem_slice = unsafe {std::slice::from_raw_parts_mut(addr as *mut u8, alloc_size)};
+        mem_slice[alloc_size-1]=0;
+        unsafe {
+            let ref_cnt = addr as *const AtomicUsize;
+            (*ref_cnt).store(1, Ordering::SeqCst)
+        };
+        RofiData{
+            addr: addr,
+            relative_addr: relative_addr+ref_cnt_size,
+            len: size+1,
+            rofi_comm: rofi_comm
+        }
+    }
+    pub fn header_as_bytes(&self) ->&mut [u8]{
+        let header_size = std::mem::size_of::<Option<SerializeHeader>>();
+        unsafe {std::slice::from_raw_parts_mut((self.addr + std::mem::size_of::<AtomicUsize>()) as *mut u8, header_size)}
+    }
+
+    pub fn header_and_data_as_bytes(&self) ->&mut [u8]{
+        unsafe {std::slice::from_raw_parts_mut((self.addr + std::mem::size_of::<AtomicUsize>()) as *mut u8, self.len)}
+    }
+
+    pub fn increment_cnt(&self){
+        unsafe{(*(self.addr as *const AtomicUsize)).fetch_add(1,Ordering::SeqCst)}; 
+    }
+
+}
+
+impl Des for RofiData{
+    fn deserialize_header(& self) -> Option<SerializeHeader>{
+        bincode::deserialize(self.header_as_bytes()).unwrap()
+    }
+    fn deserialize_data<T: serde::de::DeserializeOwned>(& self) -> Result<T, anyhow::Error>{
+        Ok(bincode::deserialize(self.data_as_bytes())?)
+    }
+    fn data_as_bytes(&self) -> &mut [u8]{
+        let header_size = std::mem::size_of::<Option<SerializeHeader>>();
+        let data_start = std::mem::size_of::<AtomicUsize>()+header_size;
+        unsafe {std::slice::from_raw_parts_mut((self.addr+data_start) as *mut u8, (self.len-1)-header_size)}
+    }
+}
+
+impl Clone for RofiData{
+    fn clone(&self) -> Self{
+        unsafe {
+            let ref_cnt = self.addr as *const AtomicUsize;
+            (*ref_cnt).fetch_add(1, Ordering::SeqCst)
+        };
+        RofiData{
+            addr: self.addr,
+            relative_addr: self.relative_addr,
+            len: self.len,
+            rofi_comm: self.rofi_comm.clone(),
+        }
+    }
+}
+
+impl Drop for RofiData{
+    fn drop(&mut self){
+       
+        let cnt = unsafe{(*(self.addr as *const AtomicUsize)).fetch_sub(1,Ordering::SeqCst)};
+        // println!("dropping rofi data {:?} {:?} {:?}",self.relative_addr,self.len,cnt);
+        if cnt == 1{
+            self.rofi_comm.rt_free(self.addr-self.rofi_comm.base_addr());
+        }
+        // //println!("dropping rofi data {:?} {:?}",self.addr,self.len);
     }
 }

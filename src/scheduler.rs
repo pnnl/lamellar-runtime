@@ -1,12 +1,11 @@
 use crate::active_messaging::*;
-use crate::lamellae_new::{Backend, Lamellae};
+use crate::lamellae::{Lamellae,SerializedData};
 use crate::lamellar_request::InternalReq;
 use crate::lamellar_team::LamellarTeamRT;
 
 #[cfg(feature = "enable-prof")]
 use lamellar_prof::*;
 use parking_lot::RwLock;
-use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::sync::{Arc, Weak};
 use futures::Future;
@@ -29,6 +28,14 @@ pub(crate) struct ReqData {
     pub(crate) team_hash: u64,
 }
 
+// impl Drop for ReqData{
+//     fn drop(&mut self){
+//         //println!("dropping ReqData");
+//         println!("lamellae: {:?}",Arc::strong_count(&self.lamellae));
+//         //println!("dropped ReqData");
+//     }
+// }
+
 pub enum SchedulerType {
     WorkStealing,
 }
@@ -50,10 +57,11 @@ pub(crate) trait SchedulerQueue: Sync + Send {
         lamellae: Arc<Lamellae>,
         team_hash: u64,
     );
-    fn submit_work(&self, msg: std::vec::Vec<u8>, lamellae: Arc<Lamellae>); //serialized active message
+    fn submit_work(&self, msg: SerializedData, lamellae: Arc<Lamellae>); //serialized active message
     fn submit_task<F>(&self,future: F )
     where 
         F: Future<Output = ()> + Send + 'static;
+    fn shutdown(&self);
 }
 
 

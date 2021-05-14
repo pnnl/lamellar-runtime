@@ -14,6 +14,7 @@ pub(crate) trait LamellarAlloc {
     fn try_malloc(&self, size: usize) -> Option<usize>;
     fn free(&self, addr: usize);
     fn space_avail(&self) -> usize;
+    fn occupied(&self) -> usize;
 }
 
 #[derive(Debug)]
@@ -127,6 +128,9 @@ impl LamellarAlloc for LinearAlloc {
     }
     fn space_avail(&self) -> usize {
         self.free_space.load(Ordering::SeqCst)
+    }
+    fn occupied(&self) -> usize {
+        self.max_size-self.free_space.load(Ordering::SeqCst)
     }
 }
 
@@ -306,6 +310,9 @@ impl LamellarAlloc for BTreeAlloc {
     fn space_avail(&self) -> usize {
         self.free_space.load(Ordering::SeqCst)
     }
+    fn occupied(&self) -> usize {
+        self.max_size-self.free_space.load(Ordering::SeqCst)
+    }
 }
 
 #[derive(Clone)]
@@ -378,6 +385,9 @@ impl<T: Copy> LamellarAlloc for ObjAlloc<T> {
         let &(ref lock, ref _cvar) = &*self.free_entries;
         let free_entries = lock.lock();
         free_entries.len()
+    }
+    fn occupied(&self) -> usize {
+        self.max_size-self.space_avail()
     }
 }
 

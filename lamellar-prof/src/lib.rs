@@ -180,7 +180,7 @@ pub fn init_prof(_item: TokenStream) -> TokenStream {
             impl Drop for TimeInst{
                 fn drop(&mut self) {
                     timer_stop(self.func.clone());
-                    // println!("dropped: {}",self.func);
+                    // //println!("dropped: {}",self.func);
                 }
             }
 

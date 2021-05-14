@@ -23,7 +23,7 @@ struct SubBufs{
 
 impl Barrier{
 
-    pub(crate) fn new(my_pe: usize, global_pes: usize, lamellae: Arc<dyn Lamellae + Send + Sync>, arch: Arc<LamellarArchRT>) -> Barrier{
+    pub(crate) fn new(my_pe: usize, global_pes: usize, lamellae: Arc<Lamellae>, arch: Arc<LamellarArchRT>) -> Barrier{
         let bufs = if let Ok(_my_index) = arch.team_pe(my_pe) {
             let num_pes = arch.num_pes;
             if num_pes > 1 {
@@ -132,6 +132,14 @@ impl Barrier{
             // self.bar_print("5".to_string());
             // println!("[{:?}] checking barrier exit ({:?})",self.my_pe,barrier_id);
         }
+    }
+}
+
+impl Drop for Barrier{
+    fn drop(&mut self){
+        //println!("dropping barrier");
+        // println!("arch: {:?}",Arc::strong_count(&self.arch));
+        //println!("dropped barrier");
     }
 }
 

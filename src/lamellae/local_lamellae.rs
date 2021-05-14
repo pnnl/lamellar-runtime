@@ -1,80 +1,89 @@
-use crate::lamellae::{AllocationType, Backend, Lamellae, LamellaeAM, LamellaeRDMA, SerializedData};
+use crate::lamellae::{AllocationType, Backend, Lamellae,LamellaeInit, LamellaeComm, LamellaeAM, LamellaeRDMA, SerializedData,SerializeHeader,Ser,Des};
 use crate::lamellar_arch::LamellarArchRT;
-use crate::schedulers::SchedulerQueue;
+use crate::scheduler::Scheduler;
 #[cfg(feature = "enable-prof")]
 use lamellar_prof::*;
-use log::{error, trace};
+use log::{trace};
 use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::sync::Arc;
 
 use async_trait::async_trait;
 
-pub(crate) struct LocalLamellae {
-    am: Arc<LocalLamellaeAM>,
-    rdma: Arc<LocalLamellaeRDMA>,
+#[derive(Clone)]
+pub(crate) struct Local {
+    // am: Arc<LocalLamellaeAM>,
+    // rdma: Arc<LocalLamellaeRDMA>,
+    allocs: Arc<Mutex<HashMap<usize, MyPtr>>>,
 }
 
-//#[prof]
-impl LocalLamellae {
-    pub(crate) fn new() -> LocalLamellae {
-        let am = Arc::new(LocalLamellaeAM {});
-
-        let rdma = Arc::new(LocalLamellaeRDMA {
-            allocs: Arc::new(Mutex::new(HashMap::new())),
-        });
-        LocalLamellae { am: am, rdma: rdma }
+#[derive(Clone)]
+pub(crate) struct LocalData {}
+impl Des for LocalData{
+    fn deserialize_header(&self) -> Option<SerializeHeader>{
+        panic!("should not be deserializing in local");
+    }
+    fn deserialize_data<T: serde::de::DeserializeOwned>(&self) -> Result<T, anyhow::Error>{
+        panic!("should not be deserializing in local");
+    }
+    fn data_as_bytes(&self) -> &mut [u8]{
+        &mut []
     }
 }
 
+
 //#[prof]
-impl Lamellae for LocalLamellae {
-    fn init_fabric(&mut self) -> (usize, usize) {
-        (1, 0)
+impl Local {
+    pub(crate) fn new() -> Local {
+       Local { allocs: Arc::new(Mutex::new(HashMap::new())), }
     }
-    fn init_lamellae(&mut self, _scheduler: Arc<dyn SchedulerQueue>) {}
-    fn finit(&self) {}
+}
+
+#[async_trait]
+impl Ser for Local{
+    async fn serialize<T: Send + Sync + serde::Serialize + ?Sized>(&self,_header: Option<SerializeHeader>, _obj: &T) -> Result<SerializedData,anyhow::Error> {
+        panic!("should not be serializing in local");
+    }
+    async fn serialize_header(&self,_header: Option<SerializeHeader>,_serialized_size: usize) -> Result<SerializedData,anyhow::Error> {
+        panic!("should not be serializing in local")
+    }
+}
+
+impl LamellaeInit for Local{
+    fn init_fabric(&mut self) -> (usize, usize){
+        (0,0)
+    }
+    fn init_lamellae(&mut self, _scheduler: Arc<Scheduler>)->Arc<Lamellae>{
+        Arc::new(Lamellae::Local(self.clone()))
+    }
+    
+}
+
+//#[prof]
+impl LamellaeComm for Local {
+    fn my_pe(&self) -> usize {0}
+    fn num_pes(&self) ->usize {1}
     fn barrier(&self) {}
     fn backend(&self) -> Backend {
         Backend::Local
-    }
-    fn get_am(&self) -> Arc<dyn LamellaeAM> {
-        self.am.clone()
-    }
-    fn get_rdma(&self) -> Arc<dyn LamellaeRDMA> {
-        self.rdma.clone()
     }
     #[allow(non_snake_case)]
     fn MB_sent(&self) -> f64 {
         0.0f64
     }
     fn print_stats(&self) {}
+    fn shutdown(&self){
+        
+    }
 }
 
-#[derive(Debug)]
-pub(crate) struct LocalLamellaeAM {}
+
 
 //#[prof]
 #[async_trait]
-impl LamellaeAM for LocalLamellaeAM {
-    fn send_to_pe(&self, _pe: usize, _data: std::vec::Vec<u8>) {}
-    fn send_to_pes(
-        &self,
-        _pe: Option<usize>,
-        _team: Arc<LamellarArchRT>,
-        _data: std::vec::Vec<u8>,
-    ) {
-    }
-    async fn send_to_pes_async(&self,pe: Option<usize>, team: Arc<LamellarArchRT>, data: SerializedData) {}
-    fn barrier(&self) {
-        error!(
-            "need to //#[prof]
-implement an active message version of barrier"
-        );
-    }
-    fn backend(&self) -> Backend {
-        Backend::Local
-    }
+impl LamellaeAM for Local {
+    async fn send_to_pe_async(&self, _pe: usize, _data: SerializedData) {}
+    async fn send_to_pes_async(&self,_pe: Option<usize>, _team: Arc<LamellarArchRT>, _data: SerializedData) {}
 }
 
 struct MyPtr {
@@ -83,12 +92,8 @@ struct MyPtr {
 unsafe impl Sync for MyPtr {}
 unsafe impl Send for MyPtr {}
 
-pub(crate) struct LocalLamellaeRDMA {
-    allocs: Arc<Mutex<HashMap<usize, MyPtr>>>,
-}
-
 //#[prof]
-impl LamellaeRDMA for LocalLamellaeRDMA {
+impl LamellaeRDMA for Local {
     fn put(&self, _pe: usize, src: &[u8], dst: usize) {
         unsafe {
             std::ptr::copy_nonoverlapping(src.as_ptr(), dst as *mut u8, src.len());
@@ -147,13 +152,10 @@ impl LamellaeRDMA for LocalLamellaeRDMA {
     fn remote_addr(&self, _pe: usize, local_addr: usize) -> usize {
         local_addr
     }
-    fn mype(&self) -> usize {
-        0
-    }
 }
 
 //#[prof]
-impl Drop for LocalLamellae {
+impl Drop for Local {
     fn drop(&mut self) {
         trace!("[{:?}] RofiLamellae Dropping", 0);
     }

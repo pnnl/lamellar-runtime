@@ -1,6 +1,6 @@
 use crate::active_messaging::*;
-use crate::lamellae::{create_lamellae, Backend, Lamellae, LamellaeAM};
-use crate::lamellae_new::{Lamellae as LamellaeNew,LamellaeInit,LamellaeComm};
+// use crate::lamellae::{create_lamellae, Backend, Lamellae, LamellaeAM};
+use crate::lamellae::{create_lamellae, Backend,Lamellae,LamellaeInit,LamellaeComm};
 use crate::lamellar_arch::LamellarArch;
 #[cfg(feature = "experimental")]
 use crate::lamellar_array::LamellarArray;
@@ -9,7 +9,7 @@ use crate::lamellar_memregion::{
 };
 use crate::lamellar_request::LamellarRequest;
 use crate::lamellar_team::{LamellarTeam, LamellarTeamRT};
-use crate::schedulers::{create_scheduler, Scheduler, SchedulerType};
+use crate::scheduler::{create_scheduler, SchedulerType};
 use lamellar_prof::*;
 use log::trace;
 use parking_lot::RwLock;
@@ -22,7 +22,7 @@ use std::time::{Duration, Instant};
 
 
 lazy_static! {
-    pub(crate) static ref LAMELLAES: RwLock<HashMap<Backend, Arc<dyn Lamellae + Send + Sync>>> = RwLock::new(HashMap::new());
+    pub(crate) static ref LAMELLAES: RwLock<HashMap<Backend, Arc<Lamellae>>> = RwLock::new(HashMap::new());
 }
 
 
@@ -31,9 +31,7 @@ pub struct LamellarWorld {
     team_rt: Arc<LamellarTeamRT>,
     teams: Arc<RwLock<HashMap<u64, Weak<LamellarTeamRT>>>>,
     counters: Arc<AMCounters>,
-    _scheduler: Arc<dyn Scheduler>,
-    lamellaes: BTreeMap<Backend, Arc<dyn Lamellae>>,
-    lamellaes_new: BTreeMap<crate::lamellae_new::Backend, Arc<LamellaeNew>>,
+    lamellaes_new: BTreeMap<crate::lamellae::Backend, Arc<Lamellae>>,
     my_pe: usize,
     num_pes: usize,
 }
@@ -59,7 +57,7 @@ impl ActiveMessaging for LamellarWorld {
     }
     fn barrier(&self) {
         // println!("[{:?}] world barrier", self.my_pe);
-        for (backend, lamellae) in &self.lamellaes {
+        for (backend, lamellae) in &self.lamellaes_new {
             trace!("[{:?}] {:?} barrier", self.my_pe, backend);
             lamellae.barrier();
             // println!("world barrier!!!!!!!!!!!!");
@@ -67,7 +65,7 @@ impl ActiveMessaging for LamellarWorld {
     }
     fn exec_am_all<F>(&self, am: F) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync>
     where
-        F: LamellarActiveMessage + LamellarAM + Send + Sync + 'static,
+        F: LamellarActiveMessage + LamellarAM + Serde + Send + Sync + 'static,
     {
         self.team_rt.exec_am_all(am)
     }
@@ -77,7 +75,7 @@ impl ActiveMessaging for LamellarWorld {
         am: F,
     ) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync>
     where
-        F: LamellarActiveMessage + LamellarAM + Send + Sync + 'static,
+        F: LamellarActiveMessage + LamellarAM + Serde + Send + Sync + 'static,
     {
         assert!(pe < self.num_pes(), "invalid pe: {:?}", pe);
         self.team_rt.exec_am_pe(pe, am)
@@ -256,7 +254,7 @@ impl LamellarWorld {
     #[allow(non_snake_case)]
     pub fn MB_sent(&self) -> Vec<f64> {
         let mut sent = vec![];
-        for (_backend, lamellae) in &self.lamellaes {
+        for (_backend, lamellae) in &self.lamellaes_new {
             sent.push(lamellae.MB_sent());
         }
         sent
@@ -326,13 +324,27 @@ impl LamellarWorld {
 //#[prof]
 impl Drop for LamellarWorld {
     fn drop(&mut self) {
-        trace!("[{:?}] world dropping", self.my_pe);
+        // println!("[{:?}] world dropping", self.my_pe);
         self.wait_all();
         // self.team_rt.barrier();
         self.barrier();
         self.team_rt.destroy();
-        self.lamellaes.clear();
+        // self.lamellaes.clear();
+        // for (backend,lamellae) in self.lamellaes_new.iter(){
+        //     println!("lamellae: {:?} {:?}",backend,Arc::strong_count(&lamellae))
+        // }
         self.lamellaes_new.clear();
+        LAMELLAES.write().clear();
+
+        // println!("team: {:?} ",Arc::strong_count(&self.team));
+        // println!("team_rt: {:?} {:?}",&self.team_rt.my_hash,Arc::strong_count(&self.team_rt));
+        // let teams = self.teams.read();
+        //     for (k,team) in teams.iter(){
+        //         println!("team map: {:?} {:?}",k,Weak::strong_count(&team));
+        //     }
+        
+        // println!("counters: {:?}",Arc::strong_count(&self.counters));
+       
         fini_prof!();
 
         // im not sure we want to explicitly call lamellae.finit(). instead we should let
@@ -342,6 +354,7 @@ impl Drop for LamellarWorld {
         // for (backend,lamellae) in &self.lamellaes{
         //     lamellae.finit();
         // }
+        // println!("[{:?}] world dropped", self.my_pe);
     }
 }
 
@@ -375,34 +388,24 @@ impl LamellarWorldBuilder {
         self
     }
     pub fn build(self) -> LamellarWorld {
+        println!("building world");
         // for exec in inventory::iter::<TestAm> {
         //     println!("{:#?}", exec);
         // }
         // let mut sched = WorkStealingScheduler::new();
         let teams = Arc::new(RwLock::new(HashMap::new()));
-        let mut lamellae = create_lamellae(self.primary_lamellae);
-        let (num_pes, my_pe) = lamellae.init_fabric();
-        let mut sched = create_scheduler(self.scheduler, num_pes, my_pe, teams.clone());
-        lamellae.init_lamellae(sched.get_queue().clone());
-        let lamellae = Arc::new(lamellae);
-        let mut lamellaes: BTreeMap<Backend, Arc<dyn LamellaeAM>> = BTreeMap::new();
-        lamellaes.insert(lamellae.backend(), lamellae.get_am());
-        sched.init(num_pes, my_pe, lamellaes);
-
-        let mut lamellae_builder = crate::lamellae_new::create_lamellae(crate::lamellae_new::Backend::Rofi);
-        let mut sched_new = Arc::new(crate::scheduler::create_scheduler(crate::scheduler::SchedulerType::WorkStealing, num_pes,my_pe,teams.clone()));
-        let lamellae_new = Arc::new(lamellae_builder.init_lamellae(sched_new.clone()));
-
+        let mut lamellae_builder = create_lamellae(Backend::Rofi);
+        let (my_pe, num_pes) = lamellae_builder.init_fabric();
+        let sched_new = Arc::new(create_scheduler(SchedulerType::WorkStealing, num_pes,my_pe,teams.clone()));
+        let lamellae = lamellae_builder.init_lamellae(sched_new.clone());
         let counters = Arc::new(AMCounters::new());
-        lamellae.get_am().barrier();
+        lamellae.barrier();
         let team_rt = Arc::new(LamellarTeamRT::new(
             num_pes,
             my_pe,
-            sched.get_queue().clone(),
             sched_new.clone(),
             counters.clone(),
             lamellae.clone(),
-            lamellae_new.clone(),
         ));
         // println!("world gen barrier!!!!!!!!!!!!");
         let mut world = LamellarWorld {
@@ -413,8 +416,6 @@ impl LamellarWorldBuilder {
             team_rt: team_rt,
             teams: teams.clone(),
             counters: counters,
-            _scheduler: Arc::new(sched),
-            lamellaes: BTreeMap::new(),
             lamellaes_new: BTreeMap::new(),
             my_pe: my_pe,
             num_pes: num_pes,
@@ -423,10 +424,11 @@ impl LamellarWorldBuilder {
             .teams
             .write()
             .insert(world.team_rt.my_hash, Arc::downgrade(&world.team_rt));
-        world.lamellaes.insert(lamellae.backend(), lamellae.clone());
+        // world.lamellaes.insert(lamellae.backend(), lamellae.clone());
         LAMELLAES.write().insert(lamellae.backend(), lamellae.clone());
-        world.lamellaes_new.insert(lamellae_new.backend(),lamellae_new.clone());
+        world.lamellaes_new.insert(lamellae.backend(),lamellae.clone());
         // println!("Lamellar world created with {:?}", lamellae.backend());
+        println!("world build");
         world
     }
 }

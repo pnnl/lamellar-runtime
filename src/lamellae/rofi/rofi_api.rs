@@ -117,7 +117,7 @@ pub(crate) unsafe fn rofi_put<T>(src: &[T], dst: usize, pe: usize) -> Result<(),
     //FI_EAGAIN should this be handled here, at c-rofi layer, or application layer?
     while ret == -11 {
         ret = rofisys::rofi_put(dst as *mut std::ffi::c_void, src_addr, size, pe as u32, 0);
-        // println!("[{:?}] ({:?}:{:?}) rofi_put src_addr {:?} {:?}",rofi_get_id(),file!(),line!(),src.as_ptr(),ret);
+        // println!("[{:?}] ({:?}:{:?}) rofi_put src_addr {:?} dst_addr 0x{:x} {:?}",rofi_get_id(),file!(),line!(),src.as_ptr(),dst,ret);
     }
     if ret == 0 {
         Ok(())

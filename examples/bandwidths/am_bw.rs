@@ -46,9 +46,11 @@ fn main() {
         } else if num_bytes >= 4096 {
             exp = 30;
         }
+        // exp=10;
 
         let timer = Instant::now();
         let mut sub_time = 0f64;
+        // println!("starting next round");
         if my_pe == 0 {
             for _j in (num_bytes..(2_u64.pow(exp))).step_by(num_bytes as usize) {
                 let d = _data.clone();
@@ -59,8 +61,9 @@ fn main() {
                 cnt += 1;
             }
             println!("issue time: {:?}", timer.elapsed().as_secs_f64());
-            world.wait_all();
+            
         }
+        world.wait_all();
         world.barrier();
         let cur_t = timer.elapsed().as_secs_f64();
         let cur: f64 = world.MB_sent().iter().sum();
@@ -81,6 +84,7 @@ fn main() {
             );
             bws.push((sum as f64 / 1048576.0) / cur_t);
         }
+        // println!("finished round");
     }
     if my_pe == 0 {
         println!(

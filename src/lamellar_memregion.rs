@@ -1,4 +1,4 @@
-use crate::lamellae::{AllocationType, Backend, Lamellae, LamellaeRDMA};
+use crate::lamellae::{AllocationType, Backend, Lamellae, LamellaeComm, LamellaeRDMA};
 // use crate::lamellar_array::{LamellarLocalArray};
 use core::marker::PhantomData;
 #[cfg(feature = "enable-prof")]
@@ -99,7 +99,7 @@ struct CountedHashMap {
 
 struct CountedHashMapInner {
     cnts: HashMap<Backend, usize>,
-    lamellaes: HashMap<Backend, (Arc<dyn Lamellae + Send + Sync>, Arc<AtomicUsize>)>,
+    lamellaes: HashMap<Backend, (Arc<Lamellae>, Arc<AtomicUsize>)>,
 }
 
 //#[prof]
@@ -112,11 +112,17 @@ impl CountedHashMap {
             }),
         }
     }
+    #[allow(dead_code)]
+    pub fn print(&self){
+        for (k,v) in self.lock.read().lamellaes.iter(){
+            println!("backend: {:?} {:?} {:?}",k,Arc::strong_count(&v.0),v.1.load(Ordering::Relaxed));
+        }
+    }
 
     pub fn insert(
         &self,
         backend: Backend,
-        lamellae: Arc<dyn Lamellae + Send + Sync>,
+        lamellae: Arc<Lamellae>,
         cnt: Arc<AtomicUsize>,
     ) {
         let mut map = self.lock.write();
@@ -143,7 +149,7 @@ impl CountedHashMap {
         }
     }
 
-    pub fn get(&self, backend: Backend) -> (Arc<dyn Lamellae + Send + Sync>, Arc<AtomicUsize>) {
+    pub fn get(&self, backend: Backend) -> (Arc<Lamellae>, Arc<AtomicUsize>) {
         let map = self.lock.read();
         map.lamellaes.get(&backend).expect("invalid key").clone()
     }
@@ -311,11 +317,11 @@ impl<T: std::clone::Clone + Send + Sync + 'static> From<__NetworkLamellarMemoryR
     fn from(reg: __NetworkLamellarMemoryRegion<T>) -> Self {
         let temp = ACTIVE.get(reg.backend);
         temp.1.fetch_add(1, Ordering::SeqCst);
-        let rdma = temp.0.get_rdma();
+        let rdma = temp.0;
         let lmr = LamellarMemoryRegion {
             // orig_addr: rdma.local_addr(reg.pe, reg.orig_addr),
             addr: rdma.local_addr(reg.pe, reg.addr),
-            pe: rdma.mype(),
+            pe: rdma.my_pe(),
             size: reg.size,
             backend: reg.backend,
             rdma: rdma,
@@ -332,26 +338,26 @@ impl<T: std::clone::Clone + Send + Sync + 'static> From<__NetworkLamellarMemoryR
 impl<T: std::clone::Clone + Send + Sync + 'static> LamellarMemoryRegion<T> {
     pub(crate) fn new(
         size: usize,
-        lamellae: Arc<dyn Lamellae + Sync + Send>,
+        lamellae: Arc<Lamellae>,
         alloc: AllocationType,
     ) -> LamellarMemoryRegion<T> {
         let cnt = Arc::new(AtomicUsize::new(1));
         ACTIVE.insert(lamellae.backend(), lamellae.clone(), cnt.clone());
-        let rdma = lamellae.get_rdma();
-        
+        // let rdma = lamellae.clone();
+        println!("creating new lamellar memory region {:?}",size * std::mem::size_of::<T>());
         let mut local = false;
         let addr = if let AllocationType::Local = alloc{
             local = true;
-            rdma.rt_alloc(size * std::mem::size_of::<T>()).unwrap() + rdma.base_addr()
+            lamellae.rt_alloc(size * std::mem::size_of::<T>()).unwrap() + lamellae.base_addr()
         } else {
-            rdma.alloc(size * std::mem::size_of::<T>(), alloc).unwrap()
+            lamellae.alloc(size * std::mem::size_of::<T>(), alloc).unwrap()
         };
         let temp = LamellarMemoryRegion {
             addr: addr,
-            pe: rdma.mype(),
+            pe: lamellae.my_pe(),
             size: size,
             backend: lamellae.backend(),
-            rdma: rdma,
+            rdma: lamellae,
             cnt: cnt,
             local: local,
             phantom: PhantomData,
@@ -516,7 +522,7 @@ impl<T: std::clone::Clone + Send + Sync + 'static> Clone for LamellarMemoryRegio
 impl<T: std::clone::Clone + Send + Sync + 'static> Drop for LamellarMemoryRegion<T> {
     fn drop(&mut self) {
         let cnt = self.cnt.fetch_sub(1, Ordering::SeqCst);
-        // println!("drop: {:?} {:?}",self,cnt);
+        // //println!("drop: {:?} {:?}",self,cnt);
 
         if cnt == 1 {
             ACTIVE.remove(self.backend);
@@ -526,7 +532,8 @@ impl<T: std::clone::Clone + Send + Sync + 'static> Drop for LamellarMemoryRegion
             } else {
                 self.rdma.free(self.addr);
             }
-            //    println!("dropping mem region {:?}",self);
+            // ACTIVE.print();
+            //println!("dropping mem region {:?}",self);
         }
     }
 }
@@ -571,7 +578,7 @@ pub struct LamellarLocalMemoryRegion<T: std::clone::Clone + Send + Sync + 'stati
 impl<T: std::clone::Clone + Send + Sync + 'static> LamellarLocalMemoryRegion<T> {
     pub(crate) fn new(
         size: usize,
-        lamellae: Arc<dyn Lamellae + Sync + Send>,
+        lamellae: Arc<Lamellae>,
     ) -> LamellarLocalMemoryRegion<T> {
         let lmr = LamellarMemoryRegion::new(size, lamellae, AllocationType::Local);
         let pe = lmr.pe;

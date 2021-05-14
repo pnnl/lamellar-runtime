@@ -14,9 +14,10 @@ extern crate lazy_static;
 // #[macro_use]
 // extern crate crossbeam;
 
+// mod active_messaging;
 mod active_messaging;
+// mod lamellae;
 mod lamellae;
-mod lamellae_new;
 mod lamellar_alloc;
 mod lamellar_arch;
 #[cfg(feature = "experimental")]
@@ -30,7 +31,7 @@ mod lamellar_memregion;
 mod lamellar_request;
 mod lamellar_team;
 mod lamellar_world;
-mod schedulers;
+// mod schedulers;
 mod scheduler;
 mod utils;
 pub use utils::*;
@@ -40,11 +41,7 @@ use lamellar_prof::init_prof;
 init_prof!();
 
 #[doc(hidden)]
-pub use crate::active_messaging::{registered_active_message::RegisteredAm, LamellarReturn};
-
-#[doc(hidden)]
-pub use crate::active_messaging::{LamellarActiveMessage,LamellarSerde};
-
+pub use crate::active_messaging::{registered_active_message::RegisteredAm, LamellarReturn,LamellarActiveMessage,DarcSerde,LamellarSerde,LamellarResultSerde,Serde};
 #[cfg(feature = "nightly")]
 pub use crate::active_messaging::remote_closures::RemoteClosures;
 pub use crate::active_messaging::{ActiveMessaging, LamellarAM,LocalAM};
@@ -61,9 +58,13 @@ pub use crate::lamellar_darc::{Darc,LocalRwDarc};
 #[doc(hidden)]
 pub use crate::lamellar_darc::{darc_serialize,darc_from_ndarc,localrw_serialize,localrw_from_ndarc};
 
-
+// #[doc(hidden)]
+// pub use crate::lamellae::{Lamellae,SerializedData,SerializeHeader};
 pub use crate::lamellae::Backend;
-pub use crate::schedulers::SchedulerType;
+
+pub use crate::scheduler::SchedulerType;
+
+
 
 pub use crate::lamellar_world::*;
 
@@ -97,6 +98,20 @@ where
     // Ok(rmp_serde::to_vec(obj)?)
 }
 
+#[doc(hidden)]
+pub fn serialized_size<T: ?Sized>(obj: &T) -> usize 
+where
+    T: serde::Serialize,{
+    bincode::serialized_size(obj).unwrap() as usize
+}
+#[doc(hidden)]
+pub fn serialize_into<T: ?Sized>(buf: &mut [u8], obj: &T) ->Result<(), anyhow::Error>
+where
+    T: serde::Serialize,
+    {
+        bincode::serialize_into(buf,obj)?;
+        Ok(())
+    }
 
 // #[doc(hidden)]
 // async fn serialize_with<T: ?Sized>(obj: &T,rdma: std::sync::Arc<dyn LamellaeRDMA>) -> Result<Vec<u8>, anyhow::Error>

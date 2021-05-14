@@ -547,11 +547,11 @@ impl<
 {
     fn drop(&mut self) {
         let cnt = self.cnt.fetch_sub(1, Ordering::SeqCst);
-        // println!("drop: {:?}",self);
+        // //println!("drop: {:?}",self);
         if cnt == 1 {
             // println!("trying to dropping mem region {:?}",self);
             self.rdma.rt_free(self.addr - self.rdma.base_addr());
-            // println!("dropping mem region {:?}",self);
+            // //println!("dropping mem region {:?}",self);
         }
     }
 }
