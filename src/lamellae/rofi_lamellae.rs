@@ -132,7 +132,7 @@ impl LamellaeAM for Rofi {
 #[async_trait]
 impl Ser for Rofi{
     async fn serialize<T: Send + Sync + serde::Serialize + ?Sized>(&self,header: Option<SerializeHeader>, obj: &T) -> Result<SerializedData,anyhow::Error> {
-        // let header_size_temp= bincode::serialized_size(&header)? as usize; //will this be standard for every header?
+        let header_size_temp= bincode::serialized_size(&header)? as usize; //will this be standard for every header?
         let header_size = std::mem::size_of::<Option<SerializeHeader>>();
         // println!("hst {:?} hs {:?}",header_size_temp, header_size);
         let data_size = bincode::serialized_size(obj)? as usize;
@@ -142,7 +142,7 @@ impl Ser for Rofi{
         Ok(SerializedData::RofiData(ser_data))
     }
     async fn serialize_header(&self,header: Option<SerializeHeader>,serialized_size: usize) -> Result<SerializedData,anyhow::Error> {
-        // let header_size_temp= bincode::serialized_size(&header)? as usize; //will this be standard for every header?
+        let header_size_temp= bincode::serialized_size(&header)? as usize; //will this be standard for every header?
         let header_size = std::mem::size_of::<Option<SerializeHeader>>();
         // println!("hst {:?} hs {:?}",header_size_temp, header_size);
         let ser_data = RofiData::new(self.rofi_comm.clone(),header_size+serialized_size).await;

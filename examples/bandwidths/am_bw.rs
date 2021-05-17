@@ -84,7 +84,8 @@ fn main() {
             );
             bws.push((sum as f64 / 1048576.0) / cur_t);
         }
-        // println!("finished round");
+        println!("finished round");
+        println!("======================================================================================");
     }
     if my_pe == 0 {
         println!(
