@@ -82,7 +82,7 @@ pub(crate) async fn exec_am_cmd(
                     }
                     LamellarReturn::RemoteAm(ref _d) => ExecType::Am(Cmd::ExecReturn),
                     LamellarReturn::RemoteData(ref _d,ref _f) => ExecType::Runtime(Cmd::DataReturn),
-                    LamellarReturn::Unit => ExecType::Runtime(Cmd::UnitReturn),//need to fix batched unit returns
+                    LamellarReturn::Unit => ExecType::Runtime(Cmd::BatchedUnitReturn),//need to fix batched unit returns
                 };
                 ame.send_response(cmd, lam_return, msg, lamellae,team.my_hash).await
             } else {

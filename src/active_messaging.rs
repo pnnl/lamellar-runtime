@@ -208,8 +208,8 @@ pub trait ActiveMessaging {
 
 //maybe make this a struct then we could hold the pending counters...
 pub(crate) struct ActiveMessageEngine {
-    pending_active: CHashMap<u16, usize>,
-    pending_resp: CHashMap<u16, crossbeam::queue::SegQueue<usize>>,
+    pending_active: Arc<Mutex<HashMap<u16,usize>>>, //CHashMap<u16, usize>,
+    pending_resp: Arc<Mutex<HashMap<u16, crossbeam::queue::SegQueue<usize>>>>,// CHashMap<u16, crossbeam::queue::SegQueue<usize>>,
     pending_msg_active: CHashMap<u64, usize>,
     pending_msg: Arc<Mutex<HashMap<u64, crossbeam::queue::SegQueue<Vec<u8>>>>>,
     my_pe: usize,
@@ -236,8 +236,8 @@ impl ActiveMessageEngine {
         trace!("registered funcs {:?}", AMS_EXECS.len(),);
         let (dummy_s, _) = crossbeam::channel::unbounded();
         ActiveMessageEngine {
-            pending_active: CHashMap::new(),
-            pending_resp: CHashMap::new(),
+            pending_active: Arc::new(Mutex::new(HashMap::new())),
+            pending_resp: Arc::new(Mutex::new(HashMap::new())),
             pending_msg_active: CHashMap::new(),
             pending_msg: Arc::new(Mutex::new(HashMap::new())),
             my_pe: my_pe,
@@ -413,8 +413,14 @@ impl ActiveMessageEngine {
                 }
             }
             Cmd::ExecBatchUnitReturns => {
-                self.pending_active.remove(&msg.src);
-                if let Some(pends) = self.pending_resp.get(&msg.src) {
+                let pends = {
+                    let mut pending_resp = self.pending_resp.lock();
+                    self.pending_active.lock().remove(&msg.src);
+                    pending_resp.remove(&msg.src)
+                };
+                // self.pending_active.remove(&msg.src);
+                if let Some(pends) = pends {
+                    
                     let mut i = 1usize;
                     let mut ids: Vec<usize> = Vec::new();
                     while !pends.is_empty() {
@@ -460,16 +466,16 @@ impl ActiveMessageEngine {
                         ids.clear();
                     }
                 }
-                self.pending_resp.alter(msg.src, |q| match q {
-                    Some(q) => {
-                        if q.len() > 0 {
-                            Some(q)
-                        } else {
-                            None
-                        }
-                    }
-                    None => None,
-                })
+                // self.pending_resp.alter(msg.src, |q| match q {
+                //     Some(q) => {
+                //         if q.len() > 0 {
+                //             Some(q)
+                //         } else {
+                //             None
+                //         }
+                //     }
+                //     None => None,
+                // })
             }
             Cmd::DataReturn => {
                 if let Some(data) = ser_data{
@@ -572,18 +578,28 @@ impl ActiveMessageEngine {
         );
         match cmd {
             ExecType::Runtime(Cmd::BatchedUnitReturn) => {
-                self.pending_resp.upsert(
-                    msg.src,
-                    || {
+                let active = {
+                    self.pending_resp.lock().entry(msg.src)
+                    .and_modify(|e| { e.push(msg.req_id) })
+                    .or_insert_with(|| {
                         let q = crossbeam::queue::SegQueue::new();
                         q.push(msg.req_id);
                         q
-                    },
-                    |q| {
-                        q.push(msg.req_id);
-                    },
-                );
-                if let None = self.pending_active.insert(msg.src, 1) {
+                    });
+                    self.pending_active.lock().insert(msg.src, 1)
+                };
+                // self.pending_resp.upsert(
+                //     msg.src,
+                //     || {
+                //         let q = crossbeam::queue::SegQueue::new();
+                //         q.push(msg.req_id);
+                //         q
+                //     },
+                //     |q| {
+                //         q.push(msg.req_id);
+                //     },
+                // );
+                if let None =  active{
                     let my_any: LamellarAny = Box::new(0);
                     let msg = Msg {
                         cmd: ExecType::Runtime(Cmd::ExecBatchUnitReturns),
