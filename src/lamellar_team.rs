@@ -514,8 +514,8 @@ impl ActiveMessaging for LamellarTeamRT {
             cmd: ExecType::Am(Cmd::Exec),
             src: self.world_pe as u16,
             req_id: my_req.id,
-            team_id: self.id,
-            return_data: true,
+            // team_id: self.id,
+            // return_data: true,
         };
         self.world_counters.add_send_req(self.num_pes);
         self.team_counters.add_send_req(self.num_pes);
@@ -558,8 +558,8 @@ impl ActiveMessaging for LamellarTeamRT {
             cmd: ExecType::Am(Cmd::Exec),
             src: self.world_pe as u16,
             req_id: my_req.id,
-            team_id: self.id,
-            return_data: true,
+            // team_id: self.id,
+            // return_data: true,
         };
         prof_end!(msg);
         prof_start!(counters);
@@ -607,8 +607,8 @@ impl ActiveMessaging for LamellarTeamRT {
             cmd: ExecType::Am(Cmd::Exec),
             src: self.world_pe as u16,
             req_id: my_req.id,
-            team_id: self.id,
-            return_data: true,
+            // team_id: self.id,
+            // return_data: true,
         };
         prof_end!(msg);
         prof_start!(counters);

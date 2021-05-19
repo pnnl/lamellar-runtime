@@ -122,6 +122,7 @@ struct RofiCmdBuffer{
     waiting_bufs: HashMap<usize,CmdBuf>,
     cur_buf: Option<CmdBuf>,
     num_bufs: usize,
+    
 }
 
 impl RofiCmdBuffer {
@@ -283,6 +284,8 @@ struct RofiCQ{
     pending_cmds: Arc<AtomicUsize>,
     sent_cnt: Arc<AtomicUsize>,
     recv_cnt: Arc<AtomicUsize>,
+    put_amt: Arc<AtomicUsize>,
+    get_amt: Arc<AtomicUsize>,
     // tx_data: Arc<Mutex<HashMap<usize,SerializedData>>>,
 }
 
@@ -327,6 +330,8 @@ impl RofiCQ{
             pending_cmds: Arc::new(AtomicUsize::new(0)),
             sent_cnt: Arc::new(AtomicUsize::new(0)),
             recv_cnt: Arc::new(AtomicUsize::new(0)),
+            put_amt: Arc::new(AtomicUsize::new(0)),
+            get_amt: Arc::new(AtomicUsize::new(0)),
         }
     }
 
@@ -379,6 +384,7 @@ impl RofiCQ{
                     let recv_buffer = self.recv_buffer.lock();
                     // println!{"sending data to dst {:?} {:?} ",recv_buffer[self.my_pe].as_addr()-self.rofi_comm.base_addr(),send_buf[dst]};
                     self.rofi_comm.put(dst,send_buf[dst].as_bytes(),recv_buffer[self.my_pe].as_addr());
+                    self.put_amt.fetch_add(send_buf[dst].as_bytes().len(),Ordering::Relaxed);
                 
                 }
                 true
@@ -406,6 +412,7 @@ impl RofiCQ{
                     //     }
                     // }
                     self.sent_cnt.fetch_add(1,Ordering::SeqCst);
+                    self.put_amt.fetch_add(len,Ordering::Relaxed);
                     let cnt = self.pending_cmds.fetch_sub(1,Ordering::SeqCst);
                     // println!("pushed {:?} {:?} {:?} {:?}",addr,len,cnt, data_slice);
                     break;
@@ -462,6 +469,7 @@ impl RofiCQ{
                     // println!("sending free {:?} (s: {:?} r: {:?})",addr,self.sent_cnt.load(Ordering::SeqCst),self.recv_cnt.load(Ordering::SeqCst));
                     let recv_buffer = self.recv_buffer.lock();
                     self.rofi_comm.put(dst,send_buf[dst].as_bytes(),recv_buffer[self.my_pe].as_addr());
+                    // self.put_amt.fetch_add(send_buf[dst].as_bytes().len(),Ordering::Relaxed);
                     break;
                 }
             }
@@ -482,6 +490,7 @@ impl RofiCQ{
                     println!("sending print {:?} (s: {:?} r: {:?})",addr,self.sent_cnt.load(Ordering::SeqCst),self.recv_cnt.load(Ordering::SeqCst));
                     let recv_buffer = self.recv_buffer.lock();
                     self.rofi_comm.put(dst,send_buf[dst].as_bytes(),recv_buffer[self.my_pe].as_addr());
+                    // self.put_amt.fetch_add(send_buf[dst].as_bytes().len(),Ordering::Relaxed);
                     break;
                 }
             }
@@ -493,6 +502,7 @@ impl RofiCQ{
         let sb = self.send_buffer.lock();
         // println!("sending clear {:?} {:?} (s: {:?} r: {:?})",buf_addr,sb[self.my_pe].as_addr()-self.rofi_comm.base_addr(),self.sent_cnt.load(Ordering::SeqCst),self.recv_cnt.load(Ordering::SeqCst));
         self.rofi_comm.put(src,self.clear_cmd.as_bytes(),sb[self.my_pe].as_addr());
+        // self.put_amt.fetch_add(self.clear_cmd.as_bytes().len(),Ordering::Relaxed);
         drop(sb);
         let mut cmd_buffer = self.cmd_buffers[src].lock();
         self.check_for_finished_tx(src,&mut cmd_buffer);
@@ -508,6 +518,7 @@ impl RofiCQ{
         data_slice[cmd.dsize as usize - 1]=255;
         data_slice[cmd.dsize as usize - 2]=255;
         self.rofi_comm.iget_relative(src,cmd.daddr as usize,data_slice);
+        // self.get_amt.fetch_add(data_slice.len(),Ordering::Relaxed);
         let mut timer = std::time::Instant::now();
         while data_slice[data_slice.len()-1] == 255{
             async_std::task::yield_now().await;
@@ -542,6 +553,7 @@ impl RofiCQ{
         let sb = self.send_buffer.lock();
         // println!("sending release to src: {:?} {:?} (s: {:?} r: {:?})",src,cmd.daddr,self.sent_cnt.load(Ordering::SeqCst),self.recv_cnt.load(Ordering::SeqCst));
         self.rofi_comm.put(src,self.release_cmd.as_bytes(),sb[self.my_pe].as_addr()); //release remote command
+        // self.put_amt.fetch_add(self.release_cmd.as_bytes().len(),Ordering::Relaxed);
         data
     }
 }
@@ -685,6 +697,11 @@ impl RofiCommandQueue{
             }
             async_std::task::yield_now().await;
         }
+    }
+
+    pub fn tx_amount(&self)->usize{
+        println!("cq put: {:?} get {:?}",self.cq.put_amt.load(Ordering::SeqCst) ,self.cq.get_amt.load(Ordering::SeqCst));
+        self.cq.put_amt.load(Ordering::SeqCst) + self.cq.get_amt.load(Ordering::SeqCst)
     }
 
     pub fn mem_per_pe() -> usize{

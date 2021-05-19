@@ -1,5 +1,6 @@
 use crate::lamellar_arch::LamellarArchRT;
 use crate::active_messaging::Msg;
+use crate::active_messaging::registered_active_message::AmId;
 use crate::scheduler::Scheduler;
 #[cfg(feature = "enable-prof")]
 use lamellar_prof::*;
@@ -64,7 +65,7 @@ fn default_backend() -> Backend {
 pub(crate) struct SerializeHeader{
     pub(crate) msg: Msg,
     pub(crate) team_hash: u64,
-    pub(crate) id: Option<usize>,
+    pub(crate) id: AmId,
 }
 
 

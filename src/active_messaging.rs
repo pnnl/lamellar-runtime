@@ -36,6 +36,7 @@ lazy_static! {
     };
 }
 
+
 #[derive(
     serde::Serialize, serde::Deserialize, Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord,
 )]
@@ -142,14 +143,14 @@ pub(crate) enum InnerCmd {
     GetReq,
     GetResp,
 }
-
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone, Copy)]
 pub(crate) struct Msg {
-    pub cmd: ExecType,
-    pub src: u16,
     pub req_id: usize,
-    pub team_id: usize,
-    pub return_data: bool,
+    pub src: u16,
+    pub cmd: ExecType,
+    
+    // pub team_id: usize,
+    // pub return_data: bool,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug)]
@@ -234,6 +235,7 @@ impl ActiveMessageEngine {
         teams: Arc<RwLock<HashMap<u64, Weak<LamellarTeamRT>>>>,
     ) -> Self {
         trace!("registered funcs {:?}", AMS_EXECS.len(),);
+        println!("sizes: {:?} {:?} {:?}",std::mem::size_of::<Msg>(),std::mem::size_of::<ExecType>(),std::mem::size_of::<Cmd>());
         let (dummy_s, _) = crossbeam::channel::unbounded();
         ActiveMessageEngine {
             pending_active: Arc::new(Mutex::new(HashMap::new())),
@@ -258,7 +260,7 @@ impl ActiveMessageEngine {
 
     pub(crate) async fn process_msg(&self, req_data: ReqData) -> Option<ReqData> {
         // trace!("[{:?}] process msg: {:?}",self.my_pe, &req_data);
-        if req_data.msg.return_data {
+        if !req_data.rt_req {//msg.return_data {
             REQUESTS[req_data.msg.req_id % REQUESTS.len()]
                 .insert_new(req_data.msg.req_id, req_data.ireq.clone());
         }
@@ -319,8 +321,8 @@ impl ActiveMessageEngine {
                     cmd: ExecType::Runtime(Cmd::ExecBatchMsgSend),
                     src: self.my_pe as u16, //fake that this is from the original sender
                     req_id: 0,
-                    team_id: id as usize, // we use this as the lookup id int the hashmaps
-                    return_data: false,
+                    // team_id: id as usize, // we use this as the lookup id int the hashmaps
+                    // return_data: false,
                 };
                 Some(ReqData {
                     // team_arch: req_data,
@@ -332,6 +334,7 @@ impl ActiveMessageEngine {
                     // backend: lamellae.backend(),
                     lamellae: req_data.lamellae.clone(),
                     team_hash: req_data.team_hash, // fake hash,
+                    rt_req: true,
                 })
             } else {
                 None
@@ -355,10 +358,10 @@ impl ActiveMessageEngine {
         trace!("[{:?}] exec_runtime_cmd: {:?}", self.my_pe, msg);
         match cmd {
             Cmd::ExecBatchMsgSend => {
-                self.pending_msg_active.remove(&(msg.team_id as u64));
+                self.pending_msg_active.remove(&team_hash);
                 let pends = {
                     let mut pending_msg = self.pending_msg.lock();
-                    pending_msg.remove(&(msg.team_id as u64))
+                    pending_msg.remove(&team_hash)
                 };
                 if let Some(pends) = pends {
                     let mut size = 0;
@@ -373,20 +376,16 @@ impl ActiveMessageEngine {
                                 cmd: ExecType::Runtime(Cmd::BatchedMsg),
                                 src: self.my_pe as u16,
                                 req_id: 0,
-                                team_id: 0,
-                                return_data: false,
+                                // team_id: 0,
+                                // return_data: false,
                             };
-                            // let data = crate::serialize(&agg_data).unwrap();
-                            // let payload = (rmsg, data, team_hash);
-                            let header = Some(SerializeHeader{msg: rmsg, team_hash: team_hash,id: None});
+                            let header = Some(SerializeHeader{msg: rmsg, team_hash: team_hash,id: 0});
                             let data = lamellae.serialize(header,&agg_data).await.unwrap();
 
                             lamellae.send_to_pes_async(
                                 pe,
                                 team.arch.clone(),
-                                data,
-                                // crate::lamellae::serialize(&payload,lamellae.clone()).await.unwrap(),
-                            ).await;
+                                data,).await;
                             size = 0;
                             agg_data.clear();
                         }
@@ -396,19 +395,15 @@ impl ActiveMessageEngine {
                             cmd: ExecType::Runtime(Cmd::BatchedMsg),
                             src: self.my_pe as u16,
                             req_id: 0,
-                            team_id: 0,
-                            return_data: false,
+                            // team_id: 0,
+                            // return_data: false,
                         };
-                        // let data = crate::serialize(&agg_data).unwrap();
-                        // let payload = (rmsg, data, team_hash);
-                        let header = Some(SerializeHeader{msg: rmsg, team_hash: team_hash,id: None});
+                        let header = Some(SerializeHeader{msg: rmsg, team_hash: team_hash,id: 0});
                         let data = lamellae.serialize(header,&agg_data).await.unwrap();
                         lamellae.send_to_pes_async(
                             pe,
                             team.arch.clone(),
-                            data,
-                            // crate::lamellae::serialize(&payload,lamellae.clone()).await.unwrap(),
-                        ).await;
+                            data,).await;
                     }
                 }
             }
@@ -418,7 +413,6 @@ impl ActiveMessageEngine {
                     self.pending_active.lock().remove(&msg.src);
                     pending_resp.remove(&msg.src)
                 };
-                // self.pending_active.remove(&msg.src);
                 if let Some(pends) = pends {
                     
                     let mut i = 1usize;
@@ -433,17 +427,13 @@ impl ActiveMessageEngine {
                                 cmd: ExecType::Runtime(Cmd::BatchedUnitReturn),
                                 src: self.my_pe as u16,
                                 req_id: msg.req_id,
-                                team_id: msg.team_id,
-                                return_data: false,
+                                // team_id: msg.team_id,
+                                // return_data: false,
                             };
-                            // let data = crate::serialize(&ids).unwrap();
-                            // let payload = (rmsg, data, team_hash);
-                            let header = Some(SerializeHeader{msg: rmsg, team_hash: team_hash, id: None});
+                            let header = Some(SerializeHeader{msg: rmsg, team_hash: team_hash, id: 0});
                             let data = lamellae.serialize(header,&ids).await.unwrap();
                             lamellae
-                                .send_to_pe_async(msg.src as usize,  data
-                                    // crate::lamellae::serialize(&payload,lamellae.clone()).await.unwrap()
-                                ).await;
+                                .send_to_pe_async(msg.src as usize,  data).await;
                             i = 0;
                             ids.clear();
                         }
@@ -453,29 +443,15 @@ impl ActiveMessageEngine {
                             cmd: ExecType::Runtime(Cmd::BatchedUnitReturn),
                             src: self.my_pe as u16,
                             req_id: msg.req_id,
-                            team_id: msg.team_id,
-                            return_data: false,
+                            // team_id: msg.team_id,
+                            // return_data: false,
                         };
-                        // let data = crate::serialize(&ids).unwrap();
-                        // let payload = (rmsg, data, team_hash);
-                        let header = Some(SerializeHeader{msg: rmsg, team_hash: team_hash, id: None});
+                        let header = Some(SerializeHeader{msg: rmsg, team_hash: team_hash, id: 0});
                         let data = lamellae.serialize(header,&ids).await.unwrap();
-                        lamellae.send_to_pe_async(msg.src as usize, data
-                            // crate::lamellae::serialize(&payload,lamellae.clone()).await.unwrap()
-                        ).await;
+                        lamellae.send_to_pe_async(msg.src as usize, data).await;
                         ids.clear();
                     }
                 }
-                // self.pending_resp.alter(msg.src, |q| match q {
-                //     Some(q) => {
-                //         if q.len() > 0 {
-                //             Some(q)
-                //         } else {
-                //             None
-                //         }
-                //     }
-                //     None => None,
-                // })
             }
             Cmd::DataReturn => {
                 if let Some(data) = ser_data{
@@ -605,8 +581,8 @@ impl ActiveMessageEngine {
                         cmd: ExecType::Runtime(Cmd::ExecBatchUnitReturns),
                         src: msg.src as u16, //fake that this is from the original sender
                         req_id: 0,
-                        team_id: 0,
-                        return_data: false,
+                        // team_id: 0,
+                        // return_data: false,
                     };
                     Some(ReqData {
                         src: self.my_pe,
@@ -616,6 +592,7 @@ impl ActiveMessageEngine {
                         func: my_any,
                         lamellae: lamellae,
                         team_hash: team_hash, // fake hash,
+                        rt_req: true,
                     })
                 } else {
                     None
@@ -626,11 +603,11 @@ impl ActiveMessageEngine {
                     cmd: cmd,
                     src: self.my_pe as u16,
                     req_id: msg.req_id,
-                    team_id: msg.team_id,
-                    return_data: false,
+                    // team_id: msg.team_id,
+                    // return_data: false,
                 };
                 // let payload = (rmsg, crate::serialize(&()).unwrap(), team_hash);
-                let header = Some(SerializeHeader{msg: rmsg, team_hash: team_hash, id: None});
+                let header = Some(SerializeHeader{msg: rmsg, team_hash: team_hash, id: 0});
                 let data = lamellae.serialize(header,&()).await.unwrap();
                 lamellae.send_to_pe_async(msg.src as usize,  data
                     // crate::lamellae::serialize(&payload,lamellae.clone()).await.unwrap()
@@ -642,12 +619,12 @@ impl ActiveMessageEngine {
                     cmd: cmd,
                     src: self.my_pe as u16,
                     req_id: msg.req_id,
-                    team_id: msg.team_id,
-                    return_data: false,
+                    // team_id: msg.team_id,
+                    // return_data: false,
                 };
                 if let LamellarReturn::RemoteData(result,func) = data{
                     let result_size = func.serialized_result_size(&result);
-                    let header = Some(SerializeHeader{msg: rmsg, team_hash: team_hash, id: None});
+                    let header = Some(SerializeHeader{msg: rmsg, team_hash: team_hash, id: 0});
                     let data = lamellae.serialize_header(header,result_size).await.unwrap();
                     func.serialize_result_into(data.data_as_bytes(),&result);
                     lamellae.send_to_pe_async(msg.src as usize,  data).await;
@@ -662,12 +639,12 @@ impl ActiveMessageEngine {
                     cmd: cmd,
                     src: self.my_pe as u16,
                     req_id: msg.req_id,
-                    team_id: msg.team_id,
-                    return_data: false,
+                    // team_id: msg.team_id,
+                    // return_data: false,
                 };
                 if let LamellarReturn::RemoteAm(am) = data {
                     let id = *AMS_IDS.get(&am.get_id()).unwrap();
-                    let header = Some(SerializeHeader{msg: rmsg, team_hash: team_hash, id: Some(id)});
+                    let header = Some(SerializeHeader{msg: rmsg, team_hash: team_hash, id: id});
                     let serialized_size = am.serialized_size();
                     let data = lamellae.serialize_header(header,serialized_size).await.unwrap();
                     am.serialize_into(data.data_as_bytes());
@@ -684,8 +661,8 @@ impl ActiveMessageEngine {
                     cmd: cmd,
                     src: self.my_pe as u16,
                     req_id: msg.req_id,
-                    team_id: msg.team_id,
-                    return_data: false,
+                    // team_id: msg.team_id,
+                    // return_data: false,
                 };
                 // let data = data.unwrap();
                 // let payload = (rmsg, data, team_hash);

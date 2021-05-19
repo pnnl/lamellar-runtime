@@ -145,7 +145,7 @@ impl RofiComm {
             // println!("[{:?}]-({:?}) put [{:?}] entry",self.my_pe,0,pe);
 
             unsafe { rofi_put(src_addr, dst_addr, pe).expect("error in rofi put") };
-            self.put_amt.fetch_add(src_addr.len(), Ordering::SeqCst);
+            self.put_amt.fetch_add(src_addr.len()*std::mem::size_of::<T>(), Ordering::SeqCst);
             self.put_cnt.fetch_add(1, Ordering::SeqCst);
         } else {
             unsafe {
@@ -178,7 +178,7 @@ impl RofiComm {
         if pe != self.my_pe {
             let _lock = self.comm_mutex.lock();
             rofi_iput(src_addr, dst_addr, pe).expect("error in rofi put");
-            self.put_amt.fetch_add(src_addr.len(), Ordering::SeqCst);
+            self.put_amt.fetch_add(src_addr.len()*std::mem::size_of::<T>(), Ordering::SeqCst);
             self.put_cnt.fetch_add(1, Ordering::SeqCst);
         } else {
             unsafe {
@@ -220,7 +220,7 @@ impl RofiComm {
             std::ptr::copy_nonoverlapping(src_addr.as_ptr(), dst_addr as *mut T, src_addr.len());
         }
         self.put_amt
-            .fetch_add(src_addr.len() * (self.num_pes - 1), Ordering::SeqCst);
+            .fetch_add(src_addr.len() * (self.num_pes - 1)*std::mem::size_of::<T>(), Ordering::SeqCst);
         self.put_cnt
             .fetch_add(1, Ordering::SeqCst);
         // println!("[{:?}]-({:?}) put all exit",self.my_pe,thread::current().id());
@@ -252,7 +252,7 @@ impl RofiComm {
                     );
                     panic!();
                 }
-                self.get_amt.fetch_add(dst_addr.len(), Ordering::SeqCst);
+                self.get_amt.fetch_add(dst_addr.len()*std::mem::size_of::<T>(), Ordering::SeqCst);
                 self.get_cnt.fetch_add(1, Ordering::SeqCst);
             };
         } else {
@@ -292,7 +292,7 @@ impl RofiComm {
                     );
                     panic!();
                 }
-                self.get_amt.fetch_add(dst_addr.len(), Ordering::SeqCst);
+                self.get_amt.fetch_add(dst_addr.len()*std::mem::size_of::<T>(), Ordering::SeqCst);
                 self.get_cnt.fetch_add(1, Ordering::SeqCst);
             }
         } else {
@@ -336,7 +336,7 @@ impl RofiComm {
                 panic!();
             }
             self.get_cnt.fetch_add(1, Ordering::SeqCst);
-            // self.get_amt.fetch_add(dst_addr.len(),Ordering::SeqCst);
+            self.get_amt.fetch_add(dst_addr.len()*std::mem::size_of::<T>(),Ordering::SeqCst);
             // }
             // };
         } else {
@@ -370,11 +370,13 @@ pub(crate) struct RofiData{
     pub(crate) relative_addr: usize,
     pub(crate) len: usize,
     pub(crate) rofi_comm: Arc<RofiComm>,
+    pub(crate) alloc_size: usize,
 }
 
 impl RofiData{
     pub async fn new(rofi_comm: Arc<RofiComm>, size: usize )->RofiData{
         let ref_cnt_size = std::mem::size_of::<AtomicUsize>();
+        let header_size = std::mem::size_of::<u64>();
         // let data_size = header_size+serialized_size+1; //plus one is our transfer flag
         let alloc_size = size + ref_cnt_size +1;
         let mut mem = rofi_comm.rt_alloc(alloc_size);
@@ -394,7 +396,8 @@ impl RofiData{
             addr: addr,
             relative_addr: relative_addr+ref_cnt_size,
             len: size+1,
-            rofi_comm: rofi_comm
+            rofi_comm: rofi_comm,
+            alloc_size: alloc_size,
         }
     }
     pub fn header_as_bytes(&self) ->&mut [u8]{
@@ -437,6 +440,7 @@ impl Clone for RofiData{
             relative_addr: self.relative_addr,
             len: self.len,
             rofi_comm: self.rofi_comm.clone(),
+            alloc_size: self.alloc_size,
         }
     }
 }

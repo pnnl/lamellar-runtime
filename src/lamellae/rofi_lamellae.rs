@@ -106,7 +106,11 @@ impl LamellaeComm for Rofi {
     fn barrier(&self) {self.rofi_comm.barrier()}
     fn backend(&self) -> Backend {Backend::Rofi}
     #[allow(non_snake_case)]
-    fn MB_sent(&self) -> f64 {0f64}
+    fn MB_sent(&self) -> f64 {
+        // println!("put: {:?} get: {:?}",self.rofi_comm.put_amt.load(Ordering::SeqCst),self.rofi_comm.get_amt.load(Ordering::SeqCst));
+        // (self.rofi_comm.put_amt.load(Ordering::SeqCst) + self.rofi_comm.get_amt.load(Ordering::SeqCst)) as 
+        self.cq.tx_amount() as f64 / 1_000_000.0 
+    }
     fn print_stats(&self) {}
     fn shutdown(&self){
         self.active.store(false,Ordering::Relaxed);
@@ -132,20 +136,42 @@ impl LamellaeAM for Rofi {
 #[async_trait]
 impl Ser for Rofi{
     async fn serialize<T: Send + Sync + serde::Serialize + ?Sized>(&self,header: Option<SerializeHeader>, obj: &T) -> Result<SerializedData,anyhow::Error> {
-        let header_size_temp= bincode::serialized_size(&header)? as usize; //will this be standard for every header?
+        // let header_size_temp= if let Some(header) = &header {
+        //     bincode::serialized_size(&header)? as usize //will this be standard for every header?
+        // }
+        // else{
+        //     // println!("None! {:?}",bincode::serialized_size(&header)? as usize);
+        //     // bincode::serialized_size(&header)? as usize
+        //     0
+        // };
+        // let test: Option<SerializeHeader> = None;
+        // let test_size = bincode::serialized_size(&test)? as usize;
         let header_size = std::mem::size_of::<Option<SerializeHeader>>();
-        // println!("hst {:?} hs {:?}",header_size_temp, header_size);
+        // println!("hst {:?} hs {:?} {:?} {:?} ",header_size_temp, header_size, test_size,std::mem::size_of::<SerializeHeader>()) ;
         let data_size = bincode::serialized_size(obj)? as usize;
         let ser_data = RofiData::new(self.rofi_comm.clone(),header_size+data_size).await;
+        // println!("h+d size: {:?} hsize {:?} dsize {:?}",ser_data.alloc_size,ser_data.header_as_bytes().len(),ser_data.data_as_bytes().len());
         bincode::serialize_into(ser_data.header_as_bytes(),&header)?;
         bincode::serialize_into(ser_data.data_as_bytes(),obj)?;
         Ok(SerializedData::RofiData(ser_data))
     }
     async fn serialize_header(&self,header: Option<SerializeHeader>,serialized_size: usize) -> Result<SerializedData,anyhow::Error> {
-        let header_size_temp= bincode::serialized_size(&header)? as usize; //will this be standard for every header?
+        // let header_size_temp= if let Some(header) = &header {
+        //     bincode::serialized_size(&header)? as usize //will this be standard for every header?
+        // }
+        // else{
+        //     // println!("None! {:?}",bincode::serialized_size(&header)? as usize);
+        //     // bincode::serialized_size(&header)? as usize
+        //     0
+        // };
+        // let test: Option<SerializeHeader> = None;
+        // let test_size = bincode::serialized_size(&test)? as usize;
+        
         let header_size = std::mem::size_of::<Option<SerializeHeader>>();
-        // println!("hst {:?} hs {:?}",header_size_temp, header_size);
+        // println!("hs {:?}",header_size);
+        // println!("hst {:?} hs {:?} {:?} {:?} ",header_size_temp, header_size, test_size,std::mem::size_of::<SerializeHeader>()) ;
         let ser_data = RofiData::new(self.rofi_comm.clone(),header_size+serialized_size).await;
+        // println!("h+d size: {:?} hsize {:?} dsize {:?}",ser_data.alloc_size,ser_data.header_as_bytes().len(),ser_data.data_as_bytes().len());
         bincode::serialize_into(ser_data.header_as_bytes(),&header)?;
         Ok(SerializedData::RofiData(ser_data))
     }

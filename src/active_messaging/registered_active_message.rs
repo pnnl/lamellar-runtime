@@ -25,16 +25,16 @@ pub (crate) type UnpackFn = fn(&[u8]) -> LamellarBoxedAm;
 //         Arc<LamellarTeamRT>,
 //         bool,
 //     ) -> std::pin::Pin<Box<dyn std::future::Future<Output = LamellarReturn> + Send>>;
-
+pub(crate) type AmId = u16;
 lazy_static! {
-    pub(crate) static ref AMS_IDS: HashMap<String, usize> = {
+    pub(crate) static ref AMS_IDS: HashMap<String, AmId> = {
         
         let mut ams = vec![];
         for am in crate::inventory::iter::<RegisteredAm>{
             ams.push(am.name.clone());
         }
         ams.sort();
-        let mut cnt = 0;
+        let mut cnt = 1 as AmId; // 0 is reserved for runtime use
         let mut temp = HashMap::new();
         for am in ams{
             temp.insert(am.clone(),cnt);
@@ -44,7 +44,7 @@ lazy_static! {
     };
 }
 lazy_static!{
-    pub(crate) static ref AMS_EXECS: HashMap<usize, UnpackFn> = {
+    pub(crate) static ref AMS_EXECS: HashMap<AmId, UnpackFn> = {
         let mut temp = HashMap::new();
         for exec in crate::inventory::iter::<RegisteredAm> {
             // trace!("{:#?}", exec.name);
@@ -75,7 +75,7 @@ pub(crate) async fn exec_am_cmd(
     match cmd {
         Cmd::Exec => {
             let lam_return = exec_am(ame, &ser_data, world, team.clone(),false).await;
-            if msg.return_data {
+            // if msg.return_data {
                 let cmd = match &lam_return {
                     LamellarReturn::LocalData(_) | LamellarReturn::LocalAm(_) =>{
                         panic!("Should not be returning local data from remote  am");
@@ -85,9 +85,9 @@ pub(crate) async fn exec_am_cmd(
                     LamellarReturn::Unit => ExecType::Runtime(Cmd::BatchedUnitReturn),//need to fix batched unit returns
                 };
                 ame.send_response(cmd, lam_return, msg, lamellae,team.my_hash).await
-            } else {
-                None
-            }
+            // } else {
+            //     None
+            // }
         }
         Cmd::ExecReturn => {
             match exec_am(ame, &ser_data, world, team,true).await {
@@ -141,7 +141,7 @@ pub(crate) async fn process_am_request(
         else{
             func.ser(1);
         };
-        let header = Some(SerializeHeader{msg: req_data.msg, team_hash: req_data.team_hash, id: Some(*id)});
+        let header = Some(SerializeHeader{msg: req_data.msg, team_hash: req_data.team_hash, id: *id});
         let serialize_size = func.serialized_size();
         // println!("func {:?} {:?}",func,serialize_size);
         let data = req_data.lamellae.serialize_header(header,serialize_size).await.unwrap();
@@ -218,7 +218,7 @@ async fn exec_am(
     // trace!("[{:?}] exec_am {:?}", ame.my_pe, data.len);
     if let Some(header) = data.deserialize_header(){
         trace!("exec am {:?}",header.id);   
-        let func = AMS_EXECS.get(&(header.id).unwrap()).unwrap()(data.data_as_bytes());
+        let func = AMS_EXECS.get(&(header.id)).unwrap()(data.data_as_bytes());
         func.exec( ame.my_pe, ame.num_pes,return_am , world.clone(), team).await
     }
     else{
@@ -242,13 +242,13 @@ pub(crate) async fn exec_local(
                 match func.exec(ame.my_pe, ame.num_pes, true, world.clone(), team.clone()).await {
                     LamellarReturn::LocalData(data) => {
                         trace!("local am data return");
-                        if msg.return_data {
-                            if let Ok(_) = ireq.data_tx.send((msg.src as usize, InternalResult::Local(data))) {} //if this returns an error it means the user has dropped the handle
-                            let cnt = ireq.cnt.fetch_sub(1, Ordering::SeqCst);
-                            if cnt == 1 {
-                                REQUESTS[msg.req_id % REQUESTS.len()].remove(&msg.req_id);
-                            }
+                        // if msg.return_data {
+                        if let Ok(_) = ireq.data_tx.send((msg.src as usize, InternalResult::Local(data))) {} //if this returns an error it means the user has dropped the handle
+                        let cnt = ireq.cnt.fetch_sub(1, Ordering::SeqCst);
+                        if cnt == 1 {
+                            REQUESTS[msg.req_id % REQUESTS.len()].remove(&msg.req_id);
                         }
+                        // }
                         ireq.team_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
                         ireq.world_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
                     }
@@ -257,13 +257,13 @@ pub(crate) async fn exec_local(
                         exec_return_am(ame, msg, am, ireq, world, team).await;
                     }
                     LamellarReturn::Unit => {
-                        if msg.return_data {
-                            if let Ok(_) = ireq.data_tx.send((msg.src as usize, InternalResult::Unit)) {} //if this returns an error it means the user has dropped the handle
-                            let cnt = ireq.cnt.fetch_sub(1, Ordering::SeqCst);
-                            if cnt == 1 {
-                                REQUESTS[msg.req_id % REQUESTS.len()].remove(&msg.req_id);
-                            }
+                        // if msg.return_data {
+                        if let Ok(_) = ireq.data_tx.send((msg.src as usize, InternalResult::Unit)) {} //if this returns an error it means the user has dropped the handle
+                        let cnt = ireq.cnt.fetch_sub(1, Ordering::SeqCst);
+                        if cnt == 1 {
+                            REQUESTS[msg.req_id % REQUESTS.len()].remove(&msg.req_id);
                         }
+                        // }
                         ireq.team_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
                         ireq.world_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
                     }
@@ -308,15 +308,15 @@ pub(crate) async fn exec_return_am(
                 match func.exec(ame.my_pe, ame.num_pes, true, world, team.clone()).await {
                     LamellarReturn::LocalData(data) => {
                         trace!("return am local am data");
-                        if msg.return_data {
-                            ireq.data_tx
-                                .send((msg.src as usize, InternalResult::Local(data)))
-                                .expect("error returning local data");
-                            let cnt = ireq.cnt.fetch_sub(1, Ordering::SeqCst);
-                            if cnt == 1 {
-                                REQUESTS[msg.req_id % REQUESTS.len()].remove(&msg.req_id);
-                            }
+                        // if msg.return_data {
+                        ireq.data_tx
+                            .send((msg.src as usize, InternalResult::Local(data)))
+                            .expect("error returning local data");
+                        let cnt = ireq.cnt.fetch_sub(1, Ordering::SeqCst);
+                        if cnt == 1 {
+                            REQUESTS[msg.req_id % REQUESTS.len()].remove(&msg.req_id);
                         }
+                        // }
                         ireq.team_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
                         ireq.world_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
                     }
@@ -329,18 +329,18 @@ pub(crate) async fn exec_return_am(
                         let result_size = func.serialized_result_size(&data);
                         let ser_data = team.lamellae.serialize_header(None,result_size).await.unwrap();
                         func.serialize_result_into(ser_data.data_as_bytes(),&data);
-                        if msg.return_data {
-                            ireq.data_tx
-                                .send((
-                                    msg.src as usize,
-                                    InternalResult::Remote(ser_data), 
-                                ))
-                                .expect("error returning remote data");
-                            let cnt = ireq.cnt.fetch_sub(1, Ordering::SeqCst);
-                            if cnt == 1 {
-                                REQUESTS[msg.req_id % REQUESTS.len()].remove(&msg.req_id);
-                            }
+                        // if msg.return_data {
+                        ireq.data_tx
+                            .send((
+                                msg.src as usize,
+                                InternalResult::Remote(ser_data), 
+                            ))
+                            .expect("error returning remote data");
+                        let cnt = ireq.cnt.fetch_sub(1, Ordering::SeqCst);
+                        if cnt == 1 {
+                            REQUESTS[msg.req_id % REQUESTS.len()].remove(&msg.req_id);
                         }
+                        // }
                         ireq.team_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
                         ireq.world_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
                     }
@@ -349,13 +349,13 @@ pub(crate) async fn exec_return_am(
                         println!("returning an am from a returned am not currently valid");
                     }
                     LamellarReturn::Unit =>{
-                        if msg.return_data {
-                            if let Ok(_) = ireq.data_tx.send((msg.src as usize, InternalResult::Unit)) {} //if this returns an error it means the user has dropped the handle
-                            let cnt = ireq.cnt.fetch_sub(1, Ordering::SeqCst);
-                            if cnt == 1 {
-                                REQUESTS[msg.req_id % REQUESTS.len()].remove(&msg.req_id);
-                            }
+                        // if msg.return_data {
+                        if let Ok(_) = ireq.data_tx.send((msg.src as usize, InternalResult::Unit)) {} //if this returns an error it means the user has dropped the handle
+                        let cnt = ireq.cnt.fetch_sub(1, Ordering::SeqCst);
+                        if cnt == 1 {
+                            REQUESTS[msg.req_id % REQUESTS.len()].remove(&msg.req_id);
                         }
+                        // }
                         ireq.team_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
                         ireq.world_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
                     }

@@ -105,6 +105,7 @@ impl SchedulerQueue for WorkStealing {
             func: func,
             lamellae: lamellae.clone(),
             team_hash: team_hash,
+            rt_req: false,
         };
         let ame = self.ame.clone();
         let work_inj = self.work_inj.clone();

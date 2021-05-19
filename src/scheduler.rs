@@ -26,6 +26,7 @@ pub(crate) struct ReqData {
     pub(crate) func: LamellarAny,
     pub(crate) lamellae: Arc<Lamellae>,
     pub(crate) team_hash: u64,
+    pub(crate) rt_req: bool,
 }
 
 // impl Drop for ReqData{
