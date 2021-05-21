@@ -2,7 +2,7 @@ use crate::lamellae::{Lamellae,LamellaeAM, LamellaeComm,SerializedData,Serialize
 use crate::lamellar_arch::StridedArch;
 use crate::lamellar_request::{InternalReq, LamellarRequest, InternalResult};
 use crate::lamellar_team::LamellarTeamRT;
-use crate::scheduler::{ReqData,AmeScheduler};
+use crate::scheduler::{NewReqData,AmeScheduler};
 // use async_trait::async_trait;
 use chashmap::CHashMap;
 use crossbeam::utils::CachePadded;
@@ -17,9 +17,9 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Weak};
 
 pub(crate) mod registered_active_message;
-use registered_active_message::{exec_am_cmd, process_am_request, AMS_EXECS,AMS_IDS};
-pub(crate) mod batched_registered_active_message;
-use batched_registered_active_message::BatchedActiveMessages;
+use registered_active_message::{AMS_EXECS,AMS_IDS,RegisteredActiveMessages};
+// pub(crate) mod batched_registered_active_message;
+// use batched_registered_active_message::BatchedActiveMessages;
 
 #[cfg(feature = "nightly")]
 pub(crate) mod remote_closures;
@@ -34,12 +34,19 @@ use remote_closures::{exec_closure_cmd, process_closure_request};
 //turn requests into a struct
 //impl insert, send_to_user -- (get, remove)
 lazy_static! {
-    pub(crate) static ref REQUESTS: Vec<CHashMap<usize, InternalReq>> = { //no reason for this to be static... we can put it im AME
-        let mut reqs = Vec::new();
-        for _i in 0..100 {
-            reqs.push(CHashMap::new());
-        }
-        reqs
+    // pub(crate) static ref REQUESTS: Vec<CHashMap<usize, InternalReq>> = { //no reason for this to be static... we can put it im AME
+    //     let mut reqs = Vec::new();
+    //     for _i in 0..100 {
+    //         reqs.push(CHashMap::new());
+    //     }
+    //     reqs
+    // };
+    pub(crate) static ref REQUESTS: Mutex<HashMap<usize, InternalReq>> = { //no reason for this to be static... we can put it im AME
+       Mutex::new(HashMap::new())
+        // for _i in 0..100 {
+        //     reqs.push(CHashMap::new());
+        // }
+        // reqs
     };
 }
 
@@ -58,7 +65,6 @@ pub trait DarcSerde {
     fn ser(&self,num_pes: usize);
     fn des(&self);
 }
-
 
 pub trait LamellarSerde:  Sync + Send {
     fn serialized_size(&self)->usize;
@@ -81,8 +87,13 @@ pub trait LamellarActiveMessage: DarcSerde + LamellarSerde + LamellarResultSerde
     fn get_id(&self) -> String;
 }
 
+pub (crate) enum LamellarFunc{
+    Am(LamellarArcAm),
+    Closure(LamellarAny),
+    None,
+}
 
-
+pub(crate) type LamellarArcAm = Arc<dyn LamellarActiveMessage + Send + Sync>;
 pub(crate) type LamellarBoxedAm = Box<dyn LamellarActiveMessage + Send + Sync>;
 // pub(crate) type LamellarBoxedData = Box<dyn LamellarSerde>;
 pub(crate) type LamellarAny = Box<dyn std::any::Any + Send + Sync>;
@@ -123,33 +134,7 @@ pub(crate) enum Cmd {
     ExecBatchMsgSend,
 }
 
-// #[repr(u8)]
-// #[derive(
-//     serde::Serialize, serde::Deserialize, Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord,
-// )]
-// pub(crate) enum InnerCmd {
-//     ClosureReq,
-//     ClosureReqLocal,
-//     ClosureResp,
-//     AmReq,
-//     AmReqLocal,
-//     AmResp,
-//     DataReq,
-//     DataResp,
-//     BatchReq,
-//     BatchResp,
-//     CompResp,
-//     Barrier,
-//     BarrierResp,
-//     UnitResp,
-//     BatchedUnitResp,
-//     BuffReq,
-//     NoHandleResp,
-//     AggregationReq,
-//     PutReq,
-//     GetReq,
-//     GetResp,
-// }
+
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone, Copy)]
 pub(crate) struct Msg {
     pub req_id: usize,
@@ -226,7 +211,7 @@ pub(crate) struct ActiveMessageEngine {
     _fake_arch: Arc<StridedArch>,
     teams: Arc<RwLock<HashMap<u64, Weak<LamellarTeamRT>>>>,
     pub(crate) scheduler: Weak<AmeScheduler>,
-    batched_am: Arc<BatchedActiveMessages>,
+    batched_am: Arc<RegisteredActiveMessages>,
 }
 
 //#[prof]
@@ -266,97 +251,87 @@ impl ActiveMessageEngine {
             _fake_arch: Arc::new(StridedArch::new(my_pe, 1, 1)),
             teams: teams,
             scheduler: scheduler.clone(),
-            batched_am: Arc::new(BatchedActiveMessages::new(scheduler.upgrade().unwrap())),
+            batched_am: Arc::new(RegisteredActiveMessages::new(scheduler.upgrade().unwrap())),
         }
     }
 
-    pub(crate) async fn process_msg(&self, req_data: ReqData) -> Option<ReqData> {
+    // pub(crate) async fn process_msg(&self, req_data: ReqData) -> Option<ReqData> {
+        // // trace!("[{:?}] process msg: {:?}",self.my_pe, &req_data);
+        // if !req_data.rt_req {//msg.return_data {
+        //     REQUESTS[req_data.msg.req_id % REQUESTS.len()]
+        //         .insert_new(req_data.msg.req_id, req_data.ireq.clone());
+        // }
+
+        // //we can probably include references to world and team in the ReqData
+        // let (world, team) = {
+        //     let teams = self.teams.read();
+        //     // println!("{:?}",&req_data);
+        //     let world = teams
+        //         .get(&0)
+        //         .expect("invalid hash id")
+        //         .upgrade()
+        //         .expect("world team no longer exists");
+        //     let team = teams
+        //         .get(&req_data.team_hash)
+        //         .expect("invalid hash id")
+        //         .upgrade()
+        //         .expect("team no longer exists");
+        //     (world, team)
+        // };
+
+        // let batch: Option<(Vec<u8>, ReqData)> = match req_data.msg.cmd.clone() {
+        //     ExecType::Runtime(cmd) => {
+        //         self.exec_runtime_cmd(
+        //             cmd,
+        //             req_data.msg,
+        //             req_data.lamellae.clone(),
+        //             None,
+        //             req_data.team_hash,
+        //             req_data.pe,
+        //             team.clone(),
+        //         ).await;
+        //         None
+        //     }
+        //     // ExecType::Am(_) => process_am_request(self, req_data, world, team.clone()).await,
+        //     ExecType::Am(_) => { self.batched_am.process_am_req(req_data,world,team.clone()).await;
+        //         None
+        //     },
+
+        //     #[cfg(feature = "nightly")]
+        //     ExecType::Closure(_) => process_closure_request(self, req_data, world, team.clone()),
+        // };
+    //     None
+        
+    // }
+
+    pub(crate) async fn process_msg_new(&self, req_data: NewReqData, ireq: Option<InternalReq>)  {
         // trace!("[{:?}] process msg: {:?}",self.my_pe, &req_data);
-        if !req_data.rt_req {//msg.return_data {
-            REQUESTS[req_data.msg.req_id % REQUESTS.len()]
-                .insert_new(req_data.msg.req_id, req_data.ireq.clone());
+        if let Some (ireq) = ireq{
+            REQUESTS.lock().insert(req_data.id, ireq.clone());
+            // REQUESTS[req_data.id % REQUESTS.len()]
+            //     .insert_new(req_data.id, ireq.clone());
         }
 
-        //we can probably include references to world and team in the ReqData
-        let (world, team) = {
-            let teams = self.teams.read();
-            // println!("{:?}",&req_data);
-            let world = teams
-                .get(&0)
-                .expect("invalid hash id")
-                .upgrade()
-                .expect("world team no longer exists");
-            let team = teams
-                .get(&req_data.team_hash)
-                .expect("invalid hash id")
-                .upgrade()
-                .expect("team no longer exists");
-            (world, team)
-        };
-
-        let batch: Option<(Vec<u8>, ReqData)> = match req_data.msg.cmd.clone() {
+        match req_data.cmd.clone() {
             ExecType::Runtime(cmd) => {
-                self.exec_runtime_cmd(
-                    cmd,
-                    req_data.msg,
-                    req_data.lamellae.clone(),
-                    None,
-                    req_data.team_hash,
-                    req_data.pe,
-                    team.clone(),
-                ).await;
-                None
+            //     self.exec_runtime_cmd(
+            //         cmd,
+            //         req_data.msg,
+            //         req_data.lamellae.clone(),
+            //         None,
+            //         req_data.team_hash,
+            //         req_data.pe,
+            //         team.clone(),
+            //     ).await;
+            //     None
             }
             // ExecType::Am(_) => process_am_request(self, req_data, world, team.clone()).await,
-            ExecType::Am(_) => { self.batched_am.process_am_req(req_data,world,team.clone()).await;
-                None
-            },
+            ExecType::Am(_) => self.batched_am.process_am_req(req_data).await,
 
             #[cfg(feature = "nightly")]
             ExecType::Closure(_) => process_closure_request(self, req_data, world, team.clone()),
-        };
-        if let Some((data, req_data)) = batch {
-            let id = if let Some(pe) = req_data.pe {
-                team.arch.world_pe(pe).expect("invalid pe") as u64 // aggregate to same pe across team boundaries
-            } else {
-                req_data.team_hash //use this to represent we want to send to all pes in the team
-            };
-            let mut pending_msg = self.pending_msg.lock();
-            let q = pending_msg
-                .entry(id)
-                .or_insert_with(crossbeam::queue::SegQueue::new);
-            q.push(data);
-            drop(pending_msg);
-            if let None = self.pending_msg_active.insert(id, 1) {
-                // no currently pending messages to send
-                // create the runtime task to send data
-                // self.batches_init.fetch_add(1,Ordering::SeqCst);
-                let my_any: LamellarAny = Box::new(0);
-                let msg = Msg {
-                    cmd: ExecType::Runtime(Cmd::ExecBatchMsgSend),
-                    src: self.my_pe as u16, //fake that this is from the original sender
-                    req_id: 0,
-                    // team_id: id as usize, // we use this as the lookup id int the hashmaps
-                    // return_data: false,
-                };
-                Some(ReqData {
-                    // team_arch: req_data,
-                    src: self.my_pe,
-                    pe: req_data.pe,
-                    msg: msg,
-                    ireq: self.fake_ireq.clone(),
-                    func: my_any,
-                    // backend: lamellae.backend(),
-                    lamellae: req_data.lamellae.clone(),
-                    team_hash: req_data.team_hash, // fake hash,
-                    rt_req: true,
-                })
-            } else {
-                None
-            }
-        } else {
-            None
         }
+        
     }
 
     pub(crate) async fn exec_runtime_cmd(
@@ -498,11 +473,12 @@ impl ActiveMessageEngine {
 
     pub(crate) async fn exec_msg(
         &self,
+        ame: Arc<ActiveMessageEngine>,
         msg: Msg,
         ser_data: SerializedData,
         lamellae: Arc<Lamellae>,
         team_hash: u64,
-    ) -> Option<ReqData> {
+    )  {
         trace!("[{:?}] exec_msg: {:?}", self.my_pe, msg);
         let (world, team) = {
             let teams = self.teams.read();
@@ -522,8 +498,7 @@ impl ActiveMessageEngine {
         match msg.cmd.clone() {
             // ExecType::Am(cmd) => exec_am_cmd(self, cmd, msg, ser_data, lamellae, world, team).await, //execute a remote am
             ExecType::Am(cmd) => {
-                self.batched_am.process_batched_am(cmd, msg, ser_data, lamellae, world, team).await;
-                None
+                self.batched_am.process_batched_am(ame, cmd, msg, ser_data, lamellae, world, team).await;
             }, //execute a remote am
 
             #[cfg(feature = "nightly")]
@@ -532,157 +507,204 @@ impl ActiveMessageEngine {
             }
             ExecType::Runtime(cmd) => {
                 self.exec_runtime_cmd(cmd, msg, lamellae, Some(ser_data), team_hash, None, team).await;
-                None
             }
         }
     }
 
+    // pub(crate) async fn exec_msg_old(
+    //     &self,
+    //     msg: Msg,
+    //     ser_data: SerializedData,
+    //     lamellae: Arc<Lamellae>,
+    //     team_hash: u64,
+    // ) -> Option<ReqData> {
+    //     trace!("[{:?}] exec_msg: {:?}", self.my_pe, msg);
+    //     let (world, team) = {
+    //         let teams = self.teams.read();
+    //         let world = teams
+    //             .get(&0)
+    //             .expect("invalid hash id")
+    //             .upgrade()
+    //             .expect("world team no longer exists");
+    //         let team = teams
+    //             .get(&team_hash)
+    //             .expect("invalid hash id")
+    //             .upgrade()
+    //             .expect("team no longer exists");
+    //         (world, team)
+    //     };
+    //     trace!("using team {:?}", team.my_hash);
+    //     match msg.cmd.clone() {
+    //         // ExecType::Am(cmd) => exec_am_cmd(self, cmd, msg, ser_data, lamellae, world, team).await, //execute a remote am
+    //         ExecType::Am(cmd) => {
+    //             self.batched_am.process_batched_am(cmd, msg, ser_data, lamellae, world, team).await;
+    //             None
+    //         }, //execute a remote am
+
+    //         #[cfg(feature = "nightly")]
+    //         ExecType::Closure(cmd) => {
+    //             exec_closure_cmd(self, cmd, msg, ser_data, lamellae, world, team)
+    //         }
+    //         ExecType::Runtime(cmd) => {
+    //             self.exec_runtime_cmd(cmd, msg, lamellae, Some(ser_data), team_hash, None, team).await;
+    //             None
+    //         }
+    //     }
+    // }
+
+    
+
     // make this an associated function... or maybe make a "REQUESTS struct which will have a send_data_to_user_handle" 
     fn send_data_to_user_handle(req_id: usize, pe: u16, data: InternalResult) { 
-        let res = REQUESTS[req_id % REQUESTS.len()].get(&req_id);
-        match res {
-            Some(v) => {
-                let ireq = v.clone();
-                drop(v); //release lock in the hashmap
+        let reqs = REQUESTS.lock();
+        // let res = REQUESTS[req_id % REQUESTS.len()].get(&req_id);
+        // println!("finalize {:?}",req_id);
+        match reqs.get(&req_id) {
+            Some(ireq) => {
+                let ireq = ireq.clone();
+                drop(reqs); //release lock in the hashmap
                 // trace!("[{:?}] send_data_to_user_handle {:?}", self.my_pe, ireq);
                 ireq.team_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
                 ireq.world_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
                 if let Ok(_) = ireq.data_tx.send((pe as usize,data)) {} //if this returns an error it means the user has dropped the handle
                 let cnt = ireq.cnt.fetch_sub(1, Ordering::SeqCst);
                 if cnt == 1 {
-                    REQUESTS[req_id % REQUESTS.len()].remove(&req_id);
+                    REQUESTS.lock().remove(&req_id);
+                    // REQUESTS[req_id % REQUESTS.len()].remove(&req_id);
                 }
             }
-            None => println!("error id not found"),
+            None => panic!("error id not found"),
         }
     }
 
-    async fn send_response( //will always be to remote node
-        &self,
-        cmd: ExecType,
-        data: LamellarReturn, // this should be option<Box<dyn Ser/De>> LamellarReturn
-        msg: Msg,
-        lamellae: Arc<Lamellae>,
-        team_hash: u64,
-    ) -> Option<ReqData> {
-        // let s = Instant::now();
-        trace!(
-            "[{:?}] send response {:?} {:?} {:?}",
-            self.my_pe,
-            cmd,
-            msg,
-            lamellae.backend()
-        );
-        match cmd {
-            ExecType::Runtime(Cmd::BatchedUnitReturn) => {
-                let active = {
-                    self.pending_resp.lock().entry(msg.src)
-                    .and_modify(|e| { e.push(msg.req_id) })
-                    .or_insert_with(|| {
-                        let q = crossbeam::queue::SegQueue::new();
-                        q.push(msg.req_id);
-                        q
-                    });
-                    self.pending_active.lock().insert(msg.src, 1)
-                };
-                if let None =  active{
-                    let my_any: LamellarAny = Box::new(0);
-                    let msg = Msg {
-                        cmd: ExecType::Runtime(Cmd::ExecBatchUnitReturns),
-                        src: msg.src as u16, //fake that this is from the original sender
-                        req_id: 0,
-                    };
-                    Some(ReqData {
-                        src: self.my_pe,
-                        pe: Some(self.my_pe),
-                        msg: msg,
-                        ireq: self.fake_ireq.clone(),
-                        func: my_any,
-                        lamellae: lamellae,
-                        team_hash: team_hash, // fake hash,
-                        rt_req: true,
-                    })
-                } else {
-                    None
-                }
-            }
-            ExecType::Runtime(Cmd::UnitReturn) => {
-                let rmsg = Msg {
-                    cmd: cmd,
-                    src: self.my_pe as u16,
-                    req_id: msg.req_id,
-                };
-                let header = Some(SerializeHeader{msg: rmsg, team_hash: team_hash, id: 0});
-                let data = lamellae.serialize(header,&()).await.unwrap();
-                lamellae.send_to_pe_async(msg.src as usize,  data
-                ).await;
-                None
-            }
-            ExecType::Runtime(Cmd::DataReturn) =>{
-                let rmsg = Msg {
-                    cmd: cmd,
-                    src: self.my_pe as u16,
-                    req_id: msg.req_id,
-                    // team_id: msg.team_id,
-                    // return_data: false,
-                };
-                if let LamellarReturn::RemoteData(result,func) = data{
-                    let result_size = func.serialized_result_size(&result);
-                    let header = Some(SerializeHeader{msg: rmsg, team_hash: team_hash, id: 0});
-                    let data = lamellae.serialize_header(header,result_size).await.unwrap();
-                    func.serialize_result_into(data.data_as_bytes(),&result);
-                    lamellae.send_to_pe_async(msg.src as usize,  data).await;
-                }
-                else{
-                    panic!("should i be here?");
-                }
-                None
-            }
-            ExecType::Am(Cmd::ExecReturn)=> {
-                let rmsg = Msg {
-                    cmd: cmd,
-                    src: self.my_pe as u16,
-                    req_id: msg.req_id,
-                    // team_id: msg.team_id,
-                    // return_data: false,
-                };
-                if let LamellarReturn::RemoteAm(am) = data {
-                    let id = *AMS_IDS.get(&am.get_id()).unwrap();
-                    let header = Some(SerializeHeader{msg: rmsg, team_hash: team_hash, id: id});
-                    let serialized_size = am.serialized_size();
-                    let data = lamellae.serialize_header(header,serialized_size).await.unwrap();
-                    am.serialize_into(data.data_as_bytes());
-                    lamellae.send_to_pe_async(msg.src as usize,  data).await;
-                }
-                else{
-                    panic!("Should i be here?");
-                }
-                None
-            }
-            #[cfg(feature = "nightly")]
-            ExecType::Closure(Cmd::ExecReturn) => {
-                let rmsg = Msg {
-                    cmd: cmd,
-                    src: self.my_pe as u16,
-                    req_id: msg.req_id,
-                    // team_id: msg.team_id,
-                    // return_data: false,
-                };
-                // let data = data.unwrap();
-                // let payload = (rmsg, data, team_hash);
-                let header = Some(SerializeHeader{msg: rmsg, team_hash: team_hash});
-                let data = lamellae.serialize(header,data).await.unwrap();
-                lamellae.send_to_pe_async(msg.src as usize, data,
-                    crate::lamellae::serialize(&payload,lamellae.clone()).await.unwrap()
-                ).await;
-                None
-            }
-            _ => {
-                trace!("send_resp unknown command {:#?}", cmd);
-                None
-            }
-        }
-        // let b = s.elapsed().as_millis() as usize;
-        // (*self.timers.get(&msg.cmd).unwrap()).fetch_add(b, Ordering::Relaxed);
-    }
+//     async fn send_response( //will always be to remote node
+//         &self,
+//         cmd: ExecType,
+//         data: LamellarReturn, // this should be option<Box<dyn Ser/De>> LamellarReturn
+//         msg: Msg,
+//         lamellae: Arc<Lamellae>,
+//         team_hash: u64,
+//     ) -> Option<ReqData> {
+//         // let s = Instant::now();
+//         trace!(
+//             "[{:?}] send response {:?} {:?} {:?}",
+//             self.my_pe,
+//             cmd,
+//             msg,
+//             lamellae.backend()
+//         );
+//         match cmd {
+//             ExecType::Runtime(Cmd::BatchedUnitReturn) => {
+//                 // let active = {
+//                 //     self.pending_resp.lock().entry(msg.src)
+//                 //     .and_modify(|e| { e.push(msg.req_id) })
+//                 //     .or_insert_with(|| {
+//                 //         let q = crossbeam::queue::SegQueue::new();
+//                 //         q.push(msg.req_id);
+//                 //         q
+//                 //     });
+//                 //     self.pending_active.lock().insert(msg.src, 1)
+//                 // };
+//                 // if let None =  active{
+//                 //     let my_any: LamellarAny = Box::new(0);
+//                 //     let msg = Msg {
+//                 //         cmd: ExecType::Runtime(Cmd::ExecBatchUnitReturns),
+//                 //         src: msg.src as u16, //fake that this is from the original sender
+//                 //         req_id: 0,
+//                 //     };
+//                 //     Some(ReqData {
+//                 //         src: self.my_pe,
+//                 //         pe: Some(self.my_pe),
+//                 //         msg: msg,
+//                 //         ireq: self.fake_ireq.clone(),
+//                 //         func: my_any,
+//                 //         lamellae: lamellae,
+//                 //         team_hash: team_hash, // fake hash,
+//                 //         rt_req: true,
+//                 //     })
+//                 // } else {
+//                 //     None
+//                 // }
+//                 None
+//             }
+//             ExecType::Runtime(Cmd::UnitReturn) => {
+//                 let rmsg = Msg {
+//                     cmd: cmd,
+//                     src: self.my_pe as u16,
+//                     req_id: msg.req_id,
+//                 };
+//                 let header = Some(SerializeHeader{msg: rmsg, team_hash: team_hash, id: 0});
+//                 let data = lamellae.serialize(header,&()).await.unwrap();
+//                 lamellae.send_to_pe_async(msg.src as usize,  data
+//                 ).await;
+//                 None
+//             }
+//             ExecType::Runtime(Cmd::DataReturn) =>{
+//                 let rmsg = Msg {
+//                     cmd: cmd,
+//                     src: self.my_pe as u16,
+//                     req_id: msg.req_id,
+//                     // team_id: msg.team_id,
+//                     // return_data: false,
+//                 };
+//                 if let LamellarReturn::RemoteData(result,func) = data{
+//                     let result_size = func.serialized_result_size(&result);
+//                     let header = Some(SerializeHeader{msg: rmsg, team_hash: team_hash, id: 0});
+//                     let data = lamellae.serialize_header(header,result_size).await.unwrap();
+//                     func.serialize_result_into(data.data_as_bytes(),&result);
+//                     lamellae.send_to_pe_async(msg.src as usize,  data).await;
+//                 }
+//                 else{
+//                     panic!("should i be here?");
+//                 }
+//                 None
+//             }
+//             ExecType::Am(Cmd::ExecReturn)=> {
+//                 let rmsg = Msg {
+//                     cmd: cmd,
+//                     src: self.my_pe as u16,
+//                     req_id: msg.req_id,
+//                     // team_id: msg.team_id,
+//                     // return_data: false,
+//                 };
+//                 if let LamellarReturn::RemoteAm(am) = data {
+//                     let id = *AMS_IDS.get(&am.get_id()).unwrap();
+//                     let header = Some(SerializeHeader{msg: rmsg, team_hash: team_hash, id: id});
+//                     let serialized_size = am.serialized_size();
+//                     let data = lamellae.serialize_header(header,serialized_size).await.unwrap();
+//                     am.serialize_into(data.data_as_bytes());
+//                     lamellae.send_to_pe_async(msg.src as usize,  data).await;
+//                 }
+//                 else{
+//                     panic!("Should i be here?");
+//                 }
+//                 None
+//             }
+//             #[cfg(feature = "nightly")]
+//             ExecType::Closure(Cmd::ExecReturn) => {
+//                 let rmsg = Msg {
+//                     cmd: cmd,
+//                     src: self.my_pe as u16,
+//                     req_id: msg.req_id,
+//                     // team_id: msg.team_id,
+//                     // return_data: false,
+//                 };
+//                 // let data = data.unwrap();
+//                 // let payload = (rmsg, data, team_hash);
+//                 let header = Some(SerializeHeader{msg: rmsg, team_hash: team_hash});
+//                 let data = lamellae.serialize(header,data).await.unwrap();
+//                 lamellae.send_to_pe_async(msg.src as usize, data,
+//                     crate::lamellae::serialize(&payload,lamellae.clone()).await.unwrap()
+//                 ).await;
+//                 None
+//             }
+//             _ => {
+//                 trace!("send_resp unknown command {:#?}", cmd);
+//                 None
+//             }
+//         }
+//         // let b = s.elapsed().as_millis() as usize;
+//         // (*self.timers.get(&msg.cmd).unwrap()).fetch_add(b, Ordering::Relaxed);
+//     }
+// }
 }

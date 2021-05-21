@@ -269,7 +269,7 @@ impl LamellarWorld {
     where
         L: LamellarArch + std::hash::Hash + 'static,
     {
-        if let Some(team) = LamellarTeamRT::create_subteam_from_arch(self.team_rt.clone(), arch) {
+        if let Some(team) = LamellarTeamRT::create_subteam_from_arch(self.team_rt.clone(),self.team_rt.clone(), arch) {
             self.teams
                 .write()
                 .insert(team.my_hash, Arc::downgrade(&team));

@@ -80,7 +80,13 @@ impl LamellarTeam {
     where
         L: LamellarArch + std::hash::Hash + 'static,
     {
-        if let Some(team) = LamellarTeamRT::create_subteam_from_arch(self.team.clone(), arch) {
+        let world = if let Some(world) = &self.team.world{
+            world.clone()
+        }
+        else{
+            self.team.clone()
+        };
+        if let Some(team) = LamellarTeamRT::create_subteam_from_arch(world,self.team.clone(), arch) {
             self.teams
                 .write()
                 .insert(team.my_hash, Arc::downgrade(&team));
@@ -149,6 +155,7 @@ impl ActiveMessaging for LamellarTeam {
 
 pub struct LamellarTeamRT {
     #[allow(dead_code)]
+    world: Option<Arc<LamellarTeamRT>>,
     parent: Option<Arc<LamellarTeamRT>>,
     sub_teams: RwLock<HashMap<usize, Arc<LamellarTeamRT>>>,
     mem_regions: RwLock<HashMap<usize, Box<dyn MemoryRegion + Sync + Send >>>,
@@ -197,6 +204,7 @@ impl LamellarTeamRT {
 
         let alloc = AllocationType::Global;
         let team = LamellarTeamRT {
+            world: None,
             parent: None,
             sub_teams: RwLock::new(HashMap::new()),
             mem_regions: RwLock::new(HashMap::new()),
@@ -235,7 +243,7 @@ impl LamellarTeamRT {
             //TODO: i have a gut feeling we might have an issue if a mem region was destroyed on one node, but not another
             // add a barrier method that takes a message so if we are stuck in the barrier for a long time we can say that
             // this is probably mismatched frees.
-            self.barrier();
+            self.barrier.barrier();
         }
         self.mem_regions.write().clear();
         self.sub_teams.write().clear(); // not sure this is necessary or should be allowed? sub teams delete themselves from this map when dropped...
@@ -253,6 +261,7 @@ impl LamellarTeamRT {
     }
 
     pub fn create_subteam_from_arch<L>(
+        world: Arc<LamellarTeamRT>,
         parent: Arc<LamellarTeamRT>,
         arch: L,
     ) -> Option<Arc<LamellarTeamRT>>
@@ -306,6 +315,7 @@ impl LamellarTeamRT {
             }
             let num_pes = archrt.num_pes();
             let team = LamellarTeamRT {
+                world: Some(world.clone()),
                 parent: Some(parent.clone()),
                 sub_teams: RwLock::new(HashMap::new()),
                 mem_regions: RwLock::new(HashMap::new()),
@@ -474,7 +484,7 @@ impl LamellarTeamRT {
 }
 
 // #[prof]
-impl ActiveMessaging for LamellarTeamRT {
+impl ActiveMessaging for Arc<LamellarTeamRT> {
     fn wait_all(&self) {
         let mut temp_now = Instant::now();
         while self.team_counters.outstanding_reqs.load(Ordering::SeqCst) > 0 {
@@ -510,24 +520,43 @@ impl ActiveMessaging for LamellarTeamRT {
             self.team_counters.outstanding_reqs.clone(),
             self.world_counters.outstanding_reqs.clone(),
         );
-        let msg = Msg {
-            cmd: ExecType::Am(Cmd::Exec),
-            src: self.world_pe as u16,
-            req_id: my_req.id,
-            // team_id: self.id,
-            // return_data: true,
-        };
+        // let msg = Msg {
+        //     cmd: ExecType::Am(Cmd::Exec),
+        //     src: self.world_pe as u16,
+        //     req_id: my_req.id,
+        //     // team_id: self.id,
+        //     // return_data: true,
+        // };
         self.world_counters.add_send_req(self.num_pes);
         self.team_counters.add_send_req(self.num_pes);
-        let my_any: LamellarAny =Box::new(Box::new(am) as LamellarBoxedAm);
-        self.scheduler.submit_req(
+        // let my_any: LamellarAny =Box::new(Box::new(am) as LamellarBoxedAm);
+        let func: LamellarArcAm = Arc::new(am);
+        // self.scheduler.submit_req(
+        //     self.world_pe,
+        //     None,
+        //     msg,
+        //     ireq,
+        //     LamellarFunc::Am(func),
+        //     self.lamellae.clone(),
+        //     self.my_hash,
+        // );
+        let world = if let Some(world) = &self.world{
+            world.clone()
+        }
+        else{
+            self.clone()
+        };
+        self.scheduler.submit_req_new(
             self.world_pe,
             None,
-            msg,
-            ireq,
-            my_any,
+            ExecType::Am(Cmd::Exec),
+            my_req.id,
+            LamellarFunc::Am(func),
             self.lamellae.clone(),
+            world,
+            self.clone(),
             self.my_hash,
+            Some(ireq),
         );
         Box::new(my_req)
     }
@@ -554,30 +583,49 @@ impl ActiveMessaging for LamellarTeamRT {
         );
         prof_end!(req);
         prof_start!(msg);
-        let msg = Msg {
-            cmd: ExecType::Am(Cmd::Exec),
-            src: self.world_pe as u16,
-            req_id: my_req.id,
-            // team_id: self.id,
-            // return_data: true,
-        };
+        // let msg = Msg {
+        //     cmd: ExecType::Am(Cmd::Exec),
+        //     src: self.world_pe as u16,
+        //     req_id: my_req.id,
+        //     // team_id: self.id,
+        //     // return_data: true,
+        // };
         prof_end!(msg);
         prof_start!(counters);
         self.world_counters.add_send_req(1);
         self.team_counters.add_send_req(1);
         prof_end!(counters);
         prof_start!(any);
-        let my_any: LamellarAny = Box::new(Box::new(am) as LamellarBoxedAm);
+        // let my_any: LamellarAny = Box::new(Box::new(am) as LamellarBoxedAm);
+        let func: LamellarArcAm = Arc::new(am);
         prof_end!(any);
         prof_start!(sub);
-        self.scheduler.submit_req(
+        // self.scheduler.submit_req(
+        //     self.world_pe,
+        //     Some(pe),
+        //     msg,
+        //     ireq,
+        //     LamellarFunc::Am(func),
+        //     self.lamellae.clone(),
+        //     self.my_hash,
+        // );
+        let world = if let Some(world) = &self.world{
+            world.clone()
+        }
+        else{
+            self.clone()
+        };
+        self.scheduler.submit_req_new(
             self.world_pe,
             Some(pe),
-            msg,
-            ireq,
-            my_any,
+            ExecType::Am(Cmd::Exec),
+            my_req.id,
+            LamellarFunc::Am(func),
             self.lamellae.clone(),
+            world,
+            self.clone(),
             self.my_hash,
+            Some(ireq),
         );
         prof_end!(sub);
         Box::new(my_req)
@@ -616,7 +664,8 @@ impl ActiveMessaging for LamellarTeamRT {
         self.team_counters.add_send_req(1);
         prof_end!(counters);
         prof_start!(any);
-        let my_any: LamellarAny = Box::new(Box::new(am) as LamellarBoxedAm);
+        // let my_any: LamellarAny = Box::new(Box::new(am) as LamellarBoxedAm);
+        let func: LamellarArcAm = Arc::new(am);
         prof_end!(any);
         prof_start!(sub);
         self.scheduler.submit_req(
@@ -624,7 +673,7 @@ impl ActiveMessaging for LamellarTeamRT {
             Some(self.team_pe.unwrap()),
             msg,
             ireq,
-            my_any,
+            LamellarFunc::Am(func),
             self.lamellae.clone(),
             self.my_hash,
         );
@@ -879,7 +928,7 @@ impl RemoteMemoryRegion for LamellarTeamRT {
         &self,
         size: usize,
     ) -> LamellarMemoryRegion<T> {
-        self.barrier();
+        self.barrier.barrier();
         let lmr = if self.num_world_pes == self.num_pes{
             LamellarMemoryRegion::new(size, self.lamellae.clone(), AllocationType::Global)
         }
@@ -889,7 +938,7 @@ impl RemoteMemoryRegion for LamellarTeamRT {
         self.mem_regions
             .write()
             .insert(lmr.id(), Box::new(lmr.clone()));
-        self.barrier();
+        self.barrier.barrier();
         lmr
     }
 
@@ -937,7 +986,7 @@ impl RemoteMemoryRegion for LamellarTeamRT {
         &self,
         region: LamellarMemoryRegion<T>,
     ) {
-        self.barrier();
+        self.barrier.barrier();
         self.mem_regions.write().remove(&region.id());
     }
 

@@ -23,10 +23,23 @@ pub(crate) struct ReqData {
     pub(crate) pe: Option<usize>, //team based pe id
     pub(crate) msg: Msg,
     pub(crate) ireq: InternalReq,
-    pub(crate) func: LamellarAny,
+    pub(crate) func: LamellarFunc,
     pub(crate) lamellae: Arc<Lamellae>,
     pub(crate) team_hash: u64,
     pub(crate) rt_req: bool,
+}
+
+pub(crate) struct NewReqData{
+    pub(crate) src: usize,
+    pub(crate) dst: Option<usize>, //team based pe id
+    pub(crate) cmd: ExecType,
+    pub(crate) id: usize,
+    pub(crate) func: LamellarFunc,
+    pub(crate) lamellae: Arc<Lamellae>,
+    pub(crate) world: Arc<LamellarTeamRT>,
+    pub(crate) team: Arc<LamellarTeamRT>,
+    pub(crate) team_hash: u64,
+    // pub(crate) rt_req: bool,
 }
 
 // impl Drop for ReqData{
@@ -55,9 +68,24 @@ pub(crate) trait AmeSchedulerQueue: Sync + Send {
         pe: Option<usize>,
         msg: Msg,
         ireq: InternalReq,
-        func: LamellarAny,
+        func: LamellarFunc,
         lamellae: Arc<Lamellae>,
         team_hash: u64,
+    );
+    fn submit_req_new(
+        //unserialized request
+        &self,
+        ame:  Arc<ActiveMessageEngine>,
+        src: usize,
+        dst: Option<usize>,
+        cmd: ExecType,
+        id: usize,
+        func: LamellarFunc,
+        lamellae: Arc<Lamellae>,
+        world: Arc<LamellarTeamRT>,
+        team: Arc<LamellarTeamRT>,
+        team_hash: u64,
+        ireq: Option<InternalReq>,
     );
     fn submit_work(&self, ame:  Arc<ActiveMessageEngine>, msg: SerializedData, lamellae: Arc<Lamellae>,); //serialized active message
     fn submit_task<F>(&self,future: F )
@@ -80,9 +108,23 @@ pub(crate) trait SchedulerQueue: Sync + Send {
         pe: Option<usize>,
         msg: Msg,
         ireq: InternalReq,
-        func: LamellarAny,
+        func: LamellarFunc,
         lamellae: Arc<Lamellae>,
         team_hash: u64,
+    );
+    fn submit_req_new(
+        //unserialized request
+        &self,
+        src: usize,
+        dst: Option<usize>,
+        cmd: ExecType,
+        id: usize,
+        func: LamellarFunc,
+        lamellae: Arc<Lamellae>,
+        world: Arc<LamellarTeamRT>,
+        team: Arc<LamellarTeamRT>,
+        team_hash: u64,
+        ireq: Option<InternalReq>,
     );
     fn submit_work(&self, msg: SerializedData, lamellae: Arc<Lamellae>); //serialized active message
     fn submit_task<F>(&self,future: F )
