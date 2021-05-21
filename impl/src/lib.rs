@@ -248,7 +248,7 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_type: AmType) -> 
 
     let mut expanded = quote! {
         impl #generics #lamellar::LamellarActiveMessage for #orig_name#generics_args {
-            fn exec(self: Box<Self>,__lamellar_current_pe: usize,__lamellar_num_pes: usize, __local: bool, __lamellar_world: std::sync::Arc<#lamellar::LamellarTeamRT>, __lamellar_team: std::sync::Arc<#lamellar::LamellarTeamRT>) -> std::pin::Pin<Box<dyn std::future::Future<Output=#lamellar::LamellarReturn> + Send>>{
+            fn exec(&self,__lamellar_current_pe: usize,__lamellar_num_pes: usize, __local: bool, __lamellar_world: std::sync::Arc<#lamellar::LamellarTeamRT>, __lamellar_team: std::sync::Arc<#lamellar::LamellarTeamRT>) -> std::pin::Pin<Box<dyn std::future::Future<Output=#lamellar::LamellarReturn> + Send>>{
                 Box::pin( async move {
                 #temp    
                 #ret_statement
@@ -272,12 +272,12 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_type: AmType) -> 
             
         }
         impl #generics #lamellar::LamellarResultSerde for #orig_name#generics_args {
-            fn serialized_result_size(&self,result: &Box<dyn std::any::Any + Send>)->usize{
+            fn serialized_result_size(&self,result: &Box<dyn std::any::Any + Send + Sync>)->usize{
                 let result  = result.downcast_ref::<#ret_type>().unwrap();
                 #lamellar::serialized_size(result)
                 
             }
-            fn serialize_result_into(&self,buf: &mut [u8],result: &Box<dyn std::any::Any + Send>){
+            fn serialize_result_into(&self,buf: &mut [u8],result: &Box<dyn std::any::Any + Send + Sync>){
                 let result  = result.downcast_ref::<#ret_type>().unwrap();
                 #lamellar::serialize_into(buf,result).unwrap();
             }

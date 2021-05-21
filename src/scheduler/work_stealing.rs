@@ -2,7 +2,7 @@ use crate::active_messaging::{ActiveMessageEngine, Cmd, ExecType, LamellarAny, M
 use crate::lamellae::{Lamellae,SerializedData,Des};
 use crate::lamellar_request::InternalReq;
 use crate::lamellar_team::LamellarTeamRT;
-use crate::scheduler::{ReqData, SchedulerQueue};
+use crate::scheduler::{ReqData, SchedulerQueue,AmeSchedulerQueue,AmeScheduler};
 use lamellar_prof::*;
 // use log::trace;
 use parking_lot::RwLock;
@@ -75,20 +75,19 @@ impl WorkStealingThread {
     }
 }
 
-pub(crate) struct WorkStealing {
+pub(crate) struct WorkStealingInner {
     threads: Vec<thread::JoinHandle<()>>,
     work_inj: Arc<crossbeam::deque::Injector<async_task::Runnable>>,
     work_stealers: Vec<crossbeam::deque::Stealer<async_task::Runnable>>,
-    ame: Arc<ActiveMessageEngine>,
     active: Arc<AtomicBool>,
     active_cnt: Arc<AtomicUsize>,
     num_tasks: Arc<AtomicUsize>,
 }
 
-//#[prof]
-impl SchedulerQueue for WorkStealing {
+impl AmeSchedulerQueue for WorkStealingInner {
     fn submit_req(
         &self,
+        ame:  Arc<ActiveMessageEngine>,
         src: usize,
         pe: Option<usize>,
         msg: Msg,
@@ -107,10 +106,8 @@ impl SchedulerQueue for WorkStealing {
             team_hash: team_hash,
             rt_req: false,
         };
-        let ame = self.ame.clone();
         let work_inj = self.work_inj.clone();
         // let num_tasks = self.num_tasks.clone();
-        
         // println!("submitting_req");
         let future = async move {
             // num_tasks.fetch_add(1,Ordering::Relaxed);
@@ -136,27 +133,28 @@ impl SchedulerQueue for WorkStealing {
         task.detach();
     }
 
-    fn submit_work(&self, data: SerializedData, lamellae: Arc<Lamellae>) {
-        let ame = self.ame.clone();
+    fn submit_work(&self,  ame:  Arc<ActiveMessageEngine>, data: SerializedData, lamellae: Arc<Lamellae>) {
         let work_inj = self.work_inj.clone();
         // let num_tasks = self.num_tasks.clone();
         let future = async move {
             // num_tasks.fetch_add(1,Ordering::Relaxed);
             if let Some(header) = data.deserialize_header(){
                 let msg = header.msg;
-                if msg.cmd == ExecType::Runtime(Cmd::BatchedMsg) {
-                    panic!("fix this!!!");
-                    // let mut reqs: Vec<Vec<u8>> = data.deserialize_data().unwrap();
-                    // for req in reqs.drain(..) {
-                    //     WorkStealing::submit_work_batch(
-                    //         req,
-                    //         lamellae.clone(),
-                    //         ame.clone(),
-                    //         work_inj.clone(),
-                    //     );
-                    // }
-                } 
-                else if let Some(req_data) = ame.exec_msg(msg, data, lamellae, header.team_hash).await {
+                // println!("message {:?}",msg);
+                // if msg.cmd == ExecType::Am(Cmd::BatchedMsg) {
+                //     panic!("fix this!!!");
+                //     // let mut reqs: Vec<Vec<u8>> = data.deserialize_data().unwrap();
+                //     // for req in reqs.drain(..) {
+                //     //     WorkStealing::submit_work_batch(
+                //     //         req,
+                //     //         lamellae.clone(),
+                //     //         ame.clone(),
+                //     //         work_inj.clone(),
+                //     //     );
+                //     // }
+                // } 
+                // else
+                 if let Some(req_data) = ame.exec_msg(msg, data, lamellae, header.team_hash).await {
                     // let num_tasks=num_tasks.clone(); 
                     let future = async move {
                         // num_tasks.fetch_add(1,Ordering::Relaxed);
@@ -191,30 +189,56 @@ impl SchedulerQueue for WorkStealing {
         runnable.schedule();
         task.detach();
     }
-
     fn shutdown(&self){
         self.active.store(false, Ordering::Relaxed);
         while self.active_cnt.load(Ordering::Relaxed) > 0 {std::thread::yield_now()}
         
+    }
+}
+
+
+
+//#[prof]
+impl SchedulerQueue for WorkStealing {
+    fn submit_req(
+        &self,
+        src: usize,
+        pe: Option<usize>,
+        msg: Msg,
+        ireq: InternalReq,
+        func: LamellarAny,
+        lamellae: Arc<Lamellae>,
+        team_hash: u64,
+    ) {
+        self.inner.submit_req(self.ame.clone(),src,pe,msg,ireq,func,lamellae,team_hash);
+    }
+
+    fn submit_work(&self, data: SerializedData, lamellae: Arc<Lamellae>) {
+        self.inner.submit_work(self.ame.clone(),data,lamellae);
+    }
+
+    fn submit_task<F>(&self,future: F )
+    where 
+        F: Future<Output = ()> + Send + 'static {
+        self.inner.submit_task(future);
+    }
+
+    fn shutdown(&self){
+        self.inner.shutdown();        
     }
 
 }
 
 
 //#[prof]
-impl WorkStealing {
-    pub(crate) fn new(
-        num_pes: usize,
-        my_pe: usize,
-        teams: Arc<RwLock<HashMap<u64, Weak<LamellarTeamRT>>>>,
-    ) -> WorkStealing {
+impl WorkStealingInner {
+    pub(crate) fn new()-> WorkStealingInner {
         // println!("new work stealing queue");
         
-        let mut sched = WorkStealing {
+        let mut sched = WorkStealingInner {
             threads: Vec::new(),
             work_inj: Arc::new(crossbeam::deque::Injector::new()),
             work_stealers: Vec::new(),
-            ame: Arc::new(ActiveMessageEngine::new(num_pes, my_pe, teams)),
             active: Arc::new(AtomicBool::new(true)),
             active_cnt: Arc::new(AtomicUsize::new(0)),
             num_tasks: Arc::new(AtomicUsize::new(0)),
@@ -261,41 +285,61 @@ impl WorkStealing {
         }
     }
 
-    fn submit_work_batch(
-        data: SerializedData,
-        lamellae: Arc<Lamellae>,
-        ame: Arc<ActiveMessageEngine>,
-        work_inj: Arc<crossbeam::deque::Injector<async_task::Runnable>>,
-    ) {
-        let ame = ame.clone();
-        let work_inj_clone = work_inj.clone();
-        let future = async move {
-            if let Some(header) = data.deserialize_header(){
-                let msg = header.msg;
-                if let Some(req_data) = ame.exec_msg(msg, data, lamellae, header.team_hash).await { //need to update for req data
-                    let future = async move {
-                        ame.process_msg(req_data).await;
-                    };
-                    let schedule = move |runnable| work_inj_clone.push(runnable);
-                    let (runnable, task) = async_task::spawn(future, schedule);
-                    runnable.schedule();
-                    task.detach();
-                }
-            }
-            else{
-                panic!("should i be here?");
-            }
+    // fn submit_work_batch(
+    //     data: SerializedData,
+    //     lamellae: Arc<Lamellae>,
+    //     ame: Arc<ActiveMessageEngine>,
+    //     work_inj: Arc<crossbeam::deque::Injector<async_task::Runnable>>,
+    // ) {
+    //     let ame = ame.clone();
+    //     let work_inj_clone = work_inj.clone();
+    //     let future = async move {
+    //         if let Some(header) = data.deserialize_header(){
+    //             let msg = header.msg;
+    //             if let Some(req_data) = ame.exec_msg(msg, data, lamellae, header.team_hash).await { //need to update for req data
+    //                 let future = async move {
+    //                     ame.process_msg(req_data).await;
+    //                 };
+    //                 let schedule = move |runnable| work_inj_clone.push(runnable);
+    //                 let (runnable, task) = async_task::spawn(future, schedule);
+    //                 runnable.schedule();
+    //                 task.detach();
+    //             }
+    //         }
+    //         else{
+    //             panic!("should i be here?");
+    //         }
+    //     };
+    //     let schedule = move |runnable| work_inj.push(runnable);
+    //     let (runnable, task) = async_task::spawn(future, schedule);
+    //     runnable.schedule();
+    //     task.detach();
+    // }    
+}
+
+pub(crate) struct WorkStealing {
+    inner: Arc<AmeScheduler>,
+    ame: Arc<ActiveMessageEngine>
+}
+impl WorkStealing {
+    pub(crate) fn new(
+        num_pes: usize,
+        my_pe: usize,
+        teams: Arc<RwLock<HashMap<u64, Weak<LamellarTeamRT>>>>,
+    ) -> WorkStealing {
+        // println!("new work stealing queue");
+        let inner = Arc::new(AmeScheduler::WorkStealingInner(WorkStealingInner::new()));
+        let mut sched = WorkStealing {
+            inner: inner.clone(),
+            ame: Arc::new(ActiveMessageEngine::new(num_pes, my_pe, teams, Arc::downgrade(&inner))),
         };
-        let schedule = move |runnable| work_inj.push(runnable);
-        let (runnable, task) = async_task::spawn(future, schedule);
-        runnable.schedule();
-        task.detach();
+        sched
     }
     
 }
 
 //#[prof]
-impl Drop for WorkStealing {
+impl Drop for WorkStealingInner {
     //when is this called with respect to world?
     fn drop(&mut self) {
         //println!("dropping work stealing");

@@ -91,11 +91,11 @@ pub(crate) async fn exec_am_cmd(
         }
         Cmd::ExecReturn => {
             match exec_am(ame, &ser_data, world, team,true).await {
-                LamellarReturn::LocalData(data) => ame.send_data_to_user_handle(msg.req_id, msg.src, InternalResult::Local(data)),
+                LamellarReturn::LocalData(data) => ActiveMessageEngine::send_data_to_user_handle(msg.req_id, msg.src, InternalResult::Local(data)),
                 LamellarReturn::LocalAm(_) => panic!("Should not be returning local data from remote  am"),
                 LamellarReturn::RemoteAm(_) => panic!("returning another AM from a returned AM not yet implemented"),
                 LamellarReturn::RemoteData(_,_) => panic!("Should not be returning remote data from a returned am"),
-                LamellarReturn::Unit => ame.send_data_to_user_handle(msg.req_id, msg.src, InternalResult::Unit)
+                LamellarReturn::Unit => ActiveMessageEngine::send_data_to_user_handle(msg.req_id, msg.src, InternalResult::Unit)
             };
             None
         }
@@ -108,6 +108,86 @@ pub(crate) async fn exec_am_cmd(
         }
     }
 }
+
+// submitted_ams = Arc<Mutex<HashMap<pe,HashMap<team,HashMap<func_id,(vec<ReqData>,usize)>>>>>;
+// txed_ams = Arc<Mutex<HashMap<req,req_id>>>
+
+// pub (crate) async fn add_am_to_queue (
+//     ame: &ActiveMessageEngine,
+//     req_data: ReqData,
+//     world: Arc<LamellarTeamRT>,
+//     team: Arc<LamellarTeamRT>,){
+//         let func = req_data
+//         .func
+//         .downcast::<LamellarBoxedAm>()
+//         .expect("LAMELLAR RUNTIME ERROR: error in remote am downcast");
+//         let id = AMS_IDS.get(&func.get_id()).unwrap();
+//         let my_pe = if let Ok(my_pe) = team.arch.team_pe(req_data.src) {
+//             Some(my_pe)
+//         } else {
+//             None
+//         };
+//         let mut map = self.map.lock();
+//         let mut submit_tx_task = false
+//         let mut entry = map.entry(my_pe).or_insert_with(|| {
+//             submit_tx_task = true;
+//             HashMap::new()
+//         })
+//         .entry(&team_hash).or_insert(HashMap::new())
+//         .entry(id).or_insert((Vec::new(),0));
+//         entry.0.push(func);
+//         entry.1 += func.serialized_size();
+//         drop(map);
+//         if submit_tx_task{
+//             submit_task(async move{
+//                 let mut map = self.map.lock();
+//                 let pe_map = map.delete(my_pe);
+//                 drop(map);
+                
+//                 if let Some(pe_map){
+//                     for (team_hash, func_map) in pe_map.get(my_pe).unwrap(){
+//                         let (funcs,size) = func_map.get(&id).unwrap();
+//                         let msg = Msg {
+//                             cmd: ExecType::Am(Cmd::ExecBatchMsgSend),
+//                             src: req_data.src as u16,
+//                             req_id: 0,
+//                         };
+//                         let header = Some(SerializeHeader{msg: req_data.msg, team_hash: req_data.team_hash, id: *id});
+//                         let data = req_data.lamellae.serialize_header(header,size).await.unwrap();
+//                         let mut data_slice = data.data_as_bytes();
+//                         let mut i =0;
+//                         let mut ids = Vec<usize>;
+//                         for req in reqs{
+//                             let func = req
+//                                 .func
+//                                 .downcast::<LamellarBoxedAm>()
+//                                 .expect("LAMELLAR RUNTIME ERROR: error in remote am downcast");
+//                             let serialize_size = func.serialized_size();
+//                             func.serialize_into(data_slice[i..(i+serialize_size)]);
+//                             ids.push(req.id);
+//                             i+=serialize_size;
+//                         }
+//                         txed_ams.lock().insert(batch_id,ids); 
+//                         req_data
+//                             .lamellae
+//                             .send_to_pes_async(req_data.pe, team.arch.clone(), data).await;
+//                     }
+//                 }
+//             })
+//         }
+//         if req_data.pe == None && my_pe != None {
+//             submit_task(async move {
+//                 exec_local( //we could probably move this out of the async
+//                     ame,
+//                     req_data.msg,
+//                     *func,
+//                     req_data.ireq.clone(),
+//                     world,
+//                     team.clone(),
+//                 ).await;
+//             }
+//         }
+//     }
 
 //#[prof]
 pub(crate) async fn process_am_request(

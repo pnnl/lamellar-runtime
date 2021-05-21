@@ -2,7 +2,7 @@ use crate::lamellae::{Lamellae,LamellaeAM, LamellaeComm,SerializedData,Serialize
 use crate::lamellar_arch::StridedArch;
 use crate::lamellar_request::{InternalReq, LamellarRequest, InternalResult};
 use crate::lamellar_team::LamellarTeamRT;
-use crate::scheduler::ReqData;
+use crate::scheduler::{ReqData,AmeScheduler};
 // use async_trait::async_trait;
 use chashmap::CHashMap;
 use crossbeam::utils::CachePadded;
@@ -18,6 +18,8 @@ use std::sync::{Arc, Weak};
 
 pub(crate) mod registered_active_message;
 use registered_active_message::{exec_am_cmd, process_am_request, AMS_EXECS,AMS_IDS};
+pub(crate) mod batched_registered_active_message;
+use batched_registered_active_message::BatchedActiveMessages;
 
 #[cfg(feature = "nightly")]
 pub(crate) mod remote_closures;
@@ -26,8 +28,13 @@ pub(crate) use remote_closures::RemoteClosures;
 #[cfg(feature = "nightly")]
 use remote_closures::{exec_closure_cmd, process_closure_request};
 
+
+
+//todo
+//turn requests into a struct
+//impl insert, send_to_user -- (get, remove)
 lazy_static! {
-    pub(crate) static ref REQUESTS: Vec<CHashMap<usize, InternalReq>> = {
+    pub(crate) static ref REQUESTS: Vec<CHashMap<usize, InternalReq>> = { //no reason for this to be static... we can put it im AME
         let mut reqs = Vec::new();
         for _i in 0..100 {
             reqs.push(CHashMap::new());
@@ -64,7 +71,7 @@ pub trait LamellarResultSerde: LamellarSerde {
 
 pub trait LamellarActiveMessage: DarcSerde + LamellarSerde + LamellarResultSerde {
     fn exec(
-        self: Box<Self>,
+        &self, //Box<Self>,
         my_pe: usize,
         num_pes: usize,
         local: bool,
@@ -78,7 +85,7 @@ pub trait LamellarActiveMessage: DarcSerde + LamellarSerde + LamellarResultSerde
 
 pub(crate) type LamellarBoxedAm = Box<dyn LamellarActiveMessage + Send + Sync>;
 // pub(crate) type LamellarBoxedData = Box<dyn LamellarSerde>;
-pub(crate) type LamellarAny = Box<dyn std::any::Any + Send>;
+pub(crate) type LamellarAny = Box<dyn std::any::Any + Send + Sync>;
 
 pub trait Serde:  serde::ser::Serialize + serde::de::DeserializeOwned {}
 
@@ -116,33 +123,33 @@ pub(crate) enum Cmd {
     ExecBatchMsgSend,
 }
 
-#[repr(u8)]
-#[derive(
-    serde::Serialize, serde::Deserialize, Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord,
-)]
-pub(crate) enum InnerCmd {
-    ClosureReq,
-    ClosureReqLocal,
-    ClosureResp,
-    AmReq,
-    AmReqLocal,
-    AmResp,
-    DataReq,
-    DataResp,
-    BatchReq,
-    BatchResp,
-    CompResp,
-    Barrier,
-    BarrierResp,
-    UnitResp,
-    BatchedUnitResp,
-    BuffReq,
-    NoHandleResp,
-    AggregationReq,
-    PutReq,
-    GetReq,
-    GetResp,
-}
+// #[repr(u8)]
+// #[derive(
+//     serde::Serialize, serde::Deserialize, Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord,
+// )]
+// pub(crate) enum InnerCmd {
+//     ClosureReq,
+//     ClosureReqLocal,
+//     ClosureResp,
+//     AmReq,
+//     AmReqLocal,
+//     AmResp,
+//     DataReq,
+//     DataResp,
+//     BatchReq,
+//     BatchResp,
+//     CompResp,
+//     Barrier,
+//     BarrierResp,
+//     UnitResp,
+//     BatchedUnitResp,
+//     BuffReq,
+//     NoHandleResp,
+//     AggregationReq,
+//     PutReq,
+//     GetReq,
+//     GetResp,
+// }
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone, Copy)]
 pub(crate) struct Msg {
     pub req_id: usize,
@@ -218,6 +225,8 @@ pub(crate) struct ActiveMessageEngine {
     fake_ireq: InternalReq,
     _fake_arch: Arc<StridedArch>,
     teams: Arc<RwLock<HashMap<u64, Weak<LamellarTeamRT>>>>,
+    pub(crate) scheduler: Weak<AmeScheduler>,
+    batched_am: Arc<BatchedActiveMessages>,
 }
 
 //#[prof]
@@ -233,9 +242,10 @@ impl ActiveMessageEngine {
         num_pes: usize,
         my_pe: usize,
         teams: Arc<RwLock<HashMap<u64, Weak<LamellarTeamRT>>>>,
+        scheduler: Weak<AmeScheduler>,
     ) -> Self {
         trace!("registered funcs {:?}", AMS_EXECS.len(),);
-        println!("sizes: {:?} {:?} {:?}",std::mem::size_of::<Msg>(),std::mem::size_of::<ExecType>(),std::mem::size_of::<Cmd>());
+        // println!("sizes: {:?} {:?} {:?}",std::mem::size_of::<Msg>(),std::mem::size_of::<ExecType>(),std::mem::size_of::<Cmd>());
         let (dummy_s, _) = crossbeam::channel::unbounded();
         ActiveMessageEngine {
             pending_active: Arc::new(Mutex::new(HashMap::new())),
@@ -255,6 +265,8 @@ impl ActiveMessageEngine {
             },
             _fake_arch: Arc::new(StridedArch::new(my_pe, 1, 1)),
             teams: teams,
+            scheduler: scheduler.clone(),
+            batched_am: Arc::new(BatchedActiveMessages::new(scheduler.upgrade().unwrap())),
         }
     }
 
@@ -282,7 +294,7 @@ impl ActiveMessageEngine {
             (world, team)
         };
 
-        let batch = match req_data.msg.cmd.clone() {
+        let batch: Option<(Vec<u8>, ReqData)> = match req_data.msg.cmd.clone() {
             ExecType::Runtime(cmd) => {
                 self.exec_runtime_cmd(
                     cmd,
@@ -295,7 +307,10 @@ impl ActiveMessageEngine {
                 ).await;
                 None
             }
-            ExecType::Am(_) => process_am_request(self, req_data, world, team.clone()).await,
+            // ExecType::Am(_) => process_am_request(self, req_data, world, team.clone()).await,
+            ExecType::Am(_) => { self.batched_am.process_am_req(req_data,world,team.clone()).await;
+                None
+            },
 
             #[cfg(feature = "nightly")]
             ExecType::Closure(_) => process_closure_request(self, req_data, world, team.clone()),
@@ -455,7 +470,7 @@ impl ActiveMessageEngine {
             }
             Cmd::DataReturn => {
                 if let Some(data) = ser_data{
-                    self.send_data_to_user_handle(msg.req_id, msg.src, InternalResult::Remote(data));
+                    ActiveMessageEngine::send_data_to_user_handle(msg.req_id, msg.src, InternalResult::Remote(data));
                 }
                 else {
                     panic!("should i be here?");
@@ -465,7 +480,7 @@ impl ActiveMessageEngine {
                 if let Some(data) = ser_data{
                     let ids: std::vec::Vec<usize> = data.deserialize_data().unwrap();//crate::deserialize_data(&ser_data).unwrap();
                     for id in &ids {
-                        self.send_data_to_user_handle(*id, msg.src, InternalResult::Unit);
+                        ActiveMessageEngine::send_data_to_user_handle(*id, msg.src, InternalResult::Unit);
                     }
                 }
                 else{
@@ -473,7 +488,7 @@ impl ActiveMessageEngine {
                 }
             }
             Cmd::UnitReturn => {
-                self.send_data_to_user_handle(msg.req_id, msg.src, InternalResult::Unit);
+                ActiveMessageEngine::send_data_to_user_handle(msg.req_id, msg.src, InternalResult::Unit);
             }
             _ => {
                 panic!("invalid cmd time for runtime cmd: {:?}", msg.cmd);
@@ -505,7 +520,12 @@ impl ActiveMessageEngine {
         };
         trace!("using team {:?}", team.my_hash);
         match msg.cmd.clone() {
-            ExecType::Am(cmd) => exec_am_cmd(self, cmd, msg, ser_data, lamellae, world, team).await, //execute a remote am
+            // ExecType::Am(cmd) => exec_am_cmd(self, cmd, msg, ser_data, lamellae, world, team).await, //execute a remote am
+            ExecType::Am(cmd) => {
+                self.batched_am.process_batched_am(cmd, msg, ser_data, lamellae, world, team).await;
+                None
+            }, //execute a remote am
+
             #[cfg(feature = "nightly")]
             ExecType::Closure(cmd) => {
                 exec_closure_cmd(self, cmd, msg, ser_data, lamellae, world, team)
@@ -517,13 +537,14 @@ impl ActiveMessageEngine {
         }
     }
 
-    fn send_data_to_user_handle(&self, req_id: usize, pe: u16, data: InternalResult) {
+    // make this an associated function... or maybe make a "REQUESTS struct which will have a send_data_to_user_handle" 
+    fn send_data_to_user_handle(req_id: usize, pe: u16, data: InternalResult) { 
         let res = REQUESTS[req_id % REQUESTS.len()].get(&req_id);
         match res {
             Some(v) => {
                 let ireq = v.clone();
                 drop(v); //release lock in the hashmap
-                trace!("[{:?}] send_data_to_user_handle {:?}", self.my_pe, ireq);
+                // trace!("[{:?}] send_data_to_user_handle {:?}", self.my_pe, ireq);
                 ireq.team_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
                 ireq.world_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
                 if let Ok(_) = ireq.data_tx.send((pe as usize,data)) {} //if this returns an error it means the user has dropped the handle
@@ -564,25 +585,12 @@ impl ActiveMessageEngine {
                     });
                     self.pending_active.lock().insert(msg.src, 1)
                 };
-                // self.pending_resp.upsert(
-                //     msg.src,
-                //     || {
-                //         let q = crossbeam::queue::SegQueue::new();
-                //         q.push(msg.req_id);
-                //         q
-                //     },
-                //     |q| {
-                //         q.push(msg.req_id);
-                //     },
-                // );
                 if let None =  active{
                     let my_any: LamellarAny = Box::new(0);
                     let msg = Msg {
                         cmd: ExecType::Runtime(Cmd::ExecBatchUnitReturns),
                         src: msg.src as u16, //fake that this is from the original sender
                         req_id: 0,
-                        // team_id: 0,
-                        // return_data: false,
                     };
                     Some(ReqData {
                         src: self.my_pe,
@@ -603,14 +611,10 @@ impl ActiveMessageEngine {
                     cmd: cmd,
                     src: self.my_pe as u16,
                     req_id: msg.req_id,
-                    // team_id: msg.team_id,
-                    // return_data: false,
                 };
-                // let payload = (rmsg, crate::serialize(&()).unwrap(), team_hash);
                 let header = Some(SerializeHeader{msg: rmsg, team_hash: team_hash, id: 0});
                 let data = lamellae.serialize(header,&()).await.unwrap();
                 lamellae.send_to_pe_async(msg.src as usize,  data
-                    // crate::lamellae::serialize(&payload,lamellae.clone()).await.unwrap()
                 ).await;
                 None
             }

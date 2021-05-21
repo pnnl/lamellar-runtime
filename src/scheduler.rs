@@ -12,7 +12,7 @@ use futures::Future;
 use enum_dispatch::enum_dispatch;
 
 pub(crate) mod work_stealing;
-use work_stealing::WorkStealing;
+use work_stealing::{WorkStealing,WorkStealingInner};
 
 
 
@@ -39,6 +39,32 @@ pub(crate) struct ReqData {
 
 pub enum SchedulerType {
     WorkStealing,
+}
+
+#[enum_dispatch(AmeSchedulerQueue)]
+pub(crate) enum AmeScheduler{
+    WorkStealingInner
+}
+#[enum_dispatch]
+pub(crate) trait AmeSchedulerQueue: Sync + Send {
+    fn submit_req(
+        //unserialized request
+        &self,
+        ame:  Arc<ActiveMessageEngine>,
+        src: usize,
+        pe: Option<usize>,
+        msg: Msg,
+        ireq: InternalReq,
+        func: LamellarAny,
+        lamellae: Arc<Lamellae>,
+        team_hash: u64,
+    );
+    fn submit_work(&self, ame:  Arc<ActiveMessageEngine>, msg: SerializedData, lamellae: Arc<Lamellae>,); //serialized active message
+    fn submit_task<F>(&self,future: F )
+    where 
+        F: Future<Output = ()> + Send + 'static;
+
+    fn shutdown(&self);
 }
 
 #[enum_dispatch(SchedulerQueue)]
