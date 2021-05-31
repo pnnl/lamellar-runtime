@@ -26,14 +26,14 @@ core_affinity = "0.5.9"
 rofisys = { version ="0.1.1", optional = true  }
 log = "0.4"
 simple_logger = "1.6.0"
-lamellar-impl = { path = "impl" }
+lamellar-impl = { path = "impl", version = "0.3.0" }
 proc-macro-hack = "0.5"
 inventory = "0.1"
 serde_closure = { version = "0.1.5", optional = true }
 async-task = "4.0.2"
 async-trait = "0.1.40"
 async-std = "1.6.4"
-lamellar-prof = {path = "lamellar-prof" }
+lamellar-prof = {path = "lamellar-prof", version = "0.1.0" }
 libc = { version = "0.2.81", optional = true }
 shared_memory = "0.11"
 raw_sync = "0.1"
