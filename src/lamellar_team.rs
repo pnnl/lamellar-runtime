@@ -169,7 +169,7 @@ impl LamellarTeamRT {
         world_counters: Arc<AMCounters>,
         lamellae: Arc<dyn Lamellae + Sync + Send>,
     ) -> LamellarTeamRT {
-        println!("creating new lamellar team ");
+        // println!("creating new lamellar team ");
         // let backend = lamellae.backend();
         let arch = Arc::new(LamellarArchRT {
             parent: None,
