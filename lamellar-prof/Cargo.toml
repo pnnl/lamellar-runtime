@@ -1,10 +1,15 @@
 [package]
 name = "lamellar-prof"
 version = "0.1.0"
-authors = ["frie869 <ryan.friese@pnnl.gov>"]
+authors = ["Ryan D. Friese <ryan.friese@pnnl.gov>", " Mark V Raugas <mark.raugas@pnnl.gov>", "Roberto Gioiosa <roberto.gioiosa@pnnl.gov>"]
 edition = "2018"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+description = "Lamellar is an asynchronous tasking runtime for HPC systems developed in RUST."
+readme = "../README.md"
+repository = "https://github.com/pnnl/lamellar-runtime"
+homepage = "https://github.com/pnnl/lamellar-runtime"
+license-file = "../LICENSE"
+keywords = ["hpc","runtime","pgas","distributed","asynchronous"]
+categories = ["asynchronous","concurrency", "network-programming","science"]
 
 [lib]
 proc-macro = true
