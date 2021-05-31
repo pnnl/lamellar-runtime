@@ -399,6 +399,7 @@ impl LamellarWorldBuilder {
             .insert(world.team.my_hash, Arc::downgrade(&world.team));
         world.lamellaes.insert(lamellae.backend(), lamellae.clone());
         // println!("Lamellar world created with {:?}", lamellae.backend());
+        world.barrier();
         world
     }
 }

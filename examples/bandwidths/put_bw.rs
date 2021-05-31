@@ -18,9 +18,11 @@ fn main() {
         for i in data.as_mut_slice().unwrap() {
             *i = my_pe as u8;
         }
+        for i in array.as_mut_slice().unwrap() {
+            *i = 255 as u8;
+        }
     }
 
-    unsafe { array.put(my_pe, 0, &data) }; //copy local array to memory region
     world.barrier();
     let s = Instant::now();
     world.barrier();
@@ -49,6 +51,7 @@ fn main() {
             for j in (0..2_u64.pow(exp) as usize).step_by(num_bytes as usize) {
                 let sub_timer = Instant::now();
                 unsafe { array.put(num_pes - 1, j, &data.sub_region(..num_bytes as usize)) };
+                // println!("j: {:?}",j);
                 // unsafe { array.put_slice(num_pes - 1, j, &data[..num_bytes as usize]) };
                 sub_time += sub_timer.elapsed().as_secs_f64();
                 sum += num_bytes * 1 as u64;
@@ -60,7 +63,7 @@ fn main() {
         if my_pe == num_pes - 1 {
             let array_slice = array.as_slice().unwrap();
             for j in (0..2_u64.pow(exp) as usize).step_by(num_bytes as usize) {
-                while *(&array_slice[(j + num_bytes as usize) - 1]) == my_pe as u8 {
+                while *(&array_slice[(j + num_bytes as usize) - 1]) == 255 as u8 {
                     std::thread::yield_now()
                 }
             }
@@ -86,7 +89,11 @@ fn main() {
         );
         }
         bws.push((sum as f64 / 1048576.0) / cur_t);
-        unsafe { array.put(my_pe, 0, &data) };
+        unsafe { 
+            for i in array.as_mut_slice().unwrap() {
+                *i = 255 as u8;
+            }
+        };
         world.barrier();
     }
     world.free_shared_memory_region(array);

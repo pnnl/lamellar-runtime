@@ -75,7 +75,7 @@ impl RofiComm {
         // let b =self.alloc.space_avail();
         if let Some(addr) = self.alloc.try_malloc(size) {
             // println!("[{:?}]-({:?}) rt_alloc exit",self.my_pe,thread::current().id());
-            // println!("alloc addr {:?} free space {:?} (before: {:?}   alloc size {:?} ({:?}))", addr, self.alloc.space_avail(), b, b - self.alloc.space_avail(), size);
+            // println!("rt alloc addr {:?} free space {:?} (before: {:?}   alloc size {:?} ({:?}))", addr, self.alloc.space_avail(), b, b - self.alloc.space_avail(), size);
             Some(addr)
         } else {
             println!("[WARNING] out of memory: (work in progress on a scalable solution, as a work around try setting the LAMELLAR_ROFI_MEM_SIZE envrionment variable (current size = {:?} -- Note: LamellarLocalArrays are currently allocated out of this pool",ROFI_MEM.load(Ordering::SeqCst));
@@ -101,7 +101,9 @@ impl RofiComm {
         //     None
         // }
         let _lock = self.alloc_mutex.lock();
-        Some(rofi_alloc(size) as usize)
+        let addr = Some(rofi_alloc(size) as usize);
+        // println!(" alloc addr {:?} ", addr);
+        addr
     }
     #[allow(dead_code)]
     pub(crate) fn free(&self, addr: usize) {
@@ -110,6 +112,7 @@ impl RofiComm {
         // println!("[{:?}]-({:?}) free exit",self.my_pe,thread::current().id());
         let _lock = self.alloc_mutex.lock();
         rofi_release(addr);
+        // println!(" alloc free {:?} ", addr);
         // println!("free addr {:?} free space {:?} (before: {:?}   {:?})", addr, self.alloc.space_avail(), b, self.alloc.space_avail()-b);
     }
 

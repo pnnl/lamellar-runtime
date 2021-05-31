@@ -169,12 +169,14 @@ impl LamellarTeamRT {
         world_counters: Arc<AMCounters>,
         lamellae: Arc<dyn Lamellae + Sync + Send>,
     ) -> LamellarTeamRT {
+        println!("creating new lamellar team ");
         // let backend = lamellae.backend();
         let arch = Arc::new(LamellarArchRT {
             parent: None,
             arch: LamellarArchEnum::GlobalArch(GlobalArch::new(num_pes)),
             num_pes: num_pes,
         });
+        lamellae.barrier();
 
         // let data_buf = LamellarMemoryRegion::new(num_pes*3+3, lamellae.clone(),true);
 
@@ -232,6 +234,7 @@ impl LamellarTeamRT {
                 *e = 0;
             }
         }
+        lamellae.barrier();
         lamellae.get_am().barrier(); //this is a noop currently
                                      // println!(
                                      //     "[{:?}] new lamellar team: {:?} {:?} {:?} {:?} {:?}",
@@ -243,6 +246,8 @@ impl LamellarTeamRT {
                                      //     team.barrier3.as_slice(),
                                      // );
                                      // team.bar_print("init".to_string());
+        team.barrier();
+        println!("new lamellar team inited");
         team
     }
 
