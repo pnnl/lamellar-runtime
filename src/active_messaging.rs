@@ -1,4 +1,4 @@
-use crate::lamellae::{Lamellae,LamellaeAM, LamellaeComm,SerializedData,SerializeHeader,Ser,Des};
+use crate::lamellae::{Lamellae,LamellaeAM, SerializedData,SerializeHeader,Ser,Des};
 use crate::lamellar_arch::StridedArch;
 use crate::lamellar_request::{InternalReq, LamellarRequest, InternalResult};
 use crate::lamellar_team::LamellarTeamRT;
@@ -17,7 +17,7 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Weak};
 
 pub(crate) mod registered_active_message;
-use registered_active_message::{AMS_EXECS,AMS_IDS,RegisteredActiveMessages};
+use registered_active_message::{AMS_EXECS,RegisteredActiveMessages};
 // pub(crate) mod batched_registered_active_message;
 // use batched_registered_active_message::BatchedActiveMessages;
 
@@ -75,9 +75,11 @@ pub trait LamellarResultSerde: LamellarSerde {
     fn serialize_result_into(&self,buf: &mut [u8],result: &LamellarAny);
 }
 
+
+
 pub trait LamellarActiveMessage: DarcSerde + LamellarSerde + LamellarResultSerde {
     fn exec(
-        &self, //Box<Self>,
+        self: Arc<Self>,
         my_pe: usize,
         num_pes: usize,
         local: bool,
@@ -87,9 +89,11 @@ pub trait LamellarActiveMessage: DarcSerde + LamellarSerde + LamellarResultSerde
     fn get_id(&self) -> String;
 }
 
+#[derive(Clone)]
 pub (crate) enum LamellarFunc{
     Am(LamellarArcAm),
-    Closure(LamellarAny),
+    // Closure(LamellarAny),
+    Result(LamellarResultArc),
     None,
 }
 
@@ -97,6 +101,7 @@ pub(crate) type LamellarArcAm = Arc<dyn LamellarActiveMessage + Send + Sync>;
 pub(crate) type LamellarBoxedAm = Box<dyn LamellarActiveMessage + Send + Sync>;
 // pub(crate) type LamellarBoxedData = Box<dyn LamellarSerde>;
 pub(crate) type LamellarAny = Box<dyn std::any::Any + Send + Sync>;
+pub(crate) type LamellarResultArc =Arc<dyn LamellarSerde + Send + Sync>;
 
 pub trait Serde:  serde::ser::Serialize + serde::de::DeserializeOwned {}
 
@@ -111,7 +116,8 @@ pub trait LamellarAM {
 pub enum LamellarReturn {
     LocalData(LamellarAny),
     LocalAm(LamellarBoxedAm),
-    RemoteData(LamellarAny,LamellarBoxedAm),
+    // RemoteData(LamellarAny,LamellarBoxedAm),
+    RemoteData(LamellarResultArc),
     RemoteAm(LamellarBoxedAm),
     Unit,
 }
@@ -128,10 +134,12 @@ pub(crate) enum Cmd {
     LocalExec,
     ExecBatchUnitReturns,
     DataReturn,
+    BatchedDataReturn,
     UnitReturn,
     BatchedUnitReturn,
     BatchedMsg,
     ExecBatchMsgSend,
+    None,
 }
 
 
@@ -173,7 +181,8 @@ impl AMCounters {
         }
     }
     pub(crate) fn add_send_req(&self, num: usize) {
-        self.outstanding_reqs.fetch_add(num, Ordering::SeqCst);
+        let num_reqs=self.outstanding_reqs.fetch_add(num, Ordering::SeqCst);
+        println!("reqs: {:?}",num_reqs+num);
         self.send_req_cnt.fetch_add(num, Ordering::SeqCst);
     }
 }
@@ -564,8 +573,10 @@ impl ActiveMessageEngine {
                 let ireq = ireq.clone();
                 drop(reqs); //release lock in the hashmap
                 // trace!("[{:?}] send_data_to_user_handle {:?}", self.my_pe, ireq);
-                ireq.team_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
-                ireq.world_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
+                let num_reqs = ireq.team_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
+                println!("team reqs: {:?}",num_reqs);
+                let num_reqs =ireq.world_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
+                println!("world reqs: {:?}",num_reqs);
                 if let Ok(_) = ireq.data_tx.send((pe as usize,data)) {} //if this returns an error it means the user has dropped the handle
                 let cnt = ireq.cnt.fetch_sub(1, Ordering::SeqCst);
                 if cnt == 1 {

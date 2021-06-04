@@ -18,22 +18,23 @@ use work_stealing::{WorkStealing,WorkStealingInner};
 
 
 // #[derive(Debug)]
-pub(crate) struct ReqData {
-    pub(crate) src: usize,
-    pub(crate) pe: Option<usize>, //team based pe id
-    pub(crate) msg: Msg,
-    pub(crate) ireq: InternalReq,
-    pub(crate) func: LamellarFunc,
-    pub(crate) lamellae: Arc<Lamellae>,
-    pub(crate) team_hash: u64,
-    pub(crate) rt_req: bool,
-}
+// pub(crate) struct ReqData {
+//     pub(crate) src: usize,
+//     pub(crate) pe: Option<usize>, //team based pe id
+//     pub(crate) msg: Msg,
+//     pub(crate) ireq: InternalReq,
+//     pub(crate) func: LamellarFunc,
+//     pub(crate) lamellae: Arc<Lamellae>,
+//     pub(crate) team_hash: u64,
+//     pub(crate) rt_req: bool,
+// }
 
 pub(crate) struct NewReqData{
     pub(crate) src: usize,
     pub(crate) dst: Option<usize>, //team based pe id
     pub(crate) cmd: ExecType,
     pub(crate) id: usize,
+    pub(crate) batch_id: Option<usize>,
     pub(crate) func: LamellarFunc,
     pub(crate) lamellae: Arc<Lamellae>,
     pub(crate) world: Arc<LamellarTeamRT>,
@@ -60,18 +61,18 @@ pub(crate) enum AmeScheduler{
 }
 #[enum_dispatch]
 pub(crate) trait AmeSchedulerQueue: Sync + Send {
-    fn submit_req(
-        //unserialized request
-        &self,
-        ame:  Arc<ActiveMessageEngine>,
-        src: usize,
-        pe: Option<usize>,
-        msg: Msg,
-        ireq: InternalReq,
-        func: LamellarFunc,
-        lamellae: Arc<Lamellae>,
-        team_hash: u64,
-    );
+    // fn submit_req(
+    //     //unserialized request
+    //     &self,
+    //     ame:  Arc<ActiveMessageEngine>,
+    //     src: usize,
+    //     pe: Option<usize>,
+    //     msg: Msg,
+    //     ireq: InternalReq,
+    //     func: LamellarFunc,
+    //     lamellae: Arc<Lamellae>,
+    //     team_hash: u64,
+    // );
     fn submit_req_new(
         //unserialized request
         &self,
@@ -101,17 +102,17 @@ pub(crate) enum Scheduler{
 }
 #[enum_dispatch]
 pub(crate) trait SchedulerQueue: Sync + Send {
-    fn submit_req(
-        //unserialized request
-        &self,
-        src: usize,
-        pe: Option<usize>,
-        msg: Msg,
-        ireq: InternalReq,
-        func: LamellarFunc,
-        lamellae: Arc<Lamellae>,
-        team_hash: u64,
-    );
+    // fn submit_req(
+    //     //unserialized request
+    //     &self,
+    //     src: usize,
+    //     pe: Option<usize>,
+    //     msg: Msg,
+    //     ireq: InternalReq,
+    //     func: LamellarFunc,
+    //     lamellae: Arc<Lamellae>,
+    //     team_hash: u64,
+    // );
     fn submit_req_new(
         //unserialized request
         &self,

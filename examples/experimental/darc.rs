@@ -16,7 +16,6 @@ impl LamellarAm for DarcAm{
     }
 }
 
-
 fn main() {
     let world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();
@@ -78,3 +77,6 @@ fn main() {
     // ro_darc.print();
 
 }
+
+
+

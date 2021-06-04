@@ -69,7 +69,7 @@ pub(crate) struct SerializeHeader{
 }
 
 
-#[enum_dispatch(Des)]
+#[enum_dispatch(Des, SubData)]
 #[derive(Clone)]
 pub(crate) enum SerializedData{
     RofiData,
@@ -80,7 +80,13 @@ pub(crate) enum SerializedData{
 pub(crate) trait Des{
     fn deserialize_header(&self) -> Option<SerializeHeader>;
     fn deserialize_data<T: serde::de::DeserializeOwned>(& self) -> Result<T, anyhow::Error>;
+    fn header_and_data_as_bytes(&self) -> &mut[u8];
     fn data_as_bytes(&self) -> &mut[u8];
+}
+
+#[enum_dispatch]
+pub(crate) trait SubData{
+    fn sub_data(&self,start: usize, end: usize) -> SerializedData;
 }
 
 
@@ -181,3 +187,6 @@ pub(crate) fn create_lamellae(backend: Backend) -> LamellaeBuilder {
         Backend::Local => LamellaeBuilder::Local(Local::new()),
     }
 }
+
+
+

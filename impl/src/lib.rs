@@ -198,6 +198,7 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_type: AmType) -> 
             }
         }
     };
+    let ret_struct = quote::format_ident!("{}Result", orig_name);
     // println!("ret_type {:?}",ret_type);
     let mut am = quote!{
         impl #generics #lamellar::LocalAM for #orig_name#generics_args{
@@ -220,12 +221,11 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_type: AmType) -> 
         },
         AmType::ReturnData(_) => {
             quote!{
-                let ret = Box::new (
-                    #last_expr
-                );
                 let ret = match __local{ //should probably just separate these into exec_local exec_remote to get rid of a conditional...
-                    true => #lamellar::LamellarReturn::LocalData(ret),
-                    false => #lamellar::LamellarReturn::RemoteData(ret,self),
+                    true => #lamellar::LamellarReturn::LocalData(Box::new(#last_expr)),
+                    false => #lamellar::LamellarReturn::RemoteData(std::sync::Arc::new (#ret_struct{    
+                        val: #last_expr
+                    })),
                 };
                 ret
             }
@@ -244,13 +244,12 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_type: AmType) -> 
         }
     };
 
-    // println!("ret_statement {:?}",ret_statement);
 
     let mut expanded = quote! {
         impl #generics #lamellar::LamellarActiveMessage for #orig_name#generics_args {
-            fn exec(&self,__lamellar_current_pe: usize,__lamellar_num_pes: usize, __local: bool, __lamellar_world: std::sync::Arc<#lamellar::LamellarTeamRT>, __lamellar_team: std::sync::Arc<#lamellar::LamellarTeamRT>) -> std::pin::Pin<Box<dyn std::future::Future<Output=#lamellar::LamellarReturn> + Send>>{
+            fn exec(self: std::sync::Arc<Self>,__lamellar_current_pe: usize,__lamellar_num_pes: usize, __local: bool, __lamellar_world: std::sync::Arc<#lamellar::LamellarTeamRT>, __lamellar_team: std::sync::Arc<#lamellar::LamellarTeamRT>) -> std::pin::Pin<Box<dyn std::future::Future<Output=#lamellar::LamellarReturn> + Send>>{
                 Box::pin( async move {
-                #temp    
+                #temp
                 #ret_statement
                 })
 
@@ -267,10 +266,10 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_type: AmType) -> 
             }
             fn serialize_into(&self,buf: &mut [u8]){
                 #lamellar::serialize_into(buf,self).unwrap();
-            }
-
-            
+            }            
         }
+
+        
         impl #generics #lamellar::LamellarResultSerde for #orig_name#generics_args {
             fn serialized_result_size(&self,result: &Box<dyn std::any::Any + Send + Sync>)->usize{
                 let result  = result.downcast_ref::<#ret_type>().unwrap();
@@ -286,10 +285,27 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_type: AmType) -> 
         #am
     };
 
+    if let AmType::ReturnData(_) = am_type{
+        expanded.extend(quote!{
+            struct #ret_struct{
+                val: #ret_type
+            }
+            
+            impl #generics #lamellar::LamellarSerde for #ret_struct {
+                fn serialized_size(&self)->usize{
+                    #lamellar::serialized_size(&self.val)
+                }
+                fn serialize_into(&self,buf: &mut [u8]){
+                    #lamellar::serialize_into(buf,&self.val).unwrap();
+                }            
+            }
+        });
+    }
+
     if !local {
         expanded.extend(quote!{
-            fn #orig_name_unpack(bytes: &[u8]) -> Box<dyn #lamellar::LamellarActiveMessage + Send + Sync>  {
-                let __lamellar_data: Box<#orig_name> = Box::new(#lamellar::deserialize(&bytes).unwrap());
+            fn #orig_name_unpack(bytes: &[u8]) -> std::sync::Arc<dyn #lamellar::LamellarActiveMessage + Send + Sync>  {
+                let __lamellar_data: std::sync::Arc<#orig_name> = std::sync::Arc::new(#lamellar::deserialize(&bytes).unwrap());
                 <#orig_name as #lamellar::DarcSerde>::des(&__lamellar_data);
                 __lamellar_data
             }

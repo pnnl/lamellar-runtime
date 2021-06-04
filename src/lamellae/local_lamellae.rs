@@ -1,4 +1,4 @@
-use crate::lamellae::{AllocationType, Backend, Lamellae,LamellaeInit, LamellaeComm, LamellaeAM, LamellaeRDMA, SerializedData,SerializeHeader,Ser,Des};
+use crate::lamellae::{AllocationType, Backend, Lamellae,LamellaeInit, LamellaeComm, LamellaeAM, LamellaeRDMA, SerializedData,SerializeHeader,Ser,Des,SubData};
 use crate::lamellar_arch::LamellarArchRT;
 use crate::scheduler::Scheduler;
 #[cfg(feature = "enable-prof")]
@@ -28,6 +28,15 @@ impl Des for LocalData{
     }
     fn data_as_bytes(&self) -> &mut [u8]{
         &mut []
+    }
+    fn header_and_data_as_bytes(&self) -> &mut [u8]{
+        &mut []
+    }
+}
+
+impl SubData for LocalData{
+    fn sub_data(&self, start: usize, end: usize) ->SerializedData {
+        SerializedData::LocalData(self.clone())
     }
 }
 

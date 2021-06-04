@@ -8,7 +8,7 @@ use lamellar::{ActiveMessaging};
 // use lamellar::{Backend, SchedulerType};
 
 //----------------- Active message returning data--------------------//
-#[lamellar::AmData( Clone, Debug)]
+#[lamellar::AmData(Debug, Clone)]
 struct AmReturnUsize {
     val1: usize,
     val2: String,

@@ -208,9 +208,7 @@ impl LamellarTeamRT {
             parent: None,
             sub_teams: RwLock::new(HashMap::new()),
             mem_regions: RwLock::new(HashMap::new()),
-            // scheduler: scheduler,
             scheduler: scheduler,
-            // lamellae: lamellae.clone(),
             lamellae: lamellae.clone(),
             arch: arch.clone(),
             world_pe: world_pe,
@@ -668,15 +666,15 @@ impl ActiveMessaging for Arc<LamellarTeamRT> {
         let func: LamellarArcAm = Arc::new(am);
         prof_end!(any);
         prof_start!(sub);
-        self.scheduler.submit_req(
-            self.world_pe,
-            Some(self.team_pe.unwrap()),
-            msg,
-            ireq,
-            LamellarFunc::Am(func),
-            self.lamellae.clone(),
-            self.my_hash,
-        );
+        // self.scheduler.submit_req(
+        //     self.world_pe,
+        //     Some(self.team_pe.unwrap()),
+        //     msg,
+        //     ireq,
+        //     LamellarFunc::Am(func),
+        //     self.lamellae.clone(),
+        //     self.my_hash,
+        // );
         prof_end!(sub);
         Box::new(my_req)
     }

@@ -14,6 +14,7 @@ use lamellar::{ActiveMessaging};
 struct AmNoReturn {
     my_pe: usize,
     index: usize,
+    data: Vec<usize>,
 }
 
 #[lamellar::am]
@@ -26,7 +27,7 @@ impl LamellarAM for AmNoReturn {
         //     lamellar::num_pes,
         //     hostname::get().unwrap()
         // );
-        // println!("\t{:?} leaving", self);
+        println!("\t{:?} {:?} leaving", self.index,self.data.len());
     }
 }
 
@@ -43,10 +44,11 @@ fn main() {
     let num_pes = world.num_pes();
     world.barrier();
     println!("after first barrier");
-    let am = AmNoReturn { my_pe: my_pe, index: 0 };
+    let am = AmNoReturn { my_pe: my_pe, index: 0, data: vec![0] };
     if my_pe == 0 {
         for i in 0..10{
-            world.exec_am_all( AmNoReturn { my_pe: my_pe, index: i });
+            world.exec_am_all( AmNoReturn { my_pe: my_pe, index: i , data: vec![i;1]});
+            world.exec_am_all( AmNoReturn { my_pe: my_pe, index: i , data: vec![i;100000]});
         }
         // world.wait_all();
     }

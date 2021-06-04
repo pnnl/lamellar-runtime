@@ -1,6 +1,6 @@
 use crate::lamellae::rofi::command_queues::RofiCommandQueue;
 use crate::lamellae::rofi::rofi_api::*;
-use crate::lamellae::{Des,AllocationType,SerializeHeader};
+use crate::lamellae::{Des,AllocationType,SerializeHeader,SubData,SerializedData};
 use crate::lamellar_alloc::{BTreeAlloc, LamellarAlloc};
 #[cfg(feature = "enable-prof")]
 use lamellar_prof::*;
@@ -366,9 +366,11 @@ impl Drop for RofiComm {
 }
 
 pub(crate) struct RofiData{
-    pub(crate) addr: usize,
-    pub(crate) relative_addr: usize,
+    pub(crate) addr: usize, // process space address
+    pub(crate) relative_addr: usize, //address allocated from rofi
     pub(crate) len: usize,
+    pub(crate) data_start: usize,
+    pub(crate) data_len: usize,
     pub(crate) rofi_comm: Arc<RofiComm>,
     pub(crate) alloc_size: usize,
 }
@@ -395,7 +397,9 @@ impl RofiData{
         RofiData{
             addr: addr,
             relative_addr: relative_addr+ref_cnt_size,
+            data_start: addr + std::mem::size_of::<AtomicUsize>()+std::mem::size_of::<Option<SerializeHeader>>(),
             len: size+1,
+            data_len: size -std::mem::size_of::<Option<SerializeHeader>>(),
             rofi_comm: rofi_comm,
             alloc_size: alloc_size,
         }
@@ -405,9 +409,7 @@ impl RofiData{
         unsafe {std::slice::from_raw_parts_mut((self.addr + std::mem::size_of::<AtomicUsize>()) as *mut u8, header_size)}
     }
 
-    pub fn header_and_data_as_bytes(&self) ->&mut [u8]{
-        unsafe {std::slice::from_raw_parts_mut((self.addr + std::mem::size_of::<AtomicUsize>()) as *mut u8, self.len)}
-    }
+    
 
     pub fn increment_cnt(&self){
         unsafe{(*(self.addr as *const AtomicUsize)).fetch_add(1,Ordering::SeqCst)}; 
@@ -423,9 +425,19 @@ impl Des for RofiData{
         Ok(bincode::deserialize(self.data_as_bytes())?)
     }
     fn data_as_bytes(&self) -> &mut [u8]{
-        let header_size = std::mem::size_of::<Option<SerializeHeader>>();
-        let data_start = std::mem::size_of::<AtomicUsize>()+header_size;
-        unsafe {std::slice::from_raw_parts_mut((self.addr+data_start) as *mut u8, (self.len-1)-header_size)}
+        unsafe {std::slice::from_raw_parts_mut((self.data_start) as *mut u8, self.data_len)}
+    }
+    fn header_and_data_as_bytes(&self) ->&mut [u8]{
+        unsafe {std::slice::from_raw_parts_mut((self.addr + std::mem::size_of::<AtomicUsize>()) as *mut u8, self.len)}
+    }
+}
+
+impl SubData for RofiData{
+    fn sub_data(&self,start: usize, end: usize) -> SerializedData{
+        let mut sub = self.clone();
+        sub.data_start += start;
+        sub.data_len += end-start;
+        SerializedData::RofiData(sub)
     }
 }
 
@@ -439,6 +451,8 @@ impl Clone for RofiData{
             addr: self.addr,
             relative_addr: self.relative_addr,
             len: self.len,
+            data_start: self.data_start,
+            data_len: self.data_len,
             rofi_comm: self.rofi_comm.clone(),
             alloc_size: self.alloc_size,
         }

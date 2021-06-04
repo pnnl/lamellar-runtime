@@ -1,8 +1,8 @@
-use crate::active_messaging::{ActiveMessageEngine, Cmd, ExecType, LamellarFunc, Msg};
+use crate::active_messaging::{ActiveMessageEngine, ExecType, LamellarFunc};
 use crate::lamellae::{Lamellae,SerializedData,Des};
 use crate::lamellar_request::InternalReq;
 use crate::lamellar_team::LamellarTeamRT;
-use crate::scheduler::{ReqData,NewReqData, SchedulerQueue,AmeSchedulerQueue,AmeScheduler};
+use crate::scheduler::{NewReqData, SchedulerQueue,AmeSchedulerQueue,AmeScheduler};
 use lamellar_prof::*;
 // use log::trace;
 use parking_lot::RwLock;
@@ -85,53 +85,53 @@ pub(crate) struct WorkStealingInner {
 }
 
 impl AmeSchedulerQueue for WorkStealingInner {
-    fn submit_req(
-        &self,
-        ame:  Arc<ActiveMessageEngine>,
-        src: usize,
-        pe: Option<usize>,
-        msg: Msg,
-        ireq: InternalReq,
-        func: LamellarFunc,
-        lamellae: Arc<Lamellae>,
-        team_hash: u64,
-    ) {
-        let req_data = ReqData {
-            src: src,
-            pe: pe,
-            msg: msg,
-            ireq: ireq,
-            func: func,
-            lamellae: lamellae.clone(),
-            team_hash: team_hash,
-            rt_req: false,
-        };
-        // let work_inj = self.work_inj.clone();
-        // // let num_tasks = self.num_tasks.clone();
-        // // println!("submitting_req");
-        // let future = async move {
-        //     // num_tasks.fetch_add(1,Ordering::Relaxed);
-        //     // println!("in submit_req {:?} {:?} {:?} ", pe.clone(), req_data.src, req_data.pe);
-        //     if let Some(req_data) = ame.process_msg(req_data).await { //need to update ame for new req_data
-        //         // let num_tasks = num_tasks.clone();
-        //         let future = async move {
-        //             // num_tasks.fetch_add(1,Ordering::Relaxed);
-        //             ame.process_msg(req_data).await;
-        //             // println!("num tasks: {:?}",num_tasks.fetch_sub(1,Ordering::Relaxed));
-        //         };
-        //         let schedule = move |runnable| work_inj.push(runnable);
-        //         let (runnable, task) = async_task::spawn(future, schedule);
-        //         runnable.schedule();
-        //         task.detach();
-        //     }
-        //     // println!("num tasks: {:?}",num_tasks.fetch_sub(1,Ordering::Relaxed));
-        // };
-        // let work_inj = self.work_inj.clone();
-        // let schedule = move |runnable| work_inj.push(runnable);
-        // let (runnable, task) = async_task::spawn(future, schedule);
-        // runnable.schedule();
-        // task.detach();
-    }
+    // fn submit_req(
+    //     &self,
+    //     ame:  Arc<ActiveMessageEngine>,
+    //     src: usize,
+    //     pe: Option<usize>,
+    //     msg: Msg,
+    //     ireq: InternalReq,
+    //     func: LamellarFunc,
+    //     lamellae: Arc<Lamellae>,
+    //     team_hash: u64,
+    // ) {
+    //     let req_data = ReqData {
+    //         src: src,
+    //         pe: pe,
+    //         msg: msg,
+    //         ireq: ireq,
+    //         func: func,
+    //         lamellae: lamellae.clone(),
+    //         team_hash: team_hash,
+    //         rt_req: false,
+    //     };
+    //     // let work_inj = self.work_inj.clone();
+    //     // // let num_tasks = self.num_tasks.clone();
+    //     // // println!("submitting_req");
+    //     // let future = async move {
+    //     //     // num_tasks.fetch_add(1,Ordering::Relaxed);
+    //     //     // println!("in submit_req {:?} {:?} {:?} ", pe.clone(), req_data.src, req_data.pe);
+    //     //     if let Some(req_data) = ame.process_msg(req_data).await { //need to update ame for new req_data
+    //     //         // let num_tasks = num_tasks.clone();
+    //     //         let future = async move {
+    //     //             // num_tasks.fetch_add(1,Ordering::Relaxed);
+    //     //             ame.process_msg(req_data).await;
+    //     //             // println!("num tasks: {:?}",num_tasks.fetch_sub(1,Ordering::Relaxed));
+    //     //         };
+    //     //         let schedule = move |runnable| work_inj.push(runnable);
+    //     //         let (runnable, task) = async_task::spawn(future, schedule);
+    //     //         runnable.schedule();
+    //     //         task.detach();
+    //     //     }
+    //     //     // println!("num tasks: {:?}",num_tasks.fetch_sub(1,Ordering::Relaxed));
+    //     // };
+    //     // let work_inj = self.work_inj.clone();
+    //     // let schedule = move |runnable| work_inj.push(runnable);
+    //     // let (runnable, task) = async_task::spawn(future, schedule);
+    //     // runnable.schedule();
+    //     // task.detach();
+    // }
     fn submit_req_new(
         //unserialized request
         &self,
@@ -152,6 +152,7 @@ impl AmeSchedulerQueue for WorkStealingInner {
             dst: dst,
             cmd: cmd,
             id: id,
+            batch_id: None,
             func: func,
             lamellae: lamellae,
             world: world,
@@ -182,6 +183,7 @@ impl AmeSchedulerQueue for WorkStealingInner {
             // num_tasks.fetch_add(1,Ordering::Relaxed);
             if let Some(header) = data.deserialize_header(){
                 let msg = header.msg;
+                println!("msg recieved: {:?}",msg);
                 ame.exec_msg(ame.clone(), msg, data, lamellae, header.team_hash).await;
             }
             else{
@@ -216,18 +218,18 @@ impl AmeSchedulerQueue for WorkStealingInner {
 
 //#[prof]
 impl SchedulerQueue for WorkStealing {
-    fn submit_req(
-        &self,
-        src: usize,
-        pe: Option<usize>,
-        msg: Msg,
-        ireq: InternalReq,
-        func: LamellarFunc,
-        lamellae: Arc<Lamellae>,
-        team_hash: u64,
-    ) {
-        self.inner.submit_req(self.ame.clone(),src,pe,msg,ireq,func,lamellae,team_hash);
-    }
+    // fn submit_req(
+    //     &self,
+    //     src: usize,
+    //     pe: Option<usize>,
+    //     msg: Msg,
+    //     ireq: InternalReq,
+    //     func: LamellarFunc,
+    //     lamellae: Arc<Lamellae>,
+    //     team_hash: u64,
+    // ) {
+    //     self.inner.submit_req(self.ame.clone(),src,pe,msg,ireq,func,lamellae,team_hash);
+    // }
     fn submit_req_new(
         //unserialized request
         &self,

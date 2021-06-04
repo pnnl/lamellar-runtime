@@ -1,6 +1,6 @@
 use crate::lamellae::rofi::{rofi_comm::{RofiData,RofiComm}};
 // use crate::lamellae::rofi_lamellae::RofiData;
-use crate::lamellae::{Lamellae, LamellaeComm,SerializedData};
+use crate::lamellae::{Lamellae, LamellaeComm,SerializedData,Des};
 use crate::scheduler::{Scheduler,SchedulerQueue};
 // use lamellar_prof::*;
 // use log::trace;
