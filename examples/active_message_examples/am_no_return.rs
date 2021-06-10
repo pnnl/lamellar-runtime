@@ -31,6 +31,28 @@ impl LamellarAM for AmNoReturn {
     }
 }
 
+#[lamellar::AmData(Debug, Clone)]
+struct AmReturnVec {
+    my_pe: usize,
+    vec_size: usize,
+    data: Vec<usize>,
+}
+
+#[lamellar::am]
+impl LamellarAM for AmReturnVec {
+    fn exec(self) -> Vec<usize>{
+        // println!(
+        //     "\tin AmNoReturn {:?} on pe {:?} of {:?} ({:?})",
+        //     self,
+        //     lamellar::current_pe,
+        //     lamellar::num_pes,
+        //     hostname::get().unwrap()
+        // );
+        println!("\t{:?} {:?} leaving", self.vec_size,self.data.len());
+        vec![0;self.vec_size]
+    }
+}
+
 fn main() {
     let world = lamellar::LamellarWorldBuilder::new()
         //.with_lamellae(Default::default()) //if enable-rofi feature is active default is rofi, otherwise local
@@ -47,8 +69,12 @@ fn main() {
     let am = AmNoReturn { my_pe: my_pe, index: 0, data: vec![0] };
     if my_pe == 0 {
         for i in 0..10{
-            world.exec_am_all( AmNoReturn { my_pe: my_pe, index: i , data: vec![i;i]});
-            world.exec_am_all( AmNoReturn { my_pe: my_pe, index: i , data: vec![i;100000]});
+            // world.exec_am_all( AmNoReturn { my_pe: my_pe, index: i , data: vec![i;i]}); //batch msg ,batch unit return
+            // world.exec_am_all( AmNoReturn { my_pe: my_pe, index: i , data: vec![i;100000]});//direct msg , batch unit return
+            // world.exec_am_all( AmReturnVec { my_pe: my_pe, vec_size: 1 , data: vec![i;1]}); //batch message, batch return
+            // world.exec_am_all( AmReturnVec { my_pe: my_pe, vec_size: 1 , data: vec![i;100000]}); //direct msg, batch return
+            // world.exec_am_all( AmReturnVec { my_pe: my_pe, vec_size: 100000 , data: vec![i;1]}); //batch message, direct return
+            world.exec_am_all( AmReturnVec { my_pe: my_pe, vec_size: 100000 , data: vec![i;100000]}); //direct msg, direct return
         }
         // world.wait_all();
     }

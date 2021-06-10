@@ -344,7 +344,7 @@ impl<T: std::clone::Clone + Send + Sync + 'static> LamellarMemoryRegion<T> {
         let cnt = Arc::new(AtomicUsize::new(1));
         ACTIVE.insert(lamellae.backend(), lamellae.clone(), cnt.clone());
         // let rdma = lamellae.clone();
-        println!("creating new lamellar memory region {:?}",size * std::mem::size_of::<T>());
+        // println!("creating new lamellar memory region {:?}",size * std::mem::size_of::<T>());
         let mut local = false;
         let addr = if let AllocationType::Local = alloc{
             local = true;

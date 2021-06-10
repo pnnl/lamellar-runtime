@@ -184,7 +184,7 @@ impl AMCounters {
     }
     pub(crate) fn add_send_req(&self, num: usize) {
         let num_reqs=self.outstanding_reqs.fetch_add(num, Ordering::SeqCst);
-        println!("reqs: {:?}",num_reqs+num);
+        // println!("reqs: {:?}",num_reqs+num);
         self.send_req_cnt.fetch_add(num, Ordering::SeqCst);
     }
 }
@@ -576,9 +576,9 @@ impl ActiveMessageEngine {
                 drop(reqs); //release lock in the hashmap
                 // trace!("[{:?}] send_data_to_user_handle {:?}", self.my_pe, ireq);
                 let num_reqs = ireq.team_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
-                println!("team reqs: {:?}",num_reqs);
+                // println!("team reqs: {:?}",num_reqs);
                 let num_reqs =ireq.world_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
-                println!("world reqs: {:?}",num_reqs);
+                // println!("world reqs: {:?}",num_reqs);
                 if let Ok(_) = ireq.data_tx.send((pe as usize,data)) {} //if this returns an error it means the user has dropped the handle
                 let cnt = ireq.cnt.fetch_sub(1, Ordering::SeqCst);
                 if cnt == 1 {

@@ -183,7 +183,7 @@ impl AmeSchedulerQueue for WorkStealingInner {
             // num_tasks.fetch_add(1,Ordering::Relaxed);
             if let Some(header) = data.deserialize_header(){
                 let msg = header.msg;
-                println!("msg recieved: {:?}",msg);
+                // println!("msg recieved: {:?}",msg);
                 ame.exec_msg(ame.clone(), msg, data, lamellae, header.team_hash).await;
             }
             else{

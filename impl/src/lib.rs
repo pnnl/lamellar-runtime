@@ -125,8 +125,9 @@ fn get_return_am_return_type(args: String) -> proc_macro2::TokenStream{
             .to_string();
     }
     if return_type.len() > 0 {
-        let ident = syn::Ident::new(&return_type, Span::call_site());
-        quote!{#ident}
+        // let ident = syn::Ident::new(&return_type, Span::call_site());
+        let ret_type: syn::Type = syn::parse_str(&return_type).expect("invalid type");
+        quote!{#ret_type}
     }else {
         quote!{()}
     }
