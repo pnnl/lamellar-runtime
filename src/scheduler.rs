@@ -43,6 +43,23 @@ pub(crate) struct NewReqData{
     // pub(crate) rt_req: bool,
 }
 
+impl NewReqData{
+    pub(crate) fn copy_with_func(self: Arc<Self>,am: LamellarArcAm) -> NewReqData{
+        NewReqData{
+            src: self.src,
+            dst: self.dst,
+            cmd: self.cmd,
+            id: self.id,
+            batch_id: self.batch_id,
+            func: LamellarFunc::Am(am),
+            lamellae: self.lamellae.clone(),
+            world: self.world.clone(),
+            team: self.team.clone(),
+            team_hash: self.team_hash,
+        }
+    }
+}
+
 // impl Drop for ReqData{
 //     fn drop(&mut self){
 //         //println!("dropping ReqData");

@@ -115,10 +115,10 @@ pub trait LamellarAM {
 
 pub enum LamellarReturn {
     LocalData(LamellarAny),
-    LocalAm(LamellarBoxedAm),
+    LocalAm(LamellarArcAm),
     // RemoteData(LamellarAny,LamellarBoxedAm),
     RemoteData(LamellarResultArc),
-    RemoteAm(LamellarBoxedAm),
+    RemoteAm(LamellarArcAm),
     Unit,
 }
 
@@ -133,6 +133,8 @@ pub(crate) enum Cmd {
     ExecReturn,
     LocalExec,
     ExecBatchUnitReturns,
+    AmReturn,
+    BatchedAmReturn,
     DataReturn,
     BatchedDataReturn,
     UnitReturn,

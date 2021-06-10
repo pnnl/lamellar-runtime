@@ -47,7 +47,7 @@ fn main() {
     let am = AmNoReturn { my_pe: my_pe, index: 0, data: vec![0] };
     if my_pe == 0 {
         for i in 0..10{
-            world.exec_am_all( AmNoReturn { my_pe: my_pe, index: i , data: vec![i;1]});
+            world.exec_am_all( AmNoReturn { my_pe: my_pe, index: i , data: vec![i;i]});
             world.exec_am_all( AmNoReturn { my_pe: my_pe, index: i , data: vec![i;100000]});
         }
         // world.wait_all();

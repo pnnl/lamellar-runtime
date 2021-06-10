@@ -232,12 +232,17 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_type: AmType) -> 
         },
         AmType::ReturnAm(_) => {
             quote!{
-                let ret = Box::new (
-                    #last_expr
-                );
                 let ret = match __local{
-                    true => #lamellar::LamellarReturn::LocalAm(ret),
-                    false => #lamellar::LamellarReturn::RemoteAm(ret),
+                    true => #lamellar::LamellarReturn::LocalAm(
+                        std::sync::Arc::new (
+                            #last_expr
+                        )
+                    ),
+                    false => #lamellar::LamellarReturn::RemoteAm(
+                        std::sync::Arc::new (
+                            #last_expr
+                        )
+                    ),
                 };
                 ret
             }

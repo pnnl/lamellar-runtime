@@ -33,6 +33,7 @@ serde_closure = { version = "0.1.5", optional = true }
 async-task = "4.0.2"
 async-trait = "0.1.40"
 async-std = "1.6.4"
+async-recursion = "0.2"
 lamellar-prof = {path = "lamellar-prof" }
 libc = { version = "0.2.81", optional = true }
 shared_memory = "0.11"

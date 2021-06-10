@@ -436,7 +436,7 @@ impl SubData for RofiData{
     fn sub_data(&self,start: usize, end: usize) -> SerializedData{
         let mut sub = self.clone();
         sub.data_start += start;
-        sub.data_len += end-start;
+        sub.data_len = end-start;
         SerializedData::RofiData(sub)
     }
 }
