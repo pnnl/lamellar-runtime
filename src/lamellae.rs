@@ -16,7 +16,9 @@ mod rofi;
 #[cfg(feature = "enable-rofi")]
 pub(crate) mod rofi_lamellae;
 
+#[cfg(feature = "enable-rofi")]
 use rofi_lamellae::{RofiBuilder,Rofi};
+#[cfg(feature = "enable-rofi")]
 use rofi::rofi_comm::RofiData;
 // pub(crate) mod shmem_lamellae;
 
@@ -72,6 +74,7 @@ pub(crate) struct SerializeHeader{
 #[enum_dispatch(Des, SubData)]
 #[derive(Clone)]
 pub(crate) enum SerializedData{
+    #[cfg(feature = "enable-rofi")]
     RofiData,
     LocalData
 }
@@ -99,6 +102,7 @@ pub(crate) trait SubData{
 
 #[enum_dispatch(LamellaeInit)]
 pub(crate) enum LamellaeBuilder{
+    #[cfg(feature = "enable-rofi")]
     RofiBuilder,
     Local, 
 }
@@ -120,7 +124,7 @@ pub(crate) trait Ser{
 
 #[enum_dispatch(LamellaeComm, LamellaeAM, LamellaeRDMA, Ser)]
 pub(crate) enum Lamellae{
-    // #[cfg(feature = "enable-rofi")]
+    #[cfg(feature = "enable-rofi")]
     Rofi,
     Local,
 }
@@ -166,7 +170,7 @@ pub(crate) trait LamellaeRDMA: Send + Sync {
 //#[prof]
 pub(crate) fn create_lamellae(backend: Backend) -> LamellaeBuilder { 
     match backend {
-        // #[cfg(feature = "enable-rofi")]
+        #[cfg(feature = "enable-rofi")]
         Backend::Rofi => {
             let provider = match std::env::var("LAMELLAR_ROFI_PROVIDER") {
                 Ok(p) => match p.as_str() {

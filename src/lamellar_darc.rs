@@ -12,7 +12,7 @@ use crate::lamellar_world::LAMELLAES;
 use crate::LamellarTeamRT;
 use crate::LamellarTeam;
 // use crate::LamellarAM;
-use crate::lamellae::{AllocationType,Backend};
+use crate::lamellae::{AllocationType,Backend,LamellaeRDMA,LamellaeComm};
 use crate::active_messaging::ActiveMessaging;
 use crate::IdError;
 
@@ -89,7 +89,7 @@ T: ?Sized,
     dist_cnt: AtomicUsize, // cnt of times weve cloned (serialized) for distributed access
     ref_cnt_addr: usize, // array of cnts for accesses from remote pes
     dropped_addr: usize,
-    team: *const LamellarTeamRT,
+    team: *const LamellarTeam,
     item: *const T,
 }
 unsafe impl<T: ?Sized + Sync + Send > Send for DarcInner<T> {}
@@ -107,8 +107,8 @@ unsafe impl<T: ?Sized + Sync + Send > Sync for Darc<T> {}
 
 impl <T: ?Sized> DarcInner<T>{
 
-    fn team(&self) -> &LamellarTeamRT{
-        unsafe{&*self.team }
+    fn team(&self) -> Arc<LamellarTeamRT>{
+        unsafe{(*self.team).team.clone() }
     }
     fn inc_pe_ref_count(&self, pe: usize, amt: usize) -> usize { //not sure yet what pe will be (world or team)
         let team_pe = pe; 
@@ -140,7 +140,7 @@ impl <T: ?Sized> DarcInner<T>{
             
             if cnt > 0 {
                 let my_addr = &*self as *const DarcInner<T>  as usize;
-                let pe_addr = team.lamellae.get_rdma().remote_addr( team.arch.world_pe(pe).unwrap(),my_addr);
+                let pe_addr = team.lamellae.remote_addr( team.arch.world_pe(pe).unwrap(),my_addr);
                 // println!("sending finised to {:?} {:?}",pe,cnt);
                 reqs.push(team.exec_am_pe(pe,FinishedAm{cnt: cnt, orig_pe: pe, inner_addr: pe_addr }).into_future()); 
             }
@@ -232,28 +232,27 @@ impl <T>  Darc<T>{
     }
 
     pub fn  try_new(team: Arc<LamellarTeam>, item: T) -> Result<Darc<T>,IdError>{
-        let team = team.team.clone();
-        let my_pe = team.team_pe?;
-        let rdma = team.lamellae.get_rdma();
+        let team_rt = team.team.clone();
+        let my_pe = team_rt.team_pe?;
         
-        let alloc = if team.num_pes == team.num_world_pes {
+        let alloc = if team_rt.num_pes == team_rt.num_world_pes {
             AllocationType::Global
             
         }
         else{
-            AllocationType::Sub(team.get_pes())
+            AllocationType::Sub(team_rt.get_pes())
             
         };
-        let size = std::mem::size_of::<DarcInner<T>>() + team.num_pes*std::mem::size_of::<usize>()+team.num_pes;
-        let addr = rdma.alloc(size,alloc).unwrap();
+        let size = std::mem::size_of::<DarcInner<T>>() + team_rt.num_pes*std::mem::size_of::<usize>()+team_rt.num_pes;
+        let addr =  team_rt.lamellae.alloc(size,alloc).unwrap();
         let temp_team = team.clone();
         let darc_temp=DarcInner{
             my_pe: my_pe,
-            num_pes: team.num_pes,
+            num_pes: team_rt.num_pes,
             local_cnt: AtomicUsize::new(1),
             dist_cnt: AtomicUsize::new(0),
             ref_cnt_addr: addr + std::mem::size_of::<DarcInner<T>>(),
-            dropped_addr: addr + std::mem::size_of::<DarcInner<T>>() + team.num_pes*std::mem::size_of::<usize>(),
+            dropped_addr: addr + std::mem::size_of::<DarcInner<T>>() + team_rt.num_pes*std::mem::size_of::<usize>(),
             team: Arc::into_raw(temp_team),
             item: Box::into_raw(Box::new(item)), 
         };
@@ -265,7 +264,7 @@ impl <T>  Darc<T>{
             orig_pe: my_pe,
             phantom: PhantomData
         };
-        team.barrier();
+        team_rt.barrier();
         Ok(d) 
     }
     
@@ -335,7 +334,7 @@ impl<T: 'static + ?Sized> Drop for Darc<T> {
                 // println!("launching drop task");
                 // self.print();
                 inner.team().exec_am_local(DroppedWaitAM{inner_addr: self.inner as *const u8 as usize, dropped_addr: inner.dropped_addr,my_pe: inner.my_pe, num_pes: inner.num_pes , phantom: PhantomData::<T>});
-                let rdma = inner.team().lamellae.get_rdma();
+                let rdma = &inner.team().lamellae;
                 for pe in inner.team().arch.team_iter(){
                     rdma.put(pe, &dropped_refs[inner.my_pe..=inner.my_pe], inner.dropped_addr + inner.my_pe * std::mem::size_of::<u8>());
                 }
@@ -396,7 +395,7 @@ impl<T: 'static + ?Sized> LamellarAM for DroppedWaitAM<T>{
             let _item =  Box::from_raw(wrapped.inner.as_ref().item as *mut T) ;
             let team =  Arc::from_raw(wrapped.inner.as_ref().team) ; //return to rust to drop appropriately
             // println!("Darc freed! {:x} {:?}",self.inner_addr,dropped_refs);
-            team.lamellae.get_rdma().free(self.inner_addr);
+            team.team.lamellae.free(self.inner_addr);
         }
         
         
@@ -456,7 +455,7 @@ impl< T: ?Sized > From<__NetworkDarc<T>>
 
         if let Some(lamellae) = LAMELLAES.read().get(&ndarc.backend){
             let darc = Darc{
-                inner: lamellae.get_rdma().local_addr(ndarc.orig_world_pe,ndarc.inner_addr) as *mut DarcInner<T>,
+                inner: lamellae.local_addr(ndarc.orig_world_pe,ndarc.inner_addr) as *mut DarcInner<T>,
                 orig_pe: ndarc.orig_team_pe,
                 phantom: PhantomData
             };
@@ -591,7 +590,7 @@ impl< T: ?Sized > From<__NetworkDarc<T>>
 
         if let Some(lamellae) = LAMELLAES.read().get(&ndarc.backend){
             let darc = Darc{
-                inner: lamellae.get_rdma().local_addr(ndarc.orig_world_pe,ndarc.inner_addr) as *mut DarcInner<RwLock<Box<T>>>,
+                inner: lamellae.local_addr(ndarc.orig_world_pe,ndarc.inner_addr) as *mut DarcInner<RwLock<Box<T>>>,
                 orig_pe: ndarc.orig_team_pe,
                 phantom: PhantomData
             };

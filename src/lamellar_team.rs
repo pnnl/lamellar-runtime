@@ -33,6 +33,7 @@ use std::time::{Duration, Instant};
 // this should allow for the inner team to persist while at least one user handle exists in the world.
 
 pub struct LamellarTeam {
+    pub(crate) world: Arc<LamellarTeamRT>,
     pub(crate) team: Arc<LamellarTeamRT>,
     pub(crate) teams: Arc<RwLock<HashMap<u64, Weak<LamellarTeamRT>>>>, //need a reference to this so we can clean up after dropping the team
 }
@@ -48,18 +49,21 @@ impl LamellarTeam {
         world_counters: Arc<AMCounters>,
         // lamellae: Arc<dyn Lamellae + Sync + Send>,
         lamellae: Arc<Lamellae>,
+        world: Option<Arc<LamellarTeamRT>>,
         teams: Arc<RwLock<HashMap<u64, Weak<LamellarTeamRT>>>>,
     ) -> LamellarTeam {
+        let team = Arc::new(LamellarTeamRT::new(
+            num_pes,
+            world_pe,
+            // scheduler,
+            scheduler,
+            world_counters,
+            // lamellae,
+            lamellae,
+        ));
         LamellarTeam {
-            team: Arc::new(LamellarTeamRT::new(
-                num_pes,
-                world_pe,
-                // scheduler,
-                scheduler,
-                world_counters,
-                // lamellae,
-                lamellae,
-            )),
+            world: if let Some(world) = world {world} else { team.clone() },
+            team: team,
             teams: teams,
         }
     }
@@ -91,6 +95,7 @@ impl LamellarTeam {
                 .write()
                 .insert(team.my_hash, Arc::downgrade(&team));
             Some(Arc::new(LamellarTeam {
+                world: self.world.clone(),
                 team: team,
                 teams: self.teams.clone(),
             }))
@@ -151,6 +156,7 @@ impl ActiveMessaging for LamellarTeam {
     {
         self.team.exec_am_local(am)
     }
+    
 }
 
 pub struct LamellarTeamRT {
@@ -257,7 +263,7 @@ impl LamellarTeamRT {
     pub fn team_pe_id(&self) -> Result<usize, IdError> {
         self.arch.team_pe(self.world_pe)
     }
-
+    
     pub fn create_subteam_from_arch<L>(
         world: Arc<LamellarTeamRT>,
         parent: Arc<LamellarTeamRT>,
@@ -518,26 +524,11 @@ impl ActiveMessaging for Arc<LamellarTeamRT> {
             self.team_counters.outstanding_reqs.clone(),
             self.world_counters.outstanding_reqs.clone(),
         );
-        // let msg = Msg {
-        //     cmd: ExecType::Am(Cmd::Exec),
-        //     src: self.world_pe as u16,
-        //     req_id: my_req.id,
-        //     // team_id: self.id,
-        //     // return_data: true,
-        // };
+        
         self.world_counters.add_send_req(self.num_pes);
         self.team_counters.add_send_req(self.num_pes);
         // let my_any: LamellarAny =Box::new(Box::new(am) as LamellarBoxedAm);
         let func: LamellarArcAm = Arc::new(am);
-        // self.scheduler.submit_req(
-        //     self.world_pe,
-        //     None,
-        //     msg,
-        //     ireq,
-        //     LamellarFunc::Am(func),
-        //     self.lamellae.clone(),
-        //     self.my_hash,
-        // );
         let world = if let Some(world) = &self.world{
             world.clone()
         }

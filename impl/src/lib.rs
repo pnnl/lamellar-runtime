@@ -639,90 +639,50 @@ fn create_reduction(
     crate_header: String,
 ) -> proc_macro2::TokenStream {
     let reduction_name = quote::format_ident!("{:}_{:}_reduction", typeident, reduction);
-    let reduction_exec = quote::format_ident!("{:}_{:}_reduction_exec", typeident, reduction);
+    let reduction_return_name = quote::format_ident!("{:}_{:}_reduction_return", typeident, reduction);
+    let reduction_unpack = quote::format_ident!("{:}_{:}_reduction_unpack", typeident, reduction);
     let reduction_gen = quote::format_ident!("{:}_{:}_reduction_gen", typeident, reduction);
     let reduction = quote::format_ident!("{:}", reduction);
     let lamellar = quote::format_ident!("{}", crate_header.clone());
-    let exec = quote! {
-
-        if self.start_pe == self.end_pe{
-            // println!("[{:?}] {:?}",__lamellar_current_pe,self);
-            let timer = std::time::Instant::now();
-            let data_slice = <#lamellar::LamellarMemoryRegion<#typeident> as #lamellar::RegisteredMemoryRegion>::as_slice(&self.data).unwrap();
-            let first = data_slice.first().unwrap().clone();
-            let res = data_slice[1..].iter().fold(first, #op );
-            // println!("[{:?}] {:?} {:?}",__lamellar_current_pe,res,timer.elapsed().as_secs_f64());
-            res
-        }
-        else{
-            // println!("[{:?}] {:?}",__lamellar_current_pe,self);
-            let mid_pe = (self.start_pe + self.end_pe)/2;
-            let op = #op;
-            let timer = std::time::Instant::now();
-            let left = __lamellar_team.exec_am_pe(self.start_pe,  #reduction_name { data: self.data.clone(), start_pe: self.start_pe, end_pe: mid_pe}).into_future();
-            let right = __lamellar_team.exec_am_pe(mid_pe+1,  #reduction_name { data: self.data.clone(), start_pe: mid_pe+1, end_pe: self.end_pe}).into_future();
-            let res = op(left.await.unwrap(),&right.await.unwrap());
-            // println!("[{:?}] {:?} {:?}",__lamellar_current_pe,res,timer.elapsed().as_secs_f64());
-            res
-        }
-    };
 
     let expanded = quote! {
         #[allow(non_camel_case_types)]
-        #[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
+        #[lamellar_impl::AmDataRT]
         struct #reduction_name{
             data: #lamellar::LamellarMemoryRegion<#typeident>,
             start_pe: usize,
             end_pe: usize,
         }
-        impl #lamellar::LamellarSerde for #reduction_name {
-            fn ser(&self,_num_pes: usize) -> Vec<u8> {
-                #lamellar::serialize(self).unwrap()
+
+        #[lamellar_impl::rt_am]
+        impl LamellarAM for #reduction_name{
+            fn exec(&self) -> #typeident{
+                if self.start_pe == self.end_pe{
+                    // println!("[{:?}] {:?}",__lamellar_current_pe,self);
+                    let timer = std::time::Instant::now();
+                    let data_slice = <#lamellar::LamellarMemoryRegion<#typeident> as #lamellar::RegisteredMemoryRegion>::as_slice(&self.data).unwrap();
+                    let first = data_slice.first().unwrap().clone();
+                    let res = data_slice[1..].iter().fold(first, #op );
+                    // println!("[{:?}] {:?} {:?}",__lamellar_current_pe,res,timer.elapsed().as_secs_f64());
+                    res
+                }
+                else{
+                    // println!("[{:?}] {:?}",__lamellar_current_pe,self);
+                    let mid_pe = (self.start_pe + self.end_pe)/2;
+                    let op = #op;
+                    let timer = std::time::Instant::now();
+                    let left = __lamellar_team.exec_am_pe(self.start_pe,  #reduction_name { data: self.data.clone(), start_pe: self.start_pe, end_pe: mid_pe}).into_future();
+                    let right = __lamellar_team.exec_am_pe(mid_pe+1,  #reduction_name { data: self.data.clone(), start_pe: mid_pe+1, end_pe: self.end_pe}).into_future();
+                    let res = op(left.await.unwrap(),&right.await.unwrap());
+                    // println!("[{:?}] {:?} {:?}",__lamellar_current_pe,res,timer.elapsed().as_secs_f64());
+                    res
+                }
             }
-            fn des(&self) {} 
-        }
-        impl #lamellar::LamellarActiveMessage for #reduction_name {
-            fn exec(self: Box<Self>,__lamellar_current_pe: usize,__lamellar_num_pes: usize, __local: bool, __lamellar_world: std::sync::Arc<#lamellar::LamellarTeamRT>, __lamellar_team: std::sync::Arc<#lamellar::LamellarTeamRT>) -> std::pin::Pin<Box<dyn std::future::Future<Output=Option<#lamellar::LamellarReturn>> + Send>>{
-
-                Box::pin( async move {
-                let ret = #lamellar::serialize(& #exec ).unwrap();
-                let ret = match __local{ //should probably just separate these into exec_local exec_remote to get rid of a conditional...
-                    true => Some(#lamellar::LamellarReturn::LocalData(ret)),
-                    false => Some(#lamellar::LamellarReturn::RemoteData(ret)),
-                };
-                ret
-                })
-            }
-            fn get_id(&self) -> String{
-                stringify!(#reduction_name).to_string()
-            }
-            
-        }
-
-        impl LocalAM for #reduction_name {
-            type Output =  #typeident;
-        }
-
-        impl LamellarAM for #reduction_name {
-            type Output = #typeident;
-        }
-
-        fn #reduction_exec(bytes: Vec<u8>,__lamellar_current_pe: usize,__lamellar_num_pes: usize, __lamellar_world: std::sync::Arc<#lamellar::LamellarTeamRT>, __lamellar_team: std::sync::Arc<#lamellar::LamellarTeamRT>) -> std::pin::Pin<Box<dyn std::future::Future<Output=Option<#lamellar::LamellarReturn>> + Send>> {
-            let __lamellar_data: Box<#reduction_name> = Box::new(#lamellar::deserialize(&bytes).unwrap());
-            <#reduction_name as #lamellar::LamellarActiveMessage>::exec(__lamellar_data,__lamellar_current_pe,__lamellar_num_pes,false,__lamellar_world,__lamellar_team)
         }
 
         fn  #reduction_gen<T: serde::ser::Serialize + serde::de::DeserializeOwned + std::clone::Clone + Send + Sync + 'static> (rmr: #lamellar::LamellarMemoryRegion<T>, num_pes: usize)
-        -> Box<dyn #lamellar::LamellarActiveMessage + Send + Sync >{
-            Box::new(#reduction_name{data: unsafe {rmr.as_base::<#typeident>() }, start_pe: 0, end_pe: num_pes-1})
-        }
-
-        #lamellar::inventory::submit! {
-            #![crate = #lamellar]
-            #lamellar::RegisteredAm{
-                exec: #reduction_exec,
-                name: stringify!(#reduction_name).to_string()
-            }
+        -> std::sync::Arc<dyn #lamellar::LamellarActiveMessage + Send + Sync >{
+            std::sync::Arc::new(#reduction_name{data: unsafe {rmr.as_base::<#typeident>() }, start_pe: 0, end_pe: num_pes-1})
         }
 
         #lamellar::inventory::submit! {

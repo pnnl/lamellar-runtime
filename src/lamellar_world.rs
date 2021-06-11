@@ -274,6 +274,7 @@ impl LamellarWorld {
                 .write()
                 .insert(team.my_hash, Arc::downgrade(&team));
             Some(Arc::new(LamellarTeam {
+                world: self.team_rt.clone(),
                 team: team,
                 teams: self.teams.clone(),
             }))
@@ -301,7 +302,7 @@ impl LamellarWorld {
         size: usize,
     ) -> LamellarArray<T> {
         self.barrier();
-        LamellarArray::new(self.team_rt.clone(), size, self.counters.clone())
+        LamellarArray::new(self.team.clone(), size, self.counters.clone())
     }
 
     // #[cfg(feature = "experimental")]
@@ -410,6 +411,7 @@ impl LamellarWorldBuilder {
         // println!("world gen barrier!!!!!!!!!!!!");
         let mut world = LamellarWorld {
             team: Arc::new(LamellarTeam {
+                world: team_rt.clone(),
                 team: team_rt.clone(),
                 teams: teams.clone(),
             }),

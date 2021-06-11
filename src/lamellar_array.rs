@@ -3,8 +3,8 @@ use crate::lamellae::Lamellae;
 use crate::lamellar_arch::LamellarArchRT;
 use crate::lamellar_memregion::{LamellarMemoryRegion, RemoteMemoryRegion};
 use crate::lamellar_request::{AmType, LamellarRequest, LamellarRequestHandle};
-use crate::lamellar_team::LamellarTeamRT;
-use crate::schedulers::SchedulerQueue;
+use crate::lamellar_team::LamellarTeam;
+use crate::scheduler::{Scheduler,SchedulerQueue};
 
 use log::trace;
 use std::hash::{Hash, Hasher};
@@ -21,7 +21,7 @@ use std::time::{Duration, Instant};
 // // this should allow for the inner team to persist while at least one user handle exists in the world.
 
 pub(crate) type ReduceGen =
-    fn(LamellarMemoryRegion<u8>, usize) -> Box<dyn LamellarActiveMessage + Send + Sync>;
+    fn(LamellarMemoryRegion<u8>, usize) -> Arc<dyn LamellarActiveMessage + Send + Sync>;
 
 lazy_static! {
     pub(crate) static ref REDUCE_OPS: HashMap<(std::any::TypeId, String), ReduceGen> = {
@@ -43,8 +43,8 @@ pub struct ReduceKey {
 }
 crate::inventory::collect!(ReduceKey);
 
-lamellar_impl::generate_reductions_for_type_rt!(u8, u16, u32, u64, u128, usize);
-lamellar_impl::generate_reductions_for_type_rt!(i8, i16, i32, i64, i128, isize);
+lamellar_impl::generate_reductions_for_type_rt!(u8);//, u16, u32, u64, u128, usize);
+// lamellar_impl::generate_reductions_for_type_rt!(i8, i16, i32, i64, i128, isize);
 // lamellar_impl::generate_reductions_for_type_rt!(f32,f64);
 
 pub struct LamellarArray<
@@ -53,13 +53,14 @@ pub struct LamellarArray<
     pub rmr: LamellarMemoryRegion<T>,
     num_pes: usize,
     my_pe: usize,
-    scheduler: Arc<dyn SchedulerQueue>,
-    lamellae: Arc<dyn Lamellae + Send + Sync>,
+    scheduler: Arc<Scheduler>,
+    lamellae: Arc<Lamellae>,
     pub(crate) arch: Arc<LamellarArchRT>,
     team_counters: AMCounters,
     world_counters: Arc<AMCounters>, // can probably remove this?
     id: usize,
     pub(crate) my_hash: u64,
+    team: Arc<LamellarTeam>,
 }
 
 //#[prof]
@@ -89,23 +90,24 @@ impl<
     > LamellarArray<T>
 {
     pub(crate) fn new(
-        team: Arc<LamellarTeamRT>,
+        team: Arc<LamellarTeam>,
         array_size: usize,
         world_counters: Arc<AMCounters>,
     ) -> LamellarArray<T> {
         LamellarArray {
             rmr: team.alloc_shared_mem_region(array_size),
             // global_length: array_size,
-            scheduler: team.scheduler.clone(),
-            lamellae: team.lamellae.clone(),
-            arch: team.arch.clone(),
-            my_pe: team.world_pe,
-            num_pes: team.num_pes,
+            scheduler: team.team.scheduler.clone(),
+            lamellae: team.team.lamellae.clone(),
+            arch: team.team.arch.clone(),
+            my_pe: team.team.world_pe,
+            num_pes: team.team.num_pes,
             team_counters: AMCounters::new(),
             world_counters: world_counters,
             id: 0,
             // sub_team_id_cnt: AtomicUsize::new(0),
             my_hash: 0, //easy id to look up for global
+            team: team,
         }
     }
 
@@ -131,7 +133,7 @@ impl<
         }
     }
 
-    fn get_reduction_op(&self, op: String) -> Box<dyn LamellarActiveMessage + Send + Sync> {
+    fn get_reduction_op(&self, op: String) -> LamellarArcAm {
         unsafe {
             REDUCE_OPS
                 .get(&(std::any::TypeId::of::<T>(), op))
@@ -143,7 +145,7 @@ impl<
 
     fn reduce_inner(
         &self,
-        func: LamellarAny,
+        func: LamellarArcAm,
     ) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
         trace!("[{:?}] team exec am all request", self.my_pe);
         let (my_req, ireq) = LamellarRequestHandle::new(
@@ -153,30 +155,24 @@ impl<
             self.team_counters.outstanding_reqs.clone(),
             self.world_counters.outstanding_reqs.clone(),
         );
-        let msg = Msg {
-            cmd: ExecType::Am(Cmd::Exec),
-            src: self.my_pe as u16,
-            req_id: my_req.id,
-            team_id: self.id,
-            return_data: true,
-        };
         self.world_counters.add_send_req(1);
         self.team_counters.add_send_req(1);
-        self.scheduler.submit_req(
+        self.scheduler.submit_req_new(
             self.my_pe,
             Some(self.my_pe),
-            msg,
-            ireq,
-            func,
-            self.lamellae.get_am(),
+            ExecType::Am(Cmd::Exec),
+            my_req.id,
+            LamellarFunc::Am(func),
+            self.lamellae.clone(),
+            self.team.world.clone(),
+            self.team.team.clone(),
             self.my_hash,
+            Some(ireq),
         );
         Box::new(my_req)
     }
     pub fn reduce(&self, op: &str) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
-        let my_any: LamellarAny =
-            Box::new(self.get_reduction_op(op.to_string()) as LamellarBoxedAm);
-        self.reduce_inner(my_any)
+        self.reduce_inner(self.get_reduction_op(op.to_string()))
     }
     pub fn sum(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
         // let my_any: LamellarAny = Box::new(self.get_reduction_op("sum".to_string()) as LamellarBoxedAm);

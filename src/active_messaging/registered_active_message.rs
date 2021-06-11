@@ -762,6 +762,7 @@ impl RegisteredActiveMessages{
             self.exec_batched_return_am(msg.src as usize,header.team_hash,-header.id,msg.req_id,lamellae,world,team,data_slice);
         }
     }
+    
     fn exec_batched_return_am(&self,
         src: usize,
         team_hash: u64,
@@ -885,7 +886,6 @@ impl RegisteredActiveMessages{
         // println!("processing returns {:?}",batch_id);
         let data_slice=ser_data.data_as_bytes();  
         let mut index=0;
-        // let batch_id = msg.req_id;
         let serialized_size = crate::serialized_size(&(0usize,0usize));
         // println!("data_slice {:?}",data_slice);
         while index < data_slice.len(){
@@ -905,9 +905,6 @@ impl RegisteredActiveMessages{
         let serialized_size = crate::serialized_size(&(0usize,0usize));
         let cnt = if let Some(reqs) =self.txed_ams.lock().get_mut(&batch_id){
             let mut reqs = reqs.lock();
-            // for (b_id,r_id) in reqs.iter(){
-            //     println!("{:?} {:?}",b_id,r_id);
-            // }
             while index < data_slice.len(){
                 // println!("index {:?} len {:?} ss {:?}",index,data_slice.len(),serialized_size);
                 let (batch_req_id,data_size): (usize,usize) = crate::deserialize(&data_slice[index..(index+serialized_size)]).unwrap();
