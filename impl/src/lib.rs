@@ -137,7 +137,7 @@ fn get_return_am_return_type(args: String) -> proc_macro2::TokenStream{
 fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_type: AmType) -> TokenStream {
     let name = type_name(&input.self_ty).expect("unable to find name");
     let lamellar = if rt {
-        quote::format_ident!("crate")
+        quote::format_ident!("lamellar_impl")
     }
     else {
         quote::format_ident!("lamellar")
@@ -448,14 +448,14 @@ pub fn AmLocalData(args: TokenStream,input: TokenStream) -> TokenStream {
 #[proc_macro_error]
 #[proc_macro_attribute]
 pub fn AmDataRT(args: TokenStream,input: TokenStream) -> TokenStream {
-    derive_am_data(input, args,"crate".to_string(),false)
+    derive_am_data(input, args,"lamellar_impl".to_string(),false)
 }
 
 #[allow(non_snake_case)]
 #[proc_macro_error]
 #[proc_macro_attribute]
 pub fn AmLocalDataRT(args: TokenStream,input: TokenStream) -> TokenStream {
-    derive_am_data(input, args,"crate".to_string(),true)
+    derive_am_data(input, args,"lamellar_impl".to_string(),true)
 }
 
 fn parse_am(args: TokenStream, input: TokenStream, local: bool, rt: bool) -> TokenStream{
