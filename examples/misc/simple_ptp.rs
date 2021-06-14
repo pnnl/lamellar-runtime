@@ -27,6 +27,7 @@ struct FollowUpAM {}
 #[lamellar::am(return_am = "RespAM -> i128")]
 impl LamellarAM for SyncAM {
     fn exec(&self) -> RespAM {
+        // println!("in sync am");
         let t = get_time_as_nsec();
         RespAM { time: t }
     }
@@ -35,6 +36,7 @@ impl LamellarAM for SyncAM {
 #[lamellar::am]
 impl LamellarAM for RespAM {
     fn exec(&self) -> i128 {
+        // println!("in resp am");
         let t2 = get_time_as_nsec();
         let t1 = self.time;
         let t3 = get_time_as_nsec();
@@ -51,6 +53,7 @@ impl LamellarAM for RespAM {
 #[lamellar::am]
 impl LamellarAM for FollowUpAM {
     fn exec(&self) -> i128 {
+        // println!("in followup am");
         get_time_as_nsec()
     }
 }
@@ -61,14 +64,15 @@ fn main() {
     let _num_pes = world.num_pes();
     world.barrier();
     let mut reqs = Vec::new();
-    for _i in 0..100 {
+    let num_tasks=100;
+    for _i in 0..num_tasks {
         reqs.push(world.exec_am_pe(0, SyncAM {}));
     }
     world.wait_all();
     world.barrier();
 
     let mut sum = 0 as i128;
-    for i in 0..10 {
+    for i in 0..num_tasks {
         let res = reqs[i].get().unwrap();
         sum += res;
     }

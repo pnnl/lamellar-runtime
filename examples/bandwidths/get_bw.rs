@@ -48,7 +48,7 @@ fn main() {
         if my_pe == 0 {
             for j in (0..2_u64.pow(exp) as usize).step_by(num_bytes as usize) {
                 // if j % 1024 ==0 {
-                    println!("[{:?}] j: {:?}",my_pe, j);
+                    // println!("[{:?}] j: {:?}",my_pe, j);
                 // }
                 let sub_timer = Instant::now();
                 unsafe {

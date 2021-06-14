@@ -28,28 +28,6 @@ impl LamellarAM for ReturnUsizeAM {
         self.val1
     }
 }
-
-#[lamellar::AmData(Clone, Debug)]
-struct ReturnVecAM {
-    val1: usize,
-    val2: String,
-    vec: Vec<usize>,
-}
-
-#[lamellar::am]
-impl LamellarAM for ReturnVecAM {
-    fn exec(&self) -> Vec<usize> {
-        // println!("{:?}",self);
-        // println!(
-        //     "\t\tin ReturnUsizeAM {:?} on pe {:?} ({:?})",
-        //     self,
-        //     lamellar::current_pe,
-        //     hostname::get().unwrap()
-        // );
-        self.vec.clone()
-
-    }
-}
 //-------------------------------------------------------------------//
 
 //--Active message returning an active message that returns nothing--//
@@ -61,7 +39,7 @@ struct InitialAM {
 
 #[lamellar::am(return_am = "ReturnUsizeAM -> usize")] //we specify as a proc_macro argument the type of AM we are returning
 impl LamellarAM for InitialAM {
-    fn exec(&self) -> ReturnUsizeAM {
+    fn exec(&self) -> ReturnAM {
         let current_hostname = hostname::get().unwrap().to_string_lossy().to_string();
         println!(
             "\tin  InitialAM {:?} on pe {:?} of {:?} ({:?})",
@@ -73,25 +51,6 @@ impl LamellarAM for InitialAM {
         ReturnUsizeAM {
             val1: lamellar::current_pe,
             val2: current_hostname,
-        }
-    }
-}
-
-#[lamellar::AmData(Clone, Debug)]
-struct InitialAMVec {
-    val1: usize,
-    val2: String,
-    vec: Vec<usize>,
-}
-
-#[lamellar::am(return_am = "ReturnVecAM -> Vec<usize>")] //we specify as a proc_macro argument the type of AM we are returning
-impl LamellarAM for InitialAMVec {
-    fn exec(&self) -> ReturnVecAM {
-        let current_hostname = hostname::get().unwrap().to_string_lossy().to_string();
-        ReturnVecAM {
-            val1: self.val1,
-            val2: current_hostname,
-            vec: vec![1;self.val1],
         }
     }
 }
@@ -114,33 +73,26 @@ fn main() {
     };
 
     if my_pe == 0 {
-        for i in 0..10{
-            world.exec_am_all( InitialAMVec { val1: 1, val2: hostname::get().unwrap().to_string_lossy().to_string(), vec: vec![i;i]}); //batch msg ,batch return
-            world.exec_am_all( InitialAMVec { val1: 1, val2: hostname::get().unwrap().to_string_lossy().to_string(), vec: vec![i;100000]});//direct msg , batch return
-            world.exec_am_all( InitialAMVec { val1: 100000, val2: hostname::get().unwrap().to_string_lossy().to_string(), vec: vec![i;i]}); //batch message, direct return
-            world.exec_am_pe( 1,InitialAMVec { val1: 100000, val2: hostname::get().unwrap().to_string_lossy().to_string(), vec: vec![i;100000]}); //direct msg, direct return
-        }
-        world.wait_all();
-        // println!("---------------------------------------------------------------");
-        // println!("Testing local am");
-        // let res = world.exec_am_pe(my_pe, am.clone()).get();
-        // assert_eq!(res, Some(my_pe));
-        // println!("PE[{:?}] return result: {:?}", my_pe, res);
-        // println!("-----------------------------------");
-        // println!("Testing remote am");
-        // let res = world.exec_am_pe(num_pes - 1, am.clone()).get();
-        // assert_eq!(res, Some(num_pes - 1));
-        // println!("PE[{:?}] return result: {:?}", my_pe, res);
-        // println!("-----------------------------------");
-        // println!("Testing all am");
-        // let res = world.exec_am_all(am).get_all();
-        // assert_eq!(
-        //     res,
-        //     (0..num_pes)
-        //         .map(|x| Some(x))
-        //         .collect::<Vec<Option<usize>>>()
-        // );
-        // println!("PE[{:?}] return result: {:?}", my_pe, res);
-        // println!("---------------------------------------------------------------");
+        println!("---------------------------------------------------------------");
+        println!("Testing local am");
+        let res = world.exec_am_pe(my_pe, am.clone()).get();
+        assert_eq!(res, Some(my_pe));
+        println!("PE[{:?}] return result: {:?}", my_pe, res);
+        println!("-----------------------------------");
+        println!("Testing remote am");
+        let res = world.exec_am_pe(num_pes - 1, am.clone()).get();
+        assert_eq!(res, Some(num_pes - 1));
+        println!("PE[{:?}] return result: {:?}", my_pe, res);
+        println!("-----------------------------------");
+        println!("Testing all am");
+        let res = world.exec_am_all(am).get_all();
+        assert_eq!(
+            res,
+            (0..num_pes)
+                .map(|x| Some(x))
+                .collect::<Vec<Option<usize>>>()
+        );
+        println!("PE[{:?}] return result: {:?}", my_pe, res);
+        println!("---------------------------------------------------------------");
     }
 }

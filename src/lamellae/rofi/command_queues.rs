@@ -406,11 +406,6 @@ impl RofiCQ{
                 let mut cmd_buffer = self.cmd_buffers[dst].lock();
                 if cmd_buffer.try_push(addr,len){
                     let data_slice = unsafe{ std::slice::from_raw_parts((addr + self.rofi_comm.base_addr()) as *const u8, len) };
-                    // if  len > 4 && self.rofi_comm.my_pe == 0{
-                    //     if data_slice[len-2] == 0 {
-                    //         println!("is this correct? {:?}",&data_slice[len-3..])
-                    //     }
-                    // }
                     self.sent_cnt.fetch_add(1,Ordering::SeqCst);
                     self.put_amt.fetch_add(len,Ordering::Relaxed);
                     let cnt = self.pending_cmds.fetch_sub(1,Ordering::SeqCst);
@@ -466,7 +461,7 @@ impl RofiCQ{
                     send_buf[dst].daddr = addr as u32;
                     send_buf[dst].dsize = 0;
                     send_buf[dst].tx_bit = 255;
-                    // println!("sending free {:?} (s: {:?} r: {:?})",addr,self.sent_cnt.load(Ordering::SeqCst),self.recv_cnt.load(Ordering::SeqCst));
+                    // println!("sending free to dst {:?} {:?} (s: {:?} r: {:?})",dst,addr,self.sent_cnt.load(Ordering::SeqCst),self.recv_cnt.load(Ordering::SeqCst));
                     let recv_buffer = self.recv_buffer.lock();
                     self.rofi_comm.put(dst,send_buf[dst].as_bytes(),recv_buffer[self.my_pe].as_addr());
                     // self.put_amt.fetch_add(send_buf[dst].as_bytes().len(),Ordering::Relaxed);
@@ -487,7 +482,7 @@ impl RofiCQ{
                     send_buf[dst].daddr = size as u32;
                     send_buf[dst].dsize = addr as u32;
                     send_buf[dst].tx_bit = 255 as u16;
-                    println!("sending print {:?} (s: {:?} r: {:?})",addr,self.sent_cnt.load(Ordering::SeqCst),self.recv_cnt.load(Ordering::SeqCst));
+                    // println!("sending print {:?} (s: {:?} r: {:?})",addr,self.sent_cnt.load(Ordering::SeqCst),self.recv_cnt.load(Ordering::SeqCst));
                     let recv_buffer = self.recv_buffer.lock();
                     self.rofi_comm.put(dst,send_buf[dst].as_bytes(),recv_buffer[self.my_pe].as_addr());
                     // self.put_amt.fetch_add(send_buf[dst].as_bytes().len(),Ordering::Relaxed);
@@ -500,7 +495,7 @@ impl RofiCQ{
 
     fn free_data(&self, src: usize, buf_addr: usize){
         let sb = self.send_buffer.lock();
-        // println!("sending clear {:?} {:?} (s: {:?} r: {:?})",buf_addr,sb[self.my_pe].as_addr()-self.rofi_comm.base_addr(),self.sent_cnt.load(Ordering::SeqCst),self.recv_cnt.load(Ordering::SeqCst));
+        // println!("sending clear to src {:?} {:?} {:?} (s: {:?} r: {:?})",src,buf_addr,sb[self.my_pe].as_addr()-self.rofi_comm.base_addr(),self.sent_cnt.load(Ordering::SeqCst),self.recv_cnt.load(Ordering::SeqCst));
         self.rofi_comm.put(src,self.clear_cmd.as_bytes(),sb[self.my_pe].as_addr());
         // self.put_amt.fetch_add(self.clear_cmd.as_bytes().len(),Ordering::Relaxed);
         drop(sb);
@@ -589,20 +584,20 @@ pub(crate) struct RofiCommandQueue{
 impl RofiCommandQueue{
     pub fn new(rofi_comm: Arc<RofiComm>,my_pe: usize, num_pes: usize) -> RofiCommandQueue {
         let send_buffer_addr = rofi_comm.rt_alloc(num_pes * std::mem::size_of::<RofiCmd>()).unwrap() + rofi_comm.base_addr();
-        println!("send_buffer_addr {:x}",send_buffer_addr-rofi_comm.base_addr());
+        // println!("send_buffer_addr {:x}",send_buffer_addr-rofi_comm.base_addr());
         let recv_buffer_addr = rofi_comm.rt_alloc(num_pes * std::mem::size_of::<RofiCmd>()).unwrap() + rofi_comm.base_addr();
-        println!("recv_buffer_addr {:x}",recv_buffer_addr-rofi_comm.base_addr());
+        // println!("recv_buffer_addr {:x}",recv_buffer_addr-rofi_comm.base_addr());
         let release_cmd_addr = rofi_comm.rt_alloc(std::mem::size_of::<RofiCmd>()).unwrap()+ rofi_comm.base_addr();
-        println!("release_cmd_addr {:x}",release_cmd_addr-rofi_comm.base_addr());
+        // println!("release_cmd_addr {:x}",release_cmd_addr-rofi_comm.base_addr());
         let clear_cmd_addr = rofi_comm.rt_alloc(std::mem::size_of::<RofiCmd>()).unwrap()+ rofi_comm.base_addr();
-        println!("clear_cmd_addr {:x}",clear_cmd_addr-rofi_comm.base_addr());
+        // println!("clear_cmd_addr {:x}",clear_cmd_addr-rofi_comm.base_addr());
 
         let mut cmd_buffers_addrs = vec![];
         for _pe in 0..num_pes{
             let mut addrs = vec![];
             for _i in 0..CMD_BUFS_PER_PE{  
                 let addr = rofi_comm.rt_alloc(CMD_BUF_LEN * std::mem::size_of::<RofiCmd>() + 1).unwrap();//+ rofi_comm.base_addr();
-                println!("{:x} {:x} {:x}",_pe,_i,addr,);
+                // println!("{:x} {:x} {:x}",_pe,_i,addr,);
                 addrs.push(addr);
                 
             }
@@ -700,7 +695,7 @@ impl RofiCommandQueue{
     }
 
     pub fn tx_amount(&self)->usize{
-        println!("cq put: {:?} get {:?}",self.cq.put_amt.load(Ordering::SeqCst) ,self.cq.get_amt.load(Ordering::SeqCst));
+        // println!("cq put: {:?} get {:?}",self.cq.put_amt.load(Ordering::SeqCst) ,self.cq.get_amt.load(Ordering::SeqCst));
         self.cq.put_amt.load(Ordering::SeqCst) + self.cq.get_amt.load(Ordering::SeqCst)
     }
 

@@ -21,7 +21,7 @@ use std::time::{Duration, Instant};
 // // this should allow for the inner team to persist while at least one user handle exists in the world.
 
 pub(crate) type ReduceGen =
-    fn(LamellarMemoryRegion<u8>, usize) -> Arc<dyn LamellarActiveMessage + Send + Sync>;
+    fn(LamellarMemoryRegion<u8>, usize) -> Arc<dyn RemoteActiveMessage + Send + Sync>;
 
 lazy_static! {
     pub(crate) static ref REDUCE_OPS: HashMap<(std::any::TypeId, String), ReduceGen> = {

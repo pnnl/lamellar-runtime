@@ -130,7 +130,7 @@ impl ActiveMessaging for LamellarTeam {
 
     fn exec_am_all<F>(&self, am: F) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync>
     where
-        F: LamellarActiveMessage + LamellarAM + Serde + Send + Sync + 'static, 
+        F: RemoteActiveMessage + LamellarAM + Serde + Send + Sync + 'static, 
     {
         trace!("[{:?}] team exec am all request", self.team.world_pe);
         self.team.exec_am_all(am)
@@ -142,7 +142,7 @@ impl ActiveMessaging for LamellarTeam {
         am: F,
     ) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync>
     where
-        F: LamellarActiveMessage + LamellarAM + Serde + Send + Sync + 'static,
+        F: RemoteActiveMessage + LamellarAM + Serde + Send + Sync + 'static,
     {
         self.team.exec_am_pe(pe, am)
     }
@@ -165,9 +165,7 @@ pub struct LamellarTeamRT {
     parent: Option<Arc<LamellarTeamRT>>,
     sub_teams: RwLock<HashMap<usize, Arc<LamellarTeamRT>>>,
     mem_regions: RwLock<HashMap<usize, Box<dyn MemoryRegion + Sync + Send >>>,
-    // pub(crate) scheduler: Arc<dyn SchedulerQueue>,
     pub(crate) scheduler: Arc<Scheduler>,
-    // pub(crate) lamellae: Arc<dyn Lamellae + Send + Sync>,
     pub(crate) lamellae: Arc<Lamellae>,
     pub(crate) arch: Arc<LamellarArchRT>,
     pub(crate) world_pe: usize,   
@@ -196,10 +194,8 @@ impl LamellarTeamRT {
         //creates a new root team
         num_pes: usize,
         world_pe: usize,
-        // scheduler: Arc<dyn SchedulerQueue>,
         scheduler: Arc<Scheduler>,
         world_counters: Arc<AMCounters>,
-        // lamellae: Arc<dyn Lamellae + Sync + Send>,
         lamellae: Arc<Lamellae>,
     ) -> LamellarTeamRT {
         let arch = Arc::new(LamellarArchRT {
@@ -207,6 +203,7 @@ impl LamellarTeamRT {
             arch: LamellarArchEnum::GlobalArch(GlobalArch::new(num_pes)),
             num_pes: num_pes,
         });
+        lamellae.barrier();
 
         let alloc = AllocationType::Global;
         let team = LamellarTeamRT {
@@ -237,6 +234,7 @@ impl LamellarTeamRT {
         }
         // lamellae.get_am().barrier(); //this is a noop currently
         lamellae.barrier();
+        team.barrier.barrier();
         team
     }
 
@@ -514,7 +512,7 @@ impl ActiveMessaging for Arc<LamellarTeamRT> {
 
     fn exec_am_all<F>(&self, am: F) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync>
     where
-        F: LamellarActiveMessage + LamellarAM + Send + Sync + 'static,
+        F: RemoteActiveMessage + LamellarAM + Send + Sync + 'static,
     {
         trace!("[{:?}] team exec am all request", self.world_pe);
         let (my_req, ireq) = LamellarRequestHandle::new(
@@ -556,7 +554,7 @@ impl ActiveMessaging for Arc<LamellarTeamRT> {
         am: F,
     ) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync>
     where
-        F: LamellarActiveMessage + LamellarAM + Send + Sync + 'static,
+        F: RemoteActiveMessage + LamellarAM + Send + Sync + 'static,
     {
         prof_start!(pre);
         trace!("[{:?}] team exec am pe request", self.world_pe);
@@ -571,33 +569,14 @@ impl ActiveMessaging for Arc<LamellarTeamRT> {
             self.world_counters.outstanding_reqs.clone(),
         );
         prof_end!(req);
-        prof_start!(msg);
-        // let msg = Msg {
-        //     cmd: ExecType::Am(Cmd::Exec),
-        //     src: self.world_pe as u16,
-        //     req_id: my_req.id,
-        //     // team_id: self.id,
-        //     // return_data: true,
-        // };
-        prof_end!(msg);
         prof_start!(counters);
         self.world_counters.add_send_req(1);
         self.team_counters.add_send_req(1);
         prof_end!(counters);
         prof_start!(any);
-        // let my_any: LamellarAny = Box::new(Box::new(am) as LamellarBoxedAm);
         let func: LamellarArcAm = Arc::new(am);
         prof_end!(any);
         prof_start!(sub);
-        // self.scheduler.submit_req(
-        //     self.world_pe,
-        //     Some(pe),
-        //     msg,
-        //     ireq,
-        //     LamellarFunc::Am(func),
-        //     self.lamellae.clone(),
-        //     self.my_hash,
-        // );
         let world = if let Some(world) = &self.world{
             world.clone()
         }
@@ -639,33 +618,32 @@ impl ActiveMessaging for Arc<LamellarTeamRT> {
             self.world_counters.outstanding_reqs.clone(),
         );
         prof_end!(req);
-        prof_start!(msg);
-        let msg = Msg {
-            cmd: ExecType::Am(Cmd::Exec),
-            src: self.world_pe as u16,
-            req_id: my_req.id,
-            // team_id: self.id,
-            // return_data: true,
-        };
-        prof_end!(msg);
         prof_start!(counters);
         self.world_counters.add_send_req(1);
         self.team_counters.add_send_req(1);
         prof_end!(counters);
         prof_start!(any);
-        // let my_any: LamellarAny = Box::new(Box::new(am) as LamellarBoxedAm);
-        let func: LamellarArcAm = Arc::new(am);
+        let func: LamellarArcLocalAm = Arc::new(am);
         prof_end!(any);
         prof_start!(sub);
-        // self.scheduler.submit_req(
-        //     self.world_pe,
-        //     Some(self.team_pe.unwrap()),
-        //     msg,
-        //     ireq,
-        //     LamellarFunc::Am(func),
-        //     self.lamellae.clone(),
-        //     self.my_hash,
-        // );
+        let world = if let Some(world) = &self.world{
+            world.clone()
+        }
+        else{
+            self.clone()
+        };
+        self.scheduler.submit_req_new(
+            self.world_pe,
+            Some(self.world_pe),
+            ExecType::Am(Cmd::Exec),
+            my_req.id,
+            LamellarFunc::LocalAm(func),
+            self.lamellae.clone(),
+            world,
+            self.clone(),
+            self.my_hash,
+            Some(ireq),
+        );
         prof_end!(sub);
         Box::new(my_req)
     }

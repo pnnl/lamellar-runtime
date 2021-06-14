@@ -9,14 +9,9 @@ pub use serde_closure::FnOnce;
 #[macro_use]
 extern crate lazy_static;
 
-// TODO: maybe make a barrier trait?
 
-// #[macro_use]
-// extern crate crossbeam;
 
-// mod active_messaging;
 mod active_messaging;
-// mod lamellae;
 mod lamellae;
 mod lamellar_alloc;
 mod lamellar_arch;
@@ -31,7 +26,6 @@ mod lamellar_memregion;
 mod lamellar_request;
 mod lamellar_team;
 mod lamellar_world;
-// mod schedulers;
 mod scheduler;
 mod utils;
 pub use utils::*;
@@ -41,7 +35,7 @@ use lamellar_prof::init_prof;
 init_prof!();
 
 #[doc(hidden)]
-pub use crate::active_messaging::{registered_active_message::RegisteredAm, LamellarReturn,LamellarActiveMessage,DarcSerde,LamellarSerde,LamellarResultSerde,Serde};
+pub use crate::active_messaging::{registered_active_message::RegisteredAm, LamellarReturn,LamellarActiveMessage,RemoteActiveMessage,DarcSerde,LamellarSerde,LamellarResultSerde,Serde};
 #[cfg(feature = "nightly")]
 pub use crate::active_messaging::remote_closures::RemoteClosures;
 pub use crate::active_messaging::{ActiveMessaging, LamellarAM,LocalAM};
@@ -61,13 +55,8 @@ pub use crate::lamellar_darc::{darc_serialize,darc_from_ndarc,localrw_serialize,
 // #[doc(hidden)]
 // pub use crate::lamellae::{Lamellae,SerializedData,SerializeHeader};
 pub use crate::lamellae::Backend;
-
 pub use crate::scheduler::SchedulerType;
-
-
-
 pub use crate::lamellar_world::*;
-
 pub use crate::lamellar_arch::{BlockedArch, IdError, LamellarArch, StridedArch};
 
 #[doc(hidden)]
@@ -78,7 +67,7 @@ pub use crate::lamellar_team::LamellarTeam;
 
 
 extern crate lamellar_impl;
-pub use lamellar_impl::{am, local_am, generate_reductions_for_type, reduction, register_reduction,AmData,AmLocalData};
+pub use lamellar_impl::{am, local_am, generate_reductions_for_type,  register_reduction,AmData,AmLocalData};
 
 #[doc(hidden)]
 pub use inventory;
@@ -112,26 +101,6 @@ where
         bincode::serialize_into(buf,obj)?;
         Ok(())
     }
-
-// #[doc(hidden)]
-// async fn serialize_with<T: ?Sized>(obj: &T,rdma: std::sync::Arc<dyn LamellaeRDMA>) -> Result<Vec<u8>, anyhow::Error>
-// where
-//     T: serde::Serialize,
-// {
-//     let size = bincode::serialize_size(obj)?;
-//     let mut mem = rdma.rt_alloc(size)?;
-//     while mem.is_none(){
-//         async_std::task::yield_now().await;
-//     }
-//     let mut mem_slice = std::slice::from_raw_parts_mut(mem.unwrap() as *mut u8, size);
-//     Ok(bincode::serialize_into(mem_slice,obj)?)
-
-//     // let mut buf = Vec::new();
-//     // obj.serialize(&mut rmp_serde::Serializer::new(&mut buf)).unwrap()
-//     // Ok(bincode::serialize(obj)?)
-//     // Ok(postcard::to_stdvec(obj)?)
-//     // Ok(rmp_serde::to_vec(obj)?)
-// }
 
 #[doc(hidden)]
 pub fn deserialize<'a, T>(bytes: &'a [u8]) -> Result<T, anyhow::Error>

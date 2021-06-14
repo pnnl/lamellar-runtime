@@ -34,19 +34,8 @@ use remote_closures::{exec_closure_cmd, process_closure_request};
 //turn requests into a struct
 //impl insert, send_to_user -- (get, remove)
 lazy_static! {
-    // pub(crate) static ref REQUESTS: Vec<CHashMap<usize, InternalReq>> = { //no reason for this to be static... we can put it im AME
-    //     let mut reqs = Vec::new();
-    //     for _i in 0..100 {
-    //         reqs.push(CHashMap::new());
-    //     }
-    //     reqs
-    // };
-    pub(crate) static ref REQUESTS: Mutex<HashMap<usize, InternalReq>> = { //no reason for this to be static... we can put it im AME
+    pub(crate) static ref REQUESTS: Mutex<HashMap<usize, InternalReq>> = { //any reason for this to be static... we can put it im AME
        Mutex::new(HashMap::new())
-        // for _i in 0..100 {
-        //     reqs.push(CHashMap::new());
-        // }
-        // reqs
     };
 }
 
@@ -75,9 +64,9 @@ pub trait LamellarResultSerde: LamellarSerde {
     fn serialize_result_into(&self,buf: &mut [u8],result: &LamellarAny);
 }
 
+pub trait RemoteActiveMessage: LamellarActiveMessage + LamellarSerde + LamellarResultSerde {}
 
-
-pub trait LamellarActiveMessage: DarcSerde + LamellarSerde + LamellarResultSerde {
+pub trait LamellarActiveMessage: DarcSerde  {
     fn exec(
         self: Arc<Self>,
         my_pe: usize,
@@ -91,13 +80,15 @@ pub trait LamellarActiveMessage: DarcSerde + LamellarSerde + LamellarResultSerde
 
 #[derive(Clone)]
 pub (crate) enum LamellarFunc{
+    LocalAm(LamellarArcLocalAm),
     Am(LamellarArcAm),
     // Closure(LamellarAny),
     Result(LamellarResultArc),
     None,
 }
 
-pub(crate) type LamellarArcAm = Arc<dyn LamellarActiveMessage + Send + Sync>;
+pub(crate) type LamellarArcLocalAm = Arc<dyn LamellarActiveMessage + Send + Sync>;
+pub(crate) type LamellarArcAm = Arc<dyn RemoteActiveMessage + Send + Sync>;
 pub(crate) type LamellarBoxedAm = Box<dyn LamellarActiveMessage + Send + Sync>;
 // pub(crate) type LamellarBoxedData = Box<dyn LamellarSerde>;
 pub(crate) type LamellarAny = Box<dyn std::any::Any + Send + Sync>;
@@ -194,14 +185,14 @@ pub trait ActiveMessaging {
     fn barrier(&self);
     fn exec_am_all<F>(&self, am: F) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync>
     where
-        F: LamellarActiveMessage + LamellarAM +Serde + Send + Sync + 'static;
+        F: RemoteActiveMessage + LamellarAM +Serde + Send + Sync + 'static;
     fn exec_am_pe<F>(
         &self,
         pe: usize,
         am: F,
     ) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync>
     where
-        F: LamellarActiveMessage + LamellarAM + Serde + Send + Sync + 'static;
+        F: RemoteActiveMessage + LamellarAM + Serde + Send + Sync + 'static;
     fn exec_am_local<F>(
             &self,
             am: F,

@@ -65,7 +65,7 @@ impl ActiveMessaging for LamellarWorld {
     }
     fn exec_am_all<F>(&self, am: F) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync>
     where
-        F: LamellarActiveMessage + LamellarAM + Serde + Send + Sync + 'static,
+        F: RemoteActiveMessage + LamellarAM + Serde + Send + Sync + 'static,
     {
         self.team_rt.exec_am_all(am)
     }
@@ -75,7 +75,7 @@ impl ActiveMessaging for LamellarWorld {
         am: F,
     ) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync>
     where
-        F: LamellarActiveMessage + LamellarAM + Serde + Send + Sync + 'static,
+        F: RemoteActiveMessage + LamellarAM + Serde + Send + Sync + 'static,
     {
         assert!(pe < self.num_pes(), "invalid pe: {:?}", pe);
         self.team_rt.exec_am_pe(pe, am)
@@ -389,7 +389,7 @@ impl LamellarWorldBuilder {
         self
     }
     pub fn build(self) -> LamellarWorld {
-        println!("building world");
+        // println!("building world");
         // for exec in inventory::iter::<TestAm> {
         //     println!("{:#?}", exec);
         // }

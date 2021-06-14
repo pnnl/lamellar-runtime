@@ -68,11 +68,11 @@ crate::inventory::collect!(RegisteredAm);
 pub(crate) struct RegisteredActiveMessages{
     submitted_ams:  Arc<
                         Mutex<
-                            HashMap<
-                                Option<usize>, //pe
-                                (
+                             HashMap<
+                                u64, //team hash
+                                // (
                                     HashMap<
-                                        u64, //team hash
+                                        Option<usize>, //pe
                                         (
                                             HashMap<
                                                 AmId, //func id
@@ -87,24 +87,24 @@ pub(crate) struct RegisteredActiveMessages{
                                                     ,usize//func size 
                                                 )                     
                                             >,
-                                            usize,//team size
+                                            usize,//pe size (total buf size)
                                         )
                                     >,
-                                    usize,//total size                               
-                                )
+                                    // usize,//total size                               
+                                // )
                             >
                         >
                     >, //pe, team hash, function id, batch id : (req_id,function), total data size // maybe we can remove the func id lookup if we enfore that a batch only contains the same function.. which I think we do...
     txed_ams: Arc<Mutex<HashMap<
                             usize, //batched req id
-                            Mutex<HashMap<usize,usize>>>>>, //actual ids
+                            Mutex<HashMap<usize,(usize,AtomicUsize)>>>>>, //actual ids, outstanding reqs
     cur_batch_id: Arc<AtomicUsize>,
     scheduler: Arc<AmeScheduler>,
 }
 
-type TeamHeader = (usize,u64);
-type FuncHeader = (usize,AmId);
-type BatchHeader = (usize,usize);
+type TeamHeader = (usize,u64); //size, hash
+type FuncHeader = (usize,AmId); //size, ID
+type BatchHeader = (usize,usize,usize); //size,num_reqs, id
 
 impl RegisteredActiveMessages{
     pub(crate) fn new(scheduler: Arc<AmeScheduler>) -> RegisteredActiveMessages{
@@ -124,49 +124,50 @@ impl RegisteredActiveMessages{
         func_id: AmId, 
         req_data: Arc<NewReqData>,){
         // println!("adding req {:?} {:?}",func_id,func_size);
-        let team_header_len = crate::serialized_size::<TeamHeader>(&(0,0));
+        // let team_header_len = crate::serialized_size::<TeamHeader>(&(0,0));/
         let func_header_len = crate::serialized_size::<FuncHeader>(&(0,0));
-        let batch_header_len = crate::serialized_size::<BatchHeader>(&(0,0));
+        let batch_header_len = crate::serialized_size::<BatchHeader>(&(0,0,0));
         // add request to a batch or create a new one
         let mut submit_tx_task = false;
-        let mut map = self.submitted_ams.lock();   
-        let mut pe_entry = map.entry(req_data.dst).or_insert_with(|| { 
+        let mut map = self.submitted_ams.lock();
+        
+        let team_entry = map.entry(req_data.team_hash).or_insert_with(|| {
+            HashMap::new()
+        });
+        // println!("team: {:?} {:?}",req_data.team_hash, team_entry.len());
+        
+        let mut pe_entry = team_entry.entry(req_data.dst).or_insert_with(|| { 
             // println!("going to submit tx task {:?}",func_id);
             submit_tx_task = true;
             (HashMap::new(),0)
-        }); // pe
+        }); 
         pe_entry.1 += func_size;
+        // println!("pe: {:?} {:?} size: {:?}",req_data.dst, pe_entry.0.len(),pe_entry.1);
 
-        let mut team_entry = pe_entry.0.entry(req_data.team_hash).or_insert_with(|| {
-            // println!("going to submit new team {:?}",req_data.team_hash);
-            (HashMap::new(),0)
-        }); // team
-        if team_entry.1 == 0 {
-            pe_entry.1+=team_header_len;
-        }
-        team_entry.1 += func_size;
-
-        let mut func_entry= team_entry.0.entry(func_id).or_insert_with(|| {
+    
+        let mut func_entry= pe_entry.0.entry(func_id).or_insert_with(|| {
             // println!("going to submit new func {:?}",func_id);
             (HashMap::new(),0)
         }); //func
         if func_entry.1 ==0 {
             pe_entry.1 += func_header_len;
-            team_entry.1 += func_header_len;
         }
         func_entry.1 += func_size;
+        // println!("func: {:?} {:?} size: {:?} ({:?})",func_id, func_entry.0.len(),func_entry.1,pe_entry.1);
+
 
         let mut batch_entry = func_entry.0.entry(req_data.batch_id).or_insert_with( || {
             // println!("going to submit new batch {:?}",req_data.batch_id);
             (Vec::new(),0)
         }); // batch id        
-        if batch_entry.1 == 0{
+        if batch_entry.0.len() == 0{ //the funcsize can be zero so can't do check based on size
             pe_entry.1 += batch_header_len;
-            team_entry.1 += batch_header_len;
             func_entry.1 += batch_header_len;
         }
         batch_entry.1 += func_size;
         batch_entry.0.push((req_data.id,func));
+        // println!("batch: {:?} {:?} size: {:?} ({:?}, {:?})",req_data.batch_id, batch_entry.0.len(),batch_entry.1,func_entry.1,pe_entry.1);
+
         drop(map); 
         //--------------------------
 
@@ -181,137 +182,146 @@ impl RegisteredActiveMessages{
                     async_std::task::yield_now().await;     // buffer enough requests to make the
                     cnt+=1;                                 // batching worth it but also quick response time
                 }                                           // ...can definitely do better
-                let team_map = { //all requests going to pe
-                    let mut map = submitted_ams.lock();
-                    map.remove(&req_data.dst)
-                };    
+                let func_map = { //all requests belonging to a team goin to a specific PE
+                    let mut team_map = submitted_ams.lock();
+                    if let Some(pe_map) = team_map.get_mut(&req_data.team_hash){
+                        pe_map.remove(&req_data.dst)
+                    }
+                    else{ None }
+                };   
+                
                 // println!{"in submit_tx_task {:?} {:?}",outgoing_batch_id,req_data.cmd};
-                if let Some((team_map,total_size)) = team_map{
-                    // let header_size = std::mem::size_of::<Option<SerializeHeader>>();
-                    // let agg_size = total_size + (func_map.len()-1) * header_size;
+                if let Some((func_map,total_size)) = func_map{
+                    // println!("func_map len {:?} total size {:?}",func_map.len(), total_size);
                     let msg = Msg {
                         cmd: ExecType::Am(Cmd::BatchedMsg), 
                         src: req_data.team.world_pe as u16, //this should always originate from me?
                         req_id: 0,//outgoing_batch_id.fetch_add(1, Ordering::Relaxed),
                     };
-                    let header = Some(SerializeHeader{msg: msg, team_hash: 0, id: 0});
+                    let header = Some(SerializeHeader{msg: msg, team_hash: req_data.team_hash, id: 0});
                     let data = req_data.lamellae.serialize_header(header,total_size).await.unwrap();
                     let data_slice = data.data_as_bytes();
                     let mut i = 0;
-                    for (team_hash,(func_map,team_size)) in team_map{
-                        let team_header: TeamHeader = (team_size,team_hash);
-                        // println!("team_header: {:?}",team_header);
-                        crate::serialize_into(&mut data_slice[i..i+team_header_len],&team_header).unwrap();
-                        i+=team_header_len;
-                        for (func_id,(batch_map,func_size)) in func_map{
-                            let func_header: FuncHeader = (func_size,func_id);
-                            // println!("func_header: {:?}",func_header);
-                            crate::serialize_into(&mut data_slice[i..i+func_header_len],&func_header).unwrap();
-                            i+=func_header_len;
-                            for (batch_id,(reqs,batch_size)) in batch_map{
-                                let batch_id = if let Some(batch_id) = batch_id { //batch exists
-                                    batch_id
+                    for (func_id,(batch_map,func_size)) in func_map{
+                        let func_header: FuncHeader = (func_size,func_id);
+                        // println!("func_header: {:?} bml: {:?}",func_header, batch_map.len());
+                        crate::serialize_into(&mut data_slice[i..i+func_header_len],&func_header).unwrap();
+                        i+=func_header_len;
+                        // println!("i: {:?}",i);
+                        for (batch_id,(reqs,batch_size)) in batch_map{
+                            // println!("bid: {:?} reqs {:?} bsize {:?}",batch_id, reqs.len(), batch_size);
+                            let batch_id = if let Some(batch_id) = batch_id { //batch exists
+                                batch_id
+                            }
+                            else{ 
+                                if func_id > 0 { //create new batch id
+                                    outgoing_batch_id.fetch_add(1, Ordering::Relaxed)
+                                }else{ //original message not part of a batch
+                                    0
                                 }
-                                else{ 
-                                    if func_id > 0 { //create new batch id
-                                        outgoing_batch_id.fetch_add(1, Ordering::Relaxed)
-                                    }else{ //original message not part of a batch
-                                        0
+                            };
+                            let batch_header: BatchHeader = (batch_size,reqs.len(),batch_id);
+                            // println!("batch_header: {:?}",batch_header);
+                            crate::serialize_into(&mut data_slice[i..i+batch_header_len],&batch_header).unwrap();
+                            i+=batch_header_len;
+                            // println!("i: {:?}",i);
+                            
+                            let mut req_ids: HashMap<usize,(usize,AtomicUsize)> = HashMap::new();
+                            let mut batch_req_id =0;
+                            // println!("dst: {:?} func_id {:?} batch_id {:?} num_reqs {:?}",req_data.dst,func_id,batch_id,reqs.len());
+                            for (req_id,func) in reqs{
+                                // println!("dst: {:?} req_id {:?} func_id {:?} batch_id {:?}",req_data.dst,req_id,func_id,batch_id);
+                                match func_id {
+                                    BATCHED_UNIT_ID  => {  }, //dont have to do anything special, as all we need to know is batch id
+                                    UNIT_ID => {  
+                                        let serialize_size = crate::serialized_size(&req_id);
+                                        crate::serialize_into(&mut data_slice[i..i+serialize_size],&req_id).unwrap();
+                                        i+=serialize_size;
                                     }
-                                };
-                                let batch_header: BatchHeader = (batch_size,batch_id);
-                                // println!("batch_header: {:?}",batch_header);
-                                crate::serialize_into(&mut data_slice[i..i+batch_header_len],&batch_header).unwrap();
-                                i+=batch_header_len;
-                              
-                                let mut req_ids: HashMap<usize,usize> = HashMap::new();
-                                let mut batch_req_id =0;
-                                for (req_id,func) in reqs{
-                                    // println!("req_id {:?} func_id {:?} batch_id {:?}",req_id,func_id,batch_id);
-                                    match func_id {
-                                        BATCHED_UNIT_ID  => {  }, //dont have to do anything special, as all we need to know is batch id
-                                        UNIT_ID => {  
-                                            let serialize_size = crate::serialized_size(&req_id);
-                                            crate::serialize_into(&mut data_slice[i..i+serialize_size],&req_id).unwrap();
-                                            i+=serialize_size;
+                                    REMOTE_DATA_ID => {  
+                                        if let LamellarFunc::Result(func) = func{
+                                            let result_header_size = crate::serialized_size(&(&req_id,0usize));
+                                                let serialize_size = func.serialized_size();
+                                                crate::serialize_into(&mut data_slice[i..i+serialize_size],&(req_id,serialize_size)).unwrap();
+                                                i+=result_header_size;                                            
+                                                func.serialize_into(&mut data_slice[i..(i+serialize_size)]);
+                                                // if req_data.dst.is_none() {
+                                                //     func.ser(req_data.team.num_pes()-1);
+                                                // }
+                                                // else{
+                                                //     func.ser(1);
+                                                // };
+                                                // ids.push(*req_id);
+                                                i+=serialize_size;
                                         }
-                                        REMOTE_DATA_ID => {  
-                                            if let LamellarFunc::Result(func) = func{
-                                                let result_header_size = crate::serialized_size(&(&req_id,0usize));
-                                                    let serialize_size = func.serialized_size();
-                                                    crate::serialize_into(&mut data_slice[i..i+serialize_size],&(req_id,serialize_size)).unwrap();
-                                                    i+=result_header_size;                                            
-                                                    func.serialize_into(&mut data_slice[i..(i+serialize_size)]);
-                                                    // if req_data.dst.is_none() {
-                                                    //     func.ser(req_data.team.num_pes()-1);
-                                                    // }
-                                                    // else{
-                                                    //     func.ser(1);
-                                                    // };
-                                                    // ids.push(*req_id);
-                                                    i+=serialize_size;
-                                            }
+                                    }
+                                    BATCHED_REMOTE_DATA_ID => { 
+                                        if let LamellarFunc::Result(func) = func{
+                                            let result_header_size = crate::serialized_size(&(&req_id,0usize));
+                                                let serialize_size = func.serialized_size();
+                                                crate::serialize_into(&mut data_slice[i..(i+result_header_size)],&(req_id,serialize_size)).unwrap();
+                                                i+=result_header_size;                                            
+                                                func.serialize_into(&mut data_slice[i..(i+serialize_size)]);
+                                                // if req_data.dst.is_none() {
+                                                //     func.ser(req_data.team.num_pes()-1);
+                                                // }
+                                                // else{
+                                                //     func.ser(1);
+                                                // };
+                                                // ids.push(*req_id);
+                                                i+=serialize_size;
                                         }
-                                        BATCHED_REMOTE_DATA_ID => { 
-                                            if let LamellarFunc::Result(func) = func{
-                                                let result_header_size = crate::serialized_size(&(&req_id,0usize));
-                                                    let serialize_size = func.serialized_size();
-                                                    crate::serialize_into(&mut data_slice[i..(i+result_header_size)],&(req_id,serialize_size)).unwrap();
-                                                    i+=result_header_size;                                            
-                                                    func.serialize_into(&mut data_slice[i..(i+serialize_size)]);
-                                                    // if req_data.dst.is_none() {
-                                                    //     func.ser(req_data.team.num_pes()-1);
-                                                    // }
-                                                    // else{
-                                                    //     func.ser(1);
-                                                    // };
-                                                    // ids.push(*req_id);
-                                                    i+=serialize_size;
-                                            }
-    
-                                        }
-                                        _ => {
-                                            match func{
-                                                LamellarFunc::Am(func) => {
-                                                    if func_id > 0 {
-                                                        req_ids.insert(batch_req_id,req_id);
-                                                        batch_req_id+=1;
+
+                                    }
+                                    _ => {
+                                        match func{
+                                            LamellarFunc::Am(func) => {
+                                                if func_id > 0 {
+                                                    let num_reqs = if req_data.dst.is_none(){
+                                                        req_data.team.num_pes()-1
                                                     }
                                                     else{
-                                                        let serialized_size = crate::serialized_size(&0usize);
-                                                        crate::serialize_into(&mut data_slice[i..(i+serialized_size)],&req_id).unwrap();
-                                                        i+=serialized_size;
-                                                    }
-                                                    let serialize_size = func.serialized_size();
-                                                    func.serialize_into(&mut data_slice[i..(i+serialize_size)]);
-                                                    if req_data.dst.is_none() {
-                                                        func.ser(req_data.team.num_pes()-1);
-                                                    }
-                                                    else{
-                                                        func.ser(1);
+                                                        1
                                                     };
+                                                    req_ids.insert(batch_req_id,(req_id,AtomicUsize::new(num_reqs)));
                                                     
-                                                    i+=serialize_size;
-                                                },
-                                                
-                                                LamellarFunc::None =>{
-                                                    panic!("should not be none"); //user registered function
-                                                },
-                                                _ =>{
-                                                    panic!("not handled yet");
+                                                    batch_req_id+=1;
                                                 }
-    
+                                                else{
+                                                    let serialized_size = crate::serialized_size(&0usize);
+                                                    crate::serialize_into(&mut data_slice[i..(i+serialized_size)],&req_id).unwrap();
+                                                    i+=serialized_size;
+                                                }
+                                                let serialize_size = func.serialized_size();
+                                                func.serialize_into(&mut data_slice[i..(i+serialize_size)]);
+                                                if req_data.dst.is_none() {
+                                                    func.ser(req_data.team.num_pes()-1);
+                                                }
+                                                else{
+                                                    func.ser(1);
+                                                };
+                                                
+                                                i+=serialize_size;
+                                            },
+                                            
+                                            LamellarFunc::None =>{
+                                                panic!("should not be none"); //user registered function
+                                            },
+                                            _ =>{
+                                                panic!("not handled yet");
                                             }
-                                        } 
-                                    }
+
+                                        }
+                                    } 
                                 }
-                                if req_ids.len() > 0 { //only when we are sending initial requests, not return requests
-                                    // println!("inserting batch_id {:?} {:?}",batch_id,req_ids);
-                                    txed_ams.lock().insert(batch_id,Mutex::new(req_ids)); 
-                                }
+                                // println!("i: {:?}",i);
+                            }
+                            if req_ids.len() > 0 { //only when we are sending initial requests, not return requests
+                                // println!("inserting batch_id {:?} {:?}",batch_id,req_ids);
+                                txed_ams.lock().insert(batch_id,Mutex::new(req_ids)); 
                             }
                         }
-                    }                  
+                    }                
                     // println!("sending batch {:?}",data.header_and_data_as_bytes());
                     req_data.lamellae.send_to_pes_async(req_data.dst, req_data.team.arch.clone(), data).await;
                 }
@@ -372,6 +382,7 @@ impl RegisteredActiveMessages{
                 i += serialized_size;
                 func.serialize_into(&mut data_slice[i..])
             },
+            LamellarFunc::LocalAm(_) => panic!("should not set a local am"),
             LamellarFunc::None => panic!("should not send none")
         }
         req_data.lamellae.send_to_pes_async(req_data.dst, req_data.team.arch.clone(), data).await;
@@ -426,7 +437,7 @@ impl RegisteredActiveMessages{
                         _ => panic!("not handled yet")
                     }
                 },
-                _ => panic!("should only process AMS"),
+                LamellarFunc::LocalAm(_) => panic!("should only process remote AMS"),
             };               
             trace!("[{:?}] remote request ", my_pe);           
             
@@ -457,36 +468,64 @@ impl RegisteredActiveMessages{
     #[async_recursion]
     async fn exec_local(
         req_data: Arc<NewReqData>,){
-        if let  LamellarFunc::Am(func) = req_data.func.clone() {
-            match func.exec(req_data.team.world_pe, req_data.team.num_world_pes, true, req_data.world.clone(), req_data.team.clone()).await {
-                LamellarReturn::LocalData(data) => {
-                    // println!("local am data return");
-                    ActiveMessageEngine::send_data_to_user_handle(req_data.id,req_data.src as u16,InternalResult::Local(data));
+        match req_data.func.clone(){
+            LamellarFunc::Am(func) => {
+                match func.exec(req_data.team.world_pe, req_data.team.num_world_pes, true, req_data.world.clone(), req_data.team.clone()).await {
+                    LamellarReturn::LocalData(data) => {
+                        // println!("local am data return");
+                        ActiveMessageEngine::send_data_to_user_handle(req_data.id,req_data.src as u16,InternalResult::Local(data));
+                    }
+                    LamellarReturn::LocalAm(am) => {
+                        // println!("local am am return");
+                        let req_data = Arc::new(req_data.copy_with_func(am));
+                        RegisteredActiveMessages::exec_local(
+                            req_data
+                        ).await;
+                        // exec_return_am(ame, msg, am, ireq, world, team).await;
+                    }
+                    LamellarReturn::Unit => {
+                        // println!("local am unit return");
+                        ActiveMessageEngine::send_data_to_user_handle(req_data.id,req_data.src as u16,InternalResult::Unit);
+                    }
+                    LamellarReturn::RemoteData(_) => {
+                        // println!("remote am data return");
+                        panic!("should not be returning remote data from local am");
+                    }
+                    LamellarReturn::RemoteAm(_) => {
+                        // println!("remote am am return");
+                        panic!("should not be returning remote am from local am");
+                    }   
                 }
-                LamellarReturn::LocalAm(am) => {
-                    // println!("local am am return");
-                    let req_data = Arc::new(req_data.copy_with_func(am));
-                    RegisteredActiveMessages::exec_local(
-                        req_data
-                    ).await;
-                    // exec_return_am(ame, msg, am, ireq, world, team).await;
+            },
+            LamellarFunc::LocalAm(func) => {
+                match func.exec(req_data.team.world_pe, req_data.team.num_world_pes, true, req_data.world.clone(), req_data.team.clone()).await {
+                    LamellarReturn::LocalData(data) => {
+                        // println!("local am data return");
+                        ActiveMessageEngine::send_data_to_user_handle(req_data.id,req_data.src as u16,InternalResult::Local(data));
+                    }
+                    LamellarReturn::LocalAm(am) => {
+                        // println!("local am am return");
+                        let req_data = Arc::new(req_data.copy_with_func(am));
+                        RegisteredActiveMessages::exec_local(
+                            req_data
+                        ).await;
+                        // exec_return_am(ame, msg, am, ireq, world, team).await;
+                    }
+                    LamellarReturn::Unit => {
+                        // println!("local am unit return");
+                        ActiveMessageEngine::send_data_to_user_handle(req_data.id,req_data.src as u16,InternalResult::Unit);
+                    }
+                    LamellarReturn::RemoteData(_) => {
+                        // println!("remote am data return");
+                        panic!("should not be returning remote data from local am");
+                    }
+                    LamellarReturn::RemoteAm(_) => {
+                        // println!("remote am am return");
+                        panic!("should not be returning remote am from local am");
+                    }   
                 }
-                LamellarReturn::Unit => {
-                    // println!("local am unit return");
-                    ActiveMessageEngine::send_data_to_user_handle(req_data.id,req_data.src as u16,InternalResult::Unit);
-                }
-                LamellarReturn::RemoteData(_) => {
-                    // println!("remote am data return");
-                    panic!("should not be returning remote data from local am");
-                }
-                LamellarReturn::RemoteAm(_) => {
-                    // println!("remote am am return");
-                    panic!("should not be returning remote am from local am");
-                }   
-            }
-        }
-        else{
-            panic!("should only exec local ams");
+            },
+            _ => panic!("should only exec local ams"),
         }
     }
 
@@ -562,46 +601,44 @@ impl RegisteredActiveMessages{
         lamellae: Arc<Lamellae>,
         world: Arc<LamellarTeamRT>,
         team: Arc<LamellarTeamRT>) {
+        // println!("exec batched msg");
         if let Some(header) = ser_data.deserialize_header(){
             // trace!("exec batched message {:?}",header.id);
             let data_slice=ser_data.data_as_bytes();
-            let team_header_len = crate::serialized_size::<TeamHeader>(&(0,0));
+            // let team_header_len = crate::serialized_size::<TeamHeader>(&(0,0));
             let func_header_len = crate::serialized_size::<FuncHeader>(&(0,0));
-            let batch_header_len = crate::serialized_size::<BatchHeader>(&(0,0));
+            let batch_header_len = crate::serialized_size::<BatchHeader>(&(0,0,0));
             let mut i = 0;
+            // println!("data slice len {:?}",data_slice.len());
             while i < data_slice.len(){
-                let team_header: TeamHeader = crate::deserialize(&data_slice[i..i+team_header_len]).unwrap();
-                i += team_header_len;
-                let team_start = i;
-                let team_hash = team_header.1;
-                while i < team_start + team_header.0{
-                    let func_header: FuncHeader = crate::deserialize(&data_slice[i..i+func_header_len]).unwrap();
-                    i += func_header_len;
-                    let func_start = i;
-                    let func_id = func_header.1;
-                    while i < func_start + func_header.0{
-                        let batch_header: BatchHeader = crate::deserialize(&data_slice[i..i+batch_header_len]).unwrap();
-                        // println!("th {:?} fh {:?} bh {:?}",team_header,func_header,batch_header);
-                        i += batch_header_len;
-                        let batch_start = i;
-                        let batch_id = batch_header.1;
-                        let batched_data = &data_slice[i..i+batch_header.0];
-                        // println!("batched_data {:?} {:?}",batched_data.len(),&batched_data);
-                        let sub_data = ser_data.sub_data(i,i+batch_header.0);
-                        i+=batch_header.0;
-                        match func_id{
-                            BATCHED_UNIT_ID  => self.process_batched_unit_return(batch_id, msg.src),
-                            UNIT_ID => self.process_unit_return( msg.src, batched_data),
-                            REMOTE_DATA_ID => self.process_data_return(msg, sub_data),
-                            BATCHED_REMOTE_DATA_ID => self.process_batched_data_return(batch_id, msg.src, sub_data),
-                            REMOTE_AM_ID => panic! {"not handled yet {:?}",func_id},
-                            _ => {
-                                if func_id > 0 {
-                                    self.exec_batched_am(ame.clone(),msg.src as usize,team_hash,func_id,batch_id,lamellae.clone(),world.clone(),team.clone(),batched_data);
-                                }
-                                else{
-                                    self.exec_batched_return_am(msg.src as usize,team_hash,-func_id,batch_id,lamellae.clone(),world.clone(),team.clone(),batched_data)
-                                }
+                let func_header: FuncHeader = crate::deserialize(&data_slice[i..i+func_header_len]).unwrap();
+                i += func_header_len;
+                let func_start = i;
+                let func_id = func_header.1;
+                while i < func_start + func_header.0{
+                    let batch_header: BatchHeader = crate::deserialize(&data_slice[i..i+batch_header_len]).unwrap();
+                    // println!("src: {:?} fh {:?} bh {:?} ({:?} {:?})",msg.src,func_header,batch_header,i,func_start + func_header.0);
+
+                    i += batch_header_len;
+                    let batch_start = i;
+                    let batch_id = batch_header.2;
+                    let num_reqs = batch_header.1;
+                    let batched_data = &data_slice[i..i+batch_header.0];
+                    // println!("batched_data {:?} {:?}",batched_data.len(),&batched_data);
+                    let sub_data = ser_data.sub_data(i,i+batch_header.0);
+                    i+=batch_header.0;
+                    match func_id{
+                        BATCHED_UNIT_ID  => self.process_batched_unit_return(batch_id, msg.src),
+                        UNIT_ID => self.process_unit_return( msg.src, batched_data),
+                        REMOTE_DATA_ID => self.process_data_return(msg, sub_data),
+                        BATCHED_REMOTE_DATA_ID => self.process_batched_data_return(batch_id, msg.src, sub_data),
+                        REMOTE_AM_ID => panic! {"not handled yet {:?}",func_id},
+                        _ => {
+                            if func_id > 0 {
+                                self.exec_batched_am(ame.clone(),msg.src as usize,header.team_hash,func_id,batch_id,num_reqs,lamellae.clone(),world.clone(),team.clone(),batched_data);
+                            }
+                            else{
+                                self.exec_batched_return_am(msg.src as usize,header.team_hash,-func_id,batch_id,num_reqs,lamellae.clone(),world.clone(),team.clone(),batched_data)
                             }
                         }
                     }
@@ -616,19 +653,20 @@ impl RegisteredActiveMessages{
         team_hash: u64,
         func_id: AmId,
         batch_id: usize,
+        num_reqs: usize,
         lamellae: Arc<Lamellae>,
         world: Arc<LamellarTeamRT>,
         team: Arc<LamellarTeamRT>,
         data_slice: &[u8],
     ){
-        // println!("execing batch_id {:?}",batch_id);
+        // println!("execing batch_id {:?} {:?}",batch_id,data_slice.len());
         let mut index = 0;
-        let mut results: Arc<Mutex<(HashMap<usize,LamellarReturn>,usize)>>= Arc::new(Mutex::new((HashMap::new(),0)));
+        let  results: Arc<Mutex<(HashMap<usize,LamellarReturn>,usize)>>= Arc::new(Mutex::new((HashMap::new(),0)));
         let  req_cnt = Arc::new(AtomicUsize::new(0));
         let  exec_cnt = Arc::new(AtomicUsize::new(0));
         let  processed = Arc::new(AtomicBool::new(false));
         let mut req_id =0;
-        while index < data_slice.len(){
+        while req_id < num_reqs{
             req_cnt.fetch_add(1,Ordering::SeqCst);
             let func = AMS_EXECS.get(&(func_id)).unwrap()(&data_slice[index..]);
             index += func.serialized_size();
@@ -641,15 +679,8 @@ impl RegisteredActiveMessages{
             let processed = processed.clone();
             let ame = ame.clone();
             self.scheduler.submit_task(async move {
-                let lam_return = func.exec( team.world_pe, team.num_world_pes, false , world.clone(), team.clone()).await;
-                // match &lam_return{
-                //     LamellarReturn::Unit => println!("unit"),
-                //     LamellarReturn::LocalData(_) => println!("local data"),
-                //     LamellarReturn::LocalAm(_) => println!("local am"),
-                //     LamellarReturn::RemoteData(_) => println!("remote data"),
-                //     LamellarReturn::RemoteAm(_) => println!("remote am"),
-                // }
-                
+                // println!("here");
+                let lam_return = func.exec( team.world_pe, team.num_world_pes, false , world.clone(), team.clone()).await;                
                 let (num_rets,num_unit_rets) = {
                     let mut entry = results.lock();
                     if let LamellarReturn::Unit  = &lam_return{
@@ -747,7 +778,7 @@ impl RegisteredActiveMessages{
         team: Arc<LamellarTeamRT>) {
         if let Some(header) = ser_data.deserialize_header(){
             let data_slice = ser_data.data_as_bytes();
-            self.exec_batched_return_am(msg.src as usize,header.team_hash,-header.id,0,lamellae,world,team,data_slice);
+            self.exec_batched_return_am(msg.src as usize,header.team_hash,-header.id,0,1,lamellae,world,team,data_slice);
         }
     }
 
@@ -759,7 +790,7 @@ impl RegisteredActiveMessages{
         team: Arc<LamellarTeamRT>) {
         if let Some(header) = ser_data.deserialize_header(){
             let data_slice = ser_data.data_as_bytes();
-            self.exec_batched_return_am(msg.src as usize,header.team_hash,-header.id,msg.req_id,lamellae,world,team,data_slice);
+            self.exec_batched_return_am(msg.src as usize,header.team_hash,-header.id,msg.req_id,1,lamellae,world,team,data_slice);
         }
     }
     
@@ -768,6 +799,7 @@ impl RegisteredActiveMessages{
         team_hash: u64,
         func_id: AmId,
         batch_id: usize,
+        num_reqs: usize,
         lamellae: Arc<Lamellae>,
         world: Arc<LamellarTeamRT>,
         team: Arc<LamellarTeamRT>,
@@ -781,13 +813,16 @@ impl RegisteredActiveMessages{
             // for (b_id,r_id) in reqs.iter(){
             //     println!("{:?} {:?}",b_id,r_id);
             // }
-            while index < data_slice.len(){
+            let mut cur_req = 0;
+            while cur_req < num_reqs{
+            // while index < data_slice.len(){
                 // println!("index {:?} len {:?}",index,data_slice.len());
                 let batch_req_id: usize = crate::deserialize(&data_slice[index..(index+serialized_size)]).unwrap();                 
                 index+=serialized_size;
                 let func = AMS_EXECS.get(&(func_id)).unwrap()(&data_slice[index..]);
                 index += func.serialized_size();
-                let req_id =reqs.remove(&batch_req_id).expect("id not found");
+                let (req_id,cnt) =reqs.get(&batch_req_id).expect("id not found");
+                let req_id = *req_id;
                 let world = world.clone();
                 let team = team.clone();
                 let lamellae = lamellae.clone();
@@ -808,11 +843,17 @@ impl RegisteredActiveMessages{
                     RegisteredActiveMessages::exec_local(
                         req_data
                     ).await;
-                });                              
+                });
+                if cnt.fetch_sub(1,Ordering::Relaxed) == 1{
+                    reqs.remove(&batch_req_id);
+                }
+                cur_req +=1;                              
             }
             reqs.len()
         }else if batch_id ==0 { //not part a an original batch
-            while index < data_slice.len(){
+            let mut cur_req=1;
+            while cur_req < num_reqs{
+            // while index < data_slice.len(){
                 // println!("index {:?} len {:?}",index,data_slice.len());
                 let req_id: usize = crate::deserialize(&data_slice[index..(index+serialized_size)]).unwrap();                 
                 index+=serialized_size;
@@ -839,6 +880,7 @@ impl RegisteredActiveMessages{
                         req_data
                     ).await;
                 }); 
+                cur_req +=1;
             }
             1
         }
@@ -853,18 +895,24 @@ impl RegisteredActiveMessages{
 
     fn process_batched_unit_return(&self, batch_id: usize, src: u16){
         // println!("processing returns {:?}",batch_id);
-        let reqs = self.txed_ams.lock().remove(&batch_id);
-        
-        if let Some(reqs) = reqs{
+        let cnt = if let Some(reqs) = self.txed_ams.lock().get(&batch_id){
             let reqs = reqs.lock();
-            
-            for (_,req_id) in reqs.iter(){
+            let mut max_cnt =0;
+            for (_,(req_id,cnt)) in reqs.iter(){
                 // println!("completed req {:?}",req_id);
                 ActiveMessageEngine::send_data_to_user_handle(*req_id,src,InternalResult::Unit);
+                let cnt = cnt.fetch_sub(1,Ordering::SeqCst);
+                if cnt > max_cnt{
+                    max_cnt=cnt;
+                }
             }
+            max_cnt
         }
         else{
             panic!("batch id {:?} not found",batch_id);
+        };
+        if cnt == 0{
+            self.txed_ams.lock().remove(&batch_id);
         }
     }
 
@@ -912,9 +960,12 @@ impl RegisteredActiveMessages{
                 index+=serialized_size;
                 let sub_data = ser_data.sub_data(index,index+data_size);
                 index+=data_size;
-                let req_id =reqs.remove(&batch_req_id).expect("id not found");
-                // println!("batch_req_id req_id data_size {:?} {:?} {:?}",batch_req_id,req_id,data_size);
-                ActiveMessageEngine::send_data_to_user_handle(req_id,src,InternalResult::Remote(sub_data));
+                let (req_id,cnt) = reqs.get(&batch_req_id).expect("id not found");
+                    // println!("batch_req_id req_id data_size {:?} {:?} {:?}",batch_req_id,req_id,data_size);
+                ActiveMessageEngine::send_data_to_user_handle(*req_id,src,InternalResult::Remote(sub_data));
+                if cnt.fetch_sub(1,Ordering::Relaxed) == 1 {
+                    reqs.remove(&batch_req_id);
+                }
                                 
             }
             reqs.len()

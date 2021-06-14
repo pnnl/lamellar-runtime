@@ -344,7 +344,7 @@ impl<T: 'static + ?Sized> Drop for Darc<T> {
 }
 
 
-#[lamellar_impl::AmDataRT]
+#[lamellar_impl::AmLocalDataRT]
 struct DroppedWaitAM<T: ?Sized>{
     inner_addr: usize,
     dropped_addr: usize,
