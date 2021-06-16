@@ -180,21 +180,21 @@ pub(crate) fn exec_closure_cmd(
                         data,
                         msg,
                         lamellae,
-                        team.my_hash,
+                        team.team_hash,
                     ),
                     RetType::Data => ame.send_response(
                         ExecType::Runtime(Cmd::DataReturn),
                         data,
                         msg,
                         lamellae,
-                        team.my_hash,
+                        team.team_hash,
                     ),
                     RetType::Unit => ame.send_response(
                         ExecType::Runtime(Cmd::BatchedUnitReturn),
                         None,
                         msg,
                         lamellae,
-                        team.my_hash,
+                        team.team_hash,
                     ),
                     _ => {
                         println!("unexpected return type");

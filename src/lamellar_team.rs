@@ -33,40 +33,40 @@ use std::time::{Duration, Instant};
 // this should allow for the inner team to persist while at least one user handle exists in the world.
 
 pub struct LamellarTeam {
-    pub(crate) world: Arc<LamellarTeamRT>,
+    pub(crate) world: Option<Arc<LamellarTeam>>,
     pub(crate) team: Arc<LamellarTeamRT>,
-    pub(crate) teams: Arc<RwLock<HashMap<u64, Weak<LamellarTeamRT>>>>, //need a reference to this so we can clean up after dropping the team
+    pub(crate) teams: Arc<RwLock<HashMap<u64, Weak<LamellarTeam>>>>, //need a reference to this so we can clean up after dropping the team
 }
 
 //#[prof]
 impl LamellarTeam {
     #[allow(dead_code)]
-    pub(crate) fn new(
-        num_pes: usize,
-        world_pe: usize,
-        // scheduler: Arc<dyn SchedulerQueue>,
-        scheduler: Arc<Scheduler>,
-        world_counters: Arc<AMCounters>,
-        // lamellae: Arc<dyn Lamellae + Sync + Send>,
-        lamellae: Arc<Lamellae>,
-        world: Option<Arc<LamellarTeamRT>>,
-        teams: Arc<RwLock<HashMap<u64, Weak<LamellarTeamRT>>>>,
-    ) -> LamellarTeam {
-        let team = Arc::new(LamellarTeamRT::new(
-            num_pes,
-            world_pe,
-            // scheduler,
-            scheduler,
-            world_counters,
-            // lamellae,
-            lamellae,
-        ));
-        LamellarTeam {
-            world: if let Some(world) = world {world} else { team.clone() },
-            team: team,
-            teams: teams,
-        }
-    }
+    // pub(crate) fn new(
+    //     num_pes: usize,
+    //     world_pe: usize,
+    //     // scheduler: Arc<dyn SchedulerQueue>,
+    //     scheduler: Arc<Scheduler>,
+    //     world_counters: Arc<AMCounters>,
+    //     // lamellae: Arc<dyn Lamellae + Sync + Send>,
+    //     lamellae: Arc<Lamellae>,
+    //     world: Option<Arc<LamellarTeamRT>>,
+    //     teams: Arc<RwLock<HashMap<u64, Arc<LamellarTeamRT>>>>,
+    // ) -> LamellarTeam {
+    //     let team = Arc::new(LamellarTeamRT::new(
+    //         num_pes,
+    //         world_pe,
+    //         // scheduler,
+    //         scheduler,
+    //         world_counters,
+    //         // lamellae,
+    //         lamellae,
+    //     ));
+    //     LamellarTeam {
+    //         world: if let Some(world) = world {world} else { team.clone() },
+    //         team: team,
+    //         // teams: teams,
+    //     }
+    // }
     #[allow(dead_code)]
     pub fn get_pes(&self) -> Vec<usize> {
         self.team.arch.team_iter().collect::<Vec<usize>>()
@@ -80,24 +80,24 @@ impl LamellarTeam {
     pub fn team_pe_id(&self) -> Result<usize, IdError> {
         self.team.arch.team_pe(self.team.world_pe)
     }
-    pub fn create_team_from_arch<L>(&self, arch: L) -> Option<Arc<LamellarTeam>>
+    pub fn create_subteam_from_arch<L>(parent: Arc<LamellarTeam>, arch: L) -> Option<Arc<LamellarTeam>>
     where
         L: LamellarArch + std::hash::Hash + 'static,
     {
-        let world = if let Some(world) = &self.team.world{
+        let world = if let Some(world) = &parent.world{
             world.clone()
         }
         else{
-            self.team.clone()
+            parent.clone()
         };
-        if let Some(team) = LamellarTeamRT::create_subteam_from_arch(world,self.team.clone(), arch) {
-            self.teams
-                .write()
-                .insert(team.my_hash, Arc::downgrade(&team));
+        if let Some(team) = LamellarTeamRT::create_subteam_from_arch(world.team.clone(),parent.team.clone(), arch) {
+            // self.teams
+            //     .write()
+            //     .insert(team.team_hash, team.clone());//Arc::downgrade(&team));
             Some(Arc::new(LamellarTeam {
-                world: self.world.clone(),
+                world: Some(world),
                 team: team,
-                teams: self.teams.clone(),
+                teams: parent.teams.clone(),
             }))
         } else {
             None
@@ -119,7 +119,7 @@ impl std::fmt::Debug for LamellarTeam {
 }
 
 // #[prof]
-impl ActiveMessaging for LamellarTeam {
+impl ActiveMessaging for Arc<LamellarTeam> {
     fn wait_all(&self) {
         self.team.wait_all();
     }
@@ -133,7 +133,7 @@ impl ActiveMessaging for LamellarTeam {
         F: RemoteActiveMessage + LamellarAM + Serde + Send + Sync + 'static, 
     {
         trace!("[{:?}] team exec am all request", self.team.world_pe);
-        self.team.exec_am_all(am)
+        self.team.exec_am_all(self.clone(),am)
     }
 
     fn exec_am_pe<F>(
@@ -144,7 +144,7 @@ impl ActiveMessaging for LamellarTeam {
     where
         F: RemoteActiveMessage + LamellarAM + Serde + Send + Sync + 'static,
     {
-        self.team.exec_am_pe(pe, am)
+        self.team.exec_am_pe(self.clone(),pe, am)
     }
 
     fn exec_am_local<F>(
@@ -154,7 +154,7 @@ impl ActiveMessaging for LamellarTeam {
     where
         F: LamellarActiveMessage + LocalAM + Send + Sync + 'static,
     {
-        self.team.exec_am_local(am)
+        self.team.exec_am_local(self.clone(),am)
     }
     
 }
@@ -178,13 +178,13 @@ pub struct LamellarTeamRT {
     sub_team_id_cnt: AtomicUsize,
     barrier: Barrier,
     dropped: LamellarMemoryRegion<usize>,
-    pub(crate) my_hash: u64,
+    pub(crate) team_hash: u64,
 }
 
 //#[prof]
 impl Hash for LamellarTeamRT {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        self.my_hash.hash(state);
+        self.team_hash.hash(state);
     }
 }
 
@@ -221,7 +221,7 @@ impl LamellarTeamRT {
             team_counters: AMCounters::new(),
             world_counters: world_counters,
             id: 0,
-            my_hash: 0, //easy id to look up for global
+            team_hash: 0, //easy id to look up for global
             sub_team_id_cnt: AtomicUsize::new(0),
             barrier: Barrier::new(world_pe, num_pes, lamellae.clone(),arch.clone()),
             dropped: LamellarMemoryRegion::new(num_pes, lamellae.clone(), alloc.clone()),
@@ -335,7 +335,7 @@ impl LamellarTeamRT {
                 id: id,
                 sub_team_id_cnt: AtomicUsize::new(0),
                 barrier: Barrier::new(parent.world_pe,parent.num_world_pes,parent.lamellae.clone(),archrt),
-                my_hash: hash,
+                team_hash: hash,
                 dropped: temp_buf, 
             };
             unsafe {
@@ -483,15 +483,22 @@ impl LamellarTeamRT {
         println!("  team pes: {}", team);
         println!("-------------------------------------------------");
     }
-}
+// }
 
-// #[prof]
-impl ActiveMessaging for Arc<LamellarTeamRT> {
+// // #[prof]
+// impl ActiveMessaging for Arc<LamellarTeamRT> {
     fn wait_all(&self) {
+        println!(
+            "in team wait_all team_hash: {:?} cnt: {:?} {:?}",
+            self.team_hash,
+            self.team_counters.send_req_cnt.load(Ordering::SeqCst),
+            self.team_counters.outstanding_reqs.load(Ordering::SeqCst),
+            // self.counters.recv_req_cnt.load(Ordering::SeqCst),
+        );
         let mut temp_now = Instant::now();
         while self.team_counters.outstanding_reqs.load(Ordering::SeqCst) > 0 {
             std::thread::yield_now();
-            if temp_now.elapsed() > Duration::new(60, 0) {
+            if temp_now.elapsed() > Duration::new(1, 0) {
                 println!(
                     "in world wait_all mype: {:?} cnt: {:?} {:?}",
                     self.world_pe,
@@ -510,7 +517,7 @@ impl ActiveMessaging for Arc<LamellarTeamRT> {
         
     }
 
-    fn exec_am_all<F>(&self, am: F) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync>
+    fn exec_am_all<F>(&self,team: Arc<LamellarTeam>, am: F) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync>
     where
         F: RemoteActiveMessage + LamellarAM + Send + Sync + 'static,
     {
@@ -521,17 +528,19 @@ impl ActiveMessaging for Arc<LamellarTeamRT> {
             self.arch.clone(),
             self.team_counters.outstanding_reqs.clone(),
             self.world_counters.outstanding_reqs.clone(),
+            self.team_hash,
+            team.clone(),
         );
         
         self.world_counters.add_send_req(self.num_pes);
         self.team_counters.add_send_req(self.num_pes);
         // let my_any: LamellarAny =Box::new(Box::new(am) as LamellarBoxedAm);
         let func: LamellarArcAm = Arc::new(am);
-        let world = if let Some(world) = &self.world{
+        let world = if let Some(world) = &team.world{
             world.clone()
         }
         else{
-            self.clone()
+            team.clone()
         };
         self.scheduler.submit_req_new(
             self.world_pe,
@@ -541,8 +550,8 @@ impl ActiveMessaging for Arc<LamellarTeamRT> {
             LamellarFunc::Am(func),
             self.lamellae.clone(),
             world,
-            self.clone(),
-            self.my_hash,
+            team.clone(),
+            self.team_hash,
             Some(ireq),
         );
         Box::new(my_req)
@@ -550,6 +559,7 @@ impl ActiveMessaging for Arc<LamellarTeamRT> {
 
     fn exec_am_pe<F>(
         &self,
+        team: Arc<LamellarTeam>,
         pe: usize,
         am: F,
     ) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync>
@@ -557,7 +567,7 @@ impl ActiveMessaging for Arc<LamellarTeamRT> {
         F: RemoteActiveMessage + LamellarAM + Send + Sync + 'static,
     {
         prof_start!(pre);
-        trace!("[{:?}] team exec am pe request", self.world_pe);
+        println!("[{:?}] team exec am pe request {:?}", self.world_pe,self.team_hash);
         assert!(pe < self.arch.num_pes());
         prof_end!(pre);
         prof_start!(req);
@@ -567,21 +577,25 @@ impl ActiveMessaging for Arc<LamellarTeamRT> {
             self.arch.clone(),
             self.team_counters.outstanding_reqs.clone(),
             self.world_counters.outstanding_reqs.clone(),
+            self.team_hash,
+            team.clone(),
         );
         prof_end!(req);
         prof_start!(counters);
+        println!("world_cnt");
         self.world_counters.add_send_req(1);
+        println!("team_cnt");
         self.team_counters.add_send_req(1);
         prof_end!(counters);
         prof_start!(any);
         let func: LamellarArcAm = Arc::new(am);
         prof_end!(any);
         prof_start!(sub);
-        let world = if let Some(world) = &self.world{
+        let world = if let Some(world) = &team.world{
             world.clone()
         }
         else{
-            self.clone()
+            team.clone()
         };
         self.scheduler.submit_req_new(
             self.world_pe,
@@ -591,23 +605,31 @@ impl ActiveMessaging for Arc<LamellarTeamRT> {
             LamellarFunc::Am(func),
             self.lamellae.clone(),
             world,
-            self.clone(),
-            self.my_hash,
+            team.clone(),
+            self.team_hash,
             Some(ireq),
         );
         prof_end!(sub);
+        println!(
+            "in team exec_am_pe team_hash: {:?} cnt: {:?} {:?}",
+            self.team_hash,
+            self.team_counters.send_req_cnt.load(Ordering::SeqCst),
+            self.team_counters.outstanding_reqs.load(Ordering::SeqCst),
+            // self.counters.recv_req_cnt.load(Ordering::SeqCst),
+        );
         Box::new(my_req)
     }
 
     fn exec_am_local<F>(
         &self,
+        team: Arc<LamellarTeam>,
         am: F,
     ) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync>
     where
         F: LamellarActiveMessage + LocalAM  + Send + Sync + 'static,
     {
         prof_start!(pre);
-        trace!("[{:?}] team exec am pe request", self.world_pe);
+        println!("[{:?}] team exec am local request", self.world_pe);
         prof_end!(pre);
         prof_start!(req);
         let (my_req, ireq) = LamellarRequestHandle::new(
@@ -616,6 +638,8 @@ impl ActiveMessaging for Arc<LamellarTeamRT> {
             self.arch.clone(),
             self.team_counters.outstanding_reqs.clone(),
             self.world_counters.outstanding_reqs.clone(),
+            self.team_hash,
+            team.clone(),
         );
         prof_end!(req);
         prof_start!(counters);
@@ -626,22 +650,22 @@ impl ActiveMessaging for Arc<LamellarTeamRT> {
         let func: LamellarArcLocalAm = Arc::new(am);
         prof_end!(any);
         prof_start!(sub);
-        let world = if let Some(world) = &self.world{
+        let world = if let Some(world) = &team.world{
             world.clone()
         }
         else{
-            self.clone()
+            team.clone()
         };
         self.scheduler.submit_req_new(
             self.world_pe,
-            Some(self.world_pe),
+            Some(self.team_pe.unwrap()),
             ExecType::Am(Cmd::Exec),
             my_req.id,
             LamellarFunc::LocalAm(func),
             self.lamellae.clone(),
             world,
-            self.clone(),
-            self.my_hash,
+            team.clone(),
+            self.team_hash,
             Some(ireq),
         );
         prof_end!(sub);
@@ -698,7 +722,7 @@ impl RemoteClosures for LamellarTeamRT {
             ireq,
             my_any,
             self.lamellae.get_am(),
-            self.my_hash,
+            self.team_hash,
         );
         Box::new(my_req)
     }
@@ -753,7 +777,7 @@ impl RemoteClosures for LamellarTeamRT {
             ireq,
             my_any,
             self.lamellae.get_am(),
-            self.my_hash,
+            self.team_hash,
         );
         Box::new(my_req)
     }
@@ -984,7 +1008,7 @@ impl RemoteMemoryRegion for LamellarTeamRT {
 //#[prof]
 impl Drop for LamellarTeamRT {
     fn drop(&mut self) {
-        // println!("LamellarTeamRT dropping");
+        println!("LamellarTeamRT dropping");
         // if let Some(parent) = &self.parent{
         //     println!("parent: {:?}",Arc::strong_count(&parent));
         // }
@@ -998,8 +1022,12 @@ impl Drop for LamellarTeamRT {
         // println!("arch: {:?}",Arc::strong_count(&self.arch));
         // println!("world_counters: {:?}",Arc::strong_count(&self.world_counters));
         // println!("LamellarTeamRT dropped");
-        self.lamellae.shutdown();
-        self.scheduler.shutdown();
+        if let None = &self.parent{
+            self.lamellae.shutdown();
+            self.scheduler.shutdown();
+        }
+
+        println!("LamellarTeamRT dropped");
         
     }
 }
@@ -1029,33 +1057,41 @@ impl Drop for LamellarTeamRT {
 //#[prof]
 impl Drop for LamellarTeam {
     fn drop(&mut self) {
-        // println!("team handle dropping");
+        println!("team handle dropping");
         if let Some(parent) = &self.team.parent {
-            // println!(
-            //     "[{:?}] {:?} team handle dropping {:?} {:?}",
-            //     self.team.world_pe,
-            //     self.team.my_hash,
-            //     self.team.get_pes(),
-            //     self.team.dropped.as_slice()
-            // );
+            println!(
+                "[{:?}] {:?} team handle dropping {:?} {:?}",
+                self.team.world_pe,
+                self.team.team_hash,
+                self.team.get_pes(),
+                self.team.dropped.as_slice()
+            );
             self.team.wait_all();
+            println!("after wait all");
             self.team.barrier();
+            println!("after barrier");
             self.team.put_dropped();
+            println!("after put dropped");
             // if let Ok(_my_index) = self.team.arch.team_pe(self.team.world_pe) {
             if self.team.team_pe.is_ok(){
                 self.team.drop_barrier();
             }
+            println!("after drop barrier");
 
             parent.sub_teams.write().remove(&self.team.id);
         }
-        self.teams.write().remove(&self.team.my_hash);
+        self.teams.write().remove(&self.team.team_hash);
+        println!("team handle dropped");
         
-        // println!("team: {:?}",Arc::strong_count(&self.team));
+        if let Some(world) = &self.world{
+            println!("world: {:?}", Arc::strong_count(world));
+        }
+        println!("team: {:?}",Arc::strong_count(&self.team));
         // for (k,tes"team handle dropped");
         // println!(
         //     "[{:?}] {:?} team handle dropped {:?} {:?}",
         //     self.team.world_pe,
-        //     self.team.my_hash,
+        //     self.team.team_hash,
         //     self.team.get_pes(),
         //     self.team.dropped.as_slice()
         // );
@@ -1108,33 +1144,33 @@ mod tests {
         let team2_2 =
             LamellarTeamRT::create_subteam_from_arch(team2.clone(), child_arch1.clone()).unwrap();
 
-        println!("{:?}", root_team.my_hash);
-        println!("{:?} -- {:?}", team1.my_hash, team2.my_hash);
+        println!("{:?}", root_team.team_hash);
+        println!("{:?} -- {:?}", team1.team_hash, team2.team_hash);
         println!(
             "{:?} {:?} -- {:?} {:?}",
-            team1_1.my_hash, team1_2.my_hash, team2_1.my_hash, team2_2.my_hash
+            team1_1.team_hash, team1_2.team_hash, team2_1.team_hash, team2_2.team_hash
         );
 
-        assert_ne!(root_team.my_hash, team1.my_hash);
-        assert_ne!(root_team.my_hash, team2.my_hash);
-        assert_ne!(team1.my_hash, team2.my_hash);
-        assert_ne!(team1.my_hash, team1_1.my_hash);
-        assert_ne!(team1.my_hash, team1_2.my_hash);
-        assert_ne!(team2.my_hash, team2_1.my_hash);
-        assert_ne!(team2.my_hash, team2_2.my_hash);
-        assert_ne!(team2.my_hash, team1_1.my_hash);
-        assert_ne!(team2.my_hash, team1_2.my_hash);
-        assert_ne!(team1.my_hash, team2_1.my_hash);
-        assert_ne!(team1.my_hash, team2_2.my_hash);
+        assert_ne!(root_team.team_hash, team1.team_hash);
+        assert_ne!(root_team.team_hash, team2.team_hash);
+        assert_ne!(team1.team_hash, team2.team_hash);
+        assert_ne!(team1.team_hash, team1_1.team_hash);
+        assert_ne!(team1.team_hash, team1_2.team_hash);
+        assert_ne!(team2.team_hash, team2_1.team_hash);
+        assert_ne!(team2.team_hash, team2_2.team_hash);
+        assert_ne!(team2.team_hash, team1_1.team_hash);
+        assert_ne!(team2.team_hash, team1_2.team_hash);
+        assert_ne!(team1.team_hash, team2_1.team_hash);
+        assert_ne!(team1.team_hash, team2_2.team_hash);
 
-        assert_ne!(team1_1.my_hash, team1_2.my_hash);
-        assert_ne!(team1_1.my_hash, team2_1.my_hash);
-        assert_ne!(team1_1.my_hash, team2_2.my_hash);
+        assert_ne!(team1_1.team_hash, team1_2.team_hash);
+        assert_ne!(team1_1.team_hash, team2_1.team_hash);
+        assert_ne!(team1_1.team_hash, team2_2.team_hash);
 
-        assert_ne!(team1_2.my_hash, team2_1.my_hash);
-        assert_ne!(team1_2.my_hash, team2_2.my_hash);
+        assert_ne!(team1_2.team_hash, team2_1.team_hash);
+        assert_ne!(team1_2.team_hash, team2_2.team_hash);
 
-        assert_ne!(team2_1.my_hash, team2_2.my_hash);
+        assert_ne!(team2_1.team_hash, team2_2.team_hash);
     }
     // #[test]
     // fn asymetric_teams(){
@@ -1167,9 +1203,9 @@ mod tests {
                 lamellae.clone(),
             )));
         }
-        let root_hash = root_teams[0].my_hash;
+        let root_hash = root_teams[0].team_hash;
         for root_team in &root_teams {
-            assert_eq!(root_hash, root_team.my_hash);
+            assert_eq!(root_hash, root_team.team_hash);
         }
 
         let odds_arch = StridedArch::new(1, 2, num_pes / 2);
@@ -1189,44 +1225,44 @@ mod tests {
             })
             .collect();
 
-        let hash = odd_childs[0].my_hash;
+        let hash = odd_childs[0].team_hash;
         for child in odd_childs {
-            assert_eq!(hash, child.my_hash);
+            assert_eq!(hash, child.team_hash);
         }
 
-        let hash = even_childs[0].my_hash;
+        let hash = even_childs[0].team_hash;
         for child in even_childs {
-            assert_eq!(hash, child.my_hash);
+            assert_eq!(hash, child.team_hash);
         }
 
         // let odds_odds_arch = StridedArch::new(1,2,num_pes);
 
-        // println!("{:?}", root_team.my_hash);
-        // println!("{:?} -- {:?}", team1.my_hash, team2.my_hash);
+        // println!("{:?}", root_team.team_hash);
+        // println!("{:?} -- {:?}", team1.team_hash, team2.team_hash);
         // println!(
         //     "{:?} {:?} -- {:?} {:?}",
-        //     team1_1.my_hash, team1_2.my_hash, team2_1.my_hash, team2_2.my_hash
+        //     team1_1.team_hash, team1_2.team_hash, team2_1.team_hash, team2_2.team_hash
         // );
 
-        // assert_ne!(root_team.my_hash, team1.my_hash);
-        // assert_ne!(root_team.my_hash, team2.my_hash);
-        // assert_ne!(team1.my_hash, team2.my_hash);
-        // assert_ne!(team1.my_hash, team1_1.my_hash);
-        // assert_ne!(team1.my_hash, team1_2.my_hash);
-        // assert_ne!(team2.my_hash, team2_1.my_hash);
-        // assert_ne!(team2.my_hash, team2_2.my_hash);
-        // assert_ne!(team2.my_hash, team1_1.my_hash);
-        // assert_ne!(team2.my_hash, team1_2.my_hash);
-        // assert_ne!(team1.my_hash, team2_1.my_hash);
-        // assert_ne!(team1.my_hash, team2_2.my_hash);
+        // assert_ne!(root_team.team_hash, team1.team_hash);
+        // assert_ne!(root_team.team_hash, team2.team_hash);
+        // assert_ne!(team1.team_hash, team2.team_hash);
+        // assert_ne!(team1.team_hash, team1_1.team_hash);
+        // assert_ne!(team1.team_hash, team1_2.team_hash);
+        // assert_ne!(team2.team_hash, team2_1.team_hash);
+        // assert_ne!(team2.team_hash, team2_2.team_hash);
+        // assert_ne!(team2.team_hash, team1_1.team_hash);
+        // assert_ne!(team2.team_hash, team1_2.team_hash);
+        // assert_ne!(team1.team_hash, team2_1.team_hash);
+        // assert_ne!(team1.team_hash, team2_2.team_hash);
 
-        // assert_ne!(team1_1.my_hash, team1_2.my_hash);
-        // assert_ne!(team1_1.my_hash, team2_1.my_hash);
-        // assert_ne!(team1_1.my_hash, team2_2.my_hash);
+        // assert_ne!(team1_1.team_hash, team1_2.team_hash);
+        // assert_ne!(team1_1.team_hash, team2_1.team_hash);
+        // assert_ne!(team1_1.team_hash, team2_2.team_hash);
 
-        // assert_ne!(team1_2.my_hash, team2_1.my_hash);
-        // assert_ne!(team1_2.my_hash, team2_2.my_hash);
+        // assert_ne!(team1_2.team_hash, team2_1.team_hash);
+        // assert_ne!(team1_2.team_hash, team2_2.team_hash);
 
-        // assert_ne!(team2_1.my_hash, team2_2.my_hash);
+        // assert_ne!(team2_1.team_hash, team2_2.team_hash);
     }
 }

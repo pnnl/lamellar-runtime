@@ -89,9 +89,9 @@ impl Rofi{
 
 impl Drop for Rofi{
     fn drop(&mut self){
-        //println!("dropping rofi_lamellae");
+        println!("dropping rofi_lamellae");
         self.active.store(false, Ordering::SeqCst);
-        //println!("dropped rofi_lamellae");
+        println!("dropped rofi_lamellae");
         //rofi finit
     }
 }
@@ -113,7 +113,9 @@ impl LamellaeComm for Rofi {
     }
     fn print_stats(&self) {}
     fn shutdown(&self){
+        // println!("Rofi Lamellae shuting down");
         self.active.store(false,Ordering::Relaxed);
+        // println!("Rofi Lamellae shut down");
     }
 }
 
@@ -125,7 +127,7 @@ impl LamellaeAM for Rofi {
     
     async fn send_to_pes_async(&self,pe: Option<usize>, team: Arc<LamellarArchRT>, data: SerializedData) {
         if let Some(pe) = pe {
-            self.cq.send_data(data,pe).await;
+            self.cq.send_data(data,team.world_pe(pe).expect("invalid pe")).await;
         }
         else{
             let mut futures = team.team_iter().filter(|pe| pe != &self.my_pe).map(|pe| self.cq.send_data(data.clone(),pe)).collect::<FuturesUnordered<_>>(); //in theory this launches all the futures before waiting...

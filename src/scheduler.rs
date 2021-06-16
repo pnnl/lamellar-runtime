@@ -1,7 +1,8 @@
 use crate::active_messaging::*;
 use crate::lamellae::{Lamellae,SerializedData};
 use crate::lamellar_request::InternalReq;
-use crate::lamellar_team::LamellarTeamRT;
+use crate::lamellar_team::LamellarTeam;
+use crate::lamellar_darc::*;
 
 #[cfg(feature = "enable-prof")]
 use lamellar_prof::*;
@@ -37,8 +38,8 @@ pub(crate) struct NewReqData{
     pub(crate) batch_id: Option<usize>,
     pub(crate) func: LamellarFunc,
     pub(crate) lamellae: Arc<Lamellae>,
-    pub(crate) world: Arc<LamellarTeamRT>,
-    pub(crate) team: Arc<LamellarTeamRT>,
+    pub(crate) world: Arc<LamellarTeam>,
+    pub(crate) team: Arc<LamellarTeam>,
     pub(crate) team_hash: u64,
     // pub(crate) rt_req: bool,
 }
@@ -100,8 +101,8 @@ pub(crate) trait AmeSchedulerQueue: Sync + Send {
         id: usize,
         func: LamellarFunc,
         lamellae: Arc<Lamellae>,
-        world: Arc<LamellarTeamRT>,
-        team: Arc<LamellarTeamRT>,
+        world: Arc<LamellarTeam>,
+        team: Arc<LamellarTeam>,
         team_hash: u64,
         ireq: Option<InternalReq>,
     );
@@ -139,8 +140,8 @@ pub(crate) trait SchedulerQueue: Sync + Send {
         id: usize,
         func: LamellarFunc,
         lamellae: Arc<Lamellae>,
-        world: Arc<LamellarTeamRT>,
-        team: Arc<LamellarTeamRT>,
+        world: Arc<LamellarTeam>,
+        team: Arc<LamellarTeam>,
         team_hash: u64,
         ireq: Option<InternalReq>,
     );
@@ -157,7 +158,7 @@ pub(crate) fn create_scheduler(
     sched: SchedulerType,
     num_pes: usize,
     my_pe: usize,
-    teams: Arc<RwLock<HashMap<u64, Weak<LamellarTeamRT>>>>,
+    teams: Arc<RwLock<HashMap<u64, Weak<LamellarTeam>>>>,
 ) -> Scheduler {
     match sched {
         SchedulerType::WorkStealing => {

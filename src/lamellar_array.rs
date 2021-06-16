@@ -43,9 +43,9 @@ pub struct ReduceKey {
 }
 crate::inventory::collect!(ReduceKey);
 
-lamellar_impl::generate_reductions_for_type_rt!(u8);//, u16, u32, u64, u128, usize);
-// lamellar_impl::generate_reductions_for_type_rt!(i8, i16, i32, i64, i128, isize);
-// lamellar_impl::generate_reductions_for_type_rt!(f32,f64);
+lamellar_impl::generate_reductions_for_type_rt!(u8, u16, u32, u64, u128, usize);
+lamellar_impl::generate_reductions_for_type_rt!(i8, i16, i32, i64, i128, isize);
+lamellar_impl::generate_reductions_for_type_rt!(f32,f64);
 
 pub struct LamellarArray<
     T: serde::ser::Serialize + serde::de::DeserializeOwned + std::clone::Clone + Send + Sync + 'static,
@@ -154,9 +154,17 @@ impl<
             self.arch.clone(),
             self.team_counters.outstanding_reqs.clone(),
             self.world_counters.outstanding_reqs.clone(),
+            self.team.team.team_hash,
+            self.team.clone(),
         );
         self.world_counters.add_send_req(1);
         self.team_counters.add_send_req(1);
+        let world = if let Some(world) = &self.team.world{
+            world.clone()
+        }
+        else{
+            self.team.clone()
+        };
         self.scheduler.submit_req_new(
             self.my_pe,
             Some(self.my_pe),
@@ -164,8 +172,8 @@ impl<
             my_req.id,
             LamellarFunc::Am(func),
             self.lamellae.clone(),
-            self.team.world.clone(),
-            self.team.team.clone(),
+            world,
+            self.team.clone(),
             self.my_hash,
             Some(ireq),
         );

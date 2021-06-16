@@ -100,7 +100,7 @@ impl Barrier{
         if self.lamellae.backend() == crate::lamellae::Backend::Local {
             return;
         }
-        // println!("[{:?}] in barrier {:?}",self.barrier_cnt.load(Ordering::SeqCst),self.my_hash);
+        // println!("[{:?}] in barrier {:?}",self.barrier_cnt.load(Ordering::SeqCst),self.team_hash);
         if let Some(bufs) = &self.barrier_buf{
             if let Ok(my_index) = self.arch.team_pe(self.my_pe) {    
                 // self.bar_print("bar_init".to_string());

@@ -51,6 +51,7 @@ fn main() {
             // local_test.clone().print();
             team.exec_am_pe(0,darc_am.clone());
             team.exec_am_all(darc_am);
+
             // test2.print();
             // println!("test3.1 val: {:?}",test2 );
             if my_pe==0{
@@ -67,14 +68,17 @@ fn main() {
                 // drop(test2)
             }
         }
+        else{
+            println!("here");
+            *(*local_test.write()) +=1;
+        }
     }
-    else{
-        *(*local_test.write()) +=1;
-    }
+    println!("after sub team");
+    
     // local_test.print();
-    let _ro_darc = local_test.into_darc();
+    let ro_darc = local_test.into_darc();
     println!("read only darc");
-    // ro_darc.print();
+    ro_darc.print();
 
 }
 

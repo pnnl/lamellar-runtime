@@ -1,6 +1,7 @@
 use crate::lamellar_arch::LamellarArchRT;
 use crate::lamellae::{SerializedData,Des};
 use crate::active_messaging::{LamellarAny};
+use crate::lamellar_team::LamellarTeam;
 use async_trait::async_trait;
 use crossbeam::utils::CachePadded;
 use lamellar_prof::*;
@@ -20,12 +21,14 @@ pub (crate) enum InternalResult{
 #[derive(Clone, Debug)]
 pub(crate) struct InternalReq {
     pub(crate) data_tx: crossbeam::channel::Sender<(usize, InternalResult)>, //what if we create an enum for either bytes or the raw data?
-    pub(crate) start: std::time::Instant,
-    pub(crate) size: usize,
+    // pub(crate) start: std::time::Instant,
+    // pub(crate) size: usize,
     pub(crate) cnt: Arc<CachePadded<AtomicUsize>>,
-    pub(crate) active: Arc<AtomicBool>,
+    // pub(crate) active: Arc<AtomicBool>,
     pub(crate) team_outstanding_reqs: Arc<AtomicUsize>,
     pub(crate) world_outstanding_reqs: Arc<AtomicUsize>,
+    pub(crate) team_hash: u64,
+    pub(crate) team: Arc<LamellarTeam>,
 }
 
 #[async_trait]
@@ -67,6 +70,8 @@ impl<T: 'static + serde::ser::Serialize + serde::de::DeserializeOwned + Sync + S
         arch: Arc<LamellarArchRT>,
         team_reqs: Arc<AtomicUsize>,
         world_reqs: Arc<AtomicUsize>,
+        team_hash: u64,
+        team: Arc<LamellarTeam>,
     ) -> (LamellarRequestHandle<T>, InternalReq) {
         prof_start!(active);
         let active = Arc::new(AtomicBool::new(true));
@@ -81,11 +86,13 @@ impl<T: 'static + serde::ser::Serialize + serde::de::DeserializeOwned + Sync + S
         let ireq = InternalReq {
             data_tx: s,
             cnt: Arc::new(CachePadded::new(AtomicUsize::new(num_pes))),
-            start: Instant::now(),
-            size: 0,
-            active: active.clone(),
+            // start: Instant::now(),
+            // size: 0,
+            // active: active.clone(),
             team_outstanding_reqs: team_reqs,
             world_outstanding_reqs: world_reqs,
+            team_hash: team_hash,
+            team: team,
         };
         prof_end!(ireq);
         (

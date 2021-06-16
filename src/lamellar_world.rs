@@ -29,7 +29,7 @@ lazy_static! {
 pub struct LamellarWorld {
     team: Arc<LamellarTeam>,
     team_rt: Arc<LamellarTeamRT>,
-    teams: Arc<RwLock<HashMap<u64, Weak<LamellarTeamRT>>>>,
+    teams: Arc<RwLock<HashMap<u64, Weak<LamellarTeam>>>>,
     counters: Arc<AMCounters>,
     lamellaes_new: BTreeMap<crate::lamellae::Backend, Arc<Lamellae>>,
     my_pe: usize,
@@ -67,7 +67,7 @@ impl ActiveMessaging for LamellarWorld {
     where
         F: RemoteActiveMessage + LamellarAM + Serde + Send + Sync + 'static,
     {
-        self.team_rt.exec_am_all(am)
+        self.team.exec_am_all(am)
     }
     fn exec_am_pe<F>(
         &self,
@@ -78,7 +78,7 @@ impl ActiveMessaging for LamellarWorld {
         F: RemoteActiveMessage + LamellarAM + Serde + Send + Sync + 'static,
     {
         assert!(pe < self.num_pes(), "invalid pe: {:?}", pe);
-        self.team_rt.exec_am_pe(pe, am)
+        self.team.exec_am_pe(pe, am)
     }
     fn exec_am_local<F>(
         &self,
@@ -87,7 +87,7 @@ impl ActiveMessaging for LamellarWorld {
     where
         F: LamellarActiveMessage + LocalAM + Send + Sync + 'static,
     {
-        self.team_rt.exec_am_local(am)
+        self.team.exec_am_local(am)
     }
 }
 
@@ -261,7 +261,7 @@ impl LamellarWorld {
     }
 
     pub fn team_barrier(&self) {
-        self.team_rt.barrier();
+        self.team.barrier();
         println!("team barrier!!!!!!!!!!!!");
     }
 
@@ -269,15 +269,11 @@ impl LamellarWorld {
     where
         L: LamellarArch + std::hash::Hash + 'static,
     {
-        if let Some(team) = LamellarTeamRT::create_subteam_from_arch(self.team_rt.clone(),self.team_rt.clone(), arch) {
+        if let Some(team) = LamellarTeam::create_subteam_from_arch(self.team.clone(), arch) {
             self.teams
                 .write()
-                .insert(team.my_hash, Arc::downgrade(&team));
-            Some(Arc::new(LamellarTeam {
-                world: self.team_rt.clone(),
-                team: team,
-                teams: self.teams.clone(),
-            }))
+                .insert(team.team.team_hash, Arc::downgrade(&team));
+            Some(team)
         } else {
             None
         }
@@ -325,7 +321,7 @@ impl LamellarWorld {
 //#[prof]
 impl Drop for LamellarWorld {
     fn drop(&mut self) {
-        // println!("[{:?}] world dropping", self.my_pe);
+        println!("[{:?}] world dropping", self.my_pe);
         self.wait_all();
         // self.team_rt.barrier();
         self.barrier();
@@ -337,12 +333,12 @@ impl Drop for LamellarWorld {
         self.lamellaes_new.clear();
         LAMELLAES.write().clear();
 
-        // println!("team: {:?} ",Arc::strong_count(&self.team));
-        // println!("team_rt: {:?} {:?}",&self.team_rt.my_hash,Arc::strong_count(&self.team_rt));
-        // let teams = self.teams.read();
-        //     for (k,team) in teams.iter(){
-        //         println!("team map: {:?} {:?}",k,Weak::strong_count(&team));
-        //     }
+        println!("team: {:?} ",Arc::strong_count(&self.team));
+        println!("team_rt: {:?} {:?}",&self.team_rt.team_hash,Arc::strong_count(&self.team_rt));
+        let teams = self.teams.read();
+            for (k,team) in teams.iter(){
+                println!("team map: {:?} {:?}",k,Weak::strong_count(&team));
+            }
         
         // println!("counters: {:?}",Arc::strong_count(&self.counters));
        
@@ -355,7 +351,7 @@ impl Drop for LamellarWorld {
         // for (backend,lamellae) in &self.lamellaes{
         //     lamellae.finit();
         // }
-        // println!("[{:?}] world dropped", self.my_pe);
+        println!("[{:?}] world dropped", self.my_pe);
     }
 }
 
@@ -411,7 +407,7 @@ impl LamellarWorldBuilder {
         // println!("world gen barrier!!!!!!!!!!!!");
         let mut world = LamellarWorld {
             team: Arc::new(LamellarTeam {
-                world: team_rt.clone(),
+                world: None,
                 team: team_rt.clone(),
                 teams: teams.clone(),
             }),
@@ -425,7 +421,7 @@ impl LamellarWorldBuilder {
         world
             .teams
             .write()
-            .insert(world.team_rt.my_hash, Arc::downgrade(&world.team_rt));
+            .insert(world.team_rt.team_hash, Arc::downgrade(&world.team));
         // world.lamellaes.insert(lamellae.backend(), lamellae.clone());
         LAMELLAES.write().insert(lamellae.backend(), lamellae.clone());
         world.lamellaes_new.insert(lamellae.backend(),lamellae.clone());

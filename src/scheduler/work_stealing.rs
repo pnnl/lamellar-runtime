@@ -1,7 +1,7 @@
 use crate::active_messaging::{ActiveMessageEngine, ExecType, LamellarFunc};
 use crate::lamellae::{Lamellae,SerializedData,Des};
 use crate::lamellar_request::InternalReq;
-use crate::lamellar_team::LamellarTeamRT;
+use crate::lamellar_team::LamellarTeam;
 use crate::scheduler::{NewReqData, SchedulerQueue,AmeSchedulerQueue,AmeScheduler};
 use lamellar_prof::*;
 // use log::trace;
@@ -70,7 +70,7 @@ impl WorkStealingThread {
             }
             fini_prof!();
             active_cnt.fetch_sub(1, Ordering::SeqCst);
-            // println!("TestSchdulerWorker thread shutting down");
+            println!("TestSchdulerWorker thread shutting down");
         })
     }
 }
@@ -142,8 +142,8 @@ impl AmeSchedulerQueue for WorkStealingInner {
         id: usize,
         func: LamellarFunc,
         lamellae: Arc<Lamellae>,
-        world: Arc<LamellarTeamRT>,
-        team: Arc<LamellarTeamRT>,
+        world: Arc<LamellarTeam>,
+        team: Arc<LamellarTeam>,
         team_hash: u64,
         ireq: Option<InternalReq>,
     ){
@@ -208,8 +208,10 @@ impl AmeSchedulerQueue for WorkStealingInner {
         task.detach();
     }
     fn shutdown(&self){
+        println!("work stealing shuting down");
         self.active.store(false, Ordering::Relaxed);
         while self.active_cnt.load(Ordering::Relaxed) > 0 {std::thread::yield_now()}
+        println!("work stealing shut down");
         
     }
 }
@@ -239,8 +241,8 @@ impl SchedulerQueue for WorkStealing {
         id: usize,
         func: LamellarFunc,
         lamellae: Arc<Lamellae>,
-        world: Arc<LamellarTeamRT>,
-        team: Arc<LamellarTeamRT>,
+        world: Arc<LamellarTeam>,
+        team: Arc<LamellarTeam>,
         team_hash: u64,
         ireq: Option<InternalReq>,
     ){
@@ -361,13 +363,13 @@ impl WorkStealing {
     pub(crate) fn new(
         num_pes: usize,
         my_pe: usize,
-        teams: Arc<RwLock<HashMap<u64, Weak<LamellarTeamRT>>>>,
+        teams: Arc<RwLock<HashMap<u64, Weak<LamellarTeam>>>>,
     ) -> WorkStealing {
         // println!("new work stealing queue");
         let inner = Arc::new(AmeScheduler::WorkStealingInner(WorkStealingInner::new()));
         let mut sched = WorkStealing {
             inner: inner.clone(),
-            ame: Arc::new(ActiveMessageEngine::new(num_pes, my_pe, teams, Arc::downgrade(&inner))),
+            ame: Arc::new(ActiveMessageEngine::new(num_pes, my_pe, Arc::downgrade(&inner),teams)),
         };
         sched
     }
@@ -378,10 +380,10 @@ impl WorkStealing {
 impl Drop for WorkStealingInner {
     //when is this called with respect to world?
     fn drop(&mut self) {
-        //println!("dropping work stealing");
+        println!("dropping work stealing");
         while let Some(thread) = self.threads.pop() {
             let _res = thread.join();
         }
-        // println!("WorkStealing Scheduler Dropped");
+        println!("WorkStealing Scheduler Dropped");
     }
 }

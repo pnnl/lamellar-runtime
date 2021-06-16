@@ -281,7 +281,7 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_type: AmType) -> 
 
     let mut expanded = quote! {
         impl #generics #lamellar::LamellarActiveMessage for #orig_name#generics_args {
-            fn exec(self: std::sync::Arc<Self>,__lamellar_current_pe: usize,__lamellar_num_pes: usize, __local: bool, __lamellar_world: std::sync::Arc<#lamellar::LamellarTeamRT>, __lamellar_team: std::sync::Arc<#lamellar::LamellarTeamRT>) -> std::pin::Pin<Box<dyn std::future::Future<Output=#lamellar::LamellarReturn> + Send>>{
+            fn exec(self: std::sync::Arc<Self>,__lamellar_current_pe: usize,__lamellar_num_pes: usize, __local: bool, __lamellar_world: std::sync::Arc<#lamellar::LamellarTeam>, __lamellar_team: std::sync::Arc<#lamellar::LamellarTeam>) -> std::pin::Pin<Box<dyn std::future::Future<Output=#lamellar::LamellarReturn> + Send>>{
                 Box::pin( async move {
                 #temp
                 #ret_statement
@@ -565,7 +565,7 @@ pub fn rt_am_local(args: TokenStream, input: TokenStream) -> TokenStream {
 
 //     let expanded = quote! {
 //         impl lamellar::LamellarActiveMessage for #orig_name {
-//             fn exec(self: Box<Self>,__lamellar_current_pe: usize,__lamellar_num_pes: usize, __local: bool, __lamellar_world: std::sync::Arc<lamellar::LamellarTeamRT>, __lamellar_team: std::sync::Arc<lamellar::LamellarTeamRT>) -> std::pin::Pin<Box<dyn std::future::Future<Output=Option<lamellar::LamellarReturn>> + Send>>{
+//             fn exec(self: Box<Self>,__lamellar_current_pe: usize,__lamellar_num_pes: usize, __local: bool, __lamellar_world: std::sync::Arc<lamellar::LamellarTeam>, __lamellar_team: std::sync::Arc<lamellar::LamellarTeam>) -> std::pin::Pin<Box<dyn std::future::Future<Output=Option<lamellar::LamellarReturn>> + Send>>{
 
 //                 Box::pin( async move {
 //                 #temp
@@ -593,7 +593,7 @@ pub fn rt_am_local(args: TokenStream, input: TokenStream) -> TokenStream {
 //             type Output = #output;
 //         }
 
-//         fn #orig_name_exec(bytes: Vec<u8>,__lamellar_current_pe: usize,__lamellar_num_pes: usize, __lamellar_world: std::sync::Arc<lamellar::LamellarTeamRT>, __lamellar_team: std::sync::Arc<lamellar::LamellarTeamRT>,return_am) -> std::pin::Pin<Box<dyn std::future::Future<Output=Option<lamellar::LamellarReturn>> + Send>> {
+//         fn #orig_name_exec(bytes: Vec<u8>,__lamellar_current_pe: usize,__lamellar_num_pes: usize, __lamellar_world: std::sync::Arc<lamellar::LamellarTeam>, __lamellar_team: std::sync::Arc<lamellar::LamellarTeam>,return_am) -> std::pin::Pin<Box<dyn std::future::Future<Output=Option<lamellar::LamellarReturn>> + Send>> {
 //             let __lamellar_data: Box<#orig_name> = Box::new(lamellar::deserialize(&bytes).unwrap());
 //             <#orig_name as lamellar::LamellarActiveMessage>::exec(__lamellar_data,__lamellar_current_pe,__lamellar_num_pes,return_am,__lamellar_world,__lamellar_team)
 //         }

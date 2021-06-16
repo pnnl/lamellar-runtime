@@ -107,10 +107,10 @@ impl std::fmt::Debug for CmdBuf{
 
 impl Drop for CmdBuf{
     fn drop(&mut self){
-        //println!("dropping cmd buf");
+        // println!("dropping cmd buf");
         let old=std::mem::take(&mut self.buf);
         Box::into_raw(old);
-        //println!("dropped cmd buf");
+        // println!("dropped cmd buf");
 
     }
 }
@@ -261,13 +261,14 @@ impl std::fmt::Debug for RofiCmdBuffer{
 
 impl Drop for RofiCmdBuffer{
     fn drop(&mut self) {
+        // println!("dropping RofiCmdBuffer");
         while!self.empty() {std::thread::yield_now()}
-        //println!("dropping RofiCmdBuffer");
+        
         self.empty_bufs.clear();
         // self.full_bufs.clear();
         // self.tx_bufs.clear();
         // std::mem::replace(&mut self.cur_buf,None);
-        //println!("dropped RofiCmdBuffer");
+        // println!("dropped RofiCmdBuffer");
     }
 }
 
@@ -555,7 +556,7 @@ impl RofiCQ{
 
 impl Drop for RofiCQ{
     fn drop(&mut self){
-        //println!("dropping RofiCQ");
+        // println!("dropping RofiCQ");
         let mut send_buf =  self.send_buffer.lock();
         let old=std::mem::take(&mut *send_buf);
         Box::into_raw(old);
@@ -567,7 +568,7 @@ impl Drop for RofiCQ{
         let old=std::mem::replace(Arc::get_mut(&mut self.clear_cmd).unwrap(),Box::new(RofiCmd{daddr:0,dsize:0,tx_bit: 0}));
         Box::into_raw(old);
         self.cmd_buffers.clear();
-        //println!("dropped RofiCQ");
+        // println!("dropped RofiCQ");
     }
 }
 
@@ -707,7 +708,7 @@ impl RofiCommandQueue{
 
 impl Drop for RofiCommandQueue{
     fn drop(&mut self){
-        //println!("dropping rofi command queue");
+        println!("dropping rofi command queue");
         self.rofi_comm.rt_free(self.send_buffer_addr - self.rofi_comm.base_addr());
         self.rofi_comm.rt_free(self.recv_buffer_addr - self.rofi_comm.base_addr());
         self.rofi_comm.rt_free(self.release_cmd_addr - self.rofi_comm.base_addr());
