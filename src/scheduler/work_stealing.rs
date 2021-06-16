@@ -21,7 +21,7 @@ pub(crate) struct WorkStealingThread {
     work_q: Worker<async_task::Runnable>,
     work_flag: Arc<AtomicU8>,
     active: Arc<AtomicBool>,
-    num_tasks: Arc<AtomicUsize>
+    // num_tasks: Arc<AtomicUsize>
 }
 
 //#[prof]
@@ -161,7 +161,7 @@ impl AmeSchedulerQueue for WorkStealingInner {
             // rt_req: false,
         };
 
-        let work_inj = self.work_inj.clone();
+        // let work_inj = self.work_inj.clone();
         // println!("submitting_req");
         let future = async move {
             // num_tasks.fetch_add(1,Ordering::Relaxed);
@@ -177,7 +177,7 @@ impl AmeSchedulerQueue for WorkStealingInner {
     }
 
     fn submit_work(&self,  ame:  Arc<ActiveMessageEngine>, data: SerializedData, lamellae: Arc<Lamellae>) {
-        let work_inj = self.work_inj.clone();
+        // let work_inj = self.work_inj.clone();
         // let num_tasks = self.num_tasks.clone();
         let future = async move {
             // num_tasks.fetch_add(1,Ordering::Relaxed);
@@ -310,7 +310,7 @@ impl WorkStealingInner {
                 work_q: work_worker,
                 work_flag: work_flag.clone(),
                 active: self.active.clone(),
-                num_tasks: self.num_tasks.clone(),
+                // num_tasks: self.num_tasks.clone(),
             };
             self.threads.push(WorkStealingThread::run(
                 worker,
@@ -361,15 +361,15 @@ pub(crate) struct WorkStealing {
 }
 impl WorkStealing {
     pub(crate) fn new(
-        num_pes: usize,
+        _num_pes: usize,
         my_pe: usize,
         teams: Arc<RwLock<HashMap<u64, Weak<LamellarTeam>>>>,
     ) -> WorkStealing {
         // println!("new work stealing queue");
         let inner = Arc::new(AmeScheduler::WorkStealingInner(WorkStealingInner::new()));
-        let mut sched = WorkStealing {
+        let sched = WorkStealing {
             inner: inner.clone(),
-            ame: Arc::new(ActiveMessageEngine::new(num_pes, my_pe, Arc::downgrade(&inner),teams)),
+            ame: Arc::new(ActiveMessageEngine::new( my_pe, inner.clone(),teams)),
         };
         sched
     }

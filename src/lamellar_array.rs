@@ -58,7 +58,7 @@ pub struct LamellarArray<
     pub(crate) arch: Arc<LamellarArchRT>,
     team_counters: AMCounters,
     world_counters: Arc<AMCounters>, // can probably remove this?
-    id: usize,
+    // id: usize,
     pub(crate) my_hash: u64,
     team: Arc<LamellarTeam>,
 }
@@ -104,7 +104,7 @@ impl<
             num_pes: team.team.num_pes,
             team_counters: AMCounters::new(),
             world_counters: world_counters,
-            id: 0,
+            // id: 0,
             // sub_team_id_cnt: AtomicUsize::new(0),
             my_hash: 0, //easy id to look up for global
             team: team,

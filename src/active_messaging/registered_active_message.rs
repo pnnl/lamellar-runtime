@@ -4,9 +4,7 @@ use crate::active_messaging::*;
     // REQUESTS,LamellarBoxedData,
 // };
 use crate::lamellae::{Lamellae,LamellaeAM,SerializeHeader,SerializedData,Ser,Des,SubData};
-use crate::lamellar_request::*;
 use crate::lamellar_team::LamellarTeam;
-use crate::lamellar_darc::*;
 
 use crate::scheduler::{NewReqData,AmeSchedulerQueue};
 #[cfg(feature = "enable-prof")]
@@ -14,7 +12,6 @@ use lamellar_prof::*;
 use log::trace;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
-use std::collections::HashSet;
 use futures::future::join_all;
 use async_recursion::async_recursion;
 
@@ -104,7 +101,7 @@ pub(crate) struct RegisteredActiveMessages{
     scheduler: Arc<AmeScheduler>,
 }
 
-type TeamHeader = (usize,u64); //size, hash
+// type TeamHeader = (usize,u64); //size, hash
 type FuncHeader = (usize,AmId); //size, ID
 type BatchHeader = (usize,usize,usize); //size,num_reqs, id
 
@@ -232,7 +229,7 @@ impl RegisteredActiveMessages{
                             let mut batch_req_id =0;
                             // println!("dst: {:?} func_id {:?} batch_id {:?} num_reqs {:?}",req_data.dst,func_id,batch_id,reqs.len());
                             for (req_id,func) in reqs{
-                                println!("dst: {:?} req_id {:?} func_id {:?} batch_id {:?}",req_data.dst,req_id,func_id,batch_id);
+                                // println!("dst: {:?} req_id {:?} func_id {:?} batch_id {:?}",req_data.dst,req_id,func_id,batch_id);
                                 match func_id {
                                     BATCHED_UNIT_ID  => {  }, //dont have to do anything special, as all we need to know is batch id
                                     UNIT_ID => {  
@@ -324,7 +321,7 @@ impl RegisteredActiveMessages{
                             }
                         }
                     }                
-                    println!("sending to {:?} batch {:?}",req_data.dst,data.header_and_data_as_bytes().len());
+                    // println!("sending to {:?} batch {:?}",req_data.dst,data.header_and_data_as_bytes().len());
                     req_data.lamellae.send_to_pes_async(req_data.dst, req_data.team.team.arch.clone(), data).await;
                 }
                 // println!("leaving tx task");
@@ -394,21 +391,23 @@ impl RegisteredActiveMessages{
         &self,
         mut req_data: NewReqData,
        ){ 
-        let my_pe = if let Ok(my_pe) = req_data.team.team.arch.team_pe(req_data.src) {
+        let my_team_pe = if let Ok(my_pe) = req_data.team.team.arch.team_pe(req_data.src) {
             Some(my_pe)
-        } else {
+        } else { //this happens when we initiate a request using a team im not a part of but have a handle to
             None
         };
-        println!("my_pe = {:?} Req src {:?} dst {:?} cmd {:?} id {:?} batch_id {:?} team_hash {:?}",my_pe,req_data.src,req_data.dst,req_data.cmd,req_data.id,req_data.batch_id,req_data.team_hash);
-        if req_data.dst == my_pe && my_pe != None {
-            println!("[{:?}] single local request ", my_pe);
+        let my_world_pe = Some(req_data.src);
+
+        // println!("my_team_pe = {:?} Req src {:?} dst {:?} cmd {:?} id {:?} batch_id {:?} team_hash {:?}",my_team_pe,req_data.src,req_data.dst,req_data.cmd,req_data.id,req_data.batch_id,req_data.team_hash);
+        if req_data.dst == my_world_pe && my_team_pe != None {
+            // println!("[{:?}] single local request ", my_team_pe);
            
             RegisteredActiveMessages::exec_local(
                 Arc::new(req_data)
             ).await;
         }
         else{
-            println!("precessing req cmd {:?}",req_data.cmd);
+            // println!("precessing req cmd {:?}",req_data.cmd);
             let (func_id, func_size, cmd) = match &req_data.func{
                 LamellarFunc::Am(ref func) => {
                     let (func_id,func_size) = match &req_data.cmd{
@@ -439,9 +438,12 @@ impl RegisteredActiveMessages{
                         _ => panic!("not handled yet")
                     }
                 },
-                LamellarFunc::LocalAm(_) => panic!("should only process remote AMS"),
+                LamellarFunc::LocalAm(_) => {
+                    println!("my_team_pe = {:?} Req src {:?} dst {:?} cmd {:?} id {:?} batch_id {:?} team_hash {:?}",my_team_pe,req_data.src,req_data.dst,req_data.cmd,req_data.id,req_data.batch_id,req_data.team_hash);
+                    panic!("should only process remote AMS")
+                },
             };               
-            trace!("[{:?}] remote request ", my_pe);           
+            trace!("[{:?}] remote request ", my_team_pe);           
             
             let req_data = if func_size <= 10000{
                 req_data.cmd=cmd;
@@ -455,7 +457,7 @@ impl RegisteredActiveMessages{
                 req_data
             };
 
-            if req_data.dst == None && my_pe != None {
+            if req_data.dst == None && my_team_pe != None {
                 self.scheduler.submit_task(async move {
                     
                     RegisteredActiveMessages::exec_local(
@@ -472,7 +474,7 @@ impl RegisteredActiveMessages{
         req_data: Arc<NewReqData>,){
         match req_data.func.clone(){
             LamellarFunc::Am(func) => {
-                println!("execing remote am locally");
+                // println!("execing remote am locally");
                 match func.exec(req_data.team.team.world_pe, req_data.team.team.num_world_pes, true, req_data.world.clone(), req_data.team.clone()).await {
                     LamellarReturn::LocalData(data) => {
                         // println!("local am data return");
@@ -501,7 +503,7 @@ impl RegisteredActiveMessages{
                 }
             },
             LamellarFunc::LocalAm(func) => {
-                println!("execing local am");
+                // println!("execing local am");
                 match func.exec(req_data.team.team.world_pe, req_data.team.team.num_world_pes, true, req_data.world.clone(), req_data.team.clone()).await {
                     LamellarReturn::LocalData(data) => {
                         // println!("local am data return");
@@ -548,7 +550,7 @@ impl RegisteredActiveMessages{
                 LamellarReturn::Unit =>{  
                     let req_data = NewReqData{
                         src: team.team.world_pe ,
-                        dst: Some(team.team.arch.team_pe(msg.src as usize).expect("invalid team member")),
+                        dst: Some(msg.src as usize), //Some(team.team.arch.team_pe(msg.src as usize).expect("invalid team member")),
                         cmd: ExecType::Am(Cmd::UnitReturn),
                         id: msg.req_id,
                         batch_id: None,
@@ -566,7 +568,7 @@ impl RegisteredActiveMessages{
                 LamellarReturn::RemoteAm(func) => {
                     let req_data = NewReqData{
                         src: team.team.world_pe ,
-                        dst: Some(team.team.arch.team_pe(msg.src as usize).expect("invalid team member")),
+                        dst: Some(msg.src as usize),//Some(team.team.arch.team_pe(msg.src as usize).expect("invalid team member")),
                         cmd: ExecType::Am(Cmd::AmReturn),
                         id: msg.req_id,
                         batch_id: None,
@@ -581,7 +583,7 @@ impl RegisteredActiveMessages{
                 LamellarReturn::RemoteData(d) => {
                     let req_data = NewReqData{
                         src: team.team.world_pe ,
-                        dst: Some(team.team.arch.team_pe(msg.src as usize).expect("invalid team member")),
+                        dst: Some(msg.src as usize),//Some(team.team.arch.team_pe(msg.src as usize).expect("invalid team member")),
                         cmd: ExecType::Am(Cmd::DataReturn),
                         id: msg.req_id,
                         batch_id: None,
@@ -593,7 +595,6 @@ impl RegisteredActiveMessages{
                     };
                     ame.process_msg_new(req_data, None).await;
                 },
-                _ => {panic!("unandled return type ")}
             }
         }
     }
@@ -621,10 +622,10 @@ impl RegisteredActiveMessages{
                 let func_id = func_header.1;
                 while i < func_start + func_header.0{
                     let batch_header: BatchHeader = crate::deserialize(&data_slice[i..i+batch_header_len]).unwrap();
-                    println!("src: {:?} fh {:?} bh {:?} ({:?} {:?})",msg.src,func_header,batch_header,i,func_start + func_header.0);
+                    // println!("src: {:?} fh {:?} bh {:?} ({:?} {:?})",msg.src,func_header,batch_header,i,func_start + func_header.0);
 
                     i += batch_header_len;
-                    let batch_start = i;
+                    // let batch_start = i;
                     let batch_id = batch_header.2;
                     let num_reqs = batch_header.1;
                     let batched_data = &data_slice[i..i+batch_header.0];
@@ -683,7 +684,8 @@ impl RegisteredActiveMessages{
             let processed = processed.clone();
             let ame = ame.clone();
             self.scheduler.submit_task(async move {
-                // println!("here");
+                // println!("in exect batch from src {:?}",src);
+                // team.print_arch();
                 let lam_return = func.exec( team.team.world_pe, team.team.num_world_pes, false , world.clone(), team.clone()).await;                
                 let (num_rets,num_unit_rets) = {
                     let mut entry = results.lock();
@@ -701,7 +703,7 @@ impl RegisteredActiveMessages{
                             if num_rets == num_unit_rets { //every result was a unit --- we probably can determine this from the function...
                                 let  req_data = NewReqData{
                                     src: team.team.world_pe ,
-                                    dst: Some(team.team.arch.team_pe(src).expect("invalid team member")),
+                                    dst: Some(src),//Some(team.team.arch.team_pe(src).expect("invalid team member")), //parent
                                     cmd: ExecType::Am(Cmd::BatchedUnitReturn),
                                     id: batch_id, //for this case where every result is a unit return we only submit a single message and the ids are generated automatically.
                                     batch_id: Some(batch_id),
@@ -726,7 +728,7 @@ impl RegisteredActiveMessages{
                                             LamellarReturn::RemoteData(d) => {
                                                 let req_data = NewReqData{
                                                     src: team.team.world_pe,
-                                                    dst: Some(team.team.arch.team_pe(src).expect("invalid team member")),
+                                                    dst: Some(src),//Some(team.team.arch.team_pe(src).expect("invalid team member")),
                                                     cmd: ExecType::Am(Cmd::BatchedDataReturn),
                                                     id: req_id,
                                                     batch_id: Some(batch_id),
@@ -742,7 +744,7 @@ impl RegisteredActiveMessages{
                                                 // println!("returnin remote am");
                                                 let req_data = NewReqData{
                                                     src: team.team.world_pe,
-                                                    dst: Some(team.team.arch.team_pe(src).expect("invalid team member")),
+                                                    dst: Some(src),//Some(team.team.arch.team_pe(src).expect("invalid team member")),
                                                     cmd: ExecType::Am(Cmd::BatchedAmReturn),
                                                     id: req_id,
                                                     batch_id: Some(batch_id),
@@ -834,7 +836,7 @@ impl RegisteredActiveMessages{
                 self.scheduler.submit_task(async move {
                     let req_data = Arc::new(NewReqData{
                         src: src,
-                        dst: Some(team.team.team_pe.unwrap()),
+                        dst: Some(src),//Some(team.team.team_pe.unwrap()),
                         cmd: ExecType::Am(Cmd::Exec),
                         id: req_id,
                         batch_id: Some(batch_id),
@@ -870,7 +872,7 @@ impl RegisteredActiveMessages{
                 self.scheduler.submit_task(async move {
                     let req_data = Arc::new(NewReqData{
                         src: src,
-                        dst: Some(team.team.team_pe.unwrap()),
+                        dst: Some(src),//Some(team.team.team_pe.unwrap()),
                         cmd: ExecType::Am(Cmd::Exec),
                         id: req_id,
                         batch_id: Some(batch_id),

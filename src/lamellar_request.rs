@@ -8,7 +8,7 @@ use lamellar_prof::*;
 use log::trace;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
-use std::time::Instant;
+// use std::time::Instant;
 // use futures::Future;
 
 static CUR_REQ_ID: AtomicUsize = AtomicUsize::new(0);

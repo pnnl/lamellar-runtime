@@ -54,12 +54,14 @@ impl Barrier{
         else{
             None
         };
-         Barrier{
+        let bar = Barrier{
             my_pe: my_pe,
             arch: arch,
             barrier_cnt: AtomicUsize::new(0),
             barrier_buf: bufs,
-        }
+        };
+        // bar.print_bar();
+        bar
     }
 
     fn print_bar(&self){
@@ -75,7 +77,7 @@ impl Barrier{
         for pe in barrier_buf.as_slice().unwrap() {
             while *pe != barrier_id {
                 std::thread::yield_now();
-                if s.elapsed().as_secs_f64() > 60.0 {
+                if s.elapsed().as_secs_f64() > 10.0 {
                     self.print_bar();
                     s = Instant::now();
                 }
@@ -91,6 +93,7 @@ impl Barrier{
     ) {
         for world_pe in self.arch.team_iter() {
             unsafe {
+                // println!("putting {:?} into {:?} on {:?}",barrier_id, my_index, world_pe);
                 barrier_buf.put_slice(world_pe, my_index, barrier_id);
             }
         }
@@ -100,9 +103,10 @@ impl Barrier{
         if self.lamellae.backend() == crate::lamellae::Backend::Local {
             return;
         }
-        // println!("[{:?}] in barrier {:?}",self.barrier_cnt.load(Ordering::SeqCst),self.team_hash);
+        // println!("[{:?}] in barrier ",self.barrier_cnt.load(Ordering::SeqCst));
+        // self.print_bar();
         if let Some(bufs) = &self.barrier_buf{
-            if let Ok(my_index) = self.arch.team_pe(self.my_pe) {    
+            if let Ok(my_index) = self.arch.team_pe(self.my_pe) {  
                 // self.bar_print("bar_init".to_string());
                 let mut barrier_id = self.barrier_cnt.fetch_add(1, Ordering::SeqCst);
                 // println!("[{:?}] checking barrier entry ({:?}) {:?}",self.my_pe,barrier_id,&[barrier_id].as_ptr());
@@ -117,6 +121,7 @@ impl Barrier{
                 // println!("[{:?}] putting new barrier val ({:?}) {:?}",self.my_pe,barrier_id,barrier_slice.as_ptr());
 
                 self.put_barrier_val(my_index, barrier_slice, &bufs.barrier1);
+                // self.print_bar();
                 // self.bar_print("2".to_string());
                 // println!("[{:?}] checking new barrier val ({:?})",self.my_pe,barrier_id);
                 self.check_barrier_vals(barrier_id, &bufs.barrier1);
@@ -129,6 +134,7 @@ impl Barrier{
 
                 self.put_barrier_val(my_index, barrier_slice, &bufs.barrier2);
             }
+            // self.print_bar();
             // self.bar_print("5".to_string());
             // println!("[{:?}] checking barrier exit ({:?})",self.my_pe,barrier_id);
         }

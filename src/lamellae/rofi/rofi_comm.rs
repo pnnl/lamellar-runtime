@@ -68,9 +68,9 @@ impl RofiComm {
         rofi_barrier();
         let _res = rofi_finit();
     }
-    pub(crate) fn mype(&self) -> usize {
-        self.my_pe
-    }
+    // pub(crate) fn mype(&self) -> usize {
+    //     self.my_pe
+    // }
     pub(crate) fn barrier(&self) {
         rofi_barrier();
     }
@@ -115,17 +115,17 @@ impl RofiComm {
     }
 
     //dst_addr relative to rofi_base_addr, need to calculate the real address
-    pub(crate) fn local_store(&self, data: &[u8], dst_addr: usize) {
-        let base_addr = *self.rofi_base_address.read();
-        unsafe {
-            std::ptr::copy_nonoverlapping(
-                data.as_ptr(),
-                (base_addr + dst_addr) as *mut u8,
-                data.len(),
-            );
-        }
-        //read lock dropped here
-    }
+    // pub(crate) fn local_store(&self, data: &[u8], dst_addr: usize) {
+    //     let base_addr = *self.rofi_base_address.read();
+    //     unsafe {
+    //         std::ptr::copy_nonoverlapping(
+    //             data.as_ptr(),
+    //             (base_addr + dst_addr) as *mut u8,
+    //             data.len(),
+    //         );
+    //     }
+    //     //read lock dropped here
+    // }
 
     pub(crate) fn put<
         T: serde::ser::Serialize
@@ -378,7 +378,7 @@ pub(crate) struct RofiData{
 impl RofiData{
     pub async fn new(rofi_comm: Arc<RofiComm>, size: usize )->RofiData{
         let ref_cnt_size = std::mem::size_of::<AtomicUsize>();
-        let header_size = std::mem::size_of::<u64>();
+        // let header_size = std::mem::size_of::<u64>();
         // let data_size = header_size+serialized_size+1; //plus one is our transfer flag
         let alloc_size = size + ref_cnt_size +1;
         let mut mem = rofi_comm.rt_alloc(alloc_size);

@@ -41,33 +41,6 @@ pub struct LamellarTeam {
 //#[prof]
 impl LamellarTeam {
     #[allow(dead_code)]
-    // pub(crate) fn new(
-    //     num_pes: usize,
-    //     world_pe: usize,
-    //     // scheduler: Arc<dyn SchedulerQueue>,
-    //     scheduler: Arc<Scheduler>,
-    //     world_counters: Arc<AMCounters>,
-    //     // lamellae: Arc<dyn Lamellae + Sync + Send>,
-    //     lamellae: Arc<Lamellae>,
-    //     world: Option<Arc<LamellarTeamRT>>,
-    //     teams: Arc<RwLock<HashMap<u64, Arc<LamellarTeamRT>>>>,
-    // ) -> LamellarTeam {
-    //     let team = Arc::new(LamellarTeamRT::new(
-    //         num_pes,
-    //         world_pe,
-    //         // scheduler,
-    //         scheduler,
-    //         world_counters,
-    //         // lamellae,
-    //         lamellae,
-    //     ));
-    //     LamellarTeam {
-    //         world: if let Some(world) = world {world} else { team.clone() },
-    //         team: team,
-    //         // teams: teams,
-    //     }
-    // }
-    #[allow(dead_code)]
     pub fn get_pes(&self) -> Vec<usize> {
         self.team.arch.team_iter().collect::<Vec<usize>>()
     }
@@ -91,14 +64,16 @@ impl LamellarTeam {
             parent.clone()
         };
         if let Some(team) = LamellarTeamRT::create_subteam_from_arch(world.team.clone(),parent.team.clone(), arch) {
-            // self.teams
-            //     .write()
-            //     .insert(team.team_hash, team.clone());//Arc::downgrade(&team));
-            Some(Arc::new(LamellarTeam {
+
+            let team = Arc::new(LamellarTeam {
                 world: Some(world),
                 team: team,
                 teams: parent.teams.clone(),
-            }))
+            });
+            parent.teams
+                .write()
+                .insert(team.team.team_hash, Arc::downgrade(&team));
+            Some(team)
         } else {
             None
         }
@@ -352,6 +327,7 @@ impl LamellarTeamRT {
             // println!("[{:?}][LAMELLAR] entering team barrier ", team.world_pe);
             team.barrier();
             // println!("[LAMELLAR] new  team 2 {:?} {:?}",hash, team.dropped.as_slice());
+            parent.barrier();
             Some(team)
         } else {
             None
@@ -405,11 +381,14 @@ impl LamellarTeamRT {
     fn put_dropped(&self) {
         if let Some(parent) = &self.parent {
             let temp_slice = unsafe { self.dropped.as_mut_slice().unwrap() };
+            // println!("temp_slice {:?}",temp_slice);
 
             let my_index = parent.arch.team_pe(self.world_pe).expect("invalid parent pe");
+            // println!("my_index {:?}",my_index);
             temp_slice[my_index] = 1;
             for world_pe in self.arch.team_iter() {
-                if world_pe != my_index {
+                // println!("world_pe: {:?}",world_pe);
+                if world_pe != self.world_pe {
                     // println!("putting into dropped {:?} {:?} {:?}",world_pe, my_index, & temp_slice[my_index..=my_index]);
                     unsafe {
                         self.dropped.put_slice(
@@ -488,17 +467,17 @@ impl LamellarTeamRT {
 // // #[prof]
 // impl ActiveMessaging for Arc<LamellarTeamRT> {
     fn wait_all(&self) {
-        println!(
-            "in team wait_all team_hash: {:?} cnt: {:?} {:?}",
-            self.team_hash,
-            self.team_counters.send_req_cnt.load(Ordering::SeqCst),
-            self.team_counters.outstanding_reqs.load(Ordering::SeqCst),
-            // self.counters.recv_req_cnt.load(Ordering::SeqCst),
-        );
+        // println!(
+        //     "in team wait_all team_hash: {:?} cnt: {:?} {:?}",
+        //     self.team_hash,
+        //     self.team_counters.send_req_cnt.load(Ordering::SeqCst),
+        //     self.team_counters.outstanding_reqs.load(Ordering::SeqCst),
+        //     // self.counters.recv_req_cnt.load(Ordering::SeqCst),
+        // );
         let mut temp_now = Instant::now();
         while self.team_counters.outstanding_reqs.load(Ordering::SeqCst) > 0 {
             std::thread::yield_now();
-            if temp_now.elapsed() > Duration::new(1, 0) {
+            if temp_now.elapsed() > Duration::new(10, 0) {
                 println!(
                     "in world wait_all mype: {:?} cnt: {:?} {:?}",
                     self.world_pe,
@@ -567,7 +546,7 @@ impl LamellarTeamRT {
         F: RemoteActiveMessage + LamellarAM + Send + Sync + 'static,
     {
         prof_start!(pre);
-        println!("[{:?}] team exec am pe request {:?}", self.world_pe,self.team_hash);
+        // println!("[{:?}] team exec am pe request {:?}", self.world_pe,self.team_hash);
         assert!(pe < self.arch.num_pes());
         prof_end!(pre);
         prof_start!(req);
@@ -582,9 +561,9 @@ impl LamellarTeamRT {
         );
         prof_end!(req);
         prof_start!(counters);
-        println!("world_cnt");
+        // println!("world_cnt");
         self.world_counters.add_send_req(1);
-        println!("team_cnt");
+        // println!("team_cnt");
         self.team_counters.add_send_req(1);
         prof_end!(counters);
         prof_start!(any);
@@ -599,7 +578,7 @@ impl LamellarTeamRT {
         };
         self.scheduler.submit_req_new(
             self.world_pe,
-            Some(pe),
+            Some(self.arch.world_pe(pe).expect("pe not member of team")),
             ExecType::Am(Cmd::Exec),
             my_req.id,
             LamellarFunc::Am(func),
@@ -610,13 +589,13 @@ impl LamellarTeamRT {
             Some(ireq),
         );
         prof_end!(sub);
-        println!(
-            "in team exec_am_pe team_hash: {:?} cnt: {:?} {:?}",
-            self.team_hash,
-            self.team_counters.send_req_cnt.load(Ordering::SeqCst),
-            self.team_counters.outstanding_reqs.load(Ordering::SeqCst),
-            // self.counters.recv_req_cnt.load(Ordering::SeqCst),
-        );
+        // println!(
+        //     "in team exec_am_pe team_hash: {:?} cnt: {:?} {:?}",
+        //     self.team_hash,
+        //     self.team_counters.send_req_cnt.load(Ordering::SeqCst),
+        //     self.team_counters.outstanding_reqs.load(Ordering::SeqCst),
+        //     // self.counters.recv_req_cnt.load(Ordering::SeqCst),
+        // );
         Box::new(my_req)
     }
 
@@ -629,7 +608,7 @@ impl LamellarTeamRT {
         F: LamellarActiveMessage + LocalAM  + Send + Sync + 'static,
     {
         prof_start!(pre);
-        println!("[{:?}] team exec am local request", self.world_pe);
+        // println!("[{:?}] team exec am local request", self.world_pe);
         prof_end!(pre);
         prof_start!(req);
         let (my_req, ireq) = LamellarRequestHandle::new(
@@ -658,7 +637,7 @@ impl LamellarTeamRT {
         };
         self.scheduler.submit_req_new(
             self.world_pe,
-            Some(self.team_pe.unwrap()),
+            Some(self.world_pe),
             ExecType::Am(Cmd::Exec),
             my_req.id,
             LamellarFunc::LocalAm(func),
@@ -1008,7 +987,7 @@ impl RemoteMemoryRegion for LamellarTeamRT {
 //#[prof]
 impl Drop for LamellarTeamRT {
     fn drop(&mut self) {
-        println!("LamellarTeamRT dropping");
+        // println!("LamellarTeamRT dropping");
         // if let Some(parent) = &self.parent{
         //     println!("parent: {:?}",Arc::strong_count(&parent));
         // }
@@ -1027,7 +1006,7 @@ impl Drop for LamellarTeamRT {
             self.scheduler.shutdown();
         }
 
-        println!("LamellarTeamRT dropped");
+        // println!("LamellarTeamRT dropped");
         
     }
 }
@@ -1059,34 +1038,34 @@ impl Drop for LamellarTeam {
     fn drop(&mut self) {
         println!("team handle dropping");
         if let Some(parent) = &self.team.parent {
-            println!(
-                "[{:?}] {:?} team handle dropping {:?} {:?}",
-                self.team.world_pe,
-                self.team.team_hash,
-                self.team.get_pes(),
-                self.team.dropped.as_slice()
-            );
+            // println!(
+            //     "[{:?}] {:?} team handle dropping {:?} {:?}",
+            //     self.team.world_pe,
+            //     self.team.team_hash,
+            //     self.team.get_pes(),
+            //     self.team.dropped.as_slice()
+            // );
             self.team.wait_all();
-            println!("after wait all");
+            // println!("after wait all");
             self.team.barrier();
-            println!("after barrier");
+            // println!("after barrier");
             self.team.put_dropped();
-            println!("after put dropped");
+            // println!("after put dropped");
             // if let Ok(_my_index) = self.team.arch.team_pe(self.team.world_pe) {
             if self.team.team_pe.is_ok(){
                 self.team.drop_barrier();
             }
-            println!("after drop barrier");
+            // println!("after drop barrier");
 
             parent.sub_teams.write().remove(&self.team.id);
         }
         self.teams.write().remove(&self.team.team_hash);
         println!("team handle dropped");
         
-        if let Some(world) = &self.world{
-            println!("world: {:?}", Arc::strong_count(world));
-        }
-        println!("team: {:?}",Arc::strong_count(&self.team));
+        // if let Some(world) = &self.world{
+        //     println!("world: {:?}", Arc::strong_count(world));
+        // }
+        // println!("team: {:?}",Arc::strong_count(&self.team));
         // for (k,tes"team handle dropped");
         // println!(
         //     "[{:?}] {:?} team handle dropped {:?} {:?}",

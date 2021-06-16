@@ -2,7 +2,6 @@ use crate::active_messaging::*;
 use crate::lamellae::{Lamellae,SerializedData};
 use crate::lamellar_request::InternalReq;
 use crate::lamellar_team::LamellarTeam;
-use crate::lamellar_darc::*;
 
 #[cfg(feature = "enable-prof")]
 use lamellar_prof::*;

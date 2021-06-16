@@ -35,7 +35,7 @@ impl Des for LocalData{
 }
 
 impl SubData for LocalData{
-    fn sub_data(&self, start: usize, end: usize) ->SerializedData {
+    fn sub_data(&self, _start: usize, _end: usize) ->SerializedData {
         SerializedData::LocalData(self.clone())
     }
 }

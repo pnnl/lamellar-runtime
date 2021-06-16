@@ -406,10 +406,10 @@ impl RofiCQ{
             {//this is to tell the compiler we wont hold the mutex lock if we have to yield
                 let mut cmd_buffer = self.cmd_buffers[dst].lock();
                 if cmd_buffer.try_push(addr,len){
-                    let data_slice = unsafe{ std::slice::from_raw_parts((addr + self.rofi_comm.base_addr()) as *const u8, len) };
+                    // let data_slice = unsafe{ std::slice::from_raw_parts((addr + self.rofi_comm.base_addr()) as *const u8, len) };
                     self.sent_cnt.fetch_add(1,Ordering::SeqCst);
                     self.put_amt.fetch_add(len,Ordering::Relaxed);
-                    let cnt = self.pending_cmds.fetch_sub(1,Ordering::SeqCst);
+                    let _cnt = self.pending_cmds.fetch_sub(1,Ordering::SeqCst);
                     // println!("pushed {:?} {:?} {:?} {:?}",addr,len,cnt, data_slice);
                     break;
                 }
@@ -505,10 +505,10 @@ impl RofiCQ{
         cmd_buffer.free_data(buf_addr,self.rofi_comm.clone());
     }
 
-    fn check_buffers(&self,src: usize){
-        let mut cmd_buffer = self.cmd_buffers[src].lock();
-        self.check_for_finished_tx(src,&mut cmd_buffer);
-    }
+    // fn check_buffers(&self,src: usize){
+    //     let mut cmd_buffer = self.cmd_buffers[src].lock();
+    //     self.check_for_finished_tx(src,&mut cmd_buffer);
+    // }
 
     async fn get_data(&self, src: usize, cmd: RofiCmd, data_slice: &mut [u8]) {
         data_slice[cmd.dsize as usize - 1]=255;

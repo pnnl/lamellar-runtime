@@ -333,12 +333,12 @@ impl Drop for LamellarWorld {
         self.lamellaes_new.clear();
         LAMELLAES.write().clear();
 
-        println!("team: {:?} ",Arc::strong_count(&self.team));
-        println!("team_rt: {:?} {:?}",&self.team_rt.team_hash,Arc::strong_count(&self.team_rt));
-        let teams = self.teams.read();
-            for (k,team) in teams.iter(){
-                println!("team map: {:?} {:?}",k,Weak::strong_count(&team));
-            }
+        // println!("team: {:?} ",Arc::strong_count(&self.team));
+        // println!("team_rt: {:?} {:?}",&self.team_rt.team_hash,Arc::strong_count(&self.team_rt));
+        // let teams = self.teams.read();
+        //     for (k,team) in teams.iter(){
+        //         println!("team map: {:?} {:?}",k,Weak::strong_count(&team));
+        //     }
         
         // println!("counters: {:?}",Arc::strong_count(&self.counters));
        

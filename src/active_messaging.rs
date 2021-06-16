@@ -1,11 +1,9 @@
-use crate::lamellae::{Lamellae,LamellaeAM, SerializedData,SerializeHeader,Ser,Des};
-use crate::lamellar_arch::StridedArch;
+use crate::lamellae::{Lamellae, SerializedData};
 use crate::lamellar_request::{InternalReq, LamellarRequest, InternalResult};
 use crate::lamellar_team::LamellarTeam;
 use crate::scheduler::{NewReqData,AmeScheduler};
 // use async_trait::async_trait;
-use chashmap::CHashMap;
-use crossbeam::utils::CachePadded;
+// use chashmap::CHashMap;
 #[cfg(feature = "enable-prof")]
 use lamellar_prof::*;
 use log::trace;
@@ -85,7 +83,7 @@ pub (crate) enum LamellarFunc{
 
 pub(crate) type LamellarArcLocalAm = Arc<dyn LamellarActiveMessage + Send + Sync>;
 pub(crate) type LamellarArcAm = Arc<dyn RemoteActiveMessage + Send + Sync>;
-pub(crate) type LamellarBoxedAm = Box<dyn LamellarActiveMessage + Send + Sync>;
+// pub(crate) type LamellarBoxedAm = Box<dyn LamellarActiveMessage + Send + Sync>;
 // pub(crate) type LamellarBoxedData = Box<dyn LamellarSerde>;
 pub(crate) type LamellarAny = Box<dyn std::any::Any + Send + Sync>;
 pub(crate) type LamellarResultArc =Arc<dyn LamellarSerde + Send + Sync>;
@@ -170,8 +168,8 @@ impl AMCounters {
         }
     }
     pub(crate) fn add_send_req(&self, num: usize) {
-        let num_reqs=self.outstanding_reqs.fetch_add(num, Ordering::SeqCst);
-        println!("reqs: {:?}",num_reqs+num);
+        let _num_reqs=self.outstanding_reqs.fetch_add(num, Ordering::SeqCst);
+        // println!("reqs: {:?}",num_reqs+num);
         self.send_req_cnt.fetch_add(num, Ordering::SeqCst);
     }
 }
@@ -200,15 +198,15 @@ pub trait ActiveMessaging {
 //maybe make this a struct then we could hold the pending counters...
 pub(crate) struct ActiveMessageEngine {
     teams: Arc<RwLock<HashMap<u64, Weak<LamellarTeam>>>>,
-    pending_active: Arc<Mutex<HashMap<u16,usize>>>, //CHashMap<u16, usize>,
-    pending_resp: Arc<Mutex<HashMap<u16, crossbeam::queue::SegQueue<usize>>>>,// CHashMap<u16, crossbeam::queue::SegQueue<usize>>,
-    pending_msg_active: CHashMap<u64, usize>,
-    pending_msg: Arc<Mutex<HashMap<u64, crossbeam::queue::SegQueue<Vec<u8>>>>>,
+    // pending_active: Arc<Mutex<HashMap<u16,usize>>>, //CHashMap<u16, usize>,
+    // pending_resp: Arc<Mutex<HashMap<u16, crossbeam::queue::SegQueue<usize>>>>,// CHashMap<u16, crossbeam::queue::SegQueue<usize>>,
+    // pending_msg_active: CHashMap<u64, usize>,
+    // pending_msg: Arc<Mutex<HashMap<u64, crossbeam::queue::SegQueue<Vec<u8>>>>>,
     my_pe: usize,
-    num_pes: usize,
+    // num_pes: usize,
     // fake_ireq: InternalReq,
     // _fake_arch: Arc<StridedArch>,
-    pub(crate) scheduler: Weak<AmeScheduler>,
+    // pub(crate) scheduler: Weak<AmeScheduler>,
     batched_am: Arc<RegisteredActiveMessages>,
     
 }
@@ -223,9 +221,9 @@ impl Drop for ActiveMessageEngine {
 //#[prof]
 impl ActiveMessageEngine {
     pub(crate) fn new(
-        num_pes: usize,
+        // num_pes: usize,
         my_pe: usize,
-        scheduler: Weak<AmeScheduler>,
+        scheduler: Arc<AmeScheduler>,
         teams: Arc<RwLock<HashMap<u64, Weak<LamellarTeam>>>>,
     ) -> Self {
         trace!("registered funcs {:?}", AMS_EXECS.len(),);
@@ -237,12 +235,12 @@ impl ActiveMessageEngine {
         // let (dummy_s, _) = crossbeam::channel::unbounded();
         ActiveMessageEngine {
             teams: teams,
-            pending_active: Arc::new(Mutex::new(HashMap::new())),
-            pending_resp: Arc::new(Mutex::new(HashMap::new())),
-            pending_msg_active: CHashMap::new(),
-            pending_msg: Arc::new(Mutex::new(HashMap::new())),
+            // pending_active: Arc::new(Mutex::new(HashMap::new())),
+            // pending_resp: Arc::new(Mutex::new(HashMap::new())),
+            // pending_msg_active: CHashMap::new(),
+            // pending_msg: Arc::new(Mutex::new(HashMap::new())),
             my_pe: my_pe,
-            num_pes: num_pes,
+            // num_pes: num_pes,
             // fake_ireq: InternalReq {
             //     data_tx: dummy_s,
             //     cnt: Arc::new(CachePadded::new(AtomicUsize::new(0usize))),
@@ -252,8 +250,8 @@ impl ActiveMessageEngine {
             //     team: world.clone(),
             // },
             // _fake_arch: Arc::new(StridedArch::new(my_pe, 1, 1)),
-            scheduler: scheduler.clone(),
-            batched_am: Arc::new(RegisteredActiveMessages::new(scheduler.upgrade().unwrap())),
+            // scheduler: scheduler.clone(),
+            batched_am: Arc::new(RegisteredActiveMessages::new(scheduler)),
         }
     }
 
@@ -266,7 +264,7 @@ impl ActiveMessageEngine {
         }
 
         match req_data.cmd.clone() {
-            ExecType::Runtime(cmd) => {
+            ExecType::Runtime(_cmd) => {
             
             }
             ExecType::Am(_) => self.batched_am.process_am_req(req_data).await,
@@ -285,7 +283,7 @@ impl ActiveMessageEngine {
         lamellae: Arc<Lamellae>,
         team_hash: u64,
     )  {
-        println!("[{:?}] exec_msg: {:?} team_hash {:?}", self.my_pe, msg,team_hash);
+        // println!("[{:?}] exec_msg: {:?} team_hash {:?}", self.my_pe, msg,team_hash);
         
         
         let (world,team) = {
@@ -304,7 +302,7 @@ impl ActiveMessageEngine {
             ExecType::Closure(cmd) => {
                 exec_closure_cmd(self, cmd, msg, ser_data, lamellae,world, team)
             }
-            ExecType::Runtime(cmd) => {
+            ExecType::Runtime(_cmd) => {
                 // self.exec_runtime_cmd(cmd, msg, lamellae, Some(ser_data), team_hash, None, team).await;
             }
         }
@@ -316,16 +314,16 @@ impl ActiveMessageEngine {
     fn send_data_to_user_handle(req_id: usize, pe: u16, data: InternalResult) { 
         let reqs = REQUESTS.lock();
         // let res = REQUESTS[req_id % REQUESTS.len()].get(&req_id);
-        println!("finalize {:?}",req_id);
+        // println!("finalize {:?}",req_id);
         match reqs.get(&req_id) {
             Some(ireq) => {
                 let ireq = ireq.clone();
                 drop(reqs); //release lock in the hashmap
-                println!(" send_data_to_user_handle {:?}",  ireq);
-                let num_reqs = ireq.team_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
-                println!("team reqs: {:?}",num_reqs);
-                let num_reqs =ireq.world_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
-                println!("world reqs: {:?}",num_reqs);
+                // println!(" send_data_to_user_handle {:?}",  ireq);
+                let _num_reqs = ireq.team_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
+                // println!("team reqs: {:?}",num_reqs);
+                let _num_reqs =ireq.world_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
+                // println!("world reqs: {:?}",num_reqs);
                 if let Ok(_) = ireq.data_tx.send((pe as usize,data)) {} //if this returns an error it means the user has dropped the handle
                 let cnt = ireq.cnt.fetch_sub(1, Ordering::SeqCst);
                 if cnt == 1 {

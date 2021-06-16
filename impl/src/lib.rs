@@ -4,7 +4,7 @@ mod parse;
 mod replace;
 
 use crate::parse::{ReductionArgs};
-use crate::replace::{SelfReplace,LamellarDSLReplace};
+use crate::replace::{LamellarDSLReplace};//SelfReplace,
 // use crate::local_am::local_am_without_return;
 
 use proc_macro::TokenStream;
@@ -91,10 +91,10 @@ fn get_expr(stmt: &syn::Stmt) -> Option<syn::Expr> {
     expr
 }
 
-fn replace_self(mut stmt: syn::Stmt) -> syn::Stmt {
-    SelfReplace.visit_stmt_mut(&mut stmt);
-    stmt
-}
+// fn replace_self(mut stmt: syn::Stmt) -> syn::Stmt {
+//     SelfReplace.visit_stmt_mut(&mut stmt);
+//     stmt
+// }
 
 fn replace_lamellar_dsl(mut stmt: syn::Stmt) -> syn::Stmt {
     LamellarDSLReplace.visit_stmt_mut(&mut stmt);
@@ -648,8 +648,8 @@ fn create_reduction(
     crate_header: String,
 ) -> proc_macro2::TokenStream {
     let reduction_name = quote::format_ident!("{:}_{:}_reduction", typeident, reduction);
-    let reduction_return_name = quote::format_ident!("{:}_{:}_reduction_return", typeident, reduction);
-    let reduction_unpack = quote::format_ident!("{:}_{:}_reduction_unpack", typeident, reduction);
+    // let reduction_return_name = quote::format_ident!("{:}_{:}_reduction_return", typeident, reduction);
+    // let reduction_unpack = quote::format_ident!("{:}_{:}_reduction_unpack", typeident, reduction);
     let reduction_gen = quote::format_ident!("{:}_{:}_reduction_gen", typeident, reduction);
     let reduction = quote::format_ident!("{:}", reduction);
     let lamellar = quote::format_ident!("{}", crate_header.clone());
