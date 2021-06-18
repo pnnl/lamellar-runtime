@@ -185,9 +185,9 @@ impl <T: ?Sized> Darc< T>{
     pub fn deserialize_update_cnts(&self, cur_pe: usize){
         // println!("deserialize darc? cnts");
         if self.orig_pe != cur_pe{
-            self.inner().inc_pe_ref_count(self.orig_pe,1);// we need to increment by 2 cause bincode calls the serialize function twice when serializing...
-            self.inner().local_cnt.fetch_add(1,Ordering::SeqCst);
+            self.inner().inc_pe_ref_count(self.orig_pe,1);// we need to increment by 2 cause bincode calls the serialize function twice when serializing... 
         }
+        self.inner().local_cnt.fetch_add(1,Ordering::SeqCst);
         // self.print();
         // println!("done deserialize darc cnts");
     }
@@ -521,19 +521,23 @@ impl <T: ?Sized> LocalRwDarc< T>{
         self.darc.inner()
     }
 
-    pub fn serialize_update_cnts(&self, cnt: usize){
-        // println!("serialize localrw darc");
-        self.inner().dist_cnt.fetch_add(cnt,std::sync::atomic::Ordering::SeqCst);
+    pub fn serialize_update_cnts(&self, cnt: usize, cur_pe: usize){
+        // println!("serialize darc cnts");
+        if self.darc.orig_pe == cur_pe{
+            self.inner().dist_cnt.fetch_add(cnt,std::sync::atomic::Ordering::SeqCst);
+        }
         // self.print();
-        // println!("done ser localrw darc" );
+        // println!("done serialize darc cnts");
     }
 
-    pub fn deserialize_update_cnts(&self){
-        // println!("deserialize localrw darc");
-        self.inner().inc_pe_ref_count(self.darc.orig_pe,1);// we need to increment by 2 cause bincode calls the serialize function twice when serializing...
+    pub fn deserialize_update_cnts(&self, cur_pe: usize){
+        // println!("deserialize darc? cnts");
+        if self.darc.orig_pe != cur_pe{
+            self.inner().inc_pe_ref_count(self.darc.orig_pe,1);// we need to increment by 2 cause bincode calls the serialize function twice when serializing...
+        }
         self.inner().local_cnt.fetch_add(1,Ordering::SeqCst);
         // self.print();
-        // println!("done des localrq");
+        // println!("done deserialize darc cnts");
     }
 
     pub fn print(&self){
@@ -550,8 +554,8 @@ impl <T: ?Sized> LocalRwDarc< T>{
 
     pub fn into_darc(self) -> Darc<T> {
         let inner = self.inner();
-        println!("into_darc");
-        self.print();
+        // println!("into_darc");
+        // self.print();
         inner.block_on_outstanding(0);  
         // println!("after block on outstanding");
         inner.local_cnt.fetch_add(1,Ordering::SeqCst);      
@@ -617,8 +621,8 @@ where
 
     let ndarc: __NetworkDarc<T> = Deserialize::deserialize(deserializer)?;
     let rwdarc = LocalRwDarc{darc: Darc::from(ndarc)};
-    println!("lrwdarc from net darc");
-    rwdarc.print();
+    // println!("lrwdarc from net darc");
+    // rwdarc.print();
     Ok(rwdarc)
 }
 
@@ -626,8 +630,8 @@ impl< T: ?Sized > From<&Darc<RwLock<Box<T>>>>
     for __NetworkDarc<T>
 {
     fn from(darc: &Darc<RwLock<Box<T>>>) -> Self {
-        println!("rwdarc to net darc");
-        darc.print();
+        // println!("rwdarc to net darc");
+        // darc.print();
         let team = &darc.inner().team().team;
         let ndarc = __NetworkDarc {
             inner_addr: darc.inner as *const u8 as usize, 
