@@ -317,7 +317,7 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_type: AmType) -> 
         expanded.extend(quote!{
             impl #generics #lamellar::RemoteActiveMessage for #orig_name#generics_args {}
 
-            fn #orig_name_unpack(bytes: &[u8]) -> std::sync::Arc<dyn #lamellar::RemoteActiveMessage + Send + Sync>  {
+            fn #orig_name_unpack(bytes: &[u8], cur_pe: Result<usize,#lamellar::lamellar_arch::IdError>) -> std::sync::Arc<dyn #lamellar::RemoteActiveMessage + Send + Sync>  {
                 // println!("unpacking {:?}",bytes.len());
                 let __lamellar_data: std::sync::Arc<#orig_name> = std::sync::Arc::new(#lamellar::deserialize(&bytes).unwrap());
                 <#orig_name as #lamellar::DarcSerde>::des(&__lamellar_data);
@@ -377,12 +377,18 @@ fn derive_am_data(input: TokenStream,args: TokenStream, crate_header: String, lo
                         });
                         let field_name = field.ident.clone();
                         ser.extend(quote_spanned!{field.span()=>
-                            self.#field_name.serialize_update_cnts(num_pes);
+                            match cur_pe{
+                                Ok(cur_pe) => {self.#field_name.serialize_update_cnts(num_pes,cur_pe);},
+                                Err(err) =>  {panic!("can only access darcs within team members ({:?})",err);}
+                            }
                             // println!("serialized darc");
                             // self.#field_name.print();
                         });
-                        des.extend(quote_spanned!{field.span()=>
-                            self.#field_name.deserialize_update_cnts();
+                        des.extend(quote_spanned!{field.span()=>    
+                            match cur_pe{
+                                Ok(cur_pe) => {self.#field_name.deserialize_update_cnts(cur_pe);},
+                                Err(err) => {panic!("can only access darcs within team members ({:?})",err);}
+                            }                                
                             // println!("deserialized darc");
                             // self.#field_name.print();
                         });
@@ -423,10 +429,10 @@ fn derive_am_data(input: TokenStream,args: TokenStream, crate_header: String, lo
                 #fields
             }
             impl #generics#lamellar::DarcSerde for #name<#generics_ids>{
-                fn ser (&self,  num_pes: usize) {
+                fn ser (&self,  num_pes: usize, cur_pe: Result<usize, #lamellar::lamellar_arch::IdError>) {
                     #ser
                 } 
-                fn des (&self){
+                fn des (&self,cur_pe: Result<usize, #lamellar::lamellar_arch::IdError>){
                     #des
                 }
             } 

@@ -12,7 +12,7 @@ use std::sync::{Arc};
 
 const CMD_BUF_LEN: usize = 50000; // this is the number of slots for each PE
                                 // const NUM_REQ_SLOTS: usize = CMD_Q_LEN; // max requests at any given time -- probably have this be a multiple of num PES
-const CMD_BUFS_PER_PE: usize = 1;
+const CMD_BUFS_PER_PE: usize = 2;
 
 #[repr(C)]
 #[derive(Clone, Copy)]

@@ -111,7 +111,7 @@ impl <T: ?Sized> DarcInner<T>{
         let ref_cnts =  std::slice::from_raw_parts_mut(self.ref_cnt_addr as *mut usize ,self.num_pes );//this is potentially a dirty read
         ref_cnts.iter().any(|x| *x >0)
     }
-    fn block_on_outstanding(&self){
+    fn block_on_outstanding(&self, state: u8){
         while self.dist_cnt.load(Ordering::SeqCst) > 0 || self.local_cnt.load(Ordering::SeqCst) > 1 || unsafe { self.any_ref_cnt()}{
             if self.local_cnt.load(Ordering::SeqCst) == 1{
                 self.send_finished();
@@ -120,14 +120,14 @@ impl <T: ?Sized> DarcInner<T>{
         }
         let team = self.team();
         let dropped_refs =   unsafe{std::slice::from_raw_parts_mut(self.dropped_addr as *mut u8,self.num_pes ) };
-        unsafe {(*(((&mut dropped_refs[self.my_pe]) as *mut u8)as *mut AtomicU8)).store(2,Ordering::SeqCst)};
+        unsafe {(*(((&mut dropped_refs[self.my_pe]) as *mut u8)as *mut AtomicU8)).store(state,Ordering::SeqCst)};
         // (&dropped_refs[self.my_pe] = 2;
         let rdma = &team.team.lamellae;
         for pe in team.team.arch.team_iter(){
             rdma.put(pe, &dropped_refs[self.my_pe..=self.my_pe], self.dropped_addr + self.my_pe * std::mem::size_of::<u8>());
         }
         for pe in dropped_refs.iter(){
-            while *pe == 0 {
+            while *pe != state {
                 if self.local_cnt.load(Ordering::SeqCst) == 1{
                     self.send_finished();
                 }
@@ -173,17 +173,21 @@ impl <T: ?Sized> Darc< T>{
         unsafe{std::slice::from_raw_parts_mut(inner.dropped_addr as *mut u8,inner.num_pes ) }
     }
 
-    pub fn serialize_update_cnts(&self, cnt: usize){
+    pub fn serialize_update_cnts(&self, cnt: usize, cur_pe: usize){
         // println!("serialize darc cnts");
-        self.inner().dist_cnt.fetch_add(cnt,std::sync::atomic::Ordering::SeqCst);
+        if self.orig_pe == cur_pe{
+            self.inner().dist_cnt.fetch_add(cnt,std::sync::atomic::Ordering::SeqCst);
+        }
         // self.print();
         // println!("done serialize darc cnts");
     }
 
-    pub fn deserialize_update_cnts(&self){
+    pub fn deserialize_update_cnts(&self, cur_pe: usize){
         // println!("deserialize darc? cnts");
-        self.inner().inc_pe_ref_count(self.orig_pe,1);// we need to increment by 2 cause bincode calls the serialize function twice when serializing...
-        self.inner().local_cnt.fetch_add(1,Ordering::SeqCst);
+        if self.orig_pe != cur_pe{
+            self.inner().inc_pe_ref_count(self.orig_pe,1);// we need to increment by 2 cause bincode calls the serialize function twice when serializing...
+            self.inner().local_cnt.fetch_add(1,Ordering::SeqCst);
+        }
         // self.print();
         // println!("done deserialize darc cnts");
     }
@@ -194,7 +198,7 @@ impl <T: ?Sized> Darc< T>{
 
     pub fn into_localrw(self) -> LocalRwDarc<T> {
         let inner = self.inner();
-        inner.block_on_outstanding();
+        inner.block_on_outstanding(2);
         inner.local_cnt.fetch_add(1,Ordering::SeqCst);
         let item = unsafe { Box::from_raw(inner.item as *mut T ) };
         let d = Darc{
@@ -210,7 +214,7 @@ impl <T: ?Sized> Darc< T>{
 
 impl <T>  Darc<T>{
     pub fn  new(team: Arc<LamellarTeam>, item: T) -> Darc<T>{
-        if let Ok(darc) = Darc::try_new(team,item) {
+        if let Ok(darc) = Darc::try_new(team,item,0) {
             darc
         }
         else{
@@ -218,7 +222,7 @@ impl <T>  Darc<T>{
         }
     }
 
-    pub fn  try_new(team: Arc<LamellarTeam>, item: T) -> Result<Darc<T>,IdError>{
+    pub fn  try_new(team: Arc<LamellarTeam>, item: T,state: u8) -> Result<Darc<T>,IdError>{
         let team_rt = team.team.clone();
         let my_pe = team_rt.team_pe?;
         
@@ -251,6 +255,11 @@ impl <T>  Darc<T>{
             orig_pe: my_pe,
             phantom: PhantomData
         };
+        unsafe{
+            for elem in d.dropped_as_mut_slice(){
+                *elem = state;
+            }
+        }
         // d.print();
         team.barrier();
         Ok(d) 
@@ -541,9 +550,9 @@ impl <T: ?Sized> LocalRwDarc< T>{
 
     pub fn into_darc(self) -> Darc<T> {
         let inner = self.inner();
-        // println!("into_darc");
-        // self.print();
-        inner.block_on_outstanding();  
+        println!("into_darc");
+        self.print();
+        inner.block_on_outstanding(0);  
         // println!("after block on outstanding");
         inner.local_cnt.fetch_add(1,Ordering::SeqCst);      
         let item = unsafe { Box::from_raw(inner.item as *mut RwLock<Box<T>> ).into_inner() };
@@ -560,14 +569,20 @@ impl <T: ?Sized> LocalRwDarc< T>{
 
 impl <T>  LocalRwDarc<T>{
     pub fn  new(team: Arc<LamellarTeam>, item: T) -> LocalRwDarc<T>{
-        LocalRwDarc{
-            darc: Darc::new(team.clone(),RwLock::new(Box::new(item)))
+        if let Ok(darc) = Darc::try_new(team.clone(),RwLock::new(Box::new(item)),2) {
+            LocalRwDarc{
+                darc: darc
+            }
         }
+        else{
+            panic!("Cannot create a team based Darc if not part of the team");
+        }
+        
     }
 
     pub fn  try_new(team: Arc<LamellarTeam>, item: T) -> Result<LocalRwDarc<T>,IdError>{
         Ok(LocalRwDarc{
-            darc: Darc::try_new(team,RwLock::new(Box::new(item)))?
+            darc: Darc::try_new(team,RwLock::new(Box::new(item)),2)?
         })
     }    
 }
@@ -602,8 +617,8 @@ where
 
     let ndarc: __NetworkDarc<T> = Deserialize::deserialize(deserializer)?;
     let rwdarc = LocalRwDarc{darc: Darc::from(ndarc)};
-    // println!("lrwdarc from net darc");
-    // rwdarc.print();
+    println!("lrwdarc from net darc");
+    rwdarc.print();
     Ok(rwdarc)
 }
 
@@ -611,7 +626,8 @@ impl< T: ?Sized > From<&Darc<RwLock<Box<T>>>>
     for __NetworkDarc<T>
 {
     fn from(darc: &Darc<RwLock<Box<T>>>) -> Self {
-        // println!("rwdarc to net darc");
+        println!("rwdarc to net darc");
+        darc.print();
         let team = &darc.inner().team().team;
         let ndarc = __NetworkDarc {
             inner_addr: darc.inner as *const u8 as usize, 

@@ -1,6 +1,7 @@
 use crate::lamellae::{Lamellae, SerializedData};
 use crate::lamellar_request::{InternalReq, LamellarRequest, InternalResult};
 use crate::lamellar_team::LamellarTeam;
+use crate::lamellar_arch::IdError;
 use crate::scheduler::{NewReqData,AmeScheduler};
 // use async_trait::async_trait;
 // use chashmap::CHashMap;
@@ -45,8 +46,8 @@ pub(crate) enum ExecType {
 }
 
 pub trait DarcSerde {
-    fn ser(&self,num_pes: usize);
-    fn des(&self);
+    fn ser(&self,num_pes: usize, cur_pe: Result<usize,IdError>);
+    fn des(&self, cur_pe: Result<usize,IdError>);
 }
 
 pub trait LamellarSerde:  Sync + Send {
@@ -225,6 +226,7 @@ impl ActiveMessageEngine {
         my_pe: usize,
         scheduler: Arc<AmeScheduler>,
         teams: Arc<RwLock<HashMap<u64, Weak<LamellarTeam>>>>,
+        stall_mark: Arc<AtomicUsize>,
     ) -> Self {
         trace!("registered funcs {:?}", AMS_EXECS.len(),);
         // println!("sizes: {:?} {:?} {:?}",std::mem::size_of::<Msg>(),std::mem::size_of::<ExecType>(),std::mem::size_of::<Cmd>());
@@ -251,7 +253,8 @@ impl ActiveMessageEngine {
             // },
             // _fake_arch: Arc::new(StridedArch::new(my_pe, 1, 1)),
             // scheduler: scheduler.clone(),
-            batched_am: Arc::new(RegisteredActiveMessages::new(scheduler)),
+            batched_am: Arc::new(RegisteredActiveMessages::new(scheduler,stall_mark)),
+            
         }
     }
 

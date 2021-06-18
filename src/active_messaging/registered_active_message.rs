@@ -23,7 +23,7 @@ const BATCHED_REMOTE_DATA_ID: AmId = REMOTE_DATA_ID + 1;
 const REMOTE_AM_ID: AmId = BATCHED_REMOTE_DATA_ID + 1; //when returning an am as a result we pass the negative of its actual id
 const AM_ID_START: AmId = REMOTE_AM_ID + 1;
 
-pub (crate) type UnpackFn = fn(&[u8]) -> LamellarArcAm;
+pub (crate) type UnpackFn = fn(&[u8],Result<usize,IdError>) -> LamellarArcAm;
 pub(crate) type AmId = i32;
 lazy_static! {
     pub(crate) static ref AMS_IDS: HashMap<String, AmId> = {
@@ -62,8 +62,6 @@ pub struct RegisteredAm {
 crate::inventory::collect!(RegisteredAm);
 
 
-//TODO: we actually do need to group by team as well,
-// so need to add the team hash hashmap back and move total size into there instead.
 pub(crate) struct RegisteredActiveMessages{
     submitted_ams:  Arc<
                         Mutex<
@@ -86,7 +84,7 @@ pub(crate) struct RegisteredActiveMessages{
                                                     ,usize//func size 
                                                 )                     
                                             >,
-                                            usize,//pe size (total buf size)
+                                            Arc<AtomicUsize>,//pe size (total buf size)
                                         )
                                     >,
                                     // usize,//total size                               
@@ -99,6 +97,7 @@ pub(crate) struct RegisteredActiveMessages{
                             Mutex<HashMap<usize,(usize,AtomicUsize)>>>>>, //actual ids, outstanding reqs
     cur_batch_id: Arc<AtomicUsize>,
     scheduler: Arc<AmeScheduler>,
+    stall_mark: Arc<AtomicUsize>,
 }
 
 // type TeamHeader = (usize,u64); //size, hash
@@ -106,12 +105,13 @@ type FuncHeader = (usize,AmId); //size, ID
 type BatchHeader = (usize,usize,usize); //size,num_reqs, id
 
 impl RegisteredActiveMessages{
-    pub(crate) fn new(scheduler: Arc<AmeScheduler>) -> RegisteredActiveMessages{
+    pub(crate) fn new(scheduler: Arc<AmeScheduler>, stall_mark: Arc<AtomicUsize>) -> RegisteredActiveMessages{
         RegisteredActiveMessages{
             submitted_ams:  Arc::new(Mutex::new(HashMap::new())),
             txed_ams: Arc::new(Mutex::new(HashMap::new())),
             cur_batch_id: Arc::new(AtomicUsize::new(1)),
             scheduler: scheduler,
+            stall_mark: stall_mark,
         }
     }
 
@@ -123,9 +123,10 @@ impl RegisteredActiveMessages{
         func_id: AmId, 
         req_data: Arc<NewReqData>,){
         // println!("adding req {:?} {:?}",func_id,func_size);
-        // let team_header_len = crate::serialized_size::<TeamHeader>(&(0,0));/
+        
         let func_header_len = crate::serialized_size::<FuncHeader>(&(0,0));
         let batch_header_len = crate::serialized_size::<BatchHeader>(&(0,0,0));
+
         // add request to a batch or create a new one
         let mut submit_tx_task = false;
         let mut map = self.submitted_ams.lock();
@@ -135,12 +136,13 @@ impl RegisteredActiveMessages{
         });
         // println!("team: {:?} {:?}",req_data.team_hash, team_entry.len());
         
-        let mut pe_entry = team_entry.entry(req_data.dst).or_insert_with(|| { 
+        let pe_entry = team_entry.entry(req_data.dst).or_insert_with(|| { 
             // println!("going to submit tx task {:?}",func_id);
             submit_tx_task = true;
-            (HashMap::new(),0)
+            (HashMap::new(),Arc::new(AtomicUsize::new(0)))
         }); 
-        pe_entry.1 += func_size;
+        pe_entry.1.fetch_add(func_size,Ordering::Relaxed);
+        let total_batch_size = pe_entry.1.clone();
         // println!("pe: {:?} {:?} size: {:?}",req_data.dst, pe_entry.0.len(),pe_entry.1);
 
     
@@ -149,7 +151,7 @@ impl RegisteredActiveMessages{
             (HashMap::new(),0)
         }); //func
         if func_entry.1 ==0 {
-            pe_entry.1 += func_header_len;
+            pe_entry.1.fetch_add(func_header_len,Ordering::Relaxed);
         }
         func_entry.1 += func_size;
         // println!("func: {:?} {:?} size: {:?} ({:?})",func_id, func_entry.0.len(),func_entry.1,pe_entry.1);
@@ -160,7 +162,7 @@ impl RegisteredActiveMessages{
             (Vec::new(),0)
         }); // batch id        
         if batch_entry.0.len() == 0{ //the funcsize can be zero so can't do check based on size
-            pe_entry.1 += batch_header_len;
+            pe_entry.1.fetch_add(batch_header_len,Ordering::Relaxed);
             func_entry.1 += batch_header_len;
         }
         batch_entry.1 += func_size;
@@ -169,18 +171,28 @@ impl RegisteredActiveMessages{
 
         drop(map); 
         //--------------------------
-
+        let mut stall_mark = self.stall_mark.load(Ordering::Relaxed);
+        let stall_mark_clone = self.stall_mark.clone();
         if submit_tx_task{
             let submitted_ams = self.submitted_ams.clone();
             let txed_ams = self.txed_ams.clone();
             let outgoing_batch_id = self.cur_batch_id.clone();//fetch_add(1, Ordering::Relaxed);
             // println!{"submitting tx_task {:?} {:?}",outgoing_batch_id,req_data.cmd};
             self.scheduler.submit_task( async move{
-                let mut cnt: usize=0;                       // -- this is a poor mans rate limiter
-                while cnt < 10000{                          // essentially we want to make sure we
-                    async_std::task::yield_now().await;     // buffer enough requests to make the
-                    cnt+=1;                                 // batching worth it but also quick response time
-                }                                           // ...can definitely do better
+                // let mut cnt: usize=0;                       // -- this is a poor mans rate limiter
+                // while cnt < 100000 && total_batch_size.load(Ordering::Relaxed) < 1000000{                          // essentially we want to make sure we
+                //     async_std::task::yield_now().await;     // buffer enough requests to make the
+                //     cnt+=1;                                 // batching worth it but also quick response time
+                // }   
+                // while cnt < 10{                                        // ...can definitely do better
+                //     cnt+=1;
+                    while stall_mark != stall_mark_clone.load(Ordering::Relaxed) && total_batch_size.load(Ordering::Relaxed) < 1000000{
+                        // cnt = 0;
+                        stall_mark = stall_mark_clone.fetch_add(1,Ordering::SeqCst) + 1;
+                        async_std::task::yield_now().await;
+                    }
+                    
+                // }
                 let func_map = { //all requests belonging to a team goin to a specific PE
                     let mut team_map = submitted_ams.lock();
                     if let Some(pe_map) = team_map.get_mut(&req_data.team_hash){
@@ -191,6 +203,7 @@ impl RegisteredActiveMessages{
                 
                 // println!{"in submit_tx_task {:?} {:?}",outgoing_batch_id,req_data.cmd};
                 if let Some((func_map,total_size)) = func_map{
+                    let total_size = total_size.load(Ordering::SeqCst);
                     // println!("func_map len {:?} total size {:?}",func_map.len(), total_size);
                     let msg = Msg {
                         cmd: ExecType::Am(Cmd::BatchedMsg), 
@@ -294,10 +307,10 @@ impl RegisteredActiveMessages{
                                                 let serialize_size = func.serialized_size();
                                                 func.serialize_into(&mut data_slice[i..(i+serialize_size)]);
                                                 if req_data.dst.is_none() {
-                                                    func.ser(req_data.team.num_pes()-1);
+                                                    func.ser(req_data.team.num_pes()-1,req_data.team.team.team_pe);
                                                 }
                                                 else{
-                                                    func.ser(1);
+                                                    func.ser(1,req_data.team.team.team_pe);
                                                 };
                                                 
                                                 i+=serialize_size;
@@ -355,10 +368,10 @@ impl RegisteredActiveMessages{
         match func{
             LamellarFunc::Am(func) => {
                 if req_data.dst.is_none() {
-                    func.ser(req_data.team.num_pes()-1);
+                    func.ser(req_data.team.num_pes()-1,req_data.team.team.team_pe);
                 }
                 else{
-                    func.ser(1);
+                    func.ser(1,req_data.team.team.team_pe);
                 };
                 let mut i =0;
                 if func_id < 0{
@@ -544,7 +557,7 @@ impl RegisteredActiveMessages{
         team: Arc<LamellarTeam>,
         return_am: bool,){
         if let Some(header) = ser_data.deserialize_header(){
-            let func = AMS_EXECS.get(&(header.id)).unwrap()(ser_data.data_as_bytes());
+            let func = AMS_EXECS.get(&(header.id)).unwrap()(ser_data.data_as_bytes(),team.team.team_pe);
             let lam_return = func.exec( team.team.world_pe, team.team.num_world_pes, return_am , world.clone(), team.clone()).await;
             match lam_return{
                 LamellarReturn::Unit =>{  
@@ -673,7 +686,7 @@ impl RegisteredActiveMessages{
         let mut req_id =0;
         while req_id < num_reqs{
             req_cnt.fetch_add(1,Ordering::SeqCst);
-            let func = AMS_EXECS.get(&(func_id)).unwrap()(&data_slice[index..]);
+            let func = AMS_EXECS.get(&(func_id)).unwrap()(&data_slice[index..],team.team.team_pe);
             index += func.serialized_size();
             let world = world.clone();
             let team = team.clone();
@@ -825,7 +838,7 @@ impl RegisteredActiveMessages{
                 // println!("index {:?} len {:?}",index,data_slice.len());
                 let batch_req_id: usize = crate::deserialize(&data_slice[index..(index+serialized_size)]).unwrap();                 
                 index+=serialized_size;
-                let func = AMS_EXECS.get(&(func_id)).unwrap()(&data_slice[index..]);
+                let func = AMS_EXECS.get(&(func_id)).unwrap()(&data_slice[index..],team.team.team_pe);
                 index += func.serialized_size();
                 let (req_id,cnt) =reqs.get(&batch_req_id).expect("id not found");
                 let req_id = *req_id;
@@ -863,7 +876,7 @@ impl RegisteredActiveMessages{
                 // println!("index {:?} len {:?}",index,data_slice.len());
                 let req_id: usize = crate::deserialize(&data_slice[index..(index+serialized_size)]).unwrap();                 
                 index+=serialized_size;
-                let func = AMS_EXECS.get(&(func_id)).unwrap()(&data_slice[index..]);
+                let func = AMS_EXECS.get(&(func_id)).unwrap()(&data_slice[index..],team.team.team_pe);
                 index += func.serialized_size();
                 let world = world.clone();
                 let team = team.clone();
