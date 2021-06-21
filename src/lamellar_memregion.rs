@@ -46,13 +46,23 @@ impl<T: std::clone::Clone + Send + Sync + 'static> RegisteredMemoryRegion
         Ok(self.addr)
     }
     fn as_slice(&self) -> MemResult<&[T]> {
-        Ok(unsafe { std::slice::from_raw_parts(self.addr as *const T, self.size) })
+        if self.addr != 0 {
+            Ok(unsafe { std::slice::from_raw_parts(self.addr as *const T, self.size) })
+        }
+        else{
+            Ok(&[])
+        }
     }
     unsafe fn as_mut_slice(&self) -> MemResult<&mut [T]> {
-        Ok(std::slice::from_raw_parts_mut(
-            self.addr as *mut T,
-            self.size,
-        ))
+        if self.addr != 0 {
+            Ok(std::slice::from_raw_parts_mut(
+                self.addr as *mut T,
+                self.size,
+            ))
+        }
+        else{
+            Ok(&mut [])
+        }
     }
     fn as_ptr(&self) -> MemResult<*const T> {
         Ok(self.addr as *const T)
@@ -318,9 +328,15 @@ impl<T: std::clone::Clone + Send + Sync + 'static> From<__NetworkLamellarMemoryR
         let temp = ACTIVE.get(reg.backend);
         temp.1.fetch_add(1, Ordering::SeqCst);
         let rdma = temp.0;
+        let addr = if reg.addr != 0{
+            rdma.local_addr(reg.pe, reg.addr)
+        }
+        else{
+            0
+        };
         let lmr = LamellarMemoryRegion {
             // orig_addr: rdma.local_addr(reg.pe, reg.orig_addr),
-            addr: rdma.local_addr(reg.pe, reg.addr),
+            addr: addr,
             pe: rdma.my_pe(),
             size: reg.size,
             backend: reg.backend,
@@ -346,11 +362,16 @@ impl<T: std::clone::Clone + Send + Sync + 'static> LamellarMemoryRegion<T> {
         // let rdma = lamellae.clone();
         // println!("creating new lamellar memory region {:?}",size * std::mem::size_of::<T>());
         let mut local = false;
-        let addr = if let AllocationType::Local = alloc{
-            local = true;
-            lamellae.rt_alloc(size * std::mem::size_of::<T>()).unwrap() + lamellae.base_addr()
-        } else {
-            lamellae.alloc(size * std::mem::size_of::<T>(), alloc).unwrap()
+        let addr = if size > 0 {
+            if let AllocationType::Local = alloc{
+                local = true;
+                lamellae.rt_alloc(size * std::mem::size_of::<T>()).unwrap() + lamellae.base_addr()
+            } else {
+                lamellae.alloc(size * std::mem::size_of::<T>(), alloc).unwrap()
+            }
+        }
+        else{
+            0
         };
         let temp = LamellarMemoryRegion {
             addr: addr,
@@ -527,10 +548,12 @@ impl<T: std::clone::Clone + Send + Sync + 'static> Drop for LamellarMemoryRegion
         if cnt == 1 {
             ACTIVE.remove(self.backend);
             // println!("trying to dropping mem region {:?}",self);
-            if self.local {
-                self.rdma.rt_free(self.addr - self.rdma.base_addr()); // - self.rdma.base_addr());
-            } else {
-                self.rdma.free(self.addr);
+            if self.addr != 0{
+                if self.local {
+                    self.rdma.rt_free(self.addr - self.rdma.base_addr()); // - self.rdma.base_addr());
+                } else {
+                    self.rdma.free(self.addr);
+                }
             }
             // ACTIVE.print();
             //println!("dropping mem region {:?}",self);

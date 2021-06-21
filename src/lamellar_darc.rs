@@ -18,7 +18,7 @@ use crate::IdError;
 #[lamellar_impl::AmDataRT(Debug)]
 struct FinishedAm{
     cnt: usize,
-    orig_pe: usize,
+    src_pe: usize,
     inner_addr: usize, //cant pass the darc itself cause we cant handle generics yet in lamellarAM...
 }
 #[lamellar_impl::rt_am]
@@ -52,7 +52,8 @@ unsafe impl<T: ?Sized + Sync + Send > Sync for DarcInner<T> {}
 
 pub struct Darc<T:'static + ?Sized>{
     inner: *mut DarcInner<T>,
-    orig_pe: usize,
+    src_pe: usize,
+    // cur_pe: usize,
     phantom: PhantomData<DarcInner<T>>,
 }
 
@@ -101,7 +102,8 @@ impl <T: ?Sized> DarcInner<T>{
                 let my_addr = &*self as *const DarcInner<T>  as usize;
                 let pe_addr = team.team.lamellae.remote_addr( team.team.arch.world_pe(pe).unwrap(),my_addr);
                 // println!("sending finished to {:?} {:?} team {:?} {:x}",pe,cnt,team.team.team_hash,my_addr);
-                reqs.push(team.exec_am_pe(pe,FinishedAm{cnt: cnt, orig_pe: pe, inner_addr: pe_addr }).into_future()); 
+                // println!("{:?}",self);
+                reqs.push(team.exec_am_pe(pe,FinishedAm{cnt: cnt, src_pe: pe, inner_addr: pe_addr }).into_future()); 
             }
         
         }
@@ -112,9 +114,14 @@ impl <T: ?Sized> DarcInner<T>{
         ref_cnts.iter().any(|x| *x >0)
     }
     fn block_on_outstanding(&self, state: u8){
+        let mut timer = std::time::Instant::now();
         while self.dist_cnt.load(Ordering::SeqCst) > 0 || self.local_cnt.load(Ordering::SeqCst) > 1 || unsafe { self.any_ref_cnt()}{
             if self.local_cnt.load(Ordering::SeqCst) == 1{
                 self.send_finished();
+            }
+            if timer.elapsed().as_secs_f64() > 10.0{
+                println!("waiting for outstanding 1 {:?}",self);
+                timer = std::time::Instant::now();
             }
             std::thread::yield_now();
         }
@@ -131,12 +138,20 @@ impl <T: ?Sized> DarcInner<T>{
                 if self.local_cnt.load(Ordering::SeqCst) == 1{
                     self.send_finished();
                 }
+                if timer.elapsed().as_secs_f64() > 10.0{
+                    println!("waiting for outstanding 2 {:?}",self);
+                    timer = std::time::Instant::now();
+                }
                 std::thread::yield_now();
             }
         }
         while self.dist_cnt.load(Ordering::SeqCst) != 0 || self.local_cnt.load(Ordering::SeqCst) > 1 || unsafe { self.any_ref_cnt()}{
             if self.local_cnt.load(Ordering::SeqCst) == 1 {
                 self.send_finished();
+            }
+            if timer.elapsed().as_secs_f64() > 10.0{
+                println!("waiting for outstanding 3 {:?}",self);
+                timer = std::time::Instant::now();
             }
             std::thread::yield_now();
         }
@@ -175,35 +190,38 @@ impl <T: ?Sized> Darc< T>{
 
     pub fn serialize_update_cnts(&self, cnt: usize, cur_pe: usize){
         // println!("serialize darc cnts");
-        if self.orig_pe == cur_pe{
+        // if self.src_pe == cur_pe{
             self.inner().dist_cnt.fetch_add(cnt,std::sync::atomic::Ordering::SeqCst);
-        }
+            // self.print();
+        // }
         // self.print();
         // println!("done serialize darc cnts");
     }
 
     pub fn deserialize_update_cnts(&self, cur_pe: usize){
         // println!("deserialize darc? cnts");
-        if self.orig_pe != cur_pe{
-            self.inner().inc_pe_ref_count(self.orig_pe,1);// we need to increment by 2 cause bincode calls the serialize function twice when serializing... 
-        }
+        // if self.src_pe != cur_pe{
+            self.inner().inc_pe_ref_count(self.src_pe,1); 
+        // }
         self.inner().local_cnt.fetch_add(1,Ordering::SeqCst);
         // self.print();
         // println!("done deserialize darc cnts");
     }
 
     pub fn print(&self){
-        println!("--------\norig: {:?} {:?} {:?}\n--------",self.orig_pe,self.inner,self.inner());
+        println!("--------\norig: {:?} {:?} {:?}\n--------",self.src_pe,self.inner,self.inner());
     }
 
     pub fn into_localrw(self) -> LocalRwDarc<T> {
         let inner = self.inner();
+        let cur_pe = inner.team().team.world_pe;
         inner.block_on_outstanding(2);
         inner.local_cnt.fetch_add(1,Ordering::SeqCst);
         let item = unsafe { Box::from_raw(inner.item as *mut T ) };
         let d = Darc{
             inner: self.inner as *mut DarcInner<RwLock<Box<T>>>,
-            orig_pe: self.orig_pe,
+            src_pe: self.src_pe,
+            // cur_pe: cur_pe,
             phantom: PhantomData
         };
         d.inner_mut().update_item(Box::into_raw(Box::new(RwLock::new(item))));
@@ -252,7 +270,7 @@ impl <T>  Darc<T>{
         }
         let d = Darc{
             inner: addr as *mut DarcInner<T>,
-            orig_pe: my_pe,
+            src_pe: my_pe,
             phantom: PhantomData
         };
         unsafe{
@@ -273,7 +291,7 @@ impl<T: ?Sized> Clone for Darc<T> {
         self.inner().local_cnt.fetch_add(1,Ordering::SeqCst);
         Darc{
             inner: self.inner,
-            orig_pe: self.orig_pe,
+            src_pe: self.src_pe,
             phantom: self.phantom
         }
     }
@@ -476,7 +494,8 @@ impl< T: ?Sized > From<&Darc<T>>
             inner_addr: darc.inner as *const u8 as usize, 
             backend: team.lamellae.backend(),
             orig_world_pe: team.world_pe,
-            orig_team_pe: darc.orig_pe,
+            // orig_team_pe: darc.src_pe,
+            orig_team_pe: team.team_pe.expect("darcs only valid on team members"),
             phantom: PhantomData
         };
         // darc.print();
@@ -492,7 +511,7 @@ impl< T: ?Sized > From<__NetworkDarc<T>>
         if let Some(lamellae) = LAMELLAES.read().get(&ndarc.backend){
             let darc = Darc{
                 inner: lamellae.local_addr(ndarc.orig_world_pe,ndarc.inner_addr) as *mut DarcInner<T>,
-                orig_pe: ndarc.orig_team_pe,
+                src_pe: ndarc.orig_team_pe,
                 phantom: PhantomData
             };
             // darc.print();
@@ -523,25 +542,25 @@ impl <T: ?Sized> LocalRwDarc< T>{
 
     pub fn serialize_update_cnts(&self, cnt: usize, cur_pe: usize){
         // println!("serialize darc cnts");
-        if self.darc.orig_pe == cur_pe{
+        // if self.darc.src_pe == cur_pe{
             self.inner().dist_cnt.fetch_add(cnt,std::sync::atomic::Ordering::SeqCst);
-        }
+        // }
         // self.print();
         // println!("done serialize darc cnts");
     }
 
     pub fn deserialize_update_cnts(&self, cur_pe: usize){
         // println!("deserialize darc? cnts");
-        if self.darc.orig_pe != cur_pe{
-            self.inner().inc_pe_ref_count(self.darc.orig_pe,1);// we need to increment by 2 cause bincode calls the serialize function twice when serializing...
-        }
+        // if self.darc.src_pe != cur_pe{
+            self.inner().inc_pe_ref_count(self.darc.src_pe,1);// we need to increment by 2 cause bincode calls the serialize function twice when serializing...
+        // }
         self.inner().local_cnt.fetch_add(1,Ordering::SeqCst);
         // self.print();
         // println!("done deserialize darc cnts");
     }
 
     pub fn print(&self){
-        println!("--------\norig: {:?} {:?} {:?}\n--------",self.darc.orig_pe,self.darc.inner,self.inner());
+        println!("--------\norig: {:?} {:?} {:?}\n--------",self.darc.src_pe,self.darc.inner,self.inner());
     }
 
     pub fn read(&self) -> RwLockReadGuard<Box<T>>{
@@ -562,7 +581,7 @@ impl <T: ?Sized> LocalRwDarc< T>{
         let item = unsafe { Box::from_raw(inner.item as *mut RwLock<Box<T>> ).into_inner() };
         let d = Darc{
             inner: self.darc.inner as *mut DarcInner<T>,
-            orig_pe: self.darc.orig_pe,
+            src_pe: self.darc.src_pe,
             phantom: PhantomData
         };
         d.inner_mut().update_item(Box::into_raw(item));
@@ -637,7 +656,7 @@ impl< T: ?Sized > From<&Darc<RwLock<Box<T>>>>
             inner_addr: darc.inner as *const u8 as usize, 
             backend: team.lamellae.backend(),
             orig_world_pe: team.world_pe,
-            orig_team_pe: darc.orig_pe,
+            orig_team_pe: team.team_pe.expect("darcs only valid on team members"),
             phantom: PhantomData
         };
         ndarc
@@ -652,7 +671,7 @@ impl< T: ?Sized > From<__NetworkDarc<T>>
         if let Some(lamellae) = LAMELLAES.read().get(&ndarc.backend){
             let darc = Darc{
                 inner: lamellae.local_addr(ndarc.orig_world_pe,ndarc.inner_addr) as *mut DarcInner<RwLock<Box<T>>>,
-                orig_pe: ndarc.orig_team_pe,
+                src_pe: ndarc.orig_team_pe,
                 phantom: PhantomData
             };
             // darc.print();

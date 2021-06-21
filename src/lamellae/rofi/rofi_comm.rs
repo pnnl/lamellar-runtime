@@ -74,6 +74,10 @@ impl RofiComm {
     pub(crate) fn barrier(&self) {
         rofi_barrier();
     }
+
+    pub(crate) fn occupied(&self){
+        println!("occupied {:?}",self.alloc.occupied());
+    }
     pub(crate) fn rt_alloc(&self, size: usize) -> Option<usize> {
         
         if let Some(addr) = self.alloc.try_malloc(size) {
@@ -415,6 +419,8 @@ impl RofiData{
         unsafe{(*(self.addr as *const AtomicUsize)).fetch_add(1,Ordering::SeqCst)}; 
     }
 
+    
+
 }
 
 impl Des for RofiData{
@@ -429,6 +435,10 @@ impl Des for RofiData{
     }
     fn header_and_data_as_bytes(&self) ->&mut [u8]{
         unsafe {std::slice::from_raw_parts_mut((self.addr + std::mem::size_of::<AtomicUsize>()) as *mut u8, self.len)}
+    }
+    fn print(&self){
+        println!("addr: {:x} relative addr {:x} len {:?} data_start {:x} data_len {:?} alloc_size {:?}",
+        self.addr,self.relative_addr,self.len,self.data_start, self.data_len, self.alloc_size);
     }
 }
 

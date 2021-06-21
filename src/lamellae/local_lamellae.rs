@@ -32,6 +32,9 @@ impl Des for LocalData{
     fn header_and_data_as_bytes(&self) -> &mut [u8]{
         &mut []
     }
+    fn print(&self){
+
+    }
 }
 
 impl SubData for LocalData{

@@ -175,8 +175,10 @@ impl Ser for Rofi{
         // println!("hs {:?}",header_size);
         // println!("hst {:?} hs {:?} {:?} {:?} ",header_size_temp, header_size, test_size,std::mem::size_of::<SerializeHeader>()) ;
         let ser_data = RofiData::new(self.rofi_comm.clone(),header_size+serialized_size).await;
+        
         // println!("h+d size: {:?} hsize {:?} dsize {:?}",ser_data.alloc_size,ser_data.header_as_bytes().len(),ser_data.data_as_bytes().len());
         bincode::serialize_into(ser_data.header_as_bytes(),&header)?;
+        // println!("header {:?} ({:?}) size {:?} occupied {:?}",header, ser_data.header_as_bytes(),header_size+serialized_size,self.rofi_comm.occupied());
         Ok(SerializedData::RofiData(ser_data))
     }
 }

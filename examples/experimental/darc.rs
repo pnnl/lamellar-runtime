@@ -30,8 +30,8 @@ fn main() {
     let local_test = LocalRwDarc::new(world.team(),10);
     println!("after creating local test");
     if let Some(team) = even_team{
-        let test = Darc::try_new(team.clone(),AtomicUsize::new(10));
-        if let Ok(test) = test  {
+        let test = Darc::new(team.clone(),AtomicUsize::new(10));
+        // if let Ok(test) = test  {
             // print!("test: ");
             // test.print();
             // println!("test val: {:?}",test);
@@ -67,11 +67,11 @@ fn main() {
                 // println!("test4 val: {:?}",test2);
                 // drop(test2)
             }
-        }
-        else{
-            println!("here");
-            *(*local_test.write()) +=1;
-        }
+        // }
+        // else{
+        //     println!("here");
+        //     *(*local_test.write()) +=1;
+        // }
     }
     println!("after sub team");
     

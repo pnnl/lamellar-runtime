@@ -142,6 +142,7 @@ impl AmeSchedulerQueue for WorkStealingInner {
                 ame.exec_msg(ame.clone(), msg, data, lamellae, header.team_hash).await;
             }
             else{
+                data.print();
                 panic!("should i be here?");
             }
             // println!("num tasks: {:?}",num_tasks.fetch_sub(1,Ordering::Relaxed));

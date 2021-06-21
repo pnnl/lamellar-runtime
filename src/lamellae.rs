@@ -63,7 +63,7 @@ fn default_backend() -> Backend {
 //     pub(crate) len: usize,
 //     pub(crate) rdma: Arc<Lamellae>
 // }
-#[derive(serde::Serialize,serde::Deserialize,Clone)]
+#[derive(serde::Serialize,serde::Deserialize,Clone,Debug)]
 pub(crate) struct SerializeHeader{
     pub(crate) msg: Msg,
     pub(crate) team_hash: u64,
@@ -85,6 +85,7 @@ pub(crate) trait Des{
     fn deserialize_data<T: serde::de::DeserializeOwned>(& self) -> Result<T, anyhow::Error>;
     fn header_and_data_as_bytes(&self) -> &mut[u8];
     fn data_as_bytes(&self) -> &mut[u8];
+    fn print(&self);
 }
 
 #[enum_dispatch]

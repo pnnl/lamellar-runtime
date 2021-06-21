@@ -188,7 +188,7 @@ impl RegisteredActiveMessages{
                 //     cnt+=1;
                     while stall_mark != stall_mark_clone.load(Ordering::Relaxed) && total_batch_size.load(Ordering::Relaxed) < 1000000{
                         // cnt = 0;
-                        stall_mark = stall_mark_clone.fetch_add(1,Ordering::SeqCst) + 1;
+                        stall_mark = stall_mark_clone.load(Ordering::Relaxed);
                         async_std::task::yield_now().await;
                     }
                     
@@ -397,6 +397,7 @@ impl RegisteredActiveMessages{
             LamellarFunc::LocalAm(_) => panic!("should not send a local am"),
             LamellarFunc::None => panic!("should not send none")
         }
+        // println!("sending single message {:?} {:?}",req_data.dst,req_data.team.team.arch.clone());
         req_data.lamellae.send_to_pes_async(req_data.dst, req_data.team.team.arch.clone(), data).await;
     }
 
