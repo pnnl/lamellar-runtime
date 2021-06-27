@@ -80,9 +80,9 @@ fn main() {
         let mut cnt = 0;
         let mut exp = 20;
         if num_bytes <= 2048 {
-            exp = i + 7; //18+i;
+            exp = 18 + i;
         } else if num_bytes >= 4096 {
-            exp = i + 7;
+            exp = 30;
         }
         let timer = Instant::now();
         let mut sub_time = 0f64;

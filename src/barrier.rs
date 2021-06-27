@@ -60,13 +60,13 @@ impl Barrier{
             barrier_cnt: AtomicUsize::new(0),
             barrier_buf: bufs,
         };
-        // bar.print_bar();
+        bar.print_bar();
         bar
     }
 
     fn print_bar(&self){
         if let Some(bufs) = &self.barrier_buf {
-            println!("[{:?}] [LAMELLAR] {:?} {:?} {:?}",
+            println!("[{:?}] [LAMELLAR BARRIER] {:?} {:?} {:?}",
                     self.my_pe, bufs.barrier1.as_slice(),
                     bufs.barrier2.as_slice(),bufs.barrier3.as_slice());
         } 

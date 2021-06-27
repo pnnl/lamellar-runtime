@@ -75,8 +75,9 @@ impl RofiComm {
         rofi_barrier();
     }
 
-    pub(crate) fn occupied(&self){
+    pub(crate) fn occupied(&self) -> usize{
         println!("occupied {:?}",self.alloc.occupied());
+        self.alloc.occupied()
     }
     pub(crate) fn rt_alloc(&self, size: usize) -> Option<usize> {
         
@@ -362,7 +363,9 @@ impl Drop for RofiComm {
     fn drop(&mut self) {
         rofi_barrier();
         std::thread::sleep(std::time::Duration::from_millis(1000));
-        println!("dropping rofi -- memory in use {:?}",self.alloc.occupied());
+        if self.alloc.occupied() > 0{
+            println!("dropping rofi -- memory in use {:?}",self.alloc.occupied());
+        }
         let _res = rofi_finit();
         std::thread::sleep(std::time::Duration::from_millis(1000));
         // trace!("[{:?}] dropping rofi comm", self.my_pe);
@@ -384,16 +387,22 @@ impl RofiData{
         let ref_cnt_size = std::mem::size_of::<AtomicUsize>();
         // let header_size = std::mem::size_of::<u64>();
         // let data_size = header_size+serialized_size+1; //plus one is our transfer flag
-        let alloc_size = size + ref_cnt_size +1;
+        // let padding_size = (size + ref_cnt_size) % std::mem::size_of::<u64>();
+        let alloc_size = size + ref_cnt_size; //+  std::mem::size_of::<u64>();
         let mut mem = rofi_comm.rt_alloc(alloc_size);
+        let mut timer = std::time::Instant::now();
         while mem.is_none(){
             async_std::task::yield_now().await;
             mem = rofi_comm.rt_alloc(alloc_size);
+            if timer.elapsed().as_secs_f64() > 15.0{
+                println!("stuck waiting for rofidata alloc");
+                timer = std::time::Instant::now();
+            }
         }
         let relative_addr =  mem.unwrap();
         let addr = relative_addr + rofi_comm.base_addr();
-        let mem_slice = unsafe {std::slice::from_raw_parts_mut(addr as *mut u8, alloc_size)};
-        mem_slice[alloc_size-1]=0;
+        // let mem_slice = unsafe {std::slice::from_raw_parts_mut(addr as *mut u8, alloc_size)};
+        // mem_slice[alloc_size-1]=0;
         unsafe {
             let ref_cnt = addr as *const AtomicUsize;
             (*ref_cnt).store(1, Ordering::SeqCst)
@@ -402,8 +411,8 @@ impl RofiData{
             addr: addr,
             relative_addr: relative_addr+ref_cnt_size,
             data_start: addr + std::mem::size_of::<AtomicUsize>()+std::mem::size_of::<Option<SerializeHeader>>(),
-            len: size+1,
-            data_len: size -std::mem::size_of::<Option<SerializeHeader>>(),
+            len: size,// + std::mem::size_of::<u64>(),
+            data_len: size - std::mem::size_of::<Option<SerializeHeader>>(),
             rofi_comm: rofi_comm,
             alloc_size: alloc_size,
         }
@@ -413,6 +422,32 @@ impl RofiData{
         unsafe {std::slice::from_raw_parts_mut((self.addr + std::mem::size_of::<AtomicUsize>()) as *mut u8, header_size)}
     }
 
+    // pub fn calc_hash(&self) {
+    //     let u64_len = (self.len-std::mem::size_of::<u64>())/std::mem::size_of::<u64>();
+    //     let u64_slice = unsafe {std::slice::from_raw_parts_mut((self.addr + std::mem::size_of::<AtomicUsize>()) as *mut u64, u64_len)};
+    //     let u8_slice = &self.header_and_data_as_bytes()[u64_len*std::mem::size_of::<u64>()..self.len-std::mem::size_of::<u64>()];
+    //     let hash = u64_slice[0..u64_slice.len()].iter().sum::<u64>() + u8_slice.iter().map(|x| *x as u64).sum::<u64>();
+    //     // println!("hash {:?} u64 {:?} u8 {:?}",hash,u64_slice[0..u64_slice.len()].iter().sum::<u64>(),u8_slice.iter().map(|x| *x as u64).sum::<u64>());
+    //     let hash_addr = self.addr + self.alloc_size-std::mem::size_of::<u64>();
+    //     // println!("len: {:?} u64_len {:?} u8_len {:?}",self.len, u64_len, u8_slice.len());
+    //     unsafe { *(hash_addr as * mut u64) = hash };
+    // }
+
+    // pub fn check_hash(&self)-> bool {
+    //     let u64_len = (self.len-std::mem::size_of::<u64>())/std::mem::size_of::<u64>();
+    //     let u64_slice = unsafe {std::slice::from_raw_parts_mut((self.addr + std::mem::size_of::<AtomicUsize>()) as *mut u64, u64_len)};
+    //     let u8_slice = &self.header_and_data_as_bytes()[u64_len*std::mem::size_of::<u64>()..self.len-std::mem::size_of::<u64>()];
+    //     let hash = u64_slice[0..u64_slice.len()].iter().sum::<u64>() + u8_slice.iter().map(|x| *x as u64).sum::<u64>();
+    //     let hash_addr = self.addr + self.alloc_size-std::mem::size_of::<u64>();
+    //     unsafe{
+    //         if *(hash_addr as * mut u64) == hash{
+    //             true
+    //         }
+    //         else{
+    //             false
+    //         }
+    //     }
+    // }
     
 
     pub fn increment_cnt(&self){

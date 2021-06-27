@@ -9,7 +9,8 @@ pub use serde_closure::FnOnce;
 #[macro_use]
 extern crate lazy_static;
 
-
+#[macro_use]
+extern crate memoffset;
 
 mod active_messaging;
 mod lamellae;
@@ -34,11 +35,14 @@ pub use utils::*;
 use lamellar_prof::init_prof;
 init_prof!();
 
-#[doc(hidden)]
-pub use crate::active_messaging::{registered_active_message::RegisteredAm, LamellarReturn,LamellarActiveMessage,RemoteActiveMessage,DarcSerde,LamellarSerde,LamellarResultSerde,Serde};
 #[cfg(feature = "nightly")]
 pub use crate::active_messaging::remote_closures::RemoteClosures;
-pub use crate::active_messaging::{ActiveMessaging, LamellarAM,LocalAM};
+#[doc(hidden)]
+pub use crate::active_messaging::{
+    registered_active_message::RegisteredAm, DarcSerde, LamellarActiveMessage, LamellarResultSerde,
+    LamellarReturn, LamellarSerde, RemoteActiveMessage, Serde,
+};
+pub use crate::active_messaging::{ActiveMessaging, LamellarAM, LocalAM};
 
 #[cfg(feature = "experimental")]
 pub use crate::lamellar_array::{LamellarArray, ReduceKey};
@@ -47,27 +51,29 @@ pub use crate::lamellar_memregion::{
 };
 
 #[cfg(feature = "experimental")]
-pub use crate::lamellar_darc::{Darc,LocalRwDarc};
-#[cfg(feature = "experimental")]
 #[doc(hidden)]
-pub use crate::lamellar_darc::{darc_serialize,darc_from_ndarc,localrw_serialize,localrw_from_ndarc};
+pub use crate::lamellar_darc::{
+    darc_from_ndarc, darc_serialize, localrw_from_ndarc, localrw_serialize,
+};
+#[cfg(feature = "experimental")]
+pub use crate::lamellar_darc::{Darc, LocalRwDarc};
 
 // #[doc(hidden)]
 // pub use crate::lamellae::{Lamellae,SerializedData,SerializeHeader};
 pub use crate::lamellae::Backend;
-pub use crate::scheduler::SchedulerType;
-pub use crate::lamellar_world::*;
 pub use crate::lamellar_arch::{BlockedArch, IdError, LamellarArch, StridedArch};
+pub use crate::lamellar_world::*;
+pub use crate::scheduler::SchedulerType;
 
 #[doc(hidden)]
 pub use crate::lamellar_team::LamellarTeamRT;
 
 pub use crate::lamellar_team::LamellarTeam;
 
-
-
 extern crate lamellar_impl;
-pub use lamellar_impl::{am, local_am, generate_reductions_for_type,  register_reduction,AmData,AmLocalData};
+pub use lamellar_impl::{
+    am, generate_reductions_for_type, local_am, register_reduction, AmData, AmLocalData,
+};
 
 #[doc(hidden)]
 pub use inventory;
@@ -88,19 +94,20 @@ where
 }
 
 #[doc(hidden)]
-pub fn serialized_size<T: ?Sized>(obj: &T) -> usize 
+pub fn serialized_size<T: ?Sized>(obj: &T) -> usize
 where
-    T: serde::Serialize,{
+    T: serde::Serialize,
+{
     bincode::serialized_size(obj).unwrap() as usize
 }
 #[doc(hidden)]
-pub fn serialize_into<T: ?Sized>(buf: &mut [u8], obj: &T) ->Result<(), anyhow::Error>
+pub fn serialize_into<T: ?Sized>(buf: &mut [u8], obj: &T) -> Result<(), anyhow::Error>
 where
     T: serde::Serialize,
-    {
-        bincode::serialize_into(buf,obj)?;
-        Ok(())
-    }
+{
+    bincode::serialize_into(buf, obj)?;
+    Ok(())
+}
 
 #[doc(hidden)]
 pub fn deserialize<'a, T>(bytes: &'a [u8]) -> Result<T, anyhow::Error>

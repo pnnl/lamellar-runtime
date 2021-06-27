@@ -397,7 +397,7 @@ impl RegisteredActiveMessages{
             LamellarFunc::LocalAm(_) => panic!("should not send a local am"),
             LamellarFunc::None => panic!("should not send none")
         }
-        // println!("sending single message {:?} {:?}",req_data.dst,req_data.team.team.arch.clone());
+        // println!("sending single message {:?} {:?} {:?}",req_data.dst,req_data.team.team.arch.clone(),data.header_and_data_as_bytes().len());
         req_data.lamellae.send_to_pes_async(req_data.dst, req_data.team.team.arch.clone(), data).await;
     }
 
@@ -492,7 +492,7 @@ impl RegisteredActiveMessages{
                 match func.exec(req_data.team.team.world_pe, req_data.team.team.num_world_pes, true, req_data.world.clone(), req_data.team.clone()).await {
                     LamellarReturn::LocalData(data) => {
                         // println!("local am data return");
-                        ActiveMessageEngine::send_data_to_user_handle(req_data.id,req_data.src as u16,InternalResult::Local(data));
+                        ActiveMessageEngine::send_data_to_user_handle(req_data.id,req_data.src as u16,InternalResult::Local(data), req_data.team.clone());
                     }
                     LamellarReturn::LocalAm(am) => {
                         // println!("local am am return");
@@ -504,7 +504,7 @@ impl RegisteredActiveMessages{
                     }
                     LamellarReturn::Unit => {
                         // println!("local am unit return");
-                        ActiveMessageEngine::send_data_to_user_handle(req_data.id,req_data.src as u16,InternalResult::Unit);
+                        ActiveMessageEngine::send_data_to_user_handle(req_data.id,req_data.src as u16,InternalResult::Unit, req_data.team.clone());
                     }
                     LamellarReturn::RemoteData(_) => {
                         // println!("remote am data return");
@@ -521,7 +521,7 @@ impl RegisteredActiveMessages{
                 match func.exec(req_data.team.team.world_pe, req_data.team.team.num_world_pes, true, req_data.world.clone(), req_data.team.clone()).await {
                     LamellarReturn::LocalData(data) => {
                         // println!("local am data return");
-                        ActiveMessageEngine::send_data_to_user_handle(req_data.id,req_data.src as u16,InternalResult::Local(data));
+                        ActiveMessageEngine::send_data_to_user_handle(req_data.id,req_data.src as u16,InternalResult::Local(data), req_data.team.clone());
                     }
                     LamellarReturn::LocalAm(am) => {
                         // println!("local am am return");
@@ -533,7 +533,7 @@ impl RegisteredActiveMessages{
                     }
                     LamellarReturn::Unit => {
                         // println!("local am unit return");
-                        ActiveMessageEngine::send_data_to_user_handle(req_data.id,req_data.src as u16,InternalResult::Unit);
+                        ActiveMessageEngine::send_data_to_user_handle(req_data.id,req_data.src as u16,InternalResult::Unit, req_data.team.clone());
                     }
                     LamellarReturn::RemoteData(_) => {
                         // println!("remote am data return");
@@ -647,10 +647,10 @@ impl RegisteredActiveMessages{
                     let sub_data = ser_data.sub_data(i,i+batch_header.0);
                     i+=batch_header.0;
                     match func_id{
-                        BATCHED_UNIT_ID  => self.process_batched_unit_return(batch_id, msg.src),
-                        UNIT_ID => self.process_unit_return( msg.src, batched_data),
-                        REMOTE_DATA_ID => self.process_data_return(msg, sub_data),
-                        BATCHED_REMOTE_DATA_ID => self.process_batched_data_return(batch_id, msg.src, sub_data),
+                        BATCHED_UNIT_ID  => self.process_batched_unit_return(batch_id, msg.src, team.clone()),
+                        UNIT_ID => self.process_unit_return( msg.src, batched_data, team.clone()),
+                        REMOTE_DATA_ID => self.process_data_return(msg, sub_data, team.clone()),
+                        BATCHED_REMOTE_DATA_ID => self.process_batched_data_return(batch_id, msg.src, sub_data, team.clone()),
                         REMOTE_AM_ID => panic! {"not handled yet {:?}",func_id},
                         _ => {
                             if func_id > 0 {
@@ -913,14 +913,14 @@ impl RegisteredActiveMessages{
         }
     }
 
-    fn process_batched_unit_return(&self, batch_id: usize, src: u16){
+    fn process_batched_unit_return(&self, batch_id: usize, src: u16, team: Arc<LamellarTeam>){
         // println!("processing returns {:?}",batch_id);
         let cnt = if let Some(reqs) = self.txed_ams.lock().get(&batch_id){
             let reqs = reqs.lock();
             let mut max_cnt =0;
             for (_,(req_id,cnt)) in reqs.iter(){
                 // println!("completed req {:?}",req_id);
-                ActiveMessageEngine::send_data_to_user_handle(*req_id,src,InternalResult::Unit);
+                ActiveMessageEngine::send_data_to_user_handle(*req_id,src,InternalResult::Unit, team.clone());
                 let cnt = cnt.fetch_sub(1,Ordering::SeqCst);
                 if cnt > max_cnt{
                     max_cnt=cnt;
@@ -929,14 +929,14 @@ impl RegisteredActiveMessages{
             max_cnt
         }
         else{
-            panic!("batch id {:?} not found",batch_id);
+            panic!("batch id {:?} not found, src: {:?}",batch_id,src);
         };
         if cnt == 0{
             self.txed_ams.lock().remove(&batch_id);
         }
     }
 
-    fn process_unit_return(&self, src: u16, data_slice: &[u8]){
+    fn process_unit_return(&self, src: u16, data_slice: &[u8], team: Arc<LamellarTeam>){
 
         // println!("processing returns {:?}",batch_id); 
         let mut index=0;
@@ -945,12 +945,12 @@ impl RegisteredActiveMessages{
         while index < data_slice.len(){
             let req_id: usize = crate::deserialize(&data_slice[index..(index+serialized_size)]).unwrap();
             // println!("completed req {:?}",req_id);
-            ActiveMessageEngine::send_data_to_user_handle(req_id,src ,InternalResult::Unit);
+            ActiveMessageEngine::send_data_to_user_handle(req_id,src ,InternalResult::Unit, team.clone());
             index+=serialized_size;
         }
     }
 
-    fn process_data_return(&self, msg: Msg, ser_data: SerializedData){
+    fn process_data_return(&self, msg: Msg, ser_data: SerializedData, team: Arc<LamellarTeam>){
         // println!("processing returns {:?}",batch_id);
         let data_slice=ser_data.data_as_bytes();  
         let mut index=0;
@@ -960,12 +960,12 @@ impl RegisteredActiveMessages{
             let (req_id,data_size): (usize,usize) = crate::deserialize(&data_slice[index..(index+serialized_size)]).unwrap();
             index+=serialized_size;
             let sub_data = ser_data.sub_data(index,index+data_size);
-            ActiveMessageEngine::send_data_to_user_handle(req_id,msg.src,InternalResult::Remote(sub_data));
+            ActiveMessageEngine::send_data_to_user_handle(req_id,msg.src,InternalResult::Remote(sub_data), team.clone());
             index+=data_size;
         }
     }
 
-    fn process_batched_data_return(&self,batch_id: usize, src: u16,  ser_data: SerializedData){
+    fn process_batched_data_return(&self,batch_id: usize, src: u16,  ser_data: SerializedData, team: Arc<LamellarTeam>){
 
         let data_slice=ser_data.data_as_bytes();
         let mut index=0;
@@ -982,7 +982,7 @@ impl RegisteredActiveMessages{
                 index+=data_size;
                 let (req_id,cnt) = reqs.get(&batch_req_id).expect("id not found");
                     // println!("batch_req_id req_id data_size {:?} {:?} {:?}",batch_req_id,req_id,data_size);
-                ActiveMessageEngine::send_data_to_user_handle(*req_id,src,InternalResult::Remote(sub_data));
+                ActiveMessageEngine::send_data_to_user_handle(*req_id,src,InternalResult::Remote(sub_data), team.clone());
                 if cnt.fetch_sub(1,Ordering::Relaxed) == 1 {
                     reqs.remove(&batch_req_id);
                 }
@@ -1008,8 +1008,8 @@ impl RegisteredActiveMessages{
         match cmd{
             Cmd::BatchedMsg => self.exec_batched_msg(ame,msg,ser_data,lamellae,world,team),
             Cmd::Exec => self.exec_single_msg(ame, msg,ser_data,lamellae,world,team,false).await,            
-            Cmd::BatchedDataReturn => self.process_batched_data_return(msg.req_id,msg.src,ser_data),
-            Cmd::DataReturn => self.process_data_return(msg,ser_data),
+            Cmd::BatchedDataReturn => self.process_batched_data_return(msg.req_id,msg.src,ser_data,team),
+            Cmd::DataReturn => self.process_data_return(msg,ser_data,team),
             Cmd::BatchedAmReturn => self.process_batched_am_return(msg,ser_data,lamellae,world,team),
             Cmd::AmReturn => self.process_am_return(msg,ser_data,lamellae,world,team),
             

@@ -321,7 +321,7 @@ impl LamellarWorld {
 //#[prof]
 impl Drop for LamellarWorld {
     fn drop(&mut self) {
-        println!("[{:?}] world dropping", self.my_pe);
+        // println!("[{:?}] world dropping", self.my_pe);
         self.wait_all();
         // self.team_rt.barrier();
         self.barrier();
@@ -351,7 +351,7 @@ impl Drop for LamellarWorld {
         // for (backend,lamellae) in &self.lamellaes{
         //     lamellae.finit();
         // }
-        println!("[{:?}] world dropped", self.my_pe);
+        // println!("[{:?}] world dropped", self.my_pe);
     }
 }
 

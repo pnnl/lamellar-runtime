@@ -89,9 +89,9 @@ impl Rofi{
 
 impl Drop for Rofi{
     fn drop(&mut self){
-        println!("dropping rofi_lamellae");
+        // println!("dropping rofi_lamellae");
         self.active.store(false, Ordering::SeqCst);
-        println!("dropped rofi_lamellae");
+        // println!("dropped rofi_lamellae");
         //rofi finit
     }
 }
@@ -219,5 +219,8 @@ impl LamellaeRDMA for Rofi {
     }
     fn remote_addr(&self, remote_pe: usize, local_addr: usize) -> usize {
         self.rofi_comm.remote_addr(remote_pe, local_addr)
+    }
+    fn occupied(&self) -> usize {
+        self.rofi_comm.occupied()
     }
 }

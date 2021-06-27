@@ -164,6 +164,10 @@ impl LamellaeRDMA for Local {
     fn remote_addr(&self, _pe: usize, local_addr: usize) -> usize {
         local_addr
     }
+    //todo make this return a real value
+    fn occupied(&self) -> usize {
+        0 
+    }
 }
 
 //#[prof]
