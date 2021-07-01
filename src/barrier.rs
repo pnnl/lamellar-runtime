@@ -99,10 +99,10 @@ impl Barrier{
         }
     }
     pub(crate) fn barrier(&self) {
-        #[cfg(test)]
-        if self.lamellae.backend() == crate::lamellae::Backend::Local {
-            return;
-        }
+        // #[cfg(test)]
+        // if self.lamellae.backend() == crate::lamellae::Backend::Local {
+        //     return;
+        // }
         // println!("[{:?}] in barrier ",self.barrier_cnt.load(Ordering::SeqCst));
         // self.print_bar();
         if let Some(bufs) = &self.barrier_buf{

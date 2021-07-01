@@ -365,6 +365,11 @@ fn derive_am_data(input: TokenStream,args: TokenStream, crate_header: String, lo
                             let deserialize = format!("{}::localrw_from_ndarc",crate_header);
                             (serialize,deserialize)
                         }
+                        else if seg.ident.to_string().contains("GlobalRwDarc"){
+                            let serialize = format!("{}::globalrw_serialize",crate_header);
+                            let deserialize = format!("{}::globalrw_from_ndarc",crate_header);
+                            (serialize,deserialize)
+                        }
                         else{
                             let serialize = format!("{}::darc_serialize",crate_header);
                             let deserialize = format!("{}::darc_from_ndarc",crate_header);

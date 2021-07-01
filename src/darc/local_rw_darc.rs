@@ -151,6 +151,7 @@ where
     T: ?Sized,
 {
     let ndarc: __NetworkDarc<T> = Deserialize::deserialize(deserializer)?;
+    // println!("lrwdarc from net darc");
     let rwdarc = LocalRwDarc {
         darc: Darc::from(ndarc),
     };
@@ -186,21 +187,6 @@ impl<T: ?Sized> From<__NetworkDarc<T>> for Darc<RwLock<Box<T>>> {
                 src_pe: ndarc.orig_team_pe,
                 phantom: PhantomData,
             };
-            // if !DARC_ADDRS.read().contains(&ndarc.inner_addr)
-            //     && !DARC_ADDRS.read().contains(&(darc.inner as usize))
-            // {
-            //     println!(
-            //         "wtf! 0x{:x} -- 0x{:x} (0x{:x}) ",
-            //         ndarc.inner_addr,
-            //         darc.inner as usize,
-            //         darc.inner as usize - lamellae.base_addr()
-            //     );
-            //     for addr in DARC_ADDRS.read().iter() {
-            //         println!("0x{:x} (0x{:x}) ", addr, addr - lamellae.base_addr());
-            //     }
-            // }
-            // panic!("just for debugging");
-            // darc.print();
             darc
         } else {
             panic!("unexepected lamellae backend {:?}", &ndarc.backend);

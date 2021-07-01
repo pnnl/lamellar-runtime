@@ -660,8 +660,6 @@ impl LamellarTeamRT {
         prof_end!(sub);
         Box::new(my_req)
     }
-
-    fn shutdown(&self) {}
 }
 
 //#feature gated closures for those with nightly

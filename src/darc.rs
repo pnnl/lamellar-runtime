@@ -214,7 +214,7 @@ impl<T: ?Sized> fmt::Debug for DarcInner<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "[{:}/{:?}] lc: {:?} dc: {:?}\nref_cnt: {:?}\ndropped {:?}",
+            "[{:}/{:?}] lc: {:?} dc: {:?}\nref_cnt: {:?}\nmode {:?}",
             self.my_pe,
             self.num_pes,
             self.local_cnt.load(Ordering::SeqCst),
@@ -238,7 +238,7 @@ impl<T: ?Sized> Darc<T> {
         let inner = self.inner();
         unsafe { std::slice::from_raw_parts_mut(inner.ref_cnt_addr as *mut usize, inner.num_pes) }
     }
-    fn dropped_as_mut_slice(&self) -> &mut [DarcMode] {
+    fn mode_as_mut_slice(&self) -> &mut [DarcMode] {
         let inner = self.inner();
         unsafe { std::slice::from_raw_parts_mut(inner.mode_addr as *mut DarcMode, inner.num_pes) }
     }
@@ -297,6 +297,9 @@ impl<T> Darc<T> {
         let size = std::mem::size_of::<DarcInner<T>>()
             + team_rt.num_pes * std::mem::size_of::<usize>()
             + team_rt.num_pes * std::mem::size_of::<DarcMode>();
+        println!("creating new darc");
+        team.barrier();
+        println!("creating new darc after barrier");
         let addr = team_rt.lamellae.alloc(size, alloc).expect("out of memory");
         let temp_team = team.clone();
         let darc_temp = DarcInner {
@@ -322,7 +325,7 @@ impl<T> Darc<T> {
             phantom: PhantomData,
         };
         // unsafe {
-        for elem in d.dropped_as_mut_slice() {
+        for elem in d.mode_as_mut_slice() {
             *elem = state;
         }
         // }
@@ -427,7 +430,7 @@ impl<T: 'static + ?Sized> Drop for Darc<T> {
         if inner.local_cnt.load(Ordering::SeqCst) == 0 {
             // we have no more current local references so lets try to launch our garbage collecting am
 
-            let mode_refs = self.dropped_as_mut_slice();
+            let mode_refs = self.mode_as_mut_slice();
             let local_mode = unsafe {
                 (*(((&mut mode_refs[inner.my_pe]) as *mut DarcMode) as *mut AtomicU8))
                     .compare_exchange(DarcMode::Darc as u8, DarcMode::Dropped as u8, Ordering::SeqCst, Ordering::SeqCst)
@@ -616,6 +619,7 @@ where
     T: ?Sized,
 {
     let ndarc: __NetworkDarc<T> = Deserialize::deserialize(deserializer)?;
+    // println!("darc from net darc");
     Ok(Darc::from(ndarc))
 }
 

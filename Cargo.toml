@@ -191,7 +191,8 @@ name="dist_array_reduce"
 path="examples/experimental/dist_array_reduce.rs"
 required-features = ["experimental"]
 
+##------------ Darc examples ------------------##
 [[example]]
 name="darc"
-path="examples/experimental/darc.rs"
+path="examples/darc_examples/darc.rs"
 required-features = ["experimental"]

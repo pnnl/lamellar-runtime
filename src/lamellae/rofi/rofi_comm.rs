@@ -22,7 +22,7 @@ pub(crate) struct RofiComm {
     pub(crate) get_amt: Arc<AtomicUsize>,
     get_cnt: Arc<AtomicUsize>,
     comm_mutex: Arc<Mutex<()>>,
-    alloc_mutex: Arc<Mutex<()>>,
+    // alloc_mutex: Arc<Mutex<()>>,
 }
 
 //#[prof]
@@ -54,7 +54,7 @@ impl RofiComm {
             get_amt: Arc::new(AtomicUsize::new(0)),
             get_cnt:  Arc::new(AtomicUsize::new(0)),
             comm_mutex: Arc::new(Mutex::new(())),
-            alloc_mutex: Arc::new(Mutex::new(())),
+            // alloc_mutex: Arc::new(Mutex::new(())),
         };
         trace!(
             "[{:?}] Rofi base addr 0x{:x}",
@@ -64,10 +64,11 @@ impl RofiComm {
         rofi.alloc.init(0, total_mem);
         rofi
     }
-    pub(crate) fn finit(&self) {
-        rofi_barrier();
-        let _res = rofi_finit();
-    }
+
+    // pub(crate) fn finit(&self) { //finit called in drop
+    //     rofi_barrier();
+    //     let _res = rofi_finit();
+    // }
     // pub(crate) fn mype(&self) -> usize {
     //     self.my_pe
     // }
@@ -97,12 +98,12 @@ impl RofiComm {
         // println!("in rt_free addr {:?} in use {:?}",addr,self.alloc.occupied());
     }
     pub(crate) fn alloc(&self, size: usize, alloc: AllocationType) -> Option<usize> {
-        let _lock = self.alloc_mutex.lock();
+        let _lock = self.comm_mutex.lock();
         Some(rofi_alloc(size,alloc) as usize)
     }
     #[allow(dead_code)]
     pub(crate) fn free(&self, addr: usize) {
-        let _lock = self.alloc_mutex.lock();
+        let _lock = self.comm_mutex.lock();
         rofi_release(addr);
     }
 
@@ -366,6 +367,7 @@ impl Drop for RofiComm {
         if self.alloc.occupied() > 0{
             println!("dropping rofi -- memory in use {:?}",self.alloc.occupied());
         }
+        rofi_barrier();
         let _res = rofi_finit();
         std::thread::sleep(std::time::Duration::from_millis(1000));
         // trace!("[{:?}] dropping rofi comm", self.my_pe);

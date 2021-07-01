@@ -367,7 +367,7 @@ impl<T: std::clone::Clone + Send + Sync + 'static> LamellarMemoryRegion<T> {
                 local = true;
                 lamellae.rt_alloc(size * std::mem::size_of::<T>()).unwrap() + lamellae.base_addr()
             } else {
-                lamellae.alloc(size * std::mem::size_of::<T>(), alloc).unwrap()
+                lamellae.alloc(size * std::mem::size_of::<T>(), alloc).unwrap()//did we call team barrer before this?
             }
         }
         else{
