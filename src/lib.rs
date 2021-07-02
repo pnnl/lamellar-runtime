@@ -9,6 +9,7 @@ pub use serde_closure::FnOnce;
 #[macro_use]
 extern crate lazy_static;
 
+#[cfg(feature = "enable-rofi")]
 #[macro_use]
 extern crate memoffset;
 

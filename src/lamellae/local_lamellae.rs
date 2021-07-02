@@ -63,7 +63,7 @@ impl Ser for Local{
 
 impl LamellaeInit for Local{
     fn init_fabric(&mut self) -> (usize, usize){
-        (0,0)
+        (0,1)
     }
     fn init_lamellae(&mut self, _scheduler: Arc<Scheduler>)->Arc<Lamellae>{
         Arc::new(Lamellae::Local(self.clone()))

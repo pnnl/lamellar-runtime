@@ -15,7 +15,7 @@ use log::trace;
 use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::collections::{BTreeMap, HashSet};
-use std::sync::atomic::Ordering;
+// use std::sync::atomic::Ordering;
 use std::sync::{Arc, Weak};
 use std::time::{Duration, Instant};
 
@@ -387,10 +387,10 @@ impl LamellarWorldBuilder {
         // }
         // let mut sched = WorkStealingScheduler::new();
         let teams = Arc::new(RwLock::new(HashMap::new()));
-        let mut lamellae_builder = create_lamellae(Backend::Rofi);
+        let mut lamellae_builder = create_lamellae(self.primary_lamellae);
         let (my_pe, num_pes) = lamellae_builder.init_fabric();
         let sched_new = Arc::new(create_scheduler(
-            SchedulerType::WorkStealing,
+            self.scheduler,
             num_pes,
             my_pe,
             teams.clone(),

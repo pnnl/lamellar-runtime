@@ -56,7 +56,7 @@ impl<T> DistRwLock<T>{
 }
 impl<T: ?Sized> DistRwLock<T>{
     
-    async fn async_reader_lock(&self, pe: usize) {
+    async fn async_reader_lock(&self, _pe: usize) {
         loop{
             while self.writer.load(Ordering::SeqCst) != self.team.team.num_pes { async_std::task::yield_now().await;}
             // println!("\t{:?} inc read count {:?} {:?}",pe,self.readers.load(Ordering::SeqCst),self.writer.load(Ordering::SeqCst));
