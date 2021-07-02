@@ -109,7 +109,7 @@ pub(crate) trait AmeSchedulerQueue: Sync + Send {
     fn submit_task<F>(&self,future: F )
     where 
         F: Future<Output = ()> + Send + 'static;
-
+    fn exec_task(&self);
     fn shutdown(&self);
 }
 
@@ -148,6 +148,7 @@ pub(crate) trait SchedulerQueue: Sync + Send {
     fn submit_task<F>(&self,future: F )
     where 
         F: Future<Output = ()> + Send + 'static;
+    fn exec_task(&self);
     fn shutdown(&self);
 }
 

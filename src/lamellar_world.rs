@@ -1,6 +1,6 @@
 use crate::active_messaging::*;
 // use crate::lamellae::{create_lamellae, Backend, Lamellae, LamellaeAM};
-use crate::lamellae::{create_lamellae, Backend,Lamellae,LamellaeInit,LamellaeComm};
+use crate::lamellae::{create_lamellae, Backend, Lamellae, LamellaeComm, LamellaeInit};
 use crate::lamellar_arch::LamellarArch;
 #[cfg(feature = "experimental")]
 use crate::lamellar_array::LamellarArray;
@@ -19,12 +19,10 @@ use std::sync::atomic::Ordering;
 use std::sync::{Arc, Weak};
 use std::time::{Duration, Instant};
 
-
-
 lazy_static! {
-    pub(crate) static ref LAMELLAES: RwLock<HashMap<Backend, Arc<Lamellae>>> = RwLock::new(HashMap::new());
+    pub(crate) static ref LAMELLAES: RwLock<HashMap<Backend, Arc<Lamellae>>> =
+        RwLock::new(HashMap::new());
 }
-
 
 pub struct LamellarWorld {
     team: Arc<LamellarTeam>,
@@ -57,11 +55,12 @@ impl ActiveMessaging for LamellarWorld {
     }
     fn barrier(&self) {
         // println!("[{:?}] world barrier", self.my_pe);
-        for (backend, lamellae) in &self.lamellaes_new {
-            trace!("[{:?}] {:?} barrier", self.my_pe, backend);
-            lamellae.barrier();
-            // println!("world barrier!!!!!!!!!!!!");
-        }
+        // for (backend, lamellae) in &self.lamellaes_new {
+        //     trace!("[{:?}] {:?} barrier", self.my_pe, backend);
+        //     lamellae.barrier();
+        //     // println!("world barrier!!!!!!!!!!!!");
+        // }
+        self.team.barrier();
     }
     fn exec_am_all<F>(&self, am: F) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync>
     where
@@ -80,10 +79,7 @@ impl ActiveMessaging for LamellarWorld {
         assert!(pe < self.num_pes(), "invalid pe: {:?}", pe);
         self.team.exec_am_pe(pe, am)
     }
-    fn exec_am_local<F>(
-        &self,
-        am: F,
-    ) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync>
+    fn exec_am_local<F>(&self, am: F) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync>
     where
         F: LamellarActiveMessage + LocalAM + Send + Sync + 'static,
     {
@@ -279,10 +275,9 @@ impl LamellarWorld {
         }
     }
 
-    pub fn team(&self) -> Arc<LamellarTeam>{
+    pub fn team(&self) -> Arc<LamellarTeam> {
         self.team.clone()
     }
-
 
     #[cfg(feature = "experimental")]
     pub fn new_array<
@@ -339,9 +334,9 @@ impl Drop for LamellarWorld {
         //     for (k,team) in teams.iter(){
         //         println!("team map: {:?} {:?}",k,Weak::strong_count(&team));
         //     }
-        
+
         // println!("counters: {:?}",Arc::strong_count(&self.counters));
-       
+
         fini_prof!();
 
         // im not sure we want to explicitly call lamellae.finit(). instead we should let
@@ -393,7 +388,12 @@ impl LamellarWorldBuilder {
         let teams = Arc::new(RwLock::new(HashMap::new()));
         let mut lamellae_builder = create_lamellae(Backend::Rofi);
         let (my_pe, num_pes) = lamellae_builder.init_fabric();
-        let sched_new = Arc::new(create_scheduler(SchedulerType::WorkStealing, num_pes,my_pe,teams.clone()));
+        let sched_new = Arc::new(create_scheduler(
+            SchedulerType::WorkStealing,
+            num_pes,
+            my_pe,
+            teams.clone(),
+        ));
         let lamellae = lamellae_builder.init_lamellae(sched_new.clone());
         let counters = Arc::new(AMCounters::new());
         lamellae.barrier();
@@ -423,8 +423,12 @@ impl LamellarWorldBuilder {
             .write()
             .insert(world.team_rt.team_hash, Arc::downgrade(&world.team));
         // world.lamellaes.insert(lamellae.backend(), lamellae.clone());
-        LAMELLAES.write().insert(lamellae.backend(), lamellae.clone());
-        world.lamellaes_new.insert(lamellae.backend(),lamellae.clone());
+        LAMELLAES
+            .write()
+            .insert(lamellae.backend(), lamellae.clone());
+        world
+            .lamellaes_new
+            .insert(lamellae.backend(), lamellae.clone());
         // println!("Lamellar world created with {:?}", lamellae.backend());
         println!("world build");
         world

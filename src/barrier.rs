@@ -1,6 +1,7 @@
 use crate::lamellae::{AllocationType,Lamellae};
 use crate::lamellar_arch::LamellarArchRT;
 use crate::lamellar_memregion::{LamellarMemoryRegion,RegisteredMemoryRegion};
+use crate::scheduler::{Scheduler,SchedulerQueue};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
@@ -9,6 +10,7 @@ use std::time::Instant;
 pub(crate) struct Barrier{
     my_pe: usize, // global pe id
     pub(crate) arch: Arc<LamellarArchRT>,
+    pub(crate) scheduler: Arc<Scheduler>,
     barrier_cnt: AtomicUsize,
     barrier_buf: Option<SubBufs>,
     
@@ -23,7 +25,7 @@ struct SubBufs{
 
 impl Barrier{
 
-    pub(crate) fn new(my_pe: usize, global_pes: usize, lamellae: Arc<Lamellae>, arch: Arc<LamellarArchRT>) -> Barrier{
+    pub(crate) fn new(my_pe: usize, global_pes: usize, lamellae: Arc<Lamellae>, arch: Arc<LamellarArchRT>,scheduler: Arc<Scheduler>) -> Barrier{
         let bufs = if let Ok(_my_index) = arch.team_pe(my_pe) {
             let num_pes = arch.num_pes;
             if num_pes > 1 {
@@ -57,6 +59,7 @@ impl Barrier{
         let bar = Barrier{
             my_pe: my_pe,
             arch: arch,
+            scheduler: scheduler,
             barrier_cnt: AtomicUsize::new(0),
             barrier_buf: bufs,
         };
@@ -76,7 +79,8 @@ impl Barrier{
         let mut s = Instant::now();
         for pe in barrier_buf.as_slice().unwrap() {
             while *pe != barrier_id {
-                std::thread::yield_now();
+                // std::thread::yield_now();
+                self.scheduler.exec_task();
                 if s.elapsed().as_secs_f64() > 10.0 {
                     self.print_bar();
                     s = Instant::now();

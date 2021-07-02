@@ -192,6 +192,14 @@ impl AmeSchedulerQueue for WorkStealingInner {
         }
         // println!("work stealing shut down");
     }
+
+    fn exec_task(&self) {
+        let mut rng = rand::thread_rng();
+        let t = rand::distributions::Uniform::from(0..self.work_stealers.len());
+        if let Some(runnable) = self.work_stealers[t.sample(&mut rng)].steal().success() {
+            runnable.run();
+        }
+    }
 }
 
 //#[prof]
@@ -236,6 +244,10 @@ impl SchedulerQueue for WorkStealing {
         F: Future<Output = ()> + Send + 'static,
     {
         self.inner.submit_task(future);
+    }
+
+    fn exec_task(&self) {
+        self.inner.exec_task();
     }
 
     fn shutdown(&self) {

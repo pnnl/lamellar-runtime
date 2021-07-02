@@ -59,38 +59,38 @@ impl<T: ?Sized> DistRwLock<T>{
     async fn async_reader_lock(&self, pe: usize) {
         loop{
             while self.writer.load(Ordering::SeqCst) != self.team.team.num_pes { async_std::task::yield_now().await;}
-            // println!("{:?} inc read count {:?} {:?}",pe,self.readers.load(Ordering::SeqCst),self.writer.load(Ordering::SeqCst));
+            // println!("\t{:?} inc read count {:?} {:?}",pe,self.readers.load(Ordering::SeqCst),self.writer.load(Ordering::SeqCst));
             self.readers.fetch_add(1,Ordering::SeqCst);
             if self.writer.load(Ordering::SeqCst) == self.team.team.num_pes { break; }
             self.readers.fetch_sub(1,Ordering::SeqCst);
-            // println!("{:?} writers exist dec read count {:?} {:?}",pe,self.readers.load(Ordering::SeqCst),self.writer.load(Ordering::SeqCst));
+            // println!("\t{:?} writers exist dec read count {:?} {:?}",pe,self.readers.load(Ordering::SeqCst),self.writer.load(Ordering::SeqCst));
         }
-        // println!("{:?} read locked {:?} {:?}",pe,self.readers.load(Ordering::SeqCst),self.writer.load(Ordering::SeqCst));
+        // println!("\t{:?} read locked {:?} {:?}",pe,self.readers.load(Ordering::SeqCst),self.writer.load(Ordering::SeqCst));
     }
     async fn async_writer_lock(&self, pe: usize){
         while let Err(_) = self.writer.compare_exchange(self.team.team.num_pes,pe,Ordering::SeqCst,Ordering::SeqCst){ async_std::task::yield_now().await; }
-        // println!("{:?} write lock checking for readers {:?} {:?}",pe,self.readers.load(Ordering::SeqCst),self.writer.load(Ordering::SeqCst));
+        // println!("\t{:?} write lock checking for readers {:?} {:?}",pe,self.readers.load(Ordering::SeqCst),self.writer.load(Ordering::SeqCst));
         while self.readers.load(Ordering::SeqCst) != 0 { async_std::task::yield_now().await; }
-        // println!("{:?} write locked {:?} {:?}",pe,self.readers.load(Ordering::SeqCst),self.writer.load(Ordering::SeqCst));
+        // println!("\t{:?} write locked {:?} {:?}",pe,self.readers.load(Ordering::SeqCst),self.writer.load(Ordering::SeqCst));
     }
 
     /// # Safety
     ///
     /// The lock must be held when calling this method.
-    unsafe fn reader_unlock(&self, pe: usize) {
-        // println!("{:?} reader unlocking  {:?} {:?}",pe,self.readers.load(Ordering::SeqCst),self.writer.load(Ordering::SeqCst));
+    unsafe fn reader_unlock(&self, _pe: usize) {
+        // println!("\t{:?} reader unlocking  {:?} {:?}",pe,self.readers.load(Ordering::SeqCst),self.writer.load(Ordering::SeqCst));
         self.readers.fetch_sub(1,Ordering::SeqCst);
-        // println!("{:?} reader unlocked  {:?} {:?}",pe,self.readers.load(Ordering::SeqCst),self.writer.load(Ordering::SeqCst));
+        // println!("\t{:?} reader unlocked  {:?} {:?}",pe,self.readers.load(Ordering::SeqCst),self.writer.load(Ordering::SeqCst));
     }
     /// # Safety
     ///
     /// The lock must be held when calling this method.
     unsafe fn writer_unlock(&self, pe: usize){
-        // println!("{:?} writer unlocking {:?} {:?}",pe,self.readers.load(Ordering::SeqCst),self.writer.load(Ordering::SeqCst));
+        // println!("\t{:?} writer unlocking {:?} {:?}",pe,self.readers.load(Ordering::SeqCst),self.writer.load(Ordering::SeqCst));
         if let Err(val) = self.writer.compare_exchange(pe,self.team.team.num_pes,Ordering::SeqCst,Ordering::SeqCst) {
             panic!("should not be trying to unlock another pes lock {:?} {:?}",pe, val);
         }
-        // println!("{:?} writer unlocked {:?} {:?}",pe,self.readers.load(Ordering::SeqCst),self.writer.load(Ordering::SeqCst));
+        // println!("\t{:?} writer unlocked {:?} {:?}",pe,self.readers.load(Ordering::SeqCst),self.writer.load(Ordering::SeqCst));
     }
 
 }
@@ -114,6 +114,7 @@ impl LamellarAM for LockAm {
             }
         };
         lock.await;
+        // println!("finished lock am");
     }
 }
 
@@ -156,7 +157,7 @@ impl<'a, T: ?Sized + 'a> Drop for GlobalRwDarcReadGuard<'a, T> {
         let inner =self.rwlock.inner();
         let team = inner.team();
         let remote_rwlock_addr = team.team.lamellae.remote_addr(0,inner as *const DarcInner<DistRwLock<T>> as *const () as usize);
-        team.exec_am_pe(0, UnlockAm{rwlock_addr: remote_rwlock_addr, orig_pe: team.team.team_pe.expect("darcs cant exist on non team members"), lock_type: LockType::Read}).get();
+        team.exec_am_pe(0, UnlockAm{rwlock_addr: remote_rwlock_addr, orig_pe: team.team.team_pe.expect("darcs cant exist on non team members"), lock_type: LockType::Read});
     }
 }
 
@@ -195,7 +196,7 @@ impl<'a, T: ?Sized + 'a> Drop for GlobalRwDarcWriteGuard<'a, T> {
         let inner =self.rwlock.inner();
         let team = inner.team();
         let remote_rwlock_addr = team.team.lamellae.remote_addr(0,inner as *const DarcInner<DistRwLock<T>> as *const () as usize);
-        team.exec_am_pe(0, UnlockAm{rwlock_addr: remote_rwlock_addr, orig_pe: team.team.team_pe.expect("darcs cant exist on non team members"), lock_type: LockType::Write}).get();
+        team.exec_am_pe(0, UnlockAm{rwlock_addr: remote_rwlock_addr, orig_pe: team.team.team_pe.expect("darcs cant exist on non team members"), lock_type: LockType::Write});
     }
 }
 
@@ -258,6 +259,7 @@ impl<T: ?Sized> GlobalRwDarc<T> {
 
    
     pub async fn async_read(&self) -> GlobalRwDarcReadGuard<'_,T> {
+        println!("async read");
         let inner = self.inner();
         let team = inner.team();
         let remote_rwlock_addr = team.team.lamellae.remote_addr(0,inner as *const DarcInner<DistRwLock<T>> as *const () as usize);
@@ -270,6 +272,7 @@ impl<T: ?Sized> GlobalRwDarc<T> {
     }
 
     pub async fn async_write(&self) -> GlobalRwDarcWriteGuard<'_,T> {
+        println!("async write");
         let inner = self.inner();
         let team = inner.team();
         let remote_rwlock_addr = team.team.lamellae.remote_addr(0,inner as *const DarcInner<DistRwLock<T>> as *const () as usize);
@@ -281,6 +284,7 @@ impl<T: ?Sized> GlobalRwDarc<T> {
     }
 
     pub fn read(&self) -> GlobalRwDarcReadGuard<'_,T> {
+        println!("read");
         let inner = self.inner();
         let team = inner.team();
         let remote_rwlock_addr = team.team.lamellae.remote_addr(0,inner as *const DarcInner<DistRwLock<T>> as *const () as usize);
@@ -292,6 +296,7 @@ impl<T: ?Sized> GlobalRwDarc<T> {
     }
 
     pub fn write(&self) -> GlobalRwDarcWriteGuard<'_,T> {
+        println!("write");
         let inner = self.inner();
         let team = inner.team();
         let remote_rwlock_addr = team.team.lamellae.remote_addr(0,inner as *const DarcInner<DistRwLock<T>> as *const () as usize);

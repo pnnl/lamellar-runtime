@@ -186,7 +186,7 @@ impl LamellarTeamRT {
             parent: None,
             sub_teams: RwLock::new(HashMap::new()),
             mem_regions: RwLock::new(HashMap::new()),
-            scheduler: scheduler,
+            scheduler: scheduler.clone(),
             lamellae: lamellae.clone(),
             arch: arch.clone(),
             world_pe: world_pe,
@@ -198,7 +198,7 @@ impl LamellarTeamRT {
             id: 0,
             team_hash: 0, //easy id to look up for global
             sub_team_id_cnt: AtomicUsize::new(0),
-            barrier: Barrier::new(world_pe, num_pes, lamellae.clone(), arch.clone()),
+            barrier: Barrier::new(world_pe, num_pes, lamellae.clone(), arch.clone(),scheduler.clone()),
             dropped: LamellarMemoryRegion::new(num_pes, lamellae.clone(), alloc.clone()),
         };
         unsafe {
@@ -316,6 +316,7 @@ impl LamellarTeamRT {
                     parent.num_world_pes,
                     parent.lamellae.clone(),
                     archrt,
+                    parent.scheduler.clone(),
                 ),
                 team_hash: hash,
                 dropped: temp_buf,
@@ -486,7 +487,8 @@ impl LamellarTeamRT {
         // );
         let mut temp_now = Instant::now();
         while self.team_counters.outstanding_reqs.load(Ordering::SeqCst) > 0 {
-            std::thread::yield_now();
+            // std::thread::yield_now();
+            self.scheduler.exec_task(); //mmight as well do useful work while we wait
             if temp_now.elapsed() > Duration::new(10, 0) {
                 println!(
                     "in world wait_all mype: {:?} cnt: {:?} {:?}",

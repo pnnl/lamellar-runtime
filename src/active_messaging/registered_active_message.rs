@@ -17,7 +17,8 @@ use async_recursion::async_recursion;
 
 // enum BatchAmId{
 const UNIT_ID: AmId = 0;
-const BATCHED_UNIT_ID: AmId = UNIT_ID + 1;
+const BATCHED_UNIT_NEW_ID: AmId = UNIT_ID + 1;
+const BATCHED_UNIT_ID: AmId = BATCHED_UNIT_NEW_ID + 1;
 const REMOTE_DATA_ID: AmId = BATCHED_UNIT_ID + 1;
 const BATCHED_REMOTE_DATA_ID: AmId = REMOTE_DATA_ID + 1;
 const REMOTE_AM_ID: AmId = BATCHED_REMOTE_DATA_ID + 1; //when returning an am as a result we pass the negative of its actual id
@@ -245,6 +246,11 @@ impl RegisteredActiveMessages{
                                 // println!("dst: {:?} req_id {:?} func_id {:?} batch_id {:?}",req_data.dst,req_id,func_id,batch_id);
                                 match func_id {
                                     BATCHED_UNIT_ID  => {  }, //dont have to do anything special, as all we need to know is batch id
+                                    BATCHED_UNIT_NEW_ID => {
+                                        let serialize_size = crate::serialized_size(&req_id);
+                                        crate::serialize_into(&mut data_slice[i..i+serialize_size],&req_id).unwrap();
+                                        i+=serialize_size;
+                                    }
                                     UNIT_ID => {  
                                         let serialize_size = crate::serialized_size(&req_id);
                                         crate::serialize_into(&mut data_slice[i..i+serialize_size],&req_id).unwrap();
@@ -448,6 +454,7 @@ impl RegisteredActiveMessages{
                 LamellarFunc::None => {
                     match req_data.cmd{
                         ExecType::Am(Cmd::UnitReturn) => (UNIT_ID, crate::serialized_size(&req_data.id),ExecType::Am(Cmd::UnitReturn)),
+                        ExecType::Am(Cmd::BatchedUnitReturnNew) => (BATCHED_UNIT_NEW_ID, crate::serialized_size(&req_data.id) ,ExecType::Am(Cmd::BatchedUnitReturn)),
                         ExecType::Am(Cmd::BatchedUnitReturn) => (BATCHED_UNIT_ID, 0 ,ExecType::Am(Cmd::BatchedUnitReturn)),
                         _ => panic!("not handled yet")
                     }
@@ -647,6 +654,7 @@ impl RegisteredActiveMessages{
                     let sub_data = ser_data.sub_data(i,i+batch_header.0);
                     i+=batch_header.0;
                     match func_id{
+                        BATCHED_UNIT_NEW_ID => self.process_batched_unit_return_new(batch_id, msg.src, batched_data, team.clone()),
                         BATCHED_UNIT_ID  => self.process_batched_unit_return(batch_id, msg.src, team.clone()),
                         UNIT_ID => self.process_unit_return( msg.src, batched_data, team.clone()),
                         REMOTE_DATA_ID => self.process_data_return(msg, sub_data, team.clone()),
@@ -654,7 +662,7 @@ impl RegisteredActiveMessages{
                         REMOTE_AM_ID => panic! {"not handled yet {:?}",func_id},
                         _ => {
                             if func_id > 0 {
-                                self.exec_batched_am(ame.clone(),msg.src as usize,header.team_hash,func_id,batch_id,num_reqs,lamellae.clone(),world.clone(),team.clone(),batched_data);
+                                self.exec_batched_am_new(ame.clone(),msg.src as usize,header.team_hash,func_id,batch_id,num_reqs,lamellae.clone(),world.clone(),team.clone(),batched_data);
                             }
                             else{
                                 self.exec_batched_return_am(msg.src as usize,header.team_hash,-func_id,batch_id,num_reqs,lamellae.clone(),world.clone(),team.clone(),batched_data)
@@ -663,6 +671,86 @@ impl RegisteredActiveMessages{
                     }
                 }
             }
+        }
+    }
+
+    fn exec_batched_am_new(&self,
+        ame: Arc<ActiveMessageEngine>,
+        src: usize,
+        team_hash: u64,
+        func_id: AmId,
+        batch_id: usize,
+        num_reqs: usize,
+        lamellae: Arc<Lamellae>,
+        world: Arc<LamellarTeam>,
+        team: Arc<LamellarTeam>,
+        data_slice: &[u8],
+    ){
+        // println!("execing batch_id {:?} {:?}",batch_id,data_slice.len());
+        let mut index = 0;
+        let mut req_id =0;
+        while req_id < num_reqs{
+            let func = AMS_EXECS.get(&(func_id)).unwrap()(&data_slice[index..],team.team.team_pe);
+            index += func.serialized_size();
+            let world = world.clone();
+            let team = team.clone();
+            let lamellae = lamellae.clone();
+            let ame = ame.clone();
+            self.scheduler.submit_task(async move {
+                // println!("in exec batch from src {:?}",src);
+                // team.print_arch();
+                let lam_return = func.exec( team.team.world_pe, team.team.num_world_pes, false , world.clone(), team.clone()).await;
+                let req_data = match lam_return{
+                    LamellarReturn::Unit =>{  
+                        NewReqData{
+                            src: team.team.world_pe,
+                            dst: Some(src),//Some(team.team.arch.team_pe(src).expect("invalid team member")),
+                            cmd: ExecType::Am(Cmd::BatchedUnitReturnNew),
+                            id: req_id,
+                            batch_id: Some(batch_id),
+                            func:  LamellarFunc::None,
+                            lamellae: lamellae.clone(),
+                            world: world.clone(),
+                            team: team.clone(),
+                            team_hash: team_hash,
+                        }
+                    }
+                    LamellarReturn::RemoteData(d) => {
+                        NewReqData{
+                            src: team.team.world_pe,
+                            dst: Some(src),//Some(team.team.arch.team_pe(src).expect("invalid team member")),
+                            cmd: ExecType::Am(Cmd::BatchedDataReturn),
+                            id: req_id,
+                            batch_id: Some(batch_id),
+                            func:  LamellarFunc::Result(d),
+                            lamellae: lamellae.clone(),
+                            world: world.clone(),
+                            team: team.clone(),
+                            team_hash: team_hash,
+                        }
+                    },
+                    LamellarReturn::RemoteAm(am) => {
+                        // println!("returnin remote am");
+                        NewReqData{
+                            src: team.team.world_pe,
+                            dst: Some(src),//Some(team.team.arch.team_pe(src).expect("invalid team member")),
+                            cmd: ExecType::Am(Cmd::BatchedAmReturn),
+                            id: req_id,
+                            batch_id: Some(batch_id),
+                            func:  LamellarFunc::Am(am),
+                            lamellae: lamellae.clone(),
+                            world: world.clone(),
+                            team: team.clone(),
+                            team_hash: team_hash,
+                        }
+                    },
+                    _ => {
+                        panic!{"not handled yet"};
+                    }
+                };
+                ame.process_msg_new(req_data, None).await;                              
+            });
+            req_id +=1;
         }
     }
 
@@ -698,7 +786,7 @@ impl RegisteredActiveMessages{
             let processed = processed.clone();
             let ame = ame.clone();
             self.scheduler.submit_task(async move {
-                // println!("in exect batch from src {:?}",src);
+                // println!("in exec batch from src {:?}",src);
                 // team.print_arch();
                 let lam_return = func.exec( team.team.world_pe, team.team.num_world_pes, false , world.clone(), team.clone()).await;                
                 let (num_rets,num_unit_rets) = {
@@ -710,7 +798,7 @@ impl RegisteredActiveMessages{
                     (entry.0.len(),entry.1)
                 };
                 let my_cnt = exec_cnt.fetch_add(1, Ordering::SeqCst) + 1;
-                while my_cnt == req_cnt.load(Ordering::SeqCst){
+                while my_cnt == req_cnt.load(Ordering::SeqCst){ //while im the last task in this batch
                     if  processed.load(Ordering::SeqCst) == true {
                         if my_cnt == req_cnt.load(Ordering::SeqCst) {    
                                                     
@@ -907,6 +995,33 @@ impl RegisteredActiveMessages{
         else{
             println!("batch id {:?} doesnt exist",batch_id);
             1
+        };
+        if cnt == 0{
+            self.txed_ams.lock().remove(&batch_id);
+        }
+    }
+
+    fn process_batched_unit_return_new(&self, batch_id: usize, src: u16, data_slice: &[u8], team: Arc<LamellarTeam>){
+
+        let mut index=0;
+        // println!("data_slice {:?}",data_slice);
+        let serialized_size = crate::serialized_size(&0usize);
+        let cnt = if let Some(reqs) =self.txed_ams.lock().get_mut(&batch_id){
+            let mut reqs = reqs.lock();
+            while index < data_slice.len(){
+                let batch_req_id: usize = crate::deserialize(&data_slice[index..(index+serialized_size)]).unwrap();
+                index+=serialized_size;
+                let (req_id,cnt) = reqs.get(&batch_req_id).expect("id not found");
+                    // println!("batch_req_id req_id data_size {:?} {:?} {:?}",batch_req_id,req_id,data_size);
+                ActiveMessageEngine::send_data_to_user_handle(*req_id,src,InternalResult::Unit, team.clone());
+                if cnt.fetch_sub(1,Ordering::Relaxed) == 1 {
+                    reqs.remove(&batch_req_id);
+                }
+                                
+            }
+            reqs.len()
+        }else{
+            0
         };
         if cnt == 0{
             self.txed_ams.lock().remove(&batch_id);

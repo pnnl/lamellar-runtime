@@ -120,6 +120,7 @@ pub(crate) enum Cmd {
     BatchedDataReturn,
     UnitReturn,
     BatchedUnitReturn,
+    BatchedUnitReturnNew,
     BatchedMsg,
     ExecBatchMsgSend,
     None,
