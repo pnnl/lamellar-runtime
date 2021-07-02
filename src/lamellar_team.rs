@@ -489,9 +489,9 @@ impl LamellarTeamRT {
         while self.team_counters.outstanding_reqs.load(Ordering::SeqCst) > 0 {
             // std::thread::yield_now();
             self.scheduler.exec_task(); //mmight as well do useful work while we wait
-            if temp_now.elapsed() > Duration::new(10, 0) {
+            if temp_now.elapsed() > Duration::new(60, 0) {
                 println!(
-                    "in world wait_all mype: {:?} cnt: {:?} {:?}",
+                    "in team wait_all mype: {:?} cnt: {:?} {:?}",
                     self.world_pe,
                     self.team_counters.send_req_cnt.load(Ordering::SeqCst),
                     self.team_counters.outstanding_reqs.load(Ordering::SeqCst),

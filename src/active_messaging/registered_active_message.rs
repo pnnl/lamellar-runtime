@@ -296,7 +296,10 @@ impl RegisteredActiveMessages{
                                             LamellarFunc::Am(func) => {
                                                 if func_id > 0 {
                                                     let num_reqs = if req_data.dst.is_none(){
-                                                        req_data.team.num_pes()-1
+                                                        match req_data.team.team_pe_id(){
+                                                            Ok(_) => req_data.team.num_pes()-1,
+                                                            Err(_) => req_data.team.num_pes(),
+                                                        }
                                                     }
                                                     else{
                                                         1
@@ -313,7 +316,10 @@ impl RegisteredActiveMessages{
                                                 let serialize_size = func.serialized_size();
                                                 func.serialize_into(&mut data_slice[i..(i+serialize_size)]);
                                                 if req_data.dst.is_none() {
-                                                    func.ser(req_data.team.num_pes()-1,req_data.team.team.team_pe);
+                                                    func.ser( match req_data.team.team_pe_id(){
+                                                        Ok(_) => req_data.team.num_pes()-1,
+                                                        Err(_) => req_data.team.num_pes(),
+                                                    },req_data.team.team.team_pe);
                                                 }
                                                 else{
                                                     func.ser(1,req_data.team.team.team_pe);
@@ -374,7 +380,10 @@ impl RegisteredActiveMessages{
         match func{
             LamellarFunc::Am(func) => {
                 if req_data.dst.is_none() {
-                    func.ser(req_data.team.num_pes()-1,req_data.team.team.team_pe);
+                    func.ser( match req_data.team.team_pe_id(){
+                        Ok(_) => req_data.team.num_pes()-1,
+                        Err(_) => req_data.team.num_pes(),
+                    },req_data.team.team.team_pe);
                 }
                 else{
                     func.ser(1,req_data.team.team.team_pe);
@@ -1008,11 +1017,12 @@ impl RegisteredActiveMessages{
         let serialized_size = crate::serialized_size(&0usize);
         let cnt = if let Some(reqs) =self.txed_ams.lock().get_mut(&batch_id){
             let mut reqs = reqs.lock();
+            // println!("batch_id: {:?} reqs {:?} ds {:?}",batch_id,reqs,data_slice);
             while index < data_slice.len(){
                 let batch_req_id: usize = crate::deserialize(&data_slice[index..(index+serialized_size)]).unwrap();
                 index+=serialized_size;
                 let (req_id,cnt) = reqs.get(&batch_req_id).expect("id not found");
-                    // println!("batch_req_id req_id data_size {:?} {:?} {:?}",batch_req_id,req_id,data_size);
+                // println!("batch_req_id  {:?} req_id {:?} ",batch_req_id,req_id);
                 ActiveMessageEngine::send_data_to_user_handle(*req_id,src,InternalResult::Unit, team.clone());
                 if cnt.fetch_sub(1,Ordering::Relaxed) == 1 {
                     reqs.remove(&batch_req_id);
@@ -1120,6 +1130,7 @@ impl RegisteredActiveMessages{
         lamellae: Arc<Lamellae>,
         world: Arc<LamellarTeam>,
         team: Arc<LamellarTeam>) {
+            // println!("recived msg!! {:?}",msg);
         match cmd{
             Cmd::BatchedMsg => self.exec_batched_msg(ame,msg,ser_data,lamellae,world,team),
             Cmd::Exec => self.exec_single_msg(ame, msg,ser_data,lamellae,world,team,false).await,            

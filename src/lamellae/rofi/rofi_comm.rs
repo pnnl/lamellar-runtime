@@ -363,12 +363,13 @@ impl RofiComm {
 impl Drop for RofiComm {
     fn drop(&mut self) {
         rofi_barrier();
-        std::thread::sleep(std::time::Duration::from_millis(1000));
+        // std::thread::sleep(std::time::Duration::from_millis(1000));
         if self.alloc.occupied() > 0{
             println!("dropping rofi -- memory in use {:?}",self.alloc.occupied());
         }
         rofi_barrier();
-        let _res = rofi_finit();
+        //we can probably do a final "put" to each node where we specify we we are done, then once all nodes have done this no further communication amongst them occurs...
+        // let _res = rofi_finit();
         std::thread::sleep(std::time::Duration::from_millis(1000));
         // trace!("[{:?}] dropping rofi comm", self.my_pe);
     }

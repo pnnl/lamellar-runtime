@@ -11,14 +11,15 @@ use std::time::{Duration, Instant};
 #[lamellar::AmData( Clone)]
 struct TeamAM {
     secs: u64,
+    orig_pe: usize,
 }
 
 #[lamellar::am]
 impl LamellarAM for TeamAM {
     fn exec() {
         // let team = lamellar::team;
-        // println!("current_pe: {:?}, team.global_pe_id(): {:?}, team.team_pe_id(): {:?} team members: {:?}",
-        // lamellar::current_pe , team.global_pe_id(), team.team_pe_id(), team.get_pes());
+        // println!("current_pe: {:?}, orig_pe {:?}, team.world_pe_id(): {:?}, team.team_pe_id(): {:?} team members: {:?}",
+        // lamellar::current_pe ,self.orig_pe, team.world_pe_id(), team.team_pe_id(), team.get_pes());
         async_std::task::sleep(Duration::from_secs(self.secs)).await;
     }
 }
@@ -39,7 +40,7 @@ fn test_team(world: &LamellarWorld, team: Option<Arc<LamellarTeam>>, label: &str
             1
         };
         let timer = Instant::now();
-        team.exec_am_all(TeamAM { secs }); //everynode that has a handle can launch on a given team;
+        team.exec_am_all(TeamAM { secs: secs, orig_pe: my_pe }); //everynode that has a handle can launch on a given team;
         team.wait_all(); //wait until all requests return
         team.barrier(); // barriers only apply to team members, its a no op for non team members
         timer.elapsed().as_secs_f64()
@@ -71,7 +72,7 @@ fn main() {
     }
     world.barrier();
     let timer = Instant::now();
-    world.exec_am_all(TeamAM { secs: 1 });
+    world.exec_am_all(TeamAM { secs: 1, orig_pe: my_pe });
     world.wait_all();
     world.barrier();
     let elapsed = timer.elapsed().as_secs_f64();

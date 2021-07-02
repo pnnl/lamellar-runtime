@@ -37,21 +37,22 @@ pub struct LamellarWorld {
 //#[prof]
 impl ActiveMessaging for LamellarWorld {
     fn wait_all(&self) {
-        let mut temp_now = Instant::now();
-        while self.counters.outstanding_reqs.load(Ordering::SeqCst) > 0 {
-            std::thread::yield_now();
-            if temp_now.elapsed() > Duration::new(60, 0) {
-                println!(
-                    "in world wait_all mype: {:?} cnt: {:?} {:?}",
-                    self.my_pe,
-                    self.counters.send_req_cnt.load(Ordering::SeqCst),
-                    self.counters.outstanding_reqs.load(Ordering::SeqCst),
-                    // self.counters.recv_req_cnt.load(Ordering::SeqCst),
-                );
-                // self.lamellae.print_stats();
-                temp_now = Instant::now();
-            }
-        }
+        self.team.wait_all();
+        // let mut temp_now = Instant::now();
+        // while self.counters.outstanding_reqs.load(Ordering::SeqCst) > 0 {
+        //     std::thread::yield_now();
+        //     if temp_now.elapsed() > Duration::new(60, 0) {
+        //         println!(
+        //             "in world wait_all mype: {:?} cnt: {:?} {:?}",
+        //             self.my_pe,
+        //             self.counters.send_req_cnt.load(Ordering::SeqCst),
+        //             self.counters.outstanding_reqs.load(Ordering::SeqCst),
+        //             // self.counters.recv_req_cnt.load(Ordering::SeqCst),
+        //         );
+        //         // self.lamellae.print_stats();
+        //         temp_now = Instant::now();
+        //     }
+        // }
     }
     fn barrier(&self) {
         // println!("[{:?}] world barrier", self.my_pe);
