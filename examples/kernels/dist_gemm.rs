@@ -10,7 +10,7 @@
 /// matrices use row-wise distribution (i.e. all elements of a row are local to a pe,
 /// conversely this means elements of a column are distributed across pes)
 ///---------------------------------------------------------------------------------
-use lamellar::{ActiveMessaging, LamellarAM};
+use lamellar::{ActiveMessaging};
 use lamellar::{
     LamellarLocalMemoryRegion, LamellarMemoryRegion, RegisteredMemoryRegion, RemoteMemoryRegion,
 };
@@ -22,7 +22,7 @@ lazy_static! {
     static ref LOCK: Mutex<()> = Mutex::new(());
 }
 
-#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
+#[lamellar::AmData( Clone, Debug)]
 struct SubMatrix {
     name: String,
     mat: LamellarMemoryRegion<f32>,
@@ -90,7 +90,7 @@ async fn get_sub_mat(mat: &SubMatrix, sub_mat: &LamellarLocalMemoryRegion<f32>) 
 }
 
 
-#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
+#[lamellar::AmData( Clone, Debug)]
 struct MatMulAM {
     a: SubMatrix,     // a is always local
     b: SubMatrix,     // b is possibly remote
@@ -157,7 +157,7 @@ fn do_gemm(
     // lamellar::world.free_local_memory_region(a);
 }
 
-#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
+#[lamellar::AmData(Clone, Debug)]
 struct CachedMM {
     a: SubMatrix,
     b: LamellarLocalMemoryRegion<f32>,

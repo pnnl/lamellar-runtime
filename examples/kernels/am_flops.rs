@@ -5,13 +5,13 @@
 /// useful to compare multiple systems and/or perform worksize to 
 /// RT latency analyses
 /// --------------------------------------------------------------------
-use lamellar::{ActiveMessaging, LamellarAM};
+use lamellar::{ActiveMessaging};
 use std::time::Instant;
 
 // #[cfg(feature = "nightly")]
 //use packed_simd::{f64x8, Simd};
 
-#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
+#[lamellar::AmData( Clone, Debug)]
 struct FlopAM {
     iterations: usize,
 }

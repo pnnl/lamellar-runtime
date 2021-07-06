@@ -1,6 +1,7 @@
 extern crate libc;
 
 use std::ffi::CString;
+use crate::lamellae::AllocationType;
 
 pub(crate) fn rofi_init(provider: &str) -> Result<(), &'static str> {
     let c_str = CString::new(provider).unwrap();
@@ -12,7 +13,8 @@ pub(crate) fn rofi_init(provider: &str) -> Result<(), &'static str> {
     }
 }
 
-pub(crate) fn rofi_finit() -> Result<(), &'static str> {
+//currently shows unused warning as we are debugging a hang in rofi_finit
+pub(crate) fn rofi_finit() -> Result<(), &'static str> { 
     let retval = unsafe { rofisys::rofi_finit() as i32 };
     if retval == 0 {
         Ok(())
@@ -33,16 +35,23 @@ pub(crate) fn rofi_barrier() {
     unsafe { rofisys::rofi_barrier() };
 }
 
-pub(crate) fn rofi_alloc(size: usize) -> *mut u8 {
+pub(crate) fn rofi_alloc(size: usize, alloc: AllocationType) -> *mut u8 {
     let mut base_ptr: *mut u8 = std::ptr::null_mut();
     let base_ptr_ptr = (&mut base_ptr as *mut _) as *mut *mut std::ffi::c_void;
     // let mut key = 0u64;
     // let key_ptr = &mut key as *mut c_ulonglong;
     // println!("rofi_alloc");
     unsafe {
-        if rofisys::rofi_alloc(size, 0x0, base_ptr_ptr) != 0 {
+        let ret = match alloc {
+            AllocationType::Sub(pes) => rofisys::rofi_sub_alloc(size, 0x0, base_ptr_ptr, pes.as_ptr() as *mut _, pes.len() as u64),
+            AllocationType::Global => rofisys::rofi_alloc(size, 0x0, base_ptr_ptr),
+            _ => panic!("unexpected allocation type {:?} in rofi_alloc",alloc),
+        };
+        
+        if ret != 0 {
             panic!("unable to allocate memory region");
         }
+        
     }
     //println!("[{:?}] ({:?}:{:?}) rofi_alloc addr: {:x} size {:?}",rofi_get_id(),file!(),line!(),base_ptr as usize, size);
 
@@ -71,6 +80,7 @@ pub(crate) fn rofi_local_addr(remote_pe: usize, remote_addr: usize) -> usize {
             remote_pe as u32,
         ) as usize
     };
+    // println!("local addr: {:x}",addr);
     if addr == 0 {
         panic!("unable to locate local memory addr");
     }
@@ -91,12 +101,13 @@ pub(crate) fn rofi_local_addr(remote_pe: usize, remote_addr: usize) -> usize {
 pub(crate) fn rofi_remote_addr(pe: usize, local_addr: usize) -> usize {
     let addr = unsafe {
         rofisys::rofi_get_remote_addr((local_addr as *mut u8) as *mut std::ffi::c_void, pe as u32)
-            as usize
+            
     };
-    if addr == 0 {
+    // println!("remote addr {:?} 0x{:x}", addr as *mut u8 ,addr as usize);
+    if addr as usize == 0 {
         panic!("unable to locate local memory addr");
     }
-    addr
+    addr as usize
 }
 
 // data is a reference, user must ensure lifetime is valid until underlying put is complete, thus is unsafe
@@ -108,7 +119,7 @@ pub(crate) unsafe fn rofi_put<T>(src: &[T], dst: usize, pe: usize) -> Result<(),
     while ret == -11 {
         std::thread::yield_now();
         ret = rofisys::rofi_put(dst as *mut std::ffi::c_void, src_addr, size, pe as u32, 0);
-        //println!("[{:?}] ({:?}:{:?}) rofi_put src_addr {:?} dst_addr 0x{:x} pe {:?} {:?}",rofi_get_id(),file!(),line!(),src_addr,dst,pe,ret);
+        // println!("[{:?}] ({:?}:{:?}) rofi_put src_addr {:?} dst_addr 0x{:x} {:?}",rofi_get_id(),file!(),line!(),src.as_ptr(),dst,ret);
     }
     if ret == 0 {
         Ok(())

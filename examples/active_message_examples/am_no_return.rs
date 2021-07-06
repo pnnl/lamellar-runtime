@@ -6,11 +6,11 @@
 /// finally it performs a ring like pattern where each pe sends an AM to its right neigbor (wrapping to 0 for the last pe)
 /// --------------------------------------------------------------------
 
-use lamellar::{ActiveMessaging, LamellarAM};
+use lamellar::{ActiveMessaging};
 // use lamellar::{Backend, SchedulerType};
 
 //----------------- Active message returning nothing-----------------//
-#[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
+#[lamellar::AmData(Debug, Clone)]
 struct AmNoReturn {
     my_pe: usize,
 }
@@ -28,6 +28,8 @@ impl LamellarAM for AmNoReturn {
         println!("\t{:?} leaving", self);
     }
 }
+
+
 
 fn main() {
     let world = lamellar::LamellarWorldBuilder::new()
@@ -69,3 +71,4 @@ fn main() {
     println!("no return result: {:?}", res);
     println!("-----------------------------------");
 }
+

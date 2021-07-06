@@ -90,3 +90,46 @@ impl Parse for ReductionArgs {
         })
     }
 }
+
+#[derive(Debug)]
+pub(crate) struct ClosureToAmArgs {
+    pub(crate) closure: ExprClosure,
+}
+
+impl Parse for ClosureToAmArgs {
+    fn parse(input: ParseStream) -> Result<Self> {
+        // let mut tys = vec![];
+        // let name = match input.parse() {
+        //     Ok(name) => name,
+        //     Err(_) => abort_call_site!("register reduction expects a name as first argument"),
+        // };
+        // input.parse::<Token![,]>()?;
+        let closure = match input.parse() {
+            Ok(closure) => closure,
+            Err(_) => abort_call_site!(
+                "register reduction expects a closure of form: |..| {...} as first argument"
+            ),
+        };
+        // if !input.peek(Token![,]) {
+        //     abort_call_site!("register reduction requires registering for at least one type");
+        // }
+        // while !input.is_empty() {
+        //     let comma = input.parse::<Token![,]>()?;
+        //     if input.is_empty() {
+        //         break;
+        //     }
+        //     tys.push(match input.parse() {
+        //         Ok(ty) => ty,
+        //         Err(_e) => abort!(
+        //             comma,
+        //             "register reduction requires registering for at least one type"
+        //         ),
+        //     })
+        // }
+        Ok(ClosureToAmArgs {
+            // name: name,
+            closure: closure,
+            // tys: tys,
+        })
+    }
+}

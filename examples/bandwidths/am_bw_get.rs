@@ -7,13 +7,13 @@
 /// of data (on the critical path)
 /// --------------------------------------------------------------------
 use lamellar::{
-    ActiveMessaging, LamellarAM, LamellarMemoryRegion, RegisteredMemoryRegion, RemoteMemoryRegion,
+    ActiveMessaging, LamellarMemoryRegion, RegisteredMemoryRegion, RemoteMemoryRegion,
 };
 use std::time::Instant;
 
 const ARRAY_LEN: usize = 1 * 1024 * 1024 * 1024;
 
-#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
+#[lamellar::AmData(Clone, Debug)]
 struct DataAM {
     array: LamellarMemoryRegion<u8>,
     index: usize,
@@ -80,9 +80,9 @@ fn main() {
         let mut cnt = 0;
         let mut exp = 20;
         if num_bytes <= 2048 {
-            exp = i + 7; //18+i;
+            exp = 18 + i;
         } else if num_bytes >= 4096 {
-            exp = i + 7;
+            exp = 30;
         }
         let timer = Instant::now();
         let mut sub_time = 0f64;

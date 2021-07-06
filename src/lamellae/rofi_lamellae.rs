@@ -1,222 +1,192 @@
-use crate::lamellae::rofi::command_queues::RofiCommandQueue;
-use crate::lamellae::rofi::rofi_comm::RofiComm;
-use crate::lamellae::{Backend, Lamellae, LamellaeAM, LamellaeRDMA};
+use crate::lamellae::{AllocationType, Backend, Lamellae, LamellaeInit, LamellaeComm, LamellaeAM, LamellaeRDMA, SerializedData,SerializeHeader,Ser,Des};
+use crate::lamellae::rofi::rofi_comm::{RofiComm,RofiData};
 use crate::lamellar_arch::LamellarArchRT;
-use crate::schedulers::SchedulerQueue;
-use lamellar_prof::*;
-use log::{error, trace};
-use std::sync::atomic::Ordering;
+use crate::scheduler::{Scheduler,SchedulerQueue};
+use crate::lamellae::rofi::command_queues::RofiCommandQueue;
+
+// use crate::active_messaging::Msg;
+
+// use lamellar_prof::*;
+// use log::{error, trace};
+// use std::sync::atomic::Ordering;
+use std::sync::atomic::{AtomicBool,  Ordering};
 use std::sync::Arc;
-use std::thread;
 
-struct IOThread {
-    thread: Option<thread::JoinHandle<()>>,
-    lamellar_msg_q_rx:
-        crossbeam::channel::Receiver<(Vec<u8>, Box<dyn Iterator<Item = usize> + Send>)>,
-    cmd_q_rx: crossbeam::channel::Receiver<Arc<Vec<u8>>>,
-    am: Arc<RofiLamellaeAM>,
-    cmd_q: Arc<RofiCommandQueue>,
-    active_notify: (
-        crossbeam::channel::Sender<bool>,
-        crossbeam::channel::Receiver<bool>,
-    ),
-}
+use futures::stream::FuturesUnordered;
+use futures::StreamExt;
 
-//#[prof]
-impl IOThread {
-    fn run(&mut self, scheduler: Arc<dyn SchedulerQueue>) {
-        trace!("[{:?}] Test Lamellae IO Thread running", self.am.my_pe);
-        let am = self.am.clone();
-        let lamellar_msg_q_rx = self.lamellar_msg_q_rx.clone();
-        let cmd_q_rx = self.cmd_q_rx.clone();
-        let cmd_q = self.cmd_q.clone();
-        let active_notify = self.active_notify.1.clone();
-        let mut active = true;
-        self.thread = Some(thread::spawn(move || {
-            let mut sel = crossbeam::Select::new();
-            let q1 = sel.recv(&lamellar_msg_q_rx);
-            let q2 = sel.recv(&cmd_q_rx);
-            let q3 = sel.recv(&active_notify);
-            while active || !(lamellar_msg_q_rx.is_empty() && cmd_q_rx.is_empty()) {
-                let oper = sel.select();
-                let q = oper.index();
-                match q {
-                    q if q == q1 => {
-                        if let Ok((data, team_iter)) = oper.recv(&lamellar_msg_q_rx) {
-                            cmd_q.send_data(data, team_iter);
-                            trace!("[{:?}] data sent", am.my_pe);
-                        }
-                    }
-                    q if q == q2 => {
-                        if let Ok(data) = oper.recv(&cmd_q_rx) {
-                            trace!("[{:?}] received data", am.my_pe);
-                            scheduler.submit_work(data.to_vec(), am.clone());
-                        }
-                    }
-                    q if q == q3 => {
-                        if let Ok(notify) = oper.recv(&active_notify) {
-                            trace!("[{:?}] received notify", am.my_pe);
-                            active = notify;
-                        }
-                    }
-                    _ => unreachable!(),
-                }
-            }
-            fini_prof!();
-            trace!("[{:?}] Lamellae IO Thread finished", am.my_pe,);
-        }));
-    }
-    fn shutdown(&mut self) {
-        trace!("[{:}] shutting down io thread", self.am.my_pe);
-        let _res = self.active_notify.0.send(false);
-        while !(self.lamellar_msg_q_rx.is_empty() && self.cmd_q_rx.is_empty()) {
-            let _res = self.active_notify.0.send(false); //keep sending notifications so we can break out of the select
-        }
-        self.thread
-            .take()
-            .expect("error joining io thread")
-            .join()
-            .expect("error joining io thread");
-        trace!("[{:}] shut down io thread", self.am.my_pe);
-    }
-}
+use async_trait::async_trait;
 
-pub(crate) struct RofiLamellae {
-    threads: Vec<IOThread>,
-    am: Arc<RofiLamellaeAM>,
-    rdma: Arc<RofiLamellaeRDMA>,
-    cq: Arc<RofiCommandQueue>,
+// mod rofi;
+
+
+
+pub(crate) struct RofiBuilder{
     my_pe: usize,
     num_pes: usize,
+    rofi_comm: Arc<RofiComm>
 }
 
-//#[prof]
-impl RofiLamellae {
-    pub(crate) fn new(provider: &str) -> RofiLamellae {
-        let (lamellar_msg_q_tx, lamellar_msg_q_rx) = crossbeam::channel::unbounded();
-        let (cmd_q_tx, cmd_q_rx) = crossbeam::channel::unbounded();
+impl RofiBuilder{
+    pub(crate) fn new(provider: &str)->RofiBuilder{
         let rofi_comm = Arc::new(RofiComm::new(provider));
-        let cq = RofiCommandQueue::new(cmd_q_tx, rofi_comm.clone());
-        let num_pes = cq.num_pes();
-        let my_pe = cq.my_pe();
-        trace!("cq initialized my_pe: {:} num_pes {:?}", my_pe, num_pes);
+        RofiBuilder{
+            my_pe: rofi_comm.my_pe,
+            num_pes: rofi_comm.num_pes,
+            rofi_comm: rofi_comm
+        }
+    }
+}
 
-        let am = Arc::new(RofiLamellaeAM {
-            lamellar_msg_q_tx: lamellar_msg_q_tx,
-            my_pe: my_pe,
+
+impl LamellaeInit for RofiBuilder{
+    fn init_fabric(&mut self) -> (usize, usize){
+        (self.my_pe, self.num_pes)
+    }
+    fn init_lamellae(&mut self, scheduler: Arc<Scheduler>) -> Arc<Lamellae>{
+        let rofi = Rofi::new(self.my_pe,self.num_pes,self.rofi_comm.clone());
+        let cq_clone = rofi.cq();
+        let scheduler_clone = scheduler.clone();
+        let active_clone = rofi.active();
+
+        let rofi = Arc::new(Lamellae::Rofi(rofi));
+        let rofi_clone = rofi.clone();
+        scheduler.submit_task (async move {
+            // cq_clone.recv_data(Arc::downgrade(&scheduler_clone),Arc::downgrade(&rofi_clone),active_clone).await;
+            cq_clone.recv_data(scheduler_clone.clone(),rofi_clone.clone(),active_clone).await;
         });
-        trace!("[{:}] new RofiLamellaeAM", my_pe);
+        rofi
+    }
+    
+}
 
-        let rdma = Arc::new(RofiLamellaeRDMA {
-            rofi_comm: rofi_comm.clone(),
-        });
 
-        let mut lamellae = RofiLamellae {
-            threads: vec![],
-            am: am.clone(),
-            rdma: rdma.clone(),
-            cq: Arc::new(cq),
+pub(crate) struct Rofi{
+    my_pe: usize,
+    num_pes: usize,
+    rofi_comm: Arc<RofiComm>,
+    active: Arc<AtomicBool>,
+    cq: Arc<RofiCommandQueue>,
+}
+impl Rofi{
+    fn new (my_pe: usize, num_pes: usize, rofi_comm: Arc<RofiComm>)->Rofi{
+        println!("my_pe {:?} num_pes {:?}",my_pe,num_pes);
+         Rofi{
             my_pe: my_pe,
             num_pes: num_pes,
-        };
-        trace!("[{:}] new RofiLamellae", my_pe);
-
-        for _i in 0..1 {
-            let thread = IOThread {
-                lamellar_msg_q_rx: lamellar_msg_q_rx.clone(),
-                cmd_q_rx: cmd_q_rx.clone(),
-                thread: None,
-                am: am.clone(),
-                cmd_q: lamellae.cq.clone(),
-                active_notify: crossbeam::channel::bounded(1),
-            };
-            lamellae.threads.push(thread);
+            rofi_comm: rofi_comm.clone(),
+            active: Arc::new(AtomicBool::new(true)),
+            cq: Arc::new(RofiCommandQueue::new(rofi_comm.clone(), my_pe, num_pes)),
         }
-
-        trace!("[{:}] threads launched", my_pe);
-        lamellae
+    }
+    fn active(&self)->Arc<AtomicBool>{
+        self.active.clone()
+    }
+    fn cq(&self) ->Arc<RofiCommandQueue>{
+        self.cq.clone() 
     }
 }
 
-//#[prof]
-impl Lamellae for RofiLamellae {
-    fn init_fabric(&mut self) -> (usize, usize) {
-        (self.num_pes, self.my_pe)
+impl Drop for Rofi{
+    fn drop(&mut self){
+        // println!("dropping rofi_lamellae");
+        self.active.store(false, Ordering::SeqCst);
+        // println!("dropped rofi_lamellae");
+        //rofi finit
     }
-    fn init_lamellae(&mut self, scheduler: Arc<dyn SchedulerQueue>) {
-        for thread in &mut self.threads {
-            thread.run(scheduler.clone());
-        }
-    }
-    fn finit(&self) {
-        self.cq.finit();
-    }
-    fn barrier(&self) {
-        self.cq.barrier();
-    }
-    fn backend(&self) -> Backend {
-        Backend::Rofi
-    }
-    fn get_am(&self) -> Arc<dyn LamellaeAM> {
-        self.am.clone()
-    }
-    fn get_rdma(&self) -> Arc<dyn LamellaeRDMA> {
-        self.rdma.clone()
-    }
+}
+
+
+
+
+impl LamellaeComm for Rofi {
+    // this is a global barrier (hopefully using hardware)
+    fn my_pe(&self) -> usize {self.my_pe}
+    fn num_pes(&self) ->usize {self.num_pes}
+    fn barrier(&self) {self.rofi_comm.barrier()}
+    fn backend(&self) -> Backend {Backend::Rofi}
     #[allow(non_snake_case)]
     fn MB_sent(&self) -> f64 {
-        (self.cq.data_sent()
-            + self.rdma.rofi_comm.get_amt.load(Ordering::SeqCst)
-            + self.rdma.rofi_comm.put_amt.load(Ordering::SeqCst)) as f64
-            / 1_000_000.0f64
+        // println!("put: {:?} get: {:?}",self.rofi_comm.put_amt.load(Ordering::SeqCst),self.rofi_comm.get_amt.load(Ordering::SeqCst));
+        // (self.rofi_comm.put_amt.load(Ordering::SeqCst) + self.rofi_comm.get_amt.load(Ordering::SeqCst)) as 
+        self.cq.tx_amount() as f64 / 1_000_000.0 
     }
     fn print_stats(&self) {}
-}
-
-#[derive(Debug)]
-pub(crate) struct RofiLamellaeAM {
-    lamellar_msg_q_tx:
-        crossbeam::channel::Sender<(Vec<u8>, Box<dyn Iterator<Item = usize> + Send>)>,
-    my_pe: usize,
-}
-
-//#[prof]
-impl LamellaeAM for RofiLamellaeAM {
-    fn send_to_pe(&self, pe: usize, data: std::vec::Vec<u8>) {
-        let v = vec![pe];
-        self.lamellar_msg_q_tx
-            .send((data, Box::new(v.into_iter())))
-            .expect("error in send to pe");
+    fn shutdown(&self){
+        // println!("Rofi Lamellae shuting down");
+        self.active.store(false,Ordering::Relaxed);
+        // println!("Rofi Lamellae shut down");
     }
-    fn send_to_all(&self, _data: std::vec::Vec<u8>) {}
-    fn send_to_pes(&self, pe: Option<usize>, team: Arc<LamellarArchRT>, data: std::vec::Vec<u8>) {
+}
+
+#[async_trait]
+impl LamellaeAM for Rofi {
+    async fn send_to_pe_async(&self, pe: usize, data: SerializedData) {
+        self.cq.send_data(data,pe).await;
+    } //should never send to self... this is short circuited before request is serialized in the active message layer
+    
+    async fn send_to_pes_async(&self,pe: Option<usize>, team: Arc<LamellarArchRT>, data: SerializedData) {
         if let Some(pe) = pe {
-            self.lamellar_msg_q_tx
-                .send((data, team.single_iter(pe)))
-                .expect("error in send to pes");
-        } else {
-            self.lamellar_msg_q_tx
-                .send((data, team.team_iter()))
-                .expect("error in send to pes");
+            // self.cq.send_data(data,team.world_pe(pe).expect("invalid pe")).await;
+            // println!("rofi_lamellae sending to {:?}",pe);
+            self.cq.send_data(data,pe).await;
+        }
+        else{
+            let mut futures = team.team_iter().filter(|pe| pe != &self.my_pe).map(|pe| self.cq.send_data(data.clone(),pe)).collect::<FuturesUnordered<_>>(); //in theory this launches all the futures before waiting...
+            while let Some(_) = futures.next().await{}
         }
     }
-    fn barrier(&self) {
-        error!(
-            "need to //#[prof]
-implement an active message version of barrier"
-        );
+}
+#[async_trait]
+impl Ser for Rofi{
+    async fn serialize<T: Send + Sync + serde::Serialize + ?Sized>(&self,header: Option<SerializeHeader>, obj: &T) -> Result<SerializedData,anyhow::Error> {
+        // let header_size_temp= if let Some(header) = &header {
+        //     bincode::serialized_size(&header)? as usize //will this be standard for every header?
+        // }
+        // else{
+        //     // println!("None! {:?}",bincode::serialized_size(&header)? as usize);
+        //     // bincode::serialized_size(&header)? as usize
+        //     0
+        // };
+        // let test: Option<SerializeHeader> = None;
+        // let test_size = bincode::serialized_size(&test)? as usize;
+        let header_size = std::mem::size_of::<Option<SerializeHeader>>();
+        // println!("hst {:?} hs {:?} {:?} {:?} ",header_size_temp, header_size, test_size,std::mem::size_of::<SerializeHeader>()) ;
+        let data_size = bincode::serialized_size(obj)? as usize;
+        let ser_data = RofiData::new(self.rofi_comm.clone(),header_size+data_size).await;
+        // println!("h+d size: {:?} hsize {:?} dsize {:?}",ser_data.alloc_size,ser_data.header_as_bytes().len(),ser_data.data_as_bytes().len());
+        bincode::serialize_into(ser_data.header_as_bytes(),&header)?;
+        bincode::serialize_into(ser_data.data_as_bytes(),obj)?;
+        Ok(SerializedData::RofiData(ser_data))
     }
-    fn backend(&self) -> Backend {
-        Backend::Rofi
+    async fn serialize_header(&self,header: Option<SerializeHeader>,serialized_size: usize) -> Result<SerializedData,anyhow::Error> {
+        // let header_size_temp= if let Some(header) = &header {
+        //     bincode::serialized_size(&header)? as usize //will this be standard for every header?
+        // }
+        // else{
+        //     // println!("None! {:?}",bincode::serialized_size(&header)? as usize);
+        //     // bincode::serialized_size(&header)? as usize
+        //     0
+        // };
+        // let test: Option<SerializeHeader> = None;
+        // let test_size = bincode::serialized_size(&test)? as usize;
+        
+        let header_size = std::mem::size_of::<Option<SerializeHeader>>();
+        // println!("hs {:?}",header_size);
+        // println!("hst {:?} hs {:?} {:?} {:?} ",header_size_temp, header_size, test_size,std::mem::size_of::<SerializeHeader>()) ;
+        let ser_data = RofiData::new(self.rofi_comm.clone(),header_size+serialized_size).await;
+        
+        // println!("h+d size: {:?} hsize {:?} dsize {:?}",ser_data.alloc_size,ser_data.header_as_bytes().len(),ser_data.data_as_bytes().len());
+        bincode::serialize_into(ser_data.header_as_bytes(),&header)?;
+        // println!("header {:?} ({:?}) size {:?} occupied {:?}",header, ser_data.header_as_bytes(),header_size+serialized_size,self.rofi_comm.occupied());
+        Ok(SerializedData::RofiData(ser_data))
     }
 }
 
-pub(crate) struct RofiLamellaeRDMA {
-    rofi_comm: Arc<RofiComm>,
-}
 
-//#[prof]
-impl LamellaeRDMA for RofiLamellaeRDMA {
+
+#[allow(dead_code,unused_variables)]
+impl LamellaeRDMA for Rofi {
     fn put(&self, pe: usize, src: &[u8], dst: usize) {
         self.rofi_comm.put(pe, src, dst);
     }
@@ -235,8 +205,8 @@ impl LamellaeRDMA for RofiLamellaeRDMA {
     fn rt_free(&self, addr: usize) {
         self.rofi_comm.rt_free(addr)
     }
-    fn alloc(&self, size: usize) -> Option<usize> {
-        self.rofi_comm.alloc(size)
+    fn alloc(&self, size: usize, alloc: AllocationType) -> Option<usize> {
+        self.rofi_comm.alloc(size,alloc)
     }
     fn free(&self, addr: usize) {
         self.rofi_comm.free(addr)
@@ -250,17 +220,7 @@ impl LamellaeRDMA for RofiLamellaeRDMA {
     fn remote_addr(&self, remote_pe: usize, local_addr: usize) -> usize {
         self.rofi_comm.remote_addr(remote_pe, local_addr)
     }
-    fn mype(&self) -> usize {
-        self.rofi_comm.mype()
-    }
-}
-
-//#[prof]
-impl Drop for RofiLamellae {
-    fn drop(&mut self) {
-        while let Some(mut iothread) = self.threads.pop() {
-            iothread.shutdown();
-        }
-        // println!("[{:?}] RofiLamellae Dropping", self.my_pe);
+    fn occupied(&self) -> usize {
+        self.rofi_comm.occupied()
     }
 }

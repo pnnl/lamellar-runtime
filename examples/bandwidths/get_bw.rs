@@ -20,7 +20,7 @@ fn main() {
     world.barrier();
     let b = s.elapsed().as_secs_f64();
     println!("Barrier latency: {:?}s {:?}us", b, b * 1_000_000 as f64);
-
+    world.barrier();
     if my_pe == 0 {
         println!("==================Bandwidth test===========================");
     }
@@ -47,6 +47,9 @@ fn main() {
         let mut sub_time = 0f64;
         if my_pe == 0 {
             for j in (0..2_u64.pow(exp) as usize).step_by(num_bytes as usize) {
+                // if j % 1024 ==0 {
+                    // println!("[{:?}] j: {:?}",my_pe, j);
+                // }
                 let sub_timer = Instant::now();
                 unsafe {
                     array.get(
