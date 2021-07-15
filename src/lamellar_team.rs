@@ -85,6 +85,9 @@ impl LamellarTeam {
     pub fn print_arch(&self) {
         self.team.print_arch()
     }
+    pub fn barrier(&self) {
+        self.team.barrier()
+    }
 }
 
 impl std::fmt::Debug for LamellarTeam {
@@ -503,7 +506,7 @@ impl LamellarTeamRT {
         }
     }
 
-    fn barrier(&self) {
+    pub(crate) fn barrier(&self) {
         self.barrier.barrier();
     }
 

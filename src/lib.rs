@@ -17,10 +17,12 @@ mod active_messaging;
 mod lamellae;
 mod lamellar_alloc;
 mod lamellar_arch;
-#[cfg(feature = "experimental")]
-mod lamellar_array;
+// #[cfg(feature = "experimental")]
+// mod lamellar_array;
 #[cfg(feature = "experimental")]
 mod darc;
+
+mod array;
 
 mod barrier;
 
@@ -45,11 +47,17 @@ pub use crate::active_messaging::{
 };
 pub use crate::active_messaging::{ActiveMessaging, LamellarAM, LocalAM};
 
-#[cfg(feature = "experimental")]
-pub use crate::lamellar_array::{LamellarArray, ReduceKey};
+// #[cfg(feature = "experimental")]
+// pub use crate::lamellar_array::{LamellarArray, ReduceKey};
 pub use crate::lamellar_memregion::{
     LamellarLocalMemoryRegion, LamellarMemoryRegion, RegisteredMemoryRegion, RemoteMemoryRegion,
 };
+pub use crate::array::{
+    LamellarArray, Distribution
+};
+pub use crate::array::r#unsafe::UnsafeArray;
+
+
 
 #[cfg(feature = "experimental")]
 #[doc(hidden)]

@@ -14,7 +14,7 @@ use std::ops::{Bound, RangeBounds};
 #[derive(Debug, Clone)]
 pub struct MemNotLocalError;
 
-type MemResult<T> = Result<T, MemNotLocalError>;
+pub type MemResult<T> = Result<T, MemNotLocalError>;
 
 impl std::fmt::Display for MemNotLocalError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
@@ -398,6 +398,8 @@ impl<T: std::clone::Clone + Send + Sync + 'static> LamellarMemoryRegion<T> {
     /// * `pe` - id of remote PE to grab data from
     /// * `index` - offset into the remote memory window
     /// * `data` - address (which is "registered" with network device) of local input buffer that will be put into the remote memory
+    /// the data buffer may not be safe to upon return from this call, currently the user is responsible for completion detection, 
+    /// or you may use the similar iput call (with a potential performance penalty);
     pub unsafe fn put(&self, pe: usize, index: usize, data: &impl RegisteredMemoryRegion) {
         //todo make return a result?
         if index + data.len() <= self.size {
@@ -406,6 +408,31 @@ impl<T: std::clone::Clone + Send + Sync + 'static> LamellarMemoryRegion<T> {
                 let bytes = std::slice::from_raw_parts(ptr as *const u8, num_bytes);
                 self.rdma
                     .put(pe, bytes, self.addr + index * std::mem::size_of::<T>())
+            } else {
+                panic!("ERROR: put data src is not local");
+            }
+        } else {
+            println!("{:?} {:?} {:?}", self.size, index, data.len());
+            panic!("index out of bounds");
+        }
+    }
+
+    /// copy data from local memory location into a remote memory localtion
+    ///
+    /// # Arguments
+    ///
+    /// * `pe` - id of remote PE to grab data from
+    /// * `index` - offset into the remote memory window
+    /// * `data` - address (which is "registered" with network device) of local input buffer that will be put into the remote memory
+    /// the data buffer is free to be reused upon return of this function.
+    pub fn iput(&self, pe: usize, index: usize, data: &impl RegisteredMemoryRegion) {
+        //todo make return a result?
+        if index + data.len() <= self.size {
+            let num_bytes = data.len() * std::mem::size_of::<T>();
+            if let Ok(ptr) = data.as_ptr() {
+                let bytes = unsafe { std::slice::from_raw_parts(ptr as *const u8, num_bytes)} ;
+                self.rdma
+                    .iput(pe, bytes, self.addr + index * std::mem::size_of::<T>())
             } else {
                 panic!("ERROR: put data src is not local");
             }
@@ -614,6 +641,10 @@ impl<T: std::clone::Clone + Send + Sync + 'static> LamellarLocalMemoryRegion<T> 
 
     pub unsafe fn get(&self, index: usize, data: &impl RegisteredMemoryRegion) {
         self.lmr.get(self.pe, index, data)
+    }
+    
+    pub(crate) unsafe fn put_slice(&self, pe: usize, index: usize, data: &[T]) {
+        self.lmr.put_slice(self.pe,index, data)
     }
 
     pub unsafe fn as_base<

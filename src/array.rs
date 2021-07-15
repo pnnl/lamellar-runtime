@@ -1,229 +1,228 @@
-use crate::active_messaging::*; //{ActiveMessaging,AMCounters,Cmd,Msg,LamellarAny,LamellarLocal};
-use crate::lamellae::Lamellae;
-use crate::lamellar_arch::LamellarArchRT;
-use crate::lamellar_memregion::{LamellarMemoryRegion, RemoteMemoryRegion};
-use crate::lamellar_request::{AmType, LamellarRequest, LamellarRequestHandle};
-use crate::lamellar_team::LamellarTeam;
-use crate::scheduler::{Scheduler,SchedulerQueue};
+// use crate::active_messaging::*; //{ActiveMessaging,AMCounters,Cmd,Msg,LamellarAny,LamellarLocal};
+// use crate::lamellae::Lamellae;
+// use crate::lamellar_arch::LamellarArchRT;
+use crate::lamellar_memregion::{LamellarMemoryRegion, RemoteMemoryRegion, RegisteredMemoryRegion};
+// use crate::lamellar_request::{AmType, LamellarRequest, LamellarRequestHandle};
+// use crate::lamellar_team::LamellarTeam;
+// use crate::scheduler::{Scheduler,SchedulerQueue};
 
-use log::trace;
-use std::hash::{Hash, Hasher};
+// use log::trace;
+// use std::hash::{Hash, Hasher};
+// use std::ops::{Index, IndexMut, Range, RangeFrom, RangeFull, RangeInclusive, RangeTo, RangeToInclusive};
 // use std::any;
 // use core::marker::PhantomData;
-use std::collections::HashMap;
-use std::sync::atomic::Ordering;
-use std::sync::Arc;
-use std::time::{Duration, Instant};
+// use std::collections::HashMap;
+// use std::sync::atomic::Ordering;
+// use std::sync::Arc;
+// use std::time::{Duration, Instant};
+
+pub (crate) mod r#unsafe;
 
 // // to manage team lifetimes properly we need a seperate user facing handle that contains a strong link to the inner team.
 // // this outer handle has a lifetime completely tied to whatever the user wants
 // // when the outer handle is dropped, we do the appropriate barriers and then remove the inner team from the runtime data structures
 // // this should allow for the inner team to persist while at least one user handle exists in the world.
 
-pub(crate) type ReduceGen =
-    fn(LamellarMemoryRegion<u8>, usize) -> Arc<dyn RemoteActiveMessage + Send + Sync>;
+// pub(crate) type ReduceGen =
+//     fn(LamellarMemoryRegion<u8>, usize) -> Arc<dyn RemoteActiveMessage + Send + Sync>;
 
-lazy_static! {
-    pub(crate) static ref REDUCE_OPS: HashMap<(std::any::TypeId, String), ReduceGen> = {
-        let mut temp = HashMap::new();
-        for reduction_type in crate::inventory::iter::<ReduceKey> {
-            temp.insert(
-                (reduction_type.id.clone(), reduction_type.name.clone()),
-                reduction_type.gen,
-            );
-        }
-        temp
-    };
+// lazy_static! {
+//     pub(crate) static ref REDUCE_OPS: HashMap<(std::any::TypeId, String), ReduceGen> = {
+//         let mut temp = HashMap::new();
+//         for reduction_type in crate::inventory::iter::<ReduceKey> {
+//             temp.insert(
+//                 (reduction_type.id.clone(), reduction_type.name.clone()),
+//                 reduction_type.gen,
+//             );
+//         }
+//         temp
+//     };
+// }
+
+// pub struct ReduceKey {
+//     pub id: std::any::TypeId,
+//     pub name: String,
+//     pub gen: ReduceGen,
+// }
+// crate::inventory::collect!(ReduceKey);
+
+// lamellar_impl::generate_reductions_for_type_rt!(u8, u16, u32, u64, u128, usize);
+// lamellar_impl::generate_reductions_for_type_rt!(i8, i16, i32, i64, i128, isize);
+// lamellar_impl::generate_reductions_for_type_rt!(f32,f64);
+
+#[derive(Clone,Debug)]
+pub enum Distribution{
+    Block,
+    Cyclic,
 }
 
-pub struct ReduceKey {
-    pub id: std::any::TypeId,
-    pub name: String,
-    pub gen: ReduceGen,
-}
-crate::inventory::collect!(ReduceKey);
-
-lamellar_impl::generate_reductions_for_type_rt!(u8, u16, u32, u64, u128, usize);
-lamellar_impl::generate_reductions_for_type_rt!(i8, i16, i32, i64, i128, isize);
-lamellar_impl::generate_reductions_for_type_rt!(f32,f64);
-
-pub struct LamellarArray<
-    T: serde::ser::Serialize + serde::de::DeserializeOwned + std::clone::Clone + Send + Sync + 'static,
-> {
-    pub rmr: LamellarMemoryRegion<T>,
-    num_pes: usize,
-    my_pe: usize,
-    scheduler: Arc<Scheduler>,
-    lamellae: Arc<Lamellae>,
-    pub(crate) arch: Arc<LamellarArchRT>,
-    team_counters: AMCounters,
-    world_counters: Arc<AMCounters>, // can probably remove this?
-    // id: usize,
-    pub(crate) my_hash: u64,
-    team: Arc<LamellarTeam>,
+pub trait LamellarArray<T>: RegisteredMemoryRegion // + std::ops::Index + std::ops::IndexMut
+where T: serde::ser::Serialize
++ serde::de::DeserializeOwned
++ std::clone::Clone
++ Send
++ Sync
++ std::fmt::Debug, {
+    fn put(&self, index: usize, buf: &impl RegisteredMemoryRegion<Output=T>);
+    // pub fn put_indirect(self, index: usize, buf: &impl LamellarBuffer<T>);
+    // pub fn get(self, index: usize, buf: &mut impl RegisteredMemoryRegion);
+    // pub fn get_indirect(self, index: usize, buf: &mut impl LamellarBuffer<T>); //do we need a LamellarBufferMut?
 }
 
-//#[prof]
-impl<
-        T: serde::ser::Serialize
-            + serde::de::DeserializeOwned
-            + std::clone::Clone
-            + Send
-            + Sync
-            + 'static,
-    > Hash for LamellarArray<T>
-{
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.my_hash.hash(state);
-    }
-}
+// pub(crate) trait LamellarBuffer<T>
+// where T: serde::ser::Serialize
+// + serde::de::DeserializeOwned
+// + std::clone::Clone
+// + Send
+// + Sync
+// + std::fmt::Debug{
+//     pub(crate) fn to_rmr(self)-> impl RegisteredMemoryRegion;
+//     pub(crate) fn from_rmr(self, data: impl RegisteredMemoryRegion);
+// }
 
-//#[prof]
-impl<
-        T: serde::ser::Serialize
-            + serde::de::DeserializeOwned
-            + std::clone::Clone
-            + Send
-            + Sync
-            + std::fmt::Debug
-            + 'static,
-    > LamellarArray<T>
-{
-    pub(crate) fn new(
-        team: Arc<LamellarTeam>,
-        array_size: usize,
-        world_counters: Arc<AMCounters>,
-    ) -> LamellarArray<T> {
-        LamellarArray {
-            rmr: team.alloc_shared_mem_region(array_size),
-            // global_length: array_size,
-            scheduler: team.team.scheduler.clone(),
-            lamellae: team.team.lamellae.clone(),
-            arch: team.team.arch.clone(),
-            my_pe: team.team.world_pe,
-            num_pes: team.team.num_pes,
-            team_counters: AMCounters::new(),
-            world_counters: world_counters,
-            // id: 0,
-            // sub_team_id_cnt: AtomicUsize::new(0),
-            my_hash: 0, //easy id to look up for global
-            team: team,
-        }
-    }
+// pub trait LamellarArrayIndex<T>
+// where T: ?Sized,{
+//     type Output: ?Sized;
+//     pub fn get(self, slice: &T)
+// }
 
-    pub fn get_raw_mem_region(&self) -> &LamellarMemoryRegion<T> {
-        &self.rmr
-    }
 
-    pub fn wait_all(&self) {
-        let mut temp_now = Instant::now();
-        while self.team_counters.outstanding_reqs.load(Ordering::SeqCst) > 0 {
-            std::thread::yield_now();
-            if temp_now.elapsed() > Duration::new(60, 0) {
-                println!(
-                    "in lamellar_array wait_all mype: {:?} cnt: {:?} {:?}",
-                    self.my_pe,
-                    self.team_counters.send_req_cnt.load(Ordering::SeqCst),
-                    self.team_counters.outstanding_reqs.load(Ordering::SeqCst),
-                    // self.counters.recv_req_cnt.load(Ordering::SeqCst),
-                );
-                // self.lamellae.print_stats();
-                temp_now = Instant::now();
-            }
-        }
-    }
 
-    fn get_reduction_op(&self, op: String) -> LamellarArcAm {
-        unsafe {
-            REDUCE_OPS
-                .get(&(std::any::TypeId::of::<T>(), op))
-                .expect("unexpected reduction type")(
-                self.rmr.clone().as_base::<u8>(), self.num_pes
-            )
-        }
-    }
 
-    fn reduce_inner(
-        &self,
-        func: LamellarArcAm,
-    ) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
-        trace!("[{:?}] team exec am all request", self.my_pe);
-        let (my_req, ireq) = LamellarRequestHandle::new(
-            1,
-            AmType::RegisteredFunction,
-            self.arch.clone(),
-            self.team_counters.outstanding_reqs.clone(),
-            self.world_counters.outstanding_reqs.clone(),
-            self.team.team.team_hash,
-            self.team.clone(),
-        );
-        self.world_counters.add_send_req(1);
-        self.team_counters.add_send_req(1);
-        let world = if let Some(world) = &self.team.world{
-            world.clone()
-        }
-        else{
-            self.team.clone()
-        };
-        self.scheduler.submit_req_new(
-            self.my_pe,
-            Some(self.my_pe),
-            ExecType::Am(Cmd::Exec),
-            my_req.id,
-            LamellarFunc::Am(func),
-            self.lamellae.clone(),
-            world,
-            self.team.clone(),
-            self.my_hash,
-            Some(ireq),
-        );
-        Box::new(my_req)
-    }
-    pub fn reduce(&self, op: &str) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
-        self.reduce_inner(self.get_reduction_op(op.to_string()))
-    }
-    pub fn sum(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
-        // let my_any: LamellarAny = Box::new(self.get_reduction_op("sum".to_string()) as LamellarBoxedAm);
-        self.reduce("sum")
-    }
-    pub fn prod(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
-        // let my_any: LamellarAny = Box::new(self.get_reduction_op("prod".to_string()) as LamellarBoxedAm);
-        self.reduce("prod")
-    }
-    pub fn max(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
-        // let my_any: LamellarAny = Box::new(self.get_reduction_op("max".to_string()) as LamellarBoxedAm);
-        self.reduce("max")
-    }
-}
+// //#[prof]
+// impl<
+//         T: serde::ser::Serialize
+//             + serde::de::DeserializeOwned
+//             + std::clone::Clone
+//             + Send
+//             + Sync
+//             + std::fmt::Debug
+//             + 'static,
+//     > UnsafeArray<T>
+// {
+//     pub(crate) fn new(
+//         team: Arc<LamellarTeam>,
+//         array_size: usize,
+//     ) -> UnsafeArray<T> {
+//         let rmr = team.alloc_shared_mem_region(array_size);
+//         UnsafeArray {
+//             mem_region: Darc::new(team,rmr),
+//         }
+//     }
 
-//#[prof]
-impl<
-        T: serde::ser::Serialize
-            + serde::de::DeserializeOwned
-            + std::clone::Clone
-            + Send
-            + Sync
-            + 'static,
-    > Drop for LamellarArray<T>
-{
-    fn drop(&mut self) {
-        // println!(
-        //     "[{:?}] team handle dropping {:?}",
-        //     self.team.my_pe,
-        //     self.team.get_pes()
-        // );
-        // self.team.wait_all();
-        // self.team.barrier();
-        // self.team.put_dropped();
-        // if let Ok(_my_index) = self.team.arch.team_pe(self.team.my_pe) {
-        //     self.team.drop_barrier();
-        // }
-        // if let Some(parent) = &self.team.parent {
-        //     parent.sub_teams.write().remove(&self.team.id);
-        // }
-        // self.teams.write().remove(&self.team.my_hash);
-    }
-}
+//     pub fn get_raw_mem_region(&self) -> &LamellarMemoryRegion<T> {
+//         self.mem_region
+//     }
+
+//     pub fn wait_all(&self) {
+//         let mut temp_now = Instant::now();
+//         while self.team_counters.outstanding_reqs.load(Ordering::SeqCst) > 0 {
+//             std::thread::yield_now();
+//             if temp_now.elapsed() > Duration::new(60, 0) {
+//                 println!(
+//                     "in lamellar_array wait_all mype: {:?} cnt: {:?} {:?}",
+//                     self.my_pe,
+//                     self.team_counters.send_req_cnt.load(Ordering::SeqCst),
+//                     self.team_counters.outstanding_reqs.load(Ordering::SeqCst),
+//                     // self.counters.recv_req_cnt.load(Ordering::SeqCst),
+//                 );
+//                 // self.lamellae.print_stats();
+//                 temp_now = Instant::now();
+//             }
+//         }
+//     }
+
+//     fn get_reduction_op(&self, op: String) -> LamellarArcAm {
+//         unsafe {
+//             REDUCE_OPS
+//                 .get(&(std::any::TypeId::of::<T>(), op))
+//                 .expect("unexpected reduction type")(
+//                 self.rmr.clone().as_base::<u8>(), self.num_pes
+//             )
+//         }
+//     }
+
+//     fn reduce_inner(
+//         &self,
+//         func: LamellarArcAm,
+//     ) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+//         trace!("[{:?}] team exec am all request", self.my_pe);
+//         let (my_req, ireq) = LamellarRequestHandle::new(
+//             1,
+//             AmType::RegisteredFunction,
+//             self.arch.clone(),
+//             self.team_counters.outstanding_reqs.clone(),
+//             self.world_counters.outstanding_reqs.clone(),
+//             self.team.team.team_hash,
+//             self.team.clone(),
+//         );
+//         self.world_counters.add_send_req(1);
+//         self.team_counters.add_send_req(1);
+//         let world = if let Some(world) = &self.team.world{
+//             world.clone()
+//         }
+//         else{
+//             self.team.clone()
+//         };
+//         self.scheduler.submit_req_new(
+//             self.my_pe,
+//             Some(self.my_pe),
+//             ExecType::Am(Cmd::Exec),
+//             my_req.id,
+//             LamellarFunc::Am(func),
+//             self.lamellae.clone(),
+//             world,
+//             self.team.clone(),
+//             self.my_hash,
+//             Some(ireq),
+//         );
+//         Box::new(my_req)
+//     }
+//     pub fn reduce(&self, op: &str) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+//         self.reduce_inner(self.get_reduction_op(op.to_string()))
+//     }
+//     pub fn sum(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+//         // let my_any: LamellarAny = Box::new(self.get_reduction_op("sum".to_string()) as LamellarBoxedAm);
+//         self.reduce("sum")
+//     }
+//     pub fn prod(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+//         // let my_any: LamellarAny = Box::new(self.get_reduction_op("prod".to_string()) as LamellarBoxedAm);
+//         self.reduce("prod")
+//     }
+//     pub fn max(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+//         // let my_any: LamellarAny = Box::new(self.get_reduction_op("max".to_string()) as LamellarBoxedAm);
+//         self.reduce("max")
+//     }
+// }
+
+// //#[prof]
+// impl<
+//         T: serde::ser::Serialize
+//             + serde::de::DeserializeOwned
+//             + std::clone::Clone
+//             + Send
+//             + Sync
+//             + 'static,
+//     > Drop for LamellarArray<T>
+// {
+//     fn drop(&mut self) {
+//         // println!(
+//         //     "[{:?}] team handle dropping {:?}",
+//         //     self.team.my_pe,
+//         //     self.team.get_pes()
+//         // );
+//         // self.team.wait_all();
+//         // self.team.barrier();
+//         // self.team.put_dropped();
+//         // if let Ok(_my_index) = self.team.arch.team_pe(self.team.my_pe) {
+//         //     self.team.drop_barrier();
+//         // }
+//         // if let Some(parent) = &self.team.parent {
+//         //     parent.sub_teams.write().remove(&self.team.id);
+//         // }
+//         // self.teams.write().remove(&self.team.my_hash);
+//     }
+// }
 
 /*
 //todo something like RefCell

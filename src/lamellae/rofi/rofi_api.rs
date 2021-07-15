@@ -1,6 +1,7 @@
 extern crate libc;
 
 use std::ffi::CString;
+use std::os::raw::c_ulong;
 use crate::lamellae::AllocationType;
 
 pub(crate) fn rofi_init(provider: &str) -> Result<(), &'static str> {
@@ -111,77 +112,81 @@ pub(crate) fn rofi_remote_addr(pe: usize, local_addr: usize) -> usize {
 }
 
 // data is a reference, user must ensure lifetime is valid until underlying put is complete, thus is unsafe
-pub(crate) unsafe fn rofi_put<T>(src: &[T], dst: usize, pe: usize) -> Result<(), i32> {
+pub(crate) unsafe fn rofi_put<T>(src: &[T], dst: usize, pe: usize) -> Result<c_ulong, i32> {
     let src_addr = src.as_ptr() as *mut std::ffi::c_void;
     let size = src.len() * std::mem::size_of::<T>();
-    let mut ret = rofisys::rofi_put(dst as *mut std::ffi::c_void, src_addr, size, pe as u32, 0);
+    let mut txid: c_ulong = 0;
+    let mut ret = rofisys::rofi_put(dst as *mut std::ffi::c_void, src_addr, size, pe as u32, 0, &mut txid);
     //FI_EAGAIN should this be handled here, at c-rofi layer, or application layer?
     while ret == -11 {
         std::thread::yield_now();
-        ret = rofisys::rofi_put(dst as *mut std::ffi::c_void, src_addr, size, pe as u32, 0);
+        ret = rofisys::rofi_put(dst as *mut std::ffi::c_void, src_addr, size, pe as u32, 0, &mut txid);
         // println!("[{:?}] ({:?}:{:?}) rofi_put src_addr {:?} dst_addr 0x{:x} {:?}",rofi_get_id(),file!(),line!(),src.as_ptr(),dst,ret);
     }
     if ret == 0 {
-        Ok(())
+        Ok(txid)
     } else {
         Err(ret)
     }
 }
 
 #[allow(dead_code)]
-pub(crate) fn rofi_iput<T>(src: &[T], dst: usize, pe: usize) -> Result<(), i32> {
+pub(crate) fn rofi_iput<T>(src: &[T], dst: usize, pe: usize) -> Result<c_ulong, i32> {
     let src_addr = src.as_ptr() as *mut std::ffi::c_void;
     let size = src.len() * std::mem::size_of::<T>();
+    let mut txid: c_ulong = 0;
     let mut ret = unsafe {
-        rofisys::rofi_iput(dst as *mut std::ffi::c_void, src_addr, size, pe as u32, 0)
+        rofisys::rofi_iput(dst as *mut std::ffi::c_void, src_addr, size, pe as u32, 0, &mut txid)
     };
     //FI_EAGAIN should this be handled here, at c-rofi layer, or application layer?
     // println!("putting {:?} to {:?} @ {:x}",src,pe,dst);
     while ret == -11 {
         std::thread::yield_now();
         ret = unsafe {
-            rofisys::rofi_iput(dst as *mut std::ffi::c_void, src_addr, size, pe as u32, 0)
+            rofisys::rofi_iput(dst as *mut std::ffi::c_void, src_addr, size, pe as u32, 0, &mut txid)
         };
         //println!("[{:?}] ({:?}:{:?}) rofi_iput src_addr {:?} dst_addr 0x{:x} pe {:?} {:?}",rofi_get_id(),file!(),line!(),src_addr,dst,pe,ret);
     }
     if ret == 0 {
-        Ok(())
+        Ok(txid)
     } else {
         Err(ret)
     }
 }
 #[allow(dead_code)]
-pub(crate) unsafe fn rofi_get<T>(src: usize, dst: &mut [T], pe: usize) -> Result<(), i32> {
+pub(crate) unsafe fn rofi_get<T>(src: usize, dst: &mut [T], pe: usize) -> Result<c_ulong, i32> {
     let src_addr = src as *mut std::ffi::c_void;
     let dst_addr = dst.as_ptr() as *mut std::ffi::c_void;
     let size = dst.len() * std::mem::size_of::<T>();
-    let mut ret = rofisys::rofi_get(dst_addr, src_addr, size, pe as u32, 0);
+    let mut txid: c_ulong = 0;
+    let mut ret = rofisys::rofi_get(dst_addr, src_addr, size, pe as u32, 0, &mut txid);
     while ret == -11 {
         std::thread::yield_now();
-        ret = rofisys::rofi_get(dst_addr, src_addr, size, pe as u32, 0);
+        ret = rofisys::rofi_get(dst_addr, src_addr, size, pe as u32, 0, &mut txid);
         //println!("[{:?}] ({:?}:{:?}) rofi_get src_addr {:?} dst_addr{:?} pe {:?} {:?}",rofi_get_id(),file!(),line!(),src_addr, dst_addr,pe, ret);
     }
     if ret == 0 {
-        Ok(())
+        Ok(txid)
     } else {
         Err(ret)
     }
 }
 
 #[allow(dead_code)]
-pub(crate) fn rofi_iget<T>(src: usize, dst: &mut [T], pe: usize) -> Result<(), i32> {
+pub(crate) fn rofi_iget<T>(src: usize, dst: &mut [T], pe: usize) -> Result<c_ulong, i32> {
     let src_addr = src as *mut std::ffi::c_void;
     let dst_addr = dst.as_ptr() as *mut std::ffi::c_void;
     let size = dst.len() * std::mem::size_of::<T>();
+    let mut txid: c_ulong = 0;
     //println!("[{:?}] ({:?}{:?}) rofi_iget src: {:x} dst: {:?} pe: {:?} size: {:?}",rofi_get_id(),file!(),line!(),src, dst.as_ptr(),pe, size);
-    let mut ret = unsafe { rofisys::rofi_iget(dst_addr, src_addr, size, pe as u32, 0) };
+    let mut ret = unsafe { rofisys::rofi_iget(dst_addr, src_addr, size, pe as u32, 0, &mut txid) };
     while ret == -11 {
         std::thread::yield_now();
-        ret = unsafe { rofisys::rofi_iget(dst_addr, src_addr, size, pe as u32, 0) };
+        ret = unsafe { rofisys::rofi_iget(dst_addr, src_addr, size, pe as u32, 0, &mut txid) };
         // println!("[{:?}] ({:?}:{:?}) rofi_get src_addr {:?} dst_addr{:?} pe {:?} {:?}",rofi_get_id(),file!(),line!(),src_addr, dst_addr,pe, ret);
     }
     if ret == 0 {
-        Ok(())
+        Ok(txid)
     } else {
         Err(ret)
     }
@@ -222,4 +227,14 @@ pub(crate) fn rofi_irecv<T>(dst: &mut [T], pe: usize) -> Result<(), i32> {
     } else {
         Err(ret)
     }
+}
+
+pub(crate) fn rofi_wait_set(txids: Vec<c_ulong>) {
+    let ptr = txids.as_ptr() as *mut c_ulong;
+    unsafe {rofisys::rofi_wait_set(ptr,txids.len()as u64)};
+}
+
+pub(crate) fn rofi_drop_set(txids: Vec<c_ulong>) {
+    let ptr = txids.as_ptr() as *mut c_ulong;
+    unsafe {rofisys::rofi_drop_set(ptr,txids.len()as u64)};
 }
