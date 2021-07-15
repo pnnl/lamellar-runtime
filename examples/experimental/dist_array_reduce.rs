@@ -38,10 +38,10 @@ fn main() {
     println!("my local size {:?}",my_local_size);
     let block_array = UnsafeArray::<usize>::new(world.team(),total_len,Distribution::Block);
     let cyclic_array = UnsafeArray::<usize>::new(world.team(),total_len,Distribution::Cyclic);
-    
+    let local_mem_region = world.alloc_local_mem_region(total_len);
     world.barrier();
     if my_pe ==0 {
-        let local_mem_region = world.alloc_local_mem_region(total_len);
+        
         unsafe {
             let mut i = 0; //(len_per_pe * my_pe as f32).round() as usize;
             for elem in local_mem_region.as_mut_slice().unwrap(){
@@ -54,7 +54,7 @@ fn main() {
         
         block_array.put(0,&local_mem_region);
         cyclic_array.put(0,&local_mem_region);
-        world.free_local_memory_region(local_mem_region);
+        
     }
     world.barrier();
         // unsafe {
@@ -70,9 +70,25 @@ fn main() {
     // }
     std::thread::sleep(std::time::Duration::from_secs(1));
     cyclic_array.print();
-
     println!();
-    
+    unsafe {
+        for elem in local_mem_region.as_mut_slice().unwrap(){
+            *elem = 0;
+        }
+    }
+    block_array.get(0,&local_mem_region);
+    world.barrier();
+    std::thread::sleep(std::time::Duration::from_secs(1));
+    println!("[{:?}] {:?}",my_pe,local_mem_region.as_slice());
+    unsafe {
+        for elem in local_mem_region.as_mut_slice().unwrap(){
+            *elem = 0;
+        }
+    }
+    cyclic_array.get(0,&local_mem_region);
+    world.barrier();
+    std::thread::sleep(std::time::Duration::from_secs(1));
+    println!("[{:?}] {:?}",my_pe,local_mem_region.as_slice());
 
 
     // let usize_array: LamellarArray<usize> = world.new_array(len_per_pe); //100 elements per pe
@@ -124,4 +140,5 @@ fn main() {
     //     println!("min: {:?} {:?}", min, 1);
     // }
     world.barrier();
+    world.free_local_memory_region(local_mem_region);
 }

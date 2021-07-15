@@ -65,7 +65,7 @@ where T: serde::ser::Serialize
 + std::fmt::Debug, {
     fn put(&self, index: usize, buf: &impl RegisteredMemoryRegion<Output=T>);
     // pub fn put_indirect(self, index: usize, buf: &impl LamellarBuffer<T>);
-    // pub fn get(self, index: usize, buf: &mut impl RegisteredMemoryRegion);
+    fn get(&self, index: usize, buf: &impl RegisteredMemoryRegion<Output=T>);
     // pub fn get_indirect(self, index: usize, buf: &mut impl LamellarBuffer<T>); //do we need a LamellarBufferMut?
 }
 

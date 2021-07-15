@@ -33,6 +33,10 @@ pub struct UnsafeArray<
     distribution: Distribution,
 }
 
+enum ArrayOp{
+    Put,
+    Get,
+}
 
 
 //#[prof]
@@ -71,10 +75,10 @@ impl<
         &self.mem_region
     }
 
-    fn block_put(&self, index: usize, buf: &impl RegisteredMemoryRegion<Output = T>){
+    fn block_op(&self, op: ArrayOp, index: usize, buf: &impl RegisteredMemoryRegion<Output =T>){
         let start_pe =  (index as f32 / self.elem_per_pe).floor() as usize;
         let end_pe = (((index + buf.len()) as f32) /  self.elem_per_pe).ceil() as usize;
-        println!("index: {:?} start_pe {:?} end_pe {:?} buf_len {:?} elem_per_pe {:?}",index,start_pe,end_pe, buf.len(),self.elem_per_pe);
+        // println!("index: {:?} start_pe {:?} end_pe {:?} buf_len {:?} elem_per_pe {:?}",index,start_pe,end_pe, buf.len(),self.elem_per_pe);
         let mut dist_index = index;
         let mut buf_index = 0;
         for pe in start_pe..end_pe{
@@ -83,37 +87,50 @@ impl<
             let offset = dist_index - pe_start_index;
             let len = std::cmp::min(num_elems_on_pe-offset,buf.len() - buf_index);
             if len > 0 {
-                println!("pe {:?} offset {:?} range: {:?}-{:?} dist_index {:?} pe_start_index {:?} num_elems {:?} len {:?}", pe, offset, buf_index, buf_index+len, dist_index, pe_start_index, num_elems_on_pe, len);
-                unsafe {self.mem_region.put(pe,offset,&buf.sub_region(buf_index..(buf_index+len)));}
+                // println!("pe {:?} offset {:?} range: {:?}-{:?} dist_index {:?} pe_start_index {:?} num_elems {:?} len {:?}", pe, offset, buf_index, buf_index+len, dist_index, pe_start_index, num_elems_on_pe, len);
+                match op{
+                    ArrayOp::Put => unsafe {self.mem_region.put(pe,offset,&buf.sub_region(buf_index..(buf_index+len)))},
+                    ArrayOp::Get => unsafe {self.mem_region.get(pe,offset,&buf.sub_region(buf_index..(buf_index+len)))},
+                }
+                
                 buf_index +=len;
                 dist_index += len;
             }
         }
     }
 
-    fn cyclic_put(&self, index: usize, buf: &impl RegisteredMemoryRegion<Output = T> ){
+    fn cyclic_op(&self, op: ArrayOp, index: usize, buf: &impl RegisteredMemoryRegion<Output =T> ){
         let num_pes = self.team.num_pes();
         let num_elems_pe = buf.len()/num_pes + 1; //we add plus one to ensure we allocate enough space
         let mut overflow = 0;
-        let temp_array = self.team.alloc_local_mem_region::<T>(num_elems_pe);
-        let buf_slice = unsafe {buf.as_slice().unwrap()};
         let start_pe = index % num_pes;
-        for i in 0..std::cmp::min(buf.len(),num_pes){
-            let mut len = 0;
-            let mut k = 0;
-            // for (j,val) in buf.as_slice().unwrap()[i..].iter().step_by(num_pes).enumerate(){
-            for j in (i..buf.len()).step_by(num_pes){
-                unsafe {temp_array.put(k,&buf.sub_region(j..=j))};
-                k+=1;
+        match op {
+            ArrayOp::Put => {
+                let temp_array = self.team.alloc_local_mem_region::<T>(num_elems_pe);
+                for i in 0..std::cmp::min(buf.len(),num_pes){
+                    let mut len = 0;
+                    let mut k = 0;
+                    let pe = (start_pe + i) % num_pes;
+                    let offset = index/num_pes + overflow;
+                    for j in (i..buf.len()).step_by(num_pes){
+                        unsafe {temp_array.put(k,&buf.sub_region(j..=j))};
+                        k+=1;
+                    }
+                    self.mem_region.iput(pe,offset,&temp_array.sub_region(0..k));
+                    if pe + 1 == num_pes{
+                        overflow += 1;
+                    }
+                    
+                }
+                self.team.free_local_memory_region(temp_array);
             }
-            let pe = (start_pe + i) % num_pes;
-            let offset = index/num_pes + overflow;
-            self.mem_region.iput(pe,offset,&temp_array.sub_region(0..k));
-            if pe + 1 == num_pes{
-                overflow += 1;
+            ArrayOp::Get => {
+                for i in 0..buf.len(){
+                    unsafe {self.mem_region.get((index+i)%num_pes,index+i/num_pes, &buf.sub_region(i..=i))};//can't do a more optimized get (where we do one get per pe) until rofi supports transfer completion events.
+                }
             }
         }
-        self.team.free_local_memory_region(temp_array);
+        
     }
 
     pub fn print(&self){
@@ -141,8 +158,14 @@ impl<
 {
     fn put(&self, index: usize, buf: &impl RegisteredMemoryRegion<Output=T>){
         match self.distribution{
-            Distribution::Block => self.block_put(index,buf),
-            Distribution::Cyclic => self.cyclic_put(index,buf),
+            Distribution::Block => self.block_op(ArrayOp::Put,index,buf),
+            Distribution::Cyclic => self.cyclic_op(ArrayOp::Put,index,buf),
+        }
+    }
+    fn get(&self, index: usize, buf: &impl RegisteredMemoryRegion<Output=T>){
+        match self.distribution{
+            Distribution::Block => self.block_op(ArrayOp::Get,index,buf),
+            Distribution::Cyclic => self.cyclic_op(ArrayOp::Get,index,buf),
         }
     }
     // fn put_indirect(self, index: usize, buf: &impl LamellarBuffer<T>){
