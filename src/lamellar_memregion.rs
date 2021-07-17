@@ -24,6 +24,10 @@ impl std::fmt::Display for MemNotLocalError {
 
 impl std::error::Error for MemNotLocalError {}
 
+enum MemRegionEnum<T: std::clone::Clone + Send + Sync + 'static> {
+    Shared(LamellarMemoryRegion<T>),
+    Local(LamellarLocalMemoryRegion<T>),
+}
 pub trait RegisteredMemoryRegion {
     type Output: std::clone::Clone + Send + Sync + 'static;
     fn len(&self) -> usize;
@@ -48,8 +52,7 @@ impl<T: std::clone::Clone + Send + Sync + 'static> RegisteredMemoryRegion
     fn as_slice(&self) -> MemResult<&[T]> {
         if self.addr != 0 {
             Ok(unsafe { std::slice::from_raw_parts(self.addr as *const T, self.size) })
-        }
-        else{
+        } else {
             Ok(&[])
         }
     }
@@ -59,8 +62,7 @@ impl<T: std::clone::Clone + Send + Sync + 'static> RegisteredMemoryRegion
                 self.addr as *mut T,
                 self.size,
             ))
-        }
-        else{
+        } else {
             Ok(&mut [])
         }
     }
@@ -98,6 +100,14 @@ impl<T: std::clone::Clone + Send + Sync + 'static> RegisteredMemoryRegion
     }
 }
 
+impl<T: std::clone::Clone + Send + Sync + 'static> From<LamellarMemoryRegion<T>>
+    for MemRegionEnum<T>
+{
+    fn from(reg: LamellarMemoryRegion<T>) -> Self {
+        MemRegionEnum::Local(reg)
+    }
+}
+
 lazy_static! {
     static ref ACTIVE: CountedHashMap = CountedHashMap::new();
 }
@@ -123,18 +133,18 @@ impl CountedHashMap {
         }
     }
     #[allow(dead_code)]
-    pub fn print(&self){
-        for (k,v) in self.lock.read().lamellaes.iter(){
-            println!("backend: {:?} {:?} {:?}",k,Arc::strong_count(&v.0),v.1.load(Ordering::Relaxed));
+    pub fn print(&self) {
+        for (k, v) in self.lock.read().lamellaes.iter() {
+            println!(
+                "backend: {:?} {:?} {:?}",
+                k,
+                Arc::strong_count(&v.0),
+                v.1.load(Ordering::Relaxed)
+            );
         }
     }
 
-    pub fn insert(
-        &self,
-        backend: Backend,
-        lamellae: Arc<Lamellae>,
-        cnt: Arc<AtomicUsize>,
-    ) {
+    pub fn insert(&self, backend: Backend, lamellae: Arc<Lamellae>, cnt: Arc<AtomicUsize>) {
         let mut map = self.lock.write();
         let mut insert = false;
         *map.cnts.entry(backend).or_insert_with(|| {
@@ -328,10 +338,9 @@ impl<T: std::clone::Clone + Send + Sync + 'static> From<__NetworkLamellarMemoryR
         let temp = ACTIVE.get(reg.backend);
         temp.1.fetch_add(1, Ordering::SeqCst);
         let rdma = temp.0;
-        let addr = if reg.addr != 0{
+        let addr = if reg.addr != 0 {
             rdma.local_addr(reg.pe, reg.addr)
-        }
-        else{
+        } else {
             0
         };
         let lmr = LamellarMemoryRegion {
@@ -363,14 +372,15 @@ impl<T: std::clone::Clone + Send + Sync + 'static> LamellarMemoryRegion<T> {
         // println!("creating new lamellar memory region {:?}",size * std::mem::size_of::<T>());
         let mut local = false;
         let addr = if size > 0 {
-            if let AllocationType::Local = alloc{
+            if let AllocationType::Local = alloc {
                 local = true;
                 lamellae.rt_alloc(size * std::mem::size_of::<T>()).unwrap() + lamellae.base_addr()
             } else {
-                lamellae.alloc(size * std::mem::size_of::<T>(), alloc).unwrap()//did we call team barrer before this?
+                lamellae
+                    .alloc(size * std::mem::size_of::<T>(), alloc)
+                    .unwrap() //did we call team barrer before this?
             }
-        }
-        else{
+        } else {
             0
         };
         let temp = LamellarMemoryRegion {
@@ -398,10 +408,11 @@ impl<T: std::clone::Clone + Send + Sync + 'static> LamellarMemoryRegion<T> {
     /// * `pe` - id of remote PE to grab data from
     /// * `index` - offset into the remote memory window
     /// * `data` - address (which is "registered" with network device) of local input buffer that will be put into the remote memory
-    /// the data buffer may not be safe to upon return from this call, currently the user is responsible for completion detection, 
+    /// the data buffer may not be safe to upon return from this call, currently the user is responsible for completion detection,
     /// or you may use the similar iput call (with a potential performance penalty);
-    pub unsafe fn put(&self, pe: usize, index: usize, data: &impl RegisteredMemoryRegion) {
+    pub unsafe fn put<U: Into<MemRegionEnum<T>>>(&self, pe: usize, index: usize, data: U) {
         //todo make return a result?
+        let data = data.into();
         if index + data.len() <= self.size {
             let num_bytes = data.len() * std::mem::size_of::<T>();
             if let Ok(ptr) = data.as_ptr() {
@@ -430,7 +441,7 @@ impl<T: std::clone::Clone + Send + Sync + 'static> LamellarMemoryRegion<T> {
         if index + data.len() <= self.size {
             let num_bytes = data.len() * std::mem::size_of::<T>();
             if let Ok(ptr) = data.as_ptr() {
-                let bytes = unsafe { std::slice::from_raw_parts(ptr as *const u8, num_bytes)} ;
+                let bytes = unsafe { std::slice::from_raw_parts(ptr as *const u8, num_bytes) };
                 self.rdma
                     .iput(pe, bytes, self.addr + index * std::mem::size_of::<T>())
             } else {
@@ -575,7 +586,7 @@ impl<T: std::clone::Clone + Send + Sync + 'static> Drop for LamellarMemoryRegion
         if cnt == 1 {
             ACTIVE.remove(self.backend);
             // println!("trying to dropping mem region {:?}",self);
-            if self.addr != 0{
+            if self.addr != 0 {
                 if self.local {
                     self.rdma.rt_free(self.addr - self.rdma.base_addr()); // - self.rdma.base_addr());
                 } else {
@@ -626,10 +637,7 @@ pub struct LamellarLocalMemoryRegion<T: std::clone::Clone + Send + Sync + 'stati
 }
 
 impl<T: std::clone::Clone + Send + Sync + 'static> LamellarLocalMemoryRegion<T> {
-    pub(crate) fn new(
-        size: usize,
-        lamellae: Arc<Lamellae>,
-    ) -> LamellarLocalMemoryRegion<T> {
+    pub(crate) fn new(size: usize, lamellae: Arc<Lamellae>) -> LamellarLocalMemoryRegion<T> {
         let lmr = LamellarMemoryRegion::new(size, lamellae, AllocationType::Local);
         let pe = lmr.pe;
         LamellarLocalMemoryRegion { lmr: lmr, pe: pe }
@@ -642,9 +650,9 @@ impl<T: std::clone::Clone + Send + Sync + 'static> LamellarLocalMemoryRegion<T> 
     pub unsafe fn get(&self, index: usize, data: &impl RegisteredMemoryRegion) {
         self.lmr.get(self.pe, index, data)
     }
-    
+
     pub(crate) unsafe fn put_slice(&self, pe: usize, index: usize, data: &[T]) {
-        self.lmr.put_slice(self.pe,index, data)
+        self.lmr.put_slice(self.pe, index, data)
     }
 
     pub unsafe fn as_base<
@@ -670,9 +678,9 @@ impl<T: std::clone::Clone + Send + Sync + 'static> RegisteredMemoryRegion
     type Output = T;
     fn len(&self) -> usize {
         // if self.pe == self.lmr.pe {
-            self.lmr.len()
+        self.lmr.len()
         // } else {
-            // 0
+        // 0
         // }
     }
     fn addr(&self) -> MemResult<usize> {
@@ -728,21 +736,20 @@ impl<T: std::clone::Clone + Send + Sync + 'static> MemoryRegion for LamellarLoca
     }
 }
 
-impl<
-        T: std::clone::Clone
-            + Send
-            + Sync
-            + 'static,
-    > std::fmt::Debug for LamellarLocalMemoryRegion<T>
+impl<T: std::clone::Clone + Send + Sync + 'static> std::fmt::Debug
+    for LamellarLocalMemoryRegion<T>
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         // let slice = unsafe { std::slice::from_raw_parts(self.addr as *const T, self.size) };
         // write!(f, "{:?}", slice)
-        write!(
-            f,
-            "[{:?}] local mem region:  {:?} ",self.pe,self.lmr,
-        )
+        write!(f, "[{:?}] local mem region:  {:?} ", self.pe, self.lmr,)
     }
 }
 
-
+impl<T: std::clone::Clone + Send + Sync + 'static> From<LamellarLocalMemoryRegion<T>>
+    for MemRegionEnum<T>
+{
+    fn from(reg: LamellarLocalMemoryRegion<T>) -> Self {
+        MemRegionEnum::Local(reg)
+    }
+}

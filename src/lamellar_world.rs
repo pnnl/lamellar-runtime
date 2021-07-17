@@ -9,9 +9,11 @@ use crate::lamellar_arch::LamellarArch;
 //     LamellarLocalMemoryRegion, LamellarMemoryRegion, RemoteMemoryRegion,
 // };
 
-use crate::memregion::{LamellarMemoryRegion,RemoteMemoryRegion,Dist};
 use crate::lamellar_request::LamellarRequest;
 use crate::lamellar_team::{LamellarTeam, LamellarTeamRT};
+use crate::memregion::{
+    local::LocalMemoryRegion, shared::SharedMemoryRegion, Dist, RemoteMemoryRegion,
+};
 use crate::scheduler::{create_scheduler, SchedulerType};
 use lamellar_prof::*;
 use log::trace;
@@ -162,14 +164,10 @@ impl RemoteMemoryRegion for LamellarWorld {
     ///
     /// * `size` - number of elements of T to allocate a memory region for -- (not size in bytes)
     ///
-    fn alloc_shared_mem_region<
-        T: Dist
-            + std::fmt::Debug
-            + 'static,
-    >(
+    fn alloc_shared_mem_region<T: Dist + std::fmt::Debug + 'static>(
         &self,
         size: usize,
-    ) -> LamellarMemoryRegion<T> {
+    ) -> SharedMemoryRegion<T> {
         self.barrier();
         self.team_rt.alloc_shared_mem_region::<T>(size)
     }
@@ -180,14 +178,10 @@ impl RemoteMemoryRegion for LamellarWorld {
     ///
     /// * `size` - number of elements of T to allocate a memory region for -- (not size in bytes)
     ///
-    fn alloc_local_mem_region<
-        T: Dist
-            + std::fmt::Debug
-            + 'static,
-    >(
+    fn alloc_local_mem_region<T: Dist + std::fmt::Debug + 'static>(
         &self,
         size: usize,
-    ) -> LamellarMemoryRegion<T> {
+    ) -> LocalMemoryRegion<T> {
         self.team_rt.alloc_local_mem_region::<T>(size)
     }
 
@@ -197,13 +191,9 @@ impl RemoteMemoryRegion for LamellarWorld {
     ///
     /// * `region` - the region to free
     ///
-    fn free_shared_memory_region<
-        T: Dist
-            + std::fmt::Debug
-            + 'static,
-    >(
+    fn free_shared_memory_region<T: Dist + std::fmt::Debug + 'static>(
         &self,
-        region: LamellarMemoryRegion<T>,
+        region: SharedMemoryRegion<T>,
     ) {
         self.team_rt.free_shared_memory_region(region)
     }
@@ -214,13 +204,9 @@ impl RemoteMemoryRegion for LamellarWorld {
     ///
     /// * `region` - the region to free
     ///
-    fn free_local_memory_region<
-        T: Dist
-            + std::fmt::Debug
-            + 'static,
-    >(
+    fn free_local_memory_region<T: Dist + std::fmt::Debug + 'static>(
         &self,
-        region: LamellarMemoryRegion<T>,
+        region: LocalMemoryRegion<T>,
     ) {
         self.team_rt.free_local_memory_region(region)
     }

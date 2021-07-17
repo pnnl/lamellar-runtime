@@ -10,18 +10,11 @@ use crate::lamellar_arch::{GlobalArch, IdError, LamellarArch, LamellarArchEnum, 
 //     LamellarLocalMemoryRegion, LamellarMemoryRegion, MemoryRegion, RegisteredMemoryRegion,
 //     RemoteMemoryRegion,
 // };
-use crate::memregion::{
-    LamellarMemoryRegion, 
-    MemRegionId, 
-    shared::SharedMemoryRegion, 
-    local::LocalMemoryRegion, 
-    RegisteredMemoryRegion,
-    RemoteMemoryRegion,
-    Dist,
-    RTMemoryRegionRDMA,
-    AsBase
-};
 use crate::lamellar_request::{AmType, LamellarRequest, LamellarRequestHandle};
+use crate::memregion::{
+    local::LocalMemoryRegion, shared::SharedMemoryRegion, AsBase, Dist, LamellarMemoryRegion,
+    MemRegionId, RTMemoryRegionRDMA, RegisteredMemoryRegion, RemoteMemoryRegion,
+};
 // use crate::schedulers::SchedulerQueue;
 use crate::scheduler::{Scheduler, SchedulerQueue};
 #[cfg(feature = "nightly")]
@@ -212,7 +205,13 @@ impl LamellarTeamRT {
             id: 0,
             team_hash: 0, //easy id to look up for global
             sub_team_id_cnt: AtomicUsize::new(0),
-            barrier: Barrier::new(world_pe, num_pes, lamellae.clone(), arch.clone(),scheduler.clone()),
+            barrier: Barrier::new(
+                world_pe,
+                num_pes,
+                lamellae.clone(),
+                arch.clone(),
+                scheduler.clone(),
+            ),
             dropped: SharedMemoryRegion::new(num_pes, lamellae.clone(), alloc.clone()),
         };
         unsafe {
@@ -531,9 +530,9 @@ impl LamellarTeamRT {
         F: RemoteActiveMessage + LamellarAM + Send + Sync + 'static,
     {
         trace!("[{:?}] team exec am all request", self.world_pe);
-        let tg_outstanding_reqs = match task_group_cnts{
+        let tg_outstanding_reqs = match task_group_cnts {
             Some(task_group_cnts) => Some(task_group_cnts.outstanding_reqs.clone()),
-            None => None
+            None => None,
         };
         let (my_req, ireq) = LamellarRequestHandle::new(
             self.num_pes,
@@ -581,9 +580,9 @@ impl LamellarTeamRT {
         F: RemoteActiveMessage + LamellarAM + Send + Sync + 'static,
     {
         prof_start!(pre);
-        let tg_outstanding_reqs = match task_group_cnts{
+        let tg_outstanding_reqs = match task_group_cnts {
             Some(task_group_cnts) => Some(task_group_cnts.outstanding_reqs.clone()),
-            None => None
+            None => None,
         };
         // println!("[{:?}] team exec am pe request {:?}", self.world_pe,self.team_hash);
         assert!(pe < self.arch.num_pes());
@@ -651,9 +650,9 @@ impl LamellarTeamRT {
         // println!("[{:?}] team exec am local request", self.world_pe);
         prof_end!(pre);
         prof_start!(req);
-        let tg_outstanding_reqs = match task_group_cnts{
+        let tg_outstanding_reqs = match task_group_cnts {
             Some(task_group_cnts) => Some(task_group_cnts.outstanding_reqs.clone()),
-            None => None
+            None => None,
         };
         let (my_req, ireq) = LamellarRequestHandle::new(
             1,
@@ -840,14 +839,10 @@ impl RemoteMemoryRegion for LamellarTeam {
     ///
     /// * `size` - number of elements of T to allocate a memory region for -- (not size in bytes)
     ///
-    fn alloc_shared_mem_region<
-        T: Dist
-            + std::fmt::Debug
-            + 'static,
-    >(
+    fn alloc_shared_mem_region<T: Dist + std::fmt::Debug + 'static>(
         &self,
         size: usize,
-    ) -> LamellarMemoryRegion<T> {
+    ) -> SharedMemoryRegion<T> {
         // println!("alloc_mem_reg: {:?}",self.world_pe);
         self.team.alloc_shared_mem_region(size)
     }
@@ -858,14 +853,10 @@ impl RemoteMemoryRegion for LamellarTeam {
     ///
     /// * `size` - number of elements of T to allocate a memory region for -- (not size in bytes)
     ///
-    fn alloc_local_mem_region<
-        T: Dist
-            + std::fmt::Debug
-            + 'static,
-    >(
+    fn alloc_local_mem_region<T: Dist + std::fmt::Debug + 'static>(
         &self,
         size: usize,
-    ) -> LamellarMemoryRegion<T> {
+    ) -> LocalMemoryRegion<T> {
         // println!("alloc_mem_reg: {:?}",self.world_pe);
         self.team.alloc_local_mem_region(size)
     }
@@ -876,13 +867,9 @@ impl RemoteMemoryRegion for LamellarTeam {
     ///
     /// * `region` - the region to free
     ///
-    fn free_shared_memory_region<
-        T: Dist
-            + std::fmt::Debug
-            + 'static,
-    >(
+    fn free_shared_memory_region<T: Dist + std::fmt::Debug + 'static>(
         &self,
-        region: LamellarMemoryRegion<T>,
+        region: SharedMemoryRegion<T>,
     ) {
         self.team.free_shared_memory_region(region)
     }
@@ -893,13 +880,9 @@ impl RemoteMemoryRegion for LamellarTeam {
     ///
     /// * `region` - the region to free
     ///
-    fn free_local_memory_region<
-        T: Dist
-            + std::fmt::Debug
-            + 'static,
-    >(
+    fn free_local_memory_region<T: Dist + std::fmt::Debug + 'static>(
         &self,
-        region: LamellarMemoryRegion<T>,
+        region: LocalMemoryRegion<T>,
     ) {
         self.team.free_local_memory_region(region)
     }
@@ -913,16 +896,12 @@ impl RemoteMemoryRegion for LamellarTeamRT {
     ///
     /// * `size` - number of elements of T to allocate a memory region for -- (not size in bytes)
     ///
-    fn alloc_shared_mem_region<
-        T: Dist
-            + std::fmt::Debug
-            + 'static,
-    >(
+    fn alloc_shared_mem_region<T: Dist + std::fmt::Debug + 'static>(
         &self,
         size: usize,
-    ) -> LamellarMemoryRegion<T> {
+    ) -> SharedMemoryRegion<T> {
         self.barrier.barrier();
-        let mr: LamellarMemoryRegion<T> = if self.num_world_pes == self.num_pes {
+        let mr: SharedMemoryRegion<T> = if self.num_world_pes == self.num_pes {
             SharedMemoryRegion::new(size, self.lamellae.clone(), AllocationType::Global)
         } else {
             SharedMemoryRegion::new(
@@ -930,10 +909,10 @@ impl RemoteMemoryRegion for LamellarTeamRT {
                 self.lamellae.clone(),
                 AllocationType::Sub(self.arch.team_iter().collect::<Vec<usize>>()),
             )
-        }.into();
+        };
         self.mem_regions
             .write()
-            .insert(mr.id(), Box::new(unsafe {mr.clone().as_base::<u8>()}));
+            .insert(mr.id(), Box::new(unsafe { mr.clone().as_base::<u8>() }));
         self.barrier.barrier();
         mr
     }
@@ -944,18 +923,14 @@ impl RemoteMemoryRegion for LamellarTeamRT {
     ///
     /// * `size` - number of elements of T to allocate a memory region for -- (not size in bytes)
     ///
-    fn alloc_local_mem_region<
-        T: Dist
-            + std::fmt::Debug
-            + 'static,
-    >(
+    fn alloc_local_mem_region<T: Dist + std::fmt::Debug + 'static>(
         &self,
         size: usize,
-    ) -> LamellarMemoryRegion<T> {
-        let lmr: LamellarMemoryRegion<T> = LocalMemoryRegion::new(size, self.lamellae.clone()).into();
+    ) -> LocalMemoryRegion<T> {
+        let lmr: LocalMemoryRegion<T> = LocalMemoryRegion::new(size, self.lamellae.clone()).into();
         self.mem_regions
             .write()
-            .insert(lmr.id(), Box::new(unsafe {lmr.clone().as_base::<u8>()}));
+            .insert(lmr.id(), Box::new(unsafe { lmr.clone().as_base::<u8>() }));
         // println!("alloc_mem_reg: {:?}",llmr);
         lmr
     }
@@ -966,13 +941,9 @@ impl RemoteMemoryRegion for LamellarTeamRT {
     ///
     /// * `region` - the region to free
     ///
-    fn free_shared_memory_region<
-        T: Dist
-            + std::fmt::Debug
-            + 'static,
-    >(
+    fn free_shared_memory_region<T: Dist + std::fmt::Debug + 'static>(
         &self,
-        region: LamellarMemoryRegion<T>,
+        region: SharedMemoryRegion<T>,
     ) {
         self.barrier.barrier();
         self.mem_regions.write().remove(&region.id());
@@ -984,13 +955,9 @@ impl RemoteMemoryRegion for LamellarTeamRT {
     ///
     /// * `region` - the region to free
     ///
-    fn free_local_memory_region<
-        T: Dist
-            + std::fmt::Debug
-            + 'static,
-    >(
+    fn free_local_memory_region<T: Dist + std::fmt::Debug + 'static>(
         &self,
-        region: LamellarMemoryRegion<T>,
+        region: LocalMemoryRegion<T>,
     ) {
         // println!("free_mem_reg: {:?}",region);
         self.mem_regions.write().remove(&region.id());

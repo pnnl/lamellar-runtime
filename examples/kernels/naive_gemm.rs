@@ -10,12 +10,9 @@
 /// matrices use row-wise distribution (i.e. all elements of a row are local to a pe,
 /// conversely this means elements of a column are distributed across pes)
 ///----------------------------------------------------------------------------------
-
 use futures::future;
-use lamellar::{ActiveMessaging};
-use lamellar::{
-    LamellarLocalMemoryRegion, LamellarMemoryRegion, RegisteredMemoryRegion, RemoteMemoryRegion,
-};
+use lamellar::ActiveMessaging;
+use lamellar::{LocalMemoryRegion, RemoteMemoryRegion, SharedMemoryRegion};
 use lazy_static::lazy_static;
 use matrixmultiply::sgemm;
 use parking_lot::Mutex;
@@ -24,13 +21,13 @@ lazy_static! {
     static ref LOCK: Mutex<()> = Mutex::new(());
 }
 
-#[lamellar::AmData( Clone, Debug)]
+#[lamellar::AmData(Clone, Debug)]
 struct SubMatrix {
     name: String,
-    mat: LamellarMemoryRegion<f32>, //handle to underlying data
-    pe: usize,                      //originating be
-    rows: usize,                    // number of rows in the distributed root matrix
-    cols: usize,                    // number of cols in the distributed root matrix
+    mat: SharedMemoryRegion<f32>, //handle to underlying data
+    pe: usize,                    //originating be
+    rows: usize,                  // number of rows in the distributed root matrix
+    cols: usize,                  // number of cols in the distributed root matrix
     row_block: usize, // index of the local row block this submatrix corresponds to (0 based indexing)
     col_block: usize, // index of the local col block this submatrix corresponds to (0 based indexing)
     block_size: usize, //sub mat will be block_size*block_size
@@ -39,7 +36,7 @@ struct SubMatrix {
 impl SubMatrix {
     fn new(
         name: String,
-        mat: LamellarMemoryRegion<f32>,
+        mat: SharedMemoryRegion<f32>,
         pe: usize,
         rows: usize,
         cols: usize,
@@ -71,7 +68,7 @@ impl SubMatrix {
         }
     }
 }
-async fn get_sub_mat(mat: &SubMatrix, sub_mat: &LamellarLocalMemoryRegion<f32>) {
+async fn get_sub_mat(mat: &SubMatrix, sub_mat: &LocalMemoryRegion<f32>) {
     let start_row = mat.row_block * mat.block_size;
     let start_col = mat.col_block * mat.block_size;
     let sub_mat_slice = unsafe { sub_mat.as_mut_slice().unwrap() };
@@ -80,7 +77,7 @@ async fn get_sub_mat(mat: &SubMatrix, sub_mat: &LamellarLocalMemoryRegion<f32>) 
         let offset = (row + start_row) * mat.cols + (start_col);
         let data = sub_mat.sub_region(row * mat.block_size..(row + 1) * mat.block_size);
         unsafe {
-            mat.mat.get(mat.pe, offset, &data);
+            mat.mat.get(mat.pe, offset, data.clone());
         }
     }
     while sub_mat_slice[sub_mat.len() - 1].is_nan() {
@@ -89,9 +86,7 @@ async fn get_sub_mat(mat: &SubMatrix, sub_mat: &LamellarLocalMemoryRegion<f32>) 
     }
 }
 
-
-
-#[lamellar::AmData( Clone, Debug)]
+#[lamellar::AmData(Clone, Debug)]
 struct NaiveMM {
     a: SubMatrix, // will always be local
     b: SubMatrix, // can possibly be remote

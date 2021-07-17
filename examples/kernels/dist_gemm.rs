@@ -10,10 +10,8 @@
 /// matrices use row-wise distribution (i.e. all elements of a row are local to a pe,
 /// conversely this means elements of a column are distributed across pes)
 ///---------------------------------------------------------------------------------
-use lamellar::{ActiveMessaging};
-use lamellar::{
-    LamellarLocalMemoryRegion, LamellarMemoryRegion, RegisteredMemoryRegion, RemoteMemoryRegion,
-};
+use lamellar::ActiveMessaging;
+use lamellar::{LocalMemoryRegion, RemoteMemoryRegion, SharedMemoryRegion};
 use lazy_static::lazy_static;
 use matrixmultiply::sgemm;
 use parking_lot::Mutex;
@@ -22,10 +20,10 @@ lazy_static! {
     static ref LOCK: Mutex<()> = Mutex::new(());
 }
 
-#[lamellar::AmData( Clone, Debug)]
+#[lamellar::AmData(Clone, Debug)]
 struct SubMatrix {
     name: String,
-    mat: LamellarMemoryRegion<f32>,
+    mat: SharedMemoryRegion<f32>,
     pe: usize,
     rows: usize,
     cols: usize,
@@ -37,7 +35,7 @@ struct SubMatrix {
 impl SubMatrix {
     fn new(
         name: String,
-        mat: LamellarMemoryRegion<f32>,
+        mat: SharedMemoryRegion<f32>,
         pe: usize,
         rows: usize,
         cols: usize,
@@ -69,7 +67,7 @@ impl SubMatrix {
         }
     }
 }
-async fn get_sub_mat(mat: &SubMatrix, sub_mat: &LamellarLocalMemoryRegion<f32>) {
+async fn get_sub_mat(mat: &SubMatrix, sub_mat: &LocalMemoryRegion<f32>) {
     let start_row = mat.row_block * mat.block_size;
     let start_col = mat.col_block * mat.block_size;
     let sub_mat_slice = unsafe { sub_mat.as_mut_slice().unwrap() };
@@ -79,7 +77,7 @@ async fn get_sub_mat(mat: &SubMatrix, sub_mat: &LamellarLocalMemoryRegion<f32>) 
         let offset = (row + start_row) * mat.cols + (start_col);
         let data = sub_mat.sub_region(row * mat.block_size..(row + 1) * mat.block_size);
         unsafe {
-            mat.mat.get(mat.pe, offset, &data);
+            mat.mat.get(mat.pe, offset, data.clone());
         }
     }
 
@@ -89,8 +87,7 @@ async fn get_sub_mat(mat: &SubMatrix, sub_mat: &LamellarLocalMemoryRegion<f32>) 
     }
 }
 
-
-#[lamellar::AmData( Clone, Debug)]
+#[lamellar::AmData(Clone, Debug)]
 struct MatMulAM {
     a: SubMatrix,     // a is always local
     b: SubMatrix,     // b is possibly remote
@@ -128,8 +125,8 @@ impl LamellarAM for MatMulAM {
 }
 
 fn do_gemm(
-    a: &LamellarLocalMemoryRegion<f32>,
-    b: &LamellarLocalMemoryRegion<f32>,
+    a: &LocalMemoryRegion<f32>,
+    b: &LocalMemoryRegion<f32>,
     c: SubMatrix,
     block_size: usize,
 ) {
@@ -160,7 +157,7 @@ fn do_gemm(
 #[lamellar::AmData(Clone, Debug)]
 struct CachedMM {
     a: SubMatrix,
-    b: LamellarLocalMemoryRegion<f32>,
+    b: LocalMemoryRegion<f32>,
     c: SubMatrix,
     block_size: usize,
 }

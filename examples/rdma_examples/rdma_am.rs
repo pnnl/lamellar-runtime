@@ -5,15 +5,13 @@
 /// a remote pes or put data into a remote pes. In the example,
 /// the handles are used on remote pes to access data on the PE which launched the AM
 ///----------------------------------------------------------------
-use lamellar::{
-    ActiveMessaging, LamellarMemoryRegion, RegisteredMemoryRegion, RemoteMemoryRegion,
-};
+use lamellar::{ActiveMessaging, RemoteMemoryRegion, SharedMemoryRegion};
 
 const ARRAY_LEN: usize = 100;
 
-#[lamellar::AmData( Clone, Debug)]
+#[lamellar::AmData(Clone, Debug)]
 struct RdmaAM {
-    array: LamellarMemoryRegion<u8>,
+    array: SharedMemoryRegion<u8>,
     orig_pe: usize,
     index: usize,
 }
@@ -28,7 +26,7 @@ impl LamellarAM for RdmaAM {
         let local_slice = unsafe { local.as_mut_slice().unwrap() };
         local_slice[ARRAY_LEN - 1] = lamellar::num_pes as u8;
         unsafe {
-            self.array.get(self.orig_pe, 0, &local);
+            self.array.get(self.orig_pe, 0, local.clone());
         }
         while local_slice[ARRAY_LEN - 1] == lamellar::num_pes as u8 {
             async_std::task::yield_now().await;
@@ -42,7 +40,7 @@ impl LamellarAM for RdmaAM {
         if my_index < ARRAY_LEN {
             unsafe {
                 self.array
-                    .put(self.orig_pe, my_index, &local.sub_region(0..=0));
+                    .put(self.orig_pe, my_index, local.sub_region(0..=0));
             }
         }
         lamellar::world.free_local_memory_region(local);
@@ -54,7 +52,7 @@ impl LamellarAM for RdmaAM {
 // we provide APIs for these memory regions but they
 // are intended mostly for internal use in the runtime
 //
-// LamellarMemoryRegions are serializable and can be transfered
+// SharedMemoryRegions are serializable and can be transfered
 // as part of a LamellarAM
 fn main() {
     let world = lamellar::LamellarWorldBuilder::new().build();

@@ -6,7 +6,7 @@
 /// as well as a (single process) shared memory version using Rayon.
 /// --------------------------------------------------------------------
 use lamellar::{ActiveMessaging, LamellarWorld};
-use lamellar::{LamellarMemoryRegion, RDMA, SubRegion};
+use lamellar::{RemoteMemoryRegion, SharedMemoryRegion};
 use parking_lot::Mutex;
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
@@ -23,9 +23,9 @@ lazy_static! {
     static ref LOCK: Mutex<()> = Mutex::new(());
 }
 
-#[lamellar::AmData( Clone, Debug)]
+#[lamellar::AmData(Clone, Debug)]
 struct ReduceAM {
-    spectrum: LamellarMemoryRegion<f64>,
+    spectrum: SharedMemoryRegion<f64>,
 }
 
 #[lamellar::am]
@@ -35,10 +35,10 @@ impl LamellarAM for ReduceAM {
     }
 }
 
-#[lamellar::AmData( Clone, Debug)]
+#[lamellar::AmData(Clone, Debug)]
 struct LocalSumAM {
-    spectrum: LamellarMemoryRegion<f64>,
-    signal: LamellarMemoryRegion<f64>,
+    spectrum: SharedMemoryRegion<f64>,
+    signal: SharedMemoryRegion<f64>,
     global_sig_len: usize,
     k: usize,
     pe: usize,
@@ -63,9 +63,9 @@ impl LamellarAM for LocalSumAM {
     }
 }
 
-#[lamellar::AmData( Clone, Debug)]
+#[lamellar::AmData(Clone, Debug)]
 struct RemoteSumAM {
-    spectrum: LamellarMemoryRegion<f64>,
+    spectrum: SharedMemoryRegion<f64>,
     add_spec: Vec<f64>,
 }
 
@@ -84,9 +84,9 @@ fn dft_lamellar(
     world: &LamellarWorld,
     my_pe: usize,
     num_pes: usize,
-    signal: LamellarMemoryRegion<f64>,
+    signal: SharedMemoryRegion<f64>,
     global_sig_len: usize,
-    spectrum: LamellarMemoryRegion<f64>,
+    spectrum: SharedMemoryRegion<f64>,
 ) {
     let spectrum_slice = spectrum.as_slice().unwrap();
     let add_spec = world.alloc_shared_mem_region::<f64>(spectrum_slice.len());
@@ -206,16 +206,16 @@ fn main() {
         }
     }
     unsafe {
-        partial_spectrum.put(my_pe, 0, &full_spectrum.sub_region(0..array_len));
+        partial_spectrum.put(my_pe, 0, full_spectrum.sub_region(0..array_len));
     }
     unsafe {
-        partial_sum.put(my_pe, 0, &magic);
+        partial_sum.put(my_pe, 0, magic.clone());
     }
     unsafe {
         partial_signal.put(
             my_pe,
             0,
-            &full_signal.sub_region(my_pe * array_len..my_pe * array_len + array_len),
+            full_signal.sub_region(my_pe * array_len..my_pe * array_len + array_len),
         );
     }
 

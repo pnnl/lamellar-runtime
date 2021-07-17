@@ -1,21 +1,19 @@
 /// ------------Lamellar Bandwidth: AM +RDMA -------------------------
 /// Test the bandwidth between two PEs using an active message which
-/// contians a handle to a LamellarMemoryRegion, the active message
+/// contians a handle to a SharedMemoryRegion, the active message
 /// then "gets" N bytes into a local array.
 /// This allows us to have multiple data transfers occuring in parallel
-/// and reduces the need to copy + serialize/deserialize larges amounts 
+/// and reduces the need to copy + serialize/deserialize larges amounts
 /// of data (on the critical path)
 /// --------------------------------------------------------------------
-use lamellar::{
-    ActiveMessaging, LamellarMemoryRegion, RegisteredMemoryRegion, RemoteMemoryRegion,
-};
+use lamellar::{ActiveMessaging, RemoteMemoryRegion, SharedMemoryRegion};
 use std::time::Instant;
 
 const ARRAY_LEN: usize = 1 * 1024 * 1024 * 1024;
 
 #[lamellar::AmData(Clone, Debug)]
 struct DataAM {
-    array: LamellarMemoryRegion<u8>,
+    array: SharedMemoryRegion<u8>,
     index: usize,
     length: usize,
     src: usize,
@@ -29,7 +27,7 @@ impl LamellarAM for DataAM {
             let local = lamellar::team.alloc_local_mem_region::<u8>(self.length);
             let local_slice = local.as_mut_slice().unwrap();
             local_slice[self.length - 1] = 255u8;
-            self.array.get(self.src, self.index, &local);
+            self.array.get(self.src, self.index, local.clone());
 
             while local_slice[self.length - 1] == 255u8 {
                 async_std::task::yield_now().await;
@@ -62,7 +60,7 @@ fn main() {
             *i = my_pe as u8;
         }
     }
-    unsafe { array.put(my_pe, 0, &data) };
+    unsafe { array.put(my_pe, 0, data.clone()) };
     world.barrier();
     let s = Instant::now();
     world.barrier();

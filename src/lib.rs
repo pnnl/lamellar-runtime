@@ -56,36 +56,27 @@ pub use crate::active_messaging::{ActiveMessaging, LamellarAM, LocalAM};
 // };
 
 pub use crate::memregion::{
-    LamellarMemoryRegion,RegisteredMemoryRegion,RemoteMemoryRegion,
-    MemoryRegionRDMA as RDMA,SubRegion
+    local::LocalMemoryRegion, shared::SharedMemoryRegion, RemoteMemoryRegion,
 };
 // pub use crate::array::{
 //     LamellarArrayRDMA, Distribution,ReduceKey
 // };
 // pub use crate::array::r#unsafe::UnsafeArray;
 
-
-
 #[cfg(feature = "experimental")]
 #[doc(hidden)]
-pub use crate::darc::{
-    darc_from_ndarc, darc_serialize, 
-};
+pub use crate::darc::global_rw_darc::{globalrw_from_ndarc, globalrw_serialize};
 #[cfg(feature = "experimental")]
 #[doc(hidden)]
-pub use crate::darc::local_rw_darc::{
-    localrw_from_ndarc, localrw_serialize,
-};
+pub use crate::darc::local_rw_darc::{localrw_from_ndarc, localrw_serialize};
 #[cfg(feature = "experimental")]
 #[doc(hidden)]
-pub use crate::darc::global_rw_darc::{
-    globalrw_from_ndarc, globalrw_serialize,
-};
+pub use crate::darc::{darc_from_ndarc, darc_serialize};
 
-#[cfg(feature = "experimental")]
-pub use crate::darc::Darc;
 #[cfg(feature = "experimental")]
 pub use crate::darc::local_rw_darc::LocalRwDarc;
+#[cfg(feature = "experimental")]
+pub use crate::darc::Darc;
 
 #[cfg(feature = "experimental")]
 pub use crate::darc::global_rw_darc::GlobalRwDarc;
