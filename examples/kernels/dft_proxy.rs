@@ -6,7 +6,7 @@
 /// as well as a (single process) shared memory version using Rayon.
 /// --------------------------------------------------------------------
 use lamellar::{ActiveMessaging, LamellarWorld};
-use lamellar::{LamellarMemoryRegion, RegisteredMemoryRegion, RemoteMemoryRegion};
+use lamellar::{LamellarMemoryRegion, RDMA, SubRegion};
 use parking_lot::Mutex;
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};

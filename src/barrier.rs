@@ -1,6 +1,7 @@
 use crate::lamellae::{AllocationType,Lamellae};
 use crate::lamellar_arch::LamellarArchRT;
-use crate::lamellar_memregion::{LamellarMemoryRegion,RegisteredMemoryRegion};
+// use crate::lamellar_memregion::{SharedMemoryRegion,RegisteredMemoryRegion};
+use crate::memregion::{MemoryRegion,RegisteredMemoryRegion,SubRegion,RTMemoryRegionRDMA};
 use crate::scheduler::{Scheduler,SchedulerQueue};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -17,10 +18,10 @@ pub(crate) struct Barrier{
 }
 
 struct SubBufs{
-    barrier1: LamellarMemoryRegion<usize>,
-    barrier2: LamellarMemoryRegion<usize>,
-    barrier3: LamellarMemoryRegion<usize>,
-    _orig_buf: LamellarMemoryRegion<usize>, //needs to be last so we can drop appropriately...
+    barrier1: MemoryRegion<usize>,
+    barrier2: MemoryRegion<usize>,
+    barrier3: MemoryRegion<usize>,
+    _orig_buf: MemoryRegion<usize>, //needs to be last so we can drop appropriately...
 }
 
 impl Barrier{
@@ -36,7 +37,7 @@ impl Barrier{
                 else{ 
                     AllocationType::Sub(arch.team_iter().collect::<Vec<usize>>())
                 };
-                let data_buf = LamellarMemoryRegion::new(size,lamellae.clone(),alloc);
+                let data_buf = MemoryRegion::new(size,lamellae.clone(),alloc);
                 unsafe { 
                     for elem in data_buf.as_mut_slice().unwrap() {
                         *elem = 0;
@@ -75,7 +76,7 @@ impl Barrier{
         } 
     }
 
-    fn check_barrier_vals(&self, barrier_id: usize, barrier_buf: &LamellarMemoryRegion<usize>) {
+    fn check_barrier_vals(&self, barrier_id: usize, barrier_buf: &MemoryRegion<usize>) {
         let mut s = Instant::now();
         for pe in barrier_buf.as_slice().unwrap() {
             while *pe != barrier_id {
@@ -93,7 +94,7 @@ impl Barrier{
         &self,
         my_index: usize,
         barrier_id: &[usize],
-        barrier_buf: &LamellarMemoryRegion<usize>,
+        barrier_buf: &MemoryRegion<usize>,
     ) {
         for world_pe in self.arch.team_iter() {
             unsafe {

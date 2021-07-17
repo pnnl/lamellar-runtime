@@ -6,7 +6,7 @@ use crate::lamellar_memregion::{LamellarMemoryRegion, RemoteMemoryRegion,MemResu
 use crate::lamellar_team::LamellarTeam;
 // use crate::scheduler::{Scheduler,SchedulerQueue};
 use crate::darc::Darc;
-use crate::array::{LamellarArray,Distribution};
+use crate::array::{LamellarArrayRDMA,Distribution};
 use crate::lamellar_memregion::RegisteredMemoryRegion;
 
 use log::trace;
@@ -154,7 +154,7 @@ impl<
             + Sync
             + std::fmt::Debug
             + 'static,
-    > LamellarArray<T> for UnsafeArray<T>
+    > LamellarArrayRDMA<T> for UnsafeArray<T>
 {
     fn put(&self, index: usize, buf: &impl RegisteredMemoryRegion<Output=T>){
         match self.distribution{

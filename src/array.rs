@@ -1,4 +1,4 @@
-// use crate::active_messaging::*; //{ActiveMessaging,AMCounters,Cmd,Msg,LamellarAny,LamellarLocal};
+use crate::active_messaging::*; //{ActiveMessaging,AMCounters,Cmd,Msg,LamellarAny,LamellarLocal};
 // use crate::lamellae::Lamellae;
 // use crate::lamellar_arch::LamellarArchRT;
 use crate::lamellar_memregion::{LamellarMemoryRegion, RemoteMemoryRegion, RegisteredMemoryRegion};
@@ -11,44 +11,39 @@ use crate::lamellar_memregion::{LamellarMemoryRegion, RemoteMemoryRegion, Regist
 // use std::ops::{Index, IndexMut, Range, RangeFrom, RangeFull, RangeInclusive, RangeTo, RangeToInclusive};
 // use std::any;
 // use core::marker::PhantomData;
-// use std::collections::HashMap;
+use std::collections::HashMap;
 // use std::sync::atomic::Ordering;
-// use std::sync::Arc;
+use std::sync::Arc;
 // use std::time::{Duration, Instant};
 
 pub (crate) mod r#unsafe;
 
-// // to manage team lifetimes properly we need a seperate user facing handle that contains a strong link to the inner team.
-// // this outer handle has a lifetime completely tied to whatever the user wants
-// // when the outer handle is dropped, we do the appropriate barriers and then remove the inner team from the runtime data structures
-// // this should allow for the inner team to persist while at least one user handle exists in the world.
+pub(crate) type ReduceGen =
+    fn(dyn RegisteredMemoryRegion<Output=u8>, usize) -> Arc<dyn RemoteActiveMessage + Send + Sync>;
 
-// pub(crate) type ReduceGen =
-//     fn(LamellarMemoryRegion<u8>, usize) -> Arc<dyn RemoteActiveMessage + Send + Sync>;
+lazy_static! {
+    pub(crate) static ref REDUCE_OPS: HashMap<(std::any::TypeId, String), ReduceGen> = {
+        let mut temp = HashMap::new();
+        for reduction_type in crate::inventory::iter::<ReduceKey> {
+            temp.insert(
+                (reduction_type.id.clone(), reduction_type.name.clone()),
+                reduction_type.gen,
+            );
+        }
+        temp
+    };
+}
 
-// lazy_static! {
-//     pub(crate) static ref REDUCE_OPS: HashMap<(std::any::TypeId, String), ReduceGen> = {
-//         let mut temp = HashMap::new();
-//         for reduction_type in crate::inventory::iter::<ReduceKey> {
-//             temp.insert(
-//                 (reduction_type.id.clone(), reduction_type.name.clone()),
-//                 reduction_type.gen,
-//             );
-//         }
-//         temp
-//     };
-// }
+pub struct ReduceKey {
+    pub id: std::any::TypeId,
+    pub name: String,
+    pub gen: ReduceGen,
+}
+crate::inventory::collect!(ReduceKey);
 
-// pub struct ReduceKey {
-//     pub id: std::any::TypeId,
-//     pub name: String,
-//     pub gen: ReduceGen,
-// }
-// crate::inventory::collect!(ReduceKey);
-
-// lamellar_impl::generate_reductions_for_type_rt!(u8, u16, u32, u64, u128, usize);
-// lamellar_impl::generate_reductions_for_type_rt!(i8, i16, i32, i64, i128, isize);
-// lamellar_impl::generate_reductions_for_type_rt!(f32,f64);
+lamellar_impl::generate_reductions_for_type_rt!(u8, u16, u32, u64, u128, usize);
+lamellar_impl::generate_reductions_for_type_rt!(i8, i16, i32, i64, i128, isize);
+lamellar_impl::generate_reductions_for_type_rt!(f32,f64);
 
 #[derive(Clone,Debug)]
 pub enum Distribution{
@@ -56,17 +51,38 @@ pub enum Distribution{
     Cyclic,
 }
 
-pub trait LamellarArray<T>: RegisteredMemoryRegion // + std::ops::Index + std::ops::IndexMut
+pub trait LamellarArrayRDMA<T>: RegisteredMemoryRegion // + std::ops::Index + std::ops::IndexMut
 where T: serde::ser::Serialize
 + serde::de::DeserializeOwned
 + std::clone::Clone
 + Send
 + Sync
 + std::fmt::Debug, {
+    type Rmr: RegisteredMemoryRegion<Output=T>;
     fn put(&self, index: usize, buf: &impl RegisteredMemoryRegion<Output=T>);
     // pub fn put_indirect(self, index: usize, buf: &impl LamellarBuffer<T>);
     fn get(&self, index: usize, buf: &impl RegisteredMemoryRegion<Output=T>);
+    fn get_raw_mem_region(&self) -> Self::Rmr;
     // pub fn get_indirect(self, index: usize, buf: &mut impl LamellarBuffer<T>); //do we need a LamellarBufferMut?
+}
+
+pub trait LamellarArrayReduce<T>: LamellarArrayRDMA<T> // + std::ops::Index + std::ops::IndexMut
+where T: serde::ser::Serialize
++ serde::de::DeserializeOwned
++ std::clone::Clone
++ Send
++ Sync
++ std::fmt::Debug, {
+    fn wait_all(&self);
+    fn get_reduction_op(&self, op: String) -> LamellarArcAm{
+        unsafe {
+            REDUCE_OPS
+                .get(&(std::any::TypeId::of::<T>(), op))
+                .expect("unexpected reduction type")(
+                self.rmr.clone().as_base::<u8>(), self.num_pes
+            )
+        }
+    }
 }
 
 // pub(crate) trait LamellarBuffer<T>

@@ -22,11 +22,13 @@ mod lamellar_arch;
 #[cfg(feature = "experimental")]
 mod darc;
 
-mod array;
+// mod array;
+
+mod memregion;
 
 mod barrier;
 
-mod lamellar_memregion;
+// mod lamellar_memregion;
 mod lamellar_request;
 mod lamellar_team;
 mod lamellar_world;
@@ -49,13 +51,18 @@ pub use crate::active_messaging::{ActiveMessaging, LamellarAM, LocalAM};
 
 // #[cfg(feature = "experimental")]
 // pub use crate::lamellar_array::{LamellarArray, ReduceKey};
-pub use crate::lamellar_memregion::{
-    LamellarLocalMemoryRegion, LamellarMemoryRegion, RegisteredMemoryRegion, RemoteMemoryRegion,
+// pub use crate::lamellar_memregion::{
+//     LamellarLocalMemoryRegion, LamellarMemoryRegion, RegisteredMemoryRegion, RemoteMemoryRegion,
+// };
+
+pub use crate::memregion::{
+    LamellarMemoryRegion,RegisteredMemoryRegion,RemoteMemoryRegion,
+    MemoryRegionRDMA as RDMA,SubRegion
 };
-pub use crate::array::{
-    LamellarArray, Distribution
-};
-pub use crate::array::r#unsafe::UnsafeArray;
+// pub use crate::array::{
+//     LamellarArrayRDMA, Distribution,ReduceKey
+// };
+// pub use crate::array::r#unsafe::UnsafeArray;
 
 
 

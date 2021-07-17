@@ -709,9 +709,9 @@ fn create_reduction(
             }
         }
 
-        fn  #reduction_gen<T: serde::ser::Serialize + serde::de::DeserializeOwned + std::clone::Clone + Send + Sync + 'static> (rmr: #lamellar::LamellarMemoryRegion<T>, num_pes: usize)
+        fn  #reduction_gen<T: serde::ser::Serialize + serde::de::DeserializeOwned + std::clone::Clone + Send + Sync + 'static> (rmr: impl #lamellar::RegisteredMemoryRegion<Output=u8>, num_pes: usize)
         -> std::sync::Arc<dyn #lamellar::RemoteActiveMessage + Send + Sync >{
-            std::sync::Arc::new(#reduction_name{data: unsafe {rmr.as_base::<#typeident>() }, start_pe: 0, end_pe: num_pes-1})
+            std::sync::Arc::new(#reduction_name{data: unsafe {rmr.clone().as_base::<#typeident>() }, start_pe: 0, end_pe: num_pes-1})
         }
 
         #lamellar::inventory::submit! {

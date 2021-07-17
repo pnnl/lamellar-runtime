@@ -288,6 +288,9 @@ impl ActiveMessageEngine {
                 let _num_reqs = ireq.team_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
                 // println!("team reqs: {:?}",num_reqs);
                 let _num_reqs = ireq.world_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
+                if let Some(tg_outstanding_reqs) = ireq.tg_outstanding_reqs{
+                    let _num_reqs = tg_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
+                }
                 // println!("world reqs: {:?}",num_reqs);
                 if let Ok(_) = ireq.data_tx.send((pe as usize, data)) {} //if this returns an error it means the user has dropped the handle
                 let cnt = ireq.cnt.fetch_sub(1, Ordering::SeqCst);
