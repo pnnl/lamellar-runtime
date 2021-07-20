@@ -6,7 +6,7 @@
 /// it is very similar to our registered active message interface.
 ///----------------------------------------------------------------
 use lamellar::{
-    ActiveMessaging, Distribution, LamellarAM, LamellarArray, LocalAM, RemoteMemoryRegion,
+    ActiveMessaging, Distribution, LamellarAM, LocalAM, RemoteMemoryRegion,
     UnsafeArray,
 };
 use std::time::Instant;

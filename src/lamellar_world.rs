@@ -164,7 +164,7 @@ impl RemoteMemoryRegion for LamellarWorld {
     ///
     /// * `size` - number of elements of T to allocate a memory region for -- (not size in bytes)
     ///
-    fn alloc_shared_mem_region<T: Dist + std::fmt::Debug + 'static>(
+    fn alloc_shared_mem_region<T: Dist  + 'static>(
         &self,
         size: usize,
     ) -> SharedMemoryRegion<T> {
@@ -178,7 +178,7 @@ impl RemoteMemoryRegion for LamellarWorld {
     ///
     /// * `size` - number of elements of T to allocate a memory region for -- (not size in bytes)
     ///
-    fn alloc_local_mem_region<T: Dist + std::fmt::Debug + 'static>(
+    fn alloc_local_mem_region<T: Dist  + 'static>(
         &self,
         size: usize,
     ) -> LocalMemoryRegion<T> {
@@ -191,7 +191,7 @@ impl RemoteMemoryRegion for LamellarWorld {
     ///
     /// * `region` - the region to free
     ///
-    fn free_shared_memory_region<T: Dist + std::fmt::Debug + 'static>(
+    fn free_shared_memory_region<T: Dist  + 'static>(
         &self,
         region: SharedMemoryRegion<T>,
     ) {
@@ -204,7 +204,7 @@ impl RemoteMemoryRegion for LamellarWorld {
     ///
     /// * `region` - the region to free
     ///
-    fn free_local_memory_region<T: Dist + std::fmt::Debug + 'static>(
+    fn free_local_memory_region<T: Dist + 'static>(
         &self,
         region: LocalMemoryRegion<T>,
     ) {

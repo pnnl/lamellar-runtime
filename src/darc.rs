@@ -234,6 +234,9 @@ impl<T: ?Sized> Darc<T> {
     fn inner_mut(&self) -> &mut DarcInner<T> {
         unsafe { self.inner.as_mut().expect("invalid darc inner ptr") }
     }
+    pub(crate) fn team(&self) -> Arc<LamellarTeam>{
+        self.inner().team()
+    }
     fn ref_cnts_as_mut_slice(&self) -> &mut [usize] {
         let inner = self.inner();
         unsafe { std::slice::from_raw_parts_mut(inner.ref_cnt_addr as *mut usize, inner.num_pes) }

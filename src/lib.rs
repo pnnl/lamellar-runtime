@@ -14,15 +14,15 @@ extern crate lazy_static;
 extern crate memoffset;
 
 mod active_messaging;
+#[cfg(feature = "experimental")]
+mod darc;
 mod lamellae;
 mod lamellar_alloc;
 mod lamellar_arch;
 // #[cfg(feature = "experimental")]
 // mod lamellar_array;
-#[cfg(feature = "experimental")]
-mod darc;
 
-// mod array;
+mod array;
 
 mod memregion;
 
@@ -55,13 +55,11 @@ pub use crate::active_messaging::{ActiveMessaging, LamellarAM, LocalAM};
 //     LamellarLocalMemoryRegion, LamellarMemoryRegion, RegisteredMemoryRegion, RemoteMemoryRegion,
 // };
 
+pub use crate::array::r#unsafe::UnsafeArray;
+pub use crate::array::{Distribution, LamellarArrayRDMA, ReduceKey};
 pub use crate::memregion::{
     local::LocalMemoryRegion, shared::SharedMemoryRegion, RemoteMemoryRegion,
 };
-// pub use crate::array::{
-//     LamellarArrayRDMA, Distribution,ReduceKey
-// };
-// pub use crate::array::r#unsafe::UnsafeArray;
 
 #[cfg(feature = "experimental")]
 #[doc(hidden)]

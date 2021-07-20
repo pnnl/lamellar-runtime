@@ -1,7 +1,7 @@
 use crate::active_messaging::*; //{ActiveMessaging,AMCounters,Cmd,Msg,LamellarAny,LamellarLocal};
-// use crate::lamellae::Lamellae;
-// use crate::lamellar_arch::LamellarArchRT;
-use crate::lamellar_memregion::{LamellarMemoryRegion, RemoteMemoryRegion, RegisteredMemoryRegion};
+                                // use crate::lamellae::Lamellae;
+                                // use crate::lamellar_arch::LamellarArchRT;
+use crate::memregion::{local::LocalMemoryRegion, shared::SharedMemoryRegion, AsBase, Dist};
 // use crate::lamellar_request::{AmType, LamellarRequest, LamellarRequestHandle};
 // use crate::lamellar_team::LamellarTeam;
 // use crate::scheduler::{Scheduler,SchedulerQueue};
@@ -15,11 +15,13 @@ use std::collections::HashMap;
 // use std::sync::atomic::Ordering;
 use std::sync::Arc;
 // use std::time::{Duration, Instant};
+use enum_dispatch::enum_dispatch;
 
-pub (crate) mod r#unsafe;
+pub(crate) mod r#unsafe;
+use r#unsafe::UnsafeArray;
 
 pub(crate) type ReduceGen =
-    fn(dyn RegisteredMemoryRegion<Output=u8>, usize) -> Arc<dyn RemoteActiveMessage + Send + Sync>;
+    fn(LamellarArray<u8>, usize) -> Arc<dyn RemoteActiveMessage + Send + Sync>;
 
 lazy_static! {
     pub(crate) static ref REDUCE_OPS: HashMap<(std::any::TypeId, String), ReduceGen> = {
@@ -41,49 +43,65 @@ pub struct ReduceKey {
 }
 crate::inventory::collect!(ReduceKey);
 
-lamellar_impl::generate_reductions_for_type_rt!(u8, u16, u32, u64, u128, usize);
-lamellar_impl::generate_reductions_for_type_rt!(i8, i16, i32, i64, i128, isize);
-lamellar_impl::generate_reductions_for_type_rt!(f32,f64);
+// lamellar_impl::generate_reductions_for_type_rt!(u8, u16, u32, u64, u128, usize);
+// lamellar_impl::generate_reductions_for_type_rt!(i8, i16, i32, i64, i128, isize);
+// lamellar_impl::generate_reductions_for_type_rt!(f32, f64);
 
-#[derive(Clone,Debug)]
-pub enum Distribution{
+#[derive(Clone, Debug)]
+#[derive(serde::Serialize, serde::Deserialize)]
+pub enum Distribution {
     Block,
     Cyclic,
 }
 
-pub trait LamellarArrayRDMA<T>: RegisteredMemoryRegion // + std::ops::Index + std::ops::IndexMut
-where T: serde::ser::Serialize
-+ serde::de::DeserializeOwned
-+ std::clone::Clone
-+ Send
-+ Sync
-+ std::fmt::Debug, {
-    type Rmr: RegisteredMemoryRegion<Output=T>;
-    fn put(&self, index: usize, buf: &impl RegisteredMemoryRegion<Output=T>);
+#[enum_dispatch(RegisteredMemoryRegion<T>, SubRegion<T>)]
+#[derive(serde::Serialize, serde::Deserialize,Clone)]
+pub enum LamellarArrayInput<T: Dist + 'static> {
+    SharedMemRegion(SharedMemoryRegion<T>),
+    LocalMemRegion(LocalMemoryRegion<T>),
+    // Unsafe(UnsafeArray<T>),
+    // Vec(Vec<T>),
+}
+
+#[enum_dispatch(LamellarArrayRDMA<T>)]
+#[derive(serde::Serialize, serde::Deserialize)]
+pub enum LamellarArray<T: Dist + 'static> {
+    Unsafe(UnsafeArray<T>),
+}
+
+#[enum_dispatch]
+pub trait LamellarArrayRDMA<T>
+where
+    T: Dist + 'static,
+{
+    fn put<U: Into<LamellarArrayInput<T>>>(&self, index: usize, buf: U);
     // pub fn put_indirect(self, index: usize, buf: &impl LamellarBuffer<T>);
-    fn get(&self, index: usize, buf: &impl RegisteredMemoryRegion<Output=T>);
-    fn get_raw_mem_region(&self) -> Self::Rmr;
+    fn get<U: Into<LamellarArrayInput<T>>>(&self, index: usize, buf: U);
+    // fn get_raw_mem_region(&self) -> LamellarMemoryRegion<T>;
     // pub fn get_indirect(self, index: usize, buf: &mut impl LamellarBuffer<T>); //do we need a LamellarBufferMut?
 }
 
-pub trait LamellarArrayReduce<T>: LamellarArrayRDMA<T> // + std::ops::Index + std::ops::IndexMut
-where T: serde::ser::Serialize
-+ serde::de::DeserializeOwned
-+ std::clone::Clone
-+ Send
-+ Sync
-+ std::fmt::Debug, {
-    fn wait_all(&self);
-    fn get_reduction_op(&self, op: String) -> LamellarArcAm{
-        unsafe {
-            REDUCE_OPS
-                .get(&(std::any::TypeId::of::<T>(), op))
-                .expect("unexpected reduction type")(
-                self.rmr.clone().as_base::<u8>(), self.num_pes
-            )
-        }
-    }
-}
+// pub trait LamellarArrayReduce<T>: LamellarArrayRDMA<T>
+// // + std::ops::Index + std::ops::IndexMut
+// where
+//     T: serde::ser::Serialize
+//         + serde::de::DeserializeOwned
+//         + std::clone::Clone
+//         + Send
+//         + Sync
+//         + std::fmt::Debug,
+// {
+//     fn wait_all(&self);
+//     fn get_reduction_op(&self, op: String) -> LamellarArcAm {
+//         unsafe {
+//             REDUCE_OPS
+//                 .get(&(std::any::TypeId::of::<T>(), op))
+//                 .expect("unexpected reduction type")(
+//                 self.rmr.clone().as_base::<u8>(), self.num_pes
+//             )
+//         }
+//     }
+// }
 
 // pub(crate) trait LamellarBuffer<T>
 // where T: serde::ser::Serialize
@@ -101,9 +119,6 @@ where T: serde::ser::Serialize
 //     type Output: ?Sized;
 //     pub fn get(self, slice: &T)
 // }
-
-
-
 
 // //#[prof]
 // impl<
