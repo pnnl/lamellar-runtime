@@ -35,7 +35,7 @@ async-trait = "0.1.40"
 async-std = "1.6.4"
 lamellar-prof = {path = "lamellar-prof", version = "0.1.0" }
 libc = { version = "0.2.81", optional = true }
-shared_memory = "0.11"
+shared_memory = { git = "https://github.com/elast0ny/shared_memory-rs" }
 raw_sync = "0.1"
 
 
