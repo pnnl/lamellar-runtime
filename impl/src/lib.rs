@@ -359,43 +359,46 @@ fn derive_am_data(input: TokenStream,args: TokenStream, crate_header: String, lo
         for field in &data.fields{
             if let syn::Type::Path(ref ty) = field.ty{
                 if let Some(seg) = ty.path.segments.first(){
-                    if seg.ident.to_string().contains("Darc") && !local{
-                        let (serialize,deserialize) = if seg.ident.to_string().contains("LocalRwDarc"){
-                            let serialize = format!("{}::localrw_serialize",crate_header);
-                            let deserialize = format!("{}::localrw_from_ndarc",crate_header);
-                            (serialize,deserialize)
-                        }
-                        else if seg.ident.to_string().contains("GlobalRwDarc"){
-                            let serialize = format!("{}::globalrw_serialize",crate_header);
-                            let deserialize = format!("{}::globalrw_from_ndarc",crate_header);
-                            (serialize,deserialize)
+                    if !local{
+                        let mut is_darc = false;
+                        let (serialize,deserialize) = match seg.ident.to_string().as_str(){
+                            "Darc" => {
+                                let serialize = format!("{}::darc_serialize",crate_header);
+                                let deserialize = format!("{}::darc_from_ndarc",crate_header);
+                                is_darc = true;
+                                (serialize,deserialize)
+                            },
+                            "LocalRwDarc" => {
+                                let serialize = format!("{}::localrw_serialize",crate_header);
+                                let deserialize = format!("{}::localrw_from_ndarc",crate_header);
+                                is_darc = true;
+                                (serialize,deserialize)
+                            },
+                            "GlobalRwDarc" => {
+                                let serialize = format!("{}::globalrw_serialize",crate_header);
+                                let deserialize = format!("{}::globalrw_from_ndarc",crate_header);
+                                is_darc = true;
+                                (serialize,deserialize)
+                            }
+                            _ => {(format!(""),format!(""))}
+                        };
+                        let field_name = field.ident.clone();
+                        if is_darc{
+                            fields.extend(quote_spanned!{field.span()=>
+                                #[serde(serialize_with = #serialize, deserialize_with = #deserialize)]
+                                #field,
+                            }); 
                         }
                         else{
-                            let serialize = format!("{}::darc_serialize",crate_header);
-                            let deserialize = format!("{}::darc_from_ndarc",crate_header);
-                            (serialize,deserialize)
-                        };
-                        
-                        fields.extend(quote_spanned!{field.span()=>
-                            #[serde(serialize_with = #serialize, deserialize_with = #deserialize)]
-                            #field,
-                        });
-                        let field_name = field.ident.clone();
+                            fields.extend(quote_spanned!{field.span()=>
+                                #field,
+                            });
+                        }
                         ser.extend(quote_spanned!{field.span()=>
-                            match cur_pe{
-                                Ok(cur_pe) => {self.#field_name.serialize_update_cnts(num_pes,cur_pe);},
-                                Err(err) =>  {panic!("can only access darcs within team members ({:?})",err);}
-                            }
-                            // println!("serialized darc");
-                            // self.#field_name.print();
+                            (&self.#field_name).ser(num_pes,cur_pe);
                         });
-                        des.extend(quote_spanned!{field.span()=>    
-                            match cur_pe{
-                                Ok(cur_pe) => {self.#field_name.deserialize_update_cnts(cur_pe);},
-                                Err(err) => {panic!("can only access darcs within team members ({:?})",err);}
-                            }                                
-                            // println!("deserialized darc");
-                            // self.#field_name.print();
+                        des.extend(quote_spanned!{field.span()=>   
+                            (&self.#field_name).des(cur_pe); 
                         });
                     }
                     else{

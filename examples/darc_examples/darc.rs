@@ -6,6 +6,7 @@ struct DarcAm{
     darc: Darc<AtomicUsize>, //each pe has a local atomicusize
     global_darc: GlobalRwDarc<usize>,
     lrw_darc: LocalRwDarc<usize>,
+    wrapped: WrappedWrappedWrappedDarc,
 }
 
 #[lamellar::am]
@@ -17,6 +18,21 @@ impl LamellarAm for DarcAm{
         println!("global w: {:?}",self.global_darc.async_write().await);
         println!("global r: {:?}",self.global_darc.async_read().await);
     }
+}
+
+#[lamellar::AmData(Clone)]
+struct WrappedDarc{
+    wrapped: Darc<usize>
+}
+
+#[lamellar::AmData(Clone)]
+struct WrappedWrappedDarc{
+    wrapped: WrappedDarc
+}
+
+#[lamellar::AmData(Clone)]
+struct WrappedWrappedWrappedDarc{
+    wrapped: WrappedWrappedDarc
 }
 
 fn main() {
@@ -42,13 +58,22 @@ fn main() {
     let local_darc = LocalRwDarc::new(world.team(),10).unwrap();
     println!("created new local rw");
     local_darc.print();
+
+    let wrapped =
+    WrappedWrappedWrappedDarc{
+        wrapped: WrappedWrappedDarc{
+            wrapped: WrappedDarc{
+                wrapped:  Darc::new(world.team(),3).unwrap()
+            }
+        }
+    };
     if let Some(team) = even_team{
         let team_darc = Darc::new(team.clone(),AtomicUsize::new(10));
         println!("created team darc");
         if let Ok(team_darc) = team_darc  {
             let test = team_darc.clone();
             test.fetch_add(1,Ordering::Relaxed);
-            let darc_am = DarcAm{darc: team_darc, lrw_darc: local_darc.clone(),global_darc: global_darc.clone()};
+            let darc_am = DarcAm{darc: team_darc, lrw_darc: local_darc.clone(),global_darc: global_darc.clone(), wrapped: wrapped.clone() };
             team.exec_am_pe(0,darc_am.clone());
             team.exec_am_all(darc_am);
         }
