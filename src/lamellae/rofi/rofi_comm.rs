@@ -18,8 +18,8 @@ pub struct RofiReq{
 
 impl Drop for RofiReq{
     fn drop(&mut self) {
-        let mut dropped = self.drop_set.lock();
-        dropped.append(&mut self.txids);
+        // let mut dropped = self.drop_set.lock();
+        // dropped.append(&mut self.txids);
     }
 }
 
@@ -83,18 +83,18 @@ impl RofiComm {
         rofi
     }
 
-    pub(crate) fn process_dropped_reqs(&self){
-        let mut new_dropped = vec!();
-        let mut dropped = self.drop_set.lock();
-        if dropped.len() > 0  {//|| self.any_dropped.load(Ordering::SeqCst){
-            // if dropped.len() > 0 {println!("dropped len {:?}",dropped.len());}
+    // pub(crate) fn process_dropped_reqs(&self){
+    //     let mut new_dropped = vec!();
+    //     let mut dropped = self.drop_set.lock();
+    //     if dropped.len() > 0  {//|| self.any_dropped.load(Ordering::SeqCst){
+    //         // if dropped.len() > 0 {println!("dropped len {:?}",dropped.len());}
             
-            std::mem::swap(&mut *dropped, &mut new_dropped);
-            drop(dropped);
-            rofi_drop_set(new_dropped);
-            // self.any_dropped.store(true,Ordering::SeqCst);
-        }
-    }
+    //         std::mem::swap(&mut *dropped, &mut new_dropped);
+    //         drop(dropped);
+    //         rofi_drop_set(new_dropped);
+    //         // self.any_dropped.store(true,Ordering::SeqCst);
+    //     }
+    // }
 
     // pub(crate) fn finit(&self) { //finit called in drop
     //     rofi_barrier();

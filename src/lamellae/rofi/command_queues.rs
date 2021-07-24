@@ -965,7 +965,7 @@ impl RofiCommandQueue{
             //     self.cq.print_recv_buffers();
             //     timer = std::time::Instant::now();
             // }
-            self.rofi_comm.process_dropped_reqs();
+            // self.rofi_comm.process_dropped_reqs();
             async_std::task::yield_now().await;
         }
         // println!("leaving recv_data task");

@@ -15,6 +15,7 @@ use crate::LamellarTeam;
 use crate::active_messaging::ActiveMessaging;
 use crate::lamellae::{AllocationType, Backend, LamellaeComm, LamellaeRDMA};
 use crate::IdError;
+use crate::DarcSerde;
 
 pub(crate) mod local_rw_darc;
 use local_rw_darc::{LocalRwDarc};
@@ -34,7 +35,6 @@ pub(crate) enum DarcMode{
 // lazy_static! {
 //     pub(crate) static ref DARC_ADDRS: RwLock<HashSet<usize>> = RwLock::new(HashSet::new());
 // }
-
 #[lamellar_impl::AmDataRT(Debug)]
 struct FinishedAm {
     cnt: usize,
@@ -73,6 +73,22 @@ pub struct Darc<T: 'static + ?Sized> {
 
 unsafe impl<T: ?Sized + Sync + Send> Send for Darc<T> {}
 unsafe impl<T: ?Sized + Sync + Send> Sync for Darc<T> {}
+
+impl<T: ?Sized> crate::DarcSerde for Darc<T> {
+    fn ser(&self, num_pes: usize, cur_pe: Result<usize, IdError>) {
+        println!("in darc ser");
+        match cur_pe{
+            Ok(cur_pe) => {self.serialize_update_cnts(num_pes,cur_pe);},
+            Err(err) =>  {panic!("can only access darcs within team members ({:?})",err);}
+        }
+    }
+    fn des(&self, cur_pe: Result<usize, IdError>) {
+        match cur_pe{
+            Ok(cur_pe) => {self.deserialize_update_cnts(cur_pe);},
+            Err(err) => {panic!("can only access darcs within team members ({:?})",err);}
+        } 
+    }
+}
 
 impl<T: ?Sized> DarcInner<T> {
     fn team(&self) -> Arc<LamellarTeam> {
@@ -673,3 +689,17 @@ impl<T: ?Sized> From<__NetworkDarc<T>> for Darc<T> {
         }
     }
 }
+
+
+pub fn serialize_update_cnts_temp<T: crate::DarcSerde> (val: T,cnt: usize, _cur_pe: Result<usize,IdError>) {
+    // let val_any = val as &dyn std::any::Any;
+
+    // if let Some(darc) = val_any.downcast_ref::<Darc<_>>() {
+    //     unsafe {darc.inner.as_ref().unwrap().dist_cnt
+    //         .fetch_add(cnt, std::sync::atomic::Ordering::SeqCst); }
+    // }
+    val.ser(cnt,_cur_pe);
+}
+    
+
+

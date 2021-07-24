@@ -69,7 +69,7 @@ pub use crate::darc::global_rw_darc::{globalrw_from_ndarc, globalrw_serialize};
 pub use crate::darc::local_rw_darc::{localrw_from_ndarc, localrw_serialize};
 #[cfg(feature = "experimental")]
 #[doc(hidden)]
-pub use crate::darc::{darc_from_ndarc, darc_serialize};
+pub use crate::darc::{darc_from_ndarc, darc_serialize,serialize_update_cnts_temp};
 
 #[cfg(feature = "experimental")]
 pub use crate::darc::local_rw_darc::LocalRwDarc;
@@ -93,7 +93,7 @@ pub use crate::lamellar_team::LamellarTeam;
 
 extern crate lamellar_impl;
 pub use lamellar_impl::{
-    am, generate_reductions_for_type, local_am, register_reduction, AmData, AmLocalData,
+    DarcSerdeRT, am, generate_reductions_for_type, local_am, register_reduction, AmData, AmLocalData
 };
 
 #[doc(hidden)]

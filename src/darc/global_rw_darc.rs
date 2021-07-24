@@ -14,7 +14,7 @@ use crate::IdError;
 use crate::darc::{Darc,DarcInner,DarcMode,__NetworkDarc};
 use crate::darc::local_rw_darc::{LocalRwDarc};
 
-#[derive(serde::Serialize, serde::Deserialize, Debug)]
+#[derive( serde::Serialize, serde::Deserialize, Debug)]
 enum LockType{
     Read,
     Write,
@@ -33,6 +33,8 @@ pub (crate) struct DistRwLock<T: ?Sized>{
 
 unsafe impl<T: ?Sized + Sync + Send> Send for DistRwLock<T> {}
 unsafe impl<T: ?Sized + Sync + Send> Sync for DistRwLock<T> {}
+
+
 
 /// # Safety
 ///
@@ -218,6 +220,22 @@ pub struct GlobalRwDarc<T: 'static + ?Sized> {
 
 unsafe impl<T: ?Sized + Sync + Send> Send for GlobalRwDarc<T> {}
 unsafe impl<T: ?Sized + Sync + Send> Sync for GlobalRwDarc<T> {}
+
+impl<T: ?Sized> crate::DarcSerde for GlobalRwDarc<T> {
+    fn ser(&self, num_pes: usize, cur_pe: Result<usize, IdError>) {
+        println!("in darc ser");
+        match cur_pe{
+            Ok(cur_pe) => {self.darc.serialize_update_cnts(num_pes,cur_pe);},
+            Err(err) =>  {panic!("can only access darcs within team members ({:?})",err);}
+        }
+    }
+    fn des(&self, cur_pe: Result<usize, IdError>) {
+        match cur_pe{
+            Ok(cur_pe) => {self.darc.deserialize_update_cnts(cur_pe);},
+            Err(err) => {panic!("can only access darcs within team members ({:?})",err);}
+        } 
+    }
+}
 
 impl<T: ?Sized> GlobalRwDarc<T> {
     fn inner(&self) -> &DarcInner<DistRwLock<T>> {

@@ -359,6 +359,7 @@ fn derive_am_data(input: TokenStream,args: TokenStream, crate_header: String, lo
         for field in &data.fields{
             if let syn::Type::Path(ref ty) = field.ty{
                 if let Some(seg) = ty.path.segments.first(){
+                    let field_name = field.ident.clone();
                     if seg.ident.to_string().contains("Darc") && !local{
                         let (serialize,deserialize) = if seg.ident.to_string().contains("LocalRwDarc"){
                             let serialize = format!("{}::localrw_serialize",crate_header);
@@ -380,20 +381,25 @@ fn derive_am_data(input: TokenStream,args: TokenStream, crate_header: String, lo
                             #[serde(serialize_with = #serialize, deserialize_with = #deserialize)]
                             #field,
                         });
-                        let field_name = field.ident.clone();
+                        
                         ser.extend(quote_spanned!{field.span()=>
-                            match cur_pe{
-                                Ok(cur_pe) => {self.#field_name.serialize_update_cnts(num_pes,cur_pe);},
-                                Err(err) =>  {panic!("can only access darcs within team members ({:?})",err);}
-                            }
+                            println!("darc ser{:?}",stringify!(self.#field_name));
+                            (&self.#field_name).ser(num_pes,cur_pe);
+                            // #lamellar::serialize_update_cnts_temp(self.#field_name.clone(),num_pes,cur_pe);
+                            // match cur_pe{
+                            //     Ok(cur_pe) => {self.#field_name.serialize_update_cnts(num_pes,cur_pe);},
+                            //     Err(err) =>  {panic!("can only access darcs within team members ({:?})",err);}
+                            // }
                             // println!("serialized darc");
                             // self.#field_name.print();
                         });
-                        des.extend(quote_spanned!{field.span()=>    
-                            match cur_pe{
-                                Ok(cur_pe) => {self.#field_name.deserialize_update_cnts(cur_pe);},
-                                Err(err) => {panic!("can only access darcs within team members ({:?})",err);}
-                            }                                
+                        des.extend(quote_spanned!{field.span()=>   
+                            println!("darc des{:?}",stringify!(self.#field_name));
+                            (&self.#field_name).des(cur_pe); 
+                            // match cur_pe{
+                            //     Ok(cur_pe) => {self.#field_name.deserialize_update_cnts(cur_pe);},
+                            //     Err(err) => {panic!("can only access darcs within team members ({:?})",err);}
+                            // }                                
                             // println!("deserialized darc");
                             // self.#field_name.print();
                         });
@@ -402,7 +408,19 @@ fn derive_am_data(input: TokenStream,args: TokenStream, crate_header: String, lo
                         fields.extend(quote_spanned!{field.span()=>
                             #field,
                         });
+                        ser.extend(quote_spanned!{field.span()=>
+                            println!("non darc {:?}",stringify!(self.#field_name));
+                            (&self.#field_name).ser(num_pes,cur_pe);
+                            // #lamellar::serialize_update_cnts_temp(&self.#field_name,num_pes,cur_pe);
+                            // println!("serialized darc");
+                            // self.#field_name.print();
+                        });
+                        des.extend(quote_spanned!{field.span()=>   
+                            println!("non darc des{:?}",stringify!(self.#field_name));
+                            (&self.#field_name).des(cur_pe); 
+                        });
                     }
+                    
                 }
             }
         }
@@ -429,10 +447,109 @@ fn derive_am_data(input: TokenStream,args: TokenStream, crate_header: String, lo
         //     quote!{ #[derive(serde::Serialize, serde::Deserialize)]}
         // };
         output.extend(quote!{  
+            
             #traits           
             struct #name#generics{
                 #fields
             }
+            impl #generics#lamellar::DarcSerde for #name<#generics_ids>{
+                fn ser (&self,  num_pes: usize, cur_pe: Result<usize, #lamellar::IdError>) {
+                    println!("in outer ser");
+                    #ser
+                } 
+                fn des (&self,cur_pe: Result<usize, #lamellar::IdError>){
+                    println!("in outer des");
+                    #des
+                }
+            } 
+        });
+
+        
+    }
+    // println!("{:?}",input);
+    TokenStream::from(output)
+}
+
+fn derive_darcserde(input: TokenStream, crate_header: String) -> TokenStream{
+    let lamellar = quote::format_ident!("{}", crate_header.clone());
+    println!("input: {:?}",input);
+    let input: syn::Item = parse_macro_input!(input);
+    let mut output = quote!{};   
+
+    if let syn::Item::Struct(data) = input{
+        let name = &data.ident;
+        let generics = data.generics.clone();
+        let mut generics_ids=quote!{};
+        for id in &generics.params{
+            if let syn::GenericParam::Type(id) = id{
+                let temp =id.ident.clone();
+                generics_ids.extend(quote!{#temp,});
+            }
+        }
+        
+        let mut fields = quote!{};
+        let mut ser = quote!{};
+        let mut des = quote!{};
+
+        for field in &data.fields{
+            if let syn::Type::Path(ref ty) = field.ty{
+                if let Some(seg) = ty.path.segments.first(){
+                    let field_name = field.ident.clone();
+                    if seg.ident.to_string().contains("Darc") {
+                        let (serialize,deserialize) = if seg.ident.to_string().contains("LocalRwDarc"){
+                            let serialize = format!("{}::localrw_serialize",crate_header);
+                            let deserialize = format!("{}::localrw_from_ndarc",crate_header);
+                            (serialize,deserialize)
+                        }
+                        else if seg.ident.to_string().contains("GlobalRwDarc"){
+                            let serialize = format!("{}::globalrw_serialize",crate_header);
+                            let deserialize = format!("{}::globalrw_from_ndarc",crate_header);
+                            (serialize,deserialize)
+                        }
+                        else{
+                            let serialize = format!("{}::darc_serialize",crate_header);
+                            let deserialize = format!("{}::darc_from_ndarc",crate_header);
+                            (serialize,deserialize)
+                        };
+                        
+                        fields.extend(quote_spanned!{field.span()=>
+                            #[serde(serialize_with = #serialize, deserialize_with = #deserialize)]
+                            #field,
+                        });
+                        
+                        ser.extend(quote_spanned!{field.span()=>
+                            match cur_pe{
+                                Ok(cur_pe) => {self.#field_name.serialize_update_cnts(num_pes,cur_pe);},
+                                Err(err) =>  {panic!("can only access darcs within team members ({:?})",err);}
+                            }
+                            // println!("serialized darc");
+                            // self.#field_name.print();
+                        });
+                        des.extend(quote_spanned!{field.span()=>    
+                            match cur_pe{
+                                Ok(cur_pe) => {self.#field_name.deserialize_update_cnts(cur_pe);},
+                                Err(err) => {panic!("can only access darcs within team members ({:?})",err);}
+                            }                                
+                            // println!("deserialized darc");
+                            // self.#field_name.print();
+                        });
+                    }
+                    else{
+                        fields.extend(quote_spanned!{field.span()=>
+                            #field,
+                        });
+                    }
+                    ser.extend(quote_spanned!{field.span()=>
+                        #lamellar::serialize_update_cnts_temp(self.#field_name,num_pes,cur_pe);
+                        // println!("serialized darc");
+                        // self.#field_name.print();
+                    });
+                }
+            }
+        }
+        
+        
+        output.extend(quote!{  
             impl #generics#lamellar::DarcSerde for #name<#generics_ids>{
                 fn ser (&self,  num_pes: usize, cur_pe: Result<usize, #lamellar::IdError>) {
                     #ser
@@ -445,8 +562,13 @@ fn derive_am_data(input: TokenStream,args: TokenStream, crate_header: String, lo
 
         
     }
-    // println!("{:?}",input);
+    println!("{:?}",output);
     TokenStream::from(output)
+}
+
+#[proc_macro_derive(DarcSerdeRT)]
+pub fn darc_serde_rt_derive(input: TokenStream) -> TokenStream{
+    derive_darcserde(input,"crate".to_string())
 }
 
 #[allow(non_snake_case)]
