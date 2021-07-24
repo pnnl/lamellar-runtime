@@ -7,6 +7,8 @@ struct DarcAm{
     global_darc: GlobalRwDarc<usize>,
     lrw_darc: LocalRwDarc<usize>,
     wrapped: WrappedWrappedWrappedDarc,
+    wrapped_tuple: (WrappedWrappedWrappedDarc,WrappedWrappedWrappedDarc),
+    // darc_tuple: ( Darc<AtomicUsize>, Darc<AtomicUsize>,) // not supported, but the macro catches it and forces compiler to fail
 }
 
 #[lamellar::am]
@@ -73,7 +75,7 @@ fn main() {
         if let Ok(team_darc) = team_darc  {
             let test = team_darc.clone();
             test.fetch_add(1,Ordering::Relaxed);
-            let darc_am = DarcAm{darc: team_darc, lrw_darc: local_darc.clone(),global_darc: global_darc.clone(), wrapped: wrapped.clone() };
+            let darc_am = DarcAm{darc: team_darc, lrw_darc: local_darc.clone(),global_darc: global_darc.clone(), wrapped: wrapped.clone(),wrapped_tuple: (wrapped.clone(),wrapped.clone()) };
             team.exec_am_pe(0,darc_am.clone());
             team.exec_am_all(darc_am);
         }

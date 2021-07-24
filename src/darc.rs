@@ -77,7 +77,6 @@ unsafe impl<T: ?Sized + Sync + Send> Sync for Darc<T> {}
 
 impl<T: ?Sized> crate::DarcSerde for Darc<T> {
     fn ser(&self, num_pes: usize, cur_pe: Result<usize, IdError>) {
-        println!("in darc ser");
         match cur_pe{
             Ok(cur_pe) => {self.serialize_update_cnts(num_pes,cur_pe);},
             Err(err) =>  {panic!("can only access darcs within team members ({:?})",err);}

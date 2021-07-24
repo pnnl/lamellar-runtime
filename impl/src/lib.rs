@@ -408,6 +408,42 @@ fn derive_am_data(input: TokenStream,args: TokenStream, crate_header: String, lo
                     }
                 }
             }
+            else if let syn::Type::Tuple(ref ty) = field.ty{
+                let field_name = field.ident.clone();
+                let mut ind = 0;
+                for elem in &ty.elems{
+                    if let syn::Type::Path(ref ty) = elem{
+                        if let Some(seg) = ty.path.segments.first(){
+                            if !local{
+                                let (serialize,deserialize) = match seg.ident.to_string().as_str(){
+                                    "Darc" | "LocalRwDarc" | "GlobalRwDarc" => {
+                                        panic!("{}","darcs not yet supported in tuples...for a workaround create a wrapper for the darc (and use that in the tuple)...e.g.
+                                        #[lamellar::AmData]
+                                        struct Wrapper{
+                                            darc: Darc<_>
+                                        }");}
+                                    _ => {(format!(""),format!(""))}
+                                };
+                                let temp_ind = syn::Index{
+                                    index: ind,
+                                    span: field.span()
+                                };
+                                ind+=1;
+                                ser.extend(quote_spanned!{field.span()=>
+
+                                    (self.#field_name).#temp_ind.ser(num_pes,cur_pe);
+                                });
+                                des.extend(quote_spanned!{field.span()=>   
+                                    (self.#field_name).#temp_ind.des(cur_pe); 
+                                });
+                            }
+                        }
+                    }
+                }
+                fields.extend(quote_spanned!{field.span()=>
+                    #field,
+                });
+            }
         }
         
         // let traits = if args.to_string().len()>0{
