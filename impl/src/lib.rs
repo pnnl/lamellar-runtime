@@ -17,6 +17,8 @@ use syn::spanned::Spanned;
 
 
 
+
+
 fn type_name(ty: &syn::Type) -> Option<String> {
     match ty {
         syn::Type::Path(syn::TypePath { qself: None, path }) => {
@@ -140,7 +142,7 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_type: AmType) -> 
         quote::format_ident!("crate")
     }
     else {
-        quote::format_ident!("lamellar")
+        quote::format_ident!("__lamellar")
     };
 
     let generics = input.generics.clone();
@@ -333,7 +335,18 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_type: AmType) -> 
             }
         });
     }
-    TokenStream::from(expanded)
+    let user_expanded = quote!{
+        const _: () = {
+            extern crate lamellar as __lamellar;
+            #expanded
+        };
+    };
+    if lamellar == "crate" {
+        TokenStream::from(expanded)
+    }
+    else{
+        TokenStream::from(user_expanded)
+    }
 }
 
 fn derive_am_data(input: TokenStream,args: TokenStream, crate_header: String, local: bool) -> TokenStream{
@@ -445,11 +458,15 @@ fn derive_am_data(input: TokenStream,args: TokenStream, crate_header: String, lo
                 });
             }
         }
-        
+
+        let my_ser: syn::Path  = syn::parse(format!("{}::serde::Serialize",crate_header).parse().unwrap()).unwrap();
+        let my_de: syn::Path  = syn::parse(format!("{}::serde::Deserialize",crate_header).parse().unwrap()).unwrap(); 
+        // let my_ser: syn::Path  = syn::parse(format!("serde::Serialize").parse().unwrap()).unwrap();
+        // let my_de: syn::Path  = syn::parse(format!("serde::Deserialize").parse().unwrap()).unwrap();        
         // let traits = if args.to_string().len()>0{
         let mut impls = quote!{};
         if !local {
-            impls.extend (quote!{ serde::Serialize, serde::Deserialize, });
+            impls.extend (quote!{ #my_ser, #my_de, });
         }
         else{
             ser.extend (quote! {panic!{"should not serialize data in LocalAM"}});
@@ -467,8 +484,17 @@ fn derive_am_data(input: TokenStream,args: TokenStream, crate_header: String, lo
         // else{
         //     quote!{ #[derive(serde::Serialize, serde::Deserialize)]}
         // };
+        let serde_temp=format!("{}::serde",crate_header);
+        let serde_temp_2 = if crate_header != "crate" {
+            quote!{#[serde(crate = "lamellar::serde")]}
+        }
+        else{
+            quote!{}
+        };
+        // println!("{:?}",serde_temp);
         output.extend(quote!{  
-            #traits           
+            #traits  
+            #serde_temp_2        
             struct #name#generics{
                 #fields
             }
@@ -748,7 +774,7 @@ fn create_reduction(
             }
         }
 
-        fn  #reduction_gen<T: serde::ser::Serialize + serde::de::DeserializeOwned + std::clone::Clone + Send + Sync + 'static> (rmr: #lamellar::LamellarMemoryRegion<T>, num_pes: usize)
+        fn  #reduction_gen<T: #lamellar::serde::ser::Serialize + #lamellar::serde::de::DeserializeOwned + std::clone::Clone + Send + Sync + 'static> (rmr: #lamellar::LamellarMemoryRegion<T>, num_pes: usize)
         -> std::sync::Arc<dyn #lamellar::RemoteActiveMessage + Send + Sync >{
             std::sync::Arc::new(#reduction_name{data: unsafe {rmr.as_base::<#typeident>() }, start_pe: 0, end_pe: num_pes-1})
         }

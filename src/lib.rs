@@ -13,14 +13,20 @@ extern crate lazy_static;
 #[macro_use]
 extern crate memoffset;
 
+// #[macro_use]
+pub extern crate serde;
+pub use serde::*;
+
+// pub use serde::{Deserialize, Serialize};
+
 mod active_messaging;
+#[cfg(feature = "experimental")]
+mod darc;
 mod lamellae;
 mod lamellar_alloc;
 mod lamellar_arch;
 #[cfg(feature = "experimental")]
 mod lamellar_array;
-#[cfg(feature = "experimental")]
-mod darc;
 
 mod barrier;
 
@@ -53,24 +59,18 @@ pub use crate::lamellar_memregion::{
 
 #[cfg(feature = "experimental")]
 #[doc(hidden)]
-pub use crate::darc::{
-    darc_from_ndarc, darc_serialize, 
-};
+pub use crate::darc::global_rw_darc::{globalrw_from_ndarc, globalrw_serialize};
 #[cfg(feature = "experimental")]
 #[doc(hidden)]
-pub use crate::darc::local_rw_darc::{
-    localrw_from_ndarc, localrw_serialize,
-};
+pub use crate::darc::local_rw_darc::{localrw_from_ndarc, localrw_serialize};
 #[cfg(feature = "experimental")]
 #[doc(hidden)]
-pub use crate::darc::global_rw_darc::{
-    globalrw_from_ndarc, globalrw_serialize,
-};
+pub use crate::darc::{darc_from_ndarc, darc_serialize};
 
 #[cfg(feature = "experimental")]
-pub use crate::darc::Darc;
-#[cfg(feature = "experimental")]
 pub use crate::darc::local_rw_darc::LocalRwDarc;
+#[cfg(feature = "experimental")]
+pub use crate::darc::Darc;
 
 #[cfg(feature = "experimental")]
 pub use crate::darc::global_rw_darc::GlobalRwDarc;
