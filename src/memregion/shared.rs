@@ -1,0 +1,199 @@
+use crate::lamellae::{AllocationType, Backend, Lamellae, LamellaeComm, LamellaeRDMA};
+use crate::memregion::*;
+// use crate::lamellar_array::{LamellarLocalArray};
+use core::marker::PhantomData;
+#[cfg(feature = "enable-prof")]
+use lamellar_prof::*;
+use parking_lot::RwLock;
+use std::collections::HashMap;
+use std::hash::{Hash, Hasher};
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
+
+use std::ops::{Bound, RangeBounds};
+
+// #[derive(serde::Serialize, serde::Deserialize)]
+// #[serde(
+//     into = "__NetworkMemoryRegion<T>",
+//     from = "__NetworkMemoryRegion<T>"
+// )]
+
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
+pub struct SharedMemoryRegion<T: Dist + 'static> {
+    mr: MemoryRegion<T>,
+}
+impl<T: Dist + 'static> SharedMemoryRegion<T> {
+    pub(crate) fn new(
+        size: usize,
+        lamellae: Arc<Lamellae>,
+        alloc: AllocationType,
+    ) -> SharedMemoryRegion<T> {
+        SharedMemoryRegion {
+            mr: MemoryRegion::new(size, lamellae, alloc),
+        }
+    }
+    pub fn len(&self) -> usize {
+        RegisteredMemoryRegion::<T>::len(self)
+    }
+    pub unsafe fn put<U: Into<LamellarMemoryRegion<T>>>(&self, pe: usize, index: usize, data: U) {
+        MemoryRegionRDMA::<T>::put(self, pe, index, data);
+    }
+    pub fn iput<U: Into<LamellarMemoryRegion<T>>>(&self, pe: usize, index: usize, data: U) {
+        MemoryRegionRDMA::<T>::iput(self, pe, index, data);
+    }
+    pub unsafe fn put_all<U: Into<LamellarMemoryRegion<T>>>(&self, index: usize, data: U) {
+        MemoryRegionRDMA::<T>::put_all(self, index, data);
+    }
+    pub unsafe fn get<U: Into<LamellarMemoryRegion<T>>>(&self, pe: usize, index: usize, data: U) {
+        MemoryRegionRDMA::<T>::get(self, pe, index, data);
+    }
+    pub fn sub_region<R: std::ops::RangeBounds<usize>>(&self, range: R) -> LamellarMemoryRegion<T> {
+        SubRegion::<T>::sub_region(self, range)
+    }
+    pub fn as_slice(&self) -> MemResult<&[T]> {
+        RegisteredMemoryRegion::<T>::as_slice(self)
+    }
+    pub unsafe fn as_mut_slice(&self) -> MemResult<&mut [T]> {
+        RegisteredMemoryRegion::<T>::as_mut_slice(self)
+    }
+    pub fn as_ptr(&self) -> MemResult<*const T> {
+        RegisteredMemoryRegion::<T>::as_ptr(self)
+    }
+    pub fn as_mut_ptr(&self) -> MemResult<*mut T> {
+        RegisteredMemoryRegion::<T>::as_mut_ptr(self)
+    }
+}
+
+impl<T: Dist + 'static> RegisteredMemoryRegion<T> for SharedMemoryRegion<T> {
+    fn len(&self) -> usize {
+        self.mr.len()
+    }
+    fn addr(&self) -> MemResult<usize> {
+        self.mr.addr()
+    }
+    fn as_slice(&self) -> MemResult<&[T]> {
+        self.mr.as_slice()
+    }
+    unsafe fn as_mut_slice(&self) -> MemResult<&mut [T]> {
+        self.mr.as_mut_slice()
+    }
+    fn as_ptr(&self) -> MemResult<*const T> {
+        self.mr.as_ptr()
+    }
+    fn as_mut_ptr(&self) -> MemResult<*mut T> {
+        self.mr.as_mut_ptr()
+    }
+}
+
+impl<T: Dist + 'static> MemRegionId for SharedMemoryRegion<T> {
+    fn id(&self) -> usize {
+        self.mr.id()
+    }
+}
+
+impl<T: Dist + 'static> SubRegion<T> for SharedMemoryRegion<T> {
+    fn sub_region<R: std::ops::RangeBounds<usize>>(&self, range: R) -> LamellarMemoryRegion<T> {
+        SharedMemoryRegion {
+            mr: self.mr.sub_region(range),
+        }
+        .into()
+    }
+}
+
+impl<T: Dist + 'static> AsBase for SharedMemoryRegion<T> {
+    unsafe fn as_base<B: Dist + 'static>(self) -> LamellarMemoryRegion<B> {
+        SharedMemoryRegion {
+            mr: self.mr.as_base::<B>(),
+        }
+        .into()
+    }
+}
+
+//#[prof]
+impl<T: Dist + 'static> MemoryRegionRDMA<T> for SharedMemoryRegion<T> {
+    unsafe fn put<U: Into<LamellarMemoryRegion<T>>>(&self, pe: usize, index: usize, data: U) {
+        self.mr.put(pe, index, data);
+    }
+    fn iput<U: Into<LamellarMemoryRegion<T>>>(&self, pe: usize, index: usize, data: U) {
+        self.mr.iput(pe, index, data);
+    }
+    unsafe fn put_all<U: Into<LamellarMemoryRegion<T>>>(&self, index: usize, data: U) {
+        self.mr.put_all(index, data);
+    }
+    unsafe fn get<U: Into<LamellarMemoryRegion<T>>>(&self, pe: usize, index: usize, data: U) {
+        self.mr.get(pe, index, data);
+    }
+}
+
+impl<T: Dist + 'static> RTMemoryRegionRDMA<T> for SharedMemoryRegion<T> {
+    unsafe fn put_slice(&self, pe: usize, index: usize, data: &[T]) {
+        self.mr.put_slice(pe, index, data)
+    }
+}
+
+impl<T: Dist + 'static> std::fmt::Debug for SharedMemoryRegion<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // let slice = unsafe { std::slice::from_raw_parts(self.addr as *const T, self.size) };
+        // write!(f, "{:?}", slice)
+        write!(f, "[{:?}] shared mem region:  {:?} ", self.mr.pe, self.mr,)
+    }
+}
+
+impl<T: Dist + 'static> From<&SharedMemoryRegion<T>> for LamellarArrayInput<T>{
+    fn from(smr: &SharedMemoryRegion<T>) ->Self{
+        LamellarArrayInput::SharedMemRegion(smr.clone())
+    }
+}
+
+// //#[prof]
+// impl<T: Dist + 'static> Drop for SharedMemoryRegion<T> {
+//     fn drop(&mut self) {
+//         let cnt = self.cnt.fetch_sub(1, Ordering::SeqCst);
+//         // //println!("drop: {:?} {:?}",self,cnt);
+
+//         if cnt == 1 {
+//             ACTIVE.remove(self.backend);
+//             // println!("trying to dropping mem region {:?}",self);
+//             if self.addr != 0{
+//                 if self.local {
+//                     self.rdma.rt_free(self.addr - self.rdma.base_addr()); // - self.rdma.base_addr());
+//                 } else {
+//                     self.rdma.free(self.addr);
+//                 }
+//             }
+//             // ACTIVE.print();
+//             //println!("dropping mem region {:?}",self);
+//         }
+//     }
+// }
+
+//#[prof]
+// impl<T: Dist + 'static> std::fmt::Debug for SharedMemoryRegion<T> {
+//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+//         // let slice = unsafe { std::slice::from_raw_parts(self.addr as *const T, self.size) };
+//         // write!(f, "{:?}", slice)
+//         write!(
+//             f,
+//             "addr {:#x} size {:?} backend {:?} cnt: {:?}",
+//             self.addr,
+//             self.size,
+//             self.backend,
+//             self.cnt.load(Ordering::SeqCst)
+//         )
+//     }
+// }
+
+// //#[prof]
+// impl<T: Dist + 'static> std::fmt::Debug
+//     for __NetworkMemoryRegion<T>
+// {
+//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+//         // let slice = unsafe { std::slice::from_raw_parts(self.addr as *const T, self.size) };
+//         // write!(f, "{:?}", slice)
+//         write!(
+//             f,
+//             "pe {:?} size {:?} backend {:?} ",
+//             self.pe, self.size, self.backend,
+//         )
+//     }
+// }
