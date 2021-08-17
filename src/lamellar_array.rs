@@ -43,8 +43,8 @@ pub struct ReduceKey {
 }
 crate::inventory::collect!(ReduceKey);
 
-// lamellar_impl::generate_reductions_for_type_rt!(u8, u16, u32, u64, u128, usize);
-// lamellar_impl::generate_reductions_for_type_rt!(i8, i16, i32, i64, i128, isize);
+lamellar_impl::generate_reductions_for_type_rt!(u8, u16, u32, u64, u128, usize);
+lamellar_impl::generate_reductions_for_type_rt!(i8, i16, i32, i64, i128, isize);
 lamellar_impl::generate_reductions_for_type_rt!(f32, f64);
 
 pub struct LamellarArray<

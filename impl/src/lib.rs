@@ -484,8 +484,8 @@ fn derive_am_data(input: TokenStream,args: TokenStream, crate_header: String, lo
         // else{
         //     quote!{ #[derive(serde::Serialize, serde::Deserialize)]}
         // };
-        let serde_temp=format!("{}::serde",crate_header);
-        let serde_temp_2 = if crate_header != "crate" {
+        // let serde_temp=format!("{}::serde",crate_header);
+        let serde_temp_2 = if crate_header != "crate" && !local {
             quote!{#[serde(crate = "lamellar::serde")]}
         }
         else{
@@ -730,25 +730,27 @@ fn create_reduction(
     let reduction = quote::format_ident!("{:}", reduction);
     let lamellar = quote::format_ident!("{}", crate_header.clone());
 
-    let (am_data,am) = if rt {
-        (quote::format_ident!("AmDataRT"),
-        quote::format_ident!("rt_am"))
+    let (am_data, am): (syn::Path,syn::Path) = if rt {
+        (syn::parse("lamellar_impl::AmDataRT".parse().unwrap()).unwrap(),
+        syn::parse("lamellar_impl::rt_am".parse().unwrap()).unwrap())
     }
     else {
-        (quote::format_ident!("AmData"),
-        quote::format_ident!("am"))
+        (syn::parse("lamellar::AmData".parse().unwrap()).unwrap(),
+        syn::parse("lamellar::am".parse().unwrap()).unwrap())
     };
 
+    // let am_data: syn::Path  = syn::parse(format!("{}::{}",crate_header,am_data).parse().unwrap()).unwrap();
+    // let am: syn::Path  = syn::parse(format!("{}::{}",crate_header,am).parse().unwrap()).unwrap();
     let expanded = quote! {
         #[allow(non_camel_case_types)]
-        #[lamellar_impl::#am_data]
+        #[#am_data]
         struct #reduction_name{
             data: #lamellar::LamellarMemoryRegion<#typeident>,
             start_pe: usize,
             end_pe: usize,
         }
 
-        #[lamellar_impl::#am]
+        #[#am]
         impl LamellarAM for #reduction_name{
             fn exec(&self) -> #typeident{
                 if self.start_pe == self.end_pe{
