@@ -14,22 +14,22 @@ use crate::LamellarTeam;
 // use crate::LamellarAM;
 use crate::active_messaging::ActiveMessaging;
 use crate::lamellae::{AllocationType, Backend, LamellaeComm, LamellaeRDMA};
-use crate::IdError;
 use crate::DarcSerde;
+use crate::IdError;
 
 pub(crate) mod local_rw_darc;
-use local_rw_darc::{LocalRwDarc};
+use local_rw_darc::LocalRwDarc;
 
 pub(crate) mod global_rw_darc;
-use global_rw_darc::{GlobalRwDarc,DistRwLock};
+use global_rw_darc::{DistRwLock, GlobalRwDarc};
 
 #[repr(u8)]
-#[derive(PartialEq,Debug,Copy,Clone)]
-pub(crate) enum DarcMode{
+#[derive(PartialEq, Debug, Copy, Clone)]
+pub(crate) enum DarcMode {
     Dropped,
     Darc,
     LocalRw,
-    GlobalRw
+    GlobalRw,
 }
 
 // lazy_static! {
@@ -76,17 +76,24 @@ unsafe impl<T: ?Sized + Sync + Send> Sync for Darc<T> {}
 
 impl<T: ?Sized> crate::DarcSerde for Darc<T> {
     fn ser(&self, num_pes: usize, cur_pe: Result<usize, IdError>) {
-        println!("in darc ser");
-        match cur_pe{
-            Ok(cur_pe) => {self.serialize_update_cnts(num_pes,cur_pe);},
-            Err(err) =>  {panic!("can only access darcs within team members ({:?})",err);}
+        match cur_pe {
+            Ok(cur_pe) => {
+                self.serialize_update_cnts(num_pes, cur_pe);
+            }
+            Err(err) => {
+                panic!("can only access darcs within team members ({:?})", err);
+            }
         }
     }
     fn des(&self, cur_pe: Result<usize, IdError>) {
-        match cur_pe{
-            Ok(cur_pe) => {self.deserialize_update_cnts(cur_pe);},
-            Err(err) => {panic!("can only access darcs within team members ({:?})",err);}
-        } 
+        match cur_pe {
+            Ok(cur_pe) => {
+                self.deserialize_update_cnts(cur_pe);
+            }
+            Err(err) => {
+                panic!("can only access darcs within team members ({:?})", err);
+            }
+        }
     }
 }
 
@@ -198,7 +205,7 @@ impl<T: ?Sized> DarcInner<T> {
             );
         }
         for pe in mode_refs.iter() {
-            while *pe  != state as u8 {
+            while *pe != state as u8 {
                 if self.local_cnt.load(Ordering::SeqCst) == 1 {
                     self.send_finished();
                 }
@@ -238,7 +245,9 @@ impl<T: ?Sized> fmt::Debug for DarcInner<T> {
             unsafe {
                 &std::slice::from_raw_parts_mut(self.ref_cnt_addr as *mut usize, self.num_pes)
             },
-            unsafe { &std::slice::from_raw_parts_mut(self.mode_addr as *mut DarcMode, self.num_pes) }
+            unsafe {
+                &std::slice::from_raw_parts_mut(self.mode_addr as *mut DarcMode, self.num_pes)
+            }
         )
     }
 }
@@ -250,7 +259,7 @@ impl<T: ?Sized> Darc<T> {
     fn inner_mut(&self) -> &mut DarcInner<T> {
         unsafe { self.inner.as_mut().expect("invalid darc inner ptr") }
     }
-    pub(crate) fn team(&self) -> Arc<LamellarTeam>{
+    pub(crate) fn team(&self) -> Arc<LamellarTeam> {
         self.inner().team()
     }
     fn ref_cnts_as_mut_slice(&self) -> &mut [usize] {
@@ -295,8 +304,6 @@ impl<T: ?Sized> Darc<T> {
             self.inner()
         );
     }
-
-    
 }
 
 impl<T> Darc<T> {
@@ -304,7 +311,11 @@ impl<T> Darc<T> {
         Darc::try_new(team, item, DarcMode::Darc)
     }
 
-    pub(crate) fn try_new(team: Arc<LamellarTeam>, item: T, state: DarcMode) -> Result<Darc<T>, IdError> {
+    pub(crate) fn try_new(
+        team: Arc<LamellarTeam>,
+        item: T,
+        state: DarcMode,
+    ) -> Result<Darc<T>, IdError> {
         let team_rt = team.team.clone();
         let my_pe = team_rt.team_pe?;
 
@@ -383,7 +394,10 @@ impl<T> Darc<T> {
             phantom: PhantomData,
         };
         d.inner_mut()
-            .update_item(Box::into_raw(Box::new(DistRwLock::new(*item,self.inner().team()))));
+            .update_item(Box::into_raw(Box::new(DistRwLock::new(
+                *item,
+                self.inner().team(),
+            ))));
         GlobalRwDarc { darc: d }
     }
 }
@@ -452,7 +466,12 @@ impl<T: 'static + ?Sized> Drop for Darc<T> {
             let mode_refs = self.mode_as_mut_slice();
             let local_mode = unsafe {
                 (*(((&mut mode_refs[inner.my_pe]) as *mut DarcMode) as *mut AtomicU8))
-                    .compare_exchange(DarcMode::Darc as u8, DarcMode::Dropped as u8, Ordering::SeqCst, Ordering::SeqCst)
+                    .compare_exchange(
+                        DarcMode::Darc as u8,
+                        DarcMode::Dropped as u8,
+                        Ordering::SeqCst,
+                        Ordering::SeqCst,
+                    )
             };
             if local_mode == Ok(DarcMode::Darc as u8) {
                 // println!("launching drop task");
@@ -467,7 +486,12 @@ impl<T: 'static + ?Sized> Drop for Darc<T> {
             } else {
                 let local_mode = unsafe {
                     (*(((&mut mode_refs[inner.my_pe]) as *mut DarcMode) as *mut AtomicU8))
-                        .compare_exchange(DarcMode::LocalRw as u8, DarcMode::Dropped as u8, Ordering::SeqCst, Ordering::SeqCst)
+                        .compare_exchange(
+                            DarcMode::LocalRw as u8,
+                            DarcMode::Dropped as u8,
+                            Ordering::SeqCst,
+                            Ordering::SeqCst,
+                        )
                 };
                 if local_mode == Ok(DarcMode::LocalRw as u8) {
                     // println!("launching drop task");
@@ -482,7 +506,12 @@ impl<T: 'static + ?Sized> Drop for Darc<T> {
                 } else {
                     let local_mode = unsafe {
                         (*(((&mut mode_refs[inner.my_pe]) as *mut DarcMode) as *mut AtomicU8))
-                            .compare_exchange(DarcMode::GlobalRw as u8, DarcMode::Dropped as u8, Ordering::SeqCst, Ordering::SeqCst)
+                            .compare_exchange(
+                                DarcMode::GlobalRw as u8,
+                                DarcMode::Dropped as u8,
+                                Ordering::SeqCst,
+                                Ordering::SeqCst,
+                            )
                     };
                     if local_mode == Ok(DarcMode::GlobalRw as u8) {
                         // println!("launching drop task");
@@ -496,7 +525,6 @@ impl<T: 'static + ?Sized> Drop for Darc<T> {
                         });
                     }
                 }
-
             }
         }
     }
@@ -690,16 +718,16 @@ impl<T: ?Sized> From<__NetworkDarc<T>> for Darc<T> {
     }
 }
 
-
-pub fn serialize_update_cnts_temp<T: crate::DarcSerde> (val: T,cnt: usize, _cur_pe: Result<usize,IdError>) {
+pub fn serialize_update_cnts_temp<T: crate::DarcSerde>(
+    val: T,
+    cnt: usize,
+    _cur_pe: Result<usize, IdError>,
+) {
     // let val_any = val as &dyn std::any::Any;
 
     // if let Some(darc) = val_any.downcast_ref::<Darc<_>>() {
     //     unsafe {darc.inner.as_ref().unwrap().dist_cnt
     //         .fetch_add(cnt, std::sync::atomic::Ordering::SeqCst); }
     // }
-    val.ser(cnt,_cur_pe);
+    val.ser(cnt, _cur_pe);
 }
-    
-
-

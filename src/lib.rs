@@ -13,6 +13,12 @@ extern crate lazy_static;
 #[macro_use]
 extern crate memoffset;
 
+// #[macro_use]
+pub extern crate serde;
+pub use serde::*;
+
+// pub use serde::{Deserialize, Serialize};
+
 mod active_messaging;
 #[cfg(feature = "experimental")]
 mod darc;
@@ -23,7 +29,6 @@ mod lamellar_arch;
 // mod lamellar_array;
 
 mod array;
-
 mod memregion;
 
 mod barrier;
@@ -69,7 +74,7 @@ pub use crate::darc::global_rw_darc::{globalrw_from_ndarc, globalrw_serialize};
 pub use crate::darc::local_rw_darc::{localrw_from_ndarc, localrw_serialize};
 #[cfg(feature = "experimental")]
 #[doc(hidden)]
-pub use crate::darc::{darc_from_ndarc, darc_serialize,serialize_update_cnts_temp};
+pub use crate::darc::{darc_from_ndarc, darc_serialize};
 
 #[cfg(feature = "experimental")]
 pub use crate::darc::local_rw_darc::LocalRwDarc;
@@ -93,7 +98,8 @@ pub use crate::lamellar_team::LamellarTeam;
 
 extern crate lamellar_impl;
 pub use lamellar_impl::{
-    DarcSerdeRT, am, generate_reductions_for_type, local_am, register_reduction, AmData, AmLocalData
+    am, generate_reductions_for_type, local_am, register_reduction, AmData, AmLocalData,
+    DarcSerdeRT,
 };
 
 #[doc(hidden)]

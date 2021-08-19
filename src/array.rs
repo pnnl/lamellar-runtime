@@ -47,15 +47,14 @@ crate::inventory::collect!(ReduceKey);
 // lamellar_impl::generate_reductions_for_type_rt!(i8, i16, i32, i64, i128, isize);
 // lamellar_impl::generate_reductions_for_type_rt!(f32, f64);
 
-#[derive(Clone, Debug)]
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub enum Distribution {
     Block,
     Cyclic,
 }
 
 #[enum_dispatch(RegisteredMemoryRegion<T>, SubRegion<T>)]
-#[derive(serde::Serialize, serde::Deserialize,Clone)]
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
 pub enum LamellarArrayInput<T: Dist + 'static> {
     SharedMemRegion(SharedMemoryRegion<T>),
     LocalMemRegion(LocalMemoryRegion<T>),

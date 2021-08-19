@@ -1,20 +1,16 @@
-
 use core::marker::PhantomData;
-use parking_lot::{RwLock,RwLockReadGuard, RwLockWriteGuard};
+use parking_lot::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
-
-use crate::lamellar_world::LAMELLAES;
-use crate::LamellarTeam;
+use crate::darc::global_rw_darc::{DistRwLock, GlobalRwDarc};
+use crate::darc::{Darc, DarcInner, DarcMode, __NetworkDarc};
 use crate::lamellae::{LamellaeComm, LamellaeRDMA};
+use crate::lamellar_world::LAMELLAES;
 use crate::IdError;
-use crate::darc::{Darc,DarcInner,DarcMode,__NetworkDarc};
-use crate::darc::global_rw_darc::{GlobalRwDarc,DistRwLock};
-
-
+use crate::LamellarTeam;
 
 #[derive(Debug)]
 pub struct LocalRwDarc<T: 'static + ?Sized> {
@@ -27,20 +23,26 @@ unsafe impl<T: ?Sized + Sync + Send> Sync for LocalRwDarc<T> {}
 impl<T: ?Sized> crate::DarcSerde for LocalRwDarc<T> {
     fn ser(&self, num_pes: usize, cur_pe: Result<usize, IdError>) {
         println!("in darc ser");
-        match cur_pe{
-            Ok(cur_pe) => {self.darc.serialize_update_cnts(num_pes,cur_pe);},
-            Err(err) =>  {panic!("can only access darcs within team members ({:?})",err);}
+        match cur_pe {
+            Ok(cur_pe) => {
+                self.darc.serialize_update_cnts(num_pes, cur_pe);
+            }
+            Err(err) => {
+                panic!("can only access darcs within team members ({:?})", err);
+            }
         }
     }
     fn des(&self, cur_pe: Result<usize, IdError>) {
-        match cur_pe{
-            Ok(cur_pe) => {self.darc.deserialize_update_cnts(cur_pe);},
-            Err(err) => {panic!("can only access darcs within team members ({:?})",err);}
-        } 
+        match cur_pe {
+            Ok(cur_pe) => {
+                self.darc.deserialize_update_cnts(cur_pe);
+            }
+            Err(err) => {
+                panic!("can only access darcs within team members ({:?})", err);
+            }
+        }
     }
 }
-
-
 
 impl<T: ?Sized> LocalRwDarc<T> {
     fn inner(&self) -> &DarcInner<RwLock<Box<T>>> {
@@ -94,7 +96,6 @@ impl<T> LocalRwDarc<T> {
         Ok(LocalRwDarc {
             darc: Darc::try_new(team, RwLock::new(Box::new(item)), DarcMode::LocalRw)?,
         })
-        
     }
 
     pub fn try_new(team: Arc<LamellarTeam>, item: T) -> Result<LocalRwDarc<T>, IdError> {
@@ -133,10 +134,12 @@ impl<T> LocalRwDarc<T> {
             src_pe: self.darc.src_pe,
             phantom: PhantomData,
         };
-        d.inner_mut().update_item(Box::into_raw(Box::new(DistRwLock::new(*item,self.inner().team()))));
-        GlobalRwDarc{
-            darc: d
-        }
+        d.inner_mut()
+            .update_item(Box::into_raw(Box::new(DistRwLock::new(
+                *item,
+                self.inner().team(),
+            ))));
+        GlobalRwDarc { darc: d }
     }
 }
 

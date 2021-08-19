@@ -47,13 +47,8 @@ pub trait DarcSerde {
     fn des(&self, cur_pe: Result<usize, IdError>);
 }
 
-impl <T> DarcSerde for &T 
-// where
-// T: serde::ser::Serialize + serde::de::DeserializeOwned 
-{
-    fn ser(&self, num_pes: usize, cur_pe: Result<usize, IdError>) {
-        println!("in fake ser");
-    }
+impl <T> DarcSerde for &T {
+    fn ser(&self, num_pes: usize, cur_pe: Result<usize, IdError>) {} 
     fn des(&self, cur_pe: Result<usize, IdError>) {}
 }
 
