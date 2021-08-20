@@ -20,15 +20,12 @@ pub use serde::*;
 // pub use serde::{Deserialize, Serialize};
 
 mod active_messaging;
+pub mod array;
 #[cfg(feature = "experimental")]
 mod darc;
 mod lamellae;
 mod lamellar_alloc;
 mod lamellar_arch;
-// #[cfg(feature = "experimental")]
-// mod lamellar_array;
-
-mod array;
 mod memregion;
 
 mod barrier;
@@ -60,8 +57,9 @@ pub use crate::active_messaging::{ActiveMessaging, LamellarAM, LocalAM};
 //     LamellarLocalMemoryRegion, LamellarMemoryRegion, RegisteredMemoryRegion, RemoteMemoryRegion,
 // };
 
-pub use crate::array::r#unsafe::UnsafeArray;
-pub use crate::array::{Distribution, LamellarArrayRDMA, ReduceKey};
+// pub use crate::array::*;
+// pub use crate::array::r#unsafe::UnsafeArray;
+// pub use crate::array::{Distribution, LamellarArrayRDMA, ReduceKey};
 pub use crate::memregion::{
     local::LocalMemoryRegion, shared::SharedMemoryRegion, RemoteMemoryRegion,
 };

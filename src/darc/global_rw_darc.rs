@@ -212,9 +212,10 @@ impl<T: ?Sized + fmt::Debug> fmt::Debug for GlobalRwDarcWriteGuard<'_,T> {
 
 
 
-#[derive(Debug)]
+#[derive(serde::Serialize, serde::Deserialize, Debug)]
 pub struct GlobalRwDarc<T: 'static + ?Sized> {
     // pub(crate) darc: Darc<RwLock<Box<(T,MyRwLock)>>>,
+    #[serde(serialize_with = "globalrw_serialize2", deserialize_with = "globalrw_from_ndarc2")]
     pub(crate) darc: Darc<DistRwLock<T>>,
 }
 
@@ -223,7 +224,7 @@ unsafe impl<T: ?Sized + Sync + Send> Sync for GlobalRwDarc<T> {}
 
 impl<T: ?Sized> crate::DarcSerde for GlobalRwDarc<T> {
     fn ser(&self, num_pes: usize, cur_pe: Result<usize, IdError>) {
-        println!("in darc ser");
+        println!("in global rw darc ser");
         match cur_pe{
             Ok(cur_pe) => {self.darc.serialize_update_cnts(num_pes,cur_pe);},
             Err(err) =>  {panic!("can only access darcs within team members ({:?})",err);}
@@ -277,7 +278,7 @@ impl<T: ?Sized> GlobalRwDarc<T> {
 
    
     pub async fn async_read(&self) -> GlobalRwDarcReadGuard<'_,T> {
-        println!("async read");
+        // println!("async read");
         let inner = self.inner();
         let team = inner.team();
         let remote_rwlock_addr = team.team.lamellae.remote_addr(0,inner as *const DarcInner<DistRwLock<T>> as *const () as usize);
@@ -290,7 +291,7 @@ impl<T: ?Sized> GlobalRwDarc<T> {
     }
 
     pub async fn async_write(&self) -> GlobalRwDarcWriteGuard<'_,T> {
-        println!("async write");
+        // println!("async write");
         let inner = self.inner();
         let team = inner.team();
         let remote_rwlock_addr = team.team.lamellae.remote_addr(0,inner as *const DarcInner<DistRwLock<T>> as *const () as usize);
@@ -302,7 +303,7 @@ impl<T: ?Sized> GlobalRwDarc<T> {
     }
 
     pub fn read(&self) -> GlobalRwDarcReadGuard<'_,T> {
-        println!("read");
+        // println!("read");
         let inner = self.inner();
         let team = inner.team();
         let remote_rwlock_addr = team.team.lamellae.remote_addr(0,inner as *const DarcInner<DistRwLock<T>> as *const () as usize);
@@ -314,7 +315,7 @@ impl<T: ?Sized> GlobalRwDarc<T> {
     }
 
     pub fn write(&self) -> GlobalRwDarcWriteGuard<'_,T> {
-        println!("write");
+        // println!("write");
         let inner = self.inner();
         let team = inner.team();
         let remote_rwlock_addr = team.team.lamellae.remote_addr(0,inner as *const DarcInner<DistRwLock<T>> as *const () as usize);
@@ -413,6 +414,25 @@ where
     // println!("lrwdarc from net darc");
     // rwdarc.print();
     Ok(rwdarc)
+}
+
+pub(crate) fn globalrw_serialize2<S, T>(globalrw: &Darc<DistRwLock<T>>, s: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+    T: ?Sized,
+{
+    __NetworkDarc::<T>::from(globalrw).serialize(s)
+}
+
+pub(crate) fn globalrw_from_ndarc2<'de, D, T>(deserializer: D) -> Result<Darc<DistRwLock<T>>, D::Error>
+where
+    D: Deserializer<'de>,
+    T: ?Sized,
+{
+    let ndarc: __NetworkDarc<T> = Deserialize::deserialize(deserializer)?;
+    // println!("gdarc from net darc");
+    // rwdarc.print();
+    Ok(Darc::from(ndarc))
 }
 
 impl<T: ?Sized> From<&Darc<DistRwLock<T>>> for __NetworkDarc<T> {

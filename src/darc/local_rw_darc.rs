@@ -12,8 +12,9 @@ use crate::lamellar_world::LAMELLAES;
 use crate::IdError;
 use crate::LamellarTeam;
 
-#[derive(Debug)]
+#[derive(serde::Serialize, serde::Deserialize, Debug)]
 pub struct LocalRwDarc<T: 'static + ?Sized> {
+    #[serde(serialize_with = "localrw_serialize2", deserialize_with = "localrw_from_ndarc2")]
     pub(crate) darc: Darc<RwLock<Box<T>>>,
 }
 
@@ -22,7 +23,7 @@ unsafe impl<T: ?Sized + Sync + Send> Sync for LocalRwDarc<T> {}
 
 impl<T: ?Sized> crate::DarcSerde for LocalRwDarc<T> {
     fn ser(&self, num_pes: usize, cur_pe: Result<usize, IdError>) {
-        println!("in darc ser");
+        println!("in local darc ser");
         match cur_pe {
             Ok(cur_pe) => {
                 self.darc.serialize_update_cnts(num_pes, cur_pe);
@@ -166,6 +167,14 @@ where
     __NetworkDarc::<T>::from(&localrw.darc).serialize(s)
 }
 
+pub fn localrw_serialize2<S, T>(localrw: &Darc<RwLock<Box<T>>>, s: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+    T: ?Sized,
+{
+    __NetworkDarc::<T>::from(localrw).serialize(s)
+}
+
 pub fn localrw_from_ndarc<'de, D, T>(deserializer: D) -> Result<LocalRwDarc<T>, D::Error>
 where
     D: Deserializer<'de>,
@@ -179,6 +188,40 @@ where
     // println!("lrwdarc from net darc");
     // rwdarc.print();
     Ok(rwdarc)
+}
+
+pub fn localrw_from_ndarc2<'de, D, T>(deserializer: D) -> Result<Darc<RwLock<Box<T>>>, D::Error>
+where
+    D: Deserializer<'de>,
+    T: ?Sized,
+{
+    let ndarc: __NetworkDarc<T> = Deserialize::deserialize(deserializer)?;
+    // println!("lrwdarc from net darc");
+    // let rwdarc = LocalRwDarc {
+    //     darc: ,
+    // };
+    // println!("lrwdarc from net darc");
+    // rwdarc.print();
+    Ok(Darc::from(ndarc))
+}
+
+
+
+
+impl<T: ?Sized> From<Darc<RwLock<Box<T>>>> for __NetworkDarc<T> {
+    fn from(darc: Darc<RwLock<Box<T>>>) -> Self {
+        // println!("rwdarc to net darc");
+        // darc.print();
+        let team = &darc.inner().team().team;
+        let ndarc = __NetworkDarc {
+            inner_addr: darc.inner as *const u8 as usize,
+            backend: team.lamellae.backend(),
+            orig_world_pe: team.world_pe,
+            orig_team_pe: team.team_pe.expect("darcs only valid on team members"),
+            phantom: PhantomData,
+        };
+        ndarc
+    }
 }
 
 impl<T: ?Sized> From<&Darc<RwLock<Box<T>>>> for __NetworkDarc<T> {

@@ -50,6 +50,12 @@ pub enum LamellarMemoryRegion<T: Dist + 'static> {
     Local(LocalMemoryRegion<T>),
 }
 
+impl<T: Dist + 'static> From<&LamellarMemoryRegion<T>> for LamellarArrayInput<T> {
+    fn from(mr: &LamellarMemoryRegion<T>) -> Self {
+        LamellarArrayInput::LamellarMemRegion(mr.clone())
+    }
+}
+
 #[enum_dispatch]
 pub trait RegisteredMemoryRegion<T: Dist + 'static> {
     fn len(&self) -> usize;
@@ -514,10 +520,7 @@ pub trait RemoteMemoryRegion {
     ///
     /// * `region` - the region to free
     ///
-    fn free_shared_memory_region<T: Dist + 'static>(
-        &self,
-        region: SharedMemoryRegion<T>,
-    );
+    fn free_shared_memory_region<T: Dist + 'static>(&self, region: SharedMemoryRegion<T>);
 
     /// release a shared memory region from the asymmetric heap
     ///
@@ -525,10 +528,7 @@ pub trait RemoteMemoryRegion {
     ///
     /// * `region` - the region to free
     ///
-    fn free_local_memory_region<T: Dist + 'static>(
-        &self,
-        region: LocalMemoryRegion<T>,
-    );
+    fn free_local_memory_region<T: Dist + 'static>(&self, region: LocalMemoryRegion<T>);
 }
 
 //#[prof]

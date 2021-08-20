@@ -2,8 +2,8 @@
 // use crate::lamellae::Lamellae;
 // use crate::lamellar_arch::LamellarArchRT;
 use crate::memregion::{
-    shared::SharedMemoryRegion, Dist, AsBase, RegisteredMemoryRegion, RemoteMemoryRegion,
-    SubRegion,MemoryRegionRDMA
+    shared::SharedMemoryRegion, AsBase, Dist, MemoryRegionRDMA, RegisteredMemoryRegion,
+    RemoteMemoryRegion, SubRegion,
 };
 // use crate::lamellar_request::{AmType, LamellarRequest, LamellarRequestHandle};
 use crate::lamellar_team::LamellarTeam;
@@ -26,9 +26,11 @@ use std::sync::Arc;
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 #[serde(into = "__NetworkUnsafeArray<T>", from = "__NetworkUnsafeArray<T>")]
 pub struct UnsafeArray<T: Dist + 'static> {
+
     mem_region: Darc<SharedMemoryRegion<T>>,
-    size: usize,
-    elem_per_pe: f32,
+    size: usize,      //total array size
+    elem_per_pe: f32, //used to evenly distribute elems
+    num_elems_local: usize,
     team: Arc<LamellarTeam>,
     distribution: Distribution,
 }
@@ -39,16 +41,30 @@ enum ArrayOp {
 }
 
 //#[prof]
-impl<
-        T: Dist + 'static,
-    > UnsafeArray<T>
-{
+impl<T: Dist + 'static> UnsafeArray<T> {
     pub fn new(
         team: Arc<LamellarTeam>,
         array_size: usize,
         distribution: Distribution,
     ) -> UnsafeArray<T> {
-        let per_pe_size = (array_size as f32 / team.num_pes() as f32).ceil() as usize;
+        let elem_per_pe = array_size as f32 / team.num_pes() as f32;
+        let num_elems_local = match distribution {
+            Distribution::Block => {
+                ((elem_per_pe * (team.team_pe_id().unwrap() + 1) as f32).round()
+                    - (elem_per_pe * team.team_pe_id().unwrap() as f32).round())
+                    as usize
+            }
+            Distribution::Cyclic => {
+                let rem = array_size  % team.num_pes();
+                if team.team_pe_id().unwrap() < rem {
+                    elem_per_pe as usize + 1
+                } else {
+                    elem_per_pe as usize
+                }
+            }
+        };
+        let per_pe_size = (array_size as f32 / team.num_pes() as f32).ceil() as usize; //we do ceil to ensure enough space an each pe
+        println!("{:?} {:?} {:?}", elem_per_pe, num_elems_local, per_pe_size);
         let rmr: SharedMemoryRegion<T> = team.alloc_shared_mem_region(per_pe_size);
         unsafe {
             for elem in rmr.clone().as_base::<u8>().as_mut_slice().unwrap() {
@@ -59,7 +75,8 @@ impl<
             mem_region: Darc::new(team.clone(), rmr)
                 .expect("trying to create array on non team member"),
             size: array_size,
-            elem_per_pe: array_size as f32 / team.num_pes() as f32,
+            elem_per_pe: elem_per_pe,
+            num_elems_local: num_elems_local,
             team: team,
             distribution: distribution,
         }
@@ -123,7 +140,7 @@ impl<
                     let pe = (start_pe + i) % num_pes;
                     let offset = index / num_pes + overflow;
                     for j in (i..buf.len()).step_by(num_pes) {
-                        unsafe { temp_array.put(my_pe,k, buf.sub_region(j..=j)) };
+                        unsafe { temp_array.put(my_pe, k, buf.sub_region(j..=j)) };
                         k += 1;
                     }
                     self.mem_region
@@ -159,38 +176,43 @@ impl<
             Distribution::Cyclic => self.cyclic_op(ArrayOp::Get, index, buf),
         }
     }
+    pub fn as_slice(&self) -> &[T] {
+        &self
+            .mem_region
+            .as_slice()
+            .expect("memory doesnt exist on this pe (this should not happen for arrays currently)")
+            [0..self.num_elems_local]
+    }
 }
-impl<
-        T: Dist + std::fmt::Debug + 'static,
-    > UnsafeArray<T>
-{
+impl<T: Dist + std::fmt::Debug + 'static> UnsafeArray<T> {
     pub fn print(&self) {
-        self.team.team.barrier();
+        // println!("print entry barrier()");
+        self.team.team.barrier(); //TODO: have barrier accept a string so we can print where we are stalling.
         for pe in 0..self.team.num_pes() {
+            // println!("print pe {:?} barrier()",pe);
             self.team.team.barrier();
             if self.team.team_pe_id().unwrap() == pe {
-                println!("[{:?}] {:?}", pe, self.mem_region.as_slice());
+                println!("[{:?}] {:?}", pe, self.as_slice());
             }
             std::thread::sleep(std::time::Duration::from_millis(500));
         }
+        // println!("print exit barrier()");
+        // self.team.team.barrier();
     }
 }
 
-impl<
-        T: Dist + 'static,
-    > LamellarArrayRDMA<T> for UnsafeArray<T>
-{
+impl<T: Dist + 'static> LamellarArrayRDMA<T> for UnsafeArray<T> {
+    #[inline(always)]
     fn put<U: Into<LamellarArrayInput<T>>>(&self, index: usize, buf: U) {
-        match self.distribution {
-            Distribution::Block => self.block_op(ArrayOp::Put, index, buf),
-            Distribution::Cyclic => self.cyclic_op(ArrayOp::Put, index, buf),
-        }
+        self.put(index, buf)
     }
+    #[inline(always)]
     fn get<U: Into<LamellarArrayInput<T>>>(&self, index: usize, buf: U) {
-        match self.distribution {
-            Distribution::Block => self.block_op(ArrayOp::Get, index, buf),
-            Distribution::Cyclic => self.cyclic_op(ArrayOp::Get, index, buf),
-        }
+        self.get(index, buf)
+    }
+    #[inline(always)]
+    fn as_slice(&self) -> &[T] {
+        self.as_slice()
     }
     // fn put_indirect(self, index: usize, buf: &impl LamellarBuffer<T>){
     //     let pe = match self.distribution{
@@ -205,6 +227,31 @@ impl<
     // fn get_indirect(self, index: usize, buf: &mut impl LamellarBuffer<T>){
 
     // }
+}
+
+impl<T: Dist + 'static> crate::DarcSerde for UnsafeArray<T> {
+    fn ser(&self, num_pes: usize, cur_pe: Result<usize, crate::IdError>) {
+        // println!("in unsafearray ser");
+        match cur_pe {
+            Ok(cur_pe) => {
+                self.mem_region.serialize_update_cnts(num_pes, cur_pe);
+            }
+            Err(err) => {
+                panic!("can only access darcs within team members ({:?})", err);
+            }
+        }
+    }
+    fn des(&self, cur_pe: Result<usize, crate::IdError>) {
+        // println!("in unsafearray des");
+        match cur_pe {
+            Ok(cur_pe) => {
+                self.mem_region.deserialize_update_cnts(cur_pe);
+            }
+            Err(err) => {
+                panic!("can only access darcs within team members ({:?})", err);
+            }
+        }
+    }
 }
 
 // impl<
@@ -278,9 +325,9 @@ impl<
 //     }
 // }
 
-#[derive(serde::Serialize, serde::Deserialize, Clone)]
+// #[derive(serde::Serialize, serde::Deserialize, Clone)]
+#[lamellar_impl::AmDataRT(Clone)]
 pub struct __NetworkUnsafeArray<T: Dist + 'static> {
-    #[serde(serialize_with = "crate::darc_serialize", deserialize_with = "crate::darc_from_ndarc")]
     mem_region: Darc<SharedMemoryRegion<T>>,
     size: usize,
     elem_per_pe: f32,
@@ -290,10 +337,9 @@ pub struct __NetworkUnsafeArray<T: Dist + 'static> {
 impl<T: Dist + 'static> From<UnsafeArray<T>> for __NetworkUnsafeArray<T> {
     fn from(array: UnsafeArray<T>) -> Self {
         let nua = __NetworkUnsafeArray {
-            
             mem_region: array.mem_region.clone(),
             size: array.size,
-            elem_per_pe: array.elem_per_pe,
+            elem_per_pe: array.elem_per_pe,//probably dont need this
             distribution: array.distribution.clone(),
         };
         nua
@@ -303,12 +349,34 @@ impl<T: Dist + 'static> From<UnsafeArray<T>> for __NetworkUnsafeArray<T> {
 //#[prof]
 impl<T: Dist + 'static> From<__NetworkUnsafeArray<T>> for UnsafeArray<T> {
     fn from(array: __NetworkUnsafeArray<T>) -> Self {
-        UnsafeArray{
+        // println!("deserializing network unsafe array");
+        // array.mem_region.print();
+        let team = array.mem_region.team();
+        let elem_per_pe = array.elem_per_pe;
+        let num_elems_local = match array.distribution {
+            Distribution::Block => {
+                ((elem_per_pe * (team.team_pe_id().unwrap() + 1) as f32).round()
+                    - (elem_per_pe * team.team_pe_id().unwrap() as f32).round())
+                    as usize
+            }
+            Distribution::Cyclic => {
+                let rem = array.size  % team.num_pes();
+                if team.team_pe_id().unwrap() < rem {
+                    elem_per_pe as usize + 1
+                } else {
+                    elem_per_pe as usize
+                }
+            }
+        };
+        UnsafeArray {
             mem_region: array.mem_region.clone(),
             size: array.size,
-            elem_per_pe: array.elem_per_pe,
-            team: array.mem_region.team(),
+            elem_per_pe: elem_per_pe,
+            num_elems_local: num_elems_local,
+            team: team,
             distribution: array.distribution.clone(),
         }
     }
 }
+
+

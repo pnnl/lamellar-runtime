@@ -64,6 +64,8 @@ pub struct DarcInner<T: ?Sized> {
 unsafe impl<T: ?Sized + Sync + Send> Send for DarcInner<T> {}
 unsafe impl<T: ?Sized + Sync + Send> Sync for DarcInner<T> {}
 
+#[derive(serde::Serialize, serde::Deserialize)]
+#[serde(into = "__NetworkDarc<T>", from = "__NetworkDarc<T>")]
 pub struct Darc<T: 'static + ?Sized> {
     inner: *mut DarcInner<T>,
     src_pe: usize,
@@ -670,6 +672,23 @@ where
     Ok(Darc::from(ndarc))
 }
 
+impl<T: ?Sized> From<Darc<T>> for __NetworkDarc<T> {
+    fn from(darc: Darc<T>) -> Self {
+        // println!("net darc from darc");
+        let team = &darc.inner().team().team;
+        let ndarc = __NetworkDarc {
+            inner_addr: darc.inner as *const u8 as usize,
+            backend: team.lamellae.backend(),
+            orig_world_pe: team.world_pe,
+            // orig_team_pe: darc.src_pe,
+            orig_team_pe: team.team_pe.expect("darcs only valid on team members"),
+            phantom: PhantomData,
+        };
+        // darc.print();
+        ndarc
+    }
+}
+
 impl<T: ?Sized> From<&Darc<T>> for __NetworkDarc<T> {
     fn from(darc: &Darc<T>) -> Self {
         // println!("net darc from darc");
@@ -718,16 +737,16 @@ impl<T: ?Sized> From<__NetworkDarc<T>> for Darc<T> {
     }
 }
 
-pub fn serialize_update_cnts_temp<T: crate::DarcSerde>(
-    val: T,
-    cnt: usize,
-    _cur_pe: Result<usize, IdError>,
-) {
-    // let val_any = val as &dyn std::any::Any;
+// pub fn serialize_update_cnts_temp<T: crate::DarcSerde>(
+//     val: T,
+//     cnt: usize,
+//     _cur_pe: Result<usize, IdError>,
+// ) {
+//     // let val_any = val as &dyn std::any::Any;
 
-    // if let Some(darc) = val_any.downcast_ref::<Darc<_>>() {
-    //     unsafe {darc.inner.as_ref().unwrap().dist_cnt
-    //         .fetch_add(cnt, std::sync::atomic::Ordering::SeqCst); }
-    // }
-    val.ser(cnt, _cur_pe);
-}
+//     // if let Some(darc) = val_any.downcast_ref::<Darc<_>>() {
+//     //     unsafe {darc.inner.as_ref().unwrap().dist_cnt
+//     //         .fetch_add(cnt, std::sync::atomic::Ordering::SeqCst); }
+//     // }
+//     val.ser(cnt, _cur_pe);
+// }

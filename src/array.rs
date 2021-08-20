@@ -1,7 +1,9 @@
 use crate::active_messaging::*; //{ActiveMessaging,AMCounters,Cmd,Msg,LamellarAny,LamellarLocal};
                                 // use crate::lamellae::Lamellae;
                                 // use crate::lamellar_arch::LamellarArchRT;
-use crate::memregion::{local::LocalMemoryRegion, shared::SharedMemoryRegion, AsBase, Dist};
+use crate::memregion::{
+    local::LocalMemoryRegion, shared::SharedMemoryRegion, AsBase, Dist, LamellarMemoryRegion,
+};
 // use crate::lamellar_request::{AmType, LamellarRequest, LamellarRequestHandle};
 // use crate::lamellar_team::LamellarTeam;
 // use crate::scheduler::{Scheduler,SchedulerQueue};
@@ -18,7 +20,7 @@ use std::sync::Arc;
 use enum_dispatch::enum_dispatch;
 
 pub(crate) mod r#unsafe;
-use r#unsafe::UnsafeArray;
+pub use r#unsafe::UnsafeArray;
 
 pub(crate) type ReduceGen =
     fn(LamellarArray<u8>, usize) -> Arc<dyn RemoteActiveMessage + Send + Sync>;
@@ -56,6 +58,7 @@ pub enum Distribution {
 #[enum_dispatch(RegisteredMemoryRegion<T>, SubRegion<T>)]
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 pub enum LamellarArrayInput<T: Dist + 'static> {
+    LamellarMemRegion(LamellarMemoryRegion<T>),
     SharedMemRegion(SharedMemoryRegion<T>),
     LocalMemRegion(LocalMemoryRegion<T>),
     // Unsafe(UnsafeArray<T>),
@@ -74,10 +77,12 @@ where
     T: Dist + 'static,
 {
     fn put<U: Into<LamellarArrayInput<T>>>(&self, index: usize, buf: U);
+    // fn put<U: Into<LamellarArrayInput<T>>>(&self, index: usize, buf: U);
     // pub fn put_indirect(self, index: usize, buf: &impl LamellarBuffer<T>);
     fn get<U: Into<LamellarArrayInput<T>>>(&self, index: usize, buf: U);
     // fn get_raw_mem_region(&self) -> LamellarMemoryRegion<T>;
     // pub fn get_indirect(self, index: usize, buf: &mut impl LamellarBuffer<T>); //do we need a LamellarBufferMut?
+    fn as_slice(&self) -> &[T];
 }
 
 // pub trait LamellarArrayReduce<T>: LamellarArrayRDMA<T>

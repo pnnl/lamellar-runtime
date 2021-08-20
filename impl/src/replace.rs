@@ -1,5 +1,6 @@
 use syn::visit_mut::VisitMut;
 use syn::parse::Result;
+use syn::spanned::Spanned;
 use proc_macro2::Span;
 use regex::Regex;
 // use proc_macro_error::proc_macro_error;
@@ -12,9 +13,10 @@ pub(crate) struct DarcReplace;
 
 impl VisitMut for SelfReplace {
     fn visit_ident_mut(&mut self, i: &mut syn::Ident) {
+        let span = i.span();
         // println!("ident: {:?}",i);
         if i.to_string() == "self" {
-            *i = syn::Ident::new("__lamellar_data", Span::call_site());
+            *i = syn::Ident::new("__lamellar_data", span);
         }
         // println!("ident: {:?}",i);
         syn::visit_mut::visit_ident_mut(self, i);
@@ -41,24 +43,26 @@ impl VisitMut for SelfReplace {
 
 impl VisitMut for LamellarDSLReplace {
     fn visit_ident_mut(&mut self, i: &mut syn::Ident) {
+        let span = i.span();
         match i.to_string().as_str() {
             "lamellar::current_pe" => {
-                *i = syn::Ident::new("__lamellar_current_pe", Span::call_site());
+                *i = syn::Ident::new("__lamellar_current_pe", span);
             }
             "lamellar::num_pes" => {
-                *i = syn::Ident::new("__lamellar_num_pes", Span::call_site());
+                *i = syn::Ident::new("__lamellar_num_pes",  span);
             }
             "lamellar::world" => {
-                *i = syn::Ident::new("__lamellar_world", Span::call_site());
+                *i = syn::Ident::new("__lamellar_world",  span);
             }
             "lamellar::team" => {
-                *i = syn::Ident::new("__lamellar_team", Span::call_site());
+                *i = syn::Ident::new("__lamellar_team",  span);
             }
             _ => {}
         }
         syn::visit_mut::visit_ident_mut(self, i);
     }
     fn visit_path_mut(&mut self, i: &mut syn::Path) {
+        let span = i.span();
         // println!("seg len: {:?}", i.segments.len());
         if i.segments.len() == 2 {
             if let Some(pathseg) = i.segments.first() {
@@ -70,7 +74,7 @@ impl VisitMut for LamellarDSLReplace {
                                 (*i).segments.push(syn::PathSegment {
                                     ident: syn::Ident::new(
                                         "__lamellar_current_pe",
-                                        Span::call_site(),
+                                        span,
                                     ),
                                     arguments: syn::PathArguments::None,
                                 });
@@ -78,21 +82,21 @@ impl VisitMut for LamellarDSLReplace {
                             "num_pes" => {
                                 (*i).segments = syn::punctuated::Punctuated::new();
                                 (*i).segments.push(syn::PathSegment {
-                                    ident: syn::Ident::new("__lamellar_num_pes", Span::call_site()),
+                                    ident: syn::Ident::new("__lamellar_num_pes",  span),
                                     arguments: syn::PathArguments::None,
                                 });
                             }
                             "world" => {
                                 (*i).segments = syn::punctuated::Punctuated::new();
                                 (*i).segments.push(syn::PathSegment {
-                                    ident: syn::Ident::new("__lamellar_world", Span::call_site()),
+                                    ident: syn::Ident::new("__lamellar_world",  span),
                                     arguments: syn::PathArguments::None,
                                 });
                             }
                             "team" => {
                                 (*i).segments = syn::punctuated::Punctuated::new();
                                 (*i).segments.push(syn::PathSegment {
-                                    ident: syn::Ident::new("__lamellar_team", Span::call_site()),
+                                    ident: syn::Ident::new("__lamellar_team",  span),
                                     arguments: syn::PathArguments::None,
                                 });
                             }
@@ -106,6 +110,7 @@ impl VisitMut for LamellarDSLReplace {
     }
 
     fn visit_macro_mut(&mut self, i: &mut syn::Macro) {
+        
         let args: Result<FormatArgs> = i.parse_body();
 
         if args.is_ok() {
@@ -141,9 +146,10 @@ impl VisitMut for LamellarDSLReplace {
 
 impl VisitMut for DarcReplace {
     fn visit_ident_mut(&mut self, i: &mut syn::Ident) {
+        let span = i.span();
         // println!("ident: {:?}",i);
         if i.to_string() == "Darc<" {
-            *i = syn::Ident::new("__AmDarc", Span::call_site());
+            *i = syn::Ident::new("__AmDarc",  span);
         }
         // println!("ident: {:?}",i);
         syn::visit_mut::visit_ident_mut(self, i);

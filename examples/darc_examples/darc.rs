@@ -8,7 +8,7 @@ struct DarcAm {
     lrw_darc: LocalRwDarc<usize>,
     wrapped: WrappedWrappedWrappedDarc,
     wrapped_tuple: (WrappedWrappedWrappedDarc, WrappedWrappedWrappedDarc),
-    // darc_tuple: ( Darc<AtomicUsize>, Darc<AtomicUsize>,) // not supported, but the macro catches it and forces compiler to fail
+    darc_tuple: ( Darc<usize>, Darc<usize>,) // not supported, but the macro catches it and forces compiler to fail
 }
 
 #[lamellar::am]
@@ -68,6 +68,8 @@ fn main() {
             },
         },
     };
+    let darc1 = Darc::new(world.team(), 10).unwrap();
+    let darc2 = Darc::new(world.team(), 20).unwrap();
     if let Some(team) = even_team {
         let team_darc = Darc::new(team.clone(), AtomicUsize::new(10));
         println!("created team darc");
@@ -80,6 +82,7 @@ fn main() {
                 global_darc: global_darc.clone(),
                 wrapped: wrapped.clone(),
                 wrapped_tuple: (wrapped.clone(), wrapped.clone()),
+                darc_tuple: ( darc1.clone(), darc2.clone() )
             };
             team.exec_am_pe(0, darc_am.clone());
             team.exec_am_all(darc_am);
@@ -88,6 +91,9 @@ fn main() {
             *(*local_darc.write()) += 1;
         }
     }
+    drop(darc1);
+    drop(darc2);
+    drop(wrapped);
     println!("changing darc type");
     let ro_darc = global_darc.into_localrw().into_darc(); // we can call into_darc directly on global_Darc, but string the operations for testing purposes
     println!("read only darc");

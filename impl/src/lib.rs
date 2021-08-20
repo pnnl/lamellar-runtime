@@ -158,35 +158,41 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_type: AmType) -> 
     };
     let mut exec_fn =
     get_impl_method("exec".to_string(), &input.items).expect("unable to extract exec body");
-    
+    let func_span = exec_fn.span();
     let last_expr = if let Some(stmt) = exec_fn.stmts.pop(){
         let last_stmt = replace_lamellar_dsl(stmt.clone());
         match am_type{
-            AmType::NoReturn => quote!{ 
+            AmType::NoReturn => quote_spanned!{last_stmt.span()=> 
                 #last_stmt
                 #lamellar::LamellarReturn::Unit 
             },
             AmType::ReturnData(_) | AmType::ReturnAm(_) => {
                 let temp =get_expr(&last_stmt)
                 .expect("failed to get exec return value (try removing the last \";\")");
-                quote!{#temp}
+                quote_spanned!{last_stmt.span()=> #temp}
             }
         }  
     }
     else{
-        quote!{ #lamellar::LamellarReturn::Unit } 
+        quote_spanned!{func_span=> #lamellar::LamellarReturn::Unit } 
     };
     // println!("last_expr {:?}",last_expr);
+
     
+    let mut temp = quote_spanned! {func_span=>};
     let stmts = exec_fn.stmts;
-    let mut temp = quote! {};
+    
 
     for stmt in stmts {
         let new_stmt = replace_lamellar_dsl(stmt.clone());
+        let span = stmt.span();
+        // println!("{:?} {:?} {:?} {:?}",span, span.source_file(), span.start(), span.end());
+        // println!("{:?}",new_stmt);
         temp.extend(quote_spanned! {stmt.span()=>
             #new_stmt
         });
     }
+    // println!("{:#?}",temp);
 
     let orig_name = syn::Ident::new(&name, Span::call_site());
     let orig_name_unpack = quote::format_ident!("{}_unpack", orig_name.clone());
@@ -281,7 +287,9 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_type: AmType) -> 
     //     quote::format_ident!("RemoteActiveMessage")
     // };
 
-    let mut expanded = quote! {
+    // let span = temp.span();
+    // println!("{:?} {:?} {:?}", span.source_file(), span.start(), span.end());
+    let mut expanded = quote_spanned! {temp.span()=>
         impl #generics #lamellar::LamellarActiveMessage for #orig_name#generics_args {
             fn exec(self: std::sync::Arc<Self>,__lamellar_current_pe: usize,__lamellar_num_pes: usize, __local: bool, __lamellar_world: std::sync::Arc<#lamellar::LamellarTeam>, __lamellar_team: std::sync::Arc<#lamellar::LamellarTeam>) -> std::pin::Pin<Box<dyn std::future::Future<Output=#lamellar::LamellarReturn> + Send>>{
                 Box::pin( async move {
@@ -299,7 +307,7 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_type: AmType) -> 
     };
 
     if let AmType::ReturnData(_) = am_type{
-        expanded.extend(quote!{
+        expanded.extend( quote_spanned! {temp.span()=>
             struct #ret_struct{
                 val: #ret_type
             }
@@ -316,7 +324,7 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_type: AmType) -> 
     }
 
     if !local {
-        expanded.extend(quote!{
+        expanded.extend( quote_spanned! {temp.span()=>
             impl #generics #lamellar::RemoteActiveMessage for #orig_name#generics_args {}
 
             fn #orig_name_unpack(bytes: &[u8], cur_pe: Result<usize,#lamellar::IdError>) -> std::sync::Arc<dyn #lamellar::RemoteActiveMessage + Send + Sync>  {
@@ -335,12 +343,16 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_type: AmType) -> 
             }
         });
     }
-    let user_expanded = quote!{
+    // let span = expanded.span();
+    // println!("{:?} {:?} {:?}", span.source_file(), span.start(), span.end());
+    let user_expanded = quote_spanned!{expanded.span()=>
         const _: () = {
             extern crate lamellar as __lamellar;
             #expanded
         };
     };
+    // let span = user_expanded.span();
+    // println!("{:?} {:?} {:?}", span.source_file(), span.start(), span.end());
     if lamellar == "crate" {
         TokenStream::from(expanded)
     }
@@ -373,40 +385,40 @@ fn derive_am_data(input: TokenStream,args: TokenStream, crate_header: String, lo
             if let syn::Type::Path(ref ty) = field.ty{
                 if let Some(seg) = ty.path.segments.first(){
                     if !local{
-                        let mut is_darc = false;
-                        let (serialize,deserialize) = match seg.ident.to_string().as_str(){
-                            "Darc" => {
-                                let serialize = format!("{}::darc_serialize",crate_header);
-                                let deserialize = format!("{}::darc_from_ndarc",crate_header);
-                                is_darc = true;
-                                (serialize,deserialize)
-                            },
-                            "LocalRwDarc" => {
-                                let serialize = format!("{}::localrw_serialize",crate_header);
-                                let deserialize = format!("{}::localrw_from_ndarc",crate_header);
-                                is_darc = true;
-                                (serialize,deserialize)
-                            },
-                            "GlobalRwDarc" => {
-                                let serialize = format!("{}::globalrw_serialize",crate_header);
-                                let deserialize = format!("{}::globalrw_from_ndarc",crate_header);
-                                is_darc = true;
-                                (serialize,deserialize)
-                            }
-                            _ => {(format!(""),format!(""))}
-                        };
+                        // let mut is_darc = false;
+                        // let (serialize,deserialize) = match seg.ident.to_string().as_str(){
+                        //     "DarcTTT" => {
+                        //         let serialize = format!("{}::darc_serialize",crate_header);
+                        //         let deserialize = format!("{}::darc_from_ndarc",crate_header);
+                        //         // is_darc = true;
+                        //         (serialize,deserialize)
+                        //     },
+                        //     "LocalRwDarcTTT" => {
+                        //         let serialize = format!("{}::localrw_serialize",crate_header);
+                        //         let deserialize = format!("{}::localrw_from_ndarc",crate_header);
+                        //         // is_darc = true;
+                        //         (serialize,deserialize)
+                        //     },
+                        //     "GlobalRwDarcTTT" => {
+                        //         let serialize = format!("{}::globalrw_serialize",crate_header);
+                        //         let deserialize = format!("{}::globalrw_from_ndarc",crate_header);
+                        //         // is_darc = true;
+                        //         (serialize,deserialize)
+                        //     }
+                        //     _ => {(format!(""),format!(""))}
+                        // };
                         let field_name = field.ident.clone();
-                        if is_darc{
-                            fields.extend(quote_spanned!{field.span()=>
-                                #[serde(serialize_with = #serialize, deserialize_with = #deserialize)]
-                                #field,
-                            }); 
-                        }
-                        else{
+                        // if is_darc{
+                        //     fields.extend(quote_spanned!{field.span()=>
+                        //         #[serde(serialize_with = #serialize, deserialize_with = #deserialize)]
+                        //         #field,
+                        //     }); 
+                        // }
+                        // else{
                             fields.extend(quote_spanned!{field.span()=>
                                 #field,
                             });
-                        }
+                        // }
                         ser.extend(quote_spanned!{field.span()=>
                             (&self.#field_name).ser(num_pes,cur_pe);
                         });
@@ -418,17 +430,17 @@ fn derive_am_data(input: TokenStream,args: TokenStream, crate_header: String, lo
                         fields.extend(quote_spanned!{field.span()=>
                             #field,
                         });
-                        ser.extend(quote_spanned!{field.span()=>
-                            // println!("non darc {:?}",stringify!(self.#field_name));
-                            (&self.#field_name).ser(num_pes,cur_pe);
-                            // #lamellar::serialize_update_cnts_temp(&self.#field_name,num_pes,cur_pe);
-                            // println!("serialized darc");
-                            // self.#field_name.print();
-                        });
-                        des.extend(quote_spanned!{field.span()=>   
-                            // println!("non darc des{:?}",stringify!(self.#field_name));
-                            (&self.#field_name).des(cur_pe); 
-                        });
+                        // ser.extend(quote_spanned!{field.span()=>
+                        //     // println!("non darc {:?}",stringify!(self.#field_name));
+                        //     (&self.#field_name).ser(num_pes,cur_pe);
+                        //     // #lamellar::serialize_update_cnts_temp(&self.#field_name,num_pes,cur_pe);
+                        //     // println!("serialized darc");
+                        //     // self.#field_name.print();
+                        // });
+                        // des.extend(quote_spanned!{field.span()=>   
+                        //     // println!("non darc des{:?}",stringify!(self.#field_name));
+                        //     (&self.#field_name).des(cur_pe); 
+                        // });
                     }
                     
                 }
@@ -441,12 +453,12 @@ fn derive_am_data(input: TokenStream,args: TokenStream, crate_header: String, lo
                         if let Some(seg) = ty.path.segments.first(){
                             if !local{
                                 let (serialize,deserialize) = match seg.ident.to_string().as_str(){
-                                    "Darc" | "LocalRwDarc" | "GlobalRwDarc" => {
-                                        panic!("{}","darcs not yet supported in tuples...for a workaround create a wrapper for the darc (and use that in the tuple)...e.g.
-                                        #[lamellar::AmData]
-                                        struct Wrapper{
-                                            darc: Darc<_>
-                                        }");}
+                                    // "Darc" | "LocalRwDarc" | "GlobalRwDarc" => {
+                                    //     panic!("{}","darcs not yet supported in tuples...for a workaround create a wrapper for the darc (and use that in the tuple)...e.g.
+                                    //     #[lamellar::AmData]
+                                    //     struct Wrapper{
+                                    //         darc: Darc<_>
+                                    //     }");}
                                     _ => {(format!(""),format!(""))}
                                 };
                                 let temp_ind = syn::Index{
@@ -512,11 +524,11 @@ fn derive_am_data(input: TokenStream,args: TokenStream, crate_header: String, lo
             }
             impl #generics#lamellar::DarcSerde for #name<#generics_ids>{
                 fn ser (&self,  num_pes: usize, cur_pe: Result<usize, #lamellar::IdError>) {
-                    println!("in outer ser");
+                    // println!("in outer ser");
                     #ser
                 } 
                 fn des (&self,cur_pe: Result<usize, #lamellar::IdError>){
-                    println!("in outer des");
+                    // println!("in outer des");
                     #des
                 }
             } 
