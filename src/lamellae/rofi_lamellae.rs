@@ -9,7 +9,7 @@ use crate::lamellae::rofi::command_queues::RofiCommandQueue;
 // use lamellar_prof::*;
 // use log::{error, trace};
 // use std::sync::atomic::Ordering;
-use std::sync::atomic::{AtomicBool,  Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8,  Ordering};
 use std::sync::Arc;
 
 use futures::stream::FuturesUnordered;
@@ -65,7 +65,7 @@ pub(crate) struct Rofi{
     my_pe: usize,
     num_pes: usize,
     rofi_comm: Arc<RofiComm>,
-    active: Arc<AtomicBool>,
+    active: Arc<AtomicU8>,
     cq: Arc<RofiCommandQueue>,
 }
 impl Rofi{
@@ -75,11 +75,11 @@ impl Rofi{
             my_pe: my_pe,
             num_pes: num_pes,
             rofi_comm: rofi_comm.clone(),
-            active: Arc::new(AtomicBool::new(true)),
+            active: Arc::new(AtomicU8::new(1)),
             cq: Arc::new(RofiCommandQueue::new(rofi_comm.clone(), my_pe, num_pes)),
         }
     }
-    fn active(&self)->Arc<AtomicBool>{
+    fn active(&self)->Arc<AtomicU8>{
         self.active.clone()
     }
     fn cq(&self) ->Arc<RofiCommandQueue>{
@@ -89,8 +89,11 @@ impl Rofi{
 
 impl Drop for Rofi{
     fn drop(&mut self){
-        // println!("dropping rofi_lamellae");
-        self.active.store(false, Ordering::SeqCst);
+        println!("dropping rofi_lamellae");
+        // self.active.store(0, Ordering::SeqCst);
+        // while self.active.load(Ordering::SeqCst) != 2 {
+        //     std::thread::yield_now();
+        // }
         // println!("dropped rofi_lamellae");
         //rofi finit
     }
@@ -113,8 +116,11 @@ impl LamellaeComm for Rofi {
     }
     fn print_stats(&self) {}
     fn shutdown(&self){
-        // println!("Rofi Lamellae shuting down");
-        self.active.store(false,Ordering::Relaxed);
+        println!("Rofi Lamellae shuting down");
+        self.active.store(0,Ordering::Relaxed);
+        while self.active.load(Ordering::SeqCst) != 2 {
+            std::thread::yield_now();
+        }
         // println!("Rofi Lamellae shut down");
     }
 }

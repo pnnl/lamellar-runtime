@@ -1,5 +1,6 @@
-use crate::array::LamellarArrayInput;
+use crate::array::{LamellarArrayInput, MyFrom};
 use crate::lamellae::{AllocationType, Backend, Lamellae, LamellaeComm, LamellaeRDMA};
+use crate::lamellar_team::LamellarTeam;
 // use crate::lamellar_array::{LamellarLocalArray};
 use core::marker::PhantomData;
 #[cfg(feature = "enable-prof")]
@@ -56,6 +57,12 @@ impl<T: Dist + 'static> From<&LamellarMemoryRegion<T>> for LamellarArrayInput<T>
     }
 }
 
+impl<T: Dist + 'static> MyFrom<&LamellarMemoryRegion<T>> for LamellarArrayInput<T> {
+    fn my_from(mr: &LamellarMemoryRegion<T>, _team: &LamellarTeam) -> Self {
+        LamellarArrayInput::LamellarMemRegion(mr.clone())
+    }
+}
+
 #[enum_dispatch]
 pub trait RegisteredMemoryRegion<T: Dist + 'static> {
     fn len(&self) -> usize;
@@ -98,39 +105,6 @@ pub(crate) trait RTMemoryRegionRDMA<T: Dist + 'static> {
     unsafe fn put_slice(&self, pe: usize, index: usize, data: &[T]);
 }
 
-// impl<T:Dist+'static> LamellarMemoryRegion<T> {
-//     pub fn len(&self) -> usize{
-//         RegisteredMemoryRegion::<T>::len(self)
-//     }
-//     pub unsafe fn put(&self, pe: usize, index: usize, data: &LamellarMemoryRegion<T>){
-//         MemoryRegionRDMA::<T>::put(self,pe,index,data)
-//     }
-//     pub fn iput(&self, pe: usize, index: usize, data: &LamellarMemoryRegion<T>){
-//         MemoryRegionRDMA::<T>::iput(self,pe,index,data)
-//     }
-//     pub unsafe fn put_all(&self, index: usize, data: &LamellarMemoryRegion<T>){
-//         MemoryRegionRDMA::<T>::put_all(self,index,data)
-//     }
-//     pub unsafe fn get(&self, pe: usize, index: usize, data: &LamellarMemoryRegion<T>){
-//         MemoryRegionRDMA::<T>::get(self,pe,index,data)
-//     }
-//     pub fn sub_region<R: std::ops::RangeBounds<usize>>(&self, range: R) -> LamellarMemoryRegion<T>{
-//         SubRegion::<T>::sub_region(self, range)
-//     }
-//     pub fn as_slice(&self) -> MemResult<&[T]>{
-//         RegisteredMemoryRegion::<T>::as_slice(self)
-//     }
-//     pub unsafe fn as_mut_slice(&self) -> MemResult<&mut [T]>{
-//         RegisteredMemoryRegion::<T>::as_mut_slice(self)
-//     }
-//     pub fn as_ptr(&self) -> MemResult<*const T>{
-//         RegisteredMemoryRegion::<T>::as_ptr(self)
-//     }
-//     pub fn as_mut_ptr(&self) -> MemResult<*mut T>{
-//         RegisteredMemoryRegion::<T>::as_mut_ptr(self)
-//     }
-// }
-
 //#[prof]
 impl<T: Dist + 'static> Hash for LamellarMemoryRegion<T> {
     fn hash<H: Hasher>(&self, state: &mut H) {
@@ -148,15 +122,18 @@ impl<T: Dist + 'static> PartialEq for LamellarMemoryRegion<T> {
 //#[prof]
 impl<T: Dist + 'static> Eq for LamellarMemoryRegion<T> {}
 
-#[derive(serde::Serialize, serde::Deserialize)]
+// this is not intended to be accessed directly by a user
+// it will be wrapped in either a shared region or local region
+// in shared regions its wrapped in a darc which allows us to send
+// to different nodes, in local we dont currently support serialization
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
 #[serde(into = "__NetworkMemoryRegion<T>", from = "__NetworkMemoryRegion<T>")]
-pub struct MemoryRegion<T: Dist + 'static> {
+pub(crate) struct MemoryRegion<T: Dist + 'static> {
     addr: usize,
     pe: usize,
     size: usize,
     backend: Backend,
     rdma: Arc<dyn LamellaeRDMA>,
-    cnt: Arc<AtomicUsize>,
     local: bool,
     phantom: PhantomData<T>,
 }
@@ -190,7 +167,6 @@ impl<T: Dist + 'static> MemoryRegion<T> {
             size: size,
             backend: lamellae.backend(),
             rdma: lamellae,
-            cnt: cnt,
             local: local,
             phantom: PhantomData,
         };
@@ -215,7 +191,7 @@ impl<T: Dist + 'static> MemoryRegion<T> {
             Bound::Excluded(idx) => *idx,
             Bound::Unbounded => self.size,
         };
-        self.cnt.fetch_add(1, Ordering::SeqCst);
+        // self.cnt.fetch_add(1, Ordering::SeqCst);
         // println!("subregion {:?} {:?} {:?} {:x?} {:x?}",start,end,end-start,self.addr+start,self.addr+(start+(end-start)-1)*std::mem::size_of::<T>());
         MemoryRegion {
             addr: self.addr + (start * std::mem::size_of::<T>()),
@@ -223,21 +199,18 @@ impl<T: Dist + 'static> MemoryRegion<T> {
             size: (end - start),
             backend: self.backend,
             rdma: self.rdma.clone(),
-            cnt: self.cnt.clone(),
             local: self.local,
             phantom: self.phantom,
         }
     }
 
     unsafe fn as_base<B: Dist + 'static>(self) -> MemoryRegion<B> {
-        self.cnt.fetch_add(1, Ordering::SeqCst);
         MemoryRegion {
             addr: self.addr, //TODO: out of memory...
             pe: self.pe,
             size: self.size,
             backend: self.backend,
             rdma: self.rdma.clone(),
-            cnt: self.cnt.clone(),
             local: self.local,
             phantom: PhantomData,
         }
@@ -431,7 +404,7 @@ lazy_static! {
 struct CountedHashMap {
     lock: RwLock<CountedHashMapInner>,
 }
-// unsafe impl Send for CountedHashMap {}
+unsafe impl Send for CountedHashMap {}
 
 struct CountedHashMapInner {
     cnts: HashMap<Backend, usize>,
@@ -532,24 +505,36 @@ pub trait RemoteMemoryRegion {
 }
 
 //#[prof]
-impl<T: Dist + 'static> Clone for MemoryRegion<T> {
-    fn clone(&self) -> Self {
-        self.cnt.fetch_add(1, Ordering::SeqCst);
-        let mr = MemoryRegion {
-            addr: self.addr,
-            pe: self.pe,
-            size: self.size,
-            backend: self.backend,
-            rdma: self.rdma.clone(),
-            cnt: self.cnt.clone(),
-            local: self.local,
-            phantom: self.phantom,
-        };
-        // println!("clone: {:?}",lmr);
-        // println!("nlmr: addr: {:?} size: {:?} backend {:?}, lmr: addr: {:?} size: {:?} backend {:?}",reg.addr,reg.size,reg.backend,lmr.addr,lmr.size,lmr.backend);
-        mr
-    }
-}
+// impl<T: Dist + 'static> Clone for MemoryRegion<T> {
+//     fn clone(&self) -> Self {
+//         let mr = MemoryRegion {
+//             addr: self.addr,
+//             pe: self.pe,
+//             size: self.size,
+//             backend: self.backend,
+//             rdma: self.rdma.clone(),
+//             local: self.local,
+//             phantom: self.phantom,
+//         };
+//         // println!("clone: {:?}",lmr);
+//         // println!("nlmr: addr: {:?} size: {:?} backend {:?}, lmr: addr: {:?} size: {:?} backend {:?}",reg.addr,reg.size,reg.backend,lmr.addr,lmr.size,lmr.backend);
+//         mr
+//     }
+// }
+
+// impl<T: Dist + 'static> Drop for MemoryRegion<T> {
+//     fn drop(&mut self) {
+//         // println!("trying to dropping mem region {:?}",self);
+//         if self.addr != 0 {
+//             if self.local {
+//                 self.rdma.rt_free(self.addr - self.rdma.base_addr()); // - self.rdma.base_addr());
+//             } else {
+//                 self.rdma.free(self.addr);
+//             }
+//         }
+//         //println!("dropping mem region {:?}",self);
+//     }
+// }
 
 impl<T: Dist + 'static> From<MemoryRegion<T>> for __NetworkMemoryRegion<T> {
     fn from(reg: MemoryRegion<T>) -> Self {
@@ -585,7 +570,6 @@ impl<T: Dist + 'static> From<__NetworkMemoryRegion<T>> for MemoryRegion<T> {
             size: reg.size,
             backend: reg.backend,
             rdma: rdma,
-            cnt: temp.1.clone(),
             local: reg.local,
             phantom: reg.phantom,
         };
@@ -601,11 +585,11 @@ impl<T: Dist + 'static> std::fmt::Debug for MemoryRegion<T> {
         // write!(f, "{:?}", slice)
         write!(
             f,
-            "addr {:#x} size {:?} backend {:?} cnt: {:?}",
+            "addr {:#x} size {:?} backend {:?}", // cnt: {:?}",
             self.addr,
             self.size,
             self.backend,
-            self.cnt.load(Ordering::SeqCst)
+            // self.cnt.load(Ordering::SeqCst)
         )
     }
 }

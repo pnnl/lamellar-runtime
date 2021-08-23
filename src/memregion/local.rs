@@ -186,8 +186,14 @@ impl<T: Dist + 'static> std::fmt::Debug for LocalMemoryRegion<T> {
     }
 }
 
-impl<T: Dist + 'static> From<&LocalMemoryRegion<T>> for LamellarArrayInput<T>{
-    fn from(smr: &LocalMemoryRegion<T>) ->Self{
+impl<T: Dist + 'static> From<&LocalMemoryRegion<T>> for LamellarArrayInput<T> {
+    fn from(smr: &LocalMemoryRegion<T>) -> Self {
+        LamellarArrayInput::LocalMemRegion(smr.clone())
+    }
+}
+
+impl<T: Dist + 'static> MyFrom<&LocalMemoryRegion<T>> for LamellarArrayInput<T> {
+    fn my_from(smr: &LocalMemoryRegion<T>, _team: &LamellarTeam) -> Self {
         LamellarArrayInput::LocalMemRegion(smr.clone())
     }
 }

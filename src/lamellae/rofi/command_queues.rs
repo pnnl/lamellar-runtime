@@ -9,7 +9,7 @@ use crate::scheduler::{Scheduler,SchedulerQueue};
 use parking_lot::{Mutex};
 
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicUsize,AtomicBool,  Ordering};
+use std::sync::atomic::{AtomicUsize,AtomicBool,AtomicU8,  Ordering};
 use std::sync::{Arc};
 
 const CMD_BUF_LEN: usize = 50000; // this is the number of slots for each PE
@@ -894,11 +894,11 @@ impl RofiCommandQueue{
 
     
 
-    pub async fn recv_data(&self, scheduler: Arc<Scheduler>, lamellae: Arc<Lamellae>, active: Arc<AtomicBool>) {
+    pub async fn recv_data(&self, scheduler: Arc<Scheduler>, lamellae: Arc<Lamellae>, active: Arc<AtomicU8>) {
         let num_pes = lamellae.num_pes();
         let my_pe = lamellae.my_pe();
         // let mut timer= std::time::Instant::now();
-        while active.load(Ordering::SeqCst) || !self.cq.empty(){
+        while active.load(Ordering::SeqCst) == 1u8 || !self.cq.empty(){
             for src in 0..num_pes{
                 if src != my_pe{
                     if let Some(cmd_buf_cmd) = self.cq.ready(src){
@@ -968,7 +968,8 @@ impl RofiCommandQueue{
             // self.rofi_comm.process_dropped_reqs();
             async_std::task::yield_now().await;
         }
-        // println!("leaving recv_data task");
+        println!("leaving recv_data task");
+        active.store(2,Ordering::SeqCst);
     }
 
     pub fn tx_amount(&self)->usize{
@@ -984,7 +985,7 @@ impl RofiCommandQueue{
 
 impl Drop for RofiCommandQueue{
     fn drop(&mut self){
-        // println!("dropping rofi command queue");
+        println!("dropping rofi command queue");
         self.rofi_comm.rt_free(self.send_buffer_addr - self.rofi_comm.base_addr());
         self.rofi_comm.rt_free(self.recv_buffer_addr - self.rofi_comm.base_addr());
         self.rofi_comm.rt_free(self.free_buffer_addr - self.rofi_comm.base_addr());

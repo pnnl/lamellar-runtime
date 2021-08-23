@@ -1,6 +1,6 @@
-use crate::active_messaging::*; //{ActiveMessaging,AMCounters,Cmd,Msg,LamellarAny,LamellarLocal};
-                                // use crate::lamellae::Lamellae;
-                                // use crate::lamellar_arch::LamellarArchRT;
+use crate::{active_messaging::*, LamellarTeam, RemoteMemoryRegion}; //{ActiveMessaging,AMCounters,Cmd,Msg,LamellarAny,LamellarLocal};
+                                                                    // use crate::lamellae::Lamellae;
+                                                                    // use crate::lamellar_arch::LamellarArchRT;
 use crate::memregion::{
     local::LocalMemoryRegion, shared::SharedMemoryRegion, AsBase, Dist, LamellarMemoryRegion,
 };
@@ -55,7 +55,7 @@ pub enum Distribution {
     Cyclic,
 }
 
-#[enum_dispatch(RegisteredMemoryRegion<T>, SubRegion<T>)]
+#[enum_dispatch(RegisteredMemoryRegion<T>, SubRegion<T>, MyFrom<T>)]
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 pub enum LamellarArrayInput<T: Dist + 'static> {
     LamellarMemRegion(LamellarMemoryRegion<T>),
@@ -63,6 +63,43 @@ pub enum LamellarArrayInput<T: Dist + 'static> {
     LocalMemRegion(LocalMemoryRegion<T>),
     // Unsafe(UnsafeArray<T>),
     // Vec(Vec<T>),
+}
+
+impl<T: Dist + 'static> MyFrom<&T> for LamellarArrayInput<T> {
+    fn my_from(val: &T, team: &LamellarTeam) -> Self {
+        let buf: LocalMemoryRegion<T> = team.alloc_local_mem_region(1);
+        unsafe {
+            buf.as_mut_slice().unwrap()[0] = val.clone();
+        }
+        LamellarArrayInput::LocalMemRegion(buf)
+    }
+}
+
+impl<T: Dist + 'static> MyFrom<T> for LamellarArrayInput<T> {
+    fn my_from(val: T, team: &LamellarTeam) -> Self {
+        let buf: LocalMemoryRegion<T> = team.alloc_local_mem_region(1);
+        unsafe {
+            buf.as_mut_slice().unwrap()[0] = val;
+        }
+        LamellarArrayInput::LocalMemRegion(buf)
+    }
+}
+
+pub trait MyFrom<T: ?Sized> {
+    fn my_from(val: T, team: &LamellarTeam) -> Self;
+}
+
+pub trait MyInto<T: ?Sized> {
+    fn my_into(self, team: &LamellarTeam) -> T;
+}
+
+impl<T, U> MyInto<U> for T
+where
+    U: MyFrom<T>,
+{
+    fn my_into(self, team: &LamellarTeam) -> U {
+        U::my_from(self, team)
+    }
 }
 
 #[enum_dispatch(LamellarArrayRDMA<T>)]
@@ -76,14 +113,23 @@ pub trait LamellarArrayRDMA<T>
 where
     T: Dist + 'static,
 {
-    fn put<U: Into<LamellarArrayInput<T>>>(&self, index: usize, buf: U);
+    fn put<U: MyInto<LamellarArrayInput<T>>>(&self, index: usize, buf: U);
     // fn put<U: Into<LamellarArrayInput<T>>>(&self, index: usize, buf: U);
     // pub fn put_indirect(self, index: usize, buf: &impl LamellarBuffer<T>);
-    fn get<U: Into<LamellarArrayInput<T>>>(&self, index: usize, buf: U);
+    fn get<U: MyInto<LamellarArrayInput<T>>>(&self, index: usize, buf: U);
     // fn get_raw_mem_region(&self) -> LamellarMemoryRegion<T>;
     // pub fn get_indirect(self, index: usize, buf: &mut impl LamellarBuffer<T>); //do we need a LamellarBufferMut?
-    fn as_slice(&self) -> &[T];
+    fn local_as_slice(&self) -> &[T];
 }
+
+// pub enum LamellarArrayElem<T: Dist +'static> {
+//     UnsafeElem(UnsafeElem<T>),
+// }
+
+// impl<T> LamellarArrayElem<T>
+// where T: Dist +'static{
+//     pub fn set(&self, index)
+// }
 
 // pub trait LamellarArrayReduce<T>: LamellarArrayRDMA<T>
 // // + std::ops::Index + std::ops::IndexMut
@@ -121,7 +167,8 @@ where
 // pub trait LamellarArrayIndex<T>
 // where T: ?Sized,{
 //     type Output: ?Sized;
-//     pub fn get(self, slice: &T)
+//     // fn get(self, array: &T) -> Option<&Self::Output>;
+//     fn index(self, array: &T) -> &Self::Output;
 // }
 
 // //#[prof]

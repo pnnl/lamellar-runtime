@@ -22,7 +22,7 @@ impl LamellarAM for RdmaAM {
     fn exec(&self) {
         let num_pes=lamellar::num_pes;
         println!("\t in RdmaAM on pe {:?}, originating from pe {:?}",lamellar::current_pe, self.orig_pe,);
-        println!("\tlocal segement of array: {:?}..", &self.array.as_slice()[0..num_pes]);
+        println!("\tlocal segement of array: {:?}..", &self.array.local_as_slice()[0..num_pes]);
 
 
         //get the original nodes data
@@ -72,10 +72,14 @@ fn main() {
             }
         }
         array.put(0, &local_mem_region);
+        // for i in 0..ARRAY_LEN{
+        //     array.put(i,255_u8);
+        // }
+        
     }
     println!("here!!! {:?}",my_pe);
     array.print();
-    for i in array.as_slice() {
+    for i in array.local_as_slice() {
         while *i != 255_u8 {
             std::thread::yield_now();
         }
@@ -85,7 +89,7 @@ fn main() {
     }
     world.barrier();
     world.free_local_memory_region(local_mem_region);
-    println!("[{:?}] Before {:?}", my_pe, array.as_slice());
+    println!("[{:?}] Before {:?}", my_pe, array.local_as_slice());
     world.barrier();
     if my_pe == 0 {
         println!("------------------------------------------------------------");
@@ -103,7 +107,7 @@ fn main() {
 
     world.wait_all();
     world.barrier();
-    println!("[{:?}] after {:?}", my_pe, array.as_slice());
+    println!("[{:?}] after {:?}", my_pe, array.local_as_slice());
     world.barrier();
     array.print();
     if my_pe == 0 {

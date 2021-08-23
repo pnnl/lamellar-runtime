@@ -1,63 +1,68 @@
-use crate::lamellae::{AllocationType,Lamellae};
+use crate::lamellae::{AllocationType, Lamellae};
 use crate::lamellar_arch::LamellarArchRT;
 // use crate::lamellar_memregion::{SharedMemoryRegion,RegisteredMemoryRegion};
-use crate::memregion::{MemoryRegion,RegisteredMemoryRegion,SubRegion,RTMemoryRegionRDMA};
-use crate::scheduler::{Scheduler,SchedulerQueue};
+use crate::memregion::{MemoryRegion, RTMemoryRegionRDMA, RegisteredMemoryRegion, SubRegion};
+use crate::scheduler::{Scheduler, SchedulerQueue};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
 
-
-pub(crate) struct Barrier{
+pub(crate) struct Barrier {
     my_pe: usize, // global pe id
     pub(crate) arch: Arc<LamellarArchRT>,
     pub(crate) scheduler: Arc<Scheduler>,
     barrier_cnt: AtomicUsize,
     barrier_buf: Option<SubBufs>,
-    
 }
 
-struct SubBufs{
+struct SubBufs {
     barrier1: MemoryRegion<usize>,
     barrier2: MemoryRegion<usize>,
     barrier3: MemoryRegion<usize>,
-    _orig_buf: MemoryRegion<usize>, //needs to be last so we can drop appropriately...
 }
 
-impl Barrier{
-
-    pub(crate) fn new(my_pe: usize, global_pes: usize, lamellae: Arc<Lamellae>, arch: Arc<LamellarArchRT>,scheduler: Arc<Scheduler>) -> Barrier{
+impl Barrier {
+    pub(crate) fn new(
+        my_pe: usize,
+        global_pes: usize,
+        lamellae: Arc<Lamellae>,
+        arch: Arc<LamellarArchRT>,
+        scheduler: Arc<Scheduler>,
+    ) -> Barrier {
         let bufs = if let Ok(_my_index) = arch.team_pe(my_pe) {
             let num_pes = arch.num_pes;
             if num_pes > 1 {
-                let size = num_pes * 2 + 3;
-                let alloc = if global_pes==arch.num_pes {
+                let alloc = if global_pes == arch.num_pes {
                     AllocationType::Global
-                }
-                else{ 
+                } else {
                     AllocationType::Sub(arch.team_iter().collect::<Vec<usize>>())
                 };
-                let data_buf = MemoryRegion::new(size,lamellae.clone(),alloc);
-                unsafe { 
-                    for elem in data_buf.as_mut_slice().unwrap() {
+                let barrier1 = MemoryRegion::new(num_pes, lamellae.clone(), alloc.clone());
+                let barrier2 = MemoryRegion::new(num_pes, lamellae.clone(), alloc.clone());
+                let barrier3 = MemoryRegion::new(3, lamellae.clone(), alloc);
+                unsafe {
+                    for elem in barrier1.as_mut_slice().unwrap() {
+                        *elem = 0;
+                    }
+                    for elem in barrier2.as_mut_slice().unwrap() {
+                        *elem = 0;
+                    }
+                    for elem in barrier3.as_mut_slice().unwrap() {
                         *elem = 0;
                     }
                 }
-                Some(SubBufs{
-                    barrier1: data_buf.sub_region(0..num_pes),
-                    barrier2: data_buf.sub_region(num_pes..num_pes*2),
-                    barrier3: data_buf.sub_region(num_pes*2..),
-                    _orig_buf: data_buf.clone(),
+                Some(SubBufs {
+                    barrier1: barrier1,
+                    barrier2: barrier2,
+                    barrier3: barrier3,
                 })
-            }
-            else{
+            } else {
                 None
             }
-        }
-        else{
+        } else {
             None
         };
-        let bar = Barrier{
+        let bar = Barrier {
             my_pe: my_pe,
             arch: arch,
             scheduler: scheduler,
@@ -68,12 +73,16 @@ impl Barrier{
         bar
     }
 
-    fn print_bar(&self){
+    fn print_bar(&self) {
         if let Some(bufs) = &self.barrier_buf {
-            println!("[{:?}] [LAMELLAR BARRIER] {:?} {:?} {:?}",
-                    self.my_pe, bufs.barrier1.as_slice(),
-                    bufs.barrier2.as_slice(),bufs.barrier3.as_slice());
-        } 
+            println!(
+                "[{:?}] [LAMELLAR BARRIER] {:?} {:?} {:?}",
+                self.my_pe,
+                bufs.barrier1.as_slice(),
+                bufs.barrier2.as_slice(),
+                bufs.barrier3.as_slice()
+            );
+        }
     }
 
     fn check_barrier_vals(&self, barrier_id: usize, barrier_buf: &MemoryRegion<usize>) {
@@ -110,8 +119,8 @@ impl Barrier{
         // }
         // println!("[{:?}] in barrier ",self.barrier_cnt.load(Ordering::SeqCst));
         // self.print_bar();
-        if let Some(bufs) = &self.barrier_buf{
-            if let Ok(my_index) = self.arch.team_pe(self.my_pe) {  
+        if let Some(bufs) = &self.barrier_buf {
+            if let Ok(my_index) = self.arch.team_pe(self.my_pe) {
                 // self.bar_print("bar_init".to_string());
                 let mut barrier_id = self.barrier_cnt.fetch_add(1, Ordering::SeqCst);
                 // println!("[{:?}] checking barrier entry ({:?}) {:?}",self.my_pe,barrier_id,&[barrier_id].as_ptr());
@@ -146,11 +155,10 @@ impl Barrier{
     }
 }
 
-impl Drop for Barrier{
-    fn drop(&mut self){
+impl Drop for Barrier {
+    fn drop(&mut self) {
         //println!("dropping barrier");
         // println!("arch: {:?}",Arc::strong_count(&self.arch));
         //println!("dropped barrier");
     }
 }
-

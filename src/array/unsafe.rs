@@ -8,14 +8,16 @@ use crate::memregion::{
 // use crate::lamellar_request::{AmType, LamellarRequest, LamellarRequestHandle};
 use crate::lamellar_team::LamellarTeam;
 // use crate::scheduler::{Scheduler,SchedulerQueue};
-use crate::array::{Distribution, LamellarArrayInput, LamellarArrayRDMA};
+use crate::array::{Distribution, LamellarArrayInput, LamellarArrayRDMA, MyInto};
 use crate::darc::Darc;
 // use crate::lamellar_memregion::RegisteredMemoryRegion;
 
 use log::trace;
 // use std::hash::{Hash, Hasher};
-// use std::ops::{Index, IndexMut, Range, RangeFrom, RangeFull, RangeInclusive, RangeTo, RangeToInclusive};
 use std::ops::RangeBounds;
+use std::ops::{
+    Index, IndexMut, Range, RangeFrom, RangeFull, RangeInclusive, RangeTo, RangeToInclusive,
+};
 // use std::any;
 // use core::marker::PhantomData;
 // use std::collections::HashMap;
@@ -26,12 +28,11 @@ use std::sync::Arc;
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 #[serde(into = "__NetworkUnsafeArray<T>", from = "__NetworkUnsafeArray<T>")]
 pub struct UnsafeArray<T: Dist + 'static> {
-
     mem_region: Darc<SharedMemoryRegion<T>>,
     size: usize,      //total array size
     elem_per_pe: f32, //used to evenly distribute elems
     num_elems_local: usize,
-    team: Arc<LamellarTeam>,
+    pub(crate) team: Arc<LamellarTeam>,
     distribution: Distribution,
 }
 
@@ -55,7 +56,7 @@ impl<T: Dist + 'static> UnsafeArray<T> {
                     as usize
             }
             Distribution::Cyclic => {
-                let rem = array_size  % team.num_pes();
+                let rem = array_size % team.num_pes();
                 if team.team_pe_id().unwrap() < rem {
                     elem_per_pe as usize + 1
                 } else {
@@ -86,8 +87,8 @@ impl<T: Dist + 'static> UnsafeArray<T> {
         &self.mem_region
     }
 
-    fn block_op<U: Into<LamellarArrayInput<T>>>(&self, op: ArrayOp, index: usize, buf: U) {
-        let buf = buf.into();
+    fn block_op<U: MyInto<LamellarArrayInput<T>>>(&self, op: ArrayOp, index: usize, buf: U) {
+        let buf = buf.my_into(&self.team);
         let start_pe = (index as f32 / self.elem_per_pe).floor() as usize;
         let end_pe = (((index + buf.len()) as f32) / self.elem_per_pe).ceil() as usize;
         // println!("index: {:?} start_pe {:?} end_pe {:?} buf_len {:?} elem_per_pe {:?}",index,start_pe,end_pe, buf.len(),self.elem_per_pe);
@@ -124,8 +125,8 @@ impl<T: Dist + 'static> UnsafeArray<T> {
         }
     }
 
-    fn cyclic_op<U: Into<LamellarArrayInput<T>>>(&self, op: ArrayOp, index: usize, buf: U) {
-        let buf = buf.into();
+    fn cyclic_op<U: MyInto<LamellarArrayInput<T>>>(&self, op: ArrayOp, index: usize, buf: U) {
+        let buf = buf.my_into(&self.team);
         let my_pe = self.team.team_pe_id().unwrap();
         let num_pes = self.team.num_pes();
         let num_elems_pe = buf.len() / num_pes + 1; //we add plus one to ensure we allocate enough space
@@ -164,19 +165,19 @@ impl<T: Dist + 'static> UnsafeArray<T> {
             }
         }
     }
-    pub fn put<U: Into<LamellarArrayInput<T>>>(&self, index: usize, buf: U) {
+    pub fn put<U: MyInto<LamellarArrayInput<T>>>(&self, index: usize, buf: U) {
         match self.distribution {
             Distribution::Block => self.block_op(ArrayOp::Put, index, buf),
             Distribution::Cyclic => self.cyclic_op(ArrayOp::Put, index, buf),
         }
     }
-    pub fn get<U: Into<LamellarArrayInput<T>>>(&self, index: usize, buf: U) {
+    pub fn get<U: MyInto<LamellarArrayInput<T>>>(&self, index: usize, buf: U) {
         match self.distribution {
             Distribution::Block => self.block_op(ArrayOp::Get, index, buf),
             Distribution::Cyclic => self.cyclic_op(ArrayOp::Get, index, buf),
         }
     }
-    pub fn as_slice(&self) -> &[T] {
+    pub fn local_as_slice(&self) -> &[T] {
         &self
             .mem_region
             .as_slice()
@@ -192,7 +193,7 @@ impl<T: Dist + std::fmt::Debug + 'static> UnsafeArray<T> {
             // println!("print pe {:?} barrier()",pe);
             self.team.team.barrier();
             if self.team.team_pe_id().unwrap() == pe {
-                println!("[{:?}] {:?}", pe, self.as_slice());
+                println!("[{:?}] {:?}", pe, self.local_as_slice());
             }
             std::thread::sleep(std::time::Duration::from_millis(500));
         }
@@ -203,16 +204,16 @@ impl<T: Dist + std::fmt::Debug + 'static> UnsafeArray<T> {
 
 impl<T: Dist + 'static> LamellarArrayRDMA<T> for UnsafeArray<T> {
     #[inline(always)]
-    fn put<U: Into<LamellarArrayInput<T>>>(&self, index: usize, buf: U) {
+    fn put<U: MyInto<LamellarArrayInput<T>>>(&self, index: usize, buf: U) {
         self.put(index, buf)
     }
     #[inline(always)]
-    fn get<U: Into<LamellarArrayInput<T>>>(&self, index: usize, buf: U) {
+    fn get<U: MyInto<LamellarArrayInput<T>>>(&self, index: usize, buf: U) {
         self.get(index, buf)
     }
     #[inline(always)]
-    fn as_slice(&self) -> &[T] {
-        self.as_slice()
+    fn local_as_slice(&self) -> &[T] {
+        self.local_as_slice()
     }
     // fn put_indirect(self, index: usize, buf: &impl LamellarBuffer<T>){
     //     let pe = match self.distribution{
@@ -254,6 +255,14 @@ impl<T: Dist + 'static> crate::DarcSerde for UnsafeArray<T> {
     }
 }
 
+// pub struct UnsafeElem<T>
+// where
+//     T: Dist + 'static,
+// {
+//     val: T,
+//     array: UnsafeArray<T>,
+// }
+
 // impl<
 //         T: serde::ser::Serialize
 //             + serde::de::DeserializeOwned
@@ -289,24 +298,23 @@ impl<T: Dist + 'static> crate::DarcSerde for UnsafeArray<T> {
 
 // impl<T, Idx> Index<Idx> for UnsafeArray<T>
 // where
-//     T: serde::ser::Serialize
-//         + serde::de::DeserializeOwned
-//         + std::clone::Clone
-//         + Send
-//         + Sync
-//         + 'static,
-//     Idx: ArrayIndex<UnsafeArray<T>>,//maybe this should be unsafesubarray?
+//     T: Dist + 'static,
+//     Idx: LamellarArrayIndex<UnsafeArray<T>>,
 // {
 //     type Output = Idx::Output;
 
-//     fn index(&self, index: Idx) -> &Self::Output {
-//         let pe = match self.distribution{
-//             Distribution::Block => (index as f32 / self.elem_per_pe) as usize,
-//             Distribution::Cyclic => index % self.team.num_pes(),
-//         }
-//         self.mem_region
+//     fn index(&self, index: Idx) -> &Idx::Output {
+//         index.index(self)
+//     }
+// }
 
-//         unsafe { &std::slice::from_raw_parts(self.addr as *mut T, self.size)[index] }
+// impl <T> LamellarArrayIndex<UnsafeArray<T>> for usize
+// where T: Dist + 'static {
+//     type Output = T;
+//     fn index(self, array: &UnsafeArray<T>) -> &T{
+//         let buf: LocalMemoryRegion<T> = array.team.alloc_local_mem_region(1);
+//         array.get(self,&buf);
+//         &buf.as_slice().unwrap()[0]
 //     }
 // }
 
@@ -339,7 +347,7 @@ impl<T: Dist + 'static> From<UnsafeArray<T>> for __NetworkUnsafeArray<T> {
         let nua = __NetworkUnsafeArray {
             mem_region: array.mem_region.clone(),
             size: array.size,
-            elem_per_pe: array.elem_per_pe,//probably dont need this
+            elem_per_pe: array.elem_per_pe, //probably dont need this
             distribution: array.distribution.clone(),
         };
         nua
@@ -360,7 +368,7 @@ impl<T: Dist + 'static> From<__NetworkUnsafeArray<T>> for UnsafeArray<T> {
                     as usize
             }
             Distribution::Cyclic => {
-                let rem = array.size  % team.num_pes();
+                let rem = array.size % team.num_pes();
                 if team.team_pe_id().unwrap() < rem {
                     elem_per_pe as usize + 1
                 } else {
@@ -378,5 +386,3 @@ impl<T: Dist + 'static> From<__NetworkUnsafeArray<T>> for UnsafeArray<T> {
         }
     }
 }
-
-

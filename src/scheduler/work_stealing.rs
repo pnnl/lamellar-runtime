@@ -85,7 +85,7 @@ impl WorkStealingThread {
             }
             fini_prof!();
             active_cnt.fetch_sub(1, Ordering::SeqCst);
-            // println!("TestSchdulerWorker thread shutting down");
+            println!("TestSchdulerWorker thread shutting down");
         })
     }
 }
@@ -190,7 +190,7 @@ impl AmeSchedulerQueue for WorkStealingInner {
         while self.active_cnt.load(Ordering::Relaxed) > 0 {
             std::thread::yield_now()
         }
-        // println!("work stealing shut down");
+        println!("work stealing shut down");
     }
 
     fn exec_task(&self) {
@@ -347,6 +347,6 @@ impl Drop for WorkStealingInner {
         while let Some(thread) = self.threads.pop() {
             let _res = thread.join();
         }
-        // println!("WorkStealing Scheduler Dropped");
+        println!("WorkStealing Scheduler Dropped");
     }
 }

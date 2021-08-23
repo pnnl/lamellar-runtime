@@ -10,7 +10,7 @@ use crate::replace::{LamellarDSLReplace};//SelfReplace,
 use proc_macro::TokenStream;
 use proc_macro2::Span;
 use proc_macro_error::{proc_macro_error};
-use quote::{quote,quote_spanned};
+use quote::{quote,quote_spanned,ToTokens};
 use syn::{parse_macro_input};
 use syn::visit_mut::VisitMut;
 use syn::spanned::Spanned;
@@ -515,11 +515,11 @@ fn derive_am_data(input: TokenStream,args: TokenStream, crate_header: String, lo
         else{
             quote!{}
         };
-        // println!("{:?}",serde_temp);
+        let vis = data.vis.to_token_stream();
         output.extend(quote!{  
             #traits  
             #serde_temp_2        
-            struct #name#generics{
+            #vis struct #name#generics{
                 #fields
             }
             impl #generics#lamellar::DarcSerde for #name<#generics_ids>{
