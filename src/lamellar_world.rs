@@ -164,12 +164,9 @@ impl RemoteMemoryRegion for LamellarWorld {
     ///
     /// * `size` - number of elements of T to allocate a memory region for -- (not size in bytes)
     ///
-    fn alloc_shared_mem_region<T: Dist  + 'static>(
-        &self,
-        size: usize,
-    ) -> SharedMemoryRegion<T> {
+    fn alloc_shared_mem_region<T: Dist + 'static>(&self, size: usize) -> SharedMemoryRegion<T> {
         self.barrier();
-        self.team_rt.alloc_shared_mem_region::<T>(size)
+        self.team.alloc_shared_mem_region::<T>(size)
     }
 
     /// allocate a local memory region from the asymmetric heap
@@ -178,11 +175,8 @@ impl RemoteMemoryRegion for LamellarWorld {
     ///
     /// * `size` - number of elements of T to allocate a memory region for -- (not size in bytes)
     ///
-    fn alloc_local_mem_region<T: Dist  + 'static>(
-        &self,
-        size: usize,
-    ) -> LocalMemoryRegion<T> {
-        self.team_rt.alloc_local_mem_region::<T>(size)
+    fn alloc_local_mem_region<T: Dist + 'static>(&self, size: usize) -> LocalMemoryRegion<T> {
+        self.team.alloc_local_mem_region::<T>(size)
     }
 
     /// release a remote memory region from the asymmetric heap
@@ -191,11 +185,8 @@ impl RemoteMemoryRegion for LamellarWorld {
     ///
     /// * `region` - the region to free
     ///
-    fn free_shared_memory_region<T: Dist  + 'static>(
-        &self,
-        region: SharedMemoryRegion<T>,
-    ) {
-        self.team_rt.free_shared_memory_region(region)
+    fn free_shared_memory_region<T: Dist + 'static>(&self, region: SharedMemoryRegion<T>) {
+        self.team.free_shared_memory_region(region)
     }
 
     /// release a remote memory region from the asymmetric heap
@@ -204,11 +195,8 @@ impl RemoteMemoryRegion for LamellarWorld {
     ///
     /// * `region` - the region to free
     ///
-    fn free_local_memory_region<T: Dist + 'static>(
-        &self,
-        region: LocalMemoryRegion<T>,
-    ) {
-        self.team_rt.free_local_memory_region(region)
+    fn free_local_memory_region<T: Dist + 'static>(&self, region: LocalMemoryRegion<T>) {
+        self.team.free_local_memory_region(region)
     }
 }
 

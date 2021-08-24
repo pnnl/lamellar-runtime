@@ -354,7 +354,7 @@ impl<T> GlobalRwDarc<T> {
         let d = Darc {
             inner: self.darc.inner as *mut DarcInner<T>,
             src_pe: self.darc.src_pe,
-            phantom: PhantomData,
+            // phantom: PhantomData,
         };
         d.inner_mut().update_item(Box::into_raw(Box::new(item)));
         d
@@ -368,7 +368,7 @@ impl<T> GlobalRwDarc<T> {
         let d = Darc {
             inner: self.darc.inner as *mut DarcInner<RwLock<Box<T>>>,
             src_pe: self.darc.src_pe,
-            phantom: PhantomData,
+            // phantom: PhantomData,
         };
         d.inner_mut()
             .update_item(Box::into_raw(Box::new(RwLock::new(Box::new(item)))));
@@ -460,7 +460,7 @@ impl<T: ?Sized> From<__NetworkDarc<T>> for Darc<DistRwLock<T>> {
                 inner: lamellae.local_addr(ndarc.orig_world_pe, ndarc.inner_addr)
                     as *mut DarcInner<DistRwLock<T>>,
                 src_pe: ndarc.orig_team_pe,
-                phantom: PhantomData,
+                // phantom: PhantomData,
             };
             darc
         } else {

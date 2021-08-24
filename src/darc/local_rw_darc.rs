@@ -14,7 +14,10 @@ use crate::LamellarTeam;
 
 #[derive(serde::Serialize, serde::Deserialize, Debug)]
 pub struct LocalRwDarc<T: 'static + ?Sized> {
-    #[serde(serialize_with = "localrw_serialize2", deserialize_with = "localrw_from_ndarc2")]
+    #[serde(
+        serialize_with = "localrw_serialize2",
+        deserialize_with = "localrw_from_ndarc2"
+    )]
     pub(crate) darc: Darc<RwLock<Box<T>>>,
 }
 
@@ -116,7 +119,7 @@ impl<T> LocalRwDarc<T> {
         let d = Darc {
             inner: self.darc.inner as *mut DarcInner<T>,
             src_pe: self.darc.src_pe,
-            phantom: PhantomData,
+            // phantom: PhantomData,
         };
         d.inner_mut().update_item(Box::into_raw(item));
         d
@@ -133,7 +136,7 @@ impl<T> LocalRwDarc<T> {
         let d = Darc {
             inner: self.darc.inner as *mut DarcInner<DistRwLock<T>>,
             src_pe: self.darc.src_pe,
-            phantom: PhantomData,
+            // phantom: PhantomData,
         };
         d.inner_mut()
             .update_item(Box::into_raw(Box::new(DistRwLock::new(
@@ -205,9 +208,6 @@ where
     Ok(Darc::from(ndarc))
 }
 
-
-
-
 impl<T: ?Sized> From<Darc<RwLock<Box<T>>>> for __NetworkDarc<T> {
     fn from(darc: Darc<RwLock<Box<T>>>) -> Self {
         // println!("rwdarc to net darc");
@@ -249,7 +249,7 @@ impl<T: ?Sized> From<__NetworkDarc<T>> for Darc<RwLock<Box<T>>> {
                 inner: lamellae.local_addr(ndarc.orig_world_pe, ndarc.inner_addr)
                     as *mut DarcInner<RwLock<Box<T>>>,
                 src_pe: ndarc.orig_team_pe,
-                phantom: PhantomData,
+                // phantom: PhantomData,
             };
             darc
         } else {

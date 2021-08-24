@@ -1,4 +1,4 @@
-// use crate::darc::Darc;
+use crate::darc::Darc;
 use crate::lamellae::{AllocationType, Backend, Lamellae, LamellaeComm, LamellaeRDMA};
 use crate::memregion::*;
 // use crate::LamellarTeam;
@@ -21,18 +21,36 @@ use std::ops::{Bound, RangeBounds};
 //     from = "__NetworkMemoryRegion<T>"
 // )]
 
-#[derive(serde::Serialize, serde::Deserialize, Clone)]
+// #[derive(serde::Serialize, serde::Deserialize, Clone)]
+#[lamellar_impl::AmDataRT(Clone)]
+// #[serde(bound(serialize="T: serde::Serialize", deserialize="T: serde::Deserialize<'de>"))]
 pub struct SharedMemoryRegion<T: Dist + 'static> {
-    mr: MemoryRegion<T>,
+    
+    mr: Darc<MemoryRegion<u8>>,
+    sub_region_offset: usize,
+    sub_region_size: usize,
+    phantom: PhantomData<T>,
 }
+
+
+
+
 impl<T: Dist + 'static> SharedMemoryRegion<T> {
     pub(crate) fn new(
         size: usize,
-        lamellae: Arc<Lamellae>,
+        // lamellae: Arc<Lamellae>,
+        team: Arc<LamellarTeam>,
         alloc: AllocationType,
     ) -> SharedMemoryRegion<T> {
         SharedMemoryRegion {
-            mr: MemoryRegion::new(size, lamellae, alloc),
+            mr: Darc::new(
+                team.clone(),
+                MemoryRegion::new(size, team.team.lamellae.clone(), alloc),
+            )
+            .expect("memregions can only be created on a member of the team"),
+            sub_region_offset: 0,
+            sub_region_size: 0,
+            phantom: PhantomData,
         }
     }
     pub fn len(&self) -> usize {
@@ -75,16 +93,16 @@ impl<T: Dist + 'static> RegisteredMemoryRegion<T> for SharedMemoryRegion<T> {
         self.mr.addr()
     }
     fn as_slice(&self) -> MemResult<&[T]> {
-        self.mr.as_slice()
+        self.mr.as_casted_slice::<T>()
     }
     unsafe fn as_mut_slice(&self) -> MemResult<&mut [T]> {
-        self.mr.as_mut_slice()
+        self.mr.as_casted_mut_slice::<T>()
     }
     fn as_ptr(&self) -> MemResult<*const T> {
-        self.mr.as_ptr()
+        self.mr.as_casted_ptr::<T>()
     }
     fn as_mut_ptr(&self) -> MemResult<*mut T> {
-        self.mr.as_mut_ptr()
+        self.mr.as_casted_mut_ptr::<T>()
     }
 }
 
@@ -96,49 +114,51 @@ impl<T: Dist + 'static> MemRegionId for SharedMemoryRegion<T> {
 
 impl<T: Dist + 'static> SubRegion<T> for SharedMemoryRegion<T> {
     fn sub_region<R: std::ops::RangeBounds<usize>>(&self, range: R) -> LamellarMemoryRegion<T> {
-        // let start = match range.start_bound() {
-        //     //inclusive
-        //     Bound::Included(idx) => *idx,
-        //     Bound::Excluded(idx) => *idx + 1,
-        //     Bound::Unbounded => 0,
-        // };
-        // let end = match range.end_bound() {
-        //     //exclusive
-        //     Bound::Included(idx) => *idx + 1,
-        //     Bound::Excluded(idx) => *idx,
-        //     Bound::Unbounded => self.sub_region_size,
-        // };
-        // if end > self.sub_region_size {
-        //     panic!(
-        //         "subregion range ({:?}-{:?}) exceeds size of memregion {:?}",
-        //         start, end, self.sub_region_size
-        //     );
-        // }
-        // SharedMemoryRegion {
-        //     mr: self.mr.clone(),
-        //     sub_region_offset: self.sub_region_offset + start,
-        //     sub_region_size: (end - start),
-        // }
-        // .into()
+        let start = match range.start_bound() {
+            //inclusive
+            Bound::Included(idx) => *idx,
+            Bound::Excluded(idx) => *idx + 1,
+            Bound::Unbounded => 0,
+        };
+        let end = match range.end_bound() {
+            //exclusive
+            Bound::Included(idx) => *idx + 1,
+            Bound::Excluded(idx) => *idx,
+            Bound::Unbounded => self.sub_region_size,
+        };
+        if end > self.sub_region_size {
+            panic!(
+                "subregion range ({:?}-{:?}) exceeds size of memregion {:?}",
+                start, end, self.sub_region_size
+            );
+        }
         SharedMemoryRegion {
-            mr: self.mr.sub_region(range),
+            mr: self.mr.clone(),
+            sub_region_offset: self.sub_region_offset + start,
+            sub_region_size: (end - start),
+            phantom: PhantomData,
         }
         .into()
+        // SharedMemoryRegion {
+        //     mr: self.mr.sub_region(range),
+        // }
+        // .into()
     }
 }
 
 impl<T: Dist + 'static> AsBase for SharedMemoryRegion<T> {
     unsafe fn as_base<B: Dist + 'static>(self) -> LamellarMemoryRegion<B> {
-        // SharedMemoryRegion {
-        //     mr: self.mr.as_base::<B>(),
-        //     sub_region_offset: self.sub_region_offset,
-        //     sub_region_size: self.sub_region_size,
-        // }
-        // .into()
         SharedMemoryRegion {
-            mr: self.mr.as_base::<B>(),
+            mr: self.mr.clone(),
+            sub_region_offset: self.sub_region_offset,
+            sub_region_size: self.sub_region_size,
+            phantom: PhantomData,
         }
         .into()
+        // // SharedMemoryRegion {
+        // //     mr: self.mr.as_base::<B>(),
+        // // }
+        // // .into()
     }
 }
 
@@ -208,7 +228,7 @@ impl<T: Dist + 'static> From<&SharedMemoryRegion<T>> for LamellarArrayInput<T> {
 }
 
 impl<T: Dist + 'static> MyFrom<&SharedMemoryRegion<T>> for LamellarArrayInput<T> {
-    fn my_from(smr: &SharedMemoryRegion<T>, _team: &LamellarTeam) -> Self {
+    fn my_from(smr: &SharedMemoryRegion<T>, _team: &Arc<LamellarTeam>) -> Self {
         LamellarArrayInput::SharedMemRegion(smr.clone())
     }
 }

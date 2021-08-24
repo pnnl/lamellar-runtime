@@ -56,7 +56,8 @@ pub enum Distribution {
 }
 
 #[enum_dispatch(RegisteredMemoryRegion<T>, SubRegion<T>, MyFrom<T>)]
-#[derive(serde::Serialize, serde::Deserialize, Clone)]
+// #[derive(serde::Serialize, serde::Deserialize, Clone)]
+#[derive(Clone)]
 pub enum LamellarArrayInput<T: Dist + 'static> {
     LamellarMemRegion(LamellarMemoryRegion<T>),
     SharedMemRegion(SharedMemoryRegion<T>),
@@ -66,7 +67,7 @@ pub enum LamellarArrayInput<T: Dist + 'static> {
 }
 
 impl<T: Dist + 'static> MyFrom<&T> for LamellarArrayInput<T> {
-    fn my_from(val: &T, team: &LamellarTeam) -> Self {
+    fn my_from(val: &T, team: &Arc<LamellarTeam>) -> Self {
         let buf: LocalMemoryRegion<T> = team.alloc_local_mem_region(1);
         unsafe {
             buf.as_mut_slice().unwrap()[0] = val.clone();
@@ -76,7 +77,7 @@ impl<T: Dist + 'static> MyFrom<&T> for LamellarArrayInput<T> {
 }
 
 impl<T: Dist + 'static> MyFrom<T> for LamellarArrayInput<T> {
-    fn my_from(val: T, team: &LamellarTeam) -> Self {
+    fn my_from(val: T, team: &Arc<LamellarTeam>) -> Self {
         let buf: LocalMemoryRegion<T> = team.alloc_local_mem_region(1);
         unsafe {
             buf.as_mut_slice().unwrap()[0] = val;
@@ -86,18 +87,18 @@ impl<T: Dist + 'static> MyFrom<T> for LamellarArrayInput<T> {
 }
 
 pub trait MyFrom<T: ?Sized> {
-    fn my_from(val: T, team: &LamellarTeam) -> Self;
+    fn my_from(val: T, team: &Arc<LamellarTeam>) -> Self;
 }
 
 pub trait MyInto<T: ?Sized> {
-    fn my_into(self, team: &LamellarTeam) -> T;
+    fn my_into(self, team: &Arc<LamellarTeam>) -> T;
 }
 
 impl<T, U> MyInto<U> for T
 where
     U: MyFrom<T>,
 {
-    fn my_into(self, team: &LamellarTeam) -> U {
+    fn my_into(self, team: &Arc<LamellarTeam>) -> U {
         U::my_from(self, team)
     }
 }

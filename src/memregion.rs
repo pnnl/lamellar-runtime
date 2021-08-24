@@ -45,7 +45,8 @@ impl<T: serde::ser::Serialize + serde::de::DeserializeOwned + std::clone::Clone 
 }
 
 #[enum_dispatch(RegisteredMemoryRegion<T>, MemRegionId, AsBase, SubRegion<T>, MemoryRegionRDMA<T>, RTMemoryRegionRDMA<T>)]
-#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
+// #[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
+#[derive( Clone, Debug)]
 pub enum LamellarMemoryRegion<T: Dist + 'static> {
     Shared(SharedMemoryRegion<T>),
     Local(LocalMemoryRegion<T>),
@@ -58,7 +59,7 @@ impl<T: Dist + 'static> From<&LamellarMemoryRegion<T>> for LamellarArrayInput<T>
 }
 
 impl<T: Dist + 'static> MyFrom<&LamellarMemoryRegion<T>> for LamellarArrayInput<T> {
-    fn my_from(mr: &LamellarMemoryRegion<T>, _team: &LamellarTeam) -> Self {
+    fn my_from(mr: &LamellarMemoryRegion<T>, _team: &Arc<LamellarTeam>) -> Self {
         LamellarArrayInput::LamellarMemRegion(mr.clone())
     }
 }
@@ -126,8 +127,8 @@ impl<T: Dist + 'static> Eq for LamellarMemoryRegion<T> {}
 // it will be wrapped in either a shared region or local region
 // in shared regions its wrapped in a darc which allows us to send
 // to different nodes, in local we dont currently support serialization
-#[derive(Clone, serde::Serialize, serde::Deserialize)]
-#[serde(into = "__NetworkMemoryRegion<T>", from = "__NetworkMemoryRegion<T>")]
+// #[derive(serde::Serialize, serde::Deserialize)]
+// #[serde(into = "__NetworkMemoryRegion<T>", from = "__NetworkMemoryRegion<T>")]
 pub(crate) struct MemoryRegion<T: Dist + 'static> {
     addr: usize,
     pe: usize,
@@ -140,7 +141,7 @@ pub(crate) struct MemoryRegion<T: Dist + 'static> {
 
 impl<T: Dist + 'static> MemoryRegion<T> {
     pub(crate) fn new(
-        size: usize,
+        size: usize, //number of elements of type T
         lamellae: Arc<Lamellae>,
         alloc: AllocationType,
     ) -> MemoryRegion<T> {
@@ -178,6 +179,7 @@ impl<T: Dist + 'static> MemoryRegion<T> {
         temp
     }
 
+    //remove... subregions of a raw memory region is not possible, need to use shared or local wrappers
     pub(crate) fn sub_region<R: RangeBounds<usize>>(&self, range: R) -> MemoryRegion<T> {
         let start = match range.start_bound() {
             //inclusive
@@ -204,58 +206,28 @@ impl<T: Dist + 'static> MemoryRegion<T> {
         }
     }
 
-    unsafe fn as_base<B: Dist + 'static>(self) -> MemoryRegion<B> {
+    pub(crate) unsafe fn as_base<B: Dist + 'static>(self) -> MemoryRegion<B> {
+        //this is allowed as we consume the old object..
+        let num_bytes = self.size * std::mem::size_of::<T>();
+        assert_eq!(
+            num_bytes % std::mem::size_of::<B>(),
+            0,
+            "Error converting memregion to new base, does not align"
+        );
         MemoryRegion {
             addr: self.addr, //TODO: out of memory...
             pe: self.pe,
-            size: self.size,
+            size: num_bytes / std::mem::size_of::<B>(),
             backend: self.backend,
             rdma: self.rdma.clone(),
             local: self.local,
             phantom: PhantomData,
         }
     }
-}
+    // }
 
-impl<T: Dist + 'static> RegisteredMemoryRegion<T> for MemoryRegion<T> {
-    fn len(&self) -> usize {
-        self.size
-    }
-    fn addr(&self) -> MemResult<usize> {
-        Ok(self.addr)
-    }
-    fn as_slice(&self) -> MemResult<&[T]> {
-        if self.addr != 0 {
-            Ok(unsafe { std::slice::from_raw_parts(self.addr as *const T, self.size) })
-        } else {
-            Ok(&[])
-        }
-    }
-    unsafe fn as_mut_slice(&self) -> MemResult<&mut [T]> {
-        if self.addr != 0 {
-            Ok(std::slice::from_raw_parts_mut(
-                self.addr as *mut T,
-                self.size,
-            ))
-        } else {
-            Ok(&mut [])
-        }
-    }
-    fn as_ptr(&self) -> MemResult<*const T> {
-        Ok(self.addr as *const T)
-    }
-    fn as_mut_ptr(&self) -> MemResult<*mut T> {
-        Ok(self.addr as *mut T)
-    }
-}
-
-impl<T: Dist + 'static> MemRegionId for MemoryRegion<T> {
-    fn id(&self) -> usize {
-        self.addr //probably should be key
-    }
-}
-//#[prof]
-impl<T: Dist + 'static> MemoryRegionRDMA<T> for MemoryRegion<T> {
+    //#[prof]
+    // impl<T: Dist + 'static> MemoryRegionRDMA<T> for MemoryRegion<T> {
     /// copy data from local memory location into a remote memory location
     ///
     /// # Arguments
@@ -265,11 +237,16 @@ impl<T: Dist + 'static> MemoryRegionRDMA<T> for MemoryRegion<T> {
     /// * `data` - address (which is "registered" with network device) of local input buffer that will be put into the remote memory
     /// the data buffer may not be safe to upon return from this call, currently the user is responsible for completion detection,
     /// or you may use the similar iput call (with a potential performance penalty);
-    unsafe fn put<U: Into<LamellarMemoryRegion<T>>>(&self, pe: usize, index: usize, data: U) {
+    pub(crate) unsafe fn put<R: Dist + 'static, U: Into<LamellarMemoryRegion<R>>>(
+        &self,
+        pe: usize,
+        index: usize,
+        data: U,
+    ) {
         //todo make return a result?
         let data = data.into();
         if index + data.len() <= self.size {
-            let num_bytes = data.len() * std::mem::size_of::<T>();
+            let num_bytes = data.len() * std::mem::size_of::<R>();
             if let Ok(ptr) = data.as_ptr() {
                 let bytes = std::slice::from_raw_parts(ptr as *const u8, num_bytes);
                 self.rdma
@@ -291,7 +268,12 @@ impl<T: Dist + 'static> MemoryRegionRDMA<T> for MemoryRegion<T> {
     /// * `index` - offset into the remote memory window
     /// * `data` - address (which is "registered" with network device) of local input buffer that will be put into the remote memory
     /// the data buffer is free to be reused upon return of this function.
-    fn iput<U: Into<LamellarMemoryRegion<T>>>(&self, pe: usize, index: usize, data: U) {
+    pub(crate) fn iput<R: Dist + 'static, U: Into<LamellarMemoryRegion<R>>>(
+        &self,
+        pe: usize,
+        index: usize,
+        data: U,
+    ) {
         //todo make return a result?
         let data = data.into();
         if index + data.len() <= self.size {
@@ -309,7 +291,11 @@ impl<T: Dist + 'static> MemoryRegionRDMA<T> for MemoryRegion<T> {
         }
     }
 
-    unsafe fn put_all<U: Into<LamellarMemoryRegion<T>>>(&self, index: usize, data: U) {
+    pub(crate) unsafe fn put_all<R: Dist + 'static, U: Into<LamellarMemoryRegion<R>>>(
+        &self,
+        index: usize,
+        data: U,
+    ) {
         let data = data.into();
         if index + data.len() <= self.size {
             let num_bytes = data.len() * std::mem::size_of::<T>();
@@ -335,7 +321,12 @@ impl<T: Dist + 'static> MemoryRegionRDMA<T> for MemoryRegion<T> {
     /// * `pe` - id of remote PE to grab data from
     /// * `index` - offset into the remote memory window
     /// * `data` - address (which is "registered" with network device) of destination buffer to store result of the get
-    unsafe fn get<U: Into<LamellarMemoryRegion<T>>>(&self, pe: usize, index: usize, data: U) {
+    pub(crate) unsafe fn get<R: Dist + 'static, U: Into<LamellarMemoryRegion<R>>>(
+        &self,
+        pe: usize,
+        index: usize,
+        data: U,
+    ) {
         let data = data.into();
         if index + data.len() <= self.size {
             let num_bytes = data.len() * std::mem::size_of::<T>();
@@ -353,13 +344,13 @@ impl<T: Dist + 'static> MemoryRegionRDMA<T> for MemoryRegion<T> {
             panic!("index out of bounds");
         }
     }
-}
+    // }
 
-impl<T: Dist + 'static> RTMemoryRegionRDMA<T> for MemoryRegion<T> {
-    unsafe fn put_slice(&self, pe: usize, index: usize, data: &[T]) {
+    // impl<T: Dist + 'static> RTMemoryRegionRDMA<T> for MemoryRegion<T> {
+    pub(crate) unsafe fn put_slice<R: Dist + 'static>(&self, pe: usize, index: usize, data: &[R]) {
         //todo make return a result?
         if index + data.len() <= self.size {
-            let num_bytes = data.len() * std::mem::size_of::<T>();
+            let num_bytes = data.len() * std::mem::size_of::<R>();
             let bytes = std::slice::from_raw_parts(data.as_ptr() as *const u8, num_bytes);
             // println!(
             //     "mem region len: {:?} index: {:?} data len{:?} num_bytes {:?}  from {:?} to {:x} ({:x} [{:?}])",
@@ -383,6 +374,84 @@ impl<T: Dist + 'static> RTMemoryRegionRDMA<T> for MemoryRegion<T> {
             );
             panic!("index out of bounds");
         }
+    }
+    // }
+
+    // impl<T: Dist + 'static> RegisteredMemoryRegion<T> for MemoryRegion<T> {
+    pub(crate) fn len(&self) -> usize {
+        self.size
+    }
+    pub(crate) fn addr(&self) -> MemResult<usize> {
+        Ok(self.addr)
+    }
+    pub(crate) fn as_slice(&self) -> MemResult<&[T]> {
+        if self.addr != 0 {
+            Ok(unsafe { std::slice::from_raw_parts(self.addr as *const T, self.size) })
+        } else {
+            Ok(&[])
+        }
+    }
+    pub(crate) fn as_casted_slice<R: Dist + 'static>(&self) -> MemResult<&[R]> {
+        if self.addr != 0 {
+            let num_bytes = self.size * std::mem::size_of::<T>();
+            assert_eq!(
+                num_bytes % std::mem::size_of::<R>(),
+                0,
+                "Error converting memregion to new base, does not align"
+            );
+            Ok(unsafe {
+                std::slice::from_raw_parts(
+                    self.addr as *const R,
+                    num_bytes / std::mem::size_of::<R>(),
+                )
+            })
+        } else {
+            Ok(&[])
+        }
+    }
+    pub(crate) unsafe fn as_mut_slice(&self) -> MemResult<&mut [T]> {
+        if self.addr != 0 {
+            Ok(std::slice::from_raw_parts_mut(
+                self.addr as *mut T,
+                self.size,
+            ))
+        } else {
+            Ok(&mut [])
+        }
+    }
+    pub(crate) unsafe fn as_casted_mut_slice<R: Dist + 'static>(&self) -> MemResult<&mut [R]> {
+        if self.addr != 0 {
+            let num_bytes = self.size * std::mem::size_of::<T>();
+            assert_eq!(
+                num_bytes % std::mem::size_of::<R>(),
+                0,
+                "Error converting memregion to new base, does not align"
+            );
+            Ok(std::slice::from_raw_parts_mut(
+                self.addr as *mut R,
+                num_bytes / std::mem::size_of::<R>(),
+            ))
+        } else {
+            Ok(&mut [])
+        }
+    }
+    pub(crate) fn as_ptr(&self) -> MemResult<*const T> {
+        Ok(self.addr as *const T)
+    }
+    pub(crate) fn as_casted_ptr<R: Dist + 'static>(&self) -> MemResult<*const R> {
+        Ok(self.addr as *const R)
+    }
+    pub(crate) fn as_mut_ptr(&self) -> MemResult<*mut T> {
+        Ok(self.addr as *mut T)
+    }
+    pub(crate) fn as_casted_mut_ptr<R: Dist + 'static>(&self) -> MemResult<*mut R> {
+        Ok(self.addr as *mut R)
+    }
+}
+
+impl<T: Dist + 'static> MemRegionId for MemoryRegion<T> {
+    fn id(&self) -> usize {
+        self.addr //probably should be key
     }
 }
 

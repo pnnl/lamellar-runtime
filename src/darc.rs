@@ -70,7 +70,7 @@ pub struct Darc<T: 'static + ?Sized> {
     inner: *mut DarcInner<T>,
     src_pe: usize,
     // cur_pe: usize,
-    phantom: PhantomData<DarcInner<T>>,
+    // phantom: PhantomData<DarcInner<T>>,
 }
 
 unsafe impl<T: ?Sized + Sync + Send> Send for Darc<T> {}
@@ -354,7 +354,7 @@ impl<T> Darc<T> {
         let d = Darc {
             inner: addr as *mut DarcInner<T>,
             src_pe: my_pe,
-            phantom: PhantomData,
+            // phantom: PhantomData,
         };
         // unsafe {
         for elem in d.mode_as_mut_slice() {
@@ -376,7 +376,7 @@ impl<T> Darc<T> {
             inner: self.inner as *mut DarcInner<RwLock<Box<T>>>,
             src_pe: self.src_pe,
             // cur_pe: cur_pe,
-            phantom: PhantomData,
+            // phantom: PhantomData,
         };
         d.inner_mut()
             .update_item(Box::into_raw(Box::new(RwLock::new(item))));
@@ -393,7 +393,7 @@ impl<T> Darc<T> {
             inner: self.inner as *mut DarcInner<DistRwLock<T>>,
             src_pe: self.src_pe,
             // cur_pe: cur_pe,
-            phantom: PhantomData,
+            // phantom: PhantomData,
         };
         d.inner_mut()
             .update_item(Box::into_raw(Box::new(DistRwLock::new(
@@ -410,7 +410,7 @@ impl<T: ?Sized> Clone for Darc<T> {
         Darc {
             inner: self.inner,
             src_pe: self.src_pe,
-            phantom: self.phantom,
+            // phantom: self.phantom,
         }
     }
 }
@@ -651,7 +651,7 @@ pub struct __NetworkDarc<T: ?Sized> {
     backend: Backend,
     orig_world_pe: usize,
     orig_team_pe: usize,
-    phantom: PhantomData<DarcInner<T>>,
+    phantom: PhantomData<T>,
 }
 
 pub fn darc_serialize<S, T>(darc: &Darc<T>, s: S) -> Result<S::Ok, S::Error>
@@ -714,7 +714,7 @@ impl<T: ?Sized> From<__NetworkDarc<T>> for Darc<T> {
                 inner: lamellae.local_addr(ndarc.orig_world_pe, ndarc.inner_addr)
                     as *mut DarcInner<T>,
                 src_pe: ndarc.orig_team_pe,
-                phantom: PhantomData,
+                // phantom: PhantomData,
             };
             // if !DARC_ADDRS.read().contains(&ndarc.inner_addr)
             //     && !DARC_ADDRS.read().contains(&(darc.inner as usize))

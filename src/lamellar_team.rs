@@ -13,7 +13,7 @@ use crate::lamellar_arch::{GlobalArch, IdError, LamellarArch, LamellarArchEnum, 
 use crate::lamellar_request::{AmType, LamellarRequest, LamellarRequestHandle};
 use crate::memregion::{
     local::LocalMemoryRegion, shared::SharedMemoryRegion, AsBase, Dist, LamellarMemoryRegion,
-    MemRegionId, RTMemoryRegionRDMA, RegisteredMemoryRegion, RemoteMemoryRegion,
+    MemRegionId, MemoryRegion, RTMemoryRegionRDMA, RegisteredMemoryRegion, RemoteMemoryRegion,
 };
 // use crate::schedulers::SchedulerQueue;
 use crate::scheduler::{Scheduler, SchedulerQueue};
@@ -159,7 +159,7 @@ pub struct LamellarTeamRT {
     id: usize,
     sub_team_id_cnt: AtomicUsize,
     barrier: Barrier,
-    dropped: SharedMemoryRegion<usize>,
+    dropped: MemoryRegion<usize>,
     pub(crate) team_hash: u64,
 }
 
@@ -212,7 +212,7 @@ impl LamellarTeamRT {
                 arch.clone(),
                 scheduler.clone(),
             ),
-            dropped: SharedMemoryRegion::new(num_pes, lamellae.clone(), alloc.clone()),
+            dropped: MemoryRegion::new(num_pes, lamellae.clone(), alloc.clone()),
         };
         unsafe {
             for e in team.dropped.as_mut_slice().unwrap().iter_mut() {
@@ -272,14 +272,14 @@ impl LamellarTeamRT {
 
             // ------ ensure team is being constructed synchronously and in order across all pes in parent ------ //
             let parent_alloc = AllocationType::Sub(parent.arch.team_iter().collect::<Vec<usize>>());
-            let temp_buf = SharedMemoryRegion::<usize>::new(
+            let temp_buf =
+                MemoryRegion::<usize>::new(parent.num_pes, parent.lamellae.clone(), parent_alloc);
+
+            let temp_array = MemoryRegion::<usize>::new(
                 parent.num_pes,
                 parent.lamellae.clone(),
-                parent_alloc,
+                AllocationType::Local,
             );
-
-            let temp_array =
-                LocalMemoryRegion::<usize>::new(parent.num_pes, parent.lamellae.clone());
             let temp_array_slice = unsafe { temp_array.as_mut_slice().unwrap() };
             for e in temp_array_slice.iter_mut() {
                 *e = 0;
@@ -360,12 +360,7 @@ impl LamellarTeamRT {
     }
 
     #[cfg_attr(test, allow(unreachable_code), allow(unused_variables))]
-    fn check_hash_vals(
-        &self,
-        hash: usize,
-        hash_buf: &SharedMemoryRegion<usize>,
-        timeout: Duration,
-    ) {
+    fn check_hash_vals(&self, hash: usize, hash_buf: &MemoryRegion<usize>, timeout: Duration) {
         #[cfg(test)]
         return;
 
@@ -379,7 +374,7 @@ impl LamellarTeamRT {
                         "[{:?}] ({:?})  hash: {:?}",
                         self.world_pe,
                         hash,
-                        hash_buf.as_slice()
+                        hash_buf.as_slice().unwrap()
                     );
                     s = Instant::now();
                 }
@@ -389,7 +384,7 @@ impl LamellarTeamRT {
                     "[{:?}] ({:?})  hash: {:?}",
                     self.world_pe,
                     hash,
-                    hash_buf.as_slice()
+                    hash_buf.as_slice().unwrap()
                 );
                 panic!("team creating mismatch! Ensure teams are constructed in same order on every pe");
             } else {
@@ -832,89 +827,32 @@ impl RemoteClosures for LamellarTeamRT {
 }
 
 //#[prof]
-impl RemoteMemoryRegion for LamellarTeam {
+impl RemoteMemoryRegion for Arc<LamellarTeam> {
     /// allocate a shared memory region from the asymmetric heap
     ///
     /// # Arguments
     ///
     /// * `size` - number of elements of T to allocate a memory region for -- (not size in bytes)
     ///
-    fn alloc_shared_mem_region<T: Dist  + 'static>(
-        &self,
-        size: usize,
-    ) -> SharedMemoryRegion<T> {
-        // println!("alloc_mem_reg: {:?}",self.world_pe);
-        self.team.alloc_shared_mem_region(size)
-    }
-
-    /// allocate a local memory region from the asymmetric heap
-    ///
-    /// # Arguments
-    ///
-    /// * `size` - number of elements of T to allocate a memory region for -- (not size in bytes)
-    ///
-    fn alloc_local_mem_region<T: Dist + 'static>(
-        &self,
-        size: usize,
-    ) -> LocalMemoryRegion<T> {
-        // println!("alloc_mem_reg: {:?}",self.world_pe);
-        self.team.alloc_local_mem_region(size)
-    }
-
-    /// release a remote memory region from the asymmetric heap
-    ///
-    /// # Arguments
-    ///
-    /// * `region` - the region to free
-    ///
-    fn free_shared_memory_region<T: Dist  + 'static>(
-        &self,
-        region: SharedMemoryRegion<T>,
-    ) {
-        self.team.free_shared_memory_region(region)
-    }
-
-    /// release a remote memory region from the asymmetric heap
-    ///
-    /// # Arguments
-    ///
-    /// * `region` - the region to free
-    ///
-    fn free_local_memory_region<T: Dist + 'static>(
-        &self,
-        region: LocalMemoryRegion<T>,
-    ) {
-        self.team.free_local_memory_region(region)
-    }
-}
-
-//#[prof]
-impl RemoteMemoryRegion for LamellarTeamRT {
-    /// allocate a remote memory region from the asymmetric heap
-    ///
-    /// # Arguments
-    ///
-    /// * `size` - number of elements of T to allocate a memory region for -- (not size in bytes)
-    ///
-    fn alloc_shared_mem_region<T: Dist + 'static>(
-        &self,
-        size: usize,
-    ) -> SharedMemoryRegion<T> {
-        self.barrier.barrier();
-        let mr: SharedMemoryRegion<T> = if self.num_world_pes == self.num_pes {
-            SharedMemoryRegion::new(size, self.lamellae.clone(), AllocationType::Global)
+    fn alloc_shared_mem_region<T: Dist + 'static>(&self, size: usize) -> SharedMemoryRegion<T> {
+        self.team.barrier.barrier();
+        let mr: SharedMemoryRegion<T> = if self.team.num_world_pes == self.team.num_pes {
+            SharedMemoryRegion::new(size, self.clone(), AllocationType::Global)
         } else {
             SharedMemoryRegion::new(
                 size,
-                self.lamellae.clone(),
-                AllocationType::Sub(self.arch.team_iter().collect::<Vec<usize>>()),
+                self.clone(),
+                AllocationType::Sub(self.team.arch.team_iter().collect::<Vec<usize>>()),
             )
         };
-        self.mem_regions
+        self.team
+            .mem_regions
             .write()
             .insert(mr.id(), Box::new(unsafe { mr.clone().as_base::<u8>() }));
-        self.barrier.barrier();
+        self.team.barrier.barrier();
         mr
+        // println!("alloc_mem_reg: {:?}",self.world_pe);
+        // self.team.alloc_shared_mem_region(size)
     }
 
     /// allocate a local memory region from the asymmetric heap
@@ -923,46 +861,106 @@ impl RemoteMemoryRegion for LamellarTeamRT {
     ///
     /// * `size` - number of elements of T to allocate a memory region for -- (not size in bytes)
     ///
-    fn alloc_local_mem_region<T: Dist  + 'static>(
-        &self,
-        size: usize,
-    ) -> LocalMemoryRegion<T> {
-        let lmr: LocalMemoryRegion<T> = LocalMemoryRegion::new(size, self.lamellae.clone()).into();
-        self.mem_regions
+    fn alloc_local_mem_region<T: Dist + 'static>(&self, size: usize) -> LocalMemoryRegion<T> {
+        let lmr: LocalMemoryRegion<T> =
+            LocalMemoryRegion::new(size, self.team.lamellae.clone()).into();
+        self.team
+            .mem_regions
             .write()
             .insert(lmr.id(), Box::new(unsafe { lmr.clone().as_base::<u8>() }));
         // println!("alloc_mem_reg: {:?}",llmr);
         lmr
+        // println!("alloc_mem_reg: {:?}",self.world_pe);
+        // self.team.alloc_local_mem_region(size)
     }
 
-    /// release a remote memory region from the symmetric heap
+    /// release a remote memory region from the asymmetric heap
     ///
     /// # Arguments
     ///
     /// * `region` - the region to free
     ///
-    fn free_shared_memory_region<T: Dist  + 'static>(
-        &self,
-        region: SharedMemoryRegion<T>,
-    ) {
-        self.barrier.barrier();
-        self.mem_regions.write().remove(&region.id());
+    fn free_shared_memory_region<T: Dist + 'static>(&self, region: SharedMemoryRegion<T>) {
+        self.team.barrier.barrier();
+        self.team.mem_regions.write().remove(&region.id());
+        // self.team.free_shared_memory_region(region)
     }
 
-    /// release a remote memory region from the symmetric heap
+    /// release a remote memory region from the asymmetric heap
     ///
     /// # Arguments
     ///
     /// * `region` - the region to free
     ///
-    fn free_local_memory_region<T: Dist  + 'static>(
-        &self,
-        region: LocalMemoryRegion<T>,
-    ) {
-        // println!("free_mem_reg: {:?}",region);
-        self.mem_regions.write().remove(&region.id());
+    fn free_local_memory_region<T: Dist + 'static>(&self, region: LocalMemoryRegion<T>) {
+        self.team.mem_regions.write().remove(&region.id());
+        // self.team.free_local_memory_region(region)
     }
 }
+
+//#[prof]
+// impl RemoteMemoryRegion for LamellarTeamRT {
+//     /// allocate a remote memory region from the asymmetric heap
+//     ///
+//     /// # Arguments
+//     ///
+//     /// * `size` - number of elements of T to allocate a memory region for -- (not size in bytes)
+//     ///
+//     fn alloc_shared_mem_region<T: Dist + 'static>(&self, size: usize) -> SharedMemoryRegion<T> {
+//         self.barrier.barrier();
+//         let mr: SharedMemoryRegion<T> = if self.num_world_pes == self.num_pes {
+//             SharedMemoryRegion::new(size, self.lamellae.clone(), AllocationType::Global)
+//         } else {
+//             SharedMemoryRegion::new(
+//                 size,
+//                 self.lamellae.clone(),
+//                 AllocationType::Sub(self.arch.team_iter().collect::<Vec<usize>>()),
+//             )
+//         };
+//         self.mem_regions
+//             .write()
+//             .insert(mr.id(), Box::new(unsafe { mr.clone().as_base::<u8>() }));
+//         self.barrier.barrier();
+//         mr
+//     }
+
+//     /// allocate a local memory region from the asymmetric heap
+//     ///
+//     /// # Arguments
+//     ///
+//     /// * `size` - number of elements of T to allocate a memory region for -- (not size in bytes)
+//     ///
+//     fn alloc_local_mem_region<T: Dist + 'static>(&self, size: usize) -> LocalMemoryRegion<T> {
+//         let lmr: LocalMemoryRegion<T> = LocalMemoryRegion::new(size, self.lamellae.clone()).into();
+//         self.mem_regions
+//             .write()
+//             .insert(lmr.id(), Box::new(unsafe { lmr.clone().as_base::<u8>() }));
+//         // println!("alloc_mem_reg: {:?}",llmr);
+//         lmr
+//     }
+
+//     /// release a remote memory region from the symmetric heap
+//     ///
+//     /// # Arguments
+//     ///
+//     /// * `region` - the region to free
+//     ///
+//     fn free_shared_memory_region<T: Dist + 'static>(&self, region: SharedMemoryRegion<T>) {
+//         self.barrier.barrier();
+//         self.mem_regions.write().remove(&region.id());
+//     }
+
+//     /// release a remote memory region from the symmetric heap
+//     ///
+//     /// # Arguments
+//     ///
+//     /// * `region` - the region to free
+//     ///
+//     fn free_local_memory_region<T: Dist + 'static>(&self, region: LocalMemoryRegion<T>) {
+//         // println!("free_mem_reg: {:?}",region);
+//         self.mem_regions.write().remove(&region.id());
+//     }
+// }
 
 //#[prof]
 impl Drop for LamellarTeamRT {

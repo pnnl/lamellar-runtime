@@ -13,15 +13,16 @@ use std::sync::Arc;
 
 use std::ops::{Bound, RangeBounds};
 
-#[derive(serde::Serialize, serde::Deserialize, Clone)]
+// #[derive(serde::Serialize, serde::Deserialize, Clone)]
+#[derive(Clone)]
 pub struct LocalMemoryRegion<T: Dist + 'static> {
-    mr: MemoryRegion<T>,
+    mr: Arc<MemoryRegion<T>>,
     pe: usize,
 }
 
 impl<T: Dist + 'static> LocalMemoryRegion<T> {
     pub(crate) fn new(size: usize, lamellae: Arc<Lamellae>) -> LocalMemoryRegion<T> {
-        let mr = MemoryRegion::new(size, lamellae, AllocationType::Local);
+        let mr = Arc::new(MemoryRegion::new(size, lamellae, AllocationType::Local));
         let pe = mr.pe;
         LocalMemoryRegion { mr: mr, pe: pe }
     }
@@ -193,7 +194,7 @@ impl<T: Dist + 'static> From<&LocalMemoryRegion<T>> for LamellarArrayInput<T> {
 }
 
 impl<T: Dist + 'static> MyFrom<&LocalMemoryRegion<T>> for LamellarArrayInput<T> {
-    fn my_from(smr: &LocalMemoryRegion<T>, _team: &LamellarTeam) -> Self {
+    fn my_from(smr: &LocalMemoryRegion<T>, _team: &Arc<LamellarTeam>) -> Self {
         LamellarArrayInput::LocalMemRegion(smr.clone())
     }
 }
