@@ -32,9 +32,6 @@ pub(crate) enum DarcMode {
     GlobalRw,
 }
 
-// lazy_static! {
-//     pub(crate) static ref DARC_ADDRS: RwLock<HashSet<usize>> = RwLock::new(HashSet::new());
-// }
 #[lamellar_impl::AmDataRT(Debug)]
 struct FinishedAm {
     cnt: usize,
@@ -64,23 +61,32 @@ pub struct DarcInner<T: ?Sized> {
 unsafe impl<T: ?Sized + Sync + Send> Send for DarcInner<T> {}
 unsafe impl<T: ?Sized + Sync + Send> Sync for DarcInner<T> {}
 
-// #[derive(serde::Serialize, serde::Deserialize)]
-// #[serde(into = "__NetworkDarc<T>", from = "__NetworkDarc<T>")]
-// #[derive(serde::Deserialize)]
-// #[serde(from = "__NetworkDarc<T>")]
+
+
 pub struct Darc<T: 'static + ?Sized> {
     inner: *mut DarcInner<T>,
     src_pe: usize,
-    // cur_pe: usize,
-    // phantom: PhantomData<DarcInner<T>>,
 }
-
-
-
-
-
 unsafe impl<T: ?Sized + Sync + Send> Send for Darc<T> {}
 unsafe impl<T: ?Sized + Sync + Send> Sync for Darc<T> {}
+
+impl<T: 'static + ?Sized> serde::Serialize for Darc<T>{
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where S: serde::Serializer,
+    {
+        __NetworkDarc::<T>::from(self).serialize(serializer)
+    }
+}
+
+impl<'de,T: 'static + ?Sized> Deserialize<'de> for Darc<T> {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let ndarc: __NetworkDarc<T> = Deserialize::deserialize(deserializer)?;
+        Ok(ndarc.into())
+    }
+}
 
 impl<T: ?Sized> crate::DarcSerde for Darc<T> {
     fn ser(&self, num_pes: usize, cur_pe: Result<usize, IdError>) {
@@ -108,13 +114,12 @@ impl<T: ?Sized> crate::DarcSerde for Darc<T> {
 impl<T: ?Sized> DarcInner<T> {
     fn team(&self) -> Arc<LamellarTeam> {
         unsafe {
-            // (*self.team).team.clone()
             Arc::increment_strong_count(self.team);
             Arc::from_raw(self.team)
         }
     }
+
     fn inc_pe_ref_count(&self, pe: usize, amt: usize) -> usize {
-        //not sure yet what pe will be (world or team)
         if self.ref_cnt_addr + pe * std::mem::size_of::<AtomicUsize>() < 10 {
             println!("error!!!! addrress makes no sense: {:?} ", pe);
             println!("{:?}", self);
@@ -128,12 +133,6 @@ impl<T: ?Sized> DarcInner<T> {
         };
         ref_cnt.fetch_add(amt, Ordering::SeqCst)
     }
-    // fn dec_pe_ref_count(&self, pe: usize,amt: usize) -> usize {
-    //     // println!("decrementing");
-    //     let team_pe = pe;
-    //     let  ref_cnt = unsafe{((self.ref_cnt_addr+team_pe*std::mem::size_of::<AtomicUsize>()) as *mut AtomicUsize).as_ref().unwrap()};
-    //     ref_cnt.fetch_sub(amt,Ordering::SeqCst)
-    // }
 
     fn update_item(&mut self, item: *const T) {
         self.item = item;
@@ -281,23 +280,16 @@ impl<T: ?Sized> Darc<T> {
 
     pub fn serialize_update_cnts(&self, cnt: usize, _cur_pe: usize) {
         // println!("serialize darc cnts");
-        // if self.src_pe == cur_pe{
         self.inner()
             .dist_cnt
             .fetch_add(cnt, std::sync::atomic::Ordering::SeqCst);
-        // self.print();
-        // }
-        // self.print();
         // println!("done serialize darc cnts");
     }
 
     pub fn deserialize_update_cnts(&self, _cur_pe: usize) {
         // println!("deserialize darc? cnts");
-        // if self.src_pe != cur_pe{
         self.inner().inc_pe_ref_count(self.src_pe, 1);
-        // }
         self.inner().local_cnt.fetch_add(1, Ordering::SeqCst);
-        // self.print();
         // println!("done deserialize darc cnts");
     }
 
@@ -335,9 +327,9 @@ impl<T> Darc<T> {
         let size = std::mem::size_of::<DarcInner<T>>()
             + team_rt.num_pes * std::mem::size_of::<usize>()
             + team_rt.num_pes * std::mem::size_of::<DarcMode>();
-        println!("creating new darc");
+        // println!("creating new darc");
         team.barrier();
-        println!("creating new darc after barrier");
+        // println!("creating new darc after barrier");
         let addr = team_rt.lamellae.alloc(size, alloc).expect("out of memory");
         let temp_team = team.clone();
         let darc_temp = DarcInner {
@@ -355,19 +347,15 @@ impl<T> Darc<T> {
         unsafe {
             std::ptr::copy_nonoverlapping(&darc_temp, addr as *mut DarcInner<T>, 1);
         }
-        // DARC_ADDRS.write().insert(addr);
 
         let d = Darc {
             inner: addr as *mut DarcInner<T>,
             src_pe: my_pe,
-            // phantom: PhantomData,
         };
-        // unsafe {
         for elem in d.mode_as_mut_slice() {
             *elem = state;
         }
-        // }
-        d.print();
+        // d.print();
         team.barrier();
         Ok(d)
     }
@@ -381,8 +369,6 @@ impl<T> Darc<T> {
         let d = Darc {
             inner: self.inner as *mut DarcInner<RwLock<Box<T>>>,
             src_pe: self.src_pe,
-            // cur_pe: cur_pe,
-            // phantom: PhantomData,
         };
         d.inner_mut()
             .update_item(Box::into_raw(Box::new(RwLock::new(item))));
@@ -398,8 +384,6 @@ impl<T> Darc<T> {
         let d = Darc {
             inner: self.inner as *mut DarcInner<DistRwLock<T>>,
             src_pe: self.src_pe,
-            // cur_pe: cur_pe,
-            // phantom: PhantomData,
         };
         d.inner_mut()
             .update_item(Box::into_raw(Box::new(DistRwLock::new(
@@ -417,7 +401,6 @@ impl<T: ?Sized> Clone for Darc<T> {
         Darc {
             inner: self.inner,
             src_pe: self.src_pe,
-            // phantom: self.phantom,
         }
     }
 }
@@ -484,7 +467,7 @@ impl<T: 'static + ?Sized> Drop for Darc<T> {
                     )
             };
             if local_mode == Ok(DarcMode::Darc as u8) {
-                println!("launching drop task");
+                // println!("launching drop task");
                 // self.print();
                 inner.team().exec_am_local(DroppedWaitAM {
                     inner_addr: self.inner as *const u8 as usize,
@@ -561,7 +544,7 @@ unsafe impl<T: ?Sized> Send for Wrapper<T> {}
 #[lamellar_impl::rt_am_local]
 impl<T: 'static + ?Sized> LamellarAM for DroppedWaitAM<T> {
     fn exec(self) {
-        println!("in DroppedWaitAM");
+        // println!("in DroppedWaitAM");
         let mode_refs =
             unsafe { std::slice::from_raw_parts_mut(self.mode_addr as *mut u8, self.num_pes) };
 
@@ -649,28 +632,12 @@ impl<T: 'static + ?Sized> LamellarAM for DroppedWaitAM<T> {
             let team = Arc::from_raw(wrapped.inner.as_ref().team); //return to rust to drop appropriately
                                                                    // println!("Darc freed! {:x} {:?}",self.inner_addr,mode_refs);
             team.team.lamellae.free(self.inner_addr);
-            println!("leaving DroppedWaitAM");
+            // println!("leaving DroppedWaitAM");
         }
     }
 }
 
-impl<T: 'static + ?Sized> serde::Serialize for Darc<T>{
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where S: serde::Serializer,
-    {
-        __NetworkDarc::<T>::from(self).serialize(serializer)
-    }
-}
 
-impl<'de,T: 'static + ?Sized> Deserialize<'de> for Darc<T> {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let ndarc: __NetworkDarc<T> = Deserialize::deserialize(deserializer)?;
-        Ok(ndarc.into())
-    }
-}
 
 #[derive(serde::Deserialize, serde::Serialize)]
 pub struct __NetworkDarc<T: ?Sized> {
@@ -681,24 +648,6 @@ pub struct __NetworkDarc<T: ?Sized> {
     phantom: PhantomData<T>,
 }
 
-// pub fn darc_serialize<S, T>(darc: &Darc<T>, s: S) -> Result<S::Ok, S::Error>
-// where
-//     S: Serializer,
-//     T: ?Sized,
-// {
-//     __NetworkDarc::from(darc).serialize(s)
-// }
-
-// pub fn darc_from_ndarc<'de, D, T>(deserializer: D) -> Result<Darc<T>, D::Error>
-// where
-//     D: Deserializer<'de>,
-//     T: ?Sized,
-// {
-//     let ndarc: __NetworkDarc<T> = Deserialize::deserialize(deserializer)?;
-//     // println!("darc from net darc");
-//     Ok(Darc::from(ndarc))
-// }
-
 impl<T: ?Sized> From<Darc<T>> for __NetworkDarc<T> {
     fn from(darc: Darc<T>) -> Self {
         // println!("net darc from darc");
@@ -707,7 +656,6 @@ impl<T: ?Sized> From<Darc<T>> for __NetworkDarc<T> {
             inner_addr: darc.inner as *const u8 as usize,
             backend: team.lamellae.backend(),
             orig_world_pe: team.world_pe,
-            // orig_team_pe: darc.src_pe,
             orig_team_pe: team.team_pe.expect("darcs only valid on team members"),
             phantom: PhantomData,
         };
@@ -724,7 +672,6 @@ impl<T: ?Sized> From<&Darc<T>> for __NetworkDarc<T> {
             inner_addr: darc.inner as *const u8 as usize,
             backend: team.lamellae.backend(),
             orig_world_pe: team.world_pe,
-            // orig_team_pe: darc.src_pe,
             orig_team_pe: team.team_pe.expect("darcs only valid on team members"),
             phantom: PhantomData,
         };
@@ -741,22 +688,7 @@ impl<T: ?Sized> From<__NetworkDarc<T>> for Darc<T> {
                 inner: lamellae.local_addr(ndarc.orig_world_pe, ndarc.inner_addr)
                     as *mut DarcInner<T>,
                 src_pe: ndarc.orig_team_pe,
-                // phantom: PhantomData,
             };
-            // if !DARC_ADDRS.read().contains(&ndarc.inner_addr)
-            //     && !DARC_ADDRS.read().contains(&(darc.inner as usize))
-            // {
-            //     println!(
-            //         "wtf! 0x{:x} -- 0x{:x} (0x{:x}) ",
-            //         ndarc.inner_addr,
-            //         darc.inner as usize,
-            //         darc.inner as usize - lamellae.base_addr()
-            //     );
-            //     for addr in DARC_ADDRS.read().iter() {
-            //         println!("0x{:x} (0x{:x}) ", addr, addr - lamellae.base_addr());
-            //     }
-            // }
-            // darc.print();
             darc
         } else {
             panic!("unexepected lamellae backend {:?}", &ndarc.backend);
@@ -764,16 +696,4 @@ impl<T: ?Sized> From<__NetworkDarc<T>> for Darc<T> {
     }
 }
 
-// pub fn serialize_update_cnts_temp<T: crate::DarcSerde>(
-//     val: T,
-//     cnt: usize,
-//     _cur_pe: Result<usize, IdError>,
-// ) {
-//     // let val_any = val as &dyn std::any::Any;
 
-//     // if let Some(darc) = val_any.downcast_ref::<Darc<_>>() {
-//     //     unsafe {darc.inner.as_ref().unwrap().dist_cnt
-//     //         .fetch_add(cnt, std::sync::atomic::Ordering::SeqCst); }
-//     // }
-//     val.ser(cnt, _cur_pe);
-// }

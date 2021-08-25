@@ -75,20 +75,18 @@ impl WorkStealingThread {
                     && timer.elapsed().as_secs_f64() > 60.0
                     && (worker.work_q.len() > 0 || worker.work_inj.len() > 0)
                 {
-                    // if worker.work_q.len() > 0{
                     println!(
                         "work_q size {:?} work inj size {:?} num_tasks {:?}",
                         worker.work_q.len(),
                         worker.work_inj.len(),
                         num_tasks.load(Ordering::SeqCst)
                     );
-                    // }
                     timer = std::time::Instant::now();
                 }
             }
             fini_prof!();
             active_cnt.fetch_sub(1, Ordering::SeqCst);
-            println!("TestSchdulerWorker thread shutting down");
+            // println!("TestSchdulerWorker thread shutting down");
         })
     }
 }
@@ -214,8 +212,8 @@ impl AmeSchedulerQueue for WorkStealingInner {
     }
 
     fn active(&self) -> bool {
-        println!("sched active {:?} {:?}",self.active.load(Ordering::SeqCst) , self.num_tasks.load(Ordering::SeqCst));
-        self.active.load(Ordering::SeqCst) || self.num_tasks.load(Ordering::SeqCst) > 1//|| self.active_cnt.load(Ordering::SeqCst) != 0
+        // println!("sched active {:?} {:?}",self.active.load(Ordering::SeqCst) , self.num_tasks.load(Ordering::SeqCst));
+        self.active.load(Ordering::SeqCst) || self.num_tasks.load(Ordering::SeqCst) > 1
     }
 }
 

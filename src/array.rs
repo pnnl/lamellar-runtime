@@ -45,7 +45,7 @@ pub struct ReduceKey {
 }
 crate::inventory::collect!(ReduceKey);
 
-// lamellar_impl::generate_reductions_for_type_rt!(u8, u16, u32, u64, u128, usize);
+// lamellar_impl::generate_reductions_for_type_rt!(u8);//, u16, u32, u64, u128, usize);
 // lamellar_impl::generate_reductions_for_type_rt!(i8, i16, i32, i64, i128, isize);
 // lamellar_impl::generate_reductions_for_type_rt!(f32, f64);
 
@@ -56,7 +56,6 @@ pub enum Distribution {
 }
 
 #[enum_dispatch(RegisteredMemoryRegion<T>, SubRegion<T>, MyFrom<T>)]
-// #[derive(serde::Serialize, serde::Deserialize, Clone)]
 #[derive(Clone)]
 pub enum LamellarArrayInput<T: Dist + 'static> {
     LamellarMemRegion(LamellarMemoryRegion<T>),
@@ -103,7 +102,7 @@ where
     }
 }
 
-#[enum_dispatch(LamellarArrayRDMA<T>)]
+#[enum_dispatch(LamellarArrayRDMA<T>)]//,LamellarArrayReduce<T>)]
 #[derive(serde::Serialize, serde::Deserialize)]
 pub enum LamellarArray<T: Dist + 'static> {
     Unsafe(UnsafeArray<T>),
@@ -115,32 +114,15 @@ where
     T: Dist + 'static,
 {
     fn put<U: MyInto<LamellarArrayInput<T>>>(&self, index: usize, buf: U);
-    // fn put<U: Into<LamellarArrayInput<T>>>(&self, index: usize, buf: U);
-    // pub fn put_indirect(self, index: usize, buf: &impl LamellarBuffer<T>);
     fn get<U: MyInto<LamellarArrayInput<T>>>(&self, index: usize, buf: U);
-    // fn get_raw_mem_region(&self) -> LamellarMemoryRegion<T>;
-    // pub fn get_indirect(self, index: usize, buf: &mut impl LamellarBuffer<T>); //do we need a LamellarBufferMut?
     fn local_as_slice(&self) -> &[T];
 }
 
-// pub enum LamellarArrayElem<T: Dist +'static> {
-//     UnsafeElem(UnsafeElem<T>),
-// }
 
-// impl<T> LamellarArrayElem<T>
-// where T: Dist +'static{
-//     pub fn set(&self, index)
-// }
 
 // pub trait LamellarArrayReduce<T>: LamellarArrayRDMA<T>
-// // + std::ops::Index + std::ops::IndexMut
 // where
-//     T: serde::ser::Serialize
-//         + serde::de::DeserializeOwned
-//         + std::clone::Clone
-//         + Send
-//         + Sync
-//         + std::fmt::Debug,
+//     T: Dist + 'static,
 // {
 //     fn wait_all(&self);
 //     fn get_reduction_op(&self, op: String) -> LamellarArcAm {

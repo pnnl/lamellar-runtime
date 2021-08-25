@@ -33,8 +33,7 @@ impl std::fmt::Display for MemNotLocalError {
 }
 
 impl std::error::Error for MemNotLocalError {}
-pub trait Dist: //serde::ser::Serialize
-//+ serde::de::DeserializeOwned
+pub trait Dist: 
 std::clone::Clone
 + Send
 + Sync {}
@@ -45,7 +44,6 @@ impl<T: serde::ser::Serialize + serde::de::DeserializeOwned + std::clone::Clone 
 }
 
 #[enum_dispatch(RegisteredMemoryRegion<T>, MemRegionId, AsBase, SubRegion<T>, MemoryRegionRDMA<T>, RTMemoryRegionRDMA<T>)]
-// #[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
 #[derive( Clone, Debug)]
 pub enum LamellarMemoryRegion<T: Dist + 'static> {
     Shared(SharedMemoryRegion<T>),
@@ -126,7 +124,8 @@ impl<T: Dist + 'static> Eq for LamellarMemoryRegion<T> {}
 // this is not intended to be accessed directly by a user
 // it will be wrapped in either a shared region or local region
 // in shared regions its wrapped in a darc which allows us to send
-// to different nodes, in local we dont currently support serialization
+// to different nodes, in local its wrapped in Arc (we dont currently support sending to other nodes)
+// for local we would probably need to develop something like a one-sided initiated darc...
 pub(crate) struct MemoryRegion<T: Dist + 'static> {
     addr: usize,
     pe: usize,
@@ -144,9 +143,6 @@ impl<T: Dist + 'static> MemoryRegion<T> {
         lamellae: Arc<Lamellae>,
         alloc: AllocationType,
     ) -> MemoryRegion<T> {
-        let cnt = Arc::new(AtomicUsize::new(1));
-        // ACTIVE.insert(lamellae.backend(), lamellae.clone(), cnt.clone());
-        // let rdma = lamellae.clone();
         // println!("creating new lamellar memory region {:?}",size * std::mem::size_of::<T>());
         let mut local = false;
         let addr = if size > 0 {
@@ -171,11 +167,11 @@ impl<T: Dist + 'static> MemoryRegion<T> {
             local: local,
             phantom: PhantomData,
         };
-        println!(
-            "new memregion {:x} {:x}",
-            temp.addr,
-            size * std::mem::size_of::<T>()
-        );
+        // println!(
+        //     "new memregion {:x} {:x}",
+        //     temp.addr,
+        //     size * std::mem::size_of::<T>()
+        // );
         temp
     }
 
@@ -217,7 +213,6 @@ impl<T: Dist + 'static> MemoryRegion<T> {
         data: U,
     ) {
         //todo make return a result?
-        
         let data = data.into();
         if (index + data.len()) * std::mem::size_of::<R>() <= self.num_bytes {
             let num_bytes = data.len() * std::mem::size_of::<R>();
@@ -431,85 +426,6 @@ impl<T: Dist + 'static> MemRegionId for MemoryRegion<T> {
 }
 
   
-
-// #[derive(serde::Serialize, serde::Deserialize, Clone, Copy)]
-// pub struct __NetworkMemoryRegion<T: Dist + 'static> {
-//     // orig_addr: usize,
-//     addr: usize,
-//     pe: usize,
-//     size: usize,
-//     backend: Backend,
-//     local: bool,
-//     phantom: PhantomData<T>,
-// }
-
-// lazy_static! {
-//     static ref ACTIVE: CountedHashMap = CountedHashMap::new();
-// }
-
-// struct CountedHashMap {
-//     lock: RwLock<CountedHashMapInner>,
-// }
-// unsafe impl Send for CountedHashMap {}
-
-// struct CountedHashMapInner {
-//     cnts: HashMap<Backend, usize>,
-//     lamellaes: HashMap<Backend, (Arc<Lamellae>, Arc<AtomicUsize>)>,
-// }
-
-// //#[prof]
-// impl CountedHashMap {
-//     pub fn new() -> CountedHashMap {
-//         CountedHashMap {
-//             lock: RwLock::new(CountedHashMapInner {
-//                 cnts: HashMap::new(),
-//                 lamellaes: HashMap::new(),
-//             }),
-//         }
-//     }
-//     #[allow(dead_code)]
-//     pub fn print(&self) {
-//         for (k, v) in self.lock.read().lamellaes.iter() {
-//             println!(
-//                 "backend: {:?} {:?} {:?}",
-//                 k,
-//                 Arc::strong_count(&v.0),
-//                 v.1.load(Ordering::Relaxed)
-//             );
-//         }
-//     }
-
-//     pub fn insert(&self, backend: Backend, lamellae: Arc<Lamellae>, cnt: Arc<AtomicUsize>) {
-//         let mut map = self.lock.write();
-//         let mut insert = false;
-//         *map.cnts.entry(backend).or_insert_with(|| {
-//             insert = true;
-//             0
-//         }) += 1;
-//         if insert {
-//             map.lamellaes.insert(backend, (lamellae, cnt));
-//         }
-//     }
-
-//     pub fn remove(&self, backend: Backend) {
-//         let mut map = self.lock.write();
-//         if let Some(cnt) = map.cnts.get_mut(&backend) {
-//             *cnt -= 1;
-//             if *cnt == 0 {
-//                 map.lamellaes.remove(&backend);
-//                 map.cnts.remove(&backend);
-//             }
-//         } else {
-//             panic!("trying to remove key that does not exist");
-//         }
-//     }
-
-//     pub fn get(&self, backend: Backend) -> (Arc<Lamellae>, Arc<AtomicUsize>) {
-//         let map = self.lock.read();
-//         map.lamellaes.get(&backend).expect("invalid key").clone()
-//     }
-// }
-
 pub trait RemoteMemoryRegion {
     /// allocate a shared memory region from the asymmetric heap
     ///
@@ -550,24 +466,6 @@ pub trait RemoteMemoryRegion {
     fn free_local_memory_region<T: Dist + 'static>(&self, region: LocalMemoryRegion<T>);
 }
 
-//#[prof]
-// impl<T: Dist + 'static> Clone for MemoryRegion<T> {
-//     fn clone(&self) -> Self {
-//         let mr = MemoryRegion {
-//             addr: self.addr,
-//             pe: self.pe,
-//             size: self.size,
-//             backend: self.backend,
-//             rdma: self.rdma.clone(),
-//             local: self.local,
-//             phantom: self.phantom,
-//         };
-//         // println!("clone: {:?}",lmr);
-//         // println!("nlmr: addr: {:?} size: {:?} backend {:?}, lmr: addr: {:?} size: {:?} backend {:?}",reg.addr,reg.size,reg.backend,lmr.addr,lmr.size,lmr.backend);
-//         mr
-//     }
-// }
-
 impl<T: Dist + 'static> Drop for MemoryRegion<T> {
     fn drop(&mut self) {
         // println!("trying to dropping mem region {:?}",self);
@@ -578,51 +476,9 @@ impl<T: Dist + 'static> Drop for MemoryRegion<T> {
                 self.rdma.free(self.addr);
             }
         }
-        println!("dropping mem region {:?}",self);
+        // println!("dropping mem region {:?}",self);
     }
 }
-
-// impl<T: Dist + 'static> From<MemoryRegion<T>> for __NetworkMemoryRegion<T> {
-//     fn from(reg: MemoryRegion<T>) -> Self {
-//         let nmr = __NetworkMemoryRegion {
-//             // orig_addr: reg.orig_addr,
-//             addr: reg.addr, //- ACTIVE.get(reg.backend).0.get_rdma().local_addr(reg.key), //.base_addr(), //remove if we are able to use two separate memory regions
-//             pe: reg.pe,
-//             size: reg.size,
-//             backend: reg.backend,
-//             local: reg.local,
-//             phantom: reg.phantom,
-//         };
-//         // println!("lmr: addr: {:x} pe: {:?} size: {:?} backend {:?}, nlmr: addr: {:x} pe: {:?} size: {:?} backend {:?}",reg.addr,reg.pe,reg.size,reg.backend,nlmr.addr,nlmr.pe,nlmr.size,nlmr.backend);
-//         nmr
-//     }
-// }
-
-// //#[prof]
-// impl<T: Dist + 'static> From<__NetworkMemoryRegion<T>> for MemoryRegion<T> {
-//     fn from(reg: __NetworkMemoryRegion<T>) -> Self {
-//         let temp = ACTIVE.get(reg.backend);
-//         temp.1.fetch_add(1, Ordering::SeqCst);
-//         let rdma = temp.0;
-//         let addr = if reg.addr != 0 {
-//             rdma.local_addr(reg.pe, reg.addr)
-//         } else {
-//             0
-//         };
-//         let mr = MemoryRegion {
-//             // orig_addr: rdma.local_addr(reg.pe, reg.orig_addr),
-//             addr: addr,
-//             pe: rdma.my_pe(),
-//             size: reg.size,
-//             backend: reg.backend,
-//             rdma: rdma,
-//             local: reg.local,
-//             phantom: reg.phantom,
-//         };
-//         // println!("nlmr: addr {:x} pe: {:?} size: {:?} backend {:?}, lmr: addr: {:x} pe: {:?} size: {:?} backend {:?} cnt {:?}",reg.addr,reg.pe,reg.size,reg.backend,lmr.addr,lmr.pe,lmr.size,lmr.backend, lmr.cnt.load(Ordering::SeqCst));
-//         mr
-//     }
-// }
 
 // #[prof]
 impl<T: Dist + 'static> std::fmt::Debug for MemoryRegion<T> {

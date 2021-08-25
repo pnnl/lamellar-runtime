@@ -99,7 +99,7 @@ fn main() {
     }
     world.barrier();
     let mut index = 0;
-    while index < 1 { //ARRAY_LEN/num_pes {
+    while index < ARRAY_LEN/num_pes {
         world.exec_am_all(RdmaAM {
             array: array.clone(),
             orig_pe: my_pe,

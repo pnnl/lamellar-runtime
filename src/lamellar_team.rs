@@ -234,13 +234,13 @@ impl LamellarTeamRT {
         //     // this is probably mismatched frees.
         //     self.barrier.barrier();
         // }
-        println!("sechduler_new: {:?}", Arc::strong_count(&self.scheduler));
-        println!("lamellae: {:?}", Arc::strong_count(&self.lamellae));
-        println!("arch: {:?}", Arc::strong_count(&self.arch));
-        println!(
-            "world_counters: {:?}",
-            Arc::strong_count(&self.world_counters)
-        );
+        // println!("sechduler_new: {:?}", Arc::strong_count(&self.scheduler));
+        // println!("lamellae: {:?}", Arc::strong_count(&self.lamellae));
+        // println!("arch: {:?}", Arc::strong_count(&self.arch));
+        // println!(
+        //     "world_counters: {:?}",
+        //     Arc::strong_count(&self.world_counters)
+        // );
         self.mem_regions.write().clear();
         self.sub_teams.write().clear(); // not sure this is necessary or should be allowed? sub teams delete themselves from this map when dropped...
                                         // what does it mean if we drop a parent team while a sub_team is valid?
@@ -251,13 +251,13 @@ impl LamellarTeamRT {
             self.drop_barrier();
             self.lamellae.shutdown();
         }
-        println!("sechduler_new: {:?}", Arc::strong_count(&self.scheduler));
-        println!("lamellae: {:?}", Arc::strong_count(&self.lamellae));
-        println!("arch: {:?}", Arc::strong_count(&self.arch));
-        println!(
-            "world_counters: {:?}",
-            Arc::strong_count(&self.world_counters)
-        );
+        // println!("sechduler_new: {:?}", Arc::strong_count(&self.scheduler));
+        // println!("lamellae: {:?}", Arc::strong_count(&self.lamellae));
+        // println!("arch: {:?}", Arc::strong_count(&self.arch));
+        // println!(
+        //     "world_counters: {:?}",
+        //     Arc::strong_count(&self.world_counters)
+        // );
     }
     #[allow(dead_code)]
     pub fn get_pes(&self) -> Vec<usize> {
@@ -1014,19 +1014,19 @@ impl Drop for LamellarTeamRT {
         // println!("lamellae: {:?}",Arc::strong_count(&self.lamellae));
         // println!("arch: {:?}",Arc::strong_count(&self.arch));
         // println!("world_counters: {:?}",Arc::strong_count(&self.world_counters));
-        println!("LamellarTeamRT dropped");
-        // if let None = &self.parent {
-        //     self.lamellae.shutdown(); //do we want to shutdown the scheduler first?
-        //     println!("shutdown lamellae, going to shutdown scheduler");
-        //     self.scheduler.shutdown();
-        // }
-        println!("sechduler_new: {:?}", Arc::strong_count(&self.scheduler));
-        println!("lamellae: {:?}", Arc::strong_count(&self.lamellae));
-        println!("arch: {:?}", Arc::strong_count(&self.arch));
-        println!(
-            "world_counters: {:?}",
-            Arc::strong_count(&self.world_counters)
-        );
+        // println!("LamellarTeamRT dropped");
+        // // if let None = &self.parent {
+        // //     self.lamellae.shutdown(); //do we want to shutdown the scheduler first?
+        // //     println!("shutdown lamellae, going to shutdown scheduler");
+        // //     self.scheduler.shutdown();
+        // // }
+        // println!("sechduler_new: {:?}", Arc::strong_count(&self.scheduler));
+        // println!("lamellae: {:?}", Arc::strong_count(&self.lamellae));
+        // println!("arch: {:?}", Arc::strong_count(&self.arch));
+        // println!(
+        //     "world_counters: {:?}",
+        //     Arc::strong_count(&self.world_counters)
+        // );
         println!("LamellarTeamRT dropped");
     }
 }

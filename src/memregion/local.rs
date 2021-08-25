@@ -13,7 +13,6 @@ use std::sync::Arc;
 
 use std::ops::{Bound, RangeBounds};
 
-// #[derive(serde::Serialize, serde::Deserialize, Clone)]
 #[derive(Clone)]
 pub struct LocalMemoryRegion<T: Dist + 'static> {
     mr: Arc<MemoryRegion<u8>>,
@@ -67,7 +66,6 @@ impl<T: Dist + 'static> LocalMemoryRegion<T> {
     }
 }
 
-//account for subregion stuff
 impl<T: Dist + 'static> RegisteredMemoryRegion<T> for LocalMemoryRegion<T> {
     fn len(&self) -> usize {
         self.sub_region_size
@@ -141,7 +139,6 @@ impl<T: Dist + 'static> MemRegionId for LocalMemoryRegion<T> {
     }
 }
 
-//fixme
 impl<T: Dist + 'static> SubRegion<T> for LocalMemoryRegion<T> {
     fn sub_region<R: std::ops::RangeBounds<usize>>(&self, range: R) -> LamellarMemoryRegion<T> {
         let start = match range.start_bound() {
@@ -176,7 +173,6 @@ impl<T: Dist + 'static> SubRegion<T> for LocalMemoryRegion<T> {
     }
 }
 
-//fixme
 impl<T: Dist + 'static> AsBase for LocalMemoryRegion<T> {
     unsafe fn as_base<B: Dist + 'static>(self) -> LamellarMemoryRegion<B> {
 
@@ -197,7 +193,6 @@ impl<T: Dist + 'static> MemoryRegionRDMA<T> for LocalMemoryRegion<T> {
     unsafe fn put<U: Into<LamellarMemoryRegion<T>>>(&self, pe: usize, index: usize, data: U) {
         if self.pe == pe {
             self.mr.put(pe, self.sub_region_offset + index, data);
-            // self.mr.put(pe, index, data);
         } else {
             panic!(
                 "trying to put to PE {:?} which does not contain data (pe with data =  {:?})",
@@ -220,12 +215,10 @@ impl<T: Dist + 'static> MemoryRegionRDMA<T> for LocalMemoryRegion<T> {
     }
     unsafe fn put_all<U: Into<LamellarMemoryRegion<T>>>(&self, index: usize, data: U) {
         self.mr.put_all(self.sub_region_offset + index, data);
-        // self.mr.put_all(index, data);
     }
     unsafe fn get<U: Into<LamellarMemoryRegion<T>>>(&self, pe: usize, index: usize, data: U) {
         if self.pe == pe {
             self.mr.get(pe, self.sub_region_offset + index, data);
-        // self.mr.get(pe, index, data);
         } else {
             panic!(
                 "trying to get from PE {:?} which does not contain data (pe with data =  {:?})",
@@ -240,7 +233,6 @@ impl<T: Dist + 'static> RTMemoryRegionRDMA<T> for LocalMemoryRegion<T> {
     unsafe fn put_slice(&self, pe: usize, index: usize, data: &[T]) {
         if self.pe == pe {
             self.mr.put_slice(pe, self.sub_region_offset + index, data)
-        // self.mr.put_slice(pe, index, data)
         } else {
             panic!(
                 "trying to put to PE {:?} which does not contain data (pe with data =  {:?})",
@@ -253,8 +245,6 @@ impl<T: Dist + 'static> RTMemoryRegionRDMA<T> for LocalMemoryRegion<T> {
 
 impl<T: Dist + 'static> std::fmt::Debug for LocalMemoryRegion<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        // let slice = unsafe { std::slice::from_raw_parts(self.addr as *const T, self.size) };
-        // write!(f, "{:?}", slice)
         write!(f, "[{:?}] local mem region:  {:?} ", self.pe, self.mr,)
     }
 }
