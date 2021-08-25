@@ -881,10 +881,10 @@ impl RemoteMemoryRegion for Arc<LamellarTeam> {
                 AllocationType::Sub(self.team.arch.team_iter().collect::<Vec<usize>>()),
             )
         };
-        self.team
-            .mem_regions
-            .write()
-            .insert(mr.id(), Box::new(unsafe { mr.clone().as_base::<u8>() }));
+        // self.team
+        //     .mem_regions
+        //     .write()
+        //     .insert(mr.id(), Box::new(unsafe { mr.clone().as_base::<u8>() }));
         self.team.barrier.barrier();
         mr
         // println!("alloc_mem_reg: {:?}",self.world_pe);
@@ -900,10 +900,10 @@ impl RemoteMemoryRegion for Arc<LamellarTeam> {
     fn alloc_local_mem_region<T: Dist + 'static>(&self, size: usize) -> LocalMemoryRegion<T> {
         let lmr: LocalMemoryRegion<T> =
             LocalMemoryRegion::new(size, self.team.lamellae.clone()).into();
-        self.team
-            .mem_regions
-            .write()
-            .insert(lmr.id(), Box::new(unsafe { lmr.clone().as_base::<u8>() }));
+        // self.team
+        //     .mem_regions
+        //     .write()
+        //     .insert(lmr.id(), Box::new(unsafe { lmr.clone().as_base::<u8>() }));
         // println!("alloc_mem_reg: {:?}",llmr);
         lmr
         // println!("alloc_mem_reg: {:?}",self.world_pe);
@@ -918,7 +918,7 @@ impl RemoteMemoryRegion for Arc<LamellarTeam> {
     ///
     fn free_shared_memory_region<T: Dist + 'static>(&self, region: SharedMemoryRegion<T>) {
         self.team.barrier.barrier();
-        self.team.mem_regions.write().remove(&region.id());
+        // self.team.mem_regions.write().remove(&region.id());
         // self.team.free_shared_memory_region(region)
     }
 
@@ -929,7 +929,7 @@ impl RemoteMemoryRegion for Arc<LamellarTeam> {
     /// * `region` - the region to free
     ///
     fn free_local_memory_region<T: Dist + 'static>(&self, region: LocalMemoryRegion<T>) {
-        self.team.mem_regions.write().remove(&region.id());
+        // self.team.mem_regions.write().remove(&region.id());
         // self.team.free_local_memory_region(region)
     }
 }

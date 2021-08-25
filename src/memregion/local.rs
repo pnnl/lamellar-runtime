@@ -25,7 +25,7 @@ pub struct LocalMemoryRegion<T: Dist + 'static> {
 
 impl<T: Dist + 'static> LocalMemoryRegion<T> {
     pub(crate) fn new(size: usize, lamellae: Arc<Lamellae>) -> LocalMemoryRegion<T> {
-        let mr = Arc::new(MemoryRegion::new(size, lamellae, AllocationType::Local));
+        let mr = Arc::new(MemoryRegion::new(size*std::mem::size_of::<T>(), lamellae, AllocationType::Local));
         let pe = mr.pe;
         LocalMemoryRegion { 
             mr: mr, 

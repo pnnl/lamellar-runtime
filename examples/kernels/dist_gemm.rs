@@ -154,44 +154,44 @@ fn do_gemm(
     // lamellar::world.free_local_memory_region(a);
 }
 
-#[lamellar::AmData(Clone, Debug)]
-struct CachedMM {
-    a: SubMatrix,
-    b: LocalMemoryRegion<f32>,
-    c: SubMatrix,
-    block_size: usize,
-}
-#[lamellar::am]
-impl LamellarAM for CachedMM {
-    fn exec() {
-        let a =
-            lamellar::world.alloc_local_mem_region::<f32>(self.a.block_size * self.a.block_size);
-        get_sub_mat(&self.a, &a).await; //this should be local copy so returns immediately
-                                        // let b = self.b.as_slice();
-        let block_size = self.block_size;
-        let mut res = vec![f32::NAN; a.len()];
-        unsafe {
-            sgemm(
-                block_size,
-                block_size,
-                block_size,
-                1.0,
-                a.as_ptr().unwrap(),
-                block_size as isize,
-                1,
-                self.b.as_ptr().unwrap(),
-                block_size as isize,
-                1,
-                0.0,
-                res.as_mut_ptr(),
-                block_size as isize,
-                1,
-            );
-        }
-        self.c.add_mat(&res);
-        lamellar::world.free_local_memory_region(a);
-    }
-}
+// #[lamellar::AmData(Clone, Debug)]
+// struct CachedMM {
+//     a: SubMatrix,
+//     b: LocalMemoryRegion<f32>,
+//     c: SubMatrix,
+//     block_size: usize,
+// }
+// #[lamellar::am]
+// impl LamellarAM for CachedMM {
+//     fn exec() {
+//         let a =
+//             lamellar::world.alloc_local_mem_region::<f32>(self.a.block_size * self.a.block_size);
+//         get_sub_mat(&self.a, &a).await; //this should be local copy so returns immediately
+//                                         // let b = self.b.as_slice();
+//         let block_size = self.block_size;
+//         let mut res = vec![f32::NAN; a.len()];
+//         unsafe {
+//             sgemm(
+//                 block_size,
+//                 block_size,
+//                 block_size,
+//                 1.0,
+//                 a.as_ptr().unwrap(),
+//                 block_size as isize,
+//                 1,
+//                 self.b.as_ptr().unwrap(),
+//                 block_size as isize,
+//                 1,
+//                 0.0,
+//                 res.as_mut_ptr(),
+//                 block_size as isize,
+//                 1,
+//             );
+//         }
+//         self.c.add_mat(&res);
+//         lamellar::world.free_local_memory_region(a);
+//     }
+// }
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
