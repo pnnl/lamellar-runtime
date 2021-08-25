@@ -1,5 +1,6 @@
 use lamellar::{ActiveMessaging, Darc, GlobalRwDarc, LocalRwDarc, StridedArch};
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
 
 #[lamellar::AmData(Clone)]
 struct DarcAm {
@@ -8,7 +9,9 @@ struct DarcAm {
     lrw_darc: LocalRwDarc<usize>,
     wrapped: WrappedWrappedWrappedDarc,
     wrapped_tuple: (WrappedWrappedWrappedDarc, WrappedWrappedWrappedDarc),
-    darc_tuple: ( Darc<usize>, Darc<usize>,) // not supported, but the macro catches it and forces compiler to fail
+    darc_tuple: ( Darc<usize>, Darc<usize>,), // not supported, but the macro catches it and forces compiler to fail
+    // #[serde(serialize_with="lamellar::darc_serialize")]
+    my_arc: Darc<Arc<usize>>
 }
 
 #[lamellar::am]
@@ -82,7 +85,8 @@ fn main() {
                 global_darc: global_darc.clone(),
                 wrapped: wrapped.clone(),
                 wrapped_tuple: (wrapped.clone(), wrapped.clone()),
-                darc_tuple: ( darc1.clone(), darc2.clone() )
+                darc_tuple: ( darc1.clone(), darc2.clone() ),
+                my_arc: Darc::new(team.clone(),Arc::new(0)).unwrap(),
             };
             team.exec_am_pe(0, darc_am.clone());
             team.exec_am_all(darc_am);

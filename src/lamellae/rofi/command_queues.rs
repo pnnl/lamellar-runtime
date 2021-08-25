@@ -898,7 +898,7 @@ impl RofiCommandQueue{
         let num_pes = lamellae.num_pes();
         let my_pe = lamellae.my_pe();
         // let mut timer= std::time::Instant::now();
-        while active.load(Ordering::SeqCst) == 1u8 || !self.cq.empty(){
+        while active.load(Ordering::SeqCst) == 1u8 || !self.cq.empty() || scheduler.active() {
             for src in 0..num_pes{
                 if src != my_pe{
                     if let Some(cmd_buf_cmd) = self.cq.ready(src){
@@ -966,9 +966,12 @@ impl RofiCommandQueue{
             //     timer = std::time::Instant::now();
             // }
             // self.rofi_comm.process_dropped_reqs();
+            if active.load(Ordering::SeqCst) != 1{
+                println!("command queue sched active? {:?}  {:?}",scheduler.active(),self.cq.empty());
+            }
             async_std::task::yield_now().await;
         }
-        println!("leaving recv_data task");
+        println!("leaving recv_data task {:?}",scheduler.active());
         active.store(2,Ordering::SeqCst);
     }
 

@@ -15,18 +15,11 @@ use std::sync::Arc;
 
 use std::ops::{Bound, RangeBounds};
 
-// #[derive(serde::Serialize, serde::Deserialize)]
-// #[serde(
-//     into = "__NetworkMemoryRegion<T>",
-//     from = "__NetworkMemoryRegion<T>"
-// )]
 
-// #[derive(serde::Serialize, serde::Deserialize, Clone)]
-#[lamellar_impl::AmDataRT(Clone)]
-// #[serde(bound(serialize="T: serde::Serialize", deserialize="T: serde::Deserialize<'de>"))]
+// #[lamellar_impl::AmDataRT(Clone)]
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
 pub struct SharedMemoryRegion<T: Dist + 'static> {
-    
-    mr: Darc<MemoryRegion<u8>>,
+    pub(crate) mr: Darc<MemoryRegion<u8>>,
     sub_region_offset: usize,
     sub_region_size: usize,
     phantom: PhantomData<T>,
@@ -42,14 +35,15 @@ impl<T: Dist + 'static> SharedMemoryRegion<T> {
         team: Arc<LamellarTeam>,
         alloc: AllocationType,
     ) -> SharedMemoryRegion<T> {
+        println!("new shared memregion");
         SharedMemoryRegion {
             mr: Darc::new(
                 team.clone(),
-                MemoryRegion::new(size, team.team.lamellae.clone(), alloc),
+                MemoryRegion::new(size*std::mem::size_of::<T>(), team.team.lamellae.clone(), alloc),
             )
             .expect("memregions can only be created on a member of the team"),
             sub_region_offset: 0,
-            sub_region_size: 0,
+            sub_region_size: size,
             phantom: PhantomData,
         }
     }
@@ -84,25 +78,50 @@ impl<T: Dist + 'static> SharedMemoryRegion<T> {
         RegisteredMemoryRegion::<T>::as_mut_ptr(self)
     }
 }
-
+//account for subregion stuff
 impl<T: Dist + 'static> RegisteredMemoryRegion<T> for SharedMemoryRegion<T> {
-    fn len(&self) -> usize {
-        self.mr.len()
+    fn len(&self) -> usize { 
+        self.sub_region_size
     }
     fn addr(&self) -> MemResult<usize> {
-        self.mr.addr()
+        if let Ok(addr) = self.mr.addr(){
+            Ok(addr + self.sub_region_offset * std::mem::size_of::<T>())
+        }
+        else{
+            Err(MemNotLocalError {})
+        }
     }
     fn as_slice(&self) -> MemResult<&[T]> {
-        self.mr.as_casted_slice::<T>()
+        if let Ok(slice) = self.mr.as_casted_slice::<T>(){
+            Ok(&slice[self.sub_region_offset..(self.sub_region_offset+self.sub_region_size)])
+        }
+        else{
+            Err(MemNotLocalError {})
+        }
     }
     unsafe fn as_mut_slice(&self) -> MemResult<&mut [T]> {
-        self.mr.as_casted_mut_slice::<T>()
+        if let Ok(slice) = self.mr.as_casted_mut_slice::<T>(){
+            Ok(&mut slice[self.sub_region_offset..(self.sub_region_offset+self.sub_region_size)])
+        }
+        else{
+            Err(MemNotLocalError {})
+        }
     }
     fn as_ptr(&self) -> MemResult<*const T> {
-        self.mr.as_casted_ptr::<T>()
+        if let Ok(addr) = self.addr(){
+            Ok(addr as *const T)
+        } 
+        else{
+            Err(MemNotLocalError{})
+        }
     }
     fn as_mut_ptr(&self) -> MemResult<*mut T> {
-        self.mr.as_casted_mut_ptr::<T>()
+        if let Ok(addr) = self.addr(){
+            Ok(addr as *mut T)
+        } 
+        else{
+            Err(MemNotLocalError{})
+        }
     }
 }
 
@@ -132,6 +151,7 @@ impl<T: Dist + 'static> SubRegion<T> for SharedMemoryRegion<T> {
                 start, end, self.sub_region_size
             );
         }
+        println!("shared subregion: {:?} {:?} {:?}",start,end,(end-start));
         SharedMemoryRegion {
             mr: self.mr.clone(),
             sub_region_offset: self.sub_region_offset + start,
@@ -148,10 +168,12 @@ impl<T: Dist + 'static> SubRegion<T> for SharedMemoryRegion<T> {
 
 impl<T: Dist + 'static> AsBase for SharedMemoryRegion<T> {
     unsafe fn as_base<B: Dist + 'static>(self) -> LamellarMemoryRegion<B> {
+        let u8_offset = self.sub_region_offset * std::mem::size_of::<T>();
+        let u8_size = self.sub_region_size * std::mem::size_of::<T>();
         SharedMemoryRegion {
             mr: self.mr.clone(),
-            sub_region_offset: self.sub_region_offset,
-            sub_region_size: self.sub_region_size,
+            sub_region_offset: u8_offset/std::mem::size_of::<B>(), 
+            sub_region_size: u8_size/std::mem::size_of::<B>(), 
             phantom: PhantomData,
         }
         .into()
@@ -170,8 +192,8 @@ impl<T: Dist + 'static> MemoryRegionRDMA<T> for SharedMemoryRegion<T> {
         //     println!("{:?} {:?} {:?}", self.sub_region_size, index, len);
         //     panic!("sub_region index out of bounds");
         // }
-        // self.mr.put(pe, self.sub_region_offset + index, data);
-        self.mr.put(pe, index, data);
+        self.mr.put(pe, self.sub_region_offset + index, data);
+        // self.mr.put(pe, index, data);
     }
     fn iput<U: Into<LamellarMemoryRegion<T>>>(&self, pe: usize, index: usize, data: U) {
         // let len = data.clone().into().len();
@@ -179,8 +201,8 @@ impl<T: Dist + 'static> MemoryRegionRDMA<T> for SharedMemoryRegion<T> {
         //     println!("{:?} {:?} {:?}", self.sub_region_size, index, len);
         //     panic!("sub_region index out of bounds");
         // }
-        // self.mr.iput(pe, self.sub_region_offset + index, data);
-        self.mr.iput(pe, index, data);
+        self.mr.iput(pe, self.sub_region_offset + index, data);
+        // self.mr.iput(pe, index, data);
     }
     unsafe fn put_all<U: Into<LamellarMemoryRegion<T>>>(&self, index: usize, data: U) {
         // let len = data.clone().into().len();
@@ -188,8 +210,8 @@ impl<T: Dist + 'static> MemoryRegionRDMA<T> for SharedMemoryRegion<T> {
         //     println!("{:?} {:?} {:?}", self.sub_region_size, index, len);
         //     panic!("sub_region index out of bounds");
         // }
-        // self.mr.put_all(self.sub_region_offset + index, data);
-        self.mr.put_all(index, data);
+        self.mr.put_all(self.sub_region_offset + index, data);
+        // self.mr.put_all(index, data);
     }
     unsafe fn get<U: Into<LamellarMemoryRegion<T>>>(&self, pe: usize, index: usize, data: U) {
         // let len = data.clone().into().len();
@@ -197,8 +219,8 @@ impl<T: Dist + 'static> MemoryRegionRDMA<T> for SharedMemoryRegion<T> {
         //     println!("{:?} {:?} {:?}", self.sub_region_size, index, len);
         //     panic!("sub_region index out of bounds");
         // }
-        // self.mr.get(pe, self.sub_region_offset + index, data);
-        self.mr.get(pe, index, data);
+        self.mr.get(pe, self.sub_region_offset + index, data);
+        // self.mr.get(pe, index, data);
     }
 }
 
@@ -208,8 +230,8 @@ impl<T: Dist + 'static> RTMemoryRegionRDMA<T> for SharedMemoryRegion<T> {
         //     println!("{:?} {:?} {:?}", self.sub_region_size, index, data.len());
         //     panic!("sub_region index out of bounds");
         // }
-        // self.mr.put_slice(pe, self.sub_region_offset + index, data)
-        self.mr.put_slice(pe, index, data)
+        self.mr.put_slice(pe, self.sub_region_offset + index, data)
+        // self.mr.put_slice(pe, index, data)
     }
 }
 
@@ -236,24 +258,36 @@ impl<T: Dist + 'static> MyFrom<&SharedMemoryRegion<T>> for LamellarArrayInput<T>
 // //#[prof]
 // impl<T: Dist + 'static> Drop for SharedMemoryRegion<T> {
 //     fn drop(&mut self) {
-//         let cnt = self.cnt.fetch_sub(1, Ordering::SeqCst);
-//         // //println!("drop: {:?} {:?}",self,cnt);
-
-//         if cnt == 1 {
-//             ACTIVE.remove(self.backend);
-//             // println!("trying to dropping mem region {:?}",self);
-//             if self.addr != 0{
-//                 if self.local {
-//                     self.rdma.rt_free(self.addr - self.rdma.base_addr()); // - self.rdma.base_addr());
-//                 } else {
-//                     self.rdma.free(self.addr);
-//                 }
-//             }
-//             // ACTIVE.print();
-//             //println!("dropping mem region {:?}",self);
-//         }
+//         println!("dropping shared memory region");
 //     }
 // }
+
+impl<T: Dist + 'static> crate::DarcSerde for SharedMemoryRegion<T> {
+    fn ser(&self, num_pes: usize, cur_pe: Result<usize, crate::IdError>) {
+        println!("in shared ser");
+        match cur_pe {
+            Ok(cur_pe) => {
+                self.mr.serialize_update_cnts(num_pes, cur_pe);
+            }
+            Err(err) => {
+                panic!("can only access darcs within team members ({:?})", err);
+            }
+        }
+    }
+    fn des(&self, cur_pe: Result<usize, crate::IdError>) {
+        println!("in shared des");
+        
+        match cur_pe {
+            Ok(cur_pe) => {
+                self.mr.deserialize_update_cnts(cur_pe);
+            }
+            Err(err) => {
+                panic!("can only access darcs within team members ({:?})", err);
+            }
+        }
+        self.mr.print();
+    }
+}
 
 //#[prof]
 // impl<T: Dist + 'static> std::fmt::Debug for SharedMemoryRegion<T> {

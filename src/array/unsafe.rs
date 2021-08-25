@@ -28,7 +28,7 @@ use std::sync::Arc;
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 #[serde(into = "__NetworkUnsafeArray<T>", from = "__NetworkUnsafeArray<T>")]
 pub struct UnsafeArray<T: Dist + 'static> {
-    mem_region: Darc<SharedMemoryRegion<T>>,
+    mem_region: SharedMemoryRegion<T>,
     size: usize,      //total array size
     elem_per_pe: f32, //used to evenly distribute elems
     num_elems_local: usize,
@@ -65,16 +65,19 @@ impl<T: Dist + 'static> UnsafeArray<T> {
             }
         };
         let per_pe_size = (array_size as f32 / team.num_pes() as f32).ceil() as usize; //we do ceil to ensure enough space an each pe
-        println!("{:?} {:?} {:?}", elem_per_pe, num_elems_local, per_pe_size);
+        println!("new unsafe array {:?} {:?} {:?}", elem_per_pe, num_elems_local, per_pe_size);
         let rmr: SharedMemoryRegion<T> = team.alloc_shared_mem_region(per_pe_size);
+        println!("goint to init array");
         unsafe {
             for elem in rmr.clone().as_base::<u8>().as_mut_slice().unwrap() {
                 *elem = 0;
             }
         }
+        println!("after array init");
         UnsafeArray {
-            mem_region: Darc::new(team.clone(), rmr)
-                .expect("trying to create array on non team member"),
+            // mem_region: Darc::new(team.clone(), rmr)
+            //     .expect("trying to create array on non team member"),
+            mem_region: rmr,   
             size: array_size,
             elem_per_pe: elem_per_pe,
             num_elems_local: num_elems_local,
@@ -230,28 +233,37 @@ impl<T: Dist + 'static> LamellarArrayRDMA<T> for UnsafeArray<T> {
     // }
 }
 
+// impl<T: Dist + 'static> Drop for UnsafeArray<T> {
+//     fn drop(&mut self) {
+//         println!("dropping unsafe array");
+//     }
+// }
+
 impl<T: Dist + 'static> crate::DarcSerde for UnsafeArray<T> {
     fn ser(&self, num_pes: usize, cur_pe: Result<usize, crate::IdError>) {
-        // println!("in unsafearray ser");
-        match cur_pe {
-            Ok(cur_pe) => {
-                self.mem_region.serialize_update_cnts(num_pes, cur_pe);
-            }
-            Err(err) => {
-                panic!("can only access darcs within team members ({:?})", err);
-            }
-        }
+        println!("in unsafearray ser");
+        self.mem_region.ser(num_pes, cur_pe);
+        // match cur_pe {
+        //     Ok(cur_pe) => {
+        //         self.mem_region.serialize_update_cnts(num_pes, cur_pe);
+        //     }
+        //     Err(err) => {
+        //         panic!("can only access darcs within team members ({:?})", err);
+        //     }
+        // }
     }
     fn des(&self, cur_pe: Result<usize, crate::IdError>) {
-        // println!("in unsafearray des");
-        match cur_pe {
-            Ok(cur_pe) => {
-                self.mem_region.deserialize_update_cnts(cur_pe);
-            }
-            Err(err) => {
-                panic!("can only access darcs within team members ({:?})", err);
-            }
-        }
+
+        println!("in unsafearray des");
+        self.mem_region.des(cur_pe);
+        // match cur_pe {
+        //     Ok(cur_pe) => {
+        //         self.mem_region.deserialize_update_cnts(cur_pe);
+        //     }
+        //     Err(err) => {
+        //         panic!("can only access darcs within team members ({:?})", err);
+        //     }
+        // }
     }
 }
 
@@ -336,7 +348,7 @@ impl<T: Dist + 'static> crate::DarcSerde for UnsafeArray<T> {
 // #[derive(serde::Serialize, serde::Deserialize, Clone)]
 #[lamellar_impl::AmDataRT(Clone)]
 pub struct __NetworkUnsafeArray<T: Dist + 'static> {
-    mem_region: Darc<SharedMemoryRegion<T>>,
+    mem_region: SharedMemoryRegion<T>,
     size: usize,
     elem_per_pe: f32,
     distribution: Distribution,
@@ -359,7 +371,7 @@ impl<T: Dist + 'static> From<__NetworkUnsafeArray<T>> for UnsafeArray<T> {
     fn from(array: __NetworkUnsafeArray<T>) -> Self {
         // println!("deserializing network unsafe array");
         // array.mem_region.print();
-        let team = array.mem_region.team();
+        let team = array.mem_region.mr.team();
         let elem_per_pe = array.elem_per_pe;
         let num_elems_local = match array.distribution {
             Distribution::Block => {

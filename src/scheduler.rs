@@ -111,6 +111,7 @@ pub(crate) trait AmeSchedulerQueue: Sync + Send {
         F: Future<Output = ()> + Send + 'static;
     fn exec_task(&self);
     fn shutdown(&self);
+    fn active(&self) -> bool;
 }
 
 #[enum_dispatch(SchedulerQueue)]
@@ -150,6 +151,7 @@ pub(crate) trait SchedulerQueue: Sync + Send {
         F: Future<Output = ()> + Send + 'static;
     fn exec_task(&self);
     fn shutdown(&self);
+    fn active(&self) -> bool;
 }
 
 

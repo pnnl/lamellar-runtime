@@ -227,16 +227,37 @@ impl LamellarTeamRT {
 
     pub(crate) fn destroy(&self) {
         // println!("destroying team? {:?}",self.mem_regions.read().len());
-        for _lmr in self.mem_regions.read().iter() {
-            // println!("lmr {:?}",_lmr);
-            //TODO: i have a gut feeling we might have an issue if a mem region was destroyed on one node, but not another
-            // add a barrier method that takes a message so if we are stuck in the barrier for a long time we can say that
-            // this is probably mismatched frees.
-            self.barrier.barrier();
-        }
+        // for _lmr in self.mem_regions.read().iter() {
+        //     // println!("lmr {:?}",_lmr);
+        //     //TODO: i have a gut feeling we might have an issue if a mem region was destroyed on one node, but not another
+        //     // add a barrier method that takes a message so if we are stuck in the barrier for a long time we can say that
+        //     // this is probably mismatched frees.
+        //     self.barrier.barrier();
+        // }
+        println!("sechduler_new: {:?}", Arc::strong_count(&self.scheduler));
+        println!("lamellae: {:?}", Arc::strong_count(&self.lamellae));
+        println!("arch: {:?}", Arc::strong_count(&self.arch));
+        println!(
+            "world_counters: {:?}",
+            Arc::strong_count(&self.world_counters)
+        );
         self.mem_regions.write().clear();
         self.sub_teams.write().clear(); // not sure this is necessary or should be allowed? sub teams delete themselves from this map when dropped...
                                         // what does it mean if we drop a parent team while a sub_team is valid?
+        if let None = &self.parent {
+            println!("shutdown lamellae, going to shutdown scheduler");
+            self.scheduler.shutdown();
+            self.put_dropped();
+            self.drop_barrier();
+            self.lamellae.shutdown();
+        }
+        println!("sechduler_new: {:?}", Arc::strong_count(&self.scheduler));
+        println!("lamellae: {:?}", Arc::strong_count(&self.lamellae));
+        println!("arch: {:?}", Arc::strong_count(&self.arch));
+        println!(
+            "world_counters: {:?}",
+            Arc::strong_count(&self.world_counters)
+        );
     }
     #[allow(dead_code)]
     pub fn get_pes(&self) -> Vec<usize> {
@@ -414,6 +435,21 @@ impl LamellarTeamRT {
                             world_pe,
                             my_index,
                             &temp_slice[my_index..=my_index],
+                        );
+                    }
+                }
+            }
+        } else {
+            let temp_slice = unsafe { self.dropped.as_mut_slice().unwrap() };
+            temp_slice[self.world_pe] = 1;
+            for world_pe in self.arch.team_iter() {
+                if world_pe != self.world_pe {
+                    // println!("putting into dropped {:?} {:?} {:?}",world_pe, my_index, & temp_slice[my_index..=my_index]);
+                    unsafe {
+                        self.dropped.put_slice(
+                            world_pe,
+                            self.world_pe,
+                            &temp_slice[self.world_pe..=self.world_pe],
                         );
                     }
                 }
@@ -978,13 +1014,20 @@ impl Drop for LamellarTeamRT {
         // println!("lamellae: {:?}",Arc::strong_count(&self.lamellae));
         // println!("arch: {:?}",Arc::strong_count(&self.arch));
         // println!("world_counters: {:?}",Arc::strong_count(&self.world_counters));
-        // println!("LamellarTeamRT dropped");
-        if let None = &self.parent {
-            self.lamellae.shutdown(); //do we want to shutdown the scheduler first?
-            self.scheduler.shutdown();
-        }
-
-        // println!("LamellarTeamRT dropped");
+        println!("LamellarTeamRT dropped");
+        // if let None = &self.parent {
+        //     self.lamellae.shutdown(); //do we want to shutdown the scheduler first?
+        //     println!("shutdown lamellae, going to shutdown scheduler");
+        //     self.scheduler.shutdown();
+        // }
+        println!("sechduler_new: {:?}", Arc::strong_count(&self.scheduler));
+        println!("lamellae: {:?}", Arc::strong_count(&self.lamellae));
+        println!("arch: {:?}", Arc::strong_count(&self.arch));
+        println!(
+            "world_counters: {:?}",
+            Arc::strong_count(&self.world_counters)
+        );
+        println!("LamellarTeamRT dropped");
     }
 }
 //         // println!("[{:?}] team dropping {:?}", self.world_pe, self.get_pes());
@@ -1044,13 +1087,13 @@ impl Drop for LamellarTeam {
         // }
         // println!("team: {:?}",Arc::strong_count(&self.team));
         // for (k,tes"team handle dropped");
-        // println!(
-        //     "[{:?}] {:?} team handle dropped {:?} {:?}",
-        //     self.team.world_pe,
-        //     self.team.team_hash,
-        //     self.team.get_pes(),
-        //     self.team.dropped.as_slice()
-        // );
+        println!(
+            "[{:?}] {:?} team handle dropped {:?} {:?}",
+            self.team.world_pe,
+            self.team.team_hash,
+            self.team.get_pes(),
+            self.team.dropped.as_slice()
+        );
         // std::thread::sleep(Duration::from_secs(1));
     }
 }

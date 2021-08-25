@@ -277,26 +277,26 @@ impl LamellarWorld {
 //#[prof]
 impl Drop for LamellarWorld {
     fn drop(&mut self) {
-        // println!("[{:?}] world dropping", self.my_pe);
+        println!("[{:?}] world dropping", self.my_pe);
         self.wait_all();
         // self.team_rt.barrier();
         self.barrier();
         self.team_rt.destroy();
         // self.lamellaes.clear();
-        // for (backend,lamellae) in self.lamellaes_new.iter(){
-        //     println!("lamellae: {:?} {:?}",backend,Arc::strong_count(&lamellae))
-        // }
+        for (backend,lamellae) in self.lamellaes_new.iter(){
+            println!("lamellae: {:?} {:?}",backend,Arc::strong_count(&lamellae))
+        }
         self.lamellaes_new.clear();
         LAMELLAES.write().clear();
 
-        // println!("team: {:?} ",Arc::strong_count(&self.team));
-        // println!("team_rt: {:?} {:?}",&self.team_rt.team_hash,Arc::strong_count(&self.team_rt));
-        // let teams = self.teams.read();
-        //     for (k,team) in teams.iter(){
-        //         println!("team map: {:?} {:?}",k,Weak::strong_count(&team));
-        //     }
+        println!("team: {:?} ",Arc::strong_count(&self.team));
+        println!("team_rt: {:?} {:?}",&self.team_rt.team_hash,Arc::strong_count(&self.team_rt));
+        let teams = self.teams.read();
+            for (k,team) in teams.iter(){
+                println!("team map: {:?} {:?}",k,Weak::strong_count(&team));
+            }
 
-        // println!("counters: {:?}",Arc::strong_count(&self.counters));
+        println!("counters: {:?}",Arc::strong_count(&self.counters));
 
         fini_prof!();
 
@@ -307,7 +307,7 @@ impl Drop for LamellarWorld {
         // for (backend,lamellae) in &self.lamellaes{
         //     lamellae.finit();
         // }
-        // println!("[{:?}] world dropped", self.my_pe);
+        println!("[{:?}] world dropped", self.my_pe);
     }
 }
 

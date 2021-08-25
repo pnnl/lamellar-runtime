@@ -127,12 +127,11 @@ impl<T: Dist + 'static> Eq for LamellarMemoryRegion<T> {}
 // it will be wrapped in either a shared region or local region
 // in shared regions its wrapped in a darc which allows us to send
 // to different nodes, in local we dont currently support serialization
-// #[derive(serde::Serialize, serde::Deserialize)]
-// #[serde(into = "__NetworkMemoryRegion<T>", from = "__NetworkMemoryRegion<T>")]
 pub(crate) struct MemoryRegion<T: Dist + 'static> {
     addr: usize,
     pe: usize,
     size: usize,
+    num_bytes: usize,
     backend: Backend,
     rdma: Arc<dyn LamellaeRDMA>,
     local: bool,
@@ -146,7 +145,7 @@ impl<T: Dist + 'static> MemoryRegion<T> {
         alloc: AllocationType,
     ) -> MemoryRegion<T> {
         let cnt = Arc::new(AtomicUsize::new(1));
-        ACTIVE.insert(lamellae.backend(), lamellae.clone(), cnt.clone());
+        // ACTIVE.insert(lamellae.backend(), lamellae.clone(), cnt.clone());
         // let rdma = lamellae.clone();
         // println!("creating new lamellar memory region {:?}",size * std::mem::size_of::<T>());
         let mut local = false;
@@ -166,58 +165,32 @@ impl<T: Dist + 'static> MemoryRegion<T> {
             addr: addr,
             pe: lamellae.my_pe(),
             size: size,
+            num_bytes: size * std::mem::size_of::<T>(), 
             backend: lamellae.backend(),
             rdma: lamellae,
             local: local,
             phantom: PhantomData,
         };
-        // println!(
-        //     "new memregion {:x} {:x}",
-        //     temp.addr,
-        //     size * std::mem::size_of::<T>()
-        // );
+        println!(
+            "new memregion {:x} {:x}",
+            temp.addr,
+            size * std::mem::size_of::<T>()
+        );
         temp
-    }
-
-    //remove... subregions of a raw memory region is not possible, need to use shared or local wrappers
-    pub(crate) fn sub_region<R: RangeBounds<usize>>(&self, range: R) -> MemoryRegion<T> {
-        let start = match range.start_bound() {
-            //inclusive
-            Bound::Included(idx) => *idx,
-            Bound::Excluded(idx) => *idx + 1,
-            Bound::Unbounded => 0,
-        };
-        let end = match range.end_bound() {
-            //exclusive
-            Bound::Included(idx) => *idx + 1,
-            Bound::Excluded(idx) => *idx,
-            Bound::Unbounded => self.size,
-        };
-        // self.cnt.fetch_add(1, Ordering::SeqCst);
-        // println!("subregion {:?} {:?} {:?} {:x?} {:x?}",start,end,end-start,self.addr+start,self.addr+(start+(end-start)-1)*std::mem::size_of::<T>());
-        MemoryRegion {
-            addr: self.addr + (start * std::mem::size_of::<T>()),
-            pe: self.pe,
-            size: (end - start),
-            backend: self.backend,
-            rdma: self.rdma.clone(),
-            local: self.local,
-            phantom: self.phantom,
-        }
     }
 
     pub(crate) unsafe fn as_base<B: Dist + 'static>(self) -> MemoryRegion<B> {
         //this is allowed as we consume the old object..
-        let num_bytes = self.size * std::mem::size_of::<T>();
         assert_eq!(
-            num_bytes % std::mem::size_of::<B>(),
+            self.num_bytes % std::mem::size_of::<B>(),
             0,
             "Error converting memregion to new base, does not align"
         );
         MemoryRegion {
             addr: self.addr, //TODO: out of memory...
             pe: self.pe,
-            size: num_bytes / std::mem::size_of::<B>(),
+            size: self.num_bytes / std::mem::size_of::<B>(),
+            num_bytes: self.num_bytes,
             backend: self.backend,
             rdma: self.rdma.clone(),
             local: self.local,
@@ -244,18 +217,20 @@ impl<T: Dist + 'static> MemoryRegion<T> {
         data: U,
     ) {
         //todo make return a result?
+        
         let data = data.into();
-        if index + data.len() <= self.size {
+        if (index + data.len()) * std::mem::size_of::<R>() <= self.num_bytes {
             let num_bytes = data.len() * std::mem::size_of::<R>();
             if let Ok(ptr) = data.as_ptr() {
                 let bytes = std::slice::from_raw_parts(ptr as *const u8, num_bytes);
                 self.rdma
-                    .put(pe, bytes, self.addr + index * std::mem::size_of::<T>())
+                    .put(pe, bytes, self.addr + index * std::mem::size_of::<R>())
             } else {
                 panic!("ERROR: put data src is not local");
             }
         } else {
-            println!("{:?} {:?} {:?}", self.size, index, data.len());
+            println!("mem region bytes: {:?} sizeof elem {:?} len {:?}", self.num_bytes, std::mem::size_of::<T>(), self.size);
+            println!("data bytes: {:?} sizeof elem {:?} len {:?} index: {:?}",data.len() * std::mem::size_of::<R>(), std::mem::size_of::<R>(), data.len(), index);
             panic!("index out of bounds");
         }
     }
@@ -276,12 +251,12 @@ impl<T: Dist + 'static> MemoryRegion<T> {
     ) {
         //todo make return a result?
         let data = data.into();
-        if index + data.len() <= self.size {
-            let num_bytes = data.len() * std::mem::size_of::<T>();
+        if (index + data.len()) * std::mem::size_of::<R>() <= self.num_bytes {
+            let num_bytes = data.len() * std::mem::size_of::<R>();
             if let Ok(ptr) = data.as_ptr() {
                 let bytes = unsafe { std::slice::from_raw_parts(ptr as *const u8, num_bytes) };
                 self.rdma
-                    .iput(pe, bytes, self.addr + index * std::mem::size_of::<T>())
+                    .iput(pe, bytes, self.addr + index * std::mem::size_of::<R>())
             } else {
                 panic!("ERROR: put data src is not local");
             }
@@ -297,12 +272,12 @@ impl<T: Dist + 'static> MemoryRegion<T> {
         data: U,
     ) {
         let data = data.into();
-        if index + data.len() <= self.size {
-            let num_bytes = data.len() * std::mem::size_of::<T>();
+        if (index + data.len()) * std::mem::size_of::<R>() <= self.num_bytes {
+            let num_bytes = data.len() * std::mem::size_of::<R>();
             if let Ok(ptr) = data.as_ptr() {
                 let bytes = std::slice::from_raw_parts(ptr as *const u8, num_bytes);
                 self.rdma
-                    .put_all(bytes, self.addr + index * std::mem::size_of::<T>());
+                    .put_all(bytes, self.addr + index * std::mem::size_of::<R>());
             } else {
                 panic!("ERROR: put data src is not local");
             }
@@ -328,12 +303,12 @@ impl<T: Dist + 'static> MemoryRegion<T> {
         data: U,
     ) {
         let data = data.into();
-        if index + data.len() <= self.size {
-            let num_bytes = data.len() * std::mem::size_of::<T>();
+        if (index + data.len()) * std::mem::size_of::<R>() <= self.num_bytes {
+            let num_bytes = data.len() * std::mem::size_of::<R>();
             if let Ok(ptr) = data.as_mut_ptr() {
                 let bytes = std::slice::from_raw_parts_mut(ptr as *mut u8, num_bytes);
                 self.rdma
-                    .get(pe, self.addr + index * std::mem::size_of::<T>(), bytes);
+                    .get(pe, self.addr + index * std::mem::size_of::<R>(), bytes);
             //(remote pe, src, dst)
             // println!("getting {:?} {:?} [{:?}] {:?} {:?} {:?}",pe,self.addr + index * std::mem::size_of::<T>(),index,data.addr(),data.len(),num_bytes);
             } else {
@@ -349,7 +324,7 @@ impl<T: Dist + 'static> MemoryRegion<T> {
     // impl<T: Dist + 'static> RTMemoryRegionRDMA<T> for MemoryRegion<T> {
     pub(crate) unsafe fn put_slice<R: Dist + 'static>(&self, pe: usize, index: usize, data: &[R]) {
         //todo make return a result?
-        if index + data.len() <= self.size {
+        if (index + data.len()) * std::mem::size_of::<R>() <= self.num_bytes {
             let num_bytes = data.len() * std::mem::size_of::<R>();
             let bytes = std::slice::from_raw_parts(data.as_ptr() as *const u8, num_bytes);
             // println!(
@@ -364,7 +339,7 @@ impl<T: Dist + 'static> MemoryRegion<T> {
             //     pe,
             // );
             self.rdma
-                .put(pe, bytes, self.addr + index * std::mem::size_of::<T>())
+                .put(pe, bytes, self.addr + index * std::mem::size_of::<R>())
         } else {
             println!(
                 "mem region len: {:?} index: {:?} data len{:?}",
@@ -455,83 +430,85 @@ impl<T: Dist + 'static> MemRegionId for MemoryRegion<T> {
     }
 }
 
-#[derive(serde::Serialize, serde::Deserialize, Clone, Copy)]
-pub struct __NetworkMemoryRegion<T: Dist + 'static> {
-    // orig_addr: usize,
-    addr: usize,
-    pe: usize,
-    size: usize,
-    backend: Backend,
-    local: bool,
-    phantom: PhantomData<T>,
-}
+  
 
-lazy_static! {
-    static ref ACTIVE: CountedHashMap = CountedHashMap::new();
-}
+// #[derive(serde::Serialize, serde::Deserialize, Clone, Copy)]
+// pub struct __NetworkMemoryRegion<T: Dist + 'static> {
+//     // orig_addr: usize,
+//     addr: usize,
+//     pe: usize,
+//     size: usize,
+//     backend: Backend,
+//     local: bool,
+//     phantom: PhantomData<T>,
+// }
 
-struct CountedHashMap {
-    lock: RwLock<CountedHashMapInner>,
-}
-unsafe impl Send for CountedHashMap {}
+// lazy_static! {
+//     static ref ACTIVE: CountedHashMap = CountedHashMap::new();
+// }
 
-struct CountedHashMapInner {
-    cnts: HashMap<Backend, usize>,
-    lamellaes: HashMap<Backend, (Arc<Lamellae>, Arc<AtomicUsize>)>,
-}
+// struct CountedHashMap {
+//     lock: RwLock<CountedHashMapInner>,
+// }
+// unsafe impl Send for CountedHashMap {}
 
-//#[prof]
-impl CountedHashMap {
-    pub fn new() -> CountedHashMap {
-        CountedHashMap {
-            lock: RwLock::new(CountedHashMapInner {
-                cnts: HashMap::new(),
-                lamellaes: HashMap::new(),
-            }),
-        }
-    }
-    #[allow(dead_code)]
-    pub fn print(&self) {
-        for (k, v) in self.lock.read().lamellaes.iter() {
-            println!(
-                "backend: {:?} {:?} {:?}",
-                k,
-                Arc::strong_count(&v.0),
-                v.1.load(Ordering::Relaxed)
-            );
-        }
-    }
+// struct CountedHashMapInner {
+//     cnts: HashMap<Backend, usize>,
+//     lamellaes: HashMap<Backend, (Arc<Lamellae>, Arc<AtomicUsize>)>,
+// }
 
-    pub fn insert(&self, backend: Backend, lamellae: Arc<Lamellae>, cnt: Arc<AtomicUsize>) {
-        let mut map = self.lock.write();
-        let mut insert = false;
-        *map.cnts.entry(backend).or_insert_with(|| {
-            insert = true;
-            0
-        }) += 1;
-        if insert {
-            map.lamellaes.insert(backend, (lamellae, cnt));
-        }
-    }
+// //#[prof]
+// impl CountedHashMap {
+//     pub fn new() -> CountedHashMap {
+//         CountedHashMap {
+//             lock: RwLock::new(CountedHashMapInner {
+//                 cnts: HashMap::new(),
+//                 lamellaes: HashMap::new(),
+//             }),
+//         }
+//     }
+//     #[allow(dead_code)]
+//     pub fn print(&self) {
+//         for (k, v) in self.lock.read().lamellaes.iter() {
+//             println!(
+//                 "backend: {:?} {:?} {:?}",
+//                 k,
+//                 Arc::strong_count(&v.0),
+//                 v.1.load(Ordering::Relaxed)
+//             );
+//         }
+//     }
 
-    pub fn remove(&self, backend: Backend) {
-        let mut map = self.lock.write();
-        if let Some(cnt) = map.cnts.get_mut(&backend) {
-            *cnt -= 1;
-            if *cnt == 0 {
-                map.lamellaes.remove(&backend);
-                map.cnts.remove(&backend);
-            }
-        } else {
-            panic!("trying to remove key that does not exist");
-        }
-    }
+//     pub fn insert(&self, backend: Backend, lamellae: Arc<Lamellae>, cnt: Arc<AtomicUsize>) {
+//         let mut map = self.lock.write();
+//         let mut insert = false;
+//         *map.cnts.entry(backend).or_insert_with(|| {
+//             insert = true;
+//             0
+//         }) += 1;
+//         if insert {
+//             map.lamellaes.insert(backend, (lamellae, cnt));
+//         }
+//     }
 
-    pub fn get(&self, backend: Backend) -> (Arc<Lamellae>, Arc<AtomicUsize>) {
-        let map = self.lock.read();
-        map.lamellaes.get(&backend).expect("invalid key").clone()
-    }
-}
+//     pub fn remove(&self, backend: Backend) {
+//         let mut map = self.lock.write();
+//         if let Some(cnt) = map.cnts.get_mut(&backend) {
+//             *cnt -= 1;
+//             if *cnt == 0 {
+//                 map.lamellaes.remove(&backend);
+//                 map.cnts.remove(&backend);
+//             }
+//         } else {
+//             panic!("trying to remove key that does not exist");
+//         }
+//     }
+
+//     pub fn get(&self, backend: Backend) -> (Arc<Lamellae>, Arc<AtomicUsize>) {
+//         let map = self.lock.read();
+//         map.lamellaes.get(&backend).expect("invalid key").clone()
+//     }
+// }
 
 pub trait RemoteMemoryRegion {
     /// allocate a shared memory region from the asymmetric heap
@@ -591,61 +568,61 @@ pub trait RemoteMemoryRegion {
 //     }
 // }
 
-// impl<T: Dist + 'static> Drop for MemoryRegion<T> {
-//     fn drop(&mut self) {
-//         // println!("trying to dropping mem region {:?}",self);
-//         if self.addr != 0 {
-//             if self.local {
-//                 self.rdma.rt_free(self.addr - self.rdma.base_addr()); // - self.rdma.base_addr());
-//             } else {
-//                 self.rdma.free(self.addr);
-//             }
-//         }
-//         //println!("dropping mem region {:?}",self);
+impl<T: Dist + 'static> Drop for MemoryRegion<T> {
+    fn drop(&mut self) {
+        // println!("trying to dropping mem region {:?}",self);
+        if self.addr != 0 {
+            if self.local {
+                self.rdma.rt_free(self.addr - self.rdma.base_addr()); // - self.rdma.base_addr());
+            } else {
+                self.rdma.free(self.addr);
+            }
+        }
+        println!("dropping mem region {:?}",self);
+    }
+}
+
+// impl<T: Dist + 'static> From<MemoryRegion<T>> for __NetworkMemoryRegion<T> {
+//     fn from(reg: MemoryRegion<T>) -> Self {
+//         let nmr = __NetworkMemoryRegion {
+//             // orig_addr: reg.orig_addr,
+//             addr: reg.addr, //- ACTIVE.get(reg.backend).0.get_rdma().local_addr(reg.key), //.base_addr(), //remove if we are able to use two separate memory regions
+//             pe: reg.pe,
+//             size: reg.size,
+//             backend: reg.backend,
+//             local: reg.local,
+//             phantom: reg.phantom,
+//         };
+//         // println!("lmr: addr: {:x} pe: {:?} size: {:?} backend {:?}, nlmr: addr: {:x} pe: {:?} size: {:?} backend {:?}",reg.addr,reg.pe,reg.size,reg.backend,nlmr.addr,nlmr.pe,nlmr.size,nlmr.backend);
+//         nmr
 //     }
 // }
 
-impl<T: Dist + 'static> From<MemoryRegion<T>> for __NetworkMemoryRegion<T> {
-    fn from(reg: MemoryRegion<T>) -> Self {
-        let nmr = __NetworkMemoryRegion {
-            // orig_addr: reg.orig_addr,
-            addr: reg.addr, //- ACTIVE.get(reg.backend).0.get_rdma().local_addr(reg.key), //.base_addr(), //remove if we are able to use two separate memory regions
-            pe: reg.pe,
-            size: reg.size,
-            backend: reg.backend,
-            local: reg.local,
-            phantom: reg.phantom,
-        };
-        // println!("lmr: addr: {:x} pe: {:?} size: {:?} backend {:?}, nlmr: addr: {:x} pe: {:?} size: {:?} backend {:?}",reg.addr,reg.pe,reg.size,reg.backend,nlmr.addr,nlmr.pe,nlmr.size,nlmr.backend);
-        nmr
-    }
-}
-
-//#[prof]
-impl<T: Dist + 'static> From<__NetworkMemoryRegion<T>> for MemoryRegion<T> {
-    fn from(reg: __NetworkMemoryRegion<T>) -> Self {
-        let temp = ACTIVE.get(reg.backend);
-        temp.1.fetch_add(1, Ordering::SeqCst);
-        let rdma = temp.0;
-        let addr = if reg.addr != 0 {
-            rdma.local_addr(reg.pe, reg.addr)
-        } else {
-            0
-        };
-        let mr = MemoryRegion {
-            // orig_addr: rdma.local_addr(reg.pe, reg.orig_addr),
-            addr: addr,
-            pe: rdma.my_pe(),
-            size: reg.size,
-            backend: reg.backend,
-            rdma: rdma,
-            local: reg.local,
-            phantom: reg.phantom,
-        };
-        // println!("nlmr: addr {:x} pe: {:?} size: {:?} backend {:?}, lmr: addr: {:x} pe: {:?} size: {:?} backend {:?} cnt {:?}",reg.addr,reg.pe,reg.size,reg.backend,lmr.addr,lmr.pe,lmr.size,lmr.backend, lmr.cnt.load(Ordering::SeqCst));
-        mr
-    }
-}
+// //#[prof]
+// impl<T: Dist + 'static> From<__NetworkMemoryRegion<T>> for MemoryRegion<T> {
+//     fn from(reg: __NetworkMemoryRegion<T>) -> Self {
+//         let temp = ACTIVE.get(reg.backend);
+//         temp.1.fetch_add(1, Ordering::SeqCst);
+//         let rdma = temp.0;
+//         let addr = if reg.addr != 0 {
+//             rdma.local_addr(reg.pe, reg.addr)
+//         } else {
+//             0
+//         };
+//         let mr = MemoryRegion {
+//             // orig_addr: rdma.local_addr(reg.pe, reg.orig_addr),
+//             addr: addr,
+//             pe: rdma.my_pe(),
+//             size: reg.size,
+//             backend: reg.backend,
+//             rdma: rdma,
+//             local: reg.local,
+//             phantom: reg.phantom,
+//         };
+//         // println!("nlmr: addr {:x} pe: {:?} size: {:?} backend {:?}, lmr: addr: {:x} pe: {:?} size: {:?} backend {:?} cnt {:?}",reg.addr,reg.pe,reg.size,reg.backend,lmr.addr,lmr.pe,lmr.size,lmr.backend, lmr.cnt.load(Ordering::SeqCst));
+//         mr
+//     }
+// }
 
 // #[prof]
 impl<T: Dist + 'static> std::fmt::Debug for MemoryRegion<T> {

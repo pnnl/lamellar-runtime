@@ -118,10 +118,11 @@ impl LamellaeComm for Rofi {
     fn shutdown(&self){
         println!("Rofi Lamellae shuting down");
         self.active.store(0,Ordering::Relaxed);
+        println!("set active to 0");
         while self.active.load(Ordering::SeqCst) != 2 {
             std::thread::yield_now();
         }
-        // println!("Rofi Lamellae shut down");
+        println!("Rofi Lamellae shut down");
     }
 }
 

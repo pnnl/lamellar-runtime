@@ -61,8 +61,10 @@ fn main() {
     let world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();
     let num_pes = world.num_pes();
+    println!("creating array");
     let array = UnsafeArray::<u8>::new(world.team(), ARRAY_LEN, Distribution::Cyclic);
-    let local_mem_region = world.alloc_local_mem_region(ARRAY_LEN);
+    println!("creating memregion");
+    let local_mem_region = world.alloc_local_mem_region::<u8>(ARRAY_LEN);
     println!("about to initialize array");
     array.print();
     if my_pe == 0 {
@@ -89,6 +91,7 @@ fn main() {
     }
     world.barrier();
     world.free_local_memory_region(local_mem_region);
+    println!("freed mem region");
     println!("[{:?}] Before {:?}", my_pe, array.local_as_slice());
     world.barrier();
     if my_pe == 0 {
@@ -96,7 +99,7 @@ fn main() {
     }
     world.barrier();
     let mut index = 0;
-    while index < ARRAY_LEN/num_pes {
+    while index < 1 { //ARRAY_LEN/num_pes {
         world.exec_am_all(RdmaAM {
             array: array.clone(),
             orig_pe: my_pe,

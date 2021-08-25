@@ -28,7 +28,7 @@ impl WorkStealingThread {
     fn run(
         worker: WorkStealingThread,
         active_cnt: Arc<AtomicUsize>,
-        _num_tasks: Arc<AtomicUsize>,
+        num_tasks: Arc<AtomicUsize>,
     ) -> thread::JoinHandle<()> {
         thread::spawn(move || {
             // println!("TestSchdulerWorker thread running");
@@ -38,6 +38,7 @@ impl WorkStealingThread {
             let mut timer = std::time::Instant::now();
             while worker.active.load(Ordering::SeqCst)
                 || !(worker.work_q.is_empty() && worker.work_inj.is_empty())
+                || num_tasks.load(Ordering::SeqCst) > 1
             {
                 // let ot = Instant::now();
                 let omsg = worker.work_q.pop().or_else(|| {
@@ -61,9 +62,10 @@ impl WorkStealingThread {
                     {
                         println!("runnable {:?}", runnable);
                         println!(
-                            "work_q size {:?} work inj size {:?}",
+                            "work_q size {:?} work inj size {:?} num_tasks {:?}",
                             worker.work_q.len(),
-                            worker.work_inj.len()
+                            worker.work_inj.len(),
+                            num_tasks.load(Ordering::SeqCst)
                         );
                         timer = std::time::Instant::now();
                     }
@@ -75,9 +77,10 @@ impl WorkStealingThread {
                 {
                     // if worker.work_q.len() > 0{
                     println!(
-                        "work_q size {:?} work inj size {:?}",
+                        "work_q size {:?} work inj size {:?} num_tasks {:?}",
                         worker.work_q.len(),
-                        worker.work_inj.len()
+                        worker.work_inj.len(),
+                        num_tasks.load(Ordering::SeqCst)
                     );
                     // }
                     timer = std::time::Instant::now();
@@ -132,12 +135,14 @@ impl AmeSchedulerQueue for WorkStealingInner {
 
         // let work_inj = self.work_inj.clone();
         // println!("submitting_req");
+        let num_tasks = self.num_tasks.clone();
         self.stall_mark.fetch_add(1, Ordering::Relaxed);
         let future = async move {
-            // num_tasks.fetch_add(1,Ordering::Relaxed);
+            num_tasks.fetch_add(1,Ordering::Relaxed);
             // println!("in submit_req {:?} {:?} {:?} ", pe.clone(), req_data.src, req_data.pe);
             ame.process_msg_new(req_data, ireq).await;
-            // println!("num tasks: {:?}",num_tasks.fetch_sub(1,Ordering::Relaxed));
+            // println!("num tasks: {:?}",);
+            num_tasks.fetch_sub(1,Ordering::Relaxed)
         };
         let work_inj = self.work_inj.clone();
         let schedule = move |runnable| work_inj.push(runnable);
@@ -153,9 +158,9 @@ impl AmeSchedulerQueue for WorkStealingInner {
         lamellae: Arc<Lamellae>,
     ) {
         // let work_inj = self.work_inj.clone();
-        // let num_tasks = self.num_tasks.clone();
+        let num_tasks = self.num_tasks.clone();
         let future = async move {
-            // num_tasks.fetch_add(1,Ordering::Relaxed);
+            num_tasks.fetch_add(1,Ordering::Relaxed);
             if let Some(header) = data.deserialize_header() {
                 let msg = header.msg;
                 // println!("msg recieved: {:?}",msg);
@@ -165,7 +170,8 @@ impl AmeSchedulerQueue for WorkStealingInner {
                 data.print();
                 panic!("should i be here?");
             }
-            // println!("num tasks: {:?}",num_tasks.fetch_sub(1,Ordering::Relaxed));
+            // println!("num tasks: {:?}",);
+            num_tasks.fetch_sub(1,Ordering::Relaxed);
         };
         let work_inj = self.work_inj.clone();
         let schedule = move |runnable| work_inj.push(runnable);
@@ -178,19 +184,25 @@ impl AmeSchedulerQueue for WorkStealingInner {
     where
         F: Future<Output = ()> + Send + 'static,
     {
+        let num_tasks = self.num_tasks.clone();
+        let future2 = async move {
+            num_tasks.fetch_add(1,Ordering::Relaxed);
+            future.await;
+            num_tasks.fetch_sub(1,Ordering::Relaxed);
+        };
         let work_inj = self.work_inj.clone();
         let schedule = move |runnable| work_inj.push(runnable);
-        let (runnable, task) = async_task::spawn(future, schedule);
+        let (runnable, task) = async_task::spawn(future2, schedule);
         runnable.schedule();
         task.detach();
     }
     fn shutdown(&self) {
-        // println!("work stealing shuting down");
+        println!("work stealing shuting down {:?}",self.active());
         self.active.store(false, Ordering::Relaxed);
-        while self.active_cnt.load(Ordering::Relaxed) > 0 {
+        while self.active_cnt.load(Ordering::Relaxed) > 1 ||self.num_tasks.load(Ordering::Relaxed) > 1 { //this should be the recvtask...
             std::thread::yield_now()
         }
-        println!("work stealing shut down");
+        println!("work stealing shut down {:?}",self.active());
     }
 
     fn exec_task(&self) {
@@ -199,6 +211,11 @@ impl AmeSchedulerQueue for WorkStealingInner {
         if let Some(runnable) = self.work_stealers[t.sample(&mut rng)].steal().success() {
             runnable.run();
         }
+    }
+
+    fn active(&self) -> bool {
+        println!("sched active {:?} {:?}",self.active.load(Ordering::SeqCst) , self.num_tasks.load(Ordering::SeqCst));
+        self.active.load(Ordering::SeqCst) || self.num_tasks.load(Ordering::SeqCst) > 1//|| self.active_cnt.load(Ordering::SeqCst) != 0
     }
 }
 
@@ -252,6 +269,9 @@ impl SchedulerQueue for WorkStealing {
 
     fn shutdown(&self) {
         self.inner.shutdown();
+    }
+    fn active(&self) -> bool{
+        self.inner.active()
     }
 }
 
@@ -343,7 +363,7 @@ impl WorkStealing {
 impl Drop for WorkStealingInner {
     //when is this called with respect to world?
     fn drop(&mut self) {
-        // println!("dropping work stealing");
+        println!("dropping work stealing");
         while let Some(thread) = self.threads.pop() {
             let _res = thread.join();
         }
