@@ -1,6 +1,6 @@
 [package]
 name = "lamellar"
-version = "0.3.0"
+version = "0.3.1"
 authors = ["Ryan D. Friese <ryan.friese@pnnl.gov>", " Mark V Raugas <mark.raugas@pnnl.gov>", "Roberto Gioiosa <roberto.gioiosa@pnnl.gov>"]
 edition = "2018"
 description = "Lamellar is an asynchronous tasking runtime for HPC systems developed in RUST."
@@ -26,7 +26,7 @@ core_affinity = "0.5.9"
 rofisys = { version ="0.1.1", optional = true  }
 log = "0.4"
 simple_logger = "1.6.0"
-lamellar-impl = { path = "impl", version = "0.3.0" }
+lamellar-impl = { path = "impl", version = "0.3.1" }
 proc-macro-hack = "0.5"
 inventory = "0.1"
 serde_closure = { version = "0.1.5", optional = true }
@@ -35,7 +35,7 @@ async-trait = "0.1.40"
 async-std = "1.6.4"
 lamellar-prof = {path = "lamellar-prof", version = "0.1.0" }
 libc = { version = "0.2.81", optional = true }
-shared_memory = { git = "https://github.com/elast0ny/shared_memory-rs" }
+shared_memory = "0.12.0"
 raw_sync = "0.1"
 
 
