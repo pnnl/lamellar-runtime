@@ -156,6 +156,10 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Un
         }
     }
 
+    fn len(&self) -> usize {
+        self.sub_array_size
+    }
+
     fn cyclic_op<U: MyInto<LamellarArrayInput<T>>>(&self, op: ArrayOp, index: usize, buf: U) {
         let buf = buf.my_into(&self.inner.team);
         let my_pe = self.inner.team.team_pe_id().unwrap();
@@ -348,6 +352,10 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + std::fmt::D
 impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> LamellarArrayRDMA<T>
     for UnsafeArray<T>
 {
+    #[inline(always)]
+    fn len(&self) -> usize {
+        self.len()
+    }
     #[inline(always)]
     fn put<U: MyInto<LamellarArrayInput<T>>>(&self, index: usize, buf: U) {
         self.put(index, buf)

@@ -124,9 +124,42 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Da
     }
 }
 
+pub(crate) struct LamellarArrayIter<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static>{
+    array: LamellarArray<T>,
+    buf_0: LocalMemoryRegion<T>,
+    buf_1: LocalMemoryRegion<T>,
+    index: usize,
+}
+
+impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Iterator for LamellarArrayIter<T>{
+    type Item = T;
+    fn next(&mut self) -> Option<T> {
+        let res = if self.index < self.array.len() {
+            let mut buf_0_slice = unsafe {self.buf_0.as_mut_slice().unwrap()};
+            // buf_0_slice[0]=;
+            let mut buf_1_slice = unsafe { self.buf_1.as_mut_slice().unwrap()};
+            // buf_1_slice[0]=;
+            self.array.get(self.index,&self.buf_0);
+            self.array.get(self.index,&self.buf_1);
+            while buf_0_slice[0] == 0 || buf_1_slice[0] == 1 {
+                std::thread::yield_now();
+            }
+            if buf_0_slice[0] == buf_1_slice[0]{
+                Some(buf_0_slice[0])
+            }
+            else{
+                None
+            }
+            // else if
+        }
+        None
+    }
+}
+
 #[enum_dispatch]
 pub trait LamellarArrayRDMA<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static>
 {
+    fn len(&self) -> usize;
     fn put<U: MyInto<LamellarArrayInput<T>>>(&self, index: usize, buf: U);
     fn get<U: MyInto<LamellarArrayInput<T>>>(&self, index: usize, buf: U);
     fn local_as_slice(&self) -> &[T];
