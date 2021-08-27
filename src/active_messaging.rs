@@ -47,6 +47,11 @@ pub trait DarcSerde {
     fn des(&self, cur_pe: Result<usize, IdError>);
 }
 
+impl <T> DarcSerde for &T {
+    fn ser(&self, num_pes: usize, cur_pe: Result<usize, IdError>) {} 
+    fn des(&self, cur_pe: Result<usize, IdError>) {}
+}
+
 pub trait LamellarSerde: Sync + Send {
     fn serialized_size(&self) -> usize;
     fn serialize_into(&self, buf: &mut [u8]);

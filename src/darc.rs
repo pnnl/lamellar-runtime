@@ -15,6 +15,7 @@ use crate::LamellarTeam;
 use crate::active_messaging::ActiveMessaging;
 use crate::lamellae::{AllocationType, Backend, LamellaeComm, LamellaeRDMA};
 use crate::IdError;
+use crate::DarcSerde;
 
 pub(crate) mod local_rw_darc;
 use local_rw_darc::{LocalRwDarc};
@@ -73,6 +74,21 @@ pub struct Darc<T: 'static + ?Sized> {
 
 unsafe impl<T: ?Sized + Sync + Send> Send for Darc<T> {}
 unsafe impl<T: ?Sized + Sync + Send> Sync for Darc<T> {}
+
+impl<T: ?Sized> crate::DarcSerde for Darc<T> {
+    fn ser(&self, num_pes: usize, cur_pe: Result<usize, IdError>) {
+        match cur_pe{
+            Ok(cur_pe) => {self.serialize_update_cnts(num_pes,cur_pe);},
+            Err(err) =>  {panic!("can only access darcs within team members ({:?})",err);}
+        }
+    }
+    fn des(&self, cur_pe: Result<usize, IdError>) {
+        match cur_pe{
+            Ok(cur_pe) => {self.deserialize_update_cnts(cur_pe);},
+            Err(err) => {panic!("can only access darcs within team members ({:?})",err);}
+        } 
+    }
+}
 
 impl<T: ?Sized> DarcInner<T> {
     fn team(&self) -> Arc<LamellarTeam> {

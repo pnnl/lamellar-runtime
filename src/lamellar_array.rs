@@ -4,7 +4,7 @@ use crate::lamellar_arch::LamellarArchRT;
 use crate::lamellar_memregion::{LamellarMemoryRegion, RemoteMemoryRegion};
 use crate::lamellar_request::{AmType, LamellarRequest, LamellarRequestHandle};
 use crate::lamellar_team::LamellarTeam;
-use crate::scheduler::{Scheduler,SchedulerQueue};
+use crate::scheduler::{Scheduler, SchedulerQueue};
 
 use log::trace;
 use std::hash::{Hash, Hasher};
@@ -45,7 +45,7 @@ crate::inventory::collect!(ReduceKey);
 
 lamellar_impl::generate_reductions_for_type_rt!(u8, u16, u32, u64, u128, usize);
 lamellar_impl::generate_reductions_for_type_rt!(i8, i16, i32, i64, i128, isize);
-lamellar_impl::generate_reductions_for_type_rt!(f32,f64);
+lamellar_impl::generate_reductions_for_type_rt!(f32, f64);
 
 pub struct LamellarArray<
     T: serde::ser::Serialize + serde::de::DeserializeOwned + std::clone::Clone + Send + Sync + 'static,
@@ -159,10 +159,9 @@ impl<
         );
         self.world_counters.add_send_req(1);
         self.team_counters.add_send_req(1);
-        let world = if let Some(world) = &self.team.world{
+        let world = if let Some(world) = &self.team.world {
             world.clone()
-        }
-        else{
+        } else {
             self.team.clone()
         };
         self.scheduler.submit_req_new(
