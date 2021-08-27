@@ -3,15 +3,15 @@ use crate::lamellae::{AllocationType, Backend, Lamellae, LamellaeComm, LamellaeR
 use crate::lamellar_team::LamellarTeam;
 // use crate::lamellar_array::{LamellarLocalArray};
 use core::marker::PhantomData;
-#[cfg(feature = "enable-prof")]
-use lamellar_prof::*;
-use parking_lot::RwLock;
-use std::collections::HashMap;
+// #[cfg(feature = "enable-prof")]
+// use lamellar_prof::*;
+// use parking_lot::RwLock;
+// use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
-use std::sync::atomic::{AtomicUsize, Ordering};
+// use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
-use std::ops::{Bound, RangeBounds};
+// use std::ops::{Bound, RangeBounds};
 
 pub(crate) mod shared;
 use shared::SharedMemoryRegion;
@@ -50,13 +50,13 @@ pub enum LamellarMemoryRegion<T: Dist + 'static> {
     Local(LocalMemoryRegion<T>),
 }
 
-impl<T: Dist + 'static> From<&LamellarMemoryRegion<T>> for LamellarArrayInput<T> {
+impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> From<&LamellarMemoryRegion<T>> for LamellarArrayInput<T> {
     fn from(mr: &LamellarMemoryRegion<T>) -> Self {
         LamellarArrayInput::LamellarMemRegion(mr.clone())
     }
 }
 
-impl<T: Dist + 'static> MyFrom<&LamellarMemoryRegion<T>> for LamellarArrayInput<T> {
+impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> MyFrom<&LamellarMemoryRegion<T>> for LamellarArrayInput<T> {
     fn my_from(mr: &LamellarMemoryRegion<T>, _team: &Arc<LamellarTeam>) -> Self {
         LamellarArrayInput::LamellarMemRegion(mr.clone())
     }
@@ -175,6 +175,7 @@ impl<T: Dist + 'static> MemoryRegion<T> {
         temp
     }
 
+    #[allow(dead_code)]   
     pub(crate) unsafe fn as_base<B: Dist + 'static>(self) -> MemoryRegion<B> {
         //this is allowed as we consume the old object..
         assert_eq!(
@@ -314,9 +315,7 @@ impl<T: Dist + 'static> MemoryRegion<T> {
             panic!("index out of bounds");
         }
     }
-    // }
 
-    // impl<T: Dist + 'static> RTMemoryRegionRDMA<T> for MemoryRegion<T> {
     pub(crate) unsafe fn put_slice<R: Dist + 'static>(&self, pe: usize, index: usize, data: &[R]) {
         //todo make return a result?
         if (index + data.len()) * std::mem::size_of::<R>() <= self.num_bytes {
@@ -345,15 +344,16 @@ impl<T: Dist + 'static> MemoryRegion<T> {
             panic!("index out of bounds");
         }
     }
-    // }
 
-    // impl<T: Dist + 'static> RegisteredMemoryRegion<T> for MemoryRegion<T> {
+    #[allow(dead_code)]
     pub(crate) fn len(&self) -> usize {
         self.size
     }
+
     pub(crate) fn addr(&self) -> MemResult<usize> {
         Ok(self.addr)
     }
+
     pub(crate) fn as_slice(&self) -> MemResult<&[T]> {
         if self.addr != 0 {
             Ok(unsafe { std::slice::from_raw_parts(self.addr as *const T, self.size) })
@@ -405,15 +405,19 @@ impl<T: Dist + 'static> MemoryRegion<T> {
             Ok(&mut [])
         }
     }
+    #[allow(dead_code)]
     pub(crate) fn as_ptr(&self) -> MemResult<*const T> {
         Ok(self.addr as *const T)
     }
+    #[allow(dead_code)]
     pub(crate) fn as_casted_ptr<R: Dist + 'static>(&self) -> MemResult<*const R> {
         Ok(self.addr as *const R)
     }
+    #[allow(dead_code)]
     pub(crate) fn as_mut_ptr(&self) -> MemResult<*mut T> {
         Ok(self.addr as *mut T)
     }
+    #[allow(dead_code)]
     pub(crate) fn as_casted_mut_ptr<R: Dist + 'static>(&self) -> MemResult<*mut R> {
         Ok(self.addr as *mut R)
     }

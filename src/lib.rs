@@ -52,7 +52,7 @@ pub use crate::active_messaging::{
 pub use crate::active_messaging::{ActiveMessaging, LamellarAM, LocalAM};
 
 // #[cfg(feature = "experimental")]
-// pub use crate::lamellar_array::{LamellarArray, ReduceKey};
+pub use crate::array::{LamellarArray, ReduceKey};
 // pub use crate::lamellar_memregion::{
 //     LamellarLocalMemoryRegion, LamellarMemoryRegion, RegisteredMemoryRegion, RemoteMemoryRegion,
 // };
@@ -69,13 +69,12 @@ pub use crate::memregion::{
 pub use crate::darc::global_rw_darc::{globalrw_from_ndarc, globalrw_serialize};
 #[cfg(feature = "experimental")]
 #[doc(hidden)]
-pub use crate::darc::local_rw_darc::{localrw_from_ndarc, localrw_serialize};
-#[cfg(feature = "experimental")]
-#[doc(hidden)]
 // pub use crate::darc::{darc_from_ndarc, darc_serialize};
-
 #[cfg(feature = "experimental")]
 pub use crate::darc::local_rw_darc::LocalRwDarc;
+#[cfg(feature = "experimental")]
+#[doc(hidden)]
+pub use crate::darc::local_rw_darc::{localrw_from_ndarc, localrw_serialize};
 #[cfg(feature = "experimental")]
 pub use crate::darc::Darc;
 

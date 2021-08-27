@@ -1,4 +1,4 @@
-use crate::lamellae::{Lamellae, SerializedData, LamellaeRDMA};
+use crate::lamellae::{Lamellae, LamellaeRDMA, SerializedData};
 use crate::lamellar_arch::IdError;
 use crate::lamellar_request::{InternalReq, InternalResult, LamellarRequest};
 use crate::lamellar_team::LamellarTeam;
@@ -47,9 +47,9 @@ pub trait DarcSerde {
     fn des(&self, cur_pe: Result<usize, IdError>);
 }
 
-impl <T> DarcSerde for &T {
-    fn ser(&self, num_pes: usize, cur_pe: Result<usize, IdError>) {} 
-    fn des(&self, cur_pe: Result<usize, IdError>) {}
+impl<T> DarcSerde for &T {
+    fn ser(&self, _num_pes: usize, _cur_pe: Result<usize, IdError>) {}
+    fn des(&self, _cur_pe: Result<usize, IdError>) {}
 }
 
 pub trait LamellarSerde: Sync + Send {
@@ -281,7 +281,12 @@ impl ActiveMessageEngine {
     }
 
     // make this an associated function... or maybe make a "REQUESTS struct which will have a send_data_to_user_handle"
-    fn send_data_to_user_handle(req_id: usize, pe: u16, data: InternalResult, team: Arc<LamellarTeam>) {
+    fn send_data_to_user_handle(
+        req_id: usize,
+        pe: u16,
+        data: InternalResult,
+        team: Arc<LamellarTeam>,
+    ) {
         let reqs = REQUESTS.lock();
         // let res = REQUESTS[req_id % REQUESTS.len()].get(&req_id);
         // println!("finalize {:?}",req_id);
@@ -293,7 +298,7 @@ impl ActiveMessageEngine {
                 let _num_reqs = ireq.team_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
                 // println!("team reqs: {:?}",num_reqs);
                 let _num_reqs = ireq.world_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
-                if let Some(tg_outstanding_reqs) = ireq.tg_outstanding_reqs{
+                if let Some(tg_outstanding_reqs) = ireq.tg_outstanding_reqs {
                     let _num_reqs = tg_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
                 }
                 // println!("world reqs: {:?}",num_reqs);
@@ -305,7 +310,12 @@ impl ActiveMessageEngine {
                 }
             }
             None => {
-                panic!("error id not found {:?} mem in use: {:?}", req_id,team.team.lamellae.occupied())},
+                panic!(
+                    "error id not found {:?} mem in use: {:?}",
+                    req_id,
+                    team.team.lamellae.occupied()
+                )
+            }
         }
     }
 }

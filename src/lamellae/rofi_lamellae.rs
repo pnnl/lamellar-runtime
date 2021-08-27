@@ -9,7 +9,7 @@ use crate::lamellae::rofi::command_queues::RofiCommandQueue;
 // use lamellar_prof::*;
 // use log::{error, trace};
 // use std::sync::atomic::Ordering;
-use std::sync::atomic::{AtomicBool, AtomicU8,  Ordering};
+use std::sync::atomic::{ AtomicU8,  Ordering};
 use std::sync::Arc;
 
 use futures::stream::FuturesUnordered;

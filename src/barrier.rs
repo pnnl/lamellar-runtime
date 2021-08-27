@@ -1,7 +1,7 @@
 use crate::lamellae::{AllocationType, Lamellae};
 use crate::lamellar_arch::LamellarArchRT;
 // use crate::lamellar_memregion::{SharedMemoryRegion,RegisteredMemoryRegion};
-use crate::memregion::{MemoryRegion, RTMemoryRegionRDMA, RegisteredMemoryRegion, SubRegion};
+use crate::memregion::{MemoryRegion};//, RTMemoryRegionRDMA, RegisteredMemoryRegion};
 use crate::scheduler::{Scheduler, SchedulerQueue};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;

@@ -1,17 +1,17 @@
-use crate::lamellae::local_lamellae::Local;
-use crate::lamellae::{AllocationType, Backend, Lamellae, LamellaeComm, LamellaeRDMA};
+// use crate::lamellae::local_lamellae::Local;
+use crate::lamellae::{AllocationType,Lamellae};//, Backend , LamellaeComm, LamellaeRDMA};
 use crate::memregion::*;
 // use crate::lamellar_array::{LamellarLocalArray};
 use core::marker::PhantomData;
-#[cfg(feature = "enable-prof")]
-use lamellar_prof::*;
-use parking_lot::RwLock;
-use std::collections::HashMap;
-use std::hash::{Hash, Hasher};
-use std::sync::atomic::{AtomicUsize, Ordering};
+// #[cfg(feature = "enable-prof")]
+// use lamellar_prof::*;
+// use parking_lot::RwLock;
+// use std::collections::HashMap;
+// use std::hash::{Hash, Hasher};
+// use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
-use std::ops::{Bound, RangeBounds};
+use std::ops::{Bound};
 
 #[derive(Clone)]
 pub struct LocalMemoryRegion<T: Dist + 'static> {
@@ -249,13 +249,13 @@ impl<T: Dist + 'static> std::fmt::Debug for LocalMemoryRegion<T> {
     }
 }
 
-impl<T: Dist + 'static> From<&LocalMemoryRegion<T>> for LamellarArrayInput<T> {
+impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> From<&LocalMemoryRegion<T>> for LamellarArrayInput<T> {
     fn from(smr: &LocalMemoryRegion<T>) -> Self {
         LamellarArrayInput::LocalMemRegion(smr.clone())
     }
 }
 
-impl<T: Dist + 'static> MyFrom<&LocalMemoryRegion<T>> for LamellarArrayInput<T> {
+impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> MyFrom<&LocalMemoryRegion<T>> for LamellarArrayInput<T> {
     fn my_from(smr: &LocalMemoryRegion<T>, _team: &Arc<LamellarTeam>) -> Self {
         LamellarArrayInput::LocalMemRegion(smr.clone())
     }

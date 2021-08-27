@@ -1,5 +1,5 @@
 use crate::darc::Darc;
-use crate::lamellae::{AllocationType, Backend, Lamellae, LamellaeComm, LamellaeRDMA};
+use crate::lamellae::{AllocationType};//, Backend, Lamellae, LamellaeComm, LamellaeRDMA};
 use crate::memregion::*;
 // use crate::LamellarTeam;
 // use crate::TEAMS;
@@ -7,13 +7,13 @@ use crate::memregion::*;
 use core::marker::PhantomData;
 #[cfg(feature = "enable-prof")]
 use lamellar_prof::*;
-use parking_lot::RwLock;
-use std::collections::HashMap;
-use std::hash::{Hash, Hasher};
-use std::sync::atomic::{AtomicUsize, Ordering};
+// use parking_lot::RwLock;
+// use std::collections::HashMap;
+// use std::hash::{Hash, Hasher};
+// use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
-use std::ops::{Bound, RangeBounds};
+use std::ops::{Bound};
 
 
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
@@ -230,13 +230,13 @@ impl<T: Dist + 'static> std::fmt::Debug for SharedMemoryRegion<T> {
     }
 }
 
-impl<T: Dist + 'static> From<&SharedMemoryRegion<T>> for LamellarArrayInput<T> {
+impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> From<&SharedMemoryRegion<T>> for LamellarArrayInput<T> {
     fn from(smr: &SharedMemoryRegion<T>) -> Self {
         LamellarArrayInput::SharedMemRegion(smr.clone())
     }
 }
 
-impl<T: Dist + 'static> MyFrom<&SharedMemoryRegion<T>> for LamellarArrayInput<T> {
+impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> MyFrom<&SharedMemoryRegion<T>> for LamellarArrayInput<T> {
     fn my_from(smr: &SharedMemoryRegion<T>, _team: &Arc<LamellarTeam>) -> Self {
         LamellarArrayInput::SharedMemRegion(smr.clone())
     }

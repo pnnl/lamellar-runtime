@@ -12,9 +12,9 @@ use crate::lamellar_arch::{GlobalArch, IdError, LamellarArch, LamellarArchEnum, 
 // };
 use crate::lamellar_request::{AmType, LamellarRequest, LamellarRequestHandle};
 use crate::memregion::{
-    local::LocalMemoryRegion, shared::SharedMemoryRegion, AsBase, Dist, LamellarMemoryRegion,
-    MemRegionId, MemoryRegion, RTMemoryRegionRDMA, RegisteredMemoryRegion, RemoteMemoryRegion,
-};
+    local::LocalMemoryRegion, shared::SharedMemoryRegion,  Dist, LamellarMemoryRegion,
+    MemoryRegion, RemoteMemoryRegion,
+};// RTMemoryRegionRDMA, RegisteredMemoryRegion,
 // use crate::schedulers::SchedulerQueue;
 use crate::scheduler::{Scheduler, SchedulerQueue};
 #[cfg(feature = "nightly")]
@@ -130,7 +130,7 @@ impl ActiveMessaging for Arc<LamellarTeam> {
     where
         F: RemoteActiveMessage + LamellarAM + Serde + Send + Sync + 'static,
     {
-        self.team.exec_am_pe(self.clone(), pe, am, None)
+        self.team.exec_am_pe::<F::Output>(self.clone(), pe,Arc::new(am), None)
     }
 
     fn exec_am_local<F>(&self, am: F) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync>
@@ -551,7 +551,7 @@ impl LamellarTeamRT {
         self.barrier.barrier();
     }
 
-    fn exec_am_all<F>(
+    pub(crate) fn exec_am_all<F>(
         &self,
         team: Arc<LamellarTeam>,
         am: F,
@@ -600,15 +600,15 @@ impl LamellarTeamRT {
         Box::new(my_req)
     }
 
-    fn exec_am_pe<F>(
+    pub(crate) fn exec_am_pe<F>(
         &self,
         team: Arc<LamellarTeam>,
         pe: usize,
-        am: F,
+        am: LamellarArcAm,
         task_group_cnts: Option<Arc<AMCounters>>,
-    ) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync>
+    ) -> Box<dyn LamellarRequest<Output = F> + Send + Sync>
     where
-        F: RemoteActiveMessage + LamellarAM + Send + Sync + 'static,
+        F: serde::ser::Serialize + serde::de::DeserializeOwned + Sync + Send + 'static,
     {
         prof_start!(pre);
         let tg_outstanding_reqs = match task_group_cnts {
@@ -637,7 +637,7 @@ impl LamellarTeamRT {
         self.team_counters.add_send_req(1);
         prof_end!(counters);
         prof_start!(any);
-        let func: LamellarArcAm = Arc::new(am);
+        
         prof_end!(any);
         prof_start!(sub);
         let world = if let Some(world) = &team.world {
@@ -650,7 +650,7 @@ impl LamellarTeamRT {
             Some(self.arch.world_pe(pe).expect("pe not member of team")),
             ExecType::Am(Cmd::Exec),
             my_req.id,
-            LamellarFunc::Am(func),
+            LamellarFunc::Am(am),
             self.lamellae.clone(),
             world,
             team.clone(),
@@ -668,7 +668,7 @@ impl LamellarTeamRT {
         Box::new(my_req)
     }
 
-    fn exec_am_local<F>(
+    pub(crate) fn exec_am_local<F>(
         &self,
         team: Arc<LamellarTeam>,
         am: F,
@@ -916,7 +916,7 @@ impl RemoteMemoryRegion for Arc<LamellarTeam> {
     ///
     /// * `region` - the region to free
     ///
-    fn free_shared_memory_region<T: Dist + 'static>(&self, region: SharedMemoryRegion<T>) {
+    fn free_shared_memory_region<T: Dist + 'static>(&self, _region: SharedMemoryRegion<T>) {
         self.team.barrier.barrier();
         // self.team.mem_regions.write().remove(&region.id());
         // self.team.free_shared_memory_region(region)
@@ -928,7 +928,7 @@ impl RemoteMemoryRegion for Arc<LamellarTeam> {
     ///
     /// * `region` - the region to free
     ///
-    fn free_local_memory_region<T: Dist + 'static>(&self, region: LocalMemoryRegion<T>) {
+    fn free_local_memory_region<T: Dist + 'static>(&self, _region: LocalMemoryRegion<T>) {
         // self.team.mem_regions.write().remove(&region.id());
         // self.team.free_local_memory_region(region)
     }

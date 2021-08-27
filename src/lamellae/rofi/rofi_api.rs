@@ -115,7 +115,7 @@ pub(crate) fn rofi_remote_addr(pe: usize, local_addr: usize) -> usize {
 pub(crate) unsafe fn rofi_put<T>(src: &[T], dst: usize, pe: usize) -> Result<c_ulong, i32> {
     let src_addr = src.as_ptr() as *mut std::ffi::c_void;
     let size = src.len() * std::mem::size_of::<T>();
-    let mut txid: c_ulong = 0;
+    let txid: c_ulong = 0;
     let mut ret = rofisys::rofi_put(dst as *mut std::ffi::c_void, src_addr, size, pe as u32, 0);//, &mut txid);
     //FI_EAGAIN should this be handled here, at c-rofi layer, or application layer?
     while ret == -11 {
@@ -134,7 +134,7 @@ pub(crate) unsafe fn rofi_put<T>(src: &[T], dst: usize, pe: usize) -> Result<c_u
 pub(crate) fn rofi_iput<T>(src: &[T], dst: usize, pe: usize) -> Result<c_ulong, i32> {
     let src_addr = src.as_ptr() as *mut std::ffi::c_void;
     let size = src.len() * std::mem::size_of::<T>();
-    let mut txid: c_ulong = 0;
+    let txid: c_ulong = 0;
     let mut ret = unsafe {
         rofisys::rofi_iput(dst as *mut std::ffi::c_void, src_addr, size, pe as u32, 0)//, &mut txid)
     };
@@ -158,7 +158,7 @@ pub(crate) unsafe fn rofi_get<T>(src: usize, dst: &mut [T], pe: usize) -> Result
     let src_addr = src as *mut std::ffi::c_void;
     let dst_addr = dst.as_ptr() as *mut std::ffi::c_void;
     let size = dst.len() * std::mem::size_of::<T>();
-    let mut txid: c_ulong = 0;
+    let txid: c_ulong = 0;
     let mut ret = rofisys::rofi_get(dst_addr, src_addr, size, pe as u32, 0);//, &mut txid);
     while ret == -11 {
         std::thread::yield_now();
@@ -177,7 +177,7 @@ pub(crate) fn rofi_iget<T>(src: usize, dst: &mut [T], pe: usize) -> Result<c_ulo
     let src_addr = src as *mut std::ffi::c_void;
     let dst_addr = dst.as_ptr() as *mut std::ffi::c_void;
     let size = dst.len() * std::mem::size_of::<T>();
-    let mut txid: c_ulong = 0;
+    let txid: c_ulong = 0;
     //println!("[{:?}] ({:?}{:?}) rofi_iget src: {:x} dst: {:?} pe: {:?} size: {:?}",rofi_get_id(),file!(),line!(),src, dst.as_ptr(),pe, size);
     let mut ret = unsafe { rofisys::rofi_iget(dst_addr, src_addr, size, pe as u32, 0)};//, &mut txid) };
     while ret == -11 {

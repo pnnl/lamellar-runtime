@@ -12,8 +12,8 @@ use std::sync::Arc;
 
 pub struct RofiReq{
     txids: Vec<std::os::raw::c_ulong>,
-    drop_set: Arc<Mutex<Vec<std::os::raw::c_ulong>>>,
-    any_dropped: Arc<AtomicBool>,
+    _drop_set: Arc<Mutex<Vec<std::os::raw::c_ulong>>>,
+    _any_dropped: Arc<AtomicBool>,
 }
 
 impl Drop for RofiReq{
@@ -179,8 +179,8 @@ impl RofiComm {
     ) -> RofiReq {
         let mut req = RofiReq{
             txids: Vec::new(),
-            drop_set: self.drop_set.clone(),
-            any_dropped: self.any_dropped.clone(),
+            _drop_set: self.drop_set.clone(),
+            _any_dropped: self.any_dropped.clone(),
         };
         if pe != self.my_pe {
             let _lock = self.comm_mutex.lock();
@@ -223,8 +223,8 @@ impl RofiComm {
         // println!("[{:?}]-({:?}) iput entry",self.my_pe,thread::current().id());
         let mut req = RofiReq{
             txids: Vec::new(),
-            drop_set: self.drop_set.clone(),
-            any_dropped: self.any_dropped.clone(),
+            _drop_set: self.drop_set.clone(),
+            _any_dropped: self.any_dropped.clone(),
         };
         if pe != self.my_pe {
             let _lock = self.comm_mutex.lock();
@@ -265,8 +265,8 @@ impl RofiComm {
         // println!("[{:?}]-({:?}) put all entry",self.my_pe,thread::current().id());
         let mut req = RofiReq{
             txids: Vec::new(),
-            drop_set: self.drop_set.clone(),
-            any_dropped: self.any_dropped.clone(),
+            _drop_set: self.drop_set.clone(),
+            _any_dropped: self.any_dropped.clone(),
         };
         for pe in 0..self.my_pe {
             let _lock = self.comm_mutex.lock();
@@ -305,8 +305,8 @@ impl RofiComm {
         // println!("[{:?}]-({:?}) get entry",self.my_pe,thread::current().id());
         let mut req = RofiReq{
             txids: Vec::new(),
-            drop_set: self.drop_set.clone(),
-            any_dropped: self.any_dropped.clone(),
+            _drop_set: self.drop_set.clone(),
+            _any_dropped: self.any_dropped.clone(),
         };
         if pe != self.my_pe {
             unsafe {
@@ -358,11 +358,11 @@ impl RofiComm {
         // println!("[{:?}]-({:?}) iget entry",self.my_pe,thread::current().id());
         let mut req = RofiReq{
             txids: Vec::new(),
-            drop_set: self.drop_set.clone(),
-            any_dropped: self.any_dropped.clone(),
+            _drop_set: self.drop_set.clone(),
+            _any_dropped: self.any_dropped.clone(),
         };
         if pe != self.my_pe {
-            unsafe {
+            // unsafe {
                 let _lock = self.comm_mutex.lock();
                 match rofi_iget(src_addr, dst_addr, pe) {//.expect("error in rofi get")
                     Err(ret) => {
@@ -385,7 +385,7 @@ impl RofiComm {
                         }
                     }
                 }
-            }
+            // }
         } else {
             unsafe {
                 std::ptr::copy_nonoverlapping(
@@ -410,8 +410,8 @@ impl RofiComm {
     ) -> RofiReq {
         let mut req = RofiReq{
             txids: Vec::new(),
-            drop_set: self.drop_set.clone(),
-            any_dropped: self.any_dropped.clone(),
+            _drop_set: self.drop_set.clone(),
+            _any_dropped: self.any_dropped.clone(),
         };
         if pe != self.my_pe {
             // unsafe {
@@ -419,7 +419,7 @@ impl RofiComm {
             // println!("[{:?}]-({:?}) iget_relative [{:?}] entry",self.my_pe,thread::current().id(),pe);
 
             match rofi_iget(*self.rofi_base_address.read() + src_addr, dst_addr, pe){ //.expect("error in rofi get")
-                Err(ret) => {
+                Err(_ret) => {
                     println!(
                         "[{:?}] Error in iget_relative from {:?} src_addr {:x} ({:x}) dst_addr {:?} base_addr {:x} size {:?}",
                         self.my_pe,

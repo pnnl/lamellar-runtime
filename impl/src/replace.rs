@@ -1,7 +1,7 @@
 use syn::visit_mut::VisitMut;
 use syn::parse::Result;
 use syn::spanned::Spanned;
-use proc_macro2::Span;
+// use proc_macro2::Span;
 use regex::Regex;
 // use proc_macro_error::proc_macro_error;
 

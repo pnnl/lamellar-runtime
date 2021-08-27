@@ -2,7 +2,7 @@ use crate::{active_messaging::*, LamellarTeam, RemoteMemoryRegion}; //{ActiveMes
                                                                     // use crate::lamellae::Lamellae;
                                                                     // use crate::lamellar_arch::LamellarArchRT;
 use crate::memregion::{
-    local::LocalMemoryRegion, shared::SharedMemoryRegion, AsBase, Dist, LamellarMemoryRegion,
+    local::LocalMemoryRegion, shared::SharedMemoryRegion, Dist, LamellarMemoryRegion,
 };
 // use crate::lamellar_request::{AmType, LamellarRequest, LamellarRequestHandle};
 // use crate::lamellar_team::LamellarTeam;
@@ -45,11 +45,11 @@ pub struct ReduceKey {
 }
 crate::inventory::collect!(ReduceKey);
 
-// lamellar_impl::generate_reductions_for_type_rt!(u8);//, u16, u32, u64, u128, usize);
-// lamellar_impl::generate_reductions_for_type_rt!(i8, i16, i32, i64, i128, isize);
-// lamellar_impl::generate_reductions_for_type_rt!(f32, f64);
+lamellar_impl::generate_reductions_for_type_rt!(u8, u16, u32, u64, u128, usize);
+lamellar_impl::generate_reductions_for_type_rt!(i8, i16, i32, i64, i128, isize);
+lamellar_impl::generate_reductions_for_type_rt!(f32, f64);
 
-#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
 pub enum Distribution {
     Block,
     Cyclic,
@@ -102,39 +102,46 @@ where
     }
 }
 
-#[enum_dispatch(LamellarArrayRDMA<T>)]//,LamellarArrayReduce<T>)]
-#[derive(serde::Serialize, serde::Deserialize)]
-pub enum LamellarArray<T: Dist + 'static> {
+#[enum_dispatch(LamellarArrayRDMA<T>,LamellarArrayReduce<T>)] //LamellarArrayReduce<T>)]
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
+#[serde(bound = "T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static")]
+pub enum LamellarArray<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> {
     Unsafe(UnsafeArray<T>),
 }
 
+impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> DarcSerde
+    for LamellarArray<T>
+{
+    fn ser(&self, num_pes: usize, cur_pe: Result<usize, crate::IdError>) {
+        match self {
+            LamellarArray::Unsafe(inner) => DarcSerde::ser(inner, num_pes, cur_pe),
+        }
+    }
+    fn des(&self, cur_pe: Result<usize, crate::IdError>) {
+        match self {
+            LamellarArray::Unsafe(inner) => DarcSerde::des(inner, cur_pe),
+        }
+    }
+}
+
 #[enum_dispatch]
-pub trait LamellarArrayRDMA<T>
-where
-    T: Dist + 'static,
+pub trait LamellarArrayRDMA<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static>
 {
     fn put<U: MyInto<LamellarArrayInput<T>>>(&self, index: usize, buf: U);
     fn get<U: MyInto<LamellarArrayInput<T>>>(&self, index: usize, buf: U);
     fn local_as_slice(&self) -> &[T];
+    fn as_base<B: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static>(
+        self,
+    ) -> LamellarArray<B>;
 }
 
-
-
-// pub trait LamellarArrayReduce<T>: LamellarArrayRDMA<T>
-// where
-//     T: Dist + 'static,
-// {
-//     fn wait_all(&self);
-//     fn get_reduction_op(&self, op: String) -> LamellarArcAm {
-//         unsafe {
-//             REDUCE_OPS
-//                 .get(&(std::any::TypeId::of::<T>(), op))
-//                 .expect("unexpected reduction type")(
-//                 self.rmr.clone().as_base::<u8>(), self.num_pes
-//             )
-//         }
-//     }
-// }
+pub trait LamellarArrayReduce<T>: LamellarArrayRDMA<T>
+where
+    T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static,
+{
+    fn wait_all(&self);
+    fn get_reduction_op(&self, op: String) -> LamellarArcAm;
+}
 
 // pub(crate) trait LamellarBuffer<T>
 // where T: serde::ser::Serialize

@@ -1,7 +1,7 @@
 use core::marker::PhantomData;
 use futures::Future;
 use parking_lot::RwLock;
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde::{Deserialize, Deserializer};
 use std::cmp::PartialEq;
 use std::fmt;
 use std::ops::Deref;
@@ -14,7 +14,7 @@ use crate::LamellarTeam;
 // use crate::LamellarAM;
 use crate::active_messaging::ActiveMessaging;
 use crate::lamellae::{AllocationType, Backend, LamellaeComm, LamellaeRDMA};
-use crate::DarcSerde;
+// use crate::DarcSerde;
 use crate::IdError;
 
 pub(crate) mod local_rw_darc;
@@ -266,6 +266,7 @@ impl<T: ?Sized> Darc<T> {
     fn inner_mut(&self) -> &mut DarcInner<T> {
         unsafe { self.inner.as_mut().expect("invalid darc inner ptr") }
     }
+    #[allow(dead_code)]
     pub(crate) fn team(&self) -> Arc<LamellarTeam> {
         self.inner().team()
     }

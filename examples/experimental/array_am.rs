@@ -29,9 +29,9 @@ impl LamellarAM for RdmaAM {
         let local = lamellar::world.alloc_local_mem_region::<u8>(ARRAY_LEN);
         let local_slice = unsafe { local.as_mut_slice().unwrap() };
         local_slice[ARRAY_LEN - 1] = num_pes as u8;
-        unsafe {
+        // unsafe {
             self.array.get(0, &local);
-        }
+        // }
         while local_slice[ARRAY_LEN - 1] == num_pes as u8 {
             async_std::task::yield_now().await;
         }
@@ -42,9 +42,9 @@ impl LamellarAM for RdmaAM {
         //update an element on the original node
         local_slice[0] = lamellar::current_pe as u8;
         // if my_index < ARRAY_LEN {
-        unsafe {
+        // unsafe {
             self.array.put(my_index, &local.sub_region(0..=0));
-        }
+        // }
         // }
         lamellar::world.free_local_memory_region(local);
     }
@@ -62,7 +62,7 @@ fn main() {
     let my_pe = world.my_pe();
     let num_pes = world.num_pes();
     println!("creating array");
-    let array = UnsafeArray::<u8>::new(world.team(), ARRAY_LEN, Distribution::Cyclic);
+    let array = UnsafeArray::<u8>::new(world.team(), ARRAY_LEN, Distribution::Block);
     println!("creating memregion");
     let local_mem_region = world.alloc_local_mem_region::<u8>(ARRAY_LEN);
     println!("about to initialize array");
@@ -116,4 +116,12 @@ fn main() {
     if my_pe == 0 {
         println!("------------------------------------------------------------");
     }
+    world.barrier();
+    
+    if my_pe == 0 {
+        let sum=array.sum().get();
+        println!("sum: {:?}",sum);
+        println!("------------------------------------------------------------");
+    }
+    
 }

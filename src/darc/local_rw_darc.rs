@@ -26,7 +26,7 @@ unsafe impl<T: ?Sized + Sync + Send> Sync for LocalRwDarc<T> {}
 
 impl<T: ?Sized> crate::DarcSerde for LocalRwDarc<T> {
     fn ser(&self, num_pes: usize, cur_pe: Result<usize, IdError>) {
-        println!("in local darc ser");
+        // println!("in local darc ser");
         match cur_pe {
             Ok(cur_pe) => {
                 self.darc.serialize_update_cnts(num_pes, cur_pe);
