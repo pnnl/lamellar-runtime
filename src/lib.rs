@@ -82,7 +82,7 @@ pub use crate::lamellar_arch::{BlockedArch, IdError, LamellarArch, StridedArch};
 pub use crate::lamellar_world::*;
 pub use crate::scheduler::SchedulerType;
 
-pub use::crate::lamellar_request::LamellarRequest;
+pub use crate::lamellar_request::LamellarRequest;
 
 #[doc(hidden)]
 pub use crate::lamellar_team::LamellarTeamRT;
