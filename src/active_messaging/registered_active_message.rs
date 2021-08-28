@@ -316,9 +316,7 @@ pub(crate) async fn exec_return_am(
                         LamellarReturn::LocalData(data) => {
                             trace!("return am local am data");
                             if msg.return_data {
-                                ireq.data_tx
-                                    .send((msg.src as usize, Some(data)))
-                                    .expect("error returning local data");
+                                if let Ok(_) = ireq.data_tx.send((msg.src as usize, Some(data))) {}
                                 let cnt = ireq.cnt.fetch_sub(1, Ordering::SeqCst);
                                 if cnt == 1 {
                                     REQUESTS[msg.req_id % REQUESTS.len()].remove(&msg.req_id);
@@ -334,12 +332,7 @@ pub(crate) async fn exec_return_am(
                         LamellarReturn::RemoteData(data) => {
                             trace!("return am remote am data");
                             if msg.return_data {
-                                ireq.data_tx
-                                    .send((
-                                        msg.src as usize,
-                                        Some(crate::serialize(&data).unwrap()),
-                                    ))
-                                    .expect("error returning remote data");
+                                if let Ok(_) = ireq.data_tx.send((msg.src as usize, Some(crate::serialize(&data).unwrap()))) {}
                                 let cnt = ireq.cnt.fetch_sub(1, Ordering::SeqCst);
                                 if cnt == 1 {
                                     REQUESTS[msg.req_id % REQUESTS.len()].remove(&msg.req_id);
@@ -355,9 +348,7 @@ pub(crate) async fn exec_return_am(
                     }
                 } else {
                     if msg.return_data {
-                        ireq.data_tx
-                            .send((msg.src as usize, None))
-                            .expect("error returning none data");
+                        if let Ok(_) = ireq.data_tx.send((msg.src as usize, None)) {}
                         let cnt = ireq.cnt.fetch_sub(1, Ordering::SeqCst);
                         if cnt == 1 {
                             REQUESTS[msg.req_id % REQUESTS.len()].remove(&msg.req_id);

@@ -434,7 +434,7 @@ fn am_with_return_am(input: syn::ItemImpl, _output: syn::Type, args: String) -> 
     let orig_name_exec = quote::format_ident!("{}_exec", orig_name.clone());
 
     let ret_temp = if return_type.len() > 0 {
-        let return_type = syn::Ident::new(&return_type, Span::call_site());
+       let return_type: syn::Type = syn::parse_str(&return_type).expect("invalid type");
         quote! {
             impl LamellarAM for #orig_name {
                 type Output = #return_type;

@@ -122,6 +122,9 @@ path="examples/active_message_examples/async_comparison.rs"
 name="recursive_am"
 path="examples/active_message_examples/recursive_am.rs"
 
+[[example]]
+name="am_batch_tests"
+path="examples/active_message_examples/am_batch_tests.rs"
 
 ##------------ RDMA Examples -----------------##
 [[example]]
