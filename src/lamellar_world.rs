@@ -2,7 +2,7 @@ use crate::active_messaging::*;
 // use crate::lamellae::{create_lamellae, Backend, Lamellae, LamellaeAM};
 use crate::lamellae::{create_lamellae, Backend, Lamellae, LamellaeComm, LamellaeInit};
 use crate::lamellar_arch::LamellarArch;
-// #[cfg(feature = "experimental")]
+// //#[cfg(feature = "experimental")]
 // use crate::lamellar_array::LamellarArray;
 
 // use crate::lamellar_memregion::{
@@ -240,7 +240,7 @@ impl LamellarWorld {
         self.team.clone()
     }
 
-    // #[cfg(feature = "experimental")]
+    // //#[cfg(feature = "experimental")]
     // pub fn new_array<
     //     T: serde::ser::Serialize
     //         + serde::de::DeserializeOwned
@@ -257,7 +257,7 @@ impl LamellarWorld {
     //     LamellarArray::new(self.team.clone(), size, self.counters.clone())
     // }
 
-    // #[cfg(feature = "experimental")]
+    // //#[cfg(feature = "experimental")]
     // pub fn local_array<
     //     T: serde::ser::Serialize
     //         + serde::de::DeserializeOwned

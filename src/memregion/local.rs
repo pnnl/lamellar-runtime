@@ -49,9 +49,6 @@ impl<T: Dist + 'static> LocalMemoryRegion<T> {
     pub unsafe fn get<U: Into<LamellarMemoryRegion<T>>>(&self, pe: usize, index: usize, data: U) {
         MemoryRegionRDMA::<T>::get(self, pe, index, data);
     }
-    pub fn sub_region<R: std::ops::RangeBounds<usize>>(&self, range: R) -> LamellarMemoryRegion<T> {
-        SubRegion::<T>::sub_region(self, range)
-    }
     pub fn as_slice(&self) -> MemResult<&[T]> {
         RegisteredMemoryRegion::<T>::as_slice(self)
     }
@@ -63,6 +60,35 @@ impl<T: Dist + 'static> LocalMemoryRegion<T> {
     }
     pub fn as_mut_ptr(&self) -> MemResult<*mut T> {
         RegisteredMemoryRegion::<T>::as_mut_ptr(self)
+    }
+    pub fn sub_region<R: std::ops::RangeBounds<usize>>(&self, range: R) -> LocalMemoryRegion<T> {
+        let start = match range.start_bound() {
+            //inclusive
+            Bound::Included(idx) => *idx,
+            Bound::Excluded(idx) => *idx + 1,
+            Bound::Unbounded => 0,
+        };
+        let end = match range.end_bound() {
+            //exclusive
+            Bound::Included(idx) => *idx + 1,
+            Bound::Excluded(idx) => *idx,
+            Bound::Unbounded => self.sub_region_size,
+        };
+        if end > self.sub_region_size {
+            panic!(
+                "subregion range ({:?}-{:?}) exceeds size of memregion {:?}",
+                start, end, self.sub_region_size
+            );
+        }
+
+        // println!("local subregion: {:?} {:?} {:?}",start,end,(end-start));
+        LocalMemoryRegion {
+            mr: self.mr.clone(),
+            pe: self.pe,
+            sub_region_offset: self.sub_region_offset + start,
+            sub_region_size: (end - start),
+            phantom: PhantomData,
+        }
     }
 }
 
@@ -141,35 +167,7 @@ impl<T: Dist + 'static> MemRegionId for LocalMemoryRegion<T> {
 
 impl<T: Dist + 'static> SubRegion<T> for LocalMemoryRegion<T> {
     fn sub_region<R: std::ops::RangeBounds<usize>>(&self, range: R) -> LamellarMemoryRegion<T> {
-        let start = match range.start_bound() {
-            //inclusive
-            Bound::Included(idx) => *idx,
-            Bound::Excluded(idx) => *idx + 1,
-            Bound::Unbounded => 0,
-        };
-        let end = match range.end_bound() {
-            //exclusive
-            Bound::Included(idx) => *idx + 1,
-            Bound::Excluded(idx) => *idx,
-            Bound::Unbounded => self.sub_region_size,
-        };
-        if end > self.sub_region_size {
-            panic!(
-                "subregion range ({:?}-{:?}) exceeds size of memregion {:?}",
-                start, end, self.sub_region_size
-            );
-        }
-
-        // println!("local subregion: {:?} {:?} {:?}",start,end,(end-start));
-        LocalMemoryRegion {
-            mr: self.mr.clone(),
-            pe: self.pe,
-            sub_region_offset: self.sub_region_offset + start,
-            sub_region_size: (end - start),
-            phantom: PhantomData,
-        }
-        .into()
-
+        self.sub_region(range).into()
     }
 }
 

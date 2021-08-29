@@ -46,7 +46,7 @@ impl<T: Dist + 'static> crate::DarcSerde for SharedMemoryRegion<T> {
                 panic!("can only access darcs within team members ({:?})", err);
             }
         }
-        self.mr.print();
+        // self.mr.print();
     }
 }
 

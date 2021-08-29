@@ -4,7 +4,7 @@ use crate::active_messaging::*;
 use crate::barrier::Barrier;
 use crate::lamellae::{AllocationType, Lamellae, LamellaeComm};
 use crate::lamellar_arch::{GlobalArch, IdError, LamellarArch, LamellarArchEnum, LamellarArchRT};
-// #[cfg(feature = "experimental")]
+// //#[cfg(feature = "experimental")]
 // use crate::lamellar_array::{LamellarArray, LamellarSubArray};
 // use crate::lamellar_memregion::{
 //     LamellarLocalMemoryRegion, LamellarMemoryRegion, MemoryRegion, RegisteredMemoryRegion,
@@ -470,7 +470,7 @@ impl LamellarTeamRT {
         }
     }
 
-    // #[cfg(feature = "experimental")]
+    // //#[cfg(feature = "experimental")]
     // pub fn local_array<
     //     T: serde::ser::Serialize
     //         + serde::de::DeserializeOwned
