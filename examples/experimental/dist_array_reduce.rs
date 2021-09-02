@@ -9,18 +9,18 @@ use lamellar::array::{Distribution, UnsafeArray};
 use lamellar::{ActiveMessaging, RemoteMemoryRegion};
 use std::time::Instant;
 
-// lamellar::register_reduction!(
-//     min,
-//     |a, b| {
-//         if a < *b {
-//             a
-//         } else {
-//             *b
-//         }
-//     },
-//     usize,
-//     u8
-// );
+lamellar::register_reduction!(
+    min,
+    |a, b| {
+        if a < *b {
+            a
+        } else {
+            *b
+        }
+    },
+    usize,
+    u8
+);
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
@@ -55,17 +55,11 @@ fn main() {
         cyclic_array.put(0, &local_mem_region);
     }
     world.barrier();
-    // unsafe {
-    //     for elem in local_mem_region.as_mut_slice().unwrap(){
-    //         *elem = num_pes;
-    //     }
-    // }
     std::thread::sleep(std::time::Duration::from_secs(1));
+    println!("Block Array");
     block_array.print();
     println!();
-    // if my_pe  == 0{
-    //     usize_array.put(index/2,&local_mem_region);
-    // }
+    println!("Cyclic Array");
     std::thread::sleep(std::time::Duration::from_secs(1));
     cyclic_array.print();
     println!();
@@ -77,7 +71,8 @@ fn main() {
     block_array.get(0, &local_mem_region);
     world.barrier();
     std::thread::sleep(std::time::Duration::from_secs(1));
-    println!("[{:?}] {:?}", my_pe, local_mem_region.as_slice());
+    println!("[{:?}] get from block array {:?}", my_pe, local_mem_region.as_slice());
+
     unsafe {
         for elem in local_mem_region.as_mut_slice().unwrap() {
             *elem = 0;
@@ -86,56 +81,25 @@ fn main() {
     cyclic_array.get(0, &local_mem_region);
     world.barrier();
     std::thread::sleep(std::time::Duration::from_secs(1));
-    println!("[{:?}] {:?}", my_pe, local_mem_region.as_slice());
+    println!("[{:?}] get from cyclic array {:?}", my_pe, local_mem_region.as_slice());
 
-    // let usize_array: LamellarArray<usize> = world.new_array(len_per_pe); //100 elements per pe
-    // let mut local = vec![0; total_len];
-    // println!("initializing data");
-    // unsafe {
-    //     //this will NOT be the standard way to update a LamellarArray
-    //     let rmr_slice = usize_array.get_raw_mem_region().as_mut_slice().unwrap();
-    //     for i in 0..len_per_pe {
-    //         rmr_slice[i] = my_pe * len_per_pe + i + 1;
-    //         local[i] = i + 1;
-    //     }
-    //     for i in len_per_pe..total_len {
-    //         //finish filling out the local buf
-    //         local[i] = i + 1;
-    //     }
-    //     //hope to end up with something like:
-    //     // for (i,elem) in usize_array.lamellar_iter_mut().enumerate(){
-    //     //    *elem = my_pe * len_per_pe + i;
-    //     //}
-    //     // next step will likely be something like:
-    //     // for i in usize_array.local_indices(){
-    //     //    usize_array[i] = i;
-    //     //}
-    //     // for i in 0..num_pes{
-    //     //     if i == my_pe{
-    //     //         println!("{:?}",&rmr_slice);
-    //     //     }
-    //     //     world.barrier();
-    //     // }
-    // }
-    // world.barrier();
-    // if my_pe == 0 {
-    //     println!("starting dist");
-    //     let timer = Instant::now();
-    //     let sum = usize_array.sum().get();
-    //     let dist_time = timer.elapsed().as_secs_f64();
-    //     println!("starting local");
-    //     let timer = Instant::now();
-    //     let local_sum = local.iter().fold(0, |acc, val| acc + val);
-    //     let local_time = timer.elapsed().as_secs_f64();
+    world.barrier();
+    if my_pe == 0 {
+        println!("starting dist");
+        let mut timer = Instant::now();
+        let cyclic_sum = cyclic_array.sum().get();
+        let cyclic_dist_time = timer.elapsed().as_secs_f64();
+        timer = Instant::now();
+        let block_sum= block_array.sum().get(); //need to figure out why this calculation is wrong...
+        let block_dist_time = timer.elapsed().as_secs_f64();
+        let calculated_sum = (total_len/2)*(0+99);
+        println!("cyclic_sum {:?} cyclic time {:?}, block_sum {:?} block time {:?}, calculated sum {:?}",cyclic_sum,cyclic_dist_time,block_sum,block_dist_time,calculated_sum);
 
-    //     println!(
-    //         "sum: {:?} ({:?}) {:?} ({:?})",
-    //         sum, dist_time, local_sum, local_time
-    //     );
-
-    //     let min = usize_array.reduce("min").get();
-    //     println!("min: {:?} {:?}", min, 1);
-    // }
+        let block_min = block_array.reduce("min").get();
+        let cyclic_min = block_array.reduce("min").get();
+        println!("block min: {:?} cyclic min: {:?}", block_min,cyclic_min);
+        
+    }
     world.barrier();
     world.free_local_memory_region(local_mem_region);
 }

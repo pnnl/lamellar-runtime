@@ -878,14 +878,20 @@ fn create_reduction(
     reduction: String,
     op: proc_macro2::TokenStream,
     rt: bool,
-    crate_header: String,
+    // crate_header: String,
 ) -> proc_macro2::TokenStream {
     let reduction_name = quote::format_ident!("{:}_{:}_reduction", typeident, reduction);
     // let reduction_return_name = quote::format_ident!("{:}_{:}_reduction_return", typeident, reduction);
     // let reduction_unpack = quote::format_ident!("{:}_{:}_reduction_unpack", typeident, reduction);
     let reduction_gen = quote::format_ident!("{:}_{:}_reduction_gen", typeident, reduction);
     let reduction = quote::format_ident!("{:}", reduction);
-    let lamellar = quote::format_ident!("{}", crate_header.clone());
+    // let lamellar = quote::format_ident!("{}", crate_header.clone());
+    let lamellar = if rt {
+        quote::format_ident!("crate")
+    }
+    else {
+        quote::format_ident!("__lamellar")
+    };
 
     let (am_data, am): (syn::Path,syn::Path) = if rt {
         (syn::parse("lamellar_impl::AmDataRT".parse().unwrap()).unwrap(),
@@ -949,7 +955,22 @@ fn create_reduction(
             }
         }
     };
-    expanded
+
+    let user_expanded = quote_spanned!{expanded.span()=>
+        const _: () = {
+            extern crate lamellar as __lamellar;
+            use __lamellar::array::LamellarArrayRDMA;
+            #expanded
+        };
+    };
+    // let span = user_expanded.span();
+    // println!("{:?} {:?} {:?}", span.source_file(), span.start(), span.end());
+    if lamellar == "crate" {
+        expanded
+    }
+    else{
+        user_expanded
+    }
 }
 
 #[proc_macro_error]
@@ -986,7 +1007,7 @@ pub fn register_reduction(item: TokenStream) -> TokenStream {
             args.name.to_string(),
             quote! {#closure},
             false,
-            "lamellar".to_string(),
+            // "lamellar".to_string(),
         ));
     }
     TokenStream::from(output)
@@ -1008,7 +1029,7 @@ pub fn generate_reductions_for_type(item: TokenStream) -> TokenStream {
                 data_slice[1..].iter().fold(first,|acc,val|{ acc+val } )
             },
             false,
-            "lamellar".to_string(),
+            // "lamellar".to_string(),
         ));
         output.extend(create_reduction(
             typeident.clone(),
@@ -1019,7 +1040,7 @@ pub fn generate_reductions_for_type(item: TokenStream) -> TokenStream {
                 data_slice[1..].iter().fold(first,|acc,val|{ acc*val } )
             },
             false,
-            "lamellar".to_string(),
+            // "lamellar".to_string(),
         ));
         output.extend(create_reduction(
             typeident.clone(),
@@ -1028,7 +1049,7 @@ pub fn generate_reductions_for_type(item: TokenStream) -> TokenStream {
                 *<lamellar::LamellarMemoryRegion<#typeident> as lamellar::RegisteredMemoryRegion>::as_slice(&self.data).unwrap().iter().max().unwrap()
             },
             false,
-            "lamellar".to_string(),
+            // "lamellar".to_string(),
         ));
     }
 
@@ -1048,7 +1069,7 @@ pub fn generate_reductions_for_type_rt(item: TokenStream) -> TokenStream {
                 |acc: #typeident, val: &#typeident|{ acc+*val }
             },
             true,
-            "crate".to_string(),
+            // "crate".to_string(),
         ));
         output.extend(create_reduction(
             typeident.clone(),
@@ -1057,7 +1078,7 @@ pub fn generate_reductions_for_type_rt(item: TokenStream) -> TokenStream {
                 |acc: #typeident, val: &#typeident| { acc* *val }
             },
             true,
-            "crate".to_string(),
+            // "crate".to_string(),
         ));
         output.extend(create_reduction(
             typeident.clone(),
@@ -1066,7 +1087,7 @@ pub fn generate_reductions_for_type_rt(item: TokenStream) -> TokenStream {
                 |val1: #typeident, val2: &#typeident| { if val1 > *val2 {val1} else {*val2} }
             },
             true,
-            "crate".to_string(),
+            // "crate".to_string(),
         ));
     }
 

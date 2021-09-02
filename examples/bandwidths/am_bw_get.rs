@@ -88,12 +88,12 @@ fn main() {
             for _j in (0..(2_u64.pow(exp))).step_by(num_bytes as usize) {
                 let sub_timer = Instant::now();
                 world.exec_am_pe(
-                    0,
+                    my_pe,
                     DataAM {
                         array: array.clone(),
                         index: 0 as usize,
                         length: num_bytes as usize,
-                        src: my_pe,
+                        src: 0,
                     },
                 );
                 sub_time += sub_timer.elapsed().as_secs_f64();
