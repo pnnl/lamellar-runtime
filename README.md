@@ -43,7 +43,7 @@ fn main(){
 
 # Creating and executing a Registered Active Message
 ```rust
-use lamellar::{ActiveMessaging, LamellarAm};
+use lamellar::{ActiveMessaging, LamellarAM};
 #[derive(serde::Serialize, serde::Deserialize)] 
 struct HelloWorld { //the "input data" we are sending with our active message
     my_pe: usize, // "pe" is processing element == a node
@@ -71,8 +71,8 @@ fn main(){
     }
     world.wait_all(); // wait for all active messages to finish
     world.barrier();  // synchronize with other pes
-    let handle = world.exec_all(am.clone()); //also possible to execute on every PE with a single call
-    handle.get(); //both exec_all and exec_am_pe return request handles that can be used to access any returned result
+    let handle = world.exec_am_all(am.clone()); //also possible to execute on every PE with a single call
+    handle.get(); //both exec_am_all and exec_am_pe return request handles that can be used to access any returned result
 }
 ```
 
