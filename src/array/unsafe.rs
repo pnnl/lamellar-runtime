@@ -33,13 +33,15 @@ struct UnsafeArrayInner {
     array_counters: Arc<AMCounters>,
     pub(crate) team: Arc<LamellarTeam>,
 }
+
+//need to calculate num_elems_local dynamically
 #[lamellar_impl::AmDataRT(Clone)]
 pub struct UnsafeArray<T: Dist + 'static> {
     inner: Darc<UnsafeArrayInner>,
     distribution: Distribution,
     size: usize,      //total array size
     elem_per_pe: f32, //used to evenly distribute elems
-    num_elems_local: usize,
+    // num_elems_local: usize,
     sub_array_offset: usize,
     sub_array_size: usize,
     phantom: PhantomData<T>,
@@ -69,21 +71,6 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Un
         distribution: Distribution,
     ) -> UnsafeArray<T> {
         let elem_per_pe = array_size as f32 / team.num_pes() as f32;
-        let num_elems_local = match distribution {
-            Distribution::Block => {
-                ((elem_per_pe * (team.team_pe_id().unwrap() + 1) as f32).round()
-                    - (elem_per_pe * team.team_pe_id().unwrap() as f32).round())
-                    as usize
-            }
-            Distribution::Cyclic => {
-                let rem = array_size % team.num_pes();
-                if team.team_pe_id().unwrap() < rem {
-                    elem_per_pe as usize + 1
-                } else {
-                    elem_per_pe as usize
-                }
-            }
-        };
         let per_pe_size = (array_size as f32 / team.num_pes() as f32).ceil() as usize; //we do ceil to ensure enough space an each pe
                                                                                        // println!("new unsafe array {:?} {:?} {:?}", elem_per_pe, num_elems_local, per_pe_size);
         let rmr = MemoryRegion::new(
@@ -98,7 +85,8 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Un
             }
         }
         // println!("after array init");
-        UnsafeArray {
+
+        let array = UnsafeArray {
             inner: Darc::new(
                 team.clone(),
                 UnsafeArrayInner {
@@ -108,13 +96,33 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Un
                 },
             )
             .expect("trying to create array on non team member"),
-            distribution: distribution,
+            distribution: distribution.clone(),
             size: array_size,
             elem_per_pe: elem_per_pe,
-            num_elems_local: num_elems_local,
+            // num_elems_local: num_elems_local,
             sub_array_offset: 0,
             sub_array_size: array_size,
             phantom: PhantomData,
+        };
+        // println!("dist {:?} size: {:?} elem_per_per {:?} num_elems_local {:?} sub_array_offset {:?} sub_array_size {:?}",
+        // distribution,array_size,elem_per_pe,array.num_elems_local(),0,array_size);
+        array
+    }
+    fn num_elems_local(&self) -> usize {
+        match self.distribution {
+            Distribution::Block => {
+                ((self.elem_per_pe * (self.inner.team.team_pe_id().unwrap() + 1) as f32).round()
+                    - (self.elem_per_pe * self.inner.team.team_pe_id().unwrap() as f32).round())
+                    as usize
+            }
+            Distribution::Cyclic => {
+                let rem = self.size % self.inner.team.num_pes();
+                if self.inner.team.team_pe_id().unwrap() < rem {
+                    self.elem_per_pe as usize + 1
+                } else {
+                    self.elem_per_pe as usize
+                }
+            }
         }
     }
 
@@ -227,31 +235,44 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Un
         let len = self.sub_array_size;
         let my_pe = self.inner.team.team_pe_id().unwrap();
         let num_pes = self.inner.team.num_pes();
+        // println!(
+        //     "index: {:?} len {:?} numelemslocal {:?}",
+        //     index,
+        //     len,
+        //     self.num_elems_local()
+        // );
         match self.distribution {
             Distribution::Block => {
                 let start_pe = (index as f32 / self.elem_per_pe).floor() as usize;
                 let end_pe = (((index + len) as f32) / self.elem_per_pe).ceil() as usize;
+                let num_elems_local = self.num_elems_local();
+                // println!("start_pe {:?} end_pe {:?}", start_pe, end_pe);
                 if my_pe == start_pe || my_pe == end_pe {
                     let start_index = index - (self.elem_per_pe * my_pe as f32).round() as usize;
-                    let end_index = if start_index + len > self.num_elems_local {
-                        self.num_elems_local
+                    let end_index = if start_index + len > num_elems_local {
+                        num_elems_local
                     } else {
                         start_index + len
                     };
+                    // println!("start_index {:?} end_index {:?}", start_index, end_index);
                     &slice[start_index..end_index]
                 } else {
-                    &slice[0..self.num_elems_local]
+                    &slice[0..num_elems_local]
                 }
             }
             Distribution::Cyclic => {
                 let start_index = index / num_pes + if my_pe >= index % num_pes { 0 } else { 1 };
                 let remainder = (index + len) % num_pes;
                 let end_index = (index + len) / num_pes
-                    - if my_pe <= remainder && remainder > 0 {
+                    + if my_pe < remainder && remainder > 0 {
                         1
                     } else {
                         0
                     };
+                // println!(
+                //     "start_index {:?} end_index {:?} remainder {:?}",
+                //     start_index, end_index, remainder
+                // );
                 &slice[start_index..end_index]
             }
         }
@@ -259,33 +280,27 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Un
     fn as_base<B: Dist + 'static>(self) -> UnsafeArray<B> {
         let u8_size = self.size * std::mem::size_of::<T>();
         let b_size = u8_size / std::mem::size_of::<B>();
+        // println!("u8size {:?} bsize {:?}", u8_size, b_size);
         let elem_per_pe = b_size as f32 / self.inner.team.num_pes() as f32;
-        let num_elems_local = match self.distribution {
-            Distribution::Block => {
-                ((elem_per_pe * (self.inner.team.team_pe_id().unwrap() + 1) as f32).round()
-                    - (elem_per_pe * self.inner.team.team_pe_id().unwrap() as f32).round())
-                    as usize
-            }
-            Distribution::Cyclic => {
-                let rem = b_size % self.inner.team.num_pes();
-                if self.inner.team.team_pe_id().unwrap() < rem {
-                    elem_per_pe as usize + 1
-                } else {
-                    elem_per_pe as usize
-                }
-            }
-        };
+        // println!("elem_per_pe {:?}", elem_per_pe);
         let u8_offset = self.sub_array_offset * std::mem::size_of::<T>();
-        let u8_size = self.sub_array_size * std::mem::size_of::<T>();
+        let u8_sub_size = self.sub_array_size * std::mem::size_of::<T>();
+
+        // println!(
+        //     "old num_elems_local {:?} u8_offset {:?} u8_sub_size {:?}",
+        //     self.num_elems_local(),
+        //     u8_offset,
+        //     u8_sub_size
+        // );
 
         UnsafeArray {
             inner: self.inner.clone(),
             distribution: self.distribution,
             size: b_size,
             elem_per_pe: elem_per_pe,
-            num_elems_local: num_elems_local / std::mem::size_of::<B>(),
+            // num_elems_local: num_elems_local,
             sub_array_offset: u8_offset / std::mem::size_of::<B>(),
-            sub_array_size: u8_size / std::mem::size_of::<B>(),
+            sub_array_size: u8_sub_size / std::mem::size_of::<B>(),
             phantom: PhantomData,
         }
     }

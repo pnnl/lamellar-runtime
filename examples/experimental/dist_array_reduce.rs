@@ -71,7 +71,13 @@ fn main() {
     block_array.get(0, &local_mem_region);
     world.barrier();
     std::thread::sleep(std::time::Duration::from_secs(1));
-    println!("[{:?}] get from block array {:?}", my_pe, local_mem_region.as_slice());
+    if my_pe == 0 {
+        println!(
+            "[{:?}] get from block array {:?}",
+            my_pe,
+            local_mem_region.as_slice()
+        );
+    }
 
     unsafe {
         for elem in local_mem_region.as_mut_slice().unwrap() {
@@ -81,7 +87,13 @@ fn main() {
     cyclic_array.get(0, &local_mem_region);
     world.barrier();
     std::thread::sleep(std::time::Duration::from_secs(1));
-    println!("[{:?}] get from cyclic array {:?}", my_pe, local_mem_region.as_slice());
+    if my_pe == 0 {
+        println!(
+            "[{:?}] get from cyclic array {:?}",
+            my_pe,
+            local_mem_region.as_slice()
+        );
+    }
 
     world.barrier();
     if my_pe == 0 {
@@ -90,15 +102,17 @@ fn main() {
         let cyclic_sum = cyclic_array.sum().get();
         let cyclic_dist_time = timer.elapsed().as_secs_f64();
         timer = Instant::now();
-        let block_sum= block_array.sum().get(); //need to figure out why this calculation is wrong...
+        let block_sum = block_array.sum().get(); //need to figure out why this calculation is wrong...
         let block_dist_time = timer.elapsed().as_secs_f64();
-        let calculated_sum = (total_len/2)*(0+99);
-        println!("cyclic_sum {:?} cyclic time {:?}, block_sum {:?} block time {:?}, calculated sum {:?}",cyclic_sum,cyclic_dist_time,block_sum,block_dist_time,calculated_sum);
+        let calculated_sum = (total_len / 2) * (0 + 99);
+        println!(
+            "cyclic_sum {:?} cyclic time {:?}, block_sum {:?} block time {:?}, calculated sum {:?}",
+            cyclic_sum, cyclic_dist_time, block_sum, block_dist_time, calculated_sum
+        );
 
         let block_min = block_array.reduce("min").get();
         let cyclic_min = block_array.reduce("min").get();
-        println!("block min: {:?} cyclic min: {:?}", block_min,cyclic_min);
-        
+        println!("block min: {:?} cyclic min: {:?}", block_min, cyclic_min);
     }
     world.barrier();
     world.free_local_memory_region(local_mem_region);

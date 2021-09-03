@@ -920,6 +920,7 @@ fn create_reduction(
                     // println!("[{:?}] root {:?} {:?}",__lamellar_current_pe,self.start_pe, self.end_pe);
                     let timer = std::time::Instant::now();
                     let data_slice = self.data.local_as_slice();
+                    // println!("data: {:?}",data_slice);
                     let first = data_slice.first().unwrap().clone();
                     let res = data_slice[1..].iter().fold(first, #op );
                     // println!("[{:?}] {:?} {:?}",__lamellar_current_pe,res,timer.elapsed().as_secs_f64());
