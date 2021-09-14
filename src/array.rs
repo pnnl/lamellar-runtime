@@ -170,6 +170,7 @@ impl<'a, T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static
                 buf_0_slice[i] = 0;
                 buf_1_slice[i] = 1;
             }
+            // println!("{:?} {:?} {:?}", self.index, buf_0_slice, buf_1_slice);
             self.array.get(self.index, &self.buf_0);
             self.array.get(self.index, &self.buf_1);
             for i in 0..buf_0_slice.len() {
@@ -177,11 +178,13 @@ impl<'a, T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static
                     std::thread::yield_now();
                 }
             }
-            if buf_0_slice[0] == buf_1_slice[0] {
-                Some(unsafe { self.ptr.as_ref() })
-            } else {
-                None
-            }
+            // println!("{:?} {:?} {:?}", self.index, buf_0_slice, buf_1_slice);
+            // if buf_0_slice[0] == buf_1_slice[0] {
+            self.index += 1;
+            Some(unsafe { self.ptr.as_ref() })
+            // } else {
+            //     None
+            // }
             // else if
         } else {
             None

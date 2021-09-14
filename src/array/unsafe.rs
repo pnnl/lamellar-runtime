@@ -130,7 +130,13 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Un
         let buf = buf.my_into(&self.inner.team);
         let start_pe = (index as f32 / self.elem_per_pe).floor() as usize;
         let end_pe = (((index + buf.len()) as f32) / self.elem_per_pe).ceil() as usize;
-        // println!("index: {:?} start_pe {:?} end_pe {:?} buf_len {:?} elem_per_pe {:?}",index,start_pe,end_pe, buf.len(),self.inner.elem_per_pe);
+        // println!(
+        //     "index: {:?} start_pe {:?} end_pe {:?} buf_len {:?} ",
+        //     index,
+        //     start_pe,
+        //     end_pe,
+        //     buf.len(),
+        // );
         let mut dist_index = index;
         let mut buf_index = 0;
         for pe in start_pe..end_pe {
@@ -140,7 +146,7 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Un
             let offset = dist_index - pe_start_index;
             let len = std::cmp::min(num_elems_on_pe - offset, buf.len() - buf_index);
             if len > 0 {
-                // println!("pe {:?} offset {:?} range: {:?}-{:?} dist_index {:?} pe_start_index {:?} num_elems {:?} len {:?}", pe, offset, buf_index, buf_index+len, dist_index, pe_start_index, num_elems_on_pe, len);
+                println!("pe {:?} offset {:?} range: {:?}-{:?} dist_index {:?} pe_start_index {:?} num_elems {:?} len {:?}", pe, offset, buf_index, buf_index+len, dist_index, pe_start_index, num_elems_on_pe, len);
                 match op {
                     ArrayOp::Put => unsafe {
                         self.inner.mem_region.put(
@@ -198,10 +204,17 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Un
             }
             ArrayOp::Get => {
                 for i in 0..buf.len() {
+                    // println!(
+                    //     "gindex {:?} pe {:?} pindex {:?} i: {:?}",
+                    //     index,
+                    //     (index + i) % num_pes,
+                    //     (index + i) / num_pes,
+                    //     i
+                    // );
                     unsafe {
                         self.inner.mem_region.get(
                             (index + i) % num_pes,
-                            index + i / num_pes,
+                            (index + i) / num_pes,
                             buf.sub_region(i..=i),
                         )
                     }; //can't do a more optimized get (where we do one get per pe) until rofi supports transfer completion events.
@@ -338,7 +351,12 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Un
     pub fn max(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
         self.reduce("max")
     }
+
+    pub fn iter(&self) -> LamellarArrayIter<'_, T> {
+        LamellarArrayIter::new(self.clone().into(), self.inner.team.clone())
+    }
 }
+
 impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + std::fmt::Debug + 'static>
     UnsafeArray<T>
 {
@@ -446,7 +464,7 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static>
     LamellarArrayIterator<T> for UnsafeArray<T>
 {
     fn iter(&self) -> LamellarArrayIter<'_, T> {
-        LamellarArrayIter::new(self.clone().into(), self.inner.team.clone())
+        self.iter()
     }
 }
 
