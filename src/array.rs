@@ -1,3 +1,4 @@
+use crate::memregion::AsBase;
 use crate::{active_messaging::*, LamellarTeam, RemoteMemoryRegion}; //{ActiveMessaging,AMCounters,Cmd,Msg,LamellarAny,LamellarLocal};
                                                                     // use crate::lamellae::Lamellae;
                                                                     // use crate::lamellar_arch::LamellarArchRT;
@@ -13,8 +14,10 @@ use crate::memregion::{
 // use std::ops::{Index, IndexMut, Range, RangeFrom, RangeFull, RangeInclusive, RangeTo, RangeToInclusive};
 // use std::any;
 // use core::marker::PhantomData;
+use core::ptr::NonNull;
 use std::collections::HashMap;
 // use std::sync::atomic::Ordering;
+use std::marker::PhantomData;
 use std::sync::Arc;
 // use std::time::{Duration, Instant};
 use enum_dispatch::enum_dispatch;
@@ -102,7 +105,7 @@ where
     }
 }
 
-#[enum_dispatch(LamellarArrayRDMA<T>,LamellarArrayReduce<T>)] //LamellarArrayReduce<T>)]
+#[enum_dispatch(LamellarArrayRDMA<T>,LamellarArrayReduce<T>,LamellarArrayIterator<T>)]
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 #[serde(bound = "T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static")]
 pub enum LamellarArray<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> {
@@ -124,37 +127,68 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Da
     }
 }
 
-// pub(crate) struct LamellarArrayIter<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static>{
-//     array: LamellarArray<T>,
-//     buf_0: LocalMemoryRegion<T>,
-//     buf_1: LocalMemoryRegion<T>,
-//     index: usize,
-// }
+pub struct LamellarArrayIter<
+    'a,
+    T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static,
+> {
+    array: LamellarArray<T>,
+    buf_0: LocalMemoryRegion<T>,
+    buf_1: LocalMemoryRegion<T>,
+    index: usize,
+    ptr: NonNull<T>,
+    _marker: PhantomData<&'a T>,
+}
 
-// impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Iterator for LamellarArrayIter<T>{
-//     type Item = T;
-//     fn next(&mut self) -> Option<T> {
-//         let res = if self.index < self.array.len() {
-//             let mut buf_0_slice = unsafe {self.buf_0.as_mut_slice().unwrap()};
-//             // buf_0_slice[0]=;
-//             let mut buf_1_slice = unsafe { self.buf_1.as_mut_slice().unwrap()};
-//             // buf_1_slice[0]=;
-//             self.array.get(self.index,&self.buf_0);
-//             self.array.get(self.index,&self.buf_1);
-//             while buf_0_slice[0] == 0 || buf_1_slice[0] == 1 {
-//                 std::thread::yield_now();
-//             }
-//             if buf_0_slice[0] == buf_1_slice[0]{
-//                 Some(buf_0_slice[0])
-//             }
-//             else{
-//                 None
-//             }
-//             // else if
-//         }
-//         None
-//     }
-// }
+impl<'a, T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static>
+    LamellarArrayIter<'a, T>
+{
+    fn new(array: LamellarArray<T>, team: Arc<LamellarTeam>) -> LamellarArrayIter<'a, T> {
+        let buf_0 = team.alloc_local_mem_region(1);
+        let ptr = NonNull::new(buf_0.as_mut_ptr().unwrap()).unwrap();
+        LamellarArrayIter {
+            array: array,
+            buf_0: buf_0,
+            buf_1: team.alloc_local_mem_region(1),
+            index: 0,
+            ptr: ptr,
+            _marker: PhantomData,
+        }
+    }
+}
+
+impl<'a, T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Iterator
+    for LamellarArrayIter<'a, T>
+{
+    type Item = &'a T;
+    fn next(&mut self) -> Option<Self::Item> {
+        let res = if self.index < self.array.len() {
+            let buf_0_u8 = self.buf_0.clone().as_base::<u8>();
+            let buf_0_slice = unsafe { buf_0_u8.as_mut_slice().unwrap() };
+            let buf_1_u8 = self.buf_1.clone().as_base::<u8>();
+            let buf_1_slice = unsafe { buf_1_u8.as_mut_slice().unwrap() };
+            for i in 0..buf_0_slice.len() {
+                buf_0_slice[i] = 0;
+                buf_1_slice[i] = 1;
+            }
+            self.array.get(self.index, &self.buf_0);
+            self.array.get(self.index, &self.buf_1);
+            for i in 0..buf_0_slice.len() {
+                while buf_0_slice[i] != buf_1_slice[i] {
+                    std::thread::yield_now();
+                }
+            }
+            if buf_0_slice[0] == buf_1_slice[0] {
+                Some(unsafe { self.ptr.as_ref() })
+            } else {
+                None
+            }
+            // else if
+        } else {
+            None
+        };
+        res
+    }
+}
 
 #[enum_dispatch]
 pub trait LamellarArrayRDMA<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static>
@@ -174,6 +208,13 @@ where
 {
     fn wait_all(&self);
     fn get_reduction_op(&self, op: String) -> LamellarArcAm;
+}
+
+pub trait LamellarArrayIterator<T>: LamellarArrayRDMA<T>
+where
+    T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static,
+{
+    fn iter(&self) -> LamellarArrayIter<'_, T>;
 }
 
 // pub(crate) trait LamellarBuffer<T>

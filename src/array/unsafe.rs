@@ -8,8 +8,8 @@ use crate::memregion::{Dist, MemoryRegion, RegisteredMemoryRegion, RemoteMemoryR
 use crate::lamellar_team::LamellarTeam;
 // use crate::scheduler::{Scheduler,SchedulerQueue};
 use crate::array::{
-    Distribution, LamellarArray, LamellarArrayInput, LamellarArrayRDMA, LamellarArrayReduce,
-    MyInto, REDUCE_OPS,
+    Distribution, LamellarArray, LamellarArrayInput, LamellarArrayIter, LamellarArrayIterator,
+    LamellarArrayRDMA, LamellarArrayReduce, MyInto, REDUCE_OPS,
 };
 use crate::darc::Darc;
 // use crate::lamellar_memregion::RegisteredMemoryRegion;
@@ -439,6 +439,14 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> La
             self.inner.team.num_pes(),
         )
         // }
+    }
+}
+
+impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static>
+    LamellarArrayIterator<T> for UnsafeArray<T>
+{
+    fn iter(&self) -> LamellarArrayIter<'_, T> {
+        LamellarArrayIter::new(self.clone().into(), self.inner.team.clone())
     }
 }
 

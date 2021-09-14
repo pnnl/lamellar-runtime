@@ -33,10 +33,7 @@ impl std::fmt::Display for MemNotLocalError {
 }
 
 impl std::error::Error for MemNotLocalError {}
-pub trait Dist: 
-std::clone::Clone
-+ Send
-+ Sync {}
+pub trait Dist: std::clone::Clone + Send + Sync {}
 
 impl<T: serde::ser::Serialize + serde::de::DeserializeOwned + std::clone::Clone + Send + Sync> Dist
     for T
@@ -44,19 +41,23 @@ impl<T: serde::ser::Serialize + serde::de::DeserializeOwned + std::clone::Clone 
 }
 
 #[enum_dispatch(RegisteredMemoryRegion<T>, MemRegionId, AsBase, SubRegion<T>, MemoryRegionRDMA<T>, RTMemoryRegionRDMA<T>)]
-#[derive( Clone, Debug)]
+#[derive(Clone, Debug)]
 pub enum LamellarMemoryRegion<T: Dist + 'static> {
     Shared(SharedMemoryRegion<T>),
     Local(LocalMemoryRegion<T>),
 }
 
-impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> From<&LamellarMemoryRegion<T>> for LamellarArrayInput<T> {
+impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static>
+    From<&LamellarMemoryRegion<T>> for LamellarArrayInput<T>
+{
     fn from(mr: &LamellarMemoryRegion<T>) -> Self {
         LamellarArrayInput::LamellarMemRegion(mr.clone())
     }
 }
 
-impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> MyFrom<&LamellarMemoryRegion<T>> for LamellarArrayInput<T> {
+impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static>
+    MyFrom<&LamellarMemoryRegion<T>> for LamellarArrayInput<T>
+{
     fn my_from(mr: &LamellarMemoryRegion<T>, _team: &Arc<LamellarTeam>) -> Self {
         LamellarArrayInput::LamellarMemRegion(mr.clone())
     }
@@ -67,6 +68,7 @@ pub trait RegisteredMemoryRegion<T: Dist + 'static> {
     fn len(&self) -> usize;
     fn addr(&self) -> MemResult<usize>;
     fn as_slice(&self) -> MemResult<&[T]>;
+    fn at(&self, index: usize) -> MemResult<&T>;
     unsafe fn as_mut_slice(&self) -> MemResult<&mut [T]>;
     fn as_ptr(&self) -> MemResult<*const T>;
     fn as_mut_ptr(&self) -> MemResult<*mut T>;
@@ -161,7 +163,7 @@ impl<T: Dist + 'static> MemoryRegion<T> {
             addr: addr,
             pe: lamellae.my_pe(),
             size: size,
-            num_bytes: size * std::mem::size_of::<T>(), 
+            num_bytes: size * std::mem::size_of::<T>(),
             backend: lamellae.backend(),
             rdma: lamellae,
             local: local,
@@ -175,7 +177,7 @@ impl<T: Dist + 'static> MemoryRegion<T> {
         temp
     }
 
-    #[allow(dead_code)]   
+    #[allow(dead_code)]
     pub(crate) unsafe fn as_base<B: Dist + 'static>(self) -> MemoryRegion<B> {
         //this is allowed as we consume the old object..
         assert_eq!(
@@ -225,8 +227,19 @@ impl<T: Dist + 'static> MemoryRegion<T> {
                 panic!("ERROR: put data src is not local");
             }
         } else {
-            println!("mem region bytes: {:?} sizeof elem {:?} len {:?}", self.num_bytes, std::mem::size_of::<T>(), self.size);
-            println!("data bytes: {:?} sizeof elem {:?} len {:?} index: {:?}",data.len() * std::mem::size_of::<R>(), std::mem::size_of::<R>(), data.len(), index);
+            println!(
+                "mem region bytes: {:?} sizeof elem {:?} len {:?}",
+                self.num_bytes,
+                std::mem::size_of::<T>(),
+                self.size
+            );
+            println!(
+                "data bytes: {:?} sizeof elem {:?} len {:?} index: {:?}",
+                data.len() * std::mem::size_of::<R>(),
+                std::mem::size_of::<R>(),
+                data.len(),
+                index
+            );
             panic!("index out of bounds");
         }
     }
@@ -354,6 +367,25 @@ impl<T: Dist + 'static> MemoryRegion<T> {
         Ok(self.addr)
     }
 
+    pub(crate) fn casted_at<R: Dist + 'static>(&self, index: usize) -> MemResult<&R> {
+        if self.addr != 0 {
+            let num_bytes = self.size * std::mem::size_of::<T>();
+            assert_eq!(
+                num_bytes % std::mem::size_of::<R>(),
+                0,
+                "Error converting memregion to new base, does not align"
+            );
+            Ok(unsafe {
+                &std::slice::from_raw_parts(
+                    self.addr as *const R,
+                    num_bytes / std::mem::size_of::<R>(),
+                )[index]
+            })
+        } else {
+            Err(MemNotLocalError {})
+        }
+    }
+
     pub(crate) fn as_slice(&self) -> MemResult<&[T]> {
         if self.addr != 0 {
             Ok(unsafe { std::slice::from_raw_parts(self.addr as *const T, self.size) })
@@ -429,7 +461,6 @@ impl<T: Dist + 'static> MemRegionId for MemoryRegion<T> {
     }
 }
 
-  
 pub trait RemoteMemoryRegion {
     /// allocate a shared memory region from the asymmetric heap
     ///
@@ -499,3 +530,24 @@ impl<T: Dist + 'static> std::fmt::Debug for MemoryRegion<T> {
         )
     }
 }
+
+// pub(crate) struct MemoryRegion<T: Dist + 'static> {
+//     addr: usize,
+//     pe: usize,
+//     size: usize,
+//     num_bytes: usize,
+//     backend: Backend,
+//     rdma: Arc<dyn LamellaeRDMA>,
+//     local: bool,
+//     phantom: PhantomData<T>,
+// }
+// pub(crate) struct MemoryRegionIter<'a,T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static>{
+//     index: usize
+// }
+
+// impl<'a, T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Iterator
+//     for MemoryRegionIter<'a, T>
+// {
+//     type Item = &'a T;
+//     fn next(&mut self) ->
+// }

@@ -1,5 +1,5 @@
 // use crate::lamellae::local_lamellae::Local;
-use crate::lamellae::{AllocationType,Lamellae};//, Backend , LamellaeComm, LamellaeRDMA};
+use crate::lamellae::{AllocationType, Lamellae}; //, Backend , LamellaeComm, LamellaeRDMA};
 use crate::memregion::*;
 // use crate::lamellar_array::{LamellarLocalArray};
 use core::marker::PhantomData;
@@ -11,7 +11,7 @@ use core::marker::PhantomData;
 // use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
-use std::ops::{Bound};
+use std::ops::Bound;
 
 #[derive(Clone)]
 pub struct LocalMemoryRegion<T: Dist + 'static> {
@@ -19,19 +19,23 @@ pub struct LocalMemoryRegion<T: Dist + 'static> {
     pe: usize,
     sub_region_offset: usize,
     sub_region_size: usize,
-    phantom: PhantomData<T>
+    phantom: PhantomData<T>,
 }
 
 impl<T: Dist + 'static> LocalMemoryRegion<T> {
     pub(crate) fn new(size: usize, lamellae: Arc<Lamellae>) -> LocalMemoryRegion<T> {
-        let mr = Arc::new(MemoryRegion::new(size*std::mem::size_of::<T>(), lamellae, AllocationType::Local));
+        let mr = Arc::new(MemoryRegion::new(
+            size * std::mem::size_of::<T>(),
+            lamellae,
+            AllocationType::Local,
+        ));
         let pe = mr.pe;
-        LocalMemoryRegion { 
-            mr: mr, 
-            pe: pe, 
+        LocalMemoryRegion {
+            mr: mr,
+            pe: pe,
             sub_region_offset: 0,
-            sub_region_size: size, 
-            phantom: PhantomData, 
+            sub_region_size: size,
+            phantom: PhantomData,
         }
     }
     pub fn len(&self) -> usize {
@@ -51,6 +55,9 @@ impl<T: Dist + 'static> LocalMemoryRegion<T> {
     }
     pub fn as_slice(&self) -> MemResult<&[T]> {
         RegisteredMemoryRegion::<T>::as_slice(self)
+    }
+    pub fn at(&self, index: usize) -> MemResult<&T> {
+        RegisteredMemoryRegion::<T>::at(self, index)
     }
     pub unsafe fn as_mut_slice(&self) -> MemResult<&mut [T]> {
         RegisteredMemoryRegion::<T>::as_mut_slice(self)
@@ -90,6 +97,18 @@ impl<T: Dist + 'static> LocalMemoryRegion<T> {
             phantom: PhantomData,
         }
     }
+
+    pub fn as_base<B: Dist + 'static>(self) -> LocalMemoryRegion<B> {
+        let u8_offset = self.sub_region_offset * std::mem::size_of::<T>();
+        let u8_size = self.sub_region_size * std::mem::size_of::<T>();
+        LocalMemoryRegion {
+            mr: self.mr.clone(),
+            pe: self.pe,
+            sub_region_offset: u8_offset / std::mem::size_of::<B>(),
+            sub_region_size: u8_size / std::mem::size_of::<B>(),
+            phantom: PhantomData,
+        }
+    }
 }
 
 impl<T: Dist + 'static> RegisteredMemoryRegion<T> for LocalMemoryRegion<T> {
@@ -98,23 +117,24 @@ impl<T: Dist + 'static> RegisteredMemoryRegion<T> for LocalMemoryRegion<T> {
     }
     fn addr(&self) -> MemResult<usize> {
         if self.pe == self.mr.pe {
-            if let Ok(addr) = self.mr.addr(){
+            if let Ok(addr) = self.mr.addr() {
                 Ok(addr + self.sub_region_offset * std::mem::size_of::<T>())
-            }
-            else{
+            } else {
                 Err(MemNotLocalError {})
             }
         } else {
             Err(MemNotLocalError {})
         }
     }
+    fn at(&self, index: usize) -> MemResult<&T> {
+        self.mr.casted_at::<T>(index)
+    }
 
     fn as_slice(&self) -> MemResult<&[T]> {
         if self.pe == self.mr.pe {
-            if let Ok(slice) = self.mr.as_casted_slice::<T>(){
-                Ok(&slice[self.sub_region_offset..(self.sub_region_offset+self.sub_region_size)])
-            }
-            else{
+            if let Ok(slice) = self.mr.as_casted_slice::<T>() {
+                Ok(&slice[self.sub_region_offset..(self.sub_region_offset + self.sub_region_size)])
+            } else {
                 Err(MemNotLocalError {})
             }
         } else {
@@ -123,10 +143,10 @@ impl<T: Dist + 'static> RegisteredMemoryRegion<T> for LocalMemoryRegion<T> {
     }
     unsafe fn as_mut_slice(&self) -> MemResult<&mut [T]> {
         if self.pe == self.mr.pe {
-            if let Ok(slice) = self.mr.as_casted_mut_slice::<T>(){
-                Ok(&mut slice[self.sub_region_offset..(self.sub_region_offset+self.sub_region_size)])
-            }
-            else{
+            if let Ok(slice) = self.mr.as_casted_mut_slice::<T>() {
+                Ok(&mut slice
+                    [self.sub_region_offset..(self.sub_region_offset + self.sub_region_size)])
+            } else {
                 Err(MemNotLocalError {})
             }
         } else {
@@ -135,11 +155,10 @@ impl<T: Dist + 'static> RegisteredMemoryRegion<T> for LocalMemoryRegion<T> {
     }
     fn as_ptr(&self) -> MemResult<*const T> {
         if self.pe == self.mr.pe {
-            if let Ok(addr) = self.addr(){
+            if let Ok(addr) = self.addr() {
                 Ok(addr as *const T)
-            } 
-            else{
-                Err(MemNotLocalError{})
+            } else {
+                Err(MemNotLocalError {})
             }
         } else {
             Err(MemNotLocalError {})
@@ -147,11 +166,10 @@ impl<T: Dist + 'static> RegisteredMemoryRegion<T> for LocalMemoryRegion<T> {
     }
     fn as_mut_ptr(&self) -> MemResult<*mut T> {
         if self.pe == self.mr.pe {
-            if let Ok(addr) = self.addr(){
+            if let Ok(addr) = self.addr() {
                 Ok(addr as *mut T)
-            } 
-            else{
-                Err(MemNotLocalError{})
+            } else {
+                Err(MemNotLocalError {})
             }
         } else {
             Err(MemNotLocalError {})
@@ -173,17 +191,7 @@ impl<T: Dist + 'static> SubRegion<T> for LocalMemoryRegion<T> {
 
 impl<T: Dist + 'static> AsBase for LocalMemoryRegion<T> {
     unsafe fn as_base<B: Dist + 'static>(self) -> LamellarMemoryRegion<B> {
-
-        let u8_offset = self.sub_region_offset * std::mem::size_of::<T>();
-        let u8_size = self.sub_region_size * std::mem::size_of::<T>();
-        LocalMemoryRegion {
-            mr: self.mr.clone(),
-            pe: self.pe,
-            sub_region_offset: u8_offset/std::mem::size_of::<B>(), 
-            sub_region_size: u8_size/std::mem::size_of::<B>(), 
-            phantom: PhantomData,
-        }
-        .into()
+        self.as_base::<B>().into()
     }
 }
 
@@ -247,14 +255,22 @@ impl<T: Dist + 'static> std::fmt::Debug for LocalMemoryRegion<T> {
     }
 }
 
-impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> From<&LocalMemoryRegion<T>> for LamellarArrayInput<T> {
+impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static>
+    From<&LocalMemoryRegion<T>> for LamellarArrayInput<T>
+{
     fn from(smr: &LocalMemoryRegion<T>) -> Self {
         LamellarArrayInput::LocalMemRegion(smr.clone())
     }
 }
 
-impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> MyFrom<&LocalMemoryRegion<T>> for LamellarArrayInput<T> {
+impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static>
+    MyFrom<&LocalMemoryRegion<T>> for LamellarArrayInput<T>
+{
     fn my_from(smr: &LocalMemoryRegion<T>, _team: &Arc<LamellarTeam>) -> Self {
         LamellarArrayInput::LocalMemRegion(smr.clone())
     }
 }
+
+// pub(crate) struct LocalMemoryRegionIter<'a,T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static>{
+//     inner:
+// }
