@@ -15,6 +15,7 @@ use crate::memregion::{
 // use std::any;
 // use core::marker::PhantomData;
 use core::ptr::NonNull;
+use core::slice::Iter;
 use std::collections::HashMap;
 // use std::sync::atomic::Ordering;
 use std::marker::PhantomData;
@@ -111,6 +112,18 @@ where
 pub enum LamellarArray<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> {
     Unsafe(UnsafeArray<T>),
 }
+impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> LamellarArray<T> {
+    pub(crate) fn local_as_ptr(&self) -> *const T {
+        match self {
+            LamellarArray::Unsafe(inner) => inner.local_as_ptr(),
+        }
+    }
+    pub(crate) fn local_as_mut_ptr(&self) -> *mut T {
+        match self {
+            LamellarArray::Unsafe(inner) => inner.local_as_mut_ptr(),
+        }
+    }
+}
 
 impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> DarcSerde
     for LamellarArray<T>
@@ -199,21 +212,36 @@ pub struct LamellarArrayDistIter<
 > {
     array: LamellarArray<T>,
     index: usize,
-    // ptr: NonNull<T>,
+    ptr: NonNull<T>,
     _marker: PhantomData<&'a T>,
+}
+
+impl<'a, T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static>
+    LamellarArrayDistIter<'a, T>
+{
+    fn new(array: LamellarArray<T>) -> LamellarArrayDistIter<'a, T> {
+        LamellarArrayDistIter {
+            array: array.clone(),
+            index: 0,
+            ptr: NonNull::new(array.local_as_mut_ptr()).unwrap(),
+            _marker: PhantomData,
+        }
+    }
 }
 impl<'a, T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Iterator
     for LamellarArrayDistIter<'a, T>
 {
     type Item = &'a T;
     fn next(&mut self) -> Option<Self::Item> {
-        let res = if self.index < self.array.len() {
-            self.index += 1;
-            Some(unsafe { &self.array.local_as_slice()[self.index - 1] })
-        } else {
-            None
-        };
-        res
+        // let res = if self.index < self.array.len() {
+        //     self.index += 1;
+        //     Some(unsafe { &self.array.local_as_slice()[self.index - 1] })
+        // } else {
+        //     None
+        // };
+        // res
+        // self.iter.next()
+        None
     }
 }
 
@@ -242,6 +270,7 @@ where
     T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static,
 {
     fn iter(&self) -> LamellarArrayIter<'_, T>;
+    fn dist_iter(&self) -> LamellarArrayDistIter<'_, T>;
 }
 
 // pub(crate) trait LamellarBuffer<T>

@@ -352,8 +352,18 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Un
         self.reduce("max")
     }
 
+    pub(crate) fn local_as_ptr(&self) -> *const T {
+        self.inner.mem_region.as_casted_ptr::<T>().unwrap()
+    }
+    pub(crate) fn local_as_mut_ptr(&self) -> *mut T {
+        self.inner.mem_region.as_casted_mut_ptr::<T>().unwrap()
+    }
+
     pub fn iter(&self) -> LamellarArrayIter<'_, T> {
         LamellarArrayIter::new(self.clone().into(), self.inner.team.clone())
+    }
+    pub fn dist_iter(&self) -> LamellarArrayIter<'_, T> {
+        LamellarArrayIter::new(self.clone().into())
     }
 }
 
@@ -465,6 +475,9 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static>
 {
     fn iter(&self) -> LamellarArrayIter<'_, T> {
         self.iter()
+    }
+    fn dist_iter(&self) -> LamellarArrayDistIter<'_, T> {
+        self.dist_iter()
     }
 }
 
