@@ -193,6 +193,30 @@ impl<'a, T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static
     }
 }
 
+pub struct LamellarArrayDistIter<
+    'a,
+    T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static,
+> {
+    array: LamellarArray<T>,
+    index: usize,
+    // ptr: NonNull<T>,
+    _marker: PhantomData<&'a T>,
+}
+impl<'a, T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Iterator
+    for LamellarArrayDistIter<'a, T>
+{
+    type Item = &'a T;
+    fn next(&mut self) -> Option<Self::Item> {
+        let res = if self.index < self.array.len() {
+            self.index += 1;
+            Some(unsafe { &self.array.local_as_slice()[self.index - 1] })
+        } else {
+            None
+        };
+        res
+    }
+}
+
 #[enum_dispatch]
 pub trait LamellarArrayRDMA<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static>
 {
