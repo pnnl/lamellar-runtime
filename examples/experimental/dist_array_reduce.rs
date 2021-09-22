@@ -37,9 +37,7 @@ fn main() {
     let my_local_size = len_per_pe.round() as usize; //((len_per_pe * (my_pe+1) as f32).round() - (len_per_pe * my_pe as f32).round()) as usize;
     println!("my local size {:?}", my_local_size);
     let block_array = UnsafeArray::<usize>::new(world.team(), total_len, Distribution::Block);
-    block_array.init_add();
     let cyclic_array = UnsafeArray::<usize>::new(world.team(), total_len, Distribution::Cyclic);
-    cyclic_array.init_add();
     let local_mem_region = world.alloc_local_mem_region(total_len);
     world.barrier();
     if my_pe == 0 {
@@ -124,9 +122,9 @@ fn main() {
         }
     }
     for i in 0..total_len{
-        block_array.add2(i,10);
+        block_array.add(i,10);
     }
-    // block_array.for_each_mut(|x| *x += *x);
+    block_array.for_each_mut(|x| *x += *x);
     block_array.for_each(|x| println!("x: {:?}",x));
     world.barrier();
     world.free_local_memory_region(local_mem_region);

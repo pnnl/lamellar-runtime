@@ -5,7 +5,7 @@ use crate::{active_messaging::*, LamellarTeam, RemoteMemoryRegion}; //{ActiveMes
 use crate::memregion::{
     local::LocalMemoryRegion, shared::SharedMemoryRegion, Dist, LamellarMemoryRegion,
 };
-// use crate::lamellar_request::{AmType, LamellarRequest, LamellarRequestHandle};
+use crate::lamellar_request::{LamellarRequest};
 // use crate::lamellar_team::LamellarTeam;
 // use crate::scheduler::{Scheduler,SchedulerQueue};
 
@@ -48,94 +48,6 @@ pub struct ReduceKey {
     pub gen: ReduceGen,
 }
 crate::inventory::collect!(ReduceKey);
-
-
-
-// pub(crate) type AddGen =
-//     fn(LamellarArray<u8>, usize) -> Box<dyn ErasedIntoAm>;
-
-// lazy_static! {
-//     pub(crate) static ref ADD_OPS: HashMap<std::any::TypeId, AddGen> = {
-//         let mut temp = HashMap::new();
-//         for add_type in crate::inventory::iter::<AddKey> {
-//             temp.insert(
-//                 add_type.id.clone(),
-//                 add_type.gen,
-//             );
-//         }
-//         temp
-//     };
-// }
-
-// pub struct AddKey {
-//     pub id: std::any::TypeId,
-//     pub gen: AddGen,
-// }
-// crate::inventory::collect!(AddKey);
-
-// struct usize_add{
-//     array: LamellarArray<usize>,
-//     index: usize,
-// }
-
-// impl IntoAddAm for usize_add{
-//     fn into_am<usize>(self, val: usize)  -> Arc<dyn RemoteActiveMessage + Send + Sync>{
-//         Arc::new(usize_add_am{
-//             array: self.array,
-//             index: self.index,
-//             val: val,
-//         })
-//     }
-// }
-// pub trait AddTrait: Sync + Send {}
-// impl<'a, T: ?Sized> AddTrait for &'a T where T: AddTrait {}
-// pub trait IntoAddAm{
-//     fn into_am<T: AddTrait>(&self, index: usize, val: T) ->Arc<dyn RemoteActiveMessage + Send + Sync>;
-// }
-
-// pub trait ErasedIntoAddAm{
-//     fn erased_into_am(&self, index: usize ,val:&dyn AddTrait) ->Arc<dyn RemoteActiveMessage + Send + Sync>;
-// }
-
-// impl IntoAddAm for dyn ErasedIntoAddAm{
-//     fn into_am<T: AddTrait>(&self, index: usize, val: T) ->Arc<dyn RemoteActiveMessage + Send + Sync>{
-//         self.erased_into_am(index,&val)
-//     }
-// }
-
-// impl<T> ErasedIntoAddAm for T
-// where T: IntoAddAm,
-// {
-//     fn erased_into_am(&self, index: usize, val: &dyn AddTrait) ->Arc<dyn RemoteActiveMessage + Send + Sync> {
-//         self.into_am(index,val)
-//     }
-// }
-
-// impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static,U> IntoAddAm<T> for &U {
-//     fn into_am(&self, index: usize, val :T) -> Arc<dyn RemoteActiveMessage + Send + Sync>{
-//         Arc::new (dummy_am{})
-//     }
-// }
-// impl<T> IntoAddAm<T> for LamellarArray<T>{
-//     fn into_am(&self,index: usize ,val: T) ->Arc<dyn RemoteActiveMessage + Send + Sync> {
-//         Arc::new (#add_name_am{
-//             data: self.clone(),
-//             local_index: self.index,
-//             val: val,
-//         })
-//     }
-// }
-// #[lamellar_impl::AmDataRT]
-// struct dummy_am{ }
-
-// #[lamellar_impl::rt_am]
-// impl LamellarAM for dummy_am{
-//     fn exec(&self){
-        
-//     }
-// }
-
-
 
 lamellar_impl::generate_reductions_for_type_rt!(u8, u16, u32, u64, u128, usize);
 lamellar_impl::generate_reductions_for_type_rt!(i8, i16, i32, i64, i128, isize);
@@ -215,37 +127,42 @@ where
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 #[serde(bound = "T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static")]
 pub enum LamellarArray<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> {
-    Unsafe(UnsafeArray<T>),
+    UnsafeArray(UnsafeArray<T>),
 }
 impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> LamellarArray<T> {
     pub(crate) fn local_as_ptr(&self) -> *const T {
         match self {
-            LamellarArray::Unsafe(inner) => inner.local_as_ptr(),
+            LamellarArray::UnsafeArray(inner) => inner.local_as_ptr(),
         }
     }
     pub(crate) fn local_as_mut_ptr(&self) -> *mut T {
         match self {
-            LamellarArray::Unsafe(inner) => inner.local_as_mut_ptr(),
+            LamellarArray::UnsafeArray(inner) => inner.local_as_mut_ptr(),
         }
     }
     pub(crate) fn for_each<F>(&self,op: F)
     where F: Fn(&T) + Sync + Send + Clone + 'static{
         match self {
-            LamellarArray::Unsafe(inner) => inner.for_each(op),
+            LamellarArray::UnsafeArray(inner) => inner.for_each(op),
         }
     }
     pub(crate) fn for_each_mut<F>(&self,op: F)
     where F: Fn(&mut T) + Sync + Send + Clone + 'static{
         match self {
-            LamellarArray::Unsafe(inner) => inner.for_each_mut(op),
+            LamellarArray::UnsafeArray(inner) => inner.for_each_mut(op),
         }
     }
 }
 
 impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + std::ops::AddAssign + 'static> LamellarArray<T> {
+    pub fn dist_add(&self, index: usize, func: LamellarArcAm) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync>{
+        match self {
+            LamellarArray::UnsafeArray(inner) => inner.dist_add(index, func)
+        }
+    }
     pub fn local_add(&self, index: usize, val: T){
         match self {
-            LamellarArray::Unsafe(inner) => inner.local_add(index,val),
+            LamellarArray::UnsafeArray(inner) => inner.local_add(index,val),
         }
     }
 }
@@ -255,12 +172,12 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Da
 {
     fn ser(&self, num_pes: usize, cur_pe: Result<usize, crate::IdError>) {
         match self {
-            LamellarArray::Unsafe(inner) => DarcSerde::ser(inner, num_pes, cur_pe),
+            LamellarArray::UnsafeArray(inner) => DarcSerde::ser(inner, num_pes, cur_pe),
         }
     }
     fn des(&self, cur_pe: Result<usize, crate::IdError>) {
         match self {
-            LamellarArray::Unsafe(inner) => DarcSerde::des(inner, cur_pe),
+            LamellarArray::UnsafeArray(inner) => DarcSerde::des(inner, cur_pe),
         }
     }
 }

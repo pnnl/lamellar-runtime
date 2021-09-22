@@ -979,16 +979,12 @@ fn create_reduction(
 
 fn create_add(
     typeident: syn::Ident,
+    array_types: &Vec<syn::Ident>,
     rt: bool,
     // crate_header: String,
 ) -> proc_macro2::TokenStream {
-    let add_name = quote::format_ident!("{:}_add", typeident);
-    let add_name_am = quote::format_ident!("{:}_add_am", typeident);
-    // let reduction_return_name = quote::format_ident!("{:}_{:}_reduction_return", typeident, reduction);
-    // let reduction_unpack = quote::format_ident!("{:}_{:}_reduction_unpack", typeident, reduction);
-    let add_gen = quote::format_ident!("{:}_add_gen", typeident);
-    let add = quote::format_ident!("add");
-    // let lamellar = quote::format_ident!("{}", crate_header.clone());
+    // let add_name = quote::format_ident!("{:}_add", typeident);
+    
     let lamellar = if rt {
         quote::format_ident!("crate")
     }
@@ -1005,64 +1001,55 @@ fn create_add(
         syn::parse("lamellar::am".parse().unwrap()).unwrap())
     };
 
-    // let am_data: syn::Path  = syn::parse(format!("{}::{}",crate_header,am_data).parse().unwrap()).unwrap();
-    // let am: syn::Path  = syn::parse(format!("{}::{}",crate_header,am).parse().unwrap()).unwrap();
+    let mut match_stmts = quote!{};
+    let mut array_impls = quote!{};
+    for array_type in array_types{
+        let add_name_am = quote::format_ident!("{:}_{:}_add_am",array_type, typeident);
+        match_stmts.extend(quote!{
+            #lamellar::array::LamellarArray::#array_type(inner) => inner.add(index,val),
+        });
+        array_impls.extend(quote!{
+            #[allow(non_camel_case_types)]
+            impl #lamellar::array::#array_type<#typeident>{
+                pub fn add(&self,index: usize, val: #typeident)->Box<dyn #lamellar::lamellar_request::LamellarRequest<Output = ()> + Send + Sync>{
+                    let pe = self.pe_for_dist_index(index);
+                    self.dist_add(
+                        index,
+                        Arc::new (#add_name_am{
+                            data: self.clone(),
+                            local_index: self.pe_offset_for_dist_index(pe,index),
+                            val: val,
+                        })
+                    )
+                }
+            }
+            #[#am_data]
+            struct #add_name_am{
+                data: #lamellar::array::#array_type<#typeident>,
+                local_index: usize,
+                val: #typeident,
+            }
+
+            #[#am]
+            impl LamellarAM for #add_name_am{
+                fn exec(&self) {
+                    self.data.local_add(self.local_index,self.val);
+                }
+            }
+        });
+    }
+
     let expanded = quote! {
         #[allow(non_camel_case_types)]
-        // struct #add_name{
-        //     data: #lamellar::LamellarArray<#typeident>,
-        //     local_index: usize,
-        // }
-        // impl IntoAddAm<#typeident> for #lamellar::LamellarArray<#typeident>{
-        //     fn into_am(&self,index: usize, val: #typeident)-> Arc<dyn RemoteActiveMessage + Send + Sync>{
-        //         Arc::new (#add_name_am{
-        //             data: self.clone(),
-        //             local_index: index,
-        //             val: val,
-        //         })
-        //     }
-        // }
-
-        impl #lamellar::array::r#unsafe::UnsafeArray<#typeident>{
-            pub fn add2(&self,index: usize, val: #typeident)->Box<dyn #lamellar::lamellar_request::LamellarRequest<Output = ()> + Send + Sync>{
-                let pe = self.pe_for_dist_index(index);
-                self.add3(
-                    index,
-                    Arc::new (#add_name_am{
-                        data: self.clone(),
-                        local_index: self.pe_offset_for_dist_index(pe,index),
-                        val: val,
-                    })
-                )
-            }
-        }
-        #[#am_data]
-        struct #add_name_am{
-            data: #lamellar::array::r#unsafe::UnsafeArray<#typeident>,
-            local_index: usize,
-            val: #typeident,
-        }
-
-        #[#am]
-        impl LamellarAM for #add_name_am{
-            fn exec(&self) {
-                self.data.local_add(self.local_index,self.val);
+        impl #lamellar::array::LamellarArray<#typeident>{
+            pub fn add(&self,index: usize, val: #typeident)->Box<dyn #lamellar::lamellar_request::LamellarRequest<Output = ()> + Send + Sync>{
+                match self{
+                    #match_stmts
+                }
             }
         }
 
-        // fn  #add_gen<T: #lamellar::serde::ser::Serialize + #lamellar::serde::de::DeserializeOwned + std::clone::Clone + Send + Sync + 'static> (data: #lamellar::LamellarArray<T>, index: usize)
-        // ->  Box<dyn IntoAddAm>{
-        //     // println!("reduce_gen");
-        //     Box::new(#add_name{data: unsafe {data.clone().as_base::<#typeident>() }, local_index: index})
-        // }
-
-        // #lamellar::inventory::submit! {
-        //     #![crate = #lamellar]
-        //     #lamellar::AddKey{
-        //         id: std::any::TypeId::of::<#typeident>(),
-        //         gen: #add_gen
-        //     }
-        // }
+        #array_impls
     };
 
     let user_expanded = quote_spanned!{expanded.span()=>
@@ -1126,6 +1113,9 @@ pub fn register_reduction(item: TokenStream) -> TokenStream {
 #[proc_macro]
 pub fn generate_reductions_for_type(item: TokenStream) -> TokenStream {
     let mut output = quote! {};
+    // let array_types: Vec<syn::Path> = vec![syn::parse("lamellar_impl::array::r#unsafe::UnsafeArray".parse().unwrap()).unwrap(),syn::parse("lamellar_impl::LamellarArray".parse().unwrap()).unwrap()];
+    let array_types: Vec<syn::Ident> = vec![quote::format_ident!("UnsafeArray")];
+
     // let lamellar = quote::format_ident!("{}", "lamellar");
     for t in item.to_string().split(",").collect::<Vec<&str>>() {
         let typeident = quote::format_ident!("{:}", t.trim());
@@ -1162,6 +1152,7 @@ pub fn generate_reductions_for_type(item: TokenStream) -> TokenStream {
         ));
         output.extend(create_add(
             typeident.clone(),
+            &array_types,
             false,
             // "lamellar".to_string(),
         ));
@@ -1173,6 +1164,9 @@ pub fn generate_reductions_for_type(item: TokenStream) -> TokenStream {
 #[proc_macro]
 pub fn generate_reductions_for_type_rt(item: TokenStream) -> TokenStream {
     let mut output = quote! {};
+    
+    // let array_types: Vec<syn::Path> = vec![syn::parse("lamellar_impl::array::r#unsafe::UnsafeArray".parse().unwrap()).unwrap(),syn::parse("lamellar_impl::LamellarArray".parse().unwrap()).unwrap()];
+    let array_types: Vec<syn::Ident> = vec![quote::format_ident!("UnsafeArray")];
     for t in item.to_string().split(",").collect::<Vec<&str>>() {
         let t = t.trim().to_string();
         let typeident = quote::format_ident!("{:}", t.clone());
@@ -1205,6 +1199,7 @@ pub fn generate_reductions_for_type_rt(item: TokenStream) -> TokenStream {
         ));
         output.extend(create_add(
             typeident.clone(),
+            &array_types,
             true,
             // "lamellar".to_string(),
         ));

@@ -477,30 +477,30 @@ impl LamellarAM for AddAm{
 impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + std::ops::AddAssign + 'static>
     UnsafeArray<T>
 {
-    pub fn init_add(&self){
-        let array_clone = self.clone();
-        let mut op_map = self.inner.op_map.write();
-        op_map.insert(ArrayOp::Add,Box::new(move |input| {
-            if let ArrayOpInput::Add(index,bytes) = input{
-                let val: T = deserialize(&bytes).unwrap();
-                array_clone.local_as_mut_slice()[*index] += val;
-            }            
-        }));
-    }
-    pub fn add(&self,index: usize,val: T) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync> {
-        let pe = self.pe_for_dist_index(index);
+    // pub fn init_add(&self){
+    //     let array_clone = self.clone();
+    //     let mut op_map = self.inner.op_map.write();
+    //     op_map.insert(ArrayOp::Add,Box::new(move |input| {
+    //         if let ArrayOpInput::Add(index,bytes) = input{
+    //             let val: T = deserialize(&bytes).unwrap();
+    //             array_clone.local_as_mut_slice()[*index] += val;
+    //         }            
+    //     }));
+    // }
+    // pub fn add(&self,index: usize,val: T) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync> {
+    //     let pe = self.pe_for_dist_index(index);
         
-        self.inner.team.team.exec_am_pe( 
-            self.inner.team.clone(),
-            pe,
-            Arc::new(AddAm{
-                array: self.clone().as_base::<u8>(),
-                input: ArrayOpInput::Add(self.pe_offset_for_dist_index(pe,index),crate::serialize(&val).unwrap())
-            }),
-            Some(self.inner.array_counters.clone()),
-        )
-    }
-    pub fn add3(&self, index: usize, func: LamellarArcAm) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync> {
+    //     self.inner.team.team.exec_am_pe( 
+    //         self.inner.team.clone(),
+    //         pe,
+    //         Arc::new(AddAm{
+    //             array: self.clone().as_base::<u8>(),
+    //             input: ArrayOpInput::Add(self.pe_offset_for_dist_index(pe,index),crate::serialize(&val).unwrap())
+    //         }),
+    //         Some(self.inner.array_counters.clone()),
+    //     )
+    // }
+    pub fn dist_add(&self, index: usize, func: LamellarArcAm) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync> {
         let pe = self.pe_for_dist_index(index);
         self.inner.team.team.exec_am_pe( 
             self.inner.team.clone(),
