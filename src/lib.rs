@@ -52,7 +52,7 @@ pub use crate::active_messaging::{
 pub use crate::active_messaging::{ActiveMessaging, LamellarAM, LocalAM};
 
 // //#[cfg(feature = "experimental")]
-pub use crate::array::{LamellarArray, ReduceKey};
+pub use crate::array::{LamellarArray, ReduceKey};//,AddKey};
 // pub use crate::lamellar_memregion::{
 //     LamellarLocalMemoryRegion, LamellarMemoryRegion, RegisteredMemoryRegion, RemoteMemoryRegion,
 // };

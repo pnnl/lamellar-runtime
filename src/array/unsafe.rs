@@ -135,7 +135,7 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Un
 
 
 
-    fn pe_for_dist_index(&self, index: usize) -> usize{
+    pub fn pe_for_dist_index(&self, index: usize) -> usize{
         match self.distribution {
             Distribution::Block => {
                 (index as f32 / self.elem_per_pe).floor() as usize
@@ -145,7 +145,7 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Un
             }
         }
     }
-    fn pe_offset_for_dist_index(&self, pe: usize, index: usize) -> usize {
+    pub fn pe_offset_for_dist_index(&self, pe: usize, index: usize) -> usize {
         match self.distribution {
             Distribution::Block => {
                 let pe_start_index = (self.elem_per_pe * pe as f32).round() as usize;
@@ -416,6 +416,31 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Un
             }
         }
     }
+    pub fn for_each_mut<F>(&self,op: F)
+    where F: Fn(&mut T) + Sync + Send + Clone +  'static{
+       let num_workers = match std::env::var("LAMELLAR_THREADS") {
+            Ok(n) => n.parse::<usize>().unwrap(),
+            Err(_) => 4,
+        };
+        let num_elems_local = self.num_elems_local();
+        let elems_per_thread = num_elems_local as f64/num_workers as f64;
+        if let Ok(my_pe) = self.inner.team.team_pe_id() {
+            let mut worker = 0;
+            while ((worker as f64 * elems_per_thread).round() as usize) < num_elems_local{
+                self.inner.team.team.exec_am_local(
+                    self.inner.team.clone(),
+                    ForEachMut{
+                        op: op.clone(),
+                        data: self.clone().into(),
+                        start_i: (worker as f64 * elems_per_thread).round() as usize,
+                        end_i: ((worker+1) as f64 * elems_per_thread).round() as usize,
+                    },
+                    Some(self.inner.array_counters.clone()),
+                );
+                worker+=1;
+            }
+        }
+    }
 }
 
 impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + std::fmt::Debug + 'static>
@@ -475,6 +500,18 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + std::ops::A
             Some(self.inner.array_counters.clone()),
         )
     }
+    pub fn add3(&self, index: usize, func: LamellarArcAm) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync> {
+        let pe = self.pe_for_dist_index(index);
+        self.inner.team.team.exec_am_pe( 
+            self.inner.team.clone(),
+            pe,
+            func,
+            Some(self.inner.array_counters.clone()),
+        )
+    }
+    pub fn local_add(&self, index: usize, val: T) {
+        self.local_as_mut_slice()[index] += val;
+    }
 }
 
 
@@ -503,6 +540,11 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> La
     fn local_as_slice(&self) -> &[T] {
         // println!("rdma local_as_slice");
         self.local_as_slice()
+    }
+    #[inline(always)]
+    fn local_as_mut_slice(&self) -> &mut [T] {
+        // println!("rdma local_as_slice");
+        self.local_as_mut_slice()
     }
     fn as_base<B: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static>(
         self,

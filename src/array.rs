@@ -49,6 +49,94 @@ pub struct ReduceKey {
 }
 crate::inventory::collect!(ReduceKey);
 
+
+
+// pub(crate) type AddGen =
+//     fn(LamellarArray<u8>, usize) -> Box<dyn ErasedIntoAm>;
+
+// lazy_static! {
+//     pub(crate) static ref ADD_OPS: HashMap<std::any::TypeId, AddGen> = {
+//         let mut temp = HashMap::new();
+//         for add_type in crate::inventory::iter::<AddKey> {
+//             temp.insert(
+//                 add_type.id.clone(),
+//                 add_type.gen,
+//             );
+//         }
+//         temp
+//     };
+// }
+
+// pub struct AddKey {
+//     pub id: std::any::TypeId,
+//     pub gen: AddGen,
+// }
+// crate::inventory::collect!(AddKey);
+
+// struct usize_add{
+//     array: LamellarArray<usize>,
+//     index: usize,
+// }
+
+// impl IntoAddAm for usize_add{
+//     fn into_am<usize>(self, val: usize)  -> Arc<dyn RemoteActiveMessage + Send + Sync>{
+//         Arc::new(usize_add_am{
+//             array: self.array,
+//             index: self.index,
+//             val: val,
+//         })
+//     }
+// }
+// pub trait AddTrait: Sync + Send {}
+// impl<'a, T: ?Sized> AddTrait for &'a T where T: AddTrait {}
+// pub trait IntoAddAm{
+//     fn into_am<T: AddTrait>(&self, index: usize, val: T) ->Arc<dyn RemoteActiveMessage + Send + Sync>;
+// }
+
+// pub trait ErasedIntoAddAm{
+//     fn erased_into_am(&self, index: usize ,val:&dyn AddTrait) ->Arc<dyn RemoteActiveMessage + Send + Sync>;
+// }
+
+// impl IntoAddAm for dyn ErasedIntoAddAm{
+//     fn into_am<T: AddTrait>(&self, index: usize, val: T) ->Arc<dyn RemoteActiveMessage + Send + Sync>{
+//         self.erased_into_am(index,&val)
+//     }
+// }
+
+// impl<T> ErasedIntoAddAm for T
+// where T: IntoAddAm,
+// {
+//     fn erased_into_am(&self, index: usize, val: &dyn AddTrait) ->Arc<dyn RemoteActiveMessage + Send + Sync> {
+//         self.into_am(index,val)
+//     }
+// }
+
+// impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static,U> IntoAddAm<T> for &U {
+//     fn into_am(&self, index: usize, val :T) -> Arc<dyn RemoteActiveMessage + Send + Sync>{
+//         Arc::new (dummy_am{})
+//     }
+// }
+// impl<T> IntoAddAm<T> for LamellarArray<T>{
+//     fn into_am(&self,index: usize ,val: T) ->Arc<dyn RemoteActiveMessage + Send + Sync> {
+//         Arc::new (#add_name_am{
+//             data: self.clone(),
+//             local_index: self.index,
+//             val: val,
+//         })
+//     }
+// }
+// #[lamellar_impl::AmDataRT]
+// struct dummy_am{ }
+
+// #[lamellar_impl::rt_am]
+// impl LamellarAM for dummy_am{
+//     fn exec(&self){
+        
+//     }
+// }
+
+
+
 lamellar_impl::generate_reductions_for_type_rt!(u8, u16, u32, u64, u128, usize);
 lamellar_impl::generate_reductions_for_type_rt!(i8, i16, i32, i64, i128, isize);
 lamellar_impl::generate_reductions_for_type_rt!(f32, f64);
@@ -73,44 +161,6 @@ pub enum ArrayOp {
 enum ArrayOpInput{
     Add(usize,Vec<u8>)
 }
-
-
-// struct ArrayBuilder{ //<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static>{
-//     LamellarArray<T>
-//     array_type: Array,
-//     distribution: Distribution,
-//     ops: Vec<ArrayOp>,
-//     team: Arc<LamellarTeam>,
-//     // _phantom: PhantomData<T>
-// }
-
-// impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> ArrayBuilder<T>{
-//     fn new(team: Arc<LamellarTeam>, array_type: Array, distribution: Distribution) -> ArrayBuilder<T>{
-//         ArrayBuilder{
-//             array_type: array_type,
-//             distribution: distribution,
-//             ops: Vec::new(),
-//             team: team,
-//             _phantom: PhantomData
-//         }
-//     }
-//     fn op(self, op: ArrayOp) -> ArrayBuilder<T> {
-//         self.ops.push(op);
-//         self
-//     }
-//     fn allocate(self,size: usize) -> LamellarArray<T> {
-//         let array = match self.array_type{
-//             Array::Unsafe => UnsafeArray::new(self.team.clone(),size,self.distribution.clone())
-//         };
-//         for op in self.ops{
-//             match op{
-//                 ArrayOp::Add => array.init_add(),
-//                 _ => {},
-//             }
-//         }
-//         array.into()
-//     }
-// }
 
 
 #[enum_dispatch(RegisteredMemoryRegion<T>, SubRegion<T>, MyFrom<T>)]
@@ -182,6 +232,20 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> La
     where F: Fn(&T) + Sync + Send + Clone + 'static{
         match self {
             LamellarArray::Unsafe(inner) => inner.for_each(op),
+        }
+    }
+    pub(crate) fn for_each_mut<F>(&self,op: F)
+    where F: Fn(&mut T) + Sync + Send + Clone + 'static{
+        match self {
+            LamellarArray::Unsafe(inner) => inner.for_each_mut(op),
+        }
+    }
+}
+
+impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + std::ops::AddAssign + 'static> LamellarArray<T> {
+    pub fn local_add(&self, index: usize, val: T){
+        match self {
+            LamellarArray::Unsafe(inner) => inner.local_add(index,val),
         }
     }
 }
@@ -290,11 +354,13 @@ impl<'a, T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static
     }
 }
 
-pub trait DistributedIterator: Dist + serde::ser::Serialize + serde::de::DeserializeOwned {
-    type Item: Dist + serde::ser::Serialize + serde::de::DeserializeOwned;
-    fn for_each<F>(self, op: F)
-    where F: Fn(Self::Item) + Sync + Send;
-}
+// pub trait DistributedIterator: Dist + serde::ser::Serialize + serde::de::DeserializeOwned {
+//     type Item: Dist + serde::ser::Serialize + serde::de::DeserializeOwned;
+//     fn for_each<F>(self, op: F)
+//     where F: Fn(Self::Item) + Sync + Send;
+//     fn for_each_mut<F>(self, op: F)
+//     where F: Fn(Self::Item) + Sync + Send;
+// }
 
 #[lamellar_impl::AmLocalDataRT(Clone)]
 struct ForEach<T,F>
@@ -321,6 +387,31 @@ where
     }
 }
 
+#[lamellar_impl::AmLocalDataRT(Clone)]
+struct ForEachMut<T,F>
+where  
+    T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static,
+    F: Fn(&mut T) + Sync + Send 
+{
+    op: F,
+    data: LamellarArray<T>,
+    start_i: usize,
+    end_i: usize,
+}
+#[lamellar_impl::rt_am_local]
+impl<T,F> LamellarAm for ForEachMut<T,F>
+where  
+    T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static,
+    F: Fn(&mut T) + Sync + Send + 'static{
+    fn exec(&self){
+        // self.data.local_as_slice()[self.start_i..self.end_i].iter().for_each((self.op));
+        // println!("{:?} {:?} {:?}",lamellar::current_pe,self.start_i,self.end_i);
+        for elem in self.data.local_as_mut_slice()[self.start_i..self.end_i].iter_mut() {
+            (&self.op)(elem)
+        }
+    }
+}
+
 // impl<'a, T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> DistributedIterator
 //     for LamellarArrayDistIter<'a, T>
 // {
@@ -337,6 +428,7 @@ pub trait LamellarArrayRDMA<T: Dist + serde::ser::Serialize + serde::de::Deseria
     fn put<U: MyInto<LamellarArrayInput<T>>>(&self, index: usize, buf: U);
     fn get<U: MyInto<LamellarArrayInput<T>>>(&self, index: usize, buf: U);
     fn local_as_slice(&self) -> &[T];
+    fn local_as_mut_slice(&self) -> &mut [T];
     fn as_base<B: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static>(
         self,
     ) -> LamellarArray<B>;

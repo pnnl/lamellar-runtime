@@ -977,6 +977,111 @@ fn create_reduction(
     }
 }
 
+fn create_add(
+    typeident: syn::Ident,
+    rt: bool,
+    // crate_header: String,
+) -> proc_macro2::TokenStream {
+    let add_name = quote::format_ident!("{:}_add", typeident);
+    let add_name_am = quote::format_ident!("{:}_add_am", typeident);
+    // let reduction_return_name = quote::format_ident!("{:}_{:}_reduction_return", typeident, reduction);
+    // let reduction_unpack = quote::format_ident!("{:}_{:}_reduction_unpack", typeident, reduction);
+    let add_gen = quote::format_ident!("{:}_add_gen", typeident);
+    let add = quote::format_ident!("add");
+    // let lamellar = quote::format_ident!("{}", crate_header.clone());
+    let lamellar = if rt {
+        quote::format_ident!("crate")
+    }
+    else {
+        quote::format_ident!("__lamellar")
+    };
+
+    let (am_data, am): (syn::Path,syn::Path) = if rt {
+        (syn::parse("lamellar_impl::AmDataRT".parse().unwrap()).unwrap(),
+        syn::parse("lamellar_impl::rt_am".parse().unwrap()).unwrap())
+    }
+    else {
+        (syn::parse("lamellar::AmData".parse().unwrap()).unwrap(),
+        syn::parse("lamellar::am".parse().unwrap()).unwrap())
+    };
+
+    // let am_data: syn::Path  = syn::parse(format!("{}::{}",crate_header,am_data).parse().unwrap()).unwrap();
+    // let am: syn::Path  = syn::parse(format!("{}::{}",crate_header,am).parse().unwrap()).unwrap();
+    let expanded = quote! {
+        #[allow(non_camel_case_types)]
+        // struct #add_name{
+        //     data: #lamellar::LamellarArray<#typeident>,
+        //     local_index: usize,
+        // }
+        // impl IntoAddAm<#typeident> for #lamellar::LamellarArray<#typeident>{
+        //     fn into_am(&self,index: usize, val: #typeident)-> Arc<dyn RemoteActiveMessage + Send + Sync>{
+        //         Arc::new (#add_name_am{
+        //             data: self.clone(),
+        //             local_index: index,
+        //             val: val,
+        //         })
+        //     }
+        // }
+
+        impl #lamellar::array::r#unsafe::UnsafeArray<#typeident>{
+            pub fn add2(&self,index: usize, val: #typeident)->Box<dyn #lamellar::lamellar_request::LamellarRequest<Output = ()> + Send + Sync>{
+                let pe = self.pe_for_dist_index(index);
+                self.add3(
+                    index,
+                    Arc::new (#add_name_am{
+                        data: self.clone(),
+                        local_index: self.pe_offset_for_dist_index(pe,index),
+                        val: val,
+                    })
+                )
+            }
+        }
+        #[#am_data]
+        struct #add_name_am{
+            data: #lamellar::array::r#unsafe::UnsafeArray<#typeident>,
+            local_index: usize,
+            val: #typeident,
+        }
+
+        #[#am]
+        impl LamellarAM for #add_name_am{
+            fn exec(&self) {
+                self.data.local_add(self.local_index,self.val);
+            }
+        }
+
+        // fn  #add_gen<T: #lamellar::serde::ser::Serialize + #lamellar::serde::de::DeserializeOwned + std::clone::Clone + Send + Sync + 'static> (data: #lamellar::LamellarArray<T>, index: usize)
+        // ->  Box<dyn IntoAddAm>{
+        //     // println!("reduce_gen");
+        //     Box::new(#add_name{data: unsafe {data.clone().as_base::<#typeident>() }, local_index: index})
+        // }
+
+        // #lamellar::inventory::submit! {
+        //     #![crate = #lamellar]
+        //     #lamellar::AddKey{
+        //         id: std::any::TypeId::of::<#typeident>(),
+        //         gen: #add_gen
+        //     }
+        // }
+    };
+
+    let user_expanded = quote_spanned!{expanded.span()=>
+        const _: () = {
+            extern crate lamellar as __lamellar;
+            use __lamellar::array::LamellarArrayRDMA;
+            #expanded
+        };
+    };
+    // let span = user_expanded.span();
+    // println!("{:?} {:?} {:?}", span.source_file(), span.start(), span.end());
+    if lamellar == "crate" {
+        expanded
+    }
+    else{
+        user_expanded
+    }
+}
+
 #[proc_macro_error]
 #[proc_macro]
 pub fn register_reduction(item: TokenStream) -> TokenStream {
@@ -1055,6 +1160,11 @@ pub fn generate_reductions_for_type(item: TokenStream) -> TokenStream {
             false,
             // "lamellar".to_string(),
         ));
+        output.extend(create_add(
+            typeident.clone(),
+            false,
+            // "lamellar".to_string(),
+        ));
     }
 
     TokenStream::from(output)
@@ -1092,6 +1202,11 @@ pub fn generate_reductions_for_type_rt(item: TokenStream) -> TokenStream {
             },
             true,
             // "crate".to_string(),
+        ));
+        output.extend(create_add(
+            typeident.clone(),
+            true,
+            // "lamellar".to_string(),
         ));
     }
 

@@ -124,8 +124,9 @@ fn main() {
         }
     }
     for i in 0..total_len{
-        block_array.add(i,10);
+        block_array.add2(i,10);
     }
+    // block_array.for_each_mut(|x| *x += *x);
     block_array.for_each(|x| println!("x: {:?}",x));
     world.barrier();
     world.free_local_memory_region(local_mem_region);
