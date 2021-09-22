@@ -13,7 +13,7 @@ use crate::IdError;
 use crate::LamellarTeam;
 
 #[derive(serde::Serialize, serde::Deserialize, Debug)]
-pub struct LocalRwDarc<T: 'static + ?Sized> {
+pub struct LocalRwDarc<T: 'static > {
     #[serde(
         serialize_with = "localrw_serialize2",
         deserialize_with = "localrw_from_ndarc2"
@@ -21,10 +21,10 @@ pub struct LocalRwDarc<T: 'static + ?Sized> {
     pub(crate) darc: Darc<RwLock<Box<T>>>,
 }
 
-unsafe impl<T: ?Sized + Sync + Send> Send for LocalRwDarc<T> {}
-unsafe impl<T: ?Sized + Sync + Send> Sync for LocalRwDarc<T> {}
+unsafe impl<T: Sync + Send> Send for LocalRwDarc<T> {}
+unsafe impl<T: Sync + Send> Sync for LocalRwDarc<T> {}
 
-impl<T: ?Sized> crate::DarcSerde for LocalRwDarc<T> {
+impl<T> crate::DarcSerde for LocalRwDarc<T> {
     fn ser(&self, num_pes: usize, cur_pe: Result<usize, IdError>) {
         // println!("in local darc ser");
         match cur_pe {
@@ -48,7 +48,7 @@ impl<T: ?Sized> crate::DarcSerde for LocalRwDarc<T> {
     }
 }
 
-impl<T: ?Sized> LocalRwDarc<T> {
+impl<T> LocalRwDarc<T> {
     fn inner(&self) -> &DarcInner<RwLock<Box<T>>> {
         self.darc.inner()
     }
@@ -147,7 +147,7 @@ impl<T> LocalRwDarc<T> {
     }
 }
 
-impl<T: ?Sized> Clone for LocalRwDarc<T> {
+impl<T> Clone for LocalRwDarc<T> {
     fn clone(&self) -> Self {
         // self.inner().local_cnt.fetch_add(1,Ordering::SeqCst);
         LocalRwDarc {
@@ -156,7 +156,7 @@ impl<T: ?Sized> Clone for LocalRwDarc<T> {
     }
 }
 
-impl<T: ?Sized + fmt::Display> fmt::Display for LocalRwDarc<T> {
+impl<T: fmt::Display> fmt::Display for LocalRwDarc<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Display::fmt(&**self.read(), f)
     }
@@ -165,7 +165,6 @@ impl<T: ?Sized + fmt::Display> fmt::Display for LocalRwDarc<T> {
 pub fn localrw_serialize<S, T>(localrw: &LocalRwDarc<T>, s: S) -> Result<S::Ok, S::Error>
 where
     S: Serializer,
-    T: ?Sized,
 {
     __NetworkDarc::<T>::from(&localrw.darc).serialize(s)
 }
@@ -173,7 +172,6 @@ where
 pub fn localrw_serialize2<S, T>(localrw: &Darc<RwLock<Box<T>>>, s: S) -> Result<S::Ok, S::Error>
 where
     S: Serializer,
-    T: ?Sized,
 {
     __NetworkDarc::<T>::from(localrw).serialize(s)
 }
@@ -181,7 +179,6 @@ where
 pub fn localrw_from_ndarc<'de, D, T>(deserializer: D) -> Result<LocalRwDarc<T>, D::Error>
 where
     D: Deserializer<'de>,
-    T: ?Sized,
 {
     let ndarc: __NetworkDarc<T> = Deserialize::deserialize(deserializer)?;
     // println!("lrwdarc from net darc");
@@ -196,7 +193,6 @@ where
 pub fn localrw_from_ndarc2<'de, D, T>(deserializer: D) -> Result<Darc<RwLock<Box<T>>>, D::Error>
 where
     D: Deserializer<'de>,
-    T: ?Sized,
 {
     let ndarc: __NetworkDarc<T> = Deserialize::deserialize(deserializer)?;
     // println!("lrwdarc from net darc");
@@ -208,7 +204,7 @@ where
     Ok(Darc::from(ndarc))
 }
 
-impl<T: ?Sized> From<Darc<RwLock<Box<T>>>> for __NetworkDarc<T> {
+impl<T> From<Darc<RwLock<Box<T>>>> for __NetworkDarc<T> {
     fn from(darc: Darc<RwLock<Box<T>>>) -> Self {
         // println!("rwdarc to net darc");
         // darc.print();
@@ -224,7 +220,7 @@ impl<T: ?Sized> From<Darc<RwLock<Box<T>>>> for __NetworkDarc<T> {
     }
 }
 
-impl<T: ?Sized> From<&Darc<RwLock<Box<T>>>> for __NetworkDarc<T> {
+impl<T> From<&Darc<RwLock<Box<T>>>> for __NetworkDarc<T> {
     fn from(darc: &Darc<RwLock<Box<T>>>) -> Self {
         // println!("rwdarc to net darc");
         // darc.print();
@@ -240,7 +236,7 @@ impl<T: ?Sized> From<&Darc<RwLock<Box<T>>>> for __NetworkDarc<T> {
     }
 }
 
-impl<T: ?Sized> From<__NetworkDarc<T>> for Darc<RwLock<Box<T>>> {
+impl<T> From<__NetworkDarc<T>> for Darc<RwLock<Box<T>>> {
     fn from(ndarc: __NetworkDarc<T>) -> Self {
         // println!("rwdarc from net darc");
 

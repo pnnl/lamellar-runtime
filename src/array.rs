@@ -59,6 +59,60 @@ pub enum Distribution {
     Cyclic,
 }
 
+pub enum Array{
+    Unsafe,
+}
+
+#[derive(Hash,std::cmp::PartialEq,std::cmp::Eq,Clone)]
+pub enum ArrayOp {
+    Put,
+    Get,
+    Add,
+}
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
+enum ArrayOpInput{
+    Add(usize,Vec<u8>)
+}
+
+
+// struct ArrayBuilder{ //<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static>{
+//     LamellarArray<T>
+//     array_type: Array,
+//     distribution: Distribution,
+//     ops: Vec<ArrayOp>,
+//     team: Arc<LamellarTeam>,
+//     // _phantom: PhantomData<T>
+// }
+
+// impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> ArrayBuilder<T>{
+//     fn new(team: Arc<LamellarTeam>, array_type: Array, distribution: Distribution) -> ArrayBuilder<T>{
+//         ArrayBuilder{
+//             array_type: array_type,
+//             distribution: distribution,
+//             ops: Vec::new(),
+//             team: team,
+//             _phantom: PhantomData
+//         }
+//     }
+//     fn op(self, op: ArrayOp) -> ArrayBuilder<T> {
+//         self.ops.push(op);
+//         self
+//     }
+//     fn allocate(self,size: usize) -> LamellarArray<T> {
+//         let array = match self.array_type{
+//             Array::Unsafe => UnsafeArray::new(self.team.clone(),size,self.distribution.clone())
+//         };
+//         for op in self.ops{
+//             match op{
+//                 ArrayOp::Add => array.init_add(),
+//                 _ => {},
+//             }
+//         }
+//         array.into()
+//     }
+// }
+
+
 #[enum_dispatch(RegisteredMemoryRegion<T>, SubRegion<T>, MyFrom<T>)]
 #[derive(Clone)]
 pub enum LamellarArrayInput<T: Dist + 'static> {
@@ -106,6 +160,7 @@ where
     }
 }
 
+
 #[enum_dispatch(LamellarArrayRDMA<T>,LamellarArrayReduce<T>,LamellarArrayIterator<T>)]
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 #[serde(bound = "T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static")]
@@ -121,6 +176,12 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> La
     pub(crate) fn local_as_mut_ptr(&self) -> *mut T {
         match self {
             LamellarArray::Unsafe(inner) => inner.local_as_mut_ptr(),
+        }
+    }
+    pub(crate) fn for_each<F>(&self,op: F)
+    where F: Fn(&T) + Sync + Send + Clone + 'static{
+        match self {
+            LamellarArray::Unsafe(inner) => inner.for_each(op),
         }
     }
 }
@@ -228,22 +289,46 @@ impl<'a, T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static
         }
     }
 }
-impl<'a, T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Iterator
-    for LamellarArrayDistIter<'a, T>
+
+pub trait DistributedIterator: Dist + serde::ser::Serialize + serde::de::DeserializeOwned {
+    type Item: Dist + serde::ser::Serialize + serde::de::DeserializeOwned;
+    fn for_each<F>(self, op: F)
+    where F: Fn(Self::Item) + Sync + Send;
+}
+
+#[lamellar_impl::AmLocalDataRT(Clone)]
+struct ForEach<T,F>
+where  
+    T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static,
+    F: Fn(&T) + Sync + Send 
 {
-    type Item = &'a T;
-    fn next(&mut self) -> Option<Self::Item> {
-        // let res = if self.index < self.array.len() {
-        //     self.index += 1;
-        //     Some(unsafe { &self.array.local_as_slice()[self.index - 1] })
-        // } else {
-        //     None
-        // };
-        // res
-        // self.iter.next()
-        None
+    op: F,
+    data: LamellarArray<T>,
+    start_i: usize,
+    end_i: usize,
+}
+#[lamellar_impl::rt_am_local]
+impl<T,F> LamellarAm for ForEach<T,F>
+where  
+    T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static,
+    F: Fn(&T) + Sync + Send + 'static{
+    fn exec(&self){
+        // self.data.local_as_slice()[self.start_i..self.end_i].iter().for_each((self.op));
+        // println!("{:?} {:?} {:?}",lamellar::current_pe,self.start_i,self.end_i);
+        for elem in self.data.local_as_slice()[self.start_i..self.end_i].into_iter() {
+            (&self.op)(elem)
+        }
     }
 }
+
+// impl<'a, T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> DistributedIterator
+//     for LamellarArrayDistIter<'a, T>
+// {
+//     type Item = &'a T;
+//     fn for_each<OP>(self, op: OP){
+//         self.array.for_each(op)
+//     }
+// }
 
 #[enum_dispatch]
 pub trait LamellarArrayRDMA<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static>

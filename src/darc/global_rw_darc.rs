@@ -21,7 +21,7 @@ enum LockType{
 }
 
 #[derive(Debug)]
-pub (crate) struct DistRwLock<T: ?Sized>{
+pub (crate) struct DistRwLock<T: >{
     readers: AtomicUsize,
     writer: AtomicUsize,
     local_cnt: AtomicUsize,
@@ -31,8 +31,8 @@ pub (crate) struct DistRwLock<T: ?Sized>{
 }
 
 
-unsafe impl<T: ?Sized + Sync + Send> Send for DistRwLock<T> {}
-unsafe impl<T: ?Sized + Sync + Send> Sync for DistRwLock<T> {}
+unsafe impl<T:  Sync + Send> Send for DistRwLock<T> {}
+unsafe impl<T:  Sync + Send> Sync for DistRwLock<T> {}
 
 
 
@@ -56,7 +56,7 @@ impl<T> DistRwLock<T>{
         self.data.into_inner()
     }
 }
-impl<T: ?Sized> DistRwLock<T>{
+impl<T> DistRwLock<T>{
     
     async fn async_reader_lock(&self, _pe: usize) {
         loop{
@@ -142,18 +142,18 @@ impl LamellarAM for UnlockAm {
 
 
 
-pub struct GlobalRwDarcReadGuard<'a, T: 'static + ?Sized>{
+pub struct GlobalRwDarcReadGuard<'a, T: 'static >{
     rwlock:  Darc<DistRwLock<T>>, 
     marker: PhantomData<&'a mut T>,
 }
-impl<'a, T: ?Sized + 'a> Deref for GlobalRwDarcReadGuard<'a, T> {
+impl<'a, T: 'a> Deref for GlobalRwDarcReadGuard<'a, T> {
     type Target = T;
     fn deref(&self) -> &T {
         unsafe { & *self.rwlock.data.get() }
     }
 }
 
-impl<'a, T: ?Sized + 'a> Drop for GlobalRwDarcReadGuard<'a, T> {
+impl<'a, T:'a> Drop for GlobalRwDarcReadGuard<'a, T> {
     fn drop(&mut self){
         // println!("dropping read guard");
         let inner =self.rwlock.inner();
@@ -164,7 +164,7 @@ impl<'a, T: ?Sized + 'a> Drop for GlobalRwDarcReadGuard<'a, T> {
 }
 
 //TODO update this so that we print locked if data is locked...
-impl<T: ?Sized + fmt::Debug> fmt::Debug for GlobalRwDarcReadGuard<'_,T> {
+impl<T: fmt::Debug> fmt::Debug for GlobalRwDarcReadGuard<'_,T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         unsafe{
             fmt::Debug::fmt(&self.rwlock.data.get().as_ref(),f)
@@ -172,12 +172,12 @@ impl<T: ?Sized + fmt::Debug> fmt::Debug for GlobalRwDarcReadGuard<'_,T> {
     }
 }
 
-pub struct GlobalRwDarcWriteGuard<'a, T: 'static + ?Sized>{
+pub struct GlobalRwDarcWriteGuard<'a, T: 'static >{
     rwlock: Darc<DistRwLock<T>>,
     marker: PhantomData<&'a mut T>,
 }
 
-impl<'a, T: ?Sized + 'a> Deref for GlobalRwDarcWriteGuard<'a, T> {
+impl<'a, T: 'a> Deref for GlobalRwDarcWriteGuard<'a, T> {
     type Target = T;
     #[inline]
     fn deref(&self) -> &T {
@@ -185,14 +185,14 @@ impl<'a, T: ?Sized + 'a> Deref for GlobalRwDarcWriteGuard<'a, T> {
     }
 }
 
-impl<'a, T: ?Sized + 'a> DerefMut for GlobalRwDarcWriteGuard<'a, T> {
+impl<'a, T:  'a> DerefMut for GlobalRwDarcWriteGuard<'a, T> {
     #[inline]
     fn deref_mut(&mut self) -> &mut T {
         unsafe { &mut *self.rwlock.data.get() }
     }
 }
 
-impl<'a, T: ?Sized + 'a> Drop for GlobalRwDarcWriteGuard<'a, T> {
+impl<'a, T:  'a> Drop for GlobalRwDarcWriteGuard<'a, T> {
     fn drop(&mut self){
         // println!("dropping write guard");
         let inner =self.rwlock.inner();
@@ -202,7 +202,7 @@ impl<'a, T: ?Sized + 'a> Drop for GlobalRwDarcWriteGuard<'a, T> {
     }
 }
 
-impl<T: ?Sized + fmt::Debug> fmt::Debug for GlobalRwDarcWriteGuard<'_,T> {
+impl<T:  fmt::Debug> fmt::Debug for GlobalRwDarcWriteGuard<'_,T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         unsafe{
             fmt::Debug::fmt(&self.rwlock.data.get().as_ref(),f)
@@ -213,16 +213,16 @@ impl<T: ?Sized + fmt::Debug> fmt::Debug for GlobalRwDarcWriteGuard<'_,T> {
 
 
 #[derive(serde::Serialize, serde::Deserialize, Debug)]
-pub struct GlobalRwDarc<T: 'static + ?Sized> {
+pub struct GlobalRwDarc<T: 'static > {
     // pub(crate) darc: Darc<RwLock<Box<(T,MyRwLock)>>>,
     #[serde(serialize_with = "globalrw_serialize2", deserialize_with = "globalrw_from_ndarc2")]
     pub(crate) darc: Darc<DistRwLock<T>>,
 }
 
-unsafe impl<T: ?Sized + Sync + Send> Send for GlobalRwDarc<T> {}
-unsafe impl<T: ?Sized + Sync + Send> Sync for GlobalRwDarc<T> {}
+unsafe impl<T:  Sync + Send> Send for GlobalRwDarc<T> {}
+unsafe impl<T:  Sync + Send> Sync for GlobalRwDarc<T> {}
 
-impl<T: ?Sized> crate::DarcSerde for GlobalRwDarc<T> {
+impl<T> crate::DarcSerde for GlobalRwDarc<T> {
     fn ser(&self, num_pes: usize, cur_pe: Result<usize, IdError>) {
         println!("in global rw darc ser");
         match cur_pe{
@@ -238,7 +238,7 @@ impl<T: ?Sized> crate::DarcSerde for GlobalRwDarc<T> {
     }
 }
 
-impl<T: ?Sized> GlobalRwDarc<T> {
+impl<T> GlobalRwDarc<T> {
     fn inner(&self) -> &DarcInner<DistRwLock<T>> {
         self.darc.inner()
     }
@@ -376,7 +376,7 @@ impl<T> GlobalRwDarc<T> {
     }
 }
 
-impl<T: ?Sized> Clone for GlobalRwDarc<T> {
+impl<T> Clone for GlobalRwDarc<T> {
     fn clone(&self) -> Self {
         // self.inner().local_cnt.fetch_add(1,Ordering::SeqCst);
         GlobalRwDarc {
@@ -385,7 +385,7 @@ impl<T: ?Sized> Clone for GlobalRwDarc<T> {
     }
 }
 
-impl<T: ?Sized + fmt::Display> fmt::Display for GlobalRwDarc<T> {
+impl<T:  fmt::Display> fmt::Display for GlobalRwDarc<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         unsafe{
             fmt::Display::fmt(&self.inner().item().data.get().as_ref().unwrap(), f)
@@ -396,7 +396,6 @@ impl<T: ?Sized + fmt::Display> fmt::Display for GlobalRwDarc<T> {
 pub fn globalrw_serialize<S, T>(localrw: &GlobalRwDarc<T>, s: S) -> Result<S::Ok, S::Error>
 where
     S: Serializer,
-    T: ?Sized,
 {
     __NetworkDarc::<T>::from(&localrw.darc).serialize(s)
 }
@@ -404,7 +403,6 @@ where
 pub fn globalrw_from_ndarc<'de, D, T>(deserializer: D) -> Result<GlobalRwDarc<T>, D::Error>
 where
     D: Deserializer<'de>,
-    T: ?Sized,
 {
     let ndarc: __NetworkDarc<T> = Deserialize::deserialize(deserializer)?;
     // println!("gdarc from net darc");
@@ -419,7 +417,6 @@ where
 pub(crate) fn globalrw_serialize2<S, T>(globalrw: &Darc<DistRwLock<T>>, s: S) -> Result<S::Ok, S::Error>
 where
     S: Serializer,
-    T: ?Sized,
 {
     __NetworkDarc::<T>::from(globalrw).serialize(s)
 }
@@ -427,7 +424,6 @@ where
 pub(crate) fn globalrw_from_ndarc2<'de, D, T>(deserializer: D) -> Result<Darc<DistRwLock<T>>, D::Error>
 where
     D: Deserializer<'de>,
-    T: ?Sized,
 {
     let ndarc: __NetworkDarc<T> = Deserialize::deserialize(deserializer)?;
     // println!("gdarc from net darc");
@@ -435,7 +431,7 @@ where
     Ok(Darc::from(ndarc))
 }
 
-impl<T: ?Sized> From<&Darc<DistRwLock<T>>> for __NetworkDarc<T> {
+impl<T> From<&Darc<DistRwLock<T>>> for __NetworkDarc<T> {
     fn from(darc: &Darc<DistRwLock<T>>) -> Self {
         // println!("rwdarc to net darc");
         // darc.print();
@@ -451,7 +447,7 @@ impl<T: ?Sized> From<&Darc<DistRwLock<T>>> for __NetworkDarc<T> {
     }
 }
 
-impl<T: ?Sized> From<__NetworkDarc<T>> for Darc<DistRwLock<T>> {
+impl<T> From<__NetworkDarc<T>> for Darc<DistRwLock<T>> {
     fn from(ndarc: __NetworkDarc<T>) -> Self {
         // println!("rwdarc from net darc");
 

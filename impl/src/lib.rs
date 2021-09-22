@@ -146,16 +146,17 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_type: AmType) -> 
     };
 
     let generics = input.generics.clone();
-    let generics_args = if let syn::Type::Path(ty) = *input.self_ty{
-        if let Some(syn::PathSegment{ident:_,arguments}) = ty.path.segments.first(){
-            arguments.clone()
-        }else{
-            syn::PathArguments::None
-        }
-    }
-    else{
-        syn::PathArguments::None
-    };
+    let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
+    // let generics_args = if let syn::Type::Path(ty) = *input.self_ty{
+    //     if let Some(syn::PathSegment{ident:_,arguments}) = ty.path.segments.first(){
+    //         arguments.clone()
+    //     }else{
+    //         syn::PathArguments::None
+    //     }
+    // }
+    // else{
+    //     syn::PathArguments::None
+    // };
     let mut exec_fn =
     get_impl_method("exec".to_string(), &input.items).expect("unable to extract exec body");
     let func_span = exec_fn.span();
@@ -210,19 +211,19 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_type: AmType) -> 
     let ret_struct = quote::format_ident!("{}Result", orig_name);
     // println!("ret_type {:?}",ret_type);
     let mut am = quote!{
-        impl #generics #lamellar::LocalAM for #orig_name#generics_args{
+        impl #impl_generics #lamellar::LocalAM for #orig_name #ty_generics #where_clause{
             type Output = #ret_type;
         }
     };
     if !local {
         am.extend(quote!{
-            impl #generics #lamellar::LamellarAM for #orig_name#generics_args {
+            impl #impl_generics #lamellar::LamellarAM for #orig_name #ty_generics #where_clause {
                 type Output = #ret_type;
             }
 
-            impl  #generics #lamellar::Serde for #orig_name#generics_args {}
+            impl  #impl_generics #lamellar::Serde for #orig_name #ty_generics #where_clause {}
 
-            impl #generics #lamellar::LamellarSerde for #orig_name#generics_args {
+            impl #impl_generics #lamellar::LamellarSerde for #orig_name #ty_generics #where_clause {
                 fn serialized_size(&self)->usize{
                     // println!("serialized size: {:?}", #lamellar::serialized_size(self));
                     #lamellar::serialized_size(self)
@@ -233,7 +234,7 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_type: AmType) -> 
                 }            
             }
 
-            impl #generics #lamellar::LamellarResultSerde for #orig_name#generics_args {
+            impl #impl_generics #lamellar::LamellarResultSerde for #orig_name #ty_generics #where_clause {
                 fn serialized_result_size(&self,result: &Box<dyn std::any::Any + Send + Sync>)->usize{
                     let result  = result.downcast_ref::<#ret_type>().unwrap();
                     #lamellar::serialized_size(result)
@@ -290,7 +291,7 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_type: AmType) -> 
     // let span = temp.span();
     // println!("{:?} {:?} {:?}", span.source_file(), span.start(), span.end());
     let mut expanded = quote_spanned! {temp.span()=>
-        impl #generics #lamellar::LamellarActiveMessage for #orig_name#generics_args {
+        impl #impl_generics #lamellar::LamellarActiveMessage for #orig_name #ty_generics #where_clause {
             fn exec(self: std::sync::Arc<Self>,__lamellar_current_pe: usize,__lamellar_num_pes: usize, __local: bool, __lamellar_world: std::sync::Arc<#lamellar::LamellarTeam>, __lamellar_team: std::sync::Arc<#lamellar::LamellarTeam>) -> std::pin::Pin<Box<dyn std::future::Future<Output=#lamellar::LamellarReturn> + Send>>{
                 Box::pin( async move {
                 #temp
@@ -325,7 +326,7 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_type: AmType) -> 
 
     if !local {
         expanded.extend( quote_spanned! {temp.span()=>
-            impl #generics #lamellar::RemoteActiveMessage for #orig_name#generics_args {}
+            impl #impl_generics #lamellar::RemoteActiveMessage for #orig_name #ty_generics #where_clause {}
 
             fn #orig_name_unpack(bytes: &[u8], cur_pe: Result<usize,#lamellar::IdError>) -> std::sync::Arc<dyn #lamellar::RemoteActiveMessage + Send + Sync>  {
                 // println!("unpacking {:?}",bytes.len());
@@ -371,13 +372,14 @@ fn derive_am_data(input: TokenStream,args: TokenStream, crate_header: String, lo
     if let syn::Item::Struct(data) = input{
         let name = &data.ident;
         let generics = data.generics.clone();
-        let mut generics_ids=quote!{};
-        for id in &generics.params{
-            if let syn::GenericParam::Type(id) = id{
-                let temp =id.ident.clone();
-                generics_ids.extend(quote!{#temp,});
-            }
-        }
+        let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
+        // let mut generics_ids=quote!{};
+        // for id in &generics.params{
+        //     if let syn::GenericParam::Type(id) = id{
+        //         let temp =id.ident.clone();
+        //         generics_ids.extend(quote!{#temp,});
+        //     }
+        // }
         
         let mut fields = quote!{};
         let mut ser = quote!{};
@@ -464,10 +466,10 @@ fn derive_am_data(input: TokenStream,args: TokenStream, crate_header: String, lo
         output.extend(quote!{  
             #traits  
             #serde_temp_2        
-            #vis struct #name#generics{
+            #vis struct #name#ty_generics #where_clause{
                 #fields
             }
-            impl #generics#lamellar::DarcSerde for #name<#generics_ids>{
+            impl #impl_generics#lamellar::DarcSerde for #name #ty_generics #where_clause{
                 fn ser (&self,  num_pes: usize, cur_pe: Result<usize, #lamellar::IdError>) {
                     // println!("in outer ser");
                     #ser
@@ -579,13 +581,14 @@ fn derive_darcserde(input: TokenStream, crate_header: String) -> TokenStream{
     if let syn::Item::Struct(data) = input{
         let name = &data.ident;
         let generics = data.generics.clone();
-        let mut generics_ids=quote!{};
-        for id in &generics.params{
-            if let syn::GenericParam::Type(id) = id{
-                let temp =id.ident.clone();
-                generics_ids.extend(quote!{#temp,});
-            }
-        }
+        let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
+        // let mut generics_ids=quote!{};
+        // for id in &generics.params{
+        //     if let syn::GenericParam::Type(id) = id{
+        //         let temp =id.ident.clone();
+        //         generics_ids.extend(quote!{#temp,});
+        //     }
+        // }
         
         let mut fields = quote!{};
         let mut ser = quote!{};
@@ -650,7 +653,7 @@ fn derive_darcserde(input: TokenStream, crate_header: String) -> TokenStream{
         
         
         output.extend(quote!{  
-            impl #generics#lamellar::DarcSerde for #name<#generics_ids>{
+            impl #impl_generics#lamellar::DarcSerde for #name #ty_generics #where_clause{
                 fn ser (&self,  num_pes: usize, cur_pe: Result<usize, #lamellar::IdError>) {
                     #ser
                 } 

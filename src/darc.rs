@@ -48,7 +48,7 @@ impl LamellarAM for FinishedAm {
 }
 
 #[repr(C)]
-pub struct DarcInner<T: ?Sized> {
+pub struct DarcInner<T> {
     my_pe: usize,           // with respect to LamellarArch used to create this object
     num_pes: usize,         // with respect to LamellarArch used to create this object
     local_cnt: AtomicUsize, // cnt of times weve cloned for local access
@@ -58,19 +58,19 @@ pub struct DarcInner<T: ?Sized> {
     team: *const LamellarTeam,
     item: *const T,
 }
-unsafe impl<T: ?Sized + Sync + Send> Send for DarcInner<T> {}
-unsafe impl<T: ?Sized + Sync + Send> Sync for DarcInner<T> {}
+unsafe impl<T:  Sync + Send> Send for DarcInner<T> {}
+unsafe impl<T:  Sync + Send> Sync for DarcInner<T> {}
 
 
 
-pub struct Darc<T: 'static + ?Sized> {
+pub struct Darc<T: 'static> {
     inner: *mut DarcInner<T>,
     src_pe: usize,
 }
-unsafe impl<T: ?Sized + Sync + Send> Send for Darc<T> {}
-unsafe impl<T: ?Sized + Sync + Send> Sync for Darc<T> {}
+unsafe impl<T:  Sync + Send> Send for Darc<T> {}
+unsafe impl<T:  Sync + Send> Sync for Darc<T> {}
 
-impl<T: 'static + ?Sized> serde::Serialize for Darc<T>{
+impl<T: 'static > serde::Serialize for Darc<T>{
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where S: serde::Serializer,
     {
@@ -78,7 +78,7 @@ impl<T: 'static + ?Sized> serde::Serialize for Darc<T>{
     }
 }
 
-impl<'de,T: 'static + ?Sized> Deserialize<'de> for Darc<T> {
+impl<'de,T: 'static > Deserialize<'de> for Darc<T> {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
@@ -88,7 +88,7 @@ impl<'de,T: 'static + ?Sized> Deserialize<'de> for Darc<T> {
     }
 }
 
-impl<T: ?Sized> crate::DarcSerde for Darc<T> {
+impl<T> crate::DarcSerde for Darc<T> {
     fn ser(&self, num_pes: usize, cur_pe: Result<usize, IdError>) {
         match cur_pe {
             Ok(cur_pe) => {
@@ -111,7 +111,7 @@ impl<T: ?Sized> crate::DarcSerde for Darc<T> {
     }
 }
 
-impl<T: ?Sized> DarcInner<T> {
+impl<T> DarcInner<T> {
     fn team(&self) -> Arc<LamellarTeam> {
         unsafe {
             Arc::increment_strong_count(self.team);
@@ -240,7 +240,7 @@ impl<T: ?Sized> DarcInner<T> {
     }
 }
 
-impl<T: ?Sized> fmt::Debug for DarcInner<T> {
+impl<T> fmt::Debug for DarcInner<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
@@ -259,7 +259,7 @@ impl<T: ?Sized> fmt::Debug for DarcInner<T> {
     }
 }
 
-impl<T: ?Sized> Darc<T> {
+impl<T> Darc<T> {
     fn inner(&self) -> &DarcInner<T> {
         unsafe { self.inner.as_ref().expect("invalid darc inner ptr") }
     }
@@ -395,7 +395,7 @@ impl<T> Darc<T> {
     }
 }
 
-impl<T: ?Sized> Clone for Darc<T> {
+impl<T> Clone for Darc<T> {
     fn clone(&self) -> Self {
         self.inner().local_cnt.fetch_add(1, Ordering::SeqCst);
         // println!{"darc cloned {:?} {:?}",self.inner,self.inner().local_cnt.load(Ordering::SeqCst)};
@@ -406,7 +406,7 @@ impl<T: ?Sized> Clone for Darc<T> {
     }
 }
 
-impl<T: ?Sized> Deref for Darc<T> {
+impl<T> Deref for Darc<T> {
     type Target = T;
 
     #[inline]
@@ -415,13 +415,13 @@ impl<T: ?Sized> Deref for Darc<T> {
     }
 }
 
-impl<T: ?Sized + fmt::Display> fmt::Display for Darc<T> {
+impl<T:  fmt::Display> fmt::Display for Darc<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Display::fmt(&**self, f)
     }
 }
 
-impl<T: ?Sized + fmt::Debug> fmt::Debug for Darc<T> {
+impl<T:  fmt::Debug> fmt::Debug for Darc<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Debug::fmt(&**self, f)
     }
@@ -436,7 +436,7 @@ impl<T: ?Sized + fmt::Debug> fmt::Debug for Darc<T> {
 //     }
 // }
 
-impl<T: 'static + ?Sized> Drop for Darc<T> {
+impl<T: 'static > Drop for Darc<T> {
     fn drop(&mut self) {
         let inner = self.inner();
         let cnt = inner.local_cnt.fetch_sub(1, Ordering::SeqCst);
@@ -525,7 +525,7 @@ impl<T: 'static + ?Sized> Drop for Darc<T> {
 }
 
 #[lamellar_impl::AmLocalDataRT]
-struct DroppedWaitAM<T: ?Sized> {
+struct DroppedWaitAM<T> {
     inner_addr: usize,
     mode_addr: usize,
     my_pe: usize,
@@ -533,17 +533,17 @@ struct DroppedWaitAM<T: ?Sized> {
     phantom: PhantomData<T>,
 }
 
-unsafe impl<T: ?Sized> Send for DroppedWaitAM<T> {}
-unsafe impl<T: ?Sized> Sync for DroppedWaitAM<T> {}
+unsafe impl<T> Send for DroppedWaitAM<T> {}
+unsafe impl<T> Sync for DroppedWaitAM<T> {}
 
 use std::ptr::NonNull;
-struct Wrapper<T: ?Sized> {
+struct Wrapper<T> {
     inner: NonNull<DarcInner<T>>,
 }
-unsafe impl<T: ?Sized> Send for Wrapper<T> {}
+unsafe impl<T> Send for Wrapper<T> {}
 
 #[lamellar_impl::rt_am_local]
-impl<T: 'static + ?Sized> LamellarAM for DroppedWaitAM<T> {
+impl<T: 'static> LamellarAM for DroppedWaitAM<T> {
     fn exec(self) {
         // println!("in DroppedWaitAM");
         let mode_refs =
@@ -641,7 +641,7 @@ impl<T: 'static + ?Sized> LamellarAM for DroppedWaitAM<T> {
 
 
 #[derive(serde::Deserialize, serde::Serialize)]
-pub struct __NetworkDarc<T: ?Sized> {
+pub struct __NetworkDarc<T> {
     inner_addr: usize,
     backend: Backend,
     orig_world_pe: usize,
@@ -649,7 +649,7 @@ pub struct __NetworkDarc<T: ?Sized> {
     phantom: PhantomData<T>,
 }
 
-impl<T: ?Sized> From<Darc<T>> for __NetworkDarc<T> {
+impl<T> From<Darc<T>> for __NetworkDarc<T> {
     fn from(darc: Darc<T>) -> Self {
         // println!("net darc from darc");
         let team = &darc.inner().team().team;
@@ -665,7 +665,7 @@ impl<T: ?Sized> From<Darc<T>> for __NetworkDarc<T> {
     }
 }
 
-impl<T: ?Sized> From<&Darc<T>> for __NetworkDarc<T> {
+impl<T> From<&Darc<T>> for __NetworkDarc<T> {
     fn from(darc: &Darc<T>) -> Self {
         // println!("net darc from darc");
         let team = &darc.inner().team().team;
@@ -681,7 +681,7 @@ impl<T: ?Sized> From<&Darc<T>> for __NetworkDarc<T> {
     }
 }
 
-impl<T: ?Sized> From<__NetworkDarc<T>> for Darc<T> {
+impl<T> From<__NetworkDarc<T>> for Darc<T> {
     fn from(ndarc: __NetworkDarc<T>) -> Self {
         // println!("ndarc: 0x{:x} {:?} {:?} {:?} ",ndarc.inner_addr,ndarc.backend,ndarc.orig_world_pe,ndarc.orig_team_pe);
         if let Some(lamellae) = LAMELLAES.read().get(&ndarc.backend) {
