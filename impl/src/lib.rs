@@ -373,13 +373,6 @@ fn derive_am_data(input: TokenStream,args: TokenStream, crate_header: String, lo
         let name = &data.ident;
         let generics = data.generics.clone();
         let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
-        // let mut generics_ids=quote!{};
-        // for id in &generics.params{
-        //     if let syn::GenericParam::Type(id) = id{
-        //         let temp =id.ident.clone();
-        //         generics_ids.extend(quote!{#temp,});
-        //     }
-        // }
         
         let mut fields = quote!{};
         let mut ser = quote!{};
@@ -582,13 +575,6 @@ fn derive_darcserde(input: TokenStream, crate_header: String) -> TokenStream{
         let name = &data.ident;
         let generics = data.generics.clone();
         let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
-        // let mut generics_ids=quote!{};
-        // for id in &generics.params{
-        //     if let syn::GenericParam::Type(id) = id{
-        //         let temp =id.ident.clone();
-        //         generics_ids.extend(quote!{#temp,});
-        //     }
-        // }
         
         let mut fields = quote!{};
         let mut ser = quote!{};
@@ -768,127 +754,14 @@ pub fn rt_am_local(args: TokenStream, input: TokenStream) -> TokenStream {
     parse_am(args,input,true,true)
 }
 
-// fn reduction_with_return(input: syn::ItemImpl, output: syn::Type) -> TokenStream {
-//     let name = type_name(&input.self_ty).expect("unable to find name");
-//     let mut exec_fn =
-//         get_impl_method("exec".to_string(), &input.items).expect("unable to extract exec body");
-//     let last_stmt = replace_lamellar_dsl(exec_fn.stmts.pop().unwrap().clone());
-//     let last_expr = get_expr(&last_stmt)
-//         .expect("failed to get exec return value (try removing the last \";\")");
-//     let _last_expr_no_self = get_expr(&replace_self(last_stmt.clone()))
-//         .expect("failed to get exec return value (try removing the last \";\")");
-
-//     let stmts = exec_fn.stmts;
-//     let mut temp = quote! {};
-//     let mut new_temp = quote! {};
-
-//     for stmt in stmts {
-//         let new_stmt = replace_lamellar_dsl(stmt.clone());
-//         let selfless_stmt = replace_self(new_stmt.clone()); //replaces self with "__lamellar_data" (a named instance of the underlying struct type of self)
-//         new_temp.extend(quote! {
-//             #selfless_stmt
-//         });
-
-//         temp.extend(quote! {
-//             #new_stmt
-//         });
-//     }
-
-//     let orig_name = syn::Ident::new(&name, Span::call_site());
-
-//     let orig_name_exec = quote::format_ident!("{}_exec", orig_name.clone());
-    
-
-//     let expanded = quote! {
-//         impl lamellar::LamellarActiveMessage for #orig_name {
-//             fn exec(self: Box<Self>,__lamellar_current_pe: usize,__lamellar_num_pes: usize, __local: bool, __lamellar_world: std::sync::Arc<lamellar::LamellarTeam>, __lamellar_team: std::sync::Arc<lamellar::LamellarTeam>) -> std::pin::Pin<Box<dyn std::future::Future<Output=Option<lamellar::LamellarReturn>> + Send>>{
-
-//                 Box::pin( async move {
-//                 #temp
-//                 let ret = lamellar::serialize(& #last_expr ).unwrap();
-//                 let ret = match __local{ //should probably just separate these into exec_local exec_remote to get rid of a conditional...
-//                     true => Some(lamellar::LamellarReturn::LocalData(ret)),
-//                     false => Some(lamellar::LamellarReturn::RemoteData(ret)),
-//                 };
-//                 ret
-//                 })
-//             }
-//             fn get_id(&self) -> String{
-//                 stringify!(#orig_name).to_string()
-//             }
-//             fn ser(&self) -> Vec<u8> {
-//                 lamellar::serialize(self).unwrap()
-//             }
-//         }
-
-//         impl LocalAM for #orig_name {
-//             type Output = #output;
-//         }
-
-//         impl LamellarAM for #orig_name {
-//             type Output = #output;
-//         }
-
-//         fn #orig_name_exec(bytes: Vec<u8>,__lamellar_current_pe: usize,__lamellar_num_pes: usize, __lamellar_world: std::sync::Arc<lamellar::LamellarTeam>, __lamellar_team: std::sync::Arc<lamellar::LamellarTeam>,return_am) -> std::pin::Pin<Box<dyn std::future::Future<Output=Option<lamellar::LamellarReturn>> + Send>> {
-//             let __lamellar_data: Box<#orig_name> = Box::new(lamellar::deserialize(&bytes).unwrap());
-//             <#orig_name as lamellar::LamellarActiveMessage>::exec(__lamellar_data,__lamellar_current_pe,__lamellar_num_pes,return_am,__lamellar_world,__lamellar_team)
-//         }
-
-//         lamellar::inventory::submit! {
-//             #![crate = lamellar]
-//             lamellar::RegisteredAm{
-//                 exec: #orig_name_exec,
-//                 name: stringify!(#orig_name).to_string()
-//             }
-//         }
-//     };
-//     TokenStream::from(expanded)
-// }
-
-// #[proc_macro_error]
-// #[proc_macro_attribute]
-// pub fn reduction(args: TokenStream, input: TokenStream) -> TokenStream {
-//     // println!("in am expansion!");
-//     let args = args.to_string();
-//     if args.len() > 0 {
-//         panic!("#[lamellar::reduction] does not expect any arguments");
-//     }
-//     // println!("args: {:?}", args);
-//     let input: syn::Item = parse_macro_input!(input);
-
-//     let output = match input.clone() {
-//         syn::Item::Impl(input) => {
-//             // println!("{:?}",input);
-//             if let Some(output) = get_return_of_method("exec".to_string(), &input.items) {
-//                 reduction_with_return(input, output)
-//             } else {
-//                 let output = quote! { #input };
-//                 output.into()
-//             }
-//         }
-//         _ => {
-//             println!("lamellar am attribute only valid for impl blocks");
-//             let output = quote! { #input };
-//             output.into()
-//         }
-//     };
-//     // println!("leaving expansion");
-//     output
-// }
-
 fn create_reduction(
     typeident: syn::Ident,
     reduction: String,
     op: proc_macro2::TokenStream,
+    array_types: &Vec<syn::Ident>,
     rt: bool,
-    // crate_header: String,
 ) -> proc_macro2::TokenStream {
-    let reduction_name = quote::format_ident!("{:}_{:}_reduction", typeident, reduction);
-    // let reduction_return_name = quote::format_ident!("{:}_{:}_reduction_return", typeident, reduction);
-    // let reduction_unpack = quote::format_ident!("{:}_{:}_reduction_unpack", typeident, reduction);
-    let reduction_gen = quote::format_ident!("{:}_{:}_reduction_gen", typeident, reduction);
-    let reduction = quote::format_ident!("{:}", reduction);
-    // let lamellar = quote::format_ident!("{}", crate_header.clone());
+    
     let lamellar = if rt {
         quote::format_ident!("crate")
     }
@@ -904,52 +777,81 @@ fn create_reduction(
         (syn::parse("lamellar::AmData".parse().unwrap()).unwrap(),
         syn::parse("lamellar::am".parse().unwrap()).unwrap())
     };
+    let reduction = quote::format_ident!("{:}",array_type, reduction);
 
-    // let am_data: syn::Path  = syn::parse(format!("{}::{}",crate_header,am_data).parse().unwrap()).unwrap();
-    // let am: syn::Path  = syn::parse(format!("{}::{}",crate_header,am).parse().unwrap()).unwrap();
-    let expanded = quote! {
-        #[allow(non_camel_case_types)]
-        #[#am_data]
-        struct #reduction_name{
-            data: #lamellar::LamellarArray<#typeident>,
-            start_pe: usize,
-            end_pe: usize,
-        }
+    let mut match_stmts = quote!{};
+    let mut gen_match_stmts = quote!{};
+    let mut array_impls = quote!{};
 
-        #[#am]
-        impl LamellarAM for #reduction_name{
-            fn exec(&self) -> #typeident{
-                if self.start_pe == self.end_pe{
-                    // println!("[{:?}] root {:?} {:?}",__lamellar_current_pe,self.start_pe, self.end_pe);
-                    let timer = std::time::Instant::now();
-                    let data_slice = self.data.local_as_slice();
-                    // println!("data: {:?}",data_slice);
-                    let first = data_slice.first().unwrap().clone();
-                    let res = data_slice[1..].iter().fold(first, #op );
-                    // println!("[{:?}] {:?} {:?}",__lamellar_current_pe,res,timer.elapsed().as_secs_f64());
-                    res
-                }
-                else{
-                    // println!("[{:?}] recurse {:?} {:?}",__lamellar_current_pe,self.start_pe, self.end_pe);
-                    let mid_pe = (self.start_pe + self.end_pe)/2;
-                    let op = #op;
-                    let timer = std::time::Instant::now();
-                    let left = __lamellar_team.exec_am_pe(self.start_pe,  #reduction_name { data: self.data.clone(), start_pe: self.start_pe, end_pe: mid_pe}).into_future();
-                    let right = __lamellar_team.exec_am_pe(mid_pe+1,  #reduction_name { data: self.data.clone(), start_pe: mid_pe+1, end_pe: self.end_pe}).into_future();
-                    let res = op(left.await.unwrap(),&right.await.unwrap());
+    for array_type in array_types{
+        let reduction_name = quote::format_ident!("{:}_{:}_{:}_reduction",array_type, typeident, reduction);
+        let reduction_gen = quote::format_ident!("{:}_{:}_{:}_reduction_gen",array_type, typeident, reduction);
+        
+        match_stmts.extend(quote!{
+            #lamellar::array::LamellarArray::#array_type(inner) => inner.reduce(stringify!(#reduction)),
+        });
+        array_impls.extend(quote!{
+            #[allow(non_camel_case_types)]
+            #[#am_data]
+            struct #reduction_name{
+                data: #lamellar::array::#array_type<#typeident>,
+                start_pe: usize,
+                end_pe: usize,
+            }
 
-                    // println!("[{:?}] {:?} {:?}",__lamellar_current_pe,res,timer.elapsed().as_secs_f64());
-                    res
+            #[#am]
+            impl LamellarAM for #reduction_name{
+                fn exec(&self) -> #typeident{
+                    if self.start_pe == self.end_pe{
+                        // println!("[{:?}] root {:?} {:?}",__lamellar_current_pe,self.start_pe, self.end_pe);
+                        let timer = std::time::Instant::now();
+                        let data_slice = self.data.local_as_slice();
+                        // println!("data: {:?}",data_slice);
+                        let first = data_slice.first().unwrap().clone();
+                        let res = data_slice[1..].iter().fold(first, #op );
+                        // println!("[{:?}] {:?} {:?}",__lamellar_current_pe,res,timer.elapsed().as_secs_f64());
+                        res
+                    }
+                    else{
+                        // println!("[{:?}] recurse {:?} {:?}",__lamellar_current_pe,self.start_pe, self.end_pe);
+                        let mid_pe = (self.start_pe + self.end_pe)/2;
+                        let op = #op;
+                        let timer = std::time::Instant::now();
+                        let left = __lamellar_team.exec_am_pe(self.start_pe,  #reduction_name { data: self.data.clone(), start_pe: self.start_pe, end_pe: mid_pe}).into_future();
+                        let right = __lamellar_team.exec_am_pe(mid_pe+1,  #reduction_name { data: self.data.clone(), start_pe: mid_pe+1, end_pe: self.end_pe}).into_future();
+                        let res = op(left.await.unwrap(),&right.await.unwrap());
+
+                        // println!("[{:?}] {:?} {:?}",__lamellar_current_pe,res,timer.elapsed().as_secs_f64());
+                        res
+                    }
                 }
             }
-        }
 
-        fn  #reduction_gen<T: #lamellar::serde::ser::Serialize + #lamellar::serde::de::DeserializeOwned + std::clone::Clone + Send + Sync + 'static> (data: #lamellar::LamellarArray<T>, num_pes: usize)
-        -> std::sync::Arc<dyn #lamellar::RemoteActiveMessage + Send + Sync >{
-            // println!("reduce_gen");
-            std::sync::Arc::new(#reduction_name{data: unsafe {data.clone().as_base::<#typeident>() }, start_pe: 0, end_pe: num_pes-1})
-        }
+            gen_match_stmts.extend(quote!{
+                #lamellar::array::LamellarArray::#array_type(inner) => std::sync::Arc::new(#reduction_name{data: unsafe {inner.clone().as_base::<#typeident>() }, start_pe: 0, end_pe: num_pes-1}),
+            });
 
+            
+
+            
+        });
+        let expanded = quote! {
+            #[allow(non_camel_case_types)]
+            impl #lamellar::array::LamellarArray<#typeident>{
+                pub fn reduce(&self, op: &str) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+                    match{
+                        #match_stmts
+                    }
+                }
+            }
+            fn  #reduction_gen<T: #lamellar::serde::ser::Serialize + #lamellar::serde::de::DeserializeOwned + std::clone::Clone + Send + Sync + 'static> (data: #lamellar::LamellarArray<T>, num_pes: usize)
+            -> std::sync::Arc<dyn #lamellar::RemoteActiveMessage + Send + Sync >{
+                match data{
+                    #gen_match_stmts
+                }
+                
+            }
+        }
         #lamellar::inventory::submit! {
             #![crate = #lamellar]
             #lamellar::ReduceKey{
@@ -958,6 +860,10 @@ fn create_reduction(
                 gen: #reduction_gen
             }
         }
+    }
+
+    let expanded = quote! {
+        
     };
 
     let user_expanded = quote_spanned!{expanded.span()=>
@@ -967,8 +873,6 @@ fn create_reduction(
             #expanded
         };
     };
-    // let span = user_expanded.span();
-    // println!("{:?} {:?} {:?}", span.source_file(), span.start(), span.end());
     if lamellar == "crate" {
         expanded
     }
@@ -981,10 +885,7 @@ fn create_add(
     typeident: syn::Ident,
     array_types: &Vec<syn::Ident>,
     rt: bool,
-    // crate_header: String,
 ) -> proc_macro2::TokenStream {
-    // let add_name = quote::format_ident!("{:}_add", typeident);
-    
     let lamellar = if rt {
         quote::format_ident!("crate")
     }
