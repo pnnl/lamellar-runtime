@@ -357,6 +357,10 @@ where
 {
     fn wait_all(&self);
     fn get_reduction_op(&self, op: String) -> LamellarArcAm;
+    fn reduce(&self, op: &str) -> Box<dyn LamellarRequest<Output = T> + Send + Sync>;
+    fn sum(&self)-> Box<dyn LamellarRequest<Output = T> + Send + Sync>;
+    fn max(&self)-> Box<dyn LamellarRequest<Output = T> + Send + Sync>;
+    fn prod(&self)-> Box<dyn LamellarRequest<Output = T> + Send + Sync>;
 }
 
 pub trait LamellarArrayIterator<T>: LamellarArrayRDMA<T>

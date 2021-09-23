@@ -777,19 +777,21 @@ fn create_reduction(
         (syn::parse("lamellar::AmData".parse().unwrap()).unwrap(),
         syn::parse("lamellar::am".parse().unwrap()).unwrap())
     };
-    let reduction = quote::format_ident!("{:}",array_type, reduction);
+    let reduction = quote::format_ident!("{:}", reduction);
+    let reduction_gen = quote::format_ident!("{:}_{:}_reduction_gen", typeident, reduction);
+    let reduction_trait = quote::format_ident!("Lamellar{:}{:}",typeident,reduction);
 
-    let mut match_stmts = quote!{};
     let mut gen_match_stmts = quote!{};
     let mut array_impls = quote!{};
 
     for array_type in array_types{
         let reduction_name = quote::format_ident!("{:}_{:}_{:}_reduction",array_type, typeident, reduction);
-        let reduction_gen = quote::format_ident!("{:}_{:}_{:}_reduction_gen",array_type, typeident, reduction);
         
-        match_stmts.extend(quote!{
-            #lamellar::array::LamellarArray::#array_type(inner) => inner.reduce(stringify!(#reduction)),
+        gen_match_stmts.extend(quote!{
+            #lamellar::array::LamellarArray::#array_type(inner) => std::sync::Arc::new(#reduction_name{
+                data: inner.clone().as_base_inner::<#typeident>() , start_pe: 0, end_pe: num_pes-1}),
         });
+
         array_impls.extend(quote!{
             #[allow(non_camel_case_types)]
             #[#am_data]
@@ -826,32 +828,18 @@ fn create_reduction(
                     }
                 }
             }
+        });        
+    }
 
-            gen_match_stmts.extend(quote!{
-                #lamellar::array::LamellarArray::#array_type(inner) => std::sync::Arc::new(#reduction_name{data: unsafe {inner.clone().as_base::<#typeident>() }, start_pe: 0, end_pe: num_pes-1}),
-            });
-
-            
-
-            
-        });
-        let expanded = quote! {
-            #[allow(non_camel_case_types)]
-            impl #lamellar::array::LamellarArray<#typeident>{
-                pub fn reduce(&self, op: &str) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
-                    match{
-                        #match_stmts
-                    }
-                }
+    let expanded = quote! {
+        fn  #reduction_gen<T: #lamellar::serde::ser::Serialize + #lamellar::serde::de::DeserializeOwned + std::clone::Clone + Send + Sync + 'static> (data: #lamellar::LamellarArray<T>, num_pes: usize)
+        -> std::sync::Arc<dyn #lamellar::RemoteActiveMessage + Send + Sync >{
+            match data{
+                #gen_match_stmts
             }
-            fn  #reduction_gen<T: #lamellar::serde::ser::Serialize + #lamellar::serde::de::DeserializeOwned + std::clone::Clone + Send + Sync + 'static> (data: #lamellar::LamellarArray<T>, num_pes: usize)
-            -> std::sync::Arc<dyn #lamellar::RemoteActiveMessage + Send + Sync >{
-                match data{
-                    #gen_match_stmts
-                }
-                
-            }
+            
         }
+
         #lamellar::inventory::submit! {
             #![crate = #lamellar]
             #lamellar::ReduceKey{
@@ -860,10 +848,8 @@ fn create_reduction(
                 gen: #reduction_gen
             }
         }
-    }
 
-    let expanded = quote! {
-        
+        #array_impls
     };
 
     let user_expanded = quote_spanned!{expanded.span()=>
@@ -912,7 +898,7 @@ fn create_add(
         array_impls.extend(quote!{
             #[allow(non_camel_case_types)]
             impl #lamellar::array::#array_type<#typeident>{
-                pub fn add(&self,index: usize, val: #typeident)->Box<dyn #lamellar::lamellar_request::LamellarRequest<Output = ()> + Send + Sync>{
+                pub fn add(&self,index: usize, val: #typeident)->Box<dyn #lamellar::LamellarRequest<Output = ()> + Send + Sync>{
                     let pe = self.pe_for_dist_index(index);
                     self.dist_add(
                         index,
@@ -943,7 +929,7 @@ fn create_add(
     let expanded = quote! {
         #[allow(non_camel_case_types)]
         impl #lamellar::array::LamellarArray<#typeident>{
-            pub fn add(&self,index: usize, val: #typeident)->Box<dyn #lamellar::lamellar_request::LamellarRequest<Output = ()> + Send + Sync>{
+            pub fn add(&self,index: usize, val: #typeident)->Box<dyn #lamellar::LamellarRequest<Output = ()> + Send + Sync>{
                 match self{
                     #match_stmts
                 }
@@ -975,6 +961,7 @@ fn create_add(
 pub fn register_reduction(item: TokenStream) -> TokenStream {
     let args = parse_macro_input!(item as ReductionArgs);
     let mut output = quote! {};
+    let array_types: Vec<syn::Ident> = vec![quote::format_ident!("UnsafeArray")];
 
     for ty in args.tys {
         let mut closure = args.closure.clone();
@@ -1003,6 +990,7 @@ pub fn register_reduction(item: TokenStream) -> TokenStream {
             ty.path.segments[0].ident.clone(),
             args.name.to_string(),
             quote! {#closure},
+            &array_types,
             false,
             // "lamellar".to_string(),
         ));
@@ -1014,7 +1002,6 @@ pub fn register_reduction(item: TokenStream) -> TokenStream {
 #[proc_macro]
 pub fn generate_reductions_for_type(item: TokenStream) -> TokenStream {
     let mut output = quote! {};
-    // let array_types: Vec<syn::Path> = vec![syn::parse("lamellar_impl::array::r#unsafe::UnsafeArray".parse().unwrap()).unwrap(),syn::parse("lamellar_impl::LamellarArray".parse().unwrap()).unwrap()];
     let array_types: Vec<syn::Ident> = vec![quote::format_ident!("UnsafeArray")];
 
     // let lamellar = quote::format_ident!("{}", "lamellar");
@@ -1028,6 +1015,7 @@ pub fn generate_reductions_for_type(item: TokenStream) -> TokenStream {
                 let first = data_slice.first().unwrap().clone();
                 data_slice[1..].iter().fold(first,|acc,val|{ acc+val } )
             },
+            &array_types,
             false,
             // "lamellar".to_string(),
         ));
@@ -1039,6 +1027,7 @@ pub fn generate_reductions_for_type(item: TokenStream) -> TokenStream {
                 let first = data_slice.first().unwrap().clone();
                 data_slice[1..].iter().fold(first,|acc,val|{ acc*val } )
             },
+            &array_types,
             false,
             // "lamellar".to_string(),
         ));
@@ -1048,6 +1037,7 @@ pub fn generate_reductions_for_type(item: TokenStream) -> TokenStream {
             quote! {
                 *<lamellar::LamellarMemoryRegion<#typeident> as lamellar::RegisteredMemoryRegion>::as_slice(&self.data).unwrap().iter().max().unwrap()
             },
+            &array_types,
             false,
             // "lamellar".to_string(),
         ));
@@ -1066,7 +1056,6 @@ pub fn generate_reductions_for_type(item: TokenStream) -> TokenStream {
 pub fn generate_reductions_for_type_rt(item: TokenStream) -> TokenStream {
     let mut output = quote! {};
     
-    // let array_types: Vec<syn::Path> = vec![syn::parse("lamellar_impl::array::r#unsafe::UnsafeArray".parse().unwrap()).unwrap(),syn::parse("lamellar_impl::LamellarArray".parse().unwrap()).unwrap()];
     let array_types: Vec<syn::Ident> = vec![quote::format_ident!("UnsafeArray")];
     for t in item.to_string().split(",").collect::<Vec<&str>>() {
         let t = t.trim().to_string();
@@ -1077,6 +1066,7 @@ pub fn generate_reductions_for_type_rt(item: TokenStream) -> TokenStream {
             quote! {
                 |acc: #typeident, val: &#typeident|{ acc+*val }
             },
+            &array_types,
             true,
             // "crate".to_string(),
         ));
@@ -1086,6 +1076,7 @@ pub fn generate_reductions_for_type_rt(item: TokenStream) -> TokenStream {
             quote! {
                 |acc: #typeident, val: &#typeident| { acc* *val }
             },
+            &array_types,
             true,
             // "crate".to_string(),
         ));
@@ -1095,6 +1086,7 @@ pub fn generate_reductions_for_type_rt(item: TokenStream) -> TokenStream {
             quote! {
                 |val1: #typeident, val2: &#typeident| { if val1 > *val2 {val1} else {*val2} }
             },
+            &array_types,
             true,
             // "crate".to_string(),
         ));
@@ -1105,7 +1097,6 @@ pub fn generate_reductions_for_type_rt(item: TokenStream) -> TokenStream {
             // "lamellar".to_string(),
         ));
     }
-
     TokenStream::from(output)
 }
 

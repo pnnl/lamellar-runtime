@@ -50,16 +50,10 @@ pub use crate::active_messaging::{
     LamellarReturn, LamellarSerde, RemoteActiveMessage, Serde,
 };
 pub use crate::active_messaging::{ActiveMessaging, LamellarAM, LocalAM};
+pub use crate::lamellar_request::LamellarRequest;
 
 // //#[cfg(feature = "experimental")]
 pub use crate::array::{LamellarArray, ReduceKey};//,AddKey};
-// pub use crate::lamellar_memregion::{
-//     LamellarLocalMemoryRegion, LamellarMemoryRegion, RegisteredMemoryRegion, RemoteMemoryRegion,
-// };
-
-// pub use crate::array::*;
-// pub use crate::array::r#unsafe::UnsafeArray;
-// pub use crate::array::{Distribution, LamellarArrayRDMA, ReduceKey};
 pub use crate::memregion::{
     local::LocalMemoryRegion, shared::SharedMemoryRegion, RemoteMemoryRegion,
 };

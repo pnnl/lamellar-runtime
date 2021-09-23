@@ -133,6 +133,9 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Un
         }
     }
 
+    pub fn num_pes(&self)->usize{
+        self.inner.team.num_pes()
+    }
 
 
     pub fn pe_for_dist_index(&self, index: usize) -> usize{
@@ -315,7 +318,7 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Un
             }
         }
     }
-    fn as_base<B: Dist + 'static>(self) -> UnsafeArray<B> {
+    pub fn as_base_inner<B: Dist + 'static>(self) -> UnsafeArray<B> {
         let u8_size = self.size * std::mem::size_of::<T>();
         let b_size = u8_size / std::mem::size_of::<B>();
         // println!("u8size {:?} bsize {:?}", u8_size, b_size);
@@ -343,7 +346,7 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Un
         }
     }
 
-    fn reduce_inner(
+    pub fn reduce_inner(
         &self,
         func: LamellarArcAm,
     ) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
@@ -546,10 +549,11 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> La
         // println!("rdma local_as_slice");
         self.local_as_mut_slice()
     }
+    #[inline(always)]
     fn as_base<B: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static>(
         self,
     ) -> LamellarArray<B> {
-        self.as_base::<B>().into()
+        self.as_base_inner::<B>().into()
     }
 }
 
@@ -597,10 +601,22 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> La
         REDUCE_OPS
             .get(&(std::any::TypeId::of::<T>(), op))
             .expect("unexpected reduction type")(
-            self.clone().as_base::<u8>().into(),
+            self.clone().as_base_inner::<u8>().into(),
             self.inner.team.num_pes(),
         )
         // }
+    }
+    fn reduce(&self, op: &str)  -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+        self.reduce(op)
+    }
+    fn sum(&self)  -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+        self.sum()
+    }
+    fn max(&self)  -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+        self.max()
+    }
+    fn prod(&self)  -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+        self.prod()
     }
 }
 
