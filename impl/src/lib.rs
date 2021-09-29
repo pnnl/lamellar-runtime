@@ -3,16 +3,16 @@ extern crate proc_macro;
 mod parse;
 mod replace;
 
-use crate::parse::{ReductionArgs};
-use crate::replace::{LamellarDSLReplace};
+use crate::parse::ReductionArgs;
+use crate::replace::LamellarDSLReplace;
 
 use proc_macro::TokenStream;
 use proc_macro2::Span;
-use proc_macro_error::{proc_macro_error};
-use quote::{quote,quote_spanned,ToTokens};
-use syn::{parse_macro_input};
-use syn::visit_mut::VisitMut;
+use proc_macro_error::proc_macro_error;
+use quote::{quote, quote_spanned, ToTokens};
+use syn::parse_macro_input;
 use syn::spanned::Spanned;
+use syn::visit_mut::VisitMut;
 
 fn type_name(ty: &syn::Type) -> Option<String> {
     match ty {
@@ -93,13 +93,13 @@ fn replace_lamellar_dsl(mut stmt: syn::Stmt) -> syn::Stmt {
     stmt
 }
 
-enum AmType{
+enum AmType {
     NoReturn,
     ReturnData(syn::Type),
     ReturnAm(proc_macro2::TokenStream),
 }
 
-fn get_return_am_return_type(args: String) -> proc_macro2::TokenStream{
+fn get_return_am_return_type(args: String) -> proc_macro2::TokenStream {
     let return_am = args
         .split("return_am")
         .collect::<Vec<&str>>()
@@ -119,49 +119,44 @@ fn get_return_am_return_type(args: String) -> proc_macro2::TokenStream{
     if return_type.len() > 0 {
         // let ident = syn::Ident::new(&return_type, Span::call_site());
         let ret_type: syn::Type = syn::parse_str(&return_type).expect("invalid type");
-        quote!{#ret_type}
-    }else {
-        quote!{()}
+        quote! {#ret_type}
+    } else {
+        quote! {()}
     }
-    
 }
 
 fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_type: AmType) -> TokenStream {
     let name = type_name(&input.self_ty).expect("unable to find name");
     let lamellar = if rt {
         quote::format_ident!("crate")
-    }
-    else {
+    } else {
         quote::format_ident!("__lamellar")
     };
 
     let generics = input.generics.clone();
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
     let mut exec_fn =
-    get_impl_method("exec".to_string(), &input.items).expect("unable to extract exec body");
+        get_impl_method("exec".to_string(), &input.items).expect("unable to extract exec body");
     let func_span = exec_fn.span();
-    let last_expr = if let Some(stmt) = exec_fn.stmts.pop(){
+    let last_expr = if let Some(stmt) = exec_fn.stmts.pop() {
         let last_stmt = replace_lamellar_dsl(stmt.clone());
-        match am_type{
-            AmType::NoReturn => quote_spanned!{last_stmt.span()=> 
+        match am_type {
+            AmType::NoReturn => quote_spanned! {last_stmt.span()=>
                 #last_stmt
-                #lamellar::LamellarReturn::Unit 
+                #lamellar::LamellarReturn::Unit
             },
             AmType::ReturnData(_) | AmType::ReturnAm(_) => {
-                let temp =get_expr(&last_stmt)
-                .expect("failed to get exec return value (try removing the last \";\")");
-                quote_spanned!{last_stmt.span()=> #temp}
+                let temp = get_expr(&last_stmt)
+                    .expect("failed to get exec return value (try removing the last \";\")");
+                quote_spanned! {last_stmt.span()=> #temp}
             }
-        }  
-    }
-    else{
-        quote_spanned!{func_span=> #lamellar::LamellarReturn::Unit } 
+        }
+    } else {
+        quote_spanned! {func_span=> #lamellar::LamellarReturn::Unit }
     };
 
-    
     let mut temp = quote_spanned! {func_span=>};
     let stmts = exec_fn.stmts;
-    
 
     for stmt in stmts {
         let new_stmt = replace_lamellar_dsl(stmt.clone());
@@ -172,19 +167,18 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_type: AmType) -> 
 
     let orig_name = syn::Ident::new(&name, Span::call_site());
     let orig_name_unpack = quote::format_ident!("{}_unpack", orig_name.clone());
-    
 
     let ret_type = {
-        match am_type{
-            AmType::NoReturn => quote!{()},
-            AmType::ReturnData(ref output) => quote!{#output},
+        match am_type {
+            AmType::NoReturn => quote! {()},
+            AmType::ReturnData(ref output) => quote! {#output},
             AmType::ReturnAm(ref output) => {
-                quote!{#output}
+                quote! {#output}
             }
         }
     };
     let ret_struct = quote::format_ident!("{}Result", orig_name);
-    let mut am = quote!{
+    let mut am = quote! {
         impl #impl_generics #lamellar::LocalAM for #orig_name #ty_generics #where_clause{
             type Output = #ret_type;
         }
@@ -205,14 +199,13 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_type: AmType) -> 
                 fn serialize_into(&self,buf: &mut [u8]){
                     // println!("buf_len: {:?} serialized size: {:?}",buf.len(), #lamellar::serialized_size(self));
                     #lamellar::serialize_into(buf,self).unwrap();
-                }            
+                }
             }
 
             impl #impl_generics #lamellar::LamellarResultSerde for #orig_name #ty_generics #where_clause {
                 fn serialized_result_size(&self,result: &Box<dyn std::any::Any + Send + Sync>)->usize{
                     let result  = result.downcast_ref::<#ret_type>().unwrap();
                     #lamellar::serialized_size(result)
-                    
                 }
                 fn serialize_result_into(&self,buf: &mut [u8],result: &Box<dyn std::any::Any + Send + Sync>){
                     let result  = result.downcast_ref::<#ret_type>().unwrap();
@@ -222,23 +215,23 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_type: AmType) -> 
         });
     }
 
-    let ret_statement = match am_type{
-        AmType::NoReturn => quote!{ 
-            #last_expr 
+    let ret_statement = match am_type {
+        AmType::NoReturn => quote! {
+            #last_expr
         },
         AmType::ReturnData(_) => {
-            quote!{
+            quote! {
                 let ret = match __local{ //should probably just separate these into exec_local exec_remote to get rid of a conditional...
                     true => #lamellar::LamellarReturn::LocalData(Box::new(#last_expr)),
-                    false => #lamellar::LamellarReturn::RemoteData(std::sync::Arc::new (#ret_struct{    
+                    false => #lamellar::LamellarReturn::RemoteData(std::sync::Arc::new (#ret_struct{
                         val: #last_expr
                     })),
                 };
                 ret
             }
-        },
+        }
         AmType::ReturnAm(_) => {
-            quote!{
+            quote! {
                 let ret = match __local{
                     true => #lamellar::LamellarReturn::LocalAm(
                         std::sync::Arc::new (
@@ -273,19 +266,19 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_type: AmType) -> 
         #am
     };
 
-    if let AmType::ReturnData(_) = am_type{
-        expanded.extend( quote_spanned! {temp.span()=>
+    if let AmType::ReturnData(_) = am_type {
+        expanded.extend(quote_spanned! {temp.span()=>
             struct #ret_struct{
                 val: #ret_type
             }
-            
+
             impl #generics #lamellar::LamellarSerde for #ret_struct {
                 fn serialized_size(&self)->usize{
                     #lamellar::serialized_size(&self.val)
                 }
                 fn serialize_into(&self,buf: &mut [u8]){
                     #lamellar::serialize_into(buf,&self.val).unwrap();
-                }            
+                }
             }
         });
     }
@@ -310,7 +303,7 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_type: AmType) -> 
         });
     }
 
-    let user_expanded = quote_spanned!{expanded.span()=>
+    let user_expanded = quote_spanned! {expanded.span()=>
         const _: () = {
             extern crate lamellar as __lamellar;
             #expanded
@@ -319,105 +312,115 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_type: AmType) -> 
 
     if lamellar == "crate" {
         TokenStream::from(expanded)
-    }
-    else{
+    } else {
         TokenStream::from(user_expanded)
     }
 }
 
-
-fn derive_am_data(input: TokenStream,args: TokenStream, crate_header: String, local: bool) -> TokenStream{
+fn derive_am_data(
+    input: TokenStream,
+    args: TokenStream,
+    crate_header: String,
+    local: bool,
+) -> TokenStream {
     let lamellar = quote::format_ident!("{}", crate_header.clone());
     let input: syn::Item = parse_macro_input!(input);
-    let mut output = quote!{};   
+    let mut output = quote! {};
 
-    if let syn::Item::Struct(data) = input{
+    if let syn::Item::Struct(data) = input {
         let name = &data.ident;
         let generics = data.generics.clone();
         let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
-        
-        let mut fields = quote!{};
-        let mut ser = quote!{};
-        let mut des = quote!{};
 
-        for field in &data.fields{
-            if let syn::Type::Path(ref ty) = field.ty{
-                if let Some(_seg) = ty.path.segments.first(){
-                    if !local{
+        let mut fields = quote! {};
+        let mut ser = quote! {};
+        let mut des = quote! {};
+
+        for field in &data.fields {
+            if let syn::Type::Path(ref ty) = field.ty {
+                if let Some(_seg) = ty.path.segments.first() {
+                    if !local {
                         let field_name = field.ident.clone();
-                        fields.extend(quote_spanned!{field.span()=>
+                        fields.extend(quote_spanned! {field.span()=>
                             #field,
                         });
-                        ser.extend(quote_spanned!{field.span()=>
+                        ser.extend(quote_spanned! {field.span()=>
                             (&self.#field_name).ser(num_pes,cur_pe);
                         });
-                        des.extend(quote_spanned!{field.span()=>   
-                            (&self.#field_name).des(cur_pe); 
+                        des.extend(quote_spanned! {field.span()=>
+                            (&self.#field_name).des(cur_pe);
                         });
-                    }
-                    else{
-                        fields.extend(quote_spanned!{field.span()=>
+                    } else {
+                        fields.extend(quote_spanned! {field.span()=>
                             #field,
                         });
                     }
-                    
                 }
-            }
-            else if let syn::Type::Tuple(ref ty) = field.ty{
+            } else if let syn::Type::Tuple(ref ty) = field.ty {
                 let field_name = field.ident.clone();
                 let mut ind = 0;
-                for elem in &ty.elems{
-                    if let syn::Type::Path(ref ty) = elem{
-                        if let Some(_seg) = ty.path.segments.first(){
-                            if !local{
-                                let temp_ind = syn::Index{
+                for elem in &ty.elems {
+                    if let syn::Type::Path(ref ty) = elem {
+                        if let Some(_seg) = ty.path.segments.first() {
+                            if !local {
+                                let temp_ind = syn::Index {
                                     index: ind,
-                                    span: field.span()
+                                    span: field.span(),
                                 };
-                                ind+=1;
-                                ser.extend(quote_spanned!{field.span()=>
+                                ind += 1;
+                                ser.extend(quote_spanned! {field.span()=>
 
                                     (self.#field_name).#temp_ind.ser(num_pes,cur_pe);
                                 });
-                                des.extend(quote_spanned!{field.span()=>   
-                                    (self.#field_name).#temp_ind.des(cur_pe); 
+                                des.extend(quote_spanned! {field.span()=>
+                                    (self.#field_name).#temp_ind.des(cur_pe);
                                 });
                             }
                         }
                     }
                 }
-                fields.extend(quote_spanned!{field.span()=>
+                fields.extend(quote_spanned! {field.span()=>
                     #field,
                 });
             }
         }
-        let my_ser: syn::Path  = syn::parse(format!("{}::serde::Serialize",crate_header).parse().unwrap()).unwrap();
-        let my_de: syn::Path  = syn::parse(format!("{}::serde::Deserialize",crate_header).parse().unwrap()).unwrap(); 
-        let mut impls = quote!{};
+        let my_ser: syn::Path = syn::parse(
+            format!("{}::serde::Serialize", crate_header)
+                .parse()
+                .unwrap(),
+        )
+        .unwrap();
+        let my_de: syn::Path = syn::parse(
+            format!("{}::serde::Deserialize", crate_header)
+                .parse()
+                .unwrap(),
+        )
+        .unwrap();
+        let mut impls = quote! {};
         if !local {
-            impls.extend (quote!{ #my_ser, #my_de, });
+            impls.extend(quote! { #my_ser, #my_de, });
+        } else {
+            ser.extend(quote! {panic!{"should not serialize data in LocalAM"}});
         }
-        else{
-            ser.extend (quote! {panic!{"should not serialize data in LocalAM"}});
-        }
-        for t in args.to_string().split(","){
-            if !t.contains("serde::Serialize") && !t.contains("serde::Deserialize") && t.trim().len()>0{
-                let temp  = quote::format_ident!("{}",t.trim());
-                impls.extend(quote!{#temp, });
+        for t in args.to_string().split(",") {
+            if !t.contains("serde::Serialize")
+                && !t.contains("serde::Deserialize")
+                && t.trim().len() > 0
+            {
+                let temp = quote::format_ident!("{}", t.trim());
+                impls.extend(quote! {#temp, });
             }
-
         }
-        let traits = quote!{ #[derive( #impls)] };
+        let traits = quote! { #[derive( #impls)] };
         let serde_temp_2 = if crate_header != "crate" && !local {
-            quote!{#[serde(crate = "lamellar::serde")]}
-        }
-        else{
-            quote!{}
+            quote! {#[serde(crate = "lamellar::serde")]}
+        } else {
+            quote! {}
         };
         let vis = data.vis.to_token_stream();
-        output.extend(quote!{  
-            #traits  
-            #serde_temp_2        
+        output.extend(quote! {
+            #traits
+            #serde_temp_2
             #vis struct #name#ty_generics #where_clause{
                 #fields
             }
@@ -425,131 +428,126 @@ fn derive_am_data(input: TokenStream,args: TokenStream, crate_header: String, lo
                 fn ser (&self,  num_pes: usize, cur_pe: Result<usize, #lamellar::IdError>) {
                     // println!("in outer ser");
                     #ser
-                } 
+                }
                 fn des (&self,cur_pe: Result<usize, #lamellar::IdError>){
                     // println!("in outer des");
                     #des
                 }
-            } 
+            }
         });
     }
     TokenStream::from(output)
 }
 
-fn derive_darcserde(input: TokenStream, crate_header: String) -> TokenStream{
+fn derive_darcserde(input: TokenStream, crate_header: String) -> TokenStream {
     let lamellar = quote::format_ident!("{}", crate_header.clone());
-    println!("input: {:?}",input);
+    println!("input: {:?}", input);
     let input: syn::Item = parse_macro_input!(input);
-    let mut output = quote!{};   
+    let mut output = quote! {};
 
-    if let syn::Item::Struct(data) = input{
+    if let syn::Item::Struct(data) = input {
         let name = &data.ident;
         let generics = data.generics.clone();
         let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
-        
-        let mut fields = quote!{};
-        let mut ser = quote!{};
-        let mut des = quote!{};
 
-        for field in &data.fields{
-            if let syn::Type::Path(ref ty) = field.ty{
-                if let Some(seg) = ty.path.segments.first(){
+        let mut fields = quote! {};
+        let mut ser = quote! {};
+        let mut des = quote! {};
+
+        for field in &data.fields {
+            if let syn::Type::Path(ref ty) = field.ty {
+                if let Some(seg) = ty.path.segments.first() {
                     let field_name = field.ident.clone();
                     if seg.ident.to_string().contains("Darc") {
-                        let (serialize,deserialize) = if seg.ident.to_string().contains("LocalRwDarc"){
-                            let serialize = format!("{}::localrw_serialize",crate_header);
-                            let deserialize = format!("{}::localrw_from_ndarc",crate_header);
-                            (serialize,deserialize)
-                        }
-                        else if seg.ident.to_string().contains("GlobalRwDarc"){
-                            let serialize = format!("{}::globalrw_serialize",crate_header);
-                            let deserialize = format!("{}::globalrw_from_ndarc",crate_header);
-                            (serialize,deserialize)
-                        }
-                        else{
-                            let serialize = format!("{}::darc_serialize",crate_header);
-                            let deserialize = format!("{}::darc_from_ndarc",crate_header);
-                            (serialize,deserialize)
-                        };
-                        
-                        fields.extend(quote_spanned!{field.span()=>
+                        let (serialize, deserialize) =
+                            if seg.ident.to_string().contains("LocalRwDarc") {
+                                let serialize = format!("{}::localrw_serialize", crate_header);
+                                let deserialize = format!("{}::localrw_from_ndarc", crate_header);
+                                (serialize, deserialize)
+                            } else if seg.ident.to_string().contains("GlobalRwDarc") {
+                                let serialize = format!("{}::globalrw_serialize", crate_header);
+                                let deserialize = format!("{}::globalrw_from_ndarc", crate_header);
+                                (serialize, deserialize)
+                            } else {
+                                let serialize = format!("{}::darc_serialize", crate_header);
+                                let deserialize = format!("{}::darc_from_ndarc", crate_header);
+                                (serialize, deserialize)
+                            };
+
+                        fields.extend(quote_spanned! {field.span()=>
                             #[serde(serialize_with = #serialize, deserialize_with = #deserialize)]
                             #field,
                         });
-                        
+
                         ser.extend(quote_spanned!{field.span()=>
                             match cur_pe{
                                 Ok(cur_pe) => {self.#field_name.serialize_update_cnts(num_pes,cur_pe);},
                                 Err(err) =>  {panic!("can only access darcs within team members ({:?})",err);}
                             }
                         });
-                        des.extend(quote_spanned!{field.span()=>    
+                        des.extend(quote_spanned!{field.span()=>
                             match cur_pe{
                                 Ok(cur_pe) => {self.#field_name.deserialize_update_cnts(cur_pe);},
                                 Err(err) => {panic!("can only access darcs within team members ({:?})",err);}
-                            } 
+                            }
                         });
-                    }
-                    else{
-                        fields.extend(quote_spanned!{field.span()=>
+                    } else {
+                        fields.extend(quote_spanned! {field.span()=>
                             #field,
                         });
                     }
                 }
             }
         }
-        
-        
-        output.extend(quote!{  
+
+        output.extend(quote! {
             impl #impl_generics#lamellar::DarcSerde for #name #ty_generics #where_clause{
                 fn ser (&self,  num_pes: usize, cur_pe: Result<usize, #lamellar::IdError>) {
                     #ser
-                } 
+                }
                 fn des (&self,cur_pe: Result<usize, #lamellar::IdError>){
                     #des
                 }
-            } 
+            }
         });
-
-        
     }
     TokenStream::from(output)
 }
 
 #[proc_macro_derive(DarcSerdeRT)]
-pub fn darc_serde_rt_derive(input: TokenStream) -> TokenStream{
-    derive_darcserde(input,"crate".to_string())
+pub fn darc_serde_rt_derive(input: TokenStream) -> TokenStream {
+    derive_darcserde(input, "crate".to_string())
 }
 
 #[allow(non_snake_case)]
 #[proc_macro_error]
 #[proc_macro_attribute]
-pub fn AmData(args: TokenStream,input: TokenStream) -> TokenStream {
-    derive_am_data(input,args,"lamellar".to_string(),false)
+pub fn AmData(args: TokenStream, input: TokenStream) -> TokenStream {
+    derive_am_data(input, args, "lamellar".to_string(), false)
 }
 
 #[allow(non_snake_case)]
 #[proc_macro_error]
 #[proc_macro_attribute]
-pub fn AmLocalData(args: TokenStream,input: TokenStream) -> TokenStream {
-    derive_am_data(input,args,"lamellar".to_string(),true)
+pub fn AmLocalData(args: TokenStream, input: TokenStream) -> TokenStream {
+    derive_am_data(input, args, "lamellar".to_string(), true)
 }
 
 #[allow(non_snake_case)]
 #[proc_macro_error]
 #[proc_macro_attribute]
-pub fn AmDataRT(args: TokenStream,input: TokenStream) -> TokenStream {
-    derive_am_data(input, args,"crate".to_string(),false)
+pub fn AmDataRT(args: TokenStream, input: TokenStream) -> TokenStream {
+    derive_am_data(input, args, "crate".to_string(), false)
 }
 
 #[allow(non_snake_case)]
 #[proc_macro_error]
 #[proc_macro_attribute]
-pub fn AmLocalDataRT(args: TokenStream,input: TokenStream) -> TokenStream {
-    derive_am_data(input, args,"crate".to_string(),true)
+pub fn AmLocalDataRT(args: TokenStream, input: TokenStream) -> TokenStream {
+    derive_am_data(input, args, "crate".to_string(), true)
 }
 
-fn parse_am(args: TokenStream, input: TokenStream, local: bool, rt: bool) -> TokenStream{
+fn parse_am(args: TokenStream, input: TokenStream, local: bool, rt: bool) -> TokenStream {
     let args = args.to_string();
     if args.len() > 0 {
         assert!(args.starts_with("return_am"), "#[lamellar::am] only accepts an (optional) argument of the form:
@@ -577,7 +575,7 @@ fn parse_am(args: TokenStream, input: TokenStream, local: bool, rt: bool) -> Tok
                         #[lamellar::am] only accepts an (optional) argument of the form:
                         #[lamellar::am(return_am = \"<am to exec upon return>\")]");
                     }
-                    generate_am(input,local,rt, AmType::NoReturn)
+                    generate_am(input, local, rt, AmType::NoReturn)
                 }
             }
         }
@@ -590,29 +588,28 @@ fn parse_am(args: TokenStream, input: TokenStream, local: bool, rt: bool) -> Tok
     output
 }
 
-
 #[proc_macro_error]
 #[proc_macro_attribute]
 pub fn am(args: TokenStream, input: TokenStream) -> TokenStream {
-    parse_am(args,input,false,false)
+    parse_am(args, input, false, false)
 }
 
 #[proc_macro_error]
 #[proc_macro_attribute]
 pub fn local_am(args: TokenStream, input: TokenStream) -> TokenStream {
-    parse_am(args,input,true,false)
+    parse_am(args, input, true, false)
 }
 
 #[proc_macro_error]
 #[proc_macro_attribute]
 pub fn rt_am(args: TokenStream, input: TokenStream) -> TokenStream {
-    parse_am(args,input,false,true)
+    parse_am(args, input, false, true)
 }
 
 #[proc_macro_error]
 #[proc_macro_attribute]
 pub fn rt_am_local(args: TokenStream, input: TokenStream) -> TokenStream {
-    parse_am(args,input,true,true)
+    parse_am(args, input, true, true)
 }
 
 fn create_reduction(
@@ -622,31 +619,33 @@ fn create_reduction(
     array_types: &Vec<syn::Ident>,
     rt: bool,
 ) -> proc_macro2::TokenStream {
-    
     let lamellar = if rt {
         quote::format_ident!("crate")
-    }
-    else {
+    } else {
         quote::format_ident!("__lamellar")
     };
 
-    let (am_data, am): (syn::Path,syn::Path) = if rt {
-        (syn::parse("lamellar_impl::AmDataRT".parse().unwrap()).unwrap(),
-        syn::parse("lamellar_impl::rt_am".parse().unwrap()).unwrap())
-    }
-    else {
-        (syn::parse("lamellar::AmData".parse().unwrap()).unwrap(),
-        syn::parse("lamellar::am".parse().unwrap()).unwrap())
+    let (am_data, am): (syn::Path, syn::Path) = if rt {
+        (
+            syn::parse("lamellar_impl::AmDataRT".parse().unwrap()).unwrap(),
+            syn::parse("lamellar_impl::rt_am".parse().unwrap()).unwrap(),
+        )
+    } else {
+        (
+            syn::parse("lamellar::AmData".parse().unwrap()).unwrap(),
+            syn::parse("lamellar::am".parse().unwrap()).unwrap(),
+        )
     };
     let reduction = quote::format_ident!("{:}", reduction);
     let reduction_gen = quote::format_ident!("{:}_{:}_reduction_gen", typeident, reduction);
 
-    let mut gen_match_stmts = quote!{};
-    let mut array_impls = quote!{};
+    let mut gen_match_stmts = quote! {};
+    let mut array_impls = quote! {};
 
-    for array_type in array_types{
-        let reduction_name = quote::format_ident!("{:}_{:}_{:}_reduction",array_type, typeident, reduction);
-        
+    for array_type in array_types {
+        let reduction_name =
+            quote::format_ident!("{:}_{:}_{:}_reduction", array_type, typeident, reduction);
+
         gen_match_stmts.extend(quote!{
             #lamellar::array::LamellarArray::#array_type(inner) => std::sync::Arc::new(#reduction_name{
                 data: inner.clone().as_base_inner::<#typeident>() , start_pe: 0, end_pe: num_pes-1}),
@@ -688,7 +687,7 @@ fn create_reduction(
                     }
                 }
             }
-        });        
+        });
     }
 
     let expanded = quote! {
@@ -697,7 +696,7 @@ fn create_reduction(
             match data{
                 #gen_match_stmts
             }
-            
+
         }
 
         #lamellar::inventory::submit! {
@@ -712,7 +711,7 @@ fn create_reduction(
         #array_impls
     };
 
-    let user_expanded = quote_spanned!{expanded.span()=>
+    let user_expanded = quote_spanned! {expanded.span()=>
         const _: () = {
             extern crate lamellar as __lamellar;
             use __lamellar::array::LamellarArrayRDMA;
@@ -721,8 +720,7 @@ fn create_reduction(
     };
     if lamellar == "crate" {
         expanded
-    }
-    else{
+    } else {
         user_expanded
     }
 }
@@ -734,25 +732,27 @@ fn create_add(
 ) -> proc_macro2::TokenStream {
     let lamellar = if rt {
         quote::format_ident!("crate")
-    }
-    else {
+    } else {
         quote::format_ident!("__lamellar")
     };
 
-    let (am_data, am): (syn::Path,syn::Path) = if rt {
-        (syn::parse("lamellar_impl::AmDataRT".parse().unwrap()).unwrap(),
-        syn::parse("lamellar_impl::rt_am".parse().unwrap()).unwrap())
-    }
-    else {
-        (syn::parse("lamellar::AmData".parse().unwrap()).unwrap(),
-        syn::parse("lamellar::am".parse().unwrap()).unwrap())
+    let (am_data, am): (syn::Path, syn::Path) = if rt {
+        (
+            syn::parse("lamellar_impl::AmDataRT".parse().unwrap()).unwrap(),
+            syn::parse("lamellar_impl::rt_am".parse().unwrap()).unwrap(),
+        )
+    } else {
+        (
+            syn::parse("lamellar::AmData".parse().unwrap()).unwrap(),
+            syn::parse("lamellar::am".parse().unwrap()).unwrap(),
+        )
     };
 
-    let mut match_stmts = quote!{};
-    let mut array_impls = quote!{};
-    for array_type in array_types{
-        let add_name_am = quote::format_ident!("{:}_{:}_add_am",array_type, typeident);
-        match_stmts.extend(quote!{
+    let mut match_stmts = quote! {};
+    let mut array_impls = quote! {};
+    for array_type in array_types {
+        let add_name_am = quote::format_ident!("{:}_{:}_add_am", array_type, typeident);
+        match_stmts.extend(quote! {
             #lamellar::array::LamellarArray::#array_type(inner) => inner.add(index,val),
         });
         array_impls.extend(quote!{
@@ -799,7 +799,7 @@ fn create_add(
         #array_impls
     };
 
-    let user_expanded = quote_spanned!{expanded.span()=>
+    let user_expanded = quote_spanned! {expanded.span()=>
         const _: () = {
             extern crate lamellar as __lamellar;
             use __lamellar::array::LamellarArrayRDMA;
@@ -808,8 +808,7 @@ fn create_add(
     };
     if lamellar == "crate" {
         expanded
-    }
-    else{
+    } else {
         user_expanded
     }
 }
@@ -895,11 +894,7 @@ pub fn generate_reductions_for_type(item: TokenStream) -> TokenStream {
             &array_types,
             false,
         ));
-        output.extend(create_add(
-            typeident.clone(),
-            &array_types,
-            false,
-        ));
+        output.extend(create_add(typeident.clone(), &array_types, false));
     }
 
     TokenStream::from(output)
@@ -908,7 +903,7 @@ pub fn generate_reductions_for_type(item: TokenStream) -> TokenStream {
 #[proc_macro]
 pub fn generate_reductions_for_type_rt(item: TokenStream) -> TokenStream {
     let mut output = quote! {};
-    
+
     let array_types: Vec<syn::Ident> = vec![quote::format_ident!("UnsafeArray")];
     for t in item.to_string().split(",").collect::<Vec<&str>>() {
         let t = t.trim().to_string();
@@ -940,12 +935,7 @@ pub fn generate_reductions_for_type_rt(item: TokenStream) -> TokenStream {
             &array_types,
             true,
         ));
-        output.extend(create_add(
-            typeident.clone(),
-            &array_types,
-            true,
-        ));
+        output.extend(create_add(typeident.clone(), &array_types, true));
     }
     TokenStream::from(output)
 }
-

@@ -5,7 +5,7 @@
 /// we make no claims to the accuracy or resolution of the resulting clock offsets
 /// this should not be used in production codes as is.
 /// --------------------------------------------------------------------------
-use lamellar::{ActiveMessaging};
+use lamellar::ActiveMessaging;
 use std::time::SystemTime;
 
 fn get_time_as_nsec() -> i128 {
@@ -15,13 +15,13 @@ fn get_time_as_nsec() -> i128 {
     }
 }
 
-#[lamellar::AmData( Clone, Debug)]
+#[lamellar::AmData(Clone, Debug)]
 struct SyncAM {}
-#[lamellar::AmData( Clone, Debug)]
+#[lamellar::AmData(Clone, Debug)]
 struct RespAM {
     time: i128,
 }
-#[lamellar::AmData( Clone, Debug)]
+#[lamellar::AmData(Clone, Debug)]
 struct FollowUpAM {}
 
 #[lamellar::am(return_am = "RespAM -> i128")]
@@ -64,7 +64,7 @@ fn main() {
     let _num_pes = world.num_pes();
     world.barrier();
     let mut reqs = Vec::new();
-    let num_tasks=100;
+    let num_tasks = 100;
     for _i in 0..num_tasks {
         reqs.push(world.exec_am_pe(0, SyncAM {}));
     }

@@ -4,15 +4,13 @@
 /// recursive ams to visit and print out a path of pes visted
 /// also experiments with sub_teams
 ///------------------------------------------------------------------------
-use lamellar::{ActiveMessaging, IdError, LamellarArch,LamellarTeam};
+use lamellar::{ActiveMessaging, IdError, LamellarArch, LamellarTeam};
 use rand::seq::SliceRandom;
 // use rand::thread_rng;
 use rand::{rngs::StdRng, SeedableRng};
 
-
-
 //----------------- Recursive Active Message -----------------//
-#[lamellar::AmData( Clone, Debug)]
+#[lamellar::AmData(Clone, Debug)]
 struct RecursiveAM {
     next: usize,
     orig: usize,
@@ -161,7 +159,7 @@ fn main() {
             random_team.print_arch();
         }
         let team_arch = RandomArch::new(0, num_pes, 2);
-        let team = LamellarTeam::create_subteam_from_arch(random_team.clone(),team_arch.clone())
+        let team = LamellarTeam::create_subteam_from_arch(random_team.clone(), team_arch.clone())
             .expect("unable to create subteam");
         if my_pe == 0 {
             team.print_arch();

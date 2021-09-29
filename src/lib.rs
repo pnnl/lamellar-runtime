@@ -19,15 +19,15 @@ pub use serde::*;
 
 mod active_messaging;
 pub mod array;
+mod barrier;
 mod darc;
 mod lamellae;
 mod lamellar_alloc;
 mod lamellar_arch;
-mod memregion;
-mod barrier;
 mod lamellar_request;
 mod lamellar_team;
 mod lamellar_world;
+mod memregion;
 mod scheduler;
 mod utils;
 pub use utils::*;
@@ -52,22 +52,22 @@ pub use crate::memregion::{
     local::LocalMemoryRegion, shared::SharedMemoryRegion, RemoteMemoryRegion,
 };
 
+pub use crate::darc::global_rw_darc::GlobalRwDarc;
 #[doc(hidden)]
 pub use crate::darc::global_rw_darc::{globalrw_from_ndarc, globalrw_serialize};
+pub use crate::darc::local_rw_darc::LocalRwDarc;
 #[doc(hidden)]
 pub use crate::darc::local_rw_darc::{localrw_from_ndarc, localrw_serialize};
 pub use crate::darc::Darc;
-pub use crate::darc::global_rw_darc::GlobalRwDarc;
-pub use crate::darc::local_rw_darc::LocalRwDarc;
 
 pub use crate::lamellae::Backend;
 pub use crate::lamellar_arch::{BlockedArch, IdError, LamellarArch, StridedArch};
 pub use crate::lamellar_world::*;
 pub use crate::scheduler::SchedulerType;
 
+pub use crate::lamellar_team::LamellarTeam;
 #[doc(hidden)]
 pub use crate::lamellar_team::LamellarTeamRT;
-pub use crate::lamellar_team::LamellarTeam;
 
 extern crate lamellar_impl;
 pub use lamellar_impl::{

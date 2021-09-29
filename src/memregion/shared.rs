@@ -1,5 +1,5 @@
 use crate::darc::Darc;
-use crate::lamellae::AllocationType; 
+use crate::lamellae::AllocationType;
 use crate::memregion::*;
 use core::marker::PhantomData;
 #[cfg(feature = "enable-prof")]

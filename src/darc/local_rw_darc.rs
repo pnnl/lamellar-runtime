@@ -13,7 +13,7 @@ use crate::IdError;
 use crate::LamellarTeam;
 
 #[derive(serde::Serialize, serde::Deserialize, Debug)]
-pub struct LocalRwDarc<T: 'static > {
+pub struct LocalRwDarc<T: 'static> {
     #[serde(
         serialize_with = "localrw_serialize2",
         deserialize_with = "localrw_from_ndarc2"

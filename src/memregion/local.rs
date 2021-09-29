@@ -1,4 +1,4 @@
-use crate::lamellae::{AllocationType, Lamellae}; 
+use crate::lamellae::{AllocationType, Lamellae};
 use crate::memregion::*;
 use core::marker::PhantomData;
 use std::sync::Arc;

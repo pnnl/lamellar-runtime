@@ -1,12 +1,11 @@
 /// ------------Lamellar Example: AM returm Am -------------------------
-/// This example highlights how to create a Lamellar Active message 
+/// This example highlights how to create a Lamellar Active message
 /// with multiple input types which returns as a result another active message.
 /// This returned active message is executed automatically upon arrival at the original
 /// PE but does not return any data to the user.
 /// it tests executing the AM localy, executing remotely, and executing on all PEs
 /// --------------------------------------------------------------------
-
-use lamellar::{ActiveMessaging};
+use lamellar::ActiveMessaging;
 // use lamellar::{Backend, SchedulerType};
 
 //--Active message returning an active message that returns nothing--//

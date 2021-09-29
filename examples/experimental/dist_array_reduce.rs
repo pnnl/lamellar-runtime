@@ -114,14 +114,14 @@ fn main() {
         let cyclic_min = block_array.reduce("min").get();
         println!("block min: {:?} cyclic min: {:?}", block_min, cyclic_min);
     }
-    for i in 0..total_len{
-        block_array.add(i,10);
+    for i in 0..total_len {
+        block_array.add(i, 10);
     }
     block_array.for_each_mut(|x| *x += *x);
-    cyclic_array.for_each(|x| println!("x: {:?}",x));
+    cyclic_array.for_each(|x| println!("x: {:?}", x));
     world.wait_all();
-    block_array.for_each(|x| println!("x: {:?}",x));
+    block_array.for_each(|x| println!("x: {:?}", x));
     cyclic_array.for_each_mut(|x| *x += *x);
-    
+
     world.barrier();
 }

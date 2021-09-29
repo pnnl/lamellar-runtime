@@ -1,12 +1,11 @@
-
 use crate::active_messaging::*;
 use crate::barrier::Barrier;
 use crate::lamellae::{AllocationType, Lamellae, LamellaeComm};
 use crate::lamellar_arch::{GlobalArch, IdError, LamellarArch, LamellarArchEnum, LamellarArchRT};
 use crate::lamellar_request::{AmType, LamellarRequest, LamellarRequestHandle};
 use crate::memregion::{
-    local::LocalMemoryRegion, shared::SharedMemoryRegion,  Dist, LamellarMemoryRegion,
-    MemoryRegion, RemoteMemoryRegion,
+    local::LocalMemoryRegion, shared::SharedMemoryRegion, Dist, LamellarMemoryRegion, MemoryRegion,
+    RemoteMemoryRegion,
 };
 use crate::scheduler::{Scheduler, SchedulerQueue};
 #[cfg(feature = "nightly")]
@@ -122,7 +121,8 @@ impl ActiveMessaging for Arc<LamellarTeam> {
     where
         F: RemoteActiveMessage + LamellarAM + Serde + Send + Sync + 'static,
     {
-        self.team.exec_am_pe::<F::Output>(self.clone(), pe,Arc::new(am), None)
+        self.team
+            .exec_am_pe::<F::Output>(self.clone(), pe, Arc::new(am), None)
     }
 
     fn exec_am_local<F>(&self, am: F) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync>
@@ -586,7 +586,7 @@ impl LamellarTeamRT {
         self.team_counters.add_send_req(1);
         prof_end!(counters);
         prof_start!(any);
-        
+
         prof_end!(any);
         prof_start!(sub);
         let world = if let Some(world) = &team.world {

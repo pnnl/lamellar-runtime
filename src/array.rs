@@ -1,14 +1,14 @@
 use crate::{active_messaging::*, LamellarTeam, RemoteMemoryRegion}; //{ActiveMessaging,AMCounters,Cmd,Msg,LamellarAny,LamellarLocal};
                                                                     // use crate::lamellae::Lamellae;
                                                                     // use crate::lamellar_arch::LamellarArchRT;
+use crate::lamellar_request::LamellarRequest;
 use crate::memregion::{
     local::LocalMemoryRegion, shared::SharedMemoryRegion, Dist, LamellarMemoryRegion,
 };
-use crate::lamellar_request::{LamellarRequest};
 
+use enum_dispatch::enum_dispatch;
 use std::collections::HashMap;
 use std::sync::Arc;
-use enum_dispatch::enum_dispatch;
 
 pub(crate) mod r#unsafe;
 pub use r#unsafe::UnsafeArray;
@@ -46,21 +46,20 @@ pub enum Distribution {
     Cyclic,
 }
 
-pub enum Array{
+pub enum Array {
     Unsafe,
 }
 
-#[derive(Hash,std::cmp::PartialEq,std::cmp::Eq,Clone)]
+#[derive(Hash, std::cmp::PartialEq, std::cmp::Eq, Clone)]
 pub enum ArrayOp {
     Put,
     Get,
     Add,
 }
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
-enum ArrayOpInput{
-    Add(usize,Vec<u8>)
+enum ArrayOpInput {
+    Add(usize, Vec<u8>),
 }
-
 
 #[enum_dispatch(RegisteredMemoryRegion<T>, SubRegion<T>, MyFrom<T>)]
 #[derive(Clone)]
@@ -109,7 +108,6 @@ where
     }
 }
 
-
 #[enum_dispatch(LamellarArrayRDMA<T>,LamellarArrayReduce<T>)] //,LamellarArrayIterator<T>)]
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 #[serde(bound = "T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static")]
@@ -127,29 +125,40 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> La
     //         LamellarArray::UnsafeArray(inner) => inner.local_as_mut_ptr(),
     //     }
     // }
-    pub fn for_each<F>(&self,op: F)
-    where F: Fn(&T) + Sync + Send + Clone + 'static{
+    pub fn for_each<F>(&self, op: F)
+    where
+        F: Fn(&T) + Sync + Send + Clone + 'static,
+    {
         match self {
             LamellarArray::UnsafeArray(inner) => inner.for_each(op),
         }
     }
-    pub fn for_each_mut<F>(&self,op: F)
-    where F: Fn(&mut T) + Sync + Send + Clone + 'static{
+    pub fn for_each_mut<F>(&self, op: F)
+    where
+        F: Fn(&mut T) + Sync + Send + Clone + 'static,
+    {
         match self {
             LamellarArray::UnsafeArray(inner) => inner.for_each_mut(op),
         }
     }
 }
 
-impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + std::ops::AddAssign + 'static> LamellarArray<T> {
-    pub fn dist_add(&self, index: usize, func: LamellarArcAm) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync>{
+impl<
+        T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + std::ops::AddAssign + 'static,
+    > LamellarArray<T>
+{
+    pub fn dist_add(
+        &self,
+        index: usize,
+        func: LamellarArcAm,
+    ) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync> {
         match self {
-            LamellarArray::UnsafeArray(inner) => inner.dist_add(index, func)
+            LamellarArray::UnsafeArray(inner) => inner.dist_add(index, func),
         }
     }
-    pub fn local_add(&self, index: usize, val: T){
+    pub fn local_add(&self, index: usize, val: T) {
         match self {
-            LamellarArray::UnsafeArray(inner) => inner.local_add(index,val),
+            LamellarArray::UnsafeArray(inner) => inner.local_add(index, val),
         }
     }
 }
@@ -169,13 +178,11 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Da
     }
 }
 
-
-
 #[lamellar_impl::AmLocalDataRT(Clone)]
-struct ForEach<T,F>
-where  
+struct ForEach<T, F>
+where
     T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static,
-    F: Fn(&T) + Sync + Send 
+    F: Fn(&T) + Sync + Send,
 {
     op: F,
     data: LamellarArray<T>,
@@ -183,11 +190,12 @@ where
     end_i: usize,
 }
 #[lamellar_impl::rt_am_local]
-impl<T,F> LamellarAm for ForEach<T,F>
-where  
+impl<T, F> LamellarAm for ForEach<T, F>
+where
     T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static,
-    F: Fn(&T) + Sync + Send + 'static{
-    fn exec(&self){
+    F: Fn(&T) + Sync + Send + 'static,
+{
+    fn exec(&self) {
         // self.data.local_as_slice()[self.start_i..self.end_i].iter().for_each((self.op));
         // println!("{:?} {:?} {:?}",lamellar::current_pe,self.start_i,self.end_i);
         for elem in self.data.local_as_slice()[self.start_i..self.end_i].into_iter() {
@@ -197,10 +205,10 @@ where
 }
 
 #[lamellar_impl::AmLocalDataRT(Clone)]
-struct ForEachMut<T,F>
-where  
+struct ForEachMut<T, F>
+where
     T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static,
-    F: Fn(&mut T) + Sync + Send 
+    F: Fn(&mut T) + Sync + Send,
 {
     op: F,
     data: LamellarArray<T>,
@@ -208,11 +216,12 @@ where
     end_i: usize,
 }
 #[lamellar_impl::rt_am_local]
-impl<T,F> LamellarAm for ForEachMut<T,F>
-where  
+impl<T, F> LamellarAm for ForEachMut<T, F>
+where
     T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static,
-    F: Fn(&mut T) + Sync + Send + 'static{
-    fn exec(&self){
+    F: Fn(&mut T) + Sync + Send + 'static,
+{
+    fn exec(&self) {
         // self.data.local_as_slice()[self.start_i..self.end_i].iter().for_each((self.op));
         // println!("{:?} {:?} {:?}",lamellar::current_pe,self.start_i,self.end_i);
         for elem in self.data.local_as_mut_slice()[self.start_i..self.end_i].iter_mut() {
@@ -220,7 +229,6 @@ where
         }
     }
 }
-
 
 #[enum_dispatch]
 pub trait LamellarArrayRDMA<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static>
@@ -242,14 +250,10 @@ where
     fn wait_all(&self);
     fn get_reduction_op(&self, op: String) -> LamellarArcAm;
     fn reduce(&self, op: &str) -> Box<dyn LamellarRequest<Output = T> + Send + Sync>;
-    fn sum(&self)-> Box<dyn LamellarRequest<Output = T> + Send + Sync>;
-    fn max(&self)-> Box<dyn LamellarRequest<Output = T> + Send + Sync>;
-    fn prod(&self)-> Box<dyn LamellarRequest<Output = T> + Send + Sync>;
+    fn sum(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync>;
+    fn max(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync>;
+    fn prod(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync>;
 }
-
-
-
-
 
 //need to think about iteration a bit more
 // use core::ptr::NonNull;

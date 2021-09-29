@@ -5,8 +5,7 @@
 /// it tests executing the AM localy, executing remotely, and executing on all PEs
 /// finally it performs a ring like pattern where each pe sends an AM to its right neigbor (wrapping to 0 for the last pe)
 /// --------------------------------------------------------------------
-
-use lamellar::{ActiveMessaging};
+use lamellar::ActiveMessaging;
 // use lamellar::{Backend, SchedulerType};
 
 //----------------- Active message returning nothing-----------------//
@@ -28,8 +27,6 @@ impl LamellarAM for AmNoReturn {
         println!("\t{:?} leaving", self);
     }
 }
-
-
 
 fn main() {
     let world = lamellar::LamellarWorldBuilder::new()
@@ -71,4 +68,3 @@ fn main() {
     println!("no return result: {:?}", res);
     println!("-----------------------------------");
 }
-

@@ -1,6 +1,6 @@
-use crate::lamellar_arch::LamellarArchRT;
-use crate::active_messaging::Msg;
 use crate::active_messaging::registered_active_message::AmId;
+use crate::active_messaging::Msg;
+use crate::lamellar_arch::LamellarArchRT;
 use crate::scheduler::Scheduler;
 #[cfg(feature = "enable-prof")]
 use lamellar_prof::*;
@@ -10,16 +10,16 @@ use async_trait::async_trait;
 use enum_dispatch::enum_dispatch;
 
 pub(crate) mod local_lamellae;
-use local_lamellae::{Local,LocalData};
+use local_lamellae::{Local, LocalData};
 #[cfg(feature = "enable-rofi")]
 mod rofi;
 #[cfg(feature = "enable-rofi")]
 pub(crate) mod rofi_lamellae;
 
 #[cfg(feature = "enable-rofi")]
-use rofi_lamellae::{RofiBuilder,Rofi};
-#[cfg(feature = "enable-rofi")]
 use rofi::rofi_comm::RofiData;
+#[cfg(feature = "enable-rofi")]
+use rofi_lamellae::{Rofi, RofiBuilder};
 // pub(crate) mod shmem_lamellae;
 
 #[derive(
@@ -32,8 +32,8 @@ pub enum Backend {
     // Shmem,
 }
 
-#[derive(Debug,Clone)]
-pub(crate) enum  AllocationType{
+#[derive(Debug, Clone)]
+pub(crate) enum AllocationType {
     Local,
     Global,
     Sub(Vec<usize>),
@@ -52,60 +52,66 @@ fn default_backend() -> Backend {
     return Backend::Local;
 }
 
-#[derive(serde::Serialize,serde::Deserialize,Clone,Debug)]
-pub(crate) struct SerializeHeader{
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
+pub(crate) struct SerializeHeader {
     pub(crate) msg: Msg,
     pub(crate) team_hash: u64,
     pub(crate) id: AmId,
 }
 
-
 #[enum_dispatch(Des, SubData)]
 #[derive(Clone)]
-pub(crate) enum SerializedData{
+pub(crate) enum SerializedData {
     #[cfg(feature = "enable-rofi")]
     RofiData,
-    LocalData
+    LocalData,
 }
 
 #[enum_dispatch]
-pub(crate) trait Des{
+pub(crate) trait Des {
     fn deserialize_header(&self) -> Option<SerializeHeader>;
-    fn deserialize_data<T: serde::de::DeserializeOwned>(& self) -> Result<T, anyhow::Error>;
-    fn header_and_data_as_bytes(&self) -> &mut[u8];
-    fn data_as_bytes(&self) -> &mut[u8];
+    fn deserialize_data<T: serde::de::DeserializeOwned>(&self) -> Result<T, anyhow::Error>;
+    fn header_and_data_as_bytes(&self) -> &mut [u8];
+    fn data_as_bytes(&self) -> &mut [u8];
     fn print(&self);
 }
 
 #[enum_dispatch]
-pub(crate) trait SubData{
-    fn sub_data(&self,start: usize, end: usize) -> SerializedData;
+pub(crate) trait SubData {
+    fn sub_data(&self, start: usize, end: usize) -> SerializedData;
 }
 
 #[enum_dispatch(LamellaeInit)]
-pub(crate) enum LamellaeBuilder{
+pub(crate) enum LamellaeBuilder {
     #[cfg(feature = "enable-rofi")]
     RofiBuilder,
-    Local, 
+    Local,
 }
 
 #[async_trait]
 #[enum_dispatch]
-pub(crate) trait LamellaeInit{
-    fn init_fabric(&mut self) -> (usize, usize);//(my_pe,num_pes)
+pub(crate) trait LamellaeInit {
+    fn init_fabric(&mut self) -> (usize, usize); //(my_pe,num_pes)
     fn init_lamellae(&mut self, scheduler: Arc<Scheduler>) -> Arc<Lamellae>;
-    
 }
 
 #[async_trait]
 #[enum_dispatch]
-pub(crate) trait Ser{
-    async fn serialize<T: Send + Sync + serde::Serialize + ?Sized >(&self,header: Option<SerializeHeader>, obj: &T) -> Result<SerializedData,anyhow::Error>;
-    async fn serialize_header(&self,header: Option<SerializeHeader>,serialized_size: usize) -> Result<SerializedData,anyhow::Error>;
+pub(crate) trait Ser {
+    async fn serialize<T: Send + Sync + serde::Serialize + ?Sized>(
+        &self,
+        header: Option<SerializeHeader>,
+        obj: &T,
+    ) -> Result<SerializedData, anyhow::Error>;
+    async fn serialize_header(
+        &self,
+        header: Option<SerializeHeader>,
+        serialized_size: usize,
+    ) -> Result<SerializedData, anyhow::Error>;
 }
 
 #[enum_dispatch(LamellaeComm, LamellaeAM, LamellaeRDMA, Ser)]
-pub(crate) enum Lamellae{
+pub(crate) enum Lamellae {
     #[cfg(feature = "enable-rofi")]
     Rofi,
     Local,
@@ -114,9 +120,9 @@ pub(crate) enum Lamellae{
 #[async_trait]
 #[enum_dispatch]
 pub(crate) trait LamellaeComm: LamellaeAM + LamellaeRDMA + Send + Sync {
-// this is a global barrier (hopefully using hardware)
+    // this is a global barrier (hopefully using hardware)
     fn my_pe(&self) -> usize;
-    fn num_pes(&self) ->usize;
+    fn num_pes(&self) -> usize;
     fn barrier(&self);
     fn backend(&self) -> Backend;
     #[allow(non_snake_case)]
@@ -127,9 +133,14 @@ pub(crate) trait LamellaeComm: LamellaeAM + LamellaeRDMA + Send + Sync {
 
 #[async_trait]
 #[enum_dispatch]
-pub(crate) trait LamellaeAM: Send + Sync{
-    async fn send_to_pe_async(&self, pe: usize ,data: SerializedData); //should never send to self... this is short circuited before request is serialized in the active message layer
-    async fn send_to_pes_async(&self,pe: Option<usize>, team: Arc<LamellarArchRT>, data: SerializedData);
+pub(crate) trait LamellaeAM: Send + Sync {
+    async fn send_to_pe_async(&self, pe: usize, data: SerializedData); //should never send to self... this is short circuited before request is serialized in the active message layer
+    async fn send_to_pes_async(
+        &self,
+        pe: Option<usize>,
+        team: Arc<LamellarArchRT>,
+        data: SerializedData,
+    );
 }
 
 #[enum_dispatch]
@@ -148,10 +159,9 @@ pub(crate) trait LamellaeRDMA: Send + Sync {
     fn occupied(&self) -> usize;
 }
 
-
 #[allow(unused_variables)]
 //#[prof]
-pub(crate) fn create_lamellae(backend: Backend) -> LamellaeBuilder { 
+pub(crate) fn create_lamellae(backend: Backend) -> LamellaeBuilder {
     match backend {
         #[cfg(feature = "enable-rofi")]
         Backend::Rofi => {
@@ -169,6 +179,3 @@ pub(crate) fn create_lamellae(backend: Backend) -> LamellaeBuilder {
         Backend::Local => LamellaeBuilder::Local(Local::new()),
     }
 }
-
-
-

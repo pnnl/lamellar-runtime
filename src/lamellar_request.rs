@@ -1,6 +1,6 @@
+use crate::active_messaging::LamellarAny;
+use crate::lamellae::{Des, SerializedData};
 use crate::lamellar_arch::LamellarArchRT;
-use crate::lamellae::{SerializedData,Des};
-use crate::active_messaging::{LamellarAny};
 use crate::lamellar_team::LamellarTeam;
 use async_trait::async_trait;
 use crossbeam::utils::CachePadded;
@@ -10,9 +10,9 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 
 static CUR_REQ_ID: AtomicUsize = AtomicUsize::new(0);
-pub (crate) enum InternalResult{
-    Local(LamellarAny), // a local result from a local am (possibly a returned one)
-    Remote(SerializedData),// a remte result from a remote am
+pub(crate) enum InternalResult {
+    Local(LamellarAny),     // a local result from a local am (possibly a returned one)
+    Remote(SerializedData), // a remte result from a remote am
     Unit,
 }
 
@@ -103,26 +103,24 @@ impl<T: 'static + serde::ser::Serialize + serde::de::DeserializeOwned + Sync + S
         )
     }
 
-    fn process_result(&self, data: InternalResult)->Option<T>{
+    fn process_result(&self, data: InternalResult) -> Option<T> {
         match data {
-            InternalResult::Local(x) =>{
-                if let Ok(result) = x.downcast::<T>(){
+            InternalResult::Local(x) => {
+                if let Ok(result) = x.downcast::<T>() {
                     Some(*result)
-                }
-                else{
+                } else {
                     None
                 }
             }
             InternalResult::Remote(x) => {
-                if let Ok(result) = x.deserialize_data() {//crate::deserialize(&x) {
+                if let Ok(result) = x.deserialize_data() {
+                    //crate::deserialize(&x) {
                     Some(result)
                 } else {
                     None
                 }
             }
-            InternalResult::Unit => {
-                None
-            }
+            InternalResult::Unit => None,
         }
     }
 
@@ -131,8 +129,6 @@ impl<T: 'static + serde::ser::Serialize + serde::de::DeserializeOwned + Sync + S
         self.process_result(data)
     }
 
-
-
     fn am_get_all(&self) -> Vec<Option<T>> {
         let mut res = vec![];
         for _i in 0..self.cnt {
@@ -140,7 +136,7 @@ impl<T: 'static + serde::ser::Serialize + serde::de::DeserializeOwned + Sync + S
         }
         if self.cnt > 1 {
             let mut cnt = self.cnt;
-            while cnt > 0 {    
+            while cnt > 0 {
                 let (pe, data) = self.data_rx.recv().expect("result recv");
                 if let Ok(pe) = self.arch.team_pe(pe) {
                     res[pe] = self.process_result(data);

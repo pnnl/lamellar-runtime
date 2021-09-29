@@ -251,8 +251,7 @@ impl ActiveMessageEngine {
                     .process_batched_am(ame, cmd, msg, ser_data, lamellae, world, team)
                     .await;
             } //execute a remote am
-            ExecType::Runtime(_cmd) => {
-            }
+            ExecType::Runtime(_cmd) => {}
         }
     }
 
@@ -289,4 +288,3 @@ impl ActiveMessageEngine {
         }
     }
 }
-

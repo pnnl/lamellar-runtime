@@ -4,11 +4,10 @@
 /// the active message struct does not need to be serialize/deserialize
 /// (although currently outputs still need to be)
 /// --------------------------------------------------------------------
-
-use lamellar::{ActiveMessaging};
+use lamellar::ActiveMessaging;
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
-use std::sync::atomic::{AtomicUsize,Ordering};
 use std::time::Duration;
 // use lamellar::{Backend, SchedulerType};
 
@@ -16,7 +15,7 @@ use std::time::Duration;
 #[lamellar::AmLocalData(Debug, Clone)]
 struct AmNoReturn {
     my_id: usize,
-    data: Arc<HashMap<usize,Vec<usize>>>,
+    data: Arc<HashMap<usize, Vec<usize>>>,
     index: Arc<AtomicUsize>,
 }
 
@@ -29,14 +28,12 @@ impl LamellarAM for AmNoReturn {
             lamellar::current_pe,
             lamellar::num_pes,
             hostname::get().unwrap()
-            
         );
-        let mut i = self.index.fetch_add(1,Ordering::Relaxed);
-        while i < self.data.len(){
-            println!("{:?} {:?} {:?}",self.my_id,i,self.data.get(&i));
+        let mut i = self.index.fetch_add(1, Ordering::Relaxed);
+        while i < self.data.len() {
+            println!("{:?} {:?} {:?}", self.my_id, i, self.data.get(&i));
             std::thread::sleep(Duration::from_millis(1000));
-            i = self.index.fetch_add(1,Ordering::Relaxed);
-            
+            i = self.index.fetch_add(1, Ordering::Relaxed);
         }
         println!("\t{:?} leaving", self.my_id);
     }
@@ -46,7 +43,7 @@ impl LamellarAM for AmNoReturn {
 #[lamellar::AmLocalData(Debug, Clone)]
 struct AmReturnUsize {
     my_id: usize,
-    data: Arc<HashMap<usize,Vec<usize>>>,
+    data: Arc<HashMap<usize, Vec<usize>>>,
     index: Arc<AtomicUsize>,
 }
 #[lamellar::local_am]
@@ -59,15 +56,14 @@ impl LamellarAM for AmReturnUsize {
             lamellar::num_pes,
             hostname::get().unwrap()
         );
-        let mut i = self.index.fetch_add(1,Ordering::Relaxed);
+        let mut i = self.index.fetch_add(1, Ordering::Relaxed);
         let mut sum = 0;
-        while i < self.data.len(){
-            sum += 1;//self.data.get(&1).unwrap().iter().sum::<usize>();
+        while i < self.data.len() {
+            sum += 1; //self.data.get(&1).unwrap().iter().sum::<usize>();
             std::thread::sleep(Duration::from_millis(1000));
-            i = self.index.fetch_add(1,Ordering::Relaxed);
-            
+            i = self.index.fetch_add(1, Ordering::Relaxed);
         }
-        println!("\t{:?} leaving, sum{:?}", self.my_id,sum);
+        println!("\t{:?} leaving, sum{:?}", self.my_id, sum);
         sum
     }
 }
@@ -79,8 +75,8 @@ fn main() {
     let _num_pes = world.num_pes();
     world.barrier();
     let mut map = HashMap::new();
-    for i in 0..10{
-        for j in i..(10){
+    for i in 0..10 {
+        for j in i..(10) {
             map.entry(i).or_insert(vec![]).push(j);
         }
     }
@@ -90,35 +86,43 @@ fn main() {
     if my_pe == 0 {
         println!("---------------------------------------------------------------");
         println!("Testing local am no return");
-        for i in 0..map.len(){
-            world.exec_am_local( AmNoReturn { my_id: i, data: map.clone(), index: index.clone() });
+        for i in 0..map.len() {
+            world.exec_am_local(AmNoReturn {
+                my_id: i,
+                data: map.clone(),
+                index: index.clone(),
+            });
         }
         world.wait_all();
         println!("-----------------------------------");
         println!("---------------------------------------------------------------");
         println!("Testing local am no return");
-        for i in 0..map.len(){
-            world.exec_am_local( AmReturnUsize { my_id: i, data: map.clone(), index: index.clone() });
+        for i in 0..map.len() {
+            world.exec_am_local(AmReturnUsize {
+                my_id: i,
+                data: map.clone(),
+                index: index.clone(),
+            });
         }
         world.wait_all();
         println!("-----------------------------------");
-    //     println!("---------------------------------------------------------------");
-    //     println!("Testing local am no return");
-    //     let res = world.exec_am_pe(my_pe, am.clone()).get();
-    //     assert_eq!(res, None);
-    //     println!("no return result: {:?}", res);
-    //     println!("-----------------------------------");
-    //     println!("Testing remote am no return");
-    //     let res = world.exec_am_pe(num_pes - 1, am.clone()).get();
-    //     assert_eq!(res, None);
-    //     println!("no return result: {:?}", res);
-    //     println!("-----------------------------------");
-    //     println!("Testing all am no return");
-    //     println!("[{:?}] exec on all", my_pe);
-    //     let res = world.exec_am_all(am.clone()).get_all();
-    //     assert!(res.iter().all(|x| x.is_none()));
-    //     println!("no return result: {:?}", res);
-    //     println!("---------------------------------------------------------------");
+        //     println!("---------------------------------------------------------------");
+        //     println!("Testing local am no return");
+        //     let res = world.exec_am_pe(my_pe, am.clone()).get();
+        //     assert_eq!(res, None);
+        //     println!("no return result: {:?}", res);
+        //     println!("-----------------------------------");
+        //     println!("Testing remote am no return");
+        //     let res = world.exec_am_pe(num_pes - 1, am.clone()).get();
+        //     assert_eq!(res, None);
+        //     println!("no return result: {:?}", res);
+        //     println!("-----------------------------------");
+        //     println!("Testing all am no return");
+        //     println!("[{:?}] exec on all", my_pe);
+        //     let res = world.exec_am_all(am.clone()).get_all();
+        //     assert!(res.iter().all(|x| x.is_none()));
+        //     println!("no return result: {:?}", res);
+        //     println!("---------------------------------------------------------------");
     }
 
     // println!("---------------------------------------------------------------");

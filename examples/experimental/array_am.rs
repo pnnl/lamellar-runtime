@@ -20,10 +20,16 @@ struct RdmaAM {
 #[lamellar::am]
 impl LamellarAM for RdmaAM {
     fn exec(&self) {
-        let num_pes=lamellar::num_pes;
-        println!("\t in RdmaAM on pe {:?}, originating from pe {:?}",lamellar::current_pe, self.orig_pe,);
-        println!("\tlocal segement of array: {:?}..", &self.array.local_as_slice()[0..num_pes]);
-
+        let num_pes = lamellar::num_pes;
+        println!(
+            "\t in RdmaAM on pe {:?}, originating from pe {:?}",
+            lamellar::current_pe,
+            self.orig_pe,
+        );
+        println!(
+            "\tlocal segement of array: {:?}..",
+            &self.array.local_as_slice()[0..num_pes]
+        );
 
         //get the original nodes data
         let local = lamellar::world.alloc_local_mem_region::<u8>(ARRAY_LEN);
@@ -40,7 +46,6 @@ impl LamellarAM for RdmaAM {
         //update an element on the original node
         local_slice[0] = lamellar::current_pe as u8;
         self.array.put(my_index, &local.sub_region(0..=0));
-        
     }
 }
 
@@ -67,9 +72,9 @@ fn main() {
                 *i = 255_u8;
             }
         }
-        array.put(0, &local_mem_region);        
+        array.put(0, &local_mem_region);
     }
-    println!("here!!! {:?}",my_pe);
+    println!("here!!! {:?}", my_pe);
     array.print();
     for i in array.local_as_slice() {
         while *i != 255_u8 {
@@ -89,7 +94,7 @@ fn main() {
     }
     world.barrier();
     let mut index = 0;
-    while index < ARRAY_LEN/num_pes {
+    while index < ARRAY_LEN / num_pes {
         world.exec_am_all(RdmaAM {
             array: array.clone(),
             orig_pe: my_pe,
@@ -107,11 +112,10 @@ fn main() {
         println!("------------------------------------------------------------");
     }
     world.barrier();
-    
+
     if my_pe == 0 {
-        let sum=array.sum().get();
-        println!("sum: {:?}",sum);
+        let sum = array.sum().get();
+        println!("sum: {:?}", sum);
         println!("------------------------------------------------------------");
     }
-    
 }

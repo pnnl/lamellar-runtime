@@ -130,7 +130,7 @@ impl LamellarAlloc for LinearAlloc {
         self.free_space.load(Ordering::SeqCst)
     }
     fn occupied(&self) -> usize {
-        self.max_size-self.free_space.load(Ordering::SeqCst)
+        self.max_size - self.free_space.load(Ordering::SeqCst)
     }
 }
 
@@ -311,7 +311,7 @@ impl LamellarAlloc for BTreeAlloc {
         self.free_space.load(Ordering::SeqCst)
     }
     fn occupied(&self) -> usize {
-        self.max_size-self.free_space.load(Ordering::SeqCst)
+        self.max_size - self.free_space.load(Ordering::SeqCst)
     }
 }
 
@@ -387,7 +387,7 @@ impl<T: Copy> LamellarAlloc for ObjAlloc<T> {
         free_entries.len()
     }
     fn occupied(&self) -> usize {
-        self.max_size-self.space_avail()
+        self.max_size - self.space_avail()
     }
 }
 

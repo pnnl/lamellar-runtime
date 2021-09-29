@@ -1,20 +1,20 @@
 use crate::active_messaging::*;
-use crate::lamellae::{Lamellae,SerializedData};
+use crate::lamellae::{Lamellae, SerializedData};
 use crate::lamellar_request::InternalReq;
 use crate::lamellar_team::LamellarTeam;
 
+use enum_dispatch::enum_dispatch;
+use futures::Future;
 #[cfg(feature = "enable-prof")]
 use lamellar_prof::*;
 use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::sync::{Arc, Weak};
-use futures::Future;
-use enum_dispatch::enum_dispatch;
 
 pub(crate) mod work_stealing;
-use work_stealing::{WorkStealing,WorkStealingInner};
+use work_stealing::{WorkStealing, WorkStealingInner};
 
-pub(crate) struct ReqData{
+pub(crate) struct ReqData {
     pub(crate) src: usize,
     pub(crate) dst: Option<usize>, //team based pe id
     pub(crate) cmd: ExecType,
@@ -28,9 +28,9 @@ pub(crate) struct ReqData{
     // pub(crate) rt_req: bool,
 }
 
-impl ReqData{
-    pub(crate) fn copy_with_func(self: Arc<Self>,am: LamellarArcAm) -> ReqData{
-        ReqData{
+impl ReqData {
+    pub(crate) fn copy_with_func(self: Arc<Self>, am: LamellarArcAm) -> ReqData {
+        ReqData {
             src: self.src,
             dst: self.dst,
             cmd: self.cmd,
@@ -50,15 +50,15 @@ pub enum SchedulerType {
 }
 
 #[enum_dispatch(AmeSchedulerQueue)]
-pub(crate) enum AmeScheduler{
-    WorkStealingInner
+pub(crate) enum AmeScheduler {
+    WorkStealingInner,
 }
 #[enum_dispatch]
 pub(crate) trait AmeSchedulerQueue: Sync + Send {
     fn submit_req(
         //unserialized request
         &self,
-        ame:  Arc<ActiveMessageEngine>,
+        ame: Arc<ActiveMessageEngine>,
         src: usize,
         dst: Option<usize>,
         cmd: ExecType,
@@ -70,9 +70,14 @@ pub(crate) trait AmeSchedulerQueue: Sync + Send {
         team_hash: u64,
         ireq: Option<InternalReq>,
     );
-    fn submit_work(&self, ame:  Arc<ActiveMessageEngine>, msg: SerializedData, lamellae: Arc<Lamellae>,); //serialized active message
-    fn submit_task<F>(&self,future: F )
-    where 
+    fn submit_work(
+        &self,
+        ame: Arc<ActiveMessageEngine>,
+        msg: SerializedData,
+        lamellae: Arc<Lamellae>,
+    ); //serialized active message
+    fn submit_task<F>(&self, future: F)
+    where
         F: Future<Output = ()> + Send + 'static;
     fn exec_task(&self);
     fn shutdown(&self);
@@ -80,8 +85,8 @@ pub(crate) trait AmeSchedulerQueue: Sync + Send {
 }
 
 #[enum_dispatch(SchedulerQueue)]
-pub(crate) enum Scheduler{
-    WorkStealing
+pub(crate) enum Scheduler {
+    WorkStealing,
 }
 #[enum_dispatch]
 pub(crate) trait SchedulerQueue: Sync + Send {
@@ -100,15 +105,13 @@ pub(crate) trait SchedulerQueue: Sync + Send {
         ireq: Option<InternalReq>,
     );
     fn submit_work(&self, msg: SerializedData, lamellae: Arc<Lamellae>); //serialized active message
-    fn submit_task<F>(&self,future: F )
-    where 
+    fn submit_task<F>(&self, future: F)
+    where
         F: Future<Output = ()> + Send + 'static;
     fn exec_task(&self);
     fn shutdown(&self);
     fn active(&self) -> bool;
 }
-
-
 
 pub(crate) fn create_scheduler(
     sched: SchedulerType,

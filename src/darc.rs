@@ -58,27 +58,26 @@ pub struct DarcInner<T> {
     team: *const LamellarTeam,
     item: *const T,
 }
-unsafe impl<T:  Sync + Send> Send for DarcInner<T> {}
-unsafe impl<T:  Sync + Send> Sync for DarcInner<T> {}
-
-
+unsafe impl<T: Sync + Send> Send for DarcInner<T> {}
+unsafe impl<T: Sync + Send> Sync for DarcInner<T> {}
 
 pub struct Darc<T: 'static> {
     inner: *mut DarcInner<T>,
     src_pe: usize,
 }
-unsafe impl<T:  Sync + Send> Send for Darc<T> {}
-unsafe impl<T:  Sync + Send> Sync for Darc<T> {}
+unsafe impl<T: Sync + Send> Send for Darc<T> {}
+unsafe impl<T: Sync + Send> Sync for Darc<T> {}
 
-impl<T: 'static > serde::Serialize for Darc<T>{
+impl<T: 'static> serde::Serialize for Darc<T> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where S: serde::Serializer,
+    where
+        S: serde::Serializer,
     {
         __NetworkDarc::<T>::from(self).serialize(serializer)
     }
 }
 
-impl<'de,T: 'static > Deserialize<'de> for Darc<T> {
+impl<'de, T: 'static> Deserialize<'de> for Darc<T> {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
@@ -415,19 +414,19 @@ impl<T> Deref for Darc<T> {
     }
 }
 
-impl<T:  fmt::Display> fmt::Display for Darc<T> {
+impl<T: fmt::Display> fmt::Display for Darc<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Display::fmt(&**self, f)
     }
 }
 
-impl<T:  fmt::Debug> fmt::Debug for Darc<T> {
+impl<T: fmt::Debug> fmt::Debug for Darc<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Debug::fmt(&**self, f)
     }
 }
 
-impl<T: 'static > Drop for Darc<T> {
+impl<T: 'static> Drop for Darc<T> {
     fn drop(&mut self) {
         let inner = self.inner();
         let cnt = inner.local_cnt.fetch_sub(1, Ordering::SeqCst);
@@ -628,8 +627,6 @@ impl<T: 'static> LamellarAM for DroppedWaitAM<T> {
     }
 }
 
-
-
 #[derive(serde::Deserialize, serde::Serialize)]
 pub struct __NetworkDarc<T> {
     inner_addr: usize,
@@ -686,5 +683,3 @@ impl<T> From<__NetworkDarc<T>> for Darc<T> {
         }
     }
 }
-
-

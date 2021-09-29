@@ -1,9 +1,12 @@
-use crate::lamellae::{AllocationType, Backend, Lamellae,LamellaeInit, LamellaeComm, LamellaeAM, LamellaeRDMA, SerializedData,SerializeHeader,Ser,Des,SubData};
+use crate::lamellae::{
+    AllocationType, Backend, Des, Lamellae, LamellaeAM, LamellaeComm, LamellaeInit, LamellaeRDMA,
+    Ser, SerializeHeader, SerializedData, SubData,
+};
 use crate::lamellar_arch::LamellarArchRT;
 use crate::scheduler::Scheduler;
 #[cfg(feature = "enable-prof")]
 use lamellar_prof::*;
-use log::{trace};
+use log::trace;
 use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -19,62 +22,72 @@ pub(crate) struct Local {
 
 #[derive(Clone)]
 pub(crate) struct LocalData {}
-impl Des for LocalData{
-    fn deserialize_header(&self) -> Option<SerializeHeader>{
+impl Des for LocalData {
+    fn deserialize_header(&self) -> Option<SerializeHeader> {
         panic!("should not be deserializing in local");
     }
-    fn deserialize_data<T: serde::de::DeserializeOwned>(&self) -> Result<T, anyhow::Error>{
+    fn deserialize_data<T: serde::de::DeserializeOwned>(&self) -> Result<T, anyhow::Error> {
         panic!("should not be deserializing in local");
     }
-    fn data_as_bytes(&self) -> &mut [u8]{
+    fn data_as_bytes(&self) -> &mut [u8] {
         &mut []
     }
-    fn header_and_data_as_bytes(&self) -> &mut [u8]{
+    fn header_and_data_as_bytes(&self) -> &mut [u8] {
         &mut []
     }
-    fn print(&self){
-
-    }
+    fn print(&self) {}
 }
 
-impl SubData for LocalData{
-    fn sub_data(&self, _start: usize, _end: usize) ->SerializedData {
+impl SubData for LocalData {
+    fn sub_data(&self, _start: usize, _end: usize) -> SerializedData {
         SerializedData::LocalData(self.clone())
     }
 }
 
-
 //#[prof]
 impl Local {
     pub(crate) fn new() -> Local {
-       Local { allocs: Arc::new(Mutex::new(HashMap::new())), }
+        Local {
+            allocs: Arc::new(Mutex::new(HashMap::new())),
+        }
     }
 }
 
 #[async_trait]
-impl Ser for Local{
-    async fn serialize<T: Send + Sync + serde::Serialize + ?Sized>(&self,_header: Option<SerializeHeader>, _obj: &T) -> Result<SerializedData,anyhow::Error> {
+impl Ser for Local {
+    async fn serialize<T: Send + Sync + serde::Serialize + ?Sized>(
+        &self,
+        _header: Option<SerializeHeader>,
+        _obj: &T,
+    ) -> Result<SerializedData, anyhow::Error> {
         panic!("should not be serializing in local");
     }
-    async fn serialize_header(&self,_header: Option<SerializeHeader>,_serialized_size: usize) -> Result<SerializedData,anyhow::Error> {
+    async fn serialize_header(
+        &self,
+        _header: Option<SerializeHeader>,
+        _serialized_size: usize,
+    ) -> Result<SerializedData, anyhow::Error> {
         panic!("should not be serializing in local")
     }
 }
 
-impl LamellaeInit for Local{
-    fn init_fabric(&mut self) -> (usize, usize){
-        (0,1)
+impl LamellaeInit for Local {
+    fn init_fabric(&mut self) -> (usize, usize) {
+        (0, 1)
     }
-    fn init_lamellae(&mut self, _scheduler: Arc<Scheduler>)->Arc<Lamellae>{
+    fn init_lamellae(&mut self, _scheduler: Arc<Scheduler>) -> Arc<Lamellae> {
         Arc::new(Lamellae::Local(self.clone()))
     }
-    
 }
 
 //#[prof]
 impl LamellaeComm for Local {
-    fn my_pe(&self) -> usize {0}
-    fn num_pes(&self) ->usize {1}
+    fn my_pe(&self) -> usize {
+        0
+    }
+    fn num_pes(&self) -> usize {
+        1
+    }
     fn barrier(&self) {}
     fn backend(&self) -> Backend {
         Backend::Local
@@ -84,18 +97,20 @@ impl LamellaeComm for Local {
         0.0f64
     }
     fn print_stats(&self) {}
-    fn shutdown(&self){
-        
-    }
+    fn shutdown(&self) {}
 }
-
-
 
 //#[prof]
 #[async_trait]
 impl LamellaeAM for Local {
     async fn send_to_pe_async(&self, _pe: usize, _data: SerializedData) {}
-    async fn send_to_pes_async(&self,_pe: Option<usize>, _team: Arc<LamellarArchRT>, _data: SerializedData) {}
+    async fn send_to_pes_async(
+        &self,
+        _pe: Option<usize>,
+        _team: Arc<LamellarArchRT>,
+        _data: SerializedData,
+    ) {
+    }
 }
 
 struct MyPtr {
@@ -166,7 +181,7 @@ impl LamellaeRDMA for Local {
     }
     //todo make this return a real value
     fn occupied(&self) -> usize {
-        0 
+        0
     }
 }
 

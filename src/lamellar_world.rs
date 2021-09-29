@@ -34,7 +34,6 @@ pub struct LamellarWorld {
 impl ActiveMessaging for LamellarWorld {
     fn wait_all(&self) {
         self.team.wait_all();
-        
     }
     fn barrier(&self) {
         self.team.barrier();

@@ -1,14 +1,14 @@
-use crate::active_messaging::*; 
-use crate::lamellae::AllocationType;
-use crate::lamellar_request::LamellarRequest;
-use crate::scheduler::SchedulerQueue;
-use crate::memregion::{Dist, MemoryRegion, RegisteredMemoryRegion, RemoteMemoryRegion, SubRegion};
-use crate::lamellar_team::LamellarTeam;
+use crate::active_messaging::*;
 use crate::array::*;
 use crate::darc::Darc;
-use std::collections::HashMap;
-use parking_lot::RwLock;
+use crate::lamellae::AllocationType;
+use crate::lamellar_request::LamellarRequest;
+use crate::lamellar_team::LamellarTeam;
+use crate::memregion::{Dist, MemoryRegion, RegisteredMemoryRegion, RemoteMemoryRegion, SubRegion};
+use crate::scheduler::SchedulerQueue;
 use core::marker::PhantomData;
+use parking_lot::RwLock;
+use std::collections::HashMap;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -16,7 +16,7 @@ use std::time::{Duration, Instant};
 struct UnsafeArrayInner {
     mem_region: MemoryRegion<u8>,
     array_counters: Arc<AMCounters>,
-    op_map: Arc<RwLock<HashMap<ArrayOp,Box<dyn Fn(&ArrayOpInput)+Sync+Send>>>>,
+    op_map: Arc<RwLock<HashMap<ArrayOp, Box<dyn Fn(&ArrayOpInput) + Sync + Send>>>>,
     pub(crate) team: Arc<LamellarTeam>,
 }
 
@@ -51,7 +51,7 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Un
             for elem in rmr.as_mut_slice().unwrap() {
                 *elem = 0;
             }
-        }        
+        }
 
         let array = UnsafeArray {
             inner: Darc::new(
@@ -91,19 +91,14 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Un
         }
     }
 
-    pub fn num_pes(&self)->usize{
+    pub fn num_pes(&self) -> usize {
         self.inner.team.num_pes()
     }
 
-
-    pub fn pe_for_dist_index(&self, index: usize) -> usize{
+    pub fn pe_for_dist_index(&self, index: usize) -> usize {
         match self.distribution {
-            Distribution::Block => {
-                (index as f32 / self.elem_per_pe).floor() as usize
-            },
-            Distribution::Cyclic => {
-                index %  self.inner.team.num_pes()
-            }
+            Distribution::Block => (index as f32 / self.elem_per_pe).floor() as usize,
+            Distribution::Cyclic => index % self.inner.team.num_pes(),
         }
     }
     pub fn pe_offset_for_dist_index(&self, pe: usize, index: usize) -> usize {
@@ -111,10 +106,8 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Un
             Distribution::Block => {
                 let pe_start_index = (self.elem_per_pe * pe as f32).round() as usize;
                 index - pe_start_index
-            },
-            Distribution::Cyclic => {
-                index /  self.inner.team.num_pes()
             }
+            Distribution::Cyclic => index / self.inner.team.num_pes(),
         }
     }
 
@@ -186,7 +179,8 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Un
                     }
                 }
             }
-            ArrayOp::Get => { //optimize like we did for put...
+            ArrayOp::Get => {
+                //optimize like we did for put...
                 for i in 0..buf.len() {
                     unsafe {
                         self.inner.mem_region.get(
@@ -194,7 +188,7 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Un
                             (index + i) / num_pes,
                             buf.sub_region(i..=i),
                         )
-                    }; 
+                    };
                 }
             }
             _ => {}
@@ -222,8 +216,9 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Un
     pub fn local_as_mut_slice(&self) -> &mut [T] {
         let slice = unsafe {
             self.inner.mem_region.as_casted_mut_slice::<T>().expect(
-            "memory doesnt exist on this pe (this should not happen for arrays currently)",
-        )};
+                "memory doesnt exist on this pe (this should not happen for arrays currently)",
+            )
+        };
         let index = self.sub_array_offset;
         let len = self.sub_array_size;
         let my_pe = self.inner.team.team_pe_id().unwrap();
@@ -310,7 +305,6 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Un
         self.reduce("max")
     }
 
-    
     // pub(crate) fn local_as_ptr(&self) -> *const T {
     //     self.inner.mem_region.as_casted_ptr::<T>().unwrap()
     // }
@@ -325,53 +319,57 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Un
     //     LamellarArrayDistIter::new(self.clone().into())
     // }
 
-    pub fn for_each<F>(&self,op: F)
-    where F: Fn(&T) + Sync + Send + Clone +  'static{
-       let num_workers = match std::env::var("LAMELLAR_THREADS") {
+    pub fn for_each<F>(&self, op: F)
+    where
+        F: Fn(&T) + Sync + Send + Clone + 'static,
+    {
+        let num_workers = match std::env::var("LAMELLAR_THREADS") {
             Ok(n) => n.parse::<usize>().unwrap(),
             Err(_) => 4,
         };
         let num_elems_local = self.num_elems_local();
-        let elems_per_thread = num_elems_local as f64/num_workers as f64;
+        let elems_per_thread = num_elems_local as f64 / num_workers as f64;
         if let Ok(_my_pe) = self.inner.team.team_pe_id() {
             let mut worker = 0;
-            while ((worker as f64 * elems_per_thread).round() as usize) < num_elems_local{
+            while ((worker as f64 * elems_per_thread).round() as usize) < num_elems_local {
                 self.inner.team.team.exec_am_local(
                     self.inner.team.clone(),
-                    ForEach{
+                    ForEach {
                         op: op.clone(),
                         data: self.clone().into(),
                         start_i: (worker as f64 * elems_per_thread).round() as usize,
-                        end_i: ((worker+1) as f64 * elems_per_thread).round() as usize,
+                        end_i: ((worker + 1) as f64 * elems_per_thread).round() as usize,
                     },
                     Some(self.inner.array_counters.clone()),
                 );
-                worker+=1;
+                worker += 1;
             }
         }
     }
-    pub fn for_each_mut<F>(&self,op: F)
-    where F: Fn(&mut T) + Sync + Send + Clone +  'static{
-       let num_workers = match std::env::var("LAMELLAR_THREADS") {
+    pub fn for_each_mut<F>(&self, op: F)
+    where
+        F: Fn(&mut T) + Sync + Send + Clone + 'static,
+    {
+        let num_workers = match std::env::var("LAMELLAR_THREADS") {
             Ok(n) => n.parse::<usize>().unwrap(),
             Err(_) => 4,
         };
         let num_elems_local = self.num_elems_local();
-        let elems_per_thread = num_elems_local as f64/num_workers as f64;
+        let elems_per_thread = num_elems_local as f64 / num_workers as f64;
         if let Ok(_my_pe) = self.inner.team.team_pe_id() {
             let mut worker = 0;
-            while ((worker as f64 * elems_per_thread).round() as usize) < num_elems_local{
+            while ((worker as f64 * elems_per_thread).round() as usize) < num_elems_local {
                 self.inner.team.team.exec_am_local(
                     self.inner.team.clone(),
-                    ForEachMut{
+                    ForEachMut {
                         op: op.clone(),
                         data: self.clone().into(),
                         start_i: (worker as f64 * elems_per_thread).round() as usize,
-                        end_i: ((worker+1) as f64 * elems_per_thread).round() as usize,
+                        end_i: ((worker + 1) as f64 * elems_per_thread).round() as usize,
                     },
                     Some(self.inner.array_counters.clone()),
                 );
-                worker+=1;
+                worker += 1;
             }
         }
     }
@@ -398,18 +396,29 @@ struct AddAm {
 }
 
 #[lamellar_impl::rt_am]
-impl LamellarAM for AddAm{
+impl LamellarAM for AddAm {
     fn exec(&self) {
-        (self.array.inner.op_map.read().get(&ArrayOp::Add).expect("Did not call array.init_add()"))(&self.input);
+        (self
+            .array
+            .inner
+            .op_map
+            .read()
+            .get(&ArrayOp::Add)
+            .expect("Did not call array.init_add()"))(&self.input);
     }
 }
 
-impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + std::ops::AddAssign + 'static>
-    UnsafeArray<T>
+impl<
+        T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + std::ops::AddAssign + 'static,
+    > UnsafeArray<T>
 {
-    pub fn dist_add(&self, index: usize, func: LamellarArcAm) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync> {
+    pub fn dist_add(
+        &self,
+        index: usize,
+        func: LamellarArcAm,
+    ) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync> {
         let pe = self.pe_for_dist_index(index);
-        self.inner.team.team.exec_am_pe( 
+        self.inner.team.team.exec_am_pe(
             self.inner.team.clone(),
             pe,
             func,
@@ -495,16 +504,16 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> La
         )
         // }
     }
-    fn reduce(&self, op: &str)  -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+    fn reduce(&self, op: &str) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
         self.reduce(op)
     }
-    fn sum(&self)  -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+    fn sum(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
         self.sum()
     }
-    fn max(&self)  -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+    fn max(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
         self.max()
     }
-    fn prod(&self)  -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+    fn prod(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
         self.prod()
     }
 }

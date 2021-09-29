@@ -3,7 +3,7 @@
 /// contains a vector of N bytes
 /// the active message simply returns immediately.
 /// --------------------------------------------------------------------
-use lamellar::{ActiveMessaging};
+use lamellar::ActiveMessaging;
 use std::time::Instant;
 
 #[lamellar::AmData(Clone, Debug)]
@@ -15,7 +15,6 @@ struct DataAM {
 impl LamellarAM for DataAM {
     fn exec() {}
 }
-
 
 fn main() {
     let world = lamellar::LamellarWorldBuilder::new().build();
@@ -62,7 +61,6 @@ fn main() {
                 cnt += 1;
             }
             println!("issue time: {:?}", timer.elapsed().as_secs_f64());
-            
         }
         world.wait_all();
         world.barrier();
