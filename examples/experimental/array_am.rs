@@ -29,9 +29,7 @@ impl LamellarAM for RdmaAM {
         let local = lamellar::world.alloc_local_mem_region::<u8>(ARRAY_LEN);
         let local_slice = unsafe { local.as_mut_slice().unwrap() };
         local_slice[ARRAY_LEN - 1] = num_pes as u8;
-        // unsafe {
-            self.array.get(0, &local);
-        // }
+        self.array.get(0, &local);
         while local_slice[ARRAY_LEN - 1] == num_pes as u8 {
             async_std::task::yield_now().await;
         }
@@ -41,12 +39,8 @@ impl LamellarAM for RdmaAM {
 
         //update an element on the original node
         local_slice[0] = lamellar::current_pe as u8;
-        // if my_index < ARRAY_LEN {
-        // unsafe {
-            self.array.put(my_index, &local.sub_region(0..=0));
-        // }
-        // }
-        lamellar::world.free_local_memory_region(local);
+        self.array.put(my_index, &local.sub_region(0..=0));
+        
     }
 }
 
@@ -73,11 +67,7 @@ fn main() {
                 *i = 255_u8;
             }
         }
-        array.put(0, &local_mem_region);
-        // for i in 0..ARRAY_LEN{
-        //     array.put(i,255_u8);
-        // }
-        
+        array.put(0, &local_mem_region);        
     }
     println!("here!!! {:?}",my_pe);
     array.print();
@@ -90,7 +80,7 @@ fn main() {
         println!("------------------------------------------------------------");
     }
     world.barrier();
-    world.free_local_memory_region(local_mem_region);
+    drop(local_mem_region);
     println!("freed mem region");
     println!("[{:?}] Before {:?}", my_pe, array.local_as_slice());
     world.barrier();

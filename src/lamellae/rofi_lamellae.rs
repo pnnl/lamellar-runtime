@@ -3,23 +3,12 @@ use crate::lamellae::rofi::rofi_comm::{RofiComm,RofiData};
 use crate::lamellar_arch::LamellarArchRT;
 use crate::scheduler::{Scheduler,SchedulerQueue};
 use crate::lamellae::rofi::command_queues::RofiCommandQueue;
-
-// use crate::active_messaging::Msg;
-
-// use lamellar_prof::*;
-// use log::{error, trace};
-// use std::sync::atomic::Ordering;
 use std::sync::atomic::{ AtomicU8,  Ordering};
 use std::sync::Arc;
 
 use futures::stream::FuturesUnordered;
 use futures::StreamExt;
-
 use async_trait::async_trait;
-
-// mod rofi;
-
-
 
 pub(crate) struct RofiBuilder{
     my_pe: usize,
@@ -38,7 +27,6 @@ impl RofiBuilder{
     }
 }
 
-
 impl LamellaeInit for RofiBuilder{
     fn init_fabric(&mut self) -> (usize, usize){
         (self.my_pe, self.num_pes)
@@ -52,14 +40,12 @@ impl LamellaeInit for RofiBuilder{
         let rofi = Arc::new(Lamellae::Rofi(rofi));
         let rofi_clone = rofi.clone();
         scheduler.submit_task (async move {
-            // cq_clone.recv_data(Arc::downgrade(&scheduler_clone),Arc::downgrade(&rofi_clone),active_clone).await;
             cq_clone.recv_data(scheduler_clone.clone(),rofi_clone.clone(),active_clone).await;
         });
         rofi
     }
     
 }
-
 
 pub(crate) struct Rofi{
     my_pe: usize,
@@ -70,7 +56,7 @@ pub(crate) struct Rofi{
 }
 impl Rofi{
     fn new (my_pe: usize, num_pes: usize, rofi_comm: Arc<RofiComm>)->Rofi{
-        println!("my_pe {:?} num_pes {:?}",my_pe,num_pes);
+        // println!("my_pe {:?} num_pes {:?}",my_pe,num_pes);
          Rofi{
             my_pe: my_pe,
             num_pes: num_pes,
@@ -87,17 +73,17 @@ impl Rofi{
     }
 }
 
-impl Drop for Rofi{
-    fn drop(&mut self){
-        println!("dropping rofi_lamellae");
-        // self.active.store(0, Ordering::SeqCst);
-        // while self.active.load(Ordering::SeqCst) != 2 {
-        //     std::thread::yield_now();
-        // }
-        // println!("dropped rofi_lamellae");
-        //rofi finit
-    }
-}
+// impl Drop for Rofi{
+//     fn drop(&mut self){
+//         // println!("dropping rofi_lamellae");
+//         // self.active.store(0, Ordering::SeqCst);
+//         // while self.active.load(Ordering::SeqCst) != 2 {
+//         //     std::thread::yield_now();
+//         // }
+//         // println!("dropped rofi_lamellae");
+//         //rofi finit
+//     }
+// }
 
 
 
@@ -116,13 +102,13 @@ impl LamellaeComm for Rofi {
     }
     fn print_stats(&self) {}
     fn shutdown(&self){
-        println!("Rofi Lamellae shuting down");
+        // println!("Rofi Lamellae shuting down");
         self.active.store(0,Ordering::Relaxed);
-        println!("set active to 0");
+        // println!("set active to 0");
         while self.active.load(Ordering::SeqCst) != 2 {
             std::thread::yield_now();
         }
-        println!("Rofi Lamellae shut down");
+        // println!("Rofi Lamellae shut down");
     }
 }
 
@@ -134,8 +120,6 @@ impl LamellaeAM for Rofi {
     
     async fn send_to_pes_async(&self,pe: Option<usize>, team: Arc<LamellarArchRT>, data: SerializedData) {
         if let Some(pe) = pe {
-            // self.cq.send_data(data,team.world_pe(pe).expect("invalid pe")).await;
-            // println!("rofi_lamellae sending to {:?}",pe);
             self.cq.send_data(data,pe).await;
         }
         else{
@@ -147,50 +131,20 @@ impl LamellaeAM for Rofi {
 #[async_trait]
 impl Ser for Rofi{
     async fn serialize<T: Send + Sync + serde::Serialize + ?Sized>(&self,header: Option<SerializeHeader>, obj: &T) -> Result<SerializedData,anyhow::Error> {
-        // let header_size_temp= if let Some(header) = &header {
-        //     bincode::serialized_size(&header)? as usize //will this be standard for every header?
-        // }
-        // else{
-        //     // println!("None! {:?}",bincode::serialized_size(&header)? as usize);
-        //     // bincode::serialized_size(&header)? as usize
-        //     0
-        // };
-        // let test: Option<SerializeHeader> = None;
-        // let test_size = bincode::serialized_size(&test)? as usize;
         let header_size = std::mem::size_of::<Option<SerializeHeader>>();
-        // println!("hst {:?} hs {:?} {:?} {:?} ",header_size_temp, header_size, test_size,std::mem::size_of::<SerializeHeader>()) ;
         let data_size = bincode::serialized_size(obj)? as usize;
         let ser_data = RofiData::new(self.rofi_comm.clone(),header_size+data_size).await;
-        // println!("h+d size: {:?} hsize {:?} dsize {:?}",ser_data.alloc_size,ser_data.header_as_bytes().len(),ser_data.data_as_bytes().len());
         bincode::serialize_into(ser_data.header_as_bytes(),&header)?;
         bincode::serialize_into(ser_data.data_as_bytes(),obj)?;
         Ok(SerializedData::RofiData(ser_data))
     }
     async fn serialize_header(&self,header: Option<SerializeHeader>,serialized_size: usize) -> Result<SerializedData,anyhow::Error> {
-        // let header_size_temp= if let Some(header) = &header {
-        //     bincode::serialized_size(&header)? as usize //will this be standard for every header?
-        // }
-        // else{
-        //     // println!("None! {:?}",bincode::serialized_size(&header)? as usize);
-        //     // bincode::serialized_size(&header)? as usize
-        //     0
-        // };
-        // let test: Option<SerializeHeader> = None;
-        // let test_size = bincode::serialized_size(&test)? as usize;
-        
         let header_size = std::mem::size_of::<Option<SerializeHeader>>();
-        // println!("hs {:?}",header_size);
-        // println!("hst {:?} hs {:?} {:?} {:?} ",header_size_temp, header_size, test_size,std::mem::size_of::<SerializeHeader>()) ;
         let ser_data = RofiData::new(self.rofi_comm.clone(),header_size+serialized_size).await;
-        
-        // println!("h+d size: {:?} hsize {:?} dsize {:?}",ser_data.alloc_size,ser_data.header_as_bytes().len(),ser_data.data_as_bytes().len());
         bincode::serialize_into(ser_data.header_as_bytes(),&header)?;
-        // println!("header {:?} ({:?}) size {:?} occupied {:?}",header, ser_data.header_as_bytes(),header_size+serialized_size,self.rofi_comm.occupied());
         Ok(SerializedData::RofiData(ser_data))
     }
 }
-
-
 
 #[allow(dead_code,unused_variables)]
 impl LamellaeRDMA for Rofi {

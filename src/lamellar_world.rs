@@ -1,13 +1,6 @@
 use crate::active_messaging::*;
-// use crate::lamellae::{create_lamellae, Backend, Lamellae, LamellaeAM};
 use crate::lamellae::{create_lamellae, Backend, Lamellae, LamellaeComm, LamellaeInit};
 use crate::lamellar_arch::LamellarArch;
-// //#[cfg(feature = "experimental")]
-// use crate::lamellar_array::LamellarArray;
-
-// use crate::lamellar_memregion::{
-//     LamellarLocalMemoryRegion, LamellarMemoryRegion, RemoteMemoryRegion,
-// };
 
 use crate::lamellar_request::LamellarRequest;
 use crate::lamellar_team::{LamellarTeam, LamellarTeamRT};
@@ -20,7 +13,6 @@ use log::trace;
 use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::collections::{BTreeMap, HashSet};
-// use std::sync::atomic::Ordering;
 use std::sync::{Arc, Weak};
 
 lazy_static! {
@@ -42,29 +34,9 @@ pub struct LamellarWorld {
 impl ActiveMessaging for LamellarWorld {
     fn wait_all(&self) {
         self.team.wait_all();
-        // let mut temp_now = Instant::now();
-        // while self.counters.outstanding_reqs.load(Ordering::SeqCst) > 0 {
-        //     std::thread::yield_now();
-        //     if temp_now.elapsed() > Duration::new(60, 0) {
-        //         println!(
-        //             "in world wait_all mype: {:?} cnt: {:?} {:?}",
-        //             self.my_pe,
-        //             self.counters.send_req_cnt.load(Ordering::SeqCst),
-        //             self.counters.outstanding_reqs.load(Ordering::SeqCst),
-        //             // self.counters.recv_req_cnt.load(Ordering::SeqCst),
-        //         );
-        //         // self.lamellae.print_stats();
-        //         temp_now = Instant::now();
-        //     }
-        // }
+        
     }
     fn barrier(&self) {
-        // println!("[{:?}] world barrier", self.my_pe);
-        // for (backend, lamellae) in &self.lamellaes_new {
-        //     trace!("[{:?}] {:?} barrier", self.my_pe, backend);
-        //     lamellae.barrier();
-        //     // println!("world barrier!!!!!!!!!!!!");
-        // }
         self.team.barrier();
     }
     fn exec_am_all<F>(&self, am: F) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync>
@@ -93,68 +65,68 @@ impl ActiveMessaging for LamellarWorld {
 }
 
 //#feature gated closures for those with nightly
-#[cfg(feature = "nightly")]
-use crate::active_messaging::remote_closures::ClosureRet;
-#[cfg(feature = "nightly")]
-//#[prof]
-impl RemoteClosures for LamellarWorld {
-    fn exec_closure_all<
-        F: FnOnce() -> T
-            + Send
-            + Sync
-            + serde::ser::Serialize
-            + serde::de::DeserializeOwned
-            + std::clone::Clone
-            + 'static,
-        T: std::any::Any
-            + Send
-            + Sync
-            + serde::ser::Serialize
-            + serde::de::DeserializeOwned
-            + std::clone::Clone,
-    >(
-        &self,
-        func: F,
-    ) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync> {
-        trace!("[{:?}] exec closure all", self.my_pe);
-        self.team_rt.exec_closure_all(func)
-    }
+// #[cfg(feature = "nightly")]
+// use crate::active_messaging::remote_closures::ClosureRet;
+// #[cfg(feature = "nightly")]
+// //#[prof]
+// impl RemoteClosures for LamellarWorld {
+//     fn exec_closure_all<
+//         F: FnOnce() -> T
+//             + Send
+//             + Sync
+//             + serde::ser::Serialize
+//             + serde::de::DeserializeOwned
+//             + std::clone::Clone
+//             + 'static,
+//         T: std::any::Any
+//             + Send
+//             + Sync
+//             + serde::ser::Serialize
+//             + serde::de::DeserializeOwned
+//             + std::clone::Clone,
+//     >(
+//         &self,
+//         func: F,
+//     ) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync> {
+//         trace!("[{:?}] exec closure all", self.my_pe);
+//         self.team_rt.exec_closure_all(func)
+//     }
 
-    #[cfg(feature = "nightly")]
-    fn exec_closure_pe<
-        F: FnOnce() -> T
-            + Send
-            + Sync
-            + serde::ser::Serialize
-            + serde::de::DeserializeOwned
-            + std::clone::Clone
-            + 'static,
-        T: std::any::Any
-            + Send
-            + Sync
-            + serde::ser::Serialize
-            + serde::de::DeserializeOwned
-            + std::clone::Clone,
-    >(
-        &self,
-        pe: usize,
-        func: F,
-    ) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync> {
-        assert!(pe < self.num_pes(), "invalid pe: {:?}", pe);
-        trace!("[{:?}] world exec_closure_pe: [{:?}]", self.my_pe, pe);
-        self.team_rt.exec_closure_pe(pe, func)
-    }
-    #[cfg(feature = "nightly")]
-    fn exec_closure_on_return<
-        F: FnOnce() -> T + serde::ser::Serialize + serde::de::DeserializeOwned + 'static,
-        T: std::any::Any + serde::ser::Serialize + serde::de::DeserializeOwned + std::clone::Clone,
-    >(
-        &self,
-        func: F,
-    ) -> ClosureRet {
-        self.team_rt.exec_closure_on_return(func)
-    }
-}
+//     #[cfg(feature = "nightly")]
+//     fn exec_closure_pe<
+//         F: FnOnce() -> T
+//             + Send
+//             + Sync
+//             + serde::ser::Serialize
+//             + serde::de::DeserializeOwned
+//             + std::clone::Clone
+//             + 'static,
+//         T: std::any::Any
+//             + Send
+//             + Sync
+//             + serde::ser::Serialize
+//             + serde::de::DeserializeOwned
+//             + std::clone::Clone,
+//     >(
+//         &self,
+//         pe: usize,
+//         func: F,
+//     ) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync> {
+//         assert!(pe < self.num_pes(), "invalid pe: {:?}", pe);
+//         trace!("[{:?}] world exec_closure_pe: [{:?}]", self.my_pe, pe);
+//         self.team_rt.exec_closure_pe(pe, func)
+//     }
+//     #[cfg(feature = "nightly")]
+//     fn exec_closure_on_return<
+//         F: FnOnce() -> T + serde::ser::Serialize + serde::de::DeserializeOwned + 'static,
+//         T: std::any::Any + serde::ser::Serialize + serde::de::DeserializeOwned + std::clone::Clone,
+//     >(
+//         &self,
+//         func: F,
+//     ) -> ClosureRet {
+//         self.team_rt.exec_closure_on_return(func)
+//     }
+// }
 
 //#[prof]
 impl RemoteMemoryRegion for LamellarWorld {
@@ -179,25 +151,25 @@ impl RemoteMemoryRegion for LamellarWorld {
         self.team.alloc_local_mem_region::<T>(size)
     }
 
-    /// release a remote memory region from the asymmetric heap
-    ///
-    /// # Arguments
-    ///
-    /// * `region` - the region to free
-    ///
-    fn free_shared_memory_region<T: Dist + 'static>(&self, region: SharedMemoryRegion<T>) {
-        self.team.free_shared_memory_region(region)
-    }
+    // /// release a remote memory region from the asymmetric heap
+    // ///
+    // /// # Arguments
+    // ///
+    // /// * `region` - the region to free
+    // ///
+    // fn free_shared_memory_region<T: Dist + 'static>(&self, region: SharedMemoryRegion<T>) {
+    //     self.team.free_shared_memory_region(region)
+    // }
 
-    /// release a remote memory region from the asymmetric heap
-    ///
-    /// # Arguments
-    ///
-    /// * `region` - the region to free
-    ///
-    fn free_local_memory_region<T: Dist + 'static>(&self, region: LocalMemoryRegion<T>) {
-        self.team.free_local_memory_region(region)
-    }
+    // /// release a remote memory region from the asymmetric heap
+    // ///
+    // /// # Arguments
+    // ///
+    // /// * `region` - the region to free
+    // ///
+    // fn free_local_memory_region<T: Dist + 'static>(&self, region: LocalMemoryRegion<T>) {
+    //     self.team.free_local_memory_region(region)
+    // }
 }
 
 //#[prof]
@@ -219,7 +191,6 @@ impl LamellarWorld {
 
     pub fn team_barrier(&self) {
         self.team.barrier();
-        println!("team barrier!!!!!!!!!!!!");
     }
 
     pub fn create_team_from_arch<L>(&self, arch: L) -> Option<Arc<LamellarTeam>>
@@ -239,50 +210,15 @@ impl LamellarWorld {
     pub fn team(&self) -> Arc<LamellarTeam> {
         self.team.clone()
     }
-
-    // //#[cfg(feature = "experimental")]
-    // pub fn new_array<
-    //     T: serde::ser::Serialize
-    //         + serde::de::DeserializeOwned
-    //         + std::clone::Clone
-    //         + Send
-    //         + Sync
-    //         + std::fmt::Debug
-    //         + 'static,
-    // >(
-    //     &self,
-    //     size: usize,
-    // ) -> LamellarArray<T> {
-    //     self.barrier();
-    //     LamellarArray::new(self.team.clone(), size, self.counters.clone())
-    // }
-
-    // //#[cfg(feature = "experimental")]
-    // pub fn local_array<
-    //     T: serde::ser::Serialize
-    //         + serde::de::DeserializeOwned
-    //         + std::clone::Clone
-    //         + Send
-    //         + Sync
-    //         + 'static,
-    // >(
-    //     &self,
-    //     size: usize,
-    //     init: T,
-    // ) -> LamellarLocalArray<T> {
-    //     LamellarLocalArray::new(size, init, self.team_rt.lamellae.get_rdma().clone())
-    // }
 }
 
 //#[prof]
 impl Drop for LamellarWorld {
     fn drop(&mut self) {
-        println!("[{:?}] world dropping", self.my_pe);
+        // println!("[{:?}] world dropping", self.my_pe);
         self.wait_all();
-        // self.team_rt.barrier();
         self.barrier();
         self.team_rt.destroy();
-        // self.lamellaes.clear();
         // for (backend,lamellae) in self.lamellaes_new.iter(){
         //     println!("lamellae: {:?} {:?}",backend,Arc::strong_count(&lamellae))
         // }
@@ -295,19 +231,10 @@ impl Drop for LamellarWorld {
         //     for (k,team) in teams.iter(){
         //         println!("team map: {:?} {:?}",k,Weak::strong_count(&team));
         //     }
-
         // println!("counters: {:?}",Arc::strong_count(&self.counters));
 
         fini_prof!();
-
-        // im not sure we want to explicitly call lamellae.finit(). instead we should let
-        // have the lamellae instances do that in their own drop implementations.
-        // partly this is because we currently call wait_all() and barrier() in the lamellar_team drop impl as well
-        // the issue is that the world team wont call drop until after this (LamellarWord) drop is executed...
-        // for (backend,lamellae) in &self.lamellaes{
-        //     lamellae.finit();
-        // }
-        println!("[{:?}] world dropped", self.my_pe);
+        // println!("[{:?}] world dropped", self.my_pe);
     }
 }
 
@@ -341,11 +268,6 @@ impl LamellarWorldBuilder {
         self
     }
     pub fn build(self) -> LamellarWorld {
-        // println!("building world");
-        // for exec in inventory::iter::<TestAm> {
-        //     println!("{:#?}", exec);
-        // }
-        // let mut sched = WorkStealingScheduler::new();
         let teams = Arc::new(RwLock::new(HashMap::new()));
         let mut lamellae_builder = create_lamellae(self.primary_lamellae);
         let (my_pe, num_pes) = lamellae_builder.init_fabric();
@@ -365,7 +287,6 @@ impl LamellarWorldBuilder {
             counters.clone(),
             lamellae.clone(),
         ));
-        // println!("world gen barrier!!!!!!!!!!!!");
         let mut world = LamellarWorld {
             team: Arc::new(LamellarTeam {
                 world: None,
@@ -383,14 +304,12 @@ impl LamellarWorldBuilder {
             .teams
             .write()
             .insert(world.team_rt.team_hash, Arc::downgrade(&world.team));
-        // world.lamellaes.insert(lamellae.backend(), lamellae.clone());
         LAMELLAES
             .write()
             .insert(lamellae.backend(), lamellae.clone());
         world
             .lamellaes_new
             .insert(lamellae.backend(), lamellae.clone());
-        // println!("Lamellar world created with {:?}", lamellae.backend());
         world.barrier();
         world
     }

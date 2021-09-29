@@ -1,11 +1,8 @@
 
 
 use crate::lamellae::rofi::{rofi_comm::{RofiData,RofiComm}};
-// use crate::lamellae::rofi_lamellae::RofiData;
 use crate::lamellae::{Lamellae, LamellaeComm,SerializedData,Des};
 use crate::scheduler::{Scheduler,SchedulerQueue};
-// use lamellar_prof::*;
-// use log::trace;
 use parking_lot::{Mutex};
 
 use std::collections::HashMap;
@@ -61,9 +58,6 @@ impl RofiCmd{
         let slice: &[u8] = unsafe { std::slice::from_raw_parts(pointer,size) };
         slice
     }
-    // fn cmd_as_addr(&self)->usize{
-    //     &(self.cmd) as *const Cmd as usize 
-    // }
     fn hash(&self) -> usize{
         self.daddr+self.dsize + self.cmd as usize + self.msg_hash
     }
@@ -119,8 +113,6 @@ impl CmdBuf{
         if dsize > 0{
             self.allocated_cnt+=1;
         }
-        // println!("pushed cmd {:?}",cmd);
-        // self.hash += cmd.hash() + cmd.cmd_hash;
     }
     fn full(&self) -> bool{
         self.index==self.max_size
@@ -128,7 +120,6 @@ impl CmdBuf{
     fn reset(&mut self){
         self.index = 0;
         self.allocated_cnt=0;
-        // self.hash = 0;
     }
     fn addr(&self)->usize{
         self.addr
@@ -307,26 +298,6 @@ impl RofiCmdBuffer {
         }
     }
     
-    // fn free_data(&mut self, buf_addr: usize,rofi_comm: Arc<RofiComm>) -> bool {
-    //     if let Some(mut buf) = self.waiting_bufs.remove(&buf_addr){
-    //         for cmd in buf.iter() {
-    //             if cmd.dsize > 0{
-    //                 let ref_cnt_addr = cmd.daddr as usize-std::mem::size_of::<AtomicUsize>()+rofi_comm.base_addr();
-    //                 let cnt = unsafe{(*(ref_cnt_addr as *const AtomicUsize)).fetch_sub(1,Ordering::SeqCst)};
-    //                 if cnt == 1 {
-    //                     rofi_comm.rt_free(ref_cnt_addr-rofi_comm.base_addr());
-    //                 }
-    //             }
-    //         }
-    //         buf.reset();
-    //         self.empty_bufs.push(buf);
-    //         true
-    //     }
-    //     else{
-    //         println!("free_data should this be possible?");
-    //         false
-    //     }
-    // }
     fn empty(&self) -> bool{
         self.empty_bufs.len() == self.num_bufs
     }
@@ -498,28 +469,6 @@ impl RofiCQ{
         else {
             None
         }
-        //     let mut free_buffer = self.free_buffer.lock();
-        //     let cmd = free_buffer[src].clone();
-        //     if cmd.check_hash(){
-        //         match cmd.cmd{
-        //             Cmd::Tx | Cmd::Clear | Cmd::Print | Cmd::Release  => panic!("should not see anything but free"),
-        //             Cmd::Free => {
-        //                 // println!("received cmd src {:?} {:?} ",src,cmd);
-        //                 let res = Some(cmd);
-        //                 let cmd = &mut free_buffer[src];
-        //                 cmd.daddr=0;
-        //                 cmd.dsize=0;
-        //                 cmd.cmd = Cmd::Clear;
-        //                 cmd.msg_hash =0;
-        //                 cmd.calc_hash();
-        //                 res
-        //             },
-        //         }
-        //     }
-        //     else{
-        //         None
-        //     }
-        // }
     }
 
     fn try_sending_buffer(&self,dst: usize, cmd_buffer: &mut RofiCmdBuffer) -> bool{
@@ -644,32 +593,6 @@ impl RofiCQ{
         self.rofi_comm.put(dst,self.free_cmd.cmd_as_bytes(),cmd.daddr + offset_of!(RofiCmd,cmd)+self.rofi_comm.base_addr());
     }
 
-    //actually can we just do the same as send_release and then just check if any buffers can be freed at the end up every recieve loop?
-    // async fn send_free(&self, dst: usize, cmd: RofiCmd){
-    //     loop{
-    //         {
-    //             //change back to send_buf...
-    //             let mut free_buf = self.free_buffer.lock();
-    //             if free_buf[dst].hash() == self.clear_cmd.hash(){
-    //                 free_buf[dst].daddr = cmd.daddr;
-    //                 free_buf[dst].dsize = 0;
-    //                 free_buf[dst].cmd = Cmd::Free;
-    //                 free_buf[dst].msg_hash = 0;
-    //                 free_buf[dst].calc_hash();
-    //                 if !free_buf[dst].check_hash(){
-    //                     panic!("wtf");
-    //                 }
-    //                 // println!("sending free to dst {:?} {:?} (s: {:?} r: {:?})",dst,addr,self.sent_cnt.load(Ordering::SeqCst),self.recv_cnt.load(Ordering::SeqCst));
-    //                 let recv_buffer = self.recv_buffer.lock();
-    //                 println!("sending free {:?}",free_buf);
-    //                 self.rofi_comm.put(dst,free_buf[dst].as_bytes(),recv_buffer[self.my_pe].as_addr());
-    //                 // self.put_amt.fetch_add(send_buf[dst].as_bytes().len(),Ordering::Relaxed);
-    //                 break;
-    //             }
-    //         }
-    //         async_std::task::yield_now().await;
-    //     }
-    // }
     async fn send_print(&self, dst: usize,  cmd: RofiCmd){
         let mut timer = std::time::Instant::now();
         loop{
@@ -711,35 +634,11 @@ impl RofiCQ{
     } 
 
 
-    // fn free_data(&self, src: usize,  buf_addr: usize){
-    //     let fb = self.free_buffer.lock();
-    //     // println!("sending clear to src {:?} {:?} {:?} (s: {:?} r: {:?})",src,buf_addr,sb[self.my_pe].as_addr()-self.rofi_comm.base_addr(),self.sent_cnt.load(Ordering::SeqCst),self.recv_cnt.load(Ordering::SeqCst));
-    //     self.rofi_comm.put(src,self.clear_cmd.as_bytes(),fb[self.my_pe].as_addr());
-    //     // self.put_amt.fetch_add(self.clear_cmd.as_bytes().len(),Ordering::Relaxed);
-    //     drop(fb);
-    //     let mut cmd_buffer = self.cmd_buffers[src].lock();
-    //     self.progress_transfers(src,&mut cmd_buffer);
-    //     // self.check_for_finished_tx(src,&mut cmd_buffer);
-    //     if !cmd_buffer.free_data(buf_addr,self.rofi_comm.clone()){
-    //         let send_buf = self.send_buffer.lock();                    
-    //         println!("waiting to add cmd to cmd buffer {:?}",cmd_buffer);
-    //         println!("send_buf: {:?}",send_buf);
-    //         drop(send_buf);
-    //         let recv_buf = self.recv_buffer.lock();                    
-    //         println!("recv_buf: {:?}",recv_buf);
-    //     }
-    // }
-
     fn print_data(&self, src: usize, cmd: RofiCmd){
         let cmd_buffer = self.cmd_buffers[src].lock();
         println!("print data -- cmd {:?}",cmd);
         println!("print data -- cmd_buffer {:?}",cmd_buffer);
     }
-
-    // fn print_recv_buffers(&self){
-    //     let  recv_buffer = self.recv_buffer.lock();
-    //     println!("recv_buffer {:?}",recv_buffer);
-    // }
 
     //update cmdbuffers to include a hash the wait on that here
     async fn get_data(&self, src: usize,  cmd: RofiCmd, data_slice: &mut [u8]) {
@@ -800,7 +699,6 @@ impl RofiCQ{
         // println!("received cmd_buf {:?}",data_slice);
         // println!("sending release to src: {:?} {:?} (s: {:?} r: {:?})",src,cmd.daddr,self.sent_cnt.load(Ordering::SeqCst),self.recv_cnt.load(Ordering::SeqCst));
         self.send_release(src,cmd);
-        // self.put_amt.fetch_add(self.release_cmd.as_bytes().len(),Ordering::Relaxed);
         data
     }
 }
@@ -967,11 +865,11 @@ impl RofiCommandQueue{
             // }
             // self.rofi_comm.process_dropped_reqs();
             if active.load(Ordering::SeqCst) != 1{
-                println!("command queue sched active? {:?}  {:?}",scheduler.active(),self.cq.empty());
+                // println!("command queue sched active? {:?}  {:?}",scheduler.active(),self.cq.empty());
             }
             async_std::task::yield_now().await;
         }
-        println!("leaving recv_data task {:?}",scheduler.active());
+        // println!("leaving recv_data task {:?}",scheduler.active());
         active.store(2,Ordering::SeqCst);
     }
 
@@ -988,7 +886,7 @@ impl RofiCommandQueue{
 
 impl Drop for RofiCommandQueue{
     fn drop(&mut self){
-        println!("dropping rofi command queue");
+        // println!("dropping rofi command queue");
         self.rofi_comm.rt_free(self.send_buffer_addr - self.rofi_comm.base_addr());
         self.rofi_comm.rt_free(self.recv_buffer_addr - self.rofi_comm.base_addr());
         self.rofi_comm.rt_free(self.free_buffer_addr - self.rofi_comm.base_addr());

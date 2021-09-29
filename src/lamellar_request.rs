@@ -8,8 +8,6 @@ use lamellar_prof::*;
 use log::trace;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
-// use std::time::Instant;
-// use futures::Future;
 
 static CUR_REQ_ID: AtomicUsize = AtomicUsize::new(0);
 pub (crate) enum InternalResult{
@@ -21,10 +19,7 @@ pub (crate) enum InternalResult{
 #[derive(Clone, Debug)]
 pub(crate) struct InternalReq {
     pub(crate) data_tx: crossbeam::channel::Sender<(usize, InternalResult)>, //what if we create an enum for either bytes or the raw data?
-    // pub(crate) start: std::time::Instant,
-    // pub(crate) size: usize,
     pub(crate) cnt: Arc<CachePadded<AtomicUsize>>,
-    // pub(crate) active: Arc<AtomicBool>,
     pub(crate) team_outstanding_reqs: Arc<AtomicUsize>,
     pub(crate) world_outstanding_reqs: Arc<AtomicUsize>,
     pub(crate) tg_outstanding_reqs: Option<Arc<AtomicUsize>>,
@@ -34,9 +29,8 @@ pub(crate) struct InternalReq {
 
 #[async_trait]
 pub trait LamellarRequest {
-    type Output;//: serde::ser::Serialize + serde::de::DeserializeOwned;
+    type Output;
     async fn into_future(self: Box<Self>) -> Option<Self::Output>;
-    // fn future(&self) -> impl Future<Output=Option<Self::Output>>;
     fn get(&self) -> Option<Self::Output>;
     fn get_all(&self) -> Vec<Option<Self::Output>>;
     fn as_any(self) -> Box<dyn std::any::Any>;
@@ -57,8 +51,8 @@ pub struct LamellarRequestHandle<
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum AmType {
     RegisteredFunction,
-    #[allow(dead_code)]
-    RemoteClosure,
+    // #[allow(dead_code)]
+    // RemoteClosure,
 }
 
 //#[prof]
@@ -88,9 +82,6 @@ impl<T: 'static + serde::ser::Serialize + serde::de::DeserializeOwned + Sync + S
         let ireq = InternalReq {
             data_tx: s,
             cnt: Arc::new(CachePadded::new(AtomicUsize::new(num_pes))),
-            // start: Instant::now(),
-            // size: 0,
-            // active: active.clone(),
             team_outstanding_reqs: team_reqs,
             world_outstanding_reqs: world_reqs,
             tg_outstanding_reqs: tg_reqs,
@@ -162,38 +153,24 @@ impl<T: 'static + serde::ser::Serialize + serde::de::DeserializeOwned + Sync + S
         res
     }
 
-    fn closure_get(&self) -> Option<T> {
-        let (_pe, data) = self.data_rx.recv().expect("result recv");
-        self.process_result(data)
-        // match data {
-        //     Some(x) => {
-        //         let result: T = crate::deserialize(&x).unwrap();
-        //         Some(result)
-        //     }
-        //     None => None,
-        // }
-    }
+    // fn closure_get(&self) -> Option<T> {
+    //     let (_pe, data) = self.data_rx.recv().expect("result recv");
+    //     self.process_result(data)
+    // }
 
-    fn closure_get_all(&self) -> std::vec::Vec<Option<T>> {
-        let mut res = vec![]; //= vec![&None; self.cnt];
-        for _i in 0..self.cnt {
-            res.push(None);
-        }
-        let mut cnt = self.cnt;
-        while cnt > 0 {
-            let (pe, data) = self.data_rx.recv().expect("result recv");
-            res[pe]=self.process_result(data);
-            // match data {
-            //     Some(x) => {
-            //         let result: T = x.deserialize_data().unwrap();//crate::deserialize(&x).unwrap();
-            //         res[pe] = Some(result);
-            //     }
-            //     None => res[pe] = None,
-            // }
-            cnt -= 1;
-        }
-        res
-    }
+    // fn closure_get_all(&self) -> std::vec::Vec<Option<T>> {
+    //     let mut res = vec![]; //= vec![&None; self.cnt];
+    //     for _i in 0..self.cnt {
+    //         res.push(None);
+    //     }
+    //     let mut cnt = self.cnt;
+    //     while cnt > 0 {
+    //         let (pe, data) = self.data_rx.recv().expect("result recv");
+    //         res[pe]=self.process_result(data);
+    //         cnt -= 1;
+    //     }
+    //     res
+    // }
 }
 
 #[async_trait]
@@ -214,21 +191,17 @@ impl<T: 'static + serde::ser::Serialize + serde::de::DeserializeOwned + Sync + S
         }
     }
 
-    // fn future(&self) -> impl Future<Output = Option<Self::Output>>{
-    //     self.am_await().await
-    // }
-
     fn get(&self) -> Option<Self::Output> {
         match self.am_type {
             AmType::RegisteredFunction => self.am_get(),
-            AmType::RemoteClosure => self.closure_get(),
+            // AmType::RemoteClosure => self.closure_get(),
         }
     }
 
     fn get_all(&self) -> Vec<Option<Self::Output>> {
         match self.am_type {
             AmType::RegisteredFunction => self.am_get_all(),
-            AmType::RemoteClosure => self.closure_get_all(),
+            // AmType::RemoteClosure => self.closure_get_all(),
         }
     }
     fn as_any(self) -> Box<dyn std::any::Any> {

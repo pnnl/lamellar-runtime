@@ -43,7 +43,6 @@ impl LamellarAM for RdmaAM {
                     .put(self.orig_pe, my_index, local.sub_region(0..=0));
             }
         }
-        lamellar::world.free_local_memory_region(local);
     }
 }
 
@@ -91,5 +90,4 @@ fn main() {
     if my_pe == 0 {
         println!("------------------------------------------------------------");
     }
-    world.free_shared_memory_region(array);
 }

@@ -1,16 +1,9 @@
 use crate::darc::Darc;
-use crate::lamellae::AllocationType; //, Backend, Lamellae, LamellaeComm, LamellaeRDMA};
+use crate::lamellae::AllocationType; 
 use crate::memregion::*;
-// use crate::LamellarTeam;
-// use crate::TEAMS;
-// use crate::lamellar_array::{LamellarLocalArray};
 use core::marker::PhantomData;
 #[cfg(feature = "enable-prof")]
 use lamellar_prof::*;
-// use parking_lot::RwLock;
-// use std::collections::HashMap;
-// use std::hash::{Hash, Hasher};
-// use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
 use std::ops::Bound;
@@ -182,10 +175,6 @@ impl<T: Dist + 'static> SubRegion<T> for SharedMemoryRegion<T> {
             phantom: PhantomData,
         }
         .into()
-        // SharedMemoryRegion {
-        //     mr: self.mr.sub_region(range),
-        // }
-        // .into()
     }
 }
 

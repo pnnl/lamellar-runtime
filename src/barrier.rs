@@ -69,7 +69,7 @@ impl Barrier {
             barrier_cnt: AtomicUsize::new(0),
             barrier_buf: bufs,
         };
-        bar.print_bar();
+        // bar.print_bar();
         bar
     }
 
@@ -107,58 +107,33 @@ impl Barrier {
     ) {
         for world_pe in self.arch.team_iter() {
             unsafe {
-                // println!("putting {:?} into {:?} on {:?}",barrier_id, my_index, world_pe);
                 barrier_buf.put_slice(world_pe, my_index, barrier_id);
             }
         }
     }
     pub(crate) fn barrier(&self) {
-        // #[cfg(test)]
-        // if self.lamellae.backend() == crate::lamellae::Backend::Local {
-        //     return;
-        // }
-        // println!("[{:?}] in barrier ",self.barrier_cnt.load(Ordering::SeqCst));
-        // self.print_bar();
         if let Some(bufs) = &self.barrier_buf {
             if let Ok(my_index) = self.arch.team_pe(self.my_pe) {
-                // self.bar_print("bar_init".to_string());
                 let mut barrier_id = self.barrier_cnt.fetch_add(1, Ordering::SeqCst);
-                // println!("[{:?}] checking barrier entry ({:?}) {:?}",self.my_pe,barrier_id,&[barrier_id].as_ptr());
-                // self.bar_print("0".to_string());
-
                 self.check_barrier_vals(barrier_id, &bufs.barrier2);
                 barrier_id += 1;
                 let barrier3_slice = unsafe { bufs.barrier3.as_mut_slice().unwrap() };
                 barrier3_slice[0] = barrier_id;
                 let barrier_slice = &[barrier_id];
-                // self.bar_print("1".to_string());
-                // println!("[{:?}] putting new barrier val ({:?}) {:?}",self.my_pe,barrier_id,barrier_slice.as_ptr());
-
                 self.put_barrier_val(my_index, barrier_slice, &bufs.barrier1);
-                // self.print_bar();
-                // self.bar_print("2".to_string());
-                // println!("[{:?}] checking new barrier val ({:?})",self.my_pe,barrier_id);
                 self.check_barrier_vals(barrier_id, &bufs.barrier1);
-                // self.bar_print("3".to_string());
-                // println!("[{:?}] setting barrier exit val ({:?})",self.my_pe,barrier_id);
                 barrier3_slice[1] = barrier_id;
-                // self.bar_print("4".to_string());
-
                 let barrier_slice = &barrier3_slice[1..2];
-
                 self.put_barrier_val(my_index, barrier_slice, &bufs.barrier2);
             }
-            // self.print_bar();
-            // self.bar_print("5".to_string());
-            // println!("[{:?}] checking barrier exit ({:?})",self.my_pe,barrier_id);
         }
     }
 }
 
-impl Drop for Barrier {
-    fn drop(&mut self) {
-        //println!("dropping barrier");
-        // println!("arch: {:?}",Arc::strong_count(&self.arch));
-        //println!("dropped barrier");
-    }
-}
+// impl Drop for Barrier {
+//     fn drop(&mut self) {
+//         //println!("dropping barrier");
+//         // println!("arch: {:?}",Arc::strong_count(&self.arch));
+//         //println!("dropped barrier");
+//     }
+// }

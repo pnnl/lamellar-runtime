@@ -12,34 +12,32 @@ keywords = ["hpc","runtime","pgas","distributed","asynchronous"]
 categories = ["asynchronous","concurrency", "network-programming","science"]
 
 [dependencies]
+lamellar-impl = { path = "impl" }
+lamellar-prof = {path = "lamellar-prof" }
+rofisys = { version ="0.1.1", optional = true  }
+inventory = "0.1"
 serde = { version = "1.0", features = ["derive"] }
 bincode = "1.3"
 anyhow = "1.0"
 futures = "0.3"
 lazy_static = "1.3.0"
 crossbeam = "0.8"
-chashmap = "2.2.2"
 rand = "0.7.3"
 parking_lot = "0.9"
-indexmap = "1.3"
+indexmap = "1.3" #lamellar_alloc
 core_affinity = "0.5.9"
-rofisys = { version ="0.1.1", optional = true  }
 log = "0.4"
 simple_logger = "1.6.0"
-lamellar-impl = { path = "impl" }
-inventory = "0.1"
-serde_closure = { version = "0.1.5", optional = true }
 async-task = "4.0.2"
 async-trait = "0.1.40"
 async-std = "1.6.4"
 async-recursion = "0.2"
-lamellar-prof = {path = "lamellar-prof" }
 libc = { version = "0.2.81", optional = true }
-#shared_memory = { git = "https://github.com/elast0ny/shared_memory-rs"}
-shared_memory = "0.12.0"
-raw_sync = "0.1"
 enum_dispatch = "0.3"
 memoffset = "0.6"
+shared_memory = "0.12.0"
+raw_sync = "0.1"
+
 
 
 [dev-dependencies]
@@ -55,12 +53,9 @@ members = ["impl"]
 
 #features are strictly additive.... can't have mutual exclusitivity
 [features]
-nightly=["serde_closure"]
-stable=[]
 enable-rofi=["rofisys","libc"]
 enable-local=[]
 enable-prof=["lamellar-prof/enable-prof"]
-experimental=[]
 default=[]
 
 
@@ -77,10 +72,6 @@ path="src/lib.rs"
 
 
 ##------------ Bandwidth Examples -----------------##
-[[example]]
-name="am_closures_bw"
-path="examples/bandwidths/am_closures_bw.rs"
-required-features = ["nightly"]
 
 [[example]]
 name="am_bw"
@@ -131,7 +122,7 @@ path="examples/active_message_examples/am_batch_tests.rs"
 [[example]]
 name="am_local"
 path="examples/active_message_examples/am_local.rs"
-required-features = ["experimental"]
+
 
 
 ##------------ RDMA Examples -----------------##
@@ -189,15 +180,15 @@ path="examples/experimental/random_team.rs"
 [[example]]
 name="dist_array_reduce"
 path="examples/experimental/dist_array_reduce.rs"
-required-features = ["experimental"]
+
 
 [[example]]
 name="array_am"
 path="examples/experimental/array_am.rs"
-required-features = ["experimental"]
+
 
 ##------------ Darc examples ------------------##
 [[example]]
 name="darc"
 path="examples/darc_examples/darc.rs"
-required-features = ["experimental"]
+

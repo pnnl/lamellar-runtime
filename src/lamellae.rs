@@ -28,10 +28,6 @@ use rofi::rofi_comm::RofiData;
 pub enum Backend {
     #[cfg(feature = "enable-rofi")]
     Rofi,
-    // #[cfg(feature = "enable-rofi")]
-    // RofiShm,
-    // #[cfg(feature = "enable-rofi")]
-    // RofiVerbs,
     Local,
     // Shmem,
 }
@@ -56,13 +52,6 @@ fn default_backend() -> Backend {
     return Backend::Local;
 }
 
-
-// #[derive(Clone)]
-// pub(crate) struct SerializedData{
-//     pub(crate) addr: usize,
-//     pub(crate) len: usize,
-//     pub(crate) rdma: Arc<Lamellae>
-// }
 #[derive(serde::Serialize,serde::Deserialize,Clone,Debug)]
 pub(crate) struct SerializeHeader{
     pub(crate) msg: Msg,
@@ -92,14 +81,6 @@ pub(crate) trait Des{
 pub(crate) trait SubData{
     fn sub_data(&self,start: usize, end: usize) -> SerializedData;
 }
-
-
-// impl Drop for SerializedData{
-//     fn drop(&mut self){
-//         //println!("dropping {:?} {:?}",self.addr,self.len);
-//         // self.rdma.rt_free(self.addr - rdma.base_addr());
-//     }
-// }
 
 #[enum_dispatch(LamellaeInit)]
 pub(crate) enum LamellaeBuilder{
@@ -183,12 +164,7 @@ pub(crate) fn create_lamellae(backend: Backend) -> LamellaeBuilder {
                 Err(_) => "verbs",
             };
             LamellaeBuilder::RofiBuilder(RofiBuilder::new(provider))
-            // Box::new(rofi_lamellae::RofiLamellae::new(provider))
         }
-        // #[cfg(feature = "enable-rofi")]
-        // Backend::RofiShm => Box::new(rofi_lamellae::RofiLamellae::new("shm")),
-        // #[cfg(feature = "enable-rofi")]
-        // Backend::RofiVerbs => Box::new(rofi_lamellae::RofiLamellae::new("verbs")),
         // Backend::Shmem => Box::new(shmem_lamellae::ShmemLamellae::new()),
         Backend::Local => LamellaeBuilder::Local(Local::new()),
     }

@@ -1,21 +1,13 @@
-// use crate::active_messaging::*; //{ActiveMessaging,AMCounters,Cmd,Msg,LamellarAny,LamellarLocal};
+
 use crate::active_messaging::*;
-// use crate::lamellae::{AllocationType,Lamellae};
 use crate::barrier::Barrier;
 use crate::lamellae::{AllocationType, Lamellae, LamellaeComm};
 use crate::lamellar_arch::{GlobalArch, IdError, LamellarArch, LamellarArchEnum, LamellarArchRT};
-// //#[cfg(feature = "experimental")]
-// use crate::lamellar_array::{LamellarArray, LamellarSubArray};
-// use crate::lamellar_memregion::{
-//     LamellarLocalMemoryRegion, LamellarMemoryRegion, MemoryRegion, RegisteredMemoryRegion,
-//     RemoteMemoryRegion,
-// };
 use crate::lamellar_request::{AmType, LamellarRequest, LamellarRequestHandle};
 use crate::memregion::{
     local::LocalMemoryRegion, shared::SharedMemoryRegion,  Dist, LamellarMemoryRegion,
     MemoryRegion, RemoteMemoryRegion,
-};// RTMemoryRegionRDMA, RegisteredMemoryRegion,
-// use crate::schedulers::SchedulerQueue;
+};
 use crate::scheduler::{Scheduler, SchedulerQueue};
 #[cfg(feature = "nightly")]
 use crate::utils::ser_closure;
@@ -245,7 +237,7 @@ impl LamellarTeamRT {
         self.sub_teams.write().clear(); // not sure this is necessary or should be allowed? sub teams delete themselves from this map when dropped...
                                         // what does it mean if we drop a parent team while a sub_team is valid?
         if let None = &self.parent {
-            println!("shutdown lamellae, going to shutdown scheduler");
+            // println!("shutdown lamellae, going to shutdown scheduler");
             self.scheduler.shutdown();
             self.put_dropped();
             self.drop_barrier();
@@ -287,9 +279,7 @@ impl LamellarTeamRT {
             arch.hash(&mut hasher);
             let hash = hasher.finish();
             let archrt = Arc::new(LamellarArchRT::new(parent.arch.clone(), arch));
-            // println!("subteam: hash: {:?} arch{:?}",hash,archrt);
             parent.barrier();
-            // println!("[{:?}][LAMELLAR] creating team: {:?}",parent.world_pe,archrt.team_iter().collect::<Vec<usize>>());
 
             // ------ ensure team is being constructed synchronously and in order across all pes in parent ------ //
             let parent_alloc = AllocationType::Sub(parent.arch.team_iter().collect::<Vec<usize>>());
@@ -308,7 +298,6 @@ impl LamellarTeamRT {
             unsafe {
                 temp_buf.put_slice(parent.world_pe, 0, &temp_array_slice[..parent.num_pes]);
             }
-            // println!("new team hash: {:?}",hash);
             let s = Instant::now();
             parent.barrier();
             let timeout = Instant::now() - s;
@@ -332,9 +321,7 @@ impl LamellarTeamRT {
                 parent: Some(parent.clone()),
                 sub_teams: RwLock::new(HashMap::new()),
                 mem_regions: RwLock::new(HashMap::new()),
-                // scheduler: parent.scheduler.clone(),
                 scheduler: parent.scheduler.clone(),
-                // lamellae: parent.lamellae.clone(),
                 lamellae: parent.lamellae.clone(),
                 arch: archrt.clone(),
                 world_pe: parent.world_pe,
@@ -361,14 +348,11 @@ impl LamellarTeamRT {
                 }
             }
             let team = Arc::new(team);
-            // println!("[LAMELLAR] new  team 1 {:?} {:?} {:?}",hash, team.dropped.as_slice(),temp_array_slice);
             let mut sub_teams = parent.sub_teams.write();
             sub_teams.insert(team.id, team.clone());
             parent.barrier();
 
-            // println!("[{:?}][LAMELLAR] entering team barrier ", team.world_pe);
             team.barrier();
-            // println!("[LAMELLAR] new  team 2 {:?} {:?}",hash, team.dropped.as_slice());
             parent.barrier();
             Some(team)
         } else {
@@ -418,18 +402,14 @@ impl LamellarTeamRT {
     fn put_dropped(&self) {
         if let Some(parent) = &self.parent {
             let temp_slice = unsafe { self.dropped.as_mut_slice().unwrap() };
-            // println!("temp_slice {:?}",temp_slice);
 
             let my_index = parent
                 .arch
                 .team_pe(self.world_pe)
                 .expect("invalid parent pe");
-            // println!("my_index {:?}",my_index);
             temp_slice[my_index] = 1;
             for world_pe in self.arch.team_iter() {
-                // println!("world_pe: {:?}",world_pe);
                 if world_pe != self.world_pe {
-                    // println!("putting into dropped {:?} {:?} {:?}",world_pe, my_index, & temp_slice[my_index..=my_index]);
                     unsafe {
                         self.dropped.put_slice(
                             world_pe,
@@ -444,7 +424,6 @@ impl LamellarTeamRT {
             temp_slice[self.world_pe] = 1;
             for world_pe in self.arch.team_iter() {
                 if world_pe != self.world_pe {
-                    // println!("putting into dropped {:?} {:?} {:?}",world_pe, my_index, & temp_slice[my_index..=my_index]);
                     unsafe {
                         self.dropped.put_slice(
                             world_pe,
@@ -469,22 +448,6 @@ impl LamellarTeamRT {
             }
         }
     }
-
-    // //#[cfg(feature = "experimental")]
-    // pub fn local_array<
-    //     T: serde::ser::Serialize
-    //         + serde::de::DeserializeOwned
-    //         + std::clone::Clone
-    //         + Send
-    //         + Sync
-    //         + 'static,
-    // >(
-    //     &self,
-    //     size: usize,
-    //     init: T,
-    // ) -> LamellarLocalArray<T> {
-    //     LamellarLocalArray::new(size, init, self.lamellae.get_rdma().clone())
-    // }
 
     pub fn print_arch(&self) {
         println!("-----mapping of team pe ids to parent pe ids-----");
@@ -520,15 +483,7 @@ impl LamellarTeamRT {
     // }
 
     // // #[prof]
-    // impl ActiveMessaging for Arc<LamellarTeamRT> {
     fn wait_all(&self) {
-        // println!(
-        //     "in team wait_all team_hash: {:?} cnt: {:?} {:?}",
-        //     self.team_hash,
-        //     self.team_counters.send_req_cnt.load(Ordering::SeqCst),
-        //     self.team_counters.outstanding_reqs.load(Ordering::SeqCst),
-        //     // self.counters.recv_req_cnt.load(Ordering::SeqCst),
-        // );
         let mut temp_now = Instant::now();
         while self.team_counters.outstanding_reqs.load(Ordering::SeqCst) > 0 {
             // std::thread::yield_now();
@@ -539,9 +494,7 @@ impl LamellarTeamRT {
                     self.world_pe,
                     self.team_counters.send_req_cnt.load(Ordering::SeqCst),
                     self.team_counters.outstanding_reqs.load(Ordering::SeqCst),
-                    // self.counters.recv_req_cnt.load(Ordering::SeqCst),
                 );
-                // self.lamellae.print_stats();
                 temp_now = Instant::now();
             }
         }
@@ -578,14 +531,13 @@ impl LamellarTeamRT {
 
         self.world_counters.add_send_req(self.num_pes);
         self.team_counters.add_send_req(self.num_pes);
-        // let my_any: LamellarAny =Box::new(Box::new(am) as LamellarBoxedAm);
         let func: LamellarArcAm = Arc::new(am);
         let world = if let Some(world) = &team.world {
             world.clone()
         } else {
             team.clone()
         };
-        self.scheduler.submit_req_new(
+        self.scheduler.submit_req(
             self.world_pe,
             None,
             ExecType::Am(Cmd::Exec),
@@ -615,7 +567,6 @@ impl LamellarTeamRT {
             Some(task_group_cnts) => Some(task_group_cnts.outstanding_reqs.clone()),
             None => None,
         };
-        // println!("[{:?}] team exec am pe request {:?}", self.world_pe,self.team_hash);
         assert!(pe < self.arch.num_pes());
         prof_end!(pre);
         prof_start!(req);
@@ -631,9 +582,7 @@ impl LamellarTeamRT {
         );
         prof_end!(req);
         prof_start!(counters);
-        // println!("world_cnt");
         self.world_counters.add_send_req(1);
-        // println!("team_cnt");
         self.team_counters.add_send_req(1);
         prof_end!(counters);
         prof_start!(any);
@@ -645,7 +594,7 @@ impl LamellarTeamRT {
         } else {
             team.clone()
         };
-        self.scheduler.submit_req_new(
+        self.scheduler.submit_req(
             self.world_pe,
             Some(self.arch.world_pe(pe).expect("pe not member of team")),
             ExecType::Am(Cmd::Exec),
@@ -658,13 +607,6 @@ impl LamellarTeamRT {
             Some(ireq),
         );
         prof_end!(sub);
-        // println!(
-        //     "in team exec_am_pe team_hash: {:?} cnt: {:?} {:?}",
-        //     self.team_hash,
-        //     self.team_counters.send_req_cnt.load(Ordering::SeqCst),
-        //     self.team_counters.outstanding_reqs.load(Ordering::SeqCst),
-        //     // self.counters.recv_req_cnt.load(Ordering::SeqCst),
-        // );
         Box::new(my_req)
     }
 
@@ -678,7 +620,6 @@ impl LamellarTeamRT {
         F: LamellarActiveMessage + LocalAM + Send + Sync + 'static,
     {
         prof_start!(pre);
-        // println!("[{:?}] team exec am local request", self.world_pe);
         prof_end!(pre);
         prof_start!(req);
         let tg_outstanding_reqs = match task_group_cnts {
@@ -709,7 +650,7 @@ impl LamellarTeamRT {
         } else {
             team.clone()
         };
-        self.scheduler.submit_req_new(
+        self.scheduler.submit_req(
             self.world_pe,
             Some(self.world_pe),
             ExecType::Am(Cmd::Exec),
@@ -726,141 +667,141 @@ impl LamellarTeamRT {
     }
 }
 
-//#feature gated closures for those with nightly
-#[cfg(feature = "nightly")]
-use crate::active_messaging::remote_closures::{lamellar_closure, lamellar_local, ClosureRet};
-#[cfg(feature = "nightly")]
-//#[prof]
-impl RemoteClosures for LamellarTeamRT {
-    fn exec_closure_all<
-        F: FnOnce() -> T
-            + Send
-            + Sync
-            + serde::ser::Serialize
-            + serde::de::DeserializeOwned
-            + std::clone::Clone
-            + 'static,
-        T: std::any::Any
-            + Send
-            + Sync
-            + serde::ser::Serialize
-            + serde::de::DeserializeOwned
-            + std::clone::Clone,
-    >(
-        &self,
-        func: F,
-    ) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
-        trace!("[{:?}] team exec closure all request", self.world_pe);
-        let (my_req, ireq) = LamellarRequestHandle::new(
-            self.num_pes,
-            AmType::RemoteClosure,
-            self.arch.clone(),
-            self.team_counters.outstanding_reqs.clone(),
-            self.world_counters.outstanding_reqs.clone(),
-        );
-        let msg = Msg {
-            cmd: ExecType::Closure(Cmd::Exec),
-            src: self.world_pe as u16,
-            req_id: my_req.id,
-            team_id: self.id,
-            return_data: true,
-        };
-        self.world_counters.add_send_req(self.num_pes);
-        self.team_counters.add_send_req(self.num_pes);
-        let my_any: LamellarAny = Box::new((lamellar_local(func.clone()), lamellar_closure(func)));
-        self.scheduler.submit_req(
-            self.world_pe,
-            None,
-            msg,
-            ireq,
-            my_any,
-            self.lamellae.get_am(),
-            self.team_hash,
-        );
-        Box::new(my_req)
-    }
+// //#feature gated closures for those with nightly
+// #[cfg(feature = "nightly")]
+// use crate::active_messaging::remote_closures::{lamellar_closure, lamellar_local, ClosureRet};
+// #[cfg(feature = "nightly")]
+// //#[prof]
+// impl RemoteClosures for LamellarTeamRT {
+//     fn exec_closure_all<
+//         F: FnOnce() -> T
+//             + Send
+//             + Sync
+//             + serde::ser::Serialize
+//             + serde::de::DeserializeOwned
+//             + std::clone::Clone
+//             + 'static,
+//         T: std::any::Any
+//             + Send
+//             + Sync
+//             + serde::ser::Serialize
+//             + serde::de::DeserializeOwned
+//             + std::clone::Clone,
+//     >(
+//         &self,
+//         func: F,
+//     ) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+//         trace!("[{:?}] team exec closure all request", self.world_pe);
+//         let (my_req, ireq) = LamellarRequestHandle::new(
+//             self.num_pes,
+//             AmType::RemoteClosure,
+//             self.arch.clone(),
+//             self.team_counters.outstanding_reqs.clone(),
+//             self.world_counters.outstanding_reqs.clone(),
+//         );
+//         let msg = Msg {
+//             cmd: ExecType::Closure(Cmd::Exec),
+//             src: self.world_pe as u16,
+//             req_id: my_req.id,
+//             team_id: self.id,
+//             return_data: true,
+//         };
+//         self.world_counters.add_send_req(self.num_pes);
+//         self.team_counters.add_send_req(self.num_pes);
+//         let my_any: LamellarAny = Box::new((lamellar_local(func.clone()), lamellar_closure(func)));
+//         self.scheduler.submit_req(
+//             self.world_pe,
+//             None,
+//             msg,
+//             ireq,
+//             my_any,
+//             self.lamellae.get_am(),
+//             self.team_hash,
+//         );
+//         Box::new(my_req)
+//     }
 
-    fn exec_closure_pe<
-        F: FnOnce() -> T
-            + Send
-            + Sync
-            + serde::ser::Serialize
-            + serde::de::DeserializeOwned
-            + std::clone::Clone
-            + 'static,
-        T: std::any::Any
-            + Send
-            + Sync
-            + serde::ser::Serialize
-            + serde::de::DeserializeOwned
-            + std::clone::Clone,
-    >(
-        &self,
-        pe: usize,
-        func: F,
-    ) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
-        trace!("[{:?}] team exec_closure_pe [{:?}]", self.world_pe, pe);
-        assert!(pe < self.arch.num_pes());
-        let (my_req, mut ireq) = LamellarRequestHandle::new(
-            1,
-            AmType::RemoteClosure,
-            self.arch.clone(),
-            self.team_counters.outstanding_reqs.clone(),
-            self.world_counters.outstanding_reqs.clone(),
-        );
-        let msg = Msg {
-            cmd: ExecType::Closure(Cmd::Exec),
-            src: self.world_pe as u16,
-            req_id: my_req.id,
-            team_id: self.id,
-            return_data: true,
-        };
-        self.world_counters.add_send_req(1);
-        self.team_counters.add_send_req(1);
-        ireq.start = Instant::now();
-        let my_any: LamellarAny = if self.world_pe == pe {
-            Box::new(lamellar_local(func))
-        } else {
-            Box::new(lamellar_closure(func))
-        };
-        self.scheduler.submit_req(
-            self.world_pe,
-            Some(pe),
-            msg,
-            ireq,
-            my_any,
-            self.lamellae.get_am(),
-            self.team_hash,
-        );
-        Box::new(my_req)
-    }
+//     fn exec_closure_pe<
+//         F: FnOnce() -> T
+//             + Send
+//             + Sync
+//             + serde::ser::Serialize
+//             + serde::de::DeserializeOwned
+//             + std::clone::Clone
+//             + 'static,
+//         T: std::any::Any
+//             + Send
+//             + Sync
+//             + serde::ser::Serialize
+//             + serde::de::DeserializeOwned
+//             + std::clone::Clone,
+//     >(
+//         &self,
+//         pe: usize,
+//         func: F,
+//     ) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+//         trace!("[{:?}] team exec_closure_pe [{:?}]", self.world_pe, pe);
+//         assert!(pe < self.arch.num_pes());
+//         let (my_req, mut ireq) = LamellarRequestHandle::new(
+//             1,
+//             AmType::RemoteClosure,
+//             self.arch.clone(),
+//             self.team_counters.outstanding_reqs.clone(),
+//             self.world_counters.outstanding_reqs.clone(),
+//         );
+//         let msg = Msg {
+//             cmd: ExecType::Closure(Cmd::Exec),
+//             src: self.world_pe as u16,
+//             req_id: my_req.id,
+//             team_id: self.id,
+//             return_data: true,
+//         };
+//         self.world_counters.add_send_req(1);
+//         self.team_counters.add_send_req(1);
+//         ireq.start = Instant::now();
+//         let my_any: LamellarAny = if self.world_pe == pe {
+//             Box::new(lamellar_local(func))
+//         } else {
+//             Box::new(lamellar_closure(func))
+//         };
+//         self.scheduler.submit_req(
+//             self.world_pe,
+//             Some(pe),
+//             msg,
+//             ireq,
+//             my_any,
+//             self.lamellae.get_am(),
+//             self.team_hash,
+//         );
+//         Box::new(my_req)
+//     }
 
-    fn exec_closure_on_return<
-        F: FnOnce() -> T + serde::ser::Serialize + serde::de::DeserializeOwned + 'static,
-        T: std::any::Any + serde::ser::Serialize + serde::de::DeserializeOwned + std::clone::Clone,
-    >(
-        &self,
-        func: F,
-    ) -> ClosureRet {
-        ClosureRet {
-            data: ser_closure(
-                FnOnce!([func] move||-> (RetType,Option<std::vec::Vec<u8>>) {
-                    let closure: F = func;
-                    let ret: T = closure();
-                    let box_any_ret: Box<dyn std::any::Any> = Box::new(ret.clone());
-                    if let Some(_x) = box_any_ret.downcast_ref::<()>(){
-                        // println!("unit return");
-                        (RetType::Unit,None)
-                    }
-                    else{
-                        println!("warning: return data from exec_on_return not yet supported -- data not reachable");
-                        (RetType::Unit,None)
-                    }
-                }),
-            ),
-        }
-    }
-}
+//     fn exec_closure_on_return<
+//         F: FnOnce() -> T + serde::ser::Serialize + serde::de::DeserializeOwned + 'static,
+//         T: std::any::Any + serde::ser::Serialize + serde::de::DeserializeOwned + std::clone::Clone,
+//     >(
+//         &self,
+//         func: F,
+//     ) -> ClosureRet {
+//         ClosureRet {
+//             data: ser_closure(
+//                 FnOnce!([func] move||-> (RetType,Option<std::vec::Vec<u8>>) {
+//                     let closure: F = func;
+//                     let ret: T = closure();
+//                     let box_any_ret: Box<dyn std::any::Any> = Box::new(ret.clone());
+//                     if let Some(_x) = box_any_ret.downcast_ref::<()>(){
+//                         // println!("unit return");
+//                         (RetType::Unit,None)
+//                     }
+//                     else{
+//                         println!("warning: return data from exec_on_return not yet supported -- data not reachable");
+//                         (RetType::Unit,None)
+//                     }
+//                 }),
+//             ),
+//         }
+//     }
+// }
 
 //#[prof]
 impl RemoteMemoryRegion for Arc<LamellarTeam> {
@@ -881,14 +822,8 @@ impl RemoteMemoryRegion for Arc<LamellarTeam> {
                 AllocationType::Sub(self.team.arch.team_iter().collect::<Vec<usize>>()),
             )
         };
-        // self.team
-        //     .mem_regions
-        //     .write()
-        //     .insert(mr.id(), Box::new(unsafe { mr.clone().as_base::<u8>() }));
         self.team.barrier.barrier();
         mr
-        // println!("alloc_mem_reg: {:?}",self.world_pe);
-        // self.team.alloc_shared_mem_region(size)
     }
 
     /// allocate a local memory region from the asymmetric heap
@@ -900,103 +835,32 @@ impl RemoteMemoryRegion for Arc<LamellarTeam> {
     fn alloc_local_mem_region<T: Dist + 'static>(&self, size: usize) -> LocalMemoryRegion<T> {
         let lmr: LocalMemoryRegion<T> =
             LocalMemoryRegion::new(size, self.team.lamellae.clone()).into();
-        // self.team
-        //     .mem_regions
-        //     .write()
-        //     .insert(lmr.id(), Box::new(unsafe { lmr.clone().as_base::<u8>() }));
-        // println!("alloc_mem_reg: {:?}",llmr);
         lmr
-        // println!("alloc_mem_reg: {:?}",self.world_pe);
-        // self.team.alloc_local_mem_region(size)
     }
 
-    /// release a remote memory region from the asymmetric heap
-    ///
-    /// # Arguments
-    ///
-    /// * `region` - the region to free
-    ///
-    fn free_shared_memory_region<T: Dist + 'static>(&self, _region: SharedMemoryRegion<T>) {
-        self.team.barrier.barrier();
-        // self.team.mem_regions.write().remove(&region.id());
-        // self.team.free_shared_memory_region(region)
-    }
+    // /// release a remote memory region from the asymmetric heap
+    // ///
+    // /// # Arguments
+    // ///
+    // /// * `region` - the region to free
+    // ///
+    // fn free_shared_memory_region<T: Dist + 'static>(&self, _region: SharedMemoryRegion<T>) {
+    //     self.team.barrier.barrier();
+    //     // self.team.mem_regions.write().remove(&region.id());
+    //     // self.team.free_shared_memory_region(region)
+    // }
 
-    /// release a remote memory region from the asymmetric heap
-    ///
-    /// # Arguments
-    ///
-    /// * `region` - the region to free
-    ///
-    fn free_local_memory_region<T: Dist + 'static>(&self, _region: LocalMemoryRegion<T>) {
-        // self.team.mem_regions.write().remove(&region.id());
-        // self.team.free_local_memory_region(region)
-    }
+    // /// release a remote memory region from the asymmetric heap
+    // ///
+    // /// # Arguments
+    // ///
+    // /// * `region` - the region to free
+    // ///
+    // fn free_local_memory_region<T: Dist + 'static>(&self, _region: LocalMemoryRegion<T>) {
+    //     // self.team.mem_regions.write().remove(&region.id());
+    //     // self.team.free_local_memory_region(region)
+    // }
 }
-
-//#[prof]
-// impl RemoteMemoryRegion for LamellarTeamRT {
-//     /// allocate a remote memory region from the asymmetric heap
-//     ///
-//     /// # Arguments
-//     ///
-//     /// * `size` - number of elements of T to allocate a memory region for -- (not size in bytes)
-//     ///
-//     fn alloc_shared_mem_region<T: Dist + 'static>(&self, size: usize) -> SharedMemoryRegion<T> {
-//         self.barrier.barrier();
-//         let mr: SharedMemoryRegion<T> = if self.num_world_pes == self.num_pes {
-//             SharedMemoryRegion::new(size, self.lamellae.clone(), AllocationType::Global)
-//         } else {
-//             SharedMemoryRegion::new(
-//                 size,
-//                 self.lamellae.clone(),
-//                 AllocationType::Sub(self.arch.team_iter().collect::<Vec<usize>>()),
-//             )
-//         };
-//         self.mem_regions
-//             .write()
-//             .insert(mr.id(), Box::new(unsafe { mr.clone().as_base::<u8>() }));
-//         self.barrier.barrier();
-//         mr
-//     }
-
-//     /// allocate a local memory region from the asymmetric heap
-//     ///
-//     /// # Arguments
-//     ///
-//     /// * `size` - number of elements of T to allocate a memory region for -- (not size in bytes)
-//     ///
-//     fn alloc_local_mem_region<T: Dist + 'static>(&self, size: usize) -> LocalMemoryRegion<T> {
-//         let lmr: LocalMemoryRegion<T> = LocalMemoryRegion::new(size, self.lamellae.clone()).into();
-//         self.mem_regions
-//             .write()
-//             .insert(lmr.id(), Box::new(unsafe { lmr.clone().as_base::<u8>() }));
-//         // println!("alloc_mem_reg: {:?}",llmr);
-//         lmr
-//     }
-
-//     /// release a remote memory region from the symmetric heap
-//     ///
-//     /// # Arguments
-//     ///
-//     /// * `region` - the region to free
-//     ///
-//     fn free_shared_memory_region<T: Dist + 'static>(&self, region: SharedMemoryRegion<T>) {
-//         self.barrier.barrier();
-//         self.mem_regions.write().remove(&region.id());
-//     }
-
-//     /// release a remote memory region from the symmetric heap
-//     ///
-//     /// # Arguments
-//     ///
-//     /// * `region` - the region to free
-//     ///
-//     fn free_local_memory_region<T: Dist + 'static>(&self, region: LocalMemoryRegion<T>) {
-//         // println!("free_mem_reg: {:?}",region);
-//         self.mem_regions.write().remove(&region.id());
-//     }
-// }
 
 //#[prof]
 impl Drop for LamellarTeamRT {
@@ -1027,31 +891,9 @@ impl Drop for LamellarTeamRT {
         //     "world_counters: {:?}",
         //     Arc::strong_count(&self.world_counters)
         // );
-        println!("LamellarTeamRT dropped");
+        // println!("LamellarTeamRT dropped");
     }
 }
-//         // println!("[{:?}] team dropping {:?}", self.world_pe, self.get_pes());
-//         // self.wait_all();
-//         // self.barrier();
-//         // self.put_dropped();
-//         // if let Ok(my_index) = self.arch.team_pe_id(&self.world_pe){
-//         //     self.drop_barrier();
-//         // }
-//         // if let Some(parent) = &self.parent{
-//         //     parent.sub_teams.write().remove(&self.id);
-//         // }
-//         // println!("[{:?}] team dropped {:?}", self.world_pe, self.get_pes());
-//         // self.barrier1.delete(self.lamellae.clone());
-//         // self.barrier2.delete(self.lamellae.clone());
-//         // self.barrier3.delete(self.lamellae.clone());
-//         // if let Some(parent) = &self.parent{
-//         //     parent.sub_teams.write().remove(&self.id);
-//         // }
-//         //TODO: what happends when we have sub_teams present?
-//         // does the recursive drop manage it properly for us or
-//         // do we need to manually remove those teams from the map?
-//     }
-// }
 
 //#[prof]
 impl Drop for LamellarTeam {
@@ -1087,13 +929,13 @@ impl Drop for LamellarTeam {
         // }
         // println!("team: {:?}",Arc::strong_count(&self.team));
         // for (k,tes"team handle dropped");
-        println!(
-            "[{:?}] {:?} team handle dropped {:?} {:?}",
-            self.team.world_pe,
-            self.team.team_hash,
-            self.team.get_pes(),
-            self.team.dropped.as_slice()
-        );
+        // println!(
+        //     "[{:?}] {:?} team handle dropped {:?} {:?}",
+        //     self.team.world_pe,
+        //     self.team.team_hash,
+        //     self.team.get_pes(),
+        //     self.team.dropped.as_slice()
+        // );
         // std::thread::sleep(Duration::from_secs(1));
     }
 }

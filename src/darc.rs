@@ -427,15 +427,6 @@ impl<T:  fmt::Debug> fmt::Debug for Darc<T> {
     }
 }
 
-// impl <'a, T> IntoIterator for &'a Darc<T>
-// where
-//     &'a T: IntoIterator{
-//     type Item = <&'T as IntoIterator>::Item;
-//     type IntoIter = <&'a T as IntoIterator>::IntoIter{
-//         self.inner().item().into_iter()
-//     }
-// }
-
 impl<T: 'static > Drop for Darc<T> {
     fn drop(&mut self) {
         let inner = self.inner();
@@ -443,7 +434,6 @@ impl<T: 'static > Drop for Darc<T> {
         // println!{"darc dropped {:?} {:?}",self.inner,self.inner().local_cnt.load(Ordering::SeqCst)};
         if cnt == 1 {
             //we are currently the last local ref, if it increases again it must mean someone else has come in and we can probably let them worry about cleaning up...
-
             let pe_ref_cnts = self.ref_cnts_as_mut_slice();
             // println!("Last local ref... for now! {:?}",pe_ref_cnts);
             // self.print();

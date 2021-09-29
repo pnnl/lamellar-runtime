@@ -1,38 +1,17 @@
-use crate::active_messaging::*; //{ActiveMessaging,AMCounters,Cmd,Msg,LamellarAny,LamellarLocal};
+use crate::active_messaging::*; 
 use crate::lamellae::AllocationType;
 use crate::lamellar_request::LamellarRequest;
 use crate::scheduler::SchedulerQueue;
-// use crate::lamellar_arch::LamellarArchRT;
 use crate::memregion::{Dist, MemoryRegion, RegisteredMemoryRegion, RemoteMemoryRegion, SubRegion};
-// use crate::lamellar_request::{AmType, LamellarRequest, LamellarRequestHandle};
 use crate::lamellar_team::LamellarTeam;
-// use crate::scheduler::{Scheduler,SchedulerQueue};
 use crate::array::*;
-// {
-//     Distribution, LamellarArray, LamellarArrayInput, LamellarArrayIter, LamellarArrayIterator,
-//     LamellarArrayRDMA, LamellarArrayReduce, MyInto, REDUCE_OPS,
-// };
 use crate::darc::Darc;
-use crate::deserialize;
-// use crate::lamellar_memregion::RegisteredMemoryRegion;
-
-// use log::trace;
-// use std::hash::{Hash, Hasher};
-// use std::ops::RangeBounds;
-// use std::ops::{
-//     Index, IndexMut, Range, RangeFrom, RangeFull, RangeInclusive, RangeTo, RangeToInclusive,
-// };
-// use std::any;
-// use core::marker::PhantomData;
 use std::collections::HashMap;
 use parking_lot::RwLock;
 use core::marker::PhantomData;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-
-
-
 
 struct UnsafeArrayInner {
     mem_region: MemoryRegion<u8>,
@@ -48,24 +27,10 @@ pub struct UnsafeArray<T: Dist + 'static> {
     distribution: Distribution,
     size: usize,      //total array size
     elem_per_pe: f32, //used to evenly distribute elems
-    // num_elems_local: usize,
     sub_array_offset: usize,
     sub_array_size: usize,
     phantom: PhantomData<T>,
 }
-
-// impl<T: Dist + 'static> crate::DarcSerde for UnsafeArray<T> {
-//     fn ser(&self, num_pes: usize, cur_pe: Result<usize, crate::IdError>) {
-//         // println!("in unsafearray ser");
-//         self.mem_region.ser(num_pes, cur_pe);
-//     }
-//     fn des(&self, cur_pe: Result<usize, crate::IdError>) {
-//         // println!("in unsafearray des");
-//         self.mem_region.des(cur_pe);
-//     }
-// }
-
-
 
 //#[prof]
 impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> UnsafeArray<T> {
@@ -82,14 +47,11 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Un
             team.team.lamellae.clone(),
             AllocationType::Global,
         );
-        // println!("goint to init array");
         unsafe {
             for elem in rmr.as_mut_slice().unwrap() {
                 *elem = 0;
             }
-        }
-        // println!("after array init");
-        
+        }        
 
         let array = UnsafeArray {
             inner: Darc::new(
@@ -105,14 +67,10 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Un
             distribution: distribution.clone(),
             size: array_size,
             elem_per_pe: elem_per_pe,
-            // num_elems_local: num_elems_local,
             sub_array_offset: 0,
             sub_array_size: array_size,
             phantom: PhantomData,
         };
-        
-        // println!("dist {:?} size: {:?} elem_per_per {:?} num_elems_local {:?} sub_array_offset {:?} sub_array_size {:?}",
-        // distribution,array_size,elem_per_pe,array.num_elems_local(),0,array_size);
         array
     }
     fn num_elems_local(&self) -> usize {
@@ -164,13 +122,6 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Un
         let buf = buf.my_into(&self.inner.team);
         let start_pe = (index as f32 / self.elem_per_pe).floor() as usize;
         let end_pe = (((index + buf.len()) as f32) / self.elem_per_pe).ceil() as usize;
-        // println!(
-        //     "index: {:?} start_pe {:?} end_pe {:?} buf_len {:?} ",
-        //     index,
-        //     start_pe,
-        //     end_pe,
-        //     buf.len(),
-        // );
         let mut dist_index = index;
         let mut buf_index = 0;
         for pe in start_pe..end_pe {
@@ -180,7 +131,7 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Un
             let offset = dist_index - pe_start_index;
             let len = std::cmp::min(num_elems_on_pe - offset, buf.len() - buf_index);
             if len > 0 {
-                println!("pe {:?} offset {:?} range: {:?}-{:?} dist_index {:?} pe_start_index {:?} num_elems {:?} len {:?}", pe, offset, buf_index, buf_index+len, dist_index, pe_start_index, num_elems_on_pe, len);
+                // println!("pe {:?} offset {:?} range: {:?}-{:?} dist_index {:?} pe_start_index {:?} num_elems {:?} len {:?}", pe, offset, buf_index, buf_index+len, dist_index, pe_start_index, num_elems_on_pe, len);
                 match op {
                     ArrayOp::Put => unsafe {
                         self.inner.mem_region.put(
@@ -220,7 +171,6 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Un
             ArrayOp::Put => {
                 let temp_array = self.inner.team.alloc_local_mem_region::<T>(num_elems_pe);
                 for i in 0..std::cmp::min(buf.len(), num_pes) {
-                    // let mut len = 0;
                     let mut k = 0;
                     let pe = (start_pe + i) % num_pes;
                     let offset = index / num_pes + overflow;
@@ -235,24 +185,16 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Un
                         overflow += 1;
                     }
                 }
-                self.inner.team.free_local_memory_region(temp_array);
             }
             ArrayOp::Get => { //optimize like we did for put...
                 for i in 0..buf.len() {
-                    // println!(
-                    //     "gindex {:?} pe {:?} pindex {:?} i: {:?}",
-                    //     index,
-                    //     (index + i) % num_pes,
-                    //     (index + i) / num_pes,
-                    //     i
-                    // );
                     unsafe {
                         self.inner.mem_region.get(
                             (index + i) % num_pes,
                             (index + i) / num_pes,
                             buf.sub_region(i..=i),
                         )
-                    }; //can't do a more optimized get (where we do one get per pe) until rofi supports transfer completion events.
+                    }; 
                 }
             }
             _ => {}
@@ -278,7 +220,6 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Un
         self.local_as_mut_slice()
     }
     pub fn local_as_mut_slice(&self) -> &mut [T] {
-        // println!("in local_as_slice");
         let slice = unsafe {
             self.inner.mem_region.as_casted_mut_slice::<T>().expect(
             "memory doesnt exist on this pe (this should not happen for arrays currently)",
@@ -292,7 +233,6 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Un
                 let start_pe = (index as f32 / self.elem_per_pe).floor() as usize;
                 let end_pe = (((index + len) as f32) / self.elem_per_pe).ceil() as usize;
                 let num_elems_local = self.num_elems_local();
-                // println!("start_pe {:?} end_pe {:?}", start_pe, end_pe);
                 if my_pe == start_pe || my_pe == end_pe {
                     let start_index = index - (self.elem_per_pe * my_pe as f32).round() as usize;
                     let end_index = if start_index + len > num_elems_local {
@@ -321,25 +261,15 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Un
     pub fn as_base_inner<B: Dist + 'static>(self) -> UnsafeArray<B> {
         let u8_size = self.size * std::mem::size_of::<T>();
         let b_size = u8_size / std::mem::size_of::<B>();
-        // println!("u8size {:?} bsize {:?}", u8_size, b_size);
         let elem_per_pe = b_size as f32 / self.inner.team.num_pes() as f32;
-        // println!("elem_per_pe {:?}", elem_per_pe);
         let u8_offset = self.sub_array_offset * std::mem::size_of::<T>();
         let u8_sub_size = self.sub_array_size * std::mem::size_of::<T>();
-
-        // println!(
-        //     "old num_elems_local {:?} u8_offset {:?} u8_sub_size {:?}",
-        //     self.num_elems_local(),
-        //     u8_offset,
-        //     u8_sub_size
-        // );
 
         UnsafeArray {
             inner: self.inner.clone(),
             distribution: self.distribution,
             size: b_size,
             elem_per_pe: elem_per_pe,
-            // num_elems_local: num_elems_local,
             sub_array_offset: u8_offset / std::mem::size_of::<B>(),
             sub_array_size: u8_sub_size / std::mem::size_of::<B>(),
             phantom: PhantomData,
@@ -380,16 +310,17 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Un
         self.reduce("max")
     }
 
-    pub(crate) fn local_as_ptr(&self) -> *const T {
-        self.inner.mem_region.as_casted_ptr::<T>().unwrap()
-    }
-    pub(crate) fn local_as_mut_ptr(&self) -> *mut T {
-        self.inner.mem_region.as_casted_mut_ptr::<T>().unwrap()
-    }
+    
+    // pub(crate) fn local_as_ptr(&self) -> *const T {
+    //     self.inner.mem_region.as_casted_ptr::<T>().unwrap()
+    // }
+    // pub(crate) fn local_as_mut_ptr(&self) -> *mut T {
+    //     self.inner.mem_region.as_casted_mut_ptr::<T>().unwrap()
+    // }
 
-    pub fn iter(&self) -> LamellarArrayIter<'_, T> {
-        LamellarArrayIter::new(self.clone().into(), self.inner.team.clone())
-    }
+    // pub fn iter(&self) -> LamellarArrayIter<'_, T> {
+    //     LamellarArrayIter::new(self.clone().into(), self.inner.team.clone())
+    // }
     // pub fn dist_iter(&self) -> LamellarArrayDistIter<'_, T> {
     //     LamellarArrayDistIter::new(self.clone().into())
     // }
@@ -402,7 +333,7 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Un
         };
         let num_elems_local = self.num_elems_local();
         let elems_per_thread = num_elems_local as f64/num_workers as f64;
-        if let Ok(my_pe) = self.inner.team.team_pe_id() {
+        if let Ok(_my_pe) = self.inner.team.team_pe_id() {
             let mut worker = 0;
             while ((worker as f64 * elems_per_thread).round() as usize) < num_elems_local{
                 self.inner.team.team.exec_am_local(
@@ -427,7 +358,7 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Un
         };
         let num_elems_local = self.num_elems_local();
         let elems_per_thread = num_elems_local as f64/num_workers as f64;
-        if let Ok(my_pe) = self.inner.team.team_pe_id() {
+        if let Ok(_my_pe) = self.inner.team.team_pe_id() {
             let mut worker = 0;
             while ((worker as f64 * elems_per_thread).round() as usize) < num_elems_local{
                 self.inner.team.team.exec_am_local(
@@ -450,18 +381,14 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + std::fmt::D
     UnsafeArray<T>
 {
     pub fn print(&self) {
-        // println!("print entry barrier()");
         self.inner.team.team.barrier(); //TODO: have barrier accept a string so we can print where we are stalling.
         for pe in 0..self.inner.team.num_pes() {
-            // println!("print pe {:?} barrier()",pe);
             self.inner.team.team.barrier();
             if self.inner.team.team_pe_id().unwrap() == pe {
                 println!("[{:?}] {:?}", pe, self.local_as_slice());
             }
             std::thread::sleep(std::time::Duration::from_millis(500));
         }
-        // println!("print exit barrier()");
-        // self.inner.team.team.barrier();
     }
 }
 #[lamellar_impl::AmDataRT]
@@ -480,29 +407,6 @@ impl LamellarAM for AddAm{
 impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + std::ops::AddAssign + 'static>
     UnsafeArray<T>
 {
-    // pub fn init_add(&self){
-    //     let array_clone = self.clone();
-    //     let mut op_map = self.inner.op_map.write();
-    //     op_map.insert(ArrayOp::Add,Box::new(move |input| {
-    //         if let ArrayOpInput::Add(index,bytes) = input{
-    //             let val: T = deserialize(&bytes).unwrap();
-    //             array_clone.local_as_mut_slice()[*index] += val;
-    //         }            
-    //     }));
-    // }
-    // pub fn add(&self,index: usize,val: T) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync> {
-    //     let pe = self.pe_for_dist_index(index);
-        
-    //     self.inner.team.team.exec_am_pe( 
-    //         self.inner.team.clone(),
-    //         pe,
-    //         Arc::new(AddAm{
-    //             array: self.clone().as_base::<u8>(),
-    //             input: ArrayOpInput::Add(self.pe_offset_for_dist_index(pe,index),crate::serialize(&val).unwrap())
-    //         }),
-    //         Some(self.inner.array_counters.clone()),
-    //     )
-    // }
     pub fn dist_add(&self, index: usize, func: LamellarArcAm) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync> {
         let pe = self.pe_for_dist_index(index);
         self.inner.team.team.exec_am_pe( 
@@ -516,13 +420,6 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + std::ops::A
         self.local_as_mut_slice()[index] += val;
     }
 }
-
-
-// impl<T:  Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> From<UnsafeArray<T>> for LamellarArray<T> {
-//     fn from(v: UnsafeArray<T>) -> LamellarArray<T> {
-//         LamellarArray::Unsafe(v)
-//     }
-// }
 
 impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> LamellarArrayRDMA<T>
     for UnsafeArray<T>
@@ -557,12 +454,6 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> La
     }
 }
 
-// impl<T: Dist + 'static> Drop for UnsafeArray<T> {
-//     fn drop(&mut self) {
-//         println!("dropping unsafe array");
-//     }
-// }
-
 impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> LamellarArrayReduce<T>
     for UnsafeArray<T>
 {
@@ -589,9 +480,7 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> La
                         .array_counters
                         .outstanding_reqs
                         .load(Ordering::SeqCst),
-                    // self.counters.recv_req_cnt.load(Ordering::SeqCst),
                 );
-                // self.lamellae.print_stats();
                 temp_now = Instant::now();
             }
         }
@@ -620,111 +509,13 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> La
     }
 }
 
-impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static>
-    LamellarArrayIterator<T> for UnsafeArray<T>
-{
-    fn iter(&self) -> LamellarArrayIter<'_, T> {
-        self.iter()
-    }
-    fn dist_iter(&self) -> LamellarArrayDistIter<'_, T> {
-        self.dist_iter()
-    }
-}
-
-// pub struct UnsafeElem<T>
-// where
-//     T: Dist + 'static,
+// impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static>
+//     LamellarArrayIterator<T> for UnsafeArray<T>
 // {
-//     val: T,
-//     array: UnsafeArray<T>,
-// }
-
-// impl<T, Idx> Index<Idx> for UnsafeArray<T>
-// where
-//     T: Dist + 'static,
-//     Idx: LamellarArrayIndex<UnsafeArray<T>>,
-// {
-//     type Output = Idx::Output;
-
-//     fn index(&self, index: Idx) -> &Idx::Output {
-//         index.index(self)
+//     fn iter(&self) -> LamellarArrayIter<'_, T> {
+//         self.iter()
 //     }
-// }
-
-// impl <T> LamellarArrayIndex<UnsafeArray<T>> for usize
-// where T: Dist + 'static {
-//     type Output = T;
-//     fn index(self, array: &UnsafeArray<T>) -> &T{
-//         let buf: LocalMemoryRegion<T> = array.team.alloc_local_mem_region(1);
-//         array.get(self,&buf);
-//         &buf.as_slice().unwrap()[0]
-//     }
-// }
-
-// impl<T, Idx> IndexMut<Idx> for UnsafeArray<T>
-// where
-//     T: serde::ser::Serialize
-//         + serde::de::DeserializeOwned
-//         + std::clone::Clone
-//         + Send
-//         + Sync
-//         + 'static,
-//     Idx: std::slice::SliceIndex<[T]>,
-// {
-//     fn index_mut(&mut self, index: Idx) -> &mut Self::Output {
-//         unsafe { &mut std::slice::from_raw_parts_mut(self.addr as *mut T, self.size)[index] }
-//     }
-// }
-
-// #[lamellar_impl::AmDataRT(Clone)]
-// pub struct __NetworkUnsafeArray<T: Dist + 'static> {
-//     mem_region: SharedMemoryRegion<T>,
-//     size: usize,
-//     elem_per_pe: f32,
-//     distribution: Distribution,
-// }
-
-// impl<T: Dist + 'static> From<UnsafeArray<T>> for __NetworkUnsafeArray<T> {
-//     fn from(array: UnsafeArray<T>) -> Self {
-//         let nua = __NetworkUnsafeArray {
-//             mem_region: array.mem_region.clone(),
-//             size: array.size,
-//             elem_per_pe: array.elem_per_pe, //probably dont need this
-//             distribution: array.distribution.clone(),
-//         };
-//         nua
-//     }
-// }
-
-// //#[prof]
-// impl<T: Dist + 'static> From<__NetworkUnsafeArray<T>> for UnsafeArray<T> {
-//     fn from(array: __NetworkUnsafeArray<T>) -> Self {
-//         // println!("deserializing network unsafe array");
-//         // array.mem_region.print();
-//         let team = array.mem_region.mr.team();
-//         let elem_per_pe = array.elem_per_pe;
-//         let num_elems_local = match array.distribution {
-//             Distribution::Block => {
-//                 ((elem_per_pe * (team.team_pe_id().unwrap() + 1) as f32).round()
-//                     - (elem_per_pe * team.team_pe_id().unwrap() as f32).round())
-//                     as usize
-//             }
-//             Distribution::Cyclic => {
-//                 let rem = array.size % team.num_pes();
-//                 if team.team_pe_id().unwrap() < rem {
-//                     elem_per_pe as usize + 1
-//                 } else {
-//                     elem_per_pe as usize
-//                 }
-//             }
-//         };
-//         UnsafeArray {
-//             mem_region: array.mem_region.clone(),
-//             size: array.size,
-//             elem_per_pe: elem_per_pe,
-//             num_elems_local: num_elems_local,
-//             team: team,
-//             distribution: array.distribution.clone(),
-//         }
+//     fn dist_iter(&self) -> LamellarArrayDistIter<'_, T> {
+//         self.dist_iter()
 //     }
 // }

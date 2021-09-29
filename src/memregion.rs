@@ -1,17 +1,9 @@
 use crate::array::{LamellarArrayInput, MyFrom};
 use crate::lamellae::{AllocationType, Backend, Lamellae, LamellaeComm, LamellaeRDMA};
 use crate::lamellar_team::LamellarTeam;
-// use crate::lamellar_array::{LamellarLocalArray};
 use core::marker::PhantomData;
-// #[cfg(feature = "enable-prof")]
-// use lamellar_prof::*;
-// use parking_lot::RwLock;
-// use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
-// use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
-
-// use std::ops::{Bound, RangeBounds};
 
 pub(crate) mod shared;
 use shared::SharedMemoryRegion;
@@ -484,21 +476,21 @@ pub trait RemoteMemoryRegion {
         size: usize,
     ) -> LocalMemoryRegion<T>;
 
-    /// release a shared memory region from the asymmetric heap
-    ///
-    /// # Arguments
-    ///
-    /// * `region` - the region to free
-    ///
-    fn free_shared_memory_region<T: Dist + 'static>(&self, region: SharedMemoryRegion<T>);
+    // /// release a shared memory region from the asymmetric heap
+    // ///
+    // /// # Arguments
+    // ///
+    // /// * `region` - the region to free
+    // ///
+    // fn free_shared_memory_region<T: Dist + 'static>(&self, region: SharedMemoryRegion<T>);
 
-    /// release a shared memory region from the asymmetric heap
-    ///
-    /// # Arguments
-    ///
-    /// * `region` - the region to free
-    ///
-    fn free_local_memory_region<T: Dist + 'static>(&self, region: LocalMemoryRegion<T>);
+    // /// release a shared memory region from the asymmetric heap
+    // ///
+    // /// # Arguments
+    // ///
+    // /// * `region` - the region to free
+    // ///
+    // fn free_local_memory_region<T: Dist + 'static>(&self, region: LocalMemoryRegion<T>);
 }
 
 impl<T: Dist + 'static> Drop for MemoryRegion<T> {
@@ -518,7 +510,6 @@ impl<T: Dist + 'static> Drop for MemoryRegion<T> {
 // #[prof]
 impl<T: Dist + 'static> std::fmt::Debug for MemoryRegion<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        // let slice = unsafe { std::slice::from_raw_parts(self.addr as *const T, self.size) };
         // write!(f, "{:?}", slice)
         write!(
             f,
@@ -530,24 +521,3 @@ impl<T: Dist + 'static> std::fmt::Debug for MemoryRegion<T> {
         )
     }
 }
-
-// pub(crate) struct MemoryRegion<T: Dist + 'static> {
-//     addr: usize,
-//     pe: usize,
-//     size: usize,
-//     num_bytes: usize,
-//     backend: Backend,
-//     rdma: Arc<dyn LamellaeRDMA>,
-//     local: bool,
-//     phantom: PhantomData<T>,
-// }
-// pub(crate) struct MemoryRegionIter<'a,T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static>{
-//     index: usize
-// }
-
-// impl<'a, T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Iterator
-//     for MemoryRegionIter<'a, T>
-// {
-//     type Item = &'a T;
-//     fn next(&mut self) ->
-// }

@@ -124,8 +124,6 @@ impl LamellarAM for NaiveMM {
             );
         }
         self.c.add_mat(&res); // add the tile to the global result
-        lamellar::world.free_local_memory_region(a);
-        lamellar::world.free_local_memory_region(b);
     }
 }
 

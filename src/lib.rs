@@ -1,10 +1,10 @@
-#![cfg_attr(feature = "nightly", feature(unboxed_closures))]
+// #![cfg_attr(feature = "nightly", feature(unboxed_closures))]
 
-#[cfg(feature = "nightly")]
-#[macro_use]
-extern crate serde_closure;
-#[cfg(feature = "nightly")]
-pub use serde_closure::FnOnce;
+// #[cfg(feature = "nightly")]
+// #[macro_use]
+// extern crate serde_closure;
+// #[cfg(feature = "nightly")]
+// pub use serde_closure::FnOnce;
 
 #[macro_use]
 extern crate lazy_static;
@@ -17,20 +17,14 @@ extern crate memoffset;
 pub extern crate serde;
 pub use serde::*;
 
-// pub use serde::{Deserialize, Serialize};
-
 mod active_messaging;
 pub mod array;
-//#[cfg(feature = "experimental")]
 mod darc;
 mod lamellae;
 mod lamellar_alloc;
 mod lamellar_arch;
 mod memregion;
-
 mod barrier;
-
-// mod lamellar_memregion;
 mod lamellar_request;
 mod lamellar_team;
 mod lamellar_world;
@@ -42,8 +36,9 @@ pub use utils::*;
 use lamellar_prof::init_prof;
 init_prof!();
 
-#[cfg(feature = "nightly")]
-pub use crate::active_messaging::remote_closures::RemoteClosures;
+// #[cfg(feature = "nightly")]
+// pub use crate::active_messaging::remote_closures::RemoteClosures;
+
 #[doc(hidden)]
 pub use crate::active_messaging::{
     registered_active_message::RegisteredAm, DarcSerde, LamellarActiveMessage, LamellarResultSerde,
@@ -52,31 +47,19 @@ pub use crate::active_messaging::{
 pub use crate::active_messaging::{ActiveMessaging, LamellarAM, LocalAM};
 pub use crate::lamellar_request::LamellarRequest;
 
-// //#[cfg(feature = "experimental")]
-pub use crate::array::{LamellarArray, ReduceKey};//,AddKey};
+pub use crate::array::{LamellarArray, ReduceKey};
 pub use crate::memregion::{
     local::LocalMemoryRegion, shared::SharedMemoryRegion, RemoteMemoryRegion,
 };
 
-//#[cfg(feature = "experimental")]
 #[doc(hidden)]
 pub use crate::darc::global_rw_darc::{globalrw_from_ndarc, globalrw_serialize};
-//#[cfg(feature = "experimental")]
-#[doc(hidden)]
-// pub use crate::darc::{darc_from_ndarc, darc_serialize};
-//#[cfg(feature = "experimental")]
-pub use crate::darc::local_rw_darc::LocalRwDarc;
-//#[cfg(feature = "experimental")]
 #[doc(hidden)]
 pub use crate::darc::local_rw_darc::{localrw_from_ndarc, localrw_serialize};
-//#[cfg(feature = "experimental")]
 pub use crate::darc::Darc;
-
-//#[cfg(feature = "experimental")]
 pub use crate::darc::global_rw_darc::GlobalRwDarc;
+pub use crate::darc::local_rw_darc::LocalRwDarc;
 
-// #[doc(hidden)]
-// pub use crate::lamellae::{Lamellae,SerializedData,SerializeHeader};
 pub use crate::lamellae::Backend;
 pub use crate::lamellar_arch::{BlockedArch, IdError, LamellarArch, StridedArch};
 pub use crate::lamellar_world::*;
@@ -84,7 +67,6 @@ pub use crate::scheduler::SchedulerType;
 
 #[doc(hidden)]
 pub use crate::lamellar_team::LamellarTeamRT;
-
 pub use crate::lamellar_team::LamellarTeam;
 
 extern crate lamellar_impl;
@@ -104,11 +86,7 @@ pub fn serialize<T: ?Sized>(obj: &T) -> Result<Vec<u8>, anyhow::Error>
 where
     T: serde::Serialize,
 {
-    // let mut buf = Vec::new();
-    // obj.serialize(&mut rmp_serde::Serializer::new(&mut buf)).unwrap()
     Ok(bincode::serialize(obj)?)
-    // Ok(postcard::to_stdvec(obj)?)
-    // Ok(rmp_serde::to_vec(obj)?)
 }
 
 #[doc(hidden)]
@@ -133,8 +111,6 @@ where
     T: serde::Deserialize<'a>,
 {
     Ok(bincode::deserialize(bytes)?)
-    // Ok(postcard::from_bytes(bytes)?)
-    // Ok(rmp_serde::from_read_ref(bytes)?)
 }
 #[doc(hidden)]
 pub use async_std;

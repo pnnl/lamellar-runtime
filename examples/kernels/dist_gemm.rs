@@ -118,9 +118,7 @@ impl LamellarAM for MatMulAM {
             let sub_a = lamellar::world.alloc_local_mem_region::<f32>(a.block_size * a.block_size);
             get_sub_mat(&a, &sub_a).await; //this should be local copy so returns immediately
             do_gemm(&sub_a, &b, c, self.block_size);
-            lamellar::world.free_local_memory_region(sub_a);
         }
-        lamellar::world.free_local_memory_region(b);
     }
 }
 

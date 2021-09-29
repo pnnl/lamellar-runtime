@@ -96,8 +96,6 @@ fn main() {
         };
         world.barrier();
     }
-    world.free_shared_memory_region(array);
-    world.free_local_memory_region(data);
     if my_pe == 0 {
         println!(
             "bandwidths: {}",

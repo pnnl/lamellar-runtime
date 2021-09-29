@@ -1,12 +1,8 @@
 use crate::active_messaging::*;
-//{
-    // ActiveMessageEngine, Cmd, ExecType, LamellarBoxedAm, LamellarReturn, Msg, RetType,
-    // REQUESTS,LamellarBoxedData,
-// };
 use crate::lamellae::{Lamellae,LamellaeAM,SerializeHeader,SerializedData,Ser,Des,SubData};
 use crate::lamellar_team::LamellarTeam;
 
-use crate::scheduler::{NewReqData,AmeSchedulerQueue};
+use crate::scheduler::{ReqData,AmeSchedulerQueue};
 #[cfg(feature = "enable-prof")]
 use lamellar_prof::*;
 use log::trace;
@@ -121,7 +117,7 @@ impl RegisteredActiveMessages{
         func: LamellarFunc, 
         func_size: usize, 
         func_id: AmId, 
-        req_data: Arc<NewReqData>,){
+        req_data: Arc<ReqData>,){
         // println!("adding req {:?} {:?}",func_id,func_size);
         
         let func_header_len = crate::serialized_size::<FuncHeader>(&(0,0));
@@ -179,20 +175,10 @@ impl RegisteredActiveMessages{
             let outgoing_batch_id = self.cur_batch_id.clone();//fetch_add(1, Ordering::Relaxed);
             // println!{"submitting tx_task {:?} {:?}",outgoing_batch_id,req_data.cmd};
             self.scheduler.submit_task( async move{
-                // let mut cnt: usize=0;                       // -- this is a poor mans rate limiter
-                // while cnt < 100000 && total_batch_size.load(Ordering::Relaxed) < 1000000{                          // essentially we want to make sure we
-                //     async_std::task::yield_now().await;     // buffer enough requests to make the
-                //     cnt+=1;                                 // batching worth it but also quick response time
-                // }   
-                // while cnt < 10{                                        // ...can definitely do better
-                //     cnt+=1;
-                    while stall_mark != stall_mark_clone.load(Ordering::Relaxed) && total_batch_size.load(Ordering::Relaxed) < 1000000{
-                        // cnt = 0;
-                        stall_mark = stall_mark_clone.load(Ordering::Relaxed);
-                        async_std::task::yield_now().await;
-                    }
-                    
-                // }
+                while stall_mark != stall_mark_clone.load(Ordering::Relaxed) && total_batch_size.load(Ordering::Relaxed) < 1000000{
+                    stall_mark = stall_mark_clone.load(Ordering::Relaxed);
+                    async_std::task::yield_now().await;
+                }
                 let func_map = { //all requests belonging to a team goin to a specific PE
                     let mut team_map = submitted_ams.lock();
                     if let Some(pe_map) = team_map.get_mut(&req_data.team_hash){
@@ -360,7 +346,7 @@ impl RegisteredActiveMessages{
         func: LamellarFunc, 
         func_size: usize, 
         func_id: AmId, 
-        req_data: Arc<NewReqData>,){
+        req_data: Arc<ReqData>,){
         
         let batch_id = if let Some(batch_id) = &req_data.batch_id{
             *batch_id
@@ -418,7 +404,7 @@ impl RegisteredActiveMessages{
 
     pub (crate) async fn process_am_req (
         &self,
-        mut req_data: NewReqData,
+        mut req_data: ReqData,
        ){ 
         let my_team_pe = if let Ok(my_pe) = req_data.team.team.arch.team_pe(req_data.src) {
             Some(my_pe)
@@ -501,7 +487,7 @@ impl RegisteredActiveMessages{
     
     #[async_recursion]
     async fn exec_local(
-        req_data: Arc<NewReqData>,){
+        req_data: Arc<ReqData>,){
         match req_data.func.clone(){
             LamellarFunc::Am(func) => {
                 // println!("execing remote am locally");
@@ -578,7 +564,7 @@ impl RegisteredActiveMessages{
             let lam_return = func.exec( team.team.world_pe, team.team.num_world_pes, return_am , world.clone(), team.clone()).await;
             match lam_return{
                 LamellarReturn::Unit =>{  
-                    let req_data = NewReqData{
+                    let req_data = ReqData{
                         src: team.team.world_pe ,
                         dst: Some(msg.src as usize), //Some(team.team.arch.team_pe(msg.src as usize).expect("invalid team member")),
                         cmd: ExecType::Am(Cmd::UnitReturn),
@@ -596,7 +582,7 @@ impl RegisteredActiveMessages{
                     panic!("Should not be returning local data from remote  am");
                 }
                 LamellarReturn::RemoteAm(func) => {
-                    let req_data = NewReqData{
+                    let req_data = ReqData{
                         src: team.team.world_pe ,
                         dst: Some(msg.src as usize),//Some(team.team.arch.team_pe(msg.src as usize).expect("invalid team member")),
                         cmd: ExecType::Am(Cmd::AmReturn),
@@ -611,7 +597,7 @@ impl RegisteredActiveMessages{
                     ame.process_msg_new(req_data, None).await;
                 }
                 LamellarReturn::RemoteData(d) => {
-                    let req_data = NewReqData{
+                    let req_data = ReqData{
                         src: team.team.world_pe ,
                         dst: Some(msg.src as usize),//Some(team.team.arch.team_pe(msg.src as usize).expect("invalid team member")),
                         cmd: ExecType::Am(Cmd::DataReturn),
@@ -711,7 +697,7 @@ impl RegisteredActiveMessages{
                 let lam_return = func.exec( team.team.world_pe, team.team.num_world_pes, false , world.clone(), team.clone()).await;
                 let req_data = match lam_return{
                     LamellarReturn::Unit =>{  
-                        NewReqData{
+                        ReqData{
                             src: team.team.world_pe,
                             dst: Some(src),//Some(team.team.arch.team_pe(src).expect("invalid team member")),
                             cmd: ExecType::Am(Cmd::BatchedUnitReturnNew),
@@ -725,7 +711,7 @@ impl RegisteredActiveMessages{
                         }
                     }
                     LamellarReturn::RemoteData(d) => {
-                        NewReqData{
+                        ReqData{
                             src: team.team.world_pe,
                             dst: Some(src),//Some(team.team.arch.team_pe(src).expect("invalid team member")),
                             cmd: ExecType::Am(Cmd::BatchedDataReturn),
@@ -740,7 +726,7 @@ impl RegisteredActiveMessages{
                     },
                     LamellarReturn::RemoteAm(am) => {
                         // println!("returnin remote am");
-                        NewReqData{
+                        ReqData{
                             src: team.team.world_pe,
                             dst: Some(src),//Some(team.team.arch.team_pe(src).expect("invalid team member")),
                             cmd: ExecType::Am(Cmd::BatchedAmReturn),
@@ -821,7 +807,7 @@ impl RegisteredActiveMessages{
                 let lamellae = lamellae.clone();
                 // let ame = ame.clone();
                 self.scheduler.submit_task(async move {
-                    let req_data = Arc::new(NewReqData{
+                    let req_data = Arc::new(ReqData{
                         src: src,
                         dst: Some(src),//Some(team.team.team_pe.unwrap()),
                         cmd: ExecType::Am(Cmd::Exec),
@@ -857,7 +843,7 @@ impl RegisteredActiveMessages{
                 let lamellae = lamellae.clone();
                 // let ame = ame.clone();
                 self.scheduler.submit_task(async move {
-                    let req_data = Arc::new(NewReqData{
+                    let req_data = Arc::new(ReqData{
                         src: src,
                         dst: Some(src),//Some(team.team.team_pe.unwrap()),
                         cmd: ExecType::Am(Cmd::Exec),

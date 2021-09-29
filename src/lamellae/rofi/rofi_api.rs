@@ -39,8 +39,6 @@ pub(crate) fn rofi_barrier() {
 pub(crate) fn rofi_alloc(size: usize, alloc: AllocationType) -> *mut u8 {
     let mut base_ptr: *mut u8 = std::ptr::null_mut();
     let base_ptr_ptr = (&mut base_ptr as *mut _) as *mut *mut std::ffi::c_void;
-    // let mut key = 0u64;
-    // let key_ptr = &mut key as *mut c_ulonglong;
     // println!("rofi_alloc");
     unsafe {
         let ret = match alloc {
@@ -55,9 +53,6 @@ pub(crate) fn rofi_alloc(size: usize, alloc: AllocationType) -> *mut u8 {
         
     }
     //println!("[{:?}] ({:?}:{:?}) rofi_alloc addr: {:x} size {:?}",rofi_get_id(),file!(),line!(),base_ptr as usize, size);
-
-    // let _rofi_slice = unsafe { std::slice::from_raw_parts(base_ptr as *const u8, size) };
-    // rofi_barrier();
     base_ptr
 }
 
@@ -87,17 +82,6 @@ pub(crate) fn rofi_local_addr(remote_pe: usize, remote_addr: usize) -> usize {
     }
     addr
 }
-
-// pub(crate) fn rofi_start_addr(id: u64) -> usize {
-//     let mut addr_ptr: *mut u8 = std::ptr::null_mut();
-//     let addr_ptr_ptr = (&mut addr_ptr as *mut _) as *mut *mut std::ffi::c_void;
-//     unsafe {
-//         if rofisys::rofi_start_addr(id as c_ulonglong, addr_ptr_ptr) != 0 {
-//             panic!("unable to locate remote memory addr");
-//         }
-//     }
-//     addr_ptr as usize
-// }
 
 pub(crate) fn rofi_remote_addr(pe: usize, local_addr: usize) -> usize {
     let addr = unsafe {

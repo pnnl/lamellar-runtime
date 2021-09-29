@@ -32,7 +32,6 @@ impl LamellarAM for DataAM {
             while local_slice[self.length - 1] == 255u8 {
                 async_std::task::yield_now().await;
             }
-            lamellar::team.free_local_memory_region(local);
         }
     }
 }
@@ -131,8 +130,6 @@ fn main() {
         }
         world.barrier();
     }
-    world.free_shared_memory_region(array);
-    world.free_local_memory_region(data);
     if my_pe == num_pes - 1 {
         println!(
             "bandwidths: {}",

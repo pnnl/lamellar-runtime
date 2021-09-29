@@ -121,8 +121,6 @@ fn main() {
                 "-------------------------------------------------------------------------------"
             );
         }
-        world.free_local_memory_region(data);
-        world.free_shared_memory_region(array);
     } else {
         println!("this example is intended for multi pe executions");
     }

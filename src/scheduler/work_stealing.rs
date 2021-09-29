@@ -2,7 +2,7 @@ use crate::active_messaging::{ActiveMessageEngine, ExecType, LamellarFunc};
 use crate::lamellae::{Des, Lamellae, SerializedData};
 use crate::lamellar_request::InternalReq;
 use crate::lamellar_team::LamellarTeam;
-use crate::scheduler::{AmeScheduler, AmeSchedulerQueue, NewReqData, SchedulerQueue};
+use crate::scheduler::{AmeScheduler, AmeSchedulerQueue, ReqData, SchedulerQueue};
 use lamellar_prof::*;
 // use log::trace;
 use crossbeam::deque::Worker;
@@ -111,7 +111,7 @@ pub(crate) struct WorkStealingInner {
 }
 
 impl AmeSchedulerQueue for WorkStealingInner {
-    fn submit_req_new(
+    fn submit_req(
         //unserialized request
         &self,
         ame: Arc<ActiveMessageEngine>,
@@ -126,7 +126,7 @@ impl AmeSchedulerQueue for WorkStealingInner {
         team_hash: u64,
         ireq: Option<InternalReq>,
     ) {
-        let req_data = NewReqData {
+        let req_data = ReqData {
             src: src,
             dst: dst,
             cmd: cmd,
@@ -139,8 +139,6 @@ impl AmeSchedulerQueue for WorkStealingInner {
             team_hash: team_hash,
             // rt_req: false,
         };
-
-        // let work_inj = self.work_inj.clone();
         // println!("submitting_req");
         let num_tasks = self.num_tasks.clone();
         self.stall_mark.fetch_add(1, Ordering::Relaxed);
@@ -204,12 +202,12 @@ impl AmeSchedulerQueue for WorkStealingInner {
         task.detach();
     }
     fn shutdown(&self) {
-        println!("work stealing shuting down {:?}",self.active());
+        // println!("work stealing shuting down {:?}",self.active());
         self.active.store(false, Ordering::Relaxed);
         while self.active_cnt.load(Ordering::Relaxed) > 1 ||self.num_tasks.load(Ordering::Relaxed) > 1 { //this should be the recvtask...
             std::thread::yield_now()
         }
-        println!("work stealing shut down {:?}",self.active());
+        // println!("work stealing shut down {:?}",self.active());
     }
 
     fn exec_task(&self) {
@@ -228,7 +226,7 @@ impl AmeSchedulerQueue for WorkStealingInner {
 
 //#[prof]
 impl SchedulerQueue for WorkStealing {
-    fn submit_req_new(
+    fn submit_req(
         //unserialized request
         &self,
         src: usize,
@@ -242,7 +240,7 @@ impl SchedulerQueue for WorkStealing {
         team_hash: u64,
         ireq: Option<InternalReq>,
     ) {
-        self.inner.submit_req_new(
+        self.inner.submit_req(
             self.ame.clone(),
             src,
             dst,
@@ -370,10 +368,12 @@ impl WorkStealing {
 impl Drop for WorkStealingInner {
     //when is this called with respect to world?
     fn drop(&mut self) {
-        println!("dropping work stealing");
+        // println!("dropping work stealing");
         while let Some(thread) = self.threads.pop() {
-            let _res = thread.join();
+            if thread.thread().id() != std::thread::current().id(){
+                let _res = thread.join();
+            }
         }
-        println!("WorkStealing Scheduler Dropped");
+        // println!("WorkStealing Scheduler Dropped");
     }
 }

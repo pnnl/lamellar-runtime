@@ -2,9 +2,7 @@ use crate::lamellae::{Lamellae, LamellaeRDMA, SerializedData};
 use crate::lamellar_arch::IdError;
 use crate::lamellar_request::{InternalReq, InternalResult, LamellarRequest};
 use crate::lamellar_team::LamellarTeam;
-use crate::scheduler::{AmeScheduler, NewReqData};
-// use async_trait::async_trait;
-// use chashmap::CHashMap;
+use crate::scheduler::{AmeScheduler, ReqData};
 #[cfg(feature = "enable-prof")]
 use lamellar_prof::*;
 use log::trace;
@@ -36,8 +34,6 @@ lazy_static! {
     serde::Serialize, serde::Deserialize, Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord,
 )]
 pub(crate) enum ExecType {
-    #[cfg(feature = "nightly")]
-    Closure(Cmd),
     Am(Cmd),
     Runtime(Cmd),
 }
@@ -79,15 +75,12 @@ pub trait LamellarActiveMessage: DarcSerde {
 pub(crate) enum LamellarFunc {
     LocalAm(LamellarArcLocalAm),
     Am(LamellarArcAm),
-    // Closure(LamellarAny),
     Result(LamellarResultArc),
     None,
 }
 
 pub(crate) type LamellarArcLocalAm = Arc<dyn LamellarActiveMessage + Send + Sync>;
 pub(crate) type LamellarArcAm = Arc<dyn RemoteActiveMessage + Send + Sync>;
-// pub(crate) type LamellarBoxedAm = Box<dyn LamellarActiveMessage + Send + Sync>;
-// pub(crate) type LamellarBoxedData = Box<dyn LamellarSerde>;
 pub(crate) type LamellarAny = Box<dyn std::any::Any + Send + Sync>;
 pub(crate) type LamellarResultArc = Arc<dyn LamellarSerde + Send + Sync>;
 
@@ -104,7 +97,6 @@ pub trait LamellarAM {
 pub enum LamellarReturn {
     LocalData(LamellarAny),
     LocalAm(LamellarArcAm),
-    // RemoteData(LamellarAny,LamellarBoxedAm),
     RemoteData(LamellarResultArc),
     RemoteAm(LamellarArcAm),
     Unit,
@@ -162,12 +154,10 @@ impl AMCounters {
         AMCounters {
             outstanding_reqs: Arc::new(AtomicUsize::new(0)),
             send_req_cnt: AtomicUsize::new(0),
-            // am_exec_cnt: Arc::new(AtomicUsize::new(0)),
         }
     }
     pub(crate) fn add_send_req(&self, num: usize) {
         let _num_reqs = self.outstanding_reqs.fetch_add(num, Ordering::SeqCst);
-        // println!("reqs: {:?}",num_reqs+num);
         self.send_req_cnt.fetch_add(num, Ordering::SeqCst);
     }
 }
@@ -207,7 +197,6 @@ impl Drop for ActiveMessageEngine {
 //#[prof]
 impl ActiveMessageEngine {
     pub(crate) fn new(
-        // num_pes: usize,
         my_pe: usize,
         scheduler: Arc<AmeScheduler>,
         teams: Arc<RwLock<HashMap<u64, Weak<LamellarTeam>>>>,
@@ -221,7 +210,7 @@ impl ActiveMessageEngine {
         }
     }
 
-    pub(crate) async fn process_msg_new(&self, req_data: NewReqData, ireq: Option<InternalReq>) {
+    pub(crate) async fn process_msg_new(&self, req_data: ReqData, ireq: Option<InternalReq>) {
         // trace!("[{:?}] process msg: {:?}",self.my_pe, &req_data);
         if let Some(ireq) = ireq {
             REQUESTS.lock().insert(req_data.id, ireq.clone());
@@ -230,9 +219,6 @@ impl ActiveMessageEngine {
         match req_data.cmd.clone() {
             ExecType::Runtime(_cmd) => {}
             ExecType::Am(_) => self.batched_am.process_am_req(req_data).await,
-
-            #[cfg(feature = "nightly")]
-            ExecType::Closure(_) => process_closure_request(self, req_data, world, team.clone()),
         }
     }
 
@@ -244,8 +230,6 @@ impl ActiveMessageEngine {
         lamellae: Arc<Lamellae>,
         team_hash: u64,
     ) {
-        // println!("[{:?}] exec_msg: {:?} team_hash {:?}", self.my_pe, msg,team_hash);
-
         let (world, team) = {
             let teams = self.teams.read();
             (
@@ -261,21 +245,13 @@ impl ActiveMessageEngine {
                     .expect("team no longer exists"),
             )
         };
-        // trace!("using team {:?}", team.team_hash);
         match msg.cmd.clone() {
-            // ExecType::Am(cmd) => exec_am_cmd(self, cmd, msg, ser_data, lamellae, world, team).await, //execute a remote am
             ExecType::Am(cmd) => {
                 self.batched_am
                     .process_batched_am(ame, cmd, msg, ser_data, lamellae, world, team)
                     .await;
             } //execute a remote am
-
-            #[cfg(feature = "nightly")]
-            ExecType::Closure(cmd) => {
-                exec_closure_cmd(self, cmd, msg, ser_data, lamellae, world, team)
-            }
             ExecType::Runtime(_cmd) => {
-                // self.exec_runtime_cmd(cmd, msg, lamellae, Some(ser_data), team_hash, None, team).await;
             }
         }
     }
@@ -288,24 +264,18 @@ impl ActiveMessageEngine {
         team: Arc<LamellarTeam>,
     ) {
         let reqs = REQUESTS.lock();
-        // let res = REQUESTS[req_id % REQUESTS.len()].get(&req_id);
-        // println!("finalize {:?}",req_id);
         match reqs.get(&req_id) {
             Some(ireq) => {
                 let ireq = ireq.clone();
                 drop(reqs); //release lock in the hashmap
-                            // println!(" send_data_to_user_handle {:?}",  ireq);
                 let _num_reqs = ireq.team_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
-                // println!("team reqs: {:?}",num_reqs);
                 let _num_reqs = ireq.world_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
                 if let Some(tg_outstanding_reqs) = ireq.tg_outstanding_reqs {
                     let _num_reqs = tg_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
                 }
-                // println!("world reqs: {:?}",num_reqs);
                 if let Ok(_) = ireq.data_tx.send((pe as usize, data)) {} //if this returns an error it means the user has dropped the handle
                 let cnt = ireq.cnt.fetch_sub(1, Ordering::SeqCst);
                 if cnt == 1 {
-                    // println!("removing {:?} for {:?}", req_id, pe);
                     REQUESTS.lock().remove(&req_id);
                 }
             }
@@ -320,4 +290,3 @@ impl ActiveMessageEngine {
     }
 }
 
-//
