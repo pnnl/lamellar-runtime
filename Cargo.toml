@@ -123,7 +123,14 @@ path="examples/active_message_examples/am_batch_tests.rs"
 name="am_local"
 path="examples/active_message_examples/am_local.rs"
 
+##---------------Array Examples -------------------##
+[[example]]
+name="dist_array_reduce"
+path="examples/array_examples/dist_array_reduce.rs"
 
+[[example]]
+name="array_am"
+path="examples/array_examples/array_am.rs"
 
 ##------------ RDMA Examples -----------------##
 [[example]]
@@ -148,6 +155,10 @@ path="examples/team_examples/team_am.rs"
 name="custom_team_arch"
 path="examples/team_examples/custom_team_arch.rs"
 
+[[example]]
+name="random_team"
+path="examples/team_examples/random_team.rs"
+
 ##------------ Kernel Examples -----------------##
 [[example]]
 name="am_flops"
@@ -170,21 +181,6 @@ path="examples/kernels/dist_gemm.rs"
 [[example]]
 name="simple_ptp"
 path="examples/misc/simple_ptp.rs"
-
-
-##------------ experimental examples ------------------##
-[[example]]
-name="random_team"
-path="examples/experimental/random_team.rs"
-
-[[example]]
-name="dist_array_reduce"
-path="examples/experimental/dist_array_reduce.rs"
-
-
-[[example]]
-name="array_am"
-path="examples/experimental/array_am.rs"
 
 
 ##------------ Darc examples ------------------##

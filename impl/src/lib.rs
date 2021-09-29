@@ -757,8 +757,8 @@ fn create_add(
         });
         array_impls.extend(quote!{
             #[allow(non_camel_case_types)]
-            impl #lamellar::array::#array_type<#typeident>{
-                pub fn add(&self,index: usize, val: #typeident)->Box<dyn #lamellar::LamellarRequest<Output = ()> + Send + Sync>{
+            impl #lamellar::array::ArrayOps<#typeident> for #lamellar::array::#array_type<#typeident>{
+                fn add(&self,index: usize, val: #typeident)->Box<dyn #lamellar::LamellarRequest<Output = ()> + Send + Sync>{
                     let pe = self.pe_for_dist_index(index);
                     self.dist_add(
                         index,
@@ -788,8 +788,8 @@ fn create_add(
 
     let expanded = quote! {
         #[allow(non_camel_case_types)]
-        impl #lamellar::array::LamellarArray<#typeident>{
-            pub fn add(&self,index: usize, val: #typeident)->Box<dyn #lamellar::LamellarRequest<Output = ()> + Send + Sync>{
+        impl #lamellar::array::ArrayOps<#typeident> for #lamellar::array::LamellarArray<#typeident>{
+            fn add(&self,index: usize, val: #typeident)->Box<dyn #lamellar::LamellarRequest<Output = ()> + Send + Sync>{
                 match self{
                     #match_stmts
                 }

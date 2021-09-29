@@ -108,7 +108,11 @@ where
     }
 }
 
-#[enum_dispatch(LamellarArrayRDMA<T>,LamellarArrayReduce<T>)] //,LamellarArrayIterator<T>)]
+pub trait ArrayOps<T> {
+    fn add(&self, index: usize, val: T) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync>;
+}
+
+#[enum_dispatch(LamellarArrayRDMA<T>,LamellarArrayReduce<T>,ArrayOps<T>)] //,LamellarArrayIterator<T>)]
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 #[serde(bound = "T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static")]
 pub enum LamellarArray<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> {

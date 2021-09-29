@@ -375,6 +375,15 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Un
     }
 }
 
+impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> UnsafeArray<T>
+where
+    UnsafeArray<T>: ArrayOps<T>,
+{
+    pub fn add(&self, index: usize, val: T) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync> {
+        <UnsafeArray<T> as ArrayOps<T>>::add(self, index, val) //this is implemented automatically by a proc macro
+    }
+}
+
 impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + std::fmt::Debug + 'static>
     UnsafeArray<T>
 {
@@ -389,6 +398,13 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + std::fmt::D
         }
     }
 }
+
+// impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + std::ops::AddAssign + 'static,> ArrayOps<T> for UnsafeArray<T> {
+//     #[inline(always)]
+//     fn add(&self, index: usize, val: T) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync> {
+//         self.add(index,val) //this is implemented automatically by a proc macro
+//     }
+// }
 #[lamellar_impl::AmDataRT]
 struct AddAm {
     array: UnsafeArray<u8>,
