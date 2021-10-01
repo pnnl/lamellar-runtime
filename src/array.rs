@@ -182,7 +182,7 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> La
     //         LamellarArray::UnsafeArray(inner) => inner.for_each_mut(op),
     //     }
     // }
-    pub fn dist_iter(&self) -> DistIter<T> {
+    pub fn dist_iter(&self) -> DistIter<'static, T> {
         match self {
             LamellarArray::UnsafeArray(inner) => inner.dist_iter(),
         }
@@ -225,7 +225,7 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Da
 }
 
 impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static>  LamellarIteratorLauncher for LamellarArray<T>{
-    fn for_each<I,F>(&self, iter: I, op: F)
+    fn for_each<I,F>(&self, iter: &I, op: F)
     where
         I: LamellarIterator + 'static,
         F: Fn(I::Item) + Sync + Send + Clone + 'static
@@ -308,7 +308,7 @@ pub trait LamellarArrayRDMA<T: Dist + serde::ser::Serialize + serde::de::Deseria
 
 // #[enum_dispatch]
 pub trait LamellarIteratorLauncher{
-    fn for_each<I,F>(&self, iter: I, op: F)
+    fn for_each<I,F>(&self, iter: &I, op: F)
     where
         I: LamellarIterator + 'static,
         F: Fn(I::Item) + Sync + Send + Clone + 'static,;
@@ -334,6 +334,13 @@ pub struct  DistIter<'a,T: Dist + serde::ser::Serialize + serde::de::Deserialize
     _marker: PhantomData<&'a T>,
 }
 
+impl <T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> DistIter<'static,T>{
+    pub fn for_each<F>(&self,op: F)
+    where
+    F: Fn(&T) + Sync + Send + Clone + 'static{
+        self.data.clone().for_each(self,op);
+    }
+}
 impl<'a, T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'a> LamellarIterator for DistIter<'a,T>
 // where  &'a T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned
 {
@@ -367,10 +374,21 @@ pub struct Enumerate<I>{
     iter: I,
     count: usize
 }
-
-impl <I> Enumerate<I> {
+impl <I> Enumerate<I> 
+where I: LamellarIterator 
+{
     pub(crate) fn new(iter: I, count: usize) -> Enumerate<I> {
         Enumerate {iter, count}
+    }
+}
+
+impl <I> Enumerate<I> 
+where I: LamellarIterator + 'static
+{
+    pub fn for_each<F>(&self,op: F)
+    where
+    F: Fn((usize,<I as LamellarIterator>::Item)) + Sync + Send + Clone + 'static{
+        self.iter.array().for_each(self,op);
     }
 }
 
@@ -405,12 +423,12 @@ pub trait LamellarIterator: Sync + Send + Clone{
     fn enumerate(self) -> Enumerate<Self>{
         Enumerate::new(self,0)
     }
-    fn for_each<F>(self, op: F)
-    where
-        F: Fn(Self::Item) + Sync + Send + Clone
-    {
-        self.array().for_each(self,op);
-    }
+    // fn for_each<F>(self, op: F)
+    // where
+    //     F: Fn(Self::Item) + Sync + Send + Clone
+    // {
+    //     self.array().for_each(self,op);
+    // }
 }
 
 //need to think about iteration a bit more

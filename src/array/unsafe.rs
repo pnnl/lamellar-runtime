@@ -324,7 +324,7 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Un
     //     LamellarArrayDistIter::new(self.clone().into())
     // }
 
-    pub fn dist_iter(&self) -> DistIter<T> {
+    pub fn dist_iter(&self) -> DistIter<'static,T> {
         DistIter{
             data: self.clone().into(),
             cur_i: 0,
@@ -365,7 +365,7 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Un
 }
 
 impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> LamellarIteratorLauncher for UnsafeArray<T> {
-    fn for_each<I,F>(&self, iter: I, op: F)
+    fn for_each<I,F>(&self, iter: &I, op: F)
         where
             I: LamellarIterator + 'static,
             F: Fn(I::Item) + Sync + Send + Clone + 'static,
