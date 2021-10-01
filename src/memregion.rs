@@ -39,6 +39,29 @@ pub enum LamellarMemoryRegion<T: Dist + 'static> {
     Local(LocalMemoryRegion<T>),
 }
 
+impl <T: Dist + 'static> LamellarMemoryRegion<T> {
+    pub unsafe  fn as_mut_slice(&self) -> MemResult<&mut [T]>{
+        match self{
+            LamellarMemoryRegion::Shared(memregion) => memregion.as_mut_slice(), 
+            LamellarMemoryRegion::Local(memregion) => memregion.as_mut_slice(),  
+        }
+    }
+
+    pub unsafe  fn as_slice(&self) -> MemResult<&[T]>{
+        match self{
+            LamellarMemoryRegion::Shared(memregion) => memregion.as_slice(), 
+            LamellarMemoryRegion::Local(memregion) => memregion.as_slice(), 
+        }
+    }
+
+    pub fn sub_region<R: std::ops::RangeBounds<usize>>(&self, range: R) -> LamellarMemoryRegion<T>{
+        match self{
+            LamellarMemoryRegion::Shared(memregion) => memregion.sub_region(range).into(),
+            LamellarMemoryRegion::Local(memregion) => memregion.sub_region(range).into(),
+        }
+    }
+}
+
 impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static>
     From<&LamellarMemoryRegion<T>> for LamellarArrayInput<T>
 {
@@ -82,7 +105,7 @@ pub trait SubRegion<T: Dist + 'static> {
 
 #[enum_dispatch]
 pub(crate) trait AsBase {
-    unsafe fn as_base<B: Dist + 'static>(self) -> LamellarMemoryRegion<B>;
+    unsafe fn to_base<B: Dist + 'static>(self) -> LamellarMemoryRegion<B>;
 }
 
 #[enum_dispatch]
@@ -170,7 +193,7 @@ impl<T: Dist + 'static> MemoryRegion<T> {
     }
 
     #[allow(dead_code)]
-    pub(crate) unsafe fn as_base<B: Dist + 'static>(self) -> MemoryRegion<B> {
+    pub(crate) unsafe fn to_base<B: Dist + 'static>(self) -> MemoryRegion<B> {
         //this is allowed as we consume the old object..
         assert_eq!(
             self.num_bytes % std::mem::size_of::<B>(),
@@ -188,6 +211,8 @@ impl<T: Dist + 'static> MemoryRegion<T> {
             phantom: PhantomData,
         }
     }
+
+   
     // }
 
     //#[prof]
@@ -521,3 +546,4 @@ impl<T: Dist + 'static> std::fmt::Debug for MemoryRegion<T> {
         )
     }
 }
+

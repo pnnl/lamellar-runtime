@@ -179,7 +179,7 @@ impl<T: Dist + 'static> SubRegion<T> for SharedMemoryRegion<T> {
 }
 
 impl<T: Dist + 'static> AsBase for SharedMemoryRegion<T> {
-    unsafe fn as_base<B: Dist + 'static>(self) -> LamellarMemoryRegion<B> {
+    unsafe fn to_base<B: Dist + 'static>(self) -> LamellarMemoryRegion<B> {
         let u8_offset = self.sub_region_offset * std::mem::size_of::<T>();
         let u8_size = self.sub_region_size * std::mem::size_of::<T>();
         SharedMemoryRegion {

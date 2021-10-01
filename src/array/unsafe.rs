@@ -12,6 +12,7 @@ use std::collections::HashMap;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
+use std::ops::Bound;
 
 struct UnsafeArrayInner {
     mem_region: MemoryRegion<u8>,
@@ -253,7 +254,7 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Un
             }
         }
     }
-    pub fn as_base_inner<B: Dist + 'static>(self) -> UnsafeArray<B> {
+    pub fn to_base_inner<B: Dist + 'static>(self) -> UnsafeArray<B> {
         let u8_size = self.size * std::mem::size_of::<T>();
         let b_size = u8_size / std::mem::size_of::<B>();
         let elem_per_pe = b_size as f32 / self.inner.team.num_pes() as f32;
@@ -305,9 +306,13 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Un
         self.reduce("max")
     }
 
-    // pub(crate) fn local_as_ptr(&self) -> *const T {
-    //     self.inner.mem_region.as_casted_ptr::<T>().unwrap()
+    // pub fn local_mem_region(&self) -> &MemoryRegion<T> {
+    //     &self.inner.mem_region
     // }
+
+    pub(crate) fn local_as_ptr(&self) -> *const T {
+        self.inner.mem_region.as_casted_ptr::<T>().unwrap()
+    }
     // pub(crate) fn local_as_mut_ptr(&self) -> *mut T {
     //     self.inner.mem_region.as_casted_mut_ptr::<T>().unwrap()
     // }
@@ -319,9 +324,51 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Un
     //     LamellarArrayDistIter::new(self.clone().into())
     // }
 
-    pub fn for_each<F>(&self, op: F)
-    where
-        F: Fn(&T) + Sync + Send + Clone + 'static,
+    pub fn dist_iter(&self) -> DistIter<T> {
+        DistIter{
+            data: self.clone().into(),
+            cur_i: 0,
+            end_i: 0,
+            _marker: PhantomData
+        }
+    }
+
+    pub fn sub_array<R: std::ops::RangeBounds<usize>>(&self, range: R) -> UnsafeArray<T> {
+        let start = match range.start_bound() {
+            //inclusive
+            Bound::Included(idx) => *idx,
+            Bound::Excluded(idx) => *idx + 1,
+            Bound::Unbounded => 0,
+        };
+        let end = match range.end_bound() {
+            //exclusive
+            Bound::Included(idx) => *idx + 1,
+            Bound::Excluded(idx) => *idx,
+            Bound::Unbounded => self.sub_array_size,
+        };
+        if end > self.sub_array_size {
+            panic!(
+                "subregion range ({:?}-{:?}) exceeds size of array {:?}",
+                start, end, self.sub_array_size
+            );
+        }
+        UnsafeArray {
+            inner: self.inner.clone(),
+            distribution: self.distribution,
+            size: self.size,
+            elem_per_pe: self.elem_per_pe,
+            sub_array_offset: self.sub_array_offset + start,
+            sub_array_size: (end - start),
+            phantom: PhantomData,
+        }
+    }
+}
+
+impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> LamellarIteratorLauncher for UnsafeArray<T> {
+    fn for_each<I,F>(&self, iter: I, op: F)
+        where
+            I: LamellarIterator + 'static,
+            F: Fn(I::Item) + Sync + Send + Clone + 'static,
     {
         let num_workers = match std::env::var("LAMELLAR_THREADS") {
             Ok(n) => n.parse::<usize>().unwrap(),
@@ -334,11 +381,12 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Un
             while ((worker as f64 * elems_per_thread).round() as usize) < num_elems_local {
                 self.inner.team.team.exec_am_local(
                     self.inner.team.clone(),
-                    ForEach {
+                    ForEach{
                         op: op.clone(),
-                        data: self.clone().into(),
+                        data: iter.clone(),
                         start_i: (worker as f64 * elems_per_thread).round() as usize,
                         end_i: ((worker + 1) as f64 * elems_per_thread).round() as usize,
+                        // _marker: PhantomData
                     },
                     Some(self.inner.array_counters.clone()),
                 );
@@ -346,32 +394,38 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Un
             }
         }
     }
-    pub fn for_each_mut<F>(&self, op: F)
-    where
-        F: Fn(&mut T) + Sync + Send + Clone + 'static,
-    {
-        let num_workers = match std::env::var("LAMELLAR_THREADS") {
-            Ok(n) => n.parse::<usize>().unwrap(),
-            Err(_) => 4,
-        };
-        let num_elems_local = self.num_elems_local();
-        let elems_per_thread = num_elems_local as f64 / num_workers as f64;
-        if let Ok(_my_pe) = self.inner.team.team_pe_id() {
-            let mut worker = 0;
-            while ((worker as f64 * elems_per_thread).round() as usize) < num_elems_local {
-                self.inner.team.team.exec_am_local(
-                    self.inner.team.clone(),
-                    ForEachMut {
-                        op: op.clone(),
-                        data: self.clone().into(),
-                        start_i: (worker as f64 * elems_per_thread).round() as usize,
-                        end_i: ((worker + 1) as f64 * elems_per_thread).round() as usize,
-                    },
-                    Some(self.inner.array_counters.clone()),
-                );
-                worker += 1;
-            }
-        }
+    // pub fn for_each_mut<F>(&self, op: F)
+    // where
+    //     F: Fn(&mut T) + Sync + Send + Clone + 'static,
+    // {
+    //     let num_workers = match std::env::var("LAMELLAR_THREADS") {
+    //         Ok(n) => n.parse::<usize>().unwrap(),
+    //         Err(_) => 4,
+    //     };
+    //     let num_elems_local = self.num_elems_local();
+    //     let elems_per_thread = num_elems_local as f64 / num_workers as f64;
+    //     if let Ok(_my_pe) = self.inner.team.team_pe_id() {
+    //         let mut worker = 0;
+    //         while ((worker as f64 * elems_per_thread).round() as usize) < num_elems_local {
+    //             self.inner.team.team.exec_am_local(
+    //                 self.inner.team.clone(),
+    //                 ForEachMut {
+    //                     op: op.clone(),
+    //                     data: self.clone().into(),
+    //                     start_i: (worker as f64 * elems_per_thread).round() as usize,
+    //                     end_i: ((worker + 1) as f64 * elems_per_thread).round() as usize,
+    //                 },
+    //                 Some(self.inner.array_counters.clone()),
+    //             );
+    //             worker += 1;
+    //         }
+    //     }
+    // }
+}
+
+impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> SubArray<T> for UnsafeArray<T> {
+    fn sub_array<R: std::ops::RangeBounds<usize>>(&self, range: R) -> LamellarArray<T> {
+        self.sub_array(range).into()
     }
 }
 
@@ -472,10 +526,10 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> La
         self.local_as_mut_slice()
     }
     #[inline(always)]
-    fn as_base<B: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static>(
+    fn to_base<B: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static>(
         self,
     ) -> LamellarArray<B> {
-        self.as_base_inner::<B>().into()
+        self.to_base_inner::<B>().into()
     }
 }
 
@@ -515,7 +569,7 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> La
         REDUCE_OPS
             .get(&(std::any::TypeId::of::<T>(), op))
             .expect("unexpected reduction type")(
-            self.clone().as_base_inner::<u8>().into(),
+            self.clone().to_base_inner::<u8>().into(),
             self.inner.team.num_pes(),
         )
         // }

@@ -3,12 +3,13 @@ use crate::{active_messaging::*, LamellarTeam, RemoteMemoryRegion}; //{ActiveMes
                                                                     // use crate::lamellar_arch::LamellarArchRT;
 use crate::lamellar_request::LamellarRequest;
 use crate::memregion::{
-    local::LocalMemoryRegion, shared::SharedMemoryRegion, Dist, LamellarMemoryRegion,
+    local::LocalMemoryRegion, shared::SharedMemoryRegion, Dist, LamellarMemoryRegion
 };
 
 use enum_dispatch::enum_dispatch;
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::marker::PhantomData;
 
 pub(crate) mod r#unsafe;
 pub use r#unsafe::UnsafeArray;
@@ -40,7 +41,7 @@ lamellar_impl::generate_reductions_for_type_rt!(u8, u16, u32, u64, u128, usize);
 lamellar_impl::generate_reductions_for_type_rt!(i8, i16, i32, i64, i128, isize);
 lamellar_impl::generate_reductions_for_type_rt!(f32, f64);
 
-#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
+#[derive(serde::Serialize, serde::Deserialize, Clone, Copy, Debug)]
 pub enum Distribution {
     Block,
     Cyclic,
@@ -91,6 +92,16 @@ impl<T: Dist + 'static> MyFrom<T> for LamellarArrayInput<T> {
     }
 }
 
+// impl<T: Dist + 'static> MyFrom<T> for LamellarArrayInput<T> {
+//     fn my_from(val: T, team: &Arc<LamellarTeam>) -> Self {
+//         let buf: LocalMemoryRegion<T> = team.alloc_local_mem_region(1);
+//         unsafe {
+//             buf.as_mut_slice().unwrap()[0] = val;
+//         }
+//         LamellarArrayInput::LocalMemRegion(buf)
+//     }
+// }
+
 pub trait MyFrom<T: ?Sized> {
     fn my_from(val: T, team: &Arc<LamellarTeam>) -> Self;
 }
@@ -112,37 +123,68 @@ pub trait ArrayOps<T> {
     fn add(&self, index: usize, val: T) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync>;
 }
 
-#[enum_dispatch(LamellarArrayRDMA<T>,LamellarArrayReduce<T>,ArrayOps<T>)] //,LamellarArrayIterator<T>)]
+pub trait SubArray<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> {
+    fn sub_array<R: std::ops::RangeBounds<usize>>(&self, range: R) -> LamellarArray<T>;
+}
+
+
+#[enum_dispatch(LamellarArrayRDMA<T>,LamellarArrayReduce<T>,ArrayOps<T>,SubArray<T>)] //,LamellarArrayIterator<T>)]
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 #[serde(bound = "T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static")]
 pub enum LamellarArray<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> {
     UnsafeArray(UnsafeArray<T>),
 }
 impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> LamellarArray<T> {
-    // pub fn local_as_ptr(&self) -> *const T {
-    //     match self {
-    //         LamellarArray::UnsafeArray(inner) => inner.local_as_ptr(),
+    fn sub_array<R: std::ops::RangeBounds<usize>>(&self, range: R) -> LamellarArray<T> {
+        match self {
+            LamellarArray::UnsafeArray(inner) => inner.sub_array(range).into(),
+        }
+    }
+    // pub fn local_mem_region(&self) -> &MemoryRegion<T> {
+    //     match self{
+    //         LamellarArray::UnsafeArray(inner) => inner.local_mem_region(),
     //     }
     // }
+    pub fn put<U: MyInto<LamellarArrayInput<T>>>(&self, index: usize, buf: U){
+        match self {
+            LamellarArray::UnsafeArray(inner) => inner.put(index,buf),
+        }
+    }
+    pub fn get<U: MyInto<LamellarArrayInput<T>>>(&self, index: usize, buf: U){
+        match self {
+            LamellarArray::UnsafeArray(inner) => inner.get(index,buf),
+        }
+    }
+    pub(crate) fn local_as_ptr(&self) -> *const T {
+        match self {
+            LamellarArray::UnsafeArray(inner) => inner.local_as_ptr(),
+        }
+    }
     // pub fn local_as_mut_ptr(&self) -> *mut T {
     //     match self {
     //         LamellarArray::UnsafeArray(inner) => inner.local_as_mut_ptr(),
     //     }
     // }
-    pub fn for_each<F>(&self, op: F)
-    where
-        F: Fn(&T) + Sync + Send + Clone + 'static,
-    {
+    // pub(crate) fn for_each<I,F>(&self, iter: &I, op: F)
+    // where
+    //     I: LamellarIterator,
+    //     F: Fn(&T) + Sync + Send + Clone + 'static,
+    // {
+    //     match self {
+    //         LamellarArray::UnsafeArray(inner) => inner.for_each(iter,op),
+    //     }
+    // }
+    // pub fn for_each_mut<F>(&self, op: F)
+    // where
+    //     F: Fn(&mut T) + Sync + Send + Clone + 'static,
+    // {
+    //     match self {
+    //         LamellarArray::UnsafeArray(inner) => inner.for_each_mut(op),
+    //     }
+    // }
+    pub fn dist_iter(&self) -> DistIter<T> {
         match self {
-            LamellarArray::UnsafeArray(inner) => inner.for_each(op),
-        }
-    }
-    pub fn for_each_mut<F>(&self, op: F)
-    where
-        F: Fn(&mut T) + Sync + Send + Clone + 'static,
-    {
-        match self {
-            LamellarArray::UnsafeArray(inner) => inner.for_each_mut(op),
+            LamellarArray::UnsafeArray(inner) => inner.dist_iter(),
         }
     }
 }
@@ -182,27 +224,44 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Da
     }
 }
 
+impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static>  LamellarIteratorLauncher for LamellarArray<T>{
+    fn for_each<I,F>(&self, iter: I, op: F)
+    where
+        I: LamellarIterator + 'static,
+        F: Fn(I::Item) + Sync + Send + Clone + 'static
+    {
+        match self{
+            LamellarArray::UnsafeArray(inner) => inner.for_each(iter,op)
+        }
+    }
+}
+
 #[lamellar_impl::AmLocalDataRT(Clone)]
-struct ForEach<T, F>
+struct ForEach<I, F>
 where
-    T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static,
-    F: Fn(&T) + Sync + Send,
+    I: LamellarIterator,
+    F: Fn(I::Item) + Sync + Send,
 {
     op: F,
-    data: LamellarArray<T>,
+    // data: LamellarArray<T>,
+    data: I,
     start_i: usize,
     end_i: usize,
 }
 #[lamellar_impl::rt_am_local]
-impl<T, F> LamellarAm for ForEach<T, F>
+impl< I, F> LamellarAm for ForEach<I, F>
 where
-    T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static,
-    F: Fn(&T) + Sync + Send + 'static,
+    I: LamellarIterator + 'static,
+    F: Fn(I::Item) + Sync + Send + 'static,
 {
     fn exec(&self) {
         // self.data.local_as_slice()[self.start_i..self.end_i].iter().for_each((self.op));
         // println!("{:?} {:?} {:?}",lamellar::current_pe,self.start_i,self.end_i);
-        for elem in self.data.local_as_slice()[self.start_i..self.end_i].into_iter() {
+        // for elem in self.data.local_as_slice()[self.start_i..self.end_i].into_iter() {
+        //     (&self.op)(elem)
+        // }
+        let mut iter = self.data.init(self.start_i,self.end_i);
+        while let Some(elem) = iter.next(){
             (&self.op)(elem)
         }
     }
@@ -242,9 +301,17 @@ pub trait LamellarArrayRDMA<T: Dist + serde::ser::Serialize + serde::de::Deseria
     fn get<U: MyInto<LamellarArrayInput<T>>>(&self, index: usize, buf: U);
     fn local_as_slice(&self) -> &[T];
     fn local_as_mut_slice(&self) -> &mut [T];
-    fn as_base<B: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static>(
+    fn to_base<B: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static>(
         self,
     ) -> LamellarArray<B>;
+}
+
+// #[enum_dispatch]
+pub trait LamellarIteratorLauncher{
+    fn for_each<I,F>(&self, iter: I, op: F)
+    where
+        I: LamellarIterator + 'static,
+        F: Fn(I::Item) + Sync + Send + Clone + 'static,;
 }
 
 pub trait LamellarArrayReduce<T>: LamellarArrayRDMA<T>
@@ -257,6 +324,93 @@ where
     fn sum(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync>;
     fn max(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync>;
     fn prod(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync>;
+}
+
+#[derive(Clone)]
+pub struct  DistIter<'a,T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static>{
+    data: LamellarArray<T>,
+    cur_i: usize,
+    end_i: usize,
+    _marker: PhantomData<&'a T>,
+}
+
+impl<'a, T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'a> LamellarIterator for DistIter<'a,T>
+// where  &'a T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned
+{
+    type Item = &'a T;
+    type Array = LamellarArray<T>;
+    fn init(&self,start_i: usize,end_i: usize) -> Self{
+        DistIter{
+            data: self.data.clone(),
+            cur_i: start_i,
+            end_i: end_i,
+            _marker: PhantomData
+        }
+    }
+    fn array(&self) -> Self::Array {
+        self.data.clone()
+    }
+    fn next(&mut self) -> Option<Self::Item>{
+        if self.cur_i < self.end_i{
+            self.cur_i += 1;
+            unsafe {self.data.local_as_ptr().offset((self.cur_i -1)as isize).as_ref()}
+        }
+        else{
+            None
+        }
+    }
+}
+
+
+#[derive(Clone)]
+pub struct Enumerate<I>{
+    iter: I,
+    count: usize
+}
+
+impl <I> Enumerate<I> {
+    pub(crate) fn new(iter: I, count: usize) -> Enumerate<I> {
+        Enumerate {iter, count}
+    }
+}
+
+impl<I> LamellarIterator for Enumerate<I>
+where  
+    I: LamellarIterator,
+{
+    type Item = (usize, <I as LamellarIterator>::Item);
+    type Array = <I as LamellarIterator>::Array;
+    fn init(&self,start_i: usize,end_i: usize) -> Enumerate<I>{
+        Enumerate::new(self.iter.init(start_i,end_i),start_i)
+    }
+    fn array(&self) -> Self::Array {
+        self.iter.array()
+    }
+    fn next(&mut self) -> Option<Self::Item>{
+        let a = self.iter.next()?;
+        let i = self.count;
+        self.count += 1;
+        Some((i, a))
+    }
+}
+
+
+
+pub trait LamellarIterator: Sync + Send + Clone{
+    type Item;
+    type Array: LamellarIteratorLauncher;
+    fn init(&self,start_i: usize, end_i: usize) -> Self;
+    fn array(&self) -> Self::Array;
+    fn next(&mut self) -> Option<Self::Item>;
+    fn enumerate(self) -> Enumerate<Self>{
+        Enumerate::new(self,0)
+    }
+    fn for_each<F>(self, op: F)
+    where
+        F: Fn(Self::Item) + Sync + Send + Clone
+    {
+        self.array().for_each(self,op);
+    }
 }
 
 //need to think about iteration a bit more
@@ -305,9 +459,9 @@ where
 //     type Item = &'a T;
 //     fn next(&mut self) -> Option<Self::Item> {
 //         let res = if self.index < self.array.len() {
-//             let buf_0_u8 = self.buf_0.clone().as_base::<u8>();
+//             let buf_0_u8 = self.buf_0.clone().to_base::<u8>();
 //             let buf_0_slice = unsafe { buf_0_u8.as_mut_slice().unwrap() };
-//             let buf_1_u8 = self.buf_1.clone().as_base::<u8>();
+//             let buf_1_u8 = self.buf_1.clone().to_base::<u8>();
 //             let buf_1_slice = unsafe { buf_1_u8.as_mut_slice().unwrap() };
 //             for i in 0..buf_0_slice.len() {
 //                 buf_0_slice[i] = 0;

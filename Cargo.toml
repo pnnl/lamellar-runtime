@@ -132,6 +132,10 @@ path="examples/array_examples/dist_array_reduce.rs"
 name="array_am"
 path="examples/array_examples/array_am.rs"
 
+[[example]]
+name="array_put_get"
+path="examples/array_examples/array_put_get.rs"
+
 ##------------ RDMA Examples -----------------##
 [[example]]
 name="put"

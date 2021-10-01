@@ -90,7 +90,7 @@ impl<T: Dist + 'static> LocalMemoryRegion<T> {
         }
     }
 
-    pub fn as_base<B: Dist + 'static>(self) -> LocalMemoryRegion<B> {
+    pub fn to_base<B: Dist + 'static>(self) -> LocalMemoryRegion<B> {
         let u8_offset = self.sub_region_offset * std::mem::size_of::<T>();
         let u8_size = self.sub_region_size * std::mem::size_of::<T>();
         LocalMemoryRegion {
@@ -182,8 +182,8 @@ impl<T: Dist + 'static> SubRegion<T> for LocalMemoryRegion<T> {
 }
 
 impl<T: Dist + 'static> AsBase for LocalMemoryRegion<T> {
-    unsafe fn as_base<B: Dist + 'static>(self) -> LamellarMemoryRegion<B> {
-        self.as_base::<B>().into()
+    unsafe fn to_base<B: Dist + 'static>(self) -> LamellarMemoryRegion<B> {
+        self.to_base::<B>().into()
     }
 }
 

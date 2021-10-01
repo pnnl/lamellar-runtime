@@ -648,7 +648,7 @@ fn create_reduction(
 
         gen_match_stmts.extend(quote!{
             #lamellar::array::LamellarArray::#array_type(inner) => std::sync::Arc::new(#reduction_name{
-                data: inner.clone().as_base_inner::<#typeident>() , start_pe: 0, end_pe: num_pes-1}),
+                data: inner.clone().to_base_inner::<#typeident>() , start_pe: 0, end_pe: num_pes-1}),
         });
 
         array_impls.extend(quote!{
