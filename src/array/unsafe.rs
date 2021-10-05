@@ -388,7 +388,7 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Un
 }
 
 impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static>
-    LamellarIteratorLauncher for UnsafeArray<T>
+    DistIteratorLauncher for UnsafeArray<T>
 {
     fn global_index_from_local(&self, index: usize) -> usize {
         let my_pe = self.inner.team.team_pe_id().unwrap();
@@ -402,7 +402,7 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static>
     }
     fn for_each<I, F>(&self, iter: &I, op: F)
     where
-        I: LamellarIterator + 'static,
+        I: DistributedIterator + 'static,
         F: Fn(I::Item) + Sync + Send + Clone + 'static,
     {
         let num_workers = match std::env::var("LAMELLAR_THREADS") {
@@ -431,7 +431,7 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static>
     }
     fn for_each_async<I, F, Fut>(&self, iter: &I, op: F)
     where
-        I: LamellarIterator + 'static,
+        I: DistributedIterator + 'static,
         F: Fn(I::Item) -> Fut + Sync + Send + Clone + 'static,
         Fut: Future<Output = ()> + Sync + Send + 'static,
     {
@@ -486,7 +486,7 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + std::fmt::D
         for pe in 0..self.inner.team.num_pes() {
             self.inner.team.team.barrier();
             if self.inner.team.team_pe_id().unwrap() == pe {
-                println!("[{:?}] {:?}", pe, self.local_as_slice());
+                println!("[pe {:?} data] {:?}", pe, self.local_as_slice());
             }
             std::thread::sleep(std::time::Duration::from_millis(500));
         }
@@ -638,3 +638,9 @@ impl<'a, T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static
         self.iter()
     }
 }
+
+// impl < T> Drop for UnsafeArray<T>{
+//     fn drop(&mut self){
+//         println!("dropping array!!!");
+//     }
+// }

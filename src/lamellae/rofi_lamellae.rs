@@ -84,7 +84,7 @@ impl Rofi {
 //         // while self.active.load(Ordering::SeqCst) != 2 {
 //         //     std::thread::yield_now();
 //         // }
-//         // println!("dropped rofi_lamellae");
+//         println!("dropped rofi_lamellae");
 //         //rofi finit
 //     }
 // }

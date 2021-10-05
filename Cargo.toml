@@ -136,6 +136,10 @@ path="examples/array_examples/array_am.rs"
 name="array_put_get"
 path="examples/array_examples/array_put_get.rs"
 
+[[example]]
+name="array_iteration"
+path="examples/array_examples/array_iteration.rs"
+
 ##------------ RDMA Examples -----------------##
 [[example]]
 name="put"

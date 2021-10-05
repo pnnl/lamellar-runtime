@@ -250,6 +250,7 @@ impl LamellarTeamRT {
         //     "world_counters: {:?}",
         //     Arc::strong_count(&self.world_counters)
         // );
+        // println!("team destroyed")
     }
     #[allow(dead_code)]
     pub fn get_pes(&self) -> Vec<usize> {
@@ -874,32 +875,12 @@ impl RemoteMemoryRegion for Arc<LamellarTeam> {
 //#[prof]
 impl Drop for LamellarTeamRT {
     fn drop(&mut self) {
-        // println!("LamellarTeamRT dropping");
-        // if let Some(parent) = &self.parent{
-        //     println!("parent: {:?}",Arc::strong_count(&parent));
-        // }
-        // let sub_teams = self.sub_teams.read();
-        // for (k,team) in sub_teams.iter(){
-        //     println!("subteam: {:?} {:?}",k,Arc::strong_count(&team));
-        // }
 
         // println!("sechduler_new: {:?}",Arc::strong_count(&self.scheduler));
         // println!("lamellae: {:?}",Arc::strong_count(&self.lamellae));
         // println!("arch: {:?}",Arc::strong_count(&self.arch));
         // println!("world_counters: {:?}",Arc::strong_count(&self.world_counters));
-        // println!("LamellarTeamRT dropped");
-        // // if let None = &self.parent {
-        // //     self.lamellae.shutdown(); //do we want to shutdown the scheduler first?
-        // //     println!("shutdown lamellae, going to shutdown scheduler");
-        // //     self.scheduler.shutdown();
-        // // }
-        // println!("sechduler_new: {:?}", Arc::strong_count(&self.scheduler));
-        // println!("lamellae: {:?}", Arc::strong_count(&self.lamellae));
-        // println!("arch: {:?}", Arc::strong_count(&self.arch));
-        // println!(
-        //     "world_counters: {:?}",
-        //     Arc::strong_count(&self.world_counters)
-        // );
+        
         // println!("LamellarTeamRT dropped");
     }
 }
