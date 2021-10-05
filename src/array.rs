@@ -282,7 +282,6 @@ where
         while let Some(elem) = iter.next() {
             (&self.op)(elem)
         }
-        // println!("done in for each {:?}",std::time::SystemTime::now());
     }
 }
 
@@ -306,12 +305,10 @@ where
     Fut: Future<Output = ()> + Sync + Send + 'static,
 {
     fn exec(&self) {
-        // println!("in for each");
         let mut iter = self.data.init(self.start_i, self.end_i);
         while let Some(elem) = iter.next() {
             (&self.op)(elem).await;
         }
-        // println!("done in for each {:?}",std::time::SystemTime::now());
     }
 }
 
@@ -532,25 +529,8 @@ pub trait LamellarIterator: Sync + Send + Clone {
     fn enumerate(self) -> Enumerate<Self> {
         Enumerate::new(self, 0)
     }
-    // fn for_each<F>(self, op: F)
-    // where
-    //     F: Fn(Self::Item) + Sync + Send + Clone
-    // {
-    //     self.array().for_each(self,op);
-    // }
 }
 
-//need to think about iteration a bit more
-// use core::ptr::NonNull;
-// use core::slice::Iter;
-// use std::marker::PhantomData;
-// pub trait LamellarArrayIterator<T>: LamellarArrayRDMA<T>
-// where
-//     T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static,
-// {
-//     fn iter(&self) -> LamellarArrayIter<'_, T>;
-//     fn dist_iter(&self) -> LamellarArrayDistIter<'_, T>;
-// }
 impl<'a, T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> IntoIterator
     for &'a LamellarArray<T>
 {
@@ -772,43 +752,3 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> It
         res
     }
 }
-
-// pub struct LamellarArrayDistIter<
-//     'a,
-//     T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static,
-// > {
-//     array: LamellarArray<T>,
-//     index: usize,
-//     ptr: NonNull<T>,
-//     _marker: PhantomData<&'a T>,
-// }
-
-// impl<'a, T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static>
-//     LamellarArrayDistIter<'a, T>
-// {
-//     fn new(array: LamellarArray<T>) -> LamellarArrayDistIter<'a, T> {
-//         LamellarArrayDistIter {
-//             array: array.clone(),
-//             index: 0,
-//             ptr: NonNull::new(array.local_as_mut_ptr()).unwrap(),
-//             _marker: PhantomData,
-//         }
-//     }
-// }
-
-// pub trait DistributedIterator: Dist + serde::ser::Serialize + serde::de::DeserializeOwned {
-//     type Item: Dist + serde::ser::Serialize + serde::de::DeserializeOwned;
-//     fn for_each<F>(self, op: F)
-//     where F: Fn(Self::Item) + Sync + Send;
-//     fn for_each_mut<F>(self, op: F)
-//     where F: Fn(Self::Item) + Sync + Send;
-// }
-
-// impl<'a, T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> DistributedIterator
-//     for LamellarArrayDistIter<'a, T>
-// {
-//     type Item = &'a T;
-//     fn for_each<OP>(self, op: OP){
-//         self.array.for_each(op)
-//     }
-// }
