@@ -39,23 +39,23 @@ pub enum LamellarMemoryRegion<T: Dist + 'static> {
     Local(LocalMemoryRegion<T>),
 }
 
-impl <T: Dist + 'static> LamellarMemoryRegion<T> {
-    pub unsafe  fn as_mut_slice(&self) -> MemResult<&mut [T]>{
-        match self{
-            LamellarMemoryRegion::Shared(memregion) => memregion.as_mut_slice(), 
-            LamellarMemoryRegion::Local(memregion) => memregion.as_mut_slice(),  
+impl<T: Dist + 'static> LamellarMemoryRegion<T> {
+    pub unsafe fn as_mut_slice(&self) -> MemResult<&mut [T]> {
+        match self {
+            LamellarMemoryRegion::Shared(memregion) => memregion.as_mut_slice(),
+            LamellarMemoryRegion::Local(memregion) => memregion.as_mut_slice(),
         }
     }
 
-    pub unsafe  fn as_slice(&self) -> MemResult<&[T]>{
-        match self{
-            LamellarMemoryRegion::Shared(memregion) => memregion.as_slice(), 
-            LamellarMemoryRegion::Local(memregion) => memregion.as_slice(), 
+    pub unsafe fn as_slice(&self) -> MemResult<&[T]> {
+        match self {
+            LamellarMemoryRegion::Shared(memregion) => memregion.as_slice(),
+            LamellarMemoryRegion::Local(memregion) => memregion.as_slice(),
         }
     }
 
-    pub fn sub_region<R: std::ops::RangeBounds<usize>>(&self, range: R) -> LamellarMemoryRegion<T>{
-        match self{
+    pub fn sub_region<R: std::ops::RangeBounds<usize>>(&self, range: R) -> LamellarMemoryRegion<T> {
+        match self {
             LamellarMemoryRegion::Shared(memregion) => memregion.sub_region(range).into(),
             LamellarMemoryRegion::Local(memregion) => memregion.sub_region(range).into(),
         }
@@ -212,7 +212,6 @@ impl<T: Dist + 'static> MemoryRegion<T> {
         }
     }
 
-   
     // }
 
     //#[prof]
@@ -546,4 +545,3 @@ impl<T: Dist + 'static> std::fmt::Debug for MemoryRegion<T> {
         )
     }
 }
-

@@ -101,6 +101,10 @@ impl<T: Dist + 'static> LocalMemoryRegion<T> {
             phantom: PhantomData,
         }
     }
+
+    pub fn iter(&self) -> std::slice::Iter<'_, T> {
+        self.as_slice().unwrap().iter()
+    }
 }
 
 impl<T: Dist + 'static> RegisteredMemoryRegion<T> for LocalMemoryRegion<T> {

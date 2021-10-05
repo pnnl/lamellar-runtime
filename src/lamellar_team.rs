@@ -515,7 +515,10 @@ impl LamellarTeamRT {
     {
         trace!("[{:?}] team exec am all request", self.world_pe);
         let tg_outstanding_reqs = match task_group_cnts {
-            Some(task_group_cnts) => Some(task_group_cnts.outstanding_reqs.clone()),
+            Some(task_group_cnts) => {
+                task_group_cnts.add_send_req(self.num_pes);
+                Some(task_group_cnts.outstanding_reqs.clone())
+            }
             None => None,
         };
         let (my_req, ireq) = LamellarRequestHandle::new(
@@ -564,7 +567,10 @@ impl LamellarTeamRT {
     {
         prof_start!(pre);
         let tg_outstanding_reqs = match task_group_cnts {
-            Some(task_group_cnts) => Some(task_group_cnts.outstanding_reqs.clone()),
+            Some(task_group_cnts) => {
+                task_group_cnts.add_send_req(1);
+                Some(task_group_cnts.outstanding_reqs.clone())
+            }
             None => None,
         };
         assert!(pe < self.arch.num_pes());
@@ -623,7 +629,10 @@ impl LamellarTeamRT {
         prof_end!(pre);
         prof_start!(req);
         let tg_outstanding_reqs = match task_group_cnts {
-            Some(task_group_cnts) => Some(task_group_cnts.outstanding_reqs.clone()),
+            Some(task_group_cnts) => {
+                task_group_cnts.add_send_req(1);
+                Some(task_group_cnts.outstanding_reqs.clone())
+            }
             None => None,
         };
         let (my_req, ireq) = LamellarRequestHandle::new(

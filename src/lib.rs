@@ -49,7 +49,7 @@ pub use crate::lamellar_request::LamellarRequest;
 
 pub use crate::array::{LamellarArray, ReduceKey};
 pub use crate::memregion::{
-    local::LocalMemoryRegion, shared::SharedMemoryRegion, RemoteMemoryRegion, LamellarMemoryRegion
+    local::LocalMemoryRegion, shared::SharedMemoryRegion, LamellarMemoryRegion, RemoteMemoryRegion,
 };
 
 pub use crate::darc::global_rw_darc::GlobalRwDarc;
