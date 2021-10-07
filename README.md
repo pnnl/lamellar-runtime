@@ -179,8 +179,8 @@ Note, if running on a single node, you can use the `local` lamellaer e.g. `Backe
 
 
 Currently, Lamellar utilizes a large static allocatio of RDMAable memory for internal Runtime data structures and buffers (work is currently in progress on a more scalable approach), this allocation pool is also used to construct `LamellarLocalMemRegions` (as this operation should not require communication with other PE's).
-The size of this allocation pool is set through the `LAMELLAR_ROFI_MEM_SIZE` environment variable, which can be set to a given number of bytes. The default size is 1GB.
-For examples setting to 20GB could be accomplished with `LAMELLAR_ROFI_MEM_SIZE=$((20*1024*1024*1024))`.
+The size of this allocation pool is set through the `LAMELLAR_MEM_SIZE` environment variable, which can be set to a given number of bytes. The default size is 1GB.
+For examples setting to 20GB could be accomplished with `LAMELLAR_MEM_SIZE=$((20*1024*1024*1024))`.
 
 
 HISTORY

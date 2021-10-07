@@ -57,7 +57,7 @@ fn default_backend() -> Backend {
     #[cfg(feature = "enable-rofi")]
     return Backend::Rofi;
     #[cfg(not(feature = "enable-rofi"))]
-    return Backend::Local;
+    return Backend::Shmem;
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]

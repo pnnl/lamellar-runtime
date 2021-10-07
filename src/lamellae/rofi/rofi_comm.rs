@@ -46,7 +46,7 @@ pub(crate) struct RofiComm {
 //#[prof]
 impl RofiComm {
     pub(crate) fn new(provider: &str) -> RofiComm {
-        if let Ok(size) = std::env::var("LAMELLAR_ROFI_MEM_SIZE") {
+        if let Ok(size) = std::env::var("LAMELLAR_MEM_SIZE") {
             let size = size
                 .parse::<usize>()
                 .expect("invalid memory size, please supply size in bytes");
@@ -107,7 +107,7 @@ impl CommOps for RofiComm{
             // println!("in rt_alloc {:?} addr {:?} in use {:?}",size,addr,self.alloc.occupied());
             Some(addr)
         } else {
-            println!("[WARNING] out of memory: (work in progress on a scalable solution, as a work around try setting the LAMELLAR_ROFI_MEM_SIZE envrionment variable (current size = {:?} -- Note: LamellarLocalArrays are currently allocated out of this pool",ROFI_MEM.load(Ordering::SeqCst));
+            println!("[WARNING] out of memory: (work in progress on a scalable solution, as a work around try setting the LAMELLAR_MEM_SIZE envrionment variable (current size = {:?} -- Note: LamellarLocalArrays are currently allocated out of this pool",ROFI_MEM.load(Ordering::SeqCst));
             None
         }
     }

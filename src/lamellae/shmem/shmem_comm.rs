@@ -1,3 +1,4 @@
+use crate::lamellae::command_queues::CommandQueue;
 use crate::lamellae::{AllocationType, Des, SerializeHeader, SerializedData, SubData,SerializedDataOps};
 use crate::lamellae::comm::*;
 use crate::lamellar_alloc::{BTreeAlloc,LamellarAlloc};
@@ -9,6 +10,9 @@ use std::sync::Arc;
 use std::env;
 use std::collections::HashMap;
 use std::borrow::Borrow;
+use std::error::Error;
+
+
 
 
 struct MyShmem {
@@ -37,63 +41,75 @@ impl MyShmem {
 fn attach_to_shmem(size: usize, id: &str, header: usize, create: bool) -> MyShmem {
     let size = size + std::mem::size_of::<usize>();
     let shmem_id = "lamellar_".to_owned() + &(size.to_string())+"_"+id;
-    // let m = if create {
-    let m = match ShmemConf::new().size(size).os_id(shmem_id.clone()).create() {
-        Ok(m) => {
-            println!("created {:?}", shmem_id);
-
-            if create {
-                let zeros = vec![0u8; size];
-                unsafe {
-                    std::ptr::copy_nonoverlapping(
-                        zeros.as_ptr() as *const u8,
-                        m.as_ptr() as *mut u8,
-                        size,
-                    );
-                    *(m.as_ptr() as *mut _ as *mut usize) = header;
-                }
-            }
-            m
-        }
-        Err(ShmemError::LinkExists) | Err(ShmemError::MappingIdExists) => {
-            match ShmemConf::new().os_id(shmem_id.clone()).open() {
-                Ok(m) => {
-                    println!("attached {:?}", shmem_id);
-                    if create {
-                        let zeros = vec![0u8; size];
-                        unsafe {
-                            std::ptr::copy_nonoverlapping(
-                                zeros.as_ptr() as *const u8,
-                                m.as_ptr() as *mut u8,
-                                size,
-                            );
-                            *(m.as_ptr() as *mut _ as *mut usize) = header;
-                        }
-                        unsafe {
-                            println!(
-                                "updated {:?} {:?}",
-                                shmem_id,
-                                *(m.as_ptr() as *const _ as *const usize)
-                            );
-                        }
+    // let  m = if create {
+    let mut retry = 0;
+    let m = loop{
+        match ShmemConf::new().size(size).os_id(shmem_id.clone()).create() {
+            Ok(m) => {
+                // println!("created {:?}", shmem_id);
+                if create {
+                    let zeros = vec![0u8; size];
+                    unsafe {
+                        std::ptr::copy_nonoverlapping(
+                            zeros.as_ptr() as *const u8,
+                            m.as_ptr() as *mut u8,
+                            size,
+                        );
+                        *(m.as_ptr() as *mut _ as *mut usize) = header;
                     }
-                    m
                 }
-                Err(r) => panic!("unable to attach to shared memory {:?} {:?}", shmem_id, r),
+                break Ok(m);
             }
+            Err(ShmemError::LinkExists) | Err(ShmemError::MappingIdExists) | Err(ShmemError::MapOpenFailed(_)) => {
+                match ShmemConf::new().os_id(shmem_id.clone()).open() {
+                    Ok(m) => {
+                        // println!("attached {:?}", shmem_id);
+                        if create {
+                            let zeros = vec![0u8; size];
+                            unsafe {
+                                std::ptr::copy_nonoverlapping(
+                                    zeros.as_ptr() as *const u8,
+                                    m.as_ptr() as *mut u8,
+                                    size,
+                                );
+                                *(m.as_ptr() as *mut _ as *mut usize) = header;
+                            }
+                            // unsafe {
+                            //     println!(
+                            //         "updated {:?} {:?}",
+                            //         shmem_id,
+                            //         *(m.as_ptr() as *const _ as *const usize)
+                            //     );
+                            // }
+                        }
+                        break Ok(m);
+                    }
+                    Err(ShmemError::MapOpenFailed(_)) if retry < 5 => {
+                        retry+=1;
+                        std::thread::sleep(std::time::Duration::from_millis(50));
+                    },
+                    Err(e) => break Err(e),
+                }
+            }
+            Err(e) => break Err(e),
         }
-        Err(e) => panic!("unable to create shared memory {:?} {:?}", shmem_id, e),
     };
+    let m = match m{
+        Ok(m) => m,
+        Err(e) => panic!("unable to create shared memory {:?} {:?}", shmem_id, e) 
+    };
+
+    
     while (unsafe { *(m.as_ptr() as *const _ as *const usize) } != header) {
         std::thread::yield_now()
     }
-    unsafe {
-        println!(
-            "shmem inited {:?} {:?}",
-            shmem_id,
-            *(m.as_ptr() as *const _ as *const usize)
-        );
-    }
+    // unsafe {
+    //     println!(
+    //         "shmem inited {:?} {:?}",
+    //         shmem_id,
+    //         *(m.as_ptr() as *const _ as *const usize)
+    //     );
+    // }
 
     unsafe {
         MyShmem {
@@ -136,7 +152,6 @@ impl ShmemAlloc{
     where 
     I: Iterator<Item=usize> + Clone{
         let barrier = std::slice::from_raw_parts_mut(self.barrier, self.num_pes) ;
-        println!("b1 {:?}",barrier);
         let mut pes_clone = pes.clone();
         let first_pe = pes_clone.next().unwrap();
         let mut relative_pe = 0;
@@ -147,7 +162,6 @@ impl ShmemAlloc{
             }
             *self.id += 1;
             barrier[self.my_pe] = *self.id;
-            println!("b2 {:?} {:?}",barrier,*self.id);
             for pe in pes_clone{
                 pes_len+=1;
                 while barrier[pe] != *self.id {
@@ -156,21 +170,18 @@ impl ShmemAlloc{
             }
         }
         else{
-            println!("b2 {:?}",barrier);
             while barrier[first_pe] == 0{
                 std::thread::yield_now();
             }
             barrier[self.my_pe] = *self.id;
-            println!("b3 {:?}",barrier);
             for pe in pes_clone{
                 pes_len+=1;
-                println!("{:?} {:?}",first_pe, pe);
                 while barrier[pe] != *self.id {
                     std::thread::yield_now();
                 }
             }
         }
-        println!("going to attach to shmem {:?} {:?} {:?}",size*pes_len,*self.id,self.my_pe);
+        // println!("going to attach to shmem {:?} {:?} {:?}",size*pes_len,*self.id,self.my_pe);
         let shmem = attach_to_shmem(size*pes_len,&((*self.id).to_string()),*self.id,self.my_pe==first_pe);
         barrier[self.my_pe] = 0;
         for pe in pes.into_iter(){
@@ -181,7 +192,6 @@ impl ShmemAlloc{
                 relative_pe +=1;
             }
         }
-        println!("b4 {:?}",barrier);
         if self.my_pe == first_pe{
             self.mutex.as_ref().unwrap().store(0,Ordering::SeqCst);
         }
@@ -202,6 +212,7 @@ pub(crate) struct ShmemComm{
 }
 
 static SHMEM_SIZE: AtomicUsize = AtomicUsize::new(1 * 1024 * 1024 * 1024);
+const RT_MEM: usize = 100 * 1024 * 1024;
 impl ShmemComm {
     pub(crate) fn new() -> ShmemComm {
         let num_pes = match env::var("LAMELLAR_NUM_PES") {
@@ -216,26 +227,33 @@ impl ShmemComm {
             Ok(val) => val.parse::<usize>().unwrap(),
             Err(_e) => 0
         };
-        if let Ok(size) = std::env::var("LAMELLAR_SHMEM_SIZE") {
+        if let Ok(size) = std::env::var("LAMELLAR_MEM_SIZE") {
             let size = size
                 .parse::<usize>()
                 .expect("invalid memory size, please supply size in bytes");
             SHMEM_SIZE.store(size, Ordering::SeqCst);
         }
         
-        let mem_per_pe = SHMEM_SIZE.load(Ordering::SeqCst)/num_pes;
-
-        
+        // let mem_per_pe = SHMEM_SIZE.load(Ordering::SeqCst)/num_pes;
+        let cmd_q_mem = CommandQueue::mem_per_pe() * num_pes;
+        let total_mem = cmd_q_mem + RT_MEM + SHMEM_SIZE.load(Ordering::SeqCst);
+        let mem_per_pe = total_mem/num_pes;
+        let mut alloc = ShmemAlloc::new(num_pes,my_pe,job_id);
+        let (shmem,index) =unsafe {alloc.alloc(mem_per_pe,0..num_pes)};
+        let addr = shmem.as_ptr() as usize + mem_per_pe * index;
+        let mut allocs_map = HashMap::new();
+        allocs_map.insert(addr,(shmem,mem_per_pe));
+        // alloc.0.insert(addr,(ret,size))
         let mut shmem = ShmemComm{
             _shmem: attach_to_shmem(SHMEM_SIZE.load(Ordering::SeqCst),"main",job_id,my_pe==0),
-            base_address: Arc::new(RwLock::new(my_pe * mem_per_pe)),
+            base_address: Arc::new(RwLock::new(addr)),
             size: mem_per_pe,
             alloc: BTreeAlloc::new("shmem".to_string()),
             _init: AtomicBool::new(true),
             num_pes: num_pes,
             my_pe: my_pe,
             comm_mutex: Arc::new(Mutex::new(())),
-            alloc_lock: Arc::new(RwLock::new((HashMap::new(), ShmemAlloc::new(num_pes,my_pe,job_id)))),
+            alloc_lock: Arc::new(RwLock::new((allocs_map, alloc))),
 
         };
         shmem.alloc.init(0,mem_per_pe);
@@ -261,7 +279,7 @@ impl CommOps for ShmemComm{
         if let Some(addr) = self.alloc.try_malloc(size) {
             Some(addr)
         } else {
-            println!("[WARNING] out of memory: (work in progress on a scalable solution, as a work around try setting the LAMELLAR_ROFI_MEM_SIZE envrionment variable (current size = {:?} -- Note: LamellarLocalArrays are currently allocated out of this pool",SHMEM_SIZE.load(Ordering::SeqCst));
+            println!("[WARNING] out of memory: (work in progress on a scalable solution, as a work around try setting the LAMELLAR_MEM_SIZE envrionment variable (current size = {:?} -- Note: LamellarLocalArrays are currently allocated out of this pool",SHMEM_SIZE.load(Ordering::SeqCst));
             None
         }
     }

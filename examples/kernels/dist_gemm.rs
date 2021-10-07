@@ -201,17 +201,17 @@ fn main() {
     let world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();
     let num_pes = world.num_pes();
-    if let Ok(size) = std::env::var("LAMELLAR_ROFI_MEM_SIZE") {
+    if let Ok(size) = std::env::var("LAMELLAR_MEM_SIZE") {
         let size = size
             .parse::<usize>()
             .expect("invalid memory size, please supply size in bytes");
         if size < 300 * 1024 * 1024 * num_pes {
-            println!("This example requires ~300 MB x Num_PEs of 'local' space, please set LAMELLAR_ROFI_MEM_SIZE env var appropriately ");
+            println!("This example requires ~300 MB x Num_PEs of 'local' space, please set LAMELLAR_MEM_SIZE env var appropriately ");
             std::process::exit(1);
         }
     } else if 1 * 1024 * 1024 * 1024 < 300 * 1024 * 1024 * num_pes {
         //1GB is the default space allocated for 'local' buffers
-        println!("This example requires ~300 MB x Num_PEs of 'local' space, please set LAMELLAR_ROFI_MEM_SIZE env var appropriately ");
+        println!("This example requires ~300 MB x Num_PEs of 'local' space, please set LAMELLAR_MEM_SIZE env var appropriately ");
         std::process::exit(1);
     }
 

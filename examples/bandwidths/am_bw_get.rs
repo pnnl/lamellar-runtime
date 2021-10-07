@@ -37,16 +37,16 @@ impl LamellarAM for DataAM {
 }
 
 fn main() {
-    if let Ok(size) = std::env::var("LAMELLAR_ROFI_MEM_SIZE") {
+    if let Ok(size) = std::env::var("LAMELLAR_MEM_SIZE") {
         let size = size
             .parse::<usize>()
             .expect("invalid memory size, please supply size in bytes");
         if size < 8 * 1024 * 1024 * 1024 {
-            println!("This example requires 8GB of 'local' space, please set LAMELLAR_ROFI_MEM_SIZE env var to at least 8589934592 (8GB)");
+            println!("This example requires 8GB of 'local' space, please set LAMELLAR_MEM_SIZE env var to at least 8589934592 (8GB)");
             std::process::exit(1);
         }
     } else {
-        println!("This example requires 8GB of 'local' space, please set LAMELLAR_ROFI_MEM_SIZE env var to at least 8589934592 (8GB)");
+        println!("This example requires 8GB of 'local' space, please set LAMELLAR_MEM_SIZE env var to at least 8589934592 (8GB)");
         std::process::exit(1);
     }
     let world = lamellar::LamellarWorldBuilder::new().build();
