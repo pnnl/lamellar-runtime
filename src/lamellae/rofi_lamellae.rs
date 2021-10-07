@@ -1,9 +1,10 @@
-use crate::lamellae::rofi::command_queues::RofiCommandQueue;
+use crate::lamellae::rofi::command_queues::CommandQueue;
 use crate::lamellae::rofi::rofi_comm::{RofiComm, RofiData};
 use crate::lamellae::{
     AllocationType, Backend, Des, Lamellae, LamellaeAM, LamellaeComm, LamellaeInit, LamellaeRDMA,
-    Ser, SerializeHeader, SerializedData,
+    Ser, SerializeHeader, SerializedData,SerializedDataOps, Comm,
 };
+use crate::lamellae::comm::CommOps;
 use crate::lamellar_arch::LamellarArchRT;
 use crate::scheduler::{Scheduler, SchedulerQueue};
 use std::sync::atomic::{AtomicU8, Ordering};
@@ -16,15 +17,15 @@ use futures::StreamExt;
 pub(crate) struct RofiBuilder {
     my_pe: usize,
     num_pes: usize,
-    rofi_comm: Arc<RofiComm>,
+    rofi_comm: Arc<Comm>,
 }
 
 impl RofiBuilder {
     pub(crate) fn new(provider: &str) -> RofiBuilder {
-        let rofi_comm = Arc::new(RofiComm::new(provider));
+        let rofi_comm: Arc<Comm> = Arc::new(RofiComm::new(provider).into());
         RofiBuilder {
-            my_pe: rofi_comm.my_pe,
-            num_pes: rofi_comm.num_pes,
+            my_pe: rofi_comm.my_pe(),
+            num_pes: rofi_comm.num_pes(),
             rofi_comm: rofi_comm,
         }
     }
@@ -54,25 +55,25 @@ impl LamellaeInit for RofiBuilder {
 pub(crate) struct Rofi {
     my_pe: usize,
     num_pes: usize,
-    rofi_comm: Arc<RofiComm>,
+    rofi_comm: Arc<Comm>,
     active: Arc<AtomicU8>,
-    cq: Arc<RofiCommandQueue>,
+    cq: Arc<CommandQueue>,
 }
 impl Rofi {
-    fn new(my_pe: usize, num_pes: usize, rofi_comm: Arc<RofiComm>) -> Rofi {
+    fn new(my_pe: usize, num_pes: usize, rofi_comm: Arc<Comm>) -> Rofi {
         // println!("my_pe {:?} num_pes {:?}",my_pe,num_pes);
         Rofi {
             my_pe: my_pe,
             num_pes: num_pes,
             rofi_comm: rofi_comm.clone(),
             active: Arc::new(AtomicU8::new(1)),
-            cq: Arc::new(RofiCommandQueue::new(rofi_comm.clone(), my_pe, num_pes)),
+            cq: Arc::new(CommandQueue::new(rofi_comm.clone(), my_pe, num_pes)),
         }
     }
     fn active(&self) -> Arc<AtomicU8> {
         self.active.clone()
     }
-    fn cq(&self) -> Arc<RofiCommandQueue> {
+    fn cq(&self) -> Arc<CommandQueue> {
         self.cq.clone()
     }
 }

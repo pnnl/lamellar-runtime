@@ -930,178 +930,178 @@ impl Drop for LamellarTeam {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::lamellae::{create_lamellae, Backend, Lamellae, LamellaeAM};
-    use crate::lamellar_arch::StridedArch;
-    use crate::schedulers::{create_scheduler, Scheduler, SchedulerType};
-    use std::collections::BTreeMap;
-    #[test]
-    fn multi_team_unique_hash() {
-        let num_pes = 10;
-        let world_pe = 0;
-        let mut lamellae = create_lamellae(Backend::Local);
-        let teams = Arc::new(RwLock::new(HashMap::new()));
+// #[cfg(test)]
+// mod tests {
+//     use super::*;
+//     use crate::lamellae::{create_lamellae, Backend, Lamellae, LamellaeAM};
+//     use crate::lamellar_arch::StridedArch;
+//     use crate::schedulers::{create_scheduler, Scheduler, SchedulerType};
+//     use std::collections::BTreeMap;
+//     #[test]
+//     fn multi_team_unique_hash() {
+//         let num_pes = 10;
+//         let world_pe = 0;
+//         let mut lamellae = create_lamellae(Backend::Local);
+//         let teams = Arc::new(RwLock::new(HashMap::new()));
 
-        let mut sched = create_scheduler(
-            SchedulerType::WorkStealing,
-            num_pes,
-            world_pe,
-            teams.clone(),
-        );
-        lamellae.init_lamellae(sched.get_queue().clone());
-        let lamellae = Arc::new(lamellae);
-        let mut lamellaes: BTreeMap<Backend, Arc<dyn LamellaeAM>> = BTreeMap::new();
-        lamellaes.insert(lamellae.backend(), lamellae.get_am());
-        sched.init(num_pes, world_pe, lamellaes);
-        let counters = Arc::new(AMCounters::new());
-        let root_team = Arc::new(LamellarTeamRT::new(
-            num_pes,
-            world_pe,
-            sched.get_queue().clone(),
-            counters.clone(),
-            lamellae.clone(),
-        ));
-        let child_arch1 = StridedArch::new(0, 1, num_pes);
-        let team1 =
-            LamellarTeamRT::create_subteam_from_arch(root_team.clone(), child_arch1.clone())
-                .unwrap();
-        let team2 =
-            LamellarTeamRT::create_subteam_from_arch(root_team.clone(), child_arch1.clone())
-                .unwrap();
-        let team1_1 =
-            LamellarTeamRT::create_subteam_from_arch(team1.clone(), child_arch1.clone()).unwrap();
-        let team1_2 =
-            LamellarTeamRT::create_subteam_from_arch(team1.clone(), child_arch1.clone()).unwrap();
-        let team2_1 =
-            LamellarTeamRT::create_subteam_from_arch(team2.clone(), child_arch1.clone()).unwrap();
-        let team2_2 =
-            LamellarTeamRT::create_subteam_from_arch(team2.clone(), child_arch1.clone()).unwrap();
+//         let mut sched = create_scheduler(
+//             SchedulerType::WorkStealing,
+//             num_pes,
+//             world_pe,
+//             teams.clone(),
+//         );
+//         lamellae.init_lamellae(sched.get_queue().clone());
+//         let lamellae = Arc::new(lamellae);
+//         let mut lamellaes: BTreeMap<Backend, Arc<dyn LamellaeAM>> = BTreeMap::new();
+//         lamellaes.insert(lamellae.backend(), lamellae.get_am());
+//         sched.init(num_pes, world_pe, lamellaes);
+//         let counters = Arc::new(AMCounters::new());
+//         let root_team = Arc::new(LamellarTeamRT::new(
+//             num_pes,
+//             world_pe,
+//             sched.get_queue().clone(),
+//             counters.clone(),
+//             lamellae.clone(),
+//         ));
+//         let child_arch1 = StridedArch::new(0, 1, num_pes);
+//         let team1 =
+//             LamellarTeamRT::create_subteam_from_arch(root_team.clone(), child_arch1.clone())
+//                 .unwrap();
+//         let team2 =
+//             LamellarTeamRT::create_subteam_from_arch(root_team.clone(), child_arch1.clone())
+//                 .unwrap();
+//         let team1_1 =
+//             LamellarTeamRT::create_subteam_from_arch(team1.clone(), child_arch1.clone()).unwrap();
+//         let team1_2 =
+//             LamellarTeamRT::create_subteam_from_arch(team1.clone(), child_arch1.clone()).unwrap();
+//         let team2_1 =
+//             LamellarTeamRT::create_subteam_from_arch(team2.clone(), child_arch1.clone()).unwrap();
+//         let team2_2 =
+//             LamellarTeamRT::create_subteam_from_arch(team2.clone(), child_arch1.clone()).unwrap();
 
-        println!("{:?}", root_team.team_hash);
-        println!("{:?} -- {:?}", team1.team_hash, team2.team_hash);
-        println!(
-            "{:?} {:?} -- {:?} {:?}",
-            team1_1.team_hash, team1_2.team_hash, team2_1.team_hash, team2_2.team_hash
-        );
+//         println!("{:?}", root_team.team_hash);
+//         println!("{:?} -- {:?}", team1.team_hash, team2.team_hash);
+//         println!(
+//             "{:?} {:?} -- {:?} {:?}",
+//             team1_1.team_hash, team1_2.team_hash, team2_1.team_hash, team2_2.team_hash
+//         );
 
-        assert_ne!(root_team.team_hash, team1.team_hash);
-        assert_ne!(root_team.team_hash, team2.team_hash);
-        assert_ne!(team1.team_hash, team2.team_hash);
-        assert_ne!(team1.team_hash, team1_1.team_hash);
-        assert_ne!(team1.team_hash, team1_2.team_hash);
-        assert_ne!(team2.team_hash, team2_1.team_hash);
-        assert_ne!(team2.team_hash, team2_2.team_hash);
-        assert_ne!(team2.team_hash, team1_1.team_hash);
-        assert_ne!(team2.team_hash, team1_2.team_hash);
-        assert_ne!(team1.team_hash, team2_1.team_hash);
-        assert_ne!(team1.team_hash, team2_2.team_hash);
+//         assert_ne!(root_team.team_hash, team1.team_hash);
+//         assert_ne!(root_team.team_hash, team2.team_hash);
+//         assert_ne!(team1.team_hash, team2.team_hash);
+//         assert_ne!(team1.team_hash, team1_1.team_hash);
+//         assert_ne!(team1.team_hash, team1_2.team_hash);
+//         assert_ne!(team2.team_hash, team2_1.team_hash);
+//         assert_ne!(team2.team_hash, team2_2.team_hash);
+//         assert_ne!(team2.team_hash, team1_1.team_hash);
+//         assert_ne!(team2.team_hash, team1_2.team_hash);
+//         assert_ne!(team1.team_hash, team2_1.team_hash);
+//         assert_ne!(team1.team_hash, team2_2.team_hash);
 
-        assert_ne!(team1_1.team_hash, team1_2.team_hash);
-        assert_ne!(team1_1.team_hash, team2_1.team_hash);
-        assert_ne!(team1_1.team_hash, team2_2.team_hash);
+//         assert_ne!(team1_1.team_hash, team1_2.team_hash);
+//         assert_ne!(team1_1.team_hash, team2_1.team_hash);
+//         assert_ne!(team1_1.team_hash, team2_2.team_hash);
 
-        assert_ne!(team1_2.team_hash, team2_1.team_hash);
-        assert_ne!(team1_2.team_hash, team2_2.team_hash);
+//         assert_ne!(team1_2.team_hash, team2_1.team_hash);
+//         assert_ne!(team1_2.team_hash, team2_2.team_hash);
 
-        assert_ne!(team2_1.team_hash, team2_2.team_hash);
-    }
-    // #[test]
-    // fn asymetric_teams(){
+//         assert_ne!(team2_1.team_hash, team2_2.team_hash);
+//     }
+//     // #[test]
+//     // fn asymetric_teams(){
 
-    // }
+//     // }
 
-    #[test]
-    fn multi_team_unique_hash2() {
-        let num_pes = 10;
-        let world_pe = 0;
-        let mut lamellae = create_lamellae(Backend::Local);
-        let teams = Arc::new(RwLock::new(HashMap::new()));
+//     #[test]
+//     fn multi_team_unique_hash2() {
+//         let num_pes = 10;
+//         let world_pe = 0;
+//         let mut lamellae = create_lamellae(Backend::Local);
+//         let teams = Arc::new(RwLock::new(HashMap::new()));
 
-        let mut sched = create_scheduler(
-            SchedulerType::WorkStealing,
-            num_pes,
-            world_pe,
-            teams.clone(),
-        );
-        lamellae.init_lamellae(sched.get_queue().clone());
-        let lamellae = Arc::new(lamellae);
-        let mut lamellaes: BTreeMap<Backend, Arc<dyn LamellaeAM>> = BTreeMap::new();
-        lamellaes.insert(lamellae.backend(), lamellae.get_am());
-        sched.init(num_pes, world_pe, lamellaes);
-        let counters = Arc::new(AMCounters::new());
+//         let mut sched = create_scheduler(
+//             SchedulerType::WorkStealing,
+//             num_pes,
+//             world_pe,
+//             teams.clone(),
+//         );
+//         lamellae.init_lamellae(sched.get_queue().clone());
+//         let lamellae = Arc::new(lamellae);
+//         let mut lamellaes: BTreeMap<Backend, Arc<dyn LamellaeAM>> = BTreeMap::new();
+//         lamellaes.insert(lamellae.backend(), lamellae.get_am());
+//         sched.init(num_pes, world_pe, lamellaes);
+//         let counters = Arc::new(AMCounters::new());
 
-        let mut root_teams = Vec::new();
-        for pe in 0..num_pes {
-            root_teams.push(Arc::new(LamellarTeamRT::new(
-                num_pes,
-                pe,
-                sched.get_queue().clone(),
-                counters.clone(),
-                lamellae.clone(),
-            )));
-        }
-        let root_hash = root_teams[0].team_hash;
-        for root_team in &root_teams {
-            assert_eq!(root_hash, root_team.team_hash);
-        }
+//         let mut root_teams = Vec::new();
+//         for pe in 0..num_pes {
+//             root_teams.push(Arc::new(LamellarTeamRT::new(
+//                 num_pes,
+//                 pe,
+//                 sched.get_queue().clone(),
+//                 counters.clone(),
+//                 lamellae.clone(),
+//             )));
+//         }
+//         let root_hash = root_teams[0].team_hash;
+//         for root_team in &root_teams {
+//             assert_eq!(root_hash, root_team.team_hash);
+//         }
 
-        let odds_arch = StridedArch::new(1, 2, num_pes / 2);
-        let odd_childs: Vec<_> = root_teams
-            .iter()
-            .map(|team| {
-                LamellarTeamRT::create_subteam_from_arch(team.clone(), odds_arch.clone()).unwrap()
-            })
-            .collect();
+//         let odds_arch = StridedArch::new(1, 2, num_pes / 2);
+//         let odd_childs: Vec<_> = root_teams
+//             .iter()
+//             .map(|team| {
+//                 LamellarTeamRT::create_subteam_from_arch(team.clone(), odds_arch.clone()).unwrap()
+//             })
+//             .collect();
 
-        let evens_arch = StridedArch::new(0, 2, num_pes / 2);
-        let even_childs: Vec<_> = root_teams
-            .iter()
-            .step_by(2)
-            .map(|team| {
-                LamellarTeamRT::create_subteam_from_arch(team.clone(), evens_arch.clone()).unwrap()
-            })
-            .collect();
+//         let evens_arch = StridedArch::new(0, 2, num_pes / 2);
+//         let even_childs: Vec<_> = root_teams
+//             .iter()
+//             .step_by(2)
+//             .map(|team| {
+//                 LamellarTeamRT::create_subteam_from_arch(team.clone(), evens_arch.clone()).unwrap()
+//             })
+//             .collect();
 
-        let hash = odd_childs[0].team_hash;
-        for child in odd_childs {
-            assert_eq!(hash, child.team_hash);
-        }
+//         let hash = odd_childs[0].team_hash;
+//         for child in odd_childs {
+//             assert_eq!(hash, child.team_hash);
+//         }
 
-        let hash = even_childs[0].team_hash;
-        for child in even_childs {
-            assert_eq!(hash, child.team_hash);
-        }
+//         let hash = even_childs[0].team_hash;
+//         for child in even_childs {
+//             assert_eq!(hash, child.team_hash);
+//         }
 
-        // let odds_odds_arch = StridedArch::new(1,2,num_pes);
+//         // let odds_odds_arch = StridedArch::new(1,2,num_pes);
 
-        // println!("{:?}", root_team.team_hash);
-        // println!("{:?} -- {:?}", team1.team_hash, team2.team_hash);
-        // println!(
-        //     "{:?} {:?} -- {:?} {:?}",
-        //     team1_1.team_hash, team1_2.team_hash, team2_1.team_hash, team2_2.team_hash
-        // );
+//         // println!("{:?}", root_team.team_hash);
+//         // println!("{:?} -- {:?}", team1.team_hash, team2.team_hash);
+//         // println!(
+//         //     "{:?} {:?} -- {:?} {:?}",
+//         //     team1_1.team_hash, team1_2.team_hash, team2_1.team_hash, team2_2.team_hash
+//         // );
 
-        // assert_ne!(root_team.team_hash, team1.team_hash);
-        // assert_ne!(root_team.team_hash, team2.team_hash);
-        // assert_ne!(team1.team_hash, team2.team_hash);
-        // assert_ne!(team1.team_hash, team1_1.team_hash);
-        // assert_ne!(team1.team_hash, team1_2.team_hash);
-        // assert_ne!(team2.team_hash, team2_1.team_hash);
-        // assert_ne!(team2.team_hash, team2_2.team_hash);
-        // assert_ne!(team2.team_hash, team1_1.team_hash);
-        // assert_ne!(team2.team_hash, team1_2.team_hash);
-        // assert_ne!(team1.team_hash, team2_1.team_hash);
-        // assert_ne!(team1.team_hash, team2_2.team_hash);
+//         // assert_ne!(root_team.team_hash, team1.team_hash);
+//         // assert_ne!(root_team.team_hash, team2.team_hash);
+//         // assert_ne!(team1.team_hash, team2.team_hash);
+//         // assert_ne!(team1.team_hash, team1_1.team_hash);
+//         // assert_ne!(team1.team_hash, team1_2.team_hash);
+//         // assert_ne!(team2.team_hash, team2_1.team_hash);
+//         // assert_ne!(team2.team_hash, team2_2.team_hash);
+//         // assert_ne!(team2.team_hash, team1_1.team_hash);
+//         // assert_ne!(team2.team_hash, team1_2.team_hash);
+//         // assert_ne!(team1.team_hash, team2_1.team_hash);
+//         // assert_ne!(team1.team_hash, team2_2.team_hash);
 
-        // assert_ne!(team1_1.team_hash, team1_2.team_hash);
-        // assert_ne!(team1_1.team_hash, team2_1.team_hash);
-        // assert_ne!(team1_1.team_hash, team2_2.team_hash);
+//         // assert_ne!(team1_1.team_hash, team1_2.team_hash);
+//         // assert_ne!(team1_1.team_hash, team2_1.team_hash);
+//         // assert_ne!(team1_1.team_hash, team2_2.team_hash);
 
-        // assert_ne!(team1_2.team_hash, team2_1.team_hash);
-        // assert_ne!(team1_2.team_hash, team2_2.team_hash);
+//         // assert_ne!(team1_2.team_hash, team2_1.team_hash);
+//         // assert_ne!(team1_2.team_hash, team2_2.team_hash);
 
-        // assert_ne!(team2_1.team_hash, team2_2.team_hash);
-    }
-}
+//         // assert_ne!(team2_1.team_hash, team2_2.team_hash);
+//     }
+// }

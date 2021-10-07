@@ -337,9 +337,7 @@ fn main() {
     //--------------------rayon---------------------
     if run_single_node {
         let timer = Instant::now();
-        dft_rayon(full_signal_array.local_as_slice().unwrap(), unsafe {
-            full_spectrum_array.local_as_mut_slice().unwrap()
-        });
+        dft_rayon(full_signal_array.local_as_slice(), full_spectrum_array.local_as_mut_slice());
         let time = timer.elapsed().as_secs_f64();
         println!(
             "rayon sum: {:?} time: {:?}",

@@ -9,6 +9,9 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use enum_dispatch::enum_dispatch;
 
+pub(crate) mod comm;
+use comm::{Comm};
+
 pub(crate) mod local_lamellae;
 use local_lamellae::{Local, LocalData};
 #[cfg(feature = "enable-rofi")]
@@ -20,7 +23,9 @@ pub(crate) mod rofi_lamellae;
 use rofi::rofi_comm::RofiData;
 #[cfg(feature = "enable-rofi")]
 use rofi_lamellae::{Rofi, RofiBuilder};
-// pub(crate) mod shmem_lamellae;
+
+pub(crate) mod shmem_lamellae;
+mod shmem;
 
 #[derive(
     serde::Serialize, serde::Deserialize, Debug, PartialEq, Eq, Ord, PartialOrd, Hash, Clone, Copy,
@@ -59,12 +64,19 @@ pub(crate) struct SerializeHeader {
     pub(crate) id: AmId,
 }
 
-#[enum_dispatch(Des, SubData)]
+#[enum_dispatch(Des, SubData, SerializedDataOps)]
 #[derive(Clone)]
 pub(crate) enum SerializedData {
     #[cfg(feature = "enable-rofi")]
     RofiData,
     LocalData,
+}
+
+#[enum_dispatch]
+pub(crate) trait SerializedDataOps{
+    fn header_as_bytes(&self) -> &mut [u8];
+    fn increment_cnt(&self);
+    fn len(&self) -> usize;
 }
 
 #[enum_dispatch]

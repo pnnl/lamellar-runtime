@@ -3,7 +3,7 @@ use lamellar::{ActiveMessaging, LamellarArray, LamellarMemoryRegion, RemoteMemor
 use std::time::Instant;
 
 fn initialize_array(array: &LamellarArray<usize>) {
-    array.for_each_mut(|x| *x = 0);
+    array.dist_iter_mut().for_each(|x| *x = 0);
 }
 
 fn initialize_mem_region(memregion: &LamellarMemoryRegion<usize>) {

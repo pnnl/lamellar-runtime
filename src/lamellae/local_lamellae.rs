@@ -1,6 +1,6 @@
 use crate::lamellae::{
     AllocationType, Backend, Des, Lamellae, LamellaeAM, LamellaeComm, LamellaeInit, LamellaeRDMA,
-    Ser, SerializeHeader, SerializedData, SubData,
+    Ser, SerializeHeader, SerializedData, SubData,SerializedDataOps,
 };
 use crate::lamellar_arch::LamellarArchRT;
 use crate::scheduler::Scheduler;
@@ -30,7 +30,7 @@ impl Des for LocalData {
         panic!("should not be deserializing in local");
     }
     fn data_as_bytes(&self) -> &mut [u8] {
-        &mut []
+        panic!("should not be deserializing in local");
     }
     fn header_and_data_as_bytes(&self) -> &mut [u8] {
         &mut []
@@ -41,6 +41,16 @@ impl Des for LocalData {
 impl SubData for LocalData {
     fn sub_data(&self, _start: usize, _end: usize) -> SerializedData {
         SerializedData::LocalData(self.clone())
+    }
+}
+
+impl SerializedDataOps for LocalData{
+    fn header_as_bytes(&self) -> &mut [u8]{
+        panic!("should not be deserializing in local");
+    }
+    fn increment_cnt(&self){ }
+    fn len(&self) -> usize{
+        0
     }
 }
 
