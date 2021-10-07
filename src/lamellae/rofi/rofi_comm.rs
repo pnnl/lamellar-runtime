@@ -1,4 +1,4 @@
-use crate::lamellae::rofi::command_queues::CommandQueue;
+use crate::lamellae::command_queues::CommandQueue;
 use crate::lamellae::rofi::rofi_api::*;
 use crate::lamellae::{AllocationType, Des, SerializeHeader, SerializedData, SubData,SerializedDataOps};
 use crate::lamellae::comm::*;

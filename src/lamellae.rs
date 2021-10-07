@@ -9,6 +9,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use enum_dispatch::enum_dispatch;
 
+pub(crate) mod command_queues;
 pub(crate) mod comm;
 use comm::{Comm};
 
@@ -25,6 +26,8 @@ use rofi::rofi_comm::RofiData;
 use rofi_lamellae::{Rofi, RofiBuilder};
 
 pub(crate) mod shmem_lamellae;
+use shmem::shmem_comm::ShmemData;
+use shmem_lamellae::{Shmem, ShmemBuilder};
 mod shmem;
 
 #[derive(
@@ -34,7 +37,7 @@ pub enum Backend {
     #[cfg(feature = "enable-rofi")]
     Rofi,
     Local,
-    // Shmem,
+    Shmem,
 }
 
 #[derive(Debug, Clone)]
@@ -69,6 +72,7 @@ pub(crate) struct SerializeHeader {
 pub(crate) enum SerializedData {
     #[cfg(feature = "enable-rofi")]
     RofiData,
+    ShmemData,
     LocalData,
 }
 
@@ -97,6 +101,7 @@ pub(crate) trait SubData {
 pub(crate) enum LamellaeBuilder {
     #[cfg(feature = "enable-rofi")]
     RofiBuilder,
+    ShmemBuilder,
     Local,
 }
 
@@ -126,6 +131,7 @@ pub(crate) trait Ser {
 pub(crate) enum Lamellae {
     #[cfg(feature = "enable-rofi")]
     Rofi,
+    Shmem,
     Local,
 }
 
@@ -187,7 +193,7 @@ pub(crate) fn create_lamellae(backend: Backend) -> LamellaeBuilder {
             };
             LamellaeBuilder::RofiBuilder(RofiBuilder::new(provider))
         }
-        // Backend::Shmem => Box::new(shmem_lamellae::ShmemLamellae::new()),
+        Backend::Shmem => LamellaeBuilder::ShmemBuilder(ShmemBuilder::new()),
         Backend::Local => LamellaeBuilder::Local(Local::new()),
     }
 }

@@ -1,5 +1,6 @@
+use crate::lamellae::shmem::*;
+use crate::lamellae::shmem::shmem_comm::*;
 use crate::lamellae::command_queues::CommandQueue;
-use crate::lamellae::rofi::rofi_comm::{RofiComm, RofiData};
 use crate::lamellae::{
     AllocationType, Backend, Des, Lamellae, LamellaeAM, LamellaeComm, LamellaeInit, LamellaeRDMA,
     Ser, SerializeHeader, SerializedData,SerializedDataOps, Comm,
@@ -14,60 +15,63 @@ use async_trait::async_trait;
 use futures::stream::FuturesUnordered;
 use futures::StreamExt;
 
-pub(crate) struct RofiBuilder {
+
+pub(crate) struct ShmemBuilder{
     my_pe: usize,
     num_pes: usize,
-    rofi_comm: Arc<Comm>,
+    shmem_comm: Arc<Comm>,
 }
 
-impl RofiBuilder {
-    pub(crate) fn new(provider: &str) -> RofiBuilder {
-        let rofi_comm: Arc<Comm> = Arc::new(RofiComm::new(provider).into());
-        RofiBuilder {
-            my_pe: rofi_comm.my_pe(),
-            num_pes: rofi_comm.num_pes(),
-            rofi_comm: rofi_comm,
+impl ShmemBuilder {
+    pub(crate) fn new() -> ShmemBuilder {
+        let shmem_comm: Arc<Comm> = Arc::new(ShmemComm::new().into());
+        ShmemBuilder {
+            my_pe: shmem_comm.my_pe(),
+            num_pes: shmem_comm.num_pes(),
+            shmem_comm: shmem_comm,
         }
     }
 }
 
-impl LamellaeInit for RofiBuilder {
+impl LamellaeInit for ShmemBuilder {
     fn init_fabric(&mut self) -> (usize, usize) {
         (self.my_pe, self.num_pes)
     }
     fn init_lamellae(&mut self, scheduler: Arc<Scheduler>) -> Arc<Lamellae> {
-        let rofi = Rofi::new(self.my_pe, self.num_pes, self.rofi_comm.clone());
-        let cq_clone = rofi.cq();
+        let shmem = Shmem::new(self.my_pe, self.num_pes, self.shmem_comm.clone());
+        let cq_clone = shmem.cq();
         let scheduler_clone = scheduler.clone();
-        let active_clone = rofi.active();
+        let active_clone = shmem.active();
 
-        let rofi = Arc::new(Lamellae::Rofi(rofi));
-        let rofi_clone = rofi.clone();
+        let shmem = Arc::new(Lamellae::Shmem(shmem));
+        let shmem_clone = shmem.clone();
         scheduler.submit_task(async move {
             cq_clone
-                .recv_data(scheduler_clone.clone(), rofi_clone.clone(), active_clone)
+                .recv_data(scheduler_clone.clone(), shmem_clone.clone(), active_clone)
                 .await;
         });
-        rofi
+        shmem
     }
 }
 
-pub(crate) struct Rofi {
+
+pub(crate) struct Shmem {
     my_pe: usize,
     num_pes: usize,
-    rofi_comm: Arc<Comm>,
+    shmem_comm: Arc<Comm>,
     active: Arc<AtomicU8>,
     cq: Arc<CommandQueue>,
 }
-impl Rofi {
-    fn new(my_pe: usize, num_pes: usize, rofi_comm: Arc<Comm>) -> Rofi {
+
+impl Shmem {
+    fn new(my_pe: usize, num_pes: usize, shmem_comm: Arc<Comm>) -> Shmem {
         // println!("my_pe {:?} num_pes {:?}",my_pe,num_pes);
-        Rofi {
+        Shmem {
             my_pe: my_pe,
             num_pes: num_pes,
-            rofi_comm: rofi_comm.clone(),
+            shmem_comm: shmem_comm.clone(),
             active: Arc::new(AtomicU8::new(1)),
-            cq: Arc::new(CommandQueue::new(rofi_comm.clone(), my_pe, num_pes)),
+            cq: Arc::new(CommandQueue::new(shmem_comm.clone(), my_pe, num_pes)),
         }
     }
     fn active(&self) -> Arc<AtomicU8> {
@@ -78,19 +82,19 @@ impl Rofi {
     }
 }
 
-// impl Drop for Rofi{
+// impl Drop for Shmem{
 //     fn drop(&mut self){
-//         // println!("dropping rofi_lamellae");
+//         // println!("dropping shmem_lamellae");
 //         // self.active.store(0, Ordering::SeqCst);
 //         // while self.active.load(Ordering::SeqCst) != 2 {
 //         //     std::thread::yield_now();
 //         // }
-//         println!("dropped rofi_lamellae");
-//         //rofi finit
+//         println!("dropped shmem_lamellae");
+//         //shmem finit
 //     }
 // }
 
-impl LamellaeComm for Rofi {
+impl LamellaeComm for Shmem {
     // this is a global barrier (hopefully using hardware)
     fn my_pe(&self) -> usize {
         self.my_pe
@@ -99,31 +103,31 @@ impl LamellaeComm for Rofi {
         self.num_pes
     }
     fn barrier(&self) {
-        self.rofi_comm.barrier()
+        self.shmem_comm.barrier()
     }
     fn backend(&self) -> Backend {
-        Backend::Rofi
+        Backend::Shmem
     }
     #[allow(non_snake_case)]
     fn MB_sent(&self) -> f64 {
-        // println!("put: {:?} get: {:?}",self.rofi_comm.put_amt.load(Ordering::SeqCst),self.rofi_comm.get_amt.load(Ordering::SeqCst));
-        // (self.rofi_comm.put_amt.load(Ordering::SeqCst) + self.rofi_comm.get_amt.load(Ordering::SeqCst)) as
+        // println!("put: {:?} get: {:?}",self.shmem_comm.put_amt.load(Ordering::SeqCst),self.shmem_comm.get_amt.load(Ordering::SeqCst));
+        // (self.shmem_comm.put_amt.load(Ordering::SeqCst) + self.shmem_comm.get_amt.load(Ordering::SeqCst)) as
         self.cq.tx_amount() as f64 / 1_000_000.0
     }
     fn print_stats(&self) {}
     fn shutdown(&self) {
-        // println!("Rofi Lamellae shuting down");
+        // println!("Shmem Lamellae shuting down");
         self.active.store(0, Ordering::Relaxed);
         // println!("set active to 0");
         while self.active.load(Ordering::SeqCst) != 2 {
             std::thread::yield_now();
         }
-        // println!("Rofi Lamellae shut down");
+        // println!("Shmem Lamellae shut down");
     }
 }
 
 #[async_trait]
-impl LamellaeAM for Rofi {
+impl LamellaeAM for Shmem {
     async fn send_to_pe_async(&self, pe: usize, data: SerializedData) {
         self.cq.send_data(data, pe).await;
     } //should never send to self... this is short circuited before request is serialized in the active message layer
@@ -147,7 +151,7 @@ impl LamellaeAM for Rofi {
     }
 }
 #[async_trait]
-impl Ser for Rofi {
+impl Ser for Shmem {
     async fn serialize<T: Send + Sync + serde::Serialize + ?Sized>(
         &self,
         header: Option<SerializeHeader>,
@@ -155,10 +159,10 @@ impl Ser for Rofi {
     ) -> Result<SerializedData, anyhow::Error> {
         let header_size = std::mem::size_of::<Option<SerializeHeader>>();
         let data_size = bincode::serialized_size(obj)? as usize;
-        let ser_data = RofiData::new(self.rofi_comm.clone(), header_size + data_size).await;
+        let ser_data = ShmemData::new(self.shmem_comm.clone(), header_size + data_size).await;
         bincode::serialize_into(ser_data.header_as_bytes(), &header)?;
         bincode::serialize_into(ser_data.data_as_bytes(), obj)?;
-        Ok(SerializedData::RofiData(ser_data))
+        Ok(SerializedData::ShmemData(ser_data))
     }
     async fn serialize_header(
         &self,
@@ -166,48 +170,48 @@ impl Ser for Rofi {
         serialized_size: usize,
     ) -> Result<SerializedData, anyhow::Error> {
         let header_size = std::mem::size_of::<Option<SerializeHeader>>();
-        let ser_data = RofiData::new(self.rofi_comm.clone(), header_size + serialized_size).await;
+        let ser_data = ShmemData::new(self.shmem_comm.clone(), header_size + serialized_size).await;
         bincode::serialize_into(ser_data.header_as_bytes(), &header)?;
-        Ok(SerializedData::RofiData(ser_data))
+        Ok(SerializedData::ShmemData(ser_data))
     }
 }
 
 #[allow(dead_code, unused_variables)]
-impl LamellaeRDMA for Rofi {
+impl LamellaeRDMA for Shmem {
     fn put(&self, pe: usize, src: &[u8], dst: usize) {
-        self.rofi_comm.put(pe, src, dst);
+        self.shmem_comm.put(pe, src, dst);
     }
     fn iput(&self, pe: usize, src: &[u8], dst: usize) {
-        self.rofi_comm.iput(pe, src, dst);
+        self.shmem_comm.iput(pe, src, dst);
     }
     fn put_all(&self, src: &[u8], dst: usize) {
-        self.rofi_comm.put_all(src, dst);
+        self.shmem_comm.put_all(src, dst);
     }
     fn get(&self, pe: usize, src: usize, dst: &mut [u8]) {
-        self.rofi_comm.get(pe, src, dst);
+        self.shmem_comm.get(pe, src, dst);
     }
     fn rt_alloc(&self, size: usize) -> Option<usize> {
-        self.rofi_comm.rt_alloc(size)
+        self.shmem_comm.rt_alloc(size)
     }
     fn rt_free(&self, addr: usize) {
-        self.rofi_comm.rt_free(addr)
+        self.shmem_comm.rt_free(addr)
     }
     fn alloc(&self, size: usize, alloc: AllocationType) -> Option<usize> {
-        self.rofi_comm.alloc(size, alloc)
+        self.shmem_comm.alloc(size, alloc)
     }
     fn free(&self, addr: usize) {
-        self.rofi_comm.free(addr)
+        self.shmem_comm.free(addr)
     }
     fn base_addr(&self) -> usize {
-        self.rofi_comm.base_addr()
+        self.shmem_comm.base_addr()
     }
     fn local_addr(&self, remote_pe: usize, remote_addr: usize) -> usize {
-        self.rofi_comm.local_addr(remote_pe, remote_addr)
+        self.shmem_comm.local_addr(remote_pe, remote_addr)
     }
     fn remote_addr(&self, remote_pe: usize, local_addr: usize) -> usize {
-        self.rofi_comm.remote_addr(remote_pe, local_addr)
+        self.shmem_comm.remote_addr(remote_pe, local_addr)
     }
     fn occupied(&self) -> usize {
-        self.rofi_comm.occupied()
+        self.shmem_comm.occupied()
     }
 }
