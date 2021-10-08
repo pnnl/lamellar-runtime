@@ -1,10 +1,10 @@
+use crate::lamellae::comm::CommOps;
 use crate::lamellae::command_queues::CommandQueue;
 use crate::lamellae::rofi::rofi_comm::{RofiComm, RofiData};
 use crate::lamellae::{
-    AllocationType, Backend, Des, Lamellae, LamellaeAM, LamellaeComm, LamellaeInit, LamellaeRDMA,
-    Ser, SerializeHeader, SerializedData,SerializedDataOps, Comm,
+    AllocationType, Backend, Comm, Des, Lamellae, LamellaeAM, LamellaeComm, LamellaeInit,
+    LamellaeRDMA, Ser, SerializeHeader, SerializedData, SerializedDataOps,
 };
-use crate::lamellae::comm::CommOps;
 use crate::lamellar_arch::LamellarArchRT;
 use crate::scheduler::{Scheduler, SchedulerQueue};
 use std::sync::atomic::{AtomicU8, Ordering};

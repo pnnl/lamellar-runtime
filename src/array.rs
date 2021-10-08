@@ -210,7 +210,7 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> La
 
     /// Returns an iterator for the LamellarArray, all iteration occurs on the PE
     /// where this was called, data that is not local to the PE is automatically
-    /// copied and transferred, array data is buffered to more efficiently make 
+    /// copied and transferred, array data is buffered to more efficiently make
     /// use of network buffers
     pub fn buffered_iter(&self, buf_size: usize) -> LamellarArrayIter<'_, T> {
         match self {
@@ -254,8 +254,8 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Da
     }
 }
 
-impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static>
-    DistIteratorLauncher for LamellarArray<T>
+impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> DistIteratorLauncher
+    for LamellarArray<T>
 {
     fn for_each<I, F>(&self, iter: &I, op: F)
     where

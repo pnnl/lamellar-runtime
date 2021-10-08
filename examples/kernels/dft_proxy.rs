@@ -1,4 +1,4 @@
-
+use lamellar::array::{DistributedIterator, Distribution, UnsafeArray};
 /// ------------Lamellar Bandwidth: DFT Proxy  -------------------------
 /// This example is inspired from peforming a naive DFT
 /// it does not actually calculate a DFT as we simply perform the transform
@@ -7,7 +7,6 @@
 /// as well as a (single process) shared memory version using Rayon.
 /// --------------------------------------------------------------------
 use lamellar::{ActiveMessaging, LamellarWorld};
-use lamellar::array::{Distribution, DistributedIterator, UnsafeArray};
 use lamellar::{RemoteMemoryRegion, SharedMemoryRegion};
 use parking_lot::Mutex;
 use rand::rngs::StdRng;
@@ -183,7 +182,6 @@ fn dft_lamellar_array(signal: UnsafeArray<f64>, spectrum: UnsafeArray<f64>) {
     spectrum.barrier();
 }
 
-
 // a more optimized version using lamellar arrays, and behaves similar to the manual active message implementation above
 // here we create "copied chunks" of the signal array, which are then passed and reused during each iteration of the spectrum loop.
 // in this case we only completely transfer the signal array one time
@@ -248,7 +246,8 @@ fn main() {
     let full_spectrum = world.alloc_local_mem_region::<f64>(global_len);
     let magic = world.alloc_local_mem_region::<f64>(num_pes);
 
-    let full_spectrum_array = UnsafeArray::<f64>::new(world.team(), global_len, Distribution::Block);
+    let full_spectrum_array =
+        UnsafeArray::<f64>::new(world.team(), global_len, Distribution::Block);
     let full_signal_array = UnsafeArray::<f64>::new(world.team(), global_len, Distribution::Block);
 
     unsafe {
@@ -262,8 +261,7 @@ fn main() {
             .for_each(move |(i, x)| *x = full_signal_clone.as_mut_slice().unwrap()[i]);
         full_signal_array.wait_all();
         full_signal_array.barrier();
-   
-        
+
         partial_spectrum.put(my_pe, 0, full_spectrum.sub_region(0..array_len));
         partial_sum.put(my_pe, 0, magic.clone());
         partial_signal.put(
@@ -280,7 +278,6 @@ fn main() {
     println!("finished init");
     world.barrier();
     println!("starting");
-
 
     //--------------lamellar Manual Active Message--------------------------
     dft_lamellar(
@@ -315,7 +312,6 @@ fn main() {
 
     world.barrier();
 
-
     //------------optimized lamellar array----------------
     full_spectrum_array
         .dist_iter_mut()
@@ -333,11 +329,13 @@ fn main() {
     );
     //-----------------------------------------------------
 
-   
     //--------------------rayon---------------------
     if run_single_node {
         let timer = Instant::now();
-        dft_rayon(full_signal_array.local_as_slice(), full_spectrum_array.local_as_mut_slice());
+        dft_rayon(
+            full_signal_array.local_as_slice(),
+            full_spectrum_array.local_as_mut_slice(),
+        );
         let time = timer.elapsed().as_secs_f64();
         println!(
             "rayon sum: {:?} time: {:?}",

@@ -1,7 +1,9 @@
+use crate::lamellae::comm::*;
 use crate::lamellae::command_queues::CommandQueue;
 use crate::lamellae::rofi::rofi_api::*;
-use crate::lamellae::{AllocationType, Des, SerializeHeader, SerializedData, SubData,SerializedDataOps};
-use crate::lamellae::comm::*;
+use crate::lamellae::{
+    AllocationType, Des, SerializeHeader, SerializedData, SerializedDataOps, SubData,
+};
 use crate::lamellar_alloc::{BTreeAlloc, LamellarAlloc};
 #[cfg(feature = "enable-prof")]
 use lamellar_prof::*;
@@ -86,22 +88,22 @@ impl RofiComm {
     }
 }
 
-impl CommOps for RofiComm{
-    fn my_pe(&self) -> usize{
+impl CommOps for RofiComm {
+    fn my_pe(&self) -> usize {
         self.my_pe
     }
-    fn num_pes(&self) -> usize{
+    fn num_pes(&self) -> usize {
         self.num_pes
     }
-     fn barrier(&self) {
+    fn barrier(&self) {
         rofi_barrier();
     }
 
-     fn occupied(&self) -> usize {
+    fn occupied(&self) -> usize {
         println!("occupied {:?}", self.alloc.occupied());
         self.alloc.occupied()
     }
-     fn rt_alloc(&self, size: usize) -> Option<usize> {
+    fn rt_alloc(&self, size: usize) -> Option<usize> {
         if let Some(addr) = self.alloc.try_malloc(size) {
             // println!("got mem: {:?}",addr);
             // println!("in rt_alloc {:?} addr {:?} in use {:?}",size,addr,self.alloc.occupied());
@@ -112,39 +114,34 @@ impl CommOps for RofiComm{
         }
     }
     #[allow(dead_code)]
-     fn rt_free(&self, addr: usize) {
+    fn rt_free(&self, addr: usize) {
         self.alloc.free(addr);
         // println!("in rt_free addr {:?} in use {:?}",addr,self.alloc.occupied());
     }
-     fn alloc(&self, size: usize, alloc: AllocationType) -> Option<usize> {
+    fn alloc(&self, size: usize, alloc: AllocationType) -> Option<usize> {
         let _lock = self.comm_mutex.lock();
         Some(rofi_alloc(size, alloc) as usize)
     }
     #[allow(dead_code)]
-     fn free(&self, addr: usize) {
+    fn free(&self, addr: usize) {
         let _lock = self.comm_mutex.lock();
         rofi_release(addr);
     }
 
     #[allow(dead_code)]
-     fn base_addr(&self) -> usize {
+    fn base_addr(&self) -> usize {
         *self.rofi_base_address.read()
     }
 
-     fn local_addr(&self, remote_pe: usize, remote_addr: usize) -> usize {
+    fn local_addr(&self, remote_pe: usize, remote_addr: usize) -> usize {
         rofi_local_addr(remote_pe, remote_addr)
     }
 
-     fn remote_addr(&self, pe: usize, local_addr: usize) -> usize {
+    fn remote_addr(&self, pe: usize, local_addr: usize) -> usize {
         rofi_remote_addr(pe, local_addr)
     }
 
-     fn put<T: Remote + 'static>(
-        &self,
-        pe: usize,
-        src_addr: &[T],
-        dst_addr: usize,
-    ) {
+    fn put<T: Remote + 'static>(&self, pe: usize, src_addr: &[T], dst_addr: usize) {
         //-> RofiReq {
         // let mut req = RofiReq{
         //     txids: Vec::new(),
@@ -177,12 +174,7 @@ impl CommOps for RofiComm{
         // println!("[{:?}]-({:?}) put [{:?}] exit",self.my_pe,thread::current().id(),pe);
     }
 
-     fn iput<T: Remote + 'static>(
-        &self,
-        pe: usize,
-        src_addr: &[T],
-        dst_addr: usize,
-    ) {
+    fn iput<T: Remote + 'static>(&self, pe: usize, src_addr: &[T], dst_addr: usize) {
         //-> RofiReq{
         // println!("[{:?}]-({:?}) iput entry",self.my_pe,thread::current().id());
         // let mut req = RofiReq{
@@ -215,11 +207,7 @@ impl CommOps for RofiComm{
         // println!("[{:?}]- gc: {:?} pc: {:?} iput exit",self.my_pe,self.get_cnt.load(Ordering::SeqCst),self.put_cnt.load(Ordering::SeqCst));
     }
 
-     fn put_all<T: Remote + 'static>(
-        &self,
-        src_addr: &[T],
-        dst_addr: usize,
-    ) {
+    fn put_all<T: Remote + 'static>(&self, src_addr: &[T], dst_addr: usize) {
         //-> RofiReq {
         // println!("[{:?}]-({:?}) put all entry",self.my_pe,thread::current().id());
         // let mut req = RofiReq{
@@ -254,12 +242,7 @@ impl CommOps for RofiComm{
         // println!("[{:?}]- gc: {:?} pc: {:?} put_all exit",self.my_pe,self.get_cnt.load(Ordering::SeqCst),self.put_cnt.load(Ordering::SeqCst));
     }
 
-     fn get<T: Remote + 'static>(
-        &self,
-        pe: usize,
-        src_addr: usize,
-        dst_addr: &mut [T],
-    ) {
+    fn get<T: Remote + 'static>(&self, pe: usize, src_addr: usize, dst_addr: &mut [T]) {
         //-> RofiReq {
         // println!("[{:?}]-({:?}) get entry",self.my_pe,thread::current().id());
         // let mut req = RofiReq{
@@ -308,12 +291,7 @@ impl CommOps for RofiComm{
         // println!("[{:?}]- gc: {:?} pc: {:?} get exit",self.my_pe,self.get_cnt.load(Ordering::SeqCst),self.put_cnt.load(Ordering::SeqCst));
     }
     #[allow(dead_code)]
-    fn iget<T: Remote + 'static>(
-        &self,
-        pe: usize,
-        src_addr: usize,
-        dst_addr: &mut [T],
-    ) {
+    fn iget<T: Remote + 'static>(&self, pe: usize, src_addr: usize, dst_addr: &mut [T]) {
         //-> RofiReq {
         // println!("[{:?}]-({:?}) iget entry",self.my_pe,thread::current().id());
         // let mut req = RofiReq{
@@ -362,12 +340,7 @@ impl CommOps for RofiComm{
         // println!("[{:?}]-({:?}) iget exit",self.my_pe,thread::current().id());
     }
     //src address is relative to rofi base addr
-     fn iget_relative<T: Remote + 'static>(
-        &self,
-        pe: usize,
-        src_addr: usize,
-        dst_addr: &mut [T],
-    ) {
+    fn iget_relative<T: Remote + 'static>(&self, pe: usize, src_addr: usize, dst_addr: &mut [T]) {
         //-> RofiReq {
         // let mut req = RofiReq{
         //     txids: Vec::new(),
@@ -417,7 +390,6 @@ impl CommOps for RofiComm{
         // println!("[{:?}]- gc: {:?} pc: {:?} iget_relative exit",self.my_pe,self.get_cnt.load(Ordering::SeqCst),self.put_cnt.load(Ordering::SeqCst));
         // println!("[{:?}]-({:?}) iget relative [{:?}] exit",self.my_pe,thread::current().id(),pe);
     }
-    
 }
 
 //#[prof]
@@ -478,7 +450,7 @@ impl RofiData {
         }
     }
 }
-impl SerializedDataOps for RofiData{
+impl SerializedDataOps for RofiData {
     fn header_as_bytes(&self) -> &mut [u8] {
         let header_size = std::mem::size_of::<Option<SerializeHeader>>();
         unsafe {
@@ -555,7 +527,6 @@ impl Clone for RofiData {
         }
     }
 }
-
 
 impl Drop for RofiData {
     fn drop(&mut self) {

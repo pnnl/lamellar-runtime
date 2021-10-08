@@ -9,9 +9,9 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use enum_dispatch::enum_dispatch;
 
-pub(crate) mod command_queues;
 pub(crate) mod comm;
-use comm::{Comm};
+pub(crate) mod command_queues;
+use comm::Comm;
 
 pub(crate) mod local_lamellae;
 use local_lamellae::{Local, LocalData};
@@ -77,7 +77,7 @@ pub(crate) enum SerializedData {
 }
 
 #[enum_dispatch]
-pub(crate) trait SerializedDataOps{
+pub(crate) trait SerializedDataOps {
     fn header_as_bytes(&self) -> &mut [u8];
     fn increment_cnt(&self);
     fn len(&self) -> usize;

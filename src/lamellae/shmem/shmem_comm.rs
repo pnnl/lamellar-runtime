@@ -1,19 +1,18 @@
-use crate::lamellae::command_queues::CommandQueue;
-use crate::lamellae::{AllocationType, Des, SerializeHeader, SerializedData, SubData,SerializedDataOps};
 use crate::lamellae::comm::*;
-use crate::lamellar_alloc::{BTreeAlloc,LamellarAlloc};
+use crate::lamellae::command_queues::CommandQueue;
+use crate::lamellae::{
+    AllocationType, Des, SerializeHeader, SerializedData, SerializedDataOps, SubData,
+};
+use crate::lamellar_alloc::{BTreeAlloc, LamellarAlloc};
 
-use shared_memory::*;
 use parking_lot::{Mutex, RwLock};
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::sync::Arc;
-use std::env;
-use std::collections::HashMap;
+use shared_memory::*;
 use std::borrow::Borrow;
+use std::collections::HashMap;
+use std::env;
 use std::error::Error;
-
-
-
+use std::sync::atomic::{AtomicBool, AtomicIsize, AtomicUsize, Ordering};
+use std::sync::Arc;
 
 struct MyShmem {
     data: *mut u8,
@@ -40,38 +39,40 @@ impl MyShmem {
 
 fn attach_to_shmem(size: usize, id: &str, header: usize, create: bool) -> MyShmem {
     let size = size + std::mem::size_of::<usize>();
-    let shmem_id = "lamellar_".to_owned() + &(size.to_string())+"_"+id;
+    let shmem_id = "lamellar_".to_owned() + &(size.to_string()) + "_" + id;
     // let  m = if create {
     let mut retry = 0;
-    let m = loop{
+    let m = loop {
         match ShmemConf::new().size(size).os_id(shmem_id.clone()).create() {
             Ok(m) => {
                 // println!("created {:?}", shmem_id);
                 if create {
-                    let zeros = vec![0u8; size];
+                    // let zeros = vec![0u8; size];
                     unsafe {
-                        std::ptr::copy_nonoverlapping(
-                            zeros.as_ptr() as *const u8,
-                            m.as_ptr() as *mut u8,
-                            size,
-                        );
+                        //     std::ptr::copy_nonoverlapping(
+                        //         zeros.as_ptr() as *const u8,
+                        //         m.as_ptr() as *mut u8,
+                        //         size,
+                        //     );
                         *(m.as_ptr() as *mut _ as *mut usize) = header;
                     }
                 }
                 break Ok(m);
             }
-            Err(ShmemError::LinkExists) | Err(ShmemError::MappingIdExists) | Err(ShmemError::MapOpenFailed(_)) => {
+            Err(ShmemError::LinkExists)
+            | Err(ShmemError::MappingIdExists)
+            | Err(ShmemError::MapOpenFailed(_)) => {
                 match ShmemConf::new().os_id(shmem_id.clone()).open() {
                     Ok(m) => {
                         // println!("attached {:?}", shmem_id);
                         if create {
-                            let zeros = vec![0u8; size];
+                            // let zeros = vec![0u8; size];
                             unsafe {
-                                std::ptr::copy_nonoverlapping(
-                                    zeros.as_ptr() as *const u8,
-                                    m.as_ptr() as *mut u8,
-                                    size,
-                                );
+                                // std::ptr::copy_nonoverlapping(
+                                //     zeros.as_ptr() as *const u8,
+                                //     m.as_ptr() as *mut u8,
+                                //     size,
+                                // );
                                 *(m.as_ptr() as *mut _ as *mut usize) = header;
                             }
                             // unsafe {
@@ -85,21 +86,20 @@ fn attach_to_shmem(size: usize, id: &str, header: usize, create: bool) -> MyShme
                         break Ok(m);
                     }
                     Err(ShmemError::MapOpenFailed(_)) if retry < 5 => {
-                        retry+=1;
+                        retry += 1;
                         std::thread::sleep(std::time::Duration::from_millis(50));
-                    },
+                    }
                     Err(e) => break Err(e),
                 }
             }
             Err(e) => break Err(e),
         }
     };
-    let m = match m{
+    let m = match m {
         Ok(m) => m,
-        Err(e) => panic!("unable to create shared memory {:?} {:?}", shmem_id, e) 
+        Err(e) => panic!("unable to create shared memory {:?} {:?}", shmem_id, e),
     };
 
-    
     while (unsafe { *(m.as_ptr() as *const _ as *const usize) } != header) {
         std::thread::yield_now()
     }
@@ -120,13 +120,13 @@ fn attach_to_shmem(size: usize, id: &str, header: usize, create: bool) -> MyShme
     }
 }
 
-
-
-struct ShmemAlloc{
+struct ShmemAlloc {
     _shmem: MyShmem,
     mutex: *mut AtomicUsize,
     id: *mut usize,
-    barrier: *mut usize,
+    barrier1: *mut usize,
+    barrier2: *mut usize,
+    // barrier3: *mut usize,
     my_pe: usize,
     num_pes: usize,
 }
@@ -134,81 +134,153 @@ struct ShmemAlloc{
 unsafe impl Sync for ShmemAlloc {}
 unsafe impl Send for ShmemAlloc {}
 
-impl ShmemAlloc{
-    fn new(num_pes: usize, pe: usize, job_id: usize) -> Self{
-        let size = std::mem::size_of::<AtomicUsize>() + std::mem::size_of::<usize>()+ std::mem::size_of::<usize>()*num_pes;
-        let shmem = attach_to_shmem(size,"alloc",job_id, pe == 0);
+impl ShmemAlloc {
+    fn new(num_pes: usize, pe: usize, job_id: usize) -> Self {
+        let size = std::mem::size_of::<AtomicUsize>()
+            + std::mem::size_of::<usize>()
+            + std::mem::size_of::<usize>() * num_pes * 2;
+        let shmem = attach_to_shmem(size, "alloc", job_id, pe == 0);
+        let mut data = unsafe { std::slice::from_raw_parts_mut(shmem.as_ptr(), size) };
+        if pe == 0 {
+            for i in data {
+                *i = 0;
+            }
+        }
         let base_ptr = shmem.as_ptr();
-        ShmemAlloc{
+        ShmemAlloc {
             _shmem: shmem,
             mutex: base_ptr as *mut AtomicUsize,
-            id: unsafe { base_ptr.add(std::mem::size_of::<AtomicUsize>())as *mut usize },
-            barrier: unsafe { base_ptr.add(std::mem::size_of::<AtomicUsize>() + std::mem::size_of::<usize>()) as *mut usize },
+            id: unsafe { base_ptr.add(std::mem::size_of::<AtomicUsize>()) as *mut usize },
+            barrier1: unsafe {
+                base_ptr.add(std::mem::size_of::<AtomicUsize>() + std::mem::size_of::<usize>())
+                    as *mut usize
+            },
+            barrier2: unsafe {
+                base_ptr.add(
+                    std::mem::size_of::<AtomicUsize>()
+                        + std::mem::size_of::<usize>()
+                        + std::mem::size_of::<usize>() * num_pes,
+                ) as *mut usize
+            },
+            // barrier3: unsafe { base_ptr.add(std::mem::size_of::<AtomicUsize>() + std::mem::size_of::<usize>()) as *mut usize + std::mem::size_of::<usize>()*num_pes*2},
             my_pe: pe,
             num_pes: num_pes,
         }
     }
-    unsafe fn alloc<I>(&self, size: usize, pes: I) -> (MyShmem,usize) 
-    where 
-    I: Iterator<Item=usize> + Clone{
-        let barrier = std::slice::from_raw_parts_mut(self.barrier, self.num_pes) ;
+    unsafe fn alloc<I>(&self, size: usize, pes: I) -> (MyShmem, usize, Vec<usize>)
+    where
+        I: Iterator<Item = usize> + Clone,
+    {
+        let barrier1 = std::slice::from_raw_parts_mut(self.barrier1, self.num_pes);
+        let barrier2 = std::slice::from_raw_parts_mut(self.barrier2, self.num_pes);
+        // println!("trying to alloc! {:?} {:?} {:?}",self.my_pe, barrier1,barrier2);
+        // let barrier3 = std::slice::from_raw_parts_mut(self.barrier1, self.num_pes) ;
+        for pe in pes.clone() {
+            while barrier2[pe] != 0 {
+                std::thread::yield_now();
+            }
+        }
         let mut pes_clone = pes.clone();
         let first_pe = pes_clone.next().unwrap();
         let mut relative_pe = 0;
-        let mut pes_len=1;
-        if self.my_pe == first_pe{
-            while let Err(_) = self.mutex.as_ref().unwrap().compare_exchange(0,1,Ordering::SeqCst,Ordering::SeqCst){
+        let mut pes_len = 1;
+
+        if self.my_pe == first_pe {
+            while let Err(_) = self.mutex.as_ref().unwrap().compare_exchange(
+                0,
+                1,
+                Ordering::SeqCst,
+                Ordering::SeqCst,
+            ) {
                 std::thread::yield_now();
             }
             *self.id += 1;
-            barrier[self.my_pe] = *self.id;
-            for pe in pes_clone{
-                pes_len+=1;
-                while barrier[pe] != *self.id {
+            barrier1[self.my_pe] = *self.id;
+            for pe in pes_clone {
+                // println!("{:?} {:?} {:?}",pe ,barrier1[pe], *self.id );
+                pes_len += 1;
+                while barrier1[pe] != *self.id {
+                    std::thread::yield_now();
+                }
+            }
+        } else {
+            while barrier1[first_pe] == 0 {
+                std::thread::yield_now();
+            }
+            barrier1[self.my_pe] = *self.id;
+
+            for pe in pes_clone {
+                // println!("{:?} {:?} {:?}",pe ,barrier1[pe], *self.id );
+                pes_len += 1;
+                while barrier1[pe] != *self.id {
                     std::thread::yield_now();
                 }
             }
         }
-        else{
-            while barrier[first_pe] == 0{
+
+        // println!("going to attach to shmem {:?} {:?} {:?} {:?} {:?}",size*pes_len,*self.id,self.my_pe, barrier1,barrier2);
+        let shmem = attach_to_shmem(
+            size * pes_len,
+            &((*self.id).to_string()),
+            *self.id,
+            self.my_pe == first_pe,
+        );
+        barrier2[self.my_pe] = shmem.as_ptr() as usize;
+        let cnt = shmem.as_ptr() as *mut AtomicIsize;
+        if self.my_pe == first_pe {
+            cnt.as_ref()
+                .unwrap()
+                .fetch_add(pes_len as isize, Ordering::SeqCst);
+        }
+        cnt.as_ref().unwrap().fetch_sub(1, Ordering::SeqCst);
+        while cnt.as_ref().unwrap().load(Ordering::SeqCst) != 0 {}
+        let addrs = barrier2.to_vec();
+        // println!("attached {:?} {:?}",self.my_pe,shmem.as_ptr());
+        barrier1[self.my_pe] = 0;
+        for pe in pes.into_iter() {
+            // println!("{:?} pe {:?} {:?} {:?}",self.my_pe, pe, barrier1,barrier2);
+            while barrier1[pe] != 0 {
                 std::thread::yield_now();
             }
-            barrier[self.my_pe] = *self.id;
-            for pe in pes_clone{
-                pes_len+=1;
-                while barrier[pe] != *self.id {
-                    std::thread::yield_now();
-                }
+            if pe < self.my_pe {
+                relative_pe += 1;
             }
         }
-        // println!("going to attach to shmem {:?} {:?} {:?}",size*pes_len,*self.id,self.my_pe);
-        let shmem = attach_to_shmem(size*pes_len,&((*self.id).to_string()),*self.id,self.my_pe==first_pe);
-        barrier[self.my_pe] = 0;
-        for pe in pes.into_iter(){
-            while barrier[pe] != 0 {
-                std::thread::yield_now();
-            }
-            if pe < self.my_pe{
-                relative_pe +=1;
-            }
+        barrier2[self.my_pe] = 0;
+        if self.my_pe == first_pe {
+            self.mutex.as_ref().unwrap().store(0, Ordering::SeqCst);
         }
-        if self.my_pe == first_pe{
-            self.mutex.as_ref().unwrap().store(0,Ordering::SeqCst);
-        }
-        (shmem,relative_pe)
+        // println!("{:?} {:?} {:?}",self.my_pe, barrier1,barrier2);
+        (shmem, relative_pe, addrs)
     }
 }
 
-pub(crate) struct ShmemComm{
-    _shmem: MyShmem, //the global handle
+pub(crate) struct ShmemComm {
+    // _shmem: MyShmem, //the global handle
     pub(crate) base_address: Arc<RwLock<usize>>, //start address of my segment
-    size: usize, //size of my segment
+    size: usize,                                 //size of my segment
     alloc: BTreeAlloc,
     _init: AtomicBool,
     pub(crate) num_pes: usize,
     pub(crate) my_pe: usize,
     comm_mutex: Arc<Mutex<()>>,
-    alloc_lock: Arc<RwLock<(HashMap<usize,(MyShmem,usize)>,ShmemAlloc)>>,
+    alloc_lock: Arc<
+        RwLock<(
+            HashMap<
+                usize, //local addr
+                (
+                    MyShmem,
+                    usize,
+                    HashMap<
+                        //share mem segment, per pe size,
+                        usize, //global pe id
+                        (usize, usize),
+                    >,
+                ), // remote addr, relative index (for subteams)
+            >,
+            ShmemAlloc,
+        )>,
+    >,
 }
 
 static SHMEM_SIZE: AtomicUsize = AtomicUsize::new(1 * 1024 * 1024 * 1024);
@@ -217,15 +289,15 @@ impl ShmemComm {
     pub(crate) fn new() -> ShmemComm {
         let num_pes = match env::var("LAMELLAR_NUM_PES") {
             Ok(val) => val.parse::<usize>().unwrap(),
-            Err(_e) => 1
+            Err(_e) => 1,
         };
         let my_pe = match env::var("LAMELLAR_PE_ID") {
             Ok(val) => val.parse::<usize>().unwrap(),
-            Err(_e) => 0
+            Err(_e) => 0,
         };
         let job_id = match env::var("LAMELLAR_JOB_ID") {
             Ok(val) => val.parse::<usize>().unwrap(),
-            Err(_e) => 0
+            Err(_e) => 0,
         };
         if let Ok(size) = std::env::var("LAMELLAR_MEM_SIZE") {
             let size = size
@@ -233,19 +305,30 @@ impl ShmemComm {
                 .expect("invalid memory size, please supply size in bytes");
             SHMEM_SIZE.store(size, Ordering::SeqCst);
         }
-        
+
         // let mem_per_pe = SHMEM_SIZE.load(Ordering::SeqCst)/num_pes;
         let cmd_q_mem = CommandQueue::mem_per_pe() * num_pes;
         let total_mem = cmd_q_mem + RT_MEM + SHMEM_SIZE.load(Ordering::SeqCst);
-        let mem_per_pe = total_mem/num_pes;
-        let mut alloc = ShmemAlloc::new(num_pes,my_pe,job_id);
-        let (shmem,index) =unsafe {alloc.alloc(mem_per_pe,0..num_pes)};
-        let addr = shmem.as_ptr() as usize + mem_per_pe * index;
+        let mem_per_pe = total_mem / num_pes;
+
+        let alloc = ShmemAlloc::new(num_pes, my_pe, job_id);
+        // let shmem = attach_to_shmem(SHMEM_SIZE.load(Ordering::SeqCst),"main",job_id,my_pe==0);
+
+        // let (shmem,index) =unsafe {alloc.alloc(mem_per_pe,0..num_pes)};
+        let (shmem, index, addrs) = unsafe { alloc.alloc(mem_per_pe, 0..num_pes) };
+        let addr = shmem.as_ptr() as usize + mem_per_pe * my_pe;
+
         let mut allocs_map = HashMap::new();
-        allocs_map.insert(addr,(shmem,mem_per_pe));
+        let mut pe_map = HashMap::new();
+        for pe in 0..num_pes {
+            if addrs[pe] > 0 {
+                pe_map.insert(pe, (addrs[pe], pe));
+            }
+        }
+        allocs_map.insert(addr, (shmem, mem_per_pe, pe_map));
         // alloc.0.insert(addr,(ret,size))
-        let mut shmem = ShmemComm{
-            _shmem: attach_to_shmem(SHMEM_SIZE.load(Ordering::SeqCst),"main",job_id,my_pe==0),
+        let mut shmem = ShmemComm {
+            // _shmem: shmem,
             base_address: Arc::new(RwLock::new(addr)),
             size: mem_per_pe,
             alloc: BTreeAlloc::new("shmem".to_string()),
@@ -254,28 +337,30 @@ impl ShmemComm {
             my_pe: my_pe,
             comm_mutex: Arc::new(Mutex::new(())),
             alloc_lock: Arc::new(RwLock::new((allocs_map, alloc))),
-
         };
-        shmem.alloc.init(0,mem_per_pe);
+        shmem.alloc.init(0, mem_per_pe);
         shmem
     }
 }
 
-impl CommOps for ShmemComm{
-    fn my_pe(&self) -> usize{
+impl CommOps for ShmemComm {
+    fn my_pe(&self) -> usize {
         self.my_pe
     }
-    fn num_pes(&self) -> usize{
+    fn num_pes(&self) -> usize {
         self.num_pes
     }
     fn barrier(&self) {
-
+        let mut alloc = self.alloc_lock.write();
+        unsafe {
+            alloc.1.alloc(1, 0..self.num_pes);
+        }
     }
     fn occupied(&self) -> usize {
         self.alloc.occupied()
     }
 
-   fn rt_alloc(&self, size: usize) -> Option<usize> {
+    fn rt_alloc(&self, size: usize) -> Option<usize> {
         if let Some(addr) = self.alloc.try_malloc(size) {
             Some(addr)
         } else {
@@ -283,65 +368,85 @@ impl CommOps for ShmemComm{
             None
         }
     }
-    fn rt_free(&self,addr: usize) {
+    fn rt_free(&self, addr: usize) {
         self.alloc.free(addr);
     }
 
     fn alloc(&self, size: usize, alloc_type: AllocationType) -> Option<usize> {
         let mut alloc = self.alloc_lock.write();
-        let (ret,index) = match alloc_type {
+        let (ret, index, remote_addrs) = match alloc_type {
             AllocationType::Sub(pes) => {
-                println!("pes: {:?}",pes);
-                if pes.contains(&self.my_pe){
-                    unsafe {  alloc.1.alloc(size,pes.iter().cloned()) }
-                }
-                else{
+                // println!("pes: {:?}",pes);
+                if pes.contains(&self.my_pe) {
+                    let ret = unsafe { alloc.1.alloc(size, pes.iter().cloned()) };
+                    // println!("{:?}",ret.2);
+                    ret
+                } else {
                     return None;
                 }
-            },
-            AllocationType::Global => unsafe { alloc.1.alloc(size,0..self.num_pes)},
+            }
+            AllocationType::Global => unsafe { alloc.1.alloc(size, 0..self.num_pes) },
             _ => panic!("unexpected allocation type {:?} in rofi_alloc", alloc_type),
         };
+        let mut addr_map = HashMap::new();
+        let mut relative_index = 0;
+        for pe in 0..self.num_pes {
+            if remote_addrs[pe] > 0 {
+                // let local_addr = ret.as_ptr() as usize + size*relative_index;
+                addr_map.insert(pe, (remote_addrs[pe], relative_index));
+                relative_index += 1;
+            }
+        }
         let addr = ret.as_ptr() as usize + size * index;
-        alloc.0.insert(addr,(ret,size));
+        alloc.0.insert(addr, (ret, size, addr_map));
         Some(addr)
     }
-    
-    fn free(&self, addr: usize){ //maybe need to do something more intelligent on the drop of the shmem_alloc
+
+    fn free(&self, addr: usize) {
+        //maybe need to do something more intelligent on the drop of the shmem_alloc
         let mut alloc = self.alloc_lock.write();
-        alloc.0.remove(&addr); 
+        alloc.0.remove(&addr);
     }
 
-    fn base_addr(&self) -> usize{
+    fn base_addr(&self) -> usize {
         *self.base_address.read()
     }
-    fn local_addr(&self, remote_pe: usize, remote_addr: usize) -> usize{
+    fn local_addr(&self, remote_pe: usize, remote_addr: usize) -> usize {
         let alloc = self.alloc_lock.read();
-        for (addr,(shmem,_)) in alloc.0.iter(){
-            if shmem.contains(remote_addr){
-                let remote_offset = remote_addr - shmem.base_addr();
+        for (addr, (shmem, size, addrs)) in alloc.0.iter() {
+            // println!("1-- addr {:?} remote_addr {:?} base_addr( {:?}, {:?} ) top_addr( {:?}, {:?} ) {:?} {:?}",addr,remote_addr,shmem.base_addr(),addrs[remote_pe],shmem.base_addr()+shmem.len(),addrs[remote_pe] + shmem.len(),addrs[remote_pe] <= remote_addr , remote_addr < addrs[remote_pe] + shmem.len());
+            if addrs[&remote_pe].0 <= remote_addr && remote_addr < addrs[&remote_pe].0 + shmem.len()
+            {
+                // if shmem.contains(remote_addr){
+                let remote_offset =
+                    remote_addr - (addrs[&remote_pe].0 + size * addrs[&remote_pe].1);
+                // println!("{:?} {:?} {:?}",addr,remote_offset,addr + remote_offset);
                 return addr + remote_offset;
             }
-            break;
         }
+        // println!();
+        // for (addr,(shmem,_,addrs)) in alloc.0.iter(){
+        //     println!("2-- addr {:?} remote_addr {:?} base_addr( {:?}, {:?} ) top_addr( {:?}, {:?} ) {:?} {:?}",addr,remote_addr,shmem.base_addr(),addrs[remote_pe],shmem.base_addr()+shmem.len(),addrs[&remote_pe].0 + shmem.len(),addrs[&remote_pe] <= remote_addr , remote_addr < addrs[remote_pe] + shmem.len());
+        // }
         panic!("not sure i should be here...means address not found");
     }
-    fn remote_addr(&self, pe: usize, local_addr: usize) -> usize{
+    fn remote_addr(&self, pe: usize, local_addr: usize) -> usize {
         let alloc = self.alloc_lock.read();
-        for (addr,(shmem,size)) in alloc.0.iter(){
-            if shmem.contains(local_addr){
+        for (addr, (shmem, size, addrs)) in alloc.0.iter() {
+            if shmem.contains(local_addr) {
                 let local_offset = local_addr - addr;
-                return shmem.base_addr()+size*pe + local_offset;
+                return addrs[&pe].0 + size * addrs[&pe].1 + local_offset;
             }
         }
         panic!("not sure i should be here...means address not found");
     }
-    fn put<T: Remote + 'static>(&self, pe: usize, src_addr: &[T], dst_addr: usize){
+    fn put<T: Remote + 'static>(&self, pe: usize, src_addr: &[T], dst_addr: usize) {
         let alloc = self.alloc_lock.read();
-        for (addr,(shmem,size)) in alloc.0.iter(){
-            if shmem.contains(dst_addr){
-                let real_dst_base = shmem.base_addr()+size*pe;
-                let real_dst_addr = real_dst_base+ (dst_addr-addr);
+        for (addr, (shmem, size, addrs)) in alloc.0.iter() {
+            if shmem.contains(dst_addr) {
+                let real_dst_base = shmem.base_addr() + size * addrs[&pe].1;
+                let real_dst_addr = real_dst_base + (dst_addr - addr);
+                // println!("base: {:?} addr: {:?}",real_dst_base,real_dst_addr);
                 unsafe {
                     std::ptr::copy_nonoverlapping(
                         src_addr.as_ptr(),
@@ -353,19 +458,19 @@ impl CommOps for ShmemComm{
             }
         }
     }
-    fn iput<T: Remote + 'static>(&self,pe: usize,src_addr: &[T],dst_addr: usize){
-        self.put(pe,src_addr,dst_addr);
+    fn iput<T: Remote + 'static>(&self, pe: usize, src_addr: &[T], dst_addr: usize) {
+        self.put(pe, src_addr, dst_addr);
     }
-    fn put_all<T: Remote + 'static>(&self, src_addr: &[T], dst_addr: usize){
-        for pe in 0..self.num_pes{
-            self.put(pe,src_addr,dst_addr);
+    fn put_all<T: Remote + 'static>(&self, src_addr: &[T], dst_addr: usize) {
+        for pe in 0..self.num_pes {
+            self.put(pe, src_addr, dst_addr);
         }
-    } 
-    fn get<T: Remote + 'static>(&self, pe: usize, src_addr: usize, dst_addr: &mut [T]){
+    }
+    fn get<T: Remote + 'static>(&self, pe: usize, src_addr: usize, dst_addr: &mut [T]) {
         let alloc = self.alloc_lock.read();
-        for (addr,(shmem,size)) in alloc.0.iter(){
-            if shmem.contains(src_addr){
-                let real_src_base = shmem.base_addr() + size*pe;
+        for (addr, (shmem, size, addrs)) in alloc.0.iter() {
+            if shmem.contains(src_addr) {
+                let real_src_base = shmem.base_addr() + size * addrs[&pe].1;
                 let real_src_addr = real_src_base + (src_addr - addr);
                 unsafe {
                     std::ptr::copy_nonoverlapping(
@@ -378,11 +483,11 @@ impl CommOps for ShmemComm{
             }
         }
     }
-    fn iget<T: Remote + 'static>(&self, pe: usize, src_addr: usize, dst_addr: &mut [T]){
-        self.get(pe,src_addr,dst_addr);
+    fn iget<T: Remote + 'static>(&self, pe: usize, src_addr: usize, dst_addr: &mut [T]) {
+        self.get(pe, src_addr, dst_addr);
     }
-    fn iget_relative<T: Remote + 'static>(&self,pe: usize,src_addr: usize,dst_addr: &mut [T]){
-        self.get(pe, src_addr+self.base_addr(),dst_addr);
+    fn iget_relative<T: Remote + 'static>(&self, pe: usize, src_addr: usize, dst_addr: &mut [T]) {
+        self.get(pe, src_addr + self.base_addr(), dst_addr);
     }
 }
 
@@ -429,7 +534,7 @@ impl ShmemData {
         }
     }
 }
-impl SerializedDataOps for ShmemData{
+impl SerializedDataOps for ShmemData {
     fn header_as_bytes(&self) -> &mut [u8] {
         let header_size = std::mem::size_of::<Option<SerializeHeader>>();
         unsafe {
@@ -507,7 +612,6 @@ impl Clone for ShmemData {
     }
 }
 
-
 impl Drop for ShmemData {
     fn drop(&mut self) {
         let cnt = unsafe { (*(self.addr as *const AtomicUsize)).fetch_sub(1, Ordering::SeqCst) };
@@ -518,8 +622,6 @@ impl Drop for ShmemData {
     }
 }
 
-
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -527,17 +629,16 @@ mod tests {
     #[test]
     fn shmem_alloc_test() {
         let num_pes = 3;
-        for pe in 0..num_pes{
+        for pe in 0..num_pes {
             std::thread::spawn(move || {
-                let shmem_comm = ShmemComm::new(num_pes,pe);
-                let addr = shmem_comm.alloc(1000,AllocationType::Global);
+                let shmem_comm = ShmemComm::new(num_pes, pe);
+                let addr = shmem_comm.alloc(1000, AllocationType::Global);
                 // let addr = 0;
-                let sub_addr = shmem_comm.alloc(500,AllocationType::Sub(vec![0,2]));
-                println!("{:?} addr {:?} sub_addr {:?}",pe,addr,sub_addr);
+                let sub_addr = shmem_comm.alloc(500, AllocationType::Sub(vec![0, 2]));
+                println!("{:?} addr {:?} sub_addr {:?}", pe, addr, sub_addr);
                 std::thread::sleep(std::time::Duration::from_secs(30));
             });
         }
         std::thread::sleep(std::time::Duration::from_secs(45));
-
     }
 }

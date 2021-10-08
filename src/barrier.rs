@@ -107,6 +107,7 @@ impl Barrier {
     ) {
         for world_pe in self.arch.team_iter() {
             unsafe {
+                // println!("world_pe {:?} my_index {:?}",world_pe,my_index);
                 barrier_buf.put_slice(world_pe, my_index, barrier_id);
             }
         }

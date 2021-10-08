@@ -281,7 +281,6 @@ impl LamellarTeamRT {
             let hash = hasher.finish();
             let archrt = Arc::new(LamellarArchRT::new(parent.arch.clone(), arch));
             parent.barrier();
-
             // ------ ensure team is being constructed synchronously and in order across all pes in parent ------ //
             let parent_alloc = AllocationType::Sub(parent.arch.team_iter().collect::<Vec<usize>>());
             let temp_buf =
@@ -352,7 +351,6 @@ impl LamellarTeamRT {
             let mut sub_teams = parent.sub_teams.write();
             sub_teams.insert(team.id, team.clone());
             parent.barrier();
-
             team.barrier();
             parent.barrier();
             Some(team)
@@ -880,7 +878,7 @@ impl Drop for LamellarTeamRT {
         // println!("lamellae: {:?}",Arc::strong_count(&self.lamellae));
         // println!("arch: {:?}",Arc::strong_count(&self.arch));
         // println!("world_counters: {:?}",Arc::strong_count(&self.world_counters));
-        
+
         // println!("LamellarTeamRT dropped");
     }
 }

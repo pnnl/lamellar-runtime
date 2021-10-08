@@ -1,6 +1,5 @@
-
-use crate::lamellae::{Des, Lamellae, LamellaeComm, SerializedData,SerializedDataOps};
 use crate::lamellae::comm::*;
+use crate::lamellae::{Des, Lamellae, LamellaeComm, SerializedData, SerializedDataOps};
 use crate::scheduler::{Scheduler, SchedulerQueue};
 
 use parking_lot::Mutex;
@@ -688,8 +687,7 @@ impl InnerCQ {
 
     //update cmdbuffers to include a hash the wait on that here
     async fn get_data(&self, src: usize, cmd: CmdMsg, data_slice: &mut [u8]) {
-        self.comm
-            .iget_relative(src, cmd.daddr as usize, data_slice);
+        self.comm.iget_relative(src, cmd.daddr as usize, data_slice);
         // self.get_amt.fetch_add(data_slice.len(),Ordering::Relaxed);
         let mut timer = std::time::Instant::now();
         while calc_hash(data_slice.as_ptr() as usize, data_slice.len()) != cmd.msg_hash {
@@ -712,8 +710,7 @@ impl InnerCQ {
 
     async fn get_serialized_data(&self, src: usize, cmd: CmdMsg, ser_data: &SerializedData) {
         let data_slice = ser_data.header_and_data_as_bytes();
-        self.comm
-            .iget_relative(src, cmd.daddr as usize, data_slice);
+        self.comm.iget_relative(src, cmd.daddr as usize, data_slice);
         // self.get_amt.fetch_add(data_slice.len(),Ordering::Relaxed);
         let mut timer = std::time::Instant::now();
         while calc_hash(data_slice.as_ptr() as usize, ser_data.len()) != cmd.msg_hash {
@@ -734,7 +731,7 @@ impl InnerCQ {
     }
 
     async fn get_cmd(&self, src: usize, cmd: CmdMsg) -> SerializedData {
-        let ser_data = self.comm.new_serialized_data( cmd.dsize as usize).await;
+        let ser_data = self.comm.new_serialized_data(cmd.dsize as usize).await;
         self.get_serialized_data(src, cmd, &ser_data).await;
         // println!("received data {:?}",ser_data.header_and_data_as_bytes());
         self.recv_cnt.fetch_add(1, Ordering::SeqCst);
@@ -894,24 +891,24 @@ impl CommandQueue {
     }
 
     pub async fn send_data(&self, data: SerializedData, dst: usize) {
-        match data{
+        match data {
             #[cfg(feature = "enable-rofi")]
             SerializedData::RofiData(ref data) => {
                 // println!("sending: {:?} {:?}",data.relative_addr,data.len);
                 let hash = calc_hash(data.relative_addr + self.comm.base_addr(), data.len);
                 // println!("send_data: {:?} {:?} {:?}",data.relative_addr,data.len,hash);
                 data.increment_cnt(); //or we could implement something like an into_raw here...
-                                    // println!("sending data {:?}",data.header_and_data_as_bytes());
+                                      // println!("sending data {:?}",data.header_and_data_as_bytes());
                 self.cq.send(data.relative_addr, data.len, dst, hash).await;
-            },
+            }
             SerializedData::ShmemData(ref data) => {
                 // println!("sending: {:?} {:?}",data.relative_addr,data.len);
                 let hash = calc_hash(data.relative_addr + self.comm.base_addr(), data.len);
                 // println!("send_data: {:?} {:?} {:?}",data.relative_addr,data.len,hash);
                 data.increment_cnt(); //or we could implement something like an into_raw here...
-                                    // println!("sending data {:?}",data.header_and_data_as_bytes());
+                                      // println!("sending data {:?}",data.header_and_data_as_bytes());
                 self.cq.send(data.relative_addr, data.len, dst, hash).await;
-            },
+            }
             _ => {}
         }
     }

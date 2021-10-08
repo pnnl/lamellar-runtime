@@ -1,11 +1,11 @@
-use crate::lamellae::shmem::*;
-use crate::lamellae::shmem::shmem_comm::*;
-use crate::lamellae::command_queues::CommandQueue;
-use crate::lamellae::{
-    AllocationType, Backend, Des, Lamellae, LamellaeAM, LamellaeComm, LamellaeInit, LamellaeRDMA,
-    Ser, SerializeHeader, SerializedData,SerializedDataOps, Comm,
-};
 use crate::lamellae::comm::CommOps;
+use crate::lamellae::command_queues::CommandQueue;
+use crate::lamellae::shmem::shmem_comm::*;
+use crate::lamellae::shmem::*;
+use crate::lamellae::{
+    AllocationType, Backend, Comm, Des, Lamellae, LamellaeAM, LamellaeComm, LamellaeInit,
+    LamellaeRDMA, Ser, SerializeHeader, SerializedData, SerializedDataOps,
+};
 use crate::lamellar_arch::LamellarArchRT;
 use crate::scheduler::{Scheduler, SchedulerQueue};
 use std::sync::atomic::{AtomicU8, Ordering};
@@ -15,8 +15,7 @@ use async_trait::async_trait;
 use futures::stream::FuturesUnordered;
 use futures::StreamExt;
 
-
-pub(crate) struct ShmemBuilder{
+pub(crate) struct ShmemBuilder {
     my_pe: usize,
     num_pes: usize,
     shmem_comm: Arc<Comm>,
@@ -53,7 +52,6 @@ impl LamellaeInit for ShmemBuilder {
         shmem
     }
 }
-
 
 pub(crate) struct Shmem {
     my_pe: usize,

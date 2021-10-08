@@ -387,8 +387,8 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Un
     }
 }
 
-impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static>
-    DistIteratorLauncher for UnsafeArray<T>
+impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> DistIteratorLauncher
+    for UnsafeArray<T>
 {
     fn global_index_from_local(&self, index: usize) -> usize {
         let my_pe = self.inner.team.team_pe_id().unwrap();
