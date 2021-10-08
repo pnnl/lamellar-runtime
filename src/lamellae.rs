@@ -54,10 +54,19 @@ impl Default for Backend {
     }
 }
 fn default_backend() -> Backend {
-    #[cfg(feature = "enable-rofi")]
-    return Backend::Rofi;
-    #[cfg(not(feature = "enable-rofi"))]
-    return Backend::Shmem;
+    match std::env::var("LAMELLAE_BACKEND") {
+        Ok(p) => match p.as_str() {
+            "rofi" => {
+                #[cfg(feature = "enable-rofi")]
+                return Backend::Rofi;
+                #[cfg(not(feature = "enable-rofi"))]
+                panic!("unable to set rofi backend, recompile with 'enable-rofi' feature")
+            },
+            "shmem" => return Backend::Shmem,
+            _ => return Backend::Local,
+        },
+        Err(_) => return Backend::Local,
+    };
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
