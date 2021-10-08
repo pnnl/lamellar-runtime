@@ -1,6 +1,6 @@
 use crate::array::{LamellarArrayInput, MyFrom};
 use crate::lamellae::{AllocationType, Backend, Lamellae, LamellaeComm, LamellaeRDMA};
-use crate::lamellar_team::LamellarTeam;
+use crate::lamellar_team::LamellarTeamRT;
 use core::marker::PhantomData;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
@@ -73,7 +73,7 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static>
 impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static>
     MyFrom<&LamellarMemoryRegion<T>> for LamellarArrayInput<T>
 {
-    fn my_from(mr: &LamellarMemoryRegion<T>, _team: &Arc<LamellarTeam>) -> Self {
+    fn my_from(mr: &LamellarMemoryRegion<T>, _team: &Arc<LamellarTeamRT>) -> Self {
         LamellarArrayInput::LamellarMemRegion(mr.clone())
     }
 }

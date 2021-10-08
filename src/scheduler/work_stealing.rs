@@ -1,7 +1,7 @@
 use crate::active_messaging::{ActiveMessageEngine, ExecType, LamellarFunc};
 use crate::lamellae::{Des, Lamellae, SerializedData};
 use crate::lamellar_request::InternalReq;
-use crate::lamellar_team::LamellarTeam;
+use crate::lamellar_team::LamellarTeamRT;
 use crate::scheduler::{AmeScheduler, AmeSchedulerQueue, ReqData, SchedulerQueue};
 use lamellar_prof::*;
 // use log::trace;
@@ -121,8 +121,8 @@ impl AmeSchedulerQueue for WorkStealingInner {
         id: usize,
         func: LamellarFunc,
         lamellae: Arc<Lamellae>,
-        world: Arc<LamellarTeam>,
-        team: Arc<LamellarTeam>,
+        world: Arc<LamellarTeamRT>,
+        team: Arc<LamellarTeamRT>,
         team_hash: u64,
         ireq: Option<InternalReq>,
     ) {
@@ -238,8 +238,8 @@ impl SchedulerQueue for WorkStealing {
         id: usize,
         func: LamellarFunc,
         lamellae: Arc<Lamellae>,
-        world: Arc<LamellarTeam>,
-        team: Arc<LamellarTeam>,
+        world: Arc<LamellarTeamRT>,
+        team: Arc<LamellarTeamRT>,
         team_hash: u64,
         ireq: Option<InternalReq>,
     ) {
@@ -347,7 +347,7 @@ impl WorkStealing {
     pub(crate) fn new(
         _num_pes: usize,
         my_pe: usize,
-        teams: Arc<RwLock<HashMap<u64, Weak<LamellarTeam>>>>,
+        teams: Arc<RwLock<HashMap<u64, Weak<LamellarTeamRT>>>>,
     ) -> WorkStealing {
         // println!("new work stealing queue");
         let stall_mark = Arc::new(AtomicUsize::new(0));

@@ -1,7 +1,7 @@
 use crate::lamellae::{Lamellae, LamellaeRDMA, SerializedData};
 use crate::lamellar_arch::IdError;
 use crate::lamellar_request::{InternalReq, InternalResult, LamellarRequest};
-use crate::lamellar_team::LamellarTeam;
+use crate::lamellar_team::LamellarTeamRT;
 use crate::scheduler::{AmeScheduler, ReqData};
 #[cfg(feature = "enable-prof")]
 use lamellar_prof::*;
@@ -65,8 +65,8 @@ pub trait LamellarActiveMessage: DarcSerde {
         my_pe: usize,
         num_pes: usize,
         local: bool,
-        world: Arc<LamellarTeam>,
-        team: Arc<LamellarTeam>,
+        world: Arc<LamellarTeamRT>,
+        team: Arc<LamellarTeamRT>,
     ) -> std::pin::Pin<Box<dyn std::future::Future<Output = LamellarReturn> + Send>>;
     fn get_id(&self) -> String;
 }
@@ -182,7 +182,7 @@ pub trait ActiveMessaging {
 
 //maybe make this a struct then we could hold the pending counters...
 pub(crate) struct ActiveMessageEngine {
-    teams: Arc<RwLock<HashMap<u64, Weak<LamellarTeam>>>>,
+    teams: Arc<RwLock<HashMap<u64, Weak<LamellarTeamRT>>>>,
     my_pe: usize,
     batched_am: Arc<RegisteredActiveMessages>,
 }
@@ -199,7 +199,7 @@ impl ActiveMessageEngine {
     pub(crate) fn new(
         my_pe: usize,
         scheduler: Arc<AmeScheduler>,
-        teams: Arc<RwLock<HashMap<u64, Weak<LamellarTeam>>>>,
+        teams: Arc<RwLock<HashMap<u64, Weak<LamellarTeamRT>>>>,
         stall_mark: Arc<AtomicUsize>,
     ) -> Self {
         trace!("registered funcs {:?}", AMS_EXECS.len(),);
@@ -260,7 +260,7 @@ impl ActiveMessageEngine {
         req_id: usize,
         pe: u16,
         data: InternalResult,
-        team: Arc<LamellarTeam>,
+        team: Arc<LamellarTeamRT>,
     ) {
         let reqs = REQUESTS.lock();
         match reqs.get(&req_id) {
@@ -282,7 +282,7 @@ impl ActiveMessageEngine {
                 panic!(
                     "error id not found {:?} mem in use: {:?}",
                     req_id,
-                    team.team.lamellae.occupied()
+                    team.lamellae.occupied()
                 )
             }
         }

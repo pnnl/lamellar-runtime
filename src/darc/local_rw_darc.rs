@@ -10,7 +10,7 @@ use crate::darc::{Darc, DarcInner, DarcMode, __NetworkDarc};
 use crate::lamellae::{LamellaeComm, LamellaeRDMA};
 use crate::lamellar_world::LAMELLAES;
 use crate::IdError;
-use crate::LamellarTeam;
+use crate::LamellarTeamRT;
 
 #[derive(serde::Serialize, serde::Deserialize, Debug)]
 pub struct LocalRwDarc<T: 'static> {
@@ -76,7 +76,7 @@ impl<T> LocalRwDarc<T> {
 
     pub fn print(&self) {
         let rel_addr =
-            unsafe { self.darc.inner as usize - (*self.inner().team).team.lamellae.base_addr() };
+            unsafe { self.darc.inner as usize - (*self.inner().team).lamellae.base_addr() };
         println!(
             "--------\norig: {:?} {:?} (0x{:x}) {:?}\n--------",
             self.darc.src_pe,
@@ -96,13 +96,13 @@ impl<T> LocalRwDarc<T> {
 }
 
 impl<T> LocalRwDarc<T> {
-    pub fn new(team: Arc<LamellarTeam>, item: T) -> Result<LocalRwDarc<T>, IdError> {
+    pub fn new(team: Arc<LamellarTeamRT>, item: T) -> Result<LocalRwDarc<T>, IdError> {
         Ok(LocalRwDarc {
             darc: Darc::try_new(team, RwLock::new(Box::new(item)), DarcMode::LocalRw)?,
         })
     }
 
-    pub fn try_new(team: Arc<LamellarTeam>, item: T) -> Result<LocalRwDarc<T>, IdError> {
+    pub fn try_new(team: Arc<LamellarTeamRT>, item: T) -> Result<LocalRwDarc<T>, IdError> {
         Ok(LocalRwDarc {
             darc: Darc::try_new(team, RwLock::new(Box::new(item)), DarcMode::LocalRw)?,
         })
@@ -208,7 +208,7 @@ impl<T> From<Darc<RwLock<Box<T>>>> for __NetworkDarc<T> {
     fn from(darc: Darc<RwLock<Box<T>>>) -> Self {
         // println!("rwdarc to net darc");
         // darc.print();
-        let team = &darc.inner().team().team;
+        let team = &darc.inner().team();
         let ndarc = __NetworkDarc {
             inner_addr: darc.inner as *const u8 as usize,
             backend: team.lamellae.backend(),
@@ -224,7 +224,7 @@ impl<T> From<&Darc<RwLock<Box<T>>>> for __NetworkDarc<T> {
     fn from(darc: &Darc<RwLock<Box<T>>>) -> Self {
         // println!("rwdarc to net darc");
         // darc.print();
-        let team = &darc.inner().team().team;
+        let team = &darc.inner().team();
         let ndarc = __NetworkDarc {
             inner_addr: darc.inner as *const u8 as usize,
             backend: team.lamellae.backend(),

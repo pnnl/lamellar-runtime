@@ -12,7 +12,7 @@ use crate::darc::{Darc, DarcInner, DarcMode, __NetworkDarc};
 use crate::lamellae::{LamellaeComm, LamellaeRDMA};
 use crate::lamellar_world::LAMELLAES;
 use crate::IdError;
-use crate::LamellarTeam;
+use crate::LamellarTeamRT;
 
 #[derive(serde::Serialize, serde::Deserialize, Debug)]
 enum LockType {
@@ -26,7 +26,7 @@ pub(crate) struct DistRwLock<T> {
     writer: AtomicUsize,
     local_cnt: AtomicUsize,
     local_state: Mutex<Option<LockType>>,
-    team: Arc<LamellarTeam>,
+    team: Arc<LamellarTeamRT>,
     data: std::cell::UnsafeCell<T>,
 }
 
@@ -39,10 +39,10 @@ unsafe impl<T: Sync + Send> Sync for DistRwLock<T> {}
 /// since this is intended to be wrapped by a Darc there should be no issues
 /// usage outside of a darc is undefined
 impl<T> DistRwLock<T> {
-    pub(crate) fn new(data: T, team: Arc<LamellarTeam>) -> DistRwLock<T> {
+    pub(crate) fn new(data: T, team: Arc<LamellarTeamRT>) -> DistRwLock<T> {
         DistRwLock {
             readers: AtomicUsize::new(0),
-            writer: AtomicUsize::new(team.team.num_pes),
+            writer: AtomicUsize::new(team.num_pes),
             local_cnt: AtomicUsize::new(0),
             local_state: Mutex::new(None),
             team: team,
@@ -56,12 +56,12 @@ impl<T> DistRwLock<T> {
 impl<T> DistRwLock<T> {
     async fn async_reader_lock(&self, _pe: usize) {
         loop {
-            while self.writer.load(Ordering::SeqCst) != self.team.team.num_pes {
+            while self.writer.load(Ordering::SeqCst) != self.team.num_pes {
                 async_std::task::yield_now().await;
             }
             // println!("\t{:?} inc read count {:?} {:?}",pe,self.readers.load(Ordering::SeqCst),self.writer.load(Ordering::SeqCst));
             self.readers.fetch_add(1, Ordering::SeqCst);
-            if self.writer.load(Ordering::SeqCst) == self.team.team.num_pes {
+            if self.writer.load(Ordering::SeqCst) == self.team.num_pes {
                 break;
             }
             self.readers.fetch_sub(1, Ordering::SeqCst);
@@ -71,7 +71,7 @@ impl<T> DistRwLock<T> {
     }
     async fn async_writer_lock(&self, pe: usize) {
         while let Err(_) = self.writer.compare_exchange(
-            self.team.team.num_pes,
+            self.team.num_pes,
             pe,
             Ordering::SeqCst,
             Ordering::SeqCst,
@@ -100,7 +100,7 @@ impl<T> DistRwLock<T> {
         // println!("\t{:?} writer unlocking {:?} {:?}",pe,self.readers.load(Ordering::SeqCst),self.writer.load(Ordering::SeqCst));
         if let Err(val) = self.writer.compare_exchange(
             pe,
-            self.team.team.num_pes,
+            self.team.num_pes,
             Ordering::SeqCst,
             Ordering::SeqCst,
         ) {
@@ -174,7 +174,7 @@ impl<'a, T: 'a> Drop for GlobalRwDarcReadGuard<'a, T> {
         // println!("dropping read guard");
         let inner = self.rwlock.inner();
         let team = inner.team();
-        let remote_rwlock_addr = team.team.lamellae.remote_addr(
+        let remote_rwlock_addr = team.lamellae.remote_addr(
             0,
             inner as *const DarcInner<DistRwLock<T>> as *const () as usize,
         );
@@ -183,11 +183,11 @@ impl<'a, T: 'a> Drop for GlobalRwDarcReadGuard<'a, T> {
             UnlockAm {
                 rwlock_addr: remote_rwlock_addr,
                 orig_pe: team
-                    .team
                     .team_pe
                     .expect("darcs cant exist on non team members"),
                 lock_type: LockType::Read,
             },
+            None
         );
     }
 }
@@ -224,7 +224,7 @@ impl<'a, T: 'a> Drop for GlobalRwDarcWriteGuard<'a, T> {
         // println!("dropping write guard");
         let inner = self.rwlock.inner();
         let team = inner.team();
-        let remote_rwlock_addr = team.team.lamellae.remote_addr(
+        let remote_rwlock_addr = team.lamellae.remote_addr(
             0,
             inner as *const DarcInner<DistRwLock<T>> as *const () as usize,
         );
@@ -233,11 +233,11 @@ impl<'a, T: 'a> Drop for GlobalRwDarcWriteGuard<'a, T> {
             UnlockAm {
                 rwlock_addr: remote_rwlock_addr,
                 orig_pe: team
-                    .team
                     .team_pe
                     .expect("darcs cant exist on non team members"),
                 lock_type: LockType::Write,
             },
+            None
         );
     }
 }
@@ -313,7 +313,7 @@ impl<T> GlobalRwDarc<T> {
 
     pub fn print(&self) {
         let rel_addr =
-            unsafe { self.darc.inner as usize - (*self.inner().team).team.lamellae.base_addr() };
+            unsafe { self.darc.inner as usize - (*self.inner().team).lamellae.base_addr() };
         println!(
             "--------\norig: {:?} {:?} (0x{:x}) {:?}\n--------",
             self.darc.src_pe,
@@ -327,7 +327,7 @@ impl<T> GlobalRwDarc<T> {
         // println!("async read");
         let inner = self.inner();
         let team = inner.team();
-        let remote_rwlock_addr = team.team.lamellae.remote_addr(
+        let remote_rwlock_addr = team.lamellae.remote_addr(
             0,
             inner as *const DarcInner<DistRwLock<T>> as *const () as usize,
         );
@@ -336,11 +336,11 @@ impl<T> GlobalRwDarc<T> {
             LockAm {
                 rwlock_addr: remote_rwlock_addr,
                 orig_pe: team
-                    .team
                     .team_pe
                     .expect("darcs cant exist on non team members"),
                 lock_type: LockType::Read,
             },
+            None
         )
         .into_future()
         .await;
@@ -355,7 +355,7 @@ impl<T> GlobalRwDarc<T> {
         // println!("async write");
         let inner = self.inner();
         let team = inner.team();
-        let remote_rwlock_addr = team.team.lamellae.remote_addr(
+        let remote_rwlock_addr = team.lamellae.remote_addr(
             0,
             inner as *const DarcInner<DistRwLock<T>> as *const () as usize,
         );
@@ -364,11 +364,11 @@ impl<T> GlobalRwDarc<T> {
             LockAm {
                 rwlock_addr: remote_rwlock_addr,
                 orig_pe: team
-                    .team
                     .team_pe
                     .expect("darcs cant exist on non team members"),
                 lock_type: LockType::Write,
             },
+            None,
         )
         .into_future()
         .await;
@@ -382,7 +382,7 @@ impl<T> GlobalRwDarc<T> {
         // println!("read");
         let inner = self.inner();
         let team = inner.team();
-        let remote_rwlock_addr = team.team.lamellae.remote_addr(
+        let remote_rwlock_addr = team.lamellae.remote_addr(
             0,
             inner as *const DarcInner<DistRwLock<T>> as *const () as usize,
         );
@@ -391,11 +391,11 @@ impl<T> GlobalRwDarc<T> {
             LockAm {
                 rwlock_addr: remote_rwlock_addr,
                 orig_pe: team
-                    .team
                     .team_pe
                     .expect("darcs cant exist on non team members"),
                 lock_type: LockType::Read,
             },
+            None
         )
         .get();
         GlobalRwDarcReadGuard {
@@ -408,7 +408,7 @@ impl<T> GlobalRwDarc<T> {
         // println!("write");
         let inner = self.inner();
         let team = inner.team();
-        let remote_rwlock_addr = team.team.lamellae.remote_addr(
+        let remote_rwlock_addr = team.lamellae.remote_addr(
             0,
             inner as *const DarcInner<DistRwLock<T>> as *const () as usize,
         );
@@ -417,11 +417,11 @@ impl<T> GlobalRwDarc<T> {
             LockAm {
                 rwlock_addr: remote_rwlock_addr,
                 orig_pe: team
-                    .team
                     .team_pe
                     .expect("darcs cant exist on non team members"),
                 lock_type: LockType::Write,
             },
+            None,
         )
         .get();
         GlobalRwDarcWriteGuard {
@@ -433,7 +433,7 @@ impl<T> GlobalRwDarc<T> {
 }
 
 impl<T> GlobalRwDarc<T> {
-    pub fn new(team: Arc<LamellarTeam>, item: T) -> Result<GlobalRwDarc<T>, IdError> {
+    pub fn new(team: Arc<LamellarTeamRT>, item: T) -> Result<GlobalRwDarc<T>, IdError> {
         Ok(GlobalRwDarc {
             darc: Darc::try_new(
                 team.clone(),
@@ -443,7 +443,7 @@ impl<T> GlobalRwDarc<T> {
         })
     }
 
-    pub fn try_new(team: Arc<LamellarTeam>, item: T) -> Result<GlobalRwDarc<T>, IdError> {
+    pub fn try_new(team: Arc<LamellarTeamRT>, item: T) -> Result<GlobalRwDarc<T>, IdError> {
         Ok(GlobalRwDarc {
             darc: Darc::try_new(
                 team.clone(),
@@ -547,7 +547,7 @@ impl<T> From<&Darc<DistRwLock<T>>> for __NetworkDarc<T> {
     fn from(darc: &Darc<DistRwLock<T>>) -> Self {
         // println!("rwdarc to net darc");
         // darc.print();
-        let team = &darc.inner().team().team;
+        let team = &darc.inner().team();
         let ndarc = __NetworkDarc {
             inner_addr: darc.inner as *const u8 as usize,
             backend: team.lamellae.backend(),

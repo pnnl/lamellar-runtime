@@ -46,7 +46,7 @@ impl<T: Dist + 'static> SharedMemoryRegion<T> {
     pub(crate) fn new(
         size: usize,
         // lamellae: Arc<Lamellae>,
-        team: Arc<LamellarTeam>,
+        team: Arc<LamellarTeamRT>,
         alloc: AllocationType,
     ) -> SharedMemoryRegion<T> {
         // println!("new shared memregion");
@@ -55,7 +55,7 @@ impl<T: Dist + 'static> SharedMemoryRegion<T> {
                 team.clone(),
                 MemoryRegion::new(
                     size * std::mem::size_of::<T>(),
-                    team.team.lamellae.clone(),
+                    team.lamellae.clone(),
                     alloc,
                 ),
             )
@@ -231,7 +231,7 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static>
 impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static>
     MyFrom<&SharedMemoryRegion<T>> for LamellarArrayInput<T>
 {
-    fn my_from(smr: &SharedMemoryRegion<T>, _team: &Arc<LamellarTeam>) -> Self {
+    fn my_from(smr: &SharedMemoryRegion<T>, _team: &Arc<LamellarTeamRT>) -> Self {
         LamellarArrayInput::SharedMemRegion(smr.clone())
     }
 }

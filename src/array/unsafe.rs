@@ -3,7 +3,7 @@ use crate::array::*;
 use crate::darc::Darc;
 use crate::lamellae::AllocationType;
 use crate::lamellar_request::LamellarRequest;
-use crate::lamellar_team::LamellarTeam;
+use crate::lamellar_team::{LamellarTeam,LamellarTeamRT};
 use crate::memregion::{Dist, MemoryRegion, RegisteredMemoryRegion, RemoteMemoryRegion, SubRegion};
 use crate::scheduler::SchedulerQueue;
 use core::marker::PhantomData;
@@ -18,7 +18,7 @@ struct UnsafeArrayInner {
     mem_region: MemoryRegion<u8>,
     array_counters: Arc<AMCounters>,
     op_map: Arc<RwLock<HashMap<ArrayOp, Box<dyn Fn(&ArrayOpInput) + Sync + Send>>>>,
-    pub(crate) team: Arc<LamellarTeam>,
+    pub(crate) team: Arc<LamellarTeamRT>,
 }
 
 //need to calculate num_elems_local dynamically
@@ -40,12 +40,13 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Un
         array_size: usize,
         distribution: Distribution,
     ) -> UnsafeArray<T> {
+        let team = team.team.clone();
         let elem_per_pe = array_size as f32 / team.num_pes() as f32;
         let per_pe_size = (array_size as f32 / team.num_pes() as f32).ceil() as usize; //we do ceil to ensure enough space an each pe
                                                                                        // println!("new unsafe array {:?} {:?} {:?}", elem_per_pe, num_elems_local, per_pe_size);
         let rmr = MemoryRegion::new(
             per_pe_size * std::mem::size_of::<T>(),
-            team.team.lamellae.clone(),
+            team.lamellae.clone(),
             AllocationType::Global,
         );
         unsafe {
@@ -283,15 +284,13 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Un
         func: LamellarArcAm,
     ) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
         if let Ok(my_pe) = self.inner.team.team_pe_id() {
-            self.inner.team.team.exec_am_pe::<T>(
-                self.inner.team.clone(),
+            self.inner.team.exec_arc_am_pe::<T>(
                 my_pe,
                 func,
                 Some(self.inner.array_counters.clone()),
             )
         } else {
-            self.inner.team.team.exec_am_pe::<T>(
-                self.inner.team.clone(),
+            self.inner.team.exec_arc_am_pe::<T>(
                 0,
                 func,
                 Some(self.inner.array_counters.clone()),
@@ -382,7 +381,7 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Un
             phantom: PhantomData,
         }
     }
-    pub(crate) fn team(&self) -> Arc<LamellarTeam> {
+    pub(crate) fn team(&self) -> Arc<LamellarTeamRT> {
         self.inner.team.clone()
     }
 }
@@ -414,8 +413,7 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Di
         if let Ok(_my_pe) = self.inner.team.team_pe_id() {
             let mut worker = 0;
             while ((worker as f64 * elems_per_thread).round() as usize) < num_elems_local {
-                self.inner.team.team.exec_am_local(
-                    self.inner.team.clone(),
+                self.inner.team.exec_am_local(
                     ForEach {
                         op: op.clone(),
                         data: iter.clone(),
@@ -444,8 +442,7 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Di
         if let Ok(_my_pe) = self.inner.team.team_pe_id() {
             let mut worker = 0;
             while ((worker as f64 * elems_per_thread).round() as usize) < num_elems_local {
-                self.inner.team.team.exec_am_local(
-                    self.inner.team.clone(),
+                self.inner.team.exec_am_local(
                     ForEachAsync {
                         op: op.clone(),
                         data: iter.clone(),
@@ -482,9 +479,9 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + std::fmt::D
     UnsafeArray<T>
 {
     pub fn print(&self) {
-        self.inner.team.team.barrier(); //TODO: have barrier accept a string so we can print where we are stalling.
+        self.inner.team.barrier(); //TODO: have barrier accept a string so we can print where we are stalling.
         for pe in 0..self.inner.team.num_pes() {
-            self.inner.team.team.barrier();
+            self.inner.team.barrier();
             if self.inner.team.team_pe_id().unwrap() == pe {
                 println!("[pe {:?} data] {:?}", pe, self.local_as_slice());
             }
@@ -528,8 +525,7 @@ impl<
         func: LamellarArcAm,
     ) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync> {
         let pe = self.pe_for_dist_index(index);
-        self.inner.team.team.exec_am_pe(
-            self.inner.team.clone(),
+        self.inner.team.exec_arc_am_pe(
             pe,
             func,
             Some(self.inner.array_counters.clone()),
@@ -586,11 +582,11 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> La
             > 0
         {
             // std::thread::yield_now();
-            self.inner.team.team.scheduler.exec_task(); //mmight as well do useful work while we wait
+            self.inner.team.scheduler.exec_task(); //mmight as well do useful work while we wait
             if temp_now.elapsed() > Duration::new(60, 0) {
                 println!(
                     "in team wait_all mype: {:?} cnt: {:?} {:?}",
-                    self.inner.team.team.world_pe,
+                    self.inner.team.world_pe,
                     self.inner
                         .array_counters
                         .send_req_cnt

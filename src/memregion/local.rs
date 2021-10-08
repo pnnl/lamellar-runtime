@@ -262,7 +262,7 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static>
 impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static>
     MyFrom<&LocalMemoryRegion<T>> for LamellarArrayInput<T>
 {
-    fn my_from(smr: &LocalMemoryRegion<T>, _team: &Arc<LamellarTeam>) -> Self {
+    fn my_from(smr: &LocalMemoryRegion<T>, _team: &Arc<LamellarTeamRT>) -> Self {
         LamellarArrayInput::LocalMemRegion(smr.clone())
     }
 }

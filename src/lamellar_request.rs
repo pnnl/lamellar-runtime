@@ -1,7 +1,7 @@
 use crate::active_messaging::LamellarAny;
 use crate::lamellae::{Des, SerializedData};
 use crate::lamellar_arch::LamellarArchRT;
-use crate::lamellar_team::LamellarTeam;
+use crate::lamellar_team::LamellarTeamRT;
 use async_trait::async_trait;
 use crossbeam::utils::CachePadded;
 use lamellar_prof::*;
@@ -24,7 +24,7 @@ pub(crate) struct InternalReq {
     pub(crate) world_outstanding_reqs: Arc<AtomicUsize>,
     pub(crate) tg_outstanding_reqs: Option<Arc<AtomicUsize>>,
     pub(crate) team_hash: u64,
-    pub(crate) team: Arc<LamellarTeam>,
+    pub(crate) team: Arc<LamellarTeamRT>,
 }
 
 #[async_trait]
@@ -67,7 +67,7 @@ impl<T: 'static + serde::ser::Serialize + serde::de::DeserializeOwned + Sync + S
         world_reqs: Arc<AtomicUsize>,
         tg_reqs: Option<Arc<AtomicUsize>>,
         team_hash: u64,
-        team: Arc<LamellarTeam>,
+        team: Arc<LamellarTeamRT>,
     ) -> (LamellarRequestHandle<T>, InternalReq) {
         prof_start!(active);
         let active = Arc::new(AtomicBool::new(true));

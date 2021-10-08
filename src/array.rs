@@ -1,4 +1,4 @@
-use crate::{active_messaging::*, LamellarTeam, RemoteMemoryRegion}; //{ActiveMessaging,AMCounters,Cmd,Msg,LamellarAny,LamellarLocal};
+use crate::{active_messaging::*, LamellarTeamRT, RemoteMemoryRegion}; //{ActiveMessaging,AMCounters,Cmd,Msg,LamellarAny,LamellarLocal};
                                                                     // use crate::lamellae::Lamellae;
                                                                     // use crate::lamellar_arch::LamellarArchRT;
 use crate::lamellar_request::LamellarRequest;
@@ -75,7 +75,7 @@ pub enum LamellarArrayInput<T: Dist + 'static> {
 }
 
 impl<T: Dist + 'static> MyFrom<&T> for LamellarArrayInput<T> {
-    fn my_from(val: &T, team: &Arc<LamellarTeam>) -> Self {
+    fn my_from(val: &T, team: &Arc<LamellarTeamRT>) -> Self {
         let buf: LocalMemoryRegion<T> = team.alloc_local_mem_region(1);
         unsafe {
             buf.as_mut_slice().unwrap()[0] = val.clone();
@@ -85,7 +85,7 @@ impl<T: Dist + 'static> MyFrom<&T> for LamellarArrayInput<T> {
 }
 
 impl<T: Dist + 'static> MyFrom<T> for LamellarArrayInput<T> {
-    fn my_from(val: T, team: &Arc<LamellarTeam>) -> Self {
+    fn my_from(val: T, team: &Arc<LamellarTeamRT>) -> Self {
         let buf: LocalMemoryRegion<T> = team.alloc_local_mem_region(1);
         unsafe {
             buf.as_mut_slice().unwrap()[0] = val;
@@ -95,7 +95,7 @@ impl<T: Dist + 'static> MyFrom<T> for LamellarArrayInput<T> {
 }
 
 // impl<T: Dist + 'static> MyFrom<T> for LamellarArrayInput<T> {
-//     fn my_from(val: T, team: &Arc<LamellarTeam>) -> Self {
+//     fn my_from(val: T, team: &Arc<LamellarTeamRT>) -> Self {
 //         let buf: LocalMemoryRegion<T> = team.alloc_local_mem_region(1);
 //         unsafe {
 //             buf.as_mut_slice().unwrap()[0] = val;
@@ -105,18 +105,18 @@ impl<T: Dist + 'static> MyFrom<T> for LamellarArrayInput<T> {
 // }
 
 pub trait MyFrom<T: ?Sized> {
-    fn my_from(val: T, team: &Arc<LamellarTeam>) -> Self;
+    fn my_from(val: T, team: &Arc<LamellarTeamRT>) -> Self;
 }
 
 pub trait MyInto<T: ?Sized> {
-    fn my_into(self, team: &Arc<LamellarTeam>) -> T;
+    fn my_into(self, team: &Arc<LamellarTeamRT>) -> T;
 }
 
 impl<T, U> MyInto<U> for T
 where
     U: MyFrom<T>,
 {
-    fn my_into(self, team: &Arc<LamellarTeam>) -> U {
+    fn my_into(self, team: &Arc<LamellarTeamRT>) -> U {
         U::my_from(self, team)
     }
 }
@@ -136,7 +136,7 @@ pub enum LamellarArray<T: Dist + serde::ser::Serialize + serde::de::DeserializeO
     UnsafeArray(UnsafeArray<T>),
 }
 impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> LamellarArray<T> {
-    pub(crate) fn team(&self) -> Arc<LamellarTeam> {
+    pub(crate) fn team(&self) -> Arc<LamellarTeamRT> {
         match self {
             LamellarArray::UnsafeArray(inner) => inner.team(),
         }
@@ -584,7 +584,7 @@ impl<'a, T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static
 {
     fn new(
         array: LamellarArray<T>,
-        team: Arc<LamellarTeam>,
+        team: Arc<LamellarTeamRT>,
         buf_size: usize,
     ) -> LamellarArrayIter<'a, T> {
         let buf_0 = team.alloc_local_mem_region(buf_size);
