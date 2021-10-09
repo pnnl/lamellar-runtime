@@ -51,13 +51,14 @@ impl<T: Dist + 'static> SharedMemoryRegion<T> {
     ) -> SharedMemoryRegion<T> {
         // println!("new shared memregion");
         SharedMemoryRegion {
-            mr: Darc::new(
+            mr: Darc::try_new(
                 team.clone(),
                 MemoryRegion::new(
                     size * std::mem::size_of::<T>(),
                     team.lamellae.clone(),
                     alloc,
                 ),
+                crate::darc::DarcMode::Darc,
             )
             .expect("memregions can only be created on a member of the team"),
             sub_region_offset: 0,

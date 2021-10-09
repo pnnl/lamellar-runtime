@@ -10,7 +10,7 @@ use std::sync::atomic::{AtomicU8, AtomicUsize, Ordering};
 use std::sync::Arc;
 
 use crate::lamellar_world::LAMELLAES;
-use crate::LamellarTeamRT;
+use crate::{LamellarTeam,LamellarTeamRT};
 // use crate::LamellarAM;
 use crate::active_messaging::ActiveMessaging;
 use crate::lamellae::{AllocationType, Backend, LamellaeComm, LamellaeRDMA};
@@ -307,8 +307,8 @@ impl<T> Darc<T> {
 }
 
 impl<T> Darc<T> {
-    pub fn new(team: Arc<LamellarTeamRT>, item: T) -> Result<Darc<T>, IdError> {
-        Darc::try_new(team, item, DarcMode::Darc)
+    pub fn new(team: Arc<LamellarTeam>, item: T) -> Result<Darc<T>, IdError> {
+        Darc::try_new(team.team.clone(), item, DarcMode::Darc)
     }
 
     pub(crate) fn try_new(

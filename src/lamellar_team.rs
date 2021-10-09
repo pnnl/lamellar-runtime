@@ -33,7 +33,7 @@ struct GlobalAllocAm{
 impl LamellarAM for GlobalAllocAm{
     fn exec() {
         self.barrier.barrier();
-        lamellar::team.lamellae.alloc_pool(self.min_size);
+        lamellar::team.team.lamellae.alloc_pool(self.min_size);
         self.barrier.barrier();
     }
 }
@@ -50,7 +50,7 @@ struct InitGlobalAllocAm{
 impl LamellarAM for InitGlobalAllocAm{
     fn exec() {
         self.mutex.async_write().await;
-        if self.prev_cnt == lamellar::team.lamellae.num_pool_allocs() {
+        if self.prev_cnt == lamellar::team.team.lamellae.num_pool_allocs() {
             lamellar::team.exec_am_all(GlobalAllocAm{
                 barrier: self.barrier.clone(),
                 min_size: self.min_size,                
@@ -69,7 +69,7 @@ impl LamellarAM for InitGlobalAllocAm{
 pub struct LamellarTeam {
     pub(crate) world: Option<Arc<LamellarTeam>>,
     pub(crate) team: Arc<LamellarTeamRT>,
-    pub(crate) teams: Arc<RwLock<HashMap<u64, Weak<LamellarTeamRT>>>>, //need a reference to this so we can clean up after dropping the team
+    pub(crate) teams: Arc<RwLock<HashMap<u64, Weak<LamellarTeam>>>>, //need a reference to this so we can clean up after dropping the team
 }
 
 //#[prof]
@@ -110,7 +110,7 @@ impl LamellarTeam {
             parent
                 .teams
                 .write()
-                .insert(team.team.team_hash, Arc::downgrade(&team.team));
+                .insert(team.team.team_hash, Arc::downgrade(&team));
             Some(team)
         } else {
             None

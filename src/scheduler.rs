@@ -1,7 +1,7 @@
 use crate::active_messaging::*;
 use crate::lamellae::{Lamellae, SerializedData};
 use crate::lamellar_request::InternalReq;
-use crate::lamellar_team::LamellarTeamRT;
+use crate::lamellar_team::{LamellarTeam,LamellarTeamRT};
 
 use enum_dispatch::enum_dispatch;
 use futures::Future;
@@ -117,7 +117,7 @@ pub(crate) fn create_scheduler(
     sched: SchedulerType,
     num_pes: usize,
     my_pe: usize,
-    teams: Arc<RwLock<HashMap<u64, Weak<LamellarTeamRT>>>>,
+    teams: Arc<RwLock<HashMap<u64, Weak<LamellarTeam>>>>,
 ) -> Scheduler {
     match sched {
         SchedulerType::WorkStealing => {

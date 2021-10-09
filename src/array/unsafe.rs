@@ -56,7 +56,7 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Un
         }
 
         let array = UnsafeArray {
-            inner: Darc::new(
+            inner: Darc::try_new(
                 team.clone(),
                 UnsafeArrayInner {
                     mem_region: rmr,
@@ -64,6 +64,7 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Un
                     op_map: Arc::new(RwLock::new(HashMap::new())),
                     team: team,
                 },
+                crate::darc::DarcMode::Darc
             )
             .expect("trying to create array on non team member"),
             distribution: distribution.clone(),

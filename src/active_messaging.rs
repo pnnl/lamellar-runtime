@@ -1,7 +1,7 @@
 use crate::lamellae::{Lamellae, LamellaeRDMA, SerializedData};
 use crate::lamellar_arch::IdError;
 use crate::lamellar_request::{InternalReq, InternalResult, LamellarRequest};
-use crate::lamellar_team::LamellarTeamRT;
+use crate::lamellar_team::{LamellarTeamRT,LamellarTeam};
 use crate::scheduler::{AmeScheduler, ReqData};
 #[cfg(feature = "enable-prof")]
 use lamellar_prof::*;
@@ -65,8 +65,8 @@ pub trait LamellarActiveMessage: DarcSerde {
         my_pe: usize,
         num_pes: usize,
         local: bool,
-        world: Arc<LamellarTeamRT>,
-        team: Arc<LamellarTeamRT>,
+        world: Arc<LamellarTeam>,
+        team: Arc<LamellarTeam>,
     ) -> std::pin::Pin<Box<dyn std::future::Future<Output = LamellarReturn> + Send>>;
     fn get_id(&self) -> String;
 }
@@ -182,7 +182,7 @@ pub trait ActiveMessaging {
 
 //maybe make this a struct then we could hold the pending counters...
 pub(crate) struct ActiveMessageEngine {
-    teams: Arc<RwLock<HashMap<u64, Weak<LamellarTeamRT>>>>,
+    teams: Arc<RwLock<HashMap<u64, Weak<LamellarTeam>>>>,
     my_pe: usize,
     batched_am: Arc<RegisteredActiveMessages>,
 }
@@ -199,7 +199,7 @@ impl ActiveMessageEngine {
     pub(crate) fn new(
         my_pe: usize,
         scheduler: Arc<AmeScheduler>,
-        teams: Arc<RwLock<HashMap<u64, Weak<LamellarTeamRT>>>>,
+        teams: Arc<RwLock<HashMap<u64, Weak<LamellarTeam>>>>,
         stall_mark: Arc<AtomicUsize>,
     ) -> Self {
         trace!("registered funcs {:?}", AMS_EXECS.len(),);
@@ -215,11 +215,28 @@ impl ActiveMessageEngine {
         if let Some(ireq) = ireq {
             REQUESTS.lock().insert(req_data.id, ireq.clone());
         }
+        let (team, world) = self.get_team_and_world(req_data.team.team_hash);
 
         match req_data.cmd.clone() {
             ExecType::Runtime(_cmd) => {}
-            ExecType::Am(_) => self.batched_am.process_am_req(req_data).await,
+            ExecType::Am(_) => self.batched_am.process_am_req(req_data,world,team).await,
         }
+    }
+
+    pub(crate) fn get_team_and_world(&self,team_hash: u64,)->(Arc<LamellarTeam>,Arc<LamellarTeam>){
+        let teams = self.teams.read();
+            (
+                teams
+                    .get(&team_hash)
+                    .expect("invalid team hash")
+                    .upgrade()
+                    .expect("team no longer exists"),
+                teams
+                    .get(&0)
+                    .expect("invalid world hash")
+                    .upgrade()
+                    .expect("team no longer exists"),
+            )
     }
 
     pub(crate) async fn exec_msg(
@@ -230,21 +247,7 @@ impl ActiveMessageEngine {
         lamellae: Arc<Lamellae>,
         team_hash: u64,
     ) {
-        let (world, team) = {
-            let teams = self.teams.read();
-            (
-                teams
-                    .get(&0)
-                    .expect("invalid world hash")
-                    .upgrade()
-                    .expect("team no longer exists"),
-                teams
-                    .get(&team_hash)
-                    .expect("invalid team hash")
-                    .upgrade()
-                    .expect("team no longer exists"),
-            )
-        };
+        let (team, world) = self.get_team_and_world(team_hash);
         match msg.cmd.clone() {
             ExecType::Am(cmd) => {
                 self.batched_am

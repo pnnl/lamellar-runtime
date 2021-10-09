@@ -23,7 +23,7 @@ lazy_static! {
 pub struct LamellarWorld {
     team: Arc<LamellarTeam>,
     team_rt: Arc<LamellarTeamRT>,
-    teams: Arc<RwLock<HashMap<u64, Weak<LamellarTeamRT>>>>,
+    teams: Arc<RwLock<HashMap<u64, Weak<LamellarTeam>>>>,
     _counters: Arc<AMCounters>,
     lamellaes_new: BTreeMap<crate::lamellae::Backend, Arc<Lamellae>>,
     my_pe: usize,
@@ -199,7 +199,7 @@ impl LamellarWorld {
         if let Some(team) = LamellarTeam::create_subteam_from_arch(self.team.clone(), arch) {
             self.teams
                 .write()
-                .insert(team.team.team_hash, Arc::downgrade(&team.team));
+                .insert(team.team.team_hash, Arc::downgrade(&team));
             Some(team)
         } else {
             None
@@ -302,7 +302,7 @@ impl LamellarWorldBuilder {
         world
             .teams
             .write()
-            .insert(world.team_rt.team_hash, Arc::downgrade(&world.team.team));
+            .insert(world.team_rt.team_hash, Arc::downgrade(&world.team));
         LAMELLAES
             .write()
             .insert(lamellae.backend(), lamellae.clone());
