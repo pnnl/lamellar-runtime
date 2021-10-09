@@ -259,7 +259,7 @@ pub(crate) struct ShmemComm {
     // _shmem: MyShmem, //the global handle
     pub(crate) base_address: Arc<RwLock<usize>>, //start address of my segment
     size: usize,                                 //size of my segment
-    alloc: BTreeAlloc,
+    alloc: RwLock<Vec<BTreeAlloc>>,
     _init: AtomicBool,
     pub(crate) num_pes: usize,
     pub(crate) my_pe: usize,
@@ -331,14 +331,14 @@ impl ShmemComm {
             // _shmem: shmem,
             base_address: Arc::new(RwLock::new(addr)),
             size: mem_per_pe,
-            alloc: BTreeAlloc::new("shmem".to_string()),
+            alloc: RwLock::new(vec![BTreeAlloc::new("shmem".to_string())]),
             _init: AtomicBool::new(true),
             num_pes: num_pes,
             my_pe: my_pe,
             comm_mutex: Arc::new(Mutex::new(())),
             alloc_lock: Arc::new(RwLock::new((allocs_map, alloc))),
         };
-        shmem.alloc.init(0, mem_per_pe);
+        shmem.alloc.write()[0].init(addr, mem_per_pe);
         shmem
     }
 }
@@ -351,25 +351,59 @@ impl CommOps for ShmemComm {
         self.num_pes
     }
     fn barrier(&self) {
-        let mut alloc = self.alloc_lock.write();
+        let alloc = self.alloc_lock.write();
         unsafe {
             alloc.1.alloc(1, 0..self.num_pes);
         }
     }
     fn occupied(&self) -> usize {
-        self.alloc.occupied()
+        let mut occupied = 0;
+        let allocs = self.alloc.read();
+        for alloc in allocs.iter(){
+            occupied += alloc.occupied();
+        }
+        occupied
+    }
+
+    fn num_pool_allocs(&self) -> usize{
+        self.alloc.read().len()
+    }
+    fn alloc_pool(&self, min_size: usize){
+        let mut allocs = self.alloc.write();
+        let size = std::cmp::max(min_size*2*self.num_pes,SHMEM_SIZE.load(Ordering::SeqCst))/self.num_pes;
+        if let Some(addr) = self.alloc(size,AllocationType::Global){
+            let mut new_alloc = BTreeAlloc::new("shmem".to_string());
+            new_alloc.init(addr,size);
+            allocs.push(new_alloc)
+        }
+        else{
+            panic!("[Error] out of system memory");
+        }
     }
 
     fn rt_alloc(&self, size: usize) -> Option<usize> {
-        if let Some(addr) = self.alloc.try_malloc(size) {
-            Some(addr)
-        } else {
-            println!("[WARNING] out of memory: (work in progress on a scalable solution, as a work around try setting the LAMELLAR_MEM_SIZE envrionment variable (current size = {:?} -- Note: LamellarLocalArrays are currently allocated out of this pool",SHMEM_SIZE.load(Ordering::SeqCst));
-            None
+        let allocs = self.alloc.read();
+        for alloc in allocs.iter(){
+            if let Some(addr) = alloc.try_malloc(size) {
+                return Some(addr)
+            }
         }
+        None
+        // if let Some(addr) = self.alloc.try_malloc(size) {
+        //     Some(addr)
+        // } else {
+        //     println!("[WARNING] out of memory: (work in progress on a scalable solution, as a work around try setting the LAMELLAR_MEM_SIZE envrionment variable (current size = {:?} -- Note: LamellarLocalArrays are currently allocated out of this pool",SHMEM_SIZE.load(Ordering::SeqCst));
+        //     None
+        // }
     }
     fn rt_free(&self, addr: usize) {
-        self.alloc.free(addr);
+        let allocs = self.alloc.read();
+        for alloc in allocs.iter(){
+            if let Ok(_) = alloc.free(addr){
+                return;
+            }
+        }
+        panic!("Error invalid free! {:?}",addr);
     }
 
     fn alloc(&self, size: usize, alloc_type: AllocationType) -> Option<usize> {

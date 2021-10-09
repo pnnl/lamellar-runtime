@@ -413,7 +413,7 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Di
         if let Ok(_my_pe) = self.inner.team.team_pe_id() {
             let mut worker = 0;
             while ((worker as f64 * elems_per_thread).round() as usize) < num_elems_local {
-                self.inner.team.exec_am_local(
+                self.inner.team.exec_am_local_tg(
                     ForEach {
                         op: op.clone(),
                         data: iter.clone(),
@@ -442,7 +442,7 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Di
         if let Ok(_my_pe) = self.inner.team.team_pe_id() {
             let mut worker = 0;
             while ((worker as f64 * elems_per_thread).round() as usize) < num_elems_local {
-                self.inner.team.exec_am_local(
+                self.inner.team.exec_am_local_tg(
                     ForEachAsync {
                         op: op.clone(),
                         data: iter.clone(),

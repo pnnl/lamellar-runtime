@@ -678,8 +678,8 @@ fn create_reduction(
                         let mid_pe = (self.start_pe + self.end_pe)/2;
                         let op = #op;
                         let timer = std::time::Instant::now();
-                        let left = __lamellar_team.exec_am_pe( self.start_pe,  #reduction_name { data: self.data.clone(), start_pe: self.start_pe, end_pe: mid_pe},None).into_future();
-                        let right = __lamellar_team.exec_am_pe( mid_pe+1, #reduction_name { data: self.data.clone(), start_pe: mid_pe+1, end_pe: self.end_pe}, None).into_future();
+                        let left = __lamellar_team.exec_am_pe( self.start_pe,  #reduction_name { data: self.data.clone(), start_pe: self.start_pe, end_pe: mid_pe}).into_future();
+                        let right = __lamellar_team.exec_am_pe( mid_pe+1, #reduction_name { data: self.data.clone(), start_pe: mid_pe+1, end_pe: self.end_pe}).into_future();
                         let res = op(left.await.unwrap(),&right.await.unwrap());
 
                         // println!("[{:?}] {:?} {:?}",__lamellar_current_pe,res,timer.elapsed().as_secs_f64());

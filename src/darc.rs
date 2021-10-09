@@ -167,7 +167,6 @@ impl<T> DarcInner<T> {
                             src_pe: pe,
                             inner_addr: pe_addr,
                         },
-                        None,
                     )
                     .into_future(),
                 );
@@ -469,7 +468,6 @@ impl<T: 'static> Drop for Darc<T> {
                             num_pes: inner.num_pes,
                             phantom: PhantomData::<T>,
                         },
-                        None,
                     );
             } else {
                 let local_mode = unsafe {
@@ -493,7 +491,6 @@ impl<T: 'static> Drop for Darc<T> {
                             num_pes: inner.num_pes,
                             phantom: PhantomData::<T>,
                         },
-                        None,
                     );
                 } else {
                     let local_mode = unsafe {
@@ -517,7 +514,6 @@ impl<T: 'static> Drop for Darc<T> {
                                 num_pes: inner.num_pes,
                                 phantom: PhantomData::<T>,
                             },
-                            None
                         );
                     }
                 }

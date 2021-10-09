@@ -210,4 +210,10 @@ impl LamellaeRDMA for Rofi {
     fn occupied(&self) -> usize {
         self.rofi_comm.occupied()
     }
+    fn num_pool_allocs(&self) -> usize{
+        self.rofi_comm.num_pool_allocs()
+    }
+    fn alloc_pool(&self, min_size: usize){
+        self.rofi_comm.alloc_pool(min_size)
+    }
 }

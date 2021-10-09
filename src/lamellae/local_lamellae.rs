@@ -193,6 +193,12 @@ impl LamellaeRDMA for Local {
     fn occupied(&self) -> usize {
         0
     }
+    fn num_pool_allocs(&self) -> usize{
+        1
+    }
+    fn alloc_pool(&self, min_size: usize){
+        
+    }
 }
 
 //#[prof]

@@ -212,4 +212,10 @@ impl LamellaeRDMA for Shmem {
     fn occupied(&self) -> usize {
         self.shmem_comm.occupied()
     }
+    fn num_pool_allocs(&self) -> usize{
+        self.shmem_comm.num_pool_allocs()
+    }
+    fn alloc_pool(&self, min_size: usize){
+        self.shmem_comm.alloc_pool(min_size)
+    }
 }

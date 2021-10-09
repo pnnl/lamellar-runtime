@@ -92,7 +92,7 @@ impl std::fmt::Debug for CmdMsg {
 struct CmdBuf {
     buf: Box<[CmdMsg]>,
     addr: usize,
-    base_addr: usize,
+    // base_addr: usize,
     index: usize,
     allocated_cnt: usize,
     max_size: usize,
@@ -142,7 +142,9 @@ impl std::fmt::Debug for CmdBuf {
             "addr {:#x}({:?}) hash {:?} index {:?} a_cnt {:?}",
             self.addr,
             self.addr,
-            calc_hash(self.addr + self.base_addr, self.size()),
+            // calc_hash(self.addr + self.base_addr, self.size()),
+            calc_hash(self.addr, self.size()),
+
             self.index,
             self.allocated_cnt
         )
@@ -166,23 +168,26 @@ struct CmdMsgBuffer {
     cur_buf: Option<CmdBuf>,
     num_bufs: usize,
     pe: usize,
-    base_addr: usize,
+    // base_addr: usize,
 }
 
 impl CmdMsgBuffer {
-    fn new(addrs: Arc<Vec<usize>>, base_addr: usize, pe: usize) -> CmdMsgBuffer {
+    // fn new(addrs: Arc<Vec<usize>>, base_addr: usize, pe: usize) -> CmdMsgBuffer {
+    fn new(addrs: Arc<Vec<usize>>, pe: usize) -> CmdMsgBuffer {
+
         let mut bufs = vec![];
         for addr in addrs.iter() {
             // println!("CmdMsgBuffer {:x} {:x} {:x}",addr,base_addr,*addr+base_addr);
             bufs.push(CmdBuf {
                 buf: unsafe {
                     Box::from_raw(std::ptr::slice_from_raw_parts_mut(
-                        (*addr + base_addr) as *mut CmdMsg,
+                        // (*addr + base_addr) as *mut CmdMsg,
+                        *addr  as *mut CmdMsg,
                         CMD_BUF_LEN,
                     ))
                 },
                 addr: *addr,
-                base_addr: base_addr,
+                // base_addr: base_addr,
                 index: 0,
                 allocated_cnt: 0,
                 max_size: CMD_BUF_LEN,
@@ -196,7 +201,7 @@ impl CmdMsgBuffer {
             cur_buf: None,
             num_bufs: addrs.len(),
             pe: pe,
-            base_addr: base_addr,
+            // base_addr: base_addr,
         }
     }
     fn try_push(&mut self, addr: usize, len: usize, hash: usize) -> bool {
@@ -221,7 +226,9 @@ impl CmdMsgBuffer {
             cmd.daddr = buf.addr();
             cmd.dsize = buf.size();
             cmd.cmd = Cmd::Tx;
-            cmd.msg_hash = calc_hash(cmd.daddr + self.base_addr, cmd.dsize);
+            // cmd.msg_hash = calc_hash(cmd.daddr + self.base_addr, cmd.dsize);
+            cmd.msg_hash = calc_hash(cmd.daddr , cmd.dsize);
+
             cmd.calc_hash();
             self.tx_bufs.insert(buf.addr(), buf);
         } else if let Some(buf) = std::mem::replace(&mut self.cur_buf, None) {
@@ -229,7 +236,8 @@ impl CmdMsgBuffer {
             cmd.daddr = buf.addr();
             cmd.dsize = buf.size(); // + std::mem::size_of::<usize>();
             cmd.cmd = Cmd::Tx;
-            cmd.msg_hash = calc_hash(cmd.daddr + self.base_addr, cmd.dsize);
+            // cmd.msg_hash = calc_hash(cmd.daddr + self.base_addr, cmd.dsize);
+            cmd.msg_hash = calc_hash(cmd.daddr , cmd.dsize);
             cmd.calc_hash();
             self.tx_bufs.insert(buf.addr(), buf);
         }
@@ -279,13 +287,13 @@ impl CmdMsgBuffer {
             if let Some(mut buf) = self.waiting_bufs.remove(&buf_addr) {
                 for cmd in buf.iter() {
                     if cmd.dsize > 0 {
-                        let ref_cnt_addr = cmd.daddr as usize - std::mem::size_of::<AtomicUsize>()
-                            + comm.base_addr();
+                        let ref_cnt_addr = cmd.daddr as usize - std::mem::size_of::<AtomicUsize>();
+                            //+ comm.base_addr();
                         let cnt = unsafe {
                             (*(ref_cnt_addr as *const AtomicUsize)).fetch_sub(1, Ordering::SeqCst)
                         };
                         if cnt == 1 {
-                            comm.rt_free(ref_cnt_addr - comm.base_addr());
+                            comm.rt_free(ref_cnt_addr);// - comm.base_addr());
                         }
                     }
                 }
@@ -372,7 +380,7 @@ impl InnerCQ {
         for addrs in cmd_buffers_addrs.iter() {
             cmd_buffers.push(Mutex::new(CmdMsgBuffer::new(
                 addrs.clone(),
-                comm.base_addr(),
+                // comm.base_addr(),
                 pe,
             )));
             pe += 1;
@@ -621,8 +629,7 @@ impl InnerCQ {
         self.comm.put(
             dst,
             self.release_cmd.cmd_as_bytes(),
-            cmd.daddr + offset_of!(CmdMsg, cmd) + self.comm.base_addr(),
-        );
+            cmd.daddr + offset_of!(CmdMsg, cmd));// + self.comm.base_addr(),);
     }
 
     fn send_free(&self, dst: usize, cmd: CmdMsg) {
@@ -631,8 +638,7 @@ impl InnerCQ {
         self.comm.put(
             dst,
             self.free_cmd.cmd_as_bytes(),
-            cmd.daddr + offset_of!(CmdMsg, cmd) + self.comm.base_addr(),
-        );
+            cmd.daddr + offset_of!(CmdMsg, cmd));// + self.comm.base_addr(),);
     }
 
     async fn send_print(&self, dst: usize, cmd: CmdMsg) {
@@ -752,7 +758,7 @@ impl InnerCQ {
             }
         }
         // println!("getting into {:?} 0x{:x} ",data, data.unwrap() + self.comm.base_addr());
-        let data = data.unwrap() + self.comm.base_addr();
+        let data = data.unwrap();
         let data_slice =
             unsafe { std::slice::from_raw_parts_mut(data as *mut u8, cmd.dsize as usize) };
         self.get_data(src, cmd, data_slice).await;
@@ -829,27 +835,27 @@ impl CommandQueue {
     pub fn new(comm: Arc<Comm>, my_pe: usize, num_pes: usize) -> CommandQueue {
         let send_buffer_addr = comm
             .rt_alloc(num_pes * std::mem::size_of::<CmdMsg>())
-            .unwrap()
-            + comm.base_addr();
+            .unwrap();
+            // + comm.base_addr();
         // println!("send_buffer_addr{:x} {:x}",send_buffer_addr,send_buffer_addr-comm.base_addr());
         let recv_buffer_addr = comm
             .rt_alloc(num_pes * std::mem::size_of::<CmdMsg>())
-            .unwrap()
-            + comm.base_addr();
+            .unwrap();
+            // + comm.base_addr();
         // println!("recv_buffer_addr {:x} {:x}",recv_buffer_addr,recv_buffer_addr-comm.base_addr());
         let free_buffer_addr = comm
             .rt_alloc(num_pes * std::mem::size_of::<CmdMsg>())
-            .unwrap()
-            + comm.base_addr();
+            .unwrap();
+            // + comm.base_addr();
         // println!("free_buffer_addr {:x} {:x}",recv_buffer_addr,recv_buffer_addr-comm.base_addr());
         let release_cmd_addr =
-            comm.rt_alloc(std::mem::size_of::<CmdMsg>()).unwrap() + comm.base_addr();
+            comm.rt_alloc(std::mem::size_of::<CmdMsg>()).unwrap();// + comm.base_addr();
         // println!("release_cmd_addr {:x}",release_cmd_addr-comm.base_addr());
         let clear_cmd_addr =
-            comm.rt_alloc(std::mem::size_of::<CmdMsg>()).unwrap() + comm.base_addr();
+            comm.rt_alloc(std::mem::size_of::<CmdMsg>()).unwrap();// + comm.base_addr();
         // println!("clear_cmd_addr {:x}",clear_cmd_addr-comm.base_addr());
         let free_cmd_addr =
-            comm.rt_alloc(std::mem::size_of::<CmdMsg>()).unwrap() + comm.base_addr();
+            comm.rt_alloc(std::mem::size_of::<CmdMsg>()).unwrap();// + comm.base_addr();
         // println!("free_cmd_addr {:x}",free_cmd_addr-comm.base_addr());
 
         let mut cmd_buffers_addrs = vec![];
@@ -895,7 +901,10 @@ impl CommandQueue {
             #[cfg(feature = "enable-rofi")]
             SerializedData::RofiData(ref data) => {
                 // println!("sending: {:?} {:?}",data.relative_addr,data.len);
-                let hash = calc_hash(data.relative_addr + self.comm.base_addr(), data.len);
+                // let hash = calc_hash(data.relative_addr + self.comm.base_addr(), data.len);
+                let hash = calc_hash(data.relative_addr, data.len);
+                
+
                 // println!("send_data: {:?} {:?} {:?}",data.relative_addr,data.len,hash);
                 data.increment_cnt(); //or we could implement something like an into_raw here...
                                       // println!("sending data {:?}",data.header_and_data_as_bytes());
@@ -903,7 +912,9 @@ impl CommandQueue {
             }
             SerializedData::ShmemData(ref data) => {
                 // println!("sending: {:?} {:?}",data.relative_addr,data.len);
-                let hash = calc_hash(data.relative_addr + self.comm.base_addr(), data.len);
+                // let hash = calc_hash(data.relative_addr + self.comm.base_addr(), data.len);
+                let hash = calc_hash(data.relative_addr, data.len);
+
                 // println!("send_data: {:?} {:?} {:?}",data.relative_addr,data.len,hash);
                 data.increment_cnt(); //or we could implement something like an into_raw here...
                                       // println!("sending data {:?}",data.header_and_data_as_bytes());
@@ -985,7 +996,9 @@ impl CommandQueue {
                                             );
                                         }
                                     }
-                                    comm.rt_free(data - comm.base_addr());
+                                    // comm.rt_free(data - comm.base_addr());
+                                    comm.rt_free(data );
+
                                 };
                                 scheduler.submit_task(task);
                             }
@@ -1024,17 +1037,17 @@ impl Drop for CommandQueue {
     fn drop(&mut self) {
         // println!("dropping rofi command queue");
         self.comm
-            .rt_free(self.send_buffer_addr - self.comm.base_addr());
+            .rt_free(self.send_buffer_addr);// - self.comm.base_addr());
         self.comm
-            .rt_free(self.recv_buffer_addr - self.comm.base_addr());
+            .rt_free(self.recv_buffer_addr);// - self.comm.base_addr());
         self.comm
-            .rt_free(self.free_buffer_addr - self.comm.base_addr());
+            .rt_free(self.free_buffer_addr);// - self.comm.base_addr());
         self.comm
-            .rt_free(self.release_cmd_addr - self.comm.base_addr());
+            .rt_free(self.release_cmd_addr);// - self.comm.base_addr());
         self.comm
-            .rt_free(self.clear_cmd_addr - self.comm.base_addr());
+            .rt_free(self.clear_cmd_addr);// - self.comm.base_addr());
         self.comm
-            .rt_free(self.free_cmd_addr - self.comm.base_addr());
+            .rt_free(self.free_cmd_addr);// - self.comm.base_addr());
         for bufs in self.cmd_buffers_addrs.iter() {
             for buf in bufs.iter() {
                 self.comm.rt_free(*buf);

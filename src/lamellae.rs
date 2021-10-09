@@ -121,6 +121,7 @@ pub(crate) trait LamellaeInit {
     fn init_lamellae(&mut self, scheduler: Arc<Scheduler>) -> Arc<Lamellae>;
 }
 
+
 #[async_trait]
 #[enum_dispatch]
 pub(crate) trait Ser {
@@ -184,6 +185,8 @@ pub(crate) trait LamellaeRDMA: Send + Sync {
     fn local_addr(&self, remote_pe: usize, remote_addr: usize) -> usize;
     fn remote_addr(&self, remote_pe: usize, local_addr: usize) -> usize;
     fn occupied(&self) -> usize;
+    fn num_pool_allocs(&self) -> usize; 
+    fn alloc_pool(&self, min_size: usize);
 }
 
 #[allow(unused_variables)]

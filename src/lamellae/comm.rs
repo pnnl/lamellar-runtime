@@ -41,6 +41,8 @@ pub(crate) trait CommOps {
     fn num_pes(&self) -> usize;
     fn barrier(&self);
     fn occupied(&self) -> usize;
+    fn num_pool_allocs(&self) -> usize; 
+    fn alloc_pool(&self, min_size: usize);
     fn rt_alloc(&self, size: usize) -> Option<usize>;
     fn rt_free(&self, addr: usize);
     fn alloc(&self, size: usize, alloc: AllocationType) -> Option<usize>;

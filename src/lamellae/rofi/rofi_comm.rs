@@ -83,7 +83,7 @@ impl RofiComm {
             rofi.my_pe,
             *rofi.rofi_base_address.read()
         );
-        rofi.alloc.init(0, total_mem);
+        rofi.alloc.init(addr as usize, total_mem);
         rofi
     }
 }

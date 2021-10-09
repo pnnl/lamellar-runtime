@@ -12,7 +12,7 @@ pub(crate) trait LamellarAlloc {
     fn init(&mut self, start_addr: usize, size: usize); //size in bytes
     fn malloc(&self, size: usize) -> usize;
     fn try_malloc(&self, size: usize) -> Option<usize>;
-    fn free(&self, addr: usize);
+    fn free(&self, addr: usize) -> Result<(),usize>;
     fn space_avail(&self) -> usize;
     fn occupied(&self) -> usize;
 }
@@ -109,7 +109,7 @@ impl LamellarAlloc for LinearAlloc {
         }
     }
 
-    fn free(&self, addr: usize) {
+    fn free(&self, addr: usize) ->Result<(),usize> {
         let &(ref lock, ref cvar) = &*self.entries;
         let mut entries = lock.lock();
         for i in 0..entries.len() {
@@ -122,9 +122,10 @@ impl LamellarAlloc for LinearAlloc {
                 }
                 cvar.notify_all();
 
-                return;
+                return Ok(())
             }
         }
+        Err(addr)
     }
     fn space_avail(&self) -> usize {
         self.free_space.load(Ordering::SeqCst)
@@ -250,7 +251,7 @@ impl LamellarAlloc for BTreeAlloc {
         addr
     }
 
-    fn free(&self, addr: usize) {
+    fn free(&self, addr: usize) -> Result<(),usize>{
         let &(ref lock, ref _cvar) = &*self.allocated_addrs;
         let mut allocated_addrs = lock.lock();
         if let Some(size) = allocated_addrs.remove(&addr) {
@@ -299,11 +300,13 @@ impl LamellarAlloc for BTreeAlloc {
                 .or_insert(IndexSet::new())
                 .insert(temp_addr);
             cvar.notify_all();
+            Ok(())
         } else {
-            panic!(
-                "{:?} illegal free, addr not currently allocated: {:?}",
-                self.id, addr
-            )
+            // panic!(
+            //     "{:?} illegal free, addr not currently allocated: {:?}",
+            //     self.id, addr
+            // )
+            Err(addr)
         }
     }
 
@@ -374,11 +377,12 @@ impl<T: Copy> LamellarAlloc for ObjAlloc<T> {
         }
     }
 
-    fn free(&self, addr: usize) {
+    fn free(&self, addr: usize) ->Result<(),usize> {
         let &(ref lock, ref cvar) = &*self.free_entries;
         let mut free_entries = lock.lock();
         free_entries.push(addr);
         cvar.notify_all();
+        Ok(())
     }
 
     fn space_avail(&self) -> usize {

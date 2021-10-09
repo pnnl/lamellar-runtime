@@ -165,7 +165,7 @@ impl<T: Dist + 'static> MemoryRegion<T> {
         let addr = if size > 0 {
             if let AllocationType::Local = alloc {
                 local = true;
-                lamellae.rt_alloc(size * std::mem::size_of::<T>()).unwrap() + lamellae.base_addr()
+                lamellae.rt_alloc(size * std::mem::size_of::<T>()).unwrap()
             } else {
                 lamellae
                     .alloc(size * std::mem::size_of::<T>(), alloc)
@@ -522,7 +522,7 @@ impl<T: Dist + 'static> Drop for MemoryRegion<T> {
         // println!("trying to dropping mem region {:?}",self);
         if self.addr != 0 {
             if self.local {
-                self.rdma.rt_free(self.addr - self.rdma.base_addr()); // - self.rdma.base_addr());
+                self.rdma.rt_free(self.addr); // - self.rdma.base_addr());
             } else {
                 self.rdma.free(self.addr);
             }

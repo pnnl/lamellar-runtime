@@ -187,7 +187,6 @@ impl<'a, T: 'a> Drop for GlobalRwDarcReadGuard<'a, T> {
                     .expect("darcs cant exist on non team members"),
                 lock_type: LockType::Read,
             },
-            None
         );
     }
 }
@@ -237,7 +236,6 @@ impl<'a, T: 'a> Drop for GlobalRwDarcWriteGuard<'a, T> {
                     .expect("darcs cant exist on non team members"),
                 lock_type: LockType::Write,
             },
-            None
         );
     }
 }
@@ -340,7 +338,6 @@ impl<T> GlobalRwDarc<T> {
                     .expect("darcs cant exist on non team members"),
                 lock_type: LockType::Read,
             },
-            None
         )
         .into_future()
         .await;
@@ -368,7 +365,6 @@ impl<T> GlobalRwDarc<T> {
                     .expect("darcs cant exist on non team members"),
                 lock_type: LockType::Write,
             },
-            None,
         )
         .into_future()
         .await;
@@ -395,7 +391,6 @@ impl<T> GlobalRwDarc<T> {
                     .expect("darcs cant exist on non team members"),
                 lock_type: LockType::Read,
             },
-            None
         )
         .get();
         GlobalRwDarcReadGuard {
@@ -421,7 +416,6 @@ impl<T> GlobalRwDarc<T> {
                     .expect("darcs cant exist on non team members"),
                 lock_type: LockType::Write,
             },
-            None,
         )
         .get();
         GlobalRwDarcWriteGuard {
