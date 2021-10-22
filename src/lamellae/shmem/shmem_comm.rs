@@ -506,6 +506,7 @@ impl CommOps for ShmemComm {
             if shmem.contains(src_addr) {
                 let real_src_base = shmem.base_addr() + size * addrs[&pe].1;
                 let real_src_addr = real_src_base + (src_addr - addr);
+                // println!("base: {:?} addr: {:?}",real_src_base,real_src_addr);
                 unsafe {
                     std::ptr::copy_nonoverlapping(
                         real_src_addr as *const T,
@@ -518,6 +519,7 @@ impl CommOps for ShmemComm {
         }
     }
     fn iget<T: Remote + 'static>(&self, pe: usize, src_addr: usize, dst_addr: &mut [T]) {
+        // println!("iget s_addr {:?} d_addr {:?} b_addr {:?}",src_addr,dst_addr.as_ptr(),self.base_addr());
         self.get(pe, src_addr, dst_addr);
     }
     fn iget_relative<T: Remote + 'static>(&self, pe: usize, src_addr: usize, dst_addr: &mut [T]) {
@@ -550,7 +552,8 @@ impl ShmemData {
             }
         }
         let relative_addr = mem.unwrap();
-        let addr = relative_addr + shmem_comm.base_addr();
+        // println!("addr: {:?} rel_addr {:?} base{:?}",relative_addr + shmem_comm.base_addr(),relative_addr ,shmem_comm.base_addr());
+        let addr = relative_addr; //+ shmem_comm.base_addr();
         unsafe {
             let ref_cnt = addr as *const AtomicUsize;
             (*ref_cnt).store(1, Ordering::SeqCst)
@@ -651,7 +654,7 @@ impl Drop for ShmemData {
         let cnt = unsafe { (*(self.addr as *const AtomicUsize)).fetch_sub(1, Ordering::SeqCst) };
         if cnt == 1 {
             self.shmem_comm
-                .rt_free(self.addr - self.shmem_comm.base_addr());
+                .rt_free(self.addr);// - self.shmem_comm.base_addr());
         }
     }
 }

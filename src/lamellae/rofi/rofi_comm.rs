@@ -432,7 +432,7 @@ impl RofiData {
             }
         }
         let relative_addr = mem.unwrap();
-        let addr = relative_addr + rofi_comm.base_addr();
+        let addr = relative_addr;// + rofi_comm.base_addr();
         unsafe {
             let ref_cnt = addr as *const AtomicUsize;
             (*ref_cnt).store(1, Ordering::SeqCst)
@@ -533,7 +533,7 @@ impl Drop for RofiData {
         let cnt = unsafe { (*(self.addr as *const AtomicUsize)).fetch_sub(1, Ordering::SeqCst) };
         if cnt == 1 {
             self.rofi_comm
-                .rt_free(self.addr - self.rofi_comm.base_addr());
+                .rt_free(self.addr);// - self.rofi_comm.base_addr());
         }
     }
 }

@@ -177,7 +177,7 @@ impl CmdMsgBuffer {
 
         let mut bufs = vec![];
         for addr in addrs.iter() {
-            // println!("CmdMsgBuffer {:x} {:x} {:x}",addr,base_addr,*addr+base_addr);
+            // println!("CmdMsgBuffer {:x} {:?}",addr,addr);
             bufs.push(CmdBuf {
                 buf: unsafe {
                     Box::from_raw(std::ptr::slice_from_raw_parts_mut(
@@ -511,7 +511,7 @@ impl InnerCQ {
             let mut send_buf = self.send_buffer.lock();
             if send_buf[dst].hash() == self.clear_cmd.hash() {
                 cmd_buffer.flush_buffer(&mut send_buf[dst]);
-                // println!{"send_buf  after{:?}",send_buf};
+                // println!{"send_buf  after{:?}",send_buf[dst]};
                 if send_buf[dst].dsize > 0 {
                     let recv_buffer = self.recv_buffer.lock();
                     // println!{"sending data to dst {:?} {:?} {:?} {:?}",recv_buffer[self.my_pe].as_addr()-self.comm.base_addr(),send_buf[dst],send_buf[dst].as_bytes(),send_buf};
@@ -626,19 +626,21 @@ impl InnerCQ {
     fn send_release(&self, dst: usize, cmd: CmdMsg) {
         // let cmd_buffer = self.cmd_buffers[dst].lock();
         // println!("sending release: {:?} cmd: {:?} {:?} {:?} 0x{:x} 0x{:x}",self.release_cmd,cmd,self.release_cmd.cmd_as_bytes(), cmd.cmd_as_bytes(),self.release_cmd.cmd_as_addr(),cmd.daddr + offset_of!(CmdMsg,cmd));
+        let local_daddr = self.comm.local_addr(dst,cmd.daddr);
         self.comm.put(
             dst,
             self.release_cmd.cmd_as_bytes(),
-            cmd.daddr + offset_of!(CmdMsg, cmd));// + self.comm.base_addr(),);
+            local_daddr + offset_of!(CmdMsg, cmd));// + self.comm.base_addr(),);
     }
 
     fn send_free(&self, dst: usize, cmd: CmdMsg) {
         // let cmd_buffer = self.cmd_buffers[dst].lock();
         // println!("sending release: {:?} cmd: {:?} {:?} {:?} 0x{:x} 0x{:x}",self.release_cmd,cmd,self.release_cmd.cmd_as_bytes(), cmd.cmd_as_bytes(),self.release_cmd.cmd_as_addr(),cmd.daddr + offset_of!(CmdMsg,cmd));
+        let local_daddr = self.comm.local_addr(dst,cmd.daddr);
         self.comm.put(
             dst,
             self.free_cmd.cmd_as_bytes(),
-            cmd.daddr + offset_of!(CmdMsg, cmd));// + self.comm.base_addr(),);
+            local_daddr + offset_of!(CmdMsg, cmd));// + self.comm.base_addr(),);
     }
 
     async fn send_print(&self, dst: usize, cmd: CmdMsg) {
@@ -693,22 +695,23 @@ impl InnerCQ {
 
     //update cmdbuffers to include a hash the wait on that here
     async fn get_data(&self, src: usize, cmd: CmdMsg, data_slice: &mut [u8]) {
-        self.comm.iget_relative(src, cmd.daddr as usize, data_slice);
+        let local_daddr = self.comm.local_addr(src,cmd.daddr);
+        self.comm.iget(src, local_daddr as usize, data_slice);
         // self.get_amt.fetch_add(data_slice.len(),Ordering::Relaxed);
         let mut timer = std::time::Instant::now();
         while calc_hash(data_slice.as_ptr() as usize, data_slice.len()) != cmd.msg_hash {
             async_std::task::yield_now().await;
             if timer.elapsed().as_secs_f64() > 15.0 {
                 println!(
-                    "stuck waiting for data from {:?}!!! {:?} {:?} {:?} {:?}",
+                    "stuck waiting for data from {:?}!!! {:?} {:?} {:?} {:?} -- calced hash {:?}",
                     src,
                     cmd,
                     data_slice.len(),
                     cmd.dsize,
-                    &data_slice
+                    &data_slice,
+                    calc_hash(data_slice.as_ptr() as usize, data_slice.len())
                 );
                 self.send_print(src, cmd).await;
-                // self.comm.iget_relative(src,cmd.daddr,data_slice);
                 timer = std::time::Instant::now();
             }
         }
@@ -716,7 +719,8 @@ impl InnerCQ {
 
     async fn get_serialized_data(&self, src: usize, cmd: CmdMsg, ser_data: &SerializedData) {
         let data_slice = ser_data.header_and_data_as_bytes();
-        self.comm.iget_relative(src, cmd.daddr as usize, data_slice);
+        let local_daddr = self.comm.local_addr(src,cmd.daddr);
+        self.comm.iget(src, local_daddr as usize, data_slice);
         // self.get_amt.fetch_add(data_slice.len(),Ordering::Relaxed);
         let mut timer = std::time::Instant::now();
         while calc_hash(data_slice.as_ptr() as usize, ser_data.len()) != cmd.msg_hash {
@@ -859,7 +863,7 @@ impl CommandQueue {
         // println!("free_cmd_addr {:x}",free_cmd_addr-comm.base_addr());
 
         let mut cmd_buffers_addrs = vec![];
-        for _pe in 0..num_pes {
+        for pe in 0..num_pes {
             let mut addrs = vec![];
             for _i in 0..CMD_BUFS_PER_PE {
                 let addr = comm
