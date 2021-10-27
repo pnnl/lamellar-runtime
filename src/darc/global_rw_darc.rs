@@ -261,7 +261,7 @@ unsafe impl<T: Sync + Send> Sync for GlobalRwDarc<T> {}
 
 impl<T> crate::DarcSerde for GlobalRwDarc<T> {
     fn ser(&self, num_pes: usize, cur_pe: Result<usize, IdError>) {
-        println!("in global rw darc ser");
+        // println!("in global rw darc ser");
         match cur_pe {
             Ok(cur_pe) => {
                 self.darc.serialize_update_cnts(num_pes, cur_pe);

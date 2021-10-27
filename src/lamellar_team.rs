@@ -1,9 +1,10 @@
 use crate::active_messaging::*;
 use crate::barrier::Barrier;
 use crate::lamellae::{AllocationType, Lamellae, LamellaeComm,LamellaeRDMA};
+use crate::lamellae::comm::AllocError;
 use crate::lamellar_arch::{GlobalArch, IdError, LamellarArch, LamellarArchEnum, LamellarArchRT};
 use crate::lamellar_request::{AmType, LamellarRequest, LamellarRequestHandle};
-use crate::darc::{Darc,global_rw_darc::GlobalRwDarc};
+use crate::darc::{Darc,DarcMode,global_rw_darc::GlobalRwDarc};
 use crate::memregion::{
     local::LocalMemoryRegion, shared::SharedMemoryRegion, Dist, LamellarMemoryRegion, MemoryRegion,
     RemoteMemoryRegion,
@@ -23,43 +24,6 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Weak};
 use std::time::{Duration, Instant};
 
-#[lamellar_impl::AmDataRT]
-struct GlobalAllocAm{
-    barrier: Darc<(Barrier)>,
-    min_size: usize
-}
-
-#[lamellar_impl::rt_am]
-impl LamellarAM for GlobalAllocAm{
-    fn exec() {
-        self.barrier.barrier();
-        lamellar::team.team.lamellae.alloc_pool(self.min_size);
-        self.barrier.barrier();
-    }
-}
-
-#[lamellar_impl::AmDataRT]
-struct InitGlobalAllocAm{
-    mutex: GlobalRwDarc<()>,
-    barrier: Darc<(Barrier)>,
-    prev_cnt: usize,
-    min_size: usize,
-}
-
-#[lamellar_impl::rt_am]
-impl LamellarAM for InitGlobalAllocAm{
-    fn exec() {
-        self.mutex.async_write().await;
-        if self.prev_cnt == lamellar::team.team.lamellae.num_pool_allocs() {
-            lamellar::team.exec_am_all(GlobalAllocAm{
-                barrier: self.barrier.clone(),
-                min_size: self.min_size,                
-            }).into_future().await;
-        }
-    }
-}
-
-
 
 // to manage team lifetimes properly we need a seperate user facing handle that contains a strong link to the inner team.
 // this outer handle has a lifetime completely tied to whatever the user wants
@@ -69,11 +33,18 @@ impl LamellarAM for InitGlobalAllocAm{
 pub struct LamellarTeam {
     pub(crate) world: Option<Arc<LamellarTeam>>,
     pub(crate) team: Arc<LamellarTeamRT>,
-    pub(crate) teams: Arc<RwLock<HashMap<u64, Weak<LamellarTeam>>>>, //need a reference to this so we can clean up after dropping the team
+    pub(crate) teams: Arc<RwLock<HashMap<u64, Weak<LamellarTeamRT>>>>,
+    pub(crate) am_team: bool //need a reference to this so we can clean up after dropping the team
+    // pub(crate) alloc_mutex: Arc<RwLock<Option<GlobalRwDarc<()>>>>, // in world drop set to none
+    // pub(crate) alloc_barrier: Arc<RwLock<Option<Darc<Barrier>>>>, // in world drop set to none
 }
 
 //#[prof]
 impl LamellarTeam {
+
+    pub(crate) fn new( world: Option<Arc<LamellarTeam>>,team: Arc<LamellarTeamRT>,teams: Arc<RwLock<HashMap<u64, Weak<LamellarTeamRT>>>>,am_team: bool) -> Arc<LamellarTeam>{
+        Arc::new(LamellarTeam{world,team,teams,am_team})
+    }
     #[allow(dead_code)]
     pub fn get_pes(&self) -> Vec<usize> {
         self.team.arch.team_iter().collect::<Vec<usize>>()
@@ -102,15 +73,11 @@ impl LamellarTeam {
         if let Some(team) =
             LamellarTeamRT::create_subteam_from_arch(world.team.clone(), parent.team.clone(), arch)
         {
-            let team = Arc::new(LamellarTeam {
-                world: Some(world),
-                team: team,
-                teams: parent.teams.clone(),
-            });
+            let team = LamellarTeam::new(Some(world),team.clone(), parent.teams.clone(), parent.am_team);
             parent
                 .teams
                 .write()
-                .insert(team.team.team_hash, Arc::downgrade(&team));
+                .insert(team.team.team_hash, Arc::downgrade(&team.team));
             Some(team)
         } else {
             None
@@ -121,6 +88,10 @@ impl LamellarTeam {
     }
     pub fn barrier(&self) {
         self.team.barrier()
+    }
+
+    pub(crate) async fn alloc_new_pool(self: &Arc<LamellarTeam>,min_size: usize){
+        self.team.lamellae.async_alloc_pool(min_size).await;
     }
 }
 
@@ -172,10 +143,50 @@ impl ActiveMessaging for Arc<LamellarTeam> {
     }
 }
 
+impl RemoteMemoryRegion for Arc<LamellarTeam> {
+    /// allocate a shared memory region from the asymmetric heap
+    ///
+    /// # Arguments
+    ///
+    /// * `size` - number of elements of T to allocate a memory region for -- (not size in bytes)
+    ///
+    fn alloc_shared_mem_region<T: Dist + 'static>(&self, size: usize) -> SharedMemoryRegion<T> {
+        self.team.barrier.barrier();
+        let mr: SharedMemoryRegion<T> = if self.team.num_world_pes == self.team.num_pes {
+            SharedMemoryRegion::new(size, self.team.clone(), AllocationType::Global)
+        } else {
+            SharedMemoryRegion::new(
+                size,
+                self.team.clone(),
+                AllocationType::Sub(self.team.arch.team_iter().collect::<Vec<usize>>()),
+            )
+        };
+        self.team.barrier.barrier();
+        mr
+    }
+
+    /// allocate a local memory region from the asymmetric heap
+    ///
+    /// # Arguments
+    ///
+    /// * `size` - number of elements of T to allocate a memory region for -- (not size in bytes)
+    ///
+    fn alloc_local_mem_region<T: Dist + 'static>(&self, size: usize) -> LocalMemoryRegion<T> {
+        let mut lmr = LocalMemoryRegion::try_new(size, self.team.lamellae.clone());
+        while let Err(err) = lmr{
+            std::thread::yield_now();
+            self.team.lamellae.alloc_pool(size);
+            lmr = LocalMemoryRegion::try_new(size, self.team.lamellae.clone());
+        }
+        lmr.expect("out of memory")
+    }
+}
+
 pub struct LamellarTeamRT {
     #[allow(dead_code)]
     world: Option<Arc<LamellarTeamRT>>,
     parent: Option<Arc<LamellarTeamRT>>,
+    teams: Arc<RwLock<HashMap<u64, Weak<LamellarTeamRT>>>>,
     sub_teams: RwLock<HashMap<usize, Arc<LamellarTeamRT>>>,
     mem_regions: RwLock<HashMap<usize, Box<LamellarMemoryRegion<u8>>>>,
     pub(crate) scheduler: Arc<Scheduler>,
@@ -187,7 +198,7 @@ pub struct LamellarTeamRT {
     pub(crate) num_pes: usize,
     team_counters: AMCounters,
     pub(crate) world_counters: Arc<AMCounters>, // can probably remove this?
-    id: usize,
+    pub(crate)id: usize,
     sub_team_id_cnt: AtomicUsize,
     barrier: Barrier,
     dropped: MemoryRegion<usize>,
@@ -220,6 +231,7 @@ impl LamellarTeamRT {
         scheduler: Arc<Scheduler>,
         world_counters: Arc<AMCounters>,
         lamellae: Arc<Lamellae>,
+        teams: Arc<RwLock<HashMap<u64, Weak<LamellarTeamRT>>>>
     ) -> LamellarTeamRT {
         let arch = Arc::new(LamellarArchRT {
             parent: None,
@@ -232,6 +244,7 @@ impl LamellarTeamRT {
         let team = LamellarTeamRT {
             world: None,
             parent: None,
+            teams: teams,
             sub_teams: RwLock::new(HashMap::new()),
             mem_regions: RwLock::new(HashMap::new()),
             scheduler: scheduler.clone(),
@@ -282,6 +295,7 @@ impl LamellarTeamRT {
         //     "world_counters: {:?}",
         //     Arc::strong_count(&self.world_counters)
         // );
+        self.wait_all();
         self.mem_regions.write().clear();
         self.sub_teams.write().clear(); // not sure this is necessary or should be allowed? sub teams delete themselves from this map when dropped...
                                         // what does it mean if we drop a parent team while a sub_team is valid?
@@ -368,6 +382,7 @@ impl LamellarTeamRT {
             let team = LamellarTeamRT {
                 world: Some(world.clone()),
                 parent: Some(parent.clone()),
+                teams: parent.teams.clone(),
                 sub_teams: RwLock::new(HashMap::new()),
                 mem_regions: RwLock::new(HashMap::new()),
                 scheduler: parent.scheduler.clone(),
@@ -980,63 +995,7 @@ impl LamellarTeamRT {
 // }
 
 //#[prof]
-impl RemoteMemoryRegion for Arc<LamellarTeam> {
-    /// allocate a shared memory region from the asymmetric heap
-    ///
-    /// # Arguments
-    ///
-    /// * `size` - number of elements of T to allocate a memory region for -- (not size in bytes)
-    ///
-    fn alloc_shared_mem_region<T: Dist + 'static>(&self, size: usize) -> SharedMemoryRegion<T> {
-        self.team.barrier.barrier();
-        let mr: SharedMemoryRegion<T> = if self.team.num_world_pes == self.team.num_pes {
-            SharedMemoryRegion::new(size, self.team.clone(), AllocationType::Global)
-        } else {
-            SharedMemoryRegion::new(
-                size,
-                self.team.clone(),
-                AllocationType::Sub(self.team.arch.team_iter().collect::<Vec<usize>>()),
-            )
-        };
-        self.team.barrier.barrier();
-        mr
-    }
 
-    /// allocate a local memory region from the asymmetric heap
-    ///
-    /// # Arguments
-    ///
-    /// * `size` - number of elements of T to allocate a memory region for -- (not size in bytes)
-    ///
-    fn alloc_local_mem_region<T: Dist + 'static>(&self, size: usize) -> LocalMemoryRegion<T> {
-        let lmr: LocalMemoryRegion<T> =
-            LocalMemoryRegion::new(size, self.team.lamellae.clone()).into();
-        lmr
-    }
-
-    // /// release a remote memory region from the asymmetric heap
-    // ///
-    // /// # Arguments
-    // ///
-    // /// * `region` - the region to free
-    // ///
-    // fn free_shared_memory_region<T: Dist + 'static>(&self, _region: SharedMemoryRegion<T>) {
-    //     self.team.barrier.barrier();
-    //     // self.team.mem_regions.write().remove(&region.id());
-    //     // self.team.free_shared_memory_region(region)
-    // }
-
-    // /// release a remote memory region from the asymmetric heap
-    // ///
-    // /// # Arguments
-    // ///
-    // /// * `region` - the region to free
-    // ///
-    // fn free_local_memory_region<T: Dist + 'static>(&self, _region: LocalMemoryRegion<T>) {
-    //     // self.team.mem_regions.write().remove(&region.id());
-    //     // self.team.free_local_memory_region(region)
-    // }
-}
 
 //#[prof]
 impl Drop for LamellarTeamRT {
@@ -1046,38 +1005,51 @@ impl Drop for LamellarTeamRT {
         // println!("lamellae: {:?}",Arc::strong_count(&self.lamellae));
         // println!("arch: {:?}",Arc::strong_count(&self.arch));
         // println!("world_counters: {:?}",Arc::strong_count(&self.world_counters));
-
-        // println!("LamellarTeamRT dropped");
+        // println!("removing {:?} ",self.team_hash);
+        self.teams.write().remove(&self.team_hash);
+        // println!("LamellarTeamRT dropped {:?}",self.team_hash);
     }
 }
 
 //#[prof]
 impl Drop for LamellarTeam {
     fn drop(&mut self) {
-        // println!("team handle dropping");
-        if let Some(parent) = &self.team.parent {
-            // println!(
-            //     "[{:?}] {:?} team handle dropping {:?} {:?}",
-            //     self.team.world_pe,
-            //     self.team.team_hash,
-            //     self.team.get_pes(),
-            //     self.team.dropped.as_slice()
-            // );
-            self.team.wait_all();
-            // println!("after wait all");
-            self.team.barrier();
-            // println!("after barrier");
-            self.team.put_dropped();
-            // println!("after put dropped");
-            // if let Ok(_my_index) = self.team.arch.team_pe(self.team.world_pe) {
-            if self.team.team_pe.is_ok() {
-                self.team.drop_barrier();
+        // println!("team handle dropping {:?}",self.team.team_hash);
+        if !self.am_team{ //we only care about when the user handle gets dropped (not the team handles that are created for use in an active message)
+            if let Some(parent) = &self.team.parent {
+                // println!("not world?");
+                // println!(
+                //     "[{:?}] {:?} team handle dropping {:?} {:?}",
+                //     self.team.world_pe,
+                //     self.team.team_hash,
+                //     self.team.get_pes(),
+                //     self.team.dropped.as_slice()
+                // );
+                self.team.wait_all();
+                // println!("after wait all");
+                self.team.barrier();
+                // println!("after barrier");
+                self.team.put_dropped();
+                // println!("after put dropped");
+                // if let Ok(_my_index) = self.team.arch.team_pe(self.team.world_pe) {
+                if self.team.team_pe.is_ok() {
+                    self.team.drop_barrier();
+                }
+                // println!("after drop barrier");
+                // println!("removing {:?} ",self.team.id);
+                parent.sub_teams.write().remove(&self.team.id);
             }
-            // println!("after drop barrier");
-
-            parent.sub_teams.write().remove(&self.team.id);
         }
-        self.teams.write().remove(&self.team.team_hash);
+        // else{
+        //     println!("in world team!!!");
+        //     self.alloc_barrier=None;
+        //     self.alloc_mutex=None;
+        //     self.team.wait_all();
+        //     self.team.barrier();
+        //     self.team.destroy();
+        // }
+        // println!("how am i here...");
+        
         // println!("team handle dropped");
 
         // if let Some(world) = &self.world{

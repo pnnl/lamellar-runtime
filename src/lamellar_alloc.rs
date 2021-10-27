@@ -12,6 +12,7 @@ pub(crate) trait LamellarAlloc {
     fn init(&mut self, start_addr: usize, size: usize); //size in bytes
     fn malloc(&self, size: usize) -> usize;
     fn try_malloc(&self, size: usize) -> Option<usize>;
+    fn fake_malloc(&self,size: usize) -> bool;
     fn free(&self, addr: usize) -> Result<(),usize>;
     fn space_avail(&self) -> usize;
     fn occupied(&self) -> usize;
@@ -109,6 +110,35 @@ impl LamellarAlloc for LinearAlloc {
         }
     }
 
+    fn fake_malloc(&self, size: usize) -> bool {
+        let &(ref lock, ref cvar) = &*self.entries;
+        let mut entries = lock.lock();
+
+        if entries.len() > 0 {
+            let mut prev_end = self.start_addr;
+            let mut idx = 0;
+            for i in 0..entries.len() {
+                if entries[i].addr - prev_end >= size {
+                    break;
+                }
+                prev_end = entries[i].addr + entries[i].size;
+                idx = i + 1;
+            }
+
+            if prev_end + size <= self.start_addr + self.max_size {
+                return true;
+            } else {
+                return false;
+            }
+        } else {
+            if size <= self.start_addr + self.max_size {
+                return true;
+            } else {
+                return false;
+            }
+        }
+    }
+
     fn free(&self, addr: usize) ->Result<(),usize> {
         let &(ref lock, ref cvar) = &*self.entries;
         let mut entries = lock.lock();
@@ -154,8 +184,8 @@ impl FreeEntries {
 pub(crate) struct BTreeAlloc {
     free_entries: Arc<(Mutex<FreeEntries>, Condvar)>,
     allocated_addrs: Arc<(Mutex<BTreeMap<usize, usize>>, Condvar)>, //<addr,size>
-    start_addr: usize,
-    max_size: usize,
+    pub(crate) start_addr: usize,
+    pub(crate) max_size: usize,
     id: String,
     free_space: Arc<AtomicUsize>,
 }
@@ -249,6 +279,21 @@ impl LamellarAlloc for BTreeAlloc {
             self.free_space.fetch_sub(size, Ordering::SeqCst);
         }
         addr
+    }
+
+    fn fake_malloc(&self, size: usize) -> bool {
+        prof_start!(locking);
+        let &(ref lock, ref cvar) = &*self.free_entries;
+        let mut free_entries = lock.lock();
+        prof_end!(locking);
+        let mut addr: Option<usize> = None;
+        let mut remove_size: Option<usize> = None;
+        //find smallest memory segment greater than or equal to size
+        if let Some((free_size, addrs)) = free_entries.sizes.range_mut(size..).next() {
+           return true;
+        } else {
+            return false;
+        }
     }
 
     fn free(&self, addr: usize) -> Result<(),usize>{
@@ -374,6 +419,23 @@ impl<T: Copy> LamellarAlloc for ObjAlloc<T> {
             cvar.wait_for(&mut free_entries, std::time::Duration::from_millis(1));
             prof_end!(waiting);
             return None;
+        }
+    }
+
+    fn fake_malloc(&self, size: usize) -> bool {
+        assert_eq!(
+            size, 1,
+            "ObjAlloc does not currently support multiobject allocations"
+        );
+        prof_start!(locking);
+        let &(ref lock, ref cvar) = &*self.free_entries;
+        let mut free_entries = lock.lock();
+        prof_end!(locking);
+        if free_entries.len() > 1{
+            true
+        }
+        else{
+            false
         }
     }
 

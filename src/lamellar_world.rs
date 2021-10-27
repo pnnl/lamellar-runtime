@@ -1,7 +1,8 @@
 use crate::active_messaging::*;
 use crate::lamellae::{create_lamellae, Backend, Lamellae, LamellaeComm, LamellaeInit};
 use crate::lamellar_arch::LamellarArch;
-
+use crate::barrier::Barrier;
+use crate::darc::{Darc,DarcMode,global_rw_darc::GlobalRwDarc};
 use crate::lamellar_request::LamellarRequest;
 use crate::lamellar_team::{LamellarTeam, LamellarTeamRT};
 use crate::memregion::{
@@ -23,7 +24,7 @@ lazy_static! {
 pub struct LamellarWorld {
     team: Arc<LamellarTeam>,
     team_rt: Arc<LamellarTeamRT>,
-    teams: Arc<RwLock<HashMap<u64, Weak<LamellarTeam>>>>,
+    teams: Arc<RwLock<HashMap<u64, Weak<LamellarTeamRT>>>>,
     _counters: Arc<AMCounters>,
     lamellaes_new: BTreeMap<crate::lamellae::Backend, Arc<Lamellae>>,
     my_pe: usize,
@@ -199,7 +200,7 @@ impl LamellarWorld {
         if let Some(team) = LamellarTeam::create_subteam_from_arch(self.team.clone(), arch) {
             self.teams
                 .write()
-                .insert(team.team.team_hash, Arc::downgrade(&team));
+                .insert(team.team.team_hash, Arc::downgrade(&team.team));
             Some(team)
         } else {
             None
@@ -217,6 +218,7 @@ impl Drop for LamellarWorld {
         // println!("[{:?}] world dropping", self.my_pe);
         self.wait_all();
         self.barrier();
+
         self.team_rt.destroy();
         // for (backend,lamellae) in self.lamellaes_new.iter(){
         //     println!("lamellae: {:?} {:?}",backend,Arc::strong_count(&lamellae))
@@ -285,14 +287,12 @@ impl LamellarWorldBuilder {
             sched_new.clone(),
             counters.clone(),
             lamellae.clone(),
+            teams.clone()
         ));
+        
         let mut world = LamellarWorld {
-            team: Arc::new(LamellarTeam {
-                world: None,
-                team: team_rt.clone(),
-                teams: teams.clone(),
-            }),
-            team_rt: team_rt,
+            team: LamellarTeam::new(None,team_rt.clone(),teams.clone(),false),
+            team_rt: team_rt.clone(),
             teams: teams.clone(),
             _counters: counters,
             lamellaes_new: BTreeMap::new(),
@@ -302,7 +302,7 @@ impl LamellarWorldBuilder {
         world
             .teams
             .write()
-            .insert(world.team_rt.team_hash, Arc::downgrade(&world.team));
+            .insert(world.team_rt.team_hash, Arc::downgrade(&team_rt));
         LAMELLAES
             .write()
             .insert(lamellae.backend(), lamellae.clone());

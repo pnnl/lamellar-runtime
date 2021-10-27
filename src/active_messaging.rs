@@ -182,7 +182,7 @@ pub trait ActiveMessaging {
 
 //maybe make this a struct then we could hold the pending counters...
 pub(crate) struct ActiveMessageEngine {
-    teams: Arc<RwLock<HashMap<u64, Weak<LamellarTeam>>>>,
+    teams: Arc<RwLock<HashMap<u64, Weak<LamellarTeamRT>>>>,
     my_pe: usize,
     batched_am: Arc<RegisteredActiveMessages>,
 }
@@ -199,7 +199,7 @@ impl ActiveMessageEngine {
     pub(crate) fn new(
         my_pe: usize,
         scheduler: Arc<AmeScheduler>,
-        teams: Arc<RwLock<HashMap<u64, Weak<LamellarTeam>>>>,
+        teams: Arc<RwLock<HashMap<u64, Weak<LamellarTeamRT>>>>,
         stall_mark: Arc<AtomicUsize>,
     ) -> Self {
         trace!("registered funcs {:?}", AMS_EXECS.len(),);
@@ -225,18 +225,19 @@ impl ActiveMessageEngine {
 
     pub(crate) fn get_team_and_world(&self,team_hash: u64,)->(Arc<LamellarTeam>,Arc<LamellarTeam>){
         let teams = self.teams.read();
-            (
-                teams
-                    .get(&team_hash)
-                    .expect("invalid team hash")
-                    .upgrade()
-                    .expect("team no longer exists"),
-                teams
-                    .get(&0)
-                    .expect("invalid world hash")
-                    .upgrade()
-                    .expect("team no longer exists"),
-            )
+        let world_rt = teams
+        .get(&0)
+        .expect("invalid world hash")
+        .upgrade()
+        .expect("team no longer exists (world)");
+        let team_rt = teams
+                .get(&team_hash)
+                .expect("invalid team hash")
+                .upgrade()
+                .expect("team no longer exists {:?}");
+        let world = LamellarTeam::new(None,world_rt,self.teams.clone(),true);
+        let team = LamellarTeam::new(Some(world.clone()),team_rt,self.teams.clone(),true);
+        (team,world)
     }
 
     pub(crate) async fn exec_msg(

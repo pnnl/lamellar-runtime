@@ -1,4 +1,4 @@
-use crate::lamellae::comm::CommOps;
+use crate::lamellae::comm::{CommOps,AllocResult};
 use crate::lamellae::command_queues::CommandQueue;
 use crate::lamellae::shmem::shmem_comm::*;
 use crate::lamellae::shmem::*;
@@ -39,14 +39,25 @@ impl LamellaeInit for ShmemBuilder {
     fn init_lamellae(&mut self, scheduler: Arc<Scheduler>) -> Arc<Lamellae> {
         let shmem = Shmem::new(self.my_pe, self.num_pes, self.shmem_comm.clone());
         let cq_clone = shmem.cq();
+        let cq_clone2 = shmem.cq();
         let scheduler_clone = scheduler.clone();
+        let scheduler_clone2 = scheduler.clone();
         let active_clone = shmem.active();
+        let active_clone2 = shmem.active();
 
         let shmem = Arc::new(Lamellae::Shmem(shmem));
         let shmem_clone = shmem.clone();
         scheduler.submit_task(async move {
             cq_clone
                 .recv_data(scheduler_clone.clone(), shmem_clone.clone(), active_clone)
+                .await;
+        });
+
+        
+        
+        scheduler.submit_task(async move {
+            cq_clone2
+                .alloc_task(scheduler_clone2.clone(), active_clone2)
                 .await;
         });
         shmem
@@ -150,31 +161,55 @@ impl LamellaeAM for Shmem {
 }
 #[async_trait]
 impl Ser for Shmem {
-    async fn serialize<T: Send + Sync + serde::Serialize + ?Sized>(
+    // async fn async_serialize<T: Send + Sync + serde::Serialize + ?Sized>(
+    //     &self,
+    //     header: Option<SerializeHeader>,
+    //     obj: &T,
+    // ) -> Result<SerializedData, anyhow::Error> {
+    //     let header_size = std::mem::size_of::<Option<SerializeHeader>>();
+    //     let data_size = bincode::serialized_size(obj)? as usize;
+    //     let ser_data = ShmemData::new(self.shmem_comm.clone(), header_size + data_size).await;
+    //     bincode::serialize_into(ser_data.header_as_bytes(), &header)?;
+    //     bincode::serialize_into(ser_data.data_as_bytes(), obj)?;
+    //     Ok(SerializedData::ShmemData(ser_data))
+    // }
+    // async fn async_serialize_header(
+    //     &self,
+    //     header: Option<SerializeHeader>,
+    //     serialized_size: usize,
+    // ) -> Result<SerializedData, anyhow::Error> {
+    //     let header_size = std::mem::size_of::<Option<SerializeHeader>>();
+    //     let ser_data = ShmemData::new(self.shmem_comm.clone(), header_size + serialized_size).await;
+    //     bincode::serialize_into(ser_data.header_as_bytes(), &header)?;
+    //     Ok(SerializedData::ShmemData(ser_data))
+    // }
+    fn serialize<T: Send + Sync + serde::Serialize + ?Sized>(
         &self,
         header: Option<SerializeHeader>,
         obj: &T,
     ) -> Result<SerializedData, anyhow::Error> {
         let header_size = std::mem::size_of::<Option<SerializeHeader>>();
         let data_size = bincode::serialized_size(obj)? as usize;
-        let ser_data = ShmemData::new(self.shmem_comm.clone(), header_size + data_size).await;
+        let ser_data = ShmemData::new(self.shmem_comm.clone(), header_size + data_size)?;
         bincode::serialize_into(ser_data.header_as_bytes(), &header)?;
         bincode::serialize_into(ser_data.data_as_bytes(), obj)?;
         Ok(SerializedData::ShmemData(ser_data))
     }
-    async fn serialize_header(
+    fn serialize_header(
         &self,
         header: Option<SerializeHeader>,
         serialized_size: usize,
     ) -> Result<SerializedData, anyhow::Error> {
         let header_size = std::mem::size_of::<Option<SerializeHeader>>();
-        let ser_data = ShmemData::new(self.shmem_comm.clone(), header_size + serialized_size).await;
+        let ser_data = ShmemData::new(self.shmem_comm.clone(), header_size + serialized_size)?;
         bincode::serialize_into(ser_data.header_as_bytes(), &header)?;
         Ok(SerializedData::ShmemData(ser_data))
     }
 }
 
+
 #[allow(dead_code, unused_variables)]
+#[async_trait]
 impl LamellaeRDMA for Shmem {
     fn put(&self, pe: usize, src: &[u8], dst: usize) {
         self.shmem_comm.put(pe, src, dst);
@@ -188,13 +223,16 @@ impl LamellaeRDMA for Shmem {
     fn get(&self, pe: usize, src: usize, dst: &mut [u8]) {
         self.shmem_comm.get(pe, src, dst);
     }
-    fn rt_alloc(&self, size: usize) -> Option<usize> {
+    fn rt_alloc(&self, size: usize) -> AllocResult<usize> {
         self.shmem_comm.rt_alloc(size)
+    }
+    fn rt_check_alloc(&self, size: usize) -> bool{
+        self.shmem_comm.rt_check_alloc(size)
     }
     fn rt_free(&self, addr: usize) {
         self.shmem_comm.rt_free(addr)
     }
-    fn alloc(&self, size: usize, alloc: AllocationType) -> Option<usize> {
+    fn alloc(&self, size: usize, alloc: AllocationType) -> AllocResult<usize> {
         self.shmem_comm.alloc(size, alloc)
     }
     fn free(&self, addr: usize) {
@@ -216,6 +254,11 @@ impl LamellaeRDMA for Shmem {
         self.shmem_comm.num_pool_allocs()
     }
     fn alloc_pool(&self, min_size: usize){
-        self.shmem_comm.alloc_pool(min_size)
+        // self.shmem_comm.alloc_pool(min_size)
+        self.cq.send_alloc(min_size);
+    }
+    async fn async_alloc_pool(&self, min_size: usize){
+        // self.shmem_comm.alloc_pool(min_size)
+        self.cq.async_send_alloc(min_size).await;
     }
 }

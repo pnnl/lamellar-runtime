@@ -117,7 +117,7 @@ pub(crate) fn create_scheduler(
     sched: SchedulerType,
     num_pes: usize,
     my_pe: usize,
-    teams: Arc<RwLock<HashMap<u64, Weak<LamellarTeam>>>>,
+    teams: Arc<RwLock<HashMap<u64, Weak<LamellarTeamRT>>>>,
 ) -> Scheduler {
     match sched {
         SchedulerType::WorkStealing => {

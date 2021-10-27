@@ -45,13 +45,18 @@ fn main() {
     let my_pe = world.my_pe();
     let num_pes = world.num_pes();
 
+    // println!("here 0");
+
     let even_team = world.create_team_from_arch(StridedArch::new(
         0,                                      // start pe
         2,                                      // stride
         (num_pes as f64 / 2.0).ceil() as usize, //num pes in team
     ));
 
+    // println!("here 1");
+
     let global_darc = GlobalRwDarc::new(world.team(), 0).unwrap();
+    // println!("here 2");
     let read_lock = global_darc.read();
     println!("I have the read lock!!!! {:?}", my_pe);
     drop(read_lock);
@@ -59,10 +64,10 @@ fn main() {
     println!("I have the write lock!!!! {:?}", my_pe);
     std::thread::sleep(std::time::Duration::from_secs(2));
     drop(write_lock);
-
+    // println!("here3");
     let local_darc = LocalRwDarc::new(world.team(), 10).unwrap();
     println!("created new local rw");
-    local_darc.print();
+    // local_darc.print();
 
     let wrapped = WrappedWrappedWrappedDarc {
         wrapped: WrappedWrappedDarc {
@@ -71,8 +76,11 @@ fn main() {
             },
         },
     };
+    // println!("here 4");
     let darc1 = Darc::new(world.team(), 10).unwrap();
+    // println!("here 5");
     let darc2 = Darc::new(world.team(), 20).unwrap();
+    // println!("here 6");
     if let Some(team) = even_team {
         let team_darc = Darc::new(team.clone(), AtomicUsize::new(10));
         println!("created team darc");
@@ -88,13 +96,17 @@ fn main() {
                 darc_tuple: (darc1.clone(), darc2.clone()),
                 my_arc: Darc::new(team.clone(), Arc::new(0)).unwrap(),
             };
+            // println!("here 7");
             team.exec_am_pe(0, darc_am.clone());
             team.exec_am_all(darc_am);
+            // println!("here 8");
         } else {
             println!("here");
             *(*local_darc.write()) += 1;
         }
     }
+    // println!("here 9");
+
     drop(darc1);
     drop(darc2);
     drop(wrapped);

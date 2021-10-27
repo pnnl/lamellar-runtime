@@ -1,6 +1,6 @@
 use crate::lamellae::{
     AllocationType, Backend, Des, Lamellae, LamellaeAM, LamellaeComm, LamellaeInit, LamellaeRDMA,
-    Ser, SerializeHeader, SerializedData, SerializedDataOps, SubData,
+    Ser, SerializeHeader, SerializedData, SerializedDataOps, SubData,AllocResult
 };
 use crate::lamellar_arch::LamellarArchRT;
 use crate::scheduler::Scheduler;
@@ -63,16 +63,16 @@ impl Local {
     }
 }
 
-#[async_trait]
+// #[async_trait]
 impl Ser for Local {
-    async fn serialize<T: Send + Sync + serde::Serialize + ?Sized>(
+    fn serialize<T: Send + Sync + serde::Serialize + ?Sized>(
         &self,
         _header: Option<SerializeHeader>,
         _obj: &T,
     ) -> Result<SerializedData, anyhow::Error> {
         panic!("should not be serializing in local");
     }
-    async fn serialize_header(
+    fn serialize_header(
         &self,
         _header: Option<SerializeHeader>,
         _serialized_size: usize,
@@ -130,6 +130,7 @@ unsafe impl Sync for MyPtr {}
 unsafe impl Send for MyPtr {}
 
 //#[prof]
+#[async_trait]
 impl LamellaeRDMA for Local {
     fn put(&self, _pe: usize, src: &[u8], dst: usize) {
         unsafe {
@@ -152,27 +153,31 @@ impl LamellaeRDMA for Local {
         }
     }
 
-    fn rt_alloc(&self, size: usize) -> Option<usize> {
+    fn rt_alloc(&self, size: usize) -> AllocResult<usize> {
         let data = vec![0u8; size].into_boxed_slice();
         let data_ptr = Box::into_raw(data);
         let data_addr = data_ptr as *const u8 as usize;
         let mut allocs = self.allocs.lock();
         allocs.insert(data_addr, MyPtr { ptr: data_ptr });
-        Some(data_addr)
+        Ok(data_addr)
     }
+    fn rt_check_alloc(&self, size: usize )-> bool {
+        true
+    }
+    
     fn rt_free(&self, addr: usize) {
         let mut allocs = self.allocs.lock();
         if let Some(data_ptr) = allocs.remove(&addr) {
             unsafe { Box::from_raw(data_ptr.ptr) }; //it will free when dropping from scope
         }
     }
-    fn alloc(&self, size: usize, _alloc: AllocationType) -> Option<usize> {
+    fn alloc(&self, size: usize, _alloc: AllocationType) -> AllocResult<usize> {
         let data = vec![0u8; size].into_boxed_slice();
         let data_ptr = Box::into_raw(data);
         let data_addr = data_ptr as *const u8 as usize;
         let mut allocs = self.allocs.lock();
         allocs.insert(data_addr, MyPtr { ptr: data_ptr });
-        Some(data_addr)
+        Ok(data_addr)
     }
     fn free(&self, addr: usize) {
         let mut allocs = self.allocs.lock();
@@ -197,6 +202,9 @@ impl LamellaeRDMA for Local {
         1
     }
     fn alloc_pool(&self, min_size: usize){
+        
+    }
+    async fn async_alloc_pool(&self, min_size: usize){
         
     }
 }

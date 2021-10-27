@@ -16,7 +16,7 @@ pub struct SharedMemoryRegion<T: Dist + 'static> {
     phantom: PhantomData<T>,
 }
 
-impl<T: Dist + 'static> crate::DarcSerde for SharedMemoryRegion<T> {
+impl<T: Dist + 'static> crate::DarcSerde for SharedMemoryRegion<T> { ///hmmm why do I need to implement manually, I think i would work with the macro automatically now?
     fn ser(&self, num_pes: usize, cur_pe: Result<usize, crate::IdError>) {
         // println!("in shared ser");
         match cur_pe {
@@ -45,26 +45,32 @@ impl<T: Dist + 'static> crate::DarcSerde for SharedMemoryRegion<T> {
 impl<T: Dist + 'static> SharedMemoryRegion<T> {
     pub(crate) fn new(
         size: usize,
-        // lamellae: Arc<Lamellae>,
         team: Arc<LamellarTeamRT>,
         alloc: AllocationType,
     ) -> SharedMemoryRegion<T> {
-        // println!("new shared memregion");
-        SharedMemoryRegion {
+       SharedMemoryRegion::try_new(size,team,alloc).expect("Out of memory")
+    }
+
+    pub(crate) fn try_new(
+        size: usize,
+        team: Arc<LamellarTeamRT>,
+        alloc: AllocationType,
+    ) -> Result<SharedMemoryRegion<T>,anyhow::Error> {
+        Ok(SharedMemoryRegion {
             mr: Darc::try_new(
                 team.clone(),
-                MemoryRegion::new(
+                MemoryRegion::try_new(
                     size * std::mem::size_of::<T>(),
                     team.lamellae.clone(),
                     alloc,
-                ),
+                )?,
                 crate::darc::DarcMode::Darc,
             )
             .expect("memregions can only be created on a member of the team"),
             sub_region_offset: 0,
             sub_region_size: size,
             phantom: PhantomData,
-        }
+        })
     }
     pub fn len(&self) -> usize {
         RegisteredMemoryRegion::<T>::len(self)

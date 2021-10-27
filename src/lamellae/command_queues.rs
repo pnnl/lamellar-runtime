@@ -23,6 +23,19 @@ struct CmdMsg {
     cmd_hash: usize,
 }
 
+impl Default for CmdMsg{
+    fn default() -> Self{
+        CmdMsg{
+            daddr:0,
+            dsize:0,
+            cmd: Cmd::Clear,
+            msg_hash: 0,
+            cmd_hash:0
+        }
+    }
+}
+
+
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Cmd {
@@ -31,6 +44,7 @@ enum Cmd {
     Release,
     Print,
     Tx,
+    Alloc,
 }
 
 fn calc_hash(addr: usize, len: usize) -> usize {
@@ -265,6 +279,7 @@ impl CmdMsgBuffer {
                 Cmd::Clear => panic!("should not clear before release"),
                 // Cmd::Free => panic!("should not free before release"),
                 Cmd::Print => panic!("shoud not encounter Print here"),
+                Cmd::Alloc => panic!("should not encounter alloc here"),
             }
         } else {
             false
@@ -281,6 +296,7 @@ impl CmdMsgBuffer {
                 Cmd::Tx => panic! {"should not be transerring if in waiting bufs"},
                 Cmd::Clear => panic!("should not clear before release"),
                 Cmd::Print => panic!("shoud not encounter Print here"),
+                Cmd::Alloc => panic!("should not encounter alloc here"),
             }
         }
         for buf_addr in freed_bufs {
@@ -347,13 +363,14 @@ struct InnerCQ {
     send_buffer: Arc<Mutex<Box<[CmdMsg]>>>,
     recv_buffer: Arc<Mutex<Box<[CmdMsg]>>>,
     free_buffer: Arc<Mutex<Box<[CmdMsg]>>>,
+    alloc_buffer: Arc<Mutex<Box<[CmdMsg]>>>,
     cmd_buffers: Vec<Mutex<CmdMsgBuffer>>,
     release_cmd: Arc<Box<CmdMsg>>,
     clear_cmd: Arc<Box<CmdMsg>>,
     free_cmd: Arc<Box<CmdMsg>>,
     comm: Arc<Comm>,
     my_pe: usize,
-    _num_pes: usize,
+    num_pes: usize,
     send_waiting: Vec<Arc<AtomicBool>>,
     pending_cmds: Arc<AtomicUsize>,
     sent_cnt: Arc<AtomicUsize>,
@@ -367,6 +384,7 @@ impl InnerCQ {
         send_buffer_addr: usize,
         recv_buffer_addr: usize,
         free_buffer_addr: usize,
+        alloc_buffer_addr: usize,
         cmd_buffers_addrs: &Vec<Arc<Vec<usize>>>,
         release_cmd_addr: usize,
         clear_cmd_addr: usize,
@@ -427,6 +445,20 @@ impl InnerCQ {
             (*cmd).calc_hash();
         }
 
+        let mut alloc_buffer = unsafe {
+            Box::from_raw(std::ptr::slice_from_raw_parts_mut(
+                alloc_buffer_addr as *mut CmdMsg,
+                num_pes,
+            ))
+        };
+        for cmd in alloc_buffer.iter_mut() {
+            (*cmd).daddr = 0;
+            (*cmd).dsize = 0;
+            (*cmd).cmd = Cmd::Clear;
+            (*cmd).msg_hash = 0;
+            (*cmd).calc_hash();
+        }
+
         let mut release_cmd = unsafe { Box::from_raw(release_cmd_addr as *mut CmdMsg) };
         release_cmd.daddr = 1;
         release_cmd.dsize = 1;
@@ -456,13 +488,14 @@ impl InnerCQ {
             send_buffer: Arc::new(Mutex::new(send_buffer)),
             recv_buffer: Arc::new(Mutex::new(recv_buffer)),
             free_buffer: Arc::new(Mutex::new(free_buffer)),
-            cmd_buffers: cmd_buffers,
+            alloc_buffer: Arc::new(Mutex::new(alloc_buffer)),
+            cmd_buffers: cmd_buffers,            
             release_cmd: Arc::new(release_cmd),
             clear_cmd: Arc::new(clear_cmd),
             free_cmd: Arc::new(free_cmd),
             comm: comm,
             my_pe: my_pe,
-            _num_pes: num_pes,
+            num_pes: num_pes,
             send_waiting: send_waiting,
             pending_cmds: Arc::new(AtomicUsize::new(0)),
             sent_cnt: Arc::new(AtomicUsize::new(0)),
@@ -499,10 +532,28 @@ impl InnerCQ {
                     cmd.msg_hash = 0;
                     cmd.calc_hash();
                     res
-                }
+                },
+                Cmd::Alloc => panic!("should not encounter alloc here"),
             }
         } else {
             None
+        }
+    }
+
+    fn check_alloc(&self) {
+        if let Some(mut alloc_buf) = self.alloc_buffer.try_lock(){
+            let mut do_alloc=false;
+            let mut min_size = 0;
+            for pe in 0..self.num_pes{
+                if alloc_buf[pe].check_hash() && alloc_buf[pe].cmd == Cmd::Alloc{
+                    do_alloc = true;
+                    min_size = alloc_buf[pe].dsize;
+                    break;
+                }
+            }
+            if do_alloc{
+                self.send_alloc_inner(&mut alloc_buf,min_size);
+            }
         }
     }
 
@@ -623,6 +674,58 @@ impl InnerCQ {
         }
     }
 
+    fn send_alloc(&self, min_size: usize){
+        let prev_cnt = self.comm.num_pool_allocs();
+        let mut alloc_buf = self.alloc_buffer.lock();
+        if !self.comm.rt_check_alloc(min_size){
+            if prev_cnt == self.comm.num_pool_allocs(){
+                // println!("im responsible for the new alloc");
+                self.send_alloc_inner(&mut alloc_buf,min_size);
+            }
+        }
+    }
+
+    fn send_alloc_inner(&self,alloc_buf: &mut Box<[CmdMsg]>, min_size: usize){
+        if alloc_buf[self.my_pe].hash() == self.clear_cmd.hash(){
+            let cmd = &mut alloc_buf[self.my_pe];
+            cmd.daddr =0;
+            cmd.dsize = min_size;
+            cmd.cmd = Cmd::Alloc;
+            cmd.msg_hash = 0;
+            cmd.calc_hash();
+            for pe in 0..self.num_pes{
+                if pe != self.my_pe{
+                    self.comm.put(pe,cmd.as_bytes(),cmd.as_addr());
+                }
+            }
+        }
+        for pe in 0 ..self.num_pes{
+            while !alloc_buf[pe].check_hash() || alloc_buf[pe].cmd != Cmd::Alloc{
+                std::thread::yield_now();
+            }
+        }
+
+        self.comm.alloc_pool(min_size);
+        let cmd = &mut alloc_buf[self.my_pe];
+        cmd.daddr =0;
+        cmd.dsize = 0;
+        cmd.cmd = Cmd::Clear;
+        cmd.msg_hash = 0;
+        cmd.calc_hash();
+        for pe in 0..self.num_pes{
+            if pe != self.my_pe{
+                self.comm.put(pe,cmd.as_bytes(),cmd.as_addr());
+            }
+        }
+        for pe in 0 ..self.num_pes{
+            while !alloc_buf[pe].check_hash() || alloc_buf[pe].cmd != Cmd::Clear{
+                std::thread::yield_now();
+            }
+        }
+        // println!("created new alloc pool");
+        
+    }
+
     fn send_release(&self, dst: usize, cmd: CmdMsg) {
         // let cmd_buffer = self.cmd_buffers[dst].lock();
         // println!("sending release: {:?} cmd: {:?} {:?} {:?} 0x{:x} 0x{:x}",self.release_cmd,cmd,self.release_cmd.cmd_as_bytes(), cmd.cmd_as_bytes(),self.release_cmd.cmd_as_addr(),cmd.daddr + offset_of!(CmdMsg,cmd));
@@ -741,7 +844,34 @@ impl InnerCQ {
     }
 
     async fn get_cmd(&self, src: usize, cmd: CmdMsg) -> SerializedData {
-        let ser_data = self.comm.new_serialized_data(cmd.dsize as usize).await;
+        let mut ser_data = self.comm.new_serialized_data(cmd.dsize as usize);
+        let mut timer = std::time::Instant::now();
+        // let mut print = false;
+        while ser_data.is_err(){
+            async_std::task::yield_now().await;
+            // println!("cq 848 need to alloc memory {:?}",cmd.dsize);
+            self.send_alloc(cmd.dsize);
+            ser_data = self.comm.new_serialized_data(cmd.dsize as usize);
+            // println!("cq 851 data {:?}",ser_data.is_ok());
+            if timer.elapsed().as_secs_f64() > 15.0 && ser_data.is_err() {
+                println!("get cmd stuck waiting for alloc {:?} {:?}",cmd.dsize,self.comm.rt_check_alloc(cmd.dsize));
+                self.comm.print_pools();
+                timer = std::time::Instant::now();
+            }
+            // print = true;
+            // ser_data = match ser_data{
+            //     Ok(ser_data) => {
+            //                         ser_data.print();
+            //                         Ok(ser_data)
+            //     },
+            //     Err(err) => Err(err),
+                            
+            // };
+        }
+        let ser_data = ser_data.unwrap();
+        // if print{
+        //     ser_data.print();
+        // }
         self.get_serialized_data(src, cmd, &ser_data).await;
         // println!("received data {:?}",ser_data.header_and_data_as_bytes());
         self.recv_cnt.fetch_add(1, Ordering::SeqCst);
@@ -753,13 +883,16 @@ impl InnerCQ {
     async fn get_cmd_buf(&self, src: usize, cmd: CmdMsg) -> usize {
         let mut data = self.comm.rt_alloc(cmd.dsize as usize);
         let mut timer = std::time::Instant::now();
-        while data.is_none() {
+        while data.is_err() {
             async_std::task::yield_now().await;
+            // println!("cq 871 need to alloc memory {:?}",cmd.dsize);
+            self.send_alloc(cmd.dsize);
             data = self.comm.rt_alloc(cmd.dsize as usize);
+            // println!("cq 874 data {:?}",data.is_ok());
             if timer.elapsed().as_secs_f64() > 15.0 {
-                println!("stuck waiting for alloc");
+                println!("get cmd buf stuck waiting for alloc");
                 timer = std::time::Instant::now();
-            }
+            }            
         }
         // println!("getting into {:?} 0x{:x} ",data, data.unwrap() + self.comm.base_addr());
         let data = data.unwrap();
@@ -784,6 +917,9 @@ impl Drop for InnerCQ {
         Box::into_raw(old);
         let mut free_buf = self.free_buffer.lock();
         let old = std::mem::take(&mut *free_buf);
+        Box::into_raw(old);
+        let mut alloc_buffer = self.alloc_buffer.lock();
+        let old = std::mem::take(&mut *alloc_buffer);
         Box::into_raw(old);
         let old = std::mem::replace(
             Arc::get_mut(&mut self.release_cmd).unwrap(),
@@ -828,6 +964,7 @@ pub(crate) struct CommandQueue {
     send_buffer_addr: usize,
     recv_buffer_addr: usize,
     free_buffer_addr: usize,
+    alloc_buffer_addr: usize,
     release_cmd_addr: usize,
     clear_cmd_addr: usize,
     free_cmd_addr: usize,
@@ -852,9 +989,13 @@ impl CommandQueue {
             .unwrap();
             // + comm.base_addr();
         // println!("free_buffer_addr {:x} {:x}",recv_buffer_addr,recv_buffer_addr-comm.base_addr());
+        let alloc_buffer_addr =
+            comm.rt_alloc(num_pes*std::mem::size_of::<CmdMsg>()).unwrap();
+        println!("alloc_buffer_addr {:x}",alloc_buffer_addr);
         let release_cmd_addr =
             comm.rt_alloc(std::mem::size_of::<CmdMsg>()).unwrap();// + comm.base_addr();
         // println!("release_cmd_addr {:x}",release_cmd_addr-comm.base_addr());
+        
         let clear_cmd_addr =
             comm.rt_alloc(std::mem::size_of::<CmdMsg>()).unwrap();// + comm.base_addr();
         // println!("clear_cmd_addr {:x}",clear_cmd_addr-comm.base_addr());
@@ -879,6 +1020,7 @@ impl CommandQueue {
             send_buffer_addr,
             recv_buffer_addr,
             free_buffer_addr,
+            alloc_buffer_addr,
             &cmd_buffers_addrs.clone(),
             release_cmd_addr,
             clear_cmd_addr,
@@ -892,12 +1034,20 @@ impl CommandQueue {
             send_buffer_addr: send_buffer_addr,
             recv_buffer_addr: recv_buffer_addr,
             free_buffer_addr: free_buffer_addr,
+            alloc_buffer_addr: alloc_buffer_addr,
             release_cmd_addr: release_cmd_addr,
             clear_cmd_addr: clear_cmd_addr,
             free_cmd_addr: free_cmd_addr,
             cmd_buffers_addrs: cmd_buffers_addrs,
             comm: comm,
         }
+    }
+
+    pub fn send_alloc(&self, min_size: usize){
+        self.cq.send_alloc(min_size)
+    }
+    pub async fn async_send_alloc(&self,min_size: usize){
+        self.cq.send_alloc(min_size);
     }
 
     pub async fn send_data(&self, data: SerializedData, dst: usize) {
@@ -928,6 +1078,14 @@ impl CommandQueue {
         }
     }
 
+    pub async fn alloc_task(&self,scheduler: Arc<Scheduler>,active: Arc<AtomicU8>){
+        while scheduler.active() {
+            self.cq.check_alloc();
+            async_std::task::yield_now().await;
+        }
+        // println!("leaving alloc_task task {:?}",scheduler.active());
+    }
+
     pub async fn recv_data(
         &self,
         scheduler: Arc<Scheduler>,
@@ -945,6 +1103,7 @@ impl CommandQueue {
                         let cmd_buf_cmd = cmd_buf_cmd;
                         // println!("recv_data {:?}",cmd_buf_cmd);
                         match cmd_buf_cmd.cmd {
+                            Cmd::Alloc => panic!("should not encounter alloc here"),
                             Cmd::Clear | Cmd::Release => {
                                 panic!("should not be possible to see cmd clear or release here")
                             }
@@ -1046,6 +1205,8 @@ impl Drop for CommandQueue {
             .rt_free(self.recv_buffer_addr);// - self.comm.base_addr());
         self.comm
             .rt_free(self.free_buffer_addr);// - self.comm.base_addr());
+        self.comm
+            .rt_free(self.alloc_buffer_addr);
         self.comm
             .rt_free(self.release_cmd_addr);// - self.comm.base_addr());
         self.comm

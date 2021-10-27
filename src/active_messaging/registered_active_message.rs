@@ -1,4 +1,5 @@
 use crate::active_messaging::*;
+use crate::lamellae::comm::AllocError;
 use crate::lamellae::{Des, Lamellae, LamellaeAM, Ser, SerializeHeader, SerializedData, SubData};
 use crate::lamellar_team::LamellarTeamRT;
 
@@ -125,6 +126,7 @@ impl RegisteredActiveMessages {
         func_size: usize,
         func_id: AmId,
         req_data: Arc<ReqData>,
+        world: Arc<LamellarTeam>
     ) {
         // println!("adding req {:?} {:?}",func_id,func_size);
 
@@ -176,6 +178,7 @@ impl RegisteredActiveMessages {
         //--------------------------
         let mut stall_mark = self.stall_mark.load(Ordering::Relaxed);
         let stall_mark_clone = self.stall_mark.clone();
+        let world_clone = world.clone();
         if submit_tx_task {
             let submitted_ams = self.submitted_ams.clone();
             let txed_ams = self.txed_ams.clone();
@@ -212,11 +215,22 @@ impl RegisteredActiveMessages {
                         team_hash: req_data.team_hash,
                         id: 0,
                     });
-                    let data = req_data
+                    let mut data = req_data
                         .lamellae
-                        .serialize_header(header, total_size)
-                        .await
-                        .unwrap();
+                        .serialize_header(header.clone(), total_size);
+                    while let Err(err) = data{
+                        // println!("ram 222 need to alloc memory");
+                        async_std::task::yield_now().await;
+                        match err.downcast_ref::<AllocError>(){
+                            Some(AllocError::OutOfMemoryError(_)) => world.alloc_new_pool(total_size*2).await,
+                            _ => panic!("unhanlded error!! {:?}",err)
+                        }
+                        data = req_data
+                        .lamellae
+                        .serialize_header(header.clone(), total_size);
+                        // println!("ram 230 data: {:?}",data.is_ok()); 
+                    }
+                    let data = data.unwrap();
                     let data_slice = data.data_as_bytes();
                     let mut i = 0;
                     for (func_id, (batch_map, func_size)) in func_map {
@@ -408,7 +422,8 @@ impl RegisteredActiveMessages {
         func_size: usize,
         func_id: AmId,
         req_data: Arc<ReqData>,
-    ) {
+        world: Arc<LamellarTeam>
+    )  {
         let batch_id = if let Some(batch_id) = &req_data.batch_id {
             *batch_id
         } else {
@@ -425,11 +440,22 @@ impl RegisteredActiveMessages {
             team_hash: req_data.team_hash,
             id: func_id,
         });
-        let data = req_data
+        let mut data = req_data
             .lamellae
-            .serialize_header(header, func_size)
-            .await
-            .unwrap();
+            .serialize_header(header.clone(), func_size);
+        while let Err(err) = data{
+            async_std::task::yield_now().await;
+            // println!("ram 446 need to alloc memory");
+            match err.downcast_ref::<AllocError>(){
+                Some(AllocError::OutOfMemoryError(_)) => world.alloc_new_pool(func_size*2).await,
+                _ => panic!("unhanlded error!! {:?}",err)
+            }   
+            data = req_data
+            .lamellae
+            .serialize_header(header.clone(), func_size);
+            // println!("ram 454 data: {:?}",data.is_ok());                 
+        }
+        let data = data.unwrap();
         let data_slice = data.data_as_bytes();
         match func {
             LamellarFunc::Am(func) => {
@@ -555,12 +581,13 @@ impl RegisteredActiveMessages {
             let req_data = if func_size <= 10000 {
                 req_data.cmd = cmd;
                 let req_data = Arc::new(req_data);
-                self.add_req_to_batch(req_data.func.clone(), func_size, func_id, req_data.clone()); //,Cmd::BatchedMsg);
+                self.add_req_to_batch(req_data.func.clone(), func_size, func_id, req_data.clone(),world.clone()); //,Cmd::BatchedMsg);
                 req_data
             } else {
                 let req_data = Arc::new(req_data);
-                self.send_req(req_data.func.clone(), func_size, func_id, req_data.clone())
-                    .await;
+                self.send_req(req_data.func.clone(), func_size, func_id, req_data.clone(),world.clone()).await;
+                
+                    
                 req_data
             };
 

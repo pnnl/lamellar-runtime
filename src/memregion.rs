@@ -160,19 +160,30 @@ impl<T: Dist + 'static> MemoryRegion<T> {
         lamellae: Arc<Lamellae>,
         alloc: AllocationType,
     ) -> MemoryRegion<T> {
+        if let Ok(memreg) = MemoryRegion::try_new(size,lamellae,alloc){
+            memreg
+        }
+        else{
+            panic!("out of memory")
+        }
+    }
+    pub(crate) fn try_new(
+        size: usize, //number of elements of type T
+        lamellae: Arc<Lamellae>,
+        alloc: AllocationType,
+    ) -> Result<MemoryRegion<T>,anyhow::Error> {
         // println!("creating new lamellar memory region {:?}",size * std::mem::size_of::<T>());
         let mut local = false;
         let addr = if size > 0 {
             if let AllocationType::Local = alloc {
                 local = true;
-                lamellae.rt_alloc(size * std::mem::size_of::<T>()).unwrap()
+                lamellae.rt_alloc(size * std::mem::size_of::<T>())?
             } else {
                 lamellae
-                    .alloc(size * std::mem::size_of::<T>(), alloc)
-                    .unwrap() //did we call team barrer before this?
+                    .alloc(size * std::mem::size_of::<T>(), alloc)?//did we call team barrer before this?
             }
         } else {
-            0
+            return Err(anyhow::anyhow!("cant have negative sized memregion"));
         };
         let temp = MemoryRegion {
             addr: addr,
@@ -189,7 +200,7 @@ impl<T: Dist + 'static> MemoryRegion<T> {
         //     temp.addr,
         //     size * std::mem::size_of::<T>()
         // );
-        temp
+        Ok(temp)
     }
 
     #[allow(dead_code)]

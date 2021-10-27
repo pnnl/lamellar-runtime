@@ -16,19 +16,22 @@ pub struct LocalMemoryRegion<T: Dist + 'static> {
 
 impl<T: Dist + 'static> LocalMemoryRegion<T> {
     pub(crate) fn new(size: usize, lamellae: Arc<Lamellae>) -> LocalMemoryRegion<T> {
-        let mr = Arc::new(MemoryRegion::new(
+        LocalMemoryRegion::try_new(size,lamellae).expect("out of memory")
+    }
+    pub(crate) fn try_new(size: usize, lamellae: Arc<Lamellae>) -> Result<LocalMemoryRegion<T>,anyhow::Error> {
+        let mr = Arc::new(MemoryRegion::try_new(
             size * std::mem::size_of::<T>(),
             lamellae,
             AllocationType::Local,
-        ));
+        )?);
         let pe = mr.pe;
-        LocalMemoryRegion {
+        Ok(LocalMemoryRegion {
             mr: mr,
             pe: pe,
             sub_region_offset: 0,
             sub_region_size: size,
             phantom: PhantomData,
-        }
+        })
     }
     pub fn len(&self) -> usize {
         RegisteredMemoryRegion::<T>::len(self)

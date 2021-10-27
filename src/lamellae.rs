@@ -12,6 +12,7 @@ use enum_dispatch::enum_dispatch;
 pub(crate) mod comm;
 pub(crate) mod command_queues;
 use comm::Comm;
+use comm::AllocResult;
 
 pub(crate) mod local_lamellae;
 use local_lamellae::{Local, LocalData};
@@ -122,15 +123,15 @@ pub(crate) trait LamellaeInit {
 }
 
 
-#[async_trait]
+// #[async_trait]
 #[enum_dispatch]
 pub(crate) trait Ser {
-    async fn serialize<T: Send + Sync + serde::Serialize + ?Sized>(
+    fn serialize<T: Send + Sync + serde::Serialize + ?Sized>(
         &self,
         header: Option<SerializeHeader>,
         obj: &T,
     ) -> Result<SerializedData, anyhow::Error>;
-    async fn serialize_header(
+    fn serialize_header(
         &self,
         header: Option<SerializeHeader>,
         serialized_size: usize,
@@ -171,15 +172,17 @@ pub(crate) trait LamellaeAM: Send + Sync {
     );
 }
 
+#[async_trait]
 #[enum_dispatch]
 pub(crate) trait LamellaeRDMA: Send + Sync {
     fn put(&self, pe: usize, src: &[u8], dst: usize);
     fn iput(&self, pe: usize, src: &[u8], dst: usize);
     fn put_all(&self, src: &[u8], dst: usize);
     fn get(&self, pe: usize, src: usize, dst: &mut [u8]);
-    fn rt_alloc(&self, size: usize) -> Option<usize>;
+    fn rt_alloc(&self, size: usize) -> AllocResult<usize>;
+    fn rt_check_alloc(&self,size: usize) -> bool;
     fn rt_free(&self, addr: usize);
-    fn alloc(&self, size: usize, alloc: AllocationType) -> Option<usize>;
+    fn alloc(&self, size: usize, alloc: AllocationType) -> AllocResult<usize>;
     fn free(&self, addr: usize);
     fn base_addr(&self) -> usize;
     fn local_addr(&self, remote_pe: usize, remote_addr: usize) -> usize;
@@ -187,6 +190,7 @@ pub(crate) trait LamellaeRDMA: Send + Sync {
     fn occupied(&self) -> usize;
     fn num_pool_allocs(&self) -> usize; 
     fn alloc_pool(&self, min_size: usize);
+    async fn async_alloc_pool(&self,min_size: usize);
 }
 
 #[allow(unused_variables)]
