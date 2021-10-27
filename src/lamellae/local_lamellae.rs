@@ -130,7 +130,6 @@ unsafe impl Sync for MyPtr {}
 unsafe impl Send for MyPtr {}
 
 //#[prof]
-#[async_trait]
 impl LamellaeRDMA for Local {
     fn put(&self, _pe: usize, src: &[u8], dst: usize) {
         unsafe {
@@ -202,9 +201,6 @@ impl LamellaeRDMA for Local {
         1
     }
     fn alloc_pool(&self, min_size: usize){
-        
-    }
-    async fn async_alloc_pool(&self, min_size: usize){
         
     }
 }

@@ -172,7 +172,6 @@ pub(crate) trait LamellaeAM: Send + Sync {
     );
 }
 
-#[async_trait]
 #[enum_dispatch]
 pub(crate) trait LamellaeRDMA: Send + Sync {
     fn put(&self, pe: usize, src: &[u8], dst: usize);
@@ -190,7 +189,6 @@ pub(crate) trait LamellaeRDMA: Send + Sync {
     fn occupied(&self) -> usize;
     fn num_pool_allocs(&self) -> usize; 
     fn alloc_pool(&self, min_size: usize);
-    async fn async_alloc_pool(&self,min_size: usize);
 }
 
 #[allow(unused_variables)]

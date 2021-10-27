@@ -91,7 +91,7 @@ impl LamellarTeam {
     }
 
     pub(crate) async fn alloc_new_pool(self: &Arc<LamellarTeam>,min_size: usize){
-        self.team.lamellae.async_alloc_pool(min_size).await;
+        self.team.lamellae.alloc_pool(min_size);
     }
 }
 

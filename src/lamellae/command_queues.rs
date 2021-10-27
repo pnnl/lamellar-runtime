@@ -991,7 +991,7 @@ impl CommandQueue {
         // println!("free_buffer_addr {:x} {:x}",recv_buffer_addr,recv_buffer_addr-comm.base_addr());
         let alloc_buffer_addr =
             comm.rt_alloc(num_pes*std::mem::size_of::<CmdMsg>()).unwrap();
-        println!("alloc_buffer_addr {:x}",alloc_buffer_addr);
+        // println!("alloc_buffer_addr {:x}",alloc_buffer_addr);
         let release_cmd_addr =
             comm.rt_alloc(std::mem::size_of::<CmdMsg>()).unwrap();// + comm.base_addr();
         // println!("release_cmd_addr {:x}",release_cmd_addr-comm.base_addr());
@@ -1045,9 +1045,6 @@ impl CommandQueue {
 
     pub fn send_alloc(&self, min_size: usize){
         self.cq.send_alloc(min_size)
-    }
-    pub async fn async_send_alloc(&self,min_size: usize){
-        self.cq.send_alloc(min_size);
     }
 
     pub async fn send_data(&self, data: SerializedData, dst: usize) {

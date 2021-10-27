@@ -1,4 +1,4 @@
-use crate::lamellae::comm::CommOps;
+use crate::lamellae::comm::{CommOps,AllocResult};
 use crate::lamellae::command_queues::CommandQueue;
 use crate::lamellae::rofi::rofi_comm::{RofiComm, RofiData};
 use crate::lamellae::{
@@ -38,14 +38,22 @@ impl LamellaeInit for RofiBuilder {
     fn init_lamellae(&mut self, scheduler: Arc<Scheduler>) -> Arc<Lamellae> {
         let rofi = Rofi::new(self.my_pe, self.num_pes, self.rofi_comm.clone());
         let cq_clone = rofi.cq();
+        let cq_clone2 = rofi.cq();
         let scheduler_clone = scheduler.clone();
+        let scheduler_clone2 = scheduler.clone();
         let active_clone = rofi.active();
+        let active_clone2 = rofi.active();
 
         let rofi = Arc::new(Lamellae::Rofi(rofi));
         let rofi_clone = rofi.clone();
         scheduler.submit_task(async move {
             cq_clone
                 .recv_data(scheduler_clone.clone(), rofi_clone.clone(), active_clone)
+                .await;
+        });
+        scheduler.submit_task(async move {
+            cq_clone2
+                .alloc_task(scheduler_clone2.clone(), active_clone2)
                 .await;
         });
         rofi
@@ -146,27 +154,27 @@ impl LamellaeAM for Rofi {
         }
     }
 }
-#[async_trait]
+
 impl Ser for Rofi {
-    async fn serialize<T: Send + Sync + serde::Serialize + ?Sized>(
+    fn serialize<T: Send + Sync + serde::Serialize + ?Sized>(
         &self,
         header: Option<SerializeHeader>,
         obj: &T,
     ) -> Result<SerializedData, anyhow::Error> {
         let header_size = std::mem::size_of::<Option<SerializeHeader>>();
         let data_size = bincode::serialized_size(obj)? as usize;
-        let ser_data = RofiData::new(self.rofi_comm.clone(), header_size + data_size).await;
+        let ser_data = RofiData::new(self.rofi_comm.clone(), header_size + data_size)?;
         bincode::serialize_into(ser_data.header_as_bytes(), &header)?;
         bincode::serialize_into(ser_data.data_as_bytes(), obj)?;
         Ok(SerializedData::RofiData(ser_data))
     }
-    async fn serialize_header(
+    fn serialize_header(
         &self,
         header: Option<SerializeHeader>,
         serialized_size: usize,
     ) -> Result<SerializedData, anyhow::Error> {
         let header_size = std::mem::size_of::<Option<SerializeHeader>>();
-        let ser_data = RofiData::new(self.rofi_comm.clone(), header_size + serialized_size).await;
+        let ser_data = RofiData::new(self.rofi_comm.clone(), header_size + serialized_size)?;
         bincode::serialize_into(ser_data.header_as_bytes(), &header)?;
         Ok(SerializedData::RofiData(ser_data))
     }
@@ -186,13 +194,16 @@ impl LamellaeRDMA for Rofi {
     fn get(&self, pe: usize, src: usize, dst: &mut [u8]) {
         self.rofi_comm.get(pe, src, dst);
     }
-    fn rt_alloc(&self, size: usize) -> Option<usize> {
+    fn rt_alloc(&self, size: usize) -> AllocResult<usize> {
         self.rofi_comm.rt_alloc(size)
+    }
+    fn rt_check_alloc(&self, size: usize) -> bool{
+        self.rofi_comm.rt_check_alloc(size)
     }
     fn rt_free(&self, addr: usize) {
         self.rofi_comm.rt_free(addr)
     }
-    fn alloc(&self, size: usize, alloc: AllocationType) -> Option<usize> {
+    fn alloc(&self, size: usize, alloc: AllocationType) -> AllocResult<usize> {
         self.rofi_comm.alloc(size, alloc)
     }
     fn free(&self, addr: usize) {
@@ -214,6 +225,6 @@ impl LamellaeRDMA for Rofi {
         self.rofi_comm.num_pool_allocs()
     }
     fn alloc_pool(&self, min_size: usize){
-        self.rofi_comm.alloc_pool(min_size)
+        self.cq.send_alloc(min_size);
     }
 }

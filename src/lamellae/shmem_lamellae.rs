@@ -159,30 +159,9 @@ impl LamellaeAM for Shmem {
         }
     }
 }
-#[async_trait]
+
+
 impl Ser for Shmem {
-    // async fn async_serialize<T: Send + Sync + serde::Serialize + ?Sized>(
-    //     &self,
-    //     header: Option<SerializeHeader>,
-    //     obj: &T,
-    // ) -> Result<SerializedData, anyhow::Error> {
-    //     let header_size = std::mem::size_of::<Option<SerializeHeader>>();
-    //     let data_size = bincode::serialized_size(obj)? as usize;
-    //     let ser_data = ShmemData::new(self.shmem_comm.clone(), header_size + data_size).await;
-    //     bincode::serialize_into(ser_data.header_as_bytes(), &header)?;
-    //     bincode::serialize_into(ser_data.data_as_bytes(), obj)?;
-    //     Ok(SerializedData::ShmemData(ser_data))
-    // }
-    // async fn async_serialize_header(
-    //     &self,
-    //     header: Option<SerializeHeader>,
-    //     serialized_size: usize,
-    // ) -> Result<SerializedData, anyhow::Error> {
-    //     let header_size = std::mem::size_of::<Option<SerializeHeader>>();
-    //     let ser_data = ShmemData::new(self.shmem_comm.clone(), header_size + serialized_size).await;
-    //     bincode::serialize_into(ser_data.header_as_bytes(), &header)?;
-    //     Ok(SerializedData::ShmemData(ser_data))
-    // }
     fn serialize<T: Send + Sync + serde::Serialize + ?Sized>(
         &self,
         header: Option<SerializeHeader>,
@@ -209,7 +188,6 @@ impl Ser for Shmem {
 
 
 #[allow(dead_code, unused_variables)]
-#[async_trait]
 impl LamellaeRDMA for Shmem {
     fn put(&self, pe: usize, src: &[u8], dst: usize) {
         self.shmem_comm.put(pe, src, dst);
@@ -254,11 +232,6 @@ impl LamellaeRDMA for Shmem {
         self.shmem_comm.num_pool_allocs()
     }
     fn alloc_pool(&self, min_size: usize){
-        // self.shmem_comm.alloc_pool(min_size)
         self.cq.send_alloc(min_size);
-    }
-    async fn async_alloc_pool(&self, min_size: usize){
-        // self.shmem_comm.alloc_pool(min_size)
-        self.cq.async_send_alloc(min_size).await;
     }
 }

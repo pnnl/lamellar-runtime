@@ -27,11 +27,11 @@ use async_trait::async_trait;
 //     }
 // }
 
-static ROFI_MEM: AtomicUsize = AtomicUsize::new(1 * 1024 * 1024 * 1024);
+static ROFI_MEM: AtomicUsize = AtomicUsize::new(4 * 1024 * 1024 * 1024);
 const RT_MEM: usize = 100 * 1024 * 1024; // we add this space for things like team barrier buffers, but will work towards having teams get memory from rofi allocs
 pub(crate) struct RofiComm {
     pub(crate) rofi_base_address: Arc<RwLock<usize>>,
-    alloc: BTreeAlloc,
+    alloc: RwLock<Vec<BTreeAlloc>>,
     _init: AtomicBool,
     pub(crate) num_pes: usize,
     pub(crate) my_pe: usize,
@@ -65,7 +65,7 @@ impl RofiComm {
         let addr = rofi_alloc(total_mem, AllocationType::Global);
         let mut rofi = RofiComm {
             rofi_base_address: Arc::new(RwLock::new(addr as usize)),
-            alloc: BTreeAlloc::new("rofi_mem".to_string()),
+            alloc:  RwLock::new(vec![BTreeAlloc::new("rofi_mem".to_string())]),
             _init: AtomicBool::new(true),
             num_pes: num_pes,
             my_pe: rofi_get_id(),
@@ -83,7 +83,7 @@ impl RofiComm {
             rofi.my_pe,
             *rofi.rofi_base_address.read()
         );
-        rofi.alloc.init(addr as usize, total_mem);
+        rofi.alloc.write()[0].init(addr as usize, total_mem);
         rofi
     }
 }
@@ -100,29 +100,70 @@ impl CommOps for RofiComm {
     }
 
     fn occupied(&self) -> usize {
-        println!("occupied {:?}", self.alloc.occupied());
-        self.alloc.occupied()
+        let mut occupied = 0;
+        let allocs = self.alloc.read();
+        for alloc in allocs.iter(){
+            occupied += alloc.occupied();
+        }
+        occupied
     }
-    fn rt_alloc(&self, size: usize) -> Option<usize> {
-        if let Some(addr) = self.alloc.try_malloc(size) {
-            // println!("got mem: {:?}",addr);
-            // println!("in rt_alloc {:?} addr {:?} in use {:?}",size,addr,self.alloc.occupied());
-            Some(addr)
-        } else {
-            println!("[WARNING] out of memory: (work in progress on a scalable solution, as a work around try setting the LAMELLAR_MEM_SIZE envrionment variable (current size = {:?} -- Note: LamellarLocalArrays are currently allocated out of this pool",ROFI_MEM.load(Ordering::SeqCst));
-            None
+    fn num_pool_allocs(&self) -> usize{
+        self.alloc.read().len()
+    }
+    fn print_pools(&self){
+        let allocs = self.alloc.read();
+        println!("num_pools {:?}",allocs.len());
+        for alloc in allocs.iter(){
+            println!("{:x} {:?} {:?} {:?}",alloc.start_addr,alloc.max_size,alloc.occupied(),alloc.space_avail());
         }
     }
-    #[allow(dead_code)]
+    fn alloc_pool(&self, min_size: usize){
+        let mut allocs = self.alloc.write();
+        let size = std::cmp::max(min_size*2*self.num_pes,ROFI_MEM.load(Ordering::SeqCst));
+        if let Ok(addr) = self.alloc(size,AllocationType::Global){
+            // println!("addr: {:x} - {:x}",addr, addr+size);
+            let mut new_alloc = BTreeAlloc::new("rofi_mem".to_string());
+            new_alloc.init(addr,size);
+            allocs.push(new_alloc)
+        }
+        else{
+            panic!("[Error] out of system memory");
+        }
+    }
+    fn rt_alloc(&self, size: usize) -> AllocResult<usize> {
+        let allocs = self.alloc.read();
+        for alloc in allocs.iter(){
+            if let Some(addr) = alloc.try_malloc(size) {
+                return Ok(addr)
+            }
+            // println!("size: {:?} remaining {:?} occupied {:?} len {:?}",size, alloc.space_avail(),alloc.occupied(),allocs.len());
+        }
+        Err(AllocError::OutOfMemoryError(size))
+    }
+    fn rt_check_alloc(&self, size: usize) -> bool {
+        let allocs = self.alloc.read();
+        for alloc in allocs.iter(){
+            if alloc.fake_malloc(size){
+                return true;
+            }
+        }
+        false
+    }
+    
     fn rt_free(&self, addr: usize) {
-        self.alloc.free(addr);
-        // println!("in rt_free addr {:?} in use {:?}",addr,self.alloc.occupied());
+        let allocs = self.alloc.read();
+        for alloc in allocs.iter(){
+            if let Ok(_) = alloc.free(addr){
+                return;
+            }
+        }
+        panic!("Error invalid free! {:?}",addr);
     }
-    fn alloc(&self, size: usize, alloc: AllocationType) -> Option<usize> {
+    fn alloc(&self, size: usize, alloc: AllocationType) -> AllocResult<usize> {
         let _lock = self.comm_mutex.lock();
-        Some(rofi_alloc(size, alloc) as usize)
+        Ok(rofi_alloc(size, alloc) as usize)
     }
-    #[allow(dead_code)]
+
     fn free(&self, addr: usize) {
         let _lock = self.comm_mutex.lock();
         rofi_release(addr);
@@ -396,9 +437,12 @@ impl CommOps for RofiComm {
 impl Drop for RofiComm {
     fn drop(&mut self) {
         rofi_barrier();
-        // if self.alloc.occupied() > 0{
-        println!("dropping rofi -- memory in use {:?}", self.alloc.occupied());
-        // }
+        if self.occupied() > 0{
+            println!("dropping rofi -- memory in use {:?}", self.occupied());
+        }
+        if self.alloc.read().len() > 1 {
+            println!("[LAMELLAR INFO] {:?} additional rt memory pools were allocated, performance may be increased using a larger initial pool, set using the LAMELLAR_MEM_SIZE envrionment variable. Current initial size = {:?}",self.alloc.read().len()-1, ROFI_MEM.load(Ordering::SeqCst));
+        }
         rofi_barrier();
         //we can probably do a final "put" to each node where we specify we we are done, then once all nodes have done this no further communication amongst them occurs...
         let _res = rofi_finit();
@@ -418,26 +462,16 @@ pub(crate) struct RofiData {
 }
 
 impl RofiData {
-    pub async fn new(rofi_comm: Arc<Comm>, size: usize) -> RofiData {
+    pub fn new(rofi_comm: Arc<Comm>, size: usize) -> Result<RofiData,anyhow::Error> {
         let ref_cnt_size = std::mem::size_of::<AtomicUsize>();
         let alloc_size = size + ref_cnt_size; //+  std::mem::size_of::<u64>();
-        let mut mem = rofi_comm.rt_alloc(alloc_size);
-        let mut timer = std::time::Instant::now();
-        while mem.is_none() {
-            async_std::task::yield_now().await;
-            mem = rofi_comm.rt_alloc(alloc_size);
-            if timer.elapsed().as_secs_f64() > 15.0 {
-                println!("stuck waiting for rofidata alloc");
-                timer = std::time::Instant::now();
-            }
-        }
-        let relative_addr = mem.unwrap();
+        let mut relative_addr = rofi_comm.rt_alloc(alloc_size)?;
         let addr = relative_addr;// + rofi_comm.base_addr();
         unsafe {
             let ref_cnt = addr as *const AtomicUsize;
             (*ref_cnt).store(1, Ordering::SeqCst)
         };
-        RofiData {
+        Ok(RofiData {
             addr: addr,
             relative_addr: relative_addr + ref_cnt_size,
             data_start: addr
@@ -447,7 +481,7 @@ impl RofiData {
             data_len: size - std::mem::size_of::<Option<SerializeHeader>>(),
             rofi_comm: rofi_comm,
             alloc_size: alloc_size,
-        }
+        })
     }
 }
 impl SerializedDataOps for RofiData {
@@ -533,7 +567,7 @@ impl Drop for RofiData {
         let cnt = unsafe { (*(self.addr as *const AtomicUsize)).fetch_sub(1, Ordering::SeqCst) };
         if cnt == 1 {
             self.rofi_comm
-                .rt_free(self.addr);// - self.rofi_comm.base_addr());
+                .rt_free(self.addr);
         }
     }
 }

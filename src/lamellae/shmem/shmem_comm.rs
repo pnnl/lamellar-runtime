@@ -559,6 +559,9 @@ impl Drop for ShmemComm{
         // for alloc in allocs.iter(){
         //     println!("dropping shmem -- memory in use {:?}", alloc.occupied());
         // }
+        if self.occupied() > 0{
+            println!("dropping rofi -- memory in use {:?}", self.occupied());
+        }
         if self.alloc.read().len() > 1 {
             println!("[LAMELLAR INFO] {:?} additional rt memory pools were allocated, performance may be increased using a larger initial pool, set using the LAMELLAR_MEM_SIZE envrionment variable. Current initial size = {:?}",self.alloc.read().len()-1, SHMEM_SIZE.load(Ordering::SeqCst));
         }
@@ -682,7 +685,7 @@ impl Drop for ShmemData {
         let cnt = unsafe { (*(self.addr as *const AtomicUsize)).fetch_sub(1, Ordering::SeqCst) };
         if cnt == 1 {
             self.shmem_comm
-                .rt_free(self.addr);// - self.shmem_comm.base_addr());
+                .rt_free(self.addr);
         }
     }
 }
