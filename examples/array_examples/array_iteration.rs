@@ -53,6 +53,8 @@ fn main() {
     block_array.wait_all();
     block_array.barrier();
 
+    println!("--------------------------------------------------------");
+
     cyclic_array
         .dist_iter()
         .enumerate()
@@ -67,6 +69,27 @@ fn main() {
         });
     cyclic_array.wait_all();
     cyclic_array.barrier();
+
+    println!("--------------------------------------------------------");
+
+    block_array
+        .dist_iter()
+        .chunks(7)
+        .enumerate()
+        .for_each(move |(i,chunk)| {
+            let data = chunk.collect::<Vec<_>>();
+            println!(
+                "[pe({:?})-{:?}] chunk {:?} {:?}",
+                my_pe,
+                std::thread::current().id(),
+                i,
+                data
+            )
+        });
+    block_array.wait_all();
+    block_array.barrier();
+
+    println!("--------------------------------------------------------");
 
     // the second approach is to iterate over the entire array on a single pe
     // this is accomplished calling ".iter()" on a Lamellar Array
@@ -89,6 +112,8 @@ fn main() {
         println!("");
     }
 
+    println!("--------------------------------------------------------");
+
     // The lamellar array iterator used above is lazy, meaning that it only accesses and returns a value as its used,
     // while this is generally efficent and results in low overhead, because an elem may actually exists on a remote node
     // latencies to retrieve the next value in the iterator are dependent on the location of the data, as a result of
@@ -110,6 +135,8 @@ fn main() {
         println!("");
     }
 
+    println!("--------------------------------------------------------");
+
     // in addition to the buffered iters we also provide a method to iterate over chunks of a lamellar array, via
     // the copied_chunks() method. Called on a LamellarArrayIterator this creates a chunk sized LocalMemoryRegion,
     // and then puts the appropriate date based on the iteration index into that region
@@ -122,4 +149,6 @@ fn main() {
             println!("{:?}", chunk.as_slice());
         }
     }
+
+    println!("--------------------------------------------------------");
 }

@@ -1,10 +1,12 @@
 use crate::active_messaging::*;
 use crate::array::*;
+use crate::array::iterator::distributed_iterator::{DistributedIterator,DistIter,DistIterMut,DistIteratorLauncher};
+use crate::array::iterator::serial_iterator::{LamellarArrayIter};
 use crate::darc::Darc;
 use crate::lamellae::AllocationType;
 use crate::lamellar_request::LamellarRequest;
-use crate::lamellar_team::{LamellarTeam,LamellarTeamRT};
-use crate::memregion::{Dist, MemoryRegion, RegisteredMemoryRegion, RemoteMemoryRegion, SubRegion};
+use crate::lamellar_team::{LamellarTeamRT,IntoLamellarTeam};
+use crate::memregion::{Dist, MemoryRegion, RegisteredMemoryRegion,  SubRegion};
 use crate::scheduler::SchedulerQueue;
 use core::marker::PhantomData;
 use parking_lot::RwLock;
@@ -35,12 +37,12 @@ pub struct UnsafeArray<T: Dist + 'static> {
 
 //#[prof]
 impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> UnsafeArray<T> {
-    pub fn new(
-        team: Arc<LamellarTeam>,
+    pub fn new<U: Into<IntoLamellarTeam>>(
+        team: U,
         array_size: usize,
         distribution: Distribution,
     ) -> UnsafeArray<T> {
-        let team = team.team.clone();
+        let team = team.into().team.clone();
         let elem_per_pe = array_size as f32 / team.num_pes() as f32;
         let per_pe_size = (array_size as f32 / team.num_pes() as f32).ceil() as usize; //we do ceil to ensure enough space an each pe
                                                                                        // println!("new unsafe array {:?} {:?} {:?}", elem_per_pe, num_elems_local, per_pe_size);
@@ -82,7 +84,7 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Un
     pub fn barrier(&self) {
         self.inner.team.barrier();
     }
-    fn num_elems_local(&self) -> usize {
+    pub(crate) fn num_elems_local(&self) -> usize {
         match self.distribution {
             Distribution::Block => {
                 ((self.elem_per_pe * (self.inner.team.team_pe_id().unwrap() + 1) as f32).round()
@@ -219,6 +221,11 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Un
             }
         }
     }
+    pub fn at(&self,index: usize) -> T{
+        let buf: LocalMemoryRegion<T> = self.team().alloc_local_mem_region(1);
+        self.get(index,&buf);
+        buf.as_slice().unwrap()[0].clone()
+    }
     pub fn local_as_slice(&self) -> &[T] {
         self.local_as_mut_slice()
     }
@@ -324,21 +331,11 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Un
     }
 
     pub fn dist_iter(&self) -> DistIter<'static, T> {
-        DistIter {
-            data: self.clone().into(),
-            cur_i: 0,
-            end_i: 0,
-            _marker: PhantomData,
-        }
+        DistIter::new(self.clone().into(),0,0)
     }
 
     pub fn dist_iter_mut(&self) -> DistIterMut<'static, T> {
-        DistIterMut {
-            data: self.clone().into(),
-            cur_i: 0,
-            end_i: 0,
-            _marker: PhantomData,
-        }
+        DistIterMut::new(self.clone().into(),0,0)
     }
 
     pub fn iter(&self) -> LamellarArrayIter<'_, T> {
@@ -390,17 +387,32 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Un
 impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> DistIteratorLauncher
     for UnsafeArray<T>
 {
-    fn global_index_from_local(&self, index: usize) -> usize {
+    fn global_index_from_local(&self, index: usize, chunk_size: usize) -> usize {
+        // println!("global index cs:{:?}",chunk_size);
         let my_pe = self.inner.team.team_pe_id().unwrap();
-        match self.distribution {
-            Distribution::Block => {
-                let pe_start_index = (self.elem_per_pe * my_pe as f32).round() as usize;
-                index + pe_start_index
+        if chunk_size == 1 {
+            match self.distribution {
+                Distribution::Block => {
+                    let pe_start_index = (self.elem_per_pe * my_pe as f32).round() as usize;
+                    index + pe_start_index
+                }
+                Distribution::Cyclic => self.inner.team.num_pes() * index + my_pe,
             }
-            Distribution::Cyclic => self.inner.team.num_pes() * index + my_pe,
+        }
+        else{
+            match self.distribution {
+                Distribution::Block => {
+                    let num_chunks_per_per = self.elem_per_pe/chunk_size as f32;
+                    // println!("{:?} {:?}", self.elem_per_pe,num_chunks_per_per);
+                    let start_chunk = (num_chunks_per_per * my_pe as f32).round() as usize;
+                    start_chunk + index
+                }
+                Distribution::Cyclic => self.inner.team.num_pes() * index + my_pe,
+            }
         }
     }
-    fn for_each<I, F>(&self, iter: &I, op: F)
+    
+    fn for_each<I, F>(&self, iter: &I, op: F, chunk_size: usize)
     where
         I: DistributedIterator + 'static,
         F: Fn(I::Item) + Sync + Send + Clone + 'static,
@@ -410,25 +422,41 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Di
             Err(_) => 4,
         };
         let num_elems_local = self.num_elems_local();
-        let elems_per_thread = num_elems_local as f64 / num_workers as f64;
+        let mut num_chunks_local = num_elems_local/chunk_size;
+        if num_elems_local%chunk_size > 0 {
+            num_chunks_local += 1;
+        }
+        let chunks_per_thread = num_chunks_local as f64 / num_workers as f64;
         if let Ok(_my_pe) = self.inner.team.team_pe_id() {
             let mut worker = 0;
-            while ((worker as f64 * elems_per_thread).round() as usize) < num_elems_local {
+            while ((worker as f64 * chunks_per_thread).round() as usize) < num_chunks_local {
                 self.inner.team.exec_am_local_tg(
                     ForEach {
                         op: op.clone(),
                         data: iter.clone(),
-                        start_i: (worker as f64 * elems_per_thread).round() as usize,
-                        end_i: ((worker + 1) as f64 * elems_per_thread).round() as usize,
+                        start_i: (worker as f64 * chunks_per_thread).round() as usize,//*chunk_size,
+                        end_i: ((worker + 1) as f64 * chunks_per_thread).round() as usize,//*chunk_size,
                         // _marker: PhantomData
                     },
                     Some(self.inner.array_counters.clone()),
                 );
                 worker += 1;
             }
+            // if elems_remaining > 0 {
+            //     self.inner.team.exec_am_local_tg(
+            //         ForEach {
+            //             op: op.clone(),
+            //             data: iter.clone(),
+            //             start_i: (worker as f64 * chunks_per_thread).round() as usize,//*chunk_size,
+            //             end_i: (worker as f64 * chunks_per_thread).round() as usize+1,//*chunk_size + elems_remaining,
+            //             // _marker: PhantomData
+            //         },
+            //         Some(self.inner.array_counters.clone()),
+            //     );
+            // }
         }
     }
-    fn for_each_async<I, F, Fut>(&self, iter: &I, op: F)
+    fn for_each_async<I, F, Fut>(&self, iter: &I, op: F, chunk_size: usize)
     where
         I: DistributedIterator + 'static,
         F: Fn(I::Item) -> Fut + Sync + Send + Clone + 'static,
@@ -439,21 +467,35 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Di
             Err(_) => 4,
         };
         let num_elems_local = self.num_elems_local();
-        let elems_per_thread = num_elems_local as f64 / num_workers as f64;
+        let num_chunks_local = num_elems_local/chunk_size;
+        let elems_remaining = num_elems_local%chunk_size;
+        let chunks_per_thread = num_chunks_local as f64 / num_workers as f64;
         if let Ok(_my_pe) = self.inner.team.team_pe_id() {
             let mut worker = 0;
-            while ((worker as f64 * elems_per_thread).round() as usize) < num_elems_local {
+            while ((worker as f64 * chunks_per_thread).round() as usize) < num_chunks_local {
                 self.inner.team.exec_am_local_tg(
                     ForEachAsync {
                         op: op.clone(),
                         data: iter.clone(),
-                        start_i: (worker as f64 * elems_per_thread).round() as usize,
-                        end_i: ((worker + 1) as f64 * elems_per_thread).round() as usize,
+                        start_i: (worker as f64 * chunks_per_thread).round() as usize,//*chunk_size,
+                        end_i: ((worker + 1) as f64 * chunks_per_thread).round() as usize,//*chunk_size,
                         // _marker: PhantomData
                     },
                     Some(self.inner.array_counters.clone()),
                 );
                 worker += 1;
+            }
+            if elems_remaining > 0 {
+                self.inner.team.exec_am_local_tg(
+                    ForEachAsync {
+                        op: op.clone(),
+                        data: iter.clone(),
+                        start_i: (worker as f64 * chunks_per_thread).round() as usize,//*chunk_size,
+                        end_i: (worker as f64 * chunks_per_thread).round() as usize+1,//*chunk_size + elems_remaining,
+                        // _marker: PhantomData
+                    },
+                    Some(self.inner.array_counters.clone()),
+                );
             }
         }
     }
@@ -551,6 +593,11 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> La
     #[inline(always)]
     fn get<U: MyInto<LamellarArrayInput<T>>>(&self, index: usize, buf: U) {
         self.get(index, buf)
+    }
+
+    #[inline(always)]
+    fn at(&self, index: usize) -> T{
+        self.at(index)
     }
     #[inline(always)]
     fn local_as_slice(&self) -> &[T] {

@@ -177,12 +177,20 @@ name="dft_proxy"
 path="examples/kernels/dft_proxy.rs"
 
 [[example]]
-name="naive_gemm"
-path="examples/kernels/naive_gemm.rs"
+name="am_gemm"
+path="examples/kernels/am_gemm.rs"
 
 [[example]]
-name="dist_gemm"
-path="examples/kernels/dist_gemm.rs"
+name="cached_am_gemm"
+path="examples/kernels/cached_am_gemm.rs"
+
+[[example]]
+name="serial_array_gemm"
+path="examples/kernels/serial_array_gemm.rs"
+
+[[example]]
+name="parallel_array_gemm"
+path="examples/kernels/parallel_array_gemm.rs"
 
 
 ##------------ Miscellaneous Examples -----------------##

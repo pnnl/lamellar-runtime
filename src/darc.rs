@@ -11,10 +11,7 @@ use std::sync::Arc;
 
 use crate::lamellar_world::LAMELLAES;
 use crate::{LamellarTeam,LamellarTeamRT};
-// use crate::LamellarAM;
-use crate::active_messaging::ActiveMessaging;
 use crate::lamellae::{AllocationType, Backend, LamellaeComm, LamellaeRDMA};
-// use crate::DarcSerde;
 use crate::IdError;
 
 pub(crate) mod local_rw_darc;
@@ -641,7 +638,7 @@ impl<T: 'static> LamellarAM for DroppedWaitAM<T> {
             }
             // let inner = unsafe {&*(self.inner_addr as *mut DarcInner<T>)}; //now we need to true type to deallocate appropriately
             let _item = Box::from_raw(wrapped.inner.as_ref().item as *mut T);
-            let team = Arc::from_raw(wrapped.inner.as_ref().team); //return to rust to drop appropriately
+            let _team = Arc::from_raw(wrapped.inner.as_ref().team); //return to rust to drop appropriately
                                                                    // println!("Darc freed! {:x} {:?}",self.inner_addr,mode_refs);
             self.team.lamellae.free(self.inner_addr);
             // println!("leaving DroppedWaitAM");

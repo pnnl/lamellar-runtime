@@ -1,10 +1,9 @@
 use crate::active_messaging::*;
 use crate::barrier::Barrier;
+use crate::lamellar_world::LamellarWorld;
 use crate::lamellae::{AllocationType, Lamellae, LamellaeComm,LamellaeRDMA};
-use crate::lamellae::comm::AllocError;
 use crate::lamellar_arch::{GlobalArch, IdError, LamellarArch, LamellarArchEnum, LamellarArchRT};
 use crate::lamellar_request::{AmType, LamellarRequest, LamellarRequestHandle};
-use crate::darc::{Darc,DarcMode,global_rw_darc::GlobalRwDarc};
 use crate::memregion::{
     local::LocalMemoryRegion, shared::SharedMemoryRegion, Dist, LamellarMemoryRegion, MemoryRegion,
     RemoteMemoryRegion,
@@ -173,12 +172,40 @@ impl RemoteMemoryRegion for Arc<LamellarTeam> {
     ///
     fn alloc_local_mem_region<T: Dist + 'static>(&self, size: usize) -> LocalMemoryRegion<T> {
         let mut lmr = LocalMemoryRegion::try_new(size, self.team.lamellae.clone());
-        while let Err(err) = lmr{
+        while let Err(_err) = lmr{
             std::thread::yield_now();
             self.team.lamellae.alloc_pool(size);
             lmr = LocalMemoryRegion::try_new(size, self.team.lamellae.clone());
         }
         lmr.expect("out of memory")
+    }
+}
+
+
+pub struct IntoLamellarTeam{
+    pub(crate) team: Arc<LamellarTeamRT>
+}
+
+impl From<Arc<LamellarTeamRT>> for IntoLamellarTeam {
+    fn from(team: Arc<LamellarTeamRT>) -> Self{
+        IntoLamellarTeam{
+            team: team.clone()
+        }
+    }
+}
+impl From<Arc<LamellarTeam>> for IntoLamellarTeam {
+    fn from(team: Arc<LamellarTeam>) -> Self{
+        IntoLamellarTeam{
+            team: team.team.clone()
+        }
+    }
+}
+
+impl From<&LamellarWorld> for IntoLamellarTeam {
+    fn from(world: &LamellarWorld) -> Self{
+        IntoLamellarTeam{
+            team: world.team_rt.clone()
+        }
     }
 }
 

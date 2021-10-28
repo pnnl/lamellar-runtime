@@ -1004,7 +1004,7 @@ impl CommandQueue {
         // println!("free_cmd_addr {:x}",free_cmd_addr-comm.base_addr());
 
         let mut cmd_buffers_addrs = vec![];
-        for pe in 0..num_pes {
+        for _pe in 0..num_pes {
             let mut addrs = vec![];
             for _i in 0..CMD_BUFS_PER_PE {
                 let addr = comm
@@ -1075,7 +1075,7 @@ impl CommandQueue {
         }
     }
 
-    pub async fn alloc_task(&self,scheduler: Arc<Scheduler>,active: Arc<AtomicU8>){
+    pub async fn alloc_task(&self,scheduler: Arc<Scheduler>,_active: Arc<AtomicU8>){
         while scheduler.active() {
             self.cq.check_alloc();
             async_std::task::yield_now().await;

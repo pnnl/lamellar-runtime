@@ -1,7 +1,7 @@
 use crate::active_messaging::{ActiveMessageEngine, ExecType, LamellarFunc};
 use crate::lamellae::{Des, Lamellae, SerializedData};
 use crate::lamellar_request::InternalReq;
-use crate::lamellar_team::{LamellarTeamRT,LamellarTeam};
+use crate::lamellar_team::{LamellarTeamRT};
 use crate::scheduler::{AmeScheduler, AmeSchedulerQueue, ReqData, SchedulerQueue};
 use lamellar_prof::*;
 // use log::trace;
@@ -36,7 +36,7 @@ impl WorkStealingThread {
             let mut rng = rand::thread_rng();
             let t = rand::distributions::Uniform::from(0..worker.work_stealers.len());
             let mut timer = std::time::Instant::now();
-            let mut cur_tasks = num_tasks.load(Ordering::SeqCst);
+            // let mut cur_tasks = num_tasks.load(Ordering::SeqCst);
             while worker.active.load(Ordering::SeqCst)
                 || !(worker.work_q.is_empty() && worker.work_inj.is_empty())
                 || num_tasks.load(Ordering::SeqCst) > 1

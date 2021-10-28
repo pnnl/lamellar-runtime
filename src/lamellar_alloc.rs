@@ -111,18 +111,16 @@ impl LamellarAlloc for LinearAlloc {
     }
 
     fn fake_malloc(&self, size: usize) -> bool {
-        let &(ref lock, ref cvar) = &*self.entries;
-        let mut entries = lock.lock();
+        let &(ref lock, ref _cvar) = &*self.entries;
+        let entries = lock.lock();
 
         if entries.len() > 0 {
             let mut prev_end = self.start_addr;
-            let mut idx = 0;
             for i in 0..entries.len() {
                 if entries[i].addr - prev_end >= size {
                     break;
                 }
                 prev_end = entries[i].addr + entries[i].size;
-                idx = i + 1;
             }
 
             if prev_end + size <= self.start_addr + self.max_size {
@@ -283,13 +281,11 @@ impl LamellarAlloc for BTreeAlloc {
 
     fn fake_malloc(&self, size: usize) -> bool {
         prof_start!(locking);
-        let &(ref lock, ref cvar) = &*self.free_entries;
+        let &(ref lock, ref _cvar) = &*self.free_entries;
         let mut free_entries = lock.lock();
         prof_end!(locking);
-        let mut addr: Option<usize> = None;
-        let mut remove_size: Option<usize> = None;
         //find smallest memory segment greater than or equal to size
-        if let Some((free_size, addrs)) = free_entries.sizes.range_mut(size..).next() {
+        if let Some((_,_)) = free_entries.sizes.range_mut(size..).next() {
            return true;
         } else {
             return false;
@@ -428,8 +424,8 @@ impl<T: Copy> LamellarAlloc for ObjAlloc<T> {
             "ObjAlloc does not currently support multiobject allocations"
         );
         prof_start!(locking);
-        let &(ref lock, ref cvar) = &*self.free_entries;
-        let mut free_entries = lock.lock();
+        let &(ref lock, ref _cvar) = &*self.free_entries;
+        let free_entries = lock.lock();
         prof_end!(locking);
         if free_entries.len() > 1{
             true

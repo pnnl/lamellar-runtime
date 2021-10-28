@@ -1,4 +1,4 @@
-use lamellar::array::{DistributedIterator, Distribution, UnsafeArray};
+
 /// ------------Lamellar Bandwidth: DFT Proxy  -------------------------
 /// This example is inspired from peforming a naive DFT
 /// it does not actually calculate a DFT as we simply perform the transform
@@ -6,6 +6,7 @@ use lamellar::array::{DistributedIterator, Distribution, UnsafeArray};
 /// we include the distributed Lamellar Implemtation
 /// as well as a (single process) shared memory version using Rayon.
 /// --------------------------------------------------------------------
+use lamellar::array::{DistributedIterator, Distribution, UnsafeArray};
 use lamellar::{ActiveMessaging, LamellarWorld};
 use lamellar::{RemoteMemoryRegion, SharedMemoryRegion};
 use parking_lot::Mutex;

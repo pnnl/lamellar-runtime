@@ -47,6 +47,7 @@ pub use crate::active_messaging::{ActiveMessaging, LamellarAM, LocalAM};
 pub use crate::lamellar_request::LamellarRequest;
 
 pub use crate::array::{LamellarArray, ReduceKey};
+// pub use crate::array::iterator::distributed_iterator::DistributedIterator;
 pub use crate::memregion::{
     local::LocalMemoryRegion, shared::SharedMemoryRegion, LamellarMemoryRegion, RemoteMemoryRegion,
 };

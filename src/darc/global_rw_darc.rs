@@ -6,7 +6,6 @@ use std::ops::{Deref, DerefMut};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
-use crate::active_messaging::ActiveMessaging;
 use crate::darc::local_rw_darc::LocalRwDarc;
 use crate::darc::{Darc, DarcInner, DarcMode, __NetworkDarc};
 use crate::lamellae::{LamellaeComm, LamellaeRDMA};

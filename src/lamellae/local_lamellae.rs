@@ -160,7 +160,7 @@ impl LamellaeRDMA for Local {
         allocs.insert(data_addr, MyPtr { ptr: data_ptr });
         Ok(data_addr)
     }
-    fn rt_check_alloc(&self, size: usize )-> bool {
+    fn rt_check_alloc(&self, _size: usize )-> bool {
         true
     }
     
@@ -200,7 +200,7 @@ impl LamellaeRDMA for Local {
     fn num_pool_allocs(&self) -> usize{
         1
     }
-    fn alloc_pool(&self, min_size: usize){
+    fn alloc_pool(&self, _min_size: usize){
         
     }
 }

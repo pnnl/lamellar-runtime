@@ -5,12 +5,10 @@ use crate::lamellae::{
 };
 use crate::lamellar_alloc::{BTreeAlloc, LamellarAlloc};
 
-use parking_lot::{Mutex, RwLock};
+use parking_lot::{RwLock};
 use shared_memory::*;
-use std::borrow::Borrow;
 use std::collections::HashMap;
 use std::env;
-use std::error::Error;
 use std::sync::atomic::{AtomicBool, AtomicIsize, AtomicUsize, Ordering};
 use std::sync::Arc;
 
@@ -140,7 +138,7 @@ impl ShmemAlloc {
             + std::mem::size_of::<usize>()
             + std::mem::size_of::<usize>() * num_pes * 2;
         let shmem = attach_to_shmem(size, "alloc", job_id, pe == 0);
-        let mut data = unsafe { std::slice::from_raw_parts_mut(shmem.as_ptr(), size) };
+        let data = unsafe { std::slice::from_raw_parts_mut(shmem.as_ptr(), size) };
         if pe == 0 {
             for i in data {
                 *i = 0;
@@ -258,12 +256,11 @@ impl ShmemAlloc {
 pub(crate) struct ShmemComm {
     // _shmem: MyShmem, //the global handle
     pub(crate) base_address: Arc<RwLock<usize>>, //start address of my segment
-    size: usize,                                 //size of my segment
+    _size: usize,                                 //size of my segment
     alloc: RwLock<Vec<BTreeAlloc>>,
     _init: AtomicBool,
     pub(crate) num_pes: usize,
     pub(crate) my_pe: usize,
-    comm_mutex: Arc<Mutex<()>>,
     alloc_lock: Arc<
         RwLock<(
             HashMap<
@@ -315,7 +312,7 @@ impl ShmemComm {
         // let shmem = attach_to_shmem(SHMEM_SIZE.load(Ordering::SeqCst),"main",job_id,my_pe==0);
 
         // let (shmem,index) =unsafe {alloc.alloc(mem_per_pe,0..num_pes)};
-        let (shmem, index, addrs) = unsafe { alloc.alloc(mem_per_pe, 0..num_pes) };
+        let (shmem, _index, addrs) = unsafe { alloc.alloc(mem_per_pe, 0..num_pes) };
         let addr = shmem.as_ptr() as usize + mem_per_pe * my_pe;
 
         let mut allocs_map = HashMap::new();
@@ -327,15 +324,14 @@ impl ShmemComm {
         }
         allocs_map.insert(addr, (shmem, mem_per_pe, pe_map));
         // alloc.0.insert(addr,(ret,size))
-        let mut shmem = ShmemComm {
+        let shmem = ShmemComm {
             // _shmem: shmem,
             base_address: Arc::new(RwLock::new(addr)),
-            size: mem_per_pe,
+            _size: mem_per_pe,
             alloc: RwLock::new(vec![BTreeAlloc::new("shmem".to_string())]),
             _init: AtomicBool::new(true),
             num_pes: num_pes,
             my_pe: my_pe,
-            comm_mutex: Arc::new(Mutex::new(())),
             alloc_lock: Arc::new(RwLock::new((allocs_map, alloc))),
         };
         shmem.alloc.write()[0].init(addr, mem_per_pe);

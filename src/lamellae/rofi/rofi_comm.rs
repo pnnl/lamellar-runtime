@@ -12,7 +12,6 @@ use parking_lot::{Mutex, RwLock};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 
-use async_trait::async_trait;
 
 // pub struct RofiReq{
 //     txids: Vec<std::os::raw::c_ulong>,
@@ -63,7 +62,7 @@ impl RofiComm {
         let total_mem = cmd_q_mem + RT_MEM + ROFI_MEM.load(Ordering::SeqCst);
         // println!("rofi comm total_mem {:?}",total_mem);
         let addr = rofi_alloc(total_mem, AllocationType::Global);
-        let mut rofi = RofiComm {
+        let rofi = RofiComm {
             rofi_base_address: Arc::new(RwLock::new(addr as usize)),
             alloc:  RwLock::new(vec![BTreeAlloc::new("rofi_mem".to_string())]),
             _init: AtomicBool::new(true),
@@ -469,7 +468,7 @@ impl RofiData {
     pub fn new(rofi_comm: Arc<Comm>, size: usize) -> Result<RofiData,anyhow::Error> {
         let ref_cnt_size = std::mem::size_of::<AtomicUsize>();
         let alloc_size = size + ref_cnt_size; //+  std::mem::size_of::<u64>();
-        let mut relative_addr = rofi_comm.rt_alloc(alloc_size)?;
+        let relative_addr = rofi_comm.rt_alloc(alloc_size)?;
         let addr = relative_addr;// + rofi_comm.base_addr();
         unsafe {
             let ref_cnt = addr as *const AtomicUsize;

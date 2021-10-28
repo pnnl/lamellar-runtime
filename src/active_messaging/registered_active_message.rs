@@ -178,7 +178,7 @@ impl RegisteredActiveMessages {
         //--------------------------
         let mut stall_mark = self.stall_mark.load(Ordering::Relaxed);
         let stall_mark_clone = self.stall_mark.clone();
-        let world_clone = world.clone();
+        // let world_clone = world.clone();
         if submit_tx_task {
             let submitted_ams = self.submitted_ams.clone();
             let txed_ams = self.txed_ams.clone();

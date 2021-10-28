@@ -1,7 +1,7 @@
 use crate::lamellae::comm::{CommOps,AllocResult};
 use crate::lamellae::command_queues::CommandQueue;
 use crate::lamellae::shmem::shmem_comm::*;
-use crate::lamellae::shmem::*;
+
 use crate::lamellae::{
     AllocationType, Backend, Comm, Des, Lamellae, LamellaeAM, LamellaeComm, LamellaeInit,
     LamellaeRDMA, Ser, SerializeHeader, SerializedData, SerializedDataOps,

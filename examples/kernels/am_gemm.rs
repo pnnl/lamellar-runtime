@@ -132,7 +132,7 @@ fn main() {
     let elem_per_pe = args
         .get(1)
         .and_then(|s| s.parse::<usize>().ok())
-        .unwrap_or_else(|| 2000);
+        .unwrap_or_else(|| 2);
 
     let world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();
@@ -149,7 +149,7 @@ fn main() {
     let b = world.alloc_shared_mem_region::<f32>((n * p) / num_pes);
     let c = world.alloc_shared_mem_region::<f32>((m * p) / num_pes);
     unsafe {
-        let mut cnt = 0.0;
+        let mut cnt = (((m * n) / num_pes) * my_pe) as f32;
         for elem in a.as_mut_slice().unwrap() {
             *elem = cnt;
             cnt += 1.0;
@@ -161,6 +161,20 @@ fn main() {
             *elem = 0.0;
         }
     }
+    // for pe in 0..num_pes{
+    //     if pe == my_pe {
+    //         println!("{:?}",a.as_slice());
+    //     }
+    //     world.barrier();
+    // }
+    // world.barrier();
+    // for pe in 0..num_pes{
+    //     if pe == my_pe {
+    //         println!("{:?}",b.as_slice());
+    //     }
+    //     world.barrier();
+    // }
+    world.barrier();
 
     let num_gops = ((2 * dim * dim * dim) - dim * dim) as f64 / 1_000_000_000.0; // accurate for square matrices
 
@@ -231,4 +245,10 @@ fn main() {
         }
         tot_mb = world.MB_sent()[0];
     }
+    // for pe in 0..num_pes{
+    //     if pe == my_pe {
+    //         println!("{:?}",c.as_slice());
+    //     }
+    //     world.barrier();
+    // }
 }
