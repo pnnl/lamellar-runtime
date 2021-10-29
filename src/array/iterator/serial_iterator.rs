@@ -4,6 +4,9 @@
 mod copied_chunks;
 use copied_chunks::*;
 
+mod ignore;
+use ignore::*;
+
 use crate::memregion::Dist;
 use crate::LamellarTeamRT;
 use crate::LamellarArray;
@@ -15,27 +18,29 @@ use std::sync::Arc;
 
 pub trait SerialIterator {
     type ElemType: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static;
+    fn advance_index(&mut self, count: usize);
     fn set_index(&mut self,index: usize);
+    fn get_index(&self) -> usize;
     fn array(&self) -> LamellarArray<Self::ElemType>;
     fn copied_chunks(self, chunk_size: usize) -> CopiedChunks<Self> where Self: Sized {
         CopiedChunks::new(self,chunk_size)
     }
-    // fn skip<I: SerialIterator>(self,count: usize) -> SkipIter<I>{
-    //     SkipIter::new(self,count)
-    // }
+    fn ignore<I: SerialIterator>(self,count: usize) -> Ignore<Self>  where Self: Sized {
+        Ignore::new(self,count)
+    }
 }
 
 pub struct LamellarArrayIter<
 'a,
 T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static,
 > {
-array: LamellarArray<T>,
-buf_0: LocalMemoryRegion<T>,
-buf_1: LocalMemoryRegion<T>,
-index: usize,
-buf_index: usize,
-ptr: NonNull<T>,
-_marker: PhantomData<&'a T>,
+    array: LamellarArray<T>,
+    buf_0: LocalMemoryRegion<T>,
+    buf_1: LocalMemoryRegion<T>,
+    index: usize,
+    buf_index: usize,
+    ptr: NonNull<T>,
+    _marker: PhantomData<&'a T>,
 }
 
 impl<'a, T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static>
@@ -104,10 +109,18 @@ LamellarArrayIter<'a, T>
 impl<'a, T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> SerialIterator for
 LamellarArrayIter<'a, T> {
     type ElemType = T;
+    fn advance_index(&mut self, count: usize){
+        self.index += count;
+        self.buf_index = self.index;
+        self.fill_buffer(0);
+    }
     fn set_index(&mut self, index: usize){
         self.index= index;
         self.buf_index = index;
         self.fill_buffer(0);
+    }
+    fn get_index(&self) -> usize {
+        self.index
     }
     fn array(&self) -> LamellarArray<T> {
         self.array.clone()

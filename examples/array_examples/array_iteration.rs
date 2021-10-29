@@ -142,7 +142,7 @@ fn main() {
     // and then puts the appropriate date based on the iteration index into that region
 
     if my_pe == 0 {
-        for chunk in block_array.iter().copied_chunks(10) {
+        for chunk in block_array.iter().copied_chunks(10).ignore(4) {
             println!("{:?}", chunk.as_slice());
         }
         println!("-----");

@@ -57,14 +57,20 @@ where
 impl <I> SerialIterator for CopiedChunks<I>
 where
     I: SerialIterator {
-        type ElemType= I::ElemType;
-        fn set_index(&mut self, index:usize ){
-            self.index = index;
-        }
-        fn array(&self) -> LamellarArray<Self::ElemType>{
-            self.iter.array()
-        }
+    type ElemType= I::ElemType;
+    fn advance_index(&mut self, count: usize){
+        self.index += count;
     }
+    fn set_index(&mut self, index: usize ){//no need to set inner iter cause we dont actually use it
+        self.index = index;
+    }
+    fn get_index(&self) -> usize {
+        self.index
+    }
+    fn array(&self) -> LamellarArray<Self::ElemType>{
+        self.iter.array()
+    }
+}
 
 impl<I> Iterator for CopiedChunks<I>
 where
