@@ -18,6 +18,7 @@ pub use r#unsafe::UnsafeArray;
 
 pub mod iterator;
 pub use iterator::distributed_iterator::DistributedIterator;
+pub use iterator::serial_iterator::SerialIterator;
 use iterator::distributed_iterator::{DistIter,DistIterMut,DistIteratorLauncher};
 use iterator::serial_iterator::{LamellarArrayIter};
 
@@ -148,6 +149,9 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> La
         match self {
             LamellarArray::UnsafeArray(inner) => inner.len(),
         }
+    }
+    pub(crate) fn size_of_elem(&self) -> usize{
+        std::mem::size_of::<T>()
     }
     pub(crate) fn team(&self) -> Arc<LamellarTeamRT> {
         match self {

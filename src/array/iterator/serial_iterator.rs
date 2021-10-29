@@ -13,6 +13,17 @@ use std::marker::PhantomData;
 use std::ptr::NonNull;
 use std::sync::Arc;
 
+pub trait SerialIterator {
+    type ElemType: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static;
+    fn set_index(&mut self,index: usize);
+    fn array(&self) -> LamellarArray<Self::ElemType>;
+    fn copied_chunks(self, chunk_size: usize) -> CopiedChunks<Self> where Self: Sized {
+        CopiedChunks::new(self,chunk_size)
+    }
+    // fn skip<I: SerialIterator>(self,count: usize) -> SkipIter<I>{
+    //     SkipIter::new(self,count)
+    // }
+}
 
 pub struct LamellarArrayIter<
 'a,
@@ -30,69 +41,80 @@ _marker: PhantomData<&'a T>,
 impl<'a, T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static>
 LamellarArrayIter<'a, T>
 {
-pub(crate) fn new(
-    array: LamellarArray<T>,
-    team: Arc<LamellarTeamRT>,
-    buf_size: usize,
-) -> LamellarArrayIter<'a, T> {
-    let buf_0 = team.alloc_local_mem_region(buf_size);
-    let ptr = NonNull::new(buf_0.as_mut_ptr().unwrap()).unwrap();
-    let iter = LamellarArrayIter {
-        array: array,
-        buf_0: buf_0,
-        buf_1: team.alloc_local_mem_region(buf_size),
-        index: 0,
-        buf_index: 0,
-        ptr: ptr,
-        _marker: PhantomData,
-    };
-    iter.fill_buffer(0);
-    iter
-}
-fn fill_buffer(&self, index: usize) {
-    let end_i = std::cmp::min(index + self.buf_0.len(), self.array.len()) - index;
-    let buf_0 = self.buf_0.sub_region(..end_i);
-    let buf_0_u8 = buf_0.clone().to_base::<u8>();
-    let buf_0_slice = unsafe { buf_0_u8.as_mut_slice().unwrap() };
-    let buf_1 = self.buf_1.sub_region(..end_i);
-    let buf_1_u8 = buf_1.clone().to_base::<u8>();
-    let buf_1_slice = unsafe { buf_1_u8.as_mut_slice().unwrap() };
-    for i in 0..buf_0_slice.len() {
-        buf_0_slice[i] = 0;
-        buf_1_slice[i] = 1;
+    pub(crate) fn new(
+        array: LamellarArray<T>,
+        team: Arc<LamellarTeamRT>,
+        buf_size: usize,
+    ) -> LamellarArrayIter<'a, T> {
+        let buf_0 = team.alloc_local_mem_region(buf_size);
+        let ptr = NonNull::new(buf_0.as_mut_ptr().unwrap()).unwrap();
+        let iter = LamellarArrayIter {
+            array: array,
+            buf_0: buf_0,
+            buf_1: team.alloc_local_mem_region(buf_size),
+            index: 0,
+            buf_index: 0,
+            ptr: ptr,
+            _marker: PhantomData,
+        };
+        iter.fill_buffer(0);
+        iter
     }
-    self.array.get(index, &buf_0);
-    self.array.get(index, &buf_1);
-}
-fn spin_for_valid(&self, index: usize) {
-    let buf_0_temp = self.buf_0.sub_region(index..=index).to_base::<u8>();
-    let buf_0 = buf_0_temp.as_slice().unwrap();
-    let buf_1_temp = self.buf_1.sub_region(index..=index).to_base::<u8>();
-    let buf_1 = buf_1_temp.as_slice().unwrap();
-    for i in 0..buf_0.len() {
-        while buf_0[i] != buf_1[i] {
-            std::thread::yield_now();
+    fn fill_buffer(&self, index: usize) {
+        let end_i = std::cmp::min(index + self.buf_0.len(), self.array.len()) - index;
+        let buf_0 = self.buf_0.sub_region(..end_i);
+        let buf_0_u8 = buf_0.clone().to_base::<u8>();
+        let buf_0_slice = unsafe { buf_0_u8.as_mut_slice().unwrap() };
+        let buf_1 = self.buf_1.sub_region(..end_i);
+        let buf_1_u8 = buf_1.clone().to_base::<u8>();
+        let buf_1_slice = unsafe { buf_1_u8.as_mut_slice().unwrap() };
+        for i in 0..buf_0_slice.len() {
+            buf_0_slice[i] = 0;
+            buf_1_slice[i] = 1;
         }
+        self.array.get(index, &buf_0);
+        self.array.get(index, &buf_1);
+    }
+    fn spin_for_valid(&self, index: usize) {
+        let buf_0_temp = self.buf_0.sub_region(index..=index).to_base::<u8>();
+        let buf_0 = buf_0_temp.as_slice().unwrap();
+        let buf_1_temp = self.buf_1.sub_region(index..=index).to_base::<u8>();
+        let buf_1 = buf_1_temp.as_slice().unwrap();
+        for i in 0..buf_0.len() {
+            while buf_0[i] != buf_1[i] {
+                std::thread::yield_now();
+            }
+        }
+    }
+
+    fn check_for_valid(&self, index: usize) -> bool {
+        let buf_0_temp = self.buf_0.sub_region(index..=index).to_base::<u8>();
+        let buf_0 = buf_0_temp.as_slice().unwrap();
+        let buf_1_temp = self.buf_1.sub_region(index..=index).to_base::<u8>();
+        let buf_1 = buf_1_temp.as_slice().unwrap();
+        for i in 0..buf_0.len() {
+            if buf_0[i] != buf_1[i] {
+                return false;
+            }
+        }
+        true
     }
 }
 
-fn check_for_valid(&self, index: usize) -> bool {
-    let buf_0_temp = self.buf_0.sub_region(index..=index).to_base::<u8>();
-    let buf_0 = buf_0_temp.as_slice().unwrap();
-    let buf_1_temp = self.buf_1.sub_region(index..=index).to_base::<u8>();
-    let buf_1 = buf_1_temp.as_slice().unwrap();
-    for i in 0..buf_0.len() {
-        if buf_0[i] != buf_1[i] {
-            return false;
-        }
+impl<'a, T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> SerialIterator for
+LamellarArrayIter<'a, T> {
+    type ElemType = T;
+    fn set_index(&mut self, index: usize){
+        self.index= index;
+        self.buf_index = index;
+        self.fill_buffer(0);
     }
-    true
+    fn array(&self) -> LamellarArray<T> {
+        self.array.clone()
+    }
 }
 
-pub fn copied_chunks(&self, chunk_size: usize) -> LamellarArrayChunksIter<T> {
-    LamellarArrayChunksIter::new(self.array.clone(), chunk_size)
-}
-}
+
 
 impl<'a, T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Iterator
 for LamellarArrayIter<'a, T>

@@ -343,6 +343,7 @@ impl<T: Dist + 'static> MemoryRegion<T> {
             let num_bytes = data.len() * std::mem::size_of::<R>();
             if let Ok(ptr) = data.as_mut_ptr() {
                 let bytes = std::slice::from_raw_parts_mut(ptr as *mut u8, num_bytes);
+                // println!("getting {:?} {:?} {:?} {:?} {:?} {:?} {:?}",pe,index,std::mem::size_of::<R>(),data.len(), num_bytes,self.size, self.num_bytes);
                 self.rdma
                     .get(pe, self.addr + index * std::mem::size_of::<R>(), bytes);
             //(remote pe, src, dst)

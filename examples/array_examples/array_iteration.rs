@@ -1,4 +1,4 @@
-use lamellar::array::{DistributedIterator, Distribution, UnsafeArray};
+use lamellar::array::{DistributedIterator,SerialIterator, Distribution, UnsafeArray};
 use lamellar::{ActiveMessaging, LamellarWorld};
 
 const ARRAY_LEN: usize = 100;
@@ -145,6 +145,7 @@ fn main() {
         for chunk in block_array.iter().copied_chunks(10) {
             println!("{:?}", chunk.as_slice());
         }
+        println!("-----");
         for chunk in cyclic_array.iter().copied_chunks(10) {
             println!("{:?}", chunk.as_slice());
         }

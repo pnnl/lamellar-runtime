@@ -24,7 +24,7 @@ where
 
 impl<I> Chunks<I>
 where
-    I: DistributedIterator + DistIterChunkSize + 'static,
+    I: DistributedIterator + 'static,
 {
     pub fn for_each<F>(&self, op: F)
     where
@@ -38,15 +38,6 @@ where
         Fut: Future<Output = ()> + Sync + Send + 'static,
     {
         self.iter.array().for_each_async(self, op, self.chunk_size());
-    }
-}
-
-impl<I> DistIterChunkSize for Chunks<I>
-where
-    I: DistIterChunkSize,
-{
-    fn chunk_size(&self) -> usize {
-        self.iter.chunk_size()*self.chunk_size
     }
 }
 
@@ -76,6 +67,9 @@ where
         } else {
             None
         }
+    }
+    fn chunk_size(&self) -> usize {
+        self.iter.chunk_size()*self.chunk_size
     }
 }
 

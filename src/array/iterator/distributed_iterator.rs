@@ -40,11 +40,10 @@ pub trait DistributedIterator: Sync + Send + Clone {
     fn chunks(self,size: usize) -> Chunks<Self>{
         Chunks::new(self,0,0,size)
     }
-}
-
-pub trait DistIterChunkSize{
     fn chunk_size(&self) -> usize;
 }
+
+
 
 #[derive(Clone)]
 pub struct DistIter<'a, T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> {
@@ -76,12 +75,6 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Di
     }
 }
 
-impl<'a, T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'a> DistIterChunkSize
-for DistIter<'a, T>{
-    fn chunk_size(&self) -> usize {
-        1
-    }
-}
 impl<'a, T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'a> DistributedIterator
     for DistIter<'a, T>
 {
@@ -113,6 +106,9 @@ impl<'a, T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'a> Dis
         } else {
             None
         }
+    }
+    fn chunk_size(&self) -> usize {
+        1
     }
 }
 
@@ -148,12 +144,6 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static>
         self.data.clone().for_each_async(self, op, self.chunk_size());
     }
 }
-impl<'a, T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'a> DistIterChunkSize
-for DistIterMut<'a, T>{
-    fn chunk_size(&self) -> usize {
-        1
-    }
-}
 impl<'a, T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'a> DistributedIterator
     for DistIterMut<'a, T>
 {
@@ -186,5 +176,8 @@ impl<'a, T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'a> Dis
         } else {
             None
         }
+    }
+    fn chunk_size(&self) -> usize {
+        1
     }
 }

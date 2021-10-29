@@ -19,7 +19,7 @@ where
 
 impl<I> Enumerate<I>
 where
-    I: DistributedIterator +DistIterChunkSize+ 'static,
+    I: DistributedIterator + 'static,
 {
     
     pub fn for_each<F>(&self, op: F)
@@ -37,18 +37,9 @@ where
     }
 }
 
-impl<I> DistIterChunkSize for Enumerate<I>
-where
-    I: DistIterChunkSize,
-{
-    fn chunk_size(&self) -> usize {
-        self.iter.chunk_size()
-    }
-}
-
 impl<I> DistributedIterator for Enumerate<I>
 where
-    I: DistributedIterator +DistIterChunkSize,
+    I: DistributedIterator ,
 {
     type Item = (usize, <I as DistributedIterator>::Item);
     type Array = <I as DistributedIterator>::Array;
@@ -63,5 +54,8 @@ where
         let i = self.iter.array().global_index_from_local(self.count,self.chunk_size());
         self.count += 1;
         Some((i, a))
+    }
+    fn chunk_size(&self) -> usize {
+        self.iter.chunk_size()
     }
 }
