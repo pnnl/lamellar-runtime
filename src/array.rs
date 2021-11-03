@@ -9,7 +9,7 @@ use crate::memregion::{
 
 
 use enum_dispatch::enum_dispatch;
-use futures::Future;
+use futures_lite::Future;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -18,7 +18,7 @@ pub use r#unsafe::UnsafeArray;
 
 pub mod iterator;
 pub use iterator::distributed_iterator::DistributedIterator;
-pub use iterator::serial_iterator::SerialIterator;
+pub use iterator::serial_iterator::{SerialIterator,SerialIteratorIter};
 use iterator::distributed_iterator::{DistIter,DistIterMut,DistIteratorLauncher};
 use iterator::serial_iterator::{LamellarArrayIter};
 
@@ -150,9 +150,9 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> La
             LamellarArray::UnsafeArray(inner) => inner.len(),
         }
     }
-    pub(crate) fn size_of_elem(&self) -> usize{
-        std::mem::size_of::<T>()
-    }
+    // pub(crate) fn size_of_elem(&self) -> usize{
+    //     std::mem::size_of::<T>()
+    // }
     pub(crate) fn team(&self) -> Arc<LamellarTeamRT> {
         match self {
             LamellarArray::UnsafeArray(inner) => inner.team(),
@@ -224,9 +224,9 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> La
     /// Returns an iterator for the LamellarArray, all iteration occurs on the PE
     /// where this was called, data that is not local to the PE is automatically
     /// copied and transferred
-    pub fn iter(&self) -> LamellarArrayIter<'_, T> {
+    pub fn ser_iter(&self) -> LamellarArrayIter<'_, T> {
         match self {
-            LamellarArray::UnsafeArray(inner) => inner.iter(),
+            LamellarArray::UnsafeArray(inner) => inner.ser_iter(),
         }
     }
 
@@ -279,23 +279,23 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Da
 impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> DistIteratorLauncher
     for LamellarArray<T>
 {
-    fn for_each<I, F>(&self, iter: &I, op: F,chunk_size: usize)
+    fn for_each<I, F>(&self, iter: &I, op: F)
     where
         I: DistributedIterator + 'static,
         F: Fn(I::Item) + Sync + Send + Clone + 'static,
     {
         match self {
-            LamellarArray::UnsafeArray(inner) => inner.for_each(iter, op,chunk_size),
+            LamellarArray::UnsafeArray(inner) => inner.for_each(iter, op),
         }
     }
-    fn for_each_async<I, F, Fut>(&self, iter: &I, op: F, chunk_size: usize)
+    fn for_each_async<I, F, Fut>(&self, iter: &I, op: F)
     where
         I: DistributedIterator + 'static,
         F: Fn(I::Item) -> Fut + Sync + Send + Clone + 'static,
         Fut: Future<Output = ()> + Sync + Send + 'static,
     {
         match self {
-            LamellarArray::UnsafeArray(inner) => inner.for_each_async(iter, op,chunk_size),
+            LamellarArray::UnsafeArray(inner) => inner.for_each_async(iter, op),
         }
     }
     fn global_index_from_local(&self, index: usize, chunk_size: usize) -> usize {
@@ -324,7 +324,7 @@ where
 {
     fn exec(&self) {
         // println!("in for each");
-        let mut iter = self.data.init(self.start_i, self.end_i);
+        let mut iter = self.data.init(self.start_i, self.end_i-self.start_i);
         while let Some(elem) = iter.next() {
             (&self.op)(elem)
         }
@@ -351,7 +351,7 @@ where
     Fut: Future<Output = ()> + Sync + Send + 'static,
 {
     fn exec(&self) {
-        let mut iter = self.data.init(self.start_i, self.end_i);
+        let mut iter = self.data.init(self.start_i, self.end_i-self.start_i);
         while let Some(elem) = iter.next() {
             (&self.op)(elem).await;
         }
@@ -389,8 +389,8 @@ impl<'a, T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static
     for &'a LamellarArray<T>
 {
     type Item = &'a T;
-    type IntoIter = LamellarArrayIter<'a, T>;
-    fn into_iter(self) -> LamellarArrayIter<'a, T> {
-        self.iter()
+    type IntoIter = SerialIteratorIter<LamellarArrayIter<'a, T>>;
+    fn into_iter(self) -> Self::IntoIter {
+        SerialIteratorIter{ iter: self.ser_iter()}
     }
 }

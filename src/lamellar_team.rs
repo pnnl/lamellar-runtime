@@ -857,20 +857,20 @@ impl LamellarTeamRT {
     ///
     /// * `size` - number of elements of T to allocate a memory region for -- (not size in bytes)
     ///
-    pub(crate) fn alloc_shared_mem_region<T: Dist + 'static>(self:  &Arc<LamellarTeamRT>, size: usize) -> SharedMemoryRegion<T> {
-        self.barrier.barrier();
-        let mr: SharedMemoryRegion<T> = if self.num_world_pes == self.num_pes {
-            SharedMemoryRegion::new(size, self.clone(), AllocationType::Global)
-        } else {
-            SharedMemoryRegion::new(
-                size,
-                self.clone(),
-                AllocationType::Sub(self.arch.team_iter().collect::<Vec<usize>>()),
-            )
-        };
-        self.barrier.barrier();
-        mr
-    }
+    // pub(crate) fn alloc_shared_mem_region<T: Dist + 'static>(self:  &Arc<LamellarTeamRT>, size: usize) -> SharedMemoryRegion<T> {
+    //     self.barrier.barrier();
+    //     let mr: SharedMemoryRegion<T> = if self.num_world_pes == self.num_pes {
+    //         SharedMemoryRegion::new(size, self.clone(), AllocationType::Global)
+    //     } else {
+    //         SharedMemoryRegion::new(
+    //             size,
+    //             self.clone(),
+    //             AllocationType::Sub(self.arch.team_iter().collect::<Vec<usize>>()),
+    //         )
+    //     };
+    //     self.barrier.barrier();
+    //     mr
+    // }
 
     /// allocate a local memory region from the asymmetric heap
     ///

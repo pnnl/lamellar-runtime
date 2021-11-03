@@ -6,7 +6,7 @@
 /// we include the distributed Lamellar Implemtation
 /// as well as a (single process) shared memory version using Rayon.
 /// --------------------------------------------------------------------
-use lamellar::array::{DistributedIterator, Distribution, UnsafeArray};
+use lamellar::array::{DistributedIterator,SerialIterator, Distribution, UnsafeArray};
 use lamellar::{ActiveMessaging, LamellarWorld};
 use lamellar::{RemoteMemoryRegion, SharedMemoryRegion};
 use parking_lot::Mutex;
@@ -171,7 +171,7 @@ fn dft_lamellar_array(signal: UnsafeArray<f64>, spectrum: UnsafeArray<f64>) {
         .enumerate()
         .for_each(move |(k, spec_bin)| {
             let mut sum = 0f64;
-            for (i, &x) in signal_clone.buffered_iter(1000).enumerate() {
+            for (i, &x) in signal_clone.buffered_iter(1000).into_iter().enumerate() {
                 let angle = -1f64 * (i * k) as f64 * 2f64 * std::f64::consts::PI
                     / signal_clone.len() as f64;
                 let twiddle = angle * (angle.cos() + angle * angle.sin());
@@ -189,8 +189,9 @@ fn dft_lamellar_array(signal: UnsafeArray<f64>, spectrum: UnsafeArray<f64>) {
 fn dft_lamellar_array_opt(signal: UnsafeArray<f64>, spectrum: UnsafeArray<f64>, buf_size: usize) {
     let sig_len = signal.len();
     signal
-        .iter()
+        .ser_iter()
         .copied_chunks(buf_size)
+        .into_iter()
         .enumerate()
         .for_each(|(i, chunk)| {
             let signal = chunk.clone();

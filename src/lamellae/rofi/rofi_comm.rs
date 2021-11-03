@@ -437,8 +437,9 @@ impl Drop for RofiComm {
     fn drop(&mut self) {
         // println!("[{:?}] in rofi comm drop", self.my_pe);
         print!(""); //not sure why this prevents hanging....
-        std::thread::sleep(std::time::Duration::from_millis(1000));
         rofi_barrier();
+        std::thread::sleep(std::time::Duration::from_millis(1000));
+        
         if self.occupied() > 0{
             println!("dropping rofi -- memory in use {:?}", self.occupied());
         }
@@ -447,9 +448,9 @@ impl Drop for RofiComm {
         }
         // rofi_barrier();
         std::thread::sleep(std::time::Duration::from_millis(1000));
-        //we can probably do a final "put" to each node where we specify we we are done, then once all nodes have done this no further communication amongst them occurs...
-        let _res = rofi_finit();
-        std::thread::sleep(std::time::Duration::from_millis(1000));
+        // //we can probably do a final "put" to each node where we specify we we are done, then once all nodes have done this no further communication amongst them occurs...
+        // let _res = rofi_finit();
+        // std::thread::sleep(std::time::Duration::from_millis(1000));
         // println!("[{:?}] dropping rofi comm", self.my_pe);
     }
 }

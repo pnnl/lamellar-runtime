@@ -8,7 +8,7 @@ where
     I: SerialIterator, {
     iter: I,
     array: LamellarArray<I::ElemType>,
-    mem_region: LocalMemoryRegion<I::ElemType>,
+    // mem_region: LocalMemoryRegion<I::ElemType>,
     index: usize,
     chunk_size: usize,
 }
@@ -20,148 +20,136 @@ where
     pub(crate) fn new(iter: I, chunk_size: usize) -> CopiedChunks<I> {
         let array = iter.array().clone();//.to_base::<u8>();
         // println!("len: {:?}",array.len());
-        let mem_region = iter.array().team().alloc_local_mem_region(chunk_size);//*iter.array().size_of_elem());
+        // let mem_region = iter.array().team().alloc_local_mem_region(chunk_size);//*iter.array().size_of_elem());
         let chunks = CopiedChunks {
             iter,
             array,
-            mem_region: mem_region.clone(),
+            // mem_region: mem_region.clone(),
             index: 0,
             chunk_size
         };
-        chunks.fill_buffer(0,&mem_region);
+        // chunks.fill_buffer(0,&mem_region);
         chunks
     }
 
-    fn fill_buffer(&self, val: u8, buf: &LocalMemoryRegion<I::ElemType>) {
-        let buf_u8 = buf.clone().to_base::<u8>();
+    fn fill_buffer(&self, val: u32, buf: &LocalMemoryRegion<I::ElemType>) {
+        let buf_u8 = buf.clone().to_base::<u32>();
         let buf_slice = unsafe { buf_u8.as_mut_slice().unwrap() };
+        // println!("buf_u8 len {:}",buf_slice.len());
         for i in 0..buf_slice.len() {
             buf_slice[i] = val;
         }
         self.array.get(self.index, buf);
     }
 
-    fn spin_for_valid(&self, buf: &LocalMemoryRegion<I::ElemType>) {
-        let buf_0_temp = self.mem_region.clone().to_base::<u8>();
-        let buf_0 = buf_0_temp.as_slice().unwrap();
-        let buf_1_temp = buf.clone().to_base::<u8>();
+    fn spin_for_valid(&self,val: u32, buf: &LocalMemoryRegion<I::ElemType>) {
+        // let buf_0_temp = self.mem_region.clone().to_base::<u8>();
+        // let buf_0 = buf_0_temp.as_slice().unwrap();
+        let buf_1_temp = buf.clone().to_base::<u32>();
         let buf_1 = buf_1_temp.as_slice().unwrap();
+
+        let mut start = std::time::Instant::now();
         for i in 0..buf_1.len() {
-            while buf_0[i] != buf_1[i] {
+            // while buf_0[i] != buf_1[i] {
+            while buf_1[i] == val{
                 std::thread::yield_now();
+                if start.elapsed().as_secs_f64() > 5.0 {
+                    println!("i: {:?} {:?} {:?}",i,val, buf_1[i] );
+                    start = std::time::Instant::now();
+                }
             }
         }
     }
+    // fn check_for_valid(&self,val: u32, buf: &LocalMemoryRegion<I::ElemType>) -> bool {
+    //     let buf_1_temp = buf.clone().to_base::<u32>();
+    //     let buf_1 = buf_1_temp.as_slice().unwrap();
+    //     for i in 0..buf_1.len() {
+    //         // while buf_0[i] != buf_1[i] {
+    //         if buf_1[i] == val{
+    //             return false;
+    //         }
+    //     }
+    //     true
+    // }
 }
 
 impl <I> SerialIterator for CopiedChunks<I>
 where
     I: SerialIterator {
     type ElemType= I::ElemType;
-    fn advance_index(&mut self, count: usize){
-        self.index += count;
-    }
-    fn set_index(&mut self, index: usize ){//no need to set inner iter cause we dont actually use it
-        self.index = index;
-    }
-    fn get_index(&self) -> usize {
-        self.index
-    }
-    fn array(&self) -> LamellarArray<Self::ElemType>{
-        self.iter.array()
-    }
-}
-
-impl<I> Iterator for CopiedChunks<I>
-where
-    I: SerialIterator
-{
     type Item = LocalMemoryRegion<I::ElemType>;
     fn next(&mut self) -> Option<Self::Item> {
         // println!("{:?} {:?}",self.index,self.array.len()/std::mem::size_of::<<Self as SerialIterator>::ElemType>());
+        
         if self.index < self.array.len(){
             let size = std::cmp::min(self.chunk_size, self.array.len() - self.index);
+            // self.fill_buffer(0, &self.mem_region.sub_region(..size));
+            // println!("getting {:?} {:?}",self.index,self.chunk_size);
             let mem_region: LocalMemoryRegion<I::ElemType> = self.array.team().alloc_local_mem_region(size);
-            self.fill_buffer(1, &mem_region);
-            self.spin_for_valid(&mem_region);
+            self.fill_buffer(101010101, &mem_region);
+            
+            self.spin_for_valid(101010101,&mem_region);
             self.index += size;
-            if self.index < self.array.len(){
-                let size = std::cmp::min(self.chunk_size, self.array.len() - self.index);
-                self.fill_buffer(0, &self.mem_region.sub_region(..size));
-            }
+            // if self.index < self.array.len(){
+            //     let size = std::cmp::min(self.chunk_size, self.array.len() - self.index);
+            //     self.fill_buffer(0, &self.mem_region.sub_region(..size));
+            // }
             Some(mem_region)
         }
         else{
             None
         }
     }
+    fn advance_index(&mut self, count: usize){
+        // println!("advance_index {:?} {:?} {:?} {:?}",self.index, count, count*self.chunk_size,self.array.len());
+        self.index += count*self.chunk_size;
+        // if self.index < self.array.len(){
+        //     let size = std::cmp::min(self.chunk_size, self.array.len() - self.index);
+        //     self.fill_buffer(0, &self.mem_region.sub_region(..size));
+        // }
+    }
+    fn array(&self) -> LamellarArray<Self::ElemType>{
+        self.iter.array()
+    }
 }
 
-// pub struct LamellarArrayChunksIter<
-// T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static,
-// > {
-// array: LamellarArray<T>,
-// mem_region: LocalMemoryRegion<T>,
-// index: usize,
-// chunk_size: usize,
-// }
-
-// impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static>
-// LamellarArrayChunksIter<T>
+// impl<I> Iterator for CopiedChunks<I>
+// where
+//     I: SerialIterator + Iterator
 // {
-// pub(crate) fn new(array: LamellarArray<T>, chunk_size: usize) -> Self {
-//     let mem_region = array.team().alloc_local_mem_region(chunk_size);
-//     let chunks = LamellarArrayChunksIter {
-//         array: array,
-//         mem_region: mem_region.clone(),
-//         index: 0,
-//         chunk_size: chunk_size,
-//     };
-//     chunks.fill_buffer(0, &mem_region);
-//     chunks
-// }
-
-// fn fill_buffer(&self, val: u8, buf: &LocalMemoryRegion<T>) {
-//     let buf_u8 = buf.clone().to_base::<u8>();
-//     let buf_slice = unsafe { buf_u8.as_mut_slice().unwrap() };
-//     for i in 0..buf_slice.len() {
-//         buf_slice[i] = val;
-//     }
-//     self.array.get(self.index, buf);
-// }
-
-// fn spin_for_valid(&self, buf: &LocalMemoryRegion<T>) {
-//     let buf_0_temp = self.mem_region.clone().to_base::<u8>();
-//     let buf_0 = buf_0_temp.as_slice().unwrap();
-//     let buf_1_temp = buf.clone().to_base::<u8>();
-//     let buf_1 = buf_1_temp.as_slice().unwrap();
-//     for i in 0..buf_1.len() {
-//         while buf_0[i] != buf_1[i] {
-//             std::thread::yield_now();
-//         }
+//     type Item = LocalMemoryRegion<I::ElemType>;
+//     fn next(&mut self) -> Option<Self::Item> {
+//         <Self as SerialIterator>::next(self)
 //     }
 // }
-// }
 
-// impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Iterator
-// for LamellarArrayChunksIter<T>
+// use futures::task::{Context, Poll};
+// use futures::Stream;
+// use std::pin::Pin;
+
+// impl<I> Stream for CopiedChunks<I>
+// where
+//     I: SerialIterator + Stream + Unpin
 // {
-// type Item = LocalMemoryRegion<T>;
-// fn next(&mut self) -> Option<Self::Item> {
-//     let res = if self.index < self.array.len() {
-//         let size = std::cmp::min(self.chunk_size, self.array.len() - self.index);
-//         let mem_region = self.array.team().alloc_local_mem_region(size);
-//         self.fill_buffer(1, &mem_region);
-//         self.spin_for_valid(&mem_region);
-//         self.index += size;
-//         if self.index < self.array.len() {
+//     type Item = LocalMemoryRegion<I::ElemType>;
+//     fn poll_next(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+//         // println!("{:?} {:?}",self.index,self.array.len()/std::mem::size_of::<<Self as SerialIterator>::ElemType>());
+//         println!("async getting {:?} {:?}",self.index,self.chunk_size);
+//         if self.index < self.array.len(){
 //             let size = std::cmp::min(self.chunk_size, self.array.len() - self.index);
-//             self.fill_buffer(0, &self.mem_region.sub_region(..size));
+//             // self.fill_buffer(0, &self.mem_region.sub_region(..size));
+//             let mem_region: LocalMemoryRegion<I::ElemType> = self.array.team().alloc_local_mem_region(size);
+//             self.fill_buffer(101010101, &mem_region);
+//             if self.check_for_valid(101010101,&mem_region){
+//                 self.index += size;
+//                 Poll::Ready(Some(mem_region))
+//             }
+//             else{
+//                 Poll::Pending
+//             }
 //         }
-//         Some(mem_region)
-//     } else {
-//         None
-//     };
-//     res
-// }
+//         else{
+//             Poll::Ready(None)
+//         }
+//     }
 // }

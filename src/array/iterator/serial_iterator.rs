@@ -7,6 +7,9 @@ use copied_chunks::*;
 mod ignore;
 use ignore::*;
 
+mod step_by;
+use step_by::*;
+
 use crate::memregion::Dist;
 use crate::LamellarTeamRT;
 use crate::LamellarArray;
@@ -17,18 +20,37 @@ use std::ptr::NonNull;
 use std::sync::Arc;
 
 pub trait SerialIterator {
+    type Item;
     type ElemType: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static;
+    fn next(&mut self) -> Option<Self::Item>;
     fn advance_index(&mut self, count: usize);
-    fn set_index(&mut self,index: usize);
-    fn get_index(&self) -> usize;
     fn array(&self) -> LamellarArray<Self::ElemType>;
     fn copied_chunks(self, chunk_size: usize) -> CopiedChunks<Self> where Self: Sized {
         CopiedChunks::new(self,chunk_size)
     }
-    fn ignore<I: SerialIterator>(self,count: usize) -> Ignore<Self>  where Self: Sized {
+    fn ignore(self,count: usize) -> Ignore<Self>  where Self: Sized {
         Ignore::new(self,count)
     }
+    fn step_by(self,step_size: usize) -> StepBy<Self>  where Self: Sized {
+        StepBy::new(self,step_size)
+    }
+    fn into_iter(self) -> SerialIteratorIter<Self> where Self: Sized {
+        SerialIteratorIter{iter: self}
+    }
 }
+
+pub struct SerialIteratorIter<I>{
+    pub(crate) iter: I
+}
+impl<I> Iterator for SerialIteratorIter<I>
+where
+    I: SerialIterator,{
+    type Item = <I as SerialIterator>::Item;
+    fn next(&mut self) -> Option<Self::Item> {
+        self.iter.next()
+    }
+}
+
 
 pub struct LamellarArrayIter<
 'a,
@@ -42,6 +64,15 @@ T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static,
     ptr: NonNull<T>,
     _marker: PhantomData<&'a T>,
 }
+
+unsafe impl<
+'a,
+T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static,
+> Sync for LamellarArrayIter<'a,T> {}
+unsafe impl<
+'a,
+T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static,
+> Send for LamellarArrayIter<'a,T> {}
 
 impl<'a, T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static>
 LamellarArrayIter<'a, T>
@@ -92,35 +123,49 @@ LamellarArrayIter<'a, T>
         }
     }
 
-    fn check_for_valid(&self, index: usize) -> bool {
-        let buf_0_temp = self.buf_0.sub_region(index..=index).to_base::<u8>();
-        let buf_0 = buf_0_temp.as_slice().unwrap();
-        let buf_1_temp = self.buf_1.sub_region(index..=index).to_base::<u8>();
-        let buf_1 = buf_1_temp.as_slice().unwrap();
-        for i in 0..buf_0.len() {
-            if buf_0[i] != buf_1[i] {
-                return false;
-            }
-        }
-        true
-    }
+    // fn check_for_valid(&self, index: usize) -> bool {
+    //     let buf_0_temp = self.buf_0.sub_region(index..=index).to_base::<u8>();
+    //     let buf_0 = buf_0_temp.as_slice().unwrap();
+    //     let buf_1_temp = self.buf_1.sub_region(index..=index).to_base::<u8>();
+    //     let buf_1 = buf_1_temp.as_slice().unwrap();
+    //     for i in 0..buf_0.len() {
+    //         if buf_0[i] != buf_1[i] {
+    //             return false;
+    //         }
+    //     }
+    //     true
+    // }
 }
 
 impl<'a, T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> SerialIterator for
 LamellarArrayIter<'a, T> {
     type ElemType = T;
+    type Item = &'a T;
+    fn next(&mut self) -> Option<Self::Item> {
+        let res = if self.index < self.array.len() {
+            if self.buf_index == self.buf_0.len() {
+                //need to get new data
+                self.buf_index = 0;
+                self.fill_buffer(self.index);
+            }
+            self.spin_for_valid(self.buf_index);
+            self.index += 1;
+            self.buf_index += 1;
+            unsafe {
+                self.ptr
+                    .as_ptr()
+                    .offset(self.buf_index as isize - 1)
+                    .as_ref()
+            }
+        } else {
+            None
+        };
+        res
+    }
     fn advance_index(&mut self, count: usize){
         self.index += count;
         self.buf_index = self.index;
         self.fill_buffer(0);
-    }
-    fn set_index(&mut self, index: usize){
-        self.index= index;
-        self.buf_index = index;
-        self.fill_buffer(0);
-    }
-    fn get_index(&self) -> usize {
-        self.index
     }
     fn array(&self) -> LamellarArray<T> {
         self.array.clone()
@@ -129,64 +174,46 @@ LamellarArrayIter<'a, T> {
 
 
 
-impl<'a, T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Iterator
-for LamellarArrayIter<'a, T>
-{
-type Item = &'a T;
-fn next(&mut self) -> Option<Self::Item> {
-    let res = if self.index < self.array.len() {
-        if self.buf_index == self.buf_0.len() {
-            //need to get new data
-            self.buf_index = 0;
-            self.fill_buffer(self.index);
-        }
-        self.spin_for_valid(self.buf_index);
-        self.index += 1;
-        self.buf_index += 1;
-        unsafe {
-            self.ptr
-                .as_ptr()
-                .offset(self.buf_index as isize - 1)
-                .as_ref()
-        }
-    } else {
-        None
-    };
-    res
-}
-}
+// impl<'a, T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Iterator
+// for LamellarArrayIter<'a, T>
+// {
+//     type Item = &'a T;
+//     fn next(&mut self) -> Option<Self::Item> {
+//         <Self as SerialIterator>::next(self)
+//     }
+// }
 
-use futures::task::{Context, Poll};
-use futures::Stream;
-use std::pin::Pin;
+// use futures::task::{Context, Poll};
+// use futures::Stream;
+// use std::pin::Pin;
 
-impl<'a, T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + Unpin + 'static> Stream
-for LamellarArrayIter<'a, T>
-{
-type Item = &'a T;
-fn poll_next(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-    let res = if self.index < self.array.len() {
-        if self.buf_index == self.buf_0.len() {
-            //need to get new data
-            self.buf_index = 0;
-            self.fill_buffer(self.index);
-        }
-        if self.check_for_valid(self.buf_index) {
-            self.index += 1;
-            self.buf_index += 1;
-            Poll::Ready(unsafe {
-                self.ptr
-                    .as_ptr()
-                    .offset(self.buf_index as isize - 1)
-                    .as_ref()
-            })
-        } else {
-            Poll::Pending
-        }
-    } else {
-        Poll::Ready(None)
-    };
-    res
-}
-}
+// impl<'a, T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + Unpin + 'static> Stream
+// for LamellarArrayIter<'a, T>
+// {
+// type Item = &'a T;
+// fn poll_next(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+//     let res = if self.index < self.array.len() {
+//         if self.buf_index == self.buf_0.len() {
+//             //need to get new data
+//             self.buf_index = 0;
+//             self.fill_buffer(self.index);
+//         }
+//         if self.check_for_valid(self.buf_index) {
+//             self.index += 1;
+//             self.buf_index += 1;
+//             Poll::Ready(unsafe {
+//                 self.ptr
+//                     .as_ptr()
+//                     .offset(self.buf_index as isize - 1)
+//                     .as_ref()
+//             })
+//         } else {
+//             Poll::Pending
+//         }
+//     } else {
+//         Poll::Ready(None)
+//     };
+//     res
+// }
+// }
 
