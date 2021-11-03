@@ -118,11 +118,18 @@ fn main() {
                         }
                         let c_slice = c.local_as_mut_slice();
                         let _lock = LOCK.lock();
+                        let g_i_blk = i_blk + my_pe *m_blks_pe;
                         for row in 0..blocksize{
+                            
                             let row_offset = (i_blk*blocksize+row)*n;
                             for col in 0..blocksize{
                                 let col_offset = j_blk*blocksize+col;
                                 c_slice[row_offset+col_offset] += c_vec[row*blocksize + col];
+                                // if row_offset+col_offset > 32000000 {
+                                //     panic!("uhhh ohhhh!!! {:?} {:?} {:?} {:?} {:?} {:?}", i_blk, g_i_blk, j_blk, row, col, row_offset+col_offset);
+
+                                // }
+                                // c.add(row_offset+col_offset,c_vec[row*blocksize + col]);
                             }
                         }  
                     });

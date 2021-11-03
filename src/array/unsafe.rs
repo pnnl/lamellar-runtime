@@ -29,9 +29,10 @@ pub struct UnsafeArray<T: Dist + 'static> {
     inner: Darc<UnsafeArrayInner>,
     distribution: Distribution,
     size: usize,      //total array size
-    elem_per_pe: f32, //used to evenly distribute elems
+    elem_per_pe: f64, //used to evenly distribute elems
     sub_array_offset: usize,
     sub_array_size: usize,
+    pub(crate) my_pe: usize,
     phantom: PhantomData<T>,
 }
 
@@ -43,8 +44,8 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Un
         distribution: Distribution,
     ) -> UnsafeArray<T> {
         let team = team.into().team.clone();
-        let elem_per_pe = array_size as f32 / team.num_pes() as f32;
-        let per_pe_size = (array_size as f32 / team.num_pes() as f32).ceil() as usize; //we do ceil to ensure enough space an each pe
+        let elem_per_pe = array_size as f64 / team.num_pes() as f64;
+        let per_pe_size = (array_size as f64 / team.num_pes() as f64).ceil() as usize; //we do ceil to ensure enough space an each pe
                                                                                        // println!("new unsafe array {:?} {:?} {:?}", elem_per_pe, num_elems_local, per_pe_size);
         let rmr = MemoryRegion::new(
             per_pe_size * std::mem::size_of::<T>(),
@@ -56,6 +57,7 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Un
                 *elem = 0;
             }
         }
+        let my_pe = team.team_pe_id().unwrap();
 
         let array = UnsafeArray {
             inner: Darc::try_new(
@@ -74,6 +76,7 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Un
             elem_per_pe: elem_per_pe,
             sub_array_offset: 0,
             sub_array_size: array_size,
+            my_pe: my_pe,
             phantom: PhantomData,
         };
         array
@@ -87,13 +90,13 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Un
     pub(crate) fn num_elems_local(&self) -> usize {
         match self.distribution {
             Distribution::Block => {
-                ((self.elem_per_pe * (self.inner.team.team_pe_id().unwrap() + 1) as f32).round()
-                    - (self.elem_per_pe * self.inner.team.team_pe_id().unwrap() as f32).round())
+                ((self.elem_per_pe * (self.my_pe + 1) as f64).round()
+                    - (self.elem_per_pe * self.my_pe as f64).round())
                     as usize
             }
             Distribution::Cyclic => {
                 let rem = self.size % self.inner.team.num_pes();
-                if self.inner.team.team_pe_id().unwrap() < rem {
+                if self.my_pe < rem {
                     self.elem_per_pe as usize + 1
                 } else {
                     self.elem_per_pe as usize
@@ -113,14 +116,14 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Un
 
     pub fn pe_for_dist_index(&self, index: usize) -> usize {
         match self.distribution {
-            Distribution::Block => (index as f32 / self.elem_per_pe).floor() as usize,
+            Distribution::Block => (index as f64 / self.elem_per_pe).floor() as usize,
             Distribution::Cyclic => index % self.inner.team.num_pes(),
         }
     }
     pub fn pe_offset_for_dist_index(&self, pe: usize, index: usize) -> usize {
         match self.distribution {
             Distribution::Block => {
-                let pe_start_index = (self.elem_per_pe * pe as f32).round() as usize;
+                let pe_start_index = (self.elem_per_pe * pe as f64).round() as usize;
                 index - pe_start_index
             }
             Distribution::Cyclic => index / self.inner.team.num_pes(),
@@ -129,14 +132,14 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Un
 
     fn block_op<U: MyInto<LamellarArrayInput<T>>>(&self, op: ArrayOp, index: usize, buf: U) {
         let buf = buf.my_into(&self.inner.team);
-        let start_pe = (index as f32 / self.elem_per_pe).floor() as usize;
-        let end_pe = (((index + buf.len()) as f32) / self.elem_per_pe).ceil() as usize;
+        let start_pe = (index as f64 / self.elem_per_pe).floor() as usize;
+        let end_pe = (((index + buf.len()) as f64) / self.elem_per_pe).ceil() as usize;
         let mut dist_index = index;
         let mut buf_index = 0;
         for pe in start_pe..end_pe {
-            let num_elems_on_pe = (self.elem_per_pe * (pe + 1) as f32).round() as usize
-                - (self.elem_per_pe * pe as f32).round() as usize;
-            let pe_start_index = (self.elem_per_pe * pe as f32).round() as usize;
+            let num_elems_on_pe = (self.elem_per_pe * (pe + 1) as f64).round() as usize
+                - (self.elem_per_pe * pe as f64).round() as usize;
+            let pe_start_index = (self.elem_per_pe * pe as f64).round() as usize;
             let offset = dist_index - pe_start_index;
             let len = std::cmp::min(num_elems_on_pe - offset, buf.len() - buf_index);
             if len > 0 {
@@ -171,7 +174,7 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Un
 
     fn cyclic_op<U: MyInto<LamellarArrayInput<T>>>(&self, op: ArrayOp, index: usize, buf: U) {
         let buf = buf.my_into(&self.inner.team);
-        let my_pe = self.inner.team.team_pe_id().unwrap();
+        let my_pe = self.my_pe;
         let num_pes = self.inner.team.num_pes();
         let num_elems_pe = buf.len() / num_pes + 1; //we add plus one to ensure we allocate enough space
         let mut overflow = 0;
@@ -242,15 +245,15 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Un
         };
         let index = self.sub_array_offset;
         let len = self.sub_array_size;
-        let my_pe = self.inner.team.team_pe_id().unwrap();
+        let my_pe = self.my_pe;
         let num_pes = self.inner.team.num_pes();
         match self.distribution {
             Distribution::Block => {
-                let start_pe = (index as f32 / self.elem_per_pe).floor() as usize;
-                let end_pe = (((index + len) as f32) / self.elem_per_pe).ceil() as usize;
+                let start_pe = (index as f64 / self.elem_per_pe).floor() as usize;
+                let end_pe = (((index + len) as f64) / self.elem_per_pe).ceil() as usize;
                 let num_elems_local = self.num_elems_local();
                 if my_pe == start_pe || my_pe == end_pe {
-                    let start_index = index - (self.elem_per_pe * my_pe as f32).round() as usize;
+                    let start_index = index - (self.elem_per_pe * my_pe as f64).round() as usize;
                     let end_index = if start_index + len > num_elems_local {
                         num_elems_local
                     } else {
@@ -277,7 +280,7 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Un
     pub fn to_base_inner<B: Dist + 'static>(self) -> UnsafeArray<B> {
         let u8_size = self.size * std::mem::size_of::<T>();
         let b_size = u8_size / std::mem::size_of::<B>();
-        let elem_per_pe = b_size as f32 / self.inner.team.num_pes() as f32;
+        let elem_per_pe = b_size as f64 / self.inner.team.num_pes() as f64;
         let u8_offset = self.sub_array_offset * std::mem::size_of::<T>();
         let u8_sub_size = self.sub_array_size * std::mem::size_of::<T>();
 
@@ -288,6 +291,7 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Un
             elem_per_pe: elem_per_pe,
             sub_array_offset: u8_offset / std::mem::size_of::<B>(),
             sub_array_size: u8_sub_size / std::mem::size_of::<B>(),
+            my_pe: self.my_pe,
             phantom: PhantomData,
         }
     }
@@ -381,6 +385,7 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Un
             elem_per_pe: self.elem_per_pe,
             sub_array_offset: self.sub_array_offset + start,
             sub_array_size: (end - start),
+            my_pe: self.my_pe,
             phantom: PhantomData,
         }
     }
@@ -394,11 +399,11 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Di
 {
     fn global_index_from_local(&self, index: usize, chunk_size: usize) -> usize {
         // println!("global index cs:{:?}",chunk_size);
-        let my_pe = self.inner.team.team_pe_id().unwrap();
+        let my_pe = self.my_pe;
         if chunk_size == 1 {
             match self.distribution {
                 Distribution::Block => {
-                    let pe_start_index = (self.elem_per_pe * my_pe as f32).round() as usize;
+                    let pe_start_index = (self.elem_per_pe * my_pe as f64).round() as usize;
                     index + pe_start_index
                 }
                 Distribution::Cyclic => self.inner.team.num_pes() * index + my_pe,
@@ -407,9 +412,9 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Di
         else{
             match self.distribution {
                 Distribution::Block => {
-                    let num_chunks_per_per = self.elem_per_pe/chunk_size as f32;
+                    let num_chunks_per_per = self.elem_per_pe/chunk_size as f64;
                     // println!("{:?} {:?}", self.elem_per_pe,num_chunks_per_per);
-                    let start_chunk = (num_chunks_per_per * my_pe as f32).round() as usize;
+                    let start_chunk = (num_chunks_per_per * my_pe as f64).round() as usize;
                     start_chunk + index
                 }
                 Distribution::Cyclic => self.inner.team.num_pes() * index + my_pe,
@@ -422,14 +427,15 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Di
         I: DistributedIterator + 'static,
         F: Fn(I::Item) + Sync + Send + Clone + 'static,
     {
-        let num_workers = match std::env::var("LAMELLAR_THREADS") {
-            Ok(n) => n.parse::<usize>().unwrap(),
-            Err(_) => 4,
-        };
-        let num_elems_local = iter.elems(self.num_elems_local());
-        let elems_per_thread = num_elems_local as f64 / num_workers as f64;
-        // println!("num_chunks {:?} chunks_thread {:?}", num_elems_local, elems_per_thread);
+        
         if let Ok(_my_pe) = self.inner.team.team_pe_id() {
+            let num_workers = match std::env::var("LAMELLAR_THREADS") {
+                Ok(n) => n.parse::<usize>().unwrap(),
+                Err(_) => 4,
+            };
+            let num_elems_local = iter.elems(self.num_elems_local());
+            let elems_per_thread = num_elems_local as f64 / num_workers as f64;
+            // println!("num_chunks {:?} chunks_thread {:?}", num_elems_local, elems_per_thread);
             let mut worker = 0;
             while ((worker as f64 * elems_per_thread).round() as usize) < num_elems_local {
                 let start_i = (worker as f64 * elems_per_thread).round() as usize;
@@ -453,14 +459,15 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Di
         F: Fn(I::Item) -> Fut + Sync + Send + Clone + 'static,
         Fut: Future<Output = ()> + Sync + Send + 'static,
     {
-        let num_workers = match std::env::var("LAMELLAR_THREADS") {
-            Ok(n) => n.parse::<usize>().unwrap(),
-            Err(_) => 4,
-        };
-        let num_elems_local = iter.elems(self.num_elems_local());
-        let elems_per_thread = num_elems_local as f64 / num_workers as f64;
-        // println!("num_chunks {:?} chunks_thread {:?}", num_elems_local, elems_per_thread);
+        
         if let Ok(_my_pe) = self.inner.team.team_pe_id() {
+            let num_workers = match std::env::var("LAMELLAR_THREADS") {
+                Ok(n) => n.parse::<usize>().unwrap(),
+                Err(_) => 4,
+            };
+            let num_elems_local = iter.elems(self.num_elems_local());
+            let elems_per_thread = num_elems_local as f64 / num_workers as f64;
+            // println!("num_chunks {:?} chunks_thread {:?}", num_elems_local, elems_per_thread);
             let mut worker = 0;
             while ((worker as f64 * elems_per_thread).round() as usize) < num_elems_local {
                 let start_i = (worker as f64 * elems_per_thread).round() as usize;
@@ -492,7 +499,7 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Un
 where
     UnsafeArray<T>: ArrayOps<T>,
 {
-    pub fn add(&self, index: usize, val: T) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync> {
+    pub fn add(&self, index: usize, val: T) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>> {
         <UnsafeArray<T> as ArrayOps<T>>::add(self, index, val) //this is implemented automatically by a proc macro
     }
 }
@@ -504,7 +511,7 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + std::fmt::D
         self.inner.team.barrier(); //TODO: have barrier accept a string so we can print where we are stalling.
         for pe in 0..self.inner.team.num_pes() {
             self.inner.team.barrier();
-            if self.inner.team.team_pe_id().unwrap() == pe {
+            if self.my_pe == pe {
                 println!("[pe {:?} data] {:?}", pe, self.local_as_slice());
             }
             std::thread::sleep(std::time::Duration::from_millis(500));

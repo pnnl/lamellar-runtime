@@ -758,16 +758,24 @@ fn create_add(
         array_impls.extend(quote!{
             #[allow(non_camel_case_types)]
             impl #lamellar::array::ArrayOps<#typeident> for #lamellar::array::#array_type<#typeident>{
-                fn add(&self,index: usize, val: #typeident)->Box<dyn #lamellar::LamellarRequest<Output = ()> + Send + Sync>{
+                fn add(&self,index: usize, val: #typeident)->Option<Box<dyn #lamellar::LamellarRequest<Output = ()> + Send + Sync>>{
                     let pe = self.pe_for_dist_index(index);
-                    self.dist_add(
-                        index,
-                        Arc::new (#add_name_am{
-                            data: self.clone(),
-                            local_index: self.pe_offset_for_dist_index(pe,index),
-                            val: val,
-                        })
-                    )
+                    let local_index = self.pe_offset_for_dist_index(pe,index);
+                    if pe == self.my_pe{
+                        
+                        self.local_add(local_index,val);
+                        None
+                    }
+                    else{
+                        Some(self.dist_add(
+                            index,
+                            Arc::new (#add_name_am{
+                                data: self.clone(),
+                                local_index: local_index,
+                                val: val,
+                            })
+                        ))
+                    }
                 }
             }
             #[#am_data]
@@ -789,7 +797,7 @@ fn create_add(
     let expanded = quote! {
         #[allow(non_camel_case_types)]
         impl #lamellar::array::ArrayOps<#typeident> for #lamellar::array::LamellarArray<#typeident>{
-            fn add(&self,index: usize, val: #typeident)->Box<dyn #lamellar::LamellarRequest<Output = ()> + Send + Sync>{
+            fn add(&self,index: usize, val: #typeident)->Option<Box<dyn #lamellar::LamellarRequest<Output = ()> + Send + Sync>>{
                 match self{
                     #match_stmts
                 }
