@@ -1,9 +1,9 @@
 use crate::active_messaging::*;
 use crate::barrier::Barrier;
-use crate::lamellar_world::LamellarWorld;
-use crate::lamellae::{AllocationType, Lamellae, LamellaeComm,LamellaeRDMA};
+use crate::lamellae::{AllocationType, Lamellae, LamellaeComm, LamellaeRDMA};
 use crate::lamellar_arch::{GlobalArch, IdError, LamellarArch, LamellarArchEnum, LamellarArchRT};
 use crate::lamellar_request::{AmType, LamellarRequest, LamellarRequestHandle};
+use crate::lamellar_world::LamellarWorld;
 use crate::memregion::{
     local::LocalMemoryRegion, shared::SharedMemoryRegion, Dist, LamellarMemoryRegion, MemoryRegion,
     RemoteMemoryRegion,
@@ -23,7 +23,6 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Weak};
 use std::time::{Duration, Instant};
 
-
 // to manage team lifetimes properly we need a seperate user facing handle that contains a strong link to the inner team.
 // this outer handle has a lifetime completely tied to whatever the user wants
 // when the outer handle is dropped, we do the appropriate barriers and then remove the inner team from the runtime data structures
@@ -33,16 +32,25 @@ pub struct LamellarTeam {
     pub(crate) world: Option<Arc<LamellarTeam>>,
     pub(crate) team: Arc<LamellarTeamRT>,
     pub(crate) teams: Arc<RwLock<HashMap<u64, Weak<LamellarTeamRT>>>>,
-    pub(crate) am_team: bool //need a reference to this so we can clean up after dropping the team
-    // pub(crate) alloc_mutex: Arc<RwLock<Option<GlobalRwDarc<()>>>>, // in world drop set to none
-    // pub(crate) alloc_barrier: Arc<RwLock<Option<Darc<Barrier>>>>, // in world drop set to none
+    pub(crate) am_team: bool, //need a reference to this so we can clean up after dropping the team
+                              // pub(crate) alloc_mutex: Arc<RwLock<Option<GlobalRwDarc<()>>>>, // in world drop set to none
+                              // pub(crate) alloc_barrier: Arc<RwLock<Option<Darc<Barrier>>>>, // in world drop set to none
 }
 
 //#[prof]
 impl LamellarTeam {
-
-    pub(crate) fn new( world: Option<Arc<LamellarTeam>>,team: Arc<LamellarTeamRT>,teams: Arc<RwLock<HashMap<u64, Weak<LamellarTeamRT>>>>,am_team: bool) -> Arc<LamellarTeam>{
-        Arc::new(LamellarTeam{world,team,teams,am_team})
+    pub(crate) fn new(
+        world: Option<Arc<LamellarTeam>>,
+        team: Arc<LamellarTeamRT>,
+        teams: Arc<RwLock<HashMap<u64, Weak<LamellarTeamRT>>>>,
+        am_team: bool,
+    ) -> Arc<LamellarTeam> {
+        Arc::new(LamellarTeam {
+            world,
+            team,
+            teams,
+            am_team,
+        })
     }
     #[allow(dead_code)]
     pub fn get_pes(&self) -> Vec<usize> {
@@ -72,7 +80,12 @@ impl LamellarTeam {
         if let Some(team) =
             LamellarTeamRT::create_subteam_from_arch(world.team.clone(), parent.team.clone(), arch)
         {
-            let team = LamellarTeam::new(Some(world),team.clone(), parent.teams.clone(), parent.am_team);
+            let team = LamellarTeam::new(
+                Some(world),
+                team.clone(),
+                parent.teams.clone(),
+                parent.am_team,
+            );
             parent
                 .teams
                 .write()
@@ -89,7 +102,7 @@ impl LamellarTeam {
         self.team.barrier()
     }
 
-    pub(crate) async fn alloc_new_pool(self: &Arc<LamellarTeam>,min_size: usize){
+    pub(crate) async fn alloc_new_pool(self: &Arc<LamellarTeam>, min_size: usize) {
         self.team.lamellae.alloc_pool(min_size);
     }
 }
@@ -119,7 +132,7 @@ impl ActiveMessaging for Arc<LamellarTeam> {
         F: RemoteActiveMessage + LamellarAM + Serde + Send + Sync + 'static,
     {
         trace!("[{:?}] team exec am all request", self.team.world_pe);
-        self.team.exec_am_all_tg( am, None)
+        self.team.exec_am_all_tg(am, None)
     }
 
     fn exec_am_pe<F>(
@@ -130,15 +143,14 @@ impl ActiveMessaging for Arc<LamellarTeam> {
     where
         F: RemoteActiveMessage + LamellarAM + Serde + Send + Sync + 'static,
     {
-        self.team
-            .exec_am_pe_tg( pe, am, None)
+        self.team.exec_am_pe_tg(pe, am, None)
     }
 
     fn exec_am_local<F>(&self, am: F) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync>
     where
         F: LamellarActiveMessage + LocalAM + Send + Sync + 'static,
     {
-        self.team.exec_am_local_tg( am, None)
+        self.team.exec_am_local_tg(am, None)
     }
 }
 
@@ -172,7 +184,7 @@ impl RemoteMemoryRegion for Arc<LamellarTeam> {
     ///
     fn alloc_local_mem_region<T: Dist + 'static>(&self, size: usize) -> LocalMemoryRegion<T> {
         let mut lmr = LocalMemoryRegion::try_new(size, self.team.lamellae.clone());
-        while let Err(_err) = lmr{
+        while let Err(_err) = lmr {
             std::thread::yield_now();
             self.team.lamellae.alloc_pool(size);
             lmr = LocalMemoryRegion::try_new(size, self.team.lamellae.clone());
@@ -181,30 +193,27 @@ impl RemoteMemoryRegion for Arc<LamellarTeam> {
     }
 }
 
-
-pub struct IntoLamellarTeam{
-    pub(crate) team: Arc<LamellarTeamRT>
+pub struct IntoLamellarTeam {
+    pub(crate) team: Arc<LamellarTeamRT>,
 }
 
 impl From<Arc<LamellarTeamRT>> for IntoLamellarTeam {
-    fn from(team: Arc<LamellarTeamRT>) -> Self{
-        IntoLamellarTeam{
-            team: team.clone()
-        }
+    fn from(team: Arc<LamellarTeamRT>) -> Self {
+        IntoLamellarTeam { team: team.clone() }
     }
 }
 impl From<Arc<LamellarTeam>> for IntoLamellarTeam {
-    fn from(team: Arc<LamellarTeam>) -> Self{
-        IntoLamellarTeam{
-            team: team.team.clone()
+    fn from(team: Arc<LamellarTeam>) -> Self {
+        IntoLamellarTeam {
+            team: team.team.clone(),
         }
     }
 }
 
 impl From<&LamellarWorld> for IntoLamellarTeam {
-    fn from(world: &LamellarWorld) -> Self{
-        IntoLamellarTeam{
-            team: world.team_rt.clone()
+    fn from(world: &LamellarWorld) -> Self {
+        IntoLamellarTeam {
+            team: world.team_rt.clone(),
         }
     }
 }
@@ -225,7 +234,7 @@ pub struct LamellarTeamRT {
     pub(crate) num_pes: usize,
     team_counters: AMCounters,
     pub(crate) world_counters: Arc<AMCounters>, // can probably remove this?
-    pub(crate)id: usize,
+    pub(crate) id: usize,
     sub_team_id_cnt: AtomicUsize,
     barrier: Barrier,
     dropped: MemoryRegion<usize>,
@@ -258,7 +267,7 @@ impl LamellarTeamRT {
         scheduler: Arc<Scheduler>,
         world_counters: Arc<AMCounters>,
         lamellae: Arc<Lamellae>,
-        teams: Arc<RwLock<HashMap<u64, Weak<LamellarTeamRT>>>>
+        teams: Arc<RwLock<HashMap<u64, Weak<LamellarTeamRT>>>>,
     ) -> LamellarTeamRT {
         let arch = Arc::new(LamellarArchRT {
             parent: None,
@@ -597,12 +606,12 @@ impl LamellarTeamRT {
     pub fn exec_am_all<F>(
         self: &Arc<LamellarTeamRT>,
         am: F,
-    )-> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync>
+    ) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync>
     where
         F: RemoteActiveMessage + LamellarAM + Send + Sync + 'static,
     {
-        self.exec_am_all_tg(am,None)
-    }       
+        self.exec_am_all_tg(am, None)
+    }
 
     pub(crate) fn exec_am_all_tg<F>(
         self: &Arc<LamellarTeamRT>,
@@ -662,7 +671,7 @@ impl LamellarTeamRT {
     where
         F: RemoteActiveMessage + LamellarAM + Send + Sync + 'static,
     {
-        self.exec_am_pe_tg(pe,am,None)
+        self.exec_am_pe_tg(pe, am, None)
     }
     pub(crate) fn exec_am_pe_tg<F>(
         self: &Arc<LamellarTeamRT>,
@@ -792,7 +801,7 @@ impl LamellarTeamRT {
     where
         F: LamellarActiveMessage + LocalAM + Send + Sync + 'static,
     {
-        self.exec_am_local_tg(am,None)
+        self.exec_am_local_tg(am, None)
     }
     pub(crate) fn exec_am_local_tg<F>(
         self: &Arc<LamellarTeamRT>,
@@ -878,9 +887,11 @@ impl LamellarTeamRT {
     ///
     /// * `size` - number of elements of T to allocate a memory region for -- (not size in bytes)
     ///
-    pub(crate) fn alloc_local_mem_region<T: Dist + 'static>(self:  &Arc<LamellarTeamRT>, size: usize) -> LocalMemoryRegion<T> {
-        let lmr: LocalMemoryRegion<T> =
-            LocalMemoryRegion::new(size, self.lamellae.clone()).into();
+    pub(crate) fn alloc_local_mem_region<T: Dist + 'static>(
+        self: &Arc<LamellarTeamRT>,
+        size: usize,
+    ) -> LocalMemoryRegion<T> {
+        let lmr: LocalMemoryRegion<T> = LocalMemoryRegion::new(size, self.lamellae.clone()).into();
         lmr
     }
 }
@@ -1023,11 +1034,9 @@ impl LamellarTeamRT {
 
 //#[prof]
 
-
 //#[prof]
 impl Drop for LamellarTeamRT {
     fn drop(&mut self) {
-
         // println!("sechduler_new: {:?}",Arc::strong_count(&self.scheduler));
         // println!("lamellae: {:?}",Arc::strong_count(&self.lamellae));
         // println!("arch: {:?}",Arc::strong_count(&self.arch));
@@ -1042,7 +1051,8 @@ impl Drop for LamellarTeamRT {
 impl Drop for LamellarTeam {
     fn drop(&mut self) {
         // println!("team handle dropping {:?}",self.team.team_hash);
-        if !self.am_team{ //we only care about when the user handle gets dropped (not the team handles that are created for use in an active message)
+        if !self.am_team {
+            //we only care about when the user handle gets dropped (not the team handles that are created for use in an active message)
             if let Some(parent) = &self.team.parent {
                 // println!("not world?");
                 // println!(
@@ -1076,7 +1086,7 @@ impl Drop for LamellarTeam {
         //     self.team.destroy();
         // }
         // println!("how am i here...");
-        
+
         // println!("team handle dropped");
 
         // if let Some(world) = &self.world{

@@ -6,26 +6,27 @@ pub struct Ignore<I> {
 
 impl<I> Ignore<I>
 where
-    I: SerialIterator
+    I: SerialIterator,
 {
     pub(crate) fn new(mut iter: I, count: usize) -> Self {
         iter.advance_index(count);
-        Ignore{iter}
+        Ignore { iter }
     }
 }
 
-impl <I> SerialIterator for Ignore<I>
+impl<I> SerialIterator for Ignore<I>
 where
-    I: SerialIterator {
-    type ElemType= I::ElemType;
+    I: SerialIterator,
+{
+    type ElemType = I::ElemType;
     type Item = <I as SerialIterator>::Item;
     fn next(&mut self) -> Option<Self::Item> {
         self.iter.next()
     }
-    fn advance_index(&mut self, count: usize){
+    fn advance_index(&mut self, count: usize) {
         self.iter.advance_index(count);
     }
-    fn array(&self) -> LamellarArray<Self::ElemType>{
+    fn array(&self) -> LamellarArray<Self::ElemType> {
         self.iter.array()
     }
 }
@@ -40,7 +41,6 @@ where
 //         <Self as SerialIterator>::next(self)
 //     }
 // }
-
 
 // impl<I> Stream for Ignore<I>
 // where

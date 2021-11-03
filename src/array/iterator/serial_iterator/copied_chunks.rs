@@ -2,10 +2,10 @@ use crate::array::iterator::serial_iterator::*;
 use crate::LamellarArray;
 use crate::LocalMemoryRegion;
 
-
-pub struct CopiedChunks<I> 
+pub struct CopiedChunks<I>
 where
-    I: SerialIterator, {
+    I: SerialIterator,
+{
     iter: I,
     array: LamellarArray<I::ElemType>,
     // mem_region: LocalMemoryRegion<I::ElemType>,
@@ -15,18 +15,18 @@ where
 
 impl<I> CopiedChunks<I>
 where
-    I: SerialIterator, 
+    I: SerialIterator,
 {
     pub(crate) fn new(iter: I, chunk_size: usize) -> CopiedChunks<I> {
-        let array = iter.array().clone();//.to_base::<u8>();
-        // println!("len: {:?}",array.len());
-        // let mem_region = iter.array().team().alloc_local_mem_region(chunk_size);//*iter.array().size_of_elem());
+        let array = iter.array().clone(); //.to_base::<u8>();
+                                          // println!("len: {:?}",array.len());
+                                          // let mem_region = iter.array().team().alloc_local_mem_region(chunk_size);//*iter.array().size_of_elem());
         let chunks = CopiedChunks {
             iter,
             array,
             // mem_region: mem_region.clone(),
             index: 0,
-            chunk_size
+            chunk_size,
         };
         // chunks.fill_buffer(0,&mem_region);
         chunks
@@ -42,7 +42,7 @@ where
         self.array.get(self.index, buf);
     }
 
-    fn spin_for_valid(&self,val: u32, buf: &LocalMemoryRegion<I::ElemType>) {
+    fn spin_for_valid(&self, val: u32, buf: &LocalMemoryRegion<I::ElemType>) {
         // let buf_0_temp = self.mem_region.clone().to_base::<u8>();
         // let buf_0 = buf_0_temp.as_slice().unwrap();
         let buf_1_temp = buf.clone().to_base::<u32>();
@@ -51,10 +51,10 @@ where
         let mut start = std::time::Instant::now();
         for i in 0..buf_1.len() {
             // while buf_0[i] != buf_1[i] {
-            while buf_1[i] == val{
+            while buf_1[i] == val {
                 std::thread::yield_now();
                 if start.elapsed().as_secs_f64() > 5.0 {
-                    println!("i: {:?} {:?} {:?}",i,val, buf_1[i] );
+                    println!("i: {:?} {:?} {:?}", i, val, buf_1[i]);
                     start = std::time::Instant::now();
                 }
             }
@@ -73,42 +73,43 @@ where
     // }
 }
 
-impl <I> SerialIterator for CopiedChunks<I>
+impl<I> SerialIterator for CopiedChunks<I>
 where
-    I: SerialIterator {
-    type ElemType= I::ElemType;
+    I: SerialIterator,
+{
+    type ElemType = I::ElemType;
     type Item = LocalMemoryRegion<I::ElemType>;
     fn next(&mut self) -> Option<Self::Item> {
         // println!("{:?} {:?}",self.index,self.array.len()/std::mem::size_of::<<Self as SerialIterator>::ElemType>());
-        
-        if self.index < self.array.len(){
+
+        if self.index < self.array.len() {
             let size = std::cmp::min(self.chunk_size, self.array.len() - self.index);
             // self.fill_buffer(0, &self.mem_region.sub_region(..size));
             // println!("getting {:?} {:?}",self.index,self.chunk_size);
-            let mem_region: LocalMemoryRegion<I::ElemType> = self.array.team().alloc_local_mem_region(size);
+            let mem_region: LocalMemoryRegion<I::ElemType> =
+                self.array.team().alloc_local_mem_region(size);
             self.fill_buffer(101010101, &mem_region);
-            
-            self.spin_for_valid(101010101,&mem_region);
+
+            self.spin_for_valid(101010101, &mem_region);
             self.index += size;
             // if self.index < self.array.len(){
             //     let size = std::cmp::min(self.chunk_size, self.array.len() - self.index);
             //     self.fill_buffer(0, &self.mem_region.sub_region(..size));
             // }
             Some(mem_region)
-        }
-        else{
+        } else {
             None
         }
     }
-    fn advance_index(&mut self, count: usize){
+    fn advance_index(&mut self, count: usize) {
         // println!("advance_index {:?} {:?} {:?} {:?}",self.index, count, count*self.chunk_size,self.array.len());
-        self.index += count*self.chunk_size;
+        self.index += count * self.chunk_size;
         // if self.index < self.array.len(){
         //     let size = std::cmp::min(self.chunk_size, self.array.len() - self.index);
         //     self.fill_buffer(0, &self.mem_region.sub_region(..size));
         // }
     }
-    fn array(&self) -> LamellarArray<Self::ElemType>{
+    fn array(&self) -> LamellarArray<Self::ElemType> {
         self.iter.array()
     }
 }

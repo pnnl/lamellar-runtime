@@ -14,14 +14,12 @@ where
         // println!("new Enumerate {:?} ",count);
         Enumerate { iter, count }
     }
-    
 }
 
 impl<I> Enumerate<I>
 where
     I: DistributedIterator + 'static,
 {
-    
     pub fn for_each<F>(&self, op: F)
     where
         F: Fn((usize, <I as DistributedIterator>::Item)) + Sync + Send + Clone + 'static,
@@ -39,7 +37,7 @@ where
 
 impl<I> DistributedIterator for Enumerate<I>
 where
-    I: DistributedIterator ,
+    I: DistributedIterator,
 {
     type Item = (usize, <I as DistributedIterator>::Item);
     type Array = <I as DistributedIterator>::Array;
@@ -57,8 +55,7 @@ where
         self.count += 1;
         Some((i, a))
     }
-    fn elems(&self, in_elems: usize) -> usize{
-        
+    fn elems(&self, in_elems: usize) -> usize {
         let in_elems = self.iter.elems(in_elems);
         // println!("enumerate elems {:?}",in_elems);
         in_elems
@@ -71,7 +68,7 @@ where
     fn chunk_size(&self) -> usize {
         self.iter.chunk_size()
     }
-    fn advance_index(&mut self, count: usize){
+    fn advance_index(&mut self, count: usize) {
         self.iter.advance_index(count);
         self.count += count;
     }

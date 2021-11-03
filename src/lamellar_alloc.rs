@@ -12,8 +12,8 @@ pub(crate) trait LamellarAlloc {
     fn init(&mut self, start_addr: usize, size: usize); //size in bytes
     fn malloc(&self, size: usize) -> usize;
     fn try_malloc(&self, size: usize) -> Option<usize>;
-    fn fake_malloc(&self,size: usize) -> bool;
-    fn free(&self, addr: usize) -> Result<(),usize>;
+    fn fake_malloc(&self, size: usize) -> bool;
+    fn free(&self, addr: usize) -> Result<(), usize>;
     fn space_avail(&self) -> usize;
     fn occupied(&self) -> usize;
 }
@@ -137,7 +137,7 @@ impl LamellarAlloc for LinearAlloc {
         }
     }
 
-    fn free(&self, addr: usize) ->Result<(),usize> {
+    fn free(&self, addr: usize) -> Result<(), usize> {
         let &(ref lock, ref cvar) = &*self.entries;
         let mut entries = lock.lock();
         for i in 0..entries.len() {
@@ -150,7 +150,7 @@ impl LamellarAlloc for LinearAlloc {
                 }
                 cvar.notify_all();
 
-                return Ok(())
+                return Ok(());
             }
         }
         Err(addr)
@@ -285,14 +285,14 @@ impl LamellarAlloc for BTreeAlloc {
         let mut free_entries = lock.lock();
         prof_end!(locking);
         //find smallest memory segment greater than or equal to size
-        if let Some((_,_)) = free_entries.sizes.range_mut(size..).next() {
-           return true;
+        if let Some((_, _)) = free_entries.sizes.range_mut(size..).next() {
+            return true;
         } else {
             return false;
         }
     }
 
-    fn free(&self, addr: usize) -> Result<(),usize>{
+    fn free(&self, addr: usize) -> Result<(), usize> {
         let &(ref lock, ref _cvar) = &*self.allocated_addrs;
         let mut allocated_addrs = lock.lock();
         if let Some(size) = allocated_addrs.remove(&addr) {
@@ -427,15 +427,14 @@ impl<T: Copy> LamellarAlloc for ObjAlloc<T> {
         let &(ref lock, ref _cvar) = &*self.free_entries;
         let free_entries = lock.lock();
         prof_end!(locking);
-        if free_entries.len() > 1{
+        if free_entries.len() > 1 {
             true
-        }
-        else{
+        } else {
             false
         }
     }
 
-    fn free(&self, addr: usize) ->Result<(),usize> {
+    fn free(&self, addr: usize) -> Result<(), usize> {
         let &(ref lock, ref cvar) = &*self.free_entries;
         let mut free_entries = lock.lock();
         free_entries.push(addr);

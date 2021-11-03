@@ -762,7 +762,6 @@ fn create_add(
                     let pe = self.pe_for_dist_index(index);
                     let local_index = self.pe_offset_for_dist_index(pe,index);
                     if pe == self.my_pe{
-                        
                         self.local_add(local_index,val);
                         None
                     }

@@ -1,4 +1,4 @@
-use crate::lamellae::comm::{CommOps,AllocResult};
+use crate::lamellae::comm::{AllocResult, CommOps};
 use crate::lamellae::command_queues::CommandQueue;
 use crate::lamellae::shmem::shmem_comm::*;
 
@@ -53,8 +53,6 @@ impl LamellaeInit for ShmemBuilder {
                 .await;
         });
 
-        
-        
         scheduler.submit_task(async move {
             cq_clone2
                 .alloc_task(scheduler_clone2.clone(), active_clone2)
@@ -160,7 +158,6 @@ impl LamellaeAM for Shmem {
     }
 }
 
-
 impl Ser for Shmem {
     fn serialize<T: Send + Sync + serde::Serialize + ?Sized>(
         &self,
@@ -186,7 +183,6 @@ impl Ser for Shmem {
     }
 }
 
-
 #[allow(dead_code, unused_variables)]
 impl LamellaeRDMA for Shmem {
     fn put(&self, pe: usize, src: &[u8], dst: usize) {
@@ -204,7 +200,7 @@ impl LamellaeRDMA for Shmem {
     fn rt_alloc(&self, size: usize) -> AllocResult<usize> {
         self.shmem_comm.rt_alloc(size)
     }
-    fn rt_check_alloc(&self, size: usize) -> bool{
+    fn rt_check_alloc(&self, size: usize) -> bool {
         self.shmem_comm.rt_check_alloc(size)
     }
     fn rt_free(&self, addr: usize) {
@@ -228,10 +224,10 @@ impl LamellaeRDMA for Shmem {
     fn occupied(&self) -> usize {
         self.shmem_comm.occupied()
     }
-    fn num_pool_allocs(&self) -> usize{
+    fn num_pool_allocs(&self) -> usize {
         self.shmem_comm.num_pool_allocs()
     }
-    fn alloc_pool(&self, min_size: usize){
+    fn alloc_pool(&self, min_size: usize) {
         self.cq.send_alloc(min_size);
     }
 }

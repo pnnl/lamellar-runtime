@@ -10,7 +10,7 @@ use crate::darc::{Darc, DarcInner, DarcMode, __NetworkDarc};
 use crate::lamellae::{LamellaeComm, LamellaeRDMA};
 use crate::lamellar_world::LAMELLAES;
 use crate::IdError;
-use crate::{LamellarTeam,LamellarTeamRT};
+use crate::{LamellarTeam, LamellarTeamRT};
 
 #[derive(serde::Serialize, serde::Deserialize, Debug)]
 pub struct LocalRwDarc<T: 'static> {
@@ -98,7 +98,11 @@ impl<T> LocalRwDarc<T> {
 impl<T> LocalRwDarc<T> {
     pub fn new(team: Arc<LamellarTeam>, item: T) -> Result<LocalRwDarc<T>, IdError> {
         Ok(LocalRwDarc {
-            darc: Darc::try_new(team.team.clone(), RwLock::new(Box::new(item)), DarcMode::LocalRw)?,
+            darc: Darc::try_new(
+                team.team.clone(),
+                RwLock::new(Box::new(item)),
+                DarcMode::LocalRw,
+            )?,
         })
     }
 

@@ -16,7 +16,8 @@ pub struct SharedMemoryRegion<T: Dist + 'static> {
     phantom: PhantomData<T>,
 }
 
-impl<T: Dist + 'static> crate::DarcSerde for SharedMemoryRegion<T> { ///hmmm why do I need to implement manually, I think i would work with the macro automatically now?
+impl<T: Dist + 'static> crate::DarcSerde for SharedMemoryRegion<T> {
+    ///hmmm why do I need to implement manually, I think i would work with the macro automatically now?
     fn ser(&self, num_pes: usize, cur_pe: Result<usize, crate::IdError>) {
         // println!("in shared ser");
         match cur_pe {
@@ -48,14 +49,14 @@ impl<T: Dist + 'static> SharedMemoryRegion<T> {
         team: Arc<LamellarTeamRT>,
         alloc: AllocationType,
     ) -> SharedMemoryRegion<T> {
-       SharedMemoryRegion::try_new(size,team,alloc).expect("Out of memory")
+        SharedMemoryRegion::try_new(size, team, alloc).expect("Out of memory")
     }
 
     pub(crate) fn try_new(
         size: usize,
         team: Arc<LamellarTeamRT>,
         alloc: AllocationType,
-    ) -> Result<SharedMemoryRegion<T>,anyhow::Error> {
+    ) -> Result<SharedMemoryRegion<T>, anyhow::Error> {
         Ok(SharedMemoryRegion {
             mr: Darc::try_new(
                 team.clone(),

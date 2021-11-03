@@ -9,10 +9,10 @@ use std::pin::Pin;
 use std::sync::atomic::{AtomicU8, AtomicUsize, Ordering};
 use std::sync::Arc;
 
-use crate::lamellar_world::LAMELLAES;
-use crate::{LamellarTeam,LamellarTeamRT};
 use crate::lamellae::{AllocationType, Backend, LamellaeComm, LamellaeRDMA};
+use crate::lamellar_world::LAMELLAES;
 use crate::IdError;
+use crate::{LamellarTeam, LamellarTeamRT};
 
 pub(crate) mod local_rw_darc;
 use local_rw_darc::LocalRwDarc;
@@ -292,8 +292,7 @@ impl<T> Darc<T> {
     }
 
     pub fn print(&self) {
-        let rel_addr =
-            unsafe { self.inner as usize - (*self.inner().team).lamellae.base_addr() };
+        let rel_addr = unsafe { self.inner as usize - (*self.inner().team).lamellae.base_addr() };
         println!(
             "--------\norig: {:?} {:?} (0x{:x}) {:?}\n--------",
             self.src_pe,
@@ -460,16 +459,14 @@ impl<T: 'static> Drop for Darc<T> {
                 // println!("launching drop task as darc");
                 // self.print();
                 let team = inner.team();
-                team.exec_am_local(
-                    DroppedWaitAM {
-                        inner_addr: self.inner as *const u8 as usize,
-                        mode_addr: inner.mode_addr,
-                        my_pe: inner.my_pe,
-                        num_pes: inner.num_pes,
-                        team: team.clone(),
-                        phantom: PhantomData::<T>,
-                    },
-                );
+                team.exec_am_local(DroppedWaitAM {
+                    inner_addr: self.inner as *const u8 as usize,
+                    mode_addr: inner.mode_addr,
+                    my_pe: inner.my_pe,
+                    num_pes: inner.num_pes,
+                    team: team.clone(),
+                    phantom: PhantomData::<T>,
+                });
                 // println!("team cnt: {:?}", Arc::strong_count(&team));
             } else {
                 let local_mode = unsafe {
@@ -485,16 +482,14 @@ impl<T: 'static> Drop for Darc<T> {
                     // println!("launching drop task as localrw");
                     // self.print();
                     let team = inner.team();
-                    team.exec_am_local(
-                        DroppedWaitAM {
-                            inner_addr: self.inner as *const u8 as usize,
-                            mode_addr: inner.mode_addr,
-                            my_pe: inner.my_pe,
-                            num_pes: inner.num_pes,
-                            team: team.clone(),
-                            phantom: PhantomData::<T>,
-                        },
-                    );
+                    team.exec_am_local(DroppedWaitAM {
+                        inner_addr: self.inner as *const u8 as usize,
+                        mode_addr: inner.mode_addr,
+                        my_pe: inner.my_pe,
+                        num_pes: inner.num_pes,
+                        team: team.clone(),
+                        phantom: PhantomData::<T>,
+                    });
                     // println!("team cnt: {:?}", Arc::strong_count(&team));
                 } else {
                     let local_mode = unsafe {
@@ -510,19 +505,16 @@ impl<T: 'static> Drop for Darc<T> {
                         // println!("launching drop task as globalrw");
                         // self.print();
                         let team = inner.team();
-                        team.exec_am_local(
-                            DroppedWaitAM {
-                                inner_addr: self.inner as *const u8 as usize,
-                                mode_addr: inner.mode_addr,
-                                my_pe: inner.my_pe,
-                                num_pes: inner.num_pes,
-                                team: team.clone(),
-                                phantom: PhantomData::<T>,
-                            },
-                        );
+                        team.exec_am_local(DroppedWaitAM {
+                            inner_addr: self.inner as *const u8 as usize,
+                            mode_addr: inner.mode_addr,
+                            my_pe: inner.my_pe,
+                            num_pes: inner.num_pes,
+                            team: team.clone(),
+                            phantom: PhantomData::<T>,
+                        });
                         // println!("team cnt: {:?}", Arc::strong_count(&team));
                     }
-                    
                 }
             }
         }
@@ -554,8 +546,9 @@ impl<T: 'static> LamellarAM for DroppedWaitAM<T> {
         // println!("in DroppedWaitAM {:x}",self.inner_addr);
         let mode_refs_u8 =
             unsafe { std::slice::from_raw_parts_mut(self.mode_addr as *mut u8, self.num_pes) };
-        let mode_refs =
-            unsafe { std::slice::from_raw_parts_mut(self.mode_addr as *mut DarcMode, self.num_pes) };
+        let mode_refs = unsafe {
+            std::slice::from_raw_parts_mut(self.mode_addr as *mut DarcMode, self.num_pes)
+        };
 
         let mut timeout = std::time::Instant::now();
         let wrapped = Wrapper {
@@ -574,7 +567,7 @@ impl<T: 'static> LamellarAM for DroppedWaitAM<T> {
                     println!(
                         "0. Darc trying to free! {:x} {:?} {:?} {:?}",
                         self.inner_addr,
-                        mode_refs  ,
+                        mode_refs,
                         wrapped.inner.as_ref().local_cnt.load(Ordering::SeqCst),
                         wrapped.inner.as_ref().dist_cnt.load(Ordering::SeqCst)
                     );
@@ -605,7 +598,7 @@ impl<T: 'static> LamellarAM for DroppedWaitAM<T> {
                 if timeout.elapsed().as_secs_f64() > 5.0 {
                     println!(
                         "1. Darc trying to free! {:x} {:?}",
-                        self.inner_addr, mode_refs 
+                        self.inner_addr, mode_refs
                     );
                     timeout = std::time::Instant::now();
                 }
@@ -628,7 +621,7 @@ impl<T: 'static> LamellarAM for DroppedWaitAM<T> {
                     println!(
                         "2. Darc trying to free! {:x} {:?} {:?} {:?}",
                         self.inner_addr,
-                        mode_refs ,
+                        mode_refs,
                         wrapped.inner.as_ref().local_cnt.load(Ordering::SeqCst),
                         wrapped.inner.as_ref().dist_cnt.load(Ordering::SeqCst)
                     );
@@ -639,7 +632,7 @@ impl<T: 'static> LamellarAM for DroppedWaitAM<T> {
             // let inner = unsafe {&*(self.inner_addr as *mut DarcInner<T>)}; //now we need to true type to deallocate appropriately
             let _item = Box::from_raw(wrapped.inner.as_ref().item as *mut T);
             let _team = Arc::from_raw(wrapped.inner.as_ref().team); //return to rust to drop appropriately
-                                                                   // println!("Darc freed! {:x} {:?}",self.inner_addr,mode_refs);
+                                                                    // println!("Darc freed! {:x} {:?}",self.inner_addr,mode_refs);
             self.team.lamellae.free(self.inner_addr);
             // println!("leaving DroppedWaitAM");
         }

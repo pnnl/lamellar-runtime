@@ -10,7 +10,7 @@ use crate::scheduler::{create_scheduler, SchedulerType};
 use lamellar_prof::*;
 use log::trace;
 use parking_lot::RwLock;
-use std::collections::{ HashMap,HashSet};
+use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Weak};
 
 lazy_static! {
@@ -279,11 +279,11 @@ impl LamellarWorldBuilder {
             sched_new.clone(),
             counters.clone(),
             lamellae.clone(),
-            teams.clone()
+            teams.clone(),
         ));
-        
+
         let world = LamellarWorld {
-            team: LamellarTeam::new(None,team_rt.clone(),teams.clone(),false),
+            team: LamellarTeam::new(None, team_rt.clone(), teams.clone(), false),
             team_rt: team_rt.clone(),
             teams: teams.clone(),
             _counters: counters,

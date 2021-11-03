@@ -1,12 +1,14 @@
 use crate::active_messaging::*;
+use crate::array::iterator::distributed_iterator::{
+    DistIter, DistIterMut, DistIteratorLauncher, DistributedIterator,
+};
+use crate::array::iterator::serial_iterator::LamellarArrayIter;
 use crate::array::*;
-use crate::array::iterator::distributed_iterator::{DistributedIterator,DistIter,DistIterMut,DistIteratorLauncher};
-use crate::array::iterator::serial_iterator::{LamellarArrayIter};
 use crate::darc::Darc;
 use crate::lamellae::AllocationType;
 use crate::lamellar_request::LamellarRequest;
-use crate::lamellar_team::{LamellarTeamRT,IntoLamellarTeam};
-use crate::memregion::{Dist, MemoryRegion, RegisteredMemoryRegion,  SubRegion};
+use crate::lamellar_team::{IntoLamellarTeam, LamellarTeamRT};
+use crate::memregion::{Dist, MemoryRegion, RegisteredMemoryRegion, SubRegion};
 use crate::scheduler::SchedulerQueue;
 use core::marker::PhantomData;
 use parking_lot::RwLock;
@@ -68,7 +70,7 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Un
                     op_map: Arc::new(RwLock::new(HashMap::new())),
                     team: team,
                 },
-                crate::darc::DarcMode::Darc
+                crate::darc::DarcMode::Darc,
             )
             .expect("trying to create array on non team member"),
             distribution: distribution.clone(),
@@ -91,8 +93,7 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Un
         match self.distribution {
             Distribution::Block => {
                 ((self.elem_per_pe * (self.my_pe + 1) as f64).round()
-                    - (self.elem_per_pe * self.my_pe as f64).round())
-                    as usize
+                    - (self.elem_per_pe * self.my_pe as f64).round()) as usize
             }
             Distribution::Cyclic => {
                 let rem = self.size % self.inner.team.num_pes();
@@ -105,7 +106,7 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Un
         }
     }
 
-    pub fn use_distribution(mut self, distribution: Distribution) -> Self{
+    pub fn use_distribution(mut self, distribution: Distribution) -> Self {
         self.distribution = distribution;
         self
     }
@@ -229,9 +230,9 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Un
             }
         }
     }
-    pub fn at(&self,index: usize) -> T{
+    pub fn at(&self, index: usize) -> T {
         let buf: LocalMemoryRegion<T> = self.team().alloc_local_mem_region(1);
-        self.get(index,&buf);
+        self.get(index, &buf);
         buf.as_slice().unwrap()[0].clone()
     }
     pub fn local_as_slice(&self) -> &[T] {
@@ -307,11 +308,9 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Un
                 Some(self.inner.array_counters.clone()),
             )
         } else {
-            self.inner.team.exec_arc_am_pe::<T>(
-                0,
-                func,
-                Some(self.inner.array_counters.clone()),
-            )
+            self.inner
+                .team
+                .exec_arc_am_pe::<T>(0, func, Some(self.inner.array_counters.clone()))
         }
     }
 
@@ -340,11 +339,11 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Un
     }
 
     pub fn dist_iter(&self) -> DistIter<'static, T> {
-        DistIter::new(self.clone().into(),0,0)
+        DistIter::new(self.clone().into(), 0, 0)
     }
 
     pub fn dist_iter_mut(&self) -> DistIterMut<'static, T> {
-        DistIterMut::new(self.clone().into(),0,0)
+        DistIterMut::new(self.clone().into(), 0, 0)
     }
 
     pub fn ser_iter(&self) -> LamellarArrayIter<'_, T> {
@@ -408,11 +407,10 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Di
                 }
                 Distribution::Cyclic => self.inner.team.num_pes() * index + my_pe,
             }
-        }
-        else{
+        } else {
             match self.distribution {
                 Distribution::Block => {
-                    let num_chunks_per_per = self.elem_per_pe/chunk_size as f64;
+                    let num_chunks_per_per = self.elem_per_pe / chunk_size as f64;
                     // println!("{:?} {:?}", self.elem_per_pe,num_chunks_per_per);
                     let start_chunk = (num_chunks_per_per * my_pe as f64).round() as usize;
                     start_chunk + index
@@ -421,13 +419,12 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Di
             }
         }
     }
-    
+
     fn for_each<I, F>(&self, iter: &I, op: F)
     where
         I: DistributedIterator + 'static,
         F: Fn(I::Item) + Sync + Send + Clone + 'static,
     {
-        
         if let Ok(_my_pe) = self.inner.team.team_pe_id() {
             let num_workers = match std::env::var("LAMELLAR_THREADS") {
                 Ok(n) => n.parse::<usize>().unwrap(),
@@ -459,7 +456,6 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Di
         F: Fn(I::Item) -> Fut + Sync + Send + Clone + 'static,
         Fut: Future<Output = ()> + Sync + Send + 'static,
     {
-        
         if let Ok(_my_pe) = self.inner.team.team_pe_id() {
             let num_workers = match std::env::var("LAMELLAR_THREADS") {
                 Ok(n) => n.parse::<usize>().unwrap(),
@@ -499,7 +495,11 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Un
 where
     UnsafeArray<T>: ArrayOps<T>,
 {
-    pub fn add(&self, index: usize, val: T) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>> {
+    pub fn add(
+        &self,
+        index: usize,
+        val: T,
+    ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>> {
         <UnsafeArray<T> as ArrayOps<T>>::add(self, index, val) //this is implemented automatically by a proc macro
     }
 }
@@ -554,11 +554,9 @@ impl<
         func: LamellarArcAm,
     ) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync> {
         let pe = self.pe_for_dist_index(index);
-        self.inner.team.exec_arc_am_pe(
-            pe,
-            func,
-            Some(self.inner.array_counters.clone()),
-        )
+        self.inner
+            .team
+            .exec_arc_am_pe(pe, func, Some(self.inner.array_counters.clone()))
     }
     pub fn local_add(&self, index: usize, val: T) {
         self.local_as_mut_slice()[index] += val;
@@ -582,7 +580,7 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> La
     }
 
     #[inline(always)]
-    fn at(&self, index: usize) -> T{
+    fn at(&self, index: usize) -> T {
         self.at(index)
     }
     #[inline(always)]
@@ -665,7 +663,9 @@ impl<'a, T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static
     type Item = &'a T;
     type IntoIter = SerialIteratorIter<LamellarArrayIter<'a, T>>;
     fn into_iter(self) -> Self::IntoIter {
-        SerialIteratorIter{ iter: self.ser_iter()}
+        SerialIteratorIter {
+            iter: self.ser_iter(),
+        }
     }
 }
 

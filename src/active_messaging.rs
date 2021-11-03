@@ -1,7 +1,7 @@
 use crate::lamellae::{Lamellae, LamellaeRDMA, SerializedData};
 use crate::lamellar_arch::IdError;
 use crate::lamellar_request::{InternalReq, InternalResult, LamellarRequest};
-use crate::lamellar_team::{LamellarTeamRT,LamellarTeam};
+use crate::lamellar_team::{LamellarTeam, LamellarTeamRT};
 use crate::scheduler::{AmeScheduler, ReqData};
 #[cfg(feature = "enable-prof")]
 use lamellar_prof::*;
@@ -219,25 +219,28 @@ impl ActiveMessageEngine {
 
         match req_data.cmd.clone() {
             ExecType::Runtime(_cmd) => {}
-            ExecType::Am(_) => self.batched_am.process_am_req(req_data,world,team).await,
+            ExecType::Am(_) => self.batched_am.process_am_req(req_data, world, team).await,
         }
     }
 
-    pub(crate) fn get_team_and_world(&self,team_hash: u64,)->(Arc<LamellarTeam>,Arc<LamellarTeam>){
+    pub(crate) fn get_team_and_world(
+        &self,
+        team_hash: u64,
+    ) -> (Arc<LamellarTeam>, Arc<LamellarTeam>) {
         let teams = self.teams.read();
         let world_rt = teams
-        .get(&0)
-        .expect("invalid world hash")
-        .upgrade()
-        .expect("team no longer exists (world)");
+            .get(&0)
+            .expect("invalid world hash")
+            .upgrade()
+            .expect("team no longer exists (world)");
         let team_rt = teams
-                .get(&team_hash)
-                .expect("invalid team hash")
-                .upgrade()
-                .expect("team no longer exists {:?}");
-        let world = LamellarTeam::new(None,world_rt,self.teams.clone(),true);
-        let team = LamellarTeam::new(Some(world.clone()),team_rt,self.teams.clone(),true);
-        (team,world)
+            .get(&team_hash)
+            .expect("invalid team hash")
+            .upgrade()
+            .expect("team no longer exists {:?}");
+        let world = LamellarTeam::new(None, world_rt, self.teams.clone(), true);
+        let team = LamellarTeam::new(Some(world.clone()), team_rt, self.teams.clone(), true);
+        (team, world)
     }
 
     pub(crate) async fn exec_msg(

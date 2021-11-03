@@ -1,32 +1,33 @@
 use crate::array::iterator::serial_iterator::*;
 
-pub struct StepBy<I>{
+pub struct StepBy<I> {
     iter: I,
     step_size: usize,
 }
 
 impl<I> StepBy<I>
 where
-    I: SerialIterator
+    I: SerialIterator,
 {
     pub(crate) fn new(iter: I, step_size: usize) -> Self {
         StepBy { iter, step_size }
     }
 }
-impl <I> SerialIterator for StepBy<I>
+impl<I> SerialIterator for StepBy<I>
 where
-    I: SerialIterator {
-    type ElemType= I::ElemType;
+    I: SerialIterator,
+{
+    type ElemType = I::ElemType;
     type Item = <I as SerialIterator>::Item;
     fn next(&mut self) -> Option<Self::Item> {
         let res = self.iter.next()?;
-        self.iter.advance_index(self.step_size-1);
+        self.iter.advance_index(self.step_size - 1);
         Some(res)
     }
-    fn advance_index(&mut self, count: usize){
-        self.iter.advance_index(count*self.step_size);
+    fn advance_index(&mut self, count: usize) {
+        self.iter.advance_index(count * self.step_size);
     }
-    fn array(&self) -> LamellarArray<Self::ElemType>{
+    fn array(&self) -> LamellarArray<Self::ElemType> {
         self.iter.array()
     }
 }

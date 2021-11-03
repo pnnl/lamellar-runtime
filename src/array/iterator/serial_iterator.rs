@@ -1,6 +1,3 @@
-
-
-
 mod copied_chunks;
 use copied_chunks::*;
 
@@ -11,8 +8,8 @@ mod step_by;
 use step_by::*;
 
 use crate::memregion::Dist;
-use crate::LamellarTeamRT;
 use crate::LamellarArray;
+use crate::LamellarTeamRT;
 use crate::LocalMemoryRegion;
 
 use std::marker::PhantomData;
@@ -25,36 +22,48 @@ pub trait SerialIterator {
     fn next(&mut self) -> Option<Self::Item>;
     fn advance_index(&mut self, count: usize);
     fn array(&self) -> LamellarArray<Self::ElemType>;
-    fn copied_chunks(self, chunk_size: usize) -> CopiedChunks<Self> where Self: Sized {
-        CopiedChunks::new(self,chunk_size)
+    fn copied_chunks(self, chunk_size: usize) -> CopiedChunks<Self>
+    where
+        Self: Sized,
+    {
+        CopiedChunks::new(self, chunk_size)
     }
-    fn ignore(self,count: usize) -> Ignore<Self>  where Self: Sized {
-        Ignore::new(self,count)
+    fn ignore(self, count: usize) -> Ignore<Self>
+    where
+        Self: Sized,
+    {
+        Ignore::new(self, count)
     }
-    fn step_by(self,step_size: usize) -> StepBy<Self>  where Self: Sized {
-        StepBy::new(self,step_size)
+    fn step_by(self, step_size: usize) -> StepBy<Self>
+    where
+        Self: Sized,
+    {
+        StepBy::new(self, step_size)
     }
-    fn into_iter(self) -> SerialIteratorIter<Self> where Self: Sized {
-        SerialIteratorIter{iter: self}
+    fn into_iter(self) -> SerialIteratorIter<Self>
+    where
+        Self: Sized,
+    {
+        SerialIteratorIter { iter: self }
     }
 }
 
-pub struct SerialIteratorIter<I>{
-    pub(crate) iter: I
+pub struct SerialIteratorIter<I> {
+    pub(crate) iter: I,
 }
 impl<I> Iterator for SerialIteratorIter<I>
 where
-    I: SerialIterator,{
+    I: SerialIterator,
+{
     type Item = <I as SerialIterator>::Item;
     fn next(&mut self) -> Option<Self::Item> {
         self.iter.next()
     }
 }
 
-
 pub struct LamellarArrayIter<
-'a,
-T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static,
+    'a,
+    T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static,
 > {
     array: LamellarArray<T>,
     buf_0: LocalMemoryRegion<T>,
@@ -65,17 +74,17 @@ T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static,
     _marker: PhantomData<&'a T>,
 }
 
-unsafe impl<
-'a,
-T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static,
-> Sync for LamellarArrayIter<'a,T> {}
-unsafe impl<
-'a,
-T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static,
-> Send for LamellarArrayIter<'a,T> {}
+unsafe impl<'a, T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Sync
+    for LamellarArrayIter<'a, T>
+{
+}
+unsafe impl<'a, T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Send
+    for LamellarArrayIter<'a, T>
+{
+}
 
 impl<'a, T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static>
-LamellarArrayIter<'a, T>
+    LamellarArrayIter<'a, T>
 {
     pub(crate) fn new(
         array: LamellarArray<T>,
@@ -137,8 +146,9 @@ LamellarArrayIter<'a, T>
     // }
 }
 
-impl<'a, T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> SerialIterator for
-LamellarArrayIter<'a, T> {
+impl<'a, T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> SerialIterator
+    for LamellarArrayIter<'a, T>
+{
     type ElemType = T;
     type Item = &'a T;
     fn next(&mut self) -> Option<Self::Item> {
@@ -162,7 +172,7 @@ LamellarArrayIter<'a, T> {
         };
         res
     }
-    fn advance_index(&mut self, count: usize){
+    fn advance_index(&mut self, count: usize) {
         self.index += count;
         self.buf_index = self.index;
         self.fill_buffer(0);
@@ -171,8 +181,6 @@ LamellarArrayIter<'a, T> {
         self.array.clone()
     }
 }
-
-
 
 // impl<'a, T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Iterator
 // for LamellarArrayIter<'a, T>
@@ -216,4 +224,3 @@ LamellarArrayIter<'a, T> {
 //     res
 // }
 // }
-

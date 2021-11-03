@@ -126,7 +126,7 @@ impl RegisteredActiveMessages {
         func_size: usize,
         func_id: AmId,
         req_data: Arc<ReqData>,
-        world: Arc<LamellarTeam>
+        world: Arc<LamellarTeam>,
     ) {
         // println!("adding req {:?} {:?}",func_id,func_size);
 
@@ -218,17 +218,19 @@ impl RegisteredActiveMessages {
                     let mut data = req_data
                         .lamellae
                         .serialize_header(header.clone(), total_size);
-                    while let Err(err) = data{
+                    while let Err(err) = data {
                         // println!("ram 222 need to alloc memory");
                         async_std::task::yield_now().await;
-                        match err.downcast_ref::<AllocError>(){
-                            Some(AllocError::OutOfMemoryError(_)) => world.alloc_new_pool(total_size*2).await,
-                            _ => panic!("unhanlded error!! {:?}",err)
+                        match err.downcast_ref::<AllocError>() {
+                            Some(AllocError::OutOfMemoryError(_)) => {
+                                world.alloc_new_pool(total_size * 2).await
+                            }
+                            _ => panic!("unhanlded error!! {:?}", err),
                         }
                         data = req_data
-                        .lamellae
-                        .serialize_header(header.clone(), total_size);
-                        // println!("ram 230 data: {:?}",data.is_ok()); 
+                            .lamellae
+                            .serialize_header(header.clone(), total_size);
+                        // println!("ram 230 data: {:?}",data.is_ok());
                     }
                     let data = data.unwrap();
                     let data_slice = data.data_as_bytes();
@@ -422,8 +424,8 @@ impl RegisteredActiveMessages {
         func_size: usize,
         func_id: AmId,
         req_data: Arc<ReqData>,
-        world: Arc<LamellarTeam>
-    )  {
+        world: Arc<LamellarTeam>,
+    ) {
         let batch_id = if let Some(batch_id) = &req_data.batch_id {
             *batch_id
         } else {
@@ -443,17 +445,17 @@ impl RegisteredActiveMessages {
         let mut data = req_data
             .lamellae
             .serialize_header(header.clone(), func_size);
-        while let Err(err) = data{
+        while let Err(err) = data {
             async_std::task::yield_now().await;
             // println!("ram 446 need to alloc memory");
-            match err.downcast_ref::<AllocError>(){
-                Some(AllocError::OutOfMemoryError(_)) => world.alloc_new_pool(func_size*2).await,
-                _ => panic!("unhanlded error!! {:?}",err)
-            }   
+            match err.downcast_ref::<AllocError>() {
+                Some(AllocError::OutOfMemoryError(_)) => world.alloc_new_pool(func_size * 2).await,
+                _ => panic!("unhanlded error!! {:?}", err),
+            }
             data = req_data
-            .lamellae
-            .serialize_header(header.clone(), func_size);
-            // println!("ram 454 data: {:?}",data.is_ok());                 
+                .lamellae
+                .serialize_header(header.clone(), func_size);
+            // println!("ram 454 data: {:?}",data.is_ok());
         }
         let data = data.unwrap();
         let data_slice = data.data_as_bytes();
@@ -506,7 +508,12 @@ impl RegisteredActiveMessages {
             .await;
     }
 
-    pub(crate) async fn process_am_req(&self, mut req_data: ReqData, world: Arc<LamellarTeam>, team: Arc<LamellarTeam>) {
+    pub(crate) async fn process_am_req(
+        &self,
+        mut req_data: ReqData,
+        world: Arc<LamellarTeam>,
+        team: Arc<LamellarTeam>,
+    ) {
         let my_team_pe = if let Ok(my_pe) = req_data.team.arch.team_pe(req_data.src) {
             Some(my_pe)
         } else {
@@ -519,7 +526,7 @@ impl RegisteredActiveMessages {
         if req_data.dst == my_world_pe && my_team_pe != None || req_data.team.num_pes() == 1 {
             // println!("[{:?}] single local request ", my_team_pe);
 
-            RegisteredActiveMessages::exec_local(Arc::new(req_data),world,team).await;
+            RegisteredActiveMessages::exec_local(Arc::new(req_data), world, team).await;
         } else {
             // println!("precessing req cmd {:?}",req_data.cmd);
             let (func_id, func_size, cmd) = match &req_data.func {
@@ -581,27 +588,38 @@ impl RegisteredActiveMessages {
             let req_data = if func_size <= 10000 {
                 req_data.cmd = cmd;
                 let req_data = Arc::new(req_data);
-                self.add_req_to_batch(req_data.func.clone(), func_size, func_id, req_data.clone(),world.clone()); //,Cmd::BatchedMsg);
+                self.add_req_to_batch(
+                    req_data.func.clone(),
+                    func_size,
+                    func_id,
+                    req_data.clone(),
+                    world.clone(),
+                ); //,Cmd::BatchedMsg);
                 req_data
             } else {
                 let req_data = Arc::new(req_data);
-                self.send_req(req_data.func.clone(), func_size, func_id, req_data.clone(),world.clone()).await;
-                
-                    
+                self.send_req(
+                    req_data.func.clone(),
+                    func_size,
+                    func_id,
+                    req_data.clone(),
+                    world.clone(),
+                )
+                .await;
+
                 req_data
             };
 
             if req_data.dst == None && my_team_pe != None {
                 self.scheduler.submit_task(async move {
-                    RegisteredActiveMessages::exec_local(req_data,world,team).await;
+                    RegisteredActiveMessages::exec_local(req_data, world, team).await;
                 });
             }
         }
     }
 
     #[async_recursion]
-    async fn exec_local(req_data: Arc<ReqData>,world: Arc<LamellarTeam>, team: Arc<LamellarTeam>) {
-        
+    async fn exec_local(req_data: Arc<ReqData>, world: Arc<LamellarTeam>, team: Arc<LamellarTeam>) {
         match req_data.func.clone() {
             LamellarFunc::Am(func) => {
                 // println!("execing remote am locally");
@@ -627,7 +645,7 @@ impl RegisteredActiveMessages {
                     LamellarReturn::LocalAm(am) => {
                         // println!("local am am return");
                         let req_data = Arc::new(req_data.copy_with_func(am));
-                        RegisteredActiveMessages::exec_local(req_data,world,team).await;
+                        RegisteredActiveMessages::exec_local(req_data, world, team).await;
                         // exec_return_am(ame, msg, am, ireq, world, team).await;
                     }
                     LamellarReturn::Unit => {
@@ -673,7 +691,7 @@ impl RegisteredActiveMessages {
                     LamellarReturn::LocalAm(am) => {
                         // println!("local am am return");
                         let req_data = Arc::new(req_data.copy_with_func(am));
-                        RegisteredActiveMessages::exec_local(req_data,world,team).await;
+                        RegisteredActiveMessages::exec_local(req_data, world, team).await;
                         // exec_return_am(ame, msg, am, ireq, world, team).await;
                     }
                     LamellarReturn::Unit => {
@@ -821,7 +839,9 @@ impl RegisteredActiveMessages {
                         BATCHED_UNIT_ID => {
                             self.process_batched_unit_return(batch_id, msg.src, team.team.clone())
                         }
-                        UNIT_ID => self.process_unit_return(msg.src, batched_data, team.team.clone()),
+                        UNIT_ID => {
+                            self.process_unit_return(msg.src, batched_data, team.team.clone())
+                        }
                         REMOTE_DATA_ID => self.process_data_return(msg, sub_data, team.clone()),
                         BATCHED_REMOTE_DATA_ID => self.process_batched_data_return(
                             batch_id,
@@ -1050,7 +1070,7 @@ impl RegisteredActiveMessages {
                         team: team_clone.team.clone(),
                         team_hash: team_hash,
                     });
-                    RegisteredActiveMessages::exec_local(req_data,world_clone,team_clone).await;
+                    RegisteredActiveMessages::exec_local(req_data, world_clone, team_clone).await;
                 });
                 if cnt.fetch_sub(1, Ordering::Relaxed) == 1 {
                     reqs.remove(&batch_req_id);
@@ -1087,7 +1107,7 @@ impl RegisteredActiveMessages {
                         team: team.team.clone(),
                         team_hash: team_hash,
                     });
-                    RegisteredActiveMessages::exec_local(req_data,world,team).await;
+                    RegisteredActiveMessages::exec_local(req_data, world, team).await;
                 });
                 cur_req += 1;
             }

@@ -1,4 +1,3 @@
-
 mod chunks;
 mod enumerate;
 mod ignore;
@@ -14,8 +13,8 @@ use take::*;
 use crate::memregion::Dist;
 use crate::LamellarArray;
 
-use std::marker::PhantomData;
 use futures::Future;
+use std::marker::PhantomData;
 
 pub trait DistIteratorLauncher {
     fn for_each<I, F>(&self, iter: &I, op: F)
@@ -40,29 +39,26 @@ pub trait DistributedIterator: Sync + Send + Clone {
     fn array(&self) -> Self::Array;
     fn next(&mut self) -> Option<Self::Item>;
     fn elems(&self, in_elems: usize) -> usize;
-    fn global_index(&self,index: usize) -> usize;
+    fn global_index(&self, index: usize) -> usize;
     fn chunk_size(&self) -> usize;
-    fn advance_index(&mut self,count: usize);
-    
+    fn advance_index(&mut self, count: usize);
+
     fn enumerate(self) -> Enumerate<Self> {
         Enumerate::new(self, 0)
     }
-    fn chunks(self,size: usize) -> Chunks<Self>{
-        Chunks::new(self,0,0,size)
+    fn chunks(self, size: usize) -> Chunks<Self> {
+        Chunks::new(self, 0, 0, size)
     }
-    fn ignore(self,count: usize) -> Ignore<Self>{
+    fn ignore(self, count: usize) -> Ignore<Self> {
         Ignore::new(self, count)
     }
     fn step_by(self, step_size: usize) -> StepBy<Self> {
-        StepBy::new(self,step_size)
+        StepBy::new(self, step_size)
     }
-    fn take(self,count: usize) -> Take<Self>{
+    fn take(self, count: usize) -> Take<Self> {
         Take::new(self, count)
     }
-    
 }
-
-
 
 #[derive(Clone)]
 pub struct DistIter<'a, T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> {
@@ -73,9 +69,14 @@ pub struct DistIter<'a, T: Dist + serde::ser::Serialize + serde::de::Deserialize
 }
 
 impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> DistIter<'_, T> {
-    pub(crate) fn new(data: LamellarArray<T>, cur_i: usize, cnt: usize,) -> Self {
+    pub(crate) fn new(data: LamellarArray<T>, cur_i: usize, cnt: usize) -> Self {
         // println!("new dist iter {:?} {:? } {:?}",cur_i, cnt, cur_i+cnt);
-        DistIter { data, cur_i, end_i: cur_i+cnt, _marker: PhantomData }
+        DistIter {
+            data,
+            cur_i,
+            end_i: cur_i + cnt,
+            _marker: PhantomData,
+        }
     }
 }
 
@@ -105,8 +106,8 @@ impl<'a, T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'a> Dis
         // println!("init dist iter start_i: {:?} cnt {:?} end_i: {:?} max_i: {:?}",start_i,cnt, start_i+cnt,max_i);
         DistIter {
             data: self.data.clone(),
-            cur_i: std::cmp::min(start_i,max_i),
-            end_i: std::cmp::min(start_i+cnt,max_i),
+            cur_i: std::cmp::min(start_i, max_i),
+            end_i: std::cmp::min(start_i + cnt, max_i),
             _marker: PhantomData,
         }
     }
@@ -127,20 +128,20 @@ impl<'a, T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'a> Dis
             None
         }
     }
-    fn elems(&self, in_elems: usize) -> usize{
+    fn elems(&self, in_elems: usize) -> usize {
         // println!("dist iter elems {:?}",in_elems);
         in_elems
     }
-    fn global_index(&self, index: usize) -> usize {        
-        let g_index = self.data.global_index_from_local(index,1);
+    fn global_index(&self, index: usize) -> usize {
+        let g_index = self.data.global_index_from_local(index, 1);
         // println!("dist_iter index: {:?} global_index {:?}", index,g_index);
         g_index
     }
     fn chunk_size(&self) -> usize {
         1
     }
-    fn advance_index(&mut self,count: usize){
-        self.cur_i = std::cmp::min(self.cur_i+count,self.end_i);
+    fn advance_index(&mut self, count: usize) {
+        self.cur_i = std::cmp::min(self.cur_i + count, self.end_i);
     }
 }
 
@@ -154,8 +155,13 @@ pub struct DistIterMut<'a, T: Dist + serde::ser::Serialize + serde::de::Deserial
 }
 
 impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> DistIterMut<'_, T> {
-    pub(crate) fn new(data: LamellarArray<T>, cur_i: usize, cnt: usize,) -> Self {
-        DistIterMut { data, cur_i, end_i: cur_i + cnt, _marker: PhantomData }
+    pub(crate) fn new(data: LamellarArray<T>, cur_i: usize, cnt: usize) -> Self {
+        DistIterMut {
+            data,
+            cur_i,
+            end_i: cur_i + cnt,
+            _marker: PhantomData,
+        }
     }
 }
 
@@ -186,8 +192,8 @@ impl<'a, T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'a> Dis
         // println!("dist iter init {:?} {:?} {:?}",start_i,end_i,max_i);
         DistIterMut {
             data: self.data.clone(),
-            cur_i: std::cmp::min(start_i,max_i),
-            end_i: std::cmp::min(start_i+cnt,max_i),
+            cur_i: std::cmp::min(start_i, max_i),
+            end_i: std::cmp::min(start_i + cnt, max_i),
             _marker: PhantomData,
         }
     }
@@ -209,18 +215,18 @@ impl<'a, T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'a> Dis
             None
         }
     }
-    fn elems(&self, in_elems: usize) -> usize{
+    fn elems(&self, in_elems: usize) -> usize {
         in_elems
     }
     fn global_index(&self, index: usize) -> usize {
-        let g_index = self.data.global_index_from_local(index,1);
+        let g_index = self.data.global_index_from_local(index, 1);
         // println!("dist_iter index: {:?} global_index {:?}", index,g_index);
         g_index
     }
     fn chunk_size(&self) -> usize {
         1
     }
-    fn advance_index(&mut self,count: usize){
-        self.cur_i = std::cmp::min(self.cur_i+count,self.end_i);
+    fn advance_index(&mut self, count: usize) {
+        self.cur_i = std::cmp::min(self.cur_i + count, self.end_i);
     }
 }

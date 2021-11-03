@@ -5,7 +5,7 @@ use crate::lamellae::{
 };
 use crate::lamellar_alloc::{BTreeAlloc, LamellarAlloc};
 
-use parking_lot::{RwLock};
+use parking_lot::RwLock;
 use shared_memory::*;
 use std::collections::HashMap;
 use std::env;
@@ -256,7 +256,7 @@ impl ShmemAlloc {
 pub(crate) struct ShmemComm {
     // _shmem: MyShmem, //the global handle
     pub(crate) base_address: Arc<RwLock<usize>>, //start address of my segment
-    _size: usize,                                 //size of my segment
+    _size: usize,                                //size of my segment
     alloc: RwLock<Vec<BTreeAlloc>>,
     _init: AtomicBool,
     pub(crate) num_pes: usize,
@@ -306,7 +306,7 @@ impl ShmemComm {
         // let mem_per_pe = SHMEM_SIZE.load(Ordering::SeqCst)/num_pes;
         let cmd_q_mem = CommandQueue::mem_per_pe() * num_pes;
         let total_mem = cmd_q_mem + RT_MEM + SHMEM_SIZE.load(Ordering::SeqCst);
-        let mem_per_pe = total_mem;// / num_pes;
+        let mem_per_pe = total_mem; // / num_pes;
 
         let alloc = ShmemAlloc::new(num_pes, my_pe, job_id);
         // let shmem = attach_to_shmem(SHMEM_SIZE.load(Ordering::SeqCst),"main",job_id,my_pe==0);
@@ -355,42 +355,50 @@ impl CommOps for ShmemComm {
     fn occupied(&self) -> usize {
         let mut occupied = 0;
         let allocs = self.alloc.read();
-        for alloc in allocs.iter(){
+        for alloc in allocs.iter() {
             occupied += alloc.occupied();
         }
         occupied
     }
 
-    fn num_pool_allocs(&self) -> usize{
+    fn num_pool_allocs(&self) -> usize {
         self.alloc.read().len()
     }
 
-    fn print_pools(&self){
+    fn print_pools(&self) {
         let allocs = self.alloc.read();
-        println!("num_pools {:?}",allocs.len());
-        for alloc in allocs.iter(){
-            println!("{:x} {:?} {:?} {:?}",alloc.start_addr,alloc.max_size,alloc.occupied(),alloc.space_avail());
+        println!("num_pools {:?}", allocs.len());
+        for alloc in allocs.iter() {
+            println!(
+                "{:x} {:?} {:?} {:?}",
+                alloc.start_addr,
+                alloc.max_size,
+                alloc.occupied(),
+                alloc.space_avail()
+            );
         }
     }
-    fn alloc_pool(&self, min_size: usize){
+    fn alloc_pool(&self, min_size: usize) {
         let mut allocs = self.alloc.write();
-        let size = std::cmp::max(min_size*2*self.num_pes,SHMEM_SIZE.load(Ordering::SeqCst))/self.num_pes;
-        if let Ok(addr) = self.alloc(size,AllocationType::Global){
+        let size = std::cmp::max(
+            min_size * 2 * self.num_pes,
+            SHMEM_SIZE.load(Ordering::SeqCst),
+        ) / self.num_pes;
+        if let Ok(addr) = self.alloc(size, AllocationType::Global) {
             // println!("addr: {:x} - {:x}",addr, addr+size);
             let mut new_alloc = BTreeAlloc::new("shmem".to_string());
-            new_alloc.init(addr,size);
+            new_alloc.init(addr, size);
             allocs.push(new_alloc)
-        }
-        else{
+        } else {
             panic!("[Error] out of system memory");
         }
     }
 
     fn rt_alloc(&self, size: usize) -> AllocResult<usize> {
         let allocs = self.alloc.read();
-        for alloc in allocs.iter(){
+        for alloc in allocs.iter() {
             if let Some(addr) = alloc.try_malloc(size) {
-                return Ok(addr)
+                return Ok(addr);
             }
             // println!("size: {:?} remaining {:?} occupied {:?} len {:?}",size, alloc.space_avail(),alloc.occupied(),allocs.len());
         }
@@ -405,8 +413,8 @@ impl CommOps for ShmemComm {
 
     fn rt_check_alloc(&self, size: usize) -> bool {
         let allocs = self.alloc.read();
-        for alloc in allocs.iter(){
-            if alloc.fake_malloc(size){
+        for alloc in allocs.iter() {
+            if alloc.fake_malloc(size) {
                 return true;
             }
         }
@@ -414,12 +422,12 @@ impl CommOps for ShmemComm {
     }
     fn rt_free(&self, addr: usize) {
         let allocs = self.alloc.read();
-        for alloc in allocs.iter(){
-            if let Ok(_) = alloc.free(addr){
+        for alloc in allocs.iter() {
+            if let Ok(_) = alloc.free(addr) {
                 return;
             }
         }
-        panic!("Error invalid free! {:?}",addr);
+        panic!("Error invalid free! {:?}", addr);
     }
 
     fn alloc(&self, size: usize, alloc_type: AllocationType) -> AllocResult<usize> {
@@ -464,17 +472,14 @@ impl CommOps for ShmemComm {
     fn local_addr(&self, remote_pe: usize, remote_addr: usize) -> usize {
         let alloc = self.alloc_lock.read();
         for (addr, (shmem, size, addrs)) in alloc.0.iter() {
-            
-            if let Some(data) = addrs.get(&remote_pe){
-                if data.0 <= remote_addr && remote_addr < data.0 + shmem.len(){
-                    let remote_offset =
-                        remote_addr - (data.0 + size * data.1);
+            if let Some(data) = addrs.get(&remote_pe) {
+                if data.0 <= remote_addr && remote_addr < data.0 + shmem.len() {
+                    let remote_offset = remote_addr - (data.0 + size * data.1);
                     // println!("{:?} {:?} {:?}",addr,remote_offset,addr + remote_offset);
                     return addr + remote_offset;
                 }
             }
             // println!("1-- addr {:?} remote_addr {:?} base_addr( {:?}, {:?} ) top_addr( {:?}, {:?} ) {:?} {:?}",addr,remote_addr,shmem.base_addr(),addrs[remote_pe],shmem.base_addr()+shmem.len(),addrs[remote_pe] + shmem.len(),addrs[remote_pe] <= remote_addr , remote_addr < addrs[remote_pe] + shmem.len());
-            
         }
         // println!();
         // for (addr,(shmem,_,addrs)) in alloc.0.iter(){
@@ -549,13 +554,13 @@ impl CommOps for ShmemComm {
     }
 }
 
-impl Drop for ShmemComm{
-    fn drop(&mut self){
+impl Drop for ShmemComm {
+    fn drop(&mut self) {
         // let allocs = self.alloc.read();
         // for alloc in allocs.iter(){
         //     println!("dropping shmem -- memory in use {:?}", alloc.occupied());
         // }
-        if self.occupied() > 0{
+        if self.occupied() > 0 {
             println!("dropping rofi -- memory in use {:?}", self.occupied());
         }
         if self.alloc.read().len() > 1 {
@@ -575,7 +580,7 @@ pub(crate) struct ShmemData {
 }
 
 impl ShmemData {
-    pub fn new(shmem_comm: Arc<Comm>, size: usize) -> Result<ShmemData,anyhow::Error> {
+    pub fn new(shmem_comm: Arc<Comm>, size: usize) -> Result<ShmemData, anyhow::Error> {
         let ref_cnt_size = std::mem::size_of::<AtomicUsize>();
         let alloc_size = size + ref_cnt_size; //+  std::mem::size_of::<u64>();
         let relative_addr = shmem_comm.rt_alloc(alloc_size)?;
@@ -680,8 +685,7 @@ impl Drop for ShmemData {
     fn drop(&mut self) {
         let cnt = unsafe { (*(self.addr as *const AtomicUsize)).fetch_sub(1, Ordering::SeqCst) };
         if cnt == 1 {
-            self.shmem_comm
-                .rt_free(self.addr);
+            self.shmem_comm.rt_free(self.addr);
         }
     }
 }

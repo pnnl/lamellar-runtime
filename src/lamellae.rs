@@ -11,8 +11,8 @@ use enum_dispatch::enum_dispatch;
 
 pub(crate) mod comm;
 pub(crate) mod command_queues;
-use comm::Comm;
 use comm::AllocResult;
+use comm::Comm;
 
 pub(crate) mod local_lamellae;
 use local_lamellae::{Local, LocalData};
@@ -62,7 +62,7 @@ fn default_backend() -> Backend {
                 return Backend::Rofi;
                 #[cfg(not(feature = "enable-rofi"))]
                 panic!("unable to set rofi backend, recompile with 'enable-rofi' feature")
-            },
+            }
             "shmem" => return Backend::Shmem,
             _ => return Backend::Local,
         },
@@ -122,7 +122,6 @@ pub(crate) trait LamellaeInit {
     fn init_lamellae(&mut self, scheduler: Arc<Scheduler>) -> Arc<Lamellae>;
 }
 
-
 // #[async_trait]
 #[enum_dispatch]
 pub(crate) trait Ser {
@@ -179,7 +178,7 @@ pub(crate) trait LamellaeRDMA: Send + Sync {
     fn put_all(&self, src: &[u8], dst: usize);
     fn get(&self, pe: usize, src: usize, dst: &mut [u8]);
     fn rt_alloc(&self, size: usize) -> AllocResult<usize>;
-    fn rt_check_alloc(&self,size: usize) -> bool;
+    fn rt_check_alloc(&self, size: usize) -> bool;
     fn rt_free(&self, addr: usize);
     fn alloc(&self, size: usize, alloc: AllocationType) -> AllocResult<usize>;
     fn free(&self, addr: usize);
@@ -187,7 +186,7 @@ pub(crate) trait LamellaeRDMA: Send + Sync {
     fn local_addr(&self, remote_pe: usize, remote_addr: usize) -> usize;
     fn remote_addr(&self, remote_pe: usize, local_addr: usize) -> usize;
     fn occupied(&self) -> usize;
-    fn num_pool_allocs(&self) -> usize; 
+    fn num_pool_allocs(&self) -> usize;
     fn alloc_pool(&self, min_size: usize);
 }
 

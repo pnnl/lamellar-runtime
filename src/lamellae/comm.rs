@@ -9,27 +9,19 @@ use enum_dispatch::enum_dispatch;
 use std::sync::Arc;
 
 #[derive(Debug, Clone, Copy)]
-pub enum AllocError{
+pub enum AllocError {
     OutOfMemoryError(usize),
     IdError(usize),
 }
 
 impl std::fmt::Display for AllocError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match self{
+        match self {
             AllocError::OutOfMemoryError(size) => {
-                write!(
-                    f,
-                    "not enough memory for to allocate {} bytes",
-                    size
-                )
-            },
+                write!(f, "not enough memory for to allocate {} bytes", size)
+            }
             AllocError::IdError(pe) => {
-                write!(
-                    f,
-                    "pe {} must be part of team of sub allocation",
-                    pe
-                )
+                write!(f, "pe {} must be part of team of sub allocation", pe)
             }
         }
     }
@@ -37,7 +29,7 @@ impl std::fmt::Display for AllocError {
 
 impl std::error::Error for AllocError {}
 
-pub(crate) type AllocResult<T> = Result<T,AllocError>;
+pub(crate) type AllocResult<T> = Result<T, AllocError>;
 
 pub(crate) trait Remote:
     serde::ser::Serialize + serde::de::DeserializeOwned + std::clone::Clone + Send + Sync
@@ -56,7 +48,10 @@ pub(crate) enum Comm {
 }
 
 impl Comm {
-    pub(crate) fn new_serialized_data(self: &Arc<Comm>, size: usize) -> Result<SerializedData,anyhow::Error> {
+    pub(crate) fn new_serialized_data(
+        self: &Arc<Comm>,
+        size: usize,
+    ) -> Result<SerializedData, anyhow::Error> {
         match self.as_ref() {
             #[cfg(feature = "enable-rofi")]
             Comm::Rofi(_) => Ok(RofiData::new(self.clone(), size)?.into()),
@@ -72,7 +67,7 @@ pub(crate) trait CommOps {
     fn num_pes(&self) -> usize;
     fn barrier(&self);
     fn occupied(&self) -> usize;
-    fn num_pool_allocs(&self) -> usize; 
+    fn num_pool_allocs(&self) -> usize;
     fn print_pools(&self);
     fn alloc_pool(&self, min_size: usize);
     fn rt_alloc(&self, size: usize) -> AllocResult<usize>;

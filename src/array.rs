@@ -1,12 +1,10 @@
 use crate::{active_messaging::*, LamellarTeamRT}; //{ActiveMessaging,AMCounters,Cmd,Msg,LamellarAny,LamellarLocal};
-                                                                    // use crate::lamellae::Lamellae;
-                                                                    // use crate::lamellar_arch::LamellarArchRT;
+                                                  // use crate::lamellae::Lamellae;
+                                                  // use crate::lamellar_arch::LamellarArchRT;
 use crate::lamellar_request::LamellarRequest;
 use crate::memregion::{
     local::LocalMemoryRegion, shared::SharedMemoryRegion, Dist, LamellarMemoryRegion,
 };
-
-
 
 use enum_dispatch::enum_dispatch;
 use futures_lite::Future;
@@ -18,12 +16,9 @@ pub use r#unsafe::UnsafeArray;
 
 pub mod iterator;
 pub use iterator::distributed_iterator::DistributedIterator;
-pub use iterator::serial_iterator::{SerialIterator,SerialIteratorIter};
-use iterator::distributed_iterator::{DistIter,DistIterMut,DistIteratorLauncher};
-use iterator::serial_iterator::{LamellarArrayIter};
-
-
-
+use iterator::distributed_iterator::{DistIter, DistIterMut, DistIteratorLauncher};
+use iterator::serial_iterator::LamellarArrayIter;
+pub use iterator::serial_iterator::{SerialIterator, SerialIteratorIter};
 
 pub(crate) type ReduceGen =
     fn(LamellarArray<u8>, usize) -> Arc<dyn RemoteActiveMessage + Send + Sync>;
@@ -131,7 +126,11 @@ where
 }
 
 pub trait ArrayOps<T> {
-    fn add(&self, index: usize, val: T) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>>;
+    fn add(
+        &self,
+        index: usize,
+        val: T,
+    ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>>;
 }
 
 pub trait SubArray<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> {
@@ -145,7 +144,7 @@ pub enum LamellarArray<T: Dist + serde::ser::Serialize + serde::de::DeserializeO
     UnsafeArray(UnsafeArray<T>),
 }
 impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> LamellarArray<T> {
-    pub fn len(&self) -> usize{
+    pub fn len(&self) -> usize {
         match self {
             LamellarArray::UnsafeArray(inner) => inner.len(),
         }
@@ -178,9 +177,9 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> La
             LamellarArray::UnsafeArray(inner) => inner.get(index, buf),
         }
     }
-    pub fn at(&self,index: usize) -> T{
+    pub fn at(&self, index: usize) -> T {
         let buf: LocalMemoryRegion<T> = self.team().alloc_local_mem_region(1);
-        self.get(index,&buf);
+        self.get(index, &buf);
         buf.as_slice().unwrap()[0].clone()
     }
     pub(crate) fn local_as_ptr(&self) -> *const T {
@@ -300,7 +299,7 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Di
     }
     fn global_index_from_local(&self, index: usize, chunk_size: usize) -> usize {
         match self {
-            LamellarArray::UnsafeArray(inner) => inner.global_index_from_local(index,chunk_size),
+            LamellarArray::UnsafeArray(inner) => inner.global_index_from_local(index, chunk_size),
         }
     }
 }
@@ -324,7 +323,7 @@ where
 {
     fn exec(&self) {
         // println!("in for each");
-        let mut iter = self.data.init(self.start_i, self.end_i-self.start_i);
+        let mut iter = self.data.init(self.start_i, self.end_i - self.start_i);
         while let Some(elem) = iter.next() {
             (&self.op)(elem)
         }
@@ -351,7 +350,7 @@ where
     Fut: Future<Output = ()> + Sync + Send + 'static,
 {
     fn exec(&self) {
-        let mut iter = self.data.init(self.start_i, self.end_i-self.start_i);
+        let mut iter = self.data.init(self.start_i, self.end_i - self.start_i);
         while let Some(elem) = iter.next() {
             (&self.op)(elem).await;
         }
@@ -364,14 +363,13 @@ pub trait LamellarArrayRDMA<T: Dist + serde::ser::Serialize + serde::de::Deseria
     fn len(&self) -> usize;
     fn put<U: MyInto<LamellarArrayInput<T>>>(&self, index: usize, buf: U);
     fn get<U: MyInto<LamellarArrayInput<T>>>(&self, index: usize, buf: U);
-    fn at(&self,index: usize) -> T;
+    fn at(&self, index: usize) -> T;
     fn local_as_slice(&self) -> &[T];
     fn local_as_mut_slice(&self) -> &mut [T];
     fn to_base<B: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static>(
         self,
     ) -> LamellarArray<B>;
 }
-
 
 pub trait LamellarArrayReduce<T>: LamellarArrayRDMA<T>
 where
@@ -391,6 +389,8 @@ impl<'a, T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static
     type Item = &'a T;
     type IntoIter = SerialIteratorIter<LamellarArrayIter<'a, T>>;
     fn into_iter(self) -> Self::IntoIter {
-        SerialIteratorIter{ iter: self.ser_iter()}
+        SerialIteratorIter {
+            iter: self.ser_iter(),
+        }
     }
 }

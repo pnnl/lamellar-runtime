@@ -1,4 +1,4 @@
-use lamellar::array::{DistributedIterator,SerialIterator, Distribution, UnsafeArray};
+use lamellar::array::{DistributedIterator, Distribution, SerialIterator, UnsafeArray};
 use lamellar::LamellarWorld;
 
 const ARRAY_LEN: usize = 100;
@@ -23,7 +23,9 @@ fn main() {
     // we currently provide the "for_each" driver which will execute a closure on every element in the distributed array (concurrently)
 
     //for example lets initialize our arrays, where we store the value of my_pe to each local element a pe owns
-    block_dist_iter.enumerate().for_each(move |(i,elem)| *elem = i);
+    block_dist_iter
+        .enumerate()
+        .for_each(move |(i, elem)| *elem = i);
     cyclic_dist_iter.for_each(move |elem| *elem = my_pe);
     //for_each is asynchronous so we must wait on the array for the operations to complete
     // we are working on providing a request handle which can be used to check for completion
@@ -79,7 +81,7 @@ fn main() {
         .dist_iter()
         .chunks(7)
         .enumerate()
-        .for_each(move |(i,chunk)| {
+        .for_each(move |(i, chunk)| {
             let data = chunk.collect::<Vec<_>>();
             println!(
                 "[pe({:?})-{:?}] chunk {:?} {:?}",
@@ -145,7 +147,12 @@ fn main() {
     // and then puts the appropriate date based on the iteration index into that region
 
     if my_pe == 0 {
-        for chunk in block_array.ser_iter().copied_chunks(10).ignore(4).into_iter() {
+        for chunk in block_array
+            .ser_iter()
+            .copied_chunks(10)
+            .ignore(4)
+            .into_iter()
+        {
             println!("{:?}", chunk.as_slice());
         }
         println!("-----");

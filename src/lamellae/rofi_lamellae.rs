@@ -1,4 +1,4 @@
-use crate::lamellae::comm::{CommOps,AllocResult};
+use crate::lamellae::comm::{AllocResult, CommOps};
 use crate::lamellae::command_queues::CommandQueue;
 use crate::lamellae::rofi::rofi_comm::{RofiComm, RofiData};
 use crate::lamellae::{
@@ -197,7 +197,7 @@ impl LamellaeRDMA for Rofi {
     fn rt_alloc(&self, size: usize) -> AllocResult<usize> {
         self.rofi_comm.rt_alloc(size)
     }
-    fn rt_check_alloc(&self, size: usize) -> bool{
+    fn rt_check_alloc(&self, size: usize) -> bool {
         self.rofi_comm.rt_check_alloc(size)
     }
     fn rt_free(&self, addr: usize) {
@@ -221,10 +221,10 @@ impl LamellaeRDMA for Rofi {
     fn occupied(&self) -> usize {
         self.rofi_comm.occupied()
     }
-    fn num_pool_allocs(&self) -> usize{
+    fn num_pool_allocs(&self) -> usize {
         self.rofi_comm.num_pool_allocs()
     }
-    fn alloc_pool(&self, min_size: usize){
+    fn alloc_pool(&self, min_size: usize) {
         self.cq.send_alloc(min_size);
     }
 }

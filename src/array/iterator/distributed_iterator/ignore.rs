@@ -2,13 +2,11 @@ use crate::array::iterator::distributed_iterator::*;
 
 use futures::Future;
 
-
 //ignores the first n elements of iterator I per pe (this implys that n * num_pes elements are ignored in total)
 #[derive(Clone)]
 pub struct Ignore<I> {
     iter: I,
     count: usize,
-
 }
 
 impl<I> Ignore<I>
@@ -19,7 +17,6 @@ where
         // println!("new Ignore {:?} ",count);
         Ignore { iter, count }
     }
-    
 }
 
 impl<I> Ignore<I>
@@ -48,11 +45,11 @@ where
     type Item = <I as DistributedIterator>::Item;
     type Array = <I as DistributedIterator>::Array;
     fn init(&self, in_start_i: usize, in_cnt: usize) -> Ignore<I> {
-        let start_i =std::cmp::max(in_start_i,self.count);
-        let end_i = std::cmp::max(start_i+in_cnt,self.count);
-        let cnt = std::cmp::min(in_cnt,end_i -start_i);
+        let start_i = std::cmp::max(in_start_i, self.count);
+        let end_i = std::cmp::max(start_i + in_cnt, self.count);
+        let cnt = std::cmp::min(in_cnt, end_i - start_i);
         // println!("init ignore in start_i: {:?} start_i {:?} in cnt {:?} cnt {:?} in end_i: {:?} end_i: {:?} count {:?}",in_start_i,start_i,in_cnt,cnt,in_start_i+in_cnt,end_i,self.count);
-        Ignore::new(self.iter.init(start_i, cnt),self.count)
+        Ignore::new(self.iter.init(start_i, cnt), self.count)
     }
     fn array(&self) -> Self::Array {
         self.iter.array()
@@ -61,10 +58,10 @@ where
         // println!("ignore next");
         self.iter.next()
     }
-    fn elems(&self, in_elems: usize) -> usize{
+    fn elems(&self, in_elems: usize) -> usize {
         let in_elems = self.iter.elems(in_elems);
         // println!("ignore elems {:?} {:?}",in_elems,std::cmp::max(0,in_elems-self.count));
-        std::cmp::max(0,in_elems-self.count)
+        std::cmp::max(0, in_elems - self.count)
     }
     fn global_index(&self, index: usize) -> usize {
         let g_index = self.iter.global_index(index);
@@ -74,7 +71,7 @@ where
     fn chunk_size(&self) -> usize {
         self.iter.chunk_size()
     }
-    fn advance_index(&mut self, count: usize){
+    fn advance_index(&mut self, count: usize) {
         self.iter.advance_index(count);
     }
 }

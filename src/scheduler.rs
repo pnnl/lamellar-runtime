@@ -1,7 +1,7 @@
 use crate::active_messaging::*;
 use crate::lamellae::{Lamellae, SerializedData};
 use crate::lamellar_request::InternalReq;
-use crate::lamellar_team::{LamellarTeamRT};
+use crate::lamellar_team::LamellarTeamRT;
 
 use enum_dispatch::enum_dispatch;
 use futures::Future;

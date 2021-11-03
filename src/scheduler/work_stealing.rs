@@ -1,7 +1,7 @@
 use crate::active_messaging::{ActiveMessageEngine, ExecType, LamellarFunc};
 use crate::lamellae::{Des, Lamellae, SerializedData};
 use crate::lamellar_request::InternalReq;
-use crate::lamellar_team::{LamellarTeamRT};
+use crate::lamellar_team::LamellarTeamRT;
 use crate::scheduler::{AmeScheduler, AmeSchedulerQueue, ReqData, SchedulerQueue};
 use lamellar_prof::*;
 // use log::trace;
@@ -116,7 +116,7 @@ pub(crate) struct WorkStealingInner {
     work_inj: Arc<crossbeam::deque::Injector<async_task::Runnable>>,
     work_stealers: Vec<crossbeam::deque::Stealer<async_task::Runnable>>,
     work_flag: Arc<AtomicU8>,
-    active: Arc<AtomicBool>,    
+    active: Arc<AtomicBool>,
     active_cnt: Arc<AtomicUsize>,
     num_tasks: Arc<AtomicUsize>,
     stall_mark: Arc<AtomicUsize>,
@@ -238,14 +238,12 @@ impl AmeSchedulerQueue for WorkStealingInner {
     fn exec_task(&self) {
         let mut rng = rand::thread_rng();
         let t = rand::distributions::Uniform::from(0..self.work_stealers.len());
-        let ret = if self.work_flag
+        let ret = if self
+            .work_flag
             .compare_exchange(0, 1, Ordering::SeqCst, Ordering::Relaxed)
             == Ok(0)
         {
-            let ret = self
-                .work_inj
-                .steal()
-                .success();
+            let ret = self.work_inj.steal().success();
             self.work_flag.store(0, Ordering::SeqCst);
             ret
         } else {
@@ -350,8 +348,6 @@ impl WorkStealingInner {
             self.work_stealers.push(work_worker.stealer());
             work_workers.push(work_worker);
         }
-
-        
 
         for _i in 0..num_workers {
             let work_worker = work_workers.pop().unwrap();

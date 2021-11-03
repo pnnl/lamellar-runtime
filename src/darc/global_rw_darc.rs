@@ -11,7 +11,7 @@ use crate::darc::{Darc, DarcInner, DarcMode, __NetworkDarc};
 use crate::lamellae::{LamellaeComm, LamellaeRDMA};
 use crate::lamellar_world::LAMELLAES;
 use crate::IdError;
-use crate::{LamellarTeam,LamellarTeamRT};
+use crate::{LamellarTeam, LamellarTeamRT};
 
 #[derive(serde::Serialize, serde::Deserialize, Debug)]
 enum LockType {
@@ -69,12 +69,10 @@ impl<T> DistRwLock<T> {
         // println!("\t{:?} read locked {:?} {:?}",pe,self.readers.load(Ordering::SeqCst),self.writer.load(Ordering::SeqCst));
     }
     async fn async_writer_lock(&self, pe: usize) {
-        while let Err(_) = self.writer.compare_exchange(
-            self.team.num_pes,
-            pe,
-            Ordering::SeqCst,
-            Ordering::SeqCst,
-        ) {
+        while let Err(_) =
+            self.writer
+                .compare_exchange(self.team.num_pes, pe, Ordering::SeqCst, Ordering::SeqCst)
+        {
             async_std::task::yield_now().await;
         }
         // println!("\t{:?} write lock checking for readers {:?} {:?}",pe,self.readers.load(Ordering::SeqCst),self.writer.load(Ordering::SeqCst));
@@ -97,12 +95,10 @@ impl<T> DistRwLock<T> {
     /// The lock must be held when calling this method.
     unsafe fn writer_unlock(&self, pe: usize) {
         // println!("\t{:?} writer unlocking {:?} {:?}",pe,self.readers.load(Ordering::SeqCst),self.writer.load(Ordering::SeqCst));
-        if let Err(val) = self.writer.compare_exchange(
-            pe,
-            self.team.num_pes,
-            Ordering::SeqCst,
-            Ordering::SeqCst,
-        ) {
+        if let Err(val) =
+            self.writer
+                .compare_exchange(pe, self.team.num_pes, Ordering::SeqCst, Ordering::SeqCst)
+        {
             panic!(
                 "should not be trying to unlock another pes lock {:?} {:?}",
                 pe, val
@@ -181,9 +177,7 @@ impl<'a, T: 'a> Drop for GlobalRwDarcReadGuard<'a, T> {
             0,
             UnlockAm {
                 rwlock_addr: remote_rwlock_addr,
-                orig_pe: team
-                    .team_pe
-                    .expect("darcs cant exist on non team members"),
+                orig_pe: team.team_pe.expect("darcs cant exist on non team members"),
                 lock_type: LockType::Read,
             },
         );
@@ -230,9 +224,7 @@ impl<'a, T: 'a> Drop for GlobalRwDarcWriteGuard<'a, T> {
             0,
             UnlockAm {
                 rwlock_addr: remote_rwlock_addr,
-                orig_pe: team
-                    .team_pe
-                    .expect("darcs cant exist on non team members"),
+                orig_pe: team.team_pe.expect("darcs cant exist on non team members"),
                 lock_type: LockType::Write,
             },
         );
@@ -332,9 +324,7 @@ impl<T> GlobalRwDarc<T> {
             0,
             LockAm {
                 rwlock_addr: remote_rwlock_addr,
-                orig_pe: team
-                    .team_pe
-                    .expect("darcs cant exist on non team members"),
+                orig_pe: team.team_pe.expect("darcs cant exist on non team members"),
                 lock_type: LockType::Read,
             },
         )
@@ -359,9 +349,7 @@ impl<T> GlobalRwDarc<T> {
             0,
             LockAm {
                 rwlock_addr: remote_rwlock_addr,
-                orig_pe: team
-                    .team_pe
-                    .expect("darcs cant exist on non team members"),
+                orig_pe: team.team_pe.expect("darcs cant exist on non team members"),
                 lock_type: LockType::Write,
             },
         )
@@ -385,9 +373,7 @@ impl<T> GlobalRwDarc<T> {
             0,
             LockAm {
                 rwlock_addr: remote_rwlock_addr,
-                orig_pe: team
-                    .team_pe
-                    .expect("darcs cant exist on non team members"),
+                orig_pe: team.team_pe.expect("darcs cant exist on non team members"),
                 lock_type: LockType::Read,
             },
         )
@@ -410,9 +396,7 @@ impl<T> GlobalRwDarc<T> {
             0,
             LockAm {
                 rwlock_addr: remote_rwlock_addr,
-                orig_pe: team
-                    .team_pe
-                    .expect("darcs cant exist on non team members"),
+                orig_pe: team.team_pe.expect("darcs cant exist on non team members"),
                 lock_type: LockType::Write,
             },
         )

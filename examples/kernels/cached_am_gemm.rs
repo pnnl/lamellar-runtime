@@ -151,7 +151,6 @@ fn do_gemm(
     c.add_mat(&res);
 }
 
-
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let elem_per_pe = args

@@ -1,6 +1,6 @@
 use crate::lamellae::{
-    AllocationType, Backend, Des, Lamellae, LamellaeAM, LamellaeComm, LamellaeInit, LamellaeRDMA,
-    Ser, SerializeHeader, SerializedData, SerializedDataOps, SubData,AllocResult
+    AllocResult, AllocationType, Backend, Des, Lamellae, LamellaeAM, LamellaeComm, LamellaeInit,
+    LamellaeRDMA, Ser, SerializeHeader, SerializedData, SerializedDataOps, SubData,
 };
 use crate::lamellar_arch::LamellarArchRT;
 use crate::scheduler::Scheduler;
@@ -160,10 +160,10 @@ impl LamellaeRDMA for Local {
         allocs.insert(data_addr, MyPtr { ptr: data_ptr });
         Ok(data_addr)
     }
-    fn rt_check_alloc(&self, _size: usize )-> bool {
+    fn rt_check_alloc(&self, _size: usize) -> bool {
         true
     }
-    
+
     fn rt_free(&self, addr: usize) {
         let mut allocs = self.allocs.lock();
         if let Some(data_ptr) = allocs.remove(&addr) {
@@ -197,12 +197,10 @@ impl LamellaeRDMA for Local {
     fn occupied(&self) -> usize {
         0
     }
-    fn num_pool_allocs(&self) -> usize{
+    fn num_pool_allocs(&self) -> usize {
         1
     }
-    fn alloc_pool(&self, _min_size: usize){
-        
-    }
+    fn alloc_pool(&self, _min_size: usize) {}
 }
 
 //#[prof]
