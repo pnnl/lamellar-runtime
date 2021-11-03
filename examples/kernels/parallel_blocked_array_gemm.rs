@@ -1,14 +1,11 @@
-/// ----------------Lamellar Gemm 1---------------------------------------------------
-/// This naive GEMM implementation performs blockwise (tiled) mat mults
-/// it does not perform any optimzation for reusing a given block
-/// a.k.a remote blocks are transfered for every sub matrix multiplication
-/// we launch active messages so that the result of a tiled mat mult
-/// is stored to the local portion of the C matrix. That is, we never transfer
-/// mat mult results over the network. To view the final matrix on a single node,
-/// we would transfer the data after the multiplication
-///
-/// matrices use row-wise distribution (i.e. all elements of a row are local to a pe,
-/// conversely this means elements of a column are distributed across pes)
+/// ----------------Lamellar Parallel Blocked Array GEMM---------------------------------------------------
+/// This performs a distributed GEMM by partitioning the global matrices (stored in LamellarArrya) 
+/// into sub matrices, and then performing GEMMS on the sub matrices.
+/// Each PE iterates of the local submatrices of the A matrix simultaneously, and thus each PE
+/// iterates over all sub matrices from the B matrix. To ensurse each submatrix of B is only 
+/// transfered to each PE once, we first iterate over B submatrices in the outer loop
+/// and then iterate over the local A submatrices in the inner loop. Finally, all updates
+/// to the C matrix are only performed locally, requiring no additional data transfer.
 ///----------------------------------------------------------------------------------
 use lamellar::ActiveMessaging;
 use lamellar::array::{DistributedIterator,SerialIterator, Distribution, UnsafeArray};
@@ -36,13 +33,14 @@ fn main() {
     //for example purposes we are multiplying square matrices
     let m = dim; //a & c rows
     let n = dim; // a cols b rows
-    let p = dim; // b & c cols
+    let p = dim; // b & c cols 
 
     let a = UnsafeArray::<f32>::new(&world, m * n, Distribution::Block);//row major
-    let b = UnsafeArray::<f32>::new(&world, m * n, Distribution::Block);//col major
-    let c = UnsafeArray::<f32>::new(&world, m * n, Distribution::Block);//row major
+    let b = UnsafeArray::<f32>::new(&world, n * p, Distribution::Block);//col major
+    let c = UnsafeArray::<f32>::new(&world, m * p, Distribution::Block);//row major
+    //initialize
     a.dist_iter_mut().enumerate().for_each(|(i,x)| *x = i as f32 );
-    b.dist_iter_mut().enumerate().for_each(move|(i,x)| {
+    b.dist_iter_mut().enumerate().for_each(move|(i,x)| { //identity matrix
         let row = i/dim;
         let col = i%dim;
         if row==col{
@@ -58,11 +56,14 @@ fn main() {
 
     let num_gops = ((2 * dim * dim * dim) - dim * dim) as f64 / 1_000_000_000.0; // accurate for square matrices
     let blocksize = dim/num_pes;
-    let m_blks = m/blocksize;
+    let m_blks = m/blocksize; //a blk row  c blk row
     let m_blks_pe = m_blks/num_pes;
-    let n_blks = n/blocksize;
-    let p_blks =  p/blocksize;
+    let n_blks = n/blocksize;//a blk col b blk col(because b is col major)
+    let p_blks =  p/blocksize;// b blk row(b is col major) c blk col
 
+    // this is a "hack" until we support something like (0..n_blks).dist_iter()
+    // we construct a global array where each pe will contain the sequence (0..n_blks)
+    // we can then call dist_iter() on this array to iterate over the range in parallel on each PE
     let nblks_array = UnsafeArray::new(&world,n_blks*num_pes,Distribution::Block);
     nblks_array.dist_iter_mut().enumerate().for_each(move |(i,x)| *x = i%n_blks );
     
@@ -70,34 +71,47 @@ fn main() {
     let a = a.clone();
     let b = b.clone();
     let c_clone = c.clone();
-    nblks_array.dist_iter_mut().for_each( move |k_blk| {        
-        for j_blk in 0..p_blks{//b_col
-            let mut b_block_vec = vec!{0.0;blocksize*blocksize};                    
-            let b_block = b.ser_iter().copied_chunks(blocksize).ignore(*k_blk*n_blks*blocksize+j_blk).step_by(n_blks).into_iter().take(blocksize).collect::<Vec<_>>();
-            for (i,row) in b_block.iter().enumerate(){
-                for (j,elem) in row.as_slice().unwrap().iter().enumerate(){
+    nblks_array.dist_iter().for_each( move |k_blk| { //iterate over the submatrix cols of b, use dist_iter() so that we can launch transfers in parallel    
+        for j_blk in 0..p_blks{// iterate over submatrix rows of b
+                              
+            let b_block = b.ser_iter() // SerialIterator (each pe will iterate through entirety of b)
+                                .copied_chunks(blocksize) //chunks columns by blocksize  -- manages efficent transfer and placement of data into a local memory region
+                                .ignore(*k_blk*n_blks*blocksize+j_blk) // skip previously transfered submatrices
+                                .step_by(n_blks) //grab chunk from next column in submatrix
+                                .into_iter() // convert to normal rust iterator
+                                .take(blocksize) // we only need to take blocksize columns
+                                .collect::<Vec<_>>(); //gather local memory regions containing each columns data
+
+            //need to store the submatrix in a contiguous memory segment for use with the MatrixMultiply library 
+            let mut b_block_vec = vec!{0.0;blocksize*blocksize}; 
+            for (j,col) in b_block.iter().enumerate(){
+                for (i,elem) in row.as_slice().unwrap().iter().enumerate(){
                     b_block_vec[j*blocksize + i] = *elem
                 }
             }
-            let b_block_vec = Arc::new(b_block_vec);
-            for i_blk in 0..m_blks_pe{//a row
+            let b_block_vec = Arc::new(b_block_vec); //we will be sharing this submatrix in multiple tasks
+            //--------------
+
+            for i_blk in 0..m_blks_pe{// iterate of the local submatrix rows of a
                 let c = c_clone.clone();
                 let b_block_vec = b_block_vec.clone();
-                a.dist_iter()
-                    .chunks(blocksize) //create blocksize vectors (across cols)
-                    .ignore(i_blk*m_blks*blocksize+*k_blk) //ignore previous row
-                    .step_by(m_blks) //ignore rest of the row
-                    .take(blocksize)// taked blocksize rows
-                    .chunks(blocksize)                            
-                    .for_each(move|a_block|{
+                a.dist_iter() //DistributedIterator (each pe will iterate through only its local data -- in parallel)
+                    .chunks(blocksize) //chunks rows by blocksize
+                    .ignore(i_blk*m_blks*blocksize+*k_blk) //ignore previously visited submatrices
+                    .step_by(m_blks) //grab chunk from the next row in submatrix
+                    .take(blocksize) //we only need to take blocksize rows
+                    .chunks(blocksize)  //currently a "hack" for Iterate::collect()
+                    .for_each(move|a_block|{ //iterate over local submatrices is submatrix row "i_blk"
+                        //need to store the submatrix in a contiguous memory segment for use with the MatrixMultiply library
                         let mut a_vec = vec!{0.0;blocksize*blocksize};
-                        let mut c_vec = vec!{0.0;blocksize*blocksize};
                         for (i,row) in a_block.enumerate(){
                             for (j,elem) in row.enumerate(){
                                 a_vec[i*blocksize+j]=*elem;
                                 
                             }
                         }
+                        //-------------------------------
+                        let mut c_vec = vec!{0.0;blocksize*blocksize}; // MatrixMultiple lib stores result in a contiguous memory segment
                         unsafe {
                             sgemm(
                                 blocksize,
@@ -116,20 +130,17 @@ fn main() {
                                 1,
                             );
                         }
+
                         let c_slice = c.local_as_mut_slice();
                         let _lock = LOCK.lock();
-                        let g_i_blk = i_blk + my_pe *m_blks_pe;
-                        for row in 0..blocksize{
-                            
+                        
+                        for row in 0..blocksize{                            
                             let row_offset = (i_blk*blocksize+row)*n;
                             for col in 0..blocksize{
                                 let col_offset = j_blk*blocksize+col;
-                                c_slice[row_offset+col_offset] += c_vec[row*blocksize + col];
-                                // if row_offset+col_offset > 32000000 {
-                                //     panic!("uhhh ohhhh!!! {:?} {:?} {:?} {:?} {:?} {:?}", i_blk, g_i_blk, j_blk, row, col, row_offset+col_offset);
-
-                                // }
-                                // c.add(row_offset+col_offset,c_vec[row*blocksize + col]);
+                                c_slice[row_offset+col_offset] += c_vec[row*blocksize + col];//we know all updates to c are local so directly update the raw data
+                                // we could use the array.add interface by calculating the global index: let g_i_blk = i_blk + my_pe *m_blks_pe; and replacing it in row_offset
+                                // c.add(row_offset+col_offset,c_vec[row*blocksize + col]); -- but some overheads are introduce from PGAS calculations performed by the runtime, and since its all local updates we can avoid them
                             }
                         }  
                     });
