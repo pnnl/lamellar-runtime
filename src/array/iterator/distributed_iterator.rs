@@ -3,12 +3,14 @@ mod enumerate;
 mod ignore;
 mod step_by;
 mod take;
+mod zip;
 
 use chunks::*;
 use enumerate::*;
 use ignore::*;
 use step_by::*;
 use take::*;
+use zip::*;
 
 use crate::memregion::Dist;
 use crate::LamellarArray;
@@ -40,7 +42,7 @@ pub trait DistributedIterator: Sync + Send + Clone {
     fn next(&mut self) -> Option<Self::Item>;
     fn elems(&self, in_elems: usize) -> usize;
     fn global_index(&self, index: usize) -> usize;
-    fn chunk_size(&self) -> usize;
+    // fn chunk_size(&self) -> usize;
     fn advance_index(&mut self, count: usize);
 
     fn enumerate(self) -> Enumerate<Self> {
@@ -57,6 +59,9 @@ pub trait DistributedIterator: Sync + Send + Clone {
     }
     fn take(self, count: usize) -> Take<Self> {
         Take::new(self, count)
+    }
+    fn zip<I: DistributedIterator>(self,iter: I) -> Zip<Self,I>{
+        Zip::new(self,iter)
     }
 }
 
@@ -137,9 +142,9 @@ impl<'a, T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'a> Dis
         // println!("dist_iter index: {:?} global_index {:?}", index,g_index);
         g_index
     }
-    fn chunk_size(&self) -> usize {
-        1
-    }
+    // fn chunk_size(&self) -> usize {
+    //     1
+    // }
     fn advance_index(&mut self, count: usize) {
         self.cur_i = std::cmp::min(self.cur_i + count, self.end_i);
     }
@@ -223,9 +228,9 @@ impl<'a, T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'a> Dis
         // println!("dist_iter index: {:?} global_index {:?}", index,g_index);
         g_index
     }
-    fn chunk_size(&self) -> usize {
-        1
-    }
+    // fn chunk_size(&self) -> usize {
+    //     1
+    // }
     fn advance_index(&mut self, count: usize) {
         self.cur_i = std::cmp::min(self.cur_i + count, self.end_i);
     }

@@ -93,9 +93,9 @@ where
         // println!("chunks index: {:?} global_index {:?}", index,g_index);
         g_index
     }
-    fn chunk_size(&self) -> usize {
-        self.iter.chunk_size() * self.chunk_size
-    }
+    // fn chunk_size(&self) -> usize {
+    //     self.iter.chunk_size() * self.chunk_size
+    // }
     fn advance_index(&mut self, count: usize) {
         self.cur_i = std::cmp::min(self.cur_i + count, self.end_i);
     }

@@ -65,9 +65,9 @@ where
         // println!("enumerate index: {:?} global_index {:?}", index,g_index);
         g_index
     }
-    fn chunk_size(&self) -> usize {
-        self.iter.chunk_size()
-    }
+    // fn chunk_size(&self) -> usize {
+    //     self.iter.chunk_size()
+    // }
     fn advance_index(&mut self, count: usize) {
         self.iter.advance_index(count);
         self.count += count;

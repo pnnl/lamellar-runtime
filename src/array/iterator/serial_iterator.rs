@@ -7,6 +7,9 @@ use ignore::*;
 mod step_by;
 use step_by::*;
 
+mod zip;
+use zip::*;
+
 use crate::memregion::Dist;
 use crate::LamellarArray;
 use crate::LamellarTeamRT;
@@ -39,6 +42,13 @@ pub trait SerialIterator {
         Self: Sized,
     {
         StepBy::new(self, step_size)
+    }
+    fn zip<I>(self, iter: I) -> Zip<Self,I>
+    where
+        Self: Sized,
+        I: SerialIterator + Sized,
+    {
+        Zip::new(self, iter)
     }
     fn into_iter(self) -> SerialIteratorIter<Self>
     where
