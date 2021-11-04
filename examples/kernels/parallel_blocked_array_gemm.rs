@@ -93,7 +93,7 @@ fn main() {
             //need to store the submatrix in a contiguous memory segment for use with the MatrixMultiply library
             let mut b_block_vec = vec![0.0; blocksize * blocksize];
             for (j, col) in b_block.iter().enumerate() {
-                for (i, elem) in row.as_slice().unwrap().iter().enumerate() {
+                for (i, elem) in col.as_slice().unwrap().iter().enumerate() {
                     b_block_vec[j * blocksize + i] = *elem
                 }
             }
@@ -170,10 +170,10 @@ fn main() {
             num_gops / elapsed,
         );
     }
-    c.dist_iter_mut().enumerate().for_each(|(i, x)| {
-        if *x != i as f32 {
-            println!("error {:?} {:?}", x, i);
-        }
-        *x = 0.0
-    });
+    // c.dist_iter_mut().enumerate().for_each(|(i, x)| {
+    //     if *x != i as f32 {
+    //         println!("error {:?} {:?}", x, i);
+    //     }
+    //     *x = 0.0
+    // });
 }

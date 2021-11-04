@@ -1,6 +1,5 @@
 use lamellar::array::{Distribution, UnsafeArray};
 use lamellar::{ActiveMessaging, LamellarArray, LamellarMemoryRegion, RemoteMemoryRegion};
-use std::time::Instant;
 
 fn initialize_array(array: &LamellarArray<usize>) {
     array.dist_iter_mut().for_each(|x| *x = 0);
@@ -16,15 +15,12 @@ fn initialize_mem_region(memregion: &LamellarMemoryRegion<usize>) {
     }
 }
 
-fn put_local(array: &LamellarArray<usize>, memregion: &LamellarMemoryRegion<usize>) {
-    array.put(0, memregion);
-}
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let world = lamellar::LamellarWorldBuilder::new().build();
-    let num_pes = world.num_pes();
-    let my_pe = world.my_pe();
+    let _num_pes = world.num_pes();
+    let _my_pe = world.my_pe();
     let total_len = args
         .get(1)
         .and_then(|s| s.parse::<usize>().ok())

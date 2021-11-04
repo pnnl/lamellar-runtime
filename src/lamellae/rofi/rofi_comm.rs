@@ -440,9 +440,9 @@ impl CommOps for RofiComm {
 impl Drop for RofiComm {
     fn drop(&mut self) {
         // println!("[{:?}] in rofi comm drop", self.my_pe);
-        print!(""); //not sure why this prevents hanging....
-        rofi_barrier();
-        std::thread::sleep(std::time::Duration::from_millis(1000));
+        // print!(""); //not sure why this prevents hanging....
+        // rofi_barrier();
+        // std::thread::sleep(std::time::Duration::from_millis(1000));
 
         if self.occupied() > 0 {
             println!("dropping rofi -- memory in use {:?}", self.occupied());
@@ -451,7 +451,7 @@ impl Drop for RofiComm {
             println!("[LAMELLAR INFO] {:?} additional rt memory pools were allocated, performance may be increased using a larger initial pool, set using the LAMELLAR_MEM_SIZE envrionment variable. Current initial size = {:?}",self.alloc.read().len()-1, ROFI_MEM.load(Ordering::SeqCst));
         }
         // rofi_barrier();
-        std::thread::sleep(std::time::Duration::from_millis(1000));
+        // std::thread::sleep(std::time::Duration::from_millis(1000));
         // //we can probably do a final "put" to each node where we specify we we are done, then once all nodes have done this no further communication amongst them occurs...
         // let _res = rofi_finit();
         // std::thread::sleep(std::time::Duration::from_millis(1000));

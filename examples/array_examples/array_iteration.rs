@@ -1,12 +1,11 @@
 use lamellar::array::{DistributedIterator, Distribution, SerialIterator, UnsafeArray};
-use lamellar::LamellarWorld;
 
 const ARRAY_LEN: usize = 100;
 
 fn main() {
     let world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();
-    let num_pes = world.num_pes();
+    let _num_pes = world.num_pes();
     let block_array = UnsafeArray::<usize>::new(world.team(), ARRAY_LEN, Distribution::Block);
     let cyclic_array = UnsafeArray::<usize>::new(world.team(), ARRAY_LEN, Distribution::Cyclic);
 

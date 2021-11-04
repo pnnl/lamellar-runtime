@@ -1,4 +1,3 @@
-use lamellar::array::{DistributedIterator, Distribution, SerialIterator, UnsafeArray};
 /// ----------------Lamellar Parallel Array GEMM---------------------------------------------------
 /// This performs a distributed GEMM, iteratively performing dot products of rows from the A matrix
 /// with columns fro the B matrix. Each pe only iterates over the local rows of the A matrix simultaneously,
@@ -7,6 +6,7 @@ use lamellar::array::{DistributedIterator, Distribution, SerialIterator, UnsafeA
 /// we only transfer each column of B once (to each PE). This formulation also allows only requiring
 /// local updates to the C matrix.
 ///----------------------------------------------------------------------------------
+use lamellar::array::{DistributedIterator, Distribution, SerialIterator, UnsafeArray};
 use lamellar::ActiveMessaging;
 use lazy_static::lazy_static;
 use parking_lot::Mutex;
@@ -61,17 +61,17 @@ fn main() {
     let rows_pe = m / num_pes;
     let start = std::time::Instant::now();
     b.ser_iter() // SerialIterator (each pe will iterate through entirety of b)
-        .copied_chunks(n) //chunk flat array in to columns -- manages efficent transfer and placement of data into a local memory region
+        .copied_chunks(p) //chunk flat array into columns -- manages efficent transfer and placement of data into a local memory region
         .into_iter() // convert into normal rust iterator
         .enumerate()
         .for_each(|(j, col)| {
             let col = col.clone();
             let c = c.clone();
             a.dist_iter() //DistributedIterator (each pe will iterate through only its local data -- in parallel)
-                .chunks(m) // chunk by the row size
+                .chunks(n) // chunk by the row size
                 .enumerate()
                 .for_each(move |(i, row)| {
-                    let sum = col.iter().zip(row).map(|(&i1, &i2)| i1 * i2).sum::<f32>();
+                    let sum = col.iter().zip(row).map(|(&i1, &i2)| i1 * i2).sum::<f32>(); // dot product using rust iters... but MatrixMultiply is faster
                     let _lock = LOCK.lock();
                     c.local_as_mut_slice()[j + (i % rows_pe) * m] += sum; //we know all updates to c are local so directly update the raw data
                                                                           //we could also use:
