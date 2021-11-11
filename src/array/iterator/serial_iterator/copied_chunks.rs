@@ -1,5 +1,5 @@
 use crate::array::iterator::serial_iterator::*;
-use crate::LamellarArray;
+// use crate::LamellarArray;
 use crate::LocalMemoryRegion;
 
 pub struct CopiedChunks<I>
@@ -7,7 +7,7 @@ where
     I: SerialIterator,
 {
     iter: I,
-    array: LamellarArray<I::ElemType>,
+    // array: LamellarArray<I::ElemType>,
     // mem_region: LocalMemoryRegion<I::ElemType>,
     index: usize,
     chunk_size: usize,
@@ -18,12 +18,12 @@ where
     I: SerialIterator,
 {
     pub(crate) fn new(iter: I, chunk_size: usize) -> CopiedChunks<I> {
-        let array = iter.array().clone(); //.to_base::<u8>();
+        // let array = iter.array().clone(); //.to_base::<u8>();
                                           // println!("len: {:?}",array.len());
                                           // let mem_region = iter.array().team().alloc_local_mem_region(chunk_size);//*iter.array().size_of_elem());
         let chunks = CopiedChunks {
             iter,
-            array,
+            // array,
             // mem_region: mem_region.clone(),
             index: 0,
             chunk_size,
@@ -39,7 +39,7 @@ where
         for i in 0..buf_slice.len() {
             buf_slice[i] = val;
         }
-        self.array.get(self.index, buf);
+        self.array().get(self.index, buf);
     }
 
     fn spin_for_valid(&self, val: u32, buf: &LocalMemoryRegion<I::ElemType>) {
@@ -79,15 +79,16 @@ where
 {
     type ElemType = I::ElemType;
     type Item = LocalMemoryRegion<I::ElemType>;
+    type Array = I::Array;
     fn next(&mut self) -> Option<Self::Item> {
         // println!("{:?} {:?}",self.index,self.array.len()/std::mem::size_of::<<Self as SerialIterator>::ElemType>());
-
-        if self.index < self.array.len() {
-            let size = std::cmp::min(self.chunk_size, self.array.len() - self.index);
+        let array = self.array();
+        if self.index < array.len() {
+            let size = std::cmp::min(self.chunk_size, array.len() - self.index);
             // self.fill_buffer(0, &self.mem_region.sub_region(..size));
             // println!("getting {:?} {:?}",self.index,self.chunk_size);
             let mem_region: LocalMemoryRegion<I::ElemType> =
-                self.array.team().alloc_local_mem_region(size);
+                array.team().alloc_local_mem_region(size);
             self.fill_buffer(101010101, &mem_region);
 
             self.spin_for_valid(101010101, &mem_region);
@@ -109,7 +110,7 @@ where
         //     self.fill_buffer(0, &self.mem_region.sub_region(..size));
         // }
     }
-    fn array(&self) -> LamellarArray<Self::ElemType> {
+    fn array(&self) -> Self::Array {
         self.iter.array()
     }
 }

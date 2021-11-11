@@ -19,6 +19,7 @@ where
 {
     type ElemType = I::ElemType;
     type Item = <I as SerialIterator>::Item;
+    type Array = I::Array;
     fn next(&mut self) -> Option<Self::Item> {
         let res = self.iter.next()?;
         self.iter.advance_index(self.step_size - 1);
@@ -27,7 +28,7 @@ where
     fn advance_index(&mut self, count: usize) {
         self.iter.advance_index(count * self.step_size);
     }
-    fn array(&self) -> LamellarArray<Self::ElemType> {
+    fn array(&self) -> Self::Array {
         self.iter.array()
     }
 }

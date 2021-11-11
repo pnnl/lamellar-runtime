@@ -253,12 +253,12 @@ fn main() {
                 block_size,
                 elapsed,
                 num_gops / elapsed,
-                world.MB_sent()[0] - tot_mb,
-                world.MB_sent()[0],
+                world.MB_sent() - tot_mb,
+                world.MB_sent(),
                 tot_mb,
                 tasks
             );
         }
-        tot_mb = world.MB_sent()[0];
+        tot_mb = world.MB_sent();
     }
 }

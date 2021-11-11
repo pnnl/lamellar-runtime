@@ -1,6 +1,6 @@
 use crate::active_messaging::*;
 use crate::array::iterator::distributed_iterator::{
-    DistIter, DistIterMut, DistIteratorLauncher, DistributedIterator,
+    DistIter, DistIterMut, DistIteratorLauncher, DistributedIterator, ForEach, ForEachAsync
 };
 use crate::array::iterator::serial_iterator::LamellarArrayIter;
 use crate::array::*;
@@ -84,7 +84,7 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Un
         array
     }
     pub fn wait_all(&self) {
-        <UnsafeArray<T> as LamellarArrayReduce<T>>::wait_all(self);
+        <UnsafeArray<T> as LamellarArray<T>>::wait_all(self);
     }
     pub fn barrier(&self) {
         self.inner.team.barrier();
@@ -338,19 +338,19 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Un
         self.inner.mem_region.as_casted_mut_ptr::<T>().unwrap()
     }
 
-    pub fn dist_iter(&self) -> DistIter<'static, T> {
+    pub fn dist_iter(&self) -> DistIter<'static, T,UnsafeArray<T>> {
         DistIter::new(self.clone().into(), 0, 0)
     }
 
-    pub fn dist_iter_mut(&self) -> DistIterMut<'static, T> {
+    pub fn dist_iter_mut(&self) -> DistIterMut<'static, T,UnsafeArray<T>> {
         DistIterMut::new(self.clone().into(), 0, 0)
     }
 
-    pub fn ser_iter(&self) -> LamellarArrayIter<'_, T> {
+    pub fn ser_iter(&self) -> LamellarArrayIter<'_, T, UnsafeArray<T>> {
         LamellarArrayIter::new(self.clone().into(), self.inner.team.clone(), 1)
     }
 
-    pub fn buffered_iter(&self, buf_size: usize) -> LamellarArrayIter<'_, T> {
+    pub fn buffered_iter(&self, buf_size: usize) -> LamellarArrayIter<'_, T, UnsafeArray<T>> {
         LamellarArrayIter::new(
             self.clone().into(),
             self.inner.team.clone(),
@@ -390,6 +390,12 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Un
     }
     pub(crate) fn team(&self) -> Arc<LamellarTeamRT> {
         self.inner.team.clone()
+    }
+
+    pub fn into_read_only(self) -> ReadOnlyArray<T> {
+        ReadOnlyArray{
+            array: self
+        }
     }
 }
 
@@ -483,10 +489,82 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Di
     }
 }
 
+impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> LamellarArray<T>
+    for UnsafeArray<T>
+{
+    fn team(&self) -> Arc<LamellarTeamRT>{
+        self.team().clone()
+    }
+    fn local_as_ptr(&self) -> *const T{
+        self.local_as_ptr()
+    }
+    fn local_as_mut_ptr(&self) -> *mut T{
+        self.local_as_mut_ptr()
+    }
+    fn num_elems_local(&self) -> usize{
+        self.num_elems_local()
+    }
+    fn len(&self) -> usize{
+        self.len()
+    }
+    fn barrier(&self){
+        self.barrier();
+    }
+    fn wait_all(&self){
+        let mut temp_now = Instant::now();
+        while self
+            .inner
+            .array_counters
+            .outstanding_reqs
+            .load(Ordering::SeqCst)
+            > 0
+        {
+            // std::thread::yield_now();
+            self.inner.team.scheduler.exec_task(); //mmight as well do useful work while we wait
+            if temp_now.elapsed() > Duration::new(60, 0) {
+                println!(
+                    "in team wait_all mype: {:?} cnt: {:?} {:?}",
+                    self.inner.team.world_pe,
+                    self.inner
+                        .array_counters
+                        .send_req_cnt
+                        .load(Ordering::SeqCst),
+                    self.inner
+                        .array_counters
+                        .outstanding_reqs
+                        .load(Ordering::SeqCst),
+                );
+                temp_now = Instant::now();
+            }
+        }
+        // println!("done in wait all {:?}",std::time::SystemTime::now());
+    }
+    
+}
+impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> LamellarArrayRead<T>
+    for UnsafeArray<T>
+{
+    fn get<U: MyInto<LamellarArrayInput<T>>>(&self, index: usize, buf: U){
+        self.get(index,buf)
+    }
+    fn at(&self, index: usize) -> T{
+        self.at(index)
+    }
+}
+
+impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> LamellarArrayWrite<T>
+    for UnsafeArray<T>
+{
+    fn put<U: MyInto<LamellarArrayInput<T>>>(&self, index: usize, buf: U){
+        self.put(index,buf)
+    }
+}
+
 impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> SubArray<T>
     for UnsafeArray<T>
 {
-    fn sub_array<R: std::ops::RangeBounds<usize>>(&self, range: R) -> LamellarArray<T> {
+    type Array=UnsafeArray<T>;
+    fn sub_array<R: std::ops::RangeBounds<usize>>(&self, range: R) -> Self::Array {
         self.sub_array(range).into()
     }
 }
@@ -563,76 +641,48 @@ impl<
     }
 }
 
-impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> LamellarArrayRDMA<T>
-    for UnsafeArray<T>
-{
-    #[inline(always)]
-    fn len(&self) -> usize {
-        self.len()
-    }
-    #[inline(always)]
-    fn put<U: MyInto<LamellarArrayInput<T>>>(&self, index: usize, buf: U) {
-        self.put(index, buf)
-    }
-    #[inline(always)]
-    fn get<U: MyInto<LamellarArrayInput<T>>>(&self, index: usize, buf: U) {
-        self.get(index, buf)
-    }
+// impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> LamellarArrayRDMA<T>
+//     for UnsafeArray<T>
+// {
+//     #[inline(always)]
+//     fn len(&self) -> usize {
+//         self.len()
+//     }
+//     #[inline(always)]
+//     fn put<U: MyInto<LamellarArrayInput<T>>>(&self, index: usize, buf: U) {
+//         self.put(index, buf)
+//     }
+//     #[inline(always)]
+//     fn get<U: MyInto<LamellarArrayInput<T>>>(&self, index: usize, buf: U) {
+//         self.get(index, buf)
+//     }
 
-    #[inline(always)]
-    fn at(&self, index: usize) -> T {
-        self.at(index)
-    }
-    #[inline(always)]
-    fn local_as_slice(&self) -> &[T] {
-        // println!("rdma local_as_slice");
-        self.local_as_slice()
-    }
-    #[inline(always)]
-    fn local_as_mut_slice(&self) -> &mut [T] {
-        // println!("rdma local_as_slice");
-        self.local_as_mut_slice()
-    }
-    #[inline(always)]
-    fn to_base<B: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static>(
-        self,
-    ) -> LamellarArray<B> {
-        self.to_base_inner::<B>().into()
-    }
-}
+//     #[inline(always)]
+//     fn at(&self, index: usize) -> T {
+//         self.at(index)
+//     }
+//     #[inline(always)]
+//     fn local_as_slice(&self) -> &[T] {
+//         // println!("rdma local_as_slice");
+//         self.local_as_slice()
+//     }
+//     #[inline(always)]
+//     fn local_as_mut_slice(&self) -> &mut [T] {
+//         // println!("rdma local_as_slice");
+//         self.local_as_mut_slice()
+//     }
+//     #[inline(always)]
+//     fn to_base<B: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static>(
+//         self,
+//     ) -> LamellarArray<B> {
+//         self.to_base_inner::<B>().into()
+//     }
+// }
 
 impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> LamellarArrayReduce<T>
     for UnsafeArray<T>
 {
-    fn wait_all(&self) {
-        let mut temp_now = Instant::now();
-        while self
-            .inner
-            .array_counters
-            .outstanding_reqs
-            .load(Ordering::SeqCst)
-            > 0
-        {
-            // std::thread::yield_now();
-            self.inner.team.scheduler.exec_task(); //mmight as well do useful work while we wait
-            if temp_now.elapsed() > Duration::new(60, 0) {
-                println!(
-                    "in team wait_all mype: {:?} cnt: {:?} {:?}",
-                    self.inner.team.world_pe,
-                    self.inner
-                        .array_counters
-                        .send_req_cnt
-                        .load(Ordering::SeqCst),
-                    self.inner
-                        .array_counters
-                        .outstanding_reqs
-                        .load(Ordering::SeqCst),
-                );
-                temp_now = Instant::now();
-            }
-        }
-        // println!("done in wait all {:?}",std::time::SystemTime::now());
-    }
+    
     fn get_reduction_op(&self, op: String) -> LamellarArcAm {
         // unsafe {
         REDUCE_OPS
@@ -657,17 +707,17 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> La
     }
 }
 
-impl<'a, T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> IntoIterator
-    for &'a UnsafeArray<T>
-{
-    type Item = &'a T;
-    type IntoIter = SerialIteratorIter<LamellarArrayIter<'a, T>>;
-    fn into_iter(self) -> Self::IntoIter {
-        SerialIteratorIter {
-            iter: self.ser_iter(),
-        }
-    }
-}
+// impl<'a, T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> IntoIterator
+//     for &'a UnsafeArray<T>
+// {
+//     type Item = &'a T;
+//     type IntoIter = SerialIteratorIter<LamellarArrayIter<'a, T>>;
+//     fn into_iter(self) -> Self::IntoIter {
+//         SerialIteratorIter {
+//             iter: self.ser_iter(),
+//         }
+//     }
+// }
 
 // impl < T> Drop for UnsafeArray<T>{
 //     fn drop(&mut self){

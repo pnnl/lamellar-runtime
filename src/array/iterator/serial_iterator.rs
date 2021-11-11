@@ -14,6 +14,7 @@ use crate::memregion::Dist;
 use crate::LamellarArray;
 use crate::LamellarTeamRT;
 use crate::LocalMemoryRegion;
+use crate::array::LamellarArrayRead;
 
 use std::marker::PhantomData;
 use std::ptr::NonNull;
@@ -22,9 +23,10 @@ use std::sync::Arc;
 pub trait SerialIterator {
     type Item;
     type ElemType: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static;
+    type Array: LamellarArrayRead<Self::ElemType>;
     fn next(&mut self) -> Option<Self::Item>;
     fn advance_index(&mut self, count: usize);
-    fn array(&self) -> LamellarArray<Self::ElemType>;
+    fn array(&self) -> Self::Array;
     fn copied_chunks(self, chunk_size: usize) -> CopiedChunks<Self>
     where
         Self: Sized,
@@ -74,8 +76,9 @@ where
 pub struct LamellarArrayIter<
     'a,
     T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static,
+    A: LamellarArrayRead<T> + 'static,
 > {
-    array: LamellarArray<T>,
+    array: A,
     buf_0: LocalMemoryRegion<T>,
     buf_1: LocalMemoryRegion<T>,
     index: usize,
@@ -84,23 +87,23 @@ pub struct LamellarArrayIter<
     _marker: PhantomData<&'a T>,
 }
 
-unsafe impl<'a, T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Sync
-    for LamellarArrayIter<'a, T>
+unsafe impl<'a, T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static, A: LamellarArrayRead<T> + 'static,> Sync
+    for LamellarArrayIter<'a, T, A>
 {
 }
-unsafe impl<'a, T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Send
-    for LamellarArrayIter<'a, T>
+unsafe impl<'a, T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static, A: LamellarArrayRead<T> + 'static,> Send
+    for LamellarArrayIter<'a, T, A>
 {
 }
 
-impl<'a, T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static>
-    LamellarArrayIter<'a, T>
+impl<'a, T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static, A: LamellarArrayRead<T> + 'static,>
+    LamellarArrayIter<'a, T, A>
 {
     pub(crate) fn new(
-        array: LamellarArray<T>,
+        array: A,
         team: Arc<LamellarTeamRT>,
         buf_size: usize,
-    ) -> LamellarArrayIter<'a, T> {
+    ) -> LamellarArrayIter<'a, T, A> {
         let buf_0 = team.alloc_local_mem_region(buf_size);
         let ptr = NonNull::new(buf_0.as_mut_ptr().unwrap()).unwrap();
         let iter = LamellarArrayIter {
@@ -156,11 +159,12 @@ impl<'a, T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static
     // }
 }
 
-impl<'a, T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> SerialIterator
-    for LamellarArrayIter<'a, T>
+impl<'a, T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static, A: LamellarArrayRead<T> + 'static,> SerialIterator
+    for LamellarArrayIter<'a, T, A>
 {
     type ElemType = T;
     type Item = &'a T;
+    type Array = A;
     fn next(&mut self) -> Option<Self::Item> {
         let res = if self.index < self.array.len() {
             if self.buf_index == self.buf_0.len() {
@@ -187,7 +191,7 @@ impl<'a, T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static
         self.buf_index = self.index;
         self.fill_buffer(0);
     }
-    fn array(&self) -> LamellarArray<T> {
+    fn array(&self) -> Self::Array {
         self.array.clone()
     }
 }

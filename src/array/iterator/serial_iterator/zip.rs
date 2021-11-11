@@ -1,39 +1,44 @@
 use crate::array::iterator::serial_iterator::*;
 
-pub struct Ignore<I> {
-    iter: I,
+pub struct Zip<A, B> {
+    a: A,
+    b: B,
 }
 
-impl<I> Ignore<I>
+impl<A, B> Zip<A, B>
 where
-    I: SerialIterator,
+    A: SerialIterator,
+    B: SerialIterator,
 {
-    pub(crate) fn new(mut iter: I, count: usize) -> Self {
-        iter.advance_index(count);
-        Ignore { iter }
+    pub(crate) fn new(a: A, b: B) -> Self {
+        Zip { a,b }
     }
 }
 
-impl<I> SerialIterator for Ignore<I>
+impl<A, B> SerialIterator for Zip<A, B>
 where
-    I: SerialIterator,
+    A: SerialIterator,
+    B: SerialIterator,
 {
-    type ElemType = I::ElemType;
-    type Item = <I as SerialIterator>::Item;
-    type Array = I::Array;
+    type ElemType = A::ElemType;
+    type Item = (<A as SerialIterator>::Item,<B as SerialIterator>::Item);
+    type Array = A::Array;
     fn next(&mut self) -> Option<Self::Item> {
-        self.iter.next()
+        let a = self.a.next()?;
+        let b = self.b.next()?;
+        Some((a,b))
     }
     fn advance_index(&mut self, count: usize) {
-        self.iter.advance_index(count);
+        self.a.advance_index(count);
+        self.b.advance_index(count);
     }
     fn array(&self) -> Self::Array {
-        self.iter.array()
+        self.a.array()
     }
 }
 
-// impl<I>  Iterator
-// for Ignore<I>
+// impl<A, B>  Iterator
+// for Zip<A, B>
 // where
 //     I: SerialIterator+Iterator,
 // {
@@ -43,7 +48,7 @@ where
 //     }
 // }
 
-// impl<I> Stream for Ignore<I>
+// impl<A, B> Stream for Zip<A, B>
 // where
 //     I: SerialIterator + Stream + Unpin
 // {

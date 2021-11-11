@@ -37,7 +37,7 @@ fn main() {
             _data.push(i as u8);
         }
 
-        let old: f64 = world.MB_sent().iter().sum();
+        let old: f64 = world.MB_sent();
         let mut sum = 0;
         let mut cnt = 0;
         let mut exp = 20;
@@ -65,7 +65,7 @@ fn main() {
         world.wait_all();
         world.barrier();
         let cur_t = timer.elapsed().as_secs_f64();
-        let cur: f64 = world.MB_sent().iter().sum();
+        let cur: f64 = world.MB_sent();
         if my_pe == 0 {
             println!(
                 "tx_size: {:?}B num_tx: {:?} num_bytes: {:?}MB time: {:?} (issue time: {:?})

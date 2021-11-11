@@ -1,6 +1,6 @@
 [package]
 name = "lamellar"
-version = "0.3.0"
+version = "0.4.0"
 authors = ["Ryan D. Friese <ryan.friese@pnnl.gov>", " Mark V Raugas <mark.raugas@pnnl.gov>", "Roberto Gioiosa <roberto.gioiosa@pnnl.gov>"]
 edition = "2018"
 description = "Lamellar is an asynchronous tasking runtime for HPC systems developed in RUST."
@@ -55,7 +55,6 @@ members = ["impl"]
 #features are strictly additive.... can't have mutual exclusitivity
 [features]
 enable-rofi=["rofisys","libc"]
-enable-local=[]
 enable-prof=["lamellar-prof/enable-prof"]
 default=[]
 

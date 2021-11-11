@@ -10,7 +10,7 @@ use crate::scheduler::{create_scheduler, SchedulerType};
 use lamellar_prof::*;
 use log::trace;
 use parking_lot::RwLock;
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap};
 use std::sync::{Arc, Weak};
 
 lazy_static! {
@@ -18,6 +18,7 @@ lazy_static! {
         RwLock::new(HashMap::new());
 }
 
+/// Represents all the pe's (processing elements) within a given distributed execution
 pub struct LamellarWorld {
     team: Arc<LamellarTeam>,
     pub(crate) team_rt: Arc<LamellarTeamRT>,
@@ -126,23 +127,23 @@ impl ActiveMessaging for LamellarWorld {
 
 //#[prof]
 impl RemoteMemoryRegion for LamellarWorld {
-    /// allocate a shared memory region from the asymmetric heap
-    ///
-    /// # Arguments
-    ///
-    /// * `size` - number of elements of T to allocate a memory region for -- (not size in bytes)
-    ///
+    // /// allocate a shared memory region from the asymmetric heap
+    // ///
+    // /// # Arguments
+    // ///
+    // /// * `size` - number of elements of T to allocate a memory region for -- (not size in bytes)
+    // ///
     fn alloc_shared_mem_region<T: Dist + 'static>(&self, size: usize) -> SharedMemoryRegion<T> {
         self.barrier();
         self.team.alloc_shared_mem_region::<T>(size)
     }
 
-    /// allocate a local memory region from the asymmetric heap
-    ///
-    /// # Arguments
-    ///
-    /// * `size` - number of elements of T to allocate a memory region for -- (not size in bytes)
-    ///
+    // /// allocate a local memory region from the asymmetric heap
+    // ///
+    // /// # Arguments
+    // ///
+    // /// * `size` - number of elements of T to allocate a memory region for -- (not size in bytes)
+    // ///
     fn alloc_local_mem_region<T: Dist + 'static>(&self, size: usize) -> LocalMemoryRegion<T> {
         self.team.alloc_local_mem_region::<T>(size)
     }
@@ -170,25 +171,32 @@ impl RemoteMemoryRegion for LamellarWorld {
 
 //#[prof]
 impl LamellarWorld {
+
+    /// gets the id of this pe (roughly equivalent to MPI Rank)
     pub fn my_pe(&self) -> usize {
         self.my_pe
     }
+    /// returns nummber of pe's in this execution
     pub fn num_pes(&self) -> usize {
         self.num_pes
     }
+
+    
+    /// return the number of megabytes sent
     #[allow(non_snake_case)]
-    pub fn MB_sent(&self) -> Vec<f64> {
+    pub fn MB_sent(&self) -> f64 {
         let mut sent = vec![];
         for (_backend, lamellae) in LAMELLAES.read().iter() {
             sent.push(lamellae.MB_sent());
         }
-        sent
+        sent[0]
     }
 
-    pub fn team_barrier(&self) {
-        self.team.barrier();
-    }
+    // pub fn team_barrier(&self) {
+    //     self.team.barrier();
+    // }
 
+    /// create a team containing any number of pe's from the world using the provided LamellarArch (layout)
     pub fn create_team_from_arch<L>(&self, arch: L) -> Option<Arc<LamellarTeam>>
     where
         L: LamellarArch + std::hash::Hash + 'static,
@@ -203,6 +211,7 @@ impl LamellarWorld {
         }
     }
 
+    /// return the team encompassing all pe's in the world
     pub fn team(&self) -> Arc<LamellarTeam> {
         self.team.clone()
     }
@@ -231,9 +240,10 @@ impl Drop for LamellarWorld {
     }
 }
 
+/// Lamellar World Builder used for customization
 pub struct LamellarWorldBuilder {
     primary_lamellae: Backend,
-    secondary_lamellae: HashSet<Backend>,
+    // secondary_lamellae: HashSet<Backend>,
     scheduler: SchedulerType,
 }
 
@@ -244,22 +254,29 @@ impl LamellarWorldBuilder {
         trace!("New world builder");
         LamellarWorldBuilder {
             primary_lamellae: Default::default(),
-            secondary_lamellae: HashSet::new(),
+            // secondary_lamellae: HashSet::new(),
             scheduler: SchedulerType::WorkStealing,
         }
     }
+
+    /// specify the lamellae backend to use for this execution
     pub fn with_lamellae(mut self, lamellae: Backend) -> LamellarWorldBuilder {
         self.primary_lamellae = lamellae;
         self
     }
-    pub fn add_lamellae(mut self, lamellae: Backend) -> LamellarWorldBuilder {
-        self.secondary_lamellae.insert(lamellae);
-        self
-    }
+
+    // pub fn add_lamellae(mut self, lamellae: Backend) -> LamellarWorldBuilder {
+    //     self.secondary_lamellae.insert(lamellae);
+    //     self
+    // }
+
+    /// specify the scheduler to use for this execution
     pub fn with_scheduler(mut self, sched: SchedulerType) -> LamellarWorldBuilder {
         self.scheduler = sched;
         self
     }
+
+    /// Instantiate a world handle
     pub fn build(self) -> LamellarWorld {
         let teams = Arc::new(RwLock::new(HashMap::new()));
         let mut lamellae_builder = create_lamellae(self.primary_lamellae);

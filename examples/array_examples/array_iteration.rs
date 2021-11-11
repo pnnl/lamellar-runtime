@@ -33,6 +33,7 @@ fn main() {
     cyclic_array.wait_all();
     cyclic_array.barrier();
 
+    let block_array = block_array.into_read_only();
     block_array.print();
     cyclic_array.print();
 

@@ -28,6 +28,10 @@ use std::time::{Duration, Instant};
 // when the outer handle is dropped, we do the appropriate barriers and then remove the inner team from the runtime data structures
 // this should allow for the inner team to persist while at least one user handle exists in the world.
 
+
+/// an abstraction used to group pes into distributed computational units
+///
+/// actions taking place on a team, only execute on members of the team.
 pub struct LamellarTeam {
     pub(crate) world: Option<Arc<LamellarTeam>>,
     pub(crate) team: Arc<LamellarTeamRT>,
@@ -52,19 +56,29 @@ impl LamellarTeam {
             am_team,
         })
     }
+
+    /// return a list of (world-based) pe ids representing the members of the team
     #[allow(dead_code)]
     pub fn get_pes(&self) -> Vec<usize> {
         self.team.arch.team_iter().collect::<Vec<usize>>()
     }
+
+    /// return number of pes in team
     pub fn num_pes(&self) -> usize {
         self.team.arch.num_pes()
     }
+
+    /// return the world-based id of this pe
     pub fn world_pe_id(&self) -> usize {
         self.team.world_pe
     }
+
+    /// return the team-based id of this pe
     pub fn team_pe_id(&self) -> Result<usize, IdError> {
         self.team.arch.team_pe(self.team.world_pe)
     }
+
+    /// create a subteam containing any number of pe's from this team using the provided LamellarArch (layout)
     pub fn create_subteam_from_arch<L>(
         parent: Arc<LamellarTeam>,
         arch: L,
@@ -95,9 +109,15 @@ impl LamellarTeam {
             None
         }
     }
+
+    /// visual representation of the team
     pub fn print_arch(&self) {
         self.team.print_arch()
     }
+
+    /// blocks execution until all members of the team have called
+    ///
+    /// only blocks pes which are members of this team
     pub fn barrier(&self) {
         self.team.barrier()
     }

@@ -647,9 +647,10 @@ fn create_reduction(
             quote::format_ident!("{:}_{:}_{:}_reduction", array_type, typeident, reduction);
 
         gen_match_stmts.extend(quote!{
-            #lamellar::array::LamellarArray::#array_type(inner) => std::sync::Arc::new(#reduction_name{
+            #lamellar::array::LamellarReadArray::#array_type(inner) => std::sync::Arc::new(#reduction_name{
                 data: inner.clone().to_base_inner::<#typeident>() , start_pe: 0, end_pe: num_pes-1}),
         });
+        
 
         array_impls.extend(quote!{
             #[allow(non_camel_case_types)]
@@ -691,7 +692,7 @@ fn create_reduction(
     }
 
     let expanded = quote! {
-        fn  #reduction_gen<T: #lamellar::serde::ser::Serialize + #lamellar::serde::de::DeserializeOwned + std::clone::Clone + Send + Sync + 'static> (data: #lamellar::LamellarArray<T>, num_pes: usize)
+        fn  #reduction_gen<T: #lamellar::serde::ser::Serialize + #lamellar::serde::de::DeserializeOwned + std::clone::Clone + Send + Sync + 'static> (data: #lamellar::array::LamellarReadArray<T>, num_pes: usize)
         -> std::sync::Arc<dyn #lamellar::RemoteActiveMessage + Send + Sync >{
             match data{
                 #gen_match_stmts
@@ -714,7 +715,7 @@ fn create_reduction(
     let user_expanded = quote_spanned! {expanded.span()=>
         const _: () = {
             extern crate lamellar as __lamellar;
-            use __lamellar::array::LamellarArrayRDMA;
+            use __lamellar::array::LamellarArrayRead;
             #expanded
         };
     };
@@ -753,7 +754,7 @@ fn create_add(
     for array_type in array_types {
         let add_name_am = quote::format_ident!("{:}_{:}_add_am", array_type, typeident);
         match_stmts.extend(quote! {
-            #lamellar::array::LamellarArray::#array_type(inner) => inner.add(index,val),
+            #lamellar::array::LamellarWriteArray::#array_type(inner) => inner.add(index,val),
         });
         array_impls.extend(quote!{
             #[allow(non_camel_case_types)]
@@ -795,7 +796,7 @@ fn create_add(
 
     let expanded = quote! {
         #[allow(non_camel_case_types)]
-        impl #lamellar::array::ArrayOps<#typeident> for #lamellar::array::LamellarArray<#typeident>{
+        impl #lamellar::array::ArrayOps<#typeident> for #lamellar::array::LamellarWriteArray<#typeident>{
             fn add(&self,index: usize, val: #typeident)->Option<Box<dyn #lamellar::LamellarRequest<Output = ()> + Send + Sync>>{
                 match self{
                     #match_stmts
@@ -809,7 +810,7 @@ fn create_add(
     let user_expanded = quote_spanned! {expanded.span()=>
         const _: () = {
             extern crate lamellar as __lamellar;
-            use __lamellar::array::LamellarArrayRDMA;
+            use __lamellar::array::LamellarArrayRead;
             #expanded
         };
     };
@@ -825,7 +826,7 @@ fn create_add(
 pub fn register_reduction(item: TokenStream) -> TokenStream {
     let args = parse_macro_input!(item as ReductionArgs);
     let mut output = quote! {};
-    let array_types: Vec<syn::Ident> = vec![quote::format_ident!("UnsafeArray")];
+    let array_types: Vec<syn::Ident> = vec![quote::format_ident!("UnsafeArray"),quote::format_ident!("ReadOnlyArray")];
 
     for ty in args.tys {
         let mut closure = args.closure.clone();
@@ -866,7 +867,8 @@ pub fn register_reduction(item: TokenStream) -> TokenStream {
 #[proc_macro]
 pub fn generate_reductions_for_type(item: TokenStream) -> TokenStream {
     let mut output = quote! {};
-    let array_types: Vec<syn::Ident> = vec![quote::format_ident!("UnsafeArray")];
+    let read_array_types: Vec<syn::Ident> = vec![quote::format_ident!("UnsafeArray"),quote::format_ident!("ReadOnlyArray")];
+    let write_array_types: Vec<syn::Ident> = vec![quote::format_ident!("UnsafeArray")];
 
     for t in item.to_string().split(",").collect::<Vec<&str>>() {
         let typeident = quote::format_ident!("{:}", t.trim());
@@ -878,7 +880,7 @@ pub fn generate_reductions_for_type(item: TokenStream) -> TokenStream {
                 let first = data_slice.first().unwrap().clone();
                 data_slice[1..].iter().fold(first,|acc,val|{ acc+val } )
             },
-            &array_types,
+            &read_array_types,
             false,
         ));
         output.extend(create_reduction(
@@ -889,7 +891,7 @@ pub fn generate_reductions_for_type(item: TokenStream) -> TokenStream {
                 let first = data_slice.first().unwrap().clone();
                 data_slice[1..].iter().fold(first,|acc,val|{ acc*val } )
             },
-            &array_types,
+            &read_array_types,
             false,
         ));
         output.extend(create_reduction(
@@ -898,10 +900,10 @@ pub fn generate_reductions_for_type(item: TokenStream) -> TokenStream {
             quote! {
                 *<lamellar::LamellarMemoryRegion<#typeident> as lamellar::RegisteredMemoryRegion>::as_slice(&self.data).unwrap().iter().max().unwrap()
             },
-            &array_types,
+            &read_array_types,
             false,
         ));
-        output.extend(create_add(typeident.clone(), &array_types, false));
+        output.extend(create_add(typeident.clone(), &write_array_types, false));
     }
 
     TokenStream::from(output)
@@ -911,7 +913,8 @@ pub fn generate_reductions_for_type(item: TokenStream) -> TokenStream {
 pub fn generate_reductions_for_type_rt(item: TokenStream) -> TokenStream {
     let mut output = quote! {};
 
-    let array_types: Vec<syn::Ident> = vec![quote::format_ident!("UnsafeArray")];
+    let read_array_types: Vec<syn::Ident> = vec![quote::format_ident!("UnsafeArray"),quote::format_ident!("ReadOnlyArray")];
+    let write_array_types: Vec<syn::Ident> = vec![quote::format_ident!("UnsafeArray")];
     for t in item.to_string().split(",").collect::<Vec<&str>>() {
         let t = t.trim().to_string();
         let typeident = quote::format_ident!("{:}", t.clone());
@@ -921,7 +924,7 @@ pub fn generate_reductions_for_type_rt(item: TokenStream) -> TokenStream {
             quote! {
                 |acc: #typeident, val: &#typeident|{ acc+*val }
             },
-            &array_types,
+            &read_array_types,
             true,
         ));
         output.extend(create_reduction(
@@ -930,7 +933,7 @@ pub fn generate_reductions_for_type_rt(item: TokenStream) -> TokenStream {
             quote! {
                 |acc: #typeident, val: &#typeident| { acc* *val }
             },
-            &array_types,
+            &read_array_types,
             true,
         ));
         output.extend(create_reduction(
@@ -939,10 +942,10 @@ pub fn generate_reductions_for_type_rt(item: TokenStream) -> TokenStream {
             quote! {
                 |val1: #typeident, val2: &#typeident| { if val1 > *val2 {val1} else {*val2} }
             },
-            &array_types,
+            &read_array_types,
             true,
         ));
-        output.extend(create_add(typeident.clone(), &array_types, true));
+        output.extend(create_add(typeident.clone(), &write_array_types, true));
     }
     TokenStream::from(output)
 }
