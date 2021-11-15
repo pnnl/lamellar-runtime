@@ -27,7 +27,7 @@ struct UnsafeArrayInner {
 
 //need to calculate num_elems_local dynamically
 #[lamellar_impl::AmDataRT(Clone)]
-pub struct UnsafeArray<T: Dist + 'static> {
+pub struct UnsafeArray<T: Dist + Clone + 'static> {
     inner: Darc<UnsafeArrayInner>,
     distribution: Distribution,
     size: usize,      //total array size
@@ -39,7 +39,7 @@ pub struct UnsafeArray<T: Dist + 'static> {
 }
 
 //#[prof]
-impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> UnsafeArray<T> {
+impl<T: Dist + Clone + 'static> UnsafeArray<T> {
     pub fn new<U: Into<IntoLamellarTeam>>(
         team: U,
         array_size: usize,
@@ -399,7 +399,7 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Un
     }
 }
 
-impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> DistIteratorLauncher
+impl<T: Dist + Clone + 'static> DistIteratorLauncher
     for UnsafeArray<T>
 {
     fn global_index_from_local(&self, index: usize, chunk_size: usize) -> usize {
@@ -489,7 +489,7 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Di
     }
 }
 
-impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> LamellarArray<T>
+impl<T: Dist + Clone + 'static> LamellarArray<T>
     for UnsafeArray<T>
 {
     fn team(&self) -> Arc<LamellarTeamRT>{
@@ -541,7 +541,7 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> La
     }
     
 }
-impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> LamellarArrayRead<T>
+impl<T: Dist + Clone + 'static> LamellarArrayRead<T>
     for UnsafeArray<T>
 {
     fn get<U: MyInto<LamellarArrayInput<T>>>(&self, index: usize, buf: U){
@@ -552,7 +552,7 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> La
     }
 }
 
-impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> LamellarArrayWrite<T>
+impl<T: Dist + Clone + 'static> LamellarArrayWrite<T>
     for UnsafeArray<T>
 {
     fn put<U: MyInto<LamellarArrayInput<T>>>(&self, index: usize, buf: U){
@@ -560,7 +560,7 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> La
     }
 }
 
-impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> SubArray<T>
+impl<T: Dist + Clone + 'static> SubArray<T>
     for UnsafeArray<T>
 {
     type Array=UnsafeArray<T>;
@@ -569,7 +569,7 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Su
     }
 }
 
-impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> UnsafeArray<T>
+impl<T: Dist + Clone + 'static> UnsafeArray<T>
 where
     UnsafeArray<T>: ArrayOps<T>,
 {
@@ -582,7 +582,7 @@ where
     }
 }
 
-impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + std::fmt::Debug + 'static>
+impl<T: Dist + Clone + std::fmt::Debug + 'static>
     UnsafeArray<T>
 {
     pub fn print(&self) {
@@ -597,7 +597,7 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + std::fmt::D
     }
 }
 
-// impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + std::ops::AddAssign + 'static,> ArrayOps<T> for UnsafeArray<T> {
+// impl<T: Dist + std::ops::AddAssign + 'static,> ArrayOps<T> for UnsafeArray<T> {
 //     #[inline(always)]
 //     fn add(&self, index: usize, val: T) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync> {
 //         self.add(index,val) //this is implemented automatically by a proc macro
@@ -623,7 +623,7 @@ impl LamellarAM for AddAm {
 }
 
 impl<
-        T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + std::ops::AddAssign + 'static,
+        T: Dist + Clone + std::ops::AddAssign + 'static,
     > UnsafeArray<T>
 {
     pub fn dist_add(
@@ -641,7 +641,7 @@ impl<
     }
 }
 
-// impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> LamellarArrayRDMA<T>
+// impl<T: Dist + 'static> LamellarArrayRDMA<T>
 //     for UnsafeArray<T>
 // {
 //     #[inline(always)]
@@ -672,14 +672,14 @@ impl<
 //         self.local_as_mut_slice()
 //     }
 //     #[inline(always)]
-//     fn to_base<B: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static>(
+//     fn to_base<B: Dist + 'static>(
 //         self,
 //     ) -> LamellarArray<B> {
 //         self.to_base_inner::<B>().into()
 //     }
 // }
 
-impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> LamellarArrayReduce<T>
+impl<T: Dist + Clone + 'static> LamellarArrayReduce<T>
     for UnsafeArray<T>
 {
     
@@ -707,7 +707,7 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> La
     }
 }
 
-// impl<'a, T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> IntoIterator
+// impl<'a, T: Dist + 'static> IntoIterator
 //     for &'a UnsafeArray<T>
 // {
 //     type Item = &'a T;

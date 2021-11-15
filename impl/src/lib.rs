@@ -654,7 +654,7 @@ fn create_reduction(
 
         array_impls.extend(quote!{
             #[allow(non_camel_case_types)]
-            #[#am_data]
+            #[#am_data(Clone)]
             struct #reduction_name{
                 data: #lamellar::array::#array_type<#typeident>,
                 start_pe: usize,
@@ -692,7 +692,7 @@ fn create_reduction(
     }
 
     let expanded = quote! {
-        fn  #reduction_gen<T: #lamellar::serde::ser::Serialize + #lamellar::serde::de::DeserializeOwned + std::clone::Clone + Send + Sync + 'static> (data: #lamellar::array::LamellarReadArray<T>, num_pes: usize)
+        fn  #reduction_gen<T: #lamellar::Dist + Clone + 'static> (data: #lamellar::array::LamellarReadArray<T>, num_pes: usize)
         -> std::sync::Arc<dyn #lamellar::RemoteActiveMessage + Send + Sync >{
             match data{
                 #gen_match_stmts

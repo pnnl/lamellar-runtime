@@ -228,7 +228,7 @@ impl<T: Dist + 'static> std::fmt::Debug for SharedMemoryRegion<T> {
     }
 }
 
-impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static>
+impl<T: Dist + Clone + 'static>
     From<&SharedMemoryRegion<T>> for LamellarArrayInput<T>
 {
     fn from(smr: &SharedMemoryRegion<T>) -> Self {
@@ -236,7 +236,7 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static>
     }
 }
 
-impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static>
+impl<T: Dist + Clone + 'static>
     MyFrom<&SharedMemoryRegion<T>> for LamellarArrayInput<T>
 {
     fn my_from(smr: &SharedMemoryRegion<T>, _team: &Arc<LamellarTeamRT>) -> Self {

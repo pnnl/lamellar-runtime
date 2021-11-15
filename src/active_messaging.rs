@@ -3,6 +3,7 @@ use crate::lamellar_arch::IdError;
 use crate::lamellar_request::{InternalReq, InternalResult, LamellarRequest};
 use crate::lamellar_team::{LamellarTeam, LamellarTeamRT};
 use crate::scheduler::{AmeScheduler, ReqData};
+use crate::memregion::{Dist};
 #[cfg(feature = "enable-prof")]
 use lamellar_prof::*;
 use log::trace;
@@ -167,17 +168,17 @@ pub trait ActiveMessaging {
     fn barrier(&self);
     fn exec_am_all<F>(&self, am: F) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync>
     where
-        F: RemoteActiveMessage + LamellarAM + Serde + Send + Sync + 'static;
+        F: RemoteActiveMessage + LamellarAM + Serde + Dist + 'static;
     fn exec_am_pe<F>(
         &self,
         pe: usize,
         am: F,
     ) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync>
     where
-        F: RemoteActiveMessage + LamellarAM + Serde + Send + Sync + 'static;
+        F: RemoteActiveMessage + LamellarAM + Serde + Dist + 'static;
     fn exec_am_local<F>(&self, am: F) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync>
     where
-        F: LamellarActiveMessage + LocalAM + Send + Sync + 'static;
+        F: LamellarActiveMessage + LocalAM + Dist + 'static;
 }
 
 //maybe make this a struct then we could hold the pending counters...

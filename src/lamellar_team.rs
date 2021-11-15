@@ -149,7 +149,7 @@ impl ActiveMessaging for Arc<LamellarTeam> {
 
     fn exec_am_all<F>(&self, am: F) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync>
     where
-        F: RemoteActiveMessage + LamellarAM + Serde + Send + Sync + 'static,
+        F: RemoteActiveMessage + LamellarAM + Serde + Dist + 'static,
     {
         trace!("[{:?}] team exec am all request", self.team.world_pe);
         self.team.exec_am_all_tg(am, None)
@@ -161,14 +161,14 @@ impl ActiveMessaging for Arc<LamellarTeam> {
         am: F,
     ) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync>
     where
-        F: RemoteActiveMessage + LamellarAM + Serde + Send + Sync + 'static,
+        F: RemoteActiveMessage + LamellarAM + Serde + Dist + 'static,
     {
         self.team.exec_am_pe_tg(pe, am, None)
     }
 
     fn exec_am_local<F>(&self, am: F) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync>
     where
-        F: LamellarActiveMessage + LocalAM + Send + Sync + 'static,
+        F: LamellarActiveMessage + LocalAM + Dist + 'static,
     {
         self.team.exec_am_local_tg(am, None)
     }
@@ -628,7 +628,7 @@ impl LamellarTeamRT {
         am: F,
     ) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync>
     where
-        F: RemoteActiveMessage + LamellarAM + Send + Sync + 'static,
+        F: RemoteActiveMessage + LamellarAM + Dist + 'static,
     {
         self.exec_am_all_tg(am, None)
     }
@@ -639,7 +639,7 @@ impl LamellarTeamRT {
         task_group_cnts: Option<Arc<AMCounters>>,
     ) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync>
     where
-        F: RemoteActiveMessage + LamellarAM + Send + Sync + 'static,
+        F: RemoteActiveMessage + LamellarAM + Dist + 'static,
     {
         trace!("[{:?}] team exec am all request", self.world_pe);
         let tg_outstanding_reqs = match task_group_cnts {
@@ -689,7 +689,7 @@ impl LamellarTeamRT {
         am: F,
     ) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync>
     where
-        F: RemoteActiveMessage + LamellarAM + Send + Sync + 'static,
+        F: RemoteActiveMessage + LamellarAM + Dist + 'static,
     {
         self.exec_am_pe_tg(pe, am, None)
     }
@@ -700,7 +700,7 @@ impl LamellarTeamRT {
         task_group_cnts: Option<Arc<AMCounters>>,
     ) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync>
     where
-        F: RemoteActiveMessage + LamellarAM + Send + Sync + 'static,
+        F: RemoteActiveMessage + LamellarAM + Dist + 'static,
     {
         prof_start!(pre);
         let tg_outstanding_reqs = match task_group_cnts {
@@ -761,7 +761,7 @@ impl LamellarTeamRT {
         task_group_cnts: Option<Arc<AMCounters>>,
     ) -> Box<dyn LamellarRequest<Output = F> + Send + Sync>
     where
-        F: serde::ser::Serialize + serde::de::DeserializeOwned + Sync + Send + 'static,
+        F: Dist + 'static,
     {
         prof_start!(pre);
         let tg_outstanding_reqs = match task_group_cnts {

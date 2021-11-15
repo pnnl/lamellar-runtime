@@ -12,12 +12,12 @@ use std::sync::Arc;
 
 
 #[lamellar_impl::AmDataRT(Clone)]
-pub struct ReadOnlyArray<T: Dist + 'static> {
+pub struct ReadOnlyArray<T: Dist + Clone + 'static> {
     pub(crate) array: UnsafeArray<T>,
 }
 
 //#[prof]
-impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> ReadOnlyArray<T> {
+impl<T: Dist + Clone + 'static> ReadOnlyArray<T> {
     pub fn new<U: Into<IntoLamellarTeam>>(
         team: U,
         array_size: usize,
@@ -70,7 +70,7 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Re
     pub fn local_as_mut_slice(&self) -> &mut [T] {
         self.array.local_as_mut_slice()
     }
-    pub fn to_base_inner<B: Dist + 'static>(self) -> ReadOnlyArray<B> {
+    pub fn to_base_inner<B: Dist + Clone + 'static>(self) -> ReadOnlyArray<B> {
         
 
         ReadOnlyArray {
@@ -132,7 +132,7 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Re
     }
 }
 
-impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> DistIteratorLauncher
+impl<T: Dist + Clone + 'static> DistIteratorLauncher
     for ReadOnlyArray<T>
 {
     fn global_index_from_local(&self, index: usize, chunk_size: usize) -> usize {
@@ -156,7 +156,7 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Di
     }
 }
 
-impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> LamellarArray<T>
+impl<T: Dist + Clone + 'static> LamellarArray<T>
     for ReadOnlyArray<T>
 {
     fn team(&self) -> Arc<LamellarTeamRT>{
@@ -183,7 +183,7 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> La
     }
     
 }
-impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> LamellarArrayRead<T>
+impl<T: Dist + Clone + 'static> LamellarArrayRead<T>
     for ReadOnlyArray<T>
 {
     fn get<U: MyInto<LamellarArrayInput<T>>>(&self, index: usize, buf: U){
@@ -195,7 +195,7 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> La
 }
 
 
-impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> SubArray<T>
+impl<T: Dist + Clone + 'static> SubArray<T>
     for ReadOnlyArray<T>
 {
     type Array = ReadOnlyArray<T>;
@@ -204,7 +204,7 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Su
     }
 }
 
-impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + std::fmt::Debug + 'static>
+impl<T: Dist + Clone + std::fmt::Debug + 'static>
     ReadOnlyArray<T>
 {
     pub fn print(&self) {
@@ -213,7 +213,7 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + std::fmt::D
 }
 
 
-// impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> LamellarArrayReduce<T>
+// impl<T: Dist + Clone + 'static> LamellarArrayReduce<T>
 //     for ReadOnlyArray<T>
 // {
     
@@ -241,7 +241,7 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + std::fmt::D
 //     }
 // }
 
-// impl<'a, T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> IntoIterator
+// impl<'a, T: Dist + Clone + 'static> IntoIterator
 //     for &'a ReadOnlyArray<T>
 // {
 //     type Item = &'a T;

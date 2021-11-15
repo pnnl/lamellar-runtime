@@ -25,9 +25,9 @@ impl std::fmt::Display for MemNotLocalError {
 }
 
 impl std::error::Error for MemNotLocalError {}
-pub trait Dist: std::clone::Clone + Send + Sync {}
+pub trait Dist: serde::ser::Serialize + serde::de::DeserializeOwned +  Send + Sync {}
 
-impl<T: serde::ser::Serialize + serde::de::DeserializeOwned + std::clone::Clone + Send + Sync> Dist
+impl<T: serde::ser::Serialize + serde::de::DeserializeOwned + Send + Sync> Dist
     for T
 {
 }
@@ -62,7 +62,7 @@ impl<T: Dist + 'static> LamellarMemoryRegion<T> {
     }
 }
 
-impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static>
+impl<T: Dist + Clone + 'static>
     From<&LamellarMemoryRegion<T>> for LamellarArrayInput<T>
 {
     fn from(mr: &LamellarMemoryRegion<T>) -> Self {
@@ -70,7 +70,7 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static>
     }
 }
 
-impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static>
+impl<T: Dist + Clone + 'static>
     MyFrom<&LamellarMemoryRegion<T>> for LamellarArrayInput<T>
 {
     fn my_from(mr: &LamellarMemoryRegion<T>, _team: &Arc<LamellarTeamRT>) -> Self {

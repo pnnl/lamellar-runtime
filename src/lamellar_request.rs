@@ -2,6 +2,7 @@ use crate::active_messaging::LamellarAny;
 use crate::lamellae::{Des, SerializedData};
 use crate::lamellar_arch::LamellarArchRT;
 use crate::lamellar_team::LamellarTeamRT;
+use crate::memregion::Dist;
 use async_trait::async_trait;
 use crossbeam::utils::CachePadded;
 use lamellar_prof::*;
@@ -37,7 +38,7 @@ pub trait LamellarRequest {
 }
 
 pub struct LamellarRequestHandle<
-    T: serde::ser::Serialize + serde::de::DeserializeOwned + Sync + Send,
+    T: Dist,
 > {
     pub(crate) id: usize,
     pub(crate) cnt: usize,
@@ -56,7 +57,7 @@ pub(crate) enum AmType {
 }
 
 //#[prof]
-impl<T: 'static + serde::ser::Serialize + serde::de::DeserializeOwned + Sync + Send>
+impl<T:Dist + 'static>
     LamellarRequestHandle<T>
 {
     pub(crate) fn new<'a>(
@@ -170,7 +171,7 @@ impl<T: 'static + serde::ser::Serialize + serde::de::DeserializeOwned + Sync + S
 }
 
 #[async_trait]
-impl<T: 'static + serde::ser::Serialize + serde::de::DeserializeOwned + Sync + Send> LamellarRequest
+impl<T: Dist + 'static > LamellarRequest
     for LamellarRequestHandle<T>
 {
     type Output = T;
@@ -206,7 +207,7 @@ impl<T: 'static + serde::ser::Serialize + serde::de::DeserializeOwned + Sync + S
 }
 
 //#[prof]
-impl<T: serde::ser::Serialize + serde::de::DeserializeOwned + Sync + Send> Drop
+impl<T: Dist> Drop
     for LamellarRequestHandle<T>
 {
     fn drop(&mut self) {

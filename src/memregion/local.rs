@@ -257,7 +257,7 @@ impl<T: Dist + 'static> std::fmt::Debug for LocalMemoryRegion<T> {
     }
 }
 
-impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static>
+impl<T: Dist + Clone +'static>
     From<&LocalMemoryRegion<T>> for LamellarArrayInput<T>
 {
     fn from(smr: &LocalMemoryRegion<T>) -> Self {
@@ -265,7 +265,7 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static>
     }
 }
 
-impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static>
+impl<T: Dist + Clone +'static>
     MyFrom<&LocalMemoryRegion<T>> for LamellarArrayInput<T>
 {
     fn my_from(smr: &LocalMemoryRegion<T>, _team: &Arc<LamellarTeamRT>) -> Self {
@@ -273,6 +273,6 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static>
     }
 }
 
-// pub(crate) struct LocalMemoryRegionIter<'a,T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static>{
+// pub(crate) struct LocalMemoryRegionIter<'a,T: Dist + 'static>{
 //     inner:
 // }

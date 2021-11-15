@@ -136,6 +136,7 @@ pub use crate::lamellar_request::LamellarRequest;
 pub use crate::memregion::{
     local::LocalMemoryRegion, shared::SharedMemoryRegion, LamellarMemoryRegion, RemoteMemoryRegion,
 };
+pub use crate::memregion::Dist;
 
 pub use crate::lamellae::Backend;
 pub use crate::lamellar_arch::{BlockedArch, IdError, LamellarArch, StridedArch};
