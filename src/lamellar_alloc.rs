@@ -478,7 +478,7 @@ mod tests {
         let mut threads = Vec::new();
         let start = std::time::Instant::now();
         for _i in 0..10 {
-            let mut alloc_clone = alloc.clone();
+            let alloc_clone = alloc.clone();
             let t = std::thread::spawn(move || {
                 let mut rng = rand::thread_rng();
                 let mut addrs: Vec<usize> = Vec::new();

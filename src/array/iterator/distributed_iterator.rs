@@ -241,7 +241,7 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static, A:
         self.data.clone().for_each_async(self, op);
     }
 }
-impl<'a, T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'a, A: LamellarArrayRead<T> + LamellarArrayWrite<T> + DistIteratorLauncher> DistributedIterator
+impl<'a, T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'a, A:  LamellarArrayRead<T> + LamellarArrayWrite<T> + DistIteratorLauncher> DistributedIterator
     for DistIterMut<'a, T, A>
 {
     type Item = &'a mut T;

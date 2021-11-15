@@ -4,7 +4,7 @@ use crate::array::iterator::distributed_iterator::{
 };
 use crate::array::iterator::serial_iterator::LamellarArrayIter;
 use crate::array::*;
-use crate::darc::Darc;
+use crate::darc::{Darc,DarcMode};
 use crate::lamellae::AllocationType;
 use crate::lamellar_request::LamellarRequest;
 use crate::lamellar_team::{IntoLamellarTeam, LamellarTeamRT};
@@ -17,6 +17,7 @@ use std::ops::Bound;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
+
 
 struct UnsafeArrayInner {
     mem_region: MemoryRegion<u8>,
@@ -331,9 +332,9 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Un
     //     &self.inner.mem_region
     // }
 
-    pub(crate) fn local_as_ptr(&self) -> *const T {
-        self.inner.mem_region.as_casted_ptr::<T>().unwrap()
-    }
+    // pub(crate) fn local_as_ptr(&self) -> *const T {
+    //     self.inner.mem_region.as_casted_ptr::<T>().unwrap()
+    // }
     pub(crate) fn local_as_mut_ptr(&self) -> *mut T {
         self.inner.mem_region.as_casted_mut_ptr::<T>().unwrap()
     }
@@ -392,9 +393,22 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Un
         self.inner.team.clone()
     }
 
+    pub(crate) fn block_on_outstanding(&self, mode: DarcMode){
+        self.inner.block_on_outstanding(mode);
+    }
+
     pub fn into_read_only(self) -> ReadOnlyArray<T> {
+        self.block_on_outstanding(DarcMode::ReadOnlyArray);
         ReadOnlyArray{
             array: self
+        }
+    }
+
+    pub fn into_local_only(self) -> LocalOnlyArray<T> {
+        self.block_on_outstanding(DarcMode::LocalOnlyArray);
+        LocalOnlyArray{
+            array: self,
+            _unsync: PhantomData
         }
     }
 }
@@ -489,18 +503,46 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Di
     }
 }
 
+impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> private::LamellarArrayPrivate<T>
+    for UnsafeArray<T>
+{
+    fn my_pe(&self) -> usize{
+        self.my_pe
+    }
+    fn local_as_ptr(&self) -> *const T{
+        self.local_as_mut_ptr()
+    }
+    fn local_as_mut_ptr(&self) -> *mut T{
+        self.local_as_mut_ptr()
+    }
+
+ 
+
+    fn pe_for_dist_index(&self, index: usize) -> usize {
+        match self.distribution {
+            Distribution::Block => (index as f64 / self.elem_per_pe).floor() as usize,
+            Distribution::Cyclic => index % self.inner.team.num_pes(),
+        }
+    }
+    fn pe_offset_for_dist_index(&self, pe: usize, index: usize) -> usize {
+        match self.distribution {
+            Distribution::Block => {
+                let pe_start_index = (self.elem_per_pe * pe as f64).round() as usize;
+                index - pe_start_index
+            }
+            Distribution::Cyclic => index / self.inner.team.num_pes(),
+        }
+    }
+}
+
+
 impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> LamellarArray<T>
     for UnsafeArray<T>
 {
     fn team(&self) -> Arc<LamellarTeamRT>{
         self.team().clone()
     }
-    fn local_as_ptr(&self) -> *const T{
-        self.local_as_ptr()
-    }
-    fn local_as_mut_ptr(&self) -> *mut T{
-        self.local_as_mut_ptr()
-    }
+    
     fn num_elems_local(&self) -> usize{
         self.num_elems_local()
     }
@@ -569,7 +611,7 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Su
     }
 }
 
-impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> UnsafeArray<T>
+impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static + std::ops::AddAssign> UnsafeArray<T>
 where
     UnsafeArray<T>: ArrayOps<T>,
 {
@@ -578,7 +620,24 @@ where
         index: usize,
         val: T,
     ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>> {
-        <UnsafeArray<T> as ArrayOps<T>>::add(self, index, val) //this is implemented automatically by a proc macro
+        // <UnsafeArray<T> as ArrayOps<T>>::add(self, index, val) //this is implemented automatically by a proc macro
+        let pe = self.pe_for_dist_index(index);
+        let local_index = self.pe_offset_for_dist_index(pe,index);
+        if pe == self.my_pe{
+            self.local_add(local_index,val);
+            None
+        }
+        else{
+            // Some(self.dist_add(
+            //     index,
+            //     Arc::new (#add_name_am{
+            //         data: self.clone(),
+            //         local_index: local_index,
+            //         val: val,
+            //     })
+            // ))
+            None
+        }
     }
 }
 
@@ -603,24 +662,24 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + std::fmt::D
 //         self.add(index,val) //this is implemented automatically by a proc macro
 //     }
 // }
-#[lamellar_impl::AmDataRT]
-struct AddAm {
-    array: UnsafeArray<u8>,
-    input: ArrayOpInput,
-}
+// #[lamellar_impl::AmDataRT]
+// struct AddAm {
+//     array: UnsafeArray<u8>,
+//     input: ArrayOpInput,
+// }
 
-#[lamellar_impl::rt_am]
-impl LamellarAM for AddAm {
-    fn exec(&self) {
-        (self
-            .array
-            .inner
-            .op_map
-            .read()
-            .get(&ArrayOp::Add)
-            .expect("Did not call array.init_add()"))(&self.input);
-    }
-}
+// #[lamellar_impl::rt_am]
+// impl LamellarAM for AddAm {
+//     fn exec(&self) {
+//         (self
+//             .array
+//             .inner
+//             .op_map
+//             .read()
+//             .get(&ArrayOp::Add)
+//             .expect("Did not call array.init_add()"))(&self.input);
+//     }
+// }
 
 impl<
         T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + std::ops::AddAssign + 'static,

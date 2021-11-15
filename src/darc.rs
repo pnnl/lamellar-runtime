@@ -27,6 +27,9 @@ pub(crate) enum DarcMode {
     Darc,
     LocalRw,
     GlobalRw,
+    UnsafeArray,
+    ReadOnlyArray,
+    LocalOnlyArray,
 }
 
 #[lamellar_impl::AmDataRT(Debug)]
@@ -355,6 +358,10 @@ impl<T> Darc<T> {
         // d.print();
         team.barrier();
         Ok(d)
+    }
+
+    pub(crate) fn block_on_outstanding(&self, state: DarcMode) {
+        self.inner().block_on_outstanding(state);
     }
 
     pub fn into_localrw(self) -> LocalRwDarc<T> {

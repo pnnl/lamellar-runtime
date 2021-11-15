@@ -15,6 +15,10 @@ pub(crate) mod r#unsafe;
 pub use r#unsafe::UnsafeArray;
 pub(crate) mod read_only;
 pub use read_only::ReadOnlyArray;
+pub(crate) mod local_only;
+pub use local_only::LocalOnlyArray;
+pub(crate) mod atomic;
+pub use atomic::AtomicArray;
 
 pub mod iterator;
 pub use iterator::distributed_iterator::DistributedIterator;
@@ -59,6 +63,10 @@ pub enum Distribution {
 
 // pub enum Array {
 //     Unsafe,
+// }
+
+// trait TestArrayOps{
+//     fn add
 // }
 
 #[derive(Hash, std::cmp::PartialEq, std::cmp::Eq, Clone)]
@@ -137,6 +145,40 @@ pub trait ArrayOps<T> {
     ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>>;
 }
 
+// pub trait ArrayOpTests<T> {
+//     fn addTest(
+//         &self,
+//         index: usize,
+//         val: T,
+//     ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>>;
+// }
+
+// // struct AddTestAm<{
+// //     data: 
+// // }
+
+// impl <T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static, L: LamellarArrayWrite<T>> ArrayOpTests<T> for L{
+//     fn addTest(&self, index: usize, val: T)->Option<Box<dyn LamellarRequest<Output=()> + Send + Sync>>{
+//         let pe = self.pe_for_dist_index(index);
+//         let local_index = self.pe_offset_for_dist_index(pe,index);
+//         if pe == self.my_pe(){
+//             self.local_add(local_index,val);
+//             None
+//         }
+//         else{
+//             // Some(self.dist_add(
+//             //     index,
+//             //     Arc::new (#add_name_am{
+//             //         data: self.clone(),
+//             //         local_index: local_index,
+//             //         val: val,
+//             //     })
+//             // ))
+//             None
+//         }
+//     }
+// }
+
 #[enum_dispatch]
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 #[serde(bound = "T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static")]
@@ -152,11 +194,23 @@ pub enum LamellarWriteArray<T: Dist + serde::ser::Serialize + serde::de::Deseria
     UnsafeArray(UnsafeArray<T>)
 }
 
+pub(crate) mod private {
+    use enum_dispatch::enum_dispatch;
+    use crate::memregion::Dist;
+    use crate::array::{UnsafeArray,ReadOnlyArray,LamellarReadArray,LamellarWriteArray};
+    #[enum_dispatch(LamellarReadArray<T>,LamellarWriteArray<T>)]
+    pub trait LamellarArrayPrivate<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> {
+        fn my_pe(&self) -> usize;
+        fn local_as_ptr(&self) -> *const T;
+        fn local_as_mut_ptr(&self) -> *mut T;        
+        fn pe_for_dist_index(&self, index: usize) -> usize;
+        fn pe_offset_for_dist_index(&self, pe: usize, index: usize) -> usize;
+    }
+}
+
 #[enum_dispatch(LamellarReadArray<T>,LamellarWriteArray<T>)]
-pub trait LamellarArray<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static>: Sync + Send + Clone{
+pub trait LamellarArray<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static>: private::LamellarArrayPrivate<T>{
     fn team(&self) -> Arc<LamellarTeamRT>;
-    fn local_as_ptr(&self) -> *const T;
-    fn local_as_mut_ptr(&self) -> *mut T;
     fn num_elems_local(&self) -> usize;
     fn len(&self) -> usize;
     fn barrier(&self);
@@ -192,14 +246,14 @@ pub trait SubArray<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned
 }
 
 #[enum_dispatch(LamellarReadArray<T>,LamellarWriteArray<T>)]
-pub trait LamellarArrayRead<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static>: LamellarArray<T>
+pub trait LamellarArrayRead<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static>: LamellarArray<T> + Clone + Send + Sync
 {
     fn get<U: MyInto<LamellarArrayInput<T>>>(&self, index: usize, buf: U);
     fn at(&self, index: usize) -> T;
 }
 
 #[enum_dispatch(LamellarWriteArray<T>)]
-pub trait LamellarArrayWrite<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static>: LamellarArray<T>
+pub trait LamellarArrayWrite<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static>: LamellarArray<T> + Clone + Send + Sync
 {
     fn put<U: MyInto<LamellarArrayInput<T>>>(&self, index: usize, buf: U); 
 }

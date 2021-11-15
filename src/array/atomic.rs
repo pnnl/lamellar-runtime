@@ -11,21 +11,74 @@ use crate::memregion::{Dist};
 use std::sync::Arc;
 use core::marker::PhantomData;
 
+use std::sync::atomic::Ordering;
 
+
+trait LanguageAtomic {
+    type Orig;
+    type Atomic;
+    fn as_atomic(&mut self) -> &Self::Atomic;
+    fn fetch_add(&mut self,val: Self::Orig) -> Self::Orig;
+    fn fetch_sub(&mut self, val: Self::Orig) -> Self::Orig;
+    fn load(&mut self) -> Self::Orig;
+    fn store(&mut self, val: Self::Orig);
+    fn swap(&mut self, val: Self::Orig) -> Self::Orig;
+}
+
+macro_rules! impl_language_atomics{
+    { $A:ty, $B:ty } => {
+        impl LanguageAtomic for $A {
+            type Orig = $A;
+            type Atomic = $B;
+
+            // there is an equivalent call in nightly rust
+            // Self::Atomic::from_mut()... we will switch to that once stablized; 
+            fn as_atomic(&mut self) -> &Self::Atomic{
+                use std::mem::align_of;
+                let [] = [(); align_of::<$B>() - align_of::<$A>()];
+                // SAFETY:
+                //  - the mutable reference guarantees unique ownership.
+                //  - the alignment of `$int_type` and `Self` is the
+                //    same, as promised by $cfg_align and verified above.
+                unsafe { &*(self as *mut $A as *mut Self::Atomic) }
+            }
+            fn fetch_add(&mut self, val: Self::Orig) -> Self::Orig {
+                self.as_atomic().fetch_add(val, Ordering::SeqCst)
+            }
+            fn fetch_sub(&mut self, val: Self::Orig) -> Self::Orig {
+                self.as_atomic().fetch_sub(val, Ordering::SeqCst)
+            }
+            fn load(&mut self) -> Self::Orig{
+                self.as_atomic().load(Ordering::SeqCst)
+            }
+            fn store(&mut self, val: Self::Orig){
+                self.as_atomic().store(val,Ordering::SeqCst)
+            }
+            fn swap(&mut self, val: Self::Orig) -> Self::Orig{
+                self.as_atomic().swap(val, Ordering::SeqCst)
+            }
+        }
+    }
+}
+
+use std::sync::atomic::AtomicI8;
+impl_language_atomics!{i8,AtomicI8}
+use std::sync::atomic::AtomicI16;
+impl_language_atomics!{i16,AtomicI16}
 
 #[lamellar_impl::AmDataRT(Clone)]
-pub struct ReadOnlyArray<T: Dist + 'static> {
+pub struct AtomicArray<T: Dist + 'static> {
     pub(crate) array: UnsafeArray<T>,
 }
 
 //#[prof]
-impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> ReadOnlyArray<T> {
+impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> AtomicArray<T> {
     pub fn new<U: Into<IntoLamellarTeam>>(
         team: U,
         array_size: usize,
         distribution: Distribution,
-    ) -> ReadOnlyArray<T> {
-        ReadOnlyArray{
+    ) -> AtomicArray<T> {
+        AtomicArray{
             array: UnsafeArray::new(team,array_size,distribution)
         }
     }
@@ -40,7 +93,7 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Re
     }
 
     pub fn use_distribution(self, distribution: Distribution) -> Self {
-        ReadOnlyArray{
+        AtomicArray{
             array: self.array.use_distribution(distribution)
         }
     }
@@ -69,10 +122,10 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Re
     pub fn local_as_slice(&self) -> &[T] {
         self.array.local_as_mut_slice()
     }
-    pub fn to_base_inner<B: Dist + 'static>(self) -> ReadOnlyArray<B> {
+    pub fn to_base_inner<B: Dist + 'static>(self) -> AtomicArray<B> {
         
 
-        ReadOnlyArray {
+        AtomicArray {
             array: self.array.to_base_inner()
         }
     }
@@ -101,15 +154,15 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Re
         self.array.local_as_mut_ptr()
     }
 
-    pub fn dist_iter(&self) -> DistIter<'static, T,ReadOnlyArray<T>> {
+    pub fn dist_iter(&self) -> DistIter<'static, T,AtomicArray<T>> {
         DistIter::new(self.clone().into(), 0, 0)
     }
 
-    pub fn ser_iter(&self) -> LamellarArrayIter<'_, T,ReadOnlyArray<T>> {
+    pub fn ser_iter(&self) -> LamellarArrayIter<'_, T,AtomicArray<T>> {
         LamellarArrayIter::new(self.clone().into(), self.array.team().clone(), 1)
     }
 
-    pub fn buffered_iter(&self, buf_size: usize) -> LamellarArrayIter<'_, T,ReadOnlyArray<T>> {
+    pub fn buffered_iter(&self, buf_size: usize) -> LamellarArrayIter<'_, T,AtomicArray<T>> {
         LamellarArrayIter::new(
             self.clone().into(),
             self.array.team().clone(),
@@ -117,8 +170,8 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Re
         )
     }
 
-    pub fn sub_array<R: std::ops::RangeBounds<usize>>(&self, range: R) -> ReadOnlyArray<T> {
-        ReadOnlyArray {
+    pub fn sub_array<R: std::ops::RangeBounds<usize>>(&self, range: R) -> AtomicArray<T> {
+        AtomicArray {
             array: self.array.sub_array(range)
         }
     }
@@ -141,7 +194,7 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Re
 }
 
 impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> DistIteratorLauncher
-    for ReadOnlyArray<T>
+    for AtomicArray<T>
 {
     fn global_index_from_local(&self, index: usize, chunk_size: usize) -> usize {
         self.array.global_index_from_local(index, chunk_size)
@@ -165,7 +218,7 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Di
 }
 
 impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> private::LamellarArrayPrivate<T>
-    for ReadOnlyArray<T>
+    for AtomicArray<T>
 {
     fn my_pe(&self) -> usize{
         self.array.my_pe()
@@ -185,7 +238,7 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> pr
 }
 
 impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> LamellarArray<T>
-    for ReadOnlyArray<T>
+    for AtomicArray<T>
 {
     fn team(&self) -> Arc<LamellarTeamRT>{
         self.array.team().clone()
@@ -206,7 +259,7 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> La
     
 }
 impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> LamellarArrayRead<T>
-    for ReadOnlyArray<T>
+    for AtomicArray<T>
 {
     fn get<U: MyInto<LamellarArrayInput<T>>>(&self, index: usize, buf: U){
         self.get(index,buf)
@@ -218,16 +271,16 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> La
 
 
 impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> SubArray<T>
-    for ReadOnlyArray<T>
+    for AtomicArray<T>
 {
-    type Array = ReadOnlyArray<T>;
+    type Array = AtomicArray<T>;
     fn sub_array<R: std::ops::RangeBounds<usize>>(&self, range: R) -> Self::Array {
         self.sub_array(range).into()
     }
 }
 
 impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + std::fmt::Debug + 'static>
-    ReadOnlyArray<T>
+    AtomicArray<T>
 {
     pub fn print(&self) {
         self.array.print()
@@ -236,7 +289,7 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + std::fmt::D
 
 
 // impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> LamellarArrayReduce<T>
-//     for ReadOnlyArray<T>
+//     for AtomicArray<T>
 // {
     
 //     fn get_reduction_op(&self, op: String) -> LamellarArcAm {
@@ -264,7 +317,7 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + std::fmt::D
 // }
 
 // impl<'a, T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> IntoIterator
-//     for &'a ReadOnlyArray<T>
+//     for &'a AtomicArray<T>
 // {
 //     type Item = &'a T;
 //     type IntoIter = SerialIteratorIter<LamellarArrayIter<'a, T>>;
@@ -275,7 +328,7 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + std::fmt::D
 //     }
 // }
 
-// impl < T> Drop for ReadOnlyArray<T>{
+// impl < T> Drop for AtomicArray<T>{
 //     fn drop(&mut self){
 //         println!("dropping array!!!");
 //     }

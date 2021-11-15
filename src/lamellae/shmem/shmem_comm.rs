@@ -690,23 +690,23 @@ impl Drop for ShmemData {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+// #[cfg(test)]
+// mod tests {
+//     use super::*;
 
-    #[test]
-    fn shmem_alloc_test() {
-        let num_pes = 3;
-        for pe in 0..num_pes {
-            std::thread::spawn(move || {
-                let shmem_comm = ShmemComm::new(num_pes, pe);
-                let addr = shmem_comm.alloc(1000, AllocationType::Global);
-                // let addr = 0;
-                let sub_addr = shmem_comm.alloc(500, AllocationType::Sub(vec![0, 2]));
-                println!("{:?} addr {:?} sub_addr {:?}", pe, addr, sub_addr);
-                std::thread::sleep(std::time::Duration::from_secs(30));
-            });
-        }
-        std::thread::sleep(std::time::Duration::from_secs(45));
-    }
-}
+//     #[test]
+//     fn shmem_alloc_test() {
+//         let num_pes = 3;
+//         for pe in 0..num_pes {
+//             std::thread::spawn(move || {
+//                 let shmem_comm = ShmemComm::new(num_pes, pe);
+//                 let addr = shmem_comm.alloc(1000, AllocationType::Global);
+//                 // let addr = 0;
+//                 let sub_addr = shmem_comm.alloc(500, AllocationType::Sub(vec![0, 2]));
+//                 println!("{:?} addr {:?} sub_addr {:?}", pe, addr, sub_addr);
+//                 std::thread::sleep(std::time::Duration::from_secs(30));
+//             });
+//         }
+//         std::thread::sleep(std::time::Duration::from_secs(45));
+//     }
+// }
