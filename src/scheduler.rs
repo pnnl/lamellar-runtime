@@ -78,7 +78,7 @@ pub(crate) trait AmeSchedulerQueue: Sync + Send {
     ); //serialized active message
     fn submit_task<F>(&self, future: F)
     where
-        F: Future<Output = ()> + Send + 'static;
+        F: Future<Output = ()> + Send;
     fn exec_task(&self);
     fn shutdown(&self);
     fn active(&self) -> bool;
@@ -107,7 +107,7 @@ pub(crate) trait SchedulerQueue: Sync + Send {
     fn submit_work(&self, msg: SerializedData, lamellae: Arc<Lamellae>); //serialized active message
     fn submit_task<F>(&self, future: F)
     where
-        F: Future<Output = ()> + Send + 'static;
+        F: Future<Output = ()> + Send;
     fn exec_task(&self);
     fn shutdown(&self);
     fn active(&self) -> bool;

@@ -650,11 +650,10 @@ fn create_reduction(
             #lamellar::array::LamellarReadArray::#array_type(inner) => std::sync::Arc::new(#reduction_name{
                 data: inner.clone().to_base_inner::<#typeident>() , start_pe: 0, end_pe: num_pes-1}),
         });
-        
 
         array_impls.extend(quote!{
             #[allow(non_camel_case_types)]
-            #[#am_data]
+            #[#am_data(Clone)]
             struct #reduction_name{
                 data: #lamellar::array::#array_type<#typeident>,
                 start_pe: usize,
@@ -692,7 +691,7 @@ fn create_reduction(
     }
 
     let expanded = quote! {
-        fn  #reduction_gen<T: #lamellar::serde::ser::Serialize + #lamellar::serde::de::DeserializeOwned + std::clone::Clone + Send + Sync + 'static> (data: #lamellar::array::LamellarReadArray<T>, num_pes: usize)
+        fn  #reduction_gen<T: #lamellar::Dist > (data: #lamellar::array::LamellarReadArray<T>, num_pes: usize)
         -> std::sync::Arc<dyn #lamellar::RemoteActiveMessage + Send + Sync >{
             match data{
                 #gen_match_stmts
@@ -826,7 +825,10 @@ fn create_add(
 pub fn register_reduction(item: TokenStream) -> TokenStream {
     let args = parse_macro_input!(item as ReductionArgs);
     let mut output = quote! {};
-    let array_types: Vec<syn::Ident> = vec![quote::format_ident!("UnsafeArray"),quote::format_ident!("ReadOnlyArray")];
+    let array_types: Vec<syn::Ident> = vec![
+        quote::format_ident!("UnsafeArray"),
+        quote::format_ident!("ReadOnlyArray"),
+    ];
 
     for ty in args.tys {
         let mut closure = args.closure.clone();
@@ -867,7 +869,10 @@ pub fn register_reduction(item: TokenStream) -> TokenStream {
 #[proc_macro]
 pub fn generate_reductions_for_type(item: TokenStream) -> TokenStream {
     let mut output = quote! {};
-    let read_array_types: Vec<syn::Ident> = vec![quote::format_ident!("UnsafeArray"),quote::format_ident!("ReadOnlyArray")];
+    let read_array_types: Vec<syn::Ident> = vec![
+        quote::format_ident!("UnsafeArray"),
+        quote::format_ident!("ReadOnlyArray"),
+    ];
     let write_array_types: Vec<syn::Ident> = vec![quote::format_ident!("UnsafeArray")];
 
     for t in item.to_string().split(",").collect::<Vec<&str>>() {
@@ -913,7 +918,10 @@ pub fn generate_reductions_for_type(item: TokenStream) -> TokenStream {
 pub fn generate_reductions_for_type_rt(item: TokenStream) -> TokenStream {
     let mut output = quote! {};
 
-    let read_array_types: Vec<syn::Ident> = vec![quote::format_ident!("UnsafeArray"),quote::format_ident!("ReadOnlyArray")];
+    let read_array_types: Vec<syn::Ident> = vec![
+        quote::format_ident!("UnsafeArray"),
+        quote::format_ident!("ReadOnlyArray"),
+    ];
     let write_array_types: Vec<syn::Ident> = vec![quote::format_ident!("UnsafeArray")];
     for t in item.to_string().split(",").collect::<Vec<&str>>() {
         let t = t.trim().to_string();

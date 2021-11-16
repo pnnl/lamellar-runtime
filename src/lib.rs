@@ -1,15 +1,15 @@
 //! Lamellar is an investigation of the applicability of the Rust systems programming language for HPC as an alternative to C and C++, with a focus on PGAS approaches.
-//! 
-//! Lamellar provides several different communication patterns to distributed applications. 
+//!
+//! Lamellar provides several different communication patterns to distributed applications.
 //! First, Lamellar allows for sending and executing user defined active messages on remote nodes in a distributed environments.
 //! User first implement runtime exported trait (LamellarAM) for their data structures and then call a procedural macro (#[lamellar::am]) on the implementation.
 //! The procedural macro procudes all the nescessary code to enable remote execution of the active message.
-//! 
+//!
 //! Lamellar also provides PGAS capabilities through multiple interfaces.
 //! The first is a low level interface for constructing memory regions which are readable and writable from remote pes (nodes).
-//! 
+//!
 //! The second is a high-level abstraction of distributed arrays, allowing for distributed iteration and data parallel processing of elements.
-//! 
+//!
 //! Lamellar relies on network providers called Lamellae to perform the transfer of data throughout the system.
 //! Currently three such Lamellae exist, one used for single node (single process) development ("local"), , one used for single node (multi-process) development ("shmem") useful for emulating distributed environments,and another based on the Rust OpenFabrics Interface Transport Layer (ROFI) (<https://github.com/pnnl/rofi>).
 //!
@@ -43,7 +43,7 @@
 //!     fn exec(&self) {
 //!         println!(
 //!             "Hello pe {:?} of {:?}, I'm pe {:?}",
-//!             lamellar::current_pe, 
+//!             lamellar::current_pe,
 //!             lamellar::num_pes,
 //!             self.my_pe
 //!         );
@@ -112,27 +112,27 @@ pub use utils::*;
 use lamellar_prof::init_prof;
 init_prof!();
 
-
 #[doc(hidden)]
 pub use crate::active_messaging::{
     registered_active_message::RegisteredAm, DarcSerde, LamellarActiveMessage, LamellarResultSerde,
-    LamellarReturn, LamellarSerde, RemoteActiveMessage, Serde
+    LamellarReturn, LamellarSerde, RemoteActiveMessage, Serde,
 };
 pub use crate::active_messaging::{ActiveMessaging, LamellarAM, LocalAM};
 
 #[doc(hidden)]
-pub use crate::array::{LamellarArray,ReduceKey};
+pub use crate::array::{LamellarArray, ReduceKey};
 
-pub use crate::darc::Darc;
-pub use crate::darc::local_rw_darc::LocalRwDarc;
 pub use crate::darc::global_rw_darc::GlobalRwDarc;
 #[doc(hidden)]
 pub use crate::darc::global_rw_darc::{globalrw_from_ndarc, globalrw_serialize};
+pub use crate::darc::local_rw_darc::LocalRwDarc;
 #[doc(hidden)]
 pub use crate::darc::local_rw_darc::{localrw_from_ndarc, localrw_serialize};
+pub use crate::darc::Darc;
 
 pub use crate::lamellar_request::LamellarRequest;
 
+pub use crate::memregion::Dist;
 pub use crate::memregion::{
     local::LocalMemoryRegion, shared::SharedMemoryRegion, LamellarMemoryRegion, RemoteMemoryRegion,
 };

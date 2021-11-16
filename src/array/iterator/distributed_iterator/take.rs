@@ -32,7 +32,7 @@ where
     pub fn for_each_async<F, Fut>(&self, op: F)
     where
         F: Fn(<I as DistributedIterator>::Item) -> Fut + Sync + Send + Clone + 'static,
-        Fut: Future<Output = ()> + Sync + Send + 'static,
+        Fut: Future<Output = ()> + Sync + Send + Clone + 'static,
     {
         self.iter.array().for_each_async(self, op);
     }

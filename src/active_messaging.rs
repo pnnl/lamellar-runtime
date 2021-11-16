@@ -30,6 +30,13 @@ lazy_static! {
     };
 }
 
+pub trait AmDist:
+    serde::ser::Serialize + serde::de::DeserializeOwned + Send + Sync + 'static
+{
+}
+
+impl<T: serde::ser::Serialize + serde::de::DeserializeOwned + Send + Sync + 'static> AmDist for T {}
+
 #[derive(
     serde::Serialize, serde::Deserialize, Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord,
 )]
@@ -87,11 +94,11 @@ pub(crate) type LamellarResultArc = Arc<dyn LamellarSerde + Send + Sync>;
 pub trait Serde: serde::ser::Serialize + serde::de::DeserializeOwned {}
 
 pub trait LocalAM {
-    type Output: serde::ser::Serialize + serde::de::DeserializeOwned + Sync + Send;
+    type Output: AmDist;
 }
 
 pub trait LamellarAM {
-    type Output: serde::ser::Serialize + serde::de::DeserializeOwned + Sync + Send;
+    type Output: AmDist;
 }
 
 pub enum LamellarReturn {
@@ -167,14 +174,14 @@ pub trait ActiveMessaging {
     fn barrier(&self);
     fn exec_am_all<F>(&self, am: F) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync>
     where
-        F: RemoteActiveMessage + LamellarAM + Serde + Send + Sync + 'static;
+        F: RemoteActiveMessage + LamellarAM + Serde + AmDist;
     fn exec_am_pe<F>(
         &self,
         pe: usize,
         am: F,
     ) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync>
     where
-        F: RemoteActiveMessage + LamellarAM + Serde + Send + Sync + 'static;
+        F: RemoteActiveMessage + LamellarAM + Serde + AmDist;
     fn exec_am_local<F>(&self, am: F) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync>
     where
         F: LamellarActiveMessage + LocalAM + Send + Sync + 'static;

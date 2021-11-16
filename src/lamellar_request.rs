@@ -1,4 +1,4 @@
-use crate::active_messaging::LamellarAny;
+use crate::active_messaging::{LamellarAny,AmDist};
 use crate::lamellae::{Des, SerializedData};
 use crate::lamellar_arch::LamellarArchRT;
 use crate::lamellar_team::LamellarTeamRT;
@@ -33,12 +33,10 @@ pub trait LamellarRequest {
     async fn into_future(self: Box<Self>) -> Option<Self::Output>;
     fn get(&self) -> Option<Self::Output>;
     fn get_all(&self) -> Vec<Option<Self::Output>>;
-    fn as_any(self) -> Box<dyn std::any::Any>;
+    // fn as_any(self) -> Box<dyn std::any::Any>;
 }
 
-pub struct LamellarRequestHandle<
-    T: serde::ser::Serialize + serde::de::DeserializeOwned + Sync + Send,
-> {
+pub struct LamellarRequestHandle<T: AmDist> {
     pub(crate) id: usize,
     pub(crate) cnt: usize,
     pub(crate) data_rx: crossbeam::channel::Receiver<(usize, InternalResult)>,
@@ -56,9 +54,7 @@ pub(crate) enum AmType {
 }
 
 //#[prof]
-impl<T: 'static + serde::ser::Serialize + serde::de::DeserializeOwned + Sync + Send>
-    LamellarRequestHandle<T>
-{
+impl<T: AmDist+ 'static> LamellarRequestHandle<T> {
     pub(crate) fn new<'a>(
         num_pes: usize,
         am_type: AmType,
@@ -170,9 +166,7 @@ impl<T: 'static + serde::ser::Serialize + serde::de::DeserializeOwned + Sync + S
 }
 
 #[async_trait]
-impl<T: 'static + serde::ser::Serialize + serde::de::DeserializeOwned + Sync + Send> LamellarRequest
-    for LamellarRequestHandle<T>
-{
+impl<T: AmDist> LamellarRequest for LamellarRequestHandle<T> {
     type Output = T;
     async fn into_future(self: Box<Self>) -> Option<Self::Output> {
         let mut res = self.data_rx.try_recv();
@@ -200,15 +194,13 @@ impl<T: 'static + serde::ser::Serialize + serde::de::DeserializeOwned + Sync + S
             // AmType::RemoteClosure => self.closure_get_all(),
         }
     }
-    fn as_any(self) -> Box<dyn std::any::Any> {
-        Box::new(self)
-    }
+    // fn as_any(self) -> Box<dyn std::any::Any> {
+    //     Box::new(self)
+    // }
 }
 
 //#[prof]
-impl<T: serde::ser::Serialize + serde::de::DeserializeOwned + Sync + Send> Drop
-    for LamellarRequestHandle<T>
-{
+impl<T: AmDist> Drop for LamellarRequestHandle<T> {
     fn drop(&mut self) {
         trace!("Request dropping {:?} {:?}", self.id, self.am_type);
         self.active.store(false, Ordering::SeqCst);

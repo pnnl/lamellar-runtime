@@ -66,13 +66,9 @@ fn main() {
         .chunks(4)
         .step_by(3)
         .for_each(move |chunk| {
-            println!("[pe({:?})-{:?}]",my_pe,std::thread::current().id(),);
-            for (i,elem) in chunk{
-                println!(
-                    "i: {:?} {:?}",                    
-                    i,
-                    elem
-                )
+            println!("[pe({:?})-{:?}]", my_pe, std::thread::current().id(),);
+            for (i, elem) in chunk {
+                println!("i: {:?} {:?}", i, elem)
             }
         });
     block_array.wait_all();
@@ -181,13 +177,22 @@ fn main() {
             println!("{:?}", chunk.as_slice());
         }
 
-        
         println!("-----");
-        for (i,(a,b)) in cyclic_array.ser_iter().zip(block_array.ser_iter()).into_iter().enumerate() {
-            println!("{:?}: {:?} {:?}",i, a, b);
+        for (i, (a, b)) in cyclic_array
+            .ser_iter()
+            .zip(block_array.ser_iter())
+            .into_iter()
+            .enumerate()
+        {
+            println!("{:?}: {:?} {:?}", i, a, b);
         }
         println!("-----");
-        for (a,b) in cyclic_array.ser_iter().copied_chunks(10).zip(block_array.ser_iter().copied_chunks(10)).into_iter() {
+        for (a, b) in cyclic_array
+            .ser_iter()
+            .copied_chunks(10)
+            .zip(block_array.ser_iter().copied_chunks(10))
+            .into_iter()
+        {
             println!("{:?} {:?}", a.as_slice(), b.as_slice());
         }
     }

@@ -1,6 +1,6 @@
 use crate::active_messaging::*;
 use crate::array::iterator::distributed_iterator::{
-    DistIter, DistIterMut, DistIteratorLauncher, DistributedIterator, ForEach, ForEachAsync
+    DistIter, DistIterMut, DistIteratorLauncher, DistributedIterator, ForEach, ForEachAsync,
 };
 use crate::array::iterator::serial_iterator::LamellarArrayIter;
 use crate::array::*;
@@ -27,7 +27,7 @@ struct UnsafeArrayInner {
 
 //need to calculate num_elems_local dynamically
 #[lamellar_impl::AmDataRT(Clone)]
-pub struct UnsafeArray<T: Dist + 'static> {
+pub struct UnsafeArray<T: Dist> {
     inner: Darc<UnsafeArrayInner>,
     distribution: Distribution,
     size: usize,      //total array size
@@ -39,7 +39,7 @@ pub struct UnsafeArray<T: Dist + 'static> {
 }
 
 //#[prof]
-impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> UnsafeArray<T> {
+impl<T: Dist> UnsafeArray<T> {
     pub fn new<U: Into<IntoLamellarTeam>>(
         team: U,
         array_size: usize,
@@ -278,7 +278,7 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Un
             }
         }
     }
-    pub fn to_base_inner<B: Dist + 'static>(self) -> UnsafeArray<B> {
+    pub fn to_base_inner<B: Dist>(self) -> UnsafeArray<B> {
         let u8_size = self.size * std::mem::size_of::<T>();
         let b_size = u8_size / std::mem::size_of::<B>();
         let elem_per_pe = b_size as f64 / self.inner.team.num_pes() as f64;
@@ -296,37 +296,6 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Un
             phantom: PhantomData,
         }
     }
-
-    pub fn reduce_inner(
-        &self,
-        func: LamellarArcAm,
-    ) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
-        if let Ok(my_pe) = self.inner.team.team_pe_id() {
-            self.inner.team.exec_arc_am_pe::<T>(
-                my_pe,
-                func,
-                Some(self.inner.array_counters.clone()),
-            )
-        } else {
-            self.inner
-                .team
-                .exec_arc_am_pe::<T>(0, func, Some(self.inner.array_counters.clone()))
-        }
-    }
-
-    pub fn reduce(&self, op: &str) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
-        self.reduce_inner(self.get_reduction_op(op.to_string()))
-    }
-    pub fn sum(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
-        self.reduce("sum")
-    }
-    pub fn prod(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
-        self.reduce("prod")
-    }
-    pub fn max(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
-        self.reduce("max")
-    }
-
     // pub fn local_mem_region(&self) -> &MemoryRegion<T> {
     //     &self.inner.mem_region
     // }
@@ -338,11 +307,11 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Un
         self.inner.mem_region.as_casted_mut_ptr::<T>().unwrap()
     }
 
-    pub fn dist_iter(&self) -> DistIter<'static, T,UnsafeArray<T>> {
+    pub fn dist_iter(&self) -> DistIter<'static, T, UnsafeArray<T>> {
         DistIter::new(self.clone().into(), 0, 0)
     }
 
-    pub fn dist_iter_mut(&self) -> DistIterMut<'static, T,UnsafeArray<T>> {
+    pub fn dist_iter_mut(&self) -> DistIterMut<'static, T, UnsafeArray<T>> {
         DistIterMut::new(self.clone().into(), 0, 0)
     }
 
@@ -393,15 +362,42 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Un
     }
 
     pub fn into_read_only(self) -> ReadOnlyArray<T> {
-        ReadOnlyArray{
-            array: self
-        }
+        ReadOnlyArray { array: self }
     }
 }
 
-impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> DistIteratorLauncher
-    for UnsafeArray<T>
-{
+impl <T: Dist + serde::Serialize + serde::de::DeserializeOwned> UnsafeArray<T> {
+    pub fn reduce_inner(
+        &self,
+        func: LamellarArcAm,
+    ) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+        if let Ok(my_pe) = self.inner.team.team_pe_id() {
+            self.inner.team.exec_arc_am_pe::<T>(
+                my_pe,
+                func,
+                Some(self.inner.array_counters.clone()),
+            )
+        } else {
+            self.inner
+                .team
+                .exec_arc_am_pe::<T>(0, func, Some(self.inner.array_counters.clone()))
+        }
+    }
+
+    pub fn reduce(&self, op: &str) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+        self.reduce_inner(self.get_reduction_op(op.to_string()))
+    }
+    pub fn sum(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+        self.reduce("sum")
+    }
+    pub fn prod(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+        self.reduce("prod")
+    }
+    pub fn max(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+        self.reduce("max")
+    }
+}
+impl<T: Dist> DistIteratorLauncher for UnsafeArray<T> {
     fn global_index_from_local(&self, index: usize, chunk_size: usize) -> usize {
         // println!("global index cs:{:?}",chunk_size);
         let my_pe = self.my_pe;
@@ -460,7 +456,7 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Di
     where
         I: DistributedIterator + 'static,
         F: Fn(I::Item) -> Fut + Sync + Send + Clone + 'static,
-        Fut: Future<Output = ()> + Sync + Send + 'static,
+        Fut: Future<Output = ()> + Sync + Send + Clone + 'static,
     {
         if let Ok(_my_pe) = self.inner.team.team_pe_id() {
             let num_workers = match std::env::var("LAMELLAR_THREADS") {
@@ -489,28 +485,26 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Di
     }
 }
 
-impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> LamellarArray<T>
-    for UnsafeArray<T>
-{
-    fn team(&self) -> Arc<LamellarTeamRT>{
+impl<T: Dist> LamellarArray<T> for UnsafeArray<T> {
+    fn team(&self) -> Arc<LamellarTeamRT> {
         self.team().clone()
     }
-    fn local_as_ptr(&self) -> *const T{
+    fn local_as_ptr(&self) -> *const T {
         self.local_as_ptr()
     }
-    fn local_as_mut_ptr(&self) -> *mut T{
+    fn local_as_mut_ptr(&self) -> *mut T {
         self.local_as_mut_ptr()
     }
-    fn num_elems_local(&self) -> usize{
+    fn num_elems_local(&self) -> usize {
         self.num_elems_local()
     }
-    fn len(&self) -> usize{
+    fn len(&self) -> usize {
         self.len()
     }
-    fn barrier(&self){
+    fn barrier(&self) {
         self.barrier();
     }
-    fn wait_all(&self){
+    fn wait_all(&self) {
         let mut temp_now = Instant::now();
         while self
             .inner
@@ -539,37 +533,30 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> La
         }
         // println!("done in wait all {:?}",std::time::SystemTime::now());
     }
-    
 }
-impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> LamellarArrayRead<T>
-    for UnsafeArray<T>
-{
-    fn get<U: MyInto<LamellarArrayInput<T>>>(&self, index: usize, buf: U){
-        self.get(index,buf)
+impl<T: Dist> LamellarArrayRead<T> for UnsafeArray<T> {
+    fn get<U: MyInto<LamellarArrayInput<T>>>(&self, index: usize, buf: U) {
+        self.get(index, buf)
     }
-    fn at(&self, index: usize) -> T{
+    fn at(&self, index: usize) -> T {
         self.at(index)
     }
 }
 
-impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> LamellarArrayWrite<T>
-    for UnsafeArray<T>
-{
-    fn put<U: MyInto<LamellarArrayInput<T>>>(&self, index: usize, buf: U){
-        self.put(index,buf)
+impl<T: Dist> LamellarArrayWrite<T> for UnsafeArray<T> {
+    fn put<U: MyInto<LamellarArrayInput<T>>>(&self, index: usize, buf: U) {
+        self.put(index, buf)
     }
 }
 
-impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> SubArray<T>
-    for UnsafeArray<T>
-{
-    type Array=UnsafeArray<T>;
+impl<T: Dist> SubArray<T> for UnsafeArray<T> {
+    type Array = UnsafeArray<T>;
     fn sub_array<R: std::ops::RangeBounds<usize>>(&self, range: R) -> Self::Array {
         self.sub_array(range).into()
     }
 }
 
-impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> UnsafeArray<T>
+impl<T: Dist> UnsafeArray<T>
 where
     UnsafeArray<T>: ArrayOps<T>,
 {
@@ -582,9 +569,7 @@ where
     }
 }
 
-impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + std::fmt::Debug + 'static>
-    UnsafeArray<T>
-{
+impl<T: Dist + std::fmt::Debug> UnsafeArray<T> {
     pub fn print(&self) {
         self.inner.team.barrier(); //TODO: have barrier accept a string so we can print where we are stalling.
         for pe in 0..self.inner.team.num_pes() {
@@ -597,7 +582,7 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + std::fmt::D
     }
 }
 
-// impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + std::ops::AddAssign + 'static,> ArrayOps<T> for UnsafeArray<T> {
+// impl<T: AmDist+ std::ops::AddAssign,> ArrayOps<T> for UnsafeArray<T> {
 //     #[inline(always)]
 //     fn add(&self, index: usize, val: T) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync> {
 //         self.add(index,val) //this is implemented automatically by a proc macro
@@ -622,10 +607,7 @@ impl LamellarAM for AddAm {
     }
 }
 
-impl<
-        T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + std::ops::AddAssign + 'static,
-    > UnsafeArray<T>
-{
+impl<T: Dist + std::ops::AddAssign> UnsafeArray<T> {
     pub fn dist_add(
         &self,
         index: usize,
@@ -641,7 +623,7 @@ impl<
     }
 }
 
-// impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> LamellarArrayRDMA<T>
+// impl<T: Dist> LamellarArrayRDMA<T>
 //     for UnsafeArray<T>
 // {
 //     #[inline(always)]
@@ -672,17 +654,14 @@ impl<
 //         self.local_as_mut_slice()
 //     }
 //     #[inline(always)]
-//     fn to_base<B: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static>(
+//     fn to_base<B: Dist>(
 //         self,
 //     ) -> LamellarArray<B> {
 //         self.to_base_inner::<B>().into()
 //     }
 // }
 
-impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> LamellarArrayReduce<T>
-    for UnsafeArray<T>
-{
-    
+impl<T: Dist + serde::Serialize + serde::de::DeserializeOwned> LamellarArrayReduce<T> for UnsafeArray<T> {
     fn get_reduction_op(&self, op: String) -> LamellarArcAm {
         // unsafe {
         REDUCE_OPS
@@ -707,7 +686,7 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> La
     }
 }
 
-// impl<'a, T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> IntoIterator
+// impl<'a, T: Dist> IntoIterator
 //     for &'a UnsafeArray<T>
 // {
 //     type Item = &'a T;
