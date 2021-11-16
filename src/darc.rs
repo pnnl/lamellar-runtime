@@ -12,7 +12,7 @@ use std::sync::Arc;
 use crate::lamellae::{AllocationType, Backend, LamellaeComm, LamellaeRDMA};
 use crate::lamellar_world::LAMELLAES;
 use crate::IdError;
-use crate::{LamellarTeam, LamellarTeamRT};
+use crate::lamellar_team::{LamellarTeamRT, IntoLamellarTeam};
 
 pub(crate) mod local_rw_darc;
 use local_rw_darc::LocalRwDarc;
@@ -305,16 +305,16 @@ impl<T> Darc<T> {
 }
 
 impl<T> Darc<T> {
-    pub fn new(team: Arc<LamellarTeam>, item: T) -> Result<Darc<T>, IdError> {
-        Darc::try_new(team.team.clone(), item, DarcMode::Darc)
+    pub fn new<U: Into<IntoLamellarTeam>>(team: U, item: T) -> Result<Darc<T>, IdError> {
+        Darc::try_new(team, item, DarcMode::Darc)
     }
 
-    pub(crate) fn try_new(
-        team: Arc<LamellarTeamRT>,
+    pub(crate) fn try_new<U: Into<IntoLamellarTeam>>(
+        team: U,
         item: T,
         state: DarcMode,
     ) -> Result<Darc<T>, IdError> {
-        let team_rt = team.clone();
+        let team_rt = team.into().team.clone();
         let my_pe = team_rt.team_pe?;
 
         let alloc = if team_rt.num_pes == team_rt.num_world_pes {
@@ -326,10 +326,10 @@ impl<T> Darc<T> {
             + team_rt.num_pes * std::mem::size_of::<usize>()
             + team_rt.num_pes * std::mem::size_of::<DarcMode>();
         // println!("creating new darc");
-        team.barrier();
+        team_rt.barrier();
         // println!("creating new darc after barrier");
         let addr = team_rt.lamellae.alloc(size, alloc).expect("out of memory");
-        let temp_team = team.clone();
+        let temp_team = team_rt.clone();
         let darc_temp = DarcInner {
             my_pe: my_pe,
             num_pes: team_rt.num_pes,
@@ -339,7 +339,7 @@ impl<T> Darc<T> {
             mode_addr: addr
                 + std::mem::size_of::<DarcInner<T>>()
                 + team_rt.num_pes * std::mem::size_of::<usize>(),
-            team: Arc::into_raw(temp_team.clone()),
+            team: Arc::into_raw(temp_team),
             item: Box::into_raw(Box::new(item)),
         };
         unsafe {
@@ -354,7 +354,7 @@ impl<T> Darc<T> {
             *elem = state;
         }
         // d.print();
-        team.barrier();
+        team_rt.barrier();
         Ok(d)
     }
 

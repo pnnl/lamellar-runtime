@@ -4,7 +4,7 @@ use crate::lamellar_arch::LamellarArch;
 use crate::lamellar_request::LamellarRequest;
 use crate::lamellar_team::{LamellarTeam, LamellarTeamRT};
 use crate::memregion::{
-    local::LocalMemoryRegion, shared::SharedMemoryRegion, Dist, Arraydist, RemoteMemoryRegion,
+    local::LocalMemoryRegion, shared::SharedMemoryRegion, Dist, RemoteMemoryRegion,
 };
 use crate::scheduler::{create_scheduler, SchedulerType};
 use lamellar_prof::*;
@@ -12,6 +12,7 @@ use log::trace;
 use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::sync::{Arc, Weak};
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 lazy_static! {
     pub(crate) static ref LAMELLAES: RwLock<HashMap<Backend, Arc<Lamellae>>> =
@@ -26,6 +27,7 @@ pub struct LamellarWorld {
     _counters: Arc<AMCounters>,
     my_pe: usize,
     num_pes: usize,
+    ref_cnt: Arc<AtomicUsize>,
 }
 
 //#[prof]
@@ -38,7 +40,7 @@ impl ActiveMessaging for LamellarWorld {
     }
     fn exec_am_all<F>(&self, am: F) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync>
     where
-        F: RemoteActiveMessage + LamellarAM + Serde + Dist,
+        F: RemoteActiveMessage + LamellarAM + Serde + AmDist,
     {
         self.team.exec_am_all(am)
     }
@@ -48,7 +50,7 @@ impl ActiveMessaging for LamellarWorld {
         am: F,
     ) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync>
     where
-        F: RemoteActiveMessage + LamellarAM + Serde + Dist,
+        F: RemoteActiveMessage + LamellarAM + Serde + AmDist,
     {
         assert!(pe < self.num_pes(), "invalid pe: {:?}", pe);
         self.team.exec_am_pe(pe, am)
@@ -133,7 +135,7 @@ impl RemoteMemoryRegion for LamellarWorld {
     // ///
     // /// * `size` - number of elements of T to allocate a memory region for -- (not size in bytes)
     // ///
-    fn alloc_shared_mem_region<T: Arraydist>(&self, size: usize) -> SharedMemoryRegion<T> {
+    fn alloc_shared_mem_region<T: Dist>(&self, size: usize) -> SharedMemoryRegion<T> {
         self.barrier();
         self.team.alloc_shared_mem_region::<T>(size)
     }
@@ -144,7 +146,7 @@ impl RemoteMemoryRegion for LamellarWorld {
     // ///
     // /// * `size` - number of elements of T to allocate a memory region for -- (not size in bytes)
     // ///
-    fn alloc_local_mem_region<T: Arraydist>(&self, size: usize) -> LocalMemoryRegion<T> {
+    fn alloc_local_mem_region<T: Dist>(&self, size: usize) -> LocalMemoryRegion<T> {
         self.team.alloc_local_mem_region::<T>(size)
     }
 
@@ -154,7 +156,7 @@ impl RemoteMemoryRegion for LamellarWorld {
     // ///
     // /// * `region` - the region to free
     // ///
-    // fn free_shared_memory_region<T: Dist + 'static>(&self, region: SharedMemoryRegion<T>) {
+    // fn free_shared_memory_region<T: AmDist+ 'static>(&self, region: SharedMemoryRegion<T>) {
     //     self.team.free_shared_memory_region(region)
     // }
 
@@ -164,7 +166,7 @@ impl RemoteMemoryRegion for LamellarWorld {
     // ///
     // /// * `region` - the region to free
     // ///
-    // fn free_local_memory_region<T: Dist + 'static>(&self, region: LocalMemoryRegion<T>) {
+    // fn free_local_memory_region<T: AmDist+ 'static>(&self, region: LocalMemoryRegion<T>) {
     //     self.team.free_local_memory_region(region)
     // }
 }
@@ -215,25 +217,42 @@ impl LamellarWorld {
     }
 }
 
+impl Clone for LamellarWorld{
+    fn clone(&self)-> Self{
+        self.ref_cnt.fetch_add(1, Ordering::SeqCst);
+        LamellarWorld {
+            team: self.team.clone(),
+            team_rt: self.team_rt.clone(),
+            teams: self.teams.clone(),
+            _counters: self._counters.clone(),
+            my_pe: self.my_pe.clone(),
+            num_pes: self.num_pes.clone(),
+            ref_cnt: self.ref_cnt.clone()
+        }
+    }
+}
 //#[prof]
 impl Drop for LamellarWorld {
     fn drop(&mut self) {
-        // println!("[{:?}] world dropping", self.my_pe);
-        self.wait_all();
-        self.barrier();
+        let cnt = self.ref_cnt.fetch_sub(1,Ordering::SeqCst);
+        if cnt == 1 {
+            // println!("[{:?}] world dropping", self.my_pe);
+            self.wait_all();
+            self.barrier();
 
-        self.team_rt.destroy();
-        LAMELLAES.write().clear();
+            self.team_rt.destroy();
+            LAMELLAES.write().clear();
 
-        // println!("team: {:?} ",Arc::strong_count(&self.team));
-        // println!("team_rt: {:?} {:?}",&self.team_rt.team_hash,Arc::strong_count(&self.team_rt));
-        // let teams = self.teams.read();
-        //     for (k,team) in teams.iter(){
-        //         println!("team map: {:?} {:?}",k,Weak::strong_count(&team));
-        //     }
-        // println!("counters: {:?}",Arc::strong_count(&self.counters));
+            // println!("team: {:?} ",Arc::strong_count(&self.team));
+            // println!("team_rt: {:?} {:?}",&self.team_rt.team_hash,Arc::strong_count(&self.team_rt));
+            // let teams = self.teams.read();
+            //     for (k,team) in teams.iter(){
+            //         println!("team map: {:?} {:?}",k,Weak::strong_count(&team));
+            //     }
+            // println!("counters: {:?}",Arc::strong_count(&self.counters));
 
-        fini_prof!();
+            fini_prof!();
+        }
         // println!("[{:?}] world dropped", self.my_pe);
     }
 }
@@ -304,6 +323,7 @@ impl LamellarWorldBuilder {
             _counters: counters,
             my_pe: my_pe,
             num_pes: num_pes,
+            ref_cnt: Arc::new(AtomicUsize::new(1))
         };
         world
             .teams

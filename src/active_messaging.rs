@@ -2,7 +2,6 @@ use crate::lamellae::{Lamellae, LamellaeRDMA, SerializedData};
 use crate::lamellar_arch::IdError;
 use crate::lamellar_request::{InternalReq, InternalResult, LamellarRequest};
 use crate::lamellar_team::{LamellarTeam, LamellarTeamRT};
-use crate::memregion::Dist;
 use crate::scheduler::{AmeScheduler, ReqData};
 #[cfg(feature = "enable-prof")]
 use lamellar_prof::*;
@@ -30,6 +29,13 @@ lazy_static! {
        Mutex::new(HashMap::new())
     };
 }
+
+pub trait AmDist:
+    serde::ser::Serialize + serde::de::DeserializeOwned + Send + Sync + 'static
+{
+}
+
+impl<T: serde::ser::Serialize + serde::de::DeserializeOwned + Send + Sync + 'static> AmDist for T {}
 
 #[derive(
     serde::Serialize, serde::Deserialize, Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord,
@@ -88,11 +94,11 @@ pub(crate) type LamellarResultArc = Arc<dyn LamellarSerde + Send + Sync>;
 pub trait Serde: serde::ser::Serialize + serde::de::DeserializeOwned {}
 
 pub trait LocalAM {
-    type Output: Dist;
+    type Output: AmDist;
 }
 
 pub trait LamellarAM {
-    type Output: Dist;
+    type Output: AmDist;
 }
 
 pub enum LamellarReturn {
@@ -168,14 +174,14 @@ pub trait ActiveMessaging {
     fn barrier(&self);
     fn exec_am_all<F>(&self, am: F) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync>
     where
-        F: RemoteActiveMessage + LamellarAM + Serde + Dist;
+        F: RemoteActiveMessage + LamellarAM + Serde + AmDist;
     fn exec_am_pe<F>(
         &self,
         pe: usize,
         am: F,
     ) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync>
     where
-        F: RemoteActiveMessage + LamellarAM + Serde + Dist;
+        F: RemoteActiveMessage + LamellarAM + Serde + AmDist;
     fn exec_am_local<F>(&self, am: F) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync>
     where
         F: LamellarActiveMessage + LocalAM + Send + Sync + 'static;

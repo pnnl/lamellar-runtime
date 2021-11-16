@@ -5,16 +5,16 @@ use crate::array::iterator::serial_iterator::LamellarArrayIter;
 use crate::array::*;
 use crate::lamellar_request::LamellarRequest;
 use crate::lamellar_team::{IntoLamellarTeam, LamellarTeamRT};
-use crate::memregion::Arraydist;
+use crate::memregion::Dist;
 use std::sync::Arc;
 
 #[lamellar_impl::AmDataRT(Clone)]
-pub struct ReadOnlyArray<T: Arraydist> {
+pub struct ReadOnlyArray<T: Dist> {
     pub(crate) array: UnsafeArray<T>,
 }
 
 //#[prof]
-impl<T: Arraydist> ReadOnlyArray<T> {
+impl<T: Dist> ReadOnlyArray<T> {
     pub fn new<U: Into<IntoLamellarTeam>>(
         team: U,
         array_size: usize,
@@ -67,23 +67,10 @@ impl<T: Arraydist> ReadOnlyArray<T> {
     pub fn local_as_mut_slice(&self) -> &mut [T] {
         self.array.local_as_mut_slice()
     }
-    pub fn to_base_inner<B: Arraydist>(self) -> ReadOnlyArray<B> {
+    pub fn to_base_inner<B: Dist>(self) -> ReadOnlyArray<B> {
         ReadOnlyArray {
             array: self.array.to_base_inner(),
         }
-    }
-
-    pub fn reduce(&self, op: &str) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
-        self.array.reduce(op)
-    }
-    pub fn sum(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
-        self.array.reduce("sum")
-    }
-    pub fn prod(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
-        self.array.reduce("prod")
-    }
-    pub fn max(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
-        self.array.reduce("max")
     }
 
     // pub fn local_mem_region(&self) -> &MemoryRegion<T> {
@@ -127,7 +114,22 @@ impl<T: Arraydist> ReadOnlyArray<T> {
     }
 }
 
-impl<T: Arraydist> DistIteratorLauncher for ReadOnlyArray<T> {
+impl <T: Dist + serde::Serialize + serde::de::DeserializeOwned> ReadOnlyArray<T> {
+    pub fn reduce(&self, op: &str) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+        self.array.reduce(op)
+    }
+    pub fn sum(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+        self.array.reduce("sum")
+    }
+    pub fn prod(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+        self.array.reduce("prod")
+    }
+    pub fn max(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+        self.array.reduce("max")
+    }
+}
+
+impl<T: Dist> DistIteratorLauncher for ReadOnlyArray<T> {
     fn global_index_from_local(&self, index: usize, chunk_size: usize) -> usize {
         self.array.global_index_from_local(index, chunk_size)
     }
@@ -149,7 +151,7 @@ impl<T: Arraydist> DistIteratorLauncher for ReadOnlyArray<T> {
     }
 }
 
-impl<T: Arraydist> LamellarArray<T> for ReadOnlyArray<T> {
+impl<T: Dist> LamellarArray<T> for ReadOnlyArray<T> {
     fn team(&self) -> Arc<LamellarTeamRT> {
         self.array.team().clone()
     }
@@ -173,7 +175,7 @@ impl<T: Arraydist> LamellarArray<T> for ReadOnlyArray<T> {
         // println!("done in wait all {:?}",std::time::SystemTime::now());
     }
 }
-impl<T: Arraydist> LamellarArrayRead<T> for ReadOnlyArray<T> {
+impl<T: Dist> LamellarArrayRead<T> for ReadOnlyArray<T> {
     fn get<U: MyInto<LamellarArrayInput<T>>>(&self, index: usize, buf: U) {
         self.get(index, buf)
     }
@@ -182,20 +184,20 @@ impl<T: Arraydist> LamellarArrayRead<T> for ReadOnlyArray<T> {
     }
 }
 
-impl<T: Arraydist> SubArray<T> for ReadOnlyArray<T> {
+impl<T: Dist> SubArray<T> for ReadOnlyArray<T> {
     type Array = ReadOnlyArray<T>;
     fn sub_array<R: std::ops::RangeBounds<usize>>(&self, range: R) -> Self::Array {
         self.sub_array(range).into()
     }
 }
 
-impl<T: Arraydist + std::fmt::Debug> ReadOnlyArray<T> {
+impl<T: Dist + std::fmt::Debug> ReadOnlyArray<T> {
     pub fn print(&self) {
         self.array.print()
     }
 }
 
-// impl<T: Arraydist > LamellarArrayReduce<T>
+// impl<T: Dist > LamellarArrayReduce<T>
 //     for ReadOnlyArray<T>
 // {
 
@@ -223,7 +225,7 @@ impl<T: Arraydist + std::fmt::Debug> ReadOnlyArray<T> {
 //     }
 // }
 
-// impl<'a, T: Arraydist > IntoIterator
+// impl<'a, T: Dist > IntoIterator
 //     for &'a ReadOnlyArray<T>
 // {
 //     type Item = &'a T;

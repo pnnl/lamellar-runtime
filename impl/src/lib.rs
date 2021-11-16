@@ -691,7 +691,7 @@ fn create_reduction(
     }
 
     let expanded = quote! {
-        fn  #reduction_gen<T: #lamellar::Arraydist > (data: #lamellar::array::LamellarReadArray<T>, num_pes: usize)
+        fn  #reduction_gen<T: #lamellar::Dist > (data: #lamellar::array::LamellarReadArray<T>, num_pes: usize)
         -> std::sync::Arc<dyn #lamellar::RemoteActiveMessage + Send + Sync >{
             match data{
                 #gen_match_stmts

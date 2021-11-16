@@ -11,7 +11,7 @@ mod zip;
 use zip::*;
 
 use crate::array::LamellarArrayRead;
-use crate::memregion::Arraydist;
+use crate::memregion::Dist;
 use crate::LamellarArray;
 use crate::LamellarTeamRT;
 use crate::LocalMemoryRegion;
@@ -22,7 +22,7 @@ use std::sync::Arc;
 
 pub trait SerialIterator {
     type Item;
-    type ElemType: Arraydist;
+    type ElemType: Dist;
     type Array: LamellarArrayRead<Self::ElemType>;
     fn next(&mut self) -> Option<Self::Item>;
     fn advance_index(&mut self, count: usize);
@@ -73,7 +73,7 @@ where
     }
 }
 
-pub struct LamellarArrayIter<'a, T: Arraydist, A: LamellarArrayRead<T>> {
+pub struct LamellarArrayIter<'a, T: Dist, A: LamellarArrayRead<T>> {
     array: A,
     buf_0: LocalMemoryRegion<T>,
     buf_1: LocalMemoryRegion<T>,
@@ -83,10 +83,10 @@ pub struct LamellarArrayIter<'a, T: Arraydist, A: LamellarArrayRead<T>> {
     _marker: PhantomData<&'a T>,
 }
 
-unsafe impl<'a, T: Arraydist, A: LamellarArrayRead<T>> Sync for LamellarArrayIter<'a, T, A> {}
-unsafe impl<'a, T: Arraydist, A: LamellarArrayRead<T>> Send for LamellarArrayIter<'a, T, A> {}
+unsafe impl<'a, T: Dist, A: LamellarArrayRead<T>> Sync for LamellarArrayIter<'a, T, A> {}
+unsafe impl<'a, T: Dist, A: LamellarArrayRead<T>> Send for LamellarArrayIter<'a, T, A> {}
 
-impl<'a, T: Arraydist, A: LamellarArrayRead<T>> LamellarArrayIter<'a, T, A> {
+impl<'a, T: Dist, A: LamellarArrayRead<T>> LamellarArrayIter<'a, T, A> {
     pub(crate) fn new(
         array: A,
         team: Arc<LamellarTeamRT>,
@@ -147,7 +147,7 @@ impl<'a, T: Arraydist, A: LamellarArrayRead<T>> LamellarArrayIter<'a, T, A> {
     // }
 }
 
-impl<'a, T: Arraydist, A: LamellarArrayRead<T> + Clone> SerialIterator
+impl<'a, T: Dist, A: LamellarArrayRead<T> + Clone> SerialIterator
     for LamellarArrayIter<'a, T, A>
 {
     type ElemType = T;
@@ -184,7 +184,7 @@ impl<'a, T: Arraydist, A: LamellarArrayRead<T> + Clone> SerialIterator
     }
 }
 
-// impl<'a, T: Dist + Clone > Iterator
+// impl<'a, T: AmDist+ Clone > Iterator
 // for LamellarArrayIter<'a, T>
 // {
 //     type Item = &'a T;
@@ -197,7 +197,7 @@ impl<'a, T: Arraydist, A: LamellarArrayRead<T> + Clone> SerialIterator
 // use futures::Stream;
 // use std::pin::Pin;
 
-// impl<'a, T: Dist + Clone + Unpin > Stream
+// impl<'a, T: AmDist+ Clone + Unpin > Stream
 // for LamellarArrayIter<'a, T>
 // {
 // type Item = &'a T;

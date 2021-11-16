@@ -9,14 +9,14 @@ use std::sync::Arc;
 use std::ops::Bound;
 
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
-pub struct SharedMemoryRegion<T: Arraydist> {
+pub struct SharedMemoryRegion<T: Dist> {
     pub(crate) mr: Darc<MemoryRegion<u8>>,
     sub_region_offset: usize,
     sub_region_size: usize,
     phantom: PhantomData<T>,
 }
 
-impl<T: Arraydist> crate::DarcSerde for SharedMemoryRegion<T> {
+impl<T: Dist> crate::DarcSerde for SharedMemoryRegion<T> {
     ///hmmm why do I need to implement manually, I think i would work with the macro automatically now?
     fn ser(&self, num_pes: usize, cur_pe: Result<usize, crate::IdError>) {
         // println!("in shared ser");
@@ -43,7 +43,7 @@ impl<T: Arraydist> crate::DarcSerde for SharedMemoryRegion<T> {
     }
 }
 
-impl<T: Arraydist> SharedMemoryRegion<T> {
+impl<T: Dist> SharedMemoryRegion<T> {
     pub(crate) fn new(
         size: usize,
         team: Arc<LamellarTeamRT>,
@@ -105,7 +105,7 @@ impl<T: Arraydist> SharedMemoryRegion<T> {
     }
 }
 //account for subregion stuff
-impl<T: Arraydist> RegisteredMemoryRegion<T> for SharedMemoryRegion<T> {
+impl<T: Dist> RegisteredMemoryRegion<T> for SharedMemoryRegion<T> {
     fn len(&self) -> usize {
         self.sub_region_size
     }
@@ -149,13 +149,13 @@ impl<T: Arraydist> RegisteredMemoryRegion<T> for SharedMemoryRegion<T> {
     }
 }
 
-impl<T: Arraydist> MemRegionId for SharedMemoryRegion<T> {
+impl<T: Dist> MemRegionId for SharedMemoryRegion<T> {
     fn id(&self) -> usize {
         self.mr.id()
     }
 }
 
-impl<T: Arraydist> SubRegion<T> for SharedMemoryRegion<T> {
+impl<T: Dist> SubRegion<T> for SharedMemoryRegion<T> {
     fn sub_region<R: std::ops::RangeBounds<usize>>(&self, range: R) -> LamellarMemoryRegion<T> {
         let start = match range.start_bound() {
             //inclusive
@@ -186,8 +186,8 @@ impl<T: Arraydist> SubRegion<T> for SharedMemoryRegion<T> {
     }
 }
 
-impl<T: Arraydist> AsBase for SharedMemoryRegion<T> {
-    unsafe fn to_base<B: Arraydist>(self) -> LamellarMemoryRegion<B> {
+impl<T: Dist> AsBase for SharedMemoryRegion<T> {
+    unsafe fn to_base<B: Dist>(self) -> LamellarMemoryRegion<B> {
         let u8_offset = self.sub_region_offset * std::mem::size_of::<T>();
         let u8_size = self.sub_region_size * std::mem::size_of::<T>();
         SharedMemoryRegion {
@@ -201,7 +201,7 @@ impl<T: Arraydist> AsBase for SharedMemoryRegion<T> {
 }
 
 //#[prof]
-impl<T: Arraydist> MemoryRegionRDMA<T> for SharedMemoryRegion<T> {
+impl<T: Dist> MemoryRegionRDMA<T> for SharedMemoryRegion<T> {
     unsafe fn put<U: Into<LamellarMemoryRegion<T>>>(&self, pe: usize, index: usize, data: U) {
         self.mr.put(pe, self.sub_region_offset + index, data);
     }
@@ -216,25 +216,25 @@ impl<T: Arraydist> MemoryRegionRDMA<T> for SharedMemoryRegion<T> {
     }
 }
 
-impl<T: Arraydist> RTMemoryRegionRDMA<T> for SharedMemoryRegion<T> {
+impl<T: Dist> RTMemoryRegionRDMA<T> for SharedMemoryRegion<T> {
     unsafe fn put_slice(&self, pe: usize, index: usize, data: &[T]) {
         self.mr.put_slice(pe, self.sub_region_offset + index, data)
     }
 }
 
-impl<T: Arraydist> std::fmt::Debug for SharedMemoryRegion<T> {
+impl<T: Dist> std::fmt::Debug for SharedMemoryRegion<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "[{:?}] shared mem region:  {:?} ", self.mr.pe, self.mr,)
     }
 }
 
-impl<T: Arraydist> From<&SharedMemoryRegion<T>> for LamellarArrayInput<T> {
+impl<T: Dist> From<&SharedMemoryRegion<T>> for LamellarArrayInput<T> {
     fn from(smr: &SharedMemoryRegion<T>) -> Self {
         LamellarArrayInput::SharedMemRegion(smr.clone())
     }
 }
 
-impl<T: Arraydist> MyFrom<&SharedMemoryRegion<T>> for LamellarArrayInput<T> {
+impl<T: Dist> MyFrom<&SharedMemoryRegion<T>> for LamellarArrayInput<T> {
     fn my_from(smr: &SharedMemoryRegion<T>, _team: &Arc<LamellarTeamRT>) -> Self {
         LamellarArrayInput::SharedMemRegion(smr.clone())
     }

@@ -6,7 +6,7 @@ use std::sync::Arc;
 use std::ops::Bound;
 
 #[derive(Clone)]
-pub struct LocalMemoryRegion<T: Arraydist> {
+pub struct LocalMemoryRegion<T: Dist> {
     mr: Arc<MemoryRegion<u8>>,
     pe: usize,
     sub_region_offset: usize,
@@ -14,7 +14,7 @@ pub struct LocalMemoryRegion<T: Arraydist> {
     phantom: PhantomData<T>,
 }
 
-impl<T: Arraydist> LocalMemoryRegion<T> {
+impl<T: Dist> LocalMemoryRegion<T> {
     pub(crate) fn new(size: usize, lamellae: Arc<Lamellae>) -> LocalMemoryRegion<T> {
         LocalMemoryRegion::try_new(size, lamellae).expect("out of memory")
     }
@@ -96,7 +96,7 @@ impl<T: Arraydist> LocalMemoryRegion<T> {
         }
     }
 
-    pub fn to_base<B: Arraydist>(self) -> LocalMemoryRegion<B> {
+    pub fn to_base<B: Dist>(self) -> LocalMemoryRegion<B> {
         let u8_offset = self.sub_region_offset * std::mem::size_of::<T>();
         let u8_size = self.sub_region_size * std::mem::size_of::<T>();
         LocalMemoryRegion {
@@ -113,7 +113,7 @@ impl<T: Arraydist> LocalMemoryRegion<T> {
     }
 }
 
-impl<T: Arraydist> RegisteredMemoryRegion<T> for LocalMemoryRegion<T> {
+impl<T: Dist> RegisteredMemoryRegion<T> for LocalMemoryRegion<T> {
     fn len(&self) -> usize {
         self.sub_region_size
     }
@@ -179,25 +179,25 @@ impl<T: Arraydist> RegisteredMemoryRegion<T> for LocalMemoryRegion<T> {
     }
 }
 
-impl<T: Arraydist> MemRegionId for LocalMemoryRegion<T> {
+impl<T: Dist> MemRegionId for LocalMemoryRegion<T> {
     fn id(&self) -> usize {
         self.mr.id()
     }
 }
 
-impl<T: Arraydist> SubRegion<T> for LocalMemoryRegion<T> {
+impl<T: Dist> SubRegion<T> for LocalMemoryRegion<T> {
     fn sub_region<R: std::ops::RangeBounds<usize>>(&self, range: R) -> LamellarMemoryRegion<T> {
         self.sub_region(range).into()
     }
 }
 
-impl<T: Arraydist> AsBase for LocalMemoryRegion<T> {
-    unsafe fn to_base<B: Arraydist>(self) -> LamellarMemoryRegion<B> {
+impl<T: Dist> AsBase for LocalMemoryRegion<T> {
+    unsafe fn to_base<B: Dist>(self) -> LamellarMemoryRegion<B> {
         self.to_base::<B>().into()
     }
 }
 
-impl<T: Arraydist> MemoryRegionRDMA<T> for LocalMemoryRegion<T> {
+impl<T: Dist> MemoryRegionRDMA<T> for LocalMemoryRegion<T> {
     unsafe fn put<U: Into<LamellarMemoryRegion<T>>>(&self, pe: usize, index: usize, data: U) {
         if self.pe == pe {
             self.mr.put(pe, self.sub_region_offset + index, data);
@@ -237,7 +237,7 @@ impl<T: Arraydist> MemoryRegionRDMA<T> for LocalMemoryRegion<T> {
     }
 }
 
-impl<T: Arraydist> RTMemoryRegionRDMA<T> for LocalMemoryRegion<T> {
+impl<T: Dist> RTMemoryRegionRDMA<T> for LocalMemoryRegion<T> {
     unsafe fn put_slice(&self, pe: usize, index: usize, data: &[T]) {
         if self.pe == pe {
             self.mr.put_slice(pe, self.sub_region_offset + index, data)
@@ -251,19 +251,19 @@ impl<T: Arraydist> RTMemoryRegionRDMA<T> for LocalMemoryRegion<T> {
     }
 }
 
-impl<T: Arraydist> std::fmt::Debug for LocalMemoryRegion<T> {
+impl<T: Dist> std::fmt::Debug for LocalMemoryRegion<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "[{:?}] local mem region:  {:?} ", self.pe, self.mr,)
     }
 }
 
-impl<T: Arraydist> From<&LocalMemoryRegion<T>> for LamellarArrayInput<T> {
+impl<T: Dist> From<&LocalMemoryRegion<T>> for LamellarArrayInput<T> {
     fn from(smr: &LocalMemoryRegion<T>) -> Self {
         LamellarArrayInput::LocalMemRegion(smr.clone())
     }
 }
 
-impl<T: Arraydist> MyFrom<&LocalMemoryRegion<T>> for LamellarArrayInput<T> {
+impl<T: Dist> MyFrom<&LocalMemoryRegion<T>> for LamellarArrayInput<T> {
     fn my_from(smr: &LocalMemoryRegion<T>, _team: &Arc<LamellarTeamRT>) -> Self {
         LamellarArrayInput::LocalMemRegion(smr.clone())
     }

@@ -132,7 +132,7 @@ pub use crate::darc::Darc;
 
 pub use crate::lamellar_request::LamellarRequest;
 
-pub use crate::memregion::Arraydist;
+pub use crate::memregion::Dist;
 pub use crate::memregion::{
     local::LocalMemoryRegion, shared::SharedMemoryRegion, LamellarMemoryRegion, RemoteMemoryRegion,
 };

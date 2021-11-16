@@ -12,7 +12,7 @@ use step_by::*;
 use take::*;
 use zip::*;
 
-use crate::memregion::Arraydist;
+use crate::memregion::Dist;
 // use crate::LamellarArray;
 use crate::array::{LamellarArrayRead, LamellarArrayWrite};
 
@@ -120,14 +120,14 @@ pub trait DistributedIterator: Sync + Send + Clone {
 }
 
 #[derive(Clone)]
-pub struct DistIter<'a, T: Arraydist + 'static, A: LamellarArrayRead<T>> {
+pub struct DistIter<'a, T: Dist + 'static, A: LamellarArrayRead<T>> {
     data: A,
     cur_i: usize,
     end_i: usize,
     _marker: PhantomData<&'a T>,
 }
 
-impl<T: Arraydist, A: LamellarArrayRead<T>> DistIter<'_, T, A> {
+impl<T: Dist, A: LamellarArrayRead<T>> DistIter<'_, T, A> {
     pub(crate) fn new(data: A, cur_i: usize, cnt: usize) -> Self {
         // println!("new dist iter {:?} {:? } {:?}",cur_i, cnt, cur_i+cnt);
         DistIter {
@@ -139,7 +139,7 @@ impl<T: Arraydist, A: LamellarArrayRead<T>> DistIter<'_, T, A> {
     }
 }
 
-impl<T: Arraydist + 'static, A: LamellarArrayRead<T> + DistIteratorLauncher + Clone + 'static>
+impl<T: Dist + 'static, A: LamellarArrayRead<T> + DistIteratorLauncher + Clone + 'static>
     DistIter<'static, T, A>
 {
     pub fn for_each<F>(&self, op: F)
@@ -157,7 +157,7 @@ impl<T: Arraydist + 'static, A: LamellarArrayRead<T> + DistIteratorLauncher + Cl
     }
 }
 
-impl<'a, T: Arraydist + 'a, A: LamellarArrayRead<T> + DistIteratorLauncher + Clone + 'a>
+impl<'a, T: Dist + 'a, A: LamellarArrayRead<T> + DistIteratorLauncher + Clone + 'a>
     DistributedIterator for DistIter<'a, T, A>
 {
     type Item = &'a T;
@@ -207,14 +207,14 @@ impl<'a, T: Arraydist + 'a, A: LamellarArrayRead<T> + DistIteratorLauncher + Clo
 }
 
 #[derive(Clone)]
-pub struct DistIterMut<'a, T: Arraydist, A: LamellarArrayRead<T> + LamellarArrayWrite<T>> {
+pub struct DistIterMut<'a, T: Dist, A: LamellarArrayRead<T> + LamellarArrayWrite<T>> {
     data: A,
     cur_i: usize,
     end_i: usize,
     _marker: PhantomData<&'a T>,
 }
 
-impl<T: Arraydist, A: LamellarArrayRead<T> + LamellarArrayWrite<T>> DistIterMut<'_, T, A> {
+impl<T: Dist, A: LamellarArrayRead<T> + LamellarArrayWrite<T>> DistIterMut<'_, T, A> {
     pub(crate) fn new(data: A, cur_i: usize, cnt: usize) -> Self {
         DistIterMut {
             data,
@@ -226,7 +226,7 @@ impl<T: Arraydist, A: LamellarArrayRead<T> + LamellarArrayWrite<T>> DistIterMut<
 }
 
 impl<
-        T: Arraydist + 'static,
+        T: Dist + 'static,
         A: LamellarArrayRead<T> + LamellarArrayWrite<T> + DistIteratorLauncher + Clone + 'static,
     > DistIterMut<'static, T, A>
 {
@@ -246,7 +246,7 @@ impl<
 }
 impl<
         'a,
-        T: Arraydist + 'a,
+        T: Dist + 'a,
         A: LamellarArrayRead<T> + LamellarArrayWrite<T> + DistIteratorLauncher + Clone,
     > DistributedIterator for DistIterMut<'a, T, A>
 {

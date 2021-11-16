@@ -8,7 +8,7 @@ use crate::darc::Darc;
 use crate::lamellae::AllocationType;
 use crate::lamellar_request::LamellarRequest;
 use crate::lamellar_team::{IntoLamellarTeam, LamellarTeamRT};
-use crate::memregion::{Dist,Arraydist, MemoryRegion, RegisteredMemoryRegion, SubRegion};
+use crate::memregion::{Dist, MemoryRegion, RegisteredMemoryRegion, SubRegion};
 use crate::scheduler::SchedulerQueue;
 use core::marker::PhantomData;
 use parking_lot::RwLock;
@@ -27,7 +27,7 @@ struct UnsafeArrayInner {
 
 //need to calculate num_elems_local dynamically
 #[lamellar_impl::AmDataRT(Clone)]
-pub struct UnsafeArray<T: Arraydist> {
+pub struct UnsafeArray<T: Dist> {
     inner: Darc<UnsafeArrayInner>,
     distribution: Distribution,
     size: usize,      //total array size
@@ -39,7 +39,7 @@ pub struct UnsafeArray<T: Arraydist> {
 }
 
 //#[prof]
-impl<T: Arraydist> UnsafeArray<T> {
+impl<T: Dist> UnsafeArray<T> {
     pub fn new<U: Into<IntoLamellarTeam>>(
         team: U,
         array_size: usize,
@@ -296,37 +296,6 @@ impl<T: Arraydist> UnsafeArray<T> {
             phantom: PhantomData,
         }
     }
-
-    pub fn reduce_inner(
-        &self,
-        func: LamellarArcAm,
-    ) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
-        if let Ok(my_pe) = self.inner.team.team_pe_id() {
-            self.inner.team.exec_arc_am_pe::<T>(
-                my_pe,
-                func,
-                Some(self.inner.array_counters.clone()),
-            )
-        } else {
-            self.inner
-                .team
-                .exec_arc_am_pe::<T>(0, func, Some(self.inner.array_counters.clone()))
-        }
-    }
-
-    pub fn reduce(&self, op: &str) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
-        self.reduce_inner(self.get_reduction_op(op.to_string()))
-    }
-    pub fn sum(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
-        self.reduce("sum")
-    }
-    pub fn prod(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
-        self.reduce("prod")
-    }
-    pub fn max(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
-        self.reduce("max")
-    }
-
     // pub fn local_mem_region(&self) -> &MemoryRegion<T> {
     //     &self.inner.mem_region
     // }
@@ -397,7 +366,38 @@ impl<T: Arraydist> UnsafeArray<T> {
     }
 }
 
-impl<T: Arraydist> DistIteratorLauncher for UnsafeArray<T> {
+impl <T: Dist + serde::Serialize + serde::de::DeserializeOwned> UnsafeArray<T> {
+    pub fn reduce_inner(
+        &self,
+        func: LamellarArcAm,
+    ) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+        if let Ok(my_pe) = self.inner.team.team_pe_id() {
+            self.inner.team.exec_arc_am_pe::<T>(
+                my_pe,
+                func,
+                Some(self.inner.array_counters.clone()),
+            )
+        } else {
+            self.inner
+                .team
+                .exec_arc_am_pe::<T>(0, func, Some(self.inner.array_counters.clone()))
+        }
+    }
+
+    pub fn reduce(&self, op: &str) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+        self.reduce_inner(self.get_reduction_op(op.to_string()))
+    }
+    pub fn sum(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+        self.reduce("sum")
+    }
+    pub fn prod(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+        self.reduce("prod")
+    }
+    pub fn max(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+        self.reduce("max")
+    }
+}
+impl<T: Dist> DistIteratorLauncher for UnsafeArray<T> {
     fn global_index_from_local(&self, index: usize, chunk_size: usize) -> usize {
         // println!("global index cs:{:?}",chunk_size);
         let my_pe = self.my_pe;
@@ -485,7 +485,7 @@ impl<T: Arraydist> DistIteratorLauncher for UnsafeArray<T> {
     }
 }
 
-impl<T: Arraydist> LamellarArray<T> for UnsafeArray<T> {
+impl<T: Dist> LamellarArray<T> for UnsafeArray<T> {
     fn team(&self) -> Arc<LamellarTeamRT> {
         self.team().clone()
     }
@@ -534,7 +534,7 @@ impl<T: Arraydist> LamellarArray<T> for UnsafeArray<T> {
         // println!("done in wait all {:?}",std::time::SystemTime::now());
     }
 }
-impl<T: Arraydist> LamellarArrayRead<T> for UnsafeArray<T> {
+impl<T: Dist> LamellarArrayRead<T> for UnsafeArray<T> {
     fn get<U: MyInto<LamellarArrayInput<T>>>(&self, index: usize, buf: U) {
         self.get(index, buf)
     }
@@ -543,20 +543,20 @@ impl<T: Arraydist> LamellarArrayRead<T> for UnsafeArray<T> {
     }
 }
 
-impl<T: Arraydist> LamellarArrayWrite<T> for UnsafeArray<T> {
+impl<T: Dist> LamellarArrayWrite<T> for UnsafeArray<T> {
     fn put<U: MyInto<LamellarArrayInput<T>>>(&self, index: usize, buf: U) {
         self.put(index, buf)
     }
 }
 
-impl<T: Arraydist> SubArray<T> for UnsafeArray<T> {
+impl<T: Dist> SubArray<T> for UnsafeArray<T> {
     type Array = UnsafeArray<T>;
     fn sub_array<R: std::ops::RangeBounds<usize>>(&self, range: R) -> Self::Array {
         self.sub_array(range).into()
     }
 }
 
-impl<T: Arraydist> UnsafeArray<T>
+impl<T: Dist> UnsafeArray<T>
 where
     UnsafeArray<T>: ArrayOps<T>,
 {
@@ -569,7 +569,7 @@ where
     }
 }
 
-impl<T: Arraydist + std::fmt::Debug> UnsafeArray<T> {
+impl<T: Dist + std::fmt::Debug> UnsafeArray<T> {
     pub fn print(&self) {
         self.inner.team.barrier(); //TODO: have barrier accept a string so we can print where we are stalling.
         for pe in 0..self.inner.team.num_pes() {
@@ -582,7 +582,7 @@ impl<T: Arraydist + std::fmt::Debug> UnsafeArray<T> {
     }
 }
 
-// impl<T: Dist + std::ops::AddAssign,> ArrayOps<T> for UnsafeArray<T> {
+// impl<T: AmDist+ std::ops::AddAssign,> ArrayOps<T> for UnsafeArray<T> {
 //     #[inline(always)]
 //     fn add(&self, index: usize, val: T) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync> {
 //         self.add(index,val) //this is implemented automatically by a proc macro
@@ -607,7 +607,7 @@ impl LamellarAM for AddAm {
     }
 }
 
-impl<T: Arraydist + std::ops::AddAssign> UnsafeArray<T> {
+impl<T: Dist + std::ops::AddAssign> UnsafeArray<T> {
     pub fn dist_add(
         &self,
         index: usize,
@@ -661,7 +661,7 @@ impl<T: Arraydist + std::ops::AddAssign> UnsafeArray<T> {
 //     }
 // }
 
-impl<T: Arraydist> LamellarArrayReduce<T> for UnsafeArray<T> {
+impl<T: Dist + serde::Serialize + serde::de::DeserializeOwned> LamellarArrayReduce<T> for UnsafeArray<T> {
     fn get_reduction_op(&self, op: String) -> LamellarArcAm {
         // unsafe {
         REDUCE_OPS
