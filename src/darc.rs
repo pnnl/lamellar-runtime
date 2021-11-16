@@ -35,6 +35,7 @@ struct FinishedAm {
     src_pe: usize,
     inner_addr: usize, //cant pass the darc itself cause we cant handle generics yet in lamellarAM...
 }
+
 #[lamellar_impl::rt_am]
 impl LamellarAM for FinishedAm {
     fn exec() {

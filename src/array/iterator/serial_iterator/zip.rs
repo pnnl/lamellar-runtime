@@ -11,7 +11,7 @@ where
     B: SerialIterator,
 {
     pub(crate) fn new(a: A, b: B) -> Self {
-        Zip { a,b }
+        Zip { a, b }
     }
 }
 
@@ -21,12 +21,12 @@ where
     B: SerialIterator,
 {
     type ElemType = A::ElemType;
-    type Item = (<A as SerialIterator>::Item,<B as SerialIterator>::Item);
+    type Item = (<A as SerialIterator>::Item, <B as SerialIterator>::Item);
     type Array = A::Array;
     fn next(&mut self) -> Option<Self::Item> {
         let a = self.a.next()?;
         let b = self.b.next()?;
-        Some((a,b))
+        Some((a, b))
     }
     fn advance_index(&mut self, count: usize) {
         self.a.advance_index(count);

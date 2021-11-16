@@ -19,8 +19,8 @@ where
 {
     pub(crate) fn new(iter: I, chunk_size: usize) -> CopiedChunks<I> {
         // let array = iter.array().clone(); //.to_base::<u8>();
-                                          // println!("len: {:?}",array.len());
-                                          // let mem_region = iter.array().team().alloc_local_mem_region(chunk_size);//*iter.array().size_of_elem());
+        // println!("len: {:?}",array.len());
+        // let mem_region = iter.array().team().alloc_local_mem_region(chunk_size);//*iter.array().size_of_elem());
         let chunks = CopiedChunks {
             iter,
             // array,

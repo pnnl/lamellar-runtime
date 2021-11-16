@@ -25,21 +25,31 @@ impl std::fmt::Display for MemNotLocalError {
 }
 
 impl std::error::Error for MemNotLocalError {}
-pub trait Dist: serde::ser::Serialize + serde::de::DeserializeOwned +  Send + Sync {}
 
-impl<T: serde::ser::Serialize + serde::de::DeserializeOwned + Send + Sync> Dist
-    for T
+pub trait Arraydist:
+    serde::ser::Serialize + serde::de::DeserializeOwned + Send + Sync + Copy + 'static
+{
+}
+impl<T: serde::ser::Serialize + serde::de::DeserializeOwned + Send + Sync + Copy + 'static>
+    Arraydist for T
 {
 }
 
+pub trait Dist:
+    serde::ser::Serialize + serde::de::DeserializeOwned + Send + Sync + 'static
+{
+}
+
+impl<T: serde::ser::Serialize + serde::de::DeserializeOwned + Send + Sync + 'static> Dist for T {}
+
 #[enum_dispatch(RegisteredMemoryRegion<T>, MemRegionId, AsBase, SubRegion<T>, MemoryRegionRDMA<T>, RTMemoryRegionRDMA<T>)]
 #[derive(Clone, Debug)]
-pub enum LamellarMemoryRegion<T: Dist + 'static> {
+pub enum LamellarMemoryRegion<T: Arraydist> {
     Shared(SharedMemoryRegion<T>),
     Local(LocalMemoryRegion<T>),
 }
 
-impl<T: Dist + 'static> LamellarMemoryRegion<T> {
+impl<T: Arraydist> LamellarMemoryRegion<T> {
     pub unsafe fn as_mut_slice(&self) -> MemResult<&mut [T]> {
         match self {
             LamellarMemoryRegion::Shared(memregion) => memregion.as_mut_slice(),
@@ -62,24 +72,20 @@ impl<T: Dist + 'static> LamellarMemoryRegion<T> {
     }
 }
 
-impl<T: Dist + Clone + 'static>
-    From<&LamellarMemoryRegion<T>> for LamellarArrayInput<T>
-{
+impl<T: Arraydist> From<&LamellarMemoryRegion<T>> for LamellarArrayInput<T> {
     fn from(mr: &LamellarMemoryRegion<T>) -> Self {
         LamellarArrayInput::LamellarMemRegion(mr.clone())
     }
 }
 
-impl<T: Dist + Clone + 'static>
-    MyFrom<&LamellarMemoryRegion<T>> for LamellarArrayInput<T>
-{
+impl<T: Arraydist> MyFrom<&LamellarMemoryRegion<T>> for LamellarArrayInput<T> {
     fn my_from(mr: &LamellarMemoryRegion<T>, _team: &Arc<LamellarTeamRT>) -> Self {
         LamellarArrayInput::LamellarMemRegion(mr.clone())
     }
 }
 
 #[enum_dispatch]
-pub trait RegisteredMemoryRegion<T: Dist + 'static> {
+pub trait RegisteredMemoryRegion<T: Arraydist> {
     fn len(&self) -> usize;
     fn addr(&self) -> MemResult<usize>;
     fn as_slice(&self) -> MemResult<&[T]>;
@@ -99,17 +105,17 @@ pub(crate) trait MemRegionId {
 // but MemRegion should not return LamellarMemoryRegions directly (as both SubRegion and AsBase require)
 // we will implement seperate functions for MemoryRegion itself.
 #[enum_dispatch]
-pub trait SubRegion<T: Dist + 'static> {
+pub trait SubRegion<T: Arraydist> {
     fn sub_region<R: std::ops::RangeBounds<usize>>(&self, range: R) -> LamellarMemoryRegion<T>;
 }
 
 #[enum_dispatch]
 pub(crate) trait AsBase {
-    unsafe fn to_base<B: Dist + 'static>(self) -> LamellarMemoryRegion<B>;
+    unsafe fn to_base<B: Arraydist>(self) -> LamellarMemoryRegion<B>;
 }
 
 #[enum_dispatch]
-pub trait MemoryRegionRDMA<T: Dist + 'static> {
+pub trait MemoryRegionRDMA<T: Arraydist> {
     unsafe fn put<U: Into<LamellarMemoryRegion<T>>>(&self, pe: usize, index: usize, data: U);
     fn iput<U: Into<LamellarMemoryRegion<T>>>(&self, pe: usize, index: usize, data: U);
     unsafe fn put_all<U: Into<LamellarMemoryRegion<T>>>(&self, index: usize, data: U);
@@ -117,33 +123,33 @@ pub trait MemoryRegionRDMA<T: Dist + 'static> {
 }
 
 #[enum_dispatch]
-pub(crate) trait RTMemoryRegionRDMA<T: Dist + 'static> {
+pub(crate) trait RTMemoryRegionRDMA<T: Arraydist> {
     unsafe fn put_slice(&self, pe: usize, index: usize, data: &[T]);
 }
 
 //#[prof]
-impl<T: Dist + 'static> Hash for LamellarMemoryRegion<T> {
+impl<T: Arraydist> Hash for LamellarMemoryRegion<T> {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.id().hash(state);
     }
 }
 
 //#[prof]
-impl<T: Dist + 'static> PartialEq for LamellarMemoryRegion<T> {
+impl<T: Arraydist> PartialEq for LamellarMemoryRegion<T> {
     fn eq(&self, other: &LamellarMemoryRegion<T>) -> bool {
         self.id() == other.id()
     }
 }
 
 //#[prof]
-impl<T: Dist + 'static> Eq for LamellarMemoryRegion<T> {}
+impl<T: Arraydist> Eq for LamellarMemoryRegion<T> {}
 
 // this is not intended to be accessed directly by a user
 // it will be wrapped in either a shared region or local region
 // in shared regions its wrapped in a darc which allows us to send
 // to different nodes, in local its wrapped in Arc (we dont currently support sending to other nodes)
 // for local we would probably need to develop something like a one-sided initiated darc...
-pub(crate) struct MemoryRegion<T: Dist + 'static> {
+pub(crate) struct MemoryRegion<T: Arraydist> {
     addr: usize,
     pe: usize,
     size: usize,
@@ -154,7 +160,7 @@ pub(crate) struct MemoryRegion<T: Dist + 'static> {
     phantom: PhantomData<T>,
 }
 
-impl<T: Dist + 'static> MemoryRegion<T> {
+impl<T: Arraydist> MemoryRegion<T> {
     pub(crate) fn new(
         size: usize, //number of elements of type T
         lamellae: Arc<Lamellae>,
@@ -202,7 +208,7 @@ impl<T: Dist + 'static> MemoryRegion<T> {
     }
 
     #[allow(dead_code)]
-    pub(crate) unsafe fn to_base<B: Dist + 'static>(self) -> MemoryRegion<B> {
+    pub(crate) unsafe fn to_base<B: Arraydist>(self) -> MemoryRegion<B> {
         //this is allowed as we consume the old object..
         assert_eq!(
             self.num_bytes % std::mem::size_of::<B>(),
@@ -234,7 +240,7 @@ impl<T: Dist + 'static> MemoryRegion<T> {
     /// * `data` - address (which is "registered" with network device) of local input buffer that will be put into the remote memory
     /// the data buffer may not be safe to upon return from this call, currently the user is responsible for completion detection,
     /// or you may use the similar iput call (with a potential performance penalty);
-    pub(crate) unsafe fn put<R: Dist + 'static, U: Into<LamellarMemoryRegion<R>>>(
+    pub(crate) unsafe fn put<R: Arraydist, U: Into<LamellarMemoryRegion<R>>>(
         &self,
         pe: usize,
         index: usize,
@@ -277,7 +283,7 @@ impl<T: Dist + 'static> MemoryRegion<T> {
     /// * `index` - offset into the remote memory window
     /// * `data` - address (which is "registered" with network device) of local input buffer that will be put into the remote memory
     /// the data buffer is free to be reused upon return of this function.
-    pub(crate) fn iput<R: Dist + 'static, U: Into<LamellarMemoryRegion<R>>>(
+    pub(crate) fn iput<R: Arraydist, U: Into<LamellarMemoryRegion<R>>>(
         &self,
         pe: usize,
         index: usize,
@@ -300,7 +306,7 @@ impl<T: Dist + 'static> MemoryRegion<T> {
         }
     }
 
-    pub(crate) unsafe fn put_all<R: Dist + 'static, U: Into<LamellarMemoryRegion<R>>>(
+    pub(crate) unsafe fn put_all<R: Arraydist, U: Into<LamellarMemoryRegion<R>>>(
         &self,
         index: usize,
         data: U,
@@ -330,7 +336,7 @@ impl<T: Dist + 'static> MemoryRegion<T> {
     /// * `pe` - id of remote PE to grab data from
     /// * `index` - offset into the remote memory window
     /// * `data` - address (which is "registered" with network device) of destination buffer to store result of the get
-    pub(crate) unsafe fn get<R: Dist + 'static, U: Into<LamellarMemoryRegion<R>>>(
+    pub(crate) unsafe fn get<R: Arraydist, U: Into<LamellarMemoryRegion<R>>>(
         &self,
         pe: usize,
         index: usize,
@@ -355,7 +361,7 @@ impl<T: Dist + 'static> MemoryRegion<T> {
         }
     }
 
-    pub(crate) unsafe fn put_slice<R: Dist + 'static>(&self, pe: usize, index: usize, data: &[R]) {
+    pub(crate) unsafe fn put_slice<R: Arraydist>(&self, pe: usize, index: usize, data: &[R]) {
         //todo make return a result?
         if (index + data.len()) * std::mem::size_of::<R>() <= self.num_bytes {
             let num_bytes = data.len() * std::mem::size_of::<R>();
@@ -393,7 +399,7 @@ impl<T: Dist + 'static> MemoryRegion<T> {
         Ok(self.addr)
     }
 
-    pub(crate) fn casted_at<R: Dist + 'static>(&self, index: usize) -> MemResult<&R> {
+    pub(crate) fn casted_at<R: Dist>(&self, index: usize) -> MemResult<&R> {
         if self.addr != 0 {
             let num_bytes = self.size * std::mem::size_of::<T>();
             assert_eq!(
@@ -419,7 +425,7 @@ impl<T: Dist + 'static> MemoryRegion<T> {
             Ok(&[])
         }
     }
-    pub(crate) fn as_casted_slice<R: Dist + 'static>(&self) -> MemResult<&[R]> {
+    pub(crate) fn as_casted_slice<R: Dist>(&self) -> MemResult<&[R]> {
         if self.addr != 0 {
             let num_bytes = self.size * std::mem::size_of::<T>();
             assert_eq!(
@@ -447,7 +453,7 @@ impl<T: Dist + 'static> MemoryRegion<T> {
             Ok(&mut [])
         }
     }
-    pub(crate) unsafe fn as_casted_mut_slice<R: Dist + 'static>(&self) -> MemResult<&mut [R]> {
+    pub(crate) unsafe fn as_casted_mut_slice<R: Dist>(&self) -> MemResult<&mut [R]> {
         if self.addr != 0 {
             let num_bytes = self.size * std::mem::size_of::<T>();
             assert_eq!(
@@ -468,7 +474,7 @@ impl<T: Dist + 'static> MemoryRegion<T> {
         Ok(self.addr as *const T)
     }
     #[allow(dead_code)]
-    pub(crate) fn as_casted_ptr<R: Dist + 'static>(&self) -> MemResult<*const R> {
+    pub(crate) fn as_casted_ptr<R: Dist>(&self) -> MemResult<*const R> {
         Ok(self.addr as *const R)
     }
     #[allow(dead_code)]
@@ -476,12 +482,12 @@ impl<T: Dist + 'static> MemoryRegion<T> {
         Ok(self.addr as *mut T)
     }
     #[allow(dead_code)]
-    pub(crate) fn as_casted_mut_ptr<R: Dist + 'static>(&self) -> MemResult<*mut R> {
+    pub(crate) fn as_casted_mut_ptr<R: Dist>(&self) -> MemResult<*mut R> {
         Ok(self.addr as *mut R)
     }
 }
 
-impl<T: Dist + 'static> MemRegionId for MemoryRegion<T> {
+impl<T: Arraydist> MemRegionId for MemoryRegion<T> {
     fn id(&self) -> usize {
         self.addr //probably should be key
     }
@@ -494,7 +500,7 @@ pub trait RemoteMemoryRegion {
     ///
     /// * `size` - number of elements of T to allocate a memory region for -- (not size in bytes)
     ///
-    fn alloc_shared_mem_region<T: Dist + std::marker::Sized + 'static>(
+    fn alloc_shared_mem_region<T: Arraydist + std::marker::Sized>(
         &self,
         size: usize,
     ) -> SharedMemoryRegion<T>;
@@ -505,7 +511,7 @@ pub trait RemoteMemoryRegion {
     ///
     /// * `size` - number of elements of T to allocate a memory region for -- (not size in bytes)
     ///
-    fn alloc_local_mem_region<T: Dist + std::marker::Sized + 'static>(
+    fn alloc_local_mem_region<T: Arraydist + std::marker::Sized>(
         &self,
         size: usize,
     ) -> LocalMemoryRegion<T>;
@@ -527,7 +533,7 @@ pub trait RemoteMemoryRegion {
     // fn free_local_memory_region<T: Dist + 'static>(&self, region: LocalMemoryRegion<T>);
 }
 
-impl<T: Dist + 'static> Drop for MemoryRegion<T> {
+impl<T: Arraydist> Drop for MemoryRegion<T> {
     fn drop(&mut self) {
         // println!("trying to dropping mem region {:?}",self);
         if self.addr != 0 {
@@ -542,7 +548,7 @@ impl<T: Dist + 'static> Drop for MemoryRegion<T> {
 }
 
 // #[prof]
-impl<T: Dist + 'static> std::fmt::Debug for MemoryRegion<T> {
+impl<T: Arraydist> std::fmt::Debug for MemoryRegion<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         // write!(f, "{:?}", slice)
         write!(

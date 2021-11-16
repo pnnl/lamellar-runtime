@@ -34,12 +34,10 @@ pub trait LamellarRequest {
     async fn into_future(self: Box<Self>) -> Option<Self::Output>;
     fn get(&self) -> Option<Self::Output>;
     fn get_all(&self) -> Vec<Option<Self::Output>>;
-    fn as_any(self) -> Box<dyn std::any::Any>;
+    // fn as_any(self) -> Box<dyn std::any::Any>;
 }
 
-pub struct LamellarRequestHandle<
-    T: Dist,
-> {
+pub struct LamellarRequestHandle<T: Dist> {
     pub(crate) id: usize,
     pub(crate) cnt: usize,
     pub(crate) data_rx: crossbeam::channel::Receiver<(usize, InternalResult)>,
@@ -57,9 +55,7 @@ pub(crate) enum AmType {
 }
 
 //#[prof]
-impl<T:Dist + 'static>
-    LamellarRequestHandle<T>
-{
+impl<T: Dist + 'static> LamellarRequestHandle<T> {
     pub(crate) fn new<'a>(
         num_pes: usize,
         am_type: AmType,
@@ -171,9 +167,7 @@ impl<T:Dist + 'static>
 }
 
 #[async_trait]
-impl<T: Dist + 'static > LamellarRequest
-    for LamellarRequestHandle<T>
-{
+impl<T: Dist> LamellarRequest for LamellarRequestHandle<T> {
     type Output = T;
     async fn into_future(self: Box<Self>) -> Option<Self::Output> {
         let mut res = self.data_rx.try_recv();
@@ -201,15 +195,13 @@ impl<T: Dist + 'static > LamellarRequest
             // AmType::RemoteClosure => self.closure_get_all(),
         }
     }
-    fn as_any(self) -> Box<dyn std::any::Any> {
-        Box::new(self)
-    }
+    // fn as_any(self) -> Box<dyn std::any::Any> {
+    //     Box::new(self)
+    // }
 }
 
 //#[prof]
-impl<T: Dist> Drop
-    for LamellarRequestHandle<T>
-{
+impl<T: Dist> Drop for LamellarRequestHandle<T> {
     fn drop(&mut self) {
         trace!("Request dropping {:?} {:?}", self.id, self.am_type);
         self.active.store(false, Ordering::SeqCst);

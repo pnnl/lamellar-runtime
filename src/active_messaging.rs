@@ -2,8 +2,8 @@ use crate::lamellae::{Lamellae, LamellaeRDMA, SerializedData};
 use crate::lamellar_arch::IdError;
 use crate::lamellar_request::{InternalReq, InternalResult, LamellarRequest};
 use crate::lamellar_team::{LamellarTeam, LamellarTeamRT};
+use crate::memregion::Dist;
 use crate::scheduler::{AmeScheduler, ReqData};
-use crate::memregion::{Dist};
 #[cfg(feature = "enable-prof")]
 use lamellar_prof::*;
 use log::trace;
@@ -88,11 +88,11 @@ pub(crate) type LamellarResultArc = Arc<dyn LamellarSerde + Send + Sync>;
 pub trait Serde: serde::ser::Serialize + serde::de::DeserializeOwned {}
 
 pub trait LocalAM {
-    type Output: serde::ser::Serialize + serde::de::DeserializeOwned + Sync + Send;
+    type Output: Dist;
 }
 
 pub trait LamellarAM {
-    type Output: serde::ser::Serialize + serde::de::DeserializeOwned + Sync + Send;
+    type Output: Dist;
 }
 
 pub enum LamellarReturn {
@@ -168,17 +168,17 @@ pub trait ActiveMessaging {
     fn barrier(&self);
     fn exec_am_all<F>(&self, am: F) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync>
     where
-        F: RemoteActiveMessage + LamellarAM + Serde + Dist + 'static;
+        F: RemoteActiveMessage + LamellarAM + Serde + Dist;
     fn exec_am_pe<F>(
         &self,
         pe: usize,
         am: F,
     ) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync>
     where
-        F: RemoteActiveMessage + LamellarAM + Serde + Dist + 'static;
+        F: RemoteActiveMessage + LamellarAM + Serde + Dist;
     fn exec_am_local<F>(&self, am: F) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync>
     where
-        F: LamellarActiveMessage + LocalAM + Dist + 'static;
+        F: LamellarActiveMessage + LocalAM + Send + Sync + 'static;
 }
 
 //maybe make this a struct then we could hold the pending counters...

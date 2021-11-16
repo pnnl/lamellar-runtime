@@ -185,7 +185,7 @@ impl CommOps for RofiComm {
         rofi_remote_addr(pe, local_addr)
     }
 
-    fn put<T: Remote + 'static>(&self, pe: usize, src_addr: &[T], dst_addr: usize) {
+    fn put<T: Remote>(&self, pe: usize, src_addr: &[T], dst_addr: usize) {
         //-> RofiReq {
         // let mut req = RofiReq{
         //     txids: Vec::new(),
@@ -218,7 +218,7 @@ impl CommOps for RofiComm {
         // println!("[{:?}]-({:?}) put [{:?}] exit",self.my_pe,thread::current().id(),pe);
     }
 
-    fn iput<T: Remote + 'static>(&self, pe: usize, src_addr: &[T], dst_addr: usize) {
+    fn iput<T: Remote>(&self, pe: usize, src_addr: &[T], dst_addr: usize) {
         //-> RofiReq{
         // println!("[{:?}]-({:?}) iput entry",self.my_pe,thread::current().id());
         // let mut req = RofiReq{
@@ -251,7 +251,7 @@ impl CommOps for RofiComm {
         // println!("[{:?}]- gc: {:?} pc: {:?} iput exit",self.my_pe,self.get_cnt.load(Ordering::SeqCst),self.put_cnt.load(Ordering::SeqCst));
     }
 
-    fn put_all<T: Remote + 'static>(&self, src_addr: &[T], dst_addr: usize) {
+    fn put_all<T: Remote>(&self, src_addr: &[T], dst_addr: usize) {
         //-> RofiReq {
         // println!("[{:?}]-({:?}) put all entry",self.my_pe,thread::current().id());
         // let mut req = RofiReq{
@@ -286,7 +286,7 @@ impl CommOps for RofiComm {
         // println!("[{:?}]- gc: {:?} pc: {:?} put_all exit",self.my_pe,self.get_cnt.load(Ordering::SeqCst),self.put_cnt.load(Ordering::SeqCst));
     }
 
-    fn get<T: Remote + 'static>(&self, pe: usize, src_addr: usize, dst_addr: &mut [T]) {
+    fn get<T: Remote>(&self, pe: usize, src_addr: usize, dst_addr: &mut [T]) {
         //-> RofiReq {
         // println!("[{:?}]-({:?}) get entry",self.my_pe,thread::current().id());
         // let mut req = RofiReq{
@@ -335,7 +335,7 @@ impl CommOps for RofiComm {
         // println!("[{:?}]- gc: {:?} pc: {:?} get exit",self.my_pe,self.get_cnt.load(Ordering::SeqCst),self.put_cnt.load(Ordering::SeqCst));
     }
     #[allow(dead_code)]
-    fn iget<T: Remote + 'static>(&self, pe: usize, src_addr: usize, dst_addr: &mut [T]) {
+    fn iget<T: Remote>(&self, pe: usize, src_addr: usize, dst_addr: &mut [T]) {
         //-> RofiReq {
         // println!("[{:?}]-({:?}) iget entry",self.my_pe,thread::current().id());
         // let mut req = RofiReq{
@@ -384,7 +384,7 @@ impl CommOps for RofiComm {
         // println!("[{:?}]-({:?}) iget exit",self.my_pe,thread::current().id());
     }
     //src address is relative to rofi base addr
-    fn iget_relative<T: Remote + 'static>(&self, pe: usize, src_addr: usize, dst_addr: &mut [T]) {
+    fn iget_relative<T: Remote>(&self, pe: usize, src_addr: usize, dst_addr: &mut [T]) {
         //-> RofiReq {
         // let mut req = RofiReq{
         //     txids: Vec::new(),

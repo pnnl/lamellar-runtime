@@ -12,9 +12,9 @@ use step_by::*;
 use take::*;
 use zip::*;
 
-use crate::memregion::Dist;
+use crate::memregion::Arraydist;
 // use crate::LamellarArray;
-use crate::array::{LamellarArrayRead,LamellarArrayWrite};
+use crate::array::{LamellarArrayRead, LamellarArrayWrite};
 
 use futures::Future;
 use std::marker::PhantomData;
@@ -83,7 +83,7 @@ pub trait DistIteratorLauncher {
     where
         I: DistributedIterator + 'static,
         F: Fn(I::Item) -> Fut + Sync + Send + Clone + 'static,
-        Fut: Future<Output = ()> + Sync + Send + 'static;
+        Fut: Future<Output = ()> + Sync + Send + Clone + 'static;
 
     fn global_index_from_local(&self, index: usize, chunk_size: usize) -> usize;
 }
@@ -114,20 +114,20 @@ pub trait DistributedIterator: Sync + Send + Clone {
     fn take(self, count: usize) -> Take<Self> {
         Take::new(self, count)
     }
-    fn zip<I: DistributedIterator>(self,iter: I) -> Zip<Self,I>{
-        Zip::new(self,iter)
+    fn zip<I: DistributedIterator>(self, iter: I) -> Zip<Self, I> {
+        Zip::new(self, iter)
     }
 }
 
 #[derive(Clone)]
-pub struct DistIter<'a, T: Dist + Clone + 'static, A: LamellarArrayRead<T>> {
+pub struct DistIter<'a, T: Arraydist + 'static, A: LamellarArrayRead<T>> {
     data: A,
     cur_i: usize,
     end_i: usize,
     _marker: PhantomData<&'a T>,
 }
 
-impl<T: Dist + Clone + 'static, A: LamellarArrayRead<T>> DistIter<'_, T, A> {
+impl<T: Arraydist, A: LamellarArrayRead<T>> DistIter<'_, T, A> {
     pub(crate) fn new(data: A, cur_i: usize, cnt: usize) -> Self {
         // println!("new dist iter {:?} {:? } {:?}",cur_i, cnt, cur_i+cnt);
         DistIter {
@@ -139,7 +139,9 @@ impl<T: Dist + Clone + 'static, A: LamellarArrayRead<T>> DistIter<'_, T, A> {
     }
 }
 
-impl<T: Dist + Clone + 'static, A: LamellarArrayRead<T> + DistIteratorLauncher+ 'static> DistIter<'static, T, A> {
+impl<T: Arraydist + 'static, A: LamellarArrayRead<T> + DistIteratorLauncher + Clone + 'static>
+    DistIter<'static, T, A>
+{
     pub fn for_each<F>(&self, op: F)
     where
         F: Fn(&T) + Sync + Send + Clone + 'static,
@@ -149,14 +151,14 @@ impl<T: Dist + Clone + 'static, A: LamellarArrayRead<T> + DistIteratorLauncher+ 
     pub fn for_each_async<F, Fut>(&self, op: F)
     where
         F: Fn(&T) -> Fut + Sync + Send + Clone + 'static,
-        Fut: Future<Output = ()> + Sync + Send + 'static,
+        Fut: Future<Output = ()> + Sync + Send + Clone + 'static,
     {
         self.data.clone().for_each_async(self, op);
     }
 }
 
-impl<'a, T: Dist + Clone + 'a, A: LamellarArrayRead<T> + DistIteratorLauncher+ 'a> DistributedIterator
-    for DistIter<'a, T, A>
+impl<'a, T: Arraydist + 'a, A: LamellarArrayRead<T> + DistIteratorLauncher + Clone + 'a>
+    DistributedIterator for DistIter<'a, T, A>
 {
     type Item = &'a T;
     type Array = A;
@@ -205,15 +207,14 @@ impl<'a, T: Dist + Clone + 'a, A: LamellarArrayRead<T> + DistIteratorLauncher+ '
 }
 
 #[derive(Clone)]
-pub struct DistIterMut<'a, T: Dist + Clone + 'static, A: LamellarArrayRead<T> + LamellarArrayWrite<T>>
-{
+pub struct DistIterMut<'a, T: Arraydist, A: LamellarArrayRead<T> + LamellarArrayWrite<T>> {
     data: A,
     cur_i: usize,
     end_i: usize,
     _marker: PhantomData<&'a T>,
 }
 
-impl<T: Dist + Clone + 'static, A: LamellarArrayRead<T> + LamellarArrayWrite<T>> DistIterMut<'_, T, A> {
+impl<T: Arraydist, A: LamellarArrayRead<T> + LamellarArrayWrite<T>> DistIterMut<'_, T, A> {
     pub(crate) fn new(data: A, cur_i: usize, cnt: usize) -> Self {
         DistIterMut {
             data,
@@ -224,8 +225,10 @@ impl<T: Dist + Clone + 'static, A: LamellarArrayRead<T> + LamellarArrayWrite<T>>
     }
 }
 
-impl<T: Dist + Clone + 'static, A: LamellarArrayRead<T> + LamellarArrayWrite<T> + DistIteratorLauncher + 'static>
-    DistIterMut<'static, T, A>
+impl<
+        T: Arraydist + 'static,
+        A: LamellarArrayRead<T> + LamellarArrayWrite<T> + DistIteratorLauncher + Clone + 'static,
+    > DistIterMut<'static, T, A>
 {
     pub fn for_each<F>(&self, op: F)
     where
@@ -236,16 +239,19 @@ impl<T: Dist + Clone + 'static, A: LamellarArrayRead<T> + LamellarArrayWrite<T> 
     pub fn for_each_async<F, Fut>(&self, op: F)
     where
         F: Fn(&mut T) -> Fut + Sync + Send + Clone + 'static,
-        Fut: Future<Output = ()> + Sync + Send + 'static,
+        Fut: Future<Output = ()> + Sync + Send + Clone + 'static,
     {
         self.data.clone().for_each_async(self, op);
     }
 }
-impl<'a, T: Dist + Clone + 'a, A: LamellarArrayRead<T> + LamellarArrayWrite<T> + DistIteratorLauncher> DistributedIterator
-    for DistIterMut<'a, T, A>
+impl<
+        'a,
+        T: Arraydist + 'a,
+        A: LamellarArrayRead<T> + LamellarArrayWrite<T> + DistIteratorLauncher + Clone,
+    > DistributedIterator for DistIterMut<'a, T, A>
 {
     type Item = &'a mut T;
-    type Array =A;
+    type Array = A;
     fn init(&self, start_i: usize, cnt: usize) -> Self {
         let max_i = self.data.num_elems_local();
         // println!("dist iter init {:?} {:?} {:?}",start_i,end_i,max_i);

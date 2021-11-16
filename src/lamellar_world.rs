@@ -4,13 +4,13 @@ use crate::lamellar_arch::LamellarArch;
 use crate::lamellar_request::LamellarRequest;
 use crate::lamellar_team::{LamellarTeam, LamellarTeamRT};
 use crate::memregion::{
-    local::LocalMemoryRegion, shared::SharedMemoryRegion, Dist, RemoteMemoryRegion,
+    local::LocalMemoryRegion, shared::SharedMemoryRegion, Dist, Arraydist, RemoteMemoryRegion,
 };
 use crate::scheduler::{create_scheduler, SchedulerType};
 use lamellar_prof::*;
 use log::trace;
 use parking_lot::RwLock;
-use std::collections::{HashMap};
+use std::collections::HashMap;
 use std::sync::{Arc, Weak};
 
 lazy_static! {
@@ -38,7 +38,7 @@ impl ActiveMessaging for LamellarWorld {
     }
     fn exec_am_all<F>(&self, am: F) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync>
     where
-        F: RemoteActiveMessage + LamellarAM + Serde + Dist + 'static,
+        F: RemoteActiveMessage + LamellarAM + Serde + Dist,
     {
         self.team.exec_am_all(am)
     }
@@ -48,14 +48,14 @@ impl ActiveMessaging for LamellarWorld {
         am: F,
     ) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync>
     where
-        F: RemoteActiveMessage + LamellarAM + Serde + Dist + 'static,
+        F: RemoteActiveMessage + LamellarAM + Serde + Dist,
     {
         assert!(pe < self.num_pes(), "invalid pe: {:?}", pe);
         self.team.exec_am_pe(pe, am)
     }
     fn exec_am_local<F>(&self, am: F) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync>
     where
-        F: LamellarActiveMessage + LocalAM + Dist + 'static,
+        F: LamellarActiveMessage + LocalAM + Send + Sync + 'static,
     {
         self.team.exec_am_local(am)
     }
@@ -133,7 +133,7 @@ impl RemoteMemoryRegion for LamellarWorld {
     // ///
     // /// * `size` - number of elements of T to allocate a memory region for -- (not size in bytes)
     // ///
-    fn alloc_shared_mem_region<T: Dist + 'static>(&self, size: usize) -> SharedMemoryRegion<T> {
+    fn alloc_shared_mem_region<T: Arraydist>(&self, size: usize) -> SharedMemoryRegion<T> {
         self.barrier();
         self.team.alloc_shared_mem_region::<T>(size)
     }
@@ -144,7 +144,7 @@ impl RemoteMemoryRegion for LamellarWorld {
     // ///
     // /// * `size` - number of elements of T to allocate a memory region for -- (not size in bytes)
     // ///
-    fn alloc_local_mem_region<T: Dist + 'static>(&self, size: usize) -> LocalMemoryRegion<T> {
+    fn alloc_local_mem_region<T: Arraydist>(&self, size: usize) -> LocalMemoryRegion<T> {
         self.team.alloc_local_mem_region::<T>(size)
     }
 
@@ -171,7 +171,6 @@ impl RemoteMemoryRegion for LamellarWorld {
 
 //#[prof]
 impl LamellarWorld {
-
     /// gets the id of this pe (roughly equivalent to MPI Rank)
     pub fn my_pe(&self) -> usize {
         self.my_pe
@@ -181,7 +180,6 @@ impl LamellarWorld {
         self.num_pes
     }
 
-    
     /// return the number of megabytes sent
     #[allow(non_snake_case)]
     pub fn MB_sent(&self) -> f64 {
