@@ -11,7 +11,7 @@ use crate::darc::{Darc, DarcInner, DarcMode, __NetworkDarc};
 use crate::lamellae::{LamellaeComm, LamellaeRDMA};
 use crate::lamellar_world::LAMELLAES;
 use crate::IdError;
-use crate::{LamellarTeam, LamellarTeamRT};
+use crate::lamellar_team::{LamellarTeamRT,IntoLamellarTeam};
 
 #[derive(serde::Serialize, serde::Deserialize, Debug)]
 enum LockType {
@@ -38,7 +38,8 @@ unsafe impl<T: Sync + Send> Sync for DistRwLock<T> {}
 /// since this is intended to be wrapped by a Darc there should be no issues
 /// usage outside of a darc is undefined
 impl<T> DistRwLock<T> {
-    pub(crate) fn new(data: T, team: Arc<LamellarTeamRT>) -> DistRwLock<T> {
+    pub(crate) fn new<U: Into<IntoLamellarTeam>>(data: T, team: U) -> DistRwLock<T> {
+        let team = team.into().team.clone();
         DistRwLock {
             readers: AtomicUsize::new(0),
             writer: AtomicUsize::new(team.num_pes),
@@ -410,17 +411,17 @@ impl<T> GlobalRwDarc<T> {
 }
 
 impl<T> GlobalRwDarc<T> {
-    pub fn new(team: Arc<LamellarTeam>, item: T) -> Result<GlobalRwDarc<T>, IdError> {
+    pub fn new<U: Clone + Into<IntoLamellarTeam>>(team: U, item: T) -> Result<GlobalRwDarc<T>, IdError> {
         Ok(GlobalRwDarc {
             darc: Darc::try_new(
-                team.team.clone(),
-                DistRwLock::new(item, team.team.clone()),
+                team.clone(),
+                DistRwLock::new(item, team),
                 DarcMode::GlobalRw,
             )?,
         })
     }
 
-    pub fn try_new(team: Arc<LamellarTeamRT>, item: T) -> Result<GlobalRwDarc<T>, IdError> {
+    pub fn try_new<U: Clone + Into<IntoLamellarTeam>>(team:U, item: T) -> Result<GlobalRwDarc<T>, IdError> {
         Ok(GlobalRwDarc {
             darc: Darc::try_new(
                 team.clone(),

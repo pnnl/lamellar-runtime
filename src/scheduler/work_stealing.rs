@@ -166,7 +166,7 @@ impl AmeSchedulerQueue for WorkStealingInner {
         };
         let work_inj = self.work_inj.clone();
         let schedule = move |runnable| work_inj.push(runnable);
-        let (runnable, task) = async_task::spawn(future, schedule);
+        let (runnable, task) = unsafe { async_task::spawn_unchecked(future, schedule) }; //safe as contents are sync+send, and no borrowed variables
         runnable.schedule();
         task.detach();
     }
@@ -198,14 +198,14 @@ impl AmeSchedulerQueue for WorkStealingInner {
         };
         let work_inj = self.work_inj.clone();
         let schedule = move |runnable| work_inj.push(runnable);
-        let (runnable, task) = async_task::spawn(future, schedule);
+        let (runnable, task) = unsafe { async_task::spawn_unchecked(future, schedule) }; //safe as contents are sync+send, and no borrowed variables
         runnable.schedule();
         task.detach();
     }
 
     fn submit_task<F>(&self, future: F)
     where
-        F: Future<Output = ()> + Send + 'static,
+        F: Future<Output = ()> + Send,
     {
         // println!("submit task {:?}",self.num_tasks.load(Ordering::Relaxed));
         let num_tasks = self.num_tasks.clone();
@@ -218,7 +218,7 @@ impl AmeSchedulerQueue for WorkStealingInner {
         };
         let work_inj = self.work_inj.clone();
         let schedule = move |runnable| work_inj.push(runnable);
-        let (runnable, task) = async_task::spawn(future2, schedule);
+        let (runnable, task) = unsafe { async_task::spawn_unchecked(future2, schedule) }; //safe //safe as contents are sync+send... may need to do something to enforce lifetime bounds
         runnable.schedule();
         task.detach();
     }
@@ -299,7 +299,7 @@ impl SchedulerQueue for WorkStealing {
 
     fn submit_task<F>(&self, future: F)
     where
-        F: Future<Output = ()> + Send + 'static,
+        F: Future<Output = ()> + Send,
     {
         self.inner.submit_task(future);
     }

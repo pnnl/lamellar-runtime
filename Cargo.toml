@@ -149,6 +149,10 @@ path="examples/array_examples/array_iteration.rs"
 name="local_only_array"
 path="examples/array_examples/local_only_array.rs"
 
+[[example]]
+name="generic_array"
+path="examples/array_examples/generic_array.rs"
+
 ##------------ RDMA Examples -----------------##
 [[example]]
 name="put"

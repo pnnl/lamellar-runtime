@@ -15,7 +15,6 @@ fn initialize_mem_region(memregion: &LamellarMemoryRegion<usize>) {
     }
 }
 
-
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let world = lamellar::LamellarWorldBuilder::new().build();

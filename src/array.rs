@@ -3,7 +3,7 @@ use crate::{active_messaging::*, LamellarTeamRT}; //{ActiveMessaging,AMCounters,
                                                   // use crate::lamellar_arch::LamellarArchRT;
 use crate::lamellar_request::LamellarRequest;
 use crate::memregion::{
-    local::LocalMemoryRegion, shared::SharedMemoryRegion, Dist, LamellarMemoryRegion,
+    local::LocalMemoryRegion, shared::SharedMemoryRegion,  Dist, LamellarMemoryRegion,
 };
 
 use enum_dispatch::enum_dispatch;
@@ -53,8 +53,6 @@ lamellar_impl::generate_reductions_for_type_rt!(u8, u16, u32, u64, u128, usize);
 lamellar_impl::generate_reductions_for_type_rt!(i8, i16, i32, i64, i128, isize);
 lamellar_impl::generate_reductions_for_type_rt!(f32, f64);
 
-
-
 #[derive(serde::Serialize, serde::Deserialize, Clone, Copy, Debug)]
 pub enum Distribution {
     Block,
@@ -82,7 +80,7 @@ enum ArrayOpInput {
 
 #[enum_dispatch(RegisteredMemoryRegion<T>, SubRegion<T>, MyFrom<T>)]
 #[derive(Clone)]
-pub enum LamellarArrayInput<T: Dist + 'static> {
+pub enum LamellarArrayInput<T: Dist> {
     LamellarMemRegion(LamellarMemoryRegion<T>),
     SharedMemRegion(SharedMemoryRegion<T>),
     LocalMemRegion(LocalMemoryRegion<T>),
@@ -90,7 +88,7 @@ pub enum LamellarArrayInput<T: Dist + 'static> {
     // Vec(Vec<T>),
 }
 
-impl<T: Dist + 'static> MyFrom<&T> for LamellarArrayInput<T> {
+impl<T: Dist> MyFrom<&T> for LamellarArrayInput<T> {
     fn my_from(val: &T, team: &Arc<LamellarTeamRT>) -> Self {
         let buf: LocalMemoryRegion<T> = team.alloc_local_mem_region(1);
         unsafe {
@@ -100,7 +98,7 @@ impl<T: Dist + 'static> MyFrom<&T> for LamellarArrayInput<T> {
     }
 }
 
-impl<T: Dist + 'static> MyFrom<T> for LamellarArrayInput<T> {
+impl<T: Dist> MyFrom<T> for LamellarArrayInput<T> {
     fn my_from(val: T, team: &Arc<LamellarTeamRT>) -> Self {
         let buf: LocalMemoryRegion<T> = team.alloc_local_mem_region(1);
         unsafe {
@@ -110,7 +108,7 @@ impl<T: Dist + 'static> MyFrom<T> for LamellarArrayInput<T> {
     }
 }
 
-// impl<T: Dist + 'static> MyFrom<T> for LamellarArrayInput<T> {
+// impl<T: AmDist+ Clone + 'static> MyFrom<T> for LamellarArrayInput<T> {
 //     fn my_from(val: T, team: &Arc<LamellarTeamRT>) -> Self {
 //         let buf: LocalMemoryRegion<T> = team.alloc_local_mem_region(1);
 //         unsafe {
@@ -181,17 +179,17 @@ pub trait ArrayOps<T> {
 
 #[enum_dispatch]
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
-#[serde(bound = "T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static")]
-pub enum LamellarReadArray<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> {
+#[serde(bound = "T: Dist + serde::Serialize + serde::de::DeserializeOwned")]
+pub enum LamellarReadArray<T: Dist> {
     UnsafeArray(UnsafeArray<T>),
-    ReadOnlyArray(ReadOnlyArray<T>)
+    ReadOnlyArray(ReadOnlyArray<T>),
 }
 
 #[enum_dispatch]
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
-#[serde(bound = "T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static")]
-pub enum LamellarWriteArray<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> {
-    UnsafeArray(UnsafeArray<T>)
+#[serde(bound = "T: Dist + serde::Serialize + serde::de::DeserializeOwned")]
+pub enum LamellarWriteArray<T: Dist> {
+    UnsafeArray(UnsafeArray<T>),
 }
 
 pub(crate) mod private {
@@ -199,7 +197,7 @@ pub(crate) mod private {
     use crate::memregion::Dist;
     use crate::array::{UnsafeArray,ReadOnlyArray,LamellarReadArray,LamellarWriteArray};
     #[enum_dispatch(LamellarReadArray<T>,LamellarWriteArray<T>)]
-    pub trait LamellarArrayPrivate<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> {
+    pub trait LamellarArrayPrivate<T: Dist>: Sync + Send {
         fn my_pe(&self) -> usize;
         fn local_as_ptr(&self) -> *const T;
         fn local_as_mut_ptr(&self) -> *mut T;        
@@ -209,7 +207,7 @@ pub(crate) mod private {
 }
 
 #[enum_dispatch(LamellarReadArray<T>,LamellarWriteArray<T>)]
-pub trait LamellarArray<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static>: private::LamellarArrayPrivate<T>{
+pub trait LamellarArray<T: Dist>: private::LamellarArrayPrivate<T>{
     fn team(&self) -> Arc<LamellarTeamRT>;
     fn num_elems_local(&self) -> usize;
     fn len(&self) -> usize;
@@ -240,27 +238,25 @@ pub trait LamellarArray<T: Dist + serde::ser::Serialize + serde::de::Deserialize
     // pub fn buffered_iter(&self, buf_size: usize) -> LamellarArrayIter<'_, T> ;
 }
 
-pub trait SubArray<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static>: LamellarArray<T> {
+pub trait SubArray<T: Dist>: LamellarArray<T> {
     type Array: LamellarArray<T>;
-    fn sub_array<R: std::ops::RangeBounds<usize>>(&self, range: R) ->Self::Array;
+    fn sub_array<R: std::ops::RangeBounds<usize>>(&self, range: R) -> Self::Array;
 }
 
 #[enum_dispatch(LamellarReadArray<T>,LamellarWriteArray<T>)]
-pub trait LamellarArrayRead<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static>: LamellarArray<T> + Clone + Send + Sync
-{
+pub trait LamellarArrayRead<T: Dist>: LamellarArray<T> {
     fn get<U: MyInto<LamellarArrayInput<T>>>(&self, index: usize, buf: U);
     fn at(&self, index: usize) -> T;
 }
 
 #[enum_dispatch(LamellarWriteArray<T>)]
-pub trait LamellarArrayWrite<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static>: LamellarArray<T> + Clone + Send + Sync
-{
-    fn put<U: MyInto<LamellarArrayInput<T>>>(&self, index: usize, buf: U); 
+pub trait LamellarArrayWrite<T: Dist>: LamellarArray<T> {
+    fn put<U: MyInto<LamellarArrayInput<T>>>(&self, index: usize, buf: U);
 }
 
 pub trait LamellarArrayReduce<T>: LamellarArrayRead<T>
 where
-    T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static,
+    T: Dist + serde::Serialize + serde::de::DeserializeOwned,
 {
     fn get_reduction_op(&self, op: String) -> LamellarArcAm;
     fn reduce(&self, op: &str) -> Box<dyn LamellarRequest<Output = T> + Send + Sync>;
@@ -269,8 +265,7 @@ where
     fn prod(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync>;
 }
 
-
-// impl<'a, T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> IntoIterator
+// impl<'a, T: AmDist + 'static> IntoIterator
 //     for &'a LamellarArray<T>
 // {
 //     type Item = &'a T;

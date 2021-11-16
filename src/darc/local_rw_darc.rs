@@ -3,14 +3,13 @@ use parking_lot::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt;
 use std::sync::atomic::Ordering;
-use std::sync::Arc;
 
 use crate::darc::global_rw_darc::{DistRwLock, GlobalRwDarc};
 use crate::darc::{Darc, DarcInner, DarcMode, __NetworkDarc};
 use crate::lamellae::{LamellaeComm, LamellaeRDMA};
 use crate::lamellar_world::LAMELLAES;
 use crate::IdError;
-use crate::{LamellarTeam, LamellarTeamRT};
+use crate::lamellar_team::IntoLamellarTeam;
 
 #[derive(serde::Serialize, serde::Deserialize, Debug)]
 pub struct LocalRwDarc<T: 'static> {
@@ -96,17 +95,17 @@ impl<T> LocalRwDarc<T> {
 }
 
 impl<T> LocalRwDarc<T> {
-    pub fn new(team: Arc<LamellarTeam>, item: T) -> Result<LocalRwDarc<T>, IdError> {
+    pub fn new<U: Into<IntoLamellarTeam>>(team: U, item: T) -> Result<LocalRwDarc<T>, IdError> {
         Ok(LocalRwDarc {
             darc: Darc::try_new(
-                team.team.clone(),
+                team,
                 RwLock::new(Box::new(item)),
                 DarcMode::LocalRw,
             )?,
         })
     }
 
-    pub fn try_new(team: Arc<LamellarTeamRT>, item: T) -> Result<LocalRwDarc<T>, IdError> {
+    pub fn try_new<U: Into<IntoLamellarTeam>>(team:U, item: T) -> Result<LocalRwDarc<T>, IdError> {
         Ok(LocalRwDarc {
             darc: Darc::try_new(team, RwLock::new(Box::new(item)), DarcMode::LocalRw)?,
         })

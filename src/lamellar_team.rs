@@ -28,7 +28,6 @@ use std::time::{Duration, Instant};
 // when the outer handle is dropped, we do the appropriate barriers and then remove the inner team from the runtime data structures
 // this should allow for the inner team to persist while at least one user handle exists in the world.
 
-
 /// an abstraction used to group pes into distributed computational units
 ///
 /// actions taking place on a team, only execute on members of the team.
@@ -149,7 +148,7 @@ impl ActiveMessaging for Arc<LamellarTeam> {
 
     fn exec_am_all<F>(&self, am: F) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync>
     where
-        F: RemoteActiveMessage + LamellarAM + Serde + Send + Sync + 'static,
+        F: RemoteActiveMessage + LamellarAM + Serde + AmDist,
     {
         trace!("[{:?}] team exec am all request", self.team.world_pe);
         self.team.exec_am_all_tg(am, None)
@@ -161,7 +160,7 @@ impl ActiveMessaging for Arc<LamellarTeam> {
         am: F,
     ) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync>
     where
-        F: RemoteActiveMessage + LamellarAM + Serde + Send + Sync + 'static,
+        F: RemoteActiveMessage + LamellarAM + Serde + AmDist,
     {
         self.team.exec_am_pe_tg(pe, am, None)
     }
@@ -181,7 +180,7 @@ impl RemoteMemoryRegion for Arc<LamellarTeam> {
     ///
     /// * `size` - number of elements of T to allocate a memory region for -- (not size in bytes)
     ///
-    fn alloc_shared_mem_region<T: Dist + 'static>(&self, size: usize) -> SharedMemoryRegion<T> {
+    fn alloc_shared_mem_region<T: Dist>(&self, size: usize) -> SharedMemoryRegion<T> {
         self.team.barrier.barrier();
         let mr: SharedMemoryRegion<T> = if self.team.num_world_pes == self.team.num_pes {
             SharedMemoryRegion::new(size, self.team.clone(), AllocationType::Global)
@@ -202,7 +201,7 @@ impl RemoteMemoryRegion for Arc<LamellarTeam> {
     ///
     /// * `size` - number of elements of T to allocate a memory region for -- (not size in bytes)
     ///
-    fn alloc_local_mem_region<T: Dist + 'static>(&self, size: usize) -> LocalMemoryRegion<T> {
+    fn alloc_local_mem_region<T: Dist>(&self, size: usize) -> LocalMemoryRegion<T> {
         let mut lmr = LocalMemoryRegion::try_new(size, self.team.lamellae.clone());
         while let Err(_err) = lmr {
             std::thread::yield_now();
@@ -232,6 +231,14 @@ impl From<Arc<LamellarTeam>> for IntoLamellarTeam {
 
 impl From<&LamellarWorld> for IntoLamellarTeam {
     fn from(world: &LamellarWorld) -> Self {
+        IntoLamellarTeam {
+            team: world.team_rt.clone(),
+        }
+    }
+}
+
+impl From<LamellarWorld> for IntoLamellarTeam {
+    fn from(world: LamellarWorld) -> Self {
         IntoLamellarTeam {
             team: world.team_rt.clone(),
         }
@@ -628,7 +635,7 @@ impl LamellarTeamRT {
         am: F,
     ) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync>
     where
-        F: RemoteActiveMessage + LamellarAM + Send + Sync + 'static,
+        F: RemoteActiveMessage + LamellarAM + AmDist,
     {
         self.exec_am_all_tg(am, None)
     }
@@ -639,7 +646,7 @@ impl LamellarTeamRT {
         task_group_cnts: Option<Arc<AMCounters>>,
     ) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync>
     where
-        F: RemoteActiveMessage + LamellarAM + Send + Sync + 'static,
+        F: RemoteActiveMessage + LamellarAM + AmDist,
     {
         trace!("[{:?}] team exec am all request", self.world_pe);
         let tg_outstanding_reqs = match task_group_cnts {
@@ -689,7 +696,7 @@ impl LamellarTeamRT {
         am: F,
     ) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync>
     where
-        F: RemoteActiveMessage + LamellarAM + Send + Sync + 'static,
+        F: RemoteActiveMessage + LamellarAM + AmDist,
     {
         self.exec_am_pe_tg(pe, am, None)
     }
@@ -700,7 +707,7 @@ impl LamellarTeamRT {
         task_group_cnts: Option<Arc<AMCounters>>,
     ) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync>
     where
-        F: RemoteActiveMessage + LamellarAM + Send + Sync + 'static,
+        F: RemoteActiveMessage + LamellarAM + AmDist,
     {
         prof_start!(pre);
         let tg_outstanding_reqs = match task_group_cnts {
@@ -761,7 +768,7 @@ impl LamellarTeamRT {
         task_group_cnts: Option<Arc<AMCounters>>,
     ) -> Box<dyn LamellarRequest<Output = F> + Send + Sync>
     where
-        F: serde::ser::Serialize + serde::de::DeserializeOwned + Sync + Send + 'static,
+        F: AmDist,
     {
         prof_start!(pre);
         let tg_outstanding_reqs = match task_group_cnts {
@@ -886,7 +893,7 @@ impl LamellarTeamRT {
     ///
     /// * `size` - number of elements of T to allocate a memory region for -- (not size in bytes)
     ///
-    // pub(crate) fn alloc_shared_mem_region<T: Dist + 'static>(self:  &Arc<LamellarTeamRT>, size: usize) -> SharedMemoryRegion<T> {
+    // pub(crate) fn alloc_shared_mem_region<T: AmDist+ 'static>(self:  &Arc<LamellarTeamRT>, size: usize) -> SharedMemoryRegion<T> {
     //     self.barrier.barrier();
     //     let mr: SharedMemoryRegion<T> = if self.num_world_pes == self.num_pes {
     //         SharedMemoryRegion::new(size, self.clone(), AllocationType::Global)
@@ -907,7 +914,7 @@ impl LamellarTeamRT {
     ///
     /// * `size` - number of elements of T to allocate a memory region for -- (not size in bytes)
     ///
-    pub(crate) fn alloc_local_mem_region<T: Dist + 'static>(
+    pub(crate) fn alloc_local_mem_region<T: Dist>(
         self: &Arc<LamellarTeamRT>,
         size: usize,
     ) -> LocalMemoryRegion<T> {
