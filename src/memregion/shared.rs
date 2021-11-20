@@ -1,6 +1,7 @@
 use crate::darc::Darc;
 use crate::lamellae::AllocationType;
 use crate::memregion::*;
+use crate::array::{LamellarWrite, LamellarRead,};
 use core::marker::PhantomData;
 #[cfg(feature = "enable-prof")]
 use lamellar_prof::*;
@@ -227,6 +228,9 @@ impl<T: Dist> std::fmt::Debug for SharedMemoryRegion<T> {
         write!(f, "[{:?}] shared mem region:  {:?} ", self.mr.pe, self.mr,)
     }
 }
+
+impl<T: Dist> LamellarWrite for SharedMemoryRegion<T> {}
+impl<T: Dist> LamellarRead for SharedMemoryRegion<T> {}
 
 impl<T: Dist> From<&SharedMemoryRegion<T>> for LamellarArrayInput<T> {
     fn from(smr: &SharedMemoryRegion<T>) -> Self {

@@ -194,6 +194,9 @@ impl LamellaeRDMA for Rofi {
     fn get(&self, pe: usize, src: usize, dst: &mut [u8]) {
         self.rofi_comm.get(pe, src, dst);
     }
+    fn iget(&self, pe: usize, src: usize, dst: &mut [u8]) {
+        self.rofi_comm.iget(pe, src, dst);
+    }
     fn rt_alloc(&self, size: usize) -> AllocResult<usize> {
         self.rofi_comm.rt_alloc(size)
     }

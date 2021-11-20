@@ -57,8 +57,11 @@ impl<T: Dist> ReadOnlyArray<T> {
         self.array.len()
     }
 
-    pub fn get<U: MyInto<LamellarArrayInput<T>>>(&self, index: usize, buf: U) {
-        self.array.get(index, buf)
+    pub unsafe fn get_unchecked<U: MyInto<LamellarArrayInput<T>> + LamellarWrite >(&self, index: usize, buf: U) {
+        self.array.get_unchecked(index, buf)
+    }
+    pub fn iget<U: MyInto<LamellarArrayInput<T>> + LamellarWrite >(&self, index: usize, buf: U) {
+        self.array.iget(index, buf)
     }
     pub fn at(&self, index: usize) -> T {
         self.array.at(index)
@@ -125,7 +128,7 @@ impl<T: Dist> ReadOnlyArray<T> {
     }
 }
 
-impl <T: Dist + serde::Serialize + serde::de::DeserializeOwned> ReadOnlyArray<T> {
+impl <T: Dist + serde::Serialize + serde::de::DeserializeOwned + 'static> ReadOnlyArray<T> {
     pub fn reduce(&self, op: &str) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
         self.array.reduce(op)
     }
@@ -165,9 +168,7 @@ impl<T: Dist> DistIteratorLauncher for ReadOnlyArray<T> {
 impl<T: Dist> private::LamellarArrayPrivate<T>
     for ReadOnlyArray<T>
 {
-    fn my_pe(&self) -> usize{
-        self.array.my_pe()
-    }
+    
     fn local_as_ptr(&self) -> *const T{
         self.local_as_mut_ptr()
     }
@@ -183,7 +184,9 @@ impl<T: Dist> private::LamellarArrayPrivate<T>
 }
 
 impl<T: Dist> LamellarArray<T> for ReadOnlyArray<T> {
-
+    fn my_pe(&self) -> usize{
+        self.array.my_pe()
+    }
     fn team(&self) -> Arc<LamellarTeamRT>{
         self.array.team().clone()
     }    
@@ -202,8 +205,11 @@ impl<T: Dist> LamellarArray<T> for ReadOnlyArray<T> {
     }
 }
 impl<T: Dist> LamellarArrayRead<T> for ReadOnlyArray<T> {
-    fn get<U: MyInto<LamellarArrayInput<T>>>(&self, index: usize, buf: U) {
-        self.get(index, buf)
+    unsafe fn get_unchecked<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(&self, index: usize, buf: U) {
+        self.get_unchecked(index, buf)
+    }
+    fn iget<U: MyInto<LamellarArrayInput<T>> + LamellarWrite >(&self, index: usize, buf: U) {
+        self.iget(index, buf)
     }
     fn at(&self, index: usize) -> T {
         self.at(index)
@@ -214,6 +220,9 @@ impl<T: Dist> SubArray<T> for ReadOnlyArray<T> {
     type Array = ReadOnlyArray<T>;
     fn sub_array<R: std::ops::RangeBounds<usize>>(&self, range: R) -> Self::Array {
         self.sub_array(range).into()
+    }
+    fn global_index(&self, sub_index: usize) -> usize{
+        self.array.global_index(sub_index)
     }
 }
 

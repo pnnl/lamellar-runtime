@@ -68,7 +68,7 @@ fn main() {
             *elem = 0;
         }
     }
-    block_array.get(0, &local_mem_region);
+    block_array.iget(0, &local_mem_region);
     world.barrier();
     std::thread::sleep(std::time::Duration::from_secs(1));
     if my_pe == 0 {
@@ -84,7 +84,7 @@ fn main() {
             *elem = 0;
         }
     }
-    cyclic_array.get(0, &local_mem_region);
+    cyclic_array.iget(0, &local_mem_region);
     world.barrier();
     std::thread::sleep(std::time::Duration::from_secs(1));
     if my_pe == 0 {

@@ -43,10 +43,16 @@ fn main() {
     cyclic_array.put(0, &shared_mem_region);
     cyclic_array.put(0, &local_mem_region);
     // can use subregions
-    block_array.get(0, &shared_mem_region.sub_region(0..total_len / 2)); //uses local data of the shared memregion
-    block_array.get(0, &local_mem_region.sub_region(0..total_len / 2));
-    cyclic_array.get(0, &shared_mem_region.sub_region(0..total_len / 2));
-    cyclic_array.get(0, &local_mem_region.sub_region(0..total_len / 2));
+    unsafe {
+        let start = std::time::Instant::now();
+        block_array.get_unchecked(0, shared_mem_region.sub_region(0..total_len / 2)); //uses local data of the shared memregion
+        block_array.get_unchecked(0, local_mem_region.sub_region(0..total_len / 2));
+        println!("get_unchecked elapsed {:?}",start.elapsed().as_secs_f64());
+    }
+    let start = std::time::Instant::now();
+    cyclic_array.iget(0, shared_mem_region.sub_region(0..total_len / 2));
+    cyclic_array.iget(0, local_mem_region.sub_region(0..total_len / 2));
+    println!("iget elapsed {:?}",start.elapsed().as_secs_f64());
     world.barrier();
     // puts/gets using single values
     block_array.put(total_len - 1, 12345);

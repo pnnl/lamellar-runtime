@@ -152,6 +152,12 @@ impl LamellaeRDMA for Local {
         }
     }
 
+    fn iget(&self, _pe: usize, src: usize, dst: &mut [u8]) {
+        unsafe {
+            std::ptr::copy_nonoverlapping(src as *mut u8, dst.as_mut_ptr(), dst.len());
+        }
+    }
+
     fn rt_alloc(&self, size: usize) -> AllocResult<usize> {
         let data = vec![0u8; size].into_boxed_slice();
         let data_ptr = Box::into_raw(data);

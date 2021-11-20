@@ -76,7 +76,7 @@ where
 pub struct LamellarArrayIter<'a, T: Dist, A: LamellarArrayRead<T>> {
     array: A,
     buf_0: LocalMemoryRegion<T>,
-    buf_1: LocalMemoryRegion<T>,
+    // buf_1: LocalMemoryRegion<T>,
     index: usize,
     buf_index: usize,
     ptr: NonNull<T>,
@@ -93,45 +93,47 @@ impl<'a, T: Dist, A: LamellarArrayRead<T>> LamellarArrayIter<'a, T, A> {
         buf_size: usize,
     ) -> LamellarArrayIter<'a, T, A> {
         let buf_0 = team.alloc_local_mem_region(buf_size);
+        array.iget(0,&buf_0);
         let ptr = NonNull::new(buf_0.as_mut_ptr().unwrap()).unwrap();
         let iter = LamellarArrayIter {
             array: array,
             buf_0: buf_0,
-            buf_1: team.alloc_local_mem_region(buf_size),
+            // buf_1: team.alloc_local_mem_region(buf_size),
             index: 0,
             buf_index: 0,
             ptr: ptr,
             _marker: PhantomData,
         };
-        iter.fill_buffer(0);
+        // iter.fill_buffer(0);
+        
         iter
     }
-    fn fill_buffer(&self, index: usize) {
-        let end_i = std::cmp::min(index + self.buf_0.len(), self.array.len()) - index;
-        let buf_0 = self.buf_0.sub_region(..end_i);
-        let buf_0_u8 = buf_0.clone().to_base::<u8>();
-        let buf_0_slice = unsafe { buf_0_u8.as_mut_slice().unwrap() };
-        let buf_1 = self.buf_1.sub_region(..end_i);
-        let buf_1_u8 = buf_1.clone().to_base::<u8>();
-        let buf_1_slice = unsafe { buf_1_u8.as_mut_slice().unwrap() };
-        for i in 0..buf_0_slice.len() {
-            buf_0_slice[i] = 0;
-            buf_1_slice[i] = 1;
-        }
-        self.array.get(index, &buf_0);
-        self.array.get(index, &buf_1);
-    }
-    fn spin_for_valid(&self, index: usize) {
-        let buf_0_temp = self.buf_0.sub_region(index..=index).to_base::<u8>();
-        let buf_0 = buf_0_temp.as_slice().unwrap();
-        let buf_1_temp = self.buf_1.sub_region(index..=index).to_base::<u8>();
-        let buf_1 = buf_1_temp.as_slice().unwrap();
-        for i in 0..buf_0.len() {
-            while buf_0[i] != buf_1[i] {
-                std::thread::yield_now();
-            }
-        }
-    }
+    // fn fill_buffer(&self, index: usize) {
+    //     let end_i = std::cmp::min(index + self.buf_0.len(), self.array.len()) - index;
+    //     let buf_0 = self.buf_0.sub_region(..end_i);
+    //     let buf_0_u8 = buf_0.clone().to_base::<u8>();
+    //     let buf_0_slice = unsafe { buf_0_u8.as_mut_slice().unwrap() };
+    //     let buf_1 = self.buf_1.sub_region(..end_i);
+    //     let buf_1_u8 = buf_1.clone().to_base::<u8>();
+    //     let buf_1_slice = unsafe { buf_1_u8.as_mut_slice().unwrap() };
+    //     for i in 0..buf_0_slice.len() {
+    //         buf_0_slice[i] = 0;
+    //         buf_1_slice[i] = 1;
+    //     }
+    //     self.array.get(index, &buf_0);
+    //     self.array.get(index, &buf_1);
+    // }
+    // fn spin_for_valid(&self, index: usize) {
+    //     let buf_0_temp = self.buf_0.sub_region(index..=index).to_base::<u8>();
+    //     let buf_0 = buf_0_temp.as_slice().unwrap();
+    //     let buf_1_temp = self.buf_1.sub_region(index..=index).to_base::<u8>();
+    //     let buf_1 = buf_1_temp.as_slice().unwrap();
+    //     for i in 0..buf_0.len() {
+    //         while buf_0[i] != buf_1[i] {
+    //             std::thread::yield_now();
+    //         }
+    //     }
+    // }
 
     // fn check_for_valid(&self, index: usize) -> bool {
     //     let buf_0_temp = self.buf_0.sub_region(index..=index).to_base::<u8>();
@@ -158,9 +160,10 @@ impl<'a, T: Dist, A: LamellarArrayRead<T> + Clone> SerialIterator
             if self.buf_index == self.buf_0.len() {
                 //need to get new data
                 self.buf_index = 0;
-                self.fill_buffer(self.index);
+                // self.fill_buffer(self.index);
+                self.array.iget(self.index,&self.buf_0);
             }
-            self.spin_for_valid(self.buf_index);
+            // self.spin_for_valid(self.buf_index);
             self.index += 1;
             self.buf_index += 1;
             unsafe {
@@ -176,8 +179,9 @@ impl<'a, T: Dist, A: LamellarArrayRead<T> + Clone> SerialIterator
     }
     fn advance_index(&mut self, count: usize) {
         self.index += count;
-        self.buf_index = self.index;
-        self.fill_buffer(0);
+        self.buf_index = 0;
+        // self.fill_buffer(0);
+        self.array.iget(self.index,&self.buf_0);
     }
     fn array(&self) -> Self::Array {
         self.array.clone()

@@ -32,10 +32,10 @@ impl std::error::Error for AllocError {}
 pub(crate) type AllocResult<T> = Result<T, AllocError>;
 
 pub(crate) trait Remote:
-    serde::ser::Serialize + serde::de::DeserializeOwned + std::clone::Clone + Send + Sync
+    Copy + Send + Sync
 {
 }
-impl<T: serde::ser::Serialize + serde::de::DeserializeOwned + std::clone::Clone + Send + Sync>
+impl<T:  Copy + Send + Sync>
     Remote for T
 {
 }

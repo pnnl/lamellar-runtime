@@ -35,10 +35,10 @@ impl LamellarAM for RdmaAM {
         let local = lamellar::world.alloc_local_mem_region::<u8>(ARRAY_LEN);
         let local_slice = unsafe { local.as_mut_slice().unwrap() };
         local_slice[ARRAY_LEN - 1] = num_pes as u8;
-        self.array.get(0, &local);
-        while local_slice[ARRAY_LEN - 1] == num_pes as u8 {
-            async_std::task::yield_now().await;
-        }
+        self.array.iget(0, &local);
+        // while local_slice[ARRAY_LEN - 1] == num_pes as u8 {
+        //     async_std::task::yield_now().await;
+        // }
 
         let my_index = self.index * num_pes + lamellar::current_pe;
         println!("\tcurrent view of remote segment on pe {:?}: {:?}..{:?}\n\tpe: {:?} updating index {:?} on pe  {:?}", self.orig_pe, &local_slice[0..num_pes], &local_slice[ARRAY_LEN-num_pes..],lamellar::current_pe, my_index, self.orig_pe);

@@ -6,11 +6,9 @@ use std::sync::Arc;
 use std::marker::PhantomData;
 
 
-
-
 pub struct LocalOnlyArray<T: Dist + 'static> {
     pub(crate) array: UnsafeArray<T>,
-    pub(crate) _unsync: PhantomData<*const T>,// because we allow mutable access to underlying slice but don't provide any protection to aquiring multiple mut slices
+    pub(crate) _unsync: PhantomData<*const ()>,// because we allow mutable access to underlying slice but don't provide any protection to aquiring multiple mut slices
                                    // we must make this not sync by default.
                                    // either wrap the localonlyarray in a mutex/rwlock or use a localRwArray 
 }
@@ -87,9 +85,7 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Lo
 impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> private::LamellarArrayPrivate<T>
     for LocalOnlyArray<T>
 {
-    fn my_pe(&self) -> usize{
-        self.array.my_pe()
-    }
+    
     fn local_as_ptr(&self) -> *const T{
         self.local_as_mut_ptr()
     }
@@ -107,6 +103,9 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> pr
 impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> LamellarArray<T>
     for LocalOnlyArray<T>
 {
+    fn my_pe(&self) -> usize{
+        self.array.my_pe()
+    }
     fn team(&self) -> Arc<LamellarTeamRT>{
         self.array.team().clone()
     }

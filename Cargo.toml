@@ -153,6 +153,10 @@ path="examples/array_examples/local_only_array.rs"
 name="generic_array"
 path="examples/array_examples/generic_array.rs"
 
+[[example]]
+name="array_ops"
+path="examples/array_examples/array_ops.rs"
+
 ##------------ RDMA Examples -----------------##
 [[example]]
 name="put"

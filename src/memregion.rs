@@ -1,4 +1,4 @@
-use crate::array::{LamellarArrayInput, MyFrom};
+use crate::array::{LamellarArrayInput, MyFrom, LamellarWrite, LamellarRead};
 use crate::lamellae::{AllocationType, Backend, Lamellae, LamellaeComm, LamellaeRDMA};
 use crate::lamellar_team::LamellarTeamRT;
 use core::marker::PhantomData;
@@ -26,14 +26,23 @@ impl std::fmt::Display for MemNotLocalError {
 
 impl std::error::Error for MemNotLocalError {}
 
-pub trait Dist:
-    Send + Sync + Copy + 'static
+pub trait Dist2: Send + Sync + Copy {}
+impl<T: Send + Sync + Copy>
+    Dist2 for T
 {
 }
-impl<T: Send + Sync + Copy + 'static>
+
+pub trait Dist:
+    Send + Sync + Copy //+ 'static
+{
+
+}
+impl<T: Send + Sync + Copy /*+ 'static*/>
     Dist for T
 {
 }
+
+
 
 #[enum_dispatch(RegisteredMemoryRegion<T>, MemRegionId, AsBase, SubRegion<T>, MemoryRegionRDMA<T>, RTMemoryRegionRDMA<T>)]
 #[derive(Clone, Debug)]
@@ -74,6 +83,18 @@ impl<T: Dist> From<&LamellarMemoryRegion<T>> for LamellarArrayInput<T> {
 impl<T: Dist> MyFrom<&LamellarMemoryRegion<T>> for LamellarArrayInput<T> {
     fn my_from(mr: &LamellarMemoryRegion<T>, _team: &Arc<LamellarTeamRT>) -> Self {
         LamellarArrayInput::LamellarMemRegion(mr.clone())
+    }
+}
+
+// impl<T: Dist> From<LamellarMemoryRegion<T>> for LamellarArrayInput<T> {
+//     fn from(mr: LamellarMemoryRegion<T>) -> Self {
+//         LamellarArrayInput::LamellarMemRegion(mr)
+//     }
+// }
+
+impl<T: Dist> MyFrom<LamellarMemoryRegion<T>> for LamellarArrayInput<T> {
+    fn my_from(mr: LamellarMemoryRegion<T>, _team: &Arc<LamellarTeamRT>) -> Self {
+        LamellarArrayInput::LamellarMemRegion(mr)
     }
 }
 
@@ -136,6 +157,10 @@ impl<T: Dist> PartialEq for LamellarMemoryRegion<T> {
 
 //#[prof]
 impl<T: Dist> Eq for LamellarMemoryRegion<T> {}
+
+
+impl<T: Dist>  LamellarWrite for LamellarMemoryRegion<T> {}
+impl<T: Dist>  LamellarRead for LamellarMemoryRegion<T> {}
 
 // this is not intended to be accessed directly by a user
 // it will be wrapped in either a shared region or local region
@@ -343,6 +368,39 @@ impl<T: Dist> MemoryRegion<T> {
                 // println!("getting {:?} {:?} {:?} {:?} {:?} {:?} {:?}",pe,index,std::mem::size_of::<R>(),data.len(), num_bytes,self.size, self.num_bytes);
                 self.rdma
                     .get(pe, self.addr + index * std::mem::size_of::<R>(), bytes);
+            //(remote pe, src, dst)
+            // println!("getting {:?} {:?} [{:?}] {:?} {:?} {:?}",pe,self.addr + index * std::mem::size_of::<T>(),index,data.addr(),data.len(),num_bytes);
+            } else {
+                panic!("ERROR: get data dst is not local");
+            }
+        } else {
+            println!("{:?} {:?} {:?}", self.size, index, data.len(),);
+            panic!("index out of bounds");
+        }
+    }
+
+    /// copy data from remote memory location into provided data buffer
+    ///
+    /// # Arguments
+    ///
+    /// * `pe` - id of remote PE to grab data from
+    /// * `index` - offset into the remote memory window
+    /// * `data` - address (which is "registered" with network device) of destination buffer to store result of the get
+    ///    data will be present within the buffer once this returns.
+    pub(crate) fn iget<R: Dist, U: Into<LamellarMemoryRegion<R>>>(
+        &self,
+        pe: usize,
+        index: usize,
+        data: U,
+    ) {
+        let data = data.into();
+        if (index + data.len()) * std::mem::size_of::<R>() <= self.num_bytes {
+            let num_bytes = data.len() * std::mem::size_of::<R>();
+            if let Ok(ptr) = data.as_mut_ptr() {
+                let bytes = unsafe { std::slice::from_raw_parts_mut(ptr as *mut u8, num_bytes) };
+                // println!("getting {:?} {:?} {:?} {:?} {:?} {:?} {:?}",pe,index,std::mem::size_of::<R>(),data.len(), num_bytes,self.size, self.num_bytes);
+                self.rdma
+                    .iget(pe, self.addr + index * std::mem::size_of::<R>(), bytes);
             //(remote pe, src, dst)
             // println!("getting {:?} {:?} [{:?}] {:?} {:?} {:?}",pe,self.addr + index * std::mem::size_of::<T>(),index,data.addr(),data.len(),num_bytes);
             } else {

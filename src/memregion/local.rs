@@ -1,5 +1,6 @@
 use crate::lamellae::{AllocationType, Lamellae};
 use crate::memregion::*;
+use crate::array::{LamellarWrite, LamellarRead,};
 use core::marker::PhantomData;
 use std::sync::Arc;
 
@@ -256,6 +257,14 @@ impl<T: Dist> std::fmt::Debug for LocalMemoryRegion<T> {
         write!(f, "[{:?}] local mem region:  {:?} ", self.pe, self.mr,)
     }
 }
+
+impl<T: Dist> LamellarWrite for LocalMemoryRegion<T> {}
+impl<T: Dist> LamellarWrite for &LocalMemoryRegion<T> {}
+impl<T: Dist> LamellarRead for LocalMemoryRegion<T> {}
+
+
+
+
 
 impl<T: Dist> From<&LocalMemoryRegion<T>> for LamellarArrayInput<T> {
     fn from(smr: &LocalMemoryRegion<T>) -> Self {

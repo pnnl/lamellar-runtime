@@ -760,16 +760,24 @@ fn create_add(
     let mut array_impls = quote! {};
     for array_type in array_types {
         let add_name_am = quote::format_ident!("{:}_{:}_add_am", array_type, typeident);
+        let add_name_func = quote::format_ident!("{:}_{:}_add", array_type, typeident);
+        let create_add= quote::format_ident!("{:}_create_add",array_type);
+        let reg_add = quote::format_ident!("{:}Add",array_type);
         match_stmts.extend(quote! {
             #lamellar::array::LamellarWriteArray::#array_type(inner) => inner.add(index,val),
         });
         array_impls.extend(quote!{
             #[allow(non_camel_case_types)]
+            #lamellar::#create_add!(#typeident);
+
+            #[allow(non_camel_case_types)]
+            // impl  #lamellar::array::#array_type<#typeident>{
             impl #lamellar::array::ArrayOps<#typeident> for #lamellar::array::#array_type<#typeident>{
                 fn add(&self,index: usize, val: #typeident)->Option<Box<dyn #lamellar::LamellarRequest<Output = ()> + Send + Sync>>{
+                    println!("specialized array ops");
                     let pe = self.pe_for_dist_index(index);
                     let local_index = self.pe_offset_for_dist_index(pe,index);
-                    if pe == self.my_pe{
+                    if pe == self.my_pe(){
                         self.local_add(local_index,val);
                         None
                     }
@@ -791,6 +799,23 @@ fn create_add(
                 local_index: usize,
                 val: #typeident,
             }
+            // impl  #add_name_am{
+                fn #add_name_func(val: *const u8, array: #lamellar::array::#array_type<u8>, index: usize) -> LamellarArcAm{
+                    let val = unsafe {*(val as  *const #typeident)};
+                    Arc::new(#add_name_am{
+                        data: array.to_base_inner(),
+                        local_index: index,
+                        val: val,
+                    })
+                }
+            // }
+            inventory::submit!{
+                #![crate = #lamellar]
+                #lamellar::array::#reg_add {
+                    id: std::any::TypeId::of::<#typeident>(),
+                    add: #add_name_func
+                }
+            }
 
             #[#am]
             impl LamellarAM for #add_name_am{
@@ -801,7 +826,10 @@ fn create_add(
         });
     }
 
+    
     let expanded = quote! {
+       
+
         #[allow(non_camel_case_types)]
         impl #lamellar::array::ArrayOps<#typeident> for #lamellar::array::LamellarWriteArray<#typeident>{
             fn add(&self,index: usize, val: #typeident)->Option<Box<dyn #lamellar::LamellarRequest<Output = ()> + Send + Sync>>{
@@ -834,6 +862,7 @@ pub fn register_reduction(item: TokenStream) -> TokenStream {
     let args = parse_macro_input!(item as ReductionArgs);
     let mut output = quote! {};
     let array_types: Vec<syn::Ident> = vec![
+        quote::format_ident!("AtomicArray"),
         quote::format_ident!("UnsafeArray"),
         quote::format_ident!("ReadOnlyArray"),
     ];
@@ -878,10 +907,11 @@ pub fn register_reduction(item: TokenStream) -> TokenStream {
 pub fn generate_reductions_for_type(item: TokenStream) -> TokenStream {
     let mut output = quote! {};
     let read_array_types: Vec<syn::Ident> = vec![
+        quote::format_ident!("AtomicArray"),
         quote::format_ident!("UnsafeArray"),
         quote::format_ident!("ReadOnlyArray"),
     ];
-    let write_array_types: Vec<syn::Ident> = vec![quote::format_ident!("UnsafeArray")];
+    let write_array_types: Vec<syn::Ident> = vec![quote::format_ident!("AtomicArray"),quote::format_ident!("UnsafeArray")];
 
     for t in item.to_string().split(",").collect::<Vec<&str>>() {
         let typeident = quote::format_ident!("{:}", t.trim());
@@ -927,10 +957,11 @@ pub fn generate_reductions_for_type_rt(item: TokenStream) -> TokenStream {
     let mut output = quote! {};
 
     let read_array_types: Vec<syn::Ident> = vec![
+        quote::format_ident!("AtomicArray"),
         quote::format_ident!("UnsafeArray"),
         quote::format_ident!("ReadOnlyArray"),
     ];
-    let write_array_types: Vec<syn::Ident> = vec![quote::format_ident!("UnsafeArray")];
+    let write_array_types: Vec<syn::Ident> = vec![quote::format_ident!("AtomicArray"),quote::format_ident!("UnsafeArray")];
     for t in item.to_string().split(",").collect::<Vec<&str>>() {
         let t = t.trim().to_string();
         let typeident = quote::format_ident!("{:}", t.clone());

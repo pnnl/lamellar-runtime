@@ -3,7 +3,7 @@ use crate::{active_messaging::*, LamellarTeamRT}; //{ActiveMessaging,AMCounters,
                                                   // use crate::lamellar_arch::LamellarArchRT;
 use crate::lamellar_request::LamellarRequest;
 use crate::memregion::{
-    local::LocalMemoryRegion, shared::SharedMemoryRegion,  Dist, LamellarMemoryRegion,
+    local::LocalMemoryRegion, shared::SharedMemoryRegion,  Dist,  LamellarMemoryRegion,
 };
 
 use enum_dispatch::enum_dispatch;
@@ -12,13 +12,13 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 pub(crate) mod r#unsafe;
-pub use r#unsafe::UnsafeArray;
+pub use r#unsafe::{UnsafeArray,UnsafeArrayAdd};
 pub(crate) mod read_only;
 pub use read_only::ReadOnlyArray;
 pub(crate) mod local_only;
 pub use local_only::LocalOnlyArray;
 pub(crate) mod atomic;
-pub use atomic::AtomicArray;
+pub use atomic::{AtomicArray,AtomicArrayAdd};
 
 pub mod iterator;
 pub use iterator::distributed_iterator::DistributedIterator;
@@ -59,23 +59,21 @@ pub enum Distribution {
     Cyclic,
 }
 
-// pub enum Array {
-//     Unsafe,
-// }
-
-// trait TestArrayOps{
-//     fn add
-// }
-
 #[derive(Hash, std::cmp::PartialEq, std::cmp::Eq, Clone)]
 pub enum ArrayOp {
     Put,
-    Get,
+    Get(bool),
     Add,
 }
+
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 enum ArrayOpInput {
     Add(usize, Vec<u8>),
+}
+
+pub trait ArrayAdd<T: Dist + std::ops::AddAssign> {
+    fn dist_add(&self, index: usize, func: LamellarArcAm) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync>;
+    fn local_add(&self, index: usize, val: T); 
 }
 
 #[enum_dispatch(RegisteredMemoryRegion<T>, SubRegion<T>, MyFrom<T>)]
@@ -87,6 +85,11 @@ pub enum LamellarArrayInput<T: Dist> {
     // Unsafe(UnsafeArray<T>),
     // Vec(Vec<T>),
 }
+
+pub trait LamellarWrite {}
+pub trait LamellarRead {}
+
+impl<T: Dist> LamellarRead for T {}
 
 impl<T: Dist> MyFrom<&T> for LamellarArrayInput<T> {
     fn my_from(val: &T, team: &Arc<LamellarTeamRT>) -> Self {
@@ -143,46 +146,13 @@ pub trait ArrayOps<T> {
     ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>>;
 }
 
-// pub trait ArrayOpTests<T> {
-//     fn addTest(
-//         &self,
-//         index: usize,
-//         val: T,
-//     ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>>;
-// }
-
-// // struct AddTestAm<{
-// //     data: 
-// // }
-
-// impl <T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static, L: LamellarArrayWrite<T>> ArrayOpTests<T> for L{
-//     fn addTest(&self, index: usize, val: T)->Option<Box<dyn LamellarRequest<Output=()> + Send + Sync>>{
-//         let pe = self.pe_for_dist_index(index);
-//         let local_index = self.pe_offset_for_dist_index(pe,index);
-//         if pe == self.my_pe(){
-//             self.local_add(local_index,val);
-//             None
-//         }
-//         else{
-//             // Some(self.dist_add(
-//             //     index,
-//             //     Arc::new (#add_name_am{
-//             //         data: self.clone(),
-//             //         local_index: local_index,
-//             //         val: val,
-//             //     })
-//             // ))
-//             None
-//         }
-//     }
-// }
-
 #[enum_dispatch]
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 #[serde(bound = "T: Dist + serde::Serialize + serde::de::DeserializeOwned")]
 pub enum LamellarReadArray<T: Dist> {
     UnsafeArray(UnsafeArray<T>),
     ReadOnlyArray(ReadOnlyArray<T>),
+    AtomicArray(AtomicArray<T>),
 }
 
 #[enum_dispatch]
@@ -190,15 +160,16 @@ pub enum LamellarReadArray<T: Dist> {
 #[serde(bound = "T: Dist + serde::Serialize + serde::de::DeserializeOwned")]
 pub enum LamellarWriteArray<T: Dist> {
     UnsafeArray(UnsafeArray<T>),
+    AtomicArray(AtomicArray<T>),
 }
 
 pub(crate) mod private {
     use enum_dispatch::enum_dispatch;
-    use crate::memregion::Dist;
-    use crate::array::{UnsafeArray,ReadOnlyArray,LamellarReadArray,LamellarWriteArray};
+    use crate::memregion::{Dist};
+    use crate::array::{UnsafeArray,ReadOnlyArray,AtomicArray,LamellarReadArray,LamellarWriteArray};
     #[enum_dispatch(LamellarReadArray<T>,LamellarWriteArray<T>)]
-    pub trait LamellarArrayPrivate<T: Dist>: Sync + Send {
-        fn my_pe(&self) -> usize;
+    pub trait LamellarArrayPrivate<T: Dist> {
+        // fn my_pe(&self) -> usize;
         fn local_as_ptr(&self) -> *const T;
         fn local_as_mut_ptr(&self) -> *mut T;        
         fn pe_for_dist_index(&self, index: usize) -> usize;
@@ -209,6 +180,7 @@ pub(crate) mod private {
 #[enum_dispatch(LamellarReadArray<T>,LamellarWriteArray<T>)]
 pub trait LamellarArray<T: Dist>: private::LamellarArrayPrivate<T>{
     fn team(&self) -> Arc<LamellarTeamRT>;
+    fn my_pe(&self) -> usize;
     fn num_elems_local(&self) -> usize;
     fn len(&self) -> usize;
     fn barrier(&self);
@@ -241,17 +213,20 @@ pub trait LamellarArray<T: Dist>: private::LamellarArrayPrivate<T>{
 pub trait SubArray<T: Dist>: LamellarArray<T> {
     type Array: LamellarArray<T>;
     fn sub_array<R: std::ops::RangeBounds<usize>>(&self, range: R) -> Self::Array;
+    fn global_index(&self, sub_index: usize) -> usize;
 }
 
 #[enum_dispatch(LamellarReadArray<T>,LamellarWriteArray<T>)]
-pub trait LamellarArrayRead<T: Dist>: LamellarArray<T> {
-    fn get<U: MyInto<LamellarArrayInput<T>>>(&self, index: usize, buf: U);
+pub trait LamellarArrayRead<T: Dist>: LamellarArray<T> + Sync + Send{
+    unsafe fn get_unchecked<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(&self, index: usize, buf: U);
+    fn iget<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(&self, index: usize, buf: U);
+    // async fn get<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(&self, index: usize, buf: U);
     fn at(&self, index: usize) -> T;
 }
 
 #[enum_dispatch(LamellarWriteArray<T>)]
-pub trait LamellarArrayWrite<T: Dist>: LamellarArray<T> {
-    fn put<U: MyInto<LamellarArrayInput<T>>>(&self, index: usize, buf: U);
+pub trait LamellarArrayWrite<T: Dist>: LamellarArray<T> + Sync + Send{
+    fn put<U: MyInto<LamellarArrayInput<T>> + LamellarRead>(&self, index: usize, buf: U);
 }
 
 pub trait LamellarArrayReduce<T>: LamellarArrayRead<T>
