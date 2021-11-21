@@ -759,22 +759,24 @@ fn create_add(
     let mut match_stmts = quote! {};
     let mut array_impls = quote! {};
     for array_type in array_types {
-        let add_name_am = quote::format_ident!("{:}_{:}_add_am", array_type, typeident);
-        let add_name_func = quote::format_ident!("{:}_{:}_add", array_type, typeident);
-        let create_add= quote::format_ident!("{:}_create_add",array_type);
-        let reg_add = quote::format_ident!("{:}Add",array_type);
+        let add_name_am = quote::format_ident!("{}_{}_add_am", array_type, typeident);
+        let add_name_func = quote::format_ident!("{}_{}_add", array_type, typeident);
+        let create_add= quote::format_ident!("{}_create_add",array_type);
+        let create_add_fn_name = quote::format_ident!("{}_{}_create_add",array_type,typeident);
+        let add_struct = quote::format_ident!("{}_inventory_add",array_type);
+        let reg_add = quote::format_ident!("{}Add",array_type);
         match_stmts.extend(quote! {
             #lamellar::array::LamellarWriteArray::#array_type(inner) => inner.add(index,val),
         });
         array_impls.extend(quote!{
             #[allow(non_camel_case_types)]
-            #lamellar::#create_add!(#typeident);
+            #lamellar::#create_add!(#typeident,#create_add_fn_name);
 
             #[allow(non_camel_case_types)]
             // impl  #lamellar::array::#array_type<#typeident>{
             impl #lamellar::array::ArrayOps<#typeident> for #lamellar::array::#array_type<#typeident>{
                 fn add(&self,index: usize, val: #typeident)->Option<Box<dyn #lamellar::LamellarRequest<Output = ()> + Send + Sync>>{
-                    println!("specialized array ops");
+                    println!("add ArrayOps<{}> for {}<{}>",stringify!(#typeident),stringify!(#array_type),stringify!(#typeident));
                     let pe = self.pe_for_dist_index(index);
                     let local_index = self.pe_offset_for_dist_index(pe,index);
                     if pe == self.my_pe(){
@@ -801,6 +803,7 @@ fn create_add(
             }
             // impl  #add_name_am{
                 fn #add_name_func(val: *const u8, array: #lamellar::array::#array_type<u8>, index: usize) -> LamellarArcAm{
+                    println!("{:}",stringify!(#add_name_func));
                     let val = unsafe {*(val as  *const #typeident)};
                     Arc::new(#add_name_am{
                         data: array.to_base_inner(),
@@ -809,13 +812,16 @@ fn create_add(
                     })
                 }
             // }
-            inventory::submit!{
-                #![crate = #lamellar]
-                #lamellar::array::#reg_add {
-                    id: std::any::TypeId::of::<#typeident>(),
-                    add: #add_name_func
-                }
-            }
+            #lamellar::#add_struct!(#typeident, #add_name_func, #create_add_fn_name);
+            // inventory::submit!{
+            //     #![crate = #lamellar]
+            //     #lamellar::#add_struct!(#typeident, #add_name_func, #create_add_fn_name);
+            //     // #lamellar::array::#reg_add {
+            //     //     id: std::any::TypeId::of::<#typeident>(),
+            //     //     add: #add_name_func,
+            //     //     #lamellar::#add_params!(#create_add_fn_name);
+            //     // }
+            // }
 
             #[#am]
             impl LamellarAM for #add_name_am{

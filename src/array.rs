@@ -62,7 +62,7 @@ pub enum Distribution {
 #[derive(Hash, std::cmp::PartialEq, std::cmp::Eq, Clone)]
 pub enum ArrayOp {
     Put,
-    Get(bool),
+    Get(bool), //bool true == immediate, false = async
     Add,
 }
 

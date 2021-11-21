@@ -23,13 +23,12 @@ use std::any::TypeId;
 type AddFn = fn(*const u8, UnsafeArray<u8>, usize) -> LamellarArcAm;
 
 lazy_static! {
-    pub(crate) static ref ADD_OPS: HashMap<TypeId, AddFn> = {
+    static ref ADD_OPS: HashMap<TypeId, AddFn> = {
         let mut map = HashMap::new();
         for add in crate::inventory::iter::<UnsafeArrayAdd> {
             map.insert(add.id.clone(),add.add);
         }
         map
-        // map.insert(TypeId::of::<f64>(), f64_add::add as AddFn );
     };
 }
 
@@ -43,7 +42,6 @@ crate::inventory::collect!(UnsafeArrayAdd);
 struct UnsafeArrayInner {
     mem_region: MemoryRegion<u8>,
     pub(crate) array_counters: Arc<AMCounters>,
-    // op_map: Arc<RwLock<HashMap<ArrayOp, Box<dyn Fn(&ArrayOpInput) + Sync + Send>>>>,
     pub(crate) team: Arc<LamellarTeamRT>,
 }
 
@@ -90,7 +88,6 @@ impl<T: Dist > UnsafeArray<T> {
                 UnsafeArrayInner {
                     mem_region: rmr,
                     array_counters: Arc::new(AMCounters::new()),
-                    // op_map: Arc::new(RwLock::new(HashMap::new())),
                     team: team,
                 },
                 crate::darc::DarcMode::Darc,
@@ -102,13 +99,10 @@ impl<T: Dist > UnsafeArray<T> {
             sub_array_offset: 0,
             sub_array_size: array_size,
             my_pe: my_pe,
-            // typeid: TypeId::of::<T>(),
             phantom: PhantomData,
         };
         array
     }
-// }
-// impl<T: Dist > UnsafeArray<T> {
     pub fn wait_all(&self) {
         <UnsafeArray<T> as LamellarArray<T>>::wait_all(self);
     }
@@ -364,7 +358,6 @@ impl<T: Dist > UnsafeArray<T> {
             sub_array_offset: u8_offset / std::mem::size_of::<B>(),
             sub_array_size: u8_sub_size / std::mem::size_of::<B>(),
             my_pe: self.my_pe,
-            // typeid: self.typeid,
             phantom: PhantomData,
         }
     }
@@ -698,6 +691,7 @@ impl<T: Dist> SubArray<T> for UnsafeArray<T> {
 
 impl<T: Dist + std::ops::AddAssign + 'static> ArrayOps<T> for &UnsafeArray<T>{
     fn add(&self, index:usize, val: T) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>> {
+        println!("add ArrayOps<T> for &UnsafeArray<T> ");
         let pe = self.pe_for_dist_index(index);
         let local_index = self.pe_offset_for_dist_index(pe,index);
         if pe == self.my_pe(){
@@ -729,12 +723,14 @@ impl<T: Dist + std::ops::AddAssign + 'static> ArrayOps<T> for &UnsafeArray<T>{
             index: usize,
             func: LamellarArcAm,
         ) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync> {
+            println!("dist_add ArrayAdd<T> for UnsafeArray<T> ");
             let pe = self.pe_for_dist_index(index);
             self.inner
                 .team
                 .exec_arc_am_pe(pe, func, Some(self.inner.array_counters.clone()))
         }
         fn local_add(&self, index: usize, val: T) {
+            println!("local_add ArrayAdd<T> for UnsafeArray<T> ");
             self.local_as_mut_slice()[index] += val;
         }
     }   
@@ -742,7 +738,19 @@ impl<T: Dist + std::ops::AddAssign + 'static> ArrayOps<T> for &UnsafeArray<T>{
 
 #[macro_export]
 macro_rules! UnsafeArray_create_add{ //we dont need to do specialization so we can implement for T within the mod directly
-    ( $a:ty) => {};
+    ( $a:ty, $path:ident) => {};
+}
+#[macro_export]
+macro_rules! UnsafeArray_inventory_add{
+    ($id:ident, $add:ident, $local:ident) => {
+        inventory::submit!{
+            #![crate =$crate]
+            $crate::array::r#unsafe::UnsafeArrayAdd{
+                id: std::any::TypeId::of::<$id>(),
+                add: $add,
+            }
+        }
+    };
 }
 
 impl<T: Dist + std::fmt::Debug> UnsafeArray<T> {

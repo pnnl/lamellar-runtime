@@ -1,6 +1,6 @@
 
 use crate::array::iterator::distributed_iterator::{
-    DistIter, DistIteratorLauncher, DistributedIterator,
+    DistIter,DistIterMut, DistIteratorLauncher, DistributedIterator,
 };
 use crate::array::iterator::serial_iterator::LamellarArrayIter;
 use crate::array::*;
@@ -13,23 +13,43 @@ use core::marker::PhantomData;
 use parking_lot::{Mutex,MutexGuard};
 use std::sync::atomic::Ordering;
 use std::any::TypeId;
+use std::collections::HashSet;
 
 type AddFn = fn(*const u8, AtomicArray<u8>, usize) -> LamellarArcAm;
+type LocalAddFn = fn(*const u8, AtomicArray<u8>, usize);
 
 lazy_static! {
-    pub(crate) static ref ADD_OPS: HashMap<TypeId, AddFn> = {
+    static ref ADD_OPS: HashMap<TypeId, (AddFn,LocalAddFn)> = {
         let mut map = HashMap::new();
         for add in crate::inventory::iter::<AtomicArrayAdd> {
-            map.insert(add.id.clone(),add.add);
+            map.insert(add.id.clone(),(add.add,add.local));
         }
         map
         // map.insert(TypeId::of::<f64>(), f64_add::add as AddFn );
     };
 }
 
+lazy_static! {
+    pub(crate) static ref NativeAtomics: HashSet<TypeId> = {
+        let mut map = HashSet::new();
+        map.insert(TypeId::of::<u8>());
+        map.insert(TypeId::of::<u16>());
+        map.insert(TypeId::of::<u32>());
+        map.insert(TypeId::of::<u64>());
+        map.insert(TypeId::of::<usize>());
+        map.insert(TypeId::of::<i8>());
+        map.insert(TypeId::of::<i16>());
+        map.insert(TypeId::of::<i32>());
+        map.insert(TypeId::of::<i64>());
+        map.insert(TypeId::of::<isize>());
+        map
+    };
+}
+
 pub struct AtomicArrayAdd{
     pub id: TypeId,
-    pub add: AddFn
+    pub add: AddFn,
+    pub local: LocalAddFn,
 }
 
 crate::inventory::collect!(AtomicArrayAdd);
@@ -42,15 +62,15 @@ mod atomic_private{
 }
 
 
-impl <T> atomic_private::LocksInit for &T { //default autoref impl
-    fn init(&self, local_len: usize) -> Option<Vec<Mutex<()>>> {
-        let mut vec = vec!{};
-        for _i in 0..local_len{
-            vec.push(Mutex::new(()));
-        }
-        Some(vec)
-    }
-}
+// impl <T> atomic_private::LocksInit for &T { //default autoref impl
+//     fn init(&self, local_len: usize) -> Option<Vec<Mutex<()>>> {
+//         let mut vec = vec!{};
+//         for _i in 0..local_len{
+//             vec.push(Mutex::new(()));
+//         }
+//         Some(vec)
+//     }
+// }
 //I think need to use autoref specialization for
 pub trait AtomicOps {
     type Atomic;
@@ -72,13 +92,14 @@ pub trait AtomicOps {
 //     fn swap(&mut self, val: &&T, old_val: &mut &T)  {panic!("should never be here")}
 // }
 
+
 macro_rules! impl_atomic_ops{
     { $A:ty, $B:ty } => {
-        impl atomic_private::LocksInit for $A {//specialized autoref impl
-            fn init(&self, _local_len: usize) -> Option<Vec<Mutex<()>>>{
-                None
-            }
-        }
+        // impl atomic_private::LocksInit for $A {//specialized autoref impl
+        //     fn init(&self, _local_len: usize) -> Option<Vec<Mutex<()>>>{
+        //         None
+        //     }
+        // }
         impl AtomicOps for $A {
             // there is an equivalent call in nightly rust
             // Self::Atomic::from_mut()... we will switch to that once stablized; 
@@ -141,16 +162,25 @@ pub struct AtomicArray<T: Dist > {
 }
 
 //#[prof]
-impl<T: Dist + atomic_private::LocksInit> AtomicArray<T> {
+impl<T: Dist + 'static > AtomicArray<T> {
     pub fn new<U: Clone + Into<IntoLamellarTeam>>(
         team: U,
         array_size: usize,
         distribution: Distribution,
     ) -> AtomicArray<T> {
         let array =  UnsafeArray::new(team.clone(),array_size,distribution);
-        let temp: T = array.local_as_slice()[0];
+        let locks = if NativeAtomics.get(&TypeId::of::<T>()).is_some(){
+            None
+        }
+        else{
+            let mut vec = vec!{};
+            for _i in 0..array.num_elems_local(){
+                vec.push(Mutex::new(()));
+            }
+            Some(vec)
+        };
         AtomicArray{
-            locks: Darc::new(team,temp.init(array.num_elems_local())).unwrap(),
+            locks: Darc::new(team,locks).unwrap(),
             array: array
         }
     }
@@ -203,16 +233,28 @@ impl<T: Dist > AtomicArray<T> {
     pub fn local_as_slice(&self) -> &[T] {
         self.array.local_as_mut_slice()
     }
-    pub fn local_as_mut_slice(&self) -> &[T] {
-        self.array.local_as_mut_slice()
-    }
+    // pub fn local_as_mut_slice(&self) -> &[T] {
+    //     self.array.local_as_mut_slice()
+    // }
 
     
     pub fn to_base_inner<B: Dist + 'static>(self) -> AtomicArray<B> {
-        todo!("need to do some aliasing of the original lock");
-        println!();
+        // todo!("need to do some aliasing of the original lock");
+        // println!();
 
         let array =  self.array.to_base_inner();
+        // let temp: T = array.local_as_slice()[0];
+        AtomicArray{
+            locks: self.locks.clone(),
+            array: array
+        }
+    }
+
+    pub fn as_base_inner<B: Dist + 'static>(&self) -> AtomicArray<B> {
+        // todo!("need to do some aliasing of the original lock");
+        // println!();
+
+        let array =  self.array.as_base_inner();
         // let temp: T = array.local_as_slice()[0];
         AtomicArray{
             locks: self.locks.clone(),
@@ -233,6 +275,10 @@ impl<T: Dist > AtomicArray<T> {
 
     pub fn dist_iter(&self) -> DistIter<'static, T,AtomicArray<T>> {
         DistIter::new(self.clone().into(), 0, 0)
+    }
+
+    pub fn dist_iter_mut(&self) -> DistIterMut<'static, T, AtomicArray<T>> {
+        DistIterMut::new(self.clone().into(), 0, 0)
     }
 
     pub fn ser_iter(&self) -> LamellarArrayIter<'_, T,AtomicArray<T>> {
@@ -395,42 +441,55 @@ impl<T: Dist> SubArray<T>
     }
 }
 
-impl<T: Dist + std::ops::AddAssign> AtomicArray<T>
-// where
-// AtomicArray<T>: ArrayOps<T>,
-{
-    pub fn add(
-        &self,
-        index: usize,
-        val: T,
-    ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>> {
-        <&AtomicArray<T> as ArrayOps<T>>::add(&self, index, val) // this is implemented automatically by a proc macro
-                                                               // because this gets implented as an active message, we need to know the full type
-                                                               // when the proc macro is called, all the integer/float times are handled by runtime,
-                                                               // but users are requried to call a proc macro on their type to get the functionality
-    }
-}
+// impl<T: Dist + std::ops::AddAssign> AtomicArray<T>
+// // where
+// // AtomicArray<T>: ArrayOps<T>,
+// {
+//     pub fn add(
+//         &self,
+//         index: usize,
+//         val: T,
+//     ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>> {
+//         <&AtomicArray<T> as ArrayOps<T>>::add(&self, index, val) // this is implemented automatically by a proc macro
+//                                                                // because this gets implented as an active message, we need to know the full type
+//                                                                // when the proc macro is called, all the integer/float times are handled by runtime,
+//                                                                // but users are requried to call a proc macro on their type to get the functionality
+//     }
+// }
 
-impl<T: Dist + std::ops::AddAssign> ArrayOps<T> for &AtomicArray<T>{
+impl<T: Dist + std::ops::AddAssign + 'static> ArrayOps<T> for &AtomicArray<T>{
     fn add(&self, index:usize, val: T) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>> {
-        let pe = self.pe_for_dist_index(index);
-        let local_index = self.pe_offset_for_dist_index(pe,index);
-        if pe == self.my_pe(){
-            self.local_add(local_index,val);
-            None
+        println!("add ArrayOps<T> for &AtomicArray<T> ");
+        if let Some(funcs) = ADD_OPS.get(&TypeId::of::<T>()){
+            let pe = self.pe_for_dist_index(index);
+            let local_index = self.pe_offset_for_dist_index(pe,index);
+            let array: AtomicArray<u8> = self.as_base_inner();
+            if pe == self.my_pe(){
+                funcs.1(&val as *const T as *const u8, array,local_index);
+                None
+            }
+            else{
+                let am = funcs.0(&val as *const T as *const u8, array,local_index);
+                Some(self.array.dist_add(index,am))
+            }
         }
         else{
-            None
+            panic!("this means a type {} has not been registered!",stringify!(T));
         }
+       
+        // if pe == self.my_pe(){
+        //     self.local_add(local_index,val);
+        //     None
+        // }
         // else{
-        //     Some(self.dist_add(
-        //         index,
-        //         Arc::new (#add_name_am{
-        //             data: self.clone(),
-        //             local_index: local_index,
-        //             val: val,
-        //         })
-        //     ))
+        //     if let Some(func) = ADD_OPS.get(&TypeId::of::<T>()){
+        //         let array: AtomicArray<u8> = self.as_base_inner();
+        //         let am = func(&val as *const T as *const u8, array,local_index);
+        //         Some(self.array.dist_add(index,am))
+        //     }
+        //     else{
+        //         panic!("should not be here");
+        //     }
         // }
     }
 }
@@ -439,49 +498,110 @@ impl<T: Dist + std::ops::AddAssign> ArrayOps<T> for &AtomicArray<T>{
 
 #[macro_export]
 macro_rules! atomic_add{
-    ($a:ty) => {
+    ($a:ty, $name:ident) => {
         impl ArrayAdd<$a> for AtomicArray<$a> { //for atomic array I need do this in the macro as well.
             fn dist_add(
                 &self,
                 index: usize,
                 func: LamellarArcAm,
             ) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync> {
+                println!("native dist_add ArrayAdd<{}>  for AtomicArray<{}>  ",stringify!($a),stringify!($a));
                 self.array.dist_add(index,func)
             }
             fn local_add(&self, index: usize, val: $a) {
+                println!("native local_add ArrayAdd<{}>  for AtomicArray<{}>  ",stringify!($a),stringify!($a));
                 use $crate::array::atomic::AtomicOps;
                 self.local_as_slice()[index].fetch_add(val);
             }
+        }
+
+        fn $name(val: *const u8, array: $crate::array::atomic::AtomicArray<u8>, index: usize){
+            let val = unsafe {*(val as  *const $a)};
+            println!("native {} ",stringify!($name));
+            let array = array.to_base_inner::<$a>();
+            use $crate::array::atomic::AtomicOps;
+            array.array.local_as_mut_slice()[index].fetch_add(val);
         }
     };
 }
 
 #[macro_export]
 macro_rules! non_atomic_add{
-    ($a:ty) => {
+    ($a:ty, $name:ident) => {
         impl ArrayAdd<$a> for AtomicArray<$a> { //for atomic array I need do this in the macro as well.
             fn dist_add(
                 &self,
                 index: usize,
                 func: LamellarArcAm,
             ) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync> {
+                println!("mutex dist_add ArrayAdd<{}> for AtomicArray<{}> ",stringify!($a),stringify!($a));
                 self.array.dist_add(index,func)
             }
             fn local_add(&self, index: usize, val: $a) {
+                println!("mutex local_add ArrayAdd<{}> for AtomicArray<{}>  ",stringify!($a),stringify!($a));
                 let _lock = self.lock_index(index);
-                self.array.local_add(index,val);
+                self.array.local_as_mut_slice()[index] += val;
             }
+        }
+
+        fn $name(val: *const u8, array: $crate::array::atomic::AtomicArray<u8>, index: usize){
+            let val = unsafe {*(val as  *const $a)};
+            let array = array.to_base_inner::<$a>();
+            println!("mutex {} ",stringify!($name));
+            let _lock = array.lock_index(index).expect("no lock exists!");
+            array.array.local_as_mut_slice()[index] += val;
         }
     };
 }
 
 #[macro_export]
 macro_rules! AtomicArray_create_add{
-    (u8) => {
-       $crate::atomic_add!(u8);
+    (u8, $name:ident) => {
+       $crate::atomic_add!(u8, $name);
     };
-    ($a:ty) => {
-        $crate::non_atomic_add!($a);
+    (u16, $name:ident) => {
+        $crate::atomic_add!(u16, $name);
+    };
+    (u32, $name:ident) => {
+        $crate::atomic_add!(u32, $name);
+    };
+    (u64, $name:ident) => {
+        $crate::atomic_add!(u64, $name);
+    };
+    (usize, $name:ident) => {
+        $crate::atomic_add!(usize, $name);
+    };
+    (i8, $name:ident) => {
+        $crate::atomic_add!(i8, $name);
+     };
+     (i16, $name:ident) => {
+         $crate::atomic_add!(i16, $name);
+     };
+     (i32, $name:ident) => {
+         $crate::atomic_add!(i32, $name);
+     };
+     (i64, $name:ident) => {
+         $crate::atomic_add!(i64, $name);
+     };
+     (isize, $name:ident) => {
+         $crate::atomic_add!(isize, $name);
+     };
+    ($a:ty, $name:ident) => {
+        $crate::non_atomic_add!($a, $name);
+    };
+}
+
+#[macro_export]
+macro_rules! AtomicArray_inventory_add{
+    ($id:ident, $add:ident, $local:ident) => {
+        inventory::submit!{
+            #![crate = $crate]
+            $crate::array::atomic::AtomicArrayAdd{
+                id: std::any::TypeId::of::<$id>(),
+                add: $add,
+                local: $local
+            }
+        }
     };
 }
 
@@ -491,9 +611,11 @@ impl<T: Dist + std::ops::AddAssign> ArrayAdd<T> for &AtomicArray<T> {
         index: usize,
         func: LamellarArcAm,
     ) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync> {
+        println!("dist_add ArrayAdd<T> for &AtomicArray<T>");
         self.array.dist_add(index,func)
     }
     fn local_add(&self, index: usize, val: T) {
+        println!("local_add ArrayAdd<T> for &AtomicArray<T>");
         let _lock = self.lock_index(index);
         self.array.local_add(index,val);
     }
