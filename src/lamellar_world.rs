@@ -22,7 +22,7 @@ lazy_static! {
 /// Represents all the pe's (processing elements) within a given distributed execution
 pub struct LamellarWorld {
     team: Arc<LamellarTeam>,
-    pub(crate) team_rt: Arc<LamellarTeamRT>,
+    pub(crate) team_rt: std::pin::Pin<Arc<LamellarTeamRT>>,
     teams: Arc<RwLock<HashMap<u64, Weak<LamellarTeamRT>>>>,
     _counters: Arc<AMCounters>,
     my_pe: usize,
@@ -202,9 +202,9 @@ impl LamellarWorld {
         L: LamellarArch + std::hash::Hash + 'static,
     {
         if let Some(team) = LamellarTeam::create_subteam_from_arch(self.team.clone(), arch) {
-            self.teams
-                .write()
-                .insert(team.team.team_hash, Arc::downgrade(&team.team));
+            // self.teams
+            //     .write()
+            //     .insert(team.team.team_hash, Arc::downgrade(&team.team));
             Some(team)
         } else {
             None
@@ -307,14 +307,14 @@ impl LamellarWorldBuilder {
         let lamellae = lamellae_builder.init_lamellae(sched_new.clone());
         let counters = Arc::new(AMCounters::new());
         lamellae.barrier();
-        let team_rt = Arc::new(LamellarTeamRT::new(
+        let team_rt = LamellarTeamRT::new(
             num_pes,
             my_pe,
             sched_new.clone(),
             counters.clone(),
             lamellae.clone(),
             teams.clone(),
-        ));
+        );
 
         let world = LamellarWorld {
             team: LamellarTeam::new(None, team_rt.clone(), teams.clone(), false),
@@ -325,10 +325,10 @@ impl LamellarWorldBuilder {
             num_pes: num_pes,
             ref_cnt: Arc::new(AtomicUsize::new(1))
         };
-        world
-            .teams
-            .write()
-            .insert(world.team_rt.team_hash, Arc::downgrade(&team_rt));
+        // world
+        //     .teams
+        //     .write()
+        //     .insert(world.team_rt.team_hash, Arc::downgrade(&team_rt));
         LAMELLAES
             .write()
             .insert(lamellae.backend(), lamellae.clone());

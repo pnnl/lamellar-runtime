@@ -10,6 +10,7 @@ use enum_dispatch::enum_dispatch;
 use futures_lite::Future;
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::pin::Pin;
 
 pub(crate) mod r#unsafe;
 pub use r#unsafe::{UnsafeArray,UnsafeArrayAdd};
@@ -18,7 +19,7 @@ pub use read_only::ReadOnlyArray;
 pub(crate) mod local_only;
 pub use local_only::LocalOnlyArray;
 pub(crate) mod atomic;
-pub use atomic::{AtomicArray,AtomicArrayAdd};
+pub use atomic::{AtomicArray,AtomicArrayAdd,AtomicOps};
 
 pub mod iterator;
 pub use iterator::distributed_iterator::DistributedIterator;
@@ -60,10 +61,20 @@ pub enum Distribution {
 }
 
 #[derive(Hash, std::cmp::PartialEq, std::cmp::Eq, Clone)]
-pub enum ArrayOp {
+pub enum ArrayOpCmd {
     Put,
+    PutAm,
     Get(bool), //bool true == immediate, false = async
-    Add,
+}
+
+pub trait ArrayOp {} //essentially a marker trait than signifys a type has been registered for distributed ArrayOps
+
+pub trait ArrayOps<T: Dist + std::ops::AddAssign > {
+    fn add(
+        &self,
+        index: usize,
+        val: T,
+    ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>>;
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
@@ -92,7 +103,7 @@ pub trait LamellarRead {}
 impl<T: Dist> LamellarRead for T {}
 
 impl<T: Dist> MyFrom<&T> for LamellarArrayInput<T> {
-    fn my_from(val: &T, team: &Arc<LamellarTeamRT>) -> Self {
+    fn my_from(val: &T, team: &Pin<Arc<LamellarTeamRT>>) -> Self {
         let buf: LocalMemoryRegion<T> = team.alloc_local_mem_region(1);
         unsafe {
             buf.as_mut_slice().unwrap()[0] = val.clone();
@@ -102,7 +113,7 @@ impl<T: Dist> MyFrom<&T> for LamellarArrayInput<T> {
 }
 
 impl<T: Dist> MyFrom<T> for LamellarArrayInput<T> {
-    fn my_from(val: T, team: &Arc<LamellarTeamRT>) -> Self {
+    fn my_from(val: T, team: &Pin<Arc<LamellarTeamRT>>) -> Self {
         let buf: LocalMemoryRegion<T> = team.alloc_local_mem_region(1);
         unsafe {
             buf.as_mut_slice().unwrap()[0] = val;
@@ -122,29 +133,30 @@ impl<T: Dist> MyFrom<T> for LamellarArrayInput<T> {
 // }
 
 pub trait MyFrom<T: ?Sized> {
-    fn my_from(val: T, team: &Arc<LamellarTeamRT>) -> Self;
+    fn my_from(val: T, team: &Pin<Arc<LamellarTeamRT>>) -> Self;
 }
 
 pub trait MyInto<T: ?Sized> {
-    fn my_into(self, team: &Arc<LamellarTeamRT>) -> T;
+    fn my_into(self, team: &Pin<Arc<LamellarTeamRT>>) -> T;
 }
 
 impl<T, U> MyInto<U> for T
 where
     U: MyFrom<T>,
 {
-    fn my_into(self, team: &Arc<LamellarTeamRT>) -> U {
+    fn my_into(self, team: &Pin<Arc<LamellarTeamRT>>) -> U {
         U::my_from(self, team)
     }
 }
 
-pub trait ArrayOps<T> {
-    fn add(
-        &self,
-        index: usize,
-        val: T,
-    ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>>;
+impl<T: Dist>  MyFrom<&LamellarArrayInput<T>> for LamellarArrayInput<T> {
+    fn my_from(lai: &LamellarArrayInput<T>, _team: &Pin<Arc<LamellarTeamRT>>) -> Self {
+        lai.clone()
+    }
 }
+
+
+
 
 #[enum_dispatch]
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
@@ -179,7 +191,7 @@ pub(crate) mod private {
 
 #[enum_dispatch(LamellarReadArray<T>,LamellarWriteArray<T>)]
 pub trait LamellarArray<T: Dist>: private::LamellarArrayPrivate<T>{
-    fn team(&self) -> Arc<LamellarTeamRT>;
+    fn team(&self) -> Pin<Arc<LamellarTeamRT>>;
     fn my_pe(&self) -> usize;
     fn num_elems_local(&self) -> usize;
     fn len(&self) -> usize;
@@ -210,6 +222,10 @@ pub trait LamellarArray<T: Dist>: private::LamellarArrayPrivate<T>{
     // pub fn buffered_iter(&self, buf_size: usize) -> LamellarArrayIter<'_, T> ;
 }
 
+// pub trait ArrayIterator{
+
+// }
+
 pub trait SubArray<T: Dist>: LamellarArray<T> {
     type Array: LamellarArray<T>;
     fn sub_array<R: std::ops::RangeBounds<usize>>(&self, range: R) -> Self::Array;
@@ -218,15 +234,71 @@ pub trait SubArray<T: Dist>: LamellarArray<T> {
 
 #[enum_dispatch(LamellarReadArray<T>,LamellarWriteArray<T>)]
 pub trait LamellarArrayRead<T: Dist>: LamellarArray<T> + Sync + Send{
+    // this is non blocking call
+    // the runtime does not manage checking for completion of message transmission
+    // the user is responsible for ensuring the buffer remains valid
     unsafe fn get_unchecked<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(&self, index: usize, buf: U);
+    
+    // a safe synchronous call that blocks untils the data as all been transfered
     fn iget<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(&self, index: usize, buf: U);
-    // async fn get<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(&self, index: usize, buf: U);
-    fn at(&self, index: usize) -> T;
+    
+    // blocking call that gets the value stored and the provided index 
+    fn iat(&self, index: usize) -> T;
+
+    // we also plan to implement safe asyncronous versions of iget and iat
+    // the apis would be something like:
+    // fn get<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(&self, index: usize, buf: U) -> LamellarRequest<U>;
+    // fn at(&self, index: usize) -> LamellarRequest<T>;
+
 }
 
 #[enum_dispatch(LamellarWriteArray<T>)]
 pub trait LamellarArrayWrite<T: Dist>: LamellarArray<T> + Sync + Send{
-    fn put<U: MyInto<LamellarArrayInput<T>> + LamellarRead>(&self, index: usize, buf: U);
+    // non blocking put
+    // runtime provides no mechansim for checking when the data has finished being written
+    // buf can immediately be reused after this call returns
+    // unsafe fn put_unchecked<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(&self, index: usize, buf: U);
+    // blocking ops
+    // fn iput<U: MyInto<LamellarArrayInput<T>> + LamellarRead>(&self, index: usize, buf: U); 
+    // fn iswap(&self, index: usize, val: T) -> T;
+    //async ops
+    // fn put<U: MyInto<LamellarArrayInput<T>> + LamellarRead>(&self, index: usize, buf: U) -> LamellarRequest<()>;
+    // fn swap(&self, index: usize, val: T) -> LamellarRequest<T>;
+}
+
+// #[enum_dispatch(LamellarArithmeticOps<T>)]
+// pub trait LamellarArithmeticOps<T: Dist + std::ops::AddAssing + std::ops::SubAssing + std::ops::MulAssign + std::ops::DivAssign>: LamellarArrayWrite{
+//     // blocking ops
+//     fn iadd(&self, index: usize, val: T);
+//     fn ifetch_add(&self, index: usize, val: T) ->T;
+//     fn isub(&self, index: usize, val: T);
+//     fn ifetch_sub(&self, index: usize, val: T) ->T;
+//     fn imul(&self, index: usize, val: T);
+//     fn ifetch_mul(&self, index: usize, val: T) ->T;
+//     fn idiv(&self, index: usize, val: T);
+//     fn ifetch_div(&self, index: usize, val: T) ->T;
+//     //async ops
+//     fn add(&self, index: usize, val: T) -> LamellarRequest<()>;
+//     fn fetch_add(&self, index: usize, val: T) -> LamellarRequest<T>;
+//     fn sub(&self, index: usize, val: T) -> LamellarRequest<()>;
+//     fn fetch_sub(&self, index: usize, val: T) ->LamellarRequest<T>;
+//     fn mul(&self, index: usize, val: T) -> LamellarRequest<()>;
+//     fn fetch_mul(&self, index: usize, val: T) -> LamellarRequest<T>;
+//     fn div(&self, index: usize, val: T) -> LamellarRequest<()>;
+//     fn fetch_div(&self, index: usize, val: T) -> LamellarRequest<T>;   
+// }
+
+// pub trait LamellarLocalOps<T: Dist + Add + Sub + Mul + Div>: LamellarArithmeticOps{
+//     fn local_add(&self, index: usize, val: T) -> T;
+//     ...
+
+// pub trait LamellarRemoteOps<T: Dist + Add + Sub + Mul + Div>: LamellarArithmeticOps{
+//     fn remote_add(&self, index: usize, val: T) -> LamellarRequest<T>;
+//     ...
+// }
+
+pub trait ArrayPrint<T: Dist + std::fmt::Debug>: LamellarArray<T>{
+    fn print(&self);
 }
 
 pub trait LamellarArrayReduce<T>: LamellarArrayRead<T>
@@ -239,6 +311,8 @@ where
     fn max(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync>;
     fn prod(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync>;
 }
+
+
 
 // impl<'a, T: AmDist + 'static> IntoIterator
 //     for &'a LamellarArray<T>

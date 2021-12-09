@@ -140,7 +140,7 @@ fn main() {
                             );
                         }
 
-                        let c_slice = c.local_as_mut_slice();
+                        let c_slice = unsafe {c.local_as_mut_slice()};
                         let _lock = LOCK.lock();
 
                         for row in 0..blocksize {

@@ -1,5 +1,5 @@
 use crate::active_messaging::{ActiveMessageEngine, ExecType, LamellarFunc};
-use crate::lamellae::{Des, Lamellae, SerializedData};
+use crate::lamellae::{Des, Lamellae, SerializedData,LamellaeRDMA};
 use crate::lamellar_request::InternalReq;
 use crate::lamellar_team::LamellarTeamRT;
 use crate::scheduler::{AmeScheduler, AmeSchedulerQueue, ReqData, SchedulerQueue};
@@ -13,6 +13,7 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicU8, AtomicUsize, Ordering};
 use std::sync::{Arc, Weak};
 use std::thread;
+use std::pin::Pin;
 // use std::time::Instant;
 
 pub(crate) struct WorkStealingThread {
@@ -133,8 +134,8 @@ impl AmeSchedulerQueue for WorkStealingInner {
         id: usize,
         func: LamellarFunc,
         lamellae: Arc<Lamellae>,
-        world: Arc<LamellarTeamRT>,
-        team: Arc<LamellarTeamRT>,
+        world: Pin<Arc<LamellarTeamRT>>,
+        team: Pin<Arc<LamellarTeamRT>>,
         team_hash: u64,
         ireq: Option<InternalReq>,
     ) {
@@ -186,7 +187,9 @@ impl AmeSchedulerQueue for WorkStealingInner {
             if let Some(header) = data.deserialize_header() {
                 let msg = header.msg;
                 // println!("msg recieved: {:?}",msg);
-                ame.exec_msg(ame.clone(), msg, data, lamellae, header.team_hash)
+                let addr = lamellae.local_addr(msg.src as usize, header.team_hash as usize);
+                // println!("from pe {:?} remote addr {:x} local addr {:x}",msg.src,header.team_hash,addr);
+                ame.exec_msg(ame.clone(), msg, data, lamellae, addr)
                     .await;
             } else {
                 data.print();
@@ -271,8 +274,8 @@ impl SchedulerQueue for WorkStealing {
         id: usize,
         func: LamellarFunc,
         lamellae: Arc<Lamellae>,
-        world: Arc<LamellarTeamRT>,
-        team: Arc<LamellarTeamRT>,
+        world: Pin<Arc<LamellarTeamRT>>,
+        team: Pin<Arc<LamellarTeamRT>>,
         team_hash: u64,
         ireq: Option<InternalReq>,
     ) {

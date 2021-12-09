@@ -12,13 +12,14 @@ use crate::lamellar_team::{IntoLamellarTeam, LamellarTeamRT};
 use crate::memregion::{Dist, MemoryRegion, RegisteredMemoryRegion, SubRegion};
 use crate::scheduler::SchedulerQueue;
 use core::marker::PhantomData;
-use parking_lot::RwLock;
+// use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::ops::Bound;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use std::any::TypeId;
+use std::pin::Pin;
 
 type AddFn = fn(*const u8, UnsafeArray<u8>, usize) -> LamellarArcAm;
 
@@ -42,7 +43,7 @@ crate::inventory::collect!(UnsafeArrayAdd);
 struct UnsafeArrayInner {
     mem_region: MemoryRegion<u8>,
     pub(crate) array_counters: Arc<AMCounters>,
-    pub(crate) team: Arc<LamellarTeamRT>,
+    pub(crate) team: Pin<Arc<LamellarTeamRT>>,
 }
 
 //need to calculate num_elems_local dynamically
@@ -151,7 +152,7 @@ impl<T: Dist > UnsafeArray<T> {
         }
     }
 
-    fn block_op<U: MyInto<LamellarArrayInput<T>>>(&self, op: ArrayOp, index: usize, buf: U) {
+    fn block_op<U: MyInto<LamellarArrayInput<T>>>(&self, op: ArrayOpCmd, index: usize, buf: U) {
         let buf = buf.my_into(&self.inner.team);
         let start_pe = (index as f64 / self.elem_per_pe).floor() as usize;
         let end_pe = (((index + buf.len()) as f64) / self.elem_per_pe).ceil() as usize;
@@ -166,14 +167,14 @@ impl<T: Dist > UnsafeArray<T> {
             if len > 0 {
                 // println!("pe {:?} offset {:?} range: {:?}-{:?} dist_index {:?} pe_start_index {:?} num_elems {:?} len {:?}", pe, offset, buf_index, buf_index+len, dist_index, pe_start_index, num_elems_on_pe, len);
                 match op {
-                    ArrayOp::Put => unsafe {
+                    ArrayOpCmd::Put => unsafe {
                         self.inner.mem_region.put(
                             pe,
                             offset,
                             buf.sub_region(buf_index..(buf_index + len)),
                         )
                     },
-                    ArrayOp::Get(immediate) => unsafe {
+                    ArrayOpCmd::Get(immediate) => unsafe {
                         if immediate{
                             self.inner.mem_region.iget(
                                 pe,
@@ -202,7 +203,7 @@ impl<T: Dist > UnsafeArray<T> {
         self.sub_array_size
     }
 
-    fn cyclic_op<U: MyInto<LamellarArrayInput<T>>>(&self, op: ArrayOp, index: usize, buf: U) {
+    fn cyclic_op<U: MyInto<LamellarArrayInput<T>>>(&self, op: ArrayOpCmd, index: usize, buf: U){
         let buf = buf.my_into(&self.inner.team);
         let my_pe = self.my_pe;
         let num_pes = self.inner.team.num_pes();
@@ -210,7 +211,7 @@ impl<T: Dist > UnsafeArray<T> {
         let mut overflow = 0;
         let start_pe = index % num_pes;
         match op {
-            ArrayOp::Put => {
+            ArrayOpCmd::Put => {
                 let temp_array = self.inner.team.alloc_local_mem_region::<T>(num_elems_pe);
                 for i in 0..std::cmp::min(buf.len(), num_pes) {
                     let mut k = 0;
@@ -228,7 +229,10 @@ impl<T: Dist > UnsafeArray<T> {
                     }
                 }
             }
-            ArrayOp::Get(immediate) => {
+            ArrayOpCmd::PutAm =>{
+                // let temp_array = self.inner.team.alloc_local_mem_region::<T>(num_elems_pe);
+            }
+            ArrayOpCmd::Get(immediate) => {
                 //optimize like we did for put...
                 for i in 0..buf.len() {
                     unsafe {
@@ -252,44 +256,70 @@ impl<T: Dist > UnsafeArray<T> {
             _ => {}
         }
     }
-    pub fn put<U: MyInto<LamellarArrayInput<T>>+ LamellarRead>(&self, index: usize, buf: U) {
+    pub unsafe fn put_unchecked<U: MyInto<LamellarArrayInput<T>>+ LamellarRead>(&self, index: usize, buf: U) {
         match self.distribution {
-            Distribution::Block => self.block_op(ArrayOp::Put, self.sub_array_offset + index, buf),
+            Distribution::Block => self.block_op(ArrayOpCmd::Put, self.sub_array_offset + index, buf),
             Distribution::Cyclic => {
-                self.cyclic_op(ArrayOp::Put, self.sub_array_offset + index, buf)
+                self.cyclic_op(ArrayOpCmd::Put, self.sub_array_offset + index, buf)
+            }
+        }
+    }
+    pub fn iput<'a, U>(&self, index: usize, buf: &'a U) 
+    where
+    U: 'a + MyInto<LamellarArrayInput<T>>+ LamellarRead, LamellarArrayInput<T>: MyFrom<&'a U>
+    {
+        match self.distribution {
+            Distribution::Block => self.block_op(ArrayOpCmd::Put, self.sub_array_offset + index, buf),
+            Distribution::Cyclic => {
+                self.cyclic_op(ArrayOpCmd::Put, self.sub_array_offset + index, buf)
             }
         }
     }
     pub unsafe fn get_unchecked<U: MyInto<LamellarArrayInput<T>>+ LamellarWrite>(&self, index: usize, buf: U) {
         match self.distribution {
-            Distribution::Block => self.block_op(ArrayOp::Get(false), self.sub_array_offset + index, buf),
+            Distribution::Block => self.block_op(ArrayOpCmd::Get(false), self.sub_array_offset + index, buf),
             Distribution::Cyclic => {
-                self.cyclic_op(ArrayOp::Get(false), self.sub_array_offset + index, buf)
+                self.cyclic_op(ArrayOpCmd::Get(false), self.sub_array_offset + index, buf)
             }
         }
     }
     pub fn iget<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(&self, index: usize, buf: U) {
         match self.distribution {
-            Distribution::Block => self.block_op(ArrayOp::Get(true), self.sub_array_offset + index, buf),
+            Distribution::Block => self.block_op(ArrayOpCmd::Get(true), self.sub_array_offset + index, buf),
             Distribution::Cyclic => {
-                self.cyclic_op(ArrayOp::Get(true), self.sub_array_offset + index, buf)
+                self.cyclic_op(ArrayOpCmd::Get(true), self.sub_array_offset + index, buf)
             }
         }
     }
-    pub fn at(&self, index: usize) -> T {
+    pub fn iat(&self, index: usize) -> T {
         let buf: LocalMemoryRegion<T> = self.team().alloc_local_mem_region(1);
         self.iget(index, &buf);
         buf.as_slice().unwrap()[0]        
     }
-    pub fn local_as_slice(&self) -> &[T] {
+
+    // pub fn get<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(&self, index: usize, buf: U) -> LamellarRequest<U> {
+    //     match self.distribution {
+    //         Distribution::Block => self.block_op(ArrayOpCmd::Get(true), self.sub_array_offset + index, buf),
+    //         Distribution::Cyclic => {
+    //             self.cyclic_op(ArrayOpCmd::Get(true), self.sub_array_offset + index, buf)
+    //         }
+    //     }
+    // }
+
+    // pub fn at(&self, index: usize) -> LamellarRequest<T> {
+    //     let buf: LocalMemoryRegion<T> = self.team().alloc_local_mem_region(1);
+    //     self.iget(index, &buf);
+    //     buf.as_slice().unwrap()[0]        
+    // }
+
+    pub unsafe fn local_as_slice(&self) -> &[T] {
         self.local_as_mut_slice()
     }
-    pub fn local_as_mut_slice(&self) -> &mut [T] {
-        let slice = unsafe {
+    pub unsafe fn local_as_mut_slice(&self) -> &mut [T] {
+        let slice = 
             self.inner.mem_region.as_casted_mut_slice::<T>().expect(
                 "memory doesnt exist on this pe (this should not happen for arrays currently)",
-            )
-        };
+            );
         let index = self.sub_array_offset;
         let len = self.sub_array_size;
         let my_pe = self.my_pe;
@@ -323,8 +353,12 @@ impl<T: Dist > UnsafeArray<T> {
                 &mut slice[start_index..end_index]
             }
         }
+
     }
-    pub fn to_base_inner<B: Dist>(self) -> UnsafeArray<B> {
+
+
+    #[doc(hidden)]
+    pub unsafe fn to_base_inner<B: Dist>(self) -> UnsafeArray<B> {
         let u8_size = self.size * std::mem::size_of::<T>();
         let b_size = u8_size / std::mem::size_of::<B>();
         let elem_per_pe = b_size as f64 / self.inner.team.num_pes() as f64;
@@ -343,7 +377,9 @@ impl<T: Dist > UnsafeArray<T> {
             phantom: PhantomData,
         }
     }
-    pub fn as_base_inner<B: Dist>(&self) -> UnsafeArray<B> {
+
+    #[doc(hidden)]
+    pub unsafe fn as_base_inner<B: Dist>(&self) -> UnsafeArray<B> {
         let u8_size = self.size * std::mem::size_of::<T>();
         let b_size = u8_size / std::mem::size_of::<B>();
         let elem_per_pe = b_size as f64 / self.inner.team.num_pes() as f64;
@@ -416,8 +452,12 @@ impl<T: Dist > UnsafeArray<T> {
             phantom: PhantomData,
         }
     }
-    pub(crate) fn team(&self) -> Arc<LamellarTeamRT> {
+    pub(crate) fn team(&self) -> Pin<Arc<LamellarTeamRT>> {
         self.inner.team.clone()
+    }
+
+    pub(crate) fn mem_region(&self) -> &MemoryRegion<u8>{
+        &self.inner.mem_region
     }
 
     pub(crate) fn block_on_outstanding(&self, mode: DarcMode){
@@ -471,6 +511,7 @@ impl <T: Dist + serde::Serialize + serde::de::DeserializeOwned + 'static> Unsafe
         self.reduce("max")
     }
 }
+
 impl<T: Dist> DistIteratorLauncher for UnsafeArray<T> {
     fn global_index_from_local(&self, index: usize, chunk_size: usize) -> usize {
         // println!("global index cs:{:?}",chunk_size);
@@ -593,7 +634,7 @@ impl<T: Dist> LamellarArray<T>
     fn my_pe(&self) -> usize{
         self.my_pe
     }
-    fn team(&self) -> Arc<LamellarTeamRT>{
+    fn team(&self) -> Pin<Arc<LamellarTeamRT>>{
         self.team().clone()
     }
     
@@ -648,15 +689,15 @@ impl<T: Dist> LamellarArrayRead<T> for UnsafeArray<T> {
     fn iget<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(&self, index: usize, buf: U) {
         self.iget(index, buf)
     }
-    fn at(&self, index: usize) -> T {
-        self.at(index)
+    fn iat(&self, index: usize) -> T {
+        self.iat(index)
     }
 }
 
 impl<T: Dist> LamellarArrayWrite<T> for UnsafeArray<T> {
-    fn put<U: MyInto<LamellarArrayInput<T>> + LamellarRead>(&self, index: usize, buf: U) {
-        self.put(index, buf)
-    }
+    // unsafe fn put_unchecked<U: MyInto<LamellarArrayInput<T>> + LamellarRead>(&self, index: usize, buf: U) {
+    //     self.put_unchecked(index, buf)
+    // }
 }
 
 impl<T: Dist> SubArray<T> for UnsafeArray<T> {
@@ -669,27 +710,23 @@ impl<T: Dist> SubArray<T> for UnsafeArray<T> {
     }
 }
 
-// impl<T: Dist + std::ops::AddAssign> UnsafeArray<T>
-// where
-//     UnsafeArray<T>: ArrayOps<T>,
-// {
-//     pub fn add(
-//         &self,
-//         index: usize,
-//         val: T,
-//     ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>> {
-//         <UnsafeArray<T> as ArrayOps<T>>::add(self, index, val) // this is implemented automatically by a proc macro
-//                                                                // because this gets implented as an active message, we need to know the full type
-//                                                                // when the proc macro is called, all the integer/float times are handled by runtime,
-//                                                                // but users are requried to call a proc macro on their type to get the functionality
-//     }
-// }
+#[lamellar_impl::AmDataRT]
+struct UnsafePutAm{
+    array: UnsafeArray<u8>,
+    pe: usize,
+    buf_addr: usize,
+    buf_len: usize,
+    index: usize, 
+}
 
-// impl <T: Dist>  Clone for &UnsafeArray<T> {
-//     fn clone(&self) -> UnsafeArray
-// }
+#[lamellar_impl::rt_am]
+impl LamellarAm for UnsafePutAm{
+    fn exec(self) {
+        unsafe {self.array.mem_region().fill_from_remote_addr::<u8>(self.pe,self.index,self.buf_addr,self.buf_len)};
+    }
+}
 
-impl<T: Dist + std::ops::AddAssign + 'static> ArrayOps<T> for &UnsafeArray<T>{
+impl<T: Dist + std::ops::AddAssign + 'static> ArrayOps<T> for UnsafeArray<T>{
     fn add(&self, index:usize, val: T) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>> {
         println!("add ArrayOps<T> for &UnsafeArray<T> ");
         let pe = self.pe_for_dist_index(index);
@@ -700,7 +737,7 @@ impl<T: Dist + std::ops::AddAssign + 'static> ArrayOps<T> for &UnsafeArray<T>{
         }
         else{
             if let Some(func) = ADD_OPS.get(&TypeId::of::<T>()){
-                let array: UnsafeArray<u8> = self.as_base_inner();
+                let array: UnsafeArray<u8> = unsafe {self.as_base_inner()};
                 let pe = self.pe_for_dist_index(index);
                 let am = func(&val as *const T as *const u8, array,local_index);
                 Some(
@@ -710,7 +747,17 @@ impl<T: Dist + std::ops::AddAssign + 'static> ArrayOps<T> for &UnsafeArray<T>{
                 )
             }
             else{
-                panic!("should not be here");
+                let name = std::any::type_name::<T>().split("::").last().unwrap();
+                panic!("the type {:?} has not been registered! this typically means you need to derive \"ArrayOps\" for the type . e.g. 
+                #[derive(lamellar::ArrayOps)]
+                struct {:?}{{
+                    ....
+                }}
+                note this also requires the type to impl Serialize + Deserialize, you can manually derive these, or use the lamellar::AmData attribute proc macro, e.g.
+                #[lamellar::AMData(ArrayOps, any other traits you derive)]
+                struct {:?}{{
+                    ....
+                }}",name,name,name);
             }
         }
     }
@@ -731,7 +778,7 @@ impl<T: Dist + std::ops::AddAssign + 'static> ArrayOps<T> for &UnsafeArray<T>{
         }
         fn local_add(&self, index: usize, val: T) {
             println!("local_add ArrayAdd<T> for UnsafeArray<T> ");
-            self.local_as_mut_slice()[index] += val;
+            unsafe { self.local_as_mut_slice()[index] += val};
         }
     }   
 // }
@@ -745,7 +792,7 @@ macro_rules! UnsafeArray_inventory_add{
     ($id:ident, $add:ident, $local:ident) => {
         inventory::submit!{
             #![crate =$crate]
-            $crate::array::r#unsafe::UnsafeArrayAdd{
+            $crate::array::UnsafeArrayAdd{
                 id: std::any::TypeId::of::<$id>(),
                 add: $add,
             }
@@ -753,13 +800,19 @@ macro_rules! UnsafeArray_inventory_add{
     };
 }
 
-impl<T: Dist + std::fmt::Debug> UnsafeArray<T> {
+impl<T: Dist + std::fmt::Debug>  UnsafeArray<T> {
     pub fn print(&self) {
+       <UnsafeArray<T> as ArrayPrint<T>>::print(&self);
+   }
+}
+
+impl<T: Dist + std::fmt::Debug> ArrayPrint<T> for UnsafeArray<T> {
+     fn print(&self) {
         self.inner.team.barrier(); //TODO: have barrier accept a string so we can print where we are stalling.
         for pe in 0..self.inner.team.num_pes() {
             self.inner.team.barrier();
             if self.my_pe == pe {
-                println!("[pe {:?} data] {:?}", pe, self.local_as_slice());
+                println!("[pe {:?} data] {:?}", pe, unsafe {self.local_as_slice()});
             }
             std::thread::sleep(std::time::Duration::from_millis(500));
         }
@@ -810,7 +863,7 @@ impl<T: Dist + serde::Serialize + serde::de::DeserializeOwned + 'static> Lamella
         REDUCE_OPS
             .get(&(std::any::TypeId::of::<T>(), op))
             .expect("unexpected reduction type")(
-            self.clone().to_base_inner::<u8>().into(),
+            unsafe{self.clone().to_base_inner::<u8>().into()},
             self.inner.team.num_pes(),
         )
         // }

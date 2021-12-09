@@ -8,6 +8,7 @@ use std::marker::PhantomData;
 
 pub struct LocalOnlyArray<T: Dist + 'static> {
     pub(crate) array: UnsafeArray<T>,
+    // actually we should just use a read write lock here to enforce mutability exclusitivity
     pub(crate) _unsync: PhantomData<*const ()>,// because we allow mutable access to underlying slice but don't provide any protection to aquiring multiple mut slices
                                    // we must make this not sync by default.
                                    // either wrap the localonlyarray in a mutex/rwlock or use a localRwArray 
@@ -51,12 +52,12 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Lo
     }
 
     pub fn as_slice(&self) -> &[T] {
-        self.array.local_as_mut_slice()
+        unsafe { self.array.local_as_mut_slice()}
     }
     pub fn as_mut_slice(&mut self) -> &mut [T] {
-        self.array.local_as_mut_slice()
+        unsafe {self.array.local_as_mut_slice()}
     }
-    pub fn to_base_inner<B: Dist + 'static>(self) -> LocalOnlyArray<B> {
+    pub unsafe fn to_base_inner<B: Dist + 'static>(self) -> LocalOnlyArray<B> {
         
 
         LocalOnlyArray {
@@ -106,7 +107,7 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> La
     fn my_pe(&self) -> usize{
         self.array.my_pe()
     }
-    fn team(&self) -> Arc<LamellarTeamRT>{
+    fn team(&self) -> Pin<Arc<LamellarTeamRT>>{
         self.array.team().clone()
     }
     fn num_elems_local(&self) -> usize{

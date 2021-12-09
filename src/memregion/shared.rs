@@ -6,6 +6,7 @@ use core::marker::PhantomData;
 #[cfg(feature = "enable-prof")]
 use lamellar_prof::*;
 use std::sync::Arc;
+use std::pin::Pin;
 
 use std::ops::Bound;
 
@@ -47,7 +48,7 @@ impl<T: Dist> crate::DarcSerde for SharedMemoryRegion<T> {
 impl<T: Dist> SharedMemoryRegion<T> {
     pub(crate) fn new(
         size: usize,
-        team: Arc<LamellarTeamRT>,
+        team: Pin<Arc<LamellarTeamRT>>,
         alloc: AllocationType,
     ) -> SharedMemoryRegion<T> {
         SharedMemoryRegion::try_new(size, team, alloc).expect("Out of memory")
@@ -55,7 +56,7 @@ impl<T: Dist> SharedMemoryRegion<T> {
 
     pub(crate) fn try_new(
         size: usize,
-        team: Arc<LamellarTeamRT>,
+        team: Pin<Arc<LamellarTeamRT>>,
         alloc: AllocationType,
     ) -> Result<SharedMemoryRegion<T>, anyhow::Error> {
         Ok(SharedMemoryRegion {
@@ -239,7 +240,7 @@ impl<T: Dist> From<&SharedMemoryRegion<T>> for LamellarArrayInput<T> {
 }
 
 impl<T: Dist> MyFrom<&SharedMemoryRegion<T>> for LamellarArrayInput<T> {
-    fn my_from(smr: &SharedMemoryRegion<T>, _team: &Arc<LamellarTeamRT>) -> Self {
+    fn my_from(smr: &SharedMemoryRegion<T>, _team: &std::pin::Pin<Arc<LamellarTeamRT>>) -> Self {
         LamellarArrayInput::SharedMemRegion(smr.clone())
     }
 }

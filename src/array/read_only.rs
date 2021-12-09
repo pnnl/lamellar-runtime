@@ -63,16 +63,16 @@ impl<T: Dist> ReadOnlyArray<T> {
     pub fn iget<U: MyInto<LamellarArrayInput<T>> + LamellarWrite >(&self, index: usize, buf: U) {
         self.array.iget(index, buf)
     }
-    pub fn at(&self, index: usize) -> T {
-        self.array.at(index)
+    pub fn iat(&self, index: usize) -> T {
+        self.array.iat(index)
     }
     pub fn local_as_slice(&self) -> &[T] {
-        self.array.local_as_mut_slice()
+        unsafe { self.array.local_as_mut_slice() }
     }
-    pub fn local_as_mut_slice(&self) -> &mut [T] {
-        self.array.local_as_mut_slice()
-    }
-    pub fn to_base_inner<B: Dist>(self) -> ReadOnlyArray<B> {
+    // pub fn local_as_mut_slice(&self) -> &mut [T] {
+    //     self.array.local_as_mut_slice()
+    // }
+    pub unsafe fn to_base_inner<B: Dist>(self) -> ReadOnlyArray<B> {
         ReadOnlyArray {
             array: self.array.to_base_inner(),
         }
@@ -85,9 +85,9 @@ impl<T: Dist> ReadOnlyArray<T> {
     // pub(crate) fn local_as_ptr(&self) -> *const T {
     //     self.array.local_as_ptr()
     // }
-    pub(crate) fn local_as_mut_ptr(&self) -> *mut T {
-        self.array.local_as_mut_ptr()
-    }
+    // pub(crate) fn local_as_mut_ptr(&self) -> *mut T {
+    //     self.array.local_as_mut_ptr()
+    // }
 
     pub fn dist_iter(&self) -> DistIter<'static, T, ReadOnlyArray<T>> {
         DistIter::new(self.clone().into(), 0, 0)
@@ -170,10 +170,10 @@ impl<T: Dist> private::LamellarArrayPrivate<T>
 {
     
     fn local_as_ptr(&self) -> *const T{
-        self.local_as_mut_ptr()
+        self.array.local_as_ptr()
     }
     fn local_as_mut_ptr(&self) -> *mut T {
-        self.local_as_mut_ptr()
+        self.array.local_as_mut_ptr()
     }
     fn pe_for_dist_index(&self, index: usize) -> usize {
         self.array.pe_for_dist_index(index)
@@ -187,7 +187,7 @@ impl<T: Dist> LamellarArray<T> for ReadOnlyArray<T> {
     fn my_pe(&self) -> usize{
         self.array.my_pe()
     }
-    fn team(&self) -> Arc<LamellarTeamRT>{
+    fn team(&self) -> Pin<Arc<LamellarTeamRT>>{
         self.array.team().clone()
     }    
     fn num_elems_local(&self) -> usize {
@@ -211,8 +211,8 @@ impl<T: Dist> LamellarArrayRead<T> for ReadOnlyArray<T> {
     fn iget<U: MyInto<LamellarArrayInput<T>> + LamellarWrite >(&self, index: usize, buf: U) {
         self.iget(index, buf)
     }
-    fn at(&self, index: usize) -> T {
-        self.at(index)
+    fn iat(&self, index: usize) -> T {
+        self.iat(index)
     }
 }
 

@@ -6,6 +6,9 @@ mod replace;
 use crate::parse::ReductionArgs;
 use crate::replace::LamellarDSLReplace;
 
+
+use std::collections::HashMap;
+
 use proc_macro::TokenStream;
 use proc_macro2::Span;
 use proc_macro_error::proc_macro_error;
@@ -410,15 +413,37 @@ fn derive_am_data(
         } else {
             ser.extend(quote! {panic!{"should not serialize data in LocalAM"}});
         }
+        let mut trait_strs = HashMap::new();
         for t in args.to_string().split(",") {
-            if !t.contains("serde::Serialize")
+            // if t.contains("ArrayOp") {
+            //     trait_strs.entry(String::from("ArrayOp")).or_insert(quote! {#lamellar::ArrayOp});
+            //     trait_strs.entry(String::from("Copy")).or_insert(quote! {Copy});
+            //     trait_strs.entry(String::from("Clone")).or_insert(quote! {Clone});
+            //     // impls.extend(quote! {#lamellar::ArrayOps});
+            // }
+            // else 
+            if t.contains("Dist") {
+                trait_strs.entry(String::from("Dist")).or_insert(quote! {#lamellar::Dist});
+                trait_strs.entry(String::from("Copy")).or_insert(quote! {Copy});
+                trait_strs.entry(String::from("Clone")).or_insert(quote! {Clone});
+            }
+            else if !t.contains("serde::Serialize")
                 && !t.contains("serde::Deserialize")
                 && t.trim().len() > 0
             {
                 let temp = quote::format_ident!("{}", t.trim());
-                impls.extend(quote! {#temp, });
+                trait_strs.entry(t.trim().to_owned()).or_insert(quote! {#temp});
             }
+            
         }
+        for t in trait_strs{
+            // let temp = quote::format_ident!("{}", t);
+            // print!("{:?}, ",t.0);
+            let temp =t.1;
+            impls.extend(quote! {#temp, });
+        }
+        // println!();
+        // println!("{:?}",impls);
         let traits = quote! { #[derive( #impls)] };
         let serde_temp_2 = if crate_header != "crate" && !local {
             quote! {#[serde(crate = "lamellar::serde")]}
@@ -656,7 +681,7 @@ fn create_reduction(
 
         gen_match_stmts.extend(quote!{
             #lamellar::array::LamellarReadArray::#array_type(inner) => std::sync::Arc::new(#reduction_name{
-                data: inner.clone().to_base_inner::<#typeident>() , start_pe: 0, end_pe: num_pes-1}),
+                data: unsafe {inner.clone().to_base_inner::<#typeident>()} , start_pe: 0, end_pe: num_pes-1}),
         });
 
         array_impls.extend(quote!{
@@ -674,7 +699,7 @@ fn create_reduction(
                     if self.start_pe == self.end_pe{
                         // println!("[{:?}] root {:?} {:?}",__lamellar_current_pe,self.start_pe, self.end_pe);
                         let timer = std::time::Instant::now();
-                        let data_slice = self.data.local_as_slice();
+                        let data_slice = unsafe {self.data.local_as_slice()};
                         // println!("data: {:?}",data_slice);
                         let first = data_slice.first().unwrap().clone();
                         let res = data_slice[1..].iter().fold(first, #op );
@@ -764,7 +789,7 @@ fn create_add(
         let create_add= quote::format_ident!("{}_create_add",array_type);
         let create_add_fn_name = quote::format_ident!("{}_{}_create_add",array_type,typeident);
         let add_struct = quote::format_ident!("{}_inventory_add",array_type);
-        let reg_add = quote::format_ident!("{}Add",array_type);
+        // let reg_add = quote::format_ident!("{}Add",array_type);
         match_stmts.extend(quote! {
             #lamellar::array::LamellarWriteArray::#array_type(inner) => inner.add(index,val),
         });
@@ -772,29 +797,29 @@ fn create_add(
             #[allow(non_camel_case_types)]
             #lamellar::#create_add!(#typeident,#create_add_fn_name);
 
-            #[allow(non_camel_case_types)]
-            // impl  #lamellar::array::#array_type<#typeident>{
-            impl #lamellar::array::ArrayOps<#typeident> for #lamellar::array::#array_type<#typeident>{
-                fn add(&self,index: usize, val: #typeident)->Option<Box<dyn #lamellar::LamellarRequest<Output = ()> + Send + Sync>>{
-                    println!("add ArrayOps<{}> for {}<{}>",stringify!(#typeident),stringify!(#array_type),stringify!(#typeident));
-                    let pe = self.pe_for_dist_index(index);
-                    let local_index = self.pe_offset_for_dist_index(pe,index);
-                    if pe == self.my_pe(){
-                        self.local_add(local_index,val);
-                        None
-                    }
-                    else{
-                        Some(self.dist_add(
-                            index,
-                            Arc::new (#add_name_am{
-                                data: self.clone(),
-                                local_index: local_index,
-                                val: val,
-                            })
-                        ))
-                    }
-                }
-            }
+            // #[allow(non_camel_case_types)]
+            // // impl  #lamellar::array::#array_type<#typeident>{
+            // impl #lamellar::array::ArrayOps<#typeident> for #lamellar::array::#array_type<#typeident>{
+            //     fn add(&self,index: usize, val: #typeident)->Option<Box<dyn #lamellar::LamellarRequest<Output = ()> + Send + Sync>>{
+            //         println!("add ArrayOps<{}> for {}<{}>",stringify!(#typeident),stringify!(#array_type),stringify!(#typeident));
+            //         let pe = self.pe_for_dist_index(index);
+            //         let local_index = self.pe_offset_for_dist_index(pe,index);
+            //         if pe == self.my_pe(){
+            //             self.local_add(local_index,val);
+            //             None
+            //         }
+            //         else{
+            //             Some(self.dist_add(
+            //                 index,
+            //                 Arc::new (#add_name_am{
+            //                     data: self.clone(),
+            //                     local_index: local_index,
+            //                     val: val,
+            //                 })
+            //             ))
+            //         }
+            //     }
+            // }
             #[#am_data]
             struct #add_name_am{
                 data: #lamellar::array::#array_type<#typeident>,
@@ -802,26 +827,17 @@ fn create_add(
                 val: #typeident,
             }
             // impl  #add_name_am{
-                fn #add_name_func(val: *const u8, array: #lamellar::array::#array_type<u8>, index: usize) -> LamellarArcAm{
+                fn #add_name_func(val: *const u8, array: #lamellar::array::#array_type<u8>, index: usize) -> Arc<dyn RemoteActiveMessage + Send + Sync>{
                     println!("{:}",stringify!(#add_name_func));
                     let val = unsafe {*(val as  *const #typeident)};
                     Arc::new(#add_name_am{
-                        data: array.to_base_inner(),
+                        data: unsafe {array.to_base_inner()},
                         local_index: index,
                         val: val,
                     })
                 }
             // }
             #lamellar::#add_struct!(#typeident, #add_name_func, #create_add_fn_name);
-            // inventory::submit!{
-            //     #![crate = #lamellar]
-            //     #lamellar::#add_struct!(#typeident, #add_name_func, #create_add_fn_name);
-            //     // #lamellar::array::#reg_add {
-            //     //     id: std::any::TypeId::of::<#typeident>(),
-            //     //     add: #add_name_func,
-            //     //     #lamellar::#add_params!(#create_add_fn_name);
-            //     // }
-            // }
 
             #[#am]
             impl LamellarAM for #add_name_am{
@@ -852,6 +868,11 @@ fn create_add(
         const _: () = {
             extern crate lamellar as __lamellar;
             use __lamellar::array::LamellarArrayRead;
+            use __lamellar::array::ArrayAdd;
+            use __lamellar::LamellarArray;
+            use __lamellar::LamellarRequest;
+            use __lamellar::RemoteActiveMessage;
+            use std::sync::Arc;
             #expanded
         };
     };
@@ -971,6 +992,7 @@ pub fn generate_reductions_for_type_rt(item: TokenStream) -> TokenStream {
     for t in item.to_string().split(",").collect::<Vec<&str>>() {
         let t = t.trim().to_string();
         let typeident = quote::format_ident!("{:}", t.clone());
+        output.extend(quote!{impl Dist for #typeident {}});
         output.extend(create_reduction(
             typeident.clone(),
             "sum".to_string(),
@@ -999,6 +1021,28 @@ pub fn generate_reductions_for_type_rt(item: TokenStream) -> TokenStream {
             true,
         ));
         output.extend(create_add(typeident.clone(), &write_array_types, true));
+        
     }
+    TokenStream::from(output)
+}
+
+#[proc_macro_error]
+#[proc_macro_derive(Dist)]
+pub fn derive_dist(input: TokenStream) -> TokenStream{
+    let mut output = quote! {};
+
+    let input = parse_macro_input!(input as syn::DeriveInput);
+    let name = input.ident;
+
+
+    let write_array_types: Vec<syn::Ident> = vec![quote::format_ident!("AtomicArray"),quote::format_ident!("UnsafeArray")];
+    output.extend(quote!{
+        const _: () = {
+            extern crate lamellar as __lamellar;
+            impl __lamellar::Dist for #name {}
+        };
+    });
+    
+    output.extend(create_add(name.clone(), &write_array_types, false));
     TokenStream::from(output)
 }

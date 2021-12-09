@@ -19,6 +19,7 @@ use crate::LocalMemoryRegion;
 use std::marker::PhantomData;
 use std::ptr::NonNull;
 use std::sync::Arc;
+use std::pin::Pin;
 
 pub trait SerialIterator {
     type Item;
@@ -89,7 +90,7 @@ unsafe impl<'a, T: Dist, A: LamellarArrayRead<T>> Send for LamellarArrayIter<'a,
 impl<'a, T: Dist, A: LamellarArrayRead<T>> LamellarArrayIter<'a, T, A> {
     pub(crate) fn new(
         array: A,
-        team: Arc<LamellarTeamRT>,
+        team: Pin<Arc<LamellarTeamRT>>,
         buf_size: usize,
     ) -> LamellarArrayIter<'a, T, A> {
         let buf_0 = team.alloc_local_mem_region(buf_size);

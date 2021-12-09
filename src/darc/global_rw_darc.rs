@@ -25,7 +25,7 @@ pub(crate) struct DistRwLock<T> {
     writer: AtomicUsize,
     local_cnt: AtomicUsize,
     local_state: Mutex<Option<LockType>>,
-    team: Arc<LamellarTeamRT>,
+    team: std::pin::Pin<Arc<LamellarTeamRT>>,
     data: std::cell::UnsafeCell<T>,
 }
 

@@ -37,10 +37,10 @@ pub trait Dist:
 {
 
 }
-impl<T: Send + Sync + Copy /*+ 'static*/>
-    Dist for T
-{
-}
+// impl<T: Send + Sync + Copy /*+ 'static*/>
+//     Dist for T
+// {
+// }
 
 
 
@@ -81,7 +81,7 @@ impl<T: Dist> From<&LamellarMemoryRegion<T>> for LamellarArrayInput<T> {
 }
 
 impl<T: Dist> MyFrom<&LamellarMemoryRegion<T>> for LamellarArrayInput<T> {
-    fn my_from(mr: &LamellarMemoryRegion<T>, _team: &Arc<LamellarTeamRT>) -> Self {
+    fn my_from(mr: &LamellarMemoryRegion<T>, _team: &std::pin::Pin<Arc<LamellarTeamRT>>) -> Self {
         LamellarArrayInput::LamellarMemRegion(mr.clone())
     }
 }
@@ -93,7 +93,7 @@ impl<T: Dist> MyFrom<&LamellarMemoryRegion<T>> for LamellarArrayInput<T> {
 // }
 
 impl<T: Dist> MyFrom<LamellarMemoryRegion<T>> for LamellarArrayInput<T> {
-    fn my_from(mr: LamellarMemoryRegion<T>, _team: &Arc<LamellarTeamRT>) -> Self {
+    fn my_from(mr: LamellarMemoryRegion<T>, _team: &std::pin::Pin<Arc<LamellarTeamRT>>) -> Self {
         LamellarArrayInput::LamellarMemRegion(mr)
     }
 }
@@ -223,6 +223,18 @@ impl<T: Dist> MemoryRegion<T> {
         //     size * std::mem::size_of::<T>()
         // );
         Ok(temp)
+    }
+    pub(crate) fn from_remote_addr(addr: usize, pe: usize, size: usize,lamellae: Arc<Lamellae>) -> Result<MemoryRegion<T>, anyhow::Error> {
+        Ok(MemoryRegion {
+            addr: addr,
+            pe: pe,
+            size: size, 
+            num_bytes: size * std::mem::size_of::<T>(),
+            backend: lamellae.backend(),
+            rdma: lamellae,
+            local: false,
+            phantom: PhantomData,
+        })
     }
 
     #[allow(dead_code)]
@@ -412,6 +424,8 @@ impl<T: Dist> MemoryRegion<T> {
         }
     }
 
+
+    //we must ensure the the slice will live long enough and that it already exsists in registered memory
     pub(crate) unsafe fn put_slice<R: Dist>(&self, pe: usize, index: usize, data: &[R]) {
         //todo make return a result?
         if (index + data.len()) * std::mem::size_of::<R>() <= self.num_bytes {
@@ -436,6 +450,25 @@ impl<T: Dist> MemoryRegion<T> {
                 self.size,
                 index,
                 data.len()
+            );
+            panic!("index out of bounds");
+        }
+    }
+
+    pub(crate) unsafe fn fill_from_remote_addr<R: Dist>(&self, my_index: usize,  pe: usize, addr: usize, len: usize) {
+        if (my_index + len)  * std::mem::size_of::<R>() <= self.num_bytes {
+            let num_bytes = len * std::mem::size_of::<R>();
+            let my_offset = self.addr + my_index * std::mem::size_of::<R>();
+            let bytes =  std::slice::from_raw_parts_mut(my_offset as *mut u8, num_bytes) ;
+            let local_addr = self.rdma.local_addr(pe,addr);
+            self.rdma.iget(pe,local_addr,bytes);
+        }
+        else {
+            println!(
+                "mem region len: {:?} index: {:?} data len{:?}",
+                self.size,
+                my_index,
+                len
             );
             panic!("index out of bounds");
         }

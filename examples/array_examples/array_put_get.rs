@@ -38,10 +38,10 @@ fn main() {
     world.barrier();
 
     // puts/gets with memregions
-    block_array.put(0, &shared_mem_region); //uses the local data of the shared memregion
-    block_array.put(0, &local_mem_region);
-    cyclic_array.put(0, &shared_mem_region);
-    cyclic_array.put(0, &local_mem_region);
+    block_array.iput(0, &shared_mem_region); //uses the local data of the shared memregion
+    block_array.iput(0, &local_mem_region);
+    cyclic_array.iput(0, &shared_mem_region);
+    cyclic_array.iput(0, &local_mem_region);
     // can use subregions
     unsafe {
         let start = std::time::Instant::now();
@@ -55,8 +55,8 @@ fn main() {
     println!("iget elapsed {:?}",start.elapsed().as_secs_f64());
     world.barrier();
     // puts/gets using single values
-    block_array.put(total_len - 1, 12345);
-    cyclic_array.put(total_len - 1, 12345);
+    block_array.iput(total_len - 1, &12345);
+    cyclic_array.iput(total_len - 1, &12345);
     world.barrier();
 
     // in the future will be able to use and input/output :

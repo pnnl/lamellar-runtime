@@ -10,6 +10,7 @@ use parking_lot::{Mutex, RwLock};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Weak};
+use std::pin::Pin;
 
 pub(crate) mod registered_active_message;
 use registered_active_message::{RegisteredActiveMessages, AMS_EXECS};
@@ -222,7 +223,10 @@ impl ActiveMessageEngine {
         if let Some(ireq) = ireq {
             REQUESTS.lock().insert(req_data.id, ireq.clone());
         }
-        let (team, world) = self.get_team_and_world(req_data.team.team_hash);
+        // let addr = req_data.lamellae.local_addr(req_data.src,req_data)
+        // let (team, world) = self.get_team_and_world(req_data.team.team_hash);
+        let world = LamellarTeam::new(None, req_data.world.clone(), self.teams.clone(), true);
+        let team = LamellarTeam::new(Some(world.clone()), req_data.team.clone(), self.teams.clone(), true);
 
         match req_data.cmd.clone() {
             ExecType::Runtime(_cmd) => {}
@@ -232,19 +236,35 @@ impl ActiveMessageEngine {
 
     pub(crate) fn get_team_and_world(
         &self,
-        team_hash: u64,
+        team_hash: usize,
     ) -> (Arc<LamellarTeam>, Arc<LamellarTeam>) {
-        let teams = self.teams.read();
-        let world_rt = teams
-            .get(&0)
-            .expect("invalid world hash")
-            .upgrade()
-            .expect("team no longer exists (world)");
-        let team_rt = teams
-            .get(&team_hash)
-            .expect("invalid team hash")
-            .upgrade()
-            .expect("team no longer exists {:?}");
+        let team_rt = unsafe {
+            let team_ptr = (team_hash as *mut (*const LamellarTeamRT));
+            // println!("{:x} {:?} {:?} {:?}", team_hash,team_ptr, (team_hash as *mut (*const LamellarTeamRT)).as_ref(), (*(team_hash as *mut (*const LamellarTeamRT))).as_ref());
+            Arc::increment_strong_count(*team_ptr);            
+            Pin::new_unchecked(Arc::from_raw(*team_ptr))
+            // unsafe {(*(team_hash as  *const  Pin<Arc<LamellarTeamRT>>)).clone()}
+        };
+        
+        // let team_rt = unsafe {(*(team_hash as *mut *const Arc<LamellarTeamRT>)).as_ref().clone()};
+        // let team_rt = unsafe{ (*(team_hash as *mut (*const Arc<LamellarTeamRT>))).as_ref().unwrap().clone()};
+        let world_rt = if let Some(world) = team_rt.world.clone(){
+            world
+        }
+        else{
+            team_rt.clone()
+        };
+        // let teams = self.teams.read();
+        // let world_rt = teams
+        //     .get(&0)
+        //     .expect("invalid world hash")
+        //     .upgrade()
+        //     .expect("team no longer exists (world)");
+        // let team_rt = teams
+        //     .get(&team_hash)
+        //     .expect("invalid team hash")
+        //     .upgrade()
+        //     .expect("team no longer exists {:?}");
         let world = LamellarTeam::new(None, world_rt, self.teams.clone(), true);
         let team = LamellarTeam::new(Some(world.clone()), team_rt, self.teams.clone(), true);
         (team, world)
@@ -256,8 +276,9 @@ impl ActiveMessageEngine {
         msg: Msg,
         ser_data: SerializedData,
         lamellae: Arc<Lamellae>,
-        team_hash: u64,
+        team_hash: usize,
     ) {
+        
         let (team, world) = self.get_team_and_world(team_hash);
         match msg.cmd.clone() {
             ExecType::Am(cmd) => {
@@ -274,7 +295,7 @@ impl ActiveMessageEngine {
         req_id: usize,
         pe: u16,
         data: InternalResult,
-        team: Arc<LamellarTeamRT>,
+        team: Pin<Arc<LamellarTeamRT>>,
     ) {
         let reqs = REQUESTS.lock();
         match reqs.get(&req_id) {

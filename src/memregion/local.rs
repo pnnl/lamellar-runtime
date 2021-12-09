@@ -272,11 +272,19 @@ impl<T: Dist> From<&LocalMemoryRegion<T>> for LamellarArrayInput<T> {
     }
 }
 
-impl<T: Dist> MyFrom<&LocalMemoryRegion<T>> for LamellarArrayInput<T> {
-    fn my_from(smr: &LocalMemoryRegion<T>, _team: &Arc<LamellarTeamRT>) -> Self {
+
+impl<T: Dist> MyFrom<LocalMemoryRegion<T>> for LamellarArrayInput<T> {
+    fn my_from(smr: LocalMemoryRegion<T>, _team: &std::pin::Pin<Arc<LamellarTeamRT>>) -> Self {
         LamellarArrayInput::LocalMemRegion(smr.clone())
     }
 }
+impl<T: Dist> MyFrom<&LocalMemoryRegion<T>> for LamellarArrayInput<T> {
+    fn my_from(smr: &LocalMemoryRegion<T>, _team: &std::pin::Pin<Arc<LamellarTeamRT>>) -> Self {
+        LamellarArrayInput::LocalMemRegion(smr.clone())
+    }
+}
+
+
 
 // pub(crate) struct LocalMemoryRegionIter<'a,T: Dist>{
 //     inner:

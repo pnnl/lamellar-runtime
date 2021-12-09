@@ -8,6 +8,7 @@ use lamellar_prof::*;
 use log::trace;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::pin::Pin;
 
 static CUR_REQ_ID: AtomicUsize = AtomicUsize::new(0);
 pub(crate) enum InternalResult {
@@ -24,7 +25,7 @@ pub(crate) struct InternalReq {
     pub(crate) world_outstanding_reqs: Arc<AtomicUsize>,
     pub(crate) tg_outstanding_reqs: Option<Arc<AtomicUsize>>,
     pub(crate) team_hash: u64,
-    pub(crate) team: Arc<LamellarTeamRT>,
+    pub(crate) team: Pin<Arc<LamellarTeamRT>>,
 }
 
 #[async_trait]
@@ -63,7 +64,7 @@ impl<T: AmDist+ 'static> LamellarRequestHandle<T> {
         world_reqs: Arc<AtomicUsize>,
         tg_reqs: Option<Arc<AtomicUsize>>,
         team_hash: u64,
-        team: Arc<LamellarTeamRT>,
+        team: Pin<Arc<LamellarTeamRT>>,
     ) -> (LamellarRequestHandle<T>, InternalReq) {
         prof_start!(active);
         let active = Arc::new(AtomicBool::new(true));

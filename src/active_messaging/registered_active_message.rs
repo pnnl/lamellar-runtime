@@ -10,6 +10,7 @@ use lamellar_prof::*;
 use log::trace;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
+use std::pin::Pin;
 
 // enum BatchAmId{
 const UNIT_ID: AmId = 0;
@@ -739,6 +740,7 @@ impl RegisteredActiveMessages {
                     team.clone(),
                 )
                 .await;
+            let team_hash = team.team.remote_ptr_addr as u64;
             match lam_return {
                 LamellarReturn::Unit => {
                     let req_data = ReqData {
@@ -751,7 +753,7 @@ impl RegisteredActiveMessages {
                         lamellae: lamellae,
                         world: world.team.clone(),
                         team: team.team.clone(),
-                        team_hash: header.team_hash,
+                        team_hash: team_hash,
                     };
                     ame.process_msg_new(req_data, None).await;
                 }
@@ -769,7 +771,7 @@ impl RegisteredActiveMessages {
                         lamellae: lamellae,
                         world: world.team.clone(),
                         team: team.team.clone(),
-                        team_hash: header.team_hash,
+                        team_hash: team_hash,
                     };
                     ame.process_msg_new(req_data, None).await;
                 }
@@ -784,7 +786,7 @@ impl RegisteredActiveMessages {
                         lamellae: lamellae,
                         world: world.team.clone(),
                         team: team.team.clone(),
-                        team_hash: header.team_hash,
+                        team_hash: team_hash,
                     };
                     ame.process_msg_new(req_data, None).await;
                 }
@@ -900,6 +902,7 @@ impl RegisteredActiveMessages {
         // println!("execing batch_id {:?} {:?}",batch_id,data_slice.len());
         let mut index = 0;
         let mut req_id = 0;
+        let team_hash = team.team.remote_ptr_addr as u64;
         while req_id < num_reqs {
             let func = AMS_EXECS.get(&(func_id)).unwrap()(&data_slice[index..], team.team.team_pe);
             index += func.serialized_size();
@@ -1036,6 +1039,7 @@ impl RegisteredActiveMessages {
         // println!("execing return am batch_id {:?} func_id {:?} num_reqs {:?}",batch_id,func_id,num_reqs);
         let mut index = 0;
         let serialized_size = crate::serialized_size(&0usize);
+        // let team_hash: team.team.remote_ptr_addr as u64;
         let cnt = if let Some(reqs) = self.txed_ams.lock().get_mut(&batch_id) {
             let mut reqs = reqs.lock();
             // for (b_id,r_id) in reqs.iter(){
@@ -1126,7 +1130,7 @@ impl RegisteredActiveMessages {
         batch_id: usize,
         src: u16,
         data_slice: &[u8],
-        team: Arc<LamellarTeamRT>,
+        team: Pin<Arc<LamellarTeamRT>>,
     ) {
         let mut index = 0;
         // println!("data_slice {:?}",data_slice);
@@ -1159,7 +1163,7 @@ impl RegisteredActiveMessages {
         }
     }
 
-    fn process_batched_unit_return(&self, batch_id: usize, src: u16, team: Arc<LamellarTeamRT>) {
+    fn process_batched_unit_return(&self, batch_id: usize, src: u16, team: Pin<Arc<LamellarTeamRT>>) {
         // println!("processing returns {:?}",batch_id);
         let cnt = if let Some(reqs) = self.txed_ams.lock().get(&batch_id) {
             let reqs = reqs.lock();
@@ -1186,7 +1190,7 @@ impl RegisteredActiveMessages {
         }
     }
 
-    fn process_unit_return(&self, src: u16, data_slice: &[u8], team: Arc<LamellarTeamRT>) {
+    fn process_unit_return(&self, src: u16, data_slice: &[u8], team: Pin<Arc<LamellarTeamRT>>) {
         // println!("processing returns {:?}",batch_id);
         let mut index = 0;
         let serialized_size = crate::serialized_size(&0usize);

@@ -28,7 +28,7 @@ impl LamellarAM for RdmaAM {
         );
         println!(
             "\tlocal segement of array: {:?}..",
-            &self.array.local_as_slice()[0..num_pes]
+            unsafe {&self.array.local_as_slice()[0..num_pes]}
         );
 
         //get the original nodes data
@@ -45,7 +45,7 @@ impl LamellarAM for RdmaAM {
 
         //update an element on the original node
         local_slice[0] = lamellar::current_pe as u8;
-        self.array.put(my_index, &local.sub_region(0..=0));
+        self.array.iput(my_index, &local.sub_region(0..=0));
     }
 }
 
@@ -72,11 +72,11 @@ fn main() {
                 *i = 255_u8;
             }
         }
-        array.put(0, &local_mem_region);
+        array.iput(0, &local_mem_region);
     }
     println!("here!!! {:?}", my_pe);
     array.print();
-    for i in array.local_as_slice() {
+    for i in unsafe {array.local_as_slice()} {
         while *i != 255_u8 {
             std::thread::yield_now();
         }
@@ -87,7 +87,7 @@ fn main() {
     world.barrier();
     drop(local_mem_region);
     println!("freed mem region");
-    println!("[{:?}] Before {:?}", my_pe, array.local_as_slice());
+    println!("[{:?}] Before {:?}", my_pe, unsafe{array.local_as_slice()});
     world.barrier();
     if my_pe == 0 {
         println!("------------------------------------------------------------");
@@ -105,7 +105,7 @@ fn main() {
 
     world.wait_all();
     world.barrier();
-    println!("[{:?}] after {:?}", my_pe, array.local_as_slice());
+    println!("[{:?}] after {:?}", my_pe,  unsafe{array.local_as_slice()});
     world.barrier();
     array.print();
     if my_pe == 0 {

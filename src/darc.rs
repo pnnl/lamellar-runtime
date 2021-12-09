@@ -56,7 +56,7 @@ pub struct DarcInner<T> {
     dist_cnt: AtomicUsize,  // cnt of times weve cloned (serialized) for distributed access
     ref_cnt_addr: usize,    // array of cnts for accesses from remote pes
     mode_addr: usize,
-    team: *const LamellarTeamRT,
+    team: *const Pin<Arc<LamellarTeamRT>>,
     item: *const T,
 }
 unsafe impl<T: Sync + Send> Send for DarcInner<T> {}
@@ -112,10 +112,11 @@ impl<T> crate::DarcSerde for Darc<T> {
 }
 
 impl<T> DarcInner<T> {
-    fn team(&self) -> Arc<LamellarTeamRT> {
+    fn team(&self) -> Pin<Arc<LamellarTeamRT>> {
         unsafe {
-            Arc::increment_strong_count(self.team);
-            Arc::from_raw(self.team)
+            // Arc::increment_strong_count(self.team);
+            // Arc::from_raw(self.team)
+            (*self.team).clone()
         }
     }
 
@@ -267,7 +268,7 @@ impl<T> Darc<T> {
         unsafe { self.inner.as_mut().expect("invalid darc inner ptr") }
     }
     #[allow(dead_code)]
-    pub(crate) fn team(&self) -> Arc<LamellarTeamRT> {
+    pub(crate) fn team(&self) -> Pin<Arc<LamellarTeamRT>> {
         self.inner().team()
     }
     fn ref_cnts_as_mut_slice(&self) -> &mut [usize] {
@@ -332,7 +333,7 @@ impl<T> Darc<T> {
         team_rt.barrier();
         // println!("creating new darc after barrier");
         let addr = team_rt.lamellae.alloc(size, alloc).expect("out of memory");
-        let temp_team = team_rt.clone();
+        // let temp_team = team_rt.clone();
         let darc_temp = DarcInner {
             my_pe: my_pe,
             num_pes: team_rt.num_pes,
@@ -342,7 +343,7 @@ impl<T> Darc<T> {
             mode_addr: addr
                 + std::mem::size_of::<DarcInner<T>>()
                 + team_rt.num_pes * std::mem::size_of::<usize>(),
-            team: Arc::into_raw(temp_team),
+            team: &team_rt, //Arc::into_raw(temp_team),
             item: Box::into_raw(Box::new(item)),
         };
         unsafe {
@@ -535,7 +536,7 @@ struct DroppedWaitAM<T> {
     mode_addr: usize,
     my_pe: usize,
     num_pes: usize,
-    team: Arc<LamellarTeamRT>, //we include this to insure the team isnt dropped until the darc has been fully dropped across the system.
+    team: Pin<Arc<LamellarTeamRT>>, //we include this to insure the team isnt dropped until the darc has been fully dropped across the system.
     phantom: PhantomData<T>,
 }
 
