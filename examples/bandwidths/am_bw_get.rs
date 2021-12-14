@@ -6,14 +6,14 @@
 /// and reduces the need to copy + serialize/deserialize larges amounts
 /// of data (on the critical path)
 /// --------------------------------------------------------------------
-use lamellar::{ActiveMessaging, RemoteMemoryRegion, SharedMemoryRegion};
+use lamellar::{ActiveMessaging, RemoteMemoryRegion, LocalMemoryRegion};
 use std::time::Instant;
 
 const ARRAY_LEN: usize = 1 * 1024 * 1024 * 1024;
 
 #[lamellar::AmData(Clone, Debug)]
 struct DataAM {
-    array: SharedMemoryRegion<u8>,
+    array: LocalMemoryRegion<u8>,
     index: usize,
     length: usize,
     src: usize,
@@ -52,7 +52,7 @@ fn main() {
     let world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();
     let num_pes = world.num_pes();
-    let array = world.alloc_shared_mem_region::<u8>(ARRAY_LEN);
+    let array = world.alloc_local_mem_region::<u8>(ARRAY_LEN);
     let data = world.alloc_local_mem_region::<u8>(ARRAY_LEN);
     unsafe {
         for i in data.as_mut_slice().unwrap() {
@@ -87,12 +87,12 @@ fn main() {
             for _j in (0..(2_u64.pow(exp))).step_by(num_bytes as usize) {
                 let sub_timer = Instant::now();
                 world.exec_am_pe(
-                    my_pe,
+                    0,
                     DataAM {
                         array: array.clone(),
                         index: 0 as usize,
                         length: num_bytes as usize,
-                        src: 0,
+                        src: my_pe,
                     },
                 );
                 sub_time += sub_timer.elapsed().as_secs_f64();

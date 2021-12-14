@@ -381,10 +381,10 @@ fn derive_am_data(
                                 ind += 1;
                                 ser.extend(quote_spanned! {field.span()=>
 
-                                    (self.#field_name).#temp_ind.ser(num_pes,cur_pe);
+                                   ( &self.#field_name.#temp_ind).ser(num_pes,cur_pe);
                                 });
                                 des.extend(quote_spanned! {field.span()=>
-                                    (self.#field_name).#temp_ind.des(cur_pe);
+                                    (&self.#field_name.#temp_ind).des(cur_pe);
                                 });
                             }
                         }

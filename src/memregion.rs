@@ -162,6 +162,13 @@ impl<T: Dist> Eq for LamellarMemoryRegion<T> {}
 impl<T: Dist>  LamellarWrite for LamellarMemoryRegion<T> {}
 impl<T: Dist>  LamellarRead for LamellarMemoryRegion<T> {}
 
+#[derive(Copy,Clone)]
+pub(crate) enum Mode{
+    Local,
+    Remote,
+    Shared
+}
+
 // this is not intended to be accessed directly by a user
 // it will be wrapped in either a shared region or local region
 // in shared regions its wrapped in a darc which allows us to send
@@ -174,7 +181,7 @@ pub(crate) struct MemoryRegion<T: Dist> {
     num_bytes: usize,
     backend: Backend,
     rdma: Arc<dyn LamellaeRDMA>,
-    local: bool,
+    mode: Mode,
     phantom: PhantomData<T>,
 }
 
@@ -196,10 +203,10 @@ impl<T: Dist> MemoryRegion<T> {
         alloc: AllocationType,
     ) -> Result<MemoryRegion<T>, anyhow::Error> {
         // println!("creating new lamellar memory region {:?}",size * std::mem::size_of::<T>());
-        let mut local = false;
+        let mut mode = Mode::Shared;
         let addr = if size > 0 {
             if let AllocationType::Local = alloc {
-                local = true;
+                mode = Mode::Local;
                 lamellae.rt_alloc(size * std::mem::size_of::<T>())?
             } else {
                 lamellae.alloc(size * std::mem::size_of::<T>(), alloc)? //did we call team barrer before this?
@@ -214,7 +221,7 @@ impl<T: Dist> MemoryRegion<T> {
             num_bytes: size * std::mem::size_of::<T>(),
             backend: lamellae.backend(),
             rdma: lamellae,
-            local: local,
+            mode: mode,
             phantom: PhantomData,
         };
         // println!(
@@ -232,7 +239,7 @@ impl<T: Dist> MemoryRegion<T> {
             num_bytes: size * std::mem::size_of::<T>(),
             backend: lamellae.backend(),
             rdma: lamellae,
-            local: false,
+            mode: Mode::Remote,
             phantom: PhantomData,
         })
     }
@@ -252,7 +259,7 @@ impl<T: Dist> MemoryRegion<T> {
             num_bytes: self.num_bytes,
             backend: self.backend,
             rdma: self.rdma.clone(),
-            local: self.local,
+            mode: self.mode,
             phantom: PhantomData,
         }
     }
@@ -621,10 +628,10 @@ impl<T: Dist> Drop for MemoryRegion<T> {
     fn drop(&mut self) {
         // println!("trying to dropping mem region {:?}",self);
         if self.addr != 0 {
-            if self.local {
-                self.rdma.rt_free(self.addr); // - self.rdma.base_addr());
-            } else {
-                self.rdma.free(self.addr);
+            match self.mode {
+                Mode::Local => self.rdma.rt_free(self.addr), // - self.rdma.base_addr());
+                Mode::Shared => self.rdma.free(self.addr),
+                Mode::Remote => {},
             }
         }
         // println!("dropping mem region {:?}",self);

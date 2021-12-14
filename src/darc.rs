@@ -30,6 +30,7 @@ pub(crate) enum DarcMode {
     UnsafeArray,
     ReadOnlyArray,
     LocalOnlyArray,
+    OneSided,
 }
 
 #[lamellar_impl::AmDataRT(Debug)]
@@ -56,7 +57,7 @@ pub struct DarcInner<T> {
     dist_cnt: AtomicUsize,  // cnt of times weve cloned (serialized) for distributed access
     ref_cnt_addr: usize,    // array of cnts for accesses from remote pes
     mode_addr: usize,
-    team: *const Pin<Arc<LamellarTeamRT>>,
+    team: *const LamellarTeamRT,
     item: *const T,
 }
 unsafe impl<T: Sync + Send> Send for DarcInner<T> {}
@@ -114,9 +115,8 @@ impl<T> crate::DarcSerde for Darc<T> {
 impl<T> DarcInner<T> {
     fn team(&self) -> Pin<Arc<LamellarTeamRT>> {
         unsafe {
-            // Arc::increment_strong_count(self.team);
-            // Arc::from_raw(self.team)
-            (*self.team).clone()
+            Arc::increment_strong_count(self.team);
+            Pin::new_unchecked(Arc::from_raw(self.team))
         }
     }
 
@@ -334,6 +334,10 @@ impl<T> Darc<T> {
         // println!("creating new darc after barrier");
         let addr = team_rt.lamellae.alloc(size, alloc).expect("out of memory");
         // let temp_team = team_rt.clone();
+        let team_ptr = unsafe {
+            let pinned_team = Pin::into_inner_unchecked(team_rt.clone());
+             Arc::into_raw(pinned_team)
+        };
         let darc_temp = DarcInner {
             my_pe: my_pe,
             num_pes: team_rt.num_pes,
@@ -343,7 +347,7 @@ impl<T> Darc<T> {
             mode_addr: addr
                 + std::mem::size_of::<DarcInner<T>>()
                 + team_rt.num_pes * std::mem::size_of::<usize>(),
-            team: &team_rt, //Arc::into_raw(temp_team),
+            team: team_ptr, //&team_rt, //Arc::into_raw(temp_team),
             item: Box::into_raw(Box::new(item)),
         };
         unsafe {
@@ -360,7 +364,7 @@ impl<T> Darc<T> {
         // d.print();
         team_rt.barrier();
         Ok(d)
-    }
+    }   
 
     pub(crate) fn block_on_outstanding(&self, state: DarcMode) {
         self.inner().block_on_outstanding(state);

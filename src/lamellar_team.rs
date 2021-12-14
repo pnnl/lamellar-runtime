@@ -217,11 +217,11 @@ impl RemoteMemoryRegion for Arc<LamellarTeam> {
     /// * `size` - number of elements of T to allocate a memory region for -- (not size in bytes)
     ///
     fn alloc_local_mem_region<T: Dist>(&self, size: usize) -> LocalMemoryRegion<T> {
-        let mut lmr = LocalMemoryRegion::try_new(size, self.team.lamellae.clone());
+        let mut lmr = LocalMemoryRegion::try_new(size, &self.team, self.team.lamellae.clone());
         while let Err(_err) = lmr {
             std::thread::yield_now();
             self.team.lamellae.alloc_pool(size);
-            lmr = LocalMemoryRegion::try_new(size, self.team.lamellae.clone());
+            lmr = LocalMemoryRegion::try_new(size, &self.team, self.team.lamellae.clone());
         }
         lmr.expect("out of memory")
     }
@@ -261,9 +261,42 @@ impl From<LamellarWorld> for IntoLamellarTeam {
     }
 }
 
-// pub (crate) struct LamellarTeamRemotePtr{
-//     ptr: *const Arc<LamellarTeamRT>
-// }
+#[derive(serde::Serialize,serde::Deserialize)]
+pub (crate) struct LamellarTeamRemotePtr{
+    pub (crate) addr: usize,
+    pub (crate) pe: usize,
+    pub (crate) backend: crate::Backend,
+}
+
+impl From<LamellarTeamRemotePtr> for Pin<Arc<LamellarTeamRT>>{
+    fn from(remote_ptr: LamellarTeamRemotePtr) -> Self{
+        let lamellae = if let Some(lamellae) = crate::LAMELLAES.read().get(&remote_ptr.backend) {
+            lamellae.clone()
+        }
+        else {
+            panic!("unexepected lamellae backend {:?}", &remote_ptr.backend);
+        };
+        let local_team_addr = lamellae.local_addr(remote_ptr.pe,remote_ptr.addr);
+        let team_ptr = (local_team_addr as *mut (*const LamellarTeamRT));
+        
+        unsafe {
+            Arc::increment_strong_count(*team_ptr);            
+            Pin::new_unchecked(Arc::from_raw(*team_ptr))
+        }
+    }
+}
+
+
+
+impl From<Pin<Arc<LamellarTeamRT>>> for LamellarTeamRemotePtr{
+    fn from(team: Pin<Arc<LamellarTeamRT>>) -> Self{
+        LamellarTeamRemotePtr{
+            addr: team.remote_ptr_addr,
+            pe: team.world_pe,
+            backend: team.lamellae.backend(),
+        }
+    }
+}
 
 pub struct LamellarTeamRT {
     #[allow(dead_code)]
@@ -290,7 +323,27 @@ pub struct LamellarTeamRT {
     _pin: std::marker::PhantomPinned,
 }
 
-// impl !Unpin for LamellarTeamRT {}
+pub(crate) mod lamellar_team_serde{
+    use std::pin::Pin;
+    use std::sync::Arc;
+    use serde::{Serialize,Deserialize};
+
+    pub(crate) fn serialize<S>(team: &Pin<Arc<super::LamellarTeamRT>>, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        super::LamellarTeamRemotePtr::from(team.clone()).serialize(serializer)
+    }
+
+    pub(crate) fn deserialize<'de,D>(deserializer: D) -> Result<Pin<Arc<super::LamellarTeamRT>>, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let remote_team_ptr: super::LamellarTeamRemotePtr = serde::Deserialize::deserialize(deserializer)?;
+        Ok(remote_team_ptr.into())
+    }
+
+}
 
 impl std::fmt::Debug for LamellarTeamRT {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -982,7 +1035,7 @@ impl LamellarTeamRT {
         self:  &Pin<Arc<LamellarTeamRT>>,
         size: usize,
     ) -> LocalMemoryRegion<T> {
-        let lmr: LocalMemoryRegion<T> = LocalMemoryRegion::new(size, self.lamellae.clone()).into();
+        let lmr: LocalMemoryRegion<T> = LocalMemoryRegion::new(size,self,self.lamellae.clone()).into();
         lmr
     }
 }
