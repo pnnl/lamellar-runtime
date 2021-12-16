@@ -91,14 +91,14 @@ impl<'de, T: 'static> Deserialize<'de> for Darc<T> {
 
 impl<T> crate::DarcSerde for Darc<T> {
     fn ser(&self, num_pes: usize, cur_pe: Result<usize, IdError>) {
-        match cur_pe {
-            Ok(cur_pe) => {
-                self.serialize_update_cnts(num_pes, cur_pe);
-            }
-            Err(err) => {
-                panic!("can only access darcs within team members ({:?})", err);
-            }
-        }
+        // match cur_pe {
+        //     Ok(cur_pe) => {
+                self.serialize_update_cnts(num_pes, 0 /*cur_pe*/);
+        //     }
+        //     Err(err) => {
+        //         panic!("can only access darcs within team members ({:?})", err);
+        //     }
+        // }
     }
     fn des(&self, cur_pe: Result<usize, IdError>) {
         match cur_pe {

@@ -6,10 +6,10 @@ use crate::lamellar_team::LamellarTeamRemotePtr;
 use crate::LAMELLAES;
 use crate::IdError;
 
-use parking_lot::RwLock;
+use parking_lot::Mutex;
 use core::marker::PhantomData;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicUsize, AtomicBool, Ordering};
 use std::collections::HashMap;
 use std::ops::Bound;
 use std::pin::Pin;
@@ -17,8 +17,8 @@ use std::pin::Pin;
 use serde::{Serialize,Deserialize};
 
 lazy_static! {
-    pub(crate) static ref ONE_SIDED_MEM_REGIONS: RwLock<HashMap<(usize,usize),Arc<MemRegionHandleInner>>> =
-        RwLock::new(HashMap::new());
+    pub(crate) static ref ONE_SIDED_MEM_REGIONS: Mutex<HashMap<(usize,usize),Arc<MemRegionHandleInner>>> =
+        Mutex::new(HashMap::new());
 }
 
 static ID_COUNTER: AtomicUsize = AtomicUsize::new(0);
@@ -45,7 +45,7 @@ impl From<NetMemRegionHandle> for Arc<MemRegionHandleInner>{
         else {
             panic!("unexepected lamellae backend {:?}", &net_handle.team.backend);
         };
-        let mut mrh_map =  ONE_SIDED_MEM_REGIONS.write();
+        let mut mrh_map =  ONE_SIDED_MEM_REGIONS.lock();
         // for elem in mrh_map.iter(){
         //     println!("elem: {:?}",elem);
         // }
@@ -54,8 +54,8 @@ impl From<NetMemRegionHandle> for Arc<MemRegionHandleInner>{
                 mrh.clone()
             }
             None => {
-                // println!("inserting onesided mem region");
-                let local_mem_region_addr = lamellae.local_addr(net_handle.mr_pe,net_handle.mr_addr);
+                
+                let local_mem_region_addr = lamellae.local_addr(parent_id.1,net_handle.mr_addr); //the address is with respect to the PE that sent the memregion handle
                 let mem_region = MemoryRegion::from_remote_addr(local_mem_region_addr, net_handle.mr_pe, net_handle.mr_size,lamellae.clone()).unwrap();
                 let team: Pin<Arc<LamellarTeamRT>> = net_handle.team.into();
                 let mrh = Arc::new(
@@ -68,9 +68,11 @@ impl From<NetMemRegionHandle> for Arc<MemRegionHandleInner>{
                         my_id: (ID_COUNTER.fetch_add(1, Ordering::Relaxed),team.team_pe.expect("pe not part of team")),
                         parent_id: parent_id,
                         grand_parent_id: grand_parent_id,
+                        local_dropped: AtomicBool::new(false),
                     }
                 );
                 mrh_map.insert(parent_id,mrh.clone());
+                // println!("inserting onesided mem region {:?} {:?} 0x{:x} {:?}",parent_id,net_handle.mr_pe,net_handle.mr_addr,mrh);
                 mrh
             }
         };
@@ -106,6 +108,7 @@ pub(crate) struct MemRegionHandleInner{
     my_id: (usize,usize), //id,pe
     parent_id: (usize,usize),//id, parent pe
     grand_parent_id: (usize,usize),//id, grand parent pe
+    local_dropped: AtomicBool,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug)]
@@ -138,25 +141,25 @@ pub(crate) mod memregion_handle_serde{
 
 impl crate::DarcSerde for MemRegionHandle {
     fn ser(&self, num_pes: usize, cur_pe: Result<usize, IdError>) {
-        match cur_pe {
-            Ok(cur_pe) => {
+        // match cur_pe {
+        //     Ok(cur_pe) => {
                 self.inner.remote_sent.fetch_add(num_pes,Ordering::SeqCst);
-            }
-            Err(err) => {
-                panic!("can only access MemRegionHandles within team members ({:?})", err);
-            }
-        }
+        //     }
+        //     Err(err) => {
+        //         panic!("can only access MemRegionHandles within team members ({:?})", err);
+        //     }
+        // }
     }
     fn des(&self, cur_pe: Result<usize, IdError>) {
-        match cur_pe {
-            Ok(cur_pe) => {
+        // match cur_pe {
+        //     Ok(cur_pe) => {
                 self.inner.remote_recv.fetch_add(1, Ordering::SeqCst);
-            }
-            Err(err) => {
-                panic!("can only access MemRegionHandles within team members ({:?})", err);
-            }
-        }
-        // println!("deserailized mrh: {:?}",self.inner);
+        //     }
+        //     Err(err) => {
+        //         panic!("can only access MemRegionHandles within team members ({:?})", err);
+        //     }
+        // }
+        // // println!("deserailized mrh: {:?}",self.inner);
     }
 }
 
@@ -171,25 +174,29 @@ impl Clone for MemRegionHandle{
 
 impl Drop for MemRegionHandle{
     fn drop(& mut self)  { //this means all local instances of this handle have been dropped
+        
+        let mut mrh_map = ONE_SIDED_MEM_REGIONS.lock();
         let cnt = self.inner.local_ref.fetch_sub(1,Ordering::SeqCst);
         // println!("dropping {:?}",self.inner);
-        if cnt == 1 { //last local reference
-            // println!("last local ref {:?}", self.inner);
-            //when is the write place to do the removal?
+        if cnt == 1 && self.inner.local_dropped.compare_exchange(false,true,Ordering::SeqCst,Ordering::SeqCst).is_ok() { //last local reference (for the first time)       
             // println!("last local ref {:?}", self.inner);
             if self.inner.remote_sent.load(Ordering::SeqCst) == 0 {
-                let mut mrh_map = ONE_SIDED_MEM_REGIONS.write();
                 mrh_map.remove(&self.inner.parent_id);
+                // println!("removed {:?}",self.inner);
                 if self.inner.my_id != self.inner.parent_id{
-                    let temp = MemRegionFinishedAm{
-                        cnt: self.inner.remote_recv.swap(0,Ordering::SeqCst),
-                        parent_id: self.inner.grand_parent_id 
-                    };
-                    // println!("sending finished am {:?}",temp);
-                    self.inner.team.exec_am_pe(self.inner.parent_id.1, temp );
+                    let cnt = self.inner.remote_recv.swap(0,Ordering::SeqCst);
+                    if cnt > 0 {
+                        let temp = MemRegionFinishedAm{
+                            cnt: cnt,
+                            parent_id: self.inner.grand_parent_id 
+                        };
+                        // println!("sending finished am {:?} pe: {:?}",temp, self.inner.parent_id.1);
+                        self.inner.team.exec_am_pe(self.inner.parent_id.1, temp );
+                    }
+                    
                 }
             }
-            else{ //need to wait for references I sent to return
+            else { //need to wait for references I sent to return
                 self.inner.team.exec_am_local(MemRegionDropWaitAm{
                     inner: self.inner.clone(),
                 });
@@ -208,14 +215,13 @@ struct MemRegionFinishedAm{
 impl LamellarAM for MemRegionFinishedAm {
     fn exec(self) {
         // println!("in finished am {:?}",self);
-        let mrh_map =  ONE_SIDED_MEM_REGIONS.write();
+        let mrh_map =  ONE_SIDED_MEM_REGIONS.lock();
         let mrh = match mrh_map.get(&self.parent_id){
-            Some(mrh) => {
-                
+            Some(mrh) => {                
                 mrh.remote_sent.fetch_sub(self.cnt, Ordering::SeqCst);
-                // println!("mrh {:?}",mrh);
+                // println!("in finished am {:?} mrh {:?}",self,mrh);
             }
-            None =>  println!("this should only be possible on the original pe?") //or we are on the original node?
+            None =>  println!("in finished am this should only be possible on the original pe? {:?} ",self) //or we are on the original node?
         };
         // println!("leaving finished am");
     }
@@ -231,17 +237,32 @@ struct MemRegionDropWaitAm{
 impl LamellarAM for MemRegionDropWaitAm {
     fn exec(self) {
         // println!("in drop wait {:?}", self.inner);
-        while self.inner.remote_sent.load(Ordering::SeqCst) != 0 {
+        loop{
+            while self.inner.remote_sent.load(Ordering::SeqCst) != 0 || self.inner.local_ref.load(Ordering::SeqCst) != 0{
+                async_std::task::yield_now().await;
+            }
+            { //drop the mrh_map lock before awaiting
+                let mut mrh_map = ONE_SIDED_MEM_REGIONS.lock();
+                //check counts again because requests could have come in by the time we can lock the map
+                if self.inner.remote_sent.load(Ordering::SeqCst) == 0 && self.inner.local_ref.load(Ordering::SeqCst) == 0 {
+                    mrh_map.remove(&self.inner.parent_id);
+                    // println!("waited removed {:?}",self.inner);
+                    if self.inner.my_id != self.inner.parent_id{
+                        let cnt = self.inner.remote_recv.swap(0,Ordering::SeqCst);
+                        if cnt > 0 {
+                            let temp = MemRegionFinishedAm{
+                                cnt: cnt,
+                                parent_id: self.inner.grand_parent_id 
+                            };
+                            // println!("waited sending finished am {:?} pe: {:?}",temp, self.inner.parent_id.1);
+                            self.inner.team.exec_am_pe(self.inner.parent_id.1, temp );
+                        }
+                    }
+                    break;
+                }
+            }
             async_std::task::yield_now().await;
-        }
-        let mut mrh_map = ONE_SIDED_MEM_REGIONS.write();
-        mrh_map.remove(&self.inner.parent_id);
-        if self.inner.my_id != self.inner.parent_id{
-            self.inner.team.exec_am_pe(self.inner.parent_id.1, MemRegionFinishedAm{
-                cnt: self.inner.remote_recv.swap(0,Ordering::SeqCst),
-                parent_id: self.inner.grand_parent_id 
-            });
-        }
+        }        
         // println!("leaving drop wait {:?}", self.inner);
     }
 }
@@ -273,6 +294,7 @@ impl<T: Dist> LocalMemoryRegion<T> {
             AllocationType::Local,
         )?;
         let pe = mr.pe;
+        // println!("new local memory region {:?}", mr.addr());
         let id = ID_COUNTER.fetch_add(1,Ordering::Relaxed);
         let mrh =MemRegionHandle{
             inner: Arc::new( 
@@ -285,10 +307,12 @@ impl<T: Dist> LocalMemoryRegion<T> {
                     my_id: (id,pe),
                     parent_id: (id,pe),
                     grand_parent_id: (id,pe),
+                    local_dropped: AtomicBool::new(false),
                 }
             )
         };
-        ONE_SIDED_MEM_REGIONS.write().insert(mrh.inner.my_id,mrh.inner.clone());
+        
+        ONE_SIDED_MEM_REGIONS.lock().insert(mrh.inner.my_id,mrh.inner.clone());
         Ok(LocalMemoryRegion {
             mr: mrh,
             pe: pe,

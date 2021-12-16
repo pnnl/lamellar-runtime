@@ -472,85 +472,85 @@ fn derive_am_data(
     TokenStream::from(output)
 }
 
-fn derive_darcserde(input: TokenStream, crate_header: String) -> TokenStream {
-    let lamellar = quote::format_ident!("{}", crate_header.clone());
-    println!("input: {:?}", input);
-    let input: syn::Item = parse_macro_input!(input);
-    let mut output = quote! {};
+// fn derive_darcserde(input: TokenStream, crate_header: String) -> TokenStream {
+//     let lamellar = quote::format_ident!("{}", crate_header.clone());
+//     println!("input: {:?}", input);
+//     let input: syn::Item = parse_macro_input!(input);
+//     let mut output = quote! {};
 
-    if let syn::Item::Struct(data) = input {
-        let name = &data.ident;
-        let generics = data.generics.clone();
-        let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
+//     if let syn::Item::Struct(data) = input {
+//         let name = &data.ident;
+//         let generics = data.generics.clone();
+//         let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
 
-        let mut fields = quote! {};
-        let mut ser = quote! {};
-        let mut des = quote! {};
+//         let mut fields = quote! {};
+//         let mut ser = quote! {};
+//         let mut des = quote! {};
 
-        for field in &data.fields {
-            if let syn::Type::Path(ref ty) = field.ty {
-                if let Some(seg) = ty.path.segments.first() {
-                    let field_name = field.ident.clone();
-                    if seg.ident.to_string().contains("Darc") {
-                        let (serialize, deserialize) =
-                            if seg.ident.to_string().contains("LocalRwDarc") {
-                                let serialize = format!("{}::localrw_serialize", crate_header);
-                                let deserialize = format!("{}::localrw_from_ndarc", crate_header);
-                                (serialize, deserialize)
-                            } else if seg.ident.to_string().contains("GlobalRwDarc") {
-                                let serialize = format!("{}::globalrw_serialize", crate_header);
-                                let deserialize = format!("{}::globalrw_from_ndarc", crate_header);
-                                (serialize, deserialize)
-                            } else {
-                                let serialize = format!("{}::darc_serialize", crate_header);
-                                let deserialize = format!("{}::darc_from_ndarc", crate_header);
-                                (serialize, deserialize)
-                            };
+//         for field in &data.fields {
+//             if let syn::Type::Path(ref ty) = field.ty {
+//                 if let Some(seg) = ty.path.segments.first() {
+//                     let field_name = field.ident.clone();
+//                     if seg.ident.to_string().contains("Darc") {
+//                         let (serialize, deserialize) =
+//                             if seg.ident.to_string().contains("LocalRwDarc") {
+//                                 let serialize = format!("{}::localrw_serialize", crate_header);
+//                                 let deserialize = format!("{}::localrw_from_ndarc", crate_header);
+//                                 (serialize, deserialize)
+//                             } else if seg.ident.to_string().contains("GlobalRwDarc") {
+//                                 let serialize = format!("{}::globalrw_serialize", crate_header);
+//                                 let deserialize = format!("{}::globalrw_from_ndarc", crate_header);
+//                                 (serialize, deserialize)
+//                             } else {
+//                                 let serialize = format!("{}::darc_serialize", crate_header);
+//                                 let deserialize = format!("{}::darc_from_ndarc", crate_header);
+//                                 (serialize, deserialize)
+//                             };
 
-                        fields.extend(quote_spanned! {field.span()=>
-                            #[serde(serialize_with = #serialize, deserialize_with = #deserialize)]
-                            #field,
-                        });
+//                         fields.extend(quote_spanned! {field.span()=>
+//                             #[serde(serialize_with = #serialize, deserialize_with = #deserialize)]
+//                             #field,
+//                         });
 
-                        ser.extend(quote_spanned!{field.span()=>
-                            match cur_pe{
-                                Ok(cur_pe) => {self.#field_name.serialize_update_cnts(num_pes,cur_pe);},
-                                Err(err) =>  {panic!("can only access darcs within team members ({:?})",err);}
-                            }
-                        });
-                        des.extend(quote_spanned!{field.span()=>
-                            match cur_pe{
-                                Ok(cur_pe) => {self.#field_name.deserialize_update_cnts(cur_pe);},
-                                Err(err) => {panic!("can only access darcs within team members ({:?})",err);}
-                            }
-                        });
-                    } else {
-                        fields.extend(quote_spanned! {field.span()=>
-                            #field,
-                        });
-                    }
-                }
-            }
-        }
+//                         ser.extend(quote_spanned!{field.span()=>
+//                             match cur_pe{
+//                                 Ok(cur_pe) => {self.#field_name.serialize_update_cnts(num_pes,cur_pe);},
+//                                 Err(err) =>  {panic!("can only access darcs within team members ({:?})",err);}
+//                             }
+//                         });
+//                         des.extend(quote_spanned!{field.span()=>
+//                             match cur_pe{
+//                                 Ok(cur_pe) => {self.#field_name.deserialize_update_cnts(cur_pe);},
+//                                 Err(err) => {panic!("can only access darcs within team members ({:?})",err);}
+//                             }
+//                         });
+//                     } else {
+//                         fields.extend(quote_spanned! {field.span()=>
+//                             #field,
+//                         });
+//                     }
+//                 }
+//             }
+//         }
 
-        output.extend(quote! {
-            impl #impl_generics#lamellar::DarcSerde for #name #ty_generics #where_clause{
-                fn ser (&self,  num_pes: usize, cur_pe: Result<usize, #lamellar::IdError>) {
-                    #ser
-                }
-                fn des (&self,cur_pe: Result<usize, #lamellar::IdError>){
-                    #des
-                }
-            }
-        });
-    }
-    TokenStream::from(output)
-}
+//         output.extend(quote! {
+//             impl #impl_generics#lamellar::DarcSerde for #name #ty_generics #where_clause{
+//                 fn ser (&self,  num_pes: usize, cur_pe: Result<usize, #lamellar::IdError>) {
+//                     #ser
+//                 }
+//                 fn des (&self,cur_pe: Result<usize, #lamellar::IdError>){
+//                     #des
+//                 }
+//             }
+//         });
+//     }
+//     TokenStream::from(output)
+// }
 
-#[proc_macro_derive(DarcSerdeRT)]
-pub fn darc_serde_rt_derive(input: TokenStream) -> TokenStream {
-    derive_darcserde(input, "crate".to_string())
-}
+// #[proc_macro_derive(DarcSerdeRT)]
+// pub fn darc_serde_rt_derive(input: TokenStream) -> TokenStream {
+//     derive_darcserde(input, "crate".to_string())
+// }
 
 #[allow(non_snake_case)]
 #[proc_macro_error]

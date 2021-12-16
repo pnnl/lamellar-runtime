@@ -128,6 +128,10 @@ path="examples/active_message_examples/am_batch_tests.rs"
 name="am_local"
 path="examples/active_message_examples/am_local.rs"
 
+[[example]]
+name="am_local_memregions"
+path="examples/active_message_examples/am_local_memregions.rs"
+
 ##---------------Array Examples -------------------##
 [[example]]
 name="dist_array_reduce"
@@ -224,4 +228,8 @@ path="examples/misc/simple_ptp.rs"
 [[example]]
 name="darc"
 path="examples/darc_examples/darc.rs"
+
+[[example]]
+name="stress_test"
+path="examples/darc_examples/stress_test.rs"
 

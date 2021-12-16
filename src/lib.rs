@@ -151,8 +151,8 @@ pub use lamellar_impl::{
     am, generate_reductions_for_type, local_am, register_reduction, AmData, AmLocalData,Dist
 };
 
-#[doc(hidden)]
-pub use lamellar_impl::DarcSerdeRT;
+// #[doc(hidden)]
+// pub use lamellar_impl::DarcSerdeRT;
 
 #[doc(hidden)]
 pub use inventory;

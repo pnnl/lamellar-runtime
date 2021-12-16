@@ -372,9 +372,6 @@ impl RegisteredActiveMessages {
                                                     i += serialized_size;
                                                 }
                                                 let serialize_size = func.serialized_size();
-                                                func.serialize_into(
-                                                    &mut data_slice[i..(i + serialize_size)],
-                                                );
                                                 if req_data.dst.is_none() {
                                                     func.ser(
                                                         match req_data.team.team_pe_id() {
@@ -386,7 +383,9 @@ impl RegisteredActiveMessages {
                                                 } else {
                                                     func.ser(1, req_data.team.team_pe);
                                                 };
-
+                                                func.serialize_into(
+                                                    &mut data_slice[i..(i + serialize_size)],
+                                                );
                                                 i += serialize_size;
                                             }
 
