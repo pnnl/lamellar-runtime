@@ -6,6 +6,7 @@ use crate::lamellar_team::LamellarTeamRemotePtr;
 use crate::LAMELLAES;
 use crate::IdError;
 
+
 use parking_lot::Mutex;
 use core::marker::PhantomData;
 use std::sync::Arc;
@@ -333,8 +334,11 @@ impl<T: Dist> LocalMemoryRegion<T> {
     pub unsafe fn put_all<U: Into<LamellarMemoryRegion<T>>>(&self, index: usize, data: U) {
         MemoryRegionRDMA::<T>::put_all(self, index, data);
     }
-    pub unsafe fn get<U: Into<LamellarMemoryRegion<T>>>(&self, pe: usize, index: usize, data: U) {
-        MemoryRegionRDMA::<T>::get(self, pe, index, data);
+    pub unsafe fn get_unchecked<U: Into<LamellarMemoryRegion<T>>>(&self, pe: usize, index: usize, data: U) {
+        MemoryRegionRDMA::<T>::get_unchecked(self, pe, index, data);
+    }
+    pub  fn iget<U: Into<LamellarMemoryRegion<T>>>(&self, pe: usize, index: usize, data: U) {
+        MemoryRegionRDMA::<T>::iget(self, pe, index, data);
     }
     pub fn as_slice(&self) -> MemResult<&[T]> {
         RegisteredMemoryRegion::<T>::as_slice(self)
@@ -510,9 +514,20 @@ impl<T: Dist> MemoryRegionRDMA<T> for LocalMemoryRegion<T> {
     unsafe fn put_all<U: Into<LamellarMemoryRegion<T>>>(&self, index: usize, data: U) {
         self.mr.inner.mr.put_all(self.sub_region_offset + index, data);
     }
-    unsafe fn get<U: Into<LamellarMemoryRegion<T>>>(&self, pe: usize, index: usize, data: U) {
+    unsafe fn get_unchecked<U: Into<LamellarMemoryRegion<T>>>(&self, pe: usize, index: usize, data: U) {
         if self.pe == pe {
-            self.mr.inner.mr.get(pe, self.sub_region_offset + index, data);
+            self.mr.inner.mr.get_unchecked(pe, self.sub_region_offset + index, data);
+        } else {
+            panic!(
+                "trying to get from PE {:?} which does not contain data (pe with data =  {:?})",
+                pe, self.pe
+            );
+            // Err(MemNotLocalError {})
+        }
+    }
+    fn iget<U: Into<LamellarMemoryRegion<T>>>(&self, pe: usize, index: usize, data: U) {
+        if self.pe == pe {
+            self.mr.inner.mr.iget(pe, self.sub_region_offset + index, data);
         } else {
             panic!(
                 "trying to get from PE {:?} which does not contain data (pe with data =  {:?})",
@@ -527,6 +542,17 @@ impl<T: Dist> RTMemoryRegionRDMA<T> for LocalMemoryRegion<T> {
     unsafe fn put_slice(&self, pe: usize, index: usize, data: &[T]) {
         if self.pe == pe {
             self.mr.inner.mr.put_slice(pe, self.sub_region_offset + index, data)
+        } else {
+            panic!(
+                "trying to put to PE {:?} which does not contain data (pe with data =  {:?})",
+                pe, self.pe
+            );
+            // Err(MemNotLocalError {})
+        }
+    }
+    unsafe fn iget_slice(&self, pe: usize, index: usize, data: &mut [T]) {
+        if self.pe == pe {
+            self.mr.inner.mr.iget_slice(pe, self.sub_region_offset + index, data)
         } else {
             panic!(
                 "trying to put to PE {:?} which does not contain data (pe with data =  {:?})",
@@ -560,6 +586,12 @@ impl<T: Dist> From<&LocalMemoryRegion<T>> for LamellarArrayInput<T> {
 impl<T: Dist> MyFrom<&LocalMemoryRegion<T>> for LamellarArrayInput<T> {
     fn my_from(smr: &LocalMemoryRegion<T>, _team: &Pin<Arc<LamellarTeamRT>>) -> Self {
         LamellarArrayInput::LocalMemRegion(smr.clone())
+    }
+}
+
+impl<T: Dist> MyFrom<LocalMemoryRegion<T>> for LamellarArrayInput<T> {
+    fn my_from(smr: LocalMemoryRegion<T>, _team: &Pin<Arc<LamellarTeamRT>>) -> Self {
+        LamellarArrayInput::LocalMemRegion(smr)
     }
 }
 

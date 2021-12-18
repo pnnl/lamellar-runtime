@@ -45,7 +45,8 @@ pub trait Dist:
 
 
 #[enum_dispatch(RegisteredMemoryRegion<T>, MemRegionId, AsBase, SubRegion<T>, MemoryRegionRDMA<T>, RTMemoryRegionRDMA<T>)]
-#[derive(Clone, Debug)]
+#[derive(serde::Serialize, serde::Deserialize, Clone,Debug)]
+#[serde(bound = "T: Dist + serde::Serialize + serde::de::DeserializeOwned")]
 pub enum LamellarMemoryRegion<T: Dist> {
     Shared(SharedMemoryRegion<T>),
     Local(LocalMemoryRegion<T>),
@@ -77,12 +78,20 @@ impl<T: Dist> LamellarMemoryRegion<T> {
 impl<T: Dist> From<&LamellarMemoryRegion<T>> for LamellarArrayInput<T> {
     fn from(mr: &LamellarMemoryRegion<T>) -> Self {
         LamellarArrayInput::LamellarMemRegion(mr.clone())
+        // match mr.clone(){
+        //     LamellarMemoryRegion::Shared(mr) => LamellarArrayInput::SharedMemRegion(mr),
+        //     LamellarMemoryRegion::Local(mr) => LamellarArrayInput::LocalMemRegion(mr),
+        // }
     }
 }
 
 impl<T: Dist> MyFrom<&LamellarMemoryRegion<T>> for LamellarArrayInput<T> {
     fn my_from(mr: &LamellarMemoryRegion<T>, _team: &std::pin::Pin<Arc<LamellarTeamRT>>) -> Self {
         LamellarArrayInput::LamellarMemRegion(mr.clone())
+        // match mr.clone(){
+        //     LamellarMemoryRegion::Shared(mr) => LamellarArrayInput::SharedMemRegion(mr),
+        //     LamellarMemoryRegion::Local(mr) => LamellarArrayInput::LocalMemRegion(mr),
+        // }
     }
 }
 
@@ -95,6 +104,10 @@ impl<T: Dist> MyFrom<&LamellarMemoryRegion<T>> for LamellarArrayInput<T> {
 impl<T: Dist> MyFrom<LamellarMemoryRegion<T>> for LamellarArrayInput<T> {
     fn my_from(mr: LamellarMemoryRegion<T>, _team: &std::pin::Pin<Arc<LamellarTeamRT>>) -> Self {
         LamellarArrayInput::LamellarMemRegion(mr)
+        // match mr{
+        //     LamellarMemoryRegion::Shared(mr) => LamellarArrayInput::SharedMemRegion(mr),
+        //     LamellarMemoryRegion::Local(mr) => LamellarArrayInput::LocalMemRegion(mr),
+        // }
     }
 }
 
@@ -133,12 +146,14 @@ pub trait MemoryRegionRDMA<T: Dist> {
     unsafe fn put<U: Into<LamellarMemoryRegion<T>>>(&self, pe: usize, index: usize, data: U);
     fn iput<U: Into<LamellarMemoryRegion<T>>>(&self, pe: usize, index: usize, data: U);
     unsafe fn put_all<U: Into<LamellarMemoryRegion<T>>>(&self, index: usize, data: U);
-    unsafe fn get<U: Into<LamellarMemoryRegion<T>>>(&self, pe: usize, index: usize, data: U);
+    unsafe fn get_unchecked<U: Into<LamellarMemoryRegion<T>>>(&self, pe: usize, index: usize, data: U);
+    fn iget<U: Into<LamellarMemoryRegion<T>>>(&self, pe: usize, index: usize, data: U);
 }
 
 #[enum_dispatch]
 pub(crate) trait RTMemoryRegionRDMA<T: Dist> {
     unsafe fn put_slice(&self, pe: usize, index: usize, data: &[T]);
+    unsafe fn iget_slice(&self, pe: usize, index: usize, data: &mut [T]);
 }
 
 //#[prof]
@@ -373,7 +388,7 @@ impl<T: Dist> MemoryRegion<T> {
     /// * `pe` - id of remote PE to grab data from
     /// * `index` - offset into the remote memory window
     /// * `data` - address (which is "registered" with network device) of destination buffer to store result of the get
-    pub(crate) unsafe fn get<R: Dist, U: Into<LamellarMemoryRegion<R>>>(
+    pub(crate) unsafe fn get_unchecked<R: Dist, U: Into<LamellarMemoryRegion<R>>>(
         &self,
         pe: usize,
         index: usize,
@@ -458,6 +473,35 @@ impl<T: Dist> MemoryRegion<T> {
                 index,
                 data.len()
             );
+            panic!("index out of bounds");
+        }
+    }
+    /// copy data from remote memory location into provided data buffer
+    ///
+    /// # Arguments
+    ///
+    /// * `pe` - id of remote PE to grab data from
+    /// * `index` - offset into the remote memory window
+    /// * `data` - address (which is "registered" with network device) of destination buffer to store result of the get
+    ///    data will be present within the buffer once this returns.
+    pub(crate) fn iget_slice<R: Dist>(
+        &self,
+        pe: usize,
+        index: usize,
+        data: &mut [R],
+    ) {
+        // let data = data.into();
+        if (index + data.len()) * std::mem::size_of::<R>() <= self.num_bytes {
+            let num_bytes = data.len() * std::mem::size_of::<R>();
+                let bytes = unsafe { std::slice::from_raw_parts_mut(data.as_mut_ptr() as *mut u8, num_bytes) };
+                // println!("getting {:?} {:?} {:?} {:?} {:?} {:?} {:?}",pe,index,std::mem::size_of::<R>(),data.len(), num_bytes,self.size, self.num_bytes);
+                self.rdma
+                    .iget(pe, self.addr + index * std::mem::size_of::<R>(), bytes);
+            //(remote pe, src, dst)
+            // println!("getting {:?} {:?} [{:?}] {:?} {:?} {:?}",pe,self.addr + index * std::mem::size_of::<T>(),index,data.addr(),data.len(),num_bytes);
+            
+        } else {
+            println!("{:?} {:?} {:?}", self.size, index, data.len(),);
             panic!("index out of bounds");
         }
     }

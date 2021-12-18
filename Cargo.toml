@@ -94,6 +94,22 @@ path="examples/bandwidths/get_bw.rs"
 name="put_bw"
 path="examples/bandwidths/put_bw.rs"
 
+[[example]]
+name="array_put_bw"
+path="examples/bandwidths/array_put_bw.rs"
+
+[[example]]
+name="array_async_put_bw"
+path="examples/bandwidths/array_async_put_bw.rs"
+
+[[example]]
+name="array_get_bw"
+path="examples/bandwidths/array_get_bw.rs"
+
+[[example]]
+name="array_async_get_bw"
+path="examples/bandwidths/array_async_get_bw.rs"
+
 
 ##------------ Active Message Examples -----------------##
 [[example]]

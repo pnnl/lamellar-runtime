@@ -9,7 +9,7 @@ use crate::darc::{Darc,DarcMode};
 use crate::lamellae::AllocationType;
 use crate::lamellar_request::LamellarRequest;
 use crate::lamellar_team::{IntoLamellarTeam, LamellarTeamRT};
-use crate::memregion::{Dist, MemoryRegion, RegisteredMemoryRegion, SubRegion};
+use crate::memregion::{Dist, MemoryRegion, RegisteredMemoryRegion, SubRegion, AsBase, RTMemoryRegionRDMA,MemoryRegionRDMA};
 use crate::scheduler::SchedulerQueue;
 use core::marker::PhantomData;
 // use parking_lot::RwLock;
@@ -44,6 +44,7 @@ struct UnsafeArrayInner {
     mem_region: MemoryRegion<u8>,
     pub(crate) array_counters: Arc<AMCounters>,
     pub(crate) team: Pin<Arc<LamellarTeamRT>>,
+    pub(crate) my_pe: usize,
 }
 
 //need to calculate num_elems_local dynamically
@@ -55,10 +56,13 @@ pub struct UnsafeArray<T: Dist> {
     elem_per_pe: f64, //used to evenly distribute elems
     sub_array_offset: usize,
     sub_array_size: usize,
-    pub(crate) my_pe: usize,
+    
     // typeid: TypeId,
     phantom: PhantomData<T>,
 }
+
+
+
 
 //#[prof]
 impl<T: Dist > UnsafeArray<T> {
@@ -90,6 +94,7 @@ impl<T: Dist > UnsafeArray<T> {
                     mem_region: rmr,
                     array_counters: Arc::new(AMCounters::new()),
                     team: team,
+                    my_pe: my_pe,
                 },
                 crate::darc::DarcMode::Darc,
             )
@@ -99,7 +104,6 @@ impl<T: Dist > UnsafeArray<T> {
             elem_per_pe: elem_per_pe,
             sub_array_offset: 0,
             sub_array_size: array_size,
-            my_pe: my_pe,
             phantom: PhantomData,
         };
         array
@@ -113,12 +117,12 @@ impl<T: Dist > UnsafeArray<T> {
     pub(crate) fn num_elems_local(&self) -> usize {
         match self.distribution {
             Distribution::Block => {
-                ((self.elem_per_pe * (self.my_pe + 1) as f64).round()
-                    - (self.elem_per_pe * self.my_pe as f64).round()) as usize
+                ((self.elem_per_pe * (self.inner.my_pe + 1) as f64).round()
+                    - (self.elem_per_pe * self.inner.my_pe as f64).round()) as usize
             }
             Distribution::Cyclic => {
                 let rem = self.size % self.inner.team.num_pes();
-                if self.my_pe < rem {
+                if self.inner.my_pe < rem {
                     self.elem_per_pe as usize + 1
                 } else {
                     self.elem_per_pe as usize
@@ -152,13 +156,16 @@ impl<T: Dist > UnsafeArray<T> {
         }
     }
 
-    fn block_op<U: MyInto<LamellarArrayInput<T>>>(&self, op: ArrayOpCmd, index: usize, buf: U) {
+
+    fn block_op<U: MyInto<LamellarArrayInput<T>>>(&self, op: ArrayOpCmd, index: usize, buf: U) -> Vec<Box<dyn LamellarRequest<Output = ()> + Send + Sync>> {
         let buf = buf.my_into(&self.inner.team);
+
         let start_pe = (index as f64 / self.elem_per_pe).floor() as usize;
         let end_pe = (((index + buf.len()) as f64) / self.elem_per_pe).ceil() as usize;
         let mut dist_index = index;
         let mut buf_index = 0;
-        for pe in start_pe..end_pe {
+        let mut reqs = vec![];
+        for pe in start_pe..end_pe { 
             let num_elems_on_pe = (self.elem_per_pe * (pe + 1) as f64).round() as usize
                 - (self.elem_per_pe * pe as f64).round() as usize;
             let pe_start_index = (self.elem_per_pe * pe as f64).round() as usize;
@@ -183,114 +190,249 @@ impl<T: Dist > UnsafeArray<T> {
                             )
                         }
                         else {
-                            self.inner.mem_region.get(
+                            self.inner.mem_region.get_unchecked(
                                 pe,
                                 offset,
                                 buf.sub_region(buf_index..(buf_index + len)),
                             )
                         }
                     },
-                    _ => {}
+                    ArrayOpCmd::PutAm => {
+                        let am = UnsafePutAm{
+                            array: unsafe { self.sub_array(dist_index..(dist_index+len)).as_base_inner::<u8>()},
+                            data:  unsafe {buf.sub_region(buf_index..(buf_index + len)).to_base::<u8>().into()},
+                            pe: self.inner.my_pe,
+                        };
+                        reqs.push(self.inner.team.exec_am_pe(pe, am)); 
+                    },
+                    ArrayOpCmd::GetAm => {
+                        let am = UnsafeBlockGetAm{
+                            array: unsafe { self.sub_array(dist_index..(dist_index+len)).as_base_inner::<u8>()},
+                            data:  unsafe {buf.sub_region(buf_index..(buf_index + len)).to_base::<u8>().into()},
+                            pe: pe,
+                        };
+                        reqs.push(self.inner.team.exec_am_local(am));
+                    }
                 }
 
                 buf_index += len;
                 dist_index += len;
             }
         }
+        reqs
+        
     }
+    // fn pe_subarrays(&self, index: usize, len: usize) -> Vec<(usize,UnsafeArray<T>)>{
+    //     let start_pe = let start_pe = (index as f64 / self.elem_per_pe).floor() as usize;
+    //     let end_pe = (((index +len) as f64) / self.elem_per_pe).ceil() as usize;
+    //     let mut pe_subarrays=vec![];
+    //     let mut dist_index = index;
+    //     for pe in start_pe..end_pe {
+    //         let num_elems_on_pe = (self.elem_per_pe * (pe + 1) as f64).round() as usize
+    //             - (self.elem_per_pe * pe as f64).round() as usize;
+    //         let pe_start_index = (self.elem_per_pe * pe as f64).round() as usize;    
+    //         let pe_offset = dist_index - pe_start_index;
+    //         let pe_len = std::cmp::min(num_elems_on_pe - offset, buf.len() - buf_index);
+    //         pe_subarrays.push((pe,self.sub_array(pe_offset..(pe_offset+pe_len))));
+    //     }
+    // }
+
+    // fn block_op<U: MyInto<LamellarArrayInput<T>>>(&self, op: ArrayOpCmd, index: usize, buf: U) {
+    //     //put: put data from buf into array
+    //     match buf.into(){
+    //         LocalMemRegion::
+    //     }
+    // }
 
     pub fn len(&self) -> usize {
         self.sub_array_size
     }
 
-    fn cyclic_op<U: MyInto<LamellarArrayInput<T>>>(&self, op: ArrayOpCmd, index: usize, buf: U){
+    fn cyclic_op<U: MyInto<LamellarArrayInput<T>>>(&self, op: ArrayOpCmd, index: usize, buf: U)  -> Vec<Box<dyn LamellarRequest<Output = ()> + Send + Sync>> {
         let buf = buf.my_into(&self.inner.team);
-        let my_pe = self.my_pe;
+        let my_pe = self.inner.my_pe;
         let num_pes = self.inner.team.num_pes();
         let num_elems_pe = buf.len() / num_pes + 1; //we add plus one to ensure we allocate enough space
         let mut overflow = 0;
         let start_pe = index % num_pes;
+        let mut reqs = vec![];
         match op {
             ArrayOpCmd::Put => {
-                let temp_array = self.inner.team.alloc_local_mem_region::<T>(num_elems_pe);
+                let temp_memreg = self.inner.team.alloc_local_mem_region::<T>(num_elems_pe);
                 for i in 0..std::cmp::min(buf.len(), num_pes) {
                     let mut k = 0;
                     let pe = (start_pe + i) % num_pes;
                     let offset = index / num_pes + overflow;
                     for j in (i..buf.len()).step_by(num_pes) {
-                        unsafe { temp_array.put(my_pe, k, buf.sub_region(j..=j)) };
+                        unsafe { temp_memreg.put(my_pe, k, buf.sub_region(j..=j)) };
                         k += 1;
                     }
                     self.inner
                         .mem_region
-                        .iput(pe, offset, temp_array.sub_region(0..k));
+                        .iput(pe, offset, temp_memreg.sub_region(0..k));
                     if pe + 1 == num_pes {
                         overflow += 1;
                     }
                 }
             }
             ArrayOpCmd::PutAm =>{
-                // let temp_array = self.inner.team.alloc_local_mem_region::<T>(num_elems_pe);
-            }
-            ArrayOpCmd::Get(immediate) => {
-                //optimize like we did for put...
-                for i in 0..buf.len() {
-                    unsafe {
-                        if immediate{
-                            self.inner.mem_region.iget(
-                                (index + i) % num_pes,
-                                (index + i) / num_pes,
-                                buf.sub_region(i..=i),
-                            )
-                        }
-                        else{
-                            self.inner.mem_region.get(
-                                (index + i) % num_pes,
-                                (index + i) / num_pes,
-                                buf.sub_region(i..=i),
-                            )
-                        }
+                
+                for i in 0..std::cmp::min(buf.len(), num_pes) {
+                    let temp_memreg = self.inner.team.alloc_local_mem_region::<T>(num_elems_pe);
+                    let mut k = 0;
+                    let pe = (start_pe + i) % num_pes;
+                    let offset = index / num_pes + overflow;
+                    for j in (i..buf.len()).step_by(num_pes) {
+                        unsafe { temp_memreg.put(my_pe, k, buf.sub_region(j..=j)) };
+                        k += 1;
+                    }
+                    let am = UnsafePutAm{
+                        array: unsafe{self.sub_array(offset..(offset+k)).as_base_inner::<u8>()},
+                        data:  temp_memreg.to_base::<u8>().into(),
+                        pe: self.inner.my_pe,
                     };
+                    reqs.push(self.inner.team.exec_am_pe(pe, am)); 
+                    if pe + 1 == num_pes {
+                        overflow += 1;
+                    }
                 }
             }
+            ArrayOpCmd::Get(immediate) => {
+                unsafe {
+                    if immediate{
+                        let temp_memreg = self.inner.team.alloc_local_mem_region::<T>(num_elems_pe);
+                        // let temp_buf: LamellarMemoryRegion<T> = buf.my_into(&self.inner.team);
+                        for i in 0..std::cmp::min(buf.len(), num_pes) {
+                            let pe = (start_pe + i) % num_pes;
+                            let offset = index/num_pes + overflow;
+                            let k = (buf.len()-i)/num_pes;
+                            self.inner.mem_region.iget(
+                                pe,
+                                offset,
+                                temp_memreg.sub_region(0..k)
+                            );
+                            // let mut k = 0;
+                            
+                            for (k,j) in (i..buf.len()).step_by(num_pes).enumerate() {
+                                buf.put(my_pe,j,temp_memreg.sub_region(k..=k));
+                            }
+                            if pe + 1 == num_pes {
+                                overflow += 1;
+                            }
+                        }
+                    }
+                    else{
+                        for i in 0..buf.len() {
+                            self.inner.mem_region.get_unchecked(
+                                (index + i) % num_pes,
+                                (index + i) / num_pes,
+                                buf.sub_region(i..=i),
+                            )
+                        }
+                    }
+                }
+            }            ,
+            ArrayOpCmd::GetAm => {
+                for i in 0..std::cmp::min(buf.len(), num_pes) {
+                    let temp_memreg = self.inner.team.alloc_local_mem_region::<T>(num_elems_pe);
+                    let pe = (start_pe + i) % num_pes;
+                    let offset = index/num_pes + overflow;
+                    let k = (buf.len()-i)/num_pes;
+                    let am = UnsafeCyclicGetAm{
+                        array: unsafe {self.clone().as_base_inner::<u8>()},
+                        data: unsafe {buf.clone().to_base::<u8>()},
+                        temp_data:  temp_memreg.sub_region(0..k).to_base::<u8>().into(),
+                        i: i,
+                        pe: pe,
+                        my_pe: self.inner.my_pe,
+                        num_pes: num_pes,
+                        offset: offset,
+                    };
+                    reqs.push(self.inner.team.exec_am_local(am));
+                    if pe + 1 == num_pes {
+                        overflow += 1;
+                    }
+                }
+                
+            },
             _ => {}
         }
+        reqs
     }
-    pub unsafe fn put_unchecked<U: MyInto<LamellarArrayInput<T>>+ LamellarRead>(&self, index: usize, buf: U) {
+    pub unsafe fn put_unchecked<U: MyInto<LamellarArrayInput<T>>>(&self, index: usize, buf: U) {
         match self.distribution {
-            Distribution::Block => self.block_op(ArrayOpCmd::Put, self.sub_array_offset + index, buf),
+            Distribution::Block => {self.block_op(ArrayOpCmd::Put, self.sub_array_offset + index, buf);},
             Distribution::Cyclic => {
-                self.cyclic_op(ArrayOpCmd::Put, self.sub_array_offset + index, buf)
+                self.cyclic_op(ArrayOpCmd::Put, self.sub_array_offset + index, buf);
             }
         }
     }
-    pub fn iput<'a, U>(&self, index: usize, buf: &'a U) 
+    pub fn iput< U>(&self, index: usize, buf: U) 
     where
-    U: 'a + MyInto<LamellarArrayInput<T>>+ LamellarRead, LamellarArrayInput<T>: MyFrom<&'a U>
+    U: MyInto<LamellarArrayInput<T>>
     {
         match self.distribution {
-            Distribution::Block => self.block_op(ArrayOpCmd::Put, self.sub_array_offset + index, buf),
+            Distribution::Block => {
+                for req in self.block_op(ArrayOpCmd::PutAm, self.sub_array_offset + index, buf){
+                    req.get();
+                }
+            },
             Distribution::Cyclic => {
-                self.cyclic_op(ArrayOpCmd::Put, self.sub_array_offset + index, buf)
+                for req in  self.cyclic_op(ArrayOpCmd::PutAm, self.sub_array_offset + index, buf){
+                    req.get();
+                }
             }
         }
     }
-    pub unsafe fn get_unchecked<U: MyInto<LamellarArrayInput<T>>+ LamellarWrite>(&self, index: usize, buf: U) {
+    pub fn put< U>(&self, index: usize, buf: U) 
+    where
+    U: MyInto<LamellarArrayInput<T>>{
         match self.distribution {
-            Distribution::Block => self.block_op(ArrayOpCmd::Get(false), self.sub_array_offset + index, buf),
+            Distribution::Block => {
+                self.block_op(ArrayOpCmd::PutAm, self.sub_array_offset + index, buf);
+            },
             Distribution::Cyclic => {
-                self.cyclic_op(ArrayOpCmd::Get(false), self.sub_array_offset + index, buf)
+                self.cyclic_op(ArrayOpCmd::Put, self.sub_array_offset + index, buf);
             }
         }
     }
-    pub fn iget<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(&self, index: usize, buf: U) {
+
+    pub unsafe fn  get_unchecked<U: MyInto<LamellarArrayInput<T>> >(&self, index: usize, buf: U) {
         match self.distribution {
-            Distribution::Block => self.block_op(ArrayOpCmd::Get(true), self.sub_array_offset + index, buf),
+            Distribution::Block => {self.block_op(ArrayOpCmd::Get(false), self.sub_array_offset + index, buf);},
             Distribution::Cyclic => {
-                self.cyclic_op(ArrayOpCmd::Get(true), self.sub_array_offset + index, buf)
+                self.cyclic_op(ArrayOpCmd::Get(false), self.sub_array_offset + index, buf);
             }
         }
     }
+    pub fn iget<U: MyInto<LamellarArrayInput<T>> >(&self, index: usize, buf: U) {
+        match self.distribution {
+            Distribution::Block => {
+                for req in self.block_op(ArrayOpCmd::Get(true), self.sub_array_offset + index, buf){
+                    req.get();
+                }
+            },
+            Distribution::Cyclic => {
+                for req in self.cyclic_op(ArrayOpCmd::Get(true), self.sub_array_offset + index, buf){
+                    req.get();
+                }
+            }
+        }
+    }
+
+    pub fn get< U>(&self, index: usize, buf: U) 
+    where
+    U: MyInto<LamellarArrayInput<T>>{
+        match self.distribution {
+            Distribution::Block => {
+                self.block_op(ArrayOpCmd::GetAm, self.sub_array_offset + index, buf);
+            },
+            Distribution::Cyclic => {
+                self.cyclic_op(ArrayOpCmd::GetAm, self.sub_array_offset + index, buf);
+            }
+        }
+    }
+
     pub fn iat(&self, index: usize) -> T {
         let buf: LocalMemoryRegion<T> = self.team().alloc_local_mem_region(1);
         self.iget(index, &buf);
@@ -322,7 +464,7 @@ impl<T: Dist > UnsafeArray<T> {
             );
         let index = self.sub_array_offset;
         let len = self.sub_array_size;
-        let my_pe = self.my_pe;
+        let my_pe = self.inner.my_pe;
         let num_pes = self.inner.team.num_pes();
         match self.distribution {
             Distribution::Block => {
@@ -372,7 +514,7 @@ impl<T: Dist > UnsafeArray<T> {
             elem_per_pe: elem_per_pe,
             sub_array_offset: u8_offset / std::mem::size_of::<B>(),
             sub_array_size: u8_sub_size / std::mem::size_of::<B>(),
-            my_pe: self.my_pe,
+            // my_pe: self.inner.my_pe,
             // typeid: self.typeid,
             phantom: PhantomData,
         }
@@ -393,7 +535,7 @@ impl<T: Dist > UnsafeArray<T> {
             elem_per_pe: elem_per_pe,
             sub_array_offset: u8_offset / std::mem::size_of::<B>(),
             sub_array_size: u8_sub_size / std::mem::size_of::<B>(),
-            my_pe: self.my_pe,
+            // my_pe: self.inner.my_pe,
             phantom: PhantomData,
         }
     }
@@ -447,7 +589,7 @@ impl<T: Dist > UnsafeArray<T> {
             elem_per_pe: self.elem_per_pe,
             sub_array_offset: self.sub_array_offset + start,
             sub_array_size: (end - start),
-            my_pe: self.my_pe,
+            // my_pe: self.inner.my_pe,
             // typeid: self.typeid,
             phantom: PhantomData,
         }
@@ -515,7 +657,7 @@ impl <T: Dist + serde::Serialize + serde::de::DeserializeOwned + 'static> Unsafe
 impl<T: Dist> DistIteratorLauncher for UnsafeArray<T> {
     fn global_index_from_local(&self, index: usize, chunk_size: usize) -> usize {
         // println!("global index cs:{:?}",chunk_size);
-        let my_pe = self.my_pe;
+        let my_pe = self.inner.my_pe;
         if chunk_size == 1 {
             match self.distribution {
                 Distribution::Block => {
@@ -632,7 +774,7 @@ impl<T: Dist> LamellarArray<T>
     for UnsafeArray<T>
 {
     fn my_pe(&self) -> usize{
-        self.my_pe
+        self.inner.my_pe
     }
     fn team(&self) -> Pin<Arc<LamellarTeamRT>>{
         self.team().clone()
@@ -710,19 +852,61 @@ impl<T: Dist> SubArray<T> for UnsafeArray<T> {
     }
 }
 
+#[lamellar_impl::AmLocalDataRT]
+struct UnsafeBlockGetAm{
+    array: UnsafeArray<u8>, //subarray of the indices we need to place data into
+    data: LamellarMemoryRegion<u8>, //change this to an enum which is a vector or localmemoryregion depending on data size
+    pe: usize,
+    
+}
+
+#[lamellar_impl::rt_am_local]
+impl LamellarAm for UnsafeBlockGetAm{
+    fn exec(self) {
+        self.array.inner.mem_region.iget(self.pe,0,self.data.clone());
+    }
+}
+
+#[lamellar_impl::AmLocalDataRT]
+struct UnsafeCyclicGetAm{
+    array: UnsafeArray<u8>, //subarray of the indices we need to place data into
+    data: LamellarMemoryRegion<u8>, //change this to an enum which is a vector or localmemoryregion depending on data size
+    temp_data: LamellarMemoryRegion<u8>,
+    i: usize,
+    pe: usize,
+    my_pe: usize,
+    num_pes: usize,
+    offset: usize,    
+}
+
+#[lamellar_impl::rt_am_local]
+impl LamellarAm for UnsafeCyclicGetAm{
+    fn exec(self) {
+        self.array.inner.mem_region.iget(
+            self.pe,
+            self.offset,
+            self.temp_data.clone(),
+        );
+        for (k,j) in (self.i..self.temp_data.len()).step_by(self.num_pes).enumerate() {
+            unsafe {self.data.put(self.my_pe,j,self.temp_data.sub_region(k..=k))};
+        }
+    }
+}
+
+
 #[lamellar_impl::AmDataRT]
 struct UnsafePutAm{
-    array: UnsafeArray<u8>,
+    array: UnsafeArray<u8>, //subarray of the indices we need to place data into
+    data: LamellarMemoryRegion<u8>, //change this to an enum which is a vector or localmemoryregion depending on data size
     pe: usize,
-    buf_addr: usize,
-    buf_len: usize,
-    index: usize, 
 }
 
 #[lamellar_impl::rt_am]
 impl LamellarAm for UnsafePutAm{
     fn exec(self) {
-        unsafe {self.array.mem_region().fill_from_remote_addr::<u8>(self.pe,self.index,self.buf_addr,self.buf_len)};
+
+        // println!("{:?} {:?} {:?} {:?}",self.array.size, self.array.elem_per_pe,self.array.sub_array_offset,self.array.sub_array_size);
+        unsafe {self.data.iget_slice(self.pe,0,self.array.local_as_mut_slice())};
     }
 }
 
@@ -811,7 +995,7 @@ impl<T: Dist + std::fmt::Debug> ArrayPrint<T> for UnsafeArray<T> {
         self.inner.team.barrier(); //TODO: have barrier accept a string so we can print where we are stalling.
         for pe in 0..self.inner.team.num_pes() {
             self.inner.team.barrier();
-            if self.my_pe == pe {
+            if self.inner.my_pe == pe {
                 println!("[pe {:?} data] {:?}", pe, unsafe {self.local_as_slice()});
             }
             std::thread::sleep(std::time::Duration::from_millis(500));

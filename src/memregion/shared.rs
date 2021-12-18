@@ -87,8 +87,11 @@ impl<T: Dist> SharedMemoryRegion<T> {
     pub unsafe fn put_all<U: Into<LamellarMemoryRegion<T>>>(&self, index: usize, data: U) {
         MemoryRegionRDMA::<T>::put_all(self, index, data);
     }
-    pub unsafe fn get<U: Into<LamellarMemoryRegion<T>>>(&self, pe: usize, index: usize, data: U) {
-        MemoryRegionRDMA::<T>::get(self, pe, index, data);
+    pub unsafe fn get_unchecked<U: Into<LamellarMemoryRegion<T>>>(&self, pe: usize, index: usize, data: U) {
+        MemoryRegionRDMA::<T>::get_unchecked(self, pe, index, data);
+    }
+    pub fn iget<U: Into<LamellarMemoryRegion<T>>>(&self, pe: usize, index: usize, data: U) {
+        MemoryRegionRDMA::<T>::iget(self, pe, index, data);
     }
     pub fn sub_region<R: std::ops::RangeBounds<usize>>(&self, range: R) -> LamellarMemoryRegion<T> {
         SubRegion::<T>::sub_region(self, range)
@@ -213,14 +216,20 @@ impl<T: Dist> MemoryRegionRDMA<T> for SharedMemoryRegion<T> {
     unsafe fn put_all<U: Into<LamellarMemoryRegion<T>>>(&self, index: usize, data: U) {
         self.mr.put_all(self.sub_region_offset + index, data);
     }
-    unsafe fn get<U: Into<LamellarMemoryRegion<T>>>(&self, pe: usize, index: usize, data: U) {
-        self.mr.get(pe, self.sub_region_offset + index, data);
+    unsafe fn get_unchecked<U: Into<LamellarMemoryRegion<T>>>(&self, pe: usize, index: usize, data: U) {
+        self.mr.get_unchecked(pe, self.sub_region_offset + index, data);
+    }
+    fn iget<U: Into<LamellarMemoryRegion<T>>>(&self, pe: usize, index: usize, data: U) {
+        self.mr.iget(pe, self.sub_region_offset + index, data);
     }
 }
 
 impl<T: Dist> RTMemoryRegionRDMA<T> for SharedMemoryRegion<T> {
     unsafe fn put_slice(&self, pe: usize, index: usize, data: &[T]) {
         self.mr.put_slice(pe, self.sub_region_offset + index, data)
+    }
+    unsafe fn iget_slice(&self, pe: usize, index: usize, data: &mut [T]) {
+        self.mr.iget_slice(pe, self.sub_region_offset + index, data)
     }
 }
 

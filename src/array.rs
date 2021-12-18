@@ -65,6 +65,7 @@ pub enum ArrayOpCmd {
     Put,
     PutAm,
     Get(bool), //bool true == immediate, false = async
+    GetAm,
 }
 
 pub trait ArrayOp {} //essentially a marker trait than signifys a type has been registered for distributed ArrayOps
@@ -87,15 +88,17 @@ pub trait ArrayAdd<T: Dist + std::ops::AddAssign> {
     fn local_add(&self, index: usize, val: T); 
 }
 
-#[enum_dispatch(RegisteredMemoryRegion<T>, SubRegion<T>, MyFrom<T>)]
+#[enum_dispatch(RegisteredMemoryRegion<T>, SubRegion<T>, MyFrom<T>,MemoryRegionRDMA<T>,AsBase)]
 #[derive(Clone)]
 pub enum LamellarArrayInput<T: Dist> {
     LamellarMemRegion(LamellarMemoryRegion<T>),
-    SharedMemRegion(SharedMemoryRegion<T>),
-    LocalMemRegion(LocalMemoryRegion<T>),
+    SharedMemRegion(SharedMemoryRegion<T>), //when used as input/output we are only using the local data 
+    LocalMemRegion(LocalMemoryRegion<T>), 
     // Unsafe(UnsafeArray<T>),
     // Vec(Vec<T>),
 }
+
+
 
 pub trait LamellarWrite {}
 pub trait LamellarRead {}
