@@ -17,9 +17,9 @@ use crate::LamellarTeamRT;
 use crate::LocalMemoryRegion;
 
 use std::marker::PhantomData;
+use std::pin::Pin;
 use std::ptr::NonNull;
 use std::sync::Arc;
-use std::pin::Pin;
 
 pub trait SerialIterator {
     type Item;
@@ -94,7 +94,7 @@ impl<'a, T: Dist, A: LamellarArrayRead<T>> LamellarArrayIter<'a, T, A> {
         buf_size: usize,
     ) -> LamellarArrayIter<'a, T, A> {
         let buf_0 = team.alloc_local_mem_region(buf_size);
-        array.iget(0,&buf_0);
+        array.iget(0, &buf_0);
         let ptr = NonNull::new(buf_0.as_mut_ptr().unwrap()).unwrap();
         let iter = LamellarArrayIter {
             array: array,
@@ -106,7 +106,7 @@ impl<'a, T: Dist, A: LamellarArrayRead<T>> LamellarArrayIter<'a, T, A> {
             _marker: PhantomData,
         };
         // iter.fill_buffer(0);
-        
+
         iter
     }
     // fn fill_buffer(&self, index: usize) {
@@ -150,9 +150,7 @@ impl<'a, T: Dist, A: LamellarArrayRead<T>> LamellarArrayIter<'a, T, A> {
     // }
 }
 
-impl<'a, T: Dist, A: LamellarArrayRead<T> + Clone> SerialIterator
-    for LamellarArrayIter<'a, T, A>
-{
+impl<'a, T: Dist, A: LamellarArrayRead<T> + Clone> SerialIterator for LamellarArrayIter<'a, T, A> {
     type ElemType = T;
     type Item = &'a T;
     type Array = A;
@@ -162,7 +160,7 @@ impl<'a, T: Dist, A: LamellarArrayRead<T> + Clone> SerialIterator
                 //need to get new data
                 self.buf_index = 0;
                 // self.fill_buffer(self.index);
-                self.array.iget(self.index,&self.buf_0);
+                self.array.iget(self.index, &self.buf_0);
             }
             // self.spin_for_valid(self.buf_index);
             self.index += 1;
@@ -182,7 +180,7 @@ impl<'a, T: Dist, A: LamellarArrayRead<T> + Clone> SerialIterator
         self.index += count;
         self.buf_index = 0;
         // self.fill_buffer(0);
-        self.array.iget(self.index,&self.buf_0);
+        self.array.iget(self.index, &self.buf_0);
     }
     fn array(&self) -> Self::Array {
         self.array.clone()

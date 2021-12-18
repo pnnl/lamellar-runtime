@@ -32,7 +32,7 @@ where
         chunks
     }
 
-    fn get_buffer(&self, val: u32,size: usize) -> LocalMemoryRegion<I::ElemType>{
+    fn get_buffer(&self, val: u32, size: usize) -> LocalMemoryRegion<I::ElemType> {
         let mem_region: LocalMemoryRegion<I::ElemType> =
             self.array().team().alloc_local_mem_region(size);
         let buf_u8 = mem_region.clone().to_base::<u32>();
@@ -41,10 +41,10 @@ where
         for i in 0..buf_slice.len() {
             buf_slice[i] = val;
         }
-        self.array().iget(self.index,&mem_region);
-    // }
+        self.array().iget(self.index, &mem_region);
+        // }
 
-    // fn spin_for_valid(&self, val: u32, buf: &LocalMemoryRegion<I::ElemType>) {
+        // fn spin_for_valid(&self, val: u32, buf: &LocalMemoryRegion<I::ElemType>) {
         // let buf_0_temp = self.mem_region.clone().to_base::<u8>();
         // let buf_0 = buf_0_temp.as_slice().unwrap();
         // let buf_1_temp = buf.clone().to_base::<u32>();
@@ -90,8 +90,8 @@ where
             let size = std::cmp::min(self.chunk_size, array.len() - self.index);
             // self.fill_buffer(0, &self.mem_region.sub_region(..size));
             // println!("getting {:?} {:?}",self.index,self.chunk_size);
-            
-            let mem_region = self.get_buffer(101010101,size);
+
+            let mem_region = self.get_buffer(101010101, size);
 
             // self.spin_for_valid(101010101, &mem_region);
             self.index += size;

@@ -6,7 +6,7 @@
 /// and reduces the need to copy + serialize/deserialize larges amounts
 /// of data (on the critical path)
 /// --------------------------------------------------------------------
-use lamellar::{ActiveMessaging, RemoteMemoryRegion, LocalMemoryRegion};
+use lamellar::{ActiveMessaging, LocalMemoryRegion, RemoteMemoryRegion};
 use std::time::Instant;
 
 const ARRAY_LEN: usize = 1 * 1024 * 1024 * 1024;

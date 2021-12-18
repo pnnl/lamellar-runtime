@@ -10,9 +10,9 @@ use std::sync::atomic::{AtomicU8, AtomicUsize, Ordering};
 use std::sync::Arc;
 
 use crate::lamellae::{AllocationType, Backend, LamellaeComm, LamellaeRDMA};
+use crate::lamellar_team::{IntoLamellarTeam, LamellarTeamRT};
 use crate::lamellar_world::LAMELLAES;
 use crate::IdError;
-use crate::lamellar_team::{LamellarTeamRT, IntoLamellarTeam};
 
 pub(crate) mod local_rw_darc;
 use local_rw_darc::LocalRwDarc;
@@ -30,7 +30,6 @@ pub(crate) enum DarcMode {
     UnsafeArray,
     ReadOnlyArray,
     LocalOnlyArray,
-    OneSided,
 }
 
 #[lamellar_impl::AmDataRT(Debug)]
@@ -90,10 +89,10 @@ impl<'de, T: 'static> Deserialize<'de> for Darc<T> {
 }
 
 impl<T> crate::DarcSerde for Darc<T> {
-    fn ser(&self, num_pes: usize, cur_pe: Result<usize, IdError>) {
+    fn ser(&self, num_pes: usize, _cur_pe: Result<usize, IdError>) {
         // match cur_pe {
         //     Ok(cur_pe) => {
-                self.serialize_update_cnts(num_pes, 0 /*cur_pe*/);
+        self.serialize_update_cnts(num_pes, 0 /*cur_pe*/);
         //     }
         //     Err(err) => {
         //         panic!("can only access darcs within team members ({:?})", err);
@@ -336,7 +335,7 @@ impl<T> Darc<T> {
         // let temp_team = team_rt.clone();
         let team_ptr = unsafe {
             let pinned_team = Pin::into_inner_unchecked(team_rt.clone());
-             Arc::into_raw(pinned_team)
+            Arc::into_raw(pinned_team)
         };
         let darc_temp = DarcInner {
             my_pe: my_pe,
@@ -364,7 +363,7 @@ impl<T> Darc<T> {
         // d.print();
         team_rt.barrier();
         Ok(d)
-    }   
+    }
 
     pub(crate) fn block_on_outstanding(&self, state: DarcMode) {
         self.inner().block_on_outstanding(state);

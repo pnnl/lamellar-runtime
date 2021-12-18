@@ -5,7 +5,7 @@
 /// a remote pes or put data into a remote pes. In the example,
 /// the handles are used on remote pes to access data on the PE which launched the AM
 ///----------------------------------------------------------------
-use lamellar::{ActiveMessaging, RemoteMemoryRegion, SharedMemoryRegion, LocalMemoryRegion};
+use lamellar::{ActiveMessaging, LocalMemoryRegion, RemoteMemoryRegion, SharedMemoryRegion};
 
 const ARRAY_LEN: usize = 1;
 
@@ -56,7 +56,11 @@ impl LamellarAM for RdmaAM {
 #[lamellar::am]
 impl LamellarAM for RdmaLocalMRAM {
     fn exec(&self) {
-        println!("\t in RdmaAM on pe {:?}, originating from pe {:?}",lamellar::current_pe, self.orig_pe);
+        println!(
+            "\t in RdmaAM on pe {:?}, originating from pe {:?}",
+            lamellar::current_pe,
+            self.orig_pe
+        );
 
         //get the original nodes data
         let local = lamellar::world.alloc_local_mem_region::<u8>(ARRAY_LEN);
@@ -70,7 +74,12 @@ impl LamellarAM for RdmaLocalMRAM {
         }
 
         let my_index = self.index * lamellar::num_pes + lamellar::current_pe;
-        println!("pe: {:?} updating index {:?} on pe  {:?}", lamellar::current_pe, my_index, self.orig_pe);
+        println!(
+            "pe: {:?} updating index {:?} on pe  {:?}",
+            lamellar::current_pe,
+            my_index,
+            self.orig_pe
+        );
 
         //update an element on the original node
         local_slice[0] = lamellar::current_pe as u8;

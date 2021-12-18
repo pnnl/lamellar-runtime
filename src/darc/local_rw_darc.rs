@@ -7,9 +7,9 @@ use std::sync::atomic::Ordering;
 use crate::darc::global_rw_darc::{DistRwLock, GlobalRwDarc};
 use crate::darc::{Darc, DarcInner, DarcMode, __NetworkDarc};
 use crate::lamellae::{LamellaeComm, LamellaeRDMA};
+use crate::lamellar_team::IntoLamellarTeam;
 use crate::lamellar_world::LAMELLAES;
 use crate::IdError;
-use crate::lamellar_team::IntoLamellarTeam;
 
 #[derive(serde::Serialize, serde::Deserialize, Debug)]
 pub struct LocalRwDarc<T: 'static> {
@@ -97,15 +97,11 @@ impl<T> LocalRwDarc<T> {
 impl<T> LocalRwDarc<T> {
     pub fn new<U: Into<IntoLamellarTeam>>(team: U, item: T) -> Result<LocalRwDarc<T>, IdError> {
         Ok(LocalRwDarc {
-            darc: Darc::try_new(
-                team,
-                RwLock::new(Box::new(item)),
-                DarcMode::LocalRw,
-            )?,
+            darc: Darc::try_new(team, RwLock::new(Box::new(item)), DarcMode::LocalRw)?,
         })
     }
 
-    pub fn try_new<U: Into<IntoLamellarTeam>>(team:U, item: T) -> Result<LocalRwDarc<T>, IdError> {
+    pub fn try_new<U: Into<IntoLamellarTeam>>(team: U, item: T) -> Result<LocalRwDarc<T>, IdError> {
         Ok(LocalRwDarc {
             darc: Darc::try_new(team, RwLock::new(Box::new(item)), DarcMode::LocalRw)?,
         })

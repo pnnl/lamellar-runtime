@@ -1,4 +1,4 @@
-use crate::active_messaging::{LamellarAny,AmDist};
+use crate::active_messaging::{AmDist, LamellarAny};
 use crate::lamellae::{Des, SerializedData};
 use crate::lamellar_arch::LamellarArchRT;
 use crate::lamellar_team::LamellarTeamRT;
@@ -6,9 +6,9 @@ use async_trait::async_trait;
 use crossbeam::utils::CachePadded;
 use lamellar_prof::*;
 use log::trace;
+use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
-use std::pin::Pin;
 
 static CUR_REQ_ID: AtomicUsize = AtomicUsize::new(0);
 pub(crate) enum InternalResult {
@@ -55,7 +55,7 @@ pub(crate) enum AmType {
 }
 
 //#[prof]
-impl<T: AmDist+ 'static> LamellarRequestHandle<T> {
+impl<T: AmDist + 'static> LamellarRequestHandle<T> {
     pub(crate) fn new<'a>(
         num_pes: usize,
         am_type: AmType,

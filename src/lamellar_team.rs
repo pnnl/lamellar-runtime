@@ -16,14 +16,14 @@ use log::trace;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 // use std::any;
+use core::pin::Pin;
 use lamellar_prof::*;
 use parking_lot::RwLock;
 use std::collections::HashMap;
+use std::marker::PhantomPinned;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Weak};
 use std::time::{Duration, Instant};
-use core::pin::Pin;
-use std::marker::PhantomPinned;
 
 // to manage team lifetimes properly we need a seperate user facing handle that contains a strong link to the inner team.
 // this outer handle has a lifetime completely tied to whatever the user wants
@@ -227,7 +227,6 @@ impl RemoteMemoryRegion for Arc<LamellarTeam> {
     }
 }
 
-
 pub struct IntoLamellarTeam {
     pub(crate) team: Pin<Arc<LamellarTeamRT>>,
 }
@@ -261,36 +260,33 @@ impl From<LamellarWorld> for IntoLamellarTeam {
     }
 }
 
-#[derive(serde::Serialize,serde::Deserialize)]
-pub (crate) struct LamellarTeamRemotePtr{
-    pub (crate) addr: usize,
-    pub (crate) pe: usize,
-    pub (crate) backend: crate::Backend,
+#[derive(serde::Serialize, serde::Deserialize)]
+pub(crate) struct LamellarTeamRemotePtr {
+    pub(crate) addr: usize,
+    pub(crate) pe: usize,
+    pub(crate) backend: crate::Backend,
 }
 
-impl From<LamellarTeamRemotePtr> for Pin<Arc<LamellarTeamRT>>{
-    fn from(remote_ptr: LamellarTeamRemotePtr) -> Self{
+impl From<LamellarTeamRemotePtr> for Pin<Arc<LamellarTeamRT>> {
+    fn from(remote_ptr: LamellarTeamRemotePtr) -> Self {
         let lamellae = if let Some(lamellae) = crate::LAMELLAES.read().get(&remote_ptr.backend) {
             lamellae.clone()
-        }
-        else {
+        } else {
             panic!("unexepected lamellae backend {:?}", &remote_ptr.backend);
         };
-        let local_team_addr = lamellae.local_addr(remote_ptr.pe,remote_ptr.addr);
-        let team_ptr = (local_team_addr as *mut (*const LamellarTeamRT));
-        
+        let local_team_addr = lamellae.local_addr(remote_ptr.pe, remote_ptr.addr);
+        let team_ptr = local_team_addr as *mut *const LamellarTeamRT;
+
         unsafe {
-            Arc::increment_strong_count(*team_ptr);            
+            Arc::increment_strong_count(*team_ptr);
             Pin::new_unchecked(Arc::from_raw(*team_ptr))
         }
     }
 }
 
-
-
-impl From<Pin<Arc<LamellarTeamRT>>> for LamellarTeamRemotePtr{
-    fn from(team: Pin<Arc<LamellarTeamRT>>) -> Self{
-        LamellarTeamRemotePtr{
+impl From<Pin<Arc<LamellarTeamRT>>> for LamellarTeamRemotePtr {
+    fn from(team: Pin<Arc<LamellarTeamRT>>) -> Self {
+        LamellarTeamRemotePtr {
             addr: team.remote_ptr_addr,
             pe: team.world_pe,
             backend: team.lamellae.backend(),
@@ -318,31 +314,9 @@ pub struct LamellarTeamRT {
     sub_team_id_cnt: AtomicUsize,
     barrier: Barrier,
     dropped: MemoryRegion<usize>,
-    pub(crate) remote_ptr_addr:  usize,
+    pub(crate) remote_ptr_addr: usize,
     pub(crate) team_hash: u64,
     _pin: std::marker::PhantomPinned,
-}
-
-pub(crate) mod lamellar_team_serde{
-    use std::pin::Pin;
-    use std::sync::Arc;
-    use serde::{Serialize,Deserialize};
-
-    pub(crate) fn serialize<S>(team: &Pin<Arc<super::LamellarTeamRT>>, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        super::LamellarTeamRemotePtr::from(team.clone()).serialize(serializer)
-    }
-
-    pub(crate) fn deserialize<'de,D>(deserializer: D) -> Result<Pin<Arc<super::LamellarTeamRT>>, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        let remote_team_ptr: super::LamellarTeamRemotePtr = serde::Deserialize::deserialize(deserializer)?;
-        Ok(remote_team_ptr.into())
-    }
-
 }
 
 impl std::fmt::Debug for LamellarTeamRT {
@@ -362,11 +336,6 @@ impl Hash for LamellarTeamRT {
     }
 }
 
-
-// We should consider placing the LamellarTeamRT instances into registered memory
-// we could then probably get rid of the teams hashmap, because we can directly pass 
-// the pointer to the team in the serialized data. Or actually maybe we just make the hash
-// a pointer in regisetered memory that points to the team in normal memory (on each PE)
 //#[prof]
 impl LamellarTeamRT {
     pub(crate) fn new(
@@ -412,7 +381,9 @@ impl LamellarTeamRT {
                 scheduler.clone(),
             ),
             dropped: MemoryRegion::new(num_pes, lamellae.clone(), alloc.clone()),
-            remote_ptr_addr: lamellae.alloc(std::mem::size_of::<*const  LamellarTeamRT>(), alloc).unwrap(),
+            remote_ptr_addr: lamellae
+                .alloc(std::mem::size_of::<*const LamellarTeamRT>(), alloc)
+                .unwrap(),
             _pin: PhantomPinned,
         };
 
@@ -429,18 +400,20 @@ impl LamellarTeamRT {
         // let team_ptr = &team as *const Pin<Arc<LamellarTeamRT>>;
         // unsafe {
         //     std::ptr::copy_nonoverlapping(&team_ptr, team.remote_ptr_addr as *mut (*const Pin<Arc<LamellarTeamRT>>), 1);
-           
+
         // }
         unsafe {
             let pinned_team = Pin::into_inner_unchecked(team.clone()).clone();
             let team_ptr = Arc::into_raw(pinned_team);
             // std::ptr::copy_nonoverlapping(&(&team as *const Pin<Arc<LamellarTeamRT>>), team.remote_ptr_addr as *mut (*const Pin<Arc<LamellarTeamRT>>), 1);
-            std::ptr::copy_nonoverlapping(&team_ptr, team.remote_ptr_addr as *mut (*const LamellarTeamRT), 1);
+            std::ptr::copy_nonoverlapping(
+                &team_ptr,
+                team.remote_ptr_addr as *mut *const LamellarTeamRT,
+                1,
+            );
             // println!{"{:?} {:?} {:?} {:?}",&team_ptr,team_ptr, (team.remote_ptr_addr as *mut (*const LamellarTeamRT)).as_ref(), (*(team.remote_ptr_addr as *mut (*const LamellarTeamRT))).as_ref()};
-
         }
-        
-        
+
         team.barrier.barrier();
         team
     }
@@ -513,8 +486,11 @@ impl LamellarTeamRT {
             parent.barrier();
             // ------ ensure team is being constructed synchronously and in order across all pes in parent ------ //
             let parent_alloc = AllocationType::Sub(parent.arch.team_iter().collect::<Vec<usize>>());
-            let temp_buf =
-                MemoryRegion::<usize>::new(parent.num_pes, parent.lamellae.clone(), parent_alloc.clone() );
+            let temp_buf = MemoryRegion::<usize>::new(
+                parent.num_pes,
+                parent.lamellae.clone(),
+                parent_alloc.clone(),
+            );
 
             let temp_array = MemoryRegion::<usize>::new(
                 parent.num_pes,
@@ -540,8 +516,11 @@ impl LamellarTeamRT {
                 }
             }
             parent.check_hash_vals(hash as usize, &temp_buf, timeout);
-            
-            let remote_ptr_addr = parent.lamellae.alloc(std::mem::size_of::<*const LamellarTeamRT>(), parent_alloc).unwrap();
+
+            let remote_ptr_addr = parent
+                .lamellae
+                .alloc(std::mem::size_of::<*const LamellarTeamRT>(), parent_alloc)
+                .unwrap();
             // ------------------------------------------------------------------------------------------------- //
 
             for e in temp_array_slice.iter_mut() {
@@ -574,7 +553,7 @@ impl LamellarTeamRT {
                 ),
                 team_hash: hash,
                 dropped: temp_buf,
-                remote_ptr_addr:  remote_ptr_addr,
+                remote_ptr_addr: remote_ptr_addr,
                 _pin: PhantomPinned,
             };
             unsafe {
@@ -587,10 +566,13 @@ impl LamellarTeamRT {
                 let pinned_team = Pin::into_inner_unchecked(team.clone()).clone();
                 let team_ptr = Arc::into_raw(pinned_team);
                 // std::ptr::copy_nonoverlapping(&(&team as *const Pin<Arc<LamellarTeamRT>>), team.remote_ptr_addr as *mut (*const Pin<Arc<LamellarTeamRT>>), 1);
-                std::ptr::copy_nonoverlapping(&team_ptr, team.remote_ptr_addr as *mut (*const LamellarTeamRT), 1);
-
+                std::ptr::copy_nonoverlapping(
+                    &team_ptr,
+                    team.remote_ptr_addr as *mut *const LamellarTeamRT,
+                    1,
+                );
             }
-            
+
             let mut sub_teams = parent.sub_teams.write();
             sub_teams.insert(team.id, team.clone());
             parent.barrier();
@@ -748,7 +730,7 @@ impl LamellarTeamRT {
     }
 
     pub fn exec_am_all<F>(
-        self:  &Pin<Arc<LamellarTeamRT>>,
+        self: &Pin<Arc<LamellarTeamRT>>,
         am: F,
     ) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync>
     where
@@ -758,7 +740,7 @@ impl LamellarTeamRT {
     }
 
     pub(crate) fn exec_am_all_tg<F>(
-        self:  &Pin<Arc<LamellarTeamRT>>,
+        self: &Pin<Arc<LamellarTeamRT>>,
         am: F,
         task_group_cnts: Option<Arc<AMCounters>>,
     ) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync>
@@ -808,7 +790,7 @@ impl LamellarTeamRT {
     }
 
     pub fn exec_am_pe<F>(
-        self:  &Pin<Arc<LamellarTeamRT>>,
+        self: &Pin<Arc<LamellarTeamRT>>,
         pe: usize,
         am: F,
     ) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync>
@@ -818,7 +800,7 @@ impl LamellarTeamRT {
         self.exec_am_pe_tg(pe, am, None)
     }
     pub(crate) fn exec_am_pe_tg<F>(
-        self:  &Pin<Arc<LamellarTeamRT>>,
+        self: &Pin<Arc<LamellarTeamRT>>,
         pe: usize,
         am: F,
         task_group_cnts: Option<Arc<AMCounters>>,
@@ -879,7 +861,7 @@ impl LamellarTeamRT {
     }
 
     pub(crate) fn exec_arc_am_pe<F>(
-        self:  &Pin<Arc<LamellarTeamRT>>,
+        self: &Pin<Arc<LamellarTeamRT>>,
         pe: usize,
         am: LamellarArcAm,
         task_group_cnts: Option<Arc<AMCounters>>,
@@ -939,7 +921,7 @@ impl LamellarTeamRT {
     }
 
     pub fn exec_am_local<F>(
-        self:  &Pin<Arc<LamellarTeamRT>>,
+        self: &Pin<Arc<LamellarTeamRT>>,
         am: F,
     ) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync>
     where
@@ -1032,10 +1014,11 @@ impl LamellarTeamRT {
     /// * `size` - number of elements of T to allocate a memory region for -- (not size in bytes)
     ///
     pub(crate) fn alloc_local_mem_region<T: Dist>(
-        self:  &Pin<Arc<LamellarTeamRT>>,
+        self: &Pin<Arc<LamellarTeamRT>>,
         size: usize,
     ) -> LocalMemoryRegion<T> {
-        let lmr: LocalMemoryRegion<T> = LocalMemoryRegion::new(size,self,self.lamellae.clone()).into();
+        let lmr: LocalMemoryRegion<T> =
+            LocalMemoryRegion::new(size, self, self.lamellae.clone()).into();
         lmr
     }
 }

@@ -8,9 +8,9 @@ use async_recursion::async_recursion;
 #[cfg(feature = "enable-prof")]
 use lamellar_prof::*;
 use log::trace;
+use std::pin::Pin;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
-use std::pin::Pin;
 
 // enum BatchAmId{
 const UNIT_ID: AmId = 0;
@@ -889,7 +889,7 @@ impl RegisteredActiveMessages {
         &self,
         ame: Arc<ActiveMessageEngine>,
         src: usize,
-        team_hash: u64,
+        _team_hash: u64,
         func_id: AmId,
         batch_id: usize,
         num_reqs: usize,
@@ -1162,7 +1162,12 @@ impl RegisteredActiveMessages {
         }
     }
 
-    fn process_batched_unit_return(&self, batch_id: usize, src: u16, team: Pin<Arc<LamellarTeamRT>>) {
+    fn process_batched_unit_return(
+        &self,
+        batch_id: usize,
+        src: u16,
+        team: Pin<Arc<LamellarTeamRT>>,
+    ) {
         // println!("processing returns {:?}",batch_id);
         let cnt = if let Some(reqs) = self.txed_ams.lock().get(&batch_id) {
             let reqs = reqs.lock();

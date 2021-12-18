@@ -1,12 +1,12 @@
+use crate::array::{LamellarRead, LamellarWrite};
 use crate::darc::Darc;
 use crate::lamellae::AllocationType;
 use crate::memregion::*;
-use crate::array::{LamellarWrite, LamellarRead,};
 use core::marker::PhantomData;
 #[cfg(feature = "enable-prof")]
 use lamellar_prof::*;
-use std::sync::Arc;
 use std::pin::Pin;
+use std::sync::Arc;
 
 use std::ops::Bound;
 
@@ -87,7 +87,12 @@ impl<T: Dist> SharedMemoryRegion<T> {
     pub unsafe fn put_all<U: Into<LamellarMemoryRegion<T>>>(&self, index: usize, data: U) {
         MemoryRegionRDMA::<T>::put_all(self, index, data);
     }
-    pub unsafe fn get_unchecked<U: Into<LamellarMemoryRegion<T>>>(&self, pe: usize, index: usize, data: U) {
+    pub unsafe fn get_unchecked<U: Into<LamellarMemoryRegion<T>>>(
+        &self,
+        pe: usize,
+        index: usize,
+        data: U,
+    ) {
         MemoryRegionRDMA::<T>::get_unchecked(self, pe, index, data);
     }
     pub fn iget<U: Into<LamellarMemoryRegion<T>>>(&self, pe: usize, index: usize, data: U) {
@@ -216,8 +221,14 @@ impl<T: Dist> MemoryRegionRDMA<T> for SharedMemoryRegion<T> {
     unsafe fn put_all<U: Into<LamellarMemoryRegion<T>>>(&self, index: usize, data: U) {
         self.mr.put_all(self.sub_region_offset + index, data);
     }
-    unsafe fn get_unchecked<U: Into<LamellarMemoryRegion<T>>>(&self, pe: usize, index: usize, data: U) {
-        self.mr.get_unchecked(pe, self.sub_region_offset + index, data);
+    unsafe fn get_unchecked<U: Into<LamellarMemoryRegion<T>>>(
+        &self,
+        pe: usize,
+        index: usize,
+        data: U,
+    ) {
+        self.mr
+            .get_unchecked(pe, self.sub_region_offset + index, data);
     }
     fn iget<U: Into<LamellarMemoryRegion<T>>>(&self, pe: usize, index: usize, data: U) {
         self.mr.iget(pe, self.sub_region_offset + index, data);

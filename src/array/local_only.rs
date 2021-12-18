@@ -1,17 +1,16 @@
 use crate::array::*;
-use crate::lamellar_team::{IntoLamellarTeam, LamellarTeamRT};
-use crate::memregion::{Dist};
 use crate::darc::DarcMode;
-use std::sync::Arc;
+use crate::lamellar_team::{IntoLamellarTeam, LamellarTeamRT};
+use crate::memregion::Dist;
 use std::marker::PhantomData;
-
+use std::sync::Arc;
 
 pub struct LocalOnlyArray<T: Dist + 'static> {
     pub(crate) array: UnsafeArray<T>,
     // actually we should just use a read write lock here to enforce mutability exclusitivity
-    pub(crate) _unsync: PhantomData<*const ()>,// because we allow mutable access to underlying slice but don't provide any protection to aquiring multiple mut slices
-                                   // we must make this not sync by default.
-                                   // either wrap the localonlyarray in a mutex/rwlock or use a localRwArray 
+    pub(crate) _unsync: PhantomData<*const ()>, // because we allow mutable access to underlying slice but don't provide any protection to aquiring multiple mut slices
+                                                // we must make this not sync by default.
+                                                // either wrap the localonlyarray in a mutex/rwlock or use a localRwArray
 }
 
 //#[prof]
@@ -21,9 +20,9 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Lo
         array_size: usize,
         distribution: Distribution,
     ) -> LocalOnlyArray<T> {
-        LocalOnlyArray{
-            array: UnsafeArray::new(team,array_size,distribution),
-            _unsync: PhantomData
+        LocalOnlyArray {
+            array: UnsafeArray::new(team, array_size, distribution),
+            _unsync: PhantomData,
         }
     }
     pub fn wait_all(&self) {
@@ -37,9 +36,9 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Lo
     }
 
     pub fn use_distribution(self, distribution: Distribution) -> Self {
-        LocalOnlyArray{
+        LocalOnlyArray {
             array: self.array.use_distribution(distribution),
-            _unsync: PhantomData
+            _unsync: PhantomData,
         }
     }
 
@@ -52,17 +51,15 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Lo
     }
 
     pub fn as_slice(&self) -> &[T] {
-        unsafe { self.array.local_as_mut_slice()}
+        unsafe { self.array.local_as_mut_slice() }
     }
     pub fn as_mut_slice(&mut self) -> &mut [T] {
-        unsafe {self.array.local_as_mut_slice()}
+        unsafe { self.array.local_as_mut_slice() }
     }
     pub unsafe fn to_base_inner<B: Dist + 'static>(self) -> LocalOnlyArray<B> {
-        
-
         LocalOnlyArray {
             array: self.array.to_base_inner(),
-            _unsync: PhantomData
+            _unsync: PhantomData,
         }
     }
 
@@ -77,53 +74,49 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Lo
 
     pub fn into_read_only(self) -> ReadOnlyArray<T> {
         self.array.block_on_outstanding(DarcMode::ReadOnlyArray);
-        ReadOnlyArray{
-            array: self.array
-        }
+        ReadOnlyArray { array: self.array }
     }
 }
 
-impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> private::LamellarArrayPrivate<T>
-    for LocalOnlyArray<T>
+impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static>
+    private::LamellarArrayPrivate<T> for LocalOnlyArray<T>
 {
-    
-    fn local_as_ptr(&self) -> *const T{
+    fn local_as_ptr(&self) -> *const T {
         self.local_as_mut_ptr()
     }
-    fn local_as_mut_ptr(&self) -> *mut T{
+    fn local_as_mut_ptr(&self) -> *mut T {
         self.local_as_mut_ptr()
     }
     fn pe_for_dist_index(&self, index: usize) -> usize {
         self.array.pe_for_dist_index(index)
     }
     fn pe_offset_for_dist_index(&self, pe: usize, index: usize) -> usize {
-        self.array.pe_offset_for_dist_index(pe,index)
+        self.array.pe_offset_for_dist_index(pe, index)
     }
 }
 
 impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> LamellarArray<T>
     for LocalOnlyArray<T>
 {
-    fn my_pe(&self) -> usize{
+    fn my_pe(&self) -> usize {
         self.array.my_pe()
     }
-    fn team(&self) -> Pin<Arc<LamellarTeamRT>>{
+    fn team(&self) -> Pin<Arc<LamellarTeamRT>> {
         self.array.team().clone()
     }
-    fn num_elems_local(&self) -> usize{
+    fn num_elems_local(&self) -> usize {
         self.num_elems_local()
     }
-    fn len(&self) -> usize{
+    fn len(&self) -> usize {
         self.len()
     }
-    fn barrier(&self){
+    fn barrier(&self) {
         self.barrier();
     }
-    fn wait_all(&self){
+    fn wait_all(&self) {
         self.array.wait_all()
         // println!("done in wait all {:?}",std::time::SystemTime::now());
     }
-    
 }
 
 impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + std::fmt::Debug + 'static>
@@ -133,4 +126,3 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + std::fmt::D
         self.array.print()
     }
 }
-

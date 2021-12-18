@@ -86,7 +86,7 @@ fn dft_lamellar(
     signal: SharedMemoryRegion<f64>,
     global_sig_len: usize,
     spectrum: SharedMemoryRegion<f64>,
-) -> f64{
+) -> f64 {
     let spectrum_slice = spectrum.as_slice().unwrap();
     let add_spec = world.alloc_shared_mem_region::<f64>(spectrum_slice.len());
 
@@ -135,28 +135,32 @@ fn dft_lamellar(
 fn dft_serial(signal: &[f64], spectrum: &mut [f64]) -> f64 {
     let timer = Instant::now();
     for (k, spec_bin) in spectrum.iter_mut().enumerate() {
-      let mut sum = 0f64;
-      for (i, &x) in signal.iter().enumerate() {
-        let angle = -1f64 * (i * k) as f64 * 2f64 * std::f64::consts::PI / signal.len() as f64;
-        let twiddle = angle * (angle.cos() + angle*angle.sin());
-        sum = sum + twiddle * x;
-      }
-      *spec_bin = sum;
+        let mut sum = 0f64;
+        for (i, &x) in signal.iter().enumerate() {
+            let angle = -1f64 * (i * k) as f64 * 2f64 * std::f64::consts::PI / signal.len() as f64;
+            let twiddle = angle * (angle.cos() + angle * angle.sin());
+            sum = sum + twiddle * x;
+        }
+        *spec_bin = sum;
     }
     timer.elapsed().as_secs_f64()
 }
 
 fn dft_rayon(signal: &[f64], spectrum: &mut [f64]) -> f64 {
     let timer = Instant::now();
-    spectrum.par_iter_mut().enumerate().for_each(|(k, spec_bin)| {
-      let mut sum = 0f64;
-      for (i, &x) in signal.iter().enumerate() {
-        let angle =-1f64 * (i * k) as f64 * 2f64 * std::f64::consts::PI / signal.len() as f64;
-        let twiddle = angle * (angle.cos() + angle * angle.sin());
-        sum = sum + twiddle * x;
-      }
-      *spec_bin = sum
-    });
+    spectrum
+        .par_iter_mut()
+        .enumerate()
+        .for_each(|(k, spec_bin)| {
+            let mut sum = 0f64;
+            for (i, &x) in signal.iter().enumerate() {
+                let angle =
+                    -1f64 * (i * k) as f64 * 2f64 * std::f64::consts::PI / signal.len() as f64;
+                let twiddle = angle * (angle.cos() + angle * angle.sin());
+                sum = sum + twiddle * x;
+            }
+            *spec_bin = sum
+        });
     timer.elapsed().as_secs_f64()
 }
 
@@ -166,37 +170,39 @@ fn dft_rayon(signal: &[f64], spectrum: &mut [f64]) -> f64 {
 // a lot of (needless) data transfer happens
 fn dft_lamellar_array(signal: UnsafeArray<f64>, spectrum: UnsafeArray<f64>) -> f64 {
     let timer = Instant::now();
-  let signal_clone = signal.clone();
-  spectrum.dist_iter_mut().enumerate().for_each(move |(k, spec_bin)| {
-    let mut sum = 0f64;
-    for (i, &x) in signal_clone.buffered_iter(1000).into_iter().enumerate() {
-      let angle = -1f64 * (i * k) as f64 * 2f64 * std::f64::consts::PI / signal_clone.len() as f64;
-      let twiddle = angle * (angle.cos() + angle * angle.sin());
-      sum = sum + twiddle * x;
-    }
-    *spec_bin = sum
-  });
-  spectrum.wait_all();
-  spectrum.barrier();
-  timer.elapsed().as_secs_f64()
-}
-
-
-fn dft_lamellar_array_swapped(signal: UnsafeArray<f64>, spectrum: UnsafeArray<f64>) -> f64{
-    let timer = Instant::now();
-    let signal_len = signal.len();
-    for (i , &x) in signal.ser_iter().into_iter().enumerate(){
-        spectrum
+    let signal_clone = signal.clone();
+    spectrum
         .dist_iter_mut()
         .enumerate()
         .for_each(move |(k, spec_bin)| {
-            let angle = -1f64 * (i * k) as f64 * 2f64 * std::f64::consts::PI
-                    / signal_len as f64;
-            let twiddle = angle * (angle.cos() + angle * angle.sin());
-            let _lock = LOCK.lock();
-            *spec_bin += twiddle*x;
+            let mut sum = 0f64;
+            for (i, &x) in signal_clone.buffered_iter(1000).into_iter().enumerate() {
+                let angle = -1f64 * (i * k) as f64 * 2f64 * std::f64::consts::PI
+                    / signal_clone.len() as f64;
+                let twiddle = angle * (angle.cos() + angle * angle.sin());
+                sum = sum + twiddle * x;
+            }
+            *spec_bin = sum
         });
-        
+    spectrum.wait_all();
+    spectrum.barrier();
+    timer.elapsed().as_secs_f64()
+}
+
+fn dft_lamellar_array_swapped(signal: UnsafeArray<f64>, spectrum: UnsafeArray<f64>) -> f64 {
+    let timer = Instant::now();
+    let signal_len = signal.len();
+    for (i, &x) in signal.ser_iter().into_iter().enumerate() {
+        spectrum
+            .dist_iter_mut()
+            .enumerate()
+            .for_each(move |(k, spec_bin)| {
+                let angle =
+                    -1f64 * (i * k) as f64 * 2f64 * std::f64::consts::PI / signal_len as f64;
+                let twiddle = angle * (angle.cos() + angle * angle.sin());
+                let _lock = LOCK.lock();
+                *spec_bin += twiddle * x;
+            });
     }
     spectrum.wait_all();
     spectrum.barrier();
@@ -206,25 +212,42 @@ fn dft_lamellar_array_swapped(signal: UnsafeArray<f64>, spectrum: UnsafeArray<f6
 // a more optimized version using lamellar arrays, and behaves similar to the manual active message implementation above
 // here we create "copied chunks" of the signal array, which are then passed and reused during each iteration of the spectrum loop.
 // in this case we only completely transfer the signal array one time
-fn dft_lamellar_array_opt(signal: UnsafeArray<f64>, spectrum: UnsafeArray<f64>, buf_size: usize) -> f64{
+fn dft_lamellar_array_opt(
+    signal: UnsafeArray<f64>,
+    spectrum: UnsafeArray<f64>,
+    buf_size: usize,
+) -> f64 {
     let timer = Instant::now();
-  let sig_len = signal.len();
-  signal.ser_iter().copied_chunks(buf_size).into_iter().enumerate().for_each(|(i, chunk)| {
-    let signal = chunk.clone();
-    spectrum.dist_iter_mut().enumerate().for_each(move |(k, spec_bin)| {
-      let mut sum = 0f64;
-      for (j, &x) in signal.iter().enumerate().map(|(j, x)| (j + i * buf_size, x)){
-        let angle = -1f64 * (j * k) as f64 * 2f64 * std::f64::consts::PI / sig_len as f64;
-        let twiddle = angle * (angle.cos() + angle * angle.sin());
-        sum = sum + twiddle * x;
-      }
-      let _lock = LOCK.lock();
-      *spec_bin += sum;
-    });
-  });
-  spectrum.wait_all();
-  spectrum.barrier();
-  timer.elapsed().as_secs_f64()
+    let sig_len = signal.len();
+    signal
+        .ser_iter()
+        .copied_chunks(buf_size)
+        .into_iter()
+        .enumerate()
+        .for_each(|(i, chunk)| {
+            let signal = chunk.clone();
+            spectrum
+                .dist_iter_mut()
+                .enumerate()
+                .for_each(move |(k, spec_bin)| {
+                    let mut sum = 0f64;
+                    for (j, &x) in signal
+                        .iter()
+                        .enumerate()
+                        .map(|(j, x)| (j + i * buf_size, x))
+                    {
+                        let angle =
+                            -1f64 * (j * k) as f64 * 2f64 * std::f64::consts::PI / sig_len as f64;
+                        let twiddle = angle * (angle.cos() + angle * angle.sin());
+                        sum = sum + twiddle * x;
+                    }
+                    let _lock = LOCK.lock();
+                    *spec_bin += sum;
+                });
+        });
+    spectrum.wait_all();
+    spectrum.barrier();
+    timer.elapsed().as_secs_f64()
 }
 
 fn main() {
@@ -247,13 +270,12 @@ fn main() {
 
     let mut rng = StdRng::seed_from_u64(10);
 
-    if !run_single_node{
-    
+    if !run_single_node {
         let world = lamellar::LamellarWorldBuilder::new().build();
         let my_pe = world.my_pe();
         let num_pes = world.num_pes();
         let global_len = num_pes * array_len;
-        
+
         println!("my_pe {:?} num_pes {:?}", my_pe, num_pes);
         let partial_sum = world.alloc_shared_mem_region::<f64>(num_pes);
         let partial_spectrum = world.alloc_shared_mem_region::<f64>(array_len);
@@ -264,7 +286,8 @@ fn main() {
 
         let full_spectrum_array =
             UnsafeArray::<f64>::new(world.team(), global_len, Distribution::Block);
-        let full_signal_array = UnsafeArray::<f64>::new(world.team(), global_len, Distribution::Block);
+        let full_signal_array =
+            UnsafeArray::<f64>::new(world.team(), global_len, Distribution::Block);
 
         unsafe {
             for i in full_signal.as_mut_slice().unwrap() {
@@ -295,8 +318,8 @@ fn main() {
         world.barrier();
         println!("starting");
 
-        let mut times = vec![vec![];3];
-        for i in 0..10{
+        let mut times = vec![vec![]; 3];
+        for i in 0..10 {
             // if my_pe == 0 {
             // println!("trial {:?}",i);
             // }
@@ -321,7 +344,10 @@ fn main() {
             full_spectrum_array.barrier();
 
             let timer = Instant::now();
-            times[1].push(dft_lamellar_array(full_signal_array.clone(), full_spectrum_array.clone()));
+            times[1].push(dft_lamellar_array(
+                full_signal_array.clone(),
+                full_spectrum_array.clone(),
+            ));
             let time = timer.elapsed().as_secs_f64();
             // if my_pe == 0 {
             //     println!(
@@ -363,7 +389,11 @@ fn main() {
             full_spectrum_array.wait_all();
             full_spectrum_array.barrier();
             let timer = Instant::now();
-            times[2].push(dft_lamellar_array_opt(full_signal_array.clone(), full_spectrum_array.clone(), 100));
+            times[2].push(dft_lamellar_array_opt(
+                full_signal_array.clone(),
+                full_spectrum_array.clone(),
+                100,
+            ));
             let time = timer.elapsed().as_secs_f64();
             // if my_pe == 0 {
             //     println!(
@@ -378,27 +408,32 @@ fn main() {
             // }
         }
         if my_pe == 0 {
-            println!("am time: {:?}",times[0].iter().sum::<f64>() / times[0].len() as f64);
-            println!("array time: {:?}",times[1].iter().sum::<f64>() / times[1].len() as f64);
-            println!("chunked time: {:?}",times[2].iter().sum::<f64>() / times[2].len() as f64);
+            println!(
+                "am time: {:?}",
+                times[0].iter().sum::<f64>() / times[0].len() as f64
+            );
+            println!(
+                "array time: {:?}",
+                times[1].iter().sum::<f64>() / times[1].len() as f64
+            );
+            println!(
+                "chunked time: {:?}",
+                times[2].iter().sum::<f64>() / times[2].len() as f64
+            );
         }
-    }
-    else{
-    //-----------------------------------------------------
-        let mut full_signal = vec![0.0;array_len];
-        let mut full_spectrum = vec![0.0;array_len];
+    } else {
+        //-----------------------------------------------------
+        let mut full_signal = vec![0.0; array_len];
+        let mut full_spectrum = vec![0.0; array_len];
         for i in full_signal.iter_mut() {
             *i = rng.gen_range(0.0, 1.0);
         }
 
-        let mut times = vec![vec![];2];
+        let mut times = vec![vec![]; 2];
         for i in 0..10 {
-            if i  == 0 {
-            // let timer = Instant::now();
-                times[0].push(dft_serial(
-                    &full_signal,
-                    &mut full_spectrum,
-                ));
+            if i == 0 {
+                // let timer = Instant::now();
+                times[0].push(dft_serial(&full_signal, &mut full_spectrum));
             }
             // let time = timer.elapsed().as_secs_f64();
             // println!(
@@ -407,10 +442,7 @@ fn main() {
             //     time
             // );
             let timer = Instant::now();
-            times[1].push(dft_rayon(
-                &full_signal,
-                &mut full_spectrum,
-            ));
+            times[1].push(dft_rayon(&full_signal, &mut full_spectrum));
             // let time = timer.elapsed().as_secs_f64();
             // println!(
             //     "rayon sum: {:?} time: {:?}",
@@ -418,9 +450,14 @@ fn main() {
             //     time
             // );
         }
-        println!("serial time: {:?}",times[0].iter().sum::<f64>() / times[0].len() as f64);
-        println!("rayon time: {:?}",times[1].iter().sum::<f64>() / times[1].len() as f64);
-    
+        println!(
+            "serial time: {:?}",
+            times[0].iter().sum::<f64>() / times[0].len() as f64
+        );
+        println!(
+            "rayon time: {:?}",
+            times[1].iter().sum::<f64>() / times[1].len() as f64
+        );
     }
     //-----------------------------------------------------
 }

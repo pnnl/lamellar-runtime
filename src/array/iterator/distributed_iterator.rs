@@ -14,7 +14,7 @@ use zip::*;
 
 use crate::memregion::Dist;
 // use crate::LamellarArray;
-use crate::array::{LamellarArray}; //, LamellarArrayRead, LamellarArrayWrite};
+use crate::array::LamellarArray; //, LamellarArrayRead, LamellarArrayWrite};
 
 use futures::Future;
 use std::marker::PhantomData;
@@ -127,7 +127,7 @@ pub struct DistIter<'a, T: Dist + 'static, A: LamellarArray<T> + Sync + Send> {
     _marker: PhantomData<&'a T>,
 }
 
-impl<T: Dist, A: LamellarArray<T>+ Sync + Send> DistIter<'_, T, A> {
+impl<T: Dist, A: LamellarArray<T> + Sync + Send> DistIter<'_, T, A> {
     pub(crate) fn new(data: A, cur_i: usize, cnt: usize) -> Self {
         // println!("new dist iter {:?} {:? } {:?}",cur_i, cnt, cur_i+cnt);
         DistIter {
@@ -139,8 +139,10 @@ impl<T: Dist, A: LamellarArray<T>+ Sync + Send> DistIter<'_, T, A> {
     }
 }
 
-impl<T: Dist + 'static, A: LamellarArray<T> + DistIteratorLauncher + Sync + Send + Clone + 'static>
-    DistIter<'static, T, A>
+impl<
+        T: Dist + 'static,
+        A: LamellarArray<T> + DistIteratorLauncher + Sync + Send + Clone + 'static,
+    > DistIter<'static, T, A>
 {
     pub fn for_each<F>(&self, op: F)
     where
@@ -207,14 +209,14 @@ impl<'a, T: Dist + 'a, A: LamellarArray<T> + DistIteratorLauncher + Sync + Send 
 }
 
 #[derive(Clone)]
-pub struct DistIterMut<'a, T: Dist, A:  LamellarArray<T> + Sync + Send> {
+pub struct DistIterMut<'a, T: Dist, A: LamellarArray<T> + Sync + Send> {
     data: A,
     cur_i: usize,
     end_i: usize,
     _marker: PhantomData<&'a T>,
 }
 
-impl<T: Dist, A:  LamellarArray<T> + Sync + Send> DistIterMut<'_, T, A> {
+impl<T: Dist, A: LamellarArray<T> + Sync + Send> DistIterMut<'_, T, A> {
     pub(crate) fn new(data: A, cur_i: usize, cnt: usize) -> Self {
         DistIterMut {
             data,
@@ -244,11 +246,8 @@ impl<
         self.data.clone().for_each_async(self, op);
     }
 }
-impl<
-        'a,
-        T: Dist + 'a,
-        A:  LamellarArray<T> + Sync + Send + DistIteratorLauncher + Clone,
-    > DistributedIterator for DistIterMut<'a, T, A>
+impl<'a, T: Dist + 'a, A: LamellarArray<T> + Sync + Send + DistIteratorLauncher + Clone>
+    DistributedIterator for DistIterMut<'a, T, A>
 {
     type Item = &'a mut T;
     type Array = A;

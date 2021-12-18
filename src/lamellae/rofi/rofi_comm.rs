@@ -28,7 +28,7 @@ use std::sync::Arc;
 static ROFI_MAGIC_8: u64 = 0b1101001110111100011111001001100100111110011001100011110111001011;
 static ROFI_MAGIC_4: u32 = 0b10001111100100110010011111001100;
 static ROFI_MAGIC_2: u16 = 0b1100100110010011;
-static ROFI_MAGIC_1: u8 =  0b10011001;
+static ROFI_MAGIC_1: u8 = 0b10011001;
 
 static ROFI_MEM: AtomicUsize = AtomicUsize::new(4 * 1024 * 1024 * 1024);
 const RT_MEM: usize = 100 * 1024 * 1024; // we add this space for things like team barrier buffers, but will work towards having teams get memory from rofi allocs
@@ -90,60 +90,62 @@ impl RofiComm {
         rofi
     }
 
-    unsafe fn fill_buffer<R: Copy,T>(&self, dst_addr: &mut [T], val: R){
+    unsafe fn fill_buffer<R: Copy, T>(&self, dst_addr: &mut [T], val: R) {
         // println!("{:?} {:?} {:?} {:?} {:?}",std::mem::size_of::<T>(),std::mem::size_of::<R>(),(dst_addr.len()*std::mem::size_of::<T>()),(dst_addr.len()*std::mem::size_of::<T>())/std::mem::size_of::<R>(),(dst_addr.len()*std::mem::size_of::<T>())%std::mem::size_of::<R>());
-        let bytes = std::slice::from_raw_parts_mut(dst_addr.as_ptr() as *mut T as *mut R, (dst_addr.len()*std::mem::size_of::<T>())/std::mem::size_of::<R>());
-        for elem in bytes.iter_mut(){
+        let bytes = std::slice::from_raw_parts_mut(
+            dst_addr.as_ptr() as *mut T as *mut R,
+            (dst_addr.len() * std::mem::size_of::<T>()) / std::mem::size_of::<R>(),
+        );
+        for elem in bytes.iter_mut() {
             *elem = val;
         }
     }
-    fn init_buffer<T>(&self, dst_addr: &mut [T]){
-        let bytes_len = dst_addr.len()*std::mem::size_of::<T>();
+    fn init_buffer<T>(&self, dst_addr: &mut [T]) {
+        let bytes_len = dst_addr.len() * std::mem::size_of::<T>();
         // println!("{:?} {:?}",dst_addr.as_ptr(),bytes_len);
         unsafe {
-            if bytes_len%std::mem::size_of::<u64>() == 0{
-                self.fill_buffer(dst_addr,ROFI_MAGIC_8);
-            }
-            else if bytes_len%std::mem::size_of::<u32>() == 0{
-                self.fill_buffer(dst_addr,ROFI_MAGIC_4);
-            }
-            else if bytes_len%std::mem::size_of::<u16>() == 0{
-                self.fill_buffer(dst_addr,ROFI_MAGIC_2);
-            }    
-            else {
-                self.fill_buffer(dst_addr,ROFI_MAGIC_1);
+            if bytes_len % std::mem::size_of::<u64>() == 0 {
+                self.fill_buffer(dst_addr, ROFI_MAGIC_8);
+            } else if bytes_len % std::mem::size_of::<u32>() == 0 {
+                self.fill_buffer(dst_addr, ROFI_MAGIC_4);
+            } else if bytes_len % std::mem::size_of::<u16>() == 0 {
+                self.fill_buffer(dst_addr, ROFI_MAGIC_2);
+            } else {
+                self.fill_buffer(dst_addr, ROFI_MAGIC_1);
             }
         }
     }
-    unsafe fn check_buffer_elems<R: std::cmp::PartialEq,T>(&self, dst_addr: & mut[T], val: R){
-        let bytes = std::slice::from_raw_parts_mut(dst_addr.as_ptr() as *mut T as *mut R, (dst_addr.len()*std::mem::size_of::<T>())/std::mem::size_of::<R>());
-        for i in 0..bytes.len() -2{
-            while bytes[i] == val && bytes[i+1] == val{ //hopefully magic number doesnt appear twice in a row
+    unsafe fn check_buffer_elems<R: std::cmp::PartialEq, T>(&self, dst_addr: &mut [T], val: R) {
+        let bytes = std::slice::from_raw_parts_mut(
+            dst_addr.as_ptr() as *mut T as *mut R,
+            (dst_addr.len() * std::mem::size_of::<T>()) / std::mem::size_of::<R>(),
+        );
+        for i in 0..bytes.len() - 2 {
+            while bytes[i] == val && bytes[i + 1] == val {
+                //hopefully magic number doesnt appear twice in a row
                 std::thread::yield_now();
-           }
+            }
         }
-        while bytes[bytes.len()-1] == val { //hopefully magic number isn't the last element
+        while bytes[bytes.len() - 1] == val {
+            //hopefully magic number isn't the last element
             std::thread::yield_now();
         }
     }
-    fn check_buffer<T>(&self, dst_addr: &mut [T]){
-        let bytes_len = dst_addr.len()*std::mem::size_of::<T>();
+    fn check_buffer<T>(&self, dst_addr: &mut [T]) {
+        let bytes_len = dst_addr.len() * std::mem::size_of::<T>();
         unsafe {
-            if bytes_len%std::mem::size_of::<u64>() == 0{
-                self.check_buffer_elems(dst_addr,ROFI_MAGIC_8);
-            }
-            else if bytes_len%std::mem::size_of::<u32>() == 0{
-                self.check_buffer_elems(dst_addr,ROFI_MAGIC_4);
-            }
-            else if bytes_len%std::mem::size_of::<u16>() == 0{
-                self.check_buffer_elems(dst_addr,ROFI_MAGIC_2);
-            }    
-            else {
-                self.check_buffer_elems(dst_addr,ROFI_MAGIC_1);
+            if bytes_len % std::mem::size_of::<u64>() == 0 {
+                self.check_buffer_elems(dst_addr, ROFI_MAGIC_8);
+            } else if bytes_len % std::mem::size_of::<u32>() == 0 {
+                self.check_buffer_elems(dst_addr, ROFI_MAGIC_4);
+            } else if bytes_len % std::mem::size_of::<u16>() == 0 {
+                self.check_buffer_elems(dst_addr, ROFI_MAGIC_2);
+            } else {
+                self.check_buffer_elems(dst_addr, ROFI_MAGIC_1);
             }
         }
     }
-    fn iget_data<T: Remote>(&self, pe: usize, src_addr: usize, dst_addr: &mut [T]){
+    fn iget_data<T: Remote>(&self, pe: usize, src_addr: usize, dst_addr: &mut [T]) {
         let _lock = self.comm_mutex.lock();
         match rofi_iget(src_addr, dst_addr, pe) {
             //.expect("error in rofi get")
@@ -420,31 +422,34 @@ impl CommOps for RofiComm {
         // println!("[{:?}]- gc: {:?} pc: {:?} get exit",self.my_pe,self.get_cnt.load(Ordering::SeqCst),self.put_cnt.load(Ordering::SeqCst));
     }
 
-    
-    
     fn iget<T: Remote>(&self, pe: usize, src_addr: usize, dst_addr: &mut [T]) {
         if pe != self.my_pe {
             let bytes_len = dst_addr.len() * std::mem::size_of::<T>();
             // println!("{:x} {:?} {:?}",src_addr,dst_addr.as_ptr(),bytes_len);
-            if  bytes_len > std::mem::size_of::<u64>(){
+            if bytes_len > std::mem::size_of::<u64>() {
                 self.init_buffer(dst_addr);
                 self.iget_data(pe, src_addr, dst_addr);
                 self.check_buffer(dst_addr);
-            }
-            else{
+            } else {
                 loop {
-                    if let Ok(addr) = self.rt_alloc(bytes_len){
+                    if let Ok(addr) = self.rt_alloc(bytes_len) {
                         unsafe {
-                            let buf1 = std::slice::from_raw_parts_mut(addr as *mut T as *mut u8, bytes_len);
-                            let buf0 = std::slice::from_raw_parts(dst_addr.as_ptr() as *mut T as *mut u8, bytes_len);
-                            self.fill_buffer(dst_addr,0u8);
-                            self.fill_buffer(buf1,1u8);
-                        
-                            self.iget_data(pe,src_addr,dst_addr);
-                            self.iget_data(pe,src_addr,buf1);
-                            
-                            for i in 0..dst_addr.len(){
-                                while buf0[i] != buf1[i]{
+                            let buf1 = std::slice::from_raw_parts_mut(
+                                addr as *mut T as *mut u8,
+                                bytes_len,
+                            );
+                            let buf0 = std::slice::from_raw_parts(
+                                dst_addr.as_ptr() as *mut T as *mut u8,
+                                bytes_len,
+                            );
+                            self.fill_buffer(dst_addr, 0u8);
+                            self.fill_buffer(buf1, 1u8);
+
+                            self.iget_data(pe, src_addr, dst_addr);
+                            self.iget_data(pe, src_addr, buf1);
+
+                            for i in 0..dst_addr.len() {
+                                while buf0[i] != buf1[i] {
                                     std::thread::yield_now();
                                 }
                             }
@@ -454,8 +459,7 @@ impl CommOps for RofiComm {
                     }
                     std::thread::yield_now();
                 }
-                
-            }           
+            }
         } else {
             unsafe {
                 std::ptr::copy_nonoverlapping(
@@ -467,7 +471,6 @@ impl CommOps for RofiComm {
         }
     }
 
-    
     //src address is relative to rofi base addr
     fn iget_relative<T: Remote>(&self, pe: usize, src_addr: usize, dst_addr: &mut [T]) {
         //-> RofiReq {

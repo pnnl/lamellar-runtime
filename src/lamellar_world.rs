@@ -11,8 +11,8 @@ use lamellar_prof::*;
 use log::trace;
 use parking_lot::RwLock;
 use std::collections::HashMap;
-use std::sync::{Arc, Weak};
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, Weak};
 
 lazy_static! {
     pub(crate) static ref LAMELLAES: RwLock<HashMap<Backend, Arc<Lamellae>>> =
@@ -217,8 +217,8 @@ impl LamellarWorld {
     }
 }
 
-impl Clone for LamellarWorld{
-    fn clone(&self)-> Self{
+impl Clone for LamellarWorld {
+    fn clone(&self) -> Self {
         self.ref_cnt.fetch_add(1, Ordering::SeqCst);
         LamellarWorld {
             team: self.team.clone(),
@@ -227,14 +227,14 @@ impl Clone for LamellarWorld{
             _counters: self._counters.clone(),
             my_pe: self.my_pe.clone(),
             num_pes: self.num_pes.clone(),
-            ref_cnt: self.ref_cnt.clone()
+            ref_cnt: self.ref_cnt.clone(),
         }
     }
 }
 //#[prof]
 impl Drop for LamellarWorld {
     fn drop(&mut self) {
-        let cnt = self.ref_cnt.fetch_sub(1,Ordering::SeqCst);
+        let cnt = self.ref_cnt.fetch_sub(1, Ordering::SeqCst);
         if cnt == 1 {
             // println!("[{:?}] world dropping", self.my_pe);
             self.wait_all();
@@ -323,7 +323,7 @@ impl LamellarWorldBuilder {
             _counters: counters,
             my_pe: my_pe,
             num_pes: num_pes,
-            ref_cnt: Arc::new(AtomicUsize::new(1))
+            ref_cnt: Arc::new(AtomicUsize::new(1)),
         };
         // world
         //     .teams

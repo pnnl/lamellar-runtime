@@ -7,8 +7,8 @@ use crate::darc::DarcMode;
 use crate::lamellar_request::LamellarRequest;
 use crate::lamellar_team::{IntoLamellarTeam, LamellarTeamRT};
 use crate::memregion::Dist;
-use std::sync::Arc;
 use core::marker::PhantomData;
+use std::sync::Arc;
 
 #[lamellar_impl::AmDataRT(Clone)]
 pub struct ReadOnlyArray<T: Dist> {
@@ -57,10 +57,14 @@ impl<T: Dist> ReadOnlyArray<T> {
         self.array.len()
     }
 
-    pub unsafe fn get_unchecked<U: MyInto<LamellarArrayInput<T>> + LamellarWrite >(&self, index: usize, buf: U) {
+    pub unsafe fn get_unchecked<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(
+        &self,
+        index: usize,
+        buf: U,
+    ) {
         self.array.get_unchecked(index, buf)
     }
-    pub fn iget<U: MyInto<LamellarArrayInput<T>> + LamellarWrite >(&self, index: usize, buf: U) {
+    pub fn iget<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(&self, index: usize, buf: U) {
         self.array.iget(index, buf)
     }
     pub fn iat(&self, index: usize) -> T {
@@ -121,14 +125,14 @@ impl<T: Dist> ReadOnlyArray<T> {
 
     pub fn into_local_only(self) -> LocalOnlyArray<T> {
         self.array.block_on_outstanding(DarcMode::LocalOnlyArray);
-        LocalOnlyArray{
+        LocalOnlyArray {
             array: self.array,
-            _unsync: PhantomData
+            _unsync: PhantomData,
         }
     }
 }
 
-impl <T: Dist + serde::Serialize + serde::de::DeserializeOwned + 'static> ReadOnlyArray<T> {
+impl<T: Dist + serde::Serialize + serde::de::DeserializeOwned + 'static> ReadOnlyArray<T> {
     pub fn reduce(&self, op: &str) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
         self.array.reduce(op)
     }
@@ -165,11 +169,8 @@ impl<T: Dist> DistIteratorLauncher for ReadOnlyArray<T> {
     }
 }
 
-impl<T: Dist> private::LamellarArrayPrivate<T>
-    for ReadOnlyArray<T>
-{
-    
-    fn local_as_ptr(&self) -> *const T{
+impl<T: Dist> private::LamellarArrayPrivate<T> for ReadOnlyArray<T> {
+    fn local_as_ptr(&self) -> *const T {
         self.array.local_as_ptr()
     }
     fn local_as_mut_ptr(&self) -> *mut T {
@@ -179,17 +180,17 @@ impl<T: Dist> private::LamellarArrayPrivate<T>
         self.array.pe_for_dist_index(index)
     }
     fn pe_offset_for_dist_index(&self, pe: usize, index: usize) -> usize {
-        self.array.pe_offset_for_dist_index(pe,index)
+        self.array.pe_offset_for_dist_index(pe, index)
     }
 }
 
 impl<T: Dist> LamellarArray<T> for ReadOnlyArray<T> {
-    fn my_pe(&self) -> usize{
+    fn my_pe(&self) -> usize {
         self.array.my_pe()
     }
-    fn team(&self) -> Pin<Arc<LamellarTeamRT>>{
+    fn team(&self) -> Pin<Arc<LamellarTeamRT>> {
         self.array.team().clone()
-    }    
+    }
     fn num_elems_local(&self) -> usize {
         self.num_elems_local()
     }
@@ -205,10 +206,14 @@ impl<T: Dist> LamellarArray<T> for ReadOnlyArray<T> {
     }
 }
 impl<T: Dist> LamellarArrayRead<T> for ReadOnlyArray<T> {
-    unsafe fn get_unchecked<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(&self, index: usize, buf: U) {
+    unsafe fn get_unchecked<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(
+        &self,
+        index: usize,
+        buf: U,
+    ) {
         self.get_unchecked(index, buf)
     }
-    fn iget<U: MyInto<LamellarArrayInput<T>> + LamellarWrite >(&self, index: usize, buf: U) {
+    fn iget<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(&self, index: usize, buf: U) {
         self.iget(index, buf)
     }
     fn iat(&self, index: usize) -> T {
@@ -221,7 +226,7 @@ impl<T: Dist> SubArray<T> for ReadOnlyArray<T> {
     fn sub_array<R: std::ops::RangeBounds<usize>>(&self, range: R) -> Self::Array {
         self.sub_array(range).into()
     }
-    fn global_index(&self, sub_index: usize) -> usize{
+    fn global_index(&self, sub_index: usize) -> usize {
         self.array.global_index(sub_index)
     }
 }

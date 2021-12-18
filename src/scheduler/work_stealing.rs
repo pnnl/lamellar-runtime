@@ -1,5 +1,5 @@
 use crate::active_messaging::{ActiveMessageEngine, ExecType, LamellarFunc};
-use crate::lamellae::{Des, Lamellae, SerializedData,LamellaeRDMA};
+use crate::lamellae::{Des, Lamellae, LamellaeRDMA, SerializedData};
 use crate::lamellar_request::InternalReq;
 use crate::lamellar_team::LamellarTeamRT;
 use crate::scheduler::{AmeScheduler, AmeSchedulerQueue, ReqData, SchedulerQueue};
@@ -10,10 +10,10 @@ use futures::Future;
 use parking_lot::RwLock;
 use rand::prelude::*;
 use std::collections::HashMap;
+use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, AtomicU8, AtomicUsize, Ordering};
 use std::sync::{Arc, Weak};
 use std::thread;
-use std::pin::Pin;
 // use std::time::Instant;
 
 pub(crate) struct WorkStealingThread {
@@ -189,8 +189,7 @@ impl AmeSchedulerQueue for WorkStealingInner {
                 // println!("msg recieved: {:?}",msg);
                 let addr = lamellae.local_addr(msg.src as usize, header.team_hash as usize);
                 // println!("from pe {:?} remote addr {:x} local addr {:x}",msg.src,header.team_hash,addr);
-                ame.exec_msg(ame.clone(), msg, data, lamellae, addr)
-                    .await;
+                ame.exec_msg(ame.clone(), msg, data, lamellae, addr).await;
             } else {
                 data.print();
                 panic!("should i be here?");

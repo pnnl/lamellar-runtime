@@ -3,6 +3,7 @@ use crate::lamellae::{Lamellae, SerializedData};
 use crate::lamellar_request::InternalReq;
 use crate::lamellar_team::LamellarTeamRT;
 
+use core::pin::Pin;
 use enum_dispatch::enum_dispatch;
 use futures::Future;
 #[cfg(feature = "enable-prof")]
@@ -10,7 +11,6 @@ use lamellar_prof::*;
 use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::sync::{Arc, Weak};
-use core::pin::Pin;
 
 pub(crate) mod work_stealing;
 use work_stealing::{WorkStealing, WorkStealingInner};

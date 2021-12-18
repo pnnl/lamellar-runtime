@@ -31,14 +31,8 @@ impl std::error::Error for AllocError {}
 
 pub(crate) type AllocResult<T> = Result<T, AllocError>;
 
-pub(crate) trait Remote:
-    Copy + Send + Sync
-{
-}
-impl<T:  Copy + Send + Sync>
-    Remote for T
-{
-}
+pub(crate) trait Remote: Copy + Send + Sync {}
+impl<T: Copy + Send + Sync> Remote for T {}
 
 #[enum_dispatch(CommOps)]
 pub(crate) enum Comm {

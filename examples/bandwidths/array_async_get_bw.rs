@@ -13,13 +13,13 @@ fn main() {
     let world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();
     let num_pes = world.num_pes();
-    let array: UnsafeArray<u8> = UnsafeArray::new(&world,ARRAY_LEN*num_pes,Distribution::Block);
+    let array: UnsafeArray<u8> = UnsafeArray::new(&world, ARRAY_LEN * num_pes, Distribution::Block);
     let data = world.alloc_local_mem_region::<u8>(ARRAY_LEN);
     unsafe {
         for i in data.as_mut_slice().unwrap() {
             *i = num_pes as u8;
         }
-        for i in array.local_as_mut_slice(){
+        for i in array.local_as_mut_slice() {
             *i = my_pe as u8;
         }
     }
@@ -51,8 +51,8 @@ fn main() {
         if my_pe == 0 {
             for j in (0..2_u64.pow(exp) as usize).step_by(num_bytes as usize) {
                 let sub_timer = Instant::now();
-                let sub_reg =data.sub_region(j..(j+ num_bytes as usize)); 
-                unsafe { array.get(ARRAY_LEN*(num_pes-1) , &sub_reg) };
+                let sub_reg = data.sub_region(j..(j + num_bytes as usize));
+                array.get(ARRAY_LEN * (num_pes - 1), &sub_reg);
                 // println!("j: {:?}",j);
                 // unsafe { array.put_slice(num_pes - 1, j, &data[..num_bytes as usize]) };
                 sub_time += sub_timer.elapsed().as_secs_f64();
@@ -76,7 +76,7 @@ fn main() {
         let mbs_c = world.MB_sent();
         if my_pe == 0 {
             for j in 0..2_u64.pow(exp) as usize {
-                if data_slice[j] != (num_pes-1) as u8 {
+                if data_slice[j] != (num_pes - 1) as u8 {
                     println!("Error: {:?} {:?}", j, data_slice[j]);
                     break;
                 }

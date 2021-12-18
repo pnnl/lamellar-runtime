@@ -6,7 +6,6 @@ mod replace;
 use crate::parse::ReductionArgs;
 use crate::replace::LamellarDSLReplace;
 
-
 use std::collections::HashMap;
 
 use proc_macro::TokenStream;
@@ -138,7 +137,7 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_type: AmType) -> 
 
     let generics = input.generics.clone();
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
-    if !ty_generics.to_token_stream().is_empty() && !local{
+    if !ty_generics.to_token_stream().is_empty() && !local {
         panic!("generics are not supported in lamellar active messages");
     }
     let mut exec_fn =
@@ -255,7 +254,6 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_type: AmType) -> 
         }
     };
 
-
     let mut expanded = quote_spanned! {temp.span()=>
         impl #impl_generics #lamellar::LamellarActiveMessage for #orig_name #ty_generics #where_clause {
             fn exec(self: std::sync::Arc<Self>,__lamellar_current_pe: usize,__lamellar_num_pes: usize, __local: bool, __lamellar_world: std::sync::Arc<#lamellar::LamellarTeam>, __lamellar_team: std::sync::Arc<#lamellar::LamellarTeam>) -> std::pin::Pin<Box<dyn std::future::Future<Output=#lamellar::LamellarReturn> + Send>>{
@@ -291,12 +289,9 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_type: AmType) -> 
         });
     }
 
-
     if !local {
         expanded.extend( quote_spanned! {temp.span()=>
             impl #impl_generics #lamellar::RemoteActiveMessage for #orig_name #ty_generics #where_clause {}
-            
-
             fn #orig_name_unpack #impl_generics (bytes: &[u8], cur_pe: Result<usize,#lamellar::IdError>) -> std::sync::Arc<dyn #lamellar::RemoteActiveMessage + Send + Sync>  {
                 let __lamellar_data: std::sync::Arc<#orig_name #ty_generics> = std::sync::Arc::new(#lamellar::deserialize(&bytes).unwrap());
                 <#orig_name #ty_generics as #lamellar::DarcSerde>::des(&__lamellar_data,cur_pe);
@@ -311,7 +306,6 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_type: AmType) -> 
                 }
             }
         });
-        
     }
 
     let user_expanded = quote_spanned! {expanded.span()=>
@@ -421,25 +415,31 @@ fn derive_am_data(
             //     trait_strs.entry(String::from("Clone")).or_insert(quote! {Clone});
             //     // impls.extend(quote! {#lamellar::ArrayOps});
             // }
-            // else 
+            // else
             if t.contains("Dist") {
-                trait_strs.entry(String::from("Dist")).or_insert(quote! {#lamellar::Dist});
-                trait_strs.entry(String::from("Copy")).or_insert(quote! {Copy});
-                trait_strs.entry(String::from("Clone")).or_insert(quote! {Clone});
-            }
-            else if !t.contains("serde::Serialize")
+                trait_strs
+                    .entry(String::from("Dist"))
+                    .or_insert(quote! {#lamellar::Dist});
+                trait_strs
+                    .entry(String::from("Copy"))
+                    .or_insert(quote! {Copy});
+                trait_strs
+                    .entry(String::from("Clone"))
+                    .or_insert(quote! {Clone});
+            } else if !t.contains("serde::Serialize")
                 && !t.contains("serde::Deserialize")
                 && t.trim().len() > 0
             {
                 let temp = quote::format_ident!("{}", t.trim());
-                trait_strs.entry(t.trim().to_owned()).or_insert(quote! {#temp});
+                trait_strs
+                    .entry(t.trim().to_owned())
+                    .or_insert(quote! {#temp});
             }
-            
         }
-        for t in trait_strs{
+        for t in trait_strs {
             // let temp = quote::format_ident!("{}", t);
             // print!("{:?}, ",t.0);
-            let temp =t.1;
+            let temp = t.1;
             impls.extend(quote! {#temp, });
         }
         // println!();
@@ -786,9 +786,9 @@ fn create_add(
     for array_type in array_types {
         let add_name_am = quote::format_ident!("{}_{}_add_am", array_type, typeident);
         let add_name_func = quote::format_ident!("{}_{}_add", array_type, typeident);
-        let create_add= quote::format_ident!("{}_create_add",array_type);
-        let create_add_fn_name = quote::format_ident!("{}_{}_create_add",array_type,typeident);
-        let add_struct = quote::format_ident!("{}_inventory_add",array_type);
+        let create_add = quote::format_ident!("{}_create_add", array_type);
+        let create_add_fn_name = quote::format_ident!("{}_{}_create_add", array_type, typeident);
+        let add_struct = quote::format_ident!("{}_inventory_add", array_type);
         // let reg_add = quote::format_ident!("{}Add",array_type);
         match_stmts.extend(quote! {
             #lamellar::array::LamellarWriteArray::#array_type(inner) => inner.add(index,val),
@@ -848,9 +848,8 @@ fn create_add(
         });
     }
 
-    
     let expanded = quote! {
-       
+
 
         #[allow(non_camel_case_types)]
         impl #lamellar::array::ArrayOps<#typeident> for #lamellar::array::LamellarWriteArray<#typeident>{
@@ -938,7 +937,10 @@ pub fn generate_reductions_for_type(item: TokenStream) -> TokenStream {
         quote::format_ident!("UnsafeArray"),
         quote::format_ident!("ReadOnlyArray"),
     ];
-    let write_array_types: Vec<syn::Ident> = vec![quote::format_ident!("AtomicArray"),quote::format_ident!("UnsafeArray")];
+    let write_array_types: Vec<syn::Ident> = vec![
+        quote::format_ident!("AtomicArray"),
+        quote::format_ident!("UnsafeArray"),
+    ];
 
     for t in item.to_string().split(",").collect::<Vec<&str>>() {
         let typeident = quote::format_ident!("{:}", t.trim());
@@ -988,11 +990,14 @@ pub fn generate_reductions_for_type_rt(item: TokenStream) -> TokenStream {
         quote::format_ident!("UnsafeArray"),
         quote::format_ident!("ReadOnlyArray"),
     ];
-    let write_array_types: Vec<syn::Ident> = vec![quote::format_ident!("AtomicArray"),quote::format_ident!("UnsafeArray")];
+    let write_array_types: Vec<syn::Ident> = vec![
+        quote::format_ident!("AtomicArray"),
+        quote::format_ident!("UnsafeArray"),
+    ];
     for t in item.to_string().split(",").collect::<Vec<&str>>() {
         let t = t.trim().to_string();
         let typeident = quote::format_ident!("{:}", t.clone());
-        output.extend(quote!{impl Dist for #typeident {}});
+        output.extend(quote! {impl Dist for #typeident {}});
         output.extend(create_reduction(
             typeident.clone(),
             "sum".to_string(),
@@ -1021,28 +1026,29 @@ pub fn generate_reductions_for_type_rt(item: TokenStream) -> TokenStream {
             true,
         ));
         output.extend(create_add(typeident.clone(), &write_array_types, true));
-        
     }
     TokenStream::from(output)
 }
 
 #[proc_macro_error]
 #[proc_macro_derive(Dist)]
-pub fn derive_dist(input: TokenStream) -> TokenStream{
+pub fn derive_dist(input: TokenStream) -> TokenStream {
     let mut output = quote! {};
 
     let input = parse_macro_input!(input as syn::DeriveInput);
     let name = input.ident;
 
-
-    let write_array_types: Vec<syn::Ident> = vec![quote::format_ident!("AtomicArray"),quote::format_ident!("UnsafeArray")];
-    output.extend(quote!{
+    let write_array_types: Vec<syn::Ident> = vec![
+        quote::format_ident!("AtomicArray"),
+        quote::format_ident!("UnsafeArray"),
+    ];
+    output.extend(quote! {
         const _: () = {
             extern crate lamellar as __lamellar;
             impl __lamellar::Dist for #name {}
         };
     });
-    
+
     output.extend(create_add(name.clone(), &write_array_types, false));
     TokenStream::from(output)
 }

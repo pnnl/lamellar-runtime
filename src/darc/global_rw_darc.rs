@@ -9,9 +9,9 @@ use std::sync::Arc;
 use crate::darc::local_rw_darc::LocalRwDarc;
 use crate::darc::{Darc, DarcInner, DarcMode, __NetworkDarc};
 use crate::lamellae::{LamellaeComm, LamellaeRDMA};
+use crate::lamellar_team::{IntoLamellarTeam, LamellarTeamRT};
 use crate::lamellar_world::LAMELLAES;
 use crate::IdError;
-use crate::lamellar_team::{LamellarTeamRT,IntoLamellarTeam};
 
 #[derive(serde::Serialize, serde::Deserialize, Debug)]
 enum LockType {
@@ -411,7 +411,10 @@ impl<T> GlobalRwDarc<T> {
 }
 
 impl<T> GlobalRwDarc<T> {
-    pub fn new<U: Clone + Into<IntoLamellarTeam>>(team: U, item: T) -> Result<GlobalRwDarc<T>, IdError> {
+    pub fn new<U: Clone + Into<IntoLamellarTeam>>(
+        team: U,
+        item: T,
+    ) -> Result<GlobalRwDarc<T>, IdError> {
         Ok(GlobalRwDarc {
             darc: Darc::try_new(
                 team.clone(),
@@ -421,7 +424,10 @@ impl<T> GlobalRwDarc<T> {
         })
     }
 
-    pub fn try_new<U: Clone + Into<IntoLamellarTeam>>(team:U, item: T) -> Result<GlobalRwDarc<T>, IdError> {
+    pub fn try_new<U: Clone + Into<IntoLamellarTeam>>(
+        team: U,
+        item: T,
+    ) -> Result<GlobalRwDarc<T>, IdError> {
         Ok(GlobalRwDarc {
             darc: Darc::try_new(
                 team.clone(),

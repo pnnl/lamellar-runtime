@@ -3,23 +3,23 @@ use crate::{active_messaging::*, LamellarTeamRT}; //{ActiveMessaging,AMCounters,
                                                   // use crate::lamellar_arch::LamellarArchRT;
 use crate::lamellar_request::LamellarRequest;
 use crate::memregion::{
-    local::LocalMemoryRegion, shared::SharedMemoryRegion,  Dist,  LamellarMemoryRegion,
+    local::LocalMemoryRegion, shared::SharedMemoryRegion, Dist, LamellarMemoryRegion,
 };
 
 use enum_dispatch::enum_dispatch;
 use futures_lite::Future;
 use std::collections::HashMap;
-use std::sync::Arc;
 use std::pin::Pin;
+use std::sync::Arc;
 
 pub(crate) mod r#unsafe;
-pub use r#unsafe::{UnsafeArray,UnsafeArrayAdd};
+pub use r#unsafe::{operations::UnsafeArrayAdd, UnsafeArray};
 pub(crate) mod read_only;
 pub use read_only::ReadOnlyArray;
 pub(crate) mod local_only;
 pub use local_only::LocalOnlyArray;
 pub(crate) mod atomic;
-pub use atomic::{AtomicArray,AtomicArrayAdd,AtomicOps};
+pub use atomic::{AtomicArray, AtomicArrayAdd, AtomicOps};
 
 pub mod iterator;
 pub use iterator::distributed_iterator::DistributedIterator;
@@ -70,7 +70,7 @@ pub enum ArrayOpCmd {
 
 pub trait ArrayOp {} //essentially a marker trait than signifys a type has been registered for distributed ArrayOps
 
-pub trait ArrayOps<T: Dist + std::ops::AddAssign > {
+pub trait ArrayOps<T: Dist + std::ops::AddAssign> {
     fn add(
         &self,
         index: usize,
@@ -84,21 +84,23 @@ enum ArrayOpInput {
 }
 
 pub trait ArrayAdd<T: Dist + std::ops::AddAssign> {
-    fn dist_add(&self, index: usize, func: LamellarArcAm) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync>;
-    fn local_add(&self, index: usize, val: T); 
+    fn dist_add(
+        &self,
+        index: usize,
+        func: LamellarArcAm,
+    ) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync>;
+    fn local_add(&self, index: usize, val: T);
 }
 
 #[enum_dispatch(RegisteredMemoryRegion<T>, SubRegion<T>, MyFrom<T>,MemoryRegionRDMA<T>,AsBase)]
 #[derive(Clone)]
 pub enum LamellarArrayInput<T: Dist> {
     LamellarMemRegion(LamellarMemoryRegion<T>),
-    SharedMemRegion(SharedMemoryRegion<T>), //when used as input/output we are only using the local data 
-    LocalMemRegion(LocalMemoryRegion<T>), 
+    SharedMemRegion(SharedMemoryRegion<T>), //when used as input/output we are only using the local data
+    LocalMemRegion(LocalMemoryRegion<T>),
     // Unsafe(UnsafeArray<T>),
     // Vec(Vec<T>),
 }
-
-
 
 pub trait LamellarWrite {}
 pub trait LamellarRead {}
@@ -152,14 +154,11 @@ where
     }
 }
 
-impl<T: Dist>  MyFrom<&LamellarArrayInput<T>> for LamellarArrayInput<T> {
+impl<T: Dist> MyFrom<&LamellarArrayInput<T>> for LamellarArrayInput<T> {
     fn my_from(lai: &LamellarArrayInput<T>, _team: &Pin<Arc<LamellarTeamRT>>) -> Self {
         lai.clone()
     }
 }
-
-
-
 
 #[enum_dispatch]
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
@@ -179,21 +178,23 @@ pub enum LamellarWriteArray<T: Dist> {
 }
 
 pub(crate) mod private {
+    use crate::array::{
+        AtomicArray, LamellarReadArray, LamellarWriteArray, ReadOnlyArray, UnsafeArray,
+    };
+    use crate::memregion::Dist;
     use enum_dispatch::enum_dispatch;
-    use crate::memregion::{Dist};
-    use crate::array::{UnsafeArray,ReadOnlyArray,AtomicArray,LamellarReadArray,LamellarWriteArray};
     #[enum_dispatch(LamellarReadArray<T>,LamellarWriteArray<T>)]
     pub trait LamellarArrayPrivate<T: Dist> {
         // fn my_pe(&self) -> usize;
         fn local_as_ptr(&self) -> *const T;
-        fn local_as_mut_ptr(&self) -> *mut T;        
+        fn local_as_mut_ptr(&self) -> *mut T;
         fn pe_for_dist_index(&self, index: usize) -> usize;
         fn pe_offset_for_dist_index(&self, pe: usize, index: usize) -> usize;
     }
 }
 
 #[enum_dispatch(LamellarReadArray<T>,LamellarWriteArray<T>)]
-pub trait LamellarArray<T: Dist>: private::LamellarArrayPrivate<T>{
+pub trait LamellarArray<T: Dist>: private::LamellarArrayPrivate<T> {
     fn team(&self) -> Pin<Arc<LamellarTeamRT>>;
     fn my_pe(&self) -> usize;
     fn num_elems_local(&self) -> usize;
@@ -236,33 +237,36 @@ pub trait SubArray<T: Dist>: LamellarArray<T> {
 }
 
 #[enum_dispatch(LamellarReadArray<T>,LamellarWriteArray<T>)]
-pub trait LamellarArrayRead<T: Dist>: LamellarArray<T> + Sync + Send{
+pub trait LamellarArrayRead<T: Dist>: LamellarArray<T> + Sync + Send {
     // this is non blocking call
     // the runtime does not manage checking for completion of message transmission
     // the user is responsible for ensuring the buffer remains valid
-    unsafe fn get_unchecked<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(&self, index: usize, buf: U);
-    
+    unsafe fn get_unchecked<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(
+        &self,
+        index: usize,
+        buf: U,
+    );
+
     // a safe synchronous call that blocks untils the data as all been transfered
     fn iget<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(&self, index: usize, buf: U);
-    
-    // blocking call that gets the value stored and the provided index 
+
+    // blocking call that gets the value stored and the provided index
     fn iat(&self, index: usize) -> T;
 
     // we also plan to implement safe asyncronous versions of iget and iat
     // the apis would be something like:
     // fn get<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(&self, index: usize, buf: U) -> LamellarRequest<U>;
     // fn at(&self, index: usize) -> LamellarRequest<T>;
-
 }
 
 #[enum_dispatch(LamellarWriteArray<T>)]
-pub trait LamellarArrayWrite<T: Dist>: LamellarArray<T> + Sync + Send{
+pub trait LamellarArrayWrite<T: Dist>: LamellarArray<T> + Sync + Send {
     // non blocking put
     // runtime provides no mechansim for checking when the data has finished being written
     // buf can immediately be reused after this call returns
     // unsafe fn put_unchecked<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(&self, index: usize, buf: U);
     // blocking ops
-    // fn iput<U: MyInto<LamellarArrayInput<T>> + LamellarRead>(&self, index: usize, buf: U); 
+    // fn iput<U: MyInto<LamellarArrayInput<T>> + LamellarRead>(&self, index: usize, buf: U);
     // fn iswap(&self, index: usize, val: T) -> T;
     //async ops
     // fn put<U: MyInto<LamellarArrayInput<T>> + LamellarRead>(&self, index: usize, buf: U) -> LamellarRequest<()>;
@@ -288,7 +292,7 @@ pub trait LamellarArrayWrite<T: Dist>: LamellarArray<T> + Sync + Send{
 //     fn mul(&self, index: usize, val: T) -> LamellarRequest<()>;
 //     fn fetch_mul(&self, index: usize, val: T) -> LamellarRequest<T>;
 //     fn div(&self, index: usize, val: T) -> LamellarRequest<()>;
-//     fn fetch_div(&self, index: usize, val: T) -> LamellarRequest<T>;   
+//     fn fetch_div(&self, index: usize, val: T) -> LamellarRequest<T>;
 // }
 
 // pub trait LamellarLocalOps<T: Dist + Add + Sub + Mul + Div>: LamellarArithmeticOps{
@@ -300,7 +304,7 @@ pub trait LamellarArrayWrite<T: Dist>: LamellarArray<T> + Sync + Send{
 //     ...
 // }
 
-pub trait ArrayPrint<T: Dist + std::fmt::Debug>: LamellarArray<T>{
+pub trait ArrayPrint<T: Dist + std::fmt::Debug>: LamellarArray<T> {
     fn print(&self);
 }
 
@@ -314,8 +318,6 @@ where
     fn max(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync>;
     fn prod(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync>;
 }
-
-
 
 // impl<'a, T: AmDist + 'static> IntoIterator
 //     for &'a LamellarArray<T>
