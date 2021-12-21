@@ -332,6 +332,7 @@ impl LamellarWorldBuilder {
         LAMELLAES
             .write()
             .insert(lamellae.backend(), lamellae.clone());
+
         world.barrier();
         world
     }
