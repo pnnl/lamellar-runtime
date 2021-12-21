@@ -5,14 +5,14 @@
 /// and then await the result of the future in a non blocking fashion.
 /// e.g. request.as_future().await
 /// --------------------------------------------------------------------
-use lamellar::{ActiveMessaging};
+use lamellar::ActiveMessaging;
 
 //----------------- Recursive Active Message -----------------//
 // in this example we launch new active messages from within
 // a currently executing active message. Specifically we visit
 // each PE in the allocation returning a list of their
 // host names in reverse order of how we visited them.
-#[lamellar::AmData( Clone, Debug)]
+#[lamellar::AmData(Clone, Debug)]
 struct RecursiveAM {
     next: usize,
     orig: usize,

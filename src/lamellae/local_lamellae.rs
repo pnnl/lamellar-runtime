@@ -1,9 +1,12 @@
-use crate::lamellae::{AllocationType, Backend, Lamellae,LamellaeInit, LamellaeComm, LamellaeAM, LamellaeRDMA, SerializedData,SerializeHeader,Ser,Des,SubData};
+use crate::lamellae::{
+    AllocResult, AllocationType, Backend, Des, Lamellae, LamellaeAM, LamellaeComm, LamellaeInit,
+    LamellaeRDMA, Ser, SerializeHeader, SerializedData, SerializedDataOps, SubData,
+};
 use crate::lamellar_arch::LamellarArchRT;
 use crate::scheduler::Scheduler;
 #[cfg(feature = "enable-prof")]
 use lamellar_prof::*;
-use log::{trace};
+use log::trace;
 use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -19,62 +22,82 @@ pub(crate) struct Local {
 
 #[derive(Clone)]
 pub(crate) struct LocalData {}
-impl Des for LocalData{
-    fn deserialize_header(&self) -> Option<SerializeHeader>{
+impl Des for LocalData {
+    fn deserialize_header(&self) -> Option<SerializeHeader> {
         panic!("should not be deserializing in local");
     }
-    fn deserialize_data<T: serde::de::DeserializeOwned>(&self) -> Result<T, anyhow::Error>{
+    fn deserialize_data<T: serde::de::DeserializeOwned>(&self) -> Result<T, anyhow::Error> {
         panic!("should not be deserializing in local");
     }
-    fn data_as_bytes(&self) -> &mut [u8]{
+    fn data_as_bytes(&self) -> &mut [u8] {
+        panic!("should not be deserializing in local");
+    }
+    fn header_and_data_as_bytes(&self) -> &mut [u8] {
         &mut []
     }
-    fn header_and_data_as_bytes(&self) -> &mut [u8]{
-        &mut []
-    }
-    fn print(&self){
-
-    }
+    fn print(&self) {}
 }
 
-impl SubData for LocalData{
-    fn sub_data(&self, _start: usize, _end: usize) ->SerializedData {
+impl SubData for LocalData {
+    fn sub_data(&self, _start: usize, _end: usize) -> SerializedData {
         SerializedData::LocalData(self.clone())
     }
 }
 
+impl SerializedDataOps for LocalData {
+    fn header_as_bytes(&self) -> &mut [u8] {
+        panic!("should not be deserializing in local");
+    }
+    fn increment_cnt(&self) {}
+    fn len(&self) -> usize {
+        0
+    }
+}
 
 //#[prof]
 impl Local {
     pub(crate) fn new() -> Local {
-       Local { allocs: Arc::new(Mutex::new(HashMap::new())), }
+        Local {
+            allocs: Arc::new(Mutex::new(HashMap::new())),
+        }
     }
 }
 
-#[async_trait]
-impl Ser for Local{
-    async fn serialize<T: Send + Sync + serde::Serialize + ?Sized>(&self,_header: Option<SerializeHeader>, _obj: &T) -> Result<SerializedData,anyhow::Error> {
+// #[async_trait]
+impl Ser for Local {
+    fn serialize<T: Send + Sync + serde::Serialize + ?Sized>(
+        &self,
+        _header: Option<SerializeHeader>,
+        _obj: &T,
+    ) -> Result<SerializedData, anyhow::Error> {
         panic!("should not be serializing in local");
     }
-    async fn serialize_header(&self,_header: Option<SerializeHeader>,_serialized_size: usize) -> Result<SerializedData,anyhow::Error> {
+    fn serialize_header(
+        &self,
+        _header: Option<SerializeHeader>,
+        _serialized_size: usize,
+    ) -> Result<SerializedData, anyhow::Error> {
         panic!("should not be serializing in local")
     }
 }
 
-impl LamellaeInit for Local{
-    fn init_fabric(&mut self) -> (usize, usize){
-        (0,1)
+impl LamellaeInit for Local {
+    fn init_fabric(&mut self) -> (usize, usize) {
+        (0, 1)
     }
-    fn init_lamellae(&mut self, _scheduler: Arc<Scheduler>)->Arc<Lamellae>{
+    fn init_lamellae(&mut self, _scheduler: Arc<Scheduler>) -> Arc<Lamellae> {
         Arc::new(Lamellae::Local(self.clone()))
     }
-    
 }
 
 //#[prof]
 impl LamellaeComm for Local {
-    fn my_pe(&self) -> usize {0}
-    fn num_pes(&self) ->usize {1}
+    fn my_pe(&self) -> usize {
+        0
+    }
+    fn num_pes(&self) -> usize {
+        1
+    }
     fn barrier(&self) {}
     fn backend(&self) -> Backend {
         Backend::Local
@@ -84,18 +107,20 @@ impl LamellaeComm for Local {
         0.0f64
     }
     fn print_stats(&self) {}
-    fn shutdown(&self){
-        
-    }
+    fn shutdown(&self) {}
 }
-
-
 
 //#[prof]
 #[async_trait]
 impl LamellaeAM for Local {
     async fn send_to_pe_async(&self, _pe: usize, _data: SerializedData) {}
-    async fn send_to_pes_async(&self,_pe: Option<usize>, _team: Arc<LamellarArchRT>, _data: SerializedData) {}
+    async fn send_to_pes_async(
+        &self,
+        _pe: Option<usize>,
+        _team: Arc<LamellarArchRT>,
+        _data: SerializedData,
+    ) {
+    }
 }
 
 struct MyPtr {
@@ -127,27 +152,31 @@ impl LamellaeRDMA for Local {
         }
     }
 
-    fn rt_alloc(&self, size: usize) -> Option<usize> {
+    fn rt_alloc(&self, size: usize) -> AllocResult<usize> {
         let data = vec![0u8; size].into_boxed_slice();
         let data_ptr = Box::into_raw(data);
         let data_addr = data_ptr as *const u8 as usize;
         let mut allocs = self.allocs.lock();
         allocs.insert(data_addr, MyPtr { ptr: data_ptr });
-        Some(data_addr)
+        Ok(data_addr)
     }
+    fn rt_check_alloc(&self, _size: usize) -> bool {
+        true
+    }
+
     fn rt_free(&self, addr: usize) {
         let mut allocs = self.allocs.lock();
         if let Some(data_ptr) = allocs.remove(&addr) {
             unsafe { Box::from_raw(data_ptr.ptr) }; //it will free when dropping from scope
         }
     }
-    fn alloc(&self, size: usize, _alloc: AllocationType) -> Option<usize> {
+    fn alloc(&self, size: usize, _alloc: AllocationType) -> AllocResult<usize> {
         let data = vec![0u8; size].into_boxed_slice();
         let data_ptr = Box::into_raw(data);
         let data_addr = data_ptr as *const u8 as usize;
         let mut allocs = self.allocs.lock();
         allocs.insert(data_addr, MyPtr { ptr: data_ptr });
-        Some(data_addr)
+        Ok(data_addr)
     }
     fn free(&self, addr: usize) {
         let mut allocs = self.allocs.lock();
@@ -166,8 +195,12 @@ impl LamellaeRDMA for Local {
     }
     //todo make this return a real value
     fn occupied(&self) -> usize {
-        0 
+        0
     }
+    fn num_pool_allocs(&self) -> usize {
+        1
+    }
+    fn alloc_pool(&self, _min_size: usize) {}
 }
 
 //#[prof]

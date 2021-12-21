@@ -10,10 +10,8 @@
 /// matrices use row-wise distribution (i.e. all elements of a row are local to a pe,
 /// conversely this means elements of a column are distributed across pes)
 ///---------------------------------------------------------------------------------
-use lamellar::{ActiveMessaging};
-use lamellar::{
-    LamellarLocalMemoryRegion, LamellarMemoryRegion, RegisteredMemoryRegion, RemoteMemoryRegion,
-};
+use lamellar::ActiveMessaging;
+use lamellar::{LocalMemoryRegion, RemoteMemoryRegion, SharedMemoryRegion};
 use lazy_static::lazy_static;
 use matrixmultiply::sgemm;
 use parking_lot::Mutex;
@@ -22,10 +20,10 @@ lazy_static! {
     static ref LOCK: Mutex<()> = Mutex::new(());
 }
 
-#[lamellar::AmData( Clone, Debug)]
+#[lamellar::AmData(Clone, Debug)]
 struct SubMatrix {
     name: String,
-    mat: LamellarMemoryRegion<f32>,
+    mat: SharedMemoryRegion<f32>,
     pe: usize,
     rows: usize,
     cols: usize,
@@ -37,7 +35,7 @@ struct SubMatrix {
 impl SubMatrix {
     fn new(
         name: String,
-        mat: LamellarMemoryRegion<f32>,
+        mat: SharedMemoryRegion<f32>,
         pe: usize,
         rows: usize,
         cols: usize,
@@ -69,7 +67,7 @@ impl SubMatrix {
         }
     }
 }
-async fn get_sub_mat(mat: &SubMatrix, sub_mat: &LamellarLocalMemoryRegion<f32>) {
+async fn get_sub_mat(mat: &SubMatrix, sub_mat: &LocalMemoryRegion<f32>) {
     let start_row = mat.row_block * mat.block_size;
     let start_col = mat.col_block * mat.block_size;
     let sub_mat_slice = unsafe { sub_mat.as_mut_slice().unwrap() };
@@ -79,7 +77,7 @@ async fn get_sub_mat(mat: &SubMatrix, sub_mat: &LamellarLocalMemoryRegion<f32>) 
         let offset = (row + start_row) * mat.cols + (start_col);
         let data = sub_mat.sub_region(row * mat.block_size..(row + 1) * mat.block_size);
         unsafe {
-            mat.mat.get(mat.pe, offset, &data);
+            mat.mat.get(mat.pe, offset, data.clone());
         }
     }
 
@@ -89,8 +87,7 @@ async fn get_sub_mat(mat: &SubMatrix, sub_mat: &LamellarLocalMemoryRegion<f32>) 
     }
 }
 
-
-#[lamellar::AmData( Clone, Debug)]
+#[lamellar::AmData(Clone, Debug)]
 struct MatMulAM {
     a: SubMatrix,     // a is always local
     b: SubMatrix,     // b is possibly remote
@@ -121,15 +118,13 @@ impl LamellarAM for MatMulAM {
             let sub_a = lamellar::world.alloc_local_mem_region::<f32>(a.block_size * a.block_size);
             get_sub_mat(&a, &sub_a).await; //this should be local copy so returns immediately
             do_gemm(&sub_a, &b, c, self.block_size);
-            lamellar::world.free_local_memory_region(sub_a);
         }
-        lamellar::world.free_local_memory_region(b);
     }
 }
 
 fn do_gemm(
-    a: &LamellarLocalMemoryRegion<f32>,
-    b: &LamellarLocalMemoryRegion<f32>,
+    a: &LocalMemoryRegion<f32>,
+    b: &LocalMemoryRegion<f32>,
     c: SubMatrix,
     block_size: usize,
 ) {
@@ -154,46 +149,6 @@ fn do_gemm(
         );
     }
     c.add_mat(&res);
-    // lamellar::world.free_local_memory_region(a);
-}
-
-#[lamellar::AmData(Clone, Debug)]
-struct CachedMM {
-    a: SubMatrix,
-    b: LamellarLocalMemoryRegion<f32>,
-    c: SubMatrix,
-    block_size: usize,
-}
-#[lamellar::am]
-impl LamellarAM for CachedMM {
-    fn exec() {
-        let a =
-            lamellar::world.alloc_local_mem_region::<f32>(self.a.block_size * self.a.block_size);
-        get_sub_mat(&self.a, &a).await; //this should be local copy so returns immediately
-                                        // let b = self.b.as_slice();
-        let block_size = self.block_size;
-        let mut res = vec![f32::NAN; a.len()];
-        unsafe {
-            sgemm(
-                block_size,
-                block_size,
-                block_size,
-                1.0,
-                a.as_ptr().unwrap(),
-                block_size as isize,
-                1,
-                self.b.as_ptr().unwrap(),
-                block_size as isize,
-                1,
-                0.0,
-                res.as_mut_ptr(),
-                block_size as isize,
-                1,
-            );
-        }
-        self.c.add_mat(&res);
-        lamellar::world.free_local_memory_region(a);
-    }
 }
 
 fn main() {
@@ -206,19 +161,6 @@ fn main() {
     let world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();
     let num_pes = world.num_pes();
-    if let Ok(size) = std::env::var("LAMELLAR_ROFI_MEM_SIZE") {
-        let size = size
-            .parse::<usize>()
-            .expect("invalid memory size, please supply size in bytes");
-        if size < 300 * 1024 * 1024 * num_pes {
-            println!("This example requires ~300 MB x Num_PEs of 'local' space, please set LAMELLAR_ROFI_MEM_SIZE env var appropriately ");
-            std::process::exit(1);
-        }
-    } else if 1 * 1024 * 1024 * 1024 < 300 * 1024 * 1024 * num_pes {
-        //1GB is the default space allocated for 'local' buffers
-        println!("This example requires ~300 MB x Num_PEs of 'local' space, please set LAMELLAR_ROFI_MEM_SIZE env var appropriately ");
-        std::process::exit(1);
-    }
 
     let dim = elem_per_pe * num_pes;
 
@@ -311,64 +253,12 @@ fn main() {
                 block_size,
                 elapsed,
                 num_gops / elapsed,
-                world.MB_sent()[0] - tot_mb,
-                world.MB_sent()[0],
+                world.MB_sent() - tot_mb,
+                world.MB_sent(),
                 tot_mb,
                 tasks
             );
         }
-        tot_mb = world.MB_sent()[0];
+        tot_mb = world.MB_sent();
     }
-
-    // for i in 0..c.as_slice().len(){
-    //     // println!("{:?} {:?} {:?}",c.as_slice()[i] , c2.as_slice()[i],i);
-    //     assert_eq!(c.as_slice()[i] , c2.as_slice()[i],"i: {:?} ({:?})",i,c.as_slice().len());
-    // }
-
-    // for pe in 0..num_pes {
-    //     if pe == my_pe {
-    //         for row in 0..m/num_pes {
-    //             for col in 0..p {
-    //                 print!("{:?} ", c2.as_slice()[row * p + col]);
-    //             }
-    //             println!();
-    //         }
-    //     }
-    //     world.barrier();
-    // }
-
-    // for pe in 0..num_pes {
-    //     if pe == my_pe {
-    //         for row in 0..m/num_pes {
-    //             for col in 0..p {
-    //                 print!("{:?} ", c.as_slice()[row * p + col]);
-    //             }
-    //             println!();
-    //         }
-    //     }
-    //     world.barrier();
-    // }
-    // let start = std::time::Instant::now();
-    // unsafe {
-    //     dgemm(
-    //         m,
-    //         n,
-    //         p,
-    //         1.0,
-    //         a.as_slice().as_ptr(),
-    //         n as isize,
-    //         1,
-    //         b.as_slice().as_ptr(),
-    //         p as isize,
-    //         1,
-    //         0.0,
-    //         c.as_mut_slice().as_mut_ptr(),
-    //         p as isize,
-    //         1,
-    //     );
-    // }
-    // let elapsed2 = start.elapsed().as_secs_f64();
-
-    // println!("elapsed2: {:?} Gflops: {:?}",elapsed2, num_gops/elapsed2);
-    // // println!("{:?}", c.as_slice());
 }

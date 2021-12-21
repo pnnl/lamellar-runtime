@@ -4,7 +4,7 @@
 /// on a remote PE.
 ///----------------------------------------------------------------
 use lamellar::ActiveMessaging; //for barrier
-use lamellar::{RegisteredMemoryRegion, RemoteMemoryRegion};
+use lamellar::RemoteMemoryRegion;
 
 const ARRAY_LEN: usize = 100;
 
@@ -33,7 +33,7 @@ fn main() {
         }
 
         // we can use the local_array to initialize our local portion a shared memory region
-        unsafe { array.put(my_pe, 0, &data) };
+        unsafe { array.put(my_pe, 0, data.clone()) };
 
         //we can "put" from our segment of a shared mem region into another nodes shared mem region
         world.barrier();
@@ -43,7 +43,7 @@ fn main() {
             );
             world.barrier();
             unsafe {
-                array.put(num_pes - 1, 0, &array);
+                array.put(num_pes - 1, 0, array.clone());
             }
         } else if my_pe == num_pes - 1 {
             println!("[{:?}] Before {:?}", my_pe, array_slice);
@@ -52,7 +52,7 @@ fn main() {
                 std::thread::yield_now();
             } // wait for put to show up
             println!("[{:?}] After {:?}", my_pe, array_slice);
-            unsafe { array.put(my_pe, 0, &data) };
+            unsafe { array.put(my_pe, 0, data.clone()) };
             println!(
                 "-------------------------------------------------------------------------------"
             );
@@ -68,7 +68,7 @@ fn main() {
             );
             world.barrier();
             unsafe {
-                array.put(num_pes - 1, 0, &data);
+                array.put(num_pes - 1, 0, data.clone());
             }
         } else if my_pe == num_pes - 1 {
             println!("[{:?}] Before {:?}", my_pe, array_slice);
@@ -77,7 +77,7 @@ fn main() {
                 std::thread::yield_now();
             } // wait for put to show up
             println!("[{:?}] After {:?}", my_pe, array_slice);
-            unsafe { array.put(my_pe, 0, &data) };
+            unsafe { array.put(my_pe, 0, data.clone()) };
             println!(
                 "-------------------------------------------------------------------------------"
             );
@@ -100,7 +100,7 @@ fn main() {
         // unsafe{data.as_mut_slice().unwrap()[0]=my_pe as u8;}
         while index < ARRAY_LEN {
             let cur_index = index;
-            unsafe { array.put_all(cur_index, &data.sub_region(0..=0)) };
+            unsafe { array.put_all(cur_index, data.sub_region(0..=0)) };
             index += num_pes;
         }
 
@@ -121,8 +121,6 @@ fn main() {
                 "-------------------------------------------------------------------------------"
             );
         }
-        world.free_local_memory_region(data);
-        world.free_shared_memory_region(array);
     } else {
         println!("this example is intended for multi pe executions");
     }

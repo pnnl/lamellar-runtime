@@ -9,11 +9,11 @@
 /// E.g. export LAMELLAR_THREADS=1
 /// this will show the blocking vs non-blocking nature of the the two active message types
 /// --------------------------------------------------------------------
-use lamellar::{ActiveMessaging};
+use lamellar::ActiveMessaging;
 
 use std::time::{Duration, Instant};
 
-#[lamellar::AmData( Clone)]
+#[lamellar::AmData(Clone)]
 struct StdSleepAM {
     secs: u64,
 }

@@ -1,21 +1,19 @@
 /// ------------Lamellar Bandwidth: AM +RDMA -------------------------
 /// Test the bandwidth between two PEs using an active message which
-/// contians a handle to a LamellarMemoryRegion, the active message
+/// contians a handle to a SharedMemoryRegion, the active message
 /// then "gets" N bytes into a local array.
 /// This allows us to have multiple data transfers occuring in parallel
-/// and reduces the need to copy + serialize/deserialize larges amounts 
+/// and reduces the need to copy + serialize/deserialize larges amounts
 /// of data (on the critical path)
 /// --------------------------------------------------------------------
-use lamellar::{
-    ActiveMessaging, LamellarMemoryRegion, RegisteredMemoryRegion, RemoteMemoryRegion,
-};
+use lamellar::{ActiveMessaging, RemoteMemoryRegion, SharedMemoryRegion};
 use std::time::Instant;
 
 const ARRAY_LEN: usize = 1 * 1024 * 1024 * 1024;
 
 #[lamellar::AmData(Clone, Debug)]
 struct DataAM {
-    array: LamellarMemoryRegion<u8>,
+    array: SharedMemoryRegion<u8>,
     index: usize,
     length: usize,
     src: usize,
@@ -29,29 +27,28 @@ impl LamellarAM for DataAM {
             let local = lamellar::team.alloc_local_mem_region::<u8>(self.length);
             let local_slice = local.as_mut_slice().unwrap();
             local_slice[self.length - 1] = 255u8;
-            self.array.get(self.src, self.index, &local);
+            self.array.get(self.src, self.index, local.clone());
 
             while local_slice[self.length - 1] == 255u8 {
                 async_std::task::yield_now().await;
             }
-            lamellar::team.free_local_memory_region(local);
         }
     }
 }
 
 fn main() {
-    if let Ok(size) = std::env::var("LAMELLAR_ROFI_MEM_SIZE") {
-        let size = size
-            .parse::<usize>()
-            .expect("invalid memory size, please supply size in bytes");
-        if size < 8 * 1024 * 1024 * 1024 {
-            println!("This example requires 8GB of 'local' space, please set LAMELLAR_ROFI_MEM_SIZE env var to at least 8589934592 (8GB)");
-            std::process::exit(1);
-        }
-    } else {
-        println!("This example requires 8GB of 'local' space, please set LAMELLAR_ROFI_MEM_SIZE env var to at least 8589934592 (8GB)");
-        std::process::exit(1);
-    }
+    // if let Ok(size) = std::env::var("LAMELLAR_MEM_SIZE") {
+    //     let size = size
+    //         .parse::<usize>()
+    //         .expect("invalid memory size, please supply size in bytes");
+    //     if size < 8 * 1024 * 1024 * 1024 {
+    //         println!("This example requires 8GB of 'local' space, please set LAMELLAR_MEM_SIZE env var to at least 8589934592 (8GB)");
+    //         std::process::exit(1);
+    //     }
+    // } else {
+    //     println!("This example requires 8GB of 'local' space, please set LAMELLAR_MEM_SIZE env var to at least 8589934592 (8GB)");
+    //     std::process::exit(1);
+    // }
     let world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();
     let num_pes = world.num_pes();
@@ -62,7 +59,7 @@ fn main() {
             *i = my_pe as u8;
         }
     }
-    unsafe { array.put(my_pe, 0, &data) };
+    unsafe { array.put(my_pe, 0, data.clone()) };
     world.barrier();
     let s = Instant::now();
     world.barrier();
@@ -75,7 +72,7 @@ fn main() {
     let mut bws = vec![];
     for i in 0..27 {
         let num_bytes = 2_u64.pow(i);
-        let old: f64 = world.MB_sent().iter().sum();
+        let old: f64 = world.MB_sent();
         let mut sum = 0;
         let mut cnt = 0;
         let mut exp = 20;
@@ -90,12 +87,12 @@ fn main() {
             for _j in (0..(2_u64.pow(exp))).step_by(num_bytes as usize) {
                 let sub_timer = Instant::now();
                 world.exec_am_pe(
-                    0,
+                    my_pe,
                     DataAM {
                         array: array.clone(),
                         index: 0 as usize,
                         length: num_bytes as usize,
-                        src: my_pe,
+                        src: 0,
                     },
                 );
                 sub_time += sub_timer.elapsed().as_secs_f64();
@@ -107,7 +104,7 @@ fn main() {
         }
         world.barrier();
         let cur_t = timer.elapsed().as_secs_f64();
-        let cur: f64 = world.MB_sent().iter().sum();
+        let cur: f64 = world.MB_sent();
         if my_pe == num_pes - 1 {
             println!(
                 "tx_size: {:?}B num_tx: {:?} num_bytes: {:?}MB time: {:?} (issue time: {:?})
@@ -133,8 +130,6 @@ fn main() {
         }
         world.barrier();
     }
-    world.free_shared_memory_region(array);
-    world.free_local_memory_region(data);
     if my_pe == num_pes - 1 {
         println!(
             "bandwidths: {}",

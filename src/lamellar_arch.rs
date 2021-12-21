@@ -11,7 +11,7 @@ pub trait LamellarArch: Sync + Send + std::fmt::Debug {
     fn team_pe_id(&self, parent_pe: &usize) -> ArchResult<usize>; // team id is for user convenience, ids == 0..num_pes-1
 }
 
-#[derive(Debug, Clone,Copy)]
+#[derive(Debug, Clone, Copy)]
 pub struct IdError {
     pub parent_pe: usize,
     pub team_pe: usize,

@@ -1,9 +1,9 @@
 /// ------------Lamellar Bandwidth: RDMA Get  -------------------------
-/// Test the bandwidth between two PEs using an RDMA get of N bytes 
+/// Test the bandwidth between two PEs using an RDMA get of N bytes
 /// from a remote PE to a local array.
 /// --------------------------------------------------------------------
 use lamellar::ActiveMessaging;
-use lamellar::{RegisteredMemoryRegion, RemoteMemoryRegion};
+use lamellar::RemoteMemoryRegion;
 use std::time::Instant;
 
 const ARRAY_LEN: usize = 1024 * 1024 * 1024;
@@ -33,7 +33,7 @@ fn main() {
     }
     for i in 0..30 {
         let num_bytes = 2_u64.pow(i);
-        let old: f64 = world.MB_sent().iter().sum();
+        let old: f64 = world.MB_sent();
         let mbs_o = world.MB_sent();
         let mut sum = 0;
         let mut cnt = 0;
@@ -48,16 +48,10 @@ fn main() {
         if my_pe == 0 {
             for j in (0..2_u64.pow(exp) as usize).step_by(num_bytes as usize) {
                 // if j % 1024 ==0 {
-                    // println!("[{:?}] j: {:?}",my_pe, j);
+                // println!("[{:?}] j: {:?}",my_pe, j);
                 // }
                 let sub_timer = Instant::now();
-                unsafe {
-                    array.get(
-                        num_pes - 1,
-                        0,
-                        &data.sub_region(j..(j + num_bytes as usize)),
-                    )
-                };
+                unsafe { array.get(num_pes - 1, 0, data.sub_region(j..(j + num_bytes as usize))) };
                 sub_time += sub_timer.elapsed().as_secs_f64();
                 sum += num_bytes * 1 as u64;
                 cnt += 1;
@@ -75,7 +69,7 @@ fn main() {
         }
         world.barrier();
         let cur_t = timer.elapsed().as_secs_f64();
-        let cur: f64 = world.MB_sent().iter().sum();
+        let cur: f64 = world.MB_sent();
         let mbs_c = world.MB_sent();
         if my_pe == 0 {
             for j in 0..2_u64.pow(exp) as usize {
@@ -95,7 +89,7 @@ fn main() {
             ((sum*(num_pes-1) as u64) as f64 / 1048576.0) / cur_t,
             cur - old, //total bytes sent including overhead
             (cur - old) as f64 / cur_t, //throughput including overhead 
-            (mbs_c[0] -mbs_o[0] )/ cur_t,
+            (mbs_c -mbs_o )/ cur_t,
             (cur_t/cnt as f64) * 1_000_000 as f64 ,
         );
         }
@@ -107,8 +101,6 @@ fn main() {
         }
         world.barrier();
     }
-    world.free_shared_memory_region(array);
-    world.free_local_memory_region(data);
     if my_pe == 0 {
         println!(
             "bandwidths: {}",

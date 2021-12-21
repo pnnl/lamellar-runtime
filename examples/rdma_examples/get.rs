@@ -3,9 +3,8 @@
 /// and performing an RDMA get of remote data from the region into
 /// a local buffer
 ///----------------------------------------------------------------
-
 use lamellar::ActiveMessaging; //for barrier
-use lamellar::{RegisteredMemoryRegion, RemoteMemoryRegion};
+use lamellar::RemoteMemoryRegion;
 
 const ARRAY_LEN: usize = 100;
 
@@ -33,7 +32,7 @@ fn main() {
         }
 
         // we can use the local_array to initialize our local portion a shared memory region
-        unsafe { array.put(my_pe, 0, &data) };
+        unsafe { array.put(my_pe, 0, data.clone()) };
 
         //we can "get" from a remote segment of a shared mem region into a local segment of the shared mem region
         world.barrier();
@@ -43,7 +42,7 @@ fn main() {
             );
             println!("[{:?}] Before {:?}", my_pe, array_slice);
             unsafe {
-                array.get(num_pes - 1, 0, &array);
+                array.get(num_pes - 1, 0, array.clone());
             }
             while array_slice[ARRAY_LEN - 1] == my_pe as u8 {
                 std::thread::yield_now();
@@ -52,7 +51,7 @@ fn main() {
             println!(
                 "-------------------------------------------------------------------------------"
             );
-            unsafe { array.put(my_pe, 0, &data) }; //reset our local segment
+            unsafe { array.put(my_pe, 0, data.clone()) }; //reset our local segment
         }
 
         world.barrier();
@@ -64,7 +63,7 @@ fn main() {
             );
             println!("[{:?}] Before {:?}", my_pe, data_slice);
             unsafe {
-                array.get(num_pes - 1, 0, &data);
+                array.get(num_pes - 1, 0, data.clone());
             }
             while data_slice[ARRAY_LEN - 1] == my_pe as u8 {
                 std::thread::yield_now();
@@ -74,7 +73,7 @@ fn main() {
                 "-------------------------------------------------------------------------------"
             );
             unsafe {
-                array.get(my_pe, 0, &data);
+                array.get(my_pe, 0, data.clone());
             } // reset local_array;
         }
         world.barrier();
@@ -89,7 +88,7 @@ fn main() {
 
         //stripe pe ids accross all shared mem regions
         for i in 0..ARRAY_LEN {
-            unsafe { array.get(i % num_pes, i, &data.sub_region(i..=i)) };
+            unsafe { array.get(i % num_pes, i, data.sub_region(i..=i)) };
         }
 
         for i in 0..ARRAY_LEN {
@@ -109,8 +108,6 @@ fn main() {
                 "-------------------------------------------------------------------------------"
             );
         }
-        world.free_local_memory_region(data);
-        world.free_shared_memory_region(array);
     } else {
         println!("this example is intended for multi pe executions");
     }

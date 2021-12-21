@@ -2,3 +2,5 @@
 **/*.rs.bk
 /.vscode
 /impl/target
+*.out
+expanded*.rs

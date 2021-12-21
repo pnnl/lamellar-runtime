@@ -17,8 +17,6 @@ use lamellar::{IdError, LamellarArch};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-
-
 #[derive(Debug, Hash, Clone)]
 struct BlockStridedArch {
     num_pes: usize,
@@ -103,7 +101,7 @@ impl LamellarArch for BlockStridedArch {
     }
 }
 
-#[lamellar::AmData( Clone)]
+#[lamellar::AmData(Clone)]
 struct TeamAM {
     secs: u64,
 }
