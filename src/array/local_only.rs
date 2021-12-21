@@ -5,6 +5,7 @@ use crate::memregion::Dist;
 use std::marker::PhantomData;
 use std::sync::Arc;
 
+
 pub struct LocalOnlyArray<T: Dist + 'static> {
     pub(crate) array: UnsafeArray<T>,
     // actually we should just use a read write lock here to enforce mutability exclusitivity
@@ -12,6 +13,7 @@ pub struct LocalOnlyArray<T: Dist + 'static> {
                                                 // we must make this not sync by default.
                                                 // either wrap the localonlyarray in a mutex/rwlock or use a localRwArray
 }
+
 
 //#[prof]
 impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> LocalOnlyArray<T> {

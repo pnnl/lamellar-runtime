@@ -1,6 +1,4 @@
-use crate::{active_messaging::*, LamellarTeamRT}; //{ActiveMessaging,AMCounters,Cmd,Msg,LamellarAny,LamellarLocal};
-                                                  // use crate::lamellae::Lamellae;
-                                                  // use crate::lamellar_arch::LamellarArchRT;
+use crate::{active_messaging::*, LamellarTeamRT}; 
 use crate::lamellar_request::LamellarRequest;
 use crate::memregion::{
     local::LocalMemoryRegion, shared::SharedMemoryRegion, Dist, LamellarMemoryRegion,
@@ -13,13 +11,13 @@ use std::pin::Pin;
 use std::sync::Arc;
 
 pub(crate) mod r#unsafe;
-pub use r#unsafe::{operations::UnsafeArrayAdd, UnsafeArray};
+pub use r#unsafe::{operations::UnsafeArrayOp, UnsafeArray};
 pub(crate) mod read_only;
 pub use read_only::ReadOnlyArray;
 pub(crate) mod local_only;
 pub use local_only::LocalOnlyArray;
 pub(crate) mod atomic;
-pub use atomic::{AtomicArray, AtomicArrayAdd, AtomicOps};
+pub use atomic::{AtomicArray, operations::AtomicArrayOp, AtomicOps};
 
 pub mod iterator;
 pub use iterator::distributed_iterator::DistributedIterator;
@@ -61,34 +59,67 @@ pub enum Distribution {
 }
 
 #[derive(Hash, std::cmp::PartialEq, std::cmp::Eq, Clone)]
-pub enum ArrayOpCmd {
+pub enum ArrayRdmaCmd {
     Put,
     PutAm,
     Get(bool), //bool true == immediate, false = async
     GetAm,
 }
 
-pub trait ArrayOp {} //essentially a marker trait than signifys a type has been registered for distributed ArrayOps
+#[derive(Hash, std::cmp::PartialEq, std::cmp::Eq, Clone)]
+pub enum ArrayOpCmd{
+    Add,
+    Sub,
+    Mul,
+    Div,
+    And,
+    Or,
+}
 
-pub trait ArrayOps<T: Dist + std::ops::AddAssign> {
+pub trait ElementOps: std::ops::AddAssign + std::ops::SubAssign + Sized  {} 
+
+impl<T> ElementOps for T where T: std::ops::AddAssign + std::ops::SubAssign {}
+
+
+pub trait ArrayOps<T: Dist + ElementOps> {
     fn add(
         &self,
         index: usize,
         val: T,
     ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>>;
+
+    // fn sub(
+    //     &self,
+    //     index: usize,
+    //     val: T,
+    // ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>>;
+
+    // fn mul(
+    //     &self,
+    //     index: usize,
+    //     val: T,
+    // ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>>;
+
+    // fn div(
+    //     &self,
+    //     index: usize,
+    //     val: T,
+    // ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>>;
+
+    // fn add(
+    //     &self,
+    //     index: usize,
+    //     val: T,
+    // ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>>;
+
+    // fn or(
+    //     &self,
+    //     index: usize,
+    //     val: T,
+    // ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>>;
 }
 
-#[derive(serde::Serialize, serde::Deserialize, Clone)]
-enum ArrayOpInput {
-    Add(usize, Vec<u8>),
-}
-
-pub trait ArrayAdd<T: Dist + std::ops::AddAssign> {
-    fn dist_add(
-        &self,
-        index: usize,
-        func: LamellarArcAm,
-    ) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync>;
+pub trait ArrayLocalOps<T: Dist + ElementOps> {
     fn local_add(&self, index: usize, val: T);
 }
 
@@ -241,14 +272,17 @@ pub trait LamellarArrayRead<T: Dist>: LamellarArray<T> + Sync + Send {
     // this is non blocking call
     // the runtime does not manage checking for completion of message transmission
     // the user is responsible for ensuring the buffer remains valid
-    unsafe fn get_unchecked<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(
-        &self,
-        index: usize,
-        buf: U,
-    );
+    // unsafe fn get_unchecked<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(
+    //     &self,
+    //     index: usize,
+    //     buf: U,
+    // );
 
     // a safe synchronous call that blocks untils the data as all been transfered
     fn iget<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(&self, index: usize, buf: U);
+
+    // async get
+    fn get<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(&self, index: usize, buf: U);
 
     // blocking call that gets the value stored and the provided index
     fn iat(&self, index: usize) -> T;

@@ -758,7 +758,7 @@ fn create_reduction(
     }
 }
 
-fn create_add(
+fn create_ops(
     typeident: syn::Ident,
     array_types: &Vec<syn::Ident>,
     rt: bool,
@@ -786,9 +786,9 @@ fn create_add(
     for array_type in array_types {
         let add_name_am = quote::format_ident!("{}_{}_add_am", array_type, typeident);
         let add_name_func = quote::format_ident!("{}_{}_add", array_type, typeident);
-        let create_add = quote::format_ident!("{}_create_add", array_type);
+        let create_add = quote::format_ident!("{}_create_ops", array_type);
         let create_add_fn_name = quote::format_ident!("{}_{}_create_add", array_type, typeident);
-        let add_struct = quote::format_ident!("{}_inventory_add", array_type);
+        let register = quote::format_ident!("{}_inventory_add_op", array_type);
         // let reg_add = quote::format_ident!("{}Add",array_type);
         match_stmts.extend(quote! {
             #lamellar::array::LamellarWriteArray::#array_type(inner) => inner.add(index,val),
@@ -797,29 +797,6 @@ fn create_add(
             #[allow(non_camel_case_types)]
             #lamellar::#create_add!(#typeident,#create_add_fn_name);
 
-            // #[allow(non_camel_case_types)]
-            // // impl  #lamellar::array::#array_type<#typeident>{
-            // impl #lamellar::array::ArrayOps<#typeident> for #lamellar::array::#array_type<#typeident>{
-            //     fn add(&self,index: usize, val: #typeident)->Option<Box<dyn #lamellar::LamellarRequest<Output = ()> + Send + Sync>>{
-            //         println!("add ArrayOps<{}> for {}<{}>",stringify!(#typeident),stringify!(#array_type),stringify!(#typeident));
-            //         let pe = self.pe_for_dist_index(index);
-            //         let local_index = self.pe_offset_for_dist_index(pe,index);
-            //         if pe == self.my_pe(){
-            //             self.local_add(local_index,val);
-            //             None
-            //         }
-            //         else{
-            //             Some(self.dist_add(
-            //                 index,
-            //                 Arc::new (#add_name_am{
-            //                     data: self.clone(),
-            //                     local_index: local_index,
-            //                     val: val,
-            //                 })
-            //             ))
-            //         }
-            //     }
-            // }
             #[#am_data]
             struct #add_name_am{
                 data: #lamellar::array::#array_type<#typeident>,
@@ -837,7 +814,7 @@ fn create_add(
                     })
                 }
             // }
-            #lamellar::#add_struct!(#typeident, #add_name_func, #create_add_fn_name);
+            #lamellar::#register!(#typeident, ArrayOpCmd::Add, #add_name_func, #create_add_fn_name);
 
             #[#am]
             impl LamellarAM for #add_name_am{
@@ -866,8 +843,7 @@ fn create_add(
     let user_expanded = quote_spanned! {expanded.span()=>
         const _: () = {
             extern crate lamellar as __lamellar;
-            use __lamellar::array::LamellarArrayRead;
-            use __lamellar::array::ArrayAdd;
+            use __lamellar::array::{ArrayLocalOps,ArrayOpCmd,LamellarArrayRead};
             use __lamellar::LamellarArray;
             use __lamellar::LamellarRequest;
             use __lamellar::RemoteActiveMessage;
@@ -975,7 +951,7 @@ pub fn generate_reductions_for_type(item: TokenStream) -> TokenStream {
             &read_array_types,
             false,
         ));
-        output.extend(create_add(typeident.clone(), &write_array_types, false));
+        output.extend(create_ops(typeident.clone(), &write_array_types, false));
     }
 
     TokenStream::from(output)
@@ -1025,7 +1001,7 @@ pub fn generate_reductions_for_type_rt(item: TokenStream) -> TokenStream {
             &read_array_types,
             true,
         ));
-        output.extend(create_add(typeident.clone(), &write_array_types, true));
+        output.extend(create_ops(typeident.clone(), &write_array_types, true));
     }
     TokenStream::from(output)
 }
@@ -1049,6 +1025,6 @@ pub fn derive_dist(input: TokenStream) -> TokenStream {
         };
     });
 
-    output.extend(create_add(name.clone(), &write_array_types, false));
+    output.extend(create_ops(name.clone(), &write_array_types, false));
     TokenStream::from(output)
 }

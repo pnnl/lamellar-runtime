@@ -1,3 +1,7 @@
+mod iteration;
+pub(crate) mod operations;
+mod rdma;
+
 use crate::array::iterator::distributed_iterator::{
     DistIter, DistIterMut, DistIteratorLauncher, DistributedIterator,
 };
@@ -15,19 +19,7 @@ use std::collections::HashSet;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
-type AddFn = fn(*const u8, AtomicArray<u8>, usize) -> LamellarArcAm;
-type LocalAddFn = fn(*const u8, AtomicArray<u8>, usize);
 
-lazy_static! {
-    static ref ADD_OPS: HashMap<TypeId, (AddFn,LocalAddFn)> = {
-        let mut map = HashMap::new();
-        for add in crate::inventory::iter::<AtomicArrayAdd> {
-            map.insert(add.id.clone(),(add.add,add.local));
-        }
-        map
-        // map.insert(TypeId::of::<f64>(), f64_add::add as AddFn );
-    };
-}
 
 lazy_static! {
     pub(crate) static ref NATIVE_ATOMICS: HashSet<TypeId> = {
@@ -46,13 +38,6 @@ lazy_static! {
     };
 }
 
-pub struct AtomicArrayAdd {
-    pub id: TypeId,
-    pub add: AddFn,
-    pub local: LocalAddFn,
-}
-
-crate::inventory::collect!(AtomicArrayAdd);
 
 mod atomic_private {
     use parking_lot::Mutex;
@@ -158,6 +143,7 @@ impl<T: Dist + std::default::Default + 'static> AtomicArray<T> {
         }
     }
 }
+
 impl<T: Dist> AtomicArray<T> {
     pub fn wait_all(&self) {
         self.array.wait_all();
@@ -195,20 +181,7 @@ impl<T: Dist> AtomicArray<T> {
         self.array.len()
     }
 
-    //these change into
-    // load, store, swap
-    // pub unsafe fn get_unchecked<U: MyInto<LamellarArrayInput<T>> + LamellarWrite >(&self, index: usize, buf: U) {
-    //     // self.array.get_unchecked(index,buf)
-    // }
-    // pub  fn iget<U: MyInto<LamellarArrayInput<T>> + LamellarWrite >(&self, index: usize, buf: U) {
-    //     // self.array.get_unchecked(index,buf)
-    // }
-    // pub fn put<U: MyInto<LamellarArrayInput<T>> + LamellarRead >(&self, index: usize, buf: U) {
-    //     // self.array.get_unchecked(index,buf)
-    // }
-    // pub fn at(&self, index: usize) -> T {
-    //     self.array.at(index)
-    // }
+   
 
     #[doc(hidden)]
     pub unsafe fn local_as_slice(&self) -> &[T] {
@@ -247,25 +220,7 @@ impl<T: Dist> AtomicArray<T> {
     //     self.array.local_as_mut_ptr()
     // }
 
-    pub fn dist_iter(&self) -> DistIter<'static, T, AtomicArray<T>> {
-        DistIter::new(self.clone().into(), 0, 0)
-    }
 
-    pub fn dist_iter_mut(&self) -> DistIterMut<'static, T, AtomicArray<T>> {
-        DistIterMut::new(self.clone().into(), 0, 0)
-    }
-
-    pub fn ser_iter(&self) -> LamellarArrayIter<'_, T, AtomicArray<T>> {
-        LamellarArrayIter::new(self.clone().into(), self.array.team().clone(), 1)
-    }
-
-    pub fn buffered_iter(&self, buf_size: usize) -> LamellarArrayIter<'_, T, AtomicArray<T>> {
-        LamellarArrayIter::new(
-            self.clone().into(),
-            self.array.team().clone(),
-            std::cmp::min(buf_size, self.len()),
-        )
-    }
 
     pub fn sub_array<R: std::ops::RangeBounds<usize>>(&self, range: R) -> AtomicArray<T> {
         AtomicArray {
@@ -322,27 +277,6 @@ impl<T: Dist> AtomicArray<T> {
 //     }
 // }
 
-impl<T: Dist> DistIteratorLauncher for AtomicArray<T> {
-    fn global_index_from_local(&self, index: usize, chunk_size: usize) -> usize {
-        self.array.global_index_from_local(index, chunk_size)
-    }
-
-    fn for_each<I, F>(&self, iter: &I, op: F)
-    where
-        I: DistributedIterator + 'static,
-        F: Fn(I::Item) + Sync + Send + Clone + 'static,
-    {
-        self.array.for_each(iter, op)
-    }
-    fn for_each_async<I, F, Fut>(&self, iter: &I, op: F)
-    where
-        I: DistributedIterator + 'static,
-        F: Fn(I::Item) -> Fut + Sync + Send + Clone + 'static,
-        Fut: Future<Output = ()> + Sync + Send + Clone + 'static,
-    {
-        self.array.for_each_async(iter, op)
-    }
-}
 
 impl<T: Dist> private::LamellarArrayPrivate<T> for AtomicArray<T> {
     fn local_as_ptr(&self) -> *const T {
@@ -383,27 +317,7 @@ impl<T: Dist> LamellarArray<T> for AtomicArray<T> {
 impl<T: Dist> LamellarWrite for AtomicArray<T> {}
 impl<T: Dist> LamellarRead for AtomicArray<T> {}
 
-impl<T: Dist> LamellarArrayRead<T> for AtomicArray<T> {
-    unsafe fn get_unchecked<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(
-        &self,
-        index: usize,
-        buf: U,
-    ) {
-        self.array.get_unchecked(index, buf)
-    }
-    fn iget<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(&self, index: usize, buf: U) {
-        self.array.iget(index, buf)
-    }
-    fn iat(&self, index: usize) -> T {
-        self.array.iat(index)
-    }
-}
 
-impl<T: Dist> LamellarArrayWrite<T> for AtomicArray<T> {
-    // fn put_unchecked<U: MyInto<LamellarArrayInput<T>> + LamellarRead>(&self, index: usize, buf: U) {
-    //     self.array.put_unchecked(index, buf)
-    // }
-}
 
 impl<T: Dist> SubArray<T> for AtomicArray<T> {
     type Array = AtomicArray<T>;
@@ -431,182 +345,6 @@ impl<T: Dist> SubArray<T> for AtomicArray<T> {
 //     }
 // }
 
-impl<T: Dist + std::ops::AddAssign + 'static> ArrayOps<T> for AtomicArray<T> {
-    fn add(
-        &self,
-        index: usize,
-        val: T,
-    ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>> {
-        println!("add ArrayOps<T> for &AtomicArray<T> ");
-        if let Some(funcs) = ADD_OPS.get(&TypeId::of::<T>()) {
-            let pe = self.pe_for_dist_index(index);
-            let local_index = self.pe_offset_for_dist_index(pe, index);
-            let array: AtomicArray<u8> = unsafe { self.as_base_inner() };
-            if pe == self.my_pe() {
-                funcs.1(&val as *const T as *const u8, array, local_index);
-                None
-            } else {
-                let am = funcs.0(&val as *const T as *const u8, array, local_index);
-                Some(self.array.dist_add(index, am))
-            }
-        } else {
-            let name = std::any::type_name::<T>().split("::").last().unwrap();
-            panic!("the type {:?} has not been registered! this typically means you need to derive \"ArrayOps\" for the type . e.g. 
-            #[derive(lamellar::ArrayOps)]
-            struct {:?}{{
-                ....
-            }}
-            note this also requires the type to impl Serialize + Deserialize, you can manually derive these, or use the lamellar::AmData attribute proc macro, e.g.
-            #[lamellar::AMData(ArrayOps, any other traits you derive)]
-            struct {:?}{{
-                ....
-            }}",name,name,name);
-        }
-    }
-}
-
-#[macro_export]
-macro_rules! atomic_add {
-    ($a:ty, $name:ident) => {
-        impl ArrayAdd<$a> for AtomicArray<$a> {
-            //for atomic array I need do this in the macro as well.
-            fn dist_add(
-                &self,
-                index: usize,
-                func: Arc<dyn RemoteActiveMessage + Send + Sync>,
-            ) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync> {
-                println!(
-                    "native dist_add ArrayAdd<{}>  for AtomicArray<{}>  ",
-                    stringify!($a),
-                    stringify!($a)
-                );
-                (&self).dist_add(index, func)
-            }
-            fn local_add(&self, index: usize, val: $a) {
-                println!(
-                    "native local_add ArrayAdd<{}>  for AtomicArray<{}>  ",
-                    stringify!($a),
-                    stringify!($a)
-                );
-                use $crate::array::AtomicOps;
-                unsafe { self.local_as_mut_slice()[index].fetch_add(val) };
-            }
-        }
-
-        fn $name(val: *const u8, array: $crate::array::AtomicArray<u8>, index: usize) {
-            let val = unsafe { *(val as *const $a) };
-            println!("native {} ", stringify!($name));
-            let array = unsafe { array.to_base_inner::<$a>() };
-            use $crate::array::AtomicOps;
-            unsafe { array.local_as_mut_slice()[index].fetch_add(val) };
-        }
-    };
-}
-
-#[macro_export]
-macro_rules! non_atomic_add {
-    ($a:ty, $name:ident) => {
-        impl ArrayAdd<$a> for AtomicArray<$a> {
-            //for atomic array I need do this in the macro as well.
-            fn dist_add(
-                &self,
-                index: usize,
-                func: Arc<dyn RemoteActiveMessage + Send + Sync>,
-            ) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync> {
-                println!(
-                    "mutex dist_add ArrayAdd<{}> for AtomicArray<{}> ",
-                    stringify!($a),
-                    stringify!($a)
-                );
-                (&self).dist_add(index, func)
-            }
-            fn local_add(&self, index: usize, val: $a) {
-                println!(
-                    "mutex local_add ArrayAdd<{}> for AtomicArray<{}>  ",
-                    stringify!($a),
-                    stringify!($a)
-                );
-                let _lock = self.lock_index(index);
-                unsafe { self.local_as_mut_slice()[index] += val };
-            }
-        }
-
-        fn $name(val: *const u8, array: $crate::array::AtomicArray<u8>, index: usize) {
-            let val = unsafe { *(val as *const $a) };
-            let array = unsafe { array.to_base_inner::<$a>() };
-            println!("mutex {} ", stringify!($name));
-            let _lock = array.lock_index(index).expect("no lock exists!");
-            unsafe { array.local_as_mut_slice()[index] += val };
-        }
-    };
-}
-
-#[macro_export]
-macro_rules! AtomicArray_create_add {
-    (u8, $name:ident) => {
-        $crate::atomic_add!(u8, $name);
-    };
-    (u16, $name:ident) => {
-        $crate::atomic_add!(u16, $name);
-    };
-    (u32, $name:ident) => {
-        $crate::atomic_add!(u32, $name);
-    };
-    (u64, $name:ident) => {
-        $crate::atomic_add!(u64, $name);
-    };
-    (usize, $name:ident) => {
-        $crate::atomic_add!(usize, $name);
-    };
-    (i8, $name:ident) => {
-        $crate::atomic_add!(i8, $name);
-    };
-    (i16, $name:ident) => {
-        $crate::atomic_add!(i16, $name);
-    };
-    (i32, $name:ident) => {
-        $crate::atomic_add!(i32, $name);
-    };
-    (i64, $name:ident) => {
-        $crate::atomic_add!(i64, $name);
-    };
-    (isize, $name:ident) => {
-        $crate::atomic_add!(isize, $name);
-    };
-    ($a:ty, $name:ident) => {
-        $crate::non_atomic_add!($a, $name);
-    };
-}
-
-#[macro_export]
-macro_rules! AtomicArray_inventory_add {
-    ($id:ident, $add:ident, $local:ident) => {
-        inventory::submit! {
-            #![crate = $crate]
-            $crate::array::AtomicArrayAdd{
-                id: std::any::TypeId::of::<$id>(),
-                add: $add,
-                local: $local
-            }
-        }
-    };
-}
-
-impl<T: Dist + std::ops::AddAssign> ArrayAdd<T> for &AtomicArray<T> {
-    fn dist_add(
-        &self,
-        index: usize,
-        func: Arc<dyn RemoteActiveMessage + Send + Sync>,
-    ) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync> {
-        println!("dist_add ArrayAdd<T> for &AtomicArray<T>");
-        self.array.dist_add(index, func)
-    }
-    fn local_add(&self, index: usize, val: T) {
-        println!("local_add ArrayAdd<T> for &AtomicArray<T>");
-        let _lock = self.lock_index(index);
-        self.array.local_add(index, val);
-    }
-}
 
 // impl<T: Dist + std::ops::AddAssign> ArrayOps<T> for AtomicArray<T>{
 //     fn add(&self, index:usize, val: T) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>> {

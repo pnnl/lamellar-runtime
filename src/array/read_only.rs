@@ -67,6 +67,9 @@ impl<T: Dist> ReadOnlyArray<T> {
     pub fn iget<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(&self, index: usize, buf: U) {
         self.array.iget(index, buf)
     }
+    pub fn get<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(&self, index: usize, buf: U) {
+        self.array.get(index, buf)
+    }
     pub fn iat(&self, index: usize) -> T {
         self.array.iat(index)
     }
@@ -206,15 +209,18 @@ impl<T: Dist> LamellarArray<T> for ReadOnlyArray<T> {
     }
 }
 impl<T: Dist> LamellarArrayRead<T> for ReadOnlyArray<T> {
-    unsafe fn get_unchecked<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(
-        &self,
-        index: usize,
-        buf: U,
-    ) {
-        self.get_unchecked(index, buf)
-    }
+    // unsafe fn get_unchecked<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(
+    //     &self,
+    //     index: usize,
+    //     buf: U,
+    // ) {
+    //     self.get_unchecked(index, buf)
+    // }
     fn iget<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(&self, index: usize, buf: U) {
         self.iget(index, buf)
+    }
+    fn get<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(&self, index: usize, buf: U) {
+        self.get(index, buf)
     }
     fn iat(&self, index: usize) -> T {
         self.iat(index)

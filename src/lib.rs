@@ -120,7 +120,7 @@ pub use crate::active_messaging::{
 pub use crate::active_messaging::{ActiveMessaging, LamellarAM, LocalAM};
 
 #[doc(hidden)]
-pub use crate::array::{LamellarArray, ReduceKey};
+pub use crate::array::{LamellarArray, ArrayOpCmd, ReduceKey};
 
 pub use crate::darc::global_rw_darc::GlobalRwDarc;
 #[doc(hidden)]
