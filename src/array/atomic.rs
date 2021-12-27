@@ -2,9 +2,9 @@ mod iteration;
 pub(crate) mod operations;
 mod rdma;
 
-use crate::array::iterator::distributed_iterator::{
-    DistIter, DistIterMut, DistIteratorLauncher, DistributedIterator,
-};
+// use crate::array::iterator::distributed_iterator::{
+//     DistIter, DistIterMut, DistIteratorLauncher, DistributedIterator,
+// };
 use crate::array::iterator::serial_iterator::LamellarArrayIter;
 use crate::array::*;
 // use crate::array::private::LamellarArrayPrivate;

@@ -781,65 +781,83 @@ fn create_ops(
         )
     };
 
-    let mut match_stmts = quote! {};
-    let mut array_impls = quote! {};
-    for array_type in array_types {
-        let add_name_am = quote::format_ident!("{}_{}_add_am", array_type, typeident);
-        let add_name_func = quote::format_ident!("{}_{}_add", array_type, typeident);
-        let create_add = quote::format_ident!("{}_create_ops", array_type);
-        let create_add_fn_name = quote::format_ident!("{}_{}_create_add", array_type, typeident);
-        let register = quote::format_ident!("{}_inventory_add_op", array_type);
-        // let reg_add = quote::format_ident!("{}Add",array_type);
-        match_stmts.extend(quote! {
-            #lamellar::array::LamellarWriteArray::#array_type(inner) => inner.add(index,val),
-        });
-        array_impls.extend(quote!{
-            #[allow(non_camel_case_types)]
-            #lamellar::#create_add!(#typeident,#create_add_fn_name);
+    let ops: Vec<syn::Ident> = vec![
+        quote::format_ident!("add"),
+        quote::format_ident!("sub"),
+    ];
 
-            #[#am_data]
-            struct #add_name_am{
-                data: #lamellar::array::#array_type<#typeident>,
-                local_index: usize,
-                val: #typeident,
-            }
-            // impl  #add_name_am{
-                fn #add_name_func(val: *const u8, array: #lamellar::array::#array_type<u8>, index: usize) -> Arc<dyn RemoteActiveMessage + Send + Sync>{
-                    println!("{:}",stringify!(#add_name_func));
+    let mut array_impls = quote! {};
+
+    array_impls.extend(quote!{
+        #[allow(non_camel_case_types)]
+    });
+    
+    for array_type in array_types {
+        let create_ops = quote::format_ident!("{}_create_ops", array_type);
+        let op_fn_name_base = quote::format_ident!("{}_{}_", array_type, typeident);
+        array_impls.extend(quote!{
+            #lamellar::#create_ops!(#typeident,#op_fn_name_base);
+        });
+        for op in &ops{
+            let op_am_name = quote::format_ident!("{}_{}_{}_am", array_type, typeident, op);
+            let dist_fn_name = quote::format_ident!("{}dist_{}", op_fn_name_base, op);
+            let local_op = quote::format_ident!("local_{}",op);
+            array_impls.extend(quote!{
+                #[#am_data]
+                struct #op_am_name{
+                    data: #lamellar::array::#array_type<#typeident>,
+                    local_index: usize,
+                    val: #typeident,
+                }
+                #[allow(non_snake_case)]
+                fn #dist_fn_name(val: *const u8, array: #lamellar::array::#array_type<u8>, index: usize) -> Arc<dyn RemoteActiveMessage + Send + Sync>{
+                    println!("{:}",stringify!(#dist_fn_name));
                     let val = unsafe {*(val as  *const #typeident)};
-                    Arc::new(#add_name_am{
+                    Arc::new(#op_am_name{
                         data: unsafe {array.to_base_inner()},
                         local_index: index,
                         val: val,
                     })
                 }
-            // }
-            #lamellar::#register!(#typeident, ArrayOpCmd::Add, #add_name_func, #create_add_fn_name);
+                #[#am]
+                impl LamellarAM for #op_am_name{
+                    fn exec(&self) {
+                        self.data.#local_op(self.local_index,self.val);
+                    }
+                }
+            });
+        }
+    }
 
-            #[#am]
-            impl LamellarAM for #add_name_am{
-                fn exec(&self) {
-                    self.data.local_add(self.local_index,self.val);
+    
+
+    let mut write_array_impl = quote! {};
+        
+    for op in ops{
+        let mut match_stmts = quote! {};
+        for array_type in array_types {
+            match_stmts.extend(quote! {
+                #lamellar::array::LamellarWriteArray::#array_type(inner) => inner.#op(index,val),
+            });
+        }
+        write_array_impl.extend(quote!{
+            fn #op(&self,index: usize, val: #typeident)->Option<Box<dyn #lamellar::LamellarRequest<Output = ()> + Send + Sync>>{
+                match self{
+                    #match_stmts
                 }
             }
         });
     }
 
-    let expanded = quote! {
+    
 
-
+    let expanded = quote!{
         #[allow(non_camel_case_types)]
         impl #lamellar::array::ArrayOps<#typeident> for #lamellar::array::LamellarWriteArray<#typeident>{
-            fn add(&self,index: usize, val: #typeident)->Option<Box<dyn #lamellar::LamellarRequest<Output = ()> + Send + Sync>>{
-                match self{
-                    #match_stmts
-                }
-            }
+            #write_array_impl
         }
-
         #array_impls
     };
-
     let user_expanded = quote_spanned! {expanded.span()=>
         const _: () = {
             extern crate lamellar as __lamellar;

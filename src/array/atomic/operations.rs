@@ -31,12 +31,12 @@ lazy_static! {
 }
 
 impl<T: Dist  + ElementOps  + 'static> AtomicArray<T> {
-    fn fetch_add(&self, index: usize, val: T) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>>{
+    pub fn fetch_add(&self, index: usize, val: T) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>>{
         self.add(index,val)
     }
-    // fn fetch_sub(&self, index, val: T) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>>{
-    //     self.sub(index,val)
-    // }
+    pub fn fetch_sub(&self, index: usize, val: T) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>>{
+        self.sub(index,val)
+    }
 
     fn initiate_op(&self, index: usize, val: T, op: ArrayOpCmd)  -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>>{
         // println!("add ArrayOps<T> for &AtomicArray<T> ");
@@ -49,7 +49,7 @@ impl<T: Dist  + ElementOps  + 'static> AtomicArray<T> {
                 None
             } else {
                 let am = funcs.0(&val as *const T as *const u8, array, local_index);
-                Some(self.array.dist_op(pe, index, am))
+                Some(self.array.dist_op(pe,am))
             }
         } else {
             let name = std::any::type_name::<T>().split("::").last().unwrap();
@@ -76,28 +76,25 @@ impl<T: Dist + ElementOps  + 'static> ArrayOps<T> for AtomicArray<T> {
     ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>> {
         self.initiate_op(index,val,ArrayOpCmd::Add)
     }
-    // fn sub(
-    //     &self,
-    //     index: usize,
-    //     val: T,
-    // ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>> {
-    //     self.perform_op(index,val,ArrayOpCmd::Sub)
-    // }
+    fn sub(
+        &self,
+        index: usize,
+        val: T,
+    ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>> {
+        self.initiate_op(index,val,ArrayOpCmd::Sub)
+    }
 }
 
 impl<T: Dist + ElementOps> ArrayLocalOps<T> for &AtomicArray<T> {
-    // fn dist_add(
-    //     &self,
-    //     index: usize,
-    //     func: Arc<dyn RemoteActiveMessage + Send + Sync>,
-    // ) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync> {
-    //     println!("dist_add ArrayAdd<T> for &AtomicArray<T>");
-    //     self.array.dist_add(index, func)
-    // }
     fn local_add(&self, index: usize, val: T) {
-        println!("local_add ArrayAdd<T> for &AtomicArray<T>");
+        println!("local_add ArrayLocalOps<T> for &AtomicArray<T>");
         let _lock = self.lock_index(index);
         self.array.local_add(index, val);
+    }
+    fn local_sub(&self, index: usize, val: T) {
+        println!("local_sub ArrayLocalOps<T> for &AtomicArray<T>");
+        let _lock = self.lock_index(index);
+        self.array.local_sub(index, val);
     }
 }
 
@@ -107,21 +104,44 @@ macro_rules! atomic_ops {
         impl ArrayLocalOps<$a> for AtomicArray<$a> {
             fn local_add(&self, index: usize, val: $a) {
                 println!(
-                    "native local_add ArrayAdd<{}>  for AtomicArray<{}>  ",
+                    "native local_add ArrayLocalOps<{}>  for AtomicArray<{}>  ",
                     stringify!($a),
                     stringify!($a)
                 );
                 use $crate::array::AtomicOps;
                 unsafe { self.local_as_mut_slice()[index].fetch_add(val) };
             }
+            fn local_sub(&self, index: usize, val: $a) {
+                println!(
+                    "native local_sub ArrayLocalOps<{}>  for AtomicArray<{}>  ",
+                    stringify!($a),
+                    stringify!($a)
+                );
+                use $crate::array::AtomicOps;
+                unsafe { self.local_as_mut_slice()[index].fetch_sub(val) };
+            }
         }
 
-        fn $name(val: *const u8, array: $crate::array::AtomicArray<u8>, index: usize) {
-            let val = unsafe { *(val as *const $a) };
-            println!("native {} ", stringify!($name));
-            let array = unsafe { array.to_base_inner::<$a>() };
-            use $crate::array::AtomicOps;
-            unsafe { array.local_as_mut_slice()[index].fetch_add(val) };
+        paste::paste!{
+            #[allow(non_snake_case)]
+            fn [<$name local_add>](val: *const u8, array: $crate::array::AtomicArray<u8>, index: usize) {
+                let val = unsafe { *(val as *const $a) };
+                println!("native {}local_add func ", stringify!($name));
+                let array = unsafe { array.to_base_inner::<$a>() };
+                use $crate::array::AtomicOps;
+                unsafe { array.local_as_mut_slice()[index].fetch_add(val) };
+            }
+            $crate::atomicarray_register!{ $a,ArrayOpCmd::Add,[<$name dist_add>],[<$name local_add>] }
+
+            #[allow(non_snake_case)]
+            fn [<$name local_sub>](val: *const u8, array: $crate::array::AtomicArray<u8>, index: usize) {
+                let val = unsafe { *(val as *const $a) };
+                println!("native {}local_sub func ", stringify!($name));
+                let array = unsafe { array.to_base_inner::<$a>() };
+                use $crate::array::AtomicOps;
+                unsafe { array.local_as_mut_slice()[index].fetch_sub(val) };
+            }
+            $crate::atomicarray_register!{ $a,ArrayOpCmd::Sub,[<$name dist_sub>],[<$name local_sub>] }
         }
     };
 }
@@ -132,28 +152,47 @@ macro_rules! non_atomic_ops {
         impl ArrayLocalOps<$a> for AtomicArray<$a> {
             fn local_add(&self, index: usize, val: $a) {
                 println!(
-                    "mutex local_add ArrayAdd<{}> for AtomicArray<{}>  ",
+                    "mutex local_add ArrayLocalOps<{}> for AtomicArray<{}>  ",
                     stringify!($a),
                     stringify!($a)
                 );
                 let _lock = self.lock_index(index);
-                unsafe { 
-                    // let cur_val = self.local_as_mut_slice()[index];
-                    self.local_as_mut_slice()[index] += val
-                };
+                unsafe { self.local_as_mut_slice()[index] += val };
+            }
+            fn local_sub(&self, index: usize, val: $a) {
+                println!(
+                    "mutex local_sub ArrayLocalOps<{}> for AtomicArray<{}>  ",
+                    stringify!($a),
+                    stringify!($a)
+                );
+                let _lock = self.lock_index(index);
+                unsafe { self.local_as_mut_slice()[index] -= val };
             }
         }
 
-        fn $name(val: *const u8, array: $crate::array::AtomicArray<u8>, index: usize) {
-            let val = unsafe { *(val as *const $a) };
-            let array = unsafe { array.to_base_inner::<$a>() };
-            println!("mutex {} ", stringify!($name));
-            let _lock = array.lock_index(index).expect("no lock exists!");
-            unsafe { 
-                // let cur_val =  array.local_as_mut_slice()[index];
-                array.local_as_mut_slice()[index] += val
+        paste::paste!{
+            #[allow(non_snake_case)]
+            fn [<$name local_add>](val: *const u8, array: $crate::array::AtomicArray<u8>, index: usize) {
+                let val = unsafe { *(val as *const $a) };
+                let array = unsafe { array.to_base_inner::<$a>() };
+                println!("mutex {}local_add func", stringify!($name));
+                let _lock = array.lock_index(index).expect("no lock exists!");
+                unsafe { array.local_as_mut_slice()[index] += val }
             }
+            $crate::atomicarray_register!{$a,ArrayOpCmd::Add,[<$name dist_add>],[<$name local_add>]}
+
+            #[allow(non_snake_case)]
+            fn [<$name local_sub>](val: *const u8, array: $crate::array::AtomicArray<u8>, index: usize) {
+                let val = unsafe { *(val as *const $a) };
+                let array = unsafe { array.to_base_inner::<$a>() };
+                println!("mutex {}local_sub func", stringify!($name));
+                let _lock = array.lock_index(index).expect("no lock exists!");
+                unsafe { array.local_as_mut_slice()[index] -= val }
+            }
+            $crate::atomicarray_register!{$a,ArrayOpCmd::Sub,[<$name dist_sub>],[<$name local_sub>]}
         }
+
+        
     };
 }
 
@@ -195,7 +234,7 @@ macro_rules! AtomicArray_create_ops {
 }
 
 #[macro_export]
-macro_rules! AtomicArray_inventory_add_op {
+macro_rules! atomicarray_register {
     ($id:ident, $optype:path, $op:ident, $local:ident) => {
         inventory::submit! {
             #![crate = $crate]

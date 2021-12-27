@@ -42,6 +42,24 @@ fn test_add<T: Dist + std::fmt::Debug + ElementOps + 'static>(
     array.print();
 }
 
+
+fn test_sub<T: Dist + std::fmt::Debug + ElementOps + 'static>(
+    array: AtomicArray<T>,
+    init_val: T,
+    sub_val: T,
+) {
+    array.dist_iter_mut().for_each(move |elem| *elem = init_val);
+    array.wait_all();
+    array.barrier();
+    array.print();
+    for i in 0..array.len() {
+        array.sub(i, sub_val);
+    }
+    array.wait_all();
+    array.barrier();
+    array.print();
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let world = lamellar::LamellarWorldBuilder::new().build();
@@ -71,4 +89,28 @@ fn main() {
     array_custom.wait_all();
     array_custom.barrier();
     array_custom.print();
+    println!("====================================================================");
+    
+    test_sub(array_f64.clone(), 10.0, 1.0);
+    test_sub(array_u8.clone(), 10, 1);
+    test_sub(
+        array_custom.clone(),
+        Custom { int: 10, float: 10.0 },
+        Custom { int: 1, float: 1.0 },
+    );
+    array_u8.sub(3, 1);
+    array_u8.wait_all();
+    array_u8.barrier();
+    array_u8.print();
+
+    array_f64.sub(3, 1.0);
+    array_f64.wait_all();
+    array_f64.barrier();
+    array_f64.print();
+
+    array_custom.sub(3, Custom { int: 1, float: 1.0 });
+    array_custom.wait_all();
+    array_custom.barrier();
+    array_custom.print();
+    println!("====================================================================");
 }

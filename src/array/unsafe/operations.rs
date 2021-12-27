@@ -29,10 +29,9 @@ impl<T: Dist  + ElementOps + 'static> UnsafeArray<T> {
     pub(crate) fn dist_op(
         &self,
         pe: usize,
-        index: usize,
         func: LamellarArcAm,
     ) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync> {
-        println!("dist_op ArrayAdd<T> for UnsafeArray<T> ");
+        println!("dist_op  for UnsafeArray<T> ");
         // let pe = self.pe_for_dist_index(index);
         self.inner
             .team
@@ -47,7 +46,7 @@ impl<T: Dist  + ElementOps + 'static> UnsafeArray<T> {
         local_index: usize,
         op: ArrayOpCmd
     ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>> {
-        println!("add ArrayOps<T> for &UnsafeArray<T> ");
+        println!("initiate_op for &UnsafeArray<T> ");
         if let Some(func) = OPS.get(&(op,TypeId::of::<T>())) {
             let array: UnsafeArray<u8> = unsafe { self.as_base_inner() };
             let pe = self.pe_for_dist_index(index);
@@ -90,14 +89,34 @@ impl<T: Dist  + ElementOps  + 'static> ArrayOps<T> for UnsafeArray<T> {
             self.initiate_op(index,val,pe,local_index,ArrayOpCmd::Add)
         }
     }
+    fn sub(
+        &self,
+        index: usize,
+        val: T,
+    ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>> {
+        let pe = self.pe_for_dist_index(index);
+        let local_index = self.pe_offset_for_dist_index(pe, index);
+        if pe == self.my_pe() {
+            self.local_sub(local_index, val);
+            None
+        } else {
+            self.initiate_op(index,val,pe,local_index,ArrayOpCmd::Sub)
+        }
+    }
 }
 
 // impl<T: Dist + std::ops::AddAssign> UnsafeArray<T> {
 impl<T: Dist + ElementOps> ArrayLocalOps<T> for UnsafeArray<T> {
     fn local_add(&self, index: usize, val: T) {
-        println!("local_add ArrayAdd<T> for UnsafeArray<T> ");
+        // println!("local_add ArrayLocalOps<T> for UnsafeArray<T> ");
         unsafe { 
             self.local_as_mut_slice()[index] += val 
+        };
+    }
+    fn local_sub(&self, index: usize, val: T) {
+        // println!("local_sub ArrayLocalOps<T> for UnsafeArray<T> ");
+        unsafe { 
+            self.local_as_mut_slice()[index] -= val 
         };
     }
 }
@@ -105,11 +124,15 @@ impl<T: Dist + ElementOps> ArrayLocalOps<T> for UnsafeArray<T> {
 
 #[macro_export]
 macro_rules! UnsafeArray_create_ops {
-    //we dont need to do specialization so we can implement for T within the mod directly
-    ( $a:ty, $path:ident) => {};
+    ($a:ty, $name:ident) => {
+        paste::paste!{
+            $crate::unsafearray_register!{$a,ArrayOpCmd::Add,[<$name dist_add>],[<$name local_add>]}
+            $crate::unsafearray_register!{$a,ArrayOpCmd::Sub,[<$name dist_sub>],[<$name local_sub>]}
+        }
+    }
 }
 #[macro_export]
-macro_rules! UnsafeArray_inventory_add_op {
+macro_rules! unsafearray_register {
     ($id:ident, $optype:path, $op:ident, $local:ident) => {
         inventory::submit! {
             #![crate =$crate]

@@ -88,11 +88,11 @@ pub trait ArrayOps<T: Dist + ElementOps> {
         val: T,
     ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>>;
 
-    // fn sub(
-    //     &self,
-    //     index: usize,
-    //     val: T,
-    // ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>>;
+    fn sub(
+        &self,
+        index: usize,
+        val: T,
+    ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>>;
 
     // fn mul(
     //     &self,
@@ -121,6 +121,7 @@ pub trait ArrayOps<T: Dist + ElementOps> {
 
 pub trait ArrayLocalOps<T: Dist + ElementOps> {
     fn local_add(&self, index: usize, val: T);
+    fn local_sub(&self, index: usize, val: T);
 }
 
 #[enum_dispatch(RegisteredMemoryRegion<T>, SubRegion<T>, MyFrom<T>,MemoryRegionRDMA<T>,AsBase)]
