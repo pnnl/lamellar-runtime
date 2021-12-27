@@ -31,8 +31,7 @@ impl<T: Dist  + ElementOps + 'static> UnsafeArray<T> {
         pe: usize,
         func: LamellarArcAm,
     ) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync> {
-        println!("dist_op  for UnsafeArray<T> ");
-        // let pe = self.pe_for_dist_index(index);
+        println!("dist_op for UnsafeArray<T> ");
         self.inner
             .team
             .exec_arc_am_pe(pe, func, Some(self.inner.array_counters.clone()))

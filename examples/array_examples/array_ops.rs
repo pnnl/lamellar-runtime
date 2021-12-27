@@ -75,17 +75,17 @@ fn main() {
         Custom { int: 0, float: 0.0 },
         Custom { int: 1, float: 1.0 },
     );
-    array_u8.add(3, 1);
+    (&array_u8).add(3, 1);
     array_u8.wait_all();
     array_u8.barrier();
     array_u8.print();
 
-    array_f64.add(3, 1.0);
+    (&array_f64).add(3, 1.0);
     array_f64.wait_all();
     array_f64.barrier();
     array_f64.print();
 
-    array_custom.add(3, Custom { int: 1, float: 1.0 });
+    (&array_custom).add(3, Custom { int: 1, float: 1.0 });
     array_custom.wait_all();
     array_custom.barrier();
     array_custom.print();
@@ -98,17 +98,17 @@ fn main() {
         Custom { int: 10, float: 10.0 },
         Custom { int: 1, float: 1.0 },
     );
-    array_u8.sub(3, 1);
+    (&array_u8).sub(3, 1);
     array_u8.wait_all();
     array_u8.barrier();
     array_u8.print();
 
-    array_f64.sub(3, 1.0);
+    (&array_f64).sub(3, 1.0);
     array_f64.wait_all();
     array_f64.barrier();
     array_f64.print();
 
-    array_custom.sub(3, Custom { int: 1, float: 1.0 });
+    (&array_custom).sub(3, Custom { int: 1, float: 1.0 });
     array_custom.wait_all();
     array_custom.barrier();
     array_custom.print();
