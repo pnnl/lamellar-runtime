@@ -800,6 +800,7 @@ fn create_ops(
         });
         for op in &ops{
             let op_am_name = quote::format_ident!("{}_{}_{}_am", array_type, typeident, op);
+            let fetch_op_am_name = quote::format_ident!("fetch_{}_{}_{}_am", array_type, typeident, op);
             let dist_fn_name = quote::format_ident!("{}dist_{}", op_fn_name_base, op);
             let local_op = quote::format_ident!("local_{}",op);
             array_impls.extend(quote!{
@@ -809,20 +810,41 @@ fn create_ops(
                     local_index: usize,
                     val: #typeident,
                 }
+                #[#am_data]
+                struct #fetch_op_am_name{
+                    data: #lamellar::array::#array_type<#typeident>,
+                    local_index: usize,
+                    val: #typeident,
+                }
                 #[allow(non_snake_case)]
-                fn #dist_fn_name(val: *const u8, array: #lamellar::array::#array_type<u8>, index: usize) -> Arc<dyn RemoteActiveMessage + Send + Sync>{
+                fn #dist_fn_name(val: *const u8, array: #lamellar::array::#array_type<u8>, index: usize, fetch: bool) -> Arc<dyn RemoteActiveMessage + Send + Sync>{
                     println!("{:}",stringify!(#dist_fn_name));
                     let val = unsafe {*(val as  *const #typeident)};
-                    Arc::new(#op_am_name{
-                        data: unsafe {array.to_base_inner()},
-                        local_index: index,
-                        val: val,
-                    })
+                    if fetch{
+                        Arc::new(#fetch_op_am_name{
+                            data: unsafe {array.to_base_inner()},
+                            local_index: index,
+                            val: val,
+                        })
+                    }
+                    else {
+                        Arc::new(#op_am_name{
+                            data: unsafe {array.to_base_inner()},
+                            local_index: index,
+                            val: val,
+                        })
+                    }
                 }
                 #[#am]
                 impl LamellarAM for #op_am_name{
                     fn exec(&self) {
                         self.data.#local_op(self.local_index,self.val);
+                    }
+                }
+                #[#am]
+                impl LamellarAM for #fetch_op_am_name{
+                    fn exec(&self) -> #typeident{
+                        self.data.#local_op(self.local_index,self.val)
                     }
                 }
             });
@@ -842,6 +864,20 @@ fn create_ops(
         }
         write_array_impl.extend(quote!{
             fn #op(&self,index: usize, val: #typeident)->Option<Box<dyn #lamellar::LamellarRequest<Output = ()> + Send + Sync>>{
+                match self{
+                    #match_stmts
+                }
+            }
+        });
+        let fetch_op = quote::format_ident!("fetch_{}",op);
+        let mut match_stmts = quote! {};
+        for array_type in array_types {
+            match_stmts.extend(quote! {
+                #lamellar::array::LamellarWriteArray::#array_type(inner) => inner.#fetch_op(index,val),
+            });
+        }
+        write_array_impl.extend(quote!{
+            fn #fetch_op(&self,index: usize, val: #typeident)-> Box<dyn #lamellar::LamellarRequest<Output = #typeident> + Send + Sync>{
                 match self{
                     #match_stmts
                 }

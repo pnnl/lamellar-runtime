@@ -1,5 +1,5 @@
 use lamellar::array::{ArrayOps, AtomicArray, Distribution, LamellarArray, ElementOps};
-use lamellar::Dist;
+
 
 #[lamellar::AmData(Default, Debug, Dist)]
 struct Custom {
@@ -25,7 +25,7 @@ impl std::ops::SubAssign for Custom {
     }
 }
 
-fn test_add<T: Dist + std::fmt::Debug + ElementOps + 'static>(
+fn test_add<T: std::fmt::Debug + ElementOps + 'static>(
     array: AtomicArray<T>,
     init_val: T,
     add_val: T,
@@ -40,10 +40,19 @@ fn test_add<T: Dist + std::fmt::Debug + ElementOps + 'static>(
     array.wait_all();
     array.barrier();
     array.print();
+    let mut reqs = vec![];
+    for i in 0..array.len() {
+        reqs.push(array.fetch_add(i, add_val));
+    }
+    for (i,req) in reqs.iter().enumerate(){
+        println!("i: {:?} {:?}",i,req.get().unwrap());
+    }
+    array.barrier();
+    array.print();
 }
 
 
-fn test_sub<T: Dist + std::fmt::Debug + ElementOps + 'static>(
+fn test_sub<T: std::fmt::Debug + ElementOps + 'static>(
     array: AtomicArray<T>,
     init_val: T,
     sub_val: T,
@@ -56,6 +65,15 @@ fn test_sub<T: Dist + std::fmt::Debug + ElementOps + 'static>(
         array.sub(i, sub_val);
     }
     array.wait_all();
+    array.barrier();
+    array.print();
+    let mut reqs = vec![];
+    for i in 0..array.len() {
+        reqs.push(array.fetch_sub(i, sub_val));
+    }
+    for (i,req) in reqs.iter().enumerate(){
+        println!("i: {:?} {:?}",i,req.get().unwrap());
+    }
     array.barrier();
     array.print();
 }

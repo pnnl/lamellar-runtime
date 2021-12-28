@@ -4,6 +4,7 @@ use crate::memregion::{
     local::LocalMemoryRegion, shared::SharedMemoryRegion, Dist, LamellarMemoryRegion,
 };
 
+use async_trait::async_trait;
 use enum_dispatch::enum_dispatch;
 use futures_lite::Future;
 use std::collections::HashMap;
@@ -76,23 +77,33 @@ pub enum ArrayOpCmd{
     Or,
 }
 
-pub trait ElementOps: std::ops::AddAssign + std::ops::SubAssign + Sized  {} 
+pub trait ElementOps: std::ops::AddAssign + std::ops::SubAssign + AmDist + Dist + Sized  {} 
 
-impl<T> ElementOps for T where T: std::ops::AddAssign + std::ops::SubAssign {}
+impl<T> ElementOps for T where T: std::ops::AddAssign + std::ops::SubAssign + AmDist + Dist{}
 
 
-pub trait ArrayOps<T: Dist + ElementOps> {
+pub trait ArrayOps<T: ElementOps> {
     fn add(
         &self,
         index: usize,
         val: T,
     ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>>;
+    fn fetch_add(
+        &self,
+        index: usize,
+        val: T,
+    ) -> Box<dyn LamellarRequest<Output = T> + Send + Sync>;
 
     fn sub(
         &self,
         index: usize,
         val: T,
     ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>>;
+    fn fetch_sub(
+        &self,
+        index: usize,
+        val: T,
+    ) -> Box<dyn LamellarRequest<Output = T> + Send + Sync>;
 
     // fn mul(
     //     &self,
@@ -120,8 +131,26 @@ pub trait ArrayOps<T: Dist + ElementOps> {
 }
 
 pub trait ArrayLocalOps<T: Dist + ElementOps> {
-    fn local_add(&self, index: usize, val: T);
-    fn local_sub(&self, index: usize, val: T);
+    fn local_add(&self, index: usize, val: T) -> T;
+    fn local_sub(&self, index: usize, val: T) -> T;
+}
+
+pub struct LocalOpResult<T: Dist + ElementOps>{
+    val: T
+}
+
+#[async_trait]
+impl<T: Dist + ElementOps> LamellarRequest for LocalOpResult<T> {
+    type Output =T;
+    async fn into_future(self: Box<Self>) -> Option<Self::Output> {
+        Some(self.val)
+    }
+    fn get(&self) -> Option<Self::Output> {
+        Some(self.val)
+    }
+    fn get_all(&self) -> Vec<Option<Self::Output>> {
+        vec![Some(self.val)]
+    }
 }
 
 #[enum_dispatch(RegisteredMemoryRegion<T>, SubRegion<T>, MyFrom<T>,MemoryRegionRDMA<T>,AsBase)]
