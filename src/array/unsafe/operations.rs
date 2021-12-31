@@ -45,7 +45,7 @@ impl<T: ElementOps + 'static> UnsafeArray<T> {
         pe: usize,
         func: LamellarArcAm,
     ) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync> {
-        println!("dist_op for UnsafeArray<T> ");
+        // println!("dist_op for UnsafeArray<T> ");
         self.inner
             .team
             .exec_arc_am_pe(pe, func, Some(self.inner.array_counters.clone()))
@@ -55,7 +55,7 @@ impl<T: ElementOps + 'static> UnsafeArray<T> {
         pe: usize,
         func: LamellarArcAm,
     ) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
-        println!("dist_op for UnsafeArray<T> ");
+        // println!("dist_op for UnsafeArray<T> ");
         self.inner
             .team
             .exec_arc_am_pe(pe, func, Some(self.inner.array_counters.clone()))
@@ -68,7 +68,7 @@ impl<T: ElementOps + 'static> UnsafeArray<T> {
         local_index: usize,
         op: ArrayOpCmd
     ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>> {
-        println!("initiate_op for UnsafeArray<T> ");
+        // println!("initiate_op for UnsafeArray<T> ");
         if let Some(func) = OPS.get(&(op,TypeId::of::<T>())) {
             let array: UnsafeArray<u8> = unsafe { self.as_base_inner() };
             let pe = self.pe_for_dist_index(index);
@@ -102,7 +102,7 @@ impl<T: ElementOps + 'static> UnsafeArray<T> {
         local_index: usize,
         op: ArrayOpCmd
     ) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
-        println!("initiate_op for UnsafeArray<T> ");
+        // println!("initiate_op for UnsafeArray<T> ");
         if let Some(func) = OPS.get(&(op,TypeId::of::<T>())) {
             let array: UnsafeArray<u8> = unsafe { self.as_base_inner() };
             let pe = self.pe_for_dist_index(index);
@@ -187,6 +187,34 @@ impl<T: ElementOps  + 'static> ArrayOps<T> for UnsafeArray<T> {
             self.initiate_fetch_op(index,val,pe,local_index,ArrayOpCmd::Sub)
         }
     }
+    fn mul(
+        &self,
+        index: usize,
+        val: T,
+    ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>> {
+        let pe = self.pe_for_dist_index(index);
+        let local_index = self.pe_offset_for_dist_index(pe, index);
+        if pe == self.my_pe() {
+            self.local_mul(local_index, val);
+            None
+        } else {
+            self.initiate_op(index,val,pe,local_index,ArrayOpCmd::Mul)
+        }
+    }
+    fn fetch_mul(
+        &self,
+        index: usize,
+        val: T,
+    ) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+        let pe = self.pe_for_dist_index(index);
+        let local_index = self.pe_offset_for_dist_index(pe, index);
+        if pe == self.my_pe() {
+            let val = self.local_mul(local_index, val);
+            Box::new(LocalOpResult{val})
+        } else {
+            self.initiate_fetch_op(index,val,pe,local_index,ArrayOpCmd::Mul)
+        }
+    }
 }
 
 // impl<T: Dist + std::ops::AddAssign> UnsafeArray<T> {
@@ -206,6 +234,13 @@ impl<T: ElementOps> ArrayLocalOps<T> for UnsafeArray<T> {
             self.local_as_mut_slice()[index] 
         }
     }
+    fn local_mul(&self, index: usize, val: T) -> T{
+        // println!("local_sub ArrayLocalOps<T> for UnsafeArray<T> ");
+        unsafe { 
+            self.local_as_mut_slice()[index] *= val;
+            self.local_as_mut_slice()[index] 
+        }
+    }
 }
 // }
 
@@ -215,6 +250,7 @@ macro_rules! UnsafeArray_create_ops {
         paste::paste!{
             $crate::unsafearray_register!{$a,ArrayOpCmd::Add,[<$name dist_add>],[<$name local_add>]}
             $crate::unsafearray_register!{$a,ArrayOpCmd::Sub,[<$name dist_sub>],[<$name local_sub>]}
+            $crate::unsafearray_register!{$a,ArrayOpCmd::Mul,[<$name dist_mul>],[<$name local_mul>]}
         }
     }
 }

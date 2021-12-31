@@ -77,9 +77,9 @@ pub enum ArrayOpCmd{
     Or,
 }
 
-pub trait ElementOps: std::ops::AddAssign + std::ops::SubAssign + AmDist + Dist + Sized  {} 
+pub trait ElementOps: std::ops::AddAssign + std::ops::SubAssign + std::ops::MulAssign + AmDist + Dist + Sized  {} 
 
-impl<T> ElementOps for T where T: std::ops::AddAssign + std::ops::SubAssign + AmDist + Dist{}
+impl<T> ElementOps for T where T: std::ops::AddAssign + std::ops::SubAssign + std::ops::MulAssign + AmDist + Dist{}
 
 
 pub trait ArrayOps<T: ElementOps> {
@@ -105,11 +105,17 @@ pub trait ArrayOps<T: ElementOps> {
         val: T,
     ) -> Box<dyn LamellarRequest<Output = T> + Send + Sync>;
 
-    // fn mul(
-    //     &self,
-    //     index: usize,
-    //     val: T,
-    // ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>>;
+    fn mul(
+        &self,
+        index: usize,
+        val: T,
+    ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>>;
+
+    fn fetch_mul(
+        &self,
+        index: usize,
+        val: T,
+    ) -> Box<dyn LamellarRequest<Output = T> + Send + Sync>;
 
     // fn div(
     //     &self,
@@ -133,6 +139,7 @@ pub trait ArrayOps<T: ElementOps> {
 pub trait ArrayLocalOps<T: Dist + ElementOps> {
     fn local_add(&self, index: usize, val: T) -> T;
     fn local_sub(&self, index: usize, val: T) -> T;
+    fn local_mul(&self, index: usize, val: T) -> T;
 }
 
 pub struct LocalOpResult<T: Dist + ElementOps>{

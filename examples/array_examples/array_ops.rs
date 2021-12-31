@@ -25,6 +25,15 @@ impl std::ops::SubAssign for Custom {
     }
 }
 
+impl std::ops::MulAssign for Custom {
+    fn mul_assign(&mut self, other: Self) {
+        *self = Self {
+            int: self.int * other.int,
+            float: self.float * other.float,
+        }
+    }
+}
+
 fn test_add<T: std::fmt::Debug + ElementOps + 'static>(
     array: AtomicArray<T>,
     init_val: T,
@@ -34,12 +43,14 @@ fn test_add<T: std::fmt::Debug + ElementOps + 'static>(
     array.wait_all();
     array.barrier();
     array.print();
+    array.barrier();
     for i in 0..array.len() {
         array.add(i, add_val);
     }
     array.wait_all();
     array.barrier();
     array.print();
+    array.barrier();
     let mut reqs = vec![];
     for i in 0..array.len() {
         reqs.push(array.fetch_add(i, add_val));
@@ -49,6 +60,7 @@ fn test_add<T: std::fmt::Debug + ElementOps + 'static>(
     }
     array.barrier();
     array.print();
+    array.barrier();
 }
 
 
@@ -61,12 +73,14 @@ fn test_sub<T: std::fmt::Debug + ElementOps + 'static>(
     array.wait_all();
     array.barrier();
     array.print();
+    array.barrier();
     for i in 0..array.len() {
         array.sub(i, sub_val);
     }
     array.wait_all();
     array.barrier();
     array.print();
+    array.barrier();
     let mut reqs = vec![];
     for i in 0..array.len() {
         reqs.push(array.fetch_sub(i, sub_val));
@@ -76,6 +90,36 @@ fn test_sub<T: std::fmt::Debug + ElementOps + 'static>(
     }
     array.barrier();
     array.print();
+    array.barrier();
+}
+
+fn test_mul<T: std::fmt::Debug + ElementOps + 'static>(
+    array: AtomicArray<T>,
+    init_val: T,
+    sub_val: T,
+) {
+    array.dist_iter_mut().for_each(move |elem| *elem = init_val);
+    array.wait_all();
+    array.barrier();
+    array.print();
+    array.barrier();
+    for i in 0..array.len() {
+        array.mul(i, sub_val);
+    }
+    array.wait_all();
+    array.barrier();
+    array.print();
+    array.barrier();
+    let mut reqs = vec![];
+    for i in 0..array.len() {
+        reqs.push(array.fetch_mul(i, sub_val));
+    }
+    for (i,req) in reqs.iter().enumerate(){
+        println!("i: {:?} {:?}",i,req.get().unwrap());
+    }
+    array.barrier();
+    array.print();
+    array.barrier();
 }
 
 fn main() {
@@ -97,16 +141,19 @@ fn main() {
     array_u8.wait_all();
     array_u8.barrier();
     array_u8.print();
+    array_u8.barrier();
 
     (&array_f64).add(3, 1.0);
     array_f64.wait_all();
     array_f64.barrier();
     array_f64.print();
+    array_f64.barrier();
 
     (&array_custom).add(3, Custom { int: 1, float: 1.0 });
     array_custom.wait_all();
     array_custom.barrier();
     array_custom.print();
+    array_custom.barrier();
     println!("====================================================================");
     
     test_sub(array_f64.clone(), 10.0, 1.0);
@@ -120,15 +167,44 @@ fn main() {
     array_u8.wait_all();
     array_u8.barrier();
     array_u8.print();
+    array_u8.barrier();
 
     (&array_f64).sub(3, 1.0);
     array_f64.wait_all();
     array_f64.barrier();
     array_f64.print();
+    array_f64.barrier();
 
     (&array_custom).sub(3, Custom { int: 1, float: 1.0 });
     array_custom.wait_all();
     array_custom.barrier();
     array_custom.print();
+    array_custom.barrier();
+    println!("====================================================================");
+
+    test_mul(array_f64.clone(), 1.0, 2.5);
+    test_mul(array_u8.clone(), 1, 2);
+    test_mul(
+        array_custom.clone(),
+        Custom { int: 1, float: 1.0 },
+        Custom { int: 2, float: 2.5 },
+    );
+    (&array_u8).mul(3, 2);
+    array_u8.wait_all();
+    array_u8.barrier();
+    array_u8.print();
+    array_u8.barrier();
+
+    (&array_f64).mul(3, 2.5);
+    array_f64.wait_all();
+    array_f64.barrier();
+    array_f64.print();
+    array_f64.barrier();
+
+    (&array_custom).mul(3, Custom { int: 1, float: 2.5 });
+    array_custom.wait_all();
+    array_custom.barrier();
+    array_custom.print();
+    array_custom.barrier();
     println!("====================================================================");
 }

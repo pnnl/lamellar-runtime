@@ -784,6 +784,7 @@ fn create_ops(
     let ops: Vec<syn::Ident> = vec![
         quote::format_ident!("add"),
         quote::format_ident!("sub"),
+        quote::format_ident!("mul"),
     ];
 
     let mut array_impls = quote! {};
@@ -818,7 +819,7 @@ fn create_ops(
                 }
                 #[allow(non_snake_case)]
                 fn #dist_fn_name(val: *const u8, array: #lamellar::array::#array_type<u8>, index: usize, fetch: bool) -> Arc<dyn RemoteActiveMessage + Send + Sync>{
-                    println!("{:}",stringify!(#dist_fn_name));
+                    // println!("{:}",stringify!(#dist_fn_name));
                     let val = unsafe {*(val as  *const #typeident)};
                     if fetch{
                         Arc::new(#fetch_op_am_name{

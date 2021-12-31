@@ -51,6 +51,8 @@ pub trait AtomicOps {
     fn as_atomic(&self) -> &Self::Atomic;
     fn fetch_add(&self, val: Self) -> Self;
     fn fetch_sub(&mut self, val: Self) -> Self;
+    fn fetch_mul(&mut self, val: Self) -> Self;
+    fn compare_exchange(&mut self, current: Self, new: Self) -> Result<Self,Self> where Self: Sized;
     fn load(&mut self) -> Self;
     fn store(&mut self, val: Self);
     fn swap(&mut self, val: Self) -> Self;
@@ -76,6 +78,19 @@ macro_rules! impl_atomic_ops{
             }
             fn fetch_sub(&mut self, val: Self,) ->Self{
                 self.as_atomic().fetch_sub(val, Ordering::SeqCst)
+            }
+            fn fetch_mul(&mut self, val: Self,) -> Self{
+                let mut cur = self.as_atomic().load(Ordering::SeqCst);
+                let mut new = cur*val;
+                while self.compare_exchange(cur,new).is_err(){
+                    std::thread::yield_now();
+                    cur = self.as_atomic().load(Ordering::SeqCst);
+                    new = cur*val;
+                }
+                cur
+            }
+            fn compare_exchange(&mut self, current: Self, new: Self) -> Result<Self,Self> {
+                self.as_atomic().compare_exchange(current,new,Ordering::SeqCst,Ordering::SeqCst)
             }
             fn load(&mut self) ->Self{
                 self.as_atomic().load(Ordering::SeqCst)
