@@ -1,7 +1,7 @@
 use lamellar::array::{ArrayOps, AtomicArray, Distribution, LamellarArray, ElementOps};
 
 
-#[lamellar::AmData(Default, Debug, Dist)]
+#[lamellar::AmData(Default, Debug, Dist, ArrayOps)]
 struct Custom {
     int: usize,
     float: f32,
@@ -30,6 +30,15 @@ impl std::ops::MulAssign for Custom {
         *self = Self {
             int: self.int * other.int,
             float: self.float * other.float,
+        }
+    }
+}
+
+impl std::ops::DivAssign for Custom {
+    fn div_assign(&mut self, other: Self) {
+        *self = Self {
+            int: self.int / other.int,
+            float: self.float / other.float,
         }
     }
 }
@@ -122,6 +131,35 @@ fn test_mul<T: std::fmt::Debug + ElementOps + 'static>(
     array.barrier();
 }
 
+fn test_div<T: std::fmt::Debug + ElementOps + 'static>(
+    array: AtomicArray<T>,
+    init_val: T,
+    sub_val: T,
+) {
+    array.dist_iter_mut().for_each(move |elem| *elem = init_val);
+    array.wait_all();
+    array.barrier();
+    array.print();
+    array.barrier();
+    for i in 0..array.len() {
+        array.div(i, sub_val);
+    }
+    array.wait_all();
+    array.barrier();
+    array.print();
+    array.barrier();
+    let mut reqs = vec![];
+    for i in 0..array.len() {
+        reqs.push(array.fetch_div(i, sub_val));
+    }
+    for (i,req) in reqs.iter().enumerate(){
+        println!("i: {:?} {:?}",i,req.get().unwrap());
+    }
+    array.barrier();
+    array.print();
+    array.barrier();
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let world = lamellar::LamellarWorldBuilder::new().build();
@@ -202,6 +240,32 @@ fn main() {
     array_f64.barrier();
 
     (&array_custom).mul(3, Custom { int: 1, float: 2.5 });
+    array_custom.wait_all();
+    array_custom.barrier();
+    array_custom.print();
+    array_custom.barrier();
+    println!("====================================================================");
+
+    test_div(array_f64.clone(), 1000.0, 2.5);
+    test_div(array_u8.clone(), 255, 2);
+    test_div(
+        array_custom.clone(),
+        Custom { int: 1000, float: 1000.0 },
+        Custom { int: 2, float: 2.5 },
+    );
+    (&array_u8).div(3, 2);
+    array_u8.wait_all();
+    array_u8.barrier();
+    array_u8.print();
+    array_u8.barrier();
+
+    (&array_f64).div(3, 2.5);
+    array_f64.wait_all();
+    array_f64.barrier();
+    array_f64.print();
+    array_f64.barrier();
+
+    (&array_custom).div(3, Custom { int: 1, float: 2.5 });
     array_custom.wait_all();
     array_custom.barrier();
     array_custom.print();

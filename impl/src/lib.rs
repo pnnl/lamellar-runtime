@@ -426,6 +426,19 @@ fn derive_am_data(
                 trait_strs
                     .entry(String::from("Clone"))
                     .or_insert(quote! {Clone});
+            }else if t.contains("ArrayOps") {
+                trait_strs
+                    .entry(String::from("ArrayOps"))
+                    .or_insert(quote! {#lamellar::ArrayOps});
+                trait_strs
+                    .entry(String::from("Dist"))
+                    .or_insert(quote! {#lamellar::Dist});
+                trait_strs
+                    .entry(String::from("Copy"))
+                    .or_insert(quote! {Copy});
+                trait_strs
+                    .entry(String::from("Clone"))
+                    .or_insert(quote! {Clone});
             } else if !t.contains("serde::Serialize")
                 && !t.contains("serde::Deserialize")
                 && t.trim().len() > 0
@@ -758,11 +771,13 @@ fn create_reduction(
     }
 }
 
-fn create_ops(
+fn gen_op_impls(
     typeident: syn::Ident,
     array_types: &Vec<syn::Ident>,
+    ops:  &Vec<syn::Ident>,
+    bitwise: bool,
     rt: bool,
-) -> proc_macro2::TokenStream {
+) -> (proc_macro2::TokenStream,proc_macro2::TokenStream){
     let lamellar = if rt {
         quote::format_ident!("crate")
     } else {
@@ -781,12 +796,6 @@ fn create_ops(
         )
     };
 
-    let ops: Vec<syn::Ident> = vec![
-        quote::format_ident!("add"),
-        quote::format_ident!("sub"),
-        quote::format_ident!("mul"),
-    ];
-
     let mut array_impls = quote! {};
 
     array_impls.extend(quote!{
@@ -794,12 +803,17 @@ fn create_ops(
     });
     
     for array_type in array_types {
-        let create_ops = quote::format_ident!("{}_create_ops", array_type);
+        let create_ops = if bitwise {
+            quote::format_ident!("{}_create_bitwise_ops", array_type)
+        }
+        else{
+            quote::format_ident!("{}_create_ops", array_type)
+        };
         let op_fn_name_base = quote::format_ident!("{}_{}_", array_type, typeident);
         array_impls.extend(quote!{
             #lamellar::#create_ops!(#typeident,#op_fn_name_base);
         });
-        for op in &ops{
+        for op in ops.clone().into_iter(){
             let op_am_name = quote::format_ident!("{}_{}_{}_am", array_type, typeident, op);
             let fetch_op_am_name = quote::format_ident!("fetch_{}_{}_{}_am", array_type, typeident, op);
             let dist_fn_name = quote::format_ident!("{}dist_{}", op_fn_name_base, op);
@@ -851,12 +865,11 @@ fn create_ops(
             });
         }
     }
+   
 
-    
-
-    let mut write_array_impl = quote! {};
+    let mut write_array_impl = quote! {};       
+    for op in ops.clone().into_iter(){
         
-    for op in ops{
         let mut match_stmts = quote! {};
         for array_type in array_types {
             match_stmts.extend(quote! {
@@ -884,21 +897,60 @@ fn create_ops(
                 }
             }
         });
-    }
+    } 
+    (array_impls,write_array_impl)
+}
 
-    
+fn create_ops(
+    typeident: syn::Ident,
+    array_types: &Vec<syn::Ident>,
+    bitwise: bool,
+    rt: bool,
+) -> proc_macro2::TokenStream {
+    let lamellar = if rt {
+        quote::format_ident!("crate")
+    } else {
+        quote::format_ident!("__lamellar")
+    };
 
-    let expanded = quote!{
+    let ops: Vec<syn::Ident> = vec![
+        quote::format_ident!("add"),
+        quote::format_ident!("sub"),
+        quote::format_ident!("mul"),
+        quote::format_ident!("div"),
+    ];   
+   
+    let (array_impls,write_array_impl) = gen_op_impls(typeident.clone(),array_types,&ops,false,rt);
+    let mut expanded = quote!{
         #[allow(non_camel_case_types)]
         impl #lamellar::array::ArrayOps<#typeident> for #lamellar::array::LamellarWriteArray<#typeident>{
             #write_array_impl
         }
         #array_impls
     };
+
+    let mut bitwise_mod = quote!{};
+    if bitwise{
+        let bitwise_ops: Vec<syn::Ident> = vec![
+            quote::format_ident!("bit_and"),
+            quote::format_ident!("bit_or"),
+        ];
+        let (array_impls,write_array_impl) = gen_op_impls(typeident.clone(),array_types,&bitwise_ops,true,rt);
+        expanded.extend(quote!{
+            #[allow(non_camel_case_types)]
+            impl #lamellar::array::ArrayBitWiseOps<#typeident> for #lamellar::array::LamellarWriteArray<#typeident>{
+                #write_array_impl
+            }
+            #array_impls
+        });
+        bitwise_mod.extend(quote!{use __lamellar::array::ArrayLocalBitWiseOps;});
+    }
+
     let user_expanded = quote_spanned! {expanded.span()=>
         const _: () = {
             extern crate lamellar as __lamellar;
             use __lamellar::array::{ArrayLocalOps,ArrayOpCmd,LamellarArrayRead};
+            #bitwise_mod
             use __lamellar::LamellarArray;
             use __lamellar::LamellarRequest;
             use __lamellar::RemoteActiveMessage;
@@ -968,10 +1020,6 @@ pub fn generate_reductions_for_type(item: TokenStream) -> TokenStream {
         quote::format_ident!("UnsafeArray"),
         quote::format_ident!("ReadOnlyArray"),
     ];
-    let write_array_types: Vec<syn::Ident> = vec![
-        quote::format_ident!("AtomicArray"),
-        quote::format_ident!("UnsafeArray"),
-    ];
 
     for t in item.to_string().split(",").collect::<Vec<&str>>() {
         let typeident = quote::format_ident!("{:}", t.trim());
@@ -1006,7 +1054,6 @@ pub fn generate_reductions_for_type(item: TokenStream) -> TokenStream {
             &read_array_types,
             false,
         ));
-        output.extend(create_ops(typeident.clone(), &write_array_types, false));
     }
 
     TokenStream::from(output)
@@ -1021,14 +1068,10 @@ pub fn generate_reductions_for_type_rt(item: TokenStream) -> TokenStream {
         quote::format_ident!("UnsafeArray"),
         quote::format_ident!("ReadOnlyArray"),
     ];
-    let write_array_types: Vec<syn::Ident> = vec![
-        quote::format_ident!("AtomicArray"),
-        quote::format_ident!("UnsafeArray"),
-    ];
+
     for t in item.to_string().split(",").collect::<Vec<&str>>() {
         let t = t.trim().to_string();
         let typeident = quote::format_ident!("{:}", t.clone());
-        output.extend(quote! {impl Dist for #typeident {}});
         output.extend(create_reduction(
             typeident.clone(),
             "sum".to_string(),
@@ -1056,14 +1099,81 @@ pub fn generate_reductions_for_type_rt(item: TokenStream) -> TokenStream {
             &read_array_types,
             true,
         ));
-        output.extend(create_ops(typeident.clone(), &write_array_types, true));
+        
     }
     TokenStream::from(output)
 }
 
 #[proc_macro_error]
+#[proc_macro]
+pub fn generate_ops_for_type(item: TokenStream) -> TokenStream {
+    let mut output = quote! {};
+
+    
+    let write_array_types: Vec<syn::Ident> = vec![
+        quote::format_ident!("AtomicArray"),
+        quote::format_ident!("UnsafeArray"),
+    ];
+    let items = item.to_string().split(",").map(|i| i.to_owned()).collect::<Vec<String>>();
+    let bitwise = if let Ok(val) = syn::parse_str::<syn::LitBool>(&items[0]){
+        val.value
+    }
+    else{
+        panic! ("first argument of generate_ops_for_type expects 'true' or 'false' specifying whether type implements bitwise operations");
+    };
+    for t in items[1..].iter(){
+        let typeident = quote::format_ident!("{:}", t.trim());
+        output.extend(quote! {impl Dist for #typeident {}});
+        output.extend(create_ops(typeident.clone(), &write_array_types, bitwise, false));
+    }
+    TokenStream::from(output)
+}
+
+#[proc_macro_error]
+#[proc_macro]
+pub fn generate_ops_for_type_rt(item: TokenStream) -> TokenStream {
+    let mut output = quote! {};
+    let write_array_types: Vec<syn::Ident> = vec![
+        quote::format_ident!("AtomicArray"),
+        quote::format_ident!("UnsafeArray"),
+    ];
+    let items = item.to_string().split(",").map(|i| i.to_owned()).collect::<Vec<String>>();
+    let bitwise = if let Ok(val) = syn::parse_str::<syn::LitBool>(&items[0]){
+        val.value
+    }
+    else{
+        panic! ("first argument of generate_ops_for_type expects 'true' or 'false' specifying whether type implements bitwise operations");
+    };
+    for t in items[1..].iter(){
+        let typeident = quote::format_ident!("{:}", t.trim());
+        output.extend(quote! {impl Dist for #typeident {}});
+        output.extend(create_ops(typeident.clone(), &write_array_types, bitwise, true));
+    }
+    TokenStream::from(output)
+}
+
+
+#[proc_macro_error]
 #[proc_macro_derive(Dist)]
 pub fn derive_dist(input: TokenStream) -> TokenStream {
+    let mut output = quote! {};
+
+    let input = parse_macro_input!(input as syn::DeriveInput);
+    let name = input.ident;
+    output.extend(quote! {
+        const _: () = {
+            extern crate lamellar as __lamellar;
+            impl __lamellar::Dist for #name {}
+        };
+    });
+
+    // output.extend(create_ops(name.clone(), &write_array_types, false, false));
+    TokenStream::from(output)
+}
+
+#[proc_macro_error]
+#[proc_macro_derive(ArrayOps)]
+pub fn derive_arrayops(input: TokenStream) -> TokenStream {
     let mut output = quote! {};
 
     let input = parse_macro_input!(input as syn::DeriveInput);
@@ -1073,13 +1183,7 @@ pub fn derive_dist(input: TokenStream) -> TokenStream {
         quote::format_ident!("AtomicArray"),
         quote::format_ident!("UnsafeArray"),
     ];
-    output.extend(quote! {
-        const _: () = {
-            extern crate lamellar as __lamellar;
-            impl __lamellar::Dist for #name {}
-        };
-    });
 
-    output.extend(create_ops(name.clone(), &write_array_types, false));
+    output.extend(create_ops(name.clone(), &write_array_types, false, false));
     TokenStream::from(output)
 }

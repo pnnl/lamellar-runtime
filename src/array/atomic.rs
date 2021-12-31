@@ -52,6 +52,9 @@ pub trait AtomicOps {
     fn fetch_add(&self, val: Self) -> Self;
     fn fetch_sub(&mut self, val: Self) -> Self;
     fn fetch_mul(&mut self, val: Self) -> Self;
+    fn fetch_div(&mut self, val: Self) -> Self;
+    fn fetch_bit_and(&mut self, val: Self) -> Self;
+    fn fetch_bit_or(&mut self, val: Self) -> Self;
     fn compare_exchange(&mut self, current: Self, new: Self) -> Result<Self,Self> where Self: Sized;
     fn load(&mut self) -> Self;
     fn store(&mut self, val: Self);
@@ -86,6 +89,36 @@ macro_rules! impl_atomic_ops{
                     std::thread::yield_now();
                     cur = self.as_atomic().load(Ordering::SeqCst);
                     new = cur*val;
+                }
+                cur
+            }
+            fn fetch_div(&mut self, val: Self,) -> Self{
+                let mut cur = self.as_atomic().load(Ordering::SeqCst);
+                let mut new = cur/val;
+                while self.compare_exchange(cur,new).is_err(){
+                    std::thread::yield_now();
+                    cur = self.as_atomic().load(Ordering::SeqCst);
+                    new = cur/val;
+                }
+                cur
+            }
+            fn fetch_bit_and(&mut self, val: Self,) -> Self{
+                let mut cur = self.as_atomic().load(Ordering::SeqCst);
+                let mut new = cur/val;
+                while self.compare_exchange(cur,new).is_err(){
+                    std::thread::yield_now();
+                    cur = self.as_atomic().load(Ordering::SeqCst);
+                    new = cur & val;
+                }
+                cur
+            }
+            fn fetch_bit_or(&mut self, val: Self,) -> Self{
+                let mut cur = self.as_atomic().load(Ordering::SeqCst);
+                let mut new = cur/val;
+                while self.compare_exchange(cur,new).is_err(){
+                    std::thread::yield_now();
+                    cur = self.as_atomic().load(Ordering::SeqCst);
+                    new = cur | val;
                 }
                 cur
             }

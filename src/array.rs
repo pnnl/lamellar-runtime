@@ -50,8 +50,13 @@ pub struct ReduceKey {
 crate::inventory::collect!(ReduceKey);
 
 lamellar_impl::generate_reductions_for_type_rt!(u8, u16, u32, u64, u128, usize);
+lamellar_impl::generate_ops_for_type_rt!(true, u8, u16, u32, u64, u128, usize);
+
 lamellar_impl::generate_reductions_for_type_rt!(i8, i16, i32, i64, i128, isize);
+lamellar_impl::generate_ops_for_type_rt!(true, i8, i16, i32, i64, i128, isize);
+
 lamellar_impl::generate_reductions_for_type_rt!(f32, f64);
+lamellar_impl::generate_ops_for_type_rt!(false, f32, f64);
 
 #[derive(serde::Serialize, serde::Deserialize, Clone, Copy, Debug)]
 pub enum Distribution {
@@ -77,9 +82,11 @@ pub enum ArrayOpCmd{
     Or,
 }
 
-pub trait ElementOps: std::ops::AddAssign + std::ops::SubAssign + std::ops::MulAssign + AmDist + Dist + Sized  {} 
+pub trait ElementOps: std::ops::AddAssign + std::ops::SubAssign + std::ops::MulAssign + std::ops::DivAssign + AmDist + Dist + Sized {} 
+impl<T> ElementOps for T where T: std::ops::AddAssign + std::ops::SubAssign + std::ops::MulAssign + std::ops::DivAssign + AmDist + Dist {}
 
-impl<T> ElementOps for T where T: std::ops::AddAssign + std::ops::SubAssign + std::ops::MulAssign + AmDist + Dist{}
+pub trait ElementBitWiseOps: std::ops::BitAndAssign + std::ops::BitOrAssign + AmDist + Dist + Sized {}
+impl<T> ElementBitWiseOps for T where T: std::ops::BitAndAssign + std::ops::BitOrAssign + AmDist + Dist {}
 
 
 pub trait ArrayOps<T: ElementOps> {
@@ -117,29 +124,55 @@ pub trait ArrayOps<T: ElementOps> {
         val: T,
     ) -> Box<dyn LamellarRequest<Output = T> + Send + Sync>;
 
-    // fn div(
-    //     &self,
-    //     index: usize,
-    //     val: T,
-    // ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>>;
+    fn div(
+        &self,
+        index: usize,
+        val: T,
+    ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>>;
 
-    // fn add(
-    //     &self,
-    //     index: usize,
-    //     val: T,
-    // ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>>;
+    fn fetch_div(
+        &self,
+        index: usize,
+        val: T,
+    ) -> Box<dyn LamellarRequest<Output = T> + Send + Sync>;
+}
+pub trait ArrayBitWiseOps<T: ElementBitWiseOps> {
+    fn bit_and(
+        &self,
+        index: usize,
+        val: T,
+    ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>>;
 
-    // fn or(
-    //     &self,
-    //     index: usize,
-    //     val: T,
-    // ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>>;
+    fn fetch_bit_and(
+        &self,
+        index: usize,
+        val: T,
+    ) -> Box<dyn LamellarRequest<Output = T> + Send + Sync>;
+
+    fn bit_or(
+        &self,
+        index: usize,
+        val: T,
+    ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>>;
+
+    fn fetch_bit_or(
+        &self,
+        index: usize,
+        val: T,
+    ) -> Box<dyn LamellarRequest<Output = T> + Send + Sync>;
 }
 
+
+//perform the specified operation in place, returning the original value
 pub trait ArrayLocalOps<T: Dist + ElementOps> {
     fn local_add(&self, index: usize, val: T) -> T;
     fn local_sub(&self, index: usize, val: T) -> T;
     fn local_mul(&self, index: usize, val: T) -> T;
+    fn local_div(&self, index: usize, val: T) -> T;
+}
+pub trait ArrayLocalBitWiseOps<T: Dist + ElementBitWiseOps> {
+    fn local_bit_and(&self, index: usize, val: T) -> T;
+    fn local_bit_or(&self, index: usize, val: T) -> T;
 }
 
 pub struct LocalOpResult<T: Dist + ElementOps>{
@@ -344,8 +377,8 @@ pub trait LamellarArrayWrite<T: Dist>: LamellarArray<T> + Sync + Send {
     // fn swap(&self, index: usize, val: T) -> LamellarRequest<T>;
 }
 
-// #[enum_dispatch(LamellarArithmeticOps<T>)]
-// pub trait LamellarArithmeticOps<T: Dist + std::ops::AddAssing + std::ops::SubAssing + std::ops::MulAssign + std::ops::DivAssign>: LamellarArrayWrite{
+// #[enum_dispatch(LamellarElementOps<T>)]
+// pub trait LamellarElementOps<T: Dist + std::ops::AddAssing + std::ops::SubAssing + std::ops::MulAssign + std::ops::DivAssign>: LamellarArrayWrite{
 //     // blocking ops
 //     fn iadd(&self, index: usize, val: T);
 //     fn ifetch_add(&self, index: usize, val: T) ->T;
@@ -366,11 +399,11 @@ pub trait LamellarArrayWrite<T: Dist>: LamellarArray<T> + Sync + Send {
 //     fn fetch_div(&self, index: usize, val: T) -> LamellarRequest<T>;
 // }
 
-// pub trait LamellarLocalOps<T: Dist + Add + Sub + Mul + Div>: LamellarArithmeticOps{
+// pub trait LamellarLocalOps<T: Dist + Add + Sub + Mul + Div>: LamellarElementOps{
 //     fn local_add(&self, index: usize, val: T) -> T;
 //     ...
 
-// pub trait LamellarRemoteOps<T: Dist + Add + Sub + Mul + Div>: LamellarArithmeticOps{
+// pub trait LamellarRemoteOps<T: Dist + Add + Sub + Mul + Div>: LamellarElementOps{
 //     fn remote_add(&self, index: usize, val: T) -> LamellarRequest<T>;
 //     ...
 // }
