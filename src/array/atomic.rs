@@ -216,9 +216,6 @@ impl<T: Dist> AtomicArray<T> {
     pub fn len(&self) -> usize {
         self.array.len()
     }
-
-   
-
     #[doc(hidden)]
     pub unsafe fn local_as_slice(&self) -> &[T] {
         self.array.local_as_mut_slice()
@@ -227,14 +224,6 @@ impl<T: Dist> AtomicArray<T> {
     pub unsafe fn local_as_mut_slice(&self) -> &mut [T] {
         self.array.local_as_mut_slice()
     }
-
-
-    // pub(crate) fn local_as_mut_ptr(&self) -> *mut T {
-    //     self.array.local_as_mut_ptr()
-    // }
-
-
-
     pub fn sub_array<R: std::ops::RangeBounds<usize>>(&self, range: R) -> AtomicArray<T> {
         AtomicArray {
             locks: self.locks.clone(),
@@ -242,23 +231,15 @@ impl<T: Dist> AtomicArray<T> {
             array: self.array.sub_array(range),
         }
     }
-    // pub(crate) fn team(&self) -> Arc<LamellarTeamRT> {
-    //     self.array.team()
-    // }
-
     pub fn into_unsafe(self) -> UnsafeArray<T> {
-        self.array.block_on_outstanding(DarcMode::UnsafeArray);
-        self.array
+        self.array.into()
     }
-
     pub fn into_local_only(self) -> LocalOnlyArray<T> {
-        self.array.block_on_outstanding(DarcMode::LocalOnlyArray);
-        LocalOnlyArray {
-            array: self.array,
-            _unsync: PhantomData,
-        }
+        self.array.into()
     }
-
+    pub fn into_read_only(self) -> ReadOnlyArray<T> {
+        self.array.into()
+    }
     #[doc(hidden)]
     pub fn lock_index(&self, index: usize) -> Option<Vec<MutexGuard<()>>> {
         if let Some(ref locks) = *self.locks {
@@ -275,29 +256,26 @@ impl<T: Dist> AtomicArray<T> {
     }
 }
 
-  // #[doc(hidden)]
-    // pub unsafe fn to_base_inner<B: Dist + 'static>(self) -> AtomicArray<B> {
-    //     let array = self.array.to_base_inner();
-    //     AtomicArray {
-    //         locks: self.locks.clone(),
-    //         orig_t_size: self.orig_t_size,
-    //         array: array,
-    //     }
-    // }
-
-    // #[doc(hidden)]
-    // pub unsafe fn as_base_inner<B: Dist + 'static>(&self) -> AtomicArray<B> {
-    //     // todo!("need to do some aliasing of the original lock");
-    //     // println!();
-
-    //     let array = self.array.as_base_inner();
-    //     // let temp: T = array.local_as_slice()[0];
-    //     AtomicArray {
-    //         locks: self.locks.clone(),
-    //         orig_t_size: self.orig_t_size,
-    //         array: array,
-    //     }
-    // }
+impl<T: Dist + 'static> From<UnsafeArray<T>> for AtomicArray<T> {
+    fn from(array: UnsafeArray<T>) -> Self{
+        // let array = array.into_inner();
+        array.block_on_outstanding(DarcMode::AtomicArray);
+        let locks = if NATIVE_ATOMICS.get(&TypeId::of::<T>()).is_some() {
+            None
+        } else {
+            let mut vec = vec![];
+            for _i in 0..array.num_elems_local() {
+                vec.push(Mutex::new(()));
+            }
+            Some(vec)
+        };
+        AtomicArray {
+            locks: Darc::new(array.team(), locks).unwrap(),
+            orig_t_size: std::mem::size_of::<T>(),
+            array: array,
+        }
+    }
+}
 
 impl <T: Dist> AsBytes<T,u8> for AtomicArray<T>{
     type Array = AtomicArray<u8>;
@@ -311,7 +289,6 @@ impl <T: Dist> AsBytes<T,u8> for AtomicArray<T>{
         }
     }
 }
-
 impl <T: Dist> FromBytes<T,u8> for AtomicArray<u8>{
     type Array = AtomicArray<T>;
     #[doc(hidden)]
@@ -354,6 +331,9 @@ impl<T: Dist> private::LamellarArrayPrivate<T> for AtomicArray<T> {
     fn pe_offset_for_dist_index(&self, pe: usize, index: usize) -> usize {
         self.array.pe_offset_for_dist_index(pe, index)
     }
+    unsafe fn into_inner(self) -> UnsafeArray<T>{
+        self.array
+    }
 }
 
 impl<T: Dist> LamellarArray<T> for AtomicArray<T> {
@@ -380,8 +360,6 @@ impl<T: Dist> LamellarArray<T> for AtomicArray<T> {
 impl<T: Dist> LamellarWrite for AtomicArray<T> {}
 impl<T: Dist> LamellarRead for AtomicArray<T> {}
 
-
-
 impl<T: Dist> SubArray<T> for AtomicArray<T> {
     type Array = AtomicArray<T>;
     fn sub_array<R: std::ops::RangeBounds<usize>>(&self, range: R) -> Self::Array {
@@ -403,6 +381,8 @@ impl<T: Dist + std::fmt::Debug> ArrayPrint<T> for AtomicArray<T> {
         self.array.print()
     }
 }
+
+
 
 // impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> LamellarArrayReduce<T>
 //     for AtomicArray<T>

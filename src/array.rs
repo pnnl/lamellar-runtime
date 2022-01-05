@@ -20,6 +20,9 @@ pub use local_only::LocalOnlyArray;
 pub(crate) mod atomic;
 pub use atomic::{AtomicArray, operations::AtomicArrayOp, AtomicOps};
 
+pub(crate) mod collective_atomic;
+pub use collective_atomic::{CollectiveAtomicArray, operations::CollectiveAtomicArrayOp};
+
 pub mod iterator;
 pub use iterator::distributed_iterator::DistributedIterator;
 // use iterator::distributed_iterator::{DistIter, DistIterMut, DistIteratorLauncher};
@@ -92,17 +95,17 @@ pub enum ArrayOpCmd{
 }
 
 
-pub trait ElementAtomicOps: AmDist + Dist + Sized{}
-impl <T> ElementAtomicOps for T where T: AmDist + Dist {}
+pub trait ElementOps: AmDist + Dist + Sized{}
+impl <T> ElementOps for T where T: AmDist + Dist {}
 
-pub trait ElementOps: std::ops::AddAssign + std::ops::SubAssign + std::ops::MulAssign + std::ops::DivAssign + AmDist + Dist + Sized {} 
-impl<T> ElementOps for T where T: std::ops::AddAssign + std::ops::SubAssign + std::ops::MulAssign + std::ops::DivAssign + AmDist + Dist {}
+pub trait ElementArithmeticOps: std::ops::AddAssign + std::ops::SubAssign + std::ops::MulAssign + std::ops::DivAssign + AmDist + Dist + Sized {} 
+impl<T> ElementArithmeticOps for T where T: std::ops::AddAssign + std::ops::SubAssign + std::ops::MulAssign + std::ops::DivAssign + AmDist + Dist {}
 
 pub trait ElementBitWiseOps: std::ops::BitAndAssign + std::ops::BitOrAssign + AmDist + Dist + Sized {}
 impl<T> ElementBitWiseOps for T where T: std::ops::BitAndAssign + std::ops::BitOrAssign + AmDist + Dist {}
 
 
-pub trait ArrayOps<T: ElementOps> {
+pub trait ArithmeticOps<T: ElementArithmeticOps> {
     fn add(
         &self,
         index: usize,
@@ -149,7 +152,7 @@ pub trait ArrayOps<T: ElementOps> {
         val: T,
     ) -> Box<dyn LamellarRequest<Output = T> + Send + Sync>;
 }
-pub trait ArrayBitWiseOps<T: ElementBitWiseOps> {
+pub trait BitWiseOps<T: ElementBitWiseOps> {
     fn bit_and(
         &self,
         index: usize,
@@ -176,7 +179,7 @@ pub trait ArrayBitWiseOps<T: ElementBitWiseOps> {
 }
 
 //perform the specified operation in place, returning the original value
-pub trait ArrayLocalOps<T: Dist + ElementOps> {
+pub trait LocalArithmeticOps<T: Dist + ElementArithmeticOps> {
     fn local_add(&self, index: usize, val: T) { self.local_fetch_add(index,val); }
     fn local_fetch_add(&self, index: usize, val: T) -> T;
     fn local_sub(&self, index: usize, val: T) { self.local_fetch_sub(index,val); }
@@ -186,14 +189,14 @@ pub trait ArrayLocalOps<T: Dist + ElementOps> {
     fn local_div(&self, index: usize, val: T) { self.local_fetch_div(index,val); }
     fn local_fetch_div(&self, index: usize, val: T) -> T;
 }
-pub trait ArrayLocalBitWiseOps<T: Dist + ElementBitWiseOps> {
+pub trait LocalBitWiseOps<T: Dist + ElementBitWiseOps> {
     fn local_bit_and(&self, index: usize, val: T) { self.local_fetch_bit_and(index,val); }
     fn local_fetch_bit_and(&self, index: usize, val: T) -> T;
     fn local_bit_or(&self, index: usize, val: T){ self.local_fetch_bit_or(index,val); }
     fn local_fetch_bit_or(&self, index: usize, val: T) -> T;
 }
 
-pub trait ArrayLocalAtomicOps<T: Dist + ElementAtomicOps> {
+pub trait LocalAtomicOps<T: Dist + ElementOps> {
     fn local_load(&self, index: usize, val: T) -> T;
     fn local_store(&self, index: usize, val: T);
     fn local_swap(&self, index: usize, val: T) -> T;
@@ -292,6 +295,7 @@ pub enum LamellarReadArray<T: Dist> {
     UnsafeArray(UnsafeArray<T>),
     ReadOnlyArray(ReadOnlyArray<T>),
     AtomicArray(AtomicArray<T>),
+    CollectiveAtomicArray(CollectiveAtomicArray<T>),
 }
 
 #[enum_dispatch]
@@ -300,11 +304,12 @@ pub enum LamellarReadArray<T: Dist> {
 pub enum LamellarWriteArray<T: Dist> {
     UnsafeArray(UnsafeArray<T>),
     AtomicArray(AtomicArray<T>),
+    CollectiveAtomicArray(CollectiveAtomicArray<T>),
 }
 
 pub(crate) mod private {
     use crate::array::{
-        AtomicArray, LamellarReadArray, LamellarWriteArray, ReadOnlyArray, UnsafeArray,
+        AtomicArray, LamellarReadArray, LamellarWriteArray, ReadOnlyArray, UnsafeArray,CollectiveAtomicArray,
     };
     use crate::memregion::Dist;
     use enum_dispatch::enum_dispatch;
@@ -315,6 +320,7 @@ pub(crate) mod private {
         fn local_as_mut_ptr(&self) -> *mut T;
         fn pe_for_dist_index(&self, index: usize) -> usize;
         fn pe_offset_for_dist_index(&self, pe: usize, index: usize) -> usize;
+        unsafe fn into_inner(self) -> UnsafeArray<T>;
     }
 }
 
@@ -382,6 +388,7 @@ impl <T: Dist> FromBytes<T,u8> for LamellarReadArray<u8>{
             LamellarReadArray::UnsafeArray(array) => array.from_bytes().into(),
             LamellarReadArray::ReadOnlyArray(array) => array.from_bytes().into(),
             LamellarReadArray::AtomicArray(array) => array.from_bytes().into(),
+            LamellarReadArray::CollectiveAtomicArray(array) => array.from_bytes().into(),
         }
     }
 }
@@ -431,37 +438,6 @@ pub trait LamellarArrayWrite<T: Dist>: LamellarArray<T> + Sync + Send {
     // fn put<U: MyInto<LamellarArrayInput<T>> + LamellarRead>(&self, index: usize, buf: U) -> LamellarRequest<()>;
     // fn swap(&self, index: usize, val: T) -> LamellarRequest<T>;
 }
-
-// #[enum_dispatch(LamellarElementOps<T>)]
-// pub trait LamellarElementOps<T: Dist + std::ops::AddAssing + std::ops::SubAssing + std::ops::MulAssign + std::ops::DivAssign>: LamellarArrayWrite{
-//     // blocking ops
-//     fn iadd(&self, index: usize, val: T);
-//     fn ifetch_add(&self, index: usize, val: T) ->T;
-//     fn isub(&self, index: usize, val: T);
-//     fn ifetch_sub(&self, index: usize, val: T) ->T;
-//     fn imul(&self, index: usize, val: T);
-//     fn ifetch_mul(&self, index: usize, val: T) ->T;
-//     fn idiv(&self, index: usize, val: T);
-//     fn ifetch_div(&self, index: usize, val: T) ->T;
-//     //async ops
-//     fn add(&self, index: usize, val: T) -> LamellarRequest<()>;
-//     fn fetch_add(&self, index: usize, val: T) -> LamellarRequest<T>;
-//     fn sub(&self, index: usize, val: T) -> LamellarRequest<()>;
-//     fn fetch_sub(&self, index: usize, val: T) ->LamellarRequest<T>;
-//     fn mul(&self, index: usize, val: T) -> LamellarRequest<()>;
-//     fn fetch_mul(&self, index: usize, val: T) -> LamellarRequest<T>;
-//     fn div(&self, index: usize, val: T) -> LamellarRequest<()>;
-//     fn fetch_div(&self, index: usize, val: T) -> LamellarRequest<T>;
-// }
-
-// pub trait LamellarLocalOps<T: Dist + Add + Sub + Mul + Div>: LamellarElementOps{
-//     fn local_add(&self, index: usize, val: T) -> T;
-//     ...
-
-// pub trait LamellarRemoteOps<T: Dist + Add + Sub + Mul + Div>: LamellarElementOps{
-//     fn remote_add(&self, index: usize, val: T) -> LamellarRequest<T>;
-//     ...
-// }
 
 pub trait ArrayPrint<T: Dist + std::fmt::Debug>: LamellarArray<T> {
     fn print(&self);

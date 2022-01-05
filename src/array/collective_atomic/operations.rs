@@ -1,51 +1,31 @@
 use crate::active_messaging::*;
-use crate::array::r#unsafe::*;
+use crate::array::collective_atomic::*;
 use crate::array::*;
 use crate::lamellar_request::LamellarRequest;
 // use crate::memregion::Dist;
 use std::any::TypeId;
 use std::collections::HashMap;
 
-type OpFn = fn(*const u8, UnsafeArray<u8>, usize) -> LamellarArcAm; 
+type OpFn = fn(*const u8, CollectiveAtomicArray<u8>, usize) -> LamellarArcAm; 
 
 lazy_static! {
     static ref OPS: HashMap<(ArrayOpCmd,TypeId), OpFn> = {
         let mut map = HashMap::new();
-        for op in crate::inventory::iter::<UnsafeArrayOp> {
+        for op in crate::inventory::iter::<CollectiveAtomicArrayOp> {
             map.insert(op.id.clone(), op.op);
         }
         map
     };
 }
 
-pub struct UnsafeArrayOp {
+pub struct CollectiveAtomicArrayOp {
     pub id: (ArrayOpCmd,TypeId),
     pub op: OpFn,
 }
 
-crate::inventory::collect!(UnsafeArrayOp);
+crate::inventory::collect!(CollectiveAtomicArrayOp);
 
-impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
-    pub(crate) fn dist_op(
-        &self,
-        pe: usize,
-        func: LamellarArcAm,
-    ) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync> {
-        // println!("dist_op for UnsafeArray<T> ");
-        self.inner
-            .team
-            .exec_arc_am_pe(pe, func, Some(self.inner.array_counters.clone()))
-    }
-    pub(crate) fn dist_fetch_op(
-        &self,
-        pe: usize,
-        func: LamellarArcAm,
-    ) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
-        // println!("dist_op for UnsafeArray<T> ");
-        self.inner
-            .team
-            .exec_arc_am_pe(pe, func, Some(self.inner.array_counters.clone()))
-    }
+impl<T: AmDist + Dist + 'static> CollectiveAtomicArray<T> {
     fn initiate_op(
         &self,
         index: usize,
@@ -53,16 +33,17 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         local_index: usize,
         op: ArrayOpCmd
     ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>> {
-        // println!("initiate_op for UnsafeArray<T> ");
+        // println!("initiate_op for CollectiveAtomicArray<T> ");
         if let Some(func) = OPS.get(&(op,TypeId::of::<T>())) {
-            let array: UnsafeArray<u8> = unsafe { self.as_bytes() };
+            let array: CollectiveAtomicArray<u8> = unsafe { self.as_bytes() };
             let pe = self.pe_for_dist_index(index);
             let am = func(&val as *const T as *const u8, array, local_index);
-            Some(self.inner.team.exec_arc_am_pe(
-                pe,
-                am,
-                Some(self.inner.array_counters.clone()),
-            ))
+            // Some(self.inner.team.exec_arc_am_pe(
+            //     pe,
+            //     am,
+            //     Some(self.inner.array_counters.clone()),
+            // ))
+            Some(self.array.dist_op(pe,am))
         } else {
             let name = std::any::type_name::<T>().split("::").last().unwrap();
             panic!("the type {:?} has not been registered! this typically means you need to derive \"ArithmeticOps\" for the type . e.g. 
@@ -86,16 +67,17 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         local_index: usize,
         op: ArrayOpCmd
     ) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
-        // println!("initiate_op for UnsafeArray<T> ");
+        // println!("initiate_op for CollectiveAtomicArray<T> ");
         if let Some(func) = OPS.get(&(op,TypeId::of::<T>())) {
-            let array: UnsafeArray<u8> = unsafe { self.as_bytes() };
+            let array: CollectiveAtomicArray<u8> = unsafe { self.as_bytes() };
             let pe = self.pe_for_dist_index(index);
             let am = func(&val as *const T as *const u8, array, local_index);
-            self.inner.team.exec_arc_am_pe(
-                pe,
-                am,
-                Some(self.inner.array_counters.clone()),
-            )
+            // self.inner.team.exec_arc_am_pe(
+            //     pe,
+            //     am,
+            //     Some(self.inner.array_counters.clone()),
+            // )
+            self.array.dist_fetch_op(pe,am)
         } else {
             let name = std::any::type_name::<T>().split("::").last().unwrap();
             panic!("the type {:?} has not been registered! this typically means you need to derive \"ArithmeticOps\" for the type . e.g. 
@@ -111,10 +93,44 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         }
         
     }
+
+    pub fn store(&self, index: usize, val: T) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>>{
+        let pe = self.pe_for_dist_index(index);
+        let local_index = self.pe_offset_for_dist_index(pe, index);
+        if pe == self.my_pe() {
+            self.local_store(local_index, val);
+            None
+        } else {
+            self.initiate_op(index,val,local_index,ArrayOpCmd::Store)
+        }
+    }
+
+    pub fn load(&self, index: usize) -> Box<dyn LamellarRequest<Output = T> + Send + Sync>{
+        let pe = self.pe_for_dist_index(index);
+        let local_index = self.pe_offset_for_dist_index(pe, index);
+        let dummy_val = unsafe{self.local_as_slice()[0]}; //we dont actually do anything with this except satisfy apis;
+        if pe == self.my_pe() {
+            let val = self.local_load(local_index, dummy_val);
+            Box::new(LocalOpResult{val})
+        } else {
+            self.initiate_fetch_op(index,dummy_val,local_index,ArrayOpCmd::Load)
+        }
+    }
+
+    pub fn swap(&self, index: usize, val: T)  -> Box<dyn LamellarRequest<Output = T> + Send + Sync>{
+        let pe = self.pe_for_dist_index(index);
+        let local_index = self.pe_offset_for_dist_index(pe, index);
+        if pe == self.my_pe() {
+            let val = self.local_swap(local_index, val);
+            Box::new(LocalOpResult{val})
+        } else {
+            self.initiate_fetch_op(index,unsafe{self.local_as_slice()[0]},local_index,ArrayOpCmd::Swap)
+        }
+    }
     
 }
 
-impl<T: ElementArithmeticOps  + 'static> ArithmeticOps<T> for UnsafeArray<T> {
+impl<T: ElementArithmeticOps  + 'static> ArithmeticOps<T> for CollectiveAtomicArray<T> {
     fn add(
         &self,
         index: usize,
@@ -229,7 +245,7 @@ impl<T: ElementArithmeticOps  + 'static> ArithmeticOps<T> for UnsafeArray<T> {
     }
 }
 
-impl<T:  ElementBitWiseOps  + 'static> BitWiseOps<T> for UnsafeArray<T> {
+impl<T:  ElementBitWiseOps  + 'static> BitWiseOps<T> for CollectiveAtomicArray<T> {
     fn bit_and(
         &self,
         index: usize,
@@ -290,10 +306,11 @@ impl<T:  ElementBitWiseOps  + 'static> BitWiseOps<T> for UnsafeArray<T> {
 
 }
 
-// impl<T: Dist + std::ops::AddAssign> UnsafeArray<T> {
-impl<T: ElementArithmeticOps> LocalArithmeticOps<T> for UnsafeArray<T> {
+// impl<T: Dist + std::ops::AddAssign> CollectiveAtomicArray<T> {
+impl<T: ElementArithmeticOps> LocalArithmeticOps<T> for CollectiveAtomicArray<T> {
     fn local_fetch_add(&self, index: usize, val: T) -> T {
-        // println!("local_add LocalArithmeticOps<T> for UnsafeArray<T> ");
+        // println!("local_add LocalArithmeticOps<T> for CollectiveAtomicArray<T> ");
+        let _lock = self.lock.write();
         unsafe { 
             let orig  = self.local_as_mut_slice()[index];
             self.local_as_mut_slice()[index] += val;
@@ -302,7 +319,8 @@ impl<T: ElementArithmeticOps> LocalArithmeticOps<T> for UnsafeArray<T> {
         
     }
     fn local_fetch_sub(&self, index: usize, val: T) -> T{
-        // println!("local_sub LocalArithmeticOps<T> for UnsafeArray<T> ");
+        // println!("local_sub LocalArithmeticOps<T> for CollectiveAtomicArray<T> ");
+        let _lock = self.lock.write();
         unsafe { 
             let orig  = self.local_as_mut_slice()[index];
             self.local_as_mut_slice()[index] -= val;
@@ -310,7 +328,8 @@ impl<T: ElementArithmeticOps> LocalArithmeticOps<T> for UnsafeArray<T> {
         }
     }
     fn local_fetch_mul(&self, index: usize, val: T) -> T{
-        // println!("local_sub LocalArithmeticOps<T> for UnsafeArray<T> ");
+        // println!("local_sub LocalArithmeticOps<T> for CollectiveAtomicArray<T> ");
+        let _lock = self.lock.write();
         unsafe { 
             let orig  = self.local_as_mut_slice()[index];
             self.local_as_mut_slice()[index] *= val;
@@ -318,7 +337,8 @@ impl<T: ElementArithmeticOps> LocalArithmeticOps<T> for UnsafeArray<T> {
         }
     }
     fn local_fetch_div(&self, index: usize, val: T) -> T{
-        // println!("local_sub LocalArithmeticOps<T> for UnsafeArray<T> ");
+        // println!("local_sub LocalArithmeticOps<T> for CollectiveAtomicArray<T> ");
+        let _lock = self.lock.write();
         unsafe {
             let orig  = self.local_as_mut_slice()[index]; 
             self.local_as_mut_slice()[index] /= val;
@@ -326,9 +346,10 @@ impl<T: ElementArithmeticOps> LocalArithmeticOps<T> for UnsafeArray<T> {
         }
     }
 }
-impl<T: ElementBitWiseOps> LocalBitWiseOps<T> for UnsafeArray<T> {
+impl<T: ElementBitWiseOps> LocalBitWiseOps<T> for CollectiveAtomicArray<T> {
     fn local_fetch_bit_and(&self, index: usize, val: T) -> T{
-        // println!("local_sub LocalArithmeticOps<T> for UnsafeArray<T> ");
+        let _lock = self.lock.write();
+        // println!("local_sub LocalArithmeticOps<T> for CollectiveAtomicArray<T> ");
         unsafe { 
             let orig  = self.local_as_mut_slice()[index];
             self.local_as_mut_slice()[index] &= val;
@@ -336,7 +357,8 @@ impl<T: ElementBitWiseOps> LocalBitWiseOps<T> for UnsafeArray<T> {
         }
     }
     fn local_fetch_bit_or(&self, index: usize, val: T) -> T{
-        // println!("local_sub LocalArithmeticOps<T> for UnsafeArray<T> ");
+        let _lock = self.lock.write();
+        // println!("local_sub LocalArithmeticOps<T> for CollectiveAtomicArray<T> ");
         unsafe { 
             let orig  = self.local_as_mut_slice()[index];
             self.local_as_mut_slice()[index] |= val;
@@ -344,41 +366,77 @@ impl<T: ElementBitWiseOps> LocalBitWiseOps<T> for UnsafeArray<T> {
         }
     }
 }
+impl<T: ElementOps> LocalAtomicOps<T> for CollectiveAtomicArray<T> {
+    fn local_load(&self, index: usize, _val: T) -> T {
+        let _lock = self.lock.read();
+        unsafe { 
+            self.local_as_mut_slice()[index]
+        }
+    }
+
+    fn local_store(&self, index: usize, val: T) {
+        let _lock = self.lock.write();
+        unsafe { 
+            self.local_as_mut_slice()[index] = val;
+        }
+    }
+
+    fn local_swap(&self, index: usize, val: T) -> T {
+        let _lock = self.lock.write();
+        unsafe { 
+            let orig = self.local_as_mut_slice()[index];
+            self.local_as_mut_slice()[index] = val;
+            orig
+        }
+    }
+}
 // }
 
 #[macro_export]
-macro_rules! UnsafeArray_create_ops {
+macro_rules! CollectiveAtomicArray_create_ops {
     ($a:ty, $name:ident) => {
         paste::paste!{
-            $crate::unsafearray_register!{$a,ArrayOpCmd::Add,[<$name dist_add>],[<$name local_add>]}
-            $crate::unsafearray_register!{$a,ArrayOpCmd::FetchAdd,[<$name dist_fetch_add>],[<$name local_add>]}
-            $crate::unsafearray_register!{$a,ArrayOpCmd::Sub,[<$name dist_sub>],[<$name local_sub>]}
-            $crate::unsafearray_register!{$a,ArrayOpCmd::FetchSub,[<$name dist_fetch_sub>],[<$name local_sub>]}
-            $crate::unsafearray_register!{$a,ArrayOpCmd::Mul,[<$name dist_mul>],[<$name local_mul>]}
-            $crate::unsafearray_register!{$a,ArrayOpCmd::FetchMul,[<$name dist_fetch_mul>],[<$name local_mul>]}
-            $crate::unsafearray_register!{$a,ArrayOpCmd::Div,[<$name dist_div>],[<$name local_div>]}
-            $crate::unsafearray_register!{$a,ArrayOpCmd::FetchDiv,[<$name dist_fetch_div>],[<$name local_div>]}
+            $crate::collectiveatomicarray_register!{$a,ArrayOpCmd::Add,[<$name dist_add>],[<$name local_add>]}
+            $crate::collectiveatomicarray_register!{$a,ArrayOpCmd::FetchAdd,[<$name dist_fetch_add>],[<$name local_add>]}
+            $crate::collectiveatomicarray_register!{$a,ArrayOpCmd::Sub,[<$name dist_sub>],[<$name local_sub>]}
+            $crate::collectiveatomicarray_register!{$a,ArrayOpCmd::FetchSub,[<$name dist_fetch_sub>],[<$name local_sub>]}
+            $crate::collectiveatomicarray_register!{$a,ArrayOpCmd::Mul,[<$name dist_mul>],[<$name local_mul>]}
+            $crate::collectiveatomicarray_register!{$a,ArrayOpCmd::FetchMul,[<$name dist_fetch_mul>],[<$name local_mul>]}
+            $crate::collectiveatomicarray_register!{$a,ArrayOpCmd::Div,[<$name dist_div>],[<$name local_div>]}
+            $crate::collectiveatomicarray_register!{$a,ArrayOpCmd::FetchDiv,[<$name dist_fetch_div>],[<$name local_div>]}
+            
         }
     }
 }
 
 #[macro_export]
-macro_rules! UnsafeArray_create_bitwise_ops {
+macro_rules! CollectiveAtomicArray_create_bitwise_ops {
     ($a:ty, $name:ident) => {
         paste::paste!{
-            $crate::unsafearray_register!{$a,ArrayOpCmd::And,[<$name dist_bit_and>],[<$name local_bit_and>]}
-            $crate::unsafearray_register!{$a,ArrayOpCmd::FetchAnd,[<$name dist_fetch_bit_and>],[<$name local_bit_and>]}
-            $crate::unsafearray_register!{$a,ArrayOpCmd::Or,[<$name dist_bit_or>],[<$name local_bit_or>]}
-            $crate::unsafearray_register!{$a,ArrayOpCmd::FetchOr,[<$name dist_fetch_bit_or>],[<$name local_bit_or>]}
+            $crate::collectiveatomicarray_register!{$a,ArrayOpCmd::And,[<$name dist_bit_and>],[<$name local_bit_and>]}
+            $crate::collectiveatomicarray_register!{$a,ArrayOpCmd::FetchAnd,[<$name dist_fetch_bit_and>],[<$name local_bit_and>]}
+            $crate::collectiveatomicarray_register!{$a,ArrayOpCmd::Or,[<$name dist_bit_or>],[<$name local_bit_or>]}
+            $crate::collectiveatomicarray_register!{$a,ArrayOpCmd::FetchOr,[<$name dist_fetch_bit_or>],[<$name local_bit_or>]}
+        }
+    }
+}
+
+#[macro_export]
+macro_rules! CollectiveAtomicArray_create_atomic_ops {
+    ($a:ty, $name:ident) => {
+        paste::paste!{
+            $crate::collectiveatomicarray_register!{$a,ArrayOpCmd::Store,[<$name dist_store>],[<$name local_store>]}
+            $crate::collectiveatomicarray_register!{$a,ArrayOpCmd::Load,[<$name dist_load>],[<$name local_load>]}
+            $crate::collectiveatomicarray_register!{$a,ArrayOpCmd::Swap,[<$name dist_swap>],[<$name local_swap>]}
         }
     }
 }
 #[macro_export]
-macro_rules! unsafearray_register {
+macro_rules! collectiveatomicarray_register {
     ($id:ident, $optype:path, $op:ident, $local:ident) => {
         inventory::submit! {
             #![crate =$crate]
-            $crate::array::UnsafeArrayOp{
+            $crate::array::CollectiveAtomicArrayOp{
                 id: ($optype,std::any::TypeId::of::<$id>()),
                 op: $op,
             }

@@ -58,27 +58,33 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Lo
     pub fn as_mut_slice(&mut self) -> &mut [T] {
         unsafe { self.array.local_as_mut_slice() }
     }
-    // pub unsafe fn to_base_inner<B: Dist + 'static>(self) -> LocalOnlyArray<B> {
-    //     LocalOnlyArray {
-    //         array: self.array.to_base_inner(),
-    //         _unsync: PhantomData,
-    //     }
-    // }
-
     pub(crate) fn local_as_mut_ptr(&self) -> *mut T {
         self.array.local_as_mut_ptr()
     }
 
     pub fn into_unsafe(self) -> UnsafeArray<T> {
-        self.array.block_on_outstanding(DarcMode::UnsafeArray);
-        self.array
+        self.array.into()
     }
 
     pub fn into_read_only(self) -> ReadOnlyArray<T> {
-        self.array.block_on_outstanding(DarcMode::ReadOnlyArray);
-        ReadOnlyArray { array: self.array }
+        self.array.into()
+    }
+
+    pub fn into_atomic(self) -> AtomicArray<T> {
+        self.array.into()
     }
 }
+
+impl<T: Dist> From<UnsafeArray<T>> for LocalOnlyArray<T> {
+    fn from(array: UnsafeArray<T>) -> Self {
+        array.block_on_outstanding(DarcMode::LocalOnlyArray);
+        LocalOnlyArray {
+            array: array,
+            _unsync: PhantomData,
+        }
+    }
+}
+
 
 impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static>
     private::LamellarArrayPrivate<T> for LocalOnlyArray<T>
@@ -94,6 +100,9 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static>
     }
     fn pe_offset_for_dist_index(&self, pe: usize, index: usize) -> usize {
         self.array.pe_offset_for_dist_index(pe, index)
+    }
+    unsafe fn into_inner(self) -> UnsafeArray<T>{
+        self.array
     }
 }
 

@@ -215,27 +215,57 @@ impl<T: Dist> UnsafeArray<T> {
     }
     pub(crate) fn team(&self) -> Pin<Arc<LamellarTeamRT>> {
         self.inner.team.clone()
-    }
-
-    // pub(crate) fn mem_region(&self) -> &MemoryRegion<u8>{
-    //     &self.inner.mem_region
-    // }
-
+    }  
+    
     pub(crate) fn block_on_outstanding(&self, mode: DarcMode) {
         self.inner.block_on_outstanding(mode);
     }
 
     pub fn into_read_only(self) -> ReadOnlyArray<T> {
-        self.block_on_outstanding(DarcMode::ReadOnlyArray);
-        ReadOnlyArray { array: self }
+        self.into()
     }
 
     pub fn into_local_only(self) -> LocalOnlyArray<T> {
-        self.block_on_outstanding(DarcMode::LocalOnlyArray);
-        LocalOnlyArray {
-            array: self,
-            _unsync: PhantomData,
-        }
+        self.into()
+    }
+
+    pub fn into_collective_atomic(self) -> CollectiveAtomicArray<T> {
+        self.into()
+    }
+}
+
+impl<T: Dist + 'static> UnsafeArray<T>{
+    pub fn into_atomic(self) -> AtomicArray<T> {
+        self.into()
+    }
+}
+
+impl<T: Dist> From<AtomicArray<T>> for UnsafeArray<T> {
+    fn from(array: AtomicArray<T>) -> Self{
+        // let array = array.into_inner();
+        array.array.block_on_outstanding(DarcMode::UnsafeArray);
+        array.array
+    }
+}
+
+impl<T: Dist> From<CollectiveAtomicArray<T>> for UnsafeArray<T> {
+    fn from(array: CollectiveAtomicArray<T>) -> Self{
+        array.array.block_on_outstanding(DarcMode::UnsafeArray);
+        array.array
+    }
+}
+
+impl<T: Dist> From<LocalOnlyArray<T>> for UnsafeArray<T> {
+    fn from(array: LocalOnlyArray<T>) -> Self{
+        array.array.block_on_outstanding(DarcMode::UnsafeArray);
+        array.array
+    }
+}
+
+impl<T: Dist> From<ReadOnlyArray<T>> for UnsafeArray<T> {
+    fn from(array: ReadOnlyArray<T>) -> Self{
+        array.array.block_on_outstanding(DarcMode::UnsafeArray);
+        array.array
     }
 }
 
@@ -340,6 +370,11 @@ impl<T: Dist> private::LamellarArrayPrivate<T> for UnsafeArray<T> {
             Distribution::Cyclic => index / self.inner.team.num_pes(),
         }
     }
+
+    unsafe fn into_inner(self) -> UnsafeArray<T>{
+        self
+    }
+    
 }
 
 impl<T: Dist> LamellarArray<T> for UnsafeArray<T> {

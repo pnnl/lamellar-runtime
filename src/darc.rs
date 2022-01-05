@@ -30,6 +30,8 @@ pub(crate) enum DarcMode {
     UnsafeArray,
     ReadOnlyArray,
     LocalOnlyArray,
+    AtomicArray,
+    CollectiveAtomicArray,
 }
 
 #[lamellar_impl::AmDataRT(Debug)]

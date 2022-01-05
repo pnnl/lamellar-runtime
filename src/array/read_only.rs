@@ -76,26 +76,6 @@ impl<T: Dist> ReadOnlyArray<T> {
     pub fn local_as_slice(&self) -> &[T] {
         unsafe { self.array.local_as_mut_slice() }
     }
-    // pub fn local_as_mut_slice(&self) -> &mut [T] {
-    //     self.array.local_as_mut_slice()
-    // }
-    // pub unsafe fn to_base_inner<B: Dist>(self) -> ReadOnlyArray<B> {
-    //     ReadOnlyArray {
-    //         array: self.array.to_base_inner(),
-    //     }
-    // }
-
-    // pub fn local_mem_region(&self) -> &MemoryRegion<T> {
-    //     &self.inner.mem_region
-    // }
-
-    // pub(crate) fn local_as_ptr(&self) -> *const T {
-    //     self.array.local_as_ptr()
-    // }
-    // pub(crate) fn local_as_mut_ptr(&self) -> *mut T {
-    //     self.array.local_as_mut_ptr()
-    // }
-
     pub fn dist_iter(&self) -> DistIter<'static, T, ReadOnlyArray<T>> {
         DistIter::new(self.clone().into(), 0, 0)
     }
@@ -117,20 +97,31 @@ impl<T: Dist> ReadOnlyArray<T> {
             array: self.array.sub_array(range),
         }
     }
-    // pub(crate) fn team(&self) -> Arc<LamellarTeamRT> {
-    //     self.array.team()
-    // }
 
     pub fn into_unsafe(self) -> UnsafeArray<T> {
-        self.array.block_on_outstanding(DarcMode::UnsafeArray);
-        self.array
+        self.array.into()
     }
 
     pub fn into_local_only(self) -> LocalOnlyArray<T> {
-        self.array.block_on_outstanding(DarcMode::LocalOnlyArray);
-        LocalOnlyArray {
-            array: self.array,
-            _unsync: PhantomData,
+        self.array.into()
+    }
+
+    pub fn into_collective_atomic(self) -> CollectiveAtomicArray<T> {
+        self.array.into()
+    }
+}
+
+impl<T: Dist + 'static> ReadOnlyArray<T>{
+    pub fn into_atomic(self) -> AtomicArray<T> {
+        self.array.into()
+    }
+}
+
+impl<T: Dist> From<UnsafeArray<T>> for ReadOnlyArray<T> {
+    fn from(array: UnsafeArray<T>) -> Self {
+        array.block_on_outstanding(DarcMode::ReadOnlyArray);
+        ReadOnlyArray {
+            array: array,
         }
     }
 }
@@ -204,6 +195,9 @@ impl<T: Dist> private::LamellarArrayPrivate<T> for ReadOnlyArray<T> {
     }
     fn pe_offset_for_dist_index(&self, pe: usize, index: usize) -> usize {
         self.array.pe_offset_for_dist_index(pe, index)
+    }
+    unsafe fn into_inner(self) -> UnsafeArray<T>{
+        self.array
     }
 }
 

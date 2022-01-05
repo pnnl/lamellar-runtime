@@ -39,7 +39,7 @@ impl<T:  AmDist + Dist  + 'static> AtomicArray<T> {
     // }
 
     fn initiate_op(&self, index: usize, val: T, op: ArrayOpCmd)  -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>>{
-        // println!("add ArrayOps<T> for &AtomicArray<T> ");
+        // println!("add ArithmeticOps<T> for &AtomicArray<T> ");
         if let Some(funcs) = OPS.get(&(op,TypeId::of::<T>())) {
             let pe = self.pe_for_dist_index(index);
             let local_index = self.pe_offset_for_dist_index(pe, index);
@@ -54,20 +54,20 @@ impl<T:  AmDist + Dist  + 'static> AtomicArray<T> {
             }
         } else {
             let name = std::any::type_name::<T>().split("::").last().unwrap();
-            panic!("the type {:?} has not been registered! this typically means you need to derive \"ArrayOps\" for the type . e.g. 
-            #[derive(lamellar::ArrayOps)]
+            panic!("the type {:?} has not been registered! this typically means you need to derive \"ArithmeticOps\" for the type . e.g. 
+            #[derive(lamellar::ArithmeticOps)]
             struct {:?}{{
                 ....
             }}
             note this also requires the type to impl Serialize + Deserialize, you can manually derive these, or use the lamellar::AmData attribute proc macro, e.g.
-            #[lamellar::AMData(ArrayOps, any other traits you derive)]
+            #[lamellar::AMData(ArithmeticOps, any other traits you derive)]
             struct {:?}{{
                 ....
             }}",name,name,name);
         }
     } 
     fn initiate_fetch_op(&self, index: usize, val: T, op: ArrayOpCmd)  -> Box<dyn LamellarRequest<Output = T> + Send + Sync>{
-        // println!("add ArrayOps<T> for &AtomicArray<T> ");
+        // println!("add ArithmeticOps<T> for &AtomicArray<T> ");
         if let Some(funcs) = OPS.get(&(op,TypeId::of::<T>())) {
             let pe = self.pe_for_dist_index(index);
             let local_index = self.pe_offset_for_dist_index(pe, index);
@@ -83,13 +83,13 @@ impl<T:  AmDist + Dist  + 'static> AtomicArray<T> {
             }
         } else {
             let name = std::any::type_name::<T>().split("::").last().unwrap();
-            panic!("the type {:?} has not been registered for the operation: {:?}! this typically means you need to derive \"ArrayOps\" for the type . e.g. 
-            #[derive(lamellar::ArrayOps)]
+            panic!("the type {:?} has not been registered for the operation: {:?}! this typically means you need to derive \"ArithmeticOps\" for the type . e.g. 
+            #[derive(lamellar::ArithmeticOps)]
             struct {:?}{{
                 ....
             }}
             note this also requires the type to impl Serialize + Deserialize, you can manually derive these, or use the lamellar::AmData attribute proc macro, e.g.
-            #[lamellar::AMData(ArrayOps, any other traits you derive)]
+            #[lamellar::AMData(ArithmeticOps, any other traits you derive)]
             struct {:?}{{
                 ....
             }}",name,op,name,name);
@@ -110,7 +110,7 @@ impl<T:  AmDist + Dist  + 'static> AtomicArray<T> {
 }
 
 
-impl<T: ElementOps  + 'static> ArrayOps<T> for AtomicArray<T> {
+impl<T: ElementArithmeticOps  + 'static> ArithmeticOps<T> for AtomicArray<T> {
     fn add(
         &self,
         index: usize,
@@ -168,7 +168,7 @@ impl<T: ElementOps  + 'static> ArrayOps<T> for AtomicArray<T> {
         self.initiate_fetch_op(index,val,ArrayOpCmd::FetchDiv)
     }
 }
-impl<T:  ElementBitWiseOps + 'static> ArrayBitWiseOps<T> for AtomicArray<T> {
+impl<T:  ElementBitWiseOps + 'static> BitWiseOps<T> for AtomicArray<T> {
     fn bit_and(
         &self,
         index: usize,
@@ -205,7 +205,7 @@ impl<T:  ElementBitWiseOps + 'static> ArrayBitWiseOps<T> for AtomicArray<T> {
 #[macro_export]
 macro_rules! atomic_ops {
     ($a:ty, $name:ident) => {
-        impl ArrayLocalOps<$a> for AtomicArray<$a> {
+        impl LocalArithmeticOps<$a> for AtomicArray<$a> {
             fn local_fetch_add(&self, index: usize, val: $a) -> $a {
                 use $crate::array::AtomicOps;
                 unsafe { self.local_as_mut_slice()[index].fetch_add(val) }
@@ -274,7 +274,7 @@ macro_rules! atomic_ops {
 #[macro_export]
 macro_rules! atomic_bitwise_ops {
     ($a:ty, $name:ident) => {
-        impl ArrayLocalBitWiseOps<$a> for AtomicArray<$a> {
+        impl LocalBitWiseOps<$a> for AtomicArray<$a> {
             // fn local_bit_and(&self, index: usize, val: $a) {
             //     self.local_fetch_bit_and(index,val);
             // }
@@ -324,7 +324,7 @@ macro_rules! atomic_bitwise_ops {
 #[macro_export]
 macro_rules! atomic_misc_ops {
     ($a:ty, $name:ident) => {
-        impl ArrayLocalAtomicOps<$a> for AtomicArray<$a> {
+        impl LocalAtomicOps<$a> for AtomicArray<$a> {
             fn local_load(&self, index: usize, _val: $a) -> $a {
                 use $crate::array::AtomicOps;
                 unsafe { self.local_as_mut_slice()[index].load() }
@@ -375,10 +375,10 @@ macro_rules! atomic_misc_ops {
 #[macro_export]
 macro_rules! non_atomic_ops {
     ($a:ty, $name:ident) => {
-        impl ArrayLocalOps<$a> for AtomicArray<$a> {
+        impl LocalArithmeticOps<$a> for AtomicArray<$a> {
             fn local_fetch_add(&self, index: usize, val: $a) -> $a {
                 // println!(
-                //     "mutex local_add ArrayLocalOps<{}> for AtomicArray<{}>  ",
+                //     "mutex local_add LocalArithmeticOps<{}> for AtomicArray<{}>  ",
                 //     stringify!($a),
                 //     stringify!($a)
                 // );
@@ -392,7 +392,7 @@ macro_rules! non_atomic_ops {
             }
             fn local_fetch_sub(&self, index: usize, val: $a) -> $a {
                 // println!(
-                //     "mutex local_sub ArrayLocalOps<{}> for AtomicArray<{}>  ",
+                //     "mutex local_sub LocalArithmeticOps<{}> for AtomicArray<{}>  ",
                 //     stringify!($a),
                 //     stringify!($a)
                 // );
@@ -484,10 +484,10 @@ macro_rules! non_atomic_ops {
 #[macro_export]
 macro_rules! non_atomic_bitwise_ops {
     ($a:ty, $name:ident) => {
-        impl ArrayLocalBitWiseOps<$a> for AtomicArray<$a> {
+        impl LocalBitWiseOps<$a> for AtomicArray<$a> {
             fn local_fetch_bit_and(&self, index: usize, val: $a) -> $a {
                 // println!(
-                //     "mutex local_add ArrayLocalOps<{}> for AtomicArray<{}>  ",
+                //     "mutex local_add LocalArithmeticOps<{}> for AtomicArray<{}>  ",
                 //     stringify!($a),
                 //     stringify!($a)
                 // );
@@ -501,7 +501,7 @@ macro_rules! non_atomic_bitwise_ops {
             }
             fn local_fetch_bit_or(&self, index: usize, val: $a) -> $a {
                 // println!(
-                //     "mutex local_sub ArrayLocalOps<{}> for AtomicArray<{}>  ",
+                //     "mutex local_sub LocalArithmeticOps<{}> for AtomicArray<{}>  ",
                 //     stringify!($a),
                 //     stringify!($a)
                 // );
@@ -549,7 +549,7 @@ macro_rules! non_atomic_bitwise_ops {
 #[macro_export]
 macro_rules! non_atomic_misc_ops {
     ($a:ty, $name:ident) => {
-        impl ArrayLocalAtomicOps<$a> for AtomicArray<$a> {
+        impl LocalAtomicOps<$a> for AtomicArray<$a> {
             fn local_load(&self, index: usize, _val: $a) -> $a {
                 let _lock = self.lock_index(index);
                 unsafe { 

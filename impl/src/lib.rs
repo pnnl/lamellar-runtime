@@ -419,10 +419,10 @@ fn derive_am_data(
                 trait_strs
                     .entry(String::from("Clone"))
                     .or_insert(quote! {Clone});
-            }else if t.contains("ArrayOps") {
+            }else if t.contains("ArithmeticOps") {
                 trait_strs
-                    .entry(String::from("ArrayOps"))
-                    .or_insert(quote! {#lamellar::ArrayOps});
+                    .entry(String::from("ArithmeticOps"))
+                    .or_insert(quote! {#lamellar::ArithmeticOps});
                 trait_strs
                     .entry(String::from("Dist"))
                     .or_insert(quote! {#lamellar::Dist});
@@ -1037,6 +1037,7 @@ fn create_ops(
     };
 
     let write_array_types: Vec<syn::Ident> = vec![
+        quote::format_ident!("CollectiveAtomicArray"),
         quote::format_ident!("AtomicArray"),
         quote::format_ident!("UnsafeArray"),
     ];
@@ -1055,13 +1056,14 @@ fn create_ops(
     let write_array_impls = gen_write_array_impls(typeident.clone(), &write_array_types, &ops, rt);   
     let mut expanded = quote!{
         #[allow(non_camel_case_types)]
-        impl #lamellar::array::ArrayOps<#typeident> for #lamellar::array::LamellarWriteArray<#typeident>{
+        impl #lamellar::array::ArithmeticOps<#typeident> for #lamellar::array::LamellarWriteArray<#typeident>{
             #write_array_impls
         }
         #array_impls
     };
 
     let atomic_array_types: Vec<syn::Ident> = vec![
+        quote::format_ident!("CollectiveAtomicArray"),
         quote::format_ident!("AtomicArray"),
     ];
     let atomic_ops: Vec<(syn::Ident,bool)> = vec![
@@ -1089,18 +1091,18 @@ fn create_ops(
         let write_array_impls = gen_write_array_impls(typeident.clone(), &write_array_types, &bitwise_ops, rt);
         expanded.extend(quote!{
             #[allow(non_camel_case_types)]
-            impl #lamellar::array::ArrayBitWiseOps<#typeident> for #lamellar::array::LamellarWriteArray<#typeident>{
+            impl #lamellar::array::BitWiseOps<#typeident> for #lamellar::array::LamellarWriteArray<#typeident>{
                 #write_array_impls
             }
             #array_impls
         });
-        bitwise_mod.extend(quote!{use __lamellar::array::ArrayLocalBitWiseOps;});
+        bitwise_mod.extend(quote!{use __lamellar::array::LocalBitWiseOps;});
     }
 
     let user_expanded = quote_spanned! {expanded.span()=>
         const _: () = {
             extern crate lamellar as __lamellar;
-            use __lamellar::array::{ArrayLocalOps,ArrayLocalAtomicOps,ArrayOpCmd,LamellarArrayRead,FromBytes};
+            use __lamellar::array::{LocalArithmeticOps,LocalAtomicOps,ArrayOpCmd,LamellarArrayRead,FromBytes};
             #bitwise_mod
             use __lamellar::LamellarArray;
             use __lamellar::LamellarRequest;
@@ -1122,6 +1124,7 @@ pub fn register_reduction(item: TokenStream) -> TokenStream {
     let args = parse_macro_input!(item as ReductionArgs);
     let mut output = quote! {};
     let array_types: Vec<syn::Ident> = vec![
+        quote::format_ident!("CollectiveAtomicArray"),
         quote::format_ident!("AtomicArray"),
         quote::format_ident!("UnsafeArray"),
         quote::format_ident!("ReadOnlyArray"),
@@ -1167,6 +1170,7 @@ pub fn register_reduction(item: TokenStream) -> TokenStream {
 pub fn generate_reductions_for_type(item: TokenStream) -> TokenStream {
     let mut output = quote! {};
     let read_array_types: Vec<syn::Ident> = vec![
+        quote::format_ident!("CollectiveAtomicArray"),
         quote::format_ident!("AtomicArray"),
         quote::format_ident!("UnsafeArray"),
         quote::format_ident!("ReadOnlyArray"),
@@ -1215,6 +1219,7 @@ pub fn generate_reductions_for_type_rt(item: TokenStream) -> TokenStream {
     let mut output = quote! {};
 
     let read_array_types: Vec<syn::Ident> = vec![
+        quote::format_ident!("CollectiveAtomicArray"),
         quote::format_ident!("AtomicArray"),
         quote::format_ident!("UnsafeArray"),
         quote::format_ident!("ReadOnlyArray"),
@@ -1313,7 +1318,7 @@ pub fn derive_dist(input: TokenStream) -> TokenStream {
 }
 
 #[proc_macro_error]
-#[proc_macro_derive(ArrayOps)]
+#[proc_macro_derive(ArithmeticOps)]
 pub fn derive_arrayops(input: TokenStream) -> TokenStream {
     let mut output = quote! {};
 

@@ -1,7 +1,7 @@
-use lamellar::array::{ArrayOps,ArrayBitWiseOps, AtomicArray, Distribution, LamellarArray, ElementOps, ElementBitWiseOps, ElementAtomicOps};
+use lamellar::array::{ArithmeticOps,BitWiseOps, AtomicArray, Distribution, LamellarArray, ElementArithmeticOps, ElementBitWiseOps, ElementOps};
 
 
-#[lamellar::AmData(Default, Debug, ArrayOps)]
+#[lamellar::AmData(Default, Debug, ArithmeticOps)]
 struct Custom {
     int: usize,
     float: f32,
@@ -43,7 +43,7 @@ impl std::ops::DivAssign for Custom {
     }
 }
 
-fn test_add<T: std::fmt::Debug + ElementOps + 'static>(
+fn test_add<T: std::fmt::Debug + ElementArithmeticOps + 'static>(
     array: AtomicArray<T>,
     init_val: T,
     add_val: T,
@@ -73,7 +73,7 @@ fn test_add<T: std::fmt::Debug + ElementOps + 'static>(
 }
 
 
-fn test_sub<T: std::fmt::Debug + ElementOps + 'static>(
+fn test_sub<T: std::fmt::Debug + ElementArithmeticOps + 'static>(
     array: AtomicArray<T>,
     init_val: T,
     sub_val: T,
@@ -102,7 +102,7 @@ fn test_sub<T: std::fmt::Debug + ElementOps + 'static>(
     array.barrier();
 }
 
-fn test_mul<T: std::fmt::Debug + ElementOps + 'static>(
+fn test_mul<T: std::fmt::Debug + ElementArithmeticOps + 'static>(
     array: AtomicArray<T>,
     init_val: T,
     mul_val: T,
@@ -131,7 +131,7 @@ fn test_mul<T: std::fmt::Debug + ElementOps + 'static>(
     array.barrier();
 }
 
-fn test_div<T: std::fmt::Debug + ElementOps + 'static>(
+fn test_div<T: std::fmt::Debug + ElementArithmeticOps + 'static>(
     array: AtomicArray<T>,
     init_val: T,
     div_val: T,
@@ -160,7 +160,7 @@ fn test_div<T: std::fmt::Debug + ElementOps + 'static>(
     array.barrier();
 }
 
-fn test_and<T: std::fmt::Debug + ElementOps + ElementBitWiseOps + 'static> (
+fn test_and<T: std::fmt::Debug + ElementArithmeticOps + ElementBitWiseOps + 'static> (
     array: AtomicArray<T>,
     init_val: T,
     and_val: T,
@@ -224,7 +224,7 @@ fn test_or<T: std::fmt::Debug + ElementBitWiseOps + 'static> (
     array.barrier();
 }
 
-fn test_store_load<T: std::fmt::Debug + ElementAtomicOps + 'static> (
+fn test_store_load<T: std::fmt::Debug + ElementOps + 'static> (
     array: AtomicArray<T>,
     init_val: T,
     store_val: T,
