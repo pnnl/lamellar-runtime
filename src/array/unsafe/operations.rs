@@ -6,7 +6,7 @@ use crate::lamellar_request::LamellarRequest;
 use std::any::TypeId;
 use std::collections::HashMap;
 
-type OpFn = fn(*const u8, UnsafeArray<u8>, usize, bool) -> LamellarArcAm; 
+type OpFn = fn(*const u8, UnsafeArray<u8>, usize) -> LamellarArcAm; 
 
 lazy_static! {
     static ref OPS: HashMap<(ArrayOpCmd,TypeId), OpFn> = {
@@ -25,21 +25,7 @@ pub struct UnsafeArrayOp {
 
 crate::inventory::collect!(UnsafeArrayOp);
 
-impl<T: ElementOps + 'static> UnsafeArray<T> {
-    pub fn add(
-        &self,
-        index: usize,
-        val: T,
-    ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>> {
-        ArrayOps::add(self,index,val)
-    }
-    pub fn sub(
-        &self,
-        index: usize,
-        val: T,
-    ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>> {
-        ArrayOps::sub(self,index,val)
-    }
+impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
     pub(crate) fn dist_op(
         &self,
         pe: usize,
@@ -64,15 +50,14 @@ impl<T: ElementOps + 'static> UnsafeArray<T> {
         &self,
         index: usize,
         val: T,
-        pe: usize,
         local_index: usize,
         op: ArrayOpCmd
     ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>> {
         // println!("initiate_op for UnsafeArray<T> ");
         if let Some(func) = OPS.get(&(op,TypeId::of::<T>())) {
-            let array: UnsafeArray<u8> = unsafe { self.as_base_inner() };
+            let array: UnsafeArray<u8> = unsafe { self.as_bytes() };
             let pe = self.pe_for_dist_index(index);
-            let am = func(&val as *const T as *const u8, array, local_index, false);
+            let am = func(&val as *const T as *const u8, array, local_index);
             Some(self.inner.team.exec_arc_am_pe(
                 pe,
                 am,
@@ -98,15 +83,14 @@ impl<T: ElementOps + 'static> UnsafeArray<T> {
         &self,
         index: usize,
         val: T,
-        pe: usize,
         local_index: usize,
         op: ArrayOpCmd
     ) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
         // println!("initiate_op for UnsafeArray<T> ");
         if let Some(func) = OPS.get(&(op,TypeId::of::<T>())) {
-            let array: UnsafeArray<u8> = unsafe { self.as_base_inner() };
+            let array: UnsafeArray<u8> = unsafe { self.as_bytes() };
             let pe = self.pe_for_dist_index(index);
-            let am = func(&val as *const T as *const u8, array, local_index, true);
+            let am = func(&val as *const T as *const u8, array, local_index);
             self.inner.team.exec_arc_am_pe(
                 pe,
                 am,
@@ -142,7 +126,7 @@ impl<T: ElementOps  + 'static> ArrayOps<T> for UnsafeArray<T> {
             self.local_add(local_index, val);
             None
         } else {
-            self.initiate_op(index,val,pe,local_index,ArrayOpCmd::Add)
+            self.initiate_op(index,val,local_index,ArrayOpCmd::Add)
         }
     }
     fn fetch_add(
@@ -153,10 +137,10 @@ impl<T: ElementOps  + 'static> ArrayOps<T> for UnsafeArray<T> {
         let pe = self.pe_for_dist_index(index);
         let local_index = self.pe_offset_for_dist_index(pe, index);
         if pe == self.my_pe() {
-            let val = self.local_add(local_index, val);
+            let val = self.local_fetch_add(local_index, val);
             Box::new(LocalOpResult{val})
         } else {
-            self.initiate_fetch_op(index,val,pe,local_index,ArrayOpCmd::Add)
+            self.initiate_fetch_op(index,val,local_index,ArrayOpCmd::FetchAdd)
         }
     }
     fn sub(
@@ -170,7 +154,7 @@ impl<T: ElementOps  + 'static> ArrayOps<T> for UnsafeArray<T> {
             self.local_sub(local_index, val);
             None
         } else {
-            self.initiate_op(index,val,pe,local_index,ArrayOpCmd::Sub)
+            self.initiate_op(index,val,local_index,ArrayOpCmd::Sub)
         }
     }
     fn fetch_sub(
@@ -181,10 +165,10 @@ impl<T: ElementOps  + 'static> ArrayOps<T> for UnsafeArray<T> {
         let pe = self.pe_for_dist_index(index);
         let local_index = self.pe_offset_for_dist_index(pe, index);
         if pe == self.my_pe() {
-            let val = self.local_sub(local_index, val);
+            let val = self.local_fetch_sub(local_index, val);
             Box::new(LocalOpResult{val})
         } else {
-            self.initiate_fetch_op(index,val,pe,local_index,ArrayOpCmd::Sub)
+            self.initiate_fetch_op(index,val,local_index,ArrayOpCmd::FetchSub)
         }
     }
     fn mul(
@@ -198,7 +182,7 @@ impl<T: ElementOps  + 'static> ArrayOps<T> for UnsafeArray<T> {
             self.local_mul(local_index, val);
             None
         } else {
-            self.initiate_op(index,val,pe,local_index,ArrayOpCmd::Mul)
+            self.initiate_op(index,val,local_index,ArrayOpCmd::Mul)
         }
     }
     fn fetch_mul(
@@ -209,10 +193,10 @@ impl<T: ElementOps  + 'static> ArrayOps<T> for UnsafeArray<T> {
         let pe = self.pe_for_dist_index(index);
         let local_index = self.pe_offset_for_dist_index(pe, index);
         if pe == self.my_pe() {
-            let val = self.local_mul(local_index, val);
+            let val = self.local_fetch_mul(local_index, val);
             Box::new(LocalOpResult{val})
         } else {
-            self.initiate_fetch_op(index,val,pe,local_index,ArrayOpCmd::Mul)
+            self.initiate_fetch_op(index,val,local_index,ArrayOpCmd::FetchMul)
         }
     }
     fn div(
@@ -226,7 +210,7 @@ impl<T: ElementOps  + 'static> ArrayOps<T> for UnsafeArray<T> {
             self.local_div(local_index, val);
             None
         } else {
-            self.initiate_op(index,val,pe,local_index,ArrayOpCmd::Div)
+            self.initiate_op(index,val,local_index,ArrayOpCmd::Div)
         }
     }
     fn fetch_div(
@@ -237,15 +221,15 @@ impl<T: ElementOps  + 'static> ArrayOps<T> for UnsafeArray<T> {
         let pe = self.pe_for_dist_index(index);
         let local_index = self.pe_offset_for_dist_index(pe, index);
         if pe == self.my_pe() {
-            let val = self.local_div(local_index, val);
+            let val = self.local_fetch_div(local_index, val);
             Box::new(LocalOpResult{val})
         } else {
-            self.initiate_fetch_op(index,val,pe,local_index,ArrayOpCmd::Div)
+            self.initiate_fetch_op(index,val,local_index,ArrayOpCmd::FetchDiv)
         }
     }
 }
 
-impl<T: ElementOps + ElementBitWiseOps  + 'static> ArrayBitWiseOps<T> for UnsafeArray<T> {
+impl<T:  ElementBitWiseOps  + 'static> ArrayBitWiseOps<T> for UnsafeArray<T> {
     fn bit_and(
         &self,
         index: usize,
@@ -257,7 +241,7 @@ impl<T: ElementOps + ElementBitWiseOps  + 'static> ArrayBitWiseOps<T> for Unsafe
             self.local_bit_and(local_index, val);
             None
         } else {
-            self.initiate_op(index,val,pe,local_index,ArrayOpCmd::And)
+            self.initiate_op(index,val,local_index,ArrayOpCmd::And)
         }
     }
     fn fetch_bit_and(
@@ -268,10 +252,10 @@ impl<T: ElementOps + ElementBitWiseOps  + 'static> ArrayBitWiseOps<T> for Unsafe
         let pe = self.pe_for_dist_index(index);
         let local_index = self.pe_offset_for_dist_index(pe, index);
         if pe == self.my_pe() {
-            let val = self.local_bit_and(local_index, val);
+            let val = self.local_fetch_bit_and(local_index, val);
             Box::new(LocalOpResult{val})
         } else {
-            self.initiate_fetch_op(index,val,pe,local_index,ArrayOpCmd::And)
+            self.initiate_fetch_op(index,val,local_index,ArrayOpCmd::FetchAnd)
         }
     }
 
@@ -286,7 +270,7 @@ impl<T: ElementOps + ElementBitWiseOps  + 'static> ArrayBitWiseOps<T> for Unsafe
             self.local_bit_or(local_index, val);
             None
         } else {
-            self.initiate_op(index,val,pe,local_index,ArrayOpCmd::Or)
+            self.initiate_op(index,val,local_index,ArrayOpCmd::Or)
         }
     }
     fn fetch_bit_or(
@@ -297,10 +281,10 @@ impl<T: ElementOps + ElementBitWiseOps  + 'static> ArrayBitWiseOps<T> for Unsafe
         let pe = self.pe_for_dist_index(index);
         let local_index = self.pe_offset_for_dist_index(pe, index);
         if pe == self.my_pe() {
-            let val = self.local_bit_and(local_index, val);
+            let val = self.local_fetch_bit_or(local_index, val);
             Box::new(LocalOpResult{val})
         } else {
-            self.initiate_fetch_op(index,val,pe,local_index,ArrayOpCmd::Or)
+            self.initiate_fetch_op(index,val,local_index,ArrayOpCmd::FetchOr)
         }
     }
 
@@ -308,7 +292,7 @@ impl<T: ElementOps + ElementBitWiseOps  + 'static> ArrayBitWiseOps<T> for Unsafe
 
 // impl<T: Dist + std::ops::AddAssign> UnsafeArray<T> {
 impl<T: ElementOps> ArrayLocalOps<T> for UnsafeArray<T> {
-    fn local_add(&self, index: usize, val: T) -> T {
+    fn local_fetch_add(&self, index: usize, val: T) -> T {
         // println!("local_add ArrayLocalOps<T> for UnsafeArray<T> ");
         unsafe { 
             let orig  = self.local_as_mut_slice()[index];
@@ -317,7 +301,7 @@ impl<T: ElementOps> ArrayLocalOps<T> for UnsafeArray<T> {
         }
         
     }
-    fn local_sub(&self, index: usize, val: T) -> T{
+    fn local_fetch_sub(&self, index: usize, val: T) -> T{
         // println!("local_sub ArrayLocalOps<T> for UnsafeArray<T> ");
         unsafe { 
             let orig  = self.local_as_mut_slice()[index];
@@ -325,7 +309,7 @@ impl<T: ElementOps> ArrayLocalOps<T> for UnsafeArray<T> {
             orig
         }
     }
-    fn local_mul(&self, index: usize, val: T) -> T{
+    fn local_fetch_mul(&self, index: usize, val: T) -> T{
         // println!("local_sub ArrayLocalOps<T> for UnsafeArray<T> ");
         unsafe { 
             let orig  = self.local_as_mut_slice()[index];
@@ -333,7 +317,7 @@ impl<T: ElementOps> ArrayLocalOps<T> for UnsafeArray<T> {
             orig
         }
     }
-    fn local_div(&self, index: usize, val: T) -> T{
+    fn local_fetch_div(&self, index: usize, val: T) -> T{
         // println!("local_sub ArrayLocalOps<T> for UnsafeArray<T> ");
         unsafe {
             let orig  = self.local_as_mut_slice()[index]; 
@@ -343,7 +327,7 @@ impl<T: ElementOps> ArrayLocalOps<T> for UnsafeArray<T> {
     }
 }
 impl<T: ElementBitWiseOps> ArrayLocalBitWiseOps<T> for UnsafeArray<T> {
-    fn local_bit_and(&self, index: usize, val: T) -> T{
+    fn local_fetch_bit_and(&self, index: usize, val: T) -> T{
         // println!("local_sub ArrayLocalOps<T> for UnsafeArray<T> ");
         unsafe { 
             let orig  = self.local_as_mut_slice()[index];
@@ -351,7 +335,7 @@ impl<T: ElementBitWiseOps> ArrayLocalBitWiseOps<T> for UnsafeArray<T> {
             orig
         }
     }
-    fn local_bit_or(&self, index: usize, val: T) -> T{
+    fn local_fetch_bit_or(&self, index: usize, val: T) -> T{
         // println!("local_sub ArrayLocalOps<T> for UnsafeArray<T> ");
         unsafe { 
             let orig  = self.local_as_mut_slice()[index];
@@ -367,9 +351,13 @@ macro_rules! UnsafeArray_create_ops {
     ($a:ty, $name:ident) => {
         paste::paste!{
             $crate::unsafearray_register!{$a,ArrayOpCmd::Add,[<$name dist_add>],[<$name local_add>]}
+            $crate::unsafearray_register!{$a,ArrayOpCmd::FetchAdd,[<$name dist_fetch_add>],[<$name local_add>]}
             $crate::unsafearray_register!{$a,ArrayOpCmd::Sub,[<$name dist_sub>],[<$name local_sub>]}
+            $crate::unsafearray_register!{$a,ArrayOpCmd::FetchSub,[<$name dist_fetch_sub>],[<$name local_sub>]}
             $crate::unsafearray_register!{$a,ArrayOpCmd::Mul,[<$name dist_mul>],[<$name local_mul>]}
+            $crate::unsafearray_register!{$a,ArrayOpCmd::FetchMul,[<$name dist_fetch_mul>],[<$name local_mul>]}
             $crate::unsafearray_register!{$a,ArrayOpCmd::Div,[<$name dist_div>],[<$name local_div>]}
+            $crate::unsafearray_register!{$a,ArrayOpCmd::FetchDiv,[<$name dist_fetch_div>],[<$name local_div>]}
         }
     }
 }

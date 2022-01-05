@@ -178,46 +178,6 @@ impl<T: Dist> UnsafeArray<T> {
         }
     }
 
-    #[doc(hidden)]
-    pub unsafe fn to_base_inner<B: Dist>(self) -> UnsafeArray<B> {
-        let u8_size = self.size * std::mem::size_of::<T>();
-        let b_size = u8_size / std::mem::size_of::<B>();
-        let elem_per_pe = b_size as f64 / self.inner.team.num_pes() as f64;
-        let u8_offset = self.sub_array_offset * std::mem::size_of::<T>();
-        let u8_sub_size = self.sub_array_size * std::mem::size_of::<T>();
-
-        UnsafeArray {
-            inner: self.inner.clone(),
-            distribution: self.distribution,
-            size: b_size,
-            elem_per_pe: elem_per_pe,
-            sub_array_offset: u8_offset / std::mem::size_of::<B>(),
-            sub_array_size: u8_sub_size / std::mem::size_of::<B>(),
-            // my_pe: self.inner.my_pe,
-            // typeid: self.typeid,
-            phantom: PhantomData,
-        }
-    }
-
-    #[doc(hidden)]
-    pub unsafe fn as_base_inner<B: Dist>(&self) -> UnsafeArray<B> {
-        let u8_size = self.size * std::mem::size_of::<T>();
-        let b_size = u8_size / std::mem::size_of::<B>();
-        let elem_per_pe = b_size as f64 / self.inner.team.num_pes() as f64;
-        let u8_offset = self.sub_array_offset * std::mem::size_of::<T>();
-        let u8_sub_size = self.sub_array_size * std::mem::size_of::<T>();
-
-        UnsafeArray {
-            inner: self.inner.clone(),
-            distribution: self.distribution,
-            size: b_size,
-            elem_per_pe: elem_per_pe,
-            sub_array_offset: u8_offset / std::mem::size_of::<B>(),
-            sub_array_size: u8_sub_size / std::mem::size_of::<B>(),
-            // my_pe: self.inner.my_pe,
-            phantom: PhantomData,
-        }
-    }
     pub(crate) fn local_as_mut_ptr(&self) -> *mut T {
         self.inner.mem_region.as_casted_mut_ptr::<T>().unwrap()
     }
@@ -275,6 +235,53 @@ impl<T: Dist> UnsafeArray<T> {
         LocalOnlyArray {
             array: self,
             _unsync: PhantomData,
+        }
+    }
+}
+
+impl <T: Dist> AsBytes<T,u8> for UnsafeArray<T>{
+    type Array = UnsafeArray<u8>;
+    #[doc(hidden)]
+    unsafe fn as_bytes(&self) -> Self::Array {
+        let u8_size = self.size * std::mem::size_of::<T>();
+        let b_size = u8_size / std::mem::size_of::<u8>();
+        let elem_per_pe = b_size as f64 / self.inner.team.num_pes() as f64;
+        let u8_offset = self.sub_array_offset * std::mem::size_of::<T>();
+        let u8_sub_size = self.sub_array_size * std::mem::size_of::<T>();
+
+        UnsafeArray {
+            inner: self.inner.clone(),
+            distribution: self.distribution,
+            size: b_size,
+            elem_per_pe: elem_per_pe,
+            sub_array_offset: u8_offset / std::mem::size_of::<u8>(),
+            sub_array_size: u8_sub_size / std::mem::size_of::<u8>(),
+            // my_pe: self.inner.my_pe,
+            phantom: PhantomData,
+        }
+    }
+}
+
+impl <T: Dist> FromBytes<T,u8> for UnsafeArray<u8>{
+    type Array = UnsafeArray<T>;
+    #[doc(hidden)]
+    unsafe fn from_bytes(self) -> Self::Array {
+        let u8_size = self.size * std::mem::size_of::<u8>();
+        let b_size = u8_size / std::mem::size_of::<T>();
+        let elem_per_pe = b_size as f64 / self.inner.team.num_pes() as f64;
+        let u8_offset = self.sub_array_offset * std::mem::size_of::<u8>();
+        let u8_sub_size = self.sub_array_size * std::mem::size_of::<u8>();
+
+        UnsafeArray {
+            inner: self.inner.clone(),
+            distribution: self.distribution,
+            size: b_size,
+            elem_per_pe: elem_per_pe,
+            sub_array_offset: u8_offset / std::mem::size_of::<T>(),
+            sub_array_size: u8_sub_size / std::mem::size_of::<T>(),
+            // my_pe: self.inner.my_pe,
+            // typeid: self.typeid,
+            phantom: PhantomData,
         }
     }
 }
@@ -410,7 +417,7 @@ impl<T: Dist + std::fmt::Debug> ArrayPrint<T> for UnsafeArray<T> {
             if self.inner.my_pe == pe {
                 println!("[pe {:?} data] {:?}", pe, unsafe { self.local_as_slice() });
             }
-            std::thread::sleep(std::time::Duration::from_millis(500));
+            std::thread::sleep(std::time::Duration::from_millis(100));
         }
     }
 }
@@ -424,7 +431,7 @@ impl<T: Dist + serde::Serialize + serde::de::DeserializeOwned + 'static> Lamella
         REDUCE_OPS
             .get(&(std::any::TypeId::of::<T>(), op))
             .expect("unexpected reduction type")(
-            unsafe { self.clone().to_base_inner::<u8>().into() },
+            unsafe { self.clone().as_bytes().into() },
             self.inner.team.num_pes(),
         )
         // }

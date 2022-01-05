@@ -79,11 +79,11 @@ impl<T: Dist> ReadOnlyArray<T> {
     // pub fn local_as_mut_slice(&self) -> &mut [T] {
     //     self.array.local_as_mut_slice()
     // }
-    pub unsafe fn to_base_inner<B: Dist>(self) -> ReadOnlyArray<B> {
-        ReadOnlyArray {
-            array: self.array.to_base_inner(),
-        }
-    }
+    // pub unsafe fn to_base_inner<B: Dist>(self) -> ReadOnlyArray<B> {
+    //     ReadOnlyArray {
+    //         array: self.array.to_base_inner(),
+    //     }
+    // }
 
     // pub fn local_mem_region(&self) -> &MemoryRegion<T> {
     //     &self.inner.mem_region
@@ -131,6 +131,26 @@ impl<T: Dist> ReadOnlyArray<T> {
         LocalOnlyArray {
             array: self.array,
             _unsync: PhantomData,
+        }
+    }
+}
+
+impl <T: Dist> AsBytes<T,u8> for ReadOnlyArray<T>{
+    type Array = ReadOnlyArray<u8>;
+    #[doc(hidden)]
+    unsafe fn as_bytes(&self) -> Self::Array {
+        ReadOnlyArray {
+            array: self.array.as_bytes(),
+        }
+    }
+}
+
+impl <T: Dist> FromBytes<T,u8> for ReadOnlyArray<u8>{
+    #[doc(hidden)]
+    type Array = ReadOnlyArray<T>;
+    unsafe fn from_bytes(self) -> Self::Array {
+        ReadOnlyArray {
+            array: self.array.from_bytes(),
         }
     }
 }

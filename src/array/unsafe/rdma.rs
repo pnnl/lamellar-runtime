@@ -54,7 +54,7 @@ impl<T: Dist> UnsafeArray<T> {
                         let am = UnsafePutAm {
                             array: unsafe {
                                 self.sub_array(dist_index..(dist_index + len))
-                                    .as_base_inner::<u8>()
+                                    .as_bytes()
                             },
                             data: unsafe {
                                 buf.sub_region(buf_index..(buf_index + len))
@@ -69,7 +69,7 @@ impl<T: Dist> UnsafeArray<T> {
                         let am = UnsafeBlockGetAm {
                             array: unsafe {
                                 self.sub_array(dist_index..(dist_index + len))
-                                    .as_base_inner::<u8>()
+                                    .as_bytes()
                             },
                             data: unsafe {
                                 buf.sub_region(buf_index..(buf_index + len))
@@ -132,7 +132,7 @@ impl<T: Dist> UnsafeArray<T> {
                     }
                     let am = UnsafePutAm {
                         array: unsafe {
-                            self.sub_array(offset..(offset + k)).as_base_inner::<u8>()
+                            self.sub_array(offset..(offset + k)).as_bytes()
                         },
                         data: temp_memreg.to_base::<u8>().into(),
                         pe: self.inner.my_pe,
@@ -182,7 +182,7 @@ impl<T: Dist> UnsafeArray<T> {
                     let offset = index / num_pes + overflow;
                     let k = (buf.len() - i) / num_pes;
                     let am = UnsafeCyclicGetAm {
-                        array: unsafe { self.clone().as_base_inner::<u8>() },
+                        array: unsafe { self.clone().as_bytes() },
                         data: unsafe { buf.clone().to_base::<u8>() },
                         temp_data: temp_memreg.sub_region(0..k).to_base::<u8>().into(),
                         i: i,

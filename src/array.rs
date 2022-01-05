@@ -72,15 +72,28 @@ pub enum ArrayRdmaCmd {
     GetAm,
 }
 
-#[derive(Hash, std::cmp::PartialEq, std::cmp::Eq, Clone)]
+#[derive(Hash, std::cmp::PartialEq, std::cmp::Eq, Clone,Debug,Copy)]
 pub enum ArrayOpCmd{
     Add,
+    FetchAdd,
     Sub,
+    FetchSub,
     Mul,
+    FetchMul,
     Div,
+    FetchDiv,
     And,
+    FetchAnd,
     Or,
+    FetchOr,
+    Store,
+    Load,
+    Swap,
 }
+
+
+pub trait ElementAtomicOps: AmDist + Dist + Sized{}
+impl <T> ElementAtomicOps for T where T: AmDist + Dist {}
 
 pub trait ElementOps: std::ops::AddAssign + std::ops::SubAssign + std::ops::MulAssign + std::ops::DivAssign + AmDist + Dist + Sized {} 
 impl<T> ElementOps for T where T: std::ops::AddAssign + std::ops::SubAssign + std::ops::MulAssign + std::ops::DivAssign + AmDist + Dist {}
@@ -162,25 +175,36 @@ pub trait ArrayBitWiseOps<T: ElementBitWiseOps> {
     ) -> Box<dyn LamellarRequest<Output = T> + Send + Sync>;
 }
 
-
 //perform the specified operation in place, returning the original value
 pub trait ArrayLocalOps<T: Dist + ElementOps> {
-    fn local_add(&self, index: usize, val: T) -> T;
-    fn local_sub(&self, index: usize, val: T) -> T;
-    fn local_mul(&self, index: usize, val: T) -> T;
-    fn local_div(&self, index: usize, val: T) -> T;
+    fn local_add(&self, index: usize, val: T) { self.local_fetch_add(index,val); }
+    fn local_fetch_add(&self, index: usize, val: T) -> T;
+    fn local_sub(&self, index: usize, val: T) { self.local_fetch_sub(index,val); }
+    fn local_fetch_sub(&self, index: usize, val: T) -> T;
+    fn local_mul(&self, index: usize, val: T) { self.local_fetch_mul(index,val); }
+    fn local_fetch_mul(&self, index: usize, val: T) -> T;
+    fn local_div(&self, index: usize, val: T) { self.local_fetch_div(index,val); }
+    fn local_fetch_div(&self, index: usize, val: T) -> T;
 }
 pub trait ArrayLocalBitWiseOps<T: Dist + ElementBitWiseOps> {
-    fn local_bit_and(&self, index: usize, val: T) -> T;
-    fn local_bit_or(&self, index: usize, val: T) -> T;
+    fn local_bit_and(&self, index: usize, val: T) { self.local_fetch_bit_and(index,val); }
+    fn local_fetch_bit_and(&self, index: usize, val: T) -> T;
+    fn local_bit_or(&self, index: usize, val: T){ self.local_fetch_bit_or(index,val); }
+    fn local_fetch_bit_or(&self, index: usize, val: T) -> T;
 }
 
-pub struct LocalOpResult<T: Dist + ElementOps>{
+pub trait ArrayLocalAtomicOps<T: Dist + ElementAtomicOps> {
+    fn local_load(&self, index: usize, val: T) -> T;
+    fn local_store(&self, index: usize, val: T);
+    fn local_swap(&self, index: usize, val: T) -> T;
+}
+
+pub struct LocalOpResult<T: Dist >{
     val: T
 }
 
 #[async_trait]
-impl<T: Dist + ElementOps> LamellarRequest for LocalOpResult<T> {
+impl<T: Dist> LamellarRequest for LocalOpResult<T> {
     type Output =T;
     async fn into_future(self: Box<Self>) -> Option<Self::Output> {
         Some(self.val)
@@ -330,6 +354,37 @@ pub trait LamellarArray<T: Dist>: private::LamellarArrayPrivate<T> {
 // pub trait ArrayIterator{
 
 // }
+#[doc(hidden)]
+// #[enum_dispatch(LamellarReadArray<T>,LamellarWriteArray<T>)]
+pub trait AsBytes<T: Dist, B: Dist>: LamellarArray<T> {
+    // #[doc(hidden)]
+    // unsafe fn to_base_inner<B: Dist>(self) -> LamellarArray<B>;
+    type Array: LamellarArray<B>;
+    #[doc(hidden)]
+    unsafe fn as_bytes(&self) -> Self::Array; 
+}
+
+#[doc(hidden)]
+// #[enum_dispatch(LamellarReadArray<T>,LamellarWriteArray<T>)]
+pub trait FromBytes<T: Dist,B: Dist>: LamellarArray<B> {
+    // #[doc(hidden)]
+    // unsafe fn to_base_inner<B: Dist>(self) -> LamellarArray<B>;
+    type Array: LamellarArray<T>;
+    #[doc(hidden)]
+    unsafe fn from_bytes(self) -> Self::Array; 
+}
+
+impl <T: Dist> FromBytes<T,u8> for LamellarReadArray<u8>{
+    type Array = LamellarReadArray<T>;
+    #[doc(hidden)]
+    unsafe fn from_bytes(self) -> Self::Array{
+        match self {
+            LamellarReadArray::UnsafeArray(array) => array.from_bytes().into(),
+            LamellarReadArray::ReadOnlyArray(array) => array.from_bytes().into(),
+            LamellarReadArray::AtomicArray(array) => array.from_bytes().into(),
+        }
+    }
+}
 
 pub trait SubArray<T: Dist>: LamellarArray<T> {
     type Array: LamellarArray<T>;

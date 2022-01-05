@@ -103,24 +103,12 @@ macro_rules! impl_atomic_ops{
                 cur
             }
             fn fetch_bit_and(&mut self, val: Self,) -> Self{
-                let mut cur = self.as_atomic().load(Ordering::SeqCst);
-                let mut new = cur/val;
-                while self.compare_exchange(cur,new).is_err(){
-                    std::thread::yield_now();
-                    cur = self.as_atomic().load(Ordering::SeqCst);
-                    new = cur & val;
-                }
-                cur
+                // println!("fetch_bit_and: {:?}",val);
+                self.as_atomic().fetch_and(val,Ordering::SeqCst)
             }
             fn fetch_bit_or(&mut self, val: Self,) -> Self{
-                let mut cur = self.as_atomic().load(Ordering::SeqCst);
-                let mut new = cur/val;
-                while self.compare_exchange(cur,new).is_err(){
-                    std::thread::yield_now();
-                    cur = self.as_atomic().load(Ordering::SeqCst);
-                    new = cur | val;
-                }
-                cur
+                // println!("fetch_bit_or: {:?}",val);
+                self.as_atomic().fetch_or(val,Ordering::SeqCst)
             }
             fn compare_exchange(&mut self, current: Self, new: Self) -> Result<Self,Self> {
                 self.as_atomic().compare_exchange(current,new,Ordering::SeqCst,Ordering::SeqCst)
@@ -240,29 +228,6 @@ impl<T: Dist> AtomicArray<T> {
         self.array.local_as_mut_slice()
     }
 
-    #[doc(hidden)]
-    pub unsafe fn to_base_inner<B: Dist + 'static>(self) -> AtomicArray<B> {
-        let array = self.array.to_base_inner();
-        AtomicArray {
-            locks: self.locks.clone(),
-            orig_t_size: self.orig_t_size,
-            array: array,
-        }
-    }
-
-    #[doc(hidden)]
-    pub unsafe fn as_base_inner<B: Dist + 'static>(&self) -> AtomicArray<B> {
-        // todo!("need to do some aliasing of the original lock");
-        // println!();
-
-        let array = self.array.as_base_inner();
-        // let temp: T = array.local_as_slice()[0];
-        AtomicArray {
-            locks: self.locks.clone(),
-            orig_t_size: self.orig_t_size,
-            array: array,
-        }
-    }
 
     // pub(crate) fn local_as_mut_ptr(&self) -> *mut T {
     //     self.array.local_as_mut_ptr()
@@ -306,6 +271,56 @@ impl<T: Dist> AtomicArray<T> {
             Some(guards)
         } else {
             None
+        }
+    }
+}
+
+  // #[doc(hidden)]
+    // pub unsafe fn to_base_inner<B: Dist + 'static>(self) -> AtomicArray<B> {
+    //     let array = self.array.to_base_inner();
+    //     AtomicArray {
+    //         locks: self.locks.clone(),
+    //         orig_t_size: self.orig_t_size,
+    //         array: array,
+    //     }
+    // }
+
+    // #[doc(hidden)]
+    // pub unsafe fn as_base_inner<B: Dist + 'static>(&self) -> AtomicArray<B> {
+    //     // todo!("need to do some aliasing of the original lock");
+    //     // println!();
+
+    //     let array = self.array.as_base_inner();
+    //     // let temp: T = array.local_as_slice()[0];
+    //     AtomicArray {
+    //         locks: self.locks.clone(),
+    //         orig_t_size: self.orig_t_size,
+    //         array: array,
+    //     }
+    // }
+
+impl <T: Dist> AsBytes<T,u8> for AtomicArray<T>{
+    type Array = AtomicArray<u8>;
+    #[doc(hidden)]
+    unsafe fn as_bytes(&self) -> Self::Array {
+        let array = self.array.as_bytes();
+        AtomicArray {
+            locks: self.locks.clone(),
+            orig_t_size: self.orig_t_size,
+            array: array,
+        }
+    }
+}
+
+impl <T: Dist> FromBytes<T,u8> for AtomicArray<u8>{
+    type Array = AtomicArray<T>;
+    #[doc(hidden)]
+    unsafe fn from_bytes(self) -> Self::Array {
+        let array = self.array.from_bytes();
+        AtomicArray {
+            locks: self.locks.clone(),
+            orig_t_size: self.orig_t_size,
+            array: array,
         }
     }
 }
@@ -376,47 +391,6 @@ impl<T: Dist> SubArray<T> for AtomicArray<T> {
         self.array.global_index(sub_index)
     }
 }
-
-// impl<T: Dist + std::ops::AddAssign> AtomicArray<T>
-// // where
-// // AtomicArray<T>: ArrayOps<T>,
-// {
-//     pub fn add(
-//         &self,
-//         index: usize,
-//         val: T,
-//     ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>> {
-//         <&AtomicArray<T> as ArrayOps<T>>::add(&self, index, val) // this is implemented automatically by a proc macro
-//                                                                // because this gets implented as an active message, we need to know the full type
-//                                                                // when the proc macro is called, all the integer/float times are handled by runtime,
-//                                                                // but users are requried to call a proc macro on their type to get the functionality
-//     }
-// }
-
-
-// impl<T: Dist + std::ops::AddAssign> ArrayOps<T> for AtomicArray<T>{
-//     fn add(&self, index:usize, val: T) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>> {
-//         let pe = self.pe_for_dist_index(index);
-//         let local_index = self.pe_offset_for_dist_index(pe,index);
-//         if pe == self.my_pe(){
-//             self.local_add(local_index,val);
-//             None
-//         }
-//         else{
-//             None
-//         }
-//         // else{
-//         //     Some(self.dist_add(
-//         //         index,
-//         //         Arc::new (#add_name_am{
-//         //             data: self.clone(),
-//         //             local_index: local_index,
-//         //             val: val,
-//         //         })
-//         //     ))
-//         // }
-//     }
-// }
 
 impl<T: Dist + std::fmt::Debug> AtomicArray<T> {
     pub fn print(&self) {

@@ -58,12 +58,12 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Lo
     pub fn as_mut_slice(&mut self) -> &mut [T] {
         unsafe { self.array.local_as_mut_slice() }
     }
-    pub unsafe fn to_base_inner<B: Dist + 'static>(self) -> LocalOnlyArray<B> {
-        LocalOnlyArray {
-            array: self.array.to_base_inner(),
-            _unsync: PhantomData,
-        }
-    }
+    // pub unsafe fn to_base_inner<B: Dist + 'static>(self) -> LocalOnlyArray<B> {
+    //     LocalOnlyArray {
+    //         array: self.array.to_base_inner(),
+    //         _unsync: PhantomData,
+    //     }
+    // }
 
     pub(crate) fn local_as_mut_ptr(&self) -> *mut T {
         self.array.local_as_mut_ptr()
