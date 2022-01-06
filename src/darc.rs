@@ -379,11 +379,11 @@ impl<T> Darc<T> {
         // println!{"darc into_localrw {:?} {:?}",self.inner,self.inner().local_cnt.load(Ordering::SeqCst)};
         let item = unsafe { Box::from_raw(inner.item as *mut T) };
         let d = Darc {
-            inner: self.inner as *mut DarcInner<RwLock<Box<T>>>,
+            inner: self.inner as *mut DarcInner<Arc<RwLock<Box<T>>>>,
             src_pe: self.src_pe,
         };
         d.inner_mut()
-            .update_item(Box::into_raw(Box::new(RwLock::new(item))));
+            .update_item(Box::into_raw(Box::new(Arc::new(RwLock::new(item)))));
         LocalRwDarc { darc: d }
     }
 

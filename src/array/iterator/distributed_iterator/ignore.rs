@@ -23,7 +23,7 @@ impl<I> Ignore<I>
 where
     I: DistributedIterator + 'static,
 {
-    pub fn for_each<F>(&self, op: F)
+    pub fn for_each<F>(self, op: F)
     where
         F: Fn(<I as DistributedIterator>::Item) + Sync + Send + Clone + 'static,
     {

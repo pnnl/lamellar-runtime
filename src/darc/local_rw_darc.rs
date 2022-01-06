@@ -1,8 +1,9 @@
 use core::marker::PhantomData;
-use parking_lot::{RwLock, RwLockReadGuard, RwLockWriteGuard};
+use parking_lot::{RwLock,RawRwLock, lock_api::{ArcRwLockReadGuard,ArcRwLockWriteGuard}};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt;
 use std::sync::atomic::Ordering;
+use std::sync::Arc;
 
 use crate::darc::global_rw_darc::{DistRwLock, GlobalRwDarc};
 use crate::darc::{Darc, DarcInner, DarcMode, __NetworkDarc};
@@ -17,7 +18,7 @@ pub struct LocalRwDarc<T: 'static> {
         serialize_with = "localrw_serialize2",
         deserialize_with = "localrw_from_ndarc2"
     )]
-    pub(crate) darc: Darc<RwLock<Box<T>>>,
+    pub(crate) darc: Darc<Arc<RwLock<Box<T>>>>, //we need to wrap WrLock in an Arc so we get access to ArcReadGuard and ArcWriteGuard
 }
 
 unsafe impl<T: Sync + Send> Send for LocalRwDarc<T> {}
@@ -48,7 +49,7 @@ impl<T> crate::DarcSerde for LocalRwDarc<T> {
 }
 
 impl<T> LocalRwDarc<T> {
-    fn inner(&self) -> &DarcInner<RwLock<Box<T>>> {
+    fn inner(&self) -> &DarcInner<Arc<RwLock<Box<T>>>> {
         self.darc.inner()
     }
 
@@ -85,25 +86,25 @@ impl<T> LocalRwDarc<T> {
         );
     }
 
-    pub fn read(&self) -> RwLockReadGuard<Box<T>> {
-        self.darc.read()
+    pub fn read(&self) -> ArcRwLockReadGuard<RawRwLock,Box<T>> {
+        self.darc.read_arc()
     }
 
-    pub fn write(&self) -> RwLockWriteGuard<Box<T>> {
-        self.darc.write()
+    pub fn write(&self) -> ArcRwLockWriteGuard<RawRwLock,Box<T>> {
+        self.darc.write_arc()
     }
 }
 
 impl<T> LocalRwDarc<T> {
     pub fn new<U: Into<IntoLamellarTeam>>(team: U, item: T) -> Result<LocalRwDarc<T>, IdError> {
         Ok(LocalRwDarc {
-            darc: Darc::try_new(team, RwLock::new(Box::new(item)), DarcMode::LocalRw)?,
+            darc: Darc::try_new(team, Arc::new(RwLock::new(Box::new(item))), DarcMode::LocalRw)?,
         })
     }
 
     pub fn try_new<U: Into<IntoLamellarTeam>>(team: U, item: T) -> Result<LocalRwDarc<T>, IdError> {
         Ok(LocalRwDarc {
-            darc: Darc::try_new(team, RwLock::new(Box::new(item)), DarcMode::LocalRw)?,
+            darc: Darc::try_new(team, Arc::new(RwLock::new(Box::new(item))), DarcMode::LocalRw)?,
         })
     }
 
@@ -168,7 +169,7 @@ where
     __NetworkDarc::<T>::from(&localrw.darc).serialize(s)
 }
 
-pub fn localrw_serialize2<S, T>(localrw: &Darc<RwLock<Box<T>>>, s: S) -> Result<S::Ok, S::Error>
+pub fn localrw_serialize2<S, T>(localrw: &Darc<Arc<RwLock<Box<T>>>>, s: S) -> Result<S::Ok, S::Error>
 where
     S: Serializer,
 {
@@ -189,7 +190,7 @@ where
     Ok(rwdarc)
 }
 
-pub fn localrw_from_ndarc2<'de, D, T>(deserializer: D) -> Result<Darc<RwLock<Box<T>>>, D::Error>
+pub fn localrw_from_ndarc2<'de, D, T>(deserializer: D) -> Result<Darc<Arc<RwLock<Box<T>>>>, D::Error>
 where
     D: Deserializer<'de>,
 {
@@ -203,8 +204,8 @@ where
     Ok(Darc::from(ndarc))
 }
 
-impl<T> From<Darc<RwLock<Box<T>>>> for __NetworkDarc<T> {
-    fn from(darc: Darc<RwLock<Box<T>>>) -> Self {
+impl<T> From<Darc<Arc<RwLock<Box<T>>>>> for __NetworkDarc<T> {
+    fn from(darc: Darc<Arc<RwLock<Box<T>>>>) -> Self {
         // println!("rwdarc to net darc");
         // darc.print();
         let team = &darc.inner().team();
@@ -219,8 +220,8 @@ impl<T> From<Darc<RwLock<Box<T>>>> for __NetworkDarc<T> {
     }
 }
 
-impl<T> From<&Darc<RwLock<Box<T>>>> for __NetworkDarc<T> {
-    fn from(darc: &Darc<RwLock<Box<T>>>) -> Self {
+impl<T> From<&Darc<Arc<RwLock<Box<T>>>>> for __NetworkDarc<T> {
+    fn from(darc: &Darc<Arc<RwLock<Box<T>>>>) -> Self {
         // println!("rwdarc to net darc");
         // darc.print();
         let team = &darc.inner().team();
@@ -235,14 +236,14 @@ impl<T> From<&Darc<RwLock<Box<T>>>> for __NetworkDarc<T> {
     }
 }
 
-impl<T> From<__NetworkDarc<T>> for Darc<RwLock<Box<T>>> {
+impl<T> From<__NetworkDarc<T>> for Darc<Arc<RwLock<Box<T>>>> {
     fn from(ndarc: __NetworkDarc<T>) -> Self {
         // println!("rwdarc from net darc");
 
         if let Some(lamellae) = LAMELLAES.read().get(&ndarc.backend) {
             let darc = Darc {
                 inner: lamellae.local_addr(ndarc.orig_world_pe, ndarc.inner_addr)
-                    as *mut DarcInner<RwLock<Box<T>>>,
+                    as *mut DarcInner<Arc<RwLock<Box<T>>>>,
                 src_pe: ndarc.orig_team_pe,
                 // phantom: PhantomData,
             };

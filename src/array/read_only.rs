@@ -166,7 +166,7 @@ impl<T: Dist> DistIteratorLauncher for ReadOnlyArray<T> {
         self.array.global_index_from_local(index, chunk_size)
     }
 
-    fn for_each<I, F>(&self, iter: &I, op: F)
+    fn for_each<I, F>(&self, iter: I, op: F)
     where
         I: DistributedIterator + 'static,
         F: Fn(I::Item) + Sync + Send + Clone + 'static,

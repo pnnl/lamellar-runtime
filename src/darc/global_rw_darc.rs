@@ -459,12 +459,12 @@ impl<T> GlobalRwDarc<T> {
         inner.local_cnt.fetch_add(1, Ordering::SeqCst);
         let item = unsafe { Box::from_raw(inner.item as *mut DistRwLock<T>).into_inner() };
         let d = Darc {
-            inner: self.darc.inner as *mut DarcInner<RwLock<Box<T>>>,
+            inner: self.darc.inner as *mut DarcInner<Arc<RwLock<Box<T>>>>,
             src_pe: self.darc.src_pe,
             // phantom: PhantomData,
         };
         d.inner_mut()
-            .update_item(Box::into_raw(Box::new(RwLock::new(Box::new(item)))));
+            .update_item(Box::into_raw(Box::new(Arc::new(RwLock::new(Box::new(item))))));
         LocalRwDarc { darc: d }
     }
 }

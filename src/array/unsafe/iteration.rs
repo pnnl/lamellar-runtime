@@ -54,7 +54,7 @@ impl<T: Dist> DistIteratorLauncher for UnsafeArray<T> {
         }
     }
 
-    fn for_each<I, F>(&self, iter: &I, op: F)
+    fn for_each<I, F>(&self, iter: I, op: F)
     where
         I: DistributedIterator + 'static,
         F: Fn(I::Item) + Sync + Send + Clone + 'static,

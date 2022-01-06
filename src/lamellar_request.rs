@@ -55,7 +55,8 @@ pub(crate) enum AmType {
 }
 
 //#[prof]
-impl<T: AmDist + 'static> LamellarRequestHandle<T> {
+// impl<T: AmDist + 'static> LamellarRequestHandle<T> {
+impl<T: AmDist> LamellarRequestHandle<T> {
     pub(crate) fn new<'a>(
         num_pes: usize,
         am_type: AmType,

@@ -33,7 +33,7 @@ where
 #[lamellar_impl::rt_am_local]
 impl<I, F> LamellarAm for ForEach<I, F>
 where
-    I: DistributedIterator + 'static,
+    I: DistributedIterator + 'static, 
     F: Fn(I::Item) + Sync + Send + 'static,
 {
     fn exec(&self) {
@@ -73,7 +73,7 @@ where
 }
 
 pub trait DistIteratorLauncher {
-    fn for_each<I, F>(&self, iter: &I, op: F)
+    fn for_each<I, F>(&self, iter: I, op: F)
     //this really needs to return a task group handle...
     where
         I: DistributedIterator + 'static,
@@ -144,7 +144,7 @@ impl<
         A: LamellarArray<T> + DistIteratorLauncher + Sync + Send + Clone + 'static,
     > DistIter<'static, T, A>
 {
-    pub fn for_each<F>(&self, op: F)
+    pub fn for_each<F>(self, op: F)
     where
         F: Fn(&T) + Sync + Send + Clone + 'static,
     {
@@ -232,7 +232,7 @@ impl<
         A: LamellarArray<T> + Sync + Send + DistIteratorLauncher + Clone + 'static,
     > DistIterMut<'static, T, A>
 {
-    pub fn for_each<F>(&self, op: F)
+    pub fn for_each<F>(self, op: F)
     where
         F: Fn(&mut T) + Sync + Send + Clone + 'static,
     {
