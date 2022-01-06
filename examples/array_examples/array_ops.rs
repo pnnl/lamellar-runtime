@@ -48,7 +48,7 @@ fn test_add<T: std::fmt::Debug + ElementArithmeticOps + 'static>(
     init_val: T,
     add_val: T,
 ) {
-    array.dist_iter_mut().for_each(move |elem| *elem = init_val);
+    array.dist_iter_mut().for_each(move |elem| elem.store(init_val));
     array.wait_all();
     array.barrier();
     array.print();
@@ -78,7 +78,7 @@ fn test_sub<T: std::fmt::Debug + ElementArithmeticOps + 'static>(
     init_val: T,
     sub_val: T,
 ) {
-    array.dist_iter_mut().for_each(move |elem| *elem = init_val);
+    array.dist_iter_mut().for_each(move |elem|  elem.store(init_val));
     array.wait_all();
     array.barrier();
     array.print();
@@ -107,7 +107,7 @@ fn test_mul<T: std::fmt::Debug + ElementArithmeticOps + 'static>(
     init_val: T,
     mul_val: T,
 ) {
-    array.dist_iter_mut().for_each(move |elem| *elem = init_val);
+    array.dist_iter_mut().for_each(move |elem|  elem.store(init_val));
     array.wait_all();
     array.barrier();
     array.print();
@@ -136,7 +136,7 @@ fn test_div<T: std::fmt::Debug + ElementArithmeticOps + 'static>(
     init_val: T,
     div_val: T,
 ) {
-    array.dist_iter_mut().for_each(move |elem| *elem = init_val);
+    array.dist_iter_mut().for_each(move |elem| elem.store(init_val));
     array.wait_all();
     array.barrier();
     array.print();
@@ -165,7 +165,7 @@ fn test_and<T: std::fmt::Debug + ElementArithmeticOps + ElementBitWiseOps + 'sta
     init_val: T,
     and_val: T,
 ){
-    array.dist_iter_mut().for_each(move |elem| *elem = init_val);
+    array.dist_iter_mut().for_each(move |elem| elem.store(init_val));
     array.wait_all();
     array.barrier();
     array.print();
@@ -177,7 +177,7 @@ fn test_and<T: std::fmt::Debug + ElementArithmeticOps + ElementBitWiseOps + 'sta
     array.barrier();
     array.print();
     array.barrier();
-    array.dist_iter_mut().for_each(move |elem| *elem = init_val);
+    array.dist_iter_mut().for_each(move |elem| elem.store(init_val));
     array.wait_all();
     array.barrier();
     let mut reqs = vec![];
@@ -197,7 +197,7 @@ fn test_or<T: std::fmt::Debug + ElementBitWiseOps + 'static> (
     init_val: T,
     or_val: T,
 ){
-    array.dist_iter_mut().for_each(move |elem| *elem = init_val);
+    array.dist_iter_mut().for_each(move |elem| elem.store(init_val));
     array.wait_all();
     array.barrier();
     array.print();
@@ -209,7 +209,7 @@ fn test_or<T: std::fmt::Debug + ElementBitWiseOps + 'static> (
     array.barrier();
     array.print();
     array.barrier();
-    array.dist_iter_mut().for_each(move |elem| *elem = init_val);
+    array.dist_iter_mut().for_each(move |elem|  elem.store(init_val));
     array.wait_all();
     array.barrier();
     let mut reqs = vec![];
@@ -231,7 +231,7 @@ fn test_store_load<T: std::fmt::Debug + ElementOps + 'static> (
     my_pe: usize,
     num_pes: usize,
 ){
-    array.dist_iter_mut().for_each(move |elem| *elem = init_val);
+    array.dist_iter_mut().for_each(move |elem|  elem.store(init_val));
     array.wait_all();
     array.barrier();
     array.print();
@@ -263,7 +263,7 @@ fn test_swap<T: std::fmt::Debug + ElementBitWiseOps + 'static> (
     my_pe: usize,
     num_pes: usize,
 ){
-    array.dist_iter_mut().for_each(move |elem| *elem = init_val);
+    array.dist_iter_mut().for_each(move |elem|  elem.store(init_val));
     array.wait_all();
     array.barrier();
     array.print();

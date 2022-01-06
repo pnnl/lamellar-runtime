@@ -20,7 +20,7 @@ pub struct AtomicArrayOp {
 crate::inventory::collect!(AtomicArrayOp);
 
 lazy_static! {
-    static ref OPS: HashMap<(ArrayOpCmd,TypeId), (OpFn,LocalOpFn)> = {
+    pub(crate) static ref OPS: HashMap<(ArrayOpCmd,TypeId), (OpFn,LocalOpFn)> = {
         let mut map = HashMap::new();
         for op in crate::inventory::iter::<AtomicArrayOp> {
             map.insert(op.id.clone(),(op.op,op.local));
