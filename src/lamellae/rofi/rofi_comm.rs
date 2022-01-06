@@ -221,6 +221,7 @@ impl CommOps for RofiComm {
         }
     }
     fn rt_alloc(&self, size: usize) -> AllocResult<usize> {
+        // let size = size + size%8;
         let allocs = self.alloc.read();
         for alloc in allocs.iter() {
             if let Some(addr) = alloc.try_malloc(size) {
@@ -250,6 +251,7 @@ impl CommOps for RofiComm {
         panic!("Error invalid free! {:?}", addr);
     }
     fn alloc(&self, size: usize, alloc: AllocationType) -> AllocResult<usize> {
+        // let size = size + size%8;
         let _lock = self.comm_mutex.lock();
         Ok(rofi_alloc(size, alloc) as usize)
     }
@@ -425,30 +427,34 @@ impl CommOps for RofiComm {
     fn iget<T: Remote>(&self, pe: usize, src_addr: usize, dst_addr: &mut [T]) {
         if pe != self.my_pe {
             let bytes_len = dst_addr.len() * std::mem::size_of::<T>();
+            let rem_bytes = bytes_len %  std::mem::size_of::<u64>();
             // println!("{:x} {:?} {:?}",src_addr,dst_addr.as_ptr(),bytes_len);
             if bytes_len > std::mem::size_of::<u64>() {
-                self.init_buffer(dst_addr);
-                self.iget_data(pe, src_addr, dst_addr);
-                self.check_buffer(dst_addr);
-            } else {
+                let temp_dst_addr=&mut dst_addr[rem_bytes..];
+                self.init_buffer(temp_dst_addr);
+                self.iget_data(pe, src_addr+rem_bytes, temp_dst_addr);
+                self.check_buffer(temp_dst_addr);
+            } 
+            if rem_bytes > 0 {
                 loop {
-                    if let Ok(addr) = self.rt_alloc(bytes_len) {
+                    if let Ok(addr) = self.rt_alloc(rem_bytes) {
                         unsafe {
+                            let temp_dst_addr=&mut dst_addr[0..rem_bytes];
                             let buf1 = std::slice::from_raw_parts_mut(
                                 addr as *mut T as *mut u8,
-                                bytes_len,
+                                rem_bytes,
                             );
                             let buf0 = std::slice::from_raw_parts(
-                                dst_addr.as_ptr() as *mut T as *mut u8,
-                                bytes_len,
+                                temp_dst_addr.as_ptr() as *mut T as *mut u8,
+                                rem_bytes,
                             );
-                            self.fill_buffer(dst_addr, 0u8);
+                            self.fill_buffer(temp_dst_addr, 0u8);
                             self.fill_buffer(buf1, 1u8);
 
-                            self.iget_data(pe, src_addr, dst_addr);
+                            self.iget_data(pe, src_addr, temp_dst_addr);
                             self.iget_data(pe, src_addr, buf1);
 
-                            for i in 0..dst_addr.len() {
+                            for i in 0..temp_dst_addr.len() {
                                 while buf0[i] != buf1[i] {
                                     std::thread::yield_now();
                                 }

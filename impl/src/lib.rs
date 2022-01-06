@@ -889,136 +889,6 @@ fn gen_write_array_impls(
     write_array_impl
 }
 
-// fn gen_op_impls(
-//     typeident: syn::Ident,
-//     array_types: &Vec<syn::Ident>,
-//     ops:  &Vec<syn::Ident>,
-//     bitwise: bool,
-//     rt: bool,
-// ) -> (proc_macro2::TokenStream,proc_macro2::TokenStream){
-//     let lamellar = if rt {
-//         quote::format_ident!("crate")
-//     } else {
-//         quote::format_ident!("__lamellar")
-//     };
-
-//     let (am_data, am): (syn::Path, syn::Path) = if rt {
-//         (
-//             syn::parse("lamellar_impl::AmDataRT".parse().unwrap()).unwrap(),
-//             syn::parse("lamellar_impl::rt_am".parse().unwrap()).unwrap(),
-//         )
-//     } else {
-//         (
-//             syn::parse("lamellar::AmData".parse().unwrap()).unwrap(),
-//             syn::parse("lamellar::am".parse().unwrap()).unwrap(),
-//         )
-//     };
-
-//     let mut array_impls = quote! {};
-
-//     array_impls.extend(quote!{
-//         #[allow(non_camel_case_types)]
-//     });
-    
-//     for array_type in array_types {
-//         let create_ops = if bitwise {
-//             quote::format_ident!("{}_create_bitwise_ops", array_type)
-//         }
-//         else{
-//             quote::format_ident!("{}_create_ops", array_type)
-//         };
-//         let op_fn_name_base = quote::format_ident!("{}_{}_", array_type, typeident);
-//         array_impls.extend(quote!{
-//             #lamellar::#create_ops!(#typeident,#op_fn_name_base);
-//         });
-//         for op in ops.clone().into_iter(){
-//             let op_am_name = quote::format_ident!("{}_{}_{}_am", array_type, typeident, op);
-//             let fetch_op_am_name = quote::format_ident!("fetch_{}_{}_{}_am", array_type, typeident, op);
-//             let dist_fn_name = quote::format_ident!("{}dist_{}", op_fn_name_base, op);
-//             let local_op = quote::format_ident!("local_{}",op);
-//             array_impls.extend(quote!{
-//                 #[#am_data]
-//                 struct #op_am_name{
-//                     data: #lamellar::array::#array_type<#typeident>,
-//                     local_index: usize,
-//                     val: #typeident,
-//                 }
-//                 #[#am_data]
-//                 struct #fetch_op_am_name{
-//                     data: #lamellar::array::#array_type<#typeident>,
-//                     local_index: usize,
-//                     val: #typeident,
-//                 }
-//                 #[allow(non_snake_case)]
-//                 fn #dist_fn_name(val: *const u8, array: #lamellar::array::#array_type<u8>, index: usize, fetch: bool) -> Arc<dyn RemoteActiveMessage + Send + Sync>{
-//                     // println!("{:}",stringify!(#dist_fn_name));
-//                     let val = unsafe {*(val as  *const #typeident)};
-//                     if fetch{
-//                         Arc::new(#fetch_op_am_name{
-//                             data: unsafe {array.from_bytes()},
-//                             local_index: index,
-//                             val: val,
-//                         })
-//                     }
-//                     else {
-//                         Arc::new(#op_am_name{
-//                             data: unsafe {array.from_bytes()},
-//                             local_index: index,
-//                             val: val,
-//                         })
-//                     }
-//                 }
-//                 #[#am]
-//                 impl LamellarAM for #op_am_name{
-//                     fn exec(&self) {
-//                         self.data.#local_op(self.local_index,self.val);
-//                     }
-//                 }
-//                 #[#am]
-//                 impl LamellarAM for #fetch_op_am_name{
-//                     fn exec(&self) -> #typeident{
-//                         self.data.#local_op(self.local_index,self.val)
-//                     }
-//                 }
-//             });
-//         }
-//     }
-   
-
-//     let mut write_array_impl = quote! {};       
-//     for op in ops.clone().into_iter(){
-        
-//         let mut match_stmts = quote! {};
-//         for array_type in array_types {
-//             match_stmts.extend(quote! {
-//                 #lamellar::array::LamellarWriteArray::#array_type(inner) => inner.#op(index,val),
-//             });
-//         }
-//         write_array_impl.extend(quote!{
-//             fn #op(&self,index: usize, val: #typeident)->Option<Box<dyn #lamellar::LamellarRequest<Output = ()> + Send + Sync>>{
-//                 match self{
-//                     #match_stmts
-//                 }
-//             }
-//         });
-//         let fetch_op = quote::format_ident!("fetch_{}",op);
-//         let mut match_stmts = quote! {};
-//         for array_type in array_types {
-//             match_stmts.extend(quote! {
-//                 #lamellar::array::LamellarWriteArray::#array_type(inner) => inner.#fetch_op(index,val),
-//             });
-//         }
-//         write_array_impl.extend(quote!{
-//             fn #fetch_op(&self,index: usize, val: #typeident)-> Box<dyn #lamellar::LamellarRequest<Output = #typeident> + Send + Sync>{
-//                 match self{
-//                     #match_stmts
-//                 }
-//             }
-//         });
-//     } 
-//     (array_impls,write_array_impl)
-// }
-
 enum OpType{
     Arithmetic,
     Bitwise,
@@ -1102,7 +972,7 @@ fn create_ops(
     let user_expanded = quote_spanned! {expanded.span()=>
         const _: () = {
             extern crate lamellar as __lamellar;
-            use __lamellar::array::{LocalArithmeticOps,LocalAtomicOps,ArrayOpCmd,LamellarArrayRead,FromBytes};
+            use __lamellar::array::{AtomicArray,CollectiveAtomicArray,LocalArithmeticOps,LocalAtomicOps,ArrayOpCmd,LamellarArrayRead,FromBytes};
             #bitwise_mod
             use __lamellar::LamellarArray;
             use __lamellar::LamellarRequest;

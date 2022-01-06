@@ -1,4 +1,4 @@
-use lamellar::array::{ArithmeticOps,BitWiseOps, AtomicArray, Distribution, LamellarArray, ElementArithmeticOps, ElementBitWiseOps, ElementOps};
+use lamellar::array::{ArithmeticOps,BitWiseOps, CollectiveAtomicArray, Distribution, LamellarArray, ElementArithmeticOps, ElementBitWiseOps, ElementOps};
 
 
 #[lamellar::AmData(Default, Debug, ArithmeticOps)]
@@ -44,7 +44,7 @@ impl std::ops::DivAssign for Custom {
 }
 
 fn test_add<T: std::fmt::Debug + ElementArithmeticOps + 'static>(
-    array: AtomicArray<T>,
+    array: CollectiveAtomicArray<T>,
     init_val: T,
     add_val: T,
 ) {
@@ -74,7 +74,7 @@ fn test_add<T: std::fmt::Debug + ElementArithmeticOps + 'static>(
 
 
 fn test_sub<T: std::fmt::Debug + ElementArithmeticOps + 'static>(
-    array: AtomicArray<T>,
+    array: CollectiveAtomicArray<T>,
     init_val: T,
     sub_val: T,
 ) {
@@ -103,7 +103,7 @@ fn test_sub<T: std::fmt::Debug + ElementArithmeticOps + 'static>(
 }
 
 fn test_mul<T: std::fmt::Debug + ElementArithmeticOps + 'static>(
-    array: AtomicArray<T>,
+    array: CollectiveAtomicArray<T>,
     init_val: T,
     mul_val: T,
 ) {
@@ -132,7 +132,7 @@ fn test_mul<T: std::fmt::Debug + ElementArithmeticOps + 'static>(
 }
 
 fn test_div<T: std::fmt::Debug + ElementArithmeticOps + 'static>(
-    array: AtomicArray<T>,
+    array: CollectiveAtomicArray<T>,
     init_val: T,
     div_val: T,
 ) {
@@ -161,7 +161,7 @@ fn test_div<T: std::fmt::Debug + ElementArithmeticOps + 'static>(
 }
 
 fn test_and<T: std::fmt::Debug + ElementArithmeticOps + ElementBitWiseOps + 'static> (
-    array: AtomicArray<T>,
+    array: CollectiveAtomicArray<T>,
     init_val: T,
     and_val: T,
 ){
@@ -193,7 +193,7 @@ fn test_and<T: std::fmt::Debug + ElementArithmeticOps + ElementBitWiseOps + 'sta
 }
 
 fn test_or<T: std::fmt::Debug + ElementBitWiseOps + 'static> (
-    array: AtomicArray<T>,
+    array: CollectiveAtomicArray<T>,
     init_val: T,
     or_val: T,
 ){
@@ -225,7 +225,7 @@ fn test_or<T: std::fmt::Debug + ElementBitWiseOps + 'static> (
 }
 
 fn test_store_load<T: std::fmt::Debug + ElementOps + 'static> (
-    array: AtomicArray<T>,
+    array: CollectiveAtomicArray<T>,
     init_val: T,
     store_val: T,
     my_pe: usize,
@@ -257,7 +257,7 @@ fn test_store_load<T: std::fmt::Debug + ElementOps + 'static> (
 }
 
 fn test_swap<T: std::fmt::Debug + ElementBitWiseOps + 'static> (
-    array: AtomicArray<T>,
+    array: CollectiveAtomicArray<T>,
     init_val: T,
     swap_val: T,
     my_pe: usize,
@@ -286,10 +286,10 @@ fn main() {
     let world = lamellar::LamellarWorldBuilder::new().build();
     let num_pes = world.num_pes();
     let my_pe = world.my_pe();
-    let array_f64 = AtomicArray::<f64>::new(world.clone(), num_pes * 10, Distribution::Block); //non intrinsic atomic, non bitwise
-    let array_u8 = AtomicArray::<u8>::new(world.clone(), num_pes * 10, Distribution::Block); //intrinsic atomic,  bitwise
-    let array_i128 = AtomicArray::<i128>::new(world.clone(), num_pes * 10, Distribution::Block); //non intrinsic atomic,  bitwise
-    let array_custom = AtomicArray::<Custom>::new(world.clone(), num_pes * 10, Distribution::Block); //non intrinsic atomic, non bitwise
+    let array_f64 = CollectiveAtomicArray::<f64>::new(world.clone(), num_pes * 10, Distribution::Block); //non intrinsic atomic, non bitwise
+    let array_u8 = CollectiveAtomicArray::<u8>::new(world.clone(), num_pes * 10, Distribution::Block); //intrinsic atomic,  bitwise
+    let array_i128 = CollectiveAtomicArray::<i128>::new(world.clone(), num_pes * 10, Distribution::Block); //non intrinsic atomic,  bitwise
+    let array_custom = CollectiveAtomicArray::<Custom>::new(world.clone(), num_pes * 10, Distribution::Block); //non intrinsic atomic, non bitwise
 
     test_add(array_f64.clone(), 0.0, 1.0);
     test_add(array_u8.clone(), 0, 1);
