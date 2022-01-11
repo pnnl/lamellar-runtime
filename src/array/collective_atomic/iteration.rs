@@ -169,7 +169,7 @@ impl<'a, T: Dist + 'a> DistributedIterator for CollectiveAtomicDistIterMut<'a, T
     }
 }
 
-impl< T: Dist> CollectiveAtomicArray<T> {
+impl< T: Dist + 'static> CollectiveAtomicArray<T> {
     pub fn dist_iter(&self) -> CollectiveAtomicDistIter<'static,T> {
         let lock = Arc::new(self.lock.read());
         self.barrier();

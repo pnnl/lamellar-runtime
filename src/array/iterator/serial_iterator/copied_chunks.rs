@@ -32,15 +32,15 @@ where
         chunks
     }
 
-    fn get_buffer(&self, val: u32, size: usize) -> LocalMemoryRegion<I::ElemType> {
+    fn get_buffer(&self, _val: u32, size: usize) -> LocalMemoryRegion<I::ElemType> {
         let mem_region: LocalMemoryRegion<I::ElemType> =
             self.array().team().alloc_local_mem_region(size);
-        let buf_u8 = mem_region.clone().to_base::<u32>();
-        let buf_slice = unsafe { buf_u8.as_mut_slice().unwrap() };
+        // let buf_u8 = mem_region.clone().to_base::<u32>();
+        // let buf_slice = unsafe { buf_u8.as_mut_slice().unwrap() };
         // println!("buf_u8 len {:}",buf_slice.len());
-        for i in 0..buf_slice.len() {
-            buf_slice[i] = val;
-        }
+        // for i in 0..buf_slice.len() {
+        //     buf_slice[i] = val;
+        // }
         self.array().iget(self.index, &mem_region);
         // }
 
@@ -50,17 +50,17 @@ where
         // let buf_1_temp = buf.clone().to_base::<u32>();
         // let buf_1 = buf_1_temp.as_slice().unwrap();
 
-        let mut start = std::time::Instant::now();
-        for i in 0..buf_slice.len() {
-            // while buf_0[i] != buf_1[i] {
-            while buf_slice[i] == val {
-                std::thread::yield_now();
-                if start.elapsed().as_secs_f64() > 5.0 {
-                    println!("i: {:?} {:?} {:?}", i, val, buf_slice[i]);
-                    start = std::time::Instant::now();
-                }
-            }
-        }
+        // let mut start = std::time::Instant::now();
+        // for i in 0..buf_slice.len() {
+        //     // while buf_0[i] != buf_1[i] {
+        //     while buf_slice[i] == val {
+        //         std::thread::yield_now();
+        //         if start.elapsed().as_secs_f64() > 5.0 {
+        //             println!("i: {:?} {:?} {:?}", i, val, buf_slice[i]);
+        //             start = std::time::Instant::now();
+        //         }
+        //     }
+        // }
         mem_region
     }
     // fn check_for_valid(&self,val: u32, buf: &LocalMemoryRegion<I::ElemType>) -> bool {

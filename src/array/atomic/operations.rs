@@ -26,17 +26,10 @@ lazy_static! {
             map.insert(op.id.clone(),(op.op,op.local));
         }
         map
-        // map.insert(TypeId::of::<f64>(), f64_add::add as AddFn );
     };
 }
 
 impl<T:  AmDist + Dist  + 'static> AtomicArray<T> {
-    // pub fn fetch_add(&self, index: usize, val: T) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>>{
-    //     self.add(index,val)
-    // }
-    // pub fn fetch_sub(&self, index: usize, val: T) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>>{
-    //     self.sub(index,val)
-    // }
 
     fn initiate_op(&self, index: usize, val: T, op: ArrayOpCmd)  -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>>{
         // println!("add ArithmeticOps<T> for &AtomicArray<T> ");

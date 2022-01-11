@@ -85,6 +85,14 @@ impl<T: Dist> From<UnsafeArray<T>> for LocalOnlyArray<T> {
     }
 }
 
+impl<T: Dist> private::ArrayExecAm<T> for LocalOnlyArray<T> {
+    fn team(&self) -> Pin<Arc<LamellarTeamRT>> {
+        self.array.team().clone()
+    }
+    fn team_counters(&self) ->Arc<AMCounters>{
+        self.array.team_counters()
+    }
+}
 
 impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static>
     private::LamellarArrayPrivate<T> for LocalOnlyArray<T>

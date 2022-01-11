@@ -460,7 +460,7 @@ fn derive_am_data(
         output.extend(quote! {
             #traits
             #serde_temp_2
-            #vis struct #name#ty_generics #where_clause{
+            #vis struct #name#impl_generics #where_clause{
                 #fields
             }
             impl #impl_generics#lamellar::DarcSerde for #name #ty_generics #where_clause{
@@ -477,86 +477,6 @@ fn derive_am_data(
     }
     TokenStream::from(output)
 }
-
-// fn derive_darcserde(input: TokenStream, crate_header: String) -> TokenStream {
-//     let lamellar = quote::format_ident!("{}", crate_header.clone());
-//     println!("input: {:?}", input);
-//     let input: syn::Item = parse_macro_input!(input);
-//     let mut output = quote! {};
-
-//     if let syn::Item::Struct(data) = input {
-//         let name = &data.ident;
-//         let generics = data.generics.clone();
-//         let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
-
-//         let mut fields = quote! {};
-//         let mut ser = quote! {};
-//         let mut des = quote! {};
-
-//         for field in &data.fields {
-//             if let syn::Type::Path(ref ty) = field.ty {
-//                 if let Some(seg) = ty.path.segments.first() {
-//                     let field_name = field.ident.clone();
-//                     if seg.ident.to_string().contains("Darc") {
-//                         let (serialize, deserialize) =
-//                             if seg.ident.to_string().contains("LocalRwDarc") {
-//                                 let serialize = format!("{}::localrw_serialize", crate_header);
-//                                 let deserialize = format!("{}::localrw_from_ndarc", crate_header);
-//                                 (serialize, deserialize)
-//                             } else if seg.ident.to_string().contains("GlobalRwDarc") {
-//                                 let serialize = format!("{}::globalrw_serialize", crate_header);
-//                                 let deserialize = format!("{}::globalrw_from_ndarc", crate_header);
-//                                 (serialize, deserialize)
-//                             } else {
-//                                 let serialize = format!("{}::darc_serialize", crate_header);
-//                                 let deserialize = format!("{}::darc_from_ndarc", crate_header);
-//                                 (serialize, deserialize)
-//                             };
-
-//                         fields.extend(quote_spanned! {field.span()=>
-//                             #[serde(serialize_with = #serialize, deserialize_with = #deserialize)]
-//                             #field,
-//                         });
-
-//                         ser.extend(quote_spanned!{field.span()=>
-//                             match cur_pe{
-//                                 Ok(cur_pe) => {self.#field_name.serialize_update_cnts(num_pes,cur_pe);},
-//                                 Err(err) =>  {panic!("can only access darcs within team members ({:?})",err);}
-//                             }
-//                         });
-//                         des.extend(quote_spanned!{field.span()=>
-//                             match cur_pe{
-//                                 Ok(cur_pe) => {self.#field_name.deserialize_update_cnts(cur_pe);},
-//                                 Err(err) => {panic!("can only access darcs within team members ({:?})",err);}
-//                             }
-//                         });
-//                     } else {
-//                         fields.extend(quote_spanned! {field.span()=>
-//                             #field,
-//                         });
-//                     }
-//                 }
-//             }
-//         }
-
-//         output.extend(quote! {
-//             impl #impl_generics#lamellar::DarcSerde for #name #ty_generics #where_clause{
-//                 fn ser (&self,  num_pes: usize, cur_pe: Result<usize, #lamellar::IdError>) {
-//                     #ser
-//                 }
-//                 fn des (&self,cur_pe: Result<usize, #lamellar::IdError>){
-//                     #des
-//                 }
-//             }
-//         });
-//     }
-//     TokenStream::from(output)
-// }
-
-// #[proc_macro_derive(DarcSerdeRT)]
-// pub fn darc_serde_rt_derive(input: TokenStream) -> TokenStream {
-//     derive_darcserde(input, "crate".to_string())
-// }
 
 #[allow(non_snake_case)]
 #[proc_macro_error]
@@ -921,7 +841,7 @@ fn create_ops(
         (quote::format_ident!("div"),false),
         (quote::format_ident!("fetch_div"),true),
     ]; 
-    // let (array_impls,write_array_impl) = gen_op_impls(typeident.clone(),&write_array_types,&ops,false,rt);
+
     let array_impls =  gen_array_impls(typeident.clone(), &write_array_types, &ops, OpType::Arithmetic, rt);
     let write_array_impls = gen_write_array_impls(typeident.clone(), &write_array_types, &ops, rt);   
     let mut expanded = quote!{
@@ -985,6 +905,130 @@ fn create_ops(
         expanded
     } else {
         user_expanded
+    }
+}
+
+fn gen_atomic_rdma(typeident: syn::Ident,rt: bool) -> proc_macro2::TokenStream {
+    let lamellar = if rt {
+        quote::format_ident!("crate")
+    } else {
+        quote::format_ident!("__lamellar")
+    };
+
+    let (am_data, am): (syn::Path, syn::Path) = if rt {
+        (
+            syn::parse("lamellar_impl::AmDataRT".parse().unwrap()).unwrap(),
+            syn::parse("lamellar_impl::rt_am".parse().unwrap()).unwrap(),
+        )
+    } else {
+        (
+            syn::parse("lamellar::AmData".parse().unwrap()).unwrap(),
+            syn::parse("lamellar::am".parse().unwrap()).unwrap(),
+        )
+    };
+
+    let get_name = quote::format_ident!("RemoteGetAm_{}",typeident);
+    let get_fn = quote::format_ident!("RemoteGetAm_{}_gen",typeident);
+    let put_name = quote::format_ident!("RemotePutAm_{}",typeident);
+    let put_fn = quote::format_ident!("RemotePutAm_{}_gen",typeident);
+    quote!{
+        // #[allow(non_snake_case)]
+        #[#am_data]
+        struct #get_name {
+            array: #lamellar::array::AtomicArray<u8>, //subarray of the indices we need to place data into
+            start_index: usize,
+            end_index: usize,
+        }
+
+        #[#am]
+        impl LamellarAm for #get_name {
+            fn exec(self) -> Vec<u8> {
+                // println!("in remotegetam {:?} {:?}",self.start_index,self.end_index);
+                let array: #lamellar::array::AtomicArray<#typeident> =unsafe {self.array.clone().from_bytes()};
+                unsafe {
+                    match array.array.local_elements_for_range(self.start_index,self.end_index){
+                        Some((unsafe_elems,indices)) => {
+                            let elems_u8_len = unsafe_elems.len() * std::mem::size_of::<#typeident>();
+                            let mut elems_u8: Vec<u8> = Vec::with_capacity(elems_u8_len);
+                            elems_u8.set_len(elems_u8_len);
+                            let elems_t_ptr = elems_u8.as_mut_ptr() as *mut #typeident;
+                            let elems_t_len = unsafe_elems.len();
+                            let elems = std::slice::from_raw_parts_mut(elems_t_ptr,elems_t_len);
+                            for i in indices{
+                                elems[i] = array.local_load(i,unsafe_elems[i]);
+                            }
+                            
+                            // println!("{:?} {:?} {:?}",unsafe_elems,elems,elems_u8);
+                            elems_u8
+                        },
+                        None => vec![],
+                    }
+                }
+            }
+        }
+
+        #[allow(non_snake_case)]
+        fn #get_fn(array: #lamellar::array::AtomicArray<u8>, start_index: usize, end_index: usize) -> Arc<dyn RemoteActiveMessage + Send + Sync>{
+            Arc::new(#get_name{
+                array: array,
+                start_index: start_index,
+                end_index: end_index,
+            })
+        }
+
+        #lamellar::inventory::submit! {
+            #![crate = #lamellar]
+            crate::array::atomic::rdma::AtomicArrayGet{
+                id: std::any::TypeId::of::<#typeident>(),
+                op: #get_fn
+            }
+        }
+
+        #[#am_data]
+        struct #put_name {
+            array: #lamellar::array::AtomicArray<u8>, //subarray of the indices we need to place data into
+            start_index: usize,
+            end_index: usize,
+            buf : Vec<u8>,
+        }
+
+        #[#am]
+        impl LamellarAm for #put_name {
+            fn exec(self) {
+                // println!("in remotegetam {:?} {:?}",self.start_index,self.end_index);
+                let array: #lamellar::array::AtomicArray<#typeident> =unsafe {self.array.clone().from_bytes()};
+                
+                unsafe {
+                    let buf = std::slice::from_raw_parts(self.buf.as_ptr() as *const #typeident,self.buf.len() / std::mem::size_of::<#typeident>());
+                    match array.array.local_elements_for_range(self.start_index,self.end_index){
+                        Some((_,indices)) => {
+                            for (buf_i,array_i) in indices.enumerate(){
+                                array.local_store(array_i,buf[buf_i]);
+                            }
+                        },
+                        None => {},
+                    }
+                }
+            }
+        }
+
+        #[allow(non_snake_case)]
+        fn #put_fn(array: #lamellar::array::AtomicArray<u8>, start_index: usize, end_index: usize, buf: Vec<u8>) -> Arc<dyn RemoteActiveMessage + Send + Sync>{
+            Arc::new(#put_name{
+                array: array,
+                start_index: start_index,
+                end_index: end_index,
+                buf: buf,
+            })
+        }
+
+        #lamellar::inventory::submit! {
+            #![crate = #lamellar]
+            crate::array::atomic::rdma::AtomicArrayPut{
+                id: std::any::TypeId::of::<#typeident>(),
+                op: #put_fn
+            }
+        }
     }
 }
 
@@ -1145,6 +1189,7 @@ pub fn generate_ops_for_type(item: TokenStream) -> TokenStream {
         let typeident = quote::format_ident!("{:}", t.trim());
         output.extend(quote! {impl Dist for #typeident {}});
         output.extend(create_ops(typeident.clone(), bitwise, false));
+        output.extend(gen_atomic_rdma(typeident.clone(),false));
     }
     TokenStream::from(output)
 }
@@ -1164,6 +1209,7 @@ pub fn generate_ops_for_type_rt(item: TokenStream) -> TokenStream {
         let typeident = quote::format_ident!("{:}", t.trim());
         output.extend(quote! {impl Dist for #typeident {}});
         output.extend(create_ops(typeident.clone(), bitwise, true));
+        output.extend(gen_atomic_rdma(typeident.clone(),true));
     }
     TokenStream::from(output)
 }
@@ -1193,10 +1239,22 @@ pub fn derive_arrayops(input: TokenStream) -> TokenStream {
     let mut output = quote! {};
 
     let input = parse_macro_input!(input as syn::DeriveInput);
-    let name = input.ident;
-
-    
+    let name = input.ident;    
 
     output.extend(create_ops(name.clone(),  false, false));
     TokenStream::from(output)
 }
+
+#[proc_macro_error]
+#[proc_macro_derive(AtomicRdma)]
+pub fn derive_atomicrdma(input: TokenStream) -> TokenStream {
+    let mut output = quote! {};
+
+    let input = parse_macro_input!(input as syn::DeriveInput);
+    let name = input.ident;    
+
+    output.extend(gen_atomic_rdma(name.clone(), true));
+    TokenStream::from(output)
+}
+
+

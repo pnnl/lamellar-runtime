@@ -23,7 +23,7 @@ use std::sync::Arc;
 
 pub trait SerialIterator {
     type Item;
-    type ElemType: Dist;
+    type ElemType: Dist + 'static;
     type Array: LamellarArrayRead<Self::ElemType>;
     fn next(&mut self) -> Option<Self::Item>;
     fn advance_index(&mut self, count: usize);
@@ -74,7 +74,7 @@ where
     }
 }
 
-pub struct LamellarArrayIter<'a, T: Dist, A: LamellarArrayRead<T>> {
+pub struct LamellarArrayIter<'a, T: Dist + 'static, A: LamellarArrayRead<T>> {
     array: A,
     buf_0: LocalMemoryRegion<T>,
     // buf_1: LocalMemoryRegion<T>,
@@ -84,10 +84,10 @@ pub struct LamellarArrayIter<'a, T: Dist, A: LamellarArrayRead<T>> {
     _marker: PhantomData<&'a T>,
 }
 
-unsafe impl<'a, T: Dist, A: LamellarArrayRead<T>> Sync for LamellarArrayIter<'a, T, A> {}
-unsafe impl<'a, T: Dist, A: LamellarArrayRead<T>> Send for LamellarArrayIter<'a, T, A> {}
+unsafe impl<'a, T: Dist + 'static, A: LamellarArrayRead<T>> Sync for LamellarArrayIter<'a, T, A> {}
+unsafe impl<'a, T: Dist + 'static, A: LamellarArrayRead<T>> Send for LamellarArrayIter<'a, T, A> {}
 
-impl<'a, T: Dist, A: LamellarArrayRead<T>> LamellarArrayIter<'a, T, A> {
+impl<'a, T: Dist + 'static, A: LamellarArrayRead<T>> LamellarArrayIter<'a, T, A> {
     pub(crate) fn new(
         array: A,
         team: Pin<Arc<LamellarTeamRT>>,
@@ -150,7 +150,7 @@ impl<'a, T: Dist, A: LamellarArrayRead<T>> LamellarArrayIter<'a, T, A> {
     // }
 }
 
-impl<'a, T: Dist, A: LamellarArrayRead<T> + Clone> SerialIterator for LamellarArrayIter<'a, T, A> {
+impl<'a, T: Dist + 'static, A: LamellarArrayRead<T> + Clone> SerialIterator for LamellarArrayIter<'a, T, A> {
     type ElemType = T;
     type Item = &'a T;
     type Array = A;

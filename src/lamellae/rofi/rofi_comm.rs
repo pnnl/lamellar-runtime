@@ -120,8 +120,8 @@ impl RofiComm {
             dst_addr.as_ptr() as *mut T as *mut R,
             (dst_addr.len() * std::mem::size_of::<T>()) / std::mem::size_of::<R>(),
         );
-        for i in 0..bytes.len() - 2 {
-            while bytes[i] == val && bytes[i + 1] == val {
+        for i  in 0..(bytes.len() as isize - 2) {
+            while bytes[i as usize] == val && bytes[i as usize + 1] == val {
                 //hopefully magic number doesnt appear twice in a row
                 std::thread::yield_now();
             }
@@ -429,7 +429,7 @@ impl CommOps for RofiComm {
             let bytes_len = dst_addr.len() * std::mem::size_of::<T>();
             let rem_bytes = bytes_len %  std::mem::size_of::<u64>();
             // println!("{:x} {:?} {:?}",src_addr,dst_addr.as_ptr(),bytes_len);
-            if bytes_len > std::mem::size_of::<u64>() {
+            if bytes_len >= std::mem::size_of::<u64>() {
                 let temp_dst_addr=&mut dst_addr[rem_bytes..];
                 self.init_buffer(temp_dst_addr);
                 self.iget_data(pe, src_addr+rem_bytes, temp_dst_addr);

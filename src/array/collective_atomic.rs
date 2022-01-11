@@ -136,6 +136,15 @@ impl <T: Dist> FromBytes<T,u8> for CollectiveAtomicArray<u8>{
     }
 }
 
+impl<T: Dist> private::ArrayExecAm<T> for CollectiveAtomicArray<T> {
+    fn team(&self) -> Pin<Arc<LamellarTeamRT>> {
+        self.array.team().clone()
+    }
+    fn team_counters(&self) ->Arc<AMCounters>{
+        self.array.team_counters()
+    }
+}
+
 impl<T: Dist> private::LamellarArrayPrivate<T> for CollectiveAtomicArray<T> {
     fn local_as_ptr(&self) -> *const T {
         self.array.local_as_mut_ptr()
@@ -160,7 +169,7 @@ impl<T: Dist> LamellarArray<T> for CollectiveAtomicArray<T> {
     }
     fn team(&self) -> Pin<Arc<LamellarTeamRT>> {
         self.array.team().clone()
-    }
+    }    
     fn num_elems_local(&self) -> usize {
         self.num_elems_local()
     }

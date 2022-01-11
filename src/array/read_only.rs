@@ -183,6 +183,15 @@ impl<T: Dist> DistIteratorLauncher for ReadOnlyArray<T> {
     }
 }
 
+impl<T: Dist> private::ArrayExecAm<T> for ReadOnlyArray<T> {
+    fn team(&self) -> Pin<Arc<LamellarTeamRT>> {
+        self.array.team().clone()
+    }
+    fn team_counters(&self) ->Arc<AMCounters>{
+        self.array.team_counters()
+    }
+}
+
 impl<T: Dist> private::LamellarArrayPrivate<T> for ReadOnlyArray<T> {
     fn local_as_ptr(&self) -> *const T {
         self.array.local_as_ptr()
@@ -222,7 +231,7 @@ impl<T: Dist> LamellarArray<T> for ReadOnlyArray<T> {
         // println!("done in wait all {:?}",std::time::SystemTime::now());
     }
 }
-impl<T: Dist> LamellarArrayRead<T> for ReadOnlyArray<T> {
+impl<T: Dist + 'static> LamellarArrayRead<T> for ReadOnlyArray<T> {
     // unsafe fn get_unchecked<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(
     //     &self,
     //     index: usize,

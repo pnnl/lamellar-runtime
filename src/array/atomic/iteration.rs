@@ -57,6 +57,7 @@ impl<T: Dist > DistributedIterator for AtomicDistIter<T> {
         self.data.clone()
     }
     fn next(&mut self) -> Option<Self::Item> {
+        // println!("{:?} {:?}",self.cur_i,self.end_i);
         if self.cur_i < self.end_i {
             self.cur_i += 1;
             Some(AtomicElement{
@@ -87,7 +88,9 @@ impl<T: Dist> AtomicArray<T> {
     pub fn dist_iter_mut(&self) -> AtomicDistIter<T> {
         AtomicDistIter::new(self.clone(), 0, 0)
     }
+}
 
+impl<T:  Dist> AtomicArray<T> {
     pub fn ser_iter(&self) -> LamellarArrayIter<'_, T, AtomicArray<T>> {
         LamellarArrayIter::new(self.clone().into(), self.array.team().clone(), 1)
     }

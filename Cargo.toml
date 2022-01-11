@@ -96,16 +96,33 @@ name="put_bw"
 path="examples/bandwidths/put_bw.rs"
 
 [[example]]
-name="array_put_bw"
-path="examples/bandwidths/array_put_bw.rs"
+name="unsafe_array_put_bw"
+path="examples/bandwidths/unsafe_array_put_bw.rs"
+
+[[example]]
+name="atomic_array_put_bw"
+path="examples/bandwidths/atomic_array_put_bw.rs"
+
+[[example]]
+name="collective_atomic_array_put_bw"
+path="examples/bandwidths/collective_atomic_array_put_bw.rs"
+
 
 [[example]]
 name="array_async_put_bw"
 path="examples/bandwidths/array_async_put_bw.rs"
 
 [[example]]
-name="array_get_bw"
-path="examples/bandwidths/array_get_bw.rs"
+name="unsafe_array_get_bw"
+path="examples/bandwidths/unsafe_array_get_bw.rs"
+
+[[example]]
+name="atomic_array_get_bw"
+path="examples/bandwidths/atomic_array_get_bw.rs"
+
+[[example]]
+name="collective_atomic_array_get_bw"
+path="examples/bandwidths/collective_atomic_array_get_bw.rs"
 
 [[example]]
 name="array_async_get_bw"

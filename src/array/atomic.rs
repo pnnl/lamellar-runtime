@@ -1,6 +1,7 @@
 mod iteration;
 pub(crate) mod operations;
-mod rdma;
+pub (crate) mod rdma;
+pub use rdma::{AtomicArrayPut,AtomicArrayGet};
 
 // use crate::array::iterator::distributed_iterator::{
 //     DistIter, DistIterMut, DistIteratorLauncher, DistributedIterator,
@@ -317,6 +318,14 @@ impl <T: Dist> FromBytes<T,u8> for AtomicArray<u8>{
 //     }
 // }
 
+impl<T: Dist> private::ArrayExecAm<T> for AtomicArray<T> {
+    fn team(&self) -> Pin<Arc<LamellarTeamRT>> {
+        self.array.team().clone()
+    }
+    fn team_counters(&self) ->Arc<AMCounters>{
+        self.array.team_counters()
+    }
+}
 
 impl<T: Dist> private::LamellarArrayPrivate<T> for AtomicArray<T> {
     fn local_as_ptr(&self) -> *const T {

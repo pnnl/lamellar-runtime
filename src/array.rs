@@ -52,14 +52,17 @@ pub struct ReduceKey {
 }
 crate::inventory::collect!(ReduceKey);
 
-lamellar_impl::generate_reductions_for_type_rt!(u8, u16, u32, u64, u128, usize);
-lamellar_impl::generate_ops_for_type_rt!(true, u8, u16, u32, u64, u128, usize);
+// lamellar_impl::generate_reductions_for_type_rt!(u8, u16, u32, u64, u128, usize);
+// lamellar_impl::generate_ops_for_type_rt!(true, u8, u16, u32, u64, u128, usize);
 
-lamellar_impl::generate_reductions_for_type_rt!(i8, i16, i32, i64, i128, isize);
-lamellar_impl::generate_ops_for_type_rt!(true, i8, i16, i32, i64, i128, isize);
+lamellar_impl::generate_reductions_for_type_rt!(u8,usize);
+lamellar_impl::generate_ops_for_type_rt!(true, u8,usize);
 
-lamellar_impl::generate_reductions_for_type_rt!(f32, f64);
-lamellar_impl::generate_ops_for_type_rt!(false, f32, f64);
+// lamellar_impl::generate_reductions_for_type_rt!(i8, i16, i32, i64, i128, isize);
+// lamellar_impl::generate_ops_for_type_rt!(true, i8, i16, i32, i64, i128, isize);
+
+// lamellar_impl::generate_reductions_for_type_rt!(f32, f64);
+// lamellar_impl::generate_ops_for_type_rt!(false, f32, f64);
 
 #[derive(serde::Serialize, serde::Deserialize, Clone, Copy, Debug)]
 pub enum Distribution {
@@ -290,8 +293,8 @@ impl<T: Dist> MyFrom<&LamellarArrayInput<T>> for LamellarArrayInput<T> {
 
 #[enum_dispatch]
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
-#[serde(bound = "T: Dist + serde::Serialize + serde::de::DeserializeOwned")]
-pub enum LamellarReadArray<T: Dist> {
+#[serde(bound = "T: Dist + serde::Serialize + serde::de::DeserializeOwned + 'static")]
+pub enum LamellarReadArray<T: Dist + 'static> {
     UnsafeArray(UnsafeArray<T>),
     ReadOnlyArray(ReadOnlyArray<T>),
     AtomicArray(AtomicArray<T>),
@@ -309,29 +312,66 @@ pub enum LamellarWriteArray<T: Dist> {
 
 pub(crate) mod private {
     use crate::array::{
-        AtomicArray, LamellarReadArray, LamellarWriteArray, ReadOnlyArray, UnsafeArray,CollectiveAtomicArray,
+        LamellarArray, AtomicArray, LamellarReadArray, LamellarWriteArray, ReadOnlyArray, UnsafeArray,CollectiveAtomicArray,
     };
+    use crate::active_messaging::*;
+    use crate::lamellar_request::LamellarRequest;
     use crate::memregion::Dist;
+    use crate::LamellarTeamRT;
     use enum_dispatch::enum_dispatch;
+    use std::sync::Arc;
+    use std::pin::Pin;
     #[enum_dispatch(LamellarReadArray<T>,LamellarWriteArray<T>)]
     pub trait LamellarArrayPrivate<T: Dist> {
-        // fn my_pe(&self) -> usize;
+        // // fn my_pe(&self) -> usize;
+        
         fn local_as_ptr(&self) -> *const T;
         fn local_as_mut_ptr(&self) -> *mut T;
         fn pe_for_dist_index(&self, index: usize) -> usize;
         fn pe_offset_for_dist_index(&self, pe: usize, index: usize) -> usize;
         unsafe fn into_inner(self) -> UnsafeArray<T>;
     }
+
+    #[enum_dispatch(LamellarReadArray<T>,LamellarWriteArray<T>)]
+    pub(crate) trait ArrayExecAm<T: Dist> {
+        fn team(&self) -> Pin<Arc<LamellarTeamRT>>;
+        fn team_counters(&self) -> Arc<AMCounters>;
+        fn exec_am_local<F>(&self,am: F) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync>
+    where
+        F: LamellarActiveMessage + LocalAM + Send + Sync + 'static,
+    {
+        self.team().exec_am_local_tg(am,Some(self.team_counters()))
+    }
+    fn exec_am_pe<F>(&self,pe: usize,am: F) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync>
+    where
+        F: RemoteActiveMessage + LamellarAM + AmDist,
+    {
+        self.team().exec_am_pe_tg(pe,am,Some(self.team_counters()))
+    }
+    fn exec_arc_am_pe<F>(&self,pe: usize,am: LamellarArcAm) -> Box<dyn LamellarRequest<Output = F> + Send + Sync>
+    where
+        F: AmDist,
+    {
+        self.team().exec_arc_am_pe(pe,am,Some(self.team_counters()))
+    }
+    fn exec_am_all<F>(&self,am: F) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync>
+    where
+        F: RemoteActiveMessage + LamellarAM + AmDist,
+    {
+        self.team().exec_am_all_tg(am,Some(self.team_counters()))
+    }
+    }
 }
 
 #[enum_dispatch(LamellarReadArray<T>,LamellarWriteArray<T>)]
-pub trait LamellarArray<T: Dist>: private::LamellarArrayPrivate<T> {
+pub trait LamellarArray<T: Dist>: private::LamellarArrayPrivate<T>{
     fn team(&self) -> Pin<Arc<LamellarTeamRT>>;
     fn my_pe(&self) -> usize;
     fn num_elems_local(&self) -> usize;
     fn len(&self) -> usize;
     fn barrier(&self);
     fn wait_all(&self);
+    
     // /// Returns a distributed iterator for the LamellarArray
     // /// must be called accross all pes containing data in the array
     // /// iteration on a pe only occurs on the data which is locally present
@@ -400,7 +440,7 @@ pub trait SubArray<T: Dist>: LamellarArray<T> {
 }
 
 #[enum_dispatch(LamellarReadArray<T>,LamellarWriteArray<T>)]
-pub trait LamellarArrayRead<T: Dist>: LamellarArray<T> + Sync + Send {
+pub trait LamellarArrayRead<T: Dist + 'static >: LamellarArray<T> + Sync + Send {
     // this is non blocking call
     // the runtime does not manage checking for completion of message transmission
     // the user is responsible for ensuring the buffer remains valid
@@ -445,7 +485,7 @@ pub trait ArrayPrint<T: Dist + std::fmt::Debug>: LamellarArray<T> {
 
 pub trait LamellarArrayReduce<T>: LamellarArrayRead<T>
 where
-    T: Dist + serde::Serialize + serde::de::DeserializeOwned,
+    T: Dist + serde::Serialize + serde::de::DeserializeOwned + 'static,
 {
     fn get_reduction_op(&self, op: String) -> LamellarArcAm;
     fn reduce(&self, op: &str) -> Box<dyn LamellarRequest<Output = T> + Send + Sync>;

@@ -29,7 +29,7 @@ struct UnsafeArrayInner {
 #[lamellar_impl::AmDataRT(Clone)]
 pub struct UnsafeArray<T: Dist> {
     inner: Darc<UnsafeArrayInner>,
-    distribution: Distribution,
+    pub(crate)  distribution: Distribution,
     size: usize,      //total array size
     elem_per_pe: f64, //used to evenly distribute elems
     sub_array_offset: usize,
@@ -348,6 +348,14 @@ impl<T: Dist + serde::Serialize + serde::de::DeserializeOwned + 'static> UnsafeA
     }
 }
 
+impl<T: Dist> private::ArrayExecAm<T> for UnsafeArray<T> {
+    fn team(&self) -> Pin<Arc<LamellarTeamRT>> {
+        self.team().clone()
+    }
+    fn team_counters(&self) -> Arc<AMCounters> {
+        self.inner.array_counters.clone()
+    }
+}
 impl<T: Dist> private::LamellarArrayPrivate<T> for UnsafeArray<T> {
     fn local_as_ptr(&self) -> *const T {
         self.local_as_mut_ptr()
