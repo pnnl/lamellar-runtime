@@ -135,7 +135,7 @@ impl<T: Dist + 'static> AtomicElement<T> {
     fn local_op(&self, val: T, op: ArrayOpCmd) -> T{
         if let Some(funcs) = OPS.get(&(op,TypeId::of::<T>())) {
             let mut val = val;
-            let array: AtomicArray<u8> = unsafe { self.array.as_bytes() };
+            let array: AtomicByteArray = self.array.clone().into();
             funcs.1(&mut val as *mut T as *mut u8, array, self.local_index);
             val
         }

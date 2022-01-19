@@ -10,7 +10,7 @@ use step_by::*;
 mod zip;
 use zip::*;
 
-use crate::array::LamellarArrayRead;
+use crate::array::LamellarArrayGet;
 use crate::memregion::Dist;
 use crate::LamellarArray;
 use crate::LamellarTeamRT;
@@ -24,7 +24,7 @@ use std::sync::Arc;
 pub trait SerialIterator {
     type Item;
     type ElemType: Dist + 'static;
-    type Array: LamellarArrayRead<Self::ElemType>;
+    type Array: LamellarArrayGet<Self::ElemType>;
     fn next(&mut self) -> Option<Self::Item>;
     fn advance_index(&mut self, count: usize);
     fn array(&self) -> Self::Array;
@@ -74,7 +74,7 @@ where
     }
 }
 
-pub struct LamellarArrayIter<'a, T: Dist + 'static, A: LamellarArrayRead<T>> {
+pub struct LamellarArrayIter<'a, T: Dist + 'static, A: LamellarArrayGet<T>> {
     array: A,
     buf_0: LocalMemoryRegion<T>,
     // buf_1: LocalMemoryRegion<T>,
@@ -84,10 +84,10 @@ pub struct LamellarArrayIter<'a, T: Dist + 'static, A: LamellarArrayRead<T>> {
     _marker: PhantomData<&'a T>,
 }
 
-unsafe impl<'a, T: Dist + 'static, A: LamellarArrayRead<T>> Sync for LamellarArrayIter<'a, T, A> {}
-unsafe impl<'a, T: Dist + 'static, A: LamellarArrayRead<T>> Send for LamellarArrayIter<'a, T, A> {}
+unsafe impl<'a, T: Dist + 'static, A: LamellarArrayGet<T>> Sync for LamellarArrayIter<'a, T, A> {}
+unsafe impl<'a, T: Dist + 'static, A: LamellarArrayGet<T>> Send for LamellarArrayIter<'a, T, A> {}
 
-impl<'a, T: Dist + 'static, A: LamellarArrayRead<T>> LamellarArrayIter<'a, T, A> {
+impl<'a, T: Dist + 'static, A: LamellarArrayGet<T>> LamellarArrayIter<'a, T, A> {
     pub(crate) fn new(
         array: A,
         team: Pin<Arc<LamellarTeamRT>>,
@@ -150,13 +150,15 @@ impl<'a, T: Dist + 'static, A: LamellarArrayRead<T>> LamellarArrayIter<'a, T, A>
     // }
 }
 
-impl<'a, T: Dist + 'static, A: LamellarArrayRead<T> + Clone> SerialIterator for LamellarArrayIter<'a, T, A> {
+impl<'a, T: Dist + 'static, A: LamellarArrayGet<T> + Clone> SerialIterator for LamellarArrayIter<'a, T, A> {
     type ElemType = T;
     type Item = &'a T;
     type Array = A;
     fn next(&mut self) -> Option<Self::Item> {
+        // println!("next {:?} {:?} {:?} {:?}",self.index,self.array.len(),self.buf_index,self.buf_0.len());
         let res = if self.index < self.array.len() {
             if self.buf_index == self.buf_0.len() {
+                // println!("need to get new data");
                 //need to get new data
                 self.buf_index = 0;
                 // self.fill_buffer(self.index);

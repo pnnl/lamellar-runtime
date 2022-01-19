@@ -19,7 +19,6 @@ pub struct SharedMemoryRegion<T: Dist> {
 }
 
 impl<T: Dist> crate::DarcSerde for SharedMemoryRegion<T> {
-    ///hmmm why do I need to implement manually, I think i would work with the macro automatically now?
     fn ser(&self, num_pes: usize, cur_pe: Result<usize, crate::IdError>) {
         // println!("in shared ser");
         match cur_pe {
@@ -59,6 +58,7 @@ impl<T: Dist> SharedMemoryRegion<T> {
         team: Pin<Arc<LamellarTeamRT>>,
         alloc: AllocationType,
     ) -> Result<SharedMemoryRegion<T>, anyhow::Error> {
+        // println!("creating new shared mem region {:?} {:?}",size,alloc);
         Ok(SharedMemoryRegion {
             mr: Darc::try_new(
                 team.clone(),
@@ -200,6 +200,7 @@ impl<T: Dist> AsBase for SharedMemoryRegion<T> {
     unsafe fn to_base<B: Dist>(self) -> LamellarMemoryRegion<B> {
         let u8_offset = self.sub_region_offset * std::mem::size_of::<T>();
         let u8_size = self.sub_region_size * std::mem::size_of::<T>();
+        // println!("to_base");
         SharedMemoryRegion {
             mr: self.mr.clone(),
             sub_region_offset: u8_offset / std::mem::size_of::<B>(),
@@ -240,6 +241,7 @@ impl<T: Dist> RTMemoryRegionRDMA<T> for SharedMemoryRegion<T> {
         self.mr.put_slice(pe, self.sub_region_offset + index, data)
     }
     unsafe fn iget_slice(&self, pe: usize, index: usize, data: &mut [T]) {
+        // println!("iget_slice {:?} {:?}",pe,self.sub_region_offset + index);
         self.mr.iget_slice(pe, self.sub_region_offset + index, data)
     }
 }
@@ -255,6 +257,7 @@ impl<T: Dist> LamellarRead for SharedMemoryRegion<T> {}
 
 impl<T: Dist> From<&SharedMemoryRegion<T>> for LamellarArrayInput<T> {
     fn from(smr: &SharedMemoryRegion<T>) -> Self {
+        // println!("from");
         LamellarArrayInput::SharedMemRegion(smr.clone())
     }
 }
@@ -265,7 +268,7 @@ impl<T: Dist> MyFrom<&SharedMemoryRegion<T>> for LamellarArrayInput<T> {
     }
 }
 
-// //#[prof]
+//#[prof]
 // impl<T: Dist> Drop for SharedMemoryRegion<T> {
 //     fn drop(&mut self) {
 //         println!("dropping shared memory region");

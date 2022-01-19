@@ -42,7 +42,7 @@ fn main() {
             );
             println!("[{:?}] Before {:?}", my_pe, array_slice);
             unsafe {
-                array.get(num_pes - 1, 0, array.clone());
+                array.get_unchecked(num_pes - 1, 0, array.clone());
             }
             while array_slice[ARRAY_LEN - 1] == my_pe as u8 {
                 std::thread::yield_now();
@@ -63,7 +63,7 @@ fn main() {
             );
             println!("[{:?}] Before {:?}", my_pe, data_slice);
             unsafe {
-                array.get(num_pes - 1, 0, data.clone());
+                array.get_unchecked(num_pes - 1, 0, data.clone());
             }
             while data_slice[ARRAY_LEN - 1] == my_pe as u8 {
                 std::thread::yield_now();
@@ -73,7 +73,7 @@ fn main() {
                 "-------------------------------------------------------------------------------"
             );
             unsafe {
-                array.get(my_pe, 0, data.clone());
+                array.get_unchecked(my_pe, 0, data.clone());
             } // reset local_array;
         }
         world.barrier();
@@ -88,7 +88,7 @@ fn main() {
 
         //stripe pe ids accross all shared mem regions
         for i in 0..ARRAY_LEN {
-            unsafe { array.get(i % num_pes, i, data.sub_region(i..=i)) };
+            unsafe { array.get_unchecked(i % num_pes, i, data.sub_region(i..=i)) };
         }
 
         for i in 0..ARRAY_LEN {

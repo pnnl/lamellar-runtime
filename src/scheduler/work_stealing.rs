@@ -14,6 +14,8 @@ use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, AtomicU8, AtomicUsize, Ordering};
 use std::sync::{Arc, Weak};
 use std::thread;
+use std::panic;
+use std::process;
 // use std::time::Instant;
 
 pub(crate) struct WorkStealingThread {
@@ -351,6 +353,12 @@ impl WorkStealingInner {
             work_workers.push(work_worker);
         }
 
+        let orig_hook = panic::take_hook();
+        panic::set_hook(Box::new(move |panic_info| {
+            // invoke the default handler and exit the process
+            orig_hook(panic_info);
+            process::exit(1);
+        }));
         for _i in 0..num_workers {
             let work_worker = work_workers.pop().unwrap();
             let worker = WorkStealingThread {

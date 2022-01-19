@@ -7,7 +7,6 @@ use crate::darc::DarcMode;
 use crate::lamellar_request::LamellarRequest;
 use crate::lamellar_team::{IntoLamellarTeam, LamellarTeamRT};
 use crate::memregion::Dist;
-use core::marker::PhantomData;
 use std::sync::Arc;
 
 #[lamellar_impl::AmDataRT(Clone)]
@@ -57,13 +56,13 @@ impl<T: Dist> ReadOnlyArray<T> {
         self.array.len()
     }
 
-    pub unsafe fn get_unchecked<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(
-        &self,
-        index: usize,
-        buf: U,
-    ) {
-        self.array.get_unchecked(index, buf)
-    }
+    // pub unsafe fn get_unchecked<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(
+    //     &self,
+    //     index: usize,
+    //     buf: U,
+    // ) {
+    //     self.array.get_unchecked(index, buf)
+    // }
     pub fn iget<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(&self, index: usize, buf: U) {
         self.array.iget(index, buf)
     }
@@ -126,40 +125,40 @@ impl<T: Dist> From<UnsafeArray<T>> for ReadOnlyArray<T> {
     }
 }
 
-impl <T: Dist> AsBytes<T,u8> for ReadOnlyArray<T>{
-    type Array = ReadOnlyArray<u8>;
-    #[doc(hidden)]
-    unsafe fn as_bytes(&self) -> Self::Array {
-        ReadOnlyArray {
-            array: self.array.as_bytes(),
-        }
-    }
-}
+// impl <T: Dist> AsBytes<T,u8> for ReadOnlyArray<T>{
+//     type Array = ReadOnlyArray<u8>;
+//     #[doc(hidden)]
+//     unsafe fn as_bytes(&self) -> Self::Array {
+//         ReadOnlyArray {
+//             array: self.array.as_bytes(),
+//         }
+//     }
+// }
 
-impl <T: Dist> FromBytes<T,u8> for ReadOnlyArray<u8>{
-    #[doc(hidden)]
-    type Array = ReadOnlyArray<T>;
-    unsafe fn from_bytes(self) -> Self::Array {
-        ReadOnlyArray {
-            array: self.array.from_bytes(),
-        }
-    }
-}
+// impl <T: Dist> FromBytes<T,u8> for ReadOnlyArray<u8>{
+//     #[doc(hidden)]
+//     type Array = ReadOnlyArray<T>;
+//     unsafe fn from_bytes(self) -> Self::Array {
+//         ReadOnlyArray {
+//             array: self.array.from_bytes(),
+//         }
+//     }
+// }
 
-impl<T: Dist + serde::Serialize + serde::de::DeserializeOwned + 'static> ReadOnlyArray<T> {
-    pub fn reduce(&self, op: &str) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
-        self.array.reduce(op)
-    }
-    pub fn sum(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
-        self.array.reduce("sum")
-    }
-    pub fn prod(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
-        self.array.reduce("prod")
-    }
-    pub fn max(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
-        self.array.reduce("max")
-    }
-}
+// impl<T: Dist + serde::Serialize + serde::de::DeserializeOwned + 'static> ReadOnlyArray<T> {
+//     pub fn reduce(&self, op: &str) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+//         self.array.reduce(op)
+//     }
+//     pub fn sum(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+//         self.array.reduce("sum")
+//     }
+//     pub fn prod(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+//         self.array.reduce("prod")
+//     }
+//     pub fn max(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+//         self.array.reduce("max")
+//     }
+// }
 
 impl<T: Dist> DistIteratorLauncher for ReadOnlyArray<T> {
     fn global_index_from_local(&self, index: usize, chunk_size: usize) -> usize {
@@ -231,14 +230,7 @@ impl<T: Dist> LamellarArray<T> for ReadOnlyArray<T> {
         // println!("done in wait all {:?}",std::time::SystemTime::now());
     }
 }
-impl<T: Dist + 'static> LamellarArrayRead<T> for ReadOnlyArray<T> {
-    // unsafe fn get_unchecked<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(
-    //     &self,
-    //     index: usize,
-    //     buf: U,
-    // ) {
-    //     self.get_unchecked(index, buf)
-    // }
+impl<T: Dist + 'static> LamellarArrayGet<T> for ReadOnlyArray<T> {
     fn iget<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(&self, index: usize, buf: U) {
         self.iget(index, buf)
     }

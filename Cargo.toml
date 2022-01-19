@@ -47,6 +47,9 @@ trybuild = "1.0"
 matrixmultiply = "0.3"
 rayon = "1.1"
 hostname = "0.3"
+nix = "0.23"
+assert_cmd = "2.0.4"
+serial_test = "*"
 #packed_simd = { version = "0.3.4", package = "packed_simd_2" } #uncomment if using nightly tool chain and want to run the am_flops example
 
 [workspace]
@@ -72,10 +75,14 @@ debug = true
 name="lamellar"
 path="src/lib.rs"
 
-[[test]]
-name= "tests"
-path = "tests/progress.rs"
+#[[test]]
+#name= "tests"
+#path = "tests/progress.rs"
 
+##------tests-------##
+[[example]]
+name = "iput"
+path = "tests/array/iput.rs"
 
 ##------------ Bandwidth Examples -----------------##
 

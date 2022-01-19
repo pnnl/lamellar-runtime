@@ -34,9 +34,22 @@ pub struct UnsafeArray<T: Dist> {
     elem_per_pe: f64, //used to evenly distribute elems
     sub_array_offset: usize,
     sub_array_size: usize,
-
+    
     // typeid: TypeId,
     phantom: PhantomData<T>,
+}
+
+
+
+#[lamellar_impl::AmDataRT(Clone)]
+pub struct UnsafeByteArray{
+    inner: Darc<UnsafeArrayInner>,
+    distribution: Distribution,
+    elem_size: usize,
+    size: usize,
+    elem_per_pe: f64, 
+    sub_array_offset: usize,
+    sub_array_size: usize,
 }
 
 //#[prof]
@@ -117,7 +130,14 @@ impl<T: Dist> UnsafeArray<T> {
 
     pub fn pe_for_dist_index(&self, index: usize) -> usize {
         match self.distribution {
-            Distribution::Block => (index as f64 / self.elem_per_pe).floor() as usize,
+            Distribution::Block => {
+                let mut pe = ((index) as f64 / self.elem_per_pe).floor() as usize;
+                let end_index = (self.elem_per_pe * (pe+1) as f64).round() as usize;
+                if index >= end_index{
+                    pe += 1;
+                }
+                pe
+            },
             Distribution::Cyclic => index % self.inner.team.num_pes(),
         }
     }
@@ -149,8 +169,10 @@ impl<T: Dist> UnsafeArray<T> {
         let num_pes = self.inner.team.num_pes();
         match self.distribution {
             Distribution::Block => {
-                let start_pe = (index as f64 / self.elem_per_pe).floor() as usize;
-                let end_pe = (((index + len) as f64) / self.elem_per_pe).ceil() as usize;
+                // let start_pe = ((index+1) as f64 / self.elem_per_pe).round() as usize;
+                let start_pe = self.pe_for_dist_index(index);
+                // let end_pe = (((index + len) as f64) / self.elem_per_pe).round() as usize;
+                let end_pe = self.pe_for_dist_index(index+len);
                 let num_elems_local = self.num_elems_local();
                 if my_pe == start_pe || my_pe == end_pe {
                     let start_index = index - (self.elem_per_pe * my_pe as f64).round() as usize;
@@ -159,8 +181,10 @@ impl<T: Dist> UnsafeArray<T> {
                     } else {
                         start_index + len
                     };
+                    // println!("as slice si: {:?} ei {:?}",start_index,end_index);
                     &mut slice[start_index..end_index]
                 } else {
+                    // println!("full as slice si: {:?} ei {:?}",0,num_elems_local);
                     &mut slice[0..num_elems_local]
                 }
             }
@@ -201,6 +225,7 @@ impl<T: Dist> UnsafeArray<T> {
                 start, end, self.sub_array_size
             );
         }
+        // println!("new subarray {:?} {:?} {:?} {:?}",start,end,end-start,self.sub_array_offset + start);
         UnsafeArray {
             inner: self.inner.clone(),
             distribution: self.distribution,
@@ -269,84 +294,128 @@ impl<T: Dist> From<ReadOnlyArray<T>> for UnsafeArray<T> {
     }
 }
 
-impl <T: Dist> AsBytes<T,u8> for UnsafeArray<T>{
-    type Array = UnsafeArray<u8>;
-    #[doc(hidden)]
-    unsafe fn as_bytes(&self) -> Self::Array {
-        let u8_size = self.size * std::mem::size_of::<T>();
-        let b_size = u8_size / std::mem::size_of::<u8>();
-        let elem_per_pe = b_size as f64 / self.inner.team.num_pes() as f64;
-        let u8_offset = self.sub_array_offset * std::mem::size_of::<T>();
-        let u8_sub_size = self.sub_array_size * std::mem::size_of::<T>();
+// impl <T: Dist> AsBytes<T,u8> for UnsafeArray<T>{
+//     type Array = UnsafeArray<u8>;
+//     #[doc(hidden)]
+//     unsafe fn as_bytes(&self) -> Self::Array {
+//         let u8_size = self.size * std::mem::size_of::<T>();
+//         let b_size = u8_size / std::mem::size_of::<u8>();
+//         let elem_per_pe = b_size as f64 / self.inner.team.num_pes() as f64;
+//         let u8_offset = self.sub_array_offset * std::mem::size_of::<T>();
+//         let u8_sub_size = self.sub_array_size * std::mem::size_of::<T>();
 
+//         UnsafeArray {
+//             inner: self.inner.clone(),
+//             distribution: self.distribution,
+//             size: b_size,
+//             elem_per_pe: elem_per_pe,
+//             sub_array_offset: u8_offset / std::mem::size_of::<u8>(),
+//             sub_array_size: u8_sub_size / std::mem::size_of::<u8>(),
+//             // my_pe: self.inner.my_pe,
+//             phantom: PhantomData,
+//         }
+//     }
+// }
+
+// impl <T: Dist> AsBytes for UnsafeArray<T>{
+//     type Array = UnsafeByteArray;
+//     #[doc(hidden)]
+//     unsafe fn as_bytes(&self) -> Self::Array {
+//         UnsafeByteArray {
+//             inner: self.inner.clone(),
+//             distribution: self.distribution,
+//             size: self.size,
+//             elem_size: std::mem::size_of::<T>(),
+//             elem_per_pe: self.elem_per_pe,
+//             sub_array_offset: self.sub_array_offset,
+//             sub_array_size: self.sub_array_size
+//         }
+//     }
+// }
+
+impl<T: Dist> From<UnsafeByteArray> for UnsafeArray<T>{
+    fn from(array: UnsafeByteArray) -> Self{
         UnsafeArray {
-            inner: self.inner.clone(),
-            distribution: self.distribution,
-            size: b_size,
-            elem_per_pe: elem_per_pe,
-            sub_array_offset: u8_offset / std::mem::size_of::<u8>(),
-            sub_array_size: u8_sub_size / std::mem::size_of::<u8>(),
-            // my_pe: self.inner.my_pe,
+            inner: array.inner.clone(),
+            distribution: array.distribution,
+            size: array.size,
+            elem_per_pe: array.elem_per_pe,
+            sub_array_offset: array.sub_array_offset,
+            sub_array_size: array.sub_array_size,
             phantom: PhantomData,
         }
     }
 }
 
-impl <T: Dist> FromBytes<T,u8> for UnsafeArray<u8>{
-    type Array = UnsafeArray<T>;
-    #[doc(hidden)]
-    unsafe fn from_bytes(self) -> Self::Array {
-        let u8_size = self.size * std::mem::size_of::<u8>();
-        let b_size = u8_size / std::mem::size_of::<T>();
-        let elem_per_pe = b_size as f64 / self.inner.team.num_pes() as f64;
-        let u8_offset = self.sub_array_offset * std::mem::size_of::<u8>();
-        let u8_sub_size = self.sub_array_size * std::mem::size_of::<u8>();
-
-        UnsafeArray {
-            inner: self.inner.clone(),
-            distribution: self.distribution,
-            size: b_size,
-            elem_per_pe: elem_per_pe,
-            sub_array_offset: u8_offset / std::mem::size_of::<T>(),
-            sub_array_size: u8_sub_size / std::mem::size_of::<T>(),
-            // my_pe: self.inner.my_pe,
-            // typeid: self.typeid,
-            phantom: PhantomData,
+impl<T: Dist> From<UnsafeArray<T>> for UnsafeByteArray{
+    fn from(array: UnsafeArray<T>) -> Self{
+        UnsafeByteArray {
+            inner: array.inner.clone(),
+            distribution: array.distribution,
+            size: array.size,
+            elem_size: std::mem::size_of::<T>(),
+            elem_per_pe: array.elem_per_pe,
+            sub_array_offset: array.sub_array_offset,
+            sub_array_size: array.sub_array_size
         }
     }
 }
 
-impl<T: Dist + serde::Serialize + serde::de::DeserializeOwned + 'static> UnsafeArray<T> {
-    pub fn reduce_inner(
-        &self,
-        func: LamellarArcAm,
-    ) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
-        if let Ok(my_pe) = self.inner.team.team_pe_id() {
-            self.inner.team.exec_arc_am_pe::<T>(
-                my_pe,
-                func,
-                Some(self.inner.array_counters.clone()),
-            )
-        } else {
-            self.inner
-                .team
-                .exec_arc_am_pe::<T>(0, func, Some(self.inner.array_counters.clone()))
-        }
-    }
+// impl <T: Dist> FromBytes<T,u8> for UnsafeArray<u8>{
+//     type Array = UnsafeArray<T>;
+//     #[doc(hidden)]
+//     unsafe fn from_bytes(self) -> Self::Array {
+//         let u8_size = self.size * std::mem::size_of::<u8>();
+//         let b_size = u8_size / std::mem::size_of::<T>();
+//         let elem_per_pe = b_size as f64 / self.inner.team.num_pes() as f64;
+//         let u8_offset = self.sub_array_offset * std::mem::size_of::<u8>();
+//         let u8_sub_size = self.sub_array_size * std::mem::size_of::<u8>();
 
-    pub fn reduce(&self, op: &str) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
-        self.reduce_inner(self.get_reduction_op(op.to_string()))
-    }
-    pub fn sum(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
-        self.reduce("sum")
-    }
-    pub fn prod(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
-        self.reduce("prod")
-    }
-    pub fn max(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
-        self.reduce("max")
-    }
-}
+//         UnsafeArray {
+//             inner: self.inner.clone(),
+//             distribution: self.distribution,
+//             size: b_size,
+//             elem_per_pe: elem_per_pe,
+//             sub_array_offset: u8_offset / std::mem::size_of::<T>(),
+//             sub_array_size: u8_sub_size / std::mem::size_of::<T>(),
+//             // my_pe: self.inner.my_pe,
+//             // typeid: self.typeid,
+//             phantom: PhantomData,
+//         }
+//     }
+// }
+
+// impl<T: Dist + serde::Serialize + serde::de::DeserializeOwned + 'static> UnsafeArray<T> {
+//     pub fn reduce_inner(
+//         &self,
+//         func: LamellarArcAm,
+//     ) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+//         if let Ok(my_pe) = self.inner.team.team_pe_id() {
+//             self.inner.team.exec_arc_am_pe::<T>(
+//                 my_pe,
+//                 func,
+//                 Some(self.inner.array_counters.clone()),
+//             )
+//         } else {
+//             self.inner
+//                 .team
+//                 .exec_arc_am_pe::<T>(0, func, Some(self.inner.array_counters.clone()))
+//         }
+//     }
+
+//     pub fn reduce(&self, op: &str) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+//         self.reduce_inner(self.get_reduction_op(op.to_string()))
+//     }
+//     pub fn sum(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+//         self.reduce("sum")
+//     }
+//     pub fn prod(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+//         self.reduce("prod")
+//     }
+//     pub fn max(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+//         self.reduce("max")
+//     }
+// }
 
 impl<T: Dist> private::ArrayExecAm<T> for UnsafeArray<T> {
     fn team(&self) -> Pin<Arc<LamellarTeamRT>> {
@@ -364,10 +433,11 @@ impl<T: Dist> private::LamellarArrayPrivate<T> for UnsafeArray<T> {
         self.local_as_mut_ptr()
     }
     fn pe_for_dist_index(&self, index: usize) -> usize {
-        match self.distribution {
-            Distribution::Block => (index as f64 / self.elem_per_pe).floor() as usize,
-            Distribution::Cyclic => index % self.inner.team.num_pes(),
-        }
+        self.pe_for_dist_index(index)
+        // match self.distribution {
+        //     Distribution::Block => ((index+1) as f64 / self.elem_per_pe).round() as usize,
+        //     Distribution::Cyclic => index % self.inner.team.num_pes(),
+        // }
     }
     fn pe_offset_for_dist_index(&self, pe: usize, index: usize) -> usize {
         match self.distribution {
@@ -465,30 +535,146 @@ impl<T: Dist + std::fmt::Debug> ArrayPrint<T> for UnsafeArray<T> {
     }
 }
 
-impl<T: Dist + serde::Serialize + serde::de::DeserializeOwned + 'static> LamellarArrayReduce<T>
-    for UnsafeArray<T>
-{
-    fn get_reduction_op(&self, op: String) -> LamellarArcAm {
-        //do this the same way we did add...
-        // unsafe {
-        REDUCE_OPS
-            .get(&(std::any::TypeId::of::<T>(), op))
-            .expect("unexpected reduction type")(
-            unsafe { self.clone().as_bytes().into() },
-            self.inner.team.num_pes(),
-        )
-        // }
+// impl<T: Dist + serde::Serialize + serde::de::DeserializeOwned + 'static> LamellarArrayReduce<T>
+//     for UnsafeArray<T>
+// {
+//     fn get_reduction_op(&self, op: String) -> LamellarArcAm {
+//         //do this the same way we did add...
+//         // unsafe {
+//         REDUCE_OPS
+//             .get(&(std::any::TypeId::of::<T>(), op))
+//             .expect("unexpected reduction type")(
+//             unsafe { self.clone().into() },
+//             self.inner.team.num_pes(),
+//         )
+//         // }
+//     }
+//     fn reduce(&self, op: &str) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+//         self.reduce(op)
+//     }
+//     fn sum(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+//         self.sum()
+//     }
+//     fn max(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+//         self.max()
+//     }
+//     fn prod(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+//         self.prod()
+//     }
+// }
+
+impl UnsafeByteArray{
+
+    pub(crate) fn pe_for_dist_index(&self, index: usize) -> usize {
+        match self.distribution {
+            Distribution::Block => {
+                let mut pe = ((index) as f64 / self.elem_per_pe).floor() as usize;
+                let end_index = (self.elem_per_pe * (pe+1) as f64).round() as usize;
+                if index >= end_index{
+                    pe += 1;
+                }
+                pe
+            },
+            Distribution::Cyclic => index % self.inner.team.num_pes(),
+        }
     }
-    fn reduce(&self, op: &str) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
-        self.reduce(op)
+
+    pub(crate) fn num_elems_local(&self) -> usize {
+        match self.distribution {
+            Distribution::Block => {
+                ((self.elem_per_pe * (self.inner.my_pe + 1) as f64).round()
+                    - (self.elem_per_pe * self.inner.my_pe as f64).round()) as usize
+            }
+            Distribution::Cyclic => {
+                let rem = self.size % self.inner.team.num_pes();
+                if self.inner.my_pe < rem {
+                    self.elem_per_pe as usize + 1
+                } else {
+                    self.elem_per_pe as usize
+                }
+            }
+        }
     }
-    fn sum(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
-        self.sum()
+
+    pub(crate) unsafe fn local_as_mut_slice(&self) -> &mut [u8] {
+        let slice =
+            self.inner.mem_region.as_casted_mut_slice::<u8>().expect(
+                "memory doesnt exist on this pe (this should not happen for arrays currently)",
+            );
+        let index = self.sub_array_offset;
+        let len = self.sub_array_size;
+        let my_pe = self.inner.my_pe;
+        let num_pes = self.inner.team.num_pes();
+        match self.distribution {
+            Distribution::Block => {
+                // let start_pe = ((index+1) as f64 / self.elem_per_pe).round() as usize;
+                let start_pe = self.pe_for_dist_index(index);
+                // let end_pe = (((index + len) as f64) / self.elem_per_pe).round() as usize;
+                let end_pe = self.pe_for_dist_index(index+len);
+                let num_elems_local = self.num_elems_local();
+                if my_pe == start_pe || my_pe == end_pe {
+                    let start_index = (index - (self.elem_per_pe * my_pe as f64).round() as usize)*self.elem_size;
+                    let end_index = if start_index + len > num_elems_local {
+                        num_elems_local*self.elem_size
+                    } else {
+                        (start_index + len)*self.elem_size
+                    };
+                    // println!("as slice si: {:?} ei {:?}",start_index,end_index);
+                    &mut slice[start_index..end_index]
+                } else {
+                    // println!("full as slice si: {:?} ei {:?}",0,num_elems_local);
+                    &mut slice[0..(num_elems_local*self.elem_size)]
+                }
+            }
+            Distribution::Cyclic => {
+                let start_index = (index / num_pes + if my_pe >= index % num_pes { 0 } else { 1 })*self.elem_size;
+                let remainder = (index + len) % num_pes;
+                let end_index = ((index + len) / num_pes
+                    + if my_pe < remainder && remainder > 0 {
+                        1
+                    } else {
+                        0
+                    })*self.elem_size;
+                &mut slice[start_index..end_index]
+            }
+        }
     }
-    fn max(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
-        self.max()
-    }
-    fn prod(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
-        self.prod()
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn pe_for_dist_index(){
+        for num_pes in 2..200{
+            println!("num_pes {:?}",num_pes);
+            for len in num_pes..2000{
+                let mut elems_per_pe = vec![0;num_pes];
+                let mut pe_for_elem = vec![0;len];
+                let epp = len as f32/num_pes as f32;
+                let mut cur_elem = 0;
+                for pe in 0..num_pes{
+                    elems_per_pe[pe] = (((pe+1) as f32 * epp).round() - (pe as f32 * epp).round()) as usize;
+                    for _i in 0..elems_per_pe[pe]{
+                        pe_for_elem[cur_elem] = pe;
+                        cur_elem +=1;
+                    }
+                }
+                for elem in 0..len{
+                    //the actual calculation
+                    let mut calc_pe = (((elem) as f32 / epp).floor()) as usize;
+                    let end_i = (epp * (calc_pe+1) as f32).round() as usize;
+                    if elem >= end_i{
+                        calc_pe +=1;
+                    }
+                    //--------------------
+                    if calc_pe != pe_for_elem[elem]{
+                        println!("npe: {:?} len {:?} e: {:?} eep: {:?} cpe: {:?}  ei {:?}",num_pes,len,elem,epp,((elem) as f32 / epp),end_i);
+                        println!("{:?}",elems_per_pe);
+                        println!("{:?}",pe_for_elem);
+                    }
+                    assert_eq!(calc_pe,pe_for_elem[elem]);
+                }
+            }
+        }
     }
 }

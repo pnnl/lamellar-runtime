@@ -13,7 +13,7 @@ struct ReadOnlyAm {
 #[lamellar::am]
 impl LamellarAM for ReadOnlyAm {
     fn exec(self) {
-        println!("{:?} {:?}", self.orig_pe, self.local_as_slice());
+        println!("{:?} {:?}", self.orig_pe, self.data.local_as_slice());
     }
 }
 

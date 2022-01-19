@@ -646,7 +646,7 @@ impl<T: 'static> LamellarAM for DroppedWaitAM<T> {
             // let inner = unsafe {&*(self.inner_addr as *mut DarcInner<T>)}; //now we need to true type to deallocate appropriately
             let _item = Box::from_raw(wrapped.inner.as_ref().item as *mut T);
             let _team = Arc::from_raw(wrapped.inner.as_ref().team); //return to rust to drop appropriately
-                                                                    // println!("Darc freed! {:x} {:?}",self.inner_addr,mode_refs);
+            // println!("Darc freed! {:x} {:?}",self.inner_addr,mode_refs);
             self.team.lamellae.free(self.inner_addr);
             // println!("leaving DroppedWaitAM");
         }

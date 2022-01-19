@@ -12,16 +12,16 @@ use std::pin::Pin;
 use std::sync::Arc;
 
 pub(crate) mod r#unsafe;
-pub use r#unsafe::{operations::UnsafeArrayOp, UnsafeArray};
+pub use r#unsafe::{operations::UnsafeArrayOp, UnsafeArray, UnsafeByteArray};
 pub(crate) mod read_only;
 pub use read_only::ReadOnlyArray;
 pub(crate) mod local_only;
 pub use local_only::LocalOnlyArray;
 pub(crate) mod atomic;
-pub use atomic::{AtomicArray, operations::AtomicArrayOp, AtomicOps};
+pub use atomic::{AtomicArray, AtomicByteArray, operations::AtomicArrayOp, AtomicOps};
 
 pub(crate) mod collective_atomic;
-pub use collective_atomic::{CollectiveAtomicArray, operations::CollectiveAtomicArrayOp};
+pub use collective_atomic::{CollectiveAtomicArray,CollectiveAtomicByteArray, operations::CollectiveAtomicArrayOp};
 
 pub mod iterator;
 pub use iterator::distributed_iterator::DistributedIterator;
@@ -53,16 +53,16 @@ pub struct ReduceKey {
 crate::inventory::collect!(ReduceKey);
 
 // lamellar_impl::generate_reductions_for_type_rt!(u8, u16, u32, u64, u128, usize);
-// lamellar_impl::generate_ops_for_type_rt!(true, u8, u16, u32, u64, u128, usize);
+lamellar_impl::generate_ops_for_type_rt!(true, u8, u16, u32, u64, u128, usize);
 
-lamellar_impl::generate_reductions_for_type_rt!(u8,usize);
-lamellar_impl::generate_ops_for_type_rt!(true, u8,usize);
+// lamellar_impl::generate_reductions_for_type_rt!(u8,usize);
+// lamellar_impl::generate_ops_for_type_rt!(true, u8,usize);
 
 // lamellar_impl::generate_reductions_for_type_rt!(i8, i16, i32, i64, i128, isize);
-// lamellar_impl::generate_ops_for_type_rt!(true, i8, i16, i32, i64, i128, isize);
+lamellar_impl::generate_ops_for_type_rt!(true, i8, i16, i32, i64, i128, isize);
 
 // lamellar_impl::generate_reductions_for_type_rt!(f32, f64);
-// lamellar_impl::generate_ops_for_type_rt!(false, f32, f64);
+lamellar_impl::generate_ops_for_type_rt!(false, f32, f64);
 
 #[derive(serde::Serialize, serde::Deserialize, Clone, Copy, Debug)]
 pub enum Distribution {
@@ -301,6 +301,27 @@ pub enum LamellarReadArray<T: Dist + 'static> {
     CollectiveAtomicArray(CollectiveAtomicArray<T>),
 }
 
+impl<T: Dist + 'static> crate::DarcSerde for LamellarReadArray<T> {
+    fn ser(&self, num_pes: usize, cur_pe: Result<usize, crate::IdError>) {
+        // println!("in shared ser");
+        match self {
+            LamellarReadArray::UnsafeArray(array) => array.ser(num_pes,cur_pe),
+            LamellarReadArray::ReadOnlyArray(array) => array.ser(num_pes,cur_pe),
+            LamellarReadArray::AtomicArray(array) => array.ser(num_pes,cur_pe),
+            LamellarReadArray::CollectiveAtomicArray(array) => array.ser(num_pes,cur_pe),
+        }
+    }
+    fn des(&self, cur_pe: Result<usize, crate::IdError>) {
+        // println!("in shared des");
+        match self {
+            LamellarReadArray::UnsafeArray(array) => array.des(cur_pe),
+            LamellarReadArray::ReadOnlyArray(array) => array.des(cur_pe),
+            LamellarReadArray::AtomicArray(array) => array.des(cur_pe),
+            LamellarReadArray::CollectiveAtomicArray(array) => array.des(cur_pe),
+        }
+    }
+}
+
 #[enum_dispatch]
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 #[serde(bound = "T: Dist + serde::Serialize + serde::de::DeserializeOwned")]
@@ -310,9 +331,28 @@ pub enum LamellarWriteArray<T: Dist> {
     CollectiveAtomicArray(CollectiveAtomicArray<T>),
 }
 
+impl<T: Dist + 'static> crate::DarcSerde for LamellarWriteArray<T> {
+    fn ser(&self, num_pes: usize, cur_pe: Result<usize, crate::IdError>) {
+        // println!("in shared ser");
+        match self {
+            LamellarWriteArray::UnsafeArray(array) => array.ser(num_pes,cur_pe),
+            LamellarWriteArray::AtomicArray(array) => array.ser(num_pes,cur_pe),
+            LamellarWriteArray::CollectiveAtomicArray(array) => array.ser(num_pes,cur_pe),
+        }
+    }
+    fn des(&self, cur_pe: Result<usize, crate::IdError>) {
+        // println!("in shared des");
+        match self {
+            LamellarWriteArray::UnsafeArray(array) => array.des(cur_pe),
+            LamellarWriteArray::AtomicArray(array) => array.des(cur_pe),
+            LamellarWriteArray::CollectiveAtomicArray(array) => array.des(cur_pe),
+        }
+    }
+}
+
 pub(crate) mod private {
     use crate::array::{
-        LamellarArray, AtomicArray, LamellarReadArray, LamellarWriteArray, ReadOnlyArray, UnsafeArray,CollectiveAtomicArray,
+        AtomicArray, LamellarReadArray, LamellarWriteArray, ReadOnlyArray, UnsafeArray,CollectiveAtomicArray,
     };
     use crate::active_messaging::*;
     use crate::lamellar_request::LamellarRequest;
@@ -400,38 +440,38 @@ pub trait LamellarArray<T: Dist>: private::LamellarArrayPrivate<T>{
 // pub trait ArrayIterator{
 
 // }
-#[doc(hidden)]
-// #[enum_dispatch(LamellarReadArray<T>,LamellarWriteArray<T>)]
-pub trait AsBytes<T: Dist, B: Dist>: LamellarArray<T> {
-    // #[doc(hidden)]
-    // unsafe fn to_base_inner<B: Dist>(self) -> LamellarArray<B>;
-    type Array: LamellarArray<B>;
-    #[doc(hidden)]
-    unsafe fn as_bytes(&self) -> Self::Array; 
-}
+// #[doc(hidden)]
+// // #[enum_dispatch(LamellarReadArray<T>,LamellarWriteArray<T>)]
+// pub trait AsBytes<T: Dist, B: Dist>: LamellarArray<T> {
+//     // #[doc(hidden)]
+//     // unsafe fn to_base_inner<B: Dist>(self) -> LamellarArray<B>;
+//     type Array: LamellarArray<B>;
+//     #[doc(hidden)]
+//     unsafe fn as_bytes(&self) -> Self::Array; 
+// }
 
-#[doc(hidden)]
-// #[enum_dispatch(LamellarReadArray<T>,LamellarWriteArray<T>)]
-pub trait FromBytes<T: Dist,B: Dist>: LamellarArray<B> {
-    // #[doc(hidden)]
-    // unsafe fn to_base_inner<B: Dist>(self) -> LamellarArray<B>;
-    type Array: LamellarArray<T>;
-    #[doc(hidden)]
-    unsafe fn from_bytes(self) -> Self::Array; 
-}
+// #[doc(hidden)]
+// // #[enum_dispatch(LamellarReadArray<T>,LamellarWriteArray<T>)]
+// pub trait FromBytes<T: Dist,B: Dist>: LamellarArray<B> {
+//     // #[doc(hidden)]
+//     // unsafe fn to_base_inner<B: Dist>(self) -> LamellarArray<B>;
+//     type Array: LamellarArray<T>;
+//     #[doc(hidden)]
+//     unsafe fn from_bytes(self) -> Self::Array; 
+// }
 
-impl <T: Dist> FromBytes<T,u8> for LamellarReadArray<u8>{
-    type Array = LamellarReadArray<T>;
-    #[doc(hidden)]
-    unsafe fn from_bytes(self) -> Self::Array{
-        match self {
-            LamellarReadArray::UnsafeArray(array) => array.from_bytes().into(),
-            LamellarReadArray::ReadOnlyArray(array) => array.from_bytes().into(),
-            LamellarReadArray::AtomicArray(array) => array.from_bytes().into(),
-            LamellarReadArray::CollectiveAtomicArray(array) => array.from_bytes().into(),
-        }
-    }
-}
+// impl <T: Dist> FromBytes<T,u8> for LamellarReadArray<u8>{
+//     type Array = LamellarReadArray<T>;
+//     #[doc(hidden)]
+//     unsafe fn from_bytes(self) -> Self::Array{
+//         match self {
+//             LamellarReadArray::UnsafeArray(array) => array.from_bytes().into(),
+//             LamellarReadArray::ReadOnlyArray(array) => array.from_bytes().into(),
+//             LamellarReadArray::AtomicArray(array) => array.from_bytes().into(),
+//             LamellarReadArray::CollectiveAtomicArray(array) => array.from_bytes().into(),
+//         }
+//     }
+// }
 
 pub trait SubArray<T: Dist>: LamellarArray<T> {
     type Array: LamellarArray<T>;
@@ -440,7 +480,7 @@ pub trait SubArray<T: Dist>: LamellarArray<T> {
 }
 
 #[enum_dispatch(LamellarReadArray<T>,LamellarWriteArray<T>)]
-pub trait LamellarArrayRead<T: Dist + 'static >: LamellarArray<T> + Sync + Send {
+pub trait LamellarArrayGet<T: Dist + 'static >: LamellarArray<T> + Sync + Send {
     // this is non blocking call
     // the runtime does not manage checking for completion of message transmission
     // the user is responsible for ensuring the buffer remains valid
@@ -451,39 +491,32 @@ pub trait LamellarArrayRead<T: Dist + 'static >: LamellarArray<T> + Sync + Send 
     // );
 
     // a safe synchronous call that blocks untils the data as all been transfered
-    fn iget<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(&self, index: usize, buf: U);
+    // get data from self and write into buf
+    fn iget<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(&self, index: usize, dst: U);
 
     // async get
-    fn get<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(&self, index: usize, buf: U);
+    // get data from self and write into buf
+    fn get<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(&self, index: usize, dst: U);
 
     // blocking call that gets the value stored and the provided index
     fn iat(&self, index: usize) -> T;
 
-    // we also plan to implement safe asyncronous versions of iget and iat
-    // the apis would be something like:
-    // fn get<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(&self, index: usize, buf: U) -> LamellarRequest<U>;
-    // fn at(&self, index: usize) -> LamellarRequest<T>;
 }
 
 #[enum_dispatch(LamellarWriteArray<T>)]
-pub trait LamellarArrayWrite<T: Dist>: LamellarArray<T> + Sync + Send {
-    // non blocking put
-    // runtime provides no mechansim for checking when the data has finished being written
-    // buf can immediately be reused after this call returns
-    // unsafe fn put_unchecked<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(&self, index: usize, buf: U);
-    // blocking ops
-    // fn iput<U: MyInto<LamellarArrayInput<T>> + LamellarRead>(&self, index: usize, buf: U);
-    // fn iswap(&self, index: usize, val: T) -> T;
-    //async ops
-    // fn put<U: MyInto<LamellarArrayInput<T>> + LamellarRead>(&self, index: usize, buf: U) -> LamellarRequest<()>;
-    // fn swap(&self, index: usize, val: T) -> LamellarRequest<T>;
+pub trait LamellarArrayPut<T: Dist>: LamellarArray<T> + Sync + Send {
+    
+    //put data from buf into self
+    fn iput<U: MyInto<LamellarArrayInput<T>> + LamellarRead>(&self, index: usize, src: U);
+
+    
 }
 
 pub trait ArrayPrint<T: Dist + std::fmt::Debug>: LamellarArray<T> {
     fn print(&self);
 }
 
-pub trait LamellarArrayReduce<T>: LamellarArrayRead<T>
+pub trait LamellarArrayReduce<T>: LamellarArrayPut<T>
 where
     T: Dist + serde::Serialize + serde::de::DeserializeOwned + 'static,
 {

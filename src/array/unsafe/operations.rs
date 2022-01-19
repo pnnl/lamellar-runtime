@@ -6,7 +6,7 @@ use crate::lamellar_request::LamellarRequest;
 use std::any::TypeId;
 use std::collections::HashMap;
 
-type OpFn = fn(*const u8, UnsafeArray<u8>, usize) -> LamellarArcAm; 
+type OpFn = fn(*const u8, UnsafeByteArray, usize) -> LamellarArcAm; 
 
 lazy_static! {
     static ref OPS: HashMap<(ArrayOpCmd,TypeId), OpFn> = {
@@ -55,7 +55,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
     ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>> {
         // println!("initiate_op for UnsafeArray<T> ");
         if let Some(func) = OPS.get(&(op,TypeId::of::<T>())) {
-            let array: UnsafeArray<u8> = unsafe { self.as_bytes() };
+            let array: UnsafeByteArray = self.clone().into();
             let pe = self.pe_for_dist_index(index);
             let am = func(&val as *const T as *const u8, array, local_index);
             Some(self.inner.team.exec_arc_am_pe(
@@ -88,7 +88,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
     ) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
         // println!("initiate_op for UnsafeArray<T> ");
         if let Some(func) = OPS.get(&(op,TypeId::of::<T>())) {
-            let array: UnsafeArray<u8> = unsafe { self.as_bytes() };
+            let array: UnsafeByteArray = self.clone().into();
             let pe = self.pe_for_dist_index(index);
             let am = func(&val as *const T as *const u8, array, local_index);
             self.inner.team.exec_arc_am_pe(

@@ -45,6 +45,24 @@ pub enum LamellarMemoryRegion<T: Dist> {
     Local(LocalMemoryRegion<T>),
 }
 
+impl<T: Dist> crate::DarcSerde for LamellarMemoryRegion<T> {
+    fn ser(&self, num_pes: usize, cur_pe: Result<usize, crate::IdError>) {
+        // println!("in shared ser");
+        match self {
+            LamellarMemoryRegion::Shared(mr) => mr.ser(num_pes,cur_pe),
+            LamellarMemoryRegion::Local(mr) => mr.ser(num_pes,cur_pe),
+        }
+    }
+    fn des(&self, cur_pe: Result<usize, crate::IdError>) {
+        // println!("in shared des");
+        match self {
+            LamellarMemoryRegion::Shared(mr) => mr.des(cur_pe),
+            LamellarMemoryRegion::Local(mr) => mr.des(cur_pe),
+        }
+        // self.mr.print();
+    }
+}
+
 impl<T: Dist> LamellarMemoryRegion<T> {
     pub unsafe fn as_mut_slice(&self) -> MemResult<&mut [T]> {
         match self {
@@ -173,6 +191,7 @@ impl<T: Dist> Eq for LamellarMemoryRegion<T> {}
 
 impl<T: Dist> LamellarWrite for LamellarMemoryRegion<T> {}
 impl<T: Dist> LamellarRead for LamellarMemoryRegion<T> {}
+impl<T: Dist> LamellarRead for &LamellarMemoryRegion<T> {}
 
 #[derive(Copy, Clone)]
 pub(crate) enum Mode {
@@ -492,6 +511,7 @@ impl<T: Dist> MemoryRegion<T> {
             let bytes =
                 unsafe { std::slice::from_raw_parts_mut(data.as_mut_ptr() as *mut u8, num_bytes) };
             // println!("getting {:?} {:?} {:?} {:?} {:?} {:?} {:?}",pe,index,std::mem::size_of::<R>(),data.len(), num_bytes,self.size, self.num_bytes);
+    
             self.rdma
                 .iget(pe, self.addr + index * std::mem::size_of::<R>(), bytes);
             //(remote pe, src, dst)

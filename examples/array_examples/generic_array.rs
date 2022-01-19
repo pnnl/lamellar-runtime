@@ -1,7 +1,7 @@
 use lamellar::array::{Distribution, UnsafeArray};
 use lamellar::{Dist, LamellarWorld};
 
-struct ArrayWrapper<T> {
+struct ArrayWrapper<T: Dist> {
     array: UnsafeArray<T>,
 }
 

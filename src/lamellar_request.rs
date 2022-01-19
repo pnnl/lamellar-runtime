@@ -76,6 +76,7 @@ impl<T: AmDist> LamellarRequestHandle<T> {
         prof_start!(id);
         let id = CUR_REQ_ID.fetch_add(1, Ordering::SeqCst);
         prof_end!(id);
+        // println!("new am id {:?}",id);
         prof_start!(ireq);
         let ireq = InternalReq {
             data_tx: s,

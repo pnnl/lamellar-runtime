@@ -303,6 +303,7 @@ impl ActiveMessageEngine {
         let reqs = REQUESTS.lock();
         match reqs.get(&req_id) {
             Some(ireq) => {
+                // println!("sending {:?} to user  handle",req_id);
                 let ireq = ireq.clone();
                 drop(reqs); //release lock in the hashmap
                 let _num_reqs = ireq.team_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);

@@ -428,7 +428,7 @@ impl CommOps for RofiComm {
         if pe != self.my_pe {
             let bytes_len = dst_addr.len() * std::mem::size_of::<T>();
             let rem_bytes = bytes_len %  std::mem::size_of::<u64>();
-            // println!("{:x} {:?} {:?}",src_addr,dst_addr.as_ptr(),bytes_len);
+            // println!("{:x} {:?} {:?} {:?}",src_addr,dst_addr.as_ptr(),bytes_len,rem_bytes);
             if bytes_len >= std::mem::size_of::<u64>() {
                 let temp_dst_addr=&mut dst_addr[rem_bytes..];
                 self.init_buffer(temp_dst_addr);
@@ -459,6 +459,7 @@ impl CommOps for RofiComm {
                                     std::thread::yield_now();
                                 }
                             }
+                            // println!("{:?} {:?}",buf0,buf1);
                         }
                         self.rt_free(addr);
                         break;

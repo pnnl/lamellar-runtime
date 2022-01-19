@@ -6,6 +6,7 @@ pub use rdma::{AtomicArrayPut,AtomicArrayGet};
 // use crate::array::iterator::distributed_iterator::{
 //     DistIter, DistIterMut, DistIteratorLauncher, DistributedIterator,
 // };
+use crate::array::r#unsafe::UnsafeByteArray;
 use crate::array::iterator::serial_iterator::LamellarArrayIter;
 use crate::array::*;
 // use crate::array::private::LamellarArrayPrivate;
@@ -155,6 +156,13 @@ pub struct AtomicArray<T: Dist> {
     pub(crate) array: UnsafeArray<T>,
 }
 
+#[lamellar_impl::AmDataRT(Clone)]
+pub struct AtomicByteArray{
+    locks: Darc<Option<Vec<Mutex<()>>>>,
+    orig_t_size: usize,
+    pub(crate) array: UnsafeByteArray,
+}
+
 //#[prof]
 impl<T: Dist + std::default::Default + 'static> AtomicArray<T> {
     //Sync + Send + Copy  == Dist
@@ -244,10 +252,10 @@ impl<T: Dist> AtomicArray<T> {
     #[doc(hidden)]
     pub fn lock_index(&self, index: usize) -> Option<Vec<MutexGuard<()>>> {
         if let Some(ref locks) = *self.locks {
-            let start_index = (index + std::mem::size_of::<T>()) / self.orig_t_size;
-            let end_index = ((index + 1) + std::mem::size_of::<T>()) / self.orig_t_size;
+            let start_index = (index * std::mem::size_of::<T>()) / self.orig_t_size;
+            let end_index = ((index + 1) * std::mem::size_of::<T>()) / self.orig_t_size;
             let mut guards = vec![];
-            for i in start_index..(end_index + 1) {
+            for i in start_index..end_index {
                 guards.push(locks[i].lock())
             }
             Some(guards)
@@ -278,27 +286,46 @@ impl<T: Dist + 'static> From<UnsafeArray<T>> for AtomicArray<T> {
     }
 }
 
-impl <T: Dist> AsBytes<T,u8> for AtomicArray<T>{
-    type Array = AtomicArray<u8>;
-    #[doc(hidden)]
-    unsafe fn as_bytes(&self) -> Self::Array {
-        let array = self.array.as_bytes();
-        AtomicArray {
-            locks: self.locks.clone(),
-            orig_t_size: self.orig_t_size,
-            array: array,
+// impl <T: Dist> AsBytes<T,u8> for AtomicArray<T>{
+//     type Array = AtomicArray<u8>;
+//     #[doc(hidden)]
+//     unsafe fn as_bytes(&self) -> Self::Array {
+//         let array = self.array.as_bytes();
+//         AtomicArray {
+//             locks: self.locks.clone(),
+//             orig_t_size: self.orig_t_size,
+//             array: array,
+//         }
+//     }
+// }
+// impl <T: Dist> FromBytes<T,u8> for AtomicArray<u8>{
+//     type Array = AtomicArray<T>;
+//     #[doc(hidden)]
+//     unsafe fn from_bytes(self) -> Self::Array {
+//         let array = self.array.from_bytes();
+//         AtomicArray {
+//             locks: self.locks.clone(),
+//             orig_t_size: self.orig_t_size,
+//             array: array,
+//         }
+//     }
+// }
+
+impl <T: Dist> From<AtomicArray<T>> for AtomicByteArray{
+    fn from(array: AtomicArray<T>) -> Self {
+        AtomicByteArray {
+            locks: array.locks.clone(),
+            orig_t_size: array.orig_t_size,
+            array: array.array.into(),
         }
     }
 }
-impl <T: Dist> FromBytes<T,u8> for AtomicArray<u8>{
-    type Array = AtomicArray<T>;
-    #[doc(hidden)]
-    unsafe fn from_bytes(self) -> Self::Array {
-        let array = self.array.from_bytes();
+impl <T: Dist> From<AtomicByteArray> for AtomicArray<T>{
+    fn from(array: AtomicByteArray) -> Self {
         AtomicArray {
-            locks: self.locks.clone(),
-            orig_t_size: self.orig_t_size,
-            array: array,
+            locks: array.locks.clone(),
+            orig_t_size: array.orig_t_size,
+            array: array.array.into(),
         }
     }
 }

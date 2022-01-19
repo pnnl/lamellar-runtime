@@ -1,7 +1,7 @@
 mod iteration;
 pub(crate) mod operations;
 mod rdma;
-
+use crate::array::r#unsafe::UnsafeByteArray;
 use crate::array::*;
 use crate::darc::DarcMode;
 use crate::darc::local_rw_darc::LocalRwDarc;
@@ -14,6 +14,12 @@ use core::marker::PhantomData;
 pub struct CollectiveAtomicArray<T: Dist> {
     lock: LocalRwDarc<()>,
     pub(crate) array: UnsafeArray<T>,
+}
+
+#[lamellar_impl::AmDataRT(Clone)]
+pub struct CollectiveAtomicByteArray {
+    lock: LocalRwDarc<()>,
+    pub(crate) array: UnsafeByteArray,
 }
 
 impl<T: Dist + std::default::Default> CollectiveAtomicArray<T> {
@@ -113,25 +119,42 @@ impl<T: Dist> From<UnsafeArray<T>> for CollectiveAtomicArray<T> {
     }
 }
 
-impl <T: Dist> AsBytes<T,u8> for CollectiveAtomicArray<T>{
-    type Array = CollectiveAtomicArray<u8>;
-    #[doc(hidden)]
-    unsafe fn as_bytes(&self) -> Self::Array {
-        let array = self.array.as_bytes();
-        CollectiveAtomicArray {
-            lock: self.lock.clone(),
-            array: array,
+// impl <T: Dist> AsBytes<T,u8> for CollectiveAtomicArray<T>{
+//     type Array = CollectiveAtomicArray<u8>;
+//     #[doc(hidden)]
+//     unsafe fn as_bytes(&self) -> Self::Array {
+//         let array = self.array.as_bytes();
+//         CollectiveAtomicArray {
+//             lock: self.lock.clone(),
+//             array: array,
+//         }
+//     }
+// }
+// impl <T: Dist> FromBytes<T,u8> for CollectiveAtomicArray<u8>{
+//     type Array = CollectiveAtomicArray<T>;
+//     #[doc(hidden)]
+//     unsafe fn from_bytes(self) -> Self::Array {
+//         let array = self.array.from_bytes();
+//         CollectiveAtomicArray {
+//             lock: self.lock.clone(),
+//             array: array,
+//         }
+//     }
+// }
+
+impl <T: Dist> From<CollectiveAtomicArray<T>> for CollectiveAtomicByteArray{
+    fn from(array: CollectiveAtomicArray<T>) -> Self {
+        CollectiveAtomicByteArray {
+            lock: array.lock.clone(),
+            array: array.array.into(),
         }
     }
 }
-impl <T: Dist> FromBytes<T,u8> for CollectiveAtomicArray<u8>{
-    type Array = CollectiveAtomicArray<T>;
-    #[doc(hidden)]
-    unsafe fn from_bytes(self) -> Self::Array {
-        let array = self.array.from_bytes();
+impl <T: Dist> From<CollectiveAtomicByteArray> for CollectiveAtomicArray<T>{
+    fn from(array: CollectiveAtomicByteArray) -> Self {
         CollectiveAtomicArray {
-            lock: self.lock.clone(),
-            array: array,
+            lock: array.lock.clone(),
+            array: array.array.into(),
         }
     }
 }

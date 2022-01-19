@@ -14,7 +14,7 @@ use zip::*;
 
 use crate::memregion::Dist;
 // use crate::LamellarArray;
-use crate::array::LamellarArray; //, LamellarArrayRead, LamellarArrayWrite};
+use crate::array::LamellarArray; //, LamellarArrayPut, LamellarArrayGet};
 
 use futures::Future;
 use std::marker::PhantomData;
