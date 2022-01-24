@@ -367,8 +367,8 @@ pub(crate) mod private {
         
         fn local_as_ptr(&self) -> *const T;
         fn local_as_mut_ptr(&self) -> *mut T;
-        fn pe_for_dist_index(&self, index: usize) -> usize;
-        fn pe_offset_for_dist_index(&self, pe: usize, index: usize) -> usize;
+        fn pe_for_dist_index(&self, index: usize) -> Option<usize>;
+        fn pe_offset_for_dist_index(&self, pe: usize, index: usize) ->  Option<usize>;
         unsafe fn into_inner(self) -> UnsafeArray<T>;
     }
 

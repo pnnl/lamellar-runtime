@@ -66,10 +66,10 @@ where
         // println!("step by elems {:?} {:?} ",in_elems,(in_elems as f32/self.step_size as f32).ceil());
         (in_elems as f32 / self.step_size as f32).ceil() as usize
     }
-    fn global_index(&self, index: usize) -> usize {
-        let g_index = self.iter.global_index(index * self.step_size) / self.step_size;
+    fn global_index(&self, index: usize) -> Option<usize> {
+        let g_index = self.iter.global_index(index * self.step_size)? / self.step_size;
         // println!("step_by index: {:?} global_index {:?}", index,g_index);
-        g_index
+        Some(g_index)
     }
     // fn chunk_size(&self) -> usize {
     //     self.iter.chunk_size()

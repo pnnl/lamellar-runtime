@@ -32,9 +32,9 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         func: LamellarArcAm,
     ) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync> {
         // println!("dist_op for UnsafeArray<T> ");
-        self.inner
+        self.inner.data
             .team
-            .exec_arc_am_pe(pe, func, Some(self.inner.array_counters.clone()))
+            .exec_arc_am_pe(pe, func, Some(self.inner.data.array_counters.clone()))
     }
     pub(crate) fn dist_fetch_op(
         &self,
@@ -42,9 +42,9 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         func: LamellarArcAm,
     ) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
         // println!("dist_op for UnsafeArray<T> ");
-        self.inner
+        self.inner.data
             .team
-            .exec_arc_am_pe(pe, func, Some(self.inner.array_counters.clone()))
+            .exec_arc_am_pe(pe, func, Some(self.inner.data.array_counters.clone()))
     }
     fn initiate_op(
         &self,
@@ -56,12 +56,12 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         // println!("initiate_op for UnsafeArray<T> ");
         if let Some(func) = OPS.get(&(op,TypeId::of::<T>())) {
             let array: UnsafeByteArray = self.clone().into();
-            let pe = self.pe_for_dist_index(index);
+            let pe = self.inner.pe_for_dist_index(index).expect("index out of bounds");
             let am = func(&val as *const T as *const u8, array, local_index);
-            Some(self.inner.team.exec_arc_am_pe(
+            Some(self.inner.data.team.exec_arc_am_pe(
                 pe,
                 am,
-                Some(self.inner.array_counters.clone()),
+                Some(self.inner.data.array_counters.clone()),
             ))
         } else {
             let name = std::any::type_name::<T>().split("::").last().unwrap();
@@ -89,12 +89,12 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         // println!("initiate_op for UnsafeArray<T> ");
         if let Some(func) = OPS.get(&(op,TypeId::of::<T>())) {
             let array: UnsafeByteArray = self.clone().into();
-            let pe = self.pe_for_dist_index(index);
+            let pe = self.inner.pe_for_dist_index(index).expect("index out of bounds");
             let am = func(&val as *const T as *const u8, array, local_index);
-            self.inner.team.exec_arc_am_pe(
+            self.inner.data.team.exec_arc_am_pe(
                 pe,
                 am,
-                Some(self.inner.array_counters.clone()),
+                Some(self.inner.data.array_counters.clone()),
             )
         } else {
             let name = std::any::type_name::<T>().split("::").last().unwrap();
@@ -120,8 +120,8 @@ impl<T: ElementArithmeticOps  + 'static> ArithmeticOps<T> for UnsafeArray<T> {
         index: usize,
         val: T,
     ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>> {
-        let pe = self.pe_for_dist_index(index);
-        let local_index = self.pe_offset_for_dist_index(pe, index);
+        let pe = self.inner.pe_for_dist_index(index).expect("index out of bounds");
+        let local_index = self.inner.pe_offset_for_dist_index(pe, index).unwrap();//calculated pe above
         if pe == self.my_pe() {
             self.local_add(local_index, val);
             None
@@ -134,8 +134,8 @@ impl<T: ElementArithmeticOps  + 'static> ArithmeticOps<T> for UnsafeArray<T> {
         index: usize,
         val: T,
     ) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
-        let pe = self.pe_for_dist_index(index);
-        let local_index = self.pe_offset_for_dist_index(pe, index);
+        let pe = self.inner.pe_for_dist_index(index).expect("index out of bounds");
+        let local_index = self.inner.pe_offset_for_dist_index(pe, index).unwrap();//calculated pe above
         if pe == self.my_pe() {
             let val = self.local_fetch_add(local_index, val);
             Box::new(LocalOpResult{val})
@@ -148,8 +148,8 @@ impl<T: ElementArithmeticOps  + 'static> ArithmeticOps<T> for UnsafeArray<T> {
         index: usize,
         val: T,
     ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>> {
-        let pe = self.pe_for_dist_index(index);
-        let local_index = self.pe_offset_for_dist_index(pe, index);
+        let pe = self.inner.pe_for_dist_index(index).expect("index out of bounds");
+        let local_index = self.inner.pe_offset_for_dist_index(pe, index).unwrap();//calculated pe above
         if pe == self.my_pe() {
             self.local_sub(local_index, val);
             None
@@ -162,8 +162,8 @@ impl<T: ElementArithmeticOps  + 'static> ArithmeticOps<T> for UnsafeArray<T> {
         index: usize,
         val: T,
     ) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
-        let pe = self.pe_for_dist_index(index);
-        let local_index = self.pe_offset_for_dist_index(pe, index);
+        let pe = self.inner.pe_for_dist_index(index).expect("index out of bounds");
+        let local_index = self.inner.pe_offset_for_dist_index(pe, index).unwrap();//calculated pe above
         if pe == self.my_pe() {
             let val = self.local_fetch_sub(local_index, val);
             Box::new(LocalOpResult{val})
@@ -176,8 +176,8 @@ impl<T: ElementArithmeticOps  + 'static> ArithmeticOps<T> for UnsafeArray<T> {
         index: usize,
         val: T,
     ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>> {
-        let pe = self.pe_for_dist_index(index);
-        let local_index = self.pe_offset_for_dist_index(pe, index);
+        let pe = self.inner.pe_for_dist_index(index).expect("index out of bounds");
+        let local_index = self.inner.pe_offset_for_dist_index(pe, index).unwrap();//calculated pe above
         if pe == self.my_pe() {
             self.local_mul(local_index, val);
             None
@@ -190,8 +190,8 @@ impl<T: ElementArithmeticOps  + 'static> ArithmeticOps<T> for UnsafeArray<T> {
         index: usize,
         val: T,
     ) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
-        let pe = self.pe_for_dist_index(index);
-        let local_index = self.pe_offset_for_dist_index(pe, index);
+        let pe = self.inner.pe_for_dist_index(index).expect("index out of bounds");
+        let local_index = self.inner.pe_offset_for_dist_index(pe, index).unwrap();//calculated pe above
         if pe == self.my_pe() {
             let val = self.local_fetch_mul(local_index, val);
             Box::new(LocalOpResult{val})
@@ -204,8 +204,8 @@ impl<T: ElementArithmeticOps  + 'static> ArithmeticOps<T> for UnsafeArray<T> {
         index: usize,
         val: T,
     ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>> {
-        let pe = self.pe_for_dist_index(index);
-        let local_index = self.pe_offset_for_dist_index(pe, index);
+        let pe = self.inner.pe_for_dist_index(index).expect("index out of bounds");
+        let local_index = self.inner.pe_offset_for_dist_index(pe, index).unwrap();//calculated pe above
         if pe == self.my_pe() {
             self.local_div(local_index, val);
             None
@@ -218,8 +218,8 @@ impl<T: ElementArithmeticOps  + 'static> ArithmeticOps<T> for UnsafeArray<T> {
         index: usize,
         val: T,
     ) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
-        let pe = self.pe_for_dist_index(index);
-        let local_index = self.pe_offset_for_dist_index(pe, index);
+        let pe = self.inner.pe_for_dist_index(index).expect("index out of bounds");
+        let local_index = self.inner.pe_offset_for_dist_index(pe, index).unwrap();//calculated pe above
         if pe == self.my_pe() {
             let val = self.local_fetch_div(local_index, val);
             Box::new(LocalOpResult{val})
@@ -235,8 +235,8 @@ impl<T:  ElementBitWiseOps  + 'static> BitWiseOps<T> for UnsafeArray<T> {
         index: usize,
         val: T,
     ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>> {
-        let pe = self.pe_for_dist_index(index);
-        let local_index = self.pe_offset_for_dist_index(pe, index);
+        let pe = self.inner.pe_for_dist_index(index).expect("index out of bounds");
+        let local_index = self.inner.pe_offset_for_dist_index(pe, index).unwrap();//calculated pe above
         if pe == self.my_pe() {
             self.local_bit_and(local_index, val);
             None
@@ -249,8 +249,8 @@ impl<T:  ElementBitWiseOps  + 'static> BitWiseOps<T> for UnsafeArray<T> {
         index: usize,
         val: T,
     ) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
-        let pe = self.pe_for_dist_index(index);
-        let local_index = self.pe_offset_for_dist_index(pe, index);
+        let pe = self.inner.pe_for_dist_index(index).expect("index out of bounds");
+        let local_index = self.inner.pe_offset_for_dist_index(pe, index).unwrap();//calculated pe above
         if pe == self.my_pe() {
             let val = self.local_fetch_bit_and(local_index, val);
             Box::new(LocalOpResult{val})
@@ -264,8 +264,8 @@ impl<T:  ElementBitWiseOps  + 'static> BitWiseOps<T> for UnsafeArray<T> {
         index: usize,
         val: T,
     ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>> {
-        let pe = self.pe_for_dist_index(index);
-        let local_index = self.pe_offset_for_dist_index(pe, index);
+        let pe = self.inner.pe_for_dist_index(index).expect("index out of bounds");
+        let local_index = self.inner.pe_offset_for_dist_index(pe, index).unwrap();//calculated pe above
         if pe == self.my_pe() {
             self.local_bit_or(local_index, val);
             None
@@ -278,8 +278,8 @@ impl<T:  ElementBitWiseOps  + 'static> BitWiseOps<T> for UnsafeArray<T> {
         index: usize,
         val: T,
     ) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
-        let pe = self.pe_for_dist_index(index);
-        let local_index = self.pe_offset_for_dist_index(pe, index);
+        let pe = self.inner.pe_for_dist_index(index).expect("index out of bounds");
+        let local_index = self.inner.pe_offset_for_dist_index(pe, index).unwrap();//calculated pe above
         if pe == self.my_pe() {
             let val = self.local_fetch_bit_or(local_index, val);
             Box::new(LocalOpResult{val})

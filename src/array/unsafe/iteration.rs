@@ -17,40 +17,26 @@ impl<T: Dist> UnsafeArray<T> {
     }
 
     pub fn ser_iter(&self) -> LamellarArrayIter<'_, T, UnsafeArray<T>> {
-        LamellarArrayIter::new(self.clone().into(), self.inner.team.clone(), 1)
+        LamellarArrayIter::new(self.clone().into(), self.inner.data.team.clone(), 1)
     }
 
     pub fn buffered_iter(&self, buf_size: usize) -> LamellarArrayIter<'_, T, UnsafeArray<T>> {
         LamellarArrayIter::new(
             self.clone().into(),
-            self.inner.team.clone(),
+            self.inner.data.team.clone(),
             std::cmp::min(buf_size, self.len()),
         )
     }
 }
 
 impl<T: Dist> DistIteratorLauncher for UnsafeArray<T> {
-    fn global_index_from_local(&self, index: usize, chunk_size: usize) -> usize {
+    fn global_index_from_local(&self, index: usize, chunk_size: usize) -> Option<usize> {
         // println!("global index cs:{:?}",chunk_size);
-        let my_pe = self.inner.my_pe;
+        let my_pe = self.inner.data.my_pe;
         if chunk_size == 1 {
-            match self.distribution {
-                Distribution::Block => {
-                    let pe_start_index = (self.elem_per_pe * my_pe as f64).round() as usize;
-                    index + pe_start_index
-                }
-                Distribution::Cyclic => self.inner.team.num_pes() * index + my_pe,
-            }
+            self.inner.global_index_from_local(index)
         } else {
-            match self.distribution {
-                Distribution::Block => {
-                    let num_chunks_per_per = self.elem_per_pe / chunk_size as f64;
-                    // println!("{:?} {:?}", self.elem_per_pe,num_chunks_per_per);
-                    let start_chunk = (num_chunks_per_per * my_pe as f64).round() as usize;
-                    start_chunk + index
-                }
-                Distribution::Cyclic => self.inner.team.num_pes() * index + my_pe,
-            }
+            Some(self.inner.global_index_from_local(index*chunk_size)?/chunk_size)
         }
     }
 
@@ -59,7 +45,7 @@ impl<T: Dist> DistIteratorLauncher for UnsafeArray<T> {
         I: DistributedIterator + 'static,
         F: Fn(I::Item) + Sync + Send + Clone + 'static,
     {
-        if let Ok(_my_pe) = self.inner.team.team_pe_id() {
+        if let Ok(_my_pe) = self.inner.data.team.team_pe_id() {
             let num_workers = match std::env::var("LAMELLAR_THREADS") {
                 Ok(n) => n.parse::<usize>().unwrap(),
                 Err(_) => 4,
@@ -71,14 +57,14 @@ impl<T: Dist> DistIteratorLauncher for UnsafeArray<T> {
             while ((worker as f64 * elems_per_thread).round() as usize) < num_elems_local {
                 let start_i = (worker as f64 * elems_per_thread).round() as usize;
                 let end_i = ((worker + 1) as f64 * elems_per_thread).round() as usize;
-                self.inner.team.exec_am_local_tg(
+                self.inner.data.team.exec_am_local_tg(
                     ForEach {
                         op: op.clone(),
                         data: iter.clone(),
                         start_i: start_i,
                         end_i: end_i,
                     },
-                    Some(self.inner.array_counters.clone()),
+                    Some(self.inner.data.array_counters.clone()),
                 );
                 worker += 1;
             }
@@ -90,7 +76,7 @@ impl<T: Dist> DistIteratorLauncher for UnsafeArray<T> {
         F: Fn(I::Item) -> Fut + Sync + Send + Clone + 'static,
         Fut: Future<Output = ()> + Sync + Send + Clone + 'static,
     {
-        if let Ok(_my_pe) = self.inner.team.team_pe_id() {
+        if let Ok(_my_pe) = self.inner.data.team.team_pe_id() {
             let num_workers = match std::env::var("LAMELLAR_THREADS") {
                 Ok(n) => n.parse::<usize>().unwrap(),
                 Err(_) => 4,
@@ -102,14 +88,14 @@ impl<T: Dist> DistIteratorLauncher for UnsafeArray<T> {
             while ((worker as f64 * elems_per_thread).round() as usize) < num_elems_local {
                 let start_i = (worker as f64 * elems_per_thread).round() as usize;
                 let end_i = ((worker + 1) as f64 * elems_per_thread).round() as usize;
-                self.inner.team.exec_am_local_tg(
+                self.inner.data.team.exec_am_local_tg(
                     ForEachAsync {
                         op: op.clone(),
                         data: iter.clone(),
                         start_i: start_i,
                         end_i: end_i,
                     },
-                    Some(self.inner.array_counters.clone()),
+                    Some(self.inner.data.array_counters.clone()),
                 );
                 worker += 1;
             }

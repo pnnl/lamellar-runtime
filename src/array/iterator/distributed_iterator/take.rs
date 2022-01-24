@@ -63,7 +63,7 @@ where
         // println!("take elems {:?} {:?}",in_elems,std::cmp::min(in_elems,self.count));
         std::cmp::min(in_elems, self.count)
     }
-    fn global_index(&self, index: usize) -> usize {
+    fn global_index(&self, index: usize) -> Option<usize> {
         let g_index = self.iter.global_index(index);
         // println!("take index: {:?} global_index {:?}", index,g_index);
         g_index

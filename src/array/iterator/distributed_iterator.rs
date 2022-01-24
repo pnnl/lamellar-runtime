@@ -85,7 +85,7 @@ pub trait DistIteratorLauncher {
         F: Fn(I::Item) -> Fut + Sync + Send + Clone + 'static,
         Fut: Future<Output = ()> + Sync + Send + Clone + 'static;
 
-    fn global_index_from_local(&self, index: usize, chunk_size: usize) -> usize;
+    fn global_index_from_local(&self, index: usize, chunk_size: usize) -> Option<usize>;
 }
 
 pub trait DistributedIterator: Sync + Send + Clone {
@@ -95,7 +95,7 @@ pub trait DistributedIterator: Sync + Send + Clone {
     fn array(&self) -> Self::Array;
     fn next(&mut self) -> Option<Self::Item>;
     fn elems(&self, in_elems: usize) -> usize;
-    fn global_index(&self, index: usize) -> usize;
+    fn global_index(&self, index: usize) -> Option<usize>;
     // fn chunk_size(&self) -> usize;
     fn advance_index(&mut self, count: usize);
 
@@ -195,7 +195,7 @@ impl<'a, T: Dist + 'a, A: LamellarArray<T> + DistIteratorLauncher + Sync + Send 
         // println!("dist iter elems {:?}",in_elems);
         in_elems
     }
-    fn global_index(&self, index: usize) -> usize {
+    fn global_index(&self, index: usize) -> Option<usize> {
         let g_index = self.data.global_index_from_local(index, 1);
         // println!("dist_iter index: {:?} global_index {:?}", index,g_index);
         g_index
@@ -282,7 +282,7 @@ impl<'a, T: Dist + 'a, A: LamellarArray<T> + Sync + Send + DistIteratorLauncher 
     fn elems(&self, in_elems: usize) -> usize {
         in_elems
     }
-    fn global_index(&self, index: usize) -> usize {
+    fn global_index(&self, index: usize) -> Option<usize> {
         let g_index = self.data.global_index_from_local(index, 1);
         // println!("dist_iter index: {:?} global_index {:?}", index,g_index);
         g_index

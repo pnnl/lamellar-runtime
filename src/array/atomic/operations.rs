@@ -34,8 +34,8 @@ impl<T:  AmDist + Dist  + 'static> AtomicArray<T> {
     fn initiate_op(&self, index: usize, val: T, op: ArrayOpCmd)  -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>>{
         // println!("add ArithmeticOps<T> for &AtomicArray<T> ");
         if let Some(funcs) = OPS.get(&(op,TypeId::of::<T>())) {
-            let pe = self.pe_for_dist_index(index);
-            let local_index = self.pe_offset_for_dist_index(pe, index);
+            let pe = self.pe_for_dist_index(index).expect("index out of bounds");
+            let local_index = self.pe_offset_for_dist_index(pe, index).unwrap();//calculated pe above
             let array: AtomicByteArray = self.clone().into();
             if pe == self.my_pe() {
                 let mut val = val;
@@ -62,8 +62,8 @@ impl<T:  AmDist + Dist  + 'static> AtomicArray<T> {
     fn initiate_fetch_op(&self, index: usize, val: T, op: ArrayOpCmd)  -> Box<dyn LamellarRequest<Output = T> + Send + Sync>{
         // println!("add ArithmeticOps<T> for &AtomicArray<T> ");
         if let Some(funcs) = OPS.get(&(op,TypeId::of::<T>())) {
-            let pe = self.pe_for_dist_index(index);
-            let local_index = self.pe_offset_for_dist_index(pe, index);
+            let pe = self.pe_for_dist_index(index).expect("index out of bounds");
+            let local_index = self.pe_offset_for_dist_index(pe, index).unwrap();//calculated pe above
             let array: AtomicByteArray = self.clone().into();
             if pe == self.my_pe() 
             {

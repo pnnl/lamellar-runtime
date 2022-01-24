@@ -935,7 +935,7 @@ fn gen_atomic_rdma(typeident: syn::Ident,rt: bool) -> proc_macro2::TokenStream {
         // #[allow(non_snake_case)]
         #[#am_data]
         struct #get_name {
-            array: #lamellar::array::AtomicByteArray, //subarray of the indices we need to place data into
+            array: #lamellar::array::AtomicByteArray, //inner of the indices we need to place data into
             start_index: usize,
             len: usize,
         }
@@ -947,7 +947,8 @@ fn gen_atomic_rdma(typeident: syn::Ident,rt: bool) -> proc_macro2::TokenStream {
                 let array: #lamellar::array::AtomicArray<#typeident> =unsafe {self.array.clone().into()};
                 unsafe {
                     match array.array.local_elements_for_range(self.start_index,self.len){
-                        Some((unsafe_elems,indices)) => {
+                        Some((unsafe_u8_elems,indices)) => {
+                            let unsafe_elems = std::slice::from_raw_parts(unsafe_u8_elems.as_ptr() as *const #typeident,unsafe_u8_elems.len()/std::mem::size_of::<#typeident>());
                             let elems_u8_len = unsafe_elems.len() * std::mem::size_of::<#typeident>();
                             let mut elems_u8: Vec<u8> = Vec::with_capacity(elems_u8_len);
                             elems_u8.set_len(elems_u8_len);
@@ -989,7 +990,7 @@ fn gen_atomic_rdma(typeident: syn::Ident,rt: bool) -> proc_macro2::TokenStream {
 
         #[#am_data]
         struct #put_name {
-            array: #lamellar::array::AtomicByteArray, //subarray of the indices we need to place data into
+            array: #lamellar::array::AtomicByteArray, //inner of the indices we need to place data into
             start_index: usize,
             len: usize,
             buf : Vec<u8>,
@@ -998,15 +999,17 @@ fn gen_atomic_rdma(typeident: syn::Ident,rt: bool) -> proc_macro2::TokenStream {
         #[#am]
         impl LamellarAm for #put_name {
             fn exec(self) {
-                // println!("in remoteput {:?} {:?}",self.start_index,self.end_index);
+                // println!("in remoteput {:?} {:?}",self.start_index,self.len);
                 let array: #lamellar::array::AtomicArray<#typeident> =unsafe {self.array.clone().into()};
                 
                 unsafe {
                     let buf = std::slice::from_raw_parts(self.buf.as_ptr() as *const #typeident,self.buf.len() / std::mem::size_of::<#typeident>());
                     // println!("buf: {:?}",buf);
                     match array.array.local_elements_for_range(self.start_index,self.len){
-                        Some((_,indices)) => {
+                        Some((elems,indices)) => {
+                            // println!("elems {:?}",elems);
                             for (buf_i,array_i) in indices.enumerate(){
+                                // println!("buf_i {:?} array_i {:?}",buf_i,array_i);
                                 array.local_store(array_i,buf[buf_i]);
                             }
                         },

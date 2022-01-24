@@ -45,12 +45,12 @@ impl<T: Dist> ReadOnlyArray<T> {
         self.array.num_pes()
     }
 
-    pub fn pe_for_dist_index(&self, index: usize) -> usize {
-        self.array.pe_for_dist_index(index)
-    }
-    pub fn pe_offset_for_dist_index(&self, pe: usize, index: usize) -> usize {
-        self.array.pe_offset_for_dist_index(pe, index)
-    }
+    // pub fn pe_for_dist_index(&self, index: usize) -> Option<usize> {
+    //     self.array.pe_for_dist_index(index)
+    // }
+    // pub fn pe_offset_for_dist_index(&self, pe: usize, index: usize) -> Option<usize> {
+    //     self.array.pe_offset_for_dist_index(pe, index)
+    // }
 
     pub fn len(&self) -> usize {
         self.array.len()
@@ -161,7 +161,7 @@ impl<T: Dist> From<UnsafeArray<T>> for ReadOnlyArray<T> {
 // }
 
 impl<T: Dist> DistIteratorLauncher for ReadOnlyArray<T> {
-    fn global_index_from_local(&self, index: usize, chunk_size: usize) -> usize {
+    fn global_index_from_local(&self, index: usize, chunk_size: usize) -> Option<usize> {
         self.array.global_index_from_local(index, chunk_size)
     }
 
@@ -198,10 +198,10 @@ impl<T: Dist> private::LamellarArrayPrivate<T> for ReadOnlyArray<T> {
     fn local_as_mut_ptr(&self) -> *mut T {
         self.array.local_as_mut_ptr()
     }
-    fn pe_for_dist_index(&self, index: usize) -> usize {
+    fn pe_for_dist_index(&self, index: usize) -> Option<usize> {
         self.array.pe_for_dist_index(index)
     }
-    fn pe_offset_for_dist_index(&self, pe: usize, index: usize) -> usize {
+    fn pe_offset_for_dist_index(&self, pe: usize, index: usize) -> Option<usize> {
         self.array.pe_offset_for_dist_index(pe, index)
     }
     unsafe fn into_inner(self) -> UnsafeArray<T>{

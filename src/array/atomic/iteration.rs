@@ -71,7 +71,7 @@ impl<T: Dist > DistributedIterator for AtomicDistIter<T> {
     fn elems(&self, in_elems: usize) -> usize {
         in_elems
     }
-    fn global_index(&self, index: usize) -> usize {
+    fn global_index(&self, index: usize) -> Option<usize> {
         let g_index = self.data.global_index_from_local(index, 1);
         g_index
     }
@@ -105,7 +105,7 @@ impl<T:  Dist> AtomicArray<T> {
 }
 
 impl<T: Dist> DistIteratorLauncher for AtomicArray<T> {
-    fn global_index_from_local(&self, index: usize, chunk_size: usize) -> usize {
+    fn global_index_from_local(&self, index: usize, chunk_size: usize) -> Option<usize> {
         self.array.global_index_from_local(index, chunk_size)
     }
 

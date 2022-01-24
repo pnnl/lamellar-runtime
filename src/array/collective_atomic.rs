@@ -2,6 +2,7 @@ mod iteration;
 pub(crate) mod operations;
 mod rdma;
 use crate::array::r#unsafe::UnsafeByteArray;
+use crate::array::private::LamellarArrayPrivate;
 use crate::array::*;
 use crate::darc::DarcMode;
 use crate::darc::local_rw_darc::LocalRwDarc;
@@ -61,12 +62,12 @@ impl<T: Dist> CollectiveAtomicArray<T> {
     }
 
     #[doc(hidden)]
-    pub fn pe_for_dist_index(&self, index: usize) -> usize {
+    pub fn pe_for_dist_index(&self, index: usize) -> Option<usize> {
         self.array.pe_for_dist_index(index)
     }
 
     #[doc(hidden)]
-    pub fn pe_offset_for_dist_index(&self, pe: usize, index: usize) -> usize {
+    pub fn pe_offset_for_dist_index(&self, pe: usize, index: usize) ->  Option<usize> {
         self.array.pe_offset_for_dist_index(pe, index)
     }
 
@@ -175,10 +176,10 @@ impl<T: Dist> private::LamellarArrayPrivate<T> for CollectiveAtomicArray<T> {
     fn local_as_mut_ptr(&self) -> *mut T {
         self.array.local_as_mut_ptr()
     }
-    fn pe_for_dist_index(&self, index: usize) -> usize {
+    fn pe_for_dist_index(&self, index: usize) -> Option<usize> {
         self.array.pe_for_dist_index(index)
     }
-    fn pe_offset_for_dist_index(&self, pe: usize, index: usize) -> usize {
+    fn pe_offset_for_dist_index(&self, pe: usize, index: usize) ->  Option<usize> {
         self.array.pe_offset_for_dist_index(pe, index)
     }
     unsafe fn into_inner(self) -> UnsafeArray<T>{

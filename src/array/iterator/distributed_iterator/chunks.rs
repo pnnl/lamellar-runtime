@@ -88,10 +88,10 @@ where
         // println!("chunk elems {:?} {:?}",in_elems, elems);
         elems
     }
-    fn global_index(&self, index: usize) -> usize {
-        let g_index = self.iter.global_index(index * self.chunk_size) / self.chunk_size;
+    fn global_index(&self, index: usize) -> Option<usize> {
+        let g_index = self.iter.global_index(index * self.chunk_size)? / self.chunk_size;
         // println!("chunks index: {:?} global_index {:?}", index,g_index);
-        g_index
+        Some(g_index)
     }
     // fn chunk_size(&self) -> usize {
     //     self.iter.chunk_size() * self.chunk_size

@@ -82,7 +82,7 @@ where
         // println!("enumerate elems {:?}",in_elems);
         in_elems
     }
-    fn global_index(&self, index: usize) -> usize {
+    fn global_index(&self, index: usize) -> Option<usize> {
         let g_index = self.a.global_index(index); //not sure if this works...
                                                   // println!("enumerate index: {:?} global_index {:?}", index,g_index);
         g_index

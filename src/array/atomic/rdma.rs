@@ -42,7 +42,7 @@ lazy_static! {
 }
 
 impl<T: Dist> AtomicArray<T> {
-    pub  fn iget<U: MyInto<LamellarArrayInput<T>> + LamellarWrite >(&self, index: usize, buf: U) {
+    pub fn iget<U: MyInto<LamellarArrayInput<T>> + LamellarWrite >(&self, index: usize, buf: U) {
         self.exec_am_local(InitGetAm{
             array: self.clone(),
             index: index,
@@ -106,7 +106,7 @@ impl<T: Dist> LamellarArrayPut<T> for AtomicArray<T> {
 
 #[lamellar_impl::AmLocalDataRT]
 struct InitGetAm<T: Dist > {
-    array: AtomicArray<T>, //subarray of the indices we need to place data into
+    array: AtomicArray<T>, //inner of the indices we need to place data into
     index: usize,
     buf: LamellarArrayInput<T>
 }
@@ -135,7 +135,7 @@ impl<T: Dist + 'static > LamellarAm for InitGetAm<T> {
             }
         }
         unsafe {
-            match self.array.array.distribution{
+            match self.array.array.inner.distribution{
                 Distribution::Block => {
                     let u8_buf = self.buf.clone().to_base::<u8>();
                     let mut cur_index = 0;
@@ -172,7 +172,7 @@ impl<T: Dist + 'static > LamellarAm for InitGetAm<T> {
 
 #[lamellar_impl::AmLocalDataRT]
 struct InitPutAm<T: Dist > {
-    array: AtomicArray<T>, //subarray of the indices we need to place data into
+    array: AtomicArray<T>, //inner of the indices we need to place data into
     index: usize,
     buf: LamellarArrayInput<T>
 }
@@ -184,12 +184,12 @@ impl<T: Dist + 'static > LamellarAm for InitPutAm<T> {
         unsafe{
             let u8_buf = self.buf.clone().to_base::<u8>();
             let mut reqs = vec![];
-            match self.array.array.distribution{
+            match self.array.array.inner.distribution{
                 Distribution::Block => {
                     let mut cur_index = 0;
                     for pe in self.array.array.pes_for_range(self.index,self.buf.len()).into_iter(){
                         // println!("pe {:?}",pe);
-                        if let Some(len) = self.array.array.elements_on_pe_for_range(pe,self.index,self.buf.len()) {
+                        if let Some(len) = self.array.array.num_elements_on_pe_for_range(pe,self.index,self.buf.len()) {
                             // println!("pe {:?} len {:?} bytes: {:?}",pe,len,u8_buf);
                             let u8_buf_len = len * std::mem::size_of::<T>();
                              //get the proper remote am from the ops map
@@ -218,15 +218,15 @@ impl<T: Dist + 'static > LamellarAm for InitPutAm<T> {
                     let mut pe_t_slices: HashMap<usize,&mut [T]> = HashMap::new();
                     let buf_slice = self.buf.as_slice().unwrap();
                     for pe in self.array.array.pes_for_range(self.index,self.buf.len()).into_iter(){
-                        if let Some(len) = self.array.array.elements_on_pe_for_range(pe,self.index,self.buf.len()) {
-                            let mut u8_vec = Vec::with_capacity(len * std::mem::size_of::<T>());
+                        if let Some(len) = self.array.array.num_elements_on_pe_for_range(pe,self.index,self.buf.len()) {
+                            let mut u8_vec = vec![0u8;len * std::mem::size_of::<T>()];
                             let t_slice = std::slice::from_raw_parts_mut(u8_vec.as_mut_ptr() as *mut T, len);
                             pe_u8_vecs.insert(pe,u8_vec);
                             pe_t_slices.insert(pe,t_slice);
                         }
                     }
-                    for (buf_index,global_index) in (self.index..(self.index + self.buf.len())).enumerate(){
-                        let pe = global_index%num_pes;
+                    for (buf_index,index) in (self.index..(self.index + self.buf.len())).enumerate(){
+                        let pe = self.array.array.pe_for_dist_index(index).unwrap()%num_pes;
                         pe_t_slices.get_mut(&pe).unwrap()[buf_index/num_pes] = buf_slice[buf_index];
                     }
                     for (pe,vec) in pe_u8_vecs.drain(){

@@ -81,8 +81,16 @@ path="src/lib.rs"
 
 ##------tests-------##
 [[example]]
-name = "iput"
-path = "tests/array/iput.rs"
+name = "iput_test"
+path = "tests/array/iput_test.rs"
+
+[[example]]
+name = "put_test"
+path = "tests/array/put_test.rs"
+
+[[example]]
+name = "iget_test"
+path = "tests/array/iget_test.rs"
 
 ##------------ Bandwidth Examples -----------------##
 
@@ -204,11 +212,11 @@ path="examples/array_examples/array_ops.rs"
 
 ##------------ RDMA Examples -----------------##
 [[example]]
-name="put"
+name="rdma_put"
 path="examples/rdma_examples/put.rs"
 
 [[example]]
-name="get"
+name="rdma_get"
 path="examples/rdma_examples/get.rs"
 
 [[example]]

@@ -103,10 +103,10 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static>
     fn local_as_mut_ptr(&self) -> *mut T {
         self.local_as_mut_ptr()
     }
-    fn pe_for_dist_index(&self, index: usize) -> usize {
+    fn pe_for_dist_index(&self, index: usize) -> Option<usize> {
         self.array.pe_for_dist_index(index)
     }
-    fn pe_offset_for_dist_index(&self, pe: usize, index: usize) -> usize {
+    fn pe_offset_for_dist_index(&self, pe: usize, index: usize) -> Option<usize> {
         self.array.pe_offset_for_dist_index(pe, index)
     }
     unsafe fn into_inner(self) -> UnsafeArray<T>{

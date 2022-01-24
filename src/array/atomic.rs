@@ -9,7 +9,7 @@ pub use rdma::{AtomicArrayPut,AtomicArrayGet};
 use crate::array::r#unsafe::UnsafeByteArray;
 use crate::array::iterator::serial_iterator::LamellarArrayIter;
 use crate::array::*;
-// use crate::array::private::LamellarArrayPrivate;
+use crate::array::private::LamellarArrayPrivate;
 use crate::darc::{Darc, DarcMode};
 use crate::lamellar_request::LamellarRequest;
 use crate::lamellar_team::{IntoLamellarTeam, LamellarTeamRT};
@@ -213,12 +213,12 @@ impl<T: Dist> AtomicArray<T> {
     }
 
     #[doc(hidden)]
-    pub fn pe_for_dist_index(&self, index: usize) -> usize {
+    pub fn pe_for_dist_index(&self, index: usize) -> Option<usize> {
         self.array.pe_for_dist_index(index)
     }
 
     #[doc(hidden)]
-    pub fn pe_offset_for_dist_index(&self, pe: usize, index: usize) -> usize {
+    pub fn pe_offset_for_dist_index(&self, pe: usize, index: usize) ->  Option<usize> {
         self.array.pe_offset_for_dist_index(pe, index)
     }
 
@@ -286,31 +286,6 @@ impl<T: Dist + 'static> From<UnsafeArray<T>> for AtomicArray<T> {
     }
 }
 
-// impl <T: Dist> AsBytes<T,u8> for AtomicArray<T>{
-//     type Array = AtomicArray<u8>;
-//     #[doc(hidden)]
-//     unsafe fn as_bytes(&self) -> Self::Array {
-//         let array = self.array.as_bytes();
-//         AtomicArray {
-//             locks: self.locks.clone(),
-//             orig_t_size: self.orig_t_size,
-//             array: array,
-//         }
-//     }
-// }
-// impl <T: Dist> FromBytes<T,u8> for AtomicArray<u8>{
-//     type Array = AtomicArray<T>;
-//     #[doc(hidden)]
-//     unsafe fn from_bytes(self) -> Self::Array {
-//         let array = self.array.from_bytes();
-//         AtomicArray {
-//             locks: self.locks.clone(),
-//             orig_t_size: self.orig_t_size,
-//             array: array,
-//         }
-//     }
-// }
-
 impl <T: Dist> From<AtomicArray<T>> for AtomicByteArray{
     fn from(array: AtomicArray<T>) -> Self {
         AtomicByteArray {
@@ -361,10 +336,10 @@ impl<T: Dist> private::LamellarArrayPrivate<T> for AtomicArray<T> {
     fn local_as_mut_ptr(&self) -> *mut T {
         self.array.local_as_mut_ptr()
     }
-    fn pe_for_dist_index(&self, index: usize) -> usize {
+    fn pe_for_dist_index(&self, index: usize) -> Option<usize> {
         self.array.pe_for_dist_index(index)
     }
-    fn pe_offset_for_dist_index(&self, pe: usize, index: usize) -> usize {
+    fn pe_offset_for_dist_index(&self, pe: usize, index: usize) ->  Option<usize> {
         self.array.pe_offset_for_dist_index(pe, index)
     }
     unsafe fn into_inner(self) -> UnsafeArray<T>{
