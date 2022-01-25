@@ -190,6 +190,7 @@ impl<T: Dist> PartialEq for LamellarMemoryRegion<T> {
 impl<T: Dist> Eq for LamellarMemoryRegion<T> {}
 
 impl<T: Dist> LamellarWrite for LamellarMemoryRegion<T> {}
+impl<T: Dist> LamellarWrite for &LamellarMemoryRegion<T> {}
 impl<T: Dist> LamellarRead for LamellarMemoryRegion<T> {}
 impl<T: Dist> LamellarRead for &LamellarMemoryRegion<T> {}
 

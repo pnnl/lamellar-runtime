@@ -84,6 +84,10 @@ impl<'a, T: Dist + 'a > DistributedIterator for CollectiveAtomicDistIter<'a, T> 
         let g_index = self.data.global_index_from_local(index, 1);
         g_index
     }
+    fn subarray_index(&self, index: usize) -> Option<usize> {
+        let g_index = self.data.subarray_index_from_local(index,1); 
+        g_index
+    }
     fn advance_index(&mut self, count: usize) {
         self.cur_i = std::cmp::min(self.cur_i + count, self.end_i);
     }
@@ -164,6 +168,11 @@ impl<'a, T: Dist + 'a> DistributedIterator for CollectiveAtomicDistIterMut<'a, T
         let g_index = self.data.global_index_from_local(index, 1);
         g_index
     }
+    fn subarray_index(&self, index: usize) -> Option<usize> {
+        let g_index = self.data.subarray_index_from_local(index,1); //not sure if this works...
+                                                  // println!("enumerate index: {:?} global_index {:?}", index,g_index);
+        g_index
+    }
     fn advance_index(&mut self, count: usize) {
         self.cur_i = std::cmp::min(self.cur_i + count, self.end_i);
     }
@@ -212,6 +221,10 @@ impl< T: Dist + 'static> CollectiveAtomicArray<T> {
 impl<T: Dist> DistIteratorLauncher for CollectiveAtomicArray<T> {
     fn global_index_from_local(&self, index: usize, chunk_size: usize) -> Option<usize> {
         self.array.global_index_from_local(index, chunk_size)
+    }
+
+    fn subarray_index_from_local(&self, index: usize, chunk_size: usize) -> Option<usize> {
+        self.array.subarray_index_from_local(index, chunk_size)
     }
 
     fn for_each<I, F>(&self, iter: I, op: F)

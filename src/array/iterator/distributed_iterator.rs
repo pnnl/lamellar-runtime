@@ -86,6 +86,7 @@ pub trait DistIteratorLauncher {
         Fut: Future<Output = ()> + Sync + Send + Clone + 'static;
 
     fn global_index_from_local(&self, index: usize, chunk_size: usize) -> Option<usize>;
+    fn subarray_index_from_local(&self, index: usize, chunk_size: usize) -> Option<usize>;
 }
 
 pub trait DistributedIterator: Sync + Send + Clone {
@@ -96,6 +97,7 @@ pub trait DistributedIterator: Sync + Send + Clone {
     fn next(&mut self) -> Option<Self::Item>;
     fn elems(&self, in_elems: usize) -> usize;
     fn global_index(&self, index: usize) -> Option<usize>;
+    fn subarray_index(&self, index: usize) -> Option<usize>;
     // fn chunk_size(&self) -> usize;
     fn advance_index(&mut self, count: usize);
 
@@ -200,6 +202,11 @@ impl<'a, T: Dist + 'a, A: LamellarArray<T> + DistIteratorLauncher + Sync + Send 
         // println!("dist_iter index: {:?} global_index {:?}", index,g_index);
         g_index
     }
+    fn subarray_index(&self, index: usize) -> Option<usize> {
+        let g_index = self.data.subarray_index_from_local(index, 1);
+        // println!("dist_iter index: {:?} global_index {:?}", index,g_index);
+        g_index
+    }
     // fn chunk_size(&self) -> usize {
     //     1
     // }
@@ -253,7 +260,7 @@ impl<'a, T: Dist + 'a, A: LamellarArray<T> + Sync + Send + DistIteratorLauncher 
     type Array = A;
     fn init(&self, start_i: usize, cnt: usize) -> Self {
         let max_i = self.data.num_elems_local();
-        // println!("dist iter init {:?} {:?} {:?}",start_i,end_i,max_i);
+        // println!("dist iter init {:?} {:?} {:?}",start_i,cnt,max_i);
         DistIterMut {
             data: self.data.clone(),
             cur_i: std::cmp::min(start_i, max_i),
@@ -285,6 +292,10 @@ impl<'a, T: Dist + 'a, A: LamellarArray<T> + Sync + Send + DistIteratorLauncher 
     fn global_index(&self, index: usize) -> Option<usize> {
         let g_index = self.data.global_index_from_local(index, 1);
         // println!("dist_iter index: {:?} global_index {:?}", index,g_index);
+        g_index
+    }
+    fn subarray_index(&self, index: usize) -> Option<usize> {
+        let g_index = self.data.subarray_index_from_local(index,1); 
         g_index
     }
     // fn chunk_size(&self) -> usize {

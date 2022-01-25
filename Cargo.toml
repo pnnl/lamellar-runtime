@@ -92,6 +92,10 @@ path = "tests/array/put_test.rs"
 name = "iget_test"
 path = "tests/array/iget_test.rs"
 
+[[example]]
+name = "get_test"
+path = "tests/array/get_test.rs"
+
 ##------------ Bandwidth Examples -----------------##
 
 [[example]]

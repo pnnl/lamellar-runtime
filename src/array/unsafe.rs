@@ -129,7 +129,9 @@ impl<T: Dist> UnsafeArray<T> {
     }
 
     pub(crate) fn local_as_mut_ptr(&self) -> *mut T {
-        self.inner.data.mem_region.as_casted_mut_ptr::<T>().unwrap()
+        let u8_ptr = unsafe {self.inner.local_as_mut_ptr()};
+        // self.inner.data.mem_region.as_casted_mut_ptr::<T>().unwrap();
+        u8_ptr as *mut T
     }
 
     pub fn sub_array<R: std::ops::RangeBounds<usize>>(&self, range: R) -> UnsafeArray<T> {
@@ -454,7 +456,8 @@ impl UnsafeArrayInner{
         }
     }
 
-    //index is local with respect to inner
+    //index is local with respect to subarray
+    //returns index with respect to original full length array
     pub(crate) fn global_index_from_local(&self,index: usize) -> Option<usize> {
         let my_pe = self.data.my_pe;
         match self.distribution {
@@ -507,6 +510,33 @@ impl UnsafeArrayInner{
                     }
                 }
                 else{
+                    None
+                }
+            }
+        }
+    }
+
+    //index is local with respect to subarray
+    //returns index with respect to subarrayy
+    pub(crate) fn subarray_index_from_local(&self,index: usize) -> Option<usize> {
+        let my_pe = self.data.my_pe;
+        let my_start_index = self.start_index_for_pe(my_pe)?; //None means subarray doesnt exist on this PE
+        match self.distribution {
+            Distribution::Block => {
+                if my_start_index + index < self.size { //local index is in subarray
+                    Some(my_start_index + index)
+                }
+                else{ //local index outside subarray
+                    None
+                }
+            }
+            Distribution::Cyclic => {
+                let num_pes = self.data.num_pes;
+                let num_elems_local = self.num_elems_local();
+                if index < num_elems_local{//local index is in subarray
+                    Some(my_start_index + num_pes*index)
+                }
+                else{//local index outside subarray
                     None
                 }
             }
@@ -575,21 +605,25 @@ impl UnsafeArrayInner{
             }
             Distribution::Cyclic => {
                 let num_pes = self.data.num_pes;
-                let start_pe = self.pe_for_dist_index(0).unwrap();
-                let end_pe = self.pe_for_dist_index(self.size-1).unwrap(); //inclusive
-                let mut num_elems = self.size/num_pes;
-                if self.size%num_pes != 0 { //we have left over elements
-                    if start_pe <= end_pe{ //no wrap around occurs
-                        if pe >= start_pe && pe <= end_pe{
-                            num_elems += 1
-                        }
-                    }else{ //wrap arround occurs
-                        if pe >= start_pe || pe <= end_pe {
-                            num_elems += 1
+                if let Some(start_pe) = self.pe_for_dist_index(0){
+                    let end_pe = self.pe_for_dist_index(self.size-1).unwrap(); //inclusive
+                    let mut num_elems = self.size/num_pes;
+                    if self.size%num_pes != 0 { //we have left over elements
+                        if start_pe <= end_pe{ //no wrap around occurs
+                            if pe >= start_pe && pe <= end_pe{
+                                num_elems += 1
+                            }
+                        }else{ //wrap arround occurs
+                            if pe >= start_pe || pe <= end_pe {
+                                num_elems += 1
+                            }
                         }
                     }
+                    num_elems
                 }
-                num_elems
+                else{
+                    0
+                }
             }
         }
 
@@ -628,6 +662,38 @@ impl UnsafeArrayInner{
                 let end_index = start_index + num_elems_local;
                 // println!("si {:?}  ei {:?}",start_index,end_index);
                 &mut slice[start_index*self.elem_size..end_index*self.elem_size]
+            }
+        }
+    }
+    pub(crate) unsafe fn local_as_mut_ptr(&self) -> *mut u8 {
+        let ptr  =
+            self.data.mem_region.as_casted_mut_ptr::<u8>().expect(
+                "memory doesnt exist on this pe (this should not happen for arrays currently)",
+            );
+        let len = self.size;
+        let my_pe = self.data.my_pe;
+        let num_pes = self.data.num_pes;
+        let num_elems_local = self.num_elems_local();
+        match self.distribution {
+            Distribution::Block => {
+                let start_pe = self.pe_for_dist_index(0).unwrap(); //index is relative to inner
+                let end_pe = self.pe_for_dist_index(len-1).unwrap();
+                // println!("spe {:?} epe {:?}",start_pe,end_pe);
+                let start_index = if my_pe == start_pe {   //inner starts on my pe 
+                    let global_start = (self.orig_elem_per_pe * my_pe as f64).round() as usize;
+                    self.offset - global_start
+                }else{
+                    0
+                };
+               
+                // println!("nel {:?} sao {:?} as slice si: {:?} ei {:?}",num_elems_local,self.offset,start_index,end_index);
+                unsafe {ptr.offset((start_index*self.elem_size) as isize)}
+            }
+            Distribution::Cyclic => {
+                let global_index = self.offset;
+                let start_index = global_index / num_pes + if my_pe >= global_index % num_pes { 0 } else { 1 };
+                // println!("si {:?}  ei {:?}",start_index,end_index);
+                unsafe {ptr.offset((start_index*self.elem_size) as isize)}
             }
         }
     }

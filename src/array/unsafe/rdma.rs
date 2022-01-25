@@ -20,6 +20,7 @@ impl<T: Dist> UnsafeArray<T> {
         let end_pe =self.inner.pe_for_dist_index(index+buf.len()-1).expect("index out of bounds"); //(((index + buf.len()) as f64) / self.elem_per_pe).round() as usize;
         // println!("block_op {:?} {:?}",start_pe,end_pe);
         let mut dist_index = global_index;
+        let mut subarray_index = index;
         let mut buf_index = 0;
         let mut reqs = vec![];
         for pe in start_pe..=end_pe {
@@ -73,9 +74,8 @@ impl<T: Dist> UnsafeArray<T> {
                     }
                     ArrayRdmaCmd::GetAm => {
                         let am = UnsafeBlockGetAm {
-                            array: unsafe {
-                                self.sub_array(dist_index..(dist_index + len)).into()
-                            },
+                            array: self.clone().into(),
+                            offset: offset,
                             data: unsafe {
                                 buf.sub_region(buf_index..(buf_index + len))
                                     .to_base::<u8>()
@@ -86,7 +86,6 @@ impl<T: Dist> UnsafeArray<T> {
                         reqs.push(self.exec_am_local(am));
                     }
                 }
-
                 buf_index += len;
                 dist_index += len;
             }
@@ -188,16 +187,17 @@ impl<T: Dist> UnsafeArray<T> {
                 }
             }
             ArrayRdmaCmd::GetAm => {
+                let rem = buf.len()%num_pes;
                 for i in 0..std::cmp::min(buf.len(), num_pes) {
                     let temp_memreg = self.inner.data.team.alloc_local_mem_region::<T>(num_elems_pe);
                     let pe = (start_pe + i) % num_pes;
                     let offset = global_index / num_pes + overflow;
-                    let k = (buf.len() - i) / num_pes;
+                    let num_elems = (num_elems_pe -1) + if i<rem {1} else {0};
                     // println!("i {:?} pe {:?} k {:?} offset {:?}",i,pe,k,offset);
                     let am = UnsafeCyclicGetAm {
                         array: unsafe { self.clone().into() },
                         data: unsafe { buf.clone().to_base::<u8>() },
-                        temp_data: temp_memreg.sub_region(0..k).to_base::<u8>().into(),
+                        temp_data: temp_memreg.sub_region(0..num_elems).to_base::<u8>().into(),
                         i: i,
                         pe: pe,
                         my_pe: self.inner.data.my_pe,
@@ -257,7 +257,7 @@ impl<T: Dist> UnsafeArray<T> {
                 self.block_op(ArrayRdmaCmd::PutAm, index, buf)
             }
             Distribution::Cyclic => {
-                self.cyclic_op(ArrayRdmaCmd::Put, index, buf)
+                self.cyclic_op(ArrayRdmaCmd::PutAm, index, buf)
             }
         };
     }
@@ -368,16 +368,15 @@ impl UnsafeArrayInner{
                 let global_start = self.offset + index;
                 let global_end = global_start + len -1; //inclusive
                 let num_pes =self.data.num_pes;
-                if num_pes < len {
-                    return Box::new(0..num_pes);
-                }
-                else{
-                    let mut pes = vec![];
-                    for index in global_start..=global_end{
-                        pes.push(index % num_pes)
+                let mut pes = vec![];
+                for index in global_start..=global_end{
+                    pes.push(index % num_pes);
+                    if pes.len() == num_pes{
+                        break;
                     }
-                    return Box::new(pes.into_iter());
                 }
+                return Box::new(pes.into_iter());
+                
             }
         }  
     }
@@ -504,6 +503,7 @@ impl UnsafeArrayInner{
 #[lamellar_impl::AmLocalDataRT]
 struct UnsafeBlockGetAm {
     array: UnsafeByteArray, //inner of the indices we need to place data into
+    offset: usize,
     data: LamellarMemoryRegion<u8>, //change this to an enum which is a vector or localmemoryregion depending on data size
     pe: usize,
 }
@@ -515,7 +515,7 @@ impl LamellarAm for UnsafeBlockGetAm {
             .inner
             .data
             .mem_region
-            .iget(self.pe, 0, self.data.clone());
+            .iget(self.pe, self.offset*self.array.inner.elem_size, self.data.clone());
     }
 }
 #[lamellar_impl::AmLocalDataRT]
@@ -537,14 +537,14 @@ impl LamellarAm for UnsafeCyclicGetAm {
             .inner
             .data
             .mem_region
-            .iget(self.pe, self.offset, self.temp_data.clone());
-        for (k, j) in (self.i..self.temp_data.len())
+            .iget(self.pe, self.offset*self.array.inner.elem_size, self.temp_data.clone());
+        for (k, j) in (self.i..self.data.len()/self.array.inner.elem_size)
             .step_by(self.num_pes)
-            .enumerate()
+            .enumerate().map(|(k,j)| {(k*self.array.inner.elem_size,j * self.array.inner.elem_size)})
         {
             unsafe {
                 self.data
-                    .put(self.my_pe, j, self.temp_data.sub_region(k..=k))
+                    .put(self.my_pe, j, self.temp_data.sub_region(k..(k+self.array.inner.elem_size)))
             };
         }
     }

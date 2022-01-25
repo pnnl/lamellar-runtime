@@ -32,11 +32,18 @@ impl<T: Dist> UnsafeArray<T> {
 impl<T: Dist> DistIteratorLauncher for UnsafeArray<T> {
     fn global_index_from_local(&self, index: usize, chunk_size: usize) -> Option<usize> {
         // println!("global index cs:{:?}",chunk_size);
-        let my_pe = self.inner.data.my_pe;
         if chunk_size == 1 {
             self.inner.global_index_from_local(index)
         } else {
             Some(self.inner.global_index_from_local(index*chunk_size)?/chunk_size)
+        }
+    }
+
+    fn subarray_index_from_local(&self, index: usize, chunk_size: usize) -> Option<usize> {
+        if chunk_size == 1 {
+            self.inner.subarray_index_from_local(index)
+        } else {
+            Some(self.inner.subarray_index_from_local(index*chunk_size)?/chunk_size)
         }
     }
 

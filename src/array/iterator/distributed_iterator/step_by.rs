@@ -71,6 +71,10 @@ where
         // println!("step_by index: {:?} global_index {:?}", index,g_index);
         Some(g_index)
     }
+    fn subarray_index(&self, index: usize) -> Option<usize> {
+        let g_index = self.iter.subarray_index(index * self.step_size)? / self.step_size; //not sure if this works...                                                  
+        Some(g_index)
+    }
     // fn chunk_size(&self) -> usize {
     //     self.iter.chunk_size()
     // }

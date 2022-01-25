@@ -68,6 +68,11 @@ where
         // println!("take index: {:?} global_index {:?}", index,g_index);
         g_index
     }
+    fn subarray_index(&self, index: usize) -> Option<usize> {
+        let g_index = self.iter.subarray_index(index); //not sure if this works...
+                                                  // println!("enumerate index: {:?} global_index {:?}", index,g_index);
+        g_index
+    }
     // fn chunk_size(&self) -> usize {
     //     self.iter.chunk_size()
     // }

@@ -157,6 +157,7 @@ impl<T: Dist + 'static > LamellarAm for InitGetAm<T> {
                         else{
                             panic!("memory align error");
                         };
+                        // println!("start_index {:?}  data {:?} {:?} {:?}",start_index,data, data.len(),data_t_len);
                         let data_t_slice = std::slice::from_raw_parts(data_t_ptr,data_t_len);
                         for (i,val) in data_t_slice.iter().enumerate(){
                             buf_slice[start_index+i*num_pes] = *val;
