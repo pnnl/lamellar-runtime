@@ -870,21 +870,21 @@ fn create_ops(
     let mut bitwise_mod = quote!{};
     if bitwise{
         let bitwise_ops: Vec<(syn::Ident,bool)> = vec![
-            // (quote::format_ident!("bit_and"),false),
-            // (quote::format_ident!("fetch_bit_and"),true),
-            // (quote::format_ident!("bit_or"),false),
-            // (quote::format_ident!("fetch_bit_or"),true),
+            (quote::format_ident!("bit_and"),false),
+            (quote::format_ident!("fetch_bit_and"),true),
+            (quote::format_ident!("bit_or"),false),
+            (quote::format_ident!("fetch_bit_or"),true),
         ];
         
         // let (array_impls,write_array_impl) = gen_op_impls(typeident.clone(),array_types,&bitwise_ops,true,rt);
         let array_impls = gen_array_impls(typeident.clone(), &write_array_types, &bitwise_ops, OpType::Bitwise, rt);
         let write_array_impls = gen_write_array_impls(typeident.clone(), &write_array_types, &bitwise_ops, rt);
         expanded.extend(quote!{
-            // #[allow(non_camel_case_types)]
-            // impl #lamellar::array::BitWiseOps<#typeident> for #lamellar::array::LamellarWriteArray<#typeident>{
-            //     #write_array_impls
-            // }
-            // #array_impls
+            #[allow(non_camel_case_types)]
+            impl #lamellar::array::BitWiseOps<#typeident> for #lamellar::array::LamellarWriteArray<#typeident>{
+                #write_array_impls
+            }
+            #array_impls
         });
         bitwise_mod.extend(quote!{use __lamellar::array::LocalBitWiseOps;});
     }

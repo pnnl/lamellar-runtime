@@ -355,6 +355,7 @@ impl<T: ElementBitWiseOps> LocalBitWiseOps<T> for CollectiveAtomicArray<T> {
         unsafe { 
             let orig  = self.local_as_mut_slice()[index];
             self.local_as_mut_slice()[index] &= val;
+            // println!("and i: {:?} {:?} {:?} {:?}",index,orig,val,self.local_as_mut_slice()[index]);
             orig
         }
     }
