@@ -20,7 +20,7 @@ impl<T: Dist> UnsafeArray<T> {
         let end_pe =self.inner.pe_for_dist_index(index+buf.len()-1).expect("index out of bounds"); //(((index + buf.len()) as f64) / self.elem_per_pe).round() as usize;
         // println!("block_op {:?} {:?}",start_pe,end_pe);
         let mut dist_index = global_index;
-        let mut subarray_index = index;
+        // let mut subarray_index = index;
         let mut buf_index = 0;
         let mut reqs = vec![];
         for pe in start_pe..=end_pe {
@@ -131,7 +131,7 @@ impl<T: Dist> UnsafeArray<T> {
                     let temp_memreg = self.inner.data.team.alloc_local_mem_region::<T>(num_elems_pe);
                     let mut k = 0;
                     let pe = (start_pe + i) % num_pes;
-                    let offset = global_index / num_pes + overflow;
+                    // let offset = global_index / num_pes + overflow;
                     for j in (i..buf.len()).step_by(num_pes) {
                         unsafe { temp_memreg.put(my_pe, k, buf.sub_region(j..=j)) };
                         k += 1;
@@ -195,7 +195,7 @@ impl<T: Dist> UnsafeArray<T> {
                     let num_elems = (num_elems_pe -1) + if i<rem {1} else {0};
                     // println!("i {:?} pe {:?} k {:?} offset {:?}",i,pe,k,offset);
                     let am = UnsafeCyclicGetAm {
-                        array: unsafe { self.clone().into() },
+                        array:  self.clone().into(),
                         data: unsafe { buf.clone().to_base::<u8>() },
                         temp_data: temp_memreg.sub_region(0..num_elems).to_base::<u8>().into(),
                         i: i,
@@ -338,17 +338,17 @@ impl<T: Dist> LamellarArrayPut<T> for UnsafeArray<T> {
 }
 
 impl UnsafeByteArray{
-    pub(crate) fn pes_for_range(&self,index: usize, len: usize) ->  Box<dyn Iterator<Item=usize>>{
-        self.inner.pes_for_range(index,len)
-    }
+    // pub(crate) fn pes_for_range(&self,index: usize, len: usize) ->  Box<dyn Iterator<Item=usize>>{
+    //     self.inner.pes_for_range(index,len)
+    // }
     
     pub(crate) unsafe fn local_elements_for_range(&self, index: usize, len: usize) -> Option<(&mut [u8],Box<dyn Iterator<Item=usize>>)> {
         self.inner.local_elements_for_range(index,len)
     }
 
-    pub(crate) fn num_elements_on_pe_for_range(&self,pe: usize, start_index: usize, len: usize) -> Option<usize> {
-        self.inner.num_elements_on_pe_for_range(pe,start_index,len)
-    }
+    // pub(crate) fn num_elements_on_pe_for_range(&self,pe: usize, start_index: usize, len: usize) -> Option<usize> {
+    //     self.inner.num_elements_on_pe_for_range(pe,start_index,len)
+    // }
 }
 
 impl UnsafeArrayInner{

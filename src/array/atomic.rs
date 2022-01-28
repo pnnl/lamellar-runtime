@@ -3,18 +3,12 @@ pub(crate) mod operations;
 pub (crate) mod rdma;
 pub use rdma::{AtomicArrayPut,AtomicArrayGet};
 
-// use crate::array::iterator::distributed_iterator::{
-//     DistIter, DistIterMut, DistIteratorLauncher, DistributedIterator,
-// };
 use crate::array::r#unsafe::UnsafeByteArray;
-use crate::array::iterator::serial_iterator::LamellarArrayIter;
 use crate::array::*;
 use crate::array::private::LamellarArrayPrivate;
 use crate::darc::{Darc, DarcMode};
-use crate::lamellar_request::LamellarRequest;
 use crate::lamellar_team::{IntoLamellarTeam, LamellarTeamRT};
 use crate::memregion::Dist;
-use core::marker::PhantomData;
 use parking_lot::{Mutex, MutexGuard};
 use std::any::TypeId;
 use std::collections::HashSet;

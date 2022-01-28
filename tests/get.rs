@@ -1,22 +1,3 @@
-// #[test]
-// fn array() {
-//     let t = trybuild::TestCases::new();
-//     t.compile_fail("tests/array/local_only/immutable_borrow.rs");
-//     t.compile_fail("tests/array/local_only/clone.rs");
-// }
-
-// #[test]
-// fn unsafe_array(){
-
-// }
-// mod array{
-//     mod r#unsafe{ 
-//         mod block{
-//             mod put;
-//         }
-//     }
-// }
-
 use assert_cmd::Command;
 use std::path::PathBuf;
 use serial_test::serial;
@@ -89,5 +70,5 @@ macro_rules! create_get_tests {
 
 
 
-create_get_tests!((UnsafeArray,AtomicArray,CollectiveAtomicArray),("Block","Cyclic"),(u8,u16,u32,u128,usize,i8,i16,i32,i128,isize,f32,f64),(2,3,4),(4,19,131));
+create_get_tests!((UnsafeArray,AtomicArray,CollectiveAtomicArray,ReadOnlyArray),("Block","Cyclic"),(u8,u16,u32,u128,usize,i8,i16,i32,i128,isize,f32,f64),(2,3,4),(4,19,128));
 // create_iput_tests!((UnsafeArray,AtomicArray,CollectiveAtomicArray),("Block"),(u8,u16,f64),(2),(4));

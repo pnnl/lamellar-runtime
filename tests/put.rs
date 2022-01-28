@@ -89,4 +89,4 @@ macro_rules! create_put_tests {
 
 
 
-create_put_tests!((UnsafeArray,AtomicArray,CollectiveAtomicArray),("Block","Cyclic"),(u8,u16,u32,u128,usize,i8,i16,i32,i128,isize,f32,f64),(2,3,4),(4,19,131));
+create_put_tests!((UnsafeArray,AtomicArray,CollectiveAtomicArray),("Block","Cyclic"),(u8,u16,u32,u128,usize,i8,i16,i32,i128,isize,f32,f64),(2,3,4),(4,19,128));

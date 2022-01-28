@@ -2,9 +2,8 @@ use crate::array::collective_atomic::*;
 use crate::array::LamellarWrite;
 use crate::array::*;
 use crate::array::private::ArrayExecAm;
-use crate::lamellar_request::LamellarRequest;
 use crate::memregion::{
-    AsBase, Dist, MemoryRegionRDMA, RTMemoryRegionRDMA, RegisteredMemoryRegion, SubRegion,
+    AsBase, Dist,  RTMemoryRegionRDMA, RegisteredMemoryRegion, 
 };
 
 
@@ -83,7 +82,7 @@ impl<T: Dist + 'static > LamellarAm for InitGetAm<T> {
         for pe in self.array.array.pes_for_range(self.index,self.buf.len()).into_iter(){
             // println!("pe {:?}",pe);
             let remote_am = RemoteGetAm{
-                array: unsafe {self.array.clone().into()},
+                array: self.array.clone().into(),
                 start_index: self.index,
                 len: self.buf.len(),
             };
@@ -157,8 +156,8 @@ struct InitPutAm<T: Dist > {
 #[lamellar_impl::rt_am_local]
 impl<T: Dist + 'static > LamellarAm for InitPutAm<T> {
     fn exec(self) {
-        let u8_index = self.index * std::mem::size_of::<T>();
-        let u8_len = self.buf.len() * std::mem::size_of::<T>(); 
+        // let u8_index = self.index * std::mem::size_of::<T>();
+        // let u8_len = self.buf.len() * std::mem::size_of::<T>(); 
 
         unsafe{
             let u8_buf = self.buf.clone().to_base::<u8>();

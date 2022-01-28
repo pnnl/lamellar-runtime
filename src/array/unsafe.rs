@@ -87,7 +87,7 @@ impl<T: Dist> UnsafeArray<T> {
         .expect("trying to create array on non team member");
         let array = UnsafeArray {
             inner: UnsafeArrayInner{
-                data: data.clone(),
+                data: data,
                 distribution:  distribution.clone(),
                 orig_elem_per_pe: elem_per_pe,
                 elem_size: std::mem::size_of::<T>(), 
@@ -430,15 +430,17 @@ impl UnsafeArrayInner{
     }
 
     
-    //index relative to inner -- i dont think this is correct
+    //index relative to subarray, return offset relative to subarray
     pub fn pe_offset_for_dist_index(&self, pe: usize, index: usize) -> Option<usize> {
         let global_index = self.offset + index;
+        let num_elems_local = self.num_elems_pe(pe);
         match self.distribution {
             Distribution::Block => {
-                let pe_start_index = (self.orig_elem_per_pe * pe as f64).round() as usize;
-                let pe_end_index = (self.orig_elem_per_pe * (pe+1) as f64).round() as usize;
-                if pe_start_index <= global_index && global_index < pe_end_index{
-                    Some(global_index - pe_start_index)
+                // println!("{:?} {:?} {:?}",pe,index,num_elems_local);
+                let pe_start_index = self.start_index_for_pe(pe)?;
+                let pe_end_index = pe_start_index + num_elems_local;
+                if pe_start_index <= index && index < pe_end_index{
+                    Some(index - pe_start_index)
                 }
                 else{
                     None
@@ -447,7 +449,7 @@ impl UnsafeArrayInner{
             Distribution::Cyclic => {
                 let num_pes = self.data.num_pes;
                 if global_index% num_pes == pe{
-                    Some(global_index/num_pes)
+                    Some(index/num_pes)
                 }
                 else{
                     None
@@ -455,6 +457,31 @@ impl UnsafeArrayInner{
             }
         }
     }
+
+    // pub fn pe_full_offset_for_dist_index(&self, pe: usize, index: usize) -> Option<usize> {
+    //     let global_index = self.offset + index;
+    //     match self.distribution {
+    //         Distribution::Block => {
+    //             let pe_start_index = (self.orig_elem_per_pe * pe as f64).round() as usize;
+    //             let pe_end_index = (self.orig_elem_per_pe * (pe+1) as f64).round() as usize;
+    //             if pe_start_index <= global_index && global_index < pe_end_index{
+    //                 Some(global_index - pe_start_index)
+    //             }
+    //             else{
+    //                 None
+    //             }
+    //         }
+    //         Distribution::Cyclic => {
+    //             let num_pes = self.data.num_pes;
+    //             if global_index% num_pes == pe{
+    //                 Some(global_index/num_pes)
+    //             }
+    //             else{
+    //                 None
+    //             }
+    //         }
+    //     }
+    // }
 
     //index is local with respect to subarray
     //returns index with respect to original full length array
@@ -637,14 +664,14 @@ impl UnsafeArrayInner{
             self.data.mem_region.as_casted_mut_slice::<u8>().expect(
                 "memory doesnt exist on this pe (this should not happen for arrays currently)",
             );
-        let len = self.size;
+        // let len = self.size;
         let my_pe = self.data.my_pe;
         let num_pes = self.data.num_pes;
         let num_elems_local = self.num_elems_local();
         match self.distribution {
             Distribution::Block => {
                 let start_pe = self.pe_for_dist_index(0).unwrap(); //index is relative to inner
-                let end_pe = self.pe_for_dist_index(len-1).unwrap();
+                // let end_pe = self.pe_for_dist_index(len-1).unwrap();
                 // println!("spe {:?} epe {:?}",start_pe,end_pe);
                 let start_index = if my_pe == start_pe {   //inner starts on my pe 
                     let global_start = (self.orig_elem_per_pe * my_pe as f64).round() as usize;
@@ -670,14 +697,14 @@ impl UnsafeArrayInner{
             self.data.mem_region.as_casted_mut_ptr::<u8>().expect(
                 "memory doesnt exist on this pe (this should not happen for arrays currently)",
             );
-        let len = self.size;
+        // let len = self.size;
         let my_pe = self.data.my_pe;
         let num_pes = self.data.num_pes;
-        let num_elems_local = self.num_elems_local();
+        // let num_elems_local = self.num_elems_local();
         match self.distribution {
             Distribution::Block => {
                 let start_pe = self.pe_for_dist_index(0).unwrap(); //index is relative to inner
-                let end_pe = self.pe_for_dist_index(len-1).unwrap();
+                // let end_pe = self.pe_for_dist_index(len-1).unwrap();
                 // println!("spe {:?} epe {:?}",start_pe,end_pe);
                 let start_index = if my_pe == start_pe {   //inner starts on my pe 
                     let global_start = (self.orig_elem_per_pe * my_pe as f64).round() as usize;
@@ -687,13 +714,13 @@ impl UnsafeArrayInner{
                 };
                
                 // println!("nel {:?} sao {:?} as slice si: {:?} ei {:?}",num_elems_local,self.offset,start_index,end_index);
-                unsafe {ptr.offset((start_index*self.elem_size) as isize)}
+                ptr.offset((start_index*self.elem_size) as isize)
             }
             Distribution::Cyclic => {
                 let global_index = self.offset;
                 let start_index = global_index / num_pes + if my_pe >= global_index % num_pes { 0 } else { 1 };
                 // println!("si {:?}  ei {:?}",start_index,end_index);
-                unsafe {ptr.offset((start_index*self.elem_size) as isize)}
+                ptr.offset((start_index*self.elem_size) as isize)
             }
         }
     }

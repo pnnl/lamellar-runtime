@@ -6,7 +6,6 @@ use crate::array::private::LamellarArrayPrivate;
 use crate::array::*;
 use crate::darc::DarcMode;
 use crate::darc::local_rw_darc::LocalRwDarc;
-use crate::lamellar_request::LamellarRequest;
 use crate::lamellar_team::{IntoLamellarTeam, LamellarTeamRT};
 use crate::memregion::Dist;
 use core::marker::PhantomData;

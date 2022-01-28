@@ -39,48 +39,6 @@ macro_rules! initialize_array{
     };
 }
 
-// macro_rules! iput_test{
-//     ($array:ident, $t:ty, $len:expr) =>{
-//        {
-//             let world = lamellar::LamellarWorldBuilder::new().build();
-//             let num_pes = world.num_pes();
-//             let my_pe = world.my_pe();
-//             let array_total_len = $len;
-//             let mem_seg_len = array_total_len;
-//             let mut success = true;
-//             let block_array: $array::<$t> = $array::<$t>::new(world.team(), array_total_len, Distribution::Block).into(); //convert into abstract LamellarArray, distributed len is total_len
-         
-//             let local_mem_region: LamellarMemoryRegion<$t> = world.alloc_local_mem_region(1).into(); //Convert into abstract LamellarMemoryRegion, each local segment is total_len
-//             //initialize array
-//             let init_val = my_pe as $t;
-//             initialize_array!($array, block_array, init_val);
-//             block_array.wait_all();
-//             block_array.barrier();
-//             initialize_mem_region(&local_mem_region,my_pe as $t);
-            
-//             for i in (my_pe..array_total_len).step_by(num_pes){
-//                 block_array.put(i, &local_mem_region); //uses the local data of the shared memregion
-//             }
-//             block_array.wait_all();
-//             block_array.barrier();
-//             // block_array.print();
-            
-//             for (i,elem) in block_array.ser_iter().into_iter().enumerate(){
-//                 if (( ((i as usize)%num_pes) as $t - *elem) as f32).abs() > 0.0001 {
-//                     println!("{:?} {:?} {:?}",i as $t,*elem,((i as $t - *elem) as f32).abs());
-//                     success = false;
-//                 }
-//             }
-            
-//             world.wait_all();
-//             world.barrier();
-//             if !success{
-//                 eprintln!("failed");
-//             }
-//         }
-//     }
-// }
-
 macro_rules! put_test{
     ($array:ident, $t:ty, $len:expr, $dist:ident) =>{
        {
@@ -222,12 +180,12 @@ fn main() {
                 "u64" => put_test!(UnsafeArray,u64,len,dist_type),
                 "u128" => put_test!(UnsafeArray,u128,len,dist_type),
                 "usize" => put_test!(UnsafeArray,usize,len,dist_type),
-                "i8" => put_test!(UnsafeArray,u8,len,dist_type),
-                "i16" => put_test!(UnsafeArray,u16,len,dist_type),
-                "i32" => put_test!(UnsafeArray,u32,len,dist_type),
-                "i64" => put_test!(UnsafeArray,u64,len,dist_type),
-                "i128" => put_test!(UnsafeArray,u128,len,dist_type),
-                "isize" => put_test!(UnsafeArray,usize,len,dist_type),
+                "i8" => put_test!(UnsafeArray,i8,len,dist_type),
+                "i16" => put_test!(UnsafeArray,i16,len,dist_type),
+                "i32" => put_test!(UnsafeArray,i32,len,dist_type),
+                "i64" => put_test!(UnsafeArray,i64,len,dist_type),
+                "i128" => put_test!(UnsafeArray,i128,len,dist_type),
+                "isize" => put_test!(UnsafeArray,isize,len,dist_type),
                 "f32" => put_test!(UnsafeArray,f32,len,dist_type),
                 "f64" => put_test!(UnsafeArray,f64,len,dist_type),
                 _ =>  eprintln!("unsupported element type"),
@@ -241,12 +199,12 @@ fn main() {
                 "u64" => put_test!(AtomicArray,u64,len,dist_type),
                 "u128" => put_test!(AtomicArray,u128,len,dist_type),
                 "usize" => put_test!(AtomicArray,usize,len,dist_type),
-                "i8" => put_test!(AtomicArray,u8,len,dist_type),
-                "i16" => put_test!(AtomicArray,u16,len,dist_type),
-                "i32" => put_test!(AtomicArray,u32,len,dist_type),
-                "i64" => put_test!(AtomicArray,u64,len,dist_type),
-                "i128" => put_test!(AtomicArray,u128,len,dist_type),
-                "isize" => put_test!(AtomicArray,usize,len,dist_type),
+                "i8" => put_test!(AtomicArray,i8,len,dist_type),
+                "i16" => put_test!(AtomicArray,i16,len,dist_type),
+                "i32" => put_test!(AtomicArray,i32,len,dist_type),
+                "i64" => put_test!(AtomicArray,i64,len,dist_type),
+                "i128" => put_test!(AtomicArray,i128,len,dist_type),
+                "isize" => put_test!(AtomicArray,isize,len,dist_type),
                 "f32" => put_test!(AtomicArray,f32,len,dist_type),
                 "f64" => put_test!(AtomicArray,f64,len,dist_type),
                 _ =>  eprintln!("unsupported element type"),
@@ -260,12 +218,12 @@ fn main() {
                 "u64" => put_test!(CollectiveAtomicArray,u64,len,dist_type),
                 "u128" => put_test!(CollectiveAtomicArray,u128,len,dist_type),
                 "usize" => put_test!(CollectiveAtomicArray,usize,len,dist_type),
-                "i8" => put_test!(CollectiveAtomicArray,u8,len,dist_type),
-                "i16" => put_test!(CollectiveAtomicArray,u16,len,dist_type),
-                "i32" => put_test!(CollectiveAtomicArray,u32,len,dist_type),
-                "i64" => put_test!(CollectiveAtomicArray,u64,len,dist_type),
-                "i128" => put_test!(CollectiveAtomicArray,u128,len,dist_type),
-                "isize" => put_test!(CollectiveAtomicArray,usize,len,dist_type),
+                "i8" => put_test!(CollectiveAtomicArray,i8,len,dist_type),
+                "i16" => put_test!(CollectiveAtomicArray,i16,len,dist_type),
+                "i32" => put_test!(CollectiveAtomicArray,i32,len,dist_type),
+                "i64" => put_test!(CollectiveAtomicArray,i64,len,dist_type),
+                "i128" => put_test!(CollectiveAtomicArray,i128,len,dist_type),
+                "isize" => put_test!(CollectiveAtomicArray,isize,len,dist_type),
                 "f32" => put_test!(CollectiveAtomicArray,f32,len,dist_type),
                 "f64" => put_test!(CollectiveAtomicArray,f64,len,dist_type),
                 _ =>  eprintln!("unsupported element type"),

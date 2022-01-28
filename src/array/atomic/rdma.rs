@@ -2,9 +2,8 @@ use crate::array::atomic::*;
 use crate::array::LamellarWrite;
 use crate::array::*;
 use crate::array::private::ArrayExecAm;
-use crate::lamellar_request::LamellarRequest;
 use crate::memregion::{
-    AsBase, Dist, MemoryRegionRDMA, RTMemoryRegionRDMA, RegisteredMemoryRegion, SubRegion,
+    AsBase, Dist,  RTMemoryRegionRDMA, RegisteredMemoryRegion, 
 };
 
 type GetFn = fn(AtomicByteArray, usize, usize) -> LamellarArcAm;
@@ -120,10 +119,8 @@ impl<T: Dist + 'static > LamellarAm for InitGetAm<T> {
             // println!("pe {:?}",pe);
             //get the proper remote am from the ops map
             if let Some(remote_am_gen) = GET_OPS.get(&TypeId::of::<T>()) {
-                unsafe{
                     let am: LamellarArcAm = remote_am_gen(self.array.clone().into(), self.index,self.buf.len());
                     reqs.push(self.array.exec_arc_am_pe::<Vec<u8>>(pe,am).into_future());
-                }
             }else{
                 let name = std::any::type_name::<T>().split("::").last().unwrap();
                 panic!("the type {:?} has not been registered for atomic rdma operations, this typically means you need to derive \"AtomicRdma\" for the type,

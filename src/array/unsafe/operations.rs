@@ -314,6 +314,7 @@ impl<T: ElementArithmeticOps> LocalArithmeticOps<T> for UnsafeArray<T> {
         unsafe { 
             let orig  = self.local_as_mut_slice()[index];
             self.local_as_mut_slice()[index] *= val;
+            // println!("orig: {:?} new {:?} va; {:?}",orig,self.local_as_mut_slice()[index] ,val);
             orig
         }
     }
@@ -322,6 +323,7 @@ impl<T: ElementArithmeticOps> LocalArithmeticOps<T> for UnsafeArray<T> {
         unsafe {
             let orig  = self.local_as_mut_slice()[index]; 
             self.local_as_mut_slice()[index] /= val;
+            // println!("div i: {:?} {:?} {:?} {:?}",index,orig,val,self.local_as_mut_slice()[index]);
             orig
         }
     }

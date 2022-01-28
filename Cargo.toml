@@ -61,6 +61,7 @@ members = ["impl"]
 [features]
 enable-rofi=["rofisys","libc"]
 enable-prof=["lamellar-prof/enable-prof"]
+slurm-test=[]
 default=[]
 
 
@@ -95,6 +96,38 @@ path = "tests/array/iget_test.rs"
 [[example]]
 name = "get_test"
 path = "tests/array/get_test.rs"
+
+[[example]]
+name = "add_test"
+path = "tests/array/add_test.rs"
+
+[[example]]
+name = "fetch_add_test"
+path = "tests/array/fetch_add_test.rs"
+
+[[example]]
+name = "sub_test"
+path = "tests/array/sub_test.rs"
+
+[[example]]
+name = "fetch_sub_test"
+path = "tests/array/fetch_sub_test.rs"
+
+[[example]]
+name = "mul_test"
+path = "tests/array/mul_test.rs"
+
+[[example]]
+name = "fetch_mul_test"
+path = "tests/array/fetch_mul_test.rs"
+
+[[example]]
+name = "div_test"
+path = "tests/array/div_test.rs"
+
+[[example]]
+name = "fetch_div_test"
+path = "tests/array/fetch_div_test.rs"
 
 ##------------ Bandwidth Examples -----------------##
 

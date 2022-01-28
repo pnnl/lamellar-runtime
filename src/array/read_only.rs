@@ -4,7 +4,6 @@ use crate::array::iterator::distributed_iterator::{
 use crate::array::iterator::serial_iterator::LamellarArrayIter;
 use crate::array::*;
 use crate::darc::DarcMode;
-use crate::lamellar_request::LamellarRequest;
 use crate::lamellar_team::{IntoLamellarTeam, LamellarTeamRT};
 use crate::memregion::Dist;
 use std::sync::Arc;

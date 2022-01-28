@@ -1,13 +1,13 @@
 use crate::array::collective_atomic::*;
 
 use crate::array::iterator::distributed_iterator::{
-    DistIter, DistIterMut, DistIteratorLauncher, DistributedIterator, ForEach, ForEachAsync,
+     DistIteratorLauncher, DistributedIterator
 };
 use crate::array::iterator::serial_iterator::LamellarArrayIter;
 use crate::array::private::LamellarArrayPrivate;
 use crate::array::*;
 use crate::memregion::Dist;
-use parking_lot::{RwLock,RawRwLock, lock_api::{ArcRwLockReadGuard,ArcRwLockWriteGuard}};
+use parking_lot::{RawRwLock, lock_api::{ArcRwLockReadGuard,ArcRwLockWriteGuard}};
 
 
 #[derive(Clone)]

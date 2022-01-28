@@ -138,6 +138,7 @@ impl<T: ElementArithmeticOps  + 'static> ArithmeticOps<T> for CollectiveAtomicAr
     ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>> {
         let pe = self.pe_for_dist_index(index).expect("index out of bounds");
         let local_index = self.pe_offset_for_dist_index(pe, index).unwrap();//calculated pe above
+        // println!("index {:?} pe {:?} local_index {:?}",index,pe,local_index);
         if pe == self.my_pe() {
             self.local_add(local_index, val);
             None
@@ -342,6 +343,7 @@ impl<T: ElementArithmeticOps> LocalArithmeticOps<T> for CollectiveAtomicArray<T>
         unsafe {
             let orig  = self.local_as_mut_slice()[index]; 
             self.local_as_mut_slice()[index] /= val;
+            // println!("div i: {:?} {:?} {:?} {:?}",index,orig,val,self.local_as_mut_slice()[index]);
             orig
         }
     }

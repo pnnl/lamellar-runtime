@@ -1,13 +1,5 @@
-use nix::{sys::wait::wait,unistd::{fork, ForkResult::{Child}}};
-
-use lamellar::array::{LamellarReadArray, Distribution, UnsafeArray,ReadOnlyArray,AtomicArray,CollectiveAtomicArray, DistributedIterator};
+use lamellar::array::{ Distribution, UnsafeArray,ReadOnlyArray,AtomicArray,CollectiveAtomicArray, DistributedIterator};
 use lamellar::{Dist,ActiveMessaging, LamellarMemoryRegion, RemoteMemoryRegion};
-
-// fn initialize_array<T: Dist>(array: &UnsafeArray<T>,init_val: T) {
-//     array.dist_iter_mut().for_each(move |x| *x = init_val);
-//     array.wait_all();
-//     array.barrier();
-// }
 
 fn initialize_mem_region<T: Dist + std::ops::AddAssign>(memregion: &LamellarMemoryRegion<T>,init_val: T,inc_val: T) {
     unsafe {
@@ -21,10 +13,7 @@ fn initialize_mem_region<T: Dist + std::ops::AddAssign>(memregion: &LamellarMemo
 
 macro_rules! initialize_array{
     (UnsafeArray,$array:ident,$t:ty) => {
-        $array.dist_iter_mut().enumerate().for_each(move |(i,x)| {
-            // println!("init i={:?}",i);
-            *x = i as $t
-        });
+        $array.dist_iter_mut().enumerate().for_each(move |(i,x)| {*x = i as $t});
         $array.wait_all();
     };
     (AtomicArray,$array:ident,$t:ty) => {
@@ -34,6 +23,46 @@ macro_rules! initialize_array{
     (CollectiveAtomicArray,$array:ident,$t:ty) => {
         $array.dist_iter_mut().enumerate().for_each(move |(i,x)| *x =i as $t);
         $array.wait_all();
+    };
+    (ReadOnlyArray,$array:ident,$t:ty) => {
+        let temp = $array.into_unsafe();
+        temp.dist_iter_mut().enumerate().for_each(move |(i,x)| *x =i as $t);
+        temp.wait_all();
+        $array = temp.into_read_only();
+    };
+}
+
+macro_rules! initialize_array_range{
+    (UnsafeArray,$array:ident,$t:ty,$range:expr) => {
+        {
+            let subarray = $array.sub_array($range);
+            subarray.dist_iter_mut().enumerate().for_each(move |(i,x)| {*x = i as $t});
+            subarray.wait_all();
+        }
+    };
+    (AtomicArray,$array:ident,$t:ty,$range:expr) => {
+        {
+            let subarray = $array.sub_array($range);
+            subarray.dist_iter().enumerate().for_each(move |(i,x)| x.store(i as $t));
+            subarray.wait_all();
+        }
+    };
+    (CollectiveAtomicArray,$array:ident,$t:ty,$range:expr) => {
+        {
+            let subarray = $array.sub_array($range);
+            subarray.dist_iter_mut().enumerate().for_each(move |(i,x)| *x =i as $t);
+            subarray.wait_all();
+        }
+    };
+    (ReadOnlyArray,$array:ident,$t:ty,$range:expr) => {
+        {
+            let temp = $array.into_unsafe();
+            let subarray = temp.sub_array($range);
+            subarray.dist_iter_mut().enumerate().for_each(move |(i,x)| *x =i as $t);
+            subarray.wait_all();
+            drop(subarray);
+            $array = temp.into_read_only();
+        }
     };
 }
 
@@ -45,15 +74,16 @@ macro_rules! get_test{
        {
             let world = lamellar::LamellarWorldBuilder::new().build();
             let num_pes = world.num_pes();
-            let my_pe = world.my_pe();
+            let _my_pe = world.my_pe();
             let array_total_len = $len;
             let mem_seg_len = array_total_len;
             let mut success = true;
-            let array: $array::<$t> = $array::<$t>::new(world.team(), array_total_len, $dist).into(); //convert into abstract LamellarArray, distributed len is total_len
-         
+            #[allow(unused_mut)]
+            let mut array: $array::<$t> = $array::<$t>::new(world.team(), array_total_len, $dist).into(); //convert into abstract LamellarArray, distributed len is total_len
+            initialize_array!($array, array, $t);
             let shared_mem_region: LamellarMemoryRegion<$t> = world.alloc_shared_mem_region(mem_seg_len).into(); //Convert into abstract LamellarMemoryRegion, each local segment is total_len
             //initialize array
-            initialize_array!($array, array, $t);
+            
             array.wait_all();
             array.barrier();
             initialize_mem_region(&shared_mem_region,num_pes as $t,0 as $t);
@@ -93,9 +123,10 @@ macro_rules! get_test{
             let half_len = array_total_len/2;
             let start_i = half_len/2;
             let end_i = start_i + half_len;
+            initialize_array_range!($array, array, $t,(start_i..end_i));
             let sub_array = array.sub_array(start_i..end_i);
             world.barrier();
-            initialize_array!($array, sub_array, $t);
+            
             sub_array.barrier();
             // sub_array.print();
             for tx_size in 1..=half_len{
@@ -128,6 +159,7 @@ macro_rules! get_test{
             if !success{
                 eprintln!("failed 2");
             }
+            drop(sub_array); //needed for if we are using a ReadOnlyArray, as we will switch to an unsafe array to re-initialize
 
             let pe_len = array_total_len/num_pes;
 
@@ -136,9 +168,10 @@ macro_rules! get_test{
                 let start_i = (pe*pe_len)+ len/2;
               
                 let end_i = start_i+len;
+                initialize_array_range!($array, array, $t,(start_i..end_i));
                 let sub_array = array.sub_array(start_i..end_i);
                 world.barrier();
-                initialize_array!($array, sub_array, $t);
+                
                 sub_array.barrier();
                 
                 for tx_size in 1..len{
@@ -198,12 +231,12 @@ fn main() {
                 "u64" => get_test!(UnsafeArray,u64,len,dist_type),
                 "u128" => get_test!(UnsafeArray,u128,len,dist_type),
                 "usize" => get_test!(UnsafeArray,usize,len,dist_type),
-                "i8" => get_test!(UnsafeArray,u8,len,dist_type),
-                "i16" => get_test!(UnsafeArray,u16,len,dist_type),
-                "i32" => get_test!(UnsafeArray,u32,len,dist_type),
-                "i64" => get_test!(UnsafeArray,u64,len,dist_type),
-                "i128" => get_test!(UnsafeArray,u128,len,dist_type),
-                "isize" => get_test!(UnsafeArray,usize,len,dist_type),
+                "i8" => get_test!(UnsafeArray,i8,len,dist_type),
+                "i16" => get_test!(UnsafeArray,i16,len,dist_type),
+                "i32" => get_test!(UnsafeArray,i32,len,dist_type),
+                "i64" => get_test!(UnsafeArray,i64,len,dist_type),
+                "i128" => get_test!(UnsafeArray,i128,len,dist_type),
+                "isize" => get_test!(UnsafeArray,isize,len,dist_type),
                 "f32" => get_test!(UnsafeArray,f32,len,dist_type),
                 "f64" => get_test!(UnsafeArray,f64,len,dist_type),
                 _ =>  eprintln!("unsupported element type"),
@@ -217,12 +250,12 @@ fn main() {
                 "u64" => get_test!(AtomicArray,u64,len,dist_type),
                 "u128" => get_test!(AtomicArray,u128,len,dist_type),
                 "usize" => get_test!(AtomicArray,usize,len,dist_type),
-                "i8" => get_test!(AtomicArray,u8,len,dist_type),
-                "i16" => get_test!(AtomicArray,u16,len,dist_type),
-                "i32" => get_test!(AtomicArray,u32,len,dist_type),
-                "i64" => get_test!(AtomicArray,u64,len,dist_type),
-                "i128" => get_test!(AtomicArray,u128,len,dist_type),
-                "isize" => get_test!(AtomicArray,usize,len,dist_type),
+                "i8" => get_test!(AtomicArray,i8,len,dist_type),
+                "i16" => get_test!(AtomicArray,i16,len,dist_type),
+                "i32" => get_test!(AtomicArray,i32,len,dist_type),
+                "i64" => get_test!(AtomicArray,i64,len,dist_type),
+                "i128" => get_test!(AtomicArray,i128,len,dist_type),
+                "isize" => get_test!(AtomicArray,isize,len,dist_type),
                 "f32" => get_test!(AtomicArray,f32,len,dist_type),
                 "f64" => get_test!(AtomicArray,f64,len,dist_type),
                 _ =>  eprintln!("unsupported element type"),
@@ -236,14 +269,33 @@ fn main() {
                 "u64" => get_test!(CollectiveAtomicArray,u64,len,dist_type),
                 "u128" => get_test!(CollectiveAtomicArray,u128,len,dist_type),
                 "usize" => get_test!(CollectiveAtomicArray,usize,len,dist_type),
-                "i8" => get_test!(CollectiveAtomicArray,u8,len,dist_type),
-                "i16" => get_test!(CollectiveAtomicArray,u16,len,dist_type),
-                "i32" => get_test!(CollectiveAtomicArray,u32,len,dist_type),
-                "i64" => get_test!(CollectiveAtomicArray,u64,len,dist_type),
-                "i128" => get_test!(CollectiveAtomicArray,u128,len,dist_type),
-                "isize" => get_test!(CollectiveAtomicArray,usize,len,dist_type),
+                "i8" => get_test!(CollectiveAtomicArray,i8,len,dist_type),
+                "i16" => get_test!(CollectiveAtomicArray,i16,len,dist_type),
+                "i32" => get_test!(CollectiveAtomicArray,i32,len,dist_type),
+                "i64" => get_test!(CollectiveAtomicArray,i64,len,dist_type),
+                "i128" => get_test!(CollectiveAtomicArray,i128,len,dist_type),
+                "isize" => get_test!(CollectiveAtomicArray,isize,len,dist_type),
                 "f32" => get_test!(CollectiveAtomicArray,f32,len,dist_type),
                 "f64" => get_test!(CollectiveAtomicArray,f64,len,dist_type),
+                _ =>  eprintln!("unsupported element type"),
+            }
+        }
+        "ReadOnlyArray" => {
+            match elem.as_str() {
+                "u8" => get_test!(ReadOnlyArray,u8,len,dist_type),
+                "u16" => get_test!(ReadOnlyArray,u16,len,dist_type),
+                "u32" => get_test!(ReadOnlyArray,u32,len,dist_type),
+                "u64" => get_test!(ReadOnlyArray,u64,len,dist_type),
+                "u128" => get_test!(ReadOnlyArray,u128,len,dist_type),
+                "usize" => get_test!(ReadOnlyArray,usize,len,dist_type),
+                "i8" => get_test!(ReadOnlyArray,i8,len,dist_type),
+                "i16" => get_test!(ReadOnlyArray,i16,len,dist_type),
+                "i32" => get_test!(ReadOnlyArray,i32,len,dist_type),
+                "i64" => get_test!(ReadOnlyArray,i64,len,dist_type),
+                "i128" => get_test!(ReadOnlyArray,i128,len,dist_type),
+                "isize" => get_test!(ReadOnlyArray,isize,len,dist_type),
+                "f32" => get_test!(ReadOnlyArray,f32,len,dist_type),
+                "f64" => get_test!(ReadOnlyArray,f64,len,dist_type),
                 _ =>  eprintln!("unsupported element type"),
             }
         }

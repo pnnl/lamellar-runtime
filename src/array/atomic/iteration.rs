@@ -2,7 +2,7 @@ use crate::array::atomic::*;
 use crate::array::atomic::operations::OPS;
 
 use crate::array::iterator::distributed_iterator::{
-    DistIter, DistIterMut, DistIteratorLauncher, DistributedIterator, ForEach, ForEachAsync,
+    DistIteratorLauncher, DistributedIterator, 
 };
 use crate::array::iterator::serial_iterator::LamellarArrayIter;
 use crate::array::*;

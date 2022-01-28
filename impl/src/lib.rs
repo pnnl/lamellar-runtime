@@ -832,24 +832,24 @@ fn create_ops(
         (quote::format_ident!("UnsafeArray"),quote::format_ident!("UnsafeByteArray")),
     ];
     let ops: Vec<(syn::Ident,bool)> = vec![
-        // (quote::format_ident!("add"),false),
-        // (quote::format_ident!("fetch_add"),true),
-        // (quote::format_ident!("sub"),false),
-        // (quote::format_ident!("fetch_sub"),true),
-        // (quote::format_ident!("mul"),false),
-        // (quote::format_ident!("fetch_mul"),true),
-        // (quote::format_ident!("div"),false),
-        // (quote::format_ident!("fetch_div"),true),
+        (quote::format_ident!("add"),false),
+        (quote::format_ident!("fetch_add"),true),
+        (quote::format_ident!("sub"),false),
+        (quote::format_ident!("fetch_sub"),true),
+        (quote::format_ident!("mul"),false),
+        (quote::format_ident!("fetch_mul"),true),
+        (quote::format_ident!("div"),false),
+        (quote::format_ident!("fetch_div"),true),
     ]; 
 
     let array_impls =  gen_array_impls(typeident.clone(), &write_array_types, &ops, OpType::Arithmetic, rt);
     let write_array_impls = gen_write_array_impls(typeident.clone(), &write_array_types, &ops, rt);   
     let mut expanded = quote!{
-        // #[allow(non_camel_case_types)]
-        // impl #lamellar::array::ArithmeticOps<#typeident> for #lamellar::array::LamellarWriteArray<#typeident>{
-        //     #write_array_impls
-        // }
-        // #array_impls
+        #[allow(non_camel_case_types)]
+        impl #lamellar::array::ArithmeticOps<#typeident> for #lamellar::array::LamellarWriteArray<#typeident>{
+            #write_array_impls
+        }
+        #array_impls
     };
 
     let atomic_array_types: Vec<(syn::Ident,syn::Ident)> = vec![

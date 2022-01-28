@@ -55,9 +55,6 @@ crate::inventory::collect!(ReduceKey);
 // lamellar_impl::generate_reductions_for_type_rt!(u8, u16, u32, u64, u128, usize);
 lamellar_impl::generate_ops_for_type_rt!(true, u8, u16, u32, u64, u128, usize);
 
-// lamellar_impl::generate_reductions_for_type_rt!(u8,usize);
-// lamellar_impl::generate_ops_for_type_rt!(true, u8,usize);
-
 // lamellar_impl::generate_reductions_for_type_rt!(i8, i16, i32, i64, i128, isize);
 lamellar_impl::generate_ops_for_type_rt!(true, i8, i16, i32, i64, i128, isize);
 
