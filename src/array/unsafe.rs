@@ -17,7 +17,7 @@ use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-struct UsafeArrayData {
+struct UnsafeArrayData {
     mem_region: MemoryRegion<u8>,
     pub(crate) array_counters: Arc<AMCounters>,
     pub(crate) team: Pin<Arc<LamellarTeamRT>>,
@@ -41,7 +41,7 @@ pub struct UnsafeByteArray{
 
 #[lamellar_impl::AmDataRT(Clone)]
 pub(crate) struct UnsafeArrayInner{
-    data: Darc<UsafeArrayData>,
+    data: Darc<UnsafeArrayData>,
     pub(crate) distribution: Distribution,
     orig_elem_per_pe: f64,
     elem_size: usize, //for bytes array will be size of T, for T array will be 1
@@ -75,7 +75,7 @@ impl<T: Dist> UnsafeArray<T> {
 
         let data = Darc::try_new(
             team.clone(),
-            UsafeArrayData {
+            UnsafeArrayData {
                 mem_region: rmr,
                 array_counters: Arc::new(AMCounters::new()),
                 team: team,

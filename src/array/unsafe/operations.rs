@@ -26,6 +26,10 @@ pub struct UnsafeArrayOp {
 crate::inventory::collect!(UnsafeArrayOp);
 
 impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
+    pub(crate) fn dummy_val(&self) -> T{
+        let slice = self.inner.data.mem_region.as_slice().unwrap();
+        unsafe{std::slice::from_raw_parts(slice.as_ptr() as *const T,slice.len()/std::mem::size_of::<T>())[0]}
+    }
     pub(crate) fn dist_op(
         &self,
         pe: usize,

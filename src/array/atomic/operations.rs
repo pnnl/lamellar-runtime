@@ -90,7 +90,7 @@ impl<T:  AmDist + Dist  + 'static> AtomicArray<T> {
     } 
 
     pub fn load(&self, index: usize) -> Box<dyn LamellarRequest<Output = T> + Send + Sync>{
-        self.initiate_fetch_op(index,unsafe{self.local_as_slice()[0]},ArrayOpCmd::Load)
+        self.initiate_fetch_op(index,self.array.dummy_val(),ArrayOpCmd::Load)
     }
 
     pub fn store(&self, index: usize, val: T) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>>{

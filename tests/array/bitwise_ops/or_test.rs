@@ -1,4 +1,5 @@
-use lamellar::array::{ UnsafeArray,AtomicArray,BitWiseOps,CollectiveAtomicArray, SerialIterator, };
+use lamellar::array::{ UnsafeArray,AtomicArray,BitWiseOps,CollectiveAtomicArray, SerialIterator};
+
 
 
 
@@ -22,7 +23,7 @@ macro_rules! initialize_array{
 
 macro_rules! check_val{
     (UnsafeArray,$val:ident,$max_val:ident,$valid:ident) => {
-       if $val < $max_val{//because unsafe we might lose some updates, but val should never be greater than max_val
+       if $val > $max_val{//because unsafe we might lose some updates, but val should never be greater than max_val
            $valid = false;
        }
     };
@@ -38,7 +39,7 @@ macro_rules! check_val{
     };
 }
 
-macro_rules! and_test{
+macro_rules! or_test{
     ($array:ident, $t:ty, $len:expr, $dist:ident) =>{
        {
             let world = lamellar::LamellarWorldBuilder::new().build();
@@ -49,18 +50,15 @@ macro_rules! and_test{
             let mut success = true;
             let array: $array::<$t> = $array::<$t>::new(world.team(), array_total_len, $dist).into(); //convert into abstract LamellarArray, distributed len is total_len
          
-            let init_val =!(0 as $t);
-            let final_val = init_val << num_pes;
+            let init_val =0 as $t;
+            let final_val = !(!init_val << num_pes);
             initialize_array!($array, array, init_val);
             array.wait_all();
             array.barrier();
-            let my_val = !(1 as $t << my_pe);
+            let my_val = 1 as $t << my_pe;
             for idx in 0..array.len(){
-                let val = array.fetch_bit_and(idx,my_val).get().unwrap();
-                if (val & !my_val) != !my_val{
-                    println!("{:?} {:x} {:x} {:x}",idx,my_val,val,(val & !my_val));
-                    success = false;
-                }                
+                array.bit_or(idx,my_val);
+                
             }
             array.wait_all();
             array.barrier();
@@ -86,11 +84,7 @@ macro_rules! and_test{
             sub_array.barrier();
             // sub_array.print();
             for idx in 0..sub_array.len(){
-                let val = sub_array.fetch_bit_and(idx,my_val).get().unwrap();
-                if (val & !my_val) != !my_val{
-                    println!("{:?} {:x} {:x} {:x}",idx,my_val,val,(val & !my_val));
-                    success = false;
-                }  
+                sub_array.bit_or(idx,my_val);
             }
             sub_array.wait_all();
             sub_array.barrier();
@@ -117,11 +111,7 @@ macro_rules! and_test{
                 let sub_array = array.sub_array(start_i..end_i);
                 sub_array.barrier();
                 for idx in 0..sub_array.len(){
-                    let val = sub_array.fetch_bit_and(idx,my_val).get().unwrap();
-                    if (val & !my_val) != !my_val{
-                        println!("{:?} {:x} {:x} {:x}",idx,my_val,val,(val & !my_val));
-                        success = false;
-                    }  
+                    sub_array.bit_or(idx,my_val);
                 }
                 sub_array.wait_all();
                 sub_array.barrier();
@@ -162,52 +152,52 @@ fn main() {
     match array.as_str(){
         "UnsafeArray" => {
             match elem.as_str() {
-                "u8" => and_test!(UnsafeArray,u8,len,dist_type),
-                "u16" => and_test!(UnsafeArray,u16,len,dist_type),
-                "u32" => and_test!(UnsafeArray,u32,len,dist_type),
-                "u64" => and_test!(UnsafeArray,u64,len,dist_type),
-                "u128" => and_test!(UnsafeArray,u128,len,dist_type),
-                "usize" => and_test!(UnsafeArray,usize,len,dist_type),
-                "i8" => and_test!(UnsafeArray,i8,len,dist_type),
-                "i16" => and_test!(UnsafeArray,i16,len,dist_type),
-                "i32" => and_test!(UnsafeArray,i32,len,dist_type),
-                "i64" => and_test!(UnsafeArray,i64,len,dist_type),
-                "i128" => and_test!(UnsafeArray,i128,len,dist_type),
-                "isize" => and_test!(UnsafeArray,isize,len,dist_type),
+                "u8" => or_test!(UnsafeArray,u8,len,dist_type),
+                "u16" => or_test!(UnsafeArray,u16,len,dist_type),
+                "u32" => or_test!(UnsafeArray,u32,len,dist_type),
+                "u64" => or_test!(UnsafeArray,u64,len,dist_type),
+                "u128" => or_test!(UnsafeArray,u128,len,dist_type),
+                "usize" => or_test!(UnsafeArray,usize,len,dist_type),
+                "i8" => or_test!(UnsafeArray,i8,len,dist_type),
+                "i16" => or_test!(UnsafeArray,i16,len,dist_type),
+                "i32" => or_test!(UnsafeArray,i32,len,dist_type),
+                "i64" => or_test!(UnsafeArray,i64,len,dist_type),
+                "i128" => or_test!(UnsafeArray,i128,len,dist_type),
+                "isize" => or_test!(UnsafeArray,isize,len,dist_type),
                 _ =>  eprintln!("unsupported element type"),
             }
         }
         "AtomicArray" => {
             match elem.as_str() {
-                "u8" => and_test!(AtomicArray,u8,len,dist_type),
-                "u16" => and_test!(AtomicArray,u16,len,dist_type),
-                "u32" => and_test!(AtomicArray,u32,len,dist_type),
-                "u64" => and_test!(AtomicArray,u64,len,dist_type),
-                "u128" => and_test!(AtomicArray,u128,len,dist_type),
-                "usize" => and_test!(AtomicArray,usize,len,dist_type),
-                "i8" => and_test!(AtomicArray,i8,len,dist_type),
-                "i16" => and_test!(AtomicArray,i16,len,dist_type),
-                "i32" => and_test!(AtomicArray,i32,len,dist_type),
-                "i64" => and_test!(AtomicArray,i64,len,dist_type),
-                "i128" => and_test!(AtomicArray,i128,len,dist_type),
-                "isize" => and_test!(AtomicArray,isize,len,dist_type),
+                "u8" => or_test!(AtomicArray,u8,len,dist_type),
+                "u16" => or_test!(AtomicArray,u16,len,dist_type),
+                "u32" => or_test!(AtomicArray,u32,len,dist_type),
+                "u64" => or_test!(AtomicArray,u64,len,dist_type),
+                "u128" => or_test!(AtomicArray,u128,len,dist_type),
+                "usize" => or_test!(AtomicArray,usize,len,dist_type),
+                "i8" => or_test!(AtomicArray,i8,len,dist_type),
+                "i16" => or_test!(AtomicArray,i16,len,dist_type),
+                "i32" => or_test!(AtomicArray,i32,len,dist_type),
+                "i64" => or_test!(AtomicArray,i64,len,dist_type),
+                "i128" => or_test!(AtomicArray,i128,len,dist_type),
+                "isize" => or_test!(AtomicArray,isize,len,dist_type),
                 _ =>  eprintln!("unsupported element type"),
             }
         }
         "CollectiveAtomicArray" => {
             match elem.as_str() {
-                "u8" => and_test!(CollectiveAtomicArray,u8,len,dist_type),
-                "u16" => and_test!(CollectiveAtomicArray,u16,len,dist_type),
-                "u32" => and_test!(CollectiveAtomicArray,u32,len,dist_type),
-                "u64" => and_test!(CollectiveAtomicArray,u64,len,dist_type),
-                "u128" => and_test!(CollectiveAtomicArray,u128,len,dist_type),
-                "usize" => and_test!(CollectiveAtomicArray,usize,len,dist_type),
-                "i8" => and_test!(CollectiveAtomicArray,i8,len,dist_type),
-                "i16" => and_test!(CollectiveAtomicArray,i16,len,dist_type),
-                "i32" => and_test!(CollectiveAtomicArray,i32,len,dist_type),
-                "i64" => and_test!(CollectiveAtomicArray,i64,len,dist_type),
-                "i128" => and_test!(CollectiveAtomicArray,i128,len,dist_type),
-                "isize" => and_test!(CollectiveAtomicArray,usize,len,dist_type),
+                "u8" => or_test!(CollectiveAtomicArray,u8,len,dist_type),
+                "u16" => or_test!(CollectiveAtomicArray,u16,len,dist_type),
+                "u32" => or_test!(CollectiveAtomicArray,u32,len,dist_type),
+                "u64" => or_test!(CollectiveAtomicArray,u64,len,dist_type),
+                "u128" => or_test!(CollectiveAtomicArray,u128,len,dist_type),
+                "usize" => or_test!(CollectiveAtomicArray,usize,len,dist_type),
+                "i8" => or_test!(CollectiveAtomicArray,i8,len,dist_type),
+                "i16" => or_test!(CollectiveAtomicArray,i16,len,dist_type),
+                "i32" => or_test!(CollectiveAtomicArray,i32,len,dist_type),
+                "i64" => or_test!(CollectiveAtomicArray,i64,len,dist_type),
+                "i128" => or_test!(CollectiveAtomicArray,i128,len,dist_type),
+                "isize" => or_test!(CollectiveAtomicArray,isize,len,dist_type),
                 _ =>  eprintln!("unsupported element type"),
             }
         }

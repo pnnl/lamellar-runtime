@@ -131,19 +131,27 @@ path = "tests/array/arithemetic_ops/fetch_div_test.rs"
 
 [[example]]
 name = "and_test"
-path = "tests/array/bitwise/and_test.rs"
+path = "tests/array/bitwise_ops/and_test.rs"
 
 [[example]]
 name = "fetch_and_test"
-path = "tests/array/bitwise/fetch_and_test.rs"
+path = "tests/array/bitwise_ops/fetch_and_test.rs"
 
 [[example]]
 name = "or_test"
-path = "tests/array/bitwise/or_test.rs"
+path = "tests/array/bitwise_ops/or_test.rs"
 
 [[example]]
 name = "fetch_or_test"
-path = "tests/array/bitwise/fetch_or_test.rs"
+path = "tests/array/bitwise_ops/fetch_or_test.rs"
+
+[[example]]
+name = "load_store_test"
+path = "tests/array/atomic_ops/load_store_test.rs"
+
+[[example]]
+name = "swap_test"
+path = "tests/array/atomic_ops/swap_test.rs"
 
 ##------------ Bandwidth Examples -----------------##
 

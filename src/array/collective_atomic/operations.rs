@@ -108,7 +108,7 @@ impl<T: AmDist + Dist + 'static> CollectiveAtomicArray<T> {
     pub fn load(&self, index: usize) -> Box<dyn LamellarRequest<Output = T> + Send + Sync>{
         let pe = self.pe_for_dist_index(index).expect("index out of bounds");
         let local_index = self.pe_offset_for_dist_index(pe, index).unwrap();//calculated pe above
-        let dummy_val = unsafe{self.local_as_slice()[0]}; //we dont actually do anything with this except satisfy apis;
+        let dummy_val = self.array.dummy_val(); //we dont actually do anything with this except satisfy apis;
         if pe == self.my_pe() {
             let val = self.local_load(local_index, dummy_val);
             Box::new(LocalOpResult{val})
@@ -124,7 +124,7 @@ impl<T: AmDist + Dist + 'static> CollectiveAtomicArray<T> {
             let val = self.local_swap(local_index, val);
             Box::new(LocalOpResult{val})
         } else {
-            self.initiate_fetch_op(index,unsafe{self.local_as_slice()[0]},local_index,ArrayOpCmd::Swap)
+            self.initiate_fetch_op(index,val,local_index,ArrayOpCmd::Swap)
         }
     }
     

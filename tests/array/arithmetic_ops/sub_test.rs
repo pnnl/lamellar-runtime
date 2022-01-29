@@ -277,7 +277,7 @@ fn main() {
                 "i32" => sub_test!(CollectiveAtomicArray,i32,len,dist_type),
                 "i64" => sub_test!(CollectiveAtomicArray,i64,len,dist_type),
                 "i128" => sub_test!(CollectiveAtomicArray,i128,len,dist_type),
-                "isize" => sub_test!(CollectiveAtomicArray,usize,len,dist_type),
+                "isize" => sub_test!(CollectiveAtomicArray,isize,len,dist_type),
                 "f32" => sub_test!(CollectiveAtomicArray,f32,len,dist_type),
                 "f64" => sub_test!(CollectiveAtomicArray,f64,len,dist_type),
                 _ =>  eprintln!("unsupported element type"),
