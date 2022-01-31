@@ -1,15 +1,14 @@
-use crate::array::atomic::*;
 use crate::array::atomic::operations::OPS;
+use crate::array::atomic::*;
 
-use crate::array::iterator::distributed_iterator::{
-    DistIteratorLauncher, DistributedIterator, 
-};
+use crate::array::iterator::distributed_iterator::{DistIteratorLauncher, DistributedIterator};
 use crate::array::iterator::serial_iterator::LamellarArrayIter;
 use crate::array::*;
 use crate::memregion::Dist;
 
 #[derive(Clone)]
-pub struct AtomicDistIter< T: Dist> { //dont need a AtomicDistIterMut in this case as any updates to inner elements are atomic
+pub struct AtomicDistIter<T: Dist> {
+    //dont need a AtomicDistIterMut in this case as any updates to inner elements are atomic
     data: AtomicArray<T>,
     cur_i: usize,
     end_i: usize,
@@ -41,7 +40,7 @@ impl<T: Dist + 'static> AtomicDistIter<T> {
     }
 }
 
-impl<T: Dist > DistributedIterator for AtomicDistIter<T> {
+impl<T: Dist> DistributedIterator for AtomicDistIter<T> {
     type Item = AtomicElement<T>;
     type Array = AtomicArray<T>;
     fn init(&self, start_i: usize, cnt: usize) -> Self {
@@ -50,7 +49,7 @@ impl<T: Dist > DistributedIterator for AtomicDistIter<T> {
         AtomicDistIter {
             data: self.data.clone(),
             cur_i: std::cmp::min(start_i, max_i),
-            end_i: std::cmp::min(start_i + cnt, max_i)
+            end_i: std::cmp::min(start_i + cnt, max_i),
         }
     }
     fn array(&self) -> Self::Array {
@@ -60,8 +59,8 @@ impl<T: Dist > DistributedIterator for AtomicDistIter<T> {
         // println!("{:?} {:?}",self.cur_i,self.end_i);
         if self.cur_i < self.end_i {
             self.cur_i += 1;
-            Some(AtomicElement{
-                array:self.data.clone(),
+            Some(AtomicElement {
+                array: self.data.clone(),
                 local_index: self.cur_i - 1,
             })
         } else {
@@ -76,7 +75,7 @@ impl<T: Dist > DistributedIterator for AtomicDistIter<T> {
         g_index
     }
     fn subarray_index(&self, index: usize) -> Option<usize> {
-        let g_index = self.data.subarray_index_from_local(index,1); 
+        let g_index = self.data.subarray_index_from_local(index, 1);
         g_index
     }
     fn advance_index(&mut self, count: usize) {
@@ -94,7 +93,7 @@ impl<T: Dist> AtomicArray<T> {
     }
 }
 
-impl<T:  Dist> AtomicArray<T> {
+impl<T: Dist> AtomicArray<T> {
     pub fn ser_iter(&self) -> LamellarArrayIter<'_, T, AtomicArray<T>> {
         LamellarArrayIter::new(self.clone().into(), self.array.team().clone(), 1)
     }
@@ -134,115 +133,76 @@ impl<T: Dist> DistIteratorLauncher for AtomicArray<T> {
     }
 }
 
-pub struct AtomicElement<T: Dist>{
+pub struct AtomicElement<T: Dist> {
     array: AtomicArray<T>,
     local_index: usize,
 }
 
 impl<T: Dist + 'static> AtomicElement<T> {
-    fn local_op(&self, val: T, op: ArrayOpCmd) -> T{
-        if let Some(funcs) = OPS.get(&(op,TypeId::of::<T>())) {
+    fn local_op(&self, val: T, op: ArrayOpCmd) -> T {
+        if let Some(funcs) = OPS.get(&(op, TypeId::of::<T>())) {
             let mut val = val;
             let array: AtomicByteArray = self.array.clone().into();
             funcs.1(&mut val as *mut T as *mut u8, array, self.local_index);
             val
-        }
-        else{
+        } else {
             panic!("type has not been registered");
         }
     }
-} 
+}
 
-impl<T:ElementOps + 'static> AtomicElement<T>{
+impl<T: ElementOps + 'static> AtomicElement<T> {
     pub fn load(&self) -> T {
-        self.local_op(unsafe{self.array.local_as_slice()[0]},ArrayOpCmd::Load)
+        self.local_op(unsafe { self.array.local_as_slice()[0] }, ArrayOpCmd::Load)
     }
 
     pub fn store(&self, val: T) {
-        self.local_op(val,ArrayOpCmd::Store);
+        self.local_op(val, ArrayOpCmd::Store);
     }
 
-    pub fn swap(&self, val: T)  -> T {
-        self.local_op(val,ArrayOpCmd::Swap)
+    pub fn swap(&self, val: T) -> T {
+        self.local_op(val, ArrayOpCmd::Swap)
     }
 }
 
-
-impl<T:ElementArithmeticOps + 'static> AtomicElement<T>{
-    pub fn add(
-        &self,
-        val: T,
-    ) {
-        self.local_op(val,ArrayOpCmd::Add);
+impl<T: ElementArithmeticOps + 'static> AtomicElement<T> {
+    pub fn add(&self, val: T) {
+        self.local_op(val, ArrayOpCmd::Add);
     }
-    pub fn fetch_add(
-        &self,
-        val: T,
-    ) -> T {
-        self.local_op(val,ArrayOpCmd::FetchAdd)
+    pub fn fetch_add(&self, val: T) -> T {
+        self.local_op(val, ArrayOpCmd::FetchAdd)
     }
-    pub fn sub(
-        &self,
-        val: T,
-    )  {
-        self.local_op(val,ArrayOpCmd::Sub);
+    pub fn sub(&self, val: T) {
+        self.local_op(val, ArrayOpCmd::Sub);
     }
-    pub fn fetch_sub(
-        &self,
-        val: T,
-    ) -> T {
-        self.local_op(val,ArrayOpCmd::FetchSub)
+    pub fn fetch_sub(&self, val: T) -> T {
+        self.local_op(val, ArrayOpCmd::FetchSub)
     }
-    pub fn mul(
-        &self,
-        val: T,
-    )  {
-        self.local_op(val,ArrayOpCmd::Mul);
+    pub fn mul(&self, val: T) {
+        self.local_op(val, ArrayOpCmd::Mul);
     }
-    pub fn fetch_mul(
-        &self,
-        val: T,
-    ) -> T {
-        self.local_op(val,ArrayOpCmd::FetchMul)
+    pub fn fetch_mul(&self, val: T) -> T {
+        self.local_op(val, ArrayOpCmd::FetchMul)
     }
-    pub fn div(
-        &self,
-        val: T,
-    )  {
-        self.local_op(val,ArrayOpCmd::Div);
+    pub fn div(&self, val: T) {
+        self.local_op(val, ArrayOpCmd::Div);
     }
-    pub fn fetch_div(
-        &self,
-        val: T,
-    ) -> T {
-        self.local_op(val,ArrayOpCmd::FetchDiv)
+    pub fn fetch_div(&self, val: T) -> T {
+        self.local_op(val, ArrayOpCmd::FetchDiv)
     }
 }
 
-impl<T:  ElementBitWiseOps + 'static> AtomicElement<T> {
-    pub fn bit_and(
-        &self,
-        val: T,
-    )  {
-        self.local_op(val,ArrayOpCmd::And);
+impl<T: ElementBitWiseOps + 'static> AtomicElement<T> {
+    pub fn bit_and(&self, val: T) {
+        self.local_op(val, ArrayOpCmd::And);
     }
-    pub fn fetch_bit_and(
-        &self,
-        val: T,
-    ) -> T {
-        self.local_op(val,ArrayOpCmd::FetchAnd)
+    pub fn fetch_bit_and(&self, val: T) -> T {
+        self.local_op(val, ArrayOpCmd::FetchAnd)
     }
-    pub fn bit_or(
-        &self,
-        val: T,
-    ) {
-        self.local_op(val,ArrayOpCmd::Or);
+    pub fn bit_or(&self, val: T) {
+        self.local_op(val, ArrayOpCmd::Or);
     }
-    pub fn fetch_bit_or(
-        &self,
-        val: T,
-    ) -> T {
-        self.local_op(val,ArrayOpCmd::FetchOr)
+    pub fn fetch_bit_or(&self, val: T) -> T {
+        self.local_op(val, ArrayOpCmd::FetchOr)
     }
 }
-

@@ -10,7 +10,7 @@
 
 // }
 // mod array{
-//     mod r#unsafe{ 
+//     mod r#unsafe{
 //         mod block{
 //             mod put;
 //         }
@@ -18,12 +18,12 @@
 // }
 
 use assert_cmd::Command;
-use std::path::PathBuf;
 use serial_test::serial;
+use std::path::PathBuf;
 
 macro_rules! create_test {
-    ( $array:ty, $dist:expr, $elem:ty, $num_pes:expr, $len:expr) =>{
-        paste::paste!{
+    ( $array:ty, $dist:expr, $elem:ty, $num_pes:expr, $len:expr) => {
+        paste::paste! {
             #[test]
             #[serial]
             #[allow(non_snake_case)]
@@ -43,7 +43,7 @@ macro_rules! create_test {
                 result.stderr("").success();
             }
         }
-    }
+    };
 }
 
 macro_rules! iter_lens{
@@ -72,7 +72,6 @@ macro_rules! iter_elem_types {
     }
 }
 
-
 macro_rules! iter_dist_types {
     ( $array:ty, ($($dist:expr),*),  $elem:tt, $num_pes:tt, $len:tt) =>{
         $(
@@ -87,6 +86,10 @@ macro_rules! create_div_tests {
     }
 }
 
-
-
-create_div_tests!((UnsafeArray,AtomicArray,CollectiveAtomicArray),("Block","Cyclic"),(u8,u16,u32,u128,usize,i8,i16,i32,i128,isize,f32,f64),(2,3,4),(4,19,128));
+create_div_tests!(
+    (UnsafeArray, AtomicArray, CollectiveAtomicArray),
+    ("Block", "Cyclic"),
+    (u8, u16, u32, u128, usize, i8, i16, i32, i128, isize, f32, f64),
+    (2, 3, 4),
+    (4, 19, 128)
+);

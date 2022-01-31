@@ -35,7 +35,7 @@ impl<T: Dist> DistIteratorLauncher for UnsafeArray<T> {
         if chunk_size == 1 {
             self.inner.global_index_from_local(index)
         } else {
-            Some(self.inner.global_index_from_local(index*chunk_size)?/chunk_size)
+            Some(self.inner.global_index_from_local(index * chunk_size)? / chunk_size)
         }
     }
 
@@ -43,7 +43,7 @@ impl<T: Dist> DistIteratorLauncher for UnsafeArray<T> {
         if chunk_size == 1 {
             self.inner.subarray_index_from_local(index)
         } else {
-            Some(self.inner.subarray_index_from_local(index*chunk_size)?/chunk_size)
+            Some(self.inner.subarray_index_from_local(index * chunk_size)? / chunk_size)
         }
     }
 

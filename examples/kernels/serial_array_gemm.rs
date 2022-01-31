@@ -4,7 +4,6 @@
 /// this is the simplest, but worst performing implementation we provide.
 ///----------------------------------------------------------------------------------
 use lamellar::array::{DistributedIterator, Distribution, UnsafeArray};
-use lamellar::ActiveMessaging;
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();

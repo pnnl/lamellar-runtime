@@ -7,7 +7,6 @@
 /// local updates to the C matrix.
 ///----------------------------------------------------------------------------------
 use lamellar::array::{DistributedIterator, Distribution, SerialIterator, UnsafeArray};
-use lamellar::ActiveMessaging;
 use lazy_static::lazy_static;
 use parking_lot::Mutex;
 lazy_static! {

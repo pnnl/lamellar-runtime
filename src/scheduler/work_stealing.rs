@@ -10,12 +10,12 @@ use futures::Future;
 use parking_lot::RwLock;
 use rand::prelude::*;
 use std::collections::HashMap;
+use std::panic;
 use std::pin::Pin;
+use std::process;
 use std::sync::atomic::{AtomicBool, AtomicU8, AtomicUsize, Ordering};
 use std::sync::{Arc, Weak};
 use std::thread;
-use std::panic;
-use std::process;
 // use std::time::Instant;
 
 pub(crate) struct WorkStealingThread {

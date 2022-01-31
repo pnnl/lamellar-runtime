@@ -72,7 +72,7 @@ where
         Some(g_index)
     }
     fn subarray_index(&self, index: usize) -> Option<usize> {
-        let g_index = self.iter.subarray_index(index * self.step_size)? / self.step_size; //not sure if this works...                                                  
+        let g_index = self.iter.subarray_index(index * self.step_size)? / self.step_size; //not sure if this works...
         Some(g_index)
     }
     // fn chunk_size(&self) -> usize {

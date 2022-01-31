@@ -1,7 +1,7 @@
-use nix::{sys::wait::wait,unistd::{fork, ForkResult::{Child}}};
-
-use lamellar::array::{LamellarReadArray, Distribution, UnsafeArray,ReadOnlyArray,AtomicArray,AtomicOps,CollectiveAtomicArray, SerialIterator};
-use lamellar::{Dist,ActiveMessaging, LamellarMemoryRegion, RemoteMemoryRegion};
+use lamellar::array::{
+    AtomicArray, CollectiveAtomicArray, Distribution, SerialIterator, UnsafeArray,
+};
+use lamellar::{Dist, LamellarMemoryRegion, RemoteMemoryRegion};
 
 // fn initialize_array<T: Dist>(array: &UnsafeArray<T>,init_val: T) {
 //     array.dist_iter_mut().for_each(move |x| *x = init_val);
@@ -9,7 +9,11 @@ use lamellar::{Dist,ActiveMessaging, LamellarMemoryRegion, RemoteMemoryRegion};
 //     array.barrier();
 // }
 
-fn initialize_mem_region<T: Dist + std::ops::AddAssign>(memregion: &LamellarMemoryRegion<T>,init_val: T,inc_val: T) {
+fn initialize_mem_region<T: Dist + std::ops::AddAssign>(
+    memregion: &LamellarMemoryRegion<T>,
+    init_val: T,
+    inc_val: T,
+) {
     unsafe {
         let mut i = init_val; //(len_per_pe * my_pe as f32).round() as usize;
         for elem in memregion.as_mut_slice().unwrap() {
@@ -19,7 +23,7 @@ fn initialize_mem_region<T: Dist + std::ops::AddAssign>(memregion: &LamellarMemo
     }
 }
 
-macro_rules! initialize_array{
+macro_rules! initialize_array {
     (UnsafeArray,$array:ident,$init_val:ident) => {
         $array.dist_iter_mut().for_each(move |x| *x = $init_val);
     };
@@ -41,7 +45,7 @@ macro_rules! initialize_array{
 //             let mem_seg_len = array_total_len;
 //             let mut success = true;
 //             let block_array: $array::<$t> = $array::<$t>::new(world.team(), array_total_len, $dist).into(); //convert into abstract LamellarArray, distributed len is total_len
-         
+
 //             let shared_mem_region: LamellarMemoryRegion<$t> = world.alloc_shared_mem_region(mem_seg_len).into(); //Convert into abstract LamellarMemoryRegion, each local segment is total_len
 //             //initialize array
 //             let init_val = my_pe as $t;
@@ -72,7 +76,6 @@ macro_rules! initialize_array{
 //     }
 // }
 
-
 macro_rules! iput_test{
     ($array:ident, $t:ty, $len:expr, $dist:ident) =>{
        {
@@ -83,7 +86,7 @@ macro_rules! iput_test{
             let mem_seg_len = array_total_len;
             let mut success = true;
             let array: $array::<$t> = $array::<$t>::new(world.team(), array_total_len, $dist).into(); //convert into abstract LamellarArray, distributed len is total_len
-         
+
             let shared_mem_region: LamellarMemoryRegion<$t> = world.alloc_shared_mem_region(mem_seg_len).into(); //Convert into abstract LamellarMemoryRegion, each local segment is total_len
             //initialize array
             let init_val = my_pe as $t;
@@ -92,7 +95,7 @@ macro_rules! iput_test{
             array.barrier();
             initialize_mem_region(&shared_mem_region,0 as $t,1 as $t);
             // world.barrier();
-            
+
             for tx_size in 1..=mem_seg_len{
                 let num_txs = mem_seg_len/tx_size;
                 for tx in (my_pe..num_txs).step_by(num_pes){
@@ -116,7 +119,7 @@ macro_rules! iput_test{
             world.wait_all();
             world.barrier();
 
-            
+
 
             let half_len = array_total_len/2;
             let start_i = half_len/2;
@@ -147,17 +150,17 @@ macro_rules! iput_test{
             array.barrier();
             world.wait_all();
             world.barrier();
-            
+
             let pe_len = array_total_len/num_pes;
 
             for pe in 0..num_pes{
                 let len = pe_len/2;
                 let start_i = (pe*pe_len)+ len/2;
-              
+
                 let end_i = start_i+len;
                 let sub_array = array.sub_array(start_i..end_i);
                 world.barrier();
-                
+
                 for tx_size in 1..len{
                     let num_txs = len/tx_size;
                     for tx in (my_pe..num_txs).step_by(num_pes){
@@ -196,70 +199,64 @@ fn main() {
     let elem = args[3].clone();
     let len = args[4].parse::<usize>().unwrap();
 
-    let dist_type = match dist.as_str(){
+    let dist_type = match dist.as_str() {
         "Block" => Distribution::Block,
         "Cyclic" => Distribution::Cyclic,
-        _ =>  panic!("unsupported dist type"),
+        _ => panic!("unsupported dist type"),
     };
-    
-    match array.as_str(){
-        "UnsafeArray" => {
-            match elem.as_str() {
-                "u8" => iput_test!(UnsafeArray,u8,len,dist_type),
-                "u16" => iput_test!(UnsafeArray,u16,len,dist_type),
-                "u32" => iput_test!(UnsafeArray,u32,len,dist_type),
-                "u64" => iput_test!(UnsafeArray,u64,len,dist_type),
-                "u128" => iput_test!(UnsafeArray,u128,len,dist_type),
-                "usize" => iput_test!(UnsafeArray,usize,len,dist_type),
-                "i8" => iput_test!(UnsafeArray,i8,len,dist_type),
-                "i16" => iput_test!(UnsafeArray,i16,len,dist_type),
-                "i32" => iput_test!(UnsafeArray,i32,len,dist_type),
-                "i64" => iput_test!(UnsafeArray,i64,len,dist_type),
-                "i128" => iput_test!(UnsafeArray,i128,len,dist_type),
-                "isize" => iput_test!(UnsafeArray,isize,len,dist_type),
-                "f32" => iput_test!(UnsafeArray,f32,len,dist_type),
-                "f64" => iput_test!(UnsafeArray,f64,len,dist_type),
-                _ =>  eprintln!("unsupported element type"),
-            }
-        }
-        "AtomicArray" => {
-            match elem.as_str() {
-                "u8" => iput_test!(AtomicArray,u8,len,dist_type),
-                "u16" => iput_test!(AtomicArray,u16,len,dist_type),
-                "u32" => iput_test!(AtomicArray,u32,len,dist_type),
-                "u64" => iput_test!(AtomicArray,u64,len,dist_type),
-                "u128" => iput_test!(AtomicArray,u128,len,dist_type),
-                "usize" => iput_test!(AtomicArray,usize,len,dist_type),
-                "i8" => iput_test!(AtomicArray,i8,len,dist_type),
-                "i16" => iput_test!(AtomicArray,i16,len,dist_type),
-                "i32" => iput_test!(AtomicArray,i32,len,dist_type),
-                "i64" => iput_test!(AtomicArray,i64,len,dist_type),
-                "i128" => iput_test!(AtomicArray,i128,len,dist_type),
-                "isize" => iput_test!(AtomicArray,isize,len,dist_type),
-                "f32" => iput_test!(AtomicArray,f32,len,dist_type),
-                "f64" => iput_test!(AtomicArray,f64,len,dist_type),
-                _ =>  eprintln!("unsupported element type"),
-            }
-        }
-        "CollectiveAtomicArray" => {
-            match elem.as_str() {
-                "u8" => iput_test!(CollectiveAtomicArray,u8,len,dist_type),
-                "u16" => iput_test!(CollectiveAtomicArray,u16,len,dist_type),
-                "u32" => iput_test!(CollectiveAtomicArray,u32,len,dist_type),
-                "u64" => iput_test!(CollectiveAtomicArray,u64,len,dist_type),
-                "u128" => iput_test!(CollectiveAtomicArray,u128,len,dist_type),
-                "usize" => iput_test!(CollectiveAtomicArray,usize,len,dist_type),
-                "i8" => iput_test!(CollectiveAtomicArray,i8,len,dist_type),
-                "i16" => iput_test!(CollectiveAtomicArray,i16,len,dist_type),
-                "i32" => iput_test!(CollectiveAtomicArray,i32,len,dist_type),
-                "i64" => iput_test!(CollectiveAtomicArray,i64,len,dist_type),
-                "i128" => iput_test!(CollectiveAtomicArray,i128,len,dist_type),
-                "isize" => iput_test!(CollectiveAtomicArray,isize,len,dist_type),
-                "f32" => iput_test!(CollectiveAtomicArray,f32,len,dist_type),
-                "f64" => iput_test!(CollectiveAtomicArray,f64,len,dist_type),
-                _ =>  eprintln!("unsupported element type"),
-            }
-        }
-        _ => eprintln!("unsupported array type")
-    }    
+
+    match array.as_str() {
+        "UnsafeArray" => match elem.as_str() {
+            "u8" => iput_test!(UnsafeArray, u8, len, dist_type),
+            "u16" => iput_test!(UnsafeArray, u16, len, dist_type),
+            "u32" => iput_test!(UnsafeArray, u32, len, dist_type),
+            "u64" => iput_test!(UnsafeArray, u64, len, dist_type),
+            "u128" => iput_test!(UnsafeArray, u128, len, dist_type),
+            "usize" => iput_test!(UnsafeArray, usize, len, dist_type),
+            "i8" => iput_test!(UnsafeArray, i8, len, dist_type),
+            "i16" => iput_test!(UnsafeArray, i16, len, dist_type),
+            "i32" => iput_test!(UnsafeArray, i32, len, dist_type),
+            "i64" => iput_test!(UnsafeArray, i64, len, dist_type),
+            "i128" => iput_test!(UnsafeArray, i128, len, dist_type),
+            "isize" => iput_test!(UnsafeArray, isize, len, dist_type),
+            "f32" => iput_test!(UnsafeArray, f32, len, dist_type),
+            "f64" => iput_test!(UnsafeArray, f64, len, dist_type),
+            _ => eprintln!("unsupported element type"),
+        },
+        "AtomicArray" => match elem.as_str() {
+            "u8" => iput_test!(AtomicArray, u8, len, dist_type),
+            "u16" => iput_test!(AtomicArray, u16, len, dist_type),
+            "u32" => iput_test!(AtomicArray, u32, len, dist_type),
+            "u64" => iput_test!(AtomicArray, u64, len, dist_type),
+            "u128" => iput_test!(AtomicArray, u128, len, dist_type),
+            "usize" => iput_test!(AtomicArray, usize, len, dist_type),
+            "i8" => iput_test!(AtomicArray, i8, len, dist_type),
+            "i16" => iput_test!(AtomicArray, i16, len, dist_type),
+            "i32" => iput_test!(AtomicArray, i32, len, dist_type),
+            "i64" => iput_test!(AtomicArray, i64, len, dist_type),
+            "i128" => iput_test!(AtomicArray, i128, len, dist_type),
+            "isize" => iput_test!(AtomicArray, isize, len, dist_type),
+            "f32" => iput_test!(AtomicArray, f32, len, dist_type),
+            "f64" => iput_test!(AtomicArray, f64, len, dist_type),
+            _ => eprintln!("unsupported element type"),
+        },
+        "CollectiveAtomicArray" => match elem.as_str() {
+            "u8" => iput_test!(CollectiveAtomicArray, u8, len, dist_type),
+            "u16" => iput_test!(CollectiveAtomicArray, u16, len, dist_type),
+            "u32" => iput_test!(CollectiveAtomicArray, u32, len, dist_type),
+            "u64" => iput_test!(CollectiveAtomicArray, u64, len, dist_type),
+            "u128" => iput_test!(CollectiveAtomicArray, u128, len, dist_type),
+            "usize" => iput_test!(CollectiveAtomicArray, usize, len, dist_type),
+            "i8" => iput_test!(CollectiveAtomicArray, i8, len, dist_type),
+            "i16" => iput_test!(CollectiveAtomicArray, i16, len, dist_type),
+            "i32" => iput_test!(CollectiveAtomicArray, i32, len, dist_type),
+            "i64" => iput_test!(CollectiveAtomicArray, i64, len, dist_type),
+            "i128" => iput_test!(CollectiveAtomicArray, i128, len, dist_type),
+            "isize" => iput_test!(CollectiveAtomicArray, isize, len, dist_type),
+            "f32" => iput_test!(CollectiveAtomicArray, f32, len, dist_type),
+            "f64" => iput_test!(CollectiveAtomicArray, f64, len, dist_type),
+            _ => eprintln!("unsupported element type"),
+        },
+        _ => eprintln!("unsupported array type"),
+    }
 }

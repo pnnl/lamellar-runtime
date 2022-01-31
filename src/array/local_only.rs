@@ -5,7 +5,6 @@ use crate::memregion::Dist;
 use std::marker::PhantomData;
 use std::sync::Arc;
 
-
 pub struct LocalOnlyArray<T: Dist + 'static> {
     pub(crate) array: UnsafeArray<T>,
     // actually we should just use a read write lock here to enforce mutability exclusitivity
@@ -13,7 +12,6 @@ pub struct LocalOnlyArray<T: Dist + 'static> {
                                                 // we must make this not sync by default.
                                                 // either wrap the localonlyarray in a mutex/rwlock or use a localRwArray
 }
-
 
 //#[prof]
 impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> LocalOnlyArray<T> {
@@ -89,7 +87,7 @@ impl<T: Dist> private::ArrayExecAm<T> for LocalOnlyArray<T> {
     fn team(&self) -> Pin<Arc<LamellarTeamRT>> {
         self.array.team().clone()
     }
-    fn team_counters(&self) ->Arc<AMCounters>{
+    fn team_counters(&self) -> Arc<AMCounters> {
         self.array.team_counters()
     }
 }
@@ -109,7 +107,7 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static>
     fn pe_offset_for_dist_index(&self, pe: usize, index: usize) -> Option<usize> {
         self.array.pe_offset_for_dist_index(pe, index)
     }
-    unsafe fn into_inner(self) -> UnsafeArray<T>{
+    unsafe fn into_inner(self) -> UnsafeArray<T> {
         self.array
     }
 }

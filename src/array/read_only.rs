@@ -13,6 +13,11 @@ pub struct ReadOnlyArray<T: Dist> {
     pub(crate) array: UnsafeArray<T>,
 }
 
+#[lamellar_impl::AmDataRT(Clone)]
+pub struct ReadOnlyByteArray {
+    pub(crate) array: UnsafeByteArray,
+}
+
 //#[prof]
 impl<T: Dist> ReadOnlyArray<T> {
     pub fn new<U: Into<IntoLamellarTeam>>(
@@ -109,7 +114,7 @@ impl<T: Dist> ReadOnlyArray<T> {
     }
 }
 
-impl<T: Dist + 'static> ReadOnlyArray<T>{
+impl<T: Dist + 'static> ReadOnlyArray<T> {
     pub fn into_atomic(self) -> AtomicArray<T> {
         self.array.into()
     }
@@ -118,46 +123,39 @@ impl<T: Dist + 'static> ReadOnlyArray<T>{
 impl<T: Dist> From<UnsafeArray<T>> for ReadOnlyArray<T> {
     fn from(array: UnsafeArray<T>) -> Self {
         array.block_on_outstanding(DarcMode::ReadOnlyArray);
+        ReadOnlyArray { array: array }
+    }
+}
+
+impl<T: Dist> From<ReadOnlyArray<T>> for ReadOnlyByteArray {
+    fn from(array: ReadOnlyArray<T>) -> Self {
+        ReadOnlyByteArray {
+            array: array.array.into(),
+        }
+    }
+}
+impl<T: Dist> From<ReadOnlyByteArray> for ReadOnlyArray<T> {
+    fn from(array: ReadOnlyByteArray) -> Self {
         ReadOnlyArray {
-            array: array,
+            array: array.array.into(),
         }
     }
 }
 
-// impl <T: Dist> AsBytes<T,u8> for ReadOnlyArray<T>{
-//     type Array = ReadOnlyArray<u8>;
-//     #[doc(hidden)]
-//     unsafe fn as_bytes(&self) -> Self::Array {
-//         ReadOnlyArray {
-//             array: self.array.as_bytes(),
-//         }
-//     }
-// }
-
-// impl <T: Dist> FromBytes<T,u8> for ReadOnlyArray<u8>{
-//     #[doc(hidden)]
-//     type Array = ReadOnlyArray<T>;
-//     unsafe fn from_bytes(self) -> Self::Array {
-//         ReadOnlyArray {
-//             array: self.array.from_bytes(),
-//         }
-//     }
-// }
-
-// impl<T: Dist + serde::Serialize + serde::de::DeserializeOwned + 'static> ReadOnlyArray<T> {
-//     pub fn reduce(&self, op: &str) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
-//         self.array.reduce(op)
-//     }
-//     pub fn sum(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
-//         self.array.reduce("sum")
-//     }
-//     pub fn prod(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
-//         self.array.reduce("prod")
-//     }
-//     pub fn max(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
-//         self.array.reduce("max")
-//     }
-// }
+impl<T: Dist + serde::Serialize + serde::de::DeserializeOwned + 'static> ReadOnlyArray<T> {
+    pub fn reduce(&self, op: &str) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+        self.array.reduce(op)
+    }
+    pub fn sum(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+        self.array.reduce("sum")
+    }
+    pub fn prod(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+        self.array.reduce("prod")
+    }
+    pub fn max(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+        self.array.reduce("max")
+    }
+}
 
 impl<T: Dist> DistIteratorLauncher for ReadOnlyArray<T> {
     fn global_index_from_local(&self, index: usize, chunk_size: usize) -> Option<usize> {
@@ -189,7 +187,7 @@ impl<T: Dist> private::ArrayExecAm<T> for ReadOnlyArray<T> {
     fn team(&self) -> Pin<Arc<LamellarTeamRT>> {
         self.array.team().clone()
     }
-    fn team_counters(&self) ->Arc<AMCounters>{
+    fn team_counters(&self) -> Arc<AMCounters> {
         self.array.team_counters()
     }
 }
@@ -207,7 +205,7 @@ impl<T: Dist> private::LamellarArrayPrivate<T> for ReadOnlyArray<T> {
     fn pe_offset_for_dist_index(&self, pe: usize, index: usize) -> Option<usize> {
         self.array.pe_offset_for_dist_index(pe, index)
     }
-    unsafe fn into_inner(self) -> UnsafeArray<T>{
+    unsafe fn into_inner(self) -> UnsafeArray<T> {
         self.array
     }
 }
@@ -261,19 +259,17 @@ impl<T: Dist + std::fmt::Debug> ReadOnlyArray<T> {
     }
 }
 
-// impl<T: Dist > LamellarArrayReduce<T>
+// impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> LamellarArrayReduce<T>
 //     for ReadOnlyArray<T>
 // {
 
 //     fn get_reduction_op(&self, op: String) -> LamellarArcAm {
-//         // unsafe {
 //         REDUCE_OPS
 //             .get(&(std::any::TypeId::of::<T>(), op))
 //             .expect("unexpected reduction type")(
-//             self.clone().to_base_inner::<u8>().into(),
+//             self.clone().into(),
 //             self.inner.team.num_pes(),
 //         )
-//         // }
 //     }
 //     fn reduce(&self, op: &str) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
 //         self.reduce(op)

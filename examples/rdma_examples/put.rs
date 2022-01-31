@@ -3,7 +3,6 @@
 /// and performing an RDMA put of local data into the region located
 /// on a remote PE.
 ///----------------------------------------------------------------
-use lamellar::ActiveMessaging; //for barrier
 use lamellar::RemoteMemoryRegion;
 
 const ARRAY_LEN: usize = 100;

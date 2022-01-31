@@ -1,11 +1,11 @@
 mod iteration;
 pub(crate) mod operations;
-pub (crate) mod rdma;
-pub use rdma::{AtomicArrayPut,AtomicArrayGet};
+pub(crate) mod rdma;
+pub use rdma::{AtomicArrayGet, AtomicArrayPut};
 
+use crate::array::private::LamellarArrayPrivate;
 use crate::array::r#unsafe::UnsafeByteArray;
 use crate::array::*;
-use crate::array::private::LamellarArrayPrivate;
 use crate::darc::{Darc, DarcMode};
 use crate::lamellar_team::{IntoLamellarTeam, LamellarTeamRT};
 use crate::memregion::Dist;
@@ -14,8 +14,6 @@ use std::any::TypeId;
 use std::collections::HashSet;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
-
-
 
 lazy_static! {
     pub(crate) static ref NATIVE_ATOMICS: HashSet<TypeId> = {
@@ -34,7 +32,6 @@ lazy_static! {
     };
 }
 
-
 mod atomic_private {
     use parking_lot::Mutex;
     pub trait LocksInit {
@@ -51,7 +48,9 @@ pub trait AtomicOps {
     fn fetch_div(&mut self, val: Self) -> Self;
     fn fetch_bit_and(&mut self, val: Self) -> Self;
     fn fetch_bit_or(&mut self, val: Self) -> Self;
-    fn compare_exchange(&mut self, current: Self, new: Self) -> Result<Self,Self> where Self: Sized;
+    fn compare_exchange(&mut self, current: Self, new: Self) -> Result<Self, Self>
+    where
+        Self: Sized;
     fn load(&mut self) -> Self;
     fn store(&mut self, val: Self);
     fn swap(&mut self, val: Self) -> Self;
@@ -151,7 +150,7 @@ pub struct AtomicArray<T: Dist> {
 }
 
 #[lamellar_impl::AmDataRT(Clone)]
-pub struct AtomicByteArray{
+pub struct AtomicByteArray {
     locks: Darc<Option<Vec<Mutex<()>>>>,
     orig_t_size: usize,
     pub(crate) array: UnsafeByteArray,
@@ -212,7 +211,7 @@ impl<T: Dist> AtomicArray<T> {
     }
 
     #[doc(hidden)]
-    pub fn pe_offset_for_dist_index(&self, pe: usize, index: usize) ->  Option<usize> {
+    pub fn pe_offset_for_dist_index(&self, pe: usize, index: usize) -> Option<usize> {
         self.array.pe_offset_for_dist_index(pe, index)
     }
 
@@ -260,7 +259,7 @@ impl<T: Dist> AtomicArray<T> {
 }
 
 impl<T: Dist + 'static> From<UnsafeArray<T>> for AtomicArray<T> {
-    fn from(array: UnsafeArray<T>) -> Self{
+    fn from(array: UnsafeArray<T>) -> Self {
         // let array = array.into_inner();
         array.block_on_outstanding(DarcMode::AtomicArray);
         let locks = if NATIVE_ATOMICS.get(&TypeId::of::<T>()).is_some() {
@@ -280,7 +279,7 @@ impl<T: Dist + 'static> From<UnsafeArray<T>> for AtomicArray<T> {
     }
 }
 
-impl <T: Dist> From<AtomicArray<T>> for AtomicByteArray{
+impl<T: Dist> From<AtomicArray<T>> for AtomicByteArray {
     fn from(array: AtomicArray<T>) -> Self {
         AtomicByteArray {
             locks: array.locks.clone(),
@@ -289,7 +288,7 @@ impl <T: Dist> From<AtomicArray<T>> for AtomicByteArray{
         }
     }
 }
-impl <T: Dist> From<AtomicByteArray> for AtomicArray<T>{
+impl<T: Dist> From<AtomicByteArray> for AtomicArray<T> {
     fn from(array: AtomicByteArray) -> Self {
         AtomicArray {
             locks: array.locks.clone(),
@@ -299,26 +298,26 @@ impl <T: Dist> From<AtomicByteArray> for AtomicArray<T>{
     }
 }
 
-// impl <T: Dist + serde::Serialize + serde::de::DeserializeOwned + 'static> AtomicArray<T> {
-//     pub fn reduce(&self, op: &str) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
-//         self.array.reduce(op)
-//     }
-//     pub fn sum(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
-//         self.array.reduce("sum")
-//     }
-//     pub fn prod(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
-//         self.array.reduce("prod")
-//     }
-//     pub fn max(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
-//         self.array.reduce("max")
-//     }
-// }
+impl<T: Dist + serde::Serialize + serde::de::DeserializeOwned + 'static> AtomicArray<T> {
+    pub fn reduce(&self, op: &str) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+        self.array.reduce(op)
+    }
+    pub fn sum(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+        self.array.reduce("sum")
+    }
+    pub fn prod(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+        self.array.reduce("prod")
+    }
+    pub fn max(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+        self.array.reduce("max")
+    }
+}
 
 impl<T: Dist> private::ArrayExecAm<T> for AtomicArray<T> {
     fn team(&self) -> Pin<Arc<LamellarTeamRT>> {
         self.array.team().clone()
     }
-    fn team_counters(&self) ->Arc<AMCounters>{
+    fn team_counters(&self) -> Arc<AMCounters> {
         self.array.team_counters()
     }
 }
@@ -333,10 +332,10 @@ impl<T: Dist> private::LamellarArrayPrivate<T> for AtomicArray<T> {
     fn pe_for_dist_index(&self, index: usize) -> Option<usize> {
         self.array.pe_for_dist_index(index)
     }
-    fn pe_offset_for_dist_index(&self, pe: usize, index: usize) ->  Option<usize> {
+    fn pe_offset_for_dist_index(&self, pe: usize, index: usize) -> Option<usize> {
         self.array.pe_offset_for_dist_index(pe, index)
     }
-    unsafe fn into_inner(self) -> UnsafeArray<T>{
+    unsafe fn into_inner(self) -> UnsafeArray<T> {
         self.array
     }
 }
@@ -387,21 +386,16 @@ impl<T: Dist + std::fmt::Debug> ArrayPrint<T> for AtomicArray<T> {
     }
 }
 
-
-
 // impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> LamellarArrayReduce<T>
 //     for AtomicArray<T>
 // {
-
 //     fn get_reduction_op(&self, op: String) -> LamellarArcAm {
-//         // unsafe {
 //         REDUCE_OPS
 //             .get(&(std::any::TypeId::of::<T>(), op))
 //             .expect("unexpected reduction type")(
-//             self.clone().to_base_inner::<u8>().into(),
+//             self.clone().into(),
 //             self.inner.team.num_pes(),
 //         )
-//         // }
 //     }
 //     fn reduce(&self, op: &str) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
 //         self.reduce(op)

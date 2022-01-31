@@ -1,5 +1,8 @@
 use core::marker::PhantomData;
-use parking_lot::{RwLock,RawRwLock, lock_api::{ArcRwLockReadGuard,ArcRwLockWriteGuard}};
+use parking_lot::{
+    lock_api::{ArcRwLockReadGuard, ArcRwLockWriteGuard},
+    RawRwLock, RwLock,
+};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt;
 use std::sync::atomic::Ordering;
@@ -86,11 +89,11 @@ impl<T> LocalRwDarc<T> {
         );
     }
 
-    pub fn read(&self) -> ArcRwLockReadGuard<RawRwLock,Box<T>> {
+    pub fn read(&self) -> ArcRwLockReadGuard<RawRwLock, Box<T>> {
         self.darc.read_arc()
     }
 
-    pub fn write(&self) -> ArcRwLockWriteGuard<RawRwLock,Box<T>> {
+    pub fn write(&self) -> ArcRwLockWriteGuard<RawRwLock, Box<T>> {
         self.darc.write_arc()
     }
 }
@@ -98,13 +101,21 @@ impl<T> LocalRwDarc<T> {
 impl<T> LocalRwDarc<T> {
     pub fn new<U: Into<IntoLamellarTeam>>(team: U, item: T) -> Result<LocalRwDarc<T>, IdError> {
         Ok(LocalRwDarc {
-            darc: Darc::try_new(team, Arc::new(RwLock::new(Box::new(item))), DarcMode::LocalRw)?,
+            darc: Darc::try_new(
+                team,
+                Arc::new(RwLock::new(Box::new(item))),
+                DarcMode::LocalRw,
+            )?,
         })
     }
 
     pub fn try_new<U: Into<IntoLamellarTeam>>(team: U, item: T) -> Result<LocalRwDarc<T>, IdError> {
         Ok(LocalRwDarc {
-            darc: Darc::try_new(team, Arc::new(RwLock::new(Box::new(item))), DarcMode::LocalRw)?,
+            darc: Darc::try_new(
+                team,
+                Arc::new(RwLock::new(Box::new(item))),
+                DarcMode::LocalRw,
+            )?,
         })
     }
 
@@ -169,7 +180,10 @@ where
     __NetworkDarc::<T>::from(&localrw.darc).serialize(s)
 }
 
-pub fn localrw_serialize2<S, T>(localrw: &Darc<Arc<RwLock<Box<T>>>>, s: S) -> Result<S::Ok, S::Error>
+pub fn localrw_serialize2<S, T>(
+    localrw: &Darc<Arc<RwLock<Box<T>>>>,
+    s: S,
+) -> Result<S::Ok, S::Error>
 where
     S: Serializer,
 {
@@ -190,7 +204,9 @@ where
     Ok(rwdarc)
 }
 
-pub fn localrw_from_ndarc2<'de, D, T>(deserializer: D) -> Result<Darc<Arc<RwLock<Box<T>>>>, D::Error>
+pub fn localrw_from_ndarc2<'de, D, T>(
+    deserializer: D,
+) -> Result<Darc<Arc<RwLock<Box<T>>>>, D::Error>
 where
     D: Deserializer<'de>,
 {

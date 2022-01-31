@@ -4,7 +4,7 @@
 /// --------------------------------------------------------------------
 // use lamellar::ActiveMessaging;
 use lamellar::array::{Distribution, UnsafeArray};
-use lamellar::{ActiveMessaging, RemoteMemoryRegion};
+use lamellar::RemoteMemoryRegion;
 use std::time::Instant;
 
 const ARRAY_LEN: usize = 1024 * 1024 * 1024;

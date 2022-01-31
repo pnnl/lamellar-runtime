@@ -150,7 +150,9 @@ impl<'a, T: Dist + 'static, A: LamellarArrayGet<T>> LamellarArrayIter<'a, T, A> 
     // }
 }
 
-impl<'a, T: Dist + 'static, A: LamellarArrayGet<T> + Clone> SerialIterator for LamellarArrayIter<'a, T, A> {
+impl<'a, T: Dist + 'static, A: LamellarArrayGet<T> + Clone> SerialIterator
+    for LamellarArrayIter<'a, T, A>
+{
     type ElemType = T;
     type Item = &'a T;
     type Array = A;

@@ -1,7 +1,5 @@
 use lamellar::array::{Distribution, LocalOnlyArray, ReadOnlyArray};
 use lamellar::ActiveMessaging;
-use std::sync::Arc;
-use parking_lot::RwLock;
 const ARRAY_LEN: usize = 100;
 
 #[lamellar::AmData(Clone)]
@@ -16,7 +14,6 @@ impl LamellarAM for ReadOnlyAm {
         println!("{:?} {:?}", self.orig_pe, self.data.local_as_slice());
     }
 }
-
 
 fn main() {
     let world = lamellar::LamellarWorldBuilder::new().build();
@@ -39,7 +36,6 @@ fn main() {
     }
     let local_only_array = read_only_array.into_local_only(); //this should act as a barrier until only the calling instance of read_only_array exists.
     local_only_array.print();
-   
 
     // let mut vector = vec!{0;1000};
     // let vec_slice = vector.as_slice();

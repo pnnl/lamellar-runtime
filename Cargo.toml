@@ -73,6 +73,7 @@ debug = true
 
 
 [lib]
+doctest = false
 name="lamellar"
 path="src/lib.rs"
 
@@ -99,35 +100,35 @@ path = "tests/array/rdma/get_test.rs"
 
 [[example]]
 name = "add_test"
-path = "tests/array/arithemetic_ops/add_test.rs"
+path = "tests/array/arithmetic_ops/add_test.rs"
 
 [[example]]
 name = "fetch_add_test"
-path = "tests/array/arithemetic_ops/fetch_add_test.rs"
+path = "tests/array/arithmetic_ops/fetch_add_test.rs"
 
 [[example]]
 name = "sub_test"
-path = "tests/array/arithemetic_ops/sub_test.rs"
+path = "tests/array/arithmetic_ops/sub_test.rs"
 
 [[example]]
 name = "fetch_sub_test"
-path = "tests/array/arithemetic_ops/fetch_sub_test.rs"
+path = "tests/array/arithmetic_ops/fetch_sub_test.rs"
 
 [[example]]
 name = "mul_test"
-path = "tests/array/arithemetic_ops/mul_test.rs"
+path = "tests/array/arithmetic_ops/mul_test.rs"
 
 [[example]]
 name = "fetch_mul_test"
-path = "tests/array/arithemetic_ops/fetch_mul_test.rs"
+path = "tests/array/arithmetic_ops/fetch_mul_test.rs"
 
 [[example]]
 name = "div_test"
-path = "tests/array/arithemetic_ops/div_test.rs"
+path = "tests/array/arithmetic_ops/div_test.rs"
 
 [[example]]
 name = "fetch_div_test"
-path = "tests/array/arithemetic_ops/fetch_div_test.rs"
+path = "tests/array/arithmetic_ops/fetch_div_test.rs"
 
 [[example]]
 name = "and_test"

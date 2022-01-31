@@ -49,14 +49,13 @@ where
         self.iter.array()
     }
     fn next(&mut self) -> Option<Self::Item> {
-       
         let a = self.iter.next()?;
         let i = self.subarray_index(self.count)?;
         // println!("enumerate next {:?} i: {:?}",self.count,i);
         self.count += 1;
         Some((i, a))
     }
-       
+
     fn elems(&self, in_elems: usize) -> usize {
         let in_elems = self.iter.elems(in_elems);
         // println!("enumerate elems {:?}",in_elems);
@@ -69,7 +68,7 @@ where
     }
     fn subarray_index(&self, index: usize) -> Option<usize> {
         let g_index = self.iter.subarray_index(index); //not sure if this works...
-                                                  // println!("enumerate index: {:?} global_index {:?}", index,g_index);
+                                                       // println!("enumerate index: {:?} global_index {:?}", index,g_index);
         g_index
     }
     // fn chunk_size(&self) -> usize {

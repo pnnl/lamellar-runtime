@@ -33,7 +33,7 @@ where
 #[lamellar_impl::rt_am_local]
 impl<I, F> LamellarAm for ForEach<I, F>
 where
-    I: DistributedIterator + 'static, 
+    I: DistributedIterator + 'static,
     F: Fn(I::Item) + Sync + Send + 'static,
 {
     fn exec(&self) {
@@ -295,7 +295,7 @@ impl<'a, T: Dist + 'a, A: LamellarArray<T> + Sync + Send + DistIteratorLauncher 
         g_index
     }
     fn subarray_index(&self, index: usize) -> Option<usize> {
-        let g_index = self.data.subarray_index_from_local(index,1); 
+        let g_index = self.data.subarray_index_from_local(index, 1);
         g_index
     }
     // fn chunk_size(&self) -> usize {

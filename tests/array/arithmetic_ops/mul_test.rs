@@ -1,12 +1,7 @@
-use nix::{sys::wait::wait,unistd::{fork, ForkResult::{Child}}};
-
-use lamellar::array::{LamellarReadArray, UnsafeArray,ReadOnlyArray,AtomicArray,AtomicOps,CollectiveAtomicArray, SerialIterator, ArithmeticOps};
-use lamellar::{Dist,ActiveMessaging, LamellarMemoryRegion, RemoteMemoryRegion};
-
-use rand::distributions::Uniform;
-use rand::distributions::Distribution;
-
-macro_rules! initialize_array{
+use lamellar::array::{
+    ArithmeticOps, AtomicArray, CollectiveAtomicArray, SerialIterator, UnsafeArray,
+};
+macro_rules! initialize_array {
     (UnsafeArray,$array:ident,$init_val:ident) => {
         $array.dist_iter_mut().for_each(move |x| *x = $init_val);
         $array.wait_all();
@@ -42,40 +37,37 @@ macro_rules! check_val{
     };
 }
 
-macro_rules! max_updates{
-    ($t:ty,$num_pes:ident) => { 
-        // let temp: u128 = (<$t>::MAX as u128/$num_pes as u128); 
-        // (temp as f64).log(2.0) as usize 
+macro_rules! max_updates {
+    ($t:ty,$num_pes:ident) => {
+        // let temp: u128 = (<$t>::MAX as u128/$num_pes as u128);
+        // (temp as f64).log(2.0) as usize
 
-        (std::mem::size_of::<u128>() * 8 - (<$t>::MAX as u128/$num_pes as u128).leading_zeros() as usize  -1 as usize)/$num_pes
+        (std::mem::size_of::<u128>() * 8
+            - (<$t>::MAX as u128 / $num_pes as u128).leading_zeros() as usize
+            - 1 as usize)
+            / $num_pes
         // if <$t>::MAX as u128 > (10000 * $num_pes) as u128{
         //     10000
         // }
         // else{
-        //     <$t>::MAX as usize / $num_pes 
+        //     <$t>::MAX as usize / $num_pes
         // }
-    }
+    };
 }
-
 
 macro_rules! add_test{
     ($array:ident, $t:ty, $len:expr, $dist:ident) =>{
        {
             let world = lamellar::LamellarWorldBuilder::new().build();
             let num_pes = world.num_pes();
-            let my_pe = world.my_pe();
+            let _my_pe = world.my_pe();
             let array_total_len = $len;
-            let mem_seg_len = array_total_len;
 
-            let mut rng = rand::thread_rng();
-            let rand_idx = Uniform::from(0..array_total_len);
             let mut success = true;
             let array: $array::<$t> = $array::<$t>::new(world.team(), array_total_len, $dist).into(); //convert into abstract LamellarArray, distributed len is total_len
 
             let max_updates = max_updates!($t,num_pes);
-            let pe_max_val: $t = 2u128.pow((max_updates) as u32) as $t;
             let max_val =  2u128.pow((max_updates*num_pes) as u32) as $t;
-            // println!("{:?} {:?} {:?} {:?}",<$t>::MAX,max_updates,pe_max_val,max_val);
             let init_val = 1 as $t;
             initialize_array!($array, array, init_val);
             array.wait_all();
@@ -96,7 +88,7 @@ macro_rules! add_test{
                     println!("{:?} {:?} {:?}",i,val,max_val);
                 }
             }
-            
+
             array.barrier();
             initialize_array!($array, array, init_val);
 
@@ -104,7 +96,6 @@ macro_rules! add_test{
             let half_len = array_total_len/2;
             let start_i = half_len/2;
             let end_i = start_i + half_len;
-            let rand_idx = Uniform::from(0..half_len);
             let sub_array = array.sub_array(start_i..end_i);
             sub_array.barrier();
             // // sub_array.print();
@@ -124,14 +115,13 @@ macro_rules! add_test{
             }
             sub_array.barrier();
             initialize_array!($array, array, init_val);
-            
+
 
             let pe_len = array_total_len/num_pes;
             for pe in 0..num_pes{
                 let len = std::cmp::max(pe_len/2,1);
                 let start_i = (pe*pe_len)+ len/2;
                 let end_i = start_i+len;
-                let rand_idx = Uniform::from(0..len);
                 let sub_array = array.sub_array(start_i..end_i);
                 sub_array.barrier();
                 for idx in 0..sub_array.len(){
@@ -151,7 +141,7 @@ macro_rules! add_test{
                 sub_array.barrier();
                 initialize_array!($array, array, init_val);
             }
-            
+
             if !success{
                 eprintln!("failed");
             }
@@ -166,69 +156,64 @@ fn main() {
     let elem = args[3].clone();
     let len = args[4].parse::<usize>().unwrap();
 
-    let dist_type = match dist.as_str(){
+    let dist_type = match dist.as_str() {
         "Block" => lamellar::array::Distribution::Block,
         "Cyclic" => lamellar::array::Distribution::Cyclic,
-        _ =>  panic!("unsupported dist type"),
+        _ => panic!("unsupported dist type"),
     };
-    
-    match array.as_str(){
-        "UnsafeArray" => {
-            match elem.as_str() {
-                "u8" => add_test!(UnsafeArray,u8,len,dist_type),
-                "u16" => add_test!(UnsafeArray,u16,len,dist_type),
-                "u32" => add_test!(UnsafeArray,u32,len,dist_type),
-                "u64" => add_test!(UnsafeArray,u64,len,dist_type),
-                "u128" => add_test!(UnsafeArray,u128,len,dist_type),
-                "usize" => add_test!(UnsafeArray,usize,len,dist_type),
-                "i8" => add_test!(UnsafeArray,i8,len,dist_type),
-                "i16" => add_test!(UnsafeArray,i16,len,dist_type),
-                "i32" => add_test!(UnsafeArray,i32,len,dist_type),
-                "i64" => add_test!(UnsafeArray,i64,len,dist_type),
-                "i128" => add_test!(UnsafeArray,i128,len,dist_type),
-                "isize" => add_test!(UnsafeArray,isize,len,dist_type),
-                "f32" => add_test!(UnsafeArray,f32,len,dist_type),
-                "f64" => add_test!(UnsafeArray,f64,len,dist_type),
-                _ =>  eprintln!("unsupported element type"),
-            }
-        }
-        "AtomicArray" => {
-            match elem.as_str() {
-                "u8" => add_test!(AtomicArray,u8,len,dist_type),
-                "u16" => add_test!(AtomicArray,u16,len,dist_type),
-                "u32" => add_test!(AtomicArray,u32,len,dist_type),
-                "u64" => add_test!(AtomicArray,u64,len,dist_type),
-                "u128" => add_test!(AtomicArray,u128,len,dist_type),
-                "usize" => add_test!(AtomicArray,usize,len,dist_type),
-                "i8" => add_test!(AtomicArray,i8,len,dist_type),
-                "i16" => add_test!(AtomicArray,i16,len,dist_type),
-                "i32" => add_test!(AtomicArray,i32,len,dist_type),
-                "i64" => add_test!(AtomicArray,i64,len,dist_type),
-                "i128" => add_test!(AtomicArray,i128,len,dist_type),
-                "isize" => add_test!(AtomicArray,isize,len,dist_type),
-                "f32" => add_test!(AtomicArray,f32,len,dist_type),                "f64" => add_test!(AtomicArray,f64,len,dist_type),
-                _ =>  eprintln!("unsupported element type"),
-            }
-        }
-        "CollectiveAtomicArray" => {
-            match elem.as_str() {
-                "u8" => add_test!(CollectiveAtomicArray,u8,len,dist_type),
-                "u16" => add_test!(CollectiveAtomicArray,u16,len,dist_type),
-                "u32" => add_test!(CollectiveAtomicArray,u32,len,dist_type),
-                "u64" => add_test!(CollectiveAtomicArray,u64,len,dist_type),
-                "u128" => add_test!(CollectiveAtomicArray,u128,len,dist_type),
-                "usize" => add_test!(CollectiveAtomicArray,usize,len,dist_type),
-                "i8" => add_test!(CollectiveAtomicArray,i8,len,dist_type),
-                "i16" => add_test!(CollectiveAtomicArray,i16,len,dist_type),
-                "i32" => add_test!(CollectiveAtomicArray,i32,len,dist_type),
-                "i64" => add_test!(CollectiveAtomicArray,i64,len,dist_type),
-                "i128" => add_test!(CollectiveAtomicArray,i128,len,dist_type),
-                "isize" => add_test!(CollectiveAtomicArray,isize,len,dist_type),
-                "f32" => add_test!(CollectiveAtomicArray,f32,len,dist_type),
-                "f64" => add_test!(CollectiveAtomicArray,f64,len,dist_type),
-                _ =>  eprintln!("unsupported element type"),
-            }
-        }
-        _ => eprintln!("unsupported array type")
-    }    
+
+    match array.as_str() {
+        "UnsafeArray" => match elem.as_str() {
+            "u8" => add_test!(UnsafeArray, u8, len, dist_type),
+            "u16" => add_test!(UnsafeArray, u16, len, dist_type),
+            "u32" => add_test!(UnsafeArray, u32, len, dist_type),
+            "u64" => add_test!(UnsafeArray, u64, len, dist_type),
+            "u128" => add_test!(UnsafeArray, u128, len, dist_type),
+            "usize" => add_test!(UnsafeArray, usize, len, dist_type),
+            "i8" => add_test!(UnsafeArray, i8, len, dist_type),
+            "i16" => add_test!(UnsafeArray, i16, len, dist_type),
+            "i32" => add_test!(UnsafeArray, i32, len, dist_type),
+            "i64" => add_test!(UnsafeArray, i64, len, dist_type),
+            "i128" => add_test!(UnsafeArray, i128, len, dist_type),
+            "isize" => add_test!(UnsafeArray, isize, len, dist_type),
+            "f32" => add_test!(UnsafeArray, f32, len, dist_type),
+            "f64" => add_test!(UnsafeArray, f64, len, dist_type),
+            _ => eprintln!("unsupported element type"),
+        },
+        "AtomicArray" => match elem.as_str() {
+            "u8" => add_test!(AtomicArray, u8, len, dist_type),
+            "u16" => add_test!(AtomicArray, u16, len, dist_type),
+            "u32" => add_test!(AtomicArray, u32, len, dist_type),
+            "u64" => add_test!(AtomicArray, u64, len, dist_type),
+            "u128" => add_test!(AtomicArray, u128, len, dist_type),
+            "usize" => add_test!(AtomicArray, usize, len, dist_type),
+            "i8" => add_test!(AtomicArray, i8, len, dist_type),
+            "i16" => add_test!(AtomicArray, i16, len, dist_type),
+            "i32" => add_test!(AtomicArray, i32, len, dist_type),
+            "i64" => add_test!(AtomicArray, i64, len, dist_type),
+            "i128" => add_test!(AtomicArray, i128, len, dist_type),
+            "isize" => add_test!(AtomicArray, isize, len, dist_type),
+            "f32" => add_test!(AtomicArray, f32, len, dist_type),
+            "f64" => add_test!(AtomicArray, f64, len, dist_type),
+            _ => eprintln!("unsupported element type"),
+        },
+        "CollectiveAtomicArray" => match elem.as_str() {
+            "u8" => add_test!(CollectiveAtomicArray, u8, len, dist_type),
+            "u16" => add_test!(CollectiveAtomicArray, u16, len, dist_type),
+            "u32" => add_test!(CollectiveAtomicArray, u32, len, dist_type),
+            "u64" => add_test!(CollectiveAtomicArray, u64, len, dist_type),
+            "u128" => add_test!(CollectiveAtomicArray, u128, len, dist_type),
+            "usize" => add_test!(CollectiveAtomicArray, usize, len, dist_type),
+            "i8" => add_test!(CollectiveAtomicArray, i8, len, dist_type),
+            "i16" => add_test!(CollectiveAtomicArray, i16, len, dist_type),
+            "i32" => add_test!(CollectiveAtomicArray, i32, len, dist_type),
+            "i64" => add_test!(CollectiveAtomicArray, i64, len, dist_type),
+            "i128" => add_test!(CollectiveAtomicArray, i128, len, dist_type),
+            "isize" => add_test!(CollectiveAtomicArray, isize, len, dist_type),
+            "f32" => add_test!(CollectiveAtomicArray, f32, len, dist_type),
+            "f64" => add_test!(CollectiveAtomicArray, f64, len, dist_type),
+            _ => eprintln!("unsupported element type"),
+        },
+        _ => eprintln!("unsupported array type"),
+    }
 }

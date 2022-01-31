@@ -29,9 +29,7 @@ impl std::error::Error for MemNotLocalError {}
 pub trait Dist2: Send + Sync + Copy {}
 impl<T: Send + Sync + Copy> Dist2 for T {}
 
-pub trait Dist: Send + Sync + Copy + std::fmt::Debug + 'static
-{
-}
+pub trait Dist: Send + Sync + Copy + std::fmt::Debug + 'static {}
 // impl<T: Send + Sync + Copy /*+ 'static*/>
 //     Dist for T
 // {
@@ -49,8 +47,8 @@ impl<T: Dist> crate::DarcSerde for LamellarMemoryRegion<T> {
     fn ser(&self, num_pes: usize, cur_pe: Result<usize, crate::IdError>) {
         // println!("in shared ser");
         match self {
-            LamellarMemoryRegion::Shared(mr) => mr.ser(num_pes,cur_pe),
-            LamellarMemoryRegion::Local(mr) => mr.ser(num_pes,cur_pe),
+            LamellarMemoryRegion::Shared(mr) => mr.ser(num_pes, cur_pe),
+            LamellarMemoryRegion::Local(mr) => mr.ser(num_pes, cur_pe),
         }
     }
     fn des(&self, cur_pe: Result<usize, crate::IdError>) {
@@ -512,7 +510,7 @@ impl<T: Dist> MemoryRegion<T> {
             let bytes =
                 unsafe { std::slice::from_raw_parts_mut(data.as_mut_ptr() as *mut u8, num_bytes) };
             // println!("getting {:?} {:?} {:?} {:?} {:?} {:?} {:?}",pe,index,std::mem::size_of::<R>(),data.len(), num_bytes,self.size, self.num_bytes);
-    
+
             self.rdma
                 .iget(pe, self.addr + index * std::mem::size_of::<R>(), bytes);
             //(remote pe, src, dst)

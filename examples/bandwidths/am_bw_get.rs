@@ -27,7 +27,8 @@ impl LamellarAM for DataAM {
             let local = lamellar::team.alloc_local_mem_region::<u8>(self.length);
             let local_slice = local.as_mut_slice().unwrap();
             local_slice[self.length - 1] = 255u8;
-            self.array.get_unchecked(self.src, self.index, local.clone());
+            self.array
+                .get_unchecked(self.src, self.index, local.clone());
 
             while local_slice[self.length - 1] == 255u8 {
                 async_std::task::yield_now().await;

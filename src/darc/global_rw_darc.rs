@@ -464,7 +464,9 @@ impl<T> GlobalRwDarc<T> {
             // phantom: PhantomData,
         };
         d.inner_mut()
-            .update_item(Box::into_raw(Box::new(Arc::new(RwLock::new(Box::new(item))))));
+            .update_item(Box::into_raw(Box::new(Arc::new(RwLock::new(Box::new(
+                item,
+            ))))));
         LocalRwDarc { darc: d }
     }
 }

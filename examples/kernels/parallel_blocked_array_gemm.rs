@@ -8,7 +8,6 @@ use lamellar::array::{DistributedIterator, Distribution, SerialIterator, UnsafeA
 /// and then iterate over the local A submatrices in the inner loop. Finally, all updates
 /// to the C matrix are only performed locally, requiring no additional data transfer.
 ///----------------------------------------------------------------------------------
-use lamellar::ActiveMessaging;
 use lazy_static::lazy_static;
 use matrixmultiply::sgemm;
 use parking_lot::Mutex;

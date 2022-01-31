@@ -1,5 +1,5 @@
 use lamellar::array::{Distribution, UnsafeArray};
-use lamellar::{ActiveMessaging, LamellarMemoryRegion, RemoteMemoryRegion};
+use lamellar::{LamellarMemoryRegion, RemoteMemoryRegion};
 
 fn initialize_array(array: &UnsafeArray<usize>) {
     array.dist_iter_mut().for_each(|x| *x = 0);

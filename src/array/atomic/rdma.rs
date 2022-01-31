@@ -1,10 +1,8 @@
 use crate::array::atomic::*;
+use crate::array::private::ArrayExecAm;
 use crate::array::LamellarWrite;
 use crate::array::*;
-use crate::array::private::ArrayExecAm;
-use crate::memregion::{
-    AsBase, Dist,  RTMemoryRegionRDMA, RegisteredMemoryRegion, 
-};
+use crate::memregion::{AsBase, Dist, RTMemoryRegionRDMA, RegisteredMemoryRegion};
 
 type GetFn = fn(AtomicByteArray, usize, usize) -> LamellarArcAm;
 pub struct AtomicArrayGet {
@@ -41,36 +39,37 @@ lazy_static! {
 }
 
 impl<T: Dist> AtomicArray<T> {
-    pub fn iget<U: MyInto<LamellarArrayInput<T>> + LamellarWrite >(&self, index: usize, buf: U) {
-        self.exec_am_local(InitGetAm{
+    pub fn iget<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(&self, index: usize, buf: U) {
+        self.exec_am_local(InitGetAm {
             array: self.clone(),
             index: index,
             buf: buf.my_into(&self.array.team()),
-        }).get();
+        })
+        .get();
     }
-    pub  fn get<U: MyInto<LamellarArrayInput<T>> + LamellarWrite >(&self, index: usize, buf: U) {
-        self.exec_am_local(InitGetAm{
+    pub fn get<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(&self, index: usize, buf: U) {
+        self.exec_am_local(InitGetAm {
             array: self.clone(),
             index: index,
             buf: buf.my_into(&self.array.team()),
         });
     }
-    pub  fn iput<U: MyInto<LamellarArrayInput<T>> + LamellarRead >(&self, index: usize, buf: U) {
-        self.exec_am_local(InitPutAm{
+    pub fn iput<U: MyInto<LamellarArrayInput<T>> + LamellarRead>(&self, index: usize, buf: U) {
+        self.exec_am_local(InitPutAm {
             array: self.clone(),
             index: index,
             buf: buf.my_into(&self.array.team()),
-        }).get();
+        })
+        .get();
     }
-    pub  fn put<U: MyInto<LamellarArrayInput<T>> + LamellarRead >(&self, index: usize, buf: U) {
-        self.exec_am_local(InitPutAm{
+    pub fn put<U: MyInto<LamellarArrayInput<T>> + LamellarRead>(&self, index: usize, buf: U) {
+        self.exec_am_local(InitPutAm {
             array: self.clone(),
             index: index,
             buf: buf.my_into(&self.array.team()),
         });
     }
 }
-
 
 impl<T: Dist + 'static> LamellarArrayGet<T> for AtomicArray<T> {
     // unsafe fn get_unchecked<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(
@@ -81,15 +80,14 @@ impl<T: Dist + 'static> LamellarArrayGet<T> for AtomicArray<T> {
     //     self.array.get_unchecked(index, buf)
     // }
     fn iget<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(&self, index: usize, buf: U) {
-        self.iget(index,buf);
+        self.iget(index, buf);
     }
     fn get<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(&self, index: usize, buf: U) {
-        self.get(index,buf);
+        self.get(index, buf);
     }
     fn iat(&self, index: usize) -> T {
         self.array.iat(index)
     }
-    
 }
 
 impl<T: Dist> LamellarArrayPut<T> for AtomicArray<T> {
@@ -97,31 +95,35 @@ impl<T: Dist> LamellarArrayPut<T> for AtomicArray<T> {
     //     self.array.put_unchecked(index, buf)
     // }
     fn iput<U: MyInto<LamellarArrayInput<T>> + LamellarRead>(&self, index: usize, buf: U) {
-        self.iput(index,buf);
+        self.iput(index, buf);
     }
-    
 }
 
-
 #[lamellar_impl::AmLocalDataRT]
-struct InitGetAm<T: Dist > {
+struct InitGetAm<T: Dist> {
     array: AtomicArray<T>, //inner of the indices we need to place data into
     index: usize,
-    buf: LamellarArrayInput<T>
+    buf: LamellarArrayInput<T>,
 }
 
 #[lamellar_impl::rt_am_local]
-impl<T: Dist + 'static > LamellarAm for InitGetAm<T> {
+impl<T: Dist + 'static> LamellarAm for InitGetAm<T> {
     fn exec(self) {
         let mut reqs = vec![];
         // println!("initgetam {:?} {:?}",self.index,self.index+self.buf.len());
-        for pe in self.array.array.pes_for_range(self.index,self.buf.len()).into_iter(){
+        for pe in self
+            .array
+            .array
+            .pes_for_range(self.index, self.buf.len())
+            .into_iter()
+        {
             // println!("pe {:?}",pe);
             //get the proper remote am from the ops map
             if let Some(remote_am_gen) = GET_OPS.get(&TypeId::of::<T>()) {
-                    let am: LamellarArcAm = remote_am_gen(self.array.clone().into(), self.index,self.buf.len());
-                    reqs.push(self.array.exec_arc_am_pe::<Vec<u8>>(pe,am).into_future());
-            }else{
+                let am: LamellarArcAm =
+                    remote_am_gen(self.array.clone().into(), self.index, self.buf.len());
+                reqs.push(self.array.exec_arc_am_pe::<Vec<u8>>(pe, am).into_future());
+            } else {
                 let name = std::any::type_name::<T>().split("::").last().unwrap();
                 panic!("the type {:?} has not been registered for atomic rdma operations, this typically means you need to derive \"AtomicRdma\" for the type,
                 you can use the lamellar::AmData attribute proc macro to automatically derive it, e.g.
@@ -132,35 +134,34 @@ impl<T: Dist + 'static > LamellarAm for InitGetAm<T> {
             }
         }
         unsafe {
-            match self.array.array.inner.distribution{
+            match self.array.array.inner.distribution {
                 Distribution::Block => {
                     let u8_buf = self.buf.clone().to_base::<u8>();
                     let mut cur_index = 0;
-                    for req in reqs.drain(..){
+                    for req in reqs.drain(..) {
                         let data = req.await.unwrap();
-                        u8_buf.put_slice(lamellar::current_pe,cur_index,&data);
+                        u8_buf.put_slice(lamellar::current_pe, cur_index, &data);
                         cur_index += data.len();
                     }
                 }
                 Distribution::Cyclic => {
                     let buf_slice = self.buf.as_mut_slice().unwrap();
-                    let num_pes = reqs.len(); 
-                    for (start_index,req) in reqs.drain(..).enumerate(){
+                    let num_pes = reqs.len();
+                    for (start_index, req) in reqs.drain(..).enumerate() {
                         let data = req.await.unwrap();
                         let data_t_ptr = data.as_ptr() as *const T;
                         let data_t_len = if data.len() % std::mem::size_of::<T>() == 0 {
-                            data.len()/std::mem::size_of::<T>()
-                        }
-                        else{
+                            data.len() / std::mem::size_of::<T>()
+                        } else {
                             panic!("memory align error");
                         };
                         // println!("start_index {:?}  data {:?} {:?} {:?}",start_index,data, data.len(),data_t_len);
-                        let data_t_slice = std::slice::from_raw_parts(data_t_ptr,data_t_len);
-                        for (i,val) in data_t_slice.iter().enumerate(){
-                            buf_slice[start_index+i*num_pes] = *val;
+                        let data_t_slice = std::slice::from_raw_parts(data_t_ptr, data_t_len);
+                        for (i, val) in data_t_slice.iter().enumerate() {
+                            buf_slice[start_index + i * num_pes] = *val;
                         }
                     }
-                }   
+                }
             }
         }
     }
@@ -169,32 +170,49 @@ impl<T: Dist + 'static > LamellarAm for InitGetAm<T> {
 //the remote get am is implemented in lamellar_impl
 
 #[lamellar_impl::AmLocalDataRT]
-struct InitPutAm<T: Dist > {
+struct InitPutAm<T: Dist> {
     array: AtomicArray<T>, //inner of the indices we need to place data into
     index: usize,
-    buf: LamellarArrayInput<T>
+    buf: LamellarArrayInput<T>,
 }
 
 #[lamellar_impl::rt_am_local]
-impl<T: Dist + 'static > LamellarAm for InitPutAm<T> {
+impl<T: Dist + 'static> LamellarAm for InitPutAm<T> {
     fn exec(self) {
         // println!("initputam {:?} {:?}",self.index,self.buf.len());
-        unsafe{
+        unsafe {
             let u8_buf = self.buf.clone().to_base::<u8>();
             let mut reqs = vec![];
-            match self.array.array.inner.distribution{
+            match self.array.array.inner.distribution {
                 Distribution::Block => {
                     let mut cur_index = 0;
-                    for pe in self.array.array.pes_for_range(self.index,self.buf.len()).into_iter(){
+                    for pe in self
+                        .array
+                        .array
+                        .pes_for_range(self.index, self.buf.len())
+                        .into_iter()
+                    {
                         // println!("pe {:?}",pe);
-                        if let Some(len) = self.array.array.num_elements_on_pe_for_range(pe,self.index,self.buf.len()) {
+                        if let Some(len) = self.array.array.num_elements_on_pe_for_range(
+                            pe,
+                            self.index,
+                            self.buf.len(),
+                        ) {
                             // println!("pe {:?} len {:?} bytes: {:?}",pe,len,u8_buf);
                             let u8_buf_len = len * std::mem::size_of::<T>();
-                             //get the proper remote am from the ops map
+                            //get the proper remote am from the ops map
                             if let Some(remote_am_gen) = PUT_OPS.get(&TypeId::of::<T>()) {
-                                    let am: LamellarArcAm = remote_am_gen(self.array.clone().into(), self.index,self.buf.len(), u8_buf.as_slice().unwrap()[cur_index..(cur_index+u8_buf_len)].to_vec());
-                                    reqs.push(self.array.exec_arc_am_pe::<Vec<u8>>(pe,am).into_future());
-                            }else{
+                                let am: LamellarArcAm = remote_am_gen(
+                                    self.array.clone().into(),
+                                    self.index,
+                                    self.buf.len(),
+                                    u8_buf.as_slice().unwrap()[cur_index..(cur_index + u8_buf_len)]
+                                        .to_vec(),
+                                );
+                                reqs.push(
+                                    self.array.exec_arc_am_pe::<Vec<u8>>(pe, am).into_future(),
+                                );
+                            } else {
                                 let name = std::any::type_name::<T>().split("::").last().unwrap();
                                 panic!("the type {:?} has not been registered for atomic rdma operations, this typically means you need to derive \"AtomicRdma\" for the type,
                                 you can use the lamellar::AmData attribute proc macro to automatically derive it, e.g.
@@ -204,34 +222,51 @@ impl<T: Dist + 'static > LamellarAm for InitPutAm<T> {
                                 }}",name,name);
                             }
                             cur_index += u8_buf_len;
-                        }   
-                        else{   
+                        } else {
                             panic!("this should not be possible");
                         }
                     }
                 }
                 Distribution::Cyclic => {
                     let num_pes = ArrayExecAm::team(&self.array).num_pes();
-                    let mut pe_u8_vecs: HashMap<usize,Vec<u8>> = HashMap::new();
-                    let mut pe_t_slices: HashMap<usize,&mut [T]> = HashMap::new();
+                    let mut pe_u8_vecs: HashMap<usize, Vec<u8>> = HashMap::new();
+                    let mut pe_t_slices: HashMap<usize, &mut [T]> = HashMap::new();
                     let buf_slice = self.buf.as_slice().unwrap();
-                    for pe in self.array.array.pes_for_range(self.index,self.buf.len()).into_iter(){
-                        if let Some(len) = self.array.array.num_elements_on_pe_for_range(pe,self.index,self.buf.len()) {
-                            let mut u8_vec = vec![0u8;len * std::mem::size_of::<T>()];
-                            let t_slice = std::slice::from_raw_parts_mut(u8_vec.as_mut_ptr() as *mut T, len);
-                            pe_u8_vecs.insert(pe,u8_vec);
-                            pe_t_slices.insert(pe,t_slice);
+                    for pe in self
+                        .array
+                        .array
+                        .pes_for_range(self.index, self.buf.len())
+                        .into_iter()
+                    {
+                        if let Some(len) = self.array.array.num_elements_on_pe_for_range(
+                            pe,
+                            self.index,
+                            self.buf.len(),
+                        ) {
+                            let mut u8_vec = vec![0u8; len * std::mem::size_of::<T>()];
+                            let t_slice =
+                                std::slice::from_raw_parts_mut(u8_vec.as_mut_ptr() as *mut T, len);
+                            pe_u8_vecs.insert(pe, u8_vec);
+                            pe_t_slices.insert(pe, t_slice);
                         }
                     }
-                    for (buf_index,index) in (self.index..(self.index + self.buf.len())).enumerate(){
-                        let pe = self.array.array.pe_for_dist_index(index).unwrap()%num_pes;
-                        pe_t_slices.get_mut(&pe).unwrap()[buf_index/num_pes] = buf_slice[buf_index];
+                    for (buf_index, index) in
+                        (self.index..(self.index + self.buf.len())).enumerate()
+                    {
+                        let pe = self.array.array.pe_for_dist_index(index).unwrap() % num_pes;
+                        pe_t_slices.get_mut(&pe).unwrap()[buf_index / num_pes] =
+                            buf_slice[buf_index];
                     }
-                    for (pe,vec) in pe_u8_vecs.drain(){
+                    for (pe, vec) in pe_u8_vecs.drain() {
                         if let Some(remote_am_gen) = PUT_OPS.get(&TypeId::of::<T>()) {
-                                let am: LamellarArcAm = remote_am_gen(self.array.clone().into(), self.index,self.buf.len(),vec);
-                                reqs.push(self.array.exec_arc_am_pe::<Vec<u8>>(pe,am).into_future());
-                        }else{
+                            let am: LamellarArcAm = remote_am_gen(
+                                self.array.clone().into(),
+                                self.index,
+                                self.buf.len(),
+                                vec,
+                            );
+                            reqs.push(self.array.exec_arc_am_pe::<Vec<u8>>(pe, am).into_future());
+                        } else {
                             let name = std::any::type_name::<T>().split("::").last().unwrap();
                             panic!("the type {:?} has not been registered for atomic rdma operations, this typically means you need to derive \"AtomicRdma\" for the type,
                             you can use the lamellar::AmData attribute proc macro to automatically derive it, e.g.
@@ -240,10 +275,10 @@ impl<T: Dist + 'static > LamellarAm for InitPutAm<T> {
                                 ....
                             }}",name,name);
                         }
-                    }                    
+                    }
                 }
             }
-            for req in  reqs.drain(..){
+            for req in reqs.drain(..) {
                 req.await;
             }
         }

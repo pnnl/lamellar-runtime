@@ -10,9 +10,8 @@ type OpFn = fn(*const u8, AtomicByteArray, usize) -> LamellarArcAm;
 type LocalOpFn = fn(*mut u8, AtomicByteArray, usize);
 // type DistOpFn = fn(*const u8, AtomicByteArray, usize);
 
-
 pub struct AtomicArrayOp {
-    pub id: (ArrayOpCmd,TypeId),
+    pub id: (ArrayOpCmd, TypeId),
     pub op: OpFn,
     pub local: LocalOpFn,
 }
@@ -20,22 +19,26 @@ pub struct AtomicArrayOp {
 crate::inventory::collect!(AtomicArrayOp);
 
 lazy_static! {
-    pub(crate) static ref OPS: HashMap<(ArrayOpCmd,TypeId), (OpFn,LocalOpFn)> = {
+    pub(crate) static ref OPS: HashMap<(ArrayOpCmd, TypeId), (OpFn, LocalOpFn)> = {
         let mut map = HashMap::new();
         for op in crate::inventory::iter::<AtomicArrayOp> {
-            map.insert(op.id.clone(),(op.op,op.local));
+            map.insert(op.id.clone(), (op.op, op.local));
         }
         map
     };
 }
 
-impl<T:  AmDist + Dist  + 'static> AtomicArray<T> {
-
-    fn initiate_op(&self, index: usize, val: T, op: ArrayOpCmd)  -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>>{
+impl<T: AmDist + Dist + 'static> AtomicArray<T> {
+    fn initiate_op(
+        &self,
+        index: usize,
+        val: T,
+        op: ArrayOpCmd,
+    ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>> {
         // println!("add ArithmeticOps<T> for &AtomicArray<T> ");
-        if let Some(funcs) = OPS.get(&(op,TypeId::of::<T>())) {
+        if let Some(funcs) = OPS.get(&(op, TypeId::of::<T>())) {
             let pe = self.pe_for_dist_index(index).expect("index out of bounds");
-            let local_index = self.pe_offset_for_dist_index(pe, index).unwrap();//calculated pe above
+            let local_index = self.pe_offset_for_dist_index(pe, index).unwrap(); //calculated pe above
             let array: AtomicByteArray = self.clone().into();
             if pe == self.my_pe() {
                 let mut val = val;
@@ -43,7 +46,7 @@ impl<T:  AmDist + Dist  + 'static> AtomicArray<T> {
                 None
             } else {
                 let am = funcs.0(&val as *const T as *const u8, array, local_index);
-                Some(self.array.dist_op(pe,am))
+                Some(self.array.dist_op(pe, am))
             }
         } else {
             let name = std::any::type_name::<T>().split("::").last().unwrap();
@@ -58,21 +61,25 @@ impl<T:  AmDist + Dist  + 'static> AtomicArray<T> {
                 ....
             }}",name,name,name);
         }
-    } 
-    fn initiate_fetch_op(&self, index: usize, val: T, op: ArrayOpCmd)  -> Box<dyn LamellarRequest<Output = T> + Send + Sync>{
+    }
+    fn initiate_fetch_op(
+        &self,
+        index: usize,
+        val: T,
+        op: ArrayOpCmd,
+    ) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
         // println!("add ArithmeticOps<T> for &AtomicArray<T> ");
-        if let Some(funcs) = OPS.get(&(op,TypeId::of::<T>())) {
+        if let Some(funcs) = OPS.get(&(op, TypeId::of::<T>())) {
             let pe = self.pe_for_dist_index(index).expect("index out of bounds");
-            let local_index = self.pe_offset_for_dist_index(pe, index).unwrap();//calculated pe above
+            let local_index = self.pe_offset_for_dist_index(pe, index).unwrap(); //calculated pe above
             let array: AtomicByteArray = self.clone().into();
-            if pe == self.my_pe() 
-            {
+            if pe == self.my_pe() {
                 let mut val = val;
                 funcs.1(&mut val as *mut T as *mut u8, array, local_index);
-                Box::new(LocalOpResult{val})
+                Box::new(LocalOpResult { val })
             } else {
                 let am = funcs.0(&val as *const T as *const u8, array, local_index);
-                self.array.dist_fetch_op(pe,am)
+                self.array.dist_fetch_op(pe, am)
             }
         } else {
             let name = std::any::type_name::<T>().split("::").last().unwrap();
@@ -87,95 +94,98 @@ impl<T:  AmDist + Dist  + 'static> AtomicArray<T> {
                 ....
             }}",name,op,name,name);
         }
-    } 
-
-    pub fn load(&self, index: usize) -> Box<dyn LamellarRequest<Output = T> + Send + Sync>{
-        self.initiate_fetch_op(index,self.array.dummy_val(),ArrayOpCmd::Load)
     }
 
-    pub fn store(&self, index: usize, val: T) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>>{
-        self.initiate_op(index,val,ArrayOpCmd::Store)
+    pub fn load(&self, index: usize) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+        self.initiate_fetch_op(index, self.array.dummy_val(), ArrayOpCmd::Load)
     }
 
-    pub fn swap(&self, index: usize, val: T)  -> Box<dyn LamellarRequest<Output = T> + Send + Sync>{
-        self.initiate_fetch_op(index,val,ArrayOpCmd::Swap)
+    pub fn store(
+        &self,
+        index: usize,
+        val: T,
+    ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>> {
+        self.initiate_op(index, val, ArrayOpCmd::Store)
+    }
+
+    pub fn swap(&self, index: usize, val: T) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+        self.initiate_fetch_op(index, val, ArrayOpCmd::Swap)
     }
 }
 
-
-impl<T: ElementArithmeticOps  + 'static> ArithmeticOps<T> for AtomicArray<T> {
+impl<T: ElementArithmeticOps + 'static> ArithmeticOps<T> for AtomicArray<T> {
     fn add(
         &self,
         index: usize,
         val: T,
     ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>> {
-        self.initiate_op(index,val,ArrayOpCmd::Add)
+        self.initiate_op(index, val, ArrayOpCmd::Add)
     }
     fn fetch_add(
         &self,
         index: usize,
         val: T,
     ) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
-        self.initiate_fetch_op(index,val,ArrayOpCmd::FetchAdd)
+        self.initiate_fetch_op(index, val, ArrayOpCmd::FetchAdd)
     }
     fn sub(
         &self,
         index: usize,
         val: T,
     ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>> {
-        self.initiate_op(index,val,ArrayOpCmd::Sub)
+        self.initiate_op(index, val, ArrayOpCmd::Sub)
     }
     fn fetch_sub(
         &self,
         index: usize,
         val: T,
     ) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
-        self.initiate_fetch_op(index,val,ArrayOpCmd::FetchSub)
+        self.initiate_fetch_op(index, val, ArrayOpCmd::FetchSub)
     }
     fn mul(
         &self,
         index: usize,
         val: T,
     ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>> {
-        self.initiate_op(index,val,ArrayOpCmd::Mul)
+        self.initiate_op(index, val, ArrayOpCmd::Mul)
     }
     fn fetch_mul(
         &self,
         index: usize,
         val: T,
     ) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
-        self.initiate_fetch_op(index,val,ArrayOpCmd::FetchMul)
+        self.initiate_fetch_op(index, val, ArrayOpCmd::FetchMul)
     }
     fn div(
         &self,
         index: usize,
         val: T,
     ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>> {
-        self.initiate_op(index,val,ArrayOpCmd::Div)
+        self.initiate_op(index, val, ArrayOpCmd::Div)
     }
     fn fetch_div(
         &self,
         index: usize,
         val: T,
     ) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
-        self.initiate_fetch_op(index,val,ArrayOpCmd::FetchDiv)
+        self.initiate_fetch_op(index, val, ArrayOpCmd::FetchDiv)
     }
 }
-impl<T:  ElementBitWiseOps + 'static> BitWiseOps<T> for AtomicArray<T> {
+impl<T: ElementBitWiseOps + 'static> BitWiseOps<T> for AtomicArray<T> {
     fn bit_and(
         &self,
         index: usize,
         val: T,
     ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>> {
         // println!("and val {:?}",val);
-        self.initiate_op(index,val,ArrayOpCmd::And)
+        self.initiate_op(index, val, ArrayOpCmd::And)
     }
     fn fetch_bit_and(
         &self,
         index: usize,
         val: T,
     ) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
-        self.initiate_fetch_op(index,val,ArrayOpCmd::FetchAnd)
+        self.initiate_fetch_op(index, val, ArrayOpCmd::FetchAnd)
     }
     fn bit_or(
         &self,
@@ -183,7 +193,7 @@ impl<T:  ElementBitWiseOps + 'static> BitWiseOps<T> for AtomicArray<T> {
         val: T,
     ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>> {
         // println!("or");
-        self.initiate_op(index,val,ArrayOpCmd::Or)
+        self.initiate_op(index, val, ArrayOpCmd::Or)
     }
     fn fetch_bit_or(
         &self,
@@ -191,7 +201,7 @@ impl<T:  ElementBitWiseOps + 'static> BitWiseOps<T> for AtomicArray<T> {
         val: T,
     ) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
         // println!("fetch_or");
-        self.initiate_fetch_op(index,val,ArrayOpCmd::FetchOr)
+        self.initiate_fetch_op(index, val, ArrayOpCmd::FetchOr)
     }
 }
 
@@ -273,7 +283,7 @@ macro_rules! atomic_bitwise_ops {
             // }
             fn local_fetch_bit_and(&self, index: usize, val: $a) -> $a {
                 use $crate::array::AtomicOps;
-                unsafe { let temp = self.local_as_mut_slice()[index].fetch_bit_and(val); 
+                unsafe { let temp = self.local_as_mut_slice()[index].fetch_bit_and(val);
                 // println!("and temp: {:?} {:?} ",temp,self.local_as_mut_slice()[index]);
                 temp}
             }
@@ -287,7 +297,7 @@ macro_rules! atomic_bitwise_ops {
                 temp}
             }
         }
-        
+
         paste::paste!{
             #[allow(non_snake_case)]
             fn [<$name local_bit_and>](val: *mut u8, array: $crate::array::AtomicByteArray, index: usize) {
@@ -378,12 +388,12 @@ macro_rules! non_atomic_ops {
                 //     stringify!($a)
                 // );
                 let _lock = self.lock_index(index);
-                unsafe { 
+                unsafe {
                     let orig  = self.local_as_mut_slice()[index];
                     self.local_as_mut_slice()[index] += val;
                     orig
                 }
-                
+
             }
             fn local_fetch_sub(&self, index: usize, val: $a) -> $a {
                 // println!(
@@ -392,7 +402,7 @@ macro_rules! non_atomic_ops {
                 //     stringify!($a)
                 // );
                 let _lock = self.lock_index(index);
-                unsafe { 
+                unsafe {
                     let orig  = self.local_as_mut_slice()[index];
                     self.local_as_mut_slice()[index] -= val ;
                     orig
@@ -401,14 +411,14 @@ macro_rules! non_atomic_ops {
             fn local_fetch_mul(&self, index: usize, val: $a) -> $a {
                 let _lock = self.lock_index(index);
                 unsafe {
-                    let orig  = self.local_as_mut_slice()[index]; 
+                    let orig  = self.local_as_mut_slice()[index];
                     self.local_as_mut_slice()[index] *= val ;
                     orig
                 }
             }
             fn local_fetch_div(&self, index: usize, val: $a) -> $a {
                 let _lock = self.lock_index(index);
-                unsafe { 
+                unsafe {
                     let orig  = self.local_as_mut_slice()[index];
                     self.local_as_mut_slice()[index] /= val ;
                     orig
@@ -437,7 +447,7 @@ macro_rules! non_atomic_ops {
                 let array: AtomicArray<$a> = array.into();
                 // println!("mutex {}local_sub func", stringify!($name));
                 let _lock = array.lock_index(index).expect("no lock exists!");
-                unsafe {                     
+                unsafe {
                     *(val as *mut $a) = array.local_as_mut_slice()[index];
                     array.local_as_mut_slice()[index] -= typed_val;
                 }
@@ -451,7 +461,7 @@ macro_rules! non_atomic_ops {
                 let array: AtomicArray<$a> = array.into();
                 // println!("mutex {}local_mul func", stringify!($name));
                 let _lock = array.lock_index(index).expect("no lock exists!");
-                unsafe { 
+                unsafe {
                     *(val as *mut $a) = array.local_as_mut_slice()[index];
                     array.local_as_mut_slice()[index] *= typed_val;
                 }
@@ -466,7 +476,7 @@ macro_rules! non_atomic_ops {
                 // println!("mutex {}local_mul func", stringify!($name));
                 let _lock = array.lock_index(index).expect("no lock exists!");
                 unsafe {
-                    *(val as *mut $a) = array.local_as_mut_slice()[index]; 
+                    *(val as *mut $a) = array.local_as_mut_slice()[index];
                     array.local_as_mut_slice()[index] /= typed_val;
                 }
             }
@@ -487,12 +497,12 @@ macro_rules! non_atomic_bitwise_ops {
                 //     stringify!($a)
                 // );
                 let _lock = self.lock_index(index);
-                unsafe { 
+                unsafe {
                     let orig  = self.local_as_mut_slice()[index];
                     self.local_as_mut_slice()[index] &= val;
                     orig
                 }
-                
+
             }
             fn local_fetch_bit_or(&self, index: usize, val: $a) -> $a {
                 // println!(
@@ -501,7 +511,7 @@ macro_rules! non_atomic_bitwise_ops {
                 //     stringify!($a)
                 // );
                 let _lock = self.lock_index(index);
-                unsafe { 
+                unsafe {
                     let orig  = self.local_as_mut_slice()[index];
                     self.local_as_mut_slice()[index] |= val ;
                     orig
@@ -530,7 +540,7 @@ macro_rules! non_atomic_bitwise_ops {
                 let array: AtomicArray<$a> = array.into();
                 // println!("mutex {}local_sub func", stringify!($name));
                 let _lock = array.lock_index(index).expect("no lock exists!");
-                unsafe {                     
+                unsafe {
                     *(val as *mut $a) = array.local_as_mut_slice()[index];
                     array.local_as_mut_slice()[index] |= typed_val;
                 }
@@ -547,19 +557,19 @@ macro_rules! non_atomic_misc_ops {
         impl LocalAtomicOps<$a> for AtomicArray<$a> {
             fn local_load(&self, index: usize, _val: $a) -> $a {
                 let _lock = self.lock_index(index);
-                unsafe { 
+                unsafe {
                     self.local_as_mut_slice()[index]
                 }
             }
             fn local_store(&self, index: usize, val: $a) {
                 let _lock = self.lock_index(index);
-                unsafe { 
+                unsafe {
                     self.local_as_mut_slice()[index] = val;
                 }
             }
             fn local_swap(&self, index: usize, val: $a) -> $a {
                 let _lock = self.lock_index(index);
-                unsafe { 
+                unsafe {
                     let orig  = self.local_as_mut_slice()[index];
                     self.local_as_mut_slice()[index] = val;
                     orig
@@ -574,7 +584,7 @@ macro_rules! non_atomic_misc_ops {
                 // println!("mutex {}local_mul func", stringify!($name));
                 let _lock = array.lock_index(index).expect("no lock exists!");
                 unsafe {
-                    *(val as *mut $a) = array.local_as_mut_slice()[index]; 
+                    *(val as *mut $a) = array.local_as_mut_slice()[index];
                 }
             }
             $crate::atomicarray_register!{$a,ArrayOpCmd::Load,[<$name dist_load>],[<$name local_load>]}
@@ -598,7 +608,7 @@ macro_rules! non_atomic_misc_ops {
                 // println!("mutex {}local_mul func", stringify!($name));
                 let _lock = array.lock_index(index).expect("no lock exists!");
                 unsafe {
-                    *(val as *mut $a) = array.local_as_mut_slice()[index]; 
+                    *(val as *mut $a) = array.local_as_mut_slice()[index];
                     array.local_as_mut_slice()[index] = typed_val;
                 }
             }
@@ -731,4 +741,3 @@ macro_rules! atomicarray_register {
         }
     };
 }
-

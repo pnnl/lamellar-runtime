@@ -3,7 +3,6 @@
 /// and performing an RDMA get of remote data from the region into
 /// a local buffer
 ///----------------------------------------------------------------
-use lamellar::ActiveMessaging; //for barrier
 use lamellar::RemoteMemoryRegion;
 
 const ARRAY_LEN: usize = 100;

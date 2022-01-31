@@ -215,6 +215,13 @@ impl LamellarWorld {
     pub fn team(&self) -> Arc<LamellarTeam> {
         self.team.clone()
     }
+
+    pub fn barrier(&self) {
+        self.team.barrier();
+    }
+    pub fn wait_all(&self) {
+        self.team.wait_all();
+    }
 }
 
 impl Clone for LamellarWorld {

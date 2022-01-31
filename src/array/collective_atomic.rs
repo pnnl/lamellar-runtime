@@ -1,11 +1,11 @@
 mod iteration;
 pub(crate) mod operations;
 mod rdma;
-use crate::array::r#unsafe::UnsafeByteArray;
 use crate::array::private::LamellarArrayPrivate;
+use crate::array::r#unsafe::UnsafeByteArray;
 use crate::array::*;
-use crate::darc::DarcMode;
 use crate::darc::local_rw_darc::LocalRwDarc;
+use crate::darc::DarcMode;
 use crate::lamellar_team::{IntoLamellarTeam, LamellarTeamRT};
 use crate::memregion::Dist;
 use core::marker::PhantomData;
@@ -30,7 +30,7 @@ impl<T: Dist + std::default::Default> CollectiveAtomicArray<T> {
         distribution: Distribution,
     ) -> CollectiveAtomicArray<T> {
         let array = UnsafeArray::new(team.clone(), array_size, distribution);
-        
+
         CollectiveAtomicArray {
             lock: LocalRwDarc::new(team, ()).unwrap(),
             array: array,
@@ -66,7 +66,7 @@ impl<T: Dist> CollectiveAtomicArray<T> {
     }
 
     #[doc(hidden)]
-    pub fn pe_offset_for_dist_index(&self, pe: usize, index: usize) ->  Option<usize> {
+    pub fn pe_offset_for_dist_index(&self, pe: usize, index: usize) -> Option<usize> {
         self.array.pe_offset_for_dist_index(pe, index)
     }
 
@@ -103,8 +103,8 @@ impl<T: Dist> CollectiveAtomicArray<T> {
     }
 }
 
-impl<T: Dist + 'static> CollectiveAtomicArray<T>{
-    pub fn into_atomic(self) -> AtomicArray<T>{
+impl<T: Dist + 'static> CollectiveAtomicArray<T> {
+    pub fn into_atomic(self) -> AtomicArray<T> {
         self.array.into()
     }
 }
@@ -113,36 +113,13 @@ impl<T: Dist> From<UnsafeArray<T>> for CollectiveAtomicArray<T> {
     fn from(array: UnsafeArray<T>) -> Self {
         array.block_on_outstanding(DarcMode::CollectiveAtomicArray);
         CollectiveAtomicArray {
-            lock: LocalRwDarc::new(array.team(),()).unwrap(),
+            lock: LocalRwDarc::new(array.team(), ()).unwrap(),
             array: array,
         }
     }
 }
 
-// impl <T: Dist> AsBytes<T,u8> for CollectiveAtomicArray<T>{
-//     type Array = CollectiveAtomicArray<u8>;
-//     #[doc(hidden)]
-//     unsafe fn as_bytes(&self) -> Self::Array {
-//         let array = self.array.as_bytes();
-//         CollectiveAtomicArray {
-//             lock: self.lock.clone(),
-//             array: array,
-//         }
-//     }
-// }
-// impl <T: Dist> FromBytes<T,u8> for CollectiveAtomicArray<u8>{
-//     type Array = CollectiveAtomicArray<T>;
-//     #[doc(hidden)]
-//     unsafe fn from_bytes(self) -> Self::Array {
-//         let array = self.array.from_bytes();
-//         CollectiveAtomicArray {
-//             lock: self.lock.clone(),
-//             array: array,
-//         }
-//     }
-// }
-
-impl <T: Dist> From<CollectiveAtomicArray<T>> for CollectiveAtomicByteArray{
+impl<T: Dist> From<CollectiveAtomicArray<T>> for CollectiveAtomicByteArray {
     fn from(array: CollectiveAtomicArray<T>) -> Self {
         CollectiveAtomicByteArray {
             lock: array.lock.clone(),
@@ -150,7 +127,7 @@ impl <T: Dist> From<CollectiveAtomicArray<T>> for CollectiveAtomicByteArray{
         }
     }
 }
-impl <T: Dist> From<CollectiveAtomicByteArray> for CollectiveAtomicArray<T>{
+impl<T: Dist> From<CollectiveAtomicByteArray> for CollectiveAtomicArray<T> {
     fn from(array: CollectiveAtomicByteArray) -> Self {
         CollectiveAtomicArray {
             lock: array.lock.clone(),
@@ -163,7 +140,7 @@ impl<T: Dist> private::ArrayExecAm<T> for CollectiveAtomicArray<T> {
     fn team(&self) -> Pin<Arc<LamellarTeamRT>> {
         self.array.team().clone()
     }
-    fn team_counters(&self) ->Arc<AMCounters>{
+    fn team_counters(&self) -> Arc<AMCounters> {
         self.array.team_counters()
     }
 }
@@ -178,10 +155,10 @@ impl<T: Dist> private::LamellarArrayPrivate<T> for CollectiveAtomicArray<T> {
     fn pe_for_dist_index(&self, index: usize) -> Option<usize> {
         self.array.pe_for_dist_index(index)
     }
-    fn pe_offset_for_dist_index(&self, pe: usize, index: usize) ->  Option<usize> {
+    fn pe_offset_for_dist_index(&self, pe: usize, index: usize) -> Option<usize> {
         self.array.pe_offset_for_dist_index(pe, index)
     }
-    unsafe fn into_inner(self) -> UnsafeArray<T>{
+    unsafe fn into_inner(self) -> UnsafeArray<T> {
         self.array
     }
 }
@@ -192,7 +169,7 @@ impl<T: Dist> LamellarArray<T> for CollectiveAtomicArray<T> {
     }
     fn team(&self) -> Pin<Arc<LamellarTeamRT>> {
         self.array.team().clone()
-    }    
+    }
     fn num_elems_local(&self) -> usize {
         self.num_elems_local()
     }
@@ -232,3 +209,38 @@ impl<T: Dist + std::fmt::Debug> ArrayPrint<T> for CollectiveAtomicArray<T> {
         self.array.print()
     }
 }
+
+impl<T: Dist + serde::Serialize + serde::de::DeserializeOwned + 'static> CollectiveAtomicArray<T> {
+    pub fn reduce(&self, op: &str) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+        self.array.reduce(op)
+    }
+    pub fn sum(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+        self.array.reduce("sum")
+    }
+    pub fn prod(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+        self.array.reduce("prod")
+    }
+    pub fn max(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+        self.array.reduce("max")
+    }
+}
+
+// impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> LamellarArrayReduce<T>
+//     for CollectiveAtomicArray<T>
+// {
+//     fn get_reduction_op(&self, op: String) -> LamellarArcAm {
+//         self.arraget_
+//     }
+//     fn reduce(&self, op: &str) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+//         self.reduce(op)
+//     }
+//     fn sum(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+//         self.sum()
+//     }
+//     fn max(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+//         self.max()
+//     }
+//     fn prod(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+//         self.prod()
+//     }
+// }

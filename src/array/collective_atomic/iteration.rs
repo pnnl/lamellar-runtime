@@ -1,14 +1,14 @@
 use crate::array::collective_atomic::*;
 
-use crate::array::iterator::distributed_iterator::{
-     DistIteratorLauncher, DistributedIterator
-};
+use crate::array::iterator::distributed_iterator::{DistIteratorLauncher, DistributedIterator};
 use crate::array::iterator::serial_iterator::LamellarArrayIter;
 use crate::array::private::LamellarArrayPrivate;
 use crate::array::*;
 use crate::memregion::Dist;
-use parking_lot::{RawRwLock, lock_api::{ArcRwLockReadGuard,ArcRwLockWriteGuard}};
-
+use parking_lot::{
+    lock_api::{ArcRwLockReadGuard, ArcRwLockWriteGuard},
+    RawRwLock,
+};
 
 #[derive(Clone)]
 pub struct CollectiveAtomicDistIter<'a, T: Dist> {
@@ -18,7 +18,6 @@ pub struct CollectiveAtomicDistIter<'a, T: Dist> {
     end_i: usize,
     _marker: PhantomData<&'a T>,
 }
-
 
 // impl<'a,T: Dist> CollectiveAtomicDistIter<'a, T> {
 //     pub(crate) fn new(data: CollectiveAtomicArray<T>,lock: Arc<RwLockReadGuard<'a, Box<()>>>, cur_i: usize, cnt: usize) -> Self {
@@ -47,7 +46,7 @@ impl<T: Dist + 'static> CollectiveAtomicDistIter<'static, T> {
     }
 }
 
-impl<'a, T: Dist + 'a > DistributedIterator for CollectiveAtomicDistIter<'a, T> {
+impl<'a, T: Dist + 'a> DistributedIterator for CollectiveAtomicDistIter<'a, T> {
     type Item = &'a T;
     type Array = CollectiveAtomicArray<T>;
     fn init(&self, start_i: usize, cnt: usize) -> Self {
@@ -68,7 +67,8 @@ impl<'a, T: Dist + 'a > DistributedIterator for CollectiveAtomicDistIter<'a, T> 
         if self.cur_i < self.end_i {
             self.cur_i += 1;
             unsafe {
-                self.data.array
+                self.data
+                    .array
                     .local_as_ptr()
                     .offset((self.cur_i - 1) as isize)
                     .as_ref()
@@ -85,7 +85,7 @@ impl<'a, T: Dist + 'a > DistributedIterator for CollectiveAtomicDistIter<'a, T> 
         g_index
     }
     fn subarray_index(&self, index: usize) -> Option<usize> {
-        let g_index = self.data.subarray_index_from_local(index,1); 
+        let g_index = self.data.subarray_index_from_local(index, 1);
         g_index
     }
     fn advance_index(&mut self, count: usize) {
@@ -113,7 +113,7 @@ pub struct CollectiveAtomicDistIterMut<'a, T: Dist> {
 //         }
 //     }
 // }
-impl<T: Dist +'static> CollectiveAtomicDistIterMut<'static, T> {
+impl<T: Dist + 'static> CollectiveAtomicDistIterMut<'static, T> {
     pub fn for_each<F>(self, op: F)
     where
         F: Fn(&mut T) + Sync + Send + Clone + 'static,
@@ -152,7 +152,8 @@ impl<'a, T: Dist + 'a> DistributedIterator for CollectiveAtomicDistIterMut<'a, T
             unsafe {
                 Some(
                     &mut *self
-                        .data.array
+                        .data
+                        .array
                         .local_as_mut_ptr()
                         .offset((self.cur_i - 1) as isize),
                 )
@@ -169,8 +170,8 @@ impl<'a, T: Dist + 'a> DistributedIterator for CollectiveAtomicDistIterMut<'a, T
         g_index
     }
     fn subarray_index(&self, index: usize) -> Option<usize> {
-        let g_index = self.data.subarray_index_from_local(index,1); //not sure if this works...
-                                                  // println!("enumerate index: {:?} global_index {:?}", index,g_index);
+        let g_index = self.data.subarray_index_from_local(index, 1); //not sure if this works...
+                                                                     // println!("enumerate index: {:?} global_index {:?}", index,g_index);
         g_index
     }
     fn advance_index(&mut self, count: usize) {
@@ -178,8 +179,8 @@ impl<'a, T: Dist + 'a> DistributedIterator for CollectiveAtomicDistIterMut<'a, T
     }
 }
 
-impl< T: Dist + 'static> CollectiveAtomicArray<T> {
-    pub fn dist_iter(&self) -> CollectiveAtomicDistIter<'static,T> {
+impl<T: Dist + 'static> CollectiveAtomicArray<T> {
+    pub fn dist_iter(&self) -> CollectiveAtomicDistIter<'static, T> {
         let lock = Arc::new(self.lock.read());
         self.barrier();
         // CollectiveAtomicDistIter::new(self.clone(), lock, 0, 0)
@@ -192,7 +193,7 @@ impl< T: Dist + 'static> CollectiveAtomicArray<T> {
         }
     }
 
-    pub fn dist_iter_mut(&self) -> CollectiveAtomicDistIterMut<'static,T> {
+    pub fn dist_iter_mut(&self) -> CollectiveAtomicDistIterMut<'static, T> {
         let lock = Arc::new(self.lock.write());
         self.barrier();
         // CollectiveAtomicDistIterMut::new(self.clone(), lock, 0, 0)
@@ -209,7 +210,10 @@ impl< T: Dist + 'static> CollectiveAtomicArray<T> {
         LamellarArrayIter::new(self.clone().into(), self.array.team().clone(), 1)
     }
 
-    pub fn buffered_iter(&self, buf_size: usize) -> LamellarArrayIter<'_, T, CollectiveAtomicArray<T>> {
+    pub fn buffered_iter(
+        &self,
+        buf_size: usize,
+    ) -> LamellarArrayIter<'_, T, CollectiveAtomicArray<T>> {
         LamellarArrayIter::new(
             self.clone().into(),
             self.array.team().clone(),

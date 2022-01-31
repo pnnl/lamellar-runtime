@@ -474,7 +474,7 @@ mod tests {
         }
     }
 
-    fn stress<T: LamellarAlloc + Clone + Sync + Send +'static>(alloc: T) {
+    fn stress<T: LamellarAlloc + Clone + Sync + Send + 'static>(alloc: T) {
         let mut threads = Vec::new();
         let start = std::time::Instant::now();
         for _i in 0..10 {
@@ -492,11 +492,11 @@ mod tests {
                     } else {
                         let index = rng.gen_range(0, addrs.len());
                         let addr = addrs.remove(index);
-                        alloc_clone.free(addr);
+                        alloc_clone.free(addr).unwrap();
                     }
                 }
                 for addr in addrs {
-                    alloc_clone.free(addr);
+                    alloc_clone.free(addr).unwrap();
                 }
             });
             threads.push(t);

@@ -319,7 +319,7 @@ fn main() {
         println!("starting");
 
         let mut times = vec![vec![]; 3];
-        for i in 0..10 {
+        for _i in 0..10 {
             // if my_pe == 0 {
             // println!("trial {:?}",i);
             // }
@@ -343,12 +343,12 @@ fn main() {
             full_spectrum_array.wait_all();
             full_spectrum_array.barrier();
 
-            let timer = Instant::now();
+            // let timer = Instant::now();
             times[1].push(dft_lamellar_array(
                 full_signal_array.clone(),
                 full_spectrum_array.clone(),
             ));
-            let time = timer.elapsed().as_secs_f64();
+            // let time = timer.elapsed().as_secs_f64();
             // if my_pe == 0 {
             //     println!(
             //         "{:?} array sum: {:?} time: {:?}",
@@ -388,13 +388,13 @@ fn main() {
                 .for_each(|elem| *elem = 0.0);
             full_spectrum_array.wait_all();
             full_spectrum_array.barrier();
-            let timer = Instant::now();
+            // let timer = Instant::now();
             times[2].push(dft_lamellar_array_opt(
                 full_signal_array.clone(),
                 full_spectrum_array.clone(),
                 100,
             ));
-            let time = timer.elapsed().as_secs_f64();
+            // let time = timer.elapsed().as_secs_f64();
             // if my_pe == 0 {
             //     println!(
             //         "{:?} array sum: {:?} time: {:?}",
@@ -441,7 +441,7 @@ fn main() {
             //     full_spectrum.iter().sum::<f64>(),
             //     time
             // );
-            let timer = Instant::now();
+            // let timer = Instant::now();
             times[1].push(dft_rayon(&full_signal, &mut full_spectrum));
             // let time = timer.elapsed().as_secs_f64();
             // println!(

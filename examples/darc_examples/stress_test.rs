@@ -1,6 +1,4 @@
-use lamellar::{
-    ActiveMessaging, BlockedArch, Darc, LocalMemoryRegion, RemoteMemoryRegion, StridedArch,
-};
+use lamellar::{ActiveMessaging, BlockedArch, Darc, StridedArch};
 use std::sync::atomic::AtomicUsize;
 use std::time::Instant;
 
