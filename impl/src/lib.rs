@@ -460,10 +460,10 @@ fn derive_am_data(
         output.extend(quote! {
             #traits
             #serde_temp_2
-            #vis struct #name#impl_generics #where_clause{
+            #vis struct #name #impl_generics #where_clause{
                 #fields
             }
-            impl #impl_generics#lamellar::DarcSerde for #name #ty_generics #where_clause{
+            impl #impl_generics #lamellar::DarcSerde for #name #ty_generics #where_clause{
                 fn ser (&self,  num_pes: usize, cur_pe: Result<usize, #lamellar::IdError>) {
                     // println!("in outer ser");
                     #ser
