@@ -308,7 +308,7 @@ pub struct LamellarTeamRT {
     pub(crate) num_world_pes: usize,
     pub(crate) team_pe: Result<usize, IdError>,
     pub(crate) num_pes: usize,
-    team_counters: AMCounters,
+    pub(crate)team_counters: AMCounters,
     pub(crate) world_counters: Arc<AMCounters>, // can probably remove this?
     pub(crate) id: usize,
     sub_team_id_cnt: AtomicUsize,
@@ -766,7 +766,7 @@ impl LamellarTeamRT {
             self.clone(),
         );
 
-        self.world_counters.add_send_req(self.num_pes);
+        //self.world_counters.add_send_req(self.num_pes);
         self.team_counters.add_send_req(self.num_pes);
         let func: LamellarArcAm = Arc::new(am);
         let world = if let Some(world) = &self.world {
@@ -831,7 +831,7 @@ impl LamellarTeamRT {
         );
         prof_end!(req);
         prof_start!(counters);
-        self.world_counters.add_send_req(1);
+        //self.world_counters.add_send_req(1);
         self.team_counters.add_send_req(1);
         prof_end!(counters);
         prof_start!(any);
@@ -892,7 +892,7 @@ impl LamellarTeamRT {
         );
         prof_end!(req);
         prof_start!(counters);
-        self.world_counters.add_send_req(1);
+        //self.world_counters.add_send_req(1);
         self.team_counters.add_send_req(1);
         prof_end!(counters);
         prof_start!(any);
@@ -959,7 +959,7 @@ impl LamellarTeamRT {
         );
         prof_end!(req);
         prof_start!(counters);
-        self.world_counters.add_send_req(1);
+        //self.world_counters.add_send_req(1);
         self.team_counters.add_send_req(1);
         prof_end!(counters);
         prof_start!(any);
@@ -1062,7 +1062,7 @@ impl LamellarTeamRT {
 //             team_id: self.id,
 //             return_data: true,
 //         };
-//         self.world_counters.add_send_req(self.num_pes);
+//         //self.world_counters.add_send_req(self.num_pes);
 //         self.team_counters.add_send_req(self.num_pes);
 //         let my_any: LamellarAny = Box::new((lamellar_local(func.clone()), lamellar_closure(func)));
 //         self.scheduler.submit_req(
@@ -1112,7 +1112,7 @@ impl LamellarTeamRT {
 //             team_id: self.id,
 //             return_data: true,
 //         };
-//         self.world_counters.add_send_req(1);
+//         //self.world_counters.add_send_req(1);
 //         self.team_counters.add_send_req(1);
 //         ireq.start = Instant::now();
 //         let my_any: LamellarAny = if self.world_pe == pe {

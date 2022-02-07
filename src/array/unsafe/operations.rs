@@ -5,6 +5,8 @@ use crate::lamellar_request::LamellarRequest;
 // use crate::memregion::Dist;
 use std::any::TypeId;
 use std::collections::HashMap;
+use std::sync::atomic::AtomicBool;
+use parking_lot::{Mutex,RwLock};
 
 type OpFn = fn(*const u8, UnsafeByteArray, usize) -> LamellarArcAm;
 
@@ -25,6 +27,25 @@ pub struct UnsafeArrayOp {
 
 crate::inventory::collect!(UnsafeArrayOp);
 
+type BufFn = fn(UnsafeByteArray) -> Arc<dyn BufferOp>;
+
+lazy_static! {
+    pub(crate) static ref BUFOPS: HashMap<TypeId, BufFn> = {
+        let mut map = HashMap::new();
+        for op in crate::inventory::iter::<UnsafeArrayOpBuf> {
+            map.insert(op.id.clone(), op.op);
+        }
+        map
+    };
+}
+
+pub struct UnsafeArrayOpBuf {
+    pub id: TypeId,
+    pub op: BufFn,
+}
+
+crate::inventory::collect!(UnsafeArrayOpBuf);
+
 impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
     pub(crate) fn dummy_val(&self) -> T {
         let slice = self.inner.data.mem_region.as_slice().unwrap();
@@ -35,6 +56,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
             )[0]
         }
     }
+    
     pub(crate) fn dist_op(
         &self,
         pe: usize,
@@ -57,7 +79,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
             .team
             .exec_arc_am_pe(pe, func, Some(self.inner.data.array_counters.clone()))
     }
-    fn initiate_op(
+    fn initiate_op_old(
         &self,
         index: usize,
         val: T,
@@ -91,6 +113,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
             }}",name,name,name);
         }
     }
+    
 
     fn initiate_fetch_op(
         &self,
@@ -126,6 +149,10 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
             }}",name,name,name);
         }
     }
+
+    pub(crate) fn process_ops(&self,ops: &Vec<(ArrayOpCmd,usize,T)>){
+        
+    }
 }
 
 impl<T: ElementArithmeticOps + 'static> ArithmeticOps<T> for UnsafeArray<T> {
@@ -143,7 +170,7 @@ impl<T: ElementArithmeticOps + 'static> ArithmeticOps<T> for UnsafeArray<T> {
             self.local_add(local_index, val);
             None
         } else {
-            self.initiate_op(index, val, local_index, ArrayOpCmd::Add)
+            Some(self.initiate_op(index, val, local_index, ArrayOpCmd::Add))
         }
     }
     fn fetch_add(
@@ -177,7 +204,7 @@ impl<T: ElementArithmeticOps + 'static> ArithmeticOps<T> for UnsafeArray<T> {
             self.local_sub(local_index, val);
             None
         } else {
-            self.initiate_op(index, val, local_index, ArrayOpCmd::Sub)
+            self.initiate_op_old(index, val, local_index, ArrayOpCmd::Sub)
         }
     }
     fn fetch_sub(
@@ -211,7 +238,7 @@ impl<T: ElementArithmeticOps + 'static> ArithmeticOps<T> for UnsafeArray<T> {
             self.local_mul(local_index, val);
             None
         } else {
-            self.initiate_op(index, val, local_index, ArrayOpCmd::Mul)
+            self.initiate_op_old(index, val, local_index, ArrayOpCmd::Mul)
         }
     }
     fn fetch_mul(
@@ -245,7 +272,7 @@ impl<T: ElementArithmeticOps + 'static> ArithmeticOps<T> for UnsafeArray<T> {
             self.local_div(local_index, val);
             None
         } else {
-            self.initiate_op(index, val, local_index, ArrayOpCmd::Div)
+            self.initiate_op_old(index, val, local_index, ArrayOpCmd::Div)
         }
     }
     fn fetch_div(
@@ -282,7 +309,7 @@ impl<T: ElementBitWiseOps + 'static> BitWiseOps<T> for UnsafeArray<T> {
             self.local_bit_and(local_index, val);
             None
         } else {
-            self.initiate_op(index, val, local_index, ArrayOpCmd::And)
+            self.initiate_op_old(index, val, local_index, ArrayOpCmd::And)
         }
     }
     fn fetch_bit_and(
@@ -317,7 +344,7 @@ impl<T: ElementBitWiseOps + 'static> BitWiseOps<T> for UnsafeArray<T> {
             self.local_bit_or(local_index, val);
             None
         } else {
-            self.initiate_op(index, val, local_index, ArrayOpCmd::Or)
+            self.initiate_op_old(index, val, local_index, ArrayOpCmd::Or)
         }
     }
     fn fetch_bit_or(

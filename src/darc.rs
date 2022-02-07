@@ -182,13 +182,13 @@ impl<T> DarcInner<T> {
             std::slice::from_raw_parts_mut(self.ref_cnt_addr as *mut usize, self.num_pes); //this is potentially a dirty read
         ref_cnts.iter().any(|x| *x > 0)
     }
-    fn block_on_outstanding(&self, state: DarcMode) {
+    fn block_on_outstanding(&self, state: DarcMode, extra_cnt: usize) {
         let mut timer = std::time::Instant::now();
         while self.dist_cnt.load(Ordering::SeqCst) > 0
-            || self.local_cnt.load(Ordering::SeqCst) > 1
+            || self.local_cnt.load(Ordering::SeqCst) > 1 + extra_cnt
             || unsafe { self.any_ref_cnt() }
         {
-            if self.local_cnt.load(Ordering::SeqCst) == 1 {
+            if self.local_cnt.load(Ordering::SeqCst) == 1 + extra_cnt{
                 self.send_finished();
             }
             if timer.elapsed().as_secs_f64() > 10.0 {
@@ -215,7 +215,7 @@ impl<T> DarcInner<T> {
         }
         for pe in mode_refs.iter() {
             while *pe != state as u8 {
-                if self.local_cnt.load(Ordering::SeqCst) == 1 {
+                if self.local_cnt.load(Ordering::SeqCst) == 1+extra_cnt {
                     self.send_finished();
                 }
                 if timer.elapsed().as_secs_f64() > 10.0 {
@@ -226,10 +226,10 @@ impl<T> DarcInner<T> {
             }
         }
         while self.dist_cnt.load(Ordering::SeqCst) != 0
-            || self.local_cnt.load(Ordering::SeqCst) > 1
+            || self.local_cnt.load(Ordering::SeqCst) > 1+extra_cnt
             || unsafe { self.any_ref_cnt() }
         {
-            if self.local_cnt.load(Ordering::SeqCst) == 1 {
+            if self.local_cnt.load(Ordering::SeqCst) == 1 + extra_cnt{
                 self.send_finished();
             }
             if timer.elapsed().as_secs_f64() > 10.0 {
@@ -367,14 +367,14 @@ impl<T> Darc<T> {
         Ok(d)
     }
 
-    pub(crate) fn block_on_outstanding(&self, state: DarcMode) {
-        self.inner().block_on_outstanding(state);
+    pub(crate) fn block_on_outstanding(&self, state: DarcMode,extra_cnt: usize) {
+        self.inner().block_on_outstanding(state,extra_cnt);
     }
 
     pub fn into_localrw(self) -> LocalRwDarc<T> {
         let inner = self.inner();
         let _cur_pe = inner.team().world_pe;
-        inner.block_on_outstanding(DarcMode::LocalRw);
+        inner.block_on_outstanding(DarcMode::LocalRw,0);
         inner.local_cnt.fetch_add(1, Ordering::SeqCst);
         // println!{"darc into_localrw {:?} {:?}",self.inner,self.inner().local_cnt.load(Ordering::SeqCst)};
         let item = unsafe { Box::from_raw(inner.item as *mut T) };
@@ -390,7 +390,7 @@ impl<T> Darc<T> {
     pub fn into_globalrw(self) -> GlobalRwDarc<T> {
         let inner = self.inner();
         let _cur_pe = inner.team().world_pe;
-        inner.block_on_outstanding(DarcMode::GlobalRw);
+        inner.block_on_outstanding(DarcMode::GlobalRw,0);
         inner.local_cnt.fetch_add(1, Ordering::SeqCst);
         // println!{"darc into_globalrw {:?} {:?}",self.inner,self.inner().local_cnt.load(Ordering::SeqCst)};
         let item = unsafe { Box::from_raw(inner.item as *mut T) };
@@ -696,7 +696,7 @@ impl<T> From<&Darc<T>> for __NetworkDarc<T> {
 
 impl<T> From<__NetworkDarc<T>> for Darc<T> {
     fn from(ndarc: __NetworkDarc<T>) -> Self {
-        // println!("ndarc: 0x{:x} {:?} {:?} {:?} ",ndarc.inner_addr,ndarc.backend,ndarc.orig_world_pe,ndarc.orig_team_pe);
+        
         if let Some(lamellae) = LAMELLAES.read().get(&ndarc.backend) {
             let darc = Darc {
                 inner: lamellae.local_addr(ndarc.orig_world_pe, ndarc.inner_addr)
@@ -705,6 +705,7 @@ impl<T> From<__NetworkDarc<T>> for Darc<T> {
             };
             darc
         } else {
+            println!("ndarc: 0x{:x} {:?} {:?} {:?} ",ndarc.inner_addr,ndarc.backend,ndarc.orig_world_pe,ndarc.orig_team_pe);
             panic!("unexepected lamellae backend {:?}", &ndarc.backend);
         }
     }

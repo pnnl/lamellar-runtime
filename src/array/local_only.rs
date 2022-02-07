@@ -71,6 +71,10 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Lo
     pub fn into_atomic(self) -> AtomicArray<T> {
         self.array.into()
     }
+
+    pub fn into_collective_atomic(self) -> CollectiveAtomicArray<T> {
+        self.array.into()
+    }
 }
 
 impl<T: Dist> From<UnsafeArray<T>> for LocalOnlyArray<T> {

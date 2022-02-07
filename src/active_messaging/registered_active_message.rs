@@ -301,7 +301,7 @@ impl RegisteredActiveMessages {
                                                 crate::serialized_size(&(&req_id, 0usize));
                                             let serialize_size = func.serialized_size();
                                             crate::serialize_into(
-                                                &mut data_slice[i..i + serialize_size],
+                                                &mut data_slice[i..i + result_header_size],
                                                 &(req_id, serialize_size),
                                             )
                                             .unwrap();

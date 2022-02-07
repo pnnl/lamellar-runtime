@@ -60,13 +60,13 @@ impl<T: Dist> ReadOnlyArray<T> {
         self.array.len()
     }
 
-    // pub unsafe fn get_unchecked<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(
-    //     &self,
-    //     index: usize,
-    //     buf: U,
-    // ) {
-    //     self.array.get_unchecked(index, buf)
-    // }
+    pub unsafe fn get_unchecked<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(
+        &self,
+        index: usize,
+        buf: U,
+    ) {
+        self.array.get_unchecked(index, buf)
+    }
     pub fn iget<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(&self, index: usize, buf: U) {
         self.array.iget(index, buf)
     }
@@ -77,6 +77,9 @@ impl<T: Dist> ReadOnlyArray<T> {
         self.array.iat(index)
     }
     pub fn local_as_slice(&self) -> &[T] {
+        unsafe { self.array.local_as_mut_slice() }
+    }
+    pub fn local_data(&self) -> &[T] {
         unsafe { self.array.local_as_mut_slice() }
     }
     pub fn dist_iter(&self) -> DistIter<'static, T, ReadOnlyArray<T>> {

@@ -24,7 +24,7 @@ futures-lite= "1.12"
 lazy_static = "1.3.0"
 crossbeam = "0.8"
 rand = "0.7.3"
-parking_lot = {version = "0.11.2", features = ["arc_lock", "send_guard"] }
+parking_lot = {version = "0.11.2", features = ["arc_lock", "send_guard", "serde"] }
 indexmap = "1.3" #lamellar_alloc
 core_affinity = "0.5.9"
 log = "0.4"
@@ -61,6 +61,7 @@ members = ["impl"]
 [features]
 enable-rofi=["rofisys","libc"]
 enable-prof=["lamellar-prof/enable-prof"]
+non-buffered-array-ops=[]
 slurm-test=[]
 default=[]
 
@@ -184,11 +185,6 @@ path="examples/bandwidths/atomic_array_put_bw.rs"
 name="collective_atomic_array_put_bw"
 path="examples/bandwidths/collective_atomic_array_put_bw.rs"
 
-
-[[example]]
-name="array_async_put_bw"
-path="examples/bandwidths/array_async_put_bw.rs"
-
 [[example]]
 name="unsafe_array_get_bw"
 path="examples/bandwidths/unsafe_array_get_bw.rs"
@@ -202,9 +198,8 @@ name="collective_atomic_array_get_bw"
 path="examples/bandwidths/collective_atomic_array_get_bw.rs"
 
 [[example]]
-name="array_async_get_bw"
-path="examples/bandwidths/array_async_get_bw.rs"
-
+name="readonly_array_get_bw"
+path="examples/bandwidths/readonly_array_get_bw.rs"
 
 ##------------ Active Message Examples -----------------##
 [[example]]
@@ -327,6 +322,10 @@ path="examples/kernels/parallel_array_gemm.rs"
 [[example]]
 name="parallel_blocked_array_gemm"
 path="examples/kernels/parallel_blocked_array_gemm.rs"
+
+[[example]]
+name="safe_parallel_blocked_array_gemm"
+path="examples/kernels/safe_parallel_blocked_array_gemm.rs"
 
 
 ##------------ Miscellaneous Examples -----------------##

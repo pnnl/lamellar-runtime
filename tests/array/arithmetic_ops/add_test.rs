@@ -25,7 +25,7 @@ macro_rules! initialize_array {
 
 macro_rules! check_val{
     (UnsafeArray,$val:ident,$max_val:ident,$valid:ident) => {
-       if $val > $max_val{//because unsafe we might lose some updates, but val should never be greater than max_val
+       if $val > $max_val || $val as usize == 0{//because unsafe we might lose some updates, but val should never be greater than max_val
            $valid = false;
        }
     };
@@ -64,7 +64,7 @@ macro_rules! add_test{
             let mut success = true;
             let array: $array::<$t> = $array::<$t>::new(world.team(), array_total_len, $dist).into(); //convert into abstract LamellarArray, distributed len is total_len
 
-            let pe_max_val: $t = 100 as $t;
+            let pe_max_val: $t = 10 as $t;
             let max_val = pe_max_val * num_pes as $t;
             let init_val = 0 as $t;
             initialize_array!($array, array, init_val);
@@ -85,7 +85,7 @@ macro_rules! add_test{
                     println!("{:?} {:?} {:?}",i,val,max_val);
                 }
             }
-            array.barrier();
+            array.barrier();            
             initialize_array!($array, array, init_val);
             array.wait_all();
             array.barrier();
@@ -105,7 +105,7 @@ macro_rules! add_test{
             world.wait_all();
             world.barrier();
             initialize_array!($array, array, init_val);
-
+            // println!("-----------------");
 
 
             let half_len = array_total_len/2;
@@ -114,7 +114,6 @@ macro_rules! add_test{
             let rand_idx = Uniform::from(0..half_len);
             let sub_array = array.sub_array(start_i..end_i);
             sub_array.barrier();
-            // sub_array.print();
             for idx in 0..sub_array.len(){
                 for _i in 0..(pe_max_val as usize){
                     sub_array.add(idx,1 as $t);
@@ -150,7 +149,7 @@ macro_rules! add_test{
             sub_array.barrier();
             initialize_array!($array, array, init_val);
 
-
+            // println!("-------------------");
             let pe_len = array_total_len/num_pes;
             for pe in 0..num_pes{
                 let len = std::cmp::max(pe_len/2,1);

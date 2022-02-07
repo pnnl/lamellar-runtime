@@ -41,7 +41,9 @@ macro_rules! initialize_array {
         $array.wait_all();
     };
     (ReadOnlyArray,$array:ident,$t:ty) => {
+        // println!("into unsafe");
         let temp = $array.into_unsafe();
+        // println!("unsafe");
         temp.dist_iter_mut()
             .enumerate()
             .for_each(move |(i, x)| *x = i as $t);
@@ -76,7 +78,9 @@ macro_rules! initialize_array_range {
         subarray.wait_all();
     }};
     (ReadOnlyArray,$array:ident,$t:ty,$range:expr) => {{
+        // println!("into unsafe");
         let temp = $array.into_unsafe();
+        // println!("unsafe");
         let subarray = temp.sub_array($range);
         subarray
             .dist_iter_mut()
@@ -84,7 +88,9 @@ macro_rules! initialize_array_range {
             .for_each(move |(i, x)| *x = i as $t);
         subarray.wait_all();
         drop(subarray);
+        println!("into read only");
         $array = temp.into_read_only();
+        println!("read only");
     }};
 }
 
@@ -99,6 +105,7 @@ macro_rules! get_test{
             let mut success = true;
             #[allow(unused_mut)]
             let mut array: $array::<$t> = $array::<$t>::new(world.team(), array_total_len, $dist).into(); //convert into abstract LamellarArray, distributed len is total_len
+            println!("bout to initialize");
             initialize_array!($array, array, $t);
             let shared_mem_region: LamellarMemoryRegion<$t> = world.alloc_shared_mem_region(mem_seg_len).into(); //Convert into abstract LamellarMemoryRegion, each local segment is total_len
             //initialize array

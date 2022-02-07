@@ -182,7 +182,7 @@ impl<'a, T: Dist + 'a> DistributedIterator for CollectiveAtomicDistIterMut<'a, T
 impl<T: Dist + 'static> CollectiveAtomicArray<T> {
     pub fn dist_iter(&self) -> CollectiveAtomicDistIter<'static, T> {
         let lock = Arc::new(self.lock.read());
-        self.barrier();
+        // self.barrier();
         // CollectiveAtomicDistIter::new(self.clone(), lock, 0, 0)
         CollectiveAtomicDistIter {
             data: self.clone(),
@@ -195,7 +195,7 @@ impl<T: Dist + 'static> CollectiveAtomicArray<T> {
 
     pub fn dist_iter_mut(&self) -> CollectiveAtomicDistIterMut<'static, T> {
         let lock = Arc::new(self.lock.write());
-        self.barrier();
+        // self.barrier();
         // CollectiveAtomicDistIterMut::new(self.clone(), lock, 0, 0)
         CollectiveAtomicDistIterMut {
             data: self.clone(),

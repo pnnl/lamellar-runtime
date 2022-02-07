@@ -1,5 +1,11 @@
 mod iteration;
+#[cfg(feature="non-buffered-array-ops")]
 pub(crate) mod operations;
+
+#[cfg(not(feature="non-buffered-array-ops"))]
+pub(crate) mod buffered_operations;
+#[cfg(not(feature="non-buffered-array-ops"))]
+pub(crate) use buffered_operations as operations;
 mod rdma;
 
 use crate::active_messaging::*;
@@ -10,19 +16,26 @@ use crate::lamellae::AllocationType;
 use crate::lamellar_team::{IntoLamellarTeam, LamellarTeamRT};
 use crate::memregion::{Dist, MemoryRegion};
 use crate::scheduler::SchedulerQueue;
+use crate::array::r#unsafe::operations::BUFOPS;
 use core::marker::PhantomData;
 use std::ops::Bound;
 use std::pin::Pin;
-use std::sync::atomic::Ordering;
+use std::sync::atomic::{AtomicUsize,Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
+use parking_lot::{RwLock};
+use std::any::TypeId;
 
-struct UnsafeArrayData {
+pub(crate) struct UnsafeArrayData {
     mem_region: MemoryRegion<u8>,
     pub(crate) array_counters: Arc<AMCounters>,
     pub(crate) team: Pin<Arc<LamellarTeamRT>>,
     pub(crate) my_pe: usize,
     pub(crate) num_pes: usize,
+    #[cfg(not(feature="non-buffered-array-ops"))]
+    pub(crate) op_buffers: RwLock<Vec<Arc<dyn BufferOp>>>,
+    #[cfg(not(feature="non-buffered-array-ops"))]
+    req_cnt: Arc<AtomicUsize>,
 }
 
 //need to calculate num_elems_local dynamically
@@ -39,7 +52,7 @@ pub struct UnsafeByteArray {
 
 #[lamellar_impl::AmDataRT(Clone)]
 pub(crate) struct UnsafeArrayInner {
-    data: Darc<UnsafeArrayData>,
+    pub(crate) data: Darc<UnsafeArrayData>,
     pub(crate) distribution: Distribution,
     orig_elem_per_pe: f64,
     elem_size: usize, //for bytes array will be size of T, for T array will be 1
@@ -47,8 +60,14 @@ pub(crate) struct UnsafeArrayInner {
     size: usize,      //relative to size of T
 }
 
+// impl<T: Dist> Drop for UnsafeArray<T>{
+//     fn drop(&mut self){
+//         self.wait_all();
+//     }
+// }
+
 //#[prof]
-impl<T: Dist> UnsafeArray<T> {
+impl<T: Dist + 'static> UnsafeArray<T> {
     pub fn new<U: Into<IntoLamellarTeam>>(
         team: U,
         array_size: usize,
@@ -79,6 +98,9 @@ impl<T: Dist> UnsafeArray<T> {
                 team: team,
                 my_pe: my_pe,
                 num_pes: num_pes,
+                // op_buffers: Mutex::new(HashMap::new()),
+                op_buffers: RwLock::new(Vec::new()),
+                req_cnt: Arc::new(AtomicUsize::new(0))
             },
             crate::darc::DarcMode::Darc,
         )
@@ -94,13 +116,25 @@ impl<T: Dist> UnsafeArray<T> {
             },
             phantom: PhantomData,
         };
+        array.create_buffered_ops();
         array
+    }
+
+    fn create_buffered_ops(&self){
+        if let Some(func) = BUFOPS.get(&TypeId::of::<T>()) {
+            let mut op_bufs = self.inner.data.op_buffers.write();
+            let bytearray: UnsafeByteArray = self.clone().into();
+            for _pe in 0..self.inner.data.num_pes{
+                op_bufs.push(func(bytearray.clone()))
+            }
+        }
     }
     pub fn wait_all(&self) {
         <UnsafeArray<T> as LamellarArray<T>>::wait_all(self);
     }
     pub fn barrier(&self) {
         self.inner.data.team.barrier();
+        
     }
 
     pub fn use_distribution(mut self, distribution: Distribution) -> Self {
@@ -126,6 +160,14 @@ impl<T: Dist> UnsafeArray<T> {
             u8_slice.as_mut_ptr() as *mut T,
             u8_slice.len() / std::mem::size_of::<T>(),
         )
+    }
+
+    pub unsafe fn local_data(&self)  -> &[T] {
+        self.local_as_mut_slice()
+    }
+
+    pub unsafe fn mut_local_data(&self)  -> &mut [T] {
+        self.local_as_mut_slice()
     }
 
     pub(crate) fn local_as_mut_ptr(&self) -> *mut T {
@@ -162,12 +204,19 @@ impl<T: Dist> UnsafeArray<T> {
             phantom: PhantomData,
         }
     }
+
+    pub fn sub_array_range(&self) -> std::ops::Range<usize>{
+        self.inner.offset..(self.inner.offset+self.inner.size)
+    }
     pub(crate) fn team(&self) -> Pin<Arc<LamellarTeamRT>> {
         self.inner.data.team.clone()
     }
 
     pub(crate) fn block_on_outstanding(&self, mode: DarcMode) {
-        self.inner.data.block_on_outstanding(mode);
+        self.wait_all();
+        //need to clear the buffered_ops...
+        self.inner.data.block_on_outstanding(mode,self.inner.data.num_pes);
+        self.inner.data.op_buffers.write().clear();
     }
 
     pub fn into_read_only(self) -> ReadOnlyArray<T> {
@@ -193,6 +242,8 @@ impl<T: Dist> From<AtomicArray<T>> for UnsafeArray<T> {
     fn from(array: AtomicArray<T>) -> Self {
         // let array = array.into_data();
         array.array.block_on_outstanding(DarcMode::UnsafeArray);
+        array.array.inner.data.op_buffers.write().clear();
+        array.array.create_buffered_ops();
         array.array
     }
 }
@@ -200,6 +251,8 @@ impl<T: Dist> From<AtomicArray<T>> for UnsafeArray<T> {
 impl<T: Dist> From<CollectiveAtomicArray<T>> for UnsafeArray<T> {
     fn from(array: CollectiveAtomicArray<T>) -> Self {
         array.array.block_on_outstanding(DarcMode::UnsafeArray);
+        array.array.inner.data.op_buffers.write().clear();
+        array.array.create_buffered_ops();
         array.array
     }
 }
@@ -207,6 +260,7 @@ impl<T: Dist> From<CollectiveAtomicArray<T>> for UnsafeArray<T> {
 impl<T: Dist> From<LocalOnlyArray<T>> for UnsafeArray<T> {
     fn from(array: LocalOnlyArray<T>) -> Self {
         array.array.block_on_outstanding(DarcMode::UnsafeArray);
+        array.array.create_buffered_ops();
         array.array
     }
 }
@@ -214,6 +268,7 @@ impl<T: Dist> From<LocalOnlyArray<T>> for UnsafeArray<T> {
 impl<T: Dist> From<ReadOnlyArray<T>> for UnsafeArray<T> {
     fn from(array: ReadOnlyArray<T>) -> Self {
         array.array.block_on_outstanding(DarcMode::UnsafeArray);
+        array.array.create_buffered_ops();
         array.array
     }
 }
@@ -319,19 +374,20 @@ impl<T: Dist> LamellarArray<T> for UnsafeArray<T> {
     }
     fn wait_all(&self) {
         let mut temp_now = Instant::now();
+        // let mut first = true;
         while self
             .inner
             .data
             .array_counters
             .outstanding_reqs
             .load(Ordering::SeqCst)
-            > 0
+            > 0 || self.inner.data.req_cnt.load(Ordering::SeqCst) > 0
         {
             // std::thread::yield_now();
             self.inner.data.team.scheduler.exec_task(); //mmight as well do useful work while we wait
-            if temp_now.elapsed() > Duration::new(60, 0) {
+            if temp_now.elapsed() > Duration::new(60, 0)  {//|| first{
                 println!(
-                    "in team wait_all mype: {:?} cnt: {:?} {:?}",
+                    "in team wait_all mype: {:?} cnt: {:?} {:?} {:?}",
                     self.inner.data.team.world_pe,
                     self.inner
                         .data
@@ -343,8 +399,10 @@ impl<T: Dist> LamellarArray<T> for UnsafeArray<T> {
                         .array_counters
                         .outstanding_reqs
                         .load(Ordering::SeqCst),
+                    self.inner.data.req_cnt.load(Ordering::SeqCst)
                 );
                 temp_now = Instant::now();
+                // first = false;
             }
         }
         // println!("done in wait all {:?}",std::time::SystemTime::now());

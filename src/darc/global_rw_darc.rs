@@ -441,7 +441,7 @@ impl<T> GlobalRwDarc<T> {
         let inner = self.inner();
         // println!("into_darc");
         // self.print();
-        inner.block_on_outstanding(DarcMode::Darc);
+        inner.block_on_outstanding(DarcMode::Darc,0);
         inner.local_cnt.fetch_add(1, Ordering::SeqCst);
         let item = unsafe { Box::from_raw(inner.item as *mut DistRwLock<T>).into_inner() };
         let d = Darc {
@@ -455,7 +455,7 @@ impl<T> GlobalRwDarc<T> {
 
     pub fn into_localrw(self) -> LocalRwDarc<T> {
         let inner = self.inner();
-        inner.block_on_outstanding(DarcMode::LocalRw);
+        inner.block_on_outstanding(DarcMode::LocalRw,0);
         inner.local_cnt.fetch_add(1, Ordering::SeqCst);
         let item = unsafe { Box::from_raw(inner.item as *mut DistRwLock<T>).into_inner() };
         let d = Darc {

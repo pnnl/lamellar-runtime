@@ -42,6 +42,7 @@ where
         while let Some(elem) = iter.next() {
             (&self.op)(elem)
         }
+        // println!("done in for each");
     }
 }
 

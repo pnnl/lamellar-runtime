@@ -5,6 +5,7 @@ use crate::lamellar_request::LamellarRequest;
 // use crate::memregion::Dist;
 use std::any::TypeId;
 use std::collections::HashMap;
+use parking_lot::Mutex;
 
 type OpFn = fn(*const u8, CollectiveAtomicByteArray, usize) -> LamellarArcAm;
 
@@ -24,6 +25,25 @@ pub struct CollectiveAtomicArrayOp {
 }
 
 crate::inventory::collect!(CollectiveAtomicArrayOp);
+
+type BufFn = fn(CollectiveAtomicByteArray) -> Arc<dyn BufferOp>;
+
+lazy_static! {
+        pub(crate) static ref BUFOPS: HashMap<TypeId, BufFn> = {
+        let mut map = HashMap::new();
+        for op in crate::inventory::iter::<CollectiveAtomicArrayOpBuf> {
+            map.insert(op.id.clone(), op.op);
+        }
+        map
+    };
+}
+
+pub struct CollectiveAtomicArrayOpBuf {
+    pub id: TypeId,
+    pub op: BufFn,
+}
+
+crate::inventory::collect!(CollectiveAtomicArrayOpBuf);
 
 impl<T: AmDist + Dist + 'static> CollectiveAtomicArray<T> {
     fn initiate_op(
@@ -139,12 +159,12 @@ impl<T: ElementArithmeticOps + 'static> ArithmeticOps<T> for CollectiveAtomicArr
     ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>> {
         let pe = self.pe_for_dist_index(index).expect("index out of bounds");
         let local_index = self.pe_offset_for_dist_index(pe, index).unwrap(); //calculated pe above
-                                                                             // println!("index {:?} pe {:?} local_index {:?}",index,pe,local_index);
+                                                                             println!("index {:?} pe {:?} local_index {:?}",index,pe,local_index);
         if pe == self.my_pe() {
             self.local_add(local_index, val);
             None
         } else {
-            self.initiate_op(index, val, local_index, ArrayOpCmd::Add)
+            Some(self.initiate_op(index, val, local_index, ArrayOpCmd::Add))
         }
     }
     fn fetch_add(
@@ -311,83 +331,66 @@ impl<T: ElementBitWiseOps + 'static> BitWiseOps<T> for CollectiveAtomicArray<T> 
 impl<T: ElementArithmeticOps> LocalArithmeticOps<T> for CollectiveAtomicArray<T> {
     fn local_fetch_add(&self, index: usize, val: T) -> T {
         // println!("local_add LocalArithmeticOps<T> for CollectiveAtomicArray<T> ");
-        let _lock = self.lock.write();
-        unsafe {
-            let orig = self.local_as_mut_slice()[index];
-            self.local_as_mut_slice()[index] += val;
-            orig
-        }
+        // let _lock = self.lock.write();
+        let mut slice = self.local_as_mut_slice(); //this locks the array
+        let orig = slice[index]; //this locks the
+        slice[index] += val;
+        orig
     }
     fn local_fetch_sub(&self, index: usize, val: T) -> T {
         // println!("local_sub LocalArithmeticOps<T> for CollectiveAtomicArray<T> ");
-        let _lock = self.lock.write();
-        unsafe {
-            let orig = self.local_as_mut_slice()[index];
-            self.local_as_mut_slice()[index] -= val;
-            orig
-        }
+        let mut slice = self.local_as_mut_slice(); //this locks the array
+        let orig = slice[index];
+        slice[index] -= val;
+        orig
     }
     fn local_fetch_mul(&self, index: usize, val: T) -> T {
         // println!("local_sub LocalArithmeticOps<T> for CollectiveAtomicArray<T> ");
-        let _lock = self.lock.write();
-        unsafe {
-            let orig = self.local_as_mut_slice()[index];
-            self.local_as_mut_slice()[index] *= val;
-            orig
-        }
+        let mut slice = self.local_as_mut_slice(); //this locks the array
+        let orig = slice[index];
+        slice[index] *= val;
+        orig
     }
     fn local_fetch_div(&self, index: usize, val: T) -> T {
         // println!("local_sub LocalArithmeticOps<T> for CollectiveAtomicArray<T> ");
-        let _lock = self.lock.write();
-        unsafe {
-            let orig = self.local_as_mut_slice()[index];
-            self.local_as_mut_slice()[index] /= val;
-            // println!("div i: {:?} {:?} {:?} {:?}",index,orig,val,self.local_as_mut_slice()[index]);
-            orig
-        }
+        let mut slice = self.local_as_mut_slice(); //this locks the array
+        let orig = slice[index];
+        slice[index] /= val;
+        // println!("div i: {:?} {:?} {:?} {:?}",index,orig,val,self.local_as_mut_slice()[index]);
+        orig
     }
 }
 impl<T: ElementBitWiseOps> LocalBitWiseOps<T> for CollectiveAtomicArray<T> {
     fn local_fetch_bit_and(&self, index: usize, val: T) -> T {
-        let _lock = self.lock.write();
+        let mut slice = self.local_as_mut_slice(); //this locks the array
         // println!("local_sub LocalArithmeticOps<T> for CollectiveAtomicArray<T> ");
-        unsafe {
-            let orig = self.local_as_mut_slice()[index];
-            self.local_as_mut_slice()[index] &= val;
-            // println!("and i: {:?} {:?} {:?} {:?}",index,orig,val,self.local_as_mut_slice()[index]);
-            orig
-        }
+        let orig = slice[index];
+        slice[index] &= val;
+        // println!("and i: {:?} {:?} {:?} {:?}",index,orig,val,self.local_as_mut_slice()[index]);
+        orig
     }
     fn local_fetch_bit_or(&self, index: usize, val: T) -> T {
-        let _lock = self.lock.write();
+        let mut slice = self.local_as_mut_slice(); //this locks the array
         // println!("local_sub LocalArithmeticOps<T> for CollectiveAtomicArray<T> ");
-        unsafe {
-            let orig = self.local_as_mut_slice()[index];
-            self.local_as_mut_slice()[index] |= val;
-            orig
-        }
+        let orig = slice[index];
+        slice[index] |= val;
+        orig
     }
 }
 impl<T: ElementOps> LocalAtomicOps<T> for CollectiveAtomicArray<T> {
     fn local_load(&self, index: usize, _val: T) -> T {
-        let _lock = self.lock.read();
-        unsafe { self.local_as_mut_slice()[index] }
+        self.local_as_mut_slice()[index]
     }
 
     fn local_store(&self, index: usize, val: T) {
-        let _lock = self.lock.write();
-        unsafe {
-            self.local_as_mut_slice()[index] = val;
-        }
+        self.local_as_mut_slice()[index] = val; //this locks the array
     }
 
     fn local_swap(&self, index: usize, val: T) -> T {
-        let _lock = self.lock.write();
-        unsafe {
-            let orig = self.local_as_mut_slice()[index];
-            self.local_as_mut_slice()[index] = val;
-            orig
-        }
+        let mut slice = self.local_as_mut_slice(); //this locks the array
+        let orig = slice[index];
+        slice[index] = val;
+        orig
     }
 }
 // }

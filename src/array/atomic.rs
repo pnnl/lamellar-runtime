@@ -1,11 +1,15 @@
 mod iteration;
-pub(crate) mod operations;
+#[cfg(not(feature="non-buffered-array-ops"))]
+pub(crate) mod buffered_operations;
+#[cfg(not(feature="non-buffered-array-ops"))]
+pub(crate) use buffered_operations as operations;
 pub(crate) mod rdma;
 pub use rdma::{AtomicArrayGet, AtomicArrayPut};
 
 use crate::array::private::LamellarArrayPrivate;
 use crate::array::r#unsafe::UnsafeByteArray;
 use crate::array::*;
+use crate::array::atomic::buffered_operations::BUFOPS;
 use crate::darc::{Darc, DarcMode};
 use crate::lamellar_team::{IntoLamellarTeam, LamellarTeamRT};
 use crate::memregion::Dist;
@@ -142,6 +146,56 @@ impl_atomic_ops! {u64,AtomicU64}
 use std::sync::atomic::AtomicUsize;
 impl_atomic_ops! {usize,AtomicUsize}
 
+
+use std::ops::{
+    AddAssign,
+    SubAssign,
+    MulAssign,
+    DivAssign,
+    BitAndAssign,
+    BitOrAssign
+};
+pub struct AtomicElement<T: Dist> {
+    array: AtomicArray<T>,
+    local_index: usize,
+}
+
+impl<T: Dist + ElementArithmeticOps> AddAssign<T> for AtomicElement<T>{
+    fn add_assign(&mut self, val: T){
+        self.add(val)
+    }
+}
+
+impl<T: Dist + ElementArithmeticOps> SubAssign<T> for AtomicElement<T>{
+    fn sub_assign(&mut self, val: T){
+        self.sub(val)
+    }
+}
+
+impl<T: Dist + ElementArithmeticOps> MulAssign<T> for AtomicElement<T>{
+    fn mul_assign(&mut self, val: T){
+        self.mul(val)
+    }
+}
+
+impl<T: Dist + ElementArithmeticOps> DivAssign<T> for AtomicElement<T>{
+    fn div_assign(&mut self, val: T){
+        self.add(val)
+    }
+}
+
+impl<T: Dist + ElementBitWiseOps> BitAndAssign<T> for AtomicElement<T>{
+    fn bitand_assign(&mut self, val: T){
+        self.bit_and(val)
+    }
+}
+
+impl<T: Dist + ElementBitWiseOps> BitOrAssign<T> for AtomicElement<T>{
+    fn bitor_assign(&mut self, val: T){
+        self.bit_or(val)
+    }
+}
+
 #[lamellar_impl::AmDataRT(Clone)]
 pub struct AtomicArray<T: Dist> {
     locks: Darc<Option<Vec<Mutex<()>>>>,
@@ -155,6 +209,75 @@ pub struct AtomicByteArray {
     orig_t_size: usize,
     pub(crate) array: UnsafeByteArray,
 }
+
+pub struct AtomicLocalData<T: Dist>{
+    array: AtomicArray<T>
+}
+
+pub struct AtomicLocalDataIter<T: Dist>{
+    array: AtomicArray<T>,
+    index: usize,
+}
+
+impl<T: Dist> AtomicLocalData<T>{
+    pub fn at(&self,index: usize) -> AtomicElement<T>{
+        AtomicElement {
+            array: self.array.clone(),
+            local_index: index,
+        }
+    }
+
+    pub fn get_mut(&self, index: usize) -> Option<AtomicElement<T>>{
+        Some(AtomicElement {
+            array: self.array.clone(),
+            local_index: index,
+        })
+    }
+
+    pub fn len(&self) -> usize{
+        unsafe{self.array.__local_as_mut_slice().len()}
+    }
+
+    pub fn iter(&self) -> AtomicLocalDataIter<T> {
+        AtomicLocalDataIter{
+            array: self.array.clone(),
+            index: 0,
+        }
+    }
+}
+
+impl<T: Dist> IntoIterator for AtomicLocalData<T>{
+    type Item = AtomicElement<T>;
+    type IntoIter = AtomicLocalDataIter<T>;
+    fn into_iter(self) -> Self::IntoIter{
+        AtomicLocalDataIter{
+            array: self.array,
+            index: 0,
+        }
+    }
+}
+
+impl<T: Dist>  Iterator for AtomicLocalDataIter<T> {
+    type Item = AtomicElement<T>;
+    fn next(&mut self) -> Option<Self::Item>{
+        if self.index < self.array.num_elems_local(){
+            let index = self.index;
+            self.index += 1;
+            Some(AtomicElement {
+                array: self.array.clone(),
+                local_index: index,
+            })
+        }
+        else{
+            None
+        }
+    }
+}
+
+
+
+
+
 
 //#[prof]
 impl<T: Dist + std::default::Default + 'static> AtomicArray<T> {
@@ -174,8 +297,22 @@ impl<T: Dist + std::default::Default + 'static> AtomicArray<T> {
             }
             Some(vec)
         };
+        let locks = Darc::new(team, locks).unwrap();
+        if let Some(func) = BUFOPS.get(&TypeId::of::<T>()) {
+            let mut op_bufs = array.inner.data.op_buffers.write();
+            let bytearray = AtomicByteArray {
+                locks: locks.clone(),
+                orig_t_size: std::mem::size_of::<T>(),
+                array: array.clone().into(),
+            };
+
+            for pe in 0..op_bufs.len(){
+                op_bufs[pe] = func(bytearray.clone());
+            }
+        }    
+
         AtomicArray {
-            locks: Darc::new(team, locks).unwrap(),
+            locks: locks.clone(),
             orig_t_size: std::mem::size_of::<T>(),
             array: array,
         }
@@ -218,12 +355,25 @@ impl<T: Dist> AtomicArray<T> {
     pub fn len(&self) -> usize {
         self.array.len()
     }
+
+    pub fn local_data(&self) -> AtomicLocalData<T> {
+        AtomicLocalData{
+            array: self.clone()
+        }
+    }
+
+    pub fn mut_local_data(&self) -> AtomicLocalData<T> {
+        AtomicLocalData{
+            array: self.clone()
+        }
+    }
+
     #[doc(hidden)]
-    pub unsafe fn local_as_slice(&self) -> &[T] {
+    pub unsafe fn __local_as_slice(&self) -> &[T] {
         self.array.local_as_mut_slice()
     }
     #[doc(hidden)]
-    pub unsafe fn local_as_mut_slice(&self) -> &mut [T] {
+    pub unsafe fn __local_as_mut_slice(&self) -> &mut [T] {
         self.array.local_as_mut_slice()
     }
     pub fn sub_array<R: std::ops::RangeBounds<usize>>(&self, range: R) -> AtomicArray<T> {
@@ -240,6 +390,9 @@ impl<T: Dist> AtomicArray<T> {
         self.array.into()
     }
     pub fn into_read_only(self) -> ReadOnlyArray<T> {
+        self.array.into()
+    }
+    pub fn into_collective_atomic(self) -> CollectiveAtomicArray<T> {
         self.array.into()
     }
     #[doc(hidden)]
@@ -271,8 +424,21 @@ impl<T: Dist + 'static> From<UnsafeArray<T>> for AtomicArray<T> {
             }
             Some(vec)
         };
+        let locks =  Darc::new(array.team(), locks).unwrap();
+        if let Some(func) = BUFOPS.get(&TypeId::of::<T>()) {
+            let mut op_bufs = array.inner.data.op_buffers.write();
+            let bytearray = AtomicByteArray {
+                locks: locks.clone(),
+                orig_t_size: std::mem::size_of::<T>(),
+                array: array.clone().into(),
+            };
+
+            for pe in 0..op_bufs.len(){
+                op_bufs[pe] = func(bytearray.clone());
+            }
+        }
         AtomicArray {
-            locks: Darc::new(array.team(), locks).unwrap(),
+            locks: locks,
             orig_t_size: std::mem::size_of::<T>(),
             array: array,
         }

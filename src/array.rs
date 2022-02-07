@@ -4,25 +4,29 @@ use crate::memregion::{
 };
 use crate::{active_messaging::*, LamellarTeamRT};
 
+use parking_lot::{Mutex,RwLock};
 use async_trait::async_trait;
 use enum_dispatch::enum_dispatch;
 use futures_lite::Future;
 use std::collections::HashMap;
 use std::pin::Pin;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool,AtomicUsize,Ordering};
+use std::marker::PhantomData;
+
 
 pub(crate) mod r#unsafe;
-pub use r#unsafe::{operations::UnsafeArrayOp, UnsafeArray, UnsafeByteArray};
+pub use r#unsafe::{operations::{UnsafeArrayOp,UnsafeArrayOpBuf}, UnsafeArray, UnsafeByteArray};
 pub(crate) mod read_only;
 pub use read_only::{ReadOnlyArray, ReadOnlyByteArray};
 pub(crate) mod local_only;
 pub use local_only::LocalOnlyArray;
 pub(crate) mod atomic;
-pub use atomic::{operations::AtomicArrayOp, AtomicArray, AtomicByteArray, AtomicOps};
+pub use atomic::{operations::{AtomicArrayOp,AtomicArrayOpBuf}, AtomicArray, AtomicByteArray, AtomicOps};
 
 pub(crate) mod collective_atomic;
 pub use collective_atomic::{
-    operations::CollectiveAtomicArrayOp, CollectiveAtomicArray, CollectiveAtomicByteArray,
+    operations::{CollectiveAtomicArrayOp,CollectiveAtomicArrayOpBuf}, CollectiveAtomicArray, CollectiveAtomicByteArray,
 };
 
 pub mod iterator;
@@ -54,6 +58,10 @@ pub struct ReduceKey {
 }
 crate::inventory::collect!(ReduceKey);
 
+
+// lamellar_impl::generate_reductions_for_type_rt!(u8,usize);
+// lamellar_impl::generate_ops_for_type_rt!(true, u8,usize);
+
 lamellar_impl::generate_reductions_for_type_rt!(u8, u16, u32, u64, u128, usize);
 lamellar_impl::generate_ops_for_type_rt!(true, u8, u16, u32, u64, u128, usize);
 
@@ -77,7 +85,7 @@ pub enum ArrayRdmaCmd {
     GetAm,
 }
 
-#[derive(Hash, std::cmp::PartialEq, std::cmp::Eq, Clone, Debug, Copy)]
+#[derive(serde::Serialize, serde::Deserialize, Hash, std::cmp::PartialEq, std::cmp::Eq, Clone, Debug, Copy)]
 pub enum ArrayOpCmd {
     Add,
     FetchAdd,
@@ -94,6 +102,73 @@ pub enum ArrayOpCmd {
     Store,
     Load,
     Swap,
+}
+
+pub trait BufferOp:  Sync + Send{ //have this also be RemoteActiveMessage
+    fn add_op(&self, op: ArrayOpCmd, index: usize, val: *const u8)->(usize,Arc<AtomicBool>);
+    fn add_fetch_op(&self, op: ArrayOpCmd, index: usize, val: *const u8) -> (usize,Arc<AtomicBool>, usize,Arc<RwLock<Vec<u8>>>);
+    fn into_arc_am(&self,sub_array: std::ops::Range<usize>) -> (LamellarArcAm,usize,Arc<AtomicBool>,Arc<RwLock<Vec<u8>>>);
+}
+
+struct ArrayOpHandle{
+    complete: Arc<AtomicBool>,
+}
+
+struct ArrayOpFetchHandle<T: Dist>{
+    index: usize,
+    complete: Arc<AtomicBool>,
+    results: Arc<RwLock<Vec<u8>>>,
+    _phantom: PhantomData<T>
+}
+
+#[async_trait]
+impl LamellarRequest for ArrayOpHandle {
+    type Output = ();
+    async fn into_future(self: Box<Self>) -> Option<Self::Output> {
+        while !self.complete.load(Ordering::Relaxed){
+            async_std::task::yield_now().await;
+        }
+        Some(())
+    }
+    fn get(&self) -> Option<Self::Output> {
+        while !self.complete.load(Ordering::Relaxed){
+            std::thread::yield_now();
+        }
+        Some(())
+    }
+    fn get_all(&self) -> Vec<Option<Self::Output>> {
+        vec![self.get()]
+    }
+}
+
+impl<T: Dist> ArrayOpFetchHandle<T>{
+    fn get_result(&self) -> T {
+       
+        let results = self.results.read();
+        // println!("getting result {:?}",results);
+        let t_slice = unsafe {std::slice::from_raw_parts(results.as_ptr() as *const T, results.len()*std::mem::size_of::<T>())};
+        t_slice[self.index]
+    }
+}
+
+#[async_trait]
+impl<T: Dist> LamellarRequest for ArrayOpFetchHandle<T> {
+    type Output = T;
+    async fn into_future(self: Box<Self>) -> Option<Self::Output> {
+        while !self.complete.load(Ordering::Relaxed){
+            async_std::task::yield_now().await;
+        }
+        Some(self.get_result())
+    }
+    fn get(&self) -> Option<Self::Output> {
+        while !self.complete.load(Ordering::Relaxed){
+            std::thread::yield_now();
+        }
+        Some(self.get_result())
+    }
+    fn get_all(&self) -> Vec<Option<Self::Output>> {
+        vec![self.get()]
+    }
 }
 
 pub trait ElementOps: AmDist + Dist + Sized {}
@@ -384,7 +459,7 @@ pub(crate) mod private {
     use crate::active_messaging::*;
     use crate::array::{
         AtomicArray, CollectiveAtomicArray, LamellarReadArray, LamellarWriteArray, ReadOnlyArray,
-        UnsafeArray,
+        UnsafeArray
     };
     use crate::lamellar_request::LamellarRequest;
     use crate::memregion::Dist;
@@ -448,7 +523,11 @@ pub(crate) mod private {
             self.team().exec_am_all_tg(am, Some(self.team_counters()))
         }
     }
+
+    
 }
+
+
 
 #[enum_dispatch(LamellarReadArray<T>,LamellarWriteArray<T>)]
 pub trait LamellarArray<T: Dist>: private::LamellarArrayPrivate<T> {

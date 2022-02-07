@@ -610,6 +610,13 @@ fn create_reduction(
                 data: unsafe {inner.clone().into()} , start_pe: 0, end_pe: num_pes-1}),
         });
 
+        let iter_chain = if array_type == "AtomicArray"{
+            quote!{.map(|elem| elem.load())}
+        }
+        else{
+            quote!{.copied()}
+        };
+
         array_impls.extend(quote!{
             #[allow(non_camel_case_types)]
             #[#am_data(Clone)]
@@ -625,12 +632,14 @@ fn create_reduction(
                     if self.start_pe == self.end_pe{
                         // println!("[{:?}] root {:?} {:?}",__lamellar_current_pe,self.start_pe, self.end_pe);
                         let timer = std::time::Instant::now();
-                        let data_slice = unsafe {self.data.local_as_slice()};
+                        let data_slice = unsafe {self.data.local_data()};
                         // println!("data: {:?}",data_slice);
-                        let first = data_slice.first().unwrap().clone();
-                        let res = data_slice[1..].iter().fold(first, #op );
+                        // let first = data_slice.first().unwrap().clone();
+                        // let res = data_slice[1..].iter().fold(first, #op );
+                        let res = data_slice.iter()#iter_chain.reduce(#op).unwrap();
                         // println!("[{:?}] {:?} {:?}",__lamellar_current_pe,res,timer.elapsed().as_secs_f64());
                         res
+                        // data_slice.first().unwrap().clone()
                     }
                     else{
                         // println!("[{:?}] recurse {:?} {:?}",__lamellar_current_pe,self.start_pe, self.end_pe);
@@ -639,10 +648,12 @@ fn create_reduction(
                         let timer = std::time::Instant::now();
                         let left = __lamellar_team.exec_am_pe( self.start_pe,  #reduction_name { data: self.data.clone(), start_pe: self.start_pe, end_pe: mid_pe}).into_future();
                         let right = __lamellar_team.exec_am_pe( mid_pe+1, #reduction_name { data: self.data.clone(), start_pe: mid_pe+1, end_pe: self.end_pe}).into_future();
-                        let res = op(left.await.unwrap(),&right.await.unwrap());
+                        let res = op(left.await.unwrap(),right.await.unwrap());
 
                         // println!("[{:?}] {:?} {:?}",__lamellar_current_pe,res,timer.elapsed().as_secs_f64());
                         res
+                        // let data_slice = unsafe {self.data.local_data()};
+                        // data_slice.first().unwrap().clone()
                     }
                 }
             }
@@ -771,6 +782,7 @@ fn gen_array_impls(
     array_impls
 }
 
+#[cfg(feature="non-buffered-array-ops")]
 fn gen_write_array_impls(
     typeident: syn::Ident,
     array_types: &Vec<(syn::Ident, syn::Ident)>,
@@ -810,12 +822,319 @@ fn gen_write_array_impls(
     write_array_impl
 }
 
+
+fn create_buf_ops( typeident: syn::Ident, array_type: syn::Ident, byte_array_type: syn::Ident,optypes: &Vec<OpType>,rt: bool,bitwise: bool) -> proc_macro2::TokenStream {
+    let lamellar = if rt {
+        quote::format_ident!("crate")
+    } else {
+        quote::format_ident!("__lamellar")
+    };
+
+    let (am_data, am): (syn::Path, syn::Path) = if rt {
+        (
+            syn::parse("lamellar_impl::AmDataRT".parse().unwrap()).unwrap(),
+            syn::parse("lamellar_impl::rt_am".parse().unwrap()).unwrap(),
+        )
+    } else {
+        (
+            syn::parse("lamellar::AmData".parse().unwrap()).unwrap(),
+            syn::parse("lamellar::am".parse().unwrap()).unwrap(),
+        )
+    };
+    let mut expanded = quote!{};
+    let (lhs,assign,load) = if array_type == "AtomicArray"{
+        let array_vec =  vec![(array_type.clone(),byte_array_type.clone())];
+        let ops: Vec<(syn::Ident, bool)> = vec![
+            (quote::format_ident!("add"), false),
+            (quote::format_ident!("fetch_add"), true),
+            (quote::format_ident!("sub"), false),
+            (quote::format_ident!("fetch_sub"), true),
+            (quote::format_ident!("mul"), false),
+            (quote::format_ident!("fetch_mul"), true),
+            (quote::format_ident!("div"), false),
+            (quote::format_ident!("fetch_div"), true),
+        ]; 
+        let temp = gen_array_impls(
+            typeident.clone(),
+            &array_vec,
+            &ops,
+            OpType::Arithmetic,
+            rt,
+        );
+        expanded.extend(quote!{#temp});
+        let ops: Vec<(syn::Ident, bool)> = vec![
+            (quote::format_ident!("load"), true),
+            (quote::format_ident!("store"), false),
+            (quote::format_ident!("swap"), true),
+        ]; 
+        let temp = gen_array_impls(
+            typeident.clone(),
+            &array_vec,
+            &ops,
+            OpType::Atomic,
+            rt,
+        );
+        expanded.extend(quote!{#temp});
+        if bitwise{
+            let ops: Vec<(syn::Ident, bool)> = vec![
+                (quote::format_ident!("bit_and"), false),
+                (quote::format_ident!("fetch_bit_and"), true),
+                (quote::format_ident!("bit_or"), false),
+                (quote::format_ident!("fetch_bit_or"), true),
+            ]; 
+            let temp = gen_array_impls(
+                typeident.clone(),
+                &array_vec,
+                &ops,
+                OpType::Bitwise,
+                rt,
+            );
+            expanded.extend(quote!{#temp});
+        }
+        (quote!{let mut elem = slice.at(index); elem },
+        quote!{slice.at(index).store(val)},
+        quote!{slice.at(index).load()})
+    }
+    else{
+        (quote!{slice[index]},
+        quote!{slice[index] = val},
+        quote!{slice[index]})
+    };
+
+    
+    let mut match_stmts = quote! {};
+    for optype in optypes{
+        match optype{
+            OpType::Arithmetic =>{
+                match_stmts.extend(quote! {
+                    ArrayOpCmd::Add=>{ #lhs += val },
+                    ArrayOpCmd::FetchAdd=> { 
+                        results_slice[fetch_index] = orig;
+                        fetch_index+=1;
+                        #lhs += val
+                    },
+                    ArrayOpCmd::Sub=>{#lhs -= val},
+                    ArrayOpCmd::FetchSub=>{ 
+                        results_slice[fetch_index] = orig;
+                        fetch_index+=1;
+                        #lhs -= val
+                    },
+                    ArrayOpCmd::Mul=>{#lhs *= val},
+                    ArrayOpCmd::FetchMul=>{ 
+                        results_slice[fetch_index] = orig;
+                        fetch_index+=1;
+                        #lhs *= val
+                    },
+                    ArrayOpCmd::Div=>{#lhs /= val},
+                    ArrayOpCmd::FetchDiv=>{ 
+                        results_slice[fetch_index] = orig;
+                        fetch_index+=1;
+                        #lhs /= val
+                    },
+                })
+            },
+            OpType::Bitwise =>{
+                match_stmts.extend(quote! {
+                    ArrayOpCmd::And=>{#lhs &= val},
+                    ArrayOpCmd::FetchAnd=>{ 
+                        results_slice[fetch_index] = orig;
+                        fetch_index+=1;
+                        #lhs &= val
+                    },
+                    ArrayOpCmd::Or=>{#lhs |= val},
+                    ArrayOpCmd::FetchOr=>{ 
+                        results_slice[fetch_index] = orig;
+                        fetch_index+=1;
+                        #lhs |= val
+                    },
+                })
+            },
+            OpType::Atomic =>{
+                match_stmts.extend(quote! {
+                    ArrayOpCmd::Store=>{#assign},
+                    ArrayOpCmd::Load=>{ 
+                        results_slice[fetch_index] = orig;
+                        fetch_index+=1;
+                    },
+                    ArrayOpCmd::Swap=>{ 
+                        results_slice[fetch_index] = orig;
+                        fetch_index+=1;
+                        #assign
+                    },
+                })
+            },
+        }
+    }
+
+    let buf_op_name = quote::format_ident!("{}_{}_op_buf", array_type, typeident);
+    let am_buf_name = quote::format_ident!("{}_{}_am_buf", array_type, typeident);
+    let dist_am_buf_name = quote::format_ident!("{}_{}_am_buf", array_type, typeident);
+    let reg_name = quote::format_ident!("{}OpBuf", array_type);
+    
+    expanded.extend(quote! {
+        struct #buf_op_name{
+            data: #lamellar::array::#array_type<#typeident>,
+            ops: Mutex<Vec<(ArrayOpCmd,usize,#typeident)>>,
+            complete: RwLock<Arc<AtomicBool>>,
+            result_cnt:  RwLock<Arc<AtomicUsize>>,
+            results:  RwLock<Arc<RwLock<Vec<u8>>>>,
+        }
+        #[#am_data]
+        struct #am_buf_name{
+            data: #lamellar::array::#array_type<#typeident>,
+            ops: Vec<(ArrayOpCmd,usize,#typeident)>, 
+            num_fetch_ops: usize,           
+        }
+        impl #lamellar::array::BufferOp for #buf_op_name{
+            fn add_op(&self, op: ArrayOpCmd, index: usize, val: *const u8) -> (usize,Arc<AtomicBool>){
+                let val = unsafe{*(val as *const #typeident)};
+                let mut buf = self.ops.lock();
+                buf.push((op,index,val));
+                (buf.len(),self.complete.read().clone())
+            }
+            fn add_fetch_op(&self, op: ArrayOpCmd, index: usize, val: *const u8) -> (usize,Arc<AtomicBool>, usize,Arc<RwLock<Vec<u8>>>){
+                let val = unsafe{*(val as *const #typeident)};
+                let mut buf = self.ops.lock();
+                buf.push((op,index,val));
+                let res_index = self.result_cnt.read().fetch_add(1,Ordering::SeqCst);
+
+                (buf.len(),self.complete.read().clone(),res_index,self.results.read().clone())
+            }
+            fn into_arc_am(&self,sub_array: std::ops::Range<usize>) -> (Arc<dyn RemoteActiveMessage + Send + Sync>,usize,Arc<AtomicBool>,Arc<RwLock<Vec<u8>>>){
+                
+                let mut buf = self.ops.lock();
+                let mut am = #am_buf_name{
+                    data: self.data.sub_array(sub_array),
+                    ops: Vec::new(),
+                    num_fetch_ops: self.result_cnt.read().swap(0,Ordering::SeqCst),
+                };
+                let len = buf.len();
+                std::mem::swap(&mut am.ops,  &mut buf);
+                let mut complete = Arc::new(AtomicBool::new(false));
+                std::mem::swap(&mut complete, &mut self.complete.write());
+                let mut results = Arc::new(RwLock::new(Vec::new()));
+                std::mem::swap(&mut results, &mut self.results.write());
+                (Arc::new(am),len,complete,results)
+            }
+        }
+        #[#am]
+        impl LamellarAM for #am_buf_name{ //eventually we can return fetchs here too...
+            fn exec(&self) -> Vec<u8>{ 
+                // self.data.process_ops(&self.ops);
+                // println!("num ops {:?} ",self.ops.len());
+                let mut slice = unsafe{self.data.mut_local_data()};
+                // println!("slice len {:?}",slice.len());
+                let u8_len = self.num_fetch_ops*std::mem::size_of::<#typeident>();
+                let mut results_u8: Vec<u8> = if u8_len > 0 {
+                    let mut temp = Vec::with_capacity(u8_len);
+                    unsafe{temp.set_len(u8_len)};
+                    temp
+                }
+                else{
+                    vec![]
+                };
+                let mut results_slice = unsafe{std::slice::from_raw_parts_mut(results_u8.as_mut_ptr() as *mut #typeident,self.num_fetch_ops)};
+                let mut fetch_index=0;
+                for (op,index,val) in &self.ops{
+                    // println!("op: {:?} index{:?} val {:?}",op,index,val);
+                    let index = *index;
+                    let val = *val;
+                    let orig = #load;
+                    match op{
+                    # match_stmts
+                    _ => {panic!("shouldnt happen {:?}",op)}
+                    }
+                }
+                // println!("buff ops exec: {:?} {:?} {:?}",results_u8.len(),u8_len,self.num_fetch_ops);
+                results_u8
+            }
+        }
+        #[allow(non_snake_case)]
+        fn #dist_am_buf_name(array: #lamellar::array::#byte_array_type) -> Arc<dyn #lamellar::array::BufferOp>{
+            // println!("{:}",stringify!(#dist_fn_name));
+            Arc::new(#buf_op_name{
+                data: unsafe {array.into()},
+                ops: Mutex::new(Vec::new()),
+                complete: RwLock::new(Arc::new(AtomicBool::new(false))),
+                result_cnt: RwLock::new(Arc::new(AtomicUsize::new(0))),
+                results: RwLock::new( Arc::new(RwLock::new(Vec::new()))),
+            })
+        }
+        inventory::submit! {
+            #![crate = #lamellar]
+            #lamellar::array::#reg_name{
+                id: std::any::TypeId::of::<#typeident>(),
+                op: #dist_am_buf_name,
+            }
+        }
+    });
+    expanded
+}
+
 enum OpType {
     Arithmetic,
     Bitwise,
     Atomic,
 }
 
+fn create_buffered_ops(typeident: syn::Ident, bitwise: bool, rt: bool) -> proc_macro2::TokenStream {
+    let lamellar = if rt {
+        quote::format_ident!("crate")
+    } else {
+        quote::format_ident!("__lamellar")
+    };
+
+    let atomic_array_types: Vec<(syn::Ident, syn::Ident)> = vec![
+        (
+            quote::format_ident!("CollectiveAtomicArray"),
+            quote::format_ident!("CollectiveAtomicByteArray"),
+        ),
+        (
+            quote::format_ident!("AtomicArray"),
+            quote::format_ident!("AtomicByteArray"),
+        )
+    ];
+
+    let mut expanded = quote! {};
+    
+    let mut optypes = vec![OpType::Arithmetic];
+    if bitwise{
+        optypes.push(OpType::Bitwise);
+    }
+    let buf_op_impl = create_buf_ops( typeident.clone(), 
+        quote::format_ident!("UnsafeArray"),
+        quote::format_ident!("UnsafeByteArray"),
+    &optypes,rt,bitwise);
+    expanded.extend(buf_op_impl);
+    optypes.push(OpType::Atomic);
+    for (array_type,byte_array_type) in atomic_array_types{
+        let buf_op_impl = create_buf_ops( typeident.clone(), array_type.clone(),byte_array_type.clone(),&optypes,rt,bitwise);
+        expanded.extend(buf_op_impl)
+    }    
+
+    let user_expanded = quote_spanned! {expanded.span()=>
+        const _: () = {
+            extern crate lamellar as __lamellar;
+            use __lamellar::array::{AtomicArray,AtomicByteArray,CollectiveAtomicArray,CollectiveAtomicByteArray,LocalArithmeticOps,LocalAtomicOps,ArrayOpCmd,LamellarArrayPut};
+            use __lamellar::array;
+            // #bitwise_mod
+            use __lamellar::LamellarArray;
+            use __lamellar::LamellarRequest;
+            use __lamellar::RemoteActiveMessage;
+            use std::sync::Arc;
+            use parking_lot::{Mutex,RwLock};
+            use std::sync::atomic::{Ordering,AtomicBool,AtomicUsize};
+            #expanded
+        };
+    };
+    if lamellar == "crate" {
+        expanded
+    } else {
+        user_expanded
+    }
+}
+
+#[cfg(feature="non-buffered-array-ops")]
 fn create_ops(typeident: syn::Ident, bitwise: bool, rt: bool) -> proc_macro2::TokenStream {
     let lamellar = if rt {
         quote::format_ident!("crate")
@@ -846,7 +1165,7 @@ fn create_ops(typeident: syn::Ident, bitwise: bool, rt: bool) -> proc_macro2::To
         (quote::format_ident!("fetch_mul"), true),
         (quote::format_ident!("div"), false),
         (quote::format_ident!("fetch_div"), true),
-    ];
+    ]; 
 
     let array_impls = gen_array_impls(
         typeident.clone(),
@@ -888,7 +1207,7 @@ fn create_ops(typeident: syn::Ident, bitwise: bool, rt: bool) -> proc_macro2::To
     );
     expanded.extend(quote! {
         #array_impls
-    });
+    }); 
 
     let mut bitwise_mod = quote! {};
     if bitwise {
@@ -928,6 +1247,7 @@ fn create_ops(typeident: syn::Ident, bitwise: bool, rt: bool) -> proc_macro2::To
             use __lamellar::LamellarRequest;
             use __lamellar::RemoteActiveMessage;
             use std::sync::Arc;
+            use parking_lot::Mutex;
             #expanded
         };
     };
@@ -1012,7 +1332,7 @@ fn gen_atomic_rdma(typeident: syn::Ident, rt: bool) -> proc_macro2::TokenStream 
 
         #lamellar::inventory::submit! {
             #![crate = #lamellar]
-            crate::array::atomic::rdma::AtomicArrayGet{
+            #lamellar::array::atomic::rdma::AtomicArrayGet{
                 id: std::any::TypeId::of::<#typeident>(),
                 op: #get_fn
             }
@@ -1062,7 +1382,7 @@ fn gen_atomic_rdma(typeident: syn::Ident, rt: bool) -> proc_macro2::TokenStream 
 
         #lamellar::inventory::submit! {
             #![crate = #lamellar]
-            crate::array::atomic::rdma::AtomicArrayPut{
+            #lamellar::array::atomic::rdma::AtomicArrayPut{
                 id: std::any::TypeId::of::<#typeident>(),
                 op: #put_fn
             }
@@ -1095,15 +1415,18 @@ pub fn register_reduction(item: TokenStream) -> TokenStream {
             closure.inputs[0] = syn::Pat::Type(pat);
         }
         if let syn::Pat::Ident(b) = &closure.inputs[1] {
-            let tyr: syn::TypeReference = syn::parse_quote! {&#tyc};
+            // let tyr: syn::TypeReference = syn::parse_quote! {&#tyc};
+            let tyc = ty.clone();
             let pat: syn::PatType = syn::PatType {
                 attrs: vec![],
                 pat: Box::new(syn::Pat::Ident(b.clone())),
                 colon_token: syn::Token![:](Span::call_site()),
-                ty: Box::new(syn::Type::Reference(tyr)),
+                // ty: Box::new(syn::Type::Reference(tyr)),
+                ty: Box::new(syn::Type::Path(tyc.clone())),
             };
             closure.inputs[1] = syn::Pat::Type(pat);
         }
+        println!("{:?}", closure);
 
         output.extend(create_reduction(
             ty.path.segments[0].ident.clone(),
@@ -1180,11 +1503,12 @@ pub fn generate_reductions_for_type_rt(item: TokenStream) -> TokenStream {
     for t in item.to_string().split(",").collect::<Vec<&str>>() {
         let t = t.trim().to_string();
         let typeident = quote::format_ident!("{:}", t.clone());
+        // let elemtypeident = if 
         output.extend(create_reduction(
             typeident.clone(),
             "sum".to_string(),
             quote! {
-                |acc: #typeident, val: &#typeident|{ acc+*val }
+                |acc, val|{ acc + val }
             },
             &read_array_types,
             true,
@@ -1193,7 +1517,7 @@ pub fn generate_reductions_for_type_rt(item: TokenStream) -> TokenStream {
             typeident.clone(),
             "prod".to_string(),
             quote! {
-                |acc: #typeident, val: &#typeident| { acc* *val }
+                |acc, val| { acc * val }
             },
             &read_array_types,
             true,
@@ -1202,7 +1526,7 @@ pub fn generate_reductions_for_type_rt(item: TokenStream) -> TokenStream {
             typeident.clone(),
             "max".to_string(),
             quote! {
-                |val1: #typeident, val2: &#typeident| { if val1 > *val2 {val1} else {*val2} }
+                |val1, val2| { if val1 > val2 {val1} else {val2} }
             },
             &read_array_types,
             true,
@@ -1228,7 +1552,10 @@ pub fn generate_ops_for_type(item: TokenStream) -> TokenStream {
     for t in items[1..].iter() {
         let typeident = quote::format_ident!("{:}", t.trim());
         output.extend(quote! {impl Dist for #typeident {}});
+        #[cfg(feature="non-buffered-array-ops")]
         output.extend(create_ops(typeident.clone(), bitwise, false));
+        #[cfg(not(feature="non-buffered-array-ops"))]
+        output.extend(create_buffered_ops(typeident.clone(), bitwise, false));
         output.extend(gen_atomic_rdma(typeident.clone(), false));
     }
     TokenStream::from(output)
@@ -1251,7 +1578,10 @@ pub fn generate_ops_for_type_rt(item: TokenStream) -> TokenStream {
     for t in items[1..].iter() {
         let typeident = quote::format_ident!("{:}", t.trim());
         output.extend(quote! {impl Dist for #typeident {}});
+        #[cfg(feature="non-buffered-array-ops")]
         output.extend(create_ops(typeident.clone(), bitwise, true));
+        #[cfg(not(feature="non-buffered-array-ops"))]
+        output.extend(create_buffered_ops(typeident.clone(), bitwise, true));
         output.extend(gen_atomic_rdma(typeident.clone(), true));
     }
     TokenStream::from(output)
@@ -1283,7 +1613,10 @@ pub fn derive_arrayops(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as syn::DeriveInput);
     let name = input.ident;
 
+    #[cfg(feature="non-buffered-array-ops")]
     output.extend(create_ops(name.clone(), false, false));
+    #[cfg(not(feature="non-buffered-array-ops"))]
+    output.extend(create_buffered_ops(name.clone(), false, false));
     TokenStream::from(output)
 }
 

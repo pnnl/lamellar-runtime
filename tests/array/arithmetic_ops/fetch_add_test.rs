@@ -72,13 +72,31 @@ macro_rules! add_test{
             array.barrier();
             for idx in 0..array.len(){
                 let mut prev = init_val;
-                for i in 0..(pe_max_val as usize){
-                    let val = array.fetch_add(idx,1 as $t).get().unwrap();
-                    if val < prev{
-                        println!("full 1: {:?} {:?} {:?}",i,val,prev);
-                        success = false;
+                #[cfg(feature="non-buffered-array-ops")]
+                {
+                    for i in 0..(pe_max_val as usize){
+                        let val = array.fetch_add(idx,1 as $t).get().unwrap();
+                        if val < prev{
+                            println!("full 1: {:?} {:?} {:?}",i,val,prev);
+                            success = false;
+                        }
+                        prev = val;
                     }
-                    prev = val;
+                }
+                #[cfg(not(feature="non-buffered-array-ops"))]
+                {
+                    let mut reqs = vec![];
+                    for _i in 0..(pe_max_val as usize){
+                        reqs.push(array.fetch_add(idx,1 as $t));
+                    }
+                    for req in reqs{
+                        let val = req.get().unwrap();
+                        if val < prev{
+                            println!("full 1: {:?} {:?}",val,prev);
+                            success = false;
+                        }
+                        prev = val;
+                    }
                 }
             }
             // array.wait_all();
@@ -91,19 +109,42 @@ macro_rules! add_test{
                 }
             }
             array.barrier();
+            // println!("1------------");
             initialize_array!($array, array, init_val);
             array.wait_all();
             array.barrier();
             let num_updates=max_updates!($t,num_pes);
             let mut prev_vals = vec![init_val;array.len()];
-            for i in 0..num_updates{
-                let idx = rand_idx.sample(&mut rng);
-                let val = array.fetch_add(idx,1 as $t).get().unwrap();
-                if val < prev_vals[idx]{
-                    println!("full 3: {:?} {:?} {:?}",i,val,prev_vals[idx]);
-                    success = false;
+            #[cfg(feature="non-buffered-array-ops")]
+            {
+                for i in 0..num_updates{
+                    let idx = rand_idx.sample(&mut rng);
+                        let val = array.fetch_add(idx,1 as $t).get().unwrap();
+                        if val < prev_vals[idx]{
+                            println!("full 3: {:?} {:?} {:?}",i,val,prev_vals[idx]);
+                            success = false;
+                        }
+                        prev_vals[idx]=val;
                 }
-                prev_vals[idx]=val;
+                
+            }
+            #[cfg(not(feature="non-buffered-array-ops"))]
+            {
+                let mut reqs = vec![];
+                // println!("2------------");
+                for _i in 0..num_updates{
+                    let idx = rand_idx.sample(&mut rng);
+                    println!("idx {:?}",idx);
+                    reqs.push((array.fetch_add(idx,1 as $t),idx))
+                }
+                for (req,idx) in reqs{
+                    let val = req.get().unwrap();
+                    if val < prev_vals[idx]{
+                        println!("full 3:  {:?} {:?}",val,prev_vals[idx]);
+                        success = false;
+                    }
+                    prev_vals[idx]=val;
+                }                
             }
             array.barrier();
             let sum = array.ser_iter().into_iter().fold(0,|acc,x| acc+ *x as usize);
@@ -114,6 +155,7 @@ macro_rules! add_test{
             }
             world.wait_all();
             world.barrier();
+            // println!("2------------");
             initialize_array!($array, array, init_val);
 
 
@@ -126,13 +168,31 @@ macro_rules! add_test{
             sub_array.barrier();
             for idx in 0..sub_array.len(){
                 let mut prev = init_val;
-                for i in 0..(pe_max_val as usize){
-                    let val =sub_array.fetch_add(idx,1 as $t).get().unwrap();
-                    if val < prev{
-                        println!("half 1: {:?} {:?} {:?}",i,val,prev);
-                        success = false;
+                #[cfg(feature="non-buffered-array-ops")]
+                {
+                    for i in 0..(pe_max_val as usize){
+                        let val = sub_array.fetch_add(idx,1 as $t).get().unwrap();
+                        if val < prev{
+                            println!("half 1: {:?} {:?} {:?}",i,val,prev);
+                            success = false;
+                        }
+                        prev = val;
                     }
-                    prev = val;
+                }
+                #[cfg(not(feature="non-buffered-array-ops"))]
+                {
+                    let mut reqs = vec![];
+                    for _i in 0..(pe_max_val as usize){
+                        reqs.push(sub_array.fetch_add(idx,1 as $t));
+                    }
+                    for req in reqs{
+                        let val = req.get().unwrap();
+                        if val < prev{
+                            println!("half 1: {:?} {:?}",val,prev);
+                            success = false;
+                        }
+                        prev = val;
+                    }
                 }
             }
             sub_array.barrier();
@@ -144,19 +204,40 @@ macro_rules! add_test{
                 }
             }
             sub_array.barrier();
+            // println!("3------------");
             initialize_array!($array, array, init_val);
             sub_array.wait_all();
             sub_array.barrier();
             let num_updates=max_updates!($t,num_pes);
             let mut prev_vals = vec![init_val;sub_array.len()];
-            for i in 0..num_updates{
-                let idx = rand_idx.sample(&mut rng);
-                let val = sub_array.fetch_add(idx,1 as $t).get().unwrap();
-                if val < prev_vals[idx]{
-                    println!("half 3: {:?} {:?} {:?}",i,val,prev_vals[idx]);
-                    success = false;
+            #[cfg(feature="non-buffered-array-ops")]
+            {
+                for i in 0..num_updates{
+                    let idx = rand_idx.sample(&mut rng);
+                        let val = sub_array.fetch_add(idx,1 as $t).get().unwrap();
+                        if val < prev_vals[idx]{
+                            println!("full 3: {:?} {:?} {:?}",i,val,prev_vals[idx]);
+                            success = false;
+                        }
+                        prev_vals[idx]=val;
                 }
-                prev_vals[idx]=val;
+                
+            }
+            #[cfg(not(feature="non-buffered-array-ops"))]
+            {
+                let mut reqs = vec![];
+                for _i in 0..num_updates{
+                    let idx = rand_idx.sample(&mut rng);
+                    reqs.push((sub_array.fetch_add(idx,1 as $t),idx))
+                }
+                for (req,idx) in reqs{
+                    let val = req.get().unwrap();
+                    if val < prev_vals[idx]{
+                        println!("full 3:  {:?} {:?}",val,prev_vals[idx]);
+                        success = false;
+                    }
+                    prev_vals[idx]=val;
+                }                
             }
             sub_array.barrier();
             let sum = sub_array.ser_iter().into_iter().fold(0,|acc,x| acc+ *x as usize);
@@ -167,9 +248,10 @@ macro_rules! add_test{
             }
             sub_array.wait_all();
             sub_array.barrier();
+            // println!("4------------");
             initialize_array!($array, array, init_val);
 
-
+            
             let pe_len = array_total_len/num_pes;
             for pe in 0..num_pes{
                 let len = std::cmp::max(pe_len/2,1);
@@ -180,13 +262,31 @@ macro_rules! add_test{
                 sub_array.barrier();
                 for idx in 0..sub_array.len(){
                     let mut prev = init_val;
-                    for i in 0..(pe_max_val as usize){
-                        let val = sub_array.fetch_add(idx,1 as $t).get().unwrap();
-                        if val < prev{
-                            println!("pe 1 {:?} val: {:?} prev: {:?}",i,val,prev);
-                            success = false;
+                    #[cfg(feature="non-buffered-array-ops")]
+                    {
+                        for i in 0..(pe_max_val as usize){
+                            let val = sub_array.fetch_add(idx,1 as $t).get().unwrap();
+                            if val < prev{
+                                println!("pe 1: {:?} {:?} {:?}",i,val,prev);
+                                success = false;
+                            }
+                            prev = val;
                         }
-                        prev = val;
+                    }
+                    #[cfg(not(feature="non-buffered-array-ops"))]
+                    {
+                        let mut reqs = vec![];
+                        for _i in 0..(pe_max_val as usize){
+                            reqs.push(sub_array.fetch_add(idx,1 as $t));
+                        }
+                        for req in reqs{
+                            let val = req.get().unwrap();
+                            if val < prev{
+                                println!("pe 1: {:?} {:?}",val,prev);
+                                success = false;
+                            }
+                            prev = val;
+                        }
                     }
                 }
                 sub_array.barrier();
@@ -198,19 +298,40 @@ macro_rules! add_test{
                     }
                 }
                 sub_array.barrier();
+                // println!("5------------");
                 initialize_array!($array, array, init_val);
                 sub_array.wait_all();
                 sub_array.barrier();
                 let num_updates=max_updates!($t,num_pes);
                 let mut prev_vals = vec![init_val;sub_array.len()];
-                for i in 0..num_updates{
-                    let idx = rand_idx.sample(&mut rng);
-                    let val = sub_array.fetch_add(idx,1 as $t).get().unwrap();
-                    if val < prev_vals[idx]{
-                        println!("half 3: {:?} {:?} {:?}",i,val,prev_vals[idx]);
-                        success = false;
+                #[cfg(feature="non-buffered-array-ops")]
+                {
+                    for i in 0..num_updates{
+                        let idx = rand_idx.sample(&mut rng);
+                            let val = sub_array.fetch_add(idx,1 as $t).get().unwrap();
+                            if val < prev_vals[idx]{
+                                println!("full 3: {:?} {:?} {:?}",i,val,prev_vals[idx]);
+                                success = false;
+                            }
+                            prev_vals[idx]=val;
                     }
-                    prev_vals[idx]=val;
+                    
+                }
+                #[cfg(not(feature="non-buffered-array-ops"))]
+                {
+                    let mut reqs = vec![];
+                    for _i in 0..num_updates{
+                        let idx = rand_idx.sample(&mut rng);
+                        reqs.push((sub_array.fetch_add(idx,1 as $t),idx))
+                    }
+                    for (req,idx) in reqs{
+                        let val = req.get().unwrap();
+                        if val < prev_vals[idx]{
+                            println!("full 3:  {:?} {:?}",val,prev_vals[idx]);
+                            success = false;
+                        }
+                        prev_vals[idx]=val;
+                    }             
                 }
                 sub_array.barrier();
                 let sum = sub_array.ser_iter().into_iter().fold(0,|acc,x| acc+ *x as usize);
@@ -221,6 +342,7 @@ macro_rules! add_test{
                 }
                 sub_array.wait_all();
                 sub_array.barrier();
+                // println!("6------------");
                 initialize_array!($array, array, init_val);
             }
 

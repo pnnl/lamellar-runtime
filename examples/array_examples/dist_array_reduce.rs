@@ -12,10 +12,10 @@ use std::time::Instant;
 lamellar::register_reduction!(
     min,
     |a, b| {
-        if a < *b {
+        if a < b {
             a
         } else {
-            *b
+            b
         }
     },
     usize,

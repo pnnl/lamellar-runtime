@@ -34,7 +34,7 @@ crate::inventory::collect!(AtomicArrayOp);
 type BufFn = fn(AtomicByteArray) -> Arc<dyn BufferOp>;
 
 lazy_static! {
-    static ref BUFOPS: HashMap<TypeId, BufFn> = {
+    pub(crate)  static ref BUFOPS: HashMap<TypeId, BufFn> = {
         let mut map = HashMap::new();
         for op in crate::inventory::iter::<AtomicArrayOpBuf> {
             map.insert(op.id.clone(), op.op);
@@ -65,7 +65,7 @@ impl<T: Dist + 'static> AtomicElement<T> {
 
 impl<T: ElementOps + 'static> AtomicElement<T> {
     pub fn load(&self) -> T {
-        self.local_op(unsafe { self.array.local_as_slice()[0] }, ArrayOpCmd::Load)
+        self.local_op(unsafe { self.array.__local_as_slice()[0] }, ArrayOpCmd::Load)
     }
 
     pub fn store(&self, val: T) {
@@ -125,33 +125,10 @@ impl<T: AmDist + Dist + 'static> AtomicArray<T> {
         index: usize,
         val: T,
         op: ArrayOpCmd,
-    ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>> {
-        // println!("add ArithmeticOps<T> for &AtomicArray<T> ");
-        if let Some(funcs) = OPS.get(&(op, TypeId::of::<T>())) {
-            let pe = self.pe_for_dist_index(index).expect("index out of bounds");
-            let local_index = self.pe_offset_for_dist_index(pe, index).unwrap(); //calculated pe above
-            let array: AtomicByteArray = self.clone().into();
-            if pe == self.my_pe() {
-                let mut val = val;
-                funcs.1(&mut val as *mut T as *mut u8, array, local_index);
-                None
-            } else {
-                let am = funcs.0(&val as *const T as *const u8, array, local_index);
-                Some(self.array.dist_op(pe, am))
-            }
-        } else {
-            let name = std::any::type_name::<T>().split("::").last().unwrap();
-            panic!("the type {:?} has not been registered! this typically means you need to derive \"ArithmeticOps\" for the type . e.g. 
-            #[derive(lamellar::ArithmeticOps)]
-            struct {:?}{{
-                ....
-            }}
-            note this also requires the type to impl Serialize + Deserialize, you can manually derive these, or use the lamellar::AmData attribute proc macro, e.g.
-            #[lamellar::AMData(ArithmeticOps, any other traits you derive)]
-            struct {:?}{{
-                ....
-            }}",name,name,name);
-        }
+    ) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync> {
+        let pe = self.pe_for_dist_index(index).expect("index out of bounds");
+        let local_index = self.pe_offset_for_dist_index(pe, index).unwrap(); //calculated pe above
+        self.array.initiate_op(pe,val,local_index,op)
     }
     fn initiate_fetch_op(
         &self,
@@ -159,32 +136,9 @@ impl<T: AmDist + Dist + 'static> AtomicArray<T> {
         val: T,
         op: ArrayOpCmd,
     ) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
-        // println!("add ArithmeticOps<T> for &AtomicArray<T> ");
-        if let Some(funcs) = OPS.get(&(op, TypeId::of::<T>())) {
-            let pe = self.pe_for_dist_index(index).expect("index out of bounds");
-            let local_index = self.pe_offset_for_dist_index(pe, index).unwrap(); //calculated pe above
-            let array: AtomicByteArray = self.clone().into();
-            if pe == self.my_pe() {
-                let mut val = val;
-                funcs.1(&mut val as *mut T as *mut u8, array, local_index);
-                Box::new(LocalOpResult { val })
-            } else {
-                let am = funcs.0(&val as *const T as *const u8, array, local_index);
-                self.array.dist_fetch_op(pe, am)
-            }
-        } else {
-            let name = std::any::type_name::<T>().split("::").last().unwrap();
-            panic!("the type {:?} has not been registered for the operation: {:?}! this typically means you need to derive \"ArithmeticOps\" for the type . e.g. 
-            #[derive(lamellar::ArithmeticOps)]
-            struct {:?}{{
-                ....
-            }}
-            note this also requires the type to impl Serialize + Deserialize, you can manually derive these, or use the lamellar::AmData attribute proc macro, e.g.
-            #[lamellar::AMData(ArithmeticOps, any other traits you derive)]
-            struct {:?}{{
-                ....
-            }}",name,op,name,name);
-        }
+        let pe = self.pe_for_dist_index(index).expect("index out of bounds");
+        let local_index = self.pe_offset_for_dist_index(pe, index).unwrap(); //calculated pe above
+        self.array.initiate_fetch_op(pe,val,local_index,op)
     }
 
     pub fn load(&self, index: usize) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
@@ -196,7 +150,7 @@ impl<T: AmDist + Dist + 'static> AtomicArray<T> {
         index: usize,
         val: T,
     ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>> {
-        self.initiate_op(index, val, ArrayOpCmd::Store)
+        Some(self.initiate_op(index, val, ArrayOpCmd::Store))
     }
 
     pub fn swap(&self, index: usize, val: T) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
@@ -210,7 +164,7 @@ impl<T: ElementArithmeticOps + 'static> ArithmeticOps<T> for AtomicArray<T> {
         index: usize,
         val: T,
     ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>> {
-        self.initiate_op(index, val, ArrayOpCmd::Add)
+        Some(self.initiate_op(index, val, ArrayOpCmd::Add))
     }
     fn fetch_add(
         &self,
@@ -224,7 +178,7 @@ impl<T: ElementArithmeticOps + 'static> ArithmeticOps<T> for AtomicArray<T> {
         index: usize,
         val: T,
     ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>> {
-        self.initiate_op(index, val, ArrayOpCmd::Sub)
+        Some(self.initiate_op(index, val, ArrayOpCmd::Sub))
     }
     fn fetch_sub(
         &self,
@@ -238,7 +192,7 @@ impl<T: ElementArithmeticOps + 'static> ArithmeticOps<T> for AtomicArray<T> {
         index: usize,
         val: T,
     ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>> {
-        self.initiate_op(index, val, ArrayOpCmd::Mul)
+        Some(self.initiate_op(index, val, ArrayOpCmd::Mul))
     }
     fn fetch_mul(
         &self,
@@ -252,7 +206,7 @@ impl<T: ElementArithmeticOps + 'static> ArithmeticOps<T> for AtomicArray<T> {
         index: usize,
         val: T,
     ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>> {
-        self.initiate_op(index, val, ArrayOpCmd::Div)
+        Some(self.initiate_op(index, val, ArrayOpCmd::Div))
     }
     fn fetch_div(
         &self,
@@ -269,7 +223,7 @@ impl<T: ElementBitWiseOps + 'static> BitWiseOps<T> for AtomicArray<T> {
         val: T,
     ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>> {
         // println!("and val {:?}",val);
-        self.initiate_op(index, val, ArrayOpCmd::And)
+        Some(self.initiate_op(index, val, ArrayOpCmd::And))
     }
     fn fetch_bit_and(
         &self,
@@ -284,7 +238,7 @@ impl<T: ElementBitWiseOps + 'static> BitWiseOps<T> for AtomicArray<T> {
         val: T,
     ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>> {
         // println!("or");
-        self.initiate_op(index, val, ArrayOpCmd::Or)
+        Some(self.initiate_op(index, val, ArrayOpCmd::Or))
     }
     fn fetch_bit_or(
         &self,
@@ -301,20 +255,21 @@ macro_rules! atomic_ops {
     ($a:ty, $name:ident) => {
         impl LocalArithmeticOps<$a> for AtomicArray<$a> {
             fn local_fetch_add(&self, index: usize, val: $a) -> $a {
+                // println!("LocalArithmeticOps native {}local_add func ", stringify!($name));
                 use $crate::array::AtomicOps;
-                unsafe { self.local_as_mut_slice()[index].fetch_add(val) }
+                unsafe { self.__local_as_mut_slice()[index].fetch_add(val) }
             }
             fn local_fetch_sub(&self, index: usize, val: $a) -> $a {
                 use $crate::array::AtomicOps;
-                unsafe { self.local_as_mut_slice()[index].fetch_sub(val) }
+                unsafe { self.__local_as_mut_slice()[index].fetch_sub(val) }
             }
             fn local_fetch_mul(&self, index: usize, val: $a) -> $a {
                 use $crate::array::AtomicOps;
-                unsafe { self.local_as_mut_slice()[index].fetch_mul(val) }
+                unsafe { self.__local_as_mut_slice()[index].fetch_mul(val) }
             }
             fn local_fetch_div(&self, index: usize, val: $a) -> $a {
                 use $crate::array::AtomicOps;
-                unsafe { self.local_as_mut_slice()[index].fetch_div(val) }
+                unsafe { self.__local_as_mut_slice()[index].fetch_div(val) }
             }
         }
 
@@ -325,7 +280,7 @@ macro_rules! atomic_ops {
                 // println!("native {}local_add func ", stringify!($name));
                 let array: AtomicArray<$a> = array.into();
                 use $crate::array::AtomicOps;
-                unsafe { *(val as *mut $a) = array.local_as_mut_slice()[index].fetch_add(typed_val) };
+                unsafe { *(val as *mut $a) = array.__local_as_mut_slice()[index].fetch_add(typed_val) };
             }
             $crate::atomicarray_register!{ $a,ArrayOpCmd::Add,[<$name dist_add>],[<$name local_add>] }
             $crate::atomicarray_register!{ $a,ArrayOpCmd::FetchAdd,[<$name dist_fetch_add>],[<$name local_add>] }
@@ -336,7 +291,7 @@ macro_rules! atomic_ops {
                 // println!("native {}local_sub func ", stringify!($name));
                 let array: AtomicArray<$a> = array.into();
                 use $crate::array::AtomicOps;
-                unsafe { *(val as *mut $a) = array.local_as_mut_slice()[index].fetch_sub(typed_val) };
+                unsafe { *(val as *mut $a) = array.__local_as_mut_slice()[index].fetch_sub(typed_val) };
             }
             $crate::atomicarray_register!{ $a,ArrayOpCmd::Sub,[<$name dist_sub>],[<$name local_sub>] }
             $crate::atomicarray_register!{ $a,ArrayOpCmd::FetchSub,[<$name dist_fetch_sub>],[<$name local_sub>] }
@@ -347,7 +302,7 @@ macro_rules! atomic_ops {
                 // println!("native {}local_mul func ", stringify!($name));
                 let array: AtomicArray<$a> = array.into();
                 use $crate::array::AtomicOps;
-                unsafe { *(val as *mut $a) = array.local_as_mut_slice()[index].fetch_mul(typed_val) };
+                unsafe { *(val as *mut $a) = array.__local_as_mut_slice()[index].fetch_mul(typed_val) };
             }
             $crate::atomicarray_register!{ $a,ArrayOpCmd::Mul,[<$name dist_mul>],[<$name local_mul>] }
             $crate::atomicarray_register!{ $a,ArrayOpCmd::FetchMul,[<$name dist_fetch_mul>],[<$name local_mul>] }
@@ -358,7 +313,7 @@ macro_rules! atomic_ops {
                 // println!("native {}local_mul func ", stringify!($name));
                 let array: AtomicArray<$a> = array.into();
                 use $crate::array::AtomicOps;
-                unsafe { *(val as *mut $a) = array.local_as_mut_slice()[index].fetch_div(typed_val) };
+                unsafe { *(val as *mut $a) = array.__local_as_mut_slice()[index].fetch_div(typed_val) };
             }
             $crate::atomicarray_register!{ $a,ArrayOpCmd::Div,[<$name dist_div>],[<$name local_div>] }
             $crate::atomicarray_register!{ $a,ArrayOpCmd::FetchDiv,[<$name dist_fetch_div>],[<$name local_div>] }
@@ -374,8 +329,8 @@ macro_rules! atomic_bitwise_ops {
             // }
             fn local_fetch_bit_and(&self, index: usize, val: $a) -> $a {
                 use $crate::array::AtomicOps;
-                unsafe { let temp = self.local_as_mut_slice()[index].fetch_bit_and(val);
-                // println!("and temp: {:?} {:?} ",temp,self.local_as_mut_slice()[index]);
+                unsafe { let temp = self.__local_as_mut_slice()[index].fetch_bit_and(val);
+                // println!("and temp: {:?} {:?} ",temp,self.__local_as_mut_slice()[index]);
                 temp}
             }
             // fn local_bit_or(&self, index: usize, val: $a) {
@@ -383,8 +338,8 @@ macro_rules! atomic_bitwise_ops {
             // }
             fn local_fetch_bit_or(&self, index: usize, val: $a) -> $a {
                 use $crate::array::AtomicOps;
-                unsafe {let temp =  self.local_as_mut_slice()[index].fetch_bit_or(val);
-                // println!("or temp: {:?} {:?} ",temp,self.local_as_mut_slice()[index]);
+                unsafe {let temp =  self.__local_as_mut_slice()[index].fetch_bit_or(val);
+                // println!("or temp: {:?} {:?} ",temp,self.__local_as_mut_slice()[index]);
                 temp}
             }
         }
@@ -396,7 +351,7 @@ macro_rules! atomic_bitwise_ops {
                 // println!("native {}local_mul func ", stringify!($name));
                 let array: AtomicArray<$a> = array.into();
                 use $crate::array::AtomicOps;
-                unsafe { *(val as *mut $a) = array.local_as_mut_slice()[index].fetch_bit_and(typed_val)};
+                unsafe { *(val as *mut $a) = array.__local_as_mut_slice()[index].fetch_bit_and(typed_val)};
             }
             $crate::atomicarray_register!{ $a,ArrayOpCmd::And,[<$name dist_bit_and>],[<$name local_bit_and>] }
             $crate::atomicarray_register!{ $a,ArrayOpCmd::FetchAnd,[<$name dist_fetch_bit_and>],[<$name local_bit_and>] }
@@ -407,7 +362,7 @@ macro_rules! atomic_bitwise_ops {
                 // println!("native {}local_mul func ", stringify!($name));
                 let array: AtomicArray<$a> = array.into();
                 use $crate::array::AtomicOps;
-                unsafe { *(val as *mut $a) = array.local_as_mut_slice()[index].fetch_bit_or(typed_val)};
+                unsafe { *(val as *mut $a) = array.__local_as_mut_slice()[index].fetch_bit_or(typed_val)};
             }
             $crate::atomicarray_register!{ $a,ArrayOpCmd::Or,[<$name dist_bit_or>],[<$name local_bit_or>] }
             $crate::atomicarray_register!{ $a,ArrayOpCmd::FetchOr,[<$name dist_fetch_bit_or>],[<$name local_bit_or>] }
@@ -421,16 +376,16 @@ macro_rules! atomic_misc_ops {
         impl LocalAtomicOps<$a> for AtomicArray<$a> {
             fn local_load(&self, index: usize, _val: $a) -> $a {
                 use $crate::array::AtomicOps;
-                unsafe { self.local_as_mut_slice()[index].load() }
+                unsafe { self.__local_as_mut_slice()[index].load() }
             }
             fn local_store(&self,index: usize, val: $a) {
                 use $crate::array::AtomicOps;
                 // println!("1. local store {:?} {:?}",index, val);
-                unsafe { self.local_as_mut_slice()[index].store(val); }
+                unsafe { self.__local_as_mut_slice()[index].store(val); }
             }
             fn local_swap(&self,index: usize, val: $a) -> $a {
                 use $crate::array::AtomicOps;
-                unsafe { self.local_as_mut_slice()[index].swap(val) }
+                unsafe { self.__local_as_mut_slice()[index].swap(val) }
             }
         }
         paste::paste!{
@@ -440,7 +395,7 @@ macro_rules! atomic_misc_ops {
                 // println!("native {}local_mul func ", stringify!($name));
                 let array: AtomicArray<$a> = array.into();
                 use $crate::array::AtomicOps;
-                unsafe { *(val as *mut $a) = array.local_as_mut_slice()[index].load() };
+                unsafe { *(val as *mut $a) = array.__local_as_mut_slice()[index].load() };
             }
             $crate::atomicarray_register!{ $a,ArrayOpCmd::Load,[<$name dist_load>],[<$name local_load>] }
 
@@ -451,7 +406,7 @@ macro_rules! atomic_misc_ops {
                 let array: AtomicArray<$a> = array.into();
                 use $crate::array::AtomicOps;
                 // println!("2. local store {:?} {:?}",index, typed_val);
-                unsafe { array.local_as_mut_slice()[index].store(typed_val) };
+                unsafe { array.__local_as_mut_slice()[index].store(typed_val) };
             }
             $crate::atomicarray_register!{ $a,ArrayOpCmd::Store,[<$name dist_store>],[<$name local_store>] }
 
@@ -461,7 +416,7 @@ macro_rules! atomic_misc_ops {
                 // println!("native {}local_mul func ", stringify!($name));
                 let array: AtomicArray<$a> = array.into();
                 use $crate::array::AtomicOps;
-                unsafe { *(val as *mut $a) = array.local_as_mut_slice()[index].swap(typed_val) };
+                unsafe { *(val as *mut $a) = array.__local_as_mut_slice()[index].swap(typed_val) };
             }
             $crate::atomicarray_register!{ $a,ArrayOpCmd::Swap,[<$name dist_swap>],[<$name local_swap>] }
         }
@@ -480,8 +435,8 @@ macro_rules! non_atomic_ops {
                 // );
                 let _lock = self.lock_index(index);
                 unsafe {
-                    let orig  = self.local_as_mut_slice()[index];
-                    self.local_as_mut_slice()[index] += val;
+                    let orig  = self.__local_as_mut_slice()[index];
+                    self.__local_as_mut_slice()[index] += val;
                     orig
                 }
 
@@ -494,24 +449,24 @@ macro_rules! non_atomic_ops {
                 // );
                 let _lock = self.lock_index(index);
                 unsafe {
-                    let orig  = self.local_as_mut_slice()[index];
-                    self.local_as_mut_slice()[index] -= val ;
+                    let orig  = self.__local_as_mut_slice()[index];
+                    self.__local_as_mut_slice()[index] -= val ;
                     orig
                 }
             }
             fn local_fetch_mul(&self, index: usize, val: $a) -> $a {
                 let _lock = self.lock_index(index);
                 unsafe {
-                    let orig  = self.local_as_mut_slice()[index];
-                    self.local_as_mut_slice()[index] *= val ;
+                    let orig  = self.__local_as_mut_slice()[index];
+                    self.__local_as_mut_slice()[index] *= val ;
                     orig
                 }
             }
             fn local_fetch_div(&self, index: usize, val: $a) -> $a {
                 let _lock = self.lock_index(index);
                 unsafe {
-                    let orig  = self.local_as_mut_slice()[index];
-                    self.local_as_mut_slice()[index] /= val ;
+                    let orig  = self.__local_as_mut_slice()[index];
+                    self.__local_as_mut_slice()[index] /= val ;
                     orig
                 }
             }
@@ -525,8 +480,8 @@ macro_rules! non_atomic_ops {
                 // println!("mutex {}local_add func", stringify!($name));
                 let _lock = array.lock_index(index).expect("no lock exists!");
                 unsafe {
-                    *(val as *mut $a) = array.local_as_mut_slice()[index];
-                    array.local_as_mut_slice()[index] += typed_val;
+                    *(val as *mut $a) = array.__local_as_mut_slice()[index];
+                    array.__local_as_mut_slice()[index] += typed_val;
                 }
             }
             $crate::atomicarray_register!{$a,ArrayOpCmd::Add,[<$name dist_add>],[<$name local_add>]}
@@ -539,8 +494,8 @@ macro_rules! non_atomic_ops {
                 // println!("mutex {}local_sub func", stringify!($name));
                 let _lock = array.lock_index(index).expect("no lock exists!");
                 unsafe {
-                    *(val as *mut $a) = array.local_as_mut_slice()[index];
-                    array.local_as_mut_slice()[index] -= typed_val;
+                    *(val as *mut $a) = array.__local_as_mut_slice()[index];
+                    array.__local_as_mut_slice()[index] -= typed_val;
                 }
             }
             $crate::atomicarray_register!{$a,ArrayOpCmd::Sub,[<$name dist_sub>],[<$name local_sub>]}
@@ -553,8 +508,8 @@ macro_rules! non_atomic_ops {
                 // println!("mutex {}local_mul func", stringify!($name));
                 let _lock = array.lock_index(index).expect("no lock exists!");
                 unsafe {
-                    *(val as *mut $a) = array.local_as_mut_slice()[index];
-                    array.local_as_mut_slice()[index] *= typed_val;
+                    *(val as *mut $a) = array.__local_as_mut_slice()[index];
+                    array.__local_as_mut_slice()[index] *= typed_val;
                 }
             }
             $crate::atomicarray_register!{$a,ArrayOpCmd::Mul,[<$name dist_mul>],[<$name local_mul>]}
@@ -567,8 +522,8 @@ macro_rules! non_atomic_ops {
                 // println!("mutex {}local_mul func", stringify!($name));
                 let _lock = array.lock_index(index).expect("no lock exists!");
                 unsafe {
-                    *(val as *mut $a) = array.local_as_mut_slice()[index];
-                    array.local_as_mut_slice()[index] /= typed_val;
+                    *(val as *mut $a) = array.__local_as_mut_slice()[index];
+                    array.__local_as_mut_slice()[index] /= typed_val;
                 }
             }
             $crate::atomicarray_register!{$a,ArrayOpCmd::Div,[<$name dist_div>],[<$name local_div>]}
@@ -589,8 +544,8 @@ macro_rules! non_atomic_bitwise_ops {
                 // );
                 let _lock = self.lock_index(index);
                 unsafe {
-                    let orig  = self.local_as_mut_slice()[index];
-                    self.local_as_mut_slice()[index] &= val;
+                    let orig  = self.__local_as_mut_slice()[index];
+                    self.__local_as_mut_slice()[index] &= val;
                     orig
                 }
 
@@ -603,8 +558,8 @@ macro_rules! non_atomic_bitwise_ops {
                 // );
                 let _lock = self.lock_index(index);
                 unsafe {
-                    let orig  = self.local_as_mut_slice()[index];
-                    self.local_as_mut_slice()[index] |= val ;
+                    let orig  = self.__local_as_mut_slice()[index];
+                    self.__local_as_mut_slice()[index] |= val ;
                     orig
                 }
             }
@@ -615,11 +570,10 @@ macro_rules! non_atomic_bitwise_ops {
             fn [<$name local_bit_and>](val: *mut u8, array: $crate::array::AtomicByteArray, index: usize) {
                 let typed_val = unsafe { *(val as *mut $a) };
                 let array: AtomicArray<$a> = array.into();
-                // println!("mutex {}local_add func", stringify!($name));
                 let _lock = array.lock_index(index).expect("no lock exists!");
                 unsafe {
-                    *(val as *mut $a) = array.local_as_mut_slice()[index];
-                    array.local_as_mut_slice()[index] &= typed_val;
+                    *(val as *mut $a) = array.__local_as_mut_slice()[index];
+                    array.__local_as_mut_slice()[index] &= typed_val;
                 }
             }
             $crate::atomicarray_register!{$a,ArrayOpCmd::And,[<$name dist_bit_and>],[<$name local_bit_and>]}
@@ -632,8 +586,8 @@ macro_rules! non_atomic_bitwise_ops {
                 // println!("mutex {}local_sub func", stringify!($name));
                 let _lock = array.lock_index(index).expect("no lock exists!");
                 unsafe {
-                    *(val as *mut $a) = array.local_as_mut_slice()[index];
-                    array.local_as_mut_slice()[index] |= typed_val;
+                    *(val as *mut $a) = array.__local_as_mut_slice()[index];
+                    array.__local_as_mut_slice()[index] |= typed_val;
                 }
             }
             $crate::atomicarray_register!{$a,ArrayOpCmd::Or,[<$name dist_bit_or>],[<$name local_bit_or>]}
@@ -649,20 +603,20 @@ macro_rules! non_atomic_misc_ops {
             fn local_load(&self, index: usize, _val: $a) -> $a {
                 let _lock = self.lock_index(index);
                 unsafe {
-                    self.local_as_mut_slice()[index]
+                    self.__local_as_mut_slice()[index]
                 }
             }
             fn local_store(&self, index: usize, val: $a) {
                 let _lock = self.lock_index(index);
                 unsafe {
-                    self.local_as_mut_slice()[index] = val;
+                    self.__local_as_mut_slice()[index] = val;
                 }
             }
             fn local_swap(&self, index: usize, val: $a) -> $a {
                 let _lock = self.lock_index(index);
                 unsafe {
-                    let orig  = self.local_as_mut_slice()[index];
-                    self.local_as_mut_slice()[index] = val;
+                    let orig  = self.__local_as_mut_slice()[index];
+                    self.__local_as_mut_slice()[index] = val;
                     orig
                 }
             }
@@ -675,7 +629,7 @@ macro_rules! non_atomic_misc_ops {
                 // println!("mutex {}local_mul func", stringify!($name));
                 let _lock = array.lock_index(index).expect("no lock exists!");
                 unsafe {
-                    *(val as *mut $a) = array.local_as_mut_slice()[index];
+                    *(val as *mut $a) = array.__local_as_mut_slice()[index];
                 }
             }
             $crate::atomicarray_register!{$a,ArrayOpCmd::Load,[<$name dist_load>],[<$name local_load>]}
@@ -687,7 +641,7 @@ macro_rules! non_atomic_misc_ops {
                 // println!("mutex {}local_mul func", stringify!($name));
                 let _lock = array.lock_index(index).expect("no lock exists!");
                 unsafe {
-                    array.local_as_mut_slice()[index] = typed_val;
+                    array.__local_as_mut_slice()[index] = typed_val;
                 }
             }
             $crate::atomicarray_register!{$a,ArrayOpCmd::Store,[<$name dist_store>],[<$name local_store>]}
@@ -699,8 +653,8 @@ macro_rules! non_atomic_misc_ops {
                 // println!("mutex {}local_mul func", stringify!($name));
                 let _lock = array.lock_index(index).expect("no lock exists!");
                 unsafe {
-                    *(val as *mut $a) = array.local_as_mut_slice()[index];
-                    array.local_as_mut_slice()[index] = typed_val;
+                    *(val as *mut $a) = array.__local_as_mut_slice()[index];
+                    array.__local_as_mut_slice()[index] = typed_val;
                 }
             }
             $crate::atomicarray_register!{$a,ArrayOpCmd::Swap,[<$name dist_swap>],[<$name local_swap>]}

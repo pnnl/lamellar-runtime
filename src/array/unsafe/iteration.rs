@@ -54,7 +54,7 @@ impl<T: Dist> DistIteratorLauncher for UnsafeArray<T> {
     {
         if let Ok(_my_pe) = self.inner.data.team.team_pe_id() {
             let num_workers = match std::env::var("LAMELLAR_THREADS") {
-                Ok(n) => n.parse::<usize>().unwrap(),
+                Ok(n) => n.parse::<usize>().unwrap() ,
                 Err(_) => 4,
             };
             let num_elems_local = iter.elems(self.num_elems_local());

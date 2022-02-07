@@ -1,14 +1,23 @@
 mod iteration;
-pub(crate) mod operations;
+#[cfg(not(feature="non-buffered-array-ops"))]
+pub(crate) mod buffered_operations;
+#[cfg(not(feature="non-buffered-array-ops"))]
+pub(crate) use buffered_operations as operations;
 mod rdma;
 use crate::array::private::LamellarArrayPrivate;
 use crate::array::r#unsafe::UnsafeByteArray;
 use crate::array::*;
+use crate::array::collective_atomic::operations::BUFOPS;
 use crate::darc::local_rw_darc::LocalRwDarc;
 use crate::darc::DarcMode;
 use crate::lamellar_team::{IntoLamellarTeam, LamellarTeamRT};
 use crate::memregion::Dist;
-use core::marker::PhantomData;
+use std::ops::{Deref,DerefMut};
+use std::any::TypeId;
+use parking_lot::{
+    lock_api::{ArcRwLockReadGuard, ArcRwLockWriteGuard},
+    RawRwLock
+};
 
 #[lamellar_impl::AmDataRT(Clone)]
 pub struct CollectiveAtomicArray<T: Dist> {
@@ -22,6 +31,41 @@ pub struct CollectiveAtomicByteArray {
     pub(crate) array: UnsafeByteArray,
 }
 
+pub struct CollectiveAtomicMutLocalData<'a,T: Dist>{
+    data: &'a mut [T],
+    _lock_guard: ArcRwLockWriteGuard<RawRwLock, Box<()>>,
+}
+
+impl<T: Dist> Deref for CollectiveAtomicMutLocalData<'_,T>{
+    type Target = [T];
+
+    fn deref(&self) -> &Self::Target {
+        self.data
+    }
+}
+impl<T: Dist> DerefMut for CollectiveAtomicMutLocalData<'_,T>{
+
+    fn deref_mut(&mut self) -> &mut Self::Target {
+       self.data
+    }
+}
+
+pub struct CollectiveAtomicLocalData<'a,T: Dist>{
+    data: &'a [T],
+    _lock_guard: ArcRwLockReadGuard<RawRwLock, Box<()>>,
+}
+
+impl<T: Dist> Deref for CollectiveAtomicLocalData<'_,T>{
+    type Target = [T];
+
+    fn deref(&self) -> &Self::Target {
+        self.data
+    }
+}
+
+
+
+
 impl<T: Dist + std::default::Default> CollectiveAtomicArray<T> {
     //Sync + Send + Copy  == Dist
     pub fn new<U: Clone + Into<IntoLamellarTeam>>(
@@ -30,9 +74,23 @@ impl<T: Dist + std::default::Default> CollectiveAtomicArray<T> {
         distribution: Distribution,
     ) -> CollectiveAtomicArray<T> {
         let array = UnsafeArray::new(team.clone(), array_size, distribution);
+        let lock = LocalRwDarc::new(team, ()).unwrap();
+
+        if let Some(func) = BUFOPS.get(&TypeId::of::<T>()) {
+            let mut op_bufs = array.inner.data.op_buffers.write();
+            let bytearray = CollectiveAtomicByteArray {
+                lock: lock.clone(),
+                array: array.clone().into(),
+            };
+
+            for pe in 0..op_bufs.len(){
+                op_bufs[pe] = func(bytearray.clone());
+            }
+        }
+        
 
         CollectiveAtomicArray {
-            lock: LocalRwDarc::new(team, ()).unwrap(),
+            lock: lock,
             array: array,
         }
     }
@@ -74,13 +132,36 @@ impl<T: Dist> CollectiveAtomicArray<T> {
         self.array.len()
     }
 
-    #[doc(hidden)]
-    pub unsafe fn local_as_slice(&self) -> &[T] {
-        self.array.local_as_mut_slice()
+    // #[doc(hidden)]
+    // pub unsafe fn local_as_slice(&self) -> &[T] {
+    //     self.array.local_as_mut_slice()
+    // }
+
+    // #[doc(hidden)]
+    pub fn local_as_slice(&self) -> CollectiveAtomicLocalData<'_,T> {
+        CollectiveAtomicLocalData{
+            data: unsafe {self.array.local_as_mut_slice()},
+            _lock_guard: self.lock.read()
+        }
     }
-    #[doc(hidden)]
-    pub unsafe fn local_as_mut_slice(&self) -> &mut [T] {
-        self.array.local_as_mut_slice()
+    // #[doc(hidden)]
+    // pub unsafe fn local_as_mut_slice(&self) -> &mut [T] {
+    //     self.array.local_as_mut_slice()
+    // }
+
+    pub fn local_as_mut_slice(&self) -> CollectiveAtomicMutLocalData<'_,T> {
+        CollectiveAtomicMutLocalData{
+            data: unsafe {self.array.local_as_mut_slice()},
+            _lock_guard: self.lock.write()
+        }
+    }
+
+    pub fn local_data(&self)  ->  CollectiveAtomicLocalData<'_,T>  {
+        self.local_as_slice()
+    }
+
+    pub fn mut_local_data(&self)  ->CollectiveAtomicMutLocalData<'_,T>{
+        self.local_as_mut_slice()
     }
 
     pub fn sub_array<R: std::ops::RangeBounds<usize>>(&self, range: R) -> Self {
@@ -112,8 +193,20 @@ impl<T: Dist + 'static> CollectiveAtomicArray<T> {
 impl<T: Dist> From<UnsafeArray<T>> for CollectiveAtomicArray<T> {
     fn from(array: UnsafeArray<T>) -> Self {
         array.block_on_outstanding(DarcMode::CollectiveAtomicArray);
+        let lock = LocalRwDarc::new(array.team(), ()).unwrap();
+        if let Some(func) = BUFOPS.get(&TypeId::of::<T>()) {
+            let mut op_bufs = array.inner.data.op_buffers.write();
+            let bytearray = CollectiveAtomicByteArray {
+                lock: lock.clone(),
+                array: array.clone().into(),
+            };
+
+            for pe in 0..op_bufs.len(){
+                op_bufs[pe] = func(bytearray.clone());
+            }
+        }
         CollectiveAtomicArray {
-            lock: LocalRwDarc::new(array.team(), ()).unwrap(),
+            lock: lock,
             array: array,
         }
     }
