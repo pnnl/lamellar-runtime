@@ -35,8 +35,11 @@ impl Barrier {
                 let alloc = if global_pes == arch.num_pes {
                     AllocationType::Global
                 } else {
-                    AllocationType::Sub(arch.team_iter().collect::<Vec<usize>>())
+                    let mut pes = arch.team_iter().collect::<Vec<usize>>();
+                    pes.sort();
+                    AllocationType::Sub(pes)
                 };
+                // println!("creating barrier {:?}",alloc);
                 let barrier1 = MemoryRegion::new(num_pes, lamellae.clone(), alloc.clone());
                 let barrier2 = MemoryRegion::new(num_pes, lamellae.clone(), alloc.clone());
                 let barrier3 = MemoryRegion::new(3, lamellae.clone(), alloc);

@@ -55,13 +55,30 @@ macro_rules! or_test{
             array.wait_all();
             array.barrier();
             let my_val = 1 as $t << my_pe;
-            for idx in 0..array.len(){
-                let val = array.fetch_bit_or(idx,my_val).get().unwrap();
-                if (val & my_val) != 0 {
-                    println!("{:?} {:x} {:x} ",idx,my_val,val);
-                    success = false;
-                }
+            #[cfg(feature="non-buffered-array-ops")]
+            {
+                for idx in 0..array.len(){
+                    let val = array.fetch_bit_or(idx,my_val).get().unwrap();
+                    if (val & my_val) != 0 {
+                        println!("{:?} {:x} {:x} ",idx,my_val,val);
+                        success = false;
+                    }
 
+                }
+            }
+            #[cfg(not(feature="non-buffered-array-ops"))]
+            {
+                let mut reqs = vec![];
+                for idx in 0..array.len(){
+                    reqs.push((array.fetch_bit_or(idx,my_val),idx));
+                }
+                for (req,idx) in reqs{
+                    let val = req.get().unwrap();
+                    if (val & my_val) != 0 {
+                        println!("{:?} {:x} {:x} ",idx,my_val,val);
+                        success = false;
+                    }
+                }
             }
             array.wait_all();
             array.barrier();
@@ -86,11 +103,28 @@ macro_rules! or_test{
             let sub_array = array.sub_array(start_i..end_i);
             sub_array.barrier();
             // sub_array.print();
-            for idx in 0..sub_array.len(){
-                let val = sub_array.fetch_bit_or(idx,my_val).get().unwrap();
-                if (val & my_val) != 0 {
-                    println!("{:?} {:x} {:x} ",idx,my_val,val);
-                    success = false;
+            #[cfg(feature="non-buffered-array-ops")]
+            {
+                for idx in 0..sub_array.len(){
+                    let val = sub_array.fetch_bit_or(idx,my_val).get().unwrap();
+                    if (val & my_val) != 0 {
+                        println!("{:?} {:x} {:x} ",idx,my_val,val);
+                        success = false;
+                    }
+                }
+            }
+            #[cfg(not(feature="non-buffered-array-ops"))]
+            {
+                let mut reqs = vec![];
+                for idx in 0..sub_array.len(){
+                    reqs.push((sub_array.fetch_bit_or(idx,my_val),idx));
+                }
+                for (req,idx)  in reqs{
+                    let val = req.get().unwrap();
+                    if (val & my_val) != 0 {
+                        println!("{:?} {:x} {:x} ",idx,my_val,val);
+                        success = false;
+                    }
                 }
             }
             sub_array.wait_all();
@@ -117,11 +151,28 @@ macro_rules! or_test{
                 let end_i = start_i+len;
                 let sub_array = array.sub_array(start_i..end_i);
                 sub_array.barrier();
-                for idx in 0..sub_array.len(){
-                    let val = sub_array.fetch_bit_or(idx,my_val).get().unwrap();
-                    if (val & my_val) != 0 {
-                        println!("{:?} {:x} {:x} ",idx,my_val,val);
-                        success = false;
+                #[cfg(feature="non-buffered-array-ops")]
+                {
+                    for idx in 0..sub_array.len(){
+                        let val = sub_array.fetch_bit_or(idx,my_val).get().unwrap();
+                        if (val & my_val) != 0 {
+                            println!("{:?} {:x} {:x} ",idx,my_val,val);
+                            success = false;
+                        }
+                    }
+                }
+                #[cfg(not(feature="non-buffered-array-ops"))]
+                {
+                    let mut reqs = vec![];
+                    for idx in 0..sub_array.len(){
+                        reqs.push((sub_array.fetch_bit_or(idx,my_val),idx));
+                    }
+                    for (req,idx)  in reqs{
+                        let val = req.get().unwrap();
+                        if (val & my_val) != 0 {
+                            println!("{:?} {:x} {:x} ",idx,my_val,val);
+                            success = false;
+                        }
                     }
                 }
                 sub_array.wait_all();

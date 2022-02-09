@@ -39,35 +39,54 @@ lazy_static! {
 }
 
 impl<T: Dist> AtomicArray<T> {
-    pub fn iget<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(&self, index: usize, buf: U) {
-        self.exec_am_local(InitGetAm {
-            array: self.clone(),
-            index: index,
-            buf: buf.my_into(&self.array.team()),
-        })
-        .get();
-    }
-    pub fn get<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(&self, index: usize, buf: U) {
-        self.exec_am_local(InitGetAm {
-            array: self.clone(),
-            index: index,
-            buf: buf.my_into(&self.array.team()),
-        });
-    }
-    pub fn iput<U: MyInto<LamellarArrayInput<T>> + LamellarRead>(&self, index: usize, buf: U) {
-        self.exec_am_local(InitPutAm {
-            array: self.clone(),
-            index: index,
-            buf: buf.my_into(&self.array.team()),
-        })
-        .get();
-    }
-    pub fn put<U: MyInto<LamellarArrayInput<T>> + LamellarRead>(&self, index: usize, buf: U) {
-        self.exec_am_local(InitPutAm {
+    // pub fn iget<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(&self, index: usize, buf: U) {
+    //     self.exec_am_local(InitGetAm {
+    //         array: self.clone(),
+    //         index: index,
+    //         buf: buf.my_into(&self.array.team()),
+    //     })
+    //     .get();
+    // }
+    pub fn get<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(&self, index: usize, buf: U) -> Box<dyn LamellarArrayRequest<Output = ()> + Send + Sync>{
+        let req = self.exec_am_local(InitGetAm {
             array: self.clone(),
             index: index,
             buf: buf.my_into(&self.array.team()),
         });
+        Box::new(ArrayRdmaHandle{
+            reqs: vec![req]
+        })
+    }
+    // pub fn iput<U: MyInto<LamellarArrayInput<T>> + LamellarRead>(&self, index: usize, buf: U) {
+    //     self.exec_am_local(InitPutAm {
+    //         array: self.clone(),
+    //         index: index,
+    //         buf: buf.my_into(&self.array.team()),
+    //     })
+    //     .get();
+    // }
+    pub fn put<U: MyInto<LamellarArrayInput<T>> + LamellarRead>(&self, index: usize, buf: U) -> Box<dyn LamellarArrayRequest<Output = ()> + Send + Sync>{
+        let req = self.exec_am_local(InitPutAm {
+            array: self.clone(),
+            index: index,
+            buf: buf.my_into(&self.array.team()),
+        });
+        Box::new(ArrayRdmaHandle{
+            reqs: vec![req]
+        })
+    }
+
+    pub fn at(&self, index: usize) -> Box<dyn LamellarArrayRequest<Output = T> + Send + Sync>{
+        let buf: LocalMemoryRegion<T> = self.array.team().alloc_local_mem_region(1);
+        let req = self.exec_am_local(InitGetAm {
+            array: self.clone(),
+            index: index,
+            buf: buf.clone().my_into(&self.array.team()),
+        });
+        Box::new(ArrayRdmaAtHandle{
+            reqs: vec![req],
+            buf: buf
+        })
     }
 }
 
@@ -79,14 +98,14 @@ impl<T: Dist + 'static> LamellarArrayGet<T> for AtomicArray<T> {
     // ) {
     //     self.array.get_unchecked(index, buf)
     // }
-    fn iget<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(&self, index: usize, buf: U) {
-        self.iget(index, buf);
+    // fn iget<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(&self, index: usize, buf: U) {
+    //     self.iget(index, buf);
+    // }
+    fn get<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(&self, index: usize, buf: U) -> Box<dyn LamellarArrayRequest<Output = ()> + Send + Sync> {
+        self.get(index, buf)
     }
-    fn get<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(&self, index: usize, buf: U) {
-        self.get(index, buf);
-    }
-    fn iat(&self, index: usize) -> T {
-        self.array.iat(index)
+    fn at(&self, index: usize) -> Box<dyn LamellarArrayRequest<Output = T> + Send + Sync> {
+        self.at(index)
     }
 }
 
@@ -94,8 +113,8 @@ impl<T: Dist> LamellarArrayPut<T> for AtomicArray<T> {
     // fn put_unchecked<U: MyInto<LamellarArrayInput<T>> + LamellarRead>(&self, index: usize, buf: U) {
     //     self.array.put_unchecked(index, buf)
     // }
-    fn iput<U: MyInto<LamellarArrayInput<T>> + LamellarRead>(&self, index: usize, buf: U) {
-        self.iput(index, buf);
+    fn put<U: MyInto<LamellarArrayInput<T>> + LamellarRead>(&self, index: usize, buf: U) -> Box<dyn LamellarArrayRequest<Output = ()> + Send + Sync>{
+        self.put(index, buf)
     }
 }
 

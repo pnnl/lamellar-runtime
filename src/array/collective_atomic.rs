@@ -132,12 +132,21 @@ impl<T: Dist> CollectiveAtomicArray<T> {
         self.array.len()
     }
 
-    // #[doc(hidden)]
-    // pub unsafe fn local_as_slice(&self) -> &[T] {
-    //     self.array.local_as_mut_slice()
-    // }
+    pub fn read_local_data(&self) -> CollectiveAtomicLocalData<'_,T> {
+        CollectiveAtomicLocalData{
+            data: unsafe {self.array.local_as_mut_slice()},
+            _lock_guard: self.lock.read()
+        }
+    }
 
-    // #[doc(hidden)]
+    pub fn write_local_data(&self) -> CollectiveAtomicLocalData<'_,T> {
+        CollectiveAtomicLocalData{
+            data: unsafe {self.array.local_as_mut_slice()},
+            _lock_guard: self.lock.read()
+        }
+    }
+
+    #[doc(hidden)] //todo create a custom macro to emit a warning saying use read_local_slice/write_local_slice intead
     pub fn local_as_slice(&self) -> CollectiveAtomicLocalData<'_,T> {
         CollectiveAtomicLocalData{
             data: unsafe {self.array.local_as_mut_slice()},
@@ -149,6 +158,7 @@ impl<T: Dist> CollectiveAtomicArray<T> {
     //     self.array.local_as_mut_slice()
     // }
 
+    #[doc(hidden)]
     pub fn local_as_mut_slice(&self) -> CollectiveAtomicMutLocalData<'_,T> {
         CollectiveAtomicMutLocalData{
             data: unsafe {self.array.local_as_mut_slice()},
@@ -156,10 +166,12 @@ impl<T: Dist> CollectiveAtomicArray<T> {
         }
     }
 
+    #[doc(hidden)]
     pub fn local_data(&self)  ->  CollectiveAtomicLocalData<'_,T>  {
         self.local_as_slice()
     }
 
+    #[doc(hidden)]
     pub fn mut_local_data(&self)  ->CollectiveAtomicMutLocalData<'_,T>{
         self.local_as_mut_slice()
     }
@@ -195,14 +207,13 @@ impl<T: Dist> From<UnsafeArray<T>> for CollectiveAtomicArray<T> {
         array.block_on_outstanding(DarcMode::CollectiveAtomicArray);
         let lock = LocalRwDarc::new(array.team(), ()).unwrap();
         if let Some(func) = BUFOPS.get(&TypeId::of::<T>()) {
-            let mut op_bufs = array.inner.data.op_buffers.write();
             let bytearray = CollectiveAtomicByteArray {
                 lock: lock.clone(),
                 array: array.clone().into(),
             };
-
-            for pe in 0..op_bufs.len(){
-                op_bufs[pe] = func(bytearray.clone());
+            let mut op_bufs = array.inner.data.op_buffers.write();
+            for _pe in 0..array.inner.data.num_pes{
+                op_bufs.push(func(bytearray.clone()))
             }
         }
         CollectiveAtomicArray {

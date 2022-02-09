@@ -58,14 +58,32 @@ macro_rules! and_test{
             }
             array.wait_all();
             array.barrier();
-            for idx in 0..array.len(){
-                let val = array.load(idx).get().unwrap();
-                let check_val = (idx%num_pes) as $t;
-                check_val!($array,val,check_val,success);
-                if !success{
-                    println!("{:?} {:?} {:?}",idx,val,check_val);
+            #[cfg(feature="non-buffered-array-ops")]
+            {
+                for idx in 0..array.len(){
+                    let val = array.load(idx).get().unwrap();
+                    let check_val = (idx%num_pes) as $t;
+                    check_val!($array,val,check_val,success);
+                    if !success{
+                        println!("{:?} {:?} {:?}",idx,val,check_val);
+                    }
                 }
 
+            }
+            #[cfg(not(feature="non-buffered-array-ops"))]
+            {
+                let mut reqs = vec![];
+                for idx in 0..array.len(){
+                    reqs.push((array.load(idx),idx));
+                }
+                for (req,idx) in reqs{
+                    let val = req.get().unwrap();
+                    let check_val = (idx%num_pes) as $t;
+                    check_val!($array,val,check_val,success);
+                    if !success{
+                        println!("{:?} {:?} {:?}",idx,val,check_val);
+                    }
+                }
             }
             array.barrier();
             initialize_array!($array, array, init_val);
@@ -86,12 +104,30 @@ macro_rules! and_test{
             }
             sub_array.wait_all();
             sub_array.barrier();
-            for idx in 0..sub_array.len(){
-                let val = sub_array.load(idx).get().unwrap();
-                let check_val = (idx%num_pes) as $t;
-                check_val!($array,val,check_val,success);
-                if !success{
-                    println!("{:?} {:?} {:?}",idx,val,check_val);
+            #[cfg(feature="non-buffered-array-ops")]
+            {
+                for idx in 0..sub_array.len(){
+                    let val = sub_array.load(idx).get().unwrap();
+                    let check_val = (idx%num_pes) as $t;
+                    check_val!($array,val,check_val,success);
+                    if !success{
+                        println!("{:?} {:?} {:?}",idx,val,check_val);
+                    }
+                }
+            }
+            #[cfg(not(feature="non-buffered-array-ops"))]
+            {
+                let mut reqs = vec![];
+                for idx in 0..sub_array.len(){
+                    reqs.push((sub_array.load(idx),idx));
+                }
+                for (req,idx) in reqs{
+                    let val = req.get().unwrap();
+                    let check_val = (idx%num_pes) as $t;
+                    check_val!($array,val,check_val,success);
+                    if !success{
+                        println!("{:?} {:?} {:?}",idx,val,check_val);
+                    }
                 }
             }
             sub_array.barrier();
@@ -115,12 +151,31 @@ macro_rules! and_test{
                 }
                 sub_array.wait_all();
                 sub_array.barrier();
-                for idx in 0..sub_array.len(){
-                    let val = sub_array.load(idx).get().unwrap();
-                    let check_val = (idx%num_pes) as $t;
-                    check_val!($array,val,check_val,success);
-                    if !success{
-                        println!("{:?} {:?} {:?}",idx,val,check_val);
+                #[cfg(feature="non-buffered-array-ops")]
+                {
+                    for idx in 0..sub_array.len(){
+                        let val = sub_array.load(idx).get().unwrap();
+                        let check_val = (idx%num_pes) as $t;
+                        check_val!($array,val,check_val,success);
+                        if !success{
+                            println!("{:?} {:?} {:?}",idx,val,check_val);
+                        }
+                    }
+                    
+                }
+                #[cfg(not(feature="non-buffered-array-ops"))]
+                {
+                    let mut reqs = vec![];
+                    for idx in 0..sub_array.len(){
+                        reqs.push((sub_array.load(idx),idx));
+                    }
+                    for (req,idx) in reqs{
+                        let val = req.get().unwrap();
+                        let check_val = (idx%num_pes) as $t;
+                        check_val!($array,val,check_val,success);
+                        if !success{
+                            println!("{:?} {:?} {:?}",idx,val,check_val);
+                        }
                     }
                 }
                 sub_array.barrier();

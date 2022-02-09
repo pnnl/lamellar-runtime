@@ -51,8 +51,8 @@ fn main() {
         println!("{:?}", local_mem_region.as_slice().unwrap());
         // let index = ((len_per_pe * (my_pe) as f32).round() as usize) % total_len;
 
-        block_array.iput(0, &local_mem_region);
-        cyclic_array.iput(0, &local_mem_region);
+        block_array.put(0, &local_mem_region).wait();
+        cyclic_array.put(0, &local_mem_region).wait();
     }
     world.barrier();
     std::thread::sleep(std::time::Duration::from_secs(1));
@@ -68,7 +68,7 @@ fn main() {
             *elem = 0;
         }
     }
-    block_array.iget(0, &local_mem_region);
+    block_array.get(0, &local_mem_region).wait();
     world.barrier();
     std::thread::sleep(std::time::Duration::from_secs(1));
     if my_pe == 0 {
@@ -84,7 +84,7 @@ fn main() {
             *elem = 0;
         }
     }
-    cyclic_array.iget(0, &local_mem_region);
+    cyclic_array.get(0, &local_mem_region).wait();
     world.barrier();
     std::thread::sleep(std::time::Duration::from_secs(1));
     if my_pe == 0 {

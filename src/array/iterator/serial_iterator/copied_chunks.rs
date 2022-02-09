@@ -41,7 +41,7 @@ where
         // for i in 0..buf_slice.len() {
         //     buf_slice[i] = val;
         // }
-        self.array().iget(self.index, &mem_region);
+        self.array().get(self.index, &mem_region).wait();
         // }
 
         // fn spin_for_valid(&self, val: u32, buf: &LocalMemoryRegion<I::ElemType>) {

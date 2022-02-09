@@ -68,15 +68,35 @@ macro_rules! add_test{
             // array.print();
             for idx in 0..array.len(){
                 let mut prev = init_val;
-                for i in 0..(max_updates as usize){
-                    let val = array.fetch_div(idx,2 as $t).get().unwrap();
-                    if val > prev || (prev as u128)%2 != 0{
-                        if prev > 1 as $t{
-                            println!("full 1: {:?} {:?} {:?} {:?}",i,val,prev,init_val);
-                            success = false;
+                #[cfg(feature="non-buffered-array-ops")]
+                {
+                    for i in 0..(max_updates as usize){
+                        let val = array.fetch_div(idx,2 as $t).get().unwrap();
+                        if val > prev || (prev as u128)%2 != 0{
+                            if prev > 1 as $t{
+                                println!("full 1: {:?} {:?} {:?} {:?}",i,val,prev,init_val);
+                                success = false;
+                            }
                         }
+                        prev = val;
                     }
-                    prev = val;
+                }
+                #[cfg(not(feature="non-buffered-array-ops"))]
+                {
+                    let mut reqs = vec![];
+                    for _i in 0..(max_updates as usize){
+                        reqs.push(array.fetch_div(idx,2 as $t));
+                    }
+                    for req in reqs{
+                        let val = req.get().unwrap();
+                        if val > prev || (prev as u128)%2 != 0{
+                            if prev > 1 as $t{
+                                println!("full 1: {:?} {:?}",val,prev);
+                                success = false;
+                            }
+                        }
+                        prev = val;
+                    }
                 }
             }
             array.wait_all();
@@ -102,15 +122,35 @@ macro_rules! add_test{
             // // sub_array.print();
             for idx in 0..sub_array.len(){
                 let mut prev = init_val;
-                for i in 0..(max_updates as usize){
-                    let val = sub_array.fetch_div(idx,2 as $t).get().unwrap();
-                    if val > prev || (prev as u128)%2 != 0{
-                        if prev > 1 as $t{
-                            println!("half 1: {:?} {:?} {:?} {:?}",i,val,prev,init_val);
-                            success = false;
+                #[cfg(feature="non-buffered-array-ops")]
+                {
+                    for i in 0..(max_updates as usize){
+                        let val = sub_array.fetch_div(idx,2 as $t).get().unwrap();
+                        if val > prev || (prev as u128)%2 != 0{
+                            if prev > 1 as $t{
+                                println!("half 1: {:?} {:?} {:?} {:?}",i,val,prev,init_val);
+                                success = false;
+                            }
                         }
+                        prev = val;
                     }
-                    prev = val;
+                }
+                #[cfg(not(feature="non-buffered-array-ops"))]
+                {
+                    let mut reqs = vec![];
+                    for _i in 0..(max_updates as usize){
+                        reqs.push(sub_array.fetch_div(idx,2 as $t));
+                    }
+                    for req in reqs{
+                        let val = req.get().unwrap();
+                        if val > prev || (prev as u128)%2 != 0{
+                            if prev > 1 as $t{
+                                println!("full 1: {:?} {:?}",val,prev);
+                                success = false;
+                            }
+                        }
+                        prev = val;
+                    }
                 }
             }
             sub_array.wait_all();
@@ -135,15 +175,35 @@ macro_rules! add_test{
                 sub_array.barrier();
                 for idx in 0..sub_array.len(){
                     let mut prev = init_val;
-                    for i in 0..(max_updates as usize){
-                        let val = sub_array.fetch_div(idx,2 as $t).get().unwrap();
-                        if val > prev || (prev as u128)%2 != 0{
-                            if prev > 1 as $t{
-                                println!("pe 1: {:?} {:?} {:?} {:?}",i,val,prev,init_val);
-                                success = false;
+                    #[cfg(feature="non-buffered-array-ops")]
+                    {                       
+                        for i in 0..(max_updates as usize){
+                            let val = sub_array.fetch_div(idx,2 as $t).get().unwrap();
+                            if val > prev || (prev as u128)%2 != 0{
+                                if prev > 1 as $t{
+                                    println!("pe 1: {:?} {:?} {:?} {:?}",i,val,prev,init_val);
+                                    success = false;
+                                }
                             }
+                            prev = val;
                         }
-                        prev = val;
+                    }
+                    #[cfg(not(feature="non-buffered-array-ops"))]
+                    {
+                        let mut reqs = vec![];
+                        for _i in 0..(max_updates as usize){
+                            reqs.push(sub_array.fetch_div(idx,2 as $t));
+                        }
+                        for req in reqs{
+                            let val = req.get().unwrap();
+                            if val > prev || (prev as u128)%2 != 0{
+                                if prev > 1 as $t{
+                                    println!("full 1: {:?} {:?}",val,prev);
+                                    success = false;
+                                }
+                            }
+                            prev = val;
+                        }
                     }
                 }
                 sub_array.wait_all();

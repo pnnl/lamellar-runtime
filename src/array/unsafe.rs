@@ -116,7 +116,11 @@ impl<T: Dist + 'static> UnsafeArray<T> {
             },
             phantom: PhantomData,
         };
+        // println!("new unsafe");
+        // array.inner.data.print();
         array.create_buffered_ops();
+        // println!("after buffered ops");
+        // array.inner.data.print();
         array
     }
 
@@ -215,8 +219,12 @@ impl<T: Dist + 'static> UnsafeArray<T> {
     pub(crate) fn block_on_outstanding(&self, mode: DarcMode) {
         self.wait_all();
         //need to clear the buffered_ops...
-        self.inner.data.block_on_outstanding(mode,self.inner.data.num_pes);
+        // println!("block on outstanding");
+        // self.inner.data.print();
+        self.inner.data.block_on_outstanding(mode,self.inner.data.op_buffers.read().len()); 
         self.inner.data.op_buffers.write().clear();
+        // println!("after op buf clear");
+        // self.inner.data.print();
     }
 
     pub fn into_read_only(self) -> ReadOnlyArray<T> {

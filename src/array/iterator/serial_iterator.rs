@@ -94,7 +94,7 @@ impl<'a, T: Dist + 'static, A: LamellarArrayGet<T>> LamellarArrayIter<'a, T, A> 
         buf_size: usize,
     ) -> LamellarArrayIter<'a, T, A> {
         let buf_0 = team.alloc_local_mem_region(buf_size);
-        array.iget(0, &buf_0);
+        array.get(0, &buf_0).wait();
         let ptr = NonNull::new(buf_0.as_mut_ptr().unwrap()).unwrap();
         let iter = LamellarArrayIter {
             array: array,
@@ -164,7 +164,7 @@ impl<'a, T: Dist + 'static, A: LamellarArrayGet<T> + Clone> SerialIterator
                 //need to get new data
                 self.buf_index = 0;
                 // self.fill_buffer(self.index);
-                self.array.iget(self.index, &self.buf_0);
+                self.array.get(self.index, &self.buf_0).wait();
             }
             // self.spin_for_valid(self.buf_index);
             self.index += 1;
@@ -184,7 +184,7 @@ impl<'a, T: Dist + 'static, A: LamellarArrayGet<T> + Clone> SerialIterator
         self.index += count;
         self.buf_index = 0;
         // self.fill_buffer(0);
-        self.array.iget(self.index, &self.buf_0);
+        self.array.get(self.index, &self.buf_0).wait();
     }
     fn array(&self) -> Self::Array {
         self.array.clone()

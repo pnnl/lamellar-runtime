@@ -34,7 +34,7 @@ impl LamellarAM for RdmaAM {
         let local = lamellar::world.alloc_local_mem_region::<u8>(ARRAY_LEN);
         let local_slice = unsafe { local.as_mut_slice().unwrap() };
         local_slice[ARRAY_LEN - 1] = num_pes as u8;
-        self.array.iget(0, &local);
+        self.array.get(0, &local).into_future().await;
         // while local_slice[ARRAY_LEN - 1] == num_pes as u8 {
         //     async_std::task::yield_now().await;
         // }
@@ -44,7 +44,7 @@ impl LamellarAM for RdmaAM {
 
         //update an element on the original node
         local_slice[0] = lamellar::current_pe as u8;
-        self.array.iput(my_index, &local.sub_region(0..=0));
+        self.array.put(my_index, &local.sub_region(0..=0)).into_future().await;
     }
 }
 
@@ -71,7 +71,7 @@ fn main() {
                 *i = 255_u8;
             }
         }
-        array.iput(0, &local_mem_region);
+        array.put(0, &local_mem_region).wait();
     }
     println!("here!!! {:?}", my_pe);
     array.print();

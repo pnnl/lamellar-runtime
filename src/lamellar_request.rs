@@ -31,7 +31,7 @@ pub(crate) struct InternalReq {
 #[async_trait]
 pub trait LamellarRequest {
     type Output;
-    async fn into_future(self: Box<Self>) -> Option<Self::Output>;
+    async fn into_future(mut self: Box<Self>) -> Option<Self::Output>;
     fn get(&self) -> Option<Self::Output>;
     fn get_all(&self) -> Vec<Option<Self::Output>>;
     // fn as_any(self) -> Box<dyn std::any::Any>;
@@ -171,7 +171,7 @@ impl<T: AmDist> LamellarRequestHandle<T> {
 #[async_trait]
 impl<T: AmDist> LamellarRequest for LamellarRequestHandle<T> {
     type Output = T;
-    async fn into_future(self: Box<Self>) -> Option<Self::Output> {
+    async fn into_future(mut self: Box<Self>) -> Option<Self::Output> {
         let mut res = self.data_rx.try_recv();
         while res.is_err() {
             res = self.data_rx.try_recv();

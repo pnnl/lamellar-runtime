@@ -3,6 +3,8 @@ use lamellar::{LamellarMemoryRegion, RemoteMemoryRegion};
 
 fn initialize_array(array: &UnsafeArray<usize>) {
     array.dist_iter_mut().for_each(|x| *x = 0);
+    array.wait_all();
+    array.barrier();
 }
 
 fn initialize_mem_region(memregion: &LamellarMemoryRegion<usize>) {
@@ -35,13 +37,17 @@ fn main() {
     initialize_array(&cyclic_array);
     initialize_mem_region(&shared_mem_region);
     initialize_mem_region(&local_mem_region);
+    println!("data initialized");
     world.barrier();
 
     // puts/gets with memregions
-    block_array.iput(0, &shared_mem_region); //uses the local data of the shared memregion
-    block_array.iput(0, &local_mem_region);
-    cyclic_array.iput(0, &shared_mem_region);
-    cyclic_array.iput(0, &local_mem_region);
+    let start = std::time::Instant::now();
+    block_array.put(0, &shared_mem_region).wait(); //uses the local data of the shared memregion
+    block_array.put(0, &local_mem_region).wait();
+    cyclic_array.put(0, &shared_mem_region).wait();
+    cyclic_array.put(0, &local_mem_region).wait();
+    println!("put elapsed {:?}", start.elapsed().as_secs_f64());
+    world.barrier();
     // can use subregions
     unsafe {
         let start = std::time::Instant::now();
@@ -50,13 +56,13 @@ fn main() {
         println!("get_unchecked elapsed {:?}", start.elapsed().as_secs_f64());
     }
     let start = std::time::Instant::now();
-    cyclic_array.iget(0, shared_mem_region.sub_region(0..total_len / 2));
-    cyclic_array.iget(0, local_mem_region.sub_region(0..total_len / 2));
-    println!("iget elapsed {:?}", start.elapsed().as_secs_f64());
+    cyclic_array.get(0, shared_mem_region.sub_region(0..total_len / 2)).wait();
+    cyclic_array.get(0, local_mem_region.sub_region(0..total_len / 2)).wait();
+    println!("get elapsed {:?}", start.elapsed().as_secs_f64());
     world.barrier();
     // puts/gets using single values
-    block_array.iput(total_len - 1, &12345);
-    cyclic_array.iput(total_len - 1, &12345);
+    block_array.put(total_len - 1, &12345).wait();
+    cyclic_array.put(total_len - 1, &12345).wait();
     world.barrier();
 
     // in the future will be able to use and input/output :

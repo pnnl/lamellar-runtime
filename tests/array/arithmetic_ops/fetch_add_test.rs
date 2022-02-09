@@ -134,7 +134,6 @@ macro_rules! add_test{
                 // println!("2------------");
                 for _i in 0..num_updates{
                     let idx = rand_idx.sample(&mut rng);
-                    println!("idx {:?}",idx);
                     reqs.push((array.fetch_add(idx,1 as $t),idx))
                 }
                 for (req,idx) in reqs{

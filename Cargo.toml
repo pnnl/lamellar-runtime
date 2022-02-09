@@ -83,9 +83,6 @@ path="src/lib.rs"
 #path = "tests/progress.rs"
 
 ##------tests-------##
-[[example]]
-name = "iput_test"
-path = "tests/array/rdma/iput_test.rs"
 
 [[example]]
 name = "put_test"

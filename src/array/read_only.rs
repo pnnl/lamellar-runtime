@@ -70,11 +70,11 @@ impl<T: Dist> ReadOnlyArray<T> {
     pub fn iget<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(&self, index: usize, buf: U) {
         self.array.iget(index, buf)
     }
-    pub fn get<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(&self, index: usize, buf: U) {
+    pub fn get<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(&self, index: usize, buf: U) -> Box<dyn LamellarArrayRequest<Output = ()> + Send + Sync>{
         self.array.get(index, buf)
     }
-    pub fn iat(&self, index: usize) -> T {
-        self.array.iat(index)
+    pub fn iat(&self, index: usize)  -> Box<dyn LamellarArrayRequest<Output = T> + Send + Sync> {
+        self.array.at(index)
     }
     pub fn local_as_slice(&self) -> &[T] {
         unsafe { self.array.local_as_mut_slice() }
@@ -235,14 +235,14 @@ impl<T: Dist> LamellarArray<T> for ReadOnlyArray<T> {
     }
 }
 impl<T: Dist + 'static> LamellarArrayGet<T> for ReadOnlyArray<T> {
-    fn iget<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(&self, index: usize, buf: U) {
-        self.iget(index, buf)
-    }
-    fn get<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(&self, index: usize, buf: U) {
+    // fn iget<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(&self, index: usize, buf: U) {
+    //     self.iget(index, buf)
+    // }
+    fn get<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(&self, index: usize, buf: U) -> Box<dyn LamellarArrayRequest<Output = ()> + Send + Sync> {
         self.get(index, buf)
     }
-    fn iat(&self, index: usize) -> T {
-        self.iat(index)
+    fn at(&self, index: usize) -> Box<dyn LamellarArrayRequest<Output = T> + Send + Sync> {
+        self.array.at(index)
     }
 }
 

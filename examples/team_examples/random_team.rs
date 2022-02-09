@@ -87,7 +87,7 @@ impl RandomArch {
         vec.extend_from_slice(&shuffled[0..num_pes]);
         let min_pe = *vec.iter().min().unwrap();
         let max_pe = *vec.iter().max().unwrap();
-        println!("RandomArch: {:?} {:?} {:?}", vec, min_pe, max_pe);
+        // println!("RandomArch: {:?} {:?} {:?}", vec, min_pe, max_pe);
         RandomArch {
             pes: vec,
             min_pe: min_pe,

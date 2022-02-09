@@ -89,8 +89,6 @@ macro_rules! create_iget_tests {
 create_iget_tests!(
     (
         UnsafeArray,
-        AtomicArray,
-        CollectiveAtomicArray,
         ReadOnlyArray
     ),
     ("Block", "Cyclic"),

@@ -68,7 +68,7 @@ fn test_add<T: std::fmt::Debug + ElementArithmeticOps + 'static>(
     for i in 0..array.len() {
         reqs.push(array.fetch_add(i, add_val));
     }
-    for (i, req) in reqs.iter().enumerate() {
+    for (i, req) in reqs.drain(0..).enumerate() {
         println!("i: {:?} {:?}", i, req.get().unwrap());
     }
     array.barrier();
@@ -99,7 +99,7 @@ fn test_sub<T: std::fmt::Debug + ElementArithmeticOps + 'static>(
     for i in 0..array.len() {
         reqs.push(array.fetch_sub(i, sub_val));
     }
-    for (i, req) in reqs.iter().enumerate() {
+    for (i, req) in reqs.drain(0..).enumerate() {
         println!("i: {:?} {:?}", i, req.get().unwrap());
     }
     array.barrier();
@@ -130,7 +130,7 @@ fn test_mul<T: std::fmt::Debug + ElementArithmeticOps + 'static>(
     for i in 0..array.len() {
         reqs.push(array.fetch_mul(i, mul_val));
     }
-    for (i, req) in reqs.iter().enumerate() {
+    for (i, req) in reqs.drain(0..).enumerate() {
         println!("i: {:?} {:?}", i, req.get().unwrap());
     }
     array.barrier();
@@ -161,7 +161,7 @@ fn test_div<T: std::fmt::Debug + ElementArithmeticOps + 'static>(
     for i in 0..array.len() {
         reqs.push(array.fetch_div(i, div_val));
     }
-    for (i, req) in reqs.iter().enumerate() {
+    for (i, req) in reqs.drain(0..).enumerate() {
         println!("i: {:?} {:?}", i, req.get().unwrap());
     }
     array.barrier();
@@ -197,7 +197,7 @@ fn test_and<T: std::fmt::Debug + ElementArithmeticOps + ElementBitWiseOps + 'sta
     for i in 0..array.len() {
         reqs.push(array.fetch_bit_and(i, and_val));
     }
-    for (i, req) in reqs.iter().enumerate() {
+    for (i, req) in reqs.drain(0..).enumerate() {
         println!("i: {:?} {:?}", i, req.get().unwrap());
     }
     array.barrier();
@@ -233,7 +233,7 @@ fn test_or<T: std::fmt::Debug + ElementBitWiseOps + 'static>(
     for i in 0..array.len() {
         reqs.push(array.fetch_bit_or(i, or_val));
     }
-    for (i, req) in reqs.iter().enumerate() {
+    for (i, req) in reqs.drain(0..).enumerate() {
         println!("i: {:?} {:?}", i, req.get().unwrap());
     }
     array.barrier();
@@ -267,7 +267,7 @@ fn test_store_load<T: std::fmt::Debug + ElementOps + 'static>(
     for i in 0..array.len() {
         reqs.push(array.load(i));
     }
-    for (i, req) in reqs.iter().enumerate() {
+    for (i, req) in reqs.drain(0..).enumerate() {
         println!("i: {:?} {:?}", i, req.get().unwrap());
     }
     array.barrier();
@@ -294,7 +294,7 @@ fn test_swap<T: std::fmt::Debug + ElementBitWiseOps + 'static>(
     for i in (my_pe..array.len()).step_by(num_pes) {
         reqs.push(array.swap(i, swap_val));
     }
-    for (i, req) in reqs.iter().enumerate() {
+    for (i, req) in reqs.drain(0..).enumerate() {
         println!("i: {:?} {:?}", i * num_pes + my_pe, req.get().unwrap());
     }
     array.barrier();

@@ -193,6 +193,14 @@ impl<T> DarcInner<T> {
             }
             if timer.elapsed().as_secs_f64() > 10.0 {
                 println!("waiting for outstanding 1 {:?}", self);
+                // let rel_addr = unsafe { self as *const DarcInner<T> as usize - (*(self.team)).lamellae.base_addr() };
+                // println!(
+                //     "--------\norig:  {:?} (0x{:x}) {:?}\n--------",
+                    
+                //     self as *const DarcInner<T>,
+                //     rel_addr,
+                //     self
+                // );
                 timer = std::time::Instant::now();
             }
             std::thread::yield_now();

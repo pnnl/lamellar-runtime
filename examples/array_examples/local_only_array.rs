@@ -34,7 +34,8 @@ fn main() {
             orig_pe: my_pe,
         });
     }
-    let local_only_array = read_only_array.into_local_only(); //this should act as a barrier until only the calling instance of read_only_array exists.
+    println!("about to chance into local only");
+    let local_only_array = read_only_array.into_local_only(); //this acts as a barrier until only the calling instance of read_only_array exists.
     local_only_array.print();
 
     // let mut vector = vec!{0;1000};

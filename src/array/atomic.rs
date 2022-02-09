@@ -309,7 +309,10 @@ impl<T: Dist + std::default::Default + 'static> AtomicArray<T> {
             for pe in 0..op_bufs.len(){
                 op_bufs[pe] = func(bytearray.clone());
             }
-        }    
+        } 
+        
+        // println!("new atomic array ");
+        // array.inner.data.print();
 
         AtomicArray {
             locks: locks.clone(),
@@ -413,8 +416,11 @@ impl<T: Dist> AtomicArray<T> {
 
 impl<T: Dist + 'static> From<UnsafeArray<T>> for AtomicArray<T> {
     fn from(array: UnsafeArray<T>) -> Self {
+        // println!("from unsafe");
         // let array = array.into_inner();
         array.block_on_outstanding(DarcMode::AtomicArray);
+        // println!("after array block on outstanding");
+        // array.inner.data.print();
         let locks = if NATIVE_ATOMICS.get(&TypeId::of::<T>()).is_some() {
             None
         } else {
@@ -426,17 +432,18 @@ impl<T: Dist + 'static> From<UnsafeArray<T>> for AtomicArray<T> {
         };
         let locks =  Darc::new(array.team(), locks).unwrap();
         if let Some(func) = BUFOPS.get(&TypeId::of::<T>()) {
-            let mut op_bufs = array.inner.data.op_buffers.write();
             let bytearray = AtomicByteArray {
                 locks: locks.clone(),
                 orig_t_size: std::mem::size_of::<T>(),
                 array: array.clone().into(),
             };
-
-            for pe in 0..op_bufs.len(){
-                op_bufs[pe] = func(bytearray.clone());
+            let mut op_bufs = array.inner.data.op_buffers.write();
+            for _pe in 0..array.inner.data.num_pes{
+                op_bufs.push(func(bytearray.clone()))
             }
         }
+        // println!("after add buf ops");
+        // array.inner.data.print();
         AtomicArray {
             locks: locks,
             orig_t_size: std::mem::size_of::<T>(),

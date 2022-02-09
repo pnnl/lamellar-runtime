@@ -527,6 +527,7 @@ impl LamellarTeamRT {
                 *e = 0;
             }
             let num_pes = archrt.num_pes();
+            parent.barrier();
             let team = LamellarTeamRT {
                 world: Some(world.clone()),
                 parent: Some(parent.clone()),

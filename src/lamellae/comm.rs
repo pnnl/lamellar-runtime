@@ -31,6 +31,25 @@ impl std::error::Error for AllocError {}
 
 pub(crate) type AllocResult<T> = Result<T, AllocError>;
 
+#[derive(Debug, Clone, Copy)]
+pub enum TxError {
+    GetError,
+}
+
+impl std::fmt::Display for TxError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            TxError::GetError => {
+                write!(f, "error performing get")
+            }
+        }
+    }
+}
+
+impl std::error::Error for TxError {}
+
+pub(crate) type TxResult<T> = Result<T, TxError>;
+
 pub(crate) trait Remote: Copy + Send + Sync {}
 impl<T: Copy + Send + Sync> Remote for T {}
 

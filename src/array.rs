@@ -110,6 +110,55 @@ pub trait BufferOp:  Sync + Send{ //have this also be RemoteActiveMessage
     fn into_arc_am(&self,sub_array: std::ops::Range<usize>) -> (LamellarArcAm,usize,Arc<AtomicBool>,Arc<RwLock<Vec<u8>>>);
 }
 
+#[async_trait]
+pub trait LamellarArrayRequest {
+    type Output;
+    async fn into_future(mut self: Box<Self>) -> Option<Self::Output>;
+    fn wait(self: Box<Self>) -> Option<Self::Output>;
+    // fn as_any(self) -> Box<dyn std::any::Any>;
+}
+
+struct ArrayRdmaHandle{
+    reqs: Vec<Box<dyn LamellarRequest<Output = ()> + Send + Sync>>
+}
+#[async_trait]
+impl LamellarArrayRequest for ArrayRdmaHandle {
+    type Output = ();
+    async fn into_future(mut self: Box<Self>) -> Option<Self::Output> {
+        for req in self.reqs.drain(0..){
+            req.into_future().await;
+        }
+        Some(())
+    }
+    fn wait(mut self: Box<Self>) -> Option<Self::Output> {
+        for req in self.reqs.drain(0..){
+            req.get();
+        }
+        Some(())
+    }
+}
+
+struct ArrayRdmaAtHandle<T: Dist>{
+    reqs:  Vec<Box<dyn LamellarRequest<Output = ()> + Send + Sync>>,
+    buf: LocalMemoryRegion<T>
+}
+#[async_trait]
+impl<T: Dist> LamellarArrayRequest for ArrayRdmaAtHandle<T> {
+    type Output = T;
+    async fn into_future(mut self: Box<Self>) -> Option<Self::Output> {
+        for req in self.reqs.drain(0..){
+            req.into_future().await;
+        }
+        Some(self.buf.as_slice().unwrap()[0])
+    }
+    fn wait(mut self: Box<Self>) -> Option<Self::Output> {
+        for req in self.reqs.drain(0..){
+            req.get();
+        }
+        Some(self.buf.as_slice().unwrap()[0])
+    }
+}
+
 struct ArrayOpHandle{
     complete: Arc<AtomicBool>,
 }
@@ -124,7 +173,7 @@ struct ArrayOpFetchHandle<T: Dist>{
 #[async_trait]
 impl LamellarRequest for ArrayOpHandle {
     type Output = ();
-    async fn into_future(self: Box<Self>) -> Option<Self::Output> {
+    async fn into_future(mut self: Box<Self>) -> Option<Self::Output> {
         while !self.complete.load(Ordering::Relaxed){
             async_std::task::yield_now().await;
         }
@@ -136,9 +185,9 @@ impl LamellarRequest for ArrayOpHandle {
         }
         Some(())
     }
-    fn get_all(&self) -> Vec<Option<Self::Output>> {
+    fn get_all(&self) -> Vec<Option<Self::Output>>{
         vec![self.get()]
-    }
+    } 
 }
 
 impl<T: Dist> ArrayOpFetchHandle<T>{
@@ -154,7 +203,7 @@ impl<T: Dist> ArrayOpFetchHandle<T>{
 #[async_trait]
 impl<T: Dist> LamellarRequest for ArrayOpFetchHandle<T> {
     type Output = T;
-    async fn into_future(self: Box<Self>) -> Option<Self::Output> {
+    async fn into_future(mut self: Box<Self>) -> Option<Self::Output> {
         while !self.complete.load(Ordering::Relaxed){
             async_std::task::yield_now().await;
         }
@@ -166,7 +215,7 @@ impl<T: Dist> LamellarRequest for ArrayOpFetchHandle<T> {
         }
         Some(self.get_result())
     }
-    fn get_all(&self) -> Vec<Option<Self::Output>> {
+    fn get_all(&self) -> Vec<Option<Self::Output>>{
         vec![self.get()]
     }
 }
@@ -305,16 +354,13 @@ pub struct LocalOpResult<T: Dist> {
 }
 
 #[async_trait]
-impl<T: Dist> LamellarRequest for LocalOpResult<T> {
+impl<T: Dist> LamellarArrayRequest for LocalOpResult<T> {
     type Output = T;
-    async fn into_future(self: Box<Self>) -> Option<Self::Output> {
+    async fn into_future(mut self: Box<Self>) -> Option<Self::Output> {
         Some(self.val)
     }
-    fn get(&self) -> Option<Self::Output> {
+    fn wait(self: Box<Self>) -> Option<Self::Output> {
         Some(self.val)
-    }
-    fn get_all(&self) -> Vec<Option<Self::Output>> {
-        vec![Some(self.val)]
     }
 }
 
@@ -618,20 +664,20 @@ pub trait LamellarArrayGet<T: Dist + 'static>: LamellarArray<T> + Sync + Send {
 
     // a safe synchronous call that blocks untils the data as all been transfered
     // get data from self and write into buf
-    fn iget<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(&self, index: usize, dst: U);
+    // fn iget<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(&self, index: usize, dst: U);
 
     // async get
     // get data from self and write into buf
-    fn get<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(&self, index: usize, dst: U);
+    fn get<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(&self, index: usize, dst: U) -> Box<dyn LamellarArrayRequest<Output = ()> + Send + Sync>;
 
     // blocking call that gets the value stored and the provided index
-    fn iat(&self, index: usize) -> T;
+    fn at(&self, index: usize) -> Box<dyn LamellarArrayRequest<Output = T> + Send + Sync>;
 }
 
 #[enum_dispatch(LamellarWriteArray<T>)]
 pub trait LamellarArrayPut<T: Dist>: LamellarArray<T> + Sync + Send {
     //put data from buf into self
-    fn iput<U: MyInto<LamellarArrayInput<T>> + LamellarRead>(&self, index: usize, src: U);
+    fn put<U: MyInto<LamellarArrayInput<T>> + LamellarRead>(&self, index: usize, src: U) -> Box<dyn LamellarArrayRequest<Output = ()> + Send + Sync>;
 }
 
 pub trait ArrayPrint<T: Dist + std::fmt::Debug>: LamellarArray<T> {
