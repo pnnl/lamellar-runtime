@@ -16,14 +16,14 @@ pub(crate) fn rofi_init(provider: &str) -> Result<(), &'static str> {
 
 //currently shows unused warning as we are debugging a hang in rofi_finit
 
-// pub(crate) fn rofi_finit() -> Result<(), &'static str> {
-//     let retval = unsafe { rofisys::rofi_finit() as i32 };
-//     if retval == 0 {
-//         Ok(())
-//     } else {
-//         Err("unable to finit rofi")
-//     }
-// }
+pub(crate) fn rofi_finit() -> Result<(), &'static str> {
+    let retval = unsafe { rofisys::rofi_finit() as i32 };
+    if retval == 0 {
+        Ok(())
+    } else {
+        Err("unable to finit rofi")
+    }
+}
 
 pub(crate) fn rofi_get_size() -> usize {
     unsafe { rofisys::rofi_get_size() as usize }
