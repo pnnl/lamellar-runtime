@@ -56,8 +56,12 @@ fn main() {
         println!("get_unchecked elapsed {:?}", start.elapsed().as_secs_f64());
     }
     let start = std::time::Instant::now();
-    cyclic_array.get(0, shared_mem_region.sub_region(0..total_len / 2)).wait();
-    cyclic_array.get(0, local_mem_region.sub_region(0..total_len / 2)).wait();
+    cyclic_array
+        .get(0, shared_mem_region.sub_region(0..total_len / 2))
+        .wait();
+    cyclic_array
+        .get(0, local_mem_region.sub_region(0..total_len / 2))
+        .wait();
     println!("get elapsed {:?}", start.elapsed().as_secs_f64());
     world.barrier();
     // puts/gets using single values

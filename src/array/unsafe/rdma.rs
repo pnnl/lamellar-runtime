@@ -282,14 +282,16 @@ impl<T: Dist> UnsafeArray<T> {
     //         req.get();
     //     }
     // }
-    pub fn put<U: MyInto<LamellarArrayInput<T>>>(&self, index: usize, buf: U) -> Box<dyn LamellarArrayRequest<Output = ()> + Send + Sync>{
+    pub fn put<U: MyInto<LamellarArrayInput<T>>>(
+        &self,
+        index: usize,
+        buf: U,
+    ) -> Box<dyn LamellarArrayRequest<Output = ()> + Send + Sync> {
         let reqs = match self.inner.distribution {
             Distribution::Block => self.block_op(ArrayRdmaCmd::PutAm, index, buf),
             Distribution::Cyclic => self.cyclic_op(ArrayRdmaCmd::PutAm, index, buf),
         };
-        Box::new(ArrayRdmaHandle{
-            reqs: reqs
-        })
+        Box::new(ArrayRdmaHandle { reqs: reqs })
     }
 
     pub unsafe fn get_unchecked<U: MyInto<LamellarArrayInput<T>>>(&self, index: usize, buf: U) {
@@ -306,7 +308,11 @@ impl<T: Dist> UnsafeArray<T> {
         };
     }
 
-    pub fn get<U>(&self, index: usize, buf: U) -> Box<dyn LamellarArrayRequest<Output = ()> + Send + Sync> 
+    pub fn get<U>(
+        &self,
+        index: usize,
+        buf: U,
+    ) -> Box<dyn LamellarArrayRequest<Output = ()> + Send + Sync>
     where
         U: MyInto<LamellarArrayInput<T>>,
     {
@@ -314,17 +320,15 @@ impl<T: Dist> UnsafeArray<T> {
             Distribution::Block => self.block_op(ArrayRdmaCmd::GetAm, index, buf),
             Distribution::Cyclic => self.cyclic_op(ArrayRdmaCmd::GetAm, index, buf),
         };
-        Box::new(ArrayRdmaHandle{
-            reqs: reqs
-        })
+        Box::new(ArrayRdmaHandle { reqs: reqs })
     }
 
-    pub fn at(&self, index: usize) -> Box<dyn LamellarArrayRequest<Output = T> + Send + Sync>  {
+    pub fn at(&self, index: usize) -> Box<dyn LamellarArrayRequest<Output = T> + Send + Sync> {
         let buf: LocalMemoryRegion<T> = self.team().alloc_local_mem_region(1);
         self.iget(index, &buf);
-        Box::new(ArrayRdmaAtHandle{
+        Box::new(ArrayRdmaAtHandle {
             reqs: vec![],
-            buf: buf
+            buf: buf,
         })
     }
 }
@@ -340,7 +344,11 @@ impl<T: Dist + 'static> LamellarArrayGet<T> for UnsafeArray<T> {
     // fn iget<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(&self, index: usize, buf: U) {
     //     self.iget(index, buf)
     // }
-    fn get<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(&self, index: usize, buf: U) -> Box<dyn LamellarArrayRequest<Output = ()> + Send + Sync> {
+    fn get<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(
+        &self,
+        index: usize,
+        buf: U,
+    ) -> Box<dyn LamellarArrayRequest<Output = ()> + Send + Sync> {
         self.get(index, buf)
     }
     fn at(&self, index: usize) -> Box<dyn LamellarArrayRequest<Output = T> + Send + Sync> {
@@ -352,7 +360,11 @@ impl<T: Dist> LamellarArrayPut<T> for UnsafeArray<T> {
     // unsafe fn put_unchecked<U: MyInto<LamellarArrayInput<T>> + LamellarRead>(&self, index: usize, buf: U) {
     //     self.put_unchecked(index, buf)
     // }
-    fn put<U: MyInto<LamellarArrayInput<T>> + LamellarRead>(&self, index: usize, buf: U) -> Box<dyn LamellarArrayRequest<Output = ()> + Send + Sync>{
+    fn put<U: MyInto<LamellarArrayInput<T>> + LamellarRead>(
+        &self,
+        index: usize,
+        buf: U,
+    ) -> Box<dyn LamellarArrayRequest<Output = ()> + Send + Sync> {
         self.put(index, buf)
     }
 }

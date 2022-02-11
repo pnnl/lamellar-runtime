@@ -54,7 +54,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
             )[0]
         }
     }
-        
+
     pub(crate) fn initiate_op(
         &self,
         pe: usize,
@@ -62,43 +62,51 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         local_index: usize,
         op: ArrayOpCmd,
     ) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync> {
-        let mut stall_mark = self.inner.data.req_cnt.fetch_add(1,Ordering::SeqCst);        
+        let mut stall_mark = self.inner.data.req_cnt.fetch_add(1, Ordering::SeqCst);
         let buf_op = self.inner.data.op_buffers.read()[pe].clone();
-        let (len,complete) = buf_op.add_op(op,local_index, &val as *const T as *const u8 );
-        if len == 1{
+        let (len, complete) = buf_op.add_op(op, local_index, &val as *const T as *const u8);
+        if len == 1 {
             let array = self.clone();
-            self.inner.data.team.team_counters.outstanding_reqs.fetch_add(1,Ordering::SeqCst); // we need to tell the world we have a request pending
-            self.inner.data.team.scheduler.submit_task(async move{
+            self.inner
+                .data
+                .team
+                .team_counters
+                .outstanding_reqs
+                .fetch_add(1, Ordering::SeqCst); // we need to tell the world we have a request pending
+            self.inner.data.team.scheduler.submit_task(async move {
                 // println!("starting");
                 let mut wait_cnt = 0;
-                while wait_cnt < 1000{
-                    while stall_mark != array.inner.data.req_cnt.load(Ordering::Relaxed)  {
+                while wait_cnt < 1000 {
+                    while stall_mark != array.inner.data.req_cnt.load(Ordering::Relaxed) {
                         stall_mark = array.inner.data.req_cnt.load(Ordering::Relaxed);
                         async_std::task::yield_now().await;
-                        
                     }
-                    wait_cnt+=1;
+                    wait_cnt += 1;
                     async_std::task::yield_now().await;
                 }
-                
-                let (am,len,complete,results) = buf_op.into_arc_am(array.sub_array_range());
+
+                let (am, len, complete, results) = buf_op.into_arc_am(array.sub_array_range());
                 let res = array.inner.data.team.exec_arc_am_pe::<Vec<u8>>(
                     pe,
                     am,
                     Some(array.inner.data.array_counters.clone()),
-                );                
+                );
                 let mut results_u8: Vec<u8> = res.into_future().await.unwrap();
                 let mut results = results.write();
                 std::mem::swap(&mut results_u8, &mut results);
-                complete.store(true,Ordering::Relaxed);
+                complete.store(true, Ordering::Relaxed);
                 // println!("done!");
-                array.inner.data.team.team_counters.outstanding_reqs.fetch_sub(1,Ordering::SeqCst); //remove our pending req now that it has actually been submitted;
-                array.inner.data.req_cnt.fetch_sub(len,Ordering::SeqCst);
+                array
+                    .inner
+                    .data
+                    .team
+                    .team_counters
+                    .outstanding_reqs
+                    .fetch_sub(1, Ordering::SeqCst); //remove our pending req now that it has actually been submitted;
+                array.inner.data.req_cnt.fetch_sub(len, Ordering::SeqCst);
             });
         }
-        Box::new(ArrayOpHandle{
-            complete: complete
-        })
+        Box::new(ArrayOpHandle { complete: complete })
     }
 
     pub(crate) fn initiate_fetch_op(
@@ -108,50 +116,63 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         local_index: usize,
         op: ArrayOpCmd,
     ) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
-        let mut stall_mark = self.inner.data.req_cnt.fetch_add(1,Ordering::SeqCst);        
+        let mut stall_mark = self.inner.data.req_cnt.fetch_add(1, Ordering::SeqCst);
         let buf_op = self.inner.data.op_buffers.read()[pe].clone();
-        let (len,complete,res_index,results) = buf_op.add_fetch_op(op,local_index, &val as *const T as *const u8);
-        if len == 1{
+        let (len, complete, res_index, results) =
+            buf_op.add_fetch_op(op, local_index, &val as *const T as *const u8);
+        if len == 1 {
             // println!("pending buf for pe {:?}",pe);
             let array = self.clone();
-            self.inner.data.team.team_counters.outstanding_reqs.fetch_add(1,Ordering::SeqCst); // we need to tell the world we have a request pending
-            self.inner.data.team.scheduler.submit_task(async move{
+            self.inner
+                .data
+                .team
+                .team_counters
+                .outstanding_reqs
+                .fetch_add(1, Ordering::SeqCst); // we need to tell the world we have a request pending
+            self.inner.data.team.scheduler.submit_task(async move {
                 let mut wait_cnt = 0;
-                while wait_cnt < 1000{
-                    while stall_mark != array.inner.data.req_cnt.load(Ordering::Relaxed)  {
+                while wait_cnt < 1000 {
+                    while stall_mark != array.inner.data.req_cnt.load(Ordering::Relaxed) {
                         stall_mark = array.inner.data.req_cnt.load(Ordering::Relaxed);
                         async_std::task::yield_now().await;
-                        
                     }
-                    wait_cnt+=1;
+                    wait_cnt += 1;
                     async_std::task::yield_now().await;
                 }
-                
-                let (am,len,complete,results) = buf_op.into_arc_am(array.sub_array_range());
+
+                let (am, len, complete, results) = buf_op.into_arc_am(array.sub_array_range());
                 let res = array.inner.data.team.exec_arc_am_pe::<Vec<u8>>(
                     pe,
                     am,
                     Some(array.inner.data.array_counters.clone()),
                 );
-                let mut results_u8: Vec<u8> = res.into_future().await.unwrap();                
+                let mut results_u8: Vec<u8> = res.into_future().await.unwrap();
                 let mut results = results.write();
                 std::mem::swap(&mut results_u8, &mut results);
-                complete.store(true,Ordering::Relaxed);
-                array.inner.data.team.team_counters.outstanding_reqs.fetch_sub(1,Ordering::SeqCst); //remove our pending req now that it has actually been executed;
-                array.inner.data.req_cnt.fetch_sub(len,Ordering::SeqCst);
+                complete.store(true, Ordering::Relaxed);
+                array
+                    .inner
+                    .data
+                    .team
+                    .team_counters
+                    .outstanding_reqs
+                    .fetch_sub(1, Ordering::SeqCst); //remove our pending req now that it has actually been executed;
+                array.inner.data.req_cnt.fetch_sub(len, Ordering::SeqCst);
                 // println!("done!");
             });
         }
-        Box::new(ArrayOpFetchHandle{
+        Box::new(ArrayOpFetchHandle {
             index: res_index,
             complete: complete,
             results: results,
-            _phantom: PhantomData
+            _phantom: PhantomData,
         })
     }
 }
 
-impl<T: ElementArithmeticOps + 'static+ std::ops::Add<Output = T>> ArithmeticOps<T> for UnsafeArray<T> {
+impl<T: ElementArithmeticOps + 'static + std::ops::Add<Output = T>> ArithmeticOps<T>
+    for UnsafeArray<T>
+{
     fn add(
         &self,
         index: usize,
@@ -165,7 +186,7 @@ impl<T: ElementArithmeticOps + 'static+ std::ops::Add<Output = T>> ArithmeticOps
             .pe_for_dist_index(index)
             .expect("index out of bounds");
         let local_index = self.inner.pe_offset_for_dist_index(pe, index).unwrap(); //calculated pe above
-            Some(self.initiate_op(pe, val, local_index, ArrayOpCmd::Add))
+        Some(self.initiate_op(pe, val, local_index, ArrayOpCmd::Add))
     }
     fn fetch_add(
         &self,
@@ -178,7 +199,6 @@ impl<T: ElementArithmeticOps + 'static+ std::ops::Add<Output = T>> ArithmeticOps
             .expect("index out of bounds");
         let local_index = self.inner.pe_offset_for_dist_index(pe, index).unwrap(); //calculated pe above
         self.initiate_fetch_op(pe, val, local_index, ArrayOpCmd::FetchAdd)
-        
     }
     fn sub(
         &self,

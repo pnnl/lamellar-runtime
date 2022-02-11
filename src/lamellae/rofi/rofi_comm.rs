@@ -115,7 +115,11 @@ impl RofiComm {
             }
         }
     }
-    unsafe fn check_buffer_elems<R: std::cmp::PartialEq + std::fmt::Debug, T>(&self, dst_addr: &mut [T], val: R) -> TxResult<()>{
+    unsafe fn check_buffer_elems<R: std::cmp::PartialEq + std::fmt::Debug, T>(
+        &self,
+        dst_addr: &mut [T],
+        val: R,
+    ) -> TxResult<()> {
         let bytes = std::slice::from_raw_parts_mut(
             dst_addr.as_ptr() as *mut T as *mut R,
             (dst_addr.len() * std::mem::size_of::<T>()) / std::mem::size_of::<R>(),
@@ -123,8 +127,14 @@ impl RofiComm {
         let mut timer = std::time::Instant::now();
         for i in 0..(bytes.len() as isize - 2) {
             while bytes[i as usize] == val && bytes[i as usize + 1] == val {
-                if timer.elapsed().as_secs_f64() > 1.0{
-                    println!("{:?}: {:?} {:?} {:?}",i,bytes[i as usize],bytes[i as usize + 1],val);
+                if timer.elapsed().as_secs_f64() > 1.0 {
+                    println!(
+                        "{:?}: {:?} {:?} {:?}",
+                        i,
+                        bytes[i as usize],
+                        bytes[i as usize + 1],
+                        val
+                    );
                     return Err(TxError::GetError);
                 }
                 //hopefully magic number doesnt appear twice in a row
@@ -133,8 +143,8 @@ impl RofiComm {
         }
         timer = std::time::Instant::now();
         while bytes[bytes.len() - 1] == val {
-            if timer.elapsed().as_secs_f64() > 1.0{
-                println!("{:?}",bytes[bytes.len() - 1]);
+            if timer.elapsed().as_secs_f64() > 1.0 {
+                println!("{:?}", bytes[bytes.len() - 1]);
                 return Err(TxError::GetError);
             }
             //hopefully magic number isn't the last element
@@ -142,7 +152,7 @@ impl RofiComm {
         }
         Ok(())
     }
-    fn check_buffer<T>(&self, dst_addr: &mut [T]) -> TxResult<()>{
+    fn check_buffer<T>(&self, dst_addr: &mut [T]) -> TxResult<()> {
         let bytes_len = dst_addr.len() * std::mem::size_of::<T>();
         unsafe {
             if bytes_len % std::mem::size_of::<u64>() == 0 {
@@ -445,7 +455,7 @@ impl CommOps for RofiComm {
                 let temp_dst_addr = &mut dst_addr[rem_bytes..];
                 self.init_buffer(temp_dst_addr);
                 self.iget_data(pe, src_addr + rem_bytes, temp_dst_addr);
-                while let Err(TxError::GetError) = self.check_buffer(temp_dst_addr){
+                while let Err(TxError::GetError) = self.check_buffer(temp_dst_addr) {
                     self.iget_data(pe, src_addr + rem_bytes, temp_dst_addr);
                 }
             }
@@ -473,7 +483,7 @@ impl CommOps for RofiComm {
                                 while buf0[i] != buf1[i] {
                                     std::thread::yield_now();
                                     if timer.elapsed().as_secs_f64() > 1.0 {
-                                        println!("iget {:?} {:?} {:?}",i,buf0[i],buf1[i]);
+                                        println!("iget {:?} {:?} {:?}", i, buf0[i], buf1[i]);
                                         self.iget_data(pe, src_addr, temp_dst_addr);
                                         self.iget_data(pe, src_addr, buf1);
                                         timer = std::time::Instant::now();

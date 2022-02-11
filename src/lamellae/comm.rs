@@ -31,11 +31,12 @@ impl std::error::Error for AllocError {}
 
 pub(crate) type AllocResult<T> = Result<T, AllocError>;
 
+#[cfg(feature = "enable-rofi")]
 #[derive(Debug, Clone, Copy)]
 pub enum TxError {
     GetError,
 }
-
+#[cfg(feature = "enable-rofi")]
 impl std::fmt::Display for TxError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
@@ -45,9 +46,9 @@ impl std::fmt::Display for TxError {
         }
     }
 }
-
+#[cfg(feature = "enable-rofi")]
 impl std::error::Error for TxError {}
-
+#[cfg(feature = "enable-rofi")]
 pub(crate) type TxResult<T> = Result<T, TxError>;
 
 pub(crate) trait Remote: Copy + Send + Sync {}

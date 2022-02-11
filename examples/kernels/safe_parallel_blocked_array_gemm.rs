@@ -1,4 +1,7 @@
-use lamellar::array::{DistributedIterator, Distribution, SerialIterator, UnsafeArray,CollectiveAtomicArray,ReadOnlyArray};
+use lamellar::array::{
+    CollectiveAtomicArray, DistributedIterator, Distribution, ReadOnlyArray, SerialIterator,
+    UnsafeArray,
+};
 /// ----------------Lamellar Parallel Blocked Array GEMM---------------------------------------------------
 /// This performs a distributed GEMM by partitioning the global matrices (stored in LamellarArrya)
 /// into sub matrices, and then performing GEMMS on the sub matrices.
@@ -12,7 +15,6 @@ use lazy_static::lazy_static;
 use matrixmultiply::sgemm;
 use parking_lot::Mutex;
 use std::sync::Arc;
-
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
@@ -35,7 +37,7 @@ fn main() {
     let a = UnsafeArray::<f32>::new(&world, m * n, Distribution::Block); //row major -- we will change this into a readonly array after initialization
     let b = UnsafeArray::<f32>::new(&world, n * p, Distribution::Block); //col major -- we will change this into a readonly array after initialization
     let c = CollectiveAtomicArray::<f32>::new(&world, m * p, Distribution::Block); //row major
-                                                                         //initialize
+                                                                                   //initialize
     a.dist_iter_mut()
         .enumerate()
         .for_each(|(i, x)| *x = i as f32);
@@ -56,7 +58,7 @@ fn main() {
     c.barrier();
 
     let num_gops = ((2 * dim * dim * dim) - dim * dim) as f64 / 1_000_000_000.0; // accurate for square matrices
-    let blocksize = std::cmp::min(2000,dim / num_pes);
+    let blocksize = std::cmp::min(2000, dim / num_pes);
     let m_blks = m / blocksize; //a blk row  c blk row
     let m_blks_pe = m_blks / num_pes;
     let n_blks = n / blocksize; //a blk col b blk col(because b is col major)

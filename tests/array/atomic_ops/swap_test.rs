@@ -54,7 +54,7 @@ macro_rules! and_test{
             #[cfg(feature="non-buffered-array-ops")]
             {
                 for idx in 0..array.len(){
-                
+
                     if idx%num_pes == my_pe{
                         let val = array.swap(idx,my_pe as $t).get().unwrap();
                         check_val!($array,val,init_val,success);

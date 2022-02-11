@@ -19,11 +19,11 @@ fn main() {
     unsafe {
         for i in data.as_mut_slice().unwrap() {
             *i = my_pe as u8;
-        }        
+        }
     }
     array
         .dist_iter_mut()
-        .for_each(move |elem| *elem = 255 as u8); 
+        .for_each(move |elem| *elem = 255 as u8);
     array.wait_all();
     array.barrier();
 
@@ -94,8 +94,8 @@ fn main() {
         }
         bws.push((sum as f64 / 1048576.0) / cur_t);
         array
-        .dist_iter_mut()
-        .for_each(move |elem| *elem = 255 as u8); 
+            .dist_iter_mut()
+            .for_each(move |elem| *elem = 255 as u8);
         array.wait_all();
         array.barrier();
     }

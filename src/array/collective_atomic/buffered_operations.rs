@@ -28,7 +28,7 @@ crate::inventory::collect!(CollectiveAtomicArrayOp);
 type BufFn = fn(CollectiveAtomicByteArray) -> Arc<dyn BufferOp>;
 
 lazy_static! {
-        pub(crate) static ref BUFOPS: HashMap<TypeId, BufFn> = {
+    pub(crate) static ref BUFOPS: HashMap<TypeId, BufFn> = {
         let mut map = HashMap::new();
         for op in crate::inventory::iter::<CollectiveAtomicArrayOpBuf> {
             map.insert(op.id.clone(), op.op);
@@ -52,7 +52,7 @@ impl<T: AmDist + Dist + 'static> CollectiveAtomicArray<T> {
         local_index: usize,
         op: ArrayOpCmd,
     ) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync> {
-        self.array.initiate_op(pe,val,local_index,op)
+        self.array.initiate_op(pe, val, local_index, op)
     }
 
     fn initiate_fetch_op(
@@ -62,7 +62,7 @@ impl<T: AmDist + Dist + 'static> CollectiveAtomicArray<T> {
         local_index: usize,
         op: ArrayOpCmd,
     ) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
-        self.array.initiate_fetch_op(pe,val,local_index,op)
+        self.array.initiate_fetch_op(pe, val, local_index, op)
     }
 
     pub fn store(

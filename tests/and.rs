@@ -68,7 +68,7 @@ macro_rules! create_and_tests {
 }
 
 create_and_tests!(
-   (CollectiveAtomicArray), // (UnsafeArray, AtomicArray, CollectiveAtomicArray),
+    (CollectiveAtomicArray), // (UnsafeArray, AtomicArray, CollectiveAtomicArray),
     ("Block", "Cyclic"),
     (u8, u16, u32, u128, usize, i8, i16, i32, i128, isize),
     (2, 3, 4),

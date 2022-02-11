@@ -3,10 +3,10 @@ use crate::array::r#unsafe::*;
 use crate::array::*;
 use crate::lamellar_request::LamellarRequest;
 // use crate::memregion::Dist;
+use parking_lot::{Mutex, RwLock};
 use std::any::TypeId;
 use std::collections::HashMap;
 use std::sync::atomic::AtomicBool;
-use parking_lot::{Mutex,RwLock};
 
 type OpFn = fn(*const u8, UnsafeByteArray, usize) -> LamellarArcAm;
 
@@ -56,7 +56,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
             )[0]
         }
     }
-    
+
     pub(crate) fn dist_op(
         &self,
         pe: usize,
@@ -113,7 +113,6 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
             }}",name,name,name);
         }
     }
-    
 
     fn initiate_fetch_op(
         &self,
@@ -150,9 +149,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         }
     }
 
-    pub(crate) fn process_ops(&self,ops: &Vec<(ArrayOpCmd,usize,T)>){
-        
-    }
+    pub(crate) fn process_ops(&self, ops: &Vec<(ArrayOpCmd, usize, T)>) {}
 }
 
 impl<T: ElementArithmeticOps + 'static> ArithmeticOps<T> for UnsafeArray<T> {

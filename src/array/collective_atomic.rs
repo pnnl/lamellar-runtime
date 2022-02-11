@@ -1,23 +1,23 @@
-mod iteration;
-#[cfg(not(feature="non-buffered-array-ops"))]
+#[cfg(not(feature = "non-buffered-array-ops"))]
 pub(crate) mod buffered_operations;
-#[cfg(not(feature="non-buffered-array-ops"))]
+mod iteration;
+#[cfg(not(feature = "non-buffered-array-ops"))]
 pub(crate) use buffered_operations as operations;
 mod rdma;
+use crate::array::collective_atomic::operations::BUFOPS;
 use crate::array::private::LamellarArrayPrivate;
 use crate::array::r#unsafe::UnsafeByteArray;
 use crate::array::*;
-use crate::array::collective_atomic::operations::BUFOPS;
 use crate::darc::local_rw_darc::LocalRwDarc;
 use crate::darc::DarcMode;
 use crate::lamellar_team::{IntoLamellarTeam, LamellarTeamRT};
 use crate::memregion::Dist;
-use std::ops::{Deref,DerefMut};
-use std::any::TypeId;
 use parking_lot::{
     lock_api::{ArcRwLockReadGuard, ArcRwLockWriteGuard},
-    RawRwLock
+    RawRwLock,
 };
+use std::any::TypeId;
+use std::ops::{Deref, DerefMut};
 
 #[lamellar_impl::AmDataRT(Clone)]
 pub struct CollectiveAtomicArray<T: Dist> {
@@ -31,40 +31,36 @@ pub struct CollectiveAtomicByteArray {
     pub(crate) array: UnsafeByteArray,
 }
 
-pub struct CollectiveAtomicMutLocalData<'a,T: Dist>{
+pub struct CollectiveAtomicMutLocalData<'a, T: Dist> {
     data: &'a mut [T],
     _lock_guard: ArcRwLockWriteGuard<RawRwLock, Box<()>>,
 }
 
-impl<T: Dist> Deref for CollectiveAtomicMutLocalData<'_,T>{
+impl<T: Dist> Deref for CollectiveAtomicMutLocalData<'_, T> {
     type Target = [T];
 
     fn deref(&self) -> &Self::Target {
         self.data
     }
 }
-impl<T: Dist> DerefMut for CollectiveAtomicMutLocalData<'_,T>{
-
+impl<T: Dist> DerefMut for CollectiveAtomicMutLocalData<'_, T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-       self.data
+        self.data
     }
 }
 
-pub struct CollectiveAtomicLocalData<'a,T: Dist>{
+pub struct CollectiveAtomicLocalData<'a, T: Dist> {
     data: &'a [T],
     _lock_guard: ArcRwLockReadGuard<RawRwLock, Box<()>>,
 }
 
-impl<T: Dist> Deref for CollectiveAtomicLocalData<'_,T>{
+impl<T: Dist> Deref for CollectiveAtomicLocalData<'_, T> {
     type Target = [T];
 
     fn deref(&self) -> &Self::Target {
         self.data
     }
 }
-
-
-
 
 impl<T: Dist + std::default::Default> CollectiveAtomicArray<T> {
     //Sync + Send + Copy  == Dist
@@ -83,11 +79,10 @@ impl<T: Dist + std::default::Default> CollectiveAtomicArray<T> {
                 array: array.clone().into(),
             };
 
-            for pe in 0..op_bufs.len(){
+            for pe in 0..op_bufs.len() {
                 op_bufs[pe] = func(bytearray.clone());
             }
         }
-        
 
         CollectiveAtomicArray {
             lock: lock,
@@ -132,25 +127,25 @@ impl<T: Dist> CollectiveAtomicArray<T> {
         self.array.len()
     }
 
-    pub fn read_local_data(&self) -> CollectiveAtomicLocalData<'_,T> {
-        CollectiveAtomicLocalData{
-            data: unsafe {self.array.local_as_mut_slice()},
-            _lock_guard: self.lock.read()
+    pub fn read_local_data(&self) -> CollectiveAtomicLocalData<'_, T> {
+        CollectiveAtomicLocalData {
+            data: unsafe { self.array.local_as_mut_slice() },
+            _lock_guard: self.lock.read(),
         }
     }
 
-    pub fn write_local_data(&self) -> CollectiveAtomicLocalData<'_,T> {
-        CollectiveAtomicLocalData{
-            data: unsafe {self.array.local_as_mut_slice()},
-            _lock_guard: self.lock.read()
+    pub fn write_local_data(&self) -> CollectiveAtomicLocalData<'_, T> {
+        CollectiveAtomicLocalData {
+            data: unsafe { self.array.local_as_mut_slice() },
+            _lock_guard: self.lock.read(),
         }
     }
 
     #[doc(hidden)] //todo create a custom macro to emit a warning saying use read_local_slice/write_local_slice intead
-    pub fn local_as_slice(&self) -> CollectiveAtomicLocalData<'_,T> {
-        CollectiveAtomicLocalData{
-            data: unsafe {self.array.local_as_mut_slice()},
-            _lock_guard: self.lock.read()
+    pub fn local_as_slice(&self) -> CollectiveAtomicLocalData<'_, T> {
+        CollectiveAtomicLocalData {
+            data: unsafe { self.array.local_as_mut_slice() },
+            _lock_guard: self.lock.read(),
         }
     }
     // #[doc(hidden)]
@@ -159,20 +154,20 @@ impl<T: Dist> CollectiveAtomicArray<T> {
     // }
 
     #[doc(hidden)]
-    pub fn local_as_mut_slice(&self) -> CollectiveAtomicMutLocalData<'_,T> {
-        CollectiveAtomicMutLocalData{
-            data: unsafe {self.array.local_as_mut_slice()},
-            _lock_guard: self.lock.write()
+    pub fn local_as_mut_slice(&self) -> CollectiveAtomicMutLocalData<'_, T> {
+        CollectiveAtomicMutLocalData {
+            data: unsafe { self.array.local_as_mut_slice() },
+            _lock_guard: self.lock.write(),
         }
     }
 
     #[doc(hidden)]
-    pub fn local_data(&self)  ->  CollectiveAtomicLocalData<'_,T>  {
+    pub fn local_data(&self) -> CollectiveAtomicLocalData<'_, T> {
         self.local_as_slice()
     }
 
     #[doc(hidden)]
-    pub fn mut_local_data(&self)  ->CollectiveAtomicMutLocalData<'_,T>{
+    pub fn mut_local_data(&self) -> CollectiveAtomicMutLocalData<'_, T> {
         self.local_as_mut_slice()
     }
 
@@ -212,7 +207,7 @@ impl<T: Dist> From<UnsafeArray<T>> for CollectiveAtomicArray<T> {
                 array: array.clone().into(),
             };
             let mut op_bufs = array.inner.data.op_buffers.write();
-            for _pe in 0..array.inner.data.num_pes{
+            for _pe in 0..array.inner.data.num_pes {
                 op_bufs.push(func(bytearray.clone()))
             }
         }

@@ -1,5 +1,5 @@
 use core::marker::PhantomData;
-use parking_lot::{Mutex, RwLock};
+use parking_lot::{ RwLock};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt;
 use std::ops::{Deref, DerefMut};
@@ -23,8 +23,8 @@ enum LockType {
 pub(crate) struct DistRwLock<T> {
     readers: AtomicUsize,
     writer: AtomicUsize,
-    local_cnt: AtomicUsize,
-    local_state: Mutex<Option<LockType>>,
+    // local_cnt: AtomicUsize, //eventually we can do an optimization potentially where if we already have the global lock and another local request comes in we keep it (although this could cause starvation)
+    // local_state: Mutex<Option<LockType>>,
     team: std::pin::Pin<Arc<LamellarTeamRT>>,
     data: std::cell::UnsafeCell<T>,
 }
@@ -43,8 +43,8 @@ impl<T> DistRwLock<T> {
         DistRwLock {
             readers: AtomicUsize::new(0),
             writer: AtomicUsize::new(team.num_pes),
-            local_cnt: AtomicUsize::new(0),
-            local_state: Mutex::new(None),
+            // local_cnt: AtomicUsize::new(0),
+            // local_state: Mutex::new(None),
             team: team,
             data: std::cell::UnsafeCell::new(data),
         }
@@ -296,7 +296,7 @@ impl<T> GlobalRwDarc<T> {
         // if self.darc.src_pe != cur_pe{
         self.inner().inc_pe_ref_count(self.darc.src_pe, 1); // we need to increment by 2 cause bincode calls the serialize function twice when serializing...
                                                             // }
-        self.inner().local_cnt.fetch_add(1, Ordering::SeqCst);
+        // self.inner().local_cnt.fetch_add(1, Ordering::SeqCst);
         // self.print();
         // println!("done deserialize darc cnts");
     }
@@ -441,8 +441,8 @@ impl<T> GlobalRwDarc<T> {
         let inner = self.inner();
         // println!("into_darc");
         // self.print();
-        inner.block_on_outstanding(DarcMode::Darc,0);
-        inner.local_cnt.fetch_add(1, Ordering::SeqCst);
+        inner.block_on_outstanding(DarcMode::Darc, 0);
+        // inner.local_cnt.fetch_add(1, Ordering::SeqCst);
         let item = unsafe { Box::from_raw(inner.item as *mut DistRwLock<T>).into_inner() };
         let d = Darc {
             inner: self.darc.inner as *mut DarcInner<T>,
@@ -455,8 +455,8 @@ impl<T> GlobalRwDarc<T> {
 
     pub fn into_localrw(self) -> LocalRwDarc<T> {
         let inner = self.inner();
-        inner.block_on_outstanding(DarcMode::LocalRw,0);
-        inner.local_cnt.fetch_add(1, Ordering::SeqCst);
+        inner.block_on_outstanding(DarcMode::LocalRw, 0);
+        // inner.local_cnt.fetch_add(1, Ordering::SeqCst);
         let item = unsafe { Box::from_raw(inner.item as *mut DistRwLock<T>).into_inner() };
         let d = Darc {
             inner: self.darc.inner as *mut DarcInner<Arc<RwLock<Box<T>>>>,

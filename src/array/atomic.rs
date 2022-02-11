@@ -1,15 +1,15 @@
-mod iteration;
-#[cfg(not(feature="non-buffered-array-ops"))]
+#[cfg(not(feature = "non-buffered-array-ops"))]
 pub(crate) mod buffered_operations;
-#[cfg(not(feature="non-buffered-array-ops"))]
+mod iteration;
+#[cfg(not(feature = "non-buffered-array-ops"))]
 pub(crate) use buffered_operations as operations;
 pub(crate) mod rdma;
 pub use rdma::{AtomicArrayGet, AtomicArrayPut};
 
+use crate::array::atomic::buffered_operations::BUFOPS;
 use crate::array::private::LamellarArrayPrivate;
 use crate::array::r#unsafe::UnsafeByteArray;
 use crate::array::*;
-use crate::array::atomic::buffered_operations::BUFOPS;
 use crate::darc::{Darc, DarcMode};
 use crate::lamellar_team::{IntoLamellarTeam, LamellarTeamRT};
 use crate::memregion::Dist;
@@ -146,52 +146,44 @@ impl_atomic_ops! {u64,AtomicU64}
 use std::sync::atomic::AtomicUsize;
 impl_atomic_ops! {usize,AtomicUsize}
 
-
-use std::ops::{
-    AddAssign,
-    SubAssign,
-    MulAssign,
-    DivAssign,
-    BitAndAssign,
-    BitOrAssign
-};
+use std::ops::{AddAssign, BitAndAssign, BitOrAssign, DivAssign, MulAssign, SubAssign};
 pub struct AtomicElement<T: Dist> {
     array: AtomicArray<T>,
     local_index: usize,
 }
 
-impl<T: Dist + ElementArithmeticOps> AddAssign<T> for AtomicElement<T>{
-    fn add_assign(&mut self, val: T){
+impl<T: Dist + ElementArithmeticOps> AddAssign<T> for AtomicElement<T> {
+    fn add_assign(&mut self, val: T) {
         self.add(val)
     }
 }
 
-impl<T: Dist + ElementArithmeticOps> SubAssign<T> for AtomicElement<T>{
-    fn sub_assign(&mut self, val: T){
+impl<T: Dist + ElementArithmeticOps> SubAssign<T> for AtomicElement<T> {
+    fn sub_assign(&mut self, val: T) {
         self.sub(val)
     }
 }
 
-impl<T: Dist + ElementArithmeticOps> MulAssign<T> for AtomicElement<T>{
-    fn mul_assign(&mut self, val: T){
+impl<T: Dist + ElementArithmeticOps> MulAssign<T> for AtomicElement<T> {
+    fn mul_assign(&mut self, val: T) {
         self.mul(val)
     }
 }
 
-impl<T: Dist + ElementArithmeticOps> DivAssign<T> for AtomicElement<T>{
-    fn div_assign(&mut self, val: T){
+impl<T: Dist + ElementArithmeticOps> DivAssign<T> for AtomicElement<T> {
+    fn div_assign(&mut self, val: T) {
         self.add(val)
     }
 }
 
-impl<T: Dist + ElementBitWiseOps> BitAndAssign<T> for AtomicElement<T>{
-    fn bitand_assign(&mut self, val: T){
+impl<T: Dist + ElementBitWiseOps> BitAndAssign<T> for AtomicElement<T> {
+    fn bitand_assign(&mut self, val: T) {
         self.bit_and(val)
     }
 }
 
-impl<T: Dist + ElementBitWiseOps> BitOrAssign<T> for AtomicElement<T>{
-    fn bitor_assign(&mut self, val: T){
+impl<T: Dist + ElementBitWiseOps> BitOrAssign<T> for AtomicElement<T> {
+    fn bitor_assign(&mut self, val: T) {
         self.bit_or(val)
     }
 }
@@ -210,74 +202,68 @@ pub struct AtomicByteArray {
     pub(crate) array: UnsafeByteArray,
 }
 
-pub struct AtomicLocalData<T: Dist>{
-    array: AtomicArray<T>
+pub struct AtomicLocalData<T: Dist> {
+    array: AtomicArray<T>,
 }
 
-pub struct AtomicLocalDataIter<T: Dist>{
+pub struct AtomicLocalDataIter<T: Dist> {
     array: AtomicArray<T>,
     index: usize,
 }
 
-impl<T: Dist> AtomicLocalData<T>{
-    pub fn at(&self,index: usize) -> AtomicElement<T>{
+impl<T: Dist> AtomicLocalData<T> {
+    pub fn at(&self, index: usize) -> AtomicElement<T> {
         AtomicElement {
             array: self.array.clone(),
             local_index: index,
         }
     }
 
-    pub fn get_mut(&self, index: usize) -> Option<AtomicElement<T>>{
+    pub fn get_mut(&self, index: usize) -> Option<AtomicElement<T>> {
         Some(AtomicElement {
             array: self.array.clone(),
             local_index: index,
         })
     }
 
-    pub fn len(&self) -> usize{
-        unsafe{self.array.__local_as_mut_slice().len()}
+    pub fn len(&self) -> usize {
+        unsafe { self.array.__local_as_mut_slice().len() }
     }
 
     pub fn iter(&self) -> AtomicLocalDataIter<T> {
-        AtomicLocalDataIter{
+        AtomicLocalDataIter {
             array: self.array.clone(),
             index: 0,
         }
     }
 }
 
-impl<T: Dist> IntoIterator for AtomicLocalData<T>{
+impl<T: Dist> IntoIterator for AtomicLocalData<T> {
     type Item = AtomicElement<T>;
     type IntoIter = AtomicLocalDataIter<T>;
-    fn into_iter(self) -> Self::IntoIter{
-        AtomicLocalDataIter{
+    fn into_iter(self) -> Self::IntoIter {
+        AtomicLocalDataIter {
             array: self.array,
             index: 0,
         }
     }
 }
 
-impl<T: Dist>  Iterator for AtomicLocalDataIter<T> {
+impl<T: Dist> Iterator for AtomicLocalDataIter<T> {
     type Item = AtomicElement<T>;
-    fn next(&mut self) -> Option<Self::Item>{
-        if self.index < self.array.num_elems_local(){
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.index < self.array.num_elems_local() {
             let index = self.index;
             self.index += 1;
             Some(AtomicElement {
                 array: self.array.clone(),
                 local_index: index,
             })
-        }
-        else{
+        } else {
             None
         }
     }
 }
-
-
-
-
-
 
 //#[prof]
 impl<T: Dist + std::default::Default + 'static> AtomicArray<T> {
@@ -306,11 +292,11 @@ impl<T: Dist + std::default::Default + 'static> AtomicArray<T> {
                 array: array.clone().into(),
             };
 
-            for pe in 0..op_bufs.len(){
+            for pe in 0..op_bufs.len() {
                 op_bufs[pe] = func(bytearray.clone());
             }
-        } 
-        
+        }
+
         // println!("new atomic array ");
         // array.inner.data.print();
 
@@ -360,14 +346,14 @@ impl<T: Dist> AtomicArray<T> {
     }
 
     pub fn local_data(&self) -> AtomicLocalData<T> {
-        AtomicLocalData{
-            array: self.clone()
+        AtomicLocalData {
+            array: self.clone(),
         }
     }
 
     pub fn mut_local_data(&self) -> AtomicLocalData<T> {
-        AtomicLocalData{
-            array: self.clone()
+        AtomicLocalData {
+            array: self.clone(),
         }
     }
 
@@ -430,7 +416,7 @@ impl<T: Dist + 'static> From<UnsafeArray<T>> for AtomicArray<T> {
             }
             Some(vec)
         };
-        let locks =  Darc::new(array.team(), locks).unwrap();
+        let locks = Darc::new(array.team(), locks).unwrap();
         if let Some(func) = BUFOPS.get(&TypeId::of::<T>()) {
             let bytearray = AtomicByteArray {
                 locks: locks.clone(),
@@ -438,7 +424,7 @@ impl<T: Dist + 'static> From<UnsafeArray<T>> for AtomicArray<T> {
                 array: array.clone().into(),
             };
             let mut op_bufs = array.inner.data.op_buffers.write();
-            for _pe in 0..array.inner.data.num_pes{
+            for _pe in 0..array.inner.data.num_pes {
                 op_bufs.push(func(bytearray.clone()))
             }
         }

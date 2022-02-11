@@ -138,7 +138,7 @@ macro_rules! sub_test{
                         success = false;
                     }
                     prev_vals[idx]=val;
-                }                
+                }
             }
             array.barrier();
             let sum = array.ser_iter().into_iter().fold(0,|acc,x| acc+ *x as usize);
@@ -226,7 +226,7 @@ macro_rules! sub_test{
                         success = false;
                     }
                     prev_vals[idx]=val;
-                }                
+                }
             }
             sub_array.barrier();
             let sum = sub_array.ser_iter().into_iter().fold(0,|acc,x| acc+ *x as usize);
@@ -315,7 +315,7 @@ macro_rules! sub_test{
                             success = false;
                         }
                         prev_vals[idx]=val;
-                    }                
+                    }
                 }
                 sub_array.barrier();
                 let sum = sub_array.ser_iter().into_iter().fold(0,|acc,x| acc+ *x as usize);

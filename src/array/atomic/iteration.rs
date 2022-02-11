@@ -131,4 +131,3 @@ impl<T: Dist> DistIteratorLauncher for AtomicArray<T> {
         self.array.for_each_async(iter, op)
     }
 }
-

@@ -85,7 +85,7 @@ macro_rules! add_test{
                     println!("{:?} {:?} {:?}",i,val,max_val);
                 }
             }
-            array.barrier();            
+            array.barrier();
             initialize_array!($array, array, init_val);
             array.wait_all();
             array.barrier();

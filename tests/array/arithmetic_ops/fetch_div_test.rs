@@ -176,7 +176,7 @@ macro_rules! add_test{
                 for idx in 0..sub_array.len(){
                     let mut prev = init_val;
                     #[cfg(feature="non-buffered-array-ops")]
-                    {                       
+                    {
                         for i in 0..(max_updates as usize){
                             let val = sub_array.fetch_div(idx,2 as $t).get().unwrap();
                             if val > prev || (prev as u128)%2 != 0{

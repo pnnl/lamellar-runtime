@@ -15,27 +15,32 @@ impl<T: Dist + 'static> CollectiveAtomicArray<T> {
     //     .get();
     // }
 
-    pub fn get<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(&self, index: usize, buf: U) -> Box<dyn LamellarArrayRequest<Output = ()> + Send + Sync>{
+    pub fn get<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(
+        &self,
+        index: usize,
+        buf: U,
+    ) -> Box<dyn LamellarArrayRequest<Output = ()> + Send + Sync> {
         let req = self.exec_am_local(InitGetAm {
             array: self.clone(),
             index: index,
             buf: buf.my_into(&self.array.team()),
         });
-        Box::new(ArrayRdmaHandle{
-            reqs: vec![req]
-        })
+        Box::new(ArrayRdmaHandle { reqs: vec![req] })
     }
 
-    pub fn at<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(&self, index: usize) -> Box<dyn LamellarArrayRequest<Output = T> + Send + Sync>{
+    pub fn at<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(
+        &self,
+        index: usize,
+    ) -> Box<dyn LamellarArrayRequest<Output = T> + Send + Sync> {
         let buf: LocalMemoryRegion<T> = self.array.team().alloc_local_mem_region(1);
         let req = self.exec_am_local(InitGetAm {
             array: self.clone(),
             index: index,
             buf: buf.clone().my_into(&self.array.team()),
         });
-        Box::new(ArrayRdmaAtHandle{
+        Box::new(ArrayRdmaAtHandle {
             reqs: vec![req],
-            buf: buf
+            buf: buf,
         })
     }
 
@@ -48,15 +53,17 @@ impl<T: Dist + 'static> CollectiveAtomicArray<T> {
     //     .get();
     // }
 
-    pub fn put<U: MyInto<LamellarArrayInput<T>> + LamellarRead>(&self, index: usize, buf: U) -> Box<dyn LamellarArrayRequest<Output = ()> + Send + Sync>{
+    pub fn put<U: MyInto<LamellarArrayInput<T>> + LamellarRead>(
+        &self,
+        index: usize,
+        buf: U,
+    ) -> Box<dyn LamellarArrayRequest<Output = ()> + Send + Sync> {
         let req = self.exec_am_local(InitPutAm {
             array: self.clone(),
             index: index,
             buf: buf.my_into(&self.array.team()),
         });
-        Box::new(ArrayRdmaHandle{
-            reqs: vec![req]
-        })
+        Box::new(ArrayRdmaHandle { reqs: vec![req] })
     }
 }
 
@@ -64,16 +71,24 @@ impl<T: Dist + 'static> LamellarArrayGet<T> for CollectiveAtomicArray<T> {
     // fn iget<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(&self, index: usize, buf: U) {
     //     self.iget(index, buf)
     // }
-    fn get<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(&self, index: usize, buf: U) -> Box<dyn LamellarArrayRequest<Output = ()> + Send + Sync> {
+    fn get<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(
+        &self,
+        index: usize,
+        buf: U,
+    ) -> Box<dyn LamellarArrayRequest<Output = ()> + Send + Sync> {
         self.array.get(index, buf)
     }
-    fn at(&self, index: usize)  -> Box<dyn LamellarArrayRequest<Output = T> + Send + Sync> {
+    fn at(&self, index: usize) -> Box<dyn LamellarArrayRequest<Output = T> + Send + Sync> {
         self.array.at(index)
     }
 }
 
 impl<T: Dist> LamellarArrayPut<T> for CollectiveAtomicArray<T> {
-    fn put<U: MyInto<LamellarArrayInput<T>> + LamellarRead>(&self, index: usize, buf: U) -> Box<dyn LamellarArrayRequest<Output = ()> + Send + Sync>{
+    fn put<U: MyInto<LamellarArrayInput<T>> + LamellarRead>(
+        &self,
+        index: usize,
+        buf: U,
+    ) -> Box<dyn LamellarArrayRequest<Output = ()> + Send + Sync> {
         self.put(index, buf)
     }
 }

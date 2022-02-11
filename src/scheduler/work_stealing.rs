@@ -5,6 +5,7 @@ use crate::lamellar_team::LamellarTeamRT;
 use crate::scheduler::{AmeScheduler, AmeSchedulerQueue, ReqData, SchedulerQueue};
 use lamellar_prof::*;
 // use log::trace;
+use core_affinity::CoreId;
 use crossbeam::deque::Worker;
 use futures::Future;
 use parking_lot::RwLock;
@@ -32,9 +33,11 @@ impl WorkStealingThread {
         worker: WorkStealingThread,
         active_cnt: Arc<AtomicUsize>,
         num_tasks: Arc<AtomicUsize>,
+        id: CoreId,
     ) -> thread::JoinHandle<()> {
         thread::spawn(move || {
             // println!("TestSchdulerWorker thread running");
+            core_affinity::set_for_current(id);
             active_cnt.fetch_add(1, Ordering::SeqCst);
             let mut rng = rand::thread_rng();
             let t = rand::distributions::Uniform::from(0..worker.work_stealers.len());
@@ -359,7 +362,8 @@ impl WorkStealingInner {
             orig_hook(panic_info);
             process::exit(1);
         }));
-        for _i in 0..num_workers {
+        let core_ids = core_affinity::get_core_ids().unwrap();
+        for i in 0..num_workers {
             let work_worker = work_workers.pop().unwrap();
             let worker = WorkStealingThread {
                 work_inj: self.work_inj.clone(),
@@ -373,6 +377,7 @@ impl WorkStealingInner {
                 worker,
                 self.active_cnt.clone(),
                 self.num_tasks.clone(),
+                core_ids[i % core_ids.len()],
             ));
         }
         while self.active_cnt.load(Ordering::SeqCst) != self.threads.len() {

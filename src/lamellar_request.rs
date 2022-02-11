@@ -24,8 +24,8 @@ pub(crate) struct InternalReq {
     pub(crate) team_outstanding_reqs: Arc<AtomicUsize>,
     pub(crate) world_outstanding_reqs: Arc<AtomicUsize>,
     pub(crate) tg_outstanding_reqs: Option<Arc<AtomicUsize>>,
-    pub(crate) team_hash: u64,
-    pub(crate) team: Pin<Arc<LamellarTeamRT>>,
+    // pub(crate) team_hash: u64,
+    // pub(crate) team: Pin<Arc<LamellarTeamRT>>,
 }
 
 #[async_trait]
@@ -64,8 +64,8 @@ impl<T: AmDist> LamellarRequestHandle<T> {
         team_reqs: Arc<AtomicUsize>,
         world_reqs: Arc<AtomicUsize>,
         tg_reqs: Option<Arc<AtomicUsize>>,
-        team_hash: u64,
-        team: Pin<Arc<LamellarTeamRT>>,
+        _team_hash: u64,
+        _team: Pin<Arc<LamellarTeamRT>>,
     ) -> (LamellarRequestHandle<T>, InternalReq) {
         prof_start!(active);
         let active = Arc::new(AtomicBool::new(true));
@@ -84,8 +84,8 @@ impl<T: AmDist> LamellarRequestHandle<T> {
             team_outstanding_reqs: team_reqs,
             world_outstanding_reqs: world_reqs,
             tg_outstanding_reqs: tg_reqs,
-            team_hash: team_hash,
-            team: team,
+            // team_hash: team_hash,
+            // team: team,
         };
         prof_end!(ireq);
         (

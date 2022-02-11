@@ -44,7 +44,10 @@ impl LamellarAM for RdmaAM {
 
         //update an element on the original node
         local_slice[0] = lamellar::current_pe as u8;
-        self.array.put(my_index, &local.sub_region(0..=0)).into_future().await;
+        self.array
+            .put(my_index, &local.sub_region(0..=0))
+            .into_future()
+            .await;
     }
 }
 

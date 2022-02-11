@@ -29,12 +29,10 @@ pub struct AtomicArrayOp {
 
 crate::inventory::collect!(AtomicArrayOp);
 
-
-
 type BufFn = fn(AtomicByteArray) -> Arc<dyn BufferOp>;
 
 lazy_static! {
-    pub(crate)  static ref BUFOPS: HashMap<TypeId, BufFn> = {
+    pub(crate) static ref BUFOPS: HashMap<TypeId, BufFn> = {
         let mut map = HashMap::new();
         for op in crate::inventory::iter::<AtomicArrayOpBuf> {
             map.insert(op.id.clone(), op.op);
@@ -65,7 +63,10 @@ impl<T: Dist + 'static> AtomicElement<T> {
 
 impl<T: ElementOps + 'static> AtomicElement<T> {
     pub fn load(&self) -> T {
-        self.local_op(unsafe { self.array.__local_as_slice()[0] }, ArrayOpCmd::Load)
+        self.local_op(
+            unsafe { self.array.__local_as_slice()[0] },
+            ArrayOpCmd::Load,
+        )
     }
 
     pub fn store(&self, val: T) {
@@ -128,7 +129,7 @@ impl<T: AmDist + Dist + 'static> AtomicArray<T> {
     ) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync> {
         let pe = self.pe_for_dist_index(index).expect("index out of bounds");
         let local_index = self.pe_offset_for_dist_index(pe, index).unwrap(); //calculated pe above
-        self.array.initiate_op(pe,val,local_index,op)
+        self.array.initiate_op(pe, val, local_index, op)
     }
     fn initiate_fetch_op(
         &self,
@@ -138,7 +139,7 @@ impl<T: AmDist + Dist + 'static> AtomicArray<T> {
     ) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
         let pe = self.pe_for_dist_index(index).expect("index out of bounds");
         let local_index = self.pe_offset_for_dist_index(pe, index).unwrap(); //calculated pe above
-        self.array.initiate_fetch_op(pe,val,local_index,op)
+        self.array.initiate_fetch_op(pe, val, local_index, op)
     }
 
     pub fn load(&self, index: usize) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {

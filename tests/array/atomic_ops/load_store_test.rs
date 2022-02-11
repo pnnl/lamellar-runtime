@@ -161,7 +161,7 @@ macro_rules! and_test{
                             println!("{:?} {:?} {:?}",idx,val,check_val);
                         }
                     }
-                    
+
                 }
                 #[cfg(not(feature="non-buffered-array-ops"))]
                 {

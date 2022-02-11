@@ -126,7 +126,7 @@ macro_rules! add_test{
                         }
                         prev_vals[idx]=val;
                 }
-                
+
             }
             #[cfg(not(feature="non-buffered-array-ops"))]
             {
@@ -143,7 +143,7 @@ macro_rules! add_test{
                         success = false;
                     }
                     prev_vals[idx]=val;
-                }                
+                }
             }
             array.barrier();
             let sum = array.ser_iter().into_iter().fold(0,|acc,x| acc+ *x as usize);
@@ -220,7 +220,7 @@ macro_rules! add_test{
                         }
                         prev_vals[idx]=val;
                 }
-                
+
             }
             #[cfg(not(feature="non-buffered-array-ops"))]
             {
@@ -236,7 +236,7 @@ macro_rules! add_test{
                         success = false;
                     }
                     prev_vals[idx]=val;
-                }                
+                }
             }
             sub_array.barrier();
             let sum = sub_array.ser_iter().into_iter().fold(0,|acc,x| acc+ *x as usize);
@@ -250,7 +250,7 @@ macro_rules! add_test{
             // println!("4------------");
             initialize_array!($array, array, init_val);
 
-            
+
             let pe_len = array_total_len/num_pes;
             for pe in 0..num_pes{
                 let len = std::cmp::max(pe_len/2,1);
@@ -314,7 +314,7 @@ macro_rules! add_test{
                             }
                             prev_vals[idx]=val;
                     }
-                    
+
                 }
                 #[cfg(not(feature="non-buffered-array-ops"))]
                 {
@@ -330,7 +330,7 @@ macro_rules! add_test{
                             success = false;
                         }
                         prev_vals[idx]=val;
-                    }             
+                    }
                 }
                 sub_array.barrier();
                 let sum = sub_array.ser_iter().into_iter().fold(0,|acc,x| acc+ *x as usize);

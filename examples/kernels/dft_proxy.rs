@@ -5,7 +5,10 @@
 /// we include the distributed Lamellar Implemtation
 /// as well as a (single process) shared memory version using Rayon.
 /// --------------------------------------------------------------------
-use lamellar::array::{DistributedIterator, Distribution, SerialIterator, UnsafeArray,ReadOnlyArray,AtomicArray,CollectiveAtomicArray};
+use lamellar::array::{
+    AtomicArray, CollectiveAtomicArray, DistributedIterator, Distribution, ReadOnlyArray,
+    SerialIterator, UnsafeArray,
+};
 use lamellar::{ActiveMessaging, LamellarWorld};
 use lamellar::{RemoteMemoryRegion, SharedMemoryRegion};
 use parking_lot::Mutex;
@@ -306,7 +309,7 @@ fn dft_lamellar_array_opt_2(
                             -1f64 * (j * k) as f64 * 2f64 * std::f64::consts::PI / sig_len as f64;
                         let twiddle = angle * (angle.cos() + angle * angle.sin());
                         sum = sum + twiddle * x;
-                    };
+                    }
                     spec_bin.add(sum);
                 });
         });
@@ -335,7 +338,8 @@ fn dft_lamellar_array_opt_3(
             spectrum
                 .dist_iter_mut() //this locks the CollectiveAtomicArray
                 .enumerate()
-                .for_each(move |(k, spec_bin)| { //we are accessing each element independently so free to mutate
+                .for_each(move |(k, spec_bin)| {
+                    //we are accessing each element independently so free to mutate
                     let mut sum = 0f64;
                     for (j, &x) in signal
                         .iter()
@@ -346,7 +350,7 @@ fn dft_lamellar_array_opt_3(
                             -1f64 * (j * k) as f64 * 2f64 * std::f64::consts::PI / sig_len as f64;
                         let twiddle = angle * (angle.cos() + angle * angle.sin());
                         sum = sum + twiddle * x;
-                    };
+                    }
                     *spec_bin += sum;
                 });
         });
@@ -515,14 +519,14 @@ fn main() {
         world.barrier();
 
         full_spectrum_array
-                .dist_iter_mut()
-                .for_each(|elem| *elem = 0.0);
+            .dist_iter_mut()
+            .for_each(|elem| *elem = 0.0);
         full_spectrum_array.wait_all();
         full_spectrum_array.barrier();
         let full_signal_array = full_signal_array.into_read_only();
         let full_spectrum_array = full_spectrum_array.into_atomic();
 
-        for _i in 0..10 {         
+        for _i in 0..10 {
             // let timer = Instant::now();
             times[3].push(dft_lamellar_array_2(
                 full_signal_array.clone(),
@@ -544,23 +548,21 @@ fn main() {
         }
 
         let full_spectrum_array = full_spectrum_array.into_collective_atomic();
-        for _i in 0..10 {         
+        for _i in 0..10 {
             // let timer = Instant::now();
             times[5].push(dft_lamellar_array_opt_3(
                 full_signal_array.clone(),
                 full_spectrum_array.clone(),
-                100
+                100,
             ));
 
             world.barrier();
             full_spectrum_array
                 .dist_iter_mut()
-                .for_each(|elem| * elem = 0.0);
+                .for_each(|elem| *elem = 0.0);
             full_spectrum_array.wait_all();
             full_spectrum_array.barrier();
         }
-
-
 
         if my_pe == 0 {
             println!(
