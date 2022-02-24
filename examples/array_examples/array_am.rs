@@ -21,13 +21,14 @@ struct RdmaAM {
 impl LamellarAM for RdmaAM {
     fn exec(&self) {
         let num_pes = lamellar::num_pes;
+        let max_i = unsafe {std::cmp::min(self.array.local_as_slice().len(),num_pes)};
         println!(
             "\t in RdmaAM on pe {:?}, originating from pe {:?}",
             lamellar::current_pe,
             self.orig_pe,
         );
         println!("\tlocal segement of array: {:?}..", unsafe {
-            &self.array.local_as_slice()[0..num_pes]
+            &self.array.local_as_slice()[0..max_i]
         });
 
         //get the original nodes data
@@ -40,7 +41,7 @@ impl LamellarAM for RdmaAM {
         // }
 
         let my_index = self.index * num_pes + lamellar::current_pe;
-        println!("\tcurrent view of remote segment on pe {:?}: {:?}..{:?}\n\tpe: {:?} updating index {:?} on pe  {:?}", self.orig_pe, &local_slice[0..num_pes], &local_slice[ARRAY_LEN-num_pes..],lamellar::current_pe, my_index, self.orig_pe);
+        println!("\tcurrent view of remote segment on pe {:?}: {:?}..{:?}\n\tpe: {:?} updating index {:?} on pe  {:?}", self.orig_pe, &local_slice[0..max_i], &local_slice[local_slice.len()-max_i..],lamellar::current_pe, my_index, self.orig_pe);
 
         //update an element on the original node
         local_slice[0] = lamellar::current_pe as u8;

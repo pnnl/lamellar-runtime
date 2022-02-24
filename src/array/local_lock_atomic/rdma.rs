@@ -1,10 +1,10 @@
-use crate::array::collective_atomic::*;
+use crate::array::local_lock_atomic::*;
 use crate::array::private::ArrayExecAm;
 use crate::array::LamellarWrite;
 use crate::array::*;
 use crate::memregion::{AsBase, Dist, RTMemoryRegionRDMA, RegisteredMemoryRegion};
 
-impl<T: Dist + 'static> CollectiveAtomicArray<T> {
+impl<T: Dist + 'static> LocalLockAtomicArray<T> {
     // pub fn iget<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(&self, index: usize, buf: U) {
     //     // println!("here");
     //     self.exec_am_local(InitGetAm {
@@ -67,7 +67,7 @@ impl<T: Dist + 'static> CollectiveAtomicArray<T> {
     }
 }
 
-impl<T: Dist + 'static> LamellarArrayGet<T> for CollectiveAtomicArray<T> {
+impl<T: Dist + 'static> LamellarArrayGet<T> for LocalLockAtomicArray<T> {
     // fn iget<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(&self, index: usize, buf: U) {
     //     self.iget(index, buf)
     // }
@@ -83,7 +83,7 @@ impl<T: Dist + 'static> LamellarArrayGet<T> for CollectiveAtomicArray<T> {
     }
 }
 
-impl<T: Dist> LamellarArrayPut<T> for CollectiveAtomicArray<T> {
+impl<T: Dist> LamellarArrayPut<T> for LocalLockAtomicArray<T> {
     fn put<U: MyInto<LamellarArrayInput<T>> + LamellarRead>(
         &self,
         index: usize,
@@ -95,8 +95,8 @@ impl<T: Dist> LamellarArrayPut<T> for CollectiveAtomicArray<T> {
 
 #[lamellar_impl::AmLocalDataRT]
 struct InitGetAm<T: Dist> {
-    array: CollectiveAtomicArray<T>, //inner of the indices we need to place data into
-    index: usize,                    //relative to inner
+    array: LocalLockAtomicArray<T>, //inner of the indices we need to place data into
+    index: usize,                   //relative to inner
     buf: LamellarArrayInput<T>,
 }
 
@@ -185,8 +185,8 @@ impl LamellarAm for RemoteGetAm {
 
 #[lamellar_impl::AmLocalDataRT]
 struct InitPutAm<T: Dist> {
-    array: CollectiveAtomicArray<T>, //inner of the indices we need to place data into
-    index: usize,                    //relative to inner
+    array: LocalLockAtomicArray<T>, //inner of the indices we need to place data into
+    index: usize,                   //relative to inner
     buf: LamellarArrayInput<T>,
 }
 

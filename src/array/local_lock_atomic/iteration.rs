@@ -1,4 +1,4 @@
-use crate::array::collective_atomic::*;
+use crate::array::local_lock_atomic::*;
 
 use crate::array::iterator::distributed_iterator::{DistIteratorLauncher, DistributedIterator};
 use crate::array::iterator::serial_iterator::LamellarArrayIter;
@@ -12,7 +12,7 @@ use parking_lot::{
 
 #[derive(Clone)]
 pub struct CollectiveAtomicDistIter<'a, T: Dist> {
-    data: CollectiveAtomicArray<T>,
+    data: LocalLockAtomicArray<T>,
     lock: Arc<ArcRwLockReadGuard<RawRwLock, Box<()>>>,
     cur_i: usize,
     end_i: usize,
@@ -20,7 +20,7 @@ pub struct CollectiveAtomicDistIter<'a, T: Dist> {
 }
 
 // impl<'a,T: Dist> CollectiveAtomicDistIter<'a, T> {
-//     pub(crate) fn new(data: CollectiveAtomicArray<T>,lock: Arc<RwLockReadGuard<'a, Box<()>>>, cur_i: usize, cnt: usize) -> Self {
+//     pub(crate) fn new(data: LocalLockAtomicArray<T>,lock: Arc<RwLockReadGuard<'a, Box<()>>>, cur_i: usize, cnt: usize) -> Self {
 //         // println!("new dist iter {:?} {:? } {:?}",cur_i, cnt, cur_i+cnt);
 //         CollectiveAtomicDistIter {
 //             data,
@@ -48,7 +48,7 @@ impl<T: Dist + 'static> CollectiveAtomicDistIter<'static, T> {
 
 impl<'a, T: Dist + 'a> DistributedIterator for CollectiveAtomicDistIter<'a, T> {
     type Item = &'a T;
-    type Array = CollectiveAtomicArray<T>;
+    type Array = LocalLockAtomicArray<T>;
     fn init(&self, start_i: usize, cnt: usize) -> Self {
         let max_i = self.data.num_elems_local();
         // println!("init dist iter start_i: {:?} cnt {:?} end_i: {:?} max_i: {:?}",start_i,cnt, start_i+cnt,max_i);
@@ -95,7 +95,7 @@ impl<'a, T: Dist + 'a> DistributedIterator for CollectiveAtomicDistIter<'a, T> {
 
 #[derive(Clone)]
 pub struct CollectiveAtomicDistIterMut<'a, T: Dist> {
-    data: CollectiveAtomicArray<T>,
+    data: LocalLockAtomicArray<T>,
     lock: Arc<ArcRwLockWriteGuard<RawRwLock, Box<()>>>,
     cur_i: usize,
     end_i: usize,
@@ -103,7 +103,7 @@ pub struct CollectiveAtomicDistIterMut<'a, T: Dist> {
 }
 
 // impl<'a, T: Dist> CollectiveAtomicDistIterMut<'a, T> {
-//     pub(crate) fn new(data: CollectiveAtomicArray<T>,lock: Arc<RwLockWriteGuard<'a, Box<()>>>, cur_i: usize, cnt: usize) -> Self {
+//     pub(crate) fn new(data: LocalLockAtomicArray<T>,lock: Arc<RwLockWriteGuard<'a, Box<()>>>, cur_i: usize, cnt: usize) -> Self {
 //         // println!("new dist iter {:?} {:? } {:?}",cur_i, cnt, cur_i+cnt);
 //         CollectiveAtomicDistIterMut {
 //             data,
@@ -131,7 +131,7 @@ impl<T: Dist + 'static> CollectiveAtomicDistIterMut<'static, T> {
 
 impl<'a, T: Dist + 'a> DistributedIterator for CollectiveAtomicDistIterMut<'a, T> {
     type Item = &'a mut T;
-    type Array = CollectiveAtomicArray<T>;
+    type Array = LocalLockAtomicArray<T>;
     fn init(&self, start_i: usize, cnt: usize) -> Self {
         let max_i = self.data.num_elems_local();
         // println!("init dist iter start_i: {:?} cnt {:?} end_i: {:?} max_i: {:?}",start_i,cnt, start_i+cnt,max_i);
@@ -179,7 +179,7 @@ impl<'a, T: Dist + 'a> DistributedIterator for CollectiveAtomicDistIterMut<'a, T
     }
 }
 
-impl<T: Dist + 'static> CollectiveAtomicArray<T> {
+impl<T: Dist + 'static> LocalLockAtomicArray<T> {
     pub fn dist_iter(&self) -> CollectiveAtomicDistIter<'static, T> {
         let lock = Arc::new(self.lock.read());
         // self.barrier();
@@ -206,14 +206,14 @@ impl<T: Dist + 'static> CollectiveAtomicArray<T> {
         }
     }
 
-    pub fn ser_iter(&self) -> LamellarArrayIter<'_, T, CollectiveAtomicArray<T>> {
+    pub fn ser_iter(&self) -> LamellarArrayIter<'_, T, LocalLockAtomicArray<T>> {
         LamellarArrayIter::new(self.clone().into(), self.array.team().clone(), 1)
     }
 
     pub fn buffered_iter(
         &self,
         buf_size: usize,
-    ) -> LamellarArrayIter<'_, T, CollectiveAtomicArray<T>> {
+    ) -> LamellarArrayIter<'_, T, LocalLockAtomicArray<T>> {
         LamellarArrayIter::new(
             self.clone().into(),
             self.array.team().clone(),
@@ -222,7 +222,7 @@ impl<T: Dist + 'static> CollectiveAtomicArray<T> {
     }
 }
 
-impl<T: Dist> DistIteratorLauncher for CollectiveAtomicArray<T> {
+impl<T: Dist> DistIteratorLauncher for LocalLockAtomicArray<T> {
     fn global_index_from_local(&self, index: usize, chunk_size: usize) -> Option<usize> {
         self.array.global_index_from_local(index, chunk_size)
     }

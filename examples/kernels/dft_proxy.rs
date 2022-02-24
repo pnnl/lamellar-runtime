@@ -6,7 +6,7 @@
 /// as well as a (single process) shared memory version using Rayon.
 /// --------------------------------------------------------------------
 use lamellar::array::{
-    AtomicArray, CollectiveAtomicArray, DistributedIterator, Distribution, ReadOnlyArray,
+    AtomicArray, DistributedIterator, Distribution, LocalLockAtomicArray, ReadOnlyArray,
     SerialIterator, UnsafeArray,
 };
 use lamellar::{ActiveMessaging, LamellarWorld};
@@ -121,17 +121,6 @@ fn dft_lamellar(
     world.wait_all();
     world.barrier();
     let time = timer.elapsed().as_secs_f64();
-    // if my_pe == 0 {
-    //     let res = world
-    //         .exec_am_all(ReduceAM {
-    //             spectrum: spectrum.clone(),
-    //         })
-    //         .get_all();
-    //     let sum = res.iter().map(|x| x.unwrap_or(0.0)).sum::<f64>();
-    //     let time = timer.elapsed().as_secs_f64();
-    //     // println!("distributed sum: {:?} {:?}", sum, time);
-    // }
-    // world.barrier();
     time
 }
 
@@ -167,7 +156,7 @@ fn dft_rayon(signal: &[f64], spectrum: &mut [f64]) -> f64 {
     timer.elapsed().as_secs_f64()
 }
 
-// the easiest implementation using lamellar arrays, although not terribly performance
+// the easiest implementation using lamellar arrays, although not terribly performant
 // because each iteration of the outer loop is transferring the entirety of the signal array
 // without an reuse, using a buffered_iter helps to ensure the transfers are efficient, but
 // a lot of (needless) data transfer happens
@@ -194,7 +183,7 @@ fn dft_lamellar_array(signal: UnsafeArray<f64>, spectrum: UnsafeArray<f64>) -> f
 
 // the easiest implementation using lamellar arrays, although not terribly performance
 // because each iteration of the outer loop is transferring the entirety of the signal array
-// without an reuse, using a buffered_iter helps to ensure the transfers are efficient, but
+// without any reuse, using a buffered_iter helps to ensure the transfers are efficient, but
 // a lot of (needless) data transfer happens
 fn dft_lamellar_array_2(signal: ReadOnlyArray<f64>, spectrum: AtomicArray<f64>) -> f64 {
     let timer = Instant::now();
@@ -278,9 +267,7 @@ fn dft_lamellar_array_opt(
     timer.elapsed().as_secs_f64()
 }
 
-// a more optimized version using lamellar arrays, and behaves similar to the manual active message implementation above
-// here we create "copied chunks" of the signal array, which are then passed and reused during each iteration of the spectrum loop.
-// in this case we only completely transfer the signal array one time
+// same as above but uses safe atomic arrays
 fn dft_lamellar_array_opt_2(
     signal: ReadOnlyArray<f64>,
     spectrum: AtomicArray<f64>,
@@ -318,12 +305,10 @@ fn dft_lamellar_array_opt_2(
     timer.elapsed().as_secs_f64()
 }
 
-// a more optimized version using lamellar arrays, and behaves similar to the manual active message implementation above
-// here we create "copied chunks" of the signal array, which are then passed and reused during each iteration of the spectrum loop.
-// in this case we only completely transfer the signal array one time
+// same as above but uses safe collective atomic arrays
 fn dft_lamellar_array_opt_3(
     signal: ReadOnlyArray<f64>,
-    spectrum: CollectiveAtomicArray<f64>,
+    spectrum: LocalLockAtomicArray<f64>,
     buf_size: usize,
 ) -> f64 {
     let timer = Instant::now();
@@ -336,7 +321,7 @@ fn dft_lamellar_array_opt_3(
         .for_each(|(i, chunk)| {
             let signal = chunk.clone();
             spectrum
-                .dist_iter_mut() //this locks the CollectiveAtomicArray
+                .dist_iter_mut() //this locks the LocalLockAtomicArray
                 .enumerate()
                 .for_each(move |(k, spec_bin)| {
                     //we are accessing each element independently so free to mutate
@@ -547,7 +532,7 @@ fn main() {
             ));
         }
 
-        let full_spectrum_array = full_spectrum_array.into_collective_atomic();
+        let full_spectrum_array = full_spectrum_array.into_local_lock_atomic();
         for _i in 0..10 {
             // let timer = Instant::now();
             times[5].push(dft_lamellar_array_opt_3(

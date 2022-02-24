@@ -275,33 +275,6 @@ fn test_store_load<T: std::fmt::Debug + ElementOps + 'static>(
     array.barrier();
 }
 
-fn test_swap<T: std::fmt::Debug + ElementBitWiseOps + 'static>(
-    array: AtomicArray<T>,
-    init_val: T,
-    swap_val: T,
-    my_pe: usize,
-    num_pes: usize,
-) {
-    array
-        .dist_iter_mut()
-        .for_each(move |elem| elem.store(init_val));
-    array.wait_all();
-    array.barrier();
-    array.print();
-    array.barrier();
-
-    let mut reqs = vec![];
-    for i in (my_pe..array.len()).step_by(num_pes) {
-        reqs.push(array.swap(i, swap_val));
-    }
-    for (i, req) in reqs.drain(0..).enumerate() {
-        println!("i: {:?} {:?}", i * num_pes + my_pe, req.get().unwrap());
-    }
-    array.barrier();
-    array.print();
-    array.barrier();
-}
-
 fn main() {
     // let args: Vec<String> = std::env::args().collect();
     let world = lamellar::LamellarWorldBuilder::new().build();

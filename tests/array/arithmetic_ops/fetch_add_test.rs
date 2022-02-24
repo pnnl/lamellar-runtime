@@ -1,5 +1,5 @@
 use lamellar::array::{
-    ArithmeticOps, AtomicArray, CollectiveAtomicArray, SerialIterator, UnsafeArray,
+    ArithmeticOps, AtomicArray, LocalLockAtomicArray, SerialIterator, UnsafeArray,
 };
 
 use rand::distributions::Distribution;
@@ -16,7 +16,7 @@ macro_rules! initialize_array {
         $array.wait_all();
         $array.barrier();
     };
-    (CollectiveAtomicArray,$array:ident,$init_val:ident) => {
+    (LocalLockAtomicArray,$array:ident,$init_val:ident) => {
         $array.dist_iter_mut().for_each(move |x| *x = $init_val);
         $array.wait_all();
         $array.barrier();
@@ -34,7 +34,7 @@ macro_rules! check_val{
             $valid = false;
         }
     };
-    (CollectiveAtomicArray,$val:ident,$max_val:ident,$valid:ident) => {
+    (LocalLockAtomicArray,$val:ident,$max_val:ident,$valid:ident) => {
         if (($val - $max_val)as f32).abs()  > 0.0001{//all updates should be preserved
             $valid = false;
         }
@@ -164,7 +164,7 @@ macro_rules! add_test{
             let end_i = start_i + half_len;
             let rand_idx = Uniform::from(0..half_len);
             let sub_array = array.sub_array(start_i..end_i);
-            sub_array.barrier();
+            array.barrier();
             for idx in 0..sub_array.len(){
                 let mut prev = init_val;
                 #[cfg(feature="non-buffered-array-ops")]
@@ -194,7 +194,7 @@ macro_rules! add_test{
                     }
                 }
             }
-            sub_array.barrier();
+            array.barrier();
             for (i,elem) in sub_array.ser_iter().into_iter().enumerate(){
                 let val = *elem;
                 check_val!($array,val,max_val,success);
@@ -202,11 +202,11 @@ macro_rules! add_test{
                     println!("half 2: {:?} {:?} {:?}",i,val,max_val);
                 }
             }
-            sub_array.barrier();
+            array.barrier();
             // println!("3------------");
             initialize_array!($array, array, init_val);
-            sub_array.wait_all();
-            sub_array.barrier();
+            array.wait_all();
+            array.barrier();
             let num_updates=max_updates!($t,num_pes);
             let mut prev_vals = vec![init_val;sub_array.len()];
             #[cfg(feature="non-buffered-array-ops")]
@@ -238,17 +238,19 @@ macro_rules! add_test{
                     prev_vals[idx]=val;
                 }
             }
-            sub_array.barrier();
+            array.barrier();
             let sum = sub_array.ser_iter().into_iter().fold(0,|acc,x| acc+ *x as usize);
             let tot_updates = num_updates * num_pes;
             check_val!($array,sum,tot_updates,success);
             if !success{
                 println!("half 4: {:?} {:?}",sum,tot_updates);
             }
-            sub_array.wait_all();
-            sub_array.barrier();
+            array.wait_all();
+            array.barrier();
             // println!("4------------");
             initialize_array!($array, array, init_val);
+            array.wait_all();
+            array.barrier();
 
 
             let pe_len = array_total_len/num_pes;
@@ -258,7 +260,7 @@ macro_rules! add_test{
                 let end_i = start_i+len;
                 let rand_idx = Uniform::from(0..len);
                 let sub_array = array.sub_array(start_i..end_i);
-                sub_array.barrier();
+                array.barrier();
                 for idx in 0..sub_array.len(){
                     let mut prev = init_val;
                     #[cfg(feature="non-buffered-array-ops")]
@@ -309,7 +311,7 @@ macro_rules! add_test{
                         let idx = rand_idx.sample(&mut rng);
                             let val = sub_array.fetch_add(idx,1 as $t).get().unwrap();
                             if val < prev_vals[idx]{
-                                println!("full 3: {:?} {:?} {:?}",i,val,prev_vals[idx]);
+                                println!("pe 3: {:?} {:?} {:?}",i,val,prev_vals[idx]);
                                 success = false;
                             }
                             prev_vals[idx]=val;
@@ -326,7 +328,7 @@ macro_rules! add_test{
                     for (req,idx) in reqs{
                         let val = req.get().unwrap();
                         if val < prev_vals[idx]{
-                            println!("full 3:  {:?} {:?}",val,prev_vals[idx]);
+                            println!("pe 3:  {:?} {:?}",val,prev_vals[idx]);
                             success = false;
                         }
                         prev_vals[idx]=val;
@@ -400,21 +402,21 @@ fn main() {
             "f64" => add_test!(AtomicArray, f64, len, dist_type),
             _ => eprintln!("unsupported element type"),
         },
-        "CollectiveAtomicArray" => match elem.as_str() {
-            "u8" => add_test!(CollectiveAtomicArray, u8, len, dist_type),
-            "u16" => add_test!(CollectiveAtomicArray, u16, len, dist_type),
-            "u32" => add_test!(CollectiveAtomicArray, u32, len, dist_type),
-            "u64" => add_test!(CollectiveAtomicArray, u64, len, dist_type),
-            "u128" => add_test!(CollectiveAtomicArray, u128, len, dist_type),
-            "usize" => add_test!(CollectiveAtomicArray, usize, len, dist_type),
-            "i8" => add_test!(CollectiveAtomicArray, i8, len, dist_type),
-            "i16" => add_test!(CollectiveAtomicArray, i16, len, dist_type),
-            "i32" => add_test!(CollectiveAtomicArray, i32, len, dist_type),
-            "i64" => add_test!(CollectiveAtomicArray, i64, len, dist_type),
-            "i128" => add_test!(CollectiveAtomicArray, i128, len, dist_type),
-            "isize" => add_test!(CollectiveAtomicArray, isize, len, dist_type),
-            "f32" => add_test!(CollectiveAtomicArray, f32, len, dist_type),
-            "f64" => add_test!(CollectiveAtomicArray, f64, len, dist_type),
+        "LocalLockAtomicArray" => match elem.as_str() {
+            "u8" => add_test!(LocalLockAtomicArray, u8, len, dist_type),
+            "u16" => add_test!(LocalLockAtomicArray, u16, len, dist_type),
+            "u32" => add_test!(LocalLockAtomicArray, u32, len, dist_type),
+            "u64" => add_test!(LocalLockAtomicArray, u64, len, dist_type),
+            "u128" => add_test!(LocalLockAtomicArray, u128, len, dist_type),
+            "usize" => add_test!(LocalLockAtomicArray, usize, len, dist_type),
+            "i8" => add_test!(LocalLockAtomicArray, i8, len, dist_type),
+            "i16" => add_test!(LocalLockAtomicArray, i16, len, dist_type),
+            "i32" => add_test!(LocalLockAtomicArray, i32, len, dist_type),
+            "i64" => add_test!(LocalLockAtomicArray, i64, len, dist_type),
+            "i128" => add_test!(LocalLockAtomicArray, i128, len, dist_type),
+            "isize" => add_test!(LocalLockAtomicArray, isize, len, dist_type),
+            "f32" => add_test!(LocalLockAtomicArray, f32, len, dist_type),
+            "f64" => add_test!(LocalLockAtomicArray, f64, len, dist_type),
             _ => eprintln!("unsupported element type"),
         },
         _ => eprintln!("unsupported array type"),

@@ -1,6 +1,5 @@
 use lamellar::array::{
-    CollectiveAtomicArray, DistributedIterator, Distribution, ReadOnlyArray, SerialIterator,
-    UnsafeArray,
+    DistributedIterator, Distribution, LocalLockAtomicArray, SerialIterator, UnsafeArray,
 };
 /// ----------------Lamellar Parallel Blocked Array GEMM---------------------------------------------------
 /// This performs a distributed GEMM by partitioning the global matrices (stored in LamellarArrya)
@@ -11,9 +10,7 @@ use lamellar::array::{
 /// and then iterate over the local A submatrices in the inner loop. Finally, all updates
 /// to the C matrix are only performed locally, requiring no additional data transfer.
 ///----------------------------------------------------------------------------------
-use lazy_static::lazy_static;
 use matrixmultiply::sgemm;
-use parking_lot::Mutex;
 use std::sync::Arc;
 
 fn main() {
@@ -36,8 +33,8 @@ fn main() {
 
     let a = UnsafeArray::<f32>::new(&world, m * n, Distribution::Block); //row major -- we will change this into a readonly array after initialization
     let b = UnsafeArray::<f32>::new(&world, n * p, Distribution::Block); //col major -- we will change this into a readonly array after initialization
-    let c = CollectiveAtomicArray::<f32>::new(&world, m * p, Distribution::Block); //row major
-                                                                                   //initialize
+    let c = LocalLockAtomicArray::<f32>::new(&world, m * p, Distribution::Block); //row major
+                                                                                  //initialize
     a.dist_iter_mut()
         .enumerate()
         .for_each(|(i, x)| *x = i as f32);
@@ -141,7 +138,7 @@ fn main() {
                             );
                         }
 
-                        let mut c_slice = unsafe { c.local_as_mut_slice() }; //this locks the array
+                        let mut c_slice = c.local_as_mut_slice(); //this locks the array
 
                         for row in 0..blocksize {
                             let row_offset = (i_blk * blocksize + row) * n;

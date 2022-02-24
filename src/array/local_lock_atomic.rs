@@ -4,7 +4,7 @@ mod iteration;
 #[cfg(not(feature = "non-buffered-array-ops"))]
 pub(crate) use buffered_operations as operations;
 mod rdma;
-use crate::array::collective_atomic::operations::BUFOPS;
+use crate::array::local_lock_atomic::operations::BUFOPS;
 use crate::array::private::LamellarArrayPrivate;
 use crate::array::r#unsafe::UnsafeByteArray;
 use crate::array::*;
@@ -20,7 +20,7 @@ use std::any::TypeId;
 use std::ops::{Deref, DerefMut};
 
 #[lamellar_impl::AmDataRT(Clone)]
-pub struct CollectiveAtomicArray<T: Dist> {
+pub struct LocalLockAtomicArray<T: Dist> {
     lock: LocalRwDarc<()>,
     pub(crate) array: UnsafeArray<T>,
 }
@@ -62,13 +62,13 @@ impl<T: Dist> Deref for CollectiveAtomicLocalData<'_, T> {
     }
 }
 
-impl<T: Dist + std::default::Default> CollectiveAtomicArray<T> {
+impl<T: Dist + std::default::Default> LocalLockAtomicArray<T> {
     //Sync + Send + Copy  == Dist
     pub fn new<U: Clone + Into<IntoLamellarTeam>>(
         team: U,
         array_size: usize,
         distribution: Distribution,
-    ) -> CollectiveAtomicArray<T> {
+    ) -> LocalLockAtomicArray<T> {
         let array = UnsafeArray::new(team.clone(), array_size, distribution);
         let lock = LocalRwDarc::new(team, ()).unwrap();
 
@@ -84,14 +84,14 @@ impl<T: Dist + std::default::Default> CollectiveAtomicArray<T> {
             }
         }
 
-        CollectiveAtomicArray {
+        LocalLockAtomicArray {
             lock: lock,
             array: array,
         }
     }
 }
 
-impl<T: Dist> CollectiveAtomicArray<T> {
+impl<T: Dist> LocalLockAtomicArray<T> {
     pub fn wait_all(&self) {
         self.array.wait_all();
     }
@@ -103,7 +103,7 @@ impl<T: Dist> CollectiveAtomicArray<T> {
     }
 
     pub fn use_distribution(self, distribution: Distribution) -> Self {
-        CollectiveAtomicArray {
+        LocalLockAtomicArray {
             lock: self.lock.clone(),
             array: self.array.use_distribution(distribution),
         }
@@ -172,7 +172,7 @@ impl<T: Dist> CollectiveAtomicArray<T> {
     }
 
     pub fn sub_array<R: std::ops::RangeBounds<usize>>(&self, range: R) -> Self {
-        CollectiveAtomicArray {
+        LocalLockAtomicArray {
             lock: self.lock.clone(),
             array: self.array.sub_array(range),
         }
@@ -191,15 +191,15 @@ impl<T: Dist> CollectiveAtomicArray<T> {
     }
 }
 
-impl<T: Dist + 'static> CollectiveAtomicArray<T> {
+impl<T: Dist + 'static> LocalLockAtomicArray<T> {
     pub fn into_atomic(self) -> AtomicArray<T> {
         self.array.into()
     }
 }
 
-impl<T: Dist> From<UnsafeArray<T>> for CollectiveAtomicArray<T> {
+impl<T: Dist> From<UnsafeArray<T>> for LocalLockAtomicArray<T> {
     fn from(array: UnsafeArray<T>) -> Self {
-        array.block_on_outstanding(DarcMode::CollectiveAtomicArray);
+        array.block_on_outstanding(DarcMode::LocalLockAtomicArray);
         let lock = LocalRwDarc::new(array.team(), ()).unwrap();
         if let Some(func) = BUFOPS.get(&TypeId::of::<T>()) {
             let bytearray = CollectiveAtomicByteArray {
@@ -211,31 +211,31 @@ impl<T: Dist> From<UnsafeArray<T>> for CollectiveAtomicArray<T> {
                 op_bufs.push(func(bytearray.clone()))
             }
         }
-        CollectiveAtomicArray {
+        LocalLockAtomicArray {
             lock: lock,
             array: array,
         }
     }
 }
 
-impl<T: Dist> From<CollectiveAtomicArray<T>> for CollectiveAtomicByteArray {
-    fn from(array: CollectiveAtomicArray<T>) -> Self {
+impl<T: Dist> From<LocalLockAtomicArray<T>> for CollectiveAtomicByteArray {
+    fn from(array: LocalLockAtomicArray<T>) -> Self {
         CollectiveAtomicByteArray {
             lock: array.lock.clone(),
             array: array.array.into(),
         }
     }
 }
-impl<T: Dist> From<CollectiveAtomicByteArray> for CollectiveAtomicArray<T> {
+impl<T: Dist> From<CollectiveAtomicByteArray> for LocalLockAtomicArray<T> {
     fn from(array: CollectiveAtomicByteArray) -> Self {
-        CollectiveAtomicArray {
+        LocalLockAtomicArray {
             lock: array.lock.clone(),
             array: array.array.into(),
         }
     }
 }
 
-impl<T: Dist> private::ArrayExecAm<T> for CollectiveAtomicArray<T> {
+impl<T: Dist> private::ArrayExecAm<T> for LocalLockAtomicArray<T> {
     fn team(&self) -> Pin<Arc<LamellarTeamRT>> {
         self.array.team().clone()
     }
@@ -244,7 +244,7 @@ impl<T: Dist> private::ArrayExecAm<T> for CollectiveAtomicArray<T> {
     }
 }
 
-impl<T: Dist> private::LamellarArrayPrivate<T> for CollectiveAtomicArray<T> {
+impl<T: Dist> private::LamellarArrayPrivate<T> for LocalLockAtomicArray<T> {
     fn local_as_ptr(&self) -> *const T {
         self.array.local_as_mut_ptr()
     }
@@ -262,7 +262,7 @@ impl<T: Dist> private::LamellarArrayPrivate<T> for CollectiveAtomicArray<T> {
     }
 }
 
-impl<T: Dist> LamellarArray<T> for CollectiveAtomicArray<T> {
+impl<T: Dist> LamellarArray<T> for LocalLockAtomicArray<T> {
     fn my_pe(&self) -> usize {
         self.array.my_pe()
     }
@@ -282,13 +282,16 @@ impl<T: Dist> LamellarArray<T> for CollectiveAtomicArray<T> {
         self.array.wait_all()
         // println!("done in wait all {:?}",std::time::SystemTime::now());
     }
+    fn pe_and_offset_for_global_index(&self, index: usize) -> Option<(usize, usize)> {
+        self.array.pe_and_offset_for_global_index(index)
+    }
 }
 
-impl<T: Dist> LamellarWrite for CollectiveAtomicArray<T> {}
-impl<T: Dist> LamellarRead for CollectiveAtomicArray<T> {}
+impl<T: Dist> LamellarWrite for LocalLockAtomicArray<T> {}
+impl<T: Dist> LamellarRead for LocalLockAtomicArray<T> {}
 
-impl<T: Dist> SubArray<T> for CollectiveAtomicArray<T> {
-    type Array = CollectiveAtomicArray<T>;
+impl<T: Dist> SubArray<T> for LocalLockAtomicArray<T> {
+    type Array = LocalLockAtomicArray<T>;
     fn sub_array<R: std::ops::RangeBounds<usize>>(&self, range: R) -> Self::Array {
         self.sub_array(range).into()
     }
@@ -297,38 +300,73 @@ impl<T: Dist> SubArray<T> for CollectiveAtomicArray<T> {
     }
 }
 
-impl<T: Dist + std::fmt::Debug> CollectiveAtomicArray<T> {
+impl<T: Dist + std::fmt::Debug> LocalLockAtomicArray<T> {
     pub fn print(&self) {
         self.array.print();
     }
 }
 
-impl<T: Dist + std::fmt::Debug> ArrayPrint<T> for CollectiveAtomicArray<T> {
+impl<T: Dist + std::fmt::Debug> ArrayPrint<T> for LocalLockAtomicArray<T> {
     fn print(&self) {
         self.array.print()
     }
 }
 
-impl<T: Dist + serde::Serialize + serde::de::DeserializeOwned + 'static> CollectiveAtomicArray<T> {
+pub struct LocalLockAtomicArrayReduceHandle<T: Dist + AmDist> {
+    req: Box<dyn LamellarRequest<Output = T> + Send + Sync>,
+    _lock_guard: ArcRwLockReadGuard<RawRwLock, Box<()>>,
+}
+
+#[async_trait]
+impl<T: Dist + AmDist> LamellarRequest for LocalLockAtomicArrayReduceHandle<T> {
+    type Output = T;
+    async fn into_future(mut self: Box<Self>) -> Option<Self::Output> {
+        self.req.into_future().await
+    }
+    fn get(&self) -> Option<Self::Output> {
+        self.req.get()
+    }
+    fn get_all(&self) -> Vec<Option<Self::Output>> {
+        self.req.get_all()
+    }
+}
+
+impl<T: Dist + AmDist + 'static> LocalLockAtomicArray<T> {
     pub fn reduce(&self, op: &str) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
-        self.array.reduce(op)
+        let lock = self.lock.read();
+        Box::new(LocalLockAtomicArrayReduceHandle {
+            req: self.array.reduce(op),
+            _lock_guard: lock,
+        })
     }
     pub fn sum(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
-        self.array.reduce("sum")
+        let lock = self.lock.read();
+        Box::new(LocalLockAtomicArrayReduceHandle {
+            req: self.array.reduce("sum"),
+            _lock_guard: lock,
+        })
     }
     pub fn prod(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
-        self.array.reduce("prod")
+        let lock = self.lock.read();
+        Box::new(LocalLockAtomicArrayReduceHandle {
+            req: self.array.reduce("prod"),
+            _lock_guard: lock,
+        })
     }
     pub fn max(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
-        self.array.reduce("max")
+        let lock = self.lock.read();
+        Box::new(LocalLockAtomicArrayReduceHandle {
+            req: self.array.reduce("max"),
+            _lock_guard: lock,
+        })
     }
 }
 
 // impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> LamellarArrayReduce<T>
-//     for CollectiveAtomicArray<T>
+//     for LocalLockAtomicArray<T>
 // {
 //     fn get_reduction_op(&self, op: String) -> LamellarArcAm {
-//         self.arraget_
+//         self.array.get_reduction_op(op)
 //     }
 //     fn reduce(&self, op: &str) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
 //         self.reduce(op)

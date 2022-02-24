@@ -29,16 +29,14 @@ pub use atomic::{
     AtomicArray, AtomicByteArray, AtomicOps,
 };
 
-pub(crate) mod collective_atomic;
-pub use collective_atomic::{
-    operations::{CollectiveAtomicArrayOp, CollectiveAtomicArrayOpBuf},
-    CollectiveAtomicArray, CollectiveAtomicByteArray,
+pub(crate) mod local_lock_atomic;
+pub use local_lock_atomic::{
+    operations::{LocalLockAtomicArrayOp, LocalLockAtomicArrayOpBuf},
+    CollectiveAtomicByteArray, LocalLockAtomicArray,
 };
 
 pub mod iterator;
 pub use iterator::distributed_iterator::DistributedIterator;
-// use iterator::distributed_iterator::{DistIter, DistIterMut, DistIteratorLauncher};
-// use iterator::serial_iterator::LamellarArrayIter;
 pub use iterator::serial_iterator::{SerialIterator, SerialIteratorIter};
 
 pub(crate) type ReduceGen =
@@ -314,6 +312,7 @@ pub trait ArithmeticOps<T: ElementArithmeticOps> {
     fn fetch_div(&self, index: usize, val: T)
         -> Box<dyn LamellarRequest<Output = T> + Send + Sync>;
 }
+
 pub trait BitWiseOps<T: ElementBitWiseOps> {
     fn bit_and(
         &self,
@@ -359,6 +358,7 @@ pub trait LocalArithmeticOps<T: Dist + ElementArithmeticOps> {
     }
     fn local_fetch_div(&self, index: usize, val: T) -> T;
 }
+
 pub trait LocalBitWiseOps<T: Dist + ElementBitWiseOps> {
     fn local_bit_and(&self, index: usize, val: T) {
         self.local_fetch_bit_and(index, val);
@@ -466,7 +466,7 @@ pub enum LamellarReadArray<T: Dist + 'static> {
     UnsafeArray(UnsafeArray<T>),
     ReadOnlyArray(ReadOnlyArray<T>),
     AtomicArray(AtomicArray<T>),
-    CollectiveAtomicArray(CollectiveAtomicArray<T>),
+    LocalLockAtomicArray(LocalLockAtomicArray<T>),
 }
 
 #[enum_dispatch]
@@ -476,7 +476,7 @@ pub enum LamellarByteArray {
     UnsafeArray(UnsafeByteArray),
     ReadOnlyArray(ReadOnlyByteArray),
     AtomicArray(AtomicByteArray),
-    CollectiveAtomicArray(CollectiveAtomicByteArray),
+    LocalLockAtomicArray(CollectiveAtomicByteArray),
 }
 
 impl<T: Dist + 'static> crate::DarcSerde for LamellarReadArray<T> {
@@ -486,7 +486,7 @@ impl<T: Dist + 'static> crate::DarcSerde for LamellarReadArray<T> {
             LamellarReadArray::UnsafeArray(array) => array.ser(num_pes, cur_pe),
             LamellarReadArray::ReadOnlyArray(array) => array.ser(num_pes, cur_pe),
             LamellarReadArray::AtomicArray(array) => array.ser(num_pes, cur_pe),
-            LamellarReadArray::CollectiveAtomicArray(array) => array.ser(num_pes, cur_pe),
+            LamellarReadArray::LocalLockAtomicArray(array) => array.ser(num_pes, cur_pe),
         }
     }
     fn des(&self, cur_pe: Result<usize, crate::IdError>) {
@@ -495,7 +495,7 @@ impl<T: Dist + 'static> crate::DarcSerde for LamellarReadArray<T> {
             LamellarReadArray::UnsafeArray(array) => array.des(cur_pe),
             LamellarReadArray::ReadOnlyArray(array) => array.des(cur_pe),
             LamellarReadArray::AtomicArray(array) => array.des(cur_pe),
-            LamellarReadArray::CollectiveAtomicArray(array) => array.des(cur_pe),
+            LamellarReadArray::LocalLockAtomicArray(array) => array.des(cur_pe),
         }
     }
 }
@@ -506,7 +506,103 @@ impl<T: Dist + 'static> crate::DarcSerde for LamellarReadArray<T> {
 pub enum LamellarWriteArray<T: Dist> {
     UnsafeArray(UnsafeArray<T>),
     AtomicArray(AtomicArray<T>),
-    CollectiveAtomicArray(CollectiveAtomicArray<T>),
+    LocalLockAtomicArray(LocalLockAtomicArray<T>),
+}
+
+impl<T: ElementArithmeticOps> ArithmeticOps<T> for LamellarWriteArray<T> {
+    fn add(
+        &self,
+        index: usize,
+        val: T,
+    ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>> {
+        match self {
+            LamellarWriteArray::UnsafeArray(array) => array.add(index, val),
+            LamellarWriteArray::AtomicArray(array) => array.add(index, val),
+            LamellarWriteArray::LocalLockAtomicArray(array) => array.add(index, val),
+        }
+    }
+    fn fetch_add(
+        &self,
+        index: usize,
+        val: T,
+    ) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+        match self {
+            LamellarWriteArray::UnsafeArray(array) => array.fetch_add(index, val),
+            LamellarWriteArray::AtomicArray(array) => array.fetch_add(index, val),
+            LamellarWriteArray::LocalLockAtomicArray(array) => array.fetch_add(index, val),
+        }
+    }
+
+    fn sub(
+        &self,
+        index: usize,
+        val: T,
+    ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>> {
+        match self {
+            LamellarWriteArray::UnsafeArray(array) => array.sub(index, val),
+            LamellarWriteArray::AtomicArray(array) => array.sub(index, val),
+            LamellarWriteArray::LocalLockAtomicArray(array) => array.sub(index, val),
+        }
+    }
+    fn fetch_sub(
+        &self,
+        index: usize,
+        val: T,
+    ) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+        match self {
+            LamellarWriteArray::UnsafeArray(array) => array.fetch_sub(index, val),
+            LamellarWriteArray::AtomicArray(array) => array.fetch_sub(index, val),
+            LamellarWriteArray::LocalLockAtomicArray(array) => array.fetch_sub(index, val),
+        }
+    }
+
+    fn mul(
+        &self,
+        index: usize,
+        val: T,
+    ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>> {
+        match self {
+            LamellarWriteArray::UnsafeArray(array) => array.mul(index, val),
+            LamellarWriteArray::AtomicArray(array) => array.mul(index, val),
+            LamellarWriteArray::LocalLockAtomicArray(array) => array.mul(index, val),
+        }
+    }
+
+    fn fetch_mul(
+        &self,
+        index: usize,
+        val: T,
+    ) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+        match self {
+            LamellarWriteArray::UnsafeArray(array) => array.fetch_mul(index, val),
+            LamellarWriteArray::AtomicArray(array) => array.fetch_mul(index, val),
+            LamellarWriteArray::LocalLockAtomicArray(array) => array.fetch_mul(index, val),
+        }
+    }
+
+    fn div(
+        &self,
+        index: usize,
+        val: T,
+    ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>> {
+        match self {
+            LamellarWriteArray::UnsafeArray(array) => array.div(index, val),
+            LamellarWriteArray::AtomicArray(array) => array.div(index, val),
+            LamellarWriteArray::LocalLockAtomicArray(array) => array.div(index, val),
+        }
+    }
+
+    fn fetch_div(
+        &self,
+        index: usize,
+        val: T,
+    ) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+        match self {
+            LamellarWriteArray::UnsafeArray(array) => array.fetch_div(index, val),
+            LamellarWriteArray::AtomicArray(array) => array.fetch_div(index, val),
+            LamellarWriteArray::LocalLockAtomicArray(array) => array.fetch_div(index, val),
+        }
+    }
 }
 
 impl<T: Dist + 'static> crate::DarcSerde for LamellarWriteArray<T> {
@@ -515,7 +611,7 @@ impl<T: Dist + 'static> crate::DarcSerde for LamellarWriteArray<T> {
         match self {
             LamellarWriteArray::UnsafeArray(array) => array.ser(num_pes, cur_pe),
             LamellarWriteArray::AtomicArray(array) => array.ser(num_pes, cur_pe),
-            LamellarWriteArray::CollectiveAtomicArray(array) => array.ser(num_pes, cur_pe),
+            LamellarWriteArray::LocalLockAtomicArray(array) => array.ser(num_pes, cur_pe),
         }
     }
     fn des(&self, cur_pe: Result<usize, crate::IdError>) {
@@ -523,7 +619,7 @@ impl<T: Dist + 'static> crate::DarcSerde for LamellarWriteArray<T> {
         match self {
             LamellarWriteArray::UnsafeArray(array) => array.des(cur_pe),
             LamellarWriteArray::AtomicArray(array) => array.des(cur_pe),
-            LamellarWriteArray::CollectiveAtomicArray(array) => array.des(cur_pe),
+            LamellarWriteArray::LocalLockAtomicArray(array) => array.des(cur_pe),
         }
     }
 }
@@ -531,7 +627,7 @@ impl<T: Dist + 'static> crate::DarcSerde for LamellarWriteArray<T> {
 pub(crate) mod private {
     use crate::active_messaging::*;
     use crate::array::{
-        AtomicArray, CollectiveAtomicArray, LamellarReadArray, LamellarWriteArray, ReadOnlyArray,
+        AtomicArray, LamellarReadArray, LamellarWriteArray, LocalLockAtomicArray, ReadOnlyArray,
         UnsafeArray,
     };
     use crate::lamellar_request::LamellarRequest;
@@ -606,6 +702,7 @@ pub trait LamellarArray<T: Dist>: private::LamellarArrayPrivate<T> {
     fn len(&self) -> usize;
     fn barrier(&self);
     fn wait_all(&self);
+    fn pe_and_offset_for_global_index(&self, index: usize) -> Option<(usize, usize)>;
 
     // /// Returns a distributed iterator for the LamellarArray
     // /// must be called accross all pes containing data in the array
@@ -663,7 +760,7 @@ pub trait LamellarArray<T: Dist>: private::LamellarArrayPrivate<T> {
 //             LamellarReadArray::UnsafeArray(array) => array.from_bytes().into(),
 //             LamellarReadArray::ReadOnlyArray(array) => array.from_bytes().into(),
 //             LamellarReadArray::AtomicArray(array) => array.from_bytes().into(),
-//             LamellarReadArray::CollectiveAtomicArray(array) => array.from_bytes().into(),
+//             LamellarReadArray::LocalLockAtomicArray(array) => array.from_bytes().into(),
 //         }
 //     }
 // }
@@ -715,15 +812,82 @@ pub trait ArrayPrint<T: Dist + std::fmt::Debug>: LamellarArray<T> {
     fn print(&self);
 }
 
+// #[enum_dispatch(LamellarWriteArray<T>,LamellarReadArray<T>)]
 pub trait LamellarArrayReduce<T>: LamellarArrayGet<T>
 where
-    T: Dist + serde::Serialize + serde::de::DeserializeOwned + 'static,
+    T: Dist + AmDist + 'static,
 {
     fn get_reduction_op(&self, op: String) -> LamellarArcAm;
     fn reduce(&self, op: &str) -> Box<dyn LamellarRequest<Output = T> + Send + Sync>;
     fn sum(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync>;
     fn max(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync>;
     fn prod(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync>;
+}
+
+impl<T: Dist + AmDist + 'static> LamellarWriteArray<T> {
+    pub fn reduce(&self, op: &str) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+        match self {
+            LamellarWriteArray::UnsafeArray(array) => array.reduce(op),
+            LamellarWriteArray::AtomicArray(array) => array.reduce(op),
+            LamellarWriteArray::LocalLockAtomicArray(array) => array.reduce(op),
+        }
+    }
+    pub fn sum(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+        match self {
+            LamellarWriteArray::UnsafeArray(array) => array.sum(),
+            LamellarWriteArray::AtomicArray(array) => array.sum(),
+            LamellarWriteArray::LocalLockAtomicArray(array) => array.sum(),
+        }
+    }
+    pub fn max(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+        match self {
+            LamellarWriteArray::UnsafeArray(array) => array.max(),
+            LamellarWriteArray::AtomicArray(array) => array.max(),
+            LamellarWriteArray::LocalLockAtomicArray(array) => array.max(),
+        }
+    }
+    pub fn prod(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+        match self {
+            LamellarWriteArray::UnsafeArray(array) => array.prod(),
+            LamellarWriteArray::AtomicArray(array) => array.prod(),
+            LamellarWriteArray::LocalLockAtomicArray(array) => array.prod(),
+        }
+    }
+}
+
+impl<T: Dist + AmDist + 'static> LamellarReadArray<T> {
+    pub fn reduce(&self, op: &str) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+        match self {
+            LamellarReadArray::UnsafeArray(array) => array.reduce(op),
+            LamellarReadArray::AtomicArray(array) => array.reduce(op),
+            LamellarReadArray::LocalLockAtomicArray(array) => array.reduce(op),
+            LamellarReadArray::ReadOnlyArray(array) => array.reduce(op),
+        }
+    }
+    pub fn sum(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+        match self {
+            LamellarReadArray::UnsafeArray(array) => array.sum(),
+            LamellarReadArray::AtomicArray(array) => array.sum(),
+            LamellarReadArray::LocalLockAtomicArray(array) => array.sum(),
+            LamellarReadArray::ReadOnlyArray(array) => array.sum(),
+        }
+    }
+    pub fn max(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+        match self {
+            LamellarReadArray::UnsafeArray(array) => array.max(),
+            LamellarReadArray::AtomicArray(array) => array.max(),
+            LamellarReadArray::LocalLockAtomicArray(array) => array.max(),
+            LamellarReadArray::ReadOnlyArray(array) => array.max(),
+        }
+    }
+    pub fn prod(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+        match self {
+            LamellarReadArray::UnsafeArray(array) => array.prod(),
+            LamellarReadArray::AtomicArray(array) => array.prod(),
+            LamellarReadArray::LocalLockAtomicArray(array) => array.prod(),
+            LamellarReadArray::ReadOnlyArray(array) => array.prod(),
+        }
+    }
 }
 
 // impl<'a, T: AmDist + 'static> IntoIterator

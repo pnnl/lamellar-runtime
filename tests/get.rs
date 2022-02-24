@@ -71,7 +71,7 @@ create_get_tests!(
     (
         UnsafeArray,
         AtomicArray,
-        CollectiveAtomicArray,
+        LocalLockAtomicArray,
         ReadOnlyArray
     ),
     ("Block", "Cyclic"),
@@ -79,4 +79,4 @@ create_get_tests!(
     (2, 3, 4),
     (4, 19, 128)
 );
-// create_iput_tests!((UnsafeArray,AtomicArray,CollectiveAtomicArray),("Block"),(u8,u16,f64),(2),(4));
+// create_iput_tests!((UnsafeArray,AtomicArray,LocalLockAtomicArray),("Block"),(u8,u16,f64),(2),(4));

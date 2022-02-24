@@ -1,5 +1,5 @@
 use core::marker::PhantomData;
-use parking_lot::{ RwLock};
+use parking_lot::RwLock;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt;
 use std::ops::{Deref, DerefMut};
@@ -174,13 +174,14 @@ impl<'a, T: 'a> Drop for GlobalRwDarcReadGuard<'a, T> {
             0,
             inner as *const DarcInner<DistRwLock<T>> as *const () as usize,
         );
-        team.exec_am_pe(
+        team.exec_am_pe_tg(
             0,
             UnlockAm {
                 rwlock_addr: remote_rwlock_addr,
                 orig_pe: team.team_pe.expect("darcs cant exist on non team members"),
                 lock_type: LockType::Read,
             },
+            Some(inner.am_counters()),
         );
     }
 }
@@ -221,13 +222,14 @@ impl<'a, T: 'a> Drop for GlobalRwDarcWriteGuard<'a, T> {
             0,
             inner as *const DarcInner<DistRwLock<T>> as *const () as usize,
         );
-        team.exec_am_pe(
+        team.exec_am_pe_tg(
             0,
             UnlockAm {
                 rwlock_addr: remote_rwlock_addr,
                 orig_pe: team.team_pe.expect("darcs cant exist on non team members"),
                 lock_type: LockType::Write,
             },
+            Some(inner.am_counters()),
         );
     }
 }
@@ -296,9 +298,9 @@ impl<T> GlobalRwDarc<T> {
         // if self.darc.src_pe != cur_pe{
         self.inner().inc_pe_ref_count(self.darc.src_pe, 1); // we need to increment by 2 cause bincode calls the serialize function twice when serializing...
                                                             // }
-        // self.inner().local_cnt.fetch_add(1, Ordering::SeqCst);
-        // self.print();
-        // println!("done deserialize darc cnts");
+                                                            // self.inner().local_cnt.fetch_add(1, Ordering::SeqCst);
+                                                            // self.print();
+                                                            // println!("done deserialize darc cnts");
     }
 
     pub fn print(&self) {
@@ -321,13 +323,14 @@ impl<T> GlobalRwDarc<T> {
             0,
             inner as *const DarcInner<DistRwLock<T>> as *const () as usize,
         );
-        team.exec_am_pe(
+        team.exec_am_pe_tg(
             0,
             LockAm {
                 rwlock_addr: remote_rwlock_addr,
                 orig_pe: team.team_pe.expect("darcs cant exist on non team members"),
                 lock_type: LockType::Read,
             },
+            Some(inner.am_counters()),
         )
         .into_future()
         .await;
@@ -346,13 +349,14 @@ impl<T> GlobalRwDarc<T> {
             0,
             inner as *const DarcInner<DistRwLock<T>> as *const () as usize,
         );
-        team.exec_am_pe(
+        team.exec_am_pe_tg(
             0,
             LockAm {
                 rwlock_addr: remote_rwlock_addr,
                 orig_pe: team.team_pe.expect("darcs cant exist on non team members"),
                 lock_type: LockType::Write,
             },
+            Some(inner.am_counters()),
         )
         .into_future()
         .await;
@@ -370,13 +374,14 @@ impl<T> GlobalRwDarc<T> {
             0,
             inner as *const DarcInner<DistRwLock<T>> as *const () as usize,
         );
-        team.exec_am_pe(
+        team.exec_am_pe_tg(
             0,
             LockAm {
                 rwlock_addr: remote_rwlock_addr,
                 orig_pe: team.team_pe.expect("darcs cant exist on non team members"),
                 lock_type: LockType::Read,
             },
+            Some(inner.am_counters()),
         )
         .get();
         GlobalRwDarcReadGuard {
@@ -393,13 +398,14 @@ impl<T> GlobalRwDarc<T> {
             0,
             inner as *const DarcInner<DistRwLock<T>> as *const () as usize,
         );
-        team.exec_am_pe(
+        team.exec_am_pe_tg(
             0,
             LockAm {
                 rwlock_addr: remote_rwlock_addr,
                 orig_pe: team.team_pe.expect("darcs cant exist on non team members"),
                 lock_type: LockType::Write,
             },
+            Some(inner.am_counters()),
         )
         .get();
         GlobalRwDarcWriteGuard {
@@ -442,7 +448,7 @@ impl<T> GlobalRwDarc<T> {
         // println!("into_darc");
         // self.print();
         inner.block_on_outstanding(DarcMode::Darc, 0);
-        // inner.local_cnt.fetch_add(1, Ordering::SeqCst);
+        inner.local_cnt.fetch_add(1, Ordering::SeqCst);//we add this here because to account for moving inner into d
         let item = unsafe { Box::from_raw(inner.item as *mut DistRwLock<T>).into_inner() };
         let d = Darc {
             inner: self.darc.inner as *mut DarcInner<T>,
@@ -455,8 +461,10 @@ impl<T> GlobalRwDarc<T> {
 
     pub fn into_localrw(self) -> LocalRwDarc<T> {
         let inner = self.inner();
+        // println!("into_localrw");
+        // self.print();
         inner.block_on_outstanding(DarcMode::LocalRw, 0);
-        // inner.local_cnt.fetch_add(1, Ordering::SeqCst);
+        inner.local_cnt.fetch_add(1, Ordering::SeqCst); //we add this here because to account for moving inner into d
         let item = unsafe { Box::from_raw(inner.item as *mut DistRwLock<T>).into_inner() };
         let d = Darc {
             inner: self.darc.inner as *mut DarcInner<Arc<RwLock<Box<T>>>>,

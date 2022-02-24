@@ -1,5 +1,5 @@
 use lamellar::array::{
-    AtomicArray, CollectiveAtomicArray, DistributedIterator, Distribution, ReadOnlyArray,
+    AtomicArray, DistributedIterator, Distribution, LocalLockAtomicArray, ReadOnlyArray,
     UnsafeArray,
 };
 use lamellar::{Dist, LamellarMemoryRegion, RemoteMemoryRegion};
@@ -33,7 +33,7 @@ macro_rules! initialize_array {
             .for_each(move |(i, x)| x.store(i as $t));
         $array.wait_all();
     };
-    (CollectiveAtomicArray,$array:ident,$t:ty) => {
+    (LocalLockAtomicArray,$array:ident,$t:ty) => {
         $array
             .dist_iter_mut()
             .enumerate()
@@ -69,7 +69,7 @@ macro_rules! initialize_array_range {
             .for_each(move |(i, x)| x.store(i as $t));
         subarray.wait_all();
     }};
-    (CollectiveAtomicArray,$array:ident,$t:ty,$range:expr) => {{
+    (LocalLockAtomicArray,$array:ident,$t:ty,$range:expr) => {{
         let subarray = $array.sub_array($range);
         subarray
             .dist_iter_mut()
@@ -283,21 +283,21 @@ fn main() {
             "f64" => get_test!(AtomicArray, f64, len, dist_type),
             _ => eprintln!("unsupported element type"),
         },
-        "CollectiveAtomicArray" => match elem.as_str() {
-            "u8" => get_test!(CollectiveAtomicArray, u8, len, dist_type),
-            "u16" => get_test!(CollectiveAtomicArray, u16, len, dist_type),
-            "u32" => get_test!(CollectiveAtomicArray, u32, len, dist_type),
-            "u64" => get_test!(CollectiveAtomicArray, u64, len, dist_type),
-            "u128" => get_test!(CollectiveAtomicArray, u128, len, dist_type),
-            "usize" => get_test!(CollectiveAtomicArray, usize, len, dist_type),
-            "i8" => get_test!(CollectiveAtomicArray, i8, len, dist_type),
-            "i16" => get_test!(CollectiveAtomicArray, i16, len, dist_type),
-            "i32" => get_test!(CollectiveAtomicArray, i32, len, dist_type),
-            "i64" => get_test!(CollectiveAtomicArray, i64, len, dist_type),
-            "i128" => get_test!(CollectiveAtomicArray, i128, len, dist_type),
-            "isize" => get_test!(CollectiveAtomicArray, isize, len, dist_type),
-            "f32" => get_test!(CollectiveAtomicArray, f32, len, dist_type),
-            "f64" => get_test!(CollectiveAtomicArray, f64, len, dist_type),
+        "LocalLockAtomicArray" => match elem.as_str() {
+            "u8" => get_test!(LocalLockAtomicArray, u8, len, dist_type),
+            "u16" => get_test!(LocalLockAtomicArray, u16, len, dist_type),
+            "u32" => get_test!(LocalLockAtomicArray, u32, len, dist_type),
+            "u64" => get_test!(LocalLockAtomicArray, u64, len, dist_type),
+            "u128" => get_test!(LocalLockAtomicArray, u128, len, dist_type),
+            "usize" => get_test!(LocalLockAtomicArray, usize, len, dist_type),
+            "i8" => get_test!(LocalLockAtomicArray, i8, len, dist_type),
+            "i16" => get_test!(LocalLockAtomicArray, i16, len, dist_type),
+            "i32" => get_test!(LocalLockAtomicArray, i32, len, dist_type),
+            "i64" => get_test!(LocalLockAtomicArray, i64, len, dist_type),
+            "i128" => get_test!(LocalLockAtomicArray, i128, len, dist_type),
+            "isize" => get_test!(LocalLockAtomicArray, isize, len, dist_type),
+            "f32" => get_test!(LocalLockAtomicArray, f32, len, dist_type),
+            "f64" => get_test!(LocalLockAtomicArray, f64, len, dist_type),
             _ => eprintln!("unsupported element type"),
         },
         "ReadOnlyArray" => match elem.as_str() {

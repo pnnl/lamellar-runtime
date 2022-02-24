@@ -3,8 +3,8 @@
 /// from a local array into a remote PE.
 /// --------------------------------------------------------------------
 // use lamellar::ActiveMessaging;
-use lamellar::array::{AtomicArray, Distribution, UnsafeArray};
-use lamellar::{ActiveMessaging, RemoteMemoryRegion};
+use lamellar::array::{Distribution, UnsafeArray};
+use lamellar::RemoteMemoryRegion;
 use std::time::Instant;
 
 const ARRAY_LEN: usize = 1024 * 1024 * 1024;
@@ -23,7 +23,7 @@ fn main() {
     array
         .dist_iter_mut()
         .for_each(move |elem| *elem = 255 as u8); //this is pretty slow for atomic arrays as we perform an atomic store for 2^30 elements
-    let mut array = array.into_atomic();
+    let mut array = array.into_atomic(); //so we simply convert the unsafe array to atomic after initalization
 
     world.barrier();
     let s = Instant::now();
@@ -65,7 +65,7 @@ fn main() {
         }
         array.barrier();
         if my_pe == num_pes - 1 {
-            let array_data = unsafe { array.mut_local_data() };
+            let array_data = array.mut_local_data();
             for j in (0..2_u64.pow(exp) as usize).step_by(num_bytes as usize) {
                 while array_data.at((j + num_bytes as usize) - 1).load() == 255 as u8 {
                     std::thread::yield_now()

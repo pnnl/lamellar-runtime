@@ -381,7 +381,7 @@ impl<T: Dist> AtomicArray<T> {
     pub fn into_read_only(self) -> ReadOnlyArray<T> {
         self.array.into()
     }
-    pub fn into_collective_atomic(self) -> CollectiveAtomicArray<T> {
+    pub fn into_local_lock_atomic(self) -> LocalLockAtomicArray<T> {
         self.array.into()
     }
     #[doc(hidden)]
@@ -518,6 +518,9 @@ impl<T: Dist> LamellarArray<T> for AtomicArray<T> {
     fn wait_all(&self) {
         self.array.wait_all()
         // println!("done in wait all {:?}",std::time::SystemTime::now());
+    }
+    fn pe_and_offset_for_global_index(&self, index: usize) -> Option<(usize, usize)> {
+        self.array.pe_and_offset_for_global_index(index)
     }
 }
 impl<T: Dist> LamellarWrite for AtomicArray<T> {}

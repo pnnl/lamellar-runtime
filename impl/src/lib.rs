@@ -1068,7 +1068,7 @@ fn create_buffered_ops(typeident: syn::Ident, bitwise: bool, rt: bool) -> proc_m
 
     let atomic_array_types: Vec<(syn::Ident, syn::Ident)> = vec![
         (
-            quote::format_ident!("CollectiveAtomicArray"),
+            quote::format_ident!("LocalLockAtomicArray"),
             quote::format_ident!("CollectiveAtomicByteArray"),
         ),
         (
@@ -1105,10 +1105,61 @@ fn create_buffered_ops(typeident: syn::Ident, bitwise: bool, rt: bool) -> proc_m
         expanded.extend(buf_op_impl)
     }
 
+    // let write_array_types: Vec<(syn::Ident, syn::Ident)> = vec![
+    //     (
+    //         quote::format_ident!("LocalLockAtomicArray"),
+    //         quote::format_ident!("CollectiveAtomicByteArray"),
+    //     ),
+    //     (
+    //         quote::format_ident!("AtomicArray"),
+    //         quote::format_ident!("AtomicByteArray"),
+    //     ),
+    //     (
+    //         quote::format_ident!("UnsafeArray"),
+    //         quote::format_ident!("UnsafeByteArray"),
+    //     ),
+    // ];
+    // let ops: Vec<(syn::Ident, bool)> = vec![
+    //     (quote::format_ident!("add"), false),
+    //     (quote::format_ident!("fetch_add"), true),
+    //     (quote::format_ident!("sub"), false),
+    //     (quote::format_ident!("fetch_sub"), true),
+    //     (quote::format_ident!("mul"), false),
+    //     (quote::format_ident!("fetch_mul"), true),
+    //     (quote::format_ident!("div"), false),
+    //     (quote::format_ident!("fetch_div"), true),
+    // ];
+    // let write_array_impls = gen_write_array_impls(typeident.clone(), &write_array_types, &ops, rt);
+    // expanded.extend( quote! {
+    //     #[allow(non_camel_case_types)]
+    //     impl #lamellar::array::ArithmeticOps<#typeident> for #lamellar::array::LamellarWriteArray<#typeident>{
+    //         #write_array_impls
+    //     }
+    // });
+
+    // let mut bitwise_mod = quote! {};
+    // if bitwise {
+    //     let bitwise_ops: Vec<(syn::Ident, bool)> = vec![
+    //         (quote::format_ident!("bit_and"), false),
+    //         (quote::format_ident!("fetch_bit_and"), true),
+    //         (quote::format_ident!("bit_or"), false),
+    //         (quote::format_ident!("fetch_bit_or"), true),
+    //     ];
+    //     let write_array_impls = gen_write_array_impls(typeident.clone(), &write_array_types, &bitwise_ops, rt);
+    //     expanded.extend( quote! {
+    //         #[allow(non_camel_case_types)]
+    //         impl #lamellar::array::BitWiseOps<#typeident> for #lamellar::array::LamellarWriteArray<#typeident>{
+    //             #write_array_impls
+    //         }
+    //     });
+    //     bitwise_mod.extend(quote! {use __lamellar::array::LocalBitWiseOps;});
+    // }
+
     let user_expanded = quote_spanned! {expanded.span()=>
         const _: () = {
             extern crate lamellar as __lamellar;
-            use __lamellar::array::{AtomicArray,AtomicByteArray,CollectiveAtomicArray,CollectiveAtomicByteArray,LocalArithmeticOps,LocalAtomicOps,ArrayOpCmd,LamellarArrayPut};
+            use __lamellar::array::{AtomicArray,AtomicByteArray,LocalLockAtomicArray,CollectiveAtomicByteArray,LocalArithmeticOps,LocalAtomicOps,ArrayOpCmd,LamellarArrayPut};
+            // #bitwise_mod
             use __lamellar::array;
             // #bitwise_mod
             use __lamellar::LamellarArray;
@@ -1137,7 +1188,7 @@ fn create_ops(typeident: syn::Ident, bitwise: bool, rt: bool) -> proc_macro2::To
 
     let write_array_types: Vec<(syn::Ident, syn::Ident)> = vec![
         (
-            quote::format_ident!("CollectiveAtomicArray"),
+            quote::format_ident!("LocalLockAtomicArray"),
             quote::format_ident!("CollectiveAtomicByteArray"),
         ),
         (
@@ -1178,7 +1229,7 @@ fn create_ops(typeident: syn::Ident, bitwise: bool, rt: bool) -> proc_macro2::To
 
     let atomic_array_types: Vec<(syn::Ident, syn::Ident)> = vec![
         (
-            quote::format_ident!("CollectiveAtomicArray"),
+            quote::format_ident!("LocalLockAtomicArray"),
             quote::format_ident!("CollectiveAtomicByteArray"),
         ),
         (
@@ -1234,7 +1285,7 @@ fn create_ops(typeident: syn::Ident, bitwise: bool, rt: bool) -> proc_macro2::To
     let user_expanded = quote_spanned! {expanded.span()=>
         const _: () = {
             extern crate lamellar as __lamellar;
-            use __lamellar::array::{AtomicArray,AtomicByteArray,CollectiveAtomicArray,CollectiveAtomicByteArray,LocalArithmeticOps,LocalAtomicOps,ArrayOpCmd,LamellarArrayPut};
+            use __lamellar::array::{AtomicArray,AtomicByteArray,LocalLockAtomicArray,CollectiveAtomicByteArray,LocalArithmeticOps,LocalAtomicOps,ArrayOpCmd,LamellarArrayPut};
             #bitwise_mod
             use __lamellar::LamellarArray;
             use __lamellar::LamellarRequest;
@@ -1389,7 +1440,7 @@ pub fn register_reduction(item: TokenStream) -> TokenStream {
     let args = parse_macro_input!(item as ReductionArgs);
     let mut output = quote! {};
     let array_types: Vec<syn::Ident> = vec![
-        quote::format_ident!("CollectiveAtomicArray"),
+        quote::format_ident!("LocalLockAtomicArray"),
         quote::format_ident!("AtomicArray"),
         quote::format_ident!("UnsafeArray"),
         quote::format_ident!("ReadOnlyArray"),
@@ -1419,7 +1470,7 @@ pub fn register_reduction(item: TokenStream) -> TokenStream {
             };
             closure.inputs[1] = syn::Pat::Type(pat);
         }
-        println!("{:?}", closure);
+        // println!("{:?}", closure);
 
         output.extend(create_reduction(
             ty.path.segments[0].ident.clone(),
@@ -1438,7 +1489,7 @@ pub fn register_reduction(item: TokenStream) -> TokenStream {
 pub fn generate_reductions_for_type(item: TokenStream) -> TokenStream {
     let mut output = quote! {};
     let read_array_types: Vec<syn::Ident> = vec![
-        quote::format_ident!("CollectiveAtomicArray"),
+        quote::format_ident!("LocalLockAtomicArray"),
         quote::format_ident!("AtomicArray"),
         quote::format_ident!("UnsafeArray"),
         quote::format_ident!("ReadOnlyArray"),
@@ -1487,7 +1538,7 @@ pub fn generate_reductions_for_type_rt(item: TokenStream) -> TokenStream {
     let mut output = quote! {};
 
     let read_array_types: Vec<syn::Ident> = vec![
-        quote::format_ident!("CollectiveAtomicArray"),
+        quote::format_ident!("LocalLockAtomicArray"),
         quote::format_ident!("AtomicArray"),
         quote::format_ident!("UnsafeArray"),
         quote::format_ident!("ReadOnlyArray"),

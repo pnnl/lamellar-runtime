@@ -236,7 +236,7 @@ impl<T: Dist + 'static> UnsafeArray<T> {
         self.into()
     }
 
-    pub fn into_collective_atomic(self) -> CollectiveAtomicArray<T> {
+    pub fn into_local_lock_atomic(self) -> LocalLockAtomicArray<T> {
         self.into()
     }
 }
@@ -257,8 +257,8 @@ impl<T: Dist> From<AtomicArray<T>> for UnsafeArray<T> {
     }
 }
 
-impl<T: Dist> From<CollectiveAtomicArray<T>> for UnsafeArray<T> {
-    fn from(array: CollectiveAtomicArray<T>) -> Self {
+impl<T: Dist> From<LocalLockAtomicArray<T>> for UnsafeArray<T> {
+    fn from(array: LocalLockAtomicArray<T>) -> Self {
         array.array.block_on_outstanding(DarcMode::UnsafeArray);
         array.array.inner.data.op_buffers.write().clear();
         array.array.create_buffered_ops();
@@ -417,6 +417,11 @@ impl<T: Dist> LamellarArray<T> for UnsafeArray<T> {
             }
         }
         // println!("done in wait all {:?}",std::time::SystemTime::now());
+    }
+    fn pe_and_offset_for_global_index(&self, index: usize) -> Option<(usize, usize)> {
+        let pe = self.inner.pe_for_dist_index(index)?;
+        let offset = self.inner.pe_offset_for_dist_index(pe, index)?;
+        Some((pe, offset))
     }
 }
 
