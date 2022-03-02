@@ -344,25 +344,24 @@ impl<T: Dist> LocalMemoryRegion<T> {
     pub fn len(&self) -> usize {
         RegisteredMemoryRegion::<T>::len(self)
     }
-    pub unsafe fn put<U: Into<LamellarMemoryRegion<T>>>(&self, pe: usize, index: usize, data: U) {
-        MemoryRegionRDMA::<T>::put(self, pe, index, data);
+    pub unsafe fn put<U: Into<LamellarMemoryRegion<T>>>(&self, index: usize, data: U) {
+        MemoryRegionRDMA::<T>::put(self, self.pe, index, data);
     }
-    pub fn iput<U: Into<LamellarMemoryRegion<T>>>(&self, pe: usize, index: usize, data: U) {
-        MemoryRegionRDMA::<T>::iput(self, pe, index, data);
+    pub fn iput<U: Into<LamellarMemoryRegion<T>>>(&self, index: usize, data: U) {
+        MemoryRegionRDMA::<T>::iput(self, self.pe, index, data);
     }
     pub unsafe fn put_all<U: Into<LamellarMemoryRegion<T>>>(&self, index: usize, data: U) {
         MemoryRegionRDMA::<T>::put_all(self, index, data);
     }
     pub unsafe fn get_unchecked<U: Into<LamellarMemoryRegion<T>>>(
         &self,
-        pe: usize,
         index: usize,
         data: U,
     ) {
-        MemoryRegionRDMA::<T>::get_unchecked(self, pe, index, data);
+        MemoryRegionRDMA::<T>::get_unchecked(self, self.pe, index, data);
     }
-    pub fn iget<U: Into<LamellarMemoryRegion<T>>>(&self, pe: usize, index: usize, data: U) {
-        MemoryRegionRDMA::<T>::iget(self, pe, index, data);
+    pub fn iget<U: Into<LamellarMemoryRegion<T>>>(&self, index: usize, data: U) {
+        MemoryRegionRDMA::<T>::iget(self, self.pe, index, data);
     }
     pub fn as_slice(&self) -> MemResult<&[T]> {
         RegisteredMemoryRegion::<T>::as_slice(self)

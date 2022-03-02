@@ -125,7 +125,7 @@ impl<T: Dist> UnsafeArray<T> {
                     let pe = (start_pe + i) % num_pes;
                     let offset = global_index / num_pes + overflow;
                     for j in (i..buf.len()).step_by(num_pes) {
-                        unsafe { temp_memreg.put(my_pe, k, buf.sub_region(j..=j)) };
+                        unsafe { temp_memreg.put( k, buf.sub_region(j..=j)) };
                         k += 1;
                     }
                     self.inner
@@ -148,7 +148,7 @@ impl<T: Dist> UnsafeArray<T> {
                     let pe = (start_pe + i) % num_pes;
                     // let offset = global_index / num_pes + overflow;
                     for j in (i..buf.len()).step_by(num_pes) {
-                        unsafe { temp_memreg.put(my_pe, k, buf.sub_region(j..=j)) };
+                        unsafe { temp_memreg.put( k, buf.sub_region(j..=j)) };
                         k += 1;
                     }
                     // println!("{:?}",temp_memreg.clone().to_base::<u8>().as_slice());
