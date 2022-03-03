@@ -167,11 +167,13 @@ The ROFI_DIR environment variable must be specified with the location of the ROF
 BUILDING PACKAGE
 ----------------
 In the following, assume a root directory ${ROOT}
-0. download Lamellar to ${ROOT}/lamellar-runtime
-    `cd ${ROOT} && git clone https://github.com/pnnl/lamellar-runtime`
 
-1. Select Lamellae to use
-    In Cargo.toml add "enable-rofi" feature if wanting to use rofi (or pass --features enable-rofi to your cargo build command ), otherwise only support for local and shmem backends will be built.
+0. download Lamellar to ${ROOT}/lamellar-runtime
+
+ `cd ${ROOT} && git clone https://github.com/pnnl/lamellar-runtime`
+
+1. Select Lamellae to use:
+    * In Cargo.toml add "enable-rofi" feature if wanting to use rofi (or pass --features enable-rofi to your cargo build command ), otherwise only support for local and shmem backends will be built.
 
 2. Compile Lamellar lib and test executable (feature flags can be passed to command line instead of specifying in cargo.toml)
 
@@ -185,7 +187,7 @@ In the following, assume a root directory ${ROOT}
 
     executables located at ./target/debug(release)/examples/
 
-    Note: we do an explicit build instead of `cargo run --examples` as they are intended to run in a distriubted envrionment (see TEST section below.)
+Note: we do an explicit build instead of `cargo run --examples` as they are intended to run in a distriubted envrionment (see TEST section below.)
 
 
 TESTING
