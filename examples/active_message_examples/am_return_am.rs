@@ -1,16 +1,15 @@
 /// ------------Lamellar Example: AM returm Am -------------------------
-/// This example highlights how to create a Lamellar Active message 
+/// This example highlights how to create a Lamellar Active message
 /// with multiple input types which returns as a result another active message.
 /// This returned active message is executed automatically upon arrival at the original
 /// PE but does not return any data to the user.
 /// it tests executing the AM localy, executing remotely, and executing on all PEs
 /// --------------------------------------------------------------------
-
-use lamellar::{ActiveMessaging, LamellarAM};
+use lamellar::ActiveMessaging;
 // use lamellar::{Backend, SchedulerType};
 
 //--Active message returning an active message that returns nothing--//
-#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
+#[lamellar::AmData(Clone, Debug)]
 struct InitialAM {
     val1: usize,
     val2: String,
@@ -37,7 +36,7 @@ impl LamellarAM for InitialAM {
 
 //--the returned active message that will execute automically upon arrival at the originating node --//
 // note that because of the way macros are expanded and evaluated we need to define the returned AM before it is used in another AM
-#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
+#[lamellar::AmData(Debug)]
 struct ReturnAM {
     val1: usize,
     val2: String,

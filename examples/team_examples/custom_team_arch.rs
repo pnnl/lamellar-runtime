@@ -12,12 +12,10 @@ pub trait LamellarArch: Sync + Send +  std::fmt::Debug {
 /// Lamellar currently provides a Block (sequential) layout, as well as a strided layout.
 /// this example shows how to implement a block+strided layout architecture.
 ///-------------------------------------------------------------------------------
-use lamellar::{ActiveMessaging, LamellarAM, LamellarTeam, LamellarWorld};
+use lamellar::{ActiveMessaging, LamellarTeam, LamellarWorld};
 use lamellar::{IdError, LamellarArch};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-
-
 
 #[derive(Debug, Hash, Clone)]
 struct BlockStridedArch {
@@ -103,7 +101,7 @@ impl LamellarArch for BlockStridedArch {
     }
 }
 
-#[derive(serde::Serialize, serde::Deserialize, Clone)]
+#[lamellar::AmData(Clone)]
 struct TeamAM {
     secs: u64,
 }
@@ -194,6 +192,8 @@ fn main() {
         let odd_team = world.create_team_from_arch(arch);
         test_team(&world, odd_team, "odd team");
     }
+
+    world.barrier();
 
     let arch = BlockStridedArch::new(
         0,                                      //start pe (world pe)

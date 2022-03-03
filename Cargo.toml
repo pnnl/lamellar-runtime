@@ -1,8 +1,8 @@
 [package]
 name = "lamellar"
-version = "0.3.1"
+version = "0.4.0"
 authors = ["Ryan D. Friese <ryan.friese@pnnl.gov>", " Mark V Raugas <mark.raugas@pnnl.gov>", "Roberto Gioiosa <roberto.gioiosa@pnnl.gov>"]
-edition = "2018"
+edition = "2021"
 description = "Lamellar is an asynchronous tasking runtime for HPC systems developed in RUST."
 readme = "README.md"
 repository = "https://github.com/pnnl/lamellar-runtime"
@@ -12,38 +12,44 @@ keywords = ["hpc","runtime","pgas","distributed","asynchronous"]
 categories = ["asynchronous","concurrency", "network-programming","science"]
 
 [dependencies]
+lamellar-impl = { path = "impl" }
+lamellar-prof = {path = "lamellar-prof" }
+rofisys = { version ="0.2.2", optional = true }
+inventory = "0.1"
 serde = { version = "1.0", features = ["derive"] }
-bincode = "1.2"
+bincode = "1.3"
 anyhow = "1.0"
 futures = "0.3"
+futures-lite= "1.12"
 lazy_static = "1.3.0"
-crossbeam = "0.7"
-chashmap = "2.2.2"
+crossbeam = "0.8"
 rand = "0.7.3"
-parking_lot = "0.9"
-indexmap = "1.3"
-core_affinity = "0.5.9"
-rofisys = { version ="0.1.1", optional = true  }
+parking_lot = {version = "0.11.2", features = ["arc_lock", "send_guard", "serde"] }
+indexmap = "1.3" #lamellar_alloc
+core_affinity = "0.5.10"
 log = "0.4"
 simple_logger = "1.6.0"
-lamellar-impl = { path = "impl", version = "0.3.1" }
-proc-macro-hack = "0.5"
-inventory = "0.1"
-serde_closure = { version = "0.1.5", optional = true }
 async-task = "4.0.2"
 async-trait = "0.1.40"
 async-std = "1.6.4"
-lamellar-prof = {path = "lamellar-prof", version = "0.1.0" }
+async-recursion = "0.2"
 libc = { version = "0.2.81", optional = true }
+enum_dispatch = "0.3"
+memoffset = "0.6"
 shared_memory = "0.12.0"
 raw_sync = "0.1"
+paste = "1.0"
 
 
 
 [dev-dependencies]
-matrixmultiply = "0.2.3"
+trybuild = "1.0"
+matrixmultiply = "0.3"
 rayon = "1.1"
 hostname = "0.3"
+nix = "0.23"
+assert_cmd = "2.0.4"
+serial_test = "*"
 #packed_simd = { version = "0.3.4", package = "packed_simd_2" } #uncomment if using nightly tool chain and want to run the am_flops example
 
 [workspace]
@@ -53,12 +59,10 @@ members = ["impl"]
 
 #features are strictly additive.... can't have mutual exclusitivity
 [features]
-nightly=["serde_closure"]
-stable=[]
 enable-rofi=["rofisys","libc"]
-enable-local=[]
 enable-prof=["lamellar-prof/enable-prof"]
-experimental=[]
+non-buffered-array-ops=[]
+slurm-test=[]
 default=[]
 
 
@@ -70,15 +74,85 @@ debug = true
 
 
 [lib]
+doctest = false
 name="lamellar"
 path="src/lib.rs"
 
+#[[test]]
+#name= "tests"
+#path = "tests/progress.rs"
+
+##------tests-------##
+
+[[example]]
+name = "put_test"
+path = "tests/array/rdma/put_test.rs"
+
+[[example]]
+name = "iget_test"
+path = "tests/array/rdma/iget_test.rs"
+
+[[example]]
+name = "get_test"
+path = "tests/array/rdma/get_test.rs"
+
+[[example]]
+name = "add_test"
+path = "tests/array/arithmetic_ops/add_test.rs"
+
+[[example]]
+name = "fetch_add_test"
+path = "tests/array/arithmetic_ops/fetch_add_test.rs"
+
+[[example]]
+name = "sub_test"
+path = "tests/array/arithmetic_ops/sub_test.rs"
+
+[[example]]
+name = "fetch_sub_test"
+path = "tests/array/arithmetic_ops/fetch_sub_test.rs"
+
+[[example]]
+name = "mul_test"
+path = "tests/array/arithmetic_ops/mul_test.rs"
+
+[[example]]
+name = "fetch_mul_test"
+path = "tests/array/arithmetic_ops/fetch_mul_test.rs"
+
+[[example]]
+name = "div_test"
+path = "tests/array/arithmetic_ops/div_test.rs"
+
+[[example]]
+name = "fetch_div_test"
+path = "tests/array/arithmetic_ops/fetch_div_test.rs"
+
+[[example]]
+name = "and_test"
+path = "tests/array/bitwise_ops/and_test.rs"
+
+[[example]]
+name = "fetch_and_test"
+path = "tests/array/bitwise_ops/fetch_and_test.rs"
+
+[[example]]
+name = "or_test"
+path = "tests/array/bitwise_ops/or_test.rs"
+
+[[example]]
+name = "fetch_or_test"
+path = "tests/array/bitwise_ops/fetch_or_test.rs"
+
+[[example]]
+name = "load_store_test"
+path = "tests/array/atomic_ops/load_store_test.rs"
+
+[[example]]
+name = "swap_test"
+path = "tests/array/atomic_ops/swap_test.rs"
 
 ##------------ Bandwidth Examples -----------------##
-[[example]]
-name="am_closures_bw"
-path="examples/bandwidths/am_closures_bw.rs"
-required-features = ["nightly"]
 
 [[example]]
 name="am_bw"
@@ -96,6 +170,33 @@ path="examples/bandwidths/get_bw.rs"
 name="put_bw"
 path="examples/bandwidths/put_bw.rs"
 
+[[example]]
+name="unsafe_array_put_bw"
+path="examples/bandwidths/unsafe_array_put_bw.rs"
+
+[[example]]
+name="atomic_array_put_bw"
+path="examples/bandwidths/atomic_array_put_bw.rs"
+
+[[example]]
+name="local_lock_atomic_array_put_bw"
+path="examples/bandwidths/local_lock_atomic_array_put_bw.rs"
+
+[[example]]
+name="unsafe_array_get_bw"
+path="examples/bandwidths/unsafe_array_get_bw.rs"
+
+[[example]]
+name="atomic_array_get_bw"
+path="examples/bandwidths/atomic_array_get_bw.rs"
+
+[[example]]
+name="local_lock_atomic_array_get_bw"
+path="examples/bandwidths/local_lock_atomic_array_get_bw.rs"
+
+[[example]]
+name="readonly_array_get_bw"
+path="examples/bandwidths/readonly_array_get_bw.rs"
 
 ##------------ Active Message Examples -----------------##
 [[example]]
@@ -126,14 +227,51 @@ path="examples/active_message_examples/recursive_am.rs"
 name="am_batch_tests"
 path="examples/active_message_examples/am_batch_tests.rs"
 
-##------------ RDMA Examples -----------------##
 [[example]]
-name="put"
-path="examples/rdma_examples/put.rs"
+name="am_local"
+path="examples/active_message_examples/am_local.rs"
 
 [[example]]
-name="get"
-path="examples/rdma_examples/get.rs"
+name="am_local_memregions"
+path="examples/active_message_examples/am_local_memregions.rs"
+
+##---------------Array Examples -------------------##
+[[example]]
+name="dist_array_reduce"
+path="examples/array_examples/dist_array_reduce.rs"
+
+[[example]]
+name="array_am"
+path="examples/array_examples/array_am.rs"
+
+[[example]]
+name="array_put_get"
+path="examples/array_examples/array_put_get.rs"
+
+[[example]]
+name="array_iteration"
+path="examples/array_examples/array_iteration.rs"
+
+[[example]]
+name="local_only_array"
+path="examples/array_examples/local_only_array.rs"
+
+[[example]]
+name="generic_array"
+path="examples/array_examples/generic_array.rs"
+
+[[example]]
+name="array_ops"
+path="examples/array_examples/array_ops.rs"
+
+##------------ RDMA Examples -----------------##
+[[example]]
+name="rdma_put"
+path="examples/rdma_examples/rdma_put.rs"
+
+[[example]]
+name="rdma_get"
+path="examples/rdma_examples/rdma_get.rs"
 
 [[example]]
 name="rdma_am"
@@ -149,6 +287,10 @@ path="examples/team_examples/team_am.rs"
 name="custom_team_arch"
 path="examples/team_examples/custom_team_arch.rs"
 
+[[example]]
+name="random_team"
+path="examples/team_examples/random_team.rs"
+
 ##------------ Kernel Examples -----------------##
 [[example]]
 name="am_flops"
@@ -159,12 +301,28 @@ name="dft_proxy"
 path="examples/kernels/dft_proxy.rs"
 
 [[example]]
-name="naive_gemm"
-path="examples/kernels/naive_gemm.rs"
+name="am_gemm"
+path="examples/kernels/am_gemm.rs"
 
 [[example]]
-name="dist_gemm"
-path="examples/kernels/dist_gemm.rs"
+name="cached_am_gemm"
+path="examples/kernels/cached_am_gemm.rs"
+
+[[example]]
+name="serial_array_gemm"
+path="examples/kernels/serial_array_gemm.rs"
+
+[[example]]
+name="parallel_array_gemm"
+path="examples/kernels/parallel_array_gemm.rs"
+
+[[example]]
+name="parallel_blocked_array_gemm"
+path="examples/kernels/parallel_blocked_array_gemm.rs"
+
+[[example]]
+name="safe_parallel_blocked_array_gemm"
+path="examples/kernels/safe_parallel_blocked_array_gemm.rs"
 
 
 ##------------ Miscellaneous Examples -----------------##
@@ -173,12 +331,12 @@ name="simple_ptp"
 path="examples/misc/simple_ptp.rs"
 
 
-##------------ experimental examples ------------------##
+##------------ Darc examples ------------------##
 [[example]]
-name="random_team"
-path="examples/experimental/random_team.rs"
+name="darc"
+path="examples/darc_examples/darc.rs"
 
 [[example]]
-name="dist_array_reduce"
-path="examples/experimental/dist_array_reduce.rs"
-required-features = ["experimental"]
+name="stress_test"
+path="examples/darc_examples/stress_test.rs"
+

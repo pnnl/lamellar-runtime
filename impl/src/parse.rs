@@ -5,18 +5,18 @@ use syn::{Expr, ExprClosure, Ident, Token, TypePath};
 
 #[derive(Debug)]
 pub(crate) struct FormatArgs {
-    pub(crate) format_string: Expr,
-    pub(crate) positional_args: Vec<Expr>,
-    pub(crate) named_args: Vec<(Ident, Expr)>,
+    pub(crate) _format_string: Expr,
+    pub(crate) _positional_args: Vec<Expr>,
+    pub(crate) _named_args: Vec<(Ident, Expr)>,
 }
 
 impl Parse for FormatArgs {
     fn parse(input: ParseStream) -> Result<Self> {
-        let format_string: Expr;
-        let mut positional_args = Vec::new();
-        let mut named_args = Vec::new();
+        let _format_string: Expr;
+        let mut _positional_args = Vec::new();
+        let mut _named_args = Vec::new();
 
-        format_string = input.parse()?;
+        _format_string = input.parse()?;
         while !input.is_empty() {
             input.parse::<Token![,]>()?;
             if input.is_empty() {
@@ -27,7 +27,7 @@ impl Parse for FormatArgs {
                     let name: Ident = input.call(Ident::parse_any)?;
                     input.parse::<Token![=]>()?;
                     let value: Expr = input.parse()?;
-                    named_args.push((name, value));
+                    _named_args.push((name, value));
                     if input.is_empty() {
                         break;
                     }
@@ -35,13 +35,13 @@ impl Parse for FormatArgs {
                 }
                 break;
             }
-            positional_args.push(input.parse()?);
+            _positional_args.push(input.parse()?);
         }
 
         Ok(FormatArgs {
-            format_string,
-            positional_args,
-            named_args,
+            _format_string,
+            _positional_args,
+            _named_args,
         })
     }
 }

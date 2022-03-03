@@ -1,24 +1,23 @@
 /// ------------Lamellar Example: Team based AM -------------------------
 /// this example highlights creating and using LamellarTeams
-/// to launch and execute active messages. 
+/// to launch and execute active messages.
 ///----------------------------------------------------------------
-use lamellar::{
-    ActiveMessaging, BlockedArch, LamellarAM, LamellarTeam, LamellarWorld, StridedArch,
-};
+use lamellar::{ActiveMessaging, BlockedArch, LamellarTeam, LamellarWorld, StridedArch};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-#[derive(serde::Serialize, serde::Deserialize, Clone)]
+#[lamellar::AmData(Clone)]
 struct TeamAM {
     secs: u64,
+    orig_pe: usize,
 }
 
 #[lamellar::am]
 impl LamellarAM for TeamAM {
     fn exec() {
         // let team = lamellar::team;
-        // println!("current_pe: {:?}, team.global_pe_id(): {:?}, team.team_pe_id(): {:?} team members: {:?}",
-        // lamellar::current_pe , team.global_pe_id(), team.team_pe_id(), team.get_pes());
+        // println!("current_pe: {:?}, orig_pe {:?}, team.world_pe_id(): {:?}, team.team_pe_id(): {:?} team members: {:?}",
+        // lamellar::current_pe ,self.orig_pe, team.world_pe_id(), team.team_pe_id(), team.get_pes());
         async_std::task::sleep(Duration::from_secs(self.secs)).await;
     }
 }
@@ -39,7 +38,10 @@ fn test_team(world: &LamellarWorld, team: Option<Arc<LamellarTeam>>, label: &str
             1
         };
         let timer = Instant::now();
-        team.exec_am_all(TeamAM { secs }); //everynode that has a handle can launch on a given team;
+        team.exec_am_all(TeamAM {
+            secs: secs,
+            orig_pe: my_pe,
+        }); //everynode that has a handle can launch on a given team;
         team.wait_all(); //wait until all requests return
         team.barrier(); // barriers only apply to team members, its a no op for non team members
         timer.elapsed().as_secs_f64()
@@ -71,7 +73,10 @@ fn main() {
     }
     world.barrier();
     let timer = Instant::now();
-    world.exec_am_all(TeamAM { secs: 1 });
+    world.exec_am_all(TeamAM {
+        secs: 1,
+        orig_pe: my_pe,
+    });
     world.wait_all();
     world.barrier();
     let elapsed = timer.elapsed().as_secs_f64();
@@ -105,10 +110,14 @@ fn main() {
     // we can also create sub teams
     if num_pes > 3 {
         if let Some(team) = first_half_team {
-            let second_half_sub_team = team.create_team_from_arch(BlockedArch::new(
-                (team.num_pes() as f64 / 2.0).ceil() as usize, //start pe
-                (team.num_pes() as f64 / 2.0).floor() as usize, //num_pes in team
-            ));
+            println!("going to create sub team");
+            let second_half_sub_team = LamellarTeam::create_subteam_from_arch(
+                team.clone(),
+                BlockedArch::new(
+                    (team.num_pes() as f64 / 2.0).ceil() as usize, //start pe
+                    (team.num_pes() as f64 / 2.0).floor() as usize, //num_pes in team
+                ),
+            );
 
             test_team(&world, second_half_sub_team.clone(), "second half sub team");
         }

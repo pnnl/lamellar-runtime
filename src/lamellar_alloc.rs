@@ -12,8 +12,10 @@ pub(crate) trait LamellarAlloc {
     fn init(&mut self, start_addr: usize, size: usize); //size in bytes
     fn malloc(&self, size: usize) -> usize;
     fn try_malloc(&self, size: usize) -> Option<usize>;
-    fn free(&self, addr: usize);
+    fn fake_malloc(&self, size: usize) -> bool;
+    fn free(&self, addr: usize) -> Result<(), usize>;
     fn space_avail(&self) -> usize;
+    fn occupied(&self) -> usize;
 }
 
 #[derive(Debug)]
@@ -108,7 +110,34 @@ impl LamellarAlloc for LinearAlloc {
         }
     }
 
-    fn free(&self, addr: usize) {
+    fn fake_malloc(&self, size: usize) -> bool {
+        let &(ref lock, ref _cvar) = &*self.entries;
+        let entries = lock.lock();
+
+        if entries.len() > 0 {
+            let mut prev_end = self.start_addr;
+            for i in 0..entries.len() {
+                if entries[i].addr - prev_end >= size {
+                    break;
+                }
+                prev_end = entries[i].addr + entries[i].size;
+            }
+
+            if prev_end + size <= self.start_addr + self.max_size {
+                return true;
+            } else {
+                return false;
+            }
+        } else {
+            if size <= self.start_addr + self.max_size {
+                return true;
+            } else {
+                return false;
+            }
+        }
+    }
+
+    fn free(&self, addr: usize) -> Result<(), usize> {
         let &(ref lock, ref cvar) = &*self.entries;
         let mut entries = lock.lock();
         for i in 0..entries.len() {
@@ -121,12 +150,16 @@ impl LamellarAlloc for LinearAlloc {
                 }
                 cvar.notify_all();
 
-                return;
+                return Ok(());
             }
         }
+        Err(addr)
     }
     fn space_avail(&self) -> usize {
         self.free_space.load(Ordering::SeqCst)
+    }
+    fn occupied(&self) -> usize {
+        self.max_size - self.free_space.load(Ordering::SeqCst)
     }
 }
 
@@ -149,8 +182,8 @@ impl FreeEntries {
 pub(crate) struct BTreeAlloc {
     free_entries: Arc<(Mutex<FreeEntries>, Condvar)>,
     allocated_addrs: Arc<(Mutex<BTreeMap<usize, usize>>, Condvar)>, //<addr,size>
-    start_addr: usize,
-    max_size: usize,
+    pub(crate) start_addr: usize,
+    pub(crate) max_size: usize,
     id: String,
     free_space: Arc<AtomicUsize>,
 }
@@ -246,7 +279,20 @@ impl LamellarAlloc for BTreeAlloc {
         addr
     }
 
-    fn free(&self, addr: usize) {
+    fn fake_malloc(&self, size: usize) -> bool {
+        prof_start!(locking);
+        let &(ref lock, ref _cvar) = &*self.free_entries;
+        let mut free_entries = lock.lock();
+        prof_end!(locking);
+        //find smallest memory segment greater than or equal to size
+        if let Some((_, _)) = free_entries.sizes.range_mut(size..).next() {
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+    fn free(&self, addr: usize) -> Result<(), usize> {
         let &(ref lock, ref _cvar) = &*self.allocated_addrs;
         let mut allocated_addrs = lock.lock();
         if let Some(size) = allocated_addrs.remove(&addr) {
@@ -295,16 +341,21 @@ impl LamellarAlloc for BTreeAlloc {
                 .or_insert(IndexSet::new())
                 .insert(temp_addr);
             cvar.notify_all();
+            Ok(())
         } else {
-            panic!(
-                "{:?} illegal free, addr not currently allocated: {:?}",
-                self.id, addr
-            )
+            // panic!(
+            //     "{:?} illegal free, addr not currently allocated: {:?}",
+            //     self.id, addr
+            // )
+            Err(addr)
         }
     }
 
     fn space_avail(&self) -> usize {
         self.free_space.load(Ordering::SeqCst)
+    }
+    fn occupied(&self) -> usize {
+        self.max_size - self.free_space.load(Ordering::SeqCst)
     }
 }
 
@@ -367,17 +418,37 @@ impl<T: Copy> LamellarAlloc for ObjAlloc<T> {
         }
     }
 
-    fn free(&self, addr: usize) {
+    fn fake_malloc(&self, size: usize) -> bool {
+        assert_eq!(
+            size, 1,
+            "ObjAlloc does not currently support multiobject allocations"
+        );
+        prof_start!(locking);
+        let &(ref lock, ref _cvar) = &*self.free_entries;
+        let free_entries = lock.lock();
+        prof_end!(locking);
+        if free_entries.len() > 1 {
+            true
+        } else {
+            false
+        }
+    }
+
+    fn free(&self, addr: usize) -> Result<(), usize> {
         let &(ref lock, ref cvar) = &*self.free_entries;
         let mut free_entries = lock.lock();
         free_entries.push(addr);
         cvar.notify_all();
+        Ok(())
     }
 
     fn space_avail(&self) -> usize {
         let &(ref lock, ref _cvar) = &*self.free_entries;
         let free_entries = lock.lock();
         free_entries.len()
+    }
+    fn occupied(&self) -> usize {
+        self.max_size - self.space_avail()
     }
 }
 
@@ -403,11 +474,11 @@ mod tests {
         }
     }
 
-    fn stress<T: 'static + LamellarAlloc + Clone + Sync + Send>(alloc: T) {
+    fn stress<T: LamellarAlloc + Clone + Sync + Send + 'static>(alloc: T) {
         let mut threads = Vec::new();
         let start = std::time::Instant::now();
         for _i in 0..10 {
-            let mut alloc_clone = alloc.clone();
+            let alloc_clone = alloc.clone();
             let t = std::thread::spawn(move || {
                 let mut rng = rand::thread_rng();
                 let mut addrs: Vec<usize> = Vec::new();
@@ -421,11 +492,11 @@ mod tests {
                     } else {
                         let index = rng.gen_range(0, addrs.len());
                         let addr = addrs.remove(index);
-                        alloc_clone.free(addr);
+                        alloc_clone.free(addr).unwrap();
                     }
                 }
                 for addr in addrs {
-                    alloc_clone.free(addr);
+                    alloc_clone.free(addr).unwrap();
                 }
             });
             threads.push(t);

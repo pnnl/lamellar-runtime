@@ -2,16 +2,16 @@
 /// similar to the AM bandwidth tests but instead of transferring data
 /// each active message performs some number of dummy multiply add operations
 /// Not to be used as a true measure of the flops of a system but can be
-/// useful to compare multiple systems and/or perform worksize to 
+/// useful to compare multiple systems and/or perform worksize to
 /// RT latency analyses
 /// --------------------------------------------------------------------
-use lamellar::{ActiveMessaging, LamellarAM};
+use lamellar::ActiveMessaging;
 use std::time::Instant;
 
 // #[cfg(feature = "nightly")]
 //use packed_simd::{f64x8, Simd};
 
-#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
+#[lamellar::AmData(Clone, Debug)]
 struct FlopAM {
     iterations: usize,
 }
@@ -109,7 +109,7 @@ fn main() {
         let cur_t = timer.elapsed().as_secs_f64();
         let tot_flop: usize = reqs
             .iter()
-            .map(|r| r.get_all().iter().map(|r| r.unwrap()).sum::<usize>())
+            .map(|r| r.get_all().drain(0..).map(|r| r.unwrap()).sum::<usize>())
             .sum();
         let task_granularity = ((cur_t * num_cores) / (num_tasks * num_pes) as f64) * 1000.0f64;
         if my_pe == 0 {

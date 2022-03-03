@@ -11,7 +11,7 @@ pub trait LamellarArch: Sync + Send + std::fmt::Debug {
     fn team_pe_id(&self, parent_pe: &usize) -> ArchResult<usize>; // team id is for user convenience, ids == 0..num_pes-1
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct IdError {
     pub parent_pe: usize,
     pub team_pe: usize,
@@ -141,25 +141,25 @@ impl LamellarArchRT {
     pub fn num_pes(&self) -> usize {
         self.num_pes
     }
-    pub fn global_pe(&self, team_pe: usize) -> ArchResult<usize> {
+    pub fn world_pe(&self, team_pe: usize) -> ArchResult<usize> {
         let parent_pe = self.arch.parent_pe_id(&team_pe)?;
         if let Some(parent) = &self.parent {
-            parent.global_pe(parent_pe)
+            parent.world_pe(parent_pe)
         } else {
             Ok(parent_pe)
         }
     }
 
-    pub fn team_pe(&self, global_pe: usize) -> ArchResult<usize> {
+    pub fn team_pe(&self, world_pe: usize) -> ArchResult<usize> {
         if let Some(parent) = &self.parent {
-            let parent_pe = parent.team_pe(global_pe)?;
-            // println!("global_pe {:?}   parent_pe {:?}  self: {:?}",global_pe, parent_pe,self);
+            let parent_pe = parent.team_pe(world_pe)?;
+            // println!("world_pe {:?}   parent_pe {:?}  self: {:?}",world_pe, parent_pe,self);
             let res = self.arch.team_pe_id(&parent_pe);
             // println!("team_pe {:?}",res);
             res
         } else {
-            // println!("root global_pe {:?}",global_pe);
-            let res = self.arch.team_pe_id(&global_pe);
+            // println!("root world_pe {:?}",world_pe);
+            let res = self.arch.team_pe_id(&world_pe);
             // println!("team_pe {:?}",res);
             res
         }
@@ -194,7 +194,7 @@ impl Iterator for LamellarArchRTiter {
     type Item = usize;
     fn next(&mut self) -> Option<usize> {
         let res = if self.cur_pe < self.arch.num_pes() {
-            if let Ok(pe) = self.arch.global_pe(self.cur_pe) {
+            if let Ok(pe) = self.arch.world_pe(self.cur_pe) {
                 Some(pe)
             } else {
                 None

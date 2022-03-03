@@ -163,7 +163,7 @@ pub(crate) fn exec_closure_cmd(
     cmd: Cmd,
     msg: Msg,
     ser_data: Vec<u8>,
-    lamellae: Arc<dyn LamellaeAM>,
+    lamellae: Arc<Lamellae>,
     _world: Arc<LamellarTeamRT>,
     team: Arc<LamellarTeamRT>,
 ) -> Option<ReqData> {
@@ -180,21 +180,21 @@ pub(crate) fn exec_closure_cmd(
                         data,
                         msg,
                         lamellae,
-                        team.my_hash,
+                        team.team_hash,
                     ),
                     RetType::Data => ame.send_response(
                         ExecType::Runtime(Cmd::DataReturn),
                         data,
                         msg,
                         lamellae,
-                        team.my_hash,
+                        team.team_hash,
                     ),
                     RetType::Unit => ame.send_response(
                         ExecType::Runtime(Cmd::BatchedUnitReturn),
                         None,
                         msg,
                         lamellae,
-                        team.my_hash,
+                        team.team_hash,
                     ),
                     _ => {
                         println!("unexpected return type");
@@ -244,7 +244,7 @@ pub(crate) fn process_closure_request(
     _world: Arc<LamellarTeamRT>,
     team: Arc<LamellarTeamRT>,
 ) -> Option<(Vec<u8>, ReqData)> {
-    //,lamellaes: &Arc<BTreeMap<Backend, Arc<dyn LamellaeAM>>>,){
+    //,lamellaes: &Arc<BTreeMap<Backend, Arc<Lamellae>>>,){
     let func = req_data.func;
     let my_pe = if let Ok(my_pe) = team.arch.team_pe(req_data.src) {
         Some(my_pe)

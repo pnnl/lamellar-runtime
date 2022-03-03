@@ -5,15 +5,20 @@
 /// a remote pes or put data into a remote pes. In the example,
 /// the handles are used on remote pes to access data on the PE which launched the AM
 ///----------------------------------------------------------------
-use lamellar::{
-    ActiveMessaging, LamellarAM, LamellarMemoryRegion, RegisteredMemoryRegion, RemoteMemoryRegion,
-};
+use lamellar::{ActiveMessaging, LocalMemoryRegion, RemoteMemoryRegion, SharedMemoryRegion};
 
-const ARRAY_LEN: usize = 100;
+const ARRAY_LEN: usize = 1;
 
-#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
+#[lamellar::AmData(Clone, Debug)]
 struct RdmaAM {
-    array: LamellarMemoryRegion<u8>,
+    array: SharedMemoryRegion<u8>,
+    orig_pe: usize,
+    index: usize,
+}
+
+#[lamellar::AmData(Clone, Debug)]
+struct RdmaLocalMRAM {
+    array: LocalMemoryRegion<u8>,
     orig_pe: usize,
     index: usize,
 }
@@ -28,7 +33,7 @@ impl LamellarAM for RdmaAM {
         let local_slice = unsafe { local.as_mut_slice().unwrap() };
         local_slice[ARRAY_LEN - 1] = lamellar::num_pes as u8;
         unsafe {
-            self.array.get(self.orig_pe, 0, &local);
+            self.array.get_unchecked(self.orig_pe, 0, local.clone());
         }
         while local_slice[ARRAY_LEN - 1] == lamellar::num_pes as u8 {
             async_std::task::yield_now().await;
@@ -42,10 +47,47 @@ impl LamellarAM for RdmaAM {
         if my_index < ARRAY_LEN {
             unsafe {
                 self.array
-                    .put(self.orig_pe, my_index, &local.sub_region(0..=0));
+                    .put(self.orig_pe, my_index, local.sub_region(0..=0));
             }
         }
-        lamellar::world.free_local_memory_region(local);
+    }
+}
+
+#[lamellar::am]
+impl LamellarAM for RdmaLocalMRAM {
+    fn exec(&self) {
+        println!(
+            "\t in RdmaAM on pe {:?}, originating from pe {:?}",
+            lamellar::current_pe,
+            self.orig_pe
+        );
+
+        //get the original nodes data
+        let local = lamellar::world.alloc_local_mem_region::<u8>(ARRAY_LEN);
+        let local_slice = unsafe { local.as_mut_slice().unwrap() };
+        local_slice[ARRAY_LEN - 1] = lamellar::num_pes as u8;
+        unsafe {
+            self.array.get_unchecked(0, local.clone());
+        }
+        while local_slice[ARRAY_LEN - 1] == lamellar::num_pes as u8 {
+            async_std::task::yield_now().await;
+        }
+
+        let my_index = self.index * lamellar::num_pes + lamellar::current_pe;
+        println!(
+            "pe: {:?} updating index {:?} on pe  {:?}",
+            lamellar::current_pe,
+            my_index,
+            self.orig_pe
+        );
+
+        //update an element on the original node
+        local_slice[0] = lamellar::current_pe as u8;
+        if my_index < ARRAY_LEN {
+            unsafe {
+                self.array.put(my_index, local.sub_region(0..=0));
+            }
+        }
     }
 }
 
@@ -54,15 +96,19 @@ impl LamellarAM for RdmaAM {
 // we provide APIs for these memory regions but they
 // are intended mostly for internal use in the runtime
 //
-// LamellarMemoryRegions are serializable and can be transfered
+// SharedMemoryRegions are serializable and can be transfered
 // as part of a LamellarAM
 fn main() {
     let world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();
     let num_pes = world.num_pes();
     let array = world.alloc_shared_mem_region::<u8>(ARRAY_LEN);
+    let local_array = world.alloc_local_mem_region::<u8>(ARRAY_LEN);
     unsafe {
         for i in array.as_mut_slice().unwrap() {
+            *i = 255_u8;
+        }
+        for i in local_array.as_mut_slice().unwrap() {
             *i = 255_u8;
         }
     }
@@ -71,15 +117,30 @@ fn main() {
     }
     world.barrier();
     println!("[{:?}] Before {:?}", my_pe, array.as_slice());
+    println!("[{:?}] Before {:?}", my_pe, local_array.as_slice());
     world.barrier();
     if my_pe == 0 {
         println!("------------------------------------------------------------");
     }
     world.barrier();
+    // let mut index = 0;
+    // while index * num_pes < ARRAY_LEN {
+    //     world.exec_am_all(RdmaAM {
+    //         array: array.clone(),
+    //         orig_pe: my_pe,
+    //         index: index,
+    //     });
+    //     index += 1;
+    // }
+
+    // world.wait_all();
+    // world.barrier();
+    // println!("[{:?}] after {:?}", my_pe, array.as_slice());
+    world.barrier();
     let mut index = 0;
     while index * num_pes < ARRAY_LEN {
-        world.exec_am_all(RdmaAM {
-            array: array.clone(),
+        world.exec_am_all(RdmaLocalMRAM {
+            array: local_array.clone(),
             orig_pe: my_pe,
             index: index,
         });
@@ -88,10 +149,9 @@ fn main() {
 
     world.wait_all();
     world.barrier();
-    println!("[{:?}] after {:?}", my_pe, array.as_slice());
+    println!("[{:?}] after {:?}", my_pe, local_array.as_slice());
     world.barrier();
     if my_pe == 0 {
         println!("------------------------------------------------------------");
     }
-    world.free_shared_memory_region(array);
 }

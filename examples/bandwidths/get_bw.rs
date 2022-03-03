@@ -1,39 +1,39 @@
 /// ------------Lamellar Bandwidth: RDMA Get  -------------------------
-/// Test the bandwidth between two PEs using an RDMA get of N bytes 
-/// from a remote PE to a local array.
+/// Test the bandwidth between two PEs using an RDMA get of N bytes
+/// from a remote PE to a local mem_reg.
 /// --------------------------------------------------------------------
-use lamellar::ActiveMessaging;
-use lamellar::{RegisteredMemoryRegion, RemoteMemoryRegion};
+use lamellar::RemoteMemoryRegion;
 use std::time::Instant;
 
-const ARRAY_LEN: usize = 1024 * 1024 * 1024;
+const MEMREG_LEN: usize = 1024 * 1024 * 1024;
 
 fn main() {
     let world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();
     let num_pes = world.num_pes();
-    let array = world.alloc_shared_mem_region::<u8>(ARRAY_LEN);
-    let data = world.alloc_local_mem_region::<u8>(ARRAY_LEN);
+    let mem_reg = world.alloc_shared_mem_region::<u8>(MEMREG_LEN);
+    let data = world.alloc_local_mem_region::<u8>(MEMREG_LEN);
+    for j in 0..MEMREG_LEN as usize {
+        unsafe {
+            data.as_mut_slice().unwrap()[j] = my_pe as u8;
+            mem_reg.as_mut_slice().unwrap()[j] = num_pes as u8;
+        }
+    }
 
     world.barrier();
     let s = Instant::now();
     world.barrier();
     let b = s.elapsed().as_secs_f64();
     println!("Barrier latency: {:?}s {:?}us", b, b * 1_000_000 as f64);
-
+    world.barrier();
     if my_pe == 0 {
         println!("==================Bandwidth test===========================");
     }
     let mut bws = vec![];
-    for j in 0..ARRAY_LEN as usize {
-        unsafe {
-            data.as_mut_slice().unwrap()[j] = my_pe as u8;
-            array.as_mut_slice().unwrap()[j] = num_pes as u8;
-        }
-    }
+
     for i in 0..30 {
         let num_bytes = 2_u64.pow(i);
-        let old: f64 = world.MB_sent().iter().sum();
+        let old: f64 = world.MB_sent();
         let mbs_o = world.MB_sent();
         let mut sum = 0;
         let mut cnt = 0;
@@ -47,12 +47,15 @@ fn main() {
         let mut sub_time = 0f64;
         if my_pe == 0 {
             for j in (0..2_u64.pow(exp) as usize).step_by(num_bytes as usize) {
+                // if j % 1024 ==0 {
+                // println!("[{:?}] j: {:?}",my_pe, j);
+                // }
                 let sub_timer = Instant::now();
                 unsafe {
-                    array.get(
+                    mem_reg.get_unchecked(
                         num_pes - 1,
                         0,
-                        &data.sub_region(j..(j + num_bytes as usize)),
+                        data.sub_region(j..(j + num_bytes as usize)),
                     )
                 };
                 sub_time += sub_timer.elapsed().as_secs_f64();
@@ -72,7 +75,7 @@ fn main() {
         }
         world.barrier();
         let cur_t = timer.elapsed().as_secs_f64();
-        let cur: f64 = world.MB_sent().iter().sum();
+        let cur: f64 = world.MB_sent();
         let mbs_c = world.MB_sent();
         if my_pe == 0 {
             for j in 0..2_u64.pow(exp) as usize {
@@ -92,7 +95,7 @@ fn main() {
             ((sum*(num_pes-1) as u64) as f64 / 1048576.0) / cur_t,
             cur - old, //total bytes sent including overhead
             (cur - old) as f64 / cur_t, //throughput including overhead 
-            (mbs_c[0] -mbs_o[0] )/ cur_t,
+            (mbs_c -mbs_o )/ cur_t,
             (cur_t/cnt as f64) * 1_000_000 as f64 ,
         );
         }
@@ -104,8 +107,6 @@ fn main() {
         }
         world.barrier();
     }
-    world.free_shared_memory_region(array);
-    world.free_local_memory_region(data);
     if my_pe == 0 {
         println!(
             "bandwidths: {}",

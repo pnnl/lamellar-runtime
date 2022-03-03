@@ -1,9 +1,8 @@
 /// ------------Lamellar Bandwidth: RDMA Put  -------------------------
-/// Test the bandwidth between two PEs using an RDMA Put of N bytes 
+/// Test the bandwidth between two PEs using an RDMA Put of N bytes
 /// from a local array into a remote PE.
 /// --------------------------------------------------------------------
-use lamellar::ActiveMessaging;
-use lamellar::{RegisteredMemoryRegion, RemoteMemoryRegion};
+use lamellar::RemoteMemoryRegion;
 use std::time::Instant;
 
 const ARRAY_LEN: usize = 1024 * 1024 * 1024;
@@ -35,7 +34,7 @@ fn main() {
     let mut bws = vec![];
     for i in 0..27 {
         let num_bytes = 2_u64.pow(i);
-        let old: f64 = world.MB_sent().iter().sum();
+        let old: f64 = world.MB_sent();
         let mbs_o = world.MB_sent();
         let mut sum = 0;
         let mut cnt = 0;
@@ -50,7 +49,8 @@ fn main() {
         if my_pe == 0 {
             for j in (0..2_u64.pow(exp) as usize).step_by(num_bytes as usize) {
                 let sub_timer = Instant::now();
-                unsafe { array.put(num_pes - 1, j, &data.sub_region(..num_bytes as usize)) };
+                unsafe { array.put(num_pes - 1, j, data.sub_region(..num_bytes as usize)) };
+
                 // println!("j: {:?}",j);
                 // unsafe { array.put_slice(num_pes - 1, j, &data[..num_bytes as usize]) };
                 sub_time += sub_timer.elapsed().as_secs_f64();
@@ -70,7 +70,7 @@ fn main() {
         }
         world.barrier();
         let cur_t = timer.elapsed().as_secs_f64();
-        let cur: f64 = world.MB_sent().iter().sum();
+        let cur: f64 = world.MB_sent();
         let mbs_c = world.MB_sent();
         if my_pe == 0 {
             println!(
@@ -84,20 +84,18 @@ fn main() {
             ((sum*(num_pes-1) as u64) as f64 / 1048576.0) / cur_t,
             cur - old, //total bytes sent including overhead
             (cur - old) as f64 / cur_t, //throughput including overhead 
-            (mbs_c[0] -mbs_o[0] )/ cur_t,
+            (mbs_c -mbs_o )/ cur_t,
             (cur_t/cnt as f64) * 1_000_000 as f64 ,
         );
         }
         bws.push((sum as f64 / 1048576.0) / cur_t);
-        unsafe { 
+        unsafe {
             for i in array.as_mut_slice().unwrap() {
                 *i = 255 as u8;
             }
         };
         world.barrier();
     }
-    world.free_shared_memory_region(array);
-    world.free_local_memory_region(data);
     if my_pe == 0 {
         println!(
             "bandwidths: {}",
