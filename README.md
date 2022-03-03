@@ -36,13 +36,16 @@ EXAMPLES
 # Selecting a Lamellae and constructing a lamellar world instance
 ```rust
 use lamellar::Backend;
-fn main(){
- let mut world = lamellar::LamellarWorldBuilder::new()
-        .with_lamellae( Default::default() ) //if "enable-rofi" feature is active default is rofi, otherwise  default is Shmem
+fn main() {
+    let world = lamellar::LamellarWorldBuilder::new()
+        .with_lamellae(Default::default()) //if "enable-rofi" feature is active default is rofi, otherwise  default is local
         //.with_lamellae( Backend::Rofi ) //explicity set the lamellae backend to rofi, using the provider specified by the LAMELLAR_ROFI_PROVIDER env var ("verbs" or "shm")
-        //.with_lamellae( Backend::RofiVerbs ) //explicity set the lamellae backend to rofi, specifying the verbs provider
-        //.with_lamellae( Backend::Shmem ) //explicity set the lamellae backend to rofi, specifying the shm provider
         .build();
+
+    let num_pes = world.num_pes();
+    let my_pe = world.my_pe();
+
+    println!("num_pes {:?}, my_pe {:?}", num_pes, my_pe);
 }
 ```
 
@@ -51,7 +54,8 @@ fn main(){
 use lamellar::ActiveMessaging;
 
 #[lamellar::AmData(Debug, Clone)]
-struct HelloWorld { //the "input data" we are sending with our active message
+struct HelloWorld {
+    //the "input data" we are sending with our active message
     my_pe: usize, // "pe" is processing element == a node
 }
 
@@ -60,23 +64,23 @@ impl LamellarAM for HelloWorld {
     fn exec(&self) {
         println!(
             "Hello pe {:?} of {:?}, I'm pe {:?}",
-            lamellar::current_pe, 
+            lamellar::current_pe,
             lamellar::num_pes,
             self.my_pe
         );
     }
 }
 
-fn main(){
-    let mut world = lamellar::LamellarWorldBuilder::new().build();
+fn main() {
+    let world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();
     let num_pes = world.num_pes();
     let am = HelloWorld { my_pe: my_pe };
-    for pe in 0..num_pes{
-        world.exec_am_pe(pe,am.clone()); // explicitly launch on each PE
+    for pe in 0..num_pes {
+        world.exec_am_pe(pe, am.clone()); // explicitly launch on each PE
     }
     world.wait_all(); // wait for all active messages to finish
-    world.barrier();  // synchronize with other pes
+    world.barrier(); // synchronize with other pes
     let handle = world.exec_am_all(am.clone()); //also possible to execute on every PE with a single call
     handle.get(); //both exec_am_all and exec_am_pe return request handles that can be used to access any returned result
 }
@@ -84,19 +88,23 @@ fn main(){
 
 # Creating, initializing, and iterating through a distributed array
 ```rust
-use lamellar::array::{DistributedIterator, Distribution, SerialIterator, UnsafeArray};
+use lamellar::array::{Distribution, SerialIterator, UnsafeArray};
 
-fn main(){
-    fn main() {
+fn main() {
     let world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();
-    let block_array = UnsafeArray::<usize>::new(world.team(), ARRAY_LEN, Distribution::Block); //we also support Cyclic distribution.
-    block_array.dist_iter_mut().enumerate().for_each(move |elem| *elem = my_pe); //simultaneosuly initialize array accross all pes, each pe only updates its local data
+    let num_pes = world.num_pes();
+    let block_array = UnsafeArray::<usize>::new(world.team(), num_pes * 5, Distribution::Block); //we also support Cyclic distribution.
+    block_array
+        .dist_iter_mut()
+        .for_each(move |elem| *elem = my_pe); //simultaneosuly initialize array accross all pes, each pe only updates its local data
     block_array.wait_all();
     block_array.barrier();
-    if my_pe == 0{
-        for (i,elem) in block_array.ser_iter().into_iter().enumerate(){ //iterate through entire array on pe 0 (automatically transfering remote data)
-            println!("i: {} = {})",elem);
+    block_array.print();
+    if my_pe == 0 {
+        for (i, elem) in block_array.ser_iter().into_iter().enumerate() {
+            //iterate through entire array on pe 0 (automatically transfering remote data)
+            println!("i: {} = {}", i, elem);
         }
     }
 }
@@ -112,15 +120,18 @@ For a workstation, simply copy the following to the dependency section of you Ca
 ``` lamellar = "0.4"```
 
 If planning to use within a distributed HPC system a few more steps maybe necessessary (this also works on single workstations):
+
 1. ensure Libfabric (with support for the verbs provider) is installed on your system (https://github.com/ofiwg/libfabric) 
 2. set the OFI_DIR envrionment variable to the install location of Libfabric, this directory should contain both the following directories:
     * lib
     * include
 3. copy the following to your Cargo.toml file:
-    ```lamellar = { version = "0.4", features = ["enable-rofi"]}```
+
+```lamellar = { version = "0.4", features = ["enable-rofi"]}```
 
 
 For both envrionments, build your application as normal
+
 ```cargo build (--release)```
 
 BUILD REQUIREMENTS
@@ -135,7 +146,7 @@ Lamellar requires the following dependencies if wanting to run in a distributed 
 the rofi lamellae is enabled by adding "enable-rofi" to features either in cargo.toml or the command line when building. i.e. cargo build --features enable-rofi
 Rofi can either be built from source and then setting the ROFI_DIR environment variable to the Rofi install directory, or by letting the rofi-sys crate build it automatically.
 
-* [libfabric] (https://github.com/ofiwg/libfabric) 
+* [libfabric](https://github.com/ofiwg/libfabric) 
 * [ROFI](https://gitlab.pnnl.gov/lamellar/rofi)
 * [rofi-sys](https://gitlab.pnnl.gov/lamellar/rofi-sys) -- available in [crates.io](https://crates.io/crates/rofisys)
 
@@ -145,9 +156,9 @@ Rofi can either be built from source and then setting the ROFI_DIR environment v
 
 At the time of release, Lamellar has been tested with the following external packages:
 
-| **GCC** | **CLANG** | **ROFI**  | **OFI**   | **IB VERBS**  | **MPI**       | **SLURM** |
-|--------:|----------:|----------:|----------:|--------------:|--------------:|----------:|
-| 7.1.0   | 8.0.1     | 0.1.0     | 1.9.0     | 1.13          | mvapich2/2.3a | 17.02.7   |
+| **GCC** | **CLANG** | **ROFI**  | **OFI**       | **IB VERBS**  | **MPI**       | **SLURM** |
+|--------:|----------:|----------:|--------------:|--------------:|--------------:|----------:|
+| 7.1.0   | 8.0.1     | 0.1.0     | 1.9.0 -1.14.0 | 1.13          | mvapich2/2.3a | 17.02.7   |
 
 The OFI_DIR environment variable must be specified with the location of the OFI (libfabrics) installation.
 The ROFI_DIR environment variable must be specified with the location of the ROFI installation (otherwise rofi-sys crate will build for you automatically).
@@ -181,7 +192,7 @@ TESTING
 -------
 The examples are designed to be run  with at least 2 processes (via either ROFI or shmem backends), but most will work on with a single process using the "local" lamellae. Here is a simple proceedure to run the tests that assume a compute cluster and [SLURM](https://slurm.schedmd.com) job manager. Please, refer to the job manager documentation for details on how to run commands on different clusters. Lamellar grabs job information (size, distribution, etc.) from the job manager and runtime launcher (e.g., MPI, please refer to the BUILDING REQUIREMENTS section for a list of tested software versions).
 
-Rofi Instructions (multi process, multi node)
+Lamellar Instructions (multi process, multi node)
 ---------------------------------------------
 
 1. Allocates two compute nodes on the cluster:
@@ -239,7 +250,8 @@ HISTORY
 -------
 - version 0.4
   - Distributed Arcs (Darcs: distributed atomically reference counted objects)
-  - LamellarArrays (UnsafeArray)
+  - LamellarArrays
+    - UnsafeArray, AtomicArray, LocalLockArray, ReadOnlyArray, LocalOnlyArray
     - Distributed Iteration
     - Local Iteration
   - SHMEM backend

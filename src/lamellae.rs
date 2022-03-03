@@ -63,10 +63,15 @@ fn default_backend() -> Backend {
                 #[cfg(not(feature = "enable-rofi"))]
                 panic!("unable to set rofi backend, recompile with 'enable-rofi' feature")
             }
-            "shmem" => return Backend::Shmem,
-            _ => return Backend::Local,
+            "shmem" => {return Backend::Shmem;}
+            _ => {return Backend::Local;}
         },
-        Err(_) => return Backend::Local,
+        Err(_) => {
+            #[cfg(feature = "enable-rofi")]
+            return Backend::Rofi;
+            #[cfg(not(feature = "enable-rofi"))]
+            return Backend::Local;
+        }
     };
 }
 
