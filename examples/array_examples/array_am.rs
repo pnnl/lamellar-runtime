@@ -21,7 +21,7 @@ struct RdmaAM {
 impl LamellarAM for RdmaAM {
     fn exec(&self) {
         let num_pes = lamellar::num_pes;
-        let max_i = unsafe {std::cmp::min(self.array.local_as_slice().len(),num_pes)};
+        let max_i = unsafe { std::cmp::min(self.array.local_as_slice().len(), num_pes) };
         println!(
             "\t in RdmaAM on pe {:?}, originating from pe {:?}",
             lamellar::current_pe,

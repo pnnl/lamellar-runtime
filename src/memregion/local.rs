@@ -353,11 +353,7 @@ impl<T: Dist> LocalMemoryRegion<T> {
     pub unsafe fn put_all<U: Into<LamellarMemoryRegion<T>>>(&self, index: usize, data: U) {
         MemoryRegionRDMA::<T>::put_all(self, index, data);
     }
-    pub unsafe fn get_unchecked<U: Into<LamellarMemoryRegion<T>>>(
-        &self,
-        index: usize,
-        data: U,
-    ) {
+    pub unsafe fn get_unchecked<U: Into<LamellarMemoryRegion<T>>>(&self, index: usize, data: U) {
         MemoryRegionRDMA::<T>::get_unchecked(self, self.pe, index, data);
     }
     pub fn iget<U: Into<LamellarMemoryRegion<T>>>(&self, index: usize, data: U) {

@@ -408,8 +408,8 @@ impl CommOps for RofiComm {
         if pe != self.my_pe {
             unsafe {
                 let _lock = self.comm_mutex.lock();
-                match rofi_get(src_addr, dst_addr, pe) {
-                    //.expect("error in rofi get")
+                match rofi_iget(src_addr, dst_addr, pe) {
+                    //not using rofi_get due to lost requests (TODO: implement better resource management in rofi)
                     Err(ret) => {
                         println!(
                             "Error in get from {:?} src {:x} base_addr {:x} dst_addr {:p} size {:?} ret {:?}",

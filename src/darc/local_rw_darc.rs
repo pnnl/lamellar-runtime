@@ -125,12 +125,13 @@ impl<T> LocalRwDarc<T> {
         // self.print();
         inner.block_on_outstanding(DarcMode::Darc, 0);
         // println!("after block on outstanding");
-        inner.local_cnt.fetch_add(1, Ordering::SeqCst);//we add this here because to account for moving inner into d
-        // let item = unsafe { Box::from_raw(inner.item as *mut Arc<RwLock<Box<T>>>).into_inner() };
-        let mut arc_item = unsafe { (*Box::from_raw(inner.item as *mut Arc<RwLock<Box<T>>>)).clone() };
+        inner.local_cnt.fetch_add(1, Ordering::SeqCst); //we add this here because to account for moving inner into d
+                                                        // let item = unsafe { Box::from_raw(inner.item as *mut Arc<RwLock<Box<T>>>).into_inner() };
+        let mut arc_item =
+            unsafe { (*Box::from_raw(inner.item as *mut Arc<RwLock<Box<T>>>)).clone() };
 
-        let item: Box<T> = loop{
-            arc_item = match Arc::try_unwrap(arc_item){
+        let item: Box<T> = loop {
+            arc_item = match Arc::try_unwrap(arc_item) {
                 Ok(item) => break item.into_inner(),
                 Err(arc_item) => arc_item,
             };
@@ -150,10 +151,11 @@ impl<T> LocalRwDarc<T> {
         // self.print();
         inner.block_on_outstanding(DarcMode::GlobalRw, 0);
         // println!("after block on outstanding");
-        inner.local_cnt.fetch_add(1, Ordering::SeqCst);//we add this here because to account for moving inner into d
-        let mut arc_item = unsafe { (*Box::from_raw(inner.item as *mut Arc<RwLock<Box<T>>>)).clone() };
-        let item: Box<T> = loop{
-            arc_item = match Arc::try_unwrap(arc_item){
+        inner.local_cnt.fetch_add(1, Ordering::SeqCst); //we add this here because to account for moving inner into d
+        let mut arc_item =
+            unsafe { (*Box::from_raw(inner.item as *mut Arc<RwLock<Box<T>>>)).clone() };
+        let item: Box<T> = loop {
+            arc_item = match Arc::try_unwrap(arc_item) {
                 Ok(item) => break item.into_inner(),
                 Err(arc_item) => arc_item,
             };

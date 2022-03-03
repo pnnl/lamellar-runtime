@@ -448,7 +448,7 @@ impl<T> GlobalRwDarc<T> {
         // println!("into_darc");
         // self.print();
         inner.block_on_outstanding(DarcMode::Darc, 0);
-        inner.local_cnt.fetch_add(1, Ordering::SeqCst);//we add this here because to account for moving inner into d
+        inner.local_cnt.fetch_add(1, Ordering::SeqCst); //we add this here because to account for moving inner into d
         let item = unsafe { Box::from_raw(inner.item as *mut DistRwLock<T>).into_inner() };
         let d = Darc {
             inner: self.darc.inner as *mut DarcInner<T>,

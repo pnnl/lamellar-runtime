@@ -8,13 +8,13 @@ use std::ops::Deref;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicU8, AtomicUsize, Ordering};
 use std::sync::Arc;
-use std::time::{Duration,Instant};
+use std::time::{Duration, Instant};
 
-use crate::scheduler::SchedulerQueue;
 use crate::active_messaging::AMCounters;
 use crate::lamellae::{AllocationType, Backend, LamellaeComm, LamellaeRDMA};
 use crate::lamellar_team::{IntoLamellarTeam, LamellarTeamRT};
 use crate::lamellar_world::LAMELLAES;
+use crate::scheduler::SchedulerQueue;
 use crate::IdError;
 
 pub(crate) mod local_rw_darc;
@@ -268,11 +268,7 @@ impl<T> DarcInner<T> {
         // let mut first = true;
         let team = self.team();
         let am_counters = self.am_counters();
-        while am_counters
-            .outstanding_reqs
-            .load(Ordering::SeqCst)
-            > 0
-        {
+        while am_counters.outstanding_reqs.load(Ordering::SeqCst) > 0 {
             // std::thread::yield_now();
             team.scheduler.exec_task(); //mmight as well do useful work while we wait
             if temp_now.elapsed() > Duration::new(60, 0) {
@@ -280,12 +276,8 @@ impl<T> DarcInner<T> {
                 println!(
                     "in team wait_all mype: {:?} cnt: {:?} {:?}",
                     team.world_pe,
-                    am_counters
-                        .send_req_cnt
-                        .load(Ordering::SeqCst),
-                    am_counters
-                        .outstanding_reqs
-                        .load(Ordering::SeqCst),
+                    am_counters.send_req_cnt.load(Ordering::SeqCst),
+                    am_counters.outstanding_reqs.load(Ordering::SeqCst),
                 );
                 temp_now = Instant::now();
                 // first = false;
@@ -433,8 +425,8 @@ impl<T> Darc<T> {
         let inner = self.inner();
         let _cur_pe = inner.team().world_pe;
         inner.block_on_outstanding(DarcMode::LocalRw, 0);
-        inner.local_cnt.fetch_add(1, Ordering::SeqCst);//we add this here because to account for moving inner into d
-        // println!{"darc into_localrw {:?} {:?}",self.inner,self.inner().local_cnt.load(Ordering::SeqCst)};
+        inner.local_cnt.fetch_add(1, Ordering::SeqCst); //we add this here because to account for moving inner into d
+                                                        // println!{"darc into_localrw {:?} {:?}",self.inner,self.inner().local_cnt.load(Ordering::SeqCst)};
         let item = unsafe { Box::from_raw(inner.item as *mut T) };
         let d = Darc {
             inner: self.inner as *mut DarcInner<Arc<RwLock<Box<T>>>>,
@@ -450,8 +442,8 @@ impl<T> Darc<T> {
         let inner = self.inner();
         let _cur_pe = inner.team().world_pe;
         inner.block_on_outstanding(DarcMode::GlobalRw, 0);
-        inner.local_cnt.fetch_add(1, Ordering::SeqCst);//we add this here because to account for moving inner into d
-        // println!{"darc into_globalrw {:?} {:?}",self.inner,self.inner().local_cnt.load(Ordering::SeqCst)};
+        inner.local_cnt.fetch_add(1, Ordering::SeqCst); //we add this here because to account for moving inner into d
+                                                        // println!{"darc into_globalrw {:?} {:?}",self.inner,self.inner().local_cnt.load(Ordering::SeqCst)};
         let item = unsafe { Box::from_raw(inner.item as *mut T) };
         let d = Darc {
             inner: self.inner as *mut DarcInner<DistRwLock<T>>,

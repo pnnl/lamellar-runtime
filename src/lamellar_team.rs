@@ -1172,7 +1172,7 @@ impl Drop for LamellarTeamRT {
         // println!("removing {:?} ",self.team_hash);
         self.teams.write().remove(&(self.remote_ptr_addr as u64));
         self.lamellae.free(self.remote_ptr_addr);
-        println!("LamellarTeamRT dropped {:?}",self.team_hash);
+        println!("LamellarTeamRT dropped {:?}", self.team_hash);
     }
 }
 

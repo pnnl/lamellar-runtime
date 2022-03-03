@@ -145,6 +145,7 @@ pub(crate) fn rofi_iput<T>(src: &[T], dst: usize, pe: usize) -> Result<c_ulong, 
         Err(ret)
     }
 }
+
 #[allow(dead_code)]
 pub(crate) unsafe fn rofi_get<T>(src: usize, dst: &mut [T], pe: usize) -> Result<c_ulong, i32> {
     let src_addr = src as *mut std::ffi::c_void;

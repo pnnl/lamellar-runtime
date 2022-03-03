@@ -1,18 +1,24 @@
 /// ------------Lamellar Bandwidth: RDMA Get  -------------------------
 /// Test the bandwidth between two PEs using an RDMA get of N bytes
-/// from a remote PE to a local array.
+/// from a remote PE to a local mem_reg.
 /// --------------------------------------------------------------------
 use lamellar::RemoteMemoryRegion;
 use std::time::Instant;
 
-const ARRAY_LEN: usize = 1024 * 1024 * 1024;
+const MEMREG_LEN: usize = 1024 * 1024 * 1024;
 
 fn main() {
     let world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();
     let num_pes = world.num_pes();
-    let array = world.alloc_shared_mem_region::<u8>(ARRAY_LEN);
-    let data = world.alloc_local_mem_region::<u8>(ARRAY_LEN);
+    let mem_reg = world.alloc_shared_mem_region::<u8>(MEMREG_LEN);
+    let data = world.alloc_local_mem_region::<u8>(MEMREG_LEN);
+    for j in 0..MEMREG_LEN as usize {
+        unsafe {
+            data.as_mut_slice().unwrap()[j] = my_pe as u8;
+            mem_reg.as_mut_slice().unwrap()[j] = num_pes as u8;
+        }
+    }
 
     world.barrier();
     let s = Instant::now();
@@ -24,12 +30,7 @@ fn main() {
         println!("==================Bandwidth test===========================");
     }
     let mut bws = vec![];
-    for j in 0..ARRAY_LEN as usize {
-        unsafe {
-            data.as_mut_slice().unwrap()[j] = my_pe as u8;
-            array.as_mut_slice().unwrap()[j] = num_pes as u8;
-        }
-    }
+
     for i in 0..30 {
         let num_bytes = 2_u64.pow(i);
         let old: f64 = world.MB_sent();
@@ -51,7 +52,7 @@ fn main() {
                 // }
                 let sub_timer = Instant::now();
                 unsafe {
-                    array.get_unchecked(
+                    mem_reg.get_unchecked(
                         num_pes - 1,
                         0,
                         data.sub_region(j..(j + num_bytes as usize)),

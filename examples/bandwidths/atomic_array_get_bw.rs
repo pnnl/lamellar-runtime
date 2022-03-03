@@ -23,9 +23,9 @@ fn main() {
     array
         .dist_iter_mut()
         .for_each(move |elem| *elem = num_pes as u8); //this is pretty slow for atomic arrays as we perform an atomic store for 2^30 elements
-    let array = array.into_atomic();
-    // array.wait_all();
-    // array.barrier();
+    let array = array.into_atomic(); //this enforces a wait_all and barrier
+                                     // array.wait_all();
+                                     // array.barrier();
 
     world.barrier();
     let s = Instant::now();
