@@ -206,6 +206,7 @@ fn dft_lamellar_array_2(signal: ReadOnlyArray<f64>, spectrum: AtomicArray<f64>) 
     timer.elapsed().as_secs_f64()
 }
 
+#[allow(dead_code)]
 fn dft_lamellar_array_swapped(signal: UnsafeArray<f64>, spectrum: UnsafeArray<f64>) -> f64 {
     let timer = Instant::now();
     let signal_len = signal.len();

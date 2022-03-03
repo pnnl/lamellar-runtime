@@ -112,7 +112,7 @@ macro_rules! sub_test{
             initialize_array!($array, array, tot_updates);
             array.wait_all();
             array.barrier();
-            let mut prev_vals = vec![tot_updates as $t;array.len()];
+            // let mut prev_vals = vec![tot_updates as $t;array.len()];
             #[cfg(feature="non-buffered-array-ops")]
             {
                 for _i in 0..num_updates  as usize{
@@ -132,12 +132,12 @@ macro_rules! sub_test{
                     let idx = rand_idx.sample(&mut rng);
                     reqs.push((array.fetch_sub(idx,1 as $t),idx))
                 }
-                for (req,idx) in reqs{
-                    let val = req.get().unwrap();
-                    if val > prev_vals[idx]{
-                        success = false;
-                    }
-                    prev_vals[idx]=val;
+                for (req,_idx) in reqs{
+                    let _val = req.get().unwrap();
+                    // if val > prev_vals[idx]{
+                    //     success = false;
+                    // }
+                    // prev_vals[idx]=val;
                 }
             }
             array.barrier();
@@ -200,7 +200,7 @@ macro_rules! sub_test{
             initialize_array!($array, array, tot_updates);
             sub_array.wait_all();
             sub_array.barrier();
-            let mut prev_vals = vec![tot_updates ;sub_array.len()];
+            // let mut prev_vals = vec![tot_updates ;sub_array.len()];
             #[cfg(feature="non-buffered-array-ops")]
             {
                 for _i in 0..num_updates as usize{
@@ -220,12 +220,12 @@ macro_rules! sub_test{
                     let idx = rand_idx.sample(&mut rng);
                     reqs.push((sub_array.fetch_sub(idx,1 as $t),idx))
                 }
-                for (req,idx) in reqs{
-                    let val = req.get().unwrap();
-                    if val > prev_vals[idx]{
-                        success = false;
-                    }
-                    prev_vals[idx]=val;
+                for (req,_idx) in reqs{
+                    let _val = req.get().unwrap();
+                    // if val > prev_vals[idx]{
+                    //     success = false;
+                    // }
+                    // prev_vals[idx]=val;
                 }
             }
             sub_array.barrier();
@@ -289,7 +289,7 @@ macro_rules! sub_test{
                 initialize_array!($array, array, tot_updates);
                 sub_array.wait_all();
                 sub_array.barrier();
-                let mut prev_vals = vec![tot_updates ;sub_array.len()];
+                // let mut prev_vals = vec![tot_updates ;sub_array.len()];
                 #[cfg(feature="non-buffered-array-ops")]
                 {
                     for _i in 0..num_updates as usize{
@@ -309,12 +309,12 @@ macro_rules! sub_test{
                         let idx = rand_idx.sample(&mut rng);
                         reqs.push((sub_array.fetch_sub(idx,1 as $t),idx))
                     }
-                    for (req,idx) in reqs{
-                        let val = req.get().unwrap();
-                        if val > prev_vals[idx]{
-                            success = false;
-                        }
-                        prev_vals[idx]=val;
+                    for (req,_idx) in reqs{
+                        let _val = req.get().unwrap();
+                        // if val > prev_vals[idx]{
+                        //     success = false;
+                        // }
+                        // prev_vals[idx]=val;
                     }
                 }
                 sub_array.barrier();
