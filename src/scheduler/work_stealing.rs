@@ -1,15 +1,19 @@
 use crate::active_messaging::{ActiveMessageEngine, ExecType, LamellarFunc};
-use crate::lamellae::{Des, Lamellae, SerializedData};
+use crate::lamellae::{Des, Lamellae, LamellaeRDMA, SerializedData};
 use crate::lamellar_request::InternalReq;
 use crate::lamellar_team::LamellarTeamRT;
 use crate::scheduler::{AmeScheduler, AmeSchedulerQueue, ReqData, SchedulerQueue};
 use lamellar_prof::*;
 // use log::trace;
+use core_affinity::CoreId;
 use crossbeam::deque::Worker;
 use futures::Future;
 use parking_lot::RwLock;
 use rand::prelude::*;
 use std::collections::HashMap;
+use std::panic;
+use std::pin::Pin;
+use std::process;
 use std::sync::atomic::{AtomicBool, AtomicU8, AtomicUsize, Ordering};
 use std::sync::{Arc, Weak};
 use std::thread;
@@ -29,9 +33,11 @@ impl WorkStealingThread {
         worker: WorkStealingThread,
         active_cnt: Arc<AtomicUsize>,
         num_tasks: Arc<AtomicUsize>,
+        id: CoreId,
     ) -> thread::JoinHandle<()> {
         thread::spawn(move || {
             // println!("TestSchdulerWorker thread running");
+            core_affinity::set_for_current(id);
             active_cnt.fetch_add(1, Ordering::SeqCst);
             let mut rng = rand::thread_rng();
             let t = rand::distributions::Uniform::from(0..worker.work_stealers.len());
@@ -133,8 +139,8 @@ impl AmeSchedulerQueue for WorkStealingInner {
         id: usize,
         func: LamellarFunc,
         lamellae: Arc<Lamellae>,
-        world: Arc<LamellarTeamRT>,
-        team: Arc<LamellarTeamRT>,
+        world: Pin<Arc<LamellarTeamRT>>,
+        team: Pin<Arc<LamellarTeamRT>>,
         team_hash: u64,
         ireq: Option<InternalReq>,
     ) {
@@ -186,8 +192,9 @@ impl AmeSchedulerQueue for WorkStealingInner {
             if let Some(header) = data.deserialize_header() {
                 let msg = header.msg;
                 // println!("msg recieved: {:?}",msg);
-                ame.exec_msg(ame.clone(), msg, data, lamellae, header.team_hash)
-                    .await;
+                let addr = lamellae.local_addr(msg.src as usize, header.team_hash as usize);
+                // println!("from pe {:?} remote addr {:x} local addr {:x}",msg.src,header.team_hash,addr);
+                ame.exec_msg(ame.clone(), msg, data, lamellae, addr).await;
             } else {
                 data.print();
                 panic!("should i be here?");
@@ -271,8 +278,8 @@ impl SchedulerQueue for WorkStealing {
         id: usize,
         func: LamellarFunc,
         lamellae: Arc<Lamellae>,
-        world: Arc<LamellarTeamRT>,
-        team: Arc<LamellarTeamRT>,
+        world: Pin<Arc<LamellarTeamRT>>,
+        team: Pin<Arc<LamellarTeamRT>>,
         team_hash: u64,
         ireq: Option<InternalReq>,
     ) {
@@ -349,7 +356,14 @@ impl WorkStealingInner {
             work_workers.push(work_worker);
         }
 
-        for _i in 0..num_workers {
+        let orig_hook = panic::take_hook();
+        panic::set_hook(Box::new(move |panic_info| {
+            // invoke the default handler and exit the process
+            orig_hook(panic_info);
+            process::exit(1);
+        }));
+        let core_ids = core_affinity::get_core_ids().unwrap();
+        for i in 0..num_workers {
             let work_worker = work_workers.pop().unwrap();
             let worker = WorkStealingThread {
                 work_inj: self.work_inj.clone(),
@@ -363,6 +377,7 @@ impl WorkStealingInner {
                 worker,
                 self.active_cnt.clone(),
                 self.num_tasks.clone(),
+                core_ids[i % core_ids.len()],
             ));
         }
         while self.active_cnt.load(Ordering::SeqCst) != self.threads.len() {

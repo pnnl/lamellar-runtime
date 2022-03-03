@@ -1,5 +1,7 @@
 #!/bin/bash
-echo "$HOSTNAME"
+
+rm -r /dev/shm/lamellar_*  2> /dev/null #cleanup incase any previous run failed unexpectedly
+#echo "$HOSTNAME"
 NUMPES=1
 
 for i in "$@"; do

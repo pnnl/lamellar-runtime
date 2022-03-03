@@ -8,7 +8,8 @@ SUMMARY
 
 Lamellar is an investigation of the applicability of the Rust systems programming language for HPC as an alternative to C and C++, with a focus on PGAS approaches.
 
-Lamellar provides several different communication patterns to distributed applications. 
+Lamellar provides several different communication patterns to distributed applications.
+
 First, Lamellar allows for sending and executing user defined active messages on remote nodes in a distributed environments.
 User first implement runtime exported trait (LamellarAM) for their data structures and then call a procedural macro (\#[lamellar::am]) on the implementation.
 The procedural macro procudes all the nescessary code to enable remote execution of the active message.
@@ -23,7 +24,7 @@ Currently three such Lamellae exist, one used for single node (single process) d
 
 NEWS
 ----
-* November 2022: Alpha release -- v0.4
+* March 2022: Alpha release -- v0.4
 * April 2021: Alpha release -- v0.3
 * September 2020: Add support for "local" lamellae, prep for crates.io release -- v0.2.1
 * July 2020: Second alpha release -- v0.2
@@ -103,7 +104,24 @@ fn main(){
 
 A number of more complete examples can be found in the examples folder. Sub directories loosely group examples by the feature they are illustrating
 
+USING LAMELLAR
+--------------
+Lamellar is capable of running on single node workstations as well as distributed HPC systems.
+For a workstation, simply copy the following to the dependency section of you Cargo.toml file:
 
+``` lamellar = "0.4"```
+
+If planning to use within a distributed HPC system a few more steps maybe necessessary (this also works on single workstations):
+1. ensure Libfabric (with support for the verbs provider) is installed on your system (https://github.com/ofiwg/libfabric) 
+2. set the OFI_DIR envrionment variable to the install location of Libfabric, this directory should contain both the following directories:
+    * lib
+    * include
+3. copy the following to your Cargo.toml file:
+    ```lamellar = { version = "0.4", features = ["enable-rofi"]}```
+
+
+For both envrionments, build your application as normal
+```cargo build (--release)```
 
 BUILD REQUIREMENTS
 ------------------
@@ -115,16 +133,12 @@ BUILD REQUIREMENTS
 Optional:
 Lamellar requires the following dependencies if wanting to run in a distributed HPC environment:
 the rofi lamellae is enabled by adding "enable-rofi" to features either in cargo.toml or the command line when building. i.e. cargo build --features enable-rofi
+Rofi can either be built from source and then setting the ROFI_DIR environment variable to the Rofi install directory, or by letting the rofi-sys crate build it automatically.
 
+* [libfabric] (https://github.com/ofiwg/libfabric) 
 * [ROFI](https://gitlab.pnnl.gov/lamellar/rofi)
 * [rofi-sys](https://gitlab.pnnl.gov/lamellar/rofi-sys) -- available in [crates.io](https://crates.io/crates/rofisys)
 
-
-
-To enable support for serializable remote closures compile with the nightly compiler and specify the "nightly" feature i.e. cargo build --features nightly
-
-* RUST nightly compiler with the following features (enables remote closure API)
-    * #![feature(unboxed_closures)]
 
 
 
@@ -136,7 +150,7 @@ At the time of release, Lamellar has been tested with the following external pac
 | 7.1.0   | 8.0.1     | 0.1.0     | 1.9.0     | 1.13          | mvapich2/2.3a | 17.02.7   |
 
 The OFI_DIR environment variable must be specified with the location of the OFI (libfabrics) installation.
-The ROFI_DIR environment variable must be specified with the location of the ROFI installation.
+The ROFI_DIR environment variable must be specified with the location of the ROFI installation (otherwise rofi-sys crate will build for you automatically).
 (See https://github.com/pnnl/rofi for instructions installing ROFI (and libfabrics))
 
 BUILDING PACKAGE
@@ -144,9 +158,6 @@ BUILDING PACKAGE
 In the following, assume a root directory ${ROOT}
 0. download Lamellar to ${ROOT}/lamellar-runtime
     `cd ${ROOT} && git clone https://github.com/pnnl/lamellar-runtime`
-
-0. download rofi-sys to ${ROOT}/rofi-sys -- or update Cargo.toml to point to the proper location
-    `cd ${ROOT} && git clone https://github.com/pnnl/rofi-sys`
 
 1. Select Lamellae to use
     In Cargo.toml add "enable-rofi" feature if wanting to use rofi (or pass --features enable-rofi to your cargo build command ), otherwise only support for local and shmem backends will be built.

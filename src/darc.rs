@@ -8,11 +8,14 @@ use std::ops::Deref;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicU8, AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
+use crate::active_messaging::AMCounters;
 use crate::lamellae::{AllocationType, Backend, LamellaeComm, LamellaeRDMA};
+use crate::lamellar_team::{IntoLamellarTeam, LamellarTeamRT};
 use crate::lamellar_world::LAMELLAES;
+use crate::scheduler::SchedulerQueue;
 use crate::IdError;
-use crate::lamellar_team::{LamellarTeamRT, IntoLamellarTeam};
 
 pub(crate) mod local_rw_darc;
 use local_rw_darc::LocalRwDarc;
@@ -27,6 +30,11 @@ pub(crate) enum DarcMode {
     Darc,
     LocalRw,
     GlobalRw,
+    UnsafeArray,
+    ReadOnlyArray,
+    LocalOnlyArray,
+    AtomicArray,
+    LocalLockAtomicArray,
 }
 
 #[lamellar_impl::AmDataRT(Debug)]
@@ -53,6 +61,7 @@ pub struct DarcInner<T> {
     dist_cnt: AtomicUsize,  // cnt of times weve cloned (serialized) for distributed access
     ref_cnt_addr: usize,    // array of cnts for accesses from remote pes
     mode_addr: usize,
+    am_counters: *const AMCounters,
     team: *const LamellarTeamRT,
     item: *const T,
 }
@@ -86,15 +95,15 @@ impl<'de, T: 'static> Deserialize<'de> for Darc<T> {
 }
 
 impl<T> crate::DarcSerde for Darc<T> {
-    fn ser(&self, num_pes: usize, cur_pe: Result<usize, IdError>) {
-        match cur_pe {
-            Ok(cur_pe) => {
-                self.serialize_update_cnts(num_pes, cur_pe);
-            }
-            Err(err) => {
-                panic!("can only access darcs within team members ({:?})", err);
-            }
-        }
+    fn ser(&self, num_pes: usize, _cur_pe: Result<usize, IdError>) {
+        // match cur_pe {
+        //     Ok(cur_pe) => {
+        self.serialize_update_cnts(num_pes, 0 /*cur_pe*/);
+        //     }
+        //     Err(err) => {
+        //         panic!("can only access darcs within team members ({:?})", err);
+        //     }
+        // }
     }
     fn des(&self, cur_pe: Result<usize, IdError>) {
         match cur_pe {
@@ -109,10 +118,17 @@ impl<T> crate::DarcSerde for Darc<T> {
 }
 
 impl<T> DarcInner<T> {
-    fn team(&self) -> Arc<LamellarTeamRT> {
+    fn team(&self) -> Pin<Arc<LamellarTeamRT>> {
         unsafe {
             Arc::increment_strong_count(self.team);
-            Arc::from_raw(self.team)
+            Pin::new_unchecked(Arc::from_raw(self.team))
+        }
+    }
+
+    fn am_counters(&self) -> Arc<AMCounters> {
+        unsafe {
+            Arc::increment_strong_count(self.am_counters);
+            Arc::from_raw(self.am_counters)
         }
     }
 
@@ -158,13 +174,14 @@ impl<T> DarcInner<T> {
                 // println!("sending finished to {:?} {:?} team {:?} {:x}",pe,cnt,team.team_hash,my_addr);
                 // println!("{:?}",self);
                 reqs.push(
-                    team.exec_am_pe(
+                    team.exec_am_pe_tg(
                         pe,
                         FinishedAm {
                             cnt: cnt,
                             src_pe: pe,
                             inner_addr: pe_addr,
                         },
+                        Some(self.am_counters()),
                     )
                     .into_future(),
                 );
@@ -177,17 +194,26 @@ impl<T> DarcInner<T> {
             std::slice::from_raw_parts_mut(self.ref_cnt_addr as *mut usize, self.num_pes); //this is potentially a dirty read
         ref_cnts.iter().any(|x| *x > 0)
     }
-    fn block_on_outstanding(&self, state: DarcMode) {
+    fn block_on_outstanding(&self, state: DarcMode, extra_cnt: usize) {
+        self.wait_all();
         let mut timer = std::time::Instant::now();
         while self.dist_cnt.load(Ordering::SeqCst) > 0
-            || self.local_cnt.load(Ordering::SeqCst) > 1
+            || self.local_cnt.load(Ordering::SeqCst) > 1 + extra_cnt
             || unsafe { self.any_ref_cnt() }
         {
-            if self.local_cnt.load(Ordering::SeqCst) == 1 {
+            if self.local_cnt.load(Ordering::SeqCst) == 1 + extra_cnt {
                 self.send_finished();
             }
             if timer.elapsed().as_secs_f64() > 10.0 {
                 println!("waiting for outstanding 1 {:?}", self);
+                // let rel_addr = unsafe { self as *const DarcInner<T> as usize - (*(self.team)).lamellae.base_addr() };
+                // println!(
+                //     "--------\norig:  {:?} (0x{:x}) {:?}\n--------",
+
+                //     self as *const DarcInner<T>,
+                //     rel_addr,
+                //     self
+                // );
                 timer = std::time::Instant::now();
             }
             std::thread::yield_now();
@@ -210,7 +236,7 @@ impl<T> DarcInner<T> {
         }
         for pe in mode_refs.iter() {
             while *pe != state as u8 {
-                if self.local_cnt.load(Ordering::SeqCst) == 1 {
+                if self.local_cnt.load(Ordering::SeqCst) == 1 + extra_cnt {
                     self.send_finished();
                 }
                 if timer.elapsed().as_secs_f64() > 10.0 {
@@ -221,10 +247,10 @@ impl<T> DarcInner<T> {
             }
         }
         while self.dist_cnt.load(Ordering::SeqCst) != 0
-            || self.local_cnt.load(Ordering::SeqCst) > 1
+            || self.local_cnt.load(Ordering::SeqCst) > 1 + extra_cnt
             || unsafe { self.any_ref_cnt() }
         {
-            if self.local_cnt.load(Ordering::SeqCst) == 1 {
+            if self.local_cnt.load(Ordering::SeqCst) == 1 + extra_cnt {
                 self.send_finished();
             }
             if timer.elapsed().as_secs_f64() > 10.0 {
@@ -233,7 +259,31 @@ impl<T> DarcInner<T> {
             }
             std::thread::yield_now();
         }
+        // println!("{:?}",self);
         self.team().barrier();
+    }
+
+    fn wait_all(&self) {
+        let mut temp_now = Instant::now();
+        // let mut first = true;
+        let team = self.team();
+        let am_counters = self.am_counters();
+        while am_counters.outstanding_reqs.load(Ordering::SeqCst) > 0 {
+            // std::thread::yield_now();
+            team.scheduler.exec_task(); //mmight as well do useful work while we wait
+            if temp_now.elapsed() > Duration::new(60, 0) {
+                //|| first{
+                println!(
+                    "in team wait_all mype: {:?} cnt: {:?} {:?}",
+                    team.world_pe,
+                    am_counters.send_req_cnt.load(Ordering::SeqCst),
+                    am_counters.outstanding_reqs.load(Ordering::SeqCst),
+                );
+                temp_now = Instant::now();
+                // first = false;
+            }
+        }
+        // println!("done in wait all {:?}",std::time::SystemTime::now());
     }
 }
 
@@ -241,7 +291,7 @@ impl<T> fmt::Debug for DarcInner<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "[{:}/{:?}] lc: {:?} dc: {:?}\nref_cnt: {:?}\nmode {:?}",
+            "[{:}/{:?}] lc: {:?} dc: {:?}\nref_cnt: {:?}\n am_cnt ({:?},{:?})\nmode {:?}",
             self.my_pe,
             self.num_pes,
             self.local_cnt.load(Ordering::SeqCst),
@@ -249,6 +299,8 @@ impl<T> fmt::Debug for DarcInner<T> {
             unsafe {
                 &std::slice::from_raw_parts_mut(self.ref_cnt_addr as *mut usize, self.num_pes)
             },
+            self.am_counters().outstanding_reqs.load(Ordering::Relaxed),
+            self.am_counters().send_req_cnt.load(Ordering::Relaxed),
             unsafe {
                 &std::slice::from_raw_parts_mut(self.mode_addr as *mut DarcMode, self.num_pes)
             }
@@ -264,7 +316,7 @@ impl<T> Darc<T> {
         unsafe { self.inner.as_mut().expect("invalid darc inner ptr") }
     }
     #[allow(dead_code)]
-    pub(crate) fn team(&self) -> Arc<LamellarTeamRT> {
+    pub(crate) fn team(&self) -> Pin<Arc<LamellarTeamRT>> {
         self.inner().team()
     }
     fn ref_cnts_as_mut_slice(&self) -> &mut [usize] {
@@ -329,7 +381,13 @@ impl<T> Darc<T> {
         team_rt.barrier();
         // println!("creating new darc after barrier");
         let addr = team_rt.lamellae.alloc(size, alloc).expect("out of memory");
-        let temp_team = team_rt.clone();
+        // let temp_team = team_rt.clone();
+        let team_ptr = unsafe {
+            let pinned_team = Pin::into_inner_unchecked(team_rt.clone());
+            Arc::into_raw(pinned_team)
+        };
+        let am_counters = Arc::new(AMCounters::new());
+        let am_counters_ptr = Arc::into_raw(am_counters);
         let darc_temp = DarcInner {
             my_pe: my_pe,
             num_pes: team_rt.num_pes,
@@ -339,7 +397,8 @@ impl<T> Darc<T> {
             mode_addr: addr
                 + std::mem::size_of::<DarcInner<T>>()
                 + team_rt.num_pes * std::mem::size_of::<usize>(),
-            team: Arc::into_raw(temp_team),
+            am_counters: am_counters_ptr,
+            team: team_ptr, //&team_rt, //Arc::into_raw(temp_team),
             item: Box::into_raw(Box::new(item)),
         };
         unsafe {
@@ -358,28 +417,33 @@ impl<T> Darc<T> {
         Ok(d)
     }
 
+    pub(crate) fn block_on_outstanding(&self, state: DarcMode, extra_cnt: usize) {
+        self.inner().block_on_outstanding(state, extra_cnt);
+    }
+
     pub fn into_localrw(self) -> LocalRwDarc<T> {
         let inner = self.inner();
         let _cur_pe = inner.team().world_pe;
-        inner.block_on_outstanding(DarcMode::LocalRw);
-        inner.local_cnt.fetch_add(1, Ordering::SeqCst);
-        // println!{"darc into_localrw {:?} {:?}",self.inner,self.inner().local_cnt.load(Ordering::SeqCst)};
+        inner.block_on_outstanding(DarcMode::LocalRw, 0);
+        inner.local_cnt.fetch_add(1, Ordering::SeqCst); //we add this here because to account for moving inner into d
+                                                        // println!{"darc into_localrw {:?} {:?}",self.inner,self.inner().local_cnt.load(Ordering::SeqCst)};
         let item = unsafe { Box::from_raw(inner.item as *mut T) };
         let d = Darc {
-            inner: self.inner as *mut DarcInner<RwLock<Box<T>>>,
+            inner: self.inner as *mut DarcInner<Arc<RwLock<Box<T>>>>,
             src_pe: self.src_pe,
         };
         d.inner_mut()
-            .update_item(Box::into_raw(Box::new(RwLock::new(item))));
+            .update_item(Box::into_raw(Box::new(Arc::new(RwLock::new(item)))));
+        // d.print();
         LocalRwDarc { darc: d }
     }
 
     pub fn into_globalrw(self) -> GlobalRwDarc<T> {
         let inner = self.inner();
         let _cur_pe = inner.team().world_pe;
-        inner.block_on_outstanding(DarcMode::GlobalRw);
-        inner.local_cnt.fetch_add(1, Ordering::SeqCst);
-        // println!{"darc into_globalrw {:?} {:?}",self.inner,self.inner().local_cnt.load(Ordering::SeqCst)};
+        inner.block_on_outstanding(DarcMode::GlobalRw, 0);
+        inner.local_cnt.fetch_add(1, Ordering::SeqCst); //we add this here because to account for moving inner into d
+                                                        // println!{"darc into_globalrw {:?} {:?}",self.inner,self.inner().local_cnt.load(Ordering::SeqCst)};
         let item = unsafe { Box::from_raw(inner.item as *mut T) };
         let d = Darc {
             inner: self.inner as *mut DarcInner<DistRwLock<T>>,
@@ -528,7 +592,7 @@ struct DroppedWaitAM<T> {
     mode_addr: usize,
     my_pe: usize,
     num_pes: usize,
-    team: Arc<LamellarTeamRT>, //we include this to insure the team isnt dropped until the darc has been fully dropped across the system.
+    team: Pin<Arc<LamellarTeamRT>>, //we include this to insure the team isnt dropped until the darc has been fully dropped across the system.
     phantom: PhantomData<T>,
 }
 
@@ -557,6 +621,7 @@ impl<T: 'static> LamellarAM for DroppedWaitAM<T> {
                 .expect("invalid darc pointer"),
         };
         unsafe {
+            wrapped.inner.as_ref().wait_all();
             // let inner = unsafe {&*wrapped.inner}; //we dont actually care about the "type" we wrap here, we just need access to the meta data for the darc (but still allow async wait cause T is not send)
             while wrapped.inner.as_ref().dist_cnt.load(Ordering::SeqCst) != 0
                 || wrapped.inner.as_ref().local_cnt.load(Ordering::SeqCst) != 0
@@ -634,6 +699,7 @@ impl<T: 'static> LamellarAM for DroppedWaitAM<T> {
             let _item = Box::from_raw(wrapped.inner.as_ref().item as *mut T);
             let _team = Arc::from_raw(wrapped.inner.as_ref().team); //return to rust to drop appropriately
                                                                     // println!("Darc freed! {:x} {:?}",self.inner_addr,mode_refs);
+            let _am_counters = Arc::from_raw(wrapped.inner.as_ref().am_counters);
             self.team.lamellae.free(self.inner_addr);
             // println!("leaving DroppedWaitAM");
         }
@@ -683,7 +749,6 @@ impl<T> From<&Darc<T>> for __NetworkDarc<T> {
 
 impl<T> From<__NetworkDarc<T>> for Darc<T> {
     fn from(ndarc: __NetworkDarc<T>) -> Self {
-        // println!("ndarc: 0x{:x} {:?} {:?} {:?} ",ndarc.inner_addr,ndarc.backend,ndarc.orig_world_pe,ndarc.orig_team_pe);
         if let Some(lamellae) = LAMELLAES.read().get(&ndarc.backend) {
             let darc = Darc {
                 inner: lamellae.local_addr(ndarc.orig_world_pe, ndarc.inner_addr)
@@ -692,6 +757,10 @@ impl<T> From<__NetworkDarc<T>> for Darc<T> {
             };
             darc
         } else {
+            println!(
+                "ndarc: 0x{:x} {:?} {:?} {:?} ",
+                ndarc.inner_addr, ndarc.backend, ndarc.orig_world_pe, ndarc.orig_team_pe
+            );
             panic!("unexepected lamellae backend {:?}", &ndarc.backend);
         }
     }

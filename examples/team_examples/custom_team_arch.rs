@@ -193,6 +193,8 @@ fn main() {
         test_team(&world, odd_team, "odd team");
     }
 
+    world.barrier();
+
     let arch = BlockStridedArch::new(
         0,                                      //start pe (world pe)
         1,                                      //stride

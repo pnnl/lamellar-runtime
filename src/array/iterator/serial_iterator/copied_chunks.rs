@@ -32,33 +32,36 @@ where
         chunks
     }
 
-    fn fill_buffer(&self, val: u32, buf: &LocalMemoryRegion<I::ElemType>) {
-        let buf_u8 = buf.clone().to_base::<u32>();
-        let buf_slice = unsafe { buf_u8.as_mut_slice().unwrap() };
+    fn get_buffer(&self, _val: u32, size: usize) -> LocalMemoryRegion<I::ElemType> {
+        let mem_region: LocalMemoryRegion<I::ElemType> =
+            self.array().team().alloc_local_mem_region(size);
+        // let buf_u8 = mem_region.clone().to_base::<u32>();
+        // let buf_slice = unsafe { buf_u8.as_mut_slice().unwrap() };
         // println!("buf_u8 len {:}",buf_slice.len());
-        for i in 0..buf_slice.len() {
-            buf_slice[i] = val;
-        }
-        self.array().get(self.index, buf);
-    }
+        // for i in 0..buf_slice.len() {
+        //     buf_slice[i] = val;
+        // }
+        self.array().get(self.index, &mem_region).wait();
+        // }
 
-    fn spin_for_valid(&self, val: u32, buf: &LocalMemoryRegion<I::ElemType>) {
+        // fn spin_for_valid(&self, val: u32, buf: &LocalMemoryRegion<I::ElemType>) {
         // let buf_0_temp = self.mem_region.clone().to_base::<u8>();
         // let buf_0 = buf_0_temp.as_slice().unwrap();
-        let buf_1_temp = buf.clone().to_base::<u32>();
-        let buf_1 = buf_1_temp.as_slice().unwrap();
+        // let buf_1_temp = buf.clone().to_base::<u32>();
+        // let buf_1 = buf_1_temp.as_slice().unwrap();
 
-        let mut start = std::time::Instant::now();
-        for i in 0..buf_1.len() {
-            // while buf_0[i] != buf_1[i] {
-            while buf_1[i] == val {
-                std::thread::yield_now();
-                if start.elapsed().as_secs_f64() > 5.0 {
-                    println!("i: {:?} {:?} {:?}", i, val, buf_1[i]);
-                    start = std::time::Instant::now();
-                }
-            }
-        }
+        // let mut start = std::time::Instant::now();
+        // for i in 0..buf_slice.len() {
+        //     // while buf_0[i] != buf_1[i] {
+        //     while buf_slice[i] == val {
+        //         std::thread::yield_now();
+        //         if start.elapsed().as_secs_f64() > 5.0 {
+        //             println!("i: {:?} {:?} {:?}", i, val, buf_slice[i]);
+        //             start = std::time::Instant::now();
+        //         }
+        //     }
+        // }
+        mem_region
     }
     // fn check_for_valid(&self,val: u32, buf: &LocalMemoryRegion<I::ElemType>) -> bool {
     //     let buf_1_temp = buf.clone().to_base::<u32>();
@@ -87,11 +90,10 @@ where
             let size = std::cmp::min(self.chunk_size, array.len() - self.index);
             // self.fill_buffer(0, &self.mem_region.sub_region(..size));
             // println!("getting {:?} {:?}",self.index,self.chunk_size);
-            let mem_region: LocalMemoryRegion<I::ElemType> =
-                array.team().alloc_local_mem_region(size);
-            self.fill_buffer(101010101, &mem_region);
 
-            self.spin_for_valid(101010101, &mem_region);
+            let mem_region = self.get_buffer(101010101, size);
+
+            // self.spin_for_valid(101010101, &mem_region);
             self.index += size;
             // if self.index < self.array.len(){
             //     let size = std::cmp::min(self.chunk_size, self.array.len() - self.index);

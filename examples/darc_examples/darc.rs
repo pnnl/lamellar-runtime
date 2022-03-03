@@ -65,6 +65,7 @@ fn main() {
     std::thread::sleep(std::time::Duration::from_secs(2));
     drop(write_lock);
     // println!("here3");
+    //----
     let local_darc = LocalRwDarc::new(world.team(), 10).unwrap();
     println!("created new local rw");
     // local_darc.print();
@@ -101,17 +102,19 @@ fn main() {
             team.exec_am_all(darc_am);
             // println!("here 8");
         } else {
-            println!("here");
+            // println!("here");
             *(*local_darc.write()) += 1;
         }
     }
+    //--------
     // println!("here 9");
 
-    drop(darc1);
-    drop(darc2);
-    drop(wrapped);
+    // drop(darc1);
+    // drop(darc2);
+    // drop(wrapped);
     println!("changing darc type");
     let ro_darc = global_darc.into_localrw().into_darc(); // we can call into_darc directly on global_Darc, but string the operations for testing purposes
     println!("read only darc");
     ro_darc.print();
+    println!("done");
 }

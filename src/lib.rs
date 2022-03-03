@@ -120,7 +120,7 @@ pub use crate::active_messaging::{
 pub use crate::active_messaging::{ActiveMessaging, LamellarAM, LocalAM};
 
 #[doc(hidden)]
-pub use crate::array::{LamellarArray, ReduceKey};
+pub use crate::array::{ArrayOpCmd, LamellarArray, ReduceKey};
 
 pub use crate::darc::global_rw_darc::GlobalRwDarc;
 #[doc(hidden)]
@@ -149,10 +149,11 @@ pub use crate::lamellar_team::LamellarTeamRT;
 extern crate lamellar_impl;
 pub use lamellar_impl::{
     am, generate_reductions_for_type, local_am, register_reduction, AmData, AmLocalData,
+    ArithmeticOps, Dist,
 };
 
-#[doc(hidden)]
-pub use lamellar_impl::DarcSerdeRT;
+// #[doc(hidden)]
+// pub use lamellar_impl::DarcSerdeRT;
 
 #[doc(hidden)]
 pub use inventory;

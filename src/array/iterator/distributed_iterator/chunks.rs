@@ -29,7 +29,7 @@ impl<I> Chunks<I>
 where
     I: DistributedIterator + 'static,
 {
-    pub fn for_each<F>(&self, op: F)
+    pub fn for_each<F>(self, op: F)
     where
         F: Fn(Chunk<I>) + Sync + Send + Clone + 'static,
     {
@@ -88,10 +88,15 @@ where
         // println!("chunk elems {:?} {:?}",in_elems, elems);
         elems
     }
-    fn global_index(&self, index: usize) -> usize {
-        let g_index = self.iter.global_index(index * self.chunk_size) / self.chunk_size;
+    fn global_index(&self, index: usize) -> Option<usize> {
+        let g_index = self.iter.global_index(index * self.chunk_size)? / self.chunk_size;
         // println!("chunks index: {:?} global_index {:?}", index,g_index);
-        g_index
+        Some(g_index)
+    }
+    fn subarray_index(&self, index: usize) -> Option<usize> {
+        let g_index = self.iter.subarray_index(index * self.chunk_size)? / self.chunk_size; //not sure if this works...
+                                                                                            // println!("enumerate index: {:?} global_index {:?}", index,g_index);
+        Some(g_index)
     }
     // fn chunk_size(&self) -> usize {
     //     self.iter.chunk_size() * self.chunk_size

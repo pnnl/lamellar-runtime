@@ -10,20 +10,21 @@ use step_by::*;
 mod zip;
 use zip::*;
 
-use crate::array::LamellarArrayRead;
+use crate::array::LamellarArrayGet;
 use crate::memregion::Dist;
 use crate::LamellarArray;
 use crate::LamellarTeamRT;
 use crate::LocalMemoryRegion;
 
 use std::marker::PhantomData;
+use std::pin::Pin;
 use std::ptr::NonNull;
 use std::sync::Arc;
 
 pub trait SerialIterator {
     type Item;
-    type ElemType: Dist;
-    type Array: LamellarArrayRead<Self::ElemType>;
+    type ElemType: Dist + 'static;
+    type Array: LamellarArrayGet<Self::ElemType>;
     fn next(&mut self) -> Option<Self::Item>;
     fn advance_index(&mut self, count: usize);
     fn array(&self) -> Self::Array;
@@ -73,65 +74,67 @@ where
     }
 }
 
-pub struct LamellarArrayIter<'a, T: Dist, A: LamellarArrayRead<T>> {
+pub struct LamellarArrayIter<'a, T: Dist + 'static, A: LamellarArrayGet<T>> {
     array: A,
     buf_0: LocalMemoryRegion<T>,
-    buf_1: LocalMemoryRegion<T>,
+    // buf_1: LocalMemoryRegion<T>,
     index: usize,
     buf_index: usize,
     ptr: NonNull<T>,
     _marker: PhantomData<&'a T>,
 }
 
-unsafe impl<'a, T: Dist, A: LamellarArrayRead<T>> Sync for LamellarArrayIter<'a, T, A> {}
-unsafe impl<'a, T: Dist, A: LamellarArrayRead<T>> Send for LamellarArrayIter<'a, T, A> {}
+unsafe impl<'a, T: Dist + 'static, A: LamellarArrayGet<T>> Sync for LamellarArrayIter<'a, T, A> {}
+unsafe impl<'a, T: Dist + 'static, A: LamellarArrayGet<T>> Send for LamellarArrayIter<'a, T, A> {}
 
-impl<'a, T: Dist, A: LamellarArrayRead<T>> LamellarArrayIter<'a, T, A> {
+impl<'a, T: Dist + 'static, A: LamellarArrayGet<T>> LamellarArrayIter<'a, T, A> {
     pub(crate) fn new(
         array: A,
-        team: Arc<LamellarTeamRT>,
+        team: Pin<Arc<LamellarTeamRT>>,
         buf_size: usize,
     ) -> LamellarArrayIter<'a, T, A> {
         let buf_0 = team.alloc_local_mem_region(buf_size);
+        array.get(0, &buf_0).wait();
         let ptr = NonNull::new(buf_0.as_mut_ptr().unwrap()).unwrap();
         let iter = LamellarArrayIter {
             array: array,
             buf_0: buf_0,
-            buf_1: team.alloc_local_mem_region(buf_size),
+            // buf_1: team.alloc_local_mem_region(buf_size),
             index: 0,
             buf_index: 0,
             ptr: ptr,
             _marker: PhantomData,
         };
-        iter.fill_buffer(0);
+        // iter.fill_buffer(0);
+
         iter
     }
-    fn fill_buffer(&self, index: usize) {
-        let end_i = std::cmp::min(index + self.buf_0.len(), self.array.len()) - index;
-        let buf_0 = self.buf_0.sub_region(..end_i);
-        let buf_0_u8 = buf_0.clone().to_base::<u8>();
-        let buf_0_slice = unsafe { buf_0_u8.as_mut_slice().unwrap() };
-        let buf_1 = self.buf_1.sub_region(..end_i);
-        let buf_1_u8 = buf_1.clone().to_base::<u8>();
-        let buf_1_slice = unsafe { buf_1_u8.as_mut_slice().unwrap() };
-        for i in 0..buf_0_slice.len() {
-            buf_0_slice[i] = 0;
-            buf_1_slice[i] = 1;
-        }
-        self.array.get(index, &buf_0);
-        self.array.get(index, &buf_1);
-    }
-    fn spin_for_valid(&self, index: usize) {
-        let buf_0_temp = self.buf_0.sub_region(index..=index).to_base::<u8>();
-        let buf_0 = buf_0_temp.as_slice().unwrap();
-        let buf_1_temp = self.buf_1.sub_region(index..=index).to_base::<u8>();
-        let buf_1 = buf_1_temp.as_slice().unwrap();
-        for i in 0..buf_0.len() {
-            while buf_0[i] != buf_1[i] {
-                std::thread::yield_now();
-            }
-        }
-    }
+    // fn fill_buffer(&self, index: usize) {
+    //     let end_i = std::cmp::min(index + self.buf_0.len(), self.array.len()) - index;
+    //     let buf_0 = self.buf_0.sub_region(..end_i);
+    //     let buf_0_u8 = buf_0.clone().to_base::<u8>();
+    //     let buf_0_slice = unsafe { buf_0_u8.as_mut_slice().unwrap() };
+    //     let buf_1 = self.buf_1.sub_region(..end_i);
+    //     let buf_1_u8 = buf_1.clone().to_base::<u8>();
+    //     let buf_1_slice = unsafe { buf_1_u8.as_mut_slice().unwrap() };
+    //     for i in 0..buf_0_slice.len() {
+    //         buf_0_slice[i] = 0;
+    //         buf_1_slice[i] = 1;
+    //     }
+    //     self.array.get(index, &buf_0);
+    //     self.array.get(index, &buf_1);
+    // }
+    // fn spin_for_valid(&self, index: usize) {
+    //     let buf_0_temp = self.buf_0.sub_region(index..=index).to_base::<u8>();
+    //     let buf_0 = buf_0_temp.as_slice().unwrap();
+    //     let buf_1_temp = self.buf_1.sub_region(index..=index).to_base::<u8>();
+    //     let buf_1 = buf_1_temp.as_slice().unwrap();
+    //     for i in 0..buf_0.len() {
+    //         while buf_0[i] != buf_1[i] {
+    //             std::thread::yield_now();
+    //         }
+    //     }
+    // }
 
     // fn check_for_valid(&self, index: usize) -> bool {
     //     let buf_0_temp = self.buf_0.sub_region(index..=index).to_base::<u8>();
@@ -147,20 +150,23 @@ impl<'a, T: Dist, A: LamellarArrayRead<T>> LamellarArrayIter<'a, T, A> {
     // }
 }
 
-impl<'a, T: Dist, A: LamellarArrayRead<T> + Clone> SerialIterator
+impl<'a, T: Dist + 'static, A: LamellarArrayGet<T> + Clone> SerialIterator
     for LamellarArrayIter<'a, T, A>
 {
     type ElemType = T;
     type Item = &'a T;
     type Array = A;
     fn next(&mut self) -> Option<Self::Item> {
+        // println!("next {:?} {:?} {:?} {:?}",self.index,self.array.len(),self.buf_index,self.buf_0.len());
         let res = if self.index < self.array.len() {
             if self.buf_index == self.buf_0.len() {
+                // println!("need to get new data");
                 //need to get new data
                 self.buf_index = 0;
-                self.fill_buffer(self.index);
+                // self.fill_buffer(self.index);
+                self.array.get(self.index, &self.buf_0).wait();
             }
-            self.spin_for_valid(self.buf_index);
+            // self.spin_for_valid(self.buf_index);
             self.index += 1;
             self.buf_index += 1;
             unsafe {
@@ -176,8 +182,9 @@ impl<'a, T: Dist, A: LamellarArrayRead<T> + Clone> SerialIterator
     }
     fn advance_index(&mut self, count: usize) {
         self.index += count;
-        self.buf_index = self.index;
-        self.fill_buffer(0);
+        self.buf_index = 0;
+        // self.fill_buffer(0);
+        self.array.get(self.index, &self.buf_0).wait();
     }
     fn array(&self) -> Self::Array {
         self.array.clone()

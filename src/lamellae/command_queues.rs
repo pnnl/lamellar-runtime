@@ -594,6 +594,9 @@ impl InnerCQ {
     }
 
     async fn send(&self, addr: usize, len: usize, dst: usize, hash: usize) {
+        // if len > 1000000000{
+        //     println!("wayyyyyy toooooo big!!!");
+        // }
         let mut timer = std::time::Instant::now();
         self.pending_cmds.fetch_add(1, Ordering::SeqCst);
         loop {

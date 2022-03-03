@@ -31,14 +31,28 @@ impl std::error::Error for AllocError {}
 
 pub(crate) type AllocResult<T> = Result<T, AllocError>;
 
-pub(crate) trait Remote:
-    serde::ser::Serialize + serde::de::DeserializeOwned + std::clone::Clone + Send + Sync
-{
+#[cfg(feature = "enable-rofi")]
+#[derive(Debug, Clone, Copy)]
+pub enum TxError {
+    GetError,
 }
-impl<T: serde::ser::Serialize + serde::de::DeserializeOwned + std::clone::Clone + Send + Sync>
-    Remote for T
-{
+#[cfg(feature = "enable-rofi")]
+impl std::fmt::Display for TxError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            TxError::GetError => {
+                write!(f, "error performing get")
+            }
+        }
+    }
 }
+#[cfg(feature = "enable-rofi")]
+impl std::error::Error for TxError {}
+#[cfg(feature = "enable-rofi")]
+pub(crate) type TxResult<T> = Result<T, TxError>;
+
+pub(crate) trait Remote: Copy + Send + Sync {}
+impl<T: Copy + Send + Sync> Remote for T {}
 
 #[enum_dispatch(CommOps)]
 pub(crate) enum Comm {

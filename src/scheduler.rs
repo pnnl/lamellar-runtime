@@ -3,6 +3,7 @@ use crate::lamellae::{Lamellae, SerializedData};
 use crate::lamellar_request::InternalReq;
 use crate::lamellar_team::LamellarTeamRT;
 
+use core::pin::Pin;
 use enum_dispatch::enum_dispatch;
 use futures::Future;
 #[cfg(feature = "enable-prof")]
@@ -22,8 +23,8 @@ pub(crate) struct ReqData {
     pub(crate) batch_id: Option<usize>,
     pub(crate) func: LamellarFunc,
     pub(crate) lamellae: Arc<Lamellae>,
-    pub(crate) world: Arc<LamellarTeamRT>,
-    pub(crate) team: Arc<LamellarTeamRT>,
+    pub(crate) world: Pin<Arc<LamellarTeamRT>>,
+    pub(crate) team: Pin<Arc<LamellarTeamRT>>,
     pub(crate) team_hash: u64,
     // pub(crate) rt_req: bool,
 }
@@ -65,8 +66,8 @@ pub(crate) trait AmeSchedulerQueue: Sync + Send {
         id: usize,
         func: LamellarFunc,
         lamellae: Arc<Lamellae>,
-        world: Arc<LamellarTeamRT>,
-        team: Arc<LamellarTeamRT>,
+        world: Pin<Arc<LamellarTeamRT>>,
+        team: Pin<Arc<LamellarTeamRT>>,
         team_hash: u64,
         ireq: Option<InternalReq>,
     );
@@ -99,8 +100,8 @@ pub(crate) trait SchedulerQueue: Sync + Send {
         id: usize,
         func: LamellarFunc,
         lamellae: Arc<Lamellae>,
-        world: Arc<LamellarTeamRT>,
-        team: Arc<LamellarTeamRT>,
+        world: Pin<Arc<LamellarTeamRT>>,
+        team: Pin<Arc<LamellarTeamRT>>,
         team_hash: u64,
         ireq: Option<InternalReq>,
     );

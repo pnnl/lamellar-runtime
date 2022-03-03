@@ -14,7 +14,7 @@ use zip::*;
 
 use crate::memregion::Dist;
 // use crate::LamellarArray;
-use crate::array::{LamellarArrayRead, LamellarArrayWrite};
+use crate::array::LamellarArray; //, LamellarArrayPut, LamellarArrayGet};
 
 use futures::Future;
 use std::marker::PhantomData;
@@ -42,6 +42,7 @@ where
         while let Some(elem) = iter.next() {
             (&self.op)(elem)
         }
+        // println!("done in for each");
     }
 }
 
@@ -73,7 +74,7 @@ where
 }
 
 pub trait DistIteratorLauncher {
-    fn for_each<I, F>(&self, iter: &I, op: F)
+    fn for_each<I, F>(&self, iter: I, op: F)
     //this really needs to return a task group handle...
     where
         I: DistributedIterator + 'static,
@@ -85,7 +86,8 @@ pub trait DistIteratorLauncher {
         F: Fn(I::Item) -> Fut + Sync + Send + Clone + 'static,
         Fut: Future<Output = ()> + Sync + Send + Clone + 'static;
 
-    fn global_index_from_local(&self, index: usize, chunk_size: usize) -> usize;
+    fn global_index_from_local(&self, index: usize, chunk_size: usize) -> Option<usize>;
+    fn subarray_index_from_local(&self, index: usize, chunk_size: usize) -> Option<usize>;
 }
 
 pub trait DistributedIterator: Sync + Send + Clone {
@@ -95,7 +97,8 @@ pub trait DistributedIterator: Sync + Send + Clone {
     fn array(&self) -> Self::Array;
     fn next(&mut self) -> Option<Self::Item>;
     fn elems(&self, in_elems: usize) -> usize;
-    fn global_index(&self, index: usize) -> usize;
+    fn global_index(&self, index: usize) -> Option<usize>;
+    fn subarray_index(&self, index: usize) -> Option<usize>;
     // fn chunk_size(&self) -> usize;
     fn advance_index(&mut self, count: usize);
 
@@ -120,14 +123,14 @@ pub trait DistributedIterator: Sync + Send + Clone {
 }
 
 #[derive(Clone)]
-pub struct DistIter<'a, T: Dist + 'static, A: LamellarArrayRead<T>> {
+pub struct DistIter<'a, T: Dist + 'static, A: LamellarArray<T> + Sync + Send> {
     data: A,
     cur_i: usize,
     end_i: usize,
     _marker: PhantomData<&'a T>,
 }
 
-impl<T: Dist, A: LamellarArrayRead<T>> DistIter<'_, T, A> {
+impl<T: Dist, A: LamellarArray<T> + Sync + Send> DistIter<'_, T, A> {
     pub(crate) fn new(data: A, cur_i: usize, cnt: usize) -> Self {
         // println!("new dist iter {:?} {:? } {:?}",cur_i, cnt, cur_i+cnt);
         DistIter {
@@ -139,10 +142,12 @@ impl<T: Dist, A: LamellarArrayRead<T>> DistIter<'_, T, A> {
     }
 }
 
-impl<T: Dist + 'static, A: LamellarArrayRead<T> + DistIteratorLauncher + Clone + 'static>
-    DistIter<'static, T, A>
+impl<
+        T: Dist + 'static,
+        A: LamellarArray<T> + DistIteratorLauncher + Sync + Send + Clone + 'static,
+    > DistIter<'static, T, A>
 {
-    pub fn for_each<F>(&self, op: F)
+    pub fn for_each<F>(self, op: F)
     where
         F: Fn(&T) + Sync + Send + Clone + 'static,
     {
@@ -157,7 +162,7 @@ impl<T: Dist + 'static, A: LamellarArrayRead<T> + DistIteratorLauncher + Clone +
     }
 }
 
-impl<'a, T: Dist + 'a, A: LamellarArrayRead<T> + DistIteratorLauncher + Clone + 'a>
+impl<'a, T: Dist + 'a, A: LamellarArray<T> + DistIteratorLauncher + Sync + Send + Clone + 'a>
     DistributedIterator for DistIter<'a, T, A>
 {
     type Item = &'a T;
@@ -193,8 +198,13 @@ impl<'a, T: Dist + 'a, A: LamellarArrayRead<T> + DistIteratorLauncher + Clone + 
         // println!("dist iter elems {:?}",in_elems);
         in_elems
     }
-    fn global_index(&self, index: usize) -> usize {
+    fn global_index(&self, index: usize) -> Option<usize> {
         let g_index = self.data.global_index_from_local(index, 1);
+        // println!("dist_iter index: {:?} global_index {:?}", index,g_index);
+        g_index
+    }
+    fn subarray_index(&self, index: usize) -> Option<usize> {
+        let g_index = self.data.subarray_index_from_local(index, 1);
         // println!("dist_iter index: {:?} global_index {:?}", index,g_index);
         g_index
     }
@@ -207,14 +217,14 @@ impl<'a, T: Dist + 'a, A: LamellarArrayRead<T> + DistIteratorLauncher + Clone + 
 }
 
 #[derive(Clone)]
-pub struct DistIterMut<'a, T: Dist, A: LamellarArrayRead<T> + LamellarArrayWrite<T>> {
+pub struct DistIterMut<'a, T: Dist, A: LamellarArray<T> + Sync + Send> {
     data: A,
     cur_i: usize,
     end_i: usize,
     _marker: PhantomData<&'a T>,
 }
 
-impl<T: Dist, A: LamellarArrayRead<T> + LamellarArrayWrite<T>> DistIterMut<'_, T, A> {
+impl<T: Dist, A: LamellarArray<T> + Sync + Send> DistIterMut<'_, T, A> {
     pub(crate) fn new(data: A, cur_i: usize, cnt: usize) -> Self {
         DistIterMut {
             data,
@@ -227,10 +237,10 @@ impl<T: Dist, A: LamellarArrayRead<T> + LamellarArrayWrite<T>> DistIterMut<'_, T
 
 impl<
         T: Dist + 'static,
-        A: LamellarArrayRead<T> + LamellarArrayWrite<T> + DistIteratorLauncher + Clone + 'static,
+        A: LamellarArray<T> + Sync + Send + DistIteratorLauncher + Clone + 'static,
     > DistIterMut<'static, T, A>
 {
-    pub fn for_each<F>(&self, op: F)
+    pub fn for_each<F>(self, op: F)
     where
         F: Fn(&mut T) + Sync + Send + Clone + 'static,
     {
@@ -244,17 +254,14 @@ impl<
         self.data.clone().for_each_async(self, op);
     }
 }
-impl<
-        'a,
-        T: Dist + 'a,
-        A: LamellarArrayRead<T> + LamellarArrayWrite<T> + DistIteratorLauncher + Clone,
-    > DistributedIterator for DistIterMut<'a, T, A>
+impl<'a, T: Dist + 'a, A: LamellarArray<T> + Sync + Send + DistIteratorLauncher + Clone>
+    DistributedIterator for DistIterMut<'a, T, A>
 {
     type Item = &'a mut T;
     type Array = A;
     fn init(&self, start_i: usize, cnt: usize) -> Self {
         let max_i = self.data.num_elems_local();
-        // println!("dist iter init {:?} {:?} {:?}",start_i,end_i,max_i);
+        // println!("dist iter init {:?} {:?} {:?}",start_i,cnt,max_i);
         DistIterMut {
             data: self.data.clone(),
             cur_i: std::cmp::min(start_i, max_i),
@@ -283,9 +290,13 @@ impl<
     fn elems(&self, in_elems: usize) -> usize {
         in_elems
     }
-    fn global_index(&self, index: usize) -> usize {
+    fn global_index(&self, index: usize) -> Option<usize> {
         let g_index = self.data.global_index_from_local(index, 1);
         // println!("dist_iter index: {:?} global_index {:?}", index,g_index);
+        g_index
+    }
+    fn subarray_index(&self, index: usize) -> Option<usize> {
+        let g_index = self.data.subarray_index_from_local(index, 1);
         g_index
     }
     // fn chunk_size(&self) -> usize {

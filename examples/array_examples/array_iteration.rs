@@ -198,4 +198,18 @@ fn main() {
     }
 
     println!("--------------------------------------------------------");
+
+    // let block_array = UnsafeArray::<usize>::new(world.team(), ARRAY_LEN, Distribution::Block);
+    // for elem in block_array.ser_iter().into_iter().step_by(4) {...}
+    // for elem in block_array.buffered_iter(10) {...}
+
+    // //rust step_by pseudo code
+    // fn step_by(&mut self, n: usize) -> Result<T>{
+    //     let val = self.next(); //grab val based on index
+    //     self.index += n;
+    //     val
+    // }
+
+    // //--------------
+    // for elem in block_array.ser_iter().step_by(4).into_iter() {...}
 }

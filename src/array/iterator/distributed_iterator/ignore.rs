@@ -23,7 +23,7 @@ impl<I> Ignore<I>
 where
     I: DistributedIterator + 'static,
 {
-    pub fn for_each<F>(&self, op: F)
+    pub fn for_each<F>(self, op: F)
     where
         F: Fn(<I as DistributedIterator>::Item) + Sync + Send + Clone + 'static,
     {
@@ -63,9 +63,14 @@ where
         // println!("ignore elems {:?} {:?}",in_elems,std::cmp::max(0,in_elems-self.count));
         std::cmp::max(0, in_elems - self.count)
     }
-    fn global_index(&self, index: usize) -> usize {
+    fn global_index(&self, index: usize) -> Option<usize> {
         let g_index = self.iter.global_index(index);
         // println!("ignore index: {:?} global_index {:?}", index,g_index);
+        g_index
+    }
+    fn subarray_index(&self, index: usize) -> Option<usize> {
+        let g_index = self.iter.subarray_index(index); //not sure if this works...
+                                                       // println!("enumerate index: {:?} global_index {:?}", index,g_index);
         g_index
     }
     // fn chunk_size(&self) -> usize {

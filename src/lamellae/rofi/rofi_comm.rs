@@ -25,6 +25,11 @@ use std::sync::Arc;
 //     }
 // }
 
+static ROFI_MAGIC_8: u64 = 0b1101001110111100011111001001100100111110011001100011110111001011;
+static ROFI_MAGIC_4: u32 = 0b10001111100100110010011111001100;
+static ROFI_MAGIC_2: u16 = 0b1100100110010011;
+static ROFI_MAGIC_1: u8 = 0b10011001;
+
 static ROFI_MEM: AtomicUsize = AtomicUsize::new(4 * 1024 * 1024 * 1024);
 const RT_MEM: usize = 100 * 1024 * 1024; // we add this space for things like team barrier buffers, but will work towards having teams get memory from rofi allocs
 pub(crate) struct RofiComm {
@@ -84,6 +89,110 @@ impl RofiComm {
         rofi.alloc.write()[0].init(addr as usize, total_mem);
         rofi
     }
+
+    unsafe fn fill_buffer<R: Copy, T>(&self, dst_addr: &mut [T], val: R) {
+        // println!("{:?} {:?} {:?} {:?} {:?}",std::mem::size_of::<T>(),std::mem::size_of::<R>(),(dst_addr.len()*std::mem::size_of::<T>()),(dst_addr.len()*std::mem::size_of::<T>())/std::mem::size_of::<R>(),(dst_addr.len()*std::mem::size_of::<T>())%std::mem::size_of::<R>());
+        let bytes = std::slice::from_raw_parts_mut(
+            dst_addr.as_ptr() as *mut T as *mut R,
+            (dst_addr.len() * std::mem::size_of::<T>()) / std::mem::size_of::<R>(),
+        );
+        for elem in bytes.iter_mut() {
+            *elem = val;
+        }
+    }
+    fn init_buffer<T>(&self, dst_addr: &mut [T]) {
+        let bytes_len = dst_addr.len() * std::mem::size_of::<T>();
+        // println!("{:?} {:?}",dst_addr.as_ptr(),bytes_len);
+        unsafe {
+            if bytes_len % std::mem::size_of::<u64>() == 0 {
+                self.fill_buffer(dst_addr, ROFI_MAGIC_8);
+            } else if bytes_len % std::mem::size_of::<u32>() == 0 {
+                self.fill_buffer(dst_addr, ROFI_MAGIC_4);
+            } else if bytes_len % std::mem::size_of::<u16>() == 0 {
+                self.fill_buffer(dst_addr, ROFI_MAGIC_2);
+            } else {
+                self.fill_buffer(dst_addr, ROFI_MAGIC_1);
+            }
+        }
+    }
+    unsafe fn check_buffer_elems<R: std::cmp::PartialEq + std::fmt::Debug, T>(
+        &self,
+        dst_addr: &mut [T],
+        val: R,
+    ) -> TxResult<()> {
+        let bytes = std::slice::from_raw_parts_mut(
+            dst_addr.as_ptr() as *mut T as *mut R,
+            (dst_addr.len() * std::mem::size_of::<T>()) / std::mem::size_of::<R>(),
+        );
+        let mut timer = std::time::Instant::now();
+        for i in 0..(bytes.len() as isize - 2) {
+            while bytes[i as usize] == val && bytes[i as usize + 1] == val {
+                if timer.elapsed().as_secs_f64() > 1.0 {
+                    println!(
+                        "{:?}: {:?} {:?} {:?}",
+                        i,
+                        bytes[i as usize],
+                        bytes[i as usize + 1],
+                        val
+                    );
+                    return Err(TxError::GetError);
+                }
+                //hopefully magic number doesnt appear twice in a row
+                std::thread::yield_now();
+            }
+        }
+        timer = std::time::Instant::now();
+        while bytes[bytes.len() - 1] == val {
+            if timer.elapsed().as_secs_f64() > 1.0 {
+                println!("{:?}", bytes[bytes.len() - 1]);
+                return Err(TxError::GetError);
+            }
+            //hopefully magic number isn't the last element
+            std::thread::yield_now();
+        }
+        Ok(())
+    }
+    fn check_buffer<T>(&self, dst_addr: &mut [T]) -> TxResult<()> {
+        let bytes_len = dst_addr.len() * std::mem::size_of::<T>();
+        unsafe {
+            if bytes_len % std::mem::size_of::<u64>() == 0 {
+                self.check_buffer_elems(dst_addr, ROFI_MAGIC_8)?;
+            } else if bytes_len % std::mem::size_of::<u32>() == 0 {
+                self.check_buffer_elems(dst_addr, ROFI_MAGIC_4)?;
+            } else if bytes_len % std::mem::size_of::<u16>() == 0 {
+                self.check_buffer_elems(dst_addr, ROFI_MAGIC_2)?;
+            } else {
+                self.check_buffer_elems(dst_addr, ROFI_MAGIC_1)?;
+            }
+        }
+        Ok(())
+    }
+    fn iget_data<T: Remote>(&self, pe: usize, src_addr: usize, dst_addr: &mut [T]) {
+        let _lock = self.comm_mutex.lock();
+        match rofi_iget(src_addr, dst_addr, pe) {
+            //.expect("error in rofi get")
+            Err(ret) => {
+                println!(
+                        "Error in get from {:?} src {:x} base_addr {:x} dst_addr {:p} size {:?} ret {:?}",
+                        pe,
+                        src_addr,
+                        *self.rofi_base_address.read(),
+                        dst_addr,
+                        dst_addr.len(),
+                        ret,
+                    );
+                panic!();
+            }
+            Ok(_ret) => {
+                self.get_amt
+                    .fetch_add(dst_addr.len() * std::mem::size_of::<T>(), Ordering::SeqCst);
+                self.get_cnt.fetch_add(1, Ordering::SeqCst);
+                // if ret != 0{
+                //     req.txids.push(ret);
+                // }
+            }
+        }
+    }
 }
 
 impl CommOps for RofiComm {
@@ -134,6 +243,7 @@ impl CommOps for RofiComm {
         }
     }
     fn rt_alloc(&self, size: usize) -> AllocResult<usize> {
+        // let size = size + size%8;
         let allocs = self.alloc.read();
         for alloc in allocs.iter() {
             if let Some(addr) = alloc.try_malloc(size) {
@@ -163,6 +273,7 @@ impl CommOps for RofiComm {
         panic!("Error invalid free! {:?}", addr);
     }
     fn alloc(&self, size: usize, alloc: AllocationType) -> AllocResult<usize> {
+        // let size = size + size%8;
         let _lock = self.comm_mutex.lock();
         Ok(rofi_alloc(size, alloc) as usize)
     }
@@ -297,8 +408,8 @@ impl CommOps for RofiComm {
         if pe != self.my_pe {
             unsafe {
                 let _lock = self.comm_mutex.lock();
-                match rofi_get(src_addr, dst_addr, pe) {
-                    //.expect("error in rofi get")
+                match rofi_iget(src_addr, dst_addr, pe) {
+                    //not using rofi_get due to lost requests (TODO: implement better resource management in rofi)
                     Err(ret) => {
                         println!(
                             "Error in get from {:?} src {:x} base_addr {:x} dst_addr {:p} size {:?} ret {:?}",
@@ -334,42 +445,59 @@ impl CommOps for RofiComm {
         // req
         // println!("[{:?}]- gc: {:?} pc: {:?} get exit",self.my_pe,self.get_cnt.load(Ordering::SeqCst),self.put_cnt.load(Ordering::SeqCst));
     }
-    #[allow(dead_code)]
+
     fn iget<T: Remote>(&self, pe: usize, src_addr: usize, dst_addr: &mut [T]) {
-        //-> RofiReq {
-        // println!("[{:?}]-({:?}) iget entry",self.my_pe,thread::current().id());
-        // let mut req = RofiReq{
-        //     txids: Vec::new(),
-        //     _drop_set: self.drop_set.clone(),
-        //     _any_dropped: self.any_dropped.clone(),
-        // };
         if pe != self.my_pe {
-            // unsafe {
-            let _lock = self.comm_mutex.lock();
-            match rofi_iget(src_addr, dst_addr, pe) {
-                //.expect("error in rofi get")
-                Err(ret) => {
-                    println!(
-                            "Error in get from {:?} src {:x} base_addr {:x} dst_addr {:p} size {:?} ret {:?}",
-                            pe,
-                            src_addr,
-                            *self.rofi_base_address.read(),
-                            dst_addr,
-                            dst_addr.len(),
-                            ret,
-                        );
-                    panic!();
-                }
-                Ok(_ret) => {
-                    self.get_amt
-                        .fetch_add(dst_addr.len() * std::mem::size_of::<T>(), Ordering::SeqCst);
-                    self.get_cnt.fetch_add(1, Ordering::SeqCst);
-                    // if ret != 0{
-                    //     req.txids.push(ret);
-                    // }
+            let bytes_len = dst_addr.len() * std::mem::size_of::<T>();
+            let rem_bytes = bytes_len % std::mem::size_of::<u64>();
+            // println!("{:x} {:?} {:?} {:?}",src_addr,dst_addr.as_ptr(),bytes_len,rem_bytes);
+            if bytes_len >= std::mem::size_of::<u64>() {
+                let temp_dst_addr = &mut dst_addr[rem_bytes..];
+                self.init_buffer(temp_dst_addr);
+                self.iget_data(pe, src_addr + rem_bytes, temp_dst_addr);
+                while let Err(TxError::GetError) = self.check_buffer(temp_dst_addr) {
+                    self.iget_data(pe, src_addr + rem_bytes, temp_dst_addr);
                 }
             }
-            // }
+            if rem_bytes > 0 {
+                loop {
+                    if let Ok(addr) = self.rt_alloc(rem_bytes) {
+                        unsafe {
+                            let temp_dst_addr = &mut dst_addr[0..rem_bytes];
+                            let buf1 = std::slice::from_raw_parts_mut(
+                                addr as *mut T as *mut u8,
+                                rem_bytes,
+                            );
+                            let buf0 = std::slice::from_raw_parts(
+                                temp_dst_addr.as_ptr() as *mut T as *mut u8,
+                                rem_bytes,
+                            );
+                            self.fill_buffer(temp_dst_addr, 0u8);
+                            self.fill_buffer(buf1, 1u8);
+
+                            self.iget_data(pe, src_addr, temp_dst_addr);
+                            self.iget_data(pe, src_addr, buf1);
+
+                            let mut timer = std::time::Instant::now();
+                            for i in 0..temp_dst_addr.len() {
+                                while buf0[i] != buf1[i] {
+                                    std::thread::yield_now();
+                                    if timer.elapsed().as_secs_f64() > 1.0 {
+                                        println!("iget {:?} {:?} {:?}", i, buf0[i], buf1[i]);
+                                        self.iget_data(pe, src_addr, temp_dst_addr);
+                                        self.iget_data(pe, src_addr, buf1);
+                                        timer = std::time::Instant::now();
+                                    }
+                                }
+                            }
+                            // println!("{:?} {:?}",buf0,buf1);
+                        }
+                        self.rt_free(addr);
+                        break;
+                    }
+                    std::thread::yield_now();
+                }
+            }
         } else {
             unsafe {
                 std::ptr::copy_nonoverlapping(
@@ -379,10 +507,8 @@ impl CommOps for RofiComm {
                 );
             }
         }
-        // req
-        // println!("[{:?}]- gc: {:?} pc: {:?} iget exit",self.my_pe,self.get_cnt.load(Ordering::SeqCst),self.put_cnt.load(Ordering::SeqCst));
-        // println!("[{:?}]-({:?}) iget exit",self.my_pe,thread::current().id());
     }
+
     //src address is relative to rofi base addr
     fn iget_relative<T: Remote>(&self, pe: usize, src_addr: usize, dst_addr: &mut [T]) {
         //-> RofiReq {
@@ -450,10 +576,10 @@ impl Drop for RofiComm {
         if self.alloc.read().len() > 1 {
             println!("[LAMELLAR INFO] {:?} additional rt memory pools were allocated, performance may be increased using a larger initial pool, set using the LAMELLAR_MEM_SIZE envrionment variable. Current initial size = {:?}",self.alloc.read().len()-1, ROFI_MEM.load(Ordering::SeqCst));
         }
-        // rofi_barrier();
+        rofi_barrier();
         // std::thread::sleep(std::time::Duration::from_millis(1000));
         // //we can probably do a final "put" to each node where we specify we we are done, then once all nodes have done this no further communication amongst them occurs...
-        // let _res = rofi_finit();
+        let _res = rofi_finit();
         // std::thread::sleep(std::time::Duration::from_millis(1000));
         // println!("[{:?}] dropping rofi comm", self.my_pe);
     }

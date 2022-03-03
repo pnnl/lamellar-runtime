@@ -20,7 +20,7 @@ impl<I> Enumerate<I>
 where
     I: DistributedIterator + 'static,
 {
-    pub fn for_each<F>(&self, op: F)
+    pub fn for_each<F>(self, op: F)
     where
         F: Fn((usize, <I as DistributedIterator>::Item)) + Sync + Send + Clone + 'static,
     {
@@ -49,20 +49,26 @@ where
         self.iter.array()
     }
     fn next(&mut self) -> Option<Self::Item> {
-        // println!("enumerate next {:?}",self.count);
         let a = self.iter.next()?;
-        let i = self.global_index(self.count);
+        let i = self.subarray_index(self.count)?;
+        // println!("enumerate next {:?} i: {:?}",self.count,i);
         self.count += 1;
         Some((i, a))
     }
+
     fn elems(&self, in_elems: usize) -> usize {
         let in_elems = self.iter.elems(in_elems);
         // println!("enumerate elems {:?}",in_elems);
         in_elems
     }
-    fn global_index(&self, index: usize) -> usize {
+    fn global_index(&self, index: usize) -> Option<usize> {
         let g_index = self.iter.global_index(index);
         // println!("enumerate index: {:?} global_index {:?}", index,g_index);
+        g_index
+    }
+    fn subarray_index(&self, index: usize) -> Option<usize> {
+        let g_index = self.iter.subarray_index(index); //not sure if this works...
+                                                       // println!("enumerate index: {:?} global_index {:?}", index,g_index);
         g_index
     }
     // fn chunk_size(&self) -> usize {

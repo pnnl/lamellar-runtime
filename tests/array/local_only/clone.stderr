@@ -1,0 +1,5 @@
+error[E0599]: no method named `clone` found for struct `LocalOnlyArray<usize>` in the current scope
+ --> tests/ui/array/local_only/clone.rs:6:46
+  |
+6 |     let mut cloned_block_array = block_array.clone();
+  |                                              ^^^^^ method not found in `LocalOnlyArray<usize>`

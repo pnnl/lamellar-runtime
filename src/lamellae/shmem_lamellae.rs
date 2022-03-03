@@ -197,6 +197,9 @@ impl LamellaeRDMA for Shmem {
     fn get(&self, pe: usize, src: usize, dst: &mut [u8]) {
         self.shmem_comm.get(pe, src, dst);
     }
+    fn iget(&self, pe: usize, src: usize, dst: &mut [u8]) {
+        self.shmem_comm.get(pe, src, dst);
+    }
     fn rt_alloc(&self, size: usize) -> AllocResult<usize> {
         self.shmem_comm.rt_alloc(size)
     }

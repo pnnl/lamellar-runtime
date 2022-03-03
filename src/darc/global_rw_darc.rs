@@ -1,5 +1,5 @@
 use core::marker::PhantomData;
-use parking_lot::{Mutex, RwLock};
+use parking_lot::RwLock;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt;
 use std::ops::{Deref, DerefMut};
@@ -9,9 +9,9 @@ use std::sync::Arc;
 use crate::darc::local_rw_darc::LocalRwDarc;
 use crate::darc::{Darc, DarcInner, DarcMode, __NetworkDarc};
 use crate::lamellae::{LamellaeComm, LamellaeRDMA};
+use crate::lamellar_team::{IntoLamellarTeam, LamellarTeamRT};
 use crate::lamellar_world::LAMELLAES;
 use crate::IdError;
-use crate::lamellar_team::{LamellarTeamRT,IntoLamellarTeam};
 
 #[derive(serde::Serialize, serde::Deserialize, Debug)]
 enum LockType {
@@ -23,9 +23,9 @@ enum LockType {
 pub(crate) struct DistRwLock<T> {
     readers: AtomicUsize,
     writer: AtomicUsize,
-    local_cnt: AtomicUsize,
-    local_state: Mutex<Option<LockType>>,
-    team: Arc<LamellarTeamRT>,
+    // local_cnt: AtomicUsize, //eventually we can do an optimization potentially where if we already have the global lock and another local request comes in we keep it (although this could cause starvation)
+    // local_state: Mutex<Option<LockType>>,
+    team: std::pin::Pin<Arc<LamellarTeamRT>>,
     data: std::cell::UnsafeCell<T>,
 }
 
@@ -43,8 +43,8 @@ impl<T> DistRwLock<T> {
         DistRwLock {
             readers: AtomicUsize::new(0),
             writer: AtomicUsize::new(team.num_pes),
-            local_cnt: AtomicUsize::new(0),
-            local_state: Mutex::new(None),
+            // local_cnt: AtomicUsize::new(0),
+            // local_state: Mutex::new(None),
             team: team,
             data: std::cell::UnsafeCell::new(data),
         }
@@ -174,13 +174,14 @@ impl<'a, T: 'a> Drop for GlobalRwDarcReadGuard<'a, T> {
             0,
             inner as *const DarcInner<DistRwLock<T>> as *const () as usize,
         );
-        team.exec_am_pe(
+        team.exec_am_pe_tg(
             0,
             UnlockAm {
                 rwlock_addr: remote_rwlock_addr,
                 orig_pe: team.team_pe.expect("darcs cant exist on non team members"),
                 lock_type: LockType::Read,
             },
+            Some(inner.am_counters()),
         );
     }
 }
@@ -221,13 +222,14 @@ impl<'a, T: 'a> Drop for GlobalRwDarcWriteGuard<'a, T> {
             0,
             inner as *const DarcInner<DistRwLock<T>> as *const () as usize,
         );
-        team.exec_am_pe(
+        team.exec_am_pe_tg(
             0,
             UnlockAm {
                 rwlock_addr: remote_rwlock_addr,
                 orig_pe: team.team_pe.expect("darcs cant exist on non team members"),
                 lock_type: LockType::Write,
             },
+            Some(inner.am_counters()),
         );
     }
 }
@@ -296,9 +298,9 @@ impl<T> GlobalRwDarc<T> {
         // if self.darc.src_pe != cur_pe{
         self.inner().inc_pe_ref_count(self.darc.src_pe, 1); // we need to increment by 2 cause bincode calls the serialize function twice when serializing...
                                                             // }
-        self.inner().local_cnt.fetch_add(1, Ordering::SeqCst);
-        // self.print();
-        // println!("done deserialize darc cnts");
+                                                            // self.inner().local_cnt.fetch_add(1, Ordering::SeqCst);
+                                                            // self.print();
+                                                            // println!("done deserialize darc cnts");
     }
 
     pub fn print(&self) {
@@ -321,13 +323,14 @@ impl<T> GlobalRwDarc<T> {
             0,
             inner as *const DarcInner<DistRwLock<T>> as *const () as usize,
         );
-        team.exec_am_pe(
+        team.exec_am_pe_tg(
             0,
             LockAm {
                 rwlock_addr: remote_rwlock_addr,
                 orig_pe: team.team_pe.expect("darcs cant exist on non team members"),
                 lock_type: LockType::Read,
             },
+            Some(inner.am_counters()),
         )
         .into_future()
         .await;
@@ -346,13 +349,14 @@ impl<T> GlobalRwDarc<T> {
             0,
             inner as *const DarcInner<DistRwLock<T>> as *const () as usize,
         );
-        team.exec_am_pe(
+        team.exec_am_pe_tg(
             0,
             LockAm {
                 rwlock_addr: remote_rwlock_addr,
                 orig_pe: team.team_pe.expect("darcs cant exist on non team members"),
                 lock_type: LockType::Write,
             },
+            Some(inner.am_counters()),
         )
         .into_future()
         .await;
@@ -370,13 +374,14 @@ impl<T> GlobalRwDarc<T> {
             0,
             inner as *const DarcInner<DistRwLock<T>> as *const () as usize,
         );
-        team.exec_am_pe(
+        team.exec_am_pe_tg(
             0,
             LockAm {
                 rwlock_addr: remote_rwlock_addr,
                 orig_pe: team.team_pe.expect("darcs cant exist on non team members"),
                 lock_type: LockType::Read,
             },
+            Some(inner.am_counters()),
         )
         .get();
         GlobalRwDarcReadGuard {
@@ -393,13 +398,14 @@ impl<T> GlobalRwDarc<T> {
             0,
             inner as *const DarcInner<DistRwLock<T>> as *const () as usize,
         );
-        team.exec_am_pe(
+        team.exec_am_pe_tg(
             0,
             LockAm {
                 rwlock_addr: remote_rwlock_addr,
                 orig_pe: team.team_pe.expect("darcs cant exist on non team members"),
                 lock_type: LockType::Write,
             },
+            Some(inner.am_counters()),
         )
         .get();
         GlobalRwDarcWriteGuard {
@@ -411,7 +417,10 @@ impl<T> GlobalRwDarc<T> {
 }
 
 impl<T> GlobalRwDarc<T> {
-    pub fn new<U: Clone + Into<IntoLamellarTeam>>(team: U, item: T) -> Result<GlobalRwDarc<T>, IdError> {
+    pub fn new<U: Clone + Into<IntoLamellarTeam>>(
+        team: U,
+        item: T,
+    ) -> Result<GlobalRwDarc<T>, IdError> {
         Ok(GlobalRwDarc {
             darc: Darc::try_new(
                 team.clone(),
@@ -421,7 +430,10 @@ impl<T> GlobalRwDarc<T> {
         })
     }
 
-    pub fn try_new<U: Clone + Into<IntoLamellarTeam>>(team:U, item: T) -> Result<GlobalRwDarc<T>, IdError> {
+    pub fn try_new<U: Clone + Into<IntoLamellarTeam>>(
+        team: U,
+        item: T,
+    ) -> Result<GlobalRwDarc<T>, IdError> {
         Ok(GlobalRwDarc {
             darc: Darc::try_new(
                 team.clone(),
@@ -435,8 +447,8 @@ impl<T> GlobalRwDarc<T> {
         let inner = self.inner();
         // println!("into_darc");
         // self.print();
-        inner.block_on_outstanding(DarcMode::Darc);
-        inner.local_cnt.fetch_add(1, Ordering::SeqCst);
+        inner.block_on_outstanding(DarcMode::Darc, 0);
+        inner.local_cnt.fetch_add(1, Ordering::SeqCst); //we add this here because to account for moving inner into d
         let item = unsafe { Box::from_raw(inner.item as *mut DistRwLock<T>).into_inner() };
         let d = Darc {
             inner: self.darc.inner as *mut DarcInner<T>,
@@ -449,16 +461,20 @@ impl<T> GlobalRwDarc<T> {
 
     pub fn into_localrw(self) -> LocalRwDarc<T> {
         let inner = self.inner();
-        inner.block_on_outstanding(DarcMode::LocalRw);
-        inner.local_cnt.fetch_add(1, Ordering::SeqCst);
+        // println!("into_localrw");
+        // self.print();
+        inner.block_on_outstanding(DarcMode::LocalRw, 0);
+        inner.local_cnt.fetch_add(1, Ordering::SeqCst); //we add this here because to account for moving inner into d
         let item = unsafe { Box::from_raw(inner.item as *mut DistRwLock<T>).into_inner() };
         let d = Darc {
-            inner: self.darc.inner as *mut DarcInner<RwLock<Box<T>>>,
+            inner: self.darc.inner as *mut DarcInner<Arc<RwLock<Box<T>>>>,
             src_pe: self.darc.src_pe,
             // phantom: PhantomData,
         };
         d.inner_mut()
-            .update_item(Box::into_raw(Box::new(RwLock::new(Box::new(item)))));
+            .update_item(Box::into_raw(Box::new(Arc::new(RwLock::new(Box::new(
+                item,
+            ))))));
         LocalRwDarc { darc: d }
     }
 }

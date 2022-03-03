@@ -1,4 +1,4 @@
-use crate::active_messaging::{LamellarAny,AmDist};
+use crate::active_messaging::{AmDist, LamellarAny};
 use crate::lamellae::{Des, SerializedData};
 use crate::lamellar_arch::LamellarArchRT;
 use crate::lamellar_team::LamellarTeamRT;
@@ -6,6 +6,7 @@ use async_trait::async_trait;
 use crossbeam::utils::CachePadded;
 use lamellar_prof::*;
 use log::trace;
+use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 
@@ -23,14 +24,14 @@ pub(crate) struct InternalReq {
     pub(crate) team_outstanding_reqs: Arc<AtomicUsize>,
     pub(crate) world_outstanding_reqs: Arc<AtomicUsize>,
     pub(crate) tg_outstanding_reqs: Option<Arc<AtomicUsize>>,
-    pub(crate) team_hash: u64,
-    pub(crate) team: Arc<LamellarTeamRT>,
+    // pub(crate) team_hash: u64,
+    // pub(crate) team: Pin<Arc<LamellarTeamRT>>,
 }
 
 #[async_trait]
 pub trait LamellarRequest {
     type Output;
-    async fn into_future(self: Box<Self>) -> Option<Self::Output>;
+    async fn into_future(mut self: Box<Self>) -> Option<Self::Output>;
     fn get(&self) -> Option<Self::Output>;
     fn get_all(&self) -> Vec<Option<Self::Output>>;
     // fn as_any(self) -> Box<dyn std::any::Any>;
@@ -54,7 +55,8 @@ pub(crate) enum AmType {
 }
 
 //#[prof]
-impl<T: AmDist+ 'static> LamellarRequestHandle<T> {
+// impl<T: AmDist + 'static> LamellarRequestHandle<T> {
+impl<T: AmDist> LamellarRequestHandle<T> {
     pub(crate) fn new<'a>(
         num_pes: usize,
         am_type: AmType,
@@ -62,8 +64,8 @@ impl<T: AmDist+ 'static> LamellarRequestHandle<T> {
         team_reqs: Arc<AtomicUsize>,
         world_reqs: Arc<AtomicUsize>,
         tg_reqs: Option<Arc<AtomicUsize>>,
-        team_hash: u64,
-        team: Arc<LamellarTeamRT>,
+        _team_hash: u64,
+        _team: Pin<Arc<LamellarTeamRT>>,
     ) -> (LamellarRequestHandle<T>, InternalReq) {
         prof_start!(active);
         let active = Arc::new(AtomicBool::new(true));
@@ -74,6 +76,7 @@ impl<T: AmDist+ 'static> LamellarRequestHandle<T> {
         prof_start!(id);
         let id = CUR_REQ_ID.fetch_add(1, Ordering::SeqCst);
         prof_end!(id);
+        // println!("new am id {:?}",id);
         prof_start!(ireq);
         let ireq = InternalReq {
             data_tx: s,
@@ -81,8 +84,8 @@ impl<T: AmDist+ 'static> LamellarRequestHandle<T> {
             team_outstanding_reqs: team_reqs,
             world_outstanding_reqs: world_reqs,
             tg_outstanding_reqs: tg_reqs,
-            team_hash: team_hash,
-            team: team,
+            // team_hash: team_hash,
+            // team: team,
         };
         prof_end!(ireq);
         (
@@ -168,7 +171,7 @@ impl<T: AmDist+ 'static> LamellarRequestHandle<T> {
 #[async_trait]
 impl<T: AmDist> LamellarRequest for LamellarRequestHandle<T> {
     type Output = T;
-    async fn into_future(self: Box<Self>) -> Option<Self::Output> {
+    async fn into_future(mut self: Box<Self>) -> Option<Self::Output> {
         let mut res = self.data_rx.try_recv();
         while res.is_err() {
             res = self.data_rx.try_recv();

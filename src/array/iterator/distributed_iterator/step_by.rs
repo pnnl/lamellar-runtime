@@ -23,7 +23,7 @@ impl<I> StepBy<I>
 where
     I: DistributedIterator + 'static,
 {
-    pub fn for_each<F>(&self, op: F)
+    pub fn for_each<F>(self, op: F)
     where
         F: Fn(<I as DistributedIterator>::Item) + Sync + Send + Clone + 'static,
     {
@@ -66,10 +66,14 @@ where
         // println!("step by elems {:?} {:?} ",in_elems,(in_elems as f32/self.step_size as f32).ceil());
         (in_elems as f32 / self.step_size as f32).ceil() as usize
     }
-    fn global_index(&self, index: usize) -> usize {
-        let g_index = self.iter.global_index(index * self.step_size) / self.step_size;
+    fn global_index(&self, index: usize) -> Option<usize> {
+        let g_index = self.iter.global_index(index * self.step_size)? / self.step_size;
         // println!("step_by index: {:?} global_index {:?}", index,g_index);
-        g_index
+        Some(g_index)
+    }
+    fn subarray_index(&self, index: usize) -> Option<usize> {
+        let g_index = self.iter.subarray_index(index * self.step_size)? / self.step_size; //not sure if this works...
+        Some(g_index)
     }
     // fn chunk_size(&self) -> usize {
     //     self.iter.chunk_size()

@@ -1,9 +1,8 @@
-/// ------------Lamellar Example: RDMA put -------------------------
+/// ------------Lamellar Example: RDMA get -------------------------
 /// this example highlights constructing a lamellar memory region
-/// and performing an RDMA put of local data into the region located
-/// on a remote PE.
+/// and performing an RDMA get of remote data from the region into
+/// a local buffer
 ///----------------------------------------------------------------
-use lamellar::ActiveMessaging; //for barrier
 use lamellar::RemoteMemoryRegion;
 
 const ARRAY_LEN: usize = 100;
@@ -22,67 +21,59 @@ fn main() {
         // all other pes can put/get into this region
         let array = world.alloc_shared_mem_region::<u8>(ARRAY_LEN);
         let array_slice = array.as_slice().unwrap(); //we can unwrap because we know array is local
-
-        // instatiates a local array whos memory is registered with
-        // the underlying network device, so that it can be used
-        // as the src buffer in a put or as the dst buffer in a get
+                                                     // instatiates a local array whos memory is registered with
+                                                     // the underlying network device, so that it can be used
+                                                     // as the src buffer in a put or as the dst buffer in a get
         let data = world.alloc_local_mem_region::<u8>(ARRAY_LEN);
         let data_slice = unsafe { data.as_mut_slice().unwrap() }; //we can unwrap because we know data is local
-        for elem in data_slice {
+        for elem in data_slice.iter_mut() {
             *elem = my_pe as u8;
         }
 
         // we can use the local_array to initialize our local portion a shared memory region
         unsafe { array.put(my_pe, 0, data.clone()) };
 
-        //we can "put" from our segment of a shared mem region into another nodes shared mem region
+        //we can "get" from a remote segment of a shared mem region into a local segment of the shared mem region
         world.barrier();
         if my_pe == 0 {
             println!(
-                "-------------- testing shared mem region put to shared mem region --------------"
+                "-------------- testing shared mem region get to shared mem region --------------"
             );
-            world.barrier();
-            unsafe {
-                array.put(num_pes - 1, 0, array.clone());
-            }
-        } else if my_pe == num_pes - 1 {
             println!("[{:?}] Before {:?}", my_pe, array_slice);
-            world.barrier();
+            unsafe {
+                array.get_unchecked(num_pes - 1, 0, array.clone());
+            }
             while array_slice[ARRAY_LEN - 1] == my_pe as u8 {
                 std::thread::yield_now();
-            } // wait for put to show up
+            } // wait for data to show up
             println!("[{:?}] After {:?}", my_pe, array_slice);
-            unsafe { array.put(my_pe, 0, data.clone()) };
             println!(
                 "-------------------------------------------------------------------------------"
             );
-        } else {
-            world.barrier();
+            unsafe { array.put(my_pe, 0, data.clone()) }; //reset our local segment
         }
+
         world.barrier();
 
-        //we can "put" from our local_array into another nodes shared mem region
+        //we can "get" from  another nodes shared mem region into a local_array
         if my_pe == 0 {
             println!(
-                "----------------- testing local_array put to shared mem region ----------------"
+                "----------------- testing shared mem region get to local_array ----------------"
             );
-            world.barrier();
+            println!("[{:?}] Before {:?}", my_pe, data_slice);
             unsafe {
-                array.put(num_pes - 1, 0, data.clone());
+                array.get_unchecked(num_pes - 1, 0, data.clone());
             }
-        } else if my_pe == num_pes - 1 {
-            println!("[{:?}] Before {:?}", my_pe, array_slice);
-            world.barrier();
-            while array_slice[ARRAY_LEN - 1] == my_pe as u8 {
+            while data_slice[ARRAY_LEN - 1] == my_pe as u8 {
                 std::thread::yield_now();
-            } // wait for put to show up
-            println!("[{:?}] After {:?}", my_pe, array_slice);
-            unsafe { array.put(my_pe, 0, data.clone()) };
+            } // local arrays suppore direct indexing, wait for data to show up
+            println!("[{:?}] After {:?}", my_pe, data_slice);
             println!(
                 "-------------------------------------------------------------------------------"
             );
-        } else {
-            world.barrier();
+            unsafe {
+                array.get_unchecked(my_pe, 0, data.clone());
+            } // reset local_array;
         }
         world.barrier();
         if my_pe == 0 {
@@ -91,21 +82,16 @@ fn main() {
             );
         }
         world.barrier();
-        println!("[{:?}] Before {:?}", my_pe, array_slice);
+        println!("[{:?}] Before {:?}", my_pe, data_slice);
         world.barrier();
-        let mut index = my_pe;
-        //stripe pe ids accross all shared mem regions
 
-        // let data  = world.alloc_local_mem_region::<u8>(1);
-        // unsafe{data.as_mut_slice().unwrap()[0]=my_pe as u8;}
-        while index < ARRAY_LEN {
-            let cur_index = index;
-            unsafe { array.put_all(cur_index, data.sub_region(0..=0)) };
-            index += num_pes;
+        //stripe pe ids accross all shared mem regions
+        for i in 0..ARRAY_LEN {
+            unsafe { array.get_unchecked(i % num_pes, i, data.sub_region(i..=i)) };
         }
 
         for i in 0..ARRAY_LEN {
-            while (i % num_pes) as u8 != array_slice[i] {
+            while (i % num_pes) as u8 != data_slice[i] {
                 std::thread::yield_now();
             }
         }
@@ -114,7 +100,7 @@ fn main() {
         if my_pe == 0 {
             println!("----------------------------------------");
         }
-        println!("[{:?}] After {:?}", my_pe, array_slice);
+        println!("[{:?}] After {:?}", my_pe, data.as_slice());
         world.barrier();
         if my_pe == 0 {
             println!(
