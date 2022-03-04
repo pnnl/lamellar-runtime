@@ -16,14 +16,20 @@ impl<T: Dist> UnsafeArray<T> {
     ) -> Vec<Box<dyn LamellarRequest<Output = ()> + Send + Sync>> {
         let global_index = index + self.inner.offset;
         let buf = buf.my_into(&self.inner.data.team);
-        let start_pe = self
+        let start_pe =  match self
             .inner
-            .pe_for_dist_index(index)
-            .expect("index out of bounds"); //((index+1) as f64 / self.elem_per_pe).round() as usize;
-        let end_pe = self
+            .pe_for_dist_index(index){
+                Some(pe) => pe,
+                None => panic!("index out of bounds {:?} len {:?}",index ,self.len()),
+            };
+            // .expect("index out of bounds"); //((index+1) as f64 / self.elem_per_pe).round() as usize;
+        let end_pe = match self
             .inner
-            .pe_for_dist_index(index + buf.len() - 1)
-            .expect("index out of bounds"); //(((index + buf.len()) as f64) / self.elem_per_pe).round() as usize;
+            .pe_for_dist_index(index + buf.len() - 1){
+                Some(pe) => pe,
+                None => panic!("index out of bounds {:?} len {:?}",index + buf.len() - 1,self.len()),
+            };
+            // .expect("index out of bounds"); //(((index + buf.len()) as f64) / self.elem_per_pe).round() as usize;
                                             // println!("block_op {:?} {:?}",start_pe,end_pe);
         let mut dist_index = global_index;
         // let mut subarray_index = index;
@@ -449,7 +455,7 @@ impl UnsafeArrayInner {
                 } else {
                     num_elems_local
                 };
-                // println!("ssi {:?} si {:?} ei {:?} nel {:?}",subarray_start_index,start_index,end_index,num_elems_local);
+                // println!("ssi {:?} si {:?} ei {:?} nel {:?} es {:?}",subarray_start_index,start_index,end_index,num_elems_local,self.elem_size);
                 Some((
                     &mut self.local_as_mut_slice()
                         [start_index * self.elem_size..end_index * self.elem_size],

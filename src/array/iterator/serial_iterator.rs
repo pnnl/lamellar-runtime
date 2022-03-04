@@ -164,7 +164,13 @@ impl<'a, T: Dist + 'static, A: LamellarArrayGet<T> + Clone> SerialIterator
                 //need to get new data
                 self.buf_index = 0;
                 // self.fill_buffer(self.index);
-                self.array.get(self.index, &self.buf_0).wait();
+                if self.index + self.buf_0.len() < self.array.len(){
+                    self.array.get(self.index, &self.buf_0).wait();
+                }
+                else{
+                    let sub_region = self.buf_0.sub_region(0..(self.array.len()-self.index));
+                    self.array.get(self.index, &sub_region).wait();
+                }
             }
             // self.spin_for_valid(self.buf_index);
             self.index += 1;

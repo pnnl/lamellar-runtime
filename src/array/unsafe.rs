@@ -117,6 +117,11 @@ impl<T: Dist + 'static> UnsafeArray<T> {
             phantom: PhantomData,
         };
         // println!("new unsafe");
+        // unsafe {println!("size {:?} bytes {:?}",array.inner.size, array.inner.data.mem_region.as_mut_slice().unwrap().len())};
+        // println!("elem per pe {:?}", elem_per_pe);
+        // for i in 0..num_pes{
+        //     println!("pe: {:?} {:?}",i,array.inner.num_elems_pe(i));
+        // }
         // array.inner.data.print();
         array.create_buffered_ops();
         // println!("after buffered ops");
@@ -767,7 +772,7 @@ impl UnsafeArrayInner {
                     0
                 };
                 let end_index = start_index + num_elems_local;
-                // println!("nel {:?} sao {:?} as slice si: {:?} ei {:?}",num_elems_local,self.offset,start_index,end_index);
+                // println!("nel {:?} sao {:?} as slice si: {:?} ei {:?} elemsize {:?}",num_elems_local,self.offset,start_index,end_index,self.elem_size);
                 &mut slice[start_index * self.elem_size..end_index * self.elem_size]
             }
             Distribution::Cyclic => {
