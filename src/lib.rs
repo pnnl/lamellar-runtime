@@ -103,6 +103,7 @@ mod lamellar_arch;
 mod lamellar_request;
 mod lamellar_team;
 mod lamellar_world;
+mod lamellar_task_group;
 mod memregion;
 mod scheduler;
 mod utils;
@@ -140,6 +141,7 @@ pub use crate::memregion::{
 pub use crate::lamellae::Backend;
 pub use crate::lamellar_arch::{BlockedArch, IdError, LamellarArch, StridedArch};
 pub use crate::lamellar_world::*;
+pub use crate::lamellar_task_group::LamellarTaskGroup;
 pub use crate::scheduler::SchedulerType;
 
 pub use crate::lamellar_team::LamellarTeam;

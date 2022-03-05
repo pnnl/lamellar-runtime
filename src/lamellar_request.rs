@@ -10,7 +10,7 @@ use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 
-static CUR_REQ_ID: AtomicUsize = AtomicUsize::new(0);
+pub(crate) static CUR_REQ_ID: AtomicUsize = AtomicUsize::new(0);
 pub(crate) enum InternalResult {
     Local(LamellarAny),     // a local result from a local am (possibly a returned one)
     Remote(SerializedData), // a remte result from a remote am
