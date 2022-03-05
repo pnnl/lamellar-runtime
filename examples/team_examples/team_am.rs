@@ -42,7 +42,10 @@ fn test_team(world: &LamellarWorld, team: Option<Arc<LamellarTeam>>, label: &str
             secs: secs,
             orig_pe: my_pe,
         }); //everynode that has a handle can launch on a given team;
+        world.wait_all();
+        println!("after world wait_all {:?}",timer.elapsed().as_secs_f64());
         team.wait_all(); //wait until all requests return
+        println!("after team wait_all {:?}",timer.elapsed().as_secs_f64());
         team.barrier(); // barriers only apply to team members, its a no op for non team members
         timer.elapsed().as_secs_f64()
     } else {

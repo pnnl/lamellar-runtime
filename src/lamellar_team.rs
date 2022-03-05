@@ -711,7 +711,7 @@ impl LamellarTeamRT {
     // // #[prof]
     fn wait_all(&self) {
         let mut temp_now = Instant::now();
-        while self.team_counters.outstanding_reqs.load(Ordering::SeqCst) > 0 {
+        while self.team_counters.outstanding_reqs.load(Ordering::SeqCst) > 0 || (self.parent.is_none() && self.world_counters.outstanding_reqs.load(Ordering::SeqCst) > 0) {
             // std::thread::yield_now();
             self.scheduler.exec_task(); //mmight as well do useful work while we wait
             if temp_now.elapsed() > Duration::new(60, 0) {
@@ -767,7 +767,7 @@ impl LamellarTeamRT {
             self.clone(),
         );
 
-        //self.world_counters.add_send_req(self.num_pes);
+        self.world_counters.add_send_req(self.num_pes);
         self.team_counters.add_send_req(self.num_pes);
         let func: LamellarArcAm = Arc::new(am);
         let world = if let Some(world) = &self.world {
@@ -832,7 +832,7 @@ impl LamellarTeamRT {
         );
         prof_end!(req);
         prof_start!(counters);
-        //self.world_counters.add_send_req(1);
+        self.world_counters.add_send_req(1);
         self.team_counters.add_send_req(1);
         prof_end!(counters);
         prof_start!(any);
@@ -893,7 +893,7 @@ impl LamellarTeamRT {
         );
         prof_end!(req);
         prof_start!(counters);
-        //self.world_counters.add_send_req(1);
+        self.world_counters.add_send_req(1);
         self.team_counters.add_send_req(1);
         prof_end!(counters);
         prof_start!(any);
@@ -960,7 +960,7 @@ impl LamellarTeamRT {
         );
         prof_end!(req);
         prof_start!(counters);
-        //self.world_counters.add_send_req(1);
+        self.world_counters.add_send_req(1);
         self.team_counters.add_send_req(1);
         prof_end!(counters);
         prof_start!(any);
