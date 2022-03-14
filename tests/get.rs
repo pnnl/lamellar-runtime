@@ -71,6 +71,7 @@ create_get_tests!(
     (
         UnsafeArray,
         AtomicArray,
+        Atomic2Array,
         LocalLockAtomicArray,
         ReadOnlyArray
     ),

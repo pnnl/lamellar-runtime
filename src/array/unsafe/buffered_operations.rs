@@ -59,13 +59,13 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         &self,
         pe: usize,
         val: T,
-        local_index: usize,
+        local_index: &[usize],
         op: ArrayOpCmd,
     ) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync> {
         let mut stall_mark = self.inner.data.req_cnt.fetch_add(1, Ordering::SeqCst);
         let buf_op = self.inner.data.op_buffers.read()[pe].clone();
-        let (len, complete) = buf_op.add_op(op, local_index, &val as *const T as *const u8);
-        if len == 1 {
+        let (first, complete) = buf_op.add_ops(op, local_index, &val as *const T as *const u8);
+        if first {
             let array = self.clone();
             self.inner
                 .data
@@ -89,24 +89,25 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
                     async_std::task::yield_now().await;
                 }
 
-                let (am, len, complete, results) = buf_op.into_arc_am(array.sub_array_range()); //maybe just make this responsible for splitting if too large...
-                if len * std::mem::size_of::<(ArrayOpCmd, usize, T)>() > 1000000000 {
-                    println!(
-                        "probably an issue! {:?} {:?}",
-                        len,
-                        len * std::mem::size_of::<(ArrayOpCmd, usize, T)>()
-                    );
-                }
+                let (ams, len, complete, results) = buf_op.into_arc_am(array.sub_array_range());
                 if len > 0 {
-                    let res = array.inner.data.team.exec_arc_am_pe::<Vec<u8>>(
-                        pe,
-                        am,
-                        Some(array.inner.data.array_counters.clone()),
-                    );
+                    let mut res = Vec::new();
+                    for am in ams{
+                        res.push(array.inner.data.team.exec_arc_am_pe::<Vec<u8>>(
+                            pe,
+                            am,
+                            Some(array.inner.data.array_counters.clone()),
+                        ));
+                    }
+
+                    let mut full_results: Vec<u8> = Vec::new();
+                    for r in res{
                     // println!("submitted indirectly {:?} ",len);
-                    let mut results_u8: Vec<u8> = res.into_future().await.unwrap();
+                        let results_u8: Vec<u8> = r.into_future().await.unwrap();
+                        full_results.extend(results_u8);
+                    }
                     let mut results = results.write();
-                    std::mem::swap(&mut results_u8, &mut results);
+                    std::mem::swap(&mut full_results, &mut results);
                     complete.store(true, Ordering::Relaxed);
                     // println!("indirectly done!");
                     let _cnt1 = array
@@ -117,6 +118,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
                         .outstanding_reqs
                         .fetch_sub(1, Ordering::SeqCst); //remove our pending req now that it has actually been submitted;
                     let _cnt2 = array.inner.data.req_cnt.fetch_sub(len, Ordering::SeqCst);
+                    
                     // println!("indirect cnts {:?}->{:?} {:?}->{:?} -- {:?}",cnt1,cnt1-1,cnt2,cnt2-len,len);
                 } else {
                     array
@@ -128,43 +130,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
                         .fetch_sub(1, Ordering::SeqCst);
                 }
             });
-        } else if len * std::mem::size_of::<(ArrayOpCmd, usize, T)>() > 100000000 {
-            let array = self.clone();
-
-            let (am, len, complete, results) = buf_op.into_arc_am(self.sub_array_range());
-            if len > 0 {
-                self.inner
-                    .data
-                    .team
-                    .team_counters
-                    .outstanding_reqs
-                    .fetch_add(1, Ordering::SeqCst); // we need to tell the world we have a request pending
-                let res = self.inner.data.team.exec_arc_am_pe::<Vec<u8>>(
-                    pe,
-                    am,
-                    Some(self.inner.data.array_counters.clone()),
-                );
-                println!("submitted directly {:?} ", len);
-
-                self.inner.data.team.scheduler.submit_task(async move {
-                    println!("going to wait on result");
-                    let mut results_u8: Vec<u8> = res.into_future().await.unwrap();
-                    let mut results = results.write();
-                    std::mem::swap(&mut results_u8, &mut results);
-                    complete.store(true, Ordering::Relaxed);
-                    println!("direct done!");
-                    let _cnt1 = array
-                        .inner
-                        .data
-                        .team
-                        .team_counters
-                        .outstanding_reqs
-                        .fetch_sub(1, Ordering::SeqCst); //remove our pending req now that it has actually been submitted;
-                    let _cnt2 = array.inner.data.req_cnt.fetch_sub(len, Ordering::SeqCst);
-                    // println!("direct cnts {:?} {:?}",cnt1-1,cnt2-len);
-                });
-            }
-        }
+        } 
         Box::new(ArrayOpHandle { complete: complete })
     }
 
@@ -177,9 +143,9 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
     ) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
         let mut stall_mark = self.inner.data.req_cnt.fetch_add(1, Ordering::SeqCst);
         let buf_op = self.inner.data.op_buffers.read()[pe].clone();
-        let (len, complete, res_index, results) =
+        let (first, complete, res_index, results) =
             buf_op.add_fetch_op(op, local_index, &val as *const T as *const u8);
-        if len == 1 {
+        if first {
             // println!("pending buf for pe {:?}",pe);
             let array = self.clone();
             self.inner
@@ -199,15 +165,25 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
                     async_std::task::yield_now().await;
                 }
 
-                let (am, len, complete, results) = buf_op.into_arc_am(array.sub_array_range());
-                let res = array.inner.data.team.exec_arc_am_pe::<Vec<u8>>(
-                    pe,
-                    am,
-                    Some(array.inner.data.array_counters.clone()),
-                );
-                let mut results_u8: Vec<u8> = res.into_future().await.unwrap();
+                let (ams, len, complete, results) = buf_op.into_arc_am(array.sub_array_range());
+                
+                let mut res = Vec::new();
+                for am in ams{
+                    res.push(array.inner.data.team.exec_arc_am_pe::<Vec<u8>>(
+                        pe,
+                        am,
+                        Some(array.inner.data.array_counters.clone()),
+                    ));
+                }
+
+                let mut full_results: Vec<u8> = Vec::new();
+                for r in res{
+                // println!("submitted indirectly {:?} ",len);
+                    let results_u8: Vec<u8> = r.into_future().await.unwrap();
+                    full_results.extend(results_u8);
+                }
                 let mut results = results.write();
-                std::mem::swap(&mut results_u8, &mut results);
+                std::mem::swap(&mut full_results, &mut results);
                 complete.store(true, Ordering::Relaxed);
                 array
                     .inner
@@ -227,23 +203,53 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
             _phantom: PhantomData,
         })
     }
+
+    // pub fn add_indices(&self, indices: &[usize], val: T) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>>{
+    //     let mut pe_offsets: HashMap<usize,Vec<usize>> = HashMap::new();
+    //     for i in indices{
+    //         let pe = self
+    //         .inner
+    //         .pe_for_dist_index(*i)
+    //         .expect("index out of bounds");
+    //         let local_index = self.inner.pe_offset_for_dist_index(pe, *i).unwrap(); //calculated pe above
+    //         pe_offsets.entry(pe).or_insert(Vec::new()).push(local_index);
+    //     }
+    //     for (pe,vals) in pe_offsets{
+    //     //     if vals.len() * std::mem::size_of::<(ArrayOpCmd, usize, T)>() > 10000000{
+    //     //         let n = (vals.len() as f32/10000000.0).ceil();
+    //     //         let num = vals.len() as f32 / n as f32;
+    //     //         for i in 0..n as usize{
+    //     //             self.initiate_op(pe, val, &vals[(i as f32*num).round() as usize..((1.0 + i as f32)*num).round() as usize], ArrayOpCmd::Add);
+                
+    //     //         }
+    //     //     }
+    //     //     else{
+    //             self.initiate_op(pe, val, &vals, ArrayOpCmd::Add);
+    //         // }
+    //     }
+    //     None
+    // }
 }
 
 impl<T: ElementArithmeticOps + 'static> ArithmeticOps<T> for UnsafeArray<T> {
     fn add(
         &self,
-        index: usize,
+        index: impl OpInput<usize>,
         val: T,
     ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>> {
-        // let data_slice = unsafe {self.local_data()};
-
-        // let res = data_slice.into_iter().reduce(|acc,val| acc+val).unwrap();
-        let pe = self
+        let mut pe_offsets: HashMap<usize,Vec<usize>> = HashMap::new();
+        let indices = index.as_op_input();
+        // println!("indices {:?}",indices);
+        for i in indices{
+            let pe = self
             .inner
-            .pe_for_dist_index(index)
+            .pe_for_dist_index(i)
             .expect("index out of bounds");
-        let local_index = self.inner.pe_offset_for_dist_index(pe, index).unwrap(); //calculated pe above
-        Some(self.initiate_op(pe, val, local_index, ArrayOpCmd::Add))
+            let local_index = self.inner.pe_offset_for_dist_index(pe, i).unwrap(); //calculated pe above
+            pe_offsets.entry(pe).or_insert(Vec::new()).push(local_index);
+        }
+        pe_offsets.iter().map(|(pe,vals)| self.initiate_op(*pe, val, &vals, ArrayOpCmd::Add)).last()
+       
     }
     fn fetch_add(
         &self,
@@ -267,7 +273,7 @@ impl<T: ElementArithmeticOps + 'static> ArithmeticOps<T> for UnsafeArray<T> {
             .pe_for_dist_index(index)
             .expect("index out of bounds");
         let local_index = self.inner.pe_offset_for_dist_index(pe, index).unwrap(); //calculated pe above
-        Some(self.initiate_op(pe, val, local_index, ArrayOpCmd::Sub))
+        Some(self.initiate_op(pe, val, std::slice::from_ref(&local_index), ArrayOpCmd::Sub))
     }
     fn fetch_sub(
         &self,
@@ -291,7 +297,7 @@ impl<T: ElementArithmeticOps + 'static> ArithmeticOps<T> for UnsafeArray<T> {
             .pe_for_dist_index(index)
             .expect("index out of bounds");
         let local_index = self.inner.pe_offset_for_dist_index(pe, index).unwrap(); //calculated pe above
-        Some(self.initiate_op(pe, val, local_index, ArrayOpCmd::Mul))
+        Some(self.initiate_op(pe, val, std::slice::from_ref(&local_index), ArrayOpCmd::Mul))
     }
     fn fetch_mul(
         &self,
@@ -315,7 +321,7 @@ impl<T: ElementArithmeticOps + 'static> ArithmeticOps<T> for UnsafeArray<T> {
             .pe_for_dist_index(index)
             .expect("index out of bounds");
         let local_index = self.inner.pe_offset_for_dist_index(pe, index).unwrap(); //calculated pe above
-        Some(self.initiate_op(pe, val, local_index, ArrayOpCmd::Div))
+        Some(self.initiate_op(pe, val, std::slice::from_ref(&local_index), ArrayOpCmd::Div))
     }
     fn fetch_div(
         &self,
@@ -342,7 +348,7 @@ impl<T: ElementBitWiseOps + 'static> BitWiseOps<T> for UnsafeArray<T> {
             .pe_for_dist_index(index)
             .expect("index out of bounds");
         let local_index = self.inner.pe_offset_for_dist_index(pe, index).unwrap(); //calculated pe above
-        Some(self.initiate_op(pe, val, local_index, ArrayOpCmd::And))
+        Some(self.initiate_op(pe, val, std::slice::from_ref(&local_index), ArrayOpCmd::And))
     }
     fn fetch_bit_and(
         &self,
@@ -367,7 +373,7 @@ impl<T: ElementBitWiseOps + 'static> BitWiseOps<T> for UnsafeArray<T> {
             .pe_for_dist_index(index)
             .expect("index out of bounds");
         let local_index = self.inner.pe_offset_for_dist_index(pe, index).unwrap(); //calculated pe above
-        Some(self.initiate_op(pe, val, local_index, ArrayOpCmd::Or))
+        Some(self.initiate_op(pe, val, std::slice::from_ref(&local_index), ArrayOpCmd::Or))
     }
     fn fetch_bit_or(
         &self,
@@ -384,60 +390,60 @@ impl<T: ElementBitWiseOps + 'static> BitWiseOps<T> for UnsafeArray<T> {
 }
 
 // impl<T: Dist + std::ops::AddAssign> UnsafeArray<T> {
-impl<T: ElementArithmeticOps> LocalArithmeticOps<T> for UnsafeArray<T> {
-    fn local_fetch_add(&self, index: usize, val: T) -> T {
-        // println!("local_add LocalArithmeticOps<T> for UnsafeArray<T> ");
-        unsafe {
-            let orig = self.local_as_mut_slice()[index];
-            self.local_as_mut_slice()[index] += val;
-            orig
-        }
-    }
-    fn local_fetch_sub(&self, index: usize, val: T) -> T {
-        // println!("local_sub LocalArithmeticOps<T> for UnsafeArray<T> ");
-        unsafe {
-            let orig = self.local_as_mut_slice()[index];
-            self.local_as_mut_slice()[index] -= val;
-            orig
-        }
-    }
-    fn local_fetch_mul(&self, index: usize, val: T) -> T {
-        // println!("local_sub LocalArithmeticOps<T> for UnsafeArray<T> ");
-        unsafe {
-            let orig = self.local_as_mut_slice()[index];
-            self.local_as_mut_slice()[index] *= val;
-            // println!("orig: {:?} new {:?} va; {:?}",orig,self.local_as_mut_slice()[index] ,val);
-            orig
-        }
-    }
-    fn local_fetch_div(&self, index: usize, val: T) -> T {
-        // println!("local_sub LocalArithmeticOps<T> for UnsafeArray<T> ");
-        unsafe {
-            let orig = self.local_as_mut_slice()[index];
-            self.local_as_mut_slice()[index] /= val;
-            // println!("div i: {:?} {:?} {:?} {:?}",index,orig,val,self.local_as_mut_slice()[index]);
-            orig
-        }
-    }
-}
-impl<T: ElementBitWiseOps> LocalBitWiseOps<T> for UnsafeArray<T> {
-    fn local_fetch_bit_and(&self, index: usize, val: T) -> T {
-        // println!("local_sub LocalArithmeticOps<T> for UnsafeArray<T> ");
-        unsafe {
-            let orig = self.local_as_mut_slice()[index];
-            self.local_as_mut_slice()[index] &= val;
-            orig
-        }
-    }
-    fn local_fetch_bit_or(&self, index: usize, val: T) -> T {
-        // println!("local_sub LocalArithmeticOps<T> for UnsafeArray<T> ");
-        unsafe {
-            let orig = self.local_as_mut_slice()[index];
-            self.local_as_mut_slice()[index] |= val;
-            orig
-        }
-    }
-}
+// impl<T: ElementArithmeticOps> LocalArithmeticOps<T> for UnsafeArray<T> {
+//     fn local_fetch_add(&self, index: usize, val: T) -> T {
+//         // println!("local_add LocalArithmeticOps<T> for UnsafeArray<T> ");
+//         unsafe {
+//             let orig = self.local_as_mut_slice()[index];
+//             self.local_as_mut_slice()[index] += val;
+//             orig
+//         }
+//     }
+//     fn local_fetch_sub(&self, index: usize, val: T) -> T {
+//         // println!("local_sub LocalArithmeticOps<T> for UnsafeArray<T> ");
+//         unsafe {
+//             let orig = self.local_as_mut_slice()[index];
+//             self.local_as_mut_slice()[index] -= val;
+//             orig
+//         }
+//     }
+//     fn local_fetch_mul(&self, index: usize, val: T) -> T {
+//         // println!("local_sub LocalArithmeticOps<T> for UnsafeArray<T> ");
+//         unsafe {
+//             let orig = self.local_as_mut_slice()[index];
+//             self.local_as_mut_slice()[index] *= val;
+//             // println!("orig: {:?} new {:?} va; {:?}",orig,self.local_as_mut_slice()[index] ,val);
+//             orig
+//         }
+//     }
+//     fn local_fetch_div(&self, index: usize, val: T) -> T {
+//         // println!("local_sub LocalArithmeticOps<T> for UnsafeArray<T> ");
+//         unsafe {
+//             let orig = self.local_as_mut_slice()[index];
+//             self.local_as_mut_slice()[index] /= val;
+//             // println!("div i: {:?} {:?} {:?} {:?}",index,orig,val,self.local_as_mut_slice()[index]);
+//             orig
+//         }
+//     }
+// }
+// impl<T: ElementBitWiseOps> LocalBitWiseOps<T> for UnsafeArray<T> {
+//     fn local_fetch_bit_and(&self, index: usize, val: T) -> T {
+//         // println!("local_sub LocalArithmeticOps<T> for UnsafeArray<T> ");
+//         unsafe {
+//             let orig = self.local_as_mut_slice()[index];
+//             self.local_as_mut_slice()[index] &= val;
+//             orig
+//         }
+//     }
+//     fn local_fetch_bit_or(&self, index: usize, val: T) -> T {
+//         // println!("local_sub LocalArithmeticOps<T> for UnsafeArray<T> ");
+//         unsafe {
+//             let orig = self.local_as_mut_slice()[index];
+//             self.local_as_mut_slice()[index] |= val;
+//             orig
+//         }
+//     }
+// }
 
 // #[macro_export]
 // macro_rules! UnsafeArray_create_ops {

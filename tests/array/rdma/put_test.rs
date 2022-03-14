@@ -1,5 +1,5 @@
 use lamellar::array::{
-    AtomicArray, Distribution, LocalLockAtomicArray, SerialIterator, UnsafeArray,
+    AtomicArray, Atomic2Array, Distribution, LocalLockAtomicArray, SerialIterator, UnsafeArray,
 };
 use lamellar::{Dist, LamellarMemoryRegion, RemoteMemoryRegion};
 
@@ -22,6 +22,9 @@ macro_rules! initialize_array {
         $array.dist_iter_mut().for_each(move |x| *x = $init_val);
     };
     (AtomicArray,$array:ident,$init_val:ident) => {
+        $array.dist_iter().for_each(move |x| x.store($init_val));
+    };
+    (Atomic2Array,$array:ident,$init_val:ident) => {
         $array.dist_iter().for_each(move |x| x.store($init_val));
     };
     (LocalLockAtomicArray,$array:ident,$init_val:ident) => {
@@ -194,6 +197,23 @@ fn main() {
             "isize" => put_test!(AtomicArray, isize, len, dist_type),
             "f32" => put_test!(AtomicArray, f32, len, dist_type),
             "f64" => put_test!(AtomicArray, f64, len, dist_type),
+            _ => eprintln!("unsupported element type"),
+        },
+        "Atomic2Array" => match elem.as_str() {
+            "u8" => put_test!(Atomic2Array, u8, len, dist_type),
+            "u16" => put_test!(Atomic2Array, u16, len, dist_type),
+            "u32" => put_test!(Atomic2Array, u32, len, dist_type),
+            "u64" => put_test!(Atomic2Array, u64, len, dist_type),
+            "u128" => put_test!(Atomic2Array, u128, len, dist_type),
+            "usize" => put_test!(Atomic2Array, usize, len, dist_type),
+            "i8" => put_test!(Atomic2Array, i8, len, dist_type),
+            "i16" => put_test!(Atomic2Array, i16, len, dist_type),
+            "i32" => put_test!(Atomic2Array, i32, len, dist_type),
+            "i64" => put_test!(Atomic2Array, i64, len, dist_type),
+            "i128" => put_test!(Atomic2Array, i128, len, dist_type),
+            "isize" => put_test!(Atomic2Array, isize, len, dist_type),
+            "f32" => put_test!(Atomic2Array, f32, len, dist_type),
+            "f64" => put_test!(Atomic2Array, f64, len, dist_type),
             _ => eprintln!("unsupported element type"),
         },
         "LocalLockAtomicArray" => match elem.as_str() {

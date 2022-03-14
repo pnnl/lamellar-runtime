@@ -119,6 +119,10 @@ impl<T: Dist> ReadOnlyArray<T> {
     pub fn into_local_lock_atomic(self) -> LocalLockAtomicArray<T> {
         self.array.into()
     }
+
+    pub fn into_atomic2(self) -> Atomic2Array<T> {
+        self.array.into()
+    }
 }
 
 impl<T: Dist + 'static> ReadOnlyArray<T> {

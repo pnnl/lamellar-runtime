@@ -21,18 +21,26 @@ pub use r#unsafe::{
 };
 pub(crate) mod read_only;
 pub use read_only::{ReadOnlyArray, ReadOnlyByteArray};
+
 pub(crate) mod local_only;
 pub use local_only::LocalOnlyArray;
+
 pub(crate) mod atomic;
 pub use atomic::{
     operations::{AtomicArrayOp, AtomicArrayOpBuf},
     AtomicArray, AtomicByteArray, AtomicOps,
 };
 
+pub(crate) mod atomic2;
+pub use atomic2::{
+    operations::{Atomic2ArrayOp, Atomic2ArrayOpBuf},
+    Atomic2Array, Atomic2ByteArray,
+};
+
 pub(crate) mod local_lock_atomic;
 pub use local_lock_atomic::{
     operations::{LocalLockAtomicArrayOp, LocalLockAtomicArrayOpBuf},
-    CollectiveAtomicByteArray, LocalLockAtomicArray,
+    LocalLockAtomicByteArray, LocalLockAtomicArray,
 };
 
 pub mod iterator;
@@ -116,19 +124,74 @@ pub enum ArrayOpCmd {
     Swap,
 }
 
+pub trait OpInput<T: Dist>{
+    fn as_op_input(&self) -> Box<dyn Iterator<Item = T>+ '_>;
+}
+
+impl<T: Dist> OpInput<T> for T{
+    fn as_op_input(&self) -> Box<dyn Iterator<Item = T>+ '_> {
+        Box::new(std::slice::from_ref(self).iter().map(|elem| *elem))
+    }
+}
+
+impl<T: Dist> OpInput<T> for Vec<T>{
+    fn as_op_input(&self) -> Box<dyn Iterator<Item = T>+ '_> {
+        Box::new(self.iter().map(|elem| *elem))
+    }
+}
+
+impl<T: Dist> OpInput<T> for &[T]{
+    fn as_op_input(&self) -> Box<dyn Iterator<Item = T>+ '_> {
+        Box::new(self.iter().map(|elem| *elem))
+    }
+}
+
+impl<T: Dist> OpInput<T> for UnsafeArray<T>{
+    fn as_op_input(&self) -> Box<dyn Iterator<Item = T>+ '_> {
+        Box::new(unsafe{self.local_data().iter().map(|elem| *elem)})
+    }
+}
+
+impl<T: Dist> OpInput<T> for ReadOnlyArray<T>{
+    fn as_op_input(&self) -> Box<dyn Iterator<Item = T>+ '_> {
+        Box::new(self.local_data().iter().map(|elem| *elem))
+    }
+}
+
+impl<T: Dist> OpInput<T> for LocalLockAtomicArray<T>{
+    fn as_op_input(&self) -> Box<dyn Iterator<Item = T>+ '_> {
+        Box::new(self.local_data().map(|elem| *elem))
+    }
+}
+
+impl<T: Dist + ElementOps> OpInput<T> for AtomicArray<T>{
+    fn as_op_input(&self) -> Box<dyn Iterator<Item = T>+ '_> {
+        Box::new(self.local_data().iter().map(|elem| elem.load()))
+    }
+}
+
+impl<T: Dist + ElementOps> OpInput<T> for Atomic2Array<T>{
+    fn as_op_input(&self) -> Box<dyn Iterator<Item = T>+ '_> {
+        Box::new(self.local_data().iter().map(|elem| elem.load()))
+    }
+}
+
+
+
 pub trait BufferOp: Sync + Send {
     //have this also be RemoteActiveMessage
-    fn add_op(&self, op: ArrayOpCmd, index: usize, val: *const u8) -> (usize, Arc<AtomicBool>);
+    fn add_op(&self, op: ArrayOpCmd, index: usize, val: *const u8) -> (bool, Arc<AtomicBool>);
+    fn add_ops(&self, op: ArrayOpCmd, indices: &[usize], val: *const u8) -> (bool, Arc<AtomicBool>);
     fn add_fetch_op(
         &self,
         op: ArrayOpCmd,
         index: usize,
         val: *const u8,
-    ) -> (usize, Arc<AtomicBool>, usize, Arc<RwLock<Vec<u8>>>);
+    ) -> (bool, Arc<AtomicBool>, usize, Arc<RwLock<Vec<u8>>>);
     fn into_arc_am(
         &self,
         sub_array: std::ops::Range<usize>,
-    ) -> (LamellarArcAm, usize, Arc<AtomicBool>, Arc<RwLock<Vec<u8>>>);
+    ) -> (Vec<LamellarArcAm>, usize, Arc<AtomicBool>, Arc<RwLock<Vec<u8>>>);
 }
 
 #[async_trait]
@@ -280,7 +343,7 @@ impl<T> ElementBitWiseOps for T where
 pub trait ArithmeticOps<T: ElementArithmeticOps> {
     fn add(
         &self,
-        index: usize,
+        index: impl OpInput<usize>,
         val: T,
     ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>>;
     fn fetch_add(&self, index: usize, val: T)
@@ -466,6 +529,7 @@ pub enum LamellarReadArray<T: Dist + 'static> {
     UnsafeArray(UnsafeArray<T>),
     ReadOnlyArray(ReadOnlyArray<T>),
     AtomicArray(AtomicArray<T>),
+    Atomic2Array(Atomic2Array<T>),
     LocalLockAtomicArray(LocalLockAtomicArray<T>),
 }
 
@@ -476,7 +540,8 @@ pub enum LamellarByteArray {
     UnsafeArray(UnsafeByteArray),
     ReadOnlyArray(ReadOnlyByteArray),
     AtomicArray(AtomicByteArray),
-    LocalLockAtomicArray(CollectiveAtomicByteArray),
+    Atomic2Array(Atomic2ByteArray),
+    LocalLockAtomicArray(LocalLockAtomicByteArray),
 }
 
 impl<T: Dist + 'static> crate::DarcSerde for LamellarReadArray<T> {
@@ -486,6 +551,7 @@ impl<T: Dist + 'static> crate::DarcSerde for LamellarReadArray<T> {
             LamellarReadArray::UnsafeArray(array) => array.ser(num_pes, cur_pe),
             LamellarReadArray::ReadOnlyArray(array) => array.ser(num_pes, cur_pe),
             LamellarReadArray::AtomicArray(array) => array.ser(num_pes, cur_pe),
+            LamellarReadArray::Atomic2Array(array) => array.ser(num_pes, cur_pe),
             LamellarReadArray::LocalLockAtomicArray(array) => array.ser(num_pes, cur_pe),
         }
     }
@@ -495,6 +561,7 @@ impl<T: Dist + 'static> crate::DarcSerde for LamellarReadArray<T> {
             LamellarReadArray::UnsafeArray(array) => array.des(cur_pe),
             LamellarReadArray::ReadOnlyArray(array) => array.des(cur_pe),
             LamellarReadArray::AtomicArray(array) => array.des(cur_pe),
+            LamellarReadArray::Atomic2Array(array) => array.des(cur_pe),
             LamellarReadArray::LocalLockAtomicArray(array) => array.des(cur_pe),
         }
     }
@@ -506,18 +573,20 @@ impl<T: Dist + 'static> crate::DarcSerde for LamellarReadArray<T> {
 pub enum LamellarWriteArray<T: Dist> {
     UnsafeArray(UnsafeArray<T>),
     AtomicArray(AtomicArray<T>),
+    Atomic2Array(Atomic2Array<T>),
     LocalLockAtomicArray(LocalLockAtomicArray<T>),
 }
 
 impl<T: ElementArithmeticOps> ArithmeticOps<T> for LamellarWriteArray<T> {
     fn add(
         &self,
-        index: usize,
+        index: impl OpInput<usize>,
         val: T,
     ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>> {
         match self {
             LamellarWriteArray::UnsafeArray(array) => array.add(index, val),
             LamellarWriteArray::AtomicArray(array) => array.add(index, val),
+            LamellarWriteArray::Atomic2Array(array) => array.add(index, val),
             LamellarWriteArray::LocalLockAtomicArray(array) => array.add(index, val),
         }
     }
@@ -529,6 +598,7 @@ impl<T: ElementArithmeticOps> ArithmeticOps<T> for LamellarWriteArray<T> {
         match self {
             LamellarWriteArray::UnsafeArray(array) => array.fetch_add(index, val),
             LamellarWriteArray::AtomicArray(array) => array.fetch_add(index, val),
+            LamellarWriteArray::Atomic2Array(array) => array.fetch_add(index, val),
             LamellarWriteArray::LocalLockAtomicArray(array) => array.fetch_add(index, val),
         }
     }
@@ -541,6 +611,7 @@ impl<T: ElementArithmeticOps> ArithmeticOps<T> for LamellarWriteArray<T> {
         match self {
             LamellarWriteArray::UnsafeArray(array) => array.sub(index, val),
             LamellarWriteArray::AtomicArray(array) => array.sub(index, val),
+            LamellarWriteArray::Atomic2Array(array) => array.sub(index, val),
             LamellarWriteArray::LocalLockAtomicArray(array) => array.sub(index, val),
         }
     }
@@ -552,6 +623,7 @@ impl<T: ElementArithmeticOps> ArithmeticOps<T> for LamellarWriteArray<T> {
         match self {
             LamellarWriteArray::UnsafeArray(array) => array.fetch_sub(index, val),
             LamellarWriteArray::AtomicArray(array) => array.fetch_sub(index, val),
+            LamellarWriteArray::Atomic2Array(array) => array.fetch_sub(index, val),
             LamellarWriteArray::LocalLockAtomicArray(array) => array.fetch_sub(index, val),
         }
     }
@@ -564,6 +636,7 @@ impl<T: ElementArithmeticOps> ArithmeticOps<T> for LamellarWriteArray<T> {
         match self {
             LamellarWriteArray::UnsafeArray(array) => array.mul(index, val),
             LamellarWriteArray::AtomicArray(array) => array.mul(index, val),
+            LamellarWriteArray::Atomic2Array(array) => array.mul(index, val),
             LamellarWriteArray::LocalLockAtomicArray(array) => array.mul(index, val),
         }
     }
@@ -576,6 +649,7 @@ impl<T: ElementArithmeticOps> ArithmeticOps<T> for LamellarWriteArray<T> {
         match self {
             LamellarWriteArray::UnsafeArray(array) => array.fetch_mul(index, val),
             LamellarWriteArray::AtomicArray(array) => array.fetch_mul(index, val),
+            LamellarWriteArray::Atomic2Array(array) => array.fetch_mul(index, val),
             LamellarWriteArray::LocalLockAtomicArray(array) => array.fetch_mul(index, val),
         }
     }
@@ -588,6 +662,7 @@ impl<T: ElementArithmeticOps> ArithmeticOps<T> for LamellarWriteArray<T> {
         match self {
             LamellarWriteArray::UnsafeArray(array) => array.div(index, val),
             LamellarWriteArray::AtomicArray(array) => array.div(index, val),
+            LamellarWriteArray::Atomic2Array(array) => array.div(index, val),
             LamellarWriteArray::LocalLockAtomicArray(array) => array.div(index, val),
         }
     }
@@ -600,6 +675,7 @@ impl<T: ElementArithmeticOps> ArithmeticOps<T> for LamellarWriteArray<T> {
         match self {
             LamellarWriteArray::UnsafeArray(array) => array.fetch_div(index, val),
             LamellarWriteArray::AtomicArray(array) => array.fetch_div(index, val),
+            LamellarWriteArray::Atomic2Array(array) => array.fetch_div(index, val),
             LamellarWriteArray::LocalLockAtomicArray(array) => array.fetch_div(index, val),
         }
     }
@@ -611,6 +687,7 @@ impl<T: Dist + 'static> crate::DarcSerde for LamellarWriteArray<T> {
         match self {
             LamellarWriteArray::UnsafeArray(array) => array.ser(num_pes, cur_pe),
             LamellarWriteArray::AtomicArray(array) => array.ser(num_pes, cur_pe),
+            LamellarWriteArray::Atomic2Array(array) => array.ser(num_pes, cur_pe),
             LamellarWriteArray::LocalLockAtomicArray(array) => array.ser(num_pes, cur_pe),
         }
     }
@@ -619,6 +696,7 @@ impl<T: Dist + 'static> crate::DarcSerde for LamellarWriteArray<T> {
         match self {
             LamellarWriteArray::UnsafeArray(array) => array.des(cur_pe),
             LamellarWriteArray::AtomicArray(array) => array.des(cur_pe),
+            LamellarWriteArray::Atomic2Array(array) => array.des(cur_pe),
             LamellarWriteArray::LocalLockAtomicArray(array) => array.des(cur_pe),
         }
     }
@@ -627,7 +705,7 @@ impl<T: Dist + 'static> crate::DarcSerde for LamellarWriteArray<T> {
 pub(crate) mod private {
     use crate::active_messaging::*;
     use crate::array::{
-        AtomicArray, LamellarReadArray, LamellarWriteArray, LocalLockAtomicArray, ReadOnlyArray,
+        AtomicArray,Atomic2Array, LamellarReadArray, LamellarWriteArray, LocalLockAtomicArray, ReadOnlyArray,
         UnsafeArray,
     };
     use crate::lamellar_request::LamellarRequest;
@@ -829,6 +907,7 @@ impl<T: Dist + AmDist + 'static> LamellarWriteArray<T> {
         match self {
             LamellarWriteArray::UnsafeArray(array) => array.reduce(op),
             LamellarWriteArray::AtomicArray(array) => array.reduce(op),
+            LamellarWriteArray::Atomic2Array(array) => array.reduce(op),
             LamellarWriteArray::LocalLockAtomicArray(array) => array.reduce(op),
         }
     }
@@ -836,6 +915,7 @@ impl<T: Dist + AmDist + 'static> LamellarWriteArray<T> {
         match self {
             LamellarWriteArray::UnsafeArray(array) => array.sum(),
             LamellarWriteArray::AtomicArray(array) => array.sum(),
+            LamellarWriteArray::Atomic2Array(array) => array.sum(),
             LamellarWriteArray::LocalLockAtomicArray(array) => array.sum(),
         }
     }
@@ -843,6 +923,7 @@ impl<T: Dist + AmDist + 'static> LamellarWriteArray<T> {
         match self {
             LamellarWriteArray::UnsafeArray(array) => array.max(),
             LamellarWriteArray::AtomicArray(array) => array.max(),
+            LamellarWriteArray::Atomic2Array(array) => array.max(),
             LamellarWriteArray::LocalLockAtomicArray(array) => array.max(),
         }
     }
@@ -850,6 +931,7 @@ impl<T: Dist + AmDist + 'static> LamellarWriteArray<T> {
         match self {
             LamellarWriteArray::UnsafeArray(array) => array.prod(),
             LamellarWriteArray::AtomicArray(array) => array.prod(),
+            LamellarWriteArray::Atomic2Array(array) => array.prod(),
             LamellarWriteArray::LocalLockAtomicArray(array) => array.prod(),
         }
     }
@@ -860,6 +942,7 @@ impl<T: Dist + AmDist + 'static> LamellarReadArray<T> {
         match self {
             LamellarReadArray::UnsafeArray(array) => array.reduce(op),
             LamellarReadArray::AtomicArray(array) => array.reduce(op),
+            LamellarReadArray::Atomic2Array(array) => array.reduce(op),
             LamellarReadArray::LocalLockAtomicArray(array) => array.reduce(op),
             LamellarReadArray::ReadOnlyArray(array) => array.reduce(op),
         }
@@ -868,6 +951,7 @@ impl<T: Dist + AmDist + 'static> LamellarReadArray<T> {
         match self {
             LamellarReadArray::UnsafeArray(array) => array.sum(),
             LamellarReadArray::AtomicArray(array) => array.sum(),
+            LamellarReadArray::Atomic2Array(array) => array.sum(),
             LamellarReadArray::LocalLockAtomicArray(array) => array.sum(),
             LamellarReadArray::ReadOnlyArray(array) => array.sum(),
         }
@@ -876,6 +960,7 @@ impl<T: Dist + AmDist + 'static> LamellarReadArray<T> {
         match self {
             LamellarReadArray::UnsafeArray(array) => array.max(),
             LamellarReadArray::AtomicArray(array) => array.max(),
+            LamellarReadArray::Atomic2Array(array) => array.max(),
             LamellarReadArray::LocalLockAtomicArray(array) => array.max(),
             LamellarReadArray::ReadOnlyArray(array) => array.max(),
         }
@@ -884,6 +969,7 @@ impl<T: Dist + AmDist + 'static> LamellarReadArray<T> {
         match self {
             LamellarReadArray::UnsafeArray(array) => array.prod(),
             LamellarReadArray::AtomicArray(array) => array.prod(),
+            LamellarReadArray::Atomic2Array(array) => array.prod(),
             LamellarReadArray::LocalLockAtomicArray(array) => array.prod(),
             LamellarReadArray::ReadOnlyArray(array) => array.prod(),
         }

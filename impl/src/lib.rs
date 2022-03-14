@@ -610,7 +610,7 @@ fn create_reduction(
                 data: unsafe {inner.clone().into()} , start_pe: 0, end_pe: num_pes-1}),
         });
 
-        let iter_chain = if array_type == "AtomicArray" {
+        let iter_chain = if array_type == "AtomicArray" || array_type == "Atomic2Array" {
             quote! {.map(|elem| elem.load())}
         } else {
             quote! {.copied()}
@@ -847,7 +847,7 @@ fn create_buf_ops(
         )
     };
     let mut expanded = quote! {};
-    let (lhs, assign, load) = if array_type == "AtomicArray" {
+    let (lhs, assign, load, lock, slice) = if array_type == "AtomicArray" {
         let array_vec = vec![(array_type.clone(), byte_array_type.clone())];
         let ops: Vec<(syn::Ident, bool)> = vec![
             (quote::format_ident!("add"), false),
@@ -882,12 +882,24 @@ fn create_buf_ops(
             quote! {let mut elem = slice.at(index); elem },
             quote! {slice.at(index).store(val)},
             quote! {slice.at(index).load()},
+            quote! {},
+            quote! {let mut slice = unsafe{self.data.mut_local_data()};},
         )
-    } else {
+    } else if array_type == "Atomic2Array" { 
         (
             quote! {slice[index]},
             quote! {slice[index] = val},
             quote! {slice[index]},
+            quote! {let _lock = self.data.lock_index(index);},
+            quote! {let mut slice = unsafe{self.data.__local_as_mut_slice()};},
+        )
+    }else {
+        (
+            quote! {slice[index]},
+            quote! {slice[index] = val},
+            quote! {slice[index]},
+            quote! {},
+            quote! {let mut slice = unsafe{self.data.mut_local_data()};},
         )
     };
 
@@ -969,34 +981,68 @@ fn create_buf_ops(
             num_fetch_ops: usize,
         }
         impl #lamellar::array::BufferOp for #buf_op_name{
-            fn add_op(&self, op: ArrayOpCmd, index: usize, val: *const u8) -> (usize,Arc<AtomicBool>){
+            fn add_op(&self, op: ArrayOpCmd, index: usize, val: *const u8) -> (bool,Arc<AtomicBool>){
                 let val = unsafe{*(val as *const #typeident)};
                 let mut buf = self.ops.lock();
+                let first = buf.len() == 0;
                 buf.push((op,index,val));
-                (buf.len(),self.complete.read().clone())
+                (first,self.complete.read().clone())
             }
-            fn add_fetch_op(&self, op: ArrayOpCmd, index: usize, val: *const u8) -> (usize,Arc<AtomicBool>, usize,Arc<RwLock<Vec<u8>>>){
+            fn add_ops(&self, op: ArrayOpCmd, index: &[usize], val: *const u8) -> (bool,Arc<AtomicBool>){
                 let val = unsafe{*(val as *const #typeident)};
                 let mut buf = self.ops.lock();
+                let first = buf.len() == 0;
+                for i in index{
+                    buf.push((op,*i,val));
+                }
+                (first,self.complete.read().clone())
+            }
+            fn add_fetch_op(&self, op: ArrayOpCmd, index: usize, val: *const u8) -> (bool,Arc<AtomicBool>, usize,Arc<RwLock<Vec<u8>>>){
+                let val = unsafe{*(val as *const #typeident)};
+                let mut buf = self.ops.lock();
+                let first = buf.len() == 0;
                 buf.push((op,index,val));
                 let res_index = self.result_cnt.read().fetch_add(1,Ordering::SeqCst);
 
-                (buf.len(),self.complete.read().clone(),res_index,self.results.read().clone())
+                (first,self.complete.read().clone(),res_index,self.results.read().clone())
             }
-            fn into_arc_am(&self,sub_array: std::ops::Range<usize>) -> (Arc<dyn RemoteActiveMessage + Send + Sync>,usize,Arc<AtomicBool>,Arc<RwLock<Vec<u8>>>){
+            fn into_arc_am(&self,sub_array: std::ops::Range<usize>) -> (Vec<Arc<dyn RemoteActiveMessage + Send + Sync>>,usize,Arc<AtomicBool>,Arc<RwLock<Vec<u8>>>){
+                let mut ams: Vec<Arc<dyn RemoteActiveMessage + Send + Sync>> = Vec::new();
                 let mut buf = self.ops.lock();
-                let mut am = #am_buf_name{
-                    data: self.data.sub_array(sub_array),
-                    ops: Vec::new(),
-                    num_fetch_ops: self.result_cnt.read().swap(0,Ordering::SeqCst),
-                };
+
+                let mut ops = Vec::new();
                 let len = buf.len();
-                std::mem::swap(&mut am.ops,  &mut buf);
+                std::mem::swap(&mut ops,  &mut buf);
                 let mut complete = Arc::new(AtomicBool::new(false));
                 std::mem::swap(&mut complete, &mut self.complete.write());
                 let mut results = Arc::new(RwLock::new(Vec::new()));
                 std::mem::swap(&mut results, &mut self.results.write());
-                (Arc::new(am),len,complete,results)
+                let mut num_fetch_ops = self.result_cnt.read().swap(0,Ordering::SeqCst);
+
+                // if len * std::mem::size_of::<(ArrayOpCmd, usize, T)>() > 100000000{
+                let n = (len as f32/10000000.0).ceil();
+                let num = len as f32 / n as f32;
+                // unsafe {ams.set_len(n as usize);}
+                // println!("n: {:?} num {:?} len {:?}",n ,num, len);
+                for i in (0..n as usize).rev(){
+                    // println!("i {:?} i? {:?} len {:?}",i,((i as f32)*num).round() as usize, ops.len());
+                    let new_ops = ops.split_off(((i as f32)*num).round() as usize);
+                    let mut am = #am_buf_name{
+                        data: self.data.sub_array(sub_array.clone()),
+                        ops: new_ops,
+                        num_fetch_ops: num_fetch_ops,
+                    };    
+                    // println!("here 0");
+                    ams.push(Arc::new(am));   
+                    // println!("here 1");           
+                }
+                ams.reverse();
+                    
+                // }
+                
+               
+                
+                (ams,len,complete,results)
             }
         }
         #[#am]
@@ -1004,7 +1050,7 @@ fn create_buf_ops(
             fn exec(&self) -> Vec<u8>{
                 // self.data.process_ops(&self.ops);
                 // println!("num ops {:?} ",self.ops.len());
-                let mut slice = unsafe{self.data.mut_local_data()};
+                #slice
                 // println!("slice len {:?}",slice.len());
                 let u8_len = self.num_fetch_ops*std::mem::size_of::<#typeident>();
                 let mut results_u8: Vec<u8> = if u8_len > 0 {
@@ -1018,9 +1064,11 @@ fn create_buf_ops(
                 let mut results_slice = unsafe{std::slice::from_raw_parts_mut(results_u8.as_mut_ptr() as *mut #typeident,self.num_fetch_ops)};
                 let mut fetch_index=0;
                 for (op,index,val) in &self.ops{
+                    
                     // println!("op: {:?} index{:?} val {:?}",op,index,val);
                     let index = *index;
                     let val = *val;
+                    #lock //this will get dropped at end of loop
                     let orig = #load;
                     match op{
                     # match_stmts
@@ -1028,6 +1076,7 @@ fn create_buf_ops(
                     }
                 }
                 // println!("buff ops exec: {:?} {:?} {:?}",results_u8.len(),u8_len,self.num_fetch_ops);
+                unsafe { results_u8.set_len(fetch_index * std::mem::size_of::<#typeident>())};
                 results_u8
             }
         }
@@ -1069,11 +1118,15 @@ fn create_buffered_ops(typeident: syn::Ident, bitwise: bool, rt: bool) -> proc_m
     let atomic_array_types: Vec<(syn::Ident, syn::Ident)> = vec![
         (
             quote::format_ident!("LocalLockAtomicArray"),
-            quote::format_ident!("CollectiveAtomicByteArray"),
+            quote::format_ident!("LocalLockAtomicByteArray"),
         ),
         (
             quote::format_ident!("AtomicArray"),
             quote::format_ident!("AtomicByteArray"),
+        ),
+        (
+            quote::format_ident!("Atomic2Array"),
+            quote::format_ident!("Atomic2ByteArray"),
         ),
     ];
 
@@ -1108,7 +1161,7 @@ fn create_buffered_ops(typeident: syn::Ident, bitwise: bool, rt: bool) -> proc_m
     // let write_array_types: Vec<(syn::Ident, syn::Ident)> = vec![
     //     (
     //         quote::format_ident!("LocalLockAtomicArray"),
-    //         quote::format_ident!("CollectiveAtomicByteArray"),
+    //         quote::format_ident!("LocalLockAtomicByteArray"),
     //     ),
     //     (
     //         quote::format_ident!("AtomicArray"),
@@ -1158,7 +1211,7 @@ fn create_buffered_ops(typeident: syn::Ident, bitwise: bool, rt: bool) -> proc_m
     let user_expanded = quote_spanned! {expanded.span()=>
         const _: () = {
             extern crate lamellar as __lamellar;
-            use __lamellar::array::{AtomicArray,AtomicByteArray,LocalLockAtomicArray,CollectiveAtomicByteArray,LocalArithmeticOps,LocalAtomicOps,ArrayOpCmd,LamellarArrayPut};
+            use __lamellar::array::{AtomicArray,Atomic2Array,AtomicByteArray,LocalLockAtomicArray,LocalLockAtomicByteArray,LocalArithmeticOps,LocalAtomicOps,ArrayOpCmd,LamellarArrayPut};
             // #bitwise_mod
             use __lamellar::array;
             // #bitwise_mod
@@ -1189,11 +1242,15 @@ fn create_ops(typeident: syn::Ident, bitwise: bool, rt: bool) -> proc_macro2::To
     let write_array_types: Vec<(syn::Ident, syn::Ident)> = vec![
         (
             quote::format_ident!("LocalLockAtomicArray"),
-            quote::format_ident!("CollectiveAtomicByteArray"),
+            quote::format_ident!("LocalLockAtomicByteArray"),
         ),
         (
             quote::format_ident!("AtomicArray"),
             quote::format_ident!("AtomicByteArray"),
+        ),
+        (
+            quote::format_ident!("Atomic2Array"),
+            quote::format_ident!("Atomic2ByteArray"),
         ),
         (
             quote::format_ident!("UnsafeArray"),
@@ -1230,11 +1287,15 @@ fn create_ops(typeident: syn::Ident, bitwise: bool, rt: bool) -> proc_macro2::To
     let atomic_array_types: Vec<(syn::Ident, syn::Ident)> = vec![
         (
             quote::format_ident!("LocalLockAtomicArray"),
-            quote::format_ident!("CollectiveAtomicByteArray"),
+            quote::format_ident!("LocalLockAtomicByteArray"),
         ),
         (
             quote::format_ident!("AtomicArray"),
             quote::format_ident!("AtomicByteArray"),
+        ),
+        (
+            quote::format_ident!("Atomic2Array"),
+            quote::format_ident!("Atomic2ByteArray"),
         ),
     ];
     let atomic_ops: Vec<(syn::Ident, bool)> = vec![
@@ -1285,7 +1346,7 @@ fn create_ops(typeident: syn::Ident, bitwise: bool, rt: bool) -> proc_macro2::To
     let user_expanded = quote_spanned! {expanded.span()=>
         const _: () = {
             extern crate lamellar as __lamellar;
-            use __lamellar::array::{AtomicArray,AtomicByteArray,LocalLockAtomicArray,CollectiveAtomicByteArray,LocalArithmeticOps,LocalAtomicOps,ArrayOpCmd,LamellarArrayPut};
+            use __lamellar::array::{AtomicArray,Atomic2Array,AtomicByteArray,LocalLockAtomicArray,LocalLockAtomicByteArray,LocalArithmeticOps,LocalAtomicOps,ArrayOpCmd,LamellarArrayPut};
             #bitwise_mod
             use __lamellar::LamellarArray;
             use __lamellar::LamellarRequest;
@@ -1442,6 +1503,7 @@ pub fn register_reduction(item: TokenStream) -> TokenStream {
     let array_types: Vec<syn::Ident> = vec![
         quote::format_ident!("LocalLockAtomicArray"),
         quote::format_ident!("AtomicArray"),
+        quote::format_ident!("Atomic2Array"),
         quote::format_ident!("UnsafeArray"),
         quote::format_ident!("ReadOnlyArray"),
     ];
@@ -1491,6 +1553,7 @@ pub fn generate_reductions_for_type(item: TokenStream) -> TokenStream {
     let read_array_types: Vec<syn::Ident> = vec![
         quote::format_ident!("LocalLockAtomicArray"),
         quote::format_ident!("AtomicArray"),
+        quote::format_ident!("Atomic2Array"),
         quote::format_ident!("UnsafeArray"),
         quote::format_ident!("ReadOnlyArray"),
     ];
@@ -1540,6 +1603,7 @@ pub fn generate_reductions_for_type_rt(item: TokenStream) -> TokenStream {
     let read_array_types: Vec<syn::Ident> = vec![
         quote::format_ident!("LocalLockAtomicArray"),
         quote::format_ident!("AtomicArray"),
+        quote::format_ident!("Atomic2Array"),
         quote::format_ident!("UnsafeArray"),
         quote::format_ident!("ReadOnlyArray"),
     ];

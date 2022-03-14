@@ -36,6 +36,13 @@ macro_rules! initialize_array {
             .for_each(move |(i, x)| x.store(i as $t));
         $array.wait_all();
     };
+    (Atomic2Array,$array:ident,$t:ty) => {
+        $array
+            .dist_iter()
+            .enumerate()
+            .for_each(move |(i, x)| x.store(i as $t));
+        $array.wait_all();
+    };
     (LocalLockAtomicArray,$array:ident,$t:ty) => {
         $array
             .dist_iter_mut()
@@ -63,6 +70,14 @@ macro_rules! initialize_array_range {
         subarray.wait_all();
     }};
     (AtomicArray,$array:ident,$t:ty,$range:expr) => {{
+        let subarray = $array.sub_array($range);
+        subarray
+            .dist_iter()
+            .enumerate()
+            .for_each(move |(i, x)| x.store(i as $t));
+        subarray.wait_all();
+    }};
+    (Atomic2Array,$array:ident,$t:ty,$range:expr) => {{
         let subarray = $array.sub_array($range);
         subarray
             .dist_iter()

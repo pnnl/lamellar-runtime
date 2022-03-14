@@ -26,35 +26,51 @@ pub struct LocalLockAtomicArray<T: Dist> {
 }
 
 #[lamellar_impl::AmDataRT(Clone)]
-pub struct CollectiveAtomicByteArray {
+pub struct LocalLockAtomicByteArray {
     lock: LocalRwDarc<()>,
     pub(crate) array: UnsafeByteArray,
 }
 
-pub struct CollectiveAtomicMutLocalData<'a, T: Dist> {
+pub struct LocalLockAtomicMutLocalData<'a, T: Dist>{
     data: &'a mut [T],
+    index: usize,
     _lock_guard: ArcRwLockWriteGuard<RawRwLock, Box<()>>,
 }
 
-impl<T: Dist> Deref for CollectiveAtomicMutLocalData<'_, T> {
+
+impl<T: Dist> Deref for LocalLockAtomicMutLocalData<'_, T> {
     type Target = [T];
 
     fn deref(&self) -> &Self::Target {
         self.data
     }
 }
-impl<T: Dist> DerefMut for CollectiveAtomicMutLocalData<'_, T> {
+impl<T: Dist> DerefMut for LocalLockAtomicMutLocalData<'_, T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.data
     }
 }
 
-pub struct CollectiveAtomicLocalData<'a, T: Dist> {
+pub struct LocalLockAtomicLocalData<'a, T: Dist> {
     data: &'a [T],
+    index: usize,
     _lock_guard: ArcRwLockReadGuard<RawRwLock, Box<()>>,
 }
 
-impl<T: Dist> Deref for CollectiveAtomicLocalData<'_, T> {
+impl<'a, T: Dist> Iterator for LocalLockAtomicLocalData<'a, T>{
+    type Item = &'a T;
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.index < self.data.len(){
+            self.index +=1;
+            Some(&self.data[self.index-1])
+        }
+        else{
+            None
+        }
+    }
+}
+
+impl<T: Dist> Deref for LocalLockAtomicLocalData<'_, T> {
     type Target = [T];
 
     fn deref(&self) -> &Self::Target {
@@ -74,7 +90,7 @@ impl<T: Dist + std::default::Default> LocalLockAtomicArray<T> {
 
         if let Some(func) = BUFOPS.get(&TypeId::of::<T>()) {
             let mut op_bufs = array.inner.data.op_buffers.write();
-            let bytearray = CollectiveAtomicByteArray {
+            let bytearray = LocalLockAtomicByteArray {
                 lock: lock.clone(),
                 array: array.clone().into(),
             };
@@ -127,24 +143,27 @@ impl<T: Dist> LocalLockAtomicArray<T> {
         self.array.len()
     }
 
-    pub fn read_local_data(&self) -> CollectiveAtomicLocalData<'_, T> {
-        CollectiveAtomicLocalData {
+    pub fn read_local_data(&self) -> LocalLockAtomicLocalData<'_, T> {
+        LocalLockAtomicLocalData {
             data: unsafe { self.array.local_as_mut_slice() },
+            index: 0,
             _lock_guard: self.lock.read(),
         }
     }
 
-    pub fn write_local_data(&self) -> CollectiveAtomicLocalData<'_, T> {
-        CollectiveAtomicLocalData {
+    pub fn write_local_data(&self) -> LocalLockAtomicLocalData<'_, T> {
+        LocalLockAtomicLocalData {
             data: unsafe { self.array.local_as_mut_slice() },
+            index: 0,
             _lock_guard: self.lock.read(),
         }
     }
 
     #[doc(hidden)] //todo create a custom macro to emit a warning saying use read_local_slice/write_local_slice intead
-    pub fn local_as_slice(&self) -> CollectiveAtomicLocalData<'_, T> {
-        CollectiveAtomicLocalData {
+    pub fn local_as_slice(&self) -> LocalLockAtomicLocalData<'_, T> {
+        LocalLockAtomicLocalData {
             data: unsafe { self.array.local_as_mut_slice() },
+            index: 0,
             _lock_guard: self.lock.read(),
         }
     }
@@ -154,20 +173,21 @@ impl<T: Dist> LocalLockAtomicArray<T> {
     // }
 
     #[doc(hidden)]
-    pub fn local_as_mut_slice(&self) -> CollectiveAtomicMutLocalData<'_, T> {
-        CollectiveAtomicMutLocalData {
+    pub fn local_as_mut_slice(&self) -> LocalLockAtomicMutLocalData<'_, T> {
+        LocalLockAtomicMutLocalData {
             data: unsafe { self.array.local_as_mut_slice() },
+            index: 0,
             _lock_guard: self.lock.write(),
         }
     }
 
     #[doc(hidden)]
-    pub fn local_data(&self) -> CollectiveAtomicLocalData<'_, T> {
+    pub fn local_data(&self) -> LocalLockAtomicLocalData<'_, T> {
         self.local_as_slice()
     }
 
     #[doc(hidden)]
-    pub fn mut_local_data(&self) -> CollectiveAtomicMutLocalData<'_, T> {
+    pub fn mut_local_data(&self) -> LocalLockAtomicMutLocalData<'_, T> {
         self.local_as_mut_slice()
     }
 
@@ -189,6 +209,10 @@ impl<T: Dist> LocalLockAtomicArray<T> {
     pub fn into_read_only(self) -> ReadOnlyArray<T> {
         self.array.into()
     }
+    
+    pub fn into_atomic2(self) -> Atomic2Array<T> {
+        self.array.into()
+    }
 }
 
 impl<T: Dist + 'static> LocalLockAtomicArray<T> {
@@ -197,12 +221,14 @@ impl<T: Dist + 'static> LocalLockAtomicArray<T> {
     }
 }
 
+
+
 impl<T: Dist> From<UnsafeArray<T>> for LocalLockAtomicArray<T> {
     fn from(array: UnsafeArray<T>) -> Self {
         array.block_on_outstanding(DarcMode::LocalLockAtomicArray);
         let lock = LocalRwDarc::new(array.team(), ()).unwrap();
         if let Some(func) = BUFOPS.get(&TypeId::of::<T>()) {
-            let bytearray = CollectiveAtomicByteArray {
+            let bytearray = LocalLockAtomicByteArray {
                 lock: lock.clone(),
                 array: array.clone().into(),
             };
@@ -218,16 +244,16 @@ impl<T: Dist> From<UnsafeArray<T>> for LocalLockAtomicArray<T> {
     }
 }
 
-impl<T: Dist> From<LocalLockAtomicArray<T>> for CollectiveAtomicByteArray {
+impl<T: Dist> From<LocalLockAtomicArray<T>> for LocalLockAtomicByteArray {
     fn from(array: LocalLockAtomicArray<T>) -> Self {
-        CollectiveAtomicByteArray {
+        LocalLockAtomicByteArray {
             lock: array.lock.clone(),
             array: array.array.into(),
         }
     }
 }
-impl<T: Dist> From<CollectiveAtomicByteArray> for LocalLockAtomicArray<T> {
-    fn from(array: CollectiveAtomicByteArray) -> Self {
+impl<T: Dist> From<LocalLockAtomicByteArray> for LocalLockAtomicArray<T> {
+    fn from(array: LocalLockAtomicByteArray) -> Self {
         LocalLockAtomicArray {
             lock: array.lock.clone(),
             array: array.array.into(),

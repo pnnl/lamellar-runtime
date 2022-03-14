@@ -244,6 +244,10 @@ impl<T: Dist + 'static> UnsafeArray<T> {
     pub fn into_local_lock_atomic(self) -> LocalLockAtomicArray<T> {
         self.into()
     }
+
+    pub fn into_atomic2(self) -> Atomic2Array<T> {
+        self.into()
+    }
 }
 
 impl<T: Dist + 'static> UnsafeArray<T> {
@@ -254,6 +258,16 @@ impl<T: Dist + 'static> UnsafeArray<T> {
 
 impl<T: Dist> From<AtomicArray<T>> for UnsafeArray<T> {
     fn from(array: AtomicArray<T>) -> Self {
+        // let array = array.into_data();
+        array.array.block_on_outstanding(DarcMode::UnsafeArray);
+        array.array.inner.data.op_buffers.write().clear();
+        array.array.create_buffered_ops();
+        array.array
+    }
+}
+
+impl<T: Dist> From<Atomic2Array<T>> for UnsafeArray<T> {
+    fn from(array: Atomic2Array<T>) -> Self {
         // let array = array.into_data();
         array.array.block_on_outstanding(DarcMode::UnsafeArray);
         array.array.inner.data.op_buffers.write().clear();

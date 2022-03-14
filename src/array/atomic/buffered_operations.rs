@@ -123,13 +123,23 @@ impl<T: ElementBitWiseOps + 'static> AtomicElement<T> {
 impl<T: AmDist + Dist + 'static> AtomicArray<T> {
     fn initiate_op(
         &self,
-        index: usize,
+        index: impl OpInput<usize>,
         val: T,
         op: ArrayOpCmd,
     ) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync> {
-        let pe = self.pe_for_dist_index(index).expect("index out of bounds");
-        let local_index = self.pe_offset_for_dist_index(pe, index).unwrap(); //calculated pe above
-        self.array.initiate_op(pe, val, local_index, op)
+        // let pe = self.pe_for_dist_index(index).expect("index out of bounds");
+        // let local_index = self.pe_offset_for_dist_index(pe, index).unwrap(); //calculated pe above
+        // self.array.initiate_op(pe, val, std::slice::from_ref(&local_index), op)
+        let mut pe_offsets: HashMap<usize,Vec<usize>> = HashMap::new();
+        let indices = index.as_op_input();
+        for i in indices{
+            let pe = self
+            .pe_for_dist_index(i)
+            .expect("index out of bounds");
+            let local_index = self.pe_offset_for_dist_index(pe, i).unwrap(); //calculated pe above
+            pe_offsets.entry(pe).or_insert(Vec::new()).push(local_index);
+        }
+        pe_offsets.iter().map(|(pe,vals)| self.array.initiate_op(*pe, val, &vals, op)).last().unwrap()
     }
     fn initiate_fetch_op(
         &self,
@@ -162,7 +172,7 @@ impl<T: AmDist + Dist + 'static> AtomicArray<T> {
 impl<T: ElementArithmeticOps + 'static> ArithmeticOps<T> for AtomicArray<T> {
     fn add(
         &self,
-        index: usize,
+        index: impl OpInput<usize>,
         val: T,
     ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>> {
         Some(self.initiate_op(index, val, ArrayOpCmd::Add))
