@@ -248,7 +248,15 @@ impl<T: Dist + 'static> UnsafeArray<T> {
     pub fn into_atomic2(self) -> Atomic2Array<T> {
         self.into()
     }
+
+    
 }
+
+// impl<T: Dist> UnsafeArray<T> {
+//     pub fn into_native_atomic(self) -> NativeAtomicArray<T> {
+//         self.into()
+//     }
+// }
 
 impl<T: Dist + 'static> UnsafeArray<T> {
     pub fn into_atomic(self) -> AtomicArray<T> {
@@ -258,6 +266,18 @@ impl<T: Dist + 'static> UnsafeArray<T> {
 
 impl<T: Dist> From<AtomicArray<T>> for UnsafeArray<T> {
     fn from(array: AtomicArray<T>) -> Self {
+        // // let array = array.into_data();
+        // match array{
+        //     AtomicArray::NativeAtomicArray(array) => array.into()
+                
+        //     }
+        // }
+        array.into()
+    }
+}
+
+impl<T: Dist > From<NativeAtomicArray<T>> for UnsafeArray<T> {
+    fn from(array: NativeAtomicArray<T>) -> Self {
         // let array = array.into_data();
         array.array.block_on_outstanding(DarcMode::UnsafeArray);
         array.array.inner.data.op_buffers.write().clear();

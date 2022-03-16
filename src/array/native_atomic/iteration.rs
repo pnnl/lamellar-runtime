@@ -1,4 +1,4 @@
-use crate::array::atomic2::*;
+use crate::array::native_atomic::*;
 
 
 use crate::array::iterator::distributed_iterator::{DistIteratorLauncher, DistributedIterator};
@@ -12,45 +12,45 @@ use crate::memregion::Dist;
 // };
 
 #[derive(Clone)]
-pub struct Atomic2DistIter< T: Dist> {
-    data: Atomic2Array<T>,
+pub struct NativeAtomicDistIter< T: Dist > {
+    data: NativeAtomicArray<T>,
     cur_i: usize,
     end_i: usize,
 }
 
-impl<T: Dist> Atomic2DistIter<T> {
-    pub(crate) fn new(data: Atomic2Array<T>, cur_i: usize, cnt: usize) -> Self {
+impl<T: Dist > NativeAtomicDistIter<T> {
+    pub(crate) fn new(data: NativeAtomicArray<T>, cur_i: usize, cnt: usize) -> Self {
         // println!("new dist iter {:?} {:? } {:?}",cur_i, cnt, cur_i+cnt);
-        Atomic2DistIter {
+        NativeAtomicDistIter {
             data,
             cur_i,
             end_i: cur_i + cnt,
         }
     }
 }
-impl<T: Dist + 'static> Atomic2DistIter< T> {
+impl<T: Dist  + 'static> NativeAtomicDistIter< T> {
     pub fn for_each<F>(self, op: F)
     where
-        F: Fn(Atomic2Element<T>) + Sync + Send + Clone + 'static,
+        F: Fn(NativeAtomicElement<T>) + Sync + Send + Clone + 'static,
     {
         self.data.clone().for_each(self, op);
     }
     pub fn for_each_async<F, Fut>(&self, op: F)
     where
-        F: Fn(Atomic2Element<T>) -> Fut + Sync + Send + Clone + 'static,
+        F: Fn(NativeAtomicElement<T>) -> Fut + Sync + Send + Clone + 'static,
         Fut: Future<Output = ()> + Sync + Send + Clone + 'static,
     {
         self.data.clone().for_each_async(self, op);
     }
 }
 
-impl<T: Dist> DistributedIterator for Atomic2DistIter<T> {
-    type Item = Atomic2Element<T>;
-    type Array = Atomic2Array<T>;
+impl<T: Dist > DistributedIterator for NativeAtomicDistIter<T> {
+    type Item = NativeAtomicElement<T>;
+    type Array = NativeAtomicArray<T>;
     fn init(&self, start_i: usize, cnt: usize) -> Self {
         let max_i = self.data.num_elems_local();
         // println!("init dist iter start_i: {:?} cnt {:?} end_i: {:?} max_i: {:?}",start_i,cnt, start_i+cnt,max_i);
-        Atomic2DistIter {
+        NativeAtomicDistIter {
             data: self.data.clone(),
             cur_i: std::cmp::min(start_i, max_i),
             end_i: std::cmp::min(start_i + cnt, max_i),
@@ -62,7 +62,7 @@ impl<T: Dist> DistributedIterator for Atomic2DistIter<T> {
     fn next(&mut self) -> Option<Self::Item> {
         if self.cur_i < self.end_i {
             self.cur_i += 1;
-            Some(Atomic2Element {
+            Some(NativeAtomicElement {
                 array: self.data.clone(),
                 local_index: self.cur_i - 1,
             })
@@ -86,31 +86,31 @@ impl<T: Dist> DistributedIterator for Atomic2DistIter<T> {
     }
 }
 
-impl<T: Dist + 'static> Atomic2Array<T> {
-    pub fn dist_iter(&self) -> Atomic2DistIter<T> {
-        Atomic2DistIter {
+impl<T: Dist  + 'static> NativeAtomicArray<T> {
+    pub fn dist_iter(&self) -> NativeAtomicDistIter<T> {
+        NativeAtomicDistIter {
             data: self.clone(),
             cur_i: 0,
             end_i: 0,
         }
     }
 
-    pub fn dist_iter_mut(&self) -> Atomic2DistIter<T> {
-        Atomic2DistIter {
+    pub fn dist_iter_mut(&self) -> NativeAtomicDistIter<T> {
+        NativeAtomicDistIter {
             data: self.clone(),
             cur_i: 0,
             end_i: 0,
         }
     }
 
-    pub fn ser_iter(&self) -> LamellarArrayIter<'_, T, Atomic2Array<T>> {
+    pub fn ser_iter(&self) -> LamellarArrayIter<'_, T, NativeAtomicArray<T>> {
         LamellarArrayIter::new(self.clone().into(), self.array.team().clone(), 1)
     }
 
     pub fn buffered_iter(
         &self,
         buf_size: usize,
-    ) -> LamellarArrayIter<'_, T, Atomic2Array<T>> {
+    ) -> LamellarArrayIter<'_, T, NativeAtomicArray<T>> {
         LamellarArrayIter::new(
             self.clone().into(),
             self.array.team().clone(),
@@ -119,7 +119,7 @@ impl<T: Dist + 'static> Atomic2Array<T> {
     }
 }
 
-impl<T: Dist> DistIteratorLauncher for Atomic2Array<T> {
+impl<T: Dist > DistIteratorLauncher for NativeAtomicArray<T> {
     fn global_index_from_local(&self, index: usize, chunk_size: usize) -> Option<usize> {
         self.array.global_index_from_local(index, chunk_size)
     }

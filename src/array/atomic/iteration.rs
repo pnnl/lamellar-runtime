@@ -58,10 +58,7 @@ impl<T: Dist> DistributedIterator for AtomicDistIter<T> {
         // println!("{:?} {:?}",self.cur_i,self.end_i);
         if self.cur_i < self.end_i {
             self.cur_i += 1;
-            Some(AtomicElement {
-                array: self.data.clone(),
-                local_index: self.cur_i - 1,
-            })
+            Some( self.data.get_element(self.cur_i - 1) )
         } else {
             None
         }
@@ -94,40 +91,40 @@ impl<T: Dist> AtomicArray<T> {
 
 impl<T: Dist> AtomicArray<T> {
     pub fn ser_iter(&self) -> LamellarArrayIter<'_, T, AtomicArray<T>> {
-        LamellarArrayIter::new(self.clone().into(), self.array.team().clone(), 1)
+        LamellarArrayIter::new(self.clone().into(), LamellarArray::team(self).clone(), 1)
     }
 
     pub fn buffered_iter(&self, buf_size: usize) -> LamellarArrayIter<'_, T, AtomicArray<T>> {
         LamellarArrayIter::new(
             self.clone().into(),
-            self.array.team().clone(),
+            LamellarArray::team(self).clone(),
             std::cmp::min(buf_size, self.len()),
         )
     }
 }
 
-impl<T: Dist> DistIteratorLauncher for AtomicArray<T> {
-    fn global_index_from_local(&self, index: usize, chunk_size: usize) -> Option<usize> {
-        self.array.global_index_from_local(index, chunk_size)
-    }
+// impl<T: Dist> DistIteratorLauncher for AtomicArray<T> {
+//     fn global_index_from_local(&self, index: usize, chunk_size: usize) -> Option<usize> {
+//         self.array.global_index_from_local(index, chunk_size)
+//     }
 
-    fn subarray_index_from_local(&self, index: usize, chunk_size: usize) -> Option<usize> {
-        self.array.subarray_index_from_local(index, chunk_size)
-    }
+//     fn subarray_index_from_local(&self, index: usize, chunk_size: usize) -> Option<usize> {
+//         self.array.subarray_index_from_local(index, chunk_size)
+//     }
 
-    fn for_each<I, F>(&self, iter: I, op: F)
-    where
-        I: DistributedIterator + 'static,
-        F: Fn(I::Item) + Sync + Send + Clone + 'static,
-    {
-        self.array.for_each(iter, op)
-    }
-    fn for_each_async<I, F, Fut>(&self, iter: &I, op: F)
-    where
-        I: DistributedIterator + 'static,
-        F: Fn(I::Item) -> Fut + Sync + Send + Clone + 'static,
-        Fut: Future<Output = ()> + Sync + Send + Clone + 'static,
-    {
-        self.array.for_each_async(iter, op)
-    }
-}
+//     fn for_each<I, F>(&self, iter: I, op: F)
+//     where
+//         I: DistributedIterator + 'static,
+//         F: Fn(I::Item) + Sync + Send + Clone + 'static,
+//     {
+//         self.array.for_each(iter, op)
+//     }
+//     fn for_each_async<I, F, Fut>(&self, iter: &I, op: F)
+//     where
+//         I: DistributedIterator + 'static,
+//         F: Fn(I::Item) -> Fut + Sync + Send + Clone + 'static,
+//         Fut: Future<Output = ()> + Sync + Send + Clone + 'static,
+//     {
+//         self.array.for_each_async(iter, op)
+//     }
+// }

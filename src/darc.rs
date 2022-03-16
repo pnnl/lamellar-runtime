@@ -35,6 +35,7 @@ pub(crate) enum DarcMode {
     LocalOnlyArray,
     AtomicArray,
     Atomic2Array,
+    NativeAtomicArray,
     LocalLockAtomicArray,
 }
 

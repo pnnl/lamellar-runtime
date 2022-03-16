@@ -577,6 +577,7 @@ fn create_reduction(
     op: proc_macro2::TokenStream,
     array_types: &Vec<syn::Ident>,
     rt: bool,
+    native: bool,
 ) -> proc_macro2::TokenStream {
     let lamellar = if rt {
         quote::format_ident!("crate")
@@ -601,6 +602,11 @@ fn create_reduction(
     let mut gen_match_stmts = quote! {};
     let mut array_impls = quote! {};
 
+    if !native{
+        gen_match_stmts.extend(quote!{
+            #lamellar::array::LamellarByteArray::NativeAtomicArray(_) => panic!("this type is not a native atomic"),
+        });
+    }
     for array_type in array_types {
         let reduction_name =
             quote::format_ident!("{:}_{:}_{:}_reduction", array_type, typeident, reduction);
@@ -610,7 +616,7 @@ fn create_reduction(
                 data: unsafe {inner.clone().into()} , start_pe: 0, end_pe: num_pes-1}),
         });
 
-        let iter_chain = if array_type == "AtomicArray" || array_type == "Atomic2Array" {
+        let iter_chain = if array_type == "AtomicArray" || array_type == "Atomic2Array" || array_type == "NativeAtomicArray" {
             quote! {.map(|elem| elem.load())}
         } else {
             quote! {.copied()}
@@ -694,92 +700,92 @@ fn create_reduction(
     }
 }
 
-fn gen_array_impls(
-    typeident: syn::Ident,
-    array_types: &Vec<(syn::Ident, syn::Ident)>,
-    ops: &Vec<(syn::Ident, bool)>,
-    ops_type: OpType,
-    rt: bool,
-) -> proc_macro2::TokenStream {
-    let lamellar = if rt {
-        quote::format_ident!("crate")
-    } else {
-        quote::format_ident!("__lamellar")
-    };
+// fn gen_array_impls(
+//     typeident: syn::Ident,
+//     array_types: &Vec<(syn::Ident, syn::Ident)>,
+//     ops: &Vec<(syn::Ident, bool)>,
+//     ops_type: OpType,
+//     rt: bool,
+// ) -> proc_macro2::TokenStream {
+//     let lamellar = if rt {
+//         quote::format_ident!("crate")
+//     } else {
+//         quote::format_ident!("__lamellar")
+//     };
 
-    let (am_data, am): (syn::Path, syn::Path) = if rt {
-        (
-            syn::parse("lamellar_impl::AmDataRT".parse().unwrap()).unwrap(),
-            syn::parse("lamellar_impl::rt_am".parse().unwrap()).unwrap(),
-        )
-    } else {
-        (
-            syn::parse("lamellar::AmData".parse().unwrap()).unwrap(),
-            syn::parse("lamellar::am".parse().unwrap()).unwrap(),
-        )
-    };
+//     let (am_data, am): (syn::Path, syn::Path) = if rt {
+//         (
+//             syn::parse("lamellar_impl::AmDataRT".parse().unwrap()).unwrap(),
+//             syn::parse("lamellar_impl::rt_am".parse().unwrap()).unwrap(),
+//         )
+//     } else {
+//         (
+//             syn::parse("lamellar::AmData".parse().unwrap()).unwrap(),
+//             syn::parse("lamellar::am".parse().unwrap()).unwrap(),
+//         )
+//     };
 
-    let mut array_impls = quote! {};
+//     let mut array_impls = quote! {};
 
-    array_impls.extend(quote! {
-        #[allow(non_camel_case_types)]
-    });
+//     array_impls.extend(quote! {
+//         #[allow(non_camel_case_types)]
+//     });
 
-    for (array_type, byte_array_type) in array_types {
-        let create_ops = match ops_type {
-            OpType::Arithmetic => quote::format_ident!("{}_create_ops", array_type),
-            OpType::Bitwise => quote::format_ident!("{}_create_bitwise_ops", array_type),
-            OpType::Atomic => quote::format_ident!("{}_create_atomic_ops", array_type),
-        };
-        let op_fn_name_base = quote::format_ident!("{}_{}_", array_type, typeident);
-        array_impls.extend(quote! {
-            #lamellar::#create_ops!(#typeident,#op_fn_name_base);
-        });
-        for (op, fetch) in ops.clone().into_iter() {
-            let op_am_name = quote::format_ident!("{}_{}_{}_am", array_type, typeident, op);
-            let dist_fn_name = quote::format_ident!("{}dist_{}", op_fn_name_base, op);
-            let local_op = quote::format_ident!("local_{}", op);
-            array_impls.extend(quote! {
-                #[#am_data]
-                struct #op_am_name{
-                    data: #lamellar::array::#array_type<#typeident>,
-                    local_index: usize,
-                    val: #typeident,
-                }
-            });
+//     for (array_type, byte_array_type) in array_types {
+//         let create_ops = match ops_type {
+//             OpType::Arithmetic => quote::format_ident!("{}_create_ops", array_type),
+//             OpType::Bitwise => quote::format_ident!("{}_create_bitwise_ops", array_type),
+//             OpType::Atomic => quote::format_ident!("{}_create_atomic_ops", array_type),
+//         };
+//         let op_fn_name_base = quote::format_ident!("{}_{}_", array_type, typeident);
+//         array_impls.extend(quote! {
+//             #lamellar::#create_ops!(#typeident,#op_fn_name_base);
+//         });
+//         for (op, fetch) in ops.clone().into_iter() {
+//             let op_am_name = quote::format_ident!("{}_{}_{}_am", array_type, typeident, op);
+//             let dist_fn_name = quote::format_ident!("{}dist_{}", op_fn_name_base, op);
+//             let local_op = quote::format_ident!("local_{}", op);
+//             array_impls.extend(quote! {
+//                 #[#am_data]
+//                 struct #op_am_name{
+//                     data: #lamellar::array::#array_type<#typeident>,
+//                     local_index: usize,
+//                     val: #typeident,
+//                 }
+//             });
 
-            let exec = match fetch {
-                true => quote! {
-                    fn exec(&self) -> #typeident {
-                        self.data.#local_op(self.local_index,self.val)
-                    }
-                },
-                false => quote! {
-                    fn exec(&self) {
-                        self.data.#local_op(self.local_index,self.val);
-                    }
-                },
-            };
-            array_impls.extend(quote!{
-                #[#am]
-                impl LamellarAM for #op_am_name{
-                    #exec
-                }
-                #[allow(non_snake_case)]
-                fn #dist_fn_name(val: *const u8, array: #lamellar::array::#byte_array_type, index: usize) -> Arc<dyn RemoteActiveMessage + Send + Sync>{
-                    // println!("{:}",stringify!(#dist_fn_name));
-                    let val = unsafe {*(val as  *const #typeident)};
-                    Arc::new(#op_am_name{
-                        data: unsafe {array.into()},
-                        local_index: index,
-                        val: val,
-                    })
-                }
-            });
-        }
-    }
-    array_impls
-}
+//             let exec = match fetch {
+//                 true => quote! {
+//                     fn exec(&self) -> #typeident {
+//                         self.data.#local_op(self.local_index,self.val)
+//                     }
+//                 },
+//                 false => quote! {
+//                     fn exec(&self) {
+//                         self.data.#local_op(self.local_index,self.val);
+//                     }
+//                 },
+//             };
+//             array_impls.extend(quote!{
+//                 #[#am]
+//                 impl LamellarAM for #op_am_name{
+//                     #exec
+//                 }
+//                 #[allow(non_snake_case)]
+//                 fn #dist_fn_name(val: *const u8, array: #lamellar::array::#byte_array_type, index: usize) -> Arc<dyn RemoteActiveMessage + Send + Sync>{
+//                     // println!("{:}",stringify!(#dist_fn_name));
+//                     let val = unsafe {*(val as  *const #typeident)};
+//                     Arc::new(#op_am_name{
+//                         data: unsafe {array.into()},
+//                         local_index: index,
+//                         val: val,
+//                     })
+//                 }
+//             });
+//         }
+//     }
+//     array_impls
+// }
 
 #[cfg(feature = "non-buffered-array-ops")]
 fn gen_write_array_impls(
@@ -821,13 +827,149 @@ fn gen_write_array_impls(
     write_array_impl
 }
 
+fn native_atomic_slice(typeident: &syn::Ident, lamellar: &proc_macro2::Ident) -> (proc_macro2::TokenStream,proc_macro2::TokenStream){
+    match typeident.to_string().as_str(){
+        "i8" => {
+            (quote!{
+                let slice = unsafe {
+                    let slice = self.data.__local_as_mut_slice();
+                    let slice_ptr = slice.as_mut_ptr() as *mut std::sync::atomic::AtomicI8;
+                    std::slice::from_raw_parts_mut(slice_ptr,slice.len())
+                };
+            },
+            quote!{
+                let mut a_val = #lamellar::array::native_atomic::MyAtomicI8(&slice[index]);
+                a_val
+            })
+        },
+        "i16" => {
+            (quote!{
+                let slice = unsafe {
+                    let slice = self.data.__local_as_mut_slice();
+                    let slice_ptr = slice.as_mut_ptr() as *mut std::sync::atomic::AtomicI16;
+                    std::slice::from_raw_parts_mut(slice_ptr,slice.len())
+                };
+            },
+            quote!{
+                let mut a_val = #lamellar::array::native_atomic::MyAtomicI16(&slice[index]);
+                a_val
+            })
+        },
+        "i32" => {
+            (quote!{
+                let slice = unsafe {
+                    let slice = self.data.__local_as_mut_slice();
+                    let slice_ptr = slice.as_mut_ptr() as *mut std::sync::atomic::AtomicI32;
+                    std::slice::from_raw_parts_mut(slice_ptr,slice.len())
+                };
+            },
+            quote!{
+                let mut a_val = #lamellar::array::native_atomic::MyAtomicI32(&slice[index]);
+                a_val
+            })
+        },
+        "i64" => {
+            (quote!{
+                let slice = unsafe {
+                    let slice = self.data.__local_as_mut_slice();
+                    let slice_ptr = slice.as_mut_ptr() as *mut std::sync::atomic::AtomicI64;
+                    std::slice::from_raw_parts_mut(slice_ptr,slice.len())
+                };
+            },
+            quote!{
+                let mut a_val = #lamellar::array::native_atomic::MyAtomicI64(&slice[index]);
+                a_val
+            })
+        },
+        "isize" => {
+            (quote!{
+                let slice = unsafe {
+                    let slice = self.data.__local_as_mut_slice();
+                    let slice_ptr = slice.as_mut_ptr() as *mut std::sync::atomic::AtomicIsize;
+                    std::slice::from_raw_parts_mut(slice_ptr,slice.len())
+                };
+            },
+            quote!{
+                let mut a_val = #lamellar::array::native_atomic::MyAtomicIsize(&slice[index]);
+                a_val
+            })
+        },
+        "u8" => {
+            (quote!{
+                let slice = unsafe {
+                    let slice = self.data.__local_as_mut_slice();
+                    let slice_ptr = slice.as_mut_ptr() as *mut std::sync::atomic::AtomicU8;
+                    std::slice::from_raw_parts_mut(slice_ptr,slice.len())
+                };
+            },
+            quote!{
+                let mut a_val = #lamellar::array::native_atomic::MyAtomicU8(&slice[index]);
+                a_val
+            })
+        },
+        "u16" => {
+            (quote!{
+                let slice = unsafe {
+                    let slice = self.data.__local_as_mut_slice();
+                    let slice_ptr = slice.as_mut_ptr() as *mut std::sync::atomic::AtomicU16;
+                    std::slice::from_raw_parts_mut(slice_ptr,slice.len())
+                };
+            },
+            quote!{
+                let mut a_val = #lamellar::array::native_atomic::MyAtomicU16(&slice[index]);
+                a_val
+            })
+        },
+        "u32" => {
+            (quote!{
+                let slice = unsafe {
+                    let slice = self.data.__local_as_mut_slice();
+                    let slice_ptr = slice.as_mut_ptr() as *mut std::sync::atomic::AtomicU32;
+                    std::slice::from_raw_parts_mut(slice_ptr,slice.len())
+                };
+            },
+            quote!{
+                let mut a_val = #lamellar::array::native_atomic::MyAtomicU32(&slice[index]);
+                a_val
+            })
+        },
+        "u64" => {
+            (quote!{
+                let slice = unsafe {
+                    let slice = self.data.__local_as_mut_slice();
+                    let slice_ptr = slice.as_mut_ptr() as *mut std::sync::atomic::AtomicU64;
+                    std::slice::from_raw_parts_mut(slice_ptr,slice.len())
+                };
+            },
+            quote!{
+                let mut a_val = #lamellar::array::native_atomic::MyAtomicU64(&slice[index]);
+                a_val
+            })
+        },
+        "usize" => {
+            (quote!{
+                let slice = unsafe {
+                    let slice = self.data.__local_as_mut_slice();
+                    let slice_ptr = slice.as_mut_ptr() as *mut std::sync::atomic::AtomicUsize;
+                    std::slice::from_raw_parts_mut(slice_ptr,slice.len())
+                };
+            },
+            quote!{
+                let mut a_val = #lamellar::array::native_atomic::MyAtomicUsize(&slice[index]);
+                a_val
+            })
+        },
+        _ => panic!("this should never happen")
+    }
+}
+
 fn create_buf_ops(
     typeident: syn::Ident,
     array_type: syn::Ident,
     byte_array_type: syn::Ident,
     optypes: &Vec<OpType>,
     rt: bool,
-    bitwise: bool,
+    _bitwise: bool,
 ) -> proc_macro2::TokenStream {
     let lamellar = if rt {
         quote::format_ident!("crate")
@@ -847,45 +989,42 @@ fn create_buf_ops(
         )
     };
     let mut expanded = quote! {};
-    let (lhs, assign, load, lock, slice) = if array_type == "AtomicArray" {
-        let array_vec = vec![(array_type.clone(), byte_array_type.clone())];
-        let ops: Vec<(syn::Ident, bool)> = vec![
-            (quote::format_ident!("add"), false),
-            (quote::format_ident!("fetch_add"), true),
-            (quote::format_ident!("sub"), false),
-            (quote::format_ident!("fetch_sub"), true),
-            (quote::format_ident!("mul"), false),
-            (quote::format_ident!("fetch_mul"), true),
-            (quote::format_ident!("div"), false),
-            (quote::format_ident!("fetch_div"), true),
-        ];
-        let temp = gen_array_impls(typeident.clone(), &array_vec, &ops, OpType::Arithmetic, rt);
-        expanded.extend(quote! {#temp});
-        let ops: Vec<(syn::Ident, bool)> = vec![
-            (quote::format_ident!("load"), true),
-            (quote::format_ident!("store"), false),
-            (quote::format_ident!("swap"), true),
-        ];
-        let temp = gen_array_impls(typeident.clone(), &array_vec, &ops, OpType::Atomic, rt);
-        expanded.extend(quote! {#temp});
-        if bitwise {
-            let ops: Vec<(syn::Ident, bool)> = vec![
-                (quote::format_ident!("bit_and"), false),
-                (quote::format_ident!("fetch_bit_and"), true),
-                (quote::format_ident!("bit_or"), false),
-                (quote::format_ident!("fetch_bit_or"), true),
-            ];
-            let temp = gen_array_impls(typeident.clone(), &array_vec, &ops, OpType::Bitwise, rt);
-            expanded.extend(quote! {#temp});
-        }
-        (
-            quote! {let mut elem = slice.at(index); elem },
-            quote! {slice.at(index).store(val)},
-            quote! {slice.at(index).load()},
-            quote! {},
-            quote! {let mut slice = unsafe{self.data.mut_local_data()};},
-        )
-    } else if array_type == "Atomic2Array" { 
+    // let (lhs, assign, load, lock, slice) = if array_type == "AtomicArray" {            
+                // AtomicArray::NativeAtomicArray(array) => {
+                //     (
+                //         quote! {slice[index]},
+                //         quote! {slice[index] = val},
+                //         quote! {slice[index]},
+                //         quote! {let _lock = self.data.lock_index(index);},
+                //         quote! {let mut slice = unsafe{self.data.__local_as_mut_slice()};},
+                //     )
+                // },
+                // AtomicArray::Atomic2Array(array) => {
+                //     (
+                //     quote! {slice[index]},
+                //     quote! {slice[index] = val},
+                //     quote! {slice[index]},
+                //     quote! {let _lock = self.data.lock_index(index);},
+                //     quote! {let mut slice = unsafe{self.data.__local_as_mut_slice()};},
+                //     )
+                // },
+                // quote!{
+                //     match self.data{
+                //         AtomicArray::NativeAtomicArray(array) => {
+                //         }
+                //         AtomicArray::Atomic2Array(array) => {
+                //         }
+                //     }
+                // }
+    //             (
+    //                 quote! {slice[index]},
+    //                 quote! {slice[index] = val},
+    //                 quote! {slice[index]},
+    //                 quote! {let _lock = self.data.lock_index(index);},
+    //                 quote! {let mut slice = unsafe{self.data.__local_as_mut_slice()};},
+    //             )
+    // } else if array_type == 
+    let (lhs, assign, load, lock, slice) = if array_type == "Atomic2Array" { 
         (
             quote! {slice[index]},
             quote! {slice[index] = val},
@@ -893,7 +1032,18 @@ fn create_buf_ops(
             quote! {let _lock = self.data.lock_index(index);},
             quote! {let mut slice = unsafe{self.data.__local_as_mut_slice()};},
         )
-    }else {
+    } else if array_type == "NativeAtomicArray" { 
+        
+        let (slice,val) = native_atomic_slice(&typeident,&lamellar);
+        (
+            quote! { #val },
+            quote! {slice[index].store(val, Ordering::SeqCst)},
+            quote! {slice[index].load(Ordering::SeqCst)},
+            quote! { },
+            quote! { #slice },  
+        )  
+        
+    } else {
         (
             quote! {slice[index]},
             quote! {slice[index] = val},
@@ -919,13 +1069,13 @@ fn create_buf_ops(
                     fetch_index+=1;
                     #lhs -= val
                 },
-                ArrayOpCmd::Mul=>{#lhs *= val},
+                ArrayOpCmd::Mul=>{ #lhs *= val},
                 ArrayOpCmd::FetchMul=>{
                     results_slice[fetch_index] = orig;
                     fetch_index+=1;
                     #lhs *= val
                 },
-                ArrayOpCmd::Div=>{#lhs /= val},
+                ArrayOpCmd::Div=>{ #lhs /= val },
                 ArrayOpCmd::FetchDiv=>{
                     results_slice[fetch_index] = orig;
                     fetch_index+=1;
@@ -1108,27 +1258,34 @@ enum OpType {
     Atomic,
 }
 
-fn create_buffered_ops(typeident: syn::Ident, bitwise: bool, rt: bool) -> proc_macro2::TokenStream {
+fn create_buffered_ops(typeident: syn::Ident, bitwise: bool, native: bool, rt: bool) -> proc_macro2::TokenStream {
     let lamellar = if rt {
         quote::format_ident!("crate")
     } else {
         quote::format_ident!("__lamellar")
     };
 
-    let atomic_array_types: Vec<(syn::Ident, syn::Ident)> = vec![
+    let mut atomic_array_types: Vec<(syn::Ident, syn::Ident)> = vec![
         (
             quote::format_ident!("LocalLockAtomicArray"),
             quote::format_ident!("LocalLockAtomicByteArray"),
         ),
-        (
-            quote::format_ident!("AtomicArray"),
-            quote::format_ident!("AtomicByteArray"),
-        ),
+        // ( //we dont use atomic array here because we directly use either Atomic2Array or NativeAtomicArray
+        //     quote::format_ident!("AtomicArray"), 
+        //     quote::format_ident!("AtomicByteArray"), 
+        // ),
         (
             quote::format_ident!("Atomic2Array"),
             quote::format_ident!("Atomic2ByteArray"),
         ),
     ];
+
+    if native{
+        atomic_array_types.push((
+            quote::format_ident!("NativeAtomicArray"),
+            quote::format_ident!("NativeAtomicByteArray"),
+        ));
+    }
 
     let mut expanded = quote! {};
 
@@ -1211,7 +1368,7 @@ fn create_buffered_ops(typeident: syn::Ident, bitwise: bool, rt: bool) -> proc_m
     let user_expanded = quote_spanned! {expanded.span()=>
         const _: () = {
             extern crate lamellar as __lamellar;
-            use __lamellar::array::{AtomicArray,Atomic2Array,AtomicByteArray,LocalLockAtomicArray,LocalLockAtomicByteArray,LocalArithmeticOps,LocalAtomicOps,ArrayOpCmd,LamellarArrayPut};
+            use __lamellar::array::{AtomicArray,AtomicByteArray,Atomic2Array,NativeAtomicArray,NativeAtomic,LocalLockAtomicArray,LocalLockAtomicByteArray,LocalArithmeticOps,LocalAtomicOps,ArrayOpCmd,LamellarArrayPut};
             // #bitwise_mod
             use __lamellar::array;
             // #bitwise_mod
@@ -1232,14 +1389,14 @@ fn create_buffered_ops(typeident: syn::Ident, bitwise: bool, rt: bool) -> proc_m
 }
 
 #[cfg(feature = "non-buffered-array-ops")]
-fn create_ops(typeident: syn::Ident, bitwise: bool, rt: bool) -> proc_macro2::TokenStream {
+fn create_ops(typeident: syn::Ident, bitwise: bool, native: bool, rt: bool) -> proc_macro2::TokenStream {
     let lamellar = if rt {
         quote::format_ident!("crate")
     } else {
         quote::format_ident!("__lamellar")
     };
 
-    let write_array_types: Vec<(syn::Ident, syn::Ident)> = vec![
+    let mut write_array_types: Vec<(syn::Ident, syn::Ident)> = vec![
         (
             quote::format_ident!("LocalLockAtomicArray"),
             quote::format_ident!("LocalLockAtomicByteArray"),
@@ -1257,6 +1414,13 @@ fn create_ops(typeident: syn::Ident, bitwise: bool, rt: bool) -> proc_macro2::To
             quote::format_ident!("UnsafeByteArray"),
         ),
     ];
+
+    if native{
+        write_array_types.push((
+            quote::format_ident!("NativeAtomicArray"),
+            quote::format_ident!("NativeAtomicByteArray"),
+        ));
+    }
     let ops: Vec<(syn::Ident, bool)> = vec![
         (quote::format_ident!("add"), false),
         (quote::format_ident!("fetch_add"), true),
@@ -1298,6 +1462,13 @@ fn create_ops(typeident: syn::Ident, bitwise: bool, rt: bool) -> proc_macro2::To
             quote::format_ident!("Atomic2ByteArray"),
         ),
     ];
+
+    if native{
+        atomic_array_types.push((
+            quote::format_ident!("NativeAtomicArray"),
+            quote::format_ident!("NativeAtomicByteArray"),
+        ));
+    }
     let atomic_ops: Vec<(syn::Ident, bool)> = vec![
         (quote::format_ident!("load"), true),
         (quote::format_ident!("store"), false),
@@ -1346,7 +1517,7 @@ fn create_ops(typeident: syn::Ident, bitwise: bool, rt: bool) -> proc_macro2::To
     let user_expanded = quote_spanned! {expanded.span()=>
         const _: () = {
             extern crate lamellar as __lamellar;
-            use __lamellar::array::{AtomicArray,Atomic2Array,AtomicByteArray,LocalLockAtomicArray,LocalLockAtomicByteArray,LocalArithmeticOps,LocalAtomicOps,ArrayOpCmd,LamellarArrayPut};
+            use __lamellar::array::{AtomicArray,AtomicByteArray,Atomic2Array,NativeAtomicArray,NativeAtomic,LocalLockAtomicArray,LocalLockAtomicByteArray,LocalArithmeticOps,LocalAtomicOps,ArrayOpCmd,LamellarArrayPut};
             #bitwise_mod
             use __lamellar::LamellarArray;
             use __lamellar::LamellarRequest;
@@ -1363,137 +1534,137 @@ fn create_ops(typeident: syn::Ident, bitwise: bool, rt: bool) -> proc_macro2::To
     }
 }
 
-fn gen_atomic_rdma(typeident: syn::Ident, rt: bool) -> proc_macro2::TokenStream {
-    let lamellar = if rt {
-        quote::format_ident!("crate")
-    } else {
-        quote::format_ident!("__lamellar")
-    };
+// fn gen_atomic_rdma(typeident: syn::Ident, rt: bool) -> proc_macro2::TokenStream {
+//     let lamellar = if rt {
+//         quote::format_ident!("crate")
+//     } else {
+//         quote::format_ident!("__lamellar")
+//     };
 
-    let (am_data, am): (syn::Path, syn::Path) = if rt {
-        (
-            syn::parse("lamellar_impl::AmDataRT".parse().unwrap()).unwrap(),
-            syn::parse("lamellar_impl::rt_am".parse().unwrap()).unwrap(),
-        )
-    } else {
-        (
-            syn::parse("lamellar::AmData".parse().unwrap()).unwrap(),
-            syn::parse("lamellar::am".parse().unwrap()).unwrap(),
-        )
-    };
+//     let (am_data, am): (syn::Path, syn::Path) = if rt {
+//         (
+//             syn::parse("lamellar_impl::AmDataRT".parse().unwrap()).unwrap(),
+//             syn::parse("lamellar_impl::rt_am".parse().unwrap()).unwrap(),
+//         )
+//     } else {
+//         (
+//             syn::parse("lamellar::AmData".parse().unwrap()).unwrap(),
+//             syn::parse("lamellar::am".parse().unwrap()).unwrap(),
+//         )
+//     };
 
-    let get_name = quote::format_ident!("RemoteGetAm_{}", typeident);
-    let get_fn = quote::format_ident!("RemoteGetAm_{}_gen", typeident);
-    let put_name = quote::format_ident!("RemotePutAm_{}", typeident);
-    let put_fn = quote::format_ident!("RemotePutAm_{}_gen", typeident);
-    quote! {
-        // #[allow(non_snake_case)]
-        #[#am_data]
-        struct #get_name {
-            array: #lamellar::array::AtomicByteArray, //inner of the indices we need to place data into
-            start_index: usize,
-            len: usize,
-        }
+//     let get_name = quote::format_ident!("RemoteGetAm_{}", typeident);
+//     let get_fn = quote::format_ident!("RemoteGetAm_{}_gen", typeident);
+//     let put_name = quote::format_ident!("RemotePutAm_{}", typeident);
+//     let put_fn = quote::format_ident!("RemotePutAm_{}_gen", typeident);
+//     quote! {
+//         // #[allow(non_snake_case)]
+//         #[#am_data]
+//         struct #get_name {
+//             array: #lamellar::array::AtomicByteArray, //inner of the indices we need to place data into
+//             start_index: usize,
+//             len: usize,
+//         }
 
-        #[#am]
-        impl LamellarAm for #get_name {
-            fn exec(self) -> Vec<u8> {
-                // println!("in remotegetam {:?} {:?}",self.start_index,self.len);
-                let array: #lamellar::array::AtomicArray<#typeident> =unsafe {self.array.clone().into()};
-                unsafe {
-                    match array.array.local_elements_for_range(self.start_index,self.len){
-                        Some((unsafe_u8_elems,indices)) => {
-                            let unsafe_elems = std::slice::from_raw_parts(unsafe_u8_elems.as_ptr() as *const #typeident,unsafe_u8_elems.len()/std::mem::size_of::<#typeident>());
-                            let elems_u8_len = unsafe_elems.len() * std::mem::size_of::<#typeident>();
-                            let mut elems_u8: Vec<u8> = Vec::with_capacity(elems_u8_len);
-                            elems_u8.set_len(elems_u8_len);
-                            let elems_t_ptr = elems_u8.as_mut_ptr() as *mut #typeident;
-                            let elems_t_len = unsafe_elems.len();
-                            let elems = std::slice::from_raw_parts_mut(elems_t_ptr,elems_t_len);
-                            for (buf_i,array_i) in indices.enumerate(){
-                                // println!("i {:?} {:?}",(buf_i,array_i),unsafe_elems[buf_i]);
-                                elems[buf_i] = array.local_load(array_i,unsafe_elems[buf_i]);
-                            }
+//         #[#am]
+//         impl LamellarAm for #get_name {
+//             fn exec(self) -> Vec<u8> {
+//                 // println!("in remotegetam {:?} {:?}",self.start_index,self.len);
+//                 let array: #lamellar::array::AtomicArray<#typeident> =unsafe {self.array.clone().into()};
+//                 unsafe {
+//                     match array.array.local_elements_for_range(self.start_index,self.len){
+//                         Some((unsafe_u8_elems,indices)) => {
+//                             let unsafe_elems = std::slice::from_raw_parts(unsafe_u8_elems.as_ptr() as *const #typeident,unsafe_u8_elems.len()/std::mem::size_of::<#typeident>());
+//                             let elems_u8_len = unsafe_elems.len() * std::mem::size_of::<#typeident>();
+//                             let mut elems_u8: Vec<u8> = Vec::with_capacity(elems_u8_len);
+//                             elems_u8.set_len(elems_u8_len);
+//                             let elems_t_ptr = elems_u8.as_mut_ptr() as *mut #typeident;
+//                             let elems_t_len = unsafe_elems.len();
+//                             let elems = std::slice::from_raw_parts_mut(elems_t_ptr,elems_t_len);
+//                             for (buf_i,array_i) in indices.enumerate(){
+//                                 // println!("i {:?} {:?}",(buf_i,array_i),unsafe_elems[buf_i]);
+//                                 elems[buf_i] = array.local_load(array_i,unsafe_elems[buf_i]);
+//                             }
 
-                            // println!("{:?} {:?} {:?}",unsafe_elems,elems,elems_u8);
-                            // println!("{:?}",elems_u8);
+//                             // println!("{:?} {:?} {:?}",unsafe_elems,elems,elems_u8);
+//                             // println!("{:?}",elems_u8);
 
-                            elems_u8
-                        },
-                        None => vec![],
-                    }
-                }
-            }
-        }
+//                             elems_u8
+//                         },
+//                         None => vec![],
+//                     }
+//                 }
+//             }
+//         }
 
-        #[allow(non_snake_case)]
-        fn #get_fn(array: #lamellar::array::AtomicByteArray, start_index: usize, len: usize) -> Arc<dyn RemoteActiveMessage + Send + Sync>{
-            Arc::new(#get_name{
-                array: array,
-                start_index: start_index,
-                len: len,
-            })
-        }
+//         #[allow(non_snake_case)]
+//         fn #get_fn(array: #lamellar::array::AtomicByteArray, start_index: usize, len: usize) -> Arc<dyn RemoteActiveMessage + Send + Sync>{
+//             Arc::new(#get_name{
+//                 array: array,
+//                 start_index: start_index,
+//                 len: len,
+//             })
+//         }
 
-        #lamellar::inventory::submit! {
-            #![crate = #lamellar]
-            #lamellar::array::atomic::rdma::AtomicArrayGet{
-                id: std::any::TypeId::of::<#typeident>(),
-                op: #get_fn
-            }
-        }
+//         #lamellar::inventory::submit! {
+//             #![crate = #lamellar]
+//             #lamellar::array::atomic::rdma::AtomicArrayGet{
+//                 id: std::any::TypeId::of::<#typeident>(),
+//                 op: #get_fn
+//             }
+//         }
 
-        #[#am_data]
-        struct #put_name {
-            array: #lamellar::array::AtomicByteArray, //inner of the indices we need to place data into
-            start_index: usize,
-            len: usize,
-            buf : Vec<u8>,
-        }
+//         #[#am_data]
+//         struct #put_name {
+//             array: #lamellar::array::AtomicByteArray, //inner of the indices we need to place data into
+//             start_index: usize,
+//             len: usize,
+//             buf : Vec<u8>,
+//         }
 
-        #[#am]
-        impl LamellarAm for #put_name {
-            fn exec(self) {
-                // println!("in remoteput {:?} {:?}",self.start_index,self.len);
-                let array: #lamellar::array::AtomicArray<#typeident> =unsafe {self.array.clone().into()};
+//         #[#am]
+//         impl LamellarAm for #put_name {
+//             fn exec(self) {
+//                 // println!("in remoteput {:?} {:?}",self.start_index,self.len);
+//                 let array: #lamellar::array::AtomicArray<#typeident> =unsafe {self.array.clone().into()};
 
-                unsafe {
-                    let buf = std::slice::from_raw_parts(self.buf.as_ptr() as *const #typeident,self.buf.len() / std::mem::size_of::<#typeident>());
-                    // println!("buf: {:?}",buf);
-                    match array.array.local_elements_for_range(self.start_index,self.len){
-                        Some((elems,indices)) => {
-                            // println!("elems {:?}",elems);
-                            for (buf_i,array_i) in indices.enumerate(){
-                                // println!("buf_i {:?} array_i {:?}",buf_i,array_i);
-                                array.local_store(array_i,buf[buf_i]);
-                            }
-                        },
-                        None => {},
-                    }
-                }
-                // println!("done remoteput");
-            }
-        }
+//                 unsafe {
+//                     let buf = std::slice::from_raw_parts(self.buf.as_ptr() as *const #typeident,self.buf.len() / std::mem::size_of::<#typeident>());
+//                     // println!("buf: {:?}",buf);
+//                     match array.array.local_elements_for_range(self.start_index,self.len){
+//                         Some((elems,indices)) => {
+//                             // println!("elems {:?}",elems);
+//                             for (buf_i,array_i) in indices.enumerate(){
+//                                 // println!("buf_i {:?} array_i {:?}",buf_i,array_i);
+//                                 array.local_store(array_i,buf[buf_i]);
+//                             }
+//                         },
+//                         None => {},
+//                     }
+//                 }
+//                 // println!("done remoteput");
+//             }
+//         }
 
-        #[allow(non_snake_case)]
-        fn #put_fn(array: #lamellar::array::AtomicByteArray, start_index: usize, len: usize, buf: Vec<u8>) -> Arc<dyn RemoteActiveMessage + Send + Sync>{
-            Arc::new(#put_name{
-                array: array,
-                start_index: start_index,
-                len: len,
-                buf: buf,
-            })
-        }
+//         #[allow(non_snake_case)]
+//         fn #put_fn(array: #lamellar::array::AtomicByteArray, start_index: usize, len: usize, buf: Vec<u8>) -> Arc<dyn RemoteActiveMessage + Send + Sync>{
+//             Arc::new(#put_name{
+//                 array: array,
+//                 start_index: start_index,
+//                 len: len,
+//                 buf: buf,
+//             })
+//         }
 
-        #lamellar::inventory::submit! {
-            #![crate = #lamellar]
-            #lamellar::array::atomic::rdma::AtomicArrayPut{
-                id: std::any::TypeId::of::<#typeident>(),
-                op: #put_fn
-            }
-        }
-    }
-}
+//         #lamellar::inventory::submit! {
+//             #![crate = #lamellar]
+//             #lamellar::array::atomic::rdma::AtomicArrayPut{
+//                 id: std::any::TypeId::of::<#typeident>(),
+//                 op: #put_fn
+//             }
+//         }
+//     }
+// }
 
 #[proc_macro_error]
 #[proc_macro]
@@ -1540,6 +1711,7 @@ pub fn register_reduction(item: TokenStream) -> TokenStream {
             quote! {#closure},
             &array_types,
             false,
+            false
             // "lamellar".to_string(),
         ));
     }
@@ -1570,6 +1742,7 @@ pub fn generate_reductions_for_type(item: TokenStream) -> TokenStream {
             },
             &read_array_types,
             false,
+            false
         ));
         output.extend(create_reduction(
             typeident.clone(),
@@ -1581,6 +1754,7 @@ pub fn generate_reductions_for_type(item: TokenStream) -> TokenStream {
             },
             &read_array_types,
             false,
+            false
         ));
         output.extend(create_reduction(
             typeident.clone(),
@@ -1590,6 +1764,7 @@ pub fn generate_reductions_for_type(item: TokenStream) -> TokenStream {
             },
             &read_array_types,
             false,
+            false
         ));
     }
 
@@ -1599,16 +1774,29 @@ pub fn generate_reductions_for_type(item: TokenStream) -> TokenStream {
 #[proc_macro]
 pub fn generate_reductions_for_type_rt(item: TokenStream) -> TokenStream {
     let mut output = quote! {};
+    let items = item
+        .to_string()
+        .split(",")
+        .map(|i| i.to_owned())
+        .collect::<Vec<String>>();
+    let native = if let Ok(val) = syn::parse_str::<syn::LitBool>(&items[0]) {
+        val.value
+    } else {
+        panic! ("first argument of generate_ops_for_type expects 'true' or 'false' specifying whether types are native atomics");
+    };
 
-    let read_array_types: Vec<syn::Ident> = vec![
+    let mut read_array_types: Vec<syn::Ident> = vec![
         quote::format_ident!("LocalLockAtomicArray"),
         quote::format_ident!("AtomicArray"),
-        quote::format_ident!("Atomic2Array"),
+        quote::format_ident!("Atomic2Array"),        
         quote::format_ident!("UnsafeArray"),
         quote::format_ident!("ReadOnlyArray"),
     ];
+    if native {
+        read_array_types.push(quote::format_ident!("NativeAtomicArray"));
+    }
 
-    for t in item.to_string().split(",").collect::<Vec<&str>>() {
+    for t in items[1..].iter()  {
         let t = t.trim().to_string();
         let typeident = quote::format_ident!("{:}", t.clone());
         // let elemtypeident = if
@@ -1620,6 +1808,7 @@ pub fn generate_reductions_for_type_rt(item: TokenStream) -> TokenStream {
             },
             &read_array_types,
             true,
+            native
         ));
         output.extend(create_reduction(
             typeident.clone(),
@@ -1629,6 +1818,7 @@ pub fn generate_reductions_for_type_rt(item: TokenStream) -> TokenStream {
             },
             &read_array_types,
             true,
+            native
         ));
         output.extend(create_reduction(
             typeident.clone(),
@@ -1638,6 +1828,7 @@ pub fn generate_reductions_for_type_rt(item: TokenStream) -> TokenStream {
             },
             &read_array_types,
             true,
+            native
         ));
     }
     TokenStream::from(output)
@@ -1657,14 +1848,15 @@ pub fn generate_ops_for_type(item: TokenStream) -> TokenStream {
     } else {
         panic! ("first argument of generate_ops_for_type expects 'true' or 'false' specifying whether type implements bitwise operations");
     };
+    let native = false; // since this is a user defined type, we assume it does not have native support for atomic operations
     for t in items[1..].iter() {
         let typeident = quote::format_ident!("{:}", t.trim());
         output.extend(quote! {impl Dist for #typeident {}});
         #[cfg(feature = "non-buffered-array-ops")]
-        output.extend(create_ops(typeident.clone(), bitwise, false));
+        output.extend(create_ops(typeident.clone(), bitwise, native, false));
         #[cfg(not(feature = "non-buffered-array-ops"))]
-        output.extend(create_buffered_ops(typeident.clone(), bitwise, false));
-        output.extend(gen_atomic_rdma(typeident.clone(), false));
+        output.extend(create_buffered_ops(typeident.clone(), bitwise, native, false));
+        // output.extend(gen_atomic_rdma(typeident.clone(), false));
     }
     TokenStream::from(output)
 }
@@ -1683,14 +1875,19 @@ pub fn generate_ops_for_type_rt(item: TokenStream) -> TokenStream {
     } else {
         panic! ("first argument of generate_ops_for_type expects 'true' or 'false' specifying whether type implements bitwise operations");
     };
-    for t in items[1..].iter() {
+    let native = if let Ok(val) = syn::parse_str::<syn::LitBool>(&items[1]) {
+        val.value
+    } else {
+        panic! ("first argument of generate_ops_for_type expects 'true' or 'false' specifying whether types are native atomics");
+    };
+    for t in items[2..].iter() {
         let typeident = quote::format_ident!("{:}", t.trim());
         output.extend(quote! {impl Dist for #typeident {}});
         #[cfg(feature = "non-buffered-array-ops")]
-        output.extend(create_ops(typeident.clone(), bitwise, true));
+        output.extend(create_ops(typeident.clone(), bitwise, native, true));
         #[cfg(not(feature = "non-buffered-array-ops"))]
-        output.extend(create_buffered_ops(typeident.clone(), bitwise, true));
-        output.extend(gen_atomic_rdma(typeident.clone(), true));
+        output.extend(create_buffered_ops(typeident.clone(), bitwise, native, true));
+        // output.extend(gen_atomic_rdma(typeident.clone(), true));
     }
     TokenStream::from(output)
 }
@@ -1722,20 +1919,20 @@ pub fn derive_arrayops(input: TokenStream) -> TokenStream {
     let name = input.ident;
 
     #[cfg(feature = "non-buffered-array-ops")]
-    output.extend(create_ops(name.clone(), false, false));
+    output.extend(create_ops(name.clone(), false, false, false));
     #[cfg(not(feature = "non-buffered-array-ops"))]
-    output.extend(create_buffered_ops(name.clone(), false, false));
+    output.extend(create_buffered_ops(name.clone(), false, false, false));
     TokenStream::from(output)
 }
 
-#[proc_macro_error]
-#[proc_macro_derive(AtomicRdma)]
-pub fn derive_atomicrdma(input: TokenStream) -> TokenStream {
-    let mut output = quote! {};
+// #[proc_macro_error]
+// #[proc_macro_derive(AtomicRdma)]
+// pub fn derive_atomicrdma(input: TokenStream) -> TokenStream {
+//     let mut output = quote! {};
 
-    let input = parse_macro_input!(input as syn::DeriveInput);
-    let name = input.ident;
+//     let input = parse_macro_input!(input as syn::DeriveInput);
+//     let name = input.ident;
 
-    output.extend(gen_atomic_rdma(name.clone(), true));
-    TokenStream::from(output)
-}
+//     // output.extend(gen_atomic_rdma(name.clone(), true));
+//     TokenStream::from(output)
+// }

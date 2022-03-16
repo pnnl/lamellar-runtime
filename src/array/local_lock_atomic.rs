@@ -213,7 +213,9 @@ impl<T: Dist> LocalLockAtomicArray<T> {
     pub fn into_atomic2(self) -> Atomic2Array<T> {
         self.array.into()
     }
+
 }
+
 
 impl<T: Dist + 'static> LocalLockAtomicArray<T> {
     pub fn into_atomic(self) -> AtomicArray<T> {

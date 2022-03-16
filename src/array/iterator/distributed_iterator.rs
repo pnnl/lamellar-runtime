@@ -14,8 +14,8 @@ use zip::*;
 
 use crate::memregion::Dist;
 // use crate::LamellarArray;
-use crate::array::LamellarArray; //, LamellarArrayPut, LamellarArrayGet};
-
+use crate::array::{LamellarArray,NativeAtomicArray,AtomicArray,Atomic2Array}; //, LamellarArrayPut, LamellarArrayGet};
+use enum_dispatch::enum_dispatch;
 use futures::Future;
 use std::marker::PhantomData;
 
@@ -73,6 +73,8 @@ where
     }
 }
 
+
+#[enum_dispatch]
 pub trait DistIteratorLauncher {
     fn for_each<I, F>(&self, iter: I, op: F)
     //this really needs to return a task group handle...

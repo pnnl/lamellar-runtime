@@ -7,6 +7,7 @@ mod rdma;
 use crate::array::atomic2::operations::BUFOPS;
 use crate::array::private::LamellarArrayPrivate;
 use crate::array::r#unsafe::UnsafeByteArray;
+use crate::array::atomic::AtomicElement;
 use crate::array::*;
 use crate::darc::Darc;
 use crate::darc::DarcMode;
@@ -16,13 +17,20 @@ use parking_lot::{
     Mutex,MutexGuard
 };
 use std::any::TypeId;
-use std::ops::{Deref, DerefMut};
+// use std::ops::{Deref, DerefMut};
+
 
 
 use std::ops::{AddAssign, BitAndAssign, BitOrAssign, DivAssign, MulAssign, SubAssign};
 pub struct Atomic2Element<T: Dist> {
     array: Atomic2Array<T>,
     local_index: usize,
+}
+
+impl <T: Dist> From<Atomic2Element<T>> for AtomicElement<T>{
+    fn from(element: Atomic2Element<T>) -> AtomicElement<T>{
+        AtomicElement::Atomic2Element(element)
+    }
 }
 
 impl <T: Dist> Atomic2Element<T>{
@@ -94,6 +102,7 @@ impl<T: Dist + ElementBitWiseOps> BitOrAssign<T> for Atomic2Element<T> {
         }
     }
 }
+
 
 #[lamellar_impl::AmDataRT(Clone)]
 pub struct Atomic2Array<T: Dist> {
@@ -206,6 +215,15 @@ impl<T: Dist + std::default::Default> Atomic2Array<T> {
         Atomic2Array {
             locks: locks,
             array: array,
+        }
+    }
+}
+
+impl<T: Dist > Atomic2Array<T> {
+    pub(crate) fn get_element(&self, index: usize) -> Atomic2Element<T>{
+        Atomic2Element{
+            array: self.clone(),
+            local_index: index,
         }
     }
 }
@@ -343,12 +361,28 @@ impl<T: Dist> From<Atomic2Array<T>> for Atomic2ByteArray {
         }
     }
 }
+impl<T: Dist> From<Atomic2Array<T>> for AtomicByteArray {
+    fn from(array: Atomic2Array<T>) -> Self {
+        AtomicByteArray::Atomic2ByteArray(Atomic2ByteArray {
+            locks: array.locks.clone(),
+            array: array.array.into(),
+        })
+    }
+}
 impl<T: Dist> From<Atomic2ByteArray> for Atomic2Array<T> {
     fn from(array: Atomic2ByteArray) -> Self {
         Atomic2Array {
             locks: array.locks.clone(),
             array: array.array.into(),
         }
+    }
+}
+impl<T: Dist> From<Atomic2ByteArray> for AtomicArray<T> {
+    fn from(array: Atomic2ByteArray) -> Self {
+        Atomic2Array {
+            locks: array.locks.clone(),
+            array: array.array.into(),
+        }.into()
     }
 }
 

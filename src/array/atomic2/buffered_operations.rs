@@ -45,9 +45,8 @@ pub struct Atomic2ArrayOpBuf {
 crate::inventory::collect!(Atomic2ArrayOpBuf);
 
 impl<T: AmDist + Dist + 'static> Atomic2Array<T> {
-    fn initiate_op(
+    pub(crate) fn initiate_op(
         &self,
-        pe: usize,
         val: T,
         index: impl OpInput<usize>,
         op: ArrayOpCmd,
@@ -64,7 +63,7 @@ impl<T: AmDist + Dist + 'static> Atomic2Array<T> {
         pe_offsets.iter().map(|(pe,vals)| self.array.initiate_op(*pe, val, &vals, op)).last().unwrap()
     }
 
-    fn initiate_fetch_op(
+    pub(crate) fn initiate_fetch_op(
         &self,
         pe: usize,
         val: T,
@@ -81,7 +80,7 @@ impl<T: AmDist + Dist + 'static> Atomic2Array<T> {
     ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>> {
         let pe = self.pe_for_dist_index(index).expect("index out of bounds");
         let local_index = self.pe_offset_for_dist_index(pe, index).unwrap(); //calculated pe above
-        Some(self.initiate_op(pe, val, local_index, ArrayOpCmd::Store))
+        Some(self.initiate_op(val, local_index, ArrayOpCmd::Store))
     }
 
     pub fn load(&self, index: usize) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
@@ -106,7 +105,7 @@ impl<T: ElementArithmeticOps + 'static> ArithmeticOps<T> for Atomic2Array<T> {
     ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>> {
         // let pe = self.pe_for_dist_index(index).expect("index out of bounds");
         // let local_index = self.pe_offset_for_dist_index(pe, index).unwrap(); //calculated pe above
-        Some(self.initiate_op(0, val, index, ArrayOpCmd::Add))
+        Some(self.initiate_op(val, index, ArrayOpCmd::Add))
     }
     fn fetch_add(
         &self,
@@ -124,7 +123,7 @@ impl<T: ElementArithmeticOps + 'static> ArithmeticOps<T> for Atomic2Array<T> {
     ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>> {
         let pe = self.pe_for_dist_index(index).expect("index out of bounds");
         let local_index = self.pe_offset_for_dist_index(pe, index).unwrap(); //calculated pe above
-        Some(self.initiate_op(pe, val, local_index, ArrayOpCmd::Sub))
+        Some(self.initiate_op(val, local_index, ArrayOpCmd::Sub))
     }
     fn fetch_sub(
         &self,
@@ -142,7 +141,7 @@ impl<T: ElementArithmeticOps + 'static> ArithmeticOps<T> for Atomic2Array<T> {
     ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>> {
         let pe = self.pe_for_dist_index(index).expect("index out of bounds");
         let local_index = self.pe_offset_for_dist_index(pe, index).unwrap(); //calculated pe above
-        Some(self.initiate_op(pe, val, local_index, ArrayOpCmd::Mul))
+        Some(self.initiate_op(val, local_index, ArrayOpCmd::Mul))
     }
     fn fetch_mul(
         &self,
@@ -160,7 +159,7 @@ impl<T: ElementArithmeticOps + 'static> ArithmeticOps<T> for Atomic2Array<T> {
     ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>> {
         let pe = self.pe_for_dist_index(index).expect("index out of bounds");
         let local_index = self.pe_offset_for_dist_index(pe, index).unwrap(); //calculated pe above
-        Some(self.initiate_op(pe, val, local_index, ArrayOpCmd::Div))
+        Some(self.initiate_op(val, local_index, ArrayOpCmd::Div))
     }
     fn fetch_div(
         &self,
@@ -181,7 +180,7 @@ impl<T: ElementBitWiseOps + 'static> BitWiseOps<T> for Atomic2Array<T> {
     ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>> {
         let pe = self.pe_for_dist_index(index).expect("index out of bounds");
         let local_index = self.pe_offset_for_dist_index(pe, index).unwrap(); //calculated pe above
-        Some(self.initiate_op(pe, val, local_index, ArrayOpCmd::And))
+        Some(self.initiate_op(val, local_index, ArrayOpCmd::And))
     }
     fn fetch_bit_and(
         &self,
@@ -200,7 +199,7 @@ impl<T: ElementBitWiseOps + 'static> BitWiseOps<T> for Atomic2Array<T> {
     ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>> {
         let pe = self.pe_for_dist_index(index).expect("index out of bounds");
         let local_index = self.pe_offset_for_dist_index(pe, index).unwrap(); //calculated pe above
-        Some(self.initiate_op(pe, val, local_index, ArrayOpCmd::Or))
+        Some(self.initiate_op(val, local_index, ArrayOpCmd::Or))
     }
     fn fetch_bit_or(
         &self,
