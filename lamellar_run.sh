@@ -25,7 +25,8 @@ JOBID=$((1+ $RANDOM % 100 ))
 for pe in $(seq 0 $ENDPE)
 do
 outfile=${pe}_shmem_test.out
-LAMELLAE_BACKEND="shmem" LAMELLAR_THREADS=${THREADS:-$((NPROC/NUMPES))} LAMELLAR_NUM_PES=$NUMPES LAMELLAR_PE_ID=$pe LAMELLAR_JOB_ID=$JOBID $bin "${@:2}" & 
+# rm ${pe}_shmem_test.out
+LAMELLAE_BACKEND="shmem" LAMELLAR_THREADS=${THREADS:-$((NPROC/NUMPES))} LAMELLAR_NUM_PES=$NUMPES LAMELLAR_PE_ID=$pe LAMELLAR_JOB_ID=$JOBID $bin "${@:2}" & #&> >(tee -a ${outfile}) &  
 done
 
 wait

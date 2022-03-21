@@ -286,7 +286,7 @@ fn dft_lamellar_array_opt_2(
             spectrum
                 .dist_iter_mut()
                 .enumerate()
-                .for_each(move |(k, spec_bin)| {
+                .for_each(move |(k, mut spec_bin)| {
                     let mut sum = 0f64;
                     for (j, &x) in signal
                         .iter()
@@ -298,7 +298,7 @@ fn dft_lamellar_array_opt_2(
                         let twiddle = angle * (angle.cos() + angle * angle.sin());
                         sum = sum + twiddle * x;
                     }
-                    spec_bin.add(sum);
+                    spec_bin += sum;
                 });
         });
     spectrum.wait_all();

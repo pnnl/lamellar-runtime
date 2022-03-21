@@ -2,12 +2,17 @@ use lamellar::array::{DistributedIterator, Distribution, SerialIterator, UnsafeA
 
 const ARRAY_LEN: usize = 100;
 
+
+
+
+
 fn main() {
     let world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();
     let _num_pes = world.num_pes();
     let block_array = UnsafeArray::<usize>::new(world.team(), ARRAY_LEN, Distribution::Block);
     let cyclic_array = UnsafeArray::<usize>::new(world.team(), ARRAY_LEN, Distribution::Cyclic);
+
 
     // We expose multiple ways to iterate over a lamellar array
     // the first approach introduces what we call a distributed iterator (inspired by Rayon's parallel iterators).

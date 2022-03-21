@@ -11,7 +11,7 @@ pub use rdma::{AtomicArrayGet, AtomicArrayPut};
 // use crate::array::r#unsafe::UnsafeByteArray;
 use crate::array::*;
 use crate::array::native_atomic::NativeAtomicElement;
-use crate::array::atomic2::Atomic2Element;
+use crate::array::generic_atomic::GenericAtomicElement;
 // use crate::darc::{Darc, DarcMode};
 use crate::lamellar_team::{IntoLamellarTeam};
 use crate::memregion::Dist;
@@ -60,20 +60,20 @@ use std::ops::{AddAssign, BitAndAssign, BitOrAssign, DivAssign, MulAssign, SubAs
 
 pub enum AtomicElement<T: Dist>{
     NativeAtomicElement(NativeAtomicElement<T>),
-    Atomic2Element(Atomic2Element<T>),
+    GenericAtomicElement(GenericAtomicElement<T>),
 }
 
 impl <T: Dist> AtomicElement<T>{
     pub fn load(&self) -> T {
         match self{
             AtomicElement::NativeAtomicElement(array) => array.load(),
-            AtomicElement::Atomic2Element(array) => array.load(),
+            AtomicElement::GenericAtomicElement(array) => array.load(),
         }
     }
     pub fn store(&self, val: T) {
         match self{
             AtomicElement::NativeAtomicElement(array) => array.store(val),
-            AtomicElement::Atomic2Element(array) => array.store(val),
+            AtomicElement::GenericAtomicElement(array) => array.store(val),
         }
     }
 }
@@ -82,7 +82,7 @@ impl<T: Dist + ElementArithmeticOps> AddAssign<T> for AtomicElement<T> {
     fn add_assign(&mut self, val: T) {
         match self{
             AtomicElement::NativeAtomicElement(array) => array.add_assign(val),
-            AtomicElement::Atomic2Element(array) => array.add_assign(val),
+            AtomicElement::GenericAtomicElement(array) => array.add_assign(val),
         }
     }
 }
@@ -91,7 +91,7 @@ impl<T: Dist + ElementArithmeticOps> SubAssign<T> for AtomicElement<T> {
     fn sub_assign(&mut self, val: T) {
         match self{
             AtomicElement::NativeAtomicElement(array) => array.sub_assign(val),
-            AtomicElement::Atomic2Element(array) => array.sub_assign(val),
+            AtomicElement::GenericAtomicElement(array) => array.sub_assign(val),
         }
     }
 }
@@ -100,7 +100,7 @@ impl<T: Dist + ElementArithmeticOps> MulAssign<T> for AtomicElement<T> {
     fn mul_assign(&mut self, val: T) {
         match self{
             AtomicElement::NativeAtomicElement(array) => array.mul_assign(val),
-            AtomicElement::Atomic2Element(array) => array.mul_assign(val),
+            AtomicElement::GenericAtomicElement(array) => array.mul_assign(val),
         }
     }
 }
@@ -109,7 +109,7 @@ impl<T: Dist + ElementArithmeticOps> DivAssign<T> for AtomicElement<T> {
     fn div_assign(&mut self, val: T) {
         match self{
             AtomicElement::NativeAtomicElement(array) => array.div_assign(val),
-            AtomicElement::Atomic2Element(array) => array.div_assign(val),
+            AtomicElement::GenericAtomicElement(array) => array.div_assign(val),
         }
     }
 }
@@ -118,7 +118,7 @@ impl<T: Dist + ElementBitWiseOps> BitAndAssign<T> for AtomicElement<T> {
     fn bitand_assign(&mut self, val: T) {
         match self{
             AtomicElement::NativeAtomicElement(array) => array.bitand_assign(val),
-            AtomicElement::Atomic2Element(array) => array.bitand_assign(val),
+            AtomicElement::GenericAtomicElement(array) => array.bitand_assign(val),
         }
     }
 }
@@ -127,7 +127,7 @@ impl<T: Dist + ElementBitWiseOps> BitOrAssign<T> for AtomicElement<T> {
     fn bitor_assign(&mut self, val: T) {
         match self{
             AtomicElement::NativeAtomicElement(array) => array.bitor_assign(val),
-            AtomicElement::Atomic2Element(array) => array.bitor_assign(val),
+            AtomicElement::GenericAtomicElement(array) => array.bitor_assign(val),
         }
     }
 }
@@ -138,20 +138,20 @@ impl<T: Dist + ElementBitWiseOps> BitOrAssign<T> for AtomicElement<T> {
 #[serde(bound = "T: Dist + serde::Serialize + serde::de::DeserializeOwned + 'static")]
 pub enum AtomicArray<T: Dist>{
     NativeAtomicArray(NativeAtomicArray<T>),
-    Atomic2Array(Atomic2Array<T>),
+    GenericAtomicArray(GenericAtomicArray<T>),
 }
 
 impl<T: Dist + 'static> crate::DarcSerde for AtomicArray<T> {
     fn ser(&self, num_pes: usize, cur_pe: Result<usize, crate::IdError>) {
         match self{
             AtomicArray::NativeAtomicArray(array) => array.ser(num_pes, cur_pe),
-            AtomicArray::Atomic2Array(array) => array.ser(num_pes, cur_pe),
+            AtomicArray::GenericAtomicArray(array) => array.ser(num_pes, cur_pe),
         }
     }
     fn des(&self, cur_pe: Result<usize, crate::IdError>) {
         match self{
             AtomicArray::NativeAtomicArray(array) => array.des(cur_pe),
-            AtomicArray::Atomic2Array(array) => array.des(cur_pe),
+            AtomicArray::GenericAtomicArray(array) => array.des(cur_pe),
         }
     }
 }
@@ -161,21 +161,21 @@ impl<T: Dist + 'static> crate::DarcSerde for AtomicArray<T> {
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 pub enum AtomicByteArray{
     NativeAtomicByteArray(NativeAtomicByteArray),
-    Atomic2ByteArray(Atomic2ByteArray),
+    GenericAtomicByteArray(GenericAtomicByteArray),
 }
 
 impl crate::DarcSerde for AtomicByteArray {
     fn ser(&self, num_pes: usize, cur_pe: Result<usize, crate::IdError>) {
         match self{
             AtomicByteArray::NativeAtomicByteArray(array) => array.ser(num_pes, cur_pe),
-            AtomicByteArray::Atomic2ByteArray(array) => array.ser(num_pes, cur_pe),
+            AtomicByteArray::GenericAtomicByteArray(array) => array.ser(num_pes, cur_pe),
         }
     }
 
     fn des(&self, cur_pe: Result<usize, crate::IdError>) {
         match self{
             AtomicByteArray::NativeAtomicByteArray(array) => array.des(cur_pe),
-            AtomicByteArray::Atomic2ByteArray(array) => array.des(cur_pe),
+            AtomicByteArray::GenericAtomicByteArray(array) => array.des(cur_pe),
         }
     }
 }
@@ -245,11 +245,12 @@ impl<T: Dist + std::default::Default + 'static> AtomicArray<T> {
         array_size: usize,
         distribution: Distribution,
     ) -> AtomicArray<T> {
+        // println!("new atomic array");
         if NATIVE_ATOMICS.contains(&TypeId::of::<T>()){
             NativeAtomicArray::new_internal(team,array_size,distribution).into()
         }
         else{
-            Atomic2Array::new(team,array_size,distribution).into()
+            GenericAtomicArray::new(team,array_size,distribution).into()
         }
         
     }
@@ -259,7 +260,7 @@ impl<T: Dist + 'static> AtomicArray<T> {
     pub(crate) fn get_element(&self, index: usize) -> AtomicElement<T>{
         match self{
             AtomicArray::NativeAtomicArray(array) => array.get_element(index).into() ,
-            AtomicArray::Atomic2Array(array) => array.get_element(index).into() ,
+            AtomicArray::GenericAtomicArray(array) => array.get_element(index).into() ,
         }
     }
 }
@@ -268,33 +269,33 @@ impl<T: Dist> AtomicArray<T> {
     pub fn wait_all(&self) {
         match self{
             AtomicArray::NativeAtomicArray(array) => array.wait_all() ,
-            AtomicArray::Atomic2Array(array) => array.wait_all() ,
+            AtomicArray::GenericAtomicArray(array) => array.wait_all() ,
         }
     }
     pub fn barrier(&self) {
         match self{
             AtomicArray::NativeAtomicArray(array) => array.barrier() ,
-            AtomicArray::Atomic2Array(array) => array.barrier() ,
+            AtomicArray::GenericAtomicArray(array) => array.barrier() ,
         }
     }
     pub(crate) fn num_elems_local(&self) -> usize {
         match self{
             AtomicArray::NativeAtomicArray(array) => array.num_elems_local() ,
-            AtomicArray::Atomic2Array(array) => array.num_elems_local() ,
+            AtomicArray::GenericAtomicArray(array) => array.num_elems_local() ,
         }
     }
 
     pub fn use_distribution(self, distribution: Distribution) -> Self {
         match self{
             AtomicArray::NativeAtomicArray(array) => array.use_distribution(distribution).into() ,
-            AtomicArray::Atomic2Array(array) => array.use_distribution(distribution).into() ,
+            AtomicArray::GenericAtomicArray(array) => array.use_distribution(distribution).into() ,
         }
     }
 
     pub fn num_pes(&self) -> usize {
         match self{
             AtomicArray::NativeAtomicArray(array) => array.num_pes() ,
-            AtomicArray::Atomic2Array(array) => array.num_pes() ,
+            AtomicArray::GenericAtomicArray(array) => array.num_pes() ,
         }
     }
 
@@ -302,7 +303,7 @@ impl<T: Dist> AtomicArray<T> {
     pub fn pe_for_dist_index(&self, index: usize) -> Option<usize> {
         match self{
             AtomicArray::NativeAtomicArray(array) => array.pe_for_dist_index(index) ,
-            AtomicArray::Atomic2Array(array) => array.pe_for_dist_index(index) ,
+            AtomicArray::GenericAtomicArray(array) => array.pe_for_dist_index(index) ,
         }
     }
 
@@ -310,14 +311,14 @@ impl<T: Dist> AtomicArray<T> {
     pub fn pe_offset_for_dist_index(&self, pe: usize, index: usize) -> Option<usize> {
         match self{
             AtomicArray::NativeAtomicArray(array) => array.pe_offset_for_dist_index(pe,index) ,
-            AtomicArray::Atomic2Array(array) => array.pe_offset_for_dist_index(pe,index) ,
+            AtomicArray::GenericAtomicArray(array) => array.pe_offset_for_dist_index(pe,index) ,
         }
     }
 
     pub fn len(&self) -> usize {
         match self{
             AtomicArray::NativeAtomicArray(array) => array.len() ,
-            AtomicArray::Atomic2Array(array) => array.len() ,
+            AtomicArray::GenericAtomicArray(array) => array.len() ,
         }
     }
 
@@ -337,50 +338,50 @@ impl<T: Dist> AtomicArray<T> {
     pub unsafe fn __local_as_slice(&self) -> &[T] {
         match self{
             AtomicArray::NativeAtomicArray(array) => array.__local_as_slice() ,
-            AtomicArray::Atomic2Array(array) => array.__local_as_slice() ,
+            AtomicArray::GenericAtomicArray(array) => array.__local_as_slice() ,
         }
     }
     #[doc(hidden)]
     pub unsafe fn __local_as_mut_slice(&self) -> &mut [T] {
         match self{
             AtomicArray::NativeAtomicArray(array) => array.__local_as_mut_slice() ,
-            AtomicArray::Atomic2Array(array) => array.__local_as_mut_slice() ,
+            AtomicArray::GenericAtomicArray(array) => array.__local_as_mut_slice() ,
         }
     }
     pub fn sub_array<R: std::ops::RangeBounds<usize>>(&self, range: R) -> AtomicArray<T> {
         match self{
             AtomicArray::NativeAtomicArray(array) => array.sub_array(range).into() ,
-            AtomicArray::Atomic2Array(array) => array.sub_array(range).into() ,
+            AtomicArray::GenericAtomicArray(array) => array.sub_array(range).into() ,
         }
     }
     pub fn into_unsafe(self) -> UnsafeArray<T> {
         match self{
             AtomicArray::NativeAtomicArray(array) => array.into() ,
-            AtomicArray::Atomic2Array(array) => array.into() ,
+            AtomicArray::GenericAtomicArray(array) => array.into() ,
         }
     }
     pub fn into_local_only(self) -> LocalOnlyArray<T> {
         match self{
             AtomicArray::NativeAtomicArray(array) => array.array.into() ,
-            AtomicArray::Atomic2Array(array) => array.array.into() ,
+            AtomicArray::GenericAtomicArray(array) => array.array.into() ,
         }
     }
     pub fn into_read_only(self) -> ReadOnlyArray<T> {
         match self{
             AtomicArray::NativeAtomicArray(array) => array.array.into() ,
-            AtomicArray::Atomic2Array(array) => array.array.into() ,
+            AtomicArray::GenericAtomicArray(array) => array.array.into() ,
         }
     }
     pub fn into_local_lock_atomic(self) -> LocalLockAtomicArray<T> {
         match self{
             AtomicArray::NativeAtomicArray(array) => array.array.into() ,
-            AtomicArray::Atomic2Array(array) => array.array.into() ,
+            AtomicArray::GenericAtomicArray(array) => array.array.into() ,
         }
     }
-    pub fn into_atomic2(self) -> Atomic2Array<T> {
+    pub fn into_generic_atomic(self) -> GenericAtomicArray<T> {
         match self{
             AtomicArray::NativeAtomicArray(array) => array.array.into() ,
-            AtomicArray::Atomic2Array(array) => array,
+            AtomicArray::GenericAtomicArray(array) => array,
         }
     }
 }
@@ -391,7 +392,7 @@ impl<T: Dist + 'static> From<UnsafeArray<T>> for AtomicArray<T> {
             NativeAtomicArray::from(array).into()
         }
         else{
-            Atomic2Array::from(array).into()
+            GenericAtomicArray::from(array).into()
         }
     }
 }
@@ -400,7 +401,7 @@ impl<T: Dist> From<AtomicArray<T>> for AtomicByteArray {
     fn from(array: AtomicArray<T>) -> Self {
         match array{
             AtomicArray::NativeAtomicArray(array) => array.into() ,
-            AtomicArray::Atomic2Array(array) => array.into() ,
+            AtomicArray::GenericAtomicArray(array) => array.into() ,
         }
     }
 }
@@ -409,7 +410,7 @@ impl<T: Dist> From<AtomicByteArray> for AtomicArray<T> {
     fn from(array: AtomicByteArray) -> Self {
         match array{
             AtomicByteArray::NativeAtomicByteArray(array) => array.into(),
-            AtomicByteArray::Atomic2ByteArray(array) => array.into(),
+            AtomicByteArray::GenericAtomicByteArray(array) => array.into(),
         }
     }
 }
@@ -418,25 +419,25 @@ impl<T: Dist + serde::Serialize + serde::de::DeserializeOwned + 'static> AtomicA
     pub fn reduce(&self, op: &str) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
         match self{
             AtomicArray::NativeAtomicArray(array) => array.reduce(op),
-            AtomicArray::Atomic2Array(array) => array.reduce(op),
+            AtomicArray::GenericAtomicArray(array) => array.reduce(op),
         }
     }
     pub fn sum(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
         match self{
             AtomicArray::NativeAtomicArray(array) => array.reduce("sum"),
-            AtomicArray::Atomic2Array(array) => array.reduce("sum"),
+            AtomicArray::GenericAtomicArray(array) => array.reduce("sum"),
         }
     }
     pub fn prod(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
         match self{
             AtomicArray::NativeAtomicArray(array) => array.reduce("prod"),
-            AtomicArray::Atomic2Array(array) => array.reduce("prod"),
+            AtomicArray::GenericAtomicArray(array) => array.reduce("prod"),
         }
     }
     pub fn max(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
         match self{
             AtomicArray::NativeAtomicArray(array) => array.reduce("max") ,
-            AtomicArray::Atomic2Array(array) => array.reduce("max") ,
+            AtomicArray::GenericAtomicArray(array) => array.reduce("max") ,
         }
     }
 }
@@ -508,16 +509,22 @@ impl<T: Dist> LamellarRead for AtomicArray<T> {}
 //     }
 // }
 
-// impl<T: Dist + std::fmt::Debug> AtomicArray<T> {
-//     pub fn print(&self) {
-//         self.array.print();
-//     }
-// }
+impl<T: Dist + std::fmt::Debug> AtomicArray<T> {
+    pub fn print(&self) {
+        match self{
+            AtomicArray::NativeAtomicArray(array) => array.print() ,
+            AtomicArray::GenericAtomicArray(array) =>  array.print() ,
+        }
+    }
+}
 
-// impl<T: Dist + std::fmt::Debug> ArrayPrint<T> for AtomicArray<T> {
-//     fn print(&self) {
-//         self.array.print()
-//     }
-// }
+impl<T: Dist + std::fmt::Debug> ArrayPrint<T> for AtomicArray<T> {
+    fn print(&self) {
+        match self{
+            AtomicArray::NativeAtomicArray(array) =>  array.print() ,
+            AtomicArray::GenericAtomicArray(array) =>  array.print() ,
+        }
+    }
+}
 
 

@@ -33,8 +33,8 @@ pub(crate) enum DarcMode {
     UnsafeArray,
     ReadOnlyArray,
     LocalOnlyArray,
-    AtomicArray,
-    Atomic2Array,
+    // AtomicArray,
+    GenericAtomicArray,
     NativeAtomicArray,
     LocalLockAtomicArray,
 }

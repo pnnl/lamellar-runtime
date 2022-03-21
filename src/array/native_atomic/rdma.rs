@@ -97,7 +97,7 @@ impl<T: Dist +  'static> LamellarAm for InitGetAm<T> {
         // let buf = self.buf.into();
         // let u8_index = self.index * std::mem::size_of::<T>();
         // let u8_len = self.buf.len() * std::mem::size_of::<T>();
-        // println!("in InitGetAm {:?} {:?}",u8_index,u8_index + u8_len);
+        // println!("in native InitGetAm ");//{:?} {:?}",u8_index,u8_index + u8_len);
         let mut reqs = vec![];
         for pe in self
             .array
@@ -106,7 +106,7 @@ impl<T: Dist +  'static> LamellarAm for InitGetAm<T> {
             .into_iter()
         {
             // println!("pe {:?}",pe);
-            let remote_am = RemoteGetAm {
+            let remote_am = NativeAtomicRemoteGetAm {
                 array: self.array.clone().into(),
                 start_index: self.index,
                 len: self.buf.len(),
@@ -148,18 +148,18 @@ impl<T: Dist +  'static> LamellarAm for InitGetAm<T> {
 }
 
 #[lamellar_impl::AmDataRT]
-struct RemoteGetAm {
+struct NativeAtomicRemoteGetAm {
     array: NativeAtomicByteArray, //inner of the indices we need to place data into
     start_index: usize,
     len: usize,
 }
 
 #[lamellar_impl::rt_am]
-impl LamellarAm for RemoteGetAm {
+impl LamellarAm for NativeAtomicRemoteGetAm {
     //we cant directly do a put from the array in to the data buf
     //because we need to guarantee the put operation is atomic (maybe iput would work?)
     fn exec(self) -> Vec<u8> {
-        // println!("in remotegetam {:?} {:?}",self.start_index,self.len);
+        // println!("in nativeAtomic remotegetam {:?} {:?}",self.start_index,self.len);
         unsafe {
             match self
                 .array
@@ -213,7 +213,7 @@ impl<T: Dist + 'static> LamellarAm for InitPutAm<T> {
                         ) {
                             let u8_buf_len = len * std::mem::size_of::<T>();
                             // println!("pe {:?} index: {:?} len {:?} buflen {:?} putting {:?}",pe,self.index,len, self.buf.len(),&u8_buf.as_slice().unwrap()[cur_index..(cur_index+u8_buf_len)]);
-                            let remote_am = RemotePutAm {
+                            let remote_am = NativeAtomicRemotePutAm {
                                 array: self.array.clone().into(), //inner of the indices we need to place data into
                                 start_index: self.index,
                                 len: self.buf.len(),
@@ -262,7 +262,7 @@ impl<T: Dist + 'static> LamellarAm for InitPutAm<T> {
                     }
                     for (pe, vec) in pe_u8_vecs.drain() {
                         // println!("pe {:?} vec {:?}",pe,vec);
-                        let remote_am = RemotePutAm {
+                        let remote_am = NativeAtomicRemotePutAm {
                             array: self.array.clone().into(), //inner of the indices we need to place data into
                             start_index: self.index,
                             len: self.buf.len(),
@@ -281,7 +281,7 @@ impl<T: Dist + 'static> LamellarAm for InitPutAm<T> {
 }
 
 #[lamellar_impl::AmDataRT]
-struct RemotePutAm {
+struct NativeAtomicRemotePutAm {
     array: NativeAtomicByteArray, //inner of the indices we need to place data into
     start_index: usize,
     len: usize,
@@ -289,7 +289,7 @@ struct RemotePutAm {
 }
 
 #[lamellar_impl::rt_am]
-impl LamellarAm for RemotePutAm {
+impl LamellarAm for NativeAtomicRemotePutAm {
     fn exec(self) {
         // println!("in remote put {:?} {:?} {:?}",self.start_index,self.len,self.data);
         // let _lock = self.array.lock.write();

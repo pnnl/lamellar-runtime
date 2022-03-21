@@ -1,4 +1,4 @@
-use lamellar::array::{AtomicArray,Atomic2Array, LocalLockAtomicArray};
+use lamellar::array::{AtomicArray, LocalLockAtomicArray};
 
 macro_rules! initialize_array {
     (UnsafeArray,$array:ident,$init_val:ident) => {
@@ -7,11 +7,6 @@ macro_rules! initialize_array {
         $array.barrier();
     };
     (AtomicArray,$array:ident,$init_val:ident) => {
-        $array.dist_iter().for_each(move |x| x.store($init_val));
-        $array.wait_all();
-        $array.barrier();
-    };
-    (Atomic2Array,$array:ident,$init_val:ident) => {
         $array.dist_iter().for_each(move |x| x.store($init_val));
         $array.wait_all();
         $array.barrier();
@@ -30,11 +25,6 @@ macro_rules! check_val{
        }
     };
     (AtomicArray,$val:ident,$max_val:ident,$valid:ident) => {
-        if (($val - $max_val)as f32).abs() > 0.0001{//all updates should be preserved
-            $valid = false;
-        }
-    };
-    (Atomic2Array,$val:ident,$max_val:ident,$valid:ident) => {
         if (($val - $max_val)as f32).abs() > 0.0001{//all updates should be preserved
             $valid = false;
         }
@@ -73,6 +63,7 @@ macro_rules! and_test{
                 for idx in 0..array.len(){
                     let val = array.load(idx).get().unwrap();
                     let check_val = (idx%num_pes) as $t;
+                    let val = val;
                     check_val!($array,val,check_val,success);
                     if !success{
                         println!("{:?} {:?} {:?}",idx,val,check_val);
@@ -87,8 +78,9 @@ macro_rules! and_test{
                     reqs.push((array.load(idx),idx));
                 }
                 for (req,idx) in reqs{
-                    let val = req.get().unwrap();
+                    let val = req.get().unwrap()[0];
                     let check_val = (idx%num_pes) as $t;
+                    let val = val;
                     check_val!($array,val,check_val,success);
                     if !success{
                         println!("{:?} {:?} {:?}",idx,val,check_val);
@@ -119,6 +111,7 @@ macro_rules! and_test{
                 for idx in 0..sub_array.len(){
                     let val = sub_array.load(idx).get().unwrap();
                     let check_val = (idx%num_pes) as $t;
+                    let val = val;
                     check_val!($array,val,check_val,success);
                     if !success{
                         println!("{:?} {:?} {:?}",idx,val,check_val);
@@ -132,8 +125,9 @@ macro_rules! and_test{
                     reqs.push((sub_array.load(idx),idx));
                 }
                 for (req,idx) in reqs{
-                    let val = req.get().unwrap();
+                    let val = req.get().unwrap()[0];
                     let check_val = (idx%num_pes) as $t;
+                    let val = val;
                     check_val!($array,val,check_val,success);
                     if !success{
                         println!("{:?} {:?} {:?}",idx,val,check_val);
@@ -166,7 +160,8 @@ macro_rules! and_test{
                     for idx in 0..sub_array.len(){
                         let val = sub_array.load(idx).get().unwrap();
                         let check_val = (idx%num_pes) as $t;
-                        check_val!($array,val,check_val,success);
+                        let val = val;
+                    check_val!($array,val,check_val,success);
                         if !success{
                             println!("{:?} {:?} {:?}",idx,val,check_val);
                         }
@@ -180,9 +175,10 @@ macro_rules! and_test{
                         reqs.push((sub_array.load(idx),idx));
                     }
                     for (req,idx) in reqs{
-                        let val = req.get().unwrap();
+                        let val = req.get().unwrap()[0];
                         let check_val = (idx%num_pes) as $t;
-                        check_val!($array,val,check_val,success);
+                        let val = val;
+                    check_val!($array,val,check_val,success);
                         if !success{
                             println!("{:?} {:?} {:?}",idx,val,check_val);
                         }
@@ -230,23 +226,6 @@ fn main() {
             "isize" => and_test!(AtomicArray, isize, len, dist_type),
             "f32" => and_test!(AtomicArray, f32, len, dist_type),
             "f64" => and_test!(AtomicArray, f64, len, dist_type),
-            _ => eprintln!("unsupported element type"),
-        },
-        "Atomic2Array" => match elem.as_str() {
-            "u8" => and_test!(Atomic2Array, u8, len, dist_type),
-            "u16" => and_test!(Atomic2Array, u16, len, dist_type),
-            "u32" => and_test!(Atomic2Array, u32, len, dist_type),
-            "u64" => and_test!(Atomic2Array, u64, len, dist_type),
-            "u128" => and_test!(Atomic2Array, u128, len, dist_type),
-            "usize" => and_test!(Atomic2Array, usize, len, dist_type),
-            "i8" => and_test!(Atomic2Array, i8, len, dist_type),
-            "i16" => and_test!(Atomic2Array, i16, len, dist_type),
-            "i32" => and_test!(Atomic2Array, i32, len, dist_type),
-            "i64" => and_test!(Atomic2Array, i64, len, dist_type),
-            "i128" => and_test!(Atomic2Array, i128, len, dist_type),
-            "isize" => and_test!(Atomic2Array, isize, len, dist_type),
-            "f32" => and_test!(Atomic2Array, f32, len, dist_type),
-            "f64" => and_test!(Atomic2Array, f64, len, dist_type),
             _ => eprintln!("unsupported element type"),
         },
         "LocalLockAtomicArray" => match elem.as_str() {

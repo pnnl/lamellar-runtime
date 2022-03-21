@@ -1,9 +1,9 @@
 use lamellar::array::{
-    ArithmeticOps, AtomicArray, Atomic2Array, LocalLockAtomicArray, SerialIterator, UnsafeArray,
+    ArithmeticOps, AtomicArray, LocalLockAtomicArray, SerialIterator, UnsafeArray,
 };
 
-use rand::distributions::Distribution;
 use rand::distributions::Uniform;
+use rand::seq::SliceRandom;
 
 macro_rules! initialize_array {
     (UnsafeArray,$array:ident,$init_val:ident) => {
@@ -15,11 +15,7 @@ macro_rules! initialize_array {
         $array.dist_iter().for_each(move |x| x.store($init_val));
         $array.wait_all();
         $array.barrier();
-    };
-    (Atomic2Array,$array:ident,$init_val:ident) => {
-        $array.dist_iter().for_each(move |x| x.store($init_val));
-        $array.wait_all();
-        $array.barrier();
+        // println!("----------------------------------------------");
     };
     (LocalLockAtomicArray,$array:ident,$init_val:ident) => {
         $array.dist_iter_mut().for_each(move |x| *x = $init_val);
@@ -35,47 +31,54 @@ macro_rules! check_val{
        }
     };
     (AtomicArray,$val:ident,$max_val:ident,$valid:ident) => {
-        if (($val - $max_val)as f32).abs() > 0.0001{//all updates should be preserved
-            $valid = false;
-        }
-    };
-    (Atomic2Array,$val:ident,$max_val:ident,$valid:ident) => {
-        if (($val - $max_val)as f32).abs() > 0.0001{//all updates should be preserved
+        if (($val - $max_val)as f64).abs() > 0.0001{//all updates should be preserved
             $valid = false;
         }
     };
     (LocalLockAtomicArray,$val:ident,$max_val:ident,$valid:ident) => {
-        if (($val - $max_val)as f32).abs()  > 0.0001{//all updates should be preserved
+        if (($val - $max_val)as f64).abs()  > 0.0001{//all updates should be preserved
             $valid = false;
         }
     };
 }
 
-macro_rules! max_updates {
-    ($t:ty,$num_pes:ident) => {
-        if <$t>::MAX as u128 > (10000 * $num_pes) as u128 {
-            10000
-        } else {
-            <$t>::MAX as usize / $num_pes
-        }
-    };
-}
+// #[allow(dead_code)]
+// macro_rules! max_updates {
+//     ($t:ty,$num_pes:ident) => {
+//         if <$t>::MAX as u128 > (10 * $num_pes) as u128 {
+//             10
+//         } else {
+//             <$t>::MAX as usize / $num_pes
+//         }
+//     };
+// }
 
 macro_rules! add_test{
     ($array:ident, $t:ty, $len:expr, $dist:ident) =>{
        {
             let world = lamellar::LamellarWorldBuilder::new().build();
             let num_pes = world.num_pes();
-            let _my_pe = world.my_pe();
+            let my_pe = world.my_pe();
             let array_total_len = $len;
 
             let mut rng = rand::thread_rng();
-            let rand_idx = Uniform::from(0..array_total_len);
+            let _rand_idx = Uniform::from(0..array_total_len);
             let mut success = true;
             let array: $array::<$t> = $array::<$t>::new(world.team(), array_total_len, $dist).into(); //convert into abstract LamellarArray, distributed len is total_len
 
-            let pe_max_val: $t = 10 as $t;
-            let max_val = pe_max_val * num_pes as $t;
+            let pe_max_val: $t = if std::any::TypeId::of::<$t>() == std::any::TypeId::of::<f32>(){
+                9 as $t
+            }
+            else{
+                50 as $t
+            };
+             
+            // let max_val = pe_max_val * num_pes as $t;
+            let mut max_val = 0 as $t;
+            for pe in 0..num_pes{
+                max_val += (10_usize.pow((pe*2)as u32) as $t * pe_max_val);
+                // println!("max_val {:?} {:?}",pe,max_val);   
+            }
             let init_val = 0 as $t;
             initialize_array!($array, array, init_val);
             array.wait_all();
@@ -83,7 +86,7 @@ macro_rules! add_test{
 
             for idx in 0..array.len(){
                 for _i in 0..(pe_max_val as usize){
-                    array.add(idx,1 as $t);
+                    array.add(idx,(10_usize.pow((my_pe*2)as u32)) as $t);
                 }
             }
             array.wait_all();
@@ -92,26 +95,45 @@ macro_rules! add_test{
                 let val = *elem;
                 check_val!($array,val,max_val,success);
                 if !success{
-                    println!("{:?} {:?} {:?}",i,val,max_val);
+                    println!("full_0 {:?} {:?} {:?}",i,val,max_val);
                 }
             }
+            if !success{
+                array.print()
+            }
+            array.wait_all();
             array.barrier();
             initialize_array!($array, array, init_val);
             array.wait_all();
             array.barrier();
-            let num_updates=max_updates!($t,num_pes);
-            for _i in 0..num_updates{
-                let idx = rand_idx.sample(&mut rng);
-                array.add(idx,1 as $t);
+            // let num_updates=max_updates!($t,num_pes);
+            let mut indices = (0..array_total_len).collect::<Vec<usize>>();
+            for _i in (0..(pe_max_val as usize -1)){
+                indices.extend( (0..array_total_len).collect::<Vec<usize>>());
+            }
+            indices.shuffle(&mut rng);
+            for idx in indices.iter() {//0..num_updates{
+                // let idx = rand_idx.sample(&mut rng);
+                array.add(idx,(10_usize.pow((my_pe*2)as u32)) as $t);
             }
             array.wait_all();
             array.barrier();
-            let sum = array.ser_iter().into_iter().fold(0,|acc,x| acc+ *x as usize);
-            let tot_updates = num_updates * num_pes;
-            check_val!($array,sum,tot_updates,success);
-            if !success{
-                println!("{:?} {:?}",sum,tot_updates);
+            for (i,elem) in array.ser_iter().into_iter().enumerate(){
+                let val = *elem;
+                check_val!($array,val,max_val,success);
+                if !success{
+                    println!("full_1 {:?} {:?} {:?}",i,val,max_val);
+                }
             }
+            if !success{
+                array.print()
+            }
+            // let sum = array.ser_iter().into_iter().fold(0,|acc,x| acc+ *x as usize);
+            // let tot_updates = indices.len()/10 * max_val as usize;
+            // check_val!($array,sum,tot_updates,success);
+            // if !success{
+            //     println!("full_1 {:?} {:?}",sum,tot_updates);
+            // }
             world.wait_all();
             world.barrier();
             initialize_array!($array, array, init_val);
@@ -121,12 +143,12 @@ macro_rules! add_test{
             let half_len = array_total_len/2;
             let start_i = half_len/2;
             let end_i = start_i + half_len;
-            let rand_idx = Uniform::from(0..half_len);
+            let _rand_idx = Uniform::from(0..half_len);
             let sub_array = array.sub_array(start_i..end_i);
             sub_array.barrier();
             for idx in 0..sub_array.len(){
                 for _i in 0..(pe_max_val as usize){
-                    sub_array.add(idx,1 as $t);
+                    sub_array.add(idx,(10_usize.pow((my_pe*2)as u32)) as $t);
                 }
             }
             sub_array.wait_all();
@@ -135,26 +157,42 @@ macro_rules! add_test{
                 let val = *elem;
                 check_val!($array,val,max_val,success);
                 if !success{
-                    println!("{:?} {:?} {:?}",i,val,max_val);
+                    println!("half_0 {:?} {:?} {:?}",i,val,max_val);
                 }
             }
+            array.wait_all();
             sub_array.barrier();
             initialize_array!($array, array, init_val);
             sub_array.wait_all();
             sub_array.barrier();
-            let num_updates=max_updates!($t,num_pes);
-            for _i in 0..num_updates{
-                let idx = rand_idx.sample(&mut rng);
-                sub_array.add(idx,1 as $t);
+            // let num_updates=max_updates!($t,num_pes);
+            let mut indices = (0..half_len).collect::<Vec<usize>>();
+            for _i in (0..(pe_max_val as usize-1)){
+                indices.extend( (0..half_len).collect::<Vec<usize>>());
+            }
+            indices.shuffle(&mut rng);
+            for idx in indices.iter(){ // in 0..num_updates{
+                // let idx = rand_idx.sample(&mut rng);
+                sub_array.add(idx,(10_usize.pow((my_pe*2)as u32)) as $t);
             }
             sub_array.wait_all();
             sub_array.barrier();
-            let sum = sub_array.ser_iter().into_iter().fold(0,|acc,x| acc+ *x as usize);
-            let tot_updates = num_updates * num_pes;
-            check_val!($array,sum,tot_updates,success);
-            if !success{
-                println!("{:?} {:?}",sum,tot_updates);
+            for (i,elem) in sub_array.ser_iter().into_iter().enumerate(){
+                let val = *elem;
+                check_val!($array,val,max_val,success);
+                if !success{
+                    println!("half_1 {:?} {:?} {:?}",i,val,max_val);
+                }
             }
+            if !success{
+                array.print()
+            }
+            // let sum = sub_array.ser_iter().into_iter().fold(0,|acc,x| acc+ *x as usize);
+            // let tot_updates = indices.len()/10 * max_val as usize;
+            // check_val!($array,sum,tot_updates,success);
+            // if !success{
+            //     println!("half_1 {:?} {:?}",sum,tot_updates);
+            // }
             sub_array.wait_all();
             sub_array.barrier();
             initialize_array!($array, array, init_val);
@@ -165,12 +203,12 @@ macro_rules! add_test{
                 let len = std::cmp::max(pe_len/2,1);
                 let start_i = (pe*pe_len)+ len/2;
                 let end_i = start_i+len;
-                let rand_idx = Uniform::from(0..len);
+                let _rand_idx = Uniform::from(0..len);
                 let sub_array = array.sub_array(start_i..end_i);
                 sub_array.barrier();
                 for idx in 0..sub_array.len(){
                     for _i in 0..(pe_max_val as usize){
-                        sub_array.add(idx,1 as $t);
+                        sub_array.add(idx,(10_usize.pow((my_pe*2)as u32)) as $t);
                     }
                 }
                 sub_array.wait_all();
@@ -179,26 +217,42 @@ macro_rules! add_test{
                     let val = *elem;
                     check_val!($array,val,max_val,success);
                     if !success{
-                        println!("{:?} {:?} {:?}",i,val,max_val);
+                        println!("small_0 {:?} {:?} {:?}",i,val,max_val);
                     }
                 }
+                array.wait_all();
                 sub_array.barrier();
                 initialize_array!($array, array, init_val);
                 sub_array.wait_all();
                 sub_array.barrier();
-                let num_updates=max_updates!($t,num_pes);
-                for _i in 0..num_updates{
-                    let idx = rand_idx.sample(&mut rng);
-                    sub_array.add(idx,1 as $t);
+                // let num_updates=max_updates!($t,num_pes);
+                let mut indices = (0..len).collect::<Vec<usize>>();
+                for _i in (0..(pe_max_val as usize-1)){
+                    indices.extend( (0..len).collect::<Vec<usize>>());
+                }
+                indices.shuffle(&mut rng);
+                for idx in indices.iter() {//0..num_updates{
+                    // let idx = rand_idx.sample(&mut rng);
+                    sub_array.add(idx,(10_usize.pow((my_pe*2)as u32)) as $t);
                 }
                 sub_array.wait_all();
                 sub_array.barrier();
-                let sum = sub_array.ser_iter().into_iter().fold(0,|acc,x| acc+ *x as usize);
-                let tot_updates = num_updates * num_pes;
-                check_val!($array,sum,tot_updates,success);
-                if !success{
-                    println!("{:?} {:?}",sum,tot_updates);
+                for (i,elem) in sub_array.ser_iter().into_iter().enumerate(){
+                    let val = *elem;
+                    check_val!($array,val,max_val,success);
+                    if !success{
+                        println!("small_1 {:?} {:?} {:?}",i,val,max_val);
+                    }
                 }
+                if !success{
+                    array.print()
+                }
+                // let sum = sub_array.ser_iter().into_iter().fold(0,|acc,x| acc+ *x as usize);
+                // let tot_updates = indices.len()/10 * max_val as usize;
+                // check_val!($array,sum,tot_updates,success);
+                // if !success{
+                //     println!("small_1 {:?} {:?}",sum,tot_updates);
+                // }
                 sub_array.wait_all();
                 sub_array.barrier();
                 initialize_array!($array, array, init_val);
@@ -257,23 +311,6 @@ fn main() {
             "isize" => add_test!(AtomicArray, isize, len, dist_type),
             "f32" => add_test!(AtomicArray, f32, len, dist_type),
             "f64" => add_test!(AtomicArray, f64, len, dist_type),
-            _ => eprintln!("unsupported element type"),
-        },
-        "Atomic2Array" => match elem.as_str() {
-            "u8" => add_test!(Atomic2Array, u8, len, dist_type),
-            "u16" => add_test!(Atomic2Array, u16, len, dist_type),
-            "u32" => add_test!(Atomic2Array, u32, len, dist_type),
-            "u64" => add_test!(Atomic2Array, u64, len, dist_type),
-            "u128" => add_test!(Atomic2Array, u128, len, dist_type),
-            "usize" => add_test!(Atomic2Array, usize, len, dist_type),
-            "i8" => add_test!(Atomic2Array, i8, len, dist_type),
-            "i16" => add_test!(Atomic2Array, i16, len, dist_type),
-            "i32" => add_test!(Atomic2Array, i32, len, dist_type),
-            "i64" => add_test!(Atomic2Array, i64, len, dist_type),
-            "i128" => add_test!(Atomic2Array, i128, len, dist_type),
-            "isize" => add_test!(Atomic2Array, isize, len, dist_type),
-            "f32" => add_test!(Atomic2Array, f32, len, dist_type),
-            "f64" => add_test!(Atomic2Array, f64, len, dist_type),
             _ => eprintln!("unsupported element type"),
         },
         "LocalLockAtomicArray" => match elem.as_str() {

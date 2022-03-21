@@ -47,54 +47,37 @@ crate::inventory::collect!(LocalLockAtomicArrayOpBuf);
 impl<T: AmDist + Dist + 'static> LocalLockAtomicArray<T> {
     fn initiate_op(
         &self,
-        _pe: usize,
         val: T,
         index: impl OpInput<usize>,
         op: ArrayOpCmd,
     ) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync> {
-        let mut pe_offsets: HashMap<usize,Vec<usize>> = HashMap::new();
-        let indices = index.as_op_input();
-        for i in indices{
-            let pe = self
-            .pe_for_dist_index(i)
-            .expect("index out of bounds");
-            let local_index = self.pe_offset_for_dist_index(pe, i).unwrap(); //calculated pe above
-            pe_offsets.entry(pe).or_insert(Vec::new()).push(local_index);
-        }
-        pe_offsets.iter().map(|(pe,vals)| self.array.initiate_op(*pe, val, &vals, op)).last().unwrap()
+        self.array.initiate_op(val,index,op)
     }
 
     fn initiate_fetch_op(
         &self,
-        pe: usize,
         val: T,
-        local_index: usize,
+        index: impl OpInput<usize>,
         op: ArrayOpCmd,
-    ) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
-        self.array.initiate_fetch_op(pe, val, local_index, op)
+    ) -> Box<dyn LamellarRequest<Output = Vec<T>> + Send + Sync> {
+        self.array.initiate_fetch_op(val,index,op)
     }
 
     pub fn store(
         &self,
-        index: usize,
+        index: impl OpInput<usize>,
         val: T,
-    ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>> {
-        let pe = self.pe_for_dist_index(index).expect("index out of bounds");
-        let local_index = self.pe_offset_for_dist_index(pe, index).unwrap(); //calculated pe above
-        Some(self.initiate_op(pe, val, local_index, ArrayOpCmd::Store))
+    ) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync> {
+        self.initiate_op( val, index, ArrayOpCmd::Store)
     }
 
-    pub fn load(&self, index: usize) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
-        let pe = self.pe_for_dist_index(index).expect("index out of bounds");
-        let local_index = self.pe_offset_for_dist_index(pe, index).unwrap(); //calculated pe above
+    pub fn load(&self, index: impl OpInput<usize>) -> Box<dyn LamellarRequest<Output = Vec<T>> + Send + Sync> {
         let dummy_val = self.array.dummy_val(); //we dont actually do anything with this except satisfy apis;
-        self.initiate_fetch_op(pe, dummy_val, local_index, ArrayOpCmd::Load)
+        self.initiate_fetch_op(dummy_val, index, ArrayOpCmd::Load)
     }
 
-    pub fn swap(&self, index: usize, val: T) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
-        let pe = self.pe_for_dist_index(index).expect("index out of bounds");
-        let local_index = self.pe_offset_for_dist_index(pe, index).unwrap(); //calculated pe above
-        self.initiate_fetch_op(pe, val, local_index, ArrayOpCmd::Swap)
+    pub fn swap(&self, index: impl OpInput<usize>, val: T) -> Box<dyn LamellarRequest<Output = Vec<T>> + Send + Sync> {
+        self.initiate_fetch_op(val, index, ArrayOpCmd::Swap)
     }
 }
 
@@ -103,119 +86,97 @@ impl<T: ElementArithmeticOps + 'static> ArithmeticOps<T> for LocalLockAtomicArra
         &self,
         index: impl OpInput<usize>,
         val: T,
-    ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>> {
+    ) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync> {
         // let pe = self.pe_for_dist_index(index).expect("index out of bounds");
         // let local_index = self.pe_offset_for_dist_index(pe, index).unwrap(); //calculated pe above
-        Some(self.initiate_op(0, val, index, ArrayOpCmd::Add))
+        self.initiate_op(val, index, ArrayOpCmd::Add)
     }
     fn fetch_add(
         &self,
-        index: usize,
+        index: impl OpInput<usize>,
         val: T,
-    ) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
-        let pe = self.pe_for_dist_index(index).expect("index out of bounds");
-        let local_index = self.pe_offset_for_dist_index(pe, index).unwrap(); //calculated pe above
-        self.initiate_fetch_op(pe, val, local_index, ArrayOpCmd::FetchAdd)
+    ) -> Box<dyn LamellarRequest<Output = Vec<T>> + Send + Sync> {
+        self.initiate_fetch_op(val, index, ArrayOpCmd::FetchAdd)
     }
     fn sub(
         &self,
-        index: usize,
+        index: impl OpInput<usize>,
         val: T,
-    ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>> {
-        let pe = self.pe_for_dist_index(index).expect("index out of bounds");
-        let local_index = self.pe_offset_for_dist_index(pe, index).unwrap(); //calculated pe above
-        Some(self.initiate_op(pe, val, local_index, ArrayOpCmd::Sub))
+    ) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync> {
+        self.initiate_op( val, index, ArrayOpCmd::Sub)
     }
     fn fetch_sub(
         &self,
-        index: usize,
+        index: impl OpInput<usize>,
         val: T,
-    ) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
-        let pe = self.pe_for_dist_index(index).expect("index out of bounds");
-        let local_index = self.pe_offset_for_dist_index(pe, index).unwrap(); //calculated pe above
-        self.initiate_fetch_op(pe, val, local_index, ArrayOpCmd::FetchSub)
+    ) -> Box<dyn LamellarRequest<Output = Vec<T>> + Send + Sync> {
+        self.initiate_fetch_op(val, index, ArrayOpCmd::FetchSub)
     }
     fn mul(
         &self,
-        index: usize,
+        index: impl OpInput<usize>,
         val: T,
-    ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>> {
-        let pe = self.pe_for_dist_index(index).expect("index out of bounds");
-        let local_index = self.pe_offset_for_dist_index(pe, index).unwrap(); //calculated pe above
-        Some(self.initiate_op(pe, val, local_index, ArrayOpCmd::Mul))
+    ) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync> {
+        self.initiate_op( val, index, ArrayOpCmd::Mul)
     }
     fn fetch_mul(
         &self,
-        index: usize,
+        index: impl OpInput<usize>,
         val: T,
-    ) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
-        let pe = self.pe_for_dist_index(index).expect("index out of bounds");
-        let local_index = self.pe_offset_for_dist_index(pe, index).unwrap(); //calculated pe above
-        self.initiate_fetch_op(pe, val, local_index, ArrayOpCmd::FetchMul)
+    ) -> Box<dyn LamellarRequest<Output = Vec<T>> + Send + Sync> {
+        self.initiate_fetch_op(val, index, ArrayOpCmd::FetchMul)
     }
     fn div(
         &self,
-        index: usize,
+        index: impl OpInput<usize>,
         val: T,
-    ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>> {
-        let pe = self.pe_for_dist_index(index).expect("index out of bounds");
-        let local_index = self.pe_offset_for_dist_index(pe, index).unwrap(); //calculated pe above
-        Some(self.initiate_op(pe, val, local_index, ArrayOpCmd::Div))
+    ) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync> {
+        self.initiate_op( val, index, ArrayOpCmd::Div)
     }
     fn fetch_div(
         &self,
-        index: usize,
+        index: impl OpInput<usize>,
         val: T,
-    ) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
-        let pe = self.pe_for_dist_index(index).expect("index out of bounds");
-        let local_index = self.pe_offset_for_dist_index(pe, index).unwrap(); //calculated pe above
-        self.initiate_fetch_op(pe, val, local_index, ArrayOpCmd::FetchDiv)
+    ) -> Box<dyn LamellarRequest<Output = Vec<T>> + Send + Sync> {
+        self.initiate_fetch_op(val, index, ArrayOpCmd::FetchDiv)
     }
 }
 
 impl<T: ElementBitWiseOps + 'static> BitWiseOps<T> for LocalLockAtomicArray<T> {
     fn bit_and(
         &self,
-        index: usize,
+        index: impl OpInput<usize>,
         val: T,
-    ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>> {
-        let pe = self.pe_for_dist_index(index).expect("index out of bounds");
-        let local_index = self.pe_offset_for_dist_index(pe, index).unwrap(); //calculated pe above
-        Some(self.initiate_op(pe, val, local_index, ArrayOpCmd::And))
+    ) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync> {
+        self.initiate_op( val, index, ArrayOpCmd::And)
     }
     fn fetch_bit_and(
         &self,
-        index: usize,
+        index: impl OpInput<usize>,
         val: T,
-    ) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
-        let pe = self.pe_for_dist_index(index).expect("index out of bounds");
-        let local_index = self.pe_offset_for_dist_index(pe, index).unwrap(); //calculated pe above
-        self.initiate_fetch_op(pe, val, local_index, ArrayOpCmd::FetchAnd)
+    ) -> Box<dyn LamellarRequest<Output = Vec<T>> + Send + Sync> {
+        self.initiate_fetch_op(val, index, ArrayOpCmd::FetchAnd)
     }
 
     fn bit_or(
         &self,
-        index: usize,
+        index: impl OpInput<usize>,
         val: T,
-    ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>> {
-        let pe = self.pe_for_dist_index(index).expect("index out of bounds");
-        let local_index = self.pe_offset_for_dist_index(pe, index).unwrap(); //calculated pe above
-        Some(self.initiate_op(pe, val, local_index, ArrayOpCmd::Or))
+    ) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync> {
+        self.initiate_op( val, index, ArrayOpCmd::Or)
     }
     fn fetch_bit_or(
         &self,
-        index: usize,
+        index: impl OpInput<usize>,
         val: T,
-    ) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
-        let pe = self.pe_for_dist_index(index).expect("index out of bounds");
-        let local_index = self.pe_offset_for_dist_index(pe, index).unwrap(); //calculated pe above
-        self.initiate_fetch_op(pe, val, local_index, ArrayOpCmd::FetchOr)
+    ) -> Box<dyn LamellarRequest<Output = Vec<T>> + Send + Sync> {
+        self.initiate_fetch_op(val, index, ArrayOpCmd::FetchOr)
     }
 }
 
 // // impl<T: Dist + std::ops::AddAssign> LocalLockAtomicArray<T> {
 // impl<T: ElementArithmeticOps> LocalArithmeticOps<T> for LocalLockAtomicArray<T> {
-//     fn local_fetch_add(&self, index: usize, val: T) -> T {
+//     fn local_fetch_add(&self, index: impl OpInput<usize>, val: T) -> T {
 //         // println!("local_add LocalArithmeticOps<T> for LocalLockAtomicArray<T> ");
 //         // let _lock = self.lock.write();
 //         let mut slice = self.local_as_mut_slice(); //this locks the array
@@ -223,21 +184,21 @@ impl<T: ElementBitWiseOps + 'static> BitWiseOps<T> for LocalLockAtomicArray<T> {
 //         slice[index] += val;
 //         orig
 //     }
-//     fn local_fetch_sub(&self, index: usize, val: T) -> T {
+//     fn local_fetch_sub(&self, index: impl OpInput<usize>, val: T) -> T {
 //         // println!("local_sub LocalArithmeticOps<T> for LocalLockAtomicArray<T> ");
 //         let mut slice = self.local_as_mut_slice(); //this locks the array
 //         let orig = slice[index];
 //         slice[index] -= val;
 //         orig
 //     }
-//     fn local_fetch_mul(&self, index: usize, val: T) -> T {
+//     fn local_fetch_mul(&self, index: impl OpInput<usize>, val: T) -> T {
 //         // println!("local_sub LocalArithmeticOps<T> for LocalLockAtomicArray<T> ");
 //         let mut slice = self.local_as_mut_slice(); //this locks the array
 //         let orig = slice[index];
 //         slice[index] *= val;
 //         orig
 //     }
-//     fn local_fetch_div(&self, index: usize, val: T) -> T {
+//     fn local_fetch_div(&self, index: impl OpInput<usize>, val: T) -> T {
 //         // println!("local_sub LocalArithmeticOps<T> for LocalLockAtomicArray<T> ");
 //         let mut slice = self.local_as_mut_slice(); //this locks the array
 //         let orig = slice[index];
@@ -247,7 +208,7 @@ impl<T: ElementBitWiseOps + 'static> BitWiseOps<T> for LocalLockAtomicArray<T> {
 //     }
 // }
 // impl<T: ElementBitWiseOps> LocalBitWiseOps<T> for LocalLockAtomicArray<T> {
-//     fn local_fetch_bit_and(&self, index: usize, val: T) -> T {
+//     fn local_fetch_bit_and(&self, index: impl OpInput<usize>, val: T) -> T {
 //         let mut slice = self.local_as_mut_slice(); //this locks the array
 //         // println!("local_sub LocalArithmeticOps<T> for LocalLockAtomicArray<T> ");
 //         let orig = slice[index];
@@ -255,7 +216,7 @@ impl<T: ElementBitWiseOps + 'static> BitWiseOps<T> for LocalLockAtomicArray<T> {
 //         // println!("and i: {:?} {:?} {:?} {:?}",index,orig,val,self.local_as_mut_slice()[index]);
 //         orig
 //     }
-//     fn local_fetch_bit_or(&self, index: usize, val: T) -> T {
+//     fn local_fetch_bit_or(&self, index: impl OpInput<usize>, val: T) -> T {
 //         let mut slice = self.local_as_mut_slice(); //this locks the array
 //         // println!("local_sub LocalArithmeticOps<T> for LocalLockAtomicArray<T> ");
 //         let orig = slice[index];
@@ -264,15 +225,15 @@ impl<T: ElementBitWiseOps + 'static> BitWiseOps<T> for LocalLockAtomicArray<T> {
 //     }
 // }
 // impl<T: ElementOps> LocalAtomicOps<T> for LocalLockAtomicArray<T> {
-//     fn local_load(&self, index: usize, _val: T) -> T {
+//     fn local_load(&self, index: impl OpInput<usize>, _val: T) -> T {
 //         self.local_as_mut_slice()[index]
 //     }
 
-//     fn local_store(&self, index: usize, val: T) {
+//     fn local_store(&self, index: impl OpInput<usize>, val: T) {
 //         self.local_as_mut_slice()[index] = val; //this locks the array
 //     }
 
-//     fn local_swap(&self, index: usize, val: T) -> T {
+//     fn local_swap(&self, index: impl OpInput<usize>, val: T) -> T {
 //         let mut slice = self.local_as_mut_slice(); //this locks the array
 //         let orig = slice[index];
 //         slice[index] = val;

@@ -120,7 +120,7 @@ impl<T: Dist> ReadOnlyArray<T> {
         self.array.into()
     }
 
-    pub fn into_atomic2(self) -> Atomic2Array<T> {
+    pub fn into_generic_atomic(self) -> GenericAtomicArray<T> {
         self.array.into()
     }
 }

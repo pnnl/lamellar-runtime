@@ -33,8 +33,14 @@ pub struct LocalLockAtomicByteArray {
 
 pub struct LocalLockAtomicMutLocalData<'a, T: Dist>{
     data: &'a mut [T],
-    index: usize,
+    _index: usize,
     _lock_guard: ArcRwLockWriteGuard<RawRwLock, Box<()>>,
+}
+
+impl<T: Dist> Drop for LocalLockAtomicMutLocalData<'_, T>{
+    fn drop(&mut self){
+        println!("dropping lla write lock");
+    }
 }
 
 
@@ -174,11 +180,13 @@ impl<T: Dist> LocalLockAtomicArray<T> {
 
     #[doc(hidden)]
     pub fn local_as_mut_slice(&self) -> LocalLockAtomicMutLocalData<'_, T> {
-        LocalLockAtomicMutLocalData {
+        let lock =LocalLockAtomicMutLocalData {
             data: unsafe { self.array.local_as_mut_slice() },
-            index: 0,
+            _index: 0,
             _lock_guard: self.lock.write(),
-        }
+        };
+        println!("have lla write lock");
+        lock
     }
 
     #[doc(hidden)]
@@ -210,7 +218,7 @@ impl<T: Dist> LocalLockAtomicArray<T> {
         self.array.into()
     }
     
-    pub fn into_atomic2(self) -> Atomic2Array<T> {
+    pub fn into_generic_atomic(self) -> GenericAtomicArray<T> {
         self.array.into()
     }
 

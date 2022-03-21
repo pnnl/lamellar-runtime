@@ -54,6 +54,7 @@ pub struct UnsafeByteArray {
 pub(crate) struct UnsafeArrayInner {
     pub(crate) data: Darc<UnsafeArrayData>,
     pub(crate) distribution: Distribution,
+    wait: Darc<AtomicUsize>,
     orig_elem_per_pe: f64,
     elem_size: usize, //for bytes array will be size of T, for T array will be 1
     offset: usize,    //relative to size of T
@@ -95,7 +96,7 @@ impl<T: Dist + 'static> UnsafeArray<T> {
             UnsafeArrayData {
                 mem_region: rmr,
                 array_counters: Arc::new(AMCounters::new()),
-                team: team,
+                team: team.clone(),
                 my_pe: my_pe,
                 num_pes: num_pes,
                 // op_buffers: Mutex::new(HashMap::new()),
@@ -105,10 +106,17 @@ impl<T: Dist + 'static> UnsafeArray<T> {
             crate::darc::DarcMode::Darc,
         )
         .expect("trying to create array on non team member");
+        let wait = Darc::try_new(
+            team.clone(),
+            AtomicUsize::new(0),
+            crate::darc::DarcMode::Darc,
+        )
+        .expect("trying to create array on non team member");
         let array = UnsafeArray {
             inner: UnsafeArrayInner {
                 data: data,
                 distribution: distribution.clone(),
+                wait: wait,
                 orig_elem_per_pe: elem_per_pe,
                 elem_size: std::mem::size_of::<T>(),
                 offset: 0,        //relative to size of T
@@ -245,7 +253,7 @@ impl<T: Dist + 'static> UnsafeArray<T> {
         self.into()
     }
 
-    pub fn into_atomic2(self) -> Atomic2Array<T> {
+    pub fn into_generic_atomic(self) -> GenericAtomicArray<T> {
         self.into()
     }
 
@@ -286,8 +294,8 @@ impl<T: Dist > From<NativeAtomicArray<T>> for UnsafeArray<T> {
     }
 }
 
-impl<T: Dist> From<Atomic2Array<T>> for UnsafeArray<T> {
-    fn from(array: Atomic2Array<T>) -> Self {
+impl<T: Dist> From<GenericAtomicArray<T>> for UnsafeArray<T> {
+    fn from(array: GenericAtomicArray<T>) -> Self {
         // let array = array.into_data();
         array.array.block_on_outstanding(DarcMode::UnsafeArray);
         array.array.inner.data.op_buffers.write().clear();
@@ -572,12 +580,15 @@ impl UnsafeArrayInner {
         }
     }
 
+    //index relative to subarray, return local offset relative to full array
     // pub fn pe_full_offset_for_dist_index(&self, pe: usize, index: usize) -> Option<usize> {
     //     let global_index = self.offset + index;
+    //     println!("{:?} {:?} {:?}",global_index, self.offset, index);
     //     match self.distribution {
     //         Distribution::Block => {
     //             let pe_start_index = (self.orig_elem_per_pe * pe as f64).round() as usize;
     //             let pe_end_index = (self.orig_elem_per_pe * (pe+1) as f64).round() as usize;
+    //             println!("{:?} {:?}",pe_start_index,pe_end_index);
     //             if pe_start_index <= global_index && global_index < pe_end_index{
     //                 Some(global_index - pe_start_index)
     //             }
@@ -596,6 +607,34 @@ impl UnsafeArrayInner {
     //         }
     //     }
     // }
+
+    pub fn pe_full_offset_for_local_index(&self, pe: usize, index: usize) -> Option<usize> {
+        // let global_index = self.offset + index;
+        let global_index = self.global_index_from_local(index)?;
+        // println!("{:?} {:?} {:?}",global_index, self.offset, index);
+        match self.distribution {
+            Distribution::Block => {
+                let pe_start_index = (self.orig_elem_per_pe * pe as f64).round() as usize;
+                let pe_end_index = (self.orig_elem_per_pe * (pe+1) as f64).round() as usize;
+                // println!("{:?} {:?}",pe_start_index,pe_end_index);
+                if pe_start_index <= global_index && global_index < pe_end_index{
+                    Some(global_index - pe_start_index)
+                }
+                else{
+                    None
+                }
+            }
+            Distribution::Cyclic => {
+                let num_pes = self.data.num_pes;
+                if global_index% num_pes == pe{
+                    Some(global_index/num_pes)
+                }
+                else{
+                    None
+                }
+            }
+        }
+    }
 
     //index is local with respect to subarray
     //returns index with respect to original full length array
@@ -629,9 +668,10 @@ impl UnsafeArrayInner {
             Distribution::Cyclic => {
                 let num_pes = self.data.num_pes;
                 let start_pe = self.pe_for_dist_index(0).unwrap();
-                let end_pe = self.pe_for_dist_index(self.size).unwrap();
+                let end_pe = self.pe_for_dist_index(self.size-1).unwrap();
 
                 let mut num_elems = self.size / num_pes;
+                // println!("{:?} {:?} {:?} {:?}",num_pes,start_pe,end_pe,num_elems);
 
                 if self.size % num_pes != 0 {
                     //we have leftover elements
@@ -647,12 +687,13 @@ impl UnsafeArrayInner {
                         }
                     }
                 }
+                // println!("{:?} {:?} {:?} {:?}",num_pes,start_pe,end_pe,num_elems);
 
                 if index < num_elems {
                     if start_pe <= my_pe {
-                        Some(self.size * index + self.offset + (my_pe - start_pe))
+                        Some(num_pes * index + self.offset + (my_pe - start_pe))
                     } else {
-                        Some(self.size * index + self.offset + (num_pes - start_pe) + my_pe)
+                        Some(num_pes * index + self.offset + (num_pes - start_pe) + my_pe)
                     }
                 } else {
                     None

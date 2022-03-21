@@ -32,9 +32,18 @@ lazy_static! {
         ams.sort();
         let mut cnt = AM_ID_START;
         let mut temp = HashMap::new();
+        let mut duplicates = vec![];
         for am in ams {
-            temp.insert(am.clone(), cnt);
-            cnt += 1;
+            if !temp.contains_key(&am){
+                temp.insert(am.clone(), cnt);
+                cnt += 1;
+            }
+            else{
+                duplicates.push(am);                
+            }
+        }
+        if duplicates.len() > 0 {
+            panic!("duplicate registered active message {:?}, AMs must have unique names",duplicates);
         }
         temp
     };

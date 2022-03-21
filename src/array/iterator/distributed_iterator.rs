@@ -14,7 +14,7 @@ use zip::*;
 
 use crate::memregion::Dist;
 // use crate::LamellarArray;
-use crate::array::{LamellarArray,NativeAtomicArray,AtomicArray,Atomic2Array}; //, LamellarArrayPut, LamellarArrayGet};
+use crate::array::{LamellarArray,NativeAtomicArray,AtomicArray,GenericAtomicArray}; //, LamellarArrayPut, LamellarArrayGet};
 use enum_dispatch::enum_dispatch;
 use futures::Future;
 use std::marker::PhantomData;
@@ -45,6 +45,7 @@ where
         // println!("done in for each");
     }
 }
+
 
 #[lamellar_impl::AmLocalDataRT(Clone)]
 pub(crate) struct ForEachAsync<I, F, Fut>

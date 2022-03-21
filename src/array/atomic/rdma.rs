@@ -54,7 +54,7 @@ impl<T: Dist> AtomicArray<T> {
     ) -> Box<dyn LamellarArrayRequest<Output = ()> + Send + Sync> {
         match self{
             AtomicArray::NativeAtomicArray(array) => array.get(index, buf),
-            AtomicArray::Atomic2Array(array) => array.get(index, buf),
+            AtomicArray::GenericAtomicArray(array) => array.get(index, buf),
         }
     }
     // pub fn iput<U: MyInto<LamellarArrayInput<T>> + LamellarRead>(&self, index: usize, buf: U) {
@@ -72,14 +72,14 @@ impl<T: Dist> AtomicArray<T> {
     ) -> Box<dyn LamellarArrayRequest<Output = ()> + Send + Sync> {
         match self{
             AtomicArray::NativeAtomicArray(array) => array.put(index, buf),
-            AtomicArray::Atomic2Array(array) => array.put(index, buf),
+            AtomicArray::GenericAtomicArray(array) => array.put(index, buf),
         }
     }
 
     pub fn at(&self, index: usize) -> Box<dyn LamellarArrayRequest<Output = T> + Send + Sync> {
         match self{
             AtomicArray::NativeAtomicArray(array) => array.at(index),
-            AtomicArray::Atomic2Array(array) => array.at(index),
+            AtomicArray::GenericAtomicArray(array) => array.at(index),
         }
     }
 }

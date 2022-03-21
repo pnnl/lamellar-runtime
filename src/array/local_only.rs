@@ -72,7 +72,7 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Lo
         self.array.into()
     }
 
-    pub fn into_atomic2(self) -> Atomic2Array<T> {
+    pub fn into_generic_atomic(self) -> GenericAtomicArray<T> {
         self.array.into()
     }
 

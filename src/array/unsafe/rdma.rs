@@ -253,13 +253,13 @@ impl<T: Dist> UnsafeArray<T> {
         self.inner.pes_for_range(index, len)
     }
 
-    pub(crate) unsafe fn local_elements_for_range(
-        &self,
-        index: usize,
-        len: usize,
-    ) -> Option<(&mut [u8], Box<dyn Iterator<Item = usize>>)> {
-        self.inner.local_elements_for_range(index, len)
-    }
+    // pub(crate) unsafe fn local_elements_for_range(
+    //     &self,
+    //     index: usize,
+    //     len: usize,
+    // ) -> Option<(&mut [u8], Box<dyn Iterator<Item = usize>>)> {
+    //     self.inner.local_elements_for_range(index, len)
+    // }
 
     pub(crate) fn num_elements_on_pe_for_range(
         &self,

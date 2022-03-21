@@ -87,7 +87,7 @@ macro_rules! create_put_tests {
 }
 
 create_put_tests!(
-    (LocalLockAtomicArray), // (UnsafeArray, AtomicArray, Atomic2Array, LocalLockAtomicArray),
+    (UnsafeArray, LocalLockAtomicArray, AtomicArray), // (UnsafeArray, AtomicArray, GenericAtomicArray, LocalLockAtomicArray),
     ("Block", "Cyclic"),
     (u8, u16, u32, u128, usize, i8, i16, i32, i128, isize, f32, f64),
     (2, 3, 4),

@@ -1,4 +1,4 @@
-use lamellar::array::{AtomicArray,Atomic2Array, BitWiseOps, LocalLockAtomicArray, SerialIterator, UnsafeArray};
+use lamellar::array::{AtomicArray, BitWiseOps, LocalLockAtomicArray, SerialIterator, UnsafeArray};
 
 macro_rules! initialize_array {
     (UnsafeArray,$array:ident,$init_val:ident) => {
@@ -7,11 +7,6 @@ macro_rules! initialize_array {
         $array.barrier();
     };
     (AtomicArray,$array:ident,$init_val:ident) => {
-        $array.dist_iter().for_each(move |x| x.store($init_val));
-        $array.wait_all();
-        $array.barrier();
-    };
-    (Atomic2Array,$array:ident,$init_val:ident) => {
         $array.dist_iter().for_each(move |x| x.store($init_val));
         $array.wait_all();
         $array.barrier();
@@ -30,11 +25,6 @@ macro_rules! check_val{
        }
     };
     (AtomicArray,$val:ident,$max_val:ident,$valid:ident) => {
-        if (($val - $max_val)as f32).abs() > 0.0001{//all updates should be preserved
-            $valid = false;
-        }
-    };
-    (Atomic2Array,$val:ident,$max_val:ident,$valid:ident) => {
         if (($val - $max_val)as f32).abs() > 0.0001{//all updates should be preserved
             $valid = false;
         }
@@ -81,7 +71,7 @@ macro_rules! or_test{
                     reqs.push((array.fetch_bit_or(idx,my_val),idx));
                 }
                 for (req,idx) in reqs{
-                    let val = req.get().unwrap();
+                    let val = req.get().unwrap()[0];
                     if (val & my_val) != 0 {
                         println!("{:?} {:x} {:x} ",idx,my_val,val);
                         success = false;
@@ -128,7 +118,7 @@ macro_rules! or_test{
                     reqs.push((sub_array.fetch_bit_or(idx,my_val),idx));
                 }
                 for (req,idx)  in reqs{
-                    let val = req.get().unwrap();
+                    let val = req.get().unwrap()[0];
                     if (val & my_val) != 0 {
                         println!("{:?} {:x} {:x} ",idx,my_val,val);
                         success = false;
@@ -176,7 +166,7 @@ macro_rules! or_test{
                         reqs.push((sub_array.fetch_bit_or(idx,my_val),idx));
                     }
                     for (req,idx)  in reqs{
-                        let val = req.get().unwrap();
+                        let val = req.get().unwrap()[0];
                         if (val & my_val) != 0 {
                             println!("{:?} {:x} {:x} ",idx,my_val,val);
                             success = false;
@@ -248,21 +238,6 @@ fn main() {
             "i64" => or_test!(AtomicArray, i64, len, dist_type),
             "i128" => or_test!(AtomicArray, i128, len, dist_type),
             "isize" => or_test!(AtomicArray, isize, len, dist_type),
-            _ => eprintln!("unsupported element type"),
-        },
-        "Atomic2Array" => match elem.as_str() {
-            "u8" => or_test!(Atomic2Array, u8, len, dist_type),
-            "u16" => or_test!(Atomic2Array, u16, len, dist_type),
-            "u32" => or_test!(Atomic2Array, u32, len, dist_type),
-            "u64" => or_test!(Atomic2Array, u64, len, dist_type),
-            "u128" => or_test!(Atomic2Array, u128, len, dist_type),
-            "usize" => or_test!(Atomic2Array, usize, len, dist_type),
-            "i8" => or_test!(Atomic2Array, i8, len, dist_type),
-            "i16" => or_test!(Atomic2Array, i16, len, dist_type),
-            "i32" => or_test!(Atomic2Array, i32, len, dist_type),
-            "i64" => or_test!(Atomic2Array, i64, len, dist_type),
-            "i128" => or_test!(Atomic2Array, i128, len, dist_type),
-            "isize" => or_test!(Atomic2Array, isize, len, dist_type),
             _ => eprintln!("unsupported element type"),
         },
         "LocalLockAtomicArray" => match elem.as_str() {

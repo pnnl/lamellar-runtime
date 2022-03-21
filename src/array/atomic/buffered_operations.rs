@@ -130,27 +130,26 @@ impl<T: AmDist + Dist + 'static> AtomicArray<T> {
     ) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync> {
         match self{
             AtomicArray::NativeAtomicArray(array) => array.initiate_op(val,index,op) ,
-            AtomicArray::Atomic2Array(array) => array.initiate_op(val,index,op) ,
+            AtomicArray::GenericAtomicArray(array) => array.initiate_op(val,index,op) ,
         }
     }
 
     fn initiate_fetch_op(
         &self,
         val: T,
-        local_index: usize,
+        index: impl OpInput<usize>,
         op: ArrayOpCmd,
-    ) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
-        let pe = 0;
+    ) -> Box<dyn LamellarRequest<Output = Vec<T>> + Send + Sync> {
         match self{
-            AtomicArray::NativeAtomicArray(array) => array.initiate_fetch_op(pe,val,local_index,op) ,
-            AtomicArray::Atomic2Array(array) => array.initiate_fetch_op(pe,val,local_index,op) ,
+            AtomicArray::NativeAtomicArray(array) => array.initiate_fetch_op(val,index,op) ,
+            AtomicArray::GenericAtomicArray(array) => array.initiate_fetch_op(val,index,op) ,
         }
     }
 
-    pub fn load(&self, index: usize) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+    pub fn load(&self, index: usize) -> Box<dyn LamellarRequest<Output = Vec<T>> + Send + Sync> {
         match self{
             AtomicArray::NativeAtomicArray(array) => array.load(index) ,
-            AtomicArray::Atomic2Array(array) => array.load(index) ,
+            AtomicArray::GenericAtomicArray(array) => array.load(index) ,
         }
     }
 
@@ -158,17 +157,17 @@ impl<T: AmDist + Dist + 'static> AtomicArray<T> {
         &self,
         index: usize,
         val: T,
-    ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>> {
+    ) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync> {
         match self{
             AtomicArray::NativeAtomicArray(array) => array.store(index,val) ,
-            AtomicArray::Atomic2Array(array) => array.store(index,val) ,
+            AtomicArray::GenericAtomicArray(array) => array.store(index,val) ,
         }
     }
 
-    pub fn swap(&self, index: usize, val: T) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+    pub fn swap(&self, index: usize, val: T) -> Box<dyn LamellarRequest<Output = Vec<T>> + Send + Sync> {
         match self{
             AtomicArray::NativeAtomicArray(array) => array.swap(index,val) ,
-            AtomicArray::Atomic2Array(array) => array.swap(index,val) ,
+            AtomicArray::GenericAtomicArray(array) => array.swap(index,val) ,
         }
     }
 }
@@ -178,56 +177,57 @@ impl<T: ElementArithmeticOps + 'static> ArithmeticOps<T> for AtomicArray<T> {
         &self,
         index: impl OpInput<usize>,
         val: T,
-    ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>> {
-        Some(self.initiate_op(val, index, ArrayOpCmd::Add))
+    ) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync> {
+        // println!("atomic add");
+        self.initiate_op(val, index, ArrayOpCmd::Add)
     }
     fn fetch_add(
         &self,
-        index: usize,
+        index: impl OpInput<usize>,
         val: T,
-    ) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+    ) -> Box<dyn LamellarRequest<Output = Vec<T>> + Send + Sync> {
         self.initiate_fetch_op(val, index, ArrayOpCmd::FetchAdd)
     }
     fn sub(
         &self,
-        index: usize,
+        index: impl OpInput<usize>,
         val: T,
-    ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>> {
-        Some(self.initiate_op(val, index, ArrayOpCmd::Sub))
+    ) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync> {
+        self.initiate_op(val, index, ArrayOpCmd::Sub)
     }
     fn fetch_sub(
         &self,
-        index: usize,
+        index: impl OpInput<usize>,
         val: T,
-    ) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+    ) -> Box<dyn LamellarRequest<Output = Vec<T>> + Send + Sync> {
         self.initiate_fetch_op(val, index, ArrayOpCmd::FetchSub)
     }
     fn mul(
         &self,
-        index: usize,
+        index: impl OpInput<usize>,
         val: T,
-    ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>> {
-        Some(self.initiate_op(val, index, ArrayOpCmd::Mul))
+    ) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync> {
+        self.initiate_op(val, index, ArrayOpCmd::Mul)
     }
     fn fetch_mul(
         &self,
-        index: usize,
+        index: impl OpInput<usize>,
         val: T,
-    ) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+    ) -> Box<dyn LamellarRequest<Output = Vec<T>> + Send + Sync> {
         self.initiate_fetch_op(val, index, ArrayOpCmd::FetchMul)
     }
     fn div(
         &self,
-        index: usize,
+        index: impl OpInput<usize>,
         val: T,
-    ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>> {
-        Some(self.initiate_op(val, index, ArrayOpCmd::Div))
+    ) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync> {
+        self.initiate_op(val, index, ArrayOpCmd::Div)
     }
     fn fetch_div(
         &self,
-        index: usize,
+        index: impl OpInput<usize>,
         val: T,
-    ) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+    ) -> Box<dyn LamellarRequest<Output = Vec<T>> + Send + Sync> {
         self.initiate_fetch_op(val, index, ArrayOpCmd::FetchDiv)
     }
 }
@@ -235,32 +235,32 @@ impl<T: ElementArithmeticOps + 'static> ArithmeticOps<T> for AtomicArray<T> {
 impl<T: ElementBitWiseOps + 'static> BitWiseOps<T> for AtomicArray<T> {
     fn bit_and(
         &self,
-        index: usize,
+        index: impl OpInput<usize>,
         val: T,
-    ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>> {
+    ) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync> {
         // println!("and val {:?}",val);
-        Some(self.initiate_op(val, index, ArrayOpCmd::And))
+       self.initiate_op(val, index, ArrayOpCmd::And)
     }
     fn fetch_bit_and(
         &self,
-        index: usize,
+        index: impl OpInput<usize>,
         val: T,
-    ) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+    ) -> Box<dyn LamellarRequest<Output = Vec<T>> + Send + Sync> {
         self.initiate_fetch_op(val, index, ArrayOpCmd::FetchAnd)
     }
     fn bit_or(
         &self,
-        index: usize,
+        index: impl OpInput<usize>,
         val: T,
-    ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>> {
+    ) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync> {
         // println!("or");
-        Some(self.initiate_op(val, index, ArrayOpCmd::Or))
+       self.initiate_op(val, index, ArrayOpCmd::Or)
     }
     fn fetch_bit_or(
         &self,
-        index: usize,
+        index: impl OpInput<usize>,
         val: T,
-    ) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+    ) -> Box<dyn LamellarRequest<Output = Vec<T>> + Send + Sync> {
         // println!("fetch_or");
         self.initiate_fetch_op(val, index, ArrayOpCmd::FetchOr)
     }

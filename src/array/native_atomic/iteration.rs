@@ -18,16 +18,16 @@ pub struct NativeAtomicDistIter< T: Dist > {
     end_i: usize,
 }
 
-impl<T: Dist > NativeAtomicDistIter<T> {
-    pub(crate) fn new(data: NativeAtomicArray<T>, cur_i: usize, cnt: usize) -> Self {
-        // println!("new dist iter {:?} {:? } {:?}",cur_i, cnt, cur_i+cnt);
-        NativeAtomicDistIter {
-            data,
-            cur_i,
-            end_i: cur_i + cnt,
-        }
-    }
-}
+// impl<T: Dist > NativeAtomicDistIter<T> {
+//     pub(crate) fn new(data: NativeAtomicArray<T>, cur_i: usize, cnt: usize) -> Self {
+//         // println!("new dist iter {:?} {:? } {:?}",cur_i, cnt, cur_i+cnt);
+//         NativeAtomicDistIter {
+//             data,
+//             cur_i,
+//             end_i: cur_i + cnt,
+//         }
+//     }
+// }
 impl<T: Dist  + 'static> NativeAtomicDistIter< T> {
     pub fn for_each<F>(self, op: F)
     where

@@ -1,5 +1,5 @@
 use lamellar::array::{
-    ArithmeticOps, AtomicArray,Atomic2Array LocalLockAtomicArray, SerialIterator, UnsafeArray,
+    ArithmeticOps, AtomicArray, LocalLockAtomicArray, SerialIterator, UnsafeArray,
 };
 
 macro_rules! initialize_array {
@@ -13,7 +13,7 @@ macro_rules! initialize_array {
         $array.wait_all();
         $array.barrier();
     };
-    (Atomic2Array,$array:ident,$init_val:ident) => {
+    (GenericAtomicArray,$array:ident,$init_val:ident) => {
         $array.dist_iter().for_each(move |x| x.store($init_val));
         $array.wait_all();
         $array.barrier();
@@ -36,7 +36,7 @@ macro_rules! check_val{
             $valid = false;
         }
     };
-    (Atomic2Array,$val:ident,$max_val:ident,$valid:ident) => {
+    (GenericAtomicArray,$val:ident,$max_val:ident,$valid:ident) => {
         if (($val - $max_val)as f32).abs() > 0.0001{//all updates should be preserved
             $valid = false;
         }
@@ -98,7 +98,7 @@ macro_rules! add_test{
                         reqs.push(array.fetch_div(idx,2 as $t));
                     }
                     for req in reqs{
-                        let val = req.get().unwrap();
+                        let val = req.get().unwrap()[0];
                         if val > prev || (prev as u128)%2 != 0{
                             if prev > 1 as $t{
                                 println!("full 1: {:?} {:?}",val,prev);
@@ -152,7 +152,7 @@ macro_rules! add_test{
                         reqs.push(sub_array.fetch_div(idx,2 as $t));
                     }
                     for req in reqs{
-                        let val = req.get().unwrap();
+                        let val = req.get().unwrap()[0];
                         if val > prev || (prev as u128)%2 != 0{
                             if prev > 1 as $t{
                                 println!("full 1: {:?} {:?}",val,prev);
@@ -205,7 +205,7 @@ macro_rules! add_test{
                             reqs.push(sub_array.fetch_div(idx,2 as $t));
                         }
                         for req in reqs{
-                            let val = req.get().unwrap();
+                            let val = req.get().unwrap()[0];
                             if val > prev || (prev as u128)%2 != 0{
                                 if prev > 1 as $t{
                                     println!("full 1: {:?} {:?}",val,prev);
@@ -282,23 +282,6 @@ fn main() {
             "isize" => add_test!(AtomicArray, isize, len, dist_type),
             "f32" => add_test!(AtomicArray, f32, len, dist_type),
             "f64" => add_test!(AtomicArray, f64, len, dist_type),
-            _ => eprintln!("unsupported element type"),
-        },
-        "Atomic2Array" => match elem.as_str() {
-            "u8" => add_test!(Atomic2Array, u8, len, dist_type),
-            "u16" => add_test!(Atomic2Array, u16, len, dist_type),
-            "u32" => add_test!(Atomic2Array, u32, len, dist_type),
-            "u64" => add_test!(Atomic2Array, u64, len, dist_type),
-            "u128" => add_test!(Atomic2Array, u128, len, dist_type),
-            "usize" => add_test!(Atomic2Array, usize, len, dist_type),
-            "i8" => add_test!(Atomic2Array, i8, len, dist_type),
-            "i16" => add_test!(Atomic2Array, i16, len, dist_type),
-            "i32" => add_test!(Atomic2Array, i32, len, dist_type),
-            "i64" => add_test!(Atomic2Array, i64, len, dist_type),
-            "i128" => add_test!(Atomic2Array, i128, len, dist_type),
-            "isize" => add_test!(Atomic2Array, isize, len, dist_type),
-            "f32" => add_test!(Atomic2Array, f32, len, dist_type),
-            "f64" => add_test!(Atomic2Array, f64, len, dist_type),
             _ => eprintln!("unsupported element type"),
         },
         "LocalLockAtomicArray" => match elem.as_str() {
