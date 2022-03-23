@@ -622,6 +622,12 @@ impl<T: Dist> LamellarWrite for LocalMemoryRegion<T> {}
 impl<T: Dist> LamellarWrite for &LocalMemoryRegion<T> {}
 impl<T: Dist> LamellarRead for LocalMemoryRegion<T> {}
 
+impl<T: Dist> From<&LocalMemoryRegion<T>> for LamellarMemoryRegion<T> {
+    fn from(smr: &LocalMemoryRegion<T>) -> Self{
+        LamellarMemoryRegion::Local(smr.clone())
+    }
+}
+
 impl<T: Dist> From<&LocalMemoryRegion<T>> for LamellarArrayInput<T> {
     fn from(smr: &LocalMemoryRegion<T>) -> Self {
         LamellarArrayInput::LocalMemRegion(smr.clone())

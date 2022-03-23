@@ -179,6 +179,10 @@ name="unsafe_array_put_bw"
 path="examples/bandwidths/unsafe_array_put_bw.rs"
 
 [[example]]
+name="unsafe_array_op_put_bw"
+path="examples/bandwidths/unsafe_array_op_put_bw.rs"
+
+[[example]]
 name="atomic_array_put_bw"
 path="examples/bandwidths/atomic_array_put_bw.rs"
 

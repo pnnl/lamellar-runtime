@@ -120,7 +120,7 @@ impl<T: ElementBitWiseOps + 'static> AtomicElement<T> {
 }
 
 impl<T: AmDist + Dist + 'static> AtomicArray<T> {
-    fn initiate_op(
+    fn initiate_op<'a>(
         &self,
         index: usize,
         val: T,
@@ -153,7 +153,7 @@ impl<T: AmDist + Dist + 'static> AtomicArray<T> {
             }}",name,name,name);
         }
     }
-    fn initiate_fetch_op(
+    fn initiate_fetch_op<'a>(
         &self,
         index: usize,
         val: T,
@@ -187,7 +187,7 @@ impl<T: AmDist + Dist + 'static> AtomicArray<T> {
         }
     }
 
-    pub fn load(&self, index: usize) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+    pub fn load<'a>(&self, index: impl OpInput<'a,usize>,) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
         self.initiate_fetch_op(index, self.array.dummy_val(), ArrayOpCmd::Load)
     }
 

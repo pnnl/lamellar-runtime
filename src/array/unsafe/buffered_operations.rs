@@ -44,6 +44,11 @@ pub struct UnsafeArrayOpBuf {
 
 crate::inventory::collect!(UnsafeArrayOpBuf);
 
+enum BufOpsRequest<T: Dist>{
+    NoFetch(Box<dyn LamellarRequest<Output = ()> + Send + Sync>),
+    Fetch(Box<dyn LamellarRequest<Output = Vec<T>> + Send + Sync>)
+}
+
 impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
     pub(crate) fn dummy_val(&self) -> T {
         let slice = self.inner.data.mem_region.as_slice().unwrap();
@@ -55,27 +60,32 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         }
     }
 
-    pub(crate) fn initiate_op(
-        &self,
-        val: T,
-        index: impl OpInput<usize>,
-        op: ArrayOpCmd,
-    ) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync> {
-        let mut pe_offsets: HashMap<usize,Vec<usize>> = HashMap::new();
-        let indices = index.as_op_input();
-        for i in indices{
+    fn initiate_op_task<'a>(&self,fetch: bool,op: ArrayOpCmd, indices: &OpInputEnum<'a,usize>, vals: &OpInputEnum<'a,T>,submit_cnt: Arc<AtomicUsize>) -> BufOpsRequest<T>{
+        let mut pe_offsets: HashMap<usize,Vec<(usize,T)>> = HashMap::new();
+        
+        let max = std::cmp::max(indices.len(),vals.len());
+        for (i,v) in indices.iter().zip(vals.iter()).take(max){
             let pe = self
-            .inner
-            .pe_for_dist_index(i)
-            .expect("index out of bounds");
-            let local_index = self.inner.pe_offset_for_dist_index(pe, i).unwrap(); //calculated pe above
-            pe_offsets.entry(pe).or_insert(Vec::new()).push(local_index);
-        }
-        pe_offsets.iter().map(|(pe,indices)|{
+                .inner
+                .pe_for_dist_index(i)
+                .expect("index out of bounds");
+                let local_index = self.inner.pe_offset_for_dist_index(pe, i).unwrap(); //calculated pe above
+                // println!("i: {:?} l_i: {:?} v: {:?}",i,local_index,v);
+                pe_offsets.entry(pe).or_insert(Vec::new()).push((local_index,v));
+        }        
+        let  res_indices = Arc::new(Mutex::new(vec![]));
+        // println!("pe_offsets size {:?}",pe_offsets.len());
+        let req = pe_offsets.iter().map(|(pe,op_data)|{
+            // println!("pe: {:?} op_len {:?}",pe,op_data.len());
             let pe = *pe;
-            let mut stall_mark = self.inner.data.req_cnt.fetch_add(1, Ordering::SeqCst);
+            let mut stall_mark = self.inner.data.req_cnt.fetch_add(op_data.len(), Ordering::SeqCst);
             let buf_op = self.inner.data.op_buffers.read()[pe].clone();
-            let (first, complete) = buf_op.add_ops(op, indices, &val as *const T as *const u8);
+            let (first, complete, results) = if fetch{
+                buf_op.add_fetch_ops(op, op_data.as_ptr() as *const u8,op_data.len(), res_indices.clone())
+            }else{
+                let (first, complete) = buf_op.add_ops(op, op_data.as_ptr() as *const u8,op_data.len());
+                (first, complete, None)
+            };
             if first {
                 let array = self.clone();
                 self.inner
@@ -100,12 +110,11 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
                         async_std::task::yield_now().await;
                     }
 
-                    let (ams, len, complete, results) = buf_op.into_arc_am(array.sub_array_range(),self.inner.wait.clone());
+                    let (ams, len, complete, results) = buf_op.into_arc_am(array.sub_array_range());
                     // println!("pe{:?} ams: {:?} len{:?}",pe,ams.len(),len);
                     if len > 0 {
                         let mut res = Vec::new();
-                        for am in ams{
-                            
+                        for am in ams{                            
                             res.push(array.inner.data.team.exec_arc_am_pe::<Vec<u8>>(
                                 pe,
                                 am,
@@ -134,7 +143,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
                         
                         // println!("indirect cnts {:?}->{:?} {:?}->{:?} -- {:?}",cnt1,cnt1-1,cnt2,cnt2-len,len);
                     } else {
-                        println!("here {:?} {:?} ",ams.len(),len);
+                        // println!("here {:?} {:?} ",ams.len(),len);
                         complete.store(true, Ordering::Relaxed);
                         array
                             .inner
@@ -145,161 +154,294 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
                             .fetch_sub(1, Ordering::SeqCst);
                     }
                 });
+            }
+            match results{
+                Some(results) =>{
+                    BufOpsRequest::Fetch(
+                        Box::new(ArrayOpFetchHandle {
+                            indices: res_indices.clone(),
+                            complete: complete,
+                            results: results,
+                            _phantom: PhantomData,
+                        })
+                    )
+                }
+                None => {
+                    BufOpsRequest::NoFetch(Box::new(ArrayOpHandle { complete: complete }))
+                }
             } 
-            Box::new(ArrayOpHandle { complete: complete })
-        }).last().unwrap()
-        
+        }).last().unwrap();
+        submit_cnt.fetch_sub(1,Ordering::SeqCst);
+        req
     }
 
-    pub(crate) fn initiate_fetch_op(
+    pub(crate) fn initiate_op<'a>(
         &self,
-        val: T,
-        index: impl OpInput<usize>,
+        val: impl OpInput<'a,T>,
+        index: impl OpInput<'a,usize>,
         op: ArrayOpCmd,
-    ) -> Box<dyn LamellarRequest<Output = Vec<T>> + Send + Sync> {
-        let mut pe_offsets: HashMap<usize,Vec<usize>> = HashMap::new();
-        let indices = index.as_op_input();
-        let  res_indices = Arc::new(Mutex::new(vec![]));
-        for i in indices{
-            let pe = self
-            .inner
-            .pe_for_dist_index(i)
-            .expect("index out of bounds");
-            let local_index = self.inner.pe_offset_for_dist_index(pe, i).unwrap(); //calculated pe above
-            // println!("i: {:?} pe: {:?} local_index{:?}",i,pe,local_index);
-            pe_offsets.entry(pe).or_insert(Vec::new()).push(local_index);
-        }
+    ) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync> {
         
-        pe_offsets.iter().map(|(pe,indices)|{
-            let pe = *pe;
-            let mut stall_mark = self.inner.data.req_cnt.fetch_add(1, Ordering::SeqCst);
-            let buf_op = self.inner.data.op_buffers.read()[pe].clone();
-            let (first, complete, results) =
-                buf_op.add_fetch_ops(op, indices, &val as *const T as *const u8, res_indices.clone());
-            if first {
-                // println!("pending buf for pe {:?}",pe);
+        let (mut indices,i_len) = index.as_op_input();
+        let (mut vals, v_len) = val.as_op_input();
+        let mut i_v_iters = vec![];
+        // println!("i_len {i_len} v_len {v_len}");
+        if v_len > 0 && i_len > 0{
+            if v_len == 1 && i_len > 1{
+                for i in indices.drain(..){
+                    i_v_iters.push((i,vals[0].clone()));
+                }
+
+            }
+            else if v_len > 1 && i_len == 1{
+                for v in vals.drain(..){
+                    i_v_iters.push((indices[0].clone(),v));
+                }
+            }
+            else if i_len == v_len{
+                for (i,v) in indices.iter().zip(vals.iter()){
+                    i_v_iters.push((i.clone(),v.clone()));
+                }
+            }
+            else{
+                panic!("not sure this case can exist!! indices len {:?} vals len {:?}",i_len, v_len);
+            };
+        
+
+            // println!("i_v_iters len {:?}",i_v_iters.len());
+
+            let submit_cnt = Arc::new(AtomicUsize::new(i_v_iters.len()));
+            
+            for (indices,vals) in i_v_iters[1..].iter(){
+                // println!("here");
+                let submit_cnt = submit_cnt.clone();
                 let array = self.clone();
-                self.inner
-                    .data
-                    .team
-                    .team_counters
-                    .outstanding_reqs
-                    .fetch_add(1, Ordering::SeqCst); // we need to tell the world we have a request pending
                 self.inner.data.team.scheduler.submit_task(async move {
-                    let mut wait_cnt = 0;
-                    while wait_cnt < 1000 {
-                        while stall_mark != array.inner.data.req_cnt.load(Ordering::Relaxed) {
-                            stall_mark = array.inner.data.req_cnt.load(Ordering::Relaxed);
-                            async_std::task::yield_now().await;
-                        }
-                        wait_cnt += 1;
-                        async_std::task::yield_now().await;
-                    }
-
-                    let (ams, len, complete, results) = buf_op.into_arc_am(array.sub_array_range(),self.inner.wait.clone());
-                    if len > 0 {
-                        let mut res = Vec::new();
-                        for am in ams{
-                            res.push(array.inner.data.team.exec_arc_am_pe::<Vec<u8>>(
-                                pe,
-                                am,
-                                Some(array.inner.data.array_counters.clone()),
-                            ));
-                        }                    
-
-                        let mut full_results: Vec<u8> = Vec::new();
-                        for r in res{
-                        // println!("submitted indirectly {:?} ",len);
-                            let results_u8: Vec<u8> = r.into_future().await.unwrap();
-                            full_results.extend(results_u8);
-                        }
-                        let mut results = results.write();
-                        std::mem::swap(&mut full_results, &mut results);
-                        complete.store(true, Ordering::Relaxed);
-                        array
-                            .inner
-                            .data
-                            .team
-                            .team_counters
-                            .outstanding_reqs
-                            .fetch_sub(1, Ordering::SeqCst); //remove our pending req now that it has actually been executed;
-                        array.inner.data.req_cnt.fetch_sub(len, Ordering::SeqCst);
-                    }else{
-                        complete.store(true, Ordering::Relaxed);
-                        array
-                            .inner
-                            .data
-                            .team
-                            .team_counters
-                            .outstanding_reqs
-                            .fetch_sub(1, Ordering::SeqCst); //remove our pending req now that it has actually been executed;
-                    }
-                    // println!("done!");
+                    array.initiate_op_task(false,op,indices,vals,submit_cnt);
                 });
             }
+            let req = self.initiate_op_task(false,op,&i_v_iters[0].0,&i_v_iters[0].1,submit_cnt.clone());
+            // println!("submit_cnt {:?}",submit_cnt);
+            while submit_cnt.load(Ordering::Relaxed) > 0{
+                std::thread::yield_now();
+            }
+            match req{
+                BufOpsRequest::NoFetch(req) => req,
+                BufOpsRequest::Fetch(_) => panic!("trying to return a fetch request for not fetch operations")
+            }
+        }
+        else{
+            Box::new(ArrayOpHandle { complete: Arc::new(AtomicBool::new(true))})
+        }
+    }
+
+    pub(crate) fn initiate_fetch_op<'a>(
+        &self,
+        val: impl OpInput<'a,T>,
+        index: impl OpInput<'a,usize>,
+        op: ArrayOpCmd,
+    ) -> Box<dyn LamellarRequest<Output = Vec<T>> + Send + Sync> {
+        let (mut indices,i_len) = index.as_op_input();
+        let (mut vals, v_len) = val.as_op_input();
+        let mut i_v_iters = vec![];
+        if v_len > 0 && i_len > 0{
+            if v_len == 1 && i_len > 1{
+                for i in indices.drain(..){
+                    i_v_iters.push((i,vals[0].clone()));
+                }
+
+            }
+            else if v_len > 1 && i_len == 1{
+                for v in vals.drain(..){
+                    i_v_iters.push((indices[0].clone(),v));
+                }
+            }
+            else if i_len == v_len{
+                for (i,v) in indices.iter().zip(vals.iter()){
+                    i_v_iters.push((i.clone(),v.clone()));
+                }
+            }
+            else{
+                panic!("not sure this case can exist!! indices len {:?} vals len {:?}",i_len, v_len);
+            };
+
+            let submit_cnt = Arc::new(AtomicUsize::new(i_v_iters.len()));
+            
+            for (indices,vals) in i_v_iters[1..].iter(){
+                let submit_cnt = submit_cnt.clone();
+                let array = self.clone();
+                self.inner.data.team.scheduler.submit_task(async move {
+                    array.initiate_op_task(true,op,indices,vals,submit_cnt);
+                });
+            }
+            let req = self.initiate_op_task(true,op,&i_v_iters[0].0,&i_v_iters[0].1,submit_cnt.clone());
+            while submit_cnt.load(Ordering::Relaxed) > 0{
+                std::thread::yield_now();
+            }
+            match req{
+                BufOpsRequest::NoFetch(_) => panic!("trying to return a fetch request for not fetch operations"),
+                BufOpsRequest::Fetch(req) => req
+            }
+        }
+        else{
             Box::new(ArrayOpFetchHandle {
-                indices: res_indices.clone(),
-                complete: complete,
-                results: results,
+                indices: Arc::new(Mutex::new(vec![])),
+                complete: Arc::new(AtomicBool::new(false)),
+                results: Arc::new(RwLock::new(vec![])),
                 _phantom: PhantomData,
             })
-        }).last().unwrap()
+        }
+        // let mut pe_offsets: HashMap<usize,Vec<usize>> = HashMap::new();
+        // let (indices,_) = index.as_op_input();
+        // let  res_indices = Arc::new(Mutex::new(vec![]));
+        // for i in indices{
+        //     let pe = self
+        //     .inner
+        //     .pe_for_dist_index(i)
+        //     .expect("index out of bounds");
+        //     let local_index = self.inner.pe_offset_for_dist_index(pe, i).unwrap(); //calculated pe above
+        //     // println!("i: {:?} pe: {:?} local_index{:?}",i,pe,local_index);
+        //     pe_offsets.entry(pe).or_insert(Vec::new()).push(local_index);
+        // }
+        
+        // pe_offsets.iter().map(|(pe,indices)|{
+        //     let pe = *pe;
+        //     let mut stall_mark = self.inner.data.req_cnt.fetch_add(1, Ordering::SeqCst);
+        //     let buf_op = self.inner.data.op_buffers.read()[pe].clone();
+        //     let (first, complete, results) =
+        //         buf_op.add_fetch_ops(op, indices, &val as *const T as *const u8, res_indices.clone());
+        //     if first {
+        //         // println!("pending buf for pe {:?}",pe);
+        //         let array = self.clone();
+        //         self.inner
+        //             .data
+        //             .team
+        //             .team_counters
+        //             .outstanding_reqs
+        //             .fetch_add(1, Ordering::SeqCst); // we need to tell the world we have a request pending
+        //         self.inner.data.team.scheduler.submit_task(async move {
+        //             let mut wait_cnt = 0;
+        //             while wait_cnt < 1000 {
+        //                 while stall_mark != array.inner.data.req_cnt.load(Ordering::Relaxed) {
+        //                     stall_mark = array.inner.data.req_cnt.load(Ordering::Relaxed);
+        //                     async_std::task::yield_now().await;
+        //                 }
+        //                 wait_cnt += 1;
+        //                 async_std::task::yield_now().await;
+        //             }
+
+        //             let (ams, len, complete, results) = buf_op.into_arc_am(array.sub_array_range());
+        //             if len > 0 {
+        //                 let mut res = Vec::new();
+        //                 for am in ams{
+        //                     res.push(array.inner.data.team.exec_arc_am_pe::<Vec<u8>>(
+        //                         pe,
+        //                         am,
+        //                         Some(array.inner.data.array_counters.clone()),
+        //                     ));
+        //                 }                    
+
+        //                 let mut full_results: Vec<u8> = Vec::new();
+        //                 for r in res{
+        //                 // println!("submitted indirectly {:?} ",len);
+        //                     let results_u8: Vec<u8> = r.into_future().await.unwrap();
+        //                     full_results.extend(results_u8);
+        //                 }
+        //                 let mut results = results.write();
+        //                 std::mem::swap(&mut full_results, &mut results);
+        //                 complete.store(true, Ordering::Relaxed);
+        //                 array
+        //                     .inner
+        //                     .data
+        //                     .team
+        //                     .team_counters
+        //                     .outstanding_reqs
+        //                     .fetch_sub(1, Ordering::SeqCst); //remove our pending req now that it has actually been executed;
+        //                 array.inner.data.req_cnt.fetch_sub(len, Ordering::SeqCst);
+        //             }else{
+        //                 complete.store(true, Ordering::Relaxed);
+        //                 array
+        //                     .inner
+        //                     .data
+        //                     .team
+        //                     .team_counters
+        //                     .outstanding_reqs
+        //                     .fetch_sub(1, Ordering::SeqCst); //remove our pending req now that it has actually been executed;
+        //             }
+        //             // println!("done!");
+        //         });
+        //     }
+        //     Box::new(ArrayOpFetchHandle {
+        //         indices: res_indices.clone(),
+        //         complete: complete,
+        //         results: results,
+        //         _phantom: PhantomData,
+        //     })
+        // }).last().unwrap()
     }
+
+    // pub fn op_put(
+    //     &self,
+    //     index: impl OpInput<'a,usize>,
+    //     val: impl OpInput<'a,T>,
+    // ) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync> {
+    //     self.initiate_op(val,index,ArrayOpCmd::Put)
+    // }
 }
 
 impl<T: ElementArithmeticOps + 'static> ArithmeticOps<T> for UnsafeArray<T> {
-    fn add(
+    fn add<'a>(
         &self,
-        index: impl OpInput<usize>,
+        index: impl OpInput<'a,usize>,
         val: T,
     ) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync> {
         self.initiate_op(val, index, ArrayOpCmd::Add)       
     }
-    fn fetch_add(
+    fn fetch_add<'a>(
         &self,
-        index: impl OpInput<usize>,
+        index: impl OpInput<'a,usize>,
         val: T,
     ) -> Box<dyn LamellarRequest<Output = Vec<T>> + Send + Sync> {
         self.initiate_fetch_op(val, index, ArrayOpCmd::FetchAdd)
     }
-    fn sub(
+    fn sub<'a>(
         &self,
-        index: impl OpInput<usize>,
+        index: impl OpInput<'a,usize>,
         val: T,
     ) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync>{
         self.initiate_op(val, index, ArrayOpCmd::Sub)
     }
-    fn fetch_sub(
+    fn fetch_sub<'a>(
         &self,
-        index: impl OpInput<usize>,
+        index: impl OpInput<'a,usize>,
         val: T,
     ) -> Box<dyn LamellarRequest<Output = Vec<T>> + Send + Sync> {
         self.initiate_fetch_op(val, index, ArrayOpCmd::FetchSub)
     }
-    fn mul(
+    fn mul<'a>(
         &self,
-        index: impl OpInput<usize>,
+        index: impl OpInput<'a,usize>,
         val: T,
     ) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync> {
         self.initiate_op(val, index, ArrayOpCmd::Mul)
     }
-    fn fetch_mul(
+    fn fetch_mul<'a>(
         &self,
-        index: impl OpInput<usize>,
+        index: impl OpInput<'a,usize>,
         val: T,
     ) -> Box<dyn LamellarRequest<Output = Vec<T>> + Send + Sync> {
         self.initiate_fetch_op(val, index, ArrayOpCmd::FetchMul)
     }
-    fn div(
+    fn div<'a>(
         &self,
-        index: impl OpInput<usize>,
+        index: impl OpInput<'a,usize>,
         val: T,
     ) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync> {
         self.initiate_op(val, index, ArrayOpCmd::Div)
     }
-    fn fetch_div(
+    fn fetch_div<'a>(
         &self,
-        index: impl OpInput<usize>,
+        index: impl OpInput<'a,usize>,
         val: T,
     ) -> Box<dyn LamellarRequest<Output = Vec<T>> + Send + Sync> {
         self.initiate_fetch_op(val, index, ArrayOpCmd::FetchDiv)
@@ -307,31 +449,31 @@ impl<T: ElementArithmeticOps + 'static> ArithmeticOps<T> for UnsafeArray<T> {
 }
 
 impl<T: ElementBitWiseOps + 'static> BitWiseOps<T> for UnsafeArray<T> {
-    fn bit_and(
+    fn bit_and<'a>(
         &self,
-        index: impl OpInput<usize>,
+        index: impl OpInput<'a,usize>,
         val: T,
     ) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync> {
         self.initiate_op(val, index, ArrayOpCmd::And)
     }
-    fn fetch_bit_and(
+    fn fetch_bit_and<'a>(
         &self,
-        index: impl OpInput<usize>,
+        index: impl OpInput<'a,usize>,
         val: T,
     ) -> Box<dyn LamellarRequest<Output = Vec<T>> + Send + Sync> {
         self.initiate_fetch_op(val, index, ArrayOpCmd::FetchAnd)
     }
 
-    fn bit_or(
+    fn bit_or<'a>(
         &self,
-        index: impl OpInput<usize>,
+        index: impl OpInput<'a,usize>,
         val: T,
     ) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync> {
         self.initiate_op(val, index, ArrayOpCmd::Or)
     }
-    fn fetch_bit_or(
+    fn fetch_bit_or<'a>(
         &self,
-        index: impl OpInput<usize>,
+        index: impl OpInput<'a,usize>,
         val: T,
     ) -> Box<dyn LamellarRequest<Output = Vec<T>> + Send + Sync> {
         self.initiate_fetch_op(val, index, ArrayOpCmd::FetchOr)

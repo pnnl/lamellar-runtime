@@ -254,6 +254,8 @@ impl<T: Dist + std::default::Default + 'static> AtomicArray<T> {
         }
         
     }
+
+    
 }
 impl<T: Dist + 'static> AtomicArray<T> {
 
@@ -266,6 +268,12 @@ impl<T: Dist + 'static> AtomicArray<T> {
 }
 
 impl<T: Dist> AtomicArray<T> {
+    pub(crate) fn start_index_for_pe(&self,pe: usize) -> Option<usize>{
+        match self{
+            AtomicArray::NativeAtomicArray(array) => array.array.inner.start_index_for_pe(pe) ,
+            AtomicArray::GenericAtomicArray(array) => array.array.inner.start_index_for_pe(pe) ,
+        }
+    }
     pub fn wait_all(&self) {
         match self{
             AtomicArray::NativeAtomicArray(array) => array.wait_all() ,

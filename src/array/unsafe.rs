@@ -54,7 +54,7 @@ pub struct UnsafeByteArray {
 pub(crate) struct UnsafeArrayInner {
     pub(crate) data: Darc<UnsafeArrayData>,
     pub(crate) distribution: Distribution,
-    wait: Darc<AtomicUsize>,
+    // wait: Darc<AtomicUsize>,
     orig_elem_per_pe: f64,
     elem_size: usize, //for bytes array will be size of T, for T array will be 1
     offset: usize,    //relative to size of T
@@ -106,17 +106,17 @@ impl<T: Dist + 'static> UnsafeArray<T> {
             crate::darc::DarcMode::Darc,
         )
         .expect("trying to create array on non team member");
-        let wait = Darc::try_new(
-            team.clone(),
-            AtomicUsize::new(0),
-            crate::darc::DarcMode::Darc,
-        )
-        .expect("trying to create array on non team member");
+        // let wait = Darc::try_new(
+        //     team.clone(),
+        //     AtomicUsize::new(0),
+        //     crate::darc::DarcMode::Darc,
+        // )
+        // .expect("trying to create array on non team member");
         let array = UnsafeArray {
             inner: UnsafeArrayInner {
                 data: data,
                 distribution: distribution.clone(),
-                wait: wait,
+                // wait: wait,
                 orig_elem_per_pe: elem_per_pe,
                 elem_size: std::mem::size_of::<T>(),
                 offset: 0,        //relative to size of T

@@ -45,95 +45,95 @@ pub struct NativeAtomicArrayOpBuf {
 crate::inventory::collect!(NativeAtomicArrayOpBuf);
 
 impl<T: AmDist + Dist  + 'static> NativeAtomicArray<T> {
-    pub(crate) fn initiate_op(
+    pub(crate) fn initiate_op<'a>(
         &self,
         val: T,
-        index: impl OpInput<usize>,
+        index: impl OpInput<'a,usize>,
         op: ArrayOpCmd,
     ) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync> {
         self.array.initiate_op( val, index, op)
     }
 
-    pub(crate) fn initiate_fetch_op(
+    pub(crate) fn initiate_fetch_op<'a>(
         &self,
         val: T,
-        index: impl OpInput<usize>,
+        index: impl OpInput<'a,usize>,
         op: ArrayOpCmd,
     ) -> Box<dyn LamellarRequest<Output = Vec<T>> + Send + Sync> {
         self.array.initiate_fetch_op( val, index, op)
     }
 
-    pub fn store(
+    pub fn store<'a>(
         &self,
-        index: impl OpInput<usize>,
+        index: impl OpInput<'a,usize>,
         val: T,
     ) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync> {
         self.initiate_op( val, index, ArrayOpCmd::Store)
     }
 
-    pub fn load(&self, index: usize) -> Box<dyn LamellarRequest<Output = Vec<T>> + Send + Sync> {
+    pub fn load<'a>(&self, index: impl OpInput<'a,usize>,) -> Box<dyn LamellarRequest<Output = Vec<T>> + Send + Sync> {
         let dummy_val = self.array.dummy_val(); //we dont actually do anything with this except satisfy apis;
         self.initiate_fetch_op(dummy_val, index, ArrayOpCmd::Load)
     }
 
-    pub fn swap(&self, index: impl OpInput<usize>, val: T) -> Box<dyn LamellarRequest<Output = Vec<T>> + Send + Sync> {
+    pub fn swap<'a>(&self, index: impl OpInput<'a,usize>, val: T) -> Box<dyn LamellarRequest<Output = Vec<T>> + Send + Sync> {
         self.initiate_fetch_op(val, index, ArrayOpCmd::Swap)
     }
 }
 
 impl<T: ElementArithmeticOps  + 'static> ArithmeticOps<T> for NativeAtomicArray<T> {
-    fn add(
+    fn add<'a>(
         &self,
-        index: impl OpInput<usize>,
+        index: impl OpInput<'a,usize>,
         val: T,
     ) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync> {
         self.initiate_op(val, index, ArrayOpCmd::Add)
     }
-    fn fetch_add(
+    fn fetch_add<'a>(
         &self,
-        index: impl OpInput<usize>,
+        index: impl OpInput<'a,usize>,
         val: T,
     ) -> Box<dyn LamellarRequest<Output = Vec<T>> + Send + Sync> {
         self.initiate_fetch_op(val, index, ArrayOpCmd::FetchAdd)
     }
-    fn sub(
+    fn sub<'a>(
         &self,
-        index: impl OpInput<usize>,
+        index: impl OpInput<'a,usize>,
         val: T,
     ) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync> {
         self.initiate_op(val, index, ArrayOpCmd::Sub)
     }
-    fn fetch_sub(
+    fn fetch_sub<'a>(
         &self,
-        index: impl OpInput<usize>,
+        index: impl OpInput<'a,usize>,
         val: T,
     ) -> Box<dyn LamellarRequest<Output = Vec<T>> + Send + Sync> {
         self.initiate_fetch_op(val, index, ArrayOpCmd::FetchSub)
     }
-    fn mul(
+    fn mul<'a>(
         &self,
-        index: impl OpInput<usize>,
+        index: impl OpInput<'a,usize>,
         val: T,
     ) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync> {
         self.initiate_op(val, index, ArrayOpCmd::Mul)
     }
-    fn fetch_mul(
+    fn fetch_mul<'a>(
         &self,
-        index: impl OpInput<usize>,
+        index: impl OpInput<'a,usize>,
         val: T,
     ) -> Box<dyn LamellarRequest<Output = Vec<T>> + Send + Sync> {
         self.initiate_fetch_op(val, index, ArrayOpCmd::FetchMul)
     }
-    fn div(
+    fn div<'a>(
         &self,
-        index: impl OpInput<usize>,
+        index: impl OpInput<'a,usize>,
         val: T,
     ) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync> {
         self.initiate_op(val, index, ArrayOpCmd::Div)
     }
-    fn fetch_div(
+    fn fetch_div<'a>(
         &self,
-        index: impl OpInput<usize>,
+        index: impl OpInput<'a,usize>,
         val: T,
     ) -> Box<dyn LamellarRequest<Output = Vec<T>> + Send + Sync> {
         self.initiate_fetch_op(val, index, ArrayOpCmd::FetchDiv)
@@ -141,31 +141,31 @@ impl<T: ElementArithmeticOps  + 'static> ArithmeticOps<T> for NativeAtomicArray<
 }
 
 impl<T: ElementBitWiseOps  + 'static> BitWiseOps<T> for NativeAtomicArray<T> {
-    fn bit_and(
+    fn bit_and<'a>(
         &self,
-        index: impl OpInput<usize>,
+        index: impl OpInput<'a,usize>,
         val: T,
     ) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync> {
         self.initiate_op(val, index, ArrayOpCmd::And)
     }
-    fn fetch_bit_and(
+    fn fetch_bit_and<'a>(
         &self,
-        index: impl OpInput<usize>,
+        index: impl OpInput<'a,usize>,
         val: T,
     ) -> Box<dyn LamellarRequest<Output = Vec<T>> + Send + Sync> {
         self.initiate_fetch_op(val, index, ArrayOpCmd::FetchAnd)
     }
 
-    fn bit_or(
+    fn bit_or<'a>(
         &self,
-        index: impl OpInput<usize>,
+        index: impl OpInput<'a,usize>,
         val: T,
     ) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync> {
         self.initiate_op(val, index, ArrayOpCmd::Or)
     }
-    fn fetch_bit_or(
+    fn fetch_bit_or<'a>(
         &self,
-        index: impl OpInput<usize>,
+        index: impl OpInput<'a,usize>,
         val: T,
     ) -> Box<dyn LamellarRequest<Output = Vec<T>> + Send + Sync> {
         self.initiate_fetch_op( val, index, ArrayOpCmd::FetchOr)
@@ -174,7 +174,7 @@ impl<T: ElementBitWiseOps  + 'static> BitWiseOps<T> for NativeAtomicArray<T> {
 
 // // impl<T: Dist + std::ops::AddAssign> NativeAtomicArray<T> {
 // impl<T: ElementArithmeticOps> LocalArithmeticOps<T> for NativeAtomicArray<T> {
-//     fn local_fetch_add(&self, index: impl OpInput<usize>, val: T) -> T {
+//     fn local_fetch_add(&self, index: impl OpInput<'a,usize>, val: T) -> T {
 //         // println!("local_add LocalArithmeticOps<T> for NativeAtomicArray<T> ");
 //         // let _lock = self.lock.write();
 //         let mut slice = self.local_as_mut_slice(); //this locks the array
@@ -182,21 +182,21 @@ impl<T: ElementBitWiseOps  + 'static> BitWiseOps<T> for NativeAtomicArray<T> {
 //         slice[index] += val;
 //         orig
 //     }
-//     fn local_fetch_sub(&self, index: impl OpInput<usize>, val: T) -> T {
+//     fn local_fetch_sub(&self, index: impl OpInput<'a,usize>, val: T) -> T {
 //         // println!("local_sub LocalArithmeticOps<T> for NativeAtomicArray<T> ");
 //         let mut slice = self.local_as_mut_slice(); //this locks the array
 //         let orig = slice[index];
 //         slice[index] -= val;
 //         orig
 //     }
-//     fn local_fetch_mul(&self, index: impl OpInput<usize>, val: T) -> T {
+//     fn local_fetch_mul(&self, index: impl OpInput<'a,usize>, val: T) -> T {
 //         // println!("local_sub LocalArithmeticOps<T> for NativeAtomicArray<T> ");
 //         let mut slice = self.local_as_mut_slice(); //this locks the array
 //         let orig = slice[index];
 //         slice[index] *= val;
 //         orig
 //     }
-//     fn local_fetch_div(&self, index: impl OpInput<usize>, val: T) -> T {
+//     fn local_fetch_div(&self, index: impl OpInput<'a,usize>, val: T) -> T {
 //         // println!("local_sub LocalArithmeticOps<T> for NativeAtomicArray<T> ");
 //         let mut slice = self.local_as_mut_slice(); //this locks the array
 //         let orig = slice[index];
@@ -206,7 +206,7 @@ impl<T: ElementBitWiseOps  + 'static> BitWiseOps<T> for NativeAtomicArray<T> {
 //     }
 // }
 // impl<T: ElementBitWiseOps> LocalBitWiseOps<T> for NativeAtomicArray<T> {
-//     fn local_fetch_bit_and(&self, index: impl OpInput<usize>, val: T) -> T {
+//     fn local_fetch_bit_and(&self, index: impl OpInput<'a,usize>, val: T) -> T {
 //         let mut slice = self.local_as_mut_slice(); //this locks the array
 //         // println!("local_sub LocalArithmeticOps<T> for NativeAtomicArray<T> ");
 //         let orig = slice[index];
@@ -214,7 +214,7 @@ impl<T: ElementBitWiseOps  + 'static> BitWiseOps<T> for NativeAtomicArray<T> {
 //         // println!("and i: {:?} {:?} {:?} {:?}",index,orig,val,self.local_as_mut_slice()[index]);
 //         orig
 //     }
-//     fn local_fetch_bit_or(&self, index: impl OpInput<usize>, val: T) -> T {
+//     fn local_fetch_bit_or(&self, index: impl OpInput<'a,usize>, val: T) -> T {
 //         let mut slice = self.local_as_mut_slice(); //this locks the array
 //         // println!("local_sub LocalArithmeticOps<T> for NativeAtomicArray<T> ");
 //         let orig = slice[index];
@@ -223,15 +223,15 @@ impl<T: ElementBitWiseOps  + 'static> BitWiseOps<T> for NativeAtomicArray<T> {
 //     }
 // }
 // impl<T: ElementOps> LocalNativeAtomicOps<T> for NativeAtomicArray<T> {
-//     fn local_load(&self, index: impl OpInput<usize>, _val: T) -> T {
+//     fn local_load(&self, index: impl OpInput<'a,usize>, _val: T) -> T {
 //         self.local_as_mut_slice()[index]
 //     }
 
-//     fn local_store(&self, index: impl OpInput<usize>, val: T) {
+//     fn local_store(&self, index: impl OpInput<'a,usize>, val: T) {
 //         self.local_as_mut_slice()[index] = val; //this locks the array
 //     }
 
-//     fn local_swap(&self, index: impl OpInput<usize>, val: T) -> T {
+//     fn local_swap(&self, index: impl OpInput<'a,usize>, val: T) -> T {
 //         let mut slice = self.local_as_mut_slice(); //this locks the array
 //         let orig = slice[index];
 //         slice[index] = val;

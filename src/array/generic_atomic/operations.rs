@@ -46,7 +46,7 @@ pub struct GenericAtomicArrayOpBuf {
 crate::inventory::collect!(GenericAtomicArrayOpBuf);
 
 impl<T: AmDist + Dist + 'static> GenericAtomicArray<T> {
-    fn initiate_op(
+    fn initiate_op<'a>(
         &self,
         index: usize,
         val: T,
@@ -74,7 +74,7 @@ impl<T: AmDist + Dist + 'static> GenericAtomicArray<T> {
         }
     }
 
-    fn initiate_fetch_op(
+    fn initiate_fetch_op<'a>(
         &self,
         index: usize,
         val: T,
@@ -117,7 +117,7 @@ impl<T: AmDist + Dist + 'static> GenericAtomicArray<T> {
         }
     }
 
-    pub fn load(&self, index: usize) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+    pub fn load<'a>(&self, index: impl OpInput<'a,usize>,) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
         let pe = self.pe_for_dist_index(index).expect("index out of bounds");
         let local_index = self.pe_offset_for_dist_index(pe, index).unwrap(); //calculated pe above
         let dummy_val = self.array.dummy_val(); //we dont actually do anything with this except satisfy apis;

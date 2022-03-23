@@ -37,11 +37,11 @@ pub struct LocalLockAtomicMutLocalData<'a, T: Dist>{
     _lock_guard: ArcRwLockWriteGuard<RawRwLock, Box<()>>,
 }
 
-impl<T: Dist> Drop for LocalLockAtomicMutLocalData<'_, T>{
-    fn drop(&mut self){
-        println!("dropping lla write lock");
-    }
-}
+// impl<T: Dist> Drop for LocalLockAtomicMutLocalData<'_, T>{
+//     fn drop(&mut self){
+//         println!("dropping lla write lock");
+//     }
+// }
 
 
 impl<T: Dist> Deref for LocalLockAtomicMutLocalData<'_, T> {
@@ -185,7 +185,7 @@ impl<T: Dist> LocalLockAtomicArray<T> {
             _index: 0,
             _lock_guard: self.lock.write(),
         };
-        println!("have lla write lock");
+        // println!("have lla write lock");
         lock
     }
 
@@ -197,6 +197,11 @@ impl<T: Dist> LocalLockAtomicArray<T> {
     #[doc(hidden)]
     pub fn mut_local_data(&self) -> LocalLockAtomicMutLocalData<'_, T> {
         self.local_as_mut_slice()
+    }
+
+    #[doc(hidden)]
+    pub unsafe fn __local_as_slice(&self) -> &[T] {
+        self.array.local_as_mut_slice()
     }
 
     pub fn sub_array<R: std::ops::RangeBounds<usize>>(&self, range: R) -> Self {
