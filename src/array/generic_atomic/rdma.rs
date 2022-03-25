@@ -5,7 +5,6 @@ use crate::array::*;
 use crate::memregion::{AsBase, Dist, RTMemoryRegionRDMA, RegisteredMemoryRegion};
 
 impl<T: Dist + 'static> GenericAtomicArray<T> {
-
     pub fn get<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(
         &self,
         index: usize,
@@ -19,10 +18,7 @@ impl<T: Dist + 'static> GenericAtomicArray<T> {
         Box::new(ArrayRdmaHandle { reqs: vec![req] })
     }
 
-    pub fn at(
-        &self,
-        index: usize,
-    ) -> Box<dyn LamellarArrayRequest<Output = T> + Send + Sync> {
+    pub fn at(&self, index: usize) -> Box<dyn LamellarArrayRequest<Output = T> + Send + Sync> {
         let buf: LocalMemoryRegion<T> = self.array.team().alloc_local_mem_region(1);
         let req = self.exec_am_local(InitGetAm {
             array: self.clone(),
@@ -84,11 +80,10 @@ impl<T: Dist> LamellarArrayPut<T> for GenericAtomicArray<T> {
     }
 }
 
-
 #[lamellar_impl::AmLocalDataRT]
 struct InitGetAm<T: Dist> {
     array: GenericAtomicArray<T>, //inner of the indices we need to place data into
-    index: usize,                   //relative to inner
+    index: usize,                 //relative to inner
     buf: LamellarArrayInput<T>,
 }
 
@@ -170,22 +165,30 @@ impl LamellarAm for GenericAtomicRemoteGetAm {
                 Some((elems, indices)) => {
                     let mut locks = Vec::new();
                     let mut diff = None;
-                    for i in indices{ //for simplicity lets lock all the indicies we are concerned about
-                        match diff{
+                    for i in indices {
+                        //for simplicity lets lock all the indicies we are concerned about
+                        match diff {
                             Some(diff) => {
                                 // assert_eq!(i+diff,self.array.array.inner.pe_full_offset_for_local_index(self.array.array.inner.data.my_pe,i).expect("invalid local index"));
-                                locks.push(self.array.locks[(i as isize +diff) as usize].lock());
+                                locks.push(self.array.locks[(i as isize + diff) as usize].lock());
                             }
-                            None =>{
-                               let temp_i = self.array.array.inner.pe_full_offset_for_local_index(self.array.array.inner.data.my_pe,i).expect("invalid local index");
-                               diff = Some(temp_i as isize-i as isize);
-                               locks.push(self.array.locks[temp_i].lock());
+                            None => {
+                                let temp_i = self
+                                    .array
+                                    .array
+                                    .inner
+                                    .pe_full_offset_for_local_index(
+                                        self.array.array.inner.data.my_pe,
+                                        i,
+                                    )
+                                    .expect("invalid local index");
+                                diff = Some(temp_i as isize - i as isize);
+                                locks.push(self.array.locks[temp_i].lock());
                             }
                         }
-                        
                     }
                     elems.to_vec() //copy the data
-                }, //locks dropped
+                } //locks dropped
                 None => vec![],
             }
         }
@@ -195,7 +198,7 @@ impl LamellarAm for GenericAtomicRemoteGetAm {
 #[lamellar_impl::AmLocalDataRT]
 struct InitPutAm<T: Dist> {
     array: GenericAtomicArray<T>, //inner of the indices we need to place data into
-    index: usize,                   //relative to inner
+    index: usize,                 //relative to inner
     buf: LamellarArrayInput<T>,
 }
 
@@ -314,16 +317,25 @@ impl LamellarAm for GenericAtomicRemotePutAm {
                     // println!("elems: {:?}",elems);
                     let mut locks = Vec::new();
                     let mut diff = None;
-                    for i in indices{ //for simplicity lets lock all the indicies we are concerned about
-                        match diff{
+                    for i in indices {
+                        //for simplicity lets lock all the indicies we are concerned about
+                        match diff {
                             Some(diff) => {
                                 // assert_eq!(i+diff,self.array.array.inner.pe_full_offset_for_local_index(self.array.array.inner.data.my_pe,i).expect("invalid local index"));
-                                locks.push(self.array.locks[(i as isize +diff)as usize].lock());
+                                locks.push(self.array.locks[(i as isize + diff) as usize].lock());
                             }
-                            None =>{
-                               let temp_i = self.array.array.inner.pe_full_offset_for_local_index(self.array.array.inner.data.my_pe,i).expect("invalid local index");
-                               diff = Some(temp_i as isize - i as isize);
-                               locks.push(self.array.locks[temp_i].lock());
+                            None => {
+                                let temp_i = self
+                                    .array
+                                    .array
+                                    .inner
+                                    .pe_full_offset_for_local_index(
+                                        self.array.array.inner.data.my_pe,
+                                        i,
+                                    )
+                                    .expect("invalid local index");
+                                diff = Some(temp_i as isize - i as isize);
+                                locks.push(self.array.locks[temp_i].lock());
                             }
                         }
                     }

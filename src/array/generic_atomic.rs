@@ -4,22 +4,18 @@ pub(crate) mod iteration;
 #[cfg(not(feature = "non-buffered-array-ops"))]
 pub(crate) use buffered_operations as operations;
 mod rdma;
+use crate::array::atomic::AtomicElement;
 use crate::array::generic_atomic::operations::BUFOPS;
 use crate::array::private::LamellarArrayPrivate;
 use crate::array::r#unsafe::UnsafeByteArray;
-use crate::array::atomic::AtomicElement;
 use crate::array::*;
 use crate::darc::Darc;
 use crate::darc::DarcMode;
 use crate::lamellar_team::{IntoLamellarTeam, LamellarTeamRT};
 use crate::memregion::Dist;
-use parking_lot::{
-    Mutex,MutexGuard
-};
+use parking_lot::{Mutex, MutexGuard};
 use std::any::TypeId;
 // use std::ops::{Deref, DerefMut};
-
-
 
 use std::ops::{AddAssign, BitAndAssign, BitOrAssign, DivAssign, MulAssign, SubAssign};
 pub struct GenericAtomicElement<T: Dist> {
@@ -27,21 +23,19 @@ pub struct GenericAtomicElement<T: Dist> {
     local_index: usize,
 }
 
-impl <T: Dist> From<GenericAtomicElement<T>> for AtomicElement<T>{
-    fn from(element: GenericAtomicElement<T>) -> AtomicElement<T>{
+impl<T: Dist> From<GenericAtomicElement<T>> for AtomicElement<T> {
+    fn from(element: GenericAtomicElement<T>) -> AtomicElement<T> {
         AtomicElement::GenericAtomicElement(element)
     }
 }
 
-impl <T: Dist> GenericAtomicElement<T>{
+impl<T: Dist> GenericAtomicElement<T> {
     pub fn load(&self) -> T {
-        let _lock =self.array.lock_index(self.local_index);
-        unsafe {
-            self.array.__local_as_mut_slice()[self.local_index]
-        }
+        let _lock = self.array.lock_index(self.local_index);
+        unsafe { self.array.__local_as_mut_slice()[self.local_index] }
     }
     pub fn store(&self, val: T) {
-        let _lock =self.array.lock_index(self.local_index);
+        let _lock = self.array.lock_index(self.local_index);
         unsafe {
             self.array.__local_as_mut_slice()[self.local_index] = val;
         }
@@ -51,58 +45,45 @@ impl <T: Dist> GenericAtomicElement<T>{
 impl<T: Dist + ElementArithmeticOps> AddAssign<T> for GenericAtomicElement<T> {
     fn add_assign(&mut self, val: T) {
         // self.add(val)
-        let _lock =self.array.lock_index(self.local_index);
-        unsafe {
-            self.array.__local_as_mut_slice()[self.local_index] += val
-        }
+        let _lock = self.array.lock_index(self.local_index);
+        unsafe { self.array.__local_as_mut_slice()[self.local_index] += val }
     }
 }
 
 impl<T: Dist + ElementArithmeticOps> SubAssign<T> for GenericAtomicElement<T> {
     fn sub_assign(&mut self, val: T) {
-        let _lock =self.array.lock_index(self.local_index);
-        unsafe {
-            self.array.__local_as_mut_slice()[self.local_index] -= val
-        }
+        let _lock = self.array.lock_index(self.local_index);
+        unsafe { self.array.__local_as_mut_slice()[self.local_index] -= val }
     }
 }
 
 impl<T: Dist + ElementArithmeticOps> MulAssign<T> for GenericAtomicElement<T> {
     fn mul_assign(&mut self, val: T) {
-        let _lock =self.array.lock_index(self.local_index);
-        unsafe {
-            self.array.__local_as_mut_slice()[self.local_index] *= val
-        }
+        let _lock = self.array.lock_index(self.local_index);
+        unsafe { self.array.__local_as_mut_slice()[self.local_index] *= val }
     }
 }
 
 impl<T: Dist + ElementArithmeticOps> DivAssign<T> for GenericAtomicElement<T> {
     fn div_assign(&mut self, val: T) {
-        let _lock =self.array.lock_index(self.local_index);
-        unsafe {
-            self.array.__local_as_mut_slice()[self.local_index] /= val
-        }
+        let _lock = self.array.lock_index(self.local_index);
+        unsafe { self.array.__local_as_mut_slice()[self.local_index] /= val }
     }
 }
 
 impl<T: Dist + ElementBitWiseOps> BitAndAssign<T> for GenericAtomicElement<T> {
     fn bitand_assign(&mut self, val: T) {
-        let _lock =self.array.lock_index(self.local_index);
-        unsafe {
-            self.array.__local_as_mut_slice()[self.local_index] &= val
-        }
+        let _lock = self.array.lock_index(self.local_index);
+        unsafe { self.array.__local_as_mut_slice()[self.local_index] &= val }
     }
 }
 
 impl<T: Dist + ElementBitWiseOps> BitOrAssign<T> for GenericAtomicElement<T> {
     fn bitor_assign(&mut self, val: T) {
-        let _lock =self.array.lock_index(self.local_index);
-        unsafe {
-            self.array.__local_as_mut_slice()[self.local_index] |= val
-        }
+        let _lock = self.array.lock_index(self.local_index);
+        unsafe { self.array.__local_as_mut_slice()[self.local_index] |= val }
     }
 }
-
 
 #[lamellar_impl::AmDataRT(Clone)]
 pub struct GenericAtomicArray<T: Dist> {
@@ -116,10 +97,14 @@ pub struct GenericAtomicByteArray {
     pub(crate) array: UnsafeByteArray,
 }
 
-impl GenericAtomicByteArray{
+impl GenericAtomicByteArray {
     #[doc(hidden)]
     pub fn lock_index(&self, index: usize) -> MutexGuard<()> {
-        let index = self.array.inner.pe_full_offset_for_local_index(self.array.inner.data.my_pe,index).expect("invalid local index");
+        let index = self
+            .array
+            .inner
+            .pe_full_offset_for_local_index(self.array.inner.data.my_pe, index)
+            .expect("invalid local index");
         self.locks[index].lock()
     }
 }
@@ -128,13 +113,13 @@ impl GenericAtomicByteArray{
 pub struct GenericAtomicLocalData<T: Dist> {
     array: GenericAtomicArray<T>,
     start_index: usize,
-    end_index: usize, 
+    end_index: usize,
 }
 
 pub struct GenericAtomicLocalDataIter<T: Dist> {
     array: GenericAtomicArray<T>,
     index: usize,
-    end_index: usize, 
+    end_index: usize,
 }
 
 impl<T: Dist> GenericAtomicLocalData<T> {
@@ -168,7 +153,7 @@ impl<T: Dist> GenericAtomicLocalData<T> {
         GenericAtomicLocalData {
             array: self.array.clone(),
             start_index: start_index,
-            end_index: std::cmp::min(end_index,self.array.num_elems_local()),
+            end_index: std::cmp::min(end_index, self.array.num_elems_local()),
         }
     }
 }
@@ -211,7 +196,7 @@ impl<T: Dist + std::default::Default> GenericAtomicArray<T> {
         // println!("new generic_atomic array");
         let array = UnsafeArray::new(team.clone(), array_size, distribution);
         let mut vec = vec![];
-        for _i in 0..array.num_elems_local(){
+        for _i in 0..array.num_elems_local() {
             vec.push(Mutex::new(()));
         }
         let locks = Darc::new(team, vec).unwrap();
@@ -235,9 +220,9 @@ impl<T: Dist + std::default::Default> GenericAtomicArray<T> {
     }
 }
 
-impl<T: Dist > GenericAtomicArray<T> {
-    pub(crate) fn get_element(&self, index: usize) -> GenericAtomicElement<T>{
-        GenericAtomicElement{
+impl<T: Dist> GenericAtomicArray<T> {
+    pub(crate) fn get_element(&self, index: usize) -> GenericAtomicElement<T> {
+        GenericAtomicElement {
             array: self.clone(),
             local_index: index,
         }
@@ -279,7 +264,6 @@ impl<T: Dist> GenericAtomicArray<T> {
     pub fn len(&self) -> usize {
         self.array.len()
     }
-
 
     pub fn local_data(&self) -> GenericAtomicLocalData<T> {
         GenericAtomicLocalData {
@@ -339,7 +323,11 @@ impl<T: Dist> GenericAtomicArray<T> {
         //     None
         // }
         // println!("trying to lock {:?}",index);
-        let index = self.array.inner.pe_full_offset_for_local_index(self.array.inner.data.my_pe,index).expect("invalid local index");
+        let index = self
+            .array
+            .inner
+            .pe_full_offset_for_local_index(self.array.inner.data.my_pe, index)
+            .expect("invalid local index");
         self.locks[index].lock()
     }
 }
@@ -354,7 +342,7 @@ impl<T: Dist> From<UnsafeArray<T>> for GenericAtomicArray<T> {
     fn from(array: UnsafeArray<T>) -> Self {
         array.block_on_outstanding(DarcMode::GenericAtomicArray);
         let mut vec = vec![];
-        for _i in 0..array.num_elems_local(){
+        for _i in 0..array.num_elems_local() {
             vec.push(Mutex::new(()));
         }
         let locks = Darc::new(array.team(), vec).unwrap();
@@ -404,7 +392,8 @@ impl<T: Dist> From<GenericAtomicByteArray> for AtomicArray<T> {
         GenericAtomicArray {
             locks: array.locks.clone(),
             array: array.array.into(),
-        }.into()
+        }
+        .into()
     }
 }
 
@@ -484,7 +473,6 @@ impl<T: Dist + std::fmt::Debug> ArrayPrint<T> for GenericAtomicArray<T> {
         self.array.print()
     }
 }
-
 
 impl<T: Dist + AmDist + 'static> GenericAtomicArray<T> {
     pub fn reduce(&self, op: &str) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {

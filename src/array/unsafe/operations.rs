@@ -79,7 +79,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
             .team
             .exec_arc_am_pe(pe, func, Some(self.inner.data.array_counters.clone()))
     }
-    fn initiate_op<'a>_old(
+    fn initiate_op(
         &self,
         index: usize,
         val: T,

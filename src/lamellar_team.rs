@@ -711,7 +711,10 @@ impl LamellarTeamRT {
     // // #[prof]
     fn wait_all(&self) {
         let mut temp_now = Instant::now();
-        while self.team_counters.outstanding_reqs.load(Ordering::SeqCst) > 0 || (self.parent.is_none() && self.world_counters.outstanding_reqs.load(Ordering::SeqCst) > 0) {
+        while self.team_counters.outstanding_reqs.load(Ordering::SeqCst) > 0
+            || (self.parent.is_none()
+                && self.world_counters.outstanding_reqs.load(Ordering::SeqCst) > 0)
+        {
             // std::thread::yield_now();
             self.scheduler.exec_task(); //mmight as well do useful work while we wait
             if temp_now.elapsed() > Duration::new(60, 0) {

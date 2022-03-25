@@ -1,6 +1,5 @@
 use crate::array::generic_atomic::*;
 
-
 use crate::array::iterator::distributed_iterator::{DistIteratorLauncher, DistributedIterator};
 use crate::array::iterator::serial_iterator::LamellarArrayIter;
 // use crate::array::private::LamellarArrayPrivate;
@@ -12,7 +11,7 @@ use crate::memregion::Dist;
 // };
 
 #[derive(Clone)]
-pub struct GenericAtomicDistIter< T: Dist> {
+pub struct GenericAtomicDistIter<T: Dist> {
     data: GenericAtomicArray<T>,
     cur_i: usize,
     end_i: usize,
@@ -28,7 +27,7 @@ pub struct GenericAtomicDistIter< T: Dist> {
 //         }
 //     }
 // }
-impl<T: Dist + 'static> GenericAtomicDistIter< T> {
+impl<T: Dist + 'static> GenericAtomicDistIter<T> {
     pub fn for_each<F>(self, op: F)
     where
         F: Fn(GenericAtomicElement<T>) + Sync + Send + Clone + 'static,

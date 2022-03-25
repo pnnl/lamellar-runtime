@@ -407,11 +407,11 @@ impl CommOps for RofiComm {
         // };
         if pe != self.my_pe {
             // unsafe {
-                let _lock = self.comm_mutex.lock();
-                match rofi_iget(src_addr, dst_addr, pe) {
-                    //not using rofi_get due to lost requests (TODO: implement better resource management in rofi)
-                    Err(ret) => {
-                        println!(
+            let _lock = self.comm_mutex.lock();
+            match rofi_iget(src_addr, dst_addr, pe) {
+                //not using rofi_get due to lost requests (TODO: implement better resource management in rofi)
+                Err(ret) => {
+                    println!(
                             "Error in get from {:?} src {:x} base_addr {:x} dst_addr {:p} size {:?} ret {:?}",
                             pe,
                             src_addr,
@@ -420,17 +420,17 @@ impl CommOps for RofiComm {
                             dst_addr.len(),
                             ret,
                         );
-                        panic!();
-                    }
-                    Ok(_ret) => {
-                        self.get_amt
-                            .fetch_add(dst_addr.len() * std::mem::size_of::<T>(), Ordering::SeqCst);
-                        self.get_cnt.fetch_add(1, Ordering::SeqCst);
-                        // if ret != 0{
-                        //     req.txids.push(ret);
-                        // }
-                    }
+                    panic!();
                 }
+                Ok(_ret) => {
+                    self.get_amt
+                        .fetch_add(dst_addr.len() * std::mem::size_of::<T>(), Ordering::SeqCst);
+                    self.get_cnt.fetch_add(1, Ordering::SeqCst);
+                    // if ret != 0{
+                    //     req.txids.push(ret);
+                    // }
+                }
+            }
             // }
         } else {
             // println!("[{:?}]-{:?} {:?} {:?}",self.my_pe,src_addr as *const T,dst_addr.as_mut_ptr(),dst_addr.len());

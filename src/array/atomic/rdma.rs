@@ -2,7 +2,7 @@ use crate::array::atomic::*;
 // use crate::array::private::ArrayExecAm;
 use crate::array::LamellarWrite;
 use crate::array::*;
-use crate::memregion::{ Dist};
+use crate::memregion::Dist;
 
 type GetFn = fn(AtomicByteArray, usize, usize) -> LamellarArcAm;
 pub struct AtomicArrayGet {
@@ -52,7 +52,7 @@ impl<T: Dist> AtomicArray<T> {
         index: usize,
         buf: U,
     ) -> Box<dyn LamellarArrayRequest<Output = ()> + Send + Sync> {
-        match self{
+        match self {
             AtomicArray::NativeAtomicArray(array) => array.get(index, buf),
             AtomicArray::GenericAtomicArray(array) => array.get(index, buf),
         }
@@ -70,14 +70,14 @@ impl<T: Dist> AtomicArray<T> {
         index: usize,
         buf: U,
     ) -> Box<dyn LamellarArrayRequest<Output = ()> + Send + Sync> {
-        match self{
+        match self {
             AtomicArray::NativeAtomicArray(array) => array.put(index, buf),
             AtomicArray::GenericAtomicArray(array) => array.put(index, buf),
         }
     }
 
     pub fn at(&self, index: usize) -> Box<dyn LamellarArrayRequest<Output = T> + Send + Sync> {
-        match self{
+        match self {
             AtomicArray::NativeAtomicArray(array) => array.at(index),
             AtomicArray::GenericAtomicArray(array) => array.at(index),
         }

@@ -256,7 +256,7 @@ impl<T: Dist> LamellarWrite for SharedMemoryRegion<T> {}
 impl<T: Dist> LamellarRead for SharedMemoryRegion<T> {}
 
 impl<T: Dist> From<&SharedMemoryRegion<T>> for LamellarMemoryRegion<T> {
-    fn from(smr: &SharedMemoryRegion<T>) -> Self{
+    fn from(smr: &SharedMemoryRegion<T>) -> Self {
         LamellarMemoryRegion::Shared(smr.clone())
     }
 }

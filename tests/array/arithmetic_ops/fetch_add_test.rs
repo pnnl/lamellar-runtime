@@ -1,5 +1,6 @@
 use lamellar::array::{
-    ArithmeticOps, AtomicArray, LocalLockAtomicArray, SerialIterator, UnsafeArray,DistributedIterator
+    ArithmeticOps, AtomicArray, DistributedIterator, LocalLockAtomicArray, SerialIterator,
+    UnsafeArray,
 };
 
 use lamellar::RemoteMemoryRegion;
@@ -14,7 +15,10 @@ macro_rules! initialize_array {
         $array.barrier();
     };
     (AtomicArray,$array:ident,$init_val:ident) => {
-        $array.dist_iter().enumerate().for_each(move |(i,x)| {println!("{:?} {:?}",i,x.load()); x.store($init_val)});
+        $array.dist_iter().enumerate().for_each(move |(i, x)| {
+            println!("{:?} {:?}", i, x.load());
+            x.store($init_val)
+        });
         $array.wait_all();
         $array.barrier();
     };
@@ -356,44 +360,39 @@ macro_rules! add_test{
     }
 }
 
-
-macro_rules! check_results{
+macro_rules! check_results {
     ($array_ty:ident, $array:ident, $num_pes:ident, $reqs:ident, $test:expr) => {
-        
-        let mut success=true;
+        let mut success = true;
         $array.wait_all();
         $array.barrier();
-        println!("test {:?} reqs len {:?}",$test,$reqs.len());
-        for (i,req) in $reqs.iter().enumerate(){
+        println!("test {:?} reqs len {:?}", $test, $reqs.len());
+        for (i, req) in $reqs.iter().enumerate() {
             let req = req.get().unwrap();
-            println!("sub_req len: {:?}",req.len());
-            for (j,res) in req.iter().enumerate(){
-                if !(res >= &0 && res < &$num_pes){
+            println!("sub_req len: {:?}", req.len());
+            for (j, res) in req.iter().enumerate() {
+                if !(res >= &0 && res < &$num_pes) {
                     success = false;
-                    println!("return i: {:?} j: {:?} val: {:?}",i,j,res);
+                    println!("return i: {:?} j: {:?} val: {:?}", i, j, res);
                 }
             }
         }
-        for (i,elem) in $array.ser_iter().into_iter().enumerate(){
+        for (i, elem) in $array.ser_iter().into_iter().enumerate() {
             let val = *elem;
-            check_val!($array_ty,val,$num_pes,success);
-            if !success{
-                println!("input {:?}: {:?} {:?} {:?}",$test,i,val,$num_pes);
+            check_val!($array_ty, val, $num_pes, success);
+            if !success {
+                println!("input {:?}: {:?} {:?} {:?}", $test, i, val, $num_pes);
             }
         }
-        if !success{
+        if !success {
             $array.print();
         }
         $array.barrier();
-        let init_val=0;
+        let init_val = 0;
         initialize_array!($array_ty, $array, init_val);
         $array.wait_all();
         $array.barrier();
-        
-    }
+    };
 }
-
-
 
 macro_rules! input_test{
     ($array:ident,  $len:expr, $dist:ident) =>{
@@ -415,7 +414,7 @@ macro_rules! input_test{
             else{
                 input_array.dist_iter_mut().enumerate().for_each(move |(i,x)| {println!("i: {:?}",i);*x = i/num_pes});
             }
-                
+
             array.wait_all();
             array.barrier();
             //individual T------------------------------
@@ -626,7 +625,7 @@ fn main() {
             "isize" => add_test!(UnsafeArray, isize, len, dist_type),
             "f32" => add_test!(UnsafeArray, f32, len, dist_type),
             "f64" => add_test!(UnsafeArray, f64, len, dist_type),
-            "input" => input_test!(UnsafeArray,len,dist_type),
+            "input" => input_test!(UnsafeArray, len, dist_type),
             _ => eprintln!("unsupported element type"),
         },
         "AtomicArray" => match elem.as_str() {
@@ -644,7 +643,7 @@ fn main() {
             "isize" => add_test!(AtomicArray, isize, len, dist_type),
             "f32" => add_test!(AtomicArray, f32, len, dist_type),
             "f64" => add_test!(AtomicArray, f64, len, dist_type),
-            "input" => input_test!(AtomicArray,len,dist_type),
+            "input" => input_test!(AtomicArray, len, dist_type),
             _ => eprintln!("unsupported element type"),
         },
         "LocalLockAtomicArray" => match elem.as_str() {
@@ -662,7 +661,7 @@ fn main() {
             "isize" => add_test!(LocalLockAtomicArray, isize, len, dist_type),
             "f32" => add_test!(LocalLockAtomicArray, f32, len, dist_type),
             "f64" => add_test!(LocalLockAtomicArray, f64, len, dist_type),
-            "input" => input_test!(LocalLockAtomicArray,len,dist_type),
+            "input" => input_test!(LocalLockAtomicArray, len, dist_type),
             _ => eprintln!("unsupported element type"),
         },
         _ => eprintln!("unsupported array type"),

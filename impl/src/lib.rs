@@ -602,7 +602,7 @@ fn create_reduction(
     let mut gen_match_stmts = quote! {};
     let mut array_impls = quote! {};
 
-    if !native{
+    if !native {
         gen_match_stmts.extend(quote!{
             #lamellar::array::LamellarByteArray::NativeAtomicArray(_) => panic!("this type is not a native atomic"),
         });
@@ -616,7 +616,10 @@ fn create_reduction(
                 data: unsafe {inner.clone().into()} , start_pe: 0, end_pe: num_pes-1}),
         });
 
-        let iter_chain = if array_type == "AtomicArray" || array_type == "GenericAtomicArray" || array_type == "NativeAtomicArray" {
+        let iter_chain = if array_type == "AtomicArray"
+            || array_type == "GenericAtomicArray"
+            || array_type == "NativeAtomicArray"
+        {
             quote! {.map(|elem| elem.load())}
         } else {
             quote! {.copied()}
@@ -827,139 +830,142 @@ fn gen_write_array_impls(
     write_array_impl
 }
 
-fn native_atomic_slice(typeident: &syn::Ident, lamellar: &proc_macro2::Ident) -> (proc_macro2::TokenStream,proc_macro2::TokenStream){
-    match typeident.to_string().as_str(){
-        "i8" => {
-            (quote!{
+fn native_atomic_slice(
+    typeident: &syn::Ident,
+    lamellar: &proc_macro2::Ident,
+) -> (proc_macro2::TokenStream, proc_macro2::TokenStream) {
+    match typeident.to_string().as_str() {
+        "i8" => (
+            quote! {
                 let slice = unsafe {
                     let slice = self.data.__local_as_mut_slice();
                     let slice_ptr = slice.as_mut_ptr() as *mut std::sync::atomic::AtomicI8;
                     std::slice::from_raw_parts_mut(slice_ptr,slice.len())
                 };
             },
-            quote!{
+            quote! {
                 let mut a_val = #lamellar::array::native_atomic::MyAtomicI8(&slice[index]);
                 a_val
-            })
-        },
-        "i16" => {
-            (quote!{
+            },
+        ),
+        "i16" => (
+            quote! {
                 let slice = unsafe {
                     let slice = self.data.__local_as_mut_slice();
                     let slice_ptr = slice.as_mut_ptr() as *mut std::sync::atomic::AtomicI16;
                     std::slice::from_raw_parts_mut(slice_ptr,slice.len())
                 };
             },
-            quote!{
+            quote! {
                 let mut a_val = #lamellar::array::native_atomic::MyAtomicI16(&slice[index]);
                 a_val
-            })
-        },
-        "i32" => {
-            (quote!{
+            },
+        ),
+        "i32" => (
+            quote! {
                 let slice = unsafe {
                     let slice = self.data.__local_as_mut_slice();
                     let slice_ptr = slice.as_mut_ptr() as *mut std::sync::atomic::AtomicI32;
                     std::slice::from_raw_parts_mut(slice_ptr,slice.len())
                 };
             },
-            quote!{
+            quote! {
                 let mut a_val = #lamellar::array::native_atomic::MyAtomicI32(&slice[index]);
                 a_val
-            })
-        },
-        "i64" => {
-            (quote!{
+            },
+        ),
+        "i64" => (
+            quote! {
                 let slice = unsafe {
                     let slice = self.data.__local_as_mut_slice();
                     let slice_ptr = slice.as_mut_ptr() as *mut std::sync::atomic::AtomicI64;
                     std::slice::from_raw_parts_mut(slice_ptr,slice.len())
                 };
             },
-            quote!{
+            quote! {
                 let mut a_val = #lamellar::array::native_atomic::MyAtomicI64(&slice[index]);
                 a_val
-            })
-        },
-        "isize" => {
-            (quote!{
+            },
+        ),
+        "isize" => (
+            quote! {
                 let slice = unsafe {
                     let slice = self.data.__local_as_mut_slice();
                     let slice_ptr = slice.as_mut_ptr() as *mut std::sync::atomic::AtomicIsize;
                     std::slice::from_raw_parts_mut(slice_ptr,slice.len())
                 };
             },
-            quote!{
+            quote! {
                 let mut a_val = #lamellar::array::native_atomic::MyAtomicIsize(&slice[index]);
                 a_val
-            })
-        },
-        "u8" => {
-            (quote!{
+            },
+        ),
+        "u8" => (
+            quote! {
                 let slice = unsafe {
                     let slice = self.data.__local_as_mut_slice();
                     let slice_ptr = slice.as_mut_ptr() as *mut std::sync::atomic::AtomicU8;
                     std::slice::from_raw_parts_mut(slice_ptr,slice.len())
                 };
             },
-            quote!{
+            quote! {
                 let mut a_val = #lamellar::array::native_atomic::MyAtomicU8(&slice[index]);
                 a_val
-            })
-        },
-        "u16" => {
-            (quote!{
+            },
+        ),
+        "u16" => (
+            quote! {
                 let slice = unsafe {
                     let slice = self.data.__local_as_mut_slice();
                     let slice_ptr = slice.as_mut_ptr() as *mut std::sync::atomic::AtomicU16;
                     std::slice::from_raw_parts_mut(slice_ptr,slice.len())
                 };
             },
-            quote!{
+            quote! {
                 let mut a_val = #lamellar::array::native_atomic::MyAtomicU16(&slice[index]);
                 a_val
-            })
-        },
-        "u32" => {
-            (quote!{
+            },
+        ),
+        "u32" => (
+            quote! {
                 let slice = unsafe {
                     let slice = self.data.__local_as_mut_slice();
                     let slice_ptr = slice.as_mut_ptr() as *mut std::sync::atomic::AtomicU32;
                     std::slice::from_raw_parts_mut(slice_ptr,slice.len())
                 };
             },
-            quote!{
+            quote! {
                 let mut a_val = #lamellar::array::native_atomic::MyAtomicU32(&slice[index]);
                 a_val
-            })
-        },
-        "u64" => {
-            (quote!{
+            },
+        ),
+        "u64" => (
+            quote! {
                 let slice = unsafe {
                     let slice = self.data.__local_as_mut_slice();
                     let slice_ptr = slice.as_mut_ptr() as *mut std::sync::atomic::AtomicU64;
                     std::slice::from_raw_parts_mut(slice_ptr,slice.len())
                 };
             },
-            quote!{
+            quote! {
                 let mut a_val = #lamellar::array::native_atomic::MyAtomicU64(&slice[index]);
                 a_val
-            })
-        },
-        "usize" => {
-            (quote!{
+            },
+        ),
+        "usize" => (
+            quote! {
                 let slice = unsafe {
                     let slice = self.data.__local_as_mut_slice();
                     let slice_ptr = slice.as_mut_ptr() as *mut std::sync::atomic::AtomicUsize;
                     std::slice::from_raw_parts_mut(slice_ptr,slice.len())
                 };
             },
-            quote!{
+            quote! {
                 let mut a_val = #lamellar::array::native_atomic::MyAtomicUsize(&slice[index]);
                 a_val
-            })
-        },
-        _ => panic!("this should never happen")
+            },
+        ),
+        _ => panic!("this should never happen"),
     }
 }
 
@@ -989,33 +995,33 @@ fn create_buf_ops(
         )
     };
     let mut expanded = quote! {};
-    // let (lhs, assign, load, lock, slice) = if array_type == "AtomicArray" {            
-                // AtomicArray::NativeAtomicArray(array) => {
-                //     (
-                //         quote! {slice[index]},
-                //         quote! {slice[index] = val},
-                //         quote! {slice[index]},
-                //         quote! {let _lock = self.data.lock_index(index);},
-                //         quote! {let mut slice = unsafe{self.data.__local_as_mut_slice()};},
-                //     )
-                // },
-                // AtomicArray::GenericAtomicArray(array) => {
-                //     (
-                //     quote! {slice[index]},
-                //     quote! {slice[index] = val},
-                //     quote! {slice[index]},
-                //     quote! {let _lock = self.data.lock_index(index);},
-                //     quote! {let mut slice = unsafe{self.data.__local_as_mut_slice()};},
-                //     )
-                // },
-                // quote!{
-                //     match self.data{
-                //         AtomicArray::NativeAtomicArray(array) => {
-                //         }
-                //         AtomicArray::GenericAtomicArray(array) => {
-                //         }
-                //     }
-                // }
+    // let (lhs, assign, load, lock, slice) = if array_type == "AtomicArray" {
+    // AtomicArray::NativeAtomicArray(array) => {
+    //     (
+    //         quote! {slice[index]},
+    //         quote! {slice[index] = val},
+    //         quote! {slice[index]},
+    //         quote! {let _lock = self.data.lock_index(index);},
+    //         quote! {let mut slice = unsafe{self.data.__local_as_mut_slice()};},
+    //     )
+    // },
+    // AtomicArray::GenericAtomicArray(array) => {
+    //     (
+    //     quote! {slice[index]},
+    //     quote! {slice[index] = val},
+    //     quote! {slice[index]},
+    //     quote! {let _lock = self.data.lock_index(index);},
+    //     quote! {let mut slice = unsafe{self.data.__local_as_mut_slice()};},
+    //     )
+    // },
+    // quote!{
+    //     match self.data{
+    //         AtomicArray::NativeAtomicArray(array) => {
+    //         }
+    //         AtomicArray::GenericAtomicArray(array) => {
+    //         }
+    //     }
+    // }
     //             (
     //                 quote! {slice[index]},
     //                 quote! {slice[index] = val},
@@ -1023,8 +1029,8 @@ fn create_buf_ops(
     //                 quote! {let _lock = self.data.lock_index(index);},
     //                 quote! {let mut slice = unsafe{self.data.__local_as_mut_slice()};},
     //             )
-    // } else if array_type == 
-    let (lhs, assign, load, lock, slice) = if array_type == "GenericAtomicArray" { 
+    // } else if array_type ==
+    let (lhs, assign, load, lock, slice) = if array_type == "GenericAtomicArray" {
         (
             quote! {slice[index]},
             quote! {slice[index] = val},
@@ -1032,18 +1038,16 @@ fn create_buf_ops(
             quote! {let _lock = self.data.lock_index(index);},
             quote! {let mut slice = unsafe{self.data.__local_as_mut_slice()};},
         )
-    } else if array_type == "NativeAtomicArray" { 
-        
-        let (slice,val) = native_atomic_slice(&typeident,&lamellar);
+    } else if array_type == "NativeAtomicArray" {
+        let (slice, val) = native_atomic_slice(&typeident, &lamellar);
         (
             quote! { #val },
             quote! {slice[index].store(val, Ordering::SeqCst)},
             quote! {slice[index].load(Ordering::SeqCst)},
-            quote! { },
+            quote! {},
             // quote! {use crate::array::native_atomic::AsNativeAtomic;let mut slice = unsafe{self.data.__local_as_mut_slice()}; }
-            quote! { #slice },  
-        )  
-        
+            quote! { #slice },
+        )
     } else {
         (
             quote! {slice[index]},
@@ -1083,7 +1087,7 @@ fn create_buf_ops(
                     #lhs /= val
                 },
                 ArrayOpCmd::Put => {#assign},
-                ArrayOpCmd::Get => 
+                ArrayOpCmd::Get =>
                     {results_slice[fetch_index]=orig;
                     fetch_index+=1
                 }
@@ -1151,9 +1155,7 @@ fn create_buf_ops(
                 let slice_ptr = op_data as *const (usize,usize,#typeident);
                 let slice = unsafe {std::slice::from_raw_parts(slice_ptr,len)};
                 // let val = unsafe{*(val as *const #typeident)};
-                
                 let mut ops = vec![];
-                
                 for (_,i,v) in slice{
                     ops.push((*i,*v));
                 }
@@ -1161,7 +1163,6 @@ fn create_buf_ops(
                 let first = buf.len() == 0;
                 self.cur_len.fetch_add(ops.len(),Ordering::SeqCst);
                 buf.push((op,ops));
-                
                 (first,self.complete.read().clone())
             }
 
@@ -1179,14 +1180,12 @@ fn create_buf_ops(
                 let slice_ptr = op_data as *const (usize,usize,#typeident);
                 let slice = unsafe {std::slice::from_raw_parts(slice_ptr,len)};
                 let mut res_indicies = vec![];//res_indicies.lock();
-                
                 let mut ops = vec![];
                 let mut buf = self.ops.lock();
                 for (rid, i,v) in slice{
                     ops.push((*i,*v));
                     res_indicies.push((*rid,self.result_cnt.read().fetch_add(1,Ordering::SeqCst)));
                 }
-               
                 let first = buf.len() == 0;
                 self.cur_len.fetch_add(ops.len(),Ordering::SeqCst);
                 buf.push((op,ops));
@@ -1226,18 +1225,14 @@ fn create_buf_ops(
                         ops: new_ops,
                         num_fetch_ops: num_fetch_ops,
                         orig_pe: self.data.my_pe(),
-                    };    
+                    };
                     // println!("here 0");
-                    ams.push(Arc::new(am));   
-                    // println!("here 1");           
+                    ams.push(Arc::new(am));
+                    // println!("here 1");
                 }
                 ams.reverse();
                 // println!("ams len: {:?}",ams.len());
-                    
                 // }
-                
-               
-                
                 (ams,len,complete,results)
             }
         }
@@ -1273,10 +1268,8 @@ fn create_buf_ops(
                     for (index,val) in ops{
                 // for (op,index,val) in &self.ops{
                         // println!("before op: {:?} index: {:?} val {:?} fetch_index {:?}",op,index,val,fetch_index);
-                        
                         let index = *index;
                         let val = *val;
-                        
                         #lock //this will get dropped at end of loop
                         let orig = #load;
                         // println!("before op: {:?} index: {:?} val {:?} fetch_index {:?} orig {:?}",op,index,val,fetch_index,orig);
@@ -1303,7 +1296,6 @@ fn create_buf_ops(
         }
         #[allow(non_snake_case)]
         fn #dist_am_buf_name(array: #lamellar::array::#byte_array_type) -> Arc<dyn #lamellar::array::BufferOp>{
-            
             // println!("{:}",stringify!(#dist_fn_name));
             Arc::new(#buf_op_name{
                 data: unsafe {array.into()},
@@ -1331,7 +1323,12 @@ enum OpType {
     Atomic,
 }
 
-fn create_buffered_ops(typeident: syn::Ident, bitwise: bool, native: bool, rt: bool) -> proc_macro2::TokenStream {
+fn create_buffered_ops(
+    typeident: syn::Ident,
+    bitwise: bool,
+    native: bool,
+    rt: bool,
+) -> proc_macro2::TokenStream {
     let lamellar = if rt {
         quote::format_ident!("crate")
     } else {
@@ -1344,8 +1341,8 @@ fn create_buffered_ops(typeident: syn::Ident, bitwise: bool, native: bool, rt: b
             quote::format_ident!("LocalLockAtomicByteArray"),
         ),
         // ( //we dont use atomic array here because we directly use either GenericAtomicArray or NativeAtomicArray
-        //     quote::format_ident!("AtomicArray"), 
-        //     quote::format_ident!("AtomicByteArray"), 
+        //     quote::format_ident!("AtomicArray"),
+        //     quote::format_ident!("AtomicByteArray"),
         // ),
         (
             quote::format_ident!("GenericAtomicArray"),
@@ -1353,7 +1350,7 @@ fn create_buffered_ops(typeident: syn::Ident, bitwise: bool, native: bool, rt: b
         ),
     ];
 
-    if native{
+    if native {
         atomic_array_types.push((
             quote::format_ident!("NativeAtomicArray"),
             quote::format_ident!("NativeAtomicByteArray"),
@@ -1463,7 +1460,12 @@ fn create_buffered_ops(typeident: syn::Ident, bitwise: bool, native: bool, rt: b
 }
 
 #[cfg(feature = "non-buffered-array-ops")]
-fn create_ops(typeident: syn::Ident, bitwise: bool, native: bool, rt: bool) -> proc_macro2::TokenStream {
+fn create_ops(
+    typeident: syn::Ident,
+    bitwise: bool,
+    native: bool,
+    rt: bool,
+) -> proc_macro2::TokenStream {
     let lamellar = if rt {
         quote::format_ident!("crate")
     } else {
@@ -1489,7 +1491,7 @@ fn create_ops(typeident: syn::Ident, bitwise: bool, native: bool, rt: bool) -> p
         ),
     ];
 
-    if native{
+    if native {
         write_array_types.push((
             quote::format_ident!("NativeAtomicArray"),
             quote::format_ident!("NativeAtomicByteArray"),
@@ -1537,7 +1539,7 @@ fn create_ops(typeident: syn::Ident, bitwise: bool, native: bool, rt: bool) -> p
         ),
     ];
 
-    if native{
+    if native {
         atomic_array_types.push((
             quote::format_ident!("NativeAtomicArray"),
             quote::format_ident!("NativeAtomicByteArray"),
@@ -1785,8 +1787,7 @@ pub fn register_reduction(item: TokenStream) -> TokenStream {
             quote! {#closure},
             &array_types,
             false,
-            false
-            // "lamellar".to_string(),
+            false, // "lamellar".to_string(),
         ));
     }
     TokenStream::from(output)
@@ -1862,7 +1863,7 @@ pub fn generate_reductions_for_type_rt(item: TokenStream) -> TokenStream {
     let mut read_array_types: Vec<syn::Ident> = vec![
         quote::format_ident!("LocalLockAtomicArray"),
         quote::format_ident!("AtomicArray"),
-        quote::format_ident!("GenericAtomicArray"),        
+        quote::format_ident!("GenericAtomicArray"),
         quote::format_ident!("UnsafeArray"),
         quote::format_ident!("ReadOnlyArray"),
     ];
@@ -1870,7 +1871,7 @@ pub fn generate_reductions_for_type_rt(item: TokenStream) -> TokenStream {
         read_array_types.push(quote::format_ident!("NativeAtomicArray"));
     }
 
-    for t in items[1..].iter()  {
+    for t in items[1..].iter() {
         let t = t.trim().to_string();
         let typeident = quote::format_ident!("{:}", t.clone());
         // let elemtypeident = if
@@ -1882,7 +1883,7 @@ pub fn generate_reductions_for_type_rt(item: TokenStream) -> TokenStream {
             },
             &read_array_types,
             true,
-            native
+            native,
         ));
         output.extend(create_reduction(
             typeident.clone(),
@@ -1892,7 +1893,7 @@ pub fn generate_reductions_for_type_rt(item: TokenStream) -> TokenStream {
             },
             &read_array_types,
             true,
-            native
+            native,
         ));
         output.extend(create_reduction(
             typeident.clone(),
@@ -1902,7 +1903,7 @@ pub fn generate_reductions_for_type_rt(item: TokenStream) -> TokenStream {
             },
             &read_array_types,
             true,
-            native
+            native,
         ));
     }
     TokenStream::from(output)
@@ -1929,7 +1930,12 @@ pub fn generate_ops_for_type(item: TokenStream) -> TokenStream {
         #[cfg(feature = "non-buffered-array-ops")]
         output.extend(create_ops(typeident.clone(), bitwise, native, false));
         #[cfg(not(feature = "non-buffered-array-ops"))]
-        output.extend(create_buffered_ops(typeident.clone(), bitwise, native, false));
+        output.extend(create_buffered_ops(
+            typeident.clone(),
+            bitwise,
+            native,
+            false,
+        ));
         // output.extend(gen_atomic_rdma(typeident.clone(), false));
     }
     TokenStream::from(output)
@@ -1960,7 +1966,12 @@ pub fn generate_ops_for_type_rt(item: TokenStream) -> TokenStream {
         #[cfg(feature = "non-buffered-array-ops")]
         output.extend(create_ops(typeident.clone(), bitwise, native, true));
         #[cfg(not(feature = "non-buffered-array-ops"))]
-        output.extend(create_buffered_ops(typeident.clone(), bitwise, native, true));
+        output.extend(create_buffered_ops(
+            typeident.clone(),
+            bitwise,
+            native,
+            true,
+        ));
         // output.extend(gen_atomic_rdma(typeident.clone(), true));
     }
     TokenStream::from(output)

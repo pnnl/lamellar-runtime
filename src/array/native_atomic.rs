@@ -4,10 +4,10 @@ pub(crate) mod iteration;
 #[cfg(not(feature = "non-buffered-array-ops"))]
 pub(crate) use buffered_operations as operations;
 mod rdma;
+use crate::array::atomic::AtomicElement;
 use crate::array::native_atomic::operations::BUFOPS;
 use crate::array::private::LamellarArrayPrivate;
 use crate::array::r#unsafe::UnsafeByteArray;
-use crate::array::atomic::{AtomicElement};
 use crate::array::*;
 // use crate::darc::Darc;
 use crate::darc::DarcMode;
@@ -19,10 +19,9 @@ use crate::memregion::Dist;
 use std::any::TypeId;
 // use std::ops::{Deref, DerefMut};
 
-
 pub trait NativeAtomic {}
 
-pub trait AsNativeAtomic{
+pub trait AsNativeAtomic {
     type Atomic;
     fn as_native_atomic(&self) -> &Self::Atomic;
 }
@@ -165,141 +164,255 @@ macro_rules! compare_exchange_op{
     }
 }
 
-macro_rules! impl_mul_div{ 
-    ($self:ident,$op:tt,$val:ident) =>{ // mul, div
-        unsafe{
-            match $self.array.orig_t{
-                NativeAtomicType::I8 => {compare_exchange_op!(i8,AtomicI8,$self,$val,$op) as *const i8 as *mut T},
-                NativeAtomicType::I16 => {compare_exchange_op!(i16,AtomicI16,$self,$val,$op) as *const i16 as *mut T},
-                NativeAtomicType::I32 => {compare_exchange_op!(i32,AtomicI32,$self,$val,$op) as *const i32 as *mut T},
-                NativeAtomicType::I64 => {compare_exchange_op!(i64,AtomicI64,$self,$val,$op) as *const i64 as *mut T},
-                NativeAtomicType::Isize => {compare_exchange_op!(isize,AtomicIsize,$self,$val,$op) as *const isize as *mut T},
-                NativeAtomicType::U8 => {compare_exchange_op!(u8,AtomicU8,$self,$val,$op) as *const u8 as *mut T},
-                NativeAtomicType::U16 => {compare_exchange_op!(u16,AtomicU16,$self,$val,$op) as *const u16 as *mut T}
-                NativeAtomicType::U32 => {compare_exchange_op!(u32,AtomicU32,$self,$val,$op) as *const u32 as *mut T},
-                NativeAtomicType::U64 => {compare_exchange_op!(u64,AtomicU64,$self,$val,$op) as *const u64 as *mut T},
-                NativeAtomicType::Usize => {compare_exchange_op!(usize,AtomicUsize,$self,$val,$op) as *const usize as *mut T},
+macro_rules! impl_mul_div {
+    ($self:ident,$op:tt,$val:ident) => {
+        // mul, div
+        unsafe {
+            match $self.array.orig_t {
+                NativeAtomicType::I8 => {
+                    compare_exchange_op!(i8, AtomicI8, $self, $val, $op) as *const i8 as *mut T
+                }
+                NativeAtomicType::I16 => {
+                    compare_exchange_op!(i16, AtomicI16, $self, $val, $op) as *const i16 as *mut T
+                }
+                NativeAtomicType::I32 => {
+                    compare_exchange_op!(i32, AtomicI32, $self, $val, $op) as *const i32 as *mut T
+                }
+                NativeAtomicType::I64 => {
+                    compare_exchange_op!(i64, AtomicI64, $self, $val, $op) as *const i64 as *mut T
+                }
+                NativeAtomicType::Isize => {
+                    compare_exchange_op!(isize, AtomicIsize, $self, $val, $op) as *const isize
+                        as *mut T
+                }
+                NativeAtomicType::U8 => {
+                    compare_exchange_op!(u8, AtomicU8, $self, $val, $op) as *const u8 as *mut T
+                }
+                NativeAtomicType::U16 => {
+                    compare_exchange_op!(u16, AtomicU16, $self, $val, $op) as *const u16 as *mut T
+                }
+                NativeAtomicType::U32 => {
+                    compare_exchange_op!(u32, AtomicU32, $self, $val, $op) as *const u32 as *mut T
+                }
+                NativeAtomicType::U64 => {
+                    compare_exchange_op!(u64, AtomicU64, $self, $val, $op) as *const u64 as *mut T
+                }
+                NativeAtomicType::Usize => {
+                    compare_exchange_op!(usize, AtomicUsize, $self, $val, $op) as *const usize
+                        as *mut T
+                }
             }
         }
     };
 }
-macro_rules! impl_add_sub_and_or{
-    ($self:ident,$op:ident,$val:ident) =>{ //add,sub,and,or (returns value)
-        unsafe{
-            let slice =  $self.array.__local_as_mut_slice();
-            match $self.array.orig_t{
-                NativeAtomicType::I8 => {slice_as_atomic!(i8,AtomicI8,slice)[$self.local_index].$op(as_type!($val,i8),Ordering::SeqCst);},
-                NativeAtomicType::I16 => {slice_as_atomic!(i16,AtomicI16,slice)[$self.local_index].$op(as_type!($val,i16),Ordering::SeqCst);},
-                NativeAtomicType::I32 => {slice_as_atomic!(i32,AtomicI32,slice)[$self.local_index].$op(as_type!($val,i32),Ordering::SeqCst);},
-                NativeAtomicType::I64 => {slice_as_atomic!(i64,AtomicI64,slice)[$self.local_index].$op(as_type!($val,i64),Ordering::SeqCst);},
-                NativeAtomicType::Isize => {slice_as_atomic!(isize,AtomicIsize,slice)[$self.local_index].$op(as_type!($val,isize),Ordering::SeqCst);},
-                NativeAtomicType::U8 => {slice_as_atomic!(u8,AtomicU8,slice)[$self.local_index].$op(as_type!($val,u8),Ordering::SeqCst);},
-                NativeAtomicType::U16 => {slice_as_atomic!(u16,AtomicU16,slice)[$self.local_index].$op(as_type!($val,u16),Ordering::SeqCst);}
-                NativeAtomicType::U32 => {slice_as_atomic!(u32,AtomicU32,slice)[$self.local_index].$op(as_type!($val,u32),Ordering::SeqCst);},
-                NativeAtomicType::U64 => {slice_as_atomic!(u64,AtomicU64,slice)[$self.local_index].$op(as_type!($val,u64),Ordering::SeqCst);},
-                NativeAtomicType::Usize => {slice_as_atomic!(usize,AtomicUsize,slice)[$self.local_index].$op(as_type!($val,usize),Ordering::SeqCst);},
+macro_rules! impl_add_sub_and_or {
+    ($self:ident,$op:ident,$val:ident) => {
+        //add,sub,and,or (returns value)
+        unsafe {
+            let slice = $self.array.__local_as_mut_slice();
+            match $self.array.orig_t {
+                NativeAtomicType::I8 => {
+                    slice_as_atomic!(i8, AtomicI8, slice)[$self.local_index]
+                        .$op(as_type!($val, i8), Ordering::SeqCst);
+                }
+                NativeAtomicType::I16 => {
+                    slice_as_atomic!(i16, AtomicI16, slice)[$self.local_index]
+                        .$op(as_type!($val, i16), Ordering::SeqCst);
+                }
+                NativeAtomicType::I32 => {
+                    slice_as_atomic!(i32, AtomicI32, slice)[$self.local_index]
+                        .$op(as_type!($val, i32), Ordering::SeqCst);
+                }
+                NativeAtomicType::I64 => {
+                    slice_as_atomic!(i64, AtomicI64, slice)[$self.local_index]
+                        .$op(as_type!($val, i64), Ordering::SeqCst);
+                }
+                NativeAtomicType::Isize => {
+                    slice_as_atomic!(isize, AtomicIsize, slice)[$self.local_index]
+                        .$op(as_type!($val, isize), Ordering::SeqCst);
+                }
+                NativeAtomicType::U8 => {
+                    slice_as_atomic!(u8, AtomicU8, slice)[$self.local_index]
+                        .$op(as_type!($val, u8), Ordering::SeqCst);
+                }
+                NativeAtomicType::U16 => {
+                    slice_as_atomic!(u16, AtomicU16, slice)[$self.local_index]
+                        .$op(as_type!($val, u16), Ordering::SeqCst);
+                }
+                NativeAtomicType::U32 => {
+                    slice_as_atomic!(u32, AtomicU32, slice)[$self.local_index]
+                        .$op(as_type!($val, u32), Ordering::SeqCst);
+                }
+                NativeAtomicType::U64 => {
+                    slice_as_atomic!(u64, AtomicU64, slice)[$self.local_index]
+                        .$op(as_type!($val, u64), Ordering::SeqCst);
+                }
+                NativeAtomicType::Usize => {
+                    slice_as_atomic!(usize, AtomicUsize, slice)[$self.local_index]
+                        .$op(as_type!($val, usize), Ordering::SeqCst);
+                }
             }
         }
     };
 }
-macro_rules! impl_store{
-    ($self:ident,$val:ident) =>{//store 
-        unsafe{
-            let slice =  $self.array.__local_as_mut_slice();
-            match $self.array.orig_t{
-                NativeAtomicType::I8 => {slice_as_atomic!(i8,AtomicI8,slice)[$self.local_index].store(as_type!($val,i8),Ordering::SeqCst);},
-                NativeAtomicType::I16 => {slice_as_atomic!(i16,AtomicI16,slice)[$self.local_index].store(as_type!($val,i16),Ordering::SeqCst);},
-                NativeAtomicType::I32 => {slice_as_atomic!(i32,AtomicI32,slice)[$self.local_index].store(as_type!($val,i32),Ordering::SeqCst);},
-                NativeAtomicType::I64 => {slice_as_atomic!(i64,AtomicI64,slice)[$self.local_index].store(as_type!($val,i64),Ordering::SeqCst);},
-                NativeAtomicType::Isize => {slice_as_atomic!(isize,AtomicIsize,slice)[$self.local_index].store(as_type!($val,isize),Ordering::SeqCst);},
-                NativeAtomicType::U8 => {slice_as_atomic!(u8,AtomicU8,slice)[$self.local_index].store(as_type!($val,u8),Ordering::SeqCst);},
-                NativeAtomicType::U16 => {slice_as_atomic!(u16,AtomicU16,slice)[$self.local_index].store(as_type!($val,u16),Ordering::SeqCst);}
-                NativeAtomicType::U32 => {slice_as_atomic!(u32,AtomicU32,slice)[$self.local_index].store(as_type!($val,u32),Ordering::SeqCst);},
-                NativeAtomicType::U64 => {slice_as_atomic!(u64,AtomicU64,slice)[$self.local_index].store(as_type!($val,u64),Ordering::SeqCst);},
-                NativeAtomicType::Usize => {slice_as_atomic!(usize,AtomicUsize,slice)[$self.local_index].store(as_type!($val,usize),Ordering::SeqCst);},
+macro_rules! impl_store {
+    ($self:ident,$val:ident) => {
+        //store
+        unsafe {
+            let slice = $self.array.__local_as_mut_slice();
+            match $self.array.orig_t {
+                NativeAtomicType::I8 => {
+                    slice_as_atomic!(i8, AtomicI8, slice)[$self.local_index]
+                        .store(as_type!($val, i8), Ordering::SeqCst);
+                }
+                NativeAtomicType::I16 => {
+                    slice_as_atomic!(i16, AtomicI16, slice)[$self.local_index]
+                        .store(as_type!($val, i16), Ordering::SeqCst);
+                }
+                NativeAtomicType::I32 => {
+                    slice_as_atomic!(i32, AtomicI32, slice)[$self.local_index]
+                        .store(as_type!($val, i32), Ordering::SeqCst);
+                }
+                NativeAtomicType::I64 => {
+                    slice_as_atomic!(i64, AtomicI64, slice)[$self.local_index]
+                        .store(as_type!($val, i64), Ordering::SeqCst);
+                }
+                NativeAtomicType::Isize => {
+                    slice_as_atomic!(isize, AtomicIsize, slice)[$self.local_index]
+                        .store(as_type!($val, isize), Ordering::SeqCst);
+                }
+                NativeAtomicType::U8 => {
+                    slice_as_atomic!(u8, AtomicU8, slice)[$self.local_index]
+                        .store(as_type!($val, u8), Ordering::SeqCst);
+                }
+                NativeAtomicType::U16 => {
+                    slice_as_atomic!(u16, AtomicU16, slice)[$self.local_index]
+                        .store(as_type!($val, u16), Ordering::SeqCst);
+                }
+                NativeAtomicType::U32 => {
+                    slice_as_atomic!(u32, AtomicU32, slice)[$self.local_index]
+                        .store(as_type!($val, u32), Ordering::SeqCst);
+                }
+                NativeAtomicType::U64 => {
+                    slice_as_atomic!(u64, AtomicU64, slice)[$self.local_index]
+                        .store(as_type!($val, u64), Ordering::SeqCst);
+                }
+                NativeAtomicType::Usize => {
+                    slice_as_atomic!(usize, AtomicUsize, slice)[$self.local_index]
+                        .store(as_type!($val, usize), Ordering::SeqCst);
+                }
             }
         }
     };
 }
 
-macro_rules! impl_load{
-    ($self:ident) =>{//load
-        unsafe{
-            let slice =  $self.array.__local_as_mut_slice();
-            match $self.array.orig_t{
-                NativeAtomicType::I8 => {*(&(slice_as_atomic!(i8,AtomicI8,slice)[$self.local_index].load(Ordering::SeqCst)) as *const i8 as *const T)},
-                NativeAtomicType::I16 => {*(&(slice_as_atomic!(i16,AtomicI16,slice)[$self.local_index].load(Ordering::SeqCst)) as *const i16 as *const T)},
-                NativeAtomicType::I32 => {*(&(slice_as_atomic!(i32,AtomicI32,slice)[$self.local_index].load(Ordering::SeqCst)) as *const i32 as *const T)},
-                NativeAtomicType::I64 => {*(&(slice_as_atomic!(i64,AtomicI64,slice)[$self.local_index].load(Ordering::SeqCst)) as *const i64 as *const T)},
-                NativeAtomicType::Isize => {*(&(slice_as_atomic!(isize,AtomicIsize,slice)[$self.local_index].load(Ordering::SeqCst))as *const isize as *const T)},
-                NativeAtomicType::U8 => {*(&(slice_as_atomic!(u8,AtomicU8,slice)[$self.local_index].load(Ordering::SeqCst)) as *const u8 as *const T)},
-                NativeAtomicType::U16 => {*(&(slice_as_atomic!(u16,AtomicU16,slice)[$self.local_index].load(Ordering::SeqCst))as *const u16 as *const T)}
-                NativeAtomicType::U32 => {*(&(slice_as_atomic!(u32,AtomicU32,slice)[$self.local_index].load(Ordering::SeqCst)) as *const u32 as *const T)},
-                NativeAtomicType::U64 => {*(&(slice_as_atomic!(u64,AtomicU64,slice)[$self.local_index].load(Ordering::SeqCst)) as *const u64 as *const T)},
-                NativeAtomicType::Usize => {*(&(slice_as_atomic!(usize,AtomicUsize,slice)[$self.local_index].load(Ordering::SeqCst)) as *const usize as *const T)},
+macro_rules! impl_load {
+    ($self:ident) => {
+        //load
+        unsafe {
+            let slice = $self.array.__local_as_mut_slice();
+            match $self.array.orig_t {
+                NativeAtomicType::I8 => {
+                    *(&(slice_as_atomic!(i8, AtomicI8, slice)[$self.local_index]
+                        .load(Ordering::SeqCst)) as *const i8 as *const T)
+                }
+                NativeAtomicType::I16 => {
+                    *(&(slice_as_atomic!(i16, AtomicI16, slice)[$self.local_index]
+                        .load(Ordering::SeqCst)) as *const i16 as *const T)
+                }
+                NativeAtomicType::I32 => {
+                    *(&(slice_as_atomic!(i32, AtomicI32, slice)[$self.local_index]
+                        .load(Ordering::SeqCst)) as *const i32 as *const T)
+                }
+                NativeAtomicType::I64 => {
+                    *(&(slice_as_atomic!(i64, AtomicI64, slice)[$self.local_index]
+                        .load(Ordering::SeqCst)) as *const i64 as *const T)
+                }
+                NativeAtomicType::Isize => {
+                    *(&(slice_as_atomic!(isize, AtomicIsize, slice)[$self.local_index]
+                        .load(Ordering::SeqCst)) as *const isize as *const T)
+                }
+                NativeAtomicType::U8 => {
+                    *(&(slice_as_atomic!(u8, AtomicU8, slice)[$self.local_index]
+                        .load(Ordering::SeqCst)) as *const u8 as *const T)
+                }
+                NativeAtomicType::U16 => {
+                    *(&(slice_as_atomic!(u16, AtomicU16, slice)[$self.local_index]
+                        .load(Ordering::SeqCst)) as *const u16 as *const T)
+                }
+                NativeAtomicType::U32 => {
+                    *(&(slice_as_atomic!(u32, AtomicU32, slice)[$self.local_index]
+                        .load(Ordering::SeqCst)) as *const u32 as *const T)
+                }
+                NativeAtomicType::U64 => {
+                    *(&(slice_as_atomic!(u64, AtomicU64, slice)[$self.local_index]
+                        .load(Ordering::SeqCst)) as *const u64 as *const T)
+                }
+                NativeAtomicType::Usize => {
+                    *(&(slice_as_atomic!(usize, AtomicUsize, slice)[$self.local_index]
+                        .load(Ordering::SeqCst)) as *const usize as *const T)
+                }
             }
         }
     };
 }
-
 
 use std::ops::{AddAssign, BitAndAssign, BitOrAssign, DivAssign, MulAssign, SubAssign};
-pub struct NativeAtomicElement<T: Dist > {
+pub struct NativeAtomicElement<T: Dist> {
     array: NativeAtomicArray<T>,
     local_index: usize,
 }
 
-impl <T: Dist > From<NativeAtomicElement<T>> for AtomicElement<T>{
-    fn from(element: NativeAtomicElement<T>) -> AtomicElement<T>{
+impl<T: Dist> From<NativeAtomicElement<T>> for AtomicElement<T> {
+    fn from(element: NativeAtomicElement<T>) -> AtomicElement<T> {
         AtomicElement::NativeAtomicElement(element)
     }
 }
- 
-impl <T: Dist > NativeAtomicElement<T>{
+
+impl<T: Dist> NativeAtomicElement<T> {
     pub fn load(&self) -> T {
         impl_load!(self)
     }
     pub fn store(&self, val: T) {
-        impl_store!(self,val);
+        impl_store!(self, val);
     }
 }
 
-impl<T: Dist + ElementArithmeticOps > AddAssign<T> for NativeAtomicElement<T> {
+impl<T: Dist + ElementArithmeticOps> AddAssign<T> for NativeAtomicElement<T> {
     fn add_assign(&mut self, val: T) {
-        impl_add_sub_and_or!(self,fetch_add,val);
+        impl_add_sub_and_or!(self, fetch_add, val);
     }
 }
 
-impl<T: Dist + ElementArithmeticOps > SubAssign<T> for NativeAtomicElement<T> {
+impl<T: Dist + ElementArithmeticOps> SubAssign<T> for NativeAtomicElement<T> {
     fn sub_assign(&mut self, val: T) {
-        impl_add_sub_and_or!(self,fetch_sub,val);
+        impl_add_sub_and_or!(self, fetch_sub, val);
     }
 }
 
-impl<T: Dist + ElementArithmeticOps > MulAssign<T> for NativeAtomicElement<T> {
+impl<T: Dist + ElementArithmeticOps> MulAssign<T> for NativeAtomicElement<T> {
     fn mul_assign(&mut self, val: T) {
         impl_mul_div!(self,*,val);
     }
 }
 
-impl<T: Dist + ElementArithmeticOps > DivAssign<T> for NativeAtomicElement<T> {
+impl<T: Dist + ElementArithmeticOps> DivAssign<T> for NativeAtomicElement<T> {
     fn div_assign(&mut self, val: T) {
         impl_mul_div!(self,/,val);
     }
 }
 
-impl<T: Dist + ElementBitWiseOps > BitAndAssign<T> for NativeAtomicElement<T> {
+impl<T: Dist + ElementBitWiseOps> BitAndAssign<T> for NativeAtomicElement<T> {
     fn bitand_assign(&mut self, val: T) {
-        impl_add_sub_and_or!(self,fetch_and,val);
+        impl_add_sub_and_or!(self, fetch_and, val);
     }
 }
 
-impl<T: Dist + ElementBitWiseOps > BitOrAssign<T> for NativeAtomicElement<T> {
+impl<T: Dist + ElementBitWiseOps> BitOrAssign<T> for NativeAtomicElement<T> {
     fn bitor_assign(&mut self, val: T) {
-        impl_add_sub_and_or!(self,fetch_or,val);
+        impl_add_sub_and_or!(self, fetch_or, val);
     }
 }
-
 
 #[lamellar_impl::AmDataRT(Clone)]
 pub struct NativeAtomicArray<T: Dist> {
@@ -313,21 +426,22 @@ pub struct NativeAtomicByteArray {
     pub(crate) orig_t: NativeAtomicType,
 }
 
-
 #[derive(Clone)]
-pub struct NativeAtomicLocalData<T: Dist> {// + NativeAtomicOps> {
+pub struct NativeAtomicLocalData<T: Dist> {
+    // + NativeAtomicOps> {
     array: NativeAtomicArray<T>,
     start_index: usize,
-    end_index: usize, 
+    end_index: usize,
 }
 
-pub struct NativeAtomicLocalDataIter<T: Dist > {//+ NativeAtomicOps> {
+pub struct NativeAtomicLocalDataIter<T: Dist> {
+    //+ NativeAtomicOps> {
     array: NativeAtomicArray<T>,
     index: usize,
-    end_index: usize, 
+    end_index: usize,
 }
 
-impl<T: Dist > NativeAtomicLocalData<T> {
+impl<T: Dist> NativeAtomicLocalData<T> {
     pub fn at(&self, index: usize) -> NativeAtomicElement<T> {
         NativeAtomicElement {
             array: self.array.clone(),
@@ -351,7 +465,6 @@ impl<T: Dist > NativeAtomicLocalData<T> {
             array: self.array.clone(),
             index: self.start_index,
             end_index: self.end_index,
-
         }
     }
 
@@ -359,7 +472,7 @@ impl<T: Dist > NativeAtomicLocalData<T> {
         NativeAtomicLocalData {
             array: self.array.clone(),
             start_index: start_index,
-            end_index: std::cmp::min(end_index,self.array.num_elems_local()),
+            end_index: std::cmp::min(end_index, self.array.num_elems_local()),
         }
     }
 
@@ -371,7 +484,7 @@ impl<T: Dist > NativeAtomicLocalData<T> {
     // }
 }
 
-impl<T: Dist > IntoIterator for NativeAtomicLocalData<T> {
+impl<T: Dist> IntoIterator for NativeAtomicLocalData<T> {
     type Item = NativeAtomicElement<T>;
     type IntoIter = NativeAtomicLocalDataIter<T>;
     fn into_iter(self) -> Self::IntoIter {
@@ -383,7 +496,7 @@ impl<T: Dist > IntoIterator for NativeAtomicLocalData<T> {
     }
 }
 
-impl<T: Dist > Iterator for NativeAtomicLocalDataIter<T> {
+impl<T: Dist> Iterator for NativeAtomicLocalDataIter<T> {
     type Item = NativeAtomicElement<T>;
     fn next(&mut self) -> Option<Self::Item> {
         if self.index < self.end_index {
@@ -399,14 +512,14 @@ impl<T: Dist > Iterator for NativeAtomicLocalDataIter<T> {
     }
 }
 
-impl<T: Dist + NativeAtomic + std::default::Default > NativeAtomicArray<T> {
+impl<T: Dist + NativeAtomic + std::default::Default> NativeAtomicArray<T> {
     //Sync + Send + Copy  == Dist
     pub fn new<U: Clone + Into<IntoLamellarTeam>>(
         team: U,
         array_size: usize,
         distribution: Distribution,
     ) -> NativeAtomicArray<T> {
-        // println!("new native atomic array 0"); 
+        // println!("new native atomic array 0");
         let array = UnsafeArray::new(team.clone(), array_size, distribution);
         if let Some(func) = BUFOPS.get(&TypeId::of::<T>()) {
             let mut op_bufs = array.inner.data.op_buffers.write();
@@ -455,13 +568,12 @@ impl<T: Dist + std::default::Default> NativeAtomicArray<T> {
     }
 }
 
-impl<T: Dist > NativeAtomicArray<T> {
-
-    pub fn native_type(&self) -> NativeAtomicType{
+impl<T: Dist> NativeAtomicArray<T> {
+    pub fn native_type(&self) -> NativeAtomicType {
         self.orig_t
     }
-    pub(crate) fn get_element(&self, index: usize) -> NativeAtomicElement<T>{
-        NativeAtomicElement{
+    pub(crate) fn get_element(&self, index: usize) -> NativeAtomicElement<T> {
+        NativeAtomicElement {
             array: self.clone(),
             local_index: index,
         }
@@ -482,7 +594,7 @@ impl<T: Dist> NativeAtomicArray<T> {
     pub fn use_distribution(self, distribution: Distribution) -> Self {
         NativeAtomicArray {
             array: self.array.use_distribution(distribution),
-            orig_t: self.orig_t
+            orig_t: self.orig_t,
         }
     }
 
@@ -503,7 +615,6 @@ impl<T: Dist> NativeAtomicArray<T> {
     pub fn len(&self) -> usize {
         self.array.len()
     }
-
 
     pub fn local_data(&self) -> NativeAtomicLocalData<T> {
         NativeAtomicLocalData {
@@ -552,9 +663,7 @@ impl<T: Dist> NativeAtomicArray<T> {
     pub fn into_generic_atomic(self) -> GenericAtomicArray<T> {
         self.array.into()
     }
-
 }
-
 
 impl<T: Dist> From<UnsafeArray<T>> for NativeAtomicArray<T> {
     fn from(array: UnsafeArray<T>) -> Self {
@@ -576,7 +685,7 @@ impl<T: Dist> From<UnsafeArray<T>> for NativeAtomicArray<T> {
     }
 }
 
-impl<T: Dist > From<NativeAtomicArray<T>> for NativeAtomicByteArray {
+impl<T: Dist> From<NativeAtomicArray<T>> for NativeAtomicByteArray {
     fn from(array: NativeAtomicArray<T>) -> Self {
         NativeAtomicByteArray {
             array: array.array.into(),
@@ -584,7 +693,7 @@ impl<T: Dist > From<NativeAtomicArray<T>> for NativeAtomicByteArray {
         }
     }
 }
-impl<T: Dist > From<NativeAtomicArray<T>> for AtomicByteArray {
+impl<T: Dist> From<NativeAtomicArray<T>> for AtomicByteArray {
     fn from(array: NativeAtomicArray<T>) -> Self {
         AtomicByteArray::NativeAtomicByteArray(NativeAtomicByteArray {
             array: array.array.into(),
@@ -592,7 +701,7 @@ impl<T: Dist > From<NativeAtomicArray<T>> for AtomicByteArray {
         })
     }
 }
-impl<T: Dist > From<NativeAtomicByteArray> for NativeAtomicArray<T> {
+impl<T: Dist> From<NativeAtomicByteArray> for NativeAtomicArray<T> {
     fn from(array: NativeAtomicByteArray) -> Self {
         NativeAtomicArray {
             array: array.array.into(),
@@ -600,12 +709,13 @@ impl<T: Dist > From<NativeAtomicByteArray> for NativeAtomicArray<T> {
         }
     }
 }
-impl<T: Dist > From<NativeAtomicByteArray> for AtomicArray<T> {
+impl<T: Dist> From<NativeAtomicByteArray> for AtomicArray<T> {
     fn from(array: NativeAtomicByteArray) -> Self {
         NativeAtomicArray {
             array: array.array.into(),
             orig_t: array.orig_t,
-        }.into()
+        }
+        .into()
     }
 }
 
@@ -618,7 +728,7 @@ impl<T: Dist> private::ArrayExecAm<T> for NativeAtomicArray<T> {
     }
 }
 
-impl<T: Dist > private::LamellarArrayPrivate<T> for NativeAtomicArray<T> {
+impl<T: Dist> private::LamellarArrayPrivate<T> for NativeAtomicArray<T> {
     fn local_as_ptr(&self) -> *const T {
         self.array.local_as_mut_ptr()
     }
@@ -636,7 +746,7 @@ impl<T: Dist > private::LamellarArrayPrivate<T> for NativeAtomicArray<T> {
     }
 }
 
-impl<T: Dist > LamellarArray<T> for NativeAtomicArray<T> {
+impl<T: Dist> LamellarArray<T> for NativeAtomicArray<T> {
     fn my_pe(&self) -> usize {
         self.array.my_pe()
     }
@@ -661,10 +771,10 @@ impl<T: Dist > LamellarArray<T> for NativeAtomicArray<T> {
     }
 }
 
-impl<T: Dist > LamellarWrite for NativeAtomicArray<T> {}
-impl<T: Dist > LamellarRead for NativeAtomicArray<T> {}
+impl<T: Dist> LamellarWrite for NativeAtomicArray<T> {}
+impl<T: Dist> LamellarRead for NativeAtomicArray<T> {}
 
-impl<T: Dist > SubArray<T> for NativeAtomicArray<T> {
+impl<T: Dist> SubArray<T> for NativeAtomicArray<T> {
     type Array = NativeAtomicArray<T>;
     fn sub_array<R: std::ops::RangeBounds<usize>>(&self, range: R) -> Self::Array {
         self.sub_array(range).into()
@@ -674,18 +784,17 @@ impl<T: Dist > SubArray<T> for NativeAtomicArray<T> {
     }
 }
 
-impl<T: Dist  + std::fmt::Debug> NativeAtomicArray<T> {
+impl<T: Dist + std::fmt::Debug> NativeAtomicArray<T> {
     pub fn print(&self) {
         self.array.print();
     }
 }
 
-impl<T: Dist  + std::fmt::Debug> ArrayPrint<T> for NativeAtomicArray<T> {
+impl<T: Dist + std::fmt::Debug> ArrayPrint<T> for NativeAtomicArray<T> {
     fn print(&self) {
         self.array.print()
     }
 }
-
 
 impl<T: Dist + AmDist + 'static> NativeAtomicArray<T> {
     pub fn reduce(&self, op: &str) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
@@ -702,11 +811,9 @@ impl<T: Dist + AmDist + 'static> NativeAtomicArray<T> {
     }
 }
 
-
-
 //for use within RDMA active messages to atomically read/write values
 #[derive(serde::Serialize, serde::Deserialize, Clone, Copy, Debug)]
-pub enum NativeAtomicType{ 
+pub enum NativeAtomicType {
     I8,
     I16,
     I32,
@@ -719,25 +826,35 @@ pub enum NativeAtomicType{
     Usize,
 }
 
-
-impl NativeAtomicType{
-    fn from<T: 'static>() -> NativeAtomicType{
-        let t =  TypeId::of::<T>();
-        if t == TypeId::of::<i8>() {NativeAtomicType::I8}
-        else if t == TypeId::of::<i16>() {NativeAtomicType::I16}
-        else if t == TypeId::of::<i32>() {NativeAtomicType::I32}
-        else if t == TypeId::of::<i64>() {NativeAtomicType::I64}
-        else if t == TypeId::of::<isize>() {NativeAtomicType::Isize}
-        else if t == TypeId::of::<u8>() {NativeAtomicType::U8}
-        else if t == TypeId::of::<u16>() {NativeAtomicType::U16}
-        else if t == TypeId::of::<u32>() {NativeAtomicType::U32}
-        else if t == TypeId::of::<u64>() {NativeAtomicType::U64}
-        else if t == TypeId::of::<usize>() {NativeAtomicType::Usize} 
-        else { panic!("invalid native atomic type!")} 
-        
+impl NativeAtomicType {
+    fn from<T: 'static>() -> NativeAtomicType {
+        let t = TypeId::of::<T>();
+        if t == TypeId::of::<i8>() {
+            NativeAtomicType::I8
+        } else if t == TypeId::of::<i16>() {
+            NativeAtomicType::I16
+        } else if t == TypeId::of::<i32>() {
+            NativeAtomicType::I32
+        } else if t == TypeId::of::<i64>() {
+            NativeAtomicType::I64
+        } else if t == TypeId::of::<isize>() {
+            NativeAtomicType::Isize
+        } else if t == TypeId::of::<u8>() {
+            NativeAtomicType::U8
+        } else if t == TypeId::of::<u16>() {
+            NativeAtomicType::U16
+        } else if t == TypeId::of::<u32>() {
+            NativeAtomicType::U32
+        } else if t == TypeId::of::<u64>() {
+            NativeAtomicType::U64
+        } else if t == TypeId::of::<usize>() {
+            NativeAtomicType::Usize
+        } else {
+            panic!("invalid native atomic type!")
+        }
     }
-    fn size(&self) -> usize{
-        match self{
+    fn size(&self) -> usize {
+        match self {
             NativeAtomicType::I8 => std::mem::size_of::<i8>(),
             NativeAtomicType::I16 => std::mem::size_of::<i16>(),
             NativeAtomicType::I32 => std::mem::size_of::<i32>(),
@@ -750,56 +867,56 @@ impl NativeAtomicType{
             NativeAtomicType::Usize => std::mem::size_of::<usize>(),
         }
     }
-    fn load(&self,src_addr: *mut u8, dst_addr: *mut u8){
-        unsafe{
-            match self{
-                NativeAtomicType::I8 =>{
+    fn load(&self, src_addr: *mut u8, dst_addr: *mut u8) {
+        unsafe {
+            match self {
+                NativeAtomicType::I8 => {
                     let dst = &mut *(dst_addr as *mut i8);
                     let src = &*(src_addr as *mut i8 as *mut AtomicI8);
                     *dst = src.load(Ordering::SeqCst);
-                },
-                NativeAtomicType::I16 =>{
-                    let dst = &mut*(dst_addr as *mut i16);
+                }
+                NativeAtomicType::I16 => {
+                    let dst = &mut *(dst_addr as *mut i16);
                     let src = &*(src_addr as *mut i16 as *mut AtomicI16);
                     *dst = src.load(Ordering::SeqCst);
                 }
-                NativeAtomicType::I32 =>{
-                    let dst = &mut*(dst_addr as *mut i32);
+                NativeAtomicType::I32 => {
+                    let dst = &mut *(dst_addr as *mut i32);
                     let src = &*(src_addr as *mut i32 as *mut AtomicI32);
                     *dst = src.load(Ordering::SeqCst);
                 }
-                NativeAtomicType::I64 =>{
-                    let dst = &mut*(dst_addr as *mut i64);
+                NativeAtomicType::I64 => {
+                    let dst = &mut *(dst_addr as *mut i64);
                     let src = &*(src_addr as *mut i64 as *mut AtomicI64);
                     *dst = src.load(Ordering::SeqCst);
                 }
-                NativeAtomicType::Isize =>{
-                    let dst = &mut*(dst_addr as *mut isize);
+                NativeAtomicType::Isize => {
+                    let dst = &mut *(dst_addr as *mut isize);
                     let src = &*(src_addr as *mut isize as *mut AtomicIsize);
                     *dst = src.load(Ordering::SeqCst);
                 }
-                NativeAtomicType::U8 =>{
-                    let dst = &mut*(dst_addr as *mut u8);
+                NativeAtomicType::U8 => {
+                    let dst = &mut *(dst_addr as *mut u8);
                     let src = &*(src_addr as *mut u8 as *mut AtomicU8);
                     *dst = src.load(Ordering::SeqCst);
-                },
-                NativeAtomicType::U16 =>{
-                    let dst = &mut*(dst_addr as *mut u16);
+                }
+                NativeAtomicType::U16 => {
+                    let dst = &mut *(dst_addr as *mut u16);
                     let src = &*(src_addr as *mut u16 as *mut AtomicU16);
                     *dst = src.load(Ordering::SeqCst);
                 }
-                NativeAtomicType::U32 =>{
-                    let dst = &mut*(dst_addr as *mut u32);
+                NativeAtomicType::U32 => {
+                    let dst = &mut *(dst_addr as *mut u32);
                     let src = &*(src_addr as *mut u32 as *mut AtomicU32);
                     *dst = src.load(Ordering::SeqCst);
                 }
-                NativeAtomicType::U64 =>{
-                    let dst = &mut*(dst_addr as *mut u64);
+                NativeAtomicType::U64 => {
+                    let dst = &mut *(dst_addr as *mut u64);
                     let src = &*(src_addr as *mut u64 as *mut AtomicU64);
                     *dst = src.load(Ordering::SeqCst);
                 }
-                NativeAtomicType::Usize =>{
-                    let dst = &mut*(dst_addr as *mut usize);
+                NativeAtomicType::Usize => {
+                    let dst = &mut *(dst_addr as *mut usize);
                     let src = &*(src_addr as *mut usize as *mut AtomicUsize);
                     *dst = src.load(Ordering::SeqCst);
                 }
@@ -807,58 +924,58 @@ impl NativeAtomicType{
         }
     }
 
-    fn store(&self,src_addr: *const u8, dst_addr: *mut u8){
-        unsafe{
-            match self{
-                NativeAtomicType::I8 =>{
+    fn store(&self, src_addr: *const u8, dst_addr: *mut u8) {
+        unsafe {
+            match self {
+                NativeAtomicType::I8 => {
                     let dst = &*(dst_addr as *mut i8 as *mut AtomicI8);
                     let src = *(src_addr as *mut i8);
-                    dst.store(src,Ordering::SeqCst);
-                },
-                NativeAtomicType::I16 =>{
+                    dst.store(src, Ordering::SeqCst);
+                }
+                NativeAtomicType::I16 => {
                     let dst = &*(dst_addr as *mut i16 as *mut AtomicI16);
                     let src = *(src_addr as *mut i16);
-                    dst.store(src,Ordering::SeqCst);
+                    dst.store(src, Ordering::SeqCst);
                 }
-                NativeAtomicType::I32 =>{
+                NativeAtomicType::I32 => {
                     let dst = &*(dst_addr as *mut i32 as *mut AtomicI32);
                     let src = *(src_addr as *mut i32);
-                    dst.store(src,Ordering::SeqCst);
+                    dst.store(src, Ordering::SeqCst);
                 }
-                NativeAtomicType::I64 =>{
+                NativeAtomicType::I64 => {
                     let dst = &*(dst_addr as *mut i64 as *mut AtomicI64);
                     let src = *(src_addr as *mut i64);
-                    dst.store(src,Ordering::SeqCst);
+                    dst.store(src, Ordering::SeqCst);
                 }
-                NativeAtomicType::Isize =>{
+                NativeAtomicType::Isize => {
                     let dst = &*(dst_addr as *mut isize as *mut AtomicIsize);
                     let src = *(src_addr as *mut isize);
-                    dst.store(src,Ordering::SeqCst);
+                    dst.store(src, Ordering::SeqCst);
                 }
-                NativeAtomicType::U8 =>{
+                NativeAtomicType::U8 => {
                     let dst = &*(dst_addr as *mut u8 as *mut AtomicU8);
                     let src = *(src_addr as *mut u8);
-                    dst.store(src,Ordering::SeqCst);
-                },
-                NativeAtomicType::U16 =>{
+                    dst.store(src, Ordering::SeqCst);
+                }
+                NativeAtomicType::U16 => {
                     let dst = &*(dst_addr as *mut u16 as *mut AtomicU16);
                     let src = *(src_addr as *mut u16);
-                    dst.store(src,Ordering::SeqCst);
+                    dst.store(src, Ordering::SeqCst);
                 }
-                NativeAtomicType::U32 =>{
+                NativeAtomicType::U32 => {
                     let dst = &*(dst_addr as *mut u32 as *mut AtomicU32);
                     let src = *(src_addr as *mut u32);
-                    dst.store(src,Ordering::SeqCst);
+                    dst.store(src, Ordering::SeqCst);
                 }
-                NativeAtomicType::U64 =>{
+                NativeAtomicType::U64 => {
                     let dst = &*(dst_addr as *mut u64 as *mut AtomicU64);
                     let src = *(src_addr as *mut u64);
-                    dst.store(src,Ordering::SeqCst);
+                    dst.store(src, Ordering::SeqCst);
                 }
-                NativeAtomicType::Usize =>{
+                NativeAtomicType::Usize => {
                     let dst = &*(dst_addr as *mut usize as *mut AtomicUsize);
                     let src = *(src_addr as *mut usize);
-                    dst.store(src,Ordering::SeqCst);
+                    dst.store(src, Ordering::SeqCst);
                 }
             }
         }

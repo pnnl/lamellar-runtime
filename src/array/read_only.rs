@@ -138,7 +138,6 @@ impl<T: Dist> From<UnsafeArray<T>> for ReadOnlyArray<T> {
     }
 }
 
-
 impl<T: Dist> From<ReadOnlyArray<T>> for ReadOnlyByteArray {
     fn from(array: ReadOnlyArray<T>) -> Self {
         ReadOnlyByteArray {

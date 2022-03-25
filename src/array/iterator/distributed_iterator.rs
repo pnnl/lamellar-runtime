@@ -14,7 +14,7 @@ use zip::*;
 
 use crate::memregion::Dist;
 // use crate::LamellarArray;
-use crate::array::{LamellarArray,NativeAtomicArray,AtomicArray,GenericAtomicArray}; //, LamellarArrayPut, LamellarArrayGet};
+use crate::array::{AtomicArray, GenericAtomicArray, LamellarArray, NativeAtomicArray}; //, LamellarArrayPut, LamellarArrayGet};
 use enum_dispatch::enum_dispatch;
 use futures::Future;
 use std::marker::PhantomData;
@@ -46,7 +46,6 @@ where
     }
 }
 
-
 #[lamellar_impl::AmLocalDataRT(Clone)]
 pub(crate) struct ForEachAsync<I, F, Fut>
 where
@@ -73,7 +72,6 @@ where
         }
     }
 }
-
 
 #[enum_dispatch]
 pub trait DistIteratorLauncher {

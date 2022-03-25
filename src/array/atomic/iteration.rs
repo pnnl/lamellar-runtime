@@ -59,7 +59,7 @@ impl<T: Dist> DistributedIterator for AtomicDistIter<T> {
         // println!("{:?} {:?}",self.cur_i,self.end_i);
         if self.cur_i < self.end_i {
             self.cur_i += 1;
-            Some( self.data.get_element(self.cur_i - 1) )
+            Some(self.data.get_element(self.cur_i - 1))
         } else {
             None
         }

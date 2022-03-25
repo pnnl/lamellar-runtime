@@ -28,25 +28,26 @@ pub use local_only::LocalOnlyArray;
 pub(crate) mod atomic;
 pub use atomic::{
     // operations::{AtomicArrayOp, AtomicArrayOpBuf},
-    AtomicArray, AtomicByteArray, //AtomicOps
+    AtomicArray,
+    AtomicByteArray, //AtomicOps
 };
 
 pub(crate) mod generic_atomic;
 pub use generic_atomic::{
     operations::{GenericAtomicArrayOp, GenericAtomicArrayOpBuf},
-    GenericAtomicArray, GenericAtomicByteArray, GenericAtomicLocalData
+    GenericAtomicArray, GenericAtomicByteArray, GenericAtomicLocalData,
 };
 
 pub(crate) mod native_atomic;
 pub use native_atomic::{
     operations::{NativeAtomicArrayOp, NativeAtomicArrayOpBuf},
-    NativeAtomicArray, NativeAtomicByteArray, NativeAtomicLocalData
+    NativeAtomicArray, NativeAtomicByteArray, NativeAtomicLocalData,
 };
 
 pub(crate) mod local_lock_atomic;
 pub use local_lock_atomic::{
     operations::{LocalLockAtomicArrayOp, LocalLockAtomicArrayOpBuf},
-    LocalLockAtomicByteArray, LocalLockAtomicArray,LocalLockAtomicLocalData
+    LocalLockAtomicArray, LocalLockAtomicByteArray, LocalLockAtomicLocalData,
 };
 
 pub mod iterator;
@@ -81,18 +82,18 @@ crate::inventory::collect!(ReduceKey);
 
 lamellar_impl::generate_reductions_for_type_rt!(true, u8, u16, u32, u64, usize);
 lamellar_impl::generate_reductions_for_type_rt!(false, u128);
-lamellar_impl::generate_ops_for_type_rt!(true, true, u8, u16, u32, u64,usize);
+lamellar_impl::generate_ops_for_type_rt!(true, true, u8, u16, u32, u64, usize);
 lamellar_impl::generate_ops_for_type_rt!(true, false, u128);
 
-lamellar_impl::generate_reductions_for_type_rt!(true,i8, i16, i32, i64, isize);
+lamellar_impl::generate_reductions_for_type_rt!(true, i8, i16, i32, i64, isize);
 lamellar_impl::generate_reductions_for_type_rt!(false, i128);
 lamellar_impl::generate_ops_for_type_rt!(true, true, i8, i16, i32, i64, isize);
-lamellar_impl::generate_ops_for_type_rt!(true,false, i128);
+lamellar_impl::generate_ops_for_type_rt!(true, false, i128);
 
 lamellar_impl::generate_reductions_for_type_rt!(false, f32, f64);
 lamellar_impl::generate_ops_for_type_rt!(false, false, f32, f64);
 
-#[derive(serde::Serialize, serde::Deserialize, Clone, Copy, Debug,Eq, PartialEq)]
+#[derive(serde::Serialize, serde::Deserialize, Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Distribution {
     Block,
     Cyclic,
@@ -136,9 +137,8 @@ pub enum ArrayOpCmd {
     Get,
 }
 
-
 #[derive(Clone)]
-pub enum OpInputEnum<'a, T: Dist>{
+pub enum OpInputEnum<'a, T: Dist> {
     Val(T),
     Slice(&'a [T]),
     Vec(Vec<T>),
@@ -148,16 +148,21 @@ pub enum OpInputEnum<'a, T: Dist>{
     // AtomicArray(AtomicArray<T>),
     NativeAtomicArray(NativeAtomicLocalData<T>),
     GenericAtomicArray(GenericAtomicLocalData<T>),
-    LocalLockAtomicArray(LocalLockAtomicLocalData<'a,T>),
+    LocalLockAtomicArray(LocalLockAtomicLocalData<'a, T>),
 }
 
-impl<'a,T: Dist> OpInputEnum<'_, T>{
-    pub(crate) fn iter(&self) -> Box<dyn Iterator<Item = T> + Send  + Sync + '_>{
-        match self{
+impl<'a, T: Dist> OpInputEnum<'_, T> {
+    pub(crate) fn iter(&self) -> Box<dyn Iterator<Item = T> + Send + Sync + '_> {
+        match self {
             OpInputEnum::Val(v) => Box::new(std::iter::repeat(v).map(|elem| *elem)),
             OpInputEnum::Slice(s) => Box::new(s.iter().map(|elem| *elem)),
             OpInputEnum::Vec(v) => Box::new(v.iter().map(|elem| *elem)),
-            OpInputEnum::MemoryRegion(mr) => Box::new(unsafe{mr.as_slice()}.expect("memregion not local").iter().map(|elem| *elem)),
+            OpInputEnum::MemoryRegion(mr) => Box::new(
+                unsafe { mr.as_slice() }
+                    .expect("memregion not local")
+                    .iter()
+                    .map(|elem| *elem),
+            ),
             // OpInputEnum::UnsafeArray(a) => Box::new(unsafe{a.local_data()}.iter().map(|elem| *elem)),
             // OpInputEnum::ReadOnlyArray(a) => Box::new(a.local_data().iter().map(|elem| *elem)),
             // OpInputEnum::AtomicArray(a) => Box::new(a.local_data().iter().map(|elem| elem.load())),
@@ -166,12 +171,14 @@ impl<'a,T: Dist> OpInputEnum<'_, T>{
             OpInputEnum::LocalLockAtomicArray(a) => Box::new(a.iter().map(|elem| *elem)),
         }
     }
-    pub(crate) fn len(&self) -> usize{
-        match self{
+    pub(crate) fn len(&self) -> usize {
+        match self {
             OpInputEnum::Val(_) => 1,
             OpInputEnum::Slice(s) => s.len(),
             OpInputEnum::Vec(v) => v.len(),
-            OpInputEnum::MemoryRegion(mr) => unsafe{mr.as_slice()}.expect("memregion not local").len(),
+            OpInputEnum::MemoryRegion(mr) => {
+                unsafe { mr.as_slice() }.expect("memregion not local").len()
+            }
             // OpInputEnum::UnsafeArray(a) => unsafe{a.local_data()}.len(),
             // OpInputEnum::ReadOnlyArray(a) => a.local_data().len(),
             // OpInputEnum::AtomicArray(a) => unsafe{a.__local_as_slice().len()},
@@ -196,123 +203,120 @@ impl<'a,T: Dist> OpInputEnum<'_, T>{
 //     }
 // }
 
-
-pub trait OpInput<'a,T: Dist>{
-    fn as_op_input(self) ->  (Vec<OpInputEnum<'a ,T>>,usize);  //(Vec<(Box<dyn Iterator<Item = T> + Send  + Sync + '_>,usize)>,usize);
+pub trait OpInput<'a, T: Dist> {
+    fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize); //(Vec<(Box<dyn Iterator<Item = T> + Send  + Sync + '_>,usize)>,usize);
 }
 
-impl<'a, T: Dist> OpInput<'a, T> for T{
-    fn  as_op_input(self) -> (Vec<OpInputEnum<'a,T>>,usize) {
-        (vec![OpInputEnum::Val(self)],1)
+impl<'a, T: Dist> OpInput<'a, T> for T {
+    fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
+        (vec![OpInputEnum::Val(self)], 1)
     }
 }
-impl<'a, T: Dist> OpInput<'a, T> for &T{
-    fn  as_op_input(self) -> (Vec<OpInputEnum<'a,T>>,usize) {
-        (vec![OpInputEnum::Val(*self)],1)
+impl<'a, T: Dist> OpInput<'a, T> for &T {
+    fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
+        (vec![OpInputEnum::Val(*self)], 1)
     }
 }
 
-impl<'a,T: Dist> OpInput<'a, T> for &'a [T]{
-    fn as_op_input(self) -> (Vec<OpInputEnum<'a ,T>>,usize) {
+impl<'a, T: Dist> OpInput<'a, T> for &'a [T] {
+    fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
         let len = self.len();
         let mut iters = vec![];
         let num_per_batch = match std::env::var("LAMELLAR_OP_BATCH") {
             Ok(n) => n.parse::<usize>().unwrap(), //+ 1 to account for main thread
-            Err(_) => 10000, //+ 1 to account for main thread
+            Err(_) => 10000,                      //+ 1 to account for main thread
         };
-        let num = len/num_per_batch;
-        for i in 0..num{
-            let temp = &self[(i*num_per_batch)..((i+1)*num_per_batch)];
+        let num = len / num_per_batch;
+        for i in 0..num {
+            let temp = &self[(i * num_per_batch)..((i + 1) * num_per_batch)];
             iters.push(OpInputEnum::Slice(temp));
         }
-        let rem = len%num_per_batch;
-        if rem > 0{
-            let temp = &self[(num*num_per_batch)..(num*num_per_batch) + rem];
+        let rem = len % num_per_batch;
+        if rem > 0 {
+            let temp = &self[(num * num_per_batch)..(num * num_per_batch) + rem];
             iters.push(OpInputEnum::Slice(temp));
         }
-        (iters,len)
+        (iters, len)
     }
 }
 
-impl<'a, T: Dist> OpInput<'a, T> for &'a Vec<T>{
-    fn  as_op_input(self) -> (Vec<OpInputEnum<'a,T>>,usize) {
+impl<'a, T: Dist> OpInput<'a, T> for &'a Vec<T> {
+    fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
         (&self[..]).as_op_input()
     }
 }
 
-
-
-impl<'a, T: Dist> OpInput<'a, T> for Vec<T>{
-    fn  as_op_input(mut self) -> (Vec<OpInputEnum<'a,T>>,usize) {
+impl<'a, T: Dist> OpInput<'a, T> for Vec<T> {
+    fn as_op_input(mut self) -> (Vec<OpInputEnum<'a, T>>, usize) {
         let len = self.len();
         let mut iters = vec![];
         let num_per_batch = match std::env::var("LAMELLAR_OP_BATCH") {
             Ok(n) => n.parse::<usize>().unwrap(), //+ 1 to account for main thread
-            Err(_) => 10000, //+ 1 to account for main thread
+            Err(_) => 10000,                      //+ 1 to account for main thread
         };
-        let num = len/num_per_batch;
-        for i in (1..num).rev(){
-            let temp = self.split_off(i*num_per_batch);
+        let num = len / num_per_batch;
+        for i in (1..num).rev() {
+            let temp = self.split_off(i * num_per_batch);
             iters.push(OpInputEnum::Vec(temp));
         }
-        let rem = len%num_per_batch;
-        if rem > 0 || num == 1{ 
+        let rem = len % num_per_batch;
+        if rem > 0 || num == 1 {
             iters.push(OpInputEnum::Vec(self));
         }
-        (iters,len)
+        (iters, len)
     }
 }
 
-impl<'a, T: Dist> OpInput<'a, T> for &LamellarMemoryRegion<T>{
-    fn  as_op_input(self) -> (Vec<OpInputEnum<'a,T>>,usize) {
-        let slice= unsafe{self.as_slice()}.expect("mem region not local");
+impl<'a, T: Dist> OpInput<'a, T> for &LamellarMemoryRegion<T> {
+    fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
+        let slice = unsafe { self.as_slice() }.expect("mem region not local");
         let len = slice.len();
         let mut iters = vec![];
         let num_per_batch = match std::env::var("LAMELLAR_OP_BATCH") {
             Ok(n) => n.parse::<usize>().unwrap(), //+ 1 to account for main thread
-            Err(_) => 10000, //+ 1 to account for main thread
+            Err(_) => 10000,                      //+ 1 to account for main thread
         };
-        let num = len/num_per_batch;
-        for i in 0..num{
-            let sub_region = self.sub_region((i*num_per_batch)..((i+1)*num_per_batch));
+        let num = len / num_per_batch;
+        for i in 0..num {
+            let sub_region = self.sub_region((i * num_per_batch)..((i + 1) * num_per_batch));
             iters.push(OpInputEnum::MemoryRegion(sub_region));
         }
-        let rem = len%num_per_batch;
-        if rem > 0{
-            let sub_region = self.sub_region((num*num_per_batch)..(num*num_per_batch) + rem);
+        let rem = len % num_per_batch;
+        if rem > 0 {
+            let sub_region = self.sub_region((num * num_per_batch)..(num * num_per_batch) + rem);
             iters.push(OpInputEnum::MemoryRegion(sub_region));
         }
-        (iters,len)
+        (iters, len)
     }
 }
 
-impl<'a, T: Dist> OpInput<'a, T> for &LocalMemoryRegion<T>{
-    fn  as_op_input(self) -> (Vec<OpInputEnum<'a,T>>,usize) {
+impl<'a, T: Dist> OpInput<'a, T> for &LocalMemoryRegion<T> {
+    fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
         LamellarMemoryRegion::from(self).as_op_input()
     }
 }
 
-impl<'a, T: Dist> OpInput<'a, T> for LocalMemoryRegion<T>{
-    fn  as_op_input(self) -> (Vec<OpInputEnum<'a,T>>,usize) {
+impl<'a, T: Dist> OpInput<'a, T> for LocalMemoryRegion<T> {
+    fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
         LamellarMemoryRegion::from(self).as_op_input()
     }
 }
 
-impl<'a, T: Dist> OpInput<'a, T> for &SharedMemoryRegion<T>{
-    fn  as_op_input(self) -> (Vec<OpInputEnum<'a,T>>,usize) {
+impl<'a, T: Dist> OpInput<'a, T> for &SharedMemoryRegion<T> {
+    fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
         LamellarMemoryRegion::from(self).as_op_input()
     }
 }
 
-impl<'a, T: Dist> OpInput<'a, T> for SharedMemoryRegion<T>{
-    fn  as_op_input(self) -> (Vec<OpInputEnum<'a,T>>,usize) {
+impl<'a, T: Dist> OpInput<'a, T> for SharedMemoryRegion<T> {
+    fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
         LamellarMemoryRegion::from(self).as_op_input()
     }
 }
 
-impl<'a,T: Dist> OpInput<'a, T> for &'a UnsafeArray<T>{
-    fn  as_op_input(self) -> (Vec<OpInputEnum<'a,T>>,usize) {
-        let slice=unsafe{self.local_as_slice()};
+impl<'a, T: Dist> OpInput<'a, T> for &'a UnsafeArray<T> {
+    fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
+        let slice = unsafe { self.local_as_slice() };
         // let slice = unsafe { std::mem::transmute::<&'_ [T], &'a [T]>(slice) }; //this is safe in the context of buffered_ops because we know we wait for all the requests to submit before we return
         slice.as_op_input()
         // let len = slice.len();
@@ -344,12 +348,11 @@ impl<'a,T: Dist> OpInput<'a, T> for &'a UnsafeArray<T>{
 //     }
 // }
 
-impl<'a, T: Dist> OpInput<'a, T> for &'a ReadOnlyArray<T>{
-    fn  as_op_input(self) -> (Vec<OpInputEnum<'a,T>>,usize) {
-        let slice=self.local_as_slice();
+impl<'a, T: Dist> OpInput<'a, T> for &'a ReadOnlyArray<T> {
+    fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
+        let slice = self.local_as_slice();
         // let slice = unsafe { std::mem::transmute::<&'_ [T], &'a [T]>(slice) }; //this is safe in the context of buffered_ops because we know we wait for all the requests to submit before we return
         slice.as_op_input()
-        
     }
 }
 
@@ -359,32 +362,36 @@ impl<'a, T: Dist> OpInput<'a, T> for &'a ReadOnlyArray<T>{
 //     }
 // }
 
-impl<'a, T: Dist> OpInput<'a, T> for &'a LocalLockAtomicArray<T>{
-    fn  as_op_input(self) -> (Vec<OpInputEnum<'a,T>>,usize) {
+impl<'a, T: Dist> OpInput<'a, T> for &'a LocalLockAtomicArray<T> {
+    fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
         // let slice=unsafe{self.__local_as_slice()};
         let slice = self.read_local_data();
         let len = slice.len();
         let mut iters = vec![];
         let my_pe = self.my_pe();
-        if let Some(_start_index) = self.array.inner.start_index_for_pe(my_pe){
+        if let Some(_start_index) = self.array.inner.start_index_for_pe(my_pe) {
             let num_per_batch = match std::env::var("LAMELLAR_OP_BATCH") {
                 Ok(n) => n.parse::<usize>().unwrap(), //+ 1 to account for main thread
-                Err(_) => 10000, //+ 1 to account for main thread
+                Err(_) => 10000,                      //+ 1 to account for main thread
             };
-            let num = len/num_per_batch;
-            for i in 0..num{
+            let num = len / num_per_batch;
+            for i in 0..num {
                 // let sub_array = self.sub_array((start_index+(i*num_per_batch))..(start_index+((i+1)*num_per_batch)));
-                let sub_data = self.read_local_data().into_sub_data(i*num_per_batch,(i+1)*num_per_batch);
+                let sub_data = self
+                    .read_local_data()
+                    .into_sub_data(i * num_per_batch, (i + 1) * num_per_batch);
                 iters.push(OpInputEnum::LocalLockAtomicArray(sub_data));
             }
-            let rem = len%num_per_batch;
-            if rem > 0{
+            let rem = len % num_per_batch;
+            if rem > 0 {
                 // let sub_array = self.sub_array((start_index+(num*num_per_batch))..(start_index+(num*num_per_batch) + rem));
-                let sub_data = self.read_local_data().into_sub_data(num*num_per_batch,num*num_per_batch + rem);
+                let sub_data = self
+                    .read_local_data()
+                    .into_sub_data(num * num_per_batch, num * num_per_batch + rem);
                 iters.push(OpInputEnum::LocalLockAtomicArray(sub_data));
             }
         }
-        (iters,len)
+        (iters, len)
     }
 }
 
@@ -394,9 +401,9 @@ impl<'a, T: Dist> OpInput<'a, T> for &'a LocalLockAtomicArray<T>{
 //     }
 // }
 
-impl<'a, T: Dist + ElementOps> OpInput<'a, T> for &AtomicArray<T>{
-    fn  as_op_input(self) -> (Vec<OpInputEnum<'a,T>>,usize) {
-        match self{
+impl<'a, T: Dist + ElementOps> OpInput<'a, T> for &AtomicArray<T> {
+    fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
+        match self {
             &AtomicArray::GenericAtomicArray(ref a) => a.as_op_input(),
             &AtomicArray::NativeAtomicArray(ref a) => a.as_op_input(),
         }
@@ -430,32 +437,33 @@ impl<'a, T: Dist + ElementOps> OpInput<'a, T> for &AtomicArray<T>{
 //     }
 // }
 
-impl<'a, T: Dist + ElementOps> OpInput<'a, T> for &GenericAtomicArray<T>{
-    fn  as_op_input(self) -> (Vec<OpInputEnum<'a,T>>,usize) {
-        let slice=unsafe{self.__local_as_slice()};
+impl<'a, T: Dist + ElementOps> OpInput<'a, T> for &GenericAtomicArray<T> {
+    fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
+        let slice = unsafe { self.__local_as_slice() };
         let len = slice.len();
         let local_data = self.local_data();
         let mut iters = vec![];
         let my_pe = self.my_pe();
-        if let Some(_start_index) = self.array.inner.start_index_for_pe(my_pe){
+        if let Some(_start_index) = self.array.inner.start_index_for_pe(my_pe) {
             let num_per_batch = match std::env::var("LAMELLAR_OP_BATCH") {
                 Ok(n) => n.parse::<usize>().unwrap(), //+ 1 to account for main thread
-                Err(_) => 10000, //+ 1 to account for main thread
+                Err(_) => 10000,                      //+ 1 to account for main thread
             };
-            let num = len/num_per_batch;
-            for i in 0..num{
+            let num = len / num_per_batch;
+            for i in 0..num {
                 // let sub_array = self.sub_array((start_index+(i*num_per_batch))..(start_index+((i+1)*num_per_batch)));
-                let sub_data = local_data.sub_data(i*num_per_batch,(i+1)*num_per_batch);
+                let sub_data = local_data.sub_data(i * num_per_batch, (i + 1) * num_per_batch);
                 iters.push(OpInputEnum::GenericAtomicArray(sub_data));
             }
-            let rem = len%num_per_batch;
-            if rem > 0{
+            let rem = len % num_per_batch;
+            if rem > 0 {
                 // let sub_array = self.sub_array((start_index+(num*num_per_batch))..(start_index+(num*num_per_batch) + rem));
-                let sub_data = local_data.sub_data(num*num_per_batch,(num*num_per_batch)+rem);
+                let sub_data =
+                    local_data.sub_data(num * num_per_batch, (num * num_per_batch) + rem);
                 iters.push(OpInputEnum::GenericAtomicArray(sub_data));
             }
         }
-        (iters,len)
+        (iters, len)
     }
 }
 
@@ -465,32 +473,33 @@ impl<'a, T: Dist + ElementOps> OpInput<'a, T> for &GenericAtomicArray<T>{
 //     }
 // }
 
-impl<'a, T: Dist + ElementOps> OpInput<'a, T> for &NativeAtomicArray<T>{
-    fn  as_op_input(self) -> (Vec<OpInputEnum<'a,T>>,usize) {
-        let slice=unsafe{self.__local_as_slice()};
+impl<'a, T: Dist + ElementOps> OpInput<'a, T> for &NativeAtomicArray<T> {
+    fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
+        let slice = unsafe { self.__local_as_slice() };
         let len = slice.len();
         let local_data = self.local_data();
         let mut iters = vec![];
         let my_pe = self.my_pe();
-        if let Some(_start_index) = self.array.inner.start_index_for_pe(my_pe){
+        if let Some(_start_index) = self.array.inner.start_index_for_pe(my_pe) {
             let num_per_batch = match std::env::var("LAMELLAR_OP_BATCH") {
                 Ok(n) => n.parse::<usize>().unwrap(), //+ 1 to account for main thread
-                Err(_) => 10000, //+ 1 to account for main thread
+                Err(_) => 10000,                      //+ 1 to account for main thread
             };
-            let num = len/num_per_batch;
-            for i in 0..num{
+            let num = len / num_per_batch;
+            for i in 0..num {
                 // let sub_array = self.sub_array((start_index+(i*num_per_batch))..(start_index+((i+1)*num_per_batch)));
-                let sub_data = local_data.sub_data(i*num_per_batch,(i+1)*num_per_batch);
+                let sub_data = local_data.sub_data(i * num_per_batch, (i + 1) * num_per_batch);
                 iters.push(OpInputEnum::NativeAtomicArray(sub_data));
             }
-            let rem = len%num_per_batch;
-            if rem > 0{
+            let rem = len % num_per_batch;
+            if rem > 0 {
                 // let sub_array = self.sub_array((start_index+(num*num_per_batch))..(start_index+(num*num_per_batch) + rem));
-                let sub_data = local_data.sub_data(num*num_per_batch,(num*num_per_batch)+rem);
+                let sub_data =
+                    local_data.sub_data(num * num_per_batch, (num * num_per_batch) + rem);
                 iters.push(OpInputEnum::NativeAtomicArray(sub_data));
             }
         }
-        (iters,len)
+        (iters, len)
     }
 }
 
@@ -499,8 +508,6 @@ impl<'a, T: Dist + ElementOps> OpInput<'a, T> for &NativeAtomicArray<T>{
 //         (&self).as_op_input()
 //     }
 // }
-
-
 
 pub trait BufferOp: Sync + Send {
     //have this also be RemoteActiveMessage
@@ -513,19 +520,23 @@ pub trait BufferOp: Sync + Send {
     //     val: *const u8,
     // ) -> (bool, Arc<AtomicBool>, usize, Arc<RwLock<Vec<u8>>>);
     fn add_fetch_ops(
-        &self, 
+        &self,
         pe: usize,
         op: ArrayOpCmd,
-        op_data: *const u8, 
+        op_data: *const u8,
         len: usize,
         res_map: OpResults,
-        
-    ) -> (bool, Arc<AtomicBool>,Option<OpResultIndices>);
+    ) -> (bool, Arc<AtomicBool>, Option<OpResultIndices>);
 
     fn into_arc_am(
         &self,
         sub_array: std::ops::Range<usize>,
-    ) -> (Vec<LamellarArcAm>, usize, Arc<AtomicBool>, Arc<Mutex<Vec<u8>>>);
+    ) -> (
+        Vec<LamellarArcAm>,
+        usize,
+        Arc<AtomicBool>,
+        Arc<Mutex<Vec<u8>>>,
+    );
 }
 
 #[async_trait]
@@ -581,31 +592,29 @@ struct ArrayOpHandle {
     complete: Vec<Arc<AtomicBool>>,
 }
 
-
-pub type OpResultIndices= Vec<(usize,usize)>;
-pub struct OpReqIndices(Arc<Mutex<HashMap<usize,OpResultIndices>>>);
-impl OpReqIndices{
-    pub(crate) fn new() -> Self{
+pub type OpResultIndices = Vec<(usize, usize)>;
+pub struct OpReqIndices(Arc<Mutex<HashMap<usize, OpResultIndices>>>);
+impl OpReqIndices {
+    pub(crate) fn new() -> Self {
         OpReqIndices(Arc::new(Mutex::new(HashMap::new())))
     }
-    pub fn insert(&self, index: usize, indices: OpResultIndices){
+    pub fn insert(&self, index: usize, indices: OpResultIndices) {
         let mut map = self.0.lock();
-        map.insert(index,indices);
+        map.insert(index, indices);
     }
 
-    pub(crate) fn lock(&self) ->  parking_lot::MutexGuard<HashMap<usize,OpResultIndices>>{
+    pub(crate) fn lock(&self) -> parking_lot::MutexGuard<HashMap<usize, OpResultIndices>> {
         self.0.lock()
     }
-   
 }
 
-impl Clone for OpReqIndices{
-    fn clone(&self) -> Self{
+impl Clone for OpReqIndices {
+    fn clone(&self) -> Self {
         OpReqIndices(self.0.clone())
     }
 }
 
-impl std::fmt::Debug for OpReqIndices{
+impl std::fmt::Debug for OpReqIndices {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let map = self.0.lock();
         write!(f, "{:?} {:?}", map.len(), map)
@@ -613,28 +622,27 @@ impl std::fmt::Debug for OpReqIndices{
 }
 
 pub type PeOpResults = Arc<Mutex<Vec<u8>>>;
-pub struct OpResults (Arc<Mutex<HashMap<usize,PeOpResults>>>);
-impl OpResults{
-    pub(crate) fn new() -> Self{
+pub struct OpResults(Arc<Mutex<HashMap<usize, PeOpResults>>>);
+impl OpResults {
+    pub(crate) fn new() -> Self {
         OpResults(Arc::new(Mutex::new(HashMap::new())))
     }
-    pub fn insert(&self, index: usize, val: PeOpResults){
+    pub fn insert(&self, index: usize, val: PeOpResults) {
         let mut map = self.0.lock();
-        map.insert(index,val);
+        map.insert(index, val);
     }
-    pub(crate) fn lock(&self) -> parking_lot::MutexGuard<HashMap<usize,PeOpResults>>{
+    pub(crate) fn lock(&self) -> parking_lot::MutexGuard<HashMap<usize, PeOpResults>> {
         self.0.lock()
     }
-
 }
 
-impl Clone for OpResults{
-    fn clone(&self) -> Self{
+impl Clone for OpResults {
+    fn clone(&self) -> Self {
         OpResults(self.0.clone())
     }
 }
 
-impl std::fmt::Debug for OpResults{
+impl std::fmt::Debug for OpResults {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let map = self.0.lock();
         write!(f, "{:?} {:?}", map.len(), map)
@@ -653,7 +661,7 @@ struct ArrayOpFetchHandle<T: Dist> {
 impl LamellarRequest for ArrayOpHandle {
     type Output = ();
     async fn into_future(mut self: Box<Self>) -> Option<Self::Output> {
-        for comp in &self.complete{
+        for comp in &self.complete {
             while comp.load(Ordering::Relaxed) == false {
                 async_std::task::yield_now().await;
             }
@@ -661,7 +669,7 @@ impl LamellarRequest for ArrayOpHandle {
         Some(())
     }
     fn get(&self) -> Option<Self::Output> {
-        for comp in &self.complete{
+        for comp in &self.complete {
             while comp.load(Ordering::Relaxed) == false {
                 std::thread::yield_now();
             }
@@ -675,33 +683,33 @@ impl LamellarRequest for ArrayOpHandle {
 
 impl<T: Dist> ArrayOpFetchHandle<T> {
     fn get_result(&self) -> Vec<T> {
-        println!("req_cnt {}",self.req_cnt);
-        if self.req_cnt > 0{
+        println!("req_cnt {}", self.req_cnt);
+        if self.req_cnt > 0 {
             // let results = self.results.read();
             // let indices = self.indices.lock();
-            let mut res_vec = Vec::with_capacity(self.req_cnt); 
-            unsafe{res_vec.set_len(self.req_cnt);}
+            let mut res_vec = Vec::with_capacity(self.req_cnt);
+            unsafe {
+                res_vec.set_len(self.req_cnt);
+            }
             // println!("getting result {:?}",self.results);
-            
-            for (pe, res) in self.results.lock().iter(){
+
+            for (pe, res) in self.results.lock().iter() {
                 let res = res.lock();
                 let t_slice = unsafe {
                     std::slice::from_raw_parts(
                         res.as_ptr() as *const T,
-                        res.len()/std::mem::size_of::<T>(),
+                        res.len() / std::mem::size_of::<T>(),
                     )
                 };
                 // println!("pe {:?} t result {:?}",pe ,t_slice);
-                
-                
+
                 // println!("pe {:?} indices {:?}",pe,self.indices);
-                for (rid,i) in self.indices.lock().get(pe).unwrap().iter(){
+                for (rid, i) in self.indices.lock().get(pe).unwrap().iter() {
                     res_vec[*rid] = t_slice[*i];
                 }
             }
             res_vec
-        }
-        else{
+        } else {
             vec![]
         }
     }
@@ -711,7 +719,7 @@ impl<T: Dist> ArrayOpFetchHandle<T> {
 impl<T: Dist> LamellarRequest for ArrayOpFetchHandle<T> {
     type Output = Vec<T>;
     async fn into_future(mut self: Box<Self>) -> Option<Self::Output> {
-        for comp in &self.complete{
+        for comp in &self.complete {
             while comp.load(Ordering::Relaxed) == false {
                 async_std::task::yield_now().await;
             }
@@ -719,7 +727,7 @@ impl<T: Dist> LamellarRequest for ArrayOpFetchHandle<T> {
         Some(self.get_result())
     }
     fn get(&self) -> Option<Self::Output> {
-        for comp in &self.complete{
+        for comp in &self.complete {
             while comp.load(Ordering::Relaxed) == false {
                 std::thread::yield_now();
             }
@@ -766,61 +774,73 @@ impl<T> ElementBitWiseOps for T where
 pub trait ArithmeticOps<T: Dist + ElementArithmeticOps> {
     fn add<'a>(
         &self,
-        index: impl OpInput<'a,usize>,
+        index: impl OpInput<'a, usize>,
         val: T,
     ) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync>;
-    fn fetch_add<'a>(&self, index: impl OpInput<'a,usize>, val: T)
-        -> Box<dyn LamellarRequest<Output = Vec<T>> + Send + Sync>;
+    fn fetch_add<'a>(
+        &self,
+        index: impl OpInput<'a, usize>,
+        val: T,
+    ) -> Box<dyn LamellarRequest<Output = Vec<T>> + Send + Sync>;
 
     fn sub<'a>(
         &self,
-        index: impl OpInput<'a,usize>,
+        index: impl OpInput<'a, usize>,
         val: T,
     ) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync>;
-    fn fetch_sub<'a>(&self, index: impl OpInput<'a,usize>, val: T)
-        -> Box<dyn LamellarRequest<Output = Vec<T>> + Send + Sync>;
+    fn fetch_sub<'a>(
+        &self,
+        index: impl OpInput<'a, usize>,
+        val: T,
+    ) -> Box<dyn LamellarRequest<Output = Vec<T>> + Send + Sync>;
 
     fn mul<'a>(
         &self,
-        index: impl OpInput<'a,usize>,
+        index: impl OpInput<'a, usize>,
         val: T,
     ) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync>;
 
-    fn fetch_mul<'a>(&self, index:impl OpInput<'a,usize>, val: T)
-        -> Box<dyn LamellarRequest<Output = Vec<T>> + Send + Sync>;
+    fn fetch_mul<'a>(
+        &self,
+        index: impl OpInput<'a, usize>,
+        val: T,
+    ) -> Box<dyn LamellarRequest<Output = Vec<T>> + Send + Sync>;
 
     fn div<'a>(
         &self,
-        index: impl OpInput<'a,usize>,
+        index: impl OpInput<'a, usize>,
         val: T,
     ) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync>;
 
-    fn fetch_div<'a>(&self, index: impl OpInput<'a,usize>, val: T)
-        -> Box<dyn LamellarRequest<Output = Vec<T>> + Send + Sync>;
+    fn fetch_div<'a>(
+        &self,
+        index: impl OpInput<'a, usize>,
+        val: T,
+    ) -> Box<dyn LamellarRequest<Output = Vec<T>> + Send + Sync>;
 }
 
 pub trait BitWiseOps<T: ElementBitWiseOps> {
     fn bit_and<'a>(
         &self,
-        index: impl OpInput<'a,usize>,
+        index: impl OpInput<'a, usize>,
         val: T,
     ) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync>;
 
     fn fetch_bit_and<'a>(
         &self,
-        index: impl OpInput<'a,usize>,
+        index: impl OpInput<'a, usize>,
         val: T,
     ) -> Box<dyn LamellarRequest<Output = Vec<T>> + Send + Sync>;
 
     fn bit_or<'a>(
         &self,
-        index: impl OpInput<'a,usize>,
+        index: impl OpInput<'a, usize>,
         val: T,
     ) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync>;
 
     fn fetch_bit_or<'a>(
         &self,
-        index: impl OpInput<'a,usize>,
+        index: impl OpInput<'a, usize>,
         val: T,
     ) -> Box<dyn LamellarRequest<Output = Vec<T>> + Send + Sync>;
 }
@@ -855,7 +875,6 @@ pub trait LocalBitWiseOps<T: Dist + ElementBitWiseOps> {
     }
     fn local_fetch_bit_or(&self, index: usize, val: T) -> T;
 }
-
 
 pub trait LocalAtomicOps<T: Dist + ElementOps> {
     fn local_load(&self, index: usize, val: T) -> T;
@@ -1009,7 +1028,7 @@ pub enum LamellarWriteArray<T: Dist> {
 impl<T: ElementArithmeticOps> ArithmeticOps<T> for LamellarWriteArray<T> {
     fn add<'a>(
         &self,
-        index: impl OpInput<'a,usize>,
+        index: impl OpInput<'a, usize>,
         val: T,
     ) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync> {
         match self {
@@ -1022,7 +1041,7 @@ impl<T: ElementArithmeticOps> ArithmeticOps<T> for LamellarWriteArray<T> {
     }
     fn fetch_add<'a>(
         &self,
-        index: impl OpInput<'a,usize>,
+        index: impl OpInput<'a, usize>,
         val: T,
     ) -> Box<dyn LamellarRequest<Output = Vec<T>> + Send + Sync> {
         match self {
@@ -1036,7 +1055,7 @@ impl<T: ElementArithmeticOps> ArithmeticOps<T> for LamellarWriteArray<T> {
 
     fn sub<'a>(
         &self,
-        index: impl OpInput<'a,usize>,
+        index: impl OpInput<'a, usize>,
         val: T,
     ) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync> {
         match self {
@@ -1049,7 +1068,7 @@ impl<T: ElementArithmeticOps> ArithmeticOps<T> for LamellarWriteArray<T> {
     }
     fn fetch_sub<'a>(
         &self,
-        index: impl OpInput<'a,usize>,
+        index: impl OpInput<'a, usize>,
         val: T,
     ) -> Box<dyn LamellarRequest<Output = Vec<T>> + Send + Sync> {
         match self {
@@ -1063,7 +1082,7 @@ impl<T: ElementArithmeticOps> ArithmeticOps<T> for LamellarWriteArray<T> {
 
     fn mul<'a>(
         &self,
-        index: impl OpInput<'a,usize>,
+        index: impl OpInput<'a, usize>,
         val: T,
     ) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync> {
         match self {
@@ -1077,7 +1096,7 @@ impl<T: ElementArithmeticOps> ArithmeticOps<T> for LamellarWriteArray<T> {
 
     fn fetch_mul<'a>(
         &self,
-        index: impl OpInput<'a,usize>,
+        index: impl OpInput<'a, usize>,
         val: T,
     ) -> Box<dyn LamellarRequest<Output = Vec<T>> + Send + Sync> {
         match self {
@@ -1091,7 +1110,7 @@ impl<T: ElementArithmeticOps> ArithmeticOps<T> for LamellarWriteArray<T> {
 
     fn div<'a>(
         &self,
-        index: impl OpInput<'a,usize>,
+        index: impl OpInput<'a, usize>,
         val: T,
     ) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync> {
         match self {
@@ -1105,7 +1124,7 @@ impl<T: ElementArithmeticOps> ArithmeticOps<T> for LamellarWriteArray<T> {
 
     fn fetch_div<'a>(
         &self,
-        index: impl OpInput<'a,usize>,
+        index: impl OpInput<'a, usize>,
         val: T,
     ) -> Box<dyn LamellarRequest<Output = Vec<T>> + Send + Sync> {
         match self {
@@ -1144,8 +1163,8 @@ impl<T: Dist + 'static> crate::DarcSerde for LamellarWriteArray<T> {
 pub(crate) mod private {
     use crate::active_messaging::*;
     use crate::array::{
-        AtomicArray, /*NativeAtomicArray, GenericAtomicArray,*/ LamellarReadArray, LamellarWriteArray, LocalLockAtomicArray, ReadOnlyArray,
-        UnsafeArray,
+        AtomicArray, /*NativeAtomicArray, GenericAtomicArray,*/ LamellarReadArray,
+        LamellarWriteArray, LocalLockAtomicArray, ReadOnlyArray, UnsafeArray,
     };
     use crate::lamellar_request::LamellarRequest;
     use crate::memregion::Dist;

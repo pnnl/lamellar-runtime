@@ -31,7 +31,7 @@ pub struct LocalLockAtomicByteArray {
     pub(crate) array: UnsafeByteArray,
 }
 
-pub struct LocalLockAtomicMutLocalData<'a, T: Dist>{
+pub struct LocalLockAtomicMutLocalData<'a, T: Dist> {
     data: &'a mut [T],
     _index: usize,
     _lock_guard: ArcRwLockWriteGuard<RawRwLock, Box<()>>,
@@ -42,7 +42,6 @@ pub struct LocalLockAtomicMutLocalData<'a, T: Dist>{
 //         println!("dropping lla write lock");
 //     }
 // }
-
 
 impl<T: Dist> Deref for LocalLockAtomicMutLocalData<'_, T> {
     type Target = [T];
@@ -75,25 +74,24 @@ impl<'a, T: Dist> Clone for LocalLockAtomicLocalData<'a, T> {
     }
 }
 
-impl <'a, T: Dist> LocalLockAtomicLocalData<'a, T>{
-    pub fn into_sub_data(self, start: usize, end: usize) -> LocalLockAtomicLocalData<'a, T>{
-        LocalLockAtomicLocalData{
+impl<'a, T: Dist> LocalLockAtomicLocalData<'a, T> {
+    pub fn into_sub_data(self, start: usize, end: usize) -> LocalLockAtomicLocalData<'a, T> {
+        LocalLockAtomicLocalData {
             data: &self.data[start..end],
             index: 0,
             lock: self.lock,
             _lock_guard: self._lock_guard,
         }
-    }        
+    }
 }
 
-impl<'a, T: Dist> Iterator for LocalLockAtomicLocalData<'a, T>{
+impl<'a, T: Dist> Iterator for LocalLockAtomicLocalData<'a, T> {
     type Item = &'a T;
     fn next(&mut self) -> Option<Self::Item> {
-        if self.index < self.data.len(){
-            self.index +=1;
-            Some(&self.data[self.index-1])
-        }
-        else{
+        if self.index < self.data.len() {
+            self.index += 1;
+            Some(&self.data[self.index - 1])
+        } else {
             None
         }
     }
@@ -205,7 +203,7 @@ impl<T: Dist> LocalLockAtomicArray<T> {
 
     #[doc(hidden)]
     pub fn local_as_mut_slice(&self) -> LocalLockAtomicMutLocalData<'_, T> {
-        let lock =LocalLockAtomicMutLocalData {
+        let lock = LocalLockAtomicMutLocalData {
             data: unsafe { self.array.local_as_mut_slice() },
             _index: 0,
             _lock_guard: self.lock.write(),
@@ -247,21 +245,17 @@ impl<T: Dist> LocalLockAtomicArray<T> {
     pub fn into_read_only(self) -> ReadOnlyArray<T> {
         self.array.into()
     }
-    
+
     pub fn into_generic_atomic(self) -> GenericAtomicArray<T> {
         self.array.into()
     }
-
 }
-
 
 impl<T: Dist + 'static> LocalLockAtomicArray<T> {
     pub fn into_atomic(self) -> AtomicArray<T> {
         self.array.into()
     }
 }
-
-
 
 impl<T: Dist> From<UnsafeArray<T>> for LocalLockAtomicArray<T> {
     fn from(array: UnsafeArray<T>) -> Self {

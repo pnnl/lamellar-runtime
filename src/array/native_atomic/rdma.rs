@@ -5,7 +5,6 @@ use crate::array::*;
 use crate::memregion::{AsBase, Dist, RTMemoryRegionRDMA, RegisteredMemoryRegion};
 
 impl<T: Dist + 'static> NativeAtomicArray<T> {
-
     pub fn get<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(
         &self,
         index: usize,
@@ -19,10 +18,7 @@ impl<T: Dist + 'static> NativeAtomicArray<T> {
         Box::new(ArrayRdmaHandle { reqs: vec![req] })
     }
 
-    pub fn at(
-        &self,
-        index: usize,
-    ) -> Box<dyn LamellarArrayRequest<Output = T> + Send + Sync> {
+    pub fn at(&self, index: usize) -> Box<dyn LamellarArrayRequest<Output = T> + Send + Sync> {
         let buf: LocalMemoryRegion<T> = self.array.team().alloc_local_mem_region(1);
         let req = self.exec_am_local(InitGetAm {
             array: self.clone(),
@@ -74,7 +70,7 @@ impl<T: Dist + 'static> LamellarArrayGet<T> for NativeAtomicArray<T> {
     }
 }
 
-impl<T: Dist > LamellarArrayPut<T> for NativeAtomicArray<T> {
+impl<T: Dist> LamellarArrayPut<T> for NativeAtomicArray<T> {
     fn put<U: MyInto<LamellarArrayInput<T>> + LamellarRead>(
         &self,
         index: usize,
@@ -85,14 +81,14 @@ impl<T: Dist > LamellarArrayPut<T> for NativeAtomicArray<T> {
 }
 
 #[lamellar_impl::AmLocalDataRT]
-struct InitGetAm<T: Dist > {
+struct InitGetAm<T: Dist> {
     array: NativeAtomicArray<T>, //inner of the indices we need to place data into
-    index: usize,                   //relative to inner
+    index: usize,                //relative to inner
     buf: LamellarArrayInput<T>,
 }
 
 #[lamellar_impl::rt_am_local]
-impl<T: Dist +  'static> LamellarAm for InitGetAm<T> {
+impl<T: Dist + 'static> LamellarAm for InitGetAm<T> {
     fn exec(self) {
         // let buf = self.buf.into();
         // let u8_index = self.index * std::mem::size_of::<T>();
@@ -170,11 +166,14 @@ impl LamellarAm for NativeAtomicRemoteGetAm {
                     let mut data = elems.to_vec();
                     let src_ptr = elems.as_mut_ptr();
                     let dst_ptr = data.as_mut_ptr();
-                    for offset in (0..data.len()).step_by(self.array.orig_t.size()){
-                        self.array.orig_t.load(src_ptr.offset(offset as isize),dst_ptr.offset(offset as isize));
+                    for offset in (0..data.len()).step_by(self.array.orig_t.size()) {
+                        self.array.orig_t.load(
+                            src_ptr.offset(offset as isize),
+                            dst_ptr.offset(offset as isize),
+                        );
                     }
                     data
-                }, 
+                }
                 None => vec![],
             }
         }
@@ -184,7 +183,7 @@ impl LamellarAm for NativeAtomicRemoteGetAm {
 #[lamellar_impl::AmLocalDataRT]
 struct InitPutAm<T: Dist> {
     array: NativeAtomicArray<T>, //inner of the indices we need to place data into
-    index: usize,                   //relative to inner
+    index: usize,                //relative to inner
     buf: LamellarArrayInput<T>,
 }
 
@@ -303,8 +302,11 @@ impl LamellarAm for NativeAtomicRemotePutAm {
                     // println!("elems: {:?}",elems);
                     let src_ptr = self.data.as_ptr();
                     let dst_ptr = elems.as_mut_ptr();
-                    for offset in (0..elems.len()).step_by(self.array.orig_t.size()){
-                        self.array.orig_t.store(src_ptr.offset(offset as isize ),dst_ptr.offset(offset as isize ));
+                    for offset in (0..elems.len()).step_by(self.array.orig_t.size()) {
+                        self.array.orig_t.store(
+                            src_ptr.offset(offset as isize),
+                            dst_ptr.offset(offset as isize),
+                        );
                     }
                     // std::ptr::copy_nonoverlapping(
                     //     self.data.as_ptr(),
@@ -318,5 +320,3 @@ impl LamellarAm for NativeAtomicRemotePutAm {
         // println!("done remote put");
     }
 }
-
-

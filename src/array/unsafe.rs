@@ -256,8 +256,6 @@ impl<T: Dist + 'static> UnsafeArray<T> {
     pub fn into_generic_atomic(self) -> GenericAtomicArray<T> {
         self.into()
     }
-
-    
 }
 
 // impl<T: Dist> UnsafeArray<T> {
@@ -277,14 +275,14 @@ impl<T: Dist> From<AtomicArray<T>> for UnsafeArray<T> {
         // // let array = array.into_data();
         // match array{
         //     AtomicArray::NativeAtomicArray(array) => array.into()
-                
+
         //     }
         // }
         array.into()
     }
 }
 
-impl<T: Dist > From<NativeAtomicArray<T>> for UnsafeArray<T> {
+impl<T: Dist> From<NativeAtomicArray<T>> for UnsafeArray<T> {
     fn from(array: NativeAtomicArray<T>) -> Self {
         // let array = array.into_data();
         array.array.block_on_outstanding(DarcMode::UnsafeArray);
@@ -615,21 +613,19 @@ impl UnsafeArrayInner {
         match self.distribution {
             Distribution::Block => {
                 let pe_start_index = (self.orig_elem_per_pe * pe as f64).round() as usize;
-                let pe_end_index = (self.orig_elem_per_pe * (pe+1) as f64).round() as usize;
+                let pe_end_index = (self.orig_elem_per_pe * (pe + 1) as f64).round() as usize;
                 // println!("{:?} {:?}",pe_start_index,pe_end_index);
-                if pe_start_index <= global_index && global_index < pe_end_index{
+                if pe_start_index <= global_index && global_index < pe_end_index {
                     Some(global_index - pe_start_index)
-                }
-                else{
+                } else {
                     None
                 }
             }
             Distribution::Cyclic => {
                 let num_pes = self.data.num_pes;
-                if global_index% num_pes == pe{
-                    Some(global_index/num_pes)
-                }
-                else{
+                if global_index % num_pes == pe {
+                    Some(global_index / num_pes)
+                } else {
                     None
                 }
             }
@@ -668,7 +664,7 @@ impl UnsafeArrayInner {
             Distribution::Cyclic => {
                 let num_pes = self.data.num_pes;
                 let start_pe = self.pe_for_dist_index(0).unwrap();
-                let end_pe = self.pe_for_dist_index(self.size-1).unwrap();
+                let end_pe = self.pe_for_dist_index(self.size - 1).unwrap();
 
                 let mut num_elems = self.size / num_pes;
                 // println!("{:?} {:?} {:?} {:?}",num_pes,start_pe,end_pe,num_elems);

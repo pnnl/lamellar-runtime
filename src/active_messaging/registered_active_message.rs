@@ -34,16 +34,18 @@ lazy_static! {
         let mut temp = HashMap::new();
         let mut duplicates = vec![];
         for am in ams {
-            if !temp.contains_key(&am){
+            if !temp.contains_key(&am) {
                 temp.insert(am.clone(), cnt);
                 cnt += 1;
-            }
-            else{
-                duplicates.push(am);                
+            } else {
+                duplicates.push(am);
             }
         }
         if duplicates.len() > 0 {
-            panic!("duplicate registered active message {:?}, AMs must have unique names",duplicates);
+            panic!(
+                "duplicate registered active message {:?}, AMs must have unique names",
+                duplicates
+            );
         }
         temp
     };

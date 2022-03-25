@@ -16,21 +16,21 @@ impl<T: Dist> UnsafeArray<T> {
     ) -> Vec<Box<dyn LamellarRequest<Output = ()> + Send + Sync>> {
         let global_index = index + self.inner.offset;
         let buf = buf.my_into(&self.inner.data.team);
-        let start_pe =  match self
-            .inner
-            .pe_for_dist_index(index){
-                Some(pe) => pe,
-                None => panic!("index out of bounds {:?} len {:?}",index ,self.len()),
-            };
-            // .expect("index out of bounds"); //((index+1) as f64 / self.elem_per_pe).round() as usize;
-        let end_pe = match self
-            .inner
-            .pe_for_dist_index(index + buf.len() - 1){
-                Some(pe) => pe,
-                None => panic!("index out of bounds {:?} len {:?}",index + buf.len() - 1,self.len()),
-            };
-            // .expect("index out of bounds"); //(((index + buf.len()) as f64) / self.elem_per_pe).round() as usize;
-                                            // println!("block_op {:?} {:?}",start_pe,end_pe);
+        let start_pe = match self.inner.pe_for_dist_index(index) {
+            Some(pe) => pe,
+            None => panic!("index out of bounds {:?} len {:?}", index, self.len()),
+        };
+        // .expect("index out of bounds"); //((index+1) as f64 / self.elem_per_pe).round() as usize;
+        let end_pe = match self.inner.pe_for_dist_index(index + buf.len() - 1) {
+            Some(pe) => pe,
+            None => panic!(
+                "index out of bounds {:?} len {:?}",
+                index + buf.len() - 1,
+                self.len()
+            ),
+        };
+        // .expect("index out of bounds"); //(((index + buf.len()) as f64) / self.elem_per_pe).round() as usize;
+        // println!("block_op {:?} {:?}",start_pe,end_pe);
         let mut dist_index = global_index;
         // let mut subarray_index = index;
         let mut buf_index = 0;

@@ -1,5 +1,6 @@
 use lamellar::array::{
-    ArithmeticOps, AtomicArray, LocalLockAtomicArray, SerialIterator, UnsafeArray,DistributedIterator
+    ArithmeticOps, AtomicArray, DistributedIterator, LocalLockAtomicArray, SerialIterator,
+    UnsafeArray,
 };
 use lamellar::RemoteMemoryRegion;
 
@@ -43,7 +44,6 @@ macro_rules! check_val{
     };
 }
 
-
 macro_rules! add_test{
     ($array:ident, $t:ty, $len:expr, $dist:ident) =>{
        {
@@ -63,12 +63,12 @@ macro_rules! add_test{
             else{
                 50 as $t
             };
-             
+
             // let max_val = pe_max_val * num_pes as $t;
             let mut max_val = 0 as $t;
             for pe in 0..num_pes{
                 max_val += (10_usize.pow((pe*2)as u32) as $t * pe_max_val);
-                // println!("max_val {:?} {:?}",pe,max_val);   
+                // println!("max_val {:?} {:?}",pe,max_val);
             }
             let init_val = 0 as $t;
             initialize_array!($array, array, init_val);
@@ -256,34 +256,29 @@ macro_rules! add_test{
     }
 }
 
-
-
-macro_rules! check_results{
+macro_rules! check_results {
     ($array_ty:ident, $array:ident, $num_pes:ident, $test:expr) => {
         // println!("test {:?}",$test);
-        let mut success=true;
+        let mut success = true;
         $array.wait_all();
         $array.barrier();
-        for (i,elem) in $array.ser_iter().into_iter().enumerate(){
+        for (i, elem) in $array.ser_iter().into_iter().enumerate() {
             let val = *elem;
-            check_val!($array_ty,val,$num_pes,success);
-            if !success{
-                println!("input {:?}: {:?} {:?} {:?}",$test,i,val,$num_pes);
+            check_val!($array_ty, val, $num_pes, success);
+            if !success {
+                println!("input {:?}: {:?} {:?} {:?}", $test, i, val, $num_pes);
             }
         }
-        if !success{
+        if !success {
             $array.print();
         }
         $array.barrier();
-        let init_val=0;
+        let init_val = 0;
         initialize_array!($array_ty, $array, init_val);
         $array.wait_all();
         $array.barrier();
-        
-    }
+    };
 }
-
-
 
 macro_rules! input_test{
     ($array:ident,  $len:expr, $dist:ident) =>{
@@ -491,8 +486,8 @@ fn main() {
             "isize" => add_test!(UnsafeArray, isize, len, dist_type),
             "f32" => add_test!(UnsafeArray, f32, len, dist_type),
             "f64" => add_test!(UnsafeArray, f64, len, dist_type),
-            "input" => input_test!(UnsafeArray,len,dist_type),
-            _ => eprintln!("unsupported element type"),           
+            "input" => input_test!(UnsafeArray, len, dist_type),
+            _ => eprintln!("unsupported element type"),
         },
         "AtomicArray" => match elem.as_str() {
             "u8" => add_test!(AtomicArray, u8, len, dist_type),
@@ -509,7 +504,7 @@ fn main() {
             "isize" => add_test!(AtomicArray, isize, len, dist_type),
             "f32" => add_test!(AtomicArray, f32, len, dist_type),
             "f64" => add_test!(AtomicArray, f64, len, dist_type),
-            "input" => input_test!(AtomicArray,len,dist_type),
+            "input" => input_test!(AtomicArray, len, dist_type),
             _ => eprintln!("unsupported element type"),
         },
         "LocalLockAtomicArray" => match elem.as_str() {
@@ -527,7 +522,7 @@ fn main() {
             "isize" => add_test!(LocalLockAtomicArray, isize, len, dist_type),
             "f32" => add_test!(LocalLockAtomicArray, f32, len, dist_type),
             "f64" => add_test!(LocalLockAtomicArray, f64, len, dist_type),
-            "input" => input_test!(LocalLockAtomicArray,len,dist_type),
+            "input" => input_test!(LocalLockAtomicArray, len, dist_type),
             _ => eprintln!("unsupported element type"),
         },
         _ => eprintln!("unsupported array type"),

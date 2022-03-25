@@ -623,7 +623,7 @@ impl<T: Dist> LamellarWrite for &LocalMemoryRegion<T> {}
 impl<T: Dist> LamellarRead for LocalMemoryRegion<T> {}
 
 impl<T: Dist> From<&LocalMemoryRegion<T>> for LamellarMemoryRegion<T> {
-    fn from(smr: &LocalMemoryRegion<T>) -> Self{
+    fn from(smr: &LocalMemoryRegion<T>) -> Self {
         LamellarMemoryRegion::Local(smr.clone())
     }
 }
