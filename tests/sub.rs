@@ -27,7 +27,7 @@ macro_rules! create_test {
             #[test]
             #[serial]
             #[allow(non_snake_case)]
-            fn [<$array _ $dist _ $elem _ $num_pes _ $len _ sub>](){
+            fn [<$array _ $dist _ $elem _ $num_pes _ $len __ sub>](){
                 let mut d = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
                 d.push("lamellar_run.sh");
                 let result = Command::new(d.into_os_string())

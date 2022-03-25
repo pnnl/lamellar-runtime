@@ -50,6 +50,7 @@ impl<T: Dist > DistributedIterator for NativeAtomicDistIter<T> {
     fn init(&self, start_i: usize, cnt: usize) -> Self {
         let max_i = self.data.num_elems_local();
         // println!("init dist iter start_i: {:?} cnt {:?} end_i: {:?} max_i: {:?}",start_i,cnt, start_i+cnt,max_i);
+        // println!("num_elems_local: {:?}",self.data.num_elems_local());
         NativeAtomicDistIter {
             data: self.data.clone(),
             cur_i: std::cmp::min(start_i, max_i),

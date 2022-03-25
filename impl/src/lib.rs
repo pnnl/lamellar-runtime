@@ -1126,9 +1126,10 @@ fn create_buf_ops(
         struct #buf_op_name{
             data: #lamellar::array::#array_type<#typeident>,
             ops: Mutex<Vec<(ArrayOpCmd,Vec<(usize,#typeident)>)>>,
+            cur_len: AtomicUsize, //this could probably just be a normal usize cause we only update it after we get ops lock
             complete: RwLock<Arc<AtomicBool>>,
             result_cnt:  RwLock<Arc<AtomicUsize>>,
-            results:  RwLock<Arc<RwLock<Vec<u8>>>>,
+            results:  RwLock<PeOpResults>,
         }
         #[#am_data]
         struct #am_buf_name{
@@ -1147,34 +1148,23 @@ fn create_buf_ops(
             //     (first,self.complete.read().clone())
             // }
             fn add_ops(&self, op: ArrayOpCmd, op_data: *const u8,len: usize) -> (bool,Arc<AtomicBool>){
-                let slice_ptr = op_data as *const (usize,#typeident);
+                let slice_ptr = op_data as *const (usize,usize,#typeident);
                 let slice = unsafe {std::slice::from_raw_parts(slice_ptr,len)};
                 // let val = unsafe{*(val as *const #typeident)};
                 
                 let mut ops = vec![];
                 
-                for (i,v) in slice{
+                for (_,i,v) in slice{
                     ops.push((*i,*v));
                 }
                 let mut buf = self.ops.lock();
                 let first = buf.len() == 0;
+                self.cur_len.fetch_add(ops.len(),Ordering::SeqCst);
                 buf.push((op,ops));
+                
                 (first,self.complete.read().clone())
             }
 
-            // fn add_ops<'a>(&self, op: ArrayOpCmd, indices: &OpInputEnum<'a,usize>, op_data: *const u8,len: usize) -> (bool,Arc<AtomicBool>){
-            //     let vals = unsafe {(op_data as *const OpInputEnum<'a,#typident>).as_ref()};//(usize,#typeident);
-                               
-            //     let mut ops = vec![];
-                
-            //     for (i,v) in slice{
-            //         ops.push((*i,*v));
-            //     }
-            //     let mut buf = self.ops.lock();
-            //     let first = buf.len() == 0;
-            //     buf.push((op,ops));
-            //     (first,self.complete.read().clone())
-            // }
             // fn add_fetch_op(&self, op: ArrayOpCmd, index: usize, val: *const u8) -> (bool,Arc<AtomicBool>, usize,Arc<RwLock<Vec<u8>>>){
             //     let val = unsafe{*(val as *const #typeident)};
             //     let mut buf = self.ops.lock();
@@ -1184,35 +1174,40 @@ fn create_buf_ops(
 
             //     (first,self.complete.read().clone(),res_index,self.results.read().clone())
             // }
-            fn add_fetch_ops(&self, op: ArrayOpCmd, op_data: *const u8, len: usize, res_indicies: Arc<Mutex<Vec<usize>>>) -> (bool,Arc<AtomicBool>,Option<Arc<RwLock<Vec<u8>>>>){
+            fn add_fetch_ops(&self, pe: usize, op: ArrayOpCmd, op_data: *const u8, len: usize, res_map: OpResults) -> (bool,Arc<AtomicBool>,Option<OpResultIndices>){
                 // let val = unsafe{*(val as *const #typeident)};
-                let slice_ptr = op_data as *const (usize,#typeident);
+                let slice_ptr = op_data as *const (usize,usize,#typeident);
                 let slice = unsafe {std::slice::from_raw_parts(slice_ptr,len)};
-                let mut res_indicies = res_indicies.lock();
+                let mut res_indicies = vec![];//res_indicies.lock();
                 
                 let mut ops = vec![];
-                
-                for (i,v) in slice{
-                    ops.push((*i,*v));
-                    res_indicies.push(self.result_cnt.read().fetch_add(1,Ordering::SeqCst));
-                }
                 let mut buf = self.ops.lock();
+                for (rid, i,v) in slice{
+                    ops.push((*i,*v));
+                    res_indicies.push((*rid,self.result_cnt.read().fetch_add(1,Ordering::SeqCst)));
+                }
+               
                 let first = buf.len() == 0;
+                self.cur_len.fetch_add(ops.len(),Ordering::SeqCst);
                 buf.push((op,ops));
-                (first,self.complete.read().clone(),Some(self.results.read().clone()))
+                res_map.insert(pe,self.results.read().clone());
+                (first,self.complete.read().clone(),Some(res_indicies))
             }
-            fn into_arc_am(&self,sub_array: std::ops::Range<usize>)-> (Vec<Arc<dyn RemoteActiveMessage + Send + Sync>>,usize,Arc<AtomicBool>,Arc<RwLock<Vec<u8>>>){
+            fn into_arc_am(&self,sub_array: std::ops::Range<usize>)-> (Vec<Arc<dyn RemoteActiveMessage + Send + Sync>>,usize,Arc<AtomicBool>, PeOpResults){
                 // println!("into arc am {:?}",stringify!(#am_buf_name));
                 let mut ams: Vec<Arc<dyn RemoteActiveMessage + Send + Sync>> = Vec::new();
                 let mut buf = self.ops.lock();
                 // println!("buf len {:?}",buf.len());
                 let mut ops = Vec::new();
-                let len = buf.len();
+                let len = self.cur_len.load(Ordering::SeqCst);
+                self.cur_len.store(0,Ordering::SeqCst);
                 std::mem::swap(&mut ops,  &mut buf);
                 let mut complete = Arc::new(AtomicBool::new(false));
                 std::mem::swap(&mut complete, &mut self.complete.write());
                 // println!(" complete{:?}",complete);
-                let mut results = Arc::new(RwLock::new(Vec::new()));
+                // let mut results = Arc::new(RwLock::new(HashMap::new()));
+                let mut results = Arc::new(Mutex::new(Vec::new()));
+
                 std::mem::swap(&mut results, &mut self.results.write());
                 // println!(" here");
                 let mut num_fetch_ops = self.result_cnt.read().swap(0,Ordering::SeqCst);
@@ -1261,7 +1256,7 @@ fn create_buf_ops(
                 // println!("from: {:?} num ops {:?}  {:?}",self.orig_pe,self.ops.len() ,stringify!(#array_type));
                 #slice
                 // println!("slice len {:?}",slice.len());
-                // println!("num fetch ops {:?}",self.num_fetch_ops);
+                // println!("opslen {:?} num fetch ops {:?}",self.ops.len(),self.num_fetch_ops);
                 let u8_len = self.num_fetch_ops*std::mem::size_of::<#typeident>();
                 let mut results_u8: Vec<u8> = if u8_len > 0 {
                     let mut temp = Vec::with_capacity(u8_len);
@@ -1274,22 +1269,29 @@ fn create_buf_ops(
                 let mut results_slice = unsafe{std::slice::from_raw_parts_mut(results_u8.as_mut_ptr() as *mut #typeident,self.num_fetch_ops)};
                 let mut fetch_index=0;
                 for (op, ops) in &self.ops{
+                    // println!("op: {:?} len {:?} {:?}",op,ops.len(),ops);
                     for (index,val) in ops{
                 // for (op,index,val) in &self.ops{
-                    // println!("op: {:?} index: {:?} val {:?}",op,index,val);
+                        // println!("before op: {:?} index: {:?} val {:?} fetch_index {:?}",op,index,val,fetch_index);
                         
                         let index = *index;
                         let val = *val;
                         
                         #lock //this will get dropped at end of loop
                         let orig = #load;
+                        // println!("before op: {:?} index: {:?} val {:?} fetch_index {:?} orig {:?}",op,index,val,fetch_index,orig);
+
                         match op{
                         # match_stmts
                         _ => {panic!("shouldnt happen {:?}",op)}
                         }
+                        // println!("done op: {:?} index: {:?} val {:?} fetch_index {:?}",op,index,val,fetch_index);
+
                     }
                 }
                 // println!("buff ops exec: {:?} {:?} {:?}",results_u8.len(),u8_len,self.num_fetch_ops);
+                // println!("results {:?}",results_slice);
+                // println!("results_u8 {:?}",results_u8);
                 unsafe { results_u8.set_len(fetch_index * std::mem::size_of::<#typeident>())};
                 // let val = self.wait.fetch_sub(1,Ordering::SeqCst);
                 // println!("trying to leave {:?} {:?}",self.orig_pe, val);
@@ -1306,9 +1308,10 @@ fn create_buf_ops(
             Arc::new(#buf_op_name{
                 data: unsafe {array.into()},
                 ops: Mutex::new(Vec::new()),
+                cur_len: AtomicUsize::new(0),
                 complete: RwLock::new(Arc::new(AtomicBool::new(false))),
                 result_cnt: RwLock::new(Arc::new(AtomicUsize::new(0))),
-                results: RwLock::new( Arc::new(RwLock::new(Vec::new()))),
+                results: RwLock::new(Arc::new(Mutex::new(Vec::new()))),
             })
         }
         inventory::submit! {
@@ -1438,7 +1441,7 @@ fn create_buffered_ops(typeident: syn::Ident, bitwise: bool, native: bool, rt: b
     let user_expanded = quote_spanned! {expanded.span()=>
         const _: () = {
             extern crate lamellar as __lamellar;
-            use __lamellar::array::{AtomicArray,AtomicByteArray,GenericAtomicArray,NativeAtomicArray,LocalLockAtomicArray,LocalLockAtomicByteArray,LocalArithmeticOps,LocalAtomicOps,ArrayOpCmd,LamellarArrayPut};
+            use __lamellar::array::{AtomicArray,AtomicByteArray,GenericAtomicArray,NativeAtomicArray,LocalLockAtomicArray,LocalLockAtomicByteArray,LocalArithmeticOps,LocalAtomicOps,ArrayOpCmd,LamellarArrayPut,OpResultIndices,PeOpResults,OpResults};
             // #bitwise_mod
             use __lamellar::array;
             // #bitwise_mod

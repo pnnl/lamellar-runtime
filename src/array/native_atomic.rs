@@ -314,14 +314,17 @@ pub struct NativeAtomicByteArray {
 }
 
 
-
+#[derive(Clone)]
 pub struct NativeAtomicLocalData<T: Dist> {// + NativeAtomicOps> {
     array: NativeAtomicArray<T>,
+    start_index: usize,
+    end_index: usize, 
 }
 
 pub struct NativeAtomicLocalDataIter<T: Dist > {//+ NativeAtomicOps> {
     array: NativeAtomicArray<T>,
     index: usize,
+    end_index: usize, 
 }
 
 impl<T: Dist > NativeAtomicLocalData<T> {
@@ -346,9 +349,26 @@ impl<T: Dist > NativeAtomicLocalData<T> {
     pub fn iter(&self) -> NativeAtomicLocalDataIter<T> {
         NativeAtomicLocalDataIter {
             array: self.array.clone(),
-            index: 0,
+            index: self.start_index,
+            end_index: self.end_index,
+
         }
     }
+
+    pub fn sub_data(&self, start_index: usize, end_index: usize) -> NativeAtomicLocalData<T> {
+        NativeAtomicLocalData {
+            array: self.array.clone(),
+            start_index: start_index,
+            end_index: std::cmp::min(end_index,self.array.num_elems_local()),
+        }
+    }
+
+    // pub fn load_iter(&self) -> NativeAtomicLocalDataIter<T> {
+    //     NativeAtomicLocalDataIter {
+    //         array: self.array.clone(),
+    //         index: 0,
+    //     }
+    // }
 }
 
 impl<T: Dist > IntoIterator for NativeAtomicLocalData<T> {
@@ -357,7 +377,8 @@ impl<T: Dist > IntoIterator for NativeAtomicLocalData<T> {
     fn into_iter(self) -> Self::IntoIter {
         NativeAtomicLocalDataIter {
             array: self.array,
-            index: 0,
+            index: self.start_index,
+            end_index: self.end_index,
         }
     }
 }
@@ -365,7 +386,7 @@ impl<T: Dist > IntoIterator for NativeAtomicLocalData<T> {
 impl<T: Dist > Iterator for NativeAtomicLocalDataIter<T> {
     type Item = NativeAtomicElement<T>;
     fn next(&mut self) -> Option<Self::Item> {
-        if self.index < self.array.num_elems_local() {
+        if self.index < self.end_index {
             let index = self.index;
             self.index += 1;
             Some(NativeAtomicElement {
@@ -487,12 +508,16 @@ impl<T: Dist> NativeAtomicArray<T> {
     pub fn local_data(&self) -> NativeAtomicLocalData<T> {
         NativeAtomicLocalData {
             array: self.clone(),
+            start_index: 0,
+            end_index: self.array.num_elems_local(),
         }
     }
 
     pub fn mut_local_data(&self) -> NativeAtomicLocalData<T> {
         NativeAtomicLocalData {
             array: self.clone(),
+            start_index: 0,
+            end_index: self.array.num_elems_local(),
         }
     }
 

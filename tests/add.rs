@@ -27,7 +27,7 @@ macro_rules! create_test {
             #[test]
             #[serial]
             #[allow(non_snake_case)]
-            fn [<$array _ $dist _ $elem _ $num_pes _ $len _ add>](){
+            fn [<$array _ $dist _ $elem _ $num_pes _ $len __ add>](){
                 let mut d = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
                 d.push("lamellar_run.sh");
                 let result = Command::new(d.into_os_string())
@@ -92,4 +92,12 @@ create_add_tests!(
     (u8, u16, u32, u128, usize, i8, i16, i32, i128, isize, f32, f64),
     (2, 3, 4),
     (4, 19, 128)
+);
+
+create_add_tests!(
+    (UnsafeArray, LocalLockAtomicArray, AtomicArray), // (UnsafeArray, AtomicArray, GenericAtomicArray, LocalLockAtomicArray),
+    ("Block", "Cyclic"),
+    (input),
+    (2, 3, 4),
+    (4, 100, 1000)
 );

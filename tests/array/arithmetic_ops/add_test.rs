@@ -1,6 +1,7 @@
 use lamellar::array::{
     ArithmeticOps, AtomicArray, LocalLockAtomicArray, SerialIterator, UnsafeArray,DistributedIterator
 };
+use lamellar::RemoteMemoryRegion;
 
 use rand::distributions::Uniform;
 use rand::seq::SliceRandom;
@@ -42,16 +43,6 @@ macro_rules! check_val{
     };
 }
 
-// #[allow(dead_code)]
-// macro_rules! max_updates {
-//     ($t:ty,$num_pes:ident) => {
-//         if <$t>::MAX as u128 > (10 * $num_pes) as u128 {
-//             10
-//         } else {
-//             <$t>::MAX as usize / $num_pes
-//         }
-//     };
-// }
 
 macro_rules! add_test{
     ($array:ident, $t:ty, $len:expr, $dist:ident) =>{
@@ -269,6 +260,7 @@ macro_rules! add_test{
 
 macro_rules! check_results{
     ($array_ty:ident, $array:ident, $num_pes:ident, $test:expr) => {
+        // println!("test {:?}",$test);
         let mut success=true;
         $array.wait_all();
         $array.barrier();
@@ -291,6 +283,8 @@ macro_rules! check_results{
     }
 }
 
+
+
 macro_rules! input_test{
     ($array:ident,  $len:expr, $dist:ident) =>{
        {
@@ -304,14 +298,25 @@ macro_rules! input_test{
             let input_array: UnsafeArray::<usize> = UnsafeArray::<usize>::new(world.team(), array_total_len*num_pes, $dist).into(); //convert into abstract LamellarArray, distributed len is total_len
             let init_val=0;
             initialize_array!($array, array, init_val);
-            input_array.dist_iter_mut().enumerate().for_each(move |(i,x)| *x = i%array_total_len);
-            array.wait_all();
-            array.barrier();
+            if $dist == lamellar::array::Distribution::Block{
+                input_array.dist_iter_mut().enumerate().for_each(move |(i,x)| {println!("i: {:?}",i);*x = i%array_total_len});
+            }
+            else{
+                input_array.dist_iter_mut().enumerate().for_each(move |(i,x)| {println!("i: {:?}",i);*x = i/num_pes});
+            }
+            input_array.wait_all();
+            input_array.barrier();
+            input_array.print();
             //individual T------------------------------
             for i in 0..array.len(){
                 array.add(i,1);
             }
             check_results!($array,array,num_pes,"T");
+            //individual T------------------------------
+            for i in 0..array.len(){
+                array.add(&i,1);
+            }
+            check_results!($array,array,num_pes,"&T");
             //&[T]------------------------------
             let vec=(0..array.len()).collect::<Vec<usize>>();
             let slice = &vec[..];
@@ -345,6 +350,114 @@ macro_rules! input_test{
             }
             check_results!($array,array,num_pes,"scoped &Vec<T>");
 
+            // LMR<T>------------------------------
+            let lmr=world.alloc_local_mem_region(array.len());
+            unsafe{
+                let slice = lmr.as_mut_slice().unwrap();
+                for i in 0..array.len(){
+                    slice[i]=i;
+                }
+            }
+            array.add(lmr.clone(),1);
+            check_results!($array,array,num_pes,"LMR<T>");
+            // &LMR<T>------------------------------
+            array.add(&lmr,1);
+            check_results!($array,array,num_pes,"&LMR<T>");
+            drop(lmr);
+            // scoped LMR<T>------------------------------
+            {
+                let lmr=world.alloc_local_mem_region(array.len());
+                unsafe{
+                    let slice = lmr.as_mut_slice().unwrap();
+                    for i in 0..array.len(){
+                        slice[i]=i;
+                    }
+                }
+                array.add(lmr.clone(),1);
+                check_results!($array,array,num_pes,"scoped LMR<T>");
+            }
+            // scoped &LMR<T>------------------------------
+            {
+                let lmr=world.alloc_local_mem_region(array.len());
+                unsafe{
+                    let slice = lmr.as_mut_slice().unwrap();
+                    for i in 0..array.len(){
+                        slice[i]=i;
+                    }
+                }
+                array.add(&lmr,1);
+                check_results!($array,array,num_pes,"scoped &LMR<T>");
+            }
+
+            // SMR<T>------------------------------
+            let smr=world.alloc_shared_mem_region(array.len());
+            unsafe{
+                let slice = smr.as_mut_slice().unwrap();
+                for i in 0..array.len(){
+                    slice[i]=i;
+                }
+            }
+            array.add(smr.clone(),1);
+            check_results!($array,array,num_pes,"SMR<T>");
+            // &SMR<T>------------------------------
+            array.add(&smr,1);
+            check_results!($array,array,num_pes,"&SMR<T>");
+            drop(smr);
+            // scoped SMR<T>------------------------------
+            {
+                let smr=world.alloc_shared_mem_region(array.len());
+                unsafe{
+                    let slice = smr.as_mut_slice().unwrap();
+                    for i in 0..array.len(){
+                        slice[i]=i;
+                    }
+                }
+                array.add(smr,1);
+                check_results!($array,array,num_pes,"scoped SMR<T>");
+            }
+            // scoped &SMR<T>------------------------------
+            {
+                let smr=world.alloc_shared_mem_region(array.len());
+                unsafe{
+                    let slice = smr.as_mut_slice().unwrap();
+                    for i in 0..array.len(){
+                        slice[i]=i;
+                    }
+                }
+                array.add(&smr,1);
+                check_results!($array,array,num_pes,"scoped &SMR<T>");
+            }
+
+            // UnsafeArray<T>------------------------------
+            // array.add(input_array.clone(),1);
+            // check_results!($array,array,num_pes,"UnsafeArray<T>");
+            // UnsafeArray<T>------------------------------
+            array.add(&input_array,1);
+            check_results!($array,array,num_pes,"&UnsafeArray<T>");
+
+            // ReadOnlyArray<T>------------------------------
+            let input_array = input_array.into_read_only();
+            // array.add(input_array.clone(),1);
+            // check_results!($array,array,num_pes,"ReadOnlyArray<T>");
+            // ReadOnlyArray<T>------------------------------
+            array.add(&input_array,1);
+            check_results!($array,array,num_pes,"&ReadOnlyArray<T>");
+
+            // AtomicArray<T>------------------------------
+            let input_array = input_array.into_atomic();
+            // array.add(input_array.clone(),1);
+            // check_results!($array,array,num_pes,"AtomicArray<T>");
+            // AtomicArray<T>------------------------------
+            array.add(&input_array,1);
+            check_results!($array,array,num_pes,"&AtomicArray<T>");
+
+             // LocalLockAtomicArray<T>------------------------------
+             let input_array = input_array.into_local_lock_atomic();
+            //  array.add(input_array.clone(),1);
+            //  check_results!($array,array,num_pes,"LocalLockAtomicArray<T>");
+             // LocalLockAtomicArray<T>------------------------------
+             array.add(&input_array,1);
+             check_results!($array,array,num_pes,"&LocalLockAtomicArray<T>");
        }
     }
 }
@@ -363,67 +476,59 @@ fn main() {
     };
 
     match array.as_str() {
-        "UnsafeArray" => {
-            match elem.as_str() {
-                "u8" => add_test!(UnsafeArray, u8, len, dist_type),
-                "u16" => add_test!(UnsafeArray, u16, len, dist_type),
-                "u32" => add_test!(UnsafeArray, u32, len, dist_type),
-                "u64" => add_test!(UnsafeArray, u64, len, dist_type),
-                "u128" => add_test!(UnsafeArray, u128, len, dist_type),
-                "usize" => add_test!(UnsafeArray, usize, len, dist_type),
-                "i8" => add_test!(UnsafeArray, i8, len, dist_type),
-                "i16" => add_test!(UnsafeArray, i16, len, dist_type),
-                "i32" => add_test!(UnsafeArray, i32, len, dist_type),
-                "i64" => add_test!(UnsafeArray, i64, len, dist_type),
-                "i128" => add_test!(UnsafeArray, i128, len, dist_type),
-                "isize" => add_test!(UnsafeArray, isize, len, dist_type),
-                "f32" => add_test!(UnsafeArray, f32, len, dist_type),
-                "f64" => add_test!(UnsafeArray, f64, len, dist_type),
-                "input" => input_test!(UnsafeArray,len,dist_type),
-                _ => eprintln!("unsupported element type"),
-            };            
+        "UnsafeArray" => match elem.as_str() {
+            "u8" => add_test!(UnsafeArray, u8, len, dist_type),
+            "u16" => add_test!(UnsafeArray, u16, len, dist_type),
+            "u32" => add_test!(UnsafeArray, u32, len, dist_type),
+            "u64" => add_test!(UnsafeArray, u64, len, dist_type),
+            "u128" => add_test!(UnsafeArray, u128, len, dist_type),
+            "usize" => add_test!(UnsafeArray, usize, len, dist_type),
+            "i8" => add_test!(UnsafeArray, i8, len, dist_type),
+            "i16" => add_test!(UnsafeArray, i16, len, dist_type),
+            "i32" => add_test!(UnsafeArray, i32, len, dist_type),
+            "i64" => add_test!(UnsafeArray, i64, len, dist_type),
+            "i128" => add_test!(UnsafeArray, i128, len, dist_type),
+            "isize" => add_test!(UnsafeArray, isize, len, dist_type),
+            "f32" => add_test!(UnsafeArray, f32, len, dist_type),
+            "f64" => add_test!(UnsafeArray, f64, len, dist_type),
+            "input" => input_test!(UnsafeArray,len,dist_type),
+            _ => eprintln!("unsupported element type"),           
         },
-        "AtomicArray" => {
-            match elem.as_str() {
-                "u8" => add_test!(AtomicArray, u8, len, dist_type),
-                "u16" => add_test!(AtomicArray, u16, len, dist_type),
-                "u32" => add_test!(AtomicArray, u32, len, dist_type),
-                "u64" => add_test!(AtomicArray, u64, len, dist_type),
-                "u128" => add_test!(AtomicArray, u128, len, dist_type),
-                "usize" => add_test!(AtomicArray, usize, len, dist_type),
-                "i8" => add_test!(AtomicArray, i8, len, dist_type),
-                "i16" => add_test!(AtomicArray, i16, len, dist_type),
-                "i32" => add_test!(AtomicArray, i32, len, dist_type),
-                "i64" => add_test!(AtomicArray, i64, len, dist_type),
-                "i128" => add_test!(AtomicArray, i128, len, dist_type),
-                "isize" => add_test!(AtomicArray, isize, len, dist_type),
-                "f32" => add_test!(AtomicArray, f32, len, dist_type),
-                "f64" => add_test!(AtomicArray, f64, len, dist_type),
-                "input" => input_test!(AtomicArray,len,dist_type),
-                _ => eprintln!("unsupported element type"),
-            };
-            
+        "AtomicArray" => match elem.as_str() {
+            "u8" => add_test!(AtomicArray, u8, len, dist_type),
+            "u16" => add_test!(AtomicArray, u16, len, dist_type),
+            "u32" => add_test!(AtomicArray, u32, len, dist_type),
+            "u64" => add_test!(AtomicArray, u64, len, dist_type),
+            "u128" => add_test!(AtomicArray, u128, len, dist_type),
+            "usize" => add_test!(AtomicArray, usize, len, dist_type),
+            "i8" => add_test!(AtomicArray, i8, len, dist_type),
+            "i16" => add_test!(AtomicArray, i16, len, dist_type),
+            "i32" => add_test!(AtomicArray, i32, len, dist_type),
+            "i64" => add_test!(AtomicArray, i64, len, dist_type),
+            "i128" => add_test!(AtomicArray, i128, len, dist_type),
+            "isize" => add_test!(AtomicArray, isize, len, dist_type),
+            "f32" => add_test!(AtomicArray, f32, len, dist_type),
+            "f64" => add_test!(AtomicArray, f64, len, dist_type),
+            "input" => input_test!(AtomicArray,len,dist_type),
+            _ => eprintln!("unsupported element type"),
         },
-        "LocalLockAtomicArray" => {
-            match elem.as_str() {
-                "u8" => add_test!(LocalLockAtomicArray, u8, len, dist_type),
-                "u16" => add_test!(LocalLockAtomicArray, u16, len, dist_type),
-                "u32" => add_test!(LocalLockAtomicArray, u32, len, dist_type),
-                "u64" => add_test!(LocalLockAtomicArray, u64, len, dist_type),
-                "u128" => add_test!(LocalLockAtomicArray, u128, len, dist_type),
-                "usize" => add_test!(LocalLockAtomicArray, usize, len, dist_type),
-                "i8" => add_test!(LocalLockAtomicArray, i8, len, dist_type),
-                "i16" => add_test!(LocalLockAtomicArray, i16, len, dist_type),
-                "i32" => add_test!(LocalLockAtomicArray, i32, len, dist_type),
-                "i64" => add_test!(LocalLockAtomicArray, i64, len, dist_type),
-                "i128" => add_test!(LocalLockAtomicArray, i128, len, dist_type),
-                "isize" => add_test!(LocalLockAtomicArray, isize, len, dist_type),
-                "f32" => add_test!(LocalLockAtomicArray, f32, len, dist_type),
-                "f64" => add_test!(LocalLockAtomicArray, f64, len, dist_type),
-                "input" => input_test!(LocalLockAtomicArray,len,dist_type),
-                _ => eprintln!("unsupported element type"),
-            };
-            
+        "LocalLockAtomicArray" => match elem.as_str() {
+            "u8" => add_test!(LocalLockAtomicArray, u8, len, dist_type),
+            "u16" => add_test!(LocalLockAtomicArray, u16, len, dist_type),
+            "u32" => add_test!(LocalLockAtomicArray, u32, len, dist_type),
+            "u64" => add_test!(LocalLockAtomicArray, u64, len, dist_type),
+            "u128" => add_test!(LocalLockAtomicArray, u128, len, dist_type),
+            "usize" => add_test!(LocalLockAtomicArray, usize, len, dist_type),
+            "i8" => add_test!(LocalLockAtomicArray, i8, len, dist_type),
+            "i16" => add_test!(LocalLockAtomicArray, i16, len, dist_type),
+            "i32" => add_test!(LocalLockAtomicArray, i32, len, dist_type),
+            "i64" => add_test!(LocalLockAtomicArray, i64, len, dist_type),
+            "i128" => add_test!(LocalLockAtomicArray, i128, len, dist_type),
+            "isize" => add_test!(LocalLockAtomicArray, isize, len, dist_type),
+            "f32" => add_test!(LocalLockAtomicArray, f32, len, dist_type),
+            "f64" => add_test!(LocalLockAtomicArray, f64, len, dist_type),
+            "input" => input_test!(LocalLockAtomicArray,len,dist_type),
+            _ => eprintln!("unsupported element type"),
         },
         _ => eprintln!("unsupported array type"),
     }

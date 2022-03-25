@@ -97,3 +97,11 @@ create_fetch_add_tests!(
     (2, 3, 4),
     (4, 19, 128)
 );
+
+create_fetch_add_tests!(
+    (UnsafeArray, LocalLockAtomicArray, AtomicArray), // (UnsafeArray, AtomicArray, GenericAtomicArray, LocalLockAtomicArray),
+    ("Block", "Cyclic"),
+    (input),
+    (2, 3, 4),
+    (4, 100, 1000)
+);

@@ -1,6 +1,8 @@
 use lamellar::array::{
-    ArithmeticOps, AtomicArray, LocalLockAtomicArray, SerialIterator, UnsafeArray,
+    ArithmeticOps, AtomicArray, LocalLockAtomicArray, SerialIterator, UnsafeArray,DistributedIterator
 };
+
+use lamellar::RemoteMemoryRegion;
 
 use rand::distributions::Distribution;
 use rand::distributions::Uniform;
@@ -12,7 +14,7 @@ macro_rules! initialize_array {
         $array.barrier();
     };
     (AtomicArray,$array:ident,$init_val:ident) => {
-        $array.dist_iter().for_each(move |x| x.store($init_val));
+        $array.dist_iter().enumerate().for_each(move |(i,x)| {println!("{:?} {:?}",i,x.load()); x.store($init_val)});
         $array.wait_all();
         $array.barrier();
     };
@@ -354,6 +356,247 @@ macro_rules! add_test{
     }
 }
 
+
+macro_rules! check_results{
+    ($array_ty:ident, $array:ident, $num_pes:ident, $reqs:ident, $test:expr) => {
+        
+        let mut success=true;
+        $array.wait_all();
+        $array.barrier();
+        println!("test {:?} reqs len {:?}",$test,$reqs.len());
+        for (i,req) in $reqs.iter().enumerate(){
+            let req = req.get().unwrap();
+            println!("sub_req len: {:?}",req.len());
+            for (j,res) in req.iter().enumerate(){
+                if !(res >= &0 && res < &$num_pes){
+                    success = false;
+                    println!("return i: {:?} j: {:?} val: {:?}",i,j,res);
+                }
+            }
+        }
+        for (i,elem) in $array.ser_iter().into_iter().enumerate(){
+            let val = *elem;
+            check_val!($array_ty,val,$num_pes,success);
+            if !success{
+                println!("input {:?}: {:?} {:?} {:?}",$test,i,val,$num_pes);
+            }
+        }
+        if !success{
+            $array.print();
+        }
+        $array.barrier();
+        let init_val=0;
+        initialize_array!($array_ty, $array, init_val);
+        $array.wait_all();
+        $array.barrier();
+        
+    }
+}
+
+
+
+macro_rules! input_test{
+    ($array:ident,  $len:expr, $dist:ident) =>{
+       {
+            std::env::set_var("LAMELLAR_OP_BATCH","10");
+            let world = lamellar::LamellarWorldBuilder::new().build();
+            let num_pes = world.num_pes();
+            let _my_pe = world.my_pe();
+            let array_total_len = $len;
+
+            // let mut success = true;
+            let array: $array::<usize> = $array::<usize>::new(world.team(), array_total_len, $dist).into(); //convert into abstract LamellarArray, distributed len is total_len
+            let input_array: UnsafeArray::<usize> = UnsafeArray::<usize>::new(world.team(), array_total_len*num_pes, $dist).into(); //convert into abstract LamellarArray, distributed len is total_len
+            let init_val=0;
+            initialize_array!($array, array, init_val);
+            if $dist == lamellar::array::Distribution::Block{
+                input_array.dist_iter_mut().enumerate().for_each(move |(i,x)| {println!("i: {:?}",i);*x = i%array_total_len});
+            }
+            else{
+                input_array.dist_iter_mut().enumerate().for_each(move |(i,x)| {println!("i: {:?}",i);*x = i/num_pes});
+            }
+                
+            array.wait_all();
+            array.barrier();
+            //individual T------------------------------
+            let mut reqs = vec![];
+            for i in 0..array.len(){
+                reqs.push(array.fetch_add(i,1));
+            }
+            check_results!($array,array,num_pes,reqs,"T");
+            //individual T------------------------------
+            let mut reqs = vec![];
+            for i in 0..array.len(){
+                reqs.push(array.fetch_add(&i,1));
+            }
+            check_results!($array,array,num_pes,reqs,"&T");
+            //&[T]------------------------------
+            let vec=(0..array.len()).collect::<Vec<usize>>();
+            let slice = &vec[..];
+            let mut reqs = vec![];
+            reqs.push(array.fetch_add(slice,1));
+            check_results!($array,array,num_pes,reqs,"&[T]");
+            //scoped &[T]------------------------------
+            let mut reqs = vec![];
+            {
+                let vec=(0..array.len()).collect::<Vec<usize>>();
+                let slice = &vec[..];
+                reqs.push(array.fetch_add(slice,1));
+            }
+            check_results!($array,array,num_pes,reqs,"scoped &[T]");
+            // Vec<T>------------------------------
+            let vec=(0..array.len()).collect::<Vec<usize>>();
+            let mut reqs = vec![];
+            reqs.push(array.fetch_add(vec,1));
+            check_results!($array,array,num_pes,reqs,"Vec<T>");
+            // &Vec<T>------------------------------
+            let mut reqs = vec![];
+            let vec=(0..array.len()).collect::<Vec<usize>>();
+            reqs.push(array.fetch_add(&vec,1));
+            check_results!($array,array,num_pes,reqs,"&Vec<T>");
+            // Scoped Vec<T>------------------------------
+            let mut reqs = vec![];
+            {
+                let vec=(0..array.len()).collect::<Vec<usize>>();
+                reqs.push(array.fetch_add(vec,1));
+            }
+            check_results!($array,array,num_pes,reqs,"scoped Vec<T>");
+            // Scoped &Vec<T>------------------------------
+            let mut reqs = vec![];
+            {
+                let vec=(0..array.len()).collect::<Vec<usize>>();
+                reqs.push(array.fetch_add(&vec,1));
+            }
+            check_results!($array,array,num_pes,reqs,"scoped &Vec<T>");
+
+            // LMR<T>------------------------------
+            let lmr=world.alloc_local_mem_region(array.len());
+            let mut reqs = vec![];
+            unsafe{
+                let slice = lmr.as_mut_slice().unwrap();
+                for i in 0..array.len(){
+                    slice[i]=i;
+                }
+            }
+            reqs.push(array.fetch_add(lmr.clone(),1));
+            check_results!($array,array,num_pes,reqs,"LMR<T>");
+            // &LMR<T>------------------------------
+            let mut reqs = vec![];
+            reqs.push(array.fetch_add(&lmr,1));
+            check_results!($array,array,num_pes,reqs,"&LMR<T>");
+            drop(lmr);
+            // scoped LMR<T>------------------------------
+            let mut reqs = vec![];
+            {
+                let lmr=world.alloc_local_mem_region(array.len());
+                unsafe{
+                    let slice = lmr.as_mut_slice().unwrap();
+                    for i in 0..array.len(){
+                        slice[i]=i;
+                    }
+                }
+                reqs.push(array.fetch_add(lmr.clone(),1));
+                check_results!($array,array,num_pes,reqs,"scoped LMR<T>");
+            }
+            // scoped &LMR<T>------------------------------
+            let mut reqs = vec![];
+            {
+                let lmr=world.alloc_local_mem_region(array.len());
+                unsafe{
+                    let slice = lmr.as_mut_slice().unwrap();
+                    for i in 0..array.len(){
+                        slice[i]=i;
+                    }
+                }
+                reqs.push(array.fetch_add(&lmr,1));
+                check_results!($array,array,num_pes,reqs,"scoped &LMR<T>");
+            }
+
+            // SMR<T>------------------------------
+            let mut reqs = vec![];
+            let smr=world.alloc_shared_mem_region(array.len());
+            unsafe{
+                let slice = smr.as_mut_slice().unwrap();
+                for i in 0..array.len(){
+                    slice[i]=i;
+                }
+            }
+            reqs.push(array.fetch_add(smr.clone(),1));
+            check_results!($array,array,num_pes,reqs,"SMR<T>");
+            // &SMR<T>------------------------------
+            let mut reqs = vec![];
+            reqs.push(array.fetch_add(&smr,1));
+            check_results!($array,array,num_pes,reqs,"&SMR<T>");
+            drop(smr);
+            // scoped SMR<T>------------------------------
+            let mut reqs = vec![];
+            {
+                let smr=world.alloc_shared_mem_region(array.len());
+                unsafe{
+                    let slice = smr.as_mut_slice().unwrap();
+                    for i in 0..array.len(){
+                        slice[i]=i;
+                    }
+                }
+                reqs.push(array.fetch_add(smr,1));
+                check_results!($array,array,num_pes,reqs,"scoped SMR<T>");
+            }
+            // scoped &SMR<T>------------------------------
+            let mut reqs = vec![];
+            {
+                let smr=world.alloc_shared_mem_region(array.len());
+                unsafe{
+                    let slice = smr.as_mut_slice().unwrap();
+                    for i in 0..array.len(){
+                        slice[i]=i;
+                    }
+                }
+                reqs.push(array.fetch_add(&smr,1));
+                check_results!($array,array,num_pes,reqs,"scoped &SMR<T>");
+            }
+
+            // UnsafeArray<T>------------------------------
+            // let mut reqs = vec![];
+            // reqs.push(array.fetch_add(input_array.clone(),1));
+            // check_results!($array,array,num_pes,reqs,"UnsafeArray<T>");
+            // UnsafeArray<T>------------------------------
+            let mut reqs = vec![];
+            reqs.push(array.fetch_add(&input_array,1));
+            check_results!($array,array,num_pes,reqs,"&UnsafeArray<T>");
+
+            // ReadOnlyArray<T>------------------------------
+            // let mut reqs = vec![];
+            let input_array = input_array.into_read_only();
+            // reqs.push(array.fetch_add(input_array.clone(),1));
+            // check_results!($array,array,num_pes,reqs,"ReadOnlyArray<T>");
+            // ReadOnlyArray<T>------------------------------
+            let mut reqs = vec![];
+            reqs.push(array.fetch_add(&input_array,1));
+            check_results!($array,array,num_pes,reqs,"&ReadOnlyArray<T>");
+
+            // AtomicArray<T>------------------------------
+            // let mut reqs = vec![];
+            let input_array = input_array.into_atomic();
+            // reqs.push(array.fetch_add(input_array.clone(),1));
+            // check_results!($array,array,num_pes,reqs,"AtomicArray<T>");
+            // AtomicArray<T>------------------------------
+            let mut reqs = vec![];
+            reqs.push(array.fetch_add(&input_array,1));
+            check_results!($array,array,num_pes,reqs,"&AtomicArray<T>");
+
+             // LocalLockAtomicArray<T>------------------------------
+            //  let mut reqs = vec![];
+             let input_array = input_array.into_local_lock_atomic();
+            //  reqs.push(array.fetch_add(input_array.clone(),1));
+            //  check_results!($array,array,num_pes,reqs,"LocalLockAtomicArray<T>");
+             // LocalLockAtomicArray<T>------------------------------
+             let mut reqs = vec![];
+             reqs.push(array.fetch_add(&input_array,1));
+             check_results!($array,array,num_pes,reqs,"&LocalLockAtomicArray<T>");
+       }
+    }
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let array = args[1].clone();
@@ -383,6 +626,7 @@ fn main() {
             "isize" => add_test!(UnsafeArray, isize, len, dist_type),
             "f32" => add_test!(UnsafeArray, f32, len, dist_type),
             "f64" => add_test!(UnsafeArray, f64, len, dist_type),
+            "input" => input_test!(UnsafeArray,len,dist_type),
             _ => eprintln!("unsupported element type"),
         },
         "AtomicArray" => match elem.as_str() {
@@ -400,6 +644,7 @@ fn main() {
             "isize" => add_test!(AtomicArray, isize, len, dist_type),
             "f32" => add_test!(AtomicArray, f32, len, dist_type),
             "f64" => add_test!(AtomicArray, f64, len, dist_type),
+            "input" => input_test!(AtomicArray,len,dist_type),
             _ => eprintln!("unsupported element type"),
         },
         "LocalLockAtomicArray" => match elem.as_str() {
@@ -417,6 +662,7 @@ fn main() {
             "isize" => add_test!(LocalLockAtomicArray, isize, len, dist_type),
             "f32" => add_test!(LocalLockAtomicArray, f32, len, dist_type),
             "f64" => add_test!(LocalLockAtomicArray, f64, len, dist_type),
+            "input" => input_test!(LocalLockAtomicArray,len,dist_type),
             _ => eprintln!("unsupported element type"),
         },
         _ => eprintln!("unsupported array type"),

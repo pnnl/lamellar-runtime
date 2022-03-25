@@ -61,9 +61,10 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
     }
 
     fn initiate_op_task<'a>(&self,fetch: bool,op: ArrayOpCmd, indices: &OpInputEnum<'a,usize>, vals: &OpInputEnum<'a,T>,submit_cnt: Arc<AtomicUsize>) -> BufOpsRequest<T>{
-        let mut pe_offsets: HashMap<usize,Vec<(usize,T)>> = HashMap::new();
+        let mut pe_offsets: HashMap<usize,Vec<(usize,usize,T)>> = HashMap::new();
         
         let max = std::cmp::max(indices.len(),vals.len());
+        let mut req_cnt = 0;
         for (i,v) in indices.iter().zip(vals.iter()).take(max){
             let pe = self
                 .inner
@@ -71,22 +72,31 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
                 .expect("index out of bounds");
                 let local_index = self.inner.pe_offset_for_dist_index(pe, i).unwrap(); //calculated pe above
                 // println!("i: {:?} l_i: {:?} v: {:?}",i,local_index,v);
-                pe_offsets.entry(pe).or_insert(Vec::new()).push((local_index,v));
-        }        
-        let  res_indices = Arc::new(Mutex::new(vec![]));
-        // println!("pe_offsets size {:?}",pe_offsets.len());
+                pe_offsets.entry(pe).or_insert(Vec::new()).push((req_cnt,local_index,v));
+                req_cnt += 1;
+        }
+
+        let res_indices_map = OpReqIndices::new();
+        let res_map = OpResults::new();
+        let mut complete_cnt = Vec::new();
+        // println!("pe_offsets size {:?}",pe_offsets);
+
         let req = pe_offsets.iter().map(|(pe,op_data)|{
             // println!("pe: {:?} op_len {:?}",pe,op_data.len());
             let pe = *pe;
             let mut stall_mark = self.inner.data.req_cnt.fetch_add(op_data.len(), Ordering::SeqCst);
             let buf_op = self.inner.data.op_buffers.read()[pe].clone();
-            let (first, complete, results) = if fetch{
-                buf_op.add_fetch_ops(op, op_data.as_ptr() as *const u8,op_data.len(), res_indices.clone())
+            let (first, complete, res_indices) = if fetch{
+                buf_op.add_fetch_ops(pe, op, op_data.as_ptr() as *const u8,op_data.len(),res_map.clone())
             }else{
                 let (first, complete) = buf_op.add_ops(op, op_data.as_ptr() as *const u8,op_data.len());
                 (first, complete, None)
             };
+            if let Some(res_indices) = res_indices{
+                res_indices_map.insert(pe,res_indices);
+            }
             if first {
+                // let res_map = res_map.clone();
                 let array = self.clone();
                 self.inner
                     .data
@@ -110,7 +120,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
                         async_std::task::yield_now().await;
                     }
 
-                    let (ams, len, complete, results) = buf_op.into_arc_am(array.sub_array_range());
+                    let (ams, len, complete,results) = buf_op.into_arc_am(array.sub_array_range());
                     // println!("pe{:?} ams: {:?} len{:?}",pe,ams.len(),len);
                     if len > 0 {
                         let mut res = Vec::new();
@@ -126,12 +136,16 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
                         for r in res{
                         // println!("submitted indirectly {:?} ",len);
                             let results_u8: Vec<u8> = r.into_future().await.unwrap();
+                            // println!("returned_u8 {:?}",results_u8);
+                            
                             full_results.extend(results_u8);
                         }
-                        let mut results = results.write();
-                        std::mem::swap(&mut full_results, &mut results);
-                        complete.store(true, Ordering::Relaxed);
-                        // println!("indirectly done!");
+                        
+                        std::mem::swap(&mut full_results, &mut results.lock());
+                        // println!("inserted results {:}",pe);
+                        // res_map.insert(pe,full_results);
+                        // println!("results {:?}",res_map);
+                        // println!("done!");
                         let _cnt1 = array
                             .inner
                             .data
@@ -140,11 +154,12 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
                             .outstanding_reqs
                             .fetch_sub(1, Ordering::SeqCst); //remove our pending req now that it has actually been submitted;
                         let _cnt2 = array.inner.data.req_cnt.fetch_sub(len, Ordering::SeqCst);
+                        complete.store(true, Ordering::Relaxed);
                         
                         // println!("indirect cnts {:?}->{:?} {:?}->{:?} -- {:?}",cnt1,cnt1-1,cnt2,cnt2-len,len);
                     } else {
                         // println!("here {:?} {:?} ",ams.len(),len);
-                        complete.store(true, Ordering::Relaxed);
+                        // complete.store(true, Ordering::Relaxed);
                         array
                             .inner
                             .data
@@ -152,24 +167,29 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
                             .team_counters
                             .outstanding_reqs
                             .fetch_sub(1, Ordering::SeqCst);
+                        complete.store(true, Ordering::Relaxed);
                     }
                 });
+                complete_cnt.push(complete.clone());
             }
-            match results{
-                Some(results) =>{
+            // match results{
+            //     Some(results) =>{
+                if fetch{
                     BufOpsRequest::Fetch(
                         Box::new(ArrayOpFetchHandle {
-                            indices: res_indices.clone(),
-                            complete: complete,
-                            results: results,
+                            indices: res_indices_map.clone(),
+                            complete: complete_cnt.clone(),
+                            results: res_map.clone(),
+                            req_cnt: req_cnt,
                             _phantom: PhantomData,
                         })
                     )
                 }
-                None => {
-                    BufOpsRequest::NoFetch(Box::new(ArrayOpHandle { complete: complete }))
+                // None => {
+                else{
+                    BufOpsRequest::NoFetch(Box::new(ArrayOpHandle { complete: complete_cnt.clone() }))
                 }
-            } 
+            // } 
         }).last().unwrap();
         submit_cnt.fetch_sub(1,Ordering::SeqCst);
         req
@@ -231,7 +251,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
             }
         }
         else{
-            Box::new(ArrayOpHandle { complete: Arc::new(AtomicBool::new(true))})
+            Box::new(ArrayOpHandle { complete: Vec::new()})
         }
     }
 
@@ -285,99 +305,13 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         }
         else{
             Box::new(ArrayOpFetchHandle {
-                indices: Arc::new(Mutex::new(vec![])),
-                complete: Arc::new(AtomicBool::new(false)),
-                results: Arc::new(RwLock::new(vec![])),
+                indices: OpReqIndices::new(),
+                complete: Vec::new(),
+                results: OpResults::new(),
+                req_cnt: 0,
                 _phantom: PhantomData,
             })
         }
-        // let mut pe_offsets: HashMap<usize,Vec<usize>> = HashMap::new();
-        // let (indices,_) = index.as_op_input();
-        // let  res_indices = Arc::new(Mutex::new(vec![]));
-        // for i in indices{
-        //     let pe = self
-        //     .inner
-        //     .pe_for_dist_index(i)
-        //     .expect("index out of bounds");
-        //     let local_index = self.inner.pe_offset_for_dist_index(pe, i).unwrap(); //calculated pe above
-        //     // println!("i: {:?} pe: {:?} local_index{:?}",i,pe,local_index);
-        //     pe_offsets.entry(pe).or_insert(Vec::new()).push(local_index);
-        // }
-        
-        // pe_offsets.iter().map(|(pe,indices)|{
-        //     let pe = *pe;
-        //     let mut stall_mark = self.inner.data.req_cnt.fetch_add(1, Ordering::SeqCst);
-        //     let buf_op = self.inner.data.op_buffers.read()[pe].clone();
-        //     let (first, complete, results) =
-        //         buf_op.add_fetch_ops(op, indices, &val as *const T as *const u8, res_indices.clone());
-        //     if first {
-        //         // println!("pending buf for pe {:?}",pe);
-        //         let array = self.clone();
-        //         self.inner
-        //             .data
-        //             .team
-        //             .team_counters
-        //             .outstanding_reqs
-        //             .fetch_add(1, Ordering::SeqCst); // we need to tell the world we have a request pending
-        //         self.inner.data.team.scheduler.submit_task(async move {
-        //             let mut wait_cnt = 0;
-        //             while wait_cnt < 1000 {
-        //                 while stall_mark != array.inner.data.req_cnt.load(Ordering::Relaxed) {
-        //                     stall_mark = array.inner.data.req_cnt.load(Ordering::Relaxed);
-        //                     async_std::task::yield_now().await;
-        //                 }
-        //                 wait_cnt += 1;
-        //                 async_std::task::yield_now().await;
-        //             }
-
-        //             let (ams, len, complete, results) = buf_op.into_arc_am(array.sub_array_range());
-        //             if len > 0 {
-        //                 let mut res = Vec::new();
-        //                 for am in ams{
-        //                     res.push(array.inner.data.team.exec_arc_am_pe::<Vec<u8>>(
-        //                         pe,
-        //                         am,
-        //                         Some(array.inner.data.array_counters.clone()),
-        //                     ));
-        //                 }                    
-
-        //                 let mut full_results: Vec<u8> = Vec::new();
-        //                 for r in res{
-        //                 // println!("submitted indirectly {:?} ",len);
-        //                     let results_u8: Vec<u8> = r.into_future().await.unwrap();
-        //                     full_results.extend(results_u8);
-        //                 }
-        //                 let mut results = results.write();
-        //                 std::mem::swap(&mut full_results, &mut results);
-        //                 complete.store(true, Ordering::Relaxed);
-        //                 array
-        //                     .inner
-        //                     .data
-        //                     .team
-        //                     .team_counters
-        //                     .outstanding_reqs
-        //                     .fetch_sub(1, Ordering::SeqCst); //remove our pending req now that it has actually been executed;
-        //                 array.inner.data.req_cnt.fetch_sub(len, Ordering::SeqCst);
-        //             }else{
-        //                 complete.store(true, Ordering::Relaxed);
-        //                 array
-        //                     .inner
-        //                     .data
-        //                     .team
-        //                     .team_counters
-        //                     .outstanding_reqs
-        //                     .fetch_sub(1, Ordering::SeqCst); //remove our pending req now that it has actually been executed;
-        //             }
-        //             // println!("done!");
-        //         });
-        //     }
-        //     Box::new(ArrayOpFetchHandle {
-        //         indices: res_indices.clone(),
-        //         complete: complete,
-        //         results: results,
-        //         _phantom: PhantomData,
-        //     })
-        // }).last().unwrap()
     }
 
     // pub fn op_put(

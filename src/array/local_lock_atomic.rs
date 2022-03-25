@@ -58,9 +58,32 @@ impl<T: Dist> DerefMut for LocalLockAtomicMutLocalData<'_, T> {
 }
 
 pub struct LocalLockAtomicLocalData<'a, T: Dist> {
-    data: &'a [T],
+    pub(crate) data: &'a [T],
     index: usize,
+    lock: LocalRwDarc<()>,
     _lock_guard: ArcRwLockReadGuard<RawRwLock, Box<()>>,
+}
+
+impl<'a, T: Dist> Clone for LocalLockAtomicLocalData<'a, T> {
+    fn clone(&self) -> Self {
+        LocalLockAtomicLocalData {
+            data: self.data,
+            index: self.index,
+            lock: self.lock.clone(),
+            _lock_guard: self.lock.read(),
+        }
+    }
+}
+
+impl <'a, T: Dist> LocalLockAtomicLocalData<'a, T>{
+    pub fn into_sub_data(self, start: usize, end: usize) -> LocalLockAtomicLocalData<'a, T>{
+        LocalLockAtomicLocalData{
+            data: &self.data[start..end],
+            index: 0,
+            lock: self.lock,
+            _lock_guard: self._lock_guard,
+        }
+    }        
 }
 
 impl<'a, T: Dist> Iterator for LocalLockAtomicLocalData<'a, T>{
@@ -153,15 +176,16 @@ impl<T: Dist> LocalLockAtomicArray<T> {
         LocalLockAtomicLocalData {
             data: unsafe { self.array.local_as_mut_slice() },
             index: 0,
+            lock: self.lock.clone(),
             _lock_guard: self.lock.read(),
         }
     }
 
-    pub fn write_local_data(&self) -> LocalLockAtomicLocalData<'_, T> {
-        LocalLockAtomicLocalData {
+    pub fn write_local_data(&self) -> LocalLockAtomicMutLocalData<'_, T> {
+        LocalLockAtomicMutLocalData {
             data: unsafe { self.array.local_as_mut_slice() },
-            index: 0,
-            _lock_guard: self.lock.read(),
+            _index: 0,
+            _lock_guard: self.lock.write(),
         }
     }
 
@@ -170,6 +194,7 @@ impl<T: Dist> LocalLockAtomicArray<T> {
         LocalLockAtomicLocalData {
             data: unsafe { self.array.local_as_mut_slice() },
             index: 0,
+            lock: self.lock.clone(),
             _lock_guard: self.lock.read(),
         }
     }

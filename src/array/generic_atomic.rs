@@ -124,13 +124,17 @@ impl GenericAtomicByteArray{
     }
 }
 
+#[derive(Clone)]
 pub struct GenericAtomicLocalData<T: Dist> {
     array: GenericAtomicArray<T>,
+    start_index: usize,
+    end_index: usize, 
 }
 
 pub struct GenericAtomicLocalDataIter<T: Dist> {
     array: GenericAtomicArray<T>,
     index: usize,
+    end_index: usize, 
 }
 
 impl<T: Dist> GenericAtomicLocalData<T> {
@@ -155,7 +159,16 @@ impl<T: Dist> GenericAtomicLocalData<T> {
     pub fn iter(&self) -> GenericAtomicLocalDataIter<T> {
         GenericAtomicLocalDataIter {
             array: self.array.clone(),
-            index: 0,
+            index: self.start_index,
+            end_index: self.end_index,
+        }
+    }
+
+    pub fn sub_data(&self, start_index: usize, end_index: usize) -> GenericAtomicLocalData<T> {
+        GenericAtomicLocalData {
+            array: self.array.clone(),
+            start_index: start_index,
+            end_index: std::cmp::min(end_index,self.array.num_elems_local()),
         }
     }
 }
@@ -166,7 +179,8 @@ impl<T: Dist> IntoIterator for GenericAtomicLocalData<T> {
     fn into_iter(self) -> Self::IntoIter {
         GenericAtomicLocalDataIter {
             array: self.array,
-            index: 0,
+            index: self.start_index,
+            end_index: self.end_index,
         }
     }
 }
@@ -174,7 +188,7 @@ impl<T: Dist> IntoIterator for GenericAtomicLocalData<T> {
 impl<T: Dist> Iterator for GenericAtomicLocalDataIter<T> {
     type Item = GenericAtomicElement<T>;
     fn next(&mut self) -> Option<Self::Item> {
-        if self.index < self.array.num_elems_local() {
+        if self.index < self.end_index {
             let index = self.index;
             self.index += 1;
             Some(GenericAtomicElement {
@@ -270,12 +284,16 @@ impl<T: Dist> GenericAtomicArray<T> {
     pub fn local_data(&self) -> GenericAtomicLocalData<T> {
         GenericAtomicLocalData {
             array: self.clone(),
+            start_index: 0,
+            end_index: self.array.num_elems_local(),
         }
     }
 
     pub fn mut_local_data(&self) -> GenericAtomicLocalData<T> {
         GenericAtomicLocalData {
             array: self.clone(),
+            start_index: 0,
+            end_index: self.array.num_elems_local(),
         }
     }
 

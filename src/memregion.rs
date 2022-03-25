@@ -652,7 +652,7 @@ pub trait RemoteMemoryRegion {
     ///
     /// # Arguments
     ///
-    /// * `size` - number of elements of T to allocate a memory region for -- (not size in bytes)
+    /// * `size` - local number of elements of T to allocate a memory region for -- (not size in bytes)
     ///
     fn alloc_shared_mem_region<T: Dist + std::marker::Sized>(
         &self,
