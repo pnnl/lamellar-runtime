@@ -64,16 +64,19 @@ fn main() {
             array.wait_all();
         }
         array.barrier();
+        let cur_t = timer.elapsed().as_secs_f64();
         if my_pe == num_pes - 1 {
             let array_data = array.mut_local_data();
             for j in (0..2_u64.pow(exp) as usize).step_by(num_bytes as usize) {
                 while array_data.at((j + num_bytes as usize) - 1).load() == 255 as u8 {
+                    println!(
+                        "this should not happen {:?}",
+                        array_data.at((j + num_bytes as usize) - 1).load()
+                    );
                     std::thread::yield_now()
                 }
             }
         }
-        world.barrier();
-        let cur_t = timer.elapsed().as_secs_f64();
         let cur: f64 = world.MB_sent();
         let mbs_c = world.MB_sent();
         if my_pe == 0 {

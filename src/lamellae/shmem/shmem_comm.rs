@@ -346,6 +346,10 @@ impl CommOps for ShmemComm {
     fn num_pes(&self) -> usize {
         self.num_pes
     }
+    #[allow(non_snake_case)]
+    fn MB_sent(&self) -> f64 {
+        0.0
+    }
     fn barrier(&self) {
         let alloc = self.alloc_lock.write();
         unsafe {

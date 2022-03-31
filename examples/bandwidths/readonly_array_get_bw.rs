@@ -58,7 +58,7 @@ fn main() {
             for j in (0..2_u64.pow(exp) as usize).step_by(num_bytes as usize) {
                 let sub_timer = Instant::now();
                 let sub_reg = data.sub_region(j..(j + num_bytes as usize));
-                unsafe { array.get_unchecked(ARRAY_LEN * (num_pes - 1), &sub_reg) };
+                array.get(ARRAY_LEN * (num_pes - 1), &sub_reg);
                 sub_time += sub_timer.elapsed().as_secs_f64();
                 sum += num_bytes * 1 as u64;
                 cnt += 1;
@@ -70,6 +70,10 @@ fn main() {
         if my_pe == 0 {
             for j in (0..2_u64.pow(exp) as usize).step_by(num_bytes as usize) {
                 while data_slice[(j + num_bytes as usize) - 1] == my_pe as u8 {
+                    println!(
+                        "should not happen {:?} ",
+                        &data_slice[(j + num_bytes as usize) - 1]
+                    );
                     std::thread::yield_now()
                 }
             }

@@ -363,6 +363,7 @@ impl WorkStealingInner {
             process::exit(1);
         }));
         let core_ids = core_affinity::get_core_ids().unwrap();
+        // println!("core_ids: {:?}",core_ids);
         for i in 0..num_workers {
             let work_worker = work_workers.pop().unwrap();
             let worker = WorkStealingThread {

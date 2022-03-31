@@ -1048,6 +1048,14 @@ fn create_buf_ops(
             // quote! {use crate::array::native_atomic::AsNativeAtomic;let mut slice = unsafe{self.data.__local_as_mut_slice()}; }
             quote! { #slice },
         )
+    } else if array_type == "LocalLockAtomicArray" {
+        (   
+            quote! {slice[index]},
+            quote! {slice[index] = val},
+            quote! {slice[index]},
+            quote! {},
+            quote! {let mut slice = self.data.write_local_data();},
+        )
     } else {
         (
             quote! {slice[index]},
@@ -1161,7 +1169,8 @@ fn create_buf_ops(
                 }
                 let mut buf = self.ops.lock();
                 let first = buf.len() == 0;
-                self.cur_len.fetch_add(ops.len(),Ordering::SeqCst);
+                let temp = self.cur_len.fetch_add(ops.len(),Ordering::SeqCst);
+                // println!("temp {:?} ops len{:?} cur_len {:?}",temp,ops.len(),self.cur_len.load(Ordering::SeqCst));
                 buf.push((op,ops));
                 (first,self.complete.read().clone())
             }
@@ -1187,7 +1196,8 @@ fn create_buf_ops(
                     res_indicies.push((*rid,self.result_cnt.read().fetch_add(1,Ordering::SeqCst)));
                 }
                 let first = buf.len() == 0;
-                self.cur_len.fetch_add(ops.len(),Ordering::SeqCst);
+                let temp = self.cur_len.fetch_add(ops.len(),Ordering::SeqCst);
+                // println!("temp {:?} ops len{:?} cur_len {:?}",temp,ops.len(),self.cur_len.load(Ordering::SeqCst));
                 buf.push((op,ops));
                 res_map.insert(pe,self.results.read().clone());
                 (first,self.complete.read().clone(),Some(res_indicies))
@@ -1211,14 +1221,17 @@ fn create_buf_ops(
                 // println!(" here");
                 let mut num_fetch_ops = self.result_cnt.read().swap(0,Ordering::SeqCst);
 
-                // if len * std::mem::size_of::<(ArrayOpCmd, usize, T)>() > 100000000{
-                let n = (len as f32/10000000.0).ceil();
-                let num = len as f32 / n as f32;
-                // unsafe {ams.set_len(n as usize);}
-                // println!("n: {:?} num {:?} len {:?}",n ,num, len);
-                for i in (0..n as usize).rev(){
-                    // println!("i {:?} i? {:?} len {:?}",i,((i as f32)*num).round() as usize, ops.len());
-                    let new_ops = ops.split_off(((i as f32)*num).round() as usize);
+                let mut cur_size = 0;
+                let mut op_i = ops.len() as isize-1;
+                
+                while op_i >= 0 {
+                    while op_i >= 0 && (cur_size + ops[op_i as usize].1.len() * std::mem::size_of::<(usize,#typeident)>() < 10000000) {
+                        cur_size += ops[op_i as usize].1.len() * std::mem::size_of::<(usize,#typeident)>();
+                        op_i -= 1isize;
+                    }
+                    
+                    let new_ops = ops.split_off((op_i+ 1 as isize) as usize);
+                    // println!("cur_size: {:?} i {:?} len {:?} ops_len {:?}",cur_size ,op_i, new_ops.len(),ops.len());
                     let mut am = #am_buf_name{
                         // wait: wait.clone(),
                         data: self.data.sub_array(sub_array.clone()),
@@ -1226,9 +1239,8 @@ fn create_buf_ops(
                         num_fetch_ops: num_fetch_ops,
                         orig_pe: self.data.my_pe(),
                     };
-                    // println!("here 0");
                     ams.push(Arc::new(am));
-                    // println!("here 1");
+                    cur_size = 0;
                 }
                 ams.reverse();
                 // println!("ams len: {:?}",ams.len());

@@ -259,7 +259,7 @@ fn dft_lamellar_array_opt(
                         let twiddle = angle * (angle.cos() + angle * angle.sin());
                         sum = sum + twiddle * x;
                     }
-                    let _lock = LOCK.lock();
+                    // let _lock = LOCK.lock();
                     *spec_bin += sum;
                 });
         });
@@ -352,8 +352,19 @@ fn main() {
         .and_then(|s| s.parse::<usize>().ok())
         .unwrap_or_else(|| 1000);
 
-    let run_single_node = args
+    let buf_amt = args
         .get(2)
+        .and_then(|s| s.parse::<usize>().ok())
+        .unwrap_or_else(|| 1000);
+
+
+    let num_trials = args
+        .get(3)
+        .and_then(|s| s.parse::<usize>().ok())
+        .unwrap_or_else(|| 10);
+
+    let run_single_node = args
+        .get(3)
         .and_then(|s| {
             if s == "--run-local" {
                 Some(true)
@@ -414,7 +425,7 @@ fn main() {
         println!("starting");
 
         let mut times = vec![vec![]; 6];
-        for _i in 0..10 {
+        for _i in 0..num_trials {
             // if my_pe == 0 {
             // println!("trial {:?}",i);
             // }
@@ -427,6 +438,9 @@ fn main() {
                 global_len,
                 partial_spectrum.clone(),
             ));
+            if my_pe==0{
+                println!("am i: {:?} {:?}", _i, times[0].last());
+            }
             //-----------------------------------------------------
 
             world.barrier();
@@ -439,10 +453,10 @@ fn main() {
             full_spectrum_array.barrier();
 
             // let timer = Instant::now();
-            times[1].push(dft_lamellar_array(
-                full_signal_array.clone(),
-                full_spectrum_array.clone(),
-            ));
+            // times[1].push(dft_lamellar_array(
+            //     full_signal_array.clone(),
+            //     full_spectrum_array.clone(),
+            // ));
             // let time = timer.elapsed().as_secs_f64();
             // if my_pe == 0 {
             //     println!(
@@ -487,8 +501,11 @@ fn main() {
             times[2].push(dft_lamellar_array_opt(
                 full_signal_array.clone(),
                 full_spectrum_array.clone(),
-                100,
+                buf_amt,
             ));
+            if my_pe==0{
+                println!("ua i: {:?} {:?}", _i, times[2].last());
+            }
             // let time = timer.elapsed().as_secs_f64();
             // if my_pe == 0 {
             //     println!(
@@ -504,20 +521,20 @@ fn main() {
         }
         world.barrier();
 
-        full_spectrum_array
-            .dist_iter_mut()
-            .for_each(|elem| *elem = 0.0);
-        full_spectrum_array.wait_all();
-        full_spectrum_array.barrier();
+        // full_spectrum_array
+        //     .dist_iter_mut()
+        //     .for_each(|elem| *elem = 0.0);
+        // full_spectrum_array.wait_all();
+        // full_spectrum_array.barrier();
         let full_signal_array = full_signal_array.into_read_only();
         let full_spectrum_array = full_spectrum_array.into_atomic();
 
-        for _i in 0..10 {
+        for _i in 0..num_trials {
             // let timer = Instant::now();
-            times[3].push(dft_lamellar_array_2(
-                full_signal_array.clone(),
-                full_spectrum_array.clone(),
-            ));
+            // times[3].push(dft_lamellar_array_2(
+            //     full_signal_array.clone(),
+            //     full_spectrum_array.clone(),
+            // ));
 
             world.barrier();
             full_spectrum_array
@@ -529,17 +546,20 @@ fn main() {
             times[4].push(dft_lamellar_array_opt_2(
                 full_signal_array.clone(),
                 full_spectrum_array.clone(),
-                100,
+                buf_amt,
             ));
+            if my_pe==0{
+                println!("aa i: {:?} {:?}", _i, times[4].last());
+            }
         }
 
         let full_spectrum_array = full_spectrum_array.into_local_lock_atomic();
-        for _i in 0..10 {
+        for _i in 0..num_trials {
             // let timer = Instant::now();
             times[5].push(dft_lamellar_array_opt_3(
                 full_signal_array.clone(),
                 full_spectrum_array.clone(),
-                100,
+                buf_amt,
             ));
 
             world.barrier();
@@ -548,6 +568,9 @@ fn main() {
                 .for_each(|elem| *elem = 0.0);
             full_spectrum_array.wait_all();
             full_spectrum_array.barrier();
+            if my_pe==0{
+                println!("lla i: {:?} {:?}", _i, times[5].last());
+            }
         }
 
         if my_pe == 0 {
@@ -555,24 +578,24 @@ fn main() {
                 "am time: {:?}",
                 times[0].iter().sum::<f64>() / times[0].len() as f64
             );
+            // println!(
+            //     "naive UnsafeArray array time: {:?}",
+            //     times[1].iter().sum::<f64>() / times[1].len() as f64
+            // );
             println!(
-                "array time: {:?}",
-                times[1].iter().sum::<f64>() / times[1].len() as f64
-            );
-            println!(
-                "chunked time: {:?}",
+                "optimized UnsafeArray time: {:?}",
                 times[2].iter().sum::<f64>() / times[2].len() as f64
             );
+            // println!(
+            //     "AtomicArray time: {:?}",
+            //     times[3].iter().sum::<f64>() / times[1].len() as f64
+            // );
             println!(
-                "array time 2: {:?}",
-                times[3].iter().sum::<f64>() / times[1].len() as f64
-            );
-            println!(
-                "chunked time 2: {:?}",
+                "optimized AtomicArray time: {:?}",
                 times[4].iter().sum::<f64>() / times[2].len() as f64
             );
             println!(
-                "chunked time 3: {:?}",
+                "optimized LocalLockAtomicArray time: {:?}",
                 times[5].iter().sum::<f64>() / times[2].len() as f64
             );
         }

@@ -319,26 +319,6 @@ impl<'a, T: Dist> OpInput<'a, T> for &'a UnsafeArray<T> {
         let slice = unsafe { self.local_as_slice() };
         // let slice = unsafe { std::mem::transmute::<&'_ [T], &'a [T]>(slice) }; //this is safe in the context of buffered_ops because we know we wait for all the requests to submit before we return
         slice.as_op_input()
-        // let len = slice.len();
-        // let mut iters = vec![];
-        // let my_pe = self.my_pe();
-        // if let Some(start_index) = self.inner.start_index_for_pe(my_pe){
-        //     let num_per_batch = match std::env::var("LAMELLAR_OP_BATCH") {
-        //         Ok(n) => n.parse::<usize>().unwrap(), //+ 1 to account for main thread
-        //         Err(_) => 10000, //+ 1 to account for main thread
-        //     };
-        //     let num = len/num_per_batch;
-        //     for i in 0..num{
-        //         let sub_array = self.sub_array((start_index+(i*num_per_batch))..(start_index+((i+1)*num_per_batch)));
-        //         iters.push(OpInputEnum::UnsafeArray(sub_array));
-        //     }
-        //     let rem = len%num_per_batch;
-        //     if rem > 0{
-        //         let sub_array = self.sub_array((start_index+(num*num_per_batch))..(start_index+(num*num_per_batch) + rem));
-        //         iters.push(OpInputEnum::UnsafeArray(sub_array));
-        //     }
-        // }
-        // (iters,len)
     }
 }
 
@@ -407,27 +387,6 @@ impl<'a, T: Dist + ElementOps> OpInput<'a, T> for &AtomicArray<T> {
             &AtomicArray::GenericAtomicArray(ref a) => a.as_op_input(),
             &AtomicArray::NativeAtomicArray(ref a) => a.as_op_input(),
         }
-        // let slice=unsafe{self.__local_as_slice()};
-        // let len = slice.len();
-        // let mut iters = vec![];
-        // let my_pe = self.my_pe();
-        // if let Some(start_index) = self.start_index_for_pe(my_pe){
-        //     let num_per_batch = match std::env::var("LAMELLAR_OP_BATCH") {
-        //         Ok(n) => n.parse::<usize>().unwrap(), //+ 1 to account for main thread
-        //         Err(_) => 10000, //+ 1 to account for main thread
-        //     };
-        //     let num = len/num_per_batch;
-        //     for i in 0..num{
-        //         let sub_array = self.sub_array((start_index+(i*num_per_batch))..(start_index+((i+1)*num_per_batch)));
-        //         iters.push(OpInputEnum::AtomicArray(sub_array));
-        //     }
-        //     let rem = len%num_per_batch;
-        //     if rem > 0{
-        //         let sub_array = self.sub_array((start_index+(num*num_per_batch))..(start_index+(num*num_per_batch) + rem));
-        //         iters.push(OpInputEnum::AtomicArray(sub_array));
-        //     }
-        // }
-        // (iters,len)
     }
 }
 
@@ -510,15 +469,7 @@ impl<'a, T: Dist + ElementOps> OpInput<'a, T> for &NativeAtomicArray<T> {
 // }
 
 pub trait BufferOp: Sync + Send {
-    //have this also be RemoteActiveMessage
-    //fn add_op(&self, op: ArrayOpCmd, index: usize, val: *const u8) -> (bool, Arc<AtomicBool>);
     fn add_ops(&self, op: ArrayOpCmd, op_data: *const u8, len: usize) -> (bool, Arc<AtomicBool>);
-    // fn add_fetch_op(
-    //     &self,
-    //     op: ArrayOpCmd,
-    //     index: usize,
-    //     val: *const u8,
-    // ) -> (bool, Arc<AtomicBool>, usize, Arc<RwLock<Vec<u8>>>);
     fn add_fetch_ops(
         &self,
         pe: usize,
@@ -544,7 +495,6 @@ pub trait LamellarArrayRequest {
     type Output;
     async fn into_future(mut self: Box<Self>) -> Option<Self::Output>;
     fn wait(self: Box<Self>) -> Option<Self::Output>;
-    // fn as_any(self) -> Box<dyn std::any::Any>;
 }
 
 struct ArrayRdmaHandle {

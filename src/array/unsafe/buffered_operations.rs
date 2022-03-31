@@ -132,7 +132,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
                         let mut wait_cnt = 0;
                         while wait_cnt < 1000
                             && array.inner.data.req_cnt.load(Ordering::Relaxed)
-                                * std::mem::size_of::<(ArrayOpCmd, usize, T)>()
+                                * std::mem::size_of::<(usize, T)>()
                                 < 100000000
                         {
                             while stall_mark != array.inner.data.req_cnt.load(Ordering::Relaxed) {

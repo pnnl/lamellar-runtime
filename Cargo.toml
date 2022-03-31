@@ -179,6 +179,10 @@ name="unsafe_array_put_bw"
 path="examples/bandwidths/unsafe_array_put_bw.rs"
 
 [[example]]
+name="unsafe_array_put_unchecked_bw"
+path="examples/bandwidths/unsafe_array_put_unchecked_bw.rs"
+
+[[example]]
 name="atomic_array_put_bw"
 path="examples/bandwidths/atomic_array_put_bw.rs"
 
@@ -191,6 +195,10 @@ name="unsafe_array_get_bw"
 path="examples/bandwidths/unsafe_array_get_bw.rs"
 
 [[example]]
+name="unsafe_array_get_unchecked_bw"
+path="examples/bandwidths/unsafe_array_get_unchecked_bw.rs"
+
+[[example]]
 name="atomic_array_get_bw"
 path="examples/bandwidths/atomic_array_get_bw.rs"
 
@@ -201,6 +209,10 @@ path="examples/bandwidths/local_lock_atomic_array_get_bw.rs"
 [[example]]
 name="readonly_array_get_bw"
 path="examples/bandwidths/readonly_array_get_bw.rs"
+
+[[example]]
+name="readonly_array_get_unchecked_bw"
+path="examples/bandwidths/readonly_array_get_unchecked_bw.rs"
 
 ##------------ Active Message Examples -----------------##
 [[example]]

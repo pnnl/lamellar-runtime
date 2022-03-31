@@ -202,6 +202,12 @@ impl CommOps for RofiComm {
     fn num_pes(&self) -> usize {
         self.num_pes
     }
+    #[allow(non_snake_case)]
+    fn MB_sent(&self) -> f64 {
+        (self.put_amt.load(Ordering::SeqCst) + self.get_amt.load(Ordering::SeqCst)) as f64
+            / 1_000_000.0
+    }
+
     fn barrier(&self) {
         rofi_barrier();
     }
@@ -246,6 +252,8 @@ impl CommOps for RofiComm {
         // let size = size + size%8;
         let allocs = self.alloc.read();
         for alloc in allocs.iter() {
+            // println!("size: {:?} remaining {:?} occupied {:?} len {:?}",size, alloc.space_avail(),alloc.occupied(),allocs.len());
+
             if let Some(addr) = alloc.try_malloc(size) {
                 return Ok(addr);
             }
@@ -257,9 +265,11 @@ impl CommOps for RofiComm {
         let allocs = self.alloc.read();
         for alloc in allocs.iter() {
             if alloc.fake_malloc(size) {
+                // println!("fake alloc passes");
                 return true;
             }
         }
+        // println!("fake alloc fails");
         false
     }
 
@@ -391,7 +401,7 @@ impl CommOps for RofiComm {
             src_addr.len() * (self.num_pes - 1) * std::mem::size_of::<T>(),
             Ordering::SeqCst,
         );
-        self.put_cnt.fetch_add(1, Ordering::SeqCst);
+        self.put_cnt.fetch_add(self.num_pes - 1, Ordering::SeqCst);
         // req
         // println!("[{:?}]-({:?}) put all exit",self.my_pe,thread::current().id());
         // println!("[{:?}]- gc: {:?} pc: {:?} put_all exit",self.my_pe,self.get_cnt.load(Ordering::SeqCst),self.put_cnt.load(Ordering::SeqCst));
@@ -426,6 +436,11 @@ impl CommOps for RofiComm {
                     self.get_amt
                         .fetch_add(dst_addr.len() * std::mem::size_of::<T>(), Ordering::SeqCst);
                     self.get_cnt.fetch_add(1, Ordering::SeqCst);
+                    // println!(
+                    //     "rofi_comm get {:?} {:?}",
+                    //     dst_addr.len() * std::mem::size_of::<T>(),
+                    //     self.get_amt.load(Ordering::SeqCst)
+                    // );
                     // if ret != 0{
                     //     req.txids.push(ret);
                     // }
@@ -449,6 +464,14 @@ impl CommOps for RofiComm {
     fn iget<T: Remote>(&self, pe: usize, src_addr: usize, dst_addr: &mut [T]) {
         if pe != self.my_pe {
             let bytes_len = dst_addr.len() * std::mem::size_of::<T>();
+            self.get_amt.fetch_add(bytes_len, Ordering::SeqCst);
+            // println!(
+            //     "rofi_comm iget {:?} {:?} {:?}",
+            //     dst_addr.len() * std::mem::size_of::<T>(),
+            //     bytes_len,
+            //     self.get_amt.load(Ordering::SeqCst)
+            // );
+            self.get_cnt.fetch_add(1, Ordering::SeqCst);
             let rem_bytes = bytes_len % std::mem::size_of::<u64>();
             // println!("{:x} {:?} {:?} {:?}",src_addr,dst_addr.as_ptr(),bytes_len,rem_bytes);
             if bytes_len >= std::mem::size_of::<u64>() {

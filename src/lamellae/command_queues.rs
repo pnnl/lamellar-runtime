@@ -549,6 +549,7 @@ impl InnerCQ {
                 }
             }
             if do_alloc {
+                println!("need to alloc new pool");
                 self.send_alloc_inner(&mut alloc_buf, min_size);
             }
         }
@@ -678,6 +679,7 @@ impl InnerCQ {
         let prev_cnt = self.comm.num_pool_allocs();
         let mut alloc_buf = self.alloc_buffer.lock();
         if !self.comm.rt_check_alloc(min_size) {
+            // println!(" {:?} {:?}",prev_cnt,self.comm.num_pool_allocs());
             if prev_cnt == self.comm.num_pool_allocs() {
                 // println!("im responsible for the new alloc");
                 self.send_alloc_inner(&mut alloc_buf, min_size);
@@ -695,6 +697,7 @@ impl InnerCQ {
             cmd.calc_hash();
             for pe in 0..self.num_pes {
                 if pe != self.my_pe {
+                    // println!("putting alloc cmd to pe {:?}",pe);
                     self.comm.put(pe, cmd.as_bytes(), cmd.as_addr());
                 }
             }
@@ -703,6 +706,7 @@ impl InnerCQ {
             while !alloc_buf[pe].check_hash() || alloc_buf[pe].cmd != Cmd::Alloc {
                 std::thread::yield_now();
             }
+            // println!(" pe {:?} ready to alloc",pe);
         }
 
         self.comm.alloc_pool(min_size);
@@ -714,6 +718,7 @@ impl InnerCQ {
         cmd.calc_hash();
         for pe in 0..self.num_pes {
             if pe != self.my_pe {
+                // println!("putting clear cmd to pe {:?}",pe);
                 self.comm.put(pe, cmd.as_bytes(), cmd.as_addr());
             }
         }
@@ -721,6 +726,7 @@ impl InnerCQ {
             while !alloc_buf[pe].check_hash() || alloc_buf[pe].cmd != Cmd::Clear {
                 std::thread::yield_now();
             }
+            // println!(" pe {:?} has alloced",pe);
         }
         // println!("created new alloc pool");
     }

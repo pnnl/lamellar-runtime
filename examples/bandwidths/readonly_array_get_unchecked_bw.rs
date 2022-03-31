@@ -1,36 +1,45 @@
-/// ------------Lamellar Bandwidth: RDMA Get  -------------------------
+/// ------------Lamellar Bandwidth: readonly get  -------------------------
 /// Test the bandwidth between two PEs using an RDMA get of N bytes
-/// from a remote PE to a local mem_reg.
+/// from a distributed array into a local memory region.
 /// --------------------------------------------------------------------
+// use lamellar::ActiveMessaging;
+use lamellar::array::{Distribution, UnsafeArray};
 use lamellar::RemoteMemoryRegion;
 use std::time::Instant;
 
-const MEMREG_LEN: usize = 2 * 1024 * 1024 * 1024;
+const ARRAY_LEN: usize = 1024 * 1024 * 1024;
 
 fn main() {
     let world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();
     let num_pes = world.num_pes();
-    let mem_reg = world.alloc_shared_mem_region::<u8>(MEMREG_LEN);
-    let data = world.alloc_local_mem_region::<u8>(MEMREG_LEN);
-    for j in 0..MEMREG_LEN as usize {
-        unsafe {
-            data.as_mut_slice().unwrap()[j] = my_pe as u8;
-            mem_reg.as_mut_slice().unwrap()[j] = num_pes as u8;
+    let array: UnsafeArray<u8> = UnsafeArray::new(&world, ARRAY_LEN * num_pes, Distribution::Block);
+    let data = world.alloc_local_mem_region::<u8>(ARRAY_LEN);
+    unsafe {
+        for i in data.as_mut_slice().unwrap() {
+            *i = my_pe as u8;
         }
+        // for i in array.local_as_mut_slice() {
+        //     *i = num_pes as u8;
+        // }
     }
+    array
+        .dist_iter_mut()
+        .for_each(move |elem| *elem = num_pes as u8);
+    array.wait_all();
+    array.barrier();
+    let array = array.into_read_only();
 
     world.barrier();
     let s = Instant::now();
     world.barrier();
     let b = s.elapsed().as_secs_f64();
     println!("Barrier latency: {:?}s {:?}us", b, b * 1_000_000 as f64);
-    world.barrier();
+
     if my_pe == 0 {
         println!("==================Bandwidth test===========================");
     }
     let mut bws = vec![];
-
     for i in 0..30 {
         let num_bytes = 2_u64.pow(i);
         let old: f64 = world.MB_sent();
@@ -47,17 +56,9 @@ fn main() {
         let mut sub_time = 0f64;
         if my_pe == 0 {
             for j in (0..2_u64.pow(exp) as usize).step_by(num_bytes as usize) {
-                // if j % 1024 ==0 {
-                // println!("[{:?}] j: {:?}",my_pe, j);
-                // }
                 let sub_timer = Instant::now();
-                unsafe {
-                    mem_reg.get_unchecked(
-                        num_pes - 1,
-                        0,
-                        data.sub_region(j..(j + num_bytes as usize)),
-                    )
-                };
+                let sub_reg = data.sub_region(j..(j + num_bytes as usize));
+                unsafe { array.get_unchecked(ARRAY_LEN * (num_pes - 1), &sub_reg) };
                 sub_time += sub_timer.elapsed().as_secs_f64();
                 sum += num_bytes * 1 as u64;
                 cnt += 1;

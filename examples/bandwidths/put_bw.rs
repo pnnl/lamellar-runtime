@@ -5,7 +5,7 @@
 use lamellar::RemoteMemoryRegion;
 use std::time::Instant;
 
-const ARRAY_LEN: usize = 1024 * 1024 * 1024;
+const ARRAY_LEN: usize = 2 * 1024 * 1024 * 1024;
 
 fn main() {
     let world = lamellar::LamellarWorldBuilder::new().build();
@@ -32,20 +32,20 @@ fn main() {
         println!("==================Bandwidth test===========================");
     }
     let mut bws = vec![];
-    for i in 0..27 {
+    for i in 0..30 {
         let num_bytes = 2_u64.pow(i);
         let old: f64 = world.MB_sent();
         let mbs_o = world.MB_sent();
         let mut sum = 0;
         let mut cnt = 0;
-        let timer = Instant::now();
-        let mut sub_time = 0f64;
         let mut exp = 20;
         if num_bytes <= 2048 {
             exp = 18 + i;
         } else if num_bytes >= 4096 {
             exp = 30;
         }
+        let timer = Instant::now();
+        let mut sub_time = 0f64;
         if my_pe == 0 {
             for j in (0..2_u64.pow(exp) as usize).step_by(num_bytes as usize) {
                 let sub_timer = Instant::now();
@@ -63,7 +63,7 @@ fn main() {
         if my_pe == num_pes - 1 {
             let array_slice = array.as_slice().unwrap();
             for j in (0..2_u64.pow(exp) as usize).step_by(num_bytes as usize) {
-                while *(&array_slice[(j + num_bytes as usize) - 1]) == 255 as u8 {
+                while *(&array_slice[(j + num_bytes as usize) - 1]) != 0 as u8 {
                     std::thread::yield_now()
                 }
             }

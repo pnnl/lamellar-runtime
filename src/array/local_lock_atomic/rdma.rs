@@ -28,10 +28,7 @@ impl<T: Dist + 'static> LocalLockAtomicArray<T> {
         Box::new(ArrayRdmaHandle { reqs: vec![req] })
     }
 
-    pub fn at<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(
-        &self,
-        index: usize,
-    ) -> Box<dyn LamellarArrayRequest<Output = T> + Send + Sync> {
+    pub fn at(&self, index: usize) -> Box<dyn LamellarArrayRequest<Output = T> + Send + Sync> {
         let buf: LocalMemoryRegion<T> = self.array.team().alloc_local_mem_region(1);
         let req = self.exec_am_local(InitGetAm {
             array: self.clone(),
@@ -76,10 +73,10 @@ impl<T: Dist + 'static> LamellarArrayGet<T> for LocalLockAtomicArray<T> {
         index: usize,
         buf: U,
     ) -> Box<dyn LamellarArrayRequest<Output = ()> + Send + Sync> {
-        self.array.get(index, buf)
+        self.get(index, buf)
     }
     fn at(&self, index: usize) -> Box<dyn LamellarArrayRequest<Output = T> + Send + Sync> {
-        self.array.at(index)
+        self.at(index)
     }
 }
 

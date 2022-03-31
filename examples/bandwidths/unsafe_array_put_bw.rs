@@ -58,18 +58,22 @@ fn main() {
                 cnt += 1;
             }
             println!("issue time: {:?}", timer.elapsed());
-            world.wait_all();
+            array.wait_all();
         }
+        array.barrier();
+        let cur_t = timer.elapsed().as_secs_f64();
         if my_pe == num_pes - 1 {
             let array_slice = unsafe { array.local_as_slice() };
             for j in (0..2_u64.pow(exp) as usize).step_by(num_bytes as usize) {
                 while *(&array_slice[(j + num_bytes as usize) - 1]) == 255 as u8 {
+                    println!(
+                        "this should not happen {:?}",
+                        &array_slice[(j + num_bytes as usize) - 1]
+                    );
                     std::thread::yield_now()
                 }
             }
         }
-        world.barrier();
-        let cur_t = timer.elapsed().as_secs_f64();
         let cur: f64 = world.MB_sent();
         let mbs_c = world.MB_sent();
         if my_pe == 0 {

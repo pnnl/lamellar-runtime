@@ -69,6 +69,10 @@ fn main() {
         if my_pe == 0 {
             for j in (0..2_u64.pow(exp) as usize).step_by(num_bytes as usize) {
                 while data_slice[(j + num_bytes as usize) - 1] == my_pe as u8 {
+                    println!(
+                        "should not happen {:?} ",
+                        &data_slice[(j + num_bytes as usize) - 1]
+                    );
                     std::thread::yield_now()
                 }
             }

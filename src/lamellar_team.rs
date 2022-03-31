@@ -220,7 +220,7 @@ impl RemoteMemoryRegion for Arc<LamellarTeam> {
         let mut lmr = LocalMemoryRegion::try_new(size, &self.team, self.team.lamellae.clone());
         while let Err(_err) = lmr {
             std::thread::yield_now();
-            self.team.lamellae.alloc_pool(size);
+            self.team.lamellae.alloc_pool(size*std::mem::size_of::<T>());
             lmr = LocalMemoryRegion::try_new(size, &self.team, self.team.lamellae.clone());
         }
         lmr.expect("out of memory")

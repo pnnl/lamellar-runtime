@@ -115,8 +115,8 @@ impl LamellaeComm for Rofi {
     #[allow(non_snake_case)]
     fn MB_sent(&self) -> f64 {
         // println!("put: {:?} get: {:?}",self.rofi_comm.put_amt.load(Ordering::SeqCst),self.rofi_comm.get_amt.load(Ordering::SeqCst));
-        // (self.rofi_comm.put_amt.load(Ordering::SeqCst) + self.rofi_comm.get_amt.load(Ordering::SeqCst)) as
-        self.cq.tx_amount() as f64 / 1_000_000.0
+        self.rofi_comm.MB_sent()
+        //+ self.cq.tx_amount() as f64 / 1_000_000.0
     }
     fn print_stats(&self) {}
     fn shutdown(&self) {
@@ -228,6 +228,7 @@ impl LamellaeRDMA for Rofi {
         self.rofi_comm.num_pool_allocs()
     }
     fn alloc_pool(&self, min_size: usize) {
+        // println!("trying to alloc pool {:?}",min_size);
         self.cq.send_alloc(min_size);
     }
 }
