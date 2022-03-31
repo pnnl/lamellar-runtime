@@ -5,6 +5,7 @@ use crate::scheduler::{Scheduler, SchedulerQueue};
 use parking_lot::Mutex;
 
 use std::collections::HashMap;
+use std::num::Wrapping;
 use std::sync::atomic::{AtomicBool, AtomicU8, AtomicUsize, Ordering};
 use std::sync::Arc;
 
@@ -57,8 +58,15 @@ fn calc_hash(addr: usize, len: usize) -> usize {
             num_u8s,
         )
     };
-    u64_slice.iter().map(|x| *x as usize).sum::<usize>()
-        + u8_slice.iter().map(|x| *x as usize).sum::<usize>()
+    (u64_slice
+        .iter()
+        .map(|x| Wrapping(*x as usize))
+        .sum::<Wrapping<usize>>()
+        + u8_slice
+            .iter()
+            .map(|x| Wrapping(*x as usize))
+            .sum::<Wrapping<usize>>())
+    .0
 }
 
 impl CmdMsg {

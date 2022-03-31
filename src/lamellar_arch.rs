@@ -303,9 +303,9 @@ impl LamellarArch for StridedArch {
         }
     }
     fn team_pe_id(&self, parent_pe: &usize) -> ArchResult<usize> {
-        if (parent_pe - self.start_pe) % self.stride == 0
-            && *parent_pe >= self.start_pe
+        if *parent_pe >= self.start_pe
             && *parent_pe <= self.end_pe
+            && (parent_pe - self.start_pe) % self.stride == 0
         {
             let team_pe = (parent_pe - self.start_pe) / self.stride;
             if team_pe < self.num_pes {
