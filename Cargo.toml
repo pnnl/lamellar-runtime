@@ -12,8 +12,8 @@ keywords = ["hpc","runtime","pgas","distributed","asynchronous"]
 categories = ["asynchronous","concurrency", "network-programming","science"]
 
 [dependencies]
-lamellar-impl = { path = "impl" }
-lamellar-prof = {path = "lamellar-prof" }
+lamellar-impl = { version = "0.4.1", path = "impl" }
+lamellar-prof = { version = "0.1.0", path = "lamellar-prof" }
 rofisys = { version ="0.2.2", optional = true }
 inventory = "0.1"
 serde = { version = "1.0", features = ["derive"] }
