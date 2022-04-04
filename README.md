@@ -147,8 +147,8 @@ the rofi lamellae is enabled by adding "enable-rofi" to features either in cargo
 Rofi can either be built from source and then setting the ROFI_DIR environment variable to the Rofi install directory, or by letting the rofi-sys crate build it automatically.
 
 * [libfabric](https://github.com/ofiwg/libfabric) 
-* [ROFI](https://gitlab.pnnl.gov/lamellar/rofi)
-* [rofi-sys](https://gitlab.pnnl.gov/lamellar/rofi-sys) -- available in [crates.io](https://crates.io/crates/rofisys)
+* [ROFI](https://github.com/pnnl/rofi)
+* [rofi-sys](https://github.com/pnnl/rofi-sys) -- available in [crates.io](https://crates.io/crates/rofisys)
 
 
 
