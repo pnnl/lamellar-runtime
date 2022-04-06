@@ -1,6 +1,6 @@
 [package]
 name = "lamellar"
-version = "0.4.1"
+version = "0.4.2"
 authors = ["Ryan D. Friese <ryan.friese@pnnl.gov>", " Mark V Raugas <mark.raugas@pnnl.gov>", "Roberto Gioiosa <roberto.gioiosa@pnnl.gov>"]
 edition = "2021"
 description = "Lamellar is an asynchronous tasking runtime for HPC systems developed in RUST."
@@ -12,8 +12,8 @@ keywords = ["hpc","runtime","pgas","distributed","asynchronous"]
 categories = ["asynchronous","concurrency", "network-programming","science"]
 
 [dependencies]
-lamellar-impl = { path = "impl" }
-lamellar-prof = {path = "lamellar-prof" }
+lamellar-impl = { version = "0.4.1", path = "impl" }
+lamellar-prof = { version = "0.1.0", path = "lamellar-prof" }
 rofisys = { version ="0.2.2", optional = true }
 inventory = "0.1"
 serde = { version = "1.0", features = ["derive"] }
@@ -49,7 +49,7 @@ rayon = "1.1"
 hostname = "0.3"
 nix = "0.23"
 assert_cmd = "2.0.4"
-serial_test = "*"
+serial_test = "0.6.0"
 #packed_simd = { version = "0.3.4", package = "packed_simd_2" } #uncomment if using nightly tool chain and want to run the am_flops example
 
 [workspace]
