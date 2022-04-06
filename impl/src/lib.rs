@@ -322,6 +322,146 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_type: AmType) -> 
     }
 }
 
+fn process_fields(args: TokenStream, the_fields: &syn::Fields, crate_header: String, local: bool) -> (proc_macro2::TokenStream,proc_macro2::TokenStream,proc_macro2::TokenStream,proc_macro2::TokenStream,proc_macro2::TokenStream){
+    let lamellar = quote::format_ident!("{}", crate_header.clone());
+    let mut fields = quote! {};
+    let mut ser = quote! {};
+    let mut des = quote! {};
+
+    for field in the_fields { //todo handle references --at least for the local case
+        if let syn::Type::Path(ref ty) = field.ty {
+            if let Some(_seg) = ty.path.segments.first() {
+                if !local {
+                    let field_name = field.ident.clone();
+                    fields.extend(quote_spanned! {field.span()=>
+                        #field,
+                    });
+                    ser.extend(quote_spanned! {field.span()=>
+                        (&self.#field_name).ser(num_pes,cur_pe);
+                    });
+                    des.extend(quote_spanned! {field.span()=>
+                        (&self.#field_name).des(cur_pe);
+                    });
+                } else {
+                    fields.extend(quote_spanned! {field.span()=>
+                        #field,
+                    });
+                }
+            }
+        } else if let syn::Type::Tuple(ref ty) = field.ty {
+            let field_name = field.ident.clone();
+            let mut ind = 0;
+            for elem in &ty.elems {
+                if let syn::Type::Path(ref ty) = elem {
+                    if let Some(_seg) = ty.path.segments.first() {
+                        if !local {
+                            let temp_ind = syn::Index {
+                                index: ind,
+                                span: field.span(),
+                            };
+                            ind += 1;
+                            ser.extend(quote_spanned! {field.span()=>
+
+                               ( &self.#field_name.#temp_ind).ser(num_pes,cur_pe);
+                            });
+                            des.extend(quote_spanned! {field.span()=>
+                                (&self.#field_name.#temp_ind).des(cur_pe);
+                            });
+                        }
+                    }
+                }
+            }
+            fields.extend(quote_spanned! {field.span()=>
+                #field,
+            });
+        }else if let syn::Type::Reference(ref _ty) = field.ty {
+            if !local {
+                panic!("references are not supported in Remote Active Messages");
+            } else {
+                fields.extend(quote_spanned! {field.span()=>
+                    #field,
+                });
+            }
+        } else {
+            if ! local{
+                panic!("unsupported type in Remote Active Message {:?}",field.ty);
+            }
+            fields.extend(quote_spanned! {field.span()=>
+                #field,
+            });
+        }
+    }
+    let my_ser: syn::Path = syn::parse(
+        format!("{}::serde::Serialize", crate_header)
+            .parse()
+            .unwrap(),
+    )
+    .unwrap();
+    let my_de: syn::Path = syn::parse(
+        format!("{}::serde::Deserialize", crate_header)
+            .parse()
+            .unwrap(),
+    )
+    .unwrap();
+    let mut impls = quote! {};
+    if !local {
+        impls.extend(quote! { #my_ser, #my_de, });
+    } else {
+        ser.extend(quote! {panic!{"should not serialize data in LocalAM"}});
+    }
+    let mut trait_strs = HashMap::new();
+    for t in args.to_string().split(",") {
+        if t.contains("Dist") {
+            trait_strs
+                .entry(String::from("Dist"))
+                .or_insert(quote! {#lamellar::Dist});
+            trait_strs
+                .entry(String::from("Copy"))
+                .or_insert(quote! {Copy});
+            trait_strs
+                .entry(String::from("Clone"))
+                .or_insert(quote! {Clone});
+        } else if t.contains("ArithmeticOps") {
+            trait_strs
+                .entry(String::from("ArithmeticOps"))
+                .or_insert(quote! {#lamellar::ArithmeticOps});
+            trait_strs
+                .entry(String::from("Dist"))
+                .or_insert(quote! {#lamellar::Dist});
+            trait_strs
+                .entry(String::from("Copy"))
+                .or_insert(quote! {Copy});
+            trait_strs
+                .entry(String::from("Clone"))
+                .or_insert(quote! {Clone});
+        } else if !t.contains("serde::Serialize")
+            && !t.contains("serde::Deserialize")
+            && t.trim().len() > 0
+        {
+            let temp = quote::format_ident!("{}", t.trim());
+            trait_strs
+                .entry(t.trim().to_owned())
+                .or_insert(quote! {#temp});
+        }
+    }
+    for t in trait_strs {
+        // let temp = quote::format_ident!("{}", t);
+        // print!("{:?}, ",t.0);
+        let temp = t.1;
+        impls.extend(quote! {#temp, });
+    }
+    // println!();
+    // println!("{:?}",impls);
+    let traits = quote! { #[derive( #impls)] };
+    let serde_temp_2 = if crate_header != "crate" && !local {
+        quote! {#[serde(crate = "lamellar::serde")]}
+    } else {
+        quote! {}
+    };
+    
+    (traits,serde_temp_2,fields,ser,des)
+}
+
 fn derive_am_data(
     input: TokenStream,
     args: TokenStream,
@@ -337,125 +477,7 @@ fn derive_am_data(
         let generics = data.generics.clone();
         let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
 
-        let mut fields = quote! {};
-        let mut ser = quote! {};
-        let mut des = quote! {};
-
-        for field in &data.fields {
-            if let syn::Type::Path(ref ty) = field.ty {
-                if let Some(_seg) = ty.path.segments.first() {
-                    if !local {
-                        let field_name = field.ident.clone();
-                        fields.extend(quote_spanned! {field.span()=>
-                            #field,
-                        });
-                        ser.extend(quote_spanned! {field.span()=>
-                            (&self.#field_name).ser(num_pes,cur_pe);
-                        });
-                        des.extend(quote_spanned! {field.span()=>
-                            (&self.#field_name).des(cur_pe);
-                        });
-                    } else {
-                        fields.extend(quote_spanned! {field.span()=>
-                            #field,
-                        });
-                    }
-                }
-            } else if let syn::Type::Tuple(ref ty) = field.ty {
-                let field_name = field.ident.clone();
-                let mut ind = 0;
-                for elem in &ty.elems {
-                    if let syn::Type::Path(ref ty) = elem {
-                        if let Some(_seg) = ty.path.segments.first() {
-                            if !local {
-                                let temp_ind = syn::Index {
-                                    index: ind,
-                                    span: field.span(),
-                                };
-                                ind += 1;
-                                ser.extend(quote_spanned! {field.span()=>
-
-                                   ( &self.#field_name.#temp_ind).ser(num_pes,cur_pe);
-                                });
-                                des.extend(quote_spanned! {field.span()=>
-                                    (&self.#field_name.#temp_ind).des(cur_pe);
-                                });
-                            }
-                        }
-                    }
-                }
-                fields.extend(quote_spanned! {field.span()=>
-                    #field,
-                });
-            }
-        }
-        let my_ser: syn::Path = syn::parse(
-            format!("{}::serde::Serialize", crate_header)
-                .parse()
-                .unwrap(),
-        )
-        .unwrap();
-        let my_de: syn::Path = syn::parse(
-            format!("{}::serde::Deserialize", crate_header)
-                .parse()
-                .unwrap(),
-        )
-        .unwrap();
-        let mut impls = quote! {};
-        if !local {
-            impls.extend(quote! { #my_ser, #my_de, });
-        } else {
-            ser.extend(quote! {panic!{"should not serialize data in LocalAM"}});
-        }
-        let mut trait_strs = HashMap::new();
-        for t in args.to_string().split(",") {
-            if t.contains("Dist") {
-                trait_strs
-                    .entry(String::from("Dist"))
-                    .or_insert(quote! {#lamellar::Dist});
-                trait_strs
-                    .entry(String::from("Copy"))
-                    .or_insert(quote! {Copy});
-                trait_strs
-                    .entry(String::from("Clone"))
-                    .or_insert(quote! {Clone});
-            } else if t.contains("ArithmeticOps") {
-                trait_strs
-                    .entry(String::from("ArithmeticOps"))
-                    .or_insert(quote! {#lamellar::ArithmeticOps});
-                trait_strs
-                    .entry(String::from("Dist"))
-                    .or_insert(quote! {#lamellar::Dist});
-                trait_strs
-                    .entry(String::from("Copy"))
-                    .or_insert(quote! {Copy});
-                trait_strs
-                    .entry(String::from("Clone"))
-                    .or_insert(quote! {Clone});
-            } else if !t.contains("serde::Serialize")
-                && !t.contains("serde::Deserialize")
-                && t.trim().len() > 0
-            {
-                let temp = quote::format_ident!("{}", t.trim());
-                trait_strs
-                    .entry(t.trim().to_owned())
-                    .or_insert(quote! {#temp});
-            }
-        }
-        for t in trait_strs {
-            // let temp = quote::format_ident!("{}", t);
-            // print!("{:?}, ",t.0);
-            let temp = t.1;
-            impls.extend(quote! {#temp, });
-        }
-        // println!();
-        // println!("{:?}",impls);
-        let traits = quote! { #[derive( #impls)] };
-        let serde_temp_2 = if crate_header != "crate" && !local {
-            quote! {#[serde(crate = "lamellar::serde")]}
-        } else {
-            quote! {}
-        };
+        let  (traits,serde_temp_2,fields,ser,des) = process_fields(args, &data.fields, crate_header, local);
         let vis = data.vis.to_token_stream();
         output.extend(quote! {
             #traits
@@ -475,6 +497,13 @@ fn derive_am_data(
             }
         });
     }
+    // else if let syn::Item::Enum(data) = input{ //todo handle enums....
+    //     let name = &data.ident;
+    //     let generics = data.generics.clone();
+    //     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
+
+
+    // }
     TokenStream::from(output)
 }
 
@@ -1291,7 +1320,7 @@ fn create_buf_ops(
                         _ => {panic!("shouldnt happen {:?}",op)}
                         }
                         // println!("done op: {:?} index: {:?} val {:?} fetch_index {:?}",op,index,val,fetch_index);
-
+                        
                     }
                 }
                 // println!("buff ops exec: {:?} {:?} {:?}",results_u8.len(),u8_len,self.num_fetch_ops);

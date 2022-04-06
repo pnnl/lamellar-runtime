@@ -152,6 +152,7 @@ impl std::fmt::Debug for LamellarTeam {
 }
 
 // #[prof]
+//todo see if we can impl deref dor Arc<lamellarteam>
 impl ActiveMessaging for Arc<LamellarTeam> {
     fn wait_all(&self) {
         self.team.wait_all();
@@ -220,7 +221,9 @@ impl RemoteMemoryRegion for Arc<LamellarTeam> {
         let mut lmr = LocalMemoryRegion::try_new(size, &self.team, self.team.lamellae.clone());
         while let Err(_err) = lmr {
             std::thread::yield_now();
-            self.team.lamellae.alloc_pool(size*std::mem::size_of::<T>());
+            self.team
+                .lamellae
+                .alloc_pool(size * std::mem::size_of::<T>());
             lmr = LocalMemoryRegion::try_new(size, &self.team, self.team.lamellae.clone());
         }
         lmr.expect("out of memory")
