@@ -162,37 +162,70 @@ pub use inventory;
 
 #[doc(hidden)]
 pub use bincode;
+use bincode::Options;
 
-#[doc(hidden)]
-pub fn serialize<T: ?Sized>(obj: &T) -> Result<Vec<u8>, anyhow::Error>
-where
-    T: serde::Serialize,
-{
-    Ok(bincode::serialize(obj)?)
+
+
+lazy_static! {
+    pub(crate) static ref BINCODE: bincode::config::WithOtherTrailing<bincode::DefaultOptions, bincode::config::AllowTrailing> = bincode::DefaultOptions::new().allow_trailing_bytes();
 }
 
 #[doc(hidden)]
-pub fn serialized_size<T: ?Sized>(obj: &T) -> usize
+pub fn serialize<T: ?Sized>(obj: &T,var: bool) -> Result<Vec<u8>, anyhow::Error>
 where
     T: serde::Serialize,
 {
-    bincode::serialized_size(obj).unwrap() as usize
+    if var{
+        // Ok(BINCODE.serialize(obj)?)
+        Ok(bincode::serialize(obj)?)
+    }
+    else{
+        Ok(bincode::serialize(obj)?)
+    }    
+}
+
+#[doc(hidden)]
+pub fn serialized_size<T: ?Sized>(obj: &T,var: bool) -> usize
+where
+    T: serde::Serialize,
+{
+    
+    
+    if var{
+        // BINCODE.serialized_size(obj).unwrap() as usize
+        bincode::serialized_size(obj).unwrap() as usize
+    }
+    else{
+        bincode::serialized_size(obj).unwrap() as usize
+    }
 }
 #[doc(hidden)]
-pub fn serialize_into<T: ?Sized>(buf: &mut [u8], obj: &T) -> Result<(), anyhow::Error>
+pub fn serialize_into<T: ?Sized>(buf: &mut [u8], obj: &T,var: bool) -> Result<(), anyhow::Error>
 where
     T: serde::Serialize,
-{
-    bincode::serialize_into(buf, obj)?;
+{ 
+    if var{
+        // BINCODE.serialize_into(buf, obj)?;
+        bincode::serialize_into(buf, obj)?;
+    }
+    else{
+        bincode::serialize_into(buf, obj)?;
+    }
     Ok(())
 }
 
 #[doc(hidden)]
-pub fn deserialize<'a, T>(bytes: &'a [u8]) -> Result<T, anyhow::Error>
+pub fn deserialize<'a, T>(bytes: &'a [u8],var: bool) -> Result<T, anyhow::Error>
 where
     T: serde::Deserialize<'a>,
 {
-    Ok(bincode::deserialize(bytes)?)
+    if var{
+        // Ok(BINCODE.deserialize(bytes)?)
+        Ok(bincode::deserialize(bytes)?)
+    }
+    else{
+        Ok(bincode::deserialize(bytes)?)
+    }
 }
 #[doc(hidden)]
 pub use async_std;

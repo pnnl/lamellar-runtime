@@ -13,6 +13,7 @@ use crate::array::*;
 use crate::darc::DarcMode;
 use crate::lamellar_team::{IntoLamellarTeam, LamellarTeamRT};
 use crate::memregion::Dist;
+use serde::ser::SerializeSeq;
 // use parking_lot::{
 //     Mutex,MutexGuard
 // };
@@ -482,6 +483,19 @@ impl<T: Dist> NativeAtomicLocalData<T> {
     //         index: 0,
     //     }
     // }
+}
+
+impl<T: Dist + serde::Serialize> serde::Serialize for NativeAtomicLocalData<T>{
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let mut seq = serializer.serialize_seq(Some(self.len()))?;
+        for i in 0..self.len() {
+            seq.serialize_element(&self.at(i).load())?;
+        }
+        seq.end()
+    }
 }
 
 impl<T: Dist> IntoIterator for NativeAtomicLocalData<T> {

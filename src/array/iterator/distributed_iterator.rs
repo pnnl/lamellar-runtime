@@ -37,7 +37,7 @@ where
     F: Fn(I::Item) + Sync + Send + 'static,
 {
     fn exec(&self) {
-        // println!("in for each");
+        // println!("in for each {:?} {:?}", self.start_i, self.end_i);
         let mut iter = self.data.init(self.start_i, self.end_i - self.start_i);
         while let Some(elem) = iter.next() {
             (&self.op)(elem)

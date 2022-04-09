@@ -13,6 +13,7 @@ use std::marker::PhantomData;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
+// use serde::de::DeserializeOwned;
 
 pub(crate) mod r#unsafe;
 pub use r#unsafe::{
@@ -137,11 +138,34 @@ pub enum ArrayOpCmd {
     Get,
 }
 
-#[derive(Clone)]
+#[derive(serde::Serialize,Clone)]
+pub enum InputToValue<'a, T: Dist > {
+    OneToOne(usize,T),
+    // #[serde(skip_deserializing,rename(serialize = "OwnedOneToMany"))]
+    OneToMany(usize,OpInputEnum<'a, T>),
+    // #[serde(skip_deserializing,rename(serialize = "ManyToOne"))]
+    ManyToOne(OpInputEnum<'a, usize>,T),
+    // #[serde(skip_deserializing,rename(serialize = "ManyToMany"))]
+    ManyToMany(OpInputEnum<'a, usize>,OpInputEnum<'a, T>),
+    // OwnedOneToMany(usize,Vec<T>),
+    // OwnedManyToOne(Vec<usize>,T),
+    // OwnedManyToMany(Vec<usize>,Vec<T>),
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+pub enum OpAmInputToValue<T: Dist >{
+    OneToOne(usize,T),
+    OneToMany(usize,Vec<T>),
+    ManyToOne(Vec<usize>,T),
+    ManyToMany(Vec<usize>,Vec<T>),
+}
+
+#[derive(Clone,serde::Serialize)]
 pub enum OpInputEnum<'a, T: Dist> {
     Val(T),
     Slice(&'a [T]),
     Vec(Vec<T>),
+    #[serde(serialize_with = "LamellarMemoryRegion::serialize_local_data")]
     MemoryRegion(LamellarMemoryRegion<T>),
     // UnsafeArray(UnsafeArray<T>),
     // ReadOnlyArray(ReadOnlyArray<T>),
@@ -187,21 +211,25 @@ impl<'a, T: Dist> OpInputEnum<'_, T> {
             OpInputEnum::LocalLockAtomicArray(a) => a.len(),
         }
     }
+
+    pub(crate) fn first(&self) -> T {
+        match self {
+            OpInputEnum::Val(v) => *v,
+            OpInputEnum::Slice(s) => *s.first().expect("slice is empty"),
+            OpInputEnum::Vec(v) => *v.first().expect("vec is empty"),
+            OpInputEnum::MemoryRegion(mr) => {
+                *unsafe { mr.as_slice() }
+                    .expect("memregion not local")
+                    .first()
+                    .expect("memregion is empty")
+            }
+            OpInputEnum::NativeAtomicArray(a) => a.at(0).load(),
+            OpInputEnum::GenericAtomicArray(a) => a.at(0).load(),
+            OpInputEnum::LocalLockAtomicArray(a) => *a.first().expect("array is empty"),
+        }
+    }
 }
 
-// impl<'a,T: Dist> Iterator for &OpInputEnum<'_, T>{
-//     type Item = T;
-//     fn next(&mut self) -> Option<Self::Item>{
-//         match self{
-//             OpInputEnum::Val(v) => std::iter::repeat(v),
-//             OpInputEnum::Slice(s) => s.iter().map(|elem| *elem),
-//             OpInputEnum::AtomicArray(a) => a.local_data().map(|elem| elem.load()),
-//             OpInputEnum::NativeAtomicArray(a) => a.local_data().map(|elem| elem.load()),
-//             OpInputEnum::GenericAtomicArray(a) => a.local_data().map(|elem| elem.load()),
-//             OpInputEnum::LocalLockAtomicArray(a) => a.local_data().map(|elem| elem.load()),
-//         }
-//     }
-// }
 
 pub trait OpInput<'a, T: Dist> {
     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize); //(Vec<(Box<dyn Iterator<Item = T> + Send  + Sync + '_>,usize)>,usize);
@@ -469,13 +497,13 @@ impl<'a, T: Dist + ElementOps> OpInput<'a, T> for &NativeAtomicArray<T> {
 // }
 
 pub trait BufferOp: Sync + Send {
-    fn add_ops(&self, op: ArrayOpCmd, op_data: *const u8, len: usize) -> (bool, Arc<AtomicBool>);
+    fn add_ops(&self, op: ArrayOpCmd, op_data: *const u8) -> (bool, Arc<AtomicBool>);
     fn add_fetch_ops(
         &self,
         pe: usize,
         op: ArrayOpCmd,
         op_data: *const u8,
-        len: usize,
+        req_ids: &Vec<usize>,
         res_map: OpResults,
     ) -> (bool, Arc<AtomicBool>, Option<OpResultIndices>);
 

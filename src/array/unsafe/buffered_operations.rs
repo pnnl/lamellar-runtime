@@ -49,6 +49,110 @@ enum BufOpsRequest<T: Dist> {
     Fetch(Box<dyn LamellarRequest<Output = Vec<T>> + Send + Sync>),
 }
 
+
+
+impl<'a, T: Dist> InputToValue<'a,T>{
+    fn len(&self) -> usize{
+        match self{
+            InputToValue::OneToOne(_,_) => 1,
+            InputToValue::OneToMany(_,vals) => vals.len(),
+            InputToValue::ManyToOne(indices,_) => indices.len(),
+            InputToValue::ManyToMany(indices,_) => indices.len(),
+        }
+    }
+    // fn num_bytes(&self) -> usize{
+    //     match self{
+    //         InputToValue::OneToOne(_,_) => std::mem::size_of::<(usize,T)>(),
+    //         InputToValue::OneToMany(_,vals) => std::mem::size_of::<usize>()+ vals.len() * std::mem::size_of::<T>(),
+    //         InputToValue::ManyToOne(indices,_) => indices.len() * std::mem::size_of::<usize>() + std::mem::size_of::<T>(),
+    //         InputToValue::ManyToMany(indices,vals) => indices.len() * std::mem::size_of::<usize>() +  vals.len() * std::mem::size_of::<T>(),
+    //     }
+    // }
+    fn to_pe_offsets(self, array: &UnsafeArray<T>) -> (HashMap<usize, InputToValue<'a,T>>,HashMap<usize, Vec<usize>>,usize) {
+        let mut pe_offsets = HashMap::new();
+        let mut req_ids = HashMap::new();
+        match self{            
+            InputToValue::OneToOne(index,value) => {                
+                let (pe,local_index) = array.calc_pe_and_offset(index);
+                pe_offsets.insert(pe, InputToValue::OneToOne(local_index,value));
+                req_ids.insert(pe, vec![0]);
+                (pe_offsets,req_ids,1)
+            },
+            InputToValue::OneToMany(index,values) => {
+                let (pe,local_index) = array.calc_pe_and_offset(index);
+                let vals_len = values.len();
+                req_ids.insert(pe, (0..vals_len).collect());
+                pe_offsets.insert(pe, InputToValue::OneToMany(local_index,values));
+                
+                (pe_offsets, req_ids,vals_len)
+            },
+            InputToValue::ManyToOne(indices,value) => {
+                let mut temp_pe_offsets = HashMap::new();
+                let mut req_cnt=0;
+                for index in indices.iter(){
+                    let (pe,local_index) = array.calc_pe_and_offset(index);
+                    temp_pe_offsets.entry(pe).or_insert(vec![]).push(local_index);
+                    req_ids.entry(pe).or_insert(vec![]).push(req_cnt);
+                    req_cnt+=1;
+                }
+                
+                for (pe,local_indices) in temp_pe_offsets{
+                    
+                    pe_offsets.insert(pe,InputToValue::ManyToOne(OpInputEnum::Vec(local_indices),value));
+                }
+                
+                (pe_offsets,req_ids,indices.len())
+            },
+            InputToValue::ManyToMany(indices,values) => {
+                let mut temp_pe_offsets = HashMap::new();
+                let mut req_cnt=0;
+                for (index,val) in indices.iter().zip(values.iter()){
+                    let (pe,local_index) = array.calc_pe_and_offset(index);
+                    let data = temp_pe_offsets.entry(pe).or_insert((vec![],vec![]));
+                    data.0.push(local_index);
+                    data.1.push(val);
+                    req_ids.entry(pe).or_insert(vec![]).push(req_cnt);
+                    req_cnt+=1;
+                }
+                for (pe,(local_indices,vals)) in temp_pe_offsets{
+                    pe_offsets.insert(pe,InputToValue::ManyToMany(OpInputEnum::Vec(local_indices),OpInputEnum::Vec(vals)));
+                }
+                (pe_offsets,req_ids,indices.len())
+            },
+        }
+    }
+}
+impl<'a, T: Dist + serde::Serialize + serde::de::DeserializeOwned> InputToValue<'a,T>{
+    pub fn as_op_am_input(&self)-> OpAmInputToValue<T>{
+        match self{
+            InputToValue::OneToOne(index,value) => OpAmInputToValue::OneToOne(*index,*value),
+            InputToValue::OneToMany(index,values) => OpAmInputToValue::OneToMany(*index,values.iter().collect()),
+            InputToValue::ManyToOne(indices,value) => OpAmInputToValue::ManyToOne(indices.iter().collect(),*value),
+            InputToValue::ManyToMany(indices,values) => OpAmInputToValue::ManyToMany(indices.iter().collect(),values.iter().collect()),
+        }
+    }
+    
+}
+
+impl< T: Dist> OpAmInputToValue<T>{
+    pub fn len(&self) -> usize{
+        match self{
+            OpAmInputToValue::OneToOne(_,_) => 1,
+            OpAmInputToValue::OneToMany(_,vals) => vals.len(),
+            OpAmInputToValue::ManyToOne(indices,_) => indices.len(),
+            OpAmInputToValue::ManyToMany(indices,_) => indices.len(),
+        }
+    }
+    pub fn num_bytes(&self) -> usize{
+        match self{
+            OpAmInputToValue::OneToOne(_,_) => std::mem::size_of::<(usize,T)>(),
+            OpAmInputToValue::OneToMany(_,vals) => std::mem::size_of::<usize>()+ vals.len() * std::mem::size_of::<T>(),
+            OpAmInputToValue::ManyToOne(indices,_) => indices.len() * std::mem::size_of::<usize>() + std::mem::size_of::<T>(),
+            OpAmInputToValue::ManyToMany(indices,vals) => indices.len() * std::mem::size_of::<usize>() +  vals.len() * std::mem::size_of::<T>(),
+        }
+    }
+}
+
 impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
     pub(crate) fn dummy_val(&self) -> T {
         let slice = self.inner.data.mem_region.as_slice().unwrap();
@@ -64,27 +168,27 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         &self,
         fetch: bool,
         op: ArrayOpCmd,
-        indices: &OpInputEnum<'a, usize>,
-        vals: &OpInputEnum<'a, T>,
+        input: InputToValue<T>,
         submit_cnt: Arc<AtomicUsize>,
-    ) -> BufOpsRequest<T> {
-        let mut pe_offsets: HashMap<usize, Vec<(usize, usize, T)>> = HashMap::new();
+    ) -> BufOpsRequest<T> {          
+        let (pe_offsets,req_ids,req_cnt) = input.to_pe_offsets(self); //HashMap<usize, InputToValue<'a,T>>
 
-        let max = std::cmp::max(indices.len(), vals.len());
-        let mut req_cnt = 0;
-        for (i, v) in indices.iter().zip(vals.iter()).take(max) {
-            let pe = self
-                .inner
-                .pe_for_dist_index(i)
-                .expect("index out of bounds");
-            let local_index = self.inner.pe_offset_for_dist_index(pe, i).unwrap(); //calculated pe above
-                                                                                   // println!("i: {:?} l_i: {:?} v: {:?}",i,local_index,v);
-            pe_offsets
-                .entry(pe)
-                .or_insert(Vec::new())
-                .push((req_cnt, local_index, v));
-            req_cnt += 1;
-        }
+        
+        // let max = std::cmp::max(indices.len(), vals.len());
+        // let mut req_cnt = 0;
+        // for (i, v) in indices.iter().zip(vals.iter()).take(max) {
+        //     let pe = self
+        //         .inner
+        //         .pe_for_dist_index(i)
+        //         .expect("index out of bounds");
+        //     let local_index = self.inner.pe_offset_for_dist_index(pe, i).unwrap(); //calculated pe above
+        //                                                                            // println!("i: {:?} l_i: {:?} v: {:?}",i,local_index,v);
+        //     pe_offsets
+        //         .entry(pe)
+        //         .or_insert(Vec::new())
+        //         .push((req_cnt, local_index, v));
+        //     req_cnt += 1;
+        // }
 
         let res_indices_map = OpReqIndices::new();
         let res_map = OpResults::new();
@@ -106,13 +210,13 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
                     buf_op.add_fetch_ops(
                         pe,
                         op,
-                        op_data.as_ptr() as *const u8,
-                        op_data.len(),
+                        op_data as *const InputToValue<T> as *const u8,
+                        &req_ids[&pe],
                         res_map.clone(),
                     )
                 } else {
                     let (first, complete) =
-                        buf_op.add_ops(op, op_data.as_ptr() as *const u8, op_data.len());
+                        buf_op.add_ops(op, op_data as *const InputToValue<T> as *const u8);
                     (first, complete, None)
                 };
                 if let Some(res_indices) = res_indices {
@@ -227,47 +331,53 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         index: impl OpInput<'a, usize>,
         op: ArrayOpCmd,
     ) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync> {
-        let (mut indices, i_len) = index.as_op_input();
+        let (mut indices, i_len) = index.as_op_input(); //(Vec<OpInputEnum<'a, usize>>, usize);
         let (mut vals, v_len) = val.as_op_input();
         let mut i_v_iters = vec![];
         // println!("i_len {i_len} v_len {v_len}");
         if v_len > 0 && i_len > 0 {
             if v_len == 1 && i_len > 1 {
+                let val = vals[0].first();
                 for i in indices.drain(..) {
-                    i_v_iters.push((i, vals[0].clone()));
+                    i_v_iters.push(InputToValue::ManyToOne(i, val));
                 }
             } else if v_len > 1 && i_len == 1 {
+                let idx = indices[0].first();
                 for v in vals.drain(..) {
-                    i_v_iters.push((indices[0].clone(), v));
+                    i_v_iters.push(InputToValue::OneToMany(idx, v));
                 }
             } else if i_len == v_len {
-                for (i, v) in indices.iter().zip(vals.iter()) {
-                    i_v_iters.push((i.clone(), v.clone()));
+                if i_len == 1{
+                    i_v_iters.push(InputToValue::OneToOne(indices[0].first(),vals[0].first()));
+                }
+                else{
+                    for (i, v) in indices.iter().zip(vals.iter()) {
+                        i_v_iters.push(InputToValue::ManyToMany(i.clone(), v.clone()));
+                    }
                 }
             } else {
                 panic!(
                     "not sure this case can exist!! indices len {:?} vals len {:?}",
                     i_len, v_len
                 );
-            };
+            }
 
             // println!("i_v_iters len {:?}",i_v_iters.len());
 
             let submit_cnt = Arc::new(AtomicUsize::new(i_v_iters.len()));
 
-            for (indices, vals) in i_v_iters[1..].iter() {
-                // println!("here");
+            while i_v_iters.len() > 1{
                 let submit_cnt = submit_cnt.clone();
                 let array = self.clone();
+                let input = i_v_iters.pop().unwrap();
                 self.inner.data.team.scheduler.submit_task(async move {
-                    array.initiate_op_task(false, op, indices, vals, submit_cnt);
+                    array.initiate_op_task(false, op, input, submit_cnt);
                 });
             }
             let req = self.initiate_op_task(
                 false,
                 op,
-                &i_v_iters[0].0,
-                &i_v_iters[0].1,
+                i_v_iters.pop().unwrap(),
                 submit_cnt.clone(),
             );
             // println!("submit_cnt {:?}",submit_cnt);
@@ -298,38 +408,46 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         let mut i_v_iters = vec![];
         if v_len > 0 && i_len > 0 {
             if v_len == 1 && i_len > 1 {
+                let val = vals[0].first();
                 for i in indices.drain(..) {
-                    i_v_iters.push((i, vals[0].clone()));
+                    i_v_iters.push(InputToValue::ManyToOne(i, val));
                 }
             } else if v_len > 1 && i_len == 1 {
+                let idx = indices[0].first();
                 for v in vals.drain(..) {
-                    i_v_iters.push((indices[0].clone(), v));
+                    i_v_iters.push(InputToValue::OneToMany(idx, v));
                 }
             } else if i_len == v_len {
-                for (i, v) in indices.iter().zip(vals.iter()) {
-                    i_v_iters.push((i.clone(), v.clone()));
+                if i_len == 1{
+                    i_v_iters.push(InputToValue::OneToOne(indices[0].first(),vals[0].first()));
+                }
+                else{
+                    for (i, v) in indices.iter().zip(vals.iter()) {
+                        i_v_iters.push(InputToValue::ManyToMany(i.clone(), v.clone()));
+                    }
                 }
             } else {
                 panic!(
                     "not sure this case can exist!! indices len {:?} vals len {:?}",
                     i_len, v_len
                 );
-            };
+            }
 
             let submit_cnt = Arc::new(AtomicUsize::new(i_v_iters.len()));
 
-            for (indices, vals) in i_v_iters[1..].iter() {
+           
+            while i_v_iters.len() > 1{
                 let submit_cnt = submit_cnt.clone();
                 let array = self.clone();
+                let input = i_v_iters.pop().unwrap();
                 self.inner.data.team.scheduler.submit_task(async move {
-                    array.initiate_op_task(true, op, indices, vals, submit_cnt);
+                    array.initiate_op_task(true, op, input, submit_cnt);
                 });
             }
             let req = self.initiate_op_task(
                 true,
                 op,
-                &i_v_iters[0].0,
-                &i_v_iters[0].1,
+                i_v_iters.pop().unwrap(),
                 submit_cnt.clone(),
             );
             while submit_cnt.load(Ordering::Relaxed) > 0 {

@@ -142,8 +142,9 @@ impl RegisteredActiveMessages {
     ) {
         // println!("adding req {:?} {:?}",func_id,func_size);
 
-        let func_header_len = crate::serialized_size::<FuncHeader>(&(0, 0));
-        let batch_header_len = crate::serialized_size::<BatchHeader>(&(0, 0, 0));
+        let func_header_len = crate::serialized_size::<FuncHeader>(&(func_size,func_id),false);
+        // println!("func header len {} {}", func_header_len,crate::serialized_size::<FuncHeader>(&(500, 500),false));
+        let batch_header_len = crate::serialized_size::<BatchHeader>(&(0, 0, 0),false);
 
         // add request to a batch or create a new one
         let mut submit_tx_task = false;
@@ -247,12 +248,14 @@ impl RegisteredActiveMessages {
                     let data = data.unwrap();
                     let data_slice = data.data_as_bytes();
                     let mut i = 0;
+                    // let mut num_reqs = 0;
                     for (func_id, (batch_map, func_size)) in func_map {
                         let func_header: FuncHeader = (func_size, func_id);
-                        // println!("func_header: {:?} bml: {:?}",func_header, batch_map.len());
+                        // println!("func_header: {:?} bml: {:?} {:?} {:?}",func_header, batch_map.len(),crate::serialized_size(&func_header),func_header_len);
                         crate::serialize_into(
                             &mut data_slice[i..i + func_header_len],
                             &func_header,
+                            false,
                         )
                         .unwrap();
                         i += func_header_len;
@@ -276,6 +279,7 @@ impl RegisteredActiveMessages {
                             crate::serialize_into(
                                 &mut data_slice[i..i + batch_header_len],
                                 &batch_header,
+                                false,
                             )
                             .unwrap();
                             i += batch_header_len;
@@ -284,24 +288,27 @@ impl RegisteredActiveMessages {
                             let mut req_ids: HashMap<usize, (usize, AtomicUsize)> = HashMap::new();
                             let mut batch_req_id = 0;
                             // println!("dst: {:?} func_id {:?} batch_id {:?} num_reqs {:?}",req_data.dst,func_id,batch_id,reqs.len());
+                            // num_reqs += reqs.len();
                             for (req_id, func) in reqs {
                                 // println!("dst: {:?} req_id {:?} func_id {:?} batch_id {:?}",req_data.dst,req_id,func_id,batch_id);
                                 match func_id {
                                     BATCHED_UNIT_ID => {} //dont have to do anything special, as all we need to know is batch id
                                     BATCHED_UNIT_NEW_ID => {
-                                        let serialize_size = crate::serialized_size(&req_id);
+                                        let serialize_size = crate::serialized_size(&req_id, false,);
                                         crate::serialize_into(
                                             &mut data_slice[i..i + serialize_size],
                                             &req_id,
+                                            false,
                                         )
                                         .unwrap();
                                         i += serialize_size;
                                     }
                                     UNIT_ID => {
-                                        let serialize_size = crate::serialized_size(&req_id);
+                                        let serialize_size = crate::serialized_size(&req_id, false,);
                                         crate::serialize_into(
                                             &mut data_slice[i..i + serialize_size],
                                             &req_id,
+                                            false,
                                         )
                                         .unwrap();
                                         i += serialize_size;
@@ -309,17 +316,19 @@ impl RegisteredActiveMessages {
                                     REMOTE_DATA_ID => {
                                         if let LamellarFunc::Result(func) = func {
                                             let result_header_size =
-                                                crate::serialized_size(&(&req_id, 0usize));
+                                                crate::serialized_size(&(&req_id, 0usize), false,);
                                             let serialize_size = func.serialized_size();
                                             crate::serialize_into(
                                                 &mut data_slice[i..i + result_header_size],
                                                 &(req_id, serialize_size),
+                                                false,
                                             )
                                             .unwrap();
                                             i += result_header_size;
                                             func.serialize_into(
                                                 &mut data_slice[i..(i + serialize_size)],
                                             );
+                                            // println!("req_id {:?} serialize_size {:?} {:?}", req_id, serialize_size, &data_slice[i..(i + serialize_size)]);
                                             // if req_data.dst.is_none() {
                                             //     func.ser(req_data.team.num_pes()-1);
                                             // }
@@ -333,17 +342,19 @@ impl RegisteredActiveMessages {
                                     BATCHED_REMOTE_DATA_ID => {
                                         if let LamellarFunc::Result(func) = func {
                                             let result_header_size =
-                                                crate::serialized_size(&(&req_id, 0usize));
+                                                crate::serialized_size(&(&req_id, 0usize), false,);
                                             let serialize_size = func.serialized_size();
                                             crate::serialize_into(
                                                 &mut data_slice[i..(i + result_header_size)],
                                                 &(req_id, serialize_size),
+                                                false,
                                             )
                                             .unwrap();
                                             i += result_header_size;
                                             func.serialize_into(
                                                 &mut data_slice[i..(i + serialize_size)],
                                             );
+                                            // println!("req_id {:?} serialize_size {:?} {:?}", req_id, serialize_size, &data_slice[i..(i + serialize_size)]);
                                             // if req_data.dst.is_none() {
                                             //     func.ser(req_data.team.num_pes()-1);
                                             // }
@@ -374,10 +385,11 @@ impl RegisteredActiveMessages {
                                                     batch_req_id += 1;
                                                 } else {
                                                     let serialized_size =
-                                                        crate::serialized_size(&0usize);
+                                                        crate::serialized_size(&0usize, false,);
                                                     crate::serialize_into(
                                                         &mut data_slice[i..(i + serialized_size)],
                                                         &req_id,
+                                                        false,
                                                     )
                                                     .unwrap();
                                                     i += serialized_size;
@@ -397,6 +409,7 @@ impl RegisteredActiveMessages {
                                                 func.serialize_into(
                                                     &mut data_slice[i..(i + serialize_size)],
                                                 );
+                                                // println!("req_id {:?} serialize_size {:?} {:?}", batch_req_id-1, serialize_size, &data_slice[i..(i + serialize_size)]);
                                                 i += serialize_size;
                                             }
 
@@ -418,7 +431,7 @@ impl RegisteredActiveMessages {
                             }
                         }
                     }
-                    // println!("sending to {:?} batch {:?}",req_data.dst,data.header_and_data_as_bytes().len());
+                    // println!("sending to {:?} batch {:?} num_reqs {:?}",req_data.dst,data.header_and_data_as_bytes().len(),num_reqs);
                     req_data
                         .lamellae
                         .send_to_pes_async(req_data.dst, req_data.team.arch.clone(), data)
@@ -485,8 +498,8 @@ impl RegisteredActiveMessages {
                 };
                 let mut i = 0;
                 if func_id < 0 {
-                    let serialized_size = crate::serialized_size(&0usize);
-                    crate::serialize_into(&mut data_slice[i..i + serialized_size], &req_data.id)
+                    let serialized_size = crate::serialized_size(&0usize, false,);
+                    crate::serialize_into(&mut data_slice[i..i + serialized_size], &req_data.id, false,)
                         .unwrap();
                     i += serialized_size;
                 }
@@ -500,10 +513,11 @@ impl RegisteredActiveMessages {
                 //     func.ser(1);
                 // };
                 let mut i = 0;
-                let serialized_size = crate::serialized_size(&(0usize, 0usize));
+                let serialized_size = crate::serialized_size(&(0usize, 0usize), false,);
                 crate::serialize_into(
                     &mut data_slice[i..i + serialized_size],
                     &(req_data.id, func_size - serialized_size),
+                    false,
                 )
                 .unwrap();
                 i += serialized_size;
@@ -545,11 +559,11 @@ impl RegisteredActiveMessages {
                     let (func_id, func_size) = match &req_data.cmd {
                         ExecType::Am(Cmd::BatchedAmReturn) => (
                             -(*AMS_IDS.get(&func.get_id()).unwrap()),
-                            func.serialized_size() + crate::serialized_size(&0usize),
+                            func.serialized_size() + crate::serialized_size(&0usize, false,)
                         ),
                         ExecType::Am(Cmd::AmReturn) => (
                             -(*AMS_IDS.get(&func.get_id()).unwrap()),
-                            func.serialized_size() + crate::serialized_size(&0usize),
+                            func.serialized_size() + crate::serialized_size(&0usize, false,),
                         ),
                         _ => (
                             *(AMS_IDS.get(&func.get_id()).unwrap()),
@@ -560,7 +574,7 @@ impl RegisteredActiveMessages {
                 }
                 LamellarFunc::Result(ref func) => {
                     let func_size =
-                        func.serialized_size() + crate::serialized_size(&(&req_data.id, 0usize));
+                        func.serialized_size() + crate::serialized_size(&(&req_data.id, 0usize), false,);
                     match req_data.cmd {
                         ExecType::Am(Cmd::BatchedDataReturn) => (
                             BATCHED_REMOTE_DATA_ID,
@@ -576,12 +590,12 @@ impl RegisteredActiveMessages {
                 LamellarFunc::None => match req_data.cmd {
                     ExecType::Am(Cmd::UnitReturn) => (
                         UNIT_ID,
-                        crate::serialized_size(&req_data.id),
+                        crate::serialized_size(&req_data.id, false,),
                         ExecType::Am(Cmd::UnitReturn),
                     ),
                     ExecType::Am(Cmd::BatchedUnitReturnNew) => (
                         BATCHED_UNIT_NEW_ID,
-                        crate::serialized_size(&req_data.id),
+                        crate::serialized_size(&req_data.id, false,),
                         ExecType::Am(Cmd::BatchedUnitReturn),
                     ),
                     ExecType::Am(Cmd::BatchedUnitReturn) => {
@@ -818,25 +832,26 @@ impl RegisteredActiveMessages {
             // trace!("exec batched message {:?}",header.id);
             let data_slice = ser_data.data_as_bytes();
             // let team_header_len = crate::serialized_size::<TeamHeader>(&(0,0));
-            let func_header_len = crate::serialized_size::<FuncHeader>(&(0, 0));
-            let batch_header_len = crate::serialized_size::<BatchHeader>(&(0, 0, 0));
+            let func_header_len = crate::serialized_size::<FuncHeader>(&(0, 0), false,);
+            let batch_header_len = crate::serialized_size::<BatchHeader>(&(0, 0, 0), false,);
             let mut i = 0;
             // println!("data slice len {:?}",data_slice.len());
             while i < data_slice.len() {
                 let func_header: FuncHeader =
-                    crate::deserialize(&data_slice[i..i + func_header_len]).unwrap();
+                    crate::deserialize(&data_slice[i..i + func_header_len], false,).unwrap();
                 i += func_header_len;
                 let func_start = i;
                 let func_id = func_header.1;
                 while i < func_start + func_header.0 {
                     let batch_header: BatchHeader =
-                        crate::deserialize(&data_slice[i..i + batch_header_len]).unwrap();
+                        crate::deserialize(&data_slice[i..i + batch_header_len], false,).unwrap();
                     // println!("src: {:?} fh {:?} bh {:?} ({:?} {:?})",msg.src,func_header,batch_header,i,func_start + func_header.0);
 
                     i += batch_header_len;
                     // let batch_start = i;
                     let batch_id = batch_header.2;
                     let num_reqs = batch_header.1;
+                    // println!("num_reqs: {:?}",num_reqs);
                     let batched_data = &data_slice[i..i + batch_header.0];
                     // println!("batched_data {:?} {:?}",batched_data.len(),&batched_data);
                     let sub_data = ser_data.sub_data(i, i + batch_header.0);
@@ -914,7 +929,9 @@ impl RegisteredActiveMessages {
         let mut req_id = 0;
         let team_hash = team.team.remote_ptr_addr as u64;
         while req_id < num_reqs {
+            // println!("req_id {:?} {:?}",req_id, &data_slice[index..(index+10)]);
             let func = AMS_EXECS.get(&(func_id)).unwrap()(&data_slice[index..], team.team.team_pe);
+            // println!("func bytes {:?} {:?}",func.serialized_size(), &data_slice[index..(index+func.serialized_size())]);
             index += func.serialized_size();
             let world = world.clone();
             let team = team.clone();
@@ -1048,7 +1065,7 @@ impl RegisteredActiveMessages {
     ) {
         // println!("execing return am batch_id {:?} func_id {:?} num_reqs {:?}",batch_id,func_id,num_reqs);
         let mut index = 0;
-        let serialized_size = crate::serialized_size(&0usize);
+        let serialized_size = crate::serialized_size(&0usize, false,);
         // let team_hash: team.team.remote_ptr_addr as u64;
         let cnt = if let Some(reqs) = self.txed_ams.lock().get_mut(&batch_id) {
             let mut reqs = reqs.lock();
@@ -1060,7 +1077,7 @@ impl RegisteredActiveMessages {
                 // while index < data_slice.len(){
                 // println!("index {:?} len {:?}",index,data_slice.len());
                 let batch_req_id: usize =
-                    crate::deserialize(&data_slice[index..(index + serialized_size)]).unwrap();
+                    crate::deserialize(&data_slice[index..(index + serialized_size)], false,).unwrap();
                 index += serialized_size;
                 let func =
                     AMS_EXECS.get(&(func_id)).unwrap()(&data_slice[index..], team.team.team_pe);
@@ -1099,7 +1116,7 @@ impl RegisteredActiveMessages {
                 // while index < data_slice.len(){
                 // println!("index {:?} len {:?}",index,data_slice.len());
                 let req_id: usize =
-                    crate::deserialize(&data_slice[index..(index + serialized_size)]).unwrap();
+                    crate::deserialize(&data_slice[index..(index + serialized_size)], false,).unwrap();
                 index += serialized_size;
                 let func =
                     AMS_EXECS.get(&(func_id)).unwrap()(&data_slice[index..], team.team.team_pe);
@@ -1144,13 +1161,13 @@ impl RegisteredActiveMessages {
     ) {
         let mut index = 0;
         // println!("data_slice {:?}",data_slice);
-        let serialized_size = crate::serialized_size(&0usize);
+        let serialized_size = crate::serialized_size(&0usize, false,);
         let cnt = if let Some(reqs) = self.txed_ams.lock().get_mut(&batch_id) {
             let mut reqs = reqs.lock();
             // println!("batch_id: {:?} reqs {:?} ds {:?}",batch_id,reqs,data_slice);
             while index < data_slice.len() {
                 let batch_req_id: usize =
-                    crate::deserialize(&data_slice[index..(index + serialized_size)]).unwrap();
+                    crate::deserialize(&data_slice[index..(index + serialized_size)], false,).unwrap();
                 index += serialized_size;
                 let (req_id, cnt) = reqs.get(&batch_req_id).expect("id not found");
                 // println!("batch_req_id  {:?} req_id {:?} ",batch_req_id,req_id);
@@ -1208,11 +1225,11 @@ impl RegisteredActiveMessages {
     fn process_unit_return(&self, src: u16, data_slice: &[u8], team: Pin<Arc<LamellarTeamRT>>) {
         // println!("processing returns {:?}",batch_id);
         let mut index = 0;
-        let serialized_size = crate::serialized_size(&0usize);
+        let serialized_size = crate::serialized_size(&0usize, false,);
         // println!("data_slice {:?}",data_slice);
         while index < data_slice.len() {
             let req_id: usize =
-                crate::deserialize(&data_slice[index..(index + serialized_size)]).unwrap();
+                crate::deserialize(&data_slice[index..(index + serialized_size)], false,).unwrap();
             // println!("completed req {:?}",req_id);
             ActiveMessageEngine::send_data_to_user_handle(
                 req_id,
@@ -1228,11 +1245,11 @@ impl RegisteredActiveMessages {
         // println!("processing returns {:?}",batch_id);
         let data_slice = ser_data.data_as_bytes();
         let mut index = 0;
-        let serialized_size = crate::serialized_size(&(0usize, 0usize));
+        let serialized_size = crate::serialized_size(&(0usize, 0usize), false,);
         // println!("data_slice {:?}",data_slice);
         while index < data_slice.len() {
             let (req_id, data_size): (usize, usize) =
-                crate::deserialize(&data_slice[index..(index + serialized_size)]).unwrap();
+                crate::deserialize(&data_slice[index..(index + serialized_size)], false,).unwrap();
             index += serialized_size;
             let sub_data = ser_data.sub_data(index, index + data_size);
             ActiveMessageEngine::send_data_to_user_handle(
@@ -1255,13 +1272,13 @@ impl RegisteredActiveMessages {
         let data_slice = ser_data.data_as_bytes();
         let mut index = 0;
         // println!("data_slice {:?}",data_slice);
-        let serialized_size = crate::serialized_size(&(0usize, 0usize));
+        let serialized_size = crate::serialized_size(&(0usize, 0usize), false,);
         let cnt = if let Some(reqs) = self.txed_ams.lock().get_mut(&batch_id) {
             let mut reqs = reqs.lock();
             while index < data_slice.len() {
                 // println!("index {:?} len {:?} ss {:?}",index,data_slice.len(),serialized_size);
                 let (batch_req_id, data_size): (usize, usize) =
-                    crate::deserialize(&data_slice[index..(index + serialized_size)]).unwrap();
+                    crate::deserialize(&data_slice[index..(index + serialized_size)], false,).unwrap();
                 // println!("batch_req_id data_size {:?}  {:?}",batch_req_id,data_size);
                 index += serialized_size;
                 let sub_data = ser_data.sub_data(index, index + data_size);

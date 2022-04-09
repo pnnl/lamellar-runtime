@@ -1,6 +1,7 @@
 use crate::array::{LamellarArrayInput, LamellarRead, LamellarWrite, MyFrom};
 use crate::lamellae::{AllocationType, Backend, Lamellae, LamellaeComm, LamellaeRDMA};
 use crate::lamellar_team::LamellarTeamRT;
+// use crate::active_messaging::AmDist;
 use core::marker::PhantomData;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
@@ -41,6 +42,18 @@ pub trait Dist: Send + Sync + Copy + std::fmt::Debug + 'static {}
 pub enum LamellarMemoryRegion<T: Dist> {
     Shared(SharedMemoryRegion<T>),
     Local(LocalMemoryRegion<T>),
+}
+
+impl<T: Dist + serde::Serialize> LamellarMemoryRegion<T>{
+    pub(crate) fn serialize_local_data<S>(mr: &LamellarMemoryRegion<T>, s: S) -> Result<S::Ok, S::Error> 
+    where 
+        S: serde::Serializer,
+    {
+        match mr {
+            LamellarMemoryRegion::Shared(mr) => mr.serialize_local_data(s),
+            LamellarMemoryRegion::Local(mr) => mr.serialize_local_data(s),
+        }
+    }
 }
 
 impl<T: Dist> crate::DarcSerde for LamellarMemoryRegion<T> {

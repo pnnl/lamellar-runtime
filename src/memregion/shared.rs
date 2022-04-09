@@ -2,11 +2,13 @@ use crate::array::{LamellarRead, LamellarWrite};
 use crate::darc::Darc;
 use crate::lamellae::AllocationType;
 use crate::memregion::*;
+// use crate::active_messaging::AmDist;
 use core::marker::PhantomData;
 #[cfg(feature = "enable-prof")]
 use lamellar_prof::*;
 use std::pin::Pin;
 use std::sync::Arc;
+use serde::ser::Serialize;
 
 use std::ops::Bound;
 
@@ -112,6 +114,15 @@ impl<T: Dist> SharedMemoryRegion<T> {
     }
     pub fn as_mut_ptr(&self) -> MemResult<*mut T> {
         RegisteredMemoryRegion::<T>::as_mut_ptr(self)
+    }
+}
+
+impl <T: Dist + serde::Serialize>  SharedMemoryRegion<T>{
+    pub(crate) fn serialize_local_data<S>(&self, s: S) -> Result<S::Ok, S::Error> 
+    where 
+        S: serde::Serializer,
+    {
+        self.as_slice().unwrap().serialize(s)
     }
 }
 //account for subregion stuff

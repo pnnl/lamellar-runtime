@@ -162,10 +162,11 @@ impl Ser for Rofi {
         obj: &T,
     ) -> Result<SerializedData, anyhow::Error> {
         let header_size = std::mem::size_of::<Option<SerializeHeader>>();
-        let data_size = bincode::serialized_size(obj)? as usize;
+        // let data_size = bincode::serialized_size(obj)? as usize;
+        let data_size = crate::serialized_size(obj,true) as usize;
         let ser_data = RofiData::new(self.rofi_comm.clone(), header_size + data_size)?;
-        bincode::serialize_into(ser_data.header_as_bytes(), &header)?;
-        bincode::serialize_into(ser_data.data_as_bytes(), obj)?;
+        crate::serialize_into(ser_data.header_as_bytes(), &header,false)?; //we want header to be a fixed size
+        crate::serialize_into(ser_data.data_as_bytes(), obj,true)?;
         Ok(SerializedData::RofiData(ser_data))
     }
     fn serialize_header(
@@ -175,7 +176,8 @@ impl Ser for Rofi {
     ) -> Result<SerializedData, anyhow::Error> {
         let header_size = std::mem::size_of::<Option<SerializeHeader>>();
         let ser_data = RofiData::new(self.rofi_comm.clone(), header_size + serialized_size)?;
-        bincode::serialize_into(ser_data.header_as_bytes(), &header)?;
+        // bincode::serialize_into(ser_data.header_as_bytes(), &header)?;
+        crate::serialize_into(ser_data.header_as_bytes(), &header,false)?; //we want header to be a fixed size
         Ok(SerializedData::RofiData(ser_data))
     }
 }

@@ -5,6 +5,7 @@ use crate::memregion::*;
 use crate::IdError;
 use crate::LamellarTeamRT;
 use crate::LAMELLAES;
+// use crate::active_messaging::AmDist;
 
 use core::marker::PhantomData;
 use parking_lot::Mutex;
@@ -13,6 +14,8 @@ use std::ops::Bound;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
+use serde::ser::Serialize;
+// use serde::ser::{Serialize, Serializer, SerializeStruct};
 
 lazy_static! {
     pub(crate) static ref ONE_SIDED_MEM_REGIONS: Mutex<HashMap<(usize, usize), Arc<MemRegionHandleInner>>> =
@@ -30,6 +33,9 @@ struct NetMemRegionHandle {
     my_id: (usize, usize),
     parent_id: (usize, usize),
 }
+
+
+
 
 impl From<NetMemRegionHandle> for Arc<MemRegionHandleInner> {
     fn from(net_handle: NetMemRegionHandle) -> Self {
@@ -130,7 +136,9 @@ pub(crate) mod memregion_handle_serde {
     where
         S: serde::Serializer,
     {
-        super::NetMemRegionHandle::from(inner.clone()).serialize(serializer)
+        let nethandle = super::NetMemRegionHandle::from(inner.clone());
+        // println!("nethandle {:?} {:?}",crate::serialized_size(&nethandle,false),crate::serialized_size(&nethandle,true));
+        nethandle.serialize(serializer)
     }
 
     pub(crate) fn deserialize<'de, D>(
@@ -139,6 +147,7 @@ pub(crate) mod memregion_handle_serde {
     where
         D: serde::Deserializer<'de>,
     {
+        // println!("in deserialize memregion_handle_serde");
         let net_handle: super::NetMemRegionHandle = serde::Deserialize::deserialize(deserializer)?;
         Ok(net_handle.into())
     }
@@ -418,6 +427,16 @@ impl<T: Dist> LocalMemoryRegion<T> {
 
     pub fn iter(&self) -> std::slice::Iter<'_, T> {
         self.as_slice().unwrap().iter()
+    }
+    
+}
+
+impl <T: Dist + serde::Serialize> LocalMemoryRegion<T>{
+    pub(crate) fn serialize_local_data<S>(&self, s: S) -> Result<S::Ok, S::Error> 
+    where 
+        S: serde::Serializer,
+    {
+       self.as_slice().unwrap().serialize(s)
     }
 }
 

@@ -284,6 +284,7 @@ struct NativeAtomicRemotePutAm {
     array: NativeAtomicByteArray, //inner of the indices we need to place data into
     start_index: usize,
     len: usize,
+    #[serde(with = "serde_bytes")]
     data: Vec<u8>,
 }
 

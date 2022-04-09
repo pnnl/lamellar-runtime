@@ -85,6 +85,15 @@ impl<'a, T: Dist> LocalLockAtomicLocalData<'a, T> {
     }
 }
 
+impl<'a, T: Dist + serde::Serialize> serde::Serialize for LocalLockAtomicLocalData<'a, T> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        self.data.serialize(serializer)
+    }
+}
+
 impl<'a, T: Dist> Iterator for LocalLockAtomicLocalData<'a, T> {
     type Item = &'a T;
     fn next(&mut self) -> Option<Self::Item> {

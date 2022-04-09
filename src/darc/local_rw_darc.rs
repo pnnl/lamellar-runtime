@@ -203,15 +203,19 @@ pub fn localrw_serialize2<S, T>(
 where
     S: Serializer,
 {
-    __NetworkDarc::<T>::from(localrw).serialize(s)
+    // __NetworkDarc::<T>::from(localrw).serialize(s)
+    let ndarc = __NetworkDarc::<T>::from(localrw);
+    // println!("ndarc size {:?} {:?}",crate::serialized_size(&ndarc,false),crate::serialized_size(&ndarc,true));
+    ndarc.serialize(s)
 }
 
 pub fn localrw_from_ndarc<'de, D, T>(deserializer: D) -> Result<LocalRwDarc<T>, D::Error>
 where
     D: Deserializer<'de>,
 {
+    // println!("lrwdarc1 from net darc");
     let ndarc: __NetworkDarc<T> = Deserialize::deserialize(deserializer)?;
-    // println!("lrwdarc from net darc");
+    
     let rwdarc = LocalRwDarc {
         darc: Darc::from(ndarc),
     };
@@ -226,20 +230,21 @@ pub fn localrw_from_ndarc2<'de, D, T>(
 where
     D: Deserializer<'de>,
 {
+    // println!("lrwdarc2 from net darc");
     let ndarc: __NetworkDarc<T> = Deserialize::deserialize(deserializer)?;
-    // println!("lrwdarc from net darc");
+    
     // let rwdarc = LocalRwDarc {
     //     darc: ,
     // };
     // println!("lrwdarc from net darc");
-    // rwdarc.print();
+    // println!("ndarc {:?}",ndarc);
     Ok(Darc::from(ndarc))
 }
 
 impl<T> From<Darc<Arc<RwLock<Box<T>>>>> for __NetworkDarc<T> {
     fn from(darc: Darc<Arc<RwLock<Box<T>>>>) -> Self {
         // println!("rwdarc to net darc");
-        // darc.print();
+        darc.print();
         let team = &darc.inner().team();
         let ndarc = __NetworkDarc {
             inner_addr: darc.inner as *const u8 as usize,

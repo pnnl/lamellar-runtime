@@ -166,6 +166,15 @@ impl<T: Dist + 'static> UnsafeArray<T> {
         self.inner.size
     }
 
+    pub fn calc_pe_and_offset(&self, i: usize) -> (usize,usize){
+        let pe = self
+                .inner
+            .pe_for_dist_index(i)
+            .expect("index out of bounds");
+        let local_index = self.inner.pe_offset_for_dist_index(pe, i).unwrap(); //calculated pe above
+        (pe,local_index)
+    }
+
     pub unsafe fn local_as_slice(&self) -> &[T] {
         self.local_as_mut_slice()
     }

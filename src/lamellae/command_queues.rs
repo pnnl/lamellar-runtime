@@ -892,9 +892,9 @@ impl InnerCQ {
         //     ser_data.print();
         // }
         self.get_serialized_data(src, cmd, &ser_data).await;
-        // println!("received data {:?}",ser_data.header_and_data_as_bytes());
+        // println!("received data {:?}",ser_data.header_and_data_as_bytes()[0..10]);
         self.recv_cnt.fetch_add(1, Ordering::SeqCst);
-        // println!("received: {:?} {:?} {:?} cmd: {:?}",ser_data.relative_addr,cmd.dsize,ser_data.len,cmd);//,ser_data.header_and_data_as_bytes());
+        // println!("received: {:?} {:?} cmd: {:?} {:?}",cmd.dsize,ser_data.len(),cmd,&ser_data.header_and_data_as_bytes()[0..20]);
         // SerializedData::RofiData(ser_data)
         ser_data
     }
@@ -1072,7 +1072,7 @@ impl CommandQueue {
                 // let hash = calc_hash(data.relative_addr + self.comm.base_addr(), data.len);
                 let hash = calc_hash(data.relative_addr, data.len);
 
-                // println!("send_data: {:?} {:?} {:?}",data.relative_addr,data.len,hash);
+                // println!("send_data: {:?} {:?} {:?} {:?}",data.relative_addr,data.len,hash ,&data.header_and_data_as_bytes()[0..20]);
                 data.increment_cnt(); //or we could implement something like an into_raw here...
                                       // println!("sending data {:?}",data.header_and_data_as_bytes());
                 self.cq.send(data.relative_addr, data.len, dst, hash).await;

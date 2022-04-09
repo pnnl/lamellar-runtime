@@ -717,6 +717,12 @@ pub struct __NetworkDarc<T> {
     phantom: PhantomData<T>,
 }
 
+impl <T> std::fmt::Debug for __NetworkDarc<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "NetworkDarc {{ inner_addr: {:x}, backend: {:?}, orig_world_pe: {:?}, orig_team_pe: {:?} }}", self.inner_addr, self.backend, self.orig_world_pe, self.orig_team_pe)
+    }
+}
+
 impl<T> From<Darc<T>> for __NetworkDarc<T> {
     fn from(darc: Darc<T>) -> Self {
         // println!("net darc from darc");

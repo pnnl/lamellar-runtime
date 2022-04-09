@@ -663,10 +663,10 @@ impl SerializedDataOps for RofiData {
 
 impl Des for RofiData {
     fn deserialize_header(&self) -> Option<SerializeHeader> {
-        bincode::deserialize(self.header_as_bytes()).unwrap()
+        crate::deserialize(self.header_as_bytes(),false).unwrap()
     }
     fn deserialize_data<T: serde::de::DeserializeOwned>(&self) -> Result<T, anyhow::Error> {
-        Ok(bincode::deserialize(self.data_as_bytes())?)
+        Ok(crate::deserialize(self.data_as_bytes(),true)?)
     }
     fn data_as_bytes(&self) -> &mut [u8] {
         unsafe { std::slice::from_raw_parts_mut((self.data_start) as *mut u8, self.data_len) }

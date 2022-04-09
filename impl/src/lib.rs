@@ -143,21 +143,37 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_type: AmType) -> 
     let mut exec_fn =
         get_impl_method("exec".to_string(), &input.items).expect("unable to extract exec body");
     let func_span = exec_fn.span();
-    let last_expr = if let Some(stmt) = exec_fn.stmts.pop() {
+    let (last_expr,vec_u8) = if let Some(stmt) = exec_fn.stmts.pop() {
         let last_stmt = replace_lamellar_dsl(stmt.clone());
         match am_type {
-            AmType::NoReturn => quote_spanned! {last_stmt.span()=>
-                #last_stmt
-                #lamellar::LamellarReturn::Unit
+            AmType::NoReturn => {
+                (quote_spanned! {last_stmt.span()=>
+                    #last_stmt
+                    #lamellar::LamellarReturn::Unit
+                },false)
             },
-            AmType::ReturnData(_) | AmType::ReturnAm(_) => {
+            AmType::ReturnData(ref ret) => {
+                let vec_u8 = match ret{
+                    syn::Type::Array(a) => {
+                         match &*a.elem{
+                            syn::Type::Path(type_path) if type_path.clone().into_token_stream().to_string() == "u8" => true,
+                            _ => false,
+                        }
+                    },
+                    _ => false,
+                };
                 let temp = get_expr(&last_stmt)
                     .expect("failed to get exec return value (try removing the last \";\")");
-                quote_spanned! {last_stmt.span()=> #temp}
+                (quote_spanned! {last_stmt.span()=> #temp},vec_u8)
+            }
+            AmType::ReturnAm(_) => {
+                let temp = get_expr(&last_stmt)
+                    .expect("failed to get exec return value (try removing the last \";\")");
+                (quote_spanned! {last_stmt.span()=> #temp},false)
             }
         }
     } else {
-        quote_spanned! {func_span=> #lamellar::LamellarReturn::Unit }
+        (quote_spanned! {func_span=> #lamellar::LamellarReturn::Unit },false)
     };
 
     let mut temp = quote_spanned! {func_span=>};
@@ -199,22 +215,24 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_type: AmType) -> 
             impl #impl_generics #lamellar::LamellarSerde for #orig_name #ty_generics #where_clause {
                 fn serialized_size(&self)->usize{
                     // println!("serialized size: {:?}", #lamellar::serialized_size(self));
-                    #lamellar::serialized_size(self)
+                    #lamellar::serialized_size(self,true)
                 }
                 fn serialize_into(&self,buf: &mut [u8]){
                     // println!("buf_len: {:?} serialized size: {:?}",buf.len(), #lamellar::serialized_size(self));
-                    #lamellar::serialize_into(buf,self).unwrap();
+                    #lamellar::serialize_into(buf,self,true).unwrap();
+                    // println!("buf_len: {:?} serialized size: {:?} buf: {:?}",buf.len(), #lamellar::serialized_size(self,true), buf);
+
                 }
             }
 
             impl #impl_generics #lamellar::LamellarResultSerde for #orig_name #ty_generics #where_clause {
                 fn serialized_result_size(&self,result: &Box<dyn std::any::Any + Send + Sync>)->usize{
                     let result  = result.downcast_ref::<#ret_type>().unwrap();
-                    #lamellar::serialized_size(result)
+                    #lamellar::serialized_size(result,true)
                 }
                 fn serialize_result_into(&self,buf: &mut [u8],result: &Box<dyn std::any::Any + Send + Sync>){
                     let result  = result.downcast_ref::<#ret_type>().unwrap();
-                    #lamellar::serialize_into(buf,result).unwrap();
+                    #lamellar::serialize_into(buf,result,true).unwrap();
                 }
             }
         });
@@ -225,11 +243,17 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_type: AmType) -> 
             #last_expr
         },
         AmType::ReturnData(_) => {
-            quote! {
+            let remote_last_expr = if vec_u8{
+                quote!{ ByteBuf::from(#last_expr) }
+            }
+            else{
+                quote!{ #last_expr }
+            };
+            quote! {                
                 let ret = match __local{ //should probably just separate these into exec_local exec_remote to get rid of a conditional...
                     true => #lamellar::LamellarReturn::LocalData(Box::new(#last_expr)),
                     false => #lamellar::LamellarReturn::RemoteData(std::sync::Arc::new (#ret_struct{
-                        val: #last_expr
+                        val: #remote_last_expr
                     })),
                 };
                 ret
@@ -273,17 +297,29 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_type: AmType) -> 
     };
 
     if let AmType::ReturnData(_) = am_type {
-        expanded.extend(quote_spanned! {temp.span()=>
-            struct #ret_struct{
-                val: #ret_type
+
+        let the_ret_struct = if vec_u8{
+            quote!{
+                struct #ret_struct{
+                    val: serde_bytes::ByteBuf
+                }
             }
+        } else {
+            quote!{
+                struct #ret_struct{
+                    val: #ret_type
+                }
+            }
+        };
+        expanded.extend(quote_spanned! {temp.span()=>
+            #the_ret_struct
 
             impl #generics #lamellar::LamellarSerde for #ret_struct {
                 fn serialized_size(&self)->usize{
-                    #lamellar::serialized_size(&self.val)
+                    #lamellar::serialized_size(&self.val,true)
                 }
                 fn serialize_into(&self,buf: &mut [u8]){
-                    #lamellar::serialize_into(buf,&self.val).unwrap();
+                    #lamellar::serialize_into(buf,&self.val,true).unwrap();
                 }
             }
         });
@@ -293,7 +329,8 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_type: AmType) -> 
         expanded.extend( quote_spanned! {temp.span()=>
             impl #impl_generics #lamellar::RemoteActiveMessage for #orig_name #ty_generics #where_clause {}
             fn #orig_name_unpack #impl_generics (bytes: &[u8], cur_pe: Result<usize,#lamellar::IdError>) -> std::sync::Arc<dyn #lamellar::RemoteActiveMessage + Send + Sync>  {
-                let __lamellar_data: std::sync::Arc<#orig_name #ty_generics> = std::sync::Arc::new(#lamellar::deserialize(&bytes).unwrap());
+                // println!("bytes len {:?} bytes {:?}",bytes.len(),bytes);
+                let __lamellar_data: std::sync::Arc<#orig_name #ty_generics> = std::sync::Arc::new(#lamellar::deserialize(&bytes,true).unwrap());
                 <#orig_name #ty_generics as #lamellar::DarcSerde>::des(&__lamellar_data,cur_pe);
                 __lamellar_data
             }
@@ -1163,10 +1200,24 @@ fn create_buf_ops(
     let dist_am_buf_name = quote::format_ident!("{}_{}_am_buf", array_type, typeident);
     let reg_name = quote::format_ident!("{}OpBuf", array_type);
 
+    let inner_op=quote!{
+        let index = *index;
+        let val = *val;
+        #lock //this will get dropped at end of loop
+        let orig = #load;
+        // println!("before op: {:?} index: {:?} val {:?} fetch_index {:?} orig {:?}",op,index,val,fetch_index,orig);
+
+        match op{
+        # match_stmts
+        _ => {panic!("shouldnt happen {:?}",op)}
+        }
+    };
+
     expanded.extend(quote! {
         struct #buf_op_name{
             data: #lamellar::array::#array_type<#typeident>,
-            ops: Mutex<Vec<(ArrayOpCmd,Vec<(usize,#typeident)>)>>,
+            // ops: Mutex<Vec<(ArrayOpCmd,Vec<(usize,#typeident)>)>>,
+            ops: Mutex<Vec<(ArrayOpCmd,#lamellar::array::OpAmInputToValue<#typeident>)>>,
             cur_len: AtomicUsize, //this could probably just be a normal usize cause we only update it after we get ops lock
             complete: RwLock<Arc<AtomicBool>>,
             result_cnt:  RwLock<Arc<AtomicUsize>>,
@@ -1176,58 +1227,30 @@ fn create_buf_ops(
         struct #am_buf_name{
             // wait: Darc<AtomicUsize>,
             data: #lamellar::array::#array_type<#typeident>,
-            ops: Vec<(ArrayOpCmd,Vec<(usize,#typeident)>)>,
+            // ops: Vec<(ArrayOpCmd,Vec<(usize,#typeident)>)>,
+            ops: Vec<(ArrayOpCmd,#lamellar::array::OpAmInputToValue<#typeident>)>,
             num_fetch_ops: usize,
             orig_pe: usize,
         }
         impl #lamellar::array::BufferOp for #buf_op_name{
-            // fn add_op(&self, op: ArrayOpCmd, index: usize, val: *const u8) -> (bool,Arc<AtomicBool>){
-            //     let val = unsafe{*(val as *const #typeident)};
-            //     let mut buf = self.ops.lock();
-            //     let first = buf.len() == 0;
-            //     buf.push((op,index,val));
-            //     (first,self.complete.read().clone())
-            // }
-            fn add_ops(&self, op: ArrayOpCmd, op_data: *const u8,len: usize) -> (bool,Arc<AtomicBool>){
-                let slice_ptr = op_data as *const (usize,usize,#typeident);
-                let slice = unsafe {std::slice::from_raw_parts(slice_ptr,len)};
-                // let val = unsafe{*(val as *const #typeident)};
-                let mut ops = vec![];
-                for (_,i,v) in slice{
-                    ops.push((*i,*v));
-                }
+            fn add_ops(&self, op: ArrayOpCmd, op_data_ptr: *const u8) -> (bool,Arc<AtomicBool>){
+                let op_data = unsafe{(&*(op_data_ptr as *const #lamellar::array::InputToValue<'_,#typeident>)).as_op_am_input()};
                 let mut buf = self.ops.lock();
                 let first = buf.len() == 0;
-                let temp = self.cur_len.fetch_add(ops.len(),Ordering::SeqCst);
-                // println!("temp {:?} ops len{:?} cur_len {:?}",temp,ops.len(),self.cur_len.load(Ordering::SeqCst));
-                buf.push((op,ops));
+                let _temp = self.cur_len.fetch_add(op_data.len(),Ordering::SeqCst);
+                buf.push((op,op_data));
                 (first,self.complete.read().clone())
             }
-
-            // fn add_fetch_op(&self, op: ArrayOpCmd, index: usize, val: *const u8) -> (bool,Arc<AtomicBool>, usize,Arc<RwLock<Vec<u8>>>){
-            //     let val = unsafe{*(val as *const #typeident)};
-            //     let mut buf = self.ops.lock();
-            //     let first = buf.len() == 0;
-            //     buf.push((op,index,val));
-            //     let res_index = self.result_cnt.read().fetch_add(1,Ordering::SeqCst);
-
-            //     (first,self.complete.read().clone(),res_index,self.results.read().clone())
-            // }
-            fn add_fetch_ops(&self, pe: usize, op: ArrayOpCmd, op_data: *const u8, len: usize, res_map: OpResults) -> (bool,Arc<AtomicBool>,Option<OpResultIndices>){
-                // let val = unsafe{*(val as *const #typeident)};
-                let slice_ptr = op_data as *const (usize,usize,#typeident);
-                let slice = unsafe {std::slice::from_raw_parts(slice_ptr,len)};
-                let mut res_indicies = vec![];//res_indicies.lock();
-                let mut ops = vec![];
+            fn add_fetch_ops(&self, pe: usize, op: ArrayOpCmd, op_data_ptr: *const u8, req_ids: &Vec<usize>, res_map: OpResults) -> (bool,Arc<AtomicBool>,Option<OpResultIndices>){
+                let op_data = unsafe{(&*(op_data_ptr as *const #lamellar::array::InputToValue<'_,#typeident>)).as_op_am_input()};
+                let mut res_indicies = vec![];
                 let mut buf = self.ops.lock();
-                for (rid, i,v) in slice{
-                    ops.push((*i,*v));
+                for rid in req_ids{
                     res_indicies.push((*rid,self.result_cnt.read().fetch_add(1,Ordering::SeqCst)));
                 }
                 let first = buf.len() == 0;
-                let temp = self.cur_len.fetch_add(ops.len(),Ordering::SeqCst);
-                // println!("temp {:?} ops len{:?} cur_len {:?}",temp,ops.len(),self.cur_len.load(Ordering::SeqCst));
-                buf.push((op,ops));
+                let _temp = self.cur_len.fetch_add(op_data.len(),Ordering::SeqCst);
+                buf.push((op,op_data));
                 res_map.insert(pe,self.results.read().clone());
                 (first,self.complete.read().clone(),Some(res_indicies))
             }
@@ -1252,10 +1275,13 @@ fn create_buf_ops(
 
                 let mut cur_size = 0;
                 let mut op_i = ops.len() as isize-1;
+                // let mut inner_i = ops[op_i as usize].1[0].len() as isize-1;
+                // Vec<(ArrayOpCmd,)> == op_i;
+                // Vec<(Vec<usize>,#typeident)>
                 
                 while op_i >= 0 {
-                    while op_i >= 0 && (cur_size + ops[op_i as usize].1.len() * std::mem::size_of::<(usize,#typeident)>() < 10000000) {
-                        cur_size += ops[op_i as usize].1.len() * std::mem::size_of::<(usize,#typeident)>();
+                    while op_i >= 0 && (cur_size + ops[op_i as usize].1.num_bytes() < 10000000) {
+                        cur_size += ops[op_i as usize].1.num_bytes() ;    
                         op_i -= 1isize;
                     }
                     
@@ -1304,24 +1330,45 @@ fn create_buf_ops(
                 };
                 let mut results_slice = unsafe{std::slice::from_raw_parts_mut(results_u8.as_mut_ptr() as *mut #typeident,self.num_fetch_ops)};
                 let mut fetch_index=0;
-                for (op, ops) in &self.ops{
-                    // println!("op: {:?} len {:?} {:?}",op,ops.len(),ops);
-                    for (index,val) in ops{
-                // for (op,index,val) in &self.ops{
-                        // println!("before op: {:?} index: {:?} val {:?} fetch_index {:?}",op,index,val,fetch_index);
-                        let index = *index;
-                        let val = *val;
-                        #lock //this will get dropped at end of loop
-                        let orig = #load;
-                        // println!("before op: {:?} index: {:?} val {:?} fetch_index {:?} orig {:?}",op,index,val,fetch_index,orig);
-
-                        match op{
-                        # match_stmts
-                        _ => {panic!("shouldnt happen {:?}",op)}
-                        }
-                        // println!("done op: {:?} index: {:?} val {:?} fetch_index {:?}",op,index,val,fetch_index);
-                        
+                for (op, ops) in &self.ops { //(ArrayOpCmd,OpAmInputToValue)
+                    match ops{
+                        OpAmInputToValue::OneToOne(index,val) => {
+                            #inner_op
+                        },
+                        OpAmInputToValue::OneToMany(index,vals) => {
+                            for val in vals{ //there maybe an optimization here where we grab the index lock outside of the loop
+                                #inner_op
+                            }
+                        },
+                        OpAmInputToValue::ManyToOne(indices,val) => {
+                            for index in indices{
+                                #inner_op
+                            }
+                        },
+                        OpAmInputToValue::ManyToMany(indices,vals) => {
+                            for (index,val) in indices.iter().zip(vals.iter()){
+                                #inner_op
+                            }
+                        },
                     }
+                // for (op, ops) in &self.ops{ //(ArrayOpCmd,Vec<(Vec<usize>,#typeident)>)
+                //     // println!("op: {:?} len {:?} {:?}",op,ops.len(),ops);
+                //     for (idxs,val) in ops{ // Vec<(Vec<usize>,#typeident)>
+                //         for index in idxs{ //Vec<usize>
+                //             // println!("before op: {:?} index: {:?} val {:?} fetch_index {:?}",op,index,val,fetch_index);
+                //             let index = *index;
+                //             let val = *val;
+                //             #lock //this will get dropped at end of loop
+                //             let orig = #load;
+                //             // println!("before op: {:?} index: {:?} val {:?} fetch_index {:?} orig {:?}",op,index,val,fetch_index,orig);
+
+                //             match op{
+                //             # match_stmts
+                //             _ => {panic!("shouldnt happen {:?}",op)}
+                //             }
+                //             // println!("done op: {:?} index: {:?} val {:?} fetch_index {:?}",op,index,val,fetch_index);
+                //         }
+                //     }
                 }
                 // println!("buff ops exec: {:?} {:?} {:?}",results_u8.len(),u8_len,self.num_fetch_ops);
                 // println!("results {:?}",results_slice);

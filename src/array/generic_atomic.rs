@@ -15,6 +15,7 @@ use crate::lamellar_team::{IntoLamellarTeam, LamellarTeamRT};
 use crate::memregion::Dist;
 use parking_lot::{Mutex, MutexGuard};
 use std::any::TypeId;
+use serde::ser::SerializeSeq;
 // use std::ops::{Deref, DerefMut};
 
 use std::ops::{AddAssign, BitAndAssign, BitOrAssign, DivAssign, MulAssign, SubAssign};
@@ -155,6 +156,19 @@ impl<T: Dist> GenericAtomicLocalData<T> {
             start_index: start_index,
             end_index: std::cmp::min(end_index, self.array.num_elems_local()),
         }
+    }
+}
+
+impl<T: Dist + serde::Serialize> serde::Serialize for GenericAtomicLocalData<T> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let mut s = serializer.serialize_seq(Some(self.len()))?;
+        for i in 0..self.len() {
+            s.serialize_element(&self.at(i).load())?;
+        }
+        s.end()
     }
 }
 
