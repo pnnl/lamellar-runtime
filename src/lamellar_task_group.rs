@@ -1,8 +1,7 @@
 use crate::active_messaging::*;
 use crate::lamellar_request::{InternalReq, CUR_REQ_ID};
 use crate::scheduler::SchedulerQueue;
-use crate::LamellarTeam;
-use crate::LamellarTeamRT;
+use crate::lamellar_team::{LamellarTeamRT,IntoLamellarTeam};
 
 use crossbeam::utils::CachePadded;
 use std::pin::Pin;
@@ -18,8 +17,8 @@ pub struct LamellarTaskGroup {
 }
 
 impl LamellarTaskGroup {
-    pub fn new(team: Arc<LamellarTeam>) -> LamellarTaskGroup {
-        let team = team.team.clone();
+    pub fn new<U: Into<IntoLamellarTeam>>(team: U) -> LamellarTaskGroup {
+        let team = team.into().team.clone();
         let (s, _r) = crossbeam::channel::unbounded();
         let counters = AMCounters::new();
         let ireq = InternalReq {
@@ -115,6 +114,34 @@ impl LamellarTaskGroup {
             None,
         )
     }
+
+    pub fn exec_am_local<F>(&self, am: F)
+    where
+        F: LamellarActiveMessage + LocalAM + Send + Sync + 'static
+    {
+        self.team.team_counters.add_send_req(1);
+        self.team.world_counters.add_send_req(1);
+        self.counters.add_send_req(1);
+        self.ireq.cnt.fetch_add(1, Ordering::SeqCst);
+        let func: LamellarArcLocalAm = Arc::new(am);
+        let world = if let Some(world) = &self.team.world {
+            world.clone()
+        } else {
+            self.team.clone()
+        };
+        self.team.scheduler.submit_req(
+            self.team.world_pe,
+            Some(self.team.world_pe),
+            ExecType::Am(Cmd::Exec),
+            self.req_id,
+            LamellarFunc::LocalAm(func),
+            self.team.lamellae.clone(),
+            world,
+            self.team.clone(),
+            self.team.remote_ptr_addr as u64,
+            None,
+        );
+    } 
 }
 
 impl Drop for LamellarTaskGroup {

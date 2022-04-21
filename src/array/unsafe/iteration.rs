@@ -64,15 +64,21 @@ impl<T: Dist> DistIteratorLauncher for UnsafeArray<T> {
             while ((worker as f64 * elems_per_thread).round() as usize) < num_elems_local {
                 let start_i = (worker as f64 * elems_per_thread).round() as usize;
                 let end_i = ((worker + 1) as f64 * elems_per_thread).round() as usize;
-                self.inner.data.team.exec_am_local_tg(
-                    ForEach {
-                        op: op.clone(),
-                        data: iter.clone(),
-                        start_i: start_i,
-                        end_i: end_i,
-                    },
-                    Some(self.inner.data.array_counters.clone()),
-                );
+                self.inner.data.task_group.exec_am_local(ForEach {
+                    op: op.clone(),
+                    data: iter.clone(),
+                    start_i: start_i,
+                    end_i: end_i,
+                },);
+                // self.inner.data.team.exec_am_local_tg(
+                //     ForEach {
+                //         op: op.clone(),
+                //         data: iter.clone(),
+                //         start_i: start_i,
+                //         end_i: end_i,
+                //     },
+                //     Some(self.inner.data.array_counters.clone()),
+                // );
                 worker += 1;
             }
         }
@@ -95,15 +101,24 @@ impl<T: Dist> DistIteratorLauncher for UnsafeArray<T> {
             while ((worker as f64 * elems_per_thread).round() as usize) < num_elems_local {
                 let start_i = (worker as f64 * elems_per_thread).round() as usize;
                 let end_i = ((worker + 1) as f64 * elems_per_thread).round() as usize;
-                self.inner.data.team.exec_am_local_tg(
+                self.inner.data.task_group.exec_am_local(
                     ForEachAsync {
                         op: op.clone(),
                         data: iter.clone(),
                         start_i: start_i,
                         end_i: end_i,
                     },
-                    Some(self.inner.data.array_counters.clone()),
+                    // Some(self.inner.data.array_counters.clone()),
                 );
+                // self.inner.data.team.exec_am_local_tg(
+                //     ForEachAsync {
+                //         op: op.clone(),
+                //         data: iter.clone(),
+                //         start_i: start_i,
+                //         end_i: end_i,
+                //     },
+                //     Some(self.inner.data.array_counters.clone()),
+                // );
                 worker += 1;
             }
         }

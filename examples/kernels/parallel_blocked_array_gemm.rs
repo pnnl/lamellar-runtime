@@ -1,4 +1,5 @@
 use lamellar::array::{DistributedIterator, Distribution, SerialIterator, UnsafeArray};
+use lamellar::Dist;
 /// ----------------Lamellar Parallel Blocked Array GEMM---------------------------------------------------
 /// This performs a distributed GEMM by partitioning the global matrices (stored in LamellarArrya)
 /// into sub matrices, and then performing GEMMS on the sub matrices.
@@ -14,6 +15,12 @@ use parking_lot::Mutex;
 use std::sync::Arc;
 lazy_static! {
     static ref LOCK: Mutex<()> = Mutex::new(());
+}
+
+#[derive(Dist,Debug,Copy,Clone)]
+struct Block{
+    j: usize,
+    k: usize,
 }
 
 fn main() {
@@ -62,39 +69,48 @@ fn main() {
     let n_blks = n / blocksize; //a blk col b blk col(because b is col major)
     let p_blks = p / blocksize; // b blk row(b is col major) c blk col
 
+
+    println!{"n: {}, m: {}, p: {}, blocksize: {}, m_blks: {}, n_blks: {}, p_blks: {}, m_blks_pe: {}, num_gops: {}", n, m, p, blocksize, m_blks, n_blks, p_blks, m_blks_pe, num_gops};
+    
     // this is a "hack" until we support something like (0..n_blks).dist_iter()
     // we construct a global array where each pe will contain the sequence (0..n_blks)
     // we can then call dist_iter() on this array to iterate over the range in parallel on each PE
-    let nblks_array = UnsafeArray::new(&world, n_blks * num_pes, Distribution::Block);
+    let nblks_array = UnsafeArray::<Block>::new(&world, (n_blks * n_blks) * num_pes, Distribution::Block);
     nblks_array
         .dist_iter_mut()
         .enumerate()
-        .for_each(move |(i, x)| *x = i % n_blks);
+        .for_each(move |(g_i, x)| {
+            let i = g_i % (n_blks * n_blks);
+            x.j = i / n_blks;
+            x.k = i % n_blks
+        });
 
     let start = std::time::Instant::now();
     let a = a.clone();
     let b = b.clone();
     let c_clone = c.clone();
-    nblks_array.dist_iter().for_each(move |k_blk| {
+    nblks_array.dist_iter().for_each(move |block| {
         //iterate over the submatrix cols of b, use dist_iter() so that we can launch transfers in parallel
-        for j_blk in 0..p_blks {
+        // for j_blk in 0..p_blks {
             // iterate over submatrix rows of b
-
+            let j_blk = block.j;
+            let k_blk = block.k;
+            // println!("j_blk: {}, k_blk: {}", j_blk, k_blk);
             let b_block = b
                 .ser_iter() // SerialIterator (each pe will iterate through entirety of b)
                 .copied_chunks(blocksize) //chunks columns by blocksize  -- manages efficent transfer and placement of data into a local memory region
-                .ignore(*k_blk * n_blks * blocksize + j_blk) // skip previously transfered submatrices
+                .ignore(k_blk * n_blks * blocksize + j_blk) // skip previously transfered submatrices
                 .step_by(n_blks) //grab chunk from next column in submatrix
+                // .buffered(100)
                 .into_iter() // convert to normal rust iterator
                 .take(blocksize) // we only need to take blocksize columns
                 .collect::<Vec<_>>(); //gather local memory regions containing each columns data
 
             //need to store the submatrix in a contiguous memory segment for use with the MatrixMultiply library
             let mut b_block_vec = vec![0.0; blocksize * blocksize];
-            for (j, col) in b_block.iter().enumerate() {
-                for (i, elem) in col.as_slice().unwrap().iter().enumerate() {
-                    b_block_vec[j * blocksize + i] = *elem
-                }
+            for (j, col) in b_block.iter().enumerate() { //(index, LocalMemRegion)
+                let b_block_col = &mut b_block_vec[j * blocksize..(j + 1) * blocksize];
+                b_block_col.copy_from_slice(col.as_slice().unwrap());
             }
             let b_block_vec = Arc::new(b_block_vec); //we will be sharing this submatrix in multiple tasks
                                                      //--------------
@@ -103,22 +119,31 @@ fn main() {
                 // iterate of the local submatrix rows of a
                 let c = c_clone.clone();
                 let b_block_vec = b_block_vec.clone();
-                a.dist_iter() //DistributedIterator (each pe will iterate through only its local data -- in parallel)
-                    .chunks(blocksize) //chunks rows by blocksize
-                    .ignore(i_blk * m_blks * blocksize + *k_blk) //ignore previously visited submatrices
+                let a_vec =unsafe { a.local_as_slice()
+                    .chunks(blocksize)
+                    .skip(i_blk * m_blks * blocksize + k_blk) //ignore previously visited submatrices
                     .step_by(m_blks) //grab chunk from the next row in submatrix
-                    .take(blocksize) //we only need to take blocksize rows
-                    .chunks(blocksize) //currently a "hack" for Iterate::collect()
-                    .for_each(move |a_block| {
-                        //iterate over local submatrices is submatrix row "i_blk"
-                        //need to store the submatrix in a contiguous memory segment for use with the MatrixMultiply library
-                        let mut a_vec = vec![0.0; blocksize * blocksize];
-                        for (i, row) in a_block.enumerate() {
-                            for (j, elem) in row.enumerate() {
-                                a_vec[i * blocksize + j] = *elem;
-                            }
-                        }
-                        //-------------------------------
+                    .take(blocksize)//we only need to take blocksize rows
+                    .flatten() 
+                    .copied() //get values instead of references
+                    .collect::<Vec<f32>>()};
+                // a.dist_iter() //DistributedIterator (each pe will iterate through only its local data -- in parallel)
+                //     .chunks(blocksize) //chunks rows by blocksize
+                //     .ignore(i_blk * m_blks * blocksize + k_blk) //ignore previously visited submatrices
+                //     .step_by(m_blks) //grab chunk from the next row in submatrix
+                //     .take(blocksize) //we only need to take blocksize rows
+                //     .chunks(blocksize) //currently a "hack" for Iterate::collect()
+                //     .for_each(move |a_block| {
+                //         //iterate over local submatrices is submatrix row "i_blk"
+                //         //need to store the submatrix in a contiguous memory segment for use with the MatrixMultiply library
+                //         let mut a_vec = vec![0.0; blocksize * blocksize];
+                //         for (i, row) in a_block.enumerate() {
+                //             for (j, elem) in row.enumerate() {
+                //                 a_vec[i * blocksize + j] = *elem;
+                //             }
+                //         }
+                        // println!("a_vec: {:?}", a_vec);
+                        // -------------------------------
                         let mut c_vec = vec![0.0; blocksize * blocksize]; // MatrixMultiple lib stores result in a contiguous memory segment
                         unsafe {
                             sgemm(
@@ -152,9 +177,9 @@ fn main() {
                                 // c.add(row_offset+col_offset,c_vec[row*blocksize + col]); -- but some overheads are introduce from PGAS calculations performed by the runtime, and since its all local updates we can avoid them
                             }
                         }
-                    });
+                    //});
             }
-        }
+        // }
     });
     world.wait_all();
     world.barrier();
@@ -163,16 +188,11 @@ fn main() {
     if my_pe == 0 {
         println!("Elapsed: {:?}", elapsed);
         println!(
-            "blksize: {:?} elapsed {:?} Gflops: {:?}",
+            "blksize: {:?} elapsed {:?} Gflops: {:?} MBsend: {:?}",
             blocksize,
             elapsed,
             num_gops / elapsed,
+            world.MB_sent()
         );
     }
-    // c.dist_iter_mut().enumerate().for_each(|(i, x)| {
-    //     if *x != i as f32 {
-    //         println!("error {:?} {:?}", x, i);
-    //     }
-    //     *x = 0.0
-    // });
 }

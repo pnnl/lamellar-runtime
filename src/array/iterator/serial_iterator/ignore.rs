@@ -1,4 +1,6 @@
 use crate::array::iterator::serial_iterator::*;
+use crate::array::LamellarArrayRequest;
+use crate::LocalMemoryRegion;
 
 pub struct Ignore<I> {
     iter: I,
@@ -29,6 +31,15 @@ where
     }
     fn array(&self) -> Self::Array {
         self.iter.array()
+    }
+    fn item_size(&self) -> usize {
+        self.iter.item_size()
+    }
+    fn buffered_next(&mut self, mem_region: LocalMemoryRegion<u8>) -> Option<Box<dyn LamellarArrayRequest<Output = ()> + Send + Sync>>{
+        self.iter.buffered_next(mem_region)
+    }
+    fn from_mem_region(&self, mem_region: LocalMemoryRegion<u8>) -> Option<Self::Item>{
+        self.iter.from_mem_region(mem_region)
     }
 }
 

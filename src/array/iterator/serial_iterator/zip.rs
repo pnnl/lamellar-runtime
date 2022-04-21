@@ -1,4 +1,6 @@
 use crate::array::iterator::serial_iterator::*;
+use crate::array::LamellarArrayRequest;
+use crate::LocalMemoryRegion;
 
 pub struct Zip<A, B> {
     a: A,
@@ -34,6 +36,24 @@ where
     }
     fn array(&self) -> Self::Array {
         self.a.array()
+    }
+    fn item_size(&self) -> usize {
+        self.a.item_size()+self.b.item_size()
+    }
+    fn buffered_next(&mut self, mem_region: LocalMemoryRegion<u8>) -> Option<Box<dyn LamellarArrayRequest<Output = ()> + Send + Sync>>{
+        let a_sub_region = mem_region.sub_region(0..self.a.item_size());
+        let a = self.a.buffered_next(a_sub_region)?;
+        let b_sub_region  = mem_region.sub_region(self.a.item_size()..self.a.item_size()+self.b.item_size());
+
+        let b = self.b.buffered_next(b_sub_region)?;
+        Some(b) //TODO create an LamellarIterRequest that would poll both reqs 
+    }
+    fn from_mem_region(&self, mem_region: LocalMemoryRegion<u8>) -> Option<Self::Item>{
+        let a_sub_region = mem_region.sub_region(0..self.a.item_size());
+        let a =self.a.from_mem_region(a_sub_region)?;
+        let b_sub_region = mem_region.sub_region(self.a.item_size()..self.a.item_size()+self.b.item_size());
+        let b = self.b.from_mem_region(b_sub_region)?;
+        Some((a,b))
     }
 }
 

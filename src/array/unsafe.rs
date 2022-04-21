@@ -15,6 +15,7 @@ use crate::array::{LamellarRead, LamellarWrite};
 use crate::darc::{Darc, DarcMode};
 use crate::lamellae::AllocationType;
 use crate::lamellar_team::{IntoLamellarTeam, LamellarTeamRT};
+use crate::LamellarTaskGroup;
 use crate::memregion::{Dist, MemoryRegion};
 use crate::scheduler::SchedulerQueue;
 use core::marker::PhantomData;
@@ -30,6 +31,7 @@ pub(crate) struct UnsafeArrayData {
     mem_region: MemoryRegion<u8>,
     pub(crate) array_counters: Arc<AMCounters>,
     pub(crate) team: Pin<Arc<LamellarTeamRT>>,
+    pub(crate) task_group: Arc<LamellarTaskGroup>,
     pub(crate) my_pe: usize,
     pub(crate) num_pes: usize,
     #[cfg(not(feature = "non-buffered-array-ops"))]
@@ -75,6 +77,7 @@ impl<T: Dist + 'static> UnsafeArray<T> {
         distribution: Distribution,
     ) -> UnsafeArray<T> {
         let team = team.into().team.clone();
+        let task_group = LamellarTaskGroup::new(team.clone());
         let my_pe = team.team_pe_id().unwrap();
         let num_pes = team.num_pes();
         let elem_per_pe = array_size as f64 / num_pes as f64;
@@ -97,6 +100,7 @@ impl<T: Dist + 'static> UnsafeArray<T> {
                 mem_region: rmr,
                 array_counters: Arc::new(AMCounters::new()),
                 team: team.clone(),
+                task_group: Arc::new(task_group),
                 my_pe: my_pe,
                 num_pes: num_pes,
                 // op_buffers: Mutex::new(HashMap::new()),
@@ -470,6 +474,7 @@ impl<T: Dist> LamellarArray<T> for UnsafeArray<T> {
                 // first = false;
             }
         }
+        self.inner.data.task_group.wait_all();
         // println!("done in wait all {:?}",std::time::SystemTime::now());
     }
     fn pe_and_offset_for_global_index(&self, index: usize) -> Option<(usize, usize)> {

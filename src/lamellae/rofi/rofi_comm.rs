@@ -183,14 +183,7 @@ impl RofiComm {
                     );
                 panic!();
             }
-            Ok(_ret) => {
-                self.get_amt
-                    .fetch_add(dst_addr.len() * std::mem::size_of::<T>(), Ordering::SeqCst);
-                self.get_cnt.fetch_add(1, Ordering::SeqCst);
-                // if ret != 0{
-                //     req.txids.push(ret);
-                // }
-            }
+            Ok(_) => {}
         }
     }
 }

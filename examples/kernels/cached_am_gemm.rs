@@ -15,10 +15,13 @@ use lamellar::{LocalMemoryRegion, RemoteMemoryRegion, SharedMemoryRegion};
 use lazy_static::lazy_static;
 use matrixmultiply::sgemm;
 use parking_lot::Mutex;
+use std::sync::atomic::{AtomicUsize,Ordering};
 
 lazy_static! {
     static ref LOCK: Mutex<()> = Mutex::new(());
 }
+
+static DATA_CNT: AtomicUsize = AtomicUsize::new(0);
 
 #[lamellar::AmData(Clone, Debug)]
 struct SubMatrix {
@@ -76,15 +79,16 @@ async fn get_sub_mat(mat: &SubMatrix, sub_mat: &LocalMemoryRegion<f32>) {
     for row in 0..mat.block_size {
         let offset = (row + start_row) * mat.cols + (start_col);
         let data = sub_mat.sub_region(row * mat.block_size..(row + 1) * mat.block_size);
+        DATA_CNT.fetch_add(data.len() * std::mem::size_of::<f32>(), Ordering::Relaxed);
         unsafe {
-            mat.mat.get_unchecked(mat.pe, offset, data.clone());
+            mat.mat.iget(mat.pe, offset, data.clone());
         }
     }
 
-    while sub_mat_slice[sub_mat.len() - 1].is_nan() {
-        async_std::task::yield_now().await;
-        // std::thread::yield_now();
-    }
+    // while sub_mat_slice[sub_mat.len() - 1].is_nan() {
+    //     async_std::task::yield_now().await;
+    //     // std::thread::yield_now();
+    // }
 }
 
 #[lamellar::AmData(Clone, Debug)]
@@ -195,6 +199,7 @@ fn main() {
         println!("starting");
     }
     let mut tot_mb = 0.0f64;
+    let mut data_cnt = 0;
     for bs in [2000, 1000, 500].iter() {
         let block_size = *bs;
         let m_blocks = m / block_size;
@@ -227,8 +232,7 @@ fn main() {
                     j,
                     block_size,
                 );
-                reqs.push(world.exec_am_pe(
-                    my_pe,
+                reqs.push(world.exec_am_local(
                     MatMulAM {
                         a: a_block,
                         b: b_block,
@@ -249,13 +253,16 @@ fn main() {
         let elapsed = start.elapsed().as_secs_f64();
         if my_pe == 0 {
             println!(
-                "blocksize {:?} elapsed {:?} Gflops: {:?} MB: {:?} ({:?}, {:?}) tasks {:?}",
+                "blocksize {:?} elapsed {:?} Gflops: {:?} MB: {:?} ({:?}, {:?}) ({:?}, {:?}) tasks {:?}",
                 block_size,
                 elapsed,
                 num_gops / elapsed,
                 world.MB_sent() - tot_mb,
                 world.MB_sent(),
                 tot_mb,
+                (DATA_CNT.load(Ordering::SeqCst) - data_cnt)/1000000,
+                DATA_CNT.load(Ordering::SeqCst)/1000000,
+                
                 tasks
             );
         }

@@ -10,11 +10,15 @@ use step_by::*;
 mod zip;
 use zip::*;
 
+mod buffered;
+use buffered::*;
+
 use crate::array::LamellarArrayGet;
 use crate::memregion::Dist;
 use crate::LamellarArray;
 use crate::LamellarTeamRT;
 use crate::LocalMemoryRegion;
+use crate::array::LamellarArrayRequest;
 
 use std::marker::PhantomData;
 use std::pin::Pin;
@@ -28,6 +32,9 @@ pub trait SerialIterator {
     fn next(&mut self) -> Option<Self::Item>;
     fn advance_index(&mut self, count: usize);
     fn array(&self) -> Self::Array;
+    fn item_size(&self) -> usize;
+    fn buffered_next(&mut self, mem_region: LocalMemoryRegion<u8>) -> Option<Box<dyn LamellarArrayRequest<Output = ()> + Send + Sync>>;
+    fn from_mem_region(&self, mem_region: LocalMemoryRegion<u8>) -> Option<Self::Item>;
     fn copied_chunks(self, chunk_size: usize) -> CopiedChunks<Self>
     where
         Self: Sized,
@@ -52,6 +59,12 @@ pub trait SerialIterator {
         I: SerialIterator + Sized,
     {
         Zip::new(self, iter)
+    }
+    fn buffered(self, buf_size: usize) -> Buffered<Self>
+    where
+        Self: Sized,
+    {
+        Buffered::new(self, buf_size)
     }
     fn into_iter(self) -> SerialIteratorIter<Self>
     where
@@ -194,6 +207,28 @@ impl<'a, T: Dist + 'static, A: LamellarArrayGet<T> + Clone> SerialIterator
     fn array(&self) -> Self::Array {
         self.array.clone()
     }
+
+    fn item_size(&self) -> usize {
+        std::mem::size_of::<T>()
+    }
+    fn buffered_next(&mut self, mem_region: LocalMemoryRegion<u8>) -> Option<Box<dyn LamellarArrayRequest<Output = ()> + Send + Sync>>{
+        if self.index < self.array.len() {
+            let mem_reg_t = mem_region.to_base::<Self::ElemType>();
+            let req  = self.array.get(self.index, &mem_reg_t);
+            self.index += mem_reg_t.len();
+            Some(req)
+        } else {
+            None
+        }
+    }
+    fn from_mem_region(&self, mem_region: LocalMemoryRegion<u8>) -> Option<Self::Item>{
+        
+        unsafe {
+            let mem_reg_t = mem_region.to_base::<Self::ElemType>();
+            mem_reg_t.as_ptr().unwrap().as_ref()
+        }
+    }
+    
 }
 
 // impl<'a, T: AmDist+ Clone > Iterator
