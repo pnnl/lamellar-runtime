@@ -153,6 +153,10 @@ path = "tests/array/atomic_ops/load_store_test.rs"
 name = "swap_test"
 path = "tests/array/atomic_ops/swap_test.rs"
 
+[[example]]
+name = "compare_exchange_test"
+path = "tests/array/atomic_ops/compare_exchange_test.rs"
+
 ##------------ Bandwidth Examples -----------------##
 
 [[example]]
@@ -280,6 +284,10 @@ path="examples/array_examples/generic_array.rs"
 [[example]]
 name="array_ops"
 path="examples/array_examples/array_ops.rs"
+
+[[example]]
+name="atomic_compare_exchange"
+path="examples/array_examples/atomic_compare_exchange.rs"
 
 ##------------ RDMA Examples -----------------##
 [[example]]

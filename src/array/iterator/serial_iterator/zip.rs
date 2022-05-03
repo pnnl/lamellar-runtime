@@ -2,6 +2,29 @@ use crate::array::iterator::serial_iterator::*;
 use crate::array::LamellarArrayRequest;
 use crate::LocalMemoryRegion;
 
+use async_trait::async_trait;
+
+struct ZipBufferedReq{
+    reqs: Vec<Box<dyn LamellarArrayRequest<Output = ()> + Send + Sync>>,
+}
+
+#[async_trait]
+impl LamellarArrayRequest for ZipBufferedReq {
+    type Output = ();
+    async fn into_future(mut self: Box<Self>) -> Option<Self::Output> {
+        for req in self.reqs.drain(0..) {
+            req.into_future().await;
+        }
+        Some(())
+    }
+    fn wait(mut self: Box<Self>) -> Option<Self::Output> {
+        for req in self.reqs.drain(0..) {
+            req.wait();
+        }
+        Some(())
+    }
+}
+
 pub struct Zip<A, B> {
     a: A,
     b: B,
@@ -42,11 +65,12 @@ where
     }
     fn buffered_next(&mut self, mem_region: LocalMemoryRegion<u8>) -> Option<Box<dyn LamellarArrayRequest<Output = ()> + Send + Sync>>{
         let a_sub_region = mem_region.sub_region(0..self.a.item_size());
-        let a = self.a.buffered_next(a_sub_region)?;
+        let mut reqs = vec![];
+        reqs.push(self.a.buffered_next(a_sub_region)?);
         let b_sub_region  = mem_region.sub_region(self.a.item_size()..self.a.item_size()+self.b.item_size());
 
-        let b = self.b.buffered_next(b_sub_region)?;
-        Some(b) //TODO create an LamellarIterRequest that would poll both reqs 
+        reqs.push(self.b.buffered_next(b_sub_region)?);
+        Some(Box::new(ZipBufferedReq{reqs})) 
     }
     fn from_mem_region(&self, mem_region: LocalMemoryRegion<u8>) -> Option<Self::Item>{
         let a_sub_region = mem_region.sub_region(0..self.a.item_size());

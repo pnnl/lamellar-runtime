@@ -72,7 +72,7 @@ macro_rules! and_test{
                 for (req,idx) in reqs{
                     let val = req.get().unwrap()[0];
                     if (val & !my_val) != !my_val{
-                        println!("{:?} {:x} {:x} {:x}",idx,my_val,val,(val & !my_val));
+                        println!("1. {:?} {:x} {:x} {:x} {:x}",idx,my_val,!my_val,val,(val & !my_val));
                         success = false;
                     }
                 }
@@ -84,7 +84,7 @@ macro_rules! and_test{
                 let val = *elem;
                 check_val!($array,val,final_val,success);
                 if !success{
-                    println!("{:?} {:x} {:x} {:x}",i,my_val,val,final_val);
+                    println!("2. {:?} {:x} {:x} {:x} {:x}",i,my_val,!my_val,val,final_val);
                 }
             }
             array.barrier();

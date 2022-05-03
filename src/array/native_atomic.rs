@@ -148,7 +148,62 @@ macro_rules! as_type{
 }
 
 macro_rules! compare_exchange_op{
-    ($A:ty, $B:ty, $self:ident, $val:ident, $op:tt ) => {
+    ($A:ty, $B:ty, $self:ident, $val:ident) => { //used for swap -- can't fail
+        {
+            let slice = $self.array.__local_as_mut_slice();
+            let slice = slice_as_atomic!($A,$B,slice);
+            let val = as_type!($val,$A);
+            let mut cur = slice[$self.local_index].load(Ordering::SeqCst);
+            while slice[$self.local_index].compare_exchange(cur,val,Ordering::SeqCst,Ordering::SeqCst).is_err(){
+                std::thread::yield_now();
+                cur = slice[$self.local_index].load(Ordering::SeqCst);
+            }
+            cur
+        }
+    };
+    ($A:ty, $B:ty, $self:ident, $old:ident, $val:ident) => { //used for compare_exchange -- can fail
+        {
+            let slice = $self.array.__local_as_mut_slice();
+            let slice = slice_as_atomic!($A,$B,slice);
+            let val = as_type!($val,$A);
+            let old = as_type!($old,$A);
+            // match slice[$self.local_index].compare_exchange(old,val,Ordering::SeqCst,Ordering::SeqCst){
+            //     Ok(old) => old,
+            //     Err(old) => old,
+            // }   
+            slice[$self.local_index].compare_exchange(old,val,Ordering::SeqCst,Ordering::SeqCst)      
+        }
+    };
+    ($A:ty, $B:ty, $self:ident, $old:ident, $val:ident, $eps:ident ) => { //used for compare_exchange epsilon
+        {
+            let slice = $self.array.__local_as_mut_slice();
+            let slice = slice_as_atomic!($A,$B,slice);
+            let val = as_type!($val,$A);
+            let old = as_type!($old,$A);
+            let eps = as_type!($eps,$A);
+            let mut cur = slice[$self.local_index].load(Ordering::SeqCst);
+            let mut done = false;
+            while cur.abs_diff(old) as $A < eps  && !done{
+                cur = match slice[$self.local_index].compare_exchange(old,val,Ordering::SeqCst,Ordering::SeqCst){
+                    Ok(cur) => {
+                        done = true;
+                        cur
+                    },
+                    Err(cur) => {
+                        std::thread::yield_now();
+                        cur
+                    }
+                }                 
+            }
+            if done{
+                Ok(cur)
+            }
+            else {
+                Err(cur)
+            }
+        }
+    };
+    ($A:ty, $B:ty, $self:ident, $val:ident, $op:tt ) => { //used for everything else --can't fail
         {
             let slice = $self.array.__local_as_mut_slice();
             let slice = slice_as_atomic!($A,$B,slice);
@@ -162,14 +217,14 @@ macro_rules! compare_exchange_op{
             }
             cur
         }
-    }
+    };    
 }
 
 macro_rules! impl_mul_div {
     ($self:ident,$op:tt,$val:ident) => {
         // mul, div
         unsafe {
-            match $self.array.orig_t {
+            *match $self.array.orig_t {//deref to the original type
                 NativeAtomicType::I8 => {
                     compare_exchange_op!(i8, AtomicI8, $self, $val, $op) as *const i8 as *mut T
                 }
@@ -211,46 +266,46 @@ macro_rules! impl_add_sub_and_or {
         //add,sub,and,or (returns value)
         unsafe {
             let slice = $self.array.__local_as_mut_slice();
-            match $self.array.orig_t {
+            *match $self.array.orig_t {//deref to the original type
                 NativeAtomicType::I8 => {
                     slice_as_atomic!(i8, AtomicI8, slice)[$self.local_index]
-                        .$op(as_type!($val, i8), Ordering::SeqCst);
+                        .$op(as_type!($val, i8), Ordering::SeqCst)  as *const i8 as *mut T
                 }
                 NativeAtomicType::I16 => {
                     slice_as_atomic!(i16, AtomicI16, slice)[$self.local_index]
-                        .$op(as_type!($val, i16), Ordering::SeqCst);
+                        .$op(as_type!($val, i16), Ordering::SeqCst) as *const i16 as *mut T
                 }
                 NativeAtomicType::I32 => {
                     slice_as_atomic!(i32, AtomicI32, slice)[$self.local_index]
-                        .$op(as_type!($val, i32), Ordering::SeqCst);
+                        .$op(as_type!($val, i32), Ordering::SeqCst) as *const i32 as *mut T
                 }
                 NativeAtomicType::I64 => {
                     slice_as_atomic!(i64, AtomicI64, slice)[$self.local_index]
-                        .$op(as_type!($val, i64), Ordering::SeqCst);
+                        .$op(as_type!($val, i64), Ordering::SeqCst)  as *const i64 as *mut T
                 }
                 NativeAtomicType::Isize => {
                     slice_as_atomic!(isize, AtomicIsize, slice)[$self.local_index]
-                        .$op(as_type!($val, isize), Ordering::SeqCst);
+                        .$op(as_type!($val, isize), Ordering::SeqCst) as *const isize as *mut T
                 }
                 NativeAtomicType::U8 => {
                     slice_as_atomic!(u8, AtomicU8, slice)[$self.local_index]
-                        .$op(as_type!($val, u8), Ordering::SeqCst);
+                        .$op(as_type!($val, u8), Ordering::SeqCst) as *const u8 as *mut T
                 }
                 NativeAtomicType::U16 => {
                     slice_as_atomic!(u16, AtomicU16, slice)[$self.local_index]
-                        .$op(as_type!($val, u16), Ordering::SeqCst);
+                        .$op(as_type!($val, u16), Ordering::SeqCst) as *const u16 as *mut T
                 }
                 NativeAtomicType::U32 => {
                     slice_as_atomic!(u32, AtomicU32, slice)[$self.local_index]
-                        .$op(as_type!($val, u32), Ordering::SeqCst);
+                        .$op(as_type!($val, u32), Ordering::SeqCst) as *const u32 as *mut T
                 }
                 NativeAtomicType::U64 => {
                     slice_as_atomic!(u64, AtomicU64, slice)[$self.local_index]
-                        .$op(as_type!($val, u64), Ordering::SeqCst);
+                        .$op(as_type!($val, u64), Ordering::SeqCst) as *const u64 as *mut T
                 }
                 NativeAtomicType::Usize => {
                     slice_as_atomic!(usize, AtomicUsize, slice)[$self.local_index]
-                        .$op(as_type!($val, usize), Ordering::SeqCst);
+                        .$op(as_type!($val, usize), Ordering::SeqCst) as *const usize as *mut T
                 }
             }
         }
@@ -358,6 +413,132 @@ macro_rules! impl_load {
     };
 }
 
+macro_rules! impl_swap {
+    ($self:ident,$val:ident) => {
+        //swap
+
+        unsafe {
+            *match $self.array.orig_t {//deref to the original type
+                NativeAtomicType::I8 => {
+                    compare_exchange_op!(i8, AtomicI8, $self, $val) as *const i8 as *mut T
+                }
+                NativeAtomicType::I16 => {
+                    compare_exchange_op!(i16, AtomicI16, $self, $val) as *const i16 as *mut T
+                }
+                NativeAtomicType::I32 => {
+                    compare_exchange_op!(i32, AtomicI32, $self, $val) as *const i32 as *mut T
+                }
+                NativeAtomicType::I64 => {
+                    compare_exchange_op!(i64, AtomicI64, $self, $val) as *const i64 as *mut T
+                }
+                NativeAtomicType::Isize => {
+                    compare_exchange_op!(isize, AtomicIsize, $self, $val) as *const isize
+                        as *mut T
+                }
+                NativeAtomicType::U8 => {
+                    compare_exchange_op!(u8, AtomicU8, $self, $val) as *const u8 as *mut T
+                }
+                NativeAtomicType::U16 => {
+                    compare_exchange_op!(u16, AtomicU16, $self, $val) as *const u16 as *mut T
+                }
+                NativeAtomicType::U32 => {
+                    compare_exchange_op!(u32, AtomicU32, $self, $val) as *const u32 as *mut T
+                }
+                NativeAtomicType::U64 => {
+                    compare_exchange_op!(u64, AtomicU64, $self, $val) as *const u64 as *mut T
+                }
+                NativeAtomicType::Usize => {
+                    compare_exchange_op!(usize, AtomicUsize, $self, $val) as *const usize
+                        as *mut T
+                }
+            }
+        }
+    };
+}
+
+macro_rules! impl_compare_exchange{
+    ($self:ident,$old:ident,$val:ident) => {
+        unsafe {
+            *match $self.array.orig_t {//deref to the original type
+                NativeAtomicType::I8 => {
+                    &compare_exchange_op!(i8, AtomicI8, $self, $old, $val) as *const Result<i8,i8> as *mut Result<T,T>
+                }
+                NativeAtomicType::I16 => {
+                    &compare_exchange_op!(i16, AtomicI16, $self, $old, $val) as *const Result<i16,i16> as *mut Result<T,T>
+                }
+                NativeAtomicType::I32 => {
+                    &compare_exchange_op!(i32, AtomicI32, $self, $old, $val) as *const Result<i32,i32> as *mut Result<T,T>
+                }
+                NativeAtomicType::I64 => {
+                    &compare_exchange_op!(i64, AtomicI64, $self, $old, $val) as *const Result<i64,i64> as *mut Result<T,T>
+                }
+                NativeAtomicType::Isize => {
+                    &compare_exchange_op!(isize, AtomicIsize, $self, $old, $val) as *const Result<isize,isize>
+                        as *mut Result<T,T>
+                }
+                NativeAtomicType::U8 => {
+                    &compare_exchange_op!(u8, AtomicU8, $self, $old, $val) as *const Result<u8,u8> as *mut Result<T,T>
+                }
+                NativeAtomicType::U16 => {
+                    &compare_exchange_op!(u16, AtomicU16, $self, $old, $val) as *const Result<u16,u16> as *mut Result<T,T>
+                }
+                NativeAtomicType::U32 => {
+                    &compare_exchange_op!(u32, AtomicU32, $self, $old, $val) as *const Result<u32,u32> as *mut Result<T,T>
+                }
+                NativeAtomicType::U64 => {
+                    &compare_exchange_op!(u64, AtomicU64, $self, $old, $val) as *const Result<u64,u64> as *mut Result<T,T>
+                }
+                NativeAtomicType::Usize => {
+                    &compare_exchange_op!(usize, AtomicUsize, $self, $old, $val) as *const Result<usize,usize>
+                        as *mut Result<T,T>
+                }
+            }
+        }
+    };
+}
+
+macro_rules! impl_compare_exchange_eps{
+    ($self:ident,$old:ident,$val:ident,$eps:ident) => {
+        unsafe {
+            *match $self.array.orig_t {//deref to the original type
+                NativeAtomicType::I8 => {
+                    &compare_exchange_op!(i8, AtomicI8, $self, $old, $val, $eps) as *const Result<i8,i8> as *mut Result<T,T>
+                }
+                NativeAtomicType::I16 => {
+                    &compare_exchange_op!(i16, AtomicI16, $self, $old, $val, $eps) as *const Result<i16,i16> as *mut Result<T,T>
+                }
+                NativeAtomicType::I32 => {
+                    &compare_exchange_op!(i32, AtomicI32, $self, $old, $val, $eps) as *const Result<i32,i32> as *mut Result<T,T>
+                }
+                NativeAtomicType::I64 => {
+                    &compare_exchange_op!(i64, AtomicI64, $self, $old, $val, $eps) as *const Result<i64,i64> as *mut Result<T,T>
+                }
+                NativeAtomicType::Isize => {
+                    &compare_exchange_op!(isize, AtomicIsize, $self, $old, $val, $eps) as *const Result<isize,isize>
+                        as *mut Result<T,T>
+                }
+                NativeAtomicType::U8 => {
+                    &compare_exchange_op!(u8, AtomicU8, $self, $old, $val, $eps) as *const Result<u8,u8> as *mut Result<T,T>
+                }
+                NativeAtomicType::U16 => {
+                    &compare_exchange_op!(u16, AtomicU16, $self, $old, $val, $eps) as *const Result<u16,u16> as *mut Result<T,T>
+                }
+                NativeAtomicType::U32 => {
+                    &compare_exchange_op!(u32, AtomicU32, $self, $old, $val, $eps) as *const Result<u32,u32> as *mut Result<T,T>
+                }
+                NativeAtomicType::U64 => {
+                    &compare_exchange_op!(u64, AtomicU64, $self, $old, $val, $eps) as *const Result<u64,u64> as *mut Result<T,T>
+                }
+                NativeAtomicType::Usize => {
+                    &compare_exchange_op!(usize, AtomicUsize, $self, $old, $val, $eps) as *const Result<usize,usize>
+                        as *mut Result<T,T>
+                }
+            }
+        }
+    };
+}
+        
+
 use std::ops::{AddAssign, BitAndAssign, BitOrAssign, DivAssign, MulAssign, SubAssign};
 pub struct NativeAtomicElement<T: Dist> {
     array: NativeAtomicArray<T>,
@@ -377,41 +558,77 @@ impl<T: Dist> NativeAtomicElement<T> {
     pub fn store(&self, val: T) {
         impl_store!(self, val);
     }
+    pub fn swap(&self, val: T) -> T {
+        impl_swap!(self, val)
+    }   
+    pub fn compare_exchange(&self, old: T, new: T) -> Result<T,T> {
+        impl_compare_exchange!(self, old, new)
+    }
+    pub fn compare_exchange_epsilon(&self, old: T, new: T, eps: T) -> Result<T,T> {
+        impl_compare_exchange_eps!(self, old, new, eps)
+    }
+    pub fn fetch_add(&self, val: T) -> T {
+        impl_add_sub_and_or!(self, fetch_add, val)
+    }
+    pub fn fetch_sub(&self, val: T) -> T {
+        impl_add_sub_and_or!(self, fetch_sub, val)
+    }
+    pub fn fetch_mul(&self, val: T) -> T {
+        impl_mul_div!(self, * , val)
+    }
+    pub fn fetch_div(&self, val: T) -> T {
+        impl_mul_div!(self, /, val)
+    }
+}
+
+impl<T: ElementBitWiseOps + 'static>   NativeAtomicElement<T> {
+    pub fn fetch_and(&self, val: T) -> T {
+        impl_add_sub_and_or!(self, fetch_and, val)
+    }
+    pub fn fetch_or(&self, val: T) -> T {
+        impl_add_sub_and_or!(self, fetch_or, val)
+    }
 }
 
 impl<T: Dist + ElementArithmeticOps> AddAssign<T> for NativeAtomicElement<T> {
     fn add_assign(&mut self, val: T) {
-        impl_add_sub_and_or!(self, fetch_add, val);
+        self.fetch_add(val);
     }
 }
 
 impl<T: Dist + ElementArithmeticOps> SubAssign<T> for NativeAtomicElement<T> {
     fn sub_assign(&mut self, val: T) {
-        impl_add_sub_and_or!(self, fetch_sub, val);
+        self.fetch_sub(val);
     }
 }
 
 impl<T: Dist + ElementArithmeticOps> MulAssign<T> for NativeAtomicElement<T> {
     fn mul_assign(&mut self, val: T) {
-        impl_mul_div!(self,*,val);
+        self.fetch_mul(val);
     }
 }
 
 impl<T: Dist + ElementArithmeticOps> DivAssign<T> for NativeAtomicElement<T> {
     fn div_assign(&mut self, val: T) {
-        impl_mul_div!(self,/,val);
+        self.fetch_div(val);    
     }
 }
 
 impl<T: Dist + ElementBitWiseOps> BitAndAssign<T> for NativeAtomicElement<T> {
     fn bitand_assign(&mut self, val: T) {
-        impl_add_sub_and_or!(self, fetch_and, val);
+        self.fetch_and(val);
     }
 }
 
 impl<T: Dist + ElementBitWiseOps> BitOrAssign<T> for NativeAtomicElement<T> {
     fn bitor_assign(&mut self, val: T) {
-        impl_add_sub_and_or!(self, fetch_or, val);
+        self.fetch_or(val);
+    }
+}
+
+impl<T: Dist + std::fmt::Debug> std::fmt::Debug for NativeAtomicElement<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{:?}", self.load())
     }
 }
 
@@ -458,7 +675,7 @@ impl<T: Dist> NativeAtomicLocalData<T> {
     }
 
     pub fn len(&self) -> usize {
-        unsafe { self.array.__local_as_mut_slice().len() }
+        self.end_index - self.start_index 
     }
 
     pub fn iter(&self) -> NativeAtomicLocalDataIter<T> {

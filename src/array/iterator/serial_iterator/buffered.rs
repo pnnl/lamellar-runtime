@@ -74,7 +74,7 @@ where
 
 pub struct BufferedItem<U>{
     item: U,
-    mem_region: LocalMemoryRegion<u8>,
+    _mem_region: LocalMemoryRegion<u8>,
 }
 
 impl<U> Deref for BufferedItem<U>{
@@ -105,7 +105,7 @@ where
             //}
             Some(BufferedItem{
                 item: self.iter.from_mem_region(mem_region.clone())?,
-                mem_region
+                _mem_region: mem_region,
             })
         } else {
             None
@@ -133,7 +133,7 @@ where
     fn from_mem_region(&self, mem_region: LocalMemoryRegion<u8>) -> Option<Self::Item>{
         Some(BufferedItem{
             item: self.iter.from_mem_region(mem_region.clone())?,
-            mem_region
+            _mem_region: mem_region,
         })
     }
 }

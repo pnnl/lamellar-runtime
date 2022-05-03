@@ -74,6 +74,71 @@ impl<T: Dist> AtomicElement<T> {
             AtomicElement::GenericAtomicElement(array) => array.store(val),
         }
     }
+    pub fn swap(&self, val: T) -> T {
+        match self {
+            AtomicElement::NativeAtomicElement(array) => array.swap(val),
+            AtomicElement::GenericAtomicElement(array) => array.swap(val),
+        }
+    }
+}
+impl<T: ElementArithmeticOps> AtomicElement<T> {
+    pub fn fetch_add(&self, val: T) -> T {
+        match self {
+            AtomicElement::NativeAtomicElement(array) => array.fetch_add(val),
+            AtomicElement::GenericAtomicElement(array) => array.fetch_add(val),
+        }
+    }
+    pub fn fetch_sub(&self, val: T) -> T {
+        match self {
+            AtomicElement::NativeAtomicElement(array) => array.fetch_sub(val),
+            AtomicElement::GenericAtomicElement(array) => array.fetch_sub(val),
+        }
+    }
+    pub fn fetch_mul(&self, val: T) -> T {
+        match self {
+            AtomicElement::NativeAtomicElement(array) => array.fetch_mul(val),
+            AtomicElement::GenericAtomicElement(array) => array.fetch_mul(val),
+        }
+    }
+    pub fn fetch_div(&self, val: T) -> T {
+        match self {
+            AtomicElement::NativeAtomicElement(array) => array.fetch_div(val),
+            AtomicElement::GenericAtomicElement(array) => array.fetch_div(val),
+        }
+    }
+}
+
+impl <T: Dist + std::cmp::Eq> AtomicElement<T> {
+    pub fn compare_exchange(&self, current: T, new: T) -> Result<T,T> {
+        match self {
+            AtomicElement::NativeAtomicElement(array) => array.compare_exchange(current, new),
+            AtomicElement::GenericAtomicElement(array) => array.compare_exchange(current, new),
+        }
+    }
+}
+
+impl <T: Dist + std::cmp::PartialEq + std::cmp::PartialOrd + std::ops::Sub<Output = T> > AtomicElement<T> {
+    pub fn compare_exchange_epsilon(&self, current: T, new: T, eps: T) -> Result<T,T> {
+        match self {
+            AtomicElement::NativeAtomicElement(array) => array.compare_exchange_epsilon(current, new, eps),
+            AtomicElement::GenericAtomicElement(array) => array.compare_exchange_epsilon(current, new, eps),
+        }
+    }
+}
+
+impl<T: ElementBitWiseOps + 'static>  AtomicElement<T> {
+    pub fn fetch_and(&self, val: T) -> T {
+        match self {
+            AtomicElement::NativeAtomicElement(array) => array.fetch_and(val),
+            AtomicElement::GenericAtomicElement(array) => array.fetch_and(val),
+        }
+    }
+    pub fn fetch_or(&self, val: T) -> T {
+        match self {
+            AtomicElement::NativeAtomicElement(array) => array.fetch_or(val),
+            AtomicElement::GenericAtomicElement(array) => array.fetch_or(val),
+        }
+    }
 }
 
 impl<T: Dist + ElementArithmeticOps> AddAssign<T> for AtomicElement<T> {
@@ -255,12 +320,6 @@ impl<T: Dist + 'static> AtomicArray<T> {
 }
 
 impl<T: Dist> AtomicArray<T> {
-    // pub(crate) fn start_index_for_pe(&self,pe: usize) -> Option<usize>{
-    //     match self{
-    //         AtomicArray::NativeAtomicArray(array) => array.array.inner.start_index_for_pe(pe) ,
-    //         AtomicArray::GenericAtomicArray(array) => array.array.inner.start_index_for_pe(pe) ,
-    //     }
-    // }
     pub fn wait_all(&self) {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.wait_all(),

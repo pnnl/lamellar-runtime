@@ -87,10 +87,9 @@ where
         }
     }
     fn from_mem_region(&self, mem_region: LocalMemoryRegion<u8>) -> Option<Self::Item>{
-        unsafe {
-            let mem_reg_t = mem_region.to_base::<I::ElemType>();
-            Some(mem_reg_t)
-        }
+        
+        let mem_reg_t = mem_region.to_base::<I::ElemType>();
+        Some(mem_reg_t)
     }
 }
 

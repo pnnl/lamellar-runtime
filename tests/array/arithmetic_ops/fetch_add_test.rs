@@ -15,8 +15,8 @@ macro_rules! initialize_array {
         $array.barrier();
     };
     (AtomicArray,$array:ident,$init_val:ident) => {
-        $array.dist_iter().enumerate().for_each(move |(i, x)| {
-            println!("{:?} {:?}", i, x.load());
+        $array.dist_iter().enumerate().for_each(move |(_i, x)| {
+            // println!("{:?} {:?}", i, x.load());
             x.store($init_val)
         });
         $array.wait_all();
@@ -360,37 +360,65 @@ macro_rules! add_test{
     }
 }
 
+macro_rules! initialize_array2 {
+    (UnsafeArray,$array:ident,$init_val:ident) => {
+        $array.dist_iter_mut().enumerate().for_each(move |(i,x)| *x = i);
+        $array.wait_all();
+        $array.barrier();
+    };
+    (AtomicArray,$array:ident,$init_val:ident) => {
+        $array.dist_iter().enumerate().for_each(move |(i, x)| {
+            // println!("{:?} {:?}", i, x.load());
+            x.store(i)
+        });
+        $array.wait_all();
+        $array.barrier();
+    };
+    (LocalLockAtomicArray,$array:ident,$init_val:ident) => {
+        $array.dist_iter_mut().enumerate().for_each(move |(i,x)| *x = i);
+        $array.wait_all();
+        $array.barrier();
+    };
+}
+
 macro_rules! check_results {
     ($array_ty:ident, $array:ident, $num_pes:ident, $reqs:ident, $test:expr) => {
+        // println!("++++++++++++++++++++++++++++++++++++++++++++++");
         let mut success = true;
         $array.wait_all();
         $array.barrier();
-        println!("test {:?} reqs len {:?}", $test, $reqs.len());
+        // println!("test {:?} reqs len {:?}", $test, $reqs.len());
+        let mut req_cnt=0;
         for (i, req) in $reqs.iter().enumerate() {
             let req = req.get().unwrap();
-            println!("sub_req len: {:?}", req.len());
+            // println!("sub_req len: {:?}", req.len());
             for (j, res) in req.iter().enumerate() {
-                if !(res >= &0 && res < &$num_pes) {
+                if !(res >= &0 && res < &(req_cnt + $num_pes)) {
                     success = false;
-                    println!("return i: {:?} j: {:?} val: {:?}", i, j, res);
+                    println!("return i: {:?} j: {:?} req_cnt+npe: {:?} val: {:?}", i, j, req_cnt + $num_pes, res);
+                    break;
                 }
+                req_cnt+=1;
             }
         }
         for (i, elem) in $array.ser_iter().into_iter().enumerate() {
             let val = *elem;
-            check_val!($array_ty, val, $num_pes, success);
+            let real_val = i + $num_pes;
+            check_val!($array_ty, real_val, val, success);
             if !success {
-                println!("input {:?}: {:?} {:?} {:?}", $test, i, val, $num_pes);
+                println!("input {:?}: {:?} {:?} {:?}", $test, i, val, real_val);
+                break;
             }
         }
         if !success {
             $array.print();
         }
         $array.barrier();
-        let init_val = 0;
-        initialize_array!($array_ty, $array, init_val);
+        // let init_val = 0;
+        initialize_array2!($array_ty, $array, init_val);
         $array.wait_all();
         $array.barrier();
+        // println!("--------------------------------------------------------------------------------");
     };
 }
 
@@ -406,13 +434,13 @@ macro_rules! input_test{
             // let mut success = true;
             let array: $array::<usize> = $array::<usize>::new(world.team(), array_total_len, $dist).into(); //convert into abstract LamellarArray, distributed len is total_len
             let input_array: UnsafeArray::<usize> = UnsafeArray::<usize>::new(world.team(), array_total_len*num_pes, $dist).into(); //convert into abstract LamellarArray, distributed len is total_len
-            let init_val=0;
-            initialize_array!($array, array, init_val);
+            // let init_val=0;
+            initialize_array2!($array, array, init_val);
             if $dist == lamellar::array::Distribution::Block{
-                input_array.dist_iter_mut().enumerate().for_each(move |(i,x)| {println!("i: {:?}",i);*x = i%array_total_len});
+                input_array.dist_iter_mut().enumerate().for_each(move |(i,x)| {/*println!("i: {:?}",i);*/ *x = i%array_total_len});
             }
             else{
-                input_array.dist_iter_mut().enumerate().for_each(move |(i,x)| {println!("i: {:?}",i);*x = i/num_pes});
+                input_array.dist_iter_mut().enumerate().for_each(move |(i,x)| {/*println!("i: {:?}",i);*/ *x = i/num_pes});
             }
 
             array.wait_all();

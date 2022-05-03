@@ -41,8 +41,119 @@ impl<T: Dist> GenericAtomicElement<T> {
             self.array.__local_as_mut_slice()[self.local_index] = val;
         }
     }
+    pub fn swap(&self, val: T) -> T {
+        let _lock = self.array.lock_index(self.local_index);
+        unsafe {
+            let old = self.array.__local_as_mut_slice()[self.local_index];
+            self.array.__local_as_mut_slice()[self.local_index] = val;
+            old
+        }
+        
+    }
 }
-//todo does this work on sub arrays?
+impl<T: ElementArithmeticOps> GenericAtomicElement<T> {
+    pub fn fetch_add(&self, val: T) -> T {
+        let _lock = self.array.lock_index(self.local_index);
+        unsafe {
+            let old = self.array.__local_as_mut_slice()[self.local_index];
+            self.array.__local_as_mut_slice()[self.local_index] += val;
+            old
+        }
+    }
+    pub fn fetch_sub(&self, val: T) -> T {
+        let _lock = self.array.lock_index(self.local_index);
+        unsafe {
+            let old = self.array.__local_as_mut_slice()[self.local_index];
+            self.array.__local_as_mut_slice()[self.local_index] -= val;
+            old
+        }
+    }
+    pub fn fetch_mul(&self, val: T) -> T {
+        let _lock = self.array.lock_index(self.local_index);
+        unsafe {
+            let old = self.array.__local_as_mut_slice()[self.local_index];
+            self.array.__local_as_mut_slice()[self.local_index] *= val;
+            old
+        }
+    }
+    pub fn fetch_div(&self, val: T) -> T {
+        let _lock = self.array.lock_index(self.local_index);
+        unsafe {
+            let old = self.array.__local_as_mut_slice()[self.local_index];
+            self.array.__local_as_mut_slice()[self.local_index]  /= val;
+            old
+        }
+    }
+}
+
+impl<T: Dist + std::cmp::Eq> GenericAtomicElement<T> {
+    pub fn compare_exchange(
+        &self,
+        current: T,
+        new: T,
+    ) -> Result<T,T> {
+        let _lock = self.array.lock_index(self.local_index);
+        let current_val = unsafe { self.array.__local_as_mut_slice()[self.local_index] };
+        if current_val == current {
+            unsafe {
+                self.array.__local_as_mut_slice()[self.local_index] = new;
+            }
+            Ok(current_val)            
+        } 
+        else{
+            Err(current_val)
+        }
+        
+    }
+}
+impl<T: Dist + std::cmp::PartialEq + std::cmp::PartialOrd + std::ops::Sub<Output = T> > GenericAtomicElement<T> {
+    pub fn compare_exchange_epsilon(
+        &self,
+        current: T,
+        new: T,
+        eps: T,
+    ) -> Result<T,T> {
+        let _lock = self.array.lock_index(self.local_index);
+        let current_val = unsafe { self.array.__local_as_mut_slice()[self.local_index] };
+        let same = if current_val > current{
+            current_val - current < eps 
+        }
+        else{
+            current - current_val < eps
+        };
+        if same{
+            unsafe {
+                self.array.__local_as_mut_slice()[self.local_index] = new;
+            }  
+            Ok(current_val)
+        } 
+        else{
+            Err(current_val)
+        }
+    }
+}
+    
+    
+
+impl<T: ElementBitWiseOps + 'static> GenericAtomicElement<T> {
+    pub fn fetch_and(&self, val: T) -> T {
+        let _lock = self.array.lock_index(self.local_index);
+        unsafe {
+            let old = self.array.__local_as_mut_slice()[self.local_index];
+            self.array.__local_as_mut_slice()[self.local_index] &= val;
+            old
+        }
+    }
+    pub fn fetch_or(&self, val: T) -> T {
+        let _lock = self.array.lock_index(self.local_index);
+        unsafe {
+            let old = self.array.__local_as_mut_slice()[self.local_index];
+            self.array.__local_as_mut_slice()[self.local_index] |= val;
+            old
+        }
+    }
+}
+
 impl<T: Dist + ElementArithmeticOps> AddAssign<T> for GenericAtomicElement<T> {
     fn add_assign(&mut self, val: T) {
         // self.add(val)

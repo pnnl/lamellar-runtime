@@ -6,24 +6,24 @@ use crate::lamellar_request::LamellarRequest;
 use std::any::TypeId;
 use std::collections::HashMap;
 
-type OpFn = fn(*const u8, UnsafeByteArray, usize) -> LamellarArcAm;
+// type OpFn = fn(*const u8, UnsafeByteArray, usize) -> LamellarArcAm;
 
-lazy_static! {
-    static ref OPS: HashMap<(ArrayOpCmd, TypeId), OpFn> = {
-        let mut map = HashMap::new();
-        for op in crate::inventory::iter::<UnsafeArrayOp> {
-            map.insert(op.id.clone(), op.op);
-        }
-        map
-    };
-}
+// lazy_static! {
+//     static ref OPS: HashMap<(ArrayOpCmd, TypeId), OpFn> = {
+//         let mut map = HashMap::new();
+//         for op in crate::inventory::iter::<UnsafeArrayOp> {
+//             map.insert(op.id.clone(), op.op);
+//         }
+//         map
+//     };
+// }
 
-pub struct UnsafeArrayOp {
-    pub id: (ArrayOpCmd, TypeId),
-    pub op: OpFn,
-}
+// pub struct UnsafeArrayOp<T: Dist> {
+//     pub id: (ArrayOpCmd, TypeId),
+//     pub op: OpFn,
+// }
 
-crate::inventory::collect!(UnsafeArrayOp);
+// crate::inventory::collect!(UnsafeArrayOp);
 
 type BufFn = fn(UnsafeByteArray) -> Arc<dyn BufferOp>;
 
@@ -44,9 +44,14 @@ pub struct UnsafeArrayOpBuf {
 
 crate::inventory::collect!(UnsafeArrayOpBuf);
 
-enum BufOpsRequest<T: Dist> {
-    NoFetch(Box<dyn LamellarRequest<Output = ()> + Send + Sync>),
-    Fetch(Box<dyn LamellarRequest<Output = Vec<T>> + Send + Sync>),
+#[derive(Debug)]
+pub(crate) enum BufOpsRequest<T: Dist> {
+    // NoFetch(Box<dyn LamellarRequest<Output = ()> + Send + Sync>),
+    // Fetch(Box<dyn LamellarRequest<Output = Vec<T>> + Send + Sync>),
+    // Result(Box<dyn LamellarRequest<Output = Vec<Result<T,T>>> + Send + Sync>),
+    NoFetch(Box<ArrayOpHandleInner>),
+    Fetch(Box<ArrayOpFetchHandleInner<T>>),
+    Result(Box<ArrayOpResultHandleInner<T>>),
 }
 
 
@@ -153,6 +158,14 @@ impl< T: Dist> OpAmInputToValue<T>{
     }
 }
 
+
+#[derive(Debug,Clone,Copy)]
+pub(crate) enum OpReturnType{
+    None,
+    Fetch,
+    Result,
+}
+
 impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
     pub(crate) fn dummy_val(&self) -> T {
         let slice = self.inner.data.mem_region.as_slice().unwrap();
@@ -166,35 +179,20 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
 
     fn initiate_op_task<'a>(
         &self,
-        fetch: bool,
-        op: ArrayOpCmd,
+        ret_type: OpReturnType,
+        op: ArrayOpCmd<T>,
         input: InputToValue<T>,
-        submit_cnt: Arc<AtomicUsize>,
-    ) -> BufOpsRequest<T> {          
+        submit_cnt: usize,
+        req_handles: Arc<Mutex<HashMap<usize,BufOpsRequest<T>>>>
+    ) {          
         let (pe_offsets,req_ids,req_cnt) = input.to_pe_offsets(self); //HashMap<usize, InputToValue<'a,T>>
 
-        
-        // let max = std::cmp::max(indices.len(), vals.len());
-        // let mut req_cnt = 0;
-        // for (i, v) in indices.iter().zip(vals.iter()).take(max) {
-        //     let pe = self
-        //         .inner
-        //         .pe_for_dist_index(i)
-        //         .expect("index out of bounds");
-        //     let local_index = self.inner.pe_offset_for_dist_index(pe, i).unwrap(); //calculated pe above
-        //                                                                            // println!("i: {:?} l_i: {:?} v: {:?}",i,local_index,v);
-        //     pe_offsets
-        //         .entry(pe)
-        //         .or_insert(Vec::new())
-        //         .push((req_cnt, local_index, v));
-        //     req_cnt += 1;
-        // }
-
-        let res_indices_map = OpReqIndices::new();
+        let res_offsets_map = OpReqOffsets::new();
         let res_map = OpResults::new();
         let mut complete_cnt = Vec::new();
         // println!("pe_offsets size {:?}",pe_offsets);
 
+        // println!("req_cnt: {:?}",req_cnt);
         let req = pe_offsets
             .iter()
             .map(|(pe, op_data)| {
@@ -206,21 +204,25 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
                     .req_cnt
                     .fetch_add(op_data.len(), Ordering::SeqCst);
                 let buf_op = self.inner.data.op_buffers.read()[pe].clone();
-                let (first, complete, res_indices) = if fetch {
-                    buf_op.add_fetch_ops(
-                        pe,
-                        op,
-                        op_data as *const InputToValue<T> as *const u8,
-                        &req_ids[&pe],
-                        res_map.clone(),
-                    )
-                } else {
-                    let (first, complete) =
-                        buf_op.add_ops(op, op_data as *const InputToValue<T> as *const u8);
-                    (first, complete, None)
+
+                let (first, complete, res_offsets) = match ret_type {
+                    OpReturnType::Fetch | OpReturnType::Result => {
+                        buf_op.add_fetch_ops(
+                            pe,
+                            &op as *const ArrayOpCmd<T> as *const u8,
+                            op_data as *const InputToValue<T> as *const u8,
+                            &req_ids[&pe],
+                            res_map.clone(),
+                        )
+                    } 
+                    OpReturnType::None => {
+                        let (first, complete) =
+                            buf_op.add_ops(&op as *const ArrayOpCmd<T> as *const u8, op_data as *const InputToValue<T> as *const u8);
+                        (first, complete, None)
+                    }
                 };
-                if let Some(res_indices) = res_indices {
-                    res_indices_map.insert(pe, res_indices);
+                if let Some(res_offsets) = res_offsets {
+                    res_offsets_map.insert(pe, res_offsets);
                 }
                 if first {
                     // let res_map = res_map.clone();
@@ -269,6 +271,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
                                 full_results.extend(results_u8);
                             }
 
+                            // println!("{:?} {:?}",full_results.len(),full_results);
                             std::mem::swap(&mut full_results, &mut results.lock());
                             // println!("inserted results {:}",pe);
                             // res_map.insert(pe,full_results);
@@ -298,42 +301,55 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
                             complete.store(true, Ordering::Relaxed);
                         }
                     });
-                    complete_cnt.push(complete.clone());
                 }
+                complete_cnt.push(complete.clone());
                 // match results{
                 //     Some(results) =>{
-                if fetch {
-                    BufOpsRequest::Fetch(Box::new(ArrayOpFetchHandle {
-                        indices: res_indices_map.clone(),
-                        complete: complete_cnt.clone(),
-                        results: res_map.clone(),
-                        req_cnt: req_cnt,
-                        _phantom: PhantomData,
-                    }))
-                }
-                // None => {
-                else {
-                    BufOpsRequest::NoFetch(Box::new(ArrayOpHandle {
-                        complete: complete_cnt.clone(),
-                    }))
+                match ret_type{
+                    OpReturnType::Fetch =>{
+                        BufOpsRequest::Fetch(Box::new(ArrayOpFetchHandleInner {
+                            indices: res_offsets_map.clone(),
+                            complete: complete_cnt.clone(),
+                            results: res_map.clone(),
+                            req_cnt: req_cnt,
+                            _phantom: PhantomData,
+                        }))
+                    } 
+                    OpReturnType::Result => {
+                        BufOpsRequest::Result(Box::new(ArrayOpResultHandleInner {
+                            indices: res_offsets_map.clone(),
+                            complete: complete_cnt.clone(),
+                            results: res_map.clone(),
+                            req_cnt: req_cnt,
+                            _phantom: PhantomData,
+                        }))
+                    }
+                    OpReturnType::None => {
+                        BufOpsRequest::NoFetch(Box::new(ArrayOpHandleInner {
+                            complete: complete_cnt.clone(),
+                        }))
+                    }
                 }
                 // }
             })
             .last()
             .unwrap();
-        submit_cnt.fetch_sub(1, Ordering::SeqCst);
-        req
+        // submit_cnt.fetch_sub(1, Ordering::SeqCst);
+        // req
+        req_handles.lock().insert(submit_cnt,req);
     }
 
-    pub(crate) fn initiate_op<'a>(
+    pub(crate) fn inner_initiate_op<'a>(
         &self,
         val: impl OpInput<'a, T>,
         index: impl OpInput<'a, usize>,
-        op: ArrayOpCmd,
-    ) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync> {
+        op: ArrayOpCmd<T>,
+        ret_type: OpReturnType,
+    ) -> Arc<Mutex<HashMap<usize,BufOpsRequest<T>>>> {
         let (mut indices, i_len) = index.as_op_input(); //(Vec<OpInputEnum<'a, usize>>, usize);
         let (mut vals, v_len) = val.as_op_input();
         let mut i_v_iters = vec![];
+        let req_handles = Arc::new(Mutex::new(HashMap::new()));
         // println!("i_len {i_len} v_len {v_len}");
         if v_len > 0 && i_len > 0 {
             if v_len == 1 && i_len > 1 {
@@ -364,110 +380,121 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
 
             // println!("i_v_iters len {:?}",i_v_iters.len());
 
-            let submit_cnt = Arc::new(AtomicUsize::new(i_v_iters.len()));
+            let num_sub_reqs = i_v_iters.len();//Arc::new(AtomicUsize::new(i_v_iters.len()));
+            let mut submit_cnt = num_sub_reqs - 1;
+            
 
             while i_v_iters.len() > 1{
-                let submit_cnt = submit_cnt.clone();
+                // let submit_cnt = submit_cnt.clone();
+                let req_handles = req_handles.clone();
                 let array = self.clone();
                 let input = i_v_iters.pop().unwrap();
                 self.inner.data.team.scheduler.submit_task(async move {
-                    array.initiate_op_task(false, op, input, submit_cnt);
+                    array.initiate_op_task(ret_type, op, input, submit_cnt,req_handles);
                 });
+                submit_cnt -= 1;
             }
-            let req = self.initiate_op_task(
-                false,
+            self.initiate_op_task(
+                ret_type,
                 op,
                 i_v_iters.pop().unwrap(),
-                submit_cnt.clone(),
+                submit_cnt,
+                req_handles.clone(),
             );
-            // println!("submit_cnt {:?}",submit_cnt);
-            while submit_cnt.load(Ordering::Relaxed) > 0 {
+            // req_handles.lock().insert(0,req);
+            
+            while req_handles.lock().len() < num_sub_reqs {
                 std::thread::yield_now();
             }
-            match req {
-                BufOpsRequest::NoFetch(req) => req,
-                BufOpsRequest::Fetch(_) => {
-                    panic!("trying to return a fetch request for not fetch operations")
-                }
-            }
+            // println!("submit_cnt {:?} {:?}",req_handles.lock().len(),num_sub_reqs);
+            req_handles
         } else {
-            Box::new(ArrayOpHandle {
-                complete: Vec::new(),
-            })
+            // println!("im not sure i can ever be here");
+            req_handles.lock().insert(0,match ret_type{
+                OpReturnType::Fetch =>{
+                    BufOpsRequest::Fetch(Box::new(ArrayOpFetchHandleInner {
+                        indices: OpReqOffsets::new(),
+                        complete: Vec::new(),
+                        results: OpResults::new(),
+                        req_cnt: 0,
+                        _phantom: PhantomData,
+                    }))
+                } 
+                OpReturnType::Result => {
+                    BufOpsRequest::Result(Box::new(ArrayOpResultHandleInner {
+                        indices: OpReqOffsets::new(),
+                        complete: Vec::new(),
+                        results: OpResults::new(),
+                        req_cnt: 0,
+                        _phantom: PhantomData,
+                    }))
+                }
+                OpReturnType::None => {
+                    BufOpsRequest::NoFetch(Box::new(ArrayOpHandleInner {
+                        complete: Vec::new(),
+                    }))
+                }
+            });
+            req_handles
         }
+    }
+
+    pub(crate) fn initiate_op<'a>(
+        &self,
+        val: impl OpInput<'a, T>,
+        index: impl OpInput<'a, usize>,
+        op: ArrayOpCmd<T>,
+    ) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync>{
+        let req_handles_mutex = self.inner_initiate_op(val, index, op, OpReturnType::None);
+        let mut req_handles = req_handles_mutex.lock();
+        let mut reqs = vec![];
+        for i in 0..req_handles.len(){
+            match req_handles.remove(&i).unwrap(){
+                BufOpsRequest::NoFetch(req) => reqs.push(req),
+                BufOpsRequest::Fetch(_) => panic!("trying to return a fetch request for not fetch operations"),
+                BufOpsRequest::Result(_) => panic!("trying to return a result request for not fetch operations"),
+            }
+        }
+        Box::new(ArrayOpHandle{reqs})
     }
 
     pub(crate) fn initiate_fetch_op<'a>(
         &self,
         val: impl OpInput<'a, T>,
         index: impl OpInput<'a, usize>,
-        op: ArrayOpCmd,
-    ) -> Box<dyn LamellarRequest<Output = Vec<T>> + Send + Sync> {
-        let (mut indices, i_len) = index.as_op_input();
-        let (mut vals, v_len) = val.as_op_input();
-        let mut i_v_iters = vec![];
-        if v_len > 0 && i_len > 0 {
-            if v_len == 1 && i_len > 1 {
-                let val = vals[0].first();
-                for i in indices.drain(..) {
-                    i_v_iters.push(InputToValue::ManyToOne(i, val));
-                }
-            } else if v_len > 1 && i_len == 1 {
-                let idx = indices[0].first();
-                for v in vals.drain(..) {
-                    i_v_iters.push(InputToValue::OneToMany(idx, v));
-                }
-            } else if i_len == v_len {
-                if i_len == 1{
-                    i_v_iters.push(InputToValue::OneToOne(indices[0].first(),vals[0].first()));
-                }
-                else{
-                    for (i, v) in indices.iter().zip(vals.iter()) {
-                        i_v_iters.push(InputToValue::ManyToMany(i.clone(), v.clone()));
-                    }
-                }
-            } else {
-                panic!(
-                    "not sure this case can exist!! indices len {:?} vals len {:?}",
-                    i_len, v_len
-                );
+        op: ArrayOpCmd<T>,
+    ) -> Box<dyn LamellarRequest<Output = Vec<T>> + Send + Sync>{
+        let req_handles_mutex = self.inner_initiate_op(val, index, op, OpReturnType::Fetch);
+        let mut req_handles = req_handles_mutex.lock();
+        let mut reqs = vec![];
+        // println!("req_handles len {:?} {:?}",req_handles.len(),req_handles);
+        for i in 0..req_handles.len(){
+            match req_handles.remove(&i).unwrap(){
+                BufOpsRequest::NoFetch(_) => panic!("trying to return a non fetch request for fetch operations"),
+                BufOpsRequest::Fetch(req) => reqs.push(req),
+                BufOpsRequest::Result(_) => panic!("trying to return a result request for fetch operations"),
             }
-
-            let submit_cnt = Arc::new(AtomicUsize::new(i_v_iters.len()));
-
-           
-            while i_v_iters.len() > 1{
-                let submit_cnt = submit_cnt.clone();
-                let array = self.clone();
-                let input = i_v_iters.pop().unwrap();
-                self.inner.data.team.scheduler.submit_task(async move {
-                    array.initiate_op_task(true, op, input, submit_cnt);
-                });
-            }
-            let req = self.initiate_op_task(
-                true,
-                op,
-                i_v_iters.pop().unwrap(),
-                submit_cnt.clone(),
-            );
-            while submit_cnt.load(Ordering::Relaxed) > 0 {
-                std::thread::yield_now();
-            }
-            match req {
-                BufOpsRequest::NoFetch(_) => {
-                    panic!("trying to return a fetch request for not fetch operations")
-                }
-                BufOpsRequest::Fetch(req) => req,
-            }
-        } else {
-            Box::new(ArrayOpFetchHandle {
-                indices: OpReqIndices::new(),
-                complete: Vec::new(),
-                results: OpResults::new(),
-                req_cnt: 0,
-                _phantom: PhantomData,
-            })
         }
+        Box::new(ArrayOpFetchHandle{reqs})
+    }
+    pub(crate) fn initiate_result_op<'a>(
+        &self,
+        val: impl OpInput<'a, T>,
+        index: impl OpInput<'a, usize>,
+        op: ArrayOpCmd<T>,
+    ) -> Box<dyn LamellarRequest<Output = Vec<Result<T,T>>> + Send + Sync>{
+        let req_handles_mutex = self.inner_initiate_op(val, index, op, OpReturnType::Result);
+        let mut req_handles = req_handles_mutex.lock();
+        let mut reqs = vec![];
+        // println!("req_handles len {:?}",req_handles.len());
+        for i in 0..req_handles.len(){
+            match req_handles.remove(&i).unwrap(){
+                BufOpsRequest::NoFetch(_) => panic!("trying to return a non fetch request for result operations"),
+                BufOpsRequest::Fetch(_) => panic!("trying to return a fetch request for result operations"),
+                BufOpsRequest::Result(req) => reqs.push(req),
+            }
+        }
+        Box::new(ArrayOpResultHandle{reqs})
     }
 
     // pub fn op_put(

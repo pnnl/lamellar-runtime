@@ -3,7 +3,7 @@ use lamellar::array::{
     ElementOps,
 };
 
-#[lamellar::AmData(Default, Debug, ArithmeticOps)]
+#[lamellar::AmData(Default, Debug, ArithmeticOps, PartialEq)]
 struct Custom {
     int: usize,
     float: f32,

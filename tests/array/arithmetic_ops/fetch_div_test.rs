@@ -101,8 +101,9 @@ macro_rules! add_test{
                         let val = req.get().unwrap()[0];
                         if val > prev || (prev as u128)%2 != 0{
                             if prev > 1 as $t{
-                                println!("full 1: {:?} {:?}",val,prev);
+                                println!("full 1: {:?} {:?} {:?}",init_val,val,prev);
                                 success = false;
+                                break;
                             }
                         }
                         prev = val;
@@ -117,6 +118,7 @@ macro_rules! add_test{
                 check_val!($array,val,one,success);
                 if !success{
                     println!("{:?} {:?} {:?}",i,val,one);
+                    break;
                 }
             }
 
@@ -140,6 +142,7 @@ macro_rules! add_test{
                             if prev > 1 as $t{
                                 println!("half 1: {:?} {:?} {:?} {:?}",i,val,prev,init_val);
                                 success = false;
+                                break;
                             }
                         }
                         prev = val;
@@ -155,8 +158,9 @@ macro_rules! add_test{
                         let val = req.get().unwrap()[0];
                         if val > prev || (prev as u128)%2 != 0{
                             if prev > 1 as $t{
-                                println!("full 1: {:?} {:?}",val,prev);
+                                println!("half 1: {:?} {:?}",val,prev);
                                 success = false;
+                                break;
                             }
                         }
                         prev = val;
@@ -170,6 +174,7 @@ macro_rules! add_test{
                 check_val!($array,val,one,success);
                 if !success{
                     println!("{:?} {:?} {:?}",i,val,one);
+                    break;
                 }
             }
             sub_array.barrier();
@@ -193,6 +198,7 @@ macro_rules! add_test{
                                 if prev > 1 as $t{
                                     println!("pe 1: {:?} {:?} {:?} {:?}",i,val,prev,init_val);
                                     success = false;
+                                    break;
                                 }
                             }
                             prev = val;
@@ -208,8 +214,9 @@ macro_rules! add_test{
                             let val = req.get().unwrap()[0];
                             if val > prev || (prev as u128)%2 != 0{
                                 if prev > 1 as $t{
-                                    println!("full 1: {:?} {:?}",val,prev);
+                                    println!("pe 1: {:?} {:?}",val,prev);
                                     success = false;
+                                    break;
                                 }
                             }
                             prev = val;
@@ -223,6 +230,7 @@ macro_rules! add_test{
                     check_val!($array,val,one,success);
                     if !success{
                         println!("{:?} {:?} {:?}",i,val,one);
+                        break;
                     }
                 }
                 sub_array.barrier();
