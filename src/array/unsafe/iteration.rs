@@ -86,8 +86,8 @@ impl<T: Dist> DistIteratorLauncher for UnsafeArray<T> {
     fn for_each_async<I, F, Fut>(&self, iter: &I, op: F)
     where
         I: DistributedIterator + 'static,
-        F: Fn(I::Item) -> Fut + Sync + Send + Clone + 'static,
-        Fut: Future<Output = ()> + Sync + Send + Clone + 'static,
+        F: Fn(I::Item) -> Fut + Sync + Send  + Clone +  'static,
+        Fut: Future<Output = ()> + Send +  'static,
     {
         if let Ok(_my_pe) = self.inner.data.team.team_pe_id() {
             let num_workers = match std::env::var("LAMELLAR_THREADS") {

@@ -241,8 +241,8 @@ impl<T: Dist> DistIteratorLauncher for LocalLockAtomicArray<T> {
     fn for_each_async<I, F, Fut>(&self, iter: &I, op: F)
     where
         I: DistributedIterator + 'static,
-        F: Fn(I::Item) -> Fut + Sync + Send + Clone + 'static,
-        Fut: Future<Output = ()> + Sync + Send + Clone + 'static,
+        F: Fn(I::Item) -> Fut + Sync + Send  + Clone + 'static,
+        Fut: Future<Output = ()> + Send + 'static,
     {
         self.array.for_each_async(iter, op)
     }

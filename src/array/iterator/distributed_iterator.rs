@@ -1,6 +1,7 @@
 mod chunks;
 mod enumerate;
 mod ignore;
+mod map;
 mod step_by;
 mod take;
 mod zip;
@@ -8,6 +9,7 @@ mod zip;
 use chunks::*;
 use enumerate::*;
 use ignore::*;
+use map::*;
 use step_by::*;
 use take::*;
 use zip::*;
@@ -50,8 +52,8 @@ where
 pub(crate) struct ForEachAsync<I, F, Fut>
 where
     I: DistributedIterator,
-    F: Fn(I::Item) -> Fut + Sync + Send,
-    Fut: Future<Output = ()> + Sync + Send,
+    F: Fn(I::Item) -> Fut + Sync + Send + Clone,
+    Fut: Future<Output = ()> + Send,
 {
     pub(crate) op: F,
     pub(crate) data: I,
@@ -62,8 +64,8 @@ where
 impl<I, F, Fut> LamellarAm for ForEachAsync<I, F, Fut>
 where
     I: DistributedIterator + 'static,
-    F: Fn(I::Item) -> Fut + Sync + Send + 'static,
-    Fut: Future<Output = ()> + Sync + Send + 'static,
+    F: Fn(I::Item) -> Fut + Sync + Send  + Clone + 'static,
+    Fut: Future<Output = ()> + Send + 'static,
 {
     fn exec(&self) {
         let mut iter = self.data.init(self.start_i, self.end_i - self.start_i);
@@ -84,15 +86,15 @@ pub trait DistIteratorLauncher {
     //this really needs to return a task group handle...
     where
         I: DistributedIterator + 'static,
-        F: Fn(I::Item) -> Fut + Sync + Send + Clone + 'static,
-        Fut: Future<Output = ()> + Sync + Send + Clone + 'static;
+        F: Fn(I::Item) -> Fut + Sync + Send  + Clone +  'static,
+        Fut: Future<Output = ()> + Send +  'static;
 
     fn global_index_from_local(&self, index: usize, chunk_size: usize) -> Option<usize>;
     fn subarray_index_from_local(&self, index: usize, chunk_size: usize) -> Option<usize>;
 }
 
 pub trait DistributedIterator: Sync + Send + Clone {
-    type Item: Sync + Send;
+    type Item: Send;
     type Array: DistIteratorLauncher;
     fn init(&self, start_i: usize, cnt: usize) -> Self;
     fn array(&self) -> Self::Array;
@@ -111,6 +113,12 @@ pub trait DistributedIterator: Sync + Send + Clone {
     }
     fn ignore(self, count: usize) -> Ignore<Self> {
         Ignore::new(self, count)
+    }
+    fn map<F, R>(self, op: F) -> Map<Self, F>
+    where
+        F: Fn(Self::Item) -> R + Sync + Send + Clone + 'static,
+        R: Send + 'static,{
+        Map::new(self, op)
     }
     fn step_by(self, step_size: usize) -> StepBy<Self> {
         StepBy::new(self, step_size)

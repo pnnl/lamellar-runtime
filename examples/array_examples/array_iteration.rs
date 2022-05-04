@@ -1,6 +1,8 @@
 use lamellar::array::{DistributedIterator, Distribution, SerialIterator, UnsafeArray};
-
+use lamellar::array::ArithmeticOps;
 const ARRAY_LEN: usize = 100;
+
+
 
 fn main() {
     let world = lamellar::LamellarWorldBuilder::new().build();
@@ -8,6 +10,7 @@ fn main() {
     let _num_pes = world.num_pes();
     let block_array = UnsafeArray::<usize>::new(world.team(), ARRAY_LEN, Distribution::Block);
     let cyclic_array = UnsafeArray::<usize>::new(world.team(), ARRAY_LEN, Distribution::Cyclic);
+
 
     // We expose multiple ways to iterate over a lamellar array
     // the first approach introduces what we call a distributed iterator (inspired by Rayon's parallel iterators).
@@ -33,7 +36,7 @@ fn main() {
     cyclic_array.wait_all();
     cyclic_array.barrier();
 
-    let block_array = block_array.into_read_only();
+    // let block_array = block_array.into_read_only();
     block_array.print();
     cyclic_array.print();
 
@@ -107,6 +110,30 @@ fn main() {
                 i,
                 data
             )
+        });
+    block_array.wait_all();
+    block_array.barrier();
+
+    println!("--------------------------------------------------------");
+    println!("map");
+    let barray = block_array.clone();
+    cyclic_array
+        .dist_iter()
+        .enumerate()
+        .map(move|(i, elem)| {
+            let barray = barray.clone(); 
+            async move {
+                (i,elem,barray.fetch_add(i,*elem).into_future().await.unwrap()[0]) 
+            }
+        }
+        )
+        .for_each_async(move |i| async move{
+            println!(
+                "[pe({:?})-{:?}] {:?}",
+                my_pe,
+                std::thread::current().id(),
+                i.await
+            );
         });
     block_array.wait_all();
     block_array.barrier();
