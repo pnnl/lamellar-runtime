@@ -27,11 +27,9 @@ impl std::fmt::Display for MemNotLocalError {
 
 impl std::error::Error for MemNotLocalError {}
 
-pub trait Dist2: Send + Sync + Copy {}
-impl<T: Send + Sync + Copy> Dist2 for T {}
 
 pub trait Dist: Send + Sync + Copy + std::fmt::Debug + 'static {}
-// impl<T: Send + Sync + Copy /*+ 'static*/>
+// impl<T: Send + Sync + Copy + std::fmt::Debug + 'static>
 //     Dist for T
 // {
 // }

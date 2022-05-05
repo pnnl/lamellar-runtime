@@ -192,6 +192,9 @@ impl<T: Dist> DistIteratorLauncher for ReadOnlyArray<T> {
     {
         self.array.for_each_async(iter, op)
     }
+    fn team(&self) -> Pin<Arc<LamellarTeamRT>> {
+        self.array.team().clone()
+    }
 }
 
 impl<T: Dist> private::ArrayExecAm<T> for ReadOnlyArray<T> {

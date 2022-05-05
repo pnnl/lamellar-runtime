@@ -336,6 +336,7 @@ impl<T: Dist + std::default::Default> GenericAtomicArray<T> {
             for pe in 0..op_bufs.len() {
                 op_bufs[pe] = func(bytearray.clone());
             }
+            // println!("{}", op_bufs.len());
         }
 
         GenericAtomicArray {

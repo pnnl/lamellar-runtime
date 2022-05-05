@@ -1066,7 +1066,6 @@ pub enum LamellarArrayInput<T: Dist> {
     SharedMemRegion(SharedMemoryRegion<T>), //when used as input/output we are only using the local data
     LocalMemRegion(LocalMemoryRegion<T>),
     // Unsafe(UnsafeArray<T>),
-    // Vec(Vec<T>),
 }
 
 pub trait LamellarWrite {}
@@ -1089,6 +1088,33 @@ impl<T: Dist> MyFrom<T> for LamellarArrayInput<T> {
         let buf: LocalMemoryRegion<T> = team.alloc_local_mem_region(1);
         unsafe {
             buf.as_mut_slice().unwrap()[0] = val;
+        }
+        LamellarArrayInput::LocalMemRegion(buf)
+    }
+}
+
+impl<T: Dist> MyFrom<Vec<T>> for LamellarArrayInput<T> {
+    fn my_from(vals: Vec<T>, team: &Pin<Arc<LamellarTeamRT>>) -> Self {
+        let buf: LocalMemoryRegion<T> = team.alloc_local_mem_region(vals.len());
+        unsafe {
+            std::ptr::copy_nonoverlapping(
+                vals.as_ptr(),
+                buf.as_mut_ptr().unwrap(),
+                vals.len(),
+            );
+        }
+        LamellarArrayInput::LocalMemRegion(buf)
+    }
+}
+impl<T: Dist> MyFrom<&Vec<T>> for LamellarArrayInput<T> {
+    fn my_from(vals: &Vec<T>, team: &Pin<Arc<LamellarTeamRT>>) -> Self {
+        let buf: LocalMemoryRegion<T> = team.alloc_local_mem_region(vals.len());
+        unsafe {
+            std::ptr::copy_nonoverlapping(
+                vals.as_ptr(),
+                buf.as_mut_ptr().unwrap(),
+                vals.len(),
+            );
         }
         LamellarArrayInput::LocalMemRegion(buf)
     }

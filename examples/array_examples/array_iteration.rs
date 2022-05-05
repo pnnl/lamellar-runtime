@@ -1,4 +1,4 @@
-use lamellar::array::{DistributedIterator, Distribution, SerialIterator, UnsafeArray};
+use lamellar::array::{DistributedIterator, Distribution, SerialIterator, UnsafeArray, ReadOnlyArray};
 use lamellar::array::ArithmeticOps;
 const ARRAY_LEN: usize = 100;
 
@@ -135,8 +135,57 @@ fn main() {
                 i.await
             );
         });
+    cyclic_array.wait_all();
+    cyclic_array.barrier();
+    block_array.print();
+
+    println!("--------------------------------------------------------");
+    println!("filter");
+    block_array.dist_iter().enumerate().filter(|(_, elem)| *elem % 4 == 0).for_each(move |(i, elem)| {
+        println!(
+            "[pe({:?})-{:?}] i: {:?} {:?}",
+            my_pe,
+            std::thread::current().id(),
+            i,
+            elem
+        )
+    });
     block_array.wait_all();
     block_array.barrier();
+
+    println!("--------------------------------------------------------");
+
+    println!("--------------------------------------------------------");
+    println!("filter_map");
+    block_array.dist_iter().enumerate().filter_map(|(i, elem)| { 
+        if *elem % 4 == 0 {
+            Some((i,*elem as f32))
+        }
+        else{
+            None
+        }
+    }).for_each(move |(i, elem)| {
+        println!(
+            "[pe({:?})-{:?}] i: {:?} {:?}",
+            my_pe,
+            std::thread::current().id(),
+            i,
+            elem
+        )
+    });
+    block_array.wait_all();
+    block_array.barrier();
+    println!("--------------------------------------------------------");
+    println!("filter_map collect");
+    let new_block_array = block_array.dist_iter().filter_map(| elem| { 
+        if *elem % 8 == 0 {
+            Some(*elem as f32)
+        }
+        else{
+            None
+        }
+    }).collect::<ReadOnlyArray<f32>>(Distribution::Block);
+    new_block_array.print();
 
     println!("--------------------------------------------------------");
 

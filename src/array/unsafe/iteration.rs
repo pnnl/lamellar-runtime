@@ -123,4 +123,8 @@ impl<T: Dist> DistIteratorLauncher for UnsafeArray<T> {
             }
         }
     }
+
+    fn team(&self) -> Pin<Arc<LamellarTeamRT>> {
+        self.inner.data.team.clone()
+    }
 }

@@ -1,5 +1,7 @@
 mod chunks;
 mod enumerate;
+mod filter;
+mod filter_map;
 mod ignore;
 mod map;
 mod step_by;
@@ -8,18 +10,24 @@ mod zip;
 
 use chunks::*;
 use enumerate::*;
+use filter::*;
+use filter_map::*;
 use ignore::*;
 use map::*;
 use step_by::*;
 use take::*;
 use zip::*;
 
-use crate::memregion::Dist;
+use crate::memregion::{Dist};
+use crate::LamellarTeamRT;
 // use crate::LamellarArray;
-use crate::array::{AtomicArray, GenericAtomicArray, LamellarArray, NativeAtomicArray}; //, LamellarArrayPut, LamellarArrayGet};
+use crate::array::{UnsafeArray,AtomicArray, GenericAtomicArray, LamellarArray, NativeAtomicArray, Distribution}; //, LamellarArrayPut, LamellarArrayGet};
+use crate::array::iterator::serial_iterator::SerialIterator;
 use enum_dispatch::enum_dispatch;
 use futures::Future;
 use std::marker::PhantomData;
+use std::pin::Pin;
+use std::sync::Arc;
 
 #[lamellar_impl::AmLocalDataRT(Clone)]
 pub(crate) struct ForEach<I, F>
@@ -91,6 +99,7 @@ pub trait DistIteratorLauncher {
 
     fn global_index_from_local(&self, index: usize, chunk_size: usize) -> Option<usize>;
     fn subarray_index_from_local(&self, index: usize, chunk_size: usize) -> Option<usize>;
+    fn team(&self) -> Pin<Arc<LamellarTeamRT>>;
 }
 
 pub trait DistributedIterator: Sync + Send + Clone {
@@ -107,6 +116,17 @@ pub trait DistributedIterator: Sync + Send + Clone {
 
     fn enumerate(self) -> Enumerate<Self> {
         Enumerate::new(self, 0)
+    }
+    fn filter<F>(self, op: F) -> Filter<Self,F> 
+    where
+        F: Fn(&Self::Item) -> bool + Sync + Send + Clone + 'static {
+        Filter::new(self, op)
+    }
+    fn filter_map<F, R>(self, op: F) -> FilterMap<Self, F>
+    where
+        F: Fn(Self::Item) -> Option<R> + Sync + Send + Clone + 'static,
+        R: Send + 'static,{
+        FilterMap::new(self, op)
     }
     fn chunks(self, size: usize) -> Chunks<Self> {
         Chunks::new(self, 0, 0, size)
@@ -128,6 +148,33 @@ pub trait DistributedIterator: Sync + Send + Clone {
     }
     fn zip<I: DistributedIterator>(self, iter: I) -> Zip<Self, I> {
         Zip::new(self, iter)
+    }
+    fn collect<A>(self,d: Distribution) -> A 
+        where Self::Item: Dist, A: From<UnsafeArray<Self::Item>>  {
+        let team = self.array().team();
+        let local_sizes = UnsafeArray::<usize>::new(team.clone(),team.num_pes, Distribution::Block);
+        let mut local_items = vec![];
+        let mut iter = self.init(0, usize::MAX); //for now just iterate over the whole array here
+        while let Some(item) = iter.next(){
+            println!("item {:?}", item);
+            local_items.push(item);
+        }
+        unsafe{ local_sizes.local_as_mut_slice()[0]=local_items.len(); }
+        local_sizes.barrier();
+        local_sizes.print();
+        let mut size = 0;
+        let mut my_start = 0;
+        let my_pe = team.team_pe.expect("pe not part of team");
+        local_sizes.ser_iter().into_iter().enumerate().for_each(|(i,local_size)| {
+            size += local_size;
+            if i < my_pe{
+                my_start += local_size;
+            }
+        });
+        println!{"size{} my_start {}",size,my_start};
+        let array =  UnsafeArray::<Self::Item>::new(team, size, d); //implcit barrier
+        array.put(my_start,&local_items);
+        array.into()
     }
 }
 

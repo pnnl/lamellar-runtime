@@ -151,7 +151,7 @@ pub use crate::lamellar_team::LamellarTeamRT;
 extern crate lamellar_impl;
 pub use lamellar_impl::{
     am, generate_reductions_for_type, local_am, register_reduction, AmData, AmLocalData,
-    ArithmeticOps, Dist,
+    ArithmeticOps, Dist, generate_ops_for_type,
 };
 
 // #[doc(hidden)]

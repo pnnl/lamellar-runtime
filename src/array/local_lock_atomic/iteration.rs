@@ -123,7 +123,7 @@ impl<T: Dist + 'static> LocalLockAtomicDistIterMut<'static, T> {
     pub fn for_each_async<F, Fut>(&self, op: F)
     where
         F: Fn(&mut T) -> Fut + Sync + Send + Clone + 'static,
-        Fut: Future<Output = ()> + Sync + Send + Clone + 'static,
+        Fut: Future<Output = ()> + Send +  'static,
     {
         self.data.clone().for_each_async(self, op);
     }
@@ -245,5 +245,8 @@ impl<T: Dist> DistIteratorLauncher for LocalLockAtomicArray<T> {
         Fut: Future<Output = ()> + Send + 'static,
     {
         self.array.for_each_async(iter, op)
+    }
+    fn team(&self) -> Pin<Arc<LamellarTeamRT>> {
+        self.array.team().clone()
     }
 }
