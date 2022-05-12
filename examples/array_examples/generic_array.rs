@@ -21,9 +21,10 @@ fn main() {
     let num_pes = world.num_pes();
     let wrapped_array_f32 = ArrayWrapper::<f32>::new(world.clone(), 10 * num_pes);
     let wrapped_array_usize = ArrayWrapper::<usize>::new(world.clone(), 10 * num_pes);
-    let wrapped_array_option_u8 = ArrayWrapper::<Option<u8>>::new(world.clone(), 10 * num_pes);
-    wrapped_array_f32.array.print();
-    wrapped_array_usize.array.print();
+    // let wrapped_array_option_u8 = ArrayWrapper::<Option<u8>>::new(world.clone(), 10 * num_pes); //todo get this to work...
+    // wrapped_array_f32.array.print();
+    // wrapped_array_usize.array.print();
+}
 //     wrapped_array_option_u8.array.compare_exchange(0,None,Some(1));
 //     wrapped_array_option_u8.array.compare_exchange(7,None,Some(7));
 //     wrapped_array_option_u8.array.wait_all();

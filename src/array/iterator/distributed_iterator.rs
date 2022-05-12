@@ -20,10 +20,13 @@ use zip::*;
 
 use crate::memregion::{Dist};
 use crate::LamellarTeamRT;
+use crate::LamellarRequest;
 // use crate::LamellarArray;
 use crate::array::{UnsafeArray,AtomicArray, GenericAtomicArray, LamellarArray, NativeAtomicArray, Distribution}; //, LamellarArrayPut, LamellarArrayGet};
 use crate::array::iterator::serial_iterator::SerialIterator;
+
 use enum_dispatch::enum_dispatch;
+use async_trait::async_trait;
 use futures::Future;
 use std::marker::PhantomData;
 use std::pin::Pin;
@@ -83,24 +86,108 @@ where
     }
 }
 
+#[async_trait]
+pub trait DistIterRequest{
+    type Output;
+    async fn into_future(mut self: Box<Self>) -> Self::Output;
+    fn wait(self: Box<Self>) -> Self::Output;
+}
+
+pub struct DistIterForEachHandle{
+    pub(crate) reqs: Vec<Box<dyn LamellarRequest<Output = ()> + Send + Sync>>,
+}
+#[async_trait]
+impl DistIterRequest for DistIterForEachHandle {
+    type Output = ();
+    async fn into_future(mut self: Box<Self>) -> Self::Output {
+        for req in self.reqs.drain(0..) {
+            req.into_future().await;
+        }
+    }
+    fn wait(mut self: Box<Self>) -> Self::Output {
+        for req in self.reqs.drain(0..) {
+            req.get();
+        }
+    }
+}
+
+pub struct DistIterCollectHandle<T: Dist,A: From<UnsafeArray<T>>>{
+    pub(crate) reqs: Vec<Box<dyn LamellarRequest<Output = Vec<T>> + Send + Sync>>,
+    pub(crate) distribution: Distribution,
+    pub(crate) team: Pin<Arc<LamellarTeamRT>>,
+    pub(crate) _phantom: PhantomData<A>,
+}
+
+impl<T: Dist, A: From<UnsafeArray<T>>> DistIterCollectHandle<T,A> {
+    fn create_array(&self, local_vals: &Vec<T>) -> A {
+        let local_sizes = UnsafeArray::<usize>::new(self.team.clone(),self.team.num_pes, Distribution::Block);
+        unsafe{ local_sizes.local_as_mut_slice()[0]=local_vals.len(); }
+        local_sizes.barrier();
+        local_sizes.print();
+        let mut size = 0;
+        let mut my_start = 0;
+        let my_pe = self.team.team_pe.expect("pe not part of team");
+        local_sizes.ser_iter().into_iter().enumerate().for_each(|(i,local_size)| {
+            size += local_size;
+            if i < my_pe{
+                my_start += local_size;
+            }
+        });
+        let array =  UnsafeArray::<T>::new(self.team.clone(), size, self.distribution); //implcit barrier
+        array.put(my_start, local_vals);
+        array.into()
+    }
+}
+#[async_trait]
+impl<T: Dist, A: From<UnsafeArray<T>> + Send > DistIterRequest for DistIterCollectHandle<T,A> 
+{
+    type Output = A;
+    async fn into_future(mut self: Box<Self>) -> Self::Output {
+        let mut local_vals = vec![];
+        for req in self.reqs.drain(0..) {
+            let v = req.into_future().await;
+            local_vals.extend(v);
+        }
+        self.create_array(&local_vals)
+    }
+    fn wait(mut self: Box<Self>) -> Self::Output {
+        let mut local_vals = vec![];
+        for req in self.reqs.drain(0..) {
+            let v = req.get();
+            local_vals.extend(v);
+        }
+        self.create_array(&local_vals)
+    }
+}
+
+
 #[enum_dispatch]
 pub trait DistIteratorLauncher {
-    fn for_each<I, F>(&self, iter: I, op: F)
+    fn for_each<I, F>(&self, iter: &I, op: F) -> DistIterForEachHandle
     //this really needs to return a task group handle...
     where
         I: DistributedIterator + 'static,
         F: Fn(I::Item) + Sync + Send + Clone + 'static;
-    fn for_each_async<I, F, Fut>(&self, iter: &I, op: F)
+    fn for_each_async<I, F, Fut>(&self, iter: &I, op: F) -> DistIterForEachHandle
     //this really needs to return a task group handle...
     where
         I: DistributedIterator + 'static,
         F: Fn(I::Item) -> Fut + Sync + Send  + Clone +  'static,
         Fut: Future<Output = ()> + Send +  'static;
 
+    fn collect<I,A>(&self, iter: &I,d: Distribution) -> DistIterCollectHandle<I::Item,A> 
+        where 
+        I: DistributedIterator + 'static,
+        I::Item: Dist,
+        A: From<UnsafeArray<I::Item>>;
+            
+
     fn global_index_from_local(&self, index: usize, chunk_size: usize) -> Option<usize>;
     fn subarray_index_from_local(&self, index: usize, chunk_size: usize) -> Option<usize>;
     fn team(&self) -> Pin<Arc<LamellarTeamRT>>;
 }
+
+
 
 pub trait DistributedIterator: Sync + Send + Clone {
     type Item: Send;
@@ -149,32 +236,27 @@ pub trait DistributedIterator: Sync + Send + Clone {
     fn zip<I: DistributedIterator>(self, iter: I) -> Zip<Self, I> {
         Zip::new(self, iter)
     }
-    fn collect<A>(self,d: Distribution) -> A 
-        where Self::Item: Dist, A: From<UnsafeArray<Self::Item>>  {
-        let team = self.array().team();
-        let local_sizes = UnsafeArray::<usize>::new(team.clone(),team.num_pes, Distribution::Block);
-        let mut local_items = vec![];
-        let mut iter = self.init(0, usize::MAX); //for now just iterate over the whole array here
-        while let Some(item) = iter.next(){
-            println!("item {:?}", item);
-            local_items.push(item);
-        }
-        unsafe{ local_sizes.local_as_mut_slice()[0]=local_items.len(); }
-        local_sizes.barrier();
-        local_sizes.print();
-        let mut size = 0;
-        let mut my_start = 0;
-        let my_pe = team.team_pe.expect("pe not part of team");
-        local_sizes.ser_iter().into_iter().enumerate().for_each(|(i,local_size)| {
-            size += local_size;
-            if i < my_pe{
-                my_start += local_size;
-            }
-        });
-        println!{"size{} my_start {}",size,my_start};
-        let array =  UnsafeArray::<Self::Item>::new(team, size, d); //implcit barrier
-        array.put(my_start,&local_items);
-        array.into()
+    fn for_each<F>(&self, op: F) -> DistIterForEachHandle
+    //this really needs to return a task group handle...
+    where
+    &'static Self: DistributedIterator + 'static,
+    F: Fn(Self::Item) + Sync + Send + Clone + 'static, {
+        self.array().for_each(self, op)
+    }
+    fn for_each_async< F, Fut>(&self, op: F) -> DistIterForEachHandle
+    //this really needs to return a task group handle...
+    where
+        &'static Self: DistributedIterator + 'static,
+        F: Fn(Self::Item) -> Fut + Sync + Send  + Clone +  'static,
+        Fut: Future<Output = ()> + Send +  'static{
+        self.array().for_each_async(self,  op)
+    }
+    fn collect<A>(&self,d: Distribution) -> DistIterCollectHandle<Self::Item,A> 
+    where 
+        &'static Self: DistributedIterator + 'static,
+        Self::Item: Dist, 
+        A: From<UnsafeArray<Self::Item>>  {
+        self.array().collect(self,d)
     }
 }
 
@@ -203,7 +285,7 @@ impl<
         A: LamellarArray<T> + DistIteratorLauncher + Sync + Send + Clone + 'static,
     > DistIter<'static, T, A>
 {
-    pub fn for_each<F>(self, op: F)
+    pub fn for_each<F>(&self, op: F)
     where
         F: Fn(&T) + Sync + Send + Clone + 'static,
     {
@@ -296,7 +378,7 @@ impl<
         A: LamellarArray<T> + Sync + Send + DistIteratorLauncher + Clone + 'static,
     > DistIterMut<'static, T, A>
 {
-    pub fn for_each<F>(self, op: F)
+    pub fn for_each<F>(&self, op: F)
     where
         F: Fn(&mut T) + Sync + Send + Clone + 'static,
     {

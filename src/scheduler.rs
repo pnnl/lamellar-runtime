@@ -15,12 +15,18 @@ use std::sync::{Arc, Weak};
 pub(crate) mod work_stealing;
 use work_stealing::{WorkStealing, WorkStealingInner};
 
+#[derive(Copy,Clone,Debug,serde::Serialize,serde::Deserialize,std::cmp::Eq,std::cmp::PartialEq, Hash)]
+pub(crate) struct ReqId {
+    pub(crate) id: usize,
+    pub(crate) sub_id: usize
+}
+
 pub(crate) struct ReqData {
     pub(crate) src: usize,
     pub(crate) dst: Option<usize>, //team based pe id
     pub(crate) cmd: ExecType,
-    pub(crate) id: usize,
-    pub(crate) batch_id: Option<usize>,
+    pub(crate) id: ReqId,
+    pub(crate) batch_id: Option<ReqId>,
     pub(crate) func: LamellarFunc,
     pub(crate) lamellae: Arc<Lamellae>,
     pub(crate) world: Pin<Arc<LamellarTeamRT>>,
@@ -63,7 +69,7 @@ pub(crate) trait AmeSchedulerQueue: Sync + Send {
         src: usize,
         dst: Option<usize>,
         cmd: ExecType,
-        id: usize,
+        id: ReqId,
         func: LamellarFunc,
         lamellae: Arc<Lamellae>,
         world: Pin<Arc<LamellarTeamRT>>,
@@ -97,7 +103,7 @@ pub(crate) trait SchedulerQueue: Sync + Send {
         src: usize,
         dst: Option<usize>,
         cmd: ExecType,
-        id: usize,
+        id: ReqId,
         func: LamellarFunc,
         lamellae: Arc<Lamellae>,
         world: Pin<Arc<LamellarTeamRT>>,

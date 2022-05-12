@@ -21,7 +21,7 @@ where
     I: DistributedIterator + 'static,
     F: FnMut(&I::Item) -> bool + Send + Sync + Clone + 'static,
 {
-    pub fn for_each<G>(self, op: G)
+    pub fn for_each<G>(&self, op: G)
     where
         G: Fn(I::Item) + Sync + Send + Clone + 'static,
     {

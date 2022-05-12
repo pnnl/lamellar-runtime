@@ -22,7 +22,7 @@ where
     A: DistributedIterator + 'static,
     B: DistributedIterator + 'static,
 {
-    pub fn for_each<F>(self, op: F)
+    pub fn for_each<F>(&self, op: F)
     where
         F: Fn(
                 (

@@ -1,7 +1,7 @@
 use crate::active_messaging::*;
 use crate::lamellae::{create_lamellae, Backend, Lamellae, LamellaeComm, LamellaeInit};
 use crate::lamellar_arch::LamellarArch;
-use crate::lamellar_request::LamellarRequest;
+use crate::lamellar_request::{LamellarRequest, LamellarMultiRequest};
 use crate::lamellar_team::{LamellarTeam, LamellarTeamRT};
 use crate::memregion::{
     local::LocalMemoryRegion, shared::SharedMemoryRegion, Dist, RemoteMemoryRegion,
@@ -38,7 +38,7 @@ impl ActiveMessaging for LamellarWorld {
     fn barrier(&self) {
         self.team.barrier();
     }
-    fn exec_am_all<F>(&self, am: F) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync>
+    fn exec_am_all<F>(&self, am: F) -> Box<dyn LamellarMultiRequest<Output = F::Output> + Send + Sync>
     where
         F: RemoteActiveMessage + LamellarAM + Serde + AmDist,
     {

@@ -427,14 +427,14 @@ fn exec_local(ame: &ActiveMessageEngine, msg: Msg, func: LamellarLocal, ireq: In
                     }
                     _ => println!("unexpected return type"),
                 };
-                ireq.team_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
-                ireq.world_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
+                // ireq.team_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
+                // ireq.world_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
             }
             Cmd::ExecReturn => {
                 func();
                 ame.send_data_to_user_handle(msg.req_id, msg.src, None);
-                ireq.team_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
-                ireq.world_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
+                // ireq.team_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
+                // ireq.world_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
             }
             _ => println!(
                 "[LAMELLAR WARNING]local  am unknown(or unhandled) command {:?}",

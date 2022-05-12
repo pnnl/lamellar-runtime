@@ -1,8 +1,9 @@
 use crate::array::r#unsafe::*;
 
-use crate::array::iterator::distributed_iterator::{
-    DistIter, DistIterMut, DistIteratorLauncher, DistributedIterator, ForEach, ForEachAsync,
-};
+use crate::array::iterator::distributed_iterator::*;
+// {
+//     DistIter, DistIterMut, DistIteratorLauncher, DistributedIterator, ForEach, ForEachAsync, DistIterForEachHandle, DistIterCollectHandle
+// };
 use crate::array::iterator::serial_iterator::LamellarArrayIter;
 use crate::array::*;
 use crate::memregion::Dist;
@@ -47,7 +48,7 @@ impl<T: Dist> DistIteratorLauncher for UnsafeArray<T> {
         }
     }
 
-    fn for_each<I, F>(&self, iter: I, op: F)
+    fn for_each<I, F>(&self, iter: &I, op: F) -> DistIterForEachHandle
     where
         I: DistributedIterator + 'static,
         F: Fn(I::Item) + Sync + Send + Clone + 'static,
@@ -70,20 +71,14 @@ impl<T: Dist> DistIteratorLauncher for UnsafeArray<T> {
                     start_i: start_i,
                     end_i: end_i,
                 },);
-                // self.inner.data.team.exec_am_local_tg(
-                //     ForEach {
-                //         op: op.clone(),
-                //         data: iter.clone(),
-                //         start_i: start_i,
-                //         end_i: end_i,
-                //     },
-                //     Some(self.inner.data.array_counters.clone()),
-                // );
                 worker += 1;
             }
         }
+        DistIterForEachHandle{ //TODO actually hold the reqs from the exec_am_local...
+            reqs: Vec::new(),
+        }
     }
-    fn for_each_async<I, F, Fut>(&self, iter: &I, op: F)
+    fn for_each_async<I, F, Fut>(&self, iter: &I, op: F) -> DistIterForEachHandle
     where
         I: DistributedIterator + 'static,
         F: Fn(I::Item) -> Fut + Sync + Send  + Clone +  'static,
@@ -98,29 +93,37 @@ impl<T: Dist> DistIteratorLauncher for UnsafeArray<T> {
             let elems_per_thread = num_elems_local as f64 / num_workers as f64;
             // println!("num_chunks {:?} chunks_thread {:?}", num_elems_local, elems_per_thread);
             let mut worker = 0;
+            let mut reqs = Vec::new();
             while ((worker as f64 * elems_per_thread).round() as usize) < num_elems_local {
                 let start_i = (worker as f64 * elems_per_thread).round() as usize;
                 let end_i = ((worker + 1) as f64 * elems_per_thread).round() as usize;
-                self.inner.data.task_group.exec_am_local(
+                reqs.push(self.inner.data.task_group.exec_am_local(
                     ForEachAsync {
                         op: op.clone(),
                         data: iter.clone(),
                         start_i: start_i,
                         end_i: end_i,
                     },
-                    // Some(self.inner.data.array_counters.clone()),
-                );
-                // self.inner.data.team.exec_am_local_tg(
-                //     ForEachAsync {
-                //         op: op.clone(),
-                //         data: iter.clone(),
-                //         start_i: start_i,
-                //         end_i: end_i,
-                //     },
-                //     Some(self.inner.data.array_counters.clone()),
-                // );
+                ));
                 worker += 1;
             }
+        }
+        DistIterForEachHandle{ //TODO actually hold the reqs from the exec_am_local...
+            reqs: Vec::new(),
+        }
+    }
+
+    fn collect<I,A>(&self, iter: &I,d: Distribution) -> DistIterCollectHandle<I::Item,A>
+        where 
+        I: DistributedIterator + 'static,
+        I::Item: Dist,
+        A: From<UnsafeArray<I::Item>>
+    {  
+        DistIterCollectHandle{
+            reqs: Vec::new(),
+            distribution: d,
+            team: self.inner.data.team.clone(),
+            _phantom: PhantomData,
         }
     }
 

@@ -22,7 +22,7 @@ where
     F: FnMut(I::Item) -> B + Send + Sync + Clone + 'static,
     B: Send + 'static
 {
-    pub fn for_each<G>(self, op: G)
+    pub fn for_each<G>(&self, op: G)
     where
         G: Fn(B) + Sync + Send + Clone + 'static,
     {

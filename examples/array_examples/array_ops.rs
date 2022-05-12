@@ -3,7 +3,7 @@ use lamellar::array::{
     ElementOps,
 };
 
-#[lamellar::AmData(Default, Debug, ArithmeticOps, PartialEq)]
+#[lamellar::AmData(Default, Debug, ArithmeticOps, PartialEq, PartialOrd)]
 struct Custom {
     int: usize,
     float: f32,
@@ -21,6 +21,16 @@ impl std::ops::AddAssign for Custom {
 impl std::ops::SubAssign for Custom {
     fn sub_assign(&mut self, other: Self) {
         *self = Self {
+            int: self.int - other.int,
+            float: self.float - other.float,
+        }
+    }
+}
+
+impl std::ops::Sub for Custom {
+    type Output = Self;
+    fn sub(self, other: Self) -> Self {
+        Self {
             int: self.int - other.int,
             float: self.float - other.float,
         }

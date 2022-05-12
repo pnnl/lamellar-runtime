@@ -2,7 +2,7 @@ use crate::active_messaging::{ActiveMessageEngine, ExecType, LamellarFunc};
 use crate::lamellae::{Des, Lamellae, LamellaeRDMA, SerializedData};
 use crate::lamellar_request::InternalReq;
 use crate::lamellar_team::LamellarTeamRT;
-use crate::scheduler::{AmeScheduler, AmeSchedulerQueue, ReqData, SchedulerQueue};
+use crate::scheduler::{AmeScheduler, AmeSchedulerQueue, ReqData, ReqId,SchedulerQueue};
 use lamellar_prof::*;
 // use log::trace;
 use core_affinity::CoreId;
@@ -136,7 +136,7 @@ impl AmeSchedulerQueue for WorkStealingInner {
         src: usize,
         dst: Option<usize>,
         cmd: ExecType,
-        id: usize,
+        id: ReqId,
         func: LamellarFunc,
         lamellae: Arc<Lamellae>,
         world: Pin<Arc<LamellarTeamRT>>,
@@ -177,6 +177,7 @@ impl AmeSchedulerQueue for WorkStealingInner {
         task.detach();
     }
 
+    //this is a serialized request
     fn submit_work(
         &self,
         ame: Arc<ActiveMessageEngine>,
@@ -275,7 +276,7 @@ impl SchedulerQueue for WorkStealing {
         src: usize,
         dst: Option<usize>,
         cmd: ExecType,
-        id: usize,
+        id: ReqId,
         func: LamellarFunc,
         lamellae: Arc<Lamellae>,
         world: Pin<Arc<LamellarTeamRT>>,

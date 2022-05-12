@@ -265,7 +265,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
                             let mut full_results: Vec<u8> = Vec::new();
                             for r in res {
                                 // println!("submitted indirectly {:?} ",len);
-                                let results_u8: Vec<u8> = r.into_future().await.unwrap();
+                                let results_u8: Vec<u8> = r.into_future().await;
                                 // println!("returned_u8 {:?}",results_u8);
 
                                 full_results.extend(results_u8);

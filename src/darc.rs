@@ -158,7 +158,7 @@ impl<T> DarcInner<T> {
         unsafe { &(*self.item) }
     }
 
-    fn send_finished(&self) -> Vec<Pin<Box<dyn Future<Output = Option<()>> + Send>>> {
+    fn send_finished(&self) -> Vec<Pin<Box<dyn Future<Output = ()> + Send>>> {
         let ref_cnts = unsafe {
             std::slice::from_raw_parts_mut(self.ref_cnt_addr as *mut AtomicUsize, self.num_pes)
         };

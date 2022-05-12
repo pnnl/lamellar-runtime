@@ -336,7 +336,7 @@ fn create_buf_ops(
                 #res_t res_t[0] = old;                
             },
             quote!{ //compare exchange epsilon
-                let same = if *old > slice[index] {
+                let same = if *old > slice[index] {   
                     *old - slice[index] < *eps
                 }
                 else{

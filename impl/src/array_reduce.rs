@@ -91,7 +91,7 @@ fn create_reduction(
                         let timer = std::time::Instant::now();
                         let left = __lamellar_team.exec_am_pe( self.start_pe,  #reduction_name { data: self.data.clone(), start_pe: self.start_pe, end_pe: mid_pe}).into_future();
                         let right = __lamellar_team.exec_am_pe( mid_pe+1, #reduction_name { data: self.data.clone(), start_pe: mid_pe+1, end_pe: self.end_pe}).into_future();
-                        let res = op(left.await.unwrap(),right.await.unwrap());
+                        let res = op(left.await,right.await);
 
                         // println!("[{:?}] {:?} {:?}",__lamellar_current_pe,res,timer.elapsed().as_secs_f64());
                         res

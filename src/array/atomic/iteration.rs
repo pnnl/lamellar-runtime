@@ -24,7 +24,7 @@ impl<T: Dist> AtomicDistIter<T> {
     }
 }
 impl<T: Dist + 'static> AtomicDistIter<T> {
-    pub fn for_each<F>(self, op: F)
+    pub fn for_each<F>(&self, op: F)
     where
         F: Fn(AtomicElement<T>) + Sync + Send + Clone + 'static,
     {

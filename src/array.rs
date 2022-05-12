@@ -1,4 +1,4 @@
-use crate::lamellar_request::LamellarRequest;
+use crate::lamellar_request::{LamellarRequest,LamellarMultiRequest};
 use crate::memregion::{
     local::LocalMemoryRegion, shared::SharedMemoryRegion, Dist, LamellarMemoryRegion,
 };
@@ -542,8 +542,8 @@ pub trait BufferOp: Sync + Send {
 #[async_trait]
 pub trait LamellarArrayRequest {
     type Output;
-    async fn into_future(mut self: Box<Self>) -> Option<Self::Output>;
-    fn wait(self: Box<Self>) -> Option<Self::Output>;
+    async fn into_future(mut self: Box<Self>) -> Self::Output;
+    fn wait(self: Box<Self>) -> Self::Output;
 }
 
 struct ArrayRdmaHandle {
@@ -552,17 +552,17 @@ struct ArrayRdmaHandle {
 #[async_trait]
 impl LamellarArrayRequest for ArrayRdmaHandle {
     type Output = ();
-    async fn into_future(mut self: Box<Self>) -> Option<Self::Output> {
+    async fn into_future(mut self: Box<Self>) -> Self::Output {
         for req in self.reqs.drain(0..) {
             req.into_future().await;
         }
-        Some(())
+        ()
     }
-    fn wait(mut self: Box<Self>) -> Option<Self::Output> {
+    fn wait(mut self: Box<Self>) -> Self::Output {
         for req in self.reqs.drain(0..) {
             req.get();
         }
-        Some(())
+        ()
     }
 }
 
@@ -573,17 +573,17 @@ struct ArrayRdmaAtHandle<T: Dist> {
 #[async_trait]
 impl<T: Dist> LamellarArrayRequest for ArrayRdmaAtHandle<T> {
     type Output = T;
-    async fn into_future(mut self: Box<Self>) -> Option<Self::Output> {
+    async fn into_future(mut self: Box<Self>) -> Self::Output {
         for req in self.reqs.drain(0..) {
             req.into_future().await;
         }
-        Some(self.buf.as_slice().unwrap()[0])
+        self.buf.as_slice().unwrap()[0]   
     }
-    fn wait(mut self: Box<Self>) -> Option<Self::Output> {
+    fn wait(mut self: Box<Self>) -> Self::Output {
         for req in self.reqs.drain(0..) {
             req.get();
         }
-        Some(self.buf.as_slice().unwrap()[0])
+        self.buf.as_slice().unwrap()[0]
     }
 }
 
@@ -684,68 +684,59 @@ pub(crate) struct ArrayOpResultHandleInner<T: Dist> {
 #[async_trait]
 impl LamellarRequest for ArrayOpHandle {
     type Output = ();
-    async fn into_future(mut self: Box<Self>) -> Option<Self::Output> {
+    async fn into_future(mut self: Box<Self>) -> Self::Output {
         for req in self.reqs.drain(..) {
             req.into_future().await;
         }
-        Some(())
+        ()
     }
-    fn get(&self) -> Option<Self::Output> {
+    fn get(&self) -> Self::Output {
         for req in &self.reqs {
             req.get();
         }
-        Some(())
-    }
-    fn get_all(&self) -> Vec<Option<Self::Output>> {
-        vec![self.get()]
+        ()
     }
 }
 
 #[async_trait]
 impl LamellarRequest for ArrayOpHandleInner {
     type Output = ();
-    async fn into_future(mut self: Box<Self>) -> Option<Self::Output> {
+    async fn into_future(mut self: Box<Self>) -> Self::Output {
         for comp in self.complete {
             while comp.load(Ordering::Relaxed) == false {
                 async_std::task::yield_now().await;
             }
         }
-        Some(())
+        ()
     }
-    fn get(&self) -> Option<Self::Output> {
+    fn get(&self) -> Self::Output {
         for comp in &self.complete {
             while comp.load(Ordering::Relaxed) == false {
                 std::thread::yield_now();
             }
         }
-        Some(())
-    }
-    fn get_all(&self) -> Vec<Option<Self::Output>> {
-        vec![self.get()]
+        ()
     }
 }
 
 #[async_trait]
 impl<T: Dist> LamellarRequest for ArrayOpFetchHandle<T> {
     type Output = Vec<T>;
-    async fn into_future(mut self: Box<Self>) -> Option<Self::Output> {
+    async fn into_future(mut self: Box<Self>) -> Self::Output {
         let mut res = vec![];
         for req in self.reqs.drain(..) {
-            res.extend(req.into_future().await.unwrap());
+            res.extend(req.into_future().await);
         }
-        Some(res)
+        res
     }
     
-    fn get(&self) -> Option<Self::Output> {
+    fn get(&self) -> Self::Output {
         let mut res = vec![];
         for req in &self.reqs {
-            res.extend(req.get().unwrap());
+            res.extend(req.get());
         }
         // println!("res: {:?}",res);
-        Some(res)
-    }
-    fn get_all(&self) -> Vec<Option<Self::Output>> {
-        vec![self.get()]
+        res
     }
 }
 
@@ -787,47 +778,41 @@ impl<T: Dist> ArrayOpFetchHandleInner<T> {
 #[async_trait]
 impl<T: Dist> LamellarRequest for ArrayOpFetchHandleInner<T> {
     type Output = Vec<T>;
-    async fn into_future(mut self: Box<Self>) -> Option<Self::Output> {
+    async fn into_future(mut self: Box<Self>) -> Self::Output {
         for comp in &self.complete {
             while comp.load(Ordering::Relaxed) == false {
                 async_std::task::yield_now().await;
             }
         }
-        Some(self.get_result())
+        self.get_result()
     }
-    fn get(&self) -> Option<Self::Output> {
+    fn get(&self) -> Self::Output {
         for comp in &self.complete {
             while comp.load(Ordering::Relaxed) == false {
                 std::thread::yield_now();
             }
         }
-        Some(self.get_result())
-    }
-    fn get_all(&self) -> Vec<Option<Self::Output>> {
-        vec![self.get()]
+        self.get_result()
     }
 }
 
 #[async_trait]
 impl<T: Dist> LamellarRequest for ArrayOpResultHandle<T> {
     type Output = Vec<Result<T,T>>;
-    async fn into_future(mut self: Box<Self>) -> Option<Self::Output> {
+    async fn into_future(mut self: Box<Self>) -> Self::Output {
         let mut res = vec![];
         for req in self.reqs.drain(..) {
-            res.extend(req.into_future().await.unwrap());
+            res.extend(req.into_future().await);
         }
-        Some(res)
+        res
     }
     
-    fn get(&self) -> Option<Self::Output> {
+    fn get(&self) -> Self::Output {
         let mut res = vec![];
         for req in &self.reqs {
-            res.extend(req.get().unwrap());
+            res.extend(req.get());
         }
-        Some(res)
-    }
-    fn get_all(&self) -> Vec<Option<Self::Output>> {
-        vec![self.get()]
+        res
     }
 }
 
@@ -880,24 +865,21 @@ impl<T: Dist> ArrayOpResultHandleInner<T> {
 #[async_trait]
 impl<T: Dist> LamellarRequest for ArrayOpResultHandleInner<T> {
     type Output = Vec<Result<T,T>>;
-    async fn into_future(mut self: Box<Self>) -> Option<Self::Output> {
+    async fn into_future(mut self: Box<Self>) -> Self::Output {
         for comp in &self.complete {
             while comp.load(Ordering::Relaxed) == false {
                 async_std::task::yield_now().await;
             }
         }
-        Some(self.get_result())
+        self.get_result()
     }
-    fn get(&self) -> Option<Self::Output> {
+    fn get(&self) -> Self::Output {
         for comp in &self.complete {
             while comp.load(Ordering::Relaxed) == false {
                 std::thread::yield_now();
             }
         }
-        Some(self.get_result())
-    }
-    fn get_all(&self) -> Vec<Option<Self::Output>> {
-        vec![self.get()]
+        self.get_result()
     }
 }
 
@@ -1051,11 +1033,11 @@ pub struct LocalOpResult<T: Dist> {
 #[async_trait]
 impl<T: Dist> LamellarArrayRequest for LocalOpResult<T> {
     type Output = T;
-    async fn into_future(mut self: Box<Self>) -> Option<Self::Output> {
-        Some(self.val)
+    async fn into_future(mut self: Box<Self>) -> Self::Output {
+        self.val
     }
-    fn wait(self: Box<Self>) -> Option<Self::Output> {
-        Some(self.val)
+    fn wait(self: Box<Self>) -> Self::Output {
+        self.val
     }
 }
 
@@ -1354,7 +1336,7 @@ pub(crate) mod private {
         AtomicArray, /*NativeAtomicArray, GenericAtomicArray,*/ LamellarReadArray,
         LamellarWriteArray, LocalLockAtomicArray, ReadOnlyArray, UnsafeArray,
     };
-    use crate::lamellar_request::LamellarRequest;
+    use crate::lamellar_request::{LamellarRequest,LamellarMultiRequest};
     use crate::memregion::Dist;
     use crate::LamellarTeamRT;
     use enum_dispatch::enum_dispatch;
@@ -1409,7 +1391,7 @@ pub(crate) mod private {
         fn exec_am_all<F>(
             &self,
             am: F,
-        ) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync>
+        ) -> Box<dyn LamellarMultiRequest<Output = F::Output> + Send + Sync>
         where
             F: RemoteActiveMessage + LamellarAM + AmDist,
         {

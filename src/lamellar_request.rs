@@ -2,6 +2,7 @@ use crate::active_messaging::{AmDist, LamellarAny};
 use crate::lamellae::{Des, SerializedData};
 use crate::lamellar_arch::LamellarArchRT;
 use crate::lamellar_team::LamellarTeamRT;
+use crate::scheduler::ReqId; //maybe move reqid to here
 use async_trait::async_trait;
 use crossbeam::utils::CachePadded;
 use lamellar_prof::*;
@@ -9,6 +10,10 @@ use log::trace;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
+
+use parking_lot::Mutex;
+use std::collections::HashMap;
+use std::cell::Cell;
 
 pub(crate) static CUR_REQ_ID: AtomicUsize = AtomicUsize::new(0);
 pub(crate) enum InternalResult {
@@ -19,7 +24,7 @@ pub(crate) enum InternalResult {
 
 #[derive(Clone, Debug)]
 pub(crate) struct InternalReq {
-    pub(crate) data_tx: crossbeam::channel::Sender<(usize, InternalResult)>, //what if we create an enum for either bytes or the raw data?
+    pub(crate) data_tx: crossbeam::channel::Sender<(usize, InternalResult)>, // pe, sub_id, result
     pub(crate) cnt: Arc<CachePadded<AtomicUsize>>,
     pub(crate) team_outstanding_reqs: Arc<AtomicUsize>,
     pub(crate) world_outstanding_reqs: Arc<AtomicUsize>,
@@ -31,181 +36,223 @@ pub(crate) struct InternalReq {
 #[async_trait]
 pub trait LamellarRequest {
     type Output;
-    async fn into_future(mut self: Box<Self>) -> Option<Self::Output>;
-    fn get(&self) -> Option<Self::Output>;
-    fn get_all(&self) -> Vec<Option<Self::Output>>;
-    // fn as_any(self) -> Box<dyn std::any::Any>;
+    async fn into_future(mut self: Box<Self>) -> Self::Output;
+    fn get(&self) -> Self::Output;
 }
+
+#[async_trait]
+pub trait LamellarMultiRequest {
+    type Output;
+    async fn into_future(mut self: Box<Self>) -> Vec<Self::Output>;
+    fn get(&self) -> Vec<Self::Output>;
+}
+
+pub(crate) trait LamellarRequestAddResult: Sync + Send{
+    fn user_held(&self) -> bool;
+    fn add_result(&self, pe: usize, sub_id: usize, data: InternalResult);
+    fn update_counters(&self);
+}
+
+
+//todo make this an enum instead...
+// will need to include the task group requests as well... 
+pub(crate) struct LamellarRequestResult{ 
+    pub(crate) req: Arc<dyn LamellarRequestAddResult>,
+}
+
+impl LamellarRequestResult {
+    pub(crate) fn add_result(&self, pe: usize, sub_id: usize, data: InternalResult) {
+        if self.req.user_held(){ //if the user has dropped the handle, no need to actually do anything with the returned data
+            self.req.add_result(pe as usize, sub_id, data);
+        }
+        self.req.update_counters();
+    }
+}
+
+
+
+
+pub(crate) struct LamellarRequestHandleInner {
+    pub(crate) ready: AtomicBool,
+    pub(crate) arch: Arc<LamellarArchRT>,
+    pub(crate) data: Cell<Option<InternalResult>>, //we only issue a single request, which the runtime will update, but the user also has a handle so we need a way to mutate
+    pub(crate) team_outstanding_reqs: Arc<AtomicUsize>,
+    pub(crate) world_outstanding_reqs: Arc<AtomicUsize>,
+    pub(crate) tg_outstanding_reqs: Option<Arc<AtomicUsize>>,
+    pub(crate) user_handle: AtomicBool, //we can use this flag to optimize what happens when the request returns    
+}
+// we use the ready bool to protect access to the data field
+unsafe impl Sync for LamellarRequestHandleInner {} 
 
 pub struct LamellarRequestHandle<T: AmDist> {
-    pub(crate) id: usize,
-    pub(crate) cnt: usize,
-    pub(crate) data_rx: crossbeam::channel::Receiver<(usize, InternalResult)>,
-    pub(crate) active: Arc<AtomicBool>,
-    pub(crate) arch: Arc<LamellarArchRT>,
-    pub(crate) am_type: AmType,
+    pub(crate) inner: Arc<LamellarRequestHandleInner>,
     pub(crate) _phantom: std::marker::PhantomData<T>,
-}
+} 
 
-#[derive(Debug, Clone, Copy)]
-pub(crate) enum AmType {
-    RegisteredFunction,
-    // #[allow(dead_code)]
-    // RemoteClosure,
-}
-
-//#[prof]
-// impl<T: AmDist + 'static> LamellarRequestHandle<T> {
-impl<T: AmDist> LamellarRequestHandle<T> {
-    pub(crate) fn new<'a>(
-        num_pes: usize,
-        am_type: AmType,
-        arch: Arc<LamellarArchRT>,
-        team_reqs: Arc<AtomicUsize>,
-        world_reqs: Arc<AtomicUsize>,
-        tg_reqs: Option<Arc<AtomicUsize>>,
-        _team_hash: u64,
-        _team: Pin<Arc<LamellarTeamRT>>,
-    ) -> (LamellarRequestHandle<T>, InternalReq) {
-        prof_start!(active);
-        let active = Arc::new(AtomicBool::new(true));
-        prof_end!(active);
-        prof_start!(channel);
-        let (s, r) = crossbeam::channel::unbounded();
-        prof_end!(channel);
-        prof_start!(id);
-        let id = CUR_REQ_ID.fetch_add(1, Ordering::SeqCst);
-        prof_end!(id);
-        // println!("new am id {:?}",id);
-        prof_start!(ireq);
-        let ireq = InternalReq {
-            data_tx: s,
-            cnt: Arc::new(CachePadded::new(AtomicUsize::new(num_pes))),
-            team_outstanding_reqs: team_reqs,
-            world_outstanding_reqs: world_reqs,
-            tg_outstanding_reqs: tg_reqs,
-            // team_hash: team_hash,
-            // team: team,
-        };
-        prof_end!(ireq);
-        (
-            LamellarRequestHandle {
-                id: id,
-                cnt: num_pes,
-                data_rx: r,
-                active: active.clone(),
-                arch: arch.clone(),
-                am_type: am_type,
-                _phantom: std::marker::PhantomData,
-            },
-            ireq,
-        )
+impl <T: AmDist> Drop for LamellarRequestHandle<T> {
+    fn drop(&mut self) {
+        self.inner.user_handle.store(false, Ordering::SeqCst);
     }
+}
 
-    fn process_result(&self, data: InternalResult) -> Option<T> {
+impl LamellarRequestAddResult for LamellarRequestHandleInner {
+    fn user_held(&self) -> bool{
+        self.user_handle.load(Ordering::SeqCst)
+    }
+    fn add_result(&self, pe: usize, _sub_id: usize, data: InternalResult) { // for a single request this is only called one time by a single runtime thread so use of the cell is safe
+        let pe = self.arch.team_pe(pe).expect("pe does not exist on team");
+        self.data.set(Some(data));
+        self.ready.store(true, Ordering::SeqCst);
+    }
+    fn update_counters(&self) {
+        self.team_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
+        self.world_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
+        if let Some(tg_outstanding_reqs) = self.tg_outstanding_reqs.clone() {
+            tg_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
+        }
+    }
+}
+
+impl<T: AmDist> LamellarRequestHandle<T> {
+    fn process_result(&self, data: InternalResult) -> T {
         match data {
             InternalResult::Local(x) => {
                 if let Ok(result) = x.downcast::<T>() {
-                    Some(*result)
+                    *result
                 } else {
-                    None
+                    panic!("unexpected local result  of type ");
                 }
             }
             InternalResult::Remote(x) => {
                 if let Ok(result) = x.deserialize_data() {
                     //crate::deserialize(&x) {
-                    Some(result)
+                    result
                 } else {
-                    None
+                    panic!("unexpected remote result  of type ");
                 }
             }
-            InternalResult::Unit => None,
-        }
-    }
-
-    fn am_get(&self) -> Option<T> {
-        let (_pe, data) = self.data_rx.recv().expect("result recv");
-        self.process_result(data)
-    }
-
-    fn am_get_all(&self) -> Vec<Option<T>> {
-        let mut res = vec![];
-        for _i in 0..self.cnt {
-            res.push(None);
-        }
-        if self.cnt > 1 {
-            let mut cnt = self.cnt;
-            while cnt > 0 {
-                let (pe, data) = self.data_rx.recv().expect("result recv");
-                if let Ok(pe) = self.arch.team_pe(pe) {
-                    res[pe] = self.process_result(data);
-                    cnt -= 1;
+            InternalResult::Unit => {
+                if let Ok(result) = (Box::new(()) as Box<dyn std::any::Any>).downcast::<T>() {
+                    *result
+                } else {
+                    panic!("unexpected unit result  of type ");
                 }
-            }
-        } else {
-            res[0] = self.am_get();
+            },
         }
-        res
     }
-
-    // fn closure_get(&self) -> Option<T> {
-    //     let (_pe, data) = self.data_rx.recv().expect("result recv");
-    //     self.process_result(data)
-    // }
-
-    // fn closure_get_all(&self) -> std::vec::Vec<Option<T>> {
-    //     let mut res = vec![]; //= vec![&None; self.cnt];
-    //     for _i in 0..self.cnt {
-    //         res.push(None);
-    //     }
-    //     let mut cnt = self.cnt;
-    //     while cnt > 0 {
-    //         let (pe, data) = self.data_rx.recv().expect("result recv");
-    //         res[pe]=self.process_result(data);
-    //         cnt -= 1;
-    //     }
-    //     res
-    // }
 }
 
 #[async_trait]
 impl<T: AmDist> LamellarRequest for LamellarRequestHandle<T> {
     type Output = T;
-    async fn into_future(mut self: Box<Self>) -> Option<Self::Output> {
-        let mut res = self.data_rx.try_recv();
-        while res.is_err() {
-            res = self.data_rx.try_recv();
+    async fn into_future(mut self: Box<Self>) -> Self::Output {
+        while !self.inner.ready.load(Ordering::SeqCst) {
             async_std::task::yield_now().await;
         }
-        if let Ok((_pe, data)) = res {
-            self.process_result(data)
-        } else {
-            None
-        }
+        self.process_result(self.inner.data.replace(None).unwrap())
     }
-
-    fn get(&self) -> Option<Self::Output> {
-        match self.am_type {
-            AmType::RegisteredFunction => self.am_get(),
-            // AmType::RemoteClosure => self.closure_get(),
+    fn get(&self) -> T {
+        while !self.inner.ready.load(Ordering::SeqCst) {
+            std::thread::yield_now();
         }
+        self.process_result(self.inner.data.replace(None).unwrap())
     }
-
-    fn get_all(&self) -> Vec<Option<Self::Output>> {
-        match self.am_type {
-            AmType::RegisteredFunction => self.am_get_all(),
-            // AmType::RemoteClosure => self.closure_get_all(),
-        }
-    }
-    // fn as_any(self) -> Box<dyn std::any::Any> {
-    //     Box::new(self)
-    // }
 }
 
-//#[prof]
-impl<T: AmDist> Drop for LamellarRequestHandle<T> {
+pub(crate) struct LamellarMultiRequestHandleInner {
+    pub(crate) cnt: AtomicUsize,
+    pub(crate) arch: Arc<LamellarArchRT>,
+    pub(crate) data: Mutex<HashMap<usize,InternalResult>>,
+    pub(crate) team_outstanding_reqs: Arc<AtomicUsize>,
+    pub(crate) world_outstanding_reqs: Arc<AtomicUsize>,
+    pub(crate) tg_outstanding_reqs: Option<Arc<AtomicUsize>>,
+    pub(crate) user_handle: AtomicBool, //we can use this flag to optimize what happens when the request returns 
+    
+}
+
+pub struct LamellarMultiRequestHandle<T: AmDist> {
+    pub(crate) inner: Arc<LamellarMultiRequestHandleInner>,
+    pub(crate) _phantom: std::marker::PhantomData<T>,
+} 
+
+impl <T: AmDist> Drop for LamellarMultiRequestHandle<T> {
     fn drop(&mut self) {
-        trace!("Request dropping {:?} {:?}", self.id, self.am_type);
-        self.active.store(false, Ordering::SeqCst);
+        self.inner.user_handle.store(false, Ordering::SeqCst);
     }
 }
+
+impl LamellarRequestAddResult for LamellarMultiRequestHandleInner {
+    fn user_held(&self) -> bool{
+        self.user_handle.load(Ordering::SeqCst)
+    }
+    fn add_result(&self, pe: usize, _sub_id: usize, data: InternalResult) {
+        let pe = self.arch.team_pe(pe).expect("pe does not exist on team");
+        self.data.lock().insert(pe, data);
+        self.cnt.fetch_sub(1, Ordering::SeqCst);
+    }
+    fn update_counters(&self) {
+        self.team_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
+        self.world_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
+        if let Some(tg_outstanding_reqs) = self.tg_outstanding_reqs.clone() {
+            tg_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
+        }
+    }
+}
+
+impl<T: AmDist> LamellarMultiRequestHandle<T> {
+    fn process_result(&self, data: InternalResult) -> T {
+        match data {
+            InternalResult::Local(x) => {
+                if let Ok(result) = x.downcast::<T>() {
+                    *result
+                } else {
+                    panic!("unexpected local result  of type ");
+                }
+            }
+            InternalResult::Remote(x) => {
+                if let Ok(result) = x.deserialize_data() {
+                    //crate::deserialize(&x) {
+                    result
+                } else {
+                    panic!("unexpected remote result  of type ");
+                }
+            }
+            InternalResult::Unit => {
+                if let Ok(result) = (Box::new(()) as Box<dyn std::any::Any>).downcast::<T>() {
+                    *result
+                } else {
+                    panic!("unexpected unit result  of type ");
+                }
+            },
+        }
+    }
+}
+
+
+#[async_trait]
+impl<T: AmDist> LamellarMultiRequest for LamellarMultiRequestHandle<T> {
+    type Output = T;
+    async fn into_future(mut self: Box<Self>) -> Vec<Self::Output> {
+        while self.inner.cnt.load(Ordering::SeqCst) > 0 {
+            async_std::task::yield_now().await;
+        }
+        let mut res = vec![];
+        let mut data = self.inner.data.lock();
+        for pe in 0..data.len(){
+            res.push(self.process_result(data.remove(&pe).unwrap()));
+        }
+        res
+    }
+    fn get(&self) -> Vec<T> {
+        while self.inner.cnt.load(Ordering::SeqCst) > 0 {
+            std::thread::yield_now();
+        }
+        let mut res = vec![];
+        let mut data = self.inner.data.lock();
+        for pe in 0..data.len(){
+            res.push(self.process_result(data.remove(&pe).unwrap()));
+        }
+        res
+    }
+}
+

@@ -11,17 +11,17 @@ struct ZipBufferedReq{
 #[async_trait]
 impl LamellarArrayRequest for ZipBufferedReq {
     type Output = ();
-    async fn into_future(mut self: Box<Self>) -> Option<Self::Output> {
+    async fn into_future(mut self: Box<Self>) -> Self::Output {
         for req in self.reqs.drain(0..) {
             req.into_future().await;
         }
-        Some(())
+        ()
     }
-    fn wait(mut self: Box<Self>) -> Option<Self::Output> {
+    fn wait(mut self: Box<Self>) -> Self::Output {
         for req in self.reqs.drain(0..) {
             req.wait();
         }
-        Some(())
+        ()
     }
 }
 

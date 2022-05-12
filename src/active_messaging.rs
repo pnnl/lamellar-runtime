@@ -1,8 +1,8 @@
 use crate::lamellae::{Lamellae, LamellaeRDMA, SerializedData};
 use crate::lamellar_arch::IdError;
-use crate::lamellar_request::{InternalReq, InternalResult, LamellarRequest};
+use crate::lamellar_request::{InternalReq, InternalResult, LamellarRequest, LamellarMultiRequest, LamellarRequestResult};
 use crate::lamellar_team::{LamellarTeam, LamellarTeamRT};
-use crate::scheduler::{AmeScheduler, ReqData};
+use crate::scheduler::{AmeScheduler, ReqData, ReqId};
 #[cfg(feature = "enable-prof")]
 use lamellar_prof::*;
 use log::trace;
@@ -133,7 +133,7 @@ pub(crate) enum Cmd {
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone, Copy)]
 pub(crate) struct Msg {
-    pub req_id: usize,
+    pub req_id: ReqId,
     pub src: u16,
     pub cmd: ExecType,
 }
@@ -173,7 +173,7 @@ impl AMCounters {
 pub trait ActiveMessaging {
     fn wait_all(&self);
     fn barrier(&self);
-    fn exec_am_all<F>(&self, am: F) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync>
+    fn exec_am_all<F>(&self, am: F) -> Box<dyn LamellarMultiRequest<Output = F::Output> + Send + Sync>
     where
         F: RemoteActiveMessage + LamellarAM + Serde + AmDist;
     fn exec_am_pe<F>(
@@ -221,7 +221,7 @@ impl ActiveMessageEngine {
     pub(crate) async fn process_msg_new(&self, req_data: ReqData, ireq: Option<InternalReq>) {
         // trace!("[{:?}] process msg: {:?}",self.my_pe, &req_data);
         if let Some(ireq) = ireq {
-            REQUESTS.lock().insert(req_data.id, ireq.clone());
+            REQUESTS.lock().insert(req_data.id.id, ireq.clone());
         }
         // let addr = req_data.lamellae.local_addr(req_data.src,req_data)
         // let (team, world) = self.get_team_and_world(req_data.team.team_hash);
@@ -294,36 +294,49 @@ impl ActiveMessageEngine {
     }
 
     // make this an associated function... or maybe make a "REQUESTS struct which will have a send_data_to_user_handle"
+    // fn send_data_to_user_handle(
+    //     req_id: ReqId,
+    //     pe: u16,
+    //     data: InternalResult,
+    //     team: Pin<Arc<LamellarTeamRT>>,
+    // ) {
+    //     let reqs = REQUESTS.lock();
+    //     match reqs.get(&req_id.id) {
+    //         Some(ireq) => {
+    //             // println!("sending {:?} to user  handle",req_id);
+    //             let ireq = ireq.clone();
+    //             drop(reqs); //release lock in the hashmap
+    //             let _num_reqs = ireq.team_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
+    //             let _num_reqs = ireq.world_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
+    //             if let Some(tg_outstanding_reqs) = ireq.tg_outstanding_reqs {
+    //                 let _num_reqs = tg_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
+    //             }
+    //             if let Ok(_) = ireq.data_tx.send((pe as usize, data)) {} //if this returns an error it means the user has dropped the handle
+    //             let cnt = ireq.cnt.fetch_sub(1, Ordering::SeqCst);
+    //             if cnt == 1 {
+    //                 REQUESTS.lock().remove(&req_id.id);
+    //             }
+    //         }
+    //         None => {
+    //             panic!(
+    //                 "error id not found {:?} mem in use: {:?}",
+    //                 req_id,
+    //                 team.lamellae.occupied()
+    //             )
+    //         }
+    //     }
+    // }
+
     fn send_data_to_user_handle(
-        req_id: usize,
+        req_id: ReqId,
         pe: u16,
         data: InternalResult,
         team: Pin<Arc<LamellarTeamRT>>,
     ) {
-        let reqs = REQUESTS.lock();
-        match reqs.get(&req_id) {
-            Some(ireq) => {
-                // println!("sending {:?} to user  handle",req_id);
-                let ireq = ireq.clone();
-                drop(reqs); //release lock in the hashmap
-                let _num_reqs = ireq.team_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
-                let _num_reqs = ireq.world_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
-                if let Some(tg_outstanding_reqs) = ireq.tg_outstanding_reqs {
-                    let _num_reqs = tg_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
-                }
-                if let Ok(_) = ireq.data_tx.send((pe as usize, data)) {} //if this returns an error it means the user has dropped the handle
-                let cnt = ireq.cnt.fetch_sub(1, Ordering::SeqCst);
-                if cnt == 1 {
-                    REQUESTS.lock().remove(&req_id);
-                }
-            }
-            None => {
-                panic!(
-                    "error id not found {:?} mem in use: {:?}",
-                    req_id,
-                    team.lamellae.occupied()
-                )
-            }
-        }
+        // println!("returned req_id: {:?}", req_id);
+        let req = unsafe{Arc::from_raw(req_id.id as *const LamellarRequestResult)};
+        req.add_result(pe as usize, req_id.sub_id, data);
+        
     }
+    
 }

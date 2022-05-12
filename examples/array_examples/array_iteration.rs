@@ -177,15 +177,15 @@ fn main() {
     block_array.barrier();
     println!("--------------------------------------------------------");
     println!("filter_map collect");
-    let new_block_array = block_array.dist_iter().filter_map(| elem| { 
-        if *elem % 8 == 0 {
-            Some(*elem as f32)
-        }
-        else{
-            None
-        }
-    }).collect::<ReadOnlyArray<f32>>(Distribution::Block);
-    new_block_array.print();
+    // let new_block_array = block_array.dist_iter().filter_map(| elem| { 
+    //     if *elem % 8 == 0 {
+    //         Some(*elem as f32)
+    //     }
+    //     else{
+    //         None
+    //     }
+    // }).collect::<ReadOnlyArray<f32>>(Distribution::Block).wait(); //todo fix me
+    // new_block_array.print();
 
     println!("--------------------------------------------------------");
 

@@ -125,7 +125,7 @@ impl<T: Dist + 'static> LamellarAm for InitGetAm<T> {
                     let u8_buf = self.buf.clone().to_base::<u8>();
                     let mut cur_index = 0;
                     for req in reqs.drain(..) {
-                        let data = req.await.unwrap();
+                        let data = req.await;
                         // println!("data recv {:?}",data.len());
                         u8_buf.put_slice(lamellar::current_pe, cur_index, &data);
                         cur_index += data.len();
@@ -135,7 +135,7 @@ impl<T: Dist + 'static> LamellarAm for InitGetAm<T> {
                     let buf_slice = self.buf.as_mut_slice().unwrap();
                     let num_pes = reqs.len();
                     for (start_index, req) in reqs.drain(..).enumerate() {
-                        let data = req.await.unwrap();
+                        let data = req.await;
                         let data_t_ptr = data.as_ptr() as *const T;
                         let data_t_len = if data.len() % std::mem::size_of::<T>() == 0 {
                             data.len() / std::mem::size_of::<T>()

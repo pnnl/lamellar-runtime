@@ -1,6 +1,6 @@
 use crate::array::generic_atomic::*;
 
-use crate::array::iterator::distributed_iterator::{DistIteratorLauncher, DistributedIterator};
+use crate::array::iterator::distributed_iterator::*;
 use crate::array::iterator::serial_iterator::LamellarArrayIter;
 // use crate::array::private::LamellarArrayPrivate;
 use crate::array::*;
@@ -28,18 +28,18 @@ pub struct GenericAtomicDistIter<T: Dist> {
 //     }
 // }
 impl<T: Dist + 'static> GenericAtomicDistIter<T> {
-    pub fn for_each<F>(self, op: F)
+    pub fn for_each<F>(&self, op: F) -> DistIterForEachHandle
     where
         F: Fn(GenericAtomicElement<T>) + Sync + Send + Clone + 'static,
     {
-        self.data.clone().for_each(self, op);
+        self.data.clone().for_each(self, op)
     }
-    pub fn for_each_async<F, Fut>(&self, op: F)
+    pub fn for_each_async<F, Fut>(&self, op: F) -> DistIterForEachHandle
     where
         F: Fn(GenericAtomicElement<T>) -> Fut + Sync + Send + Clone + 'static,
         Fut: Future<Output = ()> + Send + 'static,
     {
-        self.data.clone().for_each_async(self, op);
+        self.data.clone().for_each_async(self, op)
     }
 }
 
@@ -127,20 +127,29 @@ impl<T: Dist> DistIteratorLauncher for GenericAtomicArray<T> {
         self.array.subarray_index_from_local(index, chunk_size)
     }
 
-    fn for_each<I, F>(&self, iter: I, op: F)
+    fn for_each<I, F>(&self, iter: &I, op: F) -> DistIterForEachHandle
     where
         I: DistributedIterator + 'static,
         F: Fn(I::Item) + Sync + Send + Clone + 'static,
     {
         self.array.for_each(iter, op)
     }
-    fn for_each_async<I, F, Fut>(&self, iter: &I, op: F)
+    fn for_each_async<I, F, Fut>(&self, iter: &I, op: F) -> DistIterForEachHandle
     where
         I: DistributedIterator + 'static,
         F: Fn(I::Item) -> Fut + Sync + Send  + Clone + 'static,
         Fut: Future<Output = ()> + Send + 'static,
     {
         self.array.for_each_async(iter, op)
+    }
+
+    fn collect<I,A>(&self, iter: &I,d: Distribution) -> DistIterCollectHandle<I::Item,A>
+        where 
+        I: DistributedIterator + 'static,
+        I::Item: Dist,
+        A: From<UnsafeArray<I::Item>>
+    {
+        self.array.collect(iter,d)
     }
     fn team(&self) -> Pin<Arc<LamellarTeamRT>> {
         self.array.team().clone()

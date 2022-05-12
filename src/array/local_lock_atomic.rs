@@ -389,14 +389,11 @@ pub struct LocalLockAtomicArrayReduceHandle<T: Dist + AmDist> {
 #[async_trait]
 impl<T: Dist + AmDist> LamellarRequest for LocalLockAtomicArrayReduceHandle<T> {
     type Output = T;
-    async fn into_future(mut self: Box<Self>) -> Option<Self::Output> {
+    async fn into_future(mut self: Box<Self>) -> Self::Output {
         self.req.into_future().await
     }
-    fn get(&self) -> Option<Self::Output> {
+    fn get(&self) -> Self::Output {
         self.req.get()
-    }
-    fn get_all(&self) -> Vec<Option<Self::Output>> {
-        self.req.get_all()
     }
 }
 
