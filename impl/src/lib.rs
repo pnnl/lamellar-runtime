@@ -255,7 +255,8 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_type: AmType) -> 
                 let ret = match __local{ //should probably just separate these into exec_local exec_remote to get rid of a conditional...
                     true => #lamellar::LamellarReturn::LocalData(Box::new(#last_expr)),
                     false => #lamellar::LamellarReturn::RemoteData(std::sync::Arc::new (#ret_struct{
-                        val: #remote_last_expr
+                        val: #remote_last_expr,
+                        _phantom: std::marker::PhantomData
                     })),
                 };
                 ret
@@ -299,24 +300,27 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_type: AmType) -> 
     };
 
     if let AmType::ReturnData(_) = am_type {
+        // let generic_phantom = quote::format_ident!("std::marker::PhantomData{}", impl_generics);
 
         let the_ret_struct = if vec_u8{
             quote!{
-                struct #ret_struct{
-                    val: serde_bytes::ByteBuf
+                struct #ret_struct #ty_generics #where_clause{
+                    val: serde_bytes::ByteBuf,
+                    // _phantom: std::marker::PhantomData<(#impl_generics)>,
                 }
             }
         } else {
             quote!{
-                struct #ret_struct{
-                    val: #ret_type
+                struct #ret_struct #ty_generics #where_clause{
+                    val: #ret_type,
+                    // _phantom: std::marker::PhantomData<(#impl_generics)>,
                 }
             }
         };
         expanded.extend(quote_spanned! {temp.span()=>
             #the_ret_struct
 
-            impl #generics #lamellar::LamellarSerde for #ret_struct {
+            impl #impl_generics #lamellar::LamellarSerde for #ret_struct #ty_generics #where_clause {
                 fn serialized_size(&self)->usize{
                     #lamellar::serialized_size(&self.val,true)
                 }
@@ -367,7 +371,7 @@ fn process_fields(args: TokenStream, the_fields: &syn::Fields, crate_header: Str
     let mut ser = quote! {};
     let mut des = quote! {};
 
-    for field in the_fields { //todo handle references --at least for the local case
+    for field in the_fields { 
         if let syn::Type::Path(ref ty) = field.ty {
             if let Some(_seg) = ty.path.segments.first() {
                 if !local {
@@ -537,11 +541,9 @@ fn derive_am_data(
         });
     }
     // else if let syn::Item::Enum(data) = input{ //todo handle enums....
-    //     let name = &data.ident;
-    //     let generics = data.generics.clone();
-    //     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
-
-
+    // //     let name = &data.ident;
+    // //     let generics = data.generics.clone();
+    // //     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
     // }
     TokenStream::from(output)
 }

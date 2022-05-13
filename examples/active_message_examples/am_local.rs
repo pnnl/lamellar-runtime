@@ -119,7 +119,7 @@ fn main() {
         //     println!("-----------------------------------");
         //     println!("Testing all am no return");
         //     println!("[{:?}] exec on all", my_pe);
-        //     let res = world.exec_am_all(am.clone()).get_all();
+        //     let res = world.exec_am_all(am.clone()).get();
         //     assert!(res.iter().all(|x| x.is_none()));
         //     println!("no return result: {:?}", res);
         //     println!("---------------------------------------------------------------");

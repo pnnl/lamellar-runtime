@@ -123,7 +123,7 @@ fn main() {
         .map(move|(i, elem)| {
             let barray = barray.clone(); 
             async move {
-                (i,elem,barray.fetch_add(i,*elem).into_future().await.unwrap()[0]) 
+                (i,elem,barray.fetch_add(i,*elem).into_future().await[0]) 
             }
         }
         )

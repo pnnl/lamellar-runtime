@@ -53,6 +53,7 @@ impl<T: Dist> DistIteratorLauncher for UnsafeArray<T> {
         I: DistributedIterator + 'static,
         F: Fn(I::Item) + Sync + Send + Clone + 'static,
     {
+        let mut reqs = Vec::new();
         if let Ok(_my_pe) = self.inner.data.team.team_pe_id() {
             let num_workers = match std::env::var("LAMELLAR_THREADS") {
                 Ok(n) => n.parse::<usize>().unwrap(),
@@ -65,17 +66,17 @@ impl<T: Dist> DistIteratorLauncher for UnsafeArray<T> {
             while ((worker as f64 * elems_per_thread).round() as usize) < num_elems_local {
                 let start_i = (worker as f64 * elems_per_thread).round() as usize;
                 let end_i = ((worker + 1) as f64 * elems_per_thread).round() as usize;
-                self.inner.data.task_group.exec_am_local(ForEach {
+                reqs.push(self.inner.data.task_group.exec_am_local(ForEach {
                     op: op.clone(),
                     data: iter.clone(),
                     start_i: start_i,
                     end_i: end_i,
-                },);
+                },));
                 worker += 1;
             }
         }
         DistIterForEachHandle{ //TODO actually hold the reqs from the exec_am_local...
-            reqs: Vec::new(),
+            reqs: reqs
         }
     }
     fn for_each_async<I, F, Fut>(&self, iter: &I, op: F) -> DistIterForEachHandle
@@ -84,6 +85,7 @@ impl<T: Dist> DistIteratorLauncher for UnsafeArray<T> {
         F: Fn(I::Item) -> Fut + Sync + Send  + Clone +  'static,
         Fut: Future<Output = ()> + Send +  'static,
     {
+        let mut reqs = Vec::new();
         if let Ok(_my_pe) = self.inner.data.team.team_pe_id() {
             let num_workers = match std::env::var("LAMELLAR_THREADS") {
                 Ok(n) => n.parse::<usize>().unwrap(),
@@ -93,7 +95,7 @@ impl<T: Dist> DistIteratorLauncher for UnsafeArray<T> {
             let elems_per_thread = num_elems_local as f64 / num_workers as f64;
             // println!("num_chunks {:?} chunks_thread {:?}", num_elems_local, elems_per_thread);
             let mut worker = 0;
-            let mut reqs = Vec::new();
+            
             while ((worker as f64 * elems_per_thread).round() as usize) < num_elems_local {
                 let start_i = (worker as f64 * elems_per_thread).round() as usize;
                 let end_i = ((worker + 1) as f64 * elems_per_thread).round() as usize;
@@ -109,7 +111,7 @@ impl<T: Dist> DistIteratorLauncher for UnsafeArray<T> {
             }
         }
         DistIterForEachHandle{ //TODO actually hold the reqs from the exec_am_local...
-            reqs: Vec::new(),
+            reqs: reqs
         }
     }
 
@@ -119,6 +121,29 @@ impl<T: Dist> DistIteratorLauncher for UnsafeArray<T> {
         I::Item: Dist,
         A: From<UnsafeArray<I::Item>>
     {  
+        let mut reqs = Vec::new();
+        if let Ok(_my_pe) = self.inner.data.team.team_pe_id() {
+            let num_workers = match std::env::var("LAMELLAR_THREADS") {
+                Ok(n) => n.parse::<usize>().unwrap(),
+                Err(_) => 4,
+            };
+            let num_elems_local = iter.elems(self.num_elems_local());
+            let elems_per_thread = num_elems_local as f64 / num_workers as f64;
+            // println!("num_chunks {:?} chunks_thread {:?}", num_elems_local, elems_per_thread);
+            let mut worker = 0;
+            while ((worker as f64 * elems_per_thread).round() as usize) < num_elems_local {
+                let start_i = (worker as f64 * elems_per_thread).round() as usize;
+                let end_i = ((worker + 1) as f64 * elems_per_thread).round() as usize;
+                reqs.push(self.inner.data.task_group.exec_am_local(
+                    Collect {
+                        data: iter.clone(),
+                        start_i: start_i,
+                        end_i: end_i,
+                    },
+                ));
+                worker += 1;
+            }
+        }
         DistIterCollectHandle{
             reqs: Vec::new(),
             distribution: d,

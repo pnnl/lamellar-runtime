@@ -76,7 +76,7 @@ macro_rules! sub_test{
                 #[cfg(feature="non-buffered-array-ops")]
                 {
                     for _i in 0..(pe_max_val as usize){
-                        let val = array.fetch_sub(idx,1 as $t).get().unwrap();
+                        let val = array.fetch_sub(idx,1 as $t).get();
                         if val > prev{
                             success = false;
                         }
@@ -90,7 +90,7 @@ macro_rules! sub_test{
                         reqs.push(array.fetch_sub(idx,1 as $t));
                     }
                     for req in reqs{
-                        let val = req.get().unwrap()[0];
+                        let val = req.get()[0];
                         if val > prev{
                             success = false;
                         }
@@ -117,7 +117,7 @@ macro_rules! sub_test{
             {
                 for _i in 0..num_updates  as usize{
                     let idx = rand_idx.sample(&mut rng);
-                    let val = array.fetch_sub(idx,1 as $t).get().unwrap();
+                    let val = array.fetch_sub(idx,1 as $t).get();
                     if val > prev_vals[idx]{
                         success = false;
                     }
@@ -133,7 +133,7 @@ macro_rules! sub_test{
                     reqs.push((array.fetch_sub(idx,1 as $t),idx))
                 }
                 for (req,_idx) in reqs{
-                    let _val = req.get().unwrap();
+                    let _val = req.get();
                     // if val > prev_vals[idx]{
                     //     success = false;
                     // }
@@ -164,7 +164,7 @@ macro_rules! sub_test{
                 #[cfg(feature="non-buffered-array-ops")]
                 {
                     for _i in 0..(pe_max_val as usize){
-                        let val = sub_array.fetch_sub(idx,1 as $t).get().unwrap();
+                        let val = sub_array.fetch_sub(idx,1 as $t).get();
                         if val > prev{
                             success = false;
                         }
@@ -178,7 +178,7 @@ macro_rules! sub_test{
                         reqs.push(sub_array.fetch_sub(idx,1 as $t));
                     }
                     for req in reqs{
-                        let val = req.get().unwrap()[0];
+                        let val = req.get()[0];
                         if val > prev{
                             success = false;
                         }
@@ -205,7 +205,7 @@ macro_rules! sub_test{
             {
                 for _i in 0..num_updates as usize{
                     let idx = rand_idx.sample(&mut rng);
-                    let val = sub_array.fetch_sub(idx,1 as $t).get().unwrap();
+                    let val = sub_array.fetch_sub(idx,1 as $t).get();
                     if val > prev_vals[idx]{
                         success = false;
                     }
@@ -221,7 +221,7 @@ macro_rules! sub_test{
                     reqs.push((sub_array.fetch_sub(idx,1 as $t),idx))
                 }
                 for (req,_idx) in reqs{
-                    let _val = req.get().unwrap();
+                    let _val = req.get();
                     // if val > prev_vals[idx]{
                     //     success = false;
                     // }
@@ -253,7 +253,7 @@ macro_rules! sub_test{
                     #[cfg(feature="non-buffered-array-ops")]
                     {
                         for _i in 0..(pe_max_val as usize){
-                            let val = sub_array.fetch_sub(idx,1 as $t).get().unwrap();
+                            let val = sub_array.fetch_sub(idx,1 as $t).get();
                             if val > prev{
                                 success = false;
                             }
@@ -267,7 +267,7 @@ macro_rules! sub_test{
                             reqs.push(sub_array.fetch_sub(idx,1 as $t));
                         }
                         for req in reqs{
-                            let val = req.get().unwrap()[0];
+                            let val = req.get()[0];
                             if val > prev{
                                 success = false;
                             }
@@ -294,7 +294,7 @@ macro_rules! sub_test{
                 {
                     for _i in 0..num_updates as usize{
                         let idx = rand_idx.sample(&mut rng);
-                        let val = sub_array.fetch_sub(idx,1 as $t).get().unwrap();
+                        let val = sub_array.fetch_sub(idx,1 as $t).get();
                         if val > prev_vals[idx]{
                             success = false;
                         }
@@ -310,7 +310,7 @@ macro_rules! sub_test{
                         reqs.push((sub_array.fetch_sub(idx,1 as $t),idx))
                     }
                     for (req,_idx) in reqs{
-                        let _val = req.get().unwrap();
+                        let _val = req.get();
                         // if val > prev_vals[idx]{
                         //     success = false;
                         // }

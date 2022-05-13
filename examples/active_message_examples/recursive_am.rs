@@ -44,7 +44,7 @@ impl LamellarAM for RecursiveAM {
                 },
             );
             // let mut res = next.get().expect("error returning from am"); // this will cause deadlock
-            let mut res = next.into_future().await.expect("error returning from am");
+            let mut res = next.into_future().await;
             res.push(hostname::get().unwrap().into_string().unwrap()); //append my host name to list returned from previous call
             res
         }

@@ -1,13 +1,7 @@
 use crate::active_messaging::{AmDist, LamellarAny};
 use crate::lamellae::{Des, SerializedData};
 use crate::lamellar_arch::LamellarArchRT;
-use crate::lamellar_team::LamellarTeamRT;
-use crate::scheduler::ReqId; //maybe move reqid to here
 use async_trait::async_trait;
-use crossbeam::utils::CachePadded;
-use lamellar_prof::*;
-use log::trace;
-use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 
@@ -15,22 +9,10 @@ use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::cell::Cell;
 
-pub(crate) static CUR_REQ_ID: AtomicUsize = AtomicUsize::new(0);
 pub(crate) enum InternalResult {
     Local(LamellarAny),     // a local result from a local am (possibly a returned one)
     Remote(SerializedData), // a remte result from a remote am
     Unit,
-}
-
-#[derive(Clone, Debug)]
-pub(crate) struct InternalReq {
-    pub(crate) data_tx: crossbeam::channel::Sender<(usize, InternalResult)>, // pe, sub_id, result
-    pub(crate) cnt: Arc<CachePadded<AtomicUsize>>,
-    pub(crate) team_outstanding_reqs: Arc<AtomicUsize>,
-    pub(crate) world_outstanding_reqs: Arc<AtomicUsize>,
-    pub(crate) tg_outstanding_reqs: Option<Arc<AtomicUsize>>,
-    // pub(crate) team_hash: u64,
-    // pub(crate) team: Pin<Arc<LamellarTeamRT>>,
 }
 
 #[async_trait]
@@ -69,12 +51,8 @@ impl LamellarRequestResult {
     }
 }
 
-
-
-
 pub(crate) struct LamellarRequestHandleInner {
     pub(crate) ready: AtomicBool,
-    pub(crate) arch: Arc<LamellarArchRT>,
     pub(crate) data: Cell<Option<InternalResult>>, //we only issue a single request, which the runtime will update, but the user also has a handle so we need a way to mutate
     pub(crate) team_outstanding_reqs: Arc<AtomicUsize>,
     pub(crate) world_outstanding_reqs: Arc<AtomicUsize>,
@@ -99,8 +77,7 @@ impl LamellarRequestAddResult for LamellarRequestHandleInner {
     fn user_held(&self) -> bool{
         self.user_handle.load(Ordering::SeqCst)
     }
-    fn add_result(&self, pe: usize, _sub_id: usize, data: InternalResult) { // for a single request this is only called one time by a single runtime thread so use of the cell is safe
-        let pe = self.arch.team_pe(pe).expect("pe does not exist on team");
+    fn add_result(&self, _pe: usize, _sub_id: usize, data: InternalResult) { // for a single request this is only called one time by a single runtime thread so use of the cell is safe
         self.data.set(Some(data));
         self.ready.store(true, Ordering::SeqCst);
     }
@@ -253,6 +230,79 @@ impl<T: AmDist> LamellarMultiRequest for LamellarMultiRequestHandle<T> {
             res.push(self.process_result(data.remove(&pe).unwrap()));
         }
         res
+    }
+}
+
+
+
+
+pub(crate) struct LamellarLocalRequestHandleInner {
+    pub(crate) ready: AtomicBool,
+    pub(crate) data: Cell<Option<LamellarAny>>, //we only issue a single request, which the runtime will update, but the user also has a handle so we need a way to mutate
+    pub(crate) team_outstanding_reqs: Arc<AtomicUsize>,
+    pub(crate) world_outstanding_reqs: Arc<AtomicUsize>,
+    pub(crate) tg_outstanding_reqs: Option<Arc<AtomicUsize>>,
+    pub(crate) user_handle: AtomicBool, //we can use this flag to optimize what happens when the request returns    
+}
+// we use the ready bool to protect access to the data field
+unsafe impl Sync for LamellarLocalRequestHandleInner {} 
+
+pub struct LamellarLocalRequestHandle<T> {
+    pub(crate) inner: Arc<LamellarLocalRequestHandleInner>,
+    pub(crate) _phantom: std::marker::PhantomData<T>,
+} 
+
+impl <T> Drop for LamellarLocalRequestHandle<T> {
+    fn drop(&mut self) {
+        self.inner.user_handle.store(false, Ordering::SeqCst);
+    }
+}
+
+impl LamellarRequestAddResult for LamellarLocalRequestHandleInner {
+    fn user_held(&self) -> bool{
+        self.user_handle.load(Ordering::SeqCst)
+    }
+    fn add_result(&self, _pe: usize, _sub_id: usize, data: InternalResult) { // for a single request this is only called one time by a single runtime thread so use of the cell is safe
+        if let InternalResult::Local(x) = data {
+            self.data.set(Some(x));
+            self.ready.store(true, Ordering::SeqCst);
+        } else {
+            panic!("unexpected local result  of type ");
+        }        
+    }
+    fn update_counters(&self) {
+        self.team_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
+        self.world_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
+        if let Some(tg_outstanding_reqs) = self.tg_outstanding_reqs.clone() {
+            tg_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
+        }
+    }
+}
+
+impl<T: 'static> LamellarLocalRequestHandle<T> {
+    fn process_result(&self, data: LamellarAny) -> T {
+        if let Ok(result) = data.downcast::<T>() {
+            *result
+        } else {
+            panic!("unexpected local result  of type ");
+        }
+    }
+}
+
+#[async_trait]
+impl<T> LamellarRequest for LamellarLocalRequestHandle<T> {
+    type Output = T;
+    async fn into_future(mut self: Box<Self>) -> Self::Output {
+        while !self.inner.ready.load(Ordering::SeqCst) {
+            async_std::task::yield_now().await;
+        }
+        self.process_result(self.inner.data.replace(None).unwrap())
+    }
+    fn get(&self) -> T {
+        while !self.inner.ready.load(Ordering::SeqCst) {
+            std::thread::yield_now();
+        }
+        self.process_result(self.inner.data.replace(None).unwrap())
     }
 }
 

@@ -55,9 +55,9 @@ impl ActiveMessaging for LamellarWorld {
         assert!(pe < self.num_pes(), "invalid pe: {:?}", pe);
         self.team.exec_am_pe(pe, am)
     }
-    fn exec_am_local<F>(&self, am: F) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync>
+    fn exec_am_local<F>(&self, am: F) -> Box<dyn LamellarRequest<Output = F::Output> + Send >
     where
-        F: LamellarActiveMessage + LocalAM + Send + Sync + 'static,
+        F: LamellarActiveMessage + LocalAM + Send  + 'static,
     {
         self.team.exec_am_local(am)
     }

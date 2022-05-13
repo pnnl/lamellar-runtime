@@ -1,4 +1,4 @@
-use crate::lamellar_request::{LamellarRequest,LamellarMultiRequest};
+use crate::lamellar_request::LamellarRequest;
 use crate::memregion::{
     local::LocalMemoryRegion, shared::SharedMemoryRegion, Dist, LamellarMemoryRegion,
 };

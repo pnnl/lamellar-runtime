@@ -45,18 +45,18 @@ fn main() {
         println!("---------------------------------------------------------------");
         println!("Testing local am no return");
         let res = world.exec_am_pe(my_pe, am.clone()).get();
-        assert_eq!(res, None);
+        assert_eq!(res, ());
         println!("no return result: {:?}", res);
         println!("-----------------------------------");
         println!("Testing remote am no return");
         let res = world.exec_am_pe(num_pes - 1, am.clone()).get();
-        assert_eq!(res, None);
+        assert_eq!(res, ());
         println!("no return result: {:?}", res);
         println!("-----------------------------------");
         println!("Testing all am no return");
         println!("[{:?}] exec on all", my_pe);
-        let res = world.exec_am_all(am.clone()).get_all();
-        assert!(res.iter().all(|x| x.is_none()));
+        let res = world.exec_am_all(am.clone()).get();
+        assert!(res.iter().all(|x| *x == ()));
         println!("no return result: {:?}", res);
         println!("---------------------------------------------------------------");
     }
@@ -64,7 +64,7 @@ fn main() {
     println!("---------------------------------------------------------------");
     println!("Testing ring pattern am no return");
     let res = world.exec_am_pe((my_pe + 1) % num_pes, am.clone()).get();
-    assert_eq!(res, None);
+    assert_eq!(res, ());
     println!("no return result: {:?}", res);
     println!("-----------------------------------");
 }

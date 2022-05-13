@@ -81,7 +81,7 @@ macro_rules! add_test{
                 #[cfg(feature="non-buffered-array-ops")]
                 {
                     for i in 0..(pe_max_val as usize){
-                        let val = array.fetch_add(idx,1 as $t).get().unwrap();
+                        let val = array.fetch_add(idx,1 as $t).get();
                         if val < prev{
                             println!("full 1: {:?} {:?} {:?}",i,val,prev);
                             success = false;
@@ -96,7 +96,7 @@ macro_rules! add_test{
                         reqs.push(array.fetch_add(idx,1 as $t));
                     }
                     for req in reqs{
-                        let val = req.get().unwrap()[0];
+                        let val = req.get()[0];
                         if val < prev{
                             println!("full 1: {:?} {:?}",val,prev);
                             success = false;
@@ -125,7 +125,7 @@ macro_rules! add_test{
             {
                 for i in 0..num_updates{
                     let idx = rand_idx.sample(&mut rng);
-                        let val = array.fetch_add(idx,1 as $t).get().unwrap();
+                        let val = array.fetch_add(idx,1 as $t).get();
                         if val < prev_vals[idx]{
                             println!("full 3: {:?} {:?} {:?}",i,val,prev_vals[idx]);
                             success = false;
@@ -143,7 +143,7 @@ macro_rules! add_test{
                     reqs.push((array.fetch_add(idx,1 as $t),idx))
                 }
                 for (req,_idx) in reqs{
-                    let _val = req.get().unwrap();
+                    let _val = req.get();
                     // if val < prev_vals[idx]{
                     //     println!("full 3:  {:?} {:?}",val,prev_vals[idx]);
                     //     success = false;
@@ -176,7 +176,7 @@ macro_rules! add_test{
                 #[cfg(feature="non-buffered-array-ops")]
                 {
                     for i in 0..(pe_max_val as usize){
-                        let val = sub_array.fetch_add(idx,1 as $t).get().unwrap();
+                        let val = sub_array.fetch_add(idx,1 as $t).get();
                         if val < prev{
                             println!("half 1: {:?} {:?} {:?}",i,val,prev);
                             success = false;
@@ -191,7 +191,7 @@ macro_rules! add_test{
                         reqs.push(sub_array.fetch_add(idx,1 as $t));
                     }
                     for req in reqs{
-                        let val = req.get().unwrap()[0];
+                        let val = req.get()[0];
                         if val < prev{
                             println!("half 1: {:?} {:?}",val,prev);
                             success = false;
@@ -219,7 +219,7 @@ macro_rules! add_test{
             {
                 for i in 0..num_updates{
                     let idx = rand_idx.sample(&mut rng);
-                    let val = sub_array.fetch_add(idx,1 as $t).get().unwrap();
+                    let val = sub_array.fetch_add(idx,1 as $t).get();
                         if val < prev_vals[idx]{
                             println!("half 3: {:?} {:?} {:?}",i,val,prev_vals[idx]);
                             success = false;
@@ -236,7 +236,7 @@ macro_rules! add_test{
                     reqs.push((sub_array.fetch_add(idx,1 as $t),idx))
                 }
                 for (req,_idx) in reqs{
-                    let _val = req.get().unwrap();
+                    let _val = req.get();
                     // if val < prev_vals[idx]{
                     //     println!("half 3:  {:?} {:?}",val,prev_vals[idx]);
                     //     success = false;
@@ -272,7 +272,7 @@ macro_rules! add_test{
                     #[cfg(feature="non-buffered-array-ops")]
                     {
                         for i in 0..(pe_max_val as usize){
-                            let val = sub_array.fetch_add(idx,1 as $t).get().unwrap();
+                            let val = sub_array.fetch_add(idx,1 as $t).get();
                             if val < prev{
                                 println!("pe 1: {:?} {:?} {:?}",i,val,prev);
                                 success = false;
@@ -287,7 +287,7 @@ macro_rules! add_test{
                             reqs.push(sub_array.fetch_add(idx,1 as $t));
                         }
                         for req in reqs{
-                            let val = req.get().unwrap()[0];
+                            let val = req.get()[0];
                             if val < prev{
                                 println!("pe 1: {:?} {:?}",val,prev);
                                 success = false;
@@ -315,7 +315,7 @@ macro_rules! add_test{
                 {
                     for i in 0..num_updates{
                         let idx = rand_idx.sample(&mut rng);
-                        let val = sub_array.fetch_add(idx,1 as $t).get().unwrap();
+                        let val = sub_array.fetch_add(idx,1 as $t).get();
                             if val < prev_vals[idx]{
                                 println!("pe 3: {:?} {:?} {:?}",i,val,prev_vals[idx]);
                                 success = false;
@@ -332,7 +332,7 @@ macro_rules! add_test{
                         reqs.push((sub_array.fetch_add(idx,1 as $t),idx))
                     }
                     for (req,_idx) in reqs{
-                        let _val = req.get().unwrap();
+                        let _val = req.get();
                         // if val < prev_vals[idx]{
                         //     println!("pe 3:  {:?} {:?}",val,prev_vals[idx]);
                         //     success = false;
@@ -390,7 +390,7 @@ macro_rules! check_results {
         // println!("test {:?} reqs len {:?}", $test, $reqs.len());
         let mut req_cnt=0;
         for (i, req) in $reqs.iter().enumerate() {
-            let req = req.get().unwrap();
+            let req = req.get();
             // println!("sub_req len: {:?}", req.len());
             for (j, res) in req.iter().enumerate() {
                 if !(res >= &0 && res < &(req_cnt + $num_pes)) {

@@ -75,21 +75,20 @@ fn main() {
         println!("---------------------------------------------------------------");
         println!("Testing local am");
         let res = world.exec_am_pe(my_pe, am.clone()).get();
-        assert_eq!(res, Some(my_pe));
+        assert_eq!(res, my_pe);
         println!("PE[{:?}] return result: {:?}", my_pe, res);
         println!("-----------------------------------");
         println!("Testing remote am");
         let res = world.exec_am_pe(num_pes - 1, am.clone()).get();
-        assert_eq!(res, Some(num_pes - 1));
+        assert_eq!(res, num_pes - 1);
         println!("PE[{:?}] return result: {:?}", my_pe, res);
         println!("-----------------------------------");
         println!("Testing all am");
-        let res = world.exec_am_all(am).get_all();
+        let res = world.exec_am_all(am).get();
         assert_eq!(
             res,
             (0..num_pes)
-                .map(|x| Some(x))
-                .collect::<Vec<Option<usize>>>()
+                .collect::<Vec<usize>>()
         );
         println!("PE[{:?}] return result: {:?}", my_pe, res);
         println!("---------------------------------------------------------------");

@@ -185,9 +185,9 @@ impl ActiveMessaging for Arc<LamellarTeam> {
         self.team.exec_am_pe_tg(pe, am, None)
     }
 
-    fn exec_am_local<F>(&self, am: F) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync>
+    fn exec_am_local<F>(&self, am: F) -> Box<dyn LamellarRequest<Output = F::Output> + Send >
     where
-        F: LamellarActiveMessage + LocalAM + Send + Sync + 'static,
+        F: LamellarActiveMessage + LocalAM + Send  + 'static,
     {
         self.team.exec_am_local_tg(am, None)
     }
@@ -750,56 +750,6 @@ impl LamellarTeamRT {
         self.exec_am_all_tg(am, None)
     }
 
-    // pub(crate) fn exec_am_all_tg<F>(
-    //     self: &Pin<Arc<LamellarTeamRT>>,
-    //     am: F,
-    //     task_group_cnts: Option<Arc<AMCounters>>,
-    // ) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync>
-    // where
-    //     F: RemoteActiveMessage + LamellarAM + AmDist,
-    // {
-    //     trace!("[{:?}] team exec am all request", self.world_pe);
-    //     let tg_outstanding_reqs = match task_group_cnts {
-    //         Some(task_group_cnts) => {
-    //             task_group_cnts.add_send_req(self.num_pes);
-    //             Some(task_group_cnts.outstanding_reqs.clone())
-    //         }
-    //         None => None,
-    //     };
-    //     let (my_req, ireq) = LamellarRequestHandle::new(
-    //         self.num_pes,
-    //         AmType::RegisteredFunction,
-    //         self.arch.clone(),
-    //         self.team_counters.outstanding_reqs.clone(),
-    //         self.world_counters.outstanding_reqs.clone(),
-    //         tg_outstanding_reqs,
-    //         self.remote_ptr_addr as u64,
-    //         self.clone(),
-    //     );
-
-    //     self.world_counters.add_send_req(self.num_pes);
-    //     self.team_counters.add_send_req(self.num_pes);
-    //     let func: LamellarArcAm = Arc::new(am);
-    //     let world = if let Some(world) = &self.world {
-    //         world.clone()
-    //     } else {
-    //         self.clone()
-    //     };
-    //     self.scheduler.submit_req(
-    //         self.world_pe,
-    //         None,
-    //         ExecType::Am(Cmd::Exec),
-    //         my_req.id,
-    //         LamellarFunc::Am(func),
-    //         self.lamellae.clone(),
-    //         world,
-    //         self.clone(),
-    //         self.remote_ptr_addr as u64,
-    //         Some(ireq),
-    //     );
-    //     Box::new(my_req)
-    // }
-
     pub(crate) fn exec_am_all_tg<F>(
         self: &Pin<Arc<LamellarTeamRT>>,
         am: F,
@@ -851,8 +801,7 @@ impl LamellarTeamRT {
             self.lamellae.clone(),
             world,
             self.clone(),
-            self.remote_ptr_addr as u64,
-            None
+            self.remote_ptr_addr as u64
         );
         Box::new(LamellarMultiRequestHandle{
             inner: req,
@@ -870,66 +819,7 @@ impl LamellarTeamRT {
     {
         self.exec_am_pe_tg(pe, am, None)
     }
-    // pub(crate) fn exec_am_pe_tg<F>(
-    //     self: &Pin<Arc<LamellarTeamRT>>,
-    //     pe: usize,
-    //     am: F,
-    //     task_group_cnts: Option<Arc<AMCounters>>,
-    // ) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync>
-    // where
-    //     F: RemoteActiveMessage + LamellarAM + AmDist,
-    // {
-    //     prof_start!(pre);
-    //     let tg_outstanding_reqs = match task_group_cnts {
-    //         Some(task_group_cnts) => {
-    //             task_group_cnts.add_send_req(1);
-    //             Some(task_group_cnts.outstanding_reqs.clone())
-    //         }
-    //         None => None,
-    //     };
-    //     assert!(pe < self.arch.num_pes());
-    //     prof_end!(pre);
-    //     prof_start!(req);
-    //     let (my_req, ireq) = LamellarRequestHandle::new(
-    //         1,
-    //         AmType::RegisteredFunction,
-    //         self.arch.clone(),
-    //         self.team_counters.outstanding_reqs.clone(),
-    //         self.world_counters.outstanding_reqs.clone(),
-    //         tg_outstanding_reqs,
-    //         self.remote_ptr_addr as u64,
-    //         self.clone(),
-    //     );
-    //     prof_end!(req);
-    //     prof_start!(counters);
-    //     self.world_counters.add_send_req(1);
-    //     self.team_counters.add_send_req(1);
-    //     prof_end!(counters);
-    //     prof_start!(any);
-
-    //     prof_end!(any);
-    //     prof_start!(sub);
-    //     let world = if let Some(world) = &self.world {
-    //         world.clone()
-    //     } else {
-    //         self.clone()
-    //     };
-    //     let func: LamellarArcAm = Arc::new(am);
-    //     self.scheduler.submit_req(
-    //         self.world_pe,
-    //         Some(self.arch.world_pe(pe).expect("pe not member of team")),
-    //         ExecType::Am(Cmd::Exec),
-    //         my_req.id,
-    //         LamellarFunc::Am(func),
-    //         self.lamellae.clone(),
-    //         world,
-    //         self.clone(),
-    //         self.remote_ptr_addr as u64,
-    //         Some(ireq),
-    //     );
-    //     prof_end!(sub);
-    //     Box::new(my_req)
-    // }
+    
 
     pub(crate) fn exec_am_pe_tg<F>(
         self: &Pin<Arc<LamellarTeamRT>>,
@@ -952,7 +842,6 @@ impl LamellarTeamRT {
 
         let req =Arc::new(LamellarRequestHandleInner{
             ready: AtomicBool::new(false),
-            arch: self.arch.clone(),
             data: Cell::new(None),
             team_outstanding_reqs: self.team_counters.outstanding_reqs.clone(),
             world_outstanding_reqs: self.world_counters.outstanding_reqs.clone(),
@@ -985,9 +874,7 @@ impl LamellarTeamRT {
             self.lamellae.clone(),
             world,
             self.clone(),
-            self.remote_ptr_addr as u64,
-            None,
-            // Some(ireq),
+            self.remote_ptr_addr as u64
         );
         
         Box::new(LamellarRequestHandle{
@@ -995,66 +882,6 @@ impl LamellarTeamRT {
             _phantom: PhantomData
         })
     }
-
-    // pub(crate) fn exec_arc_am_pe<F>(
-    //     self: &Pin<Arc<LamellarTeamRT>>,
-    //     pe: usize,
-    //     am: LamellarArcAm,
-    //     task_group_cnts: Option<Arc<AMCounters>>,
-    // ) -> Box<dyn LamellarRequest<Output = F> + Send + Sync>
-    // where
-    //     F: AmDist,
-    // {
-    //     prof_start!(pre);
-    //     let tg_outstanding_reqs = match task_group_cnts {
-    //         Some(task_group_cnts) => {
-    //             task_group_cnts.add_send_req(1);
-    //             Some(task_group_cnts.outstanding_reqs.clone())
-    //         }
-    //         None => None,
-    //     };
-    //     assert!(pe < self.arch.num_pes());
-    //     prof_end!(pre);
-    //     prof_start!(req);
-    //     let (my_req, ireq) = LamellarRequestHandle::new(
-    //         1,
-    //         AmType::RegisteredFunction,
-    //         self.arch.clone(),
-    //         self.team_counters.outstanding_reqs.clone(),
-    //         self.world_counters.outstanding_reqs.clone(),
-    //         tg_outstanding_reqs,
-    //         self.remote_ptr_addr as u64,
-    //         self.clone(),
-    //     );
-    //     prof_end!(req);
-    //     prof_start!(counters);
-    //     self.world_counters.add_send_req(1);
-    //     self.team_counters.add_send_req(1);
-    //     prof_end!(counters);
-    //     prof_start!(any);
-
-    //     prof_end!(any);
-    //     prof_start!(sub);
-    //     let world = if let Some(world) = &self.world {
-    //         world.clone()
-    //     } else {
-    //         self.clone()
-    //     };
-    //     self.scheduler.submit_req(
-    //         self.world_pe,
-    //         Some(self.arch.world_pe(pe).expect("pe not member of team")),
-    //         ExecType::Am(Cmd::Exec),
-    //         my_req.id,
-    //         LamellarFunc::Am(am),
-    //         self.lamellae.clone(),
-    //         world,
-    //         self.clone(),
-    //         self.remote_ptr_addr as u64,
-    //         Some(ireq),
-    //     );
-    //     prof_end!(sub);
-    //     Box::new(my_req)
-    // }
 
     pub(crate) fn exec_arc_am_pe<F>(
         self: &Pin<Arc<LamellarTeamRT>>,
@@ -1075,7 +902,6 @@ impl LamellarTeamRT {
         assert!(pe < self.arch.num_pes());
         let req =Arc::new(LamellarRequestHandleInner{
             ready: AtomicBool::new(false),
-            arch: self.arch.clone(),
             data: Cell::new(None),
             team_outstanding_reqs: self.team_counters.outstanding_reqs.clone(),
             world_outstanding_reqs: self.world_counters.outstanding_reqs.clone(),
@@ -1103,8 +929,7 @@ impl LamellarTeamRT {
             self.lamellae.clone(),
             world,
             self.clone(),
-            self.remote_ptr_addr as u64,
-            None,
+            self.remote_ptr_addr as u64
         );
         prof_end!(sub);
         Box::new(LamellarRequestHandle{
@@ -1116,77 +941,20 @@ impl LamellarTeamRT {
     pub fn exec_am_local<F>(
         self: &Pin<Arc<LamellarTeamRT>>,
         am: F,
-    ) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync>
+    ) -> Box<dyn LamellarRequest<Output = F::Output> + Send >
     where
-        F: LamellarActiveMessage + LocalAM + Send + Sync + 'static,
+        F: LamellarActiveMessage + LocalAM + Send +  'static,
     {
         self.exec_am_local_tg(am, None)
     }
-    // pub(crate) fn exec_am_local_tg<F>(
-    //     self: &Pin<Arc<LamellarTeamRT>>,
-    //     am: F,
-    //     task_group_cnts: Option<Arc<AMCounters>>,
-    // ) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync>
-    // where
-    //     F: LamellarActiveMessage + LocalAM + Send + Sync + 'static,
-    // {
-    //     prof_start!(pre);
-    //     prof_end!(pre);
-    //     prof_start!(req);
-    //     let tg_outstanding_reqs = match task_group_cnts {
-    //         Some(task_group_cnts) => {
-    //             task_group_cnts.add_send_req(1);
-    //             Some(task_group_cnts.outstanding_reqs.clone())
-    //         }
-    //         None => None,
-    //     };
-    //     let (my_req, ireq) = LamellarRequestHandle::new(
-    //         1,
-    //         AmType::RegisteredFunction,
-    //         self.arch.clone(),
-    //         self.team_counters.outstanding_reqs.clone(),
-    //         self.world_counters.outstanding_reqs.clone(),
-    //         tg_outstanding_reqs,
-    //         self.remote_ptr_addr as u64,
-    //         self.clone(),
-    //     );
-    //     prof_end!(req);
-    //     prof_start!(counters);
-    //     self.world_counters.add_send_req(1);
-    //     self.team_counters.add_send_req(1);
-    //     prof_end!(counters);
-    //     prof_start!(any);
-    //     let func: LamellarArcLocalAm = Arc::new(am);
-    //     prof_end!(any);
-    //     prof_start!(sub);
-    //     let world = if let Some(world) = &self.world {
-    //         world.clone()
-    //     } else {
-    //         self.clone()
-    //     };
-    //     self.scheduler.submit_req(
-    //         self.world_pe,
-    //         Some(self.world_pe),
-    //         ExecType::Am(Cmd::Exec),
-    //         my_req.id,
-    //         LamellarFunc::LocalAm(func),
-    //         self.lamellae.clone(),
-    //         world,
-    //         self.clone(),
-    //         self.remote_ptr_addr as u64,
-    //         Some(ireq),
-    //     );
-    //     prof_end!(sub);
-    //     Box::new(my_req)
-    // }
 
     pub(crate) fn exec_am_local_tg<F>(
         self: &Pin<Arc<LamellarTeamRT>>,
         am: F,
         task_group_cnts: Option<Arc<AMCounters>>,
-    ) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync>
+    ) -> Box<dyn LamellarRequest<Output = F::Output> + Send >
     where
-        F: LamellarActiveMessage + LocalAM + Send + Sync + 'static,
+        F: LamellarActiveMessage + LocalAM + Send +  'static,
     {
         prof_start!(pre);
         prof_end!(pre);
@@ -1200,7 +968,6 @@ impl LamellarTeamRT {
         };
         let req =Arc::new(LamellarRequestHandleInner{
             ready: AtomicBool::new(false),
-            arch: self.arch.clone(),
             data: Cell::new(None),
             team_outstanding_reqs: self.team_counters.outstanding_reqs.clone(),
             world_outstanding_reqs: self.world_counters.outstanding_reqs.clone(),
@@ -1236,11 +1003,10 @@ impl LamellarTeamRT {
             self.lamellae.clone(),
             world,
             self.clone(),
-            self.remote_ptr_addr as u64,
-            None
+            self.remote_ptr_addr as u64
         );
         prof_end!(sub);
-        Box::new(LamellarRequestHandle{
+        Box::new(LamellarLocalRequestHandle{
             inner: req,
             _phantom: PhantomData
         })

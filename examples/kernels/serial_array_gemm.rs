@@ -61,7 +61,7 @@ fn main() {
                 let mut sum = 0.0;
                 for k in 0..n {
                     // a cols b rows
-                    sum += a.at(k + i * m).wait().unwrap() * b.at(j + k * n).wait().unwrap()
+                    sum += a.at(k + i * m).wait() * b.at(j + k * n).wait()
                 }
                 c.put(j + i * m, &sum).wait(); // could also do c.add(j+i*m,sum), but each element of c will only be updated once so put is faster
             }

@@ -13,7 +13,7 @@ impl<T: Dist + Default> ArrayWrapper<T> {
     }
 }
 
-// lamellar::generate_ops_for_type!(false, Option<u8>); //todo get this to work...
+// lamellar::generate_ops_for_type!(false, Option<u8>); //todo get this to work... which Im not sure is actually possible?
 
 fn main() {
     let world = lamellar::LamellarWorldBuilder::new().build();

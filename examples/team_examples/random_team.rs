@@ -45,7 +45,7 @@ impl LamellarAM for RecursiveAM {
                     orig: self.orig,
                 },
             );
-            let mut res = next.into_future().await.expect("error returning from am");
+            let mut res = next.into_future().await;
             let string = format!(
                 "[{:?}] {}",
                 lamellar::current_pe,

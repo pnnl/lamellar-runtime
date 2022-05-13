@@ -61,7 +61,7 @@ macro_rules! and_test{
             #[cfg(feature="non-buffered-array-ops")]
             {
                 for idx in 0..array.len(){
-                    let val = array.load(idx).get().unwrap();
+                    let val = array.load(idx).get();
                     let check_val = (idx%num_pes) as $t;
                     let val = val;
                     check_val!($array,val,check_val,success);
@@ -78,7 +78,7 @@ macro_rules! and_test{
                     reqs.push((array.load(idx),idx));
                 }
                 for (req,idx) in reqs{
-                    let val = req.get().unwrap()[0];
+                    let val = req.get()[0];
                     let check_val = (idx%num_pes) as $t;
                     let val = val;
                     check_val!($array,val,check_val,success);
@@ -109,7 +109,7 @@ macro_rules! and_test{
             #[cfg(feature="non-buffered-array-ops")]
             {
                 for idx in 0..sub_array.len(){
-                    let val = sub_array.load(idx).get().unwrap();
+                    let val = sub_array.load(idx).get();
                     let check_val = (idx%num_pes) as $t;
                     let val = val;
                     check_val!($array,val,check_val,success);
@@ -125,7 +125,7 @@ macro_rules! and_test{
                     reqs.push((sub_array.load(idx),idx));
                 }
                 for (req,idx) in reqs{
-                    let val = req.get().unwrap()[0];
+                    let val = req.get()[0];
                     let check_val = (idx%num_pes) as $t;
                     let val = val;
                     check_val!($array,val,check_val,success);
@@ -158,7 +158,7 @@ macro_rules! and_test{
                 #[cfg(feature="non-buffered-array-ops")]
                 {
                     for idx in 0..sub_array.len(){
-                        let val = sub_array.load(idx).get().unwrap();
+                        let val = sub_array.load(idx).get();
                         let check_val = (idx%num_pes) as $t;
                         let val = val;
                     check_val!($array,val,check_val,success);
@@ -175,7 +175,7 @@ macro_rules! and_test{
                         reqs.push((sub_array.load(idx),idx));
                     }
                     for (req,idx) in reqs{
-                        let val = req.get().unwrap()[0];
+                        let val = req.get()[0];
                         let check_val = (idx%num_pes) as $t;
                         let val = val;
                     check_val!($array,val,check_val,success);

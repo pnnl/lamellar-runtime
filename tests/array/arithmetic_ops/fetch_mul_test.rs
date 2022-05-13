@@ -79,7 +79,7 @@ macro_rules! add_test{
                 #[cfg(feature="non-buffered-array-ops")]
                 {
                     for i in 0..(max_updates as usize){
-                        let val = array.fetch_mul(idx,2 as $t).get().unwrap();
+                        let val = array.fetch_mul(idx,2 as $t).get();
                         if val < prev || (prev as u128)%2 != 0{
                             if prev > 1 as $t{
                                 println!("full 1: {:?} {:?} {:?}",i,val,prev);
@@ -96,7 +96,7 @@ macro_rules! add_test{
                         reqs.push(array.fetch_mul(idx,2 as $t));
                     }
                     for req in reqs{
-                        let val = req.get().unwrap()[0];
+                        let val = req.get()[0];
                         if val < prev || (prev as u128)%2 != 0{
                             if prev > 1 as $t{
                                 println!("full 1: {:?} {:?} ",val,prev);
@@ -133,7 +133,7 @@ macro_rules! add_test{
                 #[cfg(feature="non-buffered-array-ops")]
                 {
                     for i in 0..(max_updates as usize){
-                        let val = sub_array.fetch_mul(idx,2 as $t).get().unwrap();
+                        let val = sub_array.fetch_mul(idx,2 as $t).get();
                         if val < prev || (prev as u128)%2 != 0{
                             if prev > 1 as $t{
                                 println!("full 1: {:?} {:?} {:?}",i,val,prev);
@@ -150,7 +150,7 @@ macro_rules! add_test{
                         reqs.push(sub_array.fetch_mul(idx,2 as $t));
                     }
                     for req in reqs{
-                        let val = req.get().unwrap()[0];
+                        let val = req.get()[0];
                         if val < prev || (prev as u128)%2 != 0{
                             if prev > 1 as $t{
                                 println!("full 1:  {:?} {:?}",val,prev);
@@ -186,7 +186,7 @@ macro_rules! add_test{
                     #[cfg(feature="non-buffered-array-ops")]
                     {
                         for i in 0..(max_updates as usize){
-                            let val = sub_array.fetch_mul(idx,2 as $t).get().unwrap();
+                            let val = sub_array.fetch_mul(idx,2 as $t).get();
                             if val < prev || (prev as u128)%2 != 0{
                                 if prev > 1 as $t{
                                     println!("full 1: {:?} {:?} {:?}",i,val,prev);
@@ -203,7 +203,7 @@ macro_rules! add_test{
                             reqs.push(sub_array.fetch_mul(idx,2 as $t));
                         }
                         for req in reqs{
-                            let val = req.get().unwrap()[0];
+                            let val = req.get()[0];
                             if val < prev || (prev as u128)%2 != 0{
                                 if prev > 1 as $t{
                                     println!("full 1: {:?} {:?} ",val,prev);

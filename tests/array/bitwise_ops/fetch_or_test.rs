@@ -56,7 +56,7 @@ macro_rules! or_test{
             #[cfg(feature="non-buffered-array-ops")]
             {
                 for idx in 0..array.len(){
-                    let val = array.fetch_bit_or(idx,my_val).get().unwrap();
+                    let val = array.fetch_bit_or(idx,my_val).get();
                     if (val & my_val) != 0 {
                         println!("{:?} {:x} {:x} ",idx,my_val,val);
                         success = false;
@@ -71,7 +71,7 @@ macro_rules! or_test{
                     reqs.push((array.fetch_bit_or(idx,my_val),idx));
                 }
                 for (req,idx) in reqs{
-                    let val = req.get().unwrap()[0];
+                    let val = req.get()[0];
                     if (val & my_val) != 0 {
                         println!("{:?} {:x} {:x} ",idx,my_val,val);
                         success = false;
@@ -104,7 +104,7 @@ macro_rules! or_test{
             #[cfg(feature="non-buffered-array-ops")]
             {
                 for idx in 0..sub_array.len(){
-                    let val = sub_array.fetch_bit_or(idx,my_val).get().unwrap();
+                    let val = sub_array.fetch_bit_or(idx,my_val).get();
                     if (val & my_val) != 0 {
                         println!("{:?} {:x} {:x} ",idx,my_val,val);
                         success = false;
@@ -118,7 +118,7 @@ macro_rules! or_test{
                     reqs.push((sub_array.fetch_bit_or(idx,my_val),idx));
                 }
                 for (req,idx)  in reqs{
-                    let val = req.get().unwrap()[0];
+                    let val = req.get()[0];
                     if (val & my_val) != 0 {
                         println!("{:?} {:x} {:x} ",idx,my_val,val);
                         success = false;
@@ -152,7 +152,7 @@ macro_rules! or_test{
                 #[cfg(feature="non-buffered-array-ops")]
                 {
                     for idx in 0..sub_array.len(){
-                        let val = sub_array.fetch_bit_or(idx,my_val).get().unwrap();
+                        let val = sub_array.fetch_bit_or(idx,my_val).get();
                         if (val & my_val) != 0 {
                             println!("{:?} {:x} {:x} ",idx,my_val,val);
                             success = false;
@@ -166,7 +166,7 @@ macro_rules! or_test{
                         reqs.push((sub_array.fetch_bit_or(idx,my_val),idx));
                     }
                     for (req,idx)  in reqs{
-                        let val = req.get().unwrap()[0];
+                        let val = req.get()[0];
                         if (val & my_val) != 0 {
                             println!("{:?} {:x} {:x} ",idx,my_val,val);
                             success = false;

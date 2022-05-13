@@ -1,6 +1,5 @@
 use crate::active_messaging::*;
 use crate::lamellae::{Lamellae, SerializedData};
-use crate::lamellar_request::InternalReq;
 use crate::lamellar_team::LamellarTeamRT;
 
 use core::pin::Pin;
@@ -75,7 +74,6 @@ pub(crate) trait AmeSchedulerQueue: Sync + Send {
         world: Pin<Arc<LamellarTeamRT>>,
         team: Pin<Arc<LamellarTeamRT>>,
         team_hash: u64,
-        ireq: Option<InternalReq>,
     );
     fn submit_work(
         &self,
@@ -109,7 +107,6 @@ pub(crate) trait SchedulerQueue: Sync + Send {
         world: Pin<Arc<LamellarTeamRT>>,
         team: Pin<Arc<LamellarTeamRT>>,
         team_hash: u64,
-        ireq: Option<InternalReq>,
     );
     fn submit_work(&self, msg: SerializedData, lamellae: Arc<Lamellae>); //serialized active message
     fn submit_task<F>(&self, future: F)

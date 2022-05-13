@@ -59,7 +59,7 @@ macro_rules! compare_exchange_test{
                 }
             }
             for (req,idx) in reqs{
-                match req.get().unwrap()[0]{
+                match req.get()[0]{
                     Ok(val) => {
                         check_val!($array,val,init_val,success);
                         if !success{
@@ -78,7 +78,7 @@ macro_rules! compare_exchange_test{
                 reqs.push((array.compare_exchange(idx,init_val,my_pe as $t),idx));
             }
             for (req,idx) in reqs{
-                match req.get().unwrap()[0]{
+                match req.get()[0]{
                     Ok(val) => {
                         println!("returned ok {:?} {:?} {:?}",idx,val,init_val);
                     }
@@ -106,7 +106,7 @@ macro_rules! compare_exchange_test{
                 }
             }
             for (req,idx) in reqs{
-                match req.get().unwrap()[0]{
+                match req.get()[0]{
                     Ok(val) => {
                         check_val!($array,val,init_val,success);
                         if !success{
@@ -125,7 +125,7 @@ macro_rules! compare_exchange_test{
                 reqs.push((sub_array.compare_exchange(idx,init_val,my_pe as $t),idx));
             }
             for (req,idx) in reqs{
-                match req.get().unwrap()[0]{
+                match req.get()[0]{
                     Ok(val) => {
                         println!("returned ok {:?} {:?} {:?}",idx,val,init_val);
                     }
@@ -155,7 +155,7 @@ macro_rules! compare_exchange_test{
                     }
                 }
                 for (req,idx) in reqs{
-                    match req.get().unwrap()[0]{
+                    match req.get()[0]{
                         Ok(val) => {
                             check_val!($array,val,init_val,success);
                             if !success{
@@ -176,7 +176,7 @@ macro_rules! compare_exchange_test{
                     }
                 }
                 for (req,idx) in reqs{
-                    match req.get().unwrap()[0]{
+                    match req.get()[0]{
                         Ok(val) => {
                             println!("returned ok {:?} {:?} {:?}",idx,val,init_val);
                         }
@@ -222,7 +222,7 @@ macro_rules! compare_exchange_epsilon_test{
                 }
             }
             for (req,idx) in reqs{
-                match req.get().unwrap()[0]{
+                match req.get()[0]{
                     Ok(val) => {
                         check_val!($array,val,init_val,success);
                         if !success{
@@ -241,7 +241,7 @@ macro_rules! compare_exchange_epsilon_test{
                 reqs.push((array.compare_exchange_epsilon(idx,init_val,my_pe as $t,epsilon),idx));
             }
             for (req,idx) in reqs{
-                match req.get().unwrap()[0]{
+                match req.get()[0]{
                     Ok(val) => {
                         println!("returned ok {:?} {:?} {:?}",idx,val,init_val);
                     }
@@ -269,7 +269,7 @@ macro_rules! compare_exchange_epsilon_test{
                 }
             }
             for (req,idx) in reqs{
-                match req.get().unwrap()[0]{
+                match req.get()[0]{
                     Ok(val) => {
                         check_val!($array,val,init_val,success);
                         if !success{
@@ -288,7 +288,7 @@ macro_rules! compare_exchange_epsilon_test{
                 reqs.push((sub_array.compare_exchange_epsilon(idx,init_val,my_pe as $t,epsilon),idx));
             }
             for (req,idx) in reqs{
-                match req.get().unwrap()[0]{
+                match req.get()[0]{
                     Ok(val) => {
                         println!("returned ok {:?} {:?} {:?}",idx,val,init_val);
                     }
@@ -318,7 +318,7 @@ macro_rules! compare_exchange_epsilon_test{
                     }
                 }
                 for (req,idx) in reqs{
-                    match req.get().unwrap()[0]{
+                    match req.get()[0]{
                         Ok(val) => {
                             check_val!($array,val,init_val,success);
                             if !success{
@@ -339,7 +339,7 @@ macro_rules! compare_exchange_epsilon_test{
                     }
                 }
                 for (req,idx) in reqs{
-                    match req.get().unwrap()[0]{
+                    match req.get()[0]{
                         Ok(val) => {
                             println!("returned ok {:?} {:?} {:?}",idx,val,init_val);
                         }

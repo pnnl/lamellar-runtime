@@ -1,6 +1,6 @@
-use crate::lamellae::{Lamellae, LamellaeRDMA, SerializedData};
+use crate::lamellae::{Lamellae, SerializedData};
 use crate::lamellar_arch::IdError;
-use crate::lamellar_request::{InternalReq, InternalResult, LamellarRequest, LamellarMultiRequest, LamellarRequestResult};
+use crate::lamellar_request::{InternalResult, LamellarRequest, LamellarMultiRequest, LamellarRequestResult};
 use crate::lamellar_team::{LamellarTeam, LamellarTeamRT};
 use crate::scheduler::{AmeScheduler, ReqData, ReqId};
 #[cfg(feature = "enable-prof")]
@@ -22,14 +22,6 @@ pub(crate) use remote_closures::RemoteClosures;
 #[cfg(feature = "nightly")]
 use remote_closures::{exec_closure_cmd, process_closure_request};
 
-//todo
-//turn requests into a struct
-//impl insert, send_to_user -- (get, remove)
-lazy_static! {
-    pub(crate) static ref REQUESTS: Mutex<HashMap<usize, InternalReq>> = { //any reason for this to be static... we can put it im AME
-       Mutex::new(HashMap::new())
-    };
-}
 
 pub trait AmDist:
     serde::ser::Serialize + serde::de::DeserializeOwned + Send + Sync + 'static
@@ -37,6 +29,13 @@ pub trait AmDist:
 }
 
 impl<T: serde::ser::Serialize + serde::de::DeserializeOwned + Send + Sync + 'static> AmDist for T {}
+
+pub trait AmLocalDist:
+    Send + 'static
+{
+}
+
+impl<T: Send + 'static> AmLocalDist for T {}
 
 #[derive(
     serde::Serialize, serde::Deserialize, Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord,
@@ -56,7 +55,7 @@ impl<T> DarcSerde for &T {
     fn des(&self, _cur_pe: Result<usize, IdError>) {}
 }
 
-pub trait LamellarSerde: Sync + Send {
+pub trait LamellarSerde: Send {
     fn serialized_size(&self) -> usize;
     fn serialize_into(&self, buf: &mut [u8]);
 }
@@ -87,15 +86,15 @@ pub(crate) enum LamellarFunc {
     None,
 }
 
-pub(crate) type LamellarArcLocalAm = Arc<dyn LamellarActiveMessage + Send + Sync>;
-pub(crate) type LamellarArcAm = Arc<dyn RemoteActiveMessage + Send + Sync>;
-pub(crate) type LamellarAny = Box<dyn std::any::Any + Send + Sync>;
-pub(crate) type LamellarResultArc = Arc<dyn LamellarSerde + Send + Sync>;
+pub(crate) type LamellarArcLocalAm = Arc<dyn LamellarActiveMessage + Send>;
+pub(crate) type LamellarArcAm = Arc<dyn RemoteActiveMessage + Send >;
+pub(crate) type LamellarAny = Box<dyn std::any::Any + Send >;
+pub(crate) type LamellarResultArc = Arc<dyn LamellarSerde + Send >;
 
 pub trait Serde: serde::ser::Serialize + serde::de::DeserializeOwned {}
 
 pub trait LocalAM {
-    type Output: AmDist;
+    type Output: AmLocalDist;
 }
 
 pub trait LamellarAM {
@@ -183,9 +182,9 @@ pub trait ActiveMessaging {
     ) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync>
     where
         F: RemoteActiveMessage + LamellarAM + Serde + AmDist;
-    fn exec_am_local<F>(&self, am: F) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync>
+    fn exec_am_local<F>(&self, am: F) -> Box<dyn LamellarRequest<Output = F::Output> + Send >
     where
-        F: LamellarActiveMessage + LocalAM + Send + Sync + 'static;
+        F: LamellarActiveMessage + LocalAM + Send + 'static;
 }
 
 //maybe make this a struct then we could hold the pending counters...
@@ -218,11 +217,8 @@ impl ActiveMessageEngine {
         }
     }
 
-    pub(crate) async fn process_msg_new(&self, req_data: ReqData, ireq: Option<InternalReq>) {
+    pub(crate) async fn process_msg_new(&self, req_data: ReqData) {
         // trace!("[{:?}] process msg: {:?}",self.my_pe, &req_data);
-        if let Some(ireq) = ireq {
-            REQUESTS.lock().insert(req_data.id.id, ireq.clone());
-        }
         // let addr = req_data.lamellae.local_addr(req_data.src,req_data)
         // let (team, world) = self.get_team_and_world(req_data.team.team_hash);
         let world = LamellarTeam::new(None, req_data.world.clone(), self.teams.clone(), true);
@@ -293,50 +289,13 @@ impl ActiveMessageEngine {
         }
     }
 
-    // make this an associated function... or maybe make a "REQUESTS struct which will have a send_data_to_user_handle"
-    // fn send_data_to_user_handle(
-    //     req_id: ReqId,
-    //     pe: u16,
-    //     data: InternalResult,
-    //     team: Pin<Arc<LamellarTeamRT>>,
-    // ) {
-    //     let reqs = REQUESTS.lock();
-    //     match reqs.get(&req_id.id) {
-    //         Some(ireq) => {
-    //             // println!("sending {:?} to user  handle",req_id);
-    //             let ireq = ireq.clone();
-    //             drop(reqs); //release lock in the hashmap
-    //             let _num_reqs = ireq.team_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
-    //             let _num_reqs = ireq.world_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
-    //             if let Some(tg_outstanding_reqs) = ireq.tg_outstanding_reqs {
-    //                 let _num_reqs = tg_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
-    //             }
-    //             if let Ok(_) = ireq.data_tx.send((pe as usize, data)) {} //if this returns an error it means the user has dropped the handle
-    //             let cnt = ireq.cnt.fetch_sub(1, Ordering::SeqCst);
-    //             if cnt == 1 {
-    //                 REQUESTS.lock().remove(&req_id.id);
-    //             }
-    //         }
-    //         None => {
-    //             panic!(
-    //                 "error id not found {:?} mem in use: {:?}",
-    //                 req_id,
-    //                 team.lamellae.occupied()
-    //             )
-    //         }
-    //     }
-    // }
-
     fn send_data_to_user_handle(
         req_id: ReqId,
         pe: u16,
         data: InternalResult,
-        team: Pin<Arc<LamellarTeamRT>>,
     ) {
         // println!("returned req_id: {:?}", req_id);
         let req = unsafe{Arc::from_raw(req_id.id as *const LamellarRequestResult)};
-        req.add_result(pe as usize, req_id.sub_id, data);
-        
-    }
-    
+        req.add_result(pe as usize, req_id.sub_id, data);   
+    }    
 }

@@ -86,6 +86,30 @@ where
     }
 }
 
+#[lamellar_impl::AmLocalDataRT(Clone)]
+pub(crate) struct Collect<I>
+where
+    I: DistributedIterator,
+{
+    pub(crate) data: I,
+    pub(crate) start_i: usize,
+    pub(crate) end_i: usize,
+}
+#[lamellar_impl::rt_am_local]
+impl<I> LamellarAm for Collect<I> 
+where
+    I: DistributedIterator + 'static,
+{
+    fn exec(&self) -> Vec<I::Item> {
+        let mut iter = self.data.init(self.start_i, self.end_i - self.start_i);
+        let mut vec = Vec::new();
+        while let Some(elem) = iter.next() {
+            vec.push(elem);
+        }
+        vec
+    }
+}
+
 #[async_trait]
 pub trait DistIterRequest{
     type Output;
@@ -94,7 +118,7 @@ pub trait DistIterRequest{
 }
 
 pub struct DistIterForEachHandle{
-    pub(crate) reqs: Vec<Box<dyn LamellarRequest<Output = ()> + Send + Sync>>,
+    pub(crate) reqs: Vec<Box<dyn LamellarRequest<Output = ()> + Send >>,
 }
 #[async_trait]
 impl DistIterRequest for DistIterForEachHandle {
@@ -112,7 +136,7 @@ impl DistIterRequest for DistIterForEachHandle {
 }
 
 pub struct DistIterCollectHandle<T: Dist,A: From<UnsafeArray<T>>>{
-    pub(crate) reqs: Vec<Box<dyn LamellarRequest<Output = Vec<T>> + Send + Sync>>,
+    pub(crate) reqs: Vec<Box<dyn LamellarRequest<Output = Vec<T>> + Send >>,
     pub(crate) distribution: Distribution,
     pub(crate) team: Pin<Arc<LamellarTeamRT>>,
     pub(crate) _phantom: PhantomData<A>,

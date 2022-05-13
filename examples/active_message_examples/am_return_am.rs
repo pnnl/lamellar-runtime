@@ -75,17 +75,17 @@ fn main() {
         println!("---------------------------------------------------------------");
         println!("Testing local am");
         let res = world.exec_am_pe(my_pe, am.clone()).get();
-        assert_eq!(res, None);
+        assert_eq!(res, ());
         println!("PE[{:?}] return result: {:?}", my_pe, res);
         println!("-----------------------------------");
         println!("Testing remote am");
         let res = world.exec_am_pe(num_pes - 1, am.clone()).get();
-        assert_eq!(res, None);
+        assert_eq!(res, ());
         println!("PE[{:?}] return result: {:?}", my_pe, res);
         println!("-----------------------------------");
         println!("Testing all am");
-        let res = world.exec_am_all(am).get_all();
-        assert!(res.iter().all(|x| x.is_none()));
+        let res = world.exec_am_all(am).get();
+        assert!(res.iter().all(|x| *x == ()));
         println!("PE[{:?}] return result: {:?}", my_pe, res);
         println!("---------------------------------------------------------------");
     }

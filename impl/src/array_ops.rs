@@ -5,7 +5,33 @@ use quote::{quote, quote_spanned};
 use syn::parse_macro_input;
 use syn::spanned::Spanned;
 
-
+fn type_to_string(ty: &syn::Type) -> String {
+    match ty {
+        syn::Type::Path(path) => {
+            path.path.segments.iter().fold(String::new(), |acc, segment| {
+                acc+ "_" + &segment.ident.to_string() + &match &segment.arguments {
+                    syn::PathArguments::None => String::new(),
+                    syn::PathArguments::AngleBracketed(args) => {
+                        args.args.iter().fold(String::new(), |acc, arg| {
+                            acc + "_" + &match arg {
+                                syn::GenericArgument::Type(ty) => type_to_string(ty),
+                                _ => panic!("unexpected argument type"),
+                            }
+                        })
+                    }
+                    syn::PathArguments::Parenthesized(args) => {
+                        args.inputs.iter().fold(String::new(), |acc, arg| {
+                            acc + "_" + & type_to_string(arg)
+                        })
+                    }
+                }
+            })
+        }
+        _ => {
+            panic!("unexpected type");
+        }
+    }
+}
 
 #[cfg(feature = "non-buffered-array-ops")]
 fn gen_write_array_impls(
@@ -48,10 +74,14 @@ fn gen_write_array_impls(
 }
 
 fn native_atomic_slice(
-    typeident: &syn::Ident,
+    typeident: &syn::Type,
     lamellar: &proc_macro2::Ident,
 ) -> (proc_macro2::TokenStream, proc_macro2::TokenStream) {
-    match typeident.to_string().as_str() {
+    let ident = match typeident {
+        syn::Type::Path(path) => path.path.get_ident().expect("unexpected type for native atomic"),
+        _ => panic!("unexpected type for native atomic"),
+    };
+    match ident.to_string().as_str() {
         "i8" => (
             quote! {
                 let slice = unsafe {
@@ -187,7 +217,7 @@ fn native_atomic_slice(
 }
 
 fn create_buf_ops(
-    typeident: syn::Ident,
+    typeident: syn::Type,
     array_type: syn::Ident,
     byte_array_type: syn::Ident,
     optypes: &Vec<OpType>,
@@ -440,9 +470,9 @@ fn create_buf_ops(
         }
     }
 
-    let buf_op_name = quote::format_ident!("{}_{}_op_buf", array_type, typeident);
-    let am_buf_name = quote::format_ident!("{}_{}_am_buf", array_type, typeident);
-    let dist_am_buf_name = quote::format_ident!("{}_{}_am_buf", array_type, typeident);
+    let buf_op_name = quote::format_ident!("{}_{}_op_buf", array_type, type_to_string(&typeident));
+    let am_buf_name = quote::format_ident!("{}_{}_am_buf", array_type, type_to_string(&typeident));
+    let dist_am_buf_name = quote::format_ident!("{}_{}_am_buf", array_type, type_to_string(&typeident));
     let reg_name = quote::format_ident!("{}OpBuf", array_type);
 
     let inner_op=quote!{
@@ -627,7 +657,7 @@ enum OpType {
 }
 
 fn create_buffered_ops(
-    typeident: syn::Ident,
+    typeident: syn::Type,
     bitwise: bool,
     native: bool,
     rt: bool,
@@ -711,7 +741,7 @@ fn create_buffered_ops(
 
 #[cfg(feature = "non-buffered-array-ops")]
 fn create_ops(
-    typeident: syn::Ident,
+    typeident: syn::Type,
     bitwise: bool,
     native: bool,
     rt: bool,
@@ -874,13 +904,17 @@ pub(crate) fn __generate_ops_for_type(item: TokenStream) -> TokenStream {
     };
     let native = false; // since this is a user defined type, we assume it does not have native support for atomic operations
     for t in items[1..].iter() {
-        let typeident = quote::format_ident!("{:}", t.trim());
-        output.extend(quote! {impl Dist for #typeident {}});
+        let the_type = syn::parse_str::<syn::Type>(&t).unwrap();
+        // let (wrapped_impl, wrapped_type) = create_wrapped_type(&the_type, bitwise);
+        // output.extend(wrapped_impl);
+        println!("{:?}", the_type);
+        // let typeident = quote::format_ident!("{:}", t.trim());
+        output.extend(quote! {impl Dist for #the_type {}});
         #[cfg(feature = "non-buffered-array-ops")]
-        output.extend(create_ops(typeident.clone(), bitwise, native, false));
+        output.extend(create_ops(the_type.clone(), bitwise, native, false));
         #[cfg(not(feature = "non-buffered-array-ops"))]
         output.extend(create_buffered_ops(
-            typeident.clone(),
+            the_type.clone(),
             bitwise,
             native,
             false,
@@ -908,13 +942,14 @@ pub(crate) fn __generate_ops_for_type_rt(item: TokenStream) -> TokenStream {
         panic! ("first argument of generate_ops_for_type expects 'true' or 'false' specifying whether types are native atomics");
     };
     for t in items[2..].iter() {
+        let the_type = syn::parse_str::<syn::Type>(&t).unwrap();
         let typeident = quote::format_ident!("{:}", t.trim());
         output.extend(quote! {impl Dist for #typeident {}});
         #[cfg(feature = "non-buffered-array-ops")]
         output.extend(create_ops(typeident.clone(), bitwise, native, true));
         #[cfg(not(feature = "non-buffered-array-ops"))]
         output.extend(create_buffered_ops(
-            typeident.clone(),
+            the_type.clone(),
             bitwise,
             native,
             true,
@@ -924,16 +959,48 @@ pub(crate) fn __generate_ops_for_type_rt(item: TokenStream) -> TokenStream {
     TokenStream::from(output)
 }
 
+
+// fn create_wrapped_type(base_type:& syn::Type, bitwise: bool) -> (proc_macro2::TokenStream  ,syn::Type){
+//     let wrapped_type = quote::format_ident!("wrapped_{}", type_to_string(base_type));
+//     (if bitwise{
+//         quote!{
+//             const _: () = {
+//                 extern crate lamellar as __lamellar;
+//                 __lamellar::custom_derive! {
+//                     #[derive(Send, Sync, Copy, Debug, NewtypeAddAssign, NewtypeSubAssign, NewtypeMulAssign, NewtypeDivAssign, NewtypeBitAndAssign, NewtypeBitOrAssign )]
+//                     pub struct #wrapped_type(#base_type);
+//                 }
+//             };
+//         }
+//     }
+//     else{
+//         quote!{
+//             const _: () = {
+//                 extern crate lamellar as __lamellar;
+//                 use __lamellar::custom_derive::*;
+//                 use __lamellar::newtype_derive::*;
+//                 custom_derive! {
+//                     #[derive( Copy, Debug, NewtypeAddAssign, NewtypeSubAssign, NewtypeMulAssign, NewtypeDivAssign)]
+//                     pub struct #wrapped_type(#base_type);
+//                 }
+//             };
+//         }
+//     }, syn::parse_str::<syn::Type>(wrapped_type.to_string().as_str()).unwrap())
+// }
+
 pub(crate) fn __derive_arrayops(input: TokenStream) -> TokenStream {
     let mut output = quote! {};
 
     let input = parse_macro_input!(input as syn::DeriveInput);
     let name = input.ident;
+    let the_type: syn::Type = syn::parse_quote!(#name);
+    // let (wrapped_impl, wrapped_type) = create_wrapped_type(&the_type, false);
+    // output.extend(wrapped_impl);
 
     #[cfg(feature = "non-buffered-array-ops")]
-    output.extend(create_ops(name.clone(), false, false, false));
+    output.extend(create_ops(the_type.clone(), false, false, false));
     #[cfg(not(feature = "non-buffered-array-ops"))]
-    output.extend(create_buffered_ops(name.clone(), false, false, false));
+    output.extend(create_buffered_ops(the_type.clone(), false, false, false));
     TokenStream::from(output)
 }
 

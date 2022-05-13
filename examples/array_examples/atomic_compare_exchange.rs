@@ -16,7 +16,7 @@ fn main(){
         let mut fail_cnt = 0;
         let old = my_pe;
         let new = my_pe +1;
-        while array.compare_exchange(i, old, new).get().unwrap()[0].is_err() { //compare_exchange reutrns Option<Vec<Result<T,T>>> 
+        while array.compare_exchange(i, old, new).get()[0].is_err() { //compare_exchange reutrns Option<Vec<Result<T,T>>> 
                                                                                // the outer option should never be none,
                                                                                // vec is cause we can apply to multiple inidices in one call (see below), 
                                                                                // inner result is whether the compare and exchange was successful
@@ -39,7 +39,7 @@ fn main(){
     let old = 0.0;
     let new = (my_pe+1) as f32;
     let epsilon = 0.00001;
-    let res = array_2.compare_exchange_epsilon(indices, old, new, epsilon).get().unwrap(); //get should not fail
+    let res = array_2.compare_exchange_epsilon(indices, old, new, epsilon).get(); //get should not fail
     array_2.barrier();
 
     let (num_failed, num_ok) = res.iter().fold((0,0), |acc, x| {

@@ -1,6 +1,5 @@
 use crate::active_messaging::{ActiveMessageEngine, ExecType, LamellarFunc};
 use crate::lamellae::{Des, Lamellae, LamellaeRDMA, SerializedData};
-use crate::lamellar_request::InternalReq;
 use crate::lamellar_team::LamellarTeamRT;
 use crate::scheduler::{AmeScheduler, AmeSchedulerQueue, ReqData, ReqId,SchedulerQueue};
 use lamellar_prof::*;
@@ -142,7 +141,6 @@ impl AmeSchedulerQueue for WorkStealingInner {
         world: Pin<Arc<LamellarTeamRT>>,
         team: Pin<Arc<LamellarTeamRT>>,
         team_hash: u64,
-        ireq: Option<InternalReq>,
     ) {
         let req_data = ReqData {
             src: src,
@@ -165,7 +163,7 @@ impl AmeSchedulerQueue for WorkStealingInner {
             // println!("exec req {:?}",num_tasks.load(Ordering::Relaxed));
             num_tasks.fetch_add(1, Ordering::Relaxed);
             // println!("in submit_req {:?} {:?} {:?} ", pe.clone(), req_data.src, req_data.pe);
-            ame.process_msg_new(req_data, ireq).await;
+            ame.process_msg_new(req_data).await;
             // println!("num tasks: {:?}",);
             num_tasks.fetch_sub(1, Ordering::Relaxed);
             // println!("done req {:?}",num_tasks.load(Ordering::Relaxed));
@@ -282,7 +280,6 @@ impl SchedulerQueue for WorkStealing {
         world: Pin<Arc<LamellarTeamRT>>,
         team: Pin<Arc<LamellarTeamRT>>,
         team_hash: u64,
-        ireq: Option<InternalReq>,
     ) {
         self.inner.submit_req(
             self.ame.clone(),
@@ -295,7 +292,6 @@ impl SchedulerQueue for WorkStealing {
             world,
             team,
             team_hash,
-            ireq,
         );
     }
 

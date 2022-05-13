@@ -164,6 +164,19 @@ pub use inventory;
 pub use bincode;
 use bincode::Options;
 
+// #[macro_use]
+// pub extern crate custom_derive;
+#[doc(hidden)]
+pub use custom_derive;
+
+
+// #[macro_use]
+// pub extern crate newtype_derive;
+#[doc(hidden)]
+pub use newtype_derive;
+
+
+
 
 
 lazy_static! {

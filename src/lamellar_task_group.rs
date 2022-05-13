@@ -1,5 +1,4 @@
 use crate::active_messaging::*;
-// use crate::lamellar_request::{InternalReq, CUR_REQ_ID};
 use crate::scheduler::{SchedulerQueue,ReqId};
 use crate::lamellar_team::{LamellarTeamRT,IntoLamellarTeam};
 use crate::lamellar_request::*;
@@ -10,7 +9,7 @@ use async_trait::async_trait;
 
 // use crossbeam::utils::CachePadded;
 use std::pin::Pin;
-use std::sync::atomic::{AtomicUsize, AtomicBool, Ordering};
+use std::sync::atomic::{AtomicUsize,  Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use std::collections::HashMap;
@@ -19,12 +18,10 @@ use std::marker::PhantomData;
 
 pub(crate) struct TaskGroupRequestHandleInner {
     cnt: Arc<AtomicUsize>,
-    arch: Arc<LamellarArchRT>,
     data: Mutex<HashMap<usize,InternalResult>>, //<sub_id, result>
     team_outstanding_reqs: Arc<AtomicUsize>,
     world_outstanding_reqs: Arc<AtomicUsize>,
     tg_outstanding_reqs: Option<Arc<AtomicUsize>>,
-    user_handle: AtomicBool, //we can use this flag to optimize what happens when the request returns 
     
 }
 
@@ -44,9 +41,8 @@ impl LamellarRequestAddResult for TaskGroupRequestHandleInner {
     fn user_held(&self) -> bool{
         self.cnt.load(Ordering::SeqCst) > 0
     }
-    fn add_result(&self, pe: usize, _sub_id: usize, data: InternalResult) {
-        let pe = self.arch.team_pe(pe).expect("pe does not exist on team");
-        let mut map = self.data.lock().insert(pe, data);
+    fn add_result(&self, _pe: usize, sub_id: usize, data: InternalResult) {
+        self.data.lock().insert(sub_id, data);
     }
     fn update_counters(&self) {
         self.team_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
@@ -117,7 +113,6 @@ pub(crate) struct TaskGroupMultiRequestHandleInner {
     team_outstanding_reqs: Arc<AtomicUsize>,
     world_outstanding_reqs: Arc<AtomicUsize>,
     tg_outstanding_reqs: Option<Arc<AtomicUsize>>,
-    user_handle: AtomicBool, //we can use this flag to optimize what happens when the request returns 
     
 }
 
@@ -135,7 +130,7 @@ impl <T: AmDist> Drop for TaskGroupMultiRequestHandle<T> {
 
 impl LamellarRequestAddResult for TaskGroupMultiRequestHandleInner {
     fn user_held(&self) -> bool{
-        self.user_handle.load(Ordering::SeqCst)
+        self.cnt.load(Ordering::SeqCst) > 0
     }
     fn add_result(&self, pe: usize, sub_id: usize, data: InternalResult) {
         let pe = self.arch.team_pe(pe).expect("pe does not exist on team");
@@ -180,7 +175,6 @@ impl<T: AmDist> TaskGroupMultiRequestHandle<T> {
     }
 }
 
-
 #[async_trait]
 impl<T: AmDist> LamellarMultiRequest for TaskGroupMultiRequestHandle<T> {
     type Output = T;
@@ -215,20 +209,98 @@ impl<T: AmDist> LamellarMultiRequest for TaskGroupMultiRequestHandle<T> {
     }
 }
 
+pub(crate) struct TaskGroupLocalRequestHandleInner {
+    cnt: Arc<AtomicUsize>,
+    data: Mutex<HashMap<usize,LamellarAny>>, //<sub_id, result>
+    team_outstanding_reqs: Arc<AtomicUsize>,
+    world_outstanding_reqs: Arc<AtomicUsize>,
+    tg_outstanding_reqs: Option<Arc<AtomicUsize>>,
+    
+}
+
+pub struct TaskGroupLocalRequestHandle<T> {
+    inner: Arc<TaskGroupLocalRequestHandleInner>,
+    sub_id: usize,
+    _phantom: std::marker::PhantomData<T>,
+} 
+
+impl <T> Drop for TaskGroupLocalRequestHandle<T> {
+    fn drop(&mut self) {
+        self.inner.cnt.fetch_sub(1, Ordering::SeqCst);
+    }
+}
+
+impl LamellarRequestAddResult for TaskGroupLocalRequestHandleInner {
+    fn user_held(&self) -> bool{
+        self.cnt.load(Ordering::SeqCst) > 0
+    }
+    fn add_result(&self, _pe: usize, sub_id: usize, data: InternalResult) {
+        if let InternalResult::Local(x) = data {
+            self.data.lock().insert(sub_id, x);
+        } else {
+            panic!("unexpected result type");
+        }        
+    }
+    fn update_counters(&self) {
+        self.team_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
+        self.world_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
+        if let Some(tg_outstanding_reqs) = self.tg_outstanding_reqs.clone() {
+            tg_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
+        }
+    }
+}
+
+impl<T: 'static> TaskGroupLocalRequestHandle<T> {
+    fn process_result(&self, data: LamellarAny) -> T {
+        if let Ok(result) = data.downcast::<T>() {
+            *result
+        } else {
+            panic!("unexpected result type");
+        }
+    }
+}
+
+
+#[async_trait]
+impl<T> LamellarRequest for TaskGroupLocalRequestHandle<T> {
+    type Output = T;
+    async fn into_future(mut self: Box<Self>) -> Self::Output {
+        let mut res = self.inner.data.lock().remove(&self.sub_id);
+        while res.is_none(){
+            async_std::task::yield_now().await;
+            res = self.inner.data.lock().remove(&self.sub_id);
+        }
+        self.process_result(res.unwrap())
+    }
+
+    fn get(&self) -> Self::Output
+     {
+        let mut res = self.inner.data.lock().remove(&self.sub_id);
+        while res.is_none(){
+            std::thread::yield_now();
+            res = self.inner.data.lock().remove(&self.sub_id);
+        }
+        self.process_result(res.unwrap())
+    }
+}
+
 
 pub struct LamellarTaskGroup {
     team: Pin<Arc<LamellarTeamRT>>,
     id: usize, //for exec_pe requests -- is actually the pointer to the rt_req (but *const are not sync so we use usize)
     multi_id: usize, //for exec_all requests -- is actually the pointer to the rt_multi_req  (but *const are not sync so we use usize)
+    local_id: usize, //for exec_local requests -- is actually the pointer to the rt_local_req  (but *const are not sync so we use usize)
     sub_id_counter: AtomicUsize,
     cnt: Arc<AtomicUsize>, // handle reference count, so that we don't need to worry about storing results if all handles are dropped
     pub(crate) counters: AMCounters,
     //these are cloned and returned to user for each request
     req: Arc<TaskGroupRequestHandleInner>,
     multi_req: Arc<TaskGroupMultiRequestHandleInner>,
+    local_req: Arc<TaskGroupLocalRequestHandleInner>,
     //these are cloned and passed to RT for each request (they wrap the above requests)
     rt_req: Arc<LamellarRequestResult>, //for exec_pe requests
     rt_multi_req: Arc<LamellarRequestResult>, //for exec_all requests
+    rt_local_req: Arc<LamellarRequestResult>, //for exec_local requests
 }
 
 impl LamellarTaskGroup {
@@ -238,12 +310,10 @@ impl LamellarTaskGroup {
         let cnt = Arc::new(AtomicUsize::new(1)); //this lamellarTaskGroup instance represents 1 handle (even though we maintain a single and multi req handle)
         let req = Arc::new(TaskGroupRequestHandleInner{
             cnt: cnt.clone(),
-            arch: team.arch.clone(),
             data: Mutex::new(HashMap::new()),
             team_outstanding_reqs: team.team_counters.outstanding_reqs.clone(),
             world_outstanding_reqs: team.world_counters.outstanding_reqs.clone(),
             tg_outstanding_reqs: Some(counters.outstanding_reqs.clone()),
-            user_handle: AtomicBool::new(true),
         });
         let rt_req = Arc::new(LamellarRequestResult{
             req: req.clone()
@@ -255,22 +325,34 @@ impl LamellarTaskGroup {
             team_outstanding_reqs: team.team_counters.outstanding_reqs.clone(),
             world_outstanding_reqs: team.world_counters.outstanding_reqs.clone(),
             tg_outstanding_reqs: Some(counters.outstanding_reqs.clone()),
-            user_handle: AtomicBool::new(true),
         });
         let rt_multi_req = Arc::new(LamellarRequestResult{
             req: multi_req.clone()
+        });
+        let local_req = Arc::new(TaskGroupLocalRequestHandleInner{
+            cnt: cnt.clone(),
+            data: Mutex::new(HashMap::new()),
+            team_outstanding_reqs: team.team_counters.outstanding_reqs.clone(),
+            world_outstanding_reqs: team.world_counters.outstanding_reqs.clone(),
+            tg_outstanding_reqs: Some(counters.outstanding_reqs.clone()),
+        });
+        let rt_local_req = Arc::new(LamellarRequestResult{
+            req: local_req.clone()
         });
         LamellarTaskGroup {
             team: team.clone(),
             id: Arc::as_ptr(&rt_req) as usize,
             multi_id: Arc::as_ptr(&rt_multi_req) as usize,
+            local_id: Arc::as_ptr(&rt_local_req) as usize,
             sub_id_counter: AtomicUsize::new(0),
             cnt: cnt,
             counters: counters,
             req: req,
             multi_req: multi_req,
+            local_req: local_req,
             rt_req: rt_req,
             rt_multi_req: rt_multi_req,
+            rt_local_req: rt_local_req,
         }
     }
 
@@ -320,8 +402,7 @@ impl LamellarTaskGroup {
             self.team.lamellae.clone(),
             world,
             self.team.clone(),
-            self.team.remote_ptr_addr as u64,
-            None,
+            self.team.remote_ptr_addr as u64
         );
         Box::new(TaskGroupMultiRequestHandle{
             inner: self.multi_req.clone(),
@@ -355,8 +436,7 @@ impl LamellarTaskGroup {
             self.team.lamellae.clone(),
             world,
             self.team.clone(),
-            self.team.remote_ptr_addr as u64,
-            None,
+            self.team.remote_ptr_addr as u64
         );
         Box::new(TaskGroupRequestHandle{
             inner: self.req.clone(),
@@ -365,7 +445,7 @@ impl LamellarTaskGroup {
         })
     }
 
-    pub fn exec_am_local<F>(&self, am: F) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync>
+    pub fn exec_am_local<F>(&self, am: F) -> Box<dyn LamellarRequest<Output = F::Output> + Send >
     where
         F: LamellarActiveMessage + LocalAM + Send + Sync + 'static
     {
@@ -379,8 +459,8 @@ impl LamellarTaskGroup {
         } else {
             self.team.clone()
         };
-        unsafe {Arc::increment_strong_count(Arc::as_ptr(&self.rt_req))}
-        let req_id = ReqId{ id: self.id, sub_id: self.sub_id_counter.fetch_add(1, Ordering::SeqCst) };
+        unsafe {Arc::increment_strong_count(Arc::as_ptr(&self.rt_local_req))}
+        let req_id = ReqId{ id: self.local_id, sub_id: self.sub_id_counter.fetch_add(1, Ordering::SeqCst) };
         self.team.scheduler.submit_req(
             self.team.world_pe,
             Some(self.team.world_pe),
@@ -390,11 +470,10 @@ impl LamellarTaskGroup {
             self.team.lamellae.clone(),
             world,
             self.team.clone(),
-            self.team.remote_ptr_addr as u64,
-            None,
+            self.team.remote_ptr_addr as u64
         );
-        Box::new(TaskGroupRequestHandle{
-            inner: self.req.clone(),
+        Box::new(TaskGroupLocalRequestHandle{
+            inner: self.local_req.clone(),
             sub_id: req_id.sub_id,
             _phantom: PhantomData,
         })
