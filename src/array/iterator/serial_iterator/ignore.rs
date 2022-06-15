@@ -35,7 +35,7 @@ where
     fn item_size(&self) -> usize {
         self.iter.item_size()
     }
-    fn buffered_next(&mut self, mem_region: LocalMemoryRegion<u8>) -> Option<Box<dyn LamellarArrayRequest<Output = ()> + Send + Sync>>{
+    fn buffered_next(&mut self, mem_region: LocalMemoryRegion<u8>) -> Option<Box<dyn LamellarArrayRequest<Output = ()>  >>{
         self.iter.buffered_next(mem_region)
     }
     fn from_mem_region(&self, mem_region: LocalMemoryRegion<u8>) -> Option<Self::Item>{

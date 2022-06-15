@@ -92,5 +92,5 @@ fn main() {
             println!("error {:?} {:?}", x, i);
         }
         *x = 0.0
-    })
+    }).wait();
 }

@@ -67,15 +67,15 @@ pub struct DarcInner<T> {
     team: *const LamellarTeamRT,
     item: *const T,
 }
-unsafe impl<T: Sync + Send> Send for DarcInner<T> {}
-unsafe impl<T: Sync + Send> Sync for DarcInner<T> {}
+unsafe impl<T: Send > Send for DarcInner<T> {}
+unsafe impl<T: Sync > Sync for DarcInner<T> {}
 
 pub struct Darc<T: 'static> {
     inner: *mut DarcInner<T>,
     src_pe: usize,
 }
-unsafe impl<T: Sync + Send> Send for Darc<T> {}
-unsafe impl<T: Sync + Send> Sync for Darc<T> {}
+unsafe impl<T: Send > Send for Darc<T> {}
+unsafe impl<T: Sync > Sync for Darc<T> {}
 
 impl<T: 'static> serde::Serialize for Darc<T> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
@@ -158,7 +158,7 @@ impl<T> DarcInner<T> {
         unsafe { &(*self.item) }
     }
 
-    fn send_finished(&self) -> Vec<Pin<Box<dyn Future<Output = ()> + Send>>> {
+    fn send_finished(&self) -> Vec<Pin<Box<dyn Future<Output = ()> + Send >>> {
         let ref_cnts = unsafe {
             std::slice::from_raw_parts_mut(self.ref_cnt_addr as *mut AtomicUsize, self.num_pes)
         };

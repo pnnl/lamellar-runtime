@@ -1,4 +1,4 @@
-use lamellar::array::{
+use lamellar::array::{DistributedIterator,
     ArithmeticOps, AtomicArray, LocalLockAtomicArray, SerialIterator, UnsafeArray,
 };
 macro_rules! initialize_array {

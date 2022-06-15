@@ -33,7 +33,7 @@ pub trait SerialIterator {
     fn advance_index(&mut self, count: usize);
     fn array(&self) -> Self::Array;
     fn item_size(&self) -> usize;
-    fn buffered_next(&mut self, mem_region: LocalMemoryRegion<u8>) -> Option<Box<dyn LamellarArrayRequest<Output = ()> + Send + Sync>>;
+    fn buffered_next(&mut self, mem_region: LocalMemoryRegion<u8>) -> Option<Box<dyn LamellarArrayRequest<Output = ()>  >>;
     fn from_mem_region(&self, mem_region: LocalMemoryRegion<u8>) -> Option<Self::Item>;
     fn copied_chunks(self, chunk_size: usize) -> CopiedChunks<Self>
     where
@@ -97,8 +97,8 @@ pub struct LamellarArrayIter<'a, T: Dist + 'static, A: LamellarArrayGet<T>> {
     _marker: PhantomData<&'a T>,
 }
 
-unsafe impl<'a, T: Dist + 'static, A: LamellarArrayGet<T>> Sync for LamellarArrayIter<'a, T, A> {}
-unsafe impl<'a, T: Dist + 'static, A: LamellarArrayGet<T>> Send for LamellarArrayIter<'a, T, A> {}
+// unsafe impl<'a, T: Dist + 'static, A: LamellarArrayGet<T>> Sync for LamellarArrayIter<'a, T, A> {}
+// unsafe impl<'a, T: Dist + 'static, A: LamellarArrayGet<T>> Send for LamellarArrayIter<'a, T, A> {}
 
 impl<'a, T: Dist + 'static, A: LamellarArrayGet<T>> LamellarArrayIter<'a, T, A> {
     pub(crate) fn new(
@@ -211,7 +211,7 @@ impl<'a, T: Dist + 'static, A: LamellarArrayGet<T> + Clone> SerialIterator
     fn item_size(&self) -> usize {
         std::mem::size_of::<T>()
     }
-    fn buffered_next(&mut self, mem_region: LocalMemoryRegion<u8>) -> Option<Box<dyn LamellarArrayRequest<Output = ()> + Send + Sync>>{
+    fn buffered_next(&mut self, mem_region: LocalMemoryRegion<u8>) -> Option<Box<dyn LamellarArrayRequest<Output = ()>  >>{
         if self.index < self.array.len() {
             let mem_reg_t = mem_region.to_base::<Self::ElemType>();
             let req  = self.array.get(self.index, &mem_reg_t);

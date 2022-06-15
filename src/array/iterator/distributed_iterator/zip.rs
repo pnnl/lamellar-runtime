@@ -1,6 +1,5 @@
 use crate::array::iterator::distributed_iterator::*;
 
-use futures::Future;
 #[derive(Clone)]
 pub struct Zip<A, B> {
     a: A,
@@ -17,42 +16,42 @@ where
     }
 }
 
-impl<A, B> Zip<A, B>
-where
-    A: DistributedIterator + 'static,
-    B: DistributedIterator + 'static,
-{
-    pub fn for_each<F>(&self, op: F)
-    where
-        F: Fn(
-                (
-                    <A as DistributedIterator>::Item,
-                    <B as DistributedIterator>::Item,
-                ),
-            ) + Sync
-            + Send
-            + Clone
-            + 'static,
-    {
-        self.a.array().for_each(self, op);
-    }
-    pub fn for_each_async<F, Fut>(&self, op: F)
-    where
-        F: Fn(
-                (
-                    <A as DistributedIterator>::Item,
-                    <B as DistributedIterator>::Item,
-                ),
-            ) -> Fut
-            + Sync
-            + Send
-            + Clone
-            + 'static,
-        Fut: Future<Output = ()> + Sync + Send + Clone + 'static,
-    {
-        self.a.array().for_each_async(self, op);
-    }
-}
+// impl<A, B> Zip<A, B>
+// where
+//     A: DistributedIterator + 'static,
+//     B: DistributedIterator + 'static,
+// {
+//     pub fn for_each<F>(&self, op: F)
+//     where
+//         F: Fn(
+//                 (
+//                     <A as DistributedIterator>::Item,
+//                     <B as DistributedIterator>::Item,
+//                 ),
+//             ) 
+            
+//             + Clone
+//             + 'static,
+//     {
+//         self.a.array().for_each(self, op);
+//     }
+//     pub fn for_each_async<F, Fut>(&self, op: F)
+//     where
+//         F: Fn(
+//                 (
+//                     <A as DistributedIterator>::Item,
+//                     <B as DistributedIterator>::Item,
+//                 ),
+//             ) -> Fut
+            
+            
+//             + Clone
+//             + 'static,
+//         Fut: Future<Output = ()>   + Clone + 'static,
+//     {
+//         self.a.array().for_each_async(self, op);
+//     }
+// }
 
 impl<A, B> DistributedIterator for Zip<A, B>
 where

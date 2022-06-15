@@ -1,7 +1,5 @@
 use crate::array::iterator::distributed_iterator::*;
 
-use futures::Future;
-
 #[derive(Clone)]
 pub struct Chunks<I> {
     iter: I,
@@ -25,24 +23,24 @@ where
     }
 }
 
-impl<I> Chunks<I>
-where
-    I: DistributedIterator + 'static,
-{
-    pub fn for_each<F>(&self, op: F)
-    where
-        F: Fn(Chunk<I>) + Sync + Send + Clone + 'static,
-    {
-        self.iter.array().for_each(self, op);
-    }
-    pub fn for_each_async<F, Fut>(&self, op: F)
-    where
-        F: Fn(Chunk<I>) -> Fut + Sync + Send + Clone + 'static,
-        Fut: Future<Output = ()> + Sync + Send + Clone + 'static,
-    {
-        self.iter.array().for_each_async(self, op);
-    }
-}
+// impl<I> Chunks<I>
+// where
+//     I: DistributedIterator + 'static,
+// {
+//     pub fn for_each<F>(&self, op: F)
+//     where
+//         F: Fn(Chunk<I>) + AmLocal  + Clone + 'static,
+//     {
+//         self.iter.array().for_each(self, op);
+//     }
+//     pub fn for_each_async<F, Fut>(&self, op: F)
+//     where
+//         F: Fn(Chunk<I>) -> Fut + AmLocal  + Clone + 'static,
+//         Fut: Future<Output = ()> + AmLocal  + Clone + 'static,
+//     {
+//         self.iter.array().for_each_async(self, op);
+//     }
+// }
 
 impl<I> DistributedIterator for Chunks<I>
 where

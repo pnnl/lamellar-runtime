@@ -23,21 +23,21 @@ impl<T: Dist> AtomicDistIter<T> {
         }
     }
 }
-impl<T: Dist + 'static> AtomicDistIter<T> {
-    pub fn for_each<F>(&self, op: F)
-    where
-        F: Fn(AtomicElement<T>) + Sync + Send + Clone + 'static,
-    {
-        self.data.clone().for_each(self, op);
-    }
-    pub fn for_each_async<F, Fut>(&self, op: F)
-    where
-        F: Fn(AtomicElement<T>) -> Fut + Sync + Send + Clone + 'static,
-        Fut: Future<Output = ()> + Sync + Send + Clone + 'static,
-    {
-        self.data.clone().for_each_async(self, op);
-    }
-}
+// impl<T: Dist + 'static> AtomicDistIter<T> {
+//     pub fn for_each<F>(&self, op: F) -> DistIterForEachHandle
+//     where
+//         F: Fn(AtomicElement<T>) + AmLocal + Clone + 'static,
+//     {
+//         self.data.clone().for_each(self, op)
+//     }
+//     pub fn for_each_async<F, Fut>(&self, op: F) -> DistIterForEachHandle
+//     where
+//         F: Fn(AtomicElement<T>) -> Fut + AmLocal + Clone + 'static,
+//         Fut: Future<Output = ()> + AmLocal + Clone + 'static,
+//     {
+//         self.data.clone().for_each_async(self, op)
+//     }
+// }
 
 impl<T: Dist> DistributedIterator for AtomicDistIter<T> {
     type Item = AtomicElement<T>;
@@ -104,28 +104,3 @@ impl<T: Dist> AtomicArray<T> {
     }
 }
 
-// impl<T: Dist> DistIteratorLauncher for AtomicArray<T> {
-//     fn global_index_from_local(&self, index: usize, chunk_size: usize) -> Option<usize> {
-//         self.array.global_index_from_local(index, chunk_size)
-//     }
-
-//     fn subarray_index_from_local(&self, index: usize, chunk_size: usize) -> Option<usize> {
-//         self.array.subarray_index_from_local(index, chunk_size)
-//     }
-
-//     fn for_each<I, F>(&self, iter: I, op: F)
-//     where
-//         I: DistributedIterator + 'static,
-//         F: Fn(I::Item) + Sync + Send + Clone + 'static,
-//     {
-//         self.array.for_each(iter, op)
-//     }
-//     fn for_each_async<I, F, Fut>(&self, iter: &I, op: F)
-//     where
-//         I: DistributedIterator + 'static,
-//         F: Fn(I::Item) -> Fut + Sync + Send + Clone + 'static,
-//         Fut: Future<Output = ()> + Sync + Send + Clone + 'static,
-//     {
-//         self.array.for_each_async(iter, op)
-//     }
-// }

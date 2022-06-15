@@ -1,4 +1,4 @@
-use crate::active_messaging::{AmDist, LamellarAny};
+use crate::active_messaging::{AmDist,AmLocal, LamellarAny};
 use crate::lamellae::{Des, SerializedData};
 use crate::lamellar_arch::LamellarArchRT;
 use async_trait::async_trait;
@@ -16,20 +16,21 @@ pub(crate) enum InternalResult {
 }
 
 #[async_trait]
-pub trait LamellarRequest {
+pub trait LamellarRequest: Sync + Send { 
     type Output;
     async fn into_future(mut self: Box<Self>) -> Self::Output;
     fn get(&self) -> Self::Output;
 }
 
+
 #[async_trait]
-pub trait LamellarMultiRequest {
+pub trait LamellarMultiRequest: Sync + Send {
     type Output;
     async fn into_future(mut self: Box<Self>) -> Vec<Self::Output>;
     fn get(&self) -> Vec<Self::Output>;
 }
 
-pub(crate) trait LamellarRequestAddResult: Sync + Send{
+pub(crate) trait LamellarRequestAddResult: Sync + Send {
     fn user_held(&self) -> bool;
     fn add_result(&self, pe: usize, sub_id: usize, data: InternalResult);
     fn update_counters(&self);
@@ -147,6 +148,7 @@ pub(crate) struct LamellarMultiRequestHandleInner {
     
 }
 
+
 pub struct LamellarMultiRequestHandle<T: AmDist> {
     pub(crate) inner: Arc<LamellarMultiRequestHandleInner>,
     pub(crate) _phantom: std::marker::PhantomData<T>,
@@ -263,12 +265,13 @@ impl LamellarRequestAddResult for LamellarLocalRequestHandleInner {
         self.user_handle.load(Ordering::SeqCst)
     }
     fn add_result(&self, _pe: usize, _sub_id: usize, data: InternalResult) { // for a single request this is only called one time by a single runtime thread so use of the cell is safe
-        if let InternalResult::Local(x) = data {
-            self.data.set(Some(x));
-            self.ready.store(true, Ordering::SeqCst);
-        } else {
-            panic!("unexpected local result  of type ");
-        }        
+        match data {
+            InternalResult::Local(x) => self.data.set(Some(x)),
+            InternalResult::Remote(_) => panic!("unexpected local result  of type "),
+            InternalResult::Unit => self.data.set(Some(Box::new(()) as LamellarAny))
+        }  
+
+        self.ready.store(true, Ordering::SeqCst);      
     }
     fn update_counters(&self) {
         self.team_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
@@ -290,7 +293,7 @@ impl<T: 'static> LamellarLocalRequestHandle<T> {
 }
 
 #[async_trait]
-impl<T> LamellarRequest for LamellarLocalRequestHandle<T> {
+impl<T: AmLocal + 'static> LamellarRequest for LamellarLocalRequestHandle<T> {
     type Output = T;
     async fn into_future(mut self: Box<Self>) -> Self::Output {
         while !self.inner.ready.load(Ordering::SeqCst) {

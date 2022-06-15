@@ -211,7 +211,7 @@ impl AmeSchedulerQueue for WorkStealingInner {
 
     fn submit_task<F>(&self, future: F)
     where
-        F: Future<Output = ()> + Send,
+        F: Future<Output = ()> ,
     {
         // println!("submit task {:?}",self.num_tasks.load(Ordering::Relaxed));
         let num_tasks = self.num_tasks.clone();
@@ -303,7 +303,7 @@ impl SchedulerQueue for WorkStealing {
 
     fn submit_task<F>(&self, future: F)
     where
-        F: Future<Output = ()> + Send,
+        F: Future<Output = ()> ,
     {
         self.inner.submit_task(future);
     }

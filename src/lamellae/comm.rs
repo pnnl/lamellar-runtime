@@ -51,8 +51,8 @@ impl std::error::Error for TxError {}
 #[cfg(feature = "enable-rofi")]
 pub(crate) type TxResult<T> = Result<T, TxError>;
 
-pub(crate) trait Remote: Copy + Send + Sync {}
-impl<T: Copy + Send + Sync> Remote for T {}
+pub(crate) trait Remote: Copy   {}
+impl<T: Copy  > Remote for T {}
 
 #[enum_dispatch(CommOps)]
 pub(crate) enum Comm {

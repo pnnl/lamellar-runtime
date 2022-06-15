@@ -14,7 +14,7 @@ where
     buf_index: usize,
     buf_size: usize,
     // buf: LocalMemoryRegion<u8>,
-    reqs: VecDeque<Option<(usize,Box<dyn LamellarArrayRequest<Output = ()> + Send + Sync>,LocalMemoryRegion<u8>)>>,
+    reqs: VecDeque<Option<(usize,Box<dyn LamellarArrayRequest<Output = ()>  >,LocalMemoryRegion<u8>)>>,
 }
 
 impl<I> Buffered<I>
@@ -126,7 +126,7 @@ where
         self.iter.item_size()
     }
     //im not actually sure what to do if another buffered iter is called after this one
-    fn buffered_next(&mut self, mem_region: LocalMemoryRegion<u8>) -> Option<Box<dyn LamellarArrayRequest<Output = ()> + Send + Sync>>{
+    fn buffered_next(&mut self, mem_region: LocalMemoryRegion<u8>) -> Option<Box<dyn LamellarArrayRequest<Output = ()>  >>{
         self.iter.buffered_next(mem_region)
     }
     //im not actually sure what to do if another buffered iter is called after this one

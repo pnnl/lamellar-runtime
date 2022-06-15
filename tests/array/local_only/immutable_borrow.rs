@@ -1,4 +1,4 @@
-use lamellar::array::{Distribution, LocalOnlyArray};
+use lamellar::array::{DistributedIterator,Distribution, LocalOnlyArray};
 const ARRAY_LEN: usize = 100;
 fn main() {
     let world = lamellar::LamellarWorldBuilder::new().build();

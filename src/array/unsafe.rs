@@ -171,12 +171,13 @@ impl<T: Dist + 'static> UnsafeArray<T> {
     }
 
     pub fn calc_pe_and_offset(&self, i: usize) -> (usize,usize){
-        let pe = self
-                .inner
-            .pe_for_dist_index(i)
-            .expect("index out of bounds");
-        let local_index = self.inner.pe_offset_for_dist_index(pe, i).unwrap(); //calculated pe above
-        (pe,local_index)
+        if let Some(pe) = self.inner.pe_for_dist_index(i) {
+            let local_index = self.inner.pe_offset_for_dist_index(pe, i).unwrap(); //calculated pe above
+            (pe,local_index)
+        }
+        else{
+            panic!("distributed index out of bounds {:?} (len: {:?})",i,self.len());
+        }       
     }
 
     pub unsafe fn local_as_slice(&self) -> &[T] {
@@ -365,7 +366,7 @@ impl<T: Dist + serde::Serialize + serde::de::DeserializeOwned + 'static> UnsafeA
     pub fn reduce_data(
         &self,
         func: LamellarArcAm,
-    ) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+    ) -> Box<dyn LamellarRequest<Output = T>  > {
         if let Ok(my_pe) = self.inner.data.team.team_pe_id() {
             self.inner.data.team.exec_arc_am_pe::<T>(
                 my_pe,
@@ -381,16 +382,16 @@ impl<T: Dist + serde::Serialize + serde::de::DeserializeOwned + 'static> UnsafeA
         }
     }
 
-    pub fn reduce(&self, op: &str) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+    pub fn reduce(&self, op: &str) -> Box<dyn LamellarRequest<Output = T>  > {
         self.reduce_data(self.get_reduction_op(op.to_string()))
     }
-    pub fn sum(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+    pub fn sum(&self) -> Box<dyn LamellarRequest<Output = T>  > {
         self.reduce("sum")
     }
-    pub fn prod(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+    pub fn prod(&self) -> Box<dyn LamellarRequest<Output = T>  > {
         self.reduce("prod")
     }
-    pub fn max(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+    pub fn max(&self) -> Box<dyn LamellarRequest<Output = T>  > {
         self.reduce("max")
     }
 }
@@ -516,7 +517,7 @@ impl<T: Dist + std::fmt::Debug> ArrayPrint<T> for UnsafeArray<T> {
     }
 }
 
-impl<T: Dist + serde::Serialize + serde::de::DeserializeOwned + 'static> LamellarArrayReduce<T>
+impl<T: Dist + AmDist + 'static> LamellarArrayReduce<T>
     for UnsafeArray<T>
 {
     fn get_reduction_op(&self, op: String) -> LamellarArcAm {
@@ -530,16 +531,16 @@ impl<T: Dist + serde::Serialize + serde::de::DeserializeOwned + 'static> Lamella
         )
         // }
     }
-    fn reduce(&self, op: &str) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+    fn reduce(&self, op: &str) -> Box<dyn LamellarRequest<Output = T>  > {
         self.reduce(op)
     }
-    fn sum(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+    fn sum(&self) -> Box<dyn LamellarRequest<Output = T>  > {
         self.sum()
     }
-    fn max(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+    fn max(&self) -> Box<dyn LamellarRequest<Output = T>  > {
         self.max()
     }
-    fn prod(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+    fn prod(&self) -> Box<dyn LamellarRequest<Output = T>  > {
         self.prod()
     }
 }

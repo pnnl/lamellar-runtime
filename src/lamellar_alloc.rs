@@ -474,7 +474,7 @@ mod tests {
         }
     }
 
-    fn stress<T: LamellarAlloc + Clone + Sync + Send + 'static>(alloc: T) {
+    fn stress<T: LamellarAlloc + Clone + Send + 'static>(alloc: T) {
         let mut threads = Vec::new();
         let start = std::time::Instant::now();
         for _i in 0..10 {

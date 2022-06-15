@@ -24,8 +24,8 @@ pub struct LocalRwDarc<T: 'static> {
     pub(crate) darc: Darc<Arc<RwLock<Box<T>>>>, //we need to wrap WrLock in an Arc so we get access to ArcReadGuard and ArcWriteGuard
 }
 
-unsafe impl<T: Sync + Send> Send for LocalRwDarc<T> {}
-unsafe impl<T: Sync + Send> Sync for LocalRwDarc<T> {}
+unsafe impl<T:  Send> Send for LocalRwDarc<T> {}
+unsafe impl<T:  Sync> Sync for LocalRwDarc<T> {}
 
 impl<T> crate::DarcSerde for LocalRwDarc<T> {
     fn ser(&self, num_pes: usize, cur_pe: Result<usize, IdError>) {

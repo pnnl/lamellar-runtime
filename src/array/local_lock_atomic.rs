@@ -115,7 +115,7 @@ impl<T: Dist> Deref for LocalLockAtomicLocalData<'_, T> {
 }
 
 impl<T: Dist + std::default::Default> LocalLockAtomicArray<T> {
-    //Sync + Send + Copy  == Dist
+    // Send + Copy  == Dist
     pub fn new<U: Clone + Into<IntoLamellarTeam>>(
         team: U,
         array_size: usize,
@@ -382,7 +382,7 @@ impl<T: Dist + std::fmt::Debug> ArrayPrint<T> for LocalLockAtomicArray<T> {
 }
 
 pub struct LocalLockAtomicArrayReduceHandle<T: Dist + AmDist> {
-    req: Box<dyn LamellarRequest<Output = T> + Send + Sync>,
+    req: Box<dyn LamellarRequest<Output = T> >,
     _lock_guard: ArcRwLockReadGuard<RawRwLock, Box<()>>,
 }
 
@@ -398,28 +398,28 @@ impl<T: Dist + AmDist> LamellarRequest for LocalLockAtomicArrayReduceHandle<T> {
 }
 
 impl<T: Dist + AmDist + 'static> LocalLockAtomicArray<T> {
-    pub fn reduce(&self, op: &str) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+    pub fn reduce(&self, op: &str) -> Box<dyn LamellarRequest<Output = T>  > {
         let lock = self.lock.read();
         Box::new(LocalLockAtomicArrayReduceHandle {
             req: self.array.reduce(op),
             _lock_guard: lock,
         })
     }
-    pub fn sum(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+    pub fn sum(&self) -> Box<dyn LamellarRequest<Output = T>  > {
         let lock = self.lock.read();
         Box::new(LocalLockAtomicArrayReduceHandle {
             req: self.array.reduce("sum"),
             _lock_guard: lock,
         })
     }
-    pub fn prod(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+    pub fn prod(&self) -> Box<dyn LamellarRequest<Output = T>  > {
         let lock = self.lock.read();
         Box::new(LocalLockAtomicArrayReduceHandle {
             req: self.array.reduce("prod"),
             _lock_guard: lock,
         })
     }
-    pub fn max(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+    pub fn max(&self) -> Box<dyn LamellarRequest<Output = T>  > {
         let lock = self.lock.read();
         Box::new(LocalLockAtomicArrayReduceHandle {
             req: self.array.reduce("max"),
@@ -434,16 +434,16 @@ impl<T: Dist + AmDist + 'static> LocalLockAtomicArray<T> {
 //     fn get_reduction_op(&self, op: String) -> LamellarArcAm {
 //         self.array.get_reduction_op(op)
 //     }
-//     fn reduce(&self, op: &str) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+//     fn reduce(&self, op: &str) -> Box<dyn LamellarRequest<Output = T>  > {
 //         self.reduce(op)
 //     }
-//     fn sum(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+//     fn sum(&self) -> Box<dyn LamellarRequest<Output = T>  > {
 //         self.sum()
 //     }
-//     fn max(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+//     fn max(&self) -> Box<dyn LamellarRequest<Output = T>  > {
 //         self.max()
 //     }
-//     fn prod(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+//     fn prod(&self) -> Box<dyn LamellarRequest<Output = T>  > {
 //         self.prod()
 //     }
 // }

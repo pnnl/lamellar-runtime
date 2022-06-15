@@ -29,8 +29,8 @@ pub(crate) struct DistRwLock<T> {
     data: std::cell::UnsafeCell<T>,
 }
 
-unsafe impl<T: Sync + Send> Send for DistRwLock<T> {}
-unsafe impl<T: Sync + Send> Sync for DistRwLock<T> {}
+unsafe impl<T:  Send> Send for DistRwLock<T> {}
+unsafe impl<T:  Sync> Sync for DistRwLock<T> {}
 
 /// # Safety
 ///
@@ -250,8 +250,8 @@ pub struct GlobalRwDarc<T: 'static> {
     pub(crate) darc: Darc<DistRwLock<T>>,
 }
 
-unsafe impl<T: Sync + Send> Send for GlobalRwDarc<T> {}
-unsafe impl<T: Sync + Send> Sync for GlobalRwDarc<T> {}
+unsafe impl<T:  Send > Send for GlobalRwDarc<T> {}
+unsafe impl<T:  Sync > Sync for GlobalRwDarc<T> {}
 
 impl<T> crate::DarcSerde for GlobalRwDarc<T> {
     fn ser(&self, num_pes: usize, cur_pe: Result<usize, IdError>) {

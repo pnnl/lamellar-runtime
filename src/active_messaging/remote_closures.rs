@@ -11,8 +11,8 @@ use std::sync::atomic::Ordering;
 use std::sync::Arc;
 // use std::time::Instant;
 
-pub(crate) type LamellarLocal = Box<dyn FnOnce<(), Output = (RetType, Option<Vec<u8>>)> + Send>;
-pub(crate) type LamellarClosure = Box<dyn FnOnce<(), Output = Vec<u8>> + Send>;
+pub(crate) type LamellarLocal = Box<dyn FnOnce<(), Output = (RetType, Option<Vec<u8>>)> >;
+pub(crate) type LamellarClosure = Box<dyn FnOnce<(), Output = Vec<u8>> >;
 /// Special return type used by runtime to detect an automatically executed closure upon return of a request
 ///
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
@@ -28,17 +28,17 @@ pub struct ClosureRet {
 ///
 pub(crate) fn lamellar_closure<
     F: std::clone::Clone
-        + Send
-        + Sync
+        
+        
         + FnOnce() -> T
-        + Send
+        
         + serde::ser::Serialize
         + serde::de::DeserializeOwned
         + std::clone::Clone
         + 'static,
     T: std::any::Any
-        + Send
-        + Sync
+        
+        
         + serde::ser::Serialize
         + serde::de::DeserializeOwned
         + std::clone::Clone,
@@ -77,17 +77,17 @@ pub(crate) fn lamellar_closure<
 ///
 pub(crate) fn lamellar_local<
     F: std::clone::Clone
-        + Send
-        + Sync
+        
+        
         + FnOnce() -> T
-        + Send
+        
         + serde::ser::Serialize
         + serde::de::DeserializeOwned
         + std::clone::Clone
         + 'static,
     T: std::any::Any
-        + Send
-        + Sync
+        
+        
         + serde::ser::Serialize
         + serde::de::DeserializeOwned
         + std::clone::Clone,
@@ -112,34 +112,34 @@ pub(crate) fn lamellar_local<
 pub trait RemoteClosures {
     fn exec_closure_all<
         F: FnOnce() -> T
-            + Send
-            + Sync
+            
+            
             + serde::ser::Serialize
             + serde::de::DeserializeOwned
             + std::clone::Clone
             + 'static,
         T: std::any::Any
-            + Send
-            + Sync
+            
+            
             + serde::ser::Serialize
             + serde::de::DeserializeOwned
             + std::clone::Clone,
     >(
         &self,
         func: F,
-    ) -> Box<dyn LamellarRequest<Output = T> + Send + Sync>;
+    ) -> Box<dyn LamellarRequest<Output = T>  >;
 
     fn exec_closure_pe<
         F: FnOnce() -> T
-            + Send
-            + Sync
+            
+            
             + serde::ser::Serialize
             + serde::de::DeserializeOwned
             + std::clone::Clone
             + 'static,
         T: std::any::Any
-            + Send
-            + Sync
+            
+            
             + serde::ser::Serialize
             + serde::de::DeserializeOwned
             + std::clone::Clone,
@@ -147,7 +147,7 @@ pub trait RemoteClosures {
         &self,
         pe: usize,
         func: F,
-    ) -> Box<dyn LamellarRequest<Output = T> + Send + Sync>;
+    ) -> Box<dyn LamellarRequest<Output = T>  >;
 
     fn exec_closure_on_return<
         F: FnOnce() -> T + serde::ser::Serialize + serde::de::DeserializeOwned + 'static,

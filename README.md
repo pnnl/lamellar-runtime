@@ -88,7 +88,7 @@ fn main() {
 
 # Creating, initializing, and iterating through a distributed array
 ```rust
-use lamellar::array::{Distribution, SerialIterator, UnsafeArray};
+use lamellar::array::{DistributedIterator,Distribution, SerialIterator, UnsafeArray};
 
 fn main() {
     let world = lamellar::LamellarWorldBuilder::new().build();

@@ -469,25 +469,25 @@ impl<T: Dist> From<AtomicByteArray> for AtomicArray<T> {
 }
 
 impl<T: Dist + serde::Serialize + serde::de::DeserializeOwned + 'static> AtomicArray<T> {
-    pub fn reduce(&self, op: &str) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+    pub fn reduce(&self, op: &str) -> Box<dyn LamellarRequest<Output = T>  > {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.reduce(op),
             AtomicArray::GenericAtomicArray(array) => array.reduce(op),
         }
     }
-    pub fn sum(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+    pub fn sum(&self) -> Box<dyn LamellarRequest<Output = T>  > {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.reduce("sum"),
             AtomicArray::GenericAtomicArray(array) => array.reduce("sum"),
         }
     }
-    pub fn prod(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+    pub fn prod(&self) -> Box<dyn LamellarRequest<Output = T>  > {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.reduce("prod"),
             AtomicArray::GenericAtomicArray(array) => array.reduce("prod"),
         }
     }
-    pub fn max(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+    pub fn max(&self) -> Box<dyn LamellarRequest<Output = T>  > {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.reduce("max"),
             AtomicArray::GenericAtomicArray(array) => array.reduce("max"),

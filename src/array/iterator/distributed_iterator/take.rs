@@ -1,7 +1,5 @@
 use crate::array::iterator::distributed_iterator::*;
 
-use futures::Future;
-
 //ignores the first n elements of iterator I per pe (this implys that n * num_pes elements are ignored in total)
 #[derive(Clone)]
 pub struct Take<I> {
@@ -19,24 +17,24 @@ where
     }
 }
 
-impl<I> Take<I>
-where
-    I: DistributedIterator + 'static,
-{
-    pub fn for_each<F>(&self, op: F)
-    where
-        F: Fn(<I as DistributedIterator>::Item) + Sync + Send + Clone + 'static,
-    {
-        self.iter.array().for_each(self, op);
-    }
-    pub fn for_each_async<F, Fut>(&self, op: F)
-    where
-        F: Fn(<I as DistributedIterator>::Item) -> Fut + Sync + Send + Clone + 'static,
-        Fut: Future<Output = ()> + Sync + Send + Clone + 'static,
-    {
-        self.iter.array().for_each_async(self, op);
-    }
-}
+// impl<I> Take<I>
+// where
+//     I: DistributedIterator + 'static,
+// {
+//     pub fn for_each<F>(&self, op: F)
+//     where
+//         F: Fn(<I as DistributedIterator>::Item)   + Clone + 'static,
+//     {
+//         self.iter.array().for_each(self, op);
+//     }
+//     pub fn for_each_async<F, Fut>(&self, op: F)
+//     where
+//         F: Fn(<I as DistributedIterator>::Item) -> Fut   + Clone + 'static,
+//         Fut: Future<Output = ()>   + Clone + 'static,
+//     {
+//         self.iter.array().for_each_async(self, op);
+//     }
+// }
 
 impl<I> DistributedIterator for Take<I>
 where

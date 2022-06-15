@@ -1,4 +1,4 @@
-use lamellar::array::{Distribution, AtomicArray};
+use lamellar::array::{DistributedIterator,Distribution, AtomicArray};
 use rand::seq::SliceRandom;
 use rand::SeedableRng;
 

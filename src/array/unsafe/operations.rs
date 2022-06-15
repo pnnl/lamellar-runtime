@@ -61,7 +61,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         &self,
         pe: usize,
         func: LamellarArcAm,
-    ) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync> {
+    ) -> Box<dyn LamellarRequest<Output = ()>  > {
         // println!("dist_op for UnsafeArray<T> ");
         self.inner
             .data
@@ -72,7 +72,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         &self,
         pe: usize,
         func: LamellarArcAm,
-    ) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+    ) -> Box<dyn LamellarRequest<Output = T>  > {
         // println!("dist_op for UnsafeArray<T> ");
         self.inner
             .data
@@ -85,7 +85,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         val: T,
         local_index: usize,
         op: ArrayOpCmd,
-    ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>> {
+    ) -> Option<Box<dyn LamellarRequest<Output = ()>  >> {
         // println!("initiate_op for UnsafeArray<T> ");
         if let Some(func) = OPS.get(&(op, TypeId::of::<T>())) {
             let array: UnsafeByteArray = self.clone().into();
@@ -120,7 +120,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         val: T,
         local_index: usize,
         op: ArrayOpCmd,
-    ) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+    ) -> Box<dyn LamellarRequest<Output = T>  > {
         // println!("initiate_op for UnsafeArray<T> ");
         if let Some(func) = OPS.get(&(op, TypeId::of::<T>())) {
             let array: UnsafeByteArray = self.clone().into();
@@ -157,7 +157,7 @@ impl<T: ElementArithmeticOps + 'static> ArithmeticOps<T> for UnsafeArray<T> {
         &self,
         index: usize,
         val: T,
-    ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>> {
+    ) -> Option<Box<dyn LamellarRequest<Output = ()>  >> {
         let pe = self
             .inner
             .pe_for_dist_index(index)
@@ -174,7 +174,7 @@ impl<T: ElementArithmeticOps + 'static> ArithmeticOps<T> for UnsafeArray<T> {
         &self,
         index: usize,
         val: T,
-    ) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+    ) -> Box<dyn LamellarRequest<Output = T>  > {
         let pe = self
             .inner
             .pe_for_dist_index(index)
@@ -191,7 +191,7 @@ impl<T: ElementArithmeticOps + 'static> ArithmeticOps<T> for UnsafeArray<T> {
         &self,
         index: usize,
         val: T,
-    ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>> {
+    ) -> Option<Box<dyn LamellarRequest<Output = ()>  >> {
         let pe = self
             .inner
             .pe_for_dist_index(index)
@@ -208,7 +208,7 @@ impl<T: ElementArithmeticOps + 'static> ArithmeticOps<T> for UnsafeArray<T> {
         &self,
         index: usize,
         val: T,
-    ) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+    ) -> Box<dyn LamellarRequest<Output = T>  > {
         let pe = self
             .inner
             .pe_for_dist_index(index)
@@ -225,7 +225,7 @@ impl<T: ElementArithmeticOps + 'static> ArithmeticOps<T> for UnsafeArray<T> {
         &self,
         index: usize,
         val: T,
-    ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>> {
+    ) -> Option<Box<dyn LamellarRequest<Output = ()>  >> {
         let pe = self
             .inner
             .pe_for_dist_index(index)
@@ -242,7 +242,7 @@ impl<T: ElementArithmeticOps + 'static> ArithmeticOps<T> for UnsafeArray<T> {
         &self,
         index: usize,
         val: T,
-    ) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+    ) -> Box<dyn LamellarRequest<Output = T>  > {
         let pe = self
             .inner
             .pe_for_dist_index(index)
@@ -259,7 +259,7 @@ impl<T: ElementArithmeticOps + 'static> ArithmeticOps<T> for UnsafeArray<T> {
         &self,
         index: usize,
         val: T,
-    ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>> {
+    ) -> Option<Box<dyn LamellarRequest<Output = ()>  >> {
         let pe = self
             .inner
             .pe_for_dist_index(index)
@@ -276,7 +276,7 @@ impl<T: ElementArithmeticOps + 'static> ArithmeticOps<T> for UnsafeArray<T> {
         &self,
         index: usize,
         val: T,
-    ) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+    ) -> Box<dyn LamellarRequest<Output = T>  > {
         let pe = self
             .inner
             .pe_for_dist_index(index)
@@ -296,7 +296,7 @@ impl<T: ElementBitWiseOps + 'static> BitWiseOps<T> for UnsafeArray<T> {
         &self,
         index: usize,
         val: T,
-    ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>> {
+    ) -> Option<Box<dyn LamellarRequest<Output = ()>  >> {
         let pe = self
             .inner
             .pe_for_dist_index(index)
@@ -313,7 +313,7 @@ impl<T: ElementBitWiseOps + 'static> BitWiseOps<T> for UnsafeArray<T> {
         &self,
         index: usize,
         val: T,
-    ) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+    ) -> Box<dyn LamellarRequest<Output = T>  > {
         let pe = self
             .inner
             .pe_for_dist_index(index)
@@ -331,7 +331,7 @@ impl<T: ElementBitWiseOps + 'static> BitWiseOps<T> for UnsafeArray<T> {
         &self,
         index: usize,
         val: T,
-    ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>> {
+    ) -> Option<Box<dyn LamellarRequest<Output = ()>  >> {
         let pe = self
             .inner
             .pe_for_dist_index(index)
@@ -348,7 +348,7 @@ impl<T: ElementBitWiseOps + 'static> BitWiseOps<T> for UnsafeArray<T> {
         &self,
         index: usize,
         val: T,
-    ) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+    ) -> Box<dyn LamellarRequest<Output = T>  > {
         let pe = self
             .inner
             .pe_for_dist_index(index)

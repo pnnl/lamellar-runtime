@@ -134,7 +134,7 @@ pub(crate) trait LamellaeInit {
 // #[async_trait]
 #[enum_dispatch]
 pub(crate) trait Ser {
-    fn serialize<T: Send + Sync + serde::Serialize + ?Sized>(
+    fn serialize<T: serde::Serialize + ?Sized>(
         &self,
         header: Option<SerializeHeader>,
         obj: &T,
@@ -156,7 +156,7 @@ pub(crate) enum Lamellae {
 
 #[async_trait]
 #[enum_dispatch]
-pub(crate) trait LamellaeComm: LamellaeAM + LamellaeRDMA + Send + Sync {
+pub(crate) trait LamellaeComm: LamellaeAM + LamellaeRDMA   {
     // this is a global barrier (hopefully using hardware)
     fn my_pe(&self) -> usize;
     fn num_pes(&self) -> usize;
@@ -170,7 +170,7 @@ pub(crate) trait LamellaeComm: LamellaeAM + LamellaeRDMA + Send + Sync {
 
 #[async_trait]
 #[enum_dispatch]
-pub(crate) trait LamellaeAM: Send + Sync {
+pub(crate) trait LamellaeAM: Send  {
     async fn send_to_pe_async(&self, pe: usize, data: SerializedData); //should never send to self... this is short circuited before request is serialized in the active message layer
     async fn send_to_pes_async(
         &self,
@@ -181,7 +181,7 @@ pub(crate) trait LamellaeAM: Send + Sync {
 }
 
 #[enum_dispatch]
-pub(crate) trait LamellaeRDMA: Send + Sync {
+pub(crate) trait LamellaeRDMA: Send + Sync  {
     fn put(&self, pe: usize, src: &[u8], dst: usize);
     fn iput(&self, pe: usize, src: &[u8], dst: usize);
     fn put_all(&self, src: &[u8], dst: usize);

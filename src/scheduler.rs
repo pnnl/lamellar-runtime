@@ -60,7 +60,7 @@ pub(crate) enum AmeScheduler {
     WorkStealingInner,
 }
 #[enum_dispatch]
-pub(crate) trait AmeSchedulerQueue: Sync + Send {
+pub(crate) trait AmeSchedulerQueue {
     fn submit_req(
         //unserialized request
         &self,
@@ -83,7 +83,7 @@ pub(crate) trait AmeSchedulerQueue: Sync + Send {
     ); //serialized active message
     fn submit_task<F>(&self, future: F)
     where
-        F: Future<Output = ()> + Send;
+        F: Future<Output = ()> ;
     fn exec_task(&self);
     fn shutdown(&self);
     fn active(&self) -> bool;
@@ -94,7 +94,7 @@ pub(crate) enum Scheduler {
     WorkStealing,
 }
 #[enum_dispatch]
-pub(crate) trait SchedulerQueue: Sync + Send {
+pub(crate) trait SchedulerQueue {
     fn submit_req(
         //unserialized request
         &self,
@@ -111,7 +111,7 @@ pub(crate) trait SchedulerQueue: Sync + Send {
     fn submit_work(&self, msg: SerializedData, lamellae: Arc<Lamellae>); //serialized active message
     fn submit_task<F>(&self, future: F)
     where
-        F: Future<Output = ()> + Send;
+        F: Future<Output = ()> ;
     fn exec_task(&self);
     fn shutdown(&self);
     fn active(&self) -> bool;

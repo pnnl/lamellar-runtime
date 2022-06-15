@@ -56,10 +56,10 @@ fn gen_write_array_impls(
         }
         let return_type = match fetch {
             true => {
-                quote! { Box<dyn #lamellar::LamellarRequest<Output = #typeident> + Send + Sync> }
+                quote! { Box<dyn #lamellar::LamellarRequest<Output = #typeident>  > }
             }
             false => {
-                quote! {Option<Box<dyn #lamellar::LamellarRequest<Output = ()> + Send + Sync>>}
+                quote! {Option<Box<dyn #lamellar::LamellarRequest<Output = ()>  >>}
             }
         };
         write_array_impl.extend(quote! {
@@ -534,9 +534,9 @@ fn create_buf_ops(
                 res_map.insert(pe,self.results.read().clone());
                 (first,self.complete.read().clone(),Some(res_offsets))
             }
-            fn into_arc_am(&self,sub_array: std::ops::Range<usize>)-> (Vec<Arc<dyn RemoteActiveMessage + Send + Sync>>,usize,Arc<AtomicBool>, PeOpResults){
+            fn into_arc_am(&self,sub_array: std::ops::Range<usize>)-> (Vec<Arc<dyn RemoteActiveMessage + Sync + Send>>,usize,Arc<AtomicBool>, PeOpResults){
                 // println!("into arc am {:?}",stringify!(#am_buf_name));
-                let mut ams: Vec<Arc<dyn RemoteActiveMessage + Send + Sync>> = Vec::new();
+                let mut ams: Vec<Arc<dyn RemoteActiveMessage + Sync + Send>> = Vec::new();
                 let mut buf = self.ops.lock();
                 // println!("buf len {:?}",buf.len());
                 let mut ops = Vec::new();

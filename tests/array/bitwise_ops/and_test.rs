@@ -1,4 +1,4 @@
-use lamellar::array::{AtomicArray, BitWiseOps, LocalLockAtomicArray, SerialIterator, UnsafeArray};
+use lamellar::array::{DistributedIterator,AtomicArray, BitWiseOps, LocalLockAtomicArray, SerialIterator, UnsafeArray};
 
 macro_rules! initialize_array {
     (UnsafeArray,$array:ident,$init_val:ident) => {

@@ -46,9 +46,9 @@ crate::inventory::collect!(UnsafeArrayOpBuf);
 
 #[derive(Debug)]
 pub(crate) enum BufOpsRequest<T: Dist> {
-    // NoFetch(Box<dyn LamellarRequest<Output = ()> + Send + Sync>),
-    // Fetch(Box<dyn LamellarRequest<Output = Vec<T>> + Send + Sync>),
-    // Result(Box<dyn LamellarRequest<Output = Vec<Result<T,T>>> + Send + Sync>),
+    // NoFetch(Box<dyn LamellarRequest<Output = ()>  >),
+    // Fetch(Box<dyn LamellarRequest<Output = Vec<T>>  >),
+    // Result(Box<dyn LamellarRequest<Output = Vec<Result<T,T>>>  >),
     NoFetch(Box<ArrayOpHandleInner>),
     Fetch(Box<ArrayOpFetchHandleInner<T>>),
     Result(Box<ArrayOpResultHandleInner<T>>),
@@ -444,7 +444,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         val: impl OpInput<'a, T>,
         index: impl OpInput<'a, usize>,
         op: ArrayOpCmd<T>,
-    ) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync>{
+    ) -> Box<dyn LamellarRequest<Output = ()>  >{
         let req_handles_mutex = self.inner_initiate_op(val, index, op, OpReturnType::None);
         let mut req_handles = req_handles_mutex.lock();
         let mut reqs = vec![];
@@ -463,7 +463,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         val: impl OpInput<'a, T>,
         index: impl OpInput<'a, usize>,
         op: ArrayOpCmd<T>,
-    ) -> Box<dyn LamellarRequest<Output = Vec<T>> + Send + Sync>{
+    ) -> Box<dyn LamellarRequest<Output = Vec<T>>  >{
         let req_handles_mutex = self.inner_initiate_op(val, index, op, OpReturnType::Fetch);
         let mut req_handles = req_handles_mutex.lock();
         let mut reqs = vec![];
@@ -482,7 +482,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         val: impl OpInput<'a, T>,
         index: impl OpInput<'a, usize>,
         op: ArrayOpCmd<T>,
-    ) -> Box<dyn LamellarRequest<Output = Vec<Result<T,T>>> + Send + Sync>{
+    ) -> Box<dyn LamellarRequest<Output = Vec<Result<T,T>>>  >{
         let req_handles_mutex = self.inner_initiate_op(val, index, op, OpReturnType::Result);
         let mut req_handles = req_handles_mutex.lock();
         let mut reqs = vec![];
@@ -501,7 +501,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
     //     &self,
     //     index: impl OpInput<'a,usize>,
     //     val: impl OpInput<'a,T>,
-    // ) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync> {
+    // ) -> Box<dyn LamellarRequest<Output = ()>  > {
     //     self.initiate_op(val,index,ArrayOpCmd::Put)
     // }
 }
@@ -511,56 +511,56 @@ impl<T: ElementArithmeticOps + 'static> ArithmeticOps<T> for UnsafeArray<T> {
         &self,
         index: impl OpInput<'a, usize>,
         val: T,
-    ) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync> {
+    ) -> Box<dyn LamellarRequest<Output = ()>  > {
         self.initiate_op(val, index, ArrayOpCmd::Add)
     }
     fn fetch_add<'a>(
         &self,
         index: impl OpInput<'a, usize>,
         val: T,
-    ) -> Box<dyn LamellarRequest<Output = Vec<T>> + Send + Sync> {
+    ) -> Box<dyn LamellarRequest<Output = Vec<T>>  > {
         self.initiate_fetch_op(val, index, ArrayOpCmd::FetchAdd)
     }
     fn sub<'a>(
         &self,
         index: impl OpInput<'a, usize>,
         val: T,
-    ) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync> {
+    ) -> Box<dyn LamellarRequest<Output = ()>  > {
         self.initiate_op(val, index, ArrayOpCmd::Sub)
     }
     fn fetch_sub<'a>(
         &self,
         index: impl OpInput<'a, usize>,
         val: T,
-    ) -> Box<dyn LamellarRequest<Output = Vec<T>> + Send + Sync> {
+    ) -> Box<dyn LamellarRequest<Output = Vec<T>>  > {
         self.initiate_fetch_op(val, index, ArrayOpCmd::FetchSub)
     }
     fn mul<'a>(
         &self,
         index: impl OpInput<'a, usize>,
         val: T,
-    ) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync> {
+    ) -> Box<dyn LamellarRequest<Output = ()>  > {
         self.initiate_op(val, index, ArrayOpCmd::Mul)
     }
     fn fetch_mul<'a>(
         &self,
         index: impl OpInput<'a, usize>,
         val: T,
-    ) -> Box<dyn LamellarRequest<Output = Vec<T>> + Send + Sync> {
+    ) -> Box<dyn LamellarRequest<Output = Vec<T>>  > {
         self.initiate_fetch_op(val, index, ArrayOpCmd::FetchMul)
     }
     fn div<'a>(
         &self,
         index: impl OpInput<'a, usize>,
         val: T,
-    ) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync> {
+    ) -> Box<dyn LamellarRequest<Output = ()>  > {
         self.initiate_op(val, index, ArrayOpCmd::Div)
     }
     fn fetch_div<'a>(
         &self,
         index: impl OpInput<'a, usize>,
         val: T,
-    ) -> Box<dyn LamellarRequest<Output = Vec<T>> + Send + Sync> {
+    ) -> Box<dyn LamellarRequest<Output = Vec<T>>  > {
         self.initiate_fetch_op(val, index, ArrayOpCmd::FetchDiv)
     }
 }
@@ -570,14 +570,14 @@ impl<T: ElementBitWiseOps + 'static> BitWiseOps<T> for UnsafeArray<T> {
         &self,
         index: impl OpInput<'a, usize>,
         val: T,
-    ) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync> {
+    ) -> Box<dyn LamellarRequest<Output = ()>  > {
         self.initiate_op(val, index, ArrayOpCmd::And)
     }
     fn fetch_bit_and<'a>(
         &self,
         index: impl OpInput<'a, usize>,
         val: T,
-    ) -> Box<dyn LamellarRequest<Output = Vec<T>> + Send + Sync> {
+    ) -> Box<dyn LamellarRequest<Output = Vec<T>>  > {
         self.initiate_fetch_op(val, index, ArrayOpCmd::FetchAnd)
     }
 
@@ -585,14 +585,14 @@ impl<T: ElementBitWiseOps + 'static> BitWiseOps<T> for UnsafeArray<T> {
         &self,
         index: impl OpInput<'a, usize>,
         val: T,
-    ) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync> {
+    ) -> Box<dyn LamellarRequest<Output = ()>  > {
         self.initiate_op(val, index, ArrayOpCmd::Or)
     }
     fn fetch_bit_or<'a>(
         &self,
         index: impl OpInput<'a, usize>,
         val: T,
-    ) -> Box<dyn LamellarRequest<Output = Vec<T>> + Send + Sync> {
+    ) -> Box<dyn LamellarRequest<Output = Vec<T>>  > {
         self.initiate_fetch_op(val, index, ArrayOpCmd::FetchOr)
     }
 }

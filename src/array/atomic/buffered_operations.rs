@@ -30,7 +30,7 @@ impl<T: AmDist + Dist + 'static> AtomicArray<T> {
     pub fn load<'a>(
         &self,
         index: impl OpInput<'a, usize>,
-    ) -> Box<dyn LamellarRequest<Output = Vec<T>> + Send + Sync> {
+    ) -> Box<dyn LamellarRequest<Output = Vec<T>>  > {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.load(index),
             AtomicArray::GenericAtomicArray(array) => array.load(index),
@@ -41,7 +41,7 @@ impl<T: AmDist + Dist + 'static> AtomicArray<T> {
         &self,
         index: impl OpInput<'a, usize>,
         val: T,
-    ) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync> {
+    ) -> Box<dyn LamellarRequest<Output = ()>  > {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.store(index, val),
             AtomicArray::GenericAtomicArray(array) => array.store(index, val),
@@ -52,7 +52,7 @@ impl<T: AmDist + Dist + 'static> AtomicArray<T> {
         &self,
         index: impl OpInput<'a, usize>,
         val: T,
-    ) -> Box<dyn LamellarRequest<Output = Vec<T>> + Send + Sync> {
+    ) -> Box<dyn LamellarRequest<Output = Vec<T>>  > {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.swap(index, val),
             AtomicArray::GenericAtomicArray(array) => array.swap(index, val),
@@ -66,7 +66,7 @@ impl<T: AmDist + Dist + std::cmp::Eq + 'static> AtomicArray<T> {
         index: impl OpInput<'a, usize>,
         old: T,
         new: T,
-    ) -> Box<dyn LamellarRequest<Output = Vec<Result<T,T>>> + Send + Sync> {
+    ) -> Box<dyn LamellarRequest<Output = Vec<Result<T,T>>>  > {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.compare_exchange(index, old, new),
             AtomicArray::GenericAtomicArray(array) => array.compare_exchange(index, old, new),
@@ -81,7 +81,7 @@ impl<T: AmDist + Dist + std::cmp::PartialEq + 'static> AtomicArray<T> {
         old: T,
         new: T,
         eps: T,
-    ) -> Box<dyn LamellarRequest<Output = Vec<Result<T,T>>> + Send + Sync> {
+    ) -> Box<dyn LamellarRequest<Output = Vec<Result<T,T>>>  > {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.compare_exchange_epsilon(index, old, new, eps),
             AtomicArray::GenericAtomicArray(array) => array.compare_exchange_epsilon(index, old, new, eps),
@@ -94,7 +94,7 @@ impl<T: ElementArithmeticOps + 'static> ArithmeticOps<T> for AtomicArray<T> {
         &self,
         index: impl OpInput<'a, usize>,
         val: T,
-    ) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync> {
+    ) -> Box<dyn LamellarRequest<Output = ()>  > {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.add(index, val),
             AtomicArray::GenericAtomicArray(array) => array.add(index, val),
@@ -104,7 +104,7 @@ impl<T: ElementArithmeticOps + 'static> ArithmeticOps<T> for AtomicArray<T> {
         &self,
         index: impl OpInput<'a, usize>,
         val: T,
-    ) -> Box<dyn LamellarRequest<Output = Vec<T>> + Send + Sync> {
+    ) -> Box<dyn LamellarRequest<Output = Vec<T>>  > {
         match self{
             AtomicArray::NativeAtomicArray(array) => array.fetch_add(index, val),
             AtomicArray::GenericAtomicArray(array) => array.fetch_add(index, val),
@@ -114,7 +114,7 @@ impl<T: ElementArithmeticOps + 'static> ArithmeticOps<T> for AtomicArray<T> {
         &self,
         index: impl OpInput<'a, usize>,
         val: T,
-    ) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync> {
+    ) -> Box<dyn LamellarRequest<Output = ()>  > {
         match self{
             AtomicArray::NativeAtomicArray(array) => array.sub(index, val),
             AtomicArray::GenericAtomicArray(array) => array.sub(index, val),
@@ -124,7 +124,7 @@ impl<T: ElementArithmeticOps + 'static> ArithmeticOps<T> for AtomicArray<T> {
         &self,
         index: impl OpInput<'a, usize>,
         val: T,
-    ) -> Box<dyn LamellarRequest<Output = Vec<T>> + Send + Sync> {
+    ) -> Box<dyn LamellarRequest<Output = Vec<T>>  > {
         match self{
             AtomicArray::NativeAtomicArray(array) => array.fetch_sub(index, val),
             AtomicArray::GenericAtomicArray(array) => array.fetch_sub(index, val),
@@ -134,7 +134,7 @@ impl<T: ElementArithmeticOps + 'static> ArithmeticOps<T> for AtomicArray<T> {
         &self,
         index: impl OpInput<'a, usize>,
         val: T,
-    ) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync> {
+    ) -> Box<dyn LamellarRequest<Output = ()>  > {
         match self{
             AtomicArray::NativeAtomicArray(array) => array.mul(index, val),
             AtomicArray::GenericAtomicArray(array) => array.mul(index, val),
@@ -144,7 +144,7 @@ impl<T: ElementArithmeticOps + 'static> ArithmeticOps<T> for AtomicArray<T> {
         &self,
         index: impl OpInput<'a, usize>,
         val: T,
-    ) -> Box<dyn LamellarRequest<Output = Vec<T>> + Send + Sync> {
+    ) -> Box<dyn LamellarRequest<Output = Vec<T>>  > {
         match self{
             AtomicArray::NativeAtomicArray(array) => array.fetch_mul(index, val),
             AtomicArray::GenericAtomicArray(array) => array.fetch_mul(index, val),
@@ -154,7 +154,7 @@ impl<T: ElementArithmeticOps + 'static> ArithmeticOps<T> for AtomicArray<T> {
         &self,
         index: impl OpInput<'a, usize>,
         val: T,
-    ) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync> {
+    ) -> Box<dyn LamellarRequest<Output = ()>  > {
         match self{
             AtomicArray::NativeAtomicArray(array) => array.div(index, val),
             AtomicArray::GenericAtomicArray(array) => array.div(index, val),
@@ -164,7 +164,7 @@ impl<T: ElementArithmeticOps + 'static> ArithmeticOps<T> for AtomicArray<T> {
         &self,
         index: impl OpInput<'a, usize>,
         val: T,
-    ) -> Box<dyn LamellarRequest<Output = Vec<T>> + Send + Sync> {
+    ) -> Box<dyn LamellarRequest<Output = Vec<T>>  > {
         match self{
             AtomicArray::NativeAtomicArray(array) => array.fetch_div(index, val),
             AtomicArray::GenericAtomicArray(array) => array.fetch_div(index, val),
@@ -177,7 +177,7 @@ impl<T: ElementBitWiseOps + 'static> BitWiseOps<T> for AtomicArray<T> {
         &self,
         index: impl OpInput<'a, usize>,
         val: T,
-    ) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync> {
+    ) -> Box<dyn LamellarRequest<Output = ()>  > {
         // println!("and val {:?}",val);
         match self {
             AtomicArray::NativeAtomicArray(array) => array.bit_and(index, val),
@@ -188,7 +188,7 @@ impl<T: ElementBitWiseOps + 'static> BitWiseOps<T> for AtomicArray<T> {
         &self,
         index: impl OpInput<'a, usize>,
         val: T,
-    ) -> Box<dyn LamellarRequest<Output = Vec<T>> + Send + Sync> {
+    ) -> Box<dyn LamellarRequest<Output = Vec<T>>  > {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.fetch_bit_and(index, val),
             AtomicArray::GenericAtomicArray(array) => array.fetch_bit_and(index, val),
@@ -198,7 +198,7 @@ impl<T: ElementBitWiseOps + 'static> BitWiseOps<T> for AtomicArray<T> {
         &self,
         index: impl OpInput<'a, usize>,
         val: T,
-    ) -> Box<dyn LamellarRequest<Output = ()> + Send + Sync> {
+    ) -> Box<dyn LamellarRequest<Output = ()>  > {
         // println!("or");
         match self {
             AtomicArray::NativeAtomicArray(array) => array.bit_or(index, val),
@@ -209,7 +209,7 @@ impl<T: ElementBitWiseOps + 'static> BitWiseOps<T> for AtomicArray<T> {
         &self,
         index: impl OpInput<'a, usize>,
         val: T,
-    ) -> Box<dyn LamellarRequest<Output = Vec<T>> + Send + Sync> {
+    ) -> Box<dyn LamellarRequest<Output = Vec<T>>  > {
         // println!("fetch_or");
         match self {
             AtomicArray::NativeAtomicArray(array) => array.fetch_bit_or(index, val),

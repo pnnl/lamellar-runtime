@@ -1,7 +1,7 @@
 ///-------------------Lamellar Example: Custom Team Arch-----------------------------
 /// This example shows how to implement a custom team layout using the LamellarArch trait:
 /*
-pub trait LamellarArch: Sync + Send +  std::fmt::Debug {
+pub trait LamellarArch:  Send +  std::fmt::Debug {
     fn num_pes(&self) -> usize;
     fn start_pe(&self) -> usize; // the first pe of a team with respect to parent pe ids (inclusive)
     fn end_pe(&self) -> usize;   // the last pe of a team with respect to parent pe ids (inclusive)

@@ -1,6 +1,5 @@
 use crate::array::iterator::distributed_iterator::*;
 
-use futures::Future;
 #[derive(Clone)]
 pub struct Enumerate<I> {
     iter: I,
@@ -16,24 +15,24 @@ where
     }
 }
 
-impl<I> Enumerate<I>
-where
-    I: DistributedIterator + 'static,
-{
-    pub fn for_each<F>(&self, op: F)
-    where
-        F: Fn((usize, <I as DistributedIterator>::Item)) + Sync + Send + Clone + 'static,
-    {
-        self.iter.array().for_each(self, op);
-    }
-    pub fn for_each_async<F, Fut>(&self, op: F)
-    where
-        F: Fn((usize, <I as DistributedIterator>::Item)) -> Fut + Sync + Send + Clone + 'static,
-        Fut: Future<Output = ()> + Sync + Send + Clone + 'static,
-    {
-        self.iter.array().for_each_async(self, op);
-    }
-}
+// impl<I> Enumerate<I>
+// where
+//     I: DistributedIterator + 'static,
+// {
+//     pub fn for_each<F>(&self, op: F)
+//     where
+//         F: Fn((usize, <I as DistributedIterator>::Item)) + AmLocal  + Clone + 'static,
+//     {
+//         self.iter.array().for_each(self, op);
+//     }
+//     pub fn for_each_async<F, Fut>(&self, op: F)
+//     where
+//         F: Fn((usize, <I as DistributedIterator>::Item)) -> Fut + AmLocal  + Clone + 'static,
+//         Fut: Future<Output = ()> + AmLocal  + Clone + 'static,
+//     {
+//         self.iter.array().for_each_async(self, op);
+//     }
+// }
 
 impl<I> DistributedIterator for Enumerate<I>
 where

@@ -38,7 +38,7 @@ impl ActiveMessaging for LamellarWorld {
     fn barrier(&self) {
         self.team.barrier();
     }
-    fn exec_am_all<F>(&self, am: F) -> Box<dyn LamellarMultiRequest<Output = F::Output> + Send + Sync>
+    fn exec_am_all<F>(&self, am: F) -> Box<dyn LamellarMultiRequest<Output = F::Output>  >
     where
         F: RemoteActiveMessage + LamellarAM + Serde + AmDist,
     {
@@ -48,16 +48,16 @@ impl ActiveMessaging for LamellarWorld {
         &self,
         pe: usize,
         am: F,
-    ) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync>
+    ) -> Box<dyn LamellarRequest<Output = F::Output>  >
     where
         F: RemoteActiveMessage + LamellarAM + Serde + AmDist,
     {
         assert!(pe < self.num_pes(), "invalid pe: {:?}", pe);
         self.team.exec_am_pe(pe, am)
     }
-    fn exec_am_local<F>(&self, am: F) -> Box<dyn LamellarRequest<Output = F::Output> + Send >
+    fn exec_am_local<F>(&self, am: F) -> Box<dyn LamellarRequest<Output = F::Output>  >
     where
-        F: LamellarActiveMessage + LocalAM + Send  + 'static,
+        F: LamellarActiveMessage + LocalAM   + 'static,
     {
         self.team.exec_am_local(am)
     }
@@ -71,22 +71,22 @@ impl ActiveMessaging for LamellarWorld {
 // impl RemoteClosures for LamellarWorld {
 //     fn exec_closure_all<
 //         F: FnOnce() -> T
-//             + Send
-//             + Sync
+//             
+//             
 //             + serde::ser::Serialize
 //             + serde::de::DeserializeOwned
 //             + std::clone::Clone
 //             + 'static,
 //         T: std::any::Any
-//             + Send
-//             + Sync
+//             
+//             
 //             + serde::ser::Serialize
 //             + serde::de::DeserializeOwned
 //             + std::clone::Clone,
 //     >(
 //         &self,
 //         func: F,
-//     ) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync> {
+//     ) -> Box<dyn LamellarRequest<Output = F::Output>  > {
 //         trace!("[{:?}] exec closure all", self.my_pe);
 //         self.team_rt.exec_closure_all(func)
 //     }
@@ -94,15 +94,15 @@ impl ActiveMessaging for LamellarWorld {
 //     #[cfg(feature = "nightly")]
 //     fn exec_closure_pe<
 //         F: FnOnce() -> T
-//             + Send
-//             + Sync
+//             
+//             
 //             + serde::ser::Serialize
 //             + serde::de::DeserializeOwned
 //             + std::clone::Clone
 //             + 'static,
 //         T: std::any::Any
-//             + Send
-//             + Sync
+//             
+//             
 //             + serde::ser::Serialize
 //             + serde::de::DeserializeOwned
 //             + std::clone::Clone,
@@ -110,7 +110,7 @@ impl ActiveMessaging for LamellarWorld {
 //         &self,
 //         pe: usize,
 //         func: F,
-//     ) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync> {
+//     ) -> Box<dyn LamellarRequest<Output = F::Output>  > {
 //         assert!(pe < self.num_pes(), "invalid pe: {:?}", pe);
 //         trace!("[{:?}] world exec_closure_pe: [{:?}]", self.my_pe, pe);
 //         self.team_rt.exec_closure_pe(pe, func)

@@ -67,7 +67,7 @@
 //!
 //! # Creating, initializing, and iterating through a distributed array
 //! ```
-//! use lamellar::array::{DistributedIterator, Distribution, SerialIterator, UnsafeArray};
+//! use lamellar::array::{DistributedIterator,DistributedIterator, Distribution, SerialIterator, UnsafeArray};
 //!
 //! fn main(){
 //!     let world = lamellar::LamellarWorldBuilder::new().build();

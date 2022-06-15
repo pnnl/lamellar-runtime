@@ -1,4 +1,4 @@
-use lamellar::array::{DistributedIterator, Distribution, SerialIterator, UnsafeArray, ReadOnlyArray};
+use lamellar::array::{DistributedIterator, Distribution, SerialIterator, UnsafeArray};
 use lamellar::array::ArithmeticOps;
 const ARRAY_LEN: usize = 100;
 

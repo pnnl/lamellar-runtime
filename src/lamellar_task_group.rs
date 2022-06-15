@@ -235,11 +235,11 @@ impl LamellarRequestAddResult for TaskGroupLocalRequestHandleInner {
         self.cnt.load(Ordering::SeqCst) > 0
     }
     fn add_result(&self, _pe: usize, sub_id: usize, data: InternalResult) {
-        if let InternalResult::Local(x) = data {
-            self.data.lock().insert(sub_id, x);
-        } else {
-            panic!("unexpected result type");
-        }        
+        match data{
+            InternalResult::Local(x) => self.data.lock().insert(sub_id, x),
+            InternalResult::Remote(_) => panic!("unexpected result type"),
+            InternalResult::Unit => self.data.lock().insert(sub_id, Box::new(()) as LamellarAny),
+        };      
     }
     fn update_counters(&self) {
         self.team_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
@@ -262,7 +262,7 @@ impl<T: 'static> TaskGroupLocalRequestHandle<T> {
 
 
 #[async_trait]
-impl<T> LamellarRequest for TaskGroupLocalRequestHandle<T> {
+impl<T: AmLocal + 'static> LamellarRequest for TaskGroupLocalRequestHandle<T> {
     type Output = T;
     async fn into_future(mut self: Box<Self>) -> Self::Output {
         let mut res = self.inner.data.lock().remove(&self.sub_id);
@@ -375,10 +375,11 @@ impl LamellarTaskGroup {
         }
     }
 
-    pub fn exec_am_all<F>(&self, am: F) -> Box<dyn LamellarMultiRequest<Output = F::Output> + Send + Sync>
+    pub fn exec_am_all<F>(&self, am: F) -> Box<dyn LamellarMultiRequest<Output = F::Output>  >
     where
         F: RemoteActiveMessage + LamellarAM + Serde + AmDist,
     {
+        // println!("task group exec am all");
         self.team.team_counters.add_send_req(self.team.num_pes);
         self.team.world_counters.add_send_req(self.team.num_pes);
         self.counters.add_send_req(self.team.num_pes);
@@ -411,10 +412,11 @@ impl LamellarTaskGroup {
         })
     }
 
-    pub fn exec_am_pe<F>(&self, pe: usize, am: F) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync>
+    pub fn exec_am_pe<F>(&self, pe: usize, am: F) -> Box<dyn LamellarRequest<Output = F::Output>  >
     where
         F: RemoteActiveMessage + LamellarAM + Serde + AmDist,
     {
+        // println!("task group exec am pe");
         self.team.team_counters.add_send_req(1);
         self.team.world_counters.add_send_req(1);
         self.counters.add_send_req(1);
@@ -445,10 +447,11 @@ impl LamellarTaskGroup {
         })
     }
 
-    pub fn exec_am_local<F>(&self, am: F) -> Box<dyn LamellarRequest<Output = F::Output> + Send >
+    pub fn exec_am_local<F>(&self, am: F) -> Box<dyn LamellarRequest<Output = F::Output>  >
     where
-        F: LamellarActiveMessage + LocalAM + Send + Sync + 'static
+        F: LamellarActiveMessage + LocalAM + 'static
     {
+        // println!("task group exec am local");
         self.team.team_counters.add_send_req(1);
         self.team.world_counters.add_send_req(1);
         self.counters.add_send_req(1);

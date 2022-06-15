@@ -3,7 +3,7 @@ use lamellar_prof::prof;
 use std::sync::Arc;
 // use std::collections::hash_map::DefaultHasher;
 
-pub trait LamellarArch: Sync + Send + std::fmt::Debug {
+pub trait LamellarArch: Send + Sync + std::fmt::Debug {
     fn num_pes(&self) -> usize;
     fn start_pe(&self) -> usize; //with respect to parent (maybe this should be min possible pe?)
     fn end_pe(&self) -> usize; //with respect to parent (maybe this should be max possible pe?)
@@ -165,7 +165,7 @@ impl LamellarArchRT {
         }
     }
 
-    pub fn team_iter(&self) -> Box<dyn Iterator<Item = usize> + Send> {
+    pub fn team_iter(&self) -> Box<dyn Iterator<Item = usize> > {
         //return an iterator of the teams global pe ids
         Box::new(LamellarArchRTiter {
             arch: self.clone(),
@@ -174,7 +174,7 @@ impl LamellarArchRT {
         })
     }
     #[allow(dead_code)]
-    pub fn single_iter(&self, pe: usize) -> Box<dyn Iterator<Item = usize> + Send> {
+    pub fn single_iter(&self, pe: usize) -> Box<dyn Iterator<Item = usize> > {
         //a single element iterator returning the global id of pe
         Box::new(LamellarArchRTiter {
             arch: self.clone(),

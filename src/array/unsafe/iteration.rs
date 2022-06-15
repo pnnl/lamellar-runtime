@@ -48,10 +48,10 @@ impl<T: Dist> DistIteratorLauncher for UnsafeArray<T> {
         }
     }
 
-    fn for_each<I, F>(&self, iter: &I, op: F) -> DistIterForEachHandle
+    fn for_each<I, F>(&self, iter: &I, op: F) -> Box<dyn DistIterRequest<Output = ()>>
     where
         I: DistributedIterator + 'static,
-        F: Fn(I::Item) + Sync + Send + Clone + 'static,
+        F: Fn(I::Item) + AmLocal  + Clone + 'static,
     {
         let mut reqs = Vec::new();
         if let Ok(_my_pe) = self.inner.data.team.team_pe_id() {
@@ -75,14 +75,14 @@ impl<T: Dist> DistIteratorLauncher for UnsafeArray<T> {
                 worker += 1;
             }
         }
-        DistIterForEachHandle{ //TODO actually hold the reqs from the exec_am_local...
+        Box::new(DistIterForEachHandle{ //TODO actually hold the reqs from the exec_am_local...
             reqs: reqs
-        }
+        })
     }
-    fn for_each_async<I, F, Fut>(&self, iter: &I, op: F) -> DistIterForEachHandle
+    fn for_each_async<I, F, Fut>(&self, iter: &I, op: F) -> Box<dyn DistIterRequest<Output = ()>>
     where
         I: DistributedIterator + 'static,
-        F: Fn(I::Item) -> Fut + Sync + Send  + Clone +  'static,
+        F: Fn(I::Item) -> Fut + AmLocal + Clone +  'static,
         Fut: Future<Output = ()> + Send +  'static,
     {
         let mut reqs = Vec::new();
@@ -110,16 +110,16 @@ impl<T: Dist> DistIteratorLauncher for UnsafeArray<T> {
                 worker += 1;
             }
         }
-        DistIterForEachHandle{ //TODO actually hold the reqs from the exec_am_local...
+        Box::new(DistIterForEachHandle{ //TODO actually hold the reqs from the exec_am_local...
             reqs: reqs
-        }
+        })
     }
 
-    fn collect<I,A>(&self, iter: &I,d: Distribution) -> DistIterCollectHandle<I::Item,A>
+    fn collect<I,A>(&self, iter: &I,d: Distribution) -> Box<dyn DistIterRequest<Output = A>>
         where 
         I: DistributedIterator + 'static,
         I::Item: Dist,
-        A: From<UnsafeArray<I::Item>>
+        A: From<UnsafeArray<I::Item>> + AmLocal + 'static
     {  
         let mut reqs = Vec::new();
         if let Ok(_my_pe) = self.inner.data.team.team_pe_id() {
@@ -144,12 +144,12 @@ impl<T: Dist> DistIteratorLauncher for UnsafeArray<T> {
                 worker += 1;
             }
         }
-        DistIterCollectHandle{
-            reqs: Vec::new(),
+        Box::new(DistIterCollectHandle{
+            reqs: reqs,
             distribution: d,
             team: self.inner.data.team.clone(),
             _phantom: PhantomData,
-        }
+        })
     }
 
     fn team(&self) -> Pin<Arc<LamellarTeamRT>> {

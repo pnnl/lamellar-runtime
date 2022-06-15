@@ -166,7 +166,7 @@ impl ActiveMessaging for Arc<LamellarTeam> {
         self.team.barrier();
     }
 
-    fn exec_am_all<F>(&self, am: F) -> Box<dyn LamellarMultiRequest<Output = F::Output> + Send + Sync>
+    fn exec_am_all<F>(&self, am: F) -> Box<dyn LamellarMultiRequest<Output = F::Output>  >
     where
         F: RemoteActiveMessage + LamellarAM + Serde + AmDist,
     {
@@ -178,16 +178,16 @@ impl ActiveMessaging for Arc<LamellarTeam> {
         &self,
         pe: usize,
         am: F,
-    ) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync>
+    ) -> Box<dyn LamellarRequest<Output = F::Output>  >
     where
         F: RemoteActiveMessage + LamellarAM + Serde + AmDist,
     {
         self.team.exec_am_pe_tg(pe, am, None)
     }
 
-    fn exec_am_local<F>(&self, am: F) -> Box<dyn LamellarRequest<Output = F::Output> + Send >
+    fn exec_am_local<F>(&self, am: F) -> Box<dyn LamellarRequest<Output = F::Output>  >
     where
-        F: LamellarActiveMessage + LocalAM + Send  + 'static,
+        F: LamellarActiveMessage + LocalAM   + 'static,
     {
         self.team.exec_am_local_tg(am, None)
     }
@@ -743,7 +743,7 @@ impl LamellarTeamRT {
     pub fn exec_am_all<F>(
         self: &Pin<Arc<LamellarTeamRT>>,
         am: F,
-    ) -> Box<dyn LamellarMultiRequest<Output = F::Output> + Send + Sync>
+    ) -> Box<dyn LamellarMultiRequest<Output = F::Output>  >
     where
         F: RemoteActiveMessage + LamellarAM + AmDist,
     {
@@ -754,10 +754,11 @@ impl LamellarTeamRT {
         self: &Pin<Arc<LamellarTeamRT>>,
         am: F,
         task_group_cnts: Option<Arc<AMCounters>>,
-    ) -> Box<dyn LamellarMultiRequest<Output = F::Output> + Send + Sync>
+    ) -> Box<dyn LamellarMultiRequest<Output = F::Output>  >
     where
         F: RemoteActiveMessage + LamellarAM + AmDist,
     {
+        // println!("team exec am all");
         trace!("[{:?}] team exec am all request", self.world_pe);
         let tg_outstanding_reqs = match task_group_cnts {
             Some(task_group_cnts) => {
@@ -767,7 +768,7 @@ impl LamellarTeamRT {
             None => None,
         };
         let req =Arc::new(LamellarMultiRequestHandleInner{
-            cnt: AtomicUsize::new(1),
+            cnt: AtomicUsize::new(self.num_pes),
             arch: self.arch.clone(),
             data: Mutex::new(HashMap::new()),
             team_outstanding_reqs: self.team_counters.outstanding_reqs.clone(),
@@ -782,6 +783,7 @@ impl LamellarTeamRT {
         for _ in 0..(self.num_pes-1) { // -1 because of the arc we turned into raw 
             unsafe {Arc::increment_strong_count(req_ptr)} //each pe will return a result (which we turn back into an arc)
         }
+        // println!("strong count recv: {:?} ",Arc::strong_count(&req));
         let id = ReqId{id: req_ptr as usize, sub_id: 0};
 
         self.world_counters.add_send_req(self.num_pes);
@@ -813,7 +815,7 @@ impl LamellarTeamRT {
         self: &Pin<Arc<LamellarTeamRT>>,
         pe: usize,
         am: F,
-    ) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync>
+    ) -> Box<dyn LamellarRequest<Output = F::Output>  >
     where
         F: RemoteActiveMessage + LamellarAM + AmDist,
     {
@@ -826,10 +828,11 @@ impl LamellarTeamRT {
         pe: usize,
         am: F,
         task_group_cnts: Option<Arc<AMCounters>>,
-    ) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync>
+    ) -> Box<dyn LamellarRequest<Output = F::Output>  >
     where
         F: RemoteActiveMessage + LamellarAM + AmDist,
     {
+        // println!("team exec am pe");
         prof_start!(pre);
         let tg_outstanding_reqs = match task_group_cnts {
             Some(task_group_cnts) => {
@@ -888,10 +891,11 @@ impl LamellarTeamRT {
         pe: usize,
         am: LamellarArcAm,
         task_group_cnts: Option<Arc<AMCounters>>,
-    ) -> Box<dyn LamellarRequest<Output = F> + Send + Sync>
+    ) -> Box<dyn LamellarRequest<Output = F>  >
     where
         F: AmDist,
     {
+        // println!("team exec arc am pe");
         let tg_outstanding_reqs = match task_group_cnts {
             Some(task_group_cnts) => {
                 task_group_cnts.add_send_req(1);
@@ -941,9 +945,9 @@ impl LamellarTeamRT {
     pub fn exec_am_local<F>(
         self: &Pin<Arc<LamellarTeamRT>>,
         am: F,
-    ) -> Box<dyn LamellarRequest<Output = F::Output> + Send >
+    ) -> Box<dyn LamellarRequest<Output = F::Output>  >
     where
-        F: LamellarActiveMessage + LocalAM + Send +  'static,
+        F: LamellarActiveMessage + LocalAM  +  'static,
     {
         self.exec_am_local_tg(am, None)
     }
@@ -952,10 +956,11 @@ impl LamellarTeamRT {
         self: &Pin<Arc<LamellarTeamRT>>,
         am: F,
         task_group_cnts: Option<Arc<AMCounters>>,
-    ) -> Box<dyn LamellarRequest<Output = F::Output> + Send >
+    ) -> Box<dyn LamellarRequest<Output = F::Output>  >
     where
-        F: LamellarActiveMessage + LocalAM + Send +  'static,
+        F: LamellarActiveMessage + LocalAM  +  'static,
     {
+        // println!("team exec am local");
         prof_start!(pre);
         prof_end!(pre);
         prof_start!(req);
@@ -966,7 +971,7 @@ impl LamellarTeamRT {
             }
             None => None,
         };
-        let req =Arc::new(LamellarRequestHandleInner{
+        let req =Arc::new(LamellarLocalRequestHandleInner{
             ready: AtomicBool::new(false),
             data: Cell::new(None),
             team_outstanding_reqs: self.team_counters.outstanding_reqs.clone(),
@@ -1056,22 +1061,22 @@ impl LamellarTeamRT {
 // impl RemoteClosures for LamellarTeamRT {
 //     fn exec_closure_all<
 //         F: FnOnce() -> T
-//             + Send
-//             + Sync
+//             
+//             
 //             + serde::ser::Serialize
 //             + serde::de::DeserializeOwned
 //             + std::clone::Clone
 //             + 'static,
 //         T: std::any::Any
-//             + Send
-//             + Sync
+//             
+//             
 //             + serde::ser::Serialize
 //             + serde::de::DeserializeOwned
 //             + std::clone::Clone,
 //     >(
 //         &self,
 //         func: F,
-//     ) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+//     ) -> Box<dyn LamellarRequest<Output = T>  > {
 //         trace!("[{:?}] team exec closure all request", self.world_pe);
 //         let (my_req, ireq) = LamellarRequestHandle::new(
 //             self.num_pes,
@@ -1104,15 +1109,15 @@ impl LamellarTeamRT {
 
 //     fn exec_closure_pe<
 //         F: FnOnce() -> T
-//             + Send
-//             + Sync
+//             
+//             
 //             + serde::ser::Serialize
 //             + serde::de::DeserializeOwned
 //             + std::clone::Clone
 //             + 'static,
 //         T: std::any::Any
-//             + Send
-//             + Sync
+//             
+//             
 //             + serde::ser::Serialize
 //             + serde::de::DeserializeOwned
 //             + std::clone::Clone,
@@ -1120,7 +1125,7 @@ impl LamellarTeamRT {
 //         &self,
 //         pe: usize,
 //         func: F,
-//     ) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+//     ) -> Box<dyn LamellarRequest<Output = T>  > {
 //         trace!("[{:?}] team exec_closure_pe [{:?}]", self.world_pe, pe);
 //         assert!(pe < self.arch.num_pes());
 //         let (my_req, mut ireq) = LamellarRequestHandle::new(

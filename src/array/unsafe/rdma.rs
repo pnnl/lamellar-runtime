@@ -13,7 +13,7 @@ impl<T: Dist> UnsafeArray<T> {
         op: ArrayRdmaCmd,
         index: usize, //relative to inner
         buf: U,
-    ) -> Vec<Box<dyn LamellarRequest<Output = ()> + Send + Sync>> {
+    ) -> Vec<Box<dyn LamellarRequest<Output = ()>  >> {
         let global_index = index + self.inner.offset;
         let buf = buf.my_into(&self.inner.data.team);
         let start_pe = match self.inner.pe_for_dist_index(index) {
@@ -109,7 +109,7 @@ impl<T: Dist> UnsafeArray<T> {
         op: ArrayRdmaCmd,
         index: usize, //global_index
         buf: U,
-    ) -> Vec<Box<dyn LamellarRequest<Output = ()> + Send + Sync>> {
+    ) -> Vec<Box<dyn LamellarRequest<Output = ()>  >> {
         let global_index = index + self.inner.offset;
         let buf = buf.my_into(&self.inner.data.team);
         let my_pe = self.inner.data.my_pe;
@@ -292,7 +292,7 @@ impl<T: Dist> UnsafeArray<T> {
         &self,
         index: usize,
         buf: U,
-    ) -> Box<dyn LamellarArrayRequest<Output = ()> + Send + Sync> {
+    ) -> Box<dyn LamellarArrayRequest<Output = ()>  > {
         let reqs = match self.inner.distribution {
             Distribution::Block => self.block_op(ArrayRdmaCmd::PutAm, index, buf),
             Distribution::Cyclic => self.cyclic_op(ArrayRdmaCmd::PutAm, index, buf),
@@ -318,7 +318,7 @@ impl<T: Dist> UnsafeArray<T> {
         &self,
         index: usize,
         buf: U,
-    ) -> Box<dyn LamellarArrayRequest<Output = ()> + Send + Sync>
+    ) -> Box<dyn LamellarArrayRequest<Output = ()>  >
     where
         U: MyInto<LamellarArrayInput<T>>,
     {
@@ -329,7 +329,7 @@ impl<T: Dist> UnsafeArray<T> {
         Box::new(ArrayRdmaHandle { reqs: reqs })
     }
 
-    pub fn at(&self, index: usize) -> Box<dyn LamellarArrayRequest<Output = T> + Send + Sync> {
+    pub fn at(&self, index: usize) -> Box<dyn LamellarArrayRequest<Output = T>  > {
         let buf: LocalMemoryRegion<T> = self.team().alloc_local_mem_region(1);
         self.iget(index, &buf);
         Box::new(ArrayRdmaAtHandle {
@@ -354,10 +354,10 @@ impl<T: Dist + 'static> LamellarArrayGet<T> for UnsafeArray<T> {
         &self,
         index: usize,
         buf: U,
-    ) -> Box<dyn LamellarArrayRequest<Output = ()> + Send + Sync> {
+    ) -> Box<dyn LamellarArrayRequest<Output = ()>  > {
         self.get(index, buf)
     }
-    fn at(&self, index: usize) -> Box<dyn LamellarArrayRequest<Output = T> + Send + Sync> {
+    fn at(&self, index: usize) -> Box<dyn LamellarArrayRequest<Output = T>  > {
         self.at(index)
     }
 }
@@ -370,7 +370,7 @@ impl<T: Dist> LamellarArrayPut<T> for UnsafeArray<T> {
         &self,
         index: usize,
         buf: U,
-    ) -> Box<dyn LamellarArrayRequest<Output = ()> + Send + Sync> {
+    ) -> Box<dyn LamellarArrayRequest<Output = ()>  > {
         self.put(index, buf)
     }
 }

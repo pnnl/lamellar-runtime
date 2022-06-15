@@ -1,6 +1,5 @@
 use crate::array::iterator::distributed_iterator::*;
 
-use futures::Future;
 #[derive(Clone)]
 pub struct Map<I,F> {
     iter: I,
@@ -16,31 +15,31 @@ where
     }
 }
 
-impl<B,I,F> Map<I,F>
-where
-    I: DistributedIterator + 'static,
-    F: FnMut(I::Item) -> B + Send + Sync + Clone + 'static,
-    B: Send + 'static
-{
-    pub fn for_each<G>(&self, op: G)
-    where
-        G: Fn(B) + Sync + Send + Clone + 'static,
-    {
-        self.iter.array().for_each(self, op);
-    }
-    pub fn for_each_async<G, Fut>(&self, op: G)
-    where
-        G: Fn(B) -> Fut + Sync + Send + Clone + 'static,
-        Fut: Future<Output = ()> + Send + 'static,
-    {
-        self.iter.array().for_each_async(self, op);
-    }
-}
+// impl<B,I,F> Map<I,F>
+// where
+//     I: DistributedIterator + 'static,
+//     F: FnMut(I::Item) -> B + AmLocal + Clone + 'static,
+//     B: Send + 'static
+// {
+//     pub fn for_each<G>(&self, op: G)
+//     where
+//         G: Fn(B)   + Clone + 'static,
+//     {
+//         self.iter.array().for_each(self, op);
+//     }
+//     pub fn for_each_async<G, Fut>(&self, op: G)
+//     where
+//         G: Fn(B) -> Fut   + Clone + 'static,
+//         Fut: Future<Output = ()>  + 'static,
+//     {
+//         self.iter.array().for_each_async(self, op);
+//     }
+// }
 
 impl<B,I,F> DistributedIterator for Map<I,F>
 where
     I: DistributedIterator,
-    F: FnMut(I::Item) -> B + Send + Sync + Clone,
+    F: FnMut(I::Item) -> B + AmLocal + Clone + 'static,
     B: Send ,
 {
     type Item = B;

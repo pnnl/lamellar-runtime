@@ -72,10 +72,10 @@ impl<T: Dist> ReadOnlyArray<T> {
         &self,
         index: usize,
         buf: U,
-    ) -> Box<dyn LamellarArrayRequest<Output = ()> + Send + Sync> {
+    ) -> Box<dyn LamellarArrayRequest<Output = ()>  > {
         self.array.get(index, buf)
     }
-    pub fn iat(&self, index: usize) -> Box<dyn LamellarArrayRequest<Output = T> + Send + Sync> {
+    pub fn iat(&self, index: usize) -> Box<dyn LamellarArrayRequest<Output = T>  > {
         self.array.at(index)
     }
     pub fn local_as_slice(&self) -> &[T] {
@@ -152,16 +152,16 @@ impl<T: Dist> From<ReadOnlyByteArray> for ReadOnlyArray<T> {
 }
 
 impl<T: Dist + serde::Serialize + serde::de::DeserializeOwned + 'static> ReadOnlyArray<T> {
-    pub fn reduce(&self, op: &str) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+    pub fn reduce(&self, op: &str) -> Box<dyn LamellarRequest<Output = T>  > {
         self.array.reduce(op)
     }
-    pub fn sum(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+    pub fn sum(&self) -> Box<dyn LamellarRequest<Output = T>  > {
         self.array.reduce("sum")
     }
-    pub fn prod(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+    pub fn prod(&self) -> Box<dyn LamellarRequest<Output = T>  > {
         self.array.reduce("prod")
     }
-    pub fn max(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+    pub fn max(&self) -> Box<dyn LamellarRequest<Output = T>  > {
         self.array.reduce("max")
     }
 }
@@ -175,26 +175,26 @@ impl<T: Dist> DistIteratorLauncher for ReadOnlyArray<T> {
         self.array.subarray_index_from_local(index, chunk_size)
     }
 
-    fn for_each<I, F>(&self, iter: &I, op: F) -> DistIterForEachHandle
+    fn for_each<I, F>(&self, iter: &I, op: F) -> Box<dyn DistIterRequest<Output = ()>>
     where
         I: DistributedIterator + 'static,
-        F: Fn(I::Item) + Sync + Send + Clone + 'static,
+        F: Fn(I::Item) + AmLocal + Clone + 'static,
     {
         self.array.for_each(iter, op)
     }
-    fn for_each_async<I, F, Fut>(&self, iter: &I, op: F) -> DistIterForEachHandle
+    fn for_each_async<I, F, Fut>(&self, iter: &I, op: F) ->  Box<dyn DistIterRequest<Output = ()>>
     where
         I: DistributedIterator + 'static,
-        F: Fn(I::Item) -> Fut + Sync + Send  + Clone + 'static,
+        F: Fn(I::Item) -> Fut + AmLocal + Clone + 'static,
         Fut: Future<Output = ()> + Send + 'static,
     {
         self.array.for_each_async(iter, op)
     }
-    fn collect<I,A>(&self, iter: &I,d: Distribution) -> DistIterCollectHandle<I::Item,A>
+    fn collect<I,A>(&self, iter: &I,d: Distribution) -> Box<dyn DistIterRequest<Output = A>>
         where 
         I: DistributedIterator + 'static,
         I::Item: Dist,
-        A: From<UnsafeArray<I::Item>>
+        A: From<UnsafeArray<I::Item>> + AmLocal + 'static,
     {
         self.array.collect(iter,d)
     }
@@ -262,10 +262,10 @@ impl<T: Dist + 'static> LamellarArrayGet<T> for ReadOnlyArray<T> {
         &self,
         index: usize,
         buf: U,
-    ) -> Box<dyn LamellarArrayRequest<Output = ()> + Send + Sync> {
+    ) -> Box<dyn LamellarArrayRequest<Output = ()>  > {
         self.get(index, buf)
     }
-    fn at(&self, index: usize) -> Box<dyn LamellarArrayRequest<Output = T> + Send + Sync> {
+    fn at(&self, index: usize) -> Box<dyn LamellarArrayRequest<Output = T>  > {
         self.array.at(index)
     }
 }
@@ -298,16 +298,16 @@ impl<T: Dist + std::fmt::Debug> ReadOnlyArray<T> {
 //             self.inner.team.num_pes(),
 //         )
 //     }
-//     fn reduce(&self, op: &str) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+//     fn reduce(&self, op: &str) -> Box<dyn LamellarRequest<Output = T>  > {
 //         self.reduce(op)
 //     }
-//     fn sum(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+//     fn sum(&self) -> Box<dyn LamellarRequest<Output = T>  > {
 //         self.sum()
 //     }
-//     fn max(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+//     fn max(&self) -> Box<dyn LamellarRequest<Output = T>  > {
 //         self.max()
 //     }
-//     fn prod(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+//     fn prod(&self) -> Box<dyn LamellarRequest<Output = T>  > {
 //         self.prod()
 //     }
 // }

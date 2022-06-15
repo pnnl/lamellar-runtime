@@ -744,7 +744,7 @@ impl<T: Dist> Iterator for NativeAtomicLocalDataIter<T> {
 }
 
 impl<T: Dist + NativeAtomic + std::default::Default> NativeAtomicArray<T> {
-    //Sync + Send + Copy  == Dist
+    // Send + Copy  == Dist
     pub fn new<U: Clone + Into<IntoLamellarTeam>>(
         team: U,
         array_size: usize,
@@ -772,7 +772,7 @@ impl<T: Dist + NativeAtomic + std::default::Default> NativeAtomicArray<T> {
 }
 
 impl<T: Dist + std::default::Default> NativeAtomicArray<T> {
-    //Sync + Send + Copy  == Dist
+    // Send + Copy  == Dist
     pub(crate) fn new_internal<U: Clone + Into<IntoLamellarTeam>>(
         team: U,
         array_size: usize,
@@ -1028,16 +1028,16 @@ impl<T: Dist + std::fmt::Debug> ArrayPrint<T> for NativeAtomicArray<T> {
 }
 
 impl<T: Dist + AmDist + 'static> NativeAtomicArray<T> {
-    pub fn reduce(&self, op: &str) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+    pub fn reduce(&self, op: &str) -> Box<dyn LamellarRequest<Output = T>  > {
         self.array.reduce(op)
     }
-    pub fn sum(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+    pub fn sum(&self) -> Box<dyn LamellarRequest<Output = T>  > {
         self.array.reduce("sum")
     }
-    pub fn prod(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+    pub fn prod(&self) -> Box<dyn LamellarRequest<Output = T>  > {
         self.array.reduce("prod")
     }
-    pub fn max(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+    pub fn max(&self) -> Box<dyn LamellarRequest<Output = T>  > {
         self.array.reduce("max")
     }
 }
@@ -1219,16 +1219,16 @@ impl NativeAtomicType {
 //     fn get_reduction_op(&self, op: String) -> LamellarArcAm {
 //         self.array.get_reduction_op(op)
 //     }
-//     fn reduce(&self, op: &str) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+//     fn reduce(&self, op: &str) -> Box<dyn LamellarRequest<Output = T>  > {
 //         self.reduce(op)
 //     }
-//     fn sum(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+//     fn sum(&self) -> Box<dyn LamellarRequest<Output = T>  > {
 //         self.sum()
 //     }
-//     fn max(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+//     fn max(&self) -> Box<dyn LamellarRequest<Output = T>  > {
 //         self.max()
 //     }
-//     fn prod(&self) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+//     fn prod(&self) -> Box<dyn LamellarRequest<Output = T>  > {
 //         self.prod()
 //     }
 // }

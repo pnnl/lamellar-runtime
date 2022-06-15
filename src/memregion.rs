@@ -28,8 +28,8 @@ impl std::fmt::Display for MemNotLocalError {
 impl std::error::Error for MemNotLocalError {}
 
 
-pub trait Dist: Send +  Copy + std::fmt::Debug + 'static {}
-// impl<T: Send + Sync + Copy + std::fmt::Debug + 'static>
+pub trait Dist: Sync + Send + Copy + std::fmt::Debug + 'static {}
+// impl<T: Send  + Copy + std::fmt::Debug + 'static>
 //     Dist for T
 // {
 // }
@@ -235,6 +235,7 @@ impl<T: Dist> MemoryRegion<T> {
         if let Ok(memreg) = MemoryRegion::try_new(size, lamellae, alloc) {
             memreg
         } else {
+            unsafe {std::ptr::null_mut::<i32>().write(1)};
             panic!("out of memory")
         }
     }

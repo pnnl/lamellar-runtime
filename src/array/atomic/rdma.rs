@@ -51,7 +51,7 @@ impl<T: Dist> AtomicArray<T> {
         &self,
         index: usize,
         buf: U,
-    ) -> Box<dyn LamellarArrayRequest<Output = ()> + Send + Sync> {
+    ) -> Box<dyn LamellarArrayRequest<Output = ()>  > {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.get(index, buf),
             AtomicArray::GenericAtomicArray(array) => array.get(index, buf),
@@ -69,14 +69,14 @@ impl<T: Dist> AtomicArray<T> {
         &self,
         index: usize,
         buf: U,
-    ) -> Box<dyn LamellarArrayRequest<Output = ()> + Send + Sync> {
+    ) -> Box<dyn LamellarArrayRequest<Output = ()>  > {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.put(index, buf),
             AtomicArray::GenericAtomicArray(array) => array.put(index, buf),
         }
     }
 
-    pub fn at(&self, index: usize) -> Box<dyn LamellarArrayRequest<Output = T> + Send + Sync> {
+    pub fn at(&self, index: usize) -> Box<dyn LamellarArrayRequest<Output = T>  > {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.at(index),
             AtomicArray::GenericAtomicArray(array) => array.at(index),
@@ -99,10 +99,10 @@ impl<T: Dist> AtomicArray<T> {
 //         &self,
 //         index: usize,
 //         buf: U,
-//     ) -> Box<dyn LamellarArrayRequest<Output = ()> + Send + Sync> {
+//     ) -> Box<dyn LamellarArrayRequest<Output = ()>  > {
 //         self.get(index, buf)
 //     }
-//     fn at(&self, index: usize) -> Box<dyn LamellarArrayRequest<Output = T> + Send + Sync> {
+//     fn at(&self, index: usize) -> Box<dyn LamellarArrayRequest<Output = T>  > {
 //         self.at(index)
 //     }
 // }
@@ -115,7 +115,7 @@ impl<T: Dist> AtomicArray<T> {
 //         &self,
 //         index: usize,
 //         buf: U,
-//     ) -> Box<dyn LamellarArrayRequest<Output = ()> + Send + Sync> {
+//     ) -> Box<dyn LamellarArrayRequest<Output = ()>  > {
 //         self.put(index, buf)
 //     }
 // }

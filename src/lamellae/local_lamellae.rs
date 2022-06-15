@@ -65,7 +65,7 @@ impl Local {
 
 // #[async_trait]
 impl Ser for Local {
-    fn serialize<T: Send + Sync + serde::Serialize + ?Sized>(
+    fn serialize<T: serde::Serialize + ?Sized>(
         &self,
         _header: Option<SerializeHeader>,
         _obj: &T,
@@ -126,7 +126,7 @@ impl LamellaeAM for Local {
 struct MyPtr {
     ptr: *mut [u8],
 }
-unsafe impl Sync for MyPtr {}
+// unsafe impl Sync for MyPtr {}
 unsafe impl Send for MyPtr {}
 
 //#[prof]

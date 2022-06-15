@@ -23,19 +23,22 @@ pub(crate) use remote_closures::RemoteClosures;
 use remote_closures::{exec_closure_cmd, process_closure_request};
 
 
+
+pub trait AmLocal:
+    Sync + Send 
+{
+}
+
+impl<T: Sync + Send > AmLocal for T {}
+
 pub trait AmDist:
-    serde::ser::Serialize + serde::de::DeserializeOwned + Send + Sync + 'static
+    serde::ser::Serialize + serde::de::DeserializeOwned + AmLocal + 'static
 {
 }
 
-impl<T: serde::ser::Serialize + serde::de::DeserializeOwned + Send + Sync + 'static> AmDist for T {}
+impl<T: serde::ser::Serialize + serde::de::DeserializeOwned + AmLocal + 'static> AmDist for T {}
 
-pub trait AmLocalDist:
-    Send + 'static
-{
-}
 
-impl<T: Send + 'static> AmLocalDist for T {}
 
 #[derive(
     serde::Serialize, serde::Deserialize, Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord,
@@ -55,7 +58,7 @@ impl<T> DarcSerde for &T {
     fn des(&self, _cur_pe: Result<usize, IdError>) {}
 }
 
-pub trait LamellarSerde: Send {
+pub trait LamellarSerde: AmLocal {
     fn serialized_size(&self) -> usize;
     fn serialize_into(&self, buf: &mut [u8]);
 }
@@ -86,15 +89,17 @@ pub(crate) enum LamellarFunc {
     None,
 }
 
-pub(crate) type LamellarArcLocalAm = Arc<dyn LamellarActiveMessage + Send>;
-pub(crate) type LamellarArcAm = Arc<dyn RemoteActiveMessage + Send >;
-pub(crate) type LamellarAny = Box<dyn std::any::Any + Send >;
-pub(crate) type LamellarResultArc = Arc<dyn LamellarSerde + Send >;
+pub(crate) type LamellarArcLocalAm = Arc<dyn LamellarActiveMessage + Sync + Send>;
+pub(crate) type LamellarArcAm = Arc<dyn RemoteActiveMessage + Sync + Send >;
+pub(crate) type LamellarAny = Box<dyn std::any::Any + Sync + Send>;
+pub(crate) type LamellarResultArc = Arc<dyn LamellarSerde + Sync + Send>;
+
+
 
 pub trait Serde: serde::ser::Serialize + serde::de::DeserializeOwned {}
 
-pub trait LocalAM {
-    type Output: AmLocalDist;
+pub trait LocalAM: AmLocal {
+    type Output: AmLocal;
 }
 
 pub trait LamellarAM {
@@ -172,19 +177,19 @@ impl AMCounters {
 pub trait ActiveMessaging {
     fn wait_all(&self);
     fn barrier(&self);
-    fn exec_am_all<F>(&self, am: F) -> Box<dyn LamellarMultiRequest<Output = F::Output> + Send + Sync>
+    fn exec_am_all<F>(&self, am: F) -> Box<dyn LamellarMultiRequest<Output = F::Output> >
     where
         F: RemoteActiveMessage + LamellarAM + Serde + AmDist;
     fn exec_am_pe<F>(
         &self,
         pe: usize,
         am: F,
-    ) -> Box<dyn LamellarRequest<Output = F::Output> + Send + Sync>
+    ) -> Box<dyn LamellarRequest<Output = F::Output>>
     where
         F: RemoteActiveMessage + LamellarAM + Serde + AmDist;
-    fn exec_am_local<F>(&self, am: F) -> Box<dyn LamellarRequest<Output = F::Output> + Send >
+    fn exec_am_local<F>(&self, am: F) -> Box<dyn LamellarRequest<Output = F::Output>>
     where
-        F: LamellarActiveMessage + LocalAM + Send + 'static;
+        F: LamellarActiveMessage + LocalAM + 'static;
 }
 
 //maybe make this a struct then we could hold the pending counters...
@@ -296,6 +301,7 @@ impl ActiveMessageEngine {
     ) {
         // println!("returned req_id: {:?}", req_id);
         let req = unsafe{Arc::from_raw(req_id.id as *const LamellarRequestResult)};
+        // println!("strong count recv: {:?} ",Arc::strong_count(&req));
         req.add_result(pe as usize, req_id.sub_id, data);   
     }    
 }

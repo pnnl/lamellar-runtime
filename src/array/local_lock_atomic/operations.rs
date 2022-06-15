@@ -52,7 +52,7 @@ impl<T: AmDist + Dist + 'static> LocalLockAtomicArray<T> {
         val: T,
         local_index: usize,
         op: ArrayOpCmd,
-    ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>> {
+    ) -> Option<Box<dyn LamellarRequest<Output = ()>  >> {
         // println!("initiate_op for LocalLockAtomicArray<T> ");
         if let Some(func) = OPS.get(&(op, TypeId::of::<T>())) {
             let array: LocalLockAtomicByteArray = self.clone().into();
@@ -85,7 +85,7 @@ impl<T: AmDist + Dist + 'static> LocalLockAtomicArray<T> {
         val: T,
         local_index: usize,
         op: ArrayOpCmd,
-    ) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+    ) -> Box<dyn LamellarRequest<Output = T>  > {
         // println!("initiate_op for LocalLockAtomicArray<T> ");
         if let Some(func) = OPS.get(&(op, TypeId::of::<T>())) {
             let array: LocalLockAtomicByteArray = self.clone().into();
@@ -116,7 +116,7 @@ impl<T: AmDist + Dist + 'static> LocalLockAtomicArray<T> {
         &self,
         index: usize,
         val: T,
-    ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>> {
+    ) -> Option<Box<dyn LamellarRequest<Output = ()>  >> {
         let pe = self.pe_for_dist_index(index).expect("index out of bounds");
         let local_index = self.pe_offset_for_dist_index(pe, index).unwrap(); //calculated pe above
         if pe == self.my_pe() {
@@ -127,7 +127,7 @@ impl<T: AmDist + Dist + 'static> LocalLockAtomicArray<T> {
         }
     }
 
-    pub fn load<'a>(&self, index: impl OpInput<'a,usize>,) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+    pub fn load<'a>(&self, index: impl OpInput<'a,usize>,) -> Box<dyn LamellarRequest<Output = T>  > {
         let pe = self.pe_for_dist_index(index).expect("index out of bounds");
         let local_index = self.pe_offset_for_dist_index(pe, index).unwrap(); //calculated pe above
         let dummy_val = self.array.dummy_val(); //we dont actually do anything with this except satisfy apis;
@@ -139,7 +139,7 @@ impl<T: AmDist + Dist + 'static> LocalLockAtomicArray<T> {
         }
     }
 
-    pub fn swap(&self, index: usize, val: T) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+    pub fn swap(&self, index: usize, val: T) -> Box<dyn LamellarRequest<Output = T>  > {
         let pe = self.pe_for_dist_index(index).expect("index out of bounds");
         let local_index = self.pe_offset_for_dist_index(pe, index).unwrap(); //calculated pe above
         if pe == self.my_pe() {
@@ -156,7 +156,7 @@ impl<T: ElementArithmeticOps + 'static> ArithmeticOps<T> for LocalLockAtomicArra
         &self,
         index: usize,
         val: T,
-    ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>> {
+    ) -> Option<Box<dyn LamellarRequest<Output = ()>  >> {
         let pe = self.pe_for_dist_index(index).expect("index out of bounds");
         let local_index = self.pe_offset_for_dist_index(pe, index).unwrap(); //calculated pe above
                                                                              println!("index {:?} pe {:?} local_index {:?}",index,pe,local_index);
@@ -171,7 +171,7 @@ impl<T: ElementArithmeticOps + 'static> ArithmeticOps<T> for LocalLockAtomicArra
         &self,
         index: usize,
         val: T,
-    ) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+    ) -> Box<dyn LamellarRequest<Output = T>  > {
         let pe = self.pe_for_dist_index(index).expect("index out of bounds");
         let local_index = self.pe_offset_for_dist_index(pe, index).unwrap(); //calculated pe above
         if pe == self.my_pe() {
@@ -185,7 +185,7 @@ impl<T: ElementArithmeticOps + 'static> ArithmeticOps<T> for LocalLockAtomicArra
         &self,
         index: usize,
         val: T,
-    ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>> {
+    ) -> Option<Box<dyn LamellarRequest<Output = ()>  >> {
         let pe = self.pe_for_dist_index(index).expect("index out of bounds");
         let local_index = self.pe_offset_for_dist_index(pe, index).unwrap(); //calculated pe above
         if pe == self.my_pe() {
@@ -199,7 +199,7 @@ impl<T: ElementArithmeticOps + 'static> ArithmeticOps<T> for LocalLockAtomicArra
         &self,
         index: usize,
         val: T,
-    ) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+    ) -> Box<dyn LamellarRequest<Output = T>  > {
         let pe = self.pe_for_dist_index(index).expect("index out of bounds");
         let local_index = self.pe_offset_for_dist_index(pe, index).unwrap(); //calculated pe above
         if pe == self.my_pe() {
@@ -213,7 +213,7 @@ impl<T: ElementArithmeticOps + 'static> ArithmeticOps<T> for LocalLockAtomicArra
         &self,
         index: usize,
         val: T,
-    ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>> {
+    ) -> Option<Box<dyn LamellarRequest<Output = ()>  >> {
         let pe = self.pe_for_dist_index(index).expect("index out of bounds");
         let local_index = self.pe_offset_for_dist_index(pe, index).unwrap(); //calculated pe above
         if pe == self.my_pe() {
@@ -227,7 +227,7 @@ impl<T: ElementArithmeticOps + 'static> ArithmeticOps<T> for LocalLockAtomicArra
         &self,
         index: usize,
         val: T,
-    ) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+    ) -> Box<dyn LamellarRequest<Output = T>  > {
         let pe = self.pe_for_dist_index(index).expect("index out of bounds");
         let local_index = self.pe_offset_for_dist_index(pe, index).unwrap(); //calculated pe above
         if pe == self.my_pe() {
@@ -241,7 +241,7 @@ impl<T: ElementArithmeticOps + 'static> ArithmeticOps<T> for LocalLockAtomicArra
         &self,
         index: usize,
         val: T,
-    ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>> {
+    ) -> Option<Box<dyn LamellarRequest<Output = ()>  >> {
         let pe = self.pe_for_dist_index(index).expect("index out of bounds");
         let local_index = self.pe_offset_for_dist_index(pe, index).unwrap(); //calculated pe above
         if pe == self.my_pe() {
@@ -255,7 +255,7 @@ impl<T: ElementArithmeticOps + 'static> ArithmeticOps<T> for LocalLockAtomicArra
         &self,
         index: usize,
         val: T,
-    ) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+    ) -> Box<dyn LamellarRequest<Output = T>  > {
         let pe = self.pe_for_dist_index(index).expect("index out of bounds");
         let local_index = self.pe_offset_for_dist_index(pe, index).unwrap(); //calculated pe above
         if pe == self.my_pe() {
@@ -272,7 +272,7 @@ impl<T: ElementBitWiseOps + 'static> BitWiseOps<T> for LocalLockAtomicArray<T> {
         &self,
         index: usize,
         val: T,
-    ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>> {
+    ) -> Option<Box<dyn LamellarRequest<Output = ()>  >> {
         let pe = self.pe_for_dist_index(index).expect("index out of bounds");
         let local_index = self.pe_offset_for_dist_index(pe, index).unwrap(); //calculated pe above
         if pe == self.my_pe() {
@@ -286,7 +286,7 @@ impl<T: ElementBitWiseOps + 'static> BitWiseOps<T> for LocalLockAtomicArray<T> {
         &self,
         index: usize,
         val: T,
-    ) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+    ) -> Box<dyn LamellarRequest<Output = T>  > {
         let pe = self.pe_for_dist_index(index).expect("index out of bounds");
         let local_index = self.pe_offset_for_dist_index(pe, index).unwrap(); //calculated pe above
         if pe == self.my_pe() {
@@ -301,7 +301,7 @@ impl<T: ElementBitWiseOps + 'static> BitWiseOps<T> for LocalLockAtomicArray<T> {
         &self,
         index: usize,
         val: T,
-    ) -> Option<Box<dyn LamellarRequest<Output = ()> + Send + Sync>> {
+    ) -> Option<Box<dyn LamellarRequest<Output = ()>  >> {
         let pe = self.pe_for_dist_index(index).expect("index out of bounds");
         let local_index = self.pe_offset_for_dist_index(pe, index).unwrap(); //calculated pe above
         if pe == self.my_pe() {
@@ -315,7 +315,7 @@ impl<T: ElementBitWiseOps + 'static> BitWiseOps<T> for LocalLockAtomicArray<T> {
         &self,
         index: usize,
         val: T,
-    ) -> Box<dyn LamellarRequest<Output = T> + Send + Sync> {
+    ) -> Box<dyn LamellarRequest<Output = T>  > {
         let pe = self.pe_for_dist_index(index).expect("index out of bounds");
         let local_index = self.pe_offset_for_dist_index(pe, index).unwrap(); //calculated pe above
         if pe == self.my_pe() {

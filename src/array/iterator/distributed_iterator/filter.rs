@@ -1,6 +1,5 @@
 use crate::array::iterator::distributed_iterator::*;
 
-use futures::Future;
 #[derive(Clone)]
 pub struct Filter<I,F> {
     iter: I,
@@ -16,30 +15,30 @@ where
     }
 }
 
-impl<I,F> Filter<I,F>
-where
-    I: DistributedIterator + 'static,
-    F: FnMut(&I::Item) -> bool + Send + Sync + Clone + 'static,
-{
-    pub fn for_each<G>(&self, op: G)
-    where
-        G: Fn(I::Item) + Sync + Send + Clone + 'static,
-    {
-        self.iter.array().for_each(self, op);
-    }
-    pub fn for_each_async<G, Fut>(&self, op: G)
-    where
-        G: Fn(I::Item) -> Fut + Sync + Send + Clone + 'static,
-        Fut: Future<Output = ()> + Send + 'static,
-    {
-        self.iter.array().for_each_async(self, op);
-    }
-}
+// impl<I,F> Filter<I,F>
+// where
+//     I: DistributedIterator + 'static,
+//     F: FnMut(&I::Item) -> bool + AmLocal + Clone + 'static,
+// {
+//     pub fn for_each<G>(&self, op: G)
+//     where
+//         G: Fn(I::Item) + AmLocal  + Clone + 'static,
+//     {
+//         self.iter.array().for_each(self, op);
+//     }
+//     pub fn for_each_async<G, Fut>(&self, op: G)
+//     where
+//         G: Fn(I::Item) -> Fut + AmLocal  + Clone + 'static,
+//         Fut: Future<Output = ()> + AmLocal + 'static,
+//     {
+//         self.iter.array().for_each_async(self, op);
+//     }
+// }
 
 impl<I,F> DistributedIterator for Filter<I,F>
 where
     I: DistributedIterator,
-    F: FnMut(&I::Item) -> bool + Send + Sync + Clone, 
+    F: FnMut(&I::Item) -> bool + AmLocal + Clone + 'static, 
 {
     type Item = I::Item;
     type Array = <I as DistributedIterator>::Array;

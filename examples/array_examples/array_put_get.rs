@@ -1,4 +1,4 @@
-use lamellar::array::{Distribution, UnsafeArray};
+use lamellar::array::{DistributedIterator,Distribution, UnsafeArray};
 use lamellar::{LamellarMemoryRegion, RemoteMemoryRegion};
 
 fn initialize_array(array: &UnsafeArray<usize>) {

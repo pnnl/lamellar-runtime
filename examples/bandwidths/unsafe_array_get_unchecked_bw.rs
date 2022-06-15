@@ -3,7 +3,7 @@
 /// from a distributed array into a local memory region.
 /// --------------------------------------------------------------------
 // use lamellar::ActiveMessaging;
-use lamellar::array::{Distribution, UnsafeArray};
+use lamellar::array::{DistributedIterator,Distribution, UnsafeArray};
 use lamellar::RemoteMemoryRegion;
 use std::time::Instant;
 

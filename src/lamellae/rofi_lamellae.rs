@@ -156,7 +156,7 @@ impl LamellaeAM for Rofi {
 }
 
 impl Ser for Rofi {
-    fn serialize<T: Send + Sync + serde::Serialize + ?Sized>(
+    fn serialize<T: serde::Serialize + ?Sized>(
         &self,
         header: Option<SerializeHeader>,
         obj: &T,

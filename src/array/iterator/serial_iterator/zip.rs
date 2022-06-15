@@ -5,7 +5,7 @@ use crate::LocalMemoryRegion;
 use async_trait::async_trait;
 
 struct ZipBufferedReq{
-    reqs: Vec<Box<dyn LamellarArrayRequest<Output = ()> + Send + Sync>>,
+    reqs: Vec<Box<dyn LamellarArrayRequest<Output = ()> >>,
 }
 
 #[async_trait]
@@ -63,7 +63,7 @@ where
     fn item_size(&self) -> usize {
         self.a.item_size()+self.b.item_size()
     }
-    fn buffered_next(&mut self, mem_region: LocalMemoryRegion<u8>) -> Option<Box<dyn LamellarArrayRequest<Output = ()> + Send + Sync>>{
+    fn buffered_next(&mut self, mem_region: LocalMemoryRegion<u8>) -> Option<Box<dyn LamellarArrayRequest<Output = ()>  >>{
         let a_sub_region = mem_region.sub_region(0..self.a.item_size());
         let mut reqs = vec![];
         reqs.push(self.a.buffered_next(a_sub_region)?);

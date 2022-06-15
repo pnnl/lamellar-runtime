@@ -159,7 +159,7 @@ impl LamellaeAM for Shmem {
 }
 
 impl Ser for Shmem {
-    fn serialize<T: Send + Sync + serde::Serialize + ?Sized>(
+    fn serialize<T: serde::Serialize + ?Sized>(
         &self,
         header: Option<SerializeHeader>,
         obj: &T,
