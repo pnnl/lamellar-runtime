@@ -1,5 +1,6 @@
 use crate::array::iterator::distributed_iterator::*;
 use crate::array::iterator::serial_iterator::LamellarArrayIter;
+use crate::array::private::LamellarArrayPrivate;
 use crate::array::*;
 use crate::darc::DarcMode;
 use crate::lamellar_team::{IntoLamellarTeam, LamellarTeamRT};
@@ -133,6 +134,24 @@ impl<T: Dist> From<UnsafeArray<T>> for ReadOnlyArray<T> {
     fn from(array: UnsafeArray<T>) -> Self {
         array.block_on_outstanding(DarcMode::ReadOnlyArray);
         ReadOnlyArray { array: array }
+    }
+}
+
+impl <T: Dist> From<LocalOnlyArray<T>> for ReadOnlyArray<T> {
+    fn from(array: LocalOnlyArray<T>) -> Self {
+        unsafe { array.into_inner().into() }
+    }
+}
+
+impl <T: Dist> From<AtomicArray<T>> for ReadOnlyArray<T> {
+    fn from(array: AtomicArray<T>) -> Self {
+        unsafe { array.into_inner().into() }
+    }
+}
+
+impl <T: Dist> From<LocalLockAtomicArray<T>> for ReadOnlyArray<T> {
+    fn from(array: LocalLockAtomicArray<T>) -> Self {
+        unsafe { array.into_inner().into() }
     }
 }
 

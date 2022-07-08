@@ -1,4 +1,5 @@
 use crate::array::*;
+use crate::array::private::LamellarArrayPrivate;
 use crate::darc::DarcMode;
 use crate::lamellar_team::{IntoLamellarTeam, LamellarTeamRT};
 use crate::memregion::Dist;
@@ -14,7 +15,7 @@ pub struct LocalOnlyArray<T: Dist + 'static> {
 }
 
 //#[prof]
-impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> LocalOnlyArray<T> {
+impl<T: Dist > LocalOnlyArray<T> {
     pub fn new<U: Into<IntoLamellarTeam>>(
         team: U,
         array_size: usize,
@@ -68,15 +69,18 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> Lo
         self.array.into()
     }
 
-    pub fn into_atomic(self) -> AtomicArray<T> {
-        self.array.into()
-    }
-
+    
     pub fn into_generic_atomic(self) -> GenericAtomicArray<T> {
         self.array.into()
     }
 
     pub fn into_local_lock_atomic(self) -> LocalLockAtomicArray<T> {
+        self.array.into()
+    }
+}
+
+impl <T: Dist + 'static> LocalOnlyArray<T> {
+    pub fn into_atomic(self) -> AtomicArray<T> {
         self.array.into()
     }
 }
@@ -91,6 +95,25 @@ impl<T: Dist> From<UnsafeArray<T>> for LocalOnlyArray<T> {
     }
 }
 
+impl <T: Dist> From<ReadOnlyArray<T>> for LocalOnlyArray<T> {
+    fn from(array: ReadOnlyArray<T>) -> Self {
+        unsafe {array.into_inner().into() }
+    }
+}
+
+impl <T: Dist> From<AtomicArray<T>> for LocalOnlyArray<T> {
+    fn from(array: AtomicArray<T>) -> Self {
+        unsafe { array.into_inner().into() }
+    }
+}
+
+impl <T: Dist> From<LocalLockAtomicArray<T>> for LocalOnlyArray<T> {
+    fn from(array: LocalLockAtomicArray<T>) -> Self {
+        unsafe { array.into_inner().into() }
+    }
+}
+
+
 impl<T: Dist> private::ArrayExecAm<T> for LocalOnlyArray<T> {
     fn team(&self) -> Pin<Arc<LamellarTeamRT>> {
         self.array.team().clone()
@@ -100,7 +123,7 @@ impl<T: Dist> private::ArrayExecAm<T> for LocalOnlyArray<T> {
     }
 }
 
-impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static>
+impl<T: Dist>
     private::LamellarArrayPrivate<T> for LocalOnlyArray<T>
 {
     fn local_as_ptr(&self) -> *const T {
@@ -120,7 +143,7 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static>
     }
 }
 
-impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> LamellarArray<T>
+impl<T: Dist> LamellarArray<T>
     for LocalOnlyArray<T>
 {
     fn my_pe(&self) -> usize {
@@ -147,7 +170,7 @@ impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> La
     }
 }
 
-impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + std::fmt::Debug + 'static>
+impl<T: Dist +  std::fmt::Debug>
     LocalOnlyArray<T>
 {
     pub fn print(&self) {

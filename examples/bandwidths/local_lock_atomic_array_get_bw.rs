@@ -3,7 +3,7 @@
 /// from a local array into a remote PE.
 /// --------------------------------------------------------------------
 // use lamellar::ActiveMessaging;
-use lamellar::array::{DistributedIterator,Distribution, LocalLockAtomicArray};
+use lamellar::array::{DistributedIterator,Distribution, LocalLockAtomicArray, UnsafeArray,ReadOnlyArray};
 use lamellar::RemoteMemoryRegion;
 use std::time::Instant;
 
@@ -13,6 +13,7 @@ fn main() {
     let world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();
     let num_pes = world.num_pes();
+    
     let array: LocalLockAtomicArray<u8> =
         LocalLockAtomicArray::new(&world, ARRAY_LEN * num_pes, Distribution::Block);
     let data = world.alloc_local_mem_region::<u8>(ARRAY_LEN);

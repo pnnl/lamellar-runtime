@@ -244,15 +244,10 @@ impl<T: Dist + 'static> UnsafeArray<T> {
 
     pub(crate) fn block_on_outstanding(&self, mode: DarcMode) {
         self.wait_all();
-        //need to clear the buffered_ops...
-        // println!("block on outstanding");
-        // self.inner.data.print();
         self.inner
             .data
             .block_on_outstanding(mode, self.inner.data.op_buffers.read().len());
         self.inner.data.op_buffers.write().clear();
-        // println!("after op buf clear");
-        // self.inner.data.print();
     }
 
     pub fn into_read_only(self) -> ReadOnlyArray<T> {
@@ -284,15 +279,23 @@ impl<T: Dist + 'static> UnsafeArray<T> {
     }
 }
 
+// use crate::array::private::LamellarArrayPrivate;
+// impl <T: Dist, A: LamellarArrayPrivate<T>> From<A> for UnsafeArray<T>{
+//     fn from(array: A) -> Self {
+//        let array = array.into_inner();
+//        array.block_on_outstanding(DarcMode::UnsafeArray);
+//        array.create_buffered_ops();
+//        array
+//     }
+// }
+
 impl<T: Dist> From<AtomicArray<T>> for UnsafeArray<T> {
     fn from(array: AtomicArray<T>) -> Self {
-        // // let array = array.into_data();
-        // match array{
-        //     AtomicArray::NativeAtomicArray(array) => array.into()
-
-        //     }
-        // }
-        array.into()
+        // array.into_unsafe()
+        match array {
+            AtomicArray::NativeAtomicArray(array) => UnsafeArray::<T>::from(array),
+            AtomicArray::GenericAtomicArray(array) => UnsafeArray::<T>::from(array),
+        }
     }
 }
 

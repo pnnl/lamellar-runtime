@@ -266,13 +266,11 @@ pub trait DistributedIterator: AmLocal + Clone + 'static {
     }
     fn for_each<F>(&self, op: F) -> Box<dyn DistIterRequest<Output = ()>>
     where
-    // &'static Self: DistributedIterator + 'static,
     F: Fn(Self::Item) + AmLocal  + Clone + 'static, {
         self.array().for_each(self, op)
     }
     fn for_each_async< F, Fut>(&self, op: F) -> Box<dyn DistIterRequest<Output = ()>>
     where
-        // &'static Self: DistributedIterator + 'static,
         F: Fn(Self::Item) -> Fut  + AmLocal  + Clone +  'static,
         Fut: Future<Output = ()> + Send +  'static{
         self.array().for_each_async(self,  op)

@@ -6,11 +6,9 @@ mod iteration;
 pub(crate) mod rdma;
 pub use rdma::{AtomicArrayGet, AtomicArrayPut};
 
-// use crate::array::atomic::buffered_operations::BUFOPS;
-// use crate::array::private::{ArrayExecAm};
-// use crate::array::r#unsafe::UnsafeByteArray;
 use crate::array::generic_atomic::GenericAtomicElement;
 use crate::array::native_atomic::NativeAtomicElement;
+use crate::array::private::LamellarArrayPrivate;
 use crate::array::*;
 // use crate::darc::{Darc, DarcMode};
 use crate::lamellar_team::IntoLamellarTeam;
@@ -447,6 +445,21 @@ impl<T: Dist + 'static> From<UnsafeArray<T>> for AtomicArray<T> {
         } else {
             GenericAtomicArray::from(array).into()
         }
+    }
+}
+
+impl<T: Dist + 'static> From<LocalOnlyArray<T>> for AtomicArray<T> {
+    fn from(array: LocalOnlyArray<T>) -> Self {
+        unsafe { array.into_inner().into() }
+    }
+}
+impl<T: Dist + 'static> From<ReadOnlyArray<T>> for AtomicArray<T> {
+    fn from(array: ReadOnlyArray<T>) -> Self {
+        unsafe { array.into_inner().into() }
+    }
+}impl<T: Dist + 'static> From<LocalLockAtomicArray<T>> for AtomicArray<T> {
+    fn from(array: LocalLockAtomicArray<T>) -> Self {
+        unsafe { array.into_inner().into() }
     }
 }
 

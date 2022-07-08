@@ -160,6 +160,10 @@ path = "tests/array/atomic_ops/swap_test.rs"
 name = "compare_exchange_test"
 path = "tests/array/atomic_ops/compare_exchange_test.rs"
 
+[[example]]
+name = "array_into_test"
+path = "tests/array/array_into_test.rs"
+
 ##------------ Bandwidth Examples -----------------##
 
 [[example]]

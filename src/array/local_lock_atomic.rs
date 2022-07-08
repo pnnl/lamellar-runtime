@@ -266,6 +266,7 @@ impl<T: Dist + 'static> LocalLockAtomicArray<T> {
     }
 }
 
+
 impl<T: Dist> From<UnsafeArray<T>> for LocalLockAtomicArray<T> {
     fn from(array: UnsafeArray<T>) -> Self {
         array.block_on_outstanding(DarcMode::LocalLockAtomicArray);
@@ -284,6 +285,24 @@ impl<T: Dist> From<UnsafeArray<T>> for LocalLockAtomicArray<T> {
             lock: lock,
             array: array,
         }
+    }
+}
+
+impl <T: Dist> From<LocalOnlyArray<T>> for LocalLockAtomicArray<T> {
+    fn from(array: LocalOnlyArray<T>) -> Self {
+        unsafe { array.into_inner().into() }
+    }
+}
+
+impl <T: Dist> From<AtomicArray<T>> for LocalLockAtomicArray<T> {
+    fn from(array: AtomicArray<T>) -> Self {
+        unsafe { array.into_inner().into() }
+    }
+}
+
+impl <T: Dist> From<ReadOnlyArray<T>> for LocalLockAtomicArray<T> {
+    fn from(array: ReadOnlyArray<T>) -> Self {
+        unsafe { array.into_inner().into() }
     }
 }
 
