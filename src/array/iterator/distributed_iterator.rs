@@ -138,8 +138,15 @@ where
     fn exec(&self) -> Vec<<I::Item as Future>::Output> {
         let mut iter = self.data.init(self.start_i, self.end_i - self.start_i);
         let mut vec = Vec::new();
+        let mut i = self.start_i;
         while let Some(elem) = iter.next() {
-            vec.push(elem.await);
+            let res = elem.await;
+            vec.push(res);
+            println!(
+                "here! {:?} {:?} {:?} val: {:?}",
+                i, self.start_i, self.end_i, res
+            );
+            i += 1;
         }
         vec
     }
@@ -179,6 +186,7 @@ pub struct DistIterCollectHandle<T: Dist, A: From<UnsafeArray<T>> + AmLocal> {
 
 impl<T: Dist, A: From<UnsafeArray<T>> + AmLocal> DistIterCollectHandle<T, A> {
     fn create_array(&self, local_vals: &Vec<T>) -> A {
+        self.team.barrier();
         let local_sizes =
             UnsafeArray::<usize>::new(self.team.clone(), self.team.num_pes, Distribution::Block);
         unsafe {
@@ -253,7 +261,7 @@ pub trait DistIteratorLauncher {
     ) -> Box<dyn DistIterRequest<Output = A>>
     where
         I: DistributedIterator + 'static,
-        I::Item: Future<Output = B> + Send  + 'static,
+        I::Item: Future<Output = B> + Send + 'static,
         B: Dist,
         A: From<UnsafeArray<B>> + AmLocal + 'static;
 
@@ -339,7 +347,7 @@ pub trait DistributedIterator: AmLocal + Clone + 'static {
     where
         // &'static Self: DistributedIterator + 'static,
         T: Dist,
-        Self::Item: Future<Output = T> + Send  + 'static,
+        Self::Item: Future<Output = T> + Send + 'static,
         A: From<UnsafeArray<<Self::Item as Future>::Output>> + AmLocal + 'static,
     {
         self.array().collect_async(self, d)
