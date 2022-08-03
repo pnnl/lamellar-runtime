@@ -210,8 +210,8 @@ impl LamellaeRDMA for Local {
 }
 
 //#[prof]
-impl Drop for Local {
-    fn drop(&mut self) {
-        trace!("[{:?}] RofiLamellae Dropping", 0);
-    }
-}
+// impl Drop for Local {
+//     fn drop(&mut self) {
+//         trace!("[{:?}] RofiLamellae Dropping", 0);
+//     }
+// }

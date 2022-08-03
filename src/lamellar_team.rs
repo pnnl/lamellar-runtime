@@ -8,7 +8,7 @@ use crate::memregion::{
     local::LocalMemoryRegion, shared::SharedMemoryRegion, Dist, LamellarMemoryRegion, MemoryRegion,
     RemoteMemoryRegion,
 };
-use crate::scheduler::{Scheduler, SchedulerQueue, ReqId};
+use crate::scheduler::{ReqId, Scheduler, SchedulerQueue};
 #[cfg(feature = "nightly")]
 use crate::utils::ser_closure;
 
@@ -18,16 +18,16 @@ use std::hash::{Hash, Hasher};
 // use std::any;
 use core::pin::Pin;
 use lamellar_prof::*;
+use parking_lot::Mutex;
 use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::marker::PhantomPinned;
-use std::sync::atomic::{AtomicUsize, AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Weak};
 use std::time::{Duration, Instant};
-use parking_lot::Mutex;
 
-use std::marker::PhantomData;
 use std::cell::Cell;
+use std::marker::PhantomData;
 
 // to manage team lifetimes properly we need a seperate user facing handle that contains a strong link to the inner team.
 // this outer handle has a lifetime completely tied to whatever the user wants
@@ -40,7 +40,7 @@ use std::cell::Cell;
 pub struct LamellarTeam {
     pub(crate) world: Option<Arc<LamellarTeam>>,
     pub(crate) team: Pin<Arc<LamellarTeamRT>>,
-    pub(crate) teams: Arc<RwLock<HashMap<u64, Weak<LamellarTeamRT>>>>,
+    // pub(crate) teams: Arc<RwLock<HashMap<u64, Weak<LamellarTeamRT>>>>,
     pub(crate) am_team: bool, //need a reference to this so we can clean up after dropping the team
                               // pub(crate) alloc_mutex: Arc<RwLock<Option<GlobalRwDarc<()>>>>, // in world drop set to none
                               // pub(crate) alloc_barrier: Arc<RwLock<Option<Darc<Barrier>>>>, // in world drop set to none
@@ -51,7 +51,7 @@ impl LamellarTeam {
     pub(crate) fn new(
         world: Option<Arc<LamellarTeam>>,
         team: Pin<Arc<LamellarTeamRT>>,
-        teams: Arc<RwLock<HashMap<u64, Weak<LamellarTeamRT>>>>,
+        // teams: Arc<RwLock<HashMap<u64, Weak<LamellarTeamRT>>>>,
         am_team: bool,
     ) -> Arc<LamellarTeam> {
         // unsafe{
@@ -63,7 +63,7 @@ impl LamellarTeam {
         let the_team = Arc::new(LamellarTeam {
             world,
             team,
-            teams,
+            // teams,
             am_team,
         });
         // unsafe{
@@ -112,12 +112,7 @@ impl LamellarTeam {
         if let Some(team) =
             LamellarTeamRT::create_subteam_from_arch(world.team.clone(), parent.team.clone(), arch)
         {
-            let team = LamellarTeam::new(
-                Some(world),
-                team.clone(),
-                parent.teams.clone(),
-                parent.am_team,
-            );
+            let team = LamellarTeam::new(Some(world), team.clone(), parent.am_team);
             // parent
             //     .teams
             //     .write()
@@ -166,28 +161,24 @@ impl ActiveMessaging for Arc<LamellarTeam> {
         self.team.barrier();
     }
 
-    fn exec_am_all<F>(&self, am: F) -> Box<dyn LamellarMultiRequest<Output = F::Output>  >
+    fn exec_am_all<F>(&self, am: F) -> Box<dyn LamellarMultiRequest<Output = F::Output>>
     where
         F: RemoteActiveMessage + LamellarAM + Serde + AmDist,
     {
-        trace!("[{:?}] team exec am all request", self.team.world_pe);
+        // trace!("[{:?}] team exec am all request", self.team.world_pe);
         self.team.exec_am_all_tg(am, None)
     }
 
-    fn exec_am_pe<F>(
-        &self,
-        pe: usize,
-        am: F,
-    ) -> Box<dyn LamellarRequest<Output = F::Output>  >
+    fn exec_am_pe<F>(&self, pe: usize, am: F) -> Box<dyn LamellarRequest<Output = F::Output>>
     where
         F: RemoteActiveMessage + LamellarAM + Serde + AmDist,
     {
         self.team.exec_am_pe_tg(pe, am, None)
     }
 
-    fn exec_am_local<F>(&self, am: F) -> Box<dyn LamellarRequest<Output = F::Output>  >
+    fn exec_am_local<F>(&self, am: F) -> Box<dyn LamellarRequest<Output = F::Output>>
     where
-        F: LamellarActiveMessage + LocalAM   + 'static,
+        F: LamellarActiveMessage + LocalAM + 'static,
     {
         self.team.exec_am_local_tg(am, None)
     }
@@ -410,9 +401,10 @@ impl LamellarTeamRT {
 
         // }
         unsafe {
-            let pinned_team = Pin::into_inner_unchecked(team.clone()).clone();
-            let team_ptr = Arc::into_raw(pinned_team);
-            // std::ptr::copy_nonoverlapping(&(&team as *const Pin<Arc<LamellarTeamRT>>), team.remote_ptr_addr as *mut (*const Pin<Arc<LamellarTeamRT>>), 1);
+            let pinned_team = Pin::into_inner_unchecked(team.clone()).clone(); //get access to inner arc (it will stay pinned)
+            let team_ptr = Arc::into_raw(pinned_team); //we consume the arc to get access to raw ptr (this ensures we wont drop the team until destroy is called)
+                                                       // std::ptr::copy_nonoverlapping(&(&team as *const Pin<Arc<LamellarTeamRT>>), team.remote_ptr_addr as *mut (*const Pin<Arc<LamellarTeamRT>>), 1);
+                                                       // we are copying the address of the team into the remote ptr address, because of the two previous calls, we ensure its location is pinned and its lifetime will live until the team is destroyed.
             std::ptr::copy_nonoverlapping(
                 &team_ptr,
                 team.remote_ptr_addr as *mut *const LamellarTeamRT,
@@ -421,12 +413,26 @@ impl LamellarTeamRT {
             // println!{"{:?} {:?} {:?} {:?}",&team_ptr,team_ptr, (team.remote_ptr_addr as *mut (*const LamellarTeamRT)).as_ref(), (*(team.remote_ptr_addr as *mut (*const LamellarTeamRT))).as_ref()};
         }
 
+        // println!("sechduler_new: {:?}", Arc::strong_count(&team.scheduler));
+        // println!("lamellae: {:?}", Arc::strong_count(&team.lamellae));
+        // println!("arch: {:?}", Arc::strong_count(&team.arch));
+        // println!(
+        //     "world_counters: {:?}",
+        //     Arc::strong_count(&team.world_counters)
+        // );
+
         team.barrier.barrier();
         team
     }
 
     pub(crate) fn destroy(&self) {
-        // println!("destroying team? {:?}",self.mem_regions.read().len());
+        // println!("destroying team? {:?}", self.mem_regions.read().len());
+        // println!(
+        //     "in team destroy mype: {:?} cnt: {:?} {:?}",
+        //     self.world_pe,
+        //     self.team_counters.send_req_cnt.load(Ordering::SeqCst),
+        //     self.team_counters.outstanding_reqs.load(Ordering::SeqCst),
+        // );
         // for _lmr in self.mem_regions.read().iter() {
         //     // println!("lmr {:?}",_lmr);
         //     //TODO: i have a gut feeling we might have an issue if a mem region was destroyed on one node, but not another
@@ -458,6 +464,12 @@ impl LamellarTeamRT {
         // println!(
         //     "world_counters: {:?}",
         //     Arc::strong_count(&self.world_counters)
+        // );
+        // println!(
+        //     "in team destroy mype: {:?} cnt: {:?} {:?}",
+        //     self.world_pe,
+        //     self.team_counters.send_req_cnt.load(Ordering::SeqCst),
+        //     self.team_counters.outstanding_reqs.load(Ordering::SeqCst),
         // );
         // println!("team destroyed")
     }
@@ -743,7 +755,7 @@ impl LamellarTeamRT {
     pub fn exec_am_all<F>(
         self: &Pin<Arc<LamellarTeamRT>>,
         am: F,
-    ) -> Box<dyn LamellarMultiRequest<Output = F::Output>  >
+    ) -> Box<dyn LamellarMultiRequest<Output = F::Output>>
     where
         F: RemoteActiveMessage + LamellarAM + AmDist,
     {
@@ -754,12 +766,12 @@ impl LamellarTeamRT {
         self: &Pin<Arc<LamellarTeamRT>>,
         am: F,
         task_group_cnts: Option<Arc<AMCounters>>,
-    ) -> Box<dyn LamellarMultiRequest<Output = F::Output>  >
+    ) -> Box<dyn LamellarMultiRequest<Output = F::Output>>
     where
         F: RemoteActiveMessage + LamellarAM + AmDist,
     {
         // println!("team exec am all");
-        trace!("[{:?}] team exec am all request", self.world_pe);
+        // trace!("[{:?}] team exec am all request", self.world_pe);
         let tg_outstanding_reqs = match task_group_cnts {
             Some(task_group_cnts) => {
                 task_group_cnts.add_send_req(self.num_pes);
@@ -767,7 +779,7 @@ impl LamellarTeamRT {
             }
             None => None,
         };
-        let req =Arc::new(LamellarMultiRequestHandleInner{
+        let req = Arc::new(LamellarMultiRequestHandleInner {
             cnt: AtomicUsize::new(self.num_pes),
             arch: self.arch.clone(),
             data: Mutex::new(HashMap::new()),
@@ -776,15 +788,17 @@ impl LamellarTeamRT {
             tg_outstanding_reqs: tg_outstanding_reqs,
             user_handle: AtomicBool::new(true),
         });
-        let req_result = Arc::new(LamellarRequestResult{
-            req: req.clone(),
-        });
+        let req_result = Arc::new(LamellarRequestResult { req: req.clone() });
         let req_ptr = Arc::into_raw(req_result);
-        for _ in 0..(self.num_pes-1) { // -1 because of the arc we turned into raw 
-            unsafe {Arc::increment_strong_count(req_ptr)} //each pe will return a result (which we turn back into an arc)
+        for _ in 0..(self.num_pes - 1) {
+            // -1 because of the arc we turned into raw
+            unsafe { Arc::increment_strong_count(req_ptr) } //each pe will return a result (which we turn back into an arc)
         }
         // println!("strong count recv: {:?} ",Arc::strong_count(&req));
-        let id = ReqId{id: req_ptr as usize, sub_id: 0};
+        let id = ReqId {
+            id: req_ptr as usize,
+            sub_id: 0,
+        };
 
         self.world_counters.add_send_req(self.num_pes);
         self.team_counters.add_send_req(self.num_pes);
@@ -803,11 +817,11 @@ impl LamellarTeamRT {
             self.lamellae.clone(),
             world,
             self.clone(),
-            self.remote_ptr_addr as u64
+            self.remote_ptr_addr as u64,
         );
-        Box::new(LamellarMultiRequestHandle{
+        Box::new(LamellarMultiRequestHandle {
             inner: req,
-            _phantom: PhantomData
+            _phantom: PhantomData,
         })
     }
 
@@ -815,20 +829,19 @@ impl LamellarTeamRT {
         self: &Pin<Arc<LamellarTeamRT>>,
         pe: usize,
         am: F,
-    ) -> Box<dyn LamellarRequest<Output = F::Output>  >
+    ) -> Box<dyn LamellarRequest<Output = F::Output>>
     where
         F: RemoteActiveMessage + LamellarAM + AmDist,
     {
         self.exec_am_pe_tg(pe, am, None)
     }
-    
 
     pub(crate) fn exec_am_pe_tg<F>(
         self: &Pin<Arc<LamellarTeamRT>>,
         pe: usize,
         am: F,
         task_group_cnts: Option<Arc<AMCounters>>,
-    ) -> Box<dyn LamellarRequest<Output = F::Output>  >
+    ) -> Box<dyn LamellarRequest<Output = F::Output>>
     where
         F: RemoteActiveMessage + LamellarAM + AmDist,
     {
@@ -843,7 +856,7 @@ impl LamellarTeamRT {
         };
         assert!(pe < self.arch.num_pes());
 
-        let req =Arc::new(LamellarRequestHandleInner{
+        let req = Arc::new(LamellarRequestHandleInner {
             ready: AtomicBool::new(false),
             data: Cell::new(None),
             team_outstanding_reqs: self.team_counters.outstanding_reqs.clone(),
@@ -851,17 +864,17 @@ impl LamellarTeamRT {
             tg_outstanding_reqs: tg_outstanding_reqs,
             user_handle: AtomicBool::new(true),
         });
-        let req_result = Arc::new(LamellarRequestResult{
-            req: req.clone(),
-        });
+        let req_result = Arc::new(LamellarRequestResult { req: req.clone() });
         let req_ptr = Arc::into_raw(req_result);
         // Arc::increment_strong_count(req_ptr); //we would need to do this for the exec_all command
-        let id = ReqId{id: req_ptr as usize, sub_id: 0};
+        let id = ReqId {
+            id: req_ptr as usize,
+            sub_id: 0,
+        };
         self.world_counters.add_send_req(1);
         self.team_counters.add_send_req(1);
 
         // println!("req_id: {:?}", id);
-        
         let world = if let Some(world) = &self.world {
             world.clone()
         } else {
@@ -877,12 +890,12 @@ impl LamellarTeamRT {
             self.lamellae.clone(),
             world,
             self.clone(),
-            self.remote_ptr_addr as u64
+            self.remote_ptr_addr as u64,
         );
-        
-        Box::new(LamellarRequestHandle{
+
+        Box::new(LamellarRequestHandle {
             inner: req,
-            _phantom: PhantomData
+            _phantom: PhantomData,
         })
     }
 
@@ -891,7 +904,7 @@ impl LamellarTeamRT {
         pe: usize,
         am: LamellarArcAm,
         task_group_cnts: Option<Arc<AMCounters>>,
-    ) -> Box<dyn LamellarRequest<Output = F>  >
+    ) -> Box<dyn LamellarRequest<Output = F>>
     where
         F: AmDist,
     {
@@ -904,7 +917,7 @@ impl LamellarTeamRT {
             None => None,
         };
         assert!(pe < self.arch.num_pes());
-        let req =Arc::new(LamellarRequestHandleInner{
+        let req = Arc::new(LamellarRequestHandleInner {
             ready: AtomicBool::new(false),
             data: Cell::new(None),
             team_outstanding_reqs: self.team_counters.outstanding_reqs.clone(),
@@ -912,11 +925,12 @@ impl LamellarTeamRT {
             tg_outstanding_reqs: tg_outstanding_reqs,
             user_handle: AtomicBool::new(true),
         });
-        let req_result = Arc::new(LamellarRequestResult{
-            req: req.clone(),
-        });
+        let req_result = Arc::new(LamellarRequestResult { req: req.clone() });
         let req_ptr = Arc::into_raw(req_result);
-        let id = ReqId{id: req_ptr as usize, sub_id: 0};
+        let id = ReqId {
+            id: req_ptr as usize,
+            sub_id: 0,
+        };
         self.world_counters.add_send_req(1);
         self.team_counters.add_send_req(1);
         let world = if let Some(world) = &self.world {
@@ -933,21 +947,21 @@ impl LamellarTeamRT {
             self.lamellae.clone(),
             world,
             self.clone(),
-            self.remote_ptr_addr as u64
+            self.remote_ptr_addr as u64,
         );
         prof_end!(sub);
-        Box::new(LamellarRequestHandle{
+        Box::new(LamellarRequestHandle {
             inner: req,
-            _phantom: PhantomData
+            _phantom: PhantomData,
         })
     }
 
     pub fn exec_am_local<F>(
         self: &Pin<Arc<LamellarTeamRT>>,
         am: F,
-    ) -> Box<dyn LamellarRequest<Output = F::Output>  >
+    ) -> Box<dyn LamellarRequest<Output = F::Output>>
     where
-        F: LamellarActiveMessage + LocalAM  +  'static,
+        F: LamellarActiveMessage + LocalAM + 'static,
     {
         self.exec_am_local_tg(am, None)
     }
@@ -956,9 +970,9 @@ impl LamellarTeamRT {
         self: &Pin<Arc<LamellarTeamRT>>,
         am: F,
         task_group_cnts: Option<Arc<AMCounters>>,
-    ) -> Box<dyn LamellarRequest<Output = F::Output>  >
+    ) -> Box<dyn LamellarRequest<Output = F::Output>>
     where
-        F: LamellarActiveMessage + LocalAM  +  'static,
+        F: LamellarActiveMessage + LocalAM + 'static,
     {
         // println!("team exec am local");
         prof_start!(pre);
@@ -971,7 +985,7 @@ impl LamellarTeamRT {
             }
             None => None,
         };
-        let req =Arc::new(LamellarLocalRequestHandleInner{
+        let req = Arc::new(LamellarLocalRequestHandleInner {
             ready: AtomicBool::new(false),
             data: Cell::new(None),
             team_outstanding_reqs: self.team_counters.outstanding_reqs.clone(),
@@ -979,11 +993,12 @@ impl LamellarTeamRT {
             tg_outstanding_reqs: tg_outstanding_reqs,
             user_handle: AtomicBool::new(true),
         });
-        let req_result = Arc::new(LamellarRequestResult{
-            req: req.clone(),
-        });
+        let req_result = Arc::new(LamellarRequestResult { req: req.clone() });
         let req_ptr = Arc::into_raw(req_result);
-        let id = ReqId{id: req_ptr as usize, sub_id: 0};
+        let id = ReqId {
+            id: req_ptr as usize,
+            sub_id: 0,
+        };
         prof_end!(req);
 
         prof_start!(counters);
@@ -1008,12 +1023,12 @@ impl LamellarTeamRT {
             self.lamellae.clone(),
             world,
             self.clone(),
-            self.remote_ptr_addr as u64
+            self.remote_ptr_addr as u64,
         );
         prof_end!(sub);
-        Box::new(LamellarLocalRequestHandle{
+        Box::new(LamellarLocalRequestHandle {
             inner: req,
-            _phantom: PhantomData
+            _phantom: PhantomData,
         })
     }
     /// allocate a shared memory region from the asymmetric heap
@@ -1061,15 +1076,15 @@ impl LamellarTeamRT {
 // impl RemoteClosures for LamellarTeamRT {
 //     fn exec_closure_all<
 //         F: FnOnce() -> T
-//             
-//             
+//
+//
 //             + serde::ser::Serialize
 //             + serde::de::DeserializeOwned
 //             + std::clone::Clone
 //             + 'static,
 //         T: std::any::Any
-//             
-//             
+//
+//
 //             + serde::ser::Serialize
 //             + serde::de::DeserializeOwned
 //             + std::clone::Clone,
@@ -1109,15 +1124,15 @@ impl LamellarTeamRT {
 
 //     fn exec_closure_pe<
 //         F: FnOnce() -> T
-//             
-//             
+//
+//
 //             + serde::ser::Serialize
 //             + serde::de::DeserializeOwned
 //             + std::clone::Clone
 //             + 'static,
 //         T: std::any::Any
-//             
-//             
+//
+//
 //             + serde::ser::Serialize
 //             + serde::de::DeserializeOwned
 //             + std::clone::Clone,
@@ -1194,11 +1209,14 @@ impl LamellarTeamRT {
 //#[prof]
 impl Drop for LamellarTeamRT {
     fn drop(&mut self) {
-        // println!("sechduler_new: {:?}",Arc::strong_count(&self.scheduler));
-        // println!("lamellae: {:?}",Arc::strong_count(&self.lamellae));
-        // println!("arch: {:?}",Arc::strong_count(&self.arch));
-        // println!("world_counters: {:?}",Arc::strong_count(&self.world_counters));
-        // println!("removing {:?} ",self.team_hash);
+        println!("sechduler_new: {:?}", Arc::strong_count(&self.scheduler));
+        println!("lamellae: {:?}", Arc::strong_count(&self.lamellae));
+        println!("arch: {:?}", Arc::strong_count(&self.arch));
+        println!(
+            "world_counters: {:?}",
+            Arc::strong_count(&self.world_counters)
+        );
+        println!("removing {:?} ", self.team_hash);
         self.teams.write().remove(&(self.remote_ptr_addr as u64));
         self.lamellae.free(self.remote_ptr_addr);
         println!("LamellarTeamRT dropped {:?}", self.team_hash);
@@ -1208,7 +1226,7 @@ impl Drop for LamellarTeamRT {
 //#[prof]
 impl Drop for LamellarTeam {
     fn drop(&mut self) {
-        // println!("team handle dropping {:?}",self.team.team_hash);
+        // println!("team handle dropping {:?}", self.team.team_hash);
         if !self.am_team {
             //we only care about when the user handle gets dropped (not the team handles that are created for use in an active message)
             if let Some(parent) = &self.team.parent {
@@ -1233,6 +1251,25 @@ impl Drop for LamellarTeam {
                 // println!("after drop barrier");
                 // println!("removing {:?} ",self.team.id);
                 parent.sub_teams.write().remove(&self.team.id);
+            } else {
+                println!("world team");
+                println!(
+                    "sechduler_new: {:?}",
+                    Arc::strong_count(&self.team.scheduler)
+                );
+                println!("lamellae: {:?}", Arc::strong_count(&self.team.lamellae));
+                println!("arch: {:?}", Arc::strong_count(&self.team.arch));
+                println!(
+                    "world_counters: {:?}",
+                    Arc::strong_count(&self.team.world_counters)
+                );
+                println!("removing {:?} ", self.team.team_hash);
+                let team_ptr = self.team.remote_ptr_addr as *mut *const LamellarTeamRT;
+                unsafe {
+                    let arc_team = Arc::from_raw(*team_ptr);
+                    println!("arc_team: {:?}", Arc::strong_count(&arc_team));
+                    Pin::new_unchecked(arc_team); //allows us to drop the inner team
+                }
             }
         }
         // else{

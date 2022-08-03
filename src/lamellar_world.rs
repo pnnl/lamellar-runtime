@@ -1,7 +1,7 @@
 use crate::active_messaging::*;
 use crate::lamellae::{create_lamellae, Backend, Lamellae, LamellaeComm, LamellaeInit};
 use crate::lamellar_arch::LamellarArch;
-use crate::lamellar_request::{LamellarRequest, LamellarMultiRequest};
+use crate::lamellar_request::{LamellarMultiRequest, LamellarRequest};
 use crate::lamellar_team::{LamellarTeam, LamellarTeamRT};
 use crate::memregion::{
     local::LocalMemoryRegion, shared::SharedMemoryRegion, Dist, RemoteMemoryRegion,
@@ -23,7 +23,7 @@ lazy_static! {
 pub struct LamellarWorld {
     team: Arc<LamellarTeam>,
     pub(crate) team_rt: std::pin::Pin<Arc<LamellarTeamRT>>,
-    teams: Arc<RwLock<HashMap<u64, Weak<LamellarTeamRT>>>>,
+    // teams: Arc<RwLock<HashMap<u64, Weak<LamellarTeamRT>>>>,
     _counters: Arc<AMCounters>,
     my_pe: usize,
     num_pes: usize,
@@ -38,26 +38,22 @@ impl ActiveMessaging for LamellarWorld {
     fn barrier(&self) {
         self.team.barrier();
     }
-    fn exec_am_all<F>(&self, am: F) -> Box<dyn LamellarMultiRequest<Output = F::Output>  >
+    fn exec_am_all<F>(&self, am: F) -> Box<dyn LamellarMultiRequest<Output = F::Output>>
     where
         F: RemoteActiveMessage + LamellarAM + Serde + AmDist,
     {
         self.team.exec_am_all(am)
     }
-    fn exec_am_pe<F>(
-        &self,
-        pe: usize,
-        am: F,
-    ) -> Box<dyn LamellarRequest<Output = F::Output>  >
+    fn exec_am_pe<F>(&self, pe: usize, am: F) -> Box<dyn LamellarRequest<Output = F::Output>>
     where
         F: RemoteActiveMessage + LamellarAM + Serde + AmDist,
     {
         assert!(pe < self.num_pes(), "invalid pe: {:?}", pe);
         self.team.exec_am_pe(pe, am)
     }
-    fn exec_am_local<F>(&self, am: F) -> Box<dyn LamellarRequest<Output = F::Output>  >
+    fn exec_am_local<F>(&self, am: F) -> Box<dyn LamellarRequest<Output = F::Output>>
     where
-        F: LamellarActiveMessage + LocalAM   + 'static,
+        F: LamellarActiveMessage + LocalAM + 'static,
     {
         self.team.exec_am_local(am)
     }
@@ -71,15 +67,15 @@ impl ActiveMessaging for LamellarWorld {
 // impl RemoteClosures for LamellarWorld {
 //     fn exec_closure_all<
 //         F: FnOnce() -> T
-//             
-//             
+//
+//
 //             + serde::ser::Serialize
 //             + serde::de::DeserializeOwned
 //             + std::clone::Clone
 //             + 'static,
 //         T: std::any::Any
-//             
-//             
+//
+//
 //             + serde::ser::Serialize
 //             + serde::de::DeserializeOwned
 //             + std::clone::Clone,
@@ -94,15 +90,15 @@ impl ActiveMessaging for LamellarWorld {
 //     #[cfg(feature = "nightly")]
 //     fn exec_closure_pe<
 //         F: FnOnce() -> T
-//             
-//             
+//
+//
 //             + serde::ser::Serialize
 //             + serde::de::DeserializeOwned
 //             + std::clone::Clone
 //             + 'static,
 //         T: std::any::Any
-//             
-//             
+//
+//
 //             + serde::ser::Serialize
 //             + serde::de::DeserializeOwned
 //             + std::clone::Clone,
@@ -230,7 +226,7 @@ impl Clone for LamellarWorld {
         LamellarWorld {
             team: self.team.clone(),
             team_rt: self.team_rt.clone(),
-            teams: self.teams.clone(),
+            // teams: self.teams.clone(),
             _counters: self._counters.clone(),
             my_pe: self.my_pe.clone(),
             num_pes: self.num_pes.clone(),
@@ -250,13 +246,17 @@ impl Drop for LamellarWorld {
             self.team_rt.destroy();
             LAMELLAES.write().clear();
 
-            // println!("team: {:?} ",Arc::strong_count(&self.team));
-            // println!("team_rt: {:?} {:?}",&self.team_rt.team_hash,Arc::strong_count(&self.team_rt));
+            // println!("team: {:?} ", Arc::strong_count(&self.team));
+            // println!(
+            //     "team_rt: {:?} {:?}",
+            //     &self.team_rt.team_hash,
+            //     Arc::strong_count(&self.team_rt)
+            // );
             // let teams = self.teams.read();
-            //     for (k,team) in teams.iter(){
-            //         println!("team map: {:?} {:?}",k,Weak::strong_count(&team));
-            //     }
-            // println!("counters: {:?}",Arc::strong_count(&self.counters));
+            // for (k, team) in teams.iter() {
+            // println!("team map: {:?} {:?}", k, Weak::strong_count(&team));
+            // }
+            // println!("counters: {:?}", Arc::strong_count(&self._counters));
 
             fini_prof!();
         }
@@ -275,7 +275,7 @@ pub struct LamellarWorldBuilder {
 impl LamellarWorldBuilder {
     pub fn new() -> LamellarWorldBuilder {
         // simple_logger::init().unwrap();
-        trace!("New world builder");
+        // trace!("New world builder");
         LamellarWorldBuilder {
             primary_lamellae: Default::default(),
             // secondary_lamellae: HashSet::new(),
@@ -324,9 +324,9 @@ impl LamellarWorldBuilder {
         );
 
         let world = LamellarWorld {
-            team: LamellarTeam::new(None, team_rt.clone(), teams.clone(), false),
+            team: LamellarTeam::new(None, team_rt.clone(), false),
             team_rt: team_rt.clone(),
-            teams: teams.clone(),
+            // teams: teams.clone(),
             _counters: counters,
             my_pe: my_pe,
             num_pes: num_pes,

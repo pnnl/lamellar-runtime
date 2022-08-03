@@ -72,10 +72,10 @@ impl<T: Dist> ReadOnlyArray<T> {
         &self,
         index: usize,
         buf: U,
-    ) -> Box<dyn LamellarArrayRequest<Output = ()>  > {
+    ) -> Box<dyn LamellarArrayRequest<Output = ()>> {
         self.array.get(index, buf)
     }
-    pub fn iat(&self, index: usize) -> Box<dyn LamellarArrayRequest<Output = T>  > {
+    pub fn iat(&self, index: usize) -> Box<dyn LamellarArrayRequest<Output = T>> {
         self.array.at(index)
     }
     pub fn local_as_slice(&self) -> &[T] {
@@ -152,16 +152,16 @@ impl<T: Dist> From<ReadOnlyByteArray> for ReadOnlyArray<T> {
 }
 
 impl<T: Dist + serde::Serialize + serde::de::DeserializeOwned + 'static> ReadOnlyArray<T> {
-    pub fn reduce(&self, op: &str) -> Box<dyn LamellarRequest<Output = T>  > {
+    pub fn reduce(&self, op: &str) -> Box<dyn LamellarRequest<Output = T>> {
         self.array.reduce(op)
     }
-    pub fn sum(&self) -> Box<dyn LamellarRequest<Output = T>  > {
+    pub fn sum(&self) -> Box<dyn LamellarRequest<Output = T>> {
         self.array.reduce("sum")
     }
-    pub fn prod(&self) -> Box<dyn LamellarRequest<Output = T>  > {
+    pub fn prod(&self) -> Box<dyn LamellarRequest<Output = T>> {
         self.array.reduce("prod")
     }
-    pub fn max(&self) -> Box<dyn LamellarRequest<Output = T>  > {
+    pub fn max(&self) -> Box<dyn LamellarRequest<Output = T>> {
         self.array.reduce("max")
     }
 }
@@ -182,7 +182,7 @@ impl<T: Dist> DistIteratorLauncher for ReadOnlyArray<T> {
     {
         self.array.for_each(iter, op)
     }
-    fn for_each_async<I, F, Fut>(&self, iter: &I, op: F) ->  Box<dyn DistIterRequest<Output = ()>>
+    fn for_each_async<I, F, Fut>(&self, iter: &I, op: F) -> Box<dyn DistIterRequest<Output = ()>>
     where
         I: DistributedIterator + 'static,
         F: Fn(I::Item) -> Fut + AmLocal + Clone + 'static,
@@ -190,13 +190,26 @@ impl<T: Dist> DistIteratorLauncher for ReadOnlyArray<T> {
     {
         self.array.for_each_async(iter, op)
     }
-    fn collect<I,A>(&self, iter: &I,d: Distribution) -> Box<dyn DistIterRequest<Output = A>>
-        where 
+    fn collect<I, A>(&self, iter: &I, d: Distribution) -> Box<dyn DistIterRequest<Output = A>>
+    where
         I: DistributedIterator + 'static,
         I::Item: Dist,
         A: From<UnsafeArray<I::Item>> + AmLocal + 'static,
     {
-        self.array.collect(iter,d)
+        self.array.collect(iter, d)
+    }
+    fn collect_async<I, A, B>(
+        &self,
+        iter: &I,
+        d: Distribution,
+    ) -> Box<dyn DistIterRequest<Output = A>>
+    where
+        I: DistributedIterator + 'static,
+        I::Item: Future<Output = B> + Send + 'static,
+        B: Dist,
+        A: From<UnsafeArray<B>> + AmLocal + 'static,
+    {
+        self.array.collect_async(iter, d)
     }
     fn team(&self) -> Pin<Arc<LamellarTeamRT>> {
         self.array.team().clone()
@@ -262,10 +275,10 @@ impl<T: Dist + 'static> LamellarArrayGet<T> for ReadOnlyArray<T> {
         &self,
         index: usize,
         buf: U,
-    ) -> Box<dyn LamellarArrayRequest<Output = ()>  > {
+    ) -> Box<dyn LamellarArrayRequest<Output = ()>> {
         self.get(index, buf)
     }
-    fn at(&self, index: usize) -> Box<dyn LamellarArrayRequest<Output = T>  > {
+    fn at(&self, index: usize) -> Box<dyn LamellarArrayRequest<Output = T>> {
         self.array.at(index)
     }
 }

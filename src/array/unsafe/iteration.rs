@@ -51,7 +51,7 @@ impl<T: Dist> DistIteratorLauncher for UnsafeArray<T> {
     fn for_each<I, F>(&self, iter: &I, op: F) -> Box<dyn DistIterRequest<Output = ()>>
     where
         I: DistributedIterator + 'static,
-        F: Fn(I::Item) + AmLocal  + Clone + 'static,
+        F: Fn(I::Item) + AmLocal + Clone + 'static,
     {
         let mut reqs = Vec::new();
         if let Ok(_my_pe) = self.inner.data.team.team_pe_id() {
@@ -71,19 +71,20 @@ impl<T: Dist> DistIteratorLauncher for UnsafeArray<T> {
                     data: iter.clone(),
                     start_i: start_i,
                     end_i: end_i,
-                },));
+                }));
                 worker += 1;
             }
         }
-        Box::new(DistIterForEachHandle{ //TODO actually hold the reqs from the exec_am_local...
-            reqs: reqs
+        Box::new(DistIterForEachHandle {
+            //TODO actually hold the reqs from the exec_am_local...
+            reqs: reqs,
         })
     }
     fn for_each_async<I, F, Fut>(&self, iter: &I, op: F) -> Box<dyn DistIterRequest<Output = ()>>
     where
         I: DistributedIterator + 'static,
-        F: Fn(I::Item) -> Fut + AmLocal + Clone +  'static,
-        Fut: Future<Output = ()> + Send +  'static,
+        F: Fn(I::Item) -> Fut + AmLocal + Clone + 'static,
+        Fut: Future<Output = ()> + Send + 'static,
     {
         let mut reqs = Vec::new();
         if let Ok(_my_pe) = self.inner.data.team.team_pe_id() {
@@ -95,32 +96,27 @@ impl<T: Dist> DistIteratorLauncher for UnsafeArray<T> {
             let elems_per_thread = num_elems_local as f64 / num_workers as f64;
             // println!("num_chunks {:?} chunks_thread {:?}", num_elems_local, elems_per_thread);
             let mut worker = 0;
-            
             while ((worker as f64 * elems_per_thread).round() as usize) < num_elems_local {
                 let start_i = (worker as f64 * elems_per_thread).round() as usize;
                 let end_i = ((worker + 1) as f64 * elems_per_thread).round() as usize;
-                reqs.push(self.inner.data.task_group.exec_am_local(
-                    ForEachAsync {
-                        op: op.clone(),
-                        data: iter.clone(),
-                        start_i: start_i,
-                        end_i: end_i,
-                    },
-                ));
+                reqs.push(self.inner.data.task_group.exec_am_local(ForEachAsync {
+                    op: op.clone(),
+                    data: iter.clone(),
+                    start_i: start_i,
+                    end_i: end_i,
+                }));
                 worker += 1;
             }
         }
-        Box::new(DistIterForEachHandle{ //TODO actually hold the reqs from the exec_am_local...
-            reqs: reqs
-        })
+        Box::new(DistIterForEachHandle { reqs: reqs })
     }
 
-    fn collect<I,A>(&self, iter: &I,d: Distribution) -> Box<dyn DistIterRequest<Output = A>>
-        where 
+    fn collect<I, A>(&self, iter: &I, d: Distribution) -> Box<dyn DistIterRequest<Output = A>>
+    where
         I: DistributedIterator + 'static,
         I::Item: Dist,
-        A: From<UnsafeArray<I::Item>> + AmLocal + 'static
-    {  
+        A: From<UnsafeArray<I::Item>> + AmLocal + 'static,
+    {
         let mut reqs = Vec::new();
         if let Ok(_my_pe) = self.inner.data.team.team_pe_id() {
             let num_workers = match std::env::var("LAMELLAR_THREADS") {
@@ -134,17 +130,56 @@ impl<T: Dist> DistIteratorLauncher for UnsafeArray<T> {
             while ((worker as f64 * elems_per_thread).round() as usize) < num_elems_local {
                 let start_i = (worker as f64 * elems_per_thread).round() as usize;
                 let end_i = ((worker + 1) as f64 * elems_per_thread).round() as usize;
-                reqs.push(self.inner.data.task_group.exec_am_local(
-                    Collect {
-                        data: iter.clone(),
-                        start_i: start_i,
-                        end_i: end_i,
-                    },
-                ));
+                reqs.push(self.inner.data.task_group.exec_am_local(Collect {
+                    data: iter.clone(),
+                    start_i: start_i,
+                    end_i: end_i,
+                }));
                 worker += 1;
             }
         }
-        Box::new(DistIterCollectHandle{
+        Box::new(DistIterCollectHandle {
+            reqs: reqs,
+            distribution: d,
+            team: self.inner.data.team.clone(),
+            _phantom: PhantomData,
+        })
+    }
+
+    fn collect_async<I, A, B>(
+        &self,
+        iter: &I,
+        d: Distribution,
+    ) -> Box<dyn DistIterRequest<Output = A>>
+    where
+        I: DistributedIterator + 'static,
+        I::Item: Future<Output = B> + Send + 'static,
+        B: Dist,
+        A: From<UnsafeArray<B>> + AmLocal + 'static,
+    {
+        let mut reqs = Vec::new();
+        if let Ok(_my_pe) = self.inner.data.team.team_pe_id() {
+            let num_workers = match std::env::var("LAMELLAR_THREADS") {
+                Ok(n) => n.parse::<usize>().unwrap(),
+                Err(_) => 4,
+            };
+            let num_elems_local = iter.elems(self.num_elems_local());
+            let elems_per_thread = num_elems_local as f64 / num_workers as f64;
+            // println!("num_chunks {:?} chunks_thread {:?}", num_elems_local, elems_per_thread);
+            let mut worker = 0;
+            while ((worker as f64 * elems_per_thread).round() as usize) < num_elems_local {
+                let start_i = (worker as f64 * elems_per_thread).round() as usize;
+                let end_i = ((worker + 1) as f64 * elems_per_thread).round() as usize;
+                reqs.push(self.inner.data.task_group.exec_am_local(CollectAsync {
+                    data: iter.clone(),
+                    start_i: start_i,
+                    end_i: end_i,
+                    _phantom: PhantomData,
+                }));
+                worker += 1;
+            }
+        }
+        Box::new(DistIterCollectHandle {
             reqs: reqs,
             distribution: d,
             team: self.inner.data.team.clone(),

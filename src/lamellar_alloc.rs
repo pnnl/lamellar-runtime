@@ -37,7 +37,7 @@ pub(crate) struct LinearAlloc {
 #[prof]
 impl LamellarAlloc for LinearAlloc {
     fn new(id: String) -> LinearAlloc {
-        trace!("new linear alloc: {:?}", id);
+        // trace!("new linear alloc: {:?}", id);
         LinearAlloc {
             entries: Arc::new((Mutex::new(Vec::new()), Condvar::new())),
             start_addr: 0,
@@ -49,7 +49,7 @@ impl LamellarAlloc for LinearAlloc {
     }
 
     fn init(&mut self, start_addr: usize, size: usize) {
-        trace!("init: {:?} {:x} {:?}", self.id, start_addr, size);
+        // trace!("init: {:?} {:x} {:?}", self.id, start_addr, size);
         self.start_addr = start_addr;
         self.max_size = size;
         self.free_space.store(size, Ordering::SeqCst);
@@ -191,7 +191,7 @@ pub(crate) struct BTreeAlloc {
 #[prof]
 impl LamellarAlloc for BTreeAlloc {
     fn new(id: String) -> BTreeAlloc {
-        trace!("new BTreeAlloc: {:?}", id);
+        // trace!("new BTreeAlloc: {:?}", id);
         BTreeAlloc {
             free_entries: Arc::new((Mutex::new(FreeEntries::new()), Condvar::new())),
             allocated_addrs: Arc::new((Mutex::new(BTreeMap::new()), Condvar::new())),
@@ -371,7 +371,7 @@ pub(crate) struct ObjAlloc<T: Copy> {
 #[prof]
 impl<T: Copy> LamellarAlloc for ObjAlloc<T> {
     fn new(id: String) -> ObjAlloc<T> {
-        trace!("new ObjAlloc: {:?}", id);
+        // trace!("new ObjAlloc: {:?}", id);
         ObjAlloc {
             free_entries: Arc::new((Mutex::new(Vec::new()), Condvar::new())),
             start_addr: 0,
@@ -381,7 +381,7 @@ impl<T: Copy> LamellarAlloc for ObjAlloc<T> {
         }
     }
     fn init(&mut self, start_addr: usize, size: usize) {
-        trace!("init: {:?} {:x} {:?}", self.id, start_addr, size);
+        // trace!("init: {:?} {:x} {:?}", self.id, start_addr, size);
         self.start_addr = start_addr;
         self.max_size = size;
         let &(ref lock, ref _cvar) = &*self.free_entries;

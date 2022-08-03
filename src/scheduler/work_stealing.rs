@@ -1,7 +1,7 @@
 use crate::active_messaging::{ActiveMessageEngine, ExecType, LamellarFunc};
 use crate::lamellae::{Des, Lamellae, LamellaeRDMA, SerializedData};
 use crate::lamellar_team::LamellarTeamRT;
-use crate::scheduler::{AmeScheduler, AmeSchedulerQueue, ReqData, ReqId,SchedulerQueue};
+use crate::scheduler::{AmeScheduler, AmeSchedulerQueue, ReqData, ReqId, SchedulerQueue};
 use lamellar_prof::*;
 // use log::trace;
 use core_affinity::CoreId;
@@ -211,7 +211,7 @@ impl AmeSchedulerQueue for WorkStealingInner {
 
     fn submit_task<F>(&self, future: F)
     where
-        F: Future<Output = ()> ,
+        F: Future<Output = ()>,
     {
         // println!("submit task {:?}",self.num_tasks.load(Ordering::Relaxed));
         let num_tasks = self.num_tasks.clone();
@@ -229,7 +229,7 @@ impl AmeSchedulerQueue for WorkStealingInner {
         task.detach();
     }
     fn shutdown(&self) {
-        // println!("work stealing shuting down {:?}",self.active());
+        // println!("work stealing shuting down {:?}", self.active());
         self.active.store(false, Ordering::SeqCst);
         // println!("work stealing shuting down {:?}",self.active());
         while self.active_cnt.load(Ordering::Relaxed) > 2
@@ -238,7 +238,12 @@ impl AmeSchedulerQueue for WorkStealingInner {
             //this should be the recvtask, and alloc_task
             std::thread::yield_now()
         }
-        // println!("work stealing shut down {:?}",self.active());
+        // println!(
+        //     "work stealing shut down {:?} {:?} {:?}",
+        //     self.active(),
+        //     self.active_cnt.load(Ordering::Relaxed),
+        //     self.active_cnt.load(Ordering::Relaxed)
+        // );
     }
 
     fn exec_task(&self) {
@@ -303,7 +308,7 @@ impl SchedulerQueue for WorkStealing {
 
     fn submit_task<F>(&self, future: F)
     where
-        F: Future<Output = ()> ,
+        F: Future<Output = ()>,
     {
         self.inner.submit_task(future);
     }

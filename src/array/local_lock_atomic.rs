@@ -382,7 +382,7 @@ impl<T: Dist + std::fmt::Debug> ArrayPrint<T> for LocalLockAtomicArray<T> {
 }
 
 pub struct LocalLockAtomicArrayReduceHandle<T: Dist + AmDist> {
-    req: Box<dyn LamellarRequest<Output = T> >,
+    req: Box<dyn LamellarRequest<Output = T>>,
     _lock_guard: ArcRwLockReadGuard<RawRwLock, Box<()>>,
 }
 
@@ -398,28 +398,28 @@ impl<T: Dist + AmDist> LamellarRequest for LocalLockAtomicArrayReduceHandle<T> {
 }
 
 impl<T: Dist + AmDist + 'static> LocalLockAtomicArray<T> {
-    pub fn reduce(&self, op: &str) -> Box<dyn LamellarRequest<Output = T>  > {
+    pub fn reduce(&self, op: &str) -> Box<dyn LamellarRequest<Output = T>> {
         let lock = self.lock.read();
         Box::new(LocalLockAtomicArrayReduceHandle {
             req: self.array.reduce(op),
             _lock_guard: lock,
         })
     }
-    pub fn sum(&self) -> Box<dyn LamellarRequest<Output = T>  > {
+    pub fn sum(&self) -> Box<dyn LamellarRequest<Output = T>> {
         let lock = self.lock.read();
         Box::new(LocalLockAtomicArrayReduceHandle {
             req: self.array.reduce("sum"),
             _lock_guard: lock,
         })
     }
-    pub fn prod(&self) -> Box<dyn LamellarRequest<Output = T>  > {
+    pub fn prod(&self) -> Box<dyn LamellarRequest<Output = T>> {
         let lock = self.lock.read();
         Box::new(LocalLockAtomicArrayReduceHandle {
             req: self.array.reduce("prod"),
             _lock_guard: lock,
         })
     }
-    pub fn max(&self) -> Box<dyn LamellarRequest<Output = T>  > {
+    pub fn max(&self) -> Box<dyn LamellarRequest<Output = T>> {
         let lock = self.lock.read();
         Box::new(LocalLockAtomicArrayReduceHandle {
             req: self.array.reduce("max"),
