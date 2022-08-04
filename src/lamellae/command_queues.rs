@@ -1096,7 +1096,7 @@ impl CommandQueue {
             self.cq.check_alloc();
             async_std::task::yield_now().await;
         }
-        // println!("leaving alloc_task task {:?}",scheduler.active());
+        // println!("leaving alloc_task task {:?}", scheduler.active());
     }
 
     pub async fn recv_data(
@@ -1189,12 +1189,16 @@ impl CommandQueue {
             //     timer = std::time::Instant::now();
             // }
             // self.comm.process_dropped_reqs();
-            if active.load(Ordering::SeqCst) != 1 {
-                // println!("command queue sched active? {:?}  {:?}",scheduler.active(),self.cq.empty());
-            }
+            // if active.load(Ordering::SeqCst) != 1 {
+            //     println!(
+            //         "command queue sched active? {:?}  {:?}",
+            //         scheduler.active(),
+            //         self.cq.empty()
+            //     );
+            // }
             async_std::task::yield_now().await;
         }
-        // println!("leaving recv_data task {:?}",scheduler.active());
+        // println!("leaving recv_data task {:?}", scheduler.active());
         active.store(2, Ordering::SeqCst);
     }
 

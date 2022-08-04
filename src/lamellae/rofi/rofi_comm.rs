@@ -7,7 +7,7 @@ use crate::lamellae::{
 use crate::lamellar_alloc::{BTreeAlloc, LamellarAlloc};
 #[cfg(feature = "enable-prof")]
 use lamellar_prof::*;
-use log::trace;
+// use log::trace;
 use parking_lot::{Mutex, RwLock};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -58,7 +58,7 @@ impl RofiComm {
             ROFI_MEM.store(size, Ordering::SeqCst);
         }
         rofi_init(provider).expect("error in rofi init");
-        trace!("rofi initialized");
+        // trace!("rofi initialized");
         rofi_barrier();
         let num_pes = rofi_get_size();
         let cmd_q_mem = CommandQueue::mem_per_pe() * num_pes;
@@ -81,11 +81,11 @@ impl RofiComm {
             // any_dropped: Arc::new(AtomicBool::new(false)),
             // alloc_mutex: Arc::new(Mutex::new(())),
         };
-        trace!(
-            "[{:?}] Rofi base addr 0x{:x}",
-            rofi.my_pe,
-            *rofi.rofi_base_address.read()
-        );
+        // trace!(
+        //     "[{:?}] Rofi base addr 0x{:x}",
+        //     rofi.my_pe,
+        //     *rofi.rofi_base_address.read()
+        // );
         rofi.alloc.write()[0].init(addr as usize, total_mem);
         rofi
     }
@@ -656,10 +656,10 @@ impl SerializedDataOps for RofiData {
 
 impl Des for RofiData {
     fn deserialize_header(&self) -> Option<SerializeHeader> {
-        crate::deserialize(self.header_as_bytes(),false).unwrap()
+        crate::deserialize(self.header_as_bytes(), false).unwrap()
     }
     fn deserialize_data<T: serde::de::DeserializeOwned>(&self) -> Result<T, anyhow::Error> {
-        Ok(crate::deserialize(self.data_as_bytes(),true)?)
+        Ok(crate::deserialize(self.data_as_bytes(), true)?)
     }
     fn data_as_bytes(&self) -> &mut [u8] {
         unsafe { std::slice::from_raw_parts_mut((self.data_start) as *mut u8, self.data_len) }

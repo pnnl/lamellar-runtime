@@ -137,19 +137,32 @@ impl<T: Dist> DistIteratorLauncher for GenericAtomicArray<T> {
     fn for_each_async<I, F, Fut>(&self, iter: &I, op: F) -> Box<dyn DistIterRequest<Output = ()>>
     where
         I: DistributedIterator + 'static,
-        F: Fn(I::Item) -> Fut + AmLocal  + Clone + 'static,
+        F: Fn(I::Item) -> Fut + AmLocal + Clone + 'static,
         Fut: Future<Output = ()> + Send + 'static,
     {
         self.array.for_each_async(iter, op)
     }
 
-    fn collect<I,A>(&self, iter: &I,d: Distribution) -> Box<dyn DistIterRequest<Output = A>>
-        where 
+    fn collect<I, A>(&self, iter: &I, d: Distribution) -> Box<dyn DistIterRequest<Output = A>>
+    where
         I: DistributedIterator + 'static,
         I::Item: Dist,
         A: From<UnsafeArray<I::Item>> + AmLocal + 'static,
     {
-        self.array.collect(iter,d)
+        self.array.collect(iter, d)
+    }
+    fn collect_async<I, A, B>(
+        &self,
+        iter: &I,
+        d: Distribution,
+    ) -> Box<dyn DistIterRequest<Output = A>>
+    where
+        I: DistributedIterator + 'static,
+        I::Item: Future<Output = B> + Send  + 'static,
+        B: Dist,
+        A: From<UnsafeArray<B>> + AmLocal + 'static,
+    {
+        self.array.collect_async(iter, d)
     }
     fn team(&self) -> Pin<Arc<LamellarTeamRT>> {
         self.array.team().clone()

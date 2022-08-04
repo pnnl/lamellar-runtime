@@ -1,4 +1,4 @@
-use crate::array::{LamellarArrayInput, LamellarRead, LamellarWrite, MyFrom,UnsafeArray};
+use crate::array::{LamellarArrayInput, LamellarRead, LamellarWrite, MyFrom};
 use crate::lamellae::{AllocationType, Backend, Lamellae, LamellaeComm, LamellaeRDMA};
 use crate::lamellar_team::LamellarTeamRT;
 // use crate::active_messaging::AmDist;

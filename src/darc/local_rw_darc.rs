@@ -24,8 +24,8 @@ pub struct LocalRwDarc<T: 'static> {
     pub(crate) darc: Darc<Arc<RwLock<Box<T>>>>, //we need to wrap WrLock in an Arc so we get access to ArcReadGuard and ArcWriteGuard
 }
 
-unsafe impl<T:  Send> Send for LocalRwDarc<T> {}
-unsafe impl<T:  Sync> Sync for LocalRwDarc<T> {}
+unsafe impl<T: Send> Send for LocalRwDarc<T> {}
+unsafe impl<T: Sync> Sync for LocalRwDarc<T> {}
 
 impl<T> crate::DarcSerde for LocalRwDarc<T> {
     fn ser(&self, num_pes: usize, cur_pe: Result<usize, IdError>) {
@@ -215,7 +215,6 @@ where
 {
     // println!("lrwdarc1 from net darc");
     let ndarc: __NetworkDarc<T> = Deserialize::deserialize(deserializer)?;
-    
     let rwdarc = LocalRwDarc {
         darc: Darc::from(ndarc),
     };
@@ -232,7 +231,6 @@ where
 {
     // println!("lrwdarc2 from net darc");
     let ndarc: __NetworkDarc<T> = Deserialize::deserialize(deserializer)?;
-    
     // let rwdarc = LocalRwDarc {
     //     darc: ,
     // };
@@ -244,7 +242,7 @@ where
 impl<T> From<Darc<Arc<RwLock<Box<T>>>>> for __NetworkDarc<T> {
     fn from(darc: Darc<Arc<RwLock<Box<T>>>>) -> Self {
         // println!("rwdarc to net darc");
-        darc.print();
+        // darc.print();
         let team = &darc.inner().team();
         let ndarc = __NetworkDarc {
             inner_addr: darc.inner as *const u8 as usize,

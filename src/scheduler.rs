@@ -7,17 +7,26 @@ use enum_dispatch::enum_dispatch;
 use futures::Future;
 #[cfg(feature = "enable-prof")]
 use lamellar_prof::*;
-use parking_lot::RwLock;
-use std::collections::HashMap;
-use std::sync::{Arc, Weak};
+// use parking_lot::RwLock;
+// use std::collections::HashMap;
+use std::sync::Arc; //, Weak};
 
 pub(crate) mod work_stealing;
 use work_stealing::{WorkStealing, WorkStealingInner};
 
-#[derive(Copy,Clone,Debug,serde::Serialize,serde::Deserialize,std::cmp::Eq,std::cmp::PartialEq, Hash)]
+#[derive(
+    Copy,
+    Clone,
+    Debug,
+    serde::Serialize,
+    serde::Deserialize,
+    std::cmp::Eq,
+    std::cmp::PartialEq,
+    Hash,
+)]
 pub(crate) struct ReqId {
     pub(crate) id: usize,
-    pub(crate) sub_id: usize
+    pub(crate) sub_id: usize,
 }
 
 pub(crate) struct ReqData {
@@ -83,7 +92,7 @@ pub(crate) trait AmeSchedulerQueue {
     ); //serialized active message
     fn submit_task<F>(&self, future: F)
     where
-        F: Future<Output = ()> ;
+        F: Future<Output = ()>;
     fn exec_task(&self);
     fn shutdown(&self);
     fn active(&self) -> bool;
@@ -111,7 +120,7 @@ pub(crate) trait SchedulerQueue {
     fn submit_work(&self, msg: SerializedData, lamellae: Arc<Lamellae>); //serialized active message
     fn submit_task<F>(&self, future: F)
     where
-        F: Future<Output = ()> ;
+        F: Future<Output = ()>;
     fn exec_task(&self);
     fn shutdown(&self);
     fn active(&self) -> bool;
@@ -119,13 +128,13 @@ pub(crate) trait SchedulerQueue {
 
 pub(crate) fn create_scheduler(
     sched: SchedulerType,
-    num_pes: usize,
-    my_pe: usize,
-    teams: Arc<RwLock<HashMap<u64, Weak<LamellarTeamRT>>>>,
+    // num_pes: usize,
+    // my_pe: usize,
+    // teams: Arc<RwLock<HashMap<u64, Weak<LamellarTeamRT>>>>,
 ) -> Scheduler {
     match sched {
         SchedulerType::WorkStealing => {
-            Scheduler::WorkStealing(work_stealing::WorkStealing::new(num_pes, my_pe, teams))
+            Scheduler::WorkStealing(work_stealing::WorkStealing::new(/*num_pes, my_pe, teams*/))
         }
     }
 }

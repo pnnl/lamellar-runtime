@@ -18,17 +18,19 @@ use step_by::*;
 use take::*;
 use zip::*;
 
-use crate::memregion::{Dist};
-use crate::LamellarTeamRT;
+use crate::memregion::Dist;
 use crate::LamellarRequest;
+use crate::LamellarTeamRT;
 // use crate::LamellarArray;
-use crate::array::{UnsafeArray,AtomicArray, GenericAtomicArray, LamellarArray, NativeAtomicArray, Distribution}; //, LamellarArrayPut, LamellarArrayGet};
 use crate::array::iterator::serial_iterator::SerialIterator;
+use crate::array::{
+    AtomicArray, Distribution, GenericAtomicArray, LamellarArray, NativeAtomicArray, UnsafeArray,
+}; //, LamellarArrayPut, LamellarArrayGet};
 
 use crate::active_messaging::AmLocal;
 
-use enum_dispatch::enum_dispatch;
 use async_trait::async_trait;
+use enum_dispatch::enum_dispatch;
 use futures::Future;
 use std::marker::PhantomData;
 use std::pin::Pin;
@@ -38,7 +40,7 @@ use std::sync::Arc;
 pub(crate) struct ForEach<I, F>
 where
     I: DistributedIterator,
-    F: Fn(I::Item)  ,
+    F: Fn(I::Item),
 {
     pub(crate) op: F,
     pub(crate) data: I,
@@ -98,10 +100,10 @@ where
     pub(crate) end_i: usize,
 }
 #[lamellar_impl::rt_am_local]
-impl<I> LamellarAm for Collect<I> 
+impl<I> LamellarAm for Collect<I>
 where
     I: DistributedIterator + 'static,
-    I::Item: Sync
+    I::Item: Sync,
 {
     fn exec(&self) -> Vec<I::Item> {
         let mut iter = self.data.init(self.start_i, self.end_i - self.start_i);
@@ -113,16 +115,54 @@ where
     }
 }
 
+#[lamellar_impl::AmLocalDataRT(Clone)]
+pub(crate) struct CollectAsync<I, T>
+where
+    I: DistributedIterator,
+    I::Item: Future<Output = T>,
+    T: Dist,
+{
+    pub(crate) data: I,
+    pub(crate) start_i: usize,
+    pub(crate) end_i: usize,
+    pub(crate) _phantom: PhantomData<T>,
+}
+
+#[lamellar_impl::rt_am_local]
+impl<I, T> LamellarAm for CollectAsync<I, T, Fut>
+where
+    I: DistributedIterator + 'static,
+    I::Item: Future<Output = T> + Send,
+    T: Dist,
+{
+    fn exec(&self) -> Vec<<I::Item as Future>::Output> {
+        let mut iter = self.data.init(self.start_i, self.end_i - self.start_i);
+        let mut vec = Vec::new();
+        while let Some(elem) = iter.next() {
+            let res = elem.await;
+            vec.push(res);
+        }
+        vec
+    }
+}
+
 #[async_trait]
-pub trait DistIterRequest{
+pub trait DistIterRequest {
     type Output;
     async fn into_future(mut self: Box<Self>) -> Self::Output;
     fn wait(self: Box<Self>) -> Self::Output;
 }
 
-pub struct DistIterForEachHandle{
-    pub(crate) reqs: Vec<Box<dyn LamellarRequest<Output = ()>  >>,
+pub struct DistIterForEachHandle {
+    pub(crate) reqs: Vec<Box<dyn LamellarRequest<Output = ()>>>,
 }
+
+// impl Drop for DistIterForEachHandle {
+//     fn drop(&mut self) {
+//         println!("dropping DistIterForEachHandle");
+//     }
+// }
+
 #[async_trait]
 impl DistIterRequest for DistIterForEachHandle {
     type Output = ();
@@ -138,38 +178,45 @@ impl DistIterRequest for DistIterForEachHandle {
     }
 }
 
-pub struct DistIterCollectHandle<T: Dist,A: From<UnsafeArray<T>> + AmLocal> {
+pub struct DistIterCollectHandle<T: Dist, A: From<UnsafeArray<T>> + AmLocal> {
     pub(crate) reqs: Vec<Box<dyn LamellarRequest<Output = Vec<T>>>>,
     pub(crate) distribution: Distribution,
     pub(crate) team: Pin<Arc<LamellarTeamRT>>,
     pub(crate) _phantom: PhantomData<A>,
 }
 
-impl<T: Dist, A: From<UnsafeArray<T>>+ AmLocal> DistIterCollectHandle<T,A> {
+impl<T: Dist, A: From<UnsafeArray<T>> + AmLocal> DistIterCollectHandle<T, A> {
     fn create_array(&self, local_vals: &Vec<T>) -> A {
-        let local_sizes = UnsafeArray::<usize>::new(self.team.clone(),self.team.num_pes, Distribution::Block);
-        unsafe{ local_sizes.local_as_mut_slice()[0]=local_vals.len(); }
+        self.team.barrier();
+        let local_sizes =
+            UnsafeArray::<usize>::new(self.team.clone(), self.team.num_pes, Distribution::Block);
+        unsafe {
+            local_sizes.local_as_mut_slice()[0] = local_vals.len();
+        }
         local_sizes.barrier();
         // local_sizes.print();
         let mut size = 0;
         let mut my_start = 0;
         let my_pe = self.team.team_pe.expect("pe not part of team");
         // local_sizes.print();
-        local_sizes.ser_iter().into_iter().enumerate().for_each(|(i,local_size)| {
-            size += local_size;
-            if i < my_pe{
-                my_start += local_size;
-            }
-        });
+        local_sizes
+            .ser_iter()
+            .into_iter()
+            .enumerate()
+            .for_each(|(i, local_size)| {
+                size += local_size;
+                if i < my_pe {
+                    my_start += local_size;
+                }
+            });
         // println!("my_start {} size {}",my_start,size);
-        let array =  UnsafeArray::<T>::new(self.team.clone(), size, self.distribution); //implcit barrier
+        let array = UnsafeArray::<T>::new(self.team.clone(), size, self.distribution); //implcit barrier
         array.put(my_start, local_vals);
         array.into()
     }
 }
 #[async_trait]
-impl<T: Dist, A: From<UnsafeArray<T>> + AmLocal > DistIterRequest for DistIterCollectHandle<T,A> 
-{
+impl<T: Dist, A: From<UnsafeArray<T>> + AmLocal> DistIterRequest for DistIterCollectHandle<T, A> {
     type Output = A;
     async fn into_future(mut self: Box<Self>) -> Self::Output {
         let mut local_vals = vec![];
@@ -189,7 +236,6 @@ impl<T: Dist, A: From<UnsafeArray<T>> + AmLocal > DistIterRequest for DistIterCo
     }
 }
 
-
 #[enum_dispatch]
 pub trait DistIteratorLauncher {
     fn for_each<I, F>(&self, iter: &I, op: F) -> Box<dyn DistIterRequest<Output = ()>>
@@ -200,22 +246,30 @@ pub trait DistIteratorLauncher {
     fn for_each_async<I, F, Fut>(&self, iter: &I, op: F) -> Box<dyn DistIterRequest<Output = ()>>
     where
         I: DistributedIterator + 'static,
-        F: Fn(I::Item) -> Fut + AmLocal + Clone +  'static,
+        F: Fn(I::Item) -> Fut + AmLocal + Clone + 'static,
         Fut: Future<Output = ()> + Send + 'static;
 
-    fn collect<I,A>(&self, iter: &I,d: Distribution) -> Box<dyn DistIterRequest<Output = A>>
-        where 
+    fn collect<I, A>(&self, iter: &I, d: Distribution) -> Box<dyn DistIterRequest<Output = A>>
+    where
         I: DistributedIterator + 'static,
         I::Item: Dist,
         A: From<UnsafeArray<I::Item>> + AmLocal + 'static;
-            
+
+    fn collect_async<I, A, B>(
+        &self,
+        iter: &I,
+        d: Distribution,
+    ) -> Box<dyn DistIterRequest<Output = A>>
+    where
+        I: DistributedIterator + 'static,
+        I::Item: Future<Output = B> + Send + 'static,
+        B: Dist,
+        A: From<UnsafeArray<B>> + AmLocal + 'static;
 
     fn global_index_from_local(&self, index: usize, chunk_size: usize) -> Option<usize>;
     fn subarray_index_from_local(&self, index: usize, chunk_size: usize) -> Option<usize>;
     fn team(&self) -> Pin<Arc<LamellarTeamRT>>;
 }
-
-
 
 pub trait DistributedIterator: AmLocal + Clone + 'static {
     type Item: Send;
@@ -232,15 +286,17 @@ pub trait DistributedIterator: AmLocal + Clone + 'static {
     fn enumerate(self) -> Enumerate<Self> {
         Enumerate::new(self, 0)
     }
-    fn filter<F>(self, op: F) -> Filter<Self,F> 
+    fn filter<F>(self, op: F) -> Filter<Self, F>
     where
-        F: Fn(&Self::Item) -> bool   + Clone + 'static {
+        F: Fn(&Self::Item) -> bool + Clone + 'static,
+    {
         Filter::new(self, op)
     }
     fn filter_map<F, R>(self, op: F) -> FilterMap<Self, F>
     where
-        F: Fn(Self::Item) -> Option<R>   + Clone + 'static,
-        R: Send + 'static,{
+        F: Fn(Self::Item) -> Option<R> + Clone + 'static,
+        R: Send + 'static,
+    {
         FilterMap::new(self, op)
     }
     fn chunks(self, size: usize) -> Chunks<Self> {
@@ -251,8 +307,9 @@ pub trait DistributedIterator: AmLocal + Clone + 'static {
     }
     fn map<F, R>(self, op: F) -> Map<Self, F>
     where
-        F: Fn(Self::Item) -> R   + Clone + 'static,
-        R: Send + 'static,{
+        F: Fn(Self::Item) -> R + Clone + 'static,
+        R: Send + 'static,
+    {
         Map::new(self, op)
     }
     fn step_by(self, step_size: usize) -> StepBy<Self> {
@@ -266,33 +323,47 @@ pub trait DistributedIterator: AmLocal + Clone + 'static {
     }
     fn for_each<F>(&self, op: F) -> Box<dyn DistIterRequest<Output = ()>>
     where
-    F: Fn(Self::Item) + AmLocal  + Clone + 'static, {
+        // &'static Self: DistributedIterator + 'static,
+        F: Fn(Self::Item) + AmLocal + Clone + 'static,
+    {
         self.array().for_each(self, op)
     }
-    fn for_each_async< F, Fut>(&self, op: F) -> Box<dyn DistIterRequest<Output = ()>>
+    fn for_each_async<F, Fut>(&self, op: F) -> Box<dyn DistIterRequest<Output = ()>>
     where
-        F: Fn(Self::Item) -> Fut  + AmLocal  + Clone +  'static,
-        Fut: Future<Output = ()> + Send +  'static{
-        self.array().for_each_async(self,  op)
-    }
-    fn collect<A>(&self,d: Distribution)-> Box<dyn DistIterRequest<Output = A>>
-    where 
         // &'static Self: DistributedIterator + 'static,
-        Self::Item: Dist, 
-        A: From<UnsafeArray<Self::Item>> + AmLocal + 'static,{
-        self.array().collect(self,d)
+        F: Fn(Self::Item) -> Fut + AmLocal + Clone + 'static,
+        Fut: Future<Output = ()> + Send + 'static,
+    {
+        self.array().for_each_async(self, op)
+    }
+    fn collect<A>(&self, d: Distribution) -> Box<dyn DistIterRequest<Output = A>>
+    where
+        // &'static Self: DistributedIterator + 'static,
+        Self::Item: Dist,
+        A: From<UnsafeArray<Self::Item>> + AmLocal + 'static,
+    {
+        self.array().collect(self, d)
+    }
+    fn collect_async<A, T>(&self, d: Distribution) -> Box<dyn DistIterRequest<Output = A>>
+    where
+        // &'static Self: DistributedIterator + 'static,
+        T: Dist,
+        Self::Item: Future<Output = T> + Send + 'static,
+        A: From<UnsafeArray<<Self::Item as Future>::Output>> + AmLocal + 'static,
+    {
+        self.array().collect_async(self, d)
     }
 }
 
 #[derive(Clone)]
-pub struct DistIter<'a, T: Dist + 'static, A: LamellarArray<T> > {
+pub struct DistIter<'a, T: Dist + 'static, A: LamellarArray<T>> {
     data: A,
     cur_i: usize,
     end_i: usize,
     _marker: PhantomData<&'a T>,
 }
 
-impl<T: Dist, A: LamellarArray<T>  > DistIter<'_, T, A> {
+impl<T: Dist, A: LamellarArray<T>> DistIter<'_, T, A> {
     pub(crate) fn new(data: A, cur_i: usize, cnt: usize) -> Self {
         // println!("new dist iter {:?} {:? } {:?}",cur_i, cnt, cur_i+cnt);
         DistIter {
@@ -379,14 +450,14 @@ impl<T: Dist + 'static, A: LamellarArray<T> + DistIteratorLauncher + AmLocal + C
 }
 
 #[derive(Clone)]
-pub struct DistIterMut<'a, T: Dist, A: LamellarArray<T>  > {
+pub struct DistIterMut<'a, T: Dist, A: LamellarArray<T>> {
     data: A,
     cur_i: usize,
     end_i: usize,
     _marker: PhantomData<&'a T>,
 }
 
-impl<T: Dist, A: LamellarArray<T>  > DistIterMut<'_, T, A> {
+impl<T: Dist, A: LamellarArray<T>> DistIterMut<'_, T, A> {
     pub(crate) fn new(data: A, cur_i: usize, cnt: usize) -> Self {
         DistIterMut {
             data,
@@ -417,7 +488,7 @@ impl<T: Dist, A: LamellarArray<T>  > DistIterMut<'_, T, A> {
 //     }
 // }
 
-impl< T: Dist + 'static, A: LamellarArray<T> + AmLocal + DistIteratorLauncher + Clone + 'static>
+impl<T: Dist + 'static, A: LamellarArray<T> + AmLocal + DistIteratorLauncher + Clone + 'static>
     DistributedIterator for DistIterMut<'static, T, A>
 {
     type Item = &'static mut T;

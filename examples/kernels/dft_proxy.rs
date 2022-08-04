@@ -210,7 +210,8 @@ fn dft_lamellar_array_2(signal: ReadOnlyArray<f64>, spectrum: AtomicArray<f64>) 
 fn dft_lamellar_array_swapped(signal: UnsafeArray<f64>, spectrum: UnsafeArray<f64>) -> f64 {
     let timer = Instant::now();
     let signal_len = signal.len();
-    for (i, &x) in signal.ser_iter().into_iter().enumerate() {
+    for (i, x) in signal.ser_iter().into_iter().enumerate() {
+        let x = (*x).clone();
         spectrum
             .dist_iter_mut()
             .enumerate()
@@ -240,6 +241,7 @@ fn dft_lamellar_array_opt(
     signal
         .ser_iter()
         .copied_chunks(buf_size)
+        .buffered(2)
         .into_iter()
         .enumerate()
         .for_each(|(i, chunk)| {
@@ -279,6 +281,7 @@ fn dft_lamellar_array_opt_2(
     signal
         .ser_iter()
         .copied_chunks(buf_size)
+        .buffered(2)
         .into_iter()
         .enumerate()
         .for_each(|(i, chunk)| {
@@ -317,6 +320,7 @@ fn dft_lamellar_array_opt_3(
     signal
         .ser_iter()
         .copied_chunks(buf_size)
+        .buffered(2)
         .into_iter()
         .enumerate()
         .for_each(|(i, chunk)| {
@@ -356,7 +360,6 @@ fn main() {
         .get(2)
         .and_then(|s| s.parse::<usize>().ok())
         .unwrap_or_else(|| 1000);
-
 
     let num_trials = args
         .get(3)
@@ -438,7 +441,7 @@ fn main() {
                 global_len,
                 partial_spectrum.clone(),
             ));
-            if my_pe==0{
+            if my_pe == 0 {
                 println!("am i: {:?} {:?}", _i, times[0].last());
             }
             //-----------------------------------------------------
@@ -503,7 +506,7 @@ fn main() {
                 full_spectrum_array.clone(),
                 buf_amt,
             ));
-            if my_pe==0{
+            if my_pe == 0 {
                 println!("ua i: {:?} {:?}", _i, times[2].last());
             }
             // let time = timer.elapsed().as_secs_f64();
@@ -548,7 +551,7 @@ fn main() {
                 full_spectrum_array.clone(),
                 buf_amt,
             ));
-            if my_pe==0{
+            if my_pe == 0 {
                 println!("aa i: {:?} {:?}", _i, times[4].last());
             }
         }
@@ -568,7 +571,7 @@ fn main() {
                 .for_each(|elem| *elem = 0.0);
             full_spectrum_array.wait_all();
             full_spectrum_array.barrier();
-            if my_pe==0{
+            if my_pe == 0 {
                 println!("lla i: {:?} {:?}", _i, times[5].last());
             }
         }

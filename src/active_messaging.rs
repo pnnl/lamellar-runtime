@@ -1,19 +1,21 @@
 use crate::lamellae::{Lamellae, SerializedData};
 use crate::lamellar_arch::IdError;
-use crate::lamellar_request::{InternalResult, LamellarRequest, LamellarMultiRequest, LamellarRequestResult};
+use crate::lamellar_request::{
+    InternalResult, LamellarMultiRequest, LamellarRequest, LamellarRequestResult,
+};
 use crate::lamellar_team::{LamellarTeam, LamellarTeamRT};
 use crate::scheduler::{AmeScheduler, ReqData, ReqId};
 #[cfg(feature = "enable-prof")]
 use lamellar_prof::*;
-use log::trace;
-use parking_lot::{Mutex, RwLock};
+// use log::trace;
+use parking_lot::Mutex; //, RwLock};
 use std::collections::HashMap;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Arc, Weak};
+use std::sync::Arc; //, Weak};
 
 pub(crate) mod registered_active_message;
-use registered_active_message::{RegisteredActiveMessages, AMS_EXECS};
+use registered_active_message::RegisteredActiveMessages; //, AMS_EXECS};
 
 #[cfg(feature = "nightly")]
 pub(crate) mod remote_closures;
@@ -22,23 +24,13 @@ pub(crate) use remote_closures::RemoteClosures;
 #[cfg(feature = "nightly")]
 use remote_closures::{exec_closure_cmd, process_closure_request};
 
+pub trait AmLocal: Sync + Send {}
 
+impl<T: Sync + Send> AmLocal for T {}
 
-pub trait AmLocal:
-    Sync + Send 
-{
-}
-
-impl<T: Sync + Send > AmLocal for T {}
-
-pub trait AmDist:
-    serde::ser::Serialize + serde::de::DeserializeOwned + AmLocal + 'static
-{
-}
+pub trait AmDist: serde::ser::Serialize + serde::de::DeserializeOwned + AmLocal + 'static {}
 
 impl<T: serde::ser::Serialize + serde::de::DeserializeOwned + AmLocal + 'static> AmDist for T {}
-
-
 
 #[derive(
     serde::Serialize, serde::Deserialize, Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord,
@@ -90,11 +82,9 @@ pub(crate) enum LamellarFunc {
 }
 
 pub(crate) type LamellarArcLocalAm = Arc<dyn LamellarActiveMessage + Sync + Send>;
-pub(crate) type LamellarArcAm = Arc<dyn RemoteActiveMessage + Sync + Send >;
+pub(crate) type LamellarArcAm = Arc<dyn RemoteActiveMessage + Sync + Send>;
 pub(crate) type LamellarAny = Box<dyn std::any::Any + Sync + Send>;
 pub(crate) type LamellarResultArc = Arc<dyn LamellarSerde + Sync + Send>;
-
-
 
 pub trait Serde: serde::ser::Serialize + serde::de::DeserializeOwned {}
 
@@ -177,14 +167,10 @@ impl AMCounters {
 pub trait ActiveMessaging {
     fn wait_all(&self);
     fn barrier(&self);
-    fn exec_am_all<F>(&self, am: F) -> Box<dyn LamellarMultiRequest<Output = F::Output> >
+    fn exec_am_all<F>(&self, am: F) -> Box<dyn LamellarMultiRequest<Output = F::Output>>
     where
         F: RemoteActiveMessage + LamellarAM + Serde + AmDist;
-    fn exec_am_pe<F>(
-        &self,
-        pe: usize,
-        am: F,
-    ) -> Box<dyn LamellarRequest<Output = F::Output>>
+    fn exec_am_pe<F>(&self, pe: usize, am: F) -> Box<dyn LamellarRequest<Output = F::Output>>
     where
         F: RemoteActiveMessage + LamellarAM + Serde + AmDist;
     fn exec_am_local<F>(&self, am: F) -> Box<dyn LamellarRequest<Output = F::Output>>
@@ -194,30 +180,30 @@ pub trait ActiveMessaging {
 
 //maybe make this a struct then we could hold the pending counters...
 pub(crate) struct ActiveMessageEngine {
-    teams: Arc<RwLock<HashMap<u64, Weak<LamellarTeamRT>>>>,
-    my_pe: usize,
+    // teams: Arc<RwLock<HashMap<u64, Weak<LamellarTeamRT>>>>,
+    // my_pe: usize,
     batched_am: Arc<RegisteredActiveMessages>,
 }
 
 //#[prof]
-impl Drop for ActiveMessageEngine {
-    fn drop(&mut self) {
-        trace!("[{:?}] AME dropping", self.my_pe);
-    }
-}
+// impl Drop for ActiveMessageEngine {
+//     fn drop(&mut self) {
+//         trace!("[{:?}] AME dropping", self.my_pe);
+//     }
+// }
 
 //#[prof]
 impl ActiveMessageEngine {
     pub(crate) fn new(
-        my_pe: usize,
+        // my_pe: usize,
         scheduler: Arc<AmeScheduler>,
-        teams: Arc<RwLock<HashMap<u64, Weak<LamellarTeamRT>>>>,
+        // teams: Arc<RwLock<HashMap<u64, Weak<LamellarTeamRT>>>>,
         stall_mark: Arc<AtomicUsize>,
     ) -> Self {
-        trace!("registered funcs {:?}", AMS_EXECS.len(),);
+        // trace!("registered funcs {:?}", AMS_EXECS.len(),);
         ActiveMessageEngine {
-            teams: teams,
-            my_pe: my_pe,
+            // teams: teams,
+            // my_pe: my_pe,
             batched_am: Arc::new(RegisteredActiveMessages::new(scheduler, stall_mark)),
         }
     }
@@ -226,13 +212,8 @@ impl ActiveMessageEngine {
         // trace!("[{:?}] process msg: {:?}",self.my_pe, &req_data);
         // let addr = req_data.lamellae.local_addr(req_data.src,req_data)
         // let (team, world) = self.get_team_and_world(req_data.team.team_hash);
-        let world = LamellarTeam::new(None, req_data.world.clone(), self.teams.clone(), true);
-        let team = LamellarTeam::new(
-            Some(world.clone()),
-            req_data.team.clone(),
-            self.teams.clone(),
-            true,
-        );
+        let world = LamellarTeam::new(None, req_data.world.clone(), true);
+        let team = LamellarTeam::new(Some(world.clone()), req_data.team.clone(), true);
 
         match req_data.cmd.clone() {
             ExecType::Runtime(_cmd) => {}
@@ -270,8 +251,8 @@ impl ActiveMessageEngine {
         //     .expect("invalid team hash")
         //     .upgrade()
         //     .expect("team no longer exists {:?}");
-        let world = LamellarTeam::new(None, world_rt, self.teams.clone(), true);
-        let team = LamellarTeam::new(Some(world.clone()), team_rt, self.teams.clone(), true);
+        let world = LamellarTeam::new(None, world_rt, true);
+        let team = LamellarTeam::new(Some(world.clone()), team_rt, true);
         (team, world)
     }
 
@@ -294,14 +275,10 @@ impl ActiveMessageEngine {
         }
     }
 
-    fn send_data_to_user_handle(
-        req_id: ReqId,
-        pe: u16,
-        data: InternalResult,
-    ) {
+    fn send_data_to_user_handle(req_id: ReqId, pe: u16, data: InternalResult) {
         // println!("returned req_id: {:?}", req_id);
-        let req = unsafe{Arc::from_raw(req_id.id as *const LamellarRequestResult)};
+        let req = unsafe { Arc::from_raw(req_id.id as *const LamellarRequestResult) };
         // println!("strong count recv: {:?} ",Arc::strong_count(&req));
-        req.add_result(pe as usize, req_id.sub_id, data);   
-    }    
+        req.add_result(pe as usize, req_id.sub_id, data);
+    }
 }

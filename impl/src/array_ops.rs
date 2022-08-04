@@ -490,7 +490,8 @@ fn create_buf_ops(
 
     expanded.extend(quote! {
         struct #buf_op_name{
-            data: #lamellar::array::#array_type<#typeident>,
+            // data: #lamellar::array::#array_type<#typeident>,
+            data: #lamellar::array::#byte_array_type,
             // ops: Mutex<Vec<(ArrayOpCmd,Vec<(usize,#typeident)>)>>,
             ops: Mutex<Vec<(ArrayOpCmd<#typeident>,#lamellar::array::OpAmInputToValue<#typeident>)>>,
             cur_len: AtomicUsize, //this could probably just be a normal usize cause we only update it after we get ops lock
@@ -558,6 +559,7 @@ fn create_buf_ops(
                 // let mut inner_i = ops[op_i as usize].1[0].len() as isize-1;
                 // Vec<(ArrayOpCmd,)> == op_i;
                 // Vec<(Vec<usize>,#typeident)>
+                let data: #lamellar::array::#array_type<#typeident> = self.data.upgrade().expect("array invalid").into();
                 
                 while op_i >= 0 {
                     while op_i >= 0 && (cur_size + ops[op_i as usize].1.num_bytes() < 10000000) {
@@ -569,10 +571,10 @@ fn create_buf_ops(
                     // println!("cur_size: {:?} i {:?} len {:?} ops_len {:?}",cur_size ,op_i, new_ops.len(),ops.len());
                     let mut am = #am_buf_name{
                         // wait: wait.clone(),
-                        data: self.data.sub_array(sub_array.clone()),
+                        data: data.sub_array(sub_array.clone()),
                         ops: new_ops,
                         res_buf_size: result_buf_size,
-                        orig_pe: self.data.my_pe(),
+                        orig_pe: data.my_pe(),
                     };
                     ams.push(Arc::new(am));
                     cur_size = 0;
@@ -629,15 +631,14 @@ fn create_buf_ops(
         }
         #[allow(non_snake_case)]
         fn #dist_am_buf_name(array: #lamellar::array::#byte_array_type) -> Arc<dyn #lamellar::array::BufferOp>{
-            // println!("{:}",stringify!(#dist_fn_name));
-            Arc::new(#buf_op_name{
-                data: unsafe {array.into()},
-                ops: Mutex::new(Vec::new()),
-                cur_len: AtomicUsize::new(0),
-                complete: RwLock::new(Arc::new(AtomicBool::new(false))),
-                results_offset: RwLock::new(Arc::new(AtomicUsize::new(0))),
-                results: RwLock::new(Arc::new(Mutex::new(Vec::new()))),
-            })
+                Arc::new(#buf_op_name{
+                    data: array,
+                    ops: Mutex::new(Vec::new()),
+                    cur_len: AtomicUsize::new(0),
+                    complete: RwLock::new(Arc::new(AtomicBool::new(false))),
+                    results_offset: RwLock::new(Arc::new(AtomicUsize::new(0))),
+                    results: RwLock::new(Arc::new(Mutex::new(Vec::new()))),
+                })
         }
         inventory::submit! {
             #![crate = #lamellar]
@@ -671,19 +672,19 @@ fn create_buffered_ops(
     let mut atomic_array_types: Vec<(syn::Ident, syn::Ident)> = vec![
         (
             quote::format_ident!("LocalLockAtomicArray"),
-            quote::format_ident!("LocalLockAtomicByteArray"),
+            quote::format_ident!("LocalLockAtomicByteArrayWeak"),
         ),
     ];
 
     if native {
         atomic_array_types.push((
             quote::format_ident!("NativeAtomicArray"),
-            quote::format_ident!("NativeAtomicByteArray"),
+            quote::format_ident!("NativeAtomicByteArrayWeak"),
         ));
     }else{
         atomic_array_types.push((
             quote::format_ident!("GenericAtomicArray"),
-            quote::format_ident!("GenericAtomicByteArray"),
+            quote::format_ident!("GenericAtomicByteArrayWeak"),
         ));
     }
 
@@ -696,7 +697,7 @@ fn create_buffered_ops(
     let buf_op_impl = create_buf_ops(
         typeident.clone(),
         quote::format_ident!("UnsafeArray"),
-        quote::format_ident!("UnsafeByteArray"),
+        quote::format_ident!("UnsafeByteArrayWeak"),
         &optypes,
         rt,
         bitwise,
@@ -718,7 +719,18 @@ fn create_buffered_ops(
     let user_expanded = quote_spanned! {expanded.span()=>
         const _: () = {
             extern crate lamellar as __lamellar;
-            use __lamellar::array::{AtomicArray,AtomicByteArray,GenericAtomicArray,NativeAtomicArray,LocalLockAtomicArray,LocalLockAtomicByteArray,LocalArithmeticOps,LocalAtomicOps,ArrayOpCmd,LamellarArrayPut,OpResultOffsets,PeOpResults,OpResults,OpAmInputToValue};
+            use __lamellar::array::{
+                AtomicArray,AtomicByteArray,AtomicByteArrayWeak,
+                GenericAtomicArray,
+                NativeAtomicArray,
+                LocalLockAtomicArray,LocalLockAtomicByteArray,LocalLockAtomicByteArrayWeak,
+                LocalArithmeticOps,LocalAtomicOps,
+                UnsafeArray, UnsafeArrayByteArray, UnsafeArrayByteArrayWeak,
+                ArrayOpCmd,
+                LamellarArrayPut,
+                OpResultOffsets,
+                PeOpResults,OpResults,
+                OpAmInputToValue};
             // #bitwise_mod
             use __lamellar::array;
             // #bitwise_mod
@@ -755,26 +767,26 @@ fn create_ops(
     let mut write_array_types: Vec<(syn::Ident, syn::Ident)> = vec![
         (
             quote::format_ident!("LocalLockAtomicArray"),
-            quote::format_ident!("LocalLockAtomicByteArray"),
+            quote::format_ident!("LocalLockAtomicByteArrayWeak"),
         ),
         (
             quote::format_ident!("AtomicArray"),
-            quote::format_ident!("AtomicByteArray"),
+            quote::format_ident!("AtomicByteArrayWeak"),
         ),
         (
             quote::format_ident!("GenericAtomicArray"),
-            quote::format_ident!("GenericAtomicByteArray"),
+            quote::format_ident!("GenericAtomicByteArrayWeak"),
         ),
         (
             quote::format_ident!("UnsafeArray"),
-            quote::format_ident!("UnsafeByteArray"),
+            quote::format_ident!("UnsafeByteArrayWeak"),
         ),
     ];
 
     if native {
         write_array_types.push((
             quote::format_ident!("NativeAtomicArray"),
-            quote::format_ident!("NativeAtomicByteArray"),
+            quote::format_ident!("NativeAtomicByteArrayWeak"),
         ));
     }
     let ops: Vec<(syn::Ident, bool)> = vec![
@@ -807,22 +819,22 @@ fn create_ops(
     let atomic_array_types: Vec<(syn::Ident, syn::Ident)> = vec![
         (
             quote::format_ident!("LocalLockAtomicArray"),
-            quote::format_ident!("LocalLockAtomicByteArray"),
+            quote::format_ident!("LocalLockAtomicByteArrayWeak"),
         ),
         (
             quote::format_ident!("AtomicArray"),
-            quote::format_ident!("AtomicByteArray"),
+            quote::format_ident!("AtomicByteArrayWeak"),
         ),
         (
             quote::format_ident!("GenericAtomicArray"),
-            quote::format_ident!("GenericAtomicByteArray"),
+            quote::format_ident!("GenericAtomicByteArrayWeak"),
         ),
     ];
 
     if native {
         atomic_array_types.push((
             quote::format_ident!("NativeAtomicArray"),
-            quote::format_ident!("NativeAtomicByteArray"),
+            quote::format_ident!("NativeAtomicByteArrayWeak"),
         ));
     }
     let atomic_ops: Vec<(syn::Ident, bool)> = vec![

@@ -1,7 +1,7 @@
 use core::marker::PhantomData;
 use indexmap::IndexSet;
 use lamellar_prof::*;
-use log::trace;
+// use log::trace;
 use parking_lot::{Condvar, Mutex};
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -24,32 +24,32 @@ struct Vma {
     size: usize,
 }
 
-#[derive(Clone)]
+// #[derive(Clone)]
 pub(crate) struct LinearAlloc {
     entries: Arc<(Mutex<Vec<Vma>>, Condvar)>,
     start_addr: usize,
     max_size: usize,
     last_idx: Arc<AtomicUsize>,
-    id: String,
+    _id: String,
     free_space: Arc<AtomicUsize>,
 }
 
 #[prof]
 impl LamellarAlloc for LinearAlloc {
     fn new(id: String) -> LinearAlloc {
-        trace!("new linear alloc: {:?}", id);
+        // trace!("new linear alloc: {:?}", id);
         LinearAlloc {
             entries: Arc::new((Mutex::new(Vec::new()), Condvar::new())),
             start_addr: 0,
             max_size: 0,
             last_idx: Arc::new(AtomicUsize::new(0)),
-            id: id,
+            _id: id,
             free_space: Arc::new(AtomicUsize::new(0)),
         }
     }
 
     fn init(&mut self, start_addr: usize, size: usize) {
-        trace!("init: {:?} {:x} {:?}", self.id, start_addr, size);
+        // trace!("init: {:?} {:x} {:?}", self.id, start_addr, size);
         self.start_addr = start_addr;
         self.max_size = size;
         self.free_space.store(size, Ordering::SeqCst);
@@ -191,7 +191,7 @@ pub(crate) struct BTreeAlloc {
 #[prof]
 impl LamellarAlloc for BTreeAlloc {
     fn new(id: String) -> BTreeAlloc {
-        trace!("new BTreeAlloc: {:?}", id);
+        // trace!("new BTreeAlloc: {:?}", id);
         BTreeAlloc {
             free_entries: Arc::new((Mutex::new(FreeEntries::new()), Condvar::new())),
             allocated_addrs: Arc::new((Mutex::new(BTreeMap::new()), Condvar::new())),
@@ -359,29 +359,29 @@ impl LamellarAlloc for BTreeAlloc {
     }
 }
 
-#[derive(Clone)]
+// #[derive(Clone)]
 pub(crate) struct ObjAlloc<T: Copy> {
     free_entries: Arc<(Mutex<Vec<usize>>, Condvar)>,
     start_addr: usize,
     max_size: usize,
-    id: String,
+    _id: String,
     phantom: PhantomData<T>,
 }
 
 #[prof]
 impl<T: Copy> LamellarAlloc for ObjAlloc<T> {
     fn new(id: String) -> ObjAlloc<T> {
-        trace!("new ObjAlloc: {:?}", id);
+        // trace!("new ObjAlloc: {:?}", id);
         ObjAlloc {
             free_entries: Arc::new((Mutex::new(Vec::new()), Condvar::new())),
             start_addr: 0,
             max_size: 0,
-            id: id,
+            _id: id,
             phantom: PhantomData,
         }
     }
     fn init(&mut self, start_addr: usize, size: usize) {
-        trace!("init: {:?} {:x} {:?}", self.id, start_addr, size);
+        // trace!("init: {:?} {:x} {:?}", self.id, start_addr, size);
         self.start_addr = start_addr;
         self.max_size = size;
         let &(ref lock, ref _cvar) = &*self.free_entries;

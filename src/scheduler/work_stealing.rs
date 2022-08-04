@@ -1,20 +1,20 @@
 use crate::active_messaging::{ActiveMessageEngine, ExecType, LamellarFunc};
 use crate::lamellae::{Des, Lamellae, LamellaeRDMA, SerializedData};
 use crate::lamellar_team::LamellarTeamRT;
-use crate::scheduler::{AmeScheduler, AmeSchedulerQueue, ReqData, ReqId,SchedulerQueue};
+use crate::scheduler::{AmeScheduler, AmeSchedulerQueue, ReqData, ReqId, SchedulerQueue};
 use lamellar_prof::*;
 // use log::trace;
 use core_affinity::CoreId;
 use crossbeam::deque::Worker;
 use futures::Future;
-use parking_lot::RwLock;
+// use parking_lot::RwLock;
 use rand::prelude::*;
-use std::collections::HashMap;
+// use std::collections::HashMap;
 use std::panic;
 use std::pin::Pin;
 use std::process;
 use std::sync::atomic::{AtomicBool, AtomicU8, AtomicUsize, Ordering};
-use std::sync::{Arc, Weak};
+use std::sync::Arc; //, Weak};
 use std::thread;
 // use std::time::Instant;
 
@@ -211,7 +211,7 @@ impl AmeSchedulerQueue for WorkStealingInner {
 
     fn submit_task<F>(&self, future: F)
     where
-        F: Future<Output = ()> ,
+        F: Future<Output = ()>,
     {
         // println!("submit task {:?}",self.num_tasks.load(Ordering::Relaxed));
         let num_tasks = self.num_tasks.clone();
@@ -229,7 +229,7 @@ impl AmeSchedulerQueue for WorkStealingInner {
         task.detach();
     }
     fn shutdown(&self) {
-        // println!("work stealing shuting down {:?}",self.active());
+        // println!("work stealing shuting down {:?}", self.active());
         self.active.store(false, Ordering::SeqCst);
         // println!("work stealing shuting down {:?}",self.active());
         while self.active_cnt.load(Ordering::Relaxed) > 2
@@ -238,7 +238,12 @@ impl AmeSchedulerQueue for WorkStealingInner {
             //this should be the recvtask, and alloc_task
             std::thread::yield_now()
         }
-        // println!("work stealing shut down {:?}",self.active());
+        // println!(
+        //     "work stealing shut down {:?} {:?} {:?}",
+        //     self.active(),
+        //     self.active_cnt.load(Ordering::Relaxed),
+        //     self.active_cnt.load(Ordering::Relaxed)
+        // );
     }
 
     fn exec_task(&self) {
@@ -303,7 +308,7 @@ impl SchedulerQueue for WorkStealing {
 
     fn submit_task<F>(&self, future: F)
     where
-        F: Future<Output = ()> ,
+        F: Future<Output = ()>,
     {
         self.inner.submit_task(future);
     }
@@ -389,10 +394,9 @@ pub(crate) struct WorkStealing {
     ame: Arc<ActiveMessageEngine>,
 }
 impl WorkStealing {
-    pub(crate) fn new(
-        _num_pes: usize,
-        my_pe: usize,
-        teams: Arc<RwLock<HashMap<u64, Weak<LamellarTeamRT>>>>,
+    pub(crate) fn new(// _num_pes: usize,
+        // my_pe: usize,
+        // teams: Arc<RwLock<HashMap<u64, Weak<LamellarTeamRT>>>>,
     ) -> WorkStealing {
         // println!("new work stealing queue");
         let stall_mark = Arc::new(AtomicUsize::new(0));
@@ -402,9 +406,9 @@ impl WorkStealing {
         let sched = WorkStealing {
             inner: inner.clone(),
             ame: Arc::new(ActiveMessageEngine::new(
-                my_pe,
+                // my_pe,
                 inner.clone(),
-                teams,
+                // teams,
                 stall_mark.clone(),
             )),
         };

@@ -1,8 +1,8 @@
-use lamellar::array::{DistributedIterator, Distribution, SerialIterator, UnsafeArray};
 use lamellar::array::ArithmeticOps;
+use lamellar::array::{
+    DistributedIterator, Distribution, ReadOnlyArray, SerialIterator, UnsafeArray,
+};
 const ARRAY_LEN: usize = 100;
-
-
 
 fn main() {
     let world = lamellar::LamellarWorldBuilder::new().build();
@@ -10,7 +10,6 @@ fn main() {
     let _num_pes = world.num_pes();
     let block_array = UnsafeArray::<usize>::new(world.team(), ARRAY_LEN, Distribution::Block);
     let cyclic_array = UnsafeArray::<usize>::new(world.team(), ARRAY_LEN, Distribution::Cyclic);
-
 
     // We expose multiple ways to iterate over a lamellar array
     // the first approach introduces what we call a distributed iterator (inspired by Rayon's parallel iterators).
@@ -115,19 +114,24 @@ fn main() {
     block_array.barrier();
 
     println!("--------------------------------------------------------");
-    println!("map");
+    println!("map async for each");
+    cyclic_array.print();
     let barray = block_array.clone();
     cyclic_array
         .dist_iter()
         .enumerate()
-        .map(move|(i, elem)| {
-            let barray = barray.clone(); 
-            async move {
-                (i,elem,barray.fetch_add(i,*elem).into_future().await[0]) 
-            }
-        }
-        )
-        .for_each_async(move |i| async move{
+        .map(move |(i, elem)| {
+            let barray = barray.clone();
+            println!(
+                "[pe({:?})-{:?}] i: {:?} {:?}",
+                my_pe,
+                std::thread::current().id(),
+                i,
+                elem
+            );
+            async move { (i, elem, barray.fetch_add(i, *elem).into_future().await[0]) }
+        })
+        .for_each_async(move |i| async move {
             println!(
                 "[pe({:?})-{:?}] {:?}",
                 my_pe,
@@ -140,16 +144,39 @@ fn main() {
     block_array.print();
 
     println!("--------------------------------------------------------");
+    println!("map async collect");
+    let barray = block_array.clone();
+    let new_array = cyclic_array
+        .dist_iter()
+        .enumerate()
+        .map(move |(i, elem)| {
+            let barray = barray.clone();
+            async move {
+                barray.add(i, *elem).into_future().await;
+                barray.at(i).into_future().await
+            }
+        })
+        .collect_async::<ReadOnlyArray<usize>, _>(Distribution::Block)
+        .wait();
+    cyclic_array.barrier();
+    new_array.print();
+    block_array.print();
+
+    println!("--------------------------------------------------------");
     println!("filter");
-    block_array.dist_iter().enumerate().filter(|(_, elem)| *elem % 4 == 0).for_each(move |(i, elem)| {
-        println!(
-            "[pe({:?})-{:?}] i: {:?} {:?}",
-            my_pe,
-            std::thread::current().id(),
-            i,
-            elem
-        )
-    });
+    block_array
+        .dist_iter()
+        .enumerate()
+        .filter(|(_, elem)| *elem % 4 == 0)
+        .for_each(move |(i, elem)| {
+            println!(
+                "[pe({:?})-{:?}] i: {:?} {:?}",
+                my_pe,
+                std::thread::current().id(),
+                i,
+                elem
+            )
+        });
     block_array.wait_all();
     block_array.barrier();
 
@@ -157,27 +184,30 @@ fn main() {
 
     println!("--------------------------------------------------------");
     println!("filter_map");
-    block_array.dist_iter().enumerate().filter_map(|(i, elem)| { 
-        if *elem % 4 == 0 {
-            Some((i,*elem as f32))
-        }
-        else{
-            None
-        }
-    }).for_each(move |(i, elem)| {
-        println!(
-            "[pe({:?})-{:?}] i: {:?} {:?}",
-            my_pe,
-            std::thread::current().id(),
-            i,
-            elem
-        )
-    });
+    block_array
+        .dist_iter()
+        .enumerate()
+        .filter_map(|(i, elem)| {
+            if *elem % 4 == 0 {
+                Some((i, *elem as f32))
+            } else {
+                None
+            }
+        })
+        .for_each(move |(i, elem)| {
+            println!(
+                "[pe({:?})-{:?}] i: {:?} {:?}",
+                my_pe,
+                std::thread::current().id(),
+                i,
+                elem
+            )
+        });
     block_array.wait_all();
     block_array.barrier();
     println!("--------------------------------------------------------");
     println!("filter_map collect");
-    // let new_block_array = block_array.dist_iter().filter_map(| elem| { 
+    // let new_block_array = block_array.dist_iter().filter_map(| elem| {
     //     if *elem % 8 == 0 {
     //         Some(*elem as f32)
     //     }

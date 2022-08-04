@@ -1,4 +1,4 @@
-use crate::active_messaging::{AmDist,AmLocal, LamellarAny};
+use crate::active_messaging::{AmDist, AmLocal, LamellarAny};
 use crate::lamellae::{Des, SerializedData};
 use crate::lamellar_arch::LamellarArchRT;
 use async_trait::async_trait;
@@ -6,8 +6,8 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 
 use parking_lot::Mutex;
-use std::collections::HashMap;
 use std::cell::Cell;
+use std::collections::HashMap;
 
 pub(crate) enum InternalResult {
     Local(LamellarAny),     // a local result from a local am (possibly a returned one)
@@ -16,12 +16,11 @@ pub(crate) enum InternalResult {
 }
 
 #[async_trait]
-pub trait LamellarRequest: Sync + Send { 
+pub trait LamellarRequest: Sync + Send {
     type Output;
     async fn into_future(mut self: Box<Self>) -> Self::Output;
     fn get(&self) -> Self::Output;
 }
-
 
 #[async_trait]
 pub trait LamellarMultiRequest: Sync + Send {
@@ -36,16 +35,16 @@ pub(crate) trait LamellarRequestAddResult: Sync + Send {
     fn update_counters(&self);
 }
 
-
 //todo make this an enum instead...
-// will need to include the task group requests as well... 
-pub(crate) struct LamellarRequestResult{ 
+// will need to include the task group requests as well...
+pub(crate) struct LamellarRequestResult {
     pub(crate) req: Arc<dyn LamellarRequestAddResult>,
 }
 
 impl LamellarRequestResult {
     pub(crate) fn add_result(&self, pe: usize, sub_id: usize, data: InternalResult) {
-        if self.req.user_held(){ //if the user has dropped the handle, no need to actually do anything with the returned data
+        if self.req.user_held() {
+            //if the user has dropped the handle, no need to actually do anything with the returned data
             self.req.add_result(pe as usize, sub_id, data);
         }
         self.req.update_counters();
@@ -58,27 +57,28 @@ pub(crate) struct LamellarRequestHandleInner {
     pub(crate) team_outstanding_reqs: Arc<AtomicUsize>,
     pub(crate) world_outstanding_reqs: Arc<AtomicUsize>,
     pub(crate) tg_outstanding_reqs: Option<Arc<AtomicUsize>>,
-    pub(crate) user_handle: AtomicBool, //we can use this flag to optimize what happens when the request returns    
+    pub(crate) user_handle: AtomicBool, //we can use this flag to optimize what happens when the request returns
 }
 // we use the ready bool to protect access to the data field
-unsafe impl Sync for LamellarRequestHandleInner {} 
+unsafe impl Sync for LamellarRequestHandleInner {}
 
 pub struct LamellarRequestHandle<T: AmDist> {
     pub(crate) inner: Arc<LamellarRequestHandleInner>,
     pub(crate) _phantom: std::marker::PhantomData<T>,
-} 
+}
 
-impl <T: AmDist> Drop for LamellarRequestHandle<T> {
+impl<T: AmDist> Drop for LamellarRequestHandle<T> {
     fn drop(&mut self) {
         self.inner.user_handle.store(false, Ordering::SeqCst);
     }
 }
 
 impl LamellarRequestAddResult for LamellarRequestHandleInner {
-    fn user_held(&self) -> bool{
+    fn user_held(&self) -> bool {
         self.user_handle.load(Ordering::SeqCst)
     }
-    fn add_result(&self, _pe: usize, _sub_id: usize, data: InternalResult) { // for a single request this is only called one time by a single runtime thread so use of the cell is safe
+    fn add_result(&self, _pe: usize, _sub_id: usize, data: InternalResult) {
+        // for a single request this is only called one time by a single runtime thread so use of the cell is safe
         self.data.set(Some(data));
         self.ready.store(true, Ordering::SeqCst);
     }
@@ -115,7 +115,7 @@ impl<T: AmDist> LamellarRequestHandle<T> {
                 } else {
                     panic!("unexpected unit result  of type ");
                 }
-            },
+            }
         }
     }
 }
@@ -140,28 +140,26 @@ impl<T: AmDist> LamellarRequest for LamellarRequestHandle<T> {
 pub(crate) struct LamellarMultiRequestHandleInner {
     pub(crate) cnt: AtomicUsize,
     pub(crate) arch: Arc<LamellarArchRT>,
-    pub(crate) data: Mutex<HashMap<usize,InternalResult>>,
+    pub(crate) data: Mutex<HashMap<usize, InternalResult>>,
     pub(crate) team_outstanding_reqs: Arc<AtomicUsize>,
     pub(crate) world_outstanding_reqs: Arc<AtomicUsize>,
     pub(crate) tg_outstanding_reqs: Option<Arc<AtomicUsize>>,
-    pub(crate) user_handle: AtomicBool, //we can use this flag to optimize what happens when the request returns 
-    
+    pub(crate) user_handle: AtomicBool, //we can use this flag to optimize what happens when the request returns
 }
-
 
 pub struct LamellarMultiRequestHandle<T: AmDist> {
     pub(crate) inner: Arc<LamellarMultiRequestHandleInner>,
     pub(crate) _phantom: std::marker::PhantomData<T>,
-} 
+}
 
-impl <T: AmDist> Drop for LamellarMultiRequestHandle<T> {
+impl<T: AmDist> Drop for LamellarMultiRequestHandle<T> {
     fn drop(&mut self) {
         self.inner.user_handle.store(false, Ordering::SeqCst);
     }
 }
 
 impl LamellarRequestAddResult for LamellarMultiRequestHandleInner {
-    fn user_held(&self) -> bool{
+    fn user_held(&self) -> bool {
         self.user_handle.load(Ordering::SeqCst)
     }
     fn add_result(&self, pe: usize, _sub_id: usize, data: InternalResult) {
@@ -202,11 +200,10 @@ impl<T: AmDist> LamellarMultiRequestHandle<T> {
                 } else {
                     panic!("unexpected unit result  of type ");
                 }
-            },
+            }
         }
     }
 }
-
 
 #[async_trait]
 impl<T: AmDist> LamellarMultiRequest for LamellarMultiRequestHandle<T> {
@@ -217,7 +214,7 @@ impl<T: AmDist> LamellarMultiRequest for LamellarMultiRequestHandle<T> {
         }
         let mut res = vec![];
         let mut data = self.inner.data.lock();
-        for pe in 0..data.len(){
+        for pe in 0..data.len() {
             res.push(self.process_result(data.remove(&pe).unwrap()));
         }
         res
@@ -228,15 +225,12 @@ impl<T: AmDist> LamellarMultiRequest for LamellarMultiRequestHandle<T> {
         }
         let mut res = vec![];
         let mut data = self.inner.data.lock();
-        for pe in 0..data.len(){
+        for pe in 0..data.len() {
             res.push(self.process_result(data.remove(&pe).unwrap()));
         }
         res
     }
 }
-
-
-
 
 pub(crate) struct LamellarLocalRequestHandleInner {
     pub(crate) ready: AtomicBool,
@@ -244,34 +238,35 @@ pub(crate) struct LamellarLocalRequestHandleInner {
     pub(crate) team_outstanding_reqs: Arc<AtomicUsize>,
     pub(crate) world_outstanding_reqs: Arc<AtomicUsize>,
     pub(crate) tg_outstanding_reqs: Option<Arc<AtomicUsize>>,
-    pub(crate) user_handle: AtomicBool, //we can use this flag to optimize what happens when the request returns    
+    pub(crate) user_handle: AtomicBool, //we can use this flag to optimize what happens when the request returns
 }
 // we use the ready bool to protect access to the data field
-unsafe impl Sync for LamellarLocalRequestHandleInner {} 
+unsafe impl Sync for LamellarLocalRequestHandleInner {}
 
 pub struct LamellarLocalRequestHandle<T> {
     pub(crate) inner: Arc<LamellarLocalRequestHandleInner>,
     pub(crate) _phantom: std::marker::PhantomData<T>,
-} 
+}
 
-impl <T> Drop for LamellarLocalRequestHandle<T> {
+impl<T> Drop for LamellarLocalRequestHandle<T> {
     fn drop(&mut self) {
         self.inner.user_handle.store(false, Ordering::SeqCst);
     }
 }
 
 impl LamellarRequestAddResult for LamellarLocalRequestHandleInner {
-    fn user_held(&self) -> bool{
+    fn user_held(&self) -> bool {
         self.user_handle.load(Ordering::SeqCst)
     }
-    fn add_result(&self, _pe: usize, _sub_id: usize, data: InternalResult) { // for a single request this is only called one time by a single runtime thread so use of the cell is safe
+    fn add_result(&self, _pe: usize, _sub_id: usize, data: InternalResult) {
+        // for a single request this is only called one time by a single runtime thread so use of the cell is safe
         match data {
             InternalResult::Local(x) => self.data.set(Some(x)),
             InternalResult::Remote(_) => panic!("unexpected local result  of type "),
-            InternalResult::Unit => self.data.set(Some(Box::new(()) as LamellarAny))
-        }  
+            InternalResult::Unit => self.data.set(Some(Box::new(()) as LamellarAny)),
+        }
 
-        self.ready.store(true, Ordering::SeqCst);      
+        self.ready.store(true, Ordering::SeqCst);
     }
     fn update_counters(&self) {
         self.team_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
@@ -308,4 +303,3 @@ impl<T: AmLocal + 'static> LamellarRequest for LamellarLocalRequestHandle<T> {
         self.process_result(self.inner.data.replace(None).unwrap())
     }
 }
-

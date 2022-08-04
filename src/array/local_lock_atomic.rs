@@ -6,7 +6,7 @@ pub(crate) use buffered_operations as operations;
 mod rdma;
 use crate::array::local_lock_atomic::operations::BUFOPS;
 use crate::array::private::LamellarArrayPrivate;
-use crate::array::r#unsafe::UnsafeByteArray;
+use crate::array::r#unsafe::{UnsafeByteArray, UnsafeByteArrayWeak};
 use crate::array::*;
 use crate::darc::local_rw_darc::LocalRwDarc;
 use crate::darc::DarcMode;
@@ -29,6 +29,30 @@ pub struct LocalLockAtomicArray<T> {
 pub struct LocalLockAtomicByteArray {
     lock: LocalRwDarc<()>,
     pub(crate) array: UnsafeByteArray,
+}
+
+impl LocalLockAtomicByteArray {
+    pub fn downgrade(array: &LocalLockAtomicByteArray) -> LocalLockAtomicByteArrayWeak {
+        LocalLockAtomicByteArrayWeak {
+            lock: array.lock.clone(),
+            array: UnsafeByteArray::downgrade(&array.array),
+        }
+    }
+}
+
+#[lamellar_impl::AmLocalDataRT(Clone)]
+pub struct LocalLockAtomicByteArrayWeak {
+    lock: LocalRwDarc<()>,
+    pub(crate) array: UnsafeByteArrayWeak,
+}
+
+impl LocalLockAtomicByteArrayWeak {
+    pub fn upgrade(&self) -> Option<LocalLockAtomicByteArray> {
+        Some(LocalLockAtomicByteArray {
+            lock: self.lock.clone(),
+            array: self.array.upgrade()?,
+        })
+    }
 }
 
 pub struct LocalLockAtomicMutLocalData<'a, T: Dist> {
@@ -132,7 +156,7 @@ impl<T: Dist + std::default::Default> LocalLockAtomicArray<T> {
             };
 
             for pe in 0..op_bufs.len() {
-                op_bufs[pe] = func(bytearray.clone());
+                op_bufs[pe] = func(LocalLockAtomicByteArray::downgrade(&bytearray));
             }
         }
 
@@ -278,7 +302,7 @@ impl<T: Dist> From<UnsafeArray<T>> for LocalLockAtomicArray<T> {
             };
             let mut op_bufs = array.inner.data.op_buffers.write();
             for _pe in 0..array.inner.data.num_pes {
-                op_bufs.push(func(bytearray.clone()))
+                op_bufs.push(func(LocalLockAtomicByteArray::downgrade(&bytearray)))
             }
         }
         LocalLockAtomicArray {
@@ -401,7 +425,7 @@ impl<T: Dist + std::fmt::Debug> ArrayPrint<T> for LocalLockAtomicArray<T> {
 }
 
 pub struct LocalLockAtomicArrayReduceHandle<T: Dist + AmDist> {
-    req: Box<dyn LamellarRequest<Output = T> >,
+    req: Box<dyn LamellarRequest<Output = T>>,
     _lock_guard: ArcRwLockReadGuard<RawRwLock, Box<()>>,
 }
 
@@ -417,28 +441,28 @@ impl<T: Dist + AmDist> LamellarRequest for LocalLockAtomicArrayReduceHandle<T> {
 }
 
 impl<T: Dist + AmDist + 'static> LocalLockAtomicArray<T> {
-    pub fn reduce(&self, op: &str) -> Box<dyn LamellarRequest<Output = T>  > {
+    pub fn reduce(&self, op: &str) -> Box<dyn LamellarRequest<Output = T>> {
         let lock = self.lock.read();
         Box::new(LocalLockAtomicArrayReduceHandle {
             req: self.array.reduce(op),
             _lock_guard: lock,
         })
     }
-    pub fn sum(&self) -> Box<dyn LamellarRequest<Output = T>  > {
+    pub fn sum(&self) -> Box<dyn LamellarRequest<Output = T>> {
         let lock = self.lock.read();
         Box::new(LocalLockAtomicArrayReduceHandle {
             req: self.array.reduce("sum"),
             _lock_guard: lock,
         })
     }
-    pub fn prod(&self) -> Box<dyn LamellarRequest<Output = T>  > {
+    pub fn prod(&self) -> Box<dyn LamellarRequest<Output = T>> {
         let lock = self.lock.read();
         Box::new(LocalLockAtomicArrayReduceHandle {
             req: self.array.reduce("prod"),
             _lock_guard: lock,
         })
     }
-    pub fn max(&self) -> Box<dyn LamellarRequest<Output = T>  > {
+    pub fn max(&self) -> Box<dyn LamellarRequest<Output = T>> {
         let lock = self.lock.read();
         Box::new(LocalLockAtomicArrayReduceHandle {
             req: self.array.reduce("max"),

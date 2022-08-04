@@ -12,12 +12,12 @@ use crate::active_messaging::*;
 use crate::array::r#unsafe::operations::BUFOPS;
 use crate::array::*;
 use crate::array::{LamellarRead, LamellarWrite};
-use crate::darc::{Darc, DarcMode};
+use crate::darc::{Darc, DarcMode, WeakDarc};
 use crate::lamellae::AllocationType;
 use crate::lamellar_team::{IntoLamellarTeam, LamellarTeamRT};
-use crate::LamellarTaskGroup;
 use crate::memregion::{Dist, MemoryRegion};
 use crate::scheduler::SchedulerQueue;
+use crate::LamellarTaskGroup;
 use core::marker::PhantomData;
 use parking_lot::RwLock;
 use std::any::TypeId;
@@ -26,7 +26,6 @@ use std::pin::Pin;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use serde::ser::Serialize;
 
 pub(crate) struct UnsafeArrayData {
     mem_region: MemoryRegion<u8>,
@@ -41,6 +40,13 @@ pub(crate) struct UnsafeArrayData {
     req_cnt: Arc<AtomicUsize>,
 }
 
+// impl Drop for UnsafeArrayData {
+//     fn drop(&mut self) {
+//         println!("unsafe array data dropping1");
+//         self.op_buffers.write().clear();
+//     }
+// }
+
 //need to calculate num_elems_local dynamically
 #[lamellar_impl::AmDataRT(Clone)]
 pub struct UnsafeArray<T> {
@@ -51,6 +57,29 @@ pub struct UnsafeArray<T> {
 #[lamellar_impl::AmDataRT(Clone)]
 pub struct UnsafeByteArray {
     pub(crate) inner: UnsafeArrayInner,
+}
+
+impl UnsafeByteArray {
+    pub(crate) fn downgrade(array: &UnsafeByteArray) -> UnsafeByteArrayWeak {
+        UnsafeByteArrayWeak {
+            inner: UnsafeArrayInner::downgrade(&array.inner),
+        }
+    }
+}
+
+#[lamellar_impl::AmLocalDataRT(Clone)]
+pub struct UnsafeByteArrayWeak {
+    pub(crate) inner: UnsafeArrayInnerWeak,
+}
+
+impl UnsafeByteArrayWeak {
+    pub(crate) fn upgrade(&self) -> Option<UnsafeByteArray> {
+        if let Some(inner) = self.inner.upgrade() {
+            Some(UnsafeByteArray { inner })
+        } else {
+            None
+        }
+    }
 }
 
 #[lamellar_impl::AmDataRT(Clone)]
@@ -64,9 +93,27 @@ pub(crate) struct UnsafeArrayInner {
     size: usize,      //relative to size of T
 }
 
-// impl<T: Dist> Drop for UnsafeArray<T>{
-//     fn drop(&mut self){
-//         self.wait_all();
+#[lamellar_impl::AmLocalDataRT(Clone)]
+pub(crate) struct UnsafeArrayInnerWeak {
+    pub(crate) data: WeakDarc<UnsafeArrayData>,
+    pub(crate) distribution: Distribution,
+    // wait: Darc<AtomicUsize>,
+    orig_elem_per_pe: f64,
+    elem_size: usize, //for bytes array will be size of T, for T array will be 1
+    offset: usize,    //relative to size of T
+    size: usize,      //relative to size of T
+}
+
+// impl Drop for UnsafeArrayInner {
+//     fn drop(&mut self) {
+//         println!("unsafe array inner dropping");
+//     }
+// }
+
+// impl<T: Dist> Drop for UnsafeArray<T> {
+//     fn drop(&mut self) {
+//         println!("Dropping unsafe array");
+//         // self.wait_all();
 //     }
 // }
 
@@ -95,7 +142,7 @@ impl<T: Dist + 'static> UnsafeArray<T> {
             }
         }
 
-        let data = Darc::try_new(
+        let data = Darc::try_new_with_drop(
             team.clone(),
             UnsafeArrayData {
                 mem_region: rmr,
@@ -108,7 +155,11 @@ impl<T: Dist + 'static> UnsafeArray<T> {
                 op_buffers: RwLock::new(Vec::new()),
                 req_cnt: Arc::new(AtomicUsize::new(0)),
             },
-            crate::darc::DarcMode::Darc,
+            crate::darc::DarcMode::UnsafeArray,
+            Some(|data: &mut UnsafeArrayData| {
+                // println!("unsafe array data dropping2");
+                data.op_buffers.write().clear();
+            }),
         )
         .expect("trying to create array on non team member");
         // let wait = Darc::try_new(
@@ -147,7 +198,7 @@ impl<T: Dist + 'static> UnsafeArray<T> {
             let mut op_bufs = self.inner.data.op_buffers.write();
             let bytearray: UnsafeByteArray = self.clone().into();
             for _pe in 0..self.inner.data.num_pes {
-                op_bufs.push(func(bytearray.clone()))
+                op_bufs.push(func(UnsafeByteArray::downgrade(&bytearray)))
             }
         }
     }
@@ -171,14 +222,17 @@ impl<T: Dist + 'static> UnsafeArray<T> {
         self.inner.size
     }
 
-    pub fn calc_pe_and_offset(&self, i: usize) -> (usize,usize){
+    pub fn calc_pe_and_offset(&self, i: usize) -> (usize, usize) {
         if let Some(pe) = self.inner.pe_for_dist_index(i) {
             let local_index = self.inner.pe_offset_for_dist_index(pe, i).unwrap(); //calculated pe above
-            (pe,local_index)
+            (pe, local_index)
+        } else {
+            panic!(
+                "distributed index out of bounds {:?} (len: {:?})",
+                i,
+                self.len()
+            );
         }
-        else{
-            panic!("distributed index out of bounds {:?} (len: {:?})",i,self.len());
-        }       
     }
 
     pub unsafe fn local_as_slice(&self) -> &[T] {
@@ -245,9 +299,9 @@ impl<T: Dist + 'static> UnsafeArray<T> {
 
     pub(crate) fn block_on_outstanding(&self, mode: DarcMode) {
         self.wait_all();
-        self.inner
-            .data
-            .block_on_outstanding(mode, self.inner.data.op_buffers.read().len());
+        // println!("block on outstanding");
+        // self.inner.data.print();
+        self.inner.data.block_on_outstanding(mode, 0); //self.inner.data.op_buffers.read().len());
         self.inner.data.op_buffers.write().clear();
     }
 
@@ -367,10 +421,7 @@ impl<T: Dist> From<UnsafeArray<T>> for LamellarByteArray {
 }
 
 impl<T: Dist + serde::Serialize + serde::de::DeserializeOwned + 'static> UnsafeArray<T> {
-    pub fn reduce_data(
-        &self,
-        func: LamellarArcAm,
-    ) -> Box<dyn LamellarRequest<Output = T>  > {
+    pub fn reduce_data(&self, func: LamellarArcAm) -> Box<dyn LamellarRequest<Output = T>> {
         if let Ok(my_pe) = self.inner.data.team.team_pe_id() {
             self.inner.data.team.exec_arc_am_pe::<T>(
                 my_pe,
@@ -386,16 +437,16 @@ impl<T: Dist + serde::Serialize + serde::de::DeserializeOwned + 'static> UnsafeA
         }
     }
 
-    pub fn reduce(&self, op: &str) -> Box<dyn LamellarRequest<Output = T>  > {
+    pub fn reduce(&self, op: &str) -> Box<dyn LamellarRequest<Output = T>> {
         self.reduce_data(self.get_reduction_op(op.to_string()))
     }
-    pub fn sum(&self) -> Box<dyn LamellarRequest<Output = T>  > {
+    pub fn sum(&self) -> Box<dyn LamellarRequest<Output = T>> {
         self.reduce("sum")
     }
-    pub fn prod(&self) -> Box<dyn LamellarRequest<Output = T>  > {
+    pub fn prod(&self) -> Box<dyn LamellarRequest<Output = T>> {
         self.reduce("prod")
     }
-    pub fn max(&self) -> Box<dyn LamellarRequest<Output = T>  > {
+    pub fn max(&self) -> Box<dyn LamellarRequest<Output = T>> {
         self.reduce("max")
     }
 }
@@ -521,9 +572,7 @@ impl<T: Dist + std::fmt::Debug> ArrayPrint<T> for UnsafeArray<T> {
     }
 }
 
-impl<T: Dist + AmDist + 'static> LamellarArrayReduce<T>
-    for UnsafeArray<T>
-{
+impl<T: Dist + AmDist + 'static> LamellarArrayReduce<T> for UnsafeArray<T> {
     fn get_reduction_op(&self, op: String) -> LamellarArcAm {
         //do this the same way we did add...
         // unsafe {
@@ -535,21 +584,49 @@ impl<T: Dist + AmDist + 'static> LamellarArrayReduce<T>
         )
         // }
     }
-    fn reduce(&self, op: &str) -> Box<dyn LamellarRequest<Output = T>  > {
+    fn reduce(&self, op: &str) -> Box<dyn LamellarRequest<Output = T>> {
         self.reduce(op)
     }
-    fn sum(&self) -> Box<dyn LamellarRequest<Output = T>  > {
+    fn sum(&self) -> Box<dyn LamellarRequest<Output = T>> {
         self.sum()
     }
-    fn max(&self) -> Box<dyn LamellarRequest<Output = T>  > {
+    fn max(&self) -> Box<dyn LamellarRequest<Output = T>> {
         self.max()
     }
-    fn prod(&self) -> Box<dyn LamellarRequest<Output = T>  > {
+    fn prod(&self) -> Box<dyn LamellarRequest<Output = T>> {
         self.prod()
     }
 }
 
+impl UnsafeArrayInnerWeak {
+    pub fn upgrade(&self) -> Option<UnsafeArrayInner> {
+        if let Some(data) = self.data.upgrade() {
+            Some(UnsafeArrayInner {
+                data: data,
+                distribution: self.distribution.clone(),
+                orig_elem_per_pe: self.orig_elem_per_pe,
+                elem_size: self.elem_size,
+                offset: self.offset,
+                size: self.size,
+            })
+        } else {
+            None
+        }
+    }
+}
+
 impl UnsafeArrayInner {
+    pub(crate) fn downgrade(array: &UnsafeArrayInner) -> UnsafeArrayInnerWeak {
+        UnsafeArrayInnerWeak {
+            data: Darc::downgrade(&array.data),
+            distribution: array.distribution.clone(),
+            orig_elem_per_pe: array.orig_elem_per_pe,
+            elem_size: array.elem_size,
+            offset: array.offset,
+            size: array.size,
+        }
+    }
+
     //index is relative to (sub)array (i.e. index=0 doesnt necessarily live on pe=0)
     pub(crate) fn pe_for_dist_index(&self, index: usize) -> Option<usize> {
         if self.size > index {

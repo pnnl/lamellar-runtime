@@ -6,7 +6,7 @@ use std::cmp::PartialEq;
 use std::fmt;
 use std::ops::Deref;
 use std::pin::Pin;
-use std::sync::atomic::{AtomicU8, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -57,25 +57,28 @@ impl LamellarAM for FinishedAm {
 
 #[repr(C)]
 pub struct DarcInner<T> {
-    my_pe: usize,           // with respect to LamellarArch used to create this object
-    num_pes: usize,         // with respect to LamellarArch used to create this object
-    local_cnt: AtomicUsize, // cnt of times weve cloned for local access
-    dist_cnt: AtomicUsize,  // cnt of times weve cloned (serialized) for distributed access
-    ref_cnt_addr: usize,    // array of cnts for accesses from remote pes
+    my_pe: usize,                // with respect to LamellarArch used to create this object
+    num_pes: usize,              // with respect to LamellarArch used to create this object
+    local_cnt: AtomicUsize,      // cnt of times weve cloned for local access
+    weak_local_cnt: AtomicUsize, // cnt of times weve cloned for local access with a weak reference
+    dist_cnt: AtomicUsize,       // cnt of times weve cloned (serialized) for distributed access
+    ref_cnt_addr: usize,         // array of cnts for accesses from remote pes
     mode_addr: usize,
     am_counters: *const AMCounters,
     team: *const LamellarTeamRT,
     item: *const T,
+    drop: Option<fn(&mut T)>,
+    valid: AtomicBool,
 }
-unsafe impl<T: Send > Send for DarcInner<T> {}
-unsafe impl<T: Sync > Sync for DarcInner<T> {}
+unsafe impl<T: Send> Send for DarcInner<T> {}
+unsafe impl<T: Sync> Sync for DarcInner<T> {}
 
 pub struct Darc<T: 'static> {
     inner: *mut DarcInner<T>,
     src_pe: usize,
 }
-unsafe impl<T: Send > Send for Darc<T> {}
-unsafe impl<T: Sync > Sync for Darc<T> {}
+unsafe impl<T: Send> Send for Darc<T> {}
+unsafe impl<T: Sync> Sync for Darc<T> {}
 
 impl<T: 'static> serde::Serialize for Darc<T> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
@@ -93,6 +96,49 @@ impl<'de, T: 'static> Deserialize<'de> for Darc<T> {
     {
         let ndarc: __NetworkDarc<T> = Deserialize::deserialize(deserializer)?;
         Ok(ndarc.into())
+    }
+}
+
+pub struct WeakDarc<T: 'static> {
+    inner: *mut DarcInner<T>,
+    src_pe: usize,
+}
+unsafe impl<T: Send> Send for WeakDarc<T> {}
+unsafe impl<T: Sync> Sync for WeakDarc<T> {}
+
+impl<T> WeakDarc<T> {
+    pub fn upgrade(&self) -> Option<Darc<T>> {
+        let inner = unsafe { &*self.inner };
+        inner.local_cnt.fetch_add(1, Ordering::SeqCst);
+        if inner.valid.load(Ordering::SeqCst) {
+            Some(Darc {
+                inner: self.inner,
+                src_pe: self.src_pe,
+            })
+        } else {
+            inner.local_cnt.fetch_sub(1, Ordering::SeqCst);
+            None
+        }
+    }
+}
+
+impl<T> Drop for WeakDarc<T> {
+    fn drop(&mut self) {
+        let inner = unsafe { &*self.inner };
+        // println!("dropping weak darc\n {:?}", inner);
+        inner.weak_local_cnt.fetch_sub(1, Ordering::SeqCst);
+    }
+}
+
+impl<T> Clone for WeakDarc<T> {
+    fn clone(&self) -> Self {
+        let inner = unsafe { &*self.inner };
+        // inner.local_cnt.fetch_add(1, Ordering::SeqCst);
+        inner.weak_local_cnt.fetch_add(1, Ordering::SeqCst);
+        WeakDarc {
+            inner: self.inner,
+            src_pe: self.src_pe,
+        }
     }
 }
 
@@ -158,7 +204,7 @@ impl<T> DarcInner<T> {
         unsafe { &(*self.item) }
     }
 
-    fn send_finished(&self) -> Vec<Pin<Box<dyn Future<Output = ()> + Send >>> {
+    fn send_finished(&self) -> Vec<Pin<Box<dyn Future<Output = ()> + Send>>> {
         let ref_cnts = unsafe {
             std::slice::from_raw_parts_mut(self.ref_cnt_addr as *mut AtomicUsize, self.num_pes)
         };
@@ -293,11 +339,12 @@ impl<T> fmt::Debug for DarcInner<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "[{:}/{:?}] lc: {:?} dc: {:?}\nref_cnt: {:?}\n am_cnt ({:?},{:?})\nmode {:?}",
+            "[{:}/{:?}] lc: {:?} dc: {:?} wc: {:?}\nref_cnt: {:?}\n am_cnt ({:?},{:?})\nmode {:?}",
             self.my_pe,
             self.num_pes,
             self.local_cnt.load(Ordering::SeqCst),
             self.dist_cnt.load(Ordering::SeqCst),
+            self.weak_local_cnt.load(Ordering::SeqCst),
             unsafe {
                 &std::slice::from_raw_parts_mut(self.ref_cnt_addr as *mut usize, self.num_pes)
             },
@@ -311,6 +358,20 @@ impl<T> fmt::Debug for DarcInner<T> {
 }
 
 impl<T> Darc<T> {
+    pub fn downgrade(the_darc: &Darc<T>) -> WeakDarc<T> {
+        // println!("downgrading darc ");
+        // the_darc.print();
+        the_darc
+            .inner()
+            .weak_local_cnt
+            .fetch_add(1, Ordering::SeqCst);
+        let weak = WeakDarc {
+            inner: the_darc.inner,
+            src_pe: the_darc.src_pe,
+        };
+        // the_darc.print();
+        weak
+    }
     fn inner(&self) -> &DarcInner<T> {
         unsafe { self.inner.as_ref().expect("invalid darc inner ptr") }
     }
@@ -360,13 +421,22 @@ impl<T> Darc<T> {
 
 impl<T> Darc<T> {
     pub fn new<U: Into<IntoLamellarTeam>>(team: U, item: T) -> Result<Darc<T>, IdError> {
-        Darc::try_new(team, item, DarcMode::Darc)
+        Darc::try_new_with_drop(team, item, DarcMode::Darc, None)
     }
 
     pub(crate) fn try_new<U: Into<IntoLamellarTeam>>(
         team: U,
         item: T,
         state: DarcMode,
+    ) -> Result<Darc<T>, IdError> {
+        Darc::try_new_with_drop(team, item, state, None)
+    }
+
+    pub(crate) fn try_new_with_drop<U: Into<IntoLamellarTeam>>(
+        team: U,
+        item: T,
+        state: DarcMode,
+        drop: Option<fn(&mut T)>,
     ) -> Result<Darc<T>, IdError> {
         let team_rt = team.into().team.clone();
         let my_pe = team_rt.team_pe?;
@@ -394,6 +464,7 @@ impl<T> Darc<T> {
             my_pe: my_pe,
             num_pes: team_rt.num_pes,
             local_cnt: AtomicUsize::new(1),
+            weak_local_cnt: AtomicUsize::new(0),
             dist_cnt: AtomicUsize::new(0),
             ref_cnt_addr: addr + std::mem::size_of::<DarcInner<T>>(),
             mode_addr: addr
@@ -402,6 +473,8 @@ impl<T> Darc<T> {
             am_counters: am_counters_ptr,
             team: team_ptr, //&team_rt, //Arc::into_raw(temp_team),
             item: Box::into_raw(Box::new(item)),
+            drop: drop,
+            valid: AtomicBool::new(true),
         };
         unsafe {
             std::ptr::copy_nonoverlapping(&darc_temp, addr as *mut DarcInner<T>, 1);
@@ -463,7 +536,8 @@ impl<T> Darc<T> {
 impl<T> Clone for Darc<T> {
     fn clone(&self) -> Self {
         self.inner().local_cnt.fetch_add(1, Ordering::SeqCst);
-        // println!{"darc cloned {:?} {:?}",self.inner,self.inner().local_cnt.load(Ordering::SeqCst)};
+        // println! {"darc cloned {:?} {:?}",self.inner,self.inner().local_cnt.load(Ordering::SeqCst)};
+        // self.print();
         Darc {
             inner: self.inner,
             src_pe: self.src_pe,
@@ -492,15 +566,46 @@ impl<T: fmt::Debug> fmt::Debug for Darc<T> {
     }
 }
 
+macro_rules! local_mode {
+    ($mode:expr,$mode_refs:ident,$inner:ident) => {{
+        let local_mode = unsafe {
+            (*(((&mut $mode_refs[$inner.my_pe]) as *mut DarcMode) as *mut AtomicU8))
+                .compare_exchange(
+                    $mode as u8,
+                    DarcMode::Dropped as u8,
+                    Ordering::SeqCst,
+                    Ordering::SeqCst,
+                )
+        };
+        local_mode == Ok($mode as u8)
+    }};
+}
+
+macro_rules! launch_drop {
+    ($mode:ty,$inner:ident, $inner_addr:expr) => {
+        // println!("launching drop task as {}", stringify!($mode));
+        // self.print();
+        let team = $inner.team();
+        team.exec_am_local(DroppedWaitAM {
+            inner_addr: $inner_addr as *const u8 as usize,
+            mode_addr: $inner.mode_addr,
+            my_pe: $inner.my_pe,
+            num_pes: $inner.num_pes,
+            team: team.clone(),
+            phantom: PhantomData::<T>,
+        });
+    };
+}
+
 impl<T: 'static> Drop for Darc<T> {
     fn drop(&mut self) {
         let inner = self.inner();
         let cnt = inner.local_cnt.fetch_sub(1, Ordering::SeqCst);
-        // println!{"darc dropped {:?} {:?}",self.inner,self.inner().local_cnt.load(Ordering::SeqCst)};
+        // println! {"darc dropped {:?} {:?}",self.inner,self.inner().local_cnt.load(Ordering::SeqCst)};
         if cnt == 1 {
             //we are currently the last local ref, if it increases again it must mean someone else has come in and we can probably let them worry about cleaning up...
             let pe_ref_cnts = self.ref_cnts_as_mut_slice();
-            // println!("Last local ref... for now! {:?}",pe_ref_cnts);
+            // println!("Last local ref... for now! {:?}", pe_ref_cnts);
             // self.print();
             if pe_ref_cnts.iter().any(|&x| x > 0) {
                 //if we have received and accesses from remote pes, send we are finished
@@ -513,76 +618,24 @@ impl<T: 'static> Drop for Darc<T> {
             // we have no more current local references so lets try to launch our garbage collecting am
 
             let mode_refs = self.mode_as_mut_slice();
-            let local_mode = unsafe {
-                (*(((&mut mode_refs[inner.my_pe]) as *mut DarcMode) as *mut AtomicU8))
-                    .compare_exchange(
-                        DarcMode::Darc as u8,
-                        DarcMode::Dropped as u8,
-                        Ordering::SeqCst,
-                        Ordering::SeqCst,
-                    )
-            };
-            if local_mode == Ok(DarcMode::Darc as u8) {
-                // println!("launching drop task as darc");
-                // self.print();
-                let team = inner.team();
-                team.exec_am_local(DroppedWaitAM {
-                    inner_addr: self.inner as *const u8 as usize,
-                    mode_addr: inner.mode_addr,
-                    my_pe: inner.my_pe,
-                    num_pes: inner.num_pes,
-                    team: team.clone(),
-                    phantom: PhantomData::<T>,
-                });
-                // println!("team cnt: {:?}", Arc::strong_count(&team));
-            } else {
-                let local_mode = unsafe {
-                    (*(((&mut mode_refs[inner.my_pe]) as *mut DarcMode) as *mut AtomicU8))
-                        .compare_exchange(
-                            DarcMode::LocalRw as u8,
-                            DarcMode::Dropped as u8,
-                            Ordering::SeqCst,
-                            Ordering::SeqCst,
-                        )
-                };
-                if local_mode == Ok(DarcMode::LocalRw as u8) {
-                    // println!("launching drop task as localrw");
-                    // self.print();
-                    let team = inner.team();
-                    team.exec_am_local(DroppedWaitAM {
-                        inner_addr: self.inner as *const u8 as usize,
-                        mode_addr: inner.mode_addr,
-                        my_pe: inner.my_pe,
-                        num_pes: inner.num_pes,
-                        team: team.clone(),
-                        phantom: PhantomData::<T>,
-                    });
-                    // println!("team cnt: {:?}", Arc::strong_count(&team));
-                } else {
-                    let local_mode = unsafe {
-                        (*(((&mut mode_refs[inner.my_pe]) as *mut DarcMode) as *mut AtomicU8))
-                            .compare_exchange(
-                                DarcMode::GlobalRw as u8,
-                                DarcMode::Dropped as u8,
-                                Ordering::SeqCst,
-                                Ordering::SeqCst,
-                            )
-                    };
-                    if local_mode == Ok(DarcMode::GlobalRw as u8) {
-                        // println!("launching drop task as globalrw");
-                        // self.print();
-                        let team = inner.team();
-                        team.exec_am_local(DroppedWaitAM {
-                            inner_addr: self.inner as *const u8 as usize,
-                            mode_addr: inner.mode_addr,
-                            my_pe: inner.my_pe,
-                            num_pes: inner.num_pes,
-                            team: team.clone(),
-                            phantom: PhantomData::<T>,
-                        });
-                        // println!("team cnt: {:?}", Arc::strong_count(&team));
-                    }
-                }
+            if local_mode!(DarcMode::Darc, mode_refs, inner) {
+                launch_drop!(DarcMode::Darc, inner, self.inner);
+            } else if local_mode!(DarcMode::LocalRw, mode_refs, inner) {
+                launch_drop!(DarcMode::LocalRw, inner, self.inner);
+            } else if local_mode!(DarcMode::GlobalRw, mode_refs, inner) {
+                launch_drop!(DarcMode::GlobalRw, inner, self.inner);
+            } else if local_mode!(DarcMode::LocalRw, mode_refs, inner) {
+                launch_drop!(DarcMode::LocalRw, inner, self.inner);
+            } else if local_mode!(DarcMode::UnsafeArray, mode_refs, inner) {
+                launch_drop!(DarcMode::UnsafeArray, inner, self.inner);
+            } else if local_mode!(DarcMode::ReadOnlyArray, mode_refs, inner) {
+                launch_drop!(DarcMode::ReadOnlyArray, inner, self.inner);
+            } else if local_mode!(DarcMode::LocalOnlyArray, mode_refs, inner) {
+                launch_drop!(DarcMode::LocalOnlyArray, inner, self.inner);
+            } else if local_mode!(DarcMode::GenericAtomicArray, mode_refs, inner) {
+                launch_drop!(DarcMode::GenericAtomicArray, inner, self.inner);
+            } else if local_mode!(DarcMode::NativeAtomicArray, mode_refs, inner) {
+                launch_drop!(DarcMode::NativeAtomicArray, inner, self.inner);
             }
         }
     }
@@ -610,7 +663,7 @@ unsafe impl<T> Send for Wrapper<T> {}
 #[lamellar_impl::rt_am_local]
 impl<T: 'static> LamellarAM for DroppedWaitAM<T> {
     fn exec(self) {
-        // println!("in DroppedWaitAM {:x}",self.inner_addr);
+        // println!("in DroppedWaitAM {:x}", self.inner_addr);
         let mode_refs_u8 =
             unsafe { std::slice::from_raw_parts_mut(self.mode_addr as *mut u8, self.num_pes) };
         let mode_refs = unsafe {
@@ -677,8 +730,10 @@ impl<T: 'static> LamellarAM for DroppedWaitAM<T> {
             inner: NonNull::new(self.inner_addr as *mut DarcInner<T>)
                 .expect("invalid darc pointer"),
         };
+
         // let inner = unsafe {&*wrapped.inner}; //we dont actually care about the "type" we wrap here, we just need access to the meta data for the darc (but still allow async wait cause T is not send)
         unsafe {
+            wrapped.inner.as_ref().valid.store(false, Ordering::SeqCst);
             while wrapped.inner.as_ref().dist_cnt.load(Ordering::SeqCst) != 0
                 || wrapped.inner.as_ref().local_cnt.load(Ordering::SeqCst) != 0
             {
@@ -698,7 +753,19 @@ impl<T: 'static> LamellarAM for DroppedWaitAM<T> {
                 async_std::task::yield_now().await;
             }
             // let inner = unsafe {&*(self.inner_addr as *mut DarcInner<T>)}; //now we need to true type to deallocate appropriately
-            let _item = Box::from_raw(wrapped.inner.as_ref().item as *mut T);
+            {
+                let mut _item = Box::from_raw(wrapped.inner.as_ref().item as *mut T);
+                if let Some(my_drop) = wrapped.inner.as_ref().drop {
+                    // println!("Dropping darc");
+                    my_drop(&mut _item);
+                } else {
+                    // println!("no drop function for item");
+                }
+            }
+            while wrapped.inner.as_ref().weak_local_cnt.load(Ordering::SeqCst) != 0 {
+                //we can't actually free the darc memory until all weak pointers are gone too
+                async_std::task::yield_now().await;
+            }
             let _team = Arc::from_raw(wrapped.inner.as_ref().team); //return to rust to drop appropriately
                                                                     // println!("Darc freed! {:x} {:?}",self.inner_addr,mode_refs);
             let _am_counters = Arc::from_raw(wrapped.inner.as_ref().am_counters);
@@ -717,7 +784,7 @@ pub struct __NetworkDarc<T> {
     phantom: PhantomData<T>,
 }
 
-impl <T> std::fmt::Debug for __NetworkDarc<T> {
+impl<T> std::fmt::Debug for __NetworkDarc<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "NetworkDarc {{ inner_addr: {:x}, backend: {:?}, orig_world_pe: {:?}, orig_team_pe: {:?} }}", self.inner_addr, self.backend, self.orig_world_pe, self.orig_team_pe)
     }
