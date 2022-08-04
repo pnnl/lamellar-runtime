@@ -540,7 +540,7 @@ macro_rules! impl_compare_exchange_eps{
         
 
 use std::ops::{AddAssign, BitAndAssign, BitOrAssign, DivAssign, MulAssign, SubAssign};
-pub struct NativeAtomicElement<T: Dist> {
+pub struct NativeAtomicElement<T> {
     array: NativeAtomicArray<T>,
     local_index: usize,
 }
@@ -633,7 +633,7 @@ impl<T: Dist + std::fmt::Debug> std::fmt::Debug for NativeAtomicElement<T> {
 }
 
 #[lamellar_impl::AmDataRT(Clone)]
-pub struct NativeAtomicArray<T: Dist> {
+pub struct NativeAtomicArray<T> {
     pub(crate) array: UnsafeArray<T>,
     pub(crate) orig_t: NativeAtomicType,
 }
@@ -645,7 +645,7 @@ pub struct NativeAtomicByteArray {
 }
 
 #[derive(Clone)]
-pub struct NativeAtomicLocalData<T: Dist> {
+pub struct NativeAtomicLocalData<T> {
     // + NativeAtomicOps> {
     array: NativeAtomicArray<T>,
     start_index: usize,

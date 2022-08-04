@@ -1,4 +1,4 @@
-use crate::array::{LamellarArrayInput, LamellarRead, LamellarWrite, MyFrom};
+use crate::array::{LamellarArrayInput, LamellarRead, LamellarWrite, MyFrom,UnsafeArray};
 use crate::lamellae::{AllocationType, Backend, Lamellae, LamellaeComm, LamellaeRDMA};
 use crate::lamellar_team::LamellarTeamRT;
 // use crate::active_messaging::AmDist;
@@ -28,18 +28,19 @@ impl std::fmt::Display for MemNotLocalError {
 impl std::error::Error for MemNotLocalError {}
 
 
-pub trait Dist: Sync + Send + Copy + std::fmt::Debug + 'static {}
+pub trait Dist: Sync + Send + Copy + std::fmt::Debug +  serde::ser::Serialize + serde::de::DeserializeOwned + 'static {}
 // impl<T: Send  + Copy + std::fmt::Debug + 'static>
 //     Dist for T
 // {
 // }
 
 #[enum_dispatch(RegisteredMemoryRegion<T>, MemRegionId, AsBase, SubRegion<T>, MemoryRegionRDMA<T>, RTMemoryRegionRDMA<T>)]
-#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
 #[serde(bound = "T: Dist + serde::Serialize + serde::de::DeserializeOwned")]
 pub enum LamellarMemoryRegion<T: Dist> {
     Shared(SharedMemoryRegion<T>),
     Local(LocalMemoryRegion<T>),
+    // Unsafe(UnsafeArray<T>),
 }
 
 impl<T: Dist + serde::Serialize> LamellarMemoryRegion<T>{
@@ -50,6 +51,7 @@ impl<T: Dist + serde::Serialize> LamellarMemoryRegion<T>{
         match mr {
             LamellarMemoryRegion::Shared(mr) => mr.serialize_local_data(s),
             LamellarMemoryRegion::Local(mr) => mr.serialize_local_data(s),
+            // LamellarMemoryRegion::Unsafe(mr) => mr.serialize_local_data(s),
         }
     }
 }
@@ -60,6 +62,7 @@ impl<T: Dist> crate::DarcSerde for LamellarMemoryRegion<T> {
         match self {
             LamellarMemoryRegion::Shared(mr) => mr.ser(num_pes, cur_pe),
             LamellarMemoryRegion::Local(mr) => mr.ser(num_pes, cur_pe),
+            // LamellarMemoryRegion::Unsafe(mr) => mr.ser(num_pes, cur_pe),
         }
     }
     fn des(&self, cur_pe: Result<usize, crate::IdError>) {
@@ -67,6 +70,7 @@ impl<T: Dist> crate::DarcSerde for LamellarMemoryRegion<T> {
         match self {
             LamellarMemoryRegion::Shared(mr) => mr.des(cur_pe),
             LamellarMemoryRegion::Local(mr) => mr.des(cur_pe),
+            // LamellarMemoryRegion::Unsafe(mr) => mr.des(cur_pe),
         }
         // self.mr.print();
     }
@@ -77,6 +81,7 @@ impl<T: Dist> LamellarMemoryRegion<T> {
         match self {
             LamellarMemoryRegion::Shared(memregion) => memregion.as_mut_slice(),
             LamellarMemoryRegion::Local(memregion) => memregion.as_mut_slice(),
+            // LamellarMemoryRegion::Unsafe(memregion) => memregion.as_mut_slice(),
         }
     }
 
@@ -84,6 +89,7 @@ impl<T: Dist> LamellarMemoryRegion<T> {
         match self {
             LamellarMemoryRegion::Shared(memregion) => memregion.as_slice(),
             LamellarMemoryRegion::Local(memregion) => memregion.as_slice(),
+            // LamellarMemoryRegion::Unsafe(memregion) => memregion.as_slice(),
         }
     }
 
@@ -91,6 +97,7 @@ impl<T: Dist> LamellarMemoryRegion<T> {
         match self {
             LamellarMemoryRegion::Shared(memregion) => memregion.sub_region(range).into(),
             LamellarMemoryRegion::Local(memregion) => memregion.sub_region(range).into(),
+            // LamellarMemoryRegion::Unsafe(memregion) => memregion.sub_region(range).into(),
         }
     }
 }

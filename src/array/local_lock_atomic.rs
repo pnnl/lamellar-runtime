@@ -20,7 +20,7 @@ use std::any::TypeId;
 use std::ops::{Deref, DerefMut};
 
 #[lamellar_impl::AmDataRT(Clone)]
-pub struct LocalLockAtomicArray<T: Dist> {
+pub struct LocalLockAtomicArray<T> {
     lock: LocalRwDarc<()>,
     pub(crate) array: UnsafeArray<T>,
 }

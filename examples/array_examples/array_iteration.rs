@@ -290,16 +290,5 @@ fn main() {
     // for elem in block_array.ser_iter().step_by(4).into_iter() {...}
 }
 
-let array1 = ...;
-let array2 = ...;
-array2.dist_iter().enumerate()
-        .map(move|(i,elem)| {
-            async move {
-                barray.fetch_add(i,*elem).into_future().await[0] as f32
-            }
-        }
-        )
-        .for_each_async(move |i| async move{
-            i.await
-            );
-        });
+
+

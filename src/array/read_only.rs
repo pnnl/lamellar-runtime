@@ -8,7 +8,7 @@ use crate::memregion::Dist;
 use std::sync::Arc;
 
 #[lamellar_impl::AmDataRT(Clone)]
-pub struct ReadOnlyArray<T: Dist> {
+pub struct ReadOnlyArray<T> {
     pub(crate) array: UnsafeArray<T>,
 }
 

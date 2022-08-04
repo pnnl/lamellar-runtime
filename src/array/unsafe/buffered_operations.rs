@@ -1,6 +1,7 @@
 use crate::active_messaging::*;
 use crate::array::r#unsafe::*;
 use crate::array::*;
+use crate::array::operations::*;
 use crate::lamellar_request::LamellarRequest;
 // use crate::memregion::Dist;
 use std::any::TypeId;

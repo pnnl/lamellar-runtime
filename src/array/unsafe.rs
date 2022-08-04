@@ -26,6 +26,7 @@ use std::pin::Pin;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
+use serde::ser::Serialize;
 
 pub(crate) struct UnsafeArrayData {
     mem_region: MemoryRegion<u8>,
@@ -42,7 +43,7 @@ pub(crate) struct UnsafeArrayData {
 
 //need to calculate num_elems_local dynamically
 #[lamellar_impl::AmDataRT(Clone)]
-pub struct UnsafeArray<T: Dist> {
+pub struct UnsafeArray<T> {
     pub(crate) inner: UnsafeArrayInner,
     phantom: PhantomData<T>,
 }
@@ -624,6 +625,8 @@ impl UnsafeArrayInner {
     //     }
     // }
 
+    //index is local with respect to subarray
+    //returns local offset relative to full array
     pub fn pe_full_offset_for_local_index(&self, pe: usize, index: usize) -> Option<usize> {
         // let global_index = self.offset + index;
         let global_index = self.global_index_from_local(index)?;

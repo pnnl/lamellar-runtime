@@ -19,7 +19,7 @@ use serde::ser::SerializeSeq;
 // use std::ops::{Deref, DerefMut};
 
 use std::ops::{AddAssign, BitAndAssign, BitOrAssign, DivAssign, MulAssign, SubAssign};
-pub struct GenericAtomicElement<T: Dist> {
+pub struct GenericAtomicElement<T> {
     array: GenericAtomicArray<T>,
     local_index: usize,
 }
@@ -198,7 +198,7 @@ impl<T: Dist + ElementBitWiseOps> BitOrAssign<T> for GenericAtomicElement<T> {
 }
 
 #[lamellar_impl::AmDataRT(Clone)]
-pub struct GenericAtomicArray<T: Dist> {
+pub struct GenericAtomicArray<T> {
     locks: Darc<Vec<Mutex<()>>>,
     pub(crate) array: UnsafeArray<T>,
 }
