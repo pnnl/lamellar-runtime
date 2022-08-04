@@ -6,7 +6,7 @@ pub(crate) use buffered_operations as operations;
 mod rdma;
 use crate::array::local_lock_atomic::operations::BUFOPS;
 use crate::array::private::LamellarArrayPrivate;
-use crate::array::r#unsafe::UnsafeByteArray;
+use crate::array::r#unsafe::{UnsafeByteArray, UnsafeByteArrayWeak};
 use crate::array::*;
 use crate::darc::local_rw_darc::LocalRwDarc;
 use crate::darc::DarcMode;
@@ -29,6 +29,30 @@ pub struct LocalLockAtomicArray<T: Dist> {
 pub struct LocalLockAtomicByteArray {
     lock: LocalRwDarc<()>,
     pub(crate) array: UnsafeByteArray,
+}
+
+impl LocalLockAtomicByteArray {
+    pub fn downgrade(array: &LocalLockAtomicByteArray) -> LocalLockAtomicByteArrayWeak {
+        LocalLockAtomicByteArrayWeak {
+            lock: array.lock.clone(),
+            array: UnsafeByteArray::downgrade(&array.array),
+        }
+    }
+}
+
+#[lamellar_impl::AmLocalDataRT(Clone)]
+pub struct LocalLockAtomicByteArrayWeak {
+    lock: LocalRwDarc<()>,
+    pub(crate) array: UnsafeByteArrayWeak,
+}
+
+impl LocalLockAtomicByteArrayWeak {
+    pub fn upgrade(&self) -> Option<LocalLockAtomicByteArray> {
+        Some(LocalLockAtomicByteArray {
+            lock: self.lock.clone(),
+            array: self.array.upgrade()?,
+        })
+    }
 }
 
 pub struct LocalLockAtomicMutLocalData<'a, T: Dist> {
@@ -132,7 +156,7 @@ impl<T: Dist + std::default::Default> LocalLockAtomicArray<T> {
             };
 
             for pe in 0..op_bufs.len() {
-                op_bufs[pe] = func(bytearray.clone());
+                op_bufs[pe] = func(LocalLockAtomicByteArray::downgrade(&bytearray));
             }
         }
 
@@ -277,7 +301,7 @@ impl<T: Dist> From<UnsafeArray<T>> for LocalLockAtomicArray<T> {
             };
             let mut op_bufs = array.inner.data.op_buffers.write();
             for _pe in 0..array.inner.data.num_pes {
-                op_bufs.push(func(bytearray.clone()))
+                op_bufs.push(func(LocalLockAtomicByteArray::downgrade(&bytearray)))
             }
         }
         LocalLockAtomicArray {

@@ -7,15 +7,15 @@ mod rdma;
 use crate::array::atomic::AtomicElement;
 use crate::array::generic_atomic::operations::BUFOPS;
 use crate::array::private::LamellarArrayPrivate;
-use crate::array::r#unsafe::UnsafeByteArray;
+use crate::array::r#unsafe::{UnsafeByteArray, UnsafeByteArrayWeak};
 use crate::array::*;
 use crate::darc::Darc;
 use crate::darc::DarcMode;
 use crate::lamellar_team::{IntoLamellarTeam, LamellarTeamRT};
 use crate::memregion::Dist;
 use parking_lot::{Mutex, MutexGuard};
-use std::any::TypeId;
 use serde::ser::SerializeSeq;
+use std::any::TypeId;
 // use std::ops::{Deref, DerefMut};
 
 use std::ops::{AddAssign, BitAndAssign, BitOrAssign, DivAssign, MulAssign, SubAssign};
@@ -48,7 +48,6 @@ impl<T: Dist> GenericAtomicElement<T> {
             self.array.__local_as_mut_slice()[self.local_index] = val;
             old
         }
-        
     }
 }
 impl<T: ElementArithmeticOps> GenericAtomicElement<T> {
@@ -80,60 +79,47 @@ impl<T: ElementArithmeticOps> GenericAtomicElement<T> {
         let _lock = self.array.lock_index(self.local_index);
         unsafe {
             let old = self.array.__local_as_mut_slice()[self.local_index];
-            self.array.__local_as_mut_slice()[self.local_index]  /= val;
+            self.array.__local_as_mut_slice()[self.local_index] /= val;
             old
         }
     }
 }
 
 impl<T: Dist + std::cmp::Eq> GenericAtomicElement<T> {
-    pub fn compare_exchange(
-        &self,
-        current: T,
-        new: T,
-    ) -> Result<T,T> {
+    pub fn compare_exchange(&self, current: T, new: T) -> Result<T, T> {
         let _lock = self.array.lock_index(self.local_index);
         let current_val = unsafe { self.array.__local_as_mut_slice()[self.local_index] };
         if current_val == current {
             unsafe {
                 self.array.__local_as_mut_slice()[self.local_index] = new;
             }
-            Ok(current_val)            
-        } 
-        else{
+            Ok(current_val)
+        } else {
             Err(current_val)
         }
-        
     }
 }
-impl<T: Dist + std::cmp::PartialEq + std::cmp::PartialOrd + std::ops::Sub<Output = T> > GenericAtomicElement<T> {
-    pub fn compare_exchange_epsilon(
-        &self,
-        current: T,
-        new: T,
-        eps: T,
-    ) -> Result<T,T> {
+impl<T: Dist + std::cmp::PartialEq + std::cmp::PartialOrd + std::ops::Sub<Output = T>>
+    GenericAtomicElement<T>
+{
+    pub fn compare_exchange_epsilon(&self, current: T, new: T, eps: T) -> Result<T, T> {
         let _lock = self.array.lock_index(self.local_index);
         let current_val = unsafe { self.array.__local_as_mut_slice()[self.local_index] };
-        let same = if current_val > current{
-            current_val - current < eps 
-        }
-        else{
+        let same = if current_val > current {
+            current_val - current < eps
+        } else {
             current - current_val < eps
         };
-        if same{
+        if same {
             unsafe {
                 self.array.__local_as_mut_slice()[self.local_index] = new;
-            }  
+            }
             Ok(current_val)
-        } 
-        else{
+        } else {
             Err(current_val)
         }
     }
 }
-    
-    
 
 impl<T: ElementBitWiseOps + 'static> GenericAtomicElement<T> {
     pub fn fetch_and(&self, val: T) -> T {
@@ -218,6 +204,28 @@ impl GenericAtomicByteArray {
             .pe_full_offset_for_local_index(self.array.inner.data.my_pe, index)
             .expect("invalid local index");
         self.locks[index].lock()
+    }
+
+    pub fn downgrade(array: &GenericAtomicByteArray) -> GenericAtomicByteArrayWeak {
+        GenericAtomicByteArrayWeak {
+            locks: array.locks.clone(),
+            array: UnsafeByteArray::downgrade(&array.array),
+        }
+    }
+}
+
+#[lamellar_impl::AmLocalDataRT(Clone)]
+pub struct GenericAtomicByteArrayWeak {
+    locks: Darc<Vec<Mutex<()>>>,
+    pub(crate) array: UnsafeByteArrayWeak,
+}
+
+impl GenericAtomicByteArrayWeak {
+    pub fn upgrade(&self) -> Option<GenericAtomicByteArray> {
+        Some(GenericAtomicByteArray {
+            locks: self.locks.clone(),
+            array: self.array.upgrade()?,
+        })
     }
 }
 
@@ -334,7 +342,7 @@ impl<T: Dist + std::default::Default> GenericAtomicArray<T> {
             };
 
             for pe in 0..op_bufs.len() {
-                op_bufs[pe] = func(bytearray.clone());
+                op_bufs[pe] = func(GenericAtomicByteArray::downgrade(&bytearray));
             }
             // println!("{}", op_bufs.len());
         }
@@ -479,7 +487,7 @@ impl<T: Dist> From<UnsafeArray<T>> for GenericAtomicArray<T> {
             };
             let mut op_bufs = array.inner.data.op_buffers.write();
             for _pe in 0..array.inner.data.num_pes {
-                op_bufs.push(func(bytearray.clone()))
+                op_bufs.push(func(GenericAtomicByteArray::downgrade(&bytearray)))
             }
         }
         GenericAtomicArray {
@@ -601,16 +609,16 @@ impl<T: Dist + std::fmt::Debug> ArrayPrint<T> for GenericAtomicArray<T> {
 }
 
 impl<T: Dist + AmDist + 'static> GenericAtomicArray<T> {
-    pub fn reduce(&self, op: &str) -> Box<dyn LamellarRequest<Output = T>  > {
+    pub fn reduce(&self, op: &str) -> Box<dyn LamellarRequest<Output = T>> {
         self.array.reduce(op)
     }
-    pub fn sum(&self) -> Box<dyn LamellarRequest<Output = T>  > {
+    pub fn sum(&self) -> Box<dyn LamellarRequest<Output = T>> {
         self.array.reduce("sum")
     }
-    pub fn prod(&self) -> Box<dyn LamellarRequest<Output = T>  > {
+    pub fn prod(&self) -> Box<dyn LamellarRequest<Output = T>> {
         self.array.reduce("prod")
     }
-    pub fn max(&self) -> Box<dyn LamellarRequest<Output = T>  > {
+    pub fn max(&self) -> Box<dyn LamellarRequest<Output = T>> {
         self.array.reduce("max")
     }
 }

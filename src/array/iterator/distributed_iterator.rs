@@ -142,10 +142,10 @@ where
         while let Some(elem) = iter.next() {
             let res = elem.await;
             vec.push(res);
-            println!(
-                "here! {:?} {:?} {:?} val: {:?}",
-                i, self.start_i, self.end_i, res
-            );
+            // println!(
+            //     "here! {:?} {:?} {:?} val: {:?}",
+            //     i, self.start_i, self.end_i, res
+            // );
             i += 1;
         }
         vec
@@ -162,6 +162,13 @@ pub trait DistIterRequest {
 pub struct DistIterForEachHandle {
     pub(crate) reqs: Vec<Box<dyn LamellarRequest<Output = ()>>>,
 }
+
+impl Drop for DistIterForEachHandle {
+    fn drop(&mut self) {
+        println!("dropping DistIterForEachHandle");
+    }
+}
+
 #[async_trait]
 impl DistIterRequest for DistIterForEachHandle {
     type Output = ();

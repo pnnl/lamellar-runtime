@@ -108,8 +108,8 @@ impl<T: ElementArithmeticOps> AtomicElement<T> {
     }
 }
 
-impl <T: Dist + std::cmp::Eq> AtomicElement<T> {
-    pub fn compare_exchange(&self, current: T, new: T) -> Result<T,T> {
+impl<T: Dist + std::cmp::Eq> AtomicElement<T> {
+    pub fn compare_exchange(&self, current: T, new: T) -> Result<T, T> {
         match self {
             AtomicElement::NativeAtomicElement(array) => array.compare_exchange(current, new),
             AtomicElement::GenericAtomicElement(array) => array.compare_exchange(current, new),
@@ -117,16 +117,22 @@ impl <T: Dist + std::cmp::Eq> AtomicElement<T> {
     }
 }
 
-impl <T: Dist + std::cmp::PartialEq + std::cmp::PartialOrd + std::ops::Sub<Output = T> > AtomicElement<T> {
-    pub fn compare_exchange_epsilon(&self, current: T, new: T, eps: T) -> Result<T,T> {
+impl<T: Dist + std::cmp::PartialEq + std::cmp::PartialOrd + std::ops::Sub<Output = T>>
+    AtomicElement<T>
+{
+    pub fn compare_exchange_epsilon(&self, current: T, new: T, eps: T) -> Result<T, T> {
         match self {
-            AtomicElement::NativeAtomicElement(array) => array.compare_exchange_epsilon(current, new, eps),
-            AtomicElement::GenericAtomicElement(array) => array.compare_exchange_epsilon(current, new, eps),
+            AtomicElement::NativeAtomicElement(array) => {
+                array.compare_exchange_epsilon(current, new, eps)
+            }
+            AtomicElement::GenericAtomicElement(array) => {
+                array.compare_exchange_epsilon(current, new, eps)
+            }
         }
     }
 }
 
-impl<T: ElementBitWiseOps + 'static>  AtomicElement<T> {
+impl<T: ElementBitWiseOps + 'static> AtomicElement<T> {
     pub fn fetch_and(&self, val: T) -> T {
         match self {
             AtomicElement::NativeAtomicElement(array) => array.fetch_and(val),
@@ -225,6 +231,23 @@ pub enum AtomicByteArray {
     GenericAtomicByteArray(GenericAtomicByteArray),
 }
 
+impl AtomicByteArray {
+    pub fn downgrade(array: &AtomicByteArray) -> AtomicByteArrayWeak {
+        match array {
+            AtomicByteArray::NativeAtomicByteArray(array) => {
+                AtomicByteArrayWeak::NativeAtomicByteArrayWeak(NativeAtomicByteArray::downgrade(
+                    array,
+                ))
+            }
+            AtomicByteArray::GenericAtomicByteArray(array) => {
+                AtomicByteArrayWeak::GenericAtomicByteArrayWeak(GenericAtomicByteArray::downgrade(
+                    array,
+                ))
+            }
+        }
+    }
+}
+
 impl crate::DarcSerde for AtomicByteArray {
     fn ser(&self, num_pes: usize, cur_pe: Result<usize, crate::IdError>) {
         match self {
@@ -237,6 +260,26 @@ impl crate::DarcSerde for AtomicByteArray {
         match self {
             AtomicByteArray::NativeAtomicByteArray(array) => array.des(cur_pe),
             AtomicByteArray::GenericAtomicByteArray(array) => array.des(cur_pe),
+        }
+    }
+}
+
+#[enum_dispatch]
+#[derive(Clone)]
+pub enum AtomicByteArrayWeak {
+    NativeAtomicByteArrayWeak(NativeAtomicByteArrayWeak),
+    GenericAtomicByteArrayWeak(GenericAtomicByteArrayWeak),
+}
+
+impl AtomicByteArrayWeak {
+    pub fn upgrade(&self) -> Option<AtomicByteArray> {
+        match self {
+            AtomicByteArrayWeak::NativeAtomicByteArrayWeak(array) => {
+                Some(AtomicByteArray::NativeAtomicByteArray(array.upgrade()?))
+            }
+            AtomicByteArrayWeak::GenericAtomicByteArrayWeak(array) => {
+                Some(AtomicByteArray::GenericAtomicByteArray(array.upgrade()?))
+            }
         }
     }
 }
@@ -469,25 +512,25 @@ impl<T: Dist> From<AtomicByteArray> for AtomicArray<T> {
 }
 
 impl<T: Dist + serde::Serialize + serde::de::DeserializeOwned + 'static> AtomicArray<T> {
-    pub fn reduce(&self, op: &str) -> Box<dyn LamellarRequest<Output = T>  > {
+    pub fn reduce(&self, op: &str) -> Box<dyn LamellarRequest<Output = T>> {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.reduce(op),
             AtomicArray::GenericAtomicArray(array) => array.reduce(op),
         }
     }
-    pub fn sum(&self) -> Box<dyn LamellarRequest<Output = T>  > {
+    pub fn sum(&self) -> Box<dyn LamellarRequest<Output = T>> {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.reduce("sum"),
             AtomicArray::GenericAtomicArray(array) => array.reduce("sum"),
         }
     }
-    pub fn prod(&self) -> Box<dyn LamellarRequest<Output = T>  > {
+    pub fn prod(&self) -> Box<dyn LamellarRequest<Output = T>> {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.reduce("prod"),
             AtomicArray::GenericAtomicArray(array) => array.reduce("prod"),
         }
     }
-    pub fn max(&self) -> Box<dyn LamellarRequest<Output = T>  > {
+    pub fn max(&self) -> Box<dyn LamellarRequest<Output = T>> {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.reduce("max"),
             AtomicArray::GenericAtomicArray(array) => array.reduce("max"),

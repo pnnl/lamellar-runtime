@@ -16,7 +16,9 @@ use std::sync::Arc;
 // use serde::de::DeserializeOwned;
 
 pub(crate) mod r#unsafe;
-pub use r#unsafe::{operations::UnsafeArrayOpBuf, UnsafeArray, UnsafeByteArray};
+pub use r#unsafe::{
+    operations::UnsafeArrayOpBuf, UnsafeArray, UnsafeByteArray, UnsafeByteArrayWeak,
+};
 pub(crate) mod read_only;
 pub use read_only::{ReadOnlyArray, ReadOnlyByteArray};
 
@@ -28,24 +30,25 @@ pub use atomic::{
     // operations::{AtomicArrayOp, AtomicArrayOpBuf},
     AtomicArray,
     AtomicByteArray, //AtomicOps
+    AtomicByteArrayWeak,
 };
 
 pub(crate) mod generic_atomic;
 pub use generic_atomic::{
     operations::GenericAtomicArrayOpBuf, GenericAtomicArray, GenericAtomicByteArray,
-    GenericAtomicLocalData,
+    GenericAtomicByteArrayWeak, GenericAtomicLocalData,
 };
 
 pub(crate) mod native_atomic;
 pub use native_atomic::{
     operations::NativeAtomicArrayOpBuf, NativeAtomicArray, NativeAtomicByteArray,
-    NativeAtomicLocalData,
+    NativeAtomicByteArrayWeak, NativeAtomicLocalData,
 };
 
 pub(crate) mod local_lock_atomic;
 pub use local_lock_atomic::{
     operations::LocalLockAtomicArrayOpBuf, LocalLockAtomicArray, LocalLockAtomicByteArray,
-    LocalLockAtomicLocalData,
+    LocalLockAtomicByteArrayWeak, LocalLockAtomicLocalData,
 };
 
 pub mod iterator;
