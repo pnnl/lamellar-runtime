@@ -6,7 +6,7 @@ use crate::scheduler::{AmeSchedulerQueue, ReqData};
 use async_recursion::async_recursion;
 #[cfg(feature = "enable-prof")]
 use lamellar_prof::*;
-use log::trace;
+// use log::trace;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 

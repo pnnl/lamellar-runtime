@@ -138,15 +138,9 @@ where
     fn exec(&self) -> Vec<<I::Item as Future>::Output> {
         let mut iter = self.data.init(self.start_i, self.end_i - self.start_i);
         let mut vec = Vec::new();
-        let mut i = self.start_i;
         while let Some(elem) = iter.next() {
             let res = elem.await;
             vec.push(res);
-            // println!(
-            //     "here! {:?} {:?} {:?} val: {:?}",
-            //     i, self.start_i, self.end_i, res
-            // );
-            i += 1;
         }
         vec
     }
@@ -163,11 +157,11 @@ pub struct DistIterForEachHandle {
     pub(crate) reqs: Vec<Box<dyn LamellarRequest<Output = ()>>>,
 }
 
-impl Drop for DistIterForEachHandle {
-    fn drop(&mut self) {
-        println!("dropping DistIterForEachHandle");
-    }
-}
+// impl Drop for DistIterForEachHandle {
+//     fn drop(&mut self) {
+//         println!("dropping DistIterForEachHandle");
+//     }
+// }
 
 #[async_trait]
 impl DistIterRequest for DistIterForEachHandle {

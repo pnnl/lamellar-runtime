@@ -8,11 +8,11 @@ use crate::memregion::{
 };
 use crate::scheduler::{create_scheduler, SchedulerType};
 use lamellar_prof::*;
-use log::trace;
+// use log::trace;
 use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Arc, Weak};
+use std::sync::Arc; //, Weak};
 
 lazy_static! {
     pub(crate) static ref LAMELLAES: RwLock<HashMap<Backend, Arc<Lamellae>>> =
@@ -302,14 +302,14 @@ impl LamellarWorldBuilder {
 
     /// Instantiate a world handle
     pub fn build(self) -> LamellarWorld {
-        let teams = Arc::new(RwLock::new(HashMap::new()));
+        // let teams = Arc::new(RwLock::new(HashMap::new()));
         let mut lamellae_builder = create_lamellae(self.primary_lamellae);
         let (my_pe, num_pes) = lamellae_builder.init_fabric();
         let sched_new = Arc::new(create_scheduler(
             self.scheduler,
-            num_pes,
-            my_pe,
-            teams.clone(),
+            // num_pes,
+            // my_pe,
+            // teams.clone(),
         ));
         let lamellae = lamellae_builder.init_lamellae(sched_new.clone());
         let counters = Arc::new(AMCounters::new());
@@ -320,7 +320,7 @@ impl LamellarWorldBuilder {
             sched_new.clone(),
             counters.clone(),
             lamellae.clone(),
-            teams.clone(),
+            // teams.clone(),
         );
 
         let world = LamellarWorld {

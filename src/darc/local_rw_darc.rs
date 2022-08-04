@@ -242,7 +242,7 @@ where
 impl<T> From<Darc<Arc<RwLock<Box<T>>>>> for __NetworkDarc<T> {
     fn from(darc: Darc<Arc<RwLock<Box<T>>>>) -> Self {
         // println!("rwdarc to net darc");
-        darc.print();
+        // darc.print();
         let team = &darc.inner().team();
         let ndarc = __NetworkDarc {
             inner_addr: darc.inner as *const u8 as usize,

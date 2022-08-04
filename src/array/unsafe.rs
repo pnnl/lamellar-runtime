@@ -40,12 +40,12 @@ pub(crate) struct UnsafeArrayData {
     req_cnt: Arc<AtomicUsize>,
 }
 
-impl Drop for UnsafeArrayData {
-    fn drop(&mut self) {
-        println!("unsafe array data dropping");
-        self.op_buffers.write().clear();
-    }
-}
+// impl Drop for UnsafeArrayData {
+//     fn drop(&mut self) {
+//         println!("unsafe array data dropping1");
+//         self.op_buffers.write().clear();
+//     }
+// }
 
 //need to calculate num_elems_local dynamically
 #[lamellar_impl::AmDataRT(Clone)]
@@ -104,11 +104,11 @@ pub(crate) struct UnsafeArrayInnerWeak {
     size: usize,      //relative to size of T
 }
 
-impl Drop for UnsafeArrayInner {
-    fn drop(&mut self) {
-        println!("unsafe array inner dropping");
-    }
-}
+// impl Drop for UnsafeArrayInner {
+//     fn drop(&mut self) {
+//         println!("unsafe array inner dropping");
+//     }
+// }
 
 // impl<T: Dist> Drop for UnsafeArray<T> {
 //     fn drop(&mut self) {
@@ -157,7 +157,7 @@ impl<T: Dist + 'static> UnsafeArray<T> {
             },
             crate::darc::DarcMode::UnsafeArray,
             Some(|data: &mut UnsafeArrayData| {
-                println!("unsafe array data dropping");
+                // println!("unsafe array data dropping2");
                 data.op_buffers.write().clear();
             }),
         )
@@ -180,16 +180,16 @@ impl<T: Dist + 'static> UnsafeArray<T> {
             },
             phantom: PhantomData,
         };
-        println!("new unsafe");
+        // println!("new unsafe");
         // unsafe {println!("size {:?} bytes {:?}",array.inner.size, array.inner.data.mem_region.as_mut_slice().unwrap().len())};
         // println!("elem per pe {:?}", elem_per_pe);
         // for i in 0..num_pes{
         //     println!("pe: {:?} {:?}",i,array.inner.num_elems_pe(i));
         // }
-        array.inner.data.print();
+        // array.inner.data.print();
         array.create_buffered_ops();
-        println!("after buffered ops");
-        array.inner.data.print();
+        // println!("after buffered ops");
+        // array.inner.data.print();
         array
     }
 

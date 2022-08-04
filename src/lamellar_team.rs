@@ -12,7 +12,7 @@ use crate::scheduler::{ReqId, Scheduler, SchedulerQueue};
 #[cfg(feature = "nightly")]
 use crate::utils::ser_closure;
 
-use log::trace;
+// use log::trace;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 // use std::any;
@@ -23,7 +23,7 @@ use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::marker::PhantomPinned;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::sync::{Arc, Weak};
+use std::sync::Arc; //, Weak};
 use std::time::{Duration, Instant};
 
 use std::cell::Cell;
@@ -296,7 +296,7 @@ pub struct LamellarTeamRT {
     #[allow(dead_code)]
     pub(crate) world: Option<Pin<Arc<LamellarTeamRT>>>,
     parent: Option<Pin<Arc<LamellarTeamRT>>>,
-    teams: Arc<RwLock<HashMap<u64, Weak<LamellarTeamRT>>>>,
+    // teams: Arc<RwLock<HashMap<u64, Weak<LamellarTeamRT>>>>,
     sub_teams: RwLock<HashMap<usize, Pin<Arc<LamellarTeamRT>>>>,
     mem_regions: RwLock<HashMap<usize, Box<LamellarMemoryRegion<u8>>>>,
     pub(crate) scheduler: Arc<Scheduler>,
@@ -343,7 +343,7 @@ impl LamellarTeamRT {
         scheduler: Arc<Scheduler>,
         world_counters: Arc<AMCounters>,
         lamellae: Arc<Lamellae>,
-        teams: Arc<RwLock<HashMap<u64, Weak<LamellarTeamRT>>>>,
+        // teams: Arc<RwLock<HashMap<u64, Weak<LamellarTeamRT>>>>,
     ) -> Pin<Arc<LamellarTeamRT>> {
         let arch = Arc::new(LamellarArchRT {
             parent: None,
@@ -356,7 +356,7 @@ impl LamellarTeamRT {
         let team = LamellarTeamRT {
             world: None,
             parent: None,
-            teams: teams,
+            // teams: teams,
             sub_teams: RwLock::new(HashMap::new()),
             mem_regions: RwLock::new(HashMap::new()),
             scheduler: scheduler.clone(),
@@ -550,7 +550,7 @@ impl LamellarTeamRT {
             let team = LamellarTeamRT {
                 world: Some(world.clone()),
                 parent: Some(parent.clone()),
-                teams: parent.teams.clone(),
+                // teams: parent.teams.clone(),
                 sub_teams: RwLock::new(HashMap::new()),
                 mem_regions: RwLock::new(HashMap::new()),
                 scheduler: parent.scheduler.clone(),
@@ -1209,17 +1209,17 @@ impl LamellarTeamRT {
 //#[prof]
 impl Drop for LamellarTeamRT {
     fn drop(&mut self) {
-        println!("sechduler_new: {:?}", Arc::strong_count(&self.scheduler));
-        println!("lamellae: {:?}", Arc::strong_count(&self.lamellae));
-        println!("arch: {:?}", Arc::strong_count(&self.arch));
-        println!(
-            "world_counters: {:?}",
-            Arc::strong_count(&self.world_counters)
-        );
-        println!("removing {:?} ", self.team_hash);
-        self.teams.write().remove(&(self.remote_ptr_addr as u64));
+        // println!("sechduler_new: {:?}", Arc::strong_count(&self.scheduler));
+        // println!("lamellae: {:?}", Arc::strong_count(&self.lamellae));
+        // println!("arch: {:?}", Arc::strong_count(&self.arch));
+        // println!(
+        //     "world_counters: {:?}",
+        //     Arc::strong_count(&self.world_counters)
+        // );
+        // println!("removing {:?} ", self.team_hash);
+        // self.teams.write().remove(&(self.remote_ptr_addr as u64));
         self.lamellae.free(self.remote_ptr_addr);
-        println!("LamellarTeamRT dropped {:?}", self.team_hash);
+        // println!("LamellarTeamRT dropped {:?}", self.team_hash);
     }
 }
 
@@ -1252,22 +1252,22 @@ impl Drop for LamellarTeam {
                 // println!("removing {:?} ",self.team.id);
                 parent.sub_teams.write().remove(&self.team.id);
             } else {
-                println!("world team");
-                println!(
-                    "sechduler_new: {:?}",
-                    Arc::strong_count(&self.team.scheduler)
-                );
-                println!("lamellae: {:?}", Arc::strong_count(&self.team.lamellae));
-                println!("arch: {:?}", Arc::strong_count(&self.team.arch));
-                println!(
-                    "world_counters: {:?}",
-                    Arc::strong_count(&self.team.world_counters)
-                );
-                println!("removing {:?} ", self.team.team_hash);
+                // println!("world team");
+                // println!(
+                //     "sechduler_new: {:?}",
+                //     Arc::strong_count(&self.team.scheduler)
+                // );
+                // println!("lamellae: {:?}", Arc::strong_count(&self.team.lamellae));
+                // println!("arch: {:?}", Arc::strong_count(&self.team.arch));
+                // println!(
+                //     "world_counters: {:?}",
+                //     Arc::strong_count(&self.team.world_counters)
+                // );
+                // println!("removing {:?} ", self.team.team_hash);
                 let team_ptr = self.team.remote_ptr_addr as *mut *const LamellarTeamRT;
                 unsafe {
                     let arc_team = Arc::from_raw(*team_ptr);
-                    println!("arc_team: {:?}", Arc::strong_count(&arc_team));
+                    // println!("arc_team: {:?}", Arc::strong_count(&arc_team));
                     Pin::new_unchecked(arc_team); //allows us to drop the inner team
                 }
             }

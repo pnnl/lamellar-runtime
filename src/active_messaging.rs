@@ -7,15 +7,15 @@ use crate::lamellar_team::{LamellarTeam, LamellarTeamRT};
 use crate::scheduler::{AmeScheduler, ReqData, ReqId};
 #[cfg(feature = "enable-prof")]
 use lamellar_prof::*;
-use log::trace;
-use parking_lot::{Mutex, RwLock};
+// use log::trace;
+use parking_lot::Mutex; //, RwLock};
 use std::collections::HashMap;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Arc, Weak};
+use std::sync::Arc; //, Weak};
 
 pub(crate) mod registered_active_message;
-use registered_active_message::{RegisteredActiveMessages, AMS_EXECS};
+use registered_active_message::RegisteredActiveMessages; //, AMS_EXECS};
 
 #[cfg(feature = "nightly")]
 pub(crate) mod remote_closures;
@@ -180,8 +180,8 @@ pub trait ActiveMessaging {
 
 //maybe make this a struct then we could hold the pending counters...
 pub(crate) struct ActiveMessageEngine {
-    teams: Arc<RwLock<HashMap<u64, Weak<LamellarTeamRT>>>>,
-    my_pe: usize,
+    // teams: Arc<RwLock<HashMap<u64, Weak<LamellarTeamRT>>>>,
+    // my_pe: usize,
     batched_am: Arc<RegisteredActiveMessages>,
 }
 
@@ -195,15 +195,15 @@ pub(crate) struct ActiveMessageEngine {
 //#[prof]
 impl ActiveMessageEngine {
     pub(crate) fn new(
-        my_pe: usize,
+        // my_pe: usize,
         scheduler: Arc<AmeScheduler>,
-        teams: Arc<RwLock<HashMap<u64, Weak<LamellarTeamRT>>>>,
+        // teams: Arc<RwLock<HashMap<u64, Weak<LamellarTeamRT>>>>,
         stall_mark: Arc<AtomicUsize>,
     ) -> Self {
         // trace!("registered funcs {:?}", AMS_EXECS.len(),);
         ActiveMessageEngine {
-            teams: teams,
-            my_pe: my_pe,
+            // teams: teams,
+            // my_pe: my_pe,
             batched_am: Arc::new(RegisteredActiveMessages::new(scheduler, stall_mark)),
         }
     }

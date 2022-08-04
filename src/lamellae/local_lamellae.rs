@@ -6,7 +6,7 @@ use crate::lamellar_arch::LamellarArchRT;
 use crate::scheduler::Scheduler;
 #[cfg(feature = "enable-prof")]
 use lamellar_prof::*;
-use log::trace;
+// use log::trace;
 use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::sync::Arc;

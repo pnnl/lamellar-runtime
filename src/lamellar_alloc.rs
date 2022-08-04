@@ -1,7 +1,7 @@
 use core::marker::PhantomData;
 use indexmap::IndexSet;
 use lamellar_prof::*;
-use log::trace;
+// use log::trace;
 use parking_lot::{Condvar, Mutex};
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -24,13 +24,13 @@ struct Vma {
     size: usize,
 }
 
-#[derive(Clone)]
+// #[derive(Clone)]
 pub(crate) struct LinearAlloc {
     entries: Arc<(Mutex<Vec<Vma>>, Condvar)>,
     start_addr: usize,
     max_size: usize,
     last_idx: Arc<AtomicUsize>,
-    id: String,
+    _id: String,
     free_space: Arc<AtomicUsize>,
 }
 
@@ -43,7 +43,7 @@ impl LamellarAlloc for LinearAlloc {
             start_addr: 0,
             max_size: 0,
             last_idx: Arc::new(AtomicUsize::new(0)),
-            id: id,
+            _id: id,
             free_space: Arc::new(AtomicUsize::new(0)),
         }
     }
@@ -359,12 +359,12 @@ impl LamellarAlloc for BTreeAlloc {
     }
 }
 
-#[derive(Clone)]
+// #[derive(Clone)]
 pub(crate) struct ObjAlloc<T: Copy> {
     free_entries: Arc<(Mutex<Vec<usize>>, Condvar)>,
     start_addr: usize,
     max_size: usize,
-    id: String,
+    _id: String,
     phantom: PhantomData<T>,
 }
 
@@ -376,7 +376,7 @@ impl<T: Copy> LamellarAlloc for ObjAlloc<T> {
             free_entries: Arc::new((Mutex::new(Vec::new()), Condvar::new())),
             start_addr: 0,
             max_size: 0,
-            id: id,
+            _id: id,
             phantom: PhantomData,
         }
     }

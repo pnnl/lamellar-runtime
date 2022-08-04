@@ -7,14 +7,14 @@ use lamellar_prof::*;
 use core_affinity::CoreId;
 use crossbeam::deque::Worker;
 use futures::Future;
-use parking_lot::RwLock;
+// use parking_lot::RwLock;
 use rand::prelude::*;
-use std::collections::HashMap;
+// use std::collections::HashMap;
 use std::panic;
 use std::pin::Pin;
 use std::process;
 use std::sync::atomic::{AtomicBool, AtomicU8, AtomicUsize, Ordering};
-use std::sync::{Arc, Weak};
+use std::sync::Arc; //, Weak};
 use std::thread;
 // use std::time::Instant;
 
@@ -394,10 +394,9 @@ pub(crate) struct WorkStealing {
     ame: Arc<ActiveMessageEngine>,
 }
 impl WorkStealing {
-    pub(crate) fn new(
-        _num_pes: usize,
-        my_pe: usize,
-        teams: Arc<RwLock<HashMap<u64, Weak<LamellarTeamRT>>>>,
+    pub(crate) fn new(// _num_pes: usize,
+        // my_pe: usize,
+        // teams: Arc<RwLock<HashMap<u64, Weak<LamellarTeamRT>>>>,
     ) -> WorkStealing {
         // println!("new work stealing queue");
         let stall_mark = Arc::new(AtomicUsize::new(0));
@@ -407,9 +406,9 @@ impl WorkStealing {
         let sched = WorkStealing {
             inner: inner.clone(),
             ame: Arc::new(ActiveMessageEngine::new(
-                my_pe,
+                // my_pe,
                 inner.clone(),
-                teams,
+                // teams,
                 stall_mark.clone(),
             )),
         };
