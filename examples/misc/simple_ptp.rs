@@ -42,7 +42,6 @@ impl LamellarAM for RespAM {
         let t3 = get_time_as_nsec();
         let t4 = lamellar::world
             .exec_am_pe(0, FollowUpAM {})
-            .into_future()
             .await;
         let adj = -((t2 - t1) - (t4 - t3)) / 2;
         adj
@@ -72,7 +71,7 @@ fn main() {
 
     let mut sum = 0 as i128;
     for i in 0..num_tasks {
-        let res = reqs[i].get();
+        let res = world.block_on(reqs[i]);
         sum += res;
     }
     println!("[{:?}] adj: {:?}", _my_pe, sum / 10 as i128);

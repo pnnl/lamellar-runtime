@@ -68,111 +68,114 @@ fn main() {
     let world = lamellar::LamellarWorldBuilder::new()
         // .with_lamellae( Backend::Local )
         .build();
-    let my_pe = world.my_pe();
-    let num_pes = world.num_pes();
-    world.barrier();
-    let s = Instant::now();
-    world.barrier();
-    let b = s.elapsed().as_secs_f64();
-    println!("Barrier latency: {:?}s {:?}us", b, b * 1_000_000 as f64);
-
-    if my_pe == 0 {
-        println!("==================Flop test===========================");
-    }
-    let mut flops = vec![];
-    let num_tasks = 1000;
-    let num_cores = match std::env::var("LAMELLAR_THREADS") {
-        Ok(n) => n.parse::<usize>().unwrap() as f64,
-        Err(_) => 4 as f64,
-    };
-
-    for i in 0..27 {
-        let num_iterations = 2_u64.pow(i) as usize;
-
-        let timer = Instant::now();
-
-        let mut sub_time = 0f64;
-        let mut reqs = vec![];
-        if my_pe == 0 {
-            for _j in 0..num_tasks {
-                let sub_timer = Instant::now();
-                reqs.push(world.exec_am_all(FlopAM {
-                    iterations: num_iterations,
-                }));
-
-                sub_time += sub_timer.elapsed().as_secs_f64();
-            }
-            println!("issue time: {:?}", timer.elapsed().as_secs_f64());
-            world.wait_all();
-        }
+    let world_c = world.clone();
+    world_c.block_on(async move{
+        let my_pe = world.my_pe();
+        let num_pes = world.num_pes();
         world.barrier();
-        let cur_t = timer.elapsed().as_secs_f64();
-        let tot_flop: usize = reqs
-            .iter()
-            .map(|r| r.get().drain(0..).sum::<usize>())
-            .sum();
-        let task_granularity = ((cur_t * num_cores) / (num_tasks * num_pes) as f64) * 1000.0f64;
+        let s = Instant::now();
+        world.barrier();
+        let b = s.elapsed().as_secs_f64();
+        println!("Barrier latency: {:?}s {:?}us", b, b * 1_000_000 as f64);
+
+        if my_pe == 0 {
+            println!("==================Flop test===========================");
+        }
+        let mut flops = vec![];
+        let num_tasks = 1000;
+        let num_cores = match std::env::var("LAMELLAR_THREADS") {
+            Ok(n) => n.parse::<usize>().unwrap() as f64,
+            Err(_) => 4 as f64,
+        };
+
+        for i in 0..27 {
+            let num_iterations = 2_u64.pow(i) as usize;
+
+            let timer = Instant::now();
+
+            let mut sub_time = 0f64;
+            let mut reqs = vec![];
+            if my_pe == 0 {
+                for _j in 0..num_tasks {
+                    let sub_timer = Instant::now();
+                    reqs.push(world.exec_am_all(FlopAM {
+                        iterations: num_iterations,
+                    }));
+
+                    sub_time += sub_timer.elapsed().as_secs_f64();
+                }
+                println!("issue time: {:?}", timer.elapsed().as_secs_f64());
+                world.wait_all();
+            }
+            world.barrier();
+            let cur_t = timer.elapsed().as_secs_f64();
+            let tot_flop: usize = reqs
+                .iter()
+                .map(|r| r.await.drain(0..).sum::<usize>())
+                .sum();
+            let task_granularity = ((cur_t * num_cores) / (num_tasks * num_pes) as f64) * 1000.0f64;
+            if my_pe == 0 {
+                println!(
+                    "iter size: {:?} tot_flop: {:?} time: {:?} (issue time: {:?})
+                    GFLOPS (avg): {:?} ({:?}%) task_gran: {:?}(ms)",
+                    num_iterations, //transfer size
+                    tot_flop,       //num transfers
+                    cur_t,          //transfer time
+                    sub_time,
+                    ((tot_flop as f64) / cur_t) / 1_000_000_000f64, // throughput of user payload
+                    (((tot_flop as f64) / cur_t) / 1_000_000_000f64) / 2800f64,
+                    task_granularity,
+                );
+                flops.push(((tot_flop as f64) / cur_t) / 1_000_000_000f64);
+            }
+
+            // #[cfg(feature = "nightly")]
+            // {
+            //     reqs.clear();
+            //     let timer = Instant::now();
+            //     let mut sub_time = 0f64;
+            //     if my_pe == 0 {
+            //         for _j in 0..num_tasks {
+            //             let sub_timer = Instant::now();
+            //             reqs.push(world.exec_am_all(SimdAM {
+            //                 iterations: num_iterations,
+            //             }));
+            //             sub_time += sub_timer.elapsed().as_secs_f64();
+            //         }
+            //         println!("issue time: {:?}", timer.elapsed().as_secs_f64());
+            //         world.wait_all();
+            //     }
+
+            //     world.barrier();
+            //     let cur_t = timer.elapsed().as_secs_f64();
+            //     let tot_flop: usize = reqs
+            //         .iter()
+            //         .map(|r| r.get().iter().map(|r| r.unwrap()).sum::<usize>())
+            //         .sum();
+            //     let task_granularity = ((cur_t * 24f64) / num_tasks as f64) * 1000.0f64;
+            //     if my_pe == 0 {
+            //         println!(
+            //             "nightly iter size: {:?} tot_flop: {:?} time: {:?} (issue time: {:?})
+            //             GFLOPS (avg): {:?} ({:?}%) task_gran: {:?}(ms)",
+            //             num_iterations, //transfer size
+            //             tot_flop,       //num transfers
+            //             cur_t,          //transfer time
+            //             sub_time,
+            //             ((tot_flop as f64) / cur_t) / 1_000_000_000f64, // throughput of user payload
+            //             (((tot_flop as f64) / cur_t) / 1_000_000_000f64) / 2800f64,
+            //             task_granularity,
+            //         );
+            //         flops.push(((tot_flop as f64) / cur_t) / 1_000_000_000f64);
+            //     }
+            // }
+        }
         if my_pe == 0 {
             println!(
-                "iter size: {:?} tot_flop: {:?} time: {:?} (issue time: {:?})
-                GFLOPS (avg): {:?} ({:?}%) task_gran: {:?}(ms)",
-                num_iterations, //transfer size
-                tot_flop,       //num transfers
-                cur_t,          //transfer time
-                sub_time,
-                ((tot_flop as f64) / cur_t) / 1_000_000_000f64, // throughput of user payload
-                (((tot_flop as f64) / cur_t) / 1_000_000_000f64) / 2800f64,
-                task_granularity,
+                "flops: {}",
+                flops
+                    .iter()
+                    .fold(String::new(), |acc, &num| acc + &num.to_string() + ", ")
             );
-            flops.push(((tot_flop as f64) / cur_t) / 1_000_000_000f64);
         }
-
-        // #[cfg(feature = "nightly")]
-        // {
-        //     reqs.clear();
-        //     let timer = Instant::now();
-        //     let mut sub_time = 0f64;
-        //     if my_pe == 0 {
-        //         for _j in 0..num_tasks {
-        //             let sub_timer = Instant::now();
-        //             reqs.push(world.exec_am_all(SimdAM {
-        //                 iterations: num_iterations,
-        //             }));
-        //             sub_time += sub_timer.elapsed().as_secs_f64();
-        //         }
-        //         println!("issue time: {:?}", timer.elapsed().as_secs_f64());
-        //         world.wait_all();
-        //     }
-
-        //     world.barrier();
-        //     let cur_t = timer.elapsed().as_secs_f64();
-        //     let tot_flop: usize = reqs
-        //         .iter()
-        //         .map(|r| r.get().iter().map(|r| r.unwrap()).sum::<usize>())
-        //         .sum();
-        //     let task_granularity = ((cur_t * 24f64) / num_tasks as f64) * 1000.0f64;
-        //     if my_pe == 0 {
-        //         println!(
-        //             "nightly iter size: {:?} tot_flop: {:?} time: {:?} (issue time: {:?})
-        //             GFLOPS (avg): {:?} ({:?}%) task_gran: {:?}(ms)",
-        //             num_iterations, //transfer size
-        //             tot_flop,       //num transfers
-        //             cur_t,          //transfer time
-        //             sub_time,
-        //             ((tot_flop as f64) / cur_t) / 1_000_000_000f64, // throughput of user payload
-        //             (((tot_flop as f64) / cur_t) / 1_000_000_000f64) / 2800f64,
-        //             task_granularity,
-        //         );
-        //         flops.push(((tot_flop as f64) / cur_t) / 1_000_000_000f64);
-        //     }
-        // }
-    }
-    if my_pe == 0 {
-        println!(
-            "flops: {}",
-            flops
-                .iter()
-                .fold(String::new(), |acc, &num| acc + &num.to_string() + ", ")
-        );
-    }
+    });
 }

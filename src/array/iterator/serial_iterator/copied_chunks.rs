@@ -36,7 +36,7 @@ where
     fn get_buffer(&self, size: usize) -> LocalMemoryRegion<I::ElemType> {
         let mem_region: LocalMemoryRegion<I::ElemType> =
             self.array().team().alloc_local_mem_region(size);
-        self.array().get(self.index, &mem_region).wait();
+        self.array().internal_get(self.index, &mem_region).wait();
         mem_region
     }
 }
@@ -79,7 +79,7 @@ where
         let array = self.array();
         if self.index < array.len() {
             let mem_reg_t = mem_region.to_base::<I::ElemType>();
-            let req  = array.get(self.index, &mem_reg_t);
+            let req  = array.internal_get(self.index, &mem_reg_t);
             self.index += mem_reg_t.len();
             Some(req)
         } else {

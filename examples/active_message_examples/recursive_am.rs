@@ -44,7 +44,7 @@ impl LamellarAM for RecursiveAM {
                 },
             );
             // let mut res = next.get().expect("error returning from am"); // this will cause deadlock
-            let mut res = next.into_future().await;
+            let mut res = next.await;
             res.push(hostname::get().unwrap().into_string().unwrap()); //append my host name to list returned from previous call
             res
         }
@@ -58,15 +58,14 @@ fn main() {
     if my_pe == 0 {
         println!("---------------------------------------------------------------");
         println!("testing recursive am");
-        let res = world
+        let res = world.block_on(world
             .exec_am_pe(
                 my_pe,
                 RecursiveAM {
                     next: my_pe,
                     orig: my_pe,
                 },
-            )
-            .get();
+            ));
         println!("visit paths: {:?}", res);
         println!("---------------------------------------------------------------");
     }

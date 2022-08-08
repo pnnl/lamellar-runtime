@@ -47,15 +47,22 @@ impl<T: Dist> AtomicArray<T> {
     //     })
     //     .get();
     // }
-    pub fn get<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(
+    pub(crate) fn internal_get<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(
         &self,
         index: usize,
         buf: U,
     ) -> Box<dyn LamellarArrayRequest<Output = ()>  > {
         match self {
-            AtomicArray::NativeAtomicArray(array) => array.get(index, buf),
-            AtomicArray::GenericAtomicArray(array) => array.get(index, buf),
+            AtomicArray::NativeAtomicArray(array) => array.internal_get(index, buf),
+            AtomicArray::GenericAtomicArray(array) => array.internal_get(index, buf),
         }
+    }
+    pub fn get<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(
+        &self,
+        index: usize,
+        buf: U,
+    ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
+        self.internal_get(index,buf).into_future()
     }
     // pub fn iput<U: MyInto<LamellarArrayInput<T>> + LamellarRead>(&self, index: usize, buf: U) {
     //     self.exec_am_local(InitPutAm {
@@ -65,22 +72,34 @@ impl<T: Dist> AtomicArray<T> {
     //     })
     //     .get();
     // }
-    pub fn put<U: MyInto<LamellarArrayInput<T>> + LamellarRead>(
+    pub(crate) fn internal_put<U: MyInto<LamellarArrayInput<T>> + LamellarRead>(
         &self,
         index: usize,
         buf: U,
     ) -> Box<dyn LamellarArrayRequest<Output = ()>  > {
         match self {
-            AtomicArray::NativeAtomicArray(array) => array.put(index, buf),
-            AtomicArray::GenericAtomicArray(array) => array.put(index, buf),
+            AtomicArray::NativeAtomicArray(array) => array.internal_put(index, buf),
+            AtomicArray::GenericAtomicArray(array) => array.internal_put(index, buf),
         }
     }
 
-    pub fn at(&self, index: usize) -> Box<dyn LamellarArrayRequest<Output = T>  > {
+    pub fn put<U: MyInto<LamellarArrayInput<T>> + LamellarRead>(
+        &self,
+        index: usize,
+        buf: U,
+    ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
+        self.internal_put(index,buf).into_future()
+    }
+
+    pub fn internal_at(&self, index: usize) -> Box<dyn LamellarArrayRequest<Output = T>  > {
         match self {
-            AtomicArray::NativeAtomicArray(array) => array.at(index),
-            AtomicArray::GenericAtomicArray(array) => array.at(index),
+            AtomicArray::NativeAtomicArray(array) => array.internal_at(index),
+            AtomicArray::GenericAtomicArray(array) => array.internal_at(index),
         }
+    }
+
+    pub fn at(&self, index: usize) -> Pin<Box<dyn Future<Output = T> + Send >> {
+        self.internal_at(index).into_future()
     }
 }
 

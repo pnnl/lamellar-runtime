@@ -454,16 +454,39 @@ pub trait LamellarArrayGet<T: Dist + 'static>: LamellarArray<T> {
         &self,
         index: usize,
         dst: U,
+    ) -> Pin<Box<dyn Future<Output = ()>+Send>>;
+
+    // blocking call that gets the value stored and the provided index
+    fn at(&self, index: usize) -> Pin<Box<dyn Future<Output = T>+Send>>;
+}
+
+
+#[enum_dispatch(LamellarReadArray<T>,LamellarWriteArray<T>)]
+pub trait LamellarArrayInternalGet<T: Dist + 'static>: LamellarArray<T> {
+    fn internal_get<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(
+        &self,
+        index: usize,
+        dst: U,
     ) -> Box<dyn LamellarArrayRequest<Output = ()>>;
 
     // blocking call that gets the value stored and the provided index
-    fn at(&self, index: usize) -> Box<dyn LamellarArrayRequest<Output = T>>;
+    fn internal_at(&self, index: usize) -> Box<dyn LamellarArrayRequest<Output = T>>;
 }
 
 #[enum_dispatch(LamellarWriteArray<T>)]
 pub trait LamellarArrayPut<T: Dist>: LamellarArray<T> {
     //put data from buf into self
     fn put<U: MyInto<LamellarArrayInput<T>> + LamellarRead>(
+        &self,
+        index: usize,
+        src: U,
+    ) -> Pin<Box<dyn Future<Output = ()>+Send>>;
+}
+
+#[enum_dispatch(LamellarWriteArray<T>)]
+pub(crate) trait LamellarArrayInternalPut<T: Dist>: LamellarArray<T> {
+    //put data from buf into self
+    fn internal_put<U: MyInto<LamellarArrayInput<T>> + LamellarRead>(
         &self,
         index: usize,
         src: U,

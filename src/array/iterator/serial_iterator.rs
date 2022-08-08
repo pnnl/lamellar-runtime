@@ -13,7 +13,7 @@ use zip::*;
 mod buffered;
 use buffered::*;
 
-use crate::array::LamellarArrayGet;
+use crate::array::LamellarArrayInternalGet;
 use crate::memregion::Dist;
 use crate::LamellarArray;
 use crate::LamellarTeamRT;
@@ -28,7 +28,7 @@ use std::sync::Arc;
 pub trait SerialIterator {
     type Item;
     type ElemType: Dist + 'static;
-    type Array: LamellarArrayGet<Self::ElemType>;
+    type Array: LamellarArrayInternalGet<Self::ElemType>;
     fn next(&mut self) -> Option<Self::Item>;
     fn advance_index(&mut self, count: usize);
     fn array(&self) -> Self::Array;
@@ -87,7 +87,7 @@ where
     }
 }
 
-pub struct LamellarArrayIter<'a, T: Dist + 'static, A: LamellarArrayGet<T>> {
+pub struct LamellarArrayIter<'a, T: Dist + 'static, A: LamellarArrayInternalGet<T>> {
     array: A,
     buf_0: LocalMemoryRegion<T>,
     // buf_1: LocalMemoryRegion<T>,
@@ -100,14 +100,14 @@ pub struct LamellarArrayIter<'a, T: Dist + 'static, A: LamellarArrayGet<T>> {
 // unsafe impl<'a, T: Dist + 'static, A: LamellarArrayGet<T>> Sync for LamellarArrayIter<'a, T, A> {}
 // unsafe impl<'a, T: Dist + 'static, A: LamellarArrayGet<T>> Send for LamellarArrayIter<'a, T, A> {}
 
-impl<'a, T: Dist + 'static, A: LamellarArrayGet<T>> LamellarArrayIter<'a, T, A> {
+impl<'a, T: Dist + 'static, A: LamellarArrayInternalGet<T>> LamellarArrayIter<'a, T, A> {
     pub(crate) fn new(
         array: A,
         team: Pin<Arc<LamellarTeamRT>>,
         buf_size: usize,
     ) -> LamellarArrayIter<'a, T, A> {
         let buf_0 = team.alloc_local_mem_region(buf_size);
-        array.get(0, &buf_0).wait();
+        array.internal_get(0, &buf_0).wait();
         let ptr = NonNull::new(buf_0.as_mut_ptr().unwrap()).unwrap();
         let iter = LamellarArrayIter {
             array: array,
@@ -163,7 +163,7 @@ impl<'a, T: Dist + 'static, A: LamellarArrayGet<T>> LamellarArrayIter<'a, T, A> 
     // }
 }
 
-impl<'a, T: Dist + 'static, A: LamellarArrayGet<T> + Clone> SerialIterator
+impl<'a, T: Dist + 'static, A: LamellarArrayInternalGet<T> + Clone> SerialIterator
     for LamellarArrayIter<'a, T, A>
 {
     type ElemType = T;
@@ -178,10 +178,10 @@ impl<'a, T: Dist + 'static, A: LamellarArrayGet<T> + Clone> SerialIterator
                 self.buf_index = 0;
                 // self.fill_buffer(self.index);
                 if self.index + self.buf_0.len() < self.array.len() {
-                    self.array.get(self.index, &self.buf_0).wait();
+                    self.array.internal_get(self.index, &self.buf_0).wait();
                 } else {
                     let sub_region = self.buf_0.sub_region(0..(self.array.len() - self.index));
-                    self.array.get(self.index, &sub_region).wait();
+                    self.array.internal_get(self.index, &sub_region).wait();
                 }
             }
             // self.spin_for_valid(self.buf_index);
@@ -202,7 +202,7 @@ impl<'a, T: Dist + 'static, A: LamellarArrayGet<T> + Clone> SerialIterator
         self.index += count;
         self.buf_index = 0;
         // self.fill_buffer(0);
-        self.array.get(self.index, &self.buf_0).wait();
+        self.array.internal_get(self.index, &self.buf_0).wait();
     }
     fn array(&self) -> Self::Array {
         self.array.clone()
@@ -214,7 +214,7 @@ impl<'a, T: Dist + 'static, A: LamellarArrayGet<T> + Clone> SerialIterator
     fn buffered_next(&mut self, mem_region: LocalMemoryRegion<u8>) -> Option<Box<dyn LamellarArrayRequest<Output = ()>  >>{
         if self.index < self.array.len() {
             let mem_reg_t = mem_region.to_base::<Self::ElemType>();
-            let req  = self.array.get(self.index, &mem_reg_t);
+            let req  = self.array.internal_get(self.index, &mem_reg_t);
             self.index += mem_reg_t.len();
             Some(req)
         } else {

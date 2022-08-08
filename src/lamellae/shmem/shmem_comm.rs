@@ -37,11 +37,12 @@ impl MyShmem {
 
 fn attach_to_shmem(size: usize, id: &str, header: usize, create: bool) -> MyShmem {
     let size = size + std::mem::size_of::<usize>();
-    let shmem_id = "lamellar_".to_owned() + &(size.to_string()) + "_" + id;
+    let shmem_id = "lamellar_shm/lamellar_".to_owned() + &(size.to_string()) + "_" + id;
     // let  m = if create {
     let mut retry = 0;
     let m = loop {
-        match ShmemConf::new().size(size).os_id(shmem_id.clone()).create() {
+        // match ShmemConf::new().size(size).os_id(shmem_id.clone()).create() {
+        match ShmemConf::new().size(size).flink(shmem_id.clone()).create() {
             Ok(m) => {
                 // println!("created {:?}", shmem_id);
                 if create {
@@ -60,7 +61,8 @@ fn attach_to_shmem(size: usize, id: &str, header: usize, create: bool) -> MyShme
             Err(ShmemError::LinkExists)
             | Err(ShmemError::MappingIdExists)
             | Err(ShmemError::MapOpenFailed(_)) => {
-                match ShmemConf::new().os_id(shmem_id.clone()).open() {
+                // match ShmemConf::new().os_id(shmem_id.clone()).open() 
+                match ShmemConf::new().flink(shmem_id.clone()).open() {
                     Ok(m) => {
                         // println!("attached {:?}", shmem_id);
                         if create {

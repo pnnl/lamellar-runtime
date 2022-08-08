@@ -7,6 +7,7 @@ use lamellar_prof::*;
 use core_affinity::CoreId;
 use crossbeam::deque::Worker;
 use futures::Future;
+use futures_lite::FutureExt;
 // use parking_lot::RwLock;
 use rand::prelude::*;
 // use std::collections::HashMap;
@@ -228,6 +229,27 @@ impl AmeSchedulerQueue for WorkStealingInner {
         runnable.schedule();
         task.detach();
     }
+
+    fn block_on<F>(&self, future: F) -> F::Output
+    where
+        F: Future,
+    {
+        let work_inj = self.work_inj.clone();
+        let schedule = move |runnable| work_inj.push(runnable);
+        let (runnable, mut task) = unsafe { async_task::spawn_unchecked(future, schedule) }; //safe //safe as contents are sync+send... may need to do something to enforce lifetime bounds
+        let waker = runnable.waker();
+        runnable.schedule();
+        while !task.is_finished() {
+            self.exec_task();
+        }
+        let cx = &mut async_std::task::Context::from_waker(&waker);
+        if let async_std::task::Poll::Ready(output) = task.poll(cx) {
+            output
+        } else {
+            panic!("task not ready");
+        }
+    }
+
     fn shutdown(&self) {
         // println!("work stealing shuting down {:?}", self.active());
         self.active.store(false, Ordering::SeqCst);
@@ -315,6 +337,13 @@ impl SchedulerQueue for WorkStealing {
 
     fn exec_task(&self) {
         self.inner.exec_task();
+    }
+
+    fn block_on<F>(&self, future: F) -> F::Output
+    where
+        F: Future,
+    {
+        self.inner.block_on(future)
     }
 
     fn shutdown(&self) {

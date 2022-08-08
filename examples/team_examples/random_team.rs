@@ -45,7 +45,7 @@ impl LamellarAM for RecursiveAM {
                     orig: self.orig,
                 },
             );
-            let mut res = next.into_future().await;
+            let mut res = next.await;
             let string = format!(
                 "[{:?}] {}",
                 lamellar::current_pe,
@@ -191,12 +191,14 @@ fn main() {
         } else {
             team.exec_am_pe(0, RecursiveAM { next: 0, orig: 0 })
         };
+        let world_c = world.clone();
+        world.block_on(async move{
         for pe in 0..num_pes {
             if pe == my_pe {
-                println!("[{:?}] sub_team_path: {:?}", pe, sub_team_path.get());
+                println!("[{:?}] sub_team_path: {:?}", pe, sub_team_path.await);
             }
-            world.barrier();
-        }
+            world_c.barrier();
+        }});
     } else {
         println!("Random team example is intended for multi pe execution");
     }

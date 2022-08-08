@@ -13,6 +13,7 @@ use std::collections::HashMap;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc; //, Weak};
+use futures::Future;
 
 pub(crate) mod registered_active_message;
 use registered_active_message::RegisteredActiveMessages; //, AMS_EXECS};
@@ -164,16 +165,18 @@ impl AMCounters {
     }
 }
 
+
+
 pub trait ActiveMessaging {
     fn wait_all(&self);
     fn barrier(&self);
-    fn exec_am_all<F>(&self, am: F) -> Box<dyn LamellarMultiRequest<Output = F::Output>>
+    fn exec_am_all<F>(&self, am: F) -> Pin<Box<dyn Future<Output=Vec<F::Output>>+Send>>//Box<dyn LamellarMultiRequest<Output = F::Output>>
     where
         F: RemoteActiveMessage + LamellarAM + Serde + AmDist;
-    fn exec_am_pe<F>(&self, pe: usize, am: F) -> Box<dyn LamellarRequest<Output = F::Output>>
+    fn exec_am_pe<F>(&self, pe: usize, am: F) -> Pin<Box<dyn Future<Output=F::Output>+Send>> //Box<dyn LamellarRequest<Output = F::Output>>
     where
         F: RemoteActiveMessage + LamellarAM + Serde + AmDist;
-    fn exec_am_local<F>(&self, am: F) -> Box<dyn LamellarRequest<Output = F::Output>>
+    fn exec_am_local<F>(&self, am: F) -> Pin<Box<dyn Future<Output=F::Output>+Send>>
     where
         F: LamellarActiveMessage + LocalAM + 'static;
 }

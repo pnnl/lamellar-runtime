@@ -129,7 +129,7 @@ fn main() {
                 i,
                 elem
             );
-            async move { (i, elem, barray.fetch_add(i, *elem).into_future().await[0]) }
+            async move { (i, elem, barray.fetch_add(i, *elem).await[0]) }
         })
         .for_each_async(move |i| async move {
             println!(
@@ -152,8 +152,8 @@ fn main() {
         .map(move |(i, elem)| {
             let barray = barray.clone();
             async move {
-                barray.add(i, *elem).into_future().await;
-                barray.at(i).into_future().await
+                barray.add(i, *elem).await;
+                barray.at(i).await
             }
         })
         .collect_async::<ReadOnlyArray<usize>, _>(Distribution::Block)

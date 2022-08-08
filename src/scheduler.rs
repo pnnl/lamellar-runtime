@@ -94,6 +94,11 @@ pub(crate) trait AmeSchedulerQueue {
     where
         F: Future<Output = ()>;
     fn exec_task(&self);
+
+    fn block_on<F>(&self, future: F) -> F::Output
+    where
+        F: Future;
+
     fn shutdown(&self);
     fn active(&self) -> bool;
 }
@@ -122,6 +127,9 @@ pub(crate) trait SchedulerQueue {
     where
         F: Future<Output = ()>;
     fn exec_task(&self);
+    fn block_on<F>(&self, future: F) -> F::Output
+    where
+        F: Future;
     fn shutdown(&self);
     fn active(&self) -> bool;
 }

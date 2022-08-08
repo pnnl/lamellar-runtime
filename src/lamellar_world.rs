@@ -6,13 +6,15 @@ use crate::lamellar_team::{LamellarTeam, LamellarTeamRT};
 use crate::memregion::{
     local::LocalMemoryRegion, shared::SharedMemoryRegion, Dist, RemoteMemoryRegion,
 };
-use crate::scheduler::{create_scheduler, SchedulerType};
+use crate::scheduler::{create_scheduler, SchedulerType, SchedulerQueue};
 use lamellar_prof::*;
 // use log::trace;
 use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc; //, Weak};
+use std::pin::Pin;
+use futures::Future;
 
 lazy_static! {
     pub(crate) static ref LAMELLAES: RwLock<HashMap<Backend, Arc<Lamellae>>> =
@@ -38,20 +40,20 @@ impl ActiveMessaging for LamellarWorld {
     fn barrier(&self) {
         self.team.barrier();
     }
-    fn exec_am_all<F>(&self, am: F) -> Box<dyn LamellarMultiRequest<Output = F::Output>>
+    fn exec_am_all<F>(&self, am: F) -> Pin<Box<dyn Future<Output=Vec<F::Output>>+Send>>
     where
         F: RemoteActiveMessage + LamellarAM + Serde + AmDist,
     {
         self.team.exec_am_all(am)
     }
-    fn exec_am_pe<F>(&self, pe: usize, am: F) -> Box<dyn LamellarRequest<Output = F::Output>>
+    fn exec_am_pe<F>(&self, pe: usize, am: F) -> Pin<Box<dyn Future<Output=F::Output>+Send>>
     where
         F: RemoteActiveMessage + LamellarAM + Serde + AmDist,
     {
         assert!(pe < self.num_pes(), "invalid pe: {:?}", pe);
         self.team.exec_am_pe(pe, am)
     }
-    fn exec_am_local<F>(&self, am: F) -> Box<dyn LamellarRequest<Output = F::Output>>
+    fn exec_am_local<F>(&self, am: F) -> Pin<Box<dyn Future<Output=F::Output>+Send>>
     where
         F: LamellarActiveMessage + LocalAM + 'static,
     {
@@ -176,6 +178,13 @@ impl LamellarWorld {
     /// returns nummber of pe's in this execution
     pub fn num_pes(&self) -> usize {
         self.num_pes
+    }
+
+    pub fn block_on<F>(&self, f: F) -> F::Output
+    where
+        F: Future,
+    {
+        self.team_rt.scheduler.block_on(f)
     }
 
     /// return the number of megabytes sent

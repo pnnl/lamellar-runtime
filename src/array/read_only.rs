@@ -69,14 +69,24 @@ impl<T: Dist> ReadOnlyArray<T> {
     pub fn iget<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(&self, index: usize, buf: U) {
         self.array.iget(index, buf)
     }
-    pub fn get<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(
+    pub fn internal_get<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(
         &self,
         index: usize,
         buf: U,
     ) -> Box<dyn LamellarArrayRequest<Output = ()>> {
+        self.array.internal_get(index, buf)
+    }
+    pub fn get<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(
+        &self,
+        index: usize,
+        buf: U,
+    ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
         self.array.get(index, buf)
     }
-    pub fn iat(&self, index: usize) -> Box<dyn LamellarArrayRequest<Output = T>> {
+    pub fn internal_at(&self, index: usize) -> Box<dyn LamellarArrayRequest<Output = T>> {
+        self.array.internal_at(index)
+    }
+    pub fn at(&self, index: usize) -> Pin<Box<dyn Future<Output = T> + Send>> {
         self.array.at(index)
     }
     pub fn local_as_slice(&self) -> &[T] {
@@ -286,6 +296,22 @@ impl<T: Dist> LamellarArray<T> for ReadOnlyArray<T> {
         self.array.pe_and_offset_for_global_index(index)
     }
 }
+impl<T: Dist + 'static> LamellarArrayInternalGet<T> for ReadOnlyArray<T> {
+    // fn iget<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(&self, index: usize, buf: U) {
+    //     self.iget(index, buf)
+    // }
+    fn internal_get<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(
+        &self,
+        index: usize,
+        buf: U,
+    ) -> Box<dyn LamellarArrayRequest<Output = ()>> {
+        self.internal_get(index, buf)
+    }
+    fn internal_at(&self, index: usize) -> Box<dyn LamellarArrayRequest<Output = T>> {
+        self.array.internal_at(index)
+    }
+}
+
 impl<T: Dist + 'static> LamellarArrayGet<T> for ReadOnlyArray<T> {
     // fn iget<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(&self, index: usize, buf: U) {
     //     self.iget(index, buf)
@@ -294,10 +320,10 @@ impl<T: Dist + 'static> LamellarArrayGet<T> for ReadOnlyArray<T> {
         &self,
         index: usize,
         buf: U,
-    ) -> Box<dyn LamellarArrayRequest<Output = ()>> {
+    ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
         self.get(index, buf)
     }
-    fn at(&self, index: usize) -> Box<dyn LamellarArrayRequest<Output = T>> {
+    fn at(&self, index: usize) -> Pin<Box<dyn Future<Output = T> + Send>> {
         self.array.at(index)
     }
 }
