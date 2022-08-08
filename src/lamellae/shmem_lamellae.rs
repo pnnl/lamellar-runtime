@@ -165,10 +165,10 @@ impl Ser for Shmem {
         obj: &T,
     ) -> Result<SerializedData, anyhow::Error> {
         let header_size = std::mem::size_of::<Option<SerializeHeader>>();
-        let data_size = crate::serialized_size(obj,true) as usize;
+        let data_size = crate::serialized_size(obj, true) as usize;
         let ser_data = ShmemData::new(self.shmem_comm.clone(), header_size + data_size)?;
-        crate::serialize_into(ser_data.header_as_bytes(), &header,false )?; //we want header to be a fixed size
-        crate::serialize_into(ser_data.data_as_bytes(), obj,true)?;
+        crate::serialize_into(ser_data.header_as_bytes(), &header, false)?; //we want header to be a fixed size
+        crate::serialize_into(ser_data.data_as_bytes(), obj, true)?;
         Ok(SerializedData::ShmemData(ser_data))
     }
     fn serialize_header(
@@ -178,8 +178,8 @@ impl Ser for Shmem {
     ) -> Result<SerializedData, anyhow::Error> {
         let header_size = std::mem::size_of::<Option<SerializeHeader>>();
         let ser_data = ShmemData::new(self.shmem_comm.clone(), header_size + serialized_size)?;
-        crate::serialize_into(ser_data.header_as_bytes(), &header,false)?;//we want header to be a fixed size
-        Ok(SerializedData::ShmemData(ser_data)) 
+        crate::serialize_into(ser_data.header_as_bytes(), &header, false)?; //we want header to be a fixed size
+        Ok(SerializedData::ShmemData(ser_data))
     }
 }
 

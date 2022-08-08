@@ -1,5 +1,6 @@
-use lamellar::array::{DistributedIterator,
-    ArithmeticOps, AtomicArray, LocalLockAtomicArray, SerialIterator, UnsafeArray,
+use lamellar::array::{
+    ArithmeticOps, AtomicArray, DistributedIterator, LocalLockAtomicArray, SerialIterator,
+    UnsafeArray,
 };
 
 macro_rules! initialize_array {
@@ -81,7 +82,7 @@ macro_rules! add_test{
                 #[cfg(feature="non-buffered-array-ops")]
                 {
                     for i in 0..(max_updates as usize){
-                        let val = array.fetch_div(idx,2 as $t).get();
+                        let val =  world.block_on(array.fetch_div(idx,2 as $t));
                         if val > prev || (prev as u128)%2 != 0{
                             if prev > 1 as $t{
                                 println!("full 1: {:?} {:?} {:?} {:?}",i,val,prev,init_val);
@@ -98,7 +99,7 @@ macro_rules! add_test{
                         reqs.push(array.fetch_div(idx,2 as $t));
                     }
                     for req in reqs{
-                        let val = req.get()[0];
+                        let val =  world.block_on(req)[0];
                         if val > prev || (prev as u128)%2 != 0{
                             if prev > 1 as $t{
                                 println!("full 1: {:?} {:?} {:?}",init_val,val,prev);
@@ -137,7 +138,7 @@ macro_rules! add_test{
                 #[cfg(feature="non-buffered-array-ops")]
                 {
                     for i in 0..(max_updates as usize){
-                        let val = sub_array.fetch_div(idx,2 as $t).get();
+                        let val =  world.block_on(sub_array.fetch_div(idx,2 as $t));
                         if val > prev || (prev as u128)%2 != 0{
                             if prev > 1 as $t{
                                 println!("half 1: {:?} {:?} {:?} {:?}",i,val,prev,init_val);
@@ -155,7 +156,7 @@ macro_rules! add_test{
                         reqs.push(sub_array.fetch_div(idx,2 as $t));
                     }
                     for req in reqs{
-                        let val = req.get()[0];
+                        let val =  world.block_on(req)[0];
                         if val > prev || (prev as u128)%2 != 0{
                             if prev > 1 as $t{
                                 println!("half 1: {:?} {:?}",val,prev);
@@ -193,7 +194,7 @@ macro_rules! add_test{
                     #[cfg(feature="non-buffered-array-ops")]
                     {
                         for i in 0..(max_updates as usize){
-                            let val = sub_array.fetch_div(idx,2 as $t).get();
+                            let val =  world.block_on(sub_array.fetch_div(idx,2 as $t));
                             if val > prev || (prev as u128)%2 != 0{
                                 if prev > 1 as $t{
                                     println!("pe 1: {:?} {:?} {:?} {:?}",i,val,prev,init_val);
@@ -211,7 +212,7 @@ macro_rules! add_test{
                             reqs.push(sub_array.fetch_div(idx,2 as $t));
                         }
                         for req in reqs{
-                            let val = req.get()[0];
+                            let val =  world.block_on(req)[0];
                             if val > prev || (prev as u128)%2 != 0{
                                 if prev > 1 as $t{
                                     println!("pe 1: {:?} {:?}",val,prev);

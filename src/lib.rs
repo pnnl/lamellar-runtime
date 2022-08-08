@@ -150,8 +150,8 @@ pub use crate::lamellar_team::LamellarTeamRT;
 
 extern crate lamellar_impl;
 pub use lamellar_impl::{
-    am, generate_reductions_for_type, local_am, register_reduction, AmData, AmLocalData,
-    ArithmeticOps, Dist, generate_ops_for_type,
+    am, generate_ops_for_type, generate_reductions_for_type, local_am, register_reduction, AmData,
+    AmLocalData, ArithmeticOps, Dist,
 };
 
 // #[doc(hidden)]
@@ -169,74 +169,64 @@ use bincode::Options;
 #[doc(hidden)]
 pub use custom_derive;
 
-
 // #[macro_use]
 // pub extern crate newtype_derive;
 #[doc(hidden)]
 pub use newtype_derive;
 
-
-
-
-
 lazy_static! {
-    pub(crate) static ref BINCODE: bincode::config::WithOtherTrailing<bincode::DefaultOptions, bincode::config::AllowTrailing> = bincode::DefaultOptions::new().allow_trailing_bytes();
+    pub(crate) static ref BINCODE: bincode::config::WithOtherTrailing<bincode::DefaultOptions, bincode::config::AllowTrailing> =
+        bincode::DefaultOptions::new().allow_trailing_bytes();
 }
 
 #[doc(hidden)]
-pub fn serialize<T: ?Sized>(obj: &T,var: bool) -> Result<Vec<u8>, anyhow::Error>
+pub fn serialize<T: ?Sized>(obj: &T, var: bool) -> Result<Vec<u8>, anyhow::Error>
 where
     T: serde::Serialize,
 {
-    if var{
+    if var {
         // Ok(BINCODE.serialize(obj)?)
         Ok(bincode::serialize(obj)?)
-    }
-    else{
+    } else {
         Ok(bincode::serialize(obj)?)
-    }    
+    }
 }
 
 #[doc(hidden)]
-pub fn serialized_size<T: ?Sized>(obj: &T,var: bool) -> usize
+pub fn serialized_size<T: ?Sized>(obj: &T, var: bool) -> usize
 where
     T: serde::Serialize,
 {
-    
-    
-    if var{
+    if var {
         // BINCODE.serialized_size(obj).unwrap() as usize
         bincode::serialized_size(obj).unwrap() as usize
-    }
-    else{
+    } else {
         bincode::serialized_size(obj).unwrap() as usize
     }
 }
 #[doc(hidden)]
-pub fn serialize_into<T: ?Sized>(buf: &mut [u8], obj: &T,var: bool) -> Result<(), anyhow::Error>
+pub fn serialize_into<T: ?Sized>(buf: &mut [u8], obj: &T, var: bool) -> Result<(), anyhow::Error>
 where
     T: serde::Serialize,
-{ 
-    if var{
+{
+    if var {
         // BINCODE.serialize_into(buf, obj)?;
         bincode::serialize_into(buf, obj)?;
-    }
-    else{
+    } else {
         bincode::serialize_into(buf, obj)?;
     }
     Ok(())
 }
 
 #[doc(hidden)]
-pub fn deserialize<'a, T>(bytes: &'a [u8],var: bool) -> Result<T, anyhow::Error>
+pub fn deserialize<'a, T>(bytes: &'a [u8], var: bool) -> Result<T, anyhow::Error>
 where
     T: serde::Deserialize<'a>,
 {
-    if var{
+    if var {
         // Ok(BINCODE.deserialize(bytes)?)
         Ok(bincode::deserialize(bytes)?)
-    }
-    else{
+    } else {
         Ok(bincode::deserialize(bytes)?)
     }
 }

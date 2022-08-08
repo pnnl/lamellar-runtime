@@ -1,4 +1,6 @@
-use lamellar::array::{DistributedIterator,AtomicArray, BitWiseOps, LocalLockAtomicArray, SerialIterator, UnsafeArray};
+use lamellar::array::{
+    AtomicArray, BitWiseOps, DistributedIterator, LocalLockAtomicArray, SerialIterator, UnsafeArray,
+};
 
 macro_rules! initialize_array {
     (UnsafeArray,$array:ident,$init_val:ident) => {
@@ -56,7 +58,7 @@ macro_rules! or_test{
             #[cfg(feature="non-buffered-array-ops")]
             {
                 for idx in 0..array.len(){
-                    let val = array.fetch_bit_or(idx,my_val).get();
+                    let val =  world.block_on(array.fetch_bit_or(idx,my_val));
                     if (val & my_val) != 0 {
                         println!("{:?} {:x} {:x} ",idx,my_val,val);
                         success = false;
@@ -71,7 +73,7 @@ macro_rules! or_test{
                     reqs.push((array.fetch_bit_or(idx,my_val),idx));
                 }
                 for (req,idx) in reqs{
-                    let val = req.get()[0];
+                    let val =  world.block_on(req)[0];
                     if (val & my_val) != 0 {
                         println!("{:?} {:x} {:x} ",idx,my_val,val);
                         success = false;
@@ -104,7 +106,7 @@ macro_rules! or_test{
             #[cfg(feature="non-buffered-array-ops")]
             {
                 for idx in 0..sub_array.len(){
-                    let val = sub_array.fetch_bit_or(idx,my_val).get();
+                    let val =  world.block_on(sub_array.fetch_bit_or(idx,my_val));
                     if (val & my_val) != 0 {
                         println!("{:?} {:x} {:x} ",idx,my_val,val);
                         success = false;
@@ -118,7 +120,7 @@ macro_rules! or_test{
                     reqs.push((sub_array.fetch_bit_or(idx,my_val),idx));
                 }
                 for (req,idx)  in reqs{
-                    let val = req.get()[0];
+                    let val =  world.block_on(req)[0];
                     if (val & my_val) != 0 {
                         println!("{:?} {:x} {:x} ",idx,my_val,val);
                         success = false;
@@ -152,7 +154,7 @@ macro_rules! or_test{
                 #[cfg(feature="non-buffered-array-ops")]
                 {
                     for idx in 0..sub_array.len(){
-                        let val = sub_array.fetch_bit_or(idx,my_val).get();
+                        let val =  world.block_on(sub_array.fetch_bit_or(idx,my_val));
                         if (val & my_val) != 0 {
                             println!("{:?} {:x} {:x} ",idx,my_val,val);
                             success = false;
@@ -166,7 +168,7 @@ macro_rules! or_test{
                         reqs.push((sub_array.fetch_bit_or(idx,my_val),idx));
                     }
                     for (req,idx)  in reqs{
-                        let val = req.get()[0];
+                        let val =  world.block_on(req)[0];
                         if (val & my_val) != 0 {
                             println!("{:?} {:x} {:x} ",idx,my_val,val);
                             success = false;

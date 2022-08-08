@@ -145,37 +145,43 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_type: AmType) -> 
     let mut exec_fn =
         get_impl_method("exec".to_string(), &input.items).expect("unable to extract exec body");
     let func_span = exec_fn.span();
-    let (last_expr,vec_u8) = if let Some(stmt) = exec_fn.stmts.pop() {
+    let (last_expr, vec_u8) = if let Some(stmt) = exec_fn.stmts.pop() {
         let last_stmt = replace_lamellar_dsl(stmt.clone());
         match am_type {
-            AmType::NoReturn => {
-                (quote_spanned! {last_stmt.span()=>
+            AmType::NoReturn => (
+                quote_spanned! {last_stmt.span()=>
                     #last_stmt
                     #lamellar::LamellarReturn::Unit
-                },false)
-            },
+                },
+                false,
+            ),
             AmType::ReturnData(ref ret) => {
-                let vec_u8 = match ret{
-                    syn::Type::Array(a) => {
-                         match &*a.elem{
-                            syn::Type::Path(type_path) if type_path.clone().into_token_stream().to_string() == "u8" => true,
-                            _ => false,
+                let vec_u8 = match ret {
+                    syn::Type::Array(a) => match &*a.elem {
+                        syn::Type::Path(type_path)
+                            if type_path.clone().into_token_stream().to_string() == "u8" =>
+                        {
+                            true
                         }
+                        _ => false,
                     },
                     _ => false,
                 };
                 let temp = get_expr(&last_stmt)
                     .expect("failed to get exec return value (try removing the last \";\")");
-                (quote_spanned! {last_stmt.span()=> #temp},vec_u8)
+                (quote_spanned! {last_stmt.span()=> #temp}, vec_u8)
             }
             AmType::ReturnAm(_) => {
                 let temp = get_expr(&last_stmt)
                     .expect("failed to get exec return value (try removing the last \";\")");
-                (quote_spanned! {last_stmt.span()=> #temp},false)
+                (quote_spanned! {last_stmt.span()=> #temp}, false)
             }
         }
     } else {
-        (quote_spanned! {func_span=> #lamellar::LamellarReturn::Unit },false)
+        (
+            quote_spanned! {func_span=> #lamellar::LamellarReturn::Unit },
+            false,
+        )
     };
 
     let mut temp = quote_spanned! {func_span=>};
@@ -245,14 +251,13 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_type: AmType) -> 
             #last_expr
         },
         AmType::ReturnData(_) => {
-            let remote_last_expr = if vec_u8{
-                quote!{ ByteBuf::from(#last_expr) }
-            }
-            else{
-                quote!{ #last_expr }
+            let remote_last_expr = if vec_u8 {
+                quote! { ByteBuf::from(#last_expr) }
+            } else {
+                quote! { #last_expr }
             };
-            if ! local {
-                quote! {                
+            if !local {
+                quote! {
                     let ret = match __local{ //should probably just separate these into exec_local exec_remote to get rid of a conditional...
                         true => #lamellar::LamellarReturn::LocalData(Box::new(#last_expr)),
                         false => #lamellar::LamellarReturn::RemoteData(std::sync::Arc::new (#ret_struct{
@@ -262,15 +267,14 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_type: AmType) -> 
                     };
                     ret
                 }
-            }
-            else{
+            } else {
                 quote! {
                     #lamellar::LamellarReturn::LocalData(Box::new(#last_expr))
                 }
             }
         }
         AmType::ReturnAm(_) => {
-            if ! local {
+            if !local {
                 quote! {
                     let ret = match __local{
                         true => #lamellar::LamellarReturn::LocalAm(
@@ -286,8 +290,7 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_type: AmType) -> 
                     };
                     ret
                 }
-            }
-            else{
+            } else {
                 quote! {
                     #lamellar::LamellarReturn::LocalAm(
                         std::sync::Arc::new (
@@ -320,15 +323,15 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_type: AmType) -> 
     if let AmType::ReturnData(_) = am_type {
         // let generic_phantom = quote::format_ident!("std::marker::PhantomData{}", impl_generics);
 
-        let the_ret_struct = if vec_u8{
-            quote!{
+        let the_ret_struct = if vec_u8 {
+            quote! {
                 struct #ret_struct #ty_generics #where_clause{
                     val: serde_bytes::ByteBuf,
                     // _phantom: std::marker::PhantomData<(#impl_generics)>,
                 }
             }
         } else {
-            quote!{
+            quote! {
                 struct #ret_struct #ty_generics #where_clause{
                     val: #ret_type,
                     // _phantom: std::marker::PhantomData<(#impl_generics)>,
@@ -387,13 +390,24 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_type: AmType) -> 
     }
 }
 
-fn process_fields(args: TokenStream, the_fields: &syn::Fields, crate_header: String, local: bool) -> (proc_macro2::TokenStream,proc_macro2::TokenStream,proc_macro2::TokenStream,proc_macro2::TokenStream,proc_macro2::TokenStream){
+fn process_fields(
+    args: TokenStream,
+    the_fields: &syn::Fields,
+    crate_header: String,
+    local: bool,
+) -> (
+    proc_macro2::TokenStream,
+    proc_macro2::TokenStream,
+    proc_macro2::TokenStream,
+    proc_macro2::TokenStream,
+    proc_macro2::TokenStream,
+) {
     let lamellar = quote::format_ident!("{}", crate_header.clone());
     let mut fields = quote! {};
     let mut ser = quote! {};
     let mut des = quote! {};
 
-    for field in the_fields { 
+    for field in the_fields {
         if let syn::Type::Path(ref ty) = field.ty {
             if let Some(_seg) = ty.path.segments.first() {
                 if !local {
@@ -439,7 +453,7 @@ fn process_fields(args: TokenStream, the_fields: &syn::Fields, crate_header: Str
             fields.extend(quote_spanned! {field.span()=>
                 #field,
             });
-        }else if let syn::Type::Reference(ref _ty) = field.ty {
+        } else if let syn::Type::Reference(ref _ty) = field.ty {
             if !local {
                 panic!("references are not supported in Remote Active Messages");
             } else {
@@ -448,8 +462,8 @@ fn process_fields(args: TokenStream, the_fields: &syn::Fields, crate_header: Str
                 });
             }
         } else {
-            if ! local{
-                panic!("unsupported type in Remote Active Message {:?}",field.ty);
+            if !local {
+                panic!("unsupported type in Remote Active Message {:?}", field.ty);
             }
             fields.extend(quote_spanned! {field.span()=>
                 #field,
@@ -523,8 +537,8 @@ fn process_fields(args: TokenStream, the_fields: &syn::Fields, crate_header: Str
     } else {
         quote! {}
     };
-    
-    (traits,serde_temp_2,fields,ser,des)
+
+    (traits, serde_temp_2, fields, ser, des)
 }
 
 fn derive_am_data(
@@ -542,7 +556,8 @@ fn derive_am_data(
         let generics = data.generics.clone();
         let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
 
-        let  (traits,serde_temp_2,fields,ser,des) = process_fields(args, &data.fields, crate_header, local);
+        let (traits, serde_temp_2, fields, ser, des) =
+            process_fields(args, &data.fields, crate_header, local);
         let vis = data.vis.to_token_stream();
         output.extend(quote! {
             #traits
@@ -681,7 +696,6 @@ pub fn derive_dist(input: TokenStream) -> TokenStream {
     TokenStream::from(output)
 }
 
-
 #[proc_macro_error]
 #[proc_macro]
 pub fn register_reduction(item: TokenStream) -> TokenStream {
@@ -700,13 +714,11 @@ pub fn generate_reductions_for_type_rt(item: TokenStream) -> TokenStream {
     array_reduce::__generate_reductions_for_type_rt(item)
 }
 
-
 #[proc_macro_error]
 #[proc_macro]
 pub fn generate_ops_for_type(item: TokenStream) -> TokenStream {
     array_ops::__generate_ops_for_type(item)
 }
-
 
 #[proc_macro_error]
 #[proc_macro]
@@ -717,5 +729,5 @@ pub fn generate_ops_for_type_rt(item: TokenStream) -> TokenStream {
 #[proc_macro_error]
 #[proc_macro_derive(ArithmeticOps)]
 pub fn derive_arrayops(input: TokenStream) -> TokenStream {
-    array_ops:: __derive_arrayops(input)
+    array_ops::__derive_arrayops(input)
 }

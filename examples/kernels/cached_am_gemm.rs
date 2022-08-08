@@ -15,7 +15,7 @@ use lamellar::{LocalMemoryRegion, RemoteMemoryRegion, SharedMemoryRegion};
 use lazy_static::lazy_static;
 use matrixmultiply::sgemm;
 use parking_lot::Mutex;
-use std::sync::atomic::{AtomicUsize,Ordering};
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 lazy_static! {
     static ref LOCK: Mutex<()> = Mutex::new(());
@@ -232,15 +232,13 @@ fn main() {
                     j,
                     block_size,
                 );
-                reqs.push(world.exec_am_local(
-                    MatMulAM {
-                        a: a_block,
-                        b: b_block,
-                        c: c_block.clone(),
-                        a_pe_rows: a_pe_rows,
-                        block_size: block_size,
-                    },
-                ));
+                reqs.push(world.exec_am_local(MatMulAM {
+                    a: a_block,
+                    b: b_block,
+                    c: c_block.clone(),
+                    a_pe_rows: a_pe_rows,
+                    block_size: block_size,
+                }));
                 tasks += 1;
             }
             // for req in reqs {
@@ -262,7 +260,6 @@ fn main() {
                 tot_mb,
                 (DATA_CNT.load(Ordering::SeqCst) - data_cnt)/1000000,
                 DATA_CNT.load(Ordering::SeqCst)/1000000,
-                
                 tasks
             );
         }

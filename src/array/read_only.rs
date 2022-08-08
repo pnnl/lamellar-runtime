@@ -34,6 +34,14 @@ impl<T: Dist> ReadOnlyArray<T> {
     pub fn barrier(&self) {
         self.array.barrier();
     }
+
+    pub fn block_on<F>(&self, f: F) -> F::Output
+    where
+        F: Future,
+    {
+        self.array.block_on(f)
+    }
+
     pub(crate) fn num_elems_local(&self) -> usize {
         self.array.num_elems_local()
     }
@@ -147,19 +155,19 @@ impl<T: Dist> From<UnsafeArray<T>> for ReadOnlyArray<T> {
     }
 }
 
-impl <T: Dist> From<LocalOnlyArray<T>> for ReadOnlyArray<T> {
+impl<T: Dist> From<LocalOnlyArray<T>> for ReadOnlyArray<T> {
     fn from(array: LocalOnlyArray<T>) -> Self {
         unsafe { array.into_inner().into() }
     }
 }
 
-impl <T: Dist> From<AtomicArray<T>> for ReadOnlyArray<T> {
+impl<T: Dist> From<AtomicArray<T>> for ReadOnlyArray<T> {
     fn from(array: AtomicArray<T>) -> Self {
         unsafe { array.into_inner().into() }
     }
 }
 
-impl <T: Dist> From<LocalLockAtomicArray<T>> for ReadOnlyArray<T> {
+impl<T: Dist> From<LocalLockAtomicArray<T>> for ReadOnlyArray<T> {
     fn from(array: LocalLockAtomicArray<T>) -> Self {
         unsafe { array.into_inner().into() }
     }

@@ -54,25 +54,27 @@ fn main() {
     //The standard unoptimized serial matrix muliply algorithm,
     let start = std::time::Instant::now();
     if my_pe == 0 {
-        world.block_on(async move{
-        for i in 0..m {
-            // a & c rows
-            for j in 0..p {
-                // b & c cols
-                let mut sum = 0.0;
-                for k in 0..n {
-                    // a cols b rows
-                    sum += a.at(k + i * m).await * b.at(j + k * n).await
+        let c_c = c.clone();
+        world.block_on(async move {
+            for i in 0..m {
+                // a & c rows
+                for j in 0..p {
+                    // b & c cols
+                    let mut sum = 0.0;
+                    for k in 0..n {
+                        // a cols b rows
+                        sum += a.at(k + i * m).await * b.at(j + k * n).await
+                    }
+                    c_c.put(j + i * m, &sum).await; // could also do c.add(j+i*m,sum), but each element of c will only be updated once so put is faster
                 }
-                c.put(j + i * m, &sum).await; // could also do c.add(j+i*m,sum), but each element of c will only be updated once so put is faster
             }
-        }});
+        });
     }
     world.wait_all();
     world.barrier();
     let elapsed = start.elapsed().as_secs_f64();
 
-    c.dist_iter_mut().for_each(|x| *x = 0.0);
+    // c.dist_iter_mut().for_each(|x| *x = 0.0);
     c.wait_all();
     c.barrier();
     println!("Elapsed: {:?}", elapsed);

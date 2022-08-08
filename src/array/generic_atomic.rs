@@ -370,6 +370,14 @@ impl<T: Dist> GenericAtomicArray<T> {
     pub fn barrier(&self) {
         self.array.barrier();
     }
+
+    pub fn block_on<F>(&self, f: F) -> F::Output
+    where
+        F: Future,
+    {
+        self.array.block_on(f)
+    }
+
     pub(crate) fn num_elems_local(&self) -> usize {
         self.array.num_elems_local()
     }

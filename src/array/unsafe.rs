@@ -73,7 +73,7 @@ pub struct UnsafeByteArrayWeak {
 }
 
 impl UnsafeByteArrayWeak {
-    pub(crate) fn upgrade(&self) -> Option<UnsafeByteArray> {
+    pub fn upgrade(&self) -> Option<UnsafeByteArray> {
         if let Some(inner) = self.inner.upgrade() {
             Some(UnsafeByteArray { inner })
         } else {
@@ -207,6 +207,13 @@ impl<T: Dist + 'static> UnsafeArray<T> {
     }
     pub fn barrier(&self) {
         self.inner.data.team.barrier();
+    }
+
+    pub fn block_on<F>(&self, f: F) -> F::Output
+    where
+        F: Future,
+    {
+        self.inner.data.team.scheduler.block_on(f)
     }
 
     pub fn use_distribution(mut self, distribution: Distribution) -> Self {

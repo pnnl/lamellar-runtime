@@ -1,4 +1,4 @@
-use lamellar::array::{DistributedIterator,AtomicArray, LocalLockAtomicArray};
+use lamellar::array::{AtomicArray, DistributedIterator, LocalLockAtomicArray};
 
 macro_rules! initialize_array {
     (UnsafeArray,$array:ident,$init_val:ident) => {
@@ -51,7 +51,7 @@ macro_rules! compare_exchange_test{
             initialize_array!($array, array, init_val);
             array.wait_all();
             array.barrier();
-            
+
             let mut reqs = vec![];
             for idx in 0..array.len(){
                 if idx%num_pes == my_pe{
@@ -59,7 +59,7 @@ macro_rules! compare_exchange_test{
                 }
             }
             for (req,idx) in reqs{
-                match req.get()[0]{
+                match  world.block_on(req)[0]{
                     Ok(val) => {
                         check_val!($array,val,init_val,success);
                         if !success{
@@ -78,12 +78,12 @@ macro_rules! compare_exchange_test{
                 reqs.push((array.compare_exchange(idx,init_val,my_pe as $t),idx));
             }
             for (req,idx) in reqs{
-                match req.get()[0]{
+                match  world.block_on(req)[0]{
                     Ok(val) => {
                         println!("returned ok {:?} {:?} {:?}",idx,val,init_val);
                     }
                     Err(_) => {
-                        
+
                     }
                 }
             }
@@ -106,7 +106,7 @@ macro_rules! compare_exchange_test{
                 }
             }
             for (req,idx) in reqs{
-                match req.get()[0]{
+                match  world.block_on(req)[0]{
                     Ok(val) => {
                         check_val!($array,val,init_val,success);
                         if !success{
@@ -125,12 +125,12 @@ macro_rules! compare_exchange_test{
                 reqs.push((sub_array.compare_exchange(idx,init_val,my_pe as $t),idx));
             }
             for (req,idx) in reqs{
-                match req.get()[0]{
+                match  world.block_on(req)[0]{
                     Ok(val) => {
                         println!("returned ok {:?} {:?} {:?}",idx,val,init_val);
                     }
                     Err(_) => {
-                        
+
                     }
                 }
             }
@@ -155,7 +155,7 @@ macro_rules! compare_exchange_test{
                     }
                 }
                 for (req,idx) in reqs{
-                    match req.get()[0]{
+                    match  world.block_on(req)[0]{
                         Ok(val) => {
                             check_val!($array,val,init_val,success);
                             if !success{
@@ -176,12 +176,12 @@ macro_rules! compare_exchange_test{
                     }
                 }
                 for (req,idx) in reqs{
-                    match req.get()[0]{
+                    match  world.block_on(req)[0]{
                         Ok(val) => {
                             println!("returned ok {:?} {:?} {:?}",idx,val,init_val);
                         }
                         Err(_) => {
-                            
+
                         }
                     }
                 }
@@ -214,7 +214,7 @@ macro_rules! compare_exchange_epsilon_test{
             initialize_array!($array, array, init_val);
             array.wait_all();
             array.barrier();
-            
+
             let mut reqs = vec![];
             for idx in 0..array.len(){
                 if idx%num_pes == my_pe{
@@ -222,7 +222,7 @@ macro_rules! compare_exchange_epsilon_test{
                 }
             }
             for (req,idx) in reqs{
-                match req.get()[0]{
+                match  world.block_on(req)[0]{
                     Ok(val) => {
                         check_val!($array,val,init_val,success);
                         if !success{
@@ -241,12 +241,12 @@ macro_rules! compare_exchange_epsilon_test{
                 reqs.push((array.compare_exchange_epsilon(idx,init_val,my_pe as $t,epsilon),idx));
             }
             for (req,idx) in reqs{
-                match req.get()[0]{
+                match  world.block_on(req)[0]{
                     Ok(val) => {
                         println!("returned ok {:?} {:?} {:?}",idx,val,init_val);
                     }
                     Err(_) => {
-                        
+
                     }
                 }
             }
@@ -269,7 +269,7 @@ macro_rules! compare_exchange_epsilon_test{
                 }
             }
             for (req,idx) in reqs{
-                match req.get()[0]{
+                match  world.block_on(req)[0]{
                     Ok(val) => {
                         check_val!($array,val,init_val,success);
                         if !success{
@@ -288,12 +288,12 @@ macro_rules! compare_exchange_epsilon_test{
                 reqs.push((sub_array.compare_exchange_epsilon(idx,init_val,my_pe as $t,epsilon),idx));
             }
             for (req,idx) in reqs{
-                match req.get()[0]{
+                match  world.block_on(req)[0]{
                     Ok(val) => {
                         println!("returned ok {:?} {:?} {:?}",idx,val,init_val);
                     }
                     Err(_) => {
-                        
+
                     }
                 }
             }
@@ -318,7 +318,7 @@ macro_rules! compare_exchange_epsilon_test{
                     }
                 }
                 for (req,idx) in reqs{
-                    match req.get()[0]{
+                    match  world.block_on(req)[0]{
                         Ok(val) => {
                             check_val!($array,val,init_val,success);
                             if !success{
@@ -339,12 +339,12 @@ macro_rules! compare_exchange_epsilon_test{
                     }
                 }
                 for (req,idx) in reqs{
-                    match req.get()[0]{
+                    match  world.block_on(req)[0]{
                         Ok(val) => {
                             println!("returned ok {:?} {:?} {:?}",idx,val,init_val);
                         }
                         Err(_) => {
-                            
+
                         }
                     }
                 }

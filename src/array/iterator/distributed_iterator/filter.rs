@@ -1,15 +1,15 @@
 use crate::array::iterator::distributed_iterator::*;
 
 #[derive(Clone)]
-pub struct Filter<I,F> {
+pub struct Filter<I, F> {
     iter: I,
-    f: F
+    f: F,
 }
 impl<I, F> Filter<I, F>
 where
     I: DistributedIterator,
 {
-    pub(crate) fn new(iter: I, f: F) -> Filter<I,F> {
+    pub(crate) fn new(iter: I, f: F) -> Filter<I, F> {
         // println!("new Filter {:?} ",count);
         Filter { iter, f }
     }
@@ -35,14 +35,14 @@ where
 //     }
 // }
 
-impl<I,F> DistributedIterator for Filter<I,F>
+impl<I, F> DistributedIterator for Filter<I, F>
 where
     I: DistributedIterator,
-    F: FnMut(&I::Item) -> bool + AmLocal + Clone + 'static, 
+    F: FnMut(&I::Item) -> bool + AmLocal + Clone + 'static,
 {
     type Item = I::Item;
     type Array = <I as DistributedIterator>::Array;
-    fn init(&self, start_i: usize, cnt: usize) -> Filter<I,F> {
+    fn init(&self, start_i: usize, cnt: usize) -> Filter<I, F> {
         // println!("init enumerate start_i: {:?} cnt {:?} end_i {:?}",start_i, cnt, start_i+cnt );
         Filter::new(self.iter.init(start_i, cnt), self.f.clone())
     }
@@ -50,13 +50,13 @@ where
         self.iter.array()
     }
     fn next(&mut self) -> Option<Self::Item> {
-        while let Some(next) = self.iter.next(){
+        while let Some(next) = self.iter.next() {
             if (self.f)(&next) {
                 return Some(next);
             }
         }
         None
-    }        
+    }
 
     fn elems(&self, in_elems: usize) -> usize {
         let in_elems = self.iter.elems(in_elems);

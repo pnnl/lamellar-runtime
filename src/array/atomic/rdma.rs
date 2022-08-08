@@ -51,7 +51,7 @@ impl<T: Dist> AtomicArray<T> {
         &self,
         index: usize,
         buf: U,
-    ) -> Box<dyn LamellarArrayRequest<Output = ()>  > {
+    ) -> Box<dyn LamellarArrayRequest<Output = ()>> {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.internal_get(index, buf),
             AtomicArray::GenericAtomicArray(array) => array.internal_get(index, buf),
@@ -62,7 +62,7 @@ impl<T: Dist> AtomicArray<T> {
         index: usize,
         buf: U,
     ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
-        self.internal_get(index,buf).into_future()
+        self.internal_get(index, buf).into_future()
     }
     // pub fn iput<U: MyInto<LamellarArrayInput<T>> + LamellarRead>(&self, index: usize, buf: U) {
     //     self.exec_am_local(InitPutAm {
@@ -76,7 +76,7 @@ impl<T: Dist> AtomicArray<T> {
         &self,
         index: usize,
         buf: U,
-    ) -> Box<dyn LamellarArrayRequest<Output = ()>  > {
+    ) -> Box<dyn LamellarArrayRequest<Output = ()>> {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.internal_put(index, buf),
             AtomicArray::GenericAtomicArray(array) => array.internal_put(index, buf),
@@ -88,17 +88,17 @@ impl<T: Dist> AtomicArray<T> {
         index: usize,
         buf: U,
     ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
-        self.internal_put(index,buf).into_future()
+        self.internal_put(index, buf).into_future()
     }
 
-    pub fn internal_at(&self, index: usize) -> Box<dyn LamellarArrayRequest<Output = T>  > {
+    pub fn internal_at(&self, index: usize) -> Box<dyn LamellarArrayRequest<Output = T>> {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.internal_at(index),
             AtomicArray::GenericAtomicArray(array) => array.internal_at(index),
         }
     }
 
-    pub fn at(&self, index: usize) -> Pin<Box<dyn Future<Output = T> + Send >> {
+    pub fn at(&self, index: usize) -> Pin<Box<dyn Future<Output = T> + Send>> {
         self.internal_at(index).into_future()
     }
 }

@@ -373,6 +373,17 @@ impl<T: Dist> AtomicArray<T> {
             AtomicArray::GenericAtomicArray(array) => array.barrier(),
         }
     }
+
+    pub fn block_on<F>(&self, f: F) -> F::Output
+    where
+        F: Future,
+    {
+        match self {
+            AtomicArray::NativeAtomicArray(array) => array.block_on(f),
+            AtomicArray::GenericAtomicArray(array) => array.block_on(f),
+        }
+    }
+
     pub(crate) fn num_elems_local(&self) -> usize {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.num_elems_local(),
@@ -500,7 +511,8 @@ impl<T: Dist + 'static> From<ReadOnlyArray<T>> for AtomicArray<T> {
     fn from(array: ReadOnlyArray<T>) -> Self {
         unsafe { array.into_inner().into() }
     }
-}impl<T: Dist + 'static> From<LocalLockAtomicArray<T>> for AtomicArray<T> {
+}
+impl<T: Dist + 'static> From<LocalLockAtomicArray<T>> for AtomicArray<T> {
     fn from(array: LocalLockAtomicArray<T>) -> Self {
         unsafe { array.into_inner().into() }
     }

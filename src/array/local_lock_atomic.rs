@@ -174,6 +174,14 @@ impl<T: Dist> LocalLockAtomicArray<T> {
     pub fn barrier(&self) {
         self.array.barrier();
     }
+
+    pub fn block_on<F>(&self, f: F) -> F::Output
+    where
+        F: Future,
+    {
+        self.array.block_on(f)
+    }
+
     pub(crate) fn num_elems_local(&self) -> usize {
         self.array.num_elems_local()
     }
@@ -290,7 +298,6 @@ impl<T: Dist + 'static> LocalLockAtomicArray<T> {
     }
 }
 
-
 impl<T: Dist> From<UnsafeArray<T>> for LocalLockAtomicArray<T> {
     fn from(array: UnsafeArray<T>) -> Self {
         array.block_on_outstanding(DarcMode::LocalLockAtomicArray);
@@ -312,19 +319,19 @@ impl<T: Dist> From<UnsafeArray<T>> for LocalLockAtomicArray<T> {
     }
 }
 
-impl <T: Dist> From<LocalOnlyArray<T>> for LocalLockAtomicArray<T> {
+impl<T: Dist> From<LocalOnlyArray<T>> for LocalLockAtomicArray<T> {
     fn from(array: LocalOnlyArray<T>) -> Self {
         unsafe { array.into_inner().into() }
     }
 }
 
-impl <T: Dist> From<AtomicArray<T>> for LocalLockAtomicArray<T> {
+impl<T: Dist> From<AtomicArray<T>> for LocalLockAtomicArray<T> {
     fn from(array: AtomicArray<T>) -> Self {
         unsafe { array.into_inner().into() }
     }
 }
 
-impl <T: Dist> From<ReadOnlyArray<T>> for LocalLockAtomicArray<T> {
+impl<T: Dist> From<ReadOnlyArray<T>> for LocalLockAtomicArray<T> {
     fn from(array: ReadOnlyArray<T>) -> Self {
         unsafe { array.into_inner().into() }
     }

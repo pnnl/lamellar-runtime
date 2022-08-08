@@ -1,5 +1,6 @@
-use lamellar::array::{DistributedIterator,
-    ArithmeticOps, AtomicArray, LocalLockAtomicArray, SerialIterator, UnsafeArray,
+use lamellar::array::{
+    ArithmeticOps, AtomicArray, DistributedIterator, LocalLockAtomicArray, SerialIterator,
+    UnsafeArray,
 };
 
 use rand::distributions::Distribution;
@@ -76,7 +77,7 @@ macro_rules! sub_test{
                 #[cfg(feature="non-buffered-array-ops")]
                 {
                     for _i in 0..(pe_max_val as usize){
-                        let val = array.fetch_sub(idx,1 as $t).get();
+                        let val =  world.block_on(array.fetch_sub(idx,1 as $t));
                         if val > prev{
                             success = false;
                         }
@@ -90,7 +91,7 @@ macro_rules! sub_test{
                         reqs.push(array.fetch_sub(idx,1 as $t));
                     }
                     for req in reqs{
-                        let val = req.get()[0];
+                        let val =  world.block_on(req)[0];
                         if val > prev{
                             success = false;
                         }
@@ -117,7 +118,7 @@ macro_rules! sub_test{
             {
                 for _i in 0..num_updates  as usize{
                     let idx = rand_idx.sample(&mut rng);
-                    let val = array.fetch_sub(idx,1 as $t).get();
+                    let val =  world.block_on(array.fetch_sub(idx,1 as $t));
                     if val > prev_vals[idx]{
                         success = false;
                     }
@@ -133,7 +134,7 @@ macro_rules! sub_test{
                     reqs.push((array.fetch_sub(idx,1 as $t),idx))
                 }
                 for (req,_idx) in reqs{
-                    let _val = req.get();
+                    let _val =  world.block_on(req);
                     // if val > prev_vals[idx]{
                     //     success = false;
                     // }
@@ -164,7 +165,7 @@ macro_rules! sub_test{
                 #[cfg(feature="non-buffered-array-ops")]
                 {
                     for _i in 0..(pe_max_val as usize){
-                        let val = sub_array.fetch_sub(idx,1 as $t).get();
+                        let val =  world.block_on(sub_array.fetch_sub(idx,1 as $t));
                         if val > prev{
                             success = false;
                         }
@@ -178,7 +179,7 @@ macro_rules! sub_test{
                         reqs.push(sub_array.fetch_sub(idx,1 as $t));
                     }
                     for req in reqs{
-                        let val = req.get()[0];
+                        let val =  world.block_on(req)[0];
                         if val > prev{
                             success = false;
                         }
@@ -205,7 +206,7 @@ macro_rules! sub_test{
             {
                 for _i in 0..num_updates as usize{
                     let idx = rand_idx.sample(&mut rng);
-                    let val = sub_array.fetch_sub(idx,1 as $t).get();
+                    let val =  world.block_on(sub_array.fetch_sub(idx,1 as $t));
                     if val > prev_vals[idx]{
                         success = false;
                     }
@@ -221,7 +222,7 @@ macro_rules! sub_test{
                     reqs.push((sub_array.fetch_sub(idx,1 as $t),idx))
                 }
                 for (req,_idx) in reqs{
-                    let _val = req.get();
+                    let _val =  world.block_on(req);
                     // if val > prev_vals[idx]{
                     //     success = false;
                     // }
@@ -253,7 +254,7 @@ macro_rules! sub_test{
                     #[cfg(feature="non-buffered-array-ops")]
                     {
                         for _i in 0..(pe_max_val as usize){
-                            let val = sub_array.fetch_sub(idx,1 as $t).get();
+                            let val =  world.block_on(sub_array.fetch_sub(idx,1 as $t));
                             if val > prev{
                                 success = false;
                             }
@@ -267,7 +268,7 @@ macro_rules! sub_test{
                             reqs.push(sub_array.fetch_sub(idx,1 as $t));
                         }
                         for req in reqs{
-                            let val = req.get()[0];
+                            let val =  world.block_on(req)[0];
                             if val > prev{
                                 success = false;
                             }
@@ -294,7 +295,7 @@ macro_rules! sub_test{
                 {
                     for _i in 0..num_updates as usize{
                         let idx = rand_idx.sample(&mut rng);
-                        let val = sub_array.fetch_sub(idx,1 as $t).get();
+                        let val =  world.block_on(sub_array.fetch_sub(idx,1 as $t));
                         if val > prev_vals[idx]{
                             success = false;
                         }
@@ -310,7 +311,7 @@ macro_rules! sub_test{
                         reqs.push((sub_array.fetch_sub(idx,1 as $t),idx))
                     }
                     for (req,_idx) in reqs{
-                        let _val = req.get();
+                        let _val =  world.block_on(req);
                         // if val > prev_vals[idx]{
                         //     success = false;
                         // }

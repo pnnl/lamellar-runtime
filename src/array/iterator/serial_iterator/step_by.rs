@@ -36,12 +36,15 @@ where
     fn item_size(&self) -> usize {
         self.iter.item_size()
     }
-    fn buffered_next(&mut self, mem_region: LocalMemoryRegion<u8>) -> Option<Box<dyn LamellarArrayRequest<Output = ()>  >>{
+    fn buffered_next(
+        &mut self,
+        mem_region: LocalMemoryRegion<u8>,
+    ) -> Option<Box<dyn LamellarArrayRequest<Output = ()>>> {
         let res = self.iter.buffered_next(mem_region)?;
         self.iter.advance_index(self.step_size - 1);
         Some(res)
     }
-    fn from_mem_region(&self, mem_region: LocalMemoryRegion<u8>) -> Option<Self::Item>{
+    fn from_mem_region(&self, mem_region: LocalMemoryRegion<u8>) -> Option<Self::Item> {
         self.iter.from_mem_region(mem_region)
     }
 }

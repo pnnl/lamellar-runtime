@@ -54,7 +54,7 @@ where
         if self.index < array.len() {
             let size = std::cmp::min(self.chunk_size, array.len() - self.index);
 
-            let mem_region = self.get_buffer( size);
+            let mem_region = self.get_buffer(size);
             self.index += size;
             Some(mem_region)
         } else {
@@ -75,19 +75,21 @@ where
     fn item_size(&self) -> usize {
         self.chunk_size * std::mem::size_of::<I::ElemType>()
     }
-    fn buffered_next(&mut self, mem_region: LocalMemoryRegion<u8>) -> Option<Box<dyn LamellarArrayRequest<Output = ()>  >>{
+    fn buffered_next(
+        &mut self,
+        mem_region: LocalMemoryRegion<u8>,
+    ) -> Option<Box<dyn LamellarArrayRequest<Output = ()>>> {
         let array = self.array();
         if self.index < array.len() {
             let mem_reg_t = mem_region.to_base::<I::ElemType>();
-            let req  = array.internal_get(self.index, &mem_reg_t);
+            let req = array.internal_get(self.index, &mem_reg_t);
             self.index += mem_reg_t.len();
             Some(req)
         } else {
             None
         }
     }
-    fn from_mem_region(&self, mem_region: LocalMemoryRegion<u8>) -> Option<Self::Item>{
-        
+    fn from_mem_region(&self, mem_region: LocalMemoryRegion<u8>) -> Option<Self::Item> {
         let mem_reg_t = mem_region.to_base::<I::ElemType>();
         Some(mem_reg_t)
     }

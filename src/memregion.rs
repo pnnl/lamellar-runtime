@@ -27,8 +27,10 @@ impl std::fmt::Display for MemNotLocalError {
 
 impl std::error::Error for MemNotLocalError {}
 
-
-pub trait Dist: Sync + Send + Copy + std::fmt::Debug +  serde::ser::Serialize + serde::de::DeserializeOwned + 'static {}
+pub trait Dist:
+    Sync + Send + Copy + std::fmt::Debug + serde::ser::Serialize + serde::de::DeserializeOwned + 'static
+{
+}
 // impl<T: Send  + Copy + std::fmt::Debug + 'static>
 //     Dist for T
 // {
@@ -43,9 +45,12 @@ pub enum LamellarMemoryRegion<T: Dist> {
     // Unsafe(UnsafeArray<T>),
 }
 
-impl<T: Dist + serde::Serialize> LamellarMemoryRegion<T>{
-    pub(crate) fn serialize_local_data<S>(mr: &LamellarMemoryRegion<T>, s: S) -> Result<S::Ok, S::Error> 
-    where 
+impl<T: Dist + serde::Serialize> LamellarMemoryRegion<T> {
+    pub(crate) fn serialize_local_data<S>(
+        mr: &LamellarMemoryRegion<T>,
+        s: S,
+    ) -> Result<S::Ok, S::Error>
+    where
         S: serde::Serializer,
     {
         match mr {
@@ -242,7 +247,7 @@ impl<T: Dist> MemoryRegion<T> {
         if let Ok(memreg) = MemoryRegion::try_new(size, lamellae, alloc) {
             memreg
         } else {
-            unsafe {std::ptr::null_mut::<i32>().write(1)};
+            unsafe { std::ptr::null_mut::<i32>().write(1) };
             panic!("out of memory")
         }
     }

@@ -17,6 +17,7 @@ use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 // use std::any;
 use core::pin::Pin;
+use futures::Future;
 use lamellar_prof::*;
 use parking_lot::Mutex;
 use parking_lot::RwLock;
@@ -25,7 +26,6 @@ use std::marker::PhantomPinned;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc; //, Weak};
 use std::time::{Duration, Instant};
-use futures::Future;
 
 use std::cell::Cell;
 use std::marker::PhantomData;
@@ -162,7 +162,7 @@ impl ActiveMessaging for Arc<LamellarTeam> {
         self.team.barrier();
     }
 
-    fn exec_am_all<F>(&self, am: F) -> Pin<Box<dyn Future<Output=Vec<F::Output>>+Send>>
+    fn exec_am_all<F>(&self, am: F) -> Pin<Box<dyn Future<Output = Vec<F::Output>> + Send>>
     where
         F: RemoteActiveMessage + LamellarAM + Serde + AmDist,
     {
@@ -170,14 +170,14 @@ impl ActiveMessaging for Arc<LamellarTeam> {
         self.team.exec_am_all_tg(am, None).into_future()
     }
 
-    fn exec_am_pe<F>(&self, pe: usize, am: F) -> Pin<Box<dyn Future<Output=F::Output>+Send>>
+    fn exec_am_pe<F>(&self, pe: usize, am: F) -> Pin<Box<dyn Future<Output = F::Output> + Send>>
     where
         F: RemoteActiveMessage + LamellarAM + Serde + AmDist,
     {
         self.team.exec_am_pe_tg(pe, am, None).into_future()
     }
 
-    fn exec_am_local<F>(&self, am: F) -> Pin<Box<dyn Future<Output=F::Output>+Send>>
+    fn exec_am_local<F>(&self, am: F) -> Pin<Box<dyn Future<Output = F::Output> + Send>>
     where
         F: LamellarActiveMessage + LocalAM + 'static,
     {

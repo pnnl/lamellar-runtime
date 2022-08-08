@@ -22,11 +22,11 @@ impl<T: Dist + 'static> NativeAtomicArray<T> {
         &self,
         index: usize,
         buf: U,
-    ) -> Pin<Box<dyn Future<Output = ()>+Send>> {
-        self.internal_get(index,buf).into_future()
+    ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
+        self.internal_get(index, buf).into_future()
     }
 
-    pub(crate) fn internal_at(&self, index: usize) -> Box<dyn LamellarArrayRequest<Output = T>  > {
+    pub(crate) fn internal_at(&self, index: usize) -> Box<dyn LamellarArrayRequest<Output = T>> {
         let buf: LocalMemoryRegion<T> = self.array.team().alloc_local_mem_region(1);
         let req = self.exec_am_local(InitGetAm {
             array: self.clone(),
@@ -56,7 +56,7 @@ impl<T: Dist + 'static> NativeAtomicArray<T> {
         &self,
         index: usize,
         buf: U,
-    ) -> Box<dyn LamellarArrayRequest<Output = ()>  > {
+    ) -> Box<dyn LamellarArrayRequest<Output = ()>> {
         let req = self.exec_am_local(InitPutAm {
             array: self.clone(),
             index: index,
@@ -70,7 +70,7 @@ impl<T: Dist + 'static> NativeAtomicArray<T> {
         index: usize,
         buf: U,
     ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
-        self.internal_put(index,buf).into_future()
+        self.internal_put(index, buf).into_future()
     }
 }
 
@@ -82,10 +82,10 @@ impl<T: Dist + 'static> LamellarArrayInternalGet<T> for NativeAtomicArray<T> {
         &self,
         index: usize,
         buf: U,
-    ) -> Box<dyn LamellarArrayRequest<Output = ()>  > {
+    ) -> Box<dyn LamellarArrayRequest<Output = ()>> {
         self.internal_get(index, buf)
     }
-    fn internal_at(&self, index: usize) -> Box<dyn LamellarArrayRequest<Output = T>  > {
+    fn internal_at(&self, index: usize) -> Box<dyn LamellarArrayRequest<Output = T>> {
         self.internal_at(index)
     }
 }
@@ -97,7 +97,7 @@ impl<T: Dist + 'static> LamellarArrayGet<T> for NativeAtomicArray<T> {
         &self,
         index: usize,
         buf: U,
-    ) -> Pin<Box<dyn Future<Output = ()> + Send>>  {
+    ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
         self.get(index, buf)
     }
     fn at(&self, index: usize) -> Pin<Box<dyn Future<Output = T> + Send>> {
@@ -120,7 +120,7 @@ impl<T: Dist> LamellarArrayPut<T> for NativeAtomicArray<T> {
         &self,
         index: usize,
         buf: U,
-    ) -> Pin<Box<dyn Future<Output = ()> + Send >> {
+    ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
         self.put(index, buf)
     }
 }

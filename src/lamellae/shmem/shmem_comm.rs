@@ -41,8 +41,8 @@ fn attach_to_shmem(size: usize, id: &str, header: usize, create: bool) -> MyShme
     // let  m = if create {
     let mut retry = 0;
     let m = loop {
-        // match ShmemConf::new().size(size).os_id(shmem_id.clone()).create() {
-        match ShmemConf::new().size(size).flink(shmem_id.clone()).create() {
+        match ShmemConf::new().size(size).os_id(shmem_id.clone()).create() {
+            // match ShmemConf::new().size(size).flink(shmem_id.clone()).create() {
             Ok(m) => {
                 // println!("created {:?}", shmem_id);
                 if create {
@@ -61,7 +61,7 @@ fn attach_to_shmem(size: usize, id: &str, header: usize, create: bool) -> MyShme
             Err(ShmemError::LinkExists)
             | Err(ShmemError::MappingIdExists)
             | Err(ShmemError::MapOpenFailed(_)) => {
-                // match ShmemConf::new().os_id(shmem_id.clone()).open() 
+                // match ShmemConf::new().os_id(shmem_id.clone()).open()
                 match ShmemConf::new().flink(shmem_id.clone()).open() {
                     Ok(m) => {
                         // println!("attached {:?}", shmem_id);
@@ -631,10 +631,10 @@ impl SerializedDataOps for ShmemData {
 
 impl Des for ShmemData {
     fn deserialize_header(&self) -> Option<SerializeHeader> {
-        crate::deserialize(self.header_as_bytes(),false).unwrap()
+        crate::deserialize(self.header_as_bytes(), false).unwrap()
     }
     fn deserialize_data<T: serde::de::DeserializeOwned>(&self) -> Result<T, anyhow::Error> {
-        Ok(crate::deserialize(self.data_as_bytes(),true)?)
+        Ok(crate::deserialize(self.data_as_bytes(), true)?)
     }
     fn data_as_bytes(&self) -> &mut [u8] {
         unsafe { std::slice::from_raw_parts_mut((self.data_start) as *mut u8, self.data_len) }

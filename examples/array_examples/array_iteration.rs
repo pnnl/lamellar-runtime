@@ -319,6 +319,3 @@ fn main() {
     // //--------------
     // for elem in block_array.ser_iter().step_by(4).into_iter() {...}
 }
-
-
-

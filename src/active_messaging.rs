@@ -1,19 +1,17 @@
 use crate::lamellae::{Lamellae, SerializedData};
 use crate::lamellar_arch::IdError;
-use crate::lamellar_request::{
-    InternalResult, LamellarMultiRequest, LamellarRequest, LamellarRequestResult,
-};
+use crate::lamellar_request::{InternalResult, LamellarRequestResult};
 use crate::lamellar_team::{LamellarTeam, LamellarTeamRT};
 use crate::scheduler::{AmeScheduler, ReqData, ReqId};
 #[cfg(feature = "enable-prof")]
 use lamellar_prof::*;
 // use log::trace;
+use futures::Future;
 use parking_lot::Mutex; //, RwLock};
 use std::collections::HashMap;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc; //, Weak};
-use futures::Future;
 
 pub(crate) mod registered_active_message;
 use registered_active_message::RegisteredActiveMessages; //, AMS_EXECS};
@@ -165,18 +163,18 @@ impl AMCounters {
     }
 }
 
-
-
 pub trait ActiveMessaging {
     fn wait_all(&self);
     fn barrier(&self);
-    fn exec_am_all<F>(&self, am: F) -> Pin<Box<dyn Future<Output=Vec<F::Output>>+Send>>//Box<dyn LamellarMultiRequest<Output = F::Output>>
+    fn exec_am_all<F>(&self, am: F) -> Pin<Box<dyn Future<Output = Vec<F::Output>> + Send>>
+    //Box<dyn LamellarMultiRequest<Output = F::Output>>
     where
         F: RemoteActiveMessage + LamellarAM + Serde + AmDist;
-    fn exec_am_pe<F>(&self, pe: usize, am: F) -> Pin<Box<dyn Future<Output=F::Output>+Send>> //Box<dyn LamellarRequest<Output = F::Output>>
+    fn exec_am_pe<F>(&self, pe: usize, am: F) -> Pin<Box<dyn Future<Output = F::Output> + Send>>
+    //Box<dyn LamellarRequest<Output = F::Output>>
     where
         F: RemoteActiveMessage + LamellarAM + Serde + AmDist;
-    fn exec_am_local<F>(&self, am: F) -> Pin<Box<dyn Future<Output=F::Output>+Send>>
+    fn exec_am_local<F>(&self, am: F) -> Pin<Box<dyn Future<Output = F::Output> + Send>>
     where
         F: LamellarActiveMessage + LocalAM + 'static;
 }

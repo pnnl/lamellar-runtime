@@ -1,15 +1,15 @@
 use crate::array::iterator::distributed_iterator::*;
 
 #[derive(Clone)]
-pub struct Map<I,F> {
+pub struct Map<I, F> {
     iter: I,
-    f: F
+    f: F,
 }
 impl<I, F> Map<I, F>
 where
     I: DistributedIterator,
 {
-    pub(crate) fn new(iter: I, f: F) -> Map<I,F> {
+    pub(crate) fn new(iter: I, f: F) -> Map<I, F> {
         // println!("new Map {:?} ",count);
         Map { iter, f }
     }
@@ -36,15 +36,15 @@ where
 //     }
 // }
 
-impl<B,I,F> DistributedIterator for Map<I,F>
+impl<B, I, F> DistributedIterator for Map<I, F>
 where
     I: DistributedIterator,
     F: FnMut(I::Item) -> B + AmLocal + Clone + 'static,
-    B: Send ,
+    B: Send,
 {
     type Item = B;
     type Array = <I as DistributedIterator>::Array;
-    fn init(&self, start_i: usize, cnt: usize) -> Map<I,F> {
+    fn init(&self, start_i: usize, cnt: usize) -> Map<I, F> {
         // println!("init enumerate start_i: {:?} cnt {:?} end_i {:?}",start_i, cnt, start_i+cnt );
         Map::new(self.iter.init(start_i, cnt), self.f.clone())
     }
@@ -53,7 +53,7 @@ where
     }
     fn next(&mut self) -> Option<Self::Item> {
         self.iter.next().map(&mut self.f)
-    }        
+    }
 
     fn elems(&self, in_elems: usize) -> usize {
         let in_elems = self.iter.elems(in_elems);

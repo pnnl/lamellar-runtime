@@ -1,5 +1,5 @@
-use crate::array::*;
 use crate::array::private::LamellarArrayPrivate;
+use crate::array::*;
 use crate::darc::DarcMode;
 use crate::lamellar_team::{IntoLamellarTeam, LamellarTeamRT};
 use crate::memregion::Dist;
@@ -15,7 +15,7 @@ pub struct LocalOnlyArray<T: Dist + 'static> {
 }
 
 //#[prof]
-impl<T: Dist > LocalOnlyArray<T> {
+impl<T: Dist> LocalOnlyArray<T> {
     pub fn new<U: Into<IntoLamellarTeam>>(
         team: U,
         array_size: usize,
@@ -69,7 +69,6 @@ impl<T: Dist > LocalOnlyArray<T> {
         self.array.into()
     }
 
-    
     pub fn into_generic_atomic(self) -> GenericAtomicArray<T> {
         self.array.into()
     }
@@ -79,7 +78,7 @@ impl<T: Dist > LocalOnlyArray<T> {
     }
 }
 
-impl <T: Dist + 'static> LocalOnlyArray<T> {
+impl<T: Dist + 'static> LocalOnlyArray<T> {
     pub fn into_atomic(self) -> AtomicArray<T> {
         self.array.into()
     }
@@ -95,24 +94,23 @@ impl<T: Dist> From<UnsafeArray<T>> for LocalOnlyArray<T> {
     }
 }
 
-impl <T: Dist> From<ReadOnlyArray<T>> for LocalOnlyArray<T> {
+impl<T: Dist> From<ReadOnlyArray<T>> for LocalOnlyArray<T> {
     fn from(array: ReadOnlyArray<T>) -> Self {
-        unsafe {array.into_inner().into() }
+        unsafe { array.into_inner().into() }
     }
 }
 
-impl <T: Dist> From<AtomicArray<T>> for LocalOnlyArray<T> {
+impl<T: Dist> From<AtomicArray<T>> for LocalOnlyArray<T> {
     fn from(array: AtomicArray<T>) -> Self {
         unsafe { array.into_inner().into() }
     }
 }
 
-impl <T: Dist> From<LocalLockAtomicArray<T>> for LocalOnlyArray<T> {
+impl<T: Dist> From<LocalLockAtomicArray<T>> for LocalOnlyArray<T> {
     fn from(array: LocalLockAtomicArray<T>) -> Self {
         unsafe { array.into_inner().into() }
     }
 }
-
 
 impl<T: Dist> private::ArrayExecAm<T> for LocalOnlyArray<T> {
     fn team(&self) -> Pin<Arc<LamellarTeamRT>> {
@@ -123,9 +121,7 @@ impl<T: Dist> private::ArrayExecAm<T> for LocalOnlyArray<T> {
     }
 }
 
-impl<T: Dist>
-    private::LamellarArrayPrivate<T> for LocalOnlyArray<T>
-{
+impl<T: Dist> private::LamellarArrayPrivate<T> for LocalOnlyArray<T> {
     fn local_as_ptr(&self) -> *const T {
         self.local_as_mut_ptr()
     }
@@ -143,9 +139,7 @@ impl<T: Dist>
     }
 }
 
-impl<T: Dist> LamellarArray<T>
-    for LocalOnlyArray<T>
-{
+impl<T: Dist> LamellarArray<T> for LocalOnlyArray<T> {
     fn my_pe(&self) -> usize {
         self.array.my_pe()
     }
@@ -170,9 +164,7 @@ impl<T: Dist> LamellarArray<T>
     }
 }
 
-impl<T: Dist +  std::fmt::Debug>
-    LocalOnlyArray<T>
-{
+impl<T: Dist + std::fmt::Debug> LocalOnlyArray<T> {
     pub fn print(&self) {
         self.array.print()
     }

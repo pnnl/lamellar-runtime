@@ -13,7 +13,7 @@ impl<T: Dist> UnsafeArray<T> {
         op: ArrayRdmaCmd,
         index: usize, //relative to inner
         buf: U,
-    ) -> Vec<Box<dyn LamellarRequest<Output = ()>  >> {
+    ) -> Vec<Box<dyn LamellarRequest<Output = ()>>> {
         let global_index = index + self.inner.offset;
         let buf = buf.my_into(&self.inner.data.team);
         let start_pe = match self.inner.pe_for_dist_index(index) {
@@ -109,7 +109,7 @@ impl<T: Dist> UnsafeArray<T> {
         op: ArrayRdmaCmd,
         index: usize, //global_index
         buf: U,
-    ) -> Vec<Box<dyn LamellarRequest<Output = ()>  >> {
+    ) -> Vec<Box<dyn LamellarRequest<Output = ()>>> {
         let global_index = index + self.inner.offset;
         let buf = buf.my_into(&self.inner.data.team);
         let my_pe = self.inner.data.my_pe;
@@ -309,7 +309,6 @@ impl<T: Dist> UnsafeArray<T> {
         self.internal_put(index, buf).into_future()
     }
 
-
     pub unsafe fn get_unchecked<U: MyInto<LamellarArrayInput<T>>>(&self, index: usize, buf: U) {
         match self.inner.distribution {
             Distribution::Block => self.block_op(ArrayRdmaCmd::Get(false), index, buf),
@@ -328,7 +327,7 @@ impl<T: Dist> UnsafeArray<T> {
         &self,
         index: usize,
         buf: U,
-    ) -> Box<dyn LamellarArrayRequest<Output = ()>  >
+    ) -> Box<dyn LamellarArrayRequest<Output = ()>>
     where
         U: MyInto<LamellarArrayInput<T>>,
     {
@@ -339,18 +338,14 @@ impl<T: Dist> UnsafeArray<T> {
         Box::new(ArrayRdmaHandle { reqs: reqs })
     }
 
-    pub fn get<U>(
-        &self,
-        index: usize,
-        buf: U,
-    ) -> Pin<Box<dyn Future<Output = ()>+Send>>
+    pub fn get<U>(&self, index: usize, buf: U) -> Pin<Box<dyn Future<Output = ()> + Send>>
     where
         U: MyInto<LamellarArrayInput<T>>,
     {
         self.internal_get(index, buf).into_future()
     }
 
-    pub(crate) fn internal_at(&self, index: usize) -> Box<dyn LamellarArrayRequest<Output = T>  > {
+    pub(crate) fn internal_at(&self, index: usize) -> Box<dyn LamellarArrayRequest<Output = T>> {
         let buf: LocalMemoryRegion<T> = self.team().alloc_local_mem_region(1);
         self.iget(index, &buf);
         Box::new(ArrayRdmaAtHandle {
@@ -378,7 +373,7 @@ impl<T: Dist + 'static> LamellarArrayGet<T> for UnsafeArray<T> {
         &self,
         index: usize,
         buf: U,
-    ) -> Pin<Box<dyn Future<Output = ()> + Send>>{
+    ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
         self.get(index, buf)
     }
     fn at(&self, index: usize) -> Pin<Box<dyn Future<Output = T> + Send>> {
@@ -420,7 +415,7 @@ impl<T: Dist> LamellarArrayInternalPut<T> for UnsafeArray<T> {
         &self,
         index: usize,
         buf: U,
-    ) -> Box<dyn LamellarArrayRequest<Output = ()>  > {
+    ) -> Box<dyn LamellarArrayRequest<Output = ()>> {
         self.internal_put(index, buf)
     }
 }

@@ -58,14 +58,13 @@ fn main() {
     if my_pe == 0 {
         println!("---------------------------------------------------------------");
         println!("testing recursive am");
-        let res = world.block_on(world
-            .exec_am_pe(
-                my_pe,
-                RecursiveAM {
-                    next: my_pe,
-                    orig: my_pe,
-                },
-            ));
+        let res = world.block_on(world.exec_am_pe(
+            my_pe,
+            RecursiveAM {
+                next: my_pe,
+                orig: my_pe,
+            },
+        ));
         println!("visit paths: {:?}", res);
         println!("---------------------------------------------------------------");
     }

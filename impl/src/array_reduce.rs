@@ -60,7 +60,7 @@ fn create_reduction(
             quote! {.copied()}
         };
 
-        array_impls.extend(quote!{
+        array_impls.extend(quote! {
             #[allow(non_camel_case_types)]
             #[#am_data(Clone)]
             struct #reduction_name{
@@ -138,7 +138,6 @@ fn create_reduction(
     }
 }
 
-
 pub(crate) fn __register_reduction(item: TokenStream) -> TokenStream {
     let args = parse_macro_input!(item as ReductionArgs);
     let mut output = quote! {};
@@ -187,8 +186,6 @@ pub(crate) fn __register_reduction(item: TokenStream) -> TokenStream {
     }
     TokenStream::from(output)
 }
-
-
 
 pub(crate) fn __generate_reductions_for_type(item: TokenStream) -> TokenStream {
     let mut output = quote! {};
@@ -240,7 +237,6 @@ pub(crate) fn __generate_reductions_for_type(item: TokenStream) -> TokenStream {
 
     TokenStream::from(output)
 }
-
 
 pub(crate) fn __generate_reductions_for_type_rt(item: TokenStream) -> TokenStream {
     let mut output = quote! {};

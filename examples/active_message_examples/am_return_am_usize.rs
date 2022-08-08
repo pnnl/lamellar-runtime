@@ -85,11 +85,7 @@ fn main() {
         println!("-----------------------------------");
         println!("Testing all am");
         let res = world.block_on(world.exec_am_all(am));
-        assert_eq!(
-            res,
-            (0..num_pes)
-                .collect::<Vec<usize>>()
-        );
+        assert_eq!(res, (0..num_pes).collect::<Vec<usize>>());
         println!("PE[{:?}] return result: {:?}", my_pe, res);
         println!("---------------------------------------------------------------");
     }

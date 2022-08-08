@@ -19,7 +19,7 @@ impl<T: Dist + 'static> LocalLockAtomicArray<T> {
         &self,
         index: usize,
         buf: U,
-    ) -> Box<dyn LamellarArrayRequest<Output = ()>  > {
+    ) -> Box<dyn LamellarArrayRequest<Output = ()>> {
         let req = self.exec_am_local(InitGetAm {
             array: self.clone(),
             index: index,
@@ -32,11 +32,11 @@ impl<T: Dist + 'static> LocalLockAtomicArray<T> {
         &self,
         index: usize,
         buf: U,
-    ) -> Pin<Box<dyn Future<Output = ()> +Send>> {
-        self.internal_get(index,buf).into_future()
+    ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
+        self.internal_get(index, buf).into_future()
     }
 
-    pub fn internal_at(&self, index: usize) -> Box<dyn LamellarArrayRequest<Output = T>  > {
+    pub fn internal_at(&self, index: usize) -> Box<dyn LamellarArrayRequest<Output = T>> {
         let buf: LocalMemoryRegion<T> = self.array.team().alloc_local_mem_region(1);
         let req = self.exec_am_local(InitGetAm {
             array: self.clone(),
@@ -49,7 +49,7 @@ impl<T: Dist + 'static> LocalLockAtomicArray<T> {
         })
     }
 
-    pub fn at(&self, index: usize) -> Pin<Box<dyn Future<Output = T> +Send>> {
+    pub fn at(&self, index: usize) -> Pin<Box<dyn Future<Output = T> + Send>> {
         self.internal_at(index).into_future()
     }
 
@@ -66,7 +66,7 @@ impl<T: Dist + 'static> LocalLockAtomicArray<T> {
         &self,
         index: usize,
         buf: U,
-    ) -> Box<dyn LamellarArrayRequest<Output = ()>  > {
+    ) -> Box<dyn LamellarArrayRequest<Output = ()>> {
         let req = self.exec_am_local(InitPutAm {
             array: self.clone(),
             index: index,
@@ -79,8 +79,8 @@ impl<T: Dist + 'static> LocalLockAtomicArray<T> {
         &self,
         index: usize,
         buf: U,
-    ) -> Pin<Box<dyn Future<Output = ()> + Send >> {
-        self.internal_put(index,buf).into_future()
+    ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
+        self.internal_put(index, buf).into_future()
     }
 }
 
@@ -92,10 +92,10 @@ impl<T: Dist + 'static> LamellarArrayInternalGet<T> for LocalLockAtomicArray<T> 
         &self,
         index: usize,
         buf: U,
-    ) -> Box<dyn LamellarArrayRequest<Output = ()>  > {
+    ) -> Box<dyn LamellarArrayRequest<Output = ()>> {
         self.internal_get(index, buf)
     }
-    fn internal_at(&self, index: usize) -> Box<dyn LamellarArrayRequest<Output = T>  > {
+    fn internal_at(&self, index: usize) -> Box<dyn LamellarArrayRequest<Output = T>> {
         self.internal_at(index)
     }
 }
@@ -108,10 +108,10 @@ impl<T: Dist + 'static> LamellarArrayGet<T> for LocalLockAtomicArray<T> {
         &self,
         index: usize,
         buf: U,
-    ) -> Pin<Box<dyn Future<Output = ()> +Send >> {
+    ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
         self.get(index, buf)
     }
-    fn at(&self, index: usize) -> Pin<Box<dyn Future<Output = T> + Send >> {
+    fn at(&self, index: usize) -> Pin<Box<dyn Future<Output = T> + Send>> {
         self.at(index)
     }
 }
@@ -121,7 +121,7 @@ impl<T: Dist> LamellarArrayInternalPut<T> for LocalLockAtomicArray<T> {
         &self,
         index: usize,
         buf: U,
-    ) -> Box<dyn LamellarArrayRequest<Output = ()>  > {
+    ) -> Box<dyn LamellarArrayRequest<Output = ()>> {
         self.internal_put(index, buf)
     }
 }

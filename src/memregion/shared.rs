@@ -6,9 +6,9 @@ use crate::memregion::*;
 use core::marker::PhantomData;
 #[cfg(feature = "enable-prof")]
 use lamellar_prof::*;
+use serde::ser::Serialize;
 use std::pin::Pin;
 use std::sync::Arc;
-use serde::ser::Serialize;
 
 use std::ops::Bound;
 
@@ -117,9 +117,9 @@ impl<T: Dist> SharedMemoryRegion<T> {
     }
 }
 
-impl <T: Dist + serde::Serialize>  SharedMemoryRegion<T>{
-    pub(crate) fn serialize_local_data<S>(&self, s: S) -> Result<S::Ok, S::Error> 
-    where 
+impl<T: Dist + serde::Serialize> SharedMemoryRegion<T> {
+    pub(crate) fn serialize_local_data<S>(&self, s: S) -> Result<S::Ok, S::Error>
+    where
         S: serde::Serializer,
     {
         self.as_slice().unwrap().serialize(s)

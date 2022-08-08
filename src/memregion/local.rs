@@ -9,12 +9,12 @@ use crate::LAMELLAES;
 
 use core::marker::PhantomData;
 use parking_lot::Mutex;
+use serde::ser::Serialize;
 use std::collections::HashMap;
 use std::ops::Bound;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
-use serde::ser::Serialize;
 // use serde::ser::{Serialize, Serializer, SerializeStruct};
 
 lazy_static! {
@@ -33,9 +33,6 @@ struct NetMemRegionHandle {
     my_id: (usize, usize),
     parent_id: (usize, usize),
 }
-
-
-
 
 impl From<NetMemRegionHandle> for Arc<MemRegionHandleInner> {
     fn from(net_handle: NetMemRegionHandle) -> Self {
@@ -428,15 +425,14 @@ impl<T: Dist> LocalMemoryRegion<T> {
     pub fn iter(&self) -> std::slice::Iter<'_, T> {
         self.as_slice().unwrap().iter()
     }
-    
 }
 
-impl <T: Dist + serde::Serialize> LocalMemoryRegion<T>{
-    pub(crate) fn serialize_local_data<S>(&self, s: S) -> Result<S::Ok, S::Error> 
-    where 
+impl<T: Dist + serde::Serialize> LocalMemoryRegion<T> {
+    pub(crate) fn serialize_local_data<S>(&self, s: S) -> Result<S::Ok, S::Error>
+    where
         S: serde::Serializer,
     {
-       self.as_slice().unwrap().serialize(s)
+        self.as_slice().unwrap().serialize(s)
     }
 }
 

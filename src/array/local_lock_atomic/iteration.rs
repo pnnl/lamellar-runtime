@@ -262,7 +262,7 @@ impl<T: Dist> DistIteratorLauncher for LocalLockAtomicArray<T> {
     ) -> Box<dyn DistIterRequest<Output = A>>
     where
         I: DistributedIterator + 'static,
-        I::Item: Future<Output = B> + Send  + 'static,
+        I::Item: Future<Output = B> + Send + 'static,
         B: Dist,
         A: From<UnsafeArray<B>> + AmLocal + 'static,
     {

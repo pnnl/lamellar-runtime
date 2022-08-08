@@ -192,13 +192,15 @@ fn main() {
             team.exec_am_pe(0, RecursiveAM { next: 0, orig: 0 })
         };
         let world_c = world.clone();
-        world.block_on(async move{
-        for pe in 0..num_pes {
-            if pe == my_pe {
-                println!("[{:?}] sub_team_path: {:?}", pe, sub_team_path.await);
+        world.block_on(async move {
+            for _ in 0..my_pe {
+                world_c.barrier();
             }
-            world_c.barrier();
-        }});
+            println!("[{:?}] sub_team_path: {:?}", my_pe, sub_team_path.await);
+            for _ in my_pe..num_pes {
+                world_c.barrier();
+            }
+        });
     } else {
         println!("Random team example is intended for multi pe execution");
     }

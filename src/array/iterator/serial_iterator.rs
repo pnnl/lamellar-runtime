@@ -14,11 +14,11 @@ mod buffered;
 use buffered::*;
 
 use crate::array::LamellarArrayInternalGet;
+use crate::array::LamellarArrayRequest;
 use crate::memregion::Dist;
 use crate::LamellarArray;
 use crate::LamellarTeamRT;
 use crate::LocalMemoryRegion;
-use crate::array::LamellarArrayRequest;
 
 use std::marker::PhantomData;
 use std::pin::Pin;
@@ -33,7 +33,10 @@ pub trait SerialIterator {
     fn advance_index(&mut self, count: usize);
     fn array(&self) -> Self::Array;
     fn item_size(&self) -> usize;
-    fn buffered_next(&mut self, mem_region: LocalMemoryRegion<u8>) -> Option<Box<dyn LamellarArrayRequest<Output = ()>  >>;
+    fn buffered_next(
+        &mut self,
+        mem_region: LocalMemoryRegion<u8>,
+    ) -> Option<Box<dyn LamellarArrayRequest<Output = ()>>>;
     fn from_mem_region(&self, mem_region: LocalMemoryRegion<u8>) -> Option<Self::Item>;
     fn copied_chunks(self, chunk_size: usize) -> CopiedChunks<Self>
     where
@@ -211,24 +214,25 @@ impl<'a, T: Dist + 'static, A: LamellarArrayInternalGet<T> + Clone> SerialIterat
     fn item_size(&self) -> usize {
         std::mem::size_of::<T>()
     }
-    fn buffered_next(&mut self, mem_region: LocalMemoryRegion<u8>) -> Option<Box<dyn LamellarArrayRequest<Output = ()>  >>{
+    fn buffered_next(
+        &mut self,
+        mem_region: LocalMemoryRegion<u8>,
+    ) -> Option<Box<dyn LamellarArrayRequest<Output = ()>>> {
         if self.index < self.array.len() {
             let mem_reg_t = mem_region.to_base::<Self::ElemType>();
-            let req  = self.array.internal_get(self.index, &mem_reg_t);
+            let req = self.array.internal_get(self.index, &mem_reg_t);
             self.index += mem_reg_t.len();
             Some(req)
         } else {
             None
         }
     }
-    fn from_mem_region(&self, mem_region: LocalMemoryRegion<u8>) -> Option<Self::Item>{
-        
+    fn from_mem_region(&self, mem_region: LocalMemoryRegion<u8>) -> Option<Self::Item> {
         unsafe {
             let mem_reg_t = mem_region.to_base::<Self::ElemType>();
             mem_reg_t.as_ptr().unwrap().as_ref()
         }
     }
-    
 }
 
 // impl<'a, T: AmDist+ Clone > Iterator

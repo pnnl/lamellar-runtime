@@ -22,7 +22,6 @@ pub trait LamellarRequest: Sync + Send {
     fn get(&self) -> Self::Output;
 }
 
-
 #[async_trait]
 pub trait LamellarMultiRequest: Sync + Send {
     type Output;

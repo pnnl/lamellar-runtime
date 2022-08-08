@@ -14,7 +14,13 @@ where
     buf_index: usize,
     buf_size: usize,
     // buf: LocalMemoryRegion<u8>,
-    reqs: VecDeque<Option<(usize,Box<dyn LamellarArrayRequest<Output = ()>  >,LocalMemoryRegion<u8>)>>,
+    reqs: VecDeque<
+        Option<(
+            usize,
+            Box<dyn LamellarArrayRequest<Output = ()>>,
+            LocalMemoryRegion<u8>,
+        )>,
+    >,
 }
 
 impl<I> Buffered<I>
@@ -31,53 +37,50 @@ where
             buf_index: 0,
             buf_size: buf_size,
             // buf: mem_region,
-            reqs: VecDeque::new()
+            reqs: VecDeque::new(),
         };
-        for _ in 0..buf.buf_size{
+        for _ in 0..buf.buf_size {
             buf.initiate_buffer();
         }
         buf
     }
 
-    fn initiate_buffer(&mut self){
-        let array= self.iter.array();
+    fn initiate_buffer(&mut self) {
+        let array = self.iter.array();
         let array_bytes = array.len() * std::mem::size_of::<<Self as SerialIterator>::ElemType>();
-        let size = std::cmp::min(self.iter.item_size(), array_bytes-self.buf_index);
-        if  size > 0{
+        let size = std::cmp::min(self.iter.item_size(), array_bytes - self.buf_index);
+        if size > 0 {
             let mem_region = array.team().alloc_local_mem_region(size);
-            if let Some(req) = self.iter.buffered_next(mem_region.clone()){
-                self.reqs.push_back(Some((self.buf_index,req, mem_region)));
+            if let Some(req) = self.iter.buffered_next(mem_region.clone()) {
+                self.reqs.push_back(Some((self.buf_index, req, mem_region)));
                 self.buf_index += size;
-            }
-            else{
+            } else {
                 self.reqs.push_back(None);
             }
-            
         }
         // }
     }
 
     fn wait_on_buffer(&mut self, size: usize) -> Option<LocalMemoryRegion<u8>> {
-        let (index,req,mem_region) = if let Some((index,req,mem_region)) = self.reqs.pop_front().unwrap(){
-            (index,req,mem_region)
-        }
-        else{
-            return None;
-        };
+        let (index, req, mem_region) =
+            if let Some((index, req, mem_region)) = self.reqs.pop_front().unwrap() {
+                (index, req, mem_region)
+            } else {
+                return None;
+            };
         assert_eq!(mem_region.len(), size);
         assert_eq!(index, self.index);
         req.wait();
         Some(mem_region)
     }
-
 }
 
-pub struct BufferedItem<U>{
+pub struct BufferedItem<U> {
     item: U,
     _mem_region: LocalMemoryRegion<u8>,
 }
 
-impl<U> Deref for BufferedItem<U>{
+impl<U> Deref for BufferedItem<U> {
     type Target = U;
     fn deref(&self) -> &Self::Target {
         &self.item
@@ -95,7 +98,7 @@ where
         // println!("{:?} {:?}",self.index,self.array.len()/std::mem::size_of::<<Self as SerialIterator>::ElemType>());
         let array = self.array();
         let array_bytes = array.len() * std::mem::size_of::<<Self as SerialIterator>::ElemType>();
-        if self.index <  array_bytes{
+        if self.index < array_bytes {
             let size = std::cmp::min(self.iter.item_size(), array_bytes - self.index);
             // println!("getting {:?} {:?} {:?} {:?}",self.index,size,self.iter.item_size(),self.buf_index);
             let mem_region = self.wait_on_buffer(size)?;
@@ -103,7 +106,7 @@ where
             //if self.index % self.buf_index == 0 {
             self.initiate_buffer();
             //}
-            Some(BufferedItem{
+            Some(BufferedItem {
                 item: self.iter.from_mem_region(mem_region.clone())?,
                 _mem_region: mem_region,
             })
@@ -122,16 +125,19 @@ where
     fn array(&self) -> Self::Array {
         self.iter.array()
     }
-    fn item_size(&self) -> usize{
+    fn item_size(&self) -> usize {
         self.iter.item_size()
     }
     //im not actually sure what to do if another buffered iter is called after this one
-    fn buffered_next(&mut self, mem_region: LocalMemoryRegion<u8>) -> Option<Box<dyn LamellarArrayRequest<Output = ()>  >>{
+    fn buffered_next(
+        &mut self,
+        mem_region: LocalMemoryRegion<u8>,
+    ) -> Option<Box<dyn LamellarArrayRequest<Output = ()>>> {
         self.iter.buffered_next(mem_region)
     }
     //im not actually sure what to do if another buffered iter is called after this one
-    fn from_mem_region(&self, mem_region: LocalMemoryRegion<u8>) -> Option<Self::Item>{
-        Some(BufferedItem{
+    fn from_mem_region(&self, mem_region: LocalMemoryRegion<u8>) -> Option<Self::Item> {
+        Some(BufferedItem {
             item: self.iter.from_mem_region(mem_region.clone())?,
             _mem_region: mem_region,
         })

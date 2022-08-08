@@ -28,8 +28,8 @@ where
 //                     <A as DistributedIterator>::Item,
 //                     <B as DistributedIterator>::Item,
 //                 ),
-//             ) 
-            
+//             )
+
 //             + Clone
 //             + 'static,
 //     {
@@ -43,8 +43,7 @@ where
 //                     <B as DistributedIterator>::Item,
 //                 ),
 //             ) -> Fut
-            
-            
+
 //             + Clone
 //             + 'static,
 //         Fut: Future<Output = ()>   + Clone + 'static,

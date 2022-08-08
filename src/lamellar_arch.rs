@@ -165,7 +165,7 @@ impl LamellarArchRT {
         }
     }
 
-    pub fn team_iter(&self) -> Box<dyn Iterator<Item = usize> > {
+    pub fn team_iter(&self) -> Box<dyn Iterator<Item = usize>> {
         //return an iterator of the teams global pe ids
         Box::new(LamellarArchRTiter {
             arch: self.clone(),
@@ -174,7 +174,7 @@ impl LamellarArchRT {
         })
     }
     #[allow(dead_code)]
-    pub fn single_iter(&self, pe: usize) -> Box<dyn Iterator<Item = usize> > {
+    pub fn single_iter(&self, pe: usize) -> Box<dyn Iterator<Item = usize>> {
         //a single element iterator returning the global id of pe
         Box::new(LamellarArchRTiter {
             arch: self.clone(),

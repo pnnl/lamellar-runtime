@@ -1,4 +1,4 @@
-use lamellar::array::{Distribution, AtomicArray};
+use lamellar::array::{AtomicArray, Distribution};
 use lamellar::{Dist, LamellarWorld};
 
 struct ArrayWrapper<T: Dist> {

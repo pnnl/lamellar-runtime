@@ -73,7 +73,7 @@ fn main() {
 
     if my_pe == 0 {
         println!("---------------------------------------------------------------");
-        println!("Testing local am"); 
+        println!("Testing local am");
         let res = world.block_on(world.exec_am_pe(my_pe, am.clone()));
         assert_eq!(res, ());
         println!("PE[{:?}] return result: {:?}", my_pe, res);
