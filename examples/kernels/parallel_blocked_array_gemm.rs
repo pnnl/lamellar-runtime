@@ -28,7 +28,7 @@ fn main() {
     let elem_per_pe = args
         .get(1)
         .and_then(|s| s.parse::<usize>().ok())
-        .unwrap_or_else(|| 2000);
+        .unwrap_or_else(|| 200);
 
     let world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();

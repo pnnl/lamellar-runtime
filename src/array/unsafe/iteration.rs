@@ -48,7 +48,7 @@ impl<T: Dist> DistIteratorLauncher for UnsafeArray<T> {
         }
     }
 
-    fn for_each<I, F>(&self, iter: &I, op: F) -> Box<dyn DistIterRequest<Output = ()>>
+    fn for_each<I, F>(&self, iter: &I, op: F) -> Pin<Box<dyn Future<Output = ()> + Send>>
     where
         I: DistributedIterator + 'static,
         F: Fn(I::Item) + AmLocal + Clone + 'static,
@@ -75,12 +75,9 @@ impl<T: Dist> DistIteratorLauncher for UnsafeArray<T> {
                 worker += 1;
             }
         }
-        Box::new(DistIterForEachHandle {
-            //TODO actually hold the reqs from the exec_am_local...
-            reqs: reqs,
-        })
+        Box::new(DistIterForEachHandle { reqs: reqs }).into_future()
     }
-    fn for_each_async<I, F, Fut>(&self, iter: &I, op: F) -> Box<dyn DistIterRequest<Output = ()>>
+    fn for_each_async<I, F, Fut>(&self, iter: &I, op: F) -> Pin<Box<dyn Future<Output = ()> + Send>>
     where
         I: DistributedIterator + 'static,
         F: Fn(I::Item) -> Fut + AmLocal + Clone + 'static,
@@ -108,10 +105,10 @@ impl<T: Dist> DistIteratorLauncher for UnsafeArray<T> {
                 worker += 1;
             }
         }
-        Box::new(DistIterForEachHandle { reqs: reqs })
+        Box::new(DistIterForEachHandle { reqs: reqs }).into_future()
     }
 
-    fn collect<I, A>(&self, iter: &I, d: Distribution) -> Box<dyn DistIterRequest<Output = A>>
+    fn collect<I, A>(&self, iter: &I, d: Distribution) -> Pin<Box<dyn Future<Output = A> + Send>>
     where
         I: DistributedIterator + 'static,
         I::Item: Dist,
@@ -144,13 +141,14 @@ impl<T: Dist> DistIteratorLauncher for UnsafeArray<T> {
             team: self.inner.data.team.clone(),
             _phantom: PhantomData,
         })
+        .into_future()
     }
 
     fn collect_async<I, A, B>(
         &self,
         iter: &I,
         d: Distribution,
-    ) -> Box<dyn DistIterRequest<Output = A>>
+    ) -> Pin<Box<dyn Future<Output = A> + Send>>
     where
         I: DistributedIterator + 'static,
         I::Item: Future<Output = B> + Send + 'static,
@@ -185,6 +183,7 @@ impl<T: Dist> DistIteratorLauncher for UnsafeArray<T> {
             team: self.inner.data.team.clone(),
             _phantom: PhantomData,
         })
+        .into_future()
     }
 
     fn team(&self) -> Pin<Arc<LamellarTeamRT>> {

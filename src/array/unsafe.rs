@@ -42,7 +42,7 @@ pub(crate) struct UnsafeArrayData {
 
 // impl Drop for UnsafeArrayData {
 //     fn drop(&mut self) {
-//         println!("unsafe array data dropping1");
+//         // println!("unsafe array data dropping1");
 //         self.op_buffers.write().clear();
 //     }
 // }
@@ -106,7 +106,7 @@ pub(crate) struct UnsafeArrayInnerWeak {
 
 // impl Drop for UnsafeArrayInner {
 //     fn drop(&mut self) {
-//         println!("unsafe array inner dropping");
+//         // println!("unsafe array inner dropping");
 //     }
 // }
 
@@ -157,7 +157,7 @@ impl<T: Dist + 'static> UnsafeArray<T> {
             },
             crate::darc::DarcMode::UnsafeArray,
             Some(|data: &mut UnsafeArrayData| {
-                // println!("unsafe array data dropping2");
+                // // println!("unsafe array data dropping2");
                 data.op_buffers.write().clear();
             }),
         )
@@ -310,23 +310,28 @@ impl<T: Dist + 'static> UnsafeArray<T> {
         // self.inner.data.print();
         self.inner.data.block_on_outstanding(mode, 0); //self.inner.data.op_buffers.read().len());
         self.inner.data.op_buffers.write().clear();
+        // self.inner.data.print();
     }
 
     pub fn into_read_only(self) -> ReadOnlyArray<T> {
+        // println!("unsafe into read only");
         self.into()
     }
 
     pub fn into_local_only(self) -> LocalOnlyArray<T> {
+        // println!("unsafe into local only");
         self.into()
     }
 
     pub fn into_local_lock_atomic(self) -> LocalLockAtomicArray<T> {
+        // println!("unsafe into local lock atomic");
         self.into()
     }
 
-    pub fn into_generic_atomic(self) -> GenericAtomicArray<T> {
-        self.into()
-    }
+    // pub fn into_generic_atomic(self) -> GenericAtomicArray<T> {
+    //     println!("into generic atomic");
+    //     self.into()
+    // }
 }
 
 // impl<T: Dist> UnsafeArray<T> {
@@ -337,6 +342,7 @@ impl<T: Dist + 'static> UnsafeArray<T> {
 
 impl<T: Dist + 'static> UnsafeArray<T> {
     pub fn into_atomic(self) -> AtomicArray<T> {
+        // println!("unsafe into atomic");
         self.into()
     }
 }
@@ -353,6 +359,7 @@ impl<T: Dist + 'static> UnsafeArray<T> {
 
 impl<T: Dist> From<AtomicArray<T>> for UnsafeArray<T> {
     fn from(array: AtomicArray<T>) -> Self {
+        // println!("unsafe from atomic");
         // array.into_unsafe()
         match array {
             AtomicArray::NativeAtomicArray(array) => UnsafeArray::<T>::from(array),
@@ -363,6 +370,7 @@ impl<T: Dist> From<AtomicArray<T>> for UnsafeArray<T> {
 
 impl<T: Dist> From<NativeAtomicArray<T>> for UnsafeArray<T> {
     fn from(array: NativeAtomicArray<T>) -> Self {
+        // println!("unsafe from native atomic");
         // let array = array.into_data();
         array.array.block_on_outstanding(DarcMode::UnsafeArray);
         array.array.inner.data.op_buffers.write().clear();
@@ -373,6 +381,7 @@ impl<T: Dist> From<NativeAtomicArray<T>> for UnsafeArray<T> {
 
 impl<T: Dist> From<GenericAtomicArray<T>> for UnsafeArray<T> {
     fn from(array: GenericAtomicArray<T>) -> Self {
+        // println!("unsafe from generic atomic");
         // let array = array.into_data();
         array.array.block_on_outstanding(DarcMode::UnsafeArray);
         array.array.inner.data.op_buffers.write().clear();
@@ -383,6 +392,7 @@ impl<T: Dist> From<GenericAtomicArray<T>> for UnsafeArray<T> {
 
 impl<T: Dist> From<LocalLockAtomicArray<T>> for UnsafeArray<T> {
     fn from(array: LocalLockAtomicArray<T>) -> Self {
+        // println!("unsafe from local lock atomic");
         array.array.block_on_outstanding(DarcMode::UnsafeArray);
         array.array.inner.data.op_buffers.write().clear();
         array.array.create_buffered_ops();
@@ -392,7 +402,9 @@ impl<T: Dist> From<LocalLockAtomicArray<T>> for UnsafeArray<T> {
 
 impl<T: Dist> From<LocalOnlyArray<T>> for UnsafeArray<T> {
     fn from(array: LocalOnlyArray<T>) -> Self {
+        // println!("unsafe from local only");
         array.array.block_on_outstanding(DarcMode::UnsafeArray);
+        array.array.inner.data.op_buffers.write().clear();
         array.array.create_buffered_ops();
         array.array
     }
@@ -400,7 +412,9 @@ impl<T: Dist> From<LocalOnlyArray<T>> for UnsafeArray<T> {
 
 impl<T: Dist> From<ReadOnlyArray<T>> for UnsafeArray<T> {
     fn from(array: ReadOnlyArray<T>) -> Self {
+        // println!("unsafe from read only");
         array.array.block_on_outstanding(DarcMode::UnsafeArray);
+        array.array.inner.data.op_buffers.write().clear();
         array.array.create_buffered_ops();
         array.array
     }

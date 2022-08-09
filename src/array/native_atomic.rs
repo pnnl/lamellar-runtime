@@ -913,24 +913,28 @@ impl<T: Dist> NativeAtomicArray<T> {
     }
 
     pub fn into_unsafe(self) -> UnsafeArray<T> {
+        // println!("native into_unsafe");
         self.array.into()
     }
 
     pub fn into_local_only(self) -> LocalOnlyArray<T> {
+        // println!("native into_local_only");
         self.array.into()
     }
 
     pub fn into_read_only(self) -> ReadOnlyArray<T> {
+        // println!("native into_read_only");
         self.array.into()
     }
 
-    pub fn into_generic_atomic(self) -> GenericAtomicArray<T> {
-        self.array.into()
-    }
+    // pub fn into_generic_atomic(self) -> GenericAtomicArray<T> {
+    //     self.array.into()
+    // }
 }
 
 impl<T: Dist> From<UnsafeArray<T>> for NativeAtomicArray<T> {
     fn from(array: UnsafeArray<T>) -> Self {
+        // println!("native from unsafe");
         array.block_on_outstanding(DarcMode::NativeAtomicArray);
         if let Some(func) = BUFOPS.get(&TypeId::of::<T>()) {
             let bytearray = NativeAtomicByteArray {

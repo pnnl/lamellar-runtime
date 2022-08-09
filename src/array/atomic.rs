@@ -461,39 +461,45 @@ impl<T: Dist> AtomicArray<T> {
         }
     }
     pub fn into_unsafe(self) -> UnsafeArray<T> {
+        // println!("atomic into_unsafe");
         match self {
             AtomicArray::NativeAtomicArray(array) => array.into(),
             AtomicArray::GenericAtomicArray(array) => array.into(),
         }
     }
     pub fn into_local_only(self) -> LocalOnlyArray<T> {
+        // println!("atomic into_local_only");
         match self {
             AtomicArray::NativeAtomicArray(array) => array.array.into(),
             AtomicArray::GenericAtomicArray(array) => array.array.into(),
         }
     }
     pub fn into_read_only(self) -> ReadOnlyArray<T> {
+        // println!("atomic into_read_only");
         match self {
             AtomicArray::NativeAtomicArray(array) => array.array.into(),
             AtomicArray::GenericAtomicArray(array) => array.array.into(),
         }
     }
     pub fn into_local_lock_atomic(self) -> LocalLockAtomicArray<T> {
+        // println!("atomic into_local_lock_atomic");
         match self {
             AtomicArray::NativeAtomicArray(array) => array.array.into(),
             AtomicArray::GenericAtomicArray(array) => array.array.into(),
         }
     }
-    pub fn into_generic_atomic(self) -> GenericAtomicArray<T> {
-        match self {
-            AtomicArray::NativeAtomicArray(array) => array.array.into(),
-            AtomicArray::GenericAtomicArray(array) => array,
-        }
-    }
+    // pub fn into_generic_atomic(self) -> GenericAtomicArray<T> {
+    //     println!("into_generic_atomic");
+    //     match self {
+    //         AtomicArray::NativeAtomicArray(array) => array.array.into(),
+    //         AtomicArray::GenericAtomicArray(array) => array,
+    //     }
+    // }
 }
 
 impl<T: Dist + 'static> From<UnsafeArray<T>> for AtomicArray<T> {
     fn from(array: UnsafeArray<T>) -> Self {
+        // println!("Converting from UnsafeArray to AtomicArray");
         if NATIVE_ATOMICS.contains(&TypeId::of::<T>()) {
             NativeAtomicArray::from(array).into()
         } else {
@@ -504,16 +510,19 @@ impl<T: Dist + 'static> From<UnsafeArray<T>> for AtomicArray<T> {
 
 impl<T: Dist + 'static> From<LocalOnlyArray<T>> for AtomicArray<T> {
     fn from(array: LocalOnlyArray<T>) -> Self {
+        // println!("Converting from LocalOnlyArray to AtomicArray");
         unsafe { array.into_inner().into() }
     }
 }
 impl<T: Dist + 'static> From<ReadOnlyArray<T>> for AtomicArray<T> {
     fn from(array: ReadOnlyArray<T>) -> Self {
+        // println!("Converting from ReadOnlyArray to AtomicArray");
         unsafe { array.into_inner().into() }
     }
 }
 impl<T: Dist + 'static> From<LocalLockAtomicArray<T>> for AtomicArray<T> {
     fn from(array: LocalLockAtomicArray<T>) -> Self {
+        // println!("Converting from LocalLockAtomicArray to AtomicArray");
         unsafe { array.into_inner().into() }
     }
 }

@@ -126,18 +126,22 @@ impl<T: Dist> ReadOnlyArray<T> {
     }
 
     pub fn into_unsafe(self) -> UnsafeArray<T> {
+        // println!("readonly into_unsafe");
         self.array.into()
     }
 
     pub fn into_local_only(self) -> LocalOnlyArray<T> {
+        // println!("readonly into_local_only");
         self.array.into()
     }
 
     pub fn into_local_lock_atomic(self) -> LocalLockAtomicArray<T> {
+        // println!("readonly into_local_lock_atomic");
         self.array.into()
     }
 
     pub fn into_generic_atomic(self) -> GenericAtomicArray<T> {
+        // println!("readonly into_generic_atomic");
         self.array.into()
     }
 }
@@ -150,6 +154,7 @@ impl<T: Dist + 'static> ReadOnlyArray<T> {
 
 impl<T: Dist> From<UnsafeArray<T>> for ReadOnlyArray<T> {
     fn from(array: UnsafeArray<T>) -> Self {
+        // println!("readonly from UnsafeArray");
         array.block_on_outstanding(DarcMode::ReadOnlyArray);
         ReadOnlyArray { array: array }
     }
@@ -157,18 +162,21 @@ impl<T: Dist> From<UnsafeArray<T>> for ReadOnlyArray<T> {
 
 impl<T: Dist> From<LocalOnlyArray<T>> for ReadOnlyArray<T> {
     fn from(array: LocalOnlyArray<T>) -> Self {
+        // println!("readonly from LocalOnlyArray");
         unsafe { array.into_inner().into() }
     }
 }
 
 impl<T: Dist> From<AtomicArray<T>> for ReadOnlyArray<T> {
     fn from(array: AtomicArray<T>) -> Self {
+        // println!("readonly from AtomicArray");
         unsafe { array.into_inner().into() }
     }
 }
 
 impl<T: Dist> From<LocalLockAtomicArray<T>> for ReadOnlyArray<T> {
     fn from(array: LocalLockAtomicArray<T>) -> Self {
+        // println!("readonly from LocalLockAtomicArray");
         unsafe { array.into_inner().into() }
     }
 }
@@ -212,14 +220,14 @@ impl<T: Dist> DistIteratorLauncher for ReadOnlyArray<T> {
         self.array.subarray_index_from_local(index, chunk_size)
     }
 
-    fn for_each<I, F>(&self, iter: &I, op: F) -> Box<dyn DistIterRequest<Output = ()>>
+    fn for_each<I, F>(&self, iter: &I, op: F) -> Pin<Box<dyn Future<Output = ()> + Send>>
     where
         I: DistributedIterator + 'static,
         F: Fn(I::Item) + AmLocal + Clone + 'static,
     {
         self.array.for_each(iter, op)
     }
-    fn for_each_async<I, F, Fut>(&self, iter: &I, op: F) -> Box<dyn DistIterRequest<Output = ()>>
+    fn for_each_async<I, F, Fut>(&self, iter: &I, op: F) -> Pin<Box<dyn Future<Output = ()> + Send>>
     where
         I: DistributedIterator + 'static,
         F: Fn(I::Item) -> Fut + AmLocal + Clone + 'static,
@@ -227,7 +235,7 @@ impl<T: Dist> DistIteratorLauncher for ReadOnlyArray<T> {
     {
         self.array.for_each_async(iter, op)
     }
-    fn collect<I, A>(&self, iter: &I, d: Distribution) -> Box<dyn DistIterRequest<Output = A>>
+    fn collect<I, A>(&self, iter: &I, d: Distribution) -> Pin<Box<dyn Future<Output = A> + Send>>
     where
         I: DistributedIterator + 'static,
         I::Item: Dist,
@@ -239,7 +247,7 @@ impl<T: Dist> DistIteratorLauncher for ReadOnlyArray<T> {
         &self,
         iter: &I,
         d: Distribution,
-    ) -> Box<dyn DistIterRequest<Output = A>>
+    ) -> Pin<Box<dyn Future<Output = A> + Send>>
     where
         I: DistributedIterator + 'static,
         I::Item: Future<Output = B> + Send + 'static,

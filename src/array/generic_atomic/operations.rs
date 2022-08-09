@@ -52,7 +52,7 @@ impl<T: AmDist + Dist + 'static> GenericAtomicArray<T> {
         val: T,
         local_index: usize,
         op: ArrayOpCmd,
-    ) -> Option<Pin<Box<dyn Future<Output = ()>>>> {
+    ) -> Option<Pin<Box<dyn Future<Output = ()> + Send>>>> {
         // println!("initiate_op for GenericAtomicArray<T> ");
         if let Some(func) = OPS.get(&(op, TypeId::of::<T>())) {
             let array: GenericAtomicByteArray = self.clone().into();
@@ -102,7 +102,7 @@ impl<T: AmDist + Dist + 'static> GenericAtomicArray<T> {
         }
     }
 
-    pub fn store(&self, index: usize, val: T) -> Option<Pin<Box<dyn Future<Output = ()>>>> {
+    pub fn store(&self, index: usize, val: T) -> Option<Pin<Box<dyn Future<Output = ()> + Send>>>> {
         let pe = self.pe_for_dist_index(index).expect("index out of bounds");
         let local_index = self.pe_offset_for_dist_index(pe, index).unwrap(); //calculated pe above
         if pe == self.my_pe() {
@@ -138,7 +138,7 @@ impl<T: AmDist + Dist + 'static> GenericAtomicArray<T> {
 }
 
 impl<T: ElementArithmeticOps + 'static> ArithmeticOps<T> for GenericAtomicArray<T> {
-    fn add(&self, index: usize, val: T) -> Option<Pin<Box<dyn Future<Output = ()>>>> {
+    fn add(&self, index: usize, val: T) -> Option<Pin<Box<dyn Future<Output = ()> + Send>>>> {
         let pe = self.pe_for_dist_index(index).expect("index out of bounds");
         let local_index = self.pe_offset_for_dist_index(pe, index).unwrap(); //calculated pe above
         println!(
@@ -162,7 +162,7 @@ impl<T: ElementArithmeticOps + 'static> ArithmeticOps<T> for GenericAtomicArray<
             self.initiate_fetch_op(index, val, local_index, ArrayOpCmd::FetchAdd)
         }
     }
-    fn sub(&self, index: usize, val: T) -> Option<Pin<Box<dyn Future<Output = ()>>>> {
+    fn sub(&self, index: usize, val: T) -> Option<Pin<Box<dyn Future<Output = ()> + Send>>>> {
         let pe = self.pe_for_dist_index(index).expect("index out of bounds");
         let local_index = self.pe_offset_for_dist_index(pe, index).unwrap(); //calculated pe above
         if pe == self.my_pe() {
@@ -182,7 +182,7 @@ impl<T: ElementArithmeticOps + 'static> ArithmeticOps<T> for GenericAtomicArray<
             self.initiate_fetch_op(index, val, local_index, ArrayOpCmd::FetchSub)
         }
     }
-    fn mul(&self, index: usize, val: T) -> Option<Pin<Box<dyn Future<Output = ()>>>> {
+    fn mul(&self, index: usize, val: T) -> Option<Pin<Box<dyn Future<Output = ()> + Send>>>> {
         let pe = self.pe_for_dist_index(index).expect("index out of bounds");
         let local_index = self.pe_offset_for_dist_index(pe, index).unwrap(); //calculated pe above
         if pe == self.my_pe() {
@@ -202,7 +202,7 @@ impl<T: ElementArithmeticOps + 'static> ArithmeticOps<T> for GenericAtomicArray<
             self.initiate_fetch_op(index, val, local_index, ArrayOpCmd::FetchMul)
         }
     }
-    fn div(&self, index: usize, val: T) -> Option<Pin<Box<dyn Future<Output = ()>>>> {
+    fn div(&self, index: usize, val: T) -> Option<Pin<Box<dyn Future<Output = ()> + Send>>>> {
         let pe = self.pe_for_dist_index(index).expect("index out of bounds");
         let local_index = self.pe_offset_for_dist_index(pe, index).unwrap(); //calculated pe above
         if pe == self.my_pe() {
@@ -225,7 +225,7 @@ impl<T: ElementArithmeticOps + 'static> ArithmeticOps<T> for GenericAtomicArray<
 }
 
 impl<T: ElementBitWiseOps + 'static> BitWiseOps<T> for GenericAtomicArray<T> {
-    fn bit_and(&self, index: usize, val: T) -> Option<Pin<Box<dyn Future<Output = ()>>>> {
+    fn bit_and(&self, index: usize, val: T) -> Option<Pin<Box<dyn Future<Output = ()> + Send>>>> {
         let pe = self.pe_for_dist_index(index).expect("index out of bounds");
         let local_index = self.pe_offset_for_dist_index(pe, index).unwrap(); //calculated pe above
         if pe == self.my_pe() {
@@ -246,7 +246,7 @@ impl<T: ElementBitWiseOps + 'static> BitWiseOps<T> for GenericAtomicArray<T> {
         }
     }
 
-    fn bit_or(&self, index: usize, val: T) -> Option<Pin<Box<dyn Future<Output = ()>>>> {
+    fn bit_or(&self, index: usize, val: T) -> Option<Pin<Box<dyn Future<Output = ()> + Send>>>> {
         let pe = self.pe_for_dist_index(index).expect("index out of bounds");
         let local_index = self.pe_offset_for_dist_index(pe, index).unwrap(); //calculated pe above
         if pe == self.my_pe() {

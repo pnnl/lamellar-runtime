@@ -238,18 +238,22 @@ impl<T: Dist, A: From<UnsafeArray<T>> + AmLocal> DistIterRequest for DistIterCol
 
 #[enum_dispatch]
 pub trait DistIteratorLauncher {
-    fn for_each<I, F>(&self, iter: &I, op: F) -> Box<dyn DistIterRequest<Output = ()>>
+    fn for_each<I, F>(&self, iter: &I, op: F) -> Pin<Box<dyn Future<Output = ()> + Send>>
     where
         I: DistributedIterator + 'static,
         F: Fn(I::Item) + AmLocal + Clone + 'static;
 
-    fn for_each_async<I, F, Fut>(&self, iter: &I, op: F) -> Box<dyn DistIterRequest<Output = ()>>
+    fn for_each_async<I, F, Fut>(
+        &self,
+        iter: &I,
+        op: F,
+    ) -> Pin<Box<dyn Future<Output = ()> + Send>>
     where
         I: DistributedIterator + 'static,
         F: Fn(I::Item) -> Fut + AmLocal + Clone + 'static,
         Fut: Future<Output = ()> + Send + 'static;
 
-    fn collect<I, A>(&self, iter: &I, d: Distribution) -> Box<dyn DistIterRequest<Output = A>>
+    fn collect<I, A>(&self, iter: &I, d: Distribution) -> Pin<Box<dyn Future<Output = A> + Send>>
     where
         I: DistributedIterator + 'static,
         I::Item: Dist,
@@ -259,7 +263,7 @@ pub trait DistIteratorLauncher {
         &self,
         iter: &I,
         d: Distribution,
-    ) -> Box<dyn DistIterRequest<Output = A>>
+    ) -> Pin<Box<dyn Future<Output = A> + Send>>
     where
         I: DistributedIterator + 'static,
         I::Item: Future<Output = B> + Send + 'static,
@@ -321,14 +325,14 @@ pub trait DistributedIterator: AmLocal + Clone + 'static {
     fn zip<I: DistributedIterator>(self, iter: I) -> Zip<Self, I> {
         Zip::new(self, iter)
     }
-    fn for_each<F>(&self, op: F) -> Box<dyn DistIterRequest<Output = ()>>
+    fn for_each<F>(&self, op: F) -> Pin<Box<dyn Future<Output = ()> + Send>>
     where
         // &'static Self: DistributedIterator + 'static,
         F: Fn(Self::Item) + AmLocal + Clone + 'static,
     {
         self.array().for_each(self, op)
     }
-    fn for_each_async<F, Fut>(&self, op: F) -> Box<dyn DistIterRequest<Output = ()>>
+    fn for_each_async<F, Fut>(&self, op: F) -> Pin<Box<dyn Future<Output = ()> + Send>>
     where
         // &'static Self: DistributedIterator + 'static,
         F: Fn(Self::Item) -> Fut + AmLocal + Clone + 'static,
@@ -336,7 +340,7 @@ pub trait DistributedIterator: AmLocal + Clone + 'static {
     {
         self.array().for_each_async(self, op)
     }
-    fn collect<A>(&self, d: Distribution) -> Box<dyn DistIterRequest<Output = A>>
+    fn collect<A>(&self, d: Distribution) -> Pin<Box<dyn Future<Output = A> + Send>>
     where
         // &'static Self: DistributedIterator + 'static,
         Self::Item: Dist,
@@ -344,7 +348,7 @@ pub trait DistributedIterator: AmLocal + Clone + 'static {
     {
         self.array().collect(self, d)
     }
-    fn collect_async<A, T>(&self, d: Distribution) -> Box<dyn DistIterRequest<Output = A>>
+    fn collect_async<A, T>(&self, d: Distribution) -> Pin<Box<dyn Future<Output = A> + Send>>
     where
         // &'static Self: DistributedIterator + 'static,
         T: Dist,

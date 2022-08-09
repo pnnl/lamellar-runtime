@@ -127,14 +127,14 @@ impl<T: Dist> DistIteratorLauncher for GenericAtomicArray<T> {
         self.array.subarray_index_from_local(index, chunk_size)
     }
 
-    fn for_each<I, F>(&self, iter: &I, op: F) -> Box<dyn DistIterRequest<Output = ()>>
+    fn for_each<I, F>(&self, iter: &I, op: F) -> Pin<Box<dyn Future<Output = ()> + Send>>
     where
         I: DistributedIterator + 'static,
         F: Fn(I::Item) + AmLocal + Clone + 'static,
     {
         self.array.for_each(iter, op)
     }
-    fn for_each_async<I, F, Fut>(&self, iter: &I, op: F) -> Box<dyn DistIterRequest<Output = ()>>
+    fn for_each_async<I, F, Fut>(&self, iter: &I, op: F) -> Pin<Box<dyn Future<Output = ()> + Send>>
     where
         I: DistributedIterator + 'static,
         F: Fn(I::Item) -> Fut + AmLocal + Clone + 'static,
@@ -143,7 +143,7 @@ impl<T: Dist> DistIteratorLauncher for GenericAtomicArray<T> {
         self.array.for_each_async(iter, op)
     }
 
-    fn collect<I, A>(&self, iter: &I, d: Distribution) -> Box<dyn DistIterRequest<Output = A>>
+    fn collect<I, A>(&self, iter: &I, d: Distribution) -> Pin<Box<dyn Future<Output = A> + Send>>
     where
         I: DistributedIterator + 'static,
         I::Item: Dist,
@@ -155,7 +155,7 @@ impl<T: Dist> DistIteratorLauncher for GenericAtomicArray<T> {
         &self,
         iter: &I,
         d: Distribution,
-    ) -> Box<dyn DistIterRequest<Output = A>>
+    ) -> Pin<Box<dyn Future<Output = A> + Send>>
     where
         I: DistributedIterator + 'static,
         I::Item: Future<Output = B> + Send + 'static,

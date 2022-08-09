@@ -276,30 +276,36 @@ impl<T: Dist> LocalLockAtomicArray<T> {
     }
 
     pub fn into_unsafe(self) -> UnsafeArray<T> {
+        // println!("locallock into_unsafe");
         self.array.into()
     }
 
     pub fn into_local_only(self) -> LocalOnlyArray<T> {
+        // println!("locallock into_local_only");
         self.array.into()
     }
 
     pub fn into_read_only(self) -> ReadOnlyArray<T> {
+        // println!("locallock into_read_only");
         self.array.into()
     }
 
-    pub fn into_generic_atomic(self) -> GenericAtomicArray<T> {
-        self.array.into()
-    }
+    // pub fn into_generic_atomic(self) -> GenericAtomicArray<T> {
+    //     // println!("locallock into_generic_atomic");
+    //     self.array.into()
+    // }
 }
 
 impl<T: Dist + 'static> LocalLockAtomicArray<T> {
     pub fn into_atomic(self) -> AtomicArray<T> {
+        // println!("locallock into_atomic");
         self.array.into()
     }
 }
 
 impl<T: Dist> From<UnsafeArray<T>> for LocalLockAtomicArray<T> {
     fn from(array: UnsafeArray<T>) -> Self {
+        // println!("locallock from unsafe");
         array.block_on_outstanding(DarcMode::LocalLockAtomicArray);
         let lock = LocalRwDarc::new(array.team(), ()).unwrap();
         if let Some(func) = BUFOPS.get(&TypeId::of::<T>()) {
@@ -321,18 +327,21 @@ impl<T: Dist> From<UnsafeArray<T>> for LocalLockAtomicArray<T> {
 
 impl<T: Dist> From<LocalOnlyArray<T>> for LocalLockAtomicArray<T> {
     fn from(array: LocalOnlyArray<T>) -> Self {
+        // println!("locallock from localonly");
         unsafe { array.into_inner().into() }
     }
 }
 
 impl<T: Dist> From<AtomicArray<T>> for LocalLockAtomicArray<T> {
     fn from(array: AtomicArray<T>) -> Self {
+        // println!("locallock from atomic");
         unsafe { array.into_inner().into() }
     }
 }
 
 impl<T: Dist> From<ReadOnlyArray<T>> for LocalLockAtomicArray<T> {
     fn from(array: ReadOnlyArray<T>) -> Self {
+        // println!("locallock from readonly");
         unsafe { array.into_inner().into() }
     }
 }

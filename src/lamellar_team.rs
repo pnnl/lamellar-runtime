@@ -1254,25 +1254,25 @@ impl Drop for LamellarTeam {
                 parent.sub_teams.write().remove(&self.team.id);
             }
             // else {
-            // println!("world team");
-            // println!(
-            //     "sechduler_new: {:?}",
-            //     Arc::strong_count(&self.team.scheduler)
-            // );
-            // println!("lamellae: {:?}", Arc::strong_count(&self.team.lamellae));
-            // println!("arch: {:?}", Arc::strong_count(&self.team.arch));
-            // println!(
-            //     "world_counters: {:?}",
-            //     Arc::strong_count(&self.team.world_counters)
-            // );
-            // println!("removing {:?} ", self.team.team_hash);
+            //     println!("world team");
+            //     println!(
+            //         "sechduler_new: {:?}",
+            //         Arc::strong_count(&self.team.scheduler)
+            //     );
+            //     println!("lamellae: {:?}", Arc::strong_count(&self.team.lamellae));
+            //     println!("arch: {:?}", Arc::strong_count(&self.team.arch));
+            //     println!(
+            //         "world_counters: {:?}",
+            //         Arc::strong_count(&self.team.world_counters)
+            //     );
+            //     println!("removing {:?} ", self.team.team_hash);
+            // }
             let team_ptr = self.team.remote_ptr_addr as *mut *const LamellarTeamRT;
             unsafe {
                 let arc_team = Arc::from_raw(*team_ptr);
                 // println!("arc_team: {:?}", Arc::strong_count(&arc_team));
                 Pin::new_unchecked(arc_team); //allows us to drop the inner team
             }
-            // }
         }
         // else{
         //     println!("in world team!!!");

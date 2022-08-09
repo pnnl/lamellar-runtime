@@ -582,9 +582,8 @@ macro_rules! local_mode {
 }
 
 macro_rules! launch_drop {
-    ($mode:ty,$inner:ident, $inner_addr:expr) => {
+    ($mode:ty, $inner:ident, $inner_addr:expr) => {
         // println!("launching drop task as {}", stringify!($mode));
-        // self.print();
         let team = $inner.team();
         team.exec_am_local(DroppedWaitAM {
             inner_addr: $inner_addr as *const u8 as usize,
@@ -632,12 +631,16 @@ impl<T: 'static> Drop for Darc<T> {
                 launch_drop!(DarcMode::ReadOnlyArray, inner, self.inner);
             } else if local_mode!(DarcMode::LocalOnlyArray, mode_refs, inner) {
                 launch_drop!(DarcMode::LocalOnlyArray, inner, self.inner);
+            } else if local_mode!(DarcMode::LocalLockAtomicArray, mode_refs, inner) {
+                launch_drop!(DarcMode::LocalLockAtomicArray, inner, self.inner);
             } else if local_mode!(DarcMode::GenericAtomicArray, mode_refs, inner) {
                 launch_drop!(DarcMode::GenericAtomicArray, inner, self.inner);
             } else if local_mode!(DarcMode::NativeAtomicArray, mode_refs, inner) {
                 launch_drop!(DarcMode::NativeAtomicArray, inner, self.inner);
             }
+            // self.print();
         }
+        // self.print();
     }
 }
 
@@ -756,10 +759,10 @@ impl<T: 'static> LamellarAM for DroppedWaitAM<T> {
             {
                 let mut _item = Box::from_raw(wrapped.inner.as_ref().item as *mut T);
                 if let Some(my_drop) = wrapped.inner.as_ref().drop {
-                    // println!("Dropping darc");
+                    // println!("Dropping darc {:x}", self.inner_addr);
                     my_drop(&mut _item);
                 } else {
-                    // println!("no drop function for item");
+                    // println!("no drop function for item {:x}", self.inner_addr);
                 }
             }
             while wrapped.inner.as_ref().weak_local_cnt.load(Ordering::SeqCst) != 0 {
@@ -770,7 +773,7 @@ impl<T: 'static> LamellarAM for DroppedWaitAM<T> {
                                                                     // println!("Darc freed! {:x} {:?}",self.inner_addr,mode_refs);
             let _am_counters = Arc::from_raw(wrapped.inner.as_ref().am_counters);
             self.team.lamellae.free(self.inner_addr);
-            // println!("leaving DroppedWaitAM");
+            // println!("leaving DroppedWaitAM {:x}", self.inner_addr);
         }
     }
 }

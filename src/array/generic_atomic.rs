@@ -440,18 +440,22 @@ impl<T: Dist> GenericAtomicArray<T> {
     }
 
     pub fn into_unsafe(self) -> UnsafeArray<T> {
+        // println!("generic into_unsafe");
         self.array.into()
     }
 
     pub fn into_local_only(self) -> LocalOnlyArray<T> {
+        // println!("generic into_local_only");
         self.array.into()
     }
 
     pub fn into_read_only(self) -> ReadOnlyArray<T> {
+        // println!("generic into_read_only");
         self.array.into()
     }
 
     pub fn into_local_lock_atomic(self) -> LocalLockAtomicArray<T> {
+        // println!("generic into_local_lock_atomic");
         self.array.into()
     }
 
@@ -480,12 +484,14 @@ impl<T: Dist> GenericAtomicArray<T> {
 
 impl<T: Dist + 'static> GenericAtomicArray<T> {
     pub fn into_atomic(self) -> GenericAtomicArray<T> {
+        // println!("generic into_atomic");
         self.array.into()
     }
 }
 
 impl<T: Dist> From<UnsafeArray<T>> for GenericAtomicArray<T> {
     fn from(array: UnsafeArray<T>) -> Self {
+        // println!("generic from unsafe array");
         array.block_on_outstanding(DarcMode::GenericAtomicArray);
         let mut vec = vec![];
         for _i in 0..array.num_elems_local() {

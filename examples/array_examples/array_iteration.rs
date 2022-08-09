@@ -146,7 +146,7 @@ fn main() {
     println!("--------------------------------------------------------");
     println!("map async collect");
     let barray = block_array.clone();
-    let new_array = cyclic_array
+    let new_array = world.block_on(cyclic_array
         .dist_iter()
         .enumerate()
         .map(move |(i, elem)| {
@@ -156,8 +156,7 @@ fn main() {
                 barray.at(i).await
             }
         })
-        .collect_async::<ReadOnlyArray<usize>, _>(Distribution::Block)
-        .wait();
+        .collect_async::<ReadOnlyArray<usize>, _>(Distribution::Block));
     cyclic_array.barrier();
     new_array.print();
     block_array.print();
