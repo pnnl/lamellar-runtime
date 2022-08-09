@@ -3,7 +3,7 @@
 
 
 root=$PWD
-. $root/../prep.rc
+. $root/../junction-prep.rc
 
 
 ## test using local lamellae 
@@ -85,18 +85,18 @@ for toolchain in stable; do #nightly; do
         for test in `ls $root/examples/$dir`; do
           test=`basename $test .rs`
           echo "performing ${test}"
-          LAMELLAE_BACKEND="rofi" LAMELLAR_ROFI_PROVIDER="verbs" LAMELLAR_THREADS=7 srun -N 2 --partition=datavortex --time 0:5:00 --mpi=pmi2 $root/target/release/examples/$test > ${test}_n2.out 2>&1 & 
+          LAMELLAE_BACKEND="rofi" LAMELLAR_ROFI_PROVIDER="verbs" LAMELLAR_THREADS=63 srun --cpus-per-task=64 --cpu-bind=ldoms,v -N 2 --time 0:5:00 --mpi=pmi2 $root/target/release/examples/$test > ${test}_n2.out 2>&1 & 
         done
         if [ $dir != "bandwidths" ]; then
           for test in `ls $root/examples/$dir`; do
             test=`basename $test .rs`
             echo "performing ${test}"
-            LAMELLAE_BACKEND="rofi" LAMELLAR_ROFI_PROVIDER="verbs" LAMELLAR_THREADS=7 srun -N 8 --partition=datavortex --time 0:5:00 --mpi=pmi2 $root/target/release/examples/$test > ${test}_n8.out 2>&1 &
+            LAMELLAE_BACKEND="rofi" LAMELLAR_ROFI_PROVIDER="verbs" LAMELLAR_THREADS=63 srun --cpus-per-task=64 --cpu-bind=ldoms,v -N 8 --time 0:5:00 --mpi=pmi2 $root/target/release/examples/$test > ${test}_n8.out 2>&1 &
           done
           for test in `ls $root/examples/$dir`; do
             test=`basename $test .rs`
             echo "performing ${test}"
-            LAMELLAE_BACKEND="rofi" LAMELLAR_ROFI_PROVIDER="verbs" LAMELLAR_THREADS=3 srun -n 32 -N 16 --partition=datavortex --time 0:10:00 --mpi=pmi2 $root/target/release/examples/$test > ${test}_n32.out 2>&1 &
+            LAMELLAE_BACKEND="rofi" LAMELLAR_ROFI_PROVIDER="verbs" LAMELLAR_THREADS=31 srun --cpus-per-task=32 --cpu-bind=ldoms,v -n 32 -N 16  --time 0:10:00 --mpi=pmi2 $root/target/release/examples/$test > ${test}_n32.out 2>&1 &
           done
         fi
       cd ..
