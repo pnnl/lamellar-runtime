@@ -442,7 +442,7 @@ impl<T: Dist> From<UnsafeArray<T>> for LamellarByteArray {
 }
 
 impl<T: Dist + serde::Serialize + serde::de::DeserializeOwned + 'static> UnsafeArray<T> {
-    pub fn reduce_data(&self, func: LamellarArcAm) -> Box<dyn LamellarRequest<Output = T>> {
+    pub(crate) fn reduce_data(&self, func: LamellarArcAm) -> Box<dyn LamellarRequest<Output = T>> {
         if let Ok(my_pe) = self.inner.data.team.team_pe_id() {
             self.inner.data.team.exec_arc_am_pe::<T>(
                 my_pe,
@@ -458,16 +458,20 @@ impl<T: Dist + serde::Serialize + serde::de::DeserializeOwned + 'static> UnsafeA
         }
     }
 
-    pub fn reduce(&self, op: &str) -> Box<dyn LamellarRequest<Output = T>> {
+    pub(crate) fn reduce_req(&self, op: &str) -> Box<dyn LamellarRequest<Output = T>> {
         self.reduce_data(self.get_reduction_op(op.to_string()))
     }
-    pub fn sum(&self) -> Box<dyn LamellarRequest<Output = T>> {
+    pub fn reduce(&self, op: &str) -> Pin<Box<dyn Future<Output = T>>> {
+        self.reduce_data(self.get_reduction_op(op.to_string()))
+            .into_future()
+    }
+    pub fn sum(&self) -> Pin<Box<dyn Future<Output = T>>> {
         self.reduce("sum")
     }
-    pub fn prod(&self) -> Box<dyn LamellarRequest<Output = T>> {
+    pub fn prod(&self) -> Pin<Box<dyn Future<Output = T>>> {
         self.reduce("prod")
     }
-    pub fn max(&self) -> Box<dyn LamellarRequest<Output = T>> {
+    pub fn max(&self) -> Pin<Box<dyn Future<Output = T>>> {
         self.reduce("max")
     }
 }
@@ -605,16 +609,16 @@ impl<T: Dist + AmDist + 'static> LamellarArrayReduce<T> for UnsafeArray<T> {
         )
         // }
     }
-    fn reduce(&self, op: &str) -> Box<dyn LamellarRequest<Output = T>> {
+    fn reduce(&self, op: &str) -> Pin<Box<dyn Future<Output = T>>> {
         self.reduce(op)
     }
-    fn sum(&self) -> Box<dyn LamellarRequest<Output = T>> {
+    fn sum(&self) -> Pin<Box<dyn Future<Output = T>>> {
         self.sum()
     }
-    fn max(&self) -> Box<dyn LamellarRequest<Output = T>> {
+    fn max(&self) -> Pin<Box<dyn Future<Output = T>>> {
         self.max()
     }
-    fn prod(&self) -> Box<dyn LamellarRequest<Output = T>> {
+    fn prod(&self) -> Pin<Box<dyn Future<Output = T>>> {
         self.prod()
     }
 }

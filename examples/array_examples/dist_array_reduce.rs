@@ -99,10 +99,10 @@ fn main() {
     if my_pe == 0 {
         println!("starting dist");
         let mut timer = Instant::now();
-        let cyclic_sum = cyclic_array.sum().get();
+        let cyclic_sum = world.block_on(cyclic_array.sum());
         let cyclic_dist_time = timer.elapsed().as_secs_f64();
         timer = Instant::now();
-        let block_sum = block_array.sum().get(); //need to figure out why this calculation is wrong...
+        let block_sum = world.block_on(block_array.sum()); //need to figure out why this calculation is wrong...
         let block_dist_time = timer.elapsed().as_secs_f64();
         let calculated_sum = (total_len / 2) * (0 + 99);
         println!(
@@ -110,29 +110,30 @@ fn main() {
             cyclic_sum, cyclic_dist_time, block_sum, block_dist_time, calculated_sum
         );
 
-        let block_min = block_array.reduce("min").get();
-        let cyclic_min = block_array.reduce("min").get();
+        let block_min = world.block_on(block_array.reduce("min"));
+        let cyclic_min = world.block_on(block_array.reduce("min"));
         println!("block min: {:?} cyclic min: {:?}", block_min, cyclic_min);
     }
     // for i in 0..total_len {
     //     block_array.add(i, 10);
     // }
     // block_array.for_each_mut(|x| *x += *x);
-    cyclic_array.dist_iter_mut().for_each(|x| *x += *x);
-    cyclic_array
-        .dist_iter()
-        .enumerate()
-        .for_each(|x| println!("x: {:?}", x));
+    world.block_on(cyclic_array.dist_iter_mut().for_each(|x| *x += *x));
+    world.block_on(
+        cyclic_array
+            .dist_iter()
+            .enumerate()
+            .for_each(|x| println!("x: {:?}", x)),
+    );
     // cyclic_array.dist_iter().for_each(|x| println!("x: {:?}", x));
 
-    block_array
-        .dist_iter()
-        .enumerate()
-        .for_each(|x| println!("x: {:?}", x));
+    world.block_on(
+        block_array
+            .dist_iter()
+            .enumerate()
+            .for_each(|x| println!("x: {:?}", x)),
+    );
     // block_array.dist_iter().for_each(|x| println!("x: {:?}", x));
-    world.wait_all();
     // block_array.for_each(|x| println!("x: {:?}", x));
     // cyclic_array.for_each_mut(|x| *x += *x);
-
-    world.barrier();
 }
