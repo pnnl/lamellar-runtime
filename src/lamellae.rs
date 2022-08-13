@@ -1,4 +1,3 @@
-use crate::active_messaging::registered_active_message::AmId;
 use crate::active_messaging::Msg;
 use crate::lamellar_arch::LamellarArchRT;
 use crate::scheduler::Scheduler;
@@ -30,6 +29,11 @@ pub(crate) mod shmem_lamellae;
 use shmem::shmem_comm::ShmemData;
 use shmem_lamellae::{Shmem, ShmemBuilder};
 mod shmem;
+
+lazy_static! {
+    static ref SERIALIZE_HEADER_LEN: usize =
+        crate::serialized_size::<Option<SerializeHeader>>(&Some(Default::default()), false);
+}
 
 #[derive(
     serde::Serialize, serde::Deserialize, Debug, PartialEq, Eq, Ord, PartialOrd, Hash, Clone, Copy,
@@ -79,11 +83,9 @@ fn default_backend() -> Backend {
     };
 }
 
-#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug, Default)]
 pub(crate) struct SerializeHeader {
     pub(crate) msg: Msg,
-    pub(crate) team_hash: u64,
-    pub(crate) id: AmId,
 }
 
 #[enum_dispatch(Des, SubData, SerializedDataOps)]

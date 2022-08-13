@@ -4,7 +4,7 @@ use crate::lamellae::shmem::shmem_comm::*;
 
 use crate::lamellae::{
     AllocationType, Backend, Comm, Des, Lamellae, LamellaeAM, LamellaeComm, LamellaeInit,
-    LamellaeRDMA, Ser, SerializeHeader, SerializedData, SerializedDataOps,
+    LamellaeRDMA, Ser, SerializeHeader, SerializedData, SerializedDataOps, SERIALIZE_HEADER_LEN,
 };
 use crate::lamellar_arch::LamellarArchRT;
 use crate::scheduler::{Scheduler, SchedulerQueue};
@@ -164,7 +164,7 @@ impl Ser for Shmem {
         header: Option<SerializeHeader>,
         obj: &T,
     ) -> Result<SerializedData, anyhow::Error> {
-        let header_size = std::mem::size_of::<Option<SerializeHeader>>();
+        let header_size = *SERIALIZE_HEADER_LEN;
         let data_size = crate::serialized_size(obj, true) as usize;
         let ser_data = ShmemData::new(self.shmem_comm.clone(), header_size + data_size)?;
         crate::serialize_into(ser_data.header_as_bytes(), &header, false)?; //we want header to be a fixed size
@@ -176,7 +176,7 @@ impl Ser for Shmem {
         header: Option<SerializeHeader>,
         serialized_size: usize,
     ) -> Result<SerializedData, anyhow::Error> {
-        let header_size = std::mem::size_of::<Option<SerializeHeader>>();
+        let header_size = *SERIALIZE_HEADER_LEN;
         let ser_data = ShmemData::new(self.shmem_comm.clone(), header_size + serialized_size)?;
         crate::serialize_into(ser_data.header_as_bytes(), &header, false)?; //we want header to be a fixed size
         Ok(SerializedData::ShmemData(ser_data))

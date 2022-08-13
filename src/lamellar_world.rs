@@ -315,7 +315,7 @@ impl LamellarWorldBuilder {
         let (my_pe, num_pes) = lamellae_builder.init_fabric();
         let sched_new = Arc::new(create_scheduler(
             self.scheduler,
-            // num_pes,
+            num_pes,
             // my_pe,
             // teams.clone(),
         ));

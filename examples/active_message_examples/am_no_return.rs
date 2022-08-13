@@ -35,7 +35,7 @@ fn main() {
         //.with_lamellae( Backend::RofiShm ) //explicity set the lamellae backend to rofi, specifying the shm provider
         //.with_lamellae( Backend::RofiVerbs ) //explicity set the lamellae backend to rofi, specifying the verbs provider
         //.with_lamellae( Backend::Local )
-        //.with_scheduler(SchedulerType::WorkStealing) //currently the only type of thread scheduler
+        .with_scheduler(lamellar::SchedulerType::WorkStealing) //currently the only type of thread scheduler
         .build();
     let my_pe = world.my_pe();
     let num_pes = world.num_pes();
@@ -49,6 +49,10 @@ fn main() {
         println!("no return result: {:?}", res);
         println!("-----------------------------------");
         println!("Testing remote am no return");
+        // for i in 0..1 {
+        //     world.exec_am_pe(num_pes - 1, am.clone());
+        // }
+        // world.wait_all();
         let res = world.block_on(world.exec_am_pe(num_pes - 1, am.clone()));
         assert_eq!(res, ());
         println!("no return result: {:?}", res);
@@ -61,10 +65,10 @@ fn main() {
         println!("---------------------------------------------------------------");
     }
 
-    println!("---------------------------------------------------------------");
-    println!("Testing ring pattern am no return");
-    let res = world.block_on(world.exec_am_pe((my_pe + 1) % num_pes, am.clone()));
-    assert_eq!(res, ());
-    println!("no return result: {:?}", res);
-    println!("-----------------------------------");
+    // println!("---------------------------------------------------------------");
+    // println!("Testing ring pattern am no return");
+    // let res = world.block_on(world.exec_am_pe((my_pe + 1) % num_pes, am.clone()));
+    // assert_eq!(res, ());
+    // println!("no return result: {:?}", res);
+    // println!("-----------------------------------");
 }

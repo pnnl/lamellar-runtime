@@ -390,17 +390,17 @@ impl LamellarTaskGroup {
             id: self.multi_id,
             sub_id: self.sub_id_counter.fetch_add(1, Ordering::SeqCst),
         };
-        self.team.scheduler.submit_req(
-            self.team.world_pe,
-            None,
-            ExecType::Am(Cmd::Exec),
-            req_id,
-            LamellarFunc::Am(func),
-            self.team.lamellae.clone(),
-            world,
-            self.team.clone(),
-            self.team.remote_ptr_addr as u64,
-        );
+
+        let req_data = ReqMetaData {
+            src: self.team.world_pe,
+            dst: None,
+            id: req_id,
+            lamellae: self.team.lamellae.clone(),
+            world: world,
+            team: self.team.clone(),
+            team_addr: self.team.remote_ptr_addr,
+        };
+        self.team.scheduler.submit_am(Am::All(req_data, func));
         Box::new(TaskGroupMultiRequestHandle {
             inner: self.multi_req.clone(),
             sub_id: req_id.sub_id,
@@ -428,17 +428,16 @@ impl LamellarTaskGroup {
             id: self.id,
             sub_id: self.sub_id_counter.fetch_add(1, Ordering::SeqCst),
         };
-        self.team.scheduler.submit_req(
-            self.team.world_pe,
-            Some(self.team.arch.world_pe(pe).expect("pe not member of team")),
-            ExecType::Am(Cmd::Exec),
-            req_id,
-            LamellarFunc::Am(func),
-            self.team.lamellae.clone(),
-            world,
-            self.team.clone(),
-            self.team.remote_ptr_addr as u64,
-        );
+        let req_data = ReqMetaData {
+            src: self.team.world_pe,
+            dst: Some(self.team.arch.world_pe(pe).expect("pe not member of team")),
+            id: req_id,
+            lamellae: self.team.lamellae.clone(),
+            world: world,
+            team: self.team.clone(),
+            team_addr: self.team.remote_ptr_addr,
+        };
+        self.team.scheduler.submit_am(Am::Remote(req_data, func));
         Box::new(TaskGroupRequestHandle {
             inner: self.req.clone(),
             sub_id: req_id.sub_id,
@@ -466,17 +465,16 @@ impl LamellarTaskGroup {
             id: self.local_id,
             sub_id: self.sub_id_counter.fetch_add(1, Ordering::SeqCst),
         };
-        self.team.scheduler.submit_req(
-            self.team.world_pe,
-            Some(self.team.world_pe),
-            ExecType::Am(Cmd::Exec),
-            req_id,
-            LamellarFunc::LocalAm(func),
-            self.team.lamellae.clone(),
-            world,
-            self.team.clone(),
-            self.team.remote_ptr_addr as u64,
-        );
+        let req_data = ReqMetaData {
+            src: self.team.world_pe,
+            dst: Some(self.team.world_pe),
+            id: req_id,
+            lamellae: self.team.lamellae.clone(),
+            world: world,
+            team: self.team.clone(),
+            team_addr: self.team.remote_ptr_addr,
+        };
+        self.team.scheduler.submit_am(Am::Local(req_data, func));
         Box::new(TaskGroupLocalRequestHandle {
             inner: self.local_req.clone(),
             sub_id: req_id.sub_id,

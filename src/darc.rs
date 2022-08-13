@@ -143,20 +143,13 @@ impl<T> Clone for WeakDarc<T> {
 }
 
 impl<T> crate::DarcSerde for Darc<T> {
-    fn ser(&self, num_pes: usize, _cur_pe: Result<usize, IdError>) {
-        // match cur_pe {
-        //     Ok(cur_pe) => {
-        self.serialize_update_cnts(num_pes, 0 /*cur_pe*/);
-        //     }
-        //     Err(err) => {
-        //         panic!("can only access darcs within team members ({:?})", err);
-        //     }
-        // }
+    fn ser(&self, num_pes: usize) {
+        self.serialize_update_cnts(num_pes);
     }
     fn des(&self, cur_pe: Result<usize, IdError>) {
         match cur_pe {
-            Ok(cur_pe) => {
-                self.deserialize_update_cnts(cur_pe);
+            Ok(_) => {
+                self.deserialize_update_cnts();
             }
             Err(err) => {
                 panic!("can only access darcs within team members ({:?})", err);
@@ -391,7 +384,7 @@ impl<T> Darc<T> {
         unsafe { std::slice::from_raw_parts_mut(inner.mode_addr as *mut DarcMode, inner.num_pes) }
     }
 
-    pub fn serialize_update_cnts(&self, cnt: usize, _cur_pe: usize) {
+    pub fn serialize_update_cnts(&self, cnt: usize) {
         // println!("serialize darc cnts");
         self.inner()
             .dist_cnt
@@ -399,7 +392,7 @@ impl<T> Darc<T> {
         // println!("done serialize darc cnts");
     }
 
-    pub fn deserialize_update_cnts(&self, _cur_pe: usize) {
+    pub fn deserialize_update_cnts(&self) {
         // println!("deserialize darc? cnts");
         self.inner().inc_pe_ref_count(self.src_pe, 1);
         self.inner().local_cnt.fetch_add(1, Ordering::SeqCst);

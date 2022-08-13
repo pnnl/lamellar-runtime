@@ -28,21 +28,21 @@ unsafe impl<T: Send> Send for LocalRwDarc<T> {}
 unsafe impl<T: Sync> Sync for LocalRwDarc<T> {}
 
 impl<T> crate::DarcSerde for LocalRwDarc<T> {
-    fn ser(&self, num_pes: usize, cur_pe: Result<usize, IdError>) {
+    fn ser(&self, num_pes: usize) {
         // println!("in local darc ser");
-        match cur_pe {
-            Ok(cur_pe) => {
-                self.darc.serialize_update_cnts(num_pes, cur_pe);
-            }
-            Err(err) => {
-                panic!("can only access darcs within team members ({:?})", err);
-            }
-        }
+        // match cur_pe {
+        //     Ok(cur_pe) => {
+        self.darc.serialize_update_cnts(num_pes);
+        // }
+        // Err(err) => {
+        //     panic!("can only access darcs within team members ({:?})", err);
+        // }
+        // }
     }
     fn des(&self, cur_pe: Result<usize, IdError>) {
         match cur_pe {
-            Ok(cur_pe) => {
-                self.darc.deserialize_update_cnts(cur_pe);
+            Ok(_) => {
+                self.darc.deserialize_update_cnts();
             }
             Err(err) => {
                 panic!("can only access darcs within team members ({:?})", err);
@@ -56,7 +56,7 @@ impl<T> LocalRwDarc<T> {
         self.darc.inner()
     }
 
-    pub fn serialize_update_cnts(&self, cnt: usize, _cur_pe: usize) {
+    pub fn serialize_update_cnts(&self, cnt: usize) {
         // println!("serialize darc cnts");
         // if self.darc.src_pe == cur_pe{
         self.inner()
@@ -67,7 +67,7 @@ impl<T> LocalRwDarc<T> {
         // println!("done serialize darc cnts");
     }
 
-    pub fn deserialize_update_cnts(&self, _cur_pe: usize) {
+    pub fn deserialize_update_cnts(&self) {
         // println!("deserialize darc? cnts");
         // if self.darc.src_pe != cur_pe{
         self.inner().inc_pe_ref_count(self.darc.src_pe, 1); // we need to increment by 2 cause bincode calls the serialize function twice when serializing...

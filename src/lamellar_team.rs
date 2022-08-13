@@ -136,9 +136,9 @@ impl LamellarTeam {
         self.team.barrier()
     }
 
-    pub(crate) async fn alloc_new_pool(self: &Arc<LamellarTeam>, min_size: usize) {
-        self.team.lamellae.alloc_pool(min_size);
-    }
+    // pub(crate) async fn alloc_new_pool(self: &Arc<LamellarTeam>, min_size: usize) {
+    //     self.team.lamellae.alloc_pool(min_size);
+    // }
 }
 
 impl std::fmt::Debug for LamellarTeam {
@@ -809,17 +809,16 @@ impl LamellarTeamRT {
         } else {
             self.clone()
         };
-        self.scheduler.submit_req(
-            self.world_pe,
-            None,
-            ExecType::Am(Cmd::Exec),
-            id,
-            LamellarFunc::Am(func),
-            self.lamellae.clone(),
-            world,
-            self.clone(),
-            self.remote_ptr_addr as u64,
-        );
+        let req_data = ReqMetaData {
+            src: self.world_pe,
+            dst: None,
+            id: id,
+            lamellae: self.lamellae.clone(),
+            world: world,
+            team: self.clone(),
+            team_addr: self.remote_ptr_addr,
+        };
+        self.scheduler.submit_am(Am::All(req_data, func));
         Box::new(LamellarMultiRequestHandle {
             inner: req,
             _phantom: PhantomData,
@@ -882,17 +881,16 @@ impl LamellarTeamRT {
             self.clone()
         };
         let func: LamellarArcAm = Arc::new(am);
-        self.scheduler.submit_req(
-            self.world_pe,
-            Some(self.arch.world_pe(pe).expect("pe not member of team")),
-            ExecType::Am(Cmd::Exec),
-            id,
-            LamellarFunc::Am(func),
-            self.lamellae.clone(),
-            world,
-            self.clone(),
-            self.remote_ptr_addr as u64,
-        );
+        let req_data = ReqMetaData {
+            src: self.world_pe,
+            dst: Some(self.arch.world_pe(pe).expect("pe not member of team")),
+            id: id,
+            lamellae: self.lamellae.clone(),
+            world: world,
+            team: self.clone(),
+            team_addr: self.remote_ptr_addr,
+        };
+        self.scheduler.submit_am(Am::Remote(req_data, func));
 
         Box::new(LamellarRequestHandle {
             inner: req,
@@ -939,17 +937,16 @@ impl LamellarTeamRT {
         } else {
             self.clone()
         };
-        self.scheduler.submit_req(
-            self.world_pe,
-            Some(self.arch.world_pe(pe).expect("pe not member of team")),
-            ExecType::Am(Cmd::Exec),
-            id,
-            LamellarFunc::Am(am),
-            self.lamellae.clone(),
-            world,
-            self.clone(),
-            self.remote_ptr_addr as u64,
-        );
+        let req_data = ReqMetaData {
+            src: self.world_pe,
+            dst: Some(self.arch.world_pe(pe).expect("pe not member of team")),
+            id: id,
+            lamellae: self.lamellae.clone(),
+            world: world,
+            team: self.clone(),
+            team_addr: self.remote_ptr_addr,
+        };
+        self.scheduler.submit_am(Am::Remote(req_data, am));
         prof_end!(sub);
         Box::new(LamellarRequestHandle {
             inner: req,
@@ -1015,17 +1012,16 @@ impl LamellarTeamRT {
         } else {
             self.clone()
         };
-        self.scheduler.submit_req(
-            self.world_pe,
-            Some(self.world_pe),
-            ExecType::Am(Cmd::Exec),
-            id,
-            LamellarFunc::LocalAm(func),
-            self.lamellae.clone(),
-            world,
-            self.clone(),
-            self.remote_ptr_addr as u64,
-        );
+        let req_data = ReqMetaData {
+            src: self.world_pe,
+            dst: Some(self.world_pe),
+            id: id,
+            lamellae: self.lamellae.clone(),
+            world: world,
+            team: self.clone(),
+            team_addr: self.remote_ptr_addr,
+        };
+        self.scheduler.submit_am(Am::Local(req_data, func));
         prof_end!(sub);
         Box::new(LamellarLocalRequestHandle {
             inner: req,

@@ -62,12 +62,12 @@ impl<T: Dist + serde::Serialize> LamellarMemoryRegion<T> {
 }
 
 impl<T: Dist> crate::DarcSerde for LamellarMemoryRegion<T> {
-    fn ser(&self, num_pes: usize, cur_pe: Result<usize, crate::IdError>) {
+    fn ser(&self, num_pes: usize) {
         // println!("in shared ser");
         match self {
-            LamellarMemoryRegion::Shared(mr) => mr.ser(num_pes, cur_pe),
-            LamellarMemoryRegion::Local(mr) => mr.ser(num_pes, cur_pe),
-            // LamellarMemoryRegion::Unsafe(mr) => mr.ser(num_pes, cur_pe),
+            LamellarMemoryRegion::Shared(mr) => mr.ser(num_pes),
+            LamellarMemoryRegion::Local(mr) => mr.ser(num_pes),
+            // LamellarMemoryRegion::Unsafe(mr) => mr.ser(num_pes),
         }
     }
     fn des(&self, cur_pe: Result<usize, crate::IdError>) {

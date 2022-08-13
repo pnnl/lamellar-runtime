@@ -3,6 +3,7 @@ use crate::lamellae::command_queues::CommandQueue;
 use crate::lamellae::rofi::rofi_api::*;
 use crate::lamellae::{
     AllocationType, Des, SerializeHeader, SerializedData, SerializedDataOps, SubData,
+    SERIALIZE_HEADER_LEN,
 };
 use crate::lamellar_alloc::{BTreeAlloc, LamellarAlloc};
 #[cfg(feature = "enable-prof")]
@@ -624,11 +625,9 @@ impl RofiData {
         Ok(RofiData {
             addr: addr,
             relative_addr: relative_addr + ref_cnt_size,
-            data_start: addr
-                + std::mem::size_of::<AtomicUsize>()
-                + std::mem::size_of::<Option<SerializeHeader>>(),
+            data_start: addr + std::mem::size_of::<AtomicUsize>() + *SERIALIZE_HEADER_LEN,
             len: size, // + std::mem::size_of::<u64>(),
-            data_len: size - std::mem::size_of::<Option<SerializeHeader>>(),
+            data_len: size - *SERIALIZE_HEADER_LEN,
             rofi_comm: rofi_comm,
             alloc_size: alloc_size,
         })
@@ -636,7 +635,8 @@ impl RofiData {
 }
 impl SerializedDataOps for RofiData {
     fn header_as_bytes(&self) -> &mut [u8] {
-        let header_size = std::mem::size_of::<Option<SerializeHeader>>();
+        let header_size = *SERIALIZE_HEADER_LEN;
+        // println!("header_as_bytes header_size: {:?}", header_size);
         unsafe {
             std::slice::from_raw_parts_mut(
                 (self.addr + std::mem::size_of::<AtomicUsize>()) as *mut u8,

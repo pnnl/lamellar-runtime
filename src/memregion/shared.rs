@@ -21,22 +21,22 @@ pub struct SharedMemoryRegion<T: Dist> {
 }
 
 impl<T: Dist> crate::DarcSerde for SharedMemoryRegion<T> {
-    fn ser(&self, num_pes: usize, cur_pe: Result<usize, crate::IdError>) {
+    fn ser(&self, num_pes: usize) {
         // println!("in shared ser");
-        match cur_pe {
-            Ok(cur_pe) => {
-                self.mr.serialize_update_cnts(num_pes, cur_pe);
-            }
-            Err(err) => {
-                panic!("can only access darcs within team members ({:?})", err);
-            }
-        }
+        // match cur_pe {
+        //     Ok(cur_pe) => {
+        self.mr.serialize_update_cnts(num_pes);
+        //     }
+        //     Err(err) => {
+        //         panic!("can only access darcs within team members ({:?})", err);
+        //     }
+        // }
     }
     fn des(&self, cur_pe: Result<usize, crate::IdError>) {
         // println!("in shared des");
         match cur_pe {
-            Ok(cur_pe) => {
-                self.mr.deserialize_update_cnts(cur_pe);
+            Ok(_) => {
+                self.mr.deserialize_update_cnts();
             }
             Err(err) => {
                 panic!("can only access darcs within team members ({:?})", err);

@@ -269,15 +269,15 @@ pub enum LamellarByteArray {
 }
 
 impl<T: Dist + 'static> crate::DarcSerde for LamellarReadArray<T> {
-    fn ser(&self, num_pes: usize, cur_pe: Result<usize, crate::IdError>) {
+    fn ser(&self, num_pes: usize) {
         // println!("in shared ser");
         match self {
-            LamellarReadArray::UnsafeArray(array) => array.ser(num_pes, cur_pe),
-            LamellarReadArray::ReadOnlyArray(array) => array.ser(num_pes, cur_pe),
-            LamellarReadArray::AtomicArray(array) => array.ser(num_pes, cur_pe),
-            // LamellarReadArray::NativeAtomicArray(array) => array.ser(num_pes, cur_pe),
-            // LamellarReadArray::GenericAtomicArray(array) => array.ser(num_pes, cur_pe),
-            LamellarReadArray::LocalLockAtomicArray(array) => array.ser(num_pes, cur_pe),
+            LamellarReadArray::UnsafeArray(array) => array.ser(num_pes),
+            LamellarReadArray::ReadOnlyArray(array) => array.ser(num_pes),
+            LamellarReadArray::AtomicArray(array) => array.ser(num_pes),
+            // LamellarReadArray::NativeAtomicArray(array) => array.ser(num_pes),
+            // LamellarReadArray::GenericAtomicArray(array) => array.ser(num_pes),
+            LamellarReadArray::LocalLockAtomicArray(array) => array.ser(num_pes),
         }
     }
     fn des(&self, cur_pe: Result<usize, crate::IdError>) {
@@ -305,14 +305,14 @@ pub enum LamellarWriteArray<T: Dist> {
 }
 
 impl<T: Dist + 'static> crate::DarcSerde for LamellarWriteArray<T> {
-    fn ser(&self, num_pes: usize, cur_pe: Result<usize, crate::IdError>) {
+    fn ser(&self, num_pes: usize) {
         // println!("in shared ser");
         match self {
-            LamellarWriteArray::UnsafeArray(array) => array.ser(num_pes, cur_pe),
-            LamellarWriteArray::AtomicArray(array) => array.ser(num_pes, cur_pe),
-            // LamellarWriteArray::NativeAtomicArray(array) => array.ser(num_pes, cur_pe),
-            // LamellarWriteArray::GenericAtomicArray(array) => array.ser(num_pes, cur_pe),
-            LamellarWriteArray::LocalLockAtomicArray(array) => array.ser(num_pes, cur_pe),
+            LamellarWriteArray::UnsafeArray(array) => array.ser(num_pes),
+            LamellarWriteArray::AtomicArray(array) => array.ser(num_pes),
+            // LamellarWriteArray::NativeAtomicArray(array) => array.ser(num_pes),
+            // LamellarWriteArray::GenericAtomicArray(array) => array.ser(num_pes),
+            LamellarWriteArray::LocalLockAtomicArray(array) => array.ser(num_pes),
         }
     }
     fn des(&self, cur_pe: Result<usize, crate::IdError>) {

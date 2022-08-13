@@ -151,7 +151,7 @@ pub(crate) mod memregion_handle_serde {
 }
 
 impl crate::DarcSerde for MemRegionHandle {
-    fn ser(&self, num_pes: usize, _cur_pe: Result<usize, IdError>) {
+    fn ser(&self, num_pes: usize) {
         // match cur_pe {
         //     Ok(cur_pe) => {
         self.inner.remote_sent.fetch_add(num_pes, Ordering::SeqCst);

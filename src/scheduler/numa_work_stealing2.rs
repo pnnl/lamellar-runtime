@@ -12,15 +12,16 @@ use futures::Future;
 use futures_lite::FutureExt;
 // use parking_lot::RwLock;
 use rand::prelude::*;
-// use std::collections::HashMap;
+use std::collections::HashMap;
 use std::panic;
 use std::process;
 use std::sync::atomic::{AtomicBool, AtomicU8, AtomicUsize, Ordering};
 use std::sync::Arc; //, Weak};
 use std::thread;
+use thread_local::ThreadLocal;
 // use std::time::Instant;
 
-pub(crate) struct WorkStealingThread {
+pub(crate) struct NumaWorkStealing2Thread {
     work_inj: Arc<crossbeam::deque::Injector<async_task::Runnable>>,
     work_stealers: Vec<crossbeam::deque::Stealer<async_task::Runnable>>,
     work_q: Worker<async_task::Runnable>,
@@ -29,9 +30,9 @@ pub(crate) struct WorkStealingThread {
 }
 
 //#[prof]
-impl WorkStealingThread {
+impl NumaWorkStealing2Thread {
     fn run(
-        worker: WorkStealingThread,
+        worker: NumaWorkStealing2Thread,
         active_cnt: Arc<AtomicUsize>,
         num_tasks: Arc<AtomicUsize>,
         id: CoreId,
@@ -118,7 +119,7 @@ impl WorkStealingThread {
     }
 }
 
-pub(crate) struct WorkStealingInner {
+pub(crate) struct NumaWorkStealing2Inner {
     threads: Vec<thread::JoinHandle<()>>,
     work_inj: Arc<crossbeam::deque::Injector<async_task::Runnable>>,
     work_stealers: Vec<crossbeam::deque::Stealer<async_task::Runnable>>,
@@ -129,15 +130,13 @@ pub(crate) struct WorkStealingInner {
     stall_mark: Arc<AtomicUsize>,
 }
 
-impl AmeSchedulerQueue for WorkStealingInner {
+impl AmeSchedulerQueue for NumaWorkStealing2Inner {
     fn submit_am(
         //unserialized request
         &self,
         ame: Arc<ActiveMessageEngineType>,
         am: Am,
     ) {
-        // println!("submitting_req");
-        // println!("submit req {:?}",self.num_tasks.load(Ordering::Relaxed)+1);
         let num_tasks = self.num_tasks.clone();
         let stall_mark = self.stall_mark.fetch_add(1, Ordering::Relaxed);
         let future = async move {
@@ -171,9 +170,6 @@ impl AmeSchedulerQueue for WorkStealingInner {
             num_tasks.fetch_add(1, Ordering::Relaxed);
             if let Some(header) = data.deserialize_header() {
                 let msg = header.msg;
-                // println!("msg recieved: {:?}",msg);
-                // let addr = lamellae.local_addr(msg.src as usize, header.team_hash as usize);
-                // println!("from pe {:?} remote addr {:x} local addr {:x}",msg.src,header.team_hash,addr);
                 ame.exec_msg(msg, data, lamellae, self).await;
             } else {
                 data.print();
@@ -274,60 +270,103 @@ impl AmeSchedulerQueue for WorkStealingInner {
 }
 
 //#[prof]
-impl SchedulerQueue for WorkStealing {
+impl SchedulerQueue for NumaWorkStealing2 {
     fn submit_am(
         //unserialized request
         &self,
         am: Am,
     ) {
-        self.inner.submit_am(self.ame.clone(), am);
+        let node =
+            CUR_NODE.with(|cur_node| cur_node.fetch_add(1, Ordering::Relaxed) & self.node_mask);
+
+        self.inners[node].submit_am(self.ames[node].clone(), am);
     }
 
     // fn submit_return(&self, src, pe)
 
     fn submit_work(&self, data: SerializedData, lamellae: Arc<Lamellae>) {
-        self.inner.submit_work(self.ame.clone(), data, lamellae);
+        // let node = if let Some(header) = data.deserialize_header() {
+        //     let msg = header.msg;
+        //     if let ExecType::Am(cmd) = msg.cmd.clone() {
+        //         match cmd {
+        //             Cmd::BatchedDataReturn | Cmd::BatchedAmReturn => {
+        //                 println!(
+        //                     "got batched return {:x} {:x}",
+        //                     msg.req_id.id,
+        //                     msg.req_id.id & self.node_mask
+        //                 );
+        //                 msg.req_id.id & self.node_mask
+        //             }
+        //             _ => CUR_NODE
+        //                 .with(|cur_node| cur_node.fetch_add(1, Ordering::Relaxed) & self.node_mask),
+        //         }
+        //     } else {
+        //         CUR_NODE.with(|cur_node| cur_node.fetch_add(1, Ordering::Relaxed) & self.node_mask)
+        //     }
+        // } else {
+        //     CUR_NODE.with(|cur_node| cur_node.fetch_add(1, Ordering::Relaxed) & self.node_mask)
+        // };
+        // println!("submit work {:?}", node);
+        let node =
+            CUR_NODE.with(|cur_node| cur_node.fetch_add(1, Ordering::Relaxed) & self.node_mask);
+        self.inners[node].submit_work(self.ames[node].clone(), data, lamellae);
     }
 
     fn submit_task<F>(&self, future: F)
     where
         F: Future<Output = ()>,
     {
-        self.inner.submit_task(future);
+        let node =
+            CUR_NODE.with(|cur_node| cur_node.fetch_add(1, Ordering::Relaxed) & self.node_mask);
+        self.inners[node].submit_task(future);
     }
 
     fn exec_task(&self) {
-        self.inner.exec_task();
+        let node =
+            CUR_NODE.with(|cur_node| cur_node.fetch_add(1, Ordering::Relaxed) & self.node_mask);
+        self.inners[node].exec_task();
     }
 
-    fn submit_task_node<F>(&self, future: F, _node: usize)
+    fn submit_task_node<F>(&self, future: F, node: usize)
     where
         F: Future<Output = ()>,
     {
-        self.inner.submit_task(future);
+        self.inners[node].submit_task(future);
     }
 
     fn block_on<F>(&self, future: F) -> F::Output
     where
         F: Future,
     {
-        self.inner.block_on(future)
+        let node =
+            CUR_NODE.with(|cur_node| cur_node.fetch_add(1, Ordering::Relaxed) & self.node_mask);
+        self.inners[node].block_on(future)
     }
 
     fn shutdown(&self) {
-        self.inner.shutdown();
+        for inner in self.inners.iter() {
+            inner.shutdown();
+        }
     }
     fn active(&self) -> bool {
-        self.inner.active()
+        for inner in self.inners.iter() {
+            if inner.active() {
+                return true;
+            }
+        }
+        return false;
     }
 }
 
 //#[prof]
-impl WorkStealingInner {
-    pub(crate) fn new(stall_mark: Arc<AtomicUsize>) -> WorkStealingInner {
+impl NumaWorkStealing2Inner {
+    pub(crate) fn new(
+        stall_mark: Arc<AtomicUsize>,
+        core_ids: Vec<CoreId>,
+    ) -> NumaWorkStealing2Inner {
         // println!("new work stealing queue");
 
-        let mut sched = WorkStealingInner {
+        let mut sched = NumaWorkStealing2Inner {
             threads: Vec::new(),
             work_inj: Arc::new(crossbeam::deque::Injector::new()),
             work_stealers: Vec::new(),
@@ -337,18 +376,18 @@ impl WorkStealingInner {
             num_tasks: Arc::new(AtomicUsize::new(0)),
             stall_mark: stall_mark,
         };
-        sched.init();
+        sched.init(core_ids);
         sched
     }
 
-    fn init(&mut self) {
+    fn init(&mut self, core_ids: Vec<CoreId>) {
         let mut work_workers: std::vec::Vec<crossbeam::deque::Worker<async_task::Runnable>> =
             vec![];
-        let num_workers = match std::env::var("LAMELLAR_THREADS") {
-            Ok(n) => n.parse::<usize>().unwrap(),
-            Err(_) => 4,
-        };
-        for _i in 0..num_workers {
+        // let num_workers = match std::env::var("LAMELLAR_THREADS") {
+        //     Ok(n) => n.parse::<usize>().unwrap(),
+        //     Err(_) => 4,
+        // };
+        for _i in 0..core_ids.len() {
             let work_worker: crossbeam::deque::Worker<async_task::Runnable> =
                 crossbeam::deque::Worker::new_fifo();
             self.work_stealers.push(work_worker.stealer());
@@ -361,11 +400,11 @@ impl WorkStealingInner {
             orig_hook(panic_info);
             process::exit(1);
         }));
-        let core_ids = core_affinity::get_core_ids().unwrap();
+        // let core_ids = core_affinity::get_core_ids().unwrap();
         // println!("core_ids: {:?}",core_ids);
-        for i in 0..num_workers {
+        for i in 0..core_ids.len() {
             let work_worker = work_workers.pop().unwrap();
-            let worker = WorkStealingThread {
+            let worker = NumaWorkStealing2Thread {
                 work_inj: self.work_inj.clone(),
                 work_stealers: self.work_stealers.clone(),
                 work_q: work_worker,
@@ -373,7 +412,7 @@ impl WorkStealingInner {
                 active: self.active.clone(),
                 // num_tasks: self.num_tasks.clone(),
             };
-            self.threads.push(WorkStealingThread::run(
+            self.threads.push(NumaWorkStealing2Thread::run(
                 worker,
                 self.active_cnt.clone(),
                 self.num_tasks.clone(),
@@ -386,36 +425,126 @@ impl WorkStealingInner {
     }
 }
 
-pub(crate) struct WorkStealing {
-    inner: Arc<AmeScheduler>,
-    ame: Arc<ActiveMessageEngineType>,
+thread_local! {
+    static CUR_NODE: AtomicUsize = AtomicUsize::new(0);
 }
-impl WorkStealing {
+
+pub(crate) struct NumaWorkStealing2 {
+    inners: Vec<Arc<AmeScheduler>>,
+    ames: Vec<Arc<ActiveMessageEngineType>>,
+    node_mask: usize,
+}
+impl NumaWorkStealing2 {
     pub(crate) fn new(
         num_pes: usize,
         // my_pe: usize,
         // teams: Arc<RwLock<HashMap<u64, Weak<LamellarTeamRT>>>>,
-    ) -> WorkStealing {
+    ) -> NumaWorkStealing2 {
         // println!("new work stealing queue");
+
+        let num_workers = match std::env::var("LAMELLAR_THREADS") {
+            Ok(n) => n.parse::<usize>().unwrap(),
+            Err(_) => 4,
+        };
+        let core_ids = core_affinity::get_core_ids().unwrap();
+        println!("core_ids: {:?}", core_ids);
+        let mut node_to_cores: HashMap<usize, Vec<usize>> = HashMap::new();
+        let mut core_to_node: HashMap<usize, usize> = HashMap::new();
+
+        let mut cur_worker_cnt = 0;
+
+        if let Ok(nodes) = glob::glob("/sys/devices/system/node/node*") {
+            for node in nodes {
+                if let Ok(node_path) = node {
+                    if let Some(node) = format!("{}", node_path.display()).split("/").last() {
+                        if let Some(node) = node.strip_prefix("node") {
+                            if let Ok(node) = node.parse::<usize>() {
+                                if let Ok(cpus) =
+                                    glob::glob(&format!("{}/cpu*", node_path.display()))
+                                {
+                                    let mut cores = Vec::new();
+                                    for cpu in cpus {
+                                        if let Ok(cpu) = cpu {
+                                            if let Some(cpu) =
+                                                format!("{}", cpu.display()).split("/").last()
+                                            {
+                                                if let Some(cpu) = cpu.strip_prefix("cpu") {
+                                                    if let Ok(cpu) = cpu.parse::<usize>() {
+                                                        for core_id in core_ids.iter() {
+                                                            if core_id.id == cpu {
+                                                                core_to_node.insert(cpu, node);
+                                                                cores.push(cpu);
+                                                                cur_worker_cnt += 1;
+                                                            }
+                                                            if cur_worker_cnt >= num_workers {
+                                                                break;
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                    if cores.len() > 0 {
+                                        node_to_cores.insert(node, cores);
+                                    }
+                                    if cur_worker_cnt >= num_workers {
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        println!("node_to_cores {:?}", node_to_cores);
+        println!("core_to_node {:?}", core_to_node);
+
+        let mut inners = vec![];
+        let mut ames = vec![];
+
+        let mut node_mask = node_to_cores.len() - 1;
+        node_mask |= node_mask >> 1;
+        node_mask |= node_mask >> 2;
+        node_mask |= node_mask >> 4;
+        node_mask |= node_mask >> 8;
+        node_mask |= node_mask >> 16;
+        node_mask |= node_mask >> 32;
+
+        let mut node_i = 0;
         let stall_mark = Arc::new(AtomicUsize::new(0));
-        let inner = Arc::new(AmeScheduler::WorkStealingInner(WorkStealingInner::new(
-            stall_mark.clone(),
-        )));
-        let sched = WorkStealing {
-            inner: inner.clone(),
-            ame: Arc::new(ActiveMessageEngineType::RegisteredActiveMessages(
+        for (node, cores) in node_to_cores.iter() {
+            let mut core_ids = vec![];
+            for core in cores {
+                core_ids.push(CoreId { id: *core });
+            }
+            let inner = Arc::new(AmeScheduler::NumaWorkStealing2Inner(
+                NumaWorkStealing2Inner::new(stall_mark.clone(), core_ids),
+            ));
+            ames.push(Arc::new(ActiveMessageEngineType::RegisteredActiveMessages(
                 RegisteredActiveMessages::new(BatcherType::Simple(SimpleBatcher::new(
                     num_pes,
                     stall_mark.clone(),
                 ))),
-            )),
+            )));
+            inners.push(inner);
+            node_i += 1;
+        }
+
+        println!("numa node mask: {:x}", node_mask);
+
+        let sched = NumaWorkStealing2 {
+            inners: inners,
+            ames: ames,
+            node_mask: node_mask,
         };
         sched
     }
 }
 
 //#[prof]
-impl Drop for WorkStealingInner {
+impl Drop for NumaWorkStealing2Inner {
     //when is this called with respect to world?
     fn drop(&mut self) {
         // println!("dropping work stealing");
@@ -424,6 +553,9 @@ impl Drop for WorkStealingInner {
                 let _res = thread.join();
             }
         }
-        // println!("WorkStealing Scheduler Dropped");
+        // for val in self.local_work_inj.iter_mut() {
+        //     println!("local_work_inj {:?}", val.load(Ordering::SeqCst));
+        // }
+        // println!("NumaWorkStealing2 Scheduler Dropped");
     }
 }

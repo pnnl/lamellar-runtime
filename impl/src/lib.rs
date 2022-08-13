@@ -358,7 +358,11 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_type: AmType) -> 
 
     if !local {
         expanded.extend( quote_spanned! {temp.span()=>
-            impl #impl_generics #lamellar::RemoteActiveMessage for #orig_name #ty_generics #where_clause {}
+            impl #impl_generics #lamellar::RemoteActiveMessage for #orig_name #ty_generics #where_clause {
+                fn as_local(self: std::sync::Arc<Self>) -> std::sync::Arc<dyn #lamellar::LamellarActiveMessage + Send + Sync>{
+                    self
+                }
+            }
             fn #orig_name_unpack #impl_generics (bytes: &[u8], cur_pe: Result<usize,#lamellar::IdError>) -> std::sync::Arc<dyn #lamellar::RemoteActiveMessage + Sync + Send>  {
                 // println!("bytes len {:?} bytes {:?}",bytes.len(),bytes);
                 let __lamellar_data: std::sync::Arc<#orig_name #ty_generics> = std::sync::Arc::new(#lamellar::deserialize(&bytes,true).unwrap());
@@ -416,7 +420,7 @@ fn process_fields(
                         #field,
                     });
                     ser.extend(quote_spanned! {field.span()=>
-                        (&self.#field_name).ser(num_pes,cur_pe);
+                        (&self.#field_name).ser(num_pes);
                     });
                     des.extend(quote_spanned! {field.span()=>
                         (&self.#field_name).des(cur_pe);
@@ -441,7 +445,7 @@ fn process_fields(
                             ind += 1;
                             ser.extend(quote_spanned! {field.span()=>
 
-                               ( &self.#field_name.#temp_ind).ser(num_pes,cur_pe);
+                               ( &self.#field_name.#temp_ind).ser(num_pes);
                             });
                             des.extend(quote_spanned! {field.span()=>
                                 (&self.#field_name.#temp_ind).des(cur_pe);
@@ -566,7 +570,7 @@ fn derive_am_data(
                 #fields
             }
             impl #impl_generics #lamellar::DarcSerde for #name #ty_generics #where_clause{
-                fn ser (&self,  num_pes: usize, cur_pe: Result<usize, #lamellar::IdError>) {
+                fn ser (&self,  num_pes: usize) {
                     // println!("in outer ser");
                     #ser
                 }

@@ -208,10 +208,10 @@ pub enum AtomicArray<T: Dist> {
 }
 
 impl<T: Dist + 'static> crate::DarcSerde for AtomicArray<T> {
-    fn ser(&self, num_pes: usize, cur_pe: Result<usize, crate::IdError>) {
+    fn ser(&self, num_pes: usize) {
         match self {
-            AtomicArray::NativeAtomicArray(array) => array.ser(num_pes, cur_pe),
-            AtomicArray::GenericAtomicArray(array) => array.ser(num_pes, cur_pe),
+            AtomicArray::NativeAtomicArray(array) => array.ser(num_pes),
+            AtomicArray::GenericAtomicArray(array) => array.ser(num_pes),
         }
     }
     fn des(&self, cur_pe: Result<usize, crate::IdError>) {
@@ -247,10 +247,10 @@ impl AtomicByteArray {
 }
 
 impl crate::DarcSerde for AtomicByteArray {
-    fn ser(&self, num_pes: usize, cur_pe: Result<usize, crate::IdError>) {
+    fn ser(&self, num_pes: usize) {
         match self {
-            AtomicByteArray::NativeAtomicByteArray(array) => array.ser(num_pes, cur_pe),
-            AtomicByteArray::GenericAtomicByteArray(array) => array.ser(num_pes, cur_pe),
+            AtomicByteArray::NativeAtomicByteArray(array) => array.ser(num_pes),
+            AtomicByteArray::GenericAtomicByteArray(array) => array.ser(num_pes),
         }
     }
 

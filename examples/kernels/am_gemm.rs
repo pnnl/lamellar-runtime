@@ -134,7 +134,9 @@ fn main() {
         .and_then(|s| s.parse::<usize>().ok())
         .unwrap_or_else(|| 2000);
 
-    let world = lamellar::LamellarWorldBuilder::new().build();
+    let world = lamellar::LamellarWorldBuilder::new()
+        .with_scheduler(lamellar::SchedulerType::NumaWorkStealing)
+        .build();
     let my_pe = world.my_pe();
     let num_pes = world.num_pes();
 

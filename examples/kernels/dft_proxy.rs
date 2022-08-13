@@ -366,21 +366,37 @@ fn main() {
         .and_then(|s| s.parse::<usize>().ok())
         .unwrap_or_else(|| 10);
 
-    let run_single_node = args
-        .get(3)
-        .and_then(|s| {
-            if s == "--run-local" {
-                Some(true)
-            } else {
-                Some(false)
-            }
-        })
-        .unwrap_or_else(|| false);
+    let sched = args
+        .get(4)
+        .and_then(|s| s.parse::<usize>().ok())
+        .unwrap_or_else(|| 10);
+
+    // let run_single_node = args
+    //     .get(3)
+    //     .and_then(|s| {
+    //         if s == "--run-local" {
+    //             Some(true)
+    //         } else {
+    //             Some(false)
+    //         }
+    //     })
+    //     .unwrap_or_else(|| false);
+    let run_single_node = false;
 
     let mut rng = StdRng::seed_from_u64(10);
 
     if !run_single_node {
-        let world = lamellar::LamellarWorldBuilder::new().build();
+        let world = if sched == 1 {
+            lamellar::LamellarWorldBuilder::new()
+                .with_scheduler(lamellar::SchedulerType::NumaWorkStealing)
+                .build()
+        } else if sched == 2 {
+            lamellar::LamellarWorldBuilder::new()
+                .with_scheduler(lamellar::SchedulerType::NumaWorkStealing2)
+                .build()
+        } else {
+            lamellar::LamellarWorldBuilder::new().build()
+        };
         let my_pe = world.my_pe();
         let num_pes = world.num_pes();
         let global_len = num_pes * array_len;
