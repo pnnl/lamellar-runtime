@@ -2,7 +2,7 @@ use crate::lamellae::{Lamellae, LamellaeRDMA, SerializedData};
 use crate::lamellar_arch::IdError;
 use crate::lamellar_request::{InternalResult, LamellarRequestResult};
 use crate::lamellar_team::{LamellarTeam, LamellarTeamRT};
-use crate::scheduler::{AmeSchedulerQueue, ReqId};
+use crate::scheduler::{AmeSchedulerQueue, ReqId, SchedulerQueue};
 #[cfg(feature = "enable-prof")]
 use lamellar_prof::*;
 // use log::trace;
@@ -26,7 +26,7 @@ pub(crate) use remote_closures::RemoteClosures;
 #[cfg(feature = "nightly")]
 use remote_closures::{exec_closure_cmd, process_closure_request};
 
-const BATCH_AM_SIZE: usize = 10000;
+const BATCH_AM_SIZE: usize = 100000;
 
 pub trait AmLocal: Sync + Send {}
 
@@ -208,7 +208,7 @@ pub(crate) trait ActiveMessageEngine {
     async fn process_msg(
         &self,
         am: Am,
-        scheduler: &(impl AmeSchedulerQueue + Sync),
+        scheduler: &(impl SchedulerQueue + Sync),
         stall_mark: usize,
     );
 
@@ -217,7 +217,7 @@ pub(crate) trait ActiveMessageEngine {
         msg: Msg,
         ser_data: SerializedData,
         lamellae: Arc<Lamellae>,
-        scheduler: &(impl AmeSchedulerQueue + Sync),
+        scheduler: &(impl SchedulerQueue + Sync),
     );
 
     fn get_team_and_world(
@@ -246,7 +246,7 @@ pub(crate) trait ActiveMessageEngine {
     fn send_data_to_user_handle(&self, req_id: ReqId, pe: usize, data: InternalResult) {
         // println!("returned req_id: {:?}", req_id);
         let req = unsafe { Arc::from_raw(req_id.id as *const LamellarRequestResult) };
-        // println!("strong count recv: {:?} ",Arc::strong_count(&req));
+        // println!("strong count recv: {:?} ", Arc::strong_count(&req));
         req.add_result(pe, req_id.sub_id, data);
     }
 }
@@ -260,7 +260,7 @@ impl ActiveMessageEngine for ActiveMessageEngineType {
     async fn process_msg(
         &self,
         am: Am,
-        scheduler: &(impl AmeSchedulerQueue + Sync),
+        scheduler: &(impl SchedulerQueue + Sync),
         stall_mark: usize,
     ) {
         match self {
@@ -274,7 +274,7 @@ impl ActiveMessageEngine for ActiveMessageEngineType {
         msg: Msg,
         ser_data: SerializedData,
         lamellae: Arc<Lamellae>,
-        scheduler: &(impl AmeSchedulerQueue + Sync),
+        scheduler: &(impl SchedulerQueue + Sync),
     ) {
         match self {
             ActiveMessageEngineType::RegisteredActiveMessages(remote_am) => {

@@ -18,7 +18,7 @@ impl LamellarAM for DataAM {
 
 fn main() {
     let world = lamellar::LamellarWorldBuilder::new()
-        .with_scheduler(lamellar::SchedulerType::NumaWorkStealing2)
+        // .with_scheduler(lamellar::SchedulerType::WorkStealing)
         .build();
     let my_pe = world.my_pe();
     let num_pes = world.num_pes();

@@ -1,6 +1,7 @@
 use crate::active_messaging::{ActiveMessageEngine, ActiveMessageEngineType, Am};
 use crate::lamellae::{Des, Lamellae, SerializedData};
 use crate::scheduler::batching::simple_batcher::SimpleBatcher;
+use crate::scheduler::batching::team_am_batcher::TeamAmBatcher;
 use crate::scheduler::batching::BatcherType;
 use crate::scheduler::registered_active_message::RegisteredActiveMessages;
 use crate::scheduler::{AmeScheduler, AmeSchedulerQueue, SchedulerQueue};
@@ -134,6 +135,7 @@ impl AmeSchedulerQueue for NumaWorkStealing2Inner {
     fn submit_am(
         //unserialized request
         &self,
+        scheduler: &(impl SchedulerQueue + Sync),
         ame: Arc<ActiveMessageEngineType>,
         am: Am,
     ) {
@@ -143,7 +145,7 @@ impl AmeSchedulerQueue for NumaWorkStealing2Inner {
             // println!("exec req {:?}",num_tasks.load(Ordering::Relaxed));
             num_tasks.fetch_add(1, Ordering::Relaxed);
             // println!("in submit_req {:?} {:?} {:?} ", pe.clone(), req_data.src, req_data.pe);
-            ame.process_msg(am, self, stall_mark).await;
+            ame.process_msg(am, scheduler, stall_mark).await;
             // println!("num tasks: {:?}",);
             num_tasks.fetch_sub(1, Ordering::Relaxed);
             // println!("done req {:?}",num_tasks.load(Ordering::Relaxed));
@@ -158,6 +160,7 @@ impl AmeSchedulerQueue for NumaWorkStealing2Inner {
     //this is a serialized request
     fn submit_work(
         &self,
+        scheduler: &(impl SchedulerQueue + Sync),
         ame: Arc<ActiveMessageEngineType>,
         data: SerializedData,
         lamellae: Arc<Lamellae>,
@@ -170,7 +173,7 @@ impl AmeSchedulerQueue for NumaWorkStealing2Inner {
             num_tasks.fetch_add(1, Ordering::Relaxed);
             if let Some(header) = data.deserialize_header() {
                 let msg = header.msg;
-                ame.exec_msg(msg, data, lamellae, self).await;
+                ame.exec_msg(msg, data, lamellae, scheduler).await;
             } else {
                 data.print();
                 panic!("should i be here?");
@@ -279,7 +282,7 @@ impl SchedulerQueue for NumaWorkStealing2 {
         let node =
             CUR_NODE.with(|cur_node| cur_node.fetch_add(1, Ordering::Relaxed) & self.node_mask);
 
-        self.inners[node].submit_am(self.ames[node].clone(), am);
+        self.inners[node].submit_am(self, self.ames[node].clone(), am);
     }
 
     // fn submit_return(&self, src, pe)
@@ -309,7 +312,7 @@ impl SchedulerQueue for NumaWorkStealing2 {
         // println!("submit work {:?}", node);
         let node =
             CUR_NODE.with(|cur_node| cur_node.fetch_add(1, Ordering::Relaxed) & self.node_mask);
-        self.inners[node].submit_work(self.ames[node].clone(), data, lamellae);
+        self.inners[node].submit_work(self, self.ames[node].clone(), data, lamellae);
     }
 
     fn submit_task<F>(&self, future: F)
@@ -522,11 +525,19 @@ impl NumaWorkStealing2 {
             let inner = Arc::new(AmeScheduler::NumaWorkStealing2Inner(
                 NumaWorkStealing2Inner::new(stall_mark.clone(), core_ids),
             ));
+            let batcher = match std::env::var("LAMELLAR_BATCHER") {
+                Ok(n) => {
+                    let n = n.parse::<usize>().unwrap();
+                    if n == 1 {
+                        BatcherType::Simple(SimpleBatcher::new(num_pes, stall_mark.clone()))
+                    } else {
+                        BatcherType::TeamAm(TeamAmBatcher::new(num_pes, stall_mark.clone()))
+                    }
+                }
+                Err(_) => BatcherType::TeamAm(TeamAmBatcher::new(num_pes, stall_mark.clone())),
+            };
             ames.push(Arc::new(ActiveMessageEngineType::RegisteredActiveMessages(
-                RegisteredActiveMessages::new(BatcherType::Simple(SimpleBatcher::new(
-                    num_pes,
-                    stall_mark.clone(),
-                ))),
+                RegisteredActiveMessages::new(batcher),
             )));
             inners.push(inner);
             node_i += 1;

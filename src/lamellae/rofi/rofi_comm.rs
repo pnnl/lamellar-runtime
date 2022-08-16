@@ -40,9 +40,9 @@ pub(crate) struct RofiComm {
     pub(crate) num_pes: usize,
     pub(crate) my_pe: usize,
     pub(crate) put_amt: Arc<AtomicUsize>,
-    put_cnt: Arc<AtomicUsize>,
+    pub(crate) put_cnt: Arc<AtomicUsize>,
     pub(crate) get_amt: Arc<AtomicUsize>,
-    get_cnt: Arc<AtomicUsize>,
+    pub(crate) get_cnt: Arc<AtomicUsize>,
     comm_mutex: Arc<Mutex<()>>,
     // drop_set: Arc<Mutex<Vec<std::os::raw::c_ulong>>>,
     // any_dropped: Arc<AtomicBool>,
@@ -596,6 +596,17 @@ impl Drop for RofiComm {
         rofi_barrier();
         // std::thread::sleep(std::time::Duration::from_millis(1000));
         // //we can probably do a final "put" to each node where we specify we we are done, then once all nodes have done this no further communication amongst them occurs...
+
+        println!(
+            "Rofi Drop #Gets: {:?} #Puts: {:?}",
+            self.get_cnt.load(Ordering::SeqCst),
+            self.put_cnt.load(Ordering::SeqCst)
+        );
+        println!(
+            "Rofi Drop #Get amt: {:?} #Put amt: {:?}",
+            self.get_amt.load(Ordering::SeqCst),
+            self.put_amt.load(Ordering::SeqCst)
+        );
         let _res = rofi_finit();
         // std::thread::sleep(std::time::Duration::from_millis(1000));
         // println!("[{:?}] dropping rofi comm", self.my_pe);

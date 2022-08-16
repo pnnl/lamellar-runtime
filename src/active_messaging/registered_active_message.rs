@@ -5,7 +5,7 @@ use crate::lamellae::{
     Des, Lamellae, LamellaeAM, LamellaeRDMA, Ser, SerializeHeader, SerializedData, SubData,
 };
 
-use crate::scheduler::AmeSchedulerQueue;
+use crate::scheduler::{AmeSchedulerQueue, SchedulerQueue};
 use async_recursion::async_recursion;
 #[cfg(feature = "enable-prof")]
 use lamellar_prof::*;
@@ -99,7 +99,7 @@ impl ActiveMessageEngine for RegisteredActiveMessages {
     async fn process_msg(
         &self,
         am: Am,
-        scheduler: &(impl AmeSchedulerQueue + Sync),
+        scheduler: &(impl SchedulerQueue + Sync),
         stall_mark: usize,
     ) {
         match am {
@@ -216,7 +216,7 @@ impl ActiveMessageEngine for RegisteredActiveMessages {
         msg: Msg,
         ser_data: SerializedData,
         lamellae: Arc<Lamellae>,
-        scheduler: &(impl AmeSchedulerQueue + Sync),
+        scheduler: &(impl SchedulerQueue + Sync),
     ) {
         let data = ser_data.data_as_bytes();
         let mut i = 0;
@@ -360,7 +360,7 @@ impl RegisteredActiveMessages {
     }
 
     #[async_recursion]
-    async fn exec_local_am(
+    pub(crate) async fn exec_local_am(
         &self,
         req_data: ReqMetaData,
         am: LamellarArcLocalAm,
@@ -406,7 +406,7 @@ impl RegisteredActiveMessages {
         data: &[u8],
         i: &mut usize,
         lamellae: &Arc<Lamellae>,
-        scheduler: &(impl AmeSchedulerQueue + Sync),
+        scheduler: &(impl SchedulerQueue + Sync),
     ) {
         let am_header: AmHeader =
             crate::deserialize(&data[*i..*i + *AM_HEADER_LEN], false).unwrap();
@@ -445,6 +445,7 @@ impl RegisteredActiveMessages {
             }
         };
         self.process_msg(am, scheduler, 0).await; //0 just means we will force a stall_count loop
+                                                  // scheduler.submit_am(am);
                                                   //TODO: compare against: scheduler.submit_am(ame, am).await;
     }
 
@@ -464,7 +465,7 @@ impl RegisteredActiveMessages {
         *i += am.serialized_size();
 
         let req_data = ReqMetaData {
-            src: team.team.world_pe,
+            src: msg.src as usize,
             dst: Some(team.team.world_pe),
             id: am_header.req_id,
             lamellae: lamellae.clone(),

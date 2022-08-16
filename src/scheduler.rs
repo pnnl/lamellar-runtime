@@ -46,9 +46,15 @@ pub(crate) enum AmeScheduler {
 }
 #[enum_dispatch]
 pub(crate) trait AmeSchedulerQueue {
-    fn submit_am(&self, ame: Arc<ActiveMessageEngineType>, am: Am);
+    fn submit_am(
+        &self,
+        scheduler: &(impl SchedulerQueue + Sync),
+        ame: Arc<ActiveMessageEngineType>,
+        am: Am,
+    );
     fn submit_work(
         &self,
+        scheduler: &(impl SchedulerQueue + Sync),
         ame: Arc<ActiveMessageEngineType>,
         msg: SerializedData,
         lamellae: Arc<Lamellae>,

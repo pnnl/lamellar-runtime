@@ -214,6 +214,7 @@ impl<T: AmDist> LamellarMultiRequest for LamellarMultiRequestHandle<T> {
         }
         let mut res = vec![];
         let mut data = self.inner.data.lock();
+        // println!("data len{:?}", data.len());
         for pe in 0..data.len() {
             res.push(self.process_result(data.remove(&pe).unwrap()));
         }

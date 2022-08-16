@@ -1,9 +1,7 @@
 use crate::active_messaging::registered_active_message::*;
 use crate::active_messaging::*;
 use crate::lamellae::comm::AllocError;
-use crate::lamellae::SerializedDataOps;
 use crate::lamellae::{Des, Lamellae, LamellaeAM, LamellaeRDMA, Ser, SerializeHeader};
-use crate::scheduler::AmeSchedulerQueue;
 use batching::*;
 
 use async_trait::async_trait;
@@ -35,6 +33,7 @@ impl SimpleBatcherInner {
     }
 
     fn add(&self, req_data: ReqMetaData, data: LamellarData, size: usize) -> bool {
+        // println!("adding to batch");
         //return true if this is the first am in the batch
         let mut batch = self.batch.lock();
         let size = size + *CMD_LEN;
@@ -66,7 +65,7 @@ impl Batcher for SimpleBatcher {
         am: LamellarArcAm,
         am_id: AmId,
         am_size: usize,
-        scheduler: &(impl AmeSchedulerQueue + Sync),
+        scheduler: &(impl SchedulerQueue + Sync),
         stall_mark: usize,
     ) {
         let batch = match req_data.dst {
@@ -92,7 +91,7 @@ impl Batcher for SimpleBatcher {
         am: LamellarArcAm,
         am_id: AmId,
         am_size: usize,
-        scheduler: &(impl AmeSchedulerQueue + Sync),
+        scheduler: &(impl SchedulerQueue + Sync),
         stall_mark: usize,
     ) {
         let batch = match req_data.dst {
@@ -117,7 +116,7 @@ impl Batcher for SimpleBatcher {
         req_data: ReqMetaData,
         data: LamellarResultArc,
         data_size: usize,
-        scheduler: &(impl AmeSchedulerQueue + Sync),
+        scheduler: &(impl SchedulerQueue + Sync),
         stall_mark: usize,
     ) {
         let batch = match req_data.dst {
@@ -140,7 +139,7 @@ impl Batcher for SimpleBatcher {
     fn add_unit_am_to_batch(
         &self,
         req_data: ReqMetaData,
-        scheduler: &(impl AmeSchedulerQueue + Sync),
+        scheduler: &(impl SchedulerQueue + Sync),
         stall_mark: usize,
     ) {
         let batch = match req_data.dst {
@@ -161,19 +160,21 @@ impl Batcher for SimpleBatcher {
         msg: Msg,
         ser_data: SerializedData,
         lamellae: Arc<Lamellae>,
-        scheduler: &(impl AmeSchedulerQueue + Sync),
+        scheduler: &(impl SchedulerQueue + Sync),
         ame: &RegisteredActiveMessages,
     ) {
         let data = ser_data.data_as_bytes();
         let mut i = 0;
+        // println!("executing batched msg {:?}", data.len());
 
         while i < data.len() {
             let cmd: Cmd = crate::deserialize(&data[i..i + *CMD_LEN], false).unwrap();
             i += *CMD_LEN;
             let temp_i = i;
+            // println!("cmd {:?}", cmd);
             match cmd {
-                Cmd::Am => ame.exec_am(&msg, data, &mut i, &lamellae, scheduler).await,
-                Cmd::ReturnAm => ame.exec_return_am(&msg, data, &mut i, &lamellae).await,
+                Cmd::Am => self.exec_am(&msg, data, &mut i, &lamellae, scheduler, ame),
+                Cmd::ReturnAm => self.exec_return_am(&msg, data, &mut i, &lamellae, scheduler, ame),
                 Cmd::Data => ame.exec_data_am(&msg, data, &mut i, &ser_data).await,
                 Cmd::Unit => ame.exec_unit_am(&msg, data, &mut i).await,
                 Cmd::BatchedMsg => panic!("should not recieve a batched msg within a batched msg"),
@@ -198,7 +199,7 @@ impl SimpleBatcher {
         &self,
         batch: SimpleBatcherInner,
         mut stall_mark: usize,
-        scheduler: &(impl AmeSchedulerQueue + Sync),
+        scheduler: &(impl SchedulerQueue + Sync),
     ) {
         let cur_stall_mark = self.stall_mark.clone();
         scheduler.submit_task(async move {
@@ -371,5 +372,83 @@ impl SimpleBatcher {
             data = lamellae.serialize_header(header.clone(), size);
         }
         data.unwrap()
+    }
+
+    fn exec_am(
+        &self,
+        msg: &Msg,
+        data: &[u8],
+        i: &mut usize,
+        lamellae: &Arc<Lamellae>,
+        scheduler: &(impl SchedulerQueue + Sync),
+        ame: &RegisteredActiveMessages,
+    ) {
+        let am_header: AmHeader =
+            crate::deserialize(&data[*i..*i + *AM_HEADER_LEN], false).unwrap();
+        let (team, world) =
+            ame.get_team_and_world(msg.src as usize, am_header.team_addr, &lamellae);
+        *i += *AM_HEADER_LEN;
+
+        let am = AMS_EXECS.get(&am_header.am_id).unwrap()(&data[*i..], team.team.team_pe);
+        *i += am.serialized_size();
+
+        let req_data = ReqMetaData {
+            src: team.team.world_pe,
+            dst: Some(msg.src as usize),
+            id: am_header.req_id,
+            lamellae: lamellae.clone(),
+            world: world.team.clone(),
+            team: team.team.clone(),
+            team_addr: team.team.remote_ptr_addr,
+        };
+        scheduler.submit_task(async move {
+            let am = match am
+                .exec(
+                    team.team.world_pe,
+                    team.team.num_world_pes,
+                    false,
+                    world.clone(),
+                    team.clone(),
+                )
+                .await
+            {
+                LamellarReturn::Unit => Am::Unit(req_data),
+                LamellarReturn::RemoteData(data) => Am::Data(req_data, data),
+                LamellarReturn::RemoteAm(am) => Am::Return(req_data, am),
+                LamellarReturn::LocalData(_) | LamellarReturn::LocalAm(_) => {
+                    panic!("Should not be returning local data or AM from remote  am");
+                }
+            };
+            ame.process_msg(am, scheduler, 0).await;
+        });
+    }
+
+    fn exec_return_am(
+        &self,
+        msg: &Msg,
+        data: &[u8],
+        i: &mut usize,
+        lamellae: &Arc<Lamellae>,
+        scheduler: &(impl SchedulerQueue + Sync),
+        ame: &RegisteredActiveMessages,
+    ) {
+        let am_header: AmHeader =
+            crate::deserialize(&data[*i..*i + *AM_HEADER_LEN], false).unwrap();
+        let (team, world) =
+            ame.get_team_and_world(msg.src as usize, am_header.team_addr, &lamellae);
+        *i += *AM_HEADER_LEN;
+        let am = AMS_EXECS.get(&am_header.am_id).unwrap()(&data[*i..], team.team.team_pe);
+        *i += am.serialized_size();
+
+        let req_data = ReqMetaData {
+            src: msg.src as usize,
+            dst: Some(team.team.world_pe),
+            id: am_header.req_id,
+            lamellae: lamellae.clone(),
+            world: world.team.clone(),
+            team: team.team.clone(),
+            team_addr: team.team.remote_ptr_addr,
+        };
+        scheduler.submit_task(ame.exec_local_am(req_data, am.as_local(), world, team));
     }
 }

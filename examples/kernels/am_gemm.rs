@@ -135,7 +135,7 @@ fn main() {
         .unwrap_or_else(|| 2000);
 
     let world = lamellar::LamellarWorldBuilder::new()
-        .with_scheduler(lamellar::SchedulerType::NumaWorkStealing)
+        // .with_scheduler(lamellar::SchedulerType::NumaWorkStealing)
         .build();
     let my_pe = world.my_pe();
     let num_pes = world.num_pes();
@@ -184,6 +184,7 @@ fn main() {
         //A iteration:
         let mut tasks = 0;
         let start = std::time::Instant::now();
+        let task_group = lamellar::LamellarTaskGroup::new(world.team());
         for i in 0..a_pe_row_blks {
             //iterate over rows of A, (all tiles in a row are local)
             for j in 0..b_pe_col_blks {
@@ -204,7 +205,7 @@ fn main() {
                         j,
                         block_size,
                     ); //B is distributed
-                    world.exec_am_pe(
+                    task_group.exec_am_pe(
                         my_pe,
                         NaiveMM {
                             a: a_block,

@@ -98,7 +98,7 @@ fn main() {
         //.with_lamellae( Backend::RofiShm ) //explicity set the lamellae backend to rofi, specifying the shm provider
         //.with_lamellae( Backend::RofiVerbs ) //explicity set the lamellae backend to rofi, specifying the verbs provider
         //.with_lamellae( Backend::Local )
-        .with_scheduler(lamellar::SchedulerType::NumaWorkStealing2) //currently the only type of thread scheduler
+        // .with_scheduler(lamellar::SchedulerType::WorkStealing) //currently the only type of thread scheduler
         .build();
     let my_pe = world.my_pe();
     let num_pes = world.num_pes();

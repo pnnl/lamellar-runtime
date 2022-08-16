@@ -24,7 +24,6 @@ lazy_static! {
 pub struct LamellarWorld {
     team: Arc<LamellarTeam>,
     pub(crate) team_rt: std::pin::Pin<Arc<LamellarTeamRT>>,
-    // teams: Arc<RwLock<HashMap<u64, Weak<LamellarTeamRT>>>>,
     _counters: Arc<AMCounters>,
     my_pe: usize,
     num_pes: usize,
@@ -59,70 +58,6 @@ impl ActiveMessaging for LamellarWorld {
         self.team.exec_am_local(am)
     }
 }
-
-//#feature gated closures for those with nightly
-// #[cfg(feature = "nightly")]
-// use crate::active_messaging::remote_closures::ClosureRet;
-// #[cfg(feature = "nightly")]
-// //#[prof]
-// impl RemoteClosures for LamellarWorld {
-//     fn exec_closure_all<
-//         F: FnOnce() -> T
-//
-//
-//             + serde::ser::Serialize
-//             + serde::de::DeserializeOwned
-//             + std::clone::Clone
-//             + 'static,
-//         T: std::any::Any
-//
-//
-//             + serde::ser::Serialize
-//             + serde::de::DeserializeOwned
-//             + std::clone::Clone,
-//     >(
-//         &self,
-//         func: F,
-//     ) -> Box<dyn LamellarRequest<Output = F::Output>  > {
-//         trace!("[{:?}] exec closure all", self.my_pe);
-//         self.team_rt.exec_closure_all(func)
-//     }
-
-//     #[cfg(feature = "nightly")]
-//     fn exec_closure_pe<
-//         F: FnOnce() -> T
-//
-//
-//             + serde::ser::Serialize
-//             + serde::de::DeserializeOwned
-//             + std::clone::Clone
-//             + 'static,
-//         T: std::any::Any
-//
-//
-//             + serde::ser::Serialize
-//             + serde::de::DeserializeOwned
-//             + std::clone::Clone,
-//     >(
-//         &self,
-//         pe: usize,
-//         func: F,
-//     ) -> Box<dyn LamellarRequest<Output = F::Output>  > {
-//         assert!(pe < self.num_pes(), "invalid pe: {:?}", pe);
-//         trace!("[{:?}] world exec_closure_pe: [{:?}]", self.my_pe, pe);
-//         self.team_rt.exec_closure_pe(pe, func)
-//     }
-//     #[cfg(feature = "nightly")]
-//     fn exec_closure_on_return<
-//         F: FnOnce() -> T + serde::ser::Serialize + serde::de::DeserializeOwned + 'static,
-//         T: std::any::Any + serde::ser::Serialize + serde::de::DeserializeOwned + std::clone::Clone,
-//     >(
-//         &self,
-//         func: F,
-//     ) -> ClosureRet {
-//         self.team_rt.exec_closure_on_return(func)
-//     }
-// }
 
 //#[prof]
 impl RemoteMemoryRegion for LamellarWorld {
@@ -284,10 +219,25 @@ impl LamellarWorldBuilder {
     pub fn new() -> LamellarWorldBuilder {
         // simple_logger::init().unwrap();
         // trace!("New world builder");
+        let scheduler = match std::env::var("LAMELLAR_SCHEDULER") {
+            Ok(val) => {
+                let scheduler = val.parse::<usize>().unwrap();
+                if scheduler == 0 {
+                    SchedulerType::WorkStealing
+                } else if scheduler == 1 {
+                    SchedulerType::NumaWorkStealing
+                } else if scheduler == 2 {
+                    SchedulerType::NumaWorkStealing2
+                } else {
+                    SchedulerType::WorkStealing
+                }
+            }
+            Err(_) => SchedulerType::WorkStealing,
+        };
         LamellarWorldBuilder {
             primary_lamellae: Default::default(),
             // secondary_lamellae: HashSet::new(),
-            scheduler: SchedulerType::WorkStealing,
+            scheduler: scheduler,
         }
     }
 

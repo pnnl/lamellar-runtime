@@ -34,6 +34,7 @@ use enum_dispatch::enum_dispatch;
 use futures::Future;
 use std::marker::PhantomData;
 use std::pin::Pin;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
 #[lamellar_impl::AmLocalDataRT(Clone)]
@@ -44,8 +45,10 @@ where
 {
     pub(crate) op: F,
     pub(crate) data: I,
-    pub(crate) start_i: usize,
-    pub(crate) end_i: usize,
+    pub(crate) ranges: Vec<(usize, usize)>,
+    pub(crate) range_i: Arc<AtomicUsize>,
+    // pub(crate) start_i: usize,
+    // pub(crate) end_i: usize,
 }
 #[lamellar_impl::rt_am_local]
 impl<I, F> LamellarAm for ForEach<I, F>
@@ -55,9 +58,15 @@ where
 {
     fn exec(&self) {
         // println!("in for each {:?} {:?}", self.start_i, self.end_i);
-        let mut iter = self.data.init(self.start_i, self.end_i - self.start_i);
-        while let Some(elem) = iter.next() {
-            (&self.op)(elem)
+        let mut range_i = self.range_i.fetch_add(1, Ordering::Relaxed);
+        while range_i < self.ranges.len() {
+            let (start_i, end_i) = self.ranges[range_i];
+            // println!("in for each {:?} {:?} {:?}", range_i, start_i, end_i);
+            let mut iter = self.data.init(start_i, end_i - start_i);
+            while let Some(item) = iter.next() {
+                (self.op)(item);
+            }
+            range_i = self.range_i.fetch_add(1, Ordering::Relaxed);
         }
         // println!("done in for each");
     }

@@ -1,6 +1,7 @@
 use crate::active_messaging::{ActiveMessageEngine, ActiveMessageEngineType, Am};
 use crate::lamellae::{Des, Lamellae, SerializedData};
 use crate::scheduler::batching::simple_batcher::SimpleBatcher;
+use crate::scheduler::batching::team_am_batcher::TeamAmBatcher;
 use crate::scheduler::batching::BatcherType;
 use crate::scheduler::registered_active_message::RegisteredActiveMessages;
 use crate::scheduler::{AmeScheduler, AmeSchedulerQueue, SchedulerQueue};
@@ -133,6 +134,7 @@ impl AmeSchedulerQueue for WorkStealingInner {
     fn submit_am(
         //unserialized request
         &self,
+        scheduler: &(impl SchedulerQueue + Sync),
         ame: Arc<ActiveMessageEngineType>,
         am: Am,
     ) {
@@ -144,7 +146,7 @@ impl AmeSchedulerQueue for WorkStealingInner {
             // println!("exec req {:?}",num_tasks.load(Ordering::Relaxed));
             num_tasks.fetch_add(1, Ordering::Relaxed);
             // println!("in submit_req {:?} {:?} {:?} ", pe.clone(), req_data.src, req_data.pe);
-            ame.process_msg(am, self, stall_mark).await;
+            ame.process_msg(am, scheduler, stall_mark).await;
             // println!("num tasks: {:?}",);
             num_tasks.fetch_sub(1, Ordering::Relaxed);
             // println!("done req {:?}",num_tasks.load(Ordering::Relaxed));
@@ -159,6 +161,7 @@ impl AmeSchedulerQueue for WorkStealingInner {
     //this is a serialized request
     fn submit_work(
         &self,
+        scheduler: &(impl SchedulerQueue + Sync),
         ame: Arc<ActiveMessageEngineType>,
         data: SerializedData,
         lamellae: Arc<Lamellae>,
@@ -174,7 +177,7 @@ impl AmeSchedulerQueue for WorkStealingInner {
                 // println!("msg recieved: {:?}",msg);
                 // let addr = lamellae.local_addr(msg.src as usize, header.team_hash as usize);
                 // println!("from pe {:?} remote addr {:x} local addr {:x}",msg.src,header.team_hash,addr);
-                ame.exec_msg(msg, data, lamellae, self).await;
+                ame.exec_msg(msg, data, lamellae, scheduler).await;
             } else {
                 data.print();
                 panic!("should i be here?");
@@ -280,13 +283,14 @@ impl SchedulerQueue for WorkStealing {
         &self,
         am: Am,
     ) {
-        self.inner.submit_am(self.ame.clone(), am);
+        self.inner.submit_am(self, self.ame.clone(), am);
     }
 
     // fn submit_return(&self, src, pe)
 
     fn submit_work(&self, data: SerializedData, lamellae: Arc<Lamellae>) {
-        self.inner.submit_work(self.ame.clone(), data, lamellae);
+        self.inner
+            .submit_work(self, self.ame.clone(), data, lamellae);
     }
 
     fn submit_task<F>(&self, future: F)
@@ -401,13 +405,23 @@ impl WorkStealing {
         let inner = Arc::new(AmeScheduler::WorkStealingInner(WorkStealingInner::new(
             stall_mark.clone(),
         )));
+
+        let batcher = match std::env::var("LAMELLAR_BATCHER") {
+            Ok(n) => {
+                let n = n.parse::<usize>().unwrap();
+                if n == 1 {
+                    BatcherType::Simple(SimpleBatcher::new(num_pes, stall_mark.clone()))
+                } else {
+                    BatcherType::TeamAm(TeamAmBatcher::new(num_pes, stall_mark.clone()))
+                }
+            }
+            Err(_) => BatcherType::TeamAm(TeamAmBatcher::new(num_pes, stall_mark.clone())),
+        };
+
         let sched = WorkStealing {
             inner: inner.clone(),
             ame: Arc::new(ActiveMessageEngineType::RegisteredActiveMessages(
-                RegisteredActiveMessages::new(BatcherType::Simple(SimpleBatcher::new(
-                    num_pes,
-                    stall_mark.clone(),
-                ))),
+                RegisteredActiveMessages::new(batcher),
             )),
         };
         sched
