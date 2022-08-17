@@ -7,6 +7,8 @@ use crate::memregion::{
     AsBase, Dist, MemoryRegionRDMA, RTMemoryRegionRDMA, RegisteredMemoryRegion, SubRegion,
 };
 
+use tracing::*;
+
 impl<T: Dist> UnsafeArray<T> {
     fn block_op<U: MyInto<LamellarArrayInput<T>>>(
         &self,
@@ -606,7 +608,7 @@ impl UnsafeArrayInner {
     }
 }
 
-#[lamellar_impl::AmLocalDataRT]
+#[lamellar_impl::AmLocalDataRT(Debug)]
 struct UnsafeBlockGetAm {
     array: UnsafeByteArray, //inner of the indices we need to place data into
     offset: usize,
@@ -624,7 +626,7 @@ impl LamellarAm for UnsafeBlockGetAm {
         );
     }
 }
-#[lamellar_impl::AmLocalDataRT]
+#[lamellar_impl::AmLocalDataRT(Debug)]
 struct UnsafeCyclicGetAm {
     array: UnsafeByteArray, //inner of the indices we need to place data into
     data: LamellarMemoryRegion<u8>, //change this to an enum which is a vector or localmemoryregion depending on data size
@@ -666,7 +668,7 @@ impl LamellarAm for UnsafeCyclicGetAm {
     }
 }
 
-#[lamellar_impl::AmDataRT]
+#[lamellar_impl::AmDataRT(Debug)]
 struct UnsafePutAm {
     array: UnsafeByteArray,         //byte representation of the array
     start_index: usize,             //index with respect to inner (of type T)

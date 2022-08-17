@@ -89,7 +89,7 @@ pub(crate) struct SerializeHeader {
 }
 
 #[enum_dispatch(Des, SubData, SerializedDataOps)]
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(crate) enum SerializedData {
     #[cfg(feature = "enable-rofi")]
     RofiData,
@@ -149,6 +149,7 @@ pub(crate) trait Ser {
 }
 
 #[enum_dispatch(LamellaeComm, LamellaeAM, LamellaeRDMA, Ser)]
+#[derive(Debug)]
 pub(crate) enum Lamellae {
     #[cfg(feature = "enable-rofi")]
     Rofi,

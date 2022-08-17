@@ -183,13 +183,13 @@ impl<T: Dist + ElementBitWiseOps> BitOrAssign<T> for GenericAtomicElement<T> {
     }
 }
 
-#[lamellar_impl::AmDataRT(Clone)]
+#[lamellar_impl::AmDataRT(Clone, Debug)]
 pub struct GenericAtomicArray<T> {
     locks: Darc<Vec<Mutex<()>>>,
     pub(crate) array: UnsafeArray<T>,
 }
 
-#[lamellar_impl::AmDataRT(Clone)]
+#[lamellar_impl::AmDataRT(Clone, Debug)]
 pub struct GenericAtomicByteArray {
     locks: Darc<Vec<Mutex<()>>>,
     pub(crate) array: UnsafeByteArray,
@@ -214,7 +214,7 @@ impl GenericAtomicByteArray {
     }
 }
 
-#[lamellar_impl::AmLocalDataRT(Clone)]
+#[lamellar_impl::AmLocalDataRT(Clone, Debug)]
 pub struct GenericAtomicByteArrayWeak {
     locks: Darc<Vec<Mutex<()>>>,
     pub(crate) array: UnsafeByteArrayWeak,
@@ -229,13 +229,14 @@ impl GenericAtomicByteArrayWeak {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct GenericAtomicLocalData<T: Dist> {
     array: GenericAtomicArray<T>,
     start_index: usize,
     end_index: usize,
 }
 
+#[derive(Debug)]
 pub struct GenericAtomicLocalDataIter<T: Dist> {
     array: GenericAtomicArray<T>,
     index: usize,

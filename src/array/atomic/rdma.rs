@@ -139,7 +139,7 @@ impl<T: Dist> AtomicArray<T> {
 //     }
 // }
 
-// #[lamellar_impl::AmLocalDataRT]
+// #[lamellar_impl::AmLocalDataRT(Debug)]
 // struct InitGetAm<T: Dist> {
 //     array: AtomicArray<T>, //inner of the indices we need to place data into
 //     index: usize,
@@ -209,7 +209,7 @@ impl<T: Dist> AtomicArray<T> {
 
 // //the remote get am is implemented in lamellar_impl
 
-// #[lamellar_impl::AmLocalDataRT]
+// #[lamellar_impl::AmLocalDataRT(Debug)]
 // struct InitPutAm<T: Dist> {
 //     array: AtomicArray<T>, //inner of the indices we need to place data into
 //     index: usize,

@@ -2,7 +2,7 @@ use crate::lamellae::{Lamellae, LamellaeRDMA, SerializedData};
 use crate::lamellar_arch::IdError;
 use crate::lamellar_request::{InternalResult, LamellarRequestResult};
 use crate::lamellar_team::{LamellarTeam, LamellarTeamRT};
-use crate::scheduler::{AmeSchedulerQueue, ReqId, SchedulerQueue};
+use crate::scheduler::{ReqId, SchedulerQueue};
 #[cfg(feature = "enable-prof")]
 use lamellar_prof::*;
 // use log::trace;
@@ -28,9 +28,9 @@ use remote_closures::{exec_closure_cmd, process_closure_request};
 
 const BATCH_AM_SIZE: usize = 100000;
 
-pub trait AmLocal: Sync + Send {}
+pub trait AmLocal: Sync + Send + std::fmt::Debug {}
 
-impl<T: Sync + Send> AmLocal for T {}
+impl<T: Sync + Send + std::fmt::Debug> AmLocal for T {}
 
 pub trait AmDist: serde::ser::Serialize + serde::de::DeserializeOwned + AmLocal + 'static {}
 
@@ -67,7 +67,7 @@ pub trait RemoteActiveMessage: LamellarActiveMessage + LamellarSerde + LamellarR
     fn as_local(self: Arc<Self>) -> LamellarArcLocalAm;
 }
 
-pub trait LamellarActiveMessage: DarcSerde {
+pub trait LamellarActiveMessage: DarcSerde + std::fmt::Debug {
     fn exec(
         self: Arc<Self>,
         my_pe: usize,
@@ -94,6 +94,7 @@ pub trait LamellarAM {
     type Output: AmDist;
 }
 
+#[derive(Debug)]
 pub enum LamellarReturn {
     LocalData(LamellarAny),
     LocalAm(LamellarArcAm),
@@ -102,7 +103,7 @@ pub enum LamellarReturn {
     Unit,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(crate) struct ReqMetaData {
     pub(crate) src: usize,         //source pe
     pub(crate) dst: Option<usize>, // destination pe - team based pe id, none means all pes
@@ -113,6 +114,7 @@ pub(crate) struct ReqMetaData {
     pub(crate) team_addr: usize,
 }
 
+#[derive(Debug)]
 pub(crate) enum Am {
     All(ReqMetaData, LamellarArcAm),
     Remote(ReqMetaData, LamellarArcAm), //req data, am to execute
@@ -168,6 +170,7 @@ pub(crate) enum RetType {
     Get,
 }
 
+#[derive(Debug)]
 pub(crate) struct AMCounters {
     pub(crate) outstanding_reqs: Arc<AtomicUsize>,
     pub(crate) send_req_cnt: AtomicUsize,
@@ -208,7 +211,7 @@ pub(crate) trait ActiveMessageEngine {
     async fn process_msg(
         &self,
         am: Am,
-        scheduler: &(impl SchedulerQueue + Sync),
+        scheduler: &(impl SchedulerQueue + Sync + std::fmt::Debug),
         stall_mark: usize,
     );
 
@@ -217,7 +220,7 @@ pub(crate) trait ActiveMessageEngine {
         msg: Msg,
         ser_data: SerializedData,
         lamellae: Arc<Lamellae>,
-        scheduler: &(impl SchedulerQueue + Sync),
+        scheduler: &(impl SchedulerQueue + Sync + std::fmt::Debug),
     );
 
     fn get_team_and_world(
@@ -251,6 +254,7 @@ pub(crate) trait ActiveMessageEngine {
     }
 }
 
+#[derive(Debug)]
 pub(crate) enum ActiveMessageEngineType {
     RegisteredActiveMessages(RegisteredActiveMessages),
 }
@@ -260,7 +264,7 @@ impl ActiveMessageEngine for ActiveMessageEngineType {
     async fn process_msg(
         &self,
         am: Am,
-        scheduler: &(impl SchedulerQueue + Sync),
+        scheduler: &(impl SchedulerQueue + Sync + std::fmt::Debug),
         stall_mark: usize,
     ) {
         match self {
@@ -274,7 +278,7 @@ impl ActiveMessageEngine for ActiveMessageEngineType {
         msg: Msg,
         ser_data: SerializedData,
         lamellae: Arc<Lamellae>,
-        scheduler: &(impl SchedulerQueue + Sync),
+        scheduler: &(impl SchedulerQueue + Sync + std::fmt::Debug),
     ) {
         match self {
             ActiveMessageEngineType::RegisteredActiveMessages(remote_am) => {

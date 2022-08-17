@@ -306,9 +306,9 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_type: AmType) -> 
         impl #impl_generics #lamellar::LamellarActiveMessage for #orig_name #ty_generics #where_clause {
             fn exec(self: std::sync::Arc<Self>,__lamellar_current_pe: usize,__lamellar_num_pes: usize, __local: bool, __lamellar_world: std::sync::Arc<#lamellar::LamellarTeam>, __lamellar_team: std::sync::Arc<#lamellar::LamellarTeam>) -> std::pin::Pin<Box<dyn std::future::Future<Output=#lamellar::LamellarReturn> + Send >>{
                 Box::pin( async move {
-                #temp
-                #ret_statement
-                })
+                    #temp
+                    #ret_statement
+                }.instrument(tracing::trace_span!("{}",stringify!(#orig_name))))
 
             }
 
@@ -325,6 +325,7 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_type: AmType) -> 
 
         let the_ret_struct = if vec_u8 {
             quote! {
+                #[derive(Debug)]
                 struct #ret_struct #ty_generics #where_clause{
                     val: serde_bytes::ByteBuf,
                     // _phantom: std::marker::PhantomData<(#impl_generics)>,
@@ -332,6 +333,7 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_type: AmType) -> 
             }
         } else {
             quote! {
+                #[derive(Debug)]
                 struct #ret_struct #ty_generics #where_clause{
                     val: #ret_type,
                     // _phantom: std::marker::PhantomData<(#impl_generics)>,
@@ -383,12 +385,21 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_type: AmType) -> 
     let user_expanded = quote_spanned! {expanded.span()=>
         const _: () = {
             extern crate lamellar as __lamellar;
+            use tracing::*;
+            #expanded
+        };
+    };
+
+    let rt_expanded = quote_spanned! {
+        expanded.span()=>
+        const _: () = {
+            use tracing::*;
             #expanded
         };
     };
 
     if lamellar == "crate" {
-        TokenStream::from(expanded)
+        TokenStream::from(rt_expanded)
     } else {
         TokenStream::from(user_expanded)
     }

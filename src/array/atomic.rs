@@ -200,7 +200,7 @@ impl<T: Dist + ElementBitWiseOps> BitOrAssign<T> for AtomicElement<T> {
 }
 
 #[enum_dispatch(LamellarArray<T>,LamellarArrayGet<T>,LamellarArrayInternalGet<T>,LamellarArrayPut<T>,LamellarArrayInternalPut<T>,ArrayExecAm<T>,LamellarArrayPrivate<T>,DistIteratorLauncher,)]
-#[derive(serde::Serialize, serde::Deserialize, Clone)]
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
 #[serde(bound = "T: Dist + serde::Serialize + serde::de::DeserializeOwned + 'static")]
 pub enum AtomicArray<T: Dist> {
     NativeAtomicArray(NativeAtomicArray<T>),

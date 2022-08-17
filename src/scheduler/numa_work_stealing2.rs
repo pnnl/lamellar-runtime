@@ -22,6 +22,7 @@ use std::thread;
 use thread_local::ThreadLocal;
 // use std::time::Instant;
 
+#[derive(Debug)]
 pub(crate) struct NumaWorkStealing2Thread {
     work_inj: Arc<crossbeam::deque::Injector<async_task::Runnable>>,
     work_stealers: Vec<crossbeam::deque::Stealer<async_task::Runnable>>,
@@ -120,6 +121,7 @@ impl NumaWorkStealing2Thread {
     }
 }
 
+#[derive(Debug)]
 pub(crate) struct NumaWorkStealing2Inner {
     threads: Vec<thread::JoinHandle<()>>,
     work_inj: Arc<crossbeam::deque::Injector<async_task::Runnable>>,
@@ -135,7 +137,7 @@ impl AmeSchedulerQueue for NumaWorkStealing2Inner {
     fn submit_am(
         //unserialized request
         &self,
-        scheduler: &(impl SchedulerQueue + Sync),
+        scheduler: &(impl SchedulerQueue + Sync + std::fmt::Debug),
         ame: Arc<ActiveMessageEngineType>,
         am: Am,
     ) {
@@ -160,7 +162,7 @@ impl AmeSchedulerQueue for NumaWorkStealing2Inner {
     //this is a serialized request
     fn submit_work(
         &self,
-        scheduler: &(impl SchedulerQueue + Sync),
+        scheduler: &(impl SchedulerQueue + Sync + std::fmt::Debug),
         ame: Arc<ActiveMessageEngineType>,
         data: SerializedData,
         lamellae: Arc<Lamellae>,
@@ -432,6 +434,7 @@ thread_local! {
     static CUR_NODE: AtomicUsize = AtomicUsize::new(0);
 }
 
+#[derive(Debug)]
 pub(crate) struct NumaWorkStealing2 {
     inners: Vec<Arc<AmeScheduler>>,
     ames: Vec<Arc<ActiveMessageEngineType>>,

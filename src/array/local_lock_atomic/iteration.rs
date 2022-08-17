@@ -20,6 +20,18 @@ pub struct LocalLockAtomicDistIter<'a, T: Dist> {
     _marker: PhantomData<&'a T>,
 }
 
+impl<'a, T: Dist> std::fmt::Debug for LocalLockAtomicDistIter<'a, T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "LocalLockAtomicDistIter{{ data.len: {:?}, cur_i: {:?}, end_i: {:?} }}",
+            self.data.len(),
+            self.cur_i,
+            self.end_i
+        )
+    }
+}
+
 // impl<'a,T: Dist> LocalLockAtomicDistIter<'a, T> {
 //     pub(crate) fn new(data: LocalLockAtomicArray<T>,lock: Arc<RwLockReadGuard<'a, Box<()>>>, cur_i: usize, cnt: usize) -> Self {
 //         // println!("new dist iter {:?} {:? } {:?}",cur_i, cnt, cur_i+cnt);
@@ -101,6 +113,18 @@ pub struct LocalLockAtomicDistIterMut<'a, T: Dist> {
     cur_i: usize,
     end_i: usize,
     _marker: PhantomData<&'a T>,
+}
+
+impl<'a, T: Dist> std::fmt::Debug for LocalLockAtomicDistIterMut<'a, T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "LocalLockAtomicDistIterMut{{ data.len: {:?}, cur_i: {:?}, end_i: {:?} }}",
+            self.data.len(),
+            self.cur_i,
+            self.end_i
+        )
+    }
 }
 
 // impl<'a, T: Dist> LocalLockAtomicDistIterMut<'a, T> {
@@ -250,7 +274,7 @@ impl<T: Dist> DistIteratorLauncher for LocalLockAtomicArray<T> {
     fn collect<I, A>(&self, iter: &I, d: Distribution) -> Pin<Box<dyn Future<Output = A> + Send>>
     where
         I: DistributedIterator + 'static,
-        I::Item: Dist,
+        I::Item: Dist + std::fmt::Debug,
         A: From<UnsafeArray<I::Item>> + AmLocal + 'static,
     {
         self.array.collect(iter, d)
@@ -262,7 +286,7 @@ impl<T: Dist> DistIteratorLauncher for LocalLockAtomicArray<T> {
     ) -> Pin<Box<dyn Future<Output = A> + Send>>
     where
         I: DistributedIterator + 'static,
-        I::Item: Future<Output = B> + Send + 'static,
+        I::Item: Future<Output = B> + Send + 'static + std::fmt::Debug,
         B: Dist,
         A: From<UnsafeArray<B>> + AmLocal + 'static,
     {

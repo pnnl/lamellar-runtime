@@ -1,7 +1,7 @@
 use crate::array::iterator::distributed_iterator::*;
 
 //ignores the first n elements of iterator I per pe (this implys that n * num_pes elements are ignored in total)
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Take<I> {
     iter: I,
     count: usize,

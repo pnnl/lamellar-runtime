@@ -33,6 +33,7 @@ static ROFI_MAGIC_1: u8 = 0b10011001;
 
 static ROFI_MEM: AtomicUsize = AtomicUsize::new(4 * 1024 * 1024 * 1024);
 const RT_MEM: usize = 100 * 1024 * 1024; // we add this space for things like team barrier buffers, but will work towards having teams get memory from rofi allocs
+#[derive(Debug)]
 pub(crate) struct RofiComm {
     pub(crate) rofi_base_address: Arc<RwLock<usize>>,
     alloc: RwLock<Vec<BTreeAlloc>>,
@@ -51,6 +52,7 @@ pub(crate) struct RofiComm {
 
 //#[prof]
 impl RofiComm {
+    #[tracing::instrument(skip_all)]
     pub(crate) fn new(provider: &str) -> RofiComm {
         if let Ok(size) = std::env::var("LAMELLAR_MEM_SIZE") {
             let size = size
@@ -91,6 +93,7 @@ impl RofiComm {
         rofi
     }
 
+    #[tracing::instrument(skip_all)]
     unsafe fn fill_buffer<R: Copy, T>(&self, dst_addr: &mut [T], val: R) {
         // println!("{:?} {:?} {:?} {:?} {:?}",std::mem::size_of::<T>(),std::mem::size_of::<R>(),(dst_addr.len()*std::mem::size_of::<T>()),(dst_addr.len()*std::mem::size_of::<T>())/std::mem::size_of::<R>(),(dst_addr.len()*std::mem::size_of::<T>())%std::mem::size_of::<R>());
         let bytes = std::slice::from_raw_parts_mut(
@@ -101,6 +104,7 @@ impl RofiComm {
             *elem = val;
         }
     }
+    #[tracing::instrument(skip_all)]
     fn init_buffer<T>(&self, dst_addr: &mut [T]) {
         let bytes_len = dst_addr.len() * std::mem::size_of::<T>();
         // println!("{:?} {:?}",dst_addr.as_ptr(),bytes_len);
@@ -116,6 +120,7 @@ impl RofiComm {
             }
         }
     }
+    #[tracing::instrument(skip_all)]
     unsafe fn check_buffer_elems<R: std::cmp::PartialEq + std::fmt::Debug, T>(
         &self,
         dst_addr: &mut [T],
@@ -153,6 +158,7 @@ impl RofiComm {
         }
         Ok(())
     }
+    #[tracing::instrument(skip_all)]
     fn check_buffer<T>(&self, dst_addr: &mut [T]) -> TxResult<()> {
         let bytes_len = dst_addr.len() * std::mem::size_of::<T>();
         unsafe {
@@ -168,6 +174,7 @@ impl RofiComm {
         }
         Ok(())
     }
+    #[tracing::instrument(skip_all)]
     fn iget_data<T: Remote>(&self, pe: usize, src_addr: usize, dst_addr: &mut [T]) {
         let _lock = self.comm_mutex.lock();
         match rofi_iget(src_addr, dst_addr, pe) {
@@ -190,22 +197,27 @@ impl RofiComm {
 }
 
 impl CommOps for RofiComm {
+    #[tracing::instrument(skip_all)]
     fn my_pe(&self) -> usize {
         self.my_pe
     }
+    #[tracing::instrument(skip_all)]
     fn num_pes(&self) -> usize {
         self.num_pes
     }
     #[allow(non_snake_case)]
+    #[tracing::instrument(skip_all)]
     fn MB_sent(&self) -> f64 {
         (self.put_amt.load(Ordering::SeqCst) + self.get_amt.load(Ordering::SeqCst)) as f64
             / 1_000_000.0
     }
 
+    #[tracing::instrument(skip_all)]
     fn barrier(&self) {
         rofi_barrier();
     }
 
+    #[tracing::instrument(skip_all)]
     fn occupied(&self) -> usize {
         let mut occupied = 0;
         let allocs = self.alloc.read();
@@ -214,9 +226,11 @@ impl CommOps for RofiComm {
         }
         occupied
     }
+    #[tracing::instrument(skip_all)]
     fn num_pool_allocs(&self) -> usize {
         self.alloc.read().len()
     }
+    #[tracing::instrument(skip_all)]
     fn print_pools(&self) {
         let allocs = self.alloc.read();
         println!("num_pools {:?}", allocs.len());
@@ -230,6 +244,7 @@ impl CommOps for RofiComm {
             );
         }
     }
+    #[tracing::instrument(skip_all)]
     fn alloc_pool(&self, min_size: usize) {
         let mut allocs = self.alloc.write();
         let size = std::cmp::max(min_size * 2 * self.num_pes, ROFI_MEM.load(Ordering::SeqCst));
@@ -242,6 +257,7 @@ impl CommOps for RofiComm {
             panic!("[Error] out of system memory");
         }
     }
+    #[tracing::instrument(skip_all)]
     fn rt_alloc(&self, size: usize) -> AllocResult<usize> {
         // let size = size + size%8;
         let allocs = self.alloc.read();
@@ -255,6 +271,7 @@ impl CommOps for RofiComm {
         }
         Err(AllocError::OutOfMemoryError(size))
     }
+    #[tracing::instrument(skip_all)]
     fn rt_check_alloc(&self, size: usize) -> bool {
         let allocs = self.alloc.read();
         for alloc in allocs.iter() {
@@ -267,6 +284,7 @@ impl CommOps for RofiComm {
         false
     }
 
+    #[tracing::instrument(skip_all)]
     fn rt_free(&self, addr: usize) {
         let allocs = self.alloc.read();
         for alloc in allocs.iter() {
@@ -276,30 +294,36 @@ impl CommOps for RofiComm {
         }
         panic!("Error invalid free! {:?}", addr);
     }
+    #[tracing::instrument(skip_all)]
     fn alloc(&self, size: usize, alloc: AllocationType) -> AllocResult<usize> {
         // let size = size + size%8;
         let _lock = self.comm_mutex.lock();
         Ok(rofi_alloc(size, alloc) as usize)
     }
 
+    #[tracing::instrument(skip_all)]
     fn free(&self, addr: usize) {
         let _lock = self.comm_mutex.lock();
         rofi_release(addr);
     }
 
     #[allow(dead_code)]
+    #[tracing::instrument(skip_all)]
     fn base_addr(&self) -> usize {
         *self.rofi_base_address.read()
     }
 
+    #[tracing::instrument(skip_all)]
     fn local_addr(&self, remote_pe: usize, remote_addr: usize) -> usize {
         rofi_local_addr(remote_pe, remote_addr)
     }
 
+    #[tracing::instrument(skip_all)]
     fn remote_addr(&self, pe: usize, local_addr: usize) -> usize {
         rofi_remote_addr(pe, local_addr)
     }
 
+    #[tracing::instrument(skip_all)]
     fn put<T: Remote>(&self, pe: usize, src_addr: &[T], dst_addr: usize) {
         //-> RofiReq {
         // let mut req = RofiReq{
@@ -333,6 +357,7 @@ impl CommOps for RofiComm {
         // println!("[{:?}]-({:?}) put [{:?}] exit",self.my_pe,thread::current().id(),pe);
     }
 
+    #[tracing::instrument(skip_all)]
     fn iput<T: Remote>(&self, pe: usize, src_addr: &[T], dst_addr: usize) {
         //-> RofiReq{
         // println!("[{:?}]-({:?}) iput entry",self.my_pe,thread::current().id());
@@ -366,6 +391,7 @@ impl CommOps for RofiComm {
         // println!("[{:?}]- gc: {:?} pc: {:?} iput exit",self.my_pe,self.get_cnt.load(Ordering::SeqCst),self.put_cnt.load(Ordering::SeqCst));
     }
 
+    #[tracing::instrument(skip_all)]
     fn put_all<T: Remote>(&self, src_addr: &[T], dst_addr: usize) {
         //-> RofiReq {
         // println!("[{:?}]-({:?}) put all entry",self.my_pe,thread::current().id());
@@ -401,6 +427,7 @@ impl CommOps for RofiComm {
         // println!("[{:?}]- gc: {:?} pc: {:?} put_all exit",self.my_pe,self.get_cnt.load(Ordering::SeqCst),self.put_cnt.load(Ordering::SeqCst));
     }
 
+    #[tracing::instrument(skip_all)]
     fn get<T: Remote>(&self, pe: usize, src_addr: usize, dst_addr: &mut [T]) {
         //-> RofiReq {
         // println!("[{:?}]-({:?}) get entry",self.my_pe,thread::current().id());
@@ -455,6 +482,7 @@ impl CommOps for RofiComm {
         // println!("[{:?}]- gc: {:?} pc: {:?} get exit",self.my_pe,self.get_cnt.load(Ordering::SeqCst),self.put_cnt.load(Ordering::SeqCst));
     }
 
+    #[tracing::instrument(skip_all)]
     fn iget<T: Remote>(&self, pe: usize, src_addr: usize, dst_addr: &mut [T]) {
         if pe != self.my_pe {
             let bytes_len = dst_addr.len() * std::mem::size_of::<T>();
@@ -527,6 +555,7 @@ impl CommOps for RofiComm {
     }
 
     //src address is relative to rofi base addr
+    #[tracing::instrument(skip_all)]
     fn iget_relative<T: Remote>(&self, pe: usize, src_addr: usize, dst_addr: &mut [T]) {
         //-> RofiReq {
         // let mut req = RofiReq{
@@ -581,6 +610,7 @@ impl CommOps for RofiComm {
 
 //#[prof]
 impl Drop for RofiComm {
+    #[tracing::instrument(skip_all)]
     fn drop(&mut self) {
         // println!("[{:?}] in rofi comm drop", self.my_pe);
         // print!(""); //not sure why this prevents hanging....
@@ -613,6 +643,7 @@ impl Drop for RofiComm {
     }
 }
 
+#[derive(Debug)]
 pub(crate) struct RofiData {
     pub(crate) addr: usize,          // process space address
     pub(crate) relative_addr: usize, //address allocated from rofi
@@ -624,6 +655,7 @@ pub(crate) struct RofiData {
 }
 
 impl RofiData {
+    #[tracing::instrument(skip_all)]
     pub fn new(rofi_comm: Arc<Comm>, size: usize) -> Result<RofiData, anyhow::Error> {
         let ref_cnt_size = std::mem::size_of::<AtomicUsize>();
         let alloc_size = size + ref_cnt_size; //+  std::mem::size_of::<u64>();
@@ -645,6 +677,7 @@ impl RofiData {
     }
 }
 impl SerializedDataOps for RofiData {
+    #[tracing::instrument(skip_all)]
     fn header_as_bytes(&self) -> &mut [u8] {
         let header_size = *SERIALIZE_HEADER_LEN;
         // println!("header_as_bytes header_size: {:?}", header_size);
@@ -656,25 +689,31 @@ impl SerializedDataOps for RofiData {
         }
     }
 
+    #[tracing::instrument(skip_all)]
     fn increment_cnt(&self) {
         unsafe { (*(self.addr as *const AtomicUsize)).fetch_add(1, Ordering::SeqCst) };
     }
 
+    #[tracing::instrument(skip_all)]
     fn len(&self) -> usize {
         self.len
     }
 }
 
 impl Des for RofiData {
+    #[tracing::instrument(skip_all)]
     fn deserialize_header(&self) -> Option<SerializeHeader> {
         crate::deserialize(self.header_as_bytes(), false).unwrap()
     }
+    #[tracing::instrument(skip_all)]
     fn deserialize_data<T: serde::de::DeserializeOwned>(&self) -> Result<T, anyhow::Error> {
         Ok(crate::deserialize(self.data_as_bytes(), true)?)
     }
+    #[tracing::instrument(skip_all)]
     fn data_as_bytes(&self) -> &mut [u8] {
         unsafe { std::slice::from_raw_parts_mut((self.data_start) as *mut u8, self.data_len) }
     }
+    #[tracing::instrument(skip_all)]
     fn header_and_data_as_bytes(&self) -> &mut [u8] {
         unsafe {
             std::slice::from_raw_parts_mut(
@@ -683,6 +722,7 @@ impl Des for RofiData {
             )
         }
     }
+    #[tracing::instrument(skip_all)]
     fn print(&self) {
         println!(
             "addr: {:x} relative addr {:x} len {:?} data_start {:x} data_len {:?} alloc_size {:?}",
@@ -697,6 +737,7 @@ impl Des for RofiData {
 }
 
 impl SubData for RofiData {
+    #[tracing::instrument(skip_all)]
     fn sub_data(&self, start: usize, end: usize) -> SerializedData {
         let mut sub = self.clone();
         sub.data_start += start;
@@ -706,6 +747,7 @@ impl SubData for RofiData {
 }
 
 impl Clone for RofiData {
+    #[tracing::instrument(skip_all)]
     fn clone(&self) -> Self {
         unsafe {
             let ref_cnt = self.addr as *const AtomicUsize;
@@ -724,6 +766,7 @@ impl Clone for RofiData {
 }
 
 impl Drop for RofiData {
+    #[tracing::instrument(skip_all)]
     fn drop(&mut self) {
         let cnt = unsafe { (*(self.addr as *const AtomicUsize)).fetch_sub(1, Ordering::SeqCst) };
         if cnt == 1 {

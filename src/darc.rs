@@ -10,6 +10,8 @@ use std::sync::atomic::{AtomicBool, AtomicU8, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use tracing::*;
+
 use crate::active_messaging::AMCounters;
 use crate::lamellae::{AllocationType, Backend, LamellaeComm, LamellaeRDMA};
 use crate::lamellar_team::{IntoLamellarTeam, LamellarTeamRT};
@@ -99,6 +101,7 @@ impl<'de, T: 'static> Deserialize<'de> for Darc<T> {
     }
 }
 
+#[derive(Debug)]
 pub struct WeakDarc<T: 'static> {
     inner: *mut DarcInner<T>,
     src_pe: usize,
@@ -645,6 +648,12 @@ struct DroppedWaitAM<T> {
     num_pes: usize,
     team: Pin<Arc<LamellarTeamRT>>, //we include this to insure the team isnt dropped until the darc has been fully dropped across the system.
     phantom: PhantomData<T>,
+}
+
+impl<T> std::fmt::Debug for DroppedWaitAM<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "DroppedWaitAM {{ inner_addr: {:?}, mode_addr: {:?}, my_pe: {:?}, num_pes: {:?}, team: {:?} }}", self.inner_addr, self.mode_addr, self.my_pe, self.num_pes, self.team)
+    }
 }
 
 unsafe impl<T> Send for DroppedWaitAM<T> {}

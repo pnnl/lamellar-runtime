@@ -32,6 +32,7 @@ pub(crate) struct ReqId {
     pub(crate) sub_id: usize,
 }
 
+#[derive(Debug)]
 pub enum SchedulerType {
     WorkStealing,
     NumaWorkStealing,
@@ -39,6 +40,7 @@ pub enum SchedulerType {
 }
 
 #[enum_dispatch(AmeSchedulerQueue)]
+#[derive(Debug)]
 pub(crate) enum AmeScheduler {
     WorkStealingInner,
     NumaWorkStealingInner,
@@ -48,13 +50,13 @@ pub(crate) enum AmeScheduler {
 pub(crate) trait AmeSchedulerQueue {
     fn submit_am(
         &self,
-        scheduler: &(impl SchedulerQueue + Sync),
+        scheduler: &(impl SchedulerQueue + Sync + std::fmt::Debug),
         ame: Arc<ActiveMessageEngineType>,
         am: Am,
     );
     fn submit_work(
         &self,
-        scheduler: &(impl SchedulerQueue + Sync),
+        scheduler: &(impl SchedulerQueue + Sync + std::fmt::Debug),
         ame: Arc<ActiveMessageEngineType>,
         msg: SerializedData,
         lamellae: Arc<Lamellae>,
@@ -73,6 +75,7 @@ pub(crate) trait AmeSchedulerQueue {
 }
 
 #[enum_dispatch(SchedulerQueue)]
+#[derive(Debug)]
 pub(crate) enum Scheduler {
     WorkStealing,
     NumaWorkStealing,

@@ -8,15 +8,7 @@ use async_trait::async_trait;
 
 const MAX_BATCH_SIZE: usize = 1_000_000;
 
-#[derive(Clone)]
-enum LamellarData {
-    Am(LamellarArcAm, AmId),
-    Return(LamellarArcAm, AmId),
-    Data(LamellarResultArc),
-    Unit,
-}
-
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct SimpleBatcherInner {
     batch: Arc<Mutex<Vec<(ReqMetaData, LamellarData, usize)>>>, //reqid,data,data size,team addr
     size: Arc<AtomicUsize>,
@@ -24,6 +16,7 @@ struct SimpleBatcherInner {
 }
 
 impl SimpleBatcherInner {
+    #[tracing::instrument(skip_all)]
     fn new(pe: Option<usize>) -> SimpleBatcherInner {
         SimpleBatcherInner {
             batch: Arc::new(Mutex::new(Vec::new())),
@@ -32,6 +25,7 @@ impl SimpleBatcherInner {
         }
     }
 
+    #[tracing::instrument(skip_all)]
     fn add(&self, req_data: ReqMetaData, data: LamellarData, size: usize) -> bool {
         // println!("adding to batch");
         //return true if this is the first am in the batch
@@ -42,6 +36,7 @@ impl SimpleBatcherInner {
         batch.len() == 1
     }
 
+    #[tracing::instrument(skip_all)]
     fn swap(&self) -> (Vec<(ReqMetaData, LamellarData, usize)>, usize) {
         let mut batch = self.batch.lock();
         let size = self.size.load(Ordering::Relaxed);
@@ -52,6 +47,7 @@ impl SimpleBatcherInner {
     }
 }
 
+#[derive(Debug)]
 pub(crate) struct SimpleBatcher {
     batched_ams: Arc<Vec<SimpleBatcherInner>>,
     stall_mark: Arc<AtomicUsize>,
@@ -59,13 +55,14 @@ pub(crate) struct SimpleBatcher {
 
 #[async_trait]
 impl Batcher for SimpleBatcher {
+    #[tracing::instrument(skip_all)]
     fn add_remote_am_to_batch(
         &self,
         req_data: ReqMetaData,
         am: LamellarArcAm,
         am_id: AmId,
         am_size: usize,
-        scheduler: &(impl SchedulerQueue + Sync),
+        scheduler: &(impl SchedulerQueue + Sync + std::fmt::Debug),
         stall_mark: usize,
     ) {
         let batch = match req_data.dst {
@@ -85,13 +82,14 @@ impl Batcher for SimpleBatcher {
         }
     }
 
+    #[tracing::instrument(skip_all)]
     fn add_return_am_to_batch(
         &self,
         req_data: ReqMetaData,
         am: LamellarArcAm,
         am_id: AmId,
         am_size: usize,
-        scheduler: &(impl SchedulerQueue + Sync),
+        scheduler: &(impl SchedulerQueue + Sync + std::fmt::Debug),
         stall_mark: usize,
     ) {
         let batch = match req_data.dst {
@@ -111,12 +109,13 @@ impl Batcher for SimpleBatcher {
         }
     }
 
+    #[tracing::instrument(skip_all)]
     fn add_data_am_to_batch(
         &self,
         req_data: ReqMetaData,
         data: LamellarResultArc,
         data_size: usize,
-        scheduler: &(impl SchedulerQueue + Sync),
+        scheduler: &(impl SchedulerQueue + Sync + std::fmt::Debug),
         stall_mark: usize,
     ) {
         let batch = match req_data.dst {
@@ -136,10 +135,11 @@ impl Batcher for SimpleBatcher {
         }
     }
 
+    #[tracing::instrument(skip_all)]
     fn add_unit_am_to_batch(
         &self,
         req_data: ReqMetaData,
-        scheduler: &(impl SchedulerQueue + Sync),
+        scheduler: &(impl SchedulerQueue + Sync + std::fmt::Debug),
         stall_mark: usize,
     ) {
         let batch = match req_data.dst {
@@ -155,12 +155,13 @@ impl Batcher for SimpleBatcher {
         }
     }
 
+    #[tracing::instrument(skip_all)]
     async fn exec_batched_msg(
         &self,
         msg: Msg,
         ser_data: SerializedData,
         lamellae: Arc<Lamellae>,
-        scheduler: &(impl SchedulerQueue + Sync),
+        scheduler: &(impl SchedulerQueue + Sync + std::fmt::Debug),
         ame: &RegisteredActiveMessages,
     ) {
         let data = ser_data.data_as_bytes();
@@ -184,6 +185,7 @@ impl Batcher for SimpleBatcher {
 }
 
 impl SimpleBatcher {
+    #[tracing::instrument(skip_all)]
     pub(crate) fn new(num_pes: usize, stall_mark: Arc<AtomicUsize>) -> SimpleBatcher {
         let mut batched_ams = Vec::new();
         for pe in 0..num_pes {
@@ -195,11 +197,13 @@ impl SimpleBatcher {
             stall_mark: stall_mark,
         }
     }
+
+    #[tracing::instrument(skip_all)]
     fn create_tx_task(
         &self,
         batch: SimpleBatcherInner,
         mut stall_mark: usize,
-        scheduler: &(impl SchedulerQueue + Sync),
+        scheduler: &(impl SchedulerQueue + Sync + std::fmt::Debug),
     ) {
         let cur_stall_mark = self.stall_mark.clone();
         scheduler.submit_task(async move {
@@ -269,6 +273,7 @@ impl SimpleBatcher {
         });
     }
 
+    #[tracing::instrument(skip_all)]
     fn serialize_am(
         req_data: ReqMetaData,
         am: LamellarArcAm,
@@ -305,6 +310,7 @@ impl SimpleBatcher {
         *i += am_size;
     }
 
+    #[tracing::instrument(skip_all)]
     fn serialize_data(
         req_data: ReqMetaData,
         data: LamellarResultArc,
@@ -330,6 +336,7 @@ impl SimpleBatcher {
         *i += data_size;
     }
 
+    #[tracing::instrument(skip_all)]
     fn serialize_unit(req_data: ReqMetaData, data_buf: &mut [u8], i: &mut usize) {
         crate::serialize_into(&mut data_buf[*i..*i + *CMD_LEN], &Cmd::Unit, false).unwrap();
         *i += *CMD_LEN;
@@ -346,6 +353,7 @@ impl SimpleBatcher {
         *i += *UNIT_HEADER_LEN;
     }
 
+    #[tracing::instrument(skip_all)]
     fn create_header(src: usize) -> SerializeHeader {
         let msg = Msg {
             src: src as u16,
@@ -354,6 +362,7 @@ impl SimpleBatcher {
         SerializeHeader { msg: msg }
     }
 
+    #[tracing::instrument(skip_all)]
     async fn create_data_buf(
         header: SerializeHeader,
         size: usize,
@@ -374,13 +383,14 @@ impl SimpleBatcher {
         data.unwrap()
     }
 
+    #[tracing::instrument(skip_all)]
     fn exec_am(
         &self,
         msg: &Msg,
         data: &[u8],
         i: &mut usize,
         lamellae: &Arc<Lamellae>,
-        scheduler: &(impl SchedulerQueue + Sync),
+        scheduler: &(impl SchedulerQueue + Sync + std::fmt::Debug),
         ame: &RegisteredActiveMessages,
     ) {
         let am_header: AmHeader =
@@ -423,13 +433,14 @@ impl SimpleBatcher {
         });
     }
 
+    #[tracing::instrument(skip_all)]
     fn exec_return_am(
         &self,
         msg: &Msg,
         data: &[u8],
         i: &mut usize,
         lamellae: &Arc<Lamellae>,
-        scheduler: &(impl SchedulerQueue + Sync),
+        scheduler: &(impl SchedulerQueue + Sync + std::fmt::Debug),
         ame: &RegisteredActiveMessages,
     ) {
         let am_header: AmHeader =

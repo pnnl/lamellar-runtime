@@ -17,6 +17,18 @@ pub struct GenericAtomicDistIter<T: Dist> {
     end_i: usize,
 }
 
+impl<T: Dist> std::fmt::Debug for GenericAtomicDistIter<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "GenericAtomicDistIter{{ data.len: {:?}, cur_i: {:?}, end_i: {:?} }}",
+            self.data.len(),
+            self.cur_i,
+            self.end_i
+        )
+    }
+}
+
 // impl<T: Dist> GenericAtomicDistIter<T> {
 //     pub(crate) fn new(data: GenericAtomicArray<T>, cur_i: usize, cnt: usize) -> Self {
 //         // println!("new dist iter {:?} {:? } {:?}",cur_i, cnt, cur_i+cnt);
@@ -146,7 +158,7 @@ impl<T: Dist> DistIteratorLauncher for GenericAtomicArray<T> {
     fn collect<I, A>(&self, iter: &I, d: Distribution) -> Pin<Box<dyn Future<Output = A> + Send>>
     where
         I: DistributedIterator + 'static,
-        I::Item: Dist,
+        I::Item: Dist + std::fmt::Debug,
         A: From<UnsafeArray<I::Item>> + AmLocal + 'static,
     {
         self.array.collect(iter, d)
@@ -158,7 +170,7 @@ impl<T: Dist> DistIteratorLauncher for GenericAtomicArray<T> {
     ) -> Pin<Box<dyn Future<Output = A> + Send>>
     where
         I: DistributedIterator + 'static,
-        I::Item: Future<Output = B> + Send + 'static,
+        I::Item: Future<Output = B> + Send + 'static + std::fmt::Debug,
         B: Dist,
         A: From<UnsafeArray<B>> + AmLocal + 'static,
     {

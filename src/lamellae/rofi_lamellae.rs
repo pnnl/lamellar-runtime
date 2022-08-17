@@ -67,6 +67,17 @@ pub(crate) struct Rofi {
     active: Arc<AtomicU8>,
     cq: Arc<CommandQueue>,
 }
+
+impl std::fmt::Debug for Rofi {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Rofi {{ my_pe: {}, num_pes: {},  active: {:?} }}",
+            self.my_pe, self.num_pes, self.active,
+        )
+    }
+}
+
 impl Rofi {
     fn new(my_pe: usize, num_pes: usize, rofi_comm: Arc<Comm>) -> Rofi {
         // println!("my_pe {:?} num_pes {:?}",my_pe,num_pes);

@@ -1,6 +1,6 @@
 use crate::array::iterator::distributed_iterator::*;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Chunks<I> {
     iter: I,
     cur_i: usize,

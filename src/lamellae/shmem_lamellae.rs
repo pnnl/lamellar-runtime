@@ -70,6 +70,16 @@ pub(crate) struct Shmem {
     cq: Arc<CommandQueue>,
 }
 
+impl std::fmt::Debug for Shmem {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Shmem {{ my_pe: {}, num_pes: {},  active: {:?} }}",
+            self.my_pe, self.num_pes, self.active,
+        )
+    }
+}
+
 impl Shmem {
     fn new(my_pe: usize, num_pes: usize, shmem_comm: Arc<Comm>) -> Shmem {
         // println!("my_pe {:?} num_pes {:?}",my_pe,num_pes);

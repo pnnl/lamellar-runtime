@@ -1,6 +1,6 @@
 use crate::array::iterator::distributed_iterator::*;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Map<I, F> {
     iter: I,
     f: F,

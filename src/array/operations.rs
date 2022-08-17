@@ -79,7 +79,7 @@ impl<T: Dist> ArrayOpCmd<T> {
     }
 }
 
-#[derive(serde::Serialize, Clone)]
+#[derive(serde::Serialize, Clone, Debug)]
 pub enum InputToValue<'a, T: Dist> {
     OneToOne(usize, T),
     OneToMany(usize, OpInputEnum<'a, T>),
@@ -87,7 +87,7 @@ pub enum InputToValue<'a, T: Dist> {
     ManyToMany(OpInputEnum<'a, usize>, OpInputEnum<'a, T>),
 }
 
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(serde::Serialize, serde::Deserialize, Debug)]
 #[serde(bound = "T: Dist + serde::Serialize + serde::de::DeserializeOwned")]
 pub enum OpAmInputToValue<T: Dist> {
     OneToOne(usize, T),
@@ -96,7 +96,7 @@ pub enum OpAmInputToValue<T: Dist> {
     ManyToMany(Vec<usize>, Vec<T>),
 }
 
-#[derive(Clone, serde::Serialize)]
+#[derive(Clone, serde::Serialize, Debug)]
 pub enum OpInputEnum<'a, T: Dist> {
     Val(T),
     Slice(&'a [T]),

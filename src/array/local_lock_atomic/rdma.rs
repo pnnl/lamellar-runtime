@@ -136,7 +136,7 @@ impl<T: Dist> LamellarArrayPut<T> for LocalLockAtomicArray<T> {
     }
 }
 
-#[lamellar_impl::AmLocalDataRT]
+#[lamellar_impl::AmLocalDataRT(Debug)]
 struct InitGetAm<T: Dist> {
     array: LocalLockAtomicArray<T>, //inner of the indices we need to place data into
     index: usize,                   //relative to inner
@@ -199,7 +199,7 @@ impl<T: Dist + 'static> LamellarAm for InitGetAm<T> {
     }
 }
 
-#[lamellar_impl::AmDataRT]
+#[lamellar_impl::AmDataRT(Debug)]
 struct LocalLockRemoteGetAm {
     array: LocalLockAtomicByteArray, //inner of the indices we need to place data into
     start_index: usize,
@@ -226,7 +226,7 @@ impl LamellarAm for LocalLockRemoteGetAm {
     }
 }
 
-#[lamellar_impl::AmLocalDataRT]
+#[lamellar_impl::AmLocalDataRT(Debug)]
 struct InitPutAm<T: Dist> {
     array: LocalLockAtomicArray<T>, //inner of the indices we need to place data into
     index: usize,                   //relative to inner
@@ -325,7 +325,7 @@ impl<T: Dist + 'static> LamellarAm for InitPutAm<T> {
     }
 }
 
-#[lamellar_impl::AmDataRT]
+#[lamellar_impl::AmDataRT(Debug)]
 struct LocalLockRemotePutAm {
     array: LocalLockAtomicByteArray, //inner of the indices we need to place data into
     start_index: usize,

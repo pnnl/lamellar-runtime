@@ -159,7 +159,7 @@ impl<T: Dist> LamellarArrayRequest for ArrayRdmaAtHandle<T> {
 }
 
 #[enum_dispatch(RegisteredMemoryRegion<T>, SubRegion<T>, MyFrom<T>,MemoryRegionRDMA<T>,AsBase)]
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum LamellarArrayInput<T: Dist> {
     LamellarMemRegion(LamellarMemoryRegion<T>),
     SharedMemRegion(SharedMemoryRegion<T>), //when used as input/output we are only using the local data

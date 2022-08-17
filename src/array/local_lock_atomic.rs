@@ -19,13 +19,13 @@ use parking_lot::{
 use std::any::TypeId;
 use std::ops::{Deref, DerefMut};
 
-#[lamellar_impl::AmDataRT(Clone)]
+#[lamellar_impl::AmDataRT(Clone, Debug)]
 pub struct LocalLockAtomicArray<T> {
     lock: LocalRwDarc<()>,
     pub(crate) array: UnsafeArray<T>,
 }
 
-#[lamellar_impl::AmDataRT(Clone)]
+#[lamellar_impl::AmDataRT(Clone, Debug)]
 pub struct LocalLockAtomicByteArray {
     lock: LocalRwDarc<()>,
     pub(crate) array: UnsafeByteArray,
@@ -40,7 +40,7 @@ impl LocalLockAtomicByteArray {
     }
 }
 
-#[lamellar_impl::AmLocalDataRT(Clone)]
+#[lamellar_impl::AmLocalDataRT(Clone, Debug)]
 pub struct LocalLockAtomicByteArrayWeak {
     lock: LocalRwDarc<()>,
     pub(crate) array: UnsafeByteArrayWeak,
@@ -55,6 +55,7 @@ impl LocalLockAtomicByteArrayWeak {
     }
 }
 
+#[derive(Debug)]
 pub struct LocalLockAtomicMutLocalData<'a, T: Dist> {
     data: &'a mut [T],
     _index: usize,
@@ -80,6 +81,7 @@ impl<T: Dist> DerefMut for LocalLockAtomicMutLocalData<'_, T> {
     }
 }
 
+#[derive(Debug)]
 pub struct LocalLockAtomicLocalData<'a, T: Dist> {
     pub(crate) data: &'a [T],
     index: usize,

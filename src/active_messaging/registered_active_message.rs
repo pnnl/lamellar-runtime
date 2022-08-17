@@ -5,7 +5,7 @@ use crate::lamellae::{
     Des, Lamellae, LamellaeAM, LamellaeRDMA, Ser, SerializeHeader, SerializedData, SubData,
 };
 
-use crate::scheduler::{AmeSchedulerQueue, SchedulerQueue};
+use crate::scheduler::SchedulerQueue;
 use async_recursion::async_recursion;
 #[cfg(feature = "enable-prof")]
 use lamellar_prof::*;
@@ -55,13 +55,13 @@ lazy_static! {
     };
 }
 
-// #[derive(Debug)]
 pub struct RegisteredAm {
     pub exec: UnpackFn,
     pub name: String,
 }
 crate::inventory::collect!(RegisteredAm);
 
+#[derive(Debug)]
 pub(crate) struct RegisteredActiveMessages {
     batcher: BatcherType,
 }
@@ -76,30 +76,31 @@ lazy_static! {
     pub(crate) static ref CMD_LEN: usize = crate::serialized_size::<Cmd>(&Cmd::Am, false);
 }
 
-#[derive(serde::Serialize, serde::Deserialize, Default)]
+#[derive(serde::Serialize, serde::Deserialize, Default, Debug)]
 pub(crate) struct AmHeader {
     pub(crate) am_id: AmId,
     pub(crate) team_addr: usize,
     pub(crate) req_id: ReqId,
 }
 
-#[derive(serde::Serialize, serde::Deserialize, Default)]
+#[derive(serde::Serialize, serde::Deserialize, Default, Debug)]
 pub(crate) struct DataHeader {
     pub(crate) size: usize,
     pub(crate) req_id: ReqId,
 }
 
-#[derive(serde::Serialize, serde::Deserialize, Default)]
+#[derive(serde::Serialize, serde::Deserialize, Default, Debug)]
 pub(crate) struct UnitHeader {
     pub(crate) req_id: ReqId,
 }
 
 #[async_trait]
 impl ActiveMessageEngine for RegisteredActiveMessages {
+    #[tracing::instrument(skip_all)]
     async fn process_msg(
         &self,
         am: Am,
-        scheduler: &(impl SchedulerQueue + Sync),
+        scheduler: &(impl SchedulerQueue + Sync + std::fmt::Debug + std::fmt::Debug),
         stall_mark: usize,
     ) {
         match am {
@@ -211,12 +212,13 @@ impl ActiveMessageEngine for RegisteredActiveMessages {
         }
     }
 
+    #[tracing::instrument(skip_all)]
     async fn exec_msg(
         &self,
         msg: Msg,
         ser_data: SerializedData,
         lamellae: Arc<Lamellae>,
-        scheduler: &(impl SchedulerQueue + Sync),
+        scheduler: &(impl SchedulerQueue + Sync + std::fmt::Debug),
     ) {
         let data = ser_data.data_as_bytes();
         let mut i = 0;
@@ -243,10 +245,12 @@ impl ActiveMessageEngine for RegisteredActiveMessages {
 }
 
 impl RegisteredActiveMessages {
+    #[tracing::instrument(skip_all)]
     pub(crate) fn new(batcher: BatcherType) -> RegisteredActiveMessages {
         RegisteredActiveMessages { batcher: batcher }
     }
 
+    #[tracing::instrument(skip_all)]
     async fn send_am(
         &self,
         req_data: ReqMetaData,
@@ -292,6 +296,7 @@ impl RegisteredActiveMessages {
             .await;
     }
 
+    #[tracing::instrument(skip_all)]
     async fn send_data_am(&self, req_data: ReqMetaData, data: LamellarResultArc, data_size: usize) {
         let header = self.create_header(&req_data, Cmd::Data);
         let data_buf = self
@@ -313,6 +318,7 @@ impl RegisteredActiveMessages {
             .await;
     }
 
+    #[tracing::instrument(skip_all)]
     async fn send_unit_am(&self, req_data: ReqMetaData) {
         let header = self.create_header(&req_data, Cmd::Unit);
         let data_buf = self
@@ -330,6 +336,7 @@ impl RegisteredActiveMessages {
             .await;
     }
 
+    #[tracing::instrument(skip_all)]
     fn create_header(&self, req_data: &ReqMetaData, cmd: Cmd) -> SerializeHeader {
         let msg = Msg {
             src: req_data.team.world_pe as u16,
@@ -338,6 +345,7 @@ impl RegisteredActiveMessages {
         SerializeHeader { msg: msg }
     }
 
+    #[tracing::instrument(skip_all)]
     async fn create_data_buf(
         &self,
         header: SerializeHeader,
@@ -360,6 +368,7 @@ impl RegisteredActiveMessages {
     }
 
     #[async_recursion]
+    #[tracing::instrument(skip_all)]
     pub(crate) async fn exec_local_am(
         &self,
         req_data: ReqMetaData,
@@ -400,13 +409,14 @@ impl RegisteredActiveMessages {
         }
     }
 
+    #[tracing::instrument(skip_all)]
     pub(crate) async fn exec_am(
         &self,
         msg: &Msg,
         data: &[u8],
         i: &mut usize,
         lamellae: &Arc<Lamellae>,
-        scheduler: &(impl SchedulerQueue + Sync),
+        scheduler: &(impl SchedulerQueue + Sync + std::fmt::Debug + std::fmt::Debug),
     ) {
         let am_header: AmHeader =
             crate::deserialize(&data[*i..*i + *AM_HEADER_LEN], false).unwrap();
@@ -449,6 +459,7 @@ impl RegisteredActiveMessages {
                                                   //TODO: compare against: scheduler.submit_am(ame, am).await;
     }
 
+    #[tracing::instrument(skip_all)]
     pub(crate) async fn exec_return_am(
         &self,
         msg: &Msg,
@@ -477,6 +488,7 @@ impl RegisteredActiveMessages {
             .await;
     }
 
+    #[tracing::instrument(skip_all)]
     pub(crate) async fn exec_data_am(
         &self,
         msg: &Msg,
@@ -496,6 +508,7 @@ impl RegisteredActiveMessages {
         );
     }
 
+    #[tracing::instrument(skip_all)]
     pub(crate) async fn exec_unit_am(&self, msg: &Msg, data: &[u8], i: &mut usize) {
         let unit_header: UnitHeader =
             crate::deserialize(&data[*i..*i + *UNIT_HEADER_LEN], false).unwrap();

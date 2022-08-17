@@ -634,13 +634,13 @@ impl<T: Dist + std::fmt::Debug> std::fmt::Debug for NativeAtomicElement<T> {
     }
 }
 
-#[lamellar_impl::AmDataRT(Clone)]
+#[lamellar_impl::AmDataRT(Clone, Debug)]
 pub struct NativeAtomicArray<T> {
     pub(crate) array: UnsafeArray<T>,
     pub(crate) orig_t: NativeAtomicType,
 }
 
-#[lamellar_impl::AmDataRT(Clone)]
+#[lamellar_impl::AmDataRT(Clone, Debug)]
 pub struct NativeAtomicByteArray {
     pub(crate) array: UnsafeByteArray,
     pub(crate) orig_t: NativeAtomicType,
@@ -654,7 +654,7 @@ impl NativeAtomicByteArray {
     }
 }
 
-#[lamellar_impl::AmLocalDataRT(Clone)]
+#[lamellar_impl::AmLocalDataRT(Clone, Debug)]
 pub struct NativeAtomicByteArrayWeak {
     pub(crate) array: UnsafeByteArrayWeak,
     pub(crate) orig_t: NativeAtomicType,
@@ -669,7 +669,7 @@ impl NativeAtomicByteArrayWeak {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct NativeAtomicLocalData<T> {
     // + NativeAtomicOps> {
     array: NativeAtomicArray<T>,
@@ -677,6 +677,7 @@ pub struct NativeAtomicLocalData<T> {
     end_index: usize,
 }
 
+#[derive(Debug)]
 pub struct NativeAtomicLocalDataIter<T: Dist> {
     //+ NativeAtomicOps> {
     array: NativeAtomicArray<T>,

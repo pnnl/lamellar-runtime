@@ -23,6 +23,7 @@ use std::thread;
 use thread_local::ThreadLocal;
 // use std::time::Instant;
 
+#[derive(Debug)]
 pub(crate) struct NumaWorkStealingThread {
     node_work_inj: Arc<crossbeam::deque::Injector<async_task::Runnable>>,
     sys_work_inj: Vec<Arc<crossbeam::deque::Injector<async_task::Runnable>>>,
@@ -130,6 +131,7 @@ create a work injector and stealer for each numa node,
 additionally create a threadlocal counter that each thread will use to index
 into the to appropriate work injector when submitting work
 */
+#[derive(Debug)]
 pub(crate) struct NumaWorkStealingInner {
     threads: Vec<thread::JoinHandle<()>>,
     work_inj: Vec<Arc<crossbeam::deque::Injector<async_task::Runnable>>>,
@@ -147,7 +149,7 @@ impl AmeSchedulerQueue for NumaWorkStealingInner {
     fn submit_am(
         //unserialized request
         &self,
-        scheduler: &(impl SchedulerQueue + Sync),
+        scheduler: &(impl SchedulerQueue + Sync + std::fmt::Debug),
         ame: Arc<ActiveMessageEngineType>,
         am: Am,
     ) {
@@ -177,7 +179,7 @@ impl AmeSchedulerQueue for NumaWorkStealingInner {
     //this is a serialized request
     fn submit_work(
         &self,
-        scheduler: &(impl SchedulerQueue + Sync),
+        scheduler: &(impl SchedulerQueue + Sync + std::fmt::Debug),
         ame: Arc<ActiveMessageEngineType>,
         data: SerializedData,
         lamellae: Arc<Lamellae>,
@@ -504,6 +506,7 @@ impl NumaWorkStealingInner {
     }
 }
 
+#[derive(Debug)]
 pub(crate) struct NumaWorkStealing {
     inner: Arc<AmeScheduler>,
     ame: Arc<ActiveMessageEngineType>,

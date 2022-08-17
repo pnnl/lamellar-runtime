@@ -9,6 +9,14 @@ use team_am_batcher::TeamAmBatcher;
 
 use async_trait::async_trait;
 
+#[derive(Clone, Debug)]
+enum LamellarData {
+    Am(LamellarArcAm, AmId),
+    Return(LamellarArcAm, AmId),
+    Data(LamellarResultArc),
+    Unit,
+}
+
 #[async_trait]
 pub(crate) trait Batcher {
     fn add_remote_am_to_batch(
@@ -17,7 +25,7 @@ pub(crate) trait Batcher {
         am: LamellarArcAm,
         am_id: AmId,
         am_size: usize,
-        scheduler: &(impl SchedulerQueue + Sync),
+        scheduler: &(impl SchedulerQueue + Sync + std::fmt::Debug),
         stall_mark: usize,
     );
     fn add_return_am_to_batch(
@@ -26,7 +34,7 @@ pub(crate) trait Batcher {
         am: LamellarArcAm,
         am_id: AmId,
         am_size: usize,
-        scheduler: &(impl SchedulerQueue + Sync),
+        scheduler: &(impl SchedulerQueue + Sync + std::fmt::Debug),
         stall_mark: usize,
     );
     fn add_data_am_to_batch(
@@ -34,13 +42,13 @@ pub(crate) trait Batcher {
         req_data: ReqMetaData,
         data: LamellarResultArc,
         data_size: usize,
-        scheduler: &(impl SchedulerQueue + Sync),
+        scheduler: &(impl SchedulerQueue + Sync + std::fmt::Debug),
         stall_mark: usize,
     );
     fn add_unit_am_to_batch(
         &self,
         req_data: ReqMetaData,
-        scheduler: &(impl SchedulerQueue + Sync),
+        scheduler: &(impl SchedulerQueue + Sync + std::fmt::Debug),
         stall_mark: usize,
     );
 
@@ -49,11 +57,12 @@ pub(crate) trait Batcher {
         msg: Msg,
         ser_data: SerializedData,
         lamellae: Arc<Lamellae>,
-        scheduler: &(impl SchedulerQueue + Sync),
+        scheduler: &(impl SchedulerQueue + Sync + std::fmt::Debug),
         ame: &RegisteredActiveMessages,
     );
 }
 
+#[derive(Debug)]
 pub(crate) enum BatcherType {
     Simple(SimpleBatcher),
     TeamAm(TeamAmBatcher),
@@ -61,13 +70,14 @@ pub(crate) enum BatcherType {
 
 #[async_trait]
 impl Batcher for BatcherType {
+    #[tracing::instrument(skip_all)]
     fn add_remote_am_to_batch(
         &self,
         req_data: ReqMetaData,
         am: LamellarArcAm,
         am_id: AmId,
         am_size: usize,
-        scheduler: &(impl SchedulerQueue + Sync),
+        scheduler: &(impl SchedulerQueue + Sync + std::fmt::Debug),
         stall_mark: usize,
     ) {
         match self {
@@ -79,13 +89,14 @@ impl Batcher for BatcherType {
             }
         }
     }
+    #[tracing::instrument(skip_all)]
     fn add_return_am_to_batch(
         &self,
         req_data: ReqMetaData,
         am: LamellarArcAm,
         am_id: AmId,
         am_size: usize,
-        scheduler: &(impl SchedulerQueue + Sync),
+        scheduler: &(impl SchedulerQueue + Sync + std::fmt::Debug),
         stall_mark: usize,
     ) {
         match self {
@@ -97,12 +108,13 @@ impl Batcher for BatcherType {
             }
         }
     }
+    #[tracing::instrument(skip_all)]
     fn add_data_am_to_batch(
         &self,
         req_data: ReqMetaData,
         data: LamellarResultArc,
         data_size: usize,
-        scheduler: &(impl SchedulerQueue + Sync),
+        scheduler: &(impl SchedulerQueue + Sync + std::fmt::Debug),
         stall_mark: usize,
     ) {
         match self {
@@ -114,10 +126,11 @@ impl Batcher for BatcherType {
             }
         }
     }
+    #[tracing::instrument(skip_all)]
     fn add_unit_am_to_batch(
         &self,
         req_data: ReqMetaData,
-        scheduler: &(impl SchedulerQueue + Sync),
+        scheduler: &(impl SchedulerQueue + Sync + std::fmt::Debug),
         stall_mark: usize,
     ) {
         match self {
@@ -129,13 +142,13 @@ impl Batcher for BatcherType {
             }
         }
     }
-
+    #[tracing::instrument(skip_all)]
     async fn exec_batched_msg(
         &self,
         msg: Msg,
         ser_data: SerializedData,
         lamellae: Arc<Lamellae>,
-        scheduler: &(impl SchedulerQueue + Sync),
+        scheduler: &(impl SchedulerQueue + Sync + std::fmt::Debug),
         ame: &RegisteredActiveMessages,
     ) {
         match self {

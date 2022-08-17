@@ -62,7 +62,7 @@ fn create_reduction(
 
         array_impls.extend(quote! {
             #[allow(non_camel_case_types)]
-            #[#am_data(Clone)]
+            #[#am_data(Clone,Debug)]
             struct #reduction_name{
                 data: #lamellar::array::#array_type<#typeident>,
                 start_pe: usize,

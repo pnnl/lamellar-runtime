@@ -152,7 +152,7 @@ impl<T: Dist> DistIteratorLauncher for UnsafeArray<T> {
     fn collect<I, A>(&self, iter: &I, d: Distribution) -> Pin<Box<dyn Future<Output = A> + Send>>
     where
         I: DistributedIterator + 'static,
-        I::Item: Dist,
+        I::Item: Dist + std::fmt::Debug,
         A: From<UnsafeArray<I::Item>> + AmLocal + 'static,
     {
         let mut reqs = Vec::new();
@@ -193,7 +193,7 @@ impl<T: Dist> DistIteratorLauncher for UnsafeArray<T> {
     ) -> Pin<Box<dyn Future<Output = A> + Send>>
     where
         I: DistributedIterator + 'static,
-        I::Item: Future<Output = B> + Send + 'static,
+        I::Item: Future<Output = B> + Send + 'static + std::fmt::Debug,
         B: Dist,
         A: From<UnsafeArray<B>> + AmLocal + 'static,
     {

@@ -55,6 +55,7 @@ pub(crate) trait Remote: Copy {}
 impl<T: Copy> Remote for T {}
 
 #[enum_dispatch(CommOps)]
+#[derive(Debug)]
 pub(crate) enum Comm {
     #[cfg(feature = "enable-rofi")]
     Rofi(RofiComm),

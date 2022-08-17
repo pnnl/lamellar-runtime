@@ -40,6 +40,16 @@ pub(crate) struct UnsafeArrayData {
     req_cnt: Arc<AtomicUsize>,
 }
 
+impl std::fmt::Debug for UnsafeArrayData {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "UnsafeArrayData{{ mem_region: {:?}, array_counters: {:?}, team: {:?}, task_group: {:?}, my_pe: {:?}, num_pes: {:?} req_cnt: {:?} }}",
+            self.mem_region, self.array_counters, self.team, self.task_group, self.my_pe, self.num_pes, self.req_cnt
+        )
+    }
+}
+
 // impl Drop for UnsafeArrayData {
 //     fn drop(&mut self) {
 //         // println!("unsafe array data dropping1");
@@ -48,13 +58,13 @@ pub(crate) struct UnsafeArrayData {
 // }
 
 //need to calculate num_elems_local dynamically
-#[lamellar_impl::AmDataRT(Clone)]
+#[lamellar_impl::AmDataRT(Clone, Debug)]
 pub struct UnsafeArray<T> {
     pub(crate) inner: UnsafeArrayInner,
     phantom: PhantomData<T>,
 }
 
-#[lamellar_impl::AmDataRT(Clone)]
+#[lamellar_impl::AmDataRT(Clone, Debug)]
 pub struct UnsafeByteArray {
     pub(crate) inner: UnsafeArrayInner,
 }
@@ -67,7 +77,7 @@ impl UnsafeByteArray {
     }
 }
 
-#[lamellar_impl::AmLocalDataRT(Clone)]
+#[lamellar_impl::AmLocalDataRT(Clone, Debug)]
 pub struct UnsafeByteArrayWeak {
     pub(crate) inner: UnsafeArrayInnerWeak,
 }
@@ -82,7 +92,7 @@ impl UnsafeByteArrayWeak {
     }
 }
 
-#[lamellar_impl::AmDataRT(Clone)]
+#[lamellar_impl::AmDataRT(Clone, Debug)]
 pub(crate) struct UnsafeArrayInner {
     pub(crate) data: Darc<UnsafeArrayData>,
     pub(crate) distribution: Distribution,
@@ -93,7 +103,7 @@ pub(crate) struct UnsafeArrayInner {
     size: usize,      //relative to size of T
 }
 
-#[lamellar_impl::AmLocalDataRT(Clone)]
+#[lamellar_impl::AmLocalDataRT(Clone, Debug)]
 pub(crate) struct UnsafeArrayInnerWeak {
     pub(crate) data: WeakDarc<UnsafeArrayData>,
     pub(crate) distribution: Distribution,

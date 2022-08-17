@@ -16,6 +16,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+#[derive(Debug)]
 pub(crate) struct TaskGroupRequestHandleInner {
     cnt: Arc<AtomicUsize>,
     data: Mutex<HashMap<usize, InternalResult>>, //<sub_id, result>
@@ -24,6 +25,7 @@ pub(crate) struct TaskGroupRequestHandleInner {
     tg_outstanding_reqs: Option<Arc<AtomicUsize>>,
 }
 
+#[derive(Debug)]
 pub struct TaskGroupRequestHandle<T: AmDist> {
     inner: Arc<TaskGroupRequestHandleInner>,
     sub_id: usize,
@@ -103,6 +105,7 @@ impl<T: AmDist> LamellarRequest for TaskGroupRequestHandle<T> {
     }
 }
 
+#[derive(Debug)]
 pub(crate) struct TaskGroupMultiRequestHandleInner {
     cnt: Arc<AtomicUsize>,
     arch: Arc<LamellarArchRT>,
@@ -112,6 +115,7 @@ pub(crate) struct TaskGroupMultiRequestHandleInner {
     tg_outstanding_reqs: Option<Arc<AtomicUsize>>,
 }
 
+#[derive(Debug)]
 pub struct TaskGroupMultiRequestHandle<T: AmDist> {
     inner: Arc<TaskGroupMultiRequestHandleInner>,
     sub_id: usize,
@@ -207,6 +211,7 @@ impl<T: AmDist> LamellarMultiRequest for TaskGroupMultiRequestHandle<T> {
     }
 }
 
+#[derive(Debug)]
 pub(crate) struct TaskGroupLocalRequestHandleInner {
     cnt: Arc<AtomicUsize>,
     data: Mutex<HashMap<usize, LamellarAny>>, //<sub_id, result>
@@ -215,6 +220,7 @@ pub(crate) struct TaskGroupLocalRequestHandleInner {
     tg_outstanding_reqs: Option<Arc<AtomicUsize>>,
 }
 
+#[derive(Debug)]
 pub struct TaskGroupLocalRequestHandle<T> {
     inner: Arc<TaskGroupLocalRequestHandleInner>,
     sub_id: usize,
@@ -279,6 +285,7 @@ impl<T: AmLocal + 'static> LamellarRequest for TaskGroupLocalRequestHandle<T> {
     }
 }
 
+#[derive(Debug)]
 pub struct LamellarTaskGroup {
     team: Pin<Arc<LamellarTeamRT>>,
     id: usize, //for exec_pe requests -- is actually the pointer to the rt_req (but *const are not sync so we use usize)

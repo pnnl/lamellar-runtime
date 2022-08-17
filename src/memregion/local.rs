@@ -15,6 +15,7 @@ use std::ops::Bound;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
+use tracing::*;
 // use serde::ser::{Serialize, Serializer, SerializeStruct};
 
 lazy_static! {
@@ -248,7 +249,7 @@ impl LamellarAM for MemRegionFinishedAm {
     }
 }
 
-#[lamellar_impl::AmLocalDataRT]
+#[lamellar_impl::AmLocalDataRT(Debug)]
 struct MemRegionDropWaitAm {
     inner: Arc<MemRegionHandleInner>,
 }

@@ -18,6 +18,13 @@ struct MyShmem {
     len: usize,
     _shmem: Shmem,
 }
+
+impl std::fmt::Debug for MyShmem {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "MyShmem{{ data: {:?}, len: {:?} }}", self.data, self.len)
+    }
+}
+
 unsafe impl Sync for MyShmem {}
 unsafe impl Send for MyShmem {}
 
@@ -121,6 +128,7 @@ fn attach_to_shmem(size: usize, id: &str, header: usize, create: bool) -> MyShme
     }
 }
 
+#[derive(Debug)]
 struct ShmemAlloc {
     _shmem: MyShmem,
     mutex: *mut AtomicUsize,
@@ -256,6 +264,7 @@ impl ShmemAlloc {
     }
 }
 
+#[derive(Debug)]
 pub(crate) struct ShmemComm {
     // _shmem: MyShmem, //the global handle
     pub(crate) base_address: Arc<RwLock<usize>>, //start address of my segment
@@ -576,6 +585,7 @@ impl Drop for ShmemComm {
     }
 }
 
+#[derive(Debug)]
 pub(crate) struct ShmemData {
     pub(crate) addr: usize,          // process space address
     pub(crate) relative_addr: usize, //address allocated from shmem

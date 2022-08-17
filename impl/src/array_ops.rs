@@ -517,7 +517,7 @@ fn create_buf_ops(
             results_offset: RwLock<Arc<AtomicUsize>>,
             results:  RwLock<PeOpResults>,
         }
-        #[#am_data]
+        #[#am_data(Debug)]
         struct #am_buf_name{
             // wait: Darc<AtomicUsize>,
             data: #lamellar::array::#array_type<#typeident>,
