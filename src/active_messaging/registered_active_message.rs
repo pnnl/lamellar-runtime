@@ -2,7 +2,7 @@ use crate::active_messaging::batching::{Batcher, BatcherType};
 use crate::active_messaging::*;
 use crate::lamellae::comm::AllocError;
 use crate::lamellae::{
-    Des, Lamellae, LamellaeAM, LamellaeRDMA, Ser, SerializeHeader, SerializedData, SubData,
+    Des, Lamellae, LamellaeAM, LamellaeRDMA, Ser, SerializeHeader, SerializedData, SubData, Backend,LamellaeComm
 };
 
 use crate::scheduler::SchedulerQueue;
@@ -96,7 +96,7 @@ pub(crate) struct UnitHeader {
 
 #[async_trait]
 impl ActiveMessageEngine for RegisteredActiveMessages {
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     async fn process_msg(
         &self,
         am: Am,
@@ -116,7 +116,7 @@ impl ActiveMessageEngine for RegisteredActiveMessages {
                         scheduler,
                         stall_mark,
                     );
-                } else {
+                } else if req_data.team.lamellae.backend() != Backend::Local{
                     self.send_am(req_data.clone(), am.clone(), am_id, am_size, Cmd::Am)
                         .await;
                 }
@@ -212,7 +212,7 @@ impl ActiveMessageEngine for RegisteredActiveMessages {
         }
     }
 
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     async fn exec_msg(
         &self,
         msg: Msg,
@@ -245,12 +245,12 @@ impl ActiveMessageEngine for RegisteredActiveMessages {
 }
 
 impl RegisteredActiveMessages {
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     pub(crate) fn new(batcher: BatcherType) -> RegisteredActiveMessages {
         RegisteredActiveMessages { batcher: batcher }
     }
 
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     async fn send_am(
         &self,
         req_data: ReqMetaData,
@@ -296,7 +296,7 @@ impl RegisteredActiveMessages {
             .await;
     }
 
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     async fn send_data_am(&self, req_data: ReqMetaData, data: LamellarResultArc, data_size: usize) {
         let header = self.create_header(&req_data, Cmd::Data);
         let data_buf = self
@@ -318,7 +318,7 @@ impl RegisteredActiveMessages {
             .await;
     }
 
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     async fn send_unit_am(&self, req_data: ReqMetaData) {
         let header = self.create_header(&req_data, Cmd::Unit);
         let data_buf = self
@@ -336,7 +336,7 @@ impl RegisteredActiveMessages {
             .await;
     }
 
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn create_header(&self, req_data: &ReqMetaData, cmd: Cmd) -> SerializeHeader {
         let msg = Msg {
             src: req_data.team.world_pe as u16,
@@ -345,7 +345,7 @@ impl RegisteredActiveMessages {
         SerializeHeader { msg: msg }
     }
 
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     async fn create_data_buf(
         &self,
         header: SerializeHeader,
@@ -368,7 +368,7 @@ impl RegisteredActiveMessages {
     }
 
     #[async_recursion]
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     pub(crate) async fn exec_local_am(
         &self,
         req_data: ReqMetaData,
@@ -409,7 +409,7 @@ impl RegisteredActiveMessages {
         }
     }
 
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     pub(crate) async fn exec_am(
         &self,
         msg: &Msg,
@@ -459,7 +459,7 @@ impl RegisteredActiveMessages {
                                                   //TODO: compare against: scheduler.submit_am(ame, am).await;
     }
 
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     pub(crate) async fn exec_return_am(
         &self,
         msg: &Msg,
@@ -488,7 +488,7 @@ impl RegisteredActiveMessages {
             .await;
     }
 
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     pub(crate) async fn exec_data_am(
         &self,
         msg: &Msg,
@@ -508,7 +508,7 @@ impl RegisteredActiveMessages {
         );
     }
 
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     pub(crate) async fn exec_unit_am(&self, msg: &Msg, data: &[u8], i: &mut usize) {
         let unit_header: UnitHeader =
             crate::deserialize(&data[*i..*i + *UNIT_HEADER_LEN], false).unwrap();

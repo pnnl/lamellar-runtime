@@ -34,7 +34,7 @@ pub(crate) struct WorkStealingThread {
 
 //#[prof]
 impl WorkStealingThread {
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn run(
         worker: WorkStealingThread,
         active_cnt: Arc<AtomicUsize>,
@@ -137,7 +137,7 @@ pub(crate) struct WorkStealingInner {
 }
 
 impl AmeSchedulerQueue for WorkStealingInner {
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn submit_am(
         //unserialized request
         &self,
@@ -166,7 +166,7 @@ impl AmeSchedulerQueue for WorkStealingInner {
     }
 
     //this is a serialized request
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn submit_work(
         &self,
         scheduler: &(impl SchedulerQueue + Sync + std::fmt::Debug),
@@ -244,7 +244,7 @@ impl AmeSchedulerQueue for WorkStealingInner {
         })
     }
 
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn shutdown(&self) {
         // println!("work stealing shuting down {:?}", self.active());
         self.active.store(false, Ordering::SeqCst);
@@ -263,7 +263,7 @@ impl AmeSchedulerQueue for WorkStealingInner {
         // );
     }
 
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn exec_task(&self) {
         let mut rng = rand::thread_rng();
         let t = rand::distributions::Uniform::from(0..self.work_stealers.len());
@@ -283,7 +283,7 @@ impl AmeSchedulerQueue for WorkStealingInner {
         }
     }
 
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn active(&self) -> bool {
         // println!("sched active {:?} {:?}",self.active.load(Ordering::SeqCst) , self.num_tasks.load(Ordering::SeqCst));
         self.active.load(Ordering::SeqCst) || self.num_tasks.load(Ordering::SeqCst) > 2
@@ -342,7 +342,7 @@ impl SchedulerQueue for WorkStealing {
 
 //#[prof]
 impl WorkStealingInner {
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     pub(crate) fn new(stall_mark: Arc<AtomicUsize>) -> WorkStealingInner {
         // println!("new work stealing queue");
 
@@ -360,7 +360,7 @@ impl WorkStealingInner {
         sched
     }
 
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn init(&mut self) {
         let mut work_workers: std::vec::Vec<crossbeam::deque::Worker<async_task::Runnable>> =
             vec![];
@@ -412,7 +412,7 @@ pub(crate) struct WorkStealing {
     ame: Arc<ActiveMessageEngineType>,
 }
 impl WorkStealing {
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     pub(crate) fn new(
         num_pes: usize,
         // my_pe: usize,
@@ -449,7 +449,7 @@ impl WorkStealing {
 //#[prof]
 impl Drop for WorkStealingInner {
     //when is this called with respect to world?
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn drop(&mut self) {
         // println!("dropping work stealing");
         while let Some(thread) = self.threads.pop() {

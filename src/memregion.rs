@@ -46,7 +46,7 @@ pub enum LamellarMemoryRegion<T: Dist> {
 }
 
 impl<T: Dist + serde::Serialize> LamellarMemoryRegion<T> {
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     pub(crate) fn serialize_local_data<S>(
         mr: &LamellarMemoryRegion<T>,
         s: S,
@@ -63,7 +63,7 @@ impl<T: Dist + serde::Serialize> LamellarMemoryRegion<T> {
 }
 
 impl<T: Dist> crate::DarcSerde for LamellarMemoryRegion<T> {
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn ser(&self, num_pes: usize) {
         // println!("in shared ser");
         match self {
@@ -72,7 +72,7 @@ impl<T: Dist> crate::DarcSerde for LamellarMemoryRegion<T> {
             // LamellarMemoryRegion::Unsafe(mr) => mr.ser(num_pes),
         }
     }
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn des(&self, cur_pe: Result<usize, crate::IdError>) {
         // println!("in shared des");
         match self {
@@ -85,7 +85,7 @@ impl<T: Dist> crate::DarcSerde for LamellarMemoryRegion<T> {
 }
 
 impl<T: Dist> LamellarMemoryRegion<T> {
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     pub unsafe fn as_mut_slice(&self) -> MemResult<&mut [T]> {
         match self {
             LamellarMemoryRegion::Shared(memregion) => memregion.as_mut_slice(),
@@ -94,7 +94,7 @@ impl<T: Dist> LamellarMemoryRegion<T> {
         }
     }
 
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     pub unsafe fn as_slice(&self) -> MemResult<&[T]> {
         match self {
             LamellarMemoryRegion::Shared(memregion) => memregion.as_slice(),
@@ -103,7 +103,7 @@ impl<T: Dist> LamellarMemoryRegion<T> {
         }
     }
 
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     pub fn sub_region<R: std::ops::RangeBounds<usize>>(&self, range: R) -> LamellarMemoryRegion<T> {
         match self {
             LamellarMemoryRegion::Shared(memregion) => memregion.sub_region(range).into(),
@@ -114,7 +114,7 @@ impl<T: Dist> LamellarMemoryRegion<T> {
 }
 
 impl<T: Dist> From<&LamellarMemoryRegion<T>> for LamellarArrayInput<T> {
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn from(mr: &LamellarMemoryRegion<T>) -> Self {
         LamellarArrayInput::LamellarMemRegion(mr.clone())
         // match mr.clone(){
@@ -125,7 +125,7 @@ impl<T: Dist> From<&LamellarMemoryRegion<T>> for LamellarArrayInput<T> {
 }
 
 impl<T: Dist> MyFrom<&LamellarMemoryRegion<T>> for LamellarArrayInput<T> {
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn my_from(mr: &LamellarMemoryRegion<T>, _team: &std::pin::Pin<Arc<LamellarTeamRT>>) -> Self {
         LamellarArrayInput::LamellarMemRegion(mr.clone())
         // match mr.clone(){
@@ -142,7 +142,7 @@ impl<T: Dist> MyFrom<&LamellarMemoryRegion<T>> for LamellarArrayInput<T> {
 // }
 
 impl<T: Dist> MyFrom<LamellarMemoryRegion<T>> for LamellarArrayInput<T> {
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn my_from(mr: LamellarMemoryRegion<T>, _team: &std::pin::Pin<Arc<LamellarTeamRT>>) -> Self {
         LamellarArrayInput::LamellarMemRegion(mr)
         // match mr{
@@ -204,7 +204,7 @@ pub(crate) trait RTMemoryRegionRDMA<T: Dist> {
 
 //#[prof]
 impl<T: Dist> Hash for LamellarMemoryRegion<T> {
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.id().hash(state);
     }
@@ -212,7 +212,7 @@ impl<T: Dist> Hash for LamellarMemoryRegion<T> {
 
 //#[prof]
 impl<T: Dist> PartialEq for LamellarMemoryRegion<T> {
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn eq(&self, other: &LamellarMemoryRegion<T>) -> bool {
         self.id() == other.id()
     }
@@ -250,7 +250,7 @@ pub(crate) struct MemoryRegion<T: Dist> {
 }
 
 impl<T: Dist> MemoryRegion<T> {
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     pub(crate) fn new(
         size: usize, //number of elements of type T
         lamellae: Arc<Lamellae>,
@@ -263,7 +263,7 @@ impl<T: Dist> MemoryRegion<T> {
             panic!("out of memory")
         }
     }
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     pub(crate) fn try_new(
         size: usize, //number of elements of type T
         lamellae: Arc<Lamellae>,
@@ -298,7 +298,7 @@ impl<T: Dist> MemoryRegion<T> {
         // );
         Ok(temp)
     }
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     pub(crate) fn from_remote_addr(
         addr: usize,
         pe: usize,
@@ -318,7 +318,7 @@ impl<T: Dist> MemoryRegion<T> {
     }
 
     #[allow(dead_code)]
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     pub(crate) unsafe fn to_base<B: Dist>(self) -> MemoryRegion<B> {
         //this is allowed as we consume the old object..
         assert_eq!(
@@ -351,7 +351,7 @@ impl<T: Dist> MemoryRegion<T> {
     /// * `data` - address (which is "registered" with network device) of local input buffer that will be put into the remote memory
     /// the data buffer may not be safe to upon return from this call, currently the user is responsible for completion detection,
     /// or you may use the similar iput call (with a potential performance penalty);
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     pub(crate) unsafe fn put<R: Dist, U: Into<LamellarMemoryRegion<R>>>(
         &self,
         pe: usize,
@@ -395,7 +395,7 @@ impl<T: Dist> MemoryRegion<T> {
     /// * `index` - offset into the remote memory window
     /// * `data` - address (which is "registered" with network device) of local input buffer that will be put into the remote memory
     /// the data buffer is free to be reused upon return of this function.
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     pub(crate) fn iput<R: Dist, U: Into<LamellarMemoryRegion<R>>>(
         &self,
         pe: usize,
@@ -419,7 +419,7 @@ impl<T: Dist> MemoryRegion<T> {
         }
     }
 
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     pub(crate) unsafe fn put_all<R: Dist, U: Into<LamellarMemoryRegion<R>>>(
         &self,
         index: usize,
@@ -450,7 +450,7 @@ impl<T: Dist> MemoryRegion<T> {
     /// * `pe` - id of remote PE to grab data from
     /// * `index` - offset into the remote memory window
     /// * `data` - address (which is "registered" with network device) of destination buffer to store result of the get
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     pub(crate) unsafe fn get_unchecked<R: Dist, U: Into<LamellarMemoryRegion<R>>>(
         &self,
         pe: usize,
@@ -484,7 +484,7 @@ impl<T: Dist> MemoryRegion<T> {
     /// * `index` - offset into the remote memory window
     /// * `data` - address (which is "registered" with network device) of destination buffer to store result of the get
     ///    data will be present within the buffer once this returns.
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     pub(crate) fn iget<R: Dist, U: Into<LamellarMemoryRegion<R>>>(
         &self,
         pe: usize,
@@ -511,7 +511,7 @@ impl<T: Dist> MemoryRegion<T> {
     }
 
     //we must ensure the the slice will live long enough and that it already exsists in registered memory
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     pub(crate) unsafe fn put_slice<R: Dist>(&self, pe: usize, index: usize, data: &[R]) {
         //todo make return a result?
         if (index + data.len()) * std::mem::size_of::<R>() <= self.num_bytes {
@@ -548,7 +548,7 @@ impl<T: Dist> MemoryRegion<T> {
     /// * `index` - offset into the remote memory window
     /// * `data` - address (which is "registered" with network device) of destination buffer to store result of the get
     ///    data will be present within the buffer once this returns.
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     pub(crate) fn iget_slice<R: Dist>(&self, pe: usize, index: usize, data: &mut [R]) {
         // let data = data.into();
         if (index + data.len()) * std::mem::size_of::<R>() <= self.num_bytes {
@@ -568,7 +568,7 @@ impl<T: Dist> MemoryRegion<T> {
     }
 
     #[allow(dead_code)]
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     pub(crate) unsafe fn fill_from_remote_addr<R: Dist>(
         &self,
         my_index: usize,
@@ -592,17 +592,17 @@ impl<T: Dist> MemoryRegion<T> {
     }
 
     #[allow(dead_code)]
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     pub(crate) fn len(&self) -> usize {
         self.size
     }
 
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     pub(crate) fn addr(&self) -> MemResult<usize> {
         Ok(self.addr)
     }
 
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     pub(crate) fn casted_at<R: Dist>(&self, index: usize) -> MemResult<&R> {
         if self.addr != 0 {
             let num_bytes = self.size * std::mem::size_of::<T>();
@@ -622,7 +622,7 @@ impl<T: Dist> MemoryRegion<T> {
         }
     }
 
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     pub(crate) fn as_slice(&self) -> MemResult<&[T]> {
         if self.addr != 0 {
             Ok(unsafe { std::slice::from_raw_parts(self.addr as *const T, self.size) })
@@ -630,7 +630,7 @@ impl<T: Dist> MemoryRegion<T> {
             Ok(&[])
         }
     }
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     pub(crate) fn as_casted_slice<R: Dist>(&self) -> MemResult<&[R]> {
         if self.addr != 0 {
             let num_bytes = self.size * std::mem::size_of::<T>();
@@ -649,7 +649,7 @@ impl<T: Dist> MemoryRegion<T> {
             Ok(&[])
         }
     }
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     pub(crate) unsafe fn as_mut_slice(&self) -> MemResult<&mut [T]> {
         if self.addr != 0 {
             Ok(std::slice::from_raw_parts_mut(
@@ -660,7 +660,7 @@ impl<T: Dist> MemoryRegion<T> {
             Ok(&mut [])
         }
     }
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     pub(crate) unsafe fn as_casted_mut_slice<R: Dist>(&self) -> MemResult<&mut [R]> {
         if self.addr != 0 {
             let num_bytes = self.size * std::mem::size_of::<T>();
@@ -678,29 +678,29 @@ impl<T: Dist> MemoryRegion<T> {
         }
     }
     #[allow(dead_code)]
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     pub(crate) fn as_ptr(&self) -> MemResult<*const T> {
         Ok(self.addr as *const T)
     }
     #[allow(dead_code)]
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     pub(crate) fn as_casted_ptr<R: Dist>(&self) -> MemResult<*const R> {
         Ok(self.addr as *const R)
     }
     #[allow(dead_code)]
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     pub(crate) fn as_mut_ptr(&self) -> MemResult<*mut T> {
         Ok(self.addr as *mut T)
     }
     #[allow(dead_code)]
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     pub(crate) fn as_casted_mut_ptr<R: Dist>(&self) -> MemResult<*mut R> {
         Ok(self.addr as *mut R)
     }
 }
 
 impl<T: Dist> MemRegionId for MemoryRegion<T> {
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn id(&self) -> usize {
         self.addr //probably should be key
     }
@@ -745,7 +745,7 @@ pub trait RemoteMemoryRegion {
 }
 
 impl<T: Dist> Drop for MemoryRegion<T> {
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn drop(&mut self) {
         // println!("trying to dropping mem region {:?}",self);
         if self.addr != 0 {

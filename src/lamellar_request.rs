@@ -48,7 +48,7 @@ impl std::fmt::Debug for LamellarRequestResult {
 }
 
 impl LamellarRequestResult {
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     pub(crate) fn add_result(&self, pe: usize, sub_id: usize, data: InternalResult) {
         if self.req.user_held() {
             //if the user has dropped the handle, no need to actually do anything with the returned data
@@ -81,24 +81,24 @@ pub struct LamellarRequestHandle<T: AmDist> {
 }
 
 impl<T: AmDist> Drop for LamellarRequestHandle<T> {
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn drop(&mut self) {
         self.inner.user_handle.store(false, Ordering::SeqCst);
     }
 }
 
 impl LamellarRequestAddResult for LamellarRequestHandleInner {
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn user_held(&self) -> bool {
         self.user_handle.load(Ordering::SeqCst)
     }
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn add_result(&self, _pe: usize, _sub_id: usize, data: InternalResult) {
         // for a single request this is only called one time by a single runtime thread so use of the cell is safe
         self.data.set(Some(data));
         self.ready.store(true, Ordering::SeqCst);
     }
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn update_counters(&self) {
         self.team_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
         self.world_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
@@ -109,7 +109,7 @@ impl LamellarRequestAddResult for LamellarRequestHandleInner {
 }
 
 impl<T: AmDist> LamellarRequestHandle<T> {
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn process_result(&self, data: InternalResult) -> T {
         match data {
             InternalResult::Local(x) => {
@@ -141,14 +141,14 @@ impl<T: AmDist> LamellarRequestHandle<T> {
 #[async_trait]
 impl<T: AmDist> LamellarRequest for LamellarRequestHandle<T> {
     type Output = T;
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     async fn into_future(mut self: Box<Self>) -> Self::Output {
         while !self.inner.ready.load(Ordering::SeqCst) {
             async_std::task::yield_now().await;
         }
         self.process_result(self.inner.data.replace(None).unwrap())
     }
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn get(&self) -> T {
         while !self.inner.ready.load(Ordering::SeqCst) {
             std::thread::yield_now();
@@ -175,24 +175,24 @@ pub struct LamellarMultiRequestHandle<T: AmDist> {
 }
 
 impl<T: AmDist> Drop for LamellarMultiRequestHandle<T> {
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn drop(&mut self) {
         self.inner.user_handle.store(false, Ordering::SeqCst);
     }
 }
 
 impl LamellarRequestAddResult for LamellarMultiRequestHandleInner {
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn user_held(&self) -> bool {
         self.user_handle.load(Ordering::SeqCst)
     }
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn add_result(&self, pe: usize, _sub_id: usize, data: InternalResult) {
         let pe = self.arch.team_pe(pe).expect("pe does not exist on team");
         self.data.lock().insert(pe, data);
         self.cnt.fetch_sub(1, Ordering::SeqCst);
     }
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn update_counters(&self) {
         self.team_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
         self.world_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
@@ -203,7 +203,7 @@ impl LamellarRequestAddResult for LamellarMultiRequestHandleInner {
 }
 
 impl<T: AmDist> LamellarMultiRequestHandle<T> {
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn process_result(&self, data: InternalResult) -> T {
         match data {
             InternalResult::Local(x) => {
@@ -235,7 +235,7 @@ impl<T: AmDist> LamellarMultiRequestHandle<T> {
 #[async_trait]
 impl<T: AmDist> LamellarMultiRequest for LamellarMultiRequestHandle<T> {
     type Output = T;
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     async fn into_future(mut self: Box<Self>) -> Vec<Self::Output> {
         while self.inner.cnt.load(Ordering::SeqCst) > 0 {
             async_std::task::yield_now().await;
@@ -248,7 +248,7 @@ impl<T: AmDist> LamellarMultiRequest for LamellarMultiRequestHandle<T> {
         }
         res
     }
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn get(&self) -> Vec<T> {
         while self.inner.cnt.load(Ordering::SeqCst) > 0 {
             std::thread::yield_now();
@@ -287,18 +287,18 @@ pub struct LamellarLocalRequestHandle<T> {
 }
 
 impl<T> Drop for LamellarLocalRequestHandle<T> {
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn drop(&mut self) {
         self.inner.user_handle.store(false, Ordering::SeqCst);
     }
 }
 
 impl LamellarRequestAddResult for LamellarLocalRequestHandleInner {
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn user_held(&self) -> bool {
         self.user_handle.load(Ordering::SeqCst)
     }
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn add_result(&self, _pe: usize, _sub_id: usize, data: InternalResult) {
         // for a single request this is only called one time by a single runtime thread so use of the cell is safe
         match data {
@@ -309,7 +309,7 @@ impl LamellarRequestAddResult for LamellarLocalRequestHandleInner {
 
         self.ready.store(true, Ordering::SeqCst);
     }
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn update_counters(&self) {
         self.team_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
         self.world_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
@@ -320,7 +320,7 @@ impl LamellarRequestAddResult for LamellarLocalRequestHandleInner {
 }
 
 impl<T: 'static> LamellarLocalRequestHandle<T> {
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn process_result(&self, data: LamellarAny) -> T {
         if let Ok(result) = data.downcast::<T>() {
             *result
@@ -333,14 +333,14 @@ impl<T: 'static> LamellarLocalRequestHandle<T> {
 #[async_trait]
 impl<T: AmLocal + 'static> LamellarRequest for LamellarLocalRequestHandle<T> {
     type Output = T;
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     async fn into_future(mut self: Box<Self>) -> Self::Output {
         while !self.inner.ready.load(Ordering::SeqCst) {
             async_std::task::yield_now().await;
         }
         self.process_result(self.inner.data.replace(None).unwrap())
     }
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn get(&self) -> T {
         while !self.inner.ready.load(Ordering::SeqCst) {
             std::thread::yield_now();

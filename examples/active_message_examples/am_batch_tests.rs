@@ -98,6 +98,7 @@ fn setup_global_subscriber() -> impl Drop {
     let fmt_layer = fmt::Layer::default();
 
     let (flame_layer, _guard) = FlameLayer::with_file("./tracing.folded").unwrap();
+    let flame_layer = flame_layer.with_threads_collapsed(true);
 
     let subscriber = Registry::default().with(fmt_layer).with(flame_layer);
 
