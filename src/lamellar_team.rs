@@ -51,7 +51,7 @@ pub struct LamellarTeam {
 
 //#[prof]
 impl LamellarTeam {
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all)]
     pub(crate) fn new(
         world: Option<Arc<LamellarTeam>>,
         team: Pin<Arc<LamellarTeamRT>>,
@@ -81,31 +81,31 @@ impl LamellarTeam {
 
     /// return a list of (world-based) pe ids representing the members of the team
     #[allow(dead_code)]
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all)]
     pub fn get_pes(&self) -> Vec<usize> {
         self.team.arch.team_iter().collect::<Vec<usize>>()
     }
 
     /// return number of pes in team
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all)]
     pub fn num_pes(&self) -> usize {
         self.team.arch.num_pes()
     }
 
     /// return the world-based id of this pe
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all)]
     pub fn world_pe_id(&self) -> usize {
         self.team.world_pe
     }
 
     /// return the team-based id of this pe
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all)]
     pub fn team_pe_id(&self) -> Result<usize, IdError> {
         self.team.arch.team_pe(self.team.world_pe)
     }
 
     /// create a subteam containing any number of pe's from this team using the provided LamellarArch (layout)
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all)]
     pub fn create_subteam_from_arch<L>(
         parent: Arc<LamellarTeam>,
         arch: L,
@@ -133,7 +133,7 @@ impl LamellarTeam {
     }
 
     /// visual representation of the team
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all)]
     pub fn print_arch(&self) {
         self.team.print_arch()
     }
@@ -141,7 +141,7 @@ impl LamellarTeam {
     /// blocks execution until all members of the team have called
     ///
     /// only blocks pes which are members of this team
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all)]
     pub fn barrier(&self) {
         self.team.barrier()
     }
@@ -164,17 +164,17 @@ impl std::fmt::Debug for LamellarTeam {
 // #[prof]
 //todo see if we can impl deref dor Arc<lamellarteam>
 impl ActiveMessaging for Arc<LamellarTeam> {
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all)]
     fn wait_all(&self) {
         self.team.wait_all();
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all)]
     fn barrier(&self) {
         self.team.barrier();
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all)]
     fn exec_am_all<F>(&self, am: F) -> Pin<Box<dyn Future<Output = Vec<F::Output>> + Send>>
     where
         F: RemoteActiveMessage + LamellarAM + Serde + AmDist + std::fmt::Debug,
@@ -183,7 +183,7 @@ impl ActiveMessaging for Arc<LamellarTeam> {
         self.team.exec_am_all_tg(am, None).into_future()
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all)]
     fn exec_am_pe<F>(&self, pe: usize, am: F) -> Pin<Box<dyn Future<Output = F::Output> + Send>>
     where
         F: RemoteActiveMessage + LamellarAM + Serde + AmDist + std::fmt::Debug,
@@ -191,7 +191,7 @@ impl ActiveMessaging for Arc<LamellarTeam> {
         self.team.exec_am_pe_tg(pe, am, None).into_future()
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all)]
     fn exec_am_local<F>(&self, am: F) -> Pin<Box<dyn Future<Output = F::Output> + Send>>
     where
         F: LamellarActiveMessage + LocalAM + 'static + std::fmt::Debug,
@@ -207,7 +207,7 @@ impl RemoteMemoryRegion for Arc<LamellarTeam> {
     ///
     /// * `size` - number of elements of T to allocate a memory region for -- (not size in bytes)
     ///
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all)]
     fn alloc_shared_mem_region<T: Dist>(&self, size: usize) -> SharedMemoryRegion<T> {
         self.team.barrier.barrier();
         let mr: SharedMemoryRegion<T> = if self.team.num_world_pes == self.team.num_pes {
@@ -229,7 +229,7 @@ impl RemoteMemoryRegion for Arc<LamellarTeam> {
     ///
     /// * `size` - number of elements of T to allocate a memory region for -- (not size in bytes)
     ///
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all)]
     fn alloc_local_mem_region<T: Dist>(&self, size: usize) -> LocalMemoryRegion<T> {
         let mut lmr = LocalMemoryRegion::try_new(size, &self.team, self.team.lamellae.clone());
         while let Err(_err) = lmr {
@@ -249,13 +249,13 @@ pub struct IntoLamellarTeam {
 }
 
 impl From<Pin<Arc<LamellarTeamRT>>> for IntoLamellarTeam {
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all)]
     fn from(team: Pin<Arc<LamellarTeamRT>>) -> Self {
         IntoLamellarTeam { team: team.clone() }
     }
 }
 impl From<Arc<LamellarTeam>> for IntoLamellarTeam {
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all)]
     fn from(team: Arc<LamellarTeam>) -> Self {
         IntoLamellarTeam {
             team: team.team.clone(),
@@ -264,7 +264,7 @@ impl From<Arc<LamellarTeam>> for IntoLamellarTeam {
 }
 
 impl From<&LamellarWorld> for IntoLamellarTeam {
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all)]
     fn from(world: &LamellarWorld) -> Self {
         IntoLamellarTeam {
             team: world.team_rt.clone(),
@@ -273,7 +273,7 @@ impl From<&LamellarWorld> for IntoLamellarTeam {
 }
 
 impl From<LamellarWorld> for IntoLamellarTeam {
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all)]
     fn from(world: LamellarWorld) -> Self {
         IntoLamellarTeam {
             team: world.team_rt.clone(),
@@ -289,7 +289,7 @@ pub(crate) struct LamellarTeamRemotePtr {
 }
 
 impl From<LamellarTeamRemotePtr> for Pin<Arc<LamellarTeamRT>> {
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all)]
     fn from(remote_ptr: LamellarTeamRemotePtr) -> Self {
         let lamellae = if let Some(lamellae) = crate::LAMELLAES.read().get(&remote_ptr.backend) {
             lamellae.clone()
@@ -307,7 +307,7 @@ impl From<LamellarTeamRemotePtr> for Pin<Arc<LamellarTeamRT>> {
 }
 
 impl From<Pin<Arc<LamellarTeamRT>>> for LamellarTeamRemotePtr {
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all)]
     fn from(team: Pin<Arc<LamellarTeamRT>>) -> Self {
         LamellarTeamRemotePtr {
             addr: team.remote_ptr_addr,
@@ -361,7 +361,7 @@ impl Hash for LamellarTeamRT {
 
 //#[prof]
 impl LamellarTeamRT {
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all)]
     pub(crate) fn new(
         //creates a new root team
         num_pes: usize,
@@ -451,7 +451,7 @@ impl LamellarTeamRT {
         team
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all)]
     pub(crate) fn destroy(&self) {
         // println!("destroying team? {:?}", self.mem_regions.read().len());
         // println!(
@@ -501,20 +501,20 @@ impl LamellarTeamRT {
         // println!("team destroyed")
     }
     #[allow(dead_code)]
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all)]
     pub fn get_pes(&self) -> Vec<usize> {
         self.arch.team_iter().collect::<Vec<usize>>()
     }
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all)]
     pub fn world_pe_id(&self) -> usize {
         self.world_pe
     }
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all)]
     pub fn team_pe_id(&self) -> Result<usize, IdError> {
         self.arch.team_pe(self.world_pe)
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all)]
     pub fn create_subteam_from_arch<L>(
         world: Pin<Arc<LamellarTeamRT>>,
         parent: Pin<Arc<LamellarTeamRT>>,
@@ -635,13 +635,13 @@ impl LamellarTeamRT {
         }
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all)]
     pub fn num_pes(&self) -> usize {
         self.arch.num_pes()
     }
 
     #[cfg_attr(test, allow(unreachable_code), allow(unused_variables))]
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all)]
     fn check_hash_vals(&self, hash: usize, hash_buf: &MemoryRegion<usize>, timeout: Duration) {
         #[cfg(test)]
         return;
@@ -677,7 +677,7 @@ impl LamellarTeamRT {
         // println!("{:?} {:?}", hash,hash_buf.as_slice().unwrap());
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all)]
     fn put_dropped(&self) {
         if let Some(parent) = &self.parent {
             let temp_slice = unsafe { self.dropped.as_mut_slice().unwrap() };
@@ -715,7 +715,7 @@ impl LamellarTeamRT {
         }
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all)]
     fn drop_barrier(&self) {
         let mut s = Instant::now();
         for pe in self.dropped.as_slice().unwrap() {
@@ -729,7 +729,7 @@ impl LamellarTeamRT {
         }
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all)]
     pub fn print_arch(&self) {
         println!("-----mapping of team pe ids to parent pe ids-----");
         let mut parent = format!("");
@@ -764,7 +764,7 @@ impl LamellarTeamRT {
     // }
 
     // // #[prof]
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all)]
     fn wait_all(&self) {
         let mut temp_now = Instant::now();
         while self.team_counters.outstanding_reqs.load(Ordering::SeqCst) > 0
@@ -785,12 +785,12 @@ impl LamellarTeamRT {
         }
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all)]
     pub(crate) fn barrier(&self) {
         self.barrier.barrier();
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all)]
     pub fn exec_am_all<F>(
         self: &Pin<Arc<LamellarTeamRT>>,
         am: F,
@@ -801,7 +801,7 @@ impl LamellarTeamRT {
         self.exec_am_all_tg(am, None)
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all)]
     pub(crate) fn exec_am_all_tg<F>(
         self: &Pin<Arc<LamellarTeamRT>>,
         am: F,
@@ -866,7 +866,7 @@ impl LamellarTeamRT {
         })
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all)]
     pub fn exec_am_pe<F>(
         self: &Pin<Arc<LamellarTeamRT>>,
         pe: usize,
@@ -878,7 +878,7 @@ impl LamellarTeamRT {
         self.exec_am_pe_tg(pe, am, None)
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all)]
     pub(crate) fn exec_am_pe_tg<F>(
         self: &Pin<Arc<LamellarTeamRT>>,
         pe: usize,
@@ -941,7 +941,7 @@ impl LamellarTeamRT {
         })
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all)]
     pub(crate) fn exec_arc_am_pe<F>(
         self: &Pin<Arc<LamellarTeamRT>>,
         pe: usize,
@@ -998,7 +998,7 @@ impl LamellarTeamRT {
         })
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all)]
     pub fn exec_am_local<F>(
         self: &Pin<Arc<LamellarTeamRT>>,
         am: F,
@@ -1009,7 +1009,7 @@ impl LamellarTeamRT {
         self.exec_am_local_tg(am, None)
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all)]
     pub(crate) fn exec_am_local_tg<F>(
         self: &Pin<Arc<LamellarTeamRT>>,
         am: F,
@@ -1101,7 +1101,7 @@ impl LamellarTeamRT {
     ///
     /// * `size` - number of elements of T to allocate a memory region for -- (not size in bytes)
     ///
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all)]
     pub(crate) fn alloc_local_mem_region<T: Dist>(
         self: &Pin<Arc<LamellarTeamRT>>,
         size: usize,
@@ -1114,7 +1114,7 @@ impl LamellarTeamRT {
 
 //#[prof]
 impl Drop for LamellarTeamRT {
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all)]
     fn drop(&mut self) {
         // println!("sechduler_new: {:?}", Arc::strong_count(&self.scheduler));
         // println!("lamellae: {:?}", Arc::strong_count(&self.lamellae));
@@ -1132,7 +1132,7 @@ impl Drop for LamellarTeamRT {
 
 //#[prof]
 impl Drop for LamellarTeam {
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all)]
     fn drop(&mut self) {
         // println!("team handle dropping {:?}", self.team.team_hash);
         if !self.am_team {

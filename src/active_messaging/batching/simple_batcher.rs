@@ -16,7 +16,7 @@ struct SimpleBatcherInner {
 }
 
 impl SimpleBatcherInner {
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all)]
     fn new(pe: Option<usize>) -> SimpleBatcherInner {
         SimpleBatcherInner {
             batch: Arc::new(Mutex::new(Vec::new())),
@@ -25,7 +25,7 @@ impl SimpleBatcherInner {
         }
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all)]
     fn add(&self, req_data: ReqMetaData, data: LamellarData, size: usize) -> bool {
         // println!("adding to batch");
         //return true if this is the first am in the batch
@@ -36,7 +36,7 @@ impl SimpleBatcherInner {
         batch.len() == 1
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all)]
     fn swap(&self) -> (Vec<(ReqMetaData, LamellarData, usize)>, usize) {
         let mut batch = self.batch.lock();
         let size = self.size.load(Ordering::Relaxed);
@@ -55,7 +55,7 @@ pub(crate) struct SimpleBatcher {
 
 #[async_trait]
 impl Batcher for SimpleBatcher {
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all)]
     fn add_remote_am_to_batch(
         &self,
         req_data: ReqMetaData,
@@ -82,7 +82,7 @@ impl Batcher for SimpleBatcher {
         }
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all)]
     fn add_return_am_to_batch(
         &self,
         req_data: ReqMetaData,
@@ -109,7 +109,7 @@ impl Batcher for SimpleBatcher {
         }
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all)]
     fn add_data_am_to_batch(
         &self,
         req_data: ReqMetaData,
@@ -135,7 +135,7 @@ impl Batcher for SimpleBatcher {
         }
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all)]
     fn add_unit_am_to_batch(
         &self,
         req_data: ReqMetaData,
@@ -155,7 +155,7 @@ impl Batcher for SimpleBatcher {
         }
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all)]
     async fn exec_batched_msg(
         &self,
         msg: Msg,
@@ -185,7 +185,7 @@ impl Batcher for SimpleBatcher {
 }
 
 impl SimpleBatcher {
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all)]
     pub(crate) fn new(num_pes: usize, stall_mark: Arc<AtomicUsize>) -> SimpleBatcher {
         let mut batched_ams = Vec::new();
         for pe in 0..num_pes {
@@ -198,7 +198,7 @@ impl SimpleBatcher {
         }
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all)]
     fn create_tx_task(
         &self,
         batch: SimpleBatcherInner,
@@ -273,7 +273,7 @@ impl SimpleBatcher {
         });
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all)]
     fn serialize_am(
         req_data: ReqMetaData,
         am: LamellarArcAm,
@@ -310,7 +310,7 @@ impl SimpleBatcher {
         *i += am_size;
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all)]
     fn serialize_data(
         req_data: ReqMetaData,
         data: LamellarResultArc,
@@ -336,7 +336,7 @@ impl SimpleBatcher {
         *i += data_size;
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all)]
     fn serialize_unit(req_data: ReqMetaData, data_buf: &mut [u8], i: &mut usize) {
         crate::serialize_into(&mut data_buf[*i..*i + *CMD_LEN], &Cmd::Unit, false).unwrap();
         *i += *CMD_LEN;
@@ -353,7 +353,7 @@ impl SimpleBatcher {
         *i += *UNIT_HEADER_LEN;
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all)]
     fn create_header(src: usize) -> SerializeHeader {
         let msg = Msg {
             src: src as u16,
@@ -362,7 +362,7 @@ impl SimpleBatcher {
         SerializeHeader { msg: msg }
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all)]
     async fn create_data_buf(
         header: SerializeHeader,
         size: usize,
@@ -383,7 +383,7 @@ impl SimpleBatcher {
         data.unwrap()
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all)]
     fn exec_am(
         &self,
         msg: &Msg,
@@ -433,7 +433,7 @@ impl SimpleBatcher {
         });
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all)]
     fn exec_return_am(
         &self,
         msg: &Msg,

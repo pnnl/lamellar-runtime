@@ -19,6 +19,7 @@ enum LamellarData {
 
 #[async_trait]
 pub(crate) trait Batcher {
+    
     fn add_remote_am_to_batch(
         &self,
         req_data: ReqMetaData,
@@ -70,7 +71,7 @@ pub(crate) enum BatcherType {
 
 #[async_trait]
 impl Batcher for BatcherType {
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all)]
     fn add_remote_am_to_batch(
         &self,
         req_data: ReqMetaData,
@@ -89,7 +90,7 @@ impl Batcher for BatcherType {
             }
         }
     }
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all)]
     fn add_return_am_to_batch(
         &self,
         req_data: ReqMetaData,
@@ -108,7 +109,7 @@ impl Batcher for BatcherType {
             }
         }
     }
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all)]
     fn add_data_am_to_batch(
         &self,
         req_data: ReqMetaData,
@@ -126,7 +127,7 @@ impl Batcher for BatcherType {
             }
         }
     }
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all)]
     fn add_unit_am_to_batch(
         &self,
         req_data: ReqMetaData,
@@ -142,7 +143,7 @@ impl Batcher for BatcherType {
             }
         }
     }
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all)]
     async fn exec_batched_msg(
         &self,
         msg: Msg,
