@@ -65,7 +65,7 @@ impl<T: AmDist + Dist + std::cmp::Eq + 'static> AtomicArray<T> {
         index: impl OpInput<'a, usize>,
         old: T,
         new: T,
-    ) -> Pin<Box<dyn Future<Output = Vec<Result<T, T>>>>> {
+    ) -> Pin<Box<dyn Future<Output = Vec<Result<T, T>>>+ Send>> {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.compare_exchange(index, old, new),
             AtomicArray::GenericAtomicArray(array) => array.compare_exchange(index, old, new),
@@ -80,7 +80,7 @@ impl<T: AmDist + Dist + std::cmp::PartialEq + 'static> AtomicArray<T> {
         old: T,
         new: T,
         eps: T,
-    ) -> Pin<Box<dyn Future<Output = Vec<Result<T, T>>>>> {
+    ) -> Pin<Box<dyn Future<Output = Vec<Result<T, T>>>+ Send>> {
         match self {
             AtomicArray::NativeAtomicArray(array) => {
                 array.compare_exchange_epsilon(index, old, new, eps)

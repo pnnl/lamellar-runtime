@@ -513,7 +513,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         val: impl OpInput<'a, T>,
         index: impl OpInput<'a, usize>,
         op: ArrayOpCmd<T>,
-    ) -> Pin<Box<dyn Future<Output = Vec<Result<T, T>>>>> {
+    ) -> Pin<Box<dyn Future<Output = Vec<Result<T, T>>>+ Send>> {
         let req_handles_mutex = self.inner_initiate_op(val, index, op, OpReturnType::Result);
         let mut req_handles = req_handles_mutex.lock();
         let mut reqs = vec![];
