@@ -456,7 +456,7 @@ impl NumaWorkStealingInner {
                 crossbeam::deque::Worker<async_task::Runnable>,
             > = vec![];
             let mut node_work_stealers = vec![];
-            for core in cores {
+            for _core in cores {
                 let core_work_worker: crossbeam::deque::Worker<async_task::Runnable> =
                     crossbeam::deque::Worker::new_fifo();
                 node_work_stealers.push(core_work_worker.stealer());

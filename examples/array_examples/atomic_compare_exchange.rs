@@ -2,7 +2,24 @@ use lamellar::array::{AtomicArray, DistributedIterator, Distribution};
 use rand::seq::SliceRandom;
 use rand::SeedableRng;
 
+use tracing_flame::FlameLayer;
+use tracing_subscriber::{fmt, prelude::*, registry::Registry};
+
+// fn setup_global_subscriber() -> impl Drop {
+//     let fmt_layer = fmt::Layer::default();
+
+//     let (flame_layer, _guard) = FlameLayer::with_file("./tracing.folded").unwrap();
+//     let flame_layer = flame_layer.with_threads_collapsed(true);
+
+//     let subscriber = Registry::default().with(fmt_layer).with(flame_layer);
+
+//     tracing::subscriber::set_global_default(subscriber).expect("Could not set global default");
+//     _guard
+// }
+
+
 fn main() {
+    // let _guard = setup_global_subscriber();
     let world = lamellar::LamellarWorldBuilder::new().build();
     let num_pes = world.num_pes();
     let my_pe = world.my_pe();
@@ -50,6 +67,36 @@ fn main() {
         }
     });
 
+    let array2_clone = array_2.clone();
+    world.block_on(async move{ 
+        let res = array2_clone.compare_exchange_epsilon(0,10.0,11.0, 0.1).await;
+        match res[0]{
+            Ok(_) => {
+                println!("success");
+
+            }
+            Err(_) => {
+                println!("failed");
+            }
+        }
+    });
+
+    let l = array.dist_iter().enumerate().for_each_async(move |(i,e)| { 
+        let a2c= array_2.clone();
+        async move {
+            let res = a2c.compare_exchange_epsilon(i, e.load() as f32,0.0,epsilon).await;
+            match res[0]{
+                Ok(_) => {
+                    println!("success");
+
+                }
+                Err(_) => {
+                    println!("failed");
+                }
+            }
+        }
+    });
+    world.block_on(l);
     println!("num_failed {num_failed} num_ok {num_ok}");
     // array2.print();
 }

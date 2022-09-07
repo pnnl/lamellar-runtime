@@ -19,7 +19,7 @@ use std::process;
 use std::sync::atomic::{AtomicBool, AtomicU8, AtomicUsize, Ordering};
 use std::sync::Arc; //, Weak};
 use std::thread;
-use thread_local::ThreadLocal;
+// use thread_local::ThreadLocal;
 // use std::time::Instant;
 
 #[derive(Debug)]
@@ -518,9 +518,9 @@ impl NumaWorkStealing2 {
         node_mask |= node_mask >> 16;
         node_mask |= node_mask >> 32;
 
-        let mut node_i = 0;
+        // let mut node_i = 0;
         let stall_mark = Arc::new(AtomicUsize::new(0));
-        for (node, cores) in node_to_cores.iter() {
+        for (_node, cores) in node_to_cores.iter() {
             let mut core_ids = vec![];
             for core in cores {
                 core_ids.push(CoreId { id: *core });
@@ -543,7 +543,7 @@ impl NumaWorkStealing2 {
                 RegisteredActiveMessages::new(batcher),
             )));
             inners.push(inner);
-            node_i += 1;
+            // node_i += 1;
         }
 
         println!("numa node mask: {:x}", node_mask);

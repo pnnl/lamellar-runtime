@@ -171,7 +171,7 @@ impl Batcher for SimpleBatcher {
         while i < data.len() {
             let cmd: Cmd = crate::deserialize(&data[i..i + *CMD_LEN], false).unwrap();
             i += *CMD_LEN;
-            let temp_i = i;
+            // let temp_i = i;
             // println!("cmd {:?}", cmd);
             match cmd {
                 Cmd::Am => self.exec_am(&msg, data, &mut i, &lamellae, scheduler, ame),

@@ -659,7 +659,7 @@ impl InnerCQ {
                     break;
                 }
                 let span1 = trace_span!("send loop 1.1");
-                let _guard1 = span.enter();
+                let _guard1 = span1.enter();
                 //while we are waiting to push our data might as well try to advance the buffers
                 self.progress_transfers(dst, &mut cmd_buffer);
                 self.try_sending_buffer(dst, &mut cmd_buffer);

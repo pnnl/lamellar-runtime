@@ -3,7 +3,7 @@ use lamellar_prof::prof;
 use std::sync::Arc;
 // use std::collections::hash_map::DefaultHasher;
 
-pub trait LamellarArch: Send + Sync + std::fmt::Debug {
+pub trait LamellarArch: Send + Sync {
     fn num_pes(&self) -> usize;
     fn start_pe(&self) -> usize; //with respect to parent (maybe this should be min possible pe?)
     fn end_pe(&self) -> usize; //with respect to parent (maybe this should be max possible pe?)
@@ -33,12 +33,23 @@ impl std::fmt::Display for IdError {
 #[prof]
 impl std::error::Error for IdError {}
 
-#[derive(Debug, Clone)] //, Hash)]
+#[derive( Clone)] //, Hash)]
 pub(crate) enum LamellarArchEnum {
     GlobalArch(GlobalArch),
     StridedArch(StridedArch),
     BlockedArch(BlockedArch),
     Dynamic(Arc<dyn LamellarArch>),
+}
+
+impl std::fmt::Debug for LamellarArchEnum{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self{
+            LamellarArchEnum::GlobalArch(_) => write!(f,"GlobalArch"),
+            LamellarArchEnum::StridedArch(_) => write!(f,"StridedArch"),
+            LamellarArchEnum::BlockedArch(_) => write!(f,"BlockedArch"),
+            LamellarArchEnum::Dynamic(_) => write!(f,"Dynamic"),
+        }
+    }
 }
 
 impl LamellarArchEnum {

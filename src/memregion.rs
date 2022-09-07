@@ -28,7 +28,7 @@ impl std::fmt::Display for MemNotLocalError {
 impl std::error::Error for MemNotLocalError {}
 
 pub trait Dist:
-    Sync + Send + Copy + std::fmt::Debug + serde::ser::Serialize + serde::de::DeserializeOwned + 'static
+    Sync + Send + Copy + serde::ser::Serialize + serde::de::DeserializeOwned + 'static
 {
 }
 // impl<T: Send  + Copy + std::fmt::Debug + 'static>

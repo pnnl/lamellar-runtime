@@ -94,20 +94,20 @@ impl LamellarAM for ReturnVecAM {
     }
 }
 
-fn setup_global_subscriber() -> impl Drop {
-    let fmt_layer = fmt::Layer::default();
+// fn setup_global_subscriber() -> impl Drop {
+//     let fmt_layer = fmt::Layer::default();
 
-    let (flame_layer, _guard) = FlameLayer::with_file("./tracing.folded").unwrap();
-    let flame_layer = flame_layer.with_threads_collapsed(true);
+//     let (flame_layer, _guard) = FlameLayer::with_file("./tracing.folded").unwrap();
+//     let flame_layer = flame_layer.with_threads_collapsed(true);
 
-    let subscriber = Registry::default().with(fmt_layer).with(flame_layer);
+//     let subscriber = Registry::default().with(fmt_layer).with(flame_layer);
 
-    tracing::subscriber::set_global_default(subscriber).expect("Could not set global default");
-    _guard
-}
+//     tracing::subscriber::set_global_default(subscriber).expect("Could not set global default");
+//     _guard
+// }
 
 fn main() {
-    let _guard = setup_global_subscriber();
+    // let _guard = setup_global_subscriber();
     let world = lamellar::LamellarWorldBuilder::new()
         //.with_lamellae(Default::default()) //if enable-rofi feature is active default is rofi, otherwise local
         //.with_lamellae( Backend::Rofi ) //explicity set the lamellae backend to rofi, with the default provider

@@ -43,7 +43,7 @@ impl WorkStealingThread {
     ) -> thread::JoinHandle<()> {
         thread::spawn(move || {
             // println!("TestSchdulerWorker thread running");
-            let span = trace_span!("WorkStealingThread::run");
+            let _span = trace_span!("WorkStealingThread::run");
             core_affinity::set_for_current(id);
             active_cnt.fetch_add(1, Ordering::SeqCst);
             let mut rng = rand::thread_rng();

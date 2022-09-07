@@ -274,7 +274,7 @@ impl<T: Dist> DistIteratorLauncher for LocalLockAtomicArray<T> {
     fn collect<I, A>(&self, iter: &I, d: Distribution) -> Pin<Box<dyn Future<Output = A> + Send>>
     where
         I: DistributedIterator + 'static,
-        I::Item: Dist + std::fmt::Debug,
+        I::Item: Dist,
         A: From<UnsafeArray<I::Item>> + AmLocal + 'static,
     {
         self.array.collect(iter, d)
@@ -286,7 +286,7 @@ impl<T: Dist> DistIteratorLauncher for LocalLockAtomicArray<T> {
     ) -> Pin<Box<dyn Future<Output = A> + Send>>
     where
         I: DistributedIterator + 'static,
-        I::Item: Future<Output = B> + Send + 'static + std::fmt::Debug,
+        I::Item: Future<Output = B> + Send + 'static ,
         B: Dist,
         A: From<UnsafeArray<B>> + AmLocal + 'static,
     {

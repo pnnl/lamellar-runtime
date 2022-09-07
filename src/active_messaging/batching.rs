@@ -9,12 +9,23 @@ use team_am_batcher::TeamAmBatcher;
 
 use async_trait::async_trait;
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 enum LamellarData {
     Am(LamellarArcAm, AmId),
     Return(LamellarArcAm, AmId),
     Data(LamellarResultArc),
     Unit,
+}
+
+impl std::fmt::Debug for LamellarData{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self{
+            LamellarData::Am(_,_) => write!(f,"Am"),
+            LamellarData::Return(_,_) => write!(f,"Return"),
+            LamellarData::Data(_) => write!(f,"Data"),
+            LamellarData::Unit => write!(f,"Unit"),
+        }
+    }
 }
 
 #[async_trait]

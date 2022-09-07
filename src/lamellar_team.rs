@@ -177,7 +177,7 @@ impl ActiveMessaging for Arc<LamellarTeam> {
     #[tracing::instrument(skip_all)]
     fn exec_am_all<F>(&self, am: F) -> Pin<Box<dyn Future<Output = Vec<F::Output>> + Send>>
     where
-        F: RemoteActiveMessage + LamellarAM + Serde + AmDist + std::fmt::Debug,
+        F: RemoteActiveMessage + LamellarAM + Serde + AmDist,
     {
         // trace!("[{:?}] team exec am all request", self.team.world_pe);
         self.team.exec_am_all_tg(am, None).into_future()
@@ -186,7 +186,7 @@ impl ActiveMessaging for Arc<LamellarTeam> {
     #[tracing::instrument(skip_all)]
     fn exec_am_pe<F>(&self, pe: usize, am: F) -> Pin<Box<dyn Future<Output = F::Output> + Send>>
     where
-        F: RemoteActiveMessage + LamellarAM + Serde + AmDist + std::fmt::Debug,
+        F: RemoteActiveMessage + LamellarAM + Serde + AmDist,
     {
         self.team.exec_am_pe_tg(pe, am, None).into_future()
     }
@@ -194,7 +194,7 @@ impl ActiveMessaging for Arc<LamellarTeam> {
     #[tracing::instrument(skip_all)]
     fn exec_am_local<F>(&self, am: F) -> Pin<Box<dyn Future<Output = F::Output> + Send>>
     where
-        F: LamellarActiveMessage + LocalAM + 'static + std::fmt::Debug,
+        F: LamellarActiveMessage + LocalAM + 'static,
     {
         self.team.exec_am_local_tg(am, None).into_future()
     }
@@ -796,7 +796,7 @@ impl LamellarTeamRT {
         am: F,
     ) -> Box<dyn LamellarMultiRequest<Output = F::Output>>
     where
-        F: RemoteActiveMessage + LamellarAM + AmDist + std::fmt::Debug,
+        F: RemoteActiveMessage + LamellarAM + AmDist,
     {
         self.exec_am_all_tg(am, None)
     }
@@ -808,7 +808,7 @@ impl LamellarTeamRT {
         task_group_cnts: Option<Arc<AMCounters>>,
     ) -> Box<dyn LamellarMultiRequest<Output = F::Output>>
     where
-        F: RemoteActiveMessage + LamellarAM + AmDist + std::fmt::Debug,
+        F: RemoteActiveMessage + LamellarAM + AmDist,
     {
         // println!("team exec am all");
         // trace!("[{:?}] team exec am all request", self.world_pe);
@@ -873,7 +873,7 @@ impl LamellarTeamRT {
         am: F,
     ) -> Box<dyn LamellarRequest<Output = F::Output>>
     where
-        F: RemoteActiveMessage + LamellarAM + AmDist + std::fmt::Debug,
+        F: RemoteActiveMessage + LamellarAM + AmDist,
     {
         self.exec_am_pe_tg(pe, am, None)
     }
@@ -886,7 +886,7 @@ impl LamellarTeamRT {
         task_group_cnts: Option<Arc<AMCounters>>,
     ) -> Box<dyn LamellarRequest<Output = F::Output>>
     where
-        F: RemoteActiveMessage + LamellarAM + AmDist + std::fmt::Debug,
+        F: RemoteActiveMessage + LamellarAM + AmDist,
     {
         // println!("team exec am pe");
         prof_start!(pre);
@@ -949,7 +949,7 @@ impl LamellarTeamRT {
         task_group_cnts: Option<Arc<AMCounters>>,
     ) -> Box<dyn LamellarRequest<Output = F>>
     where
-        F: AmDist + std::fmt::Debug,
+        F: AmDist,
     {
         // println!("team exec arc am pe");
         let tg_outstanding_reqs = match task_group_cnts {
@@ -1004,7 +1004,7 @@ impl LamellarTeamRT {
         am: F,
     ) -> Box<dyn LamellarRequest<Output = F::Output>>
     where
-        F: LamellarActiveMessage + LocalAM + 'static + std::fmt::Debug,
+        F: LamellarActiveMessage + LocalAM + 'static ,
     {
         self.exec_am_local_tg(am, None)
     }
@@ -1016,7 +1016,7 @@ impl LamellarTeamRT {
         task_group_cnts: Option<Arc<AMCounters>>,
     ) -> Box<dyn LamellarRequest<Output = F::Output>>
     where
-        F: LamellarActiveMessage + LocalAM + 'static + std::fmt::Debug,
+        F: LamellarActiveMessage + LocalAM + 'static,
     {
         // println!("team exec am local");
         prof_start!(pre);

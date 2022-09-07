@@ -57,7 +57,7 @@ impl<T: AmDist + Dist + std::cmp::Eq + 'static> LocalLockAtomicArray<T> {
         index: impl OpInput<'a, usize>,
         old: T,
         val: T,
-    ) -> Pin<Box<dyn Future<Output = Vec<Result<T, T>>>>> {
+    ) -> Pin<Box<dyn Future<Output = Vec<Result<T, T>>> + Send>> {
         self.array
             .initiate_result_op(val, index, ArrayOpCmd::CompareExchange(old))
     }
@@ -70,7 +70,7 @@ impl<T: AmDist + Dist + std::cmp::PartialEq + 'static> LocalLockAtomicArray<T> {
         old: T,
         val: T,
         eps: T,
-    ) -> Pin<Box<dyn Future<Output = Vec<Result<T, T>>>>> {
+    ) -> Pin<Box<dyn Future<Output = Vec<Result<T, T>>> + Send>> {
         self.array
             .initiate_result_op(val, index, ArrayOpCmd::CompareExchangeEps(old, eps))
     }

@@ -217,7 +217,20 @@ fn native_atomic_slice(
                 a_val
             },
         ),
-        _ => panic!("this should never happen"),
+        "bool" => (
+            quote! {
+                let slice = unsafe {
+                    let slice = self.data.__local_as_mut_slice();
+                    let slice_ptr = slice.as_mut_ptr() as *mut std::sync::atomic::AtomicBool;
+                    std::slice::from_raw_parts_mut(slice_ptr,slice.len())
+                };
+            },
+            quote! {
+                let mut a_val = #lamellar::array::native_atomic::MyAtomicBool(&slice[index]);
+                a_val
+            },
+        ),
+        _ => panic!("this should never happen {:?}",ident.to_string().as_str()),
     }
 }
 

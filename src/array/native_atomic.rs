@@ -123,6 +123,8 @@ use std::sync::atomic::AtomicU64;
 impl_atomic_ops! {u64,AtomicU64,MyAtomicU64}
 use std::sync::atomic::AtomicUsize;
 impl_atomic_ops! {usize,AtomicUsize,MyAtomicUsize}
+// use std::sync::atomic::AtomicBool;
+// impl_atomic_ops! {bool,AtomicBool,MyAtomicBool}
 
 macro_rules! slice_as_atomic{
     { $A:ty, $B:ty, $slice:ident } => {

@@ -294,6 +294,7 @@ fn main() {
     let array_u8 = AtomicArray::<u8>::new(world.clone(), num_pes * 10, Distribution::Block); //intrinsic atomic,  bitwise
     let array_i128 = AtomicArray::<i128>::new(world.clone(), num_pes * 10, Distribution::Block); //non intrinsic atomic,  bitwise
     let array_custom = AtomicArray::<Custom>::new(world.clone(), num_pes * 10, Distribution::Block); //non intrinsic atomic, non bitwise
+    let array_bool = AtomicArray::<bool>::new(world.clone(), num_pes * 10, Distribution::Block);
 
     test_add(array_f64.clone(), 0.0, 1.0);
     test_add(array_u8.clone(), 0, 1);

@@ -121,7 +121,7 @@ impl RofiComm {
         }
     }
     #[tracing::instrument(skip_all)]
-    unsafe fn check_buffer_elems<R: std::cmp::PartialEq + std::fmt::Debug, T>(
+    unsafe fn check_buffer_elems<R: std::cmp::PartialEq, T>(
         &self,
         dst_addr: &mut [T],
         val: R,
@@ -134,13 +134,13 @@ impl RofiComm {
         for i in 0..(bytes.len() as isize - 2) {
             while bytes[i as usize] == val && bytes[i as usize + 1] == val {
                 if timer.elapsed().as_secs_f64() > 1.0 {
-                    println!(
-                        "{:?}: {:?} {:?} {:?}",
-                        i,
-                        bytes[i as usize],
-                        bytes[i as usize + 1],
-                        val
-                    );
+                    // println!(
+                    //     "{:?}: {:?} {:?} {:?}",
+                    //     i,
+                    //     bytes[i as usize],
+                    //     bytes[i as usize + 1],
+                    //     val
+                    // );
                     return Err(TxError::GetError);
                 }
                 //hopefully magic number doesnt appear twice in a row
@@ -150,7 +150,7 @@ impl RofiComm {
         timer = std::time::Instant::now();
         while bytes[bytes.len() - 1] == val {
             if timer.elapsed().as_secs_f64() > 1.0 {
-                println!("{:?}", bytes[bytes.len() - 1]);
+                // println!("{:?}", bytes[bytes.len() - 1]);
                 return Err(TxError::GetError);
             }
             //hopefully magic number isn't the last element

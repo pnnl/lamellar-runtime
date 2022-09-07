@@ -3,7 +3,7 @@ use crate::active_messaging::*;
 use crate::lamellae::comm::AllocError;
 use crate::lamellae::{Des, Lamellae, LamellaeAM, LamellaeRDMA, Ser, SerializeHeader};
 use crate::lamellar_arch::LamellarArchRT;
-use crate::{LamellarTeam, LamellarWorld};
+use crate::{LamellarTeam};
 use batching::*;
 
 use async_trait::async_trait;
@@ -35,11 +35,17 @@ struct BatchedAmHeader {
     cmd: Cmd,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 struct TeamAmBatcherInner {
     batch: Arc<Mutex<(TeamMap, TeamMap, Vec<(ReqMetaData, LamellarData, usize)>)>>,
     size: Arc<AtomicUsize>,
     pe: Option<usize>,
+}
+
+impl std::fmt::Debug for TeamAmBatcherInner{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f,"TeamAmBatcherInner {:?} {:?}", self.size.load(Ordering::SeqCst), self.pe)
+    }
 }
 
 impl TeamAmBatcherInner {

@@ -28,9 +28,9 @@ use remote_closures::{exec_closure_cmd, process_closure_request};
 
 const BATCH_AM_SIZE: usize = 100000;
 
-pub trait AmLocal: Sync + Send + std::fmt::Debug {}
+pub trait AmLocal: Sync + Send {}
 
-impl<T: Sync + Send + std::fmt::Debug> AmLocal for T {}
+impl<T: Sync + Send> AmLocal for T {}
 
 pub trait AmDist: serde::ser::Serialize + serde::de::DeserializeOwned + AmLocal + 'static {}
 
@@ -67,7 +67,7 @@ pub trait RemoteActiveMessage: LamellarActiveMessage + LamellarSerde + LamellarR
     fn as_local(self: Arc<Self>) -> LamellarArcLocalAm;
 }
 
-pub trait LamellarActiveMessage: DarcSerde + std::fmt::Debug {
+pub trait LamellarActiveMessage: DarcSerde{
     fn exec(
         self: Arc<Self>,
         my_pe: usize,
@@ -94,13 +94,25 @@ pub trait LamellarAM {
     type Output: AmDist;
 }
 
-#[derive(Debug)]
+
 pub enum LamellarReturn {
     LocalData(LamellarAny),
     LocalAm(LamellarArcAm),
     RemoteData(LamellarResultArc),
     RemoteAm(LamellarArcAm),
     Unit,
+}
+
+impl std::fmt::Debug for LamellarReturn{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self{
+            LamellarReturn::LocalData(_) => write!(f,"LocalData"),
+            LamellarReturn::LocalAm(_) => write!(f,"LocalAm"),
+            LamellarReturn::RemoteData(_) => write!(f,"RemoteData"),
+            LamellarReturn::RemoteAm(_) => write!(f,"RemoteAm"),
+            LamellarReturn::Unit => write!(f,"Unit"),
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -114,7 +126,7 @@ pub(crate) struct ReqMetaData {
     pub(crate) team_addr: usize,
 }
 
-#[derive(Debug)]
+
 pub(crate) enum Am {
     All(ReqMetaData, LamellarArcAm),
     Remote(ReqMetaData, LamellarArcAm), //req data, am to execute
@@ -125,6 +137,22 @@ pub(crate) enum Am {
     BatchedReturn(ReqMetaData, LamellarArcAm, ReqId), //req data, am to return and execute, batch id
     BatchedData(ReqMetaData, LamellarResultArc, ReqId), //req data, data to return, batch id
     BatchedUnit(ReqMetaData, ReqId),    //req data, batch id
+}
+
+impl std::fmt::Debug for Am{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self{
+            Am::All(_,_) => write!(f,"All"),
+            Am::Remote(_,_) => write!(f,"Remote"),
+            Am::Local(_,_) => write!(f,"Local"),
+            Am::Return(_,_) => write!(f,"Return"),
+            Am::Data(_,_) => write!(f,"Data"),
+            Am::Unit(_) => write!(f,"Unit"),
+            Am::BatchedReturn(_,_,_) => write!(f,"BatchedReturn"),
+            Am::BatchedData(_,_,_) => write!(f,"BatchedData"),
+            Am::BatchedUnit(_,_) => write!(f,"BatchedUnit"),
+        }
+    }
 }
 
 #[derive(

@@ -67,7 +67,7 @@ impl<T: Dist> DistIteratorLauncher for UnsafeArray<T> {
             let mut i = 0;
             while elems_per_thread > 100.0 && cur_i < num_elems_local_orig {
                 num_elems_local = num_elems_local / 1.61; //golden ratio
-                let mut start_i = cur_i;
+                let start_i = cur_i;
                 let end_i = std::cmp::min(
                     cur_i + num_elems_local.round() as usize,
                     num_elems_local_orig,
@@ -152,7 +152,7 @@ impl<T: Dist> DistIteratorLauncher for UnsafeArray<T> {
     fn collect<I, A>(&self, iter: &I, d: Distribution) -> Pin<Box<dyn Future<Output = A> + Send>>
     where
         I: DistributedIterator + 'static,
-        I::Item: Dist + std::fmt::Debug,
+        I::Item: Dist,
         A: From<UnsafeArray<I::Item>> + AmLocal + 'static,
     {
         let mut reqs = Vec::new();
@@ -193,7 +193,7 @@ impl<T: Dist> DistIteratorLauncher for UnsafeArray<T> {
     ) -> Pin<Box<dyn Future<Output = A> + Send>>
     where
         I: DistributedIterator + 'static,
-        I::Item: Future<Output = B> + Send + 'static + std::fmt::Debug,
+        I::Item: Future<Output = B> + Send + 'static,
         B: Dist,
         A: From<UnsafeArray<B>> + AmLocal + 'static,
     {

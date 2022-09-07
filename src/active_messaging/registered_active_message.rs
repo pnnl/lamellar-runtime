@@ -100,7 +100,7 @@ impl ActiveMessageEngine for RegisteredActiveMessages {
     async fn process_msg(
         &self,
         am: Am,
-        scheduler: &(impl SchedulerQueue + Sync + std::fmt::Debug + std::fmt::Debug),
+        scheduler: &(impl SchedulerQueue + Sync + std::fmt::Debug),
         stall_mark: usize,
     ) {
         match am {
@@ -416,7 +416,7 @@ impl RegisteredActiveMessages {
         data: &[u8],
         i: &mut usize,
         lamellae: &Arc<Lamellae>,
-        scheduler: &(impl SchedulerQueue + Sync + std::fmt::Debug + std::fmt::Debug),
+        scheduler: &(impl SchedulerQueue + Sync + std::fmt::Debug),
     ) {
         let am_header: AmHeader =
             crate::deserialize(&data[*i..*i + *AM_HEADER_LEN], false).unwrap();

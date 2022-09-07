@@ -94,8 +94,8 @@ where
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "ForEachAsync {{  data: {:?}, start_i: {:?}, end_i: {:?} }}",
-            self.data, self.start_i, self.end_i
+            "ForEachAsync {{   start_i: {:?}, end_i: {:?} }}",
+            self.start_i, self.end_i
         )
     }
 }
@@ -132,8 +132,8 @@ where
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "Collect {{  data: {:?}, start_i: {:?}, end_i: {:?} }}",
-            self.data, self.start_i, self.end_i
+            "Collect {{   start_i: {:?}, end_i: {:?} }}",
+         self.start_i, self.end_i
         )
     }
 }
@@ -142,7 +142,7 @@ where
 impl<I> LamellarAm for Collect<I>
 where
     I: DistributedIterator + 'static,
-    I::Item: Sync + std::fmt::Debug,
+    I::Item: Sync,
 {
     fn exec(&self) -> Vec<I::Item> {
         let mut iter = self.data.init(self.start_i, self.end_i - self.start_i);
@@ -171,7 +171,7 @@ where
 impl<I, T> LamellarAm for CollectAsync<I, T, Fut>
 where
     I: DistributedIterator + 'static,
-    I::Item: Future<Output = T> + Send + std::fmt::Debug,
+    I::Item: Future<Output = T> + Send,
     T: Dist,
 {
     fn exec(&self) -> Vec<<I::Item as Future>::Output> {
@@ -295,7 +295,7 @@ pub trait DistIteratorLauncher {
     fn collect<I, A>(&self, iter: &I, d: Distribution) -> Pin<Box<dyn Future<Output = A> + Send>>
     where
         I: DistributedIterator + 'static,
-        I::Item: Dist + std::fmt::Debug,
+        I::Item: Dist,
         A: From<UnsafeArray<I::Item>> + AmLocal + 'static;
 
     fn collect_async<I, A, B>(
@@ -305,7 +305,7 @@ pub trait DistIteratorLauncher {
     ) -> Pin<Box<dyn Future<Output = A> + Send>>
     where
         I: DistributedIterator + 'static,
-        I::Item: Future<Output = B> + Send + 'static + std::fmt::Debug,
+        I::Item: Future<Output = B> + Send + 'static,
         B: Dist,
         A: From<UnsafeArray<B>> + AmLocal + 'static;
 
@@ -382,7 +382,7 @@ pub trait DistributedIterator: AmLocal + Clone + 'static {
     fn collect<A>(&self, d: Distribution) -> Pin<Box<dyn Future<Output = A> + Send>>
     where
         // &'static Self: DistributedIterator + 'static,
-        Self::Item: Dist + std::fmt::Debug,
+        Self::Item: Dist ,
         A: From<UnsafeArray<Self::Item>> + AmLocal + 'static,
     {
         self.array().collect(self, d)
@@ -391,7 +391,7 @@ pub trait DistributedIterator: AmLocal + Clone + 'static {
     where
         // &'static Self: DistributedIterator + 'static,
         T: Dist,
-        Self::Item: Future<Output = T> + Send + 'static + std::fmt::Debug,
+        Self::Item: Future<Output = T> + Send + 'static,
         A: From<UnsafeArray<<Self::Item as Future>::Output>> + AmLocal + 'static,
     {
         self.array().collect_async(self, d)
