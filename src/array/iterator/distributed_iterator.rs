@@ -37,6 +37,10 @@ use std::pin::Pin;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
+use parking_lot::Mutex;
+use rand::seq::SliceRandom;
+use rand::thread_rng;
+
 #[lamellar_impl::AmLocalDataRT(Clone, Debug)]
 pub(crate) struct ForEach<I, F>
 where
@@ -67,6 +71,92 @@ where
                 (self.op)(item);
             }
             range_i = self.range_i.fetch_add(1, Ordering::Relaxed);
+        }
+        // println!("done in for each");
+    }
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct ForEachWorkStealer {
+    pub(crate) range: Arc<Mutex<(usize, usize)>>, //start, end
+}
+
+impl ForEachWorkStealer {
+    fn set_range(&self, start: usize, end: usize) {
+        let mut range = self.range.lock();
+        range.0 = start;
+        range.1 = end;
+        // println!("{:?} set range {:?}", std::thread::current().id(), range);
+    }
+
+    fn next(&self) -> Option<usize> {
+        let mut range = self.range.lock();
+        range.0 += 1;
+        if range.0 <= range.1 {
+            Some(range.0)
+        } else {
+            None
+        }
+    }
+
+    fn steal(&self) -> Option<(usize, usize)> {
+        let mut range = self.range.lock();
+        let start = range.0;
+        let end = range.1;
+        // println!("{:?} stealing {:?}", std::thread::current().id(), range);
+        if end > start && end - start > 2 {
+            let new_end = (start + end) / 2;
+            range.1 = new_end;
+            Some((new_end, end))
+        } else {
+            None
+        }
+    }
+}
+
+#[lamellar_impl::AmLocalDataRT(Clone, Debug)]
+pub(crate) struct ForEachTest<I, F>
+where
+    I: DistributedIterator,
+    F: Fn(I::Item),
+{
+    pub(crate) op: F,
+    pub(crate) data: I,
+    pub(crate) range: ForEachWorkStealer,
+    // pub(crate) ranges: Vec<(usize, usize)>,
+    // pub(crate) range_i: Arc<AtomicUsize>,
+    pub(crate) siblings: Vec<ForEachWorkStealer>,
+}
+#[lamellar_impl::rt_am_local]
+impl<I, F> LamellarAm for ForEachTest<I, F>
+where
+    I: DistributedIterator + 'static,
+    F: Fn(I::Item) + AmLocal + 'static,
+{
+    fn exec(&self) {
+        // println!("in for each {:?} {:?}", self.start_i, self.end_i);
+        let (start, end) = *self.range.range.lock();
+        let mut iter = self.data.init(start, end - start);
+        while self.range.next().is_some() {
+            if let Some(elem) = iter.next() {
+                (&self.op)(elem);
+            }
+        }
+        let mut rng = thread_rng();
+        let mut workers = (0..self.siblings.len()).collect::<Vec<usize>>();
+        workers.shuffle(&mut rng);
+        while let Some(worker) = workers.pop() {
+            if let Some((start, end)) = self.siblings[worker].steal() {
+                let mut iter = self.data.init(start, end - start);
+                self.range.set_range(start, end);
+                while self.range.next().is_some() {
+                    if let Some(elem) = iter.next() {
+                        (&self.op)(elem);
+                    }
+                }
+                workers = (0..self.siblings.len()).collect::<Vec<usize>>();
+                workers.shuffle(&mut rng);
+            }
         }
         // println!("done in for each");
     }
@@ -133,7 +223,7 @@ where
         write!(
             f,
             "Collect {{   start_i: {:?}, end_i: {:?} }}",
-         self.start_i, self.end_i
+            self.start_i, self.end_i
         )
     }
 }
@@ -382,7 +472,7 @@ pub trait DistributedIterator: AmLocal + Clone + 'static {
     fn collect<A>(&self, d: Distribution) -> Pin<Box<dyn Future<Output = A> + Send>>
     where
         // &'static Self: DistributedIterator + 'static,
-        Self::Item: Dist ,
+        Self::Item: Dist,
         A: From<UnsafeArray<Self::Item>> + AmLocal + 'static,
     {
         self.array().collect(self, d)

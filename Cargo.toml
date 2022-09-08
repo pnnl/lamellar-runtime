@@ -288,6 +288,10 @@ name="array_iteration"
 path="examples/array_examples/array_iteration.rs"
 
 [[example]]
+name="array_iteration_test"
+path="examples/array_examples/array_iteration_test.rs"
+
+[[example]]
 name="local_only_array"
 path="examples/array_examples/local_only_array.rs"
 

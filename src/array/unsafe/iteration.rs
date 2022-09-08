@@ -28,6 +28,46 @@ impl<T: Dist> UnsafeArray<T> {
             std::cmp::min(buf_size, self.len()),
         )
     }
+
+    pub fn for_each_test<I, F>(&self, iter: &I, op: F) -> Pin<Box<dyn Future<Output = ()> + Send>>
+    where
+        I: DistributedIterator + 'static,
+        F: Fn(I::Item) + AmLocal + Clone + 'static,
+    {
+        let mut reqs = Vec::new();
+        if let Ok(_my_pe) = self.inner.data.team.team_pe_id() {
+            let num_workers = match std::env::var("LAMELLAR_THREADS") {
+                Ok(n) => n.parse::<usize>().unwrap(),
+                Err(_) => 4,
+            };
+            let num_elems_local = iter.elems(self.num_elems_local());
+            let elems_per_thread = num_elems_local as f64 / num_workers as f64;
+            // println!(
+            //     "num_chunks {:?} chunks_thread {:?}",
+            //     num_elems_local, elems_per_thread
+            // );
+            let mut worker = 0;
+            let iter = iter.init(0, num_elems_local);
+            let mut siblings = Vec::new();
+            while ((worker as f64 * elems_per_thread).round() as usize) < num_elems_local {
+                let start_i = (worker as f64 * elems_per_thread).round() as usize;
+                let end_i = ((worker + 1) as f64 * elems_per_thread).round() as usize;
+                siblings.push(ForEachWorkStealer {
+                    range: Arc::new(Mutex::new((start_i, end_i))),
+                });
+                worker += 1;
+            }
+            for sibling in &siblings {
+                reqs.push(self.inner.data.task_group.exec_am_local(ForEachTest {
+                    op: op.clone(),
+                    data: iter.clone(),
+                    range: sibling.clone(),
+                    siblings: siblings.clone(),
+                }));
+            }
+        }
+        Box::new(DistIterForEachHandle { reqs: reqs }).into_future()
+    }
 }
 
 impl<T: Dist> DistIteratorLauncher for UnsafeArray<T> {
@@ -131,7 +171,10 @@ impl<T: Dist> DistIteratorLauncher for UnsafeArray<T> {
             };
             let num_elems_local = iter.elems(self.num_elems_local());
             let elems_per_thread = num_elems_local as f64 / num_workers as f64;
-            // println!("num_chunks {:?} chunks_thread {:?}", num_elems_local, elems_per_thread);
+            // println!(
+            //     "num_chunks {:?} chunks_thread {:?}",
+            //     num_elems_local, elems_per_thread
+            // );
             let mut worker = 0;
             let iter = iter.init(0, num_elems_local);
             while ((worker as f64 * elems_per_thread).round() as usize) < num_elems_local {
