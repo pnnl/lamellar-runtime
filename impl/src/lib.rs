@@ -302,7 +302,7 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_type: AmType) -> 
         }
     };
 
-    let my_name = quote!{stringify!(#orig_name)};
+    let my_name = quote! {stringify!(#orig_name)};
 
     let mut expanded = quote_spanned! {temp.span()=>
         impl #impl_generics #lamellar::LamellarActiveMessage for #orig_name #ty_generics #where_clause {
@@ -310,7 +310,7 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_type: AmType) -> 
                 Box::pin( async move {
                     #temp
                     #ret_statement
-                }.instrument(tracing::trace_span!(#my_name)))
+                }.instrument(#lamellar::tracing::trace_span!(#my_name)))
 
             }
 
@@ -387,7 +387,8 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_type: AmType) -> 
     let user_expanded = quote_spanned! {expanded.span()=>
         const _: () = {
             extern crate lamellar as __lamellar;
-            use tracing::*;
+            use __lamellar::tracing::*;
+            use __lamellar::tracing::instrument::Instrument;
             #expanded
         };
     };
@@ -396,6 +397,7 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_type: AmType) -> 
         expanded.span()=>
         const _: () = {
             use tracing::*;
+            use tracing::instrument::Instrument;
             #expanded
         };
     };

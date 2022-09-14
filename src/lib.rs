@@ -93,6 +93,11 @@ pub extern crate serde;
 #[doc(hidden)]
 pub use serde::*;
 
+#[doc(hidden)]
+pub extern crate tracing;
+#[doc(hidden)]
+pub use tracing::*;
+
 mod active_messaging;
 pub mod array;
 mod barrier;
