@@ -194,6 +194,11 @@ impl LamellarRequestAddResult for LamellarMultiRequestHandleInner {
     }
     #[tracing::instrument(skip_all)]
     fn update_counters(&self) {
+        // println!(
+        //     "update counter {:?} {:?}",
+        //     self.team_outstanding_reqs.load(Ordering::SeqCst),
+        //     self.world_outstanding_reqs.load(Ordering::SeqCst)
+        // );
         self.team_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
         self.world_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
         if let Some(tg_outstanding_reqs) = self.tg_outstanding_reqs.clone() {

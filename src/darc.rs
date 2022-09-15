@@ -10,7 +10,7 @@ use std::sync::atomic::{AtomicBool, AtomicU8, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use tracing::*;
+// use tracing::*;
 
 use crate::active_messaging::AMCounters;
 use crate::lamellae::{AllocationType, Backend, LamellaeComm, LamellaeRDMA};

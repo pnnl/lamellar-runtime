@@ -810,7 +810,7 @@ impl LamellarTeamRT {
     where
         F: RemoteActiveMessage + LamellarAM + AmDist,
     {
-        // println!("team exec am all");
+        // println!("team exec am all num_pes {:?}", self.num_pes);
         // trace!("[{:?}] team exec am all request", self.world_pe);
         // event!(Level::TRACE, "team exec am all request");
         let tg_outstanding_reqs = match task_group_cnts {
@@ -843,6 +843,7 @@ impl LamellarTeamRT {
 
         self.world_counters.add_send_req(self.num_pes);
         self.team_counters.add_send_req(self.num_pes);
+        // println!("team counter: {:?}", self.team_counters.outstanding_reqs);
         let func: LamellarArcAm = Arc::new(am);
         let world = if let Some(world) = &self.world {
             world.clone()
@@ -1004,7 +1005,7 @@ impl LamellarTeamRT {
         am: F,
     ) -> Box<dyn LamellarRequest<Output = F::Output>>
     where
-        F: LamellarActiveMessage + LocalAM + 'static ,
+        F: LamellarActiveMessage + LocalAM + 'static,
     {
         self.exec_am_local_tg(am, None)
     }

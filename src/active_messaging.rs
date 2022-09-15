@@ -67,7 +67,7 @@ pub trait RemoteActiveMessage: LamellarActiveMessage + LamellarSerde + LamellarR
     fn as_local(self: Arc<Self>) -> LamellarArcLocalAm;
 }
 
-pub trait LamellarActiveMessage: DarcSerde{
+pub trait LamellarActiveMessage: DarcSerde {
     fn exec(
         self: Arc<Self>,
         my_pe: usize,
@@ -94,7 +94,6 @@ pub trait LamellarAM {
     type Output: AmDist;
 }
 
-
 pub enum LamellarReturn {
     LocalData(LamellarAny),
     LocalAm(LamellarArcAm),
@@ -103,14 +102,14 @@ pub enum LamellarReturn {
     Unit,
 }
 
-impl std::fmt::Debug for LamellarReturn{
+impl std::fmt::Debug for LamellarReturn {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self{
-            LamellarReturn::LocalData(_) => write!(f,"LocalData"),
-            LamellarReturn::LocalAm(_) => write!(f,"LocalAm"),
-            LamellarReturn::RemoteData(_) => write!(f,"RemoteData"),
-            LamellarReturn::RemoteAm(_) => write!(f,"RemoteAm"),
-            LamellarReturn::Unit => write!(f,"Unit"),
+        match self {
+            LamellarReturn::LocalData(_) => write!(f, "LocalData"),
+            LamellarReturn::LocalAm(_) => write!(f, "LocalAm"),
+            LamellarReturn::RemoteData(_) => write!(f, "RemoteData"),
+            LamellarReturn::RemoteAm(_) => write!(f, "RemoteAm"),
+            LamellarReturn::Unit => write!(f, "Unit"),
         }
     }
 }
@@ -126,7 +125,6 @@ pub(crate) struct ReqMetaData {
     pub(crate) team_addr: usize,
 }
 
-
 pub(crate) enum Am {
     All(ReqMetaData, LamellarArcAm),
     Remote(ReqMetaData, LamellarArcAm), //req data, am to execute
@@ -134,23 +132,23 @@ pub(crate) enum Am {
     Return(ReqMetaData, LamellarArcAm), //req data, am to return and execute
     Data(ReqMetaData, LamellarResultArc), //req data, data to return
     Unit(ReqMetaData),                  //req data
-    BatchedReturn(ReqMetaData, LamellarArcAm, ReqId), //req data, am to return and execute, batch id
-    BatchedData(ReqMetaData, LamellarResultArc, ReqId), //req data, data to return, batch id
-    BatchedUnit(ReqMetaData, ReqId),    //req data, batch id
+    _BatchedReturn(ReqMetaData, LamellarArcAm, ReqId), //req data, am to return and execute, batch id
+    _BatchedData(ReqMetaData, LamellarResultArc, ReqId), //req data, data to return, batch id
+    _BatchedUnit(ReqMetaData, ReqId),                  //req data, batch id
 }
 
-impl std::fmt::Debug for Am{
+impl std::fmt::Debug for Am {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self{
-            Am::All(_,_) => write!(f,"All"),
-            Am::Remote(_,_) => write!(f,"Remote"),
-            Am::Local(_,_) => write!(f,"Local"),
-            Am::Return(_,_) => write!(f,"Return"),
-            Am::Data(_,_) => write!(f,"Data"),
-            Am::Unit(_) => write!(f,"Unit"),
-            Am::BatchedReturn(_,_,_) => write!(f,"BatchedReturn"),
-            Am::BatchedData(_,_,_) => write!(f,"BatchedData"),
-            Am::BatchedUnit(_,_) => write!(f,"BatchedUnit"),
+        match self {
+            Am::All(_, _) => write!(f, "All"),
+            Am::Remote(_, _) => write!(f, "Remote"),
+            Am::Local(_, _) => write!(f, "Local"),
+            Am::Return(_, _) => write!(f, "Return"),
+            Am::Data(_, _) => write!(f, "Data"),
+            Am::Unit(_) => write!(f, "Unit"),
+            Am::_BatchedReturn(_, _, _) => write!(f, "BatchedReturn"),
+            Am::_BatchedData(_, _, _) => write!(f, "BatchedData"),
+            Am::_BatchedUnit(_, _) => write!(f, "BatchedUnit"),
         }
     }
 }

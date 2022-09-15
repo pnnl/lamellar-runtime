@@ -26,9 +26,9 @@ use thread_local::ThreadLocal;
 #[derive(Debug)]
 pub(crate) struct NumaWorkStealingThread {
     node_work_inj: Arc<crossbeam::deque::Injector<async_task::Runnable>>,
-    sys_work_inj: Vec<Arc<crossbeam::deque::Injector<async_task::Runnable>>>,
+    _sys_work_inj: Vec<Arc<crossbeam::deque::Injector<async_task::Runnable>>>,
     node_work_stealers: Vec<crossbeam::deque::Stealer<async_task::Runnable>>,
-    sys_work_stealers: HashMap<usize, Vec<crossbeam::deque::Stealer<async_task::Runnable>>>,
+    _sys_work_stealers: HashMap<usize, Vec<crossbeam::deque::Stealer<async_task::Runnable>>>,
     work_q: Worker<async_task::Runnable>,
     work_flag: Arc<AtomicU8>,
     active: Arc<AtomicBool>,
@@ -483,9 +483,9 @@ impl NumaWorkStealingInner {
                 let core_work_worker = node_work_workers.pop().unwrap();
                 let worker = NumaWorkStealingThread {
                     node_work_inj: self.work_inj[inj].clone(),
-                    sys_work_inj: self.work_inj.clone(),
+                    _sys_work_inj: self.work_inj.clone(),
                     node_work_stealers: self.work_stealers.get(&node).unwrap().clone(),
-                    sys_work_stealers: self.work_stealers.clone(),
+                    _sys_work_stealers: self.work_stealers.clone(),
                     work_q: core_work_worker,
                     work_flag: self.work_flag.clone(),
                     active: self.active.clone(),

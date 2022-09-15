@@ -104,7 +104,7 @@ impl<T: Dist> DistIteratorLauncher for UnsafeArray<T> {
             let mut elems_per_thread = num_elems_local / num_workers as f64;
             let mut ranges = Vec::new();
             let mut cur_i = 0;
-            let mut i = 0;
+            let mut i;
             while elems_per_thread > 100.0 && cur_i < num_elems_local_orig {
                 num_elems_local = num_elems_local / 1.61; //golden ratio
                 let start_i = cur_i;
@@ -127,7 +127,7 @@ impl<T: Dist> DistIteratorLauncher for UnsafeArray<T> {
                 elems_per_thread = 1.0;
             }
             i = 0;
-            let mut start_i = cur_i;
+            let start_i = cur_i;
             while cur_i < num_elems_local_orig {
                 ranges.push((
                     start_i + (i as f64 * elems_per_thread).round() as usize,

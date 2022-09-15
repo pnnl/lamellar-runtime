@@ -2,7 +2,8 @@ use crate::active_messaging::batching::{Batcher, BatcherType};
 use crate::active_messaging::*;
 use crate::lamellae::comm::AllocError;
 use crate::lamellae::{
-    Des, Lamellae, LamellaeAM, LamellaeRDMA, Ser, SerializeHeader, SerializedData, SubData, Backend,LamellaeComm
+    Backend, Des, Lamellae, LamellaeAM, LamellaeComm, LamellaeRDMA, Ser, SerializeHeader,
+    SerializedData, SubData,
 };
 
 use crate::scheduler::SchedulerQueue;
@@ -107,7 +108,7 @@ impl ActiveMessageEngine for RegisteredActiveMessages {
             Am::All(req_data, am) => {
                 let am_id = *(AMS_IDS.get(&am.get_id()).unwrap());
                 let am_size = am.serialized_size();
-                if false && am_size < crate::active_messaging::BATCH_AM_SIZE {
+                if am_size < crate::active_messaging::BATCH_AM_SIZE {
                     self.batcher.add_remote_am_to_batch(
                         req_data.clone(),
                         am.clone(),
@@ -116,14 +117,16 @@ impl ActiveMessageEngine for RegisteredActiveMessages {
                         scheduler,
                         stall_mark,
                     );
-                } else if req_data.team.lamellae.backend() != Backend::Local{
+                } else if req_data.team.lamellae.backend() != Backend::Local {
                     self.send_am(req_data.clone(), am.clone(), am_id, am_size, Cmd::Am)
                         .await;
                 }
                 let world = LamellarTeam::new(None, req_data.world.clone(), true);
                 let team = LamellarTeam::new(Some(world.clone()), req_data.team.clone(), true);
-                self.exec_local_am(req_data, am.as_local(), world, team)
-                    .await;
+                if req_data.team.arch.team_pe(req_data.src).is_ok() {
+                    self.exec_local_am(req_data, am.as_local(), world, team)
+                        .await;
+                }
             }
             Am::Remote(req_data, am) => {
                 if req_data.dst == Some(req_data.src) {
@@ -177,7 +180,7 @@ impl ActiveMessageEngine for RegisteredActiveMessages {
                     self.send_unit_am(req_data).await;
                 }
             }
-            Am::BatchedReturn(_req_data, _func, _batch_id) => {
+            Am::_BatchedReturn(_req_data, _func, _batch_id) => {
                 // let func_id = *(AMS_IDS.get(&func.get_id()).unwrap());
                 // let func_size = func.serialized_size();
                 // if func_size <= crate::active_messaging::BATCH_AM_SIZE {
@@ -193,7 +196,7 @@ impl ActiveMessageEngine for RegisteredActiveMessages {
                 //     .await;
                 // }
             }
-            Am::BatchedData(_req_data, _data, _batch_id) => {
+            Am::_BatchedData(_req_data, _data, _batch_id) => {
                 // let data_size = data.serialized_size();
                 // if data_size <= crate::active_messaging::BATCH_AM_SIZE {
                 //     self.add_batched_data_am_to_batch(
@@ -205,7 +208,7 @@ impl ActiveMessageEngine for RegisteredActiveMessages {
                 //         .await;
                 // }
             }
-            Am::BatchedUnit(_req_data, _batch_id) => {
+            Am::_BatchedUnit(_req_data, _batch_id) => {
                 // self.add_batched_unit_am_to_batch(req_data, batch_id, scheduler,stall_mark)
                 //     .await;
             }
