@@ -1,4 +1,4 @@
-use lamellar::array::{AtomicArray, DistributedIterator, LocalLockAtomicArray};
+use lamellar::array::{AccessOps, AtomicArray, DistributedIterator, LocalLockAtomicArray};
 
 macro_rules! initialize_array {
     (UnsafeArray,$array:ident,$init_val:ident) => {
@@ -73,7 +73,7 @@ macro_rules! and_test{
                     }
                 }
                 for (req,idx) in reqs{
-                    let val =  world.block_on(req)[0];
+                    let val =  world.block_on(req);
                     check_val!($array,val,init_val,success);
                     if !success{
                         println!("{:?} {:?} {:?}",idx,val,init_val);
@@ -101,7 +101,7 @@ macro_rules! and_test{
                     reqs.push((array.load(idx),idx));
                 }
                 for (req,idx) in reqs{
-                    let val =  world.block_on(req)[0];
+                    let val =  world.block_on(req);
                     let check_val = (idx%num_pes) as $t;
                     let val = val;
                     check_val!($array,val,check_val,success);
@@ -143,7 +143,7 @@ macro_rules! and_test{
                     }
                 }
                 for (req,idx) in reqs{
-                    let val =  world.block_on(req)[0];
+                    let val =  world.block_on(req);
                     check_val!($array,val,init_val,success);
                     if !success{
                         println!("{:?} {:?} {:?}",idx,val,init_val);
@@ -171,7 +171,7 @@ macro_rules! and_test{
                     reqs.push((sub_array.load(idx),idx));
                 }
                 for (req,idx) in reqs{
-                    let val =  world.block_on(req)[0];
+                    let val =  world.block_on(req);
                     let check_val = (idx%num_pes) as $t;
                     let val = val;
                     check_val!($array,val,check_val,success);
@@ -215,7 +215,7 @@ macro_rules! and_test{
                         }
                     }
                     for (req,idx) in reqs{
-                        let val =  world.block_on(req)[0];
+                        let val =  world.block_on(req);
                         check_val!($array,val,init_val,success);
                         if !success{
                             println!("{:?} {:?} {:?}",idx,val,init_val);
@@ -243,7 +243,7 @@ macro_rules! and_test{
                         reqs.push((sub_array.load(idx),idx));
                     }
                     for (req,idx) in reqs{
-                        let val =  world.block_on(req)[0];
+                        let val =  world.block_on(req);
                         let check_val = (idx%num_pes) as $t;
                         let val = val;
                     check_val!($array,val,check_val,success);

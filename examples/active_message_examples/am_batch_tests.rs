@@ -118,6 +118,7 @@ fn main() {
         .build();
     let my_pe = world.my_pe();
     let num_pes = world.num_pes();
+    // let _guard = setup_global_subscriber();
 
     let mut rng = rand::thread_rng();
     let pe_rng = Uniform::from(0..num_pes + 1);

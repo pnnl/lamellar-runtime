@@ -343,7 +343,7 @@ pub(crate) mod private {
     #[enum_dispatch(LamellarReadArray<T>,LamellarWriteArray<T>)]
     pub trait LamellarArrayPrivate<T: Dist> {
         // // fn my_pe(&self) -> usize;
-
+        fn inner_array(&self) -> &UnsafeArray<T>;
         fn local_as_ptr(&self) -> *const T;
         fn local_as_mut_ptr(&self) -> *mut T;
         fn pe_for_dist_index(&self, index: usize) -> Option<usize>;

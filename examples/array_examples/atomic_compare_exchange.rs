@@ -1,4 +1,6 @@
-use lamellar::array::{AtomicArray, DistributedIterator, Distribution};
+use lamellar::array::{
+    AtomicArray, CompareExchangeEpsilonOps, CompareExchangeOps, DistributedIterator, Distribution,
+};
 use rand::seq::SliceRandom;
 use rand::SeedableRng;
 
@@ -17,7 +19,6 @@ use tracing_subscriber::{fmt, prelude::*, registry::Registry};
 //     _guard
 // }
 
-
 fn main() {
     // let _guard = setup_global_subscriber();
     let world = lamellar::LamellarWorldBuilder::new().build();
@@ -33,7 +34,7 @@ fn main() {
         let mut fail_cnt = 0;
         let old = my_pe;
         let new = my_pe + 1;
-        while world.block_on(array.compare_exchange(i, old, new))[0].is_err() {
+        while world.block_on(array.compare_exchange(i, old, new)).is_err() {
             //compare_exchange reutrns Option<Vec<Result<T,T>>>
             // the outer option should never be none,
             // vec is cause we can apply to multiple inidices in one call (see below),
@@ -56,7 +57,7 @@ fn main() {
     let old = 0.0;
     let new = (my_pe + 1) as f32;
     let epsilon = 0.00001;
-    let res = world.block_on(array_2.compare_exchange_epsilon(indices, old, new, epsilon)); //should not fail
+    let res = world.block_on(array_2.batch_compare_exchange_epsilon(indices, old, new, epsilon)); //should not fail
     array_2.barrier();
 
     let (num_failed, num_ok) = res.iter().fold((0, 0), |acc, x| {
@@ -68,12 +69,13 @@ fn main() {
     });
 
     let array2_clone = array_2.clone();
-    world.block_on(async move{ 
-        let res = array2_clone.compare_exchange_epsilon(0,10.0,11.0, 0.1).await;
-        match res[0]{
+    world.block_on(async move {
+        let res = array2_clone
+            .compare_exchange_epsilon(0, 10.0, 11.0, 0.1)
+            .await;
+        match res {
             Ok(_) => {
                 println!("success");
-
             }
             Err(_) => {
                 println!("failed");
@@ -81,14 +83,15 @@ fn main() {
         }
     });
 
-    let l = array.dist_iter().enumerate().for_each_async(move |(i,e)| { 
-        let a2c= array_2.clone();
+    let l = array.dist_iter().enumerate().for_each_async(move |(i, e)| {
+        let a2c = array_2.clone();
         async move {
-            let res = a2c.compare_exchange_epsilon(i, e.load() as f32,0.0,epsilon).await;
-            match res[0]{
+            let res = a2c
+                .compare_exchange_epsilon(i, e.load() as f32, 0.0, epsilon)
+                .await;
+            match res {
                 Ok(_) => {
                     println!("success");
-
                 }
                 Err(_) => {
                     println!("failed");

@@ -99,7 +99,7 @@ macro_rules! add_test{
                         reqs.push(array.fetch_div(idx,2 as $t));
                     }
                     for req in reqs{
-                        let val =  world.block_on(req)[0];
+                        let val =  world.block_on(req);
                         if val > prev || (prev as u128)%2 != 0{
                             if prev > 1 as $t{
                                 println!("full 1: {:?} {:?} {:?}",init_val,val,prev);
@@ -156,7 +156,7 @@ macro_rules! add_test{
                         reqs.push(sub_array.fetch_div(idx,2 as $t));
                     }
                     for req in reqs{
-                        let val =  world.block_on(req)[0];
+                        let val =  world.block_on(req);
                         if val > prev || (prev as u128)%2 != 0{
                             if prev > 1 as $t{
                                 println!("half 1: {:?} {:?}",val,prev);
@@ -212,7 +212,7 @@ macro_rules! add_test{
                             reqs.push(sub_array.fetch_div(idx,2 as $t));
                         }
                         for req in reqs{
-                            let val =  world.block_on(req)[0];
+                            let val =  world.block_on(req);
                             if val > prev || (prev as u128)%2 != 0{
                                 if prev > 1 as $t{
                                     println!("pe 1: {:?} {:?}",val,prev);

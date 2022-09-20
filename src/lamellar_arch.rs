@@ -33,7 +33,7 @@ impl std::fmt::Display for IdError {
 #[prof]
 impl std::error::Error for IdError {}
 
-#[derive( Clone)] //, Hash)]
+#[derive(Clone)] //, Hash)]
 pub(crate) enum LamellarArchEnum {
     GlobalArch(GlobalArch),
     StridedArch(StridedArch),
@@ -41,13 +41,13 @@ pub(crate) enum LamellarArchEnum {
     Dynamic(Arc<dyn LamellarArch>),
 }
 
-impl std::fmt::Debug for LamellarArchEnum{
+impl std::fmt::Debug for LamellarArchEnum {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self{
-            LamellarArchEnum::GlobalArch(_) => write!(f,"GlobalArch"),
-            LamellarArchEnum::StridedArch(_) => write!(f,"StridedArch"),
-            LamellarArchEnum::BlockedArch(_) => write!(f,"BlockedArch"),
-            LamellarArchEnum::Dynamic(_) => write!(f,"Dynamic"),
+        match self {
+            LamellarArchEnum::GlobalArch(_) => write!(f, "GlobalArch"),
+            LamellarArchEnum::StridedArch(_) => write!(f, "StridedArch"),
+            LamellarArchEnum::BlockedArch(_) => write!(f, "BlockedArch"),
+            LamellarArchEnum::Dynamic(_) => write!(f, "Dynamic"),
         }
     }
 }

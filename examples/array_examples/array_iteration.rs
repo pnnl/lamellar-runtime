@@ -129,7 +129,7 @@ fn main() {
                 i,
                 elem
             );
-            async move { (i, elem, barray.fetch_add(i, *elem).await[0]) }
+            async move { (i, elem, barray.fetch_add(i, *elem).await) }
         })
         .for_each_async(move |i| async move {
             println!(
@@ -146,17 +146,19 @@ fn main() {
     println!("--------------------------------------------------------");
     println!("map async collect");
     let barray = block_array.clone();
-    let new_array = world.block_on(cyclic_array
-        .dist_iter()
-        .enumerate()
-        .map(move |(i, elem)| {
-            let barray = barray.clone();
-            async move {
-                barray.add(i, *elem).await;
-                barray.at(i).await
-            }
-        })
-        .collect_async::<ReadOnlyArray<usize>, _>(Distribution::Block));
+    let new_array = world.block_on(
+        cyclic_array
+            .dist_iter()
+            .enumerate()
+            .map(move |(i, elem)| {
+                let barray = barray.clone();
+                async move {
+                    barray.add(i, *elem).await;
+                    barray.at(i).await
+                }
+            })
+            .collect_async::<ReadOnlyArray<usize>, _>(Distribution::Block),
+    );
     cyclic_array.barrier();
     new_array.print();
     block_array.print();

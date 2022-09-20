@@ -4,11 +4,11 @@ use lamellar::array::{
 macro_rules! into_test {
     ($array1:ident, $array2:ident) => {{
         let world = lamellar::LamellarWorldBuilder::new().build();
-        let num_pes = world.num_pes();
-        let my_pe = world.my_pe();
+        let _num_pes = world.num_pes();
+        let _my_pe = world.my_pe();
 
         let array = $array1::<u32>::new(world.clone(), 1000, Distribution::Block);
-        let array2: $array2<u32> = array.into();
+        let _array2: $array2<u32> = array.into();
     }};
 }
 

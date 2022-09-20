@@ -560,6 +560,9 @@ impl<T: Dist> private::ArrayExecAm<T> for GenericAtomicArray<T> {
 }
 
 impl<T: Dist> private::LamellarArrayPrivate<T> for GenericAtomicArray<T> {
+    fn inner_array(&self) -> &UnsafeArray<T> {
+        &self.array
+    }
     fn local_as_ptr(&self) -> *const T {
         self.array.local_as_mut_ptr()
     }

@@ -35,6 +35,7 @@ impl LamellarAM for AmNoReturn {
 //     let fmt_layer = fmt::Layer::default();
 
 //     let (flame_layer, _guard) = FlameLayer::with_file("./tracing.folded").unwrap();
+//     let flame_layer = flame_layer.with_threads_collapsed(true);
 
 //     let subscriber = Registry::default().with(fmt_layer).with(flame_layer);
 
@@ -57,6 +58,7 @@ fn main() {
         .build();
     let my_pe = world.my_pe();
     let num_pes = world.num_pes();
+    // let _guard = setup_global_subscriber();
     world.barrier();
     let am = AmNoReturn { my_pe: my_pe };
     if my_pe == 0 {

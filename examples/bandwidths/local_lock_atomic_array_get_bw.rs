@@ -3,9 +3,7 @@
 /// from a local array into a remote PE.
 /// --------------------------------------------------------------------
 // use lamellar::ActiveMessaging;
-use lamellar::array::{
-    DistributedIterator, Distribution, LocalLockAtomicArray, ReadOnlyArray, UnsafeArray,
-};
+use lamellar::array::{DistributedIterator, Distribution, LocalLockAtomicArray};
 use lamellar::RemoteMemoryRegion;
 use std::time::Instant;
 

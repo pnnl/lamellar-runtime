@@ -95,7 +95,7 @@ for toolchain in stable; do #nightly; do
         sbatch --cpus-per-task=64 -N 2 --time 0:120:00 $root/batch_runner.sh $root $dir $mode 63 2
         if [ $dir != "bandwidths" ]; then
           sbatch --cpus-per-task=64 -N 8 --time 0:120:00 $root/batch_runner.sh $root $dir $mode 63 8
-          sbatch --cpus-per-task=32 -N 16 -n 32 --time 0:120:00 $root/batch_runner.sh $root $dir $mode 31 32
+          sbatch --cpus-per-task=32 -N 16 -n 32 --time 0:240:00 $root/batch_runner.sh $root $dir $mode 31 32
                 
         #   for test in `ls $root/examples/$dir`; do
         #     test=`basename $test .rs`

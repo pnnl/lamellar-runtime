@@ -1,4 +1,7 @@
-use lamellar::array::{AtomicArray, DistributedIterator, LocalLockAtomicArray};
+use lamellar::array::{
+    AtomicArray, CompareExchangeEpsilonOps, CompareExchangeOps, DistributedIterator,
+    LocalLockAtomicArray,
+};
 
 macro_rules! initialize_array {
     (UnsafeArray,$array:ident,$init_val:ident) => {
@@ -59,7 +62,7 @@ macro_rules! compare_exchange_test{
                 }
             }
             for (req,idx) in reqs{
-                match  world.block_on(req)[0]{
+                match  world.block_on(req){
                     Ok(val) => {
                         check_val!($array,val,init_val,success);
                         if !success{
@@ -78,7 +81,7 @@ macro_rules! compare_exchange_test{
                 reqs.push((array.compare_exchange(idx,init_val,my_pe as $t),idx));
             }
             for (req,idx) in reqs{
-                match  world.block_on(req)[0]{
+                match  world.block_on(req){
                     Ok(val) => {
                         println!("returned ok {:?} {:?} {:?}",idx,val,init_val);
                     }
@@ -106,7 +109,7 @@ macro_rules! compare_exchange_test{
                 }
             }
             for (req,idx) in reqs{
-                match  world.block_on(req)[0]{
+                match  world.block_on(req){
                     Ok(val) => {
                         check_val!($array,val,init_val,success);
                         if !success{
@@ -125,7 +128,7 @@ macro_rules! compare_exchange_test{
                 reqs.push((sub_array.compare_exchange(idx,init_val,my_pe as $t),idx));
             }
             for (req,idx) in reqs{
-                match  world.block_on(req)[0]{
+                match  world.block_on(req){
                     Ok(val) => {
                         println!("returned ok {:?} {:?} {:?}",idx,val,init_val);
                     }
@@ -155,7 +158,7 @@ macro_rules! compare_exchange_test{
                     }
                 }
                 for (req,idx) in reqs{
-                    match  world.block_on(req)[0]{
+                    match  world.block_on(req){
                         Ok(val) => {
                             check_val!($array,val,init_val,success);
                             if !success{
@@ -176,7 +179,7 @@ macro_rules! compare_exchange_test{
                     }
                 }
                 for (req,idx) in reqs{
-                    match  world.block_on(req)[0]{
+                    match  world.block_on(req){
                         Ok(val) => {
                             println!("returned ok {:?} {:?} {:?}",idx,val,init_val);
                         }
@@ -222,7 +225,7 @@ macro_rules! compare_exchange_epsilon_test{
                 }
             }
             for (req,idx) in reqs{
-                match  world.block_on(req)[0]{
+                match  world.block_on(req){
                     Ok(val) => {
                         check_val!($array,val,init_val,success);
                         if !success{
@@ -241,7 +244,7 @@ macro_rules! compare_exchange_epsilon_test{
                 reqs.push((array.compare_exchange_epsilon(idx,init_val,my_pe as $t,epsilon),idx));
             }
             for (req,idx) in reqs{
-                match  world.block_on(req)[0]{
+                match  world.block_on(req){
                     Ok(val) => {
                         println!("returned ok {:?} {:?} {:?}",idx,val,init_val);
                     }
@@ -269,7 +272,7 @@ macro_rules! compare_exchange_epsilon_test{
                 }
             }
             for (req,idx) in reqs{
-                match  world.block_on(req)[0]{
+                match  world.block_on(req){
                     Ok(val) => {
                         check_val!($array,val,init_val,success);
                         if !success{
@@ -288,7 +291,7 @@ macro_rules! compare_exchange_epsilon_test{
                 reqs.push((sub_array.compare_exchange_epsilon(idx,init_val,my_pe as $t,epsilon),idx));
             }
             for (req,idx) in reqs{
-                match  world.block_on(req)[0]{
+                match  world.block_on(req){
                     Ok(val) => {
                         println!("returned ok {:?} {:?} {:?}",idx,val,init_val);
                     }
@@ -318,7 +321,7 @@ macro_rules! compare_exchange_epsilon_test{
                     }
                 }
                 for (req,idx) in reqs{
-                    match  world.block_on(req)[0]{
+                    match  world.block_on(req){
                         Ok(val) => {
                             check_val!($array,val,init_val,success);
                             if !success{
@@ -339,7 +342,7 @@ macro_rules! compare_exchange_epsilon_test{
                     }
                 }
                 for (req,idx) in reqs{
-                    match  world.block_on(req)[0]{
+                    match  world.block_on(req){
                         Ok(val) => {
                             println!("returned ok {:?} {:?} {:?}",idx,val,init_val);
                         }

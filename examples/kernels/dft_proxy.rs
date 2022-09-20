@@ -6,8 +6,8 @@
 /// as well as a (single process) shared memory version using Rayon.
 /// --------------------------------------------------------------------
 use lamellar::array::{
-    AtomicArray, DistributedIterator, Distribution, LocalLockAtomicArray, ReadOnlyArray,
-    SerialIterator, UnsafeArray,
+    iterator::distributed_iterator::Schedule, AtomicArray, DistributedIterator, Distribution,
+    LocalLockAtomicArray, ReadOnlyArray, SerialIterator, UnsafeArray,
 };
 use lamellar::{ActiveMessaging, LamellarWorld};
 use lamellar::{RemoteMemoryRegion, SharedMemoryRegion};
@@ -285,22 +285,24 @@ fn dft_lamellar_array_opt_test(
         .enumerate()
         .for_each(|(i, chunk)| {
             let signal = chunk.clone();
-            let iter = spectrum.dist_iter_mut().enumerate();
-            spectrum.for_each_test(&iter, move |(k, spec_bin)| {
-                let mut sum = 0f64;
-                for (j, &x) in signal
-                    .iter()
-                    .enumerate()
-                    .map(|(j, x)| (j + i * buf_size, x))
-                {
-                    let angle =
-                        -1f64 * (j * k) as f64 * 2f64 * std::f64::consts::PI / sig_len as f64;
-                    let twiddle = angle * (angle.cos() + angle * angle.sin());
-                    sum = sum + twiddle * x;
-                }
-                // let _lock = LOCK.lock();
-                *spec_bin += sum;
-            });
+            spectrum.dist_iter_mut().enumerate().for_each_with_schedule(
+                move |(k, spec_bin)| {
+                    let mut sum = 0f64;
+                    for (j, &x) in signal
+                        .iter()
+                        .enumerate()
+                        .map(|(j, x)| (j + i * buf_size, x))
+                    {
+                        let angle =
+                            -1f64 * (j * k) as f64 * 2f64 * std::f64::consts::PI / sig_len as f64;
+                        let twiddle = angle * (angle.cos() + angle * angle.sin());
+                        sum = sum + twiddle * x;
+                    }
+                    // let _lock = LOCK.lock();
+                    *spec_bin += sum;
+                },
+                Schedule::Dynamic,
+            );
         });
     spectrum.wait_all();
     spectrum.barrier();

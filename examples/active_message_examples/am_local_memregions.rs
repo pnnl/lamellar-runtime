@@ -47,7 +47,7 @@ fn main() {
 
     let mut rng = rand::thread_rng();
     let pes = Uniform::from(0..num_pes);
-    let width = 10;
+    let _width = 10;
     let s = Instant::now();
     // for _i in 0..width {
     //     let pe = pes.sample(&mut rng);

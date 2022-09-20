@@ -91,7 +91,7 @@ macro_rules! sub_test{
                         reqs.push(array.fetch_sub(idx,1 as $t));
                     }
                     for req in reqs{
-                        let val =  world.block_on(req)[0];
+                        let val =  world.block_on(req);
                         if val > prev{
                             success = false;
                         }
@@ -179,7 +179,7 @@ macro_rules! sub_test{
                         reqs.push(sub_array.fetch_sub(idx,1 as $t));
                     }
                     for req in reqs{
-                        let val =  world.block_on(req)[0];
+                        let val =  world.block_on(req);
                         if val > prev{
                             success = false;
                         }
@@ -268,7 +268,7 @@ macro_rules! sub_test{
                             reqs.push(sub_array.fetch_sub(idx,1 as $t));
                         }
                         for req in reqs{
-                            let val =  world.block_on(req)[0];
+                            let val =  world.block_on(req);
                             if val > prev{
                                 success = false;
                             }

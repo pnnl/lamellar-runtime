@@ -72,7 +72,7 @@ macro_rules! and_test{
                     reqs.push((array.fetch_bit_and(idx,my_val),idx));
                 }
                 for (req,idx) in reqs{
-                    let val =  world.block_on(req)[0];
+                    let val =  world.block_on(req);
                     if (val & !my_val) != !my_val{
                         println!("1. {:?} {:x} {:x} {:x} {:x}",idx,my_val,!my_val,val,(val & !my_val));
                         success = false;
@@ -119,7 +119,7 @@ macro_rules! and_test{
                     reqs.push((sub_array.fetch_bit_and(idx,my_val),idx));
                 }
                 for (req,idx) in reqs{
-                    let val =  world.block_on(req)[0];
+                    let val =  world.block_on(req);
                     if (val & !my_val) != !my_val{
                         println!("{:?} {:x} {:x} {:x}",idx,my_val,val,(val & !my_val));
                         success = false;
@@ -167,7 +167,7 @@ macro_rules! and_test{
                         reqs.push((sub_array.fetch_bit_and(idx,my_val),idx));
                     }
                     for (req,idx) in reqs{
-                        let val =  world.block_on(req)[0];
+                        let val =  world.block_on(req);
                         if (val & !my_val) != !my_val{
                             println!("{:?} {:x} {:x} {:x}",idx,my_val,val,(val & !my_val));
                             success = false;

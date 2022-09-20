@@ -69,8 +69,8 @@ fn attach_to_shmem(size: usize, id: &str, header: usize, create: bool) -> MyShme
             Err(ShmemError::LinkExists)
             | Err(ShmemError::MappingIdExists)
             | Err(ShmemError::MapOpenFailed(_)) => {
-                match ShmemConf::new().os_id(shmem_id.clone()).open(){
-                // match ShmemConf::new().flink(shmem_id.clone()).open() {
+                match ShmemConf::new().os_id(shmem_id.clone()).open() {
+                    // match ShmemConf::new().flink(shmem_id.clone()).open() {
                     Ok(m) => {
                         // println!("attached {:?}", shmem_id);
                         if create {

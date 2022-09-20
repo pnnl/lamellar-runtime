@@ -644,11 +644,12 @@ impl InnerCQ {
         let mut timer = std::time::Instant::now();
         self.pending_cmds.fetch_add(1, Ordering::SeqCst);
         loop {
-            {//this is to tell the compiler we wont hold the mutex lock if we have to yield
+            {
+                //this is to tell the compiler we wont hold the mutex lock if we have to yield
                 let span = trace_span!("send loop 1");
                 let _guard = span.enter();
-                
-                let mut cmd_buffer = trace_span!("lock").in_scope(||self.cmd_buffers[dst].lock());
+
+                let mut cmd_buffer = trace_span!("lock").in_scope(|| self.cmd_buffers[dst].lock());
                 if cmd_buffer.try_push(addr, len, hash) {
                     // let data_slice = unsafe{ std::slice::from_raw_parts((addr + self.comm.base_addr()) as *const u8, len) };
                     self.sent_cnt.fetch_add(1, Ordering::SeqCst);

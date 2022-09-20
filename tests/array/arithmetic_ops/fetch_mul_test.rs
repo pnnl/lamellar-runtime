@@ -97,7 +97,7 @@ macro_rules! add_test{
                         reqs.push(array.fetch_mul(idx,2 as $t));
                     }
                     for req in reqs{
-                        let val =  world.block_on(req)[0];
+                        let val =  world.block_on(req);
                         if val < prev || (prev as u128)%2 != 0{
                             if prev > 1 as $t{
                                 println!("full 1: {:?} {:?} ",val,prev);
@@ -151,7 +151,7 @@ macro_rules! add_test{
                         reqs.push(sub_array.fetch_mul(idx,2 as $t));
                     }
                     for req in reqs{
-                        let val =  world.block_on(req)[0];
+                        let val =  world.block_on(req);
                         if val < prev || (prev as u128)%2 != 0{
                             if prev > 1 as $t{
                                 println!("full 1:  {:?} {:?}",val,prev);
@@ -204,7 +204,7 @@ macro_rules! add_test{
                             reqs.push(sub_array.fetch_mul(idx,2 as $t));
                         }
                         for req in reqs{
-                            let val =  world.block_on(req)[0];
+                            let val =  world.block_on(req);
                             if val < prev || (prev as u128)%2 != 0{
                                 if prev > 1 as $t{
                                     println!("full 1: {:?} {:?} ",val,prev);

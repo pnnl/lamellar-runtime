@@ -73,7 +73,7 @@ macro_rules! or_test{
                     reqs.push((array.fetch_bit_or(idx,my_val),idx));
                 }
                 for (req,idx) in reqs{
-                    let val =  world.block_on(req)[0];
+                    let val =  world.block_on(req);
                     if (val & my_val) != 0 {
                         println!("{:?} {:x} {:x} ",idx,my_val,val);
                         success = false;
@@ -120,7 +120,7 @@ macro_rules! or_test{
                     reqs.push((sub_array.fetch_bit_or(idx,my_val),idx));
                 }
                 for (req,idx)  in reqs{
-                    let val =  world.block_on(req)[0];
+                    let val =  world.block_on(req);
                     if (val & my_val) != 0 {
                         println!("{:?} {:x} {:x} ",idx,my_val,val);
                         success = false;
@@ -168,7 +168,7 @@ macro_rules! or_test{
                         reqs.push((sub_array.fetch_bit_or(idx,my_val),idx));
                     }
                     for (req,idx)  in reqs{
-                        let val =  world.block_on(req)[0];
+                        let val =  world.block_on(req);
                         if (val & my_val) != 0 {
                             println!("{:?} {:x} {:x} ",idx,my_val,val);
                             success = false;

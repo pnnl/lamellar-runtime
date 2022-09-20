@@ -1,5 +1,4 @@
 use lamellar::array::{DistributedIterator, Distribution, SerialIterator, UnsafeArray};
-use lamellar::Dist;
 /// ----------------Lamellar Parallel Blocked Array GEMM---------------------------------------------------
 /// This performs a distributed GEMM by partitioning the global matrices (stored in LamellarArrya)
 /// into sub matrices, and then performing GEMMS on the sub matrices.

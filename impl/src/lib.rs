@@ -389,7 +389,6 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_type: AmType) -> 
         const _: () = {
             extern crate lamellar as __lamellar;
             use __lamellar::tracing::*;
-            use __lamellar::tracing::instrument::Instrument;
             #expanded
         };
     };

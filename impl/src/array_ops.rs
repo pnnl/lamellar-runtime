@@ -230,7 +230,7 @@ fn native_atomic_slice(
                 a_val
             },
         ),
-        _ => panic!("this should never happen {:?}",ident.to_string().as_str()),
+        _ => panic!("this should never happen {:?}", ident.to_string().as_str()),
     }
 }
 

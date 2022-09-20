@@ -122,6 +122,9 @@ impl<T: Dist> private::ArrayExecAm<T> for LocalOnlyArray<T> {
 }
 
 impl<T: Dist> private::LamellarArrayPrivate<T> for LocalOnlyArray<T> {
+    fn inner_array(&self) -> &UnsafeArray<T> {
+        &self.array
+    }
     fn local_as_ptr(&self) -> *const T {
         self.local_as_mut_ptr()
     }

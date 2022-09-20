@@ -530,6 +530,10 @@ pub(crate) struct ArrayOpHandleInner {
 }
 
 pub(crate) struct ArrayOpFetchHandle<T: Dist> {
+    pub(crate) req: Box<ArrayOpFetchHandleInner<T>>,
+}
+
+pub(crate) struct ArrayOpBatchFetchHandle<T: Dist> {
     pub(crate) reqs: Vec<Box<ArrayOpFetchHandleInner<T>>>,
 }
 
@@ -543,6 +547,9 @@ pub(crate) struct ArrayOpFetchHandleInner<T: Dist> {
 }
 
 pub(crate) struct ArrayOpResultHandle<T: Dist> {
+    pub(crate) req: Box<ArrayOpResultHandleInner<T>>,
+}
+pub(crate) struct ArrayOpBatchResultHandle<T: Dist> {
     pub(crate) reqs: Vec<Box<ArrayOpResultHandleInner<T>>>,
 }
 
@@ -595,6 +602,22 @@ impl LamellarRequest for ArrayOpHandleInner {
 
 #[async_trait]
 impl<T: Dist> LamellarRequest for ArrayOpFetchHandle<T> {
+    type Output = T;
+    async fn into_future(mut self: Box<Self>) -> Self::Output {
+        self.req
+            .into_future()
+            .await
+            .pop()
+            .expect("should have a single request")
+    }
+
+    fn get(&self) -> Self::Output {
+        self.req.get().pop().expect("should have a single request")
+    }
+}
+
+#[async_trait]
+impl<T: Dist> LamellarRequest for ArrayOpBatchFetchHandle<T> {
     type Output = Vec<T>;
     async fn into_future(mut self: Box<Self>) -> Self::Output {
         let mut res = vec![];
@@ -676,6 +699,22 @@ impl<T: Dist> LamellarRequest for ArrayOpFetchHandleInner<T> {
 
 #[async_trait]
 impl<T: Dist> LamellarRequest for ArrayOpResultHandle<T> {
+    type Output = Result<T, T>;
+    async fn into_future(mut self: Box<Self>) -> Self::Output {
+        self.req
+            .into_future()
+            .await
+            .pop()
+            .expect("should have a single request")
+    }
+
+    fn get(&self) -> Self::Output {
+        self.req.get().pop().expect("should have a single request")
+    }
+}
+
+#[async_trait]
+impl<T: Dist> LamellarRequest for ArrayOpBatchResultHandle<T> {
     type Output = Vec<Result<T, T>>;
     async fn into_future(mut self: Box<Self>) -> Self::Output {
         let mut res = vec![];
@@ -795,78 +834,256 @@ impl<T> ElementBitWiseOps for T where
 {
 }
 
-pub trait ArithmeticOps<T: Dist + ElementArithmeticOps> {
-    fn add<'a>(
-        &self,
-        index: impl OpInput<'a, usize>,
-        val: T,
-    ) -> Pin<Box<dyn Future<Output = ()> + Send>>;
-    fn fetch_add<'a>(
-        &self,
-        index: impl OpInput<'a, usize>,
-        val: T,
-    ) -> Pin<Box<dyn Future<Output = Vec<T>> + Send>>;
+pub trait ElementCompareEqOps: std::cmp::Eq + AmDist + Dist + Sized {}
+impl<T> ElementCompareEqOps for T where T: std::cmp::Eq + AmDist + Dist {}
 
-    fn sub<'a>(
-        &self,
-        index: impl OpInput<'a, usize>,
-        val: T,
-    ) -> Pin<Box<dyn Future<Output = ()> + Send>>;
-    fn fetch_sub<'a>(
-        &self,
-        index: impl OpInput<'a, usize>,
-        val: T,
-    ) -> Pin<Box<dyn Future<Output = Vec<T>> + Send>>;
+pub trait ElementComparePartialEqOps: std::cmp::PartialEq + AmDist + Dist + Sized {}
+impl<T> ElementComparePartialEqOps for T where T: std::cmp::PartialEq + AmDist + Dist {}
 
-    fn mul<'a>(
-        &self,
-        index: impl OpInput<'a, usize>,
-        val: T,
-    ) -> Pin<Box<dyn Future<Output = ()> + Send>>;
+pub trait AccessOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
+    fn store<'a>(&self, index: usize, val: T) -> Pin<Box<dyn Future<Output = ()> + Send>> {
+        self.inner_array()
+            .initiate_op(val, index, ArrayOpCmd::Store)
+    }
 
-    fn fetch_mul<'a>(
+    fn batch_store<'a>(
         &self,
         index: impl OpInput<'a, usize>,
         val: T,
-    ) -> Pin<Box<dyn Future<Output = Vec<T>> + Send>>;
+    ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
+        self.inner_array()
+            .initiate_op(val, index, ArrayOpCmd::Store)
+    }
 
-    fn div<'a>(
-        &self,
-        index: impl OpInput<'a, usize>,
-        val: T,
-    ) -> Pin<Box<dyn Future<Output = ()> + Send>>;
+    fn load<'a>(&self, index: usize) -> Pin<Box<dyn Future<Output = T> + Send>> {
+        let dummy_val = self.inner_array().dummy_val(); //we dont actually do anything with this except satisfy apis;
+        self.inner_array()
+            .initiate_fetch_op(dummy_val, index, ArrayOpCmd::Load)
+    }
 
-    fn fetch_div<'a>(
+    fn batch_load<'a>(
+        &self,
+        index: impl OpInput<'a, usize>,
+    ) -> Pin<Box<dyn Future<Output = Vec<T>> + Send>> {
+        let dummy_val = self.inner_array().dummy_val(); //we dont actually do anything with this except satisfy apis;
+        self.inner_array()
+            .initiate_batch_fetch_op(dummy_val, index, ArrayOpCmd::Load)
+    }
+
+    fn swap<'a>(&self, index: usize, val: T) -> Pin<Box<dyn Future<Output = T> + Send>> {
+        self.inner_array()
+            .initiate_fetch_op(val, index, ArrayOpCmd::Swap)
+    }
+
+    fn batch_swap<'a>(
         &self,
         index: impl OpInput<'a, usize>,
         val: T,
-    ) -> Pin<Box<dyn Future<Output = Vec<T>> + Send>>;
+    ) -> Pin<Box<dyn Future<Output = Vec<T>> + Send>> {
+        self.inner_array()
+            .initiate_batch_fetch_op(val, index, ArrayOpCmd::Swap)
+    }
 }
 
-pub trait BitWiseOps<T: ElementBitWiseOps> {
-    fn bit_and<'a>(
+pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayPrivate<T> {
+    fn add(&self, index: usize, val: T) -> Pin<Box<dyn Future<Output = ()> + Send>> {
+        self.inner_array().initiate_op(val, index, ArrayOpCmd::Add)
+    }
+    fn batch_add<'a>(
         &self,
         index: impl OpInput<'a, usize>,
         val: T,
-    ) -> Pin<Box<dyn Future<Output = ()> + Send>>;
+    ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
+        self.inner_array().initiate_op(val, index, ArrayOpCmd::Add)
+    }
+    fn fetch_add(&self, index: usize, val: T) -> Pin<Box<dyn Future<Output = T> + Send>> {
+        self.inner_array()
+            .initiate_fetch_op(val, index, ArrayOpCmd::FetchAdd)
+    }
+    fn batch_fetch_add<'a>(
+        &self,
+        index: impl OpInput<'a, usize>,
+        val: T,
+    ) -> Pin<Box<dyn Future<Output = Vec<T>> + Send>> {
+        self.inner_array()
+            .initiate_batch_fetch_op(val, index, ArrayOpCmd::FetchAdd)
+    }
 
-    fn fetch_bit_and<'a>(
+    fn sub<'a>(&self, index: usize, val: T) -> Pin<Box<dyn Future<Output = ()> + Send>> {
+        self.inner_array().initiate_op(val, index, ArrayOpCmd::Sub)
+    }
+    fn batch_sub<'a>(
         &self,
         index: impl OpInput<'a, usize>,
         val: T,
-    ) -> Pin<Box<dyn Future<Output = Vec<T>> + Send>>;
+    ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
+        self.inner_array().initiate_op(val, index, ArrayOpCmd::Sub)
+    }
+    fn fetch_sub<'a>(&self, index: usize, val: T) -> Pin<Box<dyn Future<Output = T> + Send>> {
+        self.inner_array()
+            .initiate_fetch_op(val, index, ArrayOpCmd::FetchSub)
+    }
+    fn batch_fetch_sub<'a>(
+        &self,
+        index: impl OpInput<'a, usize>,
+        val: T,
+    ) -> Pin<Box<dyn Future<Output = Vec<T>> + Send>> {
+        self.inner_array()
+            .initiate_batch_fetch_op(val, index, ArrayOpCmd::FetchSub)
+    }
 
-    fn bit_or<'a>(
+    fn mul<'a>(&self, index: usize, val: T) -> Pin<Box<dyn Future<Output = ()> + Send>> {
+        self.inner_array().initiate_op(val, index, ArrayOpCmd::Mul)
+    }
+    fn batch_mul<'a>(
         &self,
         index: impl OpInput<'a, usize>,
         val: T,
-    ) -> Pin<Box<dyn Future<Output = ()> + Send>>;
+    ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
+        self.inner_array().initiate_op(val, index, ArrayOpCmd::Mul)
+    }
 
-    fn fetch_bit_or<'a>(
+    fn fetch_mul<'a>(&self, index: usize, val: T) -> Pin<Box<dyn Future<Output = T> + Send>> {
+        self.inner_array()
+            .initiate_fetch_op(val, index, ArrayOpCmd::FetchMul)
+    }
+
+    fn batch_fetch_mul<'a>(
         &self,
         index: impl OpInput<'a, usize>,
         val: T,
-    ) -> Pin<Box<dyn Future<Output = Vec<T>> + Send>>;
+    ) -> Pin<Box<dyn Future<Output = Vec<T>> + Send>> {
+        self.inner_array()
+            .initiate_batch_fetch_op(val, index, ArrayOpCmd::FetchMul)
+    }
+
+    fn div<'a>(&self, index: usize, val: T) -> Pin<Box<dyn Future<Output = ()> + Send>> {
+        self.inner_array().initiate_op(val, index, ArrayOpCmd::Div)
+    }
+    fn batch_div<'a>(
+        &self,
+        index: impl OpInput<'a, usize>,
+        val: T,
+    ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
+        self.inner_array().initiate_op(val, index, ArrayOpCmd::Div)
+    }
+
+    fn fetch_div<'a>(&self, index: usize, val: T) -> Pin<Box<dyn Future<Output = T> + Send>> {
+        self.inner_array()
+            .initiate_fetch_op(val, index, ArrayOpCmd::FetchDiv)
+    }
+
+    fn batch_fetch_div<'a>(
+        &self,
+        index: impl OpInput<'a, usize>,
+        val: T,
+    ) -> Pin<Box<dyn Future<Output = Vec<T>> + Send>> {
+        self.inner_array()
+            .initiate_batch_fetch_op(val, index, ArrayOpCmd::FetchDiv)
+    }
+}
+
+pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
+    fn bit_and<'a>(&self, index: usize, val: T) -> Pin<Box<dyn Future<Output = ()> + Send>> {
+        self.inner_array().initiate_op(val, index, ArrayOpCmd::And)
+    }
+
+    fn batch_bit_and<'a>(
+        &self,
+        index: impl OpInput<'a, usize>,
+        val: T,
+    ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
+        self.inner_array().initiate_op(val, index, ArrayOpCmd::And)
+    }
+
+    fn fetch_bit_and<'a>(&self, index: usize, val: T) -> Pin<Box<dyn Future<Output = T> + Send>> {
+        self.inner_array()
+            .initiate_fetch_op(val, index, ArrayOpCmd::FetchAnd)
+    }
+
+    fn batch_fetch_bit_and<'a>(
+        &self,
+        index: impl OpInput<'a, usize>,
+        val: T,
+    ) -> Pin<Box<dyn Future<Output = Vec<T>> + Send>> {
+        self.inner_array()
+            .initiate_batch_fetch_op(val, index, ArrayOpCmd::FetchAnd)
+    }
+
+    fn bit_or<'a>(&self, index: usize, val: T) -> Pin<Box<dyn Future<Output = ()> + Send>> {
+        self.inner_array().initiate_op(val, index, ArrayOpCmd::Or)
+    }
+
+    fn batch_bit_or<'a>(
+        &self,
+        index: impl OpInput<'a, usize>,
+        val: T,
+    ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
+        self.inner_array().initiate_op(val, index, ArrayOpCmd::Or)
+    }
+
+    fn fetch_bit_or<'a>(&self, index: usize, val: T) -> Pin<Box<dyn Future<Output = T> + Send>> {
+        self.inner_array()
+            .initiate_fetch_op(val, index, ArrayOpCmd::FetchOr)
+    }
+
+    fn batch_fetch_bit_or<'a>(
+        &self,
+        index: impl OpInput<'a, usize>,
+        val: T,
+    ) -> Pin<Box<dyn Future<Output = Vec<T>> + Send>> {
+        self.inner_array()
+            .initiate_batch_fetch_op(val, index, ArrayOpCmd::FetchOr)
+    }
+}
+
+pub trait CompareExchangeOps<T: ElementCompareEqOps>: private::LamellarArrayPrivate<T> {
+    fn compare_exchange<'a>(
+        &self,
+        index: usize,
+        old: T,
+        new: T,
+    ) -> Pin<Box<dyn Future<Output = Result<T, T>> + Send>> {
+        self.inner_array()
+            .initiate_result_op(new, index, ArrayOpCmd::CompareExchange(old))
+    }
+    fn batch_compare_exchange<'a>(
+        &self,
+        index: impl OpInput<'a, usize>,
+        old: T,
+        new: T,
+    ) -> Pin<Box<dyn Future<Output = Vec<Result<T, T>>> + Send>> {
+        self.inner_array()
+            .initiate_batch_result_op(new, index, ArrayOpCmd::CompareExchange(old))
+    }
+}
+
+pub trait CompareExchangeEpsilonOps<T: ElementComparePartialEqOps>:
+    private::LamellarArrayPrivate<T>
+{
+    fn compare_exchange_epsilon<'a>(
+        &self,
+        index: usize,
+        old: T,
+        new: T,
+        eps: T,
+    ) -> Pin<Box<dyn Future<Output = Result<T, T>> + Send>> {
+        self.inner_array()
+            .initiate_result_op(new, index, ArrayOpCmd::CompareExchangeEps(old, eps))
+    }
+    fn batch_compare_exchange_epsilon<'a>(
+        &self,
+        index: impl OpInput<'a, usize>,
+        old: T,
+        new: T,
+        eps: T,
+    ) -> Pin<Box<dyn Future<Output = Vec<Result<T, T>>> + Send>> {
+        self.inner_array().initiate_batch_result_op(
+            new,
+            index,
+            ArrayOpCmd::CompareExchangeEps(old, eps),
+        )
+    }
 }
 
 //perform the specified operation in place, returning the original value
@@ -921,114 +1138,4 @@ impl<T: Dist> LamellarArrayRequest for LocalOpResult<T> {
     }
 }
 
-impl<T: ElementArithmeticOps> ArithmeticOps<T> for LamellarWriteArray<T> {
-    fn add<'a>(
-        &self,
-        index: impl OpInput<'a, usize>,
-        val: T,
-    ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
-        match self {
-            LamellarWriteArray::UnsafeArray(array) => array.add(index, val),
-            LamellarWriteArray::AtomicArray(array) => array.add(index, val),
-            // LamellarWriteArray::NativeAtomicArray(array) => array.add(index, val),
-            // LamellarWriteArray::GenericAtomicArray(array) => array.add(index, val),
-            LamellarWriteArray::LocalLockAtomicArray(array) => array.add(index, val),
-        }
-    }
-    fn fetch_add<'a>(
-        &self,
-        index: impl OpInput<'a, usize>,
-        val: T,
-    ) -> Pin<Box<dyn Future<Output = Vec<T>> + Send>> {
-        match self {
-            LamellarWriteArray::UnsafeArray(array) => array.fetch_add(index, val),
-            LamellarWriteArray::AtomicArray(array) => array.fetch_add(index, val),
-            // LamellarWriteArray::NativeAtomicArray(array) => array.fetch_add(index, val),
-            // LamellarWriteArray::GenericAtomicArray(array) => array.fetch_add(index, val),
-            LamellarWriteArray::LocalLockAtomicArray(array) => array.fetch_add(index, val),
-        }
-    }
-
-    fn sub<'a>(
-        &self,
-        index: impl OpInput<'a, usize>,
-        val: T,
-    ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
-        match self {
-            LamellarWriteArray::UnsafeArray(array) => array.sub(index, val),
-            LamellarWriteArray::AtomicArray(array) => array.sub(index, val),
-            // LamellarWriteArray::NativeAtomicArray(array) => array.sub(index, val),
-            // LamellarWriteArray::GenericAtomicArray(array) => array.sub(index, val),
-            LamellarWriteArray::LocalLockAtomicArray(array) => array.sub(index, val),
-        }
-    }
-    fn fetch_sub<'a>(
-        &self,
-        index: impl OpInput<'a, usize>,
-        val: T,
-    ) -> Pin<Box<dyn Future<Output = Vec<T>> + Send>> {
-        match self {
-            LamellarWriteArray::UnsafeArray(array) => array.fetch_sub(index, val),
-            LamellarWriteArray::AtomicArray(array) => array.fetch_sub(index, val),
-            // LamellarWriteArray::NativeAtomicArray(array) => array.fetch_sub(index, val),
-            // LamellarWriteArray::GenericAtomicArray(array) => array.fetch_sub(index, val),
-            LamellarWriteArray::LocalLockAtomicArray(array) => array.fetch_sub(index, val),
-        }
-    }
-
-    fn mul<'a>(
-        &self,
-        index: impl OpInput<'a, usize>,
-        val: T,
-    ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
-        match self {
-            LamellarWriteArray::UnsafeArray(array) => array.mul(index, val),
-            LamellarWriteArray::AtomicArray(array) => array.mul(index, val),
-            // LamellarWriteArray::NativeAtomicArray(array) => array.mul(index, val),
-            // LamellarWriteArray::GenericAtomicArray(array) => array.mul(index, val),
-            LamellarWriteArray::LocalLockAtomicArray(array) => array.mul(index, val),
-        }
-    }
-
-    fn fetch_mul<'a>(
-        &self,
-        index: impl OpInput<'a, usize>,
-        val: T,
-    ) -> Pin<Box<dyn Future<Output = Vec<T>> + Send>> {
-        match self {
-            LamellarWriteArray::UnsafeArray(array) => array.fetch_mul(index, val),
-            LamellarWriteArray::AtomicArray(array) => array.fetch_mul(index, val),
-            // LamellarWriteArray::NativeAtomicArray(array) => array.fetch_mul(index, val),
-            // LamellarWriteArray::GenericAtomicArray(array) => array.fetch_mul(index, val),
-            LamellarWriteArray::LocalLockAtomicArray(array) => array.fetch_mul(index, val),
-        }
-    }
-
-    fn div<'a>(
-        &self,
-        index: impl OpInput<'a, usize>,
-        val: T,
-    ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
-        match self {
-            LamellarWriteArray::UnsafeArray(array) => array.div(index, val),
-            LamellarWriteArray::AtomicArray(array) => array.div(index, val),
-            // LamellarWriteArray::NativeAtomicArray(array) => array.div(index, val),
-            // LamellarWriteArray::GenericAtomicArray(array) => array.div(index, val),
-            LamellarWriteArray::LocalLockAtomicArray(array) => array.div(index, val),
-        }
-    }
-
-    fn fetch_div<'a>(
-        &self,
-        index: impl OpInput<'a, usize>,
-        val: T,
-    ) -> Pin<Box<dyn Future<Output = Vec<T>> + Send>> {
-        match self {
-            LamellarWriteArray::UnsafeArray(array) => array.fetch_div(index, val),
-            LamellarWriteArray::AtomicArray(array) => array.fetch_div(index, val),
-            // LamellarWriteArray::NativeAtomicArray(array) => array.fetch_div(index, val),
-            // LamellarWriteArray::GenericAtomicArray(array) => array.fetch_div(index, val),
-            LamellarWriteArray::LocalLockAtomicArray(array) => array.fetch_div(index, val),
-        }
-    }
-}
+impl<T: ElementArithmeticOps> ArithmeticOps<T> for LamellarWriteArray<T> {}

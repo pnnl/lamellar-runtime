@@ -490,6 +490,25 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         val: impl OpInput<'a, T>,
         index: impl OpInput<'a, usize>,
         op: ArrayOpCmd<T>,
+    ) -> Pin<Box<dyn Future<Output = T> + Send>> {
+        let req_handles_mutex = self.inner_initiate_op(val, index, op, OpReturnType::Fetch);
+        let mut req_handles = req_handles_mutex.lock();
+        match req_handles.remove(&0).unwrap() {
+            BufOpsRequest::NoFetch(_) => {
+                panic!("trying to return a non fetch request for fetch operations")
+            }
+            BufOpsRequest::Fetch(req) => Box::new(ArrayOpFetchHandle { req }).into_future(),
+            BufOpsRequest::Result(_) => {
+                panic!("trying to return a result request for fetch operations")
+            }
+        }
+    }
+
+    pub(crate) fn initiate_batch_fetch_op<'a>(
+        &self,
+        val: impl OpInput<'a, T>,
+        index: impl OpInput<'a, usize>,
+        op: ArrayOpCmd<T>,
     ) -> Pin<Box<dyn Future<Output = Vec<T>> + Send>> {
         let req_handles_mutex = self.inner_initiate_op(val, index, op, OpReturnType::Fetch);
         let mut req_handles = req_handles_mutex.lock();
@@ -506,9 +525,29 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
                 }
             }
         }
-        Box::new(ArrayOpFetchHandle { reqs }).into_future()
+        Box::new(ArrayOpBatchFetchHandle { reqs }).into_future()
     }
     pub(crate) fn initiate_result_op<'a>(
+        &self,
+        val: impl OpInput<'a, T>,
+        index: impl OpInput<'a, usize>,
+        op: ArrayOpCmd<T>,
+    ) -> Pin<Box<dyn Future<Output = Result<T, T>> + Send>> {
+        let req_handles_mutex = self.inner_initiate_op(val, index, op, OpReturnType::Result);
+        let mut req_handles = req_handles_mutex.lock();
+        // println!("req_handles len {:?}",req_handles.len());
+
+        match req_handles.remove(&0).unwrap() {
+            BufOpsRequest::NoFetch(_) => {
+                panic!("trying to return a non fetch request for result operations")
+            }
+            BufOpsRequest::Fetch(_) => {
+                panic!("trying to return a fetch request for result operations")
+            }
+            BufOpsRequest::Result(req) => Box::new(ArrayOpResultHandle { req }).into_future(),
+        }
+    }
+    pub(crate) fn initiate_batch_result_op<'a>(
         &self,
         val: impl OpInput<'a, T>,
         index: impl OpInput<'a, usize>,
@@ -529,7 +568,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
                 BufOpsRequest::Result(req) => reqs.push(req),
             }
         }
-        Box::new(ArrayOpResultHandle { reqs }).into_future()
+        Box::new(ArrayOpBatchResultHandle { reqs }).into_future()
     }
 
     // pub fn op_put(
@@ -541,96 +580,15 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
     // }
 }
 
-impl<T: ElementArithmeticOps + 'static> ArithmeticOps<T> for UnsafeArray<T> {
-    fn add<'a>(
-        &self,
-        index: impl OpInput<'a, usize>,
-        val: T,
-    ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
-        self.initiate_op(val, index, ArrayOpCmd::Add)
-    }
-    fn fetch_add<'a>(
-        &self,
-        index: impl OpInput<'a, usize>,
-        val: T,
-    ) -> Pin<Box<dyn Future<Output = Vec<T>> + Send>> {
-        self.initiate_fetch_op(val, index, ArrayOpCmd::FetchAdd)
-    }
-    fn sub<'a>(
-        &self,
-        index: impl OpInput<'a, usize>,
-        val: T,
-    ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
-        self.initiate_op(val, index, ArrayOpCmd::Sub)
-    }
-    fn fetch_sub<'a>(
-        &self,
-        index: impl OpInput<'a, usize>,
-        val: T,
-    ) -> Pin<Box<dyn Future<Output = Vec<T>> + Send>> {
-        self.initiate_fetch_op(val, index, ArrayOpCmd::FetchSub)
-    }
-    fn mul<'a>(
-        &self,
-        index: impl OpInput<'a, usize>,
-        val: T,
-    ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
-        self.initiate_op(val, index, ArrayOpCmd::Mul)
-    }
-    fn fetch_mul<'a>(
-        &self,
-        index: impl OpInput<'a, usize>,
-        val: T,
-    ) -> Pin<Box<dyn Future<Output = Vec<T>> + Send>> {
-        self.initiate_fetch_op(val, index, ArrayOpCmd::FetchMul)
-    }
-    fn div<'a>(
-        &self,
-        index: impl OpInput<'a, usize>,
-        val: T,
-    ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
-        self.initiate_op(val, index, ArrayOpCmd::Div)
-    }
-    fn fetch_div<'a>(
-        &self,
-        index: impl OpInput<'a, usize>,
-        val: T,
-    ) -> Pin<Box<dyn Future<Output = Vec<T>> + Send>> {
-        self.initiate_fetch_op(val, index, ArrayOpCmd::FetchDiv)
-    }
-}
+impl<T: ElementOps + 'static> AccessOps<T> for UnsafeArray<T> {}
 
-impl<T: ElementBitWiseOps + 'static> BitWiseOps<T> for UnsafeArray<T> {
-    fn bit_and<'a>(
-        &self,
-        index: impl OpInput<'a, usize>,
-        val: T,
-    ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
-        self.initiate_op(val, index, ArrayOpCmd::And)
-    }
-    fn fetch_bit_and<'a>(
-        &self,
-        index: impl OpInput<'a, usize>,
-        val: T,
-    ) -> Pin<Box<dyn Future<Output = Vec<T>> + Send>> {
-        self.initiate_fetch_op(val, index, ArrayOpCmd::FetchAnd)
-    }
+impl<T: ElementArithmeticOps + 'static> ArithmeticOps<T> for UnsafeArray<T> {}
 
-    fn bit_or<'a>(
-        &self,
-        index: impl OpInput<'a, usize>,
-        val: T,
-    ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
-        self.initiate_op(val, index, ArrayOpCmd::Or)
-    }
-    fn fetch_bit_or<'a>(
-        &self,
-        index: impl OpInput<'a, usize>,
-        val: T,
-    ) -> Pin<Box<dyn Future<Output = Vec<T>> + Send>> {
-        self.initiate_fetch_op(val, index, ArrayOpCmd::FetchOr)
-    }
-}
+impl<T: ElementBitWiseOps + 'static> BitWiseOps<T> for UnsafeArray<T> {}
+
+impl<T: ElementCompareEqOps + 'static> CompareExchangeOps<T> for UnsafeArray<T> {}
+
+impl<T: ElementComparePartialEqOps + 'static> CompareExchangeEpsilonOps<T> for UnsafeArray<T> {}
 
 // impl<T: Dist + std::ops::AddAssign> UnsafeArray<T> {
 // impl<T: ElementArithmeticOps> LocalArithmeticOps<T> for UnsafeArray<T> {

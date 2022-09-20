@@ -146,6 +146,18 @@ impl<T: Dist> DistIteratorLauncher for GenericAtomicArray<T> {
     {
         self.array.for_each(iter, op)
     }
+    fn for_each_with_schedule<I, F>(
+        &self,
+        iter: &I,
+        op: F,
+        sched: Schedule,
+    ) -> Pin<Box<dyn Future<Output = ()> + Send>>
+    where
+        I: DistributedIterator + 'static,
+        F: Fn(I::Item) + AmLocal + Clone + 'static,
+    {
+        self.array.for_each_with_schedule(iter, op, sched)
+    }
     fn for_each_async<I, F, Fut>(&self, iter: &I, op: F) -> Pin<Box<dyn Future<Output = ()> + Send>>
     where
         I: DistributedIterator + 'static,
@@ -153,6 +165,19 @@ impl<T: Dist> DistIteratorLauncher for GenericAtomicArray<T> {
         Fut: Future<Output = ()> + Send + 'static,
     {
         self.array.for_each_async(iter, op)
+    }
+    fn for_each_async_with_schedule<I, F, Fut>(
+        &self,
+        iter: &I,
+        op: F,
+        sched: Schedule,
+    ) -> Pin<Box<dyn Future<Output = ()> + Send>>
+    where
+        I: DistributedIterator + 'static,
+        F: Fn(I::Item) -> Fut + AmLocal + Clone + 'static,
+        Fut: Future<Output = ()> + Send + 'static,
+    {
+        self.array.for_each_async_with_schedule(iter, op, sched)
     }
 
     fn collect<I, A>(&self, iter: &I, d: Distribution) -> Pin<Box<dyn Future<Output = A> + Send>>

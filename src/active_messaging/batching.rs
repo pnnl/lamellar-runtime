@@ -17,20 +17,19 @@ enum LamellarData {
     Unit,
 }
 
-impl std::fmt::Debug for LamellarData{
+impl std::fmt::Debug for LamellarData {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self{
-            LamellarData::Am(_,_) => write!(f,"Am"),
-            LamellarData::Return(_,_) => write!(f,"Return"),
-            LamellarData::Data(_) => write!(f,"Data"),
-            LamellarData::Unit => write!(f,"Unit"),
+        match self {
+            LamellarData::Am(_, _) => write!(f, "Am"),
+            LamellarData::Return(_, _) => write!(f, "Return"),
+            LamellarData::Data(_) => write!(f, "Data"),
+            LamellarData::Unit => write!(f, "Unit"),
         }
     }
 }
 
 #[async_trait]
 pub(crate) trait Batcher {
-    
     fn add_remote_am_to_batch(
         &self,
         req_data: ReqMetaData,
