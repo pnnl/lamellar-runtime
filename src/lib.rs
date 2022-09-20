@@ -40,7 +40,7 @@
 //!
 //! #[lamellar::am]
 //! impl LamellarAM for HelloWorld {
-//!     fn exec(&self) {
+//!     async fn exec(&self) {
 //!         println!(
 //!             "Hello pe {:?} of {:?}, I'm pe {:?}",
 //!             lamellar::current_pe,

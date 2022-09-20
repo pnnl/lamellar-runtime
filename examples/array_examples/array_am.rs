@@ -19,7 +19,7 @@ struct RdmaAM {
 
 #[lamellar::am]
 impl LamellarAM for RdmaAM {
-    fn exec(&self) {
+    async fn exec(&self) {
         let num_pes = lamellar::num_pes;
         let max_i = unsafe { std::cmp::min(self.array.local_as_slice().len(), num_pes) };
         println!(

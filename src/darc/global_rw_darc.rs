@@ -117,7 +117,7 @@ struct LockAm {
 }
 #[lamellar_impl::rt_am]
 impl LamellarAM for LockAm {
-    fn exec() {
+    async fn exec() {
         let lock = {
             let rwlock = unsafe { &*(self.rwlock_addr as *mut DarcInner<DistRwLock<()>>) }; //we dont actually care about the "type" we wrap here, we just need access to the meta data for the darc
 
@@ -143,7 +143,7 @@ struct UnlockAm {
 }
 #[lamellar_impl::rt_am]
 impl LamellarAM for UnlockAm {
-    fn exec() {
+    async fn exec() {
         let rwlock = unsafe { &*(self.rwlock_addr as *mut DarcInner<DistRwLock<()>>) }; //we dont actually care about the "type" we wrap here, we just need access to the meta data for the darc
         unsafe {
             match self.lock_type {

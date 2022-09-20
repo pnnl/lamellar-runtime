@@ -15,7 +15,7 @@ struct AmReturnUsize {
 
 #[lamellar::am]
 impl LamellarAM for AmReturnUsize {
-    fn exec(&self) -> usize {
+    async fn exec(&self) -> usize {
         println!(
             "\tin  AmReturnUsize self: {:?} on pe {:?} of {:?} ({:?})",
             self,

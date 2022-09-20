@@ -14,7 +14,7 @@ struct AmEmpty {}
 
 #[lamellar::am]
 impl LamellarAM for AmEmpty {
-    fn exec(self) {
+    async fn exec(self) {
         // println!("in empty");
     }
 }
@@ -24,7 +24,7 @@ struct AmEmptyReturnAmEmpty {}
 
 #[lamellar::am(return_am = "AmEmpty")]
 impl LamellarAM for AmEmptyReturnAmEmpty {
-    fn exec(self) -> AmEmpty {
+    async fn exec(self) -> AmEmpty {
         // println!("in return empty");
         AmEmpty {}
     }
@@ -39,7 +39,7 @@ struct AmNoReturn {
 
 #[lamellar::am]
 impl LamellarAM for AmNoReturn {
-    fn exec(self) {
+    async fn exec(self) {
         // println!("\t{:?} {:?} leaving", self.index,self.data.len());
     }
 }
@@ -53,7 +53,7 @@ struct AmReturnVec {
 
 #[lamellar::am]
 impl LamellarAM for AmReturnVec {
-    fn exec(self) -> Vec<usize> {
+    async fn exec(self) -> Vec<usize> {
         // println!("\t{:?} {:?} leaving", self.vec_size,self.data.len());
         vec![0; self.vec_size]
     }
@@ -68,7 +68,7 @@ struct InitialAMVec {
 
 #[lamellar::am(return_am = "ReturnVecAM -> Vec<usize>")] //we specify as a proc_macro argument the type of AM we are returning
 impl LamellarAM for InitialAMVec {
-    fn exec(&self) -> ReturnVecAM {
+    async fn exec(&self) -> ReturnVecAM {
         let current_hostname = hostname::get().unwrap().to_string_lossy().to_string();
         // println!("{:?}",current_hostname);
         ReturnVecAM {
@@ -88,7 +88,7 @@ struct ReturnVecAM {
 
 #[lamellar::am]
 impl LamellarAM for ReturnVecAM {
-    fn exec(&self) -> Vec<usize> {
+    async fn exec(&self) -> Vec<usize> {
         // println!("return vec");
         self.vec.clone()
     }

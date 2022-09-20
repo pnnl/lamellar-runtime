@@ -18,7 +18,7 @@ where
     I: DistributedIterator + 'static,
     F: Fn(I::Item) + AmLocal + 'static,
 {
-    fn exec(&self) {
+    async fn exec(&self) {
         let mut iter = self.data.init(self.start_i, self.end_i - self.start_i);
         while let Some(elem) = iter.next() {
             (&self.op)(elem);
@@ -44,7 +44,7 @@ where
     I: DistributedIterator + 'static,
     F: Fn(I::Item) + AmLocal + 'static,
 {
-    fn exec(&self) {
+    async fn exec(&self) {
         // println!("in for each {:?} {:?}", self.start_i, self.end_i);
         let mut cur_i = self.cur_i.fetch_add(1, Ordering::Relaxed);
 
@@ -78,7 +78,7 @@ where
     I: DistributedIterator + 'static,
     F: Fn(I::Item) + AmLocal + 'static,
 {
-    fn exec(&self) {
+    async fn exec(&self) {
         // println!("in for each {:?} {:?}", self.start_i, self.end_i);
         let mut range_i = self.range_i.fetch_add(1, Ordering::Relaxed);
         while range_i < self.ranges.len() {
@@ -151,7 +151,7 @@ where
     I: DistributedIterator + 'static,
     F: Fn(I::Item) + AmLocal + 'static,
 {
-    fn exec(&self) {
+    async fn exec(&self) {
         // println!("in for each {:?} {:?}", self.start_i, self.end_i);
         let (start, end) = *self.range.range.lock();
         let mut iter = self.data.init(start, end - start);
@@ -217,7 +217,7 @@ where
     F: Fn(I::Item) -> Fut + AmLocal + Clone + 'static,
     Fut: Future<Output = ()> + Send + 'static,
 {
-    fn exec(&self) {
+    async fn exec(&self) {
         let mut iter = self.data.init(self.start_i, self.end_i - self.start_i);
         while let Some(elem) = iter.next() {
             (&self.op)(elem).await;
@@ -245,7 +245,7 @@ where
     F: Fn(I::Item) -> Fut + AmLocal + Clone + 'static,
     Fut: Future<Output = ()> + Send + 'static,
 {
-    fn exec(&self) {
+    async fn exec(&self) {
         // println!("in for each {:?} {:?}", self.start_i, self.end_i);
         let mut cur_i = self.cur_i.fetch_add(1, Ordering::Relaxed);
 
@@ -281,7 +281,7 @@ where
     F: Fn(I::Item) -> Fut + AmLocal + Clone + 'static,
     Fut: Future<Output = ()> + Send + 'static,
 {
-    fn exec(&self) {
+    async fn exec(&self) {
         // println!("in for each {:?} {:?}", self.start_i, self.end_i);
         let mut range_i = self.range_i.fetch_add(1, Ordering::Relaxed);
         while range_i < self.ranges.len() {
@@ -316,7 +316,7 @@ where
     F: Fn(I::Item) -> Fut + AmLocal + Clone + 'static,
     Fut: Future<Output = ()> + Send + 'static,
 {
-    fn exec(&self) {
+    async fn exec(&self) {
         // println!("in for each {:?} {:?}", self.start_i, self.end_i);
         let (start, end) = *self.range.range.lock();
         let mut iter = self.data.init(start, end - start);

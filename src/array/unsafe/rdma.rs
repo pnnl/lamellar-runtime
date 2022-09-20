@@ -618,7 +618,7 @@ struct UnsafeBlockGetAm {
 
 #[lamellar_impl::rt_am_local]
 impl LamellarAm for UnsafeBlockGetAm {
-    fn exec(self) {
+    async fn exec(self) {
         self.array.inner.data.mem_region.iget(
             self.pe,
             self.offset * self.array.inner.elem_size,
@@ -640,7 +640,7 @@ struct UnsafeCyclicGetAm {
 
 #[lamellar_impl::rt_am_local]
 impl LamellarAm for UnsafeCyclicGetAm {
-    fn exec(self) {
+    async fn exec(self) {
         self.array.inner.data.mem_region.iget(
             self.pe,
             self.offset * self.array.inner.elem_size,
@@ -678,7 +678,7 @@ struct UnsafePutAm {
 }
 #[lamellar_impl::rt_am]
 impl LamellarAm for UnsafePutAm {
-    fn exec(self) {
+    async fn exec(self) {
         unsafe {
             // println!("unsafe put am: pe {:?} si {:?} len {:?}",self.pe,self.start_index,self.len);
             match self

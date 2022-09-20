@@ -232,7 +232,7 @@ struct MemRegionFinishedAm {
 
 #[lamellar_impl::rt_am]
 impl LamellarAM for MemRegionFinishedAm {
-    fn exec(self) {
+    async fn exec(self) {
         // println!("in finished am {:?}",self);
         let mrh_map = ONE_SIDED_MEM_REGIONS.lock();
         let _mrh = match mrh_map.get(&self.parent_id) {
@@ -256,7 +256,7 @@ struct MemRegionDropWaitAm {
 
 #[lamellar_impl::rt_am_local]
 impl LamellarAM for MemRegionDropWaitAm {
-    fn exec(self) {
+    async fn exec(self) {
         // println!("in drop wait {:?}", self.inner);
         loop {
             while self.inner.remote_sent.load(Ordering::SeqCst) != 0

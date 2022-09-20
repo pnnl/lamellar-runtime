@@ -102,7 +102,7 @@ struct MatMulAM {
 
 #[lamellar::am]
 impl LamellarAM for MatMulAM {
-    fn exec() {
+    async fn exec() {
         let b =
             lamellar::world.alloc_local_mem_region::<f32>(self.b.block_size * self.b.block_size);
         get_sub_mat(&self.b, &b).await;

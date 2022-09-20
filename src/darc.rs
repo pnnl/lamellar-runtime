@@ -50,7 +50,7 @@ struct FinishedAm {
 
 #[lamellar_impl::rt_am]
 impl LamellarAM for FinishedAm {
-    fn exec() {
+    async fn exec() {
         // println!("in finished! {:?}",self);
         let inner = unsafe { &*(self.inner_addr as *mut DarcInner<()>) }; //we dont actually care about the "type" we wrap here, we just need access to the meta data for the darc
         inner.dist_cnt.fetch_sub(self.cnt, Ordering::SeqCst);
@@ -667,7 +667,7 @@ unsafe impl<T> Send for Wrapper<T> {}
 
 #[lamellar_impl::rt_am_local]
 impl<T: 'static> LamellarAM for DroppedWaitAM<T> {
-    fn exec(self) {
+    async fn exec(self) {
         // println!("in DroppedWaitAM {:x}", self.inner_addr);
         let mode_refs_u8 =
             unsafe { std::slice::from_raw_parts_mut(self.mode_addr as *mut u8, self.num_pes) };

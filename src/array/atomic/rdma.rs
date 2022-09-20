@@ -148,7 +148,7 @@ impl<T: Dist> AtomicArray<T> {
 
 // #[lamellar_impl::rt_am_local]
 // impl<T: Dist + 'static> LamellarAm for InitGetAm<T> {
-//     fn exec(self) {
+//     async fn exec(self) {
 //         let mut reqs = vec![];
 //         // println!("initgetam {:?} {:?}",self.index,self.index+self.buf.len());
 //         for pe in self
@@ -218,7 +218,7 @@ impl<T: Dist> AtomicArray<T> {
 
 // #[lamellar_impl::rt_am_local]
 // impl<T: Dist + 'static> LamellarAm for InitPutAm<T> {
-//     fn exec(self) {
+//     async fn exec(self) {
 //         // println!("initputam {:?} {:?}",self.index,self.buf.len());
 //         unsafe {
 //             let u8_buf = self.buf.clone().to_base::<u8>();

@@ -20,7 +20,7 @@ struct RecursiveAM {
 
 #[lamellar::am]
 impl LamellarAM for RecursiveAM {
-    fn exec(&self) -> Vec<String> {
+    async fn exec(&self) -> Vec<String> {
         println!(
             "\tin RecursiveAM {:?} on pe {:?} of {:?} ({:?})",
             self,

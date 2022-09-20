@@ -25,7 +25,7 @@ struct RdmaLocalMRAM {
 
 #[lamellar::am]
 impl LamellarAM for RdmaAM {
-    fn exec(&self) {
+    async fn exec(&self) {
         println!("\t in RdmaAM on pe {:?}, originating from pe {:?}\n\tlocal segement of array: {:?}..{:?}",lamellar::current_pe, self.orig_pe,  &self.array.as_slice().unwrap()[0..10], &self.array.as_slice().unwrap()[ARRAY_LEN-10..]);
 
         //get the original nodes data
@@ -55,7 +55,7 @@ impl LamellarAM for RdmaAM {
 
 #[lamellar::am]
 impl LamellarAM for RdmaLocalMRAM {
-    fn exec(&self) {
+    async fn exec(&self) {
         println!(
             "\t in RdmaAM on pe {:?}, originating from pe {:?}",
             lamellar::current_pe,

@@ -21,7 +21,7 @@ struct AmNoReturn {
 
 #[lamellar::local_am] //note the change from #[lamellar::am]
 impl LamellarAM for AmNoReturn {
-    fn exec(self) {
+    async fn exec(self) {
         println!(
             "\tin AmNoReturn {:?} on pe {:?} of {:?} ({:?})",
             self.my_id,
@@ -48,7 +48,7 @@ struct AmReturnUsize {
 }
 #[lamellar::local_am]
 impl LamellarAM for AmReturnUsize {
-    fn exec(self) -> usize {
+    async fn exec(self) -> usize {
         println!(
             "\tin AmReturnUsize {:?} on pe {:?} of {:?} ({:?})",
             self.my_id,

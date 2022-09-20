@@ -12,7 +12,7 @@ use std::collections::HashMap;
 
 use proc_macro::TokenStream;
 use proc_macro2::Span;
-use proc_macro_error::proc_macro_error;
+use proc_macro_error::{abort, proc_macro_error};
 use quote::{quote, quote_spanned, ToTokens};
 use syn::parse_macro_input;
 use syn::spanned::Spanned;
@@ -46,15 +46,19 @@ fn get_return_of_method(name: String, tys: &Vec<syn::ImplItem>) -> Option<syn::T
     for ty in tys {
         match ty {
             syn::ImplItem::Method(ref item) => {
-                if item.sig.ident.to_string() == name {
-                    match item.sig.output.clone() {
-                        syn::ReturnType::Default => {
-                            return None;
-                        }
-                        syn::ReturnType::Type(_, item) => {
-                            return Some(*item);
+                if item.sig.asyncness.is_some() {
+                    if item.sig.ident.to_string() == name {
+                        match item.sig.output.clone() {
+                            syn::ReturnType::Default => {
+                                return None;
+                            }
+                            syn::ReturnType::Type(_, item) => {
+                                return Some(*item);
+                            }
                         }
                     }
+                } else {
+                    abort!(item.sig.fn_token.span(),"implementing lamellar::am expects the exec function to be async (e.g. 'async async fn exec(...)')")
                 }
             }
             _ => (),

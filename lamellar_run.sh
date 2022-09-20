@@ -2,7 +2,7 @@
 
 rm -r /dev/shm/lamellar_*  2> /dev/null #cleanup incase any previous run failed unexpectedly
 rm -r ./lamellar_shm/ 2> /dev/null #cleanup incase any previous run failed unexpected
-mkdir lamellar_shm
+# mkdir lamellar_shm
 #echo "$HOSTNAME"
 NUMPES=1
 
@@ -21,8 +21,8 @@ done
 
 bin=$1
 
-# NPROC=`nproc --all`
-NPROC=4
+NPROC=`nproc --all`
+# NPROC=4
 ENDPE=$(( $NUMPES-1))
 JOBID=$((1+ $RANDOM % 100 ))
 S_CORE=$((0))

@@ -16,7 +16,7 @@ struct DataAM {
 
 #[lamellar::am]
 impl LamellarAM for DataAM {
-    fn exec() {
+    async fn exec() {
         let mut rng = rand::thread_rng();
         let pes = Uniform::from(0..lamellar::team.num_pes());
         // println!("depth {:?} {:?}",self.depth, self.path);

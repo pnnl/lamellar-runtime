@@ -95,7 +95,7 @@ struct NaiveMM {
 
 #[lamellar::am]
 impl LamellarAM for NaiveMM {
-    fn exec() {
+    async fn exec() {
         let a = lamellar::world.alloc_local_mem_region(self.a.block_size * self.a.block_size); //the tile for the A matrix
         let b = lamellar::world.alloc_local_mem_region(self.b.block_size * self.b.block_size); //the tile for the B matrix
         let b_fut = get_sub_mat(&self.b, &b); //b is remote so we will launch "gets" for this data first

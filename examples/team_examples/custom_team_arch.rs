@@ -108,7 +108,7 @@ struct TeamAM {
 
 #[lamellar::am]
 impl LamellarAM for TeamAM {
-    fn exec() {
+    async fn exec() {
         // let team = lamellar::team;
         // println!("current_pe: {:?}, team.global_pe_id(): {:?}, team.team_pe_id(): {:?} team members: {:?} sec {:?}",
         // lamellar::current_pe , team.global_pe_id(), team.team_pe_id(), team.get_pes(),self.secs);

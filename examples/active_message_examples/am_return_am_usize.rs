@@ -17,7 +17,7 @@ struct ReturnUsizeAM {
 
 #[lamellar::am]
 impl LamellarAM for ReturnUsizeAM {
-    fn exec(&self) -> usize {
+    async fn exec(&self) -> usize {
         println!(
             "\t\tin ReturnUsizeAM {:?} on pe {:?} ({:?})",
             self,
@@ -38,7 +38,7 @@ struct InitialAM {
 
 #[lamellar::am(return_am = "ReturnUsizeAM -> usize")] //we specify as a proc_macro argument the type of AM we are returning
 impl LamellarAM for InitialAM {
-    fn exec(&self) -> ReturnAM {
+    async fn exec(&self) -> ReturnAM {
         let current_hostname = hostname::get().unwrap().to_string_lossy().to_string();
         println!(
             "\tin  InitialAM {:?} on pe {:?} of {:?} ({:?})",

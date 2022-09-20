@@ -24,7 +24,7 @@ struct Vma {
     size: usize,
 }
 
-// #[derive(Clone)]
+#[derive(Clone)]
 pub(crate) struct LinearAlloc {
     entries: Arc<(Mutex<Vec<Vma>>, Condvar)>,
     start_addr: usize,
@@ -359,7 +359,7 @@ impl LamellarAlloc for BTreeAlloc {
     }
 }
 
-// #[derive(Clone)]
+#[derive(Clone)]
 pub(crate) struct ObjAlloc<T: Copy> {
     free_entries: Arc<(Mutex<Vec<usize>>, Condvar)>,
     start_addr: usize,

@@ -79,7 +79,7 @@ where
     I: DistributedIterator + 'static,
     I::Item: Sync,
 {
-    fn exec(&self) -> Vec<I::Item> {
+    async fn exec(&self) -> Vec<I::Item> {
         let mut iter = self.data.init(self.start_i, self.end_i - self.start_i);
         let mut vec = Vec::new();
         while let Some(elem) = iter.next() {
@@ -109,7 +109,7 @@ where
     I::Item: Future<Output = T> + Send,
     T: Dist,
 {
-    fn exec(&self) -> Vec<<I::Item as Future>::Output> {
+    async fn exec(&self) -> Vec<<I::Item as Future>::Output> {
         let mut iter = self.data.init(self.start_i, self.end_i - self.start_i);
         let mut vec = Vec::new();
         while let Some(elem) = iter.next() {

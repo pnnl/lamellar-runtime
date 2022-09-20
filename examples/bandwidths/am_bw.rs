@@ -13,7 +13,7 @@ struct DataAM {
 
 #[lamellar::am]
 impl LamellarAM for DataAM {
-    fn exec() {}
+    async fn exec() {}
 }
 
 fn main() {

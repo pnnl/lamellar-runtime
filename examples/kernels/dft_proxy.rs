@@ -32,7 +32,7 @@ struct ReduceAM {
 
 #[lamellar::am]
 impl LamellarAM for ReduceAM {
-    fn exec(self) -> f64 {
+    async fn exec(self) -> f64 {
         self.spectrum.as_slice().unwrap().iter().sum::<f64>()
     }
 }
@@ -48,7 +48,7 @@ struct LocalSumAM {
 
 #[lamellar::am]
 impl LamellarAM for LocalSumAM {
-    fn exec() {
+    async fn exec() {
         let spectrum_slice = unsafe { self.spectrum.as_mut_slice().unwrap() };
         let k_prime = self.k + self.pe * spectrum_slice.len();
         let signal = self.signal.as_slice().unwrap();
@@ -73,7 +73,7 @@ struct RemoteSumAM {
 
 #[lamellar::am]
 impl LamellarAM for RemoteSumAM {
-    fn exec(self) {
+    async fn exec(self) {
         let _lock = LOCK.lock();
         for (k, spec_bin) in unsafe { self.spectrum.as_mut_slice().unwrap().iter_mut().enumerate() }
         {

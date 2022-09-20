@@ -615,7 +615,7 @@ fn create_buf_ops(
         }
         #[#am]
         impl LamellarAM for #am_buf_name{ //eventually we can return fetchs here too...
-            fn exec(&self) -> Vec<u8>{
+            async fn exec(&self) -> Vec<u8>{
                 #slice
                 let u8_len = self.res_buf_size;
                 let mut results_u8: Vec<u8> = if u8_len > 0 {

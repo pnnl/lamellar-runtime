@@ -18,7 +18,7 @@ struct FlopAM {
 
 #[lamellar::am]
 impl LamellarAM for FlopAM {
-    fn exec(&self) -> usize {
+    async fn exec(&self) -> usize {
         let mut a = [1.2345f64; 128];
         for _i in 0..self.iterations {
             for a_i in a.iter_mut() {
@@ -44,7 +44,7 @@ impl LamellarAM for FlopAM {
 // #[cfg(feature = "nightly")]
 // #[lamellar::am]
 // impl LamellarAM for SimdAM {
-//     fn exec(&self) -> usize {
+//     async fn exec(&self) -> usize {
 //         let mut a: [Simd<[f64; 8]>; 16] = [f64x8::new(
 //             1.2345, 1.2345, 1.2345, 1.2345, 1.2345, 1.2345, 1.2345, 1.2345,
 //         ); 16];

@@ -134,7 +134,7 @@ struct InitGetAm<T: Dist> {
 
 #[lamellar_impl::rt_am_local]
 impl<T: Dist + 'static> LamellarAm for InitGetAm<T> {
-    fn exec(self) {
+    async fn exec(self) {
         // let buf = self.buf.into();
         // let u8_index = self.index * std::mem::size_of::<T>();
         // let u8_len = self.buf.len() * std::mem::size_of::<T>();
@@ -199,7 +199,7 @@ struct NativeAtomicRemoteGetAm {
 impl LamellarAm for NativeAtomicRemoteGetAm {
     //we cant directly do a put from the array in to the data buf
     //because we need to guarantee the put operation is atomic (maybe iput would work?)
-    fn exec(self) -> Vec<u8> {
+    async fn exec(self) -> Vec<u8> {
         // println!("in nativeAtomic remotegetam {:?} {:?}",self.start_index,self.len);
         unsafe {
             match self
@@ -234,7 +234,7 @@ struct InitPutAm<T: Dist> {
 
 #[lamellar_impl::rt_am_local]
 impl<T: Dist + 'static> LamellarAm for InitPutAm<T> {
-    fn exec(self) {
+    async fn exec(self) {
         // let u8_index = self.index * std::mem::size_of::<T>();
         // let u8_len = self.buf.len() * std::mem::size_of::<T>();
 
@@ -335,7 +335,7 @@ struct NativeAtomicRemotePutAm {
 
 #[lamellar_impl::rt_am]
 impl LamellarAm for NativeAtomicRemotePutAm {
-    fn exec(self) {
+    async fn exec(self) {
         // println!("in remote put {:?} {:?} {:?}",self.start_index,self.len,self.data);
         // let _lock = self.array.lock.write();
         unsafe {

@@ -16,7 +16,7 @@ struct DarcAm {
 
 #[lamellar::am]
 impl LamellarAm for DarcAm {
-    fn exec(self) {
+    async fn exec(self) {
         println!("in darc am!!");
         self.darc.fetch_add(1, Ordering::SeqCst); //this only updates atomic on the executing pe
         println!("lrw: {:?} ", self.lrw_darc.read());

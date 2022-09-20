@@ -19,7 +19,7 @@ struct AmNoReturn {
 
 #[lamellar::am]
 impl LamellarAM for AmNoReturn {
-    fn exec(self) {
+    async fn exec(self) {
         println!(
             "\tin AmNoReturn {:?} on pe {:?} of {:?} ({:?})",
             self,
