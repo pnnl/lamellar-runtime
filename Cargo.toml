@@ -47,6 +47,7 @@ thread_local = "1.1.4"
 tracing = "0.1"
 tracing-futures = "0.2"
 tracing-flame = "0.2"
+pin-project = "1.0"
 
 
 
@@ -370,6 +371,10 @@ path="examples/kernels/parallel_blocked_array_gemm.rs"
 [[example]]
 name="safe_parallel_blocked_array_gemm"
 path="examples/kernels/safe_parallel_blocked_array_gemm.rs"
+
+[[example]]
+name="safe_parallel_blocked_array_gemm_2"
+path="examples/kernels/safe_parallel_blocked_array_gemm_2.rs"
 
 
 ##------------ Miscellaneous Examples -----------------##

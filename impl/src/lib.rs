@@ -58,7 +58,7 @@ fn get_return_of_method(name: String, tys: &Vec<syn::ImplItem>) -> Option<syn::T
                         }
                     }
                 } else {
-                    abort!(item.sig.fn_token.span(),"implementing lamellar::am expects the exec function to be async (e.g. 'async async fn exec(...)')")
+                    abort!(item.sig.fn_token.span(),"implementing lamellar::am expects the exec function to be async (e.g. 'async fn exec(...)')")
                 }
             }
             _ => (),
@@ -315,7 +315,8 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_type: AmType) -> 
                 Box::pin( async move {
                     #temp
                     #ret_statement
-                }.instrument(#lamellar::tracing::trace_span!(#my_name)))
+                }.instrument(#lamellar::tracing::trace_span!(#my_name))
+            )
 
             }
 

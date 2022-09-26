@@ -9,6 +9,8 @@
 ///
 /// matrices use row-wise distribution (i.e. all elements of a row are local to a pe,
 /// conversely this means elements of a column are distributed across pes)
+///
+/// note this example only works for block that do not span multiple pes.
 ///---------------------------------------------------------------------------------
 use lamellar::ActiveMessaging;
 use lamellar::{LocalMemoryRegion, RemoteMemoryRegion, SharedMemoryRegion};
@@ -210,6 +212,8 @@ fn main() {
         let b_pe_rows = n_blocks / num_pes;
         let b_pe_cols = p_blocks;
 
+        // println!("{block_size} {m_blocks} {n_blocks} {p_blocks} {a_pe_rows} {a_pe_cols} {b_pe_rows} {b_pe_cols}");
+
         //A iteration:
         let mut tasks = 0;
         let start = std::time::Instant::now();
@@ -222,6 +226,7 @@ fn main() {
                 //a col == b row
                 let a_block =
                     SubMatrix::new("A".to_owned(), a.clone(), my_pe, m, n, 0, k, block_size);
+                // println!("{j} {k} {}", k / b_pe_rows);
                 let b_block = SubMatrix::new(
                     "B".to_owned(),
                     b.clone(),

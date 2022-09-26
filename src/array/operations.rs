@@ -53,6 +53,7 @@ pub enum ArrayOpCmd<T: Dist> {
 }
 
 impl<T: Dist> ArrayOpCmd<T> {
+    #[tracing::instrument(skip_all)]
     pub fn result_size(&self) -> usize {
         match self {
             ArrayOpCmd::CompareExchange(_) | ArrayOpCmd::CompareExchangeEps(_, _) => {
@@ -112,6 +113,7 @@ pub enum OpInputEnum<'a, T: Dist> {
 }
 
 impl<'a, T: Dist> OpInputEnum<'_, T> {
+    #[tracing::instrument(skip_all)]
     pub(crate) fn iter(&self) -> Box<dyn Iterator<Item = T> + '_> {
         match self {
             OpInputEnum::Val(v) => Box::new(std::iter::repeat(v).map(|elem| *elem)),
@@ -131,6 +133,7 @@ impl<'a, T: Dist> OpInputEnum<'_, T> {
             OpInputEnum::LocalLockAtomicArray(a) => Box::new(a.iter().map(|elem| *elem)),
         }
     }
+    #[tracing::instrument(skip_all)]
     pub(crate) fn len(&self) -> usize {
         match self {
             OpInputEnum::Val(_) => 1,
@@ -148,6 +151,7 @@ impl<'a, T: Dist> OpInputEnum<'_, T> {
         }
     }
 
+    #[tracing::instrument(skip_all)]
     pub(crate) fn first(&self) -> T {
         match self {
             OpInputEnum::Val(v) => *v,
@@ -180,6 +184,7 @@ impl<'a, T: Dist> OpInput<'a, T> for &T {
 }
 
 impl<'a, T: Dist> OpInput<'a, T> for &'a [T] {
+    #[tracing::instrument(skip_all)]
     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
         let len = self.len();
         let mut iters = vec![];
@@ -202,12 +207,14 @@ impl<'a, T: Dist> OpInput<'a, T> for &'a [T] {
 }
 
 impl<'a, T: Dist> OpInput<'a, T> for &'a Vec<T> {
+    #[tracing::instrument(skip_all)]
     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
         (&self[..]).as_op_input()
     }
 }
 
 impl<'a, T: Dist> OpInput<'a, T> for Vec<T> {
+    #[tracing::instrument(skip_all)]
     fn as_op_input(mut self) -> (Vec<OpInputEnum<'a, T>>, usize) {
         let len = self.len();
         let mut iters = vec![];
@@ -233,6 +240,7 @@ impl<'a, T: Dist> OpInput<'a, T> for Vec<T> {
 }
 
 impl<'a, T: Dist> OpInput<'a, T> for &LamellarMemoryRegion<T> {
+    #[tracing::instrument(skip_all)]
     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
         let slice = unsafe { self.as_slice() }.expect("mem region not local");
         let len = slice.len();
@@ -256,30 +264,35 @@ impl<'a, T: Dist> OpInput<'a, T> for &LamellarMemoryRegion<T> {
 }
 
 impl<'a, T: Dist> OpInput<'a, T> for &LocalMemoryRegion<T> {
+    #[tracing::instrument(skip_all)]
     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
         LamellarMemoryRegion::from(self).as_op_input()
     }
 }
 
 impl<'a, T: Dist> OpInput<'a, T> for LocalMemoryRegion<T> {
+    #[tracing::instrument(skip_all)]
     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
         LamellarMemoryRegion::from(self).as_op_input()
     }
 }
 
 impl<'a, T: Dist> OpInput<'a, T> for &SharedMemoryRegion<T> {
+    #[tracing::instrument(skip_all)]
     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
         LamellarMemoryRegion::from(self).as_op_input()
     }
 }
 
 impl<'a, T: Dist> OpInput<'a, T> for SharedMemoryRegion<T> {
+    #[tracing::instrument(skip_all)]
     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
         LamellarMemoryRegion::from(self).as_op_input()
     }
 }
 
 impl<'a, T: Dist> OpInput<'a, T> for &'a UnsafeArray<T> {
+    #[tracing::instrument(skip_all)]
     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
         let slice = unsafe { self.local_as_slice() };
         // let slice = unsafe { std::mem::transmute::<&'_ [T], &'a [T]>(slice) }; //this is safe in the context of buffered_ops because we know we wait for all the requests to submit before we return
@@ -294,6 +307,7 @@ impl<'a, T: Dist> OpInput<'a, T> for &'a UnsafeArray<T> {
 // }
 
 impl<'a, T: Dist> OpInput<'a, T> for &'a ReadOnlyArray<T> {
+    #[tracing::instrument(skip_all)]
     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
         let slice = self.local_as_slice();
         // let slice = unsafe { std::mem::transmute::<&'_ [T], &'a [T]>(slice) }; //this is safe in the context of buffered_ops because we know we wait for all the requests to submit before we return
@@ -308,6 +322,7 @@ impl<'a, T: Dist> OpInput<'a, T> for &'a ReadOnlyArray<T> {
 // }
 
 impl<'a, T: Dist> OpInput<'a, T> for &'a LocalLockAtomicArray<T> {
+    #[tracing::instrument(skip_all)]
     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
         // let slice=unsafe{self.__local_as_slice()};
         let slice = self.read_local_data();
@@ -349,6 +364,7 @@ impl<'a, T: Dist> OpInput<'a, T> for &'a LocalLockAtomicArray<T> {
 // }
 
 impl<'a, T: Dist + ElementOps> OpInput<'a, T> for &AtomicArray<T> {
+    #[tracing::instrument(skip_all)]
     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
         match self {
             &AtomicArray::GenericAtomicArray(ref a) => a.as_op_input(),
@@ -364,6 +380,7 @@ impl<'a, T: Dist + ElementOps> OpInput<'a, T> for &AtomicArray<T> {
 // }
 
 impl<'a, T: Dist + ElementOps> OpInput<'a, T> for &GenericAtomicArray<T> {
+    #[tracing::instrument(skip_all)]
     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
         let slice = unsafe { self.__local_as_slice() };
         let len = slice.len();
@@ -401,6 +418,7 @@ impl<'a, T: Dist + ElementOps> OpInput<'a, T> for &GenericAtomicArray<T> {
 // }
 
 impl<'a, T: Dist + ElementOps> OpInput<'a, T> for &NativeAtomicArray<T> {
+    #[tracing::instrument(skip_all)]
     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
         let slice = unsafe { self.__local_as_slice() };
         let len = slice.len();
@@ -466,14 +484,16 @@ pub trait BufferOp: Sync + Send {
 pub type OpResultOffsets = Vec<(usize, usize, usize)>; //reqid,offset,len
 pub struct OpReqOffsets(Arc<Mutex<HashMap<usize, OpResultOffsets>>>); //pe
 impl OpReqOffsets {
+    #[tracing::instrument(skip_all)]
     pub(crate) fn new() -> Self {
         OpReqOffsets(Arc::new(Mutex::new(HashMap::new())))
     }
+    #[tracing::instrument(skip_all)]
     pub fn insert(&self, index: usize, indices: OpResultOffsets) {
         let mut map = self.0.lock();
         map.insert(index, indices);
     }
-
+    #[tracing::instrument(skip_all)]
     pub(crate) fn lock(&self) -> parking_lot::MutexGuard<HashMap<usize, OpResultOffsets>> {
         self.0.lock()
     }
@@ -495,13 +515,16 @@ impl std::fmt::Debug for OpReqOffsets {
 pub type PeOpResults = Arc<Mutex<Vec<u8>>>;
 pub struct OpResults(Arc<Mutex<HashMap<usize, PeOpResults>>>);
 impl OpResults {
+    #[tracing::instrument(skip_all)]
     pub(crate) fn new() -> Self {
         OpResults(Arc::new(Mutex::new(HashMap::new())))
     }
+    #[tracing::instrument(skip_all)]
     pub fn insert(&self, index: usize, val: PeOpResults) {
         let mut map = self.0.lock();
         map.insert(index, val);
     }
+    #[tracing::instrument(skip_all)]
     pub(crate) fn lock(&self) -> parking_lot::MutexGuard<HashMap<usize, PeOpResults>> {
         self.0.lock()
     }
@@ -565,12 +588,14 @@ pub(crate) struct ArrayOpResultHandleInner<T> {
 #[async_trait]
 impl LamellarRequest for ArrayOpHandle {
     type Output = ();
+    #[tracing::instrument(skip_all)]
     async fn into_future(mut self: Box<Self>) -> Self::Output {
         for req in self.reqs.drain(..) {
             req.into_future().await;
         }
         ()
     }
+    #[tracing::instrument(skip_all)]
     fn get(&self) -> Self::Output {
         for req in &self.reqs {
             req.get();
@@ -582,6 +607,7 @@ impl LamellarRequest for ArrayOpHandle {
 #[async_trait]
 impl LamellarRequest for ArrayOpHandleInner {
     type Output = ();
+    #[tracing::instrument(skip_all)]
     async fn into_future(mut self: Box<Self>) -> Self::Output {
         for comp in self.complete {
             while comp.load(Ordering::Relaxed) == false {
@@ -590,6 +616,7 @@ impl LamellarRequest for ArrayOpHandleInner {
         }
         ()
     }
+    #[tracing::instrument(skip_all)]
     fn get(&self) -> Self::Output {
         for comp in &self.complete {
             while comp.load(Ordering::Relaxed) == false {
@@ -603,6 +630,7 @@ impl LamellarRequest for ArrayOpHandleInner {
 #[async_trait]
 impl<T: Dist> LamellarRequest for ArrayOpFetchHandle<T> {
     type Output = T;
+    #[tracing::instrument(skip_all)]
     async fn into_future(mut self: Box<Self>) -> Self::Output {
         self.req
             .into_future()
@@ -610,7 +638,7 @@ impl<T: Dist> LamellarRequest for ArrayOpFetchHandle<T> {
             .pop()
             .expect("should have a single request")
     }
-
+    #[tracing::instrument(skip_all)]
     fn get(&self) -> Self::Output {
         self.req.get().pop().expect("should have a single request")
     }
@@ -619,6 +647,7 @@ impl<T: Dist> LamellarRequest for ArrayOpFetchHandle<T> {
 #[async_trait]
 impl<T: Dist> LamellarRequest for ArrayOpBatchFetchHandle<T> {
     type Output = Vec<T>;
+    #[tracing::instrument(skip_all)]
     async fn into_future(mut self: Box<Self>) -> Self::Output {
         let mut res = vec![];
         for req in self.reqs.drain(..) {
@@ -626,7 +655,7 @@ impl<T: Dist> LamellarRequest for ArrayOpBatchFetchHandle<T> {
         }
         res
     }
-
+    #[tracing::instrument(skip_all)]
     fn get(&self) -> Self::Output {
         let mut res = vec![];
         for req in &self.reqs {
@@ -638,6 +667,7 @@ impl<T: Dist> LamellarRequest for ArrayOpBatchFetchHandle<T> {
 }
 
 impl<T: Dist> ArrayOpFetchHandleInner<T> {
+    #[tracing::instrument(skip_all)]
     fn get_result(&self) -> Vec<T> {
         if self.req_cnt > 0 {
             let mut res_vec = Vec::with_capacity(self.req_cnt);
@@ -679,6 +709,7 @@ impl<T: Dist> ArrayOpFetchHandleInner<T> {
 #[async_trait]
 impl<T: Dist> LamellarRequest for ArrayOpFetchHandleInner<T> {
     type Output = Vec<T>;
+    #[tracing::instrument(skip_all)]
     async fn into_future(mut self: Box<Self>) -> Self::Output {
         for comp in &self.complete {
             while comp.load(Ordering::Relaxed) == false {
@@ -687,6 +718,7 @@ impl<T: Dist> LamellarRequest for ArrayOpFetchHandleInner<T> {
         }
         self.get_result()
     }
+    #[tracing::instrument(skip_all)]
     fn get(&self) -> Self::Output {
         for comp in &self.complete {
             while comp.load(Ordering::Relaxed) == false {
@@ -700,6 +732,7 @@ impl<T: Dist> LamellarRequest for ArrayOpFetchHandleInner<T> {
 #[async_trait]
 impl<T: Dist> LamellarRequest for ArrayOpResultHandle<T> {
     type Output = Result<T, T>;
+    #[tracing::instrument(skip_all)]
     async fn into_future(mut self: Box<Self>) -> Self::Output {
         self.req
             .into_future()
@@ -707,7 +740,7 @@ impl<T: Dist> LamellarRequest for ArrayOpResultHandle<T> {
             .pop()
             .expect("should have a single request")
     }
-
+    #[tracing::instrument(skip_all)]
     fn get(&self) -> Self::Output {
         self.req.get().pop().expect("should have a single request")
     }
@@ -716,6 +749,7 @@ impl<T: Dist> LamellarRequest for ArrayOpResultHandle<T> {
 #[async_trait]
 impl<T: Dist> LamellarRequest for ArrayOpBatchResultHandle<T> {
     type Output = Vec<Result<T, T>>;
+    #[tracing::instrument(skip_all)]
     async fn into_future(mut self: Box<Self>) -> Self::Output {
         let mut res = vec![];
         for req in self.reqs.drain(..) {
@@ -723,7 +757,7 @@ impl<T: Dist> LamellarRequest for ArrayOpBatchResultHandle<T> {
         }
         res
     }
-
+    #[tracing::instrument(skip_all)]
     fn get(&self) -> Self::Output {
         let mut res = vec![];
         for req in &self.reqs {
@@ -734,6 +768,7 @@ impl<T: Dist> LamellarRequest for ArrayOpBatchResultHandle<T> {
 }
 
 impl<T: Dist> ArrayOpResultHandleInner<T> {
+    #[tracing::instrument(skip_all)]
     fn get_result(&self) -> Vec<Result<T, T>> {
         // println!("req_cnt: {:?}", self.req_cnt);
         if self.req_cnt > 0 {
@@ -784,6 +819,7 @@ impl<T: Dist> ArrayOpResultHandleInner<T> {
 #[async_trait]
 impl<T: Dist> LamellarRequest for ArrayOpResultHandleInner<T> {
     type Output = Vec<Result<T, T>>;
+    #[tracing::instrument(skip_all)]
     async fn into_future(mut self: Box<Self>) -> Self::Output {
         for comp in &self.complete {
             while comp.load(Ordering::Relaxed) == false {
@@ -792,6 +828,7 @@ impl<T: Dist> LamellarRequest for ArrayOpResultHandleInner<T> {
         }
         self.get_result()
     }
+    #[tracing::instrument(skip_all)]
     fn get(&self) -> Self::Output {
         for comp in &self.complete {
             while comp.load(Ordering::Relaxed) == false {
@@ -841,11 +878,12 @@ pub trait ElementComparePartialEqOps: std::cmp::PartialEq + AmDist + Dist + Size
 impl<T> ElementComparePartialEqOps for T where T: std::cmp::PartialEq + AmDist + Dist {}
 
 pub trait AccessOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
+    #[tracing::instrument(skip_all)]
     fn store<'a>(&self, index: usize, val: T) -> Pin<Box<dyn Future<Output = ()> + Send>> {
         self.inner_array()
             .initiate_op(val, index, ArrayOpCmd::Store)
     }
-
+    #[tracing::instrument(skip_all)]
     fn batch_store<'a>(
         &self,
         index: impl OpInput<'a, usize>,
@@ -854,13 +892,13 @@ pub trait AccessOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
         self.inner_array()
             .initiate_op(val, index, ArrayOpCmd::Store)
     }
-
+    #[tracing::instrument(skip_all)]
     fn load<'a>(&self, index: usize) -> Pin<Box<dyn Future<Output = T> + Send>> {
         let dummy_val = self.inner_array().dummy_val(); //we dont actually do anything with this except satisfy apis;
         self.inner_array()
             .initiate_fetch_op(dummy_val, index, ArrayOpCmd::Load)
     }
-
+    #[tracing::instrument(skip_all)]
     fn batch_load<'a>(
         &self,
         index: impl OpInput<'a, usize>,
@@ -869,12 +907,12 @@ pub trait AccessOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
         self.inner_array()
             .initiate_batch_fetch_op(dummy_val, index, ArrayOpCmd::Load)
     }
-
+    #[tracing::instrument(skip_all)]
     fn swap<'a>(&self, index: usize, val: T) -> Pin<Box<dyn Future<Output = T> + Send>> {
         self.inner_array()
             .initiate_fetch_op(val, index, ArrayOpCmd::Swap)
     }
-
+    #[tracing::instrument(skip_all)]
     fn batch_swap<'a>(
         &self,
         index: impl OpInput<'a, usize>,
@@ -886,9 +924,11 @@ pub trait AccessOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
 }
 
 pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayPrivate<T> {
+    #[tracing::instrument(skip_all)]
     fn add(&self, index: usize, val: T) -> Pin<Box<dyn Future<Output = ()> + Send>> {
         self.inner_array().initiate_op(val, index, ArrayOpCmd::Add)
     }
+    #[tracing::instrument(skip_all)]
     fn batch_add<'a>(
         &self,
         index: impl OpInput<'a, usize>,
@@ -896,10 +936,12 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
         self.inner_array().initiate_op(val, index, ArrayOpCmd::Add)
     }
+    #[tracing::instrument(skip_all)]
     fn fetch_add(&self, index: usize, val: T) -> Pin<Box<dyn Future<Output = T> + Send>> {
         self.inner_array()
             .initiate_fetch_op(val, index, ArrayOpCmd::FetchAdd)
     }
+    #[tracing::instrument(skip_all)]
     fn batch_fetch_add<'a>(
         &self,
         index: impl OpInput<'a, usize>,
@@ -909,9 +951,11 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
             .initiate_batch_fetch_op(val, index, ArrayOpCmd::FetchAdd)
     }
 
+    #[tracing::instrument(skip_all)]
     fn sub<'a>(&self, index: usize, val: T) -> Pin<Box<dyn Future<Output = ()> + Send>> {
         self.inner_array().initiate_op(val, index, ArrayOpCmd::Sub)
     }
+    #[tracing::instrument(skip_all)]
     fn batch_sub<'a>(
         &self,
         index: impl OpInput<'a, usize>,
@@ -919,10 +963,12 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
         self.inner_array().initiate_op(val, index, ArrayOpCmd::Sub)
     }
+    #[tracing::instrument(skip_all)]
     fn fetch_sub<'a>(&self, index: usize, val: T) -> Pin<Box<dyn Future<Output = T> + Send>> {
         self.inner_array()
             .initiate_fetch_op(val, index, ArrayOpCmd::FetchSub)
     }
+    #[tracing::instrument(skip_all)]
     fn batch_fetch_sub<'a>(
         &self,
         index: impl OpInput<'a, usize>,
@@ -931,10 +977,11 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
         self.inner_array()
             .initiate_batch_fetch_op(val, index, ArrayOpCmd::FetchSub)
     }
-
+    #[tracing::instrument(skip_all)]
     fn mul<'a>(&self, index: usize, val: T) -> Pin<Box<dyn Future<Output = ()> + Send>> {
         self.inner_array().initiate_op(val, index, ArrayOpCmd::Mul)
     }
+    #[tracing::instrument(skip_all)]
     fn batch_mul<'a>(
         &self,
         index: impl OpInput<'a, usize>,
@@ -942,12 +989,12 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
         self.inner_array().initiate_op(val, index, ArrayOpCmd::Mul)
     }
-
+    #[tracing::instrument(skip_all)]
     fn fetch_mul<'a>(&self, index: usize, val: T) -> Pin<Box<dyn Future<Output = T> + Send>> {
         self.inner_array()
             .initiate_fetch_op(val, index, ArrayOpCmd::FetchMul)
     }
-
+    #[tracing::instrument(skip_all)]
     fn batch_fetch_mul<'a>(
         &self,
         index: impl OpInput<'a, usize>,
@@ -956,10 +1003,11 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
         self.inner_array()
             .initiate_batch_fetch_op(val, index, ArrayOpCmd::FetchMul)
     }
-
+    #[tracing::instrument(skip_all)]
     fn div<'a>(&self, index: usize, val: T) -> Pin<Box<dyn Future<Output = ()> + Send>> {
         self.inner_array().initiate_op(val, index, ArrayOpCmd::Div)
     }
+    #[tracing::instrument(skip_all)]
     fn batch_div<'a>(
         &self,
         index: impl OpInput<'a, usize>,
@@ -967,12 +1015,12 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
         self.inner_array().initiate_op(val, index, ArrayOpCmd::Div)
     }
-
+    #[tracing::instrument(skip_all)]
     fn fetch_div<'a>(&self, index: usize, val: T) -> Pin<Box<dyn Future<Output = T> + Send>> {
         self.inner_array()
             .initiate_fetch_op(val, index, ArrayOpCmd::FetchDiv)
     }
-
+    #[tracing::instrument(skip_all)]
     fn batch_fetch_div<'a>(
         &self,
         index: impl OpInput<'a, usize>,
@@ -984,10 +1032,11 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
 }
 
 pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
+    #[tracing::instrument(skip_all)]
     fn bit_and<'a>(&self, index: usize, val: T) -> Pin<Box<dyn Future<Output = ()> + Send>> {
         self.inner_array().initiate_op(val, index, ArrayOpCmd::And)
     }
-
+    #[tracing::instrument(skip_all)]
     fn batch_bit_and<'a>(
         &self,
         index: impl OpInput<'a, usize>,
@@ -995,12 +1044,12 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
     ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
         self.inner_array().initiate_op(val, index, ArrayOpCmd::And)
     }
-
+    #[tracing::instrument(skip_all)]
     fn fetch_bit_and<'a>(&self, index: usize, val: T) -> Pin<Box<dyn Future<Output = T> + Send>> {
         self.inner_array()
             .initiate_fetch_op(val, index, ArrayOpCmd::FetchAnd)
     }
-
+    #[tracing::instrument(skip_all)]
     fn batch_fetch_bit_and<'a>(
         &self,
         index: impl OpInput<'a, usize>,
@@ -1009,11 +1058,11 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
         self.inner_array()
             .initiate_batch_fetch_op(val, index, ArrayOpCmd::FetchAnd)
     }
-
+    #[tracing::instrument(skip_all)]
     fn bit_or<'a>(&self, index: usize, val: T) -> Pin<Box<dyn Future<Output = ()> + Send>> {
         self.inner_array().initiate_op(val, index, ArrayOpCmd::Or)
     }
-
+    #[tracing::instrument(skip_all)]
     fn batch_bit_or<'a>(
         &self,
         index: impl OpInput<'a, usize>,
@@ -1021,12 +1070,12 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
     ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
         self.inner_array().initiate_op(val, index, ArrayOpCmd::Or)
     }
-
+    #[tracing::instrument(skip_all)]
     fn fetch_bit_or<'a>(&self, index: usize, val: T) -> Pin<Box<dyn Future<Output = T> + Send>> {
         self.inner_array()
             .initiate_fetch_op(val, index, ArrayOpCmd::FetchOr)
     }
-
+    #[tracing::instrument(skip_all)]
     fn batch_fetch_bit_or<'a>(
         &self,
         index: impl OpInput<'a, usize>,
@@ -1038,6 +1087,7 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
 }
 
 pub trait CompareExchangeOps<T: ElementCompareEqOps>: private::LamellarArrayPrivate<T> {
+    #[tracing::instrument(skip_all)]
     fn compare_exchange<'a>(
         &self,
         index: usize,
@@ -1047,6 +1097,7 @@ pub trait CompareExchangeOps<T: ElementCompareEqOps>: private::LamellarArrayPriv
         self.inner_array()
             .initiate_result_op(new, index, ArrayOpCmd::CompareExchange(old))
     }
+    #[tracing::instrument(skip_all)]
     fn batch_compare_exchange<'a>(
         &self,
         index: impl OpInput<'a, usize>,
@@ -1061,6 +1112,7 @@ pub trait CompareExchangeOps<T: ElementCompareEqOps>: private::LamellarArrayPriv
 pub trait CompareExchangeEpsilonOps<T: ElementComparePartialEqOps>:
     private::LamellarArrayPrivate<T>
 {
+    #[tracing::instrument(skip_all)]
     fn compare_exchange_epsilon<'a>(
         &self,
         index: usize,
@@ -1071,6 +1123,7 @@ pub trait CompareExchangeEpsilonOps<T: ElementComparePartialEqOps>:
         self.inner_array()
             .initiate_result_op(new, index, ArrayOpCmd::CompareExchangeEps(old, eps))
     }
+    #[tracing::instrument(skip_all)]
     fn batch_compare_exchange_epsilon<'a>(
         &self,
         index: impl OpInput<'a, usize>,

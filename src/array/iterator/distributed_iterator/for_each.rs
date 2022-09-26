@@ -20,9 +20,12 @@ where
 {
     async fn exec(&self) {
         let mut iter = self.data.init(self.start_i, self.end_i - self.start_i);
+        // let mut cnt = 0;
         while let Some(elem) = iter.next() {
             (&self.op)(elem);
+            // cnt += 1;
         }
+        // println!("elems processed {:?}", cnt);
     }
 }
 

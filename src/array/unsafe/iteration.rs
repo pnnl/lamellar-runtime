@@ -42,7 +42,8 @@ impl<T: Dist> UnsafeArray<T> {
                 Err(_) => 4,
             };
             let num_elems_local = iter.elems(self.num_elems_local());
-            let elems_per_thread = num_elems_local as f64 / num_workers as f64;
+            let elems_per_thread = 1.0f64.max(num_elems_local as f64 / num_workers as f64);
+
             // println!(
             //     "num_chunks {:?} chunks_thread {:?}",
             //     num_elems_local, elems_per_thread
@@ -107,7 +108,7 @@ impl<T: Dist> UnsafeArray<T> {
                 Err(_) => 4,
             };
             let num_elems_local = iter.elems(self.num_elems_local());
-            let elems_per_thread = num_elems_local as f64 / num_workers as f64;
+            let elems_per_thread = 1.0f64.max(num_elems_local as f64 / num_workers as f64);
             // println!(
             //     "num_chunks {:?} chunks_thread {:?}",
             //     num_elems_local, elems_per_thread
@@ -220,14 +221,16 @@ impl<T: Dist> UnsafeArray<T> {
             let num_elems_local = iter.elems(self.num_elems_local());
             let mut ranges = Vec::new();
             let mut cur_i = 0;
+            let mut num_chunks = 0;
             while cur_i < num_elems_local {
                 ranges.push((cur_i, cur_i + chunk_size));
                 cur_i += chunk_size;
+                num_chunks += 1;
             }
 
             let range_i = Arc::new(AtomicUsize::new(0));
             // println!("ranges {:?}", ranges);
-            for _ in 0..std::cmp::min(num_workers, num_elems_local) {
+            for _ in 0..std::cmp::min(num_workers, num_chunks) {
                 reqs.push(self.inner.data.task_group.exec_am_local(ForEachChunk {
                     op: op.clone(),
                     data: iter.clone(),
@@ -256,7 +259,7 @@ impl<T: Dist> UnsafeArray<T> {
                 Err(_) => 4,
             };
             let num_elems_local = iter.elems(self.num_elems_local());
-            let elems_per_thread = num_elems_local as f64 / num_workers as f64;
+            let elems_per_thread = 1.0f64.max(num_elems_local as f64 / num_workers as f64);
             // println!(
             //     "num_chunks {:?} chunks_thread {:?}",
             //     num_elems_local, elems_per_thread
@@ -337,7 +340,7 @@ impl<T: Dist> UnsafeArray<T> {
                 Err(_) => 4,
             };
             let num_elems_local = iter.elems(self.num_elems_local());
-            let elems_per_thread = num_elems_local as f64 / num_workers as f64;
+            let elems_per_thread = 1.0f64.max(num_elems_local as f64 / num_workers as f64);
             // println!(
             //     "num_chunks {:?} chunks_thread {:?}",
             //     num_elems_local, elems_per_thread
@@ -504,9 +507,9 @@ impl<T: Dist> DistIteratorLauncher for UnsafeArray<T> {
 
     fn for_each_with_schedule<I, F>(
         &self,
+        sched: Schedule,
         iter: &I,
         op: F,
-        sched: Schedule,
     ) -> Pin<Box<dyn Future<Output = ()> + Send>>
     where
         I: DistributedIterator + 'static,
@@ -532,9 +535,9 @@ impl<T: Dist> DistIteratorLauncher for UnsafeArray<T> {
 
     fn for_each_async_with_schedule<I, F, Fut>(
         &self,
+        sched: Schedule,
         iter: &I,
         op: F,
-        sched: Schedule,
     ) -> Pin<Box<dyn Future<Output = ()> + Send>>
     where
         I: DistributedIterator + 'static,

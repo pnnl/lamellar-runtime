@@ -540,15 +540,26 @@ fn create_buf_ops(
             orig_pe: usize,
         }
         impl #lamellar::array::BufferOp for #buf_op_name{
+            #[tracing::instrument(skip_all)]
             fn add_ops(&self, op_ptr: *const u8, op_data_ptr: *const u8) -> (bool,Arc<AtomicBool>){
+                let span1 = tracing::trace_span!("convert");
+                let _guard = span1.enter();
                 let op_data = unsafe{(&*(op_data_ptr as *const #lamellar::array::InputToValue<'_,#typeident>)).as_op_am_input()};
                 let op = unsafe{*(op_ptr as *const ArrayOpCmd<#typeident>)};
+                drop(_guard);
+                let span2 = tracing::trace_span!("lock");
+                let _guard = span2.enter();
                 let mut buf = self.ops.lock();
+                drop(_guard);
+                let span3 = tracing::trace_span!("update");
+                let _guard = span3.enter();
                 let first = buf.len() == 0;
                 let _temp = self.cur_len.fetch_add(op_data.len(),Ordering::SeqCst);
                 buf.push((op,op_data));
+                drop(_guard);
                 (first,self.complete.read().clone())
             }
+            #[tracing::instrument(skip_all)]
             fn add_fetch_ops(&self, pe: usize, op_ptr: *const u8, op_data_ptr: *const u8, req_ids: &Vec<usize>, res_map: OpResults) -> (bool,Arc<AtomicBool>,Option<OpResultOffsets>){
                 let op_data = unsafe{(&*(op_data_ptr as *const #lamellar::array::InputToValue<'_,#typeident>)).as_op_am_input()};
                 let op = unsafe{*(op_ptr as *const ArrayOpCmd<#typeident>)};
@@ -565,6 +576,7 @@ fn create_buf_ops(
                 res_map.insert(pe,self.results.read().clone());
                 (first,self.complete.read().clone(),Some(res_offsets))
             }
+            #[tracing::instrument(skip_all)]
             fn into_arc_am(&self,sub_array: std::ops::Range<usize>)-> (Vec<Arc<dyn RemoteActiveMessage + Sync + Send>>,usize,Arc<AtomicBool>, PeOpResults){
                 // println!("into arc am {:?}",stringify!(#am_buf_name));
                 let mut ams: Vec<Arc<dyn RemoteActiveMessage + Sync + Send>> = Vec::new();

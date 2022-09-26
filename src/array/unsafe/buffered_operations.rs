@@ -56,6 +56,7 @@ pub(crate) enum BufOpsRequest<T: Dist> {
 }
 
 impl<'a, T: Dist> InputToValue<'a, T> {
+    #[tracing::instrument(skip_all)]
     fn len(&self) -> usize {
         match self {
             InputToValue::OneToOne(_, _) => 1,
@@ -72,6 +73,7 @@ impl<'a, T: Dist> InputToValue<'a, T> {
     //         InputToValue::ManyToMany(indices,vals) => indices.len() * std::mem::size_of::<usize>() +  vals.len() * std::mem::size_of::<T>(),
     //     }
     // }
+    #[tracing::instrument(skip_all)]
     fn to_pe_offsets(
         self,
         array: &UnsafeArray<T>,
@@ -145,6 +147,7 @@ impl<'a, T: Dist> InputToValue<'a, T> {
     }
 }
 impl<'a, T: Dist + serde::Serialize + serde::de::DeserializeOwned> InputToValue<'a, T> {
+    #[tracing::instrument(skip_all)]
     pub fn as_op_am_input(&self) -> OpAmInputToValue<T> {
         match self {
             InputToValue::OneToOne(index, value) => OpAmInputToValue::OneToOne(*index, *value),
@@ -162,6 +165,7 @@ impl<'a, T: Dist + serde::Serialize + serde::de::DeserializeOwned> InputToValue<
 }
 
 impl<T: Dist> OpAmInputToValue<T> {
+    #[tracing::instrument(skip_all)]
     pub fn len(&self) -> usize {
         match self {
             OpAmInputToValue::OneToOne(_, _) => 1,
@@ -170,6 +174,7 @@ impl<T: Dist> OpAmInputToValue<T> {
             OpAmInputToValue::ManyToMany(indices, _) => indices.len(),
         }
     }
+    #[tracing::instrument(skip_all)]
     pub fn num_bytes(&self) -> usize {
         match self {
             OpAmInputToValue::OneToOne(_, _) => std::mem::size_of::<(usize, T)>(),
@@ -204,6 +209,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         }
     }
 
+    #[tracing::instrument(skip_all)]
     fn initiate_op_task<'a>(
         &self,
         ret_type: OpReturnType,
@@ -212,6 +218,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         submit_cnt: usize,
         req_handles: Arc<Mutex<HashMap<usize, BufOpsRequest<T>>>>,
     ) {
+        println!("initiate_op_task");
         let (pe_offsets, req_ids, req_cnt) = input.to_pe_offsets(self); //HashMap<usize, InputToValue<'a,T>>
 
         let res_offsets_map = OpReqOffsets::new();
@@ -364,6 +371,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         req_handles.lock().insert(submit_cnt, req);
     }
 
+    #[tracing::instrument(skip_all)]
     pub(crate) fn inner_initiate_op<'a>(
         &self,
         val: impl OpInput<'a, T>,
@@ -462,6 +470,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         }
     }
 
+    #[tracing::instrument(skip_all)]
     pub(crate) fn initiate_op<'a>(
         &self,
         val: impl OpInput<'a, T>,
@@ -485,6 +494,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         Box::new(ArrayOpHandle { reqs }).into_future()
     }
 
+    #[tracing::instrument(skip_all)]
     pub(crate) fn initiate_fetch_op<'a>(
         &self,
         val: impl OpInput<'a, T>,
@@ -504,6 +514,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         }
     }
 
+    #[tracing::instrument(skip_all)]
     pub(crate) fn initiate_batch_fetch_op<'a>(
         &self,
         val: impl OpInput<'a, T>,
@@ -527,6 +538,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         }
         Box::new(ArrayOpBatchFetchHandle { reqs }).into_future()
     }
+    #[tracing::instrument(skip_all)]
     pub(crate) fn initiate_result_op<'a>(
         &self,
         val: impl OpInput<'a, T>,
@@ -547,6 +559,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
             BufOpsRequest::Result(req) => Box::new(ArrayOpResultHandle { req }).into_future(),
         }
     }
+    #[tracing::instrument(skip_all)]
     pub(crate) fn initiate_batch_result_op<'a>(
         &self,
         val: impl OpInput<'a, T>,

@@ -2,11 +2,16 @@ use crate::array::iterator::serial_iterator::*;
 use crate::array::LamellarArrayRequest;
 // use crate::LamellarArray;
 use crate::LocalMemoryRegion;
+use pin_project::pin_project;
 
+use async_trait::async_trait;
+use futures::Future;
+#[pin_project]
 pub struct CopiedChunks<I>
 where
-    I: SerialIterator,
+    I: SerialIterator + Send,
 {
+    #[pin]
     iter: I,
     // array: LamellarArray<I::ElemType>,
     // mem_region: LocalMemoryRegion<I::ElemType>,
@@ -16,7 +21,7 @@ where
 
 impl<I> CopiedChunks<I>
 where
-    I: SerialIterator,
+    I: SerialIterator + Send,
 {
     pub(crate) fn new(iter: I, chunk_size: usize) -> CopiedChunks<I> {
         // let array = iter.array().clone(); //.to_base::<u8>();
@@ -33,17 +38,56 @@ where
         chunks
     }
 
-    fn get_buffer(&self, size: usize) -> LocalMemoryRegion<I::ElemType> {
-        let mem_region: LocalMemoryRegion<I::ElemType> =
+    fn get_buffer(&self, size: usize) -> LocalMemoryRegion<<I as SerialIterator>::ElemType> {
+        let mem_region: LocalMemoryRegion<<I as SerialIterator>::ElemType> =
             self.array().team().alloc_local_mem_region(size);
         self.array().internal_get(self.index, &mem_region).wait();
         mem_region
     }
+
+    fn get_buffer_async(
+        self: &Pin<&mut Self>,
+        size: usize,
+    ) -> Pin<Box<dyn Future<Output = LocalMemoryRegion<<I as SerialIterator>::ElemType>> + Send>>
+    {
+        // let this = self.project();
+        let array = self.iter.array();
+        let mem_region: LocalMemoryRegion<<I as SerialIterator>::ElemType> =
+            array.team().alloc_local_mem_region(size);
+        let index = self.index;
+        let req = array.internal_get(index, &mem_region).into_future();
+        Box::pin(async {
+            req.await;
+            mem_region
+        })
+    }
 }
 
+#[async_trait]
+// impl<I> SerialAsyncIterator for CopiedChunks<I>
+// where
+//     I: SerialIterator + SerialAsyncIterator,
+// {
+//     type ElemType = <I as SerialAsyncIterator>::ElemType;
+//     type Item = LocalMemoryRegion<<I as SerialAsyncIterator>::ElemType>;
+//     type Array = <I as SerialAsyncIterator>::Array;
+//     async fn async_next(self: Pin<&mut Self>) -> Option<Self::Item> {
+//         // println!("{:?} {:?}",self.index,self.array.len()/std::mem::size_of::<<Self as SerialIterator>::ElemType>());
+//         let array = self.array();
+//         if self.index < array.len() {
+//             let size = std::cmp::min(self.chunk_size, array.len() - self.index);
+
+//             let mem_region = self.get_buffer_async(size).await;
+//             self.index += size;
+//             Some(mem_region)
+//         } else {
+//             None
+//         }
+//     }
+// }
 impl<I> SerialIterator for CopiedChunks<I>
 where
-    I: SerialIterator,
+    I: SerialIterator + Send,
 {
     type ElemType = I::ElemType;
     type Item = LocalMemoryRegion<I::ElemType>;
@@ -61,6 +105,21 @@ where
             None
         }
     }
+    async fn async_next(self: Pin<&mut Self>) -> Option<Self::Item> {
+        // println!("async_next copied_chunks");
+        // let mut this = self.project();
+        // println!("{:?} {:?}",self.index,self.array.len()/std::mem::size_of::<<Self as SerialIterator>::ElemType>());
+        let array = self.iter.array();
+        if self.index < array.len() {
+            let size = std::cmp::min(self.chunk_size, array.len() - self.index);
+
+            let mem_region = self.get_buffer_async(size);
+            *self.project().index += size;
+            Some(mem_region.await)
+        } else {
+            None
+        }
+    }
     fn advance_index(&mut self, count: usize) {
         // println!("advance_index {:?} {:?} {:?} {:?}",self.index, count, count*self.chunk_size,self.array.len());
         self.index += count * self.chunk_size;
@@ -68,6 +127,10 @@ where
         //     let size = std::cmp::min(self.chunk_size, self.array.len() - self.index);
         //     self.fill_buffer(0, &self.mem_region.sub_region(..size));
         // }
+    }
+    async fn async_advance_index(mut self: Pin<&mut Self>, count: usize) {
+        let this = self.project();
+        *this.index += count * *this.chunk_size;
     }
     fn array(&self) -> Self::Array {
         self.iter.array()
@@ -84,6 +147,21 @@ where
             let mem_reg_t = mem_region.to_base::<I::ElemType>();
             let req = array.internal_get(self.index, &mem_reg_t);
             self.index += mem_reg_t.len();
+            Some(req)
+        } else {
+            None
+        }
+    }
+    async fn async_buffered_next(
+        mut self: Pin<&mut Self>,
+        mem_region: LocalMemoryRegion<u8>,
+    ) -> Option<Box<dyn LamellarArrayRequest<Output = ()>>> {
+        let array = self.array();
+        if self.index < array.len() {
+            let mem_reg_t = mem_region.to_base::<I::ElemType>();
+            let req = array.internal_get(self.index, &mem_reg_t);
+            let this = self.project();
+            *this.index += mem_reg_t.len();
             Some(req)
         } else {
             None

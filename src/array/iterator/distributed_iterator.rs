@@ -29,10 +29,11 @@ use crate::array::{
 }; //, LamellarArrayPut, LamellarArrayGet};
 
 use crate::active_messaging::AmLocal;
+use crate::scheduler::SchedulerQueue;
 
 use async_trait::async_trait;
 use enum_dispatch::enum_dispatch;
-use futures::Future;
+use futures::{future, Future, StreamExt};
 use std::marker::PhantomData;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -160,7 +161,7 @@ pub struct DistIterCollectHandle<T: Dist, A: From<UnsafeArray<T>> + AmLocal> {
 }
 
 impl<T: Dist, A: From<UnsafeArray<T>> + AmLocal> DistIterCollectHandle<T, A> {
-    fn create_array(&self, local_vals: &Vec<T>) -> A {
+    async fn create_array(&self, local_vals: &Vec<T>) -> A {
         self.team.barrier();
         let local_sizes =
             UnsafeArray::<usize>::new(self.team.clone(), self.team.num_pes, Distribution::Block);
@@ -175,14 +176,16 @@ impl<T: Dist, A: From<UnsafeArray<T>> + AmLocal> DistIterCollectHandle<T, A> {
         // local_sizes.print();
         local_sizes
             .ser_iter()
-            .into_iter()
+            .into_stream()
             .enumerate()
             .for_each(|(i, local_size)| {
                 size += local_size;
                 if i < my_pe {
                     my_start += local_size;
                 }
-            });
+                future::ready(())
+            })
+            .await;
         // println!("my_start {} size {}",my_start,size);
         let array = UnsafeArray::<T>::new(self.team.clone(), size, self.distribution); //implcit barrier
         array.put(my_start, local_vals);
@@ -198,7 +201,7 @@ impl<T: Dist, A: From<UnsafeArray<T>> + AmLocal> DistIterRequest for DistIterCol
             let v = req.into_future().await;
             local_vals.extend(v);
         }
-        self.create_array(&local_vals)
+        self.create_array(&local_vals).await
     }
     fn wait(mut self: Box<Self>) -> Self::Output {
         let mut local_vals = vec![];
@@ -206,7 +209,7 @@ impl<T: Dist, A: From<UnsafeArray<T>> + AmLocal> DistIterRequest for DistIterCol
             let v = req.get();
             local_vals.extend(v);
         }
-        self.create_array(&local_vals)
+        self.team.scheduler.block_on(self.create_array(&local_vals))
     }
 }
 
@@ -219,9 +222,9 @@ pub trait DistIteratorLauncher {
 
     fn for_each_with_schedule<I, F>(
         &self,
+        sched: Schedule,
         iter: &I,
         op: F,
-        sched: Schedule,
     ) -> Pin<Box<dyn Future<Output = ()> + Send>>
     where
         I: DistributedIterator + 'static,
@@ -239,9 +242,9 @@ pub trait DistIteratorLauncher {
 
     fn for_each_async_with_schedule<I, F, Fut>(
         &self,
+        sched: Schedule,
         iter: &I,
         op: F,
-        sched: Schedule,
     ) -> Pin<Box<dyn Future<Output = ()> + Send>>
     where
         I: DistributedIterator + 'static,
@@ -328,13 +331,13 @@ pub trait DistributedIterator: AmLocal + Clone + 'static {
     }
     fn for_each_with_schedule<F>(
         &self,
-        op: F,
         sched: Schedule,
+        op: F,
     ) -> Pin<Box<dyn Future<Output = ()> + Send>>
     where
         F: Fn(Self::Item) + AmLocal + Clone + 'static,
     {
-        self.array().for_each_with_schedule(self, op, sched)
+        self.array().for_each_with_schedule(sched, self, op)
     }
     fn for_each_async<F, Fut>(&self, op: F) -> Pin<Box<dyn Future<Output = ()> + Send>>
     where
@@ -345,14 +348,14 @@ pub trait DistributedIterator: AmLocal + Clone + 'static {
     }
     fn for_each_async_with_schedule<F, Fut>(
         &self,
-        op: F,
         sched: Schedule,
+        op: F,
     ) -> Pin<Box<dyn Future<Output = ()> + Send>>
     where
         F: Fn(Self::Item) -> Fut + AmLocal + Clone + 'static,
         Fut: Future<Output = ()> + Send + 'static,
     {
-        self.array().for_each_async_with_schedule(self, op, sched)
+        self.array().for_each_async_with_schedule(sched, self, op)
     }
     fn collect<A>(&self, d: Distribution) -> Pin<Box<dyn Future<Output = A> + Send>>
     where
