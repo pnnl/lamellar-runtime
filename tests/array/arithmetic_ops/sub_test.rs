@@ -1,5 +1,6 @@
-use lamellar::array::{DistributedIterator,
-    ArithmeticOps, AtomicArray, LocalLockAtomicArray, SerialIterator, UnsafeArray,
+use lamellar::array::{
+    ArithmeticOps, AtomicArray, DistributedIterator, LocalLockAtomicArray, SerialIterator,
+    UnsafeArray,
 };
 
 use rand::distributions::Distribution;

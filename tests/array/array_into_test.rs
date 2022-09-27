@@ -1,20 +1,19 @@
-use lamellar::array::{UnsafeArray, LocalOnlyArray, ReadOnlyArray, AtomicArray, LocalLockAtomicArray, Distribution};
-macro_rules! into_test{
-    ($array1:ident, $array2:ident) => {
-        {
-            let world = lamellar::LamellarWorldBuilder::new().build();
-            let num_pes = world.num_pes();
-            let my_pe = world.my_pe();
+use lamellar::array::{
+    AtomicArray, Distribution, LocalLockAtomicArray, LocalOnlyArray, ReadOnlyArray, UnsafeArray,
+};
+macro_rules! into_test {
+    ($array1:ident, $array2:ident) => {{
+        let world = lamellar::LamellarWorldBuilder::new().build();
+        let _num_pes = world.num_pes();
+        let _my_pe = world.my_pe();
 
-            let array = $array1::<u32>::new(world.clone(),1000, Distribution::Block);
-            let array2: $array2<u32> = array.into();
-        }
-    }
+        let array = $array1::<u32>::new(world.clone(), 1000, Distribution::Block);
+        let _array2: $array2<u32> = array.into();
+    }};
 }
 
-
-macro_rules! match_array2{
-    ($array_ty:ident, $array2_str:tt) =>{
+macro_rules! match_array2 {
+    ($array_ty:ident, $array2_str:tt) => {
         match $array2_str.as_str() {
             "UnsafeArray" => into_test!($array_ty, UnsafeArray),
             "LocalOnlyArray" => into_test!($array_ty, LocalOnlyArray),
@@ -23,7 +22,7 @@ macro_rules! match_array2{
             "LocalLockAtomicArray" => into_test!($array_ty, LocalLockAtomicArray),
             _ => panic!("Unknown array type: {}", $array2_str),
         }
-    }
+    };
 }
 
 fn main() {

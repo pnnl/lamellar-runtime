@@ -10,7 +10,7 @@ fn main() {
     let elem_per_pe = args
         .get(1)
         .and_then(|s| s.parse::<usize>().ok())
-        .unwrap_or_else(|| 20);
+        .unwrap_or_else(|| 2);
 
     let world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();
@@ -54,27 +54,33 @@ fn main() {
     //The standard unoptimized serial matrix muliply algorithm,
     let start = std::time::Instant::now();
     if my_pe == 0 {
-        for i in 0..m {
-            // a & c rows
-            for j in 0..p {
-                // b & c cols
-                let mut sum = 0.0;
-                for k in 0..n {
-                    // a cols b rows
-                    sum += a.at(k + i * m).wait() * b.at(j + k * n).wait()
+        let a_c = a.clone();
+        let b_c = b.clone();
+        let c_c = c.clone();
+        world.block_on(async move {
+            for i in 0..m {
+                // a & c rows
+                for j in 0..p {
+                    // b & c cols
+                    let mut sum = 0.0;
+                    for k in 0..n {
+                        // a cols b rows
+                        let a_val = a_c.at(k + i * m);
+                        let b_val = b_c.at(j + k * n);
+                        sum += a_val.await * b_val.await;
+                    }
+                    c_c.put(j + i * m, &sum); // could also do c.add(j+i*m,sum), but each element of c will only be updated once so put is faster
                 }
-                c.put(j + i * m, &sum).wait(); // could also do c.add(j+i*m,sum), but each element of c will only be updated once so put is faster
             }
-        }
+        });
     }
     world.wait_all();
     world.barrier();
     let elapsed = start.elapsed().as_secs_f64();
 
-    c.dist_iter_mut().for_each(|x| *x = 0.0);
+    // c.dist_iter_mut().for_each(|x| *x = 0.0);
     c.wait_all();
     c.barrier();
-    println!("Elapsed: {:?}", elapsed);
     if my_pe == 0 {
         println!("elapsed {:?} Gflops: {:?}", elapsed, num_gops / elapsed,);
     }

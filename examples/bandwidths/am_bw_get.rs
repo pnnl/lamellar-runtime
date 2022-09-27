@@ -20,7 +20,7 @@ struct DataAM {
 
 #[lamellar::am]
 impl LamellarAM for DataAM {
-    fn exec(&self) {
+    async fn exec(&self) {
         unsafe {
             // let local = lamellar::team.local_array::<u8>(self.length, 255u8);
             let local = lamellar::team.alloc_local_mem_region::<u8>(self.length);

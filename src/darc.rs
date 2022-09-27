@@ -10,6 +10,8 @@ use std::sync::atomic::{AtomicBool, AtomicU8, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+// use tracing::*;
+
 use crate::active_messaging::AMCounters;
 use crate::lamellae::{AllocationType, Backend, LamellaeComm, LamellaeRDMA};
 use crate::lamellar_team::{IntoLamellarTeam, LamellarTeamRT};
@@ -48,7 +50,7 @@ struct FinishedAm {
 
 #[lamellar_impl::rt_am]
 impl LamellarAM for FinishedAm {
-    fn exec() {
+    async fn exec() {
         // println!("in finished! {:?}",self);
         let inner = unsafe { &*(self.inner_addr as *mut DarcInner<()>) }; //we dont actually care about the "type" we wrap here, we just need access to the meta data for the darc
         inner.dist_cnt.fetch_sub(self.cnt, Ordering::SeqCst);
@@ -99,6 +101,7 @@ impl<'de, T: 'static> Deserialize<'de> for Darc<T> {
     }
 }
 
+#[derive(Debug)]
 pub struct WeakDarc<T: 'static> {
     inner: *mut DarcInner<T>,
     src_pe: usize,
@@ -143,20 +146,13 @@ impl<T> Clone for WeakDarc<T> {
 }
 
 impl<T> crate::DarcSerde for Darc<T> {
-    fn ser(&self, num_pes: usize, _cur_pe: Result<usize, IdError>) {
-        // match cur_pe {
-        //     Ok(cur_pe) => {
-        self.serialize_update_cnts(num_pes, 0 /*cur_pe*/);
-        //     }
-        //     Err(err) => {
-        //         panic!("can only access darcs within team members ({:?})", err);
-        //     }
-        // }
+    fn ser(&self, num_pes: usize) {
+        self.serialize_update_cnts(num_pes);
     }
     fn des(&self, cur_pe: Result<usize, IdError>) {
         match cur_pe {
-            Ok(cur_pe) => {
-                self.deserialize_update_cnts(cur_pe);
+            Ok(_) => {
+                self.deserialize_update_cnts();
             }
             Err(err) => {
                 panic!("can only access darcs within team members ({:?})", err);
@@ -391,7 +387,7 @@ impl<T> Darc<T> {
         unsafe { std::slice::from_raw_parts_mut(inner.mode_addr as *mut DarcMode, inner.num_pes) }
     }
 
-    pub fn serialize_update_cnts(&self, cnt: usize, _cur_pe: usize) {
+    pub fn serialize_update_cnts(&self, cnt: usize) {
         // println!("serialize darc cnts");
         self.inner()
             .dist_cnt
@@ -399,7 +395,7 @@ impl<T> Darc<T> {
         // println!("done serialize darc cnts");
     }
 
-    pub fn deserialize_update_cnts(&self, _cur_pe: usize) {
+    pub fn deserialize_update_cnts(&self) {
         // println!("deserialize darc? cnts");
         self.inner().inc_pe_ref_count(self.src_pe, 1);
         self.inner().local_cnt.fetch_add(1, Ordering::SeqCst);
@@ -582,9 +578,8 @@ macro_rules! local_mode {
 }
 
 macro_rules! launch_drop {
-    ($mode:ty,$inner:ident, $inner_addr:expr) => {
+    ($mode:ty, $inner:ident, $inner_addr:expr) => {
         // println!("launching drop task as {}", stringify!($mode));
-        // self.print();
         let team = $inner.team();
         team.exec_am_local(DroppedWaitAM {
             inner_addr: $inner_addr as *const u8 as usize,
@@ -639,7 +634,9 @@ impl<T: 'static> Drop for Darc<T> {
             } else if local_mode!(DarcMode::NativeAtomicArray, mode_refs, inner) {
                 launch_drop!(DarcMode::NativeAtomicArray, inner, self.inner);
             }
+            // self.print();
         }
+        // self.print();
     }
 }
 
@@ -653,6 +650,12 @@ struct DroppedWaitAM<T> {
     phantom: PhantomData<T>,
 }
 
+impl<T> std::fmt::Debug for DroppedWaitAM<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "DroppedWaitAM {{ inner_addr: {:?}, mode_addr: {:?}, my_pe: {:?}, num_pes: {:?}, team: {:?} }}", self.inner_addr, self.mode_addr, self.my_pe, self.num_pes, self.team)
+    }
+}
+
 unsafe impl<T> Send for DroppedWaitAM<T> {}
 unsafe impl<T> Sync for DroppedWaitAM<T> {}
 
@@ -664,7 +667,7 @@ unsafe impl<T> Send for Wrapper<T> {}
 
 #[lamellar_impl::rt_am_local]
 impl<T: 'static> LamellarAM for DroppedWaitAM<T> {
-    fn exec(self) {
+    async fn exec(self) {
         // println!("in DroppedWaitAM {:x}", self.inner_addr);
         let mode_refs_u8 =
             unsafe { std::slice::from_raw_parts_mut(self.mode_addr as *mut u8, self.num_pes) };
@@ -758,10 +761,10 @@ impl<T: 'static> LamellarAM for DroppedWaitAM<T> {
             {
                 let mut _item = Box::from_raw(wrapped.inner.as_ref().item as *mut T);
                 if let Some(my_drop) = wrapped.inner.as_ref().drop {
-                    // println!("Dropping darc");
+                    // println!("Dropping darc {:x}", self.inner_addr);
                     my_drop(&mut _item);
                 } else {
-                    // println!("no drop function for item");
+                    // println!("no drop function for item {:x}", self.inner_addr);
                 }
             }
             while wrapped.inner.as_ref().weak_local_cnt.load(Ordering::SeqCst) != 0 {
@@ -772,7 +775,7 @@ impl<T: 'static> LamellarAM for DroppedWaitAM<T> {
                                                                     // println!("Darc freed! {:x} {:?}",self.inner_addr,mode_refs);
             let _am_counters = Arc::from_raw(wrapped.inner.as_ref().am_counters);
             self.team.lamellae.free(self.inner_addr);
-            // println!("leaving DroppedWaitAM");
+            // println!("leaving DroppedWaitAM {:x}", self.inner_addr);
         }
     }
 }

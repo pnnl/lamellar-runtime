@@ -199,8 +199,8 @@ impl<T: Dist + ElementBitWiseOps> BitOrAssign<T> for AtomicElement<T> {
     }
 }
 
-#[enum_dispatch(LamellarArray<T>,LamellarArrayGet<T>,LamellarArrayPut<T>,ArrayExecAm<T>,LamellarArrayPrivate<T>,DistIteratorLauncher,)]
-#[derive(serde::Serialize, serde::Deserialize, Clone)]
+#[enum_dispatch(LamellarArray<T>,LamellarArrayGet<T>,LamellarArrayInternalGet<T>,LamellarArrayPut<T>,LamellarArrayInternalPut<T>,ArrayExecAm<T>,LamellarArrayPrivate<T>,DistIteratorLauncher,)]
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
 #[serde(bound = "T: Dist + serde::Serialize + serde::de::DeserializeOwned + 'static")]
 pub enum AtomicArray<T: Dist> {
     NativeAtomicArray(NativeAtomicArray<T>),
@@ -208,10 +208,10 @@ pub enum AtomicArray<T: Dist> {
 }
 
 impl<T: Dist + 'static> crate::DarcSerde for AtomicArray<T> {
-    fn ser(&self, num_pes: usize, cur_pe: Result<usize, crate::IdError>) {
+    fn ser(&self, num_pes: usize) {
         match self {
-            AtomicArray::NativeAtomicArray(array) => array.ser(num_pes, cur_pe),
-            AtomicArray::GenericAtomicArray(array) => array.ser(num_pes, cur_pe),
+            AtomicArray::NativeAtomicArray(array) => array.ser(num_pes),
+            AtomicArray::GenericAtomicArray(array) => array.ser(num_pes),
         }
     }
     fn des(&self, cur_pe: Result<usize, crate::IdError>) {
@@ -247,10 +247,10 @@ impl AtomicByteArray {
 }
 
 impl crate::DarcSerde for AtomicByteArray {
-    fn ser(&self, num_pes: usize, cur_pe: Result<usize, crate::IdError>) {
+    fn ser(&self, num_pes: usize) {
         match self {
-            AtomicByteArray::NativeAtomicByteArray(array) => array.ser(num_pes, cur_pe),
-            AtomicByteArray::GenericAtomicByteArray(array) => array.ser(num_pes, cur_pe),
+            AtomicByteArray::NativeAtomicByteArray(array) => array.ser(num_pes),
+            AtomicByteArray::GenericAtomicByteArray(array) => array.ser(num_pes),
         }
     }
 
@@ -373,6 +373,17 @@ impl<T: Dist> AtomicArray<T> {
             AtomicArray::GenericAtomicArray(array) => array.barrier(),
         }
     }
+
+    pub fn block_on<F>(&self, f: F) -> F::Output
+    where
+        F: Future,
+    {
+        match self {
+            AtomicArray::NativeAtomicArray(array) => array.block_on(f),
+            AtomicArray::GenericAtomicArray(array) => array.block_on(f),
+        }
+    }
+
     pub(crate) fn num_elems_local(&self) -> usize {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.num_elems_local(),
@@ -450,39 +461,45 @@ impl<T: Dist> AtomicArray<T> {
         }
     }
     pub fn into_unsafe(self) -> UnsafeArray<T> {
+        // println!("atomic into_unsafe");
         match self {
             AtomicArray::NativeAtomicArray(array) => array.into(),
             AtomicArray::GenericAtomicArray(array) => array.into(),
         }
     }
     pub fn into_local_only(self) -> LocalOnlyArray<T> {
+        // println!("atomic into_local_only");
         match self {
             AtomicArray::NativeAtomicArray(array) => array.array.into(),
             AtomicArray::GenericAtomicArray(array) => array.array.into(),
         }
     }
     pub fn into_read_only(self) -> ReadOnlyArray<T> {
+        // println!("atomic into_read_only");
         match self {
             AtomicArray::NativeAtomicArray(array) => array.array.into(),
             AtomicArray::GenericAtomicArray(array) => array.array.into(),
         }
     }
     pub fn into_local_lock_atomic(self) -> LocalLockAtomicArray<T> {
+        // println!("atomic into_local_lock_atomic");
         match self {
             AtomicArray::NativeAtomicArray(array) => array.array.into(),
             AtomicArray::GenericAtomicArray(array) => array.array.into(),
         }
     }
-    pub fn into_generic_atomic(self) -> GenericAtomicArray<T> {
-        match self {
-            AtomicArray::NativeAtomicArray(array) => array.array.into(),
-            AtomicArray::GenericAtomicArray(array) => array,
-        }
-    }
+    // pub fn into_generic_atomic(self) -> GenericAtomicArray<T> {
+    //     println!("into_generic_atomic");
+    //     match self {
+    //         AtomicArray::NativeAtomicArray(array) => array.array.into(),
+    //         AtomicArray::GenericAtomicArray(array) => array,
+    //     }
+    // }
 }
 
 impl<T: Dist + 'static> From<UnsafeArray<T>> for AtomicArray<T> {
     fn from(array: UnsafeArray<T>) -> Self {
+        // println!("Converting from UnsafeArray to AtomicArray");
         if NATIVE_ATOMICS.contains(&TypeId::of::<T>()) {
             NativeAtomicArray::from(array).into()
         } else {
@@ -493,15 +510,19 @@ impl<T: Dist + 'static> From<UnsafeArray<T>> for AtomicArray<T> {
 
 impl<T: Dist + 'static> From<LocalOnlyArray<T>> for AtomicArray<T> {
     fn from(array: LocalOnlyArray<T>) -> Self {
+        // println!("Converting from LocalOnlyArray to AtomicArray");
         unsafe { array.into_inner().into() }
     }
 }
 impl<T: Dist + 'static> From<ReadOnlyArray<T>> for AtomicArray<T> {
     fn from(array: ReadOnlyArray<T>) -> Self {
+        // println!("Converting from ReadOnlyArray to AtomicArray");
         unsafe { array.into_inner().into() }
     }
-}impl<T: Dist + 'static> From<LocalLockAtomicArray<T>> for AtomicArray<T> {
+}
+impl<T: Dist + 'static> From<LocalLockAtomicArray<T>> for AtomicArray<T> {
     fn from(array: LocalLockAtomicArray<T>) -> Self {
+        // println!("Converting from LocalLockAtomicArray to AtomicArray");
         unsafe { array.into_inner().into() }
     }
 }
@@ -525,25 +546,25 @@ impl<T: Dist> From<AtomicByteArray> for AtomicArray<T> {
 }
 
 impl<T: Dist + serde::Serialize + serde::de::DeserializeOwned + 'static> AtomicArray<T> {
-    pub fn reduce(&self, op: &str) -> Box<dyn LamellarRequest<Output = T>> {
+    pub fn reduce(&self, op: &str) -> Pin<Box<dyn Future<Output = T>>> {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.reduce(op),
             AtomicArray::GenericAtomicArray(array) => array.reduce(op),
         }
     }
-    pub fn sum(&self) -> Box<dyn LamellarRequest<Output = T>> {
+    pub fn sum(&self) -> Pin<Box<dyn Future<Output = T>>> {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.reduce("sum"),
             AtomicArray::GenericAtomicArray(array) => array.reduce("sum"),
         }
     }
-    pub fn prod(&self) -> Box<dyn LamellarRequest<Output = T>> {
+    pub fn prod(&self) -> Pin<Box<dyn Future<Output = T>>> {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.reduce("prod"),
             AtomicArray::GenericAtomicArray(array) => array.reduce("prod"),
         }
     }
-    pub fn max(&self) -> Box<dyn LamellarRequest<Output = T>> {
+    pub fn max(&self) -> Pin<Box<dyn Future<Output = T>>> {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.reduce("max"),
             AtomicArray::GenericAtomicArray(array) => array.reduce("max"),

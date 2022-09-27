@@ -11,7 +11,6 @@
 /// conversely this means elements of a column are distributed across pes)
 ///----------------------------------------------------------------------------------
 use futures::future;
-use lamellar::ActiveMessaging;
 use lamellar::{LocalMemoryRegion, RemoteMemoryRegion, SharedMemoryRegion};
 use lazy_static::lazy_static;
 use matrixmultiply::sgemm;
@@ -96,7 +95,7 @@ struct NaiveMM {
 
 #[lamellar::am]
 impl LamellarAM for NaiveMM {
-    fn exec() {
+    async fn exec() {
         let a = lamellar::world.alloc_local_mem_region(self.a.block_size * self.a.block_size); //the tile for the A matrix
         let b = lamellar::world.alloc_local_mem_region(self.b.block_size * self.b.block_size); //the tile for the B matrix
         let b_fut = get_sub_mat(&self.b, &b); //b is remote so we will launch "gets" for this data first
@@ -134,7 +133,9 @@ fn main() {
         .and_then(|s| s.parse::<usize>().ok())
         .unwrap_or_else(|| 2000);
 
-    let world = lamellar::LamellarWorldBuilder::new().build();
+    let world = lamellar::LamellarWorldBuilder::new()
+        // .with_scheduler(lamellar::SchedulerType::NumaWorkStealing)
+        .build();
     let my_pe = world.my_pe();
     let num_pes = world.num_pes();
 
@@ -182,6 +183,7 @@ fn main() {
         //A iteration:
         let mut tasks = 0;
         let start = std::time::Instant::now();
+        let task_group = lamellar::LamellarTaskGroup::new(world.team());
         for i in 0..a_pe_row_blks {
             //iterate over rows of A, (all tiles in a row are local)
             for j in 0..b_pe_col_blks {
@@ -202,7 +204,7 @@ fn main() {
                         j,
                         block_size,
                     ); //B is distributed
-                    world.exec_am_pe(
+                    task_group.exec_am_pe(
                         my_pe,
                         NaiveMM {
                             a: a_block,

@@ -40,21 +40,31 @@ pub(crate) struct UnsafeArrayData {
     req_cnt: Arc<AtomicUsize>,
 }
 
+impl std::fmt::Debug for UnsafeArrayData {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "UnsafeArrayData{{ mem_region: {:?}, array_counters: {:?}, team: {:?}, task_group: {:?}, my_pe: {:?}, num_pes: {:?} req_cnt: {:?} }}",
+            self.mem_region, self.array_counters, self.team, self.task_group, self.my_pe, self.num_pes, self.req_cnt
+        )
+    }
+}
+
 // impl Drop for UnsafeArrayData {
 //     fn drop(&mut self) {
-//         println!("unsafe array data dropping1");
+//         // println!("unsafe array data dropping1");
 //         self.op_buffers.write().clear();
 //     }
 // }
 
 //need to calculate num_elems_local dynamically
-#[lamellar_impl::AmDataRT(Clone)]
+#[lamellar_impl::AmDataRT(Clone, Debug)]
 pub struct UnsafeArray<T> {
     pub(crate) inner: UnsafeArrayInner,
     phantom: PhantomData<T>,
 }
 
-#[lamellar_impl::AmDataRT(Clone)]
+#[lamellar_impl::AmDataRT(Clone, Debug)]
 pub struct UnsafeByteArray {
     pub(crate) inner: UnsafeArrayInner,
 }
@@ -67,13 +77,13 @@ impl UnsafeByteArray {
     }
 }
 
-#[lamellar_impl::AmLocalDataRT(Clone)]
+#[lamellar_impl::AmLocalDataRT(Clone, Debug)]
 pub struct UnsafeByteArrayWeak {
     pub(crate) inner: UnsafeArrayInnerWeak,
 }
 
 impl UnsafeByteArrayWeak {
-    pub(crate) fn upgrade(&self) -> Option<UnsafeByteArray> {
+    pub fn upgrade(&self) -> Option<UnsafeByteArray> {
         if let Some(inner) = self.inner.upgrade() {
             Some(UnsafeByteArray { inner })
         } else {
@@ -82,7 +92,7 @@ impl UnsafeByteArrayWeak {
     }
 }
 
-#[lamellar_impl::AmDataRT(Clone)]
+#[lamellar_impl::AmDataRT(Clone, Debug)]
 pub(crate) struct UnsafeArrayInner {
     pub(crate) data: Darc<UnsafeArrayData>,
     pub(crate) distribution: Distribution,
@@ -93,7 +103,7 @@ pub(crate) struct UnsafeArrayInner {
     size: usize,      //relative to size of T
 }
 
-#[lamellar_impl::AmLocalDataRT(Clone)]
+#[lamellar_impl::AmLocalDataRT(Clone, Debug)]
 pub(crate) struct UnsafeArrayInnerWeak {
     pub(crate) data: WeakDarc<UnsafeArrayData>,
     pub(crate) distribution: Distribution,
@@ -106,7 +116,7 @@ pub(crate) struct UnsafeArrayInnerWeak {
 
 // impl Drop for UnsafeArrayInner {
 //     fn drop(&mut self) {
-//         println!("unsafe array inner dropping");
+//         // println!("unsafe array inner dropping");
 //     }
 // }
 
@@ -157,7 +167,7 @@ impl<T: Dist + 'static> UnsafeArray<T> {
             },
             crate::darc::DarcMode::UnsafeArray,
             Some(|data: &mut UnsafeArrayData| {
-                // println!("unsafe array data dropping2");
+                // // println!("unsafe array data dropping2");
                 data.op_buffers.write().clear();
             }),
         )
@@ -209,6 +219,13 @@ impl<T: Dist + 'static> UnsafeArray<T> {
         self.inner.data.team.barrier();
     }
 
+    pub fn block_on<F>(&self, f: F) -> F::Output
+    where
+        F: Future,
+    {
+        self.inner.data.team.scheduler.block_on(f)
+    }
+
     pub fn use_distribution(mut self, distribution: Distribution) -> Self {
         self.inner.distribution = distribution;
         self
@@ -222,6 +239,7 @@ impl<T: Dist + 'static> UnsafeArray<T> {
         self.inner.size
     }
 
+    #[tracing::instrument(skip_all)]
     pub fn calc_pe_and_offset(&self, i: usize) -> (usize, usize) {
         if let Some(pe) = self.inner.pe_for_dist_index(i) {
             let local_index = self.inner.pe_offset_for_dist_index(pe, i).unwrap(); //calculated pe above
@@ -303,23 +321,28 @@ impl<T: Dist + 'static> UnsafeArray<T> {
         // self.inner.data.print();
         self.inner.data.block_on_outstanding(mode, 0); //self.inner.data.op_buffers.read().len());
         self.inner.data.op_buffers.write().clear();
+        // self.inner.data.print();
     }
 
     pub fn into_read_only(self) -> ReadOnlyArray<T> {
+        // println!("unsafe into read only");
         self.into()
     }
 
     pub fn into_local_only(self) -> LocalOnlyArray<T> {
+        // println!("unsafe into local only");
         self.into()
     }
 
     pub fn into_local_lock_atomic(self) -> LocalLockAtomicArray<T> {
+        // println!("unsafe into local lock atomic");
         self.into()
     }
 
-    pub fn into_generic_atomic(self) -> GenericAtomicArray<T> {
-        self.into()
-    }
+    // pub fn into_generic_atomic(self) -> GenericAtomicArray<T> {
+    //     println!("into generic atomic");
+    //     self.into()
+    // }
 }
 
 // impl<T: Dist> UnsafeArray<T> {
@@ -330,6 +353,7 @@ impl<T: Dist + 'static> UnsafeArray<T> {
 
 impl<T: Dist + 'static> UnsafeArray<T> {
     pub fn into_atomic(self) -> AtomicArray<T> {
+        // println!("unsafe into atomic");
         self.into()
     }
 }
@@ -346,6 +370,7 @@ impl<T: Dist + 'static> UnsafeArray<T> {
 
 impl<T: Dist> From<AtomicArray<T>> for UnsafeArray<T> {
     fn from(array: AtomicArray<T>) -> Self {
+        // println!("unsafe from atomic");
         // array.into_unsafe()
         match array {
             AtomicArray::NativeAtomicArray(array) => UnsafeArray::<T>::from(array),
@@ -356,6 +381,7 @@ impl<T: Dist> From<AtomicArray<T>> for UnsafeArray<T> {
 
 impl<T: Dist> From<NativeAtomicArray<T>> for UnsafeArray<T> {
     fn from(array: NativeAtomicArray<T>) -> Self {
+        // println!("unsafe from native atomic");
         // let array = array.into_data();
         array.array.block_on_outstanding(DarcMode::UnsafeArray);
         array.array.inner.data.op_buffers.write().clear();
@@ -366,6 +392,7 @@ impl<T: Dist> From<NativeAtomicArray<T>> for UnsafeArray<T> {
 
 impl<T: Dist> From<GenericAtomicArray<T>> for UnsafeArray<T> {
     fn from(array: GenericAtomicArray<T>) -> Self {
+        // println!("unsafe from generic atomic");
         // let array = array.into_data();
         array.array.block_on_outstanding(DarcMode::UnsafeArray);
         array.array.inner.data.op_buffers.write().clear();
@@ -376,6 +403,7 @@ impl<T: Dist> From<GenericAtomicArray<T>> for UnsafeArray<T> {
 
 impl<T: Dist> From<LocalLockAtomicArray<T>> for UnsafeArray<T> {
     fn from(array: LocalLockAtomicArray<T>) -> Self {
+        // println!("unsafe from local lock atomic");
         array.array.block_on_outstanding(DarcMode::UnsafeArray);
         array.array.inner.data.op_buffers.write().clear();
         array.array.create_buffered_ops();
@@ -385,7 +413,9 @@ impl<T: Dist> From<LocalLockAtomicArray<T>> for UnsafeArray<T> {
 
 impl<T: Dist> From<LocalOnlyArray<T>> for UnsafeArray<T> {
     fn from(array: LocalOnlyArray<T>) -> Self {
+        // println!("unsafe from local only");
         array.array.block_on_outstanding(DarcMode::UnsafeArray);
+        array.array.inner.data.op_buffers.write().clear();
         array.array.create_buffered_ops();
         array.array
     }
@@ -393,7 +423,9 @@ impl<T: Dist> From<LocalOnlyArray<T>> for UnsafeArray<T> {
 
 impl<T: Dist> From<ReadOnlyArray<T>> for UnsafeArray<T> {
     fn from(array: ReadOnlyArray<T>) -> Self {
+        // println!("unsafe from read only");
         array.array.block_on_outstanding(DarcMode::UnsafeArray);
+        array.array.inner.data.op_buffers.write().clear();
         array.array.create_buffered_ops();
         array.array
     }
@@ -421,7 +453,7 @@ impl<T: Dist> From<UnsafeArray<T>> for LamellarByteArray {
 }
 
 impl<T: Dist + serde::Serialize + serde::de::DeserializeOwned + 'static> UnsafeArray<T> {
-    pub fn reduce_data(&self, func: LamellarArcAm) -> Box<dyn LamellarRequest<Output = T>> {
+    pub(crate) fn reduce_data(&self, func: LamellarArcAm) -> Box<dyn LamellarRequest<Output = T>> {
         if let Ok(my_pe) = self.inner.data.team.team_pe_id() {
             self.inner.data.team.exec_arc_am_pe::<T>(
                 my_pe,
@@ -437,16 +469,20 @@ impl<T: Dist + serde::Serialize + serde::de::DeserializeOwned + 'static> UnsafeA
         }
     }
 
-    pub fn reduce(&self, op: &str) -> Box<dyn LamellarRequest<Output = T>> {
+    pub(crate) fn reduce_req(&self, op: &str) -> Box<dyn LamellarRequest<Output = T>> {
         self.reduce_data(self.get_reduction_op(op.to_string()))
     }
-    pub fn sum(&self) -> Box<dyn LamellarRequest<Output = T>> {
+    pub fn reduce(&self, op: &str) -> Pin<Box<dyn Future<Output = T>>> {
+        self.reduce_data(self.get_reduction_op(op.to_string()))
+            .into_future()
+    }
+    pub fn sum(&self) -> Pin<Box<dyn Future<Output = T>>> {
         self.reduce("sum")
     }
-    pub fn prod(&self) -> Box<dyn LamellarRequest<Output = T>> {
+    pub fn prod(&self) -> Pin<Box<dyn Future<Output = T>>> {
         self.reduce("prod")
     }
-    pub fn max(&self) -> Box<dyn LamellarRequest<Output = T>> {
+    pub fn max(&self) -> Pin<Box<dyn Future<Output = T>>> {
         self.reduce("max")
     }
 }
@@ -460,6 +496,9 @@ impl<T: Dist> private::ArrayExecAm<T> for UnsafeArray<T> {
     }
 }
 impl<T: Dist> private::LamellarArrayPrivate<T> for UnsafeArray<T> {
+    fn inner_array(&self) -> &UnsafeArray<T> {
+        self
+    }
     fn local_as_ptr(&self) -> *const T {
         self.local_as_mut_ptr()
     }
@@ -533,6 +572,7 @@ impl<T: Dist> LamellarArray<T> for UnsafeArray<T> {
         self.inner.data.task_group.wait_all();
         // println!("done in wait all {:?}",std::time::SystemTime::now());
     }
+    #[tracing::instrument(skip_all)]
     fn pe_and_offset_for_global_index(&self, index: usize) -> Option<(usize, usize)> {
         let pe = self.inner.pe_for_dist_index(index)?;
         let offset = self.inner.pe_offset_for_dist_index(pe, index)?;
@@ -584,16 +624,16 @@ impl<T: Dist + AmDist + 'static> LamellarArrayReduce<T> for UnsafeArray<T> {
         )
         // }
     }
-    fn reduce(&self, op: &str) -> Box<dyn LamellarRequest<Output = T>> {
+    fn reduce(&self, op: &str) -> Pin<Box<dyn Future<Output = T>>> {
         self.reduce(op)
     }
-    fn sum(&self) -> Box<dyn LamellarRequest<Output = T>> {
+    fn sum(&self) -> Pin<Box<dyn Future<Output = T>>> {
         self.sum()
     }
-    fn max(&self) -> Box<dyn LamellarRequest<Output = T>> {
+    fn max(&self) -> Pin<Box<dyn Future<Output = T>>> {
         self.max()
     }
-    fn prod(&self) -> Box<dyn LamellarRequest<Output = T>> {
+    fn prod(&self) -> Pin<Box<dyn Future<Output = T>>> {
         self.prod()
     }
 }
@@ -628,6 +668,7 @@ impl UnsafeArrayInner {
     }
 
     //index is relative to (sub)array (i.e. index=0 doesnt necessarily live on pe=0)
+    // #[tracing::instrument(skip_all)]
     pub(crate) fn pe_for_dist_index(&self, index: usize) -> Option<usize> {
         if self.size > index {
             let global_index = index + self.offset;
@@ -649,6 +690,7 @@ impl UnsafeArrayInner {
     }
 
     //index relative to subarray, return offset relative to subarray
+    // #[tracing::instrument(skip_all)]
     pub fn pe_offset_for_dist_index(&self, pe: usize, index: usize) -> Option<usize> {
         let global_index = self.offset + index;
         let num_elems_local = self.num_elems_pe(pe);
@@ -704,6 +746,7 @@ impl UnsafeArrayInner {
 
     //index is local with respect to subarray
     //returns local offset relative to full array
+    // #[tracing::instrument(skip_all)]
     pub fn pe_full_offset_for_local_index(&self, pe: usize, index: usize) -> Option<usize> {
         // let global_index = self.offset + index;
         let global_index = self.global_index_from_local(index)?;
@@ -732,6 +775,7 @@ impl UnsafeArrayInner {
 
     //index is local with respect to subarray
     //returns index with respect to original full length array
+    // #[tracing::instrument(skip_all)]
     pub(crate) fn global_index_from_local(&self, index: usize) -> Option<usize> {
         let my_pe = self.data.my_pe;
         match self.distribution {
@@ -798,6 +842,7 @@ impl UnsafeArrayInner {
 
     //index is local with respect to subarray
     //returns index with respect to subarrayy
+    // #[tracing::instrument(skip_all)]
     pub(crate) fn subarray_index_from_local(&self, index: usize) -> Option<usize> {
         let my_pe = self.data.my_pe;
         let my_start_index = self.start_index_for_pe(my_pe)?; //None means subarray doesnt exist on this PE
@@ -826,6 +871,7 @@ impl UnsafeArrayInner {
     }
 
     //return index relative to the subarray
+    // #[tracing::instrument(skip_all)]
     pub(crate) fn start_index_for_pe(&self, pe: usize) -> Option<usize> {
         match self.distribution {
             Distribution::Block => {
@@ -871,6 +917,7 @@ impl UnsafeArrayInner {
         }
     }
 
+    // #[tracing::instrument(skip_all)]
     pub(crate) fn num_elems_pe(&self, pe: usize) -> usize {
         match self.distribution {
             Distribution::Block => {
@@ -915,10 +962,12 @@ impl UnsafeArrayInner {
             }
         }
     }
+    // #[tracing::instrument(skip_all)]
     pub(crate) fn num_elems_local(&self) -> usize {
         self.num_elems_pe(self.data.my_pe)
     }
 
+    // #[tracing::instrument(skip_all)]
     pub(crate) unsafe fn local_as_mut_slice(&self) -> &mut [u8] {
         let slice =
             self.data.mem_region.as_casted_mut_slice::<u8>().expect(
@@ -958,6 +1007,8 @@ impl UnsafeArrayInner {
             }
         }
     }
+
+    // #[tracing::instrument(skip_all)]
     pub(crate) unsafe fn local_as_mut_ptr(&self) -> *mut u8 {
         let ptr =
             self.data.mem_region.as_casted_mut_ptr::<u8>().expect(

@@ -9,12 +9,13 @@ use crate::LAMELLAES;
 
 use core::marker::PhantomData;
 use parking_lot::Mutex;
+use serde::ser::Serialize;
 use std::collections::HashMap;
 use std::ops::Bound;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
-use serde::ser::Serialize;
+// use tracing::*;
 // use serde::ser::{Serialize, Serializer, SerializeStruct};
 
 lazy_static! {
@@ -33,9 +34,6 @@ struct NetMemRegionHandle {
     my_id: (usize, usize),
     parent_id: (usize, usize),
 }
-
-
-
 
 impl From<NetMemRegionHandle> for Arc<MemRegionHandleInner> {
     fn from(net_handle: NetMemRegionHandle) -> Self {
@@ -154,7 +152,7 @@ pub(crate) mod memregion_handle_serde {
 }
 
 impl crate::DarcSerde for MemRegionHandle {
-    fn ser(&self, num_pes: usize, _cur_pe: Result<usize, IdError>) {
+    fn ser(&self, num_pes: usize) {
         // match cur_pe {
         //     Ok(cur_pe) => {
         self.inner.remote_sent.fetch_add(num_pes, Ordering::SeqCst);
@@ -234,7 +232,7 @@ struct MemRegionFinishedAm {
 
 #[lamellar_impl::rt_am]
 impl LamellarAM for MemRegionFinishedAm {
-    fn exec(self) {
+    async fn exec(self) {
         // println!("in finished am {:?}",self);
         let mrh_map = ONE_SIDED_MEM_REGIONS.lock();
         let _mrh = match mrh_map.get(&self.parent_id) {
@@ -251,14 +249,14 @@ impl LamellarAM for MemRegionFinishedAm {
     }
 }
 
-#[lamellar_impl::AmLocalDataRT]
+#[lamellar_impl::AmLocalDataRT(Debug)]
 struct MemRegionDropWaitAm {
     inner: Arc<MemRegionHandleInner>,
 }
 
 #[lamellar_impl::rt_am_local]
 impl LamellarAM for MemRegionDropWaitAm {
-    fn exec(self) {
+    async fn exec(self) {
         // println!("in drop wait {:?}", self.inner);
         loop {
             while self.inner.remote_sent.load(Ordering::SeqCst) != 0
@@ -428,15 +426,14 @@ impl<T: Dist> LocalMemoryRegion<T> {
     pub fn iter(&self) -> std::slice::Iter<'_, T> {
         self.as_slice().unwrap().iter()
     }
-    
 }
 
-impl <T: Dist + serde::Serialize> LocalMemoryRegion<T>{
-    pub(crate) fn serialize_local_data<S>(&self, s: S) -> Result<S::Ok, S::Error> 
-    where 
+impl<T: Dist + serde::Serialize> LocalMemoryRegion<T> {
+    pub(crate) fn serialize_local_data<S>(&self, s: S) -> Result<S::Ok, S::Error>
+    where
         S: serde::Serializer,
     {
-       self.as_slice().unwrap().serialize(s)
+        self.as_slice().unwrap().serialize(s)
     }
 }
 

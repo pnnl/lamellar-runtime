@@ -19,13 +19,13 @@ use parking_lot::{
 use std::any::TypeId;
 use std::ops::{Deref, DerefMut};
 
-#[lamellar_impl::AmDataRT(Clone)]
+#[lamellar_impl::AmDataRT(Clone, Debug)]
 pub struct LocalLockAtomicArray<T> {
     lock: LocalRwDarc<()>,
     pub(crate) array: UnsafeArray<T>,
 }
 
-#[lamellar_impl::AmDataRT(Clone)]
+#[lamellar_impl::AmDataRT(Clone, Debug)]
 pub struct LocalLockAtomicByteArray {
     lock: LocalRwDarc<()>,
     pub(crate) array: UnsafeByteArray,
@@ -40,7 +40,7 @@ impl LocalLockAtomicByteArray {
     }
 }
 
-#[lamellar_impl::AmLocalDataRT(Clone)]
+#[lamellar_impl::AmLocalDataRT(Clone, Debug)]
 pub struct LocalLockAtomicByteArrayWeak {
     lock: LocalRwDarc<()>,
     pub(crate) array: UnsafeByteArrayWeak,
@@ -55,6 +55,7 @@ impl LocalLockAtomicByteArrayWeak {
     }
 }
 
+#[derive(Debug)]
 pub struct LocalLockAtomicMutLocalData<'a, T: Dist> {
     data: &'a mut [T],
     _index: usize,
@@ -80,6 +81,7 @@ impl<T: Dist> DerefMut for LocalLockAtomicMutLocalData<'_, T> {
     }
 }
 
+#[derive(Debug)]
 pub struct LocalLockAtomicLocalData<'a, T: Dist> {
     pub(crate) data: &'a [T],
     index: usize,
@@ -174,6 +176,14 @@ impl<T: Dist> LocalLockAtomicArray<T> {
     pub fn barrier(&self) {
         self.array.barrier();
     }
+
+    pub fn block_on<F>(&self, f: F) -> F::Output
+    where
+        F: Future,
+    {
+        self.array.block_on(f)
+    }
+
     pub(crate) fn num_elems_local(&self) -> usize {
         self.array.num_elems_local()
     }
@@ -268,31 +278,36 @@ impl<T: Dist> LocalLockAtomicArray<T> {
     }
 
     pub fn into_unsafe(self) -> UnsafeArray<T> {
+        // println!("locallock into_unsafe");
         self.array.into()
     }
 
     pub fn into_local_only(self) -> LocalOnlyArray<T> {
+        // println!("locallock into_local_only");
         self.array.into()
     }
 
     pub fn into_read_only(self) -> ReadOnlyArray<T> {
+        // println!("locallock into_read_only");
         self.array.into()
     }
 
-    pub fn into_generic_atomic(self) -> GenericAtomicArray<T> {
-        self.array.into()
-    }
+    // pub fn into_generic_atomic(self) -> GenericAtomicArray<T> {
+    //     // println!("locallock into_generic_atomic");
+    //     self.array.into()
+    // }
 }
 
 impl<T: Dist + 'static> LocalLockAtomicArray<T> {
     pub fn into_atomic(self) -> AtomicArray<T> {
+        // println!("locallock into_atomic");
         self.array.into()
     }
 }
 
-
 impl<T: Dist> From<UnsafeArray<T>> for LocalLockAtomicArray<T> {
     fn from(array: UnsafeArray<T>) -> Self {
+        // println!("locallock from unsafe");
         array.block_on_outstanding(DarcMode::LocalLockAtomicArray);
         let lock = LocalRwDarc::new(array.team(), ()).unwrap();
         if let Some(func) = BUFOPS.get(&TypeId::of::<T>()) {
@@ -312,20 +327,23 @@ impl<T: Dist> From<UnsafeArray<T>> for LocalLockAtomicArray<T> {
     }
 }
 
-impl <T: Dist> From<LocalOnlyArray<T>> for LocalLockAtomicArray<T> {
+impl<T: Dist> From<LocalOnlyArray<T>> for LocalLockAtomicArray<T> {
     fn from(array: LocalOnlyArray<T>) -> Self {
+        // println!("locallock from localonly");
         unsafe { array.into_inner().into() }
     }
 }
 
-impl <T: Dist> From<AtomicArray<T>> for LocalLockAtomicArray<T> {
+impl<T: Dist> From<AtomicArray<T>> for LocalLockAtomicArray<T> {
     fn from(array: AtomicArray<T>) -> Self {
+        // println!("locallock from atomic");
         unsafe { array.into_inner().into() }
     }
 }
 
-impl <T: Dist> From<ReadOnlyArray<T>> for LocalLockAtomicArray<T> {
+impl<T: Dist> From<ReadOnlyArray<T>> for LocalLockAtomicArray<T> {
     fn from(array: ReadOnlyArray<T>) -> Self {
+        // println!("locallock from readonly");
         unsafe { array.into_inner().into() }
     }
 }
@@ -357,6 +375,9 @@ impl<T: Dist> private::ArrayExecAm<T> for LocalLockAtomicArray<T> {
 }
 
 impl<T: Dist> private::LamellarArrayPrivate<T> for LocalLockAtomicArray<T> {
+    fn inner_array(&self) -> &UnsafeArray<T> {
+        &self.array
+    }
     fn local_as_ptr(&self) -> *const T {
         self.array.local_as_mut_ptr()
     }
@@ -441,33 +462,37 @@ impl<T: Dist + AmDist> LamellarRequest for LocalLockAtomicArrayReduceHandle<T> {
 }
 
 impl<T: Dist + AmDist + 'static> LocalLockAtomicArray<T> {
-    pub fn reduce(&self, op: &str) -> Box<dyn LamellarRequest<Output = T>> {
+    pub fn reduce(&self, op: &str) -> Pin<Box<dyn Future<Output = T>>> {
         let lock = self.lock.read();
         Box::new(LocalLockAtomicArrayReduceHandle {
-            req: self.array.reduce(op),
+            req: self.array.reduce_req(op),
             _lock_guard: lock,
         })
+        .into_future()
     }
-    pub fn sum(&self) -> Box<dyn LamellarRequest<Output = T>> {
+    pub fn sum(&self) -> Pin<Box<dyn Future<Output = T>>> {
         let lock = self.lock.read();
         Box::new(LocalLockAtomicArrayReduceHandle {
-            req: self.array.reduce("sum"),
+            req: self.array.reduce_req("sum"),
             _lock_guard: lock,
         })
+        .into_future()
     }
-    pub fn prod(&self) -> Box<dyn LamellarRequest<Output = T>> {
+    pub fn prod(&self) -> Pin<Box<dyn Future<Output = T>>> {
         let lock = self.lock.read();
         Box::new(LocalLockAtomicArrayReduceHandle {
-            req: self.array.reduce("prod"),
+            req: self.array.reduce_req("prod"),
             _lock_guard: lock,
         })
+        .into_future()
     }
-    pub fn max(&self) -> Box<dyn LamellarRequest<Output = T>> {
+    pub fn max(&self) -> Pin<Box<dyn Future<Output = T>>> {
         let lock = self.lock.read();
         Box::new(LocalLockAtomicArrayReduceHandle {
-            req: self.array.reduce("max"),
+            req: self.array.reduce_req("max"),
             _lock_guard: lock,
         })
+        .into_future()
     }
 }
 

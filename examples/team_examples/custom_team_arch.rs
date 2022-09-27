@@ -108,10 +108,10 @@ struct TeamAM {
 
 #[lamellar::am]
 impl LamellarAM for TeamAM {
-    fn exec() {
+    async fn exec() {
         // let team = lamellar::team;
-        // println!("current_pe: {:?}, team.global_pe_id(): {:?}, team.team_pe_id(): {:?} team members: {:?}",
-        // lamellar::current_pe , team.global_pe_id(), team.team_pe_id(), team.get_pes());
+        // println!("current_pe: {:?}, team.global_pe_id(): {:?}, team.team_pe_id(): {:?} team members: {:?} sec {:?}",
+        // lamellar::current_pe , team.global_pe_id(), team.team_pe_id(), team.get_pes(),self.secs);
         async_std::task::sleep(Duration::from_secs(self.secs)).await;
     }
 }
@@ -125,10 +125,12 @@ fn test_team(world: &LamellarWorld, team: Option<Arc<LamellarTeam>>, label: &str
     let elapsed = if let Some(team) = team {
         let secs = if let Ok(id) = team.team_pe_id() {
             if id == 0 {
+                // println!("im in the team");
                 team.print_arch();
             }
             2
         } else {
+            // println!("im have a handle");
             1
         };
         let timer = Instant::now();

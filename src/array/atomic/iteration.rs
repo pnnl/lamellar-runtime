@@ -13,6 +13,18 @@ pub struct AtomicDistIter<T: Dist> {
     end_i: usize,
 }
 
+impl<T: Dist> std::fmt::Debug for AtomicDistIter<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "AtomicDistIter{{ data.len: {:?}, cur_i: {:?}, end_i: {:?} }}",
+            self.data.len(),
+            self.cur_i,
+            self.end_i
+        )
+    }
+}
+
 impl<T: Dist> AtomicDistIter<T> {
     pub(crate) fn new(data: AtomicArray<T>, cur_i: usize, cnt: usize) -> Self {
         // println!("new dist iter {:?} {:? } {:?}",cur_i, cnt, cur_i+cnt);
@@ -103,4 +115,3 @@ impl<T: Dist> AtomicArray<T> {
         )
     }
 }
-

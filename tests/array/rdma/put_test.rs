@@ -1,5 +1,6 @@
-use lamellar::array::{DistributedIterator,
-    AtomicArray, Distribution, LocalLockAtomicArray, SerialIterator, UnsafeArray,
+use lamellar::array::{
+    AtomicArray, DistributedIterator, Distribution, LocalLockAtomicArray, SerialIterator,
+    UnsafeArray,
 };
 use lamellar::{Dist, LamellarMemoryRegion, RemoteMemoryRegion};
 

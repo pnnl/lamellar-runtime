@@ -7,13 +7,15 @@ use crate::memregion::{
     AsBase, Dist, MemoryRegionRDMA, RTMemoryRegionRDMA, RegisteredMemoryRegion, SubRegion,
 };
 
+// use tracing::*;
+
 impl<T: Dist> UnsafeArray<T> {
     fn block_op<U: MyInto<LamellarArrayInput<T>>>(
         &self,
         op: ArrayRdmaCmd,
         index: usize, //relative to inner
         buf: U,
-    ) -> Vec<Box<dyn LamellarRequest<Output = ()>  >> {
+    ) -> Vec<Box<dyn LamellarRequest<Output = ()>>> {
         let global_index = index + self.inner.offset;
         let buf = buf.my_into(&self.inner.data.team);
         let start_pe = match self.inner.pe_for_dist_index(index) {
@@ -109,7 +111,7 @@ impl<T: Dist> UnsafeArray<T> {
         op: ArrayRdmaCmd,
         index: usize, //global_index
         buf: U,
-    ) -> Vec<Box<dyn LamellarRequest<Output = ()>  >> {
+    ) -> Vec<Box<dyn LamellarRequest<Output = ()>>> {
         let global_index = index + self.inner.offset;
         let buf = buf.my_into(&self.inner.data.team);
         let my_pe = self.inner.data.my_pe;
@@ -288,16 +290,25 @@ impl<T: Dist> UnsafeArray<T> {
     //         req.get();
     //     }
     // }
-    pub fn put<U: MyInto<LamellarArrayInput<T>>>(
+
+    pub(crate) fn internal_put<U: MyInto<LamellarArrayInput<T>>>(
         &self,
         index: usize,
         buf: U,
-    ) -> Box<dyn LamellarArrayRequest<Output = ()>  > {
+    ) -> Box<dyn LamellarArrayRequest<Output = ()>> {
         let reqs = match self.inner.distribution {
             Distribution::Block => self.block_op(ArrayRdmaCmd::PutAm, index, buf),
             Distribution::Cyclic => self.cyclic_op(ArrayRdmaCmd::PutAm, index, buf),
         };
         Box::new(ArrayRdmaHandle { reqs: reqs })
+    }
+
+    pub fn put<U: MyInto<LamellarArrayInput<T>>>(
+        &self,
+        index: usize,
+        buf: U,
+    ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
+        self.internal_put(index, buf).into_future()
     }
 
     pub unsafe fn get_unchecked<U: MyInto<LamellarArrayInput<T>>>(&self, index: usize, buf: U) {
@@ -314,11 +325,11 @@ impl<T: Dist> UnsafeArray<T> {
         };
     }
 
-    pub fn get<U>(
+    pub(crate) fn internal_get<U>(
         &self,
         index: usize,
         buf: U,
-    ) -> Box<dyn LamellarArrayRequest<Output = ()>  >
+    ) -> Box<dyn LamellarArrayRequest<Output = ()>>
     where
         U: MyInto<LamellarArrayInput<T>>,
     {
@@ -329,13 +340,23 @@ impl<T: Dist> UnsafeArray<T> {
         Box::new(ArrayRdmaHandle { reqs: reqs })
     }
 
-    pub fn at(&self, index: usize) -> Box<dyn LamellarArrayRequest<Output = T>  > {
+    pub fn get<U>(&self, index: usize, buf: U) -> Pin<Box<dyn Future<Output = ()> + Send>>
+    where
+        U: MyInto<LamellarArrayInput<T>>,
+    {
+        self.internal_get(index, buf).into_future()
+    }
+
+    pub(crate) fn internal_at(&self, index: usize) -> Box<dyn LamellarArrayRequest<Output = T>> {
         let buf: LocalMemoryRegion<T> = self.team().alloc_local_mem_region(1);
         self.iget(index, &buf);
         Box::new(ArrayRdmaAtHandle {
             reqs: vec![],
             buf: buf,
         })
+    }
+    pub fn at(&self, index: usize) -> Pin<Box<dyn Future<Output = T> + Send>> {
+        self.internal_at(index).into_future()
     }
 }
 
@@ -354,11 +375,24 @@ impl<T: Dist + 'static> LamellarArrayGet<T> for UnsafeArray<T> {
         &self,
         index: usize,
         buf: U,
-    ) -> Box<dyn LamellarArrayRequest<Output = ()>  > {
+    ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
         self.get(index, buf)
     }
-    fn at(&self, index: usize) -> Box<dyn LamellarArrayRequest<Output = T>  > {
+    fn at(&self, index: usize) -> Pin<Box<dyn Future<Output = T> + Send>> {
         self.at(index)
+    }
+}
+
+impl<T: Dist + 'static> LamellarArrayInternalGet<T> for UnsafeArray<T> {
+    fn internal_get<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(
+        &self,
+        index: usize,
+        buf: U,
+    ) -> Box<dyn LamellarArrayRequest<Output = ()>> {
+        self.internal_get(index, buf)
+    }
+    fn internal_at(&self, index: usize) -> Box<dyn LamellarArrayRequest<Output = T>> {
+        self.internal_at(index)
     }
 }
 
@@ -370,8 +404,21 @@ impl<T: Dist> LamellarArrayPut<T> for UnsafeArray<T> {
         &self,
         index: usize,
         buf: U,
-    ) -> Box<dyn LamellarArrayRequest<Output = ()>  > {
+    ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
         self.put(index, buf)
+    }
+}
+
+impl<T: Dist> LamellarArrayInternalPut<T> for UnsafeArray<T> {
+    // unsafe fn put_unchecked<U: MyInto<LamellarArrayInput<T>> + LamellarRead>(&self, index: usize, buf: U) {
+    //     self.put_unchecked(index, buf)
+    // }
+    fn internal_put<U: MyInto<LamellarArrayInput<T>> + LamellarRead>(
+        &self,
+        index: usize,
+        buf: U,
+    ) -> Box<dyn LamellarArrayRequest<Output = ()>> {
+        self.internal_put(index, buf)
     }
 }
 
@@ -561,7 +608,7 @@ impl UnsafeArrayInner {
     }
 }
 
-#[lamellar_impl::AmLocalDataRT]
+#[lamellar_impl::AmLocalDataRT(Debug)]
 struct UnsafeBlockGetAm {
     array: UnsafeByteArray, //inner of the indices we need to place data into
     offset: usize,
@@ -571,7 +618,7 @@ struct UnsafeBlockGetAm {
 
 #[lamellar_impl::rt_am_local]
 impl LamellarAm for UnsafeBlockGetAm {
-    fn exec(self) {
+    async fn exec(self) {
         self.array.inner.data.mem_region.iget(
             self.pe,
             self.offset * self.array.inner.elem_size,
@@ -579,7 +626,7 @@ impl LamellarAm for UnsafeBlockGetAm {
         );
     }
 }
-#[lamellar_impl::AmLocalDataRT]
+#[lamellar_impl::AmLocalDataRT(Debug)]
 struct UnsafeCyclicGetAm {
     array: UnsafeByteArray, //inner of the indices we need to place data into
     data: LamellarMemoryRegion<u8>, //change this to an enum which is a vector or localmemoryregion depending on data size
@@ -593,7 +640,7 @@ struct UnsafeCyclicGetAm {
 
 #[lamellar_impl::rt_am_local]
 impl LamellarAm for UnsafeCyclicGetAm {
-    fn exec(self) {
+    async fn exec(self) {
         self.array.inner.data.mem_region.iget(
             self.pe,
             self.offset * self.array.inner.elem_size,
@@ -621,7 +668,7 @@ impl LamellarAm for UnsafeCyclicGetAm {
     }
 }
 
-#[lamellar_impl::AmDataRT]
+#[lamellar_impl::AmDataRT(Debug)]
 struct UnsafePutAm {
     array: UnsafeByteArray,         //byte representation of the array
     start_index: usize,             //index with respect to inner (of type T)
@@ -631,7 +678,7 @@ struct UnsafePutAm {
 }
 #[lamellar_impl::rt_am]
 impl LamellarAm for UnsafePutAm {
-    fn exec(self) {
+    async fn exec(self) {
         unsafe {
             // println!("unsafe put am: pe {:?} si {:?} len {:?}",self.pe,self.start_index,self.len);
             match self

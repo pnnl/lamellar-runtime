@@ -123,6 +123,8 @@ use std::sync::atomic::AtomicU64;
 impl_atomic_ops! {u64,AtomicU64,MyAtomicU64}
 use std::sync::atomic::AtomicUsize;
 impl_atomic_ops! {usize,AtomicUsize,MyAtomicUsize}
+// use std::sync::atomic::AtomicBool;
+// impl_atomic_ops! {bool,AtomicBool,MyAtomicBool}
 
 macro_rules! slice_as_atomic{
     { $A:ty, $B:ty, $slice:ident } => {
@@ -634,13 +636,13 @@ impl<T: Dist + std::fmt::Debug> std::fmt::Debug for NativeAtomicElement<T> {
     }
 }
 
-#[lamellar_impl::AmDataRT(Clone)]
+#[lamellar_impl::AmDataRT(Clone, Debug)]
 pub struct NativeAtomicArray<T> {
     pub(crate) array: UnsafeArray<T>,
     pub(crate) orig_t: NativeAtomicType,
 }
 
-#[lamellar_impl::AmDataRT(Clone)]
+#[lamellar_impl::AmDataRT(Clone, Debug)]
 pub struct NativeAtomicByteArray {
     pub(crate) array: UnsafeByteArray,
     pub(crate) orig_t: NativeAtomicType,
@@ -654,7 +656,7 @@ impl NativeAtomicByteArray {
     }
 }
 
-#[lamellar_impl::AmLocalDataRT(Clone)]
+#[lamellar_impl::AmLocalDataRT(Clone, Debug)]
 pub struct NativeAtomicByteArrayWeak {
     pub(crate) array: UnsafeByteArrayWeak,
     pub(crate) orig_t: NativeAtomicType,
@@ -669,7 +671,7 @@ impl NativeAtomicByteArrayWeak {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct NativeAtomicLocalData<T> {
     // + NativeAtomicOps> {
     array: NativeAtomicArray<T>,
@@ -677,6 +679,7 @@ pub struct NativeAtomicLocalData<T> {
     end_index: usize,
 }
 
+#[derive(Debug)]
 pub struct NativeAtomicLocalDataIter<T: Dist> {
     //+ NativeAtomicOps> {
     array: NativeAtomicArray<T>,
@@ -843,6 +846,14 @@ impl<T: Dist> NativeAtomicArray<T> {
     pub fn barrier(&self) {
         self.array.barrier();
     }
+
+    pub fn block_on<F>(&self, f: F) -> F::Output
+    where
+        F: Future,
+    {
+        self.array.block_on(f)
+    }
+
     pub(crate) fn num_elems_local(&self) -> usize {
         self.array.num_elems_local()
     }
@@ -905,24 +916,28 @@ impl<T: Dist> NativeAtomicArray<T> {
     }
 
     pub fn into_unsafe(self) -> UnsafeArray<T> {
+        // println!("native into_unsafe");
         self.array.into()
     }
 
     pub fn into_local_only(self) -> LocalOnlyArray<T> {
+        // println!("native into_local_only");
         self.array.into()
     }
 
     pub fn into_read_only(self) -> ReadOnlyArray<T> {
+        // println!("native into_read_only");
         self.array.into()
     }
 
-    pub fn into_generic_atomic(self) -> GenericAtomicArray<T> {
-        self.array.into()
-    }
+    // pub fn into_generic_atomic(self) -> GenericAtomicArray<T> {
+    //     self.array.into()
+    // }
 }
 
 impl<T: Dist> From<UnsafeArray<T>> for NativeAtomicArray<T> {
     fn from(array: UnsafeArray<T>) -> Self {
+        // println!("native from unsafe");
         array.block_on_outstanding(DarcMode::NativeAtomicArray);
         if let Some(func) = BUFOPS.get(&TypeId::of::<T>()) {
             let bytearray = NativeAtomicByteArray {
@@ -985,6 +1000,9 @@ impl<T: Dist> private::ArrayExecAm<T> for NativeAtomicArray<T> {
 }
 
 impl<T: Dist> private::LamellarArrayPrivate<T> for NativeAtomicArray<T> {
+    fn inner_array(&self) -> &UnsafeArray<T> {
+        &self.array
+    }
     fn local_as_ptr(&self) -> *const T {
         self.array.local_as_mut_ptr()
     }
@@ -1053,16 +1071,16 @@ impl<T: Dist + std::fmt::Debug> ArrayPrint<T> for NativeAtomicArray<T> {
 }
 
 impl<T: Dist + AmDist + 'static> NativeAtomicArray<T> {
-    pub fn reduce(&self, op: &str) -> Box<dyn LamellarRequest<Output = T>> {
+    pub fn reduce(&self, op: &str) -> Pin<Box<dyn Future<Output = T>>> {
         self.array.reduce(op)
     }
-    pub fn sum(&self) -> Box<dyn LamellarRequest<Output = T>> {
+    pub fn sum(&self) -> Pin<Box<dyn Future<Output = T>>> {
         self.array.reduce("sum")
     }
-    pub fn prod(&self) -> Box<dyn LamellarRequest<Output = T>> {
+    pub fn prod(&self) -> Pin<Box<dyn Future<Output = T>>> {
         self.array.reduce("prod")
     }
-    pub fn max(&self) -> Box<dyn LamellarRequest<Output = T>> {
+    pub fn max(&self) -> Pin<Box<dyn Future<Output = T>>> {
         self.array.reduce("max")
     }
 }

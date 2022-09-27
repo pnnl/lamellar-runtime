@@ -5,7 +5,7 @@
 /// PE but does not return any data to the user.
 /// it tests executing the AM localy, executing remotely, and executing on all PEs
 /// --------------------------------------------------------------------
-use lamellar::ActiveMessaging;
+use lamellar::{ActiveMessaging, SchedulerType};
 // use lamellar::{Backend, SchedulerType};
 
 //--Active message returning an active message that returns nothing--//
@@ -17,7 +17,7 @@ struct InitialAM {
 
 #[lamellar::am(return_am = "ReturnAM")] //we specify as a proc_macro argument the type of AM we are returning
 impl LamellarAM for InitialAM {
-    fn exec(&self) -> ReturnAM {
+    async fn exec(&self) -> ReturnAM {
         let current_hostname = hostname::get().unwrap().to_string_lossy().to_string();
         println!(
             "\tin  InitialAM {:?} on pe {:?} of {:?} ({:?})",
@@ -44,7 +44,7 @@ struct ReturnAM {
 
 #[lamellar::am]
 impl LamellarAM for ReturnAM {
-    fn exec(&self) {
+    async fn exec(&self) {
         println!(
             "\t\tin ReturnAM {:?} on pe {:?} ({:?})",
             self,
@@ -60,7 +60,7 @@ fn main() {
         // .with_lamellae(Default::default()) //if enable-rofi feature is active default is rofi, otherwise local
         //.with_lamellae( Backend::Rofi ) //explicity set the lamellae backend
         //.with_lamellae( Backend::Local )
-        // .with_scheduler(SchedulerType::WorkStealing) //currently the only type of thread scheduler
+        .with_scheduler(SchedulerType::NumaWorkStealing2) //currently the only type of thread scheduler
         .build();
     let my_pe = world.my_pe();
     let num_pes = world.num_pes();
@@ -74,17 +74,17 @@ fn main() {
     if my_pe == 0 {
         println!("---------------------------------------------------------------");
         println!("Testing local am");
-        let res = world.exec_am_pe(my_pe, am.clone()).get();
+        let res = world.block_on(world.exec_am_pe(my_pe, am.clone()));
         assert_eq!(res, ());
         println!("PE[{:?}] return result: {:?}", my_pe, res);
         println!("-----------------------------------");
         println!("Testing remote am");
-        let res = world.exec_am_pe(num_pes - 1, am.clone()).get();
+        let res = world.block_on(world.exec_am_pe(num_pes - 1, am.clone()));
         assert_eq!(res, ());
         println!("PE[{:?}] return result: {:?}", my_pe, res);
         println!("-----------------------------------");
         println!("Testing all am");
-        let res = world.exec_am_all(am).get();
+        let res = world.block_on(world.exec_am_all(am));
         assert!(res.iter().all(|x| *x == ()));
         println!("PE[{:?}] return result: {:?}", my_pe, res);
         println!("---------------------------------------------------------------");

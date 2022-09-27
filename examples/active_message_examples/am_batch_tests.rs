@@ -5,13 +5,16 @@ use std::time::Instant;
 use lamellar::ActiveMessaging;
 // use lamellar::{Backend, SchedulerType};
 
+use tracing_flame::FlameLayer;
+use tracing_subscriber::{fmt, prelude::*, registry::Registry};
+
 //----------------- Active message returning nothing-----------------//
 #[lamellar::AmData(Debug, Clone)]
 struct AmEmpty {}
 
 #[lamellar::am]
 impl LamellarAM for AmEmpty {
-    fn exec(self) {
+    async fn exec(self) {
         // println!("in empty");
     }
 }
@@ -21,7 +24,7 @@ struct AmEmptyReturnAmEmpty {}
 
 #[lamellar::am(return_am = "AmEmpty")]
 impl LamellarAM for AmEmptyReturnAmEmpty {
-    fn exec(self) -> AmEmpty {
+    async fn exec(self) -> AmEmpty {
         // println!("in return empty");
         AmEmpty {}
     }
@@ -36,7 +39,7 @@ struct AmNoReturn {
 
 #[lamellar::am]
 impl LamellarAM for AmNoReturn {
-    fn exec(self) {
+    async fn exec(self) {
         // println!("\t{:?} {:?} leaving", self.index,self.data.len());
     }
 }
@@ -50,7 +53,7 @@ struct AmReturnVec {
 
 #[lamellar::am]
 impl LamellarAM for AmReturnVec {
-    fn exec(self) -> Vec<usize> {
+    async fn exec(self) -> Vec<usize> {
         // println!("\t{:?} {:?} leaving", self.vec_size,self.data.len());
         vec![0; self.vec_size]
     }
@@ -65,7 +68,7 @@ struct InitialAMVec {
 
 #[lamellar::am(return_am = "ReturnVecAM -> Vec<usize>")] //we specify as a proc_macro argument the type of AM we are returning
 impl LamellarAM for InitialAMVec {
-    fn exec(&self) -> ReturnVecAM {
+    async fn exec(&self) -> ReturnVecAM {
         let current_hostname = hostname::get().unwrap().to_string_lossy().to_string();
         // println!("{:?}",current_hostname);
         ReturnVecAM {
@@ -85,23 +88,37 @@ struct ReturnVecAM {
 
 #[lamellar::am]
 impl LamellarAM for ReturnVecAM {
-    fn exec(&self) -> Vec<usize> {
+    async fn exec(&self) -> Vec<usize> {
         // println!("return vec");
         self.vec.clone()
     }
 }
 
+// fn setup_global_subscriber() -> impl Drop {
+//     let fmt_layer = fmt::Layer::default();
+
+//     let (flame_layer, _guard) = FlameLayer::with_file("./tracing.folded").unwrap();
+//     let flame_layer = flame_layer.with_threads_collapsed(true);
+
+//     let subscriber = Registry::default().with(fmt_layer).with(flame_layer);
+
+//     tracing::subscriber::set_global_default(subscriber).expect("Could not set global default");
+//     _guard
+// }
+
 fn main() {
+    // let _guard = setup_global_subscriber();
     let world = lamellar::LamellarWorldBuilder::new()
         //.with_lamellae(Default::default()) //if enable-rofi feature is active default is rofi, otherwise local
         //.with_lamellae( Backend::Rofi ) //explicity set the lamellae backend to rofi, with the default provider
         //.with_lamellae( Backend::RofiShm ) //explicity set the lamellae backend to rofi, specifying the shm provider
         //.with_lamellae( Backend::RofiVerbs ) //explicity set the lamellae backend to rofi, specifying the verbs provider
         //.with_lamellae( Backend::Local )
-        //.with_scheduler(SchedulerType::WorkStealing) //currently the only type of thread scheduler
+        // .with_scheduler(lamellar::SchedulerType::WorkStealing) //currently the only type of thread scheduler
         .build();
     let my_pe = world.my_pe();
     let num_pes = world.num_pes();
+    // let _guard = setup_global_subscriber();
 
     let mut rng = rand::thread_rng();
     let pe_rng = Uniform::from(0..num_pes + 1);

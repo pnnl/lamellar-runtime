@@ -18,6 +18,18 @@ pub struct NativeAtomicDistIter<T: Dist> {
     end_i: usize,
 }
 
+impl<T: Dist> std::fmt::Debug for NativeAtomicDistIter<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "NativeAtomicDistIter{{ data.len: {:?}, cur_i: {:?}, end_i: {:?} }}",
+            self.data.len(),
+            self.cur_i,
+            self.end_i
+        )
+    }
+}
+
 // impl<T: Dist > NativeAtomicDistIter<T> {
 //     pub(crate) fn new(data: NativeAtomicArray<T>, cur_i: usize, cnt: usize) -> Self {
 //         // println!("new dist iter {:?} {:? } {:?}",cur_i, cnt, cur_i+cnt);
@@ -126,14 +138,26 @@ impl<T: Dist> DistIteratorLauncher for NativeAtomicArray<T> {
         self.array.subarray_index_from_local(index, chunk_size)
     }
 
-    fn for_each<I, F>(&self, iter: &I, op: F) -> Box<dyn DistIterRequest<Output = ()>>
+    fn for_each<I, F>(&self, iter: &I, op: F) -> Pin<Box<dyn Future<Output = ()> + Send>>
     where
         I: DistributedIterator + 'static,
         F: Fn(I::Item) + AmLocal + Clone + 'static,
     {
         self.array.for_each(iter, op)
     }
-    fn for_each_async<I, F, Fut>(&self, iter: &I, op: F) -> Box<dyn DistIterRequest<Output = ()>>
+    fn for_each_with_schedule<I, F>(
+        &self,
+        sched: Schedule,
+        iter: &I,
+        op: F,
+    ) -> Pin<Box<dyn Future<Output = ()> + Send>>
+    where
+        I: DistributedIterator + 'static,
+        F: Fn(I::Item) + AmLocal + Clone + 'static,
+    {
+        self.array.for_each_with_schedule(sched, iter, op)
+    }
+    fn for_each_async<I, F, Fut>(&self, iter: &I, op: F) -> Pin<Box<dyn Future<Output = ()> + Send>>
     where
         I: DistributedIterator + 'static,
         F: Fn(I::Item) -> Fut + AmLocal + Clone + 'static,
@@ -141,7 +165,21 @@ impl<T: Dist> DistIteratorLauncher for NativeAtomicArray<T> {
     {
         self.array.for_each_async(iter, op)
     }
-    fn collect<I, A>(&self, iter: &I, d: Distribution) -> Box<dyn DistIterRequest<Output = A>>
+    fn for_each_async_with_schedule<I, F, Fut>(
+        &self,
+        sched: Schedule,
+        iter: &I,
+        op: F,
+    ) -> Pin<Box<dyn Future<Output = ()> + Send>>
+    where
+        I: DistributedIterator + 'static,
+        F: Fn(I::Item) -> Fut + AmLocal + Clone + 'static,
+        Fut: Future<Output = ()> + Send + 'static,
+    {
+        self.array.for_each_async_with_schedule(sched, iter, op)
+    }
+
+    fn collect<I, A>(&self, iter: &I, d: Distribution) -> Pin<Box<dyn Future<Output = A> + Send>>
     where
         I: DistributedIterator + 'static,
         I::Item: Dist,
@@ -153,7 +191,7 @@ impl<T: Dist> DistIteratorLauncher for NativeAtomicArray<T> {
         &self,
         iter: &I,
         d: Distribution,
-    ) -> Box<dyn DistIterRequest<Output = A>>
+    ) -> Pin<Box<dyn Future<Output = A> + Send>>
     where
         I: DistributedIterator + 'static,
         I::Item: Future<Output = B> + Send + 'static,

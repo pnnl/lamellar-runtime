@@ -5,11 +5,11 @@ use crate::array::*;
 use crate::memregion::{AsBase, Dist, RTMemoryRegionRDMA, RegisteredMemoryRegion};
 
 impl<T: Dist + 'static> NativeAtomicArray<T> {
-    pub fn get<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(
+    pub(crate) fn internal_get<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(
         &self,
         index: usize,
         buf: U,
-    ) -> Box<dyn LamellarArrayRequest<Output = ()>  > {
+    ) -> Box<dyn LamellarArrayRequest<Output = ()>> {
         let req = self.exec_am_local(InitGetAm {
             array: self.clone(),
             index: index,
@@ -18,7 +18,15 @@ impl<T: Dist + 'static> NativeAtomicArray<T> {
         Box::new(ArrayRdmaHandle { reqs: vec![req] })
     }
 
-    pub fn at(&self, index: usize) -> Box<dyn LamellarArrayRequest<Output = T>  > {
+    pub fn get<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(
+        &self,
+        index: usize,
+        buf: U,
+    ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
+        self.internal_get(index, buf).into_future()
+    }
+
+    pub(crate) fn internal_at(&self, index: usize) -> Box<dyn LamellarArrayRequest<Output = T>> {
         let buf: LocalMemoryRegion<T> = self.array.team().alloc_local_mem_region(1);
         let req = self.exec_am_local(InitGetAm {
             array: self.clone(),
@@ -31,6 +39,10 @@ impl<T: Dist + 'static> NativeAtomicArray<T> {
         })
     }
 
+    pub fn at(&self, index: usize) -> Pin<Box<dyn Future<Output = T> + Send>> {
+        self.internal_at(index).into_future()
+    }
+
     // pub fn iput<U: MyInto<LamellarArrayInput<T>> + LamellarRead>(&self, index: usize, buf: U) {
     //     self.exec_am_local(InitPutAm {
     //         array: self.clone(),
@@ -40,11 +52,11 @@ impl<T: Dist + 'static> NativeAtomicArray<T> {
     //     .get();
     // }
 
-    pub fn put<U: MyInto<LamellarArrayInput<T>> + LamellarRead>(
+    pub(crate) fn internal_put<U: MyInto<LamellarArrayInput<T>> + LamellarRead>(
         &self,
         index: usize,
         buf: U,
-    ) -> Box<dyn LamellarArrayRequest<Output = ()>  > {
+    ) -> Box<dyn LamellarArrayRequest<Output = ()>> {
         let req = self.exec_am_local(InitPutAm {
             array: self.clone(),
             index: index,
@@ -52,8 +64,31 @@ impl<T: Dist + 'static> NativeAtomicArray<T> {
         });
         Box::new(ArrayRdmaHandle { reqs: vec![req] })
     }
+
+    pub fn put<U: MyInto<LamellarArrayInput<T>> + LamellarRead>(
+        &self,
+        index: usize,
+        buf: U,
+    ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
+        self.internal_put(index, buf).into_future()
+    }
 }
 
+impl<T: Dist + 'static> LamellarArrayInternalGet<T> for NativeAtomicArray<T> {
+    // fn iget<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(&self, index: usize, buf: U) {
+    //     self.iget(index, buf)
+    // }
+    fn internal_get<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(
+        &self,
+        index: usize,
+        buf: U,
+    ) -> Box<dyn LamellarArrayRequest<Output = ()>> {
+        self.internal_get(index, buf)
+    }
+    fn internal_at(&self, index: usize) -> Box<dyn LamellarArrayRequest<Output = T>> {
+        self.internal_at(index)
+    }
+}
 impl<T: Dist + 'static> LamellarArrayGet<T> for NativeAtomicArray<T> {
     // fn iget<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(&self, index: usize, buf: U) {
     //     self.iget(index, buf)
@@ -62,11 +97,21 @@ impl<T: Dist + 'static> LamellarArrayGet<T> for NativeAtomicArray<T> {
         &self,
         index: usize,
         buf: U,
-    ) -> Box<dyn LamellarArrayRequest<Output = ()>  > {
-        self.array.get(index, buf)
+    ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
+        self.get(index, buf)
     }
-    fn at(&self, index: usize) -> Box<dyn LamellarArrayRequest<Output = T>  > {
-        self.array.at(index)
+    fn at(&self, index: usize) -> Pin<Box<dyn Future<Output = T> + Send>> {
+        self.at(index)
+    }
+}
+
+impl<T: Dist> LamellarArrayInternalPut<T> for NativeAtomicArray<T> {
+    fn internal_put<U: MyInto<LamellarArrayInput<T>> + LamellarRead>(
+        &self,
+        index: usize,
+        buf: U,
+    ) -> Box<dyn LamellarArrayRequest<Output = ()>> {
+        self.internal_put(index, buf)
     }
 }
 
@@ -75,12 +120,12 @@ impl<T: Dist> LamellarArrayPut<T> for NativeAtomicArray<T> {
         &self,
         index: usize,
         buf: U,
-    ) -> Box<dyn LamellarArrayRequest<Output = ()>  > {
+    ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
         self.put(index, buf)
     }
 }
 
-#[lamellar_impl::AmLocalDataRT]
+#[lamellar_impl::AmLocalDataRT(Debug)]
 struct InitGetAm<T: Dist> {
     array: NativeAtomicArray<T>, //inner of the indices we need to place data into
     index: usize,                //relative to inner
@@ -89,7 +134,7 @@ struct InitGetAm<T: Dist> {
 
 #[lamellar_impl::rt_am_local]
 impl<T: Dist + 'static> LamellarAm for InitGetAm<T> {
-    fn exec(self) {
+    async fn exec(self) {
         // let buf = self.buf.into();
         // let u8_index = self.index * std::mem::size_of::<T>();
         // let u8_len = self.buf.len() * std::mem::size_of::<T>();
@@ -143,7 +188,7 @@ impl<T: Dist + 'static> LamellarAm for InitGetAm<T> {
     }
 }
 
-#[lamellar_impl::AmDataRT]
+#[lamellar_impl::AmDataRT(Debug)]
 struct NativeAtomicRemoteGetAm {
     array: NativeAtomicByteArray, //inner of the indices we need to place data into
     start_index: usize,
@@ -154,7 +199,7 @@ struct NativeAtomicRemoteGetAm {
 impl LamellarAm for NativeAtomicRemoteGetAm {
     //we cant directly do a put from the array in to the data buf
     //because we need to guarantee the put operation is atomic (maybe iput would work?)
-    fn exec(self) -> Vec<u8> {
+    async fn exec(self) -> Vec<u8> {
         // println!("in nativeAtomic remotegetam {:?} {:?}",self.start_index,self.len);
         unsafe {
             match self
@@ -180,7 +225,7 @@ impl LamellarAm for NativeAtomicRemoteGetAm {
     }
 }
 
-#[lamellar_impl::AmLocalDataRT]
+#[lamellar_impl::AmLocalDataRT(Debug)]
 struct InitPutAm<T: Dist> {
     array: NativeAtomicArray<T>, //inner of the indices we need to place data into
     index: usize,                //relative to inner
@@ -189,7 +234,7 @@ struct InitPutAm<T: Dist> {
 
 #[lamellar_impl::rt_am_local]
 impl<T: Dist + 'static> LamellarAm for InitPutAm<T> {
-    fn exec(self) {
+    async fn exec(self) {
         // let u8_index = self.index * std::mem::size_of::<T>();
         // let u8_len = self.buf.len() * std::mem::size_of::<T>();
 
@@ -279,7 +324,7 @@ impl<T: Dist + 'static> LamellarAm for InitPutAm<T> {
     }
 }
 
-#[lamellar_impl::AmDataRT]
+#[lamellar_impl::AmDataRT(Debug)]
 struct NativeAtomicRemotePutAm {
     array: NativeAtomicByteArray, //inner of the indices we need to place data into
     start_index: usize,
@@ -290,7 +335,7 @@ struct NativeAtomicRemotePutAm {
 
 #[lamellar_impl::rt_am]
 impl LamellarAm for NativeAtomicRemotePutAm {
-    fn exec(self) {
+    async fn exec(self) {
         // println!("in remote put {:?} {:?} {:?}",self.start_index,self.len,self.data);
         // let _lock = self.array.lock.write();
         unsafe {

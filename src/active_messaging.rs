@@ -1,13 +1,13 @@
-use crate::lamellae::{Lamellae, SerializedData};
+use crate::lamellae::{Lamellae, LamellaeRDMA, SerializedData};
 use crate::lamellar_arch::IdError;
-use crate::lamellar_request::{
-    InternalResult, LamellarMultiRequest, LamellarRequest, LamellarRequestResult,
-};
+use crate::lamellar_request::{InternalResult, LamellarRequestResult};
 use crate::lamellar_team::{LamellarTeam, LamellarTeamRT};
-use crate::scheduler::{AmeScheduler, ReqData, ReqId};
+use crate::scheduler::{ReqId, SchedulerQueue};
 #[cfg(feature = "enable-prof")]
 use lamellar_prof::*;
 // use log::trace;
+use async_trait::async_trait;
+use futures::Future;
 use parking_lot::Mutex; //, RwLock};
 use std::collections::HashMap;
 use std::pin::Pin;
@@ -17,12 +17,16 @@ use std::sync::Arc; //, Weak};
 pub(crate) mod registered_active_message;
 use registered_active_message::RegisteredActiveMessages; //, AMS_EXECS};
 
+pub(crate) mod batching;
+
 #[cfg(feature = "nightly")]
 pub(crate) mod remote_closures;
 #[cfg(feature = "nightly")]
 pub(crate) use remote_closures::RemoteClosures;
 #[cfg(feature = "nightly")]
 use remote_closures::{exec_closure_cmd, process_closure_request};
+
+const BATCH_AM_SIZE: usize = 100000;
 
 pub trait AmLocal: Sync + Send {}
 
@@ -41,12 +45,12 @@ pub(crate) enum ExecType {
 }
 
 pub trait DarcSerde {
-    fn ser(&self, num_pes: usize, cur_pe: Result<usize, IdError>);
+    fn ser(&self, num_pes: usize);
     fn des(&self, cur_pe: Result<usize, IdError>);
 }
 
 impl<T> DarcSerde for &T {
-    fn ser(&self, _num_pes: usize, _cur_pe: Result<usize, IdError>) {}
+    fn ser(&self, _num_pes: usize) {}
     fn des(&self, _cur_pe: Result<usize, IdError>) {}
 }
 
@@ -59,7 +63,9 @@ pub trait LamellarResultSerde: LamellarSerde {
     fn serialize_result_into(&self, buf: &mut [u8], result: &LamellarAny);
 }
 
-pub trait RemoteActiveMessage: LamellarActiveMessage + LamellarSerde + LamellarResultSerde {}
+pub trait RemoteActiveMessage: LamellarActiveMessage + LamellarSerde + LamellarResultSerde {
+    fn as_local(self: Arc<Self>) -> LamellarArcLocalAm;
+}
 
 pub trait LamellarActiveMessage: DarcSerde {
     fn exec(
@@ -71,14 +77,6 @@ pub trait LamellarActiveMessage: DarcSerde {
         team: Arc<LamellarTeam>,
     ) -> std::pin::Pin<Box<dyn std::future::Future<Output = LamellarReturn> + Send>>;
     fn get_id(&self) -> String;
-}
-
-#[derive(Clone)]
-pub(crate) enum LamellarFunc {
-    LocalAm(LamellarArcLocalAm),
-    Am(LamellarArcAm),
-    Result(LamellarResultArc),
-    None,
 }
 
 pub(crate) type LamellarArcLocalAm = Arc<dyn LamellarActiveMessage + Sync + Send>;
@@ -104,32 +102,85 @@ pub enum LamellarReturn {
     Unit,
 }
 
-#[derive(
-    serde::Serialize, serde::Deserialize, Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord,
-)]
-pub(crate) enum Cmd {
-    //inverse this so its the exec type holding the inner command...
-    Exec,
-    ExecReturn,
-    LocalExec,
-    ExecBatchUnitReturns,
-    AmReturn,
-    BatchedAmReturn,
-    DataReturn,
-    BatchedDataReturn,
-    UnitReturn,
-    BatchedUnitReturn,
-    BatchedUnitReturnNew,
-    BatchedMsg,
-    ExecBatchMsgSend,
-    None,
+impl std::fmt::Debug for LamellarReturn {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            LamellarReturn::LocalData(_) => write!(f, "LocalData"),
+            LamellarReturn::LocalAm(_) => write!(f, "LocalAm"),
+            LamellarReturn::RemoteData(_) => write!(f, "RemoteData"),
+            LamellarReturn::RemoteAm(_) => write!(f, "RemoteAm"),
+            LamellarReturn::Unit => write!(f, "Unit"),
+        }
+    }
 }
 
-#[derive(serde::Serialize, serde::Deserialize, Debug, Clone, Copy)]
+#[derive(Clone, Debug)]
+pub(crate) struct ReqMetaData {
+    pub(crate) src: usize,         //source pe
+    pub(crate) dst: Option<usize>, // destination pe - team based pe id, none means all pes
+    pub(crate) id: ReqId,          // id of the request
+    pub(crate) lamellae: Arc<Lamellae>,
+    pub(crate) world: Pin<Arc<LamellarTeamRT>>,
+    pub(crate) team: Pin<Arc<LamellarTeamRT>>,
+    pub(crate) team_addr: usize,
+}
+
+pub(crate) enum Am {
+    All(ReqMetaData, LamellarArcAm),
+    Remote(ReqMetaData, LamellarArcAm), //req data, am to execute
+    Local(ReqMetaData, LamellarArcLocalAm), //req data, am to execute
+    Return(ReqMetaData, LamellarArcAm), //req data, am to return and execute
+    Data(ReqMetaData, LamellarResultArc), //req data, data to return
+    Unit(ReqMetaData),                  //req data
+    _BatchedReturn(ReqMetaData, LamellarArcAm, ReqId), //req data, am to return and execute, batch id
+    _BatchedData(ReqMetaData, LamellarResultArc, ReqId), //req data, data to return, batch id
+    _BatchedUnit(ReqMetaData, ReqId),                  //req data, batch id
+}
+
+impl std::fmt::Debug for Am {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Am::All(_, _) => write!(f, "All"),
+            Am::Remote(_, _) => write!(f, "Remote"),
+            Am::Local(_, _) => write!(f, "Local"),
+            Am::Return(_, _) => write!(f, "Return"),
+            Am::Data(_, _) => write!(f, "Data"),
+            Am::Unit(_) => write!(f, "Unit"),
+            Am::_BatchedReturn(_, _, _) => write!(f, "BatchedReturn"),
+            Am::_BatchedData(_, _, _) => write!(f, "BatchedData"),
+            Am::_BatchedUnit(_, _) => write!(f, "BatchedUnit"),
+        }
+    }
+}
+
+#[derive(
+    serde::Serialize,
+    serde::Deserialize,
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Hash,
+    PartialOrd,
+    Ord,
+    Default,
+)]
+pub(crate) enum Cmd {
+    #[default]
+    Am, //a single am
+    ReturnAm, //a single return am
+    Data,     //a single data result
+    Unit,     //a single unit result
+    BatchedMsg, //a batched message, can contain a variety of am types
+              // BatchedReturnAm, //a batched message, only containing return ams -- not sure this can happen
+              // BatchedData, //a batched message, only containing data results
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone, Copy, Default)]
 pub(crate) struct Msg {
-    pub req_id: ReqId,
     pub src: u16,
-    pub cmd: ExecType,
+    pub cmd: Cmd,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug)]
@@ -145,6 +196,7 @@ pub(crate) enum RetType {
     Get,
 }
 
+#[derive(Debug)]
 pub(crate) struct AMCounters {
     pub(crate) outstanding_reqs: Arc<AtomicUsize>,
     pub(crate) send_req_cnt: AtomicUsize,
@@ -167,118 +219,194 @@ impl AMCounters {
 pub trait ActiveMessaging {
     fn wait_all(&self);
     fn barrier(&self);
-    fn exec_am_all<F>(&self, am: F) -> Box<dyn LamellarMultiRequest<Output = F::Output>>
+    fn exec_am_all<F>(&self, am: F) -> Pin<Box<dyn Future<Output = Vec<F::Output>> + Send>>
+    //Box<dyn LamellarMultiRequest<Output = F::Output>>
     where
         F: RemoteActiveMessage + LamellarAM + Serde + AmDist;
-    fn exec_am_pe<F>(&self, pe: usize, am: F) -> Box<dyn LamellarRequest<Output = F::Output>>
+    fn exec_am_pe<F>(&self, pe: usize, am: F) -> Pin<Box<dyn Future<Output = F::Output> + Send>>
+    //Box<dyn LamellarRequest<Output = F::Output>>
     where
         F: RemoteActiveMessage + LamellarAM + Serde + AmDist;
-    fn exec_am_local<F>(&self, am: F) -> Box<dyn LamellarRequest<Output = F::Output>>
+    fn exec_am_local<F>(&self, am: F) -> Pin<Box<dyn Future<Output = F::Output> + Send>>
     where
         F: LamellarActiveMessage + LocalAM + 'static;
 }
 
-//maybe make this a struct then we could hold the pending counters...
-pub(crate) struct ActiveMessageEngine {
-    // teams: Arc<RwLock<HashMap<u64, Weak<LamellarTeamRT>>>>,
-    // my_pe: usize,
-    batched_am: Arc<RegisteredActiveMessages>,
-}
-
-//#[prof]
-// impl Drop for ActiveMessageEngine {
-//     fn drop(&mut self) {
-//         trace!("[{:?}] AME dropping", self.my_pe);
-//     }
-// }
-
-//#[prof]
-impl ActiveMessageEngine {
-    pub(crate) fn new(
-        // my_pe: usize,
-        scheduler: Arc<AmeScheduler>,
-        // teams: Arc<RwLock<HashMap<u64, Weak<LamellarTeamRT>>>>,
-        stall_mark: Arc<AtomicUsize>,
-    ) -> Self {
-        // trace!("registered funcs {:?}", AMS_EXECS.len(),);
-        ActiveMessageEngine {
-            // teams: teams,
-            // my_pe: my_pe,
-            batched_am: Arc::new(RegisteredActiveMessages::new(scheduler, stall_mark)),
-        }
-    }
-
-    pub(crate) async fn process_msg_new(&self, req_data: ReqData) {
-        // trace!("[{:?}] process msg: {:?}",self.my_pe, &req_data);
-        // let addr = req_data.lamellae.local_addr(req_data.src,req_data)
-        // let (team, world) = self.get_team_and_world(req_data.team.team_hash);
-        let world = LamellarTeam::new(None, req_data.world.clone(), true);
-        let team = LamellarTeam::new(Some(world.clone()), req_data.team.clone(), true);
-
-        match req_data.cmd.clone() {
-            ExecType::Runtime(_cmd) => {}
-            ExecType::Am(_) => self.batched_am.process_am_req(req_data, world, team).await,
-        }
-    }
-
-    pub(crate) fn get_team_and_world(
+#[async_trait]
+pub(crate) trait ActiveMessageEngine {
+    async fn process_msg(
         &self,
-        team_hash: usize,
+        am: Am,
+        scheduler: &(impl SchedulerQueue + Sync + std::fmt::Debug),
+        stall_mark: usize,
+    );
+
+    async fn exec_msg(
+        &self,
+        msg: Msg,
+        ser_data: SerializedData,
+        lamellae: Arc<Lamellae>,
+        scheduler: &(impl SchedulerQueue + Sync + std::fmt::Debug),
+    );
+
+    fn get_team_and_world(
+        &self,
+        pe: usize,
+        team_addr: usize,
+        lamellae: &Arc<Lamellae>,
     ) -> (Arc<LamellarTeam>, Arc<LamellarTeam>) {
+        let local_team_addr = lamellae.local_addr(pe, team_addr);
         let team_rt = unsafe {
-            let team_ptr = team_hash as *mut *const LamellarTeamRT;
+            let team_ptr = local_team_addr as *mut *const LamellarTeamRT;
             // println!("{:x} {:?} {:?} {:?}", team_hash,team_ptr, (team_hash as *mut (*const LamellarTeamRT)).as_ref(), (*(team_hash as *mut (*const LamellarTeamRT))).as_ref());
             Arc::increment_strong_count(*team_ptr);
             Pin::new_unchecked(Arc::from_raw(*team_ptr))
-            // unsafe {(*(team_hash as  *const  Pin<Arc<LamellarTeamRT>>)).clone()}
         };
-
-        // let team_rt = unsafe {(*(team_hash as *mut *const Arc<LamellarTeamRT>)).as_ref().clone()};
-        // let team_rt = unsafe{ (*(team_hash as *mut (*const Arc<LamellarTeamRT>))).as_ref().unwrap().clone()};
         let world_rt = if let Some(world) = team_rt.world.clone() {
             world
         } else {
             team_rt.clone()
         };
-        // let teams = self.teams.read();
-        // let world_rt = teams
-        //     .get(&0)
-        //     .expect("invalid world hash")
-        //     .upgrade()
-        //     .expect("team no longer exists (world)");
-        // let team_rt = teams
-        //     .get(&team_hash)
-        //     .expect("invalid team hash")
-        //     .upgrade()
-        //     .expect("team no longer exists {:?}");
         let world = LamellarTeam::new(None, world_rt, true);
         let team = LamellarTeam::new(Some(world.clone()), team_rt, true);
         (team, world)
     }
 
-    pub(crate) async fn exec_msg(
+    fn send_data_to_user_handle(&self, req_id: ReqId, pe: usize, data: InternalResult) {
+        // println!("returned req_id: {:?}", req_id);
+        let req = unsafe { Arc::from_raw(req_id.id as *const LamellarRequestResult) };
+        // println!("strong count recv: {:?} ", Arc::strong_count(&req));
+        req.add_result(pe, req_id.sub_id, data);
+    }
+}
+
+#[derive(Debug)]
+pub(crate) enum ActiveMessageEngineType {
+    RegisteredActiveMessages(RegisteredActiveMessages),
+}
+
+#[async_trait]
+impl ActiveMessageEngine for ActiveMessageEngineType {
+    async fn process_msg(
         &self,
-        ame: Arc<ActiveMessageEngine>,
+        am: Am,
+        scheduler: &(impl SchedulerQueue + Sync + std::fmt::Debug),
+        stall_mark: usize,
+    ) {
+        match self {
+            ActiveMessageEngineType::RegisteredActiveMessages(remote_am) => {
+                remote_am.process_msg(am, scheduler, stall_mark).await;
+            }
+        }
+    }
+    async fn exec_msg(
+        &self,
         msg: Msg,
         ser_data: SerializedData,
         lamellae: Arc<Lamellae>,
-        team_hash: usize,
+        scheduler: &(impl SchedulerQueue + Sync + std::fmt::Debug),
     ) {
-        let (team, world) = self.get_team_and_world(team_hash);
-        match msg.cmd.clone() {
-            ExecType::Am(cmd) => {
-                self.batched_am
-                    .process_batched_am(ame, cmd, msg, ser_data, lamellae, world, team)
-                    .await;
-            } //execute a remote am
-            ExecType::Runtime(_cmd) => {}
+        match self {
+            ActiveMessageEngineType::RegisteredActiveMessages(remote_am) => {
+                remote_am.exec_msg(msg, ser_data, lamellae, scheduler).await;
+            }
         }
     }
-
-    fn send_data_to_user_handle(req_id: ReqId, pe: u16, data: InternalResult) {
-        // println!("returned req_id: {:?}", req_id);
-        let req = unsafe { Arc::from_raw(req_id.id as *const LamellarRequestResult) };
-        // println!("strong count recv: {:?} ",Arc::strong_count(&req));
-        req.add_result(pe as usize, req_id.sub_id, data);
-    }
 }
+
+// //maybe make this a struct then we could hold the pending counters...
+// pub(crate) struct ActiveMessageEngineS {
+//     // teams: Arc<RwLock<HashMap<u64, Weak<LamellarTeamRT>>>>,
+//     // my_pe: usize,
+//     batched_am: Arc<RegisteredActiveMessages>,
+// }
+
+// //#[prof]
+// // impl Drop for ActiveMessageEngine {
+// //     fn drop(&mut self) {
+// //         trace!("[{:?}] AME dropping", self.my_pe);
+// //     }
+// // }
+
+// //#[prof]
+// impl ActiveMessageEngine {
+//     pub(crate) fn new(
+//         // my_pe: usize,
+//         scheduler: Arc<AmeScheduler>,
+//         // teams: Arc<RwLock<HashMap<u64, Weak<LamellarTeamRT>>>>,
+//         stall_mark: Arc<AtomicUsize>,
+//         batch_id_start: usize,
+//         scheduler_mask: usize,
+//     ) -> Self {
+//         // trace!("registered funcs {:?}", AMS_EXECS.len(),);
+//         ActiveMessageEngine {
+//             // teams: teams,
+//             // my_pe: my_pe,
+//             batched_am: Arc::new(RegisteredActiveMessages::new(
+//                 scheduler,
+//                 stall_mark,
+//                 batch_id_start,
+//                 scheduler_mask,
+//             )),
+//         }
+//     }
+
+//     pub(crate) async fn process_msg_new(&self, req_data: ReqData) {
+//         // trace!("[{:?}] process msg: {:?}",self.my_pe, &req_data);
+//         // let addr = req_data.lamellae.local_addr(req_data.src,req_data)
+//         // let (team, world) = self.get_team_and_world(req_data.team.team_hash);
+//         let world = LamellarTeam::new(None, req_data.world.clone(), true);
+//         let team = LamellarTeam::new(Some(world.clone()), req_data.team.clone(), true);
+
+//         match req_data.cmd.clone() {
+//             ExecType::Runtime(_cmd) => {}
+//             ExecType::Am(_) => self.batched_am.process_am_req(req_data, world, team).await,
+//         }
+//     }
+
+//     pub(crate) fn get_team_and_world(
+//         &self,
+//         team_hash: usize,
+//     ) -> (Arc<LamellarTeam>, Arc<LamellarTeam>) {
+//         let team_rt = unsafe {
+//             let team_ptr = team_hash as *mut *const LamellarTeamRT;
+//             // println!("{:x} {:?} {:?} {:?}", team_hash,team_ptr, (team_hash as *mut (*const LamellarTeamRT)).as_ref(), (*(team_hash as *mut (*const LamellarTeamRT))).as_ref());
+//             Arc::increment_strong_count(*team_ptr);
+//             Pin::new_unchecked(Arc::from_raw(*team_ptr))
+//         };
+//         let world_rt = if let Some(world) = team_rt.world.clone() {
+//             world
+//         } else {
+//             team_rt.clone()
+//         };
+//         let world = LamellarTeam::new(None, world_rt, true);
+//         let team = LamellarTeam::new(Some(world.clone()), team_rt, true);
+//         (team, world)
+//     }
+
+//     pub(crate) async fn exec_msg(
+//         &self,
+//         ame: Arc<ActiveMessageEngine>,
+//         msg: Msg,
+//         ser_data: SerializedData,
+//         lamellae: Arc<Lamellae>,
+//         team_hash: usize,
+//     ) {
+//         let (team, world) = self.get_team_and_world(team_hash);
+//         match msg.cmd.clone() {
+//             ExecType::Am(cmd) => {
+//                 self.batched_am
+//                     .process_batched_am(ame, cmd, msg, ser_data, lamellae, world, team)
+//                     .await;
+//             } //execute a remote am
+//             ExecType::Runtime(_cmd) => {}
+//         }
+//     }
+
+//     fn send_data_to_user_handle(req_id: ReqId, pe: u16, data: InternalResult) {
+//         // println!("returned req_id: {:?}", req_id);
+//         let req = unsafe { Arc::from_raw(req_id.id as *const LamellarRequestResult) };
+//         // println!("strong count recv: {:?} ",Arc::strong_count(&req));
+//         req.add_result(pe as usize, req_id.sub_id, data);
+//     }
+// }

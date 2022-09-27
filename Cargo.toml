@@ -42,6 +42,13 @@ raw_sync = "0.1"
 paste = "1.0"
 newtype_derive = "0.1.6"
 custom_derive = "0.1.7"
+glob = "0.3.0"
+thread_local = "1.1.4"
+tracing = "0.1"
+tracing-futures = "0.2"
+tracing-flame = "0.2"
+pin-project = "1.0"
+
 
 
 
@@ -54,6 +61,7 @@ hostname = "0.3"
 nix = "0.23"
 assert_cmd = "2.0.4"
 serial_test = "0.6.0"
+tracing-subscriber = "0.3"
 #packed_simd = { version = "0.3.4", package = "packed_simd_2" } #uncomment if using nightly tool chain and want to run the am_flops example
 
 [workspace]
@@ -207,6 +215,10 @@ name="unsafe_array_get_bw"
 path="examples/bandwidths/unsafe_array_get_bw.rs"
 
 [[example]]
+name="unsafe_array_store_bw"
+path="examples/bandwidths/unsafe_array_store_bw.rs"
+
+[[example]]
 name="unsafe_array_get_unchecked_bw"
 path="examples/bandwidths/unsafe_array_get_unchecked_bw.rs"
 
@@ -281,6 +293,10 @@ name="array_iteration"
 path="examples/array_examples/array_iteration.rs"
 
 [[example]]
+name="array_iteration_test"
+path="examples/array_examples/array_iteration_test.rs"
+
+[[example]]
 name="local_only_array"
 path="examples/array_examples/local_only_array.rs"
 
@@ -296,9 +312,9 @@ path="examples/array_examples/array_ops.rs"
 name="atomic_compare_exchange"
 path="examples/array_examples/atomic_compare_exchange.rs"
 
-[[example]]
-name="2d_array"
-path="examples/array_examples/2d_array.rs"
+#[[example]]
+#name="2d_array"
+#path="examples/array_examples/2d_array.rs"
 
 ##------------ RDMA Examples -----------------##
 [[example]]
@@ -359,6 +375,10 @@ path="examples/kernels/parallel_blocked_array_gemm.rs"
 [[example]]
 name="safe_parallel_blocked_array_gemm"
 path="examples/kernels/safe_parallel_blocked_array_gemm.rs"
+
+[[example]]
+name="safe_parallel_blocked_array_gemm_2"
+path="examples/kernels/safe_parallel_blocked_array_gemm_2.rs"
 
 
 ##------------ Miscellaneous Examples -----------------##

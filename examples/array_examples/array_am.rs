@@ -19,7 +19,7 @@ struct RdmaAM {
 
 #[lamellar::am]
 impl LamellarAM for RdmaAM {
-    fn exec(&self) {
+    async fn exec(&self) {
         let num_pes = lamellar::num_pes;
         let max_i = unsafe { std::cmp::min(self.array.local_as_slice().len(), num_pes) };
         println!(
@@ -35,7 +35,7 @@ impl LamellarAM for RdmaAM {
         let local = lamellar::world.alloc_local_mem_region::<u8>(ARRAY_LEN);
         let local_slice = unsafe { local.as_mut_slice().unwrap() };
         local_slice[ARRAY_LEN - 1] = num_pes as u8;
-        self.array.get(0, &local).into_future().await;
+        self.array.get(0, &local).await;
         // while local_slice[ARRAY_LEN - 1] == num_pes as u8 {
         //     async_std::task::yield_now().await;
         // }
@@ -45,10 +45,7 @@ impl LamellarAM for RdmaAM {
 
         //update an element on the original node
         local_slice[0] = lamellar::current_pe as u8;
-        self.array
-            .put(my_index, &local.sub_region(0..=0))
-            .into_future()
-            .await;
+        self.array.put(my_index, &local.sub_region(0..=0)).await;
     }
 }
 
@@ -75,7 +72,7 @@ fn main() {
                 *i = 255_u8;
             }
         }
-        array.put(0, &local_mem_region).wait();
+        world.block_on(array.put(0, &local_mem_region));
     }
     println!("here!!! {:?}", my_pe);
     array.print();
@@ -121,7 +118,7 @@ fn main() {
     world.barrier();
 
     if my_pe == 0 {
-        let sum = array.sum().get();
+        let sum = world.block_on(array.sum());
         println!("sum: {:?}", sum);
         println!("------------------------------------------------------------");
     }

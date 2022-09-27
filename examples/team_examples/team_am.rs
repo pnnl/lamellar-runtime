@@ -14,7 +14,7 @@ struct TeamAM {
 
 #[lamellar::am]
 impl LamellarAM for TeamAM {
-    fn exec() {
+    async fn exec() {
         // let team = lamellar::team;
         // println!("current_pe: {:?}, orig_pe {:?}, team.world_pe_id(): {:?}, team.team_pe_id(): {:?} team members: {:?}",
         // lamellar::current_pe ,self.orig_pe, team.world_pe_id(), team.team_pe_id(), team.get_pes());

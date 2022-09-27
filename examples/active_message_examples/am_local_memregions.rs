@@ -15,7 +15,7 @@ struct DataAM {
 
 #[lamellar::am]
 impl LamellarAM for DataAM {
-    fn exec() {
+    async fn exec() {
         let mut rng = rand::thread_rng();
         let pes = Uniform::from(0..lamellar::team.num_pes());
         // println!("depth {:?} {:?}",self.depth, self.path);
@@ -47,20 +47,20 @@ fn main() {
 
     let mut rng = rand::thread_rng();
     let pes = Uniform::from(0..num_pes);
-    let width = 10;
+    let _width = 10;
     let s = Instant::now();
-    for _i in 0..width {
-        let pe = pes.sample(&mut rng);
-        world.exec_am_pe(
-            pe,
-            DataAM {
-                array: array.clone(),
-                depth: 5,
-                width: width,
-                path: vec![my_pe],
-            },
-        );
-    }
+    // for _i in 0..width {
+    //     let pe = pes.sample(&mut rng);
+    //     world.exec_am_pe(
+    //         pe,
+    //         DataAM {
+    //             array: array.clone(),
+    //             depth: 5,
+    //             width: width,
+    //             path: vec![my_pe],
+    //         },
+    //     );
+    // }
     world.wait_all();
     world.barrier();
     println!("time: {:?}", s.elapsed().as_secs_f64());

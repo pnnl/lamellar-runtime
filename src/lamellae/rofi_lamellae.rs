@@ -3,7 +3,7 @@ use crate::lamellae::command_queues::CommandQueue;
 use crate::lamellae::rofi::rofi_comm::{RofiComm, RofiData};
 use crate::lamellae::{
     AllocationType, Backend, Comm, Des, Lamellae, LamellaeAM, LamellaeComm, LamellaeInit,
-    LamellaeRDMA, Ser, SerializeHeader, SerializedData, SerializedDataOps,
+    LamellaeRDMA, Ser, SerializeHeader, SerializedData, SerializedDataOps, SERIALIZE_HEADER_LEN,
 };
 use crate::lamellar_arch::LamellarArchRT;
 use crate::scheduler::{Scheduler, SchedulerQueue};
@@ -67,6 +67,17 @@ pub(crate) struct Rofi {
     active: Arc<AtomicU8>,
     cq: Arc<CommandQueue>,
 }
+
+impl std::fmt::Debug for Rofi {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Rofi {{ my_pe: {}, num_pes: {},  active: {:?} }}",
+            self.my_pe, self.num_pes, self.active,
+        )
+    }
+}
+
 impl Rofi {
     fn new(my_pe: usize, num_pes: usize, rofi_comm: Arc<Comm>) -> Rofi {
         // println!("my_pe {:?} num_pes {:?}",my_pe,num_pes);
@@ -161,7 +172,7 @@ impl Ser for Rofi {
         header: Option<SerializeHeader>,
         obj: &T,
     ) -> Result<SerializedData, anyhow::Error> {
-        let header_size = std::mem::size_of::<Option<SerializeHeader>>();
+        let header_size = *SERIALIZE_HEADER_LEN;
         // let data_size = bincode::serialized_size(obj)? as usize;
         let data_size = crate::serialized_size(obj, true) as usize;
         let ser_data = RofiData::new(self.rofi_comm.clone(), header_size + data_size)?;
@@ -174,7 +185,7 @@ impl Ser for Rofi {
         header: Option<SerializeHeader>,
         serialized_size: usize,
     ) -> Result<SerializedData, anyhow::Error> {
-        let header_size = std::mem::size_of::<Option<SerializeHeader>>();
+        let header_size = *SERIALIZE_HEADER_LEN;
         let ser_data = RofiData::new(self.rofi_comm.clone(), header_size + serialized_size)?;
         // bincode::serialize_into(ser_data.header_as_bytes(), &header)?;
         crate::serialize_into(ser_data.header_as_bytes(), &header, false)?; //we want header to be a fixed size

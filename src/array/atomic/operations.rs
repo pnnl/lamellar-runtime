@@ -29,8 +29,6 @@ pub struct AtomicArrayOp {
 
 crate::inventory::collect!(AtomicArrayOp);
 
-
-
 type BufFn = fn(AtomicByteArray) -> Arc<dyn BufferOp>;
 
 lazy_static! {
@@ -125,7 +123,7 @@ impl<T: AmDist + Dist + 'static> AtomicArray<T> {
         index: usize,
         val: T,
         op: ArrayOpCmd,
-    ) -> Option<Box<dyn LamellarRequest<Output = ()>  >> {
+    ) -> Option<Pin<Box<dyn Future<Output = T>>>> {
         // println!("add ArithmeticOps<T> for &AtomicArray<T> ");
         if let Some(funcs) = OPS.get(&(op, TypeId::of::<T>())) {
             let pe = self.pe_for_dist_index(index).expect("index out of bounds");
@@ -158,7 +156,7 @@ impl<T: AmDist + Dist + 'static> AtomicArray<T> {
         index: usize,
         val: T,
         op: ArrayOpCmd,
-    ) -> Box<dyn LamellarRequest<Output = T>  > {
+    ) -> Pin<Box<dyn Future<Output = T>>> {
         // println!("add ArithmeticOps<T> for &AtomicArray<T> ");
         if let Some(funcs) = OPS.get(&(op, TypeId::of::<T>())) {
             let pe = self.pe_for_dist_index(index).expect("index out of bounds");
@@ -187,110 +185,58 @@ impl<T: AmDist + Dist + 'static> AtomicArray<T> {
         }
     }
 
-    pub fn load<'a>(&self, index: impl OpInput<'a,usize>,) -> Box<dyn LamellarRequest<Output = T>  > {
+    pub fn load<'a>(&self, index: impl OpInput<'a, usize>) -> Pin<Box<dyn Future<Output = T>>> {
         self.initiate_fetch_op(index, self.array.dummy_val(), ArrayOpCmd::Load)
     }
 
-    pub fn store(
-        &self,
-        index: usize,
-        val: T,
-    ) -> Option<Box<dyn LamellarRequest<Output = ()>  >> {
+    pub fn store(&self, index: usize, val: T) -> Option<Pin<Box<dyn Future<Output = T>>>> {
         self.initiate_op(index, val, ArrayOpCmd::Store)
     }
 
-    pub fn swap(&self, index: usize, val: T) -> Box<dyn LamellarRequest<Output = T>  > {
+    pub fn swap(&self, index: usize, val: T) -> Pin<Box<dyn Future<Output = T>>> {
         self.initiate_fetch_op(index, val, ArrayOpCmd::Swap)
     }
 }
 
 impl<T: ElementArithmeticOps + 'static> ArithmeticOps<T> for AtomicArray<T> {
-    fn add(
-        &self,
-        index: usize,
-        val: T,
-    ) -> Option<Box<dyn LamellarRequest<Output = ()>  >> {
+    fn add(&self, index: usize, val: T) -> Option<Pin<Box<dyn Future<Output = T>>>> {
         self.initiate_op(index, val, ArrayOpCmd::Add)
     }
-    fn fetch_add(
-        &self,
-        index: usize,
-        val: T,
-    ) -> Box<dyn LamellarRequest<Output = T>  > {
+    fn fetch_add(&self, index: usize, val: T) -> Pin<Box<dyn Future<Output = T>>> {
         self.initiate_fetch_op(index, val, ArrayOpCmd::FetchAdd)
     }
-    fn sub(
-        &self,
-        index: usize,
-        val: T,
-    ) -> Option<Box<dyn LamellarRequest<Output = ()>  >> {
+    fn sub(&self, index: usize, val: T) -> Option<Pin<Box<dyn Future<Output = T>>>> {
         self.initiate_op(index, val, ArrayOpCmd::Sub)
     }
-    fn fetch_sub(
-        &self,
-        index: usize,
-        val: T,
-    ) -> Box<dyn LamellarRequest<Output = T>  > {
+    fn fetch_sub(&self, index: usize, val: T) -> Pin<Box<dyn Future<Output = T>>> {
         self.initiate_fetch_op(index, val, ArrayOpCmd::FetchSub)
     }
-    fn mul(
-        &self,
-        index: usize,
-        val: T,
-    ) -> Option<Box<dyn LamellarRequest<Output = ()>  >> {
+    fn mul(&self, index: usize, val: T) -> Option<Pin<Box<dyn Future<Output = T>>>> {
         self.initiate_op(index, val, ArrayOpCmd::Mul)
     }
-    fn fetch_mul(
-        &self,
-        index: usize,
-        val: T,
-    ) -> Box<dyn LamellarRequest<Output = T>  > {
+    fn fetch_mul(&self, index: usize, val: T) -> Pin<Box<dyn Future<Output = T>>> {
         self.initiate_fetch_op(index, val, ArrayOpCmd::FetchMul)
     }
-    fn div(
-        &self,
-        index: usize,
-        val: T,
-    ) -> Option<Box<dyn LamellarRequest<Output = ()>  >> {
+    fn div(&self, index: usize, val: T) -> Option<Pin<Box<dyn Future<Output = T>>>> {
         self.initiate_op(index, val, ArrayOpCmd::Div)
     }
-    fn fetch_div(
-        &self,
-        index: usize,
-        val: T,
-    ) -> Box<dyn LamellarRequest<Output = T>  > {
+    fn fetch_div(&self, index: usize, val: T) -> Pin<Box<dyn Future<Output = T>>> {
         self.initiate_fetch_op(index, val, ArrayOpCmd::FetchDiv)
     }
 }
 impl<T: ElementBitWiseOps + 'static> BitWiseOps<T> for AtomicArray<T> {
-    fn bit_and(
-        &self,
-        index: usize,
-        val: T,
-    ) -> Option<Box<dyn LamellarRequest<Output = ()>  >> {
+    fn bit_and(&self, index: usize, val: T) -> Option<Pin<Box<dyn Future<Output = T>>>> {
         // println!("and val {:?}",val);
         self.initiate_op(index, val, ArrayOpCmd::And)
     }
-    fn fetch_bit_and(
-        &self,
-        index: usize,
-        val: T,
-    ) -> Box<dyn LamellarRequest<Output = T>  > {
+    fn fetch_bit_and(&self, index: usize, val: T) -> Pin<Box<dyn Future<Output = T>>> {
         self.initiate_fetch_op(index, val, ArrayOpCmd::FetchAnd)
     }
-    fn bit_or(
-        &self,
-        index: usize,
-        val: T,
-    ) -> Option<Box<dyn LamellarRequest<Output = ()>  >> {
+    fn bit_or(&self, index: usize, val: T) -> Option<Pin<Box<dyn Future<Output = T>>>> {
         // println!("or");
         self.initiate_op(index, val, ArrayOpCmd::Or)
     }
-    fn fetch_bit_or(
-        &self,
-        index: usize,
-        val: T,
-    ) -> Box<dyn LamellarRequest<Output = T>  > {
+    fn fetch_bit_or(&self, index: usize, val: T) -> Pin<Box<dyn Future<Output = T>>> {
         // println!("fetch_or");
         self.initiate_fetch_op(index, val, ArrayOpCmd::FetchOr)
     }

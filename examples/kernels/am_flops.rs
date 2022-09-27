@@ -18,7 +18,7 @@ struct FlopAM {
 
 #[lamellar::am]
 impl LamellarAM for FlopAM {
-    fn exec(&self) -> usize {
+    async fn exec(&self) -> usize {
         let mut a = [1.2345f64; 128];
         for _i in 0..self.iterations {
             for a_i in a.iter_mut() {
@@ -44,7 +44,7 @@ impl LamellarAM for FlopAM {
 // #[cfg(feature = "nightly")]
 // #[lamellar::am]
 // impl LamellarAM for SimdAM {
-//     fn exec(&self) -> usize {
+//     async fn exec(&self) -> usize {
 //         let mut a: [Simd<[f64; 8]>; 16] = [f64x8::new(
 //             1.2345, 1.2345, 1.2345, 1.2345, 1.2345, 1.2345, 1.2345, 1.2345,
 //         ); 16];
@@ -68,6 +68,8 @@ fn main() {
     let world = lamellar::LamellarWorldBuilder::new()
         // .with_lamellae( Backend::Local )
         .build();
+    // let world_c = world.clone();
+    // world_c.block_on(async move {
     let my_pe = world.my_pe();
     let num_pes = world.num_pes();
     world.barrier();
@@ -108,14 +110,14 @@ fn main() {
         world.barrier();
         let cur_t = timer.elapsed().as_secs_f64();
         let tot_flop: usize = reqs
-            .iter()
-            .map(|r| r.get().drain(0..).sum::<usize>())
+            .drain(0..)
+            .map(|r| world.block_on(r).drain(0..).sum::<usize>())
             .sum();
         let task_granularity = ((cur_t * num_cores) / (num_tasks * num_pes) as f64) * 1000.0f64;
         if my_pe == 0 {
             println!(
                 "iter size: {:?} tot_flop: {:?} time: {:?} (issue time: {:?})
-                GFLOPS (avg): {:?} ({:?}%) task_gran: {:?}(ms)",
+                    GFLOPS (avg): {:?} ({:?}%) task_gran: {:?}(ms)",
                 num_iterations, //transfer size
                 tot_flop,       //num transfers
                 cur_t,          //transfer time
@@ -175,4 +177,5 @@ fn main() {
                 .fold(String::new(), |acc, &num| acc + &num.to_string() + ", ")
         );
     }
+    // });
 }

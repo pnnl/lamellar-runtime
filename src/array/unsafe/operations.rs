@@ -61,7 +61,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         &self,
         pe: usize,
         func: LamellarArcAm,
-    ) -> Box<dyn LamellarRequest<Output = ()>  > {
+    ) -> Box<dyn LamellarRequest<Output = ()>> {
         // println!("dist_op for UnsafeArray<T> ");
         self.inner
             .data
@@ -72,7 +72,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         &self,
         pe: usize,
         func: LamellarArcAm,
-    ) -> Box<dyn LamellarRequest<Output = T>  > {
+    ) -> Box<dyn LamellarRequest<Output = T>> {
         // println!("dist_op for UnsafeArray<T> ");
         self.inner
             .data
@@ -85,7 +85,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         val: T,
         local_index: usize,
         op: ArrayOpCmd,
-    ) -> Option<Box<dyn LamellarRequest<Output = ()>  >> {
+    ) -> Option<Box<dyn LamellarRequest<Output = ()>>> {
         // println!("initiate_op for UnsafeArray<T> ");
         if let Some(func) = OPS.get(&(op, TypeId::of::<T>())) {
             let array: UnsafeByteArray = self.clone().into();
@@ -120,7 +120,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         val: T,
         local_index: usize,
         op: ArrayOpCmd,
-    ) -> Box<dyn LamellarRequest<Output = T>  > {
+    ) -> Box<dyn LamellarRequest<Output = T>> {
         // println!("initiate_op for UnsafeArray<T> ");
         if let Some(func) = OPS.get(&(op, TypeId::of::<T>())) {
             let array: UnsafeByteArray = self.clone().into();
@@ -153,11 +153,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
 }
 
 impl<T: ElementArithmeticOps + 'static> ArithmeticOps<T> for UnsafeArray<T> {
-    fn add(
-        &self,
-        index: usize,
-        val: T,
-    ) -> Option<Box<dyn LamellarRequest<Output = ()>  >> {
+    fn add(&self, index: usize, val: T) -> Option<Box<dyn LamellarRequest<Output = ()>>> {
         let pe = self
             .inner
             .pe_for_dist_index(index)
@@ -170,11 +166,7 @@ impl<T: ElementArithmeticOps + 'static> ArithmeticOps<T> for UnsafeArray<T> {
             Some(self.initiate_op(index, val, local_index, ArrayOpCmd::Add))
         }
     }
-    fn fetch_add(
-        &self,
-        index: usize,
-        val: T,
-    ) -> Box<dyn LamellarRequest<Output = T>  > {
+    fn fetch_add(&self, index: usize, val: T) -> Box<dyn LamellarRequest<Output = T>> {
         let pe = self
             .inner
             .pe_for_dist_index(index)
@@ -187,11 +179,7 @@ impl<T: ElementArithmeticOps + 'static> ArithmeticOps<T> for UnsafeArray<T> {
             self.initiate_fetch_op(index, val, local_index, ArrayOpCmd::FetchAdd)
         }
     }
-    fn sub(
-        &self,
-        index: usize,
-        val: T,
-    ) -> Option<Box<dyn LamellarRequest<Output = ()>  >> {
+    fn sub(&self, index: usize, val: T) -> Option<Box<dyn LamellarRequest<Output = ()>>> {
         let pe = self
             .inner
             .pe_for_dist_index(index)
@@ -204,11 +192,7 @@ impl<T: ElementArithmeticOps + 'static> ArithmeticOps<T> for UnsafeArray<T> {
             self.initiate_op_old(index, val, local_index, ArrayOpCmd::Sub)
         }
     }
-    fn fetch_sub(
-        &self,
-        index: usize,
-        val: T,
-    ) -> Box<dyn LamellarRequest<Output = T>  > {
+    fn fetch_sub(&self, index: usize, val: T) -> Box<dyn LamellarRequest<Output = T>> {
         let pe = self
             .inner
             .pe_for_dist_index(index)
@@ -221,11 +205,7 @@ impl<T: ElementArithmeticOps + 'static> ArithmeticOps<T> for UnsafeArray<T> {
             self.initiate_fetch_op(index, val, local_index, ArrayOpCmd::FetchSub)
         }
     }
-    fn mul(
-        &self,
-        index: usize,
-        val: T,
-    ) -> Option<Box<dyn LamellarRequest<Output = ()>  >> {
+    fn mul(&self, index: usize, val: T) -> Option<Box<dyn LamellarRequest<Output = ()>>> {
         let pe = self
             .inner
             .pe_for_dist_index(index)
@@ -238,11 +218,7 @@ impl<T: ElementArithmeticOps + 'static> ArithmeticOps<T> for UnsafeArray<T> {
             self.initiate_op_old(index, val, local_index, ArrayOpCmd::Mul)
         }
     }
-    fn fetch_mul(
-        &self,
-        index: usize,
-        val: T,
-    ) -> Box<dyn LamellarRequest<Output = T>  > {
+    fn fetch_mul(&self, index: usize, val: T) -> Box<dyn LamellarRequest<Output = T>> {
         let pe = self
             .inner
             .pe_for_dist_index(index)
@@ -255,11 +231,7 @@ impl<T: ElementArithmeticOps + 'static> ArithmeticOps<T> for UnsafeArray<T> {
             self.initiate_fetch_op(index, val, local_index, ArrayOpCmd::FetchMul)
         }
     }
-    fn div(
-        &self,
-        index: usize,
-        val: T,
-    ) -> Option<Box<dyn LamellarRequest<Output = ()>  >> {
+    fn div(&self, index: usize, val: T) -> Option<Box<dyn LamellarRequest<Output = ()>>> {
         let pe = self
             .inner
             .pe_for_dist_index(index)
@@ -272,11 +244,7 @@ impl<T: ElementArithmeticOps + 'static> ArithmeticOps<T> for UnsafeArray<T> {
             self.initiate_op_old(index, val, local_index, ArrayOpCmd::Div)
         }
     }
-    fn fetch_div(
-        &self,
-        index: usize,
-        val: T,
-    ) -> Box<dyn LamellarRequest<Output = T>  > {
+    fn fetch_div(&self, index: usize, val: T) -> Box<dyn LamellarRequest<Output = T>> {
         let pe = self
             .inner
             .pe_for_dist_index(index)
@@ -292,11 +260,7 @@ impl<T: ElementArithmeticOps + 'static> ArithmeticOps<T> for UnsafeArray<T> {
 }
 
 impl<T: ElementBitWiseOps + 'static> BitWiseOps<T> for UnsafeArray<T> {
-    fn bit_and(
-        &self,
-        index: usize,
-        val: T,
-    ) -> Option<Box<dyn LamellarRequest<Output = ()>  >> {
+    fn bit_and(&self, index: usize, val: T) -> Option<Box<dyn LamellarRequest<Output = ()>>> {
         let pe = self
             .inner
             .pe_for_dist_index(index)
@@ -309,11 +273,7 @@ impl<T: ElementBitWiseOps + 'static> BitWiseOps<T> for UnsafeArray<T> {
             self.initiate_op_old(index, val, local_index, ArrayOpCmd::And)
         }
     }
-    fn fetch_bit_and(
-        &self,
-        index: usize,
-        val: T,
-    ) -> Box<dyn LamellarRequest<Output = T>  > {
+    fn fetch_bit_and(&self, index: usize, val: T) -> Box<dyn LamellarRequest<Output = T>> {
         let pe = self
             .inner
             .pe_for_dist_index(index)
@@ -327,11 +287,7 @@ impl<T: ElementBitWiseOps + 'static> BitWiseOps<T> for UnsafeArray<T> {
         }
     }
 
-    fn bit_or(
-        &self,
-        index: usize,
-        val: T,
-    ) -> Option<Box<dyn LamellarRequest<Output = ()>  >> {
+    fn bit_or(&self, index: usize, val: T) -> Option<Box<dyn LamellarRequest<Output = ()>>> {
         let pe = self
             .inner
             .pe_for_dist_index(index)
@@ -344,11 +300,7 @@ impl<T: ElementBitWiseOps + 'static> BitWiseOps<T> for UnsafeArray<T> {
             self.initiate_op_old(index, val, local_index, ArrayOpCmd::Or)
         }
     }
-    fn fetch_bit_or(
-        &self,
-        index: usize,
-        val: T,
-    ) -> Box<dyn LamellarRequest<Output = T>  > {
+    fn fetch_bit_or(&self, index: usize, val: T) -> Box<dyn LamellarRequest<Output = T>> {
         let pe = self
             .inner
             .pe_for_dist_index(index)

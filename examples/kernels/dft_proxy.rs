@@ -6,8 +6,8 @@
 /// as well as a (single process) shared memory version using Rayon.
 /// --------------------------------------------------------------------
 use lamellar::array::{
-    AtomicArray, DistributedIterator, Distribution, LocalLockAtomicArray, ReadOnlyArray,
-    SerialIterator, UnsafeArray,
+    iterator::distributed_iterator::Schedule, AtomicArray, DistributedIterator, Distribution,
+    LocalLockAtomicArray, ReadOnlyArray, SerialIterator, UnsafeArray,
 };
 use lamellar::{ActiveMessaging, LamellarWorld};
 use lamellar::{RemoteMemoryRegion, SharedMemoryRegion};
@@ -32,7 +32,7 @@ struct ReduceAM {
 
 #[lamellar::am]
 impl LamellarAM for ReduceAM {
-    fn exec(self) -> f64 {
+    async fn exec(self) -> f64 {
         self.spectrum.as_slice().unwrap().iter().sum::<f64>()
     }
 }
@@ -48,7 +48,7 @@ struct LocalSumAM {
 
 #[lamellar::am]
 impl LamellarAM for LocalSumAM {
-    fn exec() {
+    async fn exec() {
         let spectrum_slice = unsafe { self.spectrum.as_mut_slice().unwrap() };
         let k_prime = self.k + self.pe * spectrum_slice.len();
         let signal = self.signal.as_slice().unwrap();
@@ -73,7 +73,7 @@ struct RemoteSumAM {
 
 #[lamellar::am]
 impl LamellarAM for RemoteSumAM {
-    fn exec(self) {
+    async fn exec(self) {
         let _lock = LOCK.lock();
         for (k, spec_bin) in unsafe { self.spectrum.as_mut_slice().unwrap().iter_mut().enumerate() }
         {
@@ -270,6 +270,45 @@ fn dft_lamellar_array_opt(
     timer.elapsed().as_secs_f64()
 }
 
+fn dft_lamellar_array_opt_test(
+    signal: UnsafeArray<f64>,
+    spectrum: UnsafeArray<f64>,
+    buf_size: usize,
+) -> f64 {
+    let timer = Instant::now();
+    let sig_len = signal.len();
+    signal
+        .ser_iter()
+        .copied_chunks(buf_size)
+        .buffered(2)
+        .into_iter()
+        .enumerate()
+        .for_each(|(i, chunk)| {
+            let signal = chunk.clone();
+            spectrum.dist_iter_mut().enumerate().for_each_with_schedule(
+                Schedule::Dynamic,
+                move |(k, spec_bin)| {
+                    let mut sum = 0f64;
+                    for (j, &x) in signal
+                        .iter()
+                        .enumerate()
+                        .map(|(j, x)| (j + i * buf_size, x))
+                    {
+                        let angle =
+                            -1f64 * (j * k) as f64 * 2f64 * std::f64::consts::PI / sig_len as f64;
+                        let twiddle = angle * (angle.cos() + angle * angle.sin());
+                        sum = sum + twiddle * x;
+                    }
+                    // let _lock = LOCK.lock();
+                    *spec_bin += sum;
+                },
+            );
+        });
+    spectrum.wait_all();
+    spectrum.barrier();
+    timer.elapsed().as_secs_f64()
+}
+
 // same as above but uses safe atomic arrays
 fn dft_lamellar_array_opt_2(
     signal: ReadOnlyArray<f64>,
@@ -366,16 +405,17 @@ fn main() {
         .and_then(|s| s.parse::<usize>().ok())
         .unwrap_or_else(|| 10);
 
-    let run_single_node = args
-        .get(3)
-        .and_then(|s| {
-            if s == "--run-local" {
-                Some(true)
-            } else {
-                Some(false)
-            }
-        })
-        .unwrap_or_else(|| false);
+    // let run_single_node = args
+    //     .get(3)
+    //     .and_then(|s| {
+    //         if s == "--run-local" {
+    //             Some(true)
+    //         } else {
+    //             Some(false)
+    //         }
+    //     })
+    //     .unwrap_or_else(|| false);
+    let run_single_node = false;
 
     let mut rng = StdRng::seed_from_u64(10);
 
@@ -509,6 +549,21 @@ fn main() {
             if my_pe == 0 {
                 println!("ua i: {:?} {:?}", _i, times[2].last());
             }
+
+            //--------------lamellar array--------------------------
+            full_spectrum_array
+                .dist_iter_mut()
+                .for_each(|elem| *elem = 0.0);
+            full_spectrum_array.wait_all();
+            full_spectrum_array.barrier();
+            times[3].push(dft_lamellar_array_opt_test(
+                full_signal_array.clone(),
+                full_spectrum_array.clone(),
+                buf_amt,
+            ));
+            if my_pe == 0 {
+                println!("uat i: {:?} {:?}", _i, times[3].last());
+            }
             // let time = timer.elapsed().as_secs_f64();
             // if my_pe == 0 {
             //     println!(
@@ -589,10 +644,10 @@ fn main() {
                 "optimized UnsafeArray time: {:?}",
                 times[2].iter().sum::<f64>() / times[2].len() as f64
             );
-            // println!(
-            //     "AtomicArray time: {:?}",
-            //     times[3].iter().sum::<f64>() / times[1].len() as f64
-            // );
+            println!(
+                "optimized UnsafeArray test time: {:?}",
+                times[3].iter().sum::<f64>() / times[2].len() as f64
+            );
             println!(
                 "optimized AtomicArray time: {:?}",
                 times[4].iter().sum::<f64>() / times[2].len() as f64

@@ -1,10 +1,9 @@
-
 use assert_cmd::Command;
 use serial_test::serial;
 use std::path::PathBuf;
 
 macro_rules! create_test {
-    ($array1:ty,$array2:ty) =>{
+    ($array1:ty,$array2:ty) => {
         paste::paste! {
             #[test]
             #[serial]
@@ -32,7 +31,6 @@ macro_rules! into_types {
     }
 }
 
-
 macro_rules! loop_type {
     ( ($($array1:ty),*), $array2:tt) =>{
         // $(
@@ -43,12 +41,15 @@ macro_rules! loop_type {
 }
 
 macro_rules! create_into_tests {
-    ( $array:tt) =>{
-        loop_type!($array,$array);
-    }
+    ( $array:tt) => {
+        loop_type!($array, $array);
+    };
 }
 
-
-create_into_tests!(
-    (UnsafeArray, LocalOnlyArray, ReadOnlyArray, AtomicArray, LocalLockAtomicArray)
-);
+create_into_tests!((
+    UnsafeArray,
+    LocalOnlyArray,
+    ReadOnlyArray,
+    AtomicArray,
+    LocalLockAtomicArray
+));

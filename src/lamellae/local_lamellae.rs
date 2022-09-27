@@ -20,7 +20,13 @@ pub(crate) struct Local {
     allocs: Arc<Mutex<HashMap<usize, MyPtr>>>,
 }
 
-#[derive(Clone)]
+impl std::fmt::Debug for Local {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Local")
+    }
+}
+
+#[derive(Clone, Debug)]
 pub(crate) struct LocalData {}
 impl Des for LocalData {
     fn deserialize_header(&self) -> Option<SerializeHeader> {

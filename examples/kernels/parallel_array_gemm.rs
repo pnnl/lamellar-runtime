@@ -1,3 +1,4 @@
+use futures::StreamExt;
 /// ----------------Lamellar Parallel Array GEMM---------------------------------------------------
 /// This performs a distributed GEMM, iteratively performing dot products of rows from the A matrix
 /// with columns fro the B matrix. Each pe only iterates over the local rows of the A matrix simultaneously,
@@ -9,6 +10,7 @@
 use lamellar::array::{DistributedIterator, Distribution, SerialIterator, UnsafeArray};
 use lazy_static::lazy_static;
 use parking_lot::Mutex;
+
 lazy_static! {
     static ref LOCK: Mutex<()> = Mutex::new(());
 }
@@ -86,11 +88,11 @@ fn main() {
     if my_pe == 0 {
         println!("elapsed {:?} Gflops: {:?}", elapsed, num_gops / elapsed,);
     }
-    c.dist_iter_mut().enumerate().for_each(|(i, x)| {
+    world.block_on(c.dist_iter_mut().enumerate().for_each(|(i, x)| {
         //check that c == a
         if *x != i as f32 {
             println!("error {:?} {:?}", x, i);
         }
         *x = 0.0
-    }).wait();
+    }));
 }

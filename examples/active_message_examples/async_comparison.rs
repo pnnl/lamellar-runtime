@@ -20,7 +20,7 @@ struct StdSleepAM {
 
 #[lamellar::am]
 impl LamellarAM for StdSleepAM {
-    fn exec(self) {
+    async fn exec(self) {
         println!(
             "\tsleeping for {:?} sec on pe: {:?}",
             self.secs,
@@ -43,7 +43,7 @@ struct AsyncSleepAM {
 
 #[lamellar::am]
 impl LamellarAM for AsyncSleepAM {
-    fn exec(self) {
+    async fn exec(self) {
         println!(
             "\tsleeping for {:?} sec on pe: {:?}",
             self.secs,

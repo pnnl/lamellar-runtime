@@ -81,7 +81,7 @@ macro_rules! add_test{
                 #[cfg(feature="non-buffered-array-ops")]
                 {
                     for i in 0..(pe_max_val as usize){
-                        let val = array.fetch_add(idx,1 as $t).get();
+                        let val =  world.block_on(array.fetch_add(idx,1 as $t));
                         if val < prev{
                             println!("full 1: {:?} {:?} {:?}",i,val,prev);
                             success = false;
@@ -96,7 +96,7 @@ macro_rules! add_test{
                         reqs.push(array.fetch_add(idx,1 as $t));
                     }
                     for req in reqs{
-                        let val = req.get()[0];
+                        let val =  world.block_on(req);
                         if val < prev{
                             println!("full 1: {:?} {:?}",val,prev);
                             success = false;
@@ -125,7 +125,7 @@ macro_rules! add_test{
             {
                 for i in 0..num_updates{
                     let idx = rand_idx.sample(&mut rng);
-                        let val = array.fetch_add(idx,1 as $t).get();
+                        let val =  world.block_on(array.fetch_add(idx,1 as $t));
                         if val < prev_vals[idx]{
                             println!("full 3: {:?} {:?} {:?}",i,val,prev_vals[idx]);
                             success = false;
@@ -143,7 +143,7 @@ macro_rules! add_test{
                     reqs.push((array.fetch_add(idx,1 as $t),idx))
                 }
                 for (req,_idx) in reqs{
-                    let _val = req.get();
+                    let _val =  world.block_on(req);
                     // if val < prev_vals[idx]{
                     //     println!("full 3:  {:?} {:?}",val,prev_vals[idx]);
                     //     success = false;
@@ -176,7 +176,7 @@ macro_rules! add_test{
                 #[cfg(feature="non-buffered-array-ops")]
                 {
                     for i in 0..(pe_max_val as usize){
-                        let val = sub_array.fetch_add(idx,1 as $t).get();
+                        let val =  world.block_on(sub_array.fetch_add(idx,1 as $t));
                         if val < prev{
                             println!("half 1: {:?} {:?} {:?}",i,val,prev);
                             success = false;
@@ -191,7 +191,7 @@ macro_rules! add_test{
                         reqs.push(sub_array.fetch_add(idx,1 as $t));
                     }
                     for req in reqs{
-                        let val = req.get()[0];
+                        let val =  world.block_on(req);
                         if val < prev{
                             println!("half 1: {:?} {:?}",val,prev);
                             success = false;
@@ -219,7 +219,7 @@ macro_rules! add_test{
             {
                 for i in 0..num_updates{
                     let idx = rand_idx.sample(&mut rng);
-                    let val = sub_array.fetch_add(idx,1 as $t).get();
+                    let val =  world.block_on(sub_array.fetch_add(idx,1 as $t));
                         if val < prev_vals[idx]{
                             println!("half 3: {:?} {:?} {:?}",i,val,prev_vals[idx]);
                             success = false;
@@ -236,7 +236,7 @@ macro_rules! add_test{
                     reqs.push((sub_array.fetch_add(idx,1 as $t),idx))
                 }
                 for (req,_idx) in reqs{
-                    let _val = req.get();
+                    let _val =  world.block_on(req);
                     // if val < prev_vals[idx]{
                     //     println!("half 3:  {:?} {:?}",val,prev_vals[idx]);
                     //     success = false;
@@ -272,7 +272,7 @@ macro_rules! add_test{
                     #[cfg(feature="non-buffered-array-ops")]
                     {
                         for i in 0..(pe_max_val as usize){
-                            let val = sub_array.fetch_add(idx,1 as $t).get();
+                            let val =  world.block_on(sub_array.fetch_add(idx,1 as $t));
                             if val < prev{
                                 println!("pe 1: {:?} {:?} {:?}",i,val,prev);
                                 success = false;
@@ -287,7 +287,7 @@ macro_rules! add_test{
                             reqs.push(sub_array.fetch_add(idx,1 as $t));
                         }
                         for req in reqs{
-                            let val = req.get()[0];
+                            let val =  world.block_on(req);
                             if val < prev{
                                 println!("pe 1: {:?} {:?}",val,prev);
                                 success = false;
@@ -315,7 +315,7 @@ macro_rules! add_test{
                 {
                     for i in 0..num_updates{
                         let idx = rand_idx.sample(&mut rng);
-                        let val = sub_array.fetch_add(idx,1 as $t).get();
+                        let val =  world.block_on(sub_array.fetch_add(idx,1 as $t));
                             if val < prev_vals[idx]{
                                 println!("pe 3: {:?} {:?} {:?}",i,val,prev_vals[idx]);
                                 success = false;
@@ -332,7 +332,7 @@ macro_rules! add_test{
                         reqs.push((sub_array.fetch_add(idx,1 as $t),idx))
                     }
                     for (req,_idx) in reqs{
-                        let _val = req.get();
+                        let _val =  world.block_on(req);
                         // if val < prev_vals[idx]{
                         //     println!("pe 3:  {:?} {:?}",val,prev_vals[idx]);
                         //     success = false;
@@ -362,7 +362,10 @@ macro_rules! add_test{
 
 macro_rules! initialize_array2 {
     (UnsafeArray,$array:ident,$init_val:ident) => {
-        $array.dist_iter_mut().enumerate().for_each(move |(i,x)| *x = i);
+        $array
+            .dist_iter_mut()
+            .enumerate()
+            .for_each(move |(i, x)| *x = i);
         $array.wait_all();
         $array.barrier();
     };
@@ -375,7 +378,10 @@ macro_rules! initialize_array2 {
         $array.barrier();
     };
     (LocalLockAtomicArray,$array:ident,$init_val:ident) => {
-        $array.dist_iter_mut().enumerate().for_each(move |(i,x)| *x = i);
+        $array
+            .dist_iter_mut()
+            .enumerate()
+            .for_each(move |(i, x)| *x = i);
         $array.wait_all();
         $array.barrier();
     };
@@ -389,8 +395,8 @@ macro_rules! check_results {
         $array.barrier();
         // println!("test {:?} reqs len {:?}", $test, $reqs.len());
         let mut req_cnt=0;
-        for (i, req) in $reqs.iter().enumerate() {
-            let req = req.get();
+        for (i, req) in $reqs.drain(0..).enumerate() {
+            let req =  $array.block_on(req);
             // println!("sub_req len: {:?}", req.len());
             for (j, res) in req.iter().enumerate() {
                 if !(res >= &0 && res < &(req_cnt + $num_pes)) {
@@ -448,51 +454,51 @@ macro_rules! input_test{
             //individual T------------------------------
             let mut reqs = vec![];
             for i in 0..array.len(){
-                reqs.push(array.fetch_add(i,1));
+                reqs.push(array.batch_fetch_add(i,1));
             }
             check_results!($array,array,num_pes,reqs,"T");
             //individual T------------------------------
             let mut reqs = vec![];
             for i in 0..array.len(){
-                reqs.push(array.fetch_add(&i,1));
+                reqs.push(array.batch_fetch_add(&i,1));
             }
             check_results!($array,array,num_pes,reqs,"&T");
             //&[T]------------------------------
             let vec=(0..array.len()).collect::<Vec<usize>>();
             let slice = &vec[..];
             let mut reqs = vec![];
-            reqs.push(array.fetch_add(slice,1));
+            reqs.push(array.batch_fetch_add(slice,1));
             check_results!($array,array,num_pes,reqs,"&[T]");
             //scoped &[T]------------------------------
             let mut reqs = vec![];
             {
                 let vec=(0..array.len()).collect::<Vec<usize>>();
                 let slice = &vec[..];
-                reqs.push(array.fetch_add(slice,1));
+                reqs.push(array.batch_fetch_add(slice,1));
             }
             check_results!($array,array,num_pes,reqs,"scoped &[T]");
             // Vec<T>------------------------------
             let vec=(0..array.len()).collect::<Vec<usize>>();
             let mut reqs = vec![];
-            reqs.push(array.fetch_add(vec,1));
+            reqs.push(array.batch_fetch_add(vec,1));
             check_results!($array,array,num_pes,reqs,"Vec<T>");
             // &Vec<T>------------------------------
             let mut reqs = vec![];
             let vec=(0..array.len()).collect::<Vec<usize>>();
-            reqs.push(array.fetch_add(&vec,1));
+            reqs.push(array.batch_fetch_add(&vec,1));
             check_results!($array,array,num_pes,reqs,"&Vec<T>");
             // Scoped Vec<T>------------------------------
             let mut reqs = vec![];
             {
                 let vec=(0..array.len()).collect::<Vec<usize>>();
-                reqs.push(array.fetch_add(vec,1));
+                reqs.push(array.batch_fetch_add(vec,1));
             }
             check_results!($array,array,num_pes,reqs,"scoped Vec<T>");
             // Scoped &Vec<T>------------------------------
             let mut reqs = vec![];
             {
                 let vec=(0..array.len()).collect::<Vec<usize>>();
-                reqs.push(array.fetch_add(&vec,1));
+                reqs.push(array.batch_fetch_add(&vec,1));
             }
             check_results!($array,array,num_pes,reqs,"scoped &Vec<T>");
 
@@ -505,11 +511,11 @@ macro_rules! input_test{
                     slice[i]=i;
                 }
             }
-            reqs.push(array.fetch_add(lmr.clone(),1));
+            reqs.push(array.batch_fetch_add(lmr.clone(),1));
             check_results!($array,array,num_pes,reqs,"LMR<T>");
             // &LMR<T>------------------------------
             let mut reqs = vec![];
-            reqs.push(array.fetch_add(&lmr,1));
+            reqs.push(array.batch_fetch_add(&lmr,1));
             check_results!($array,array,num_pes,reqs,"&LMR<T>");
             drop(lmr);
             // scoped LMR<T>------------------------------
@@ -522,7 +528,7 @@ macro_rules! input_test{
                         slice[i]=i;
                     }
                 }
-                reqs.push(array.fetch_add(lmr.clone(),1));
+                reqs.push(array.batch_fetch_add(lmr.clone(),1));
                 check_results!($array,array,num_pes,reqs,"scoped LMR<T>");
             }
             // scoped &LMR<T>------------------------------
@@ -535,7 +541,7 @@ macro_rules! input_test{
                         slice[i]=i;
                     }
                 }
-                reqs.push(array.fetch_add(&lmr,1));
+                reqs.push(array.batch_fetch_add(&lmr,1));
                 check_results!($array,array,num_pes,reqs,"scoped &LMR<T>");
             }
 
@@ -548,11 +554,11 @@ macro_rules! input_test{
                     slice[i]=i;
                 }
             }
-            reqs.push(array.fetch_add(smr.clone(),1));
+            reqs.push(array.batch_fetch_add(smr.clone(),1));
             check_results!($array,array,num_pes,reqs,"SMR<T>");
             // &SMR<T>------------------------------
             let mut reqs = vec![];
-            reqs.push(array.fetch_add(&smr,1));
+            reqs.push(array.batch_fetch_add(&smr,1));
             check_results!($array,array,num_pes,reqs,"&SMR<T>");
             drop(smr);
             // scoped SMR<T>------------------------------
@@ -565,7 +571,7 @@ macro_rules! input_test{
                         slice[i]=i;
                     }
                 }
-                reqs.push(array.fetch_add(smr,1));
+                reqs.push(array.batch_fetch_add(smr,1));
                 check_results!($array,array,num_pes,reqs,"scoped SMR<T>");
             }
             // scoped &SMR<T>------------------------------
@@ -578,7 +584,7 @@ macro_rules! input_test{
                         slice[i]=i;
                     }
                 }
-                reqs.push(array.fetch_add(&smr,1));
+                reqs.push(array.batch_fetch_add(&smr,1));
                 check_results!($array,array,num_pes,reqs,"scoped &SMR<T>");
             }
 
@@ -588,7 +594,7 @@ macro_rules! input_test{
             // check_results!($array,array,num_pes,reqs,"UnsafeArray<T>");
             // UnsafeArray<T>------------------------------
             let mut reqs = vec![];
-            reqs.push(array.fetch_add(&input_array,1));
+            reqs.push(array.batch_fetch_add(&input_array,1));
             check_results!($array,array,num_pes,reqs,"&UnsafeArray<T>");
 
             // ReadOnlyArray<T>------------------------------
@@ -598,7 +604,7 @@ macro_rules! input_test{
             // check_results!($array,array,num_pes,reqs,"ReadOnlyArray<T>");
             // ReadOnlyArray<T>------------------------------
             let mut reqs = vec![];
-            reqs.push(array.fetch_add(&input_array,1));
+            reqs.push(array.batch_fetch_add(&input_array,1));
             check_results!($array,array,num_pes,reqs,"&ReadOnlyArray<T>");
 
             // AtomicArray<T>------------------------------
@@ -608,7 +614,7 @@ macro_rules! input_test{
             // check_results!($array,array,num_pes,reqs,"AtomicArray<T>");
             // AtomicArray<T>------------------------------
             let mut reqs = vec![];
-            reqs.push(array.fetch_add(&input_array,1));
+            reqs.push(array.batch_fetch_add(&input_array,1));
             check_results!($array,array,num_pes,reqs,"&AtomicArray<T>");
 
              // LocalLockAtomicArray<T>------------------------------
@@ -618,7 +624,7 @@ macro_rules! input_test{
             //  check_results!($array,array,num_pes,reqs,"LocalLockAtomicArray<T>");
              // LocalLockAtomicArray<T>------------------------------
              let mut reqs = vec![];
-             reqs.push(array.fetch_add(&input_array,1));
+             reqs.push(array.batch_fetch_add(&input_array,1));
              check_results!($array,array,num_pes,reqs,"&LocalLockAtomicArray<T>");
        }
     }

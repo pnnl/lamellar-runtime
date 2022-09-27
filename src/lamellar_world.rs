@@ -1,16 +1,20 @@
 use crate::active_messaging::*;
 use crate::lamellae::{create_lamellae, Backend, Lamellae, LamellaeComm, LamellaeInit};
 use crate::lamellar_arch::LamellarArch;
-use crate::lamellar_request::{LamellarMultiRequest, LamellarRequest};
 use crate::lamellar_team::{LamellarTeam, LamellarTeamRT};
 use crate::memregion::{
     local::LocalMemoryRegion, shared::SharedMemoryRegion, Dist, RemoteMemoryRegion,
 };
-use crate::scheduler::{create_scheduler, SchedulerType};
+use crate::scheduler::{create_scheduler, SchedulerQueue, SchedulerType};
 use lamellar_prof::*;
 // use log::trace;
+
+use tracing::*;
+
+use futures::Future;
 use parking_lot::RwLock;
 use std::collections::HashMap;
+use std::pin::Pin;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc; //, Weak};
 
@@ -20,10 +24,10 @@ lazy_static! {
 }
 
 /// Represents all the pe's (processing elements) within a given distributed execution
+#[derive(Debug)]
 pub struct LamellarWorld {
     team: Arc<LamellarTeam>,
     pub(crate) team_rt: std::pin::Pin<Arc<LamellarTeamRT>>,
-    // teams: Arc<RwLock<HashMap<u64, Weak<LamellarTeamRT>>>>,
     _counters: Arc<AMCounters>,
     my_pe: usize,
     num_pes: usize,
@@ -32,96 +36,37 @@ pub struct LamellarWorld {
 
 //#[prof]
 impl ActiveMessaging for LamellarWorld {
+    #[tracing::instrument(skip_all)]
     fn wait_all(&self) {
         self.team.wait_all();
     }
+    #[tracing::instrument(skip_all)]
     fn barrier(&self) {
         self.team.barrier();
     }
-    fn exec_am_all<F>(&self, am: F) -> Box<dyn LamellarMultiRequest<Output = F::Output>>
+    #[tracing::instrument(skip_all)]
+    fn exec_am_all<F>(&self, am: F) -> Pin<Box<dyn Future<Output = Vec<F::Output>> + Send>>
     where
         F: RemoteActiveMessage + LamellarAM + Serde + AmDist,
     {
         self.team.exec_am_all(am)
     }
-    fn exec_am_pe<F>(&self, pe: usize, am: F) -> Box<dyn LamellarRequest<Output = F::Output>>
+    #[tracing::instrument(skip_all)]
+    fn exec_am_pe<F>(&self, pe: usize, am: F) -> Pin<Box<dyn Future<Output = F::Output> + Send>>
     where
         F: RemoteActiveMessage + LamellarAM + Serde + AmDist,
     {
         assert!(pe < self.num_pes(), "invalid pe: {:?}", pe);
         self.team.exec_am_pe(pe, am)
     }
-    fn exec_am_local<F>(&self, am: F) -> Box<dyn LamellarRequest<Output = F::Output>>
+    #[tracing::instrument(skip_all)]
+    fn exec_am_local<F>(&self, am: F) -> Pin<Box<dyn Future<Output = F::Output> + Send>>
     where
         F: LamellarActiveMessage + LocalAM + 'static,
     {
         self.team.exec_am_local(am)
     }
 }
-
-//#feature gated closures for those with nightly
-// #[cfg(feature = "nightly")]
-// use crate::active_messaging::remote_closures::ClosureRet;
-// #[cfg(feature = "nightly")]
-// //#[prof]
-// impl RemoteClosures for LamellarWorld {
-//     fn exec_closure_all<
-//         F: FnOnce() -> T
-//
-//
-//             + serde::ser::Serialize
-//             + serde::de::DeserializeOwned
-//             + std::clone::Clone
-//             + 'static,
-//         T: std::any::Any
-//
-//
-//             + serde::ser::Serialize
-//             + serde::de::DeserializeOwned
-//             + std::clone::Clone,
-//     >(
-//         &self,
-//         func: F,
-//     ) -> Box<dyn LamellarRequest<Output = F::Output>  > {
-//         trace!("[{:?}] exec closure all", self.my_pe);
-//         self.team_rt.exec_closure_all(func)
-//     }
-
-//     #[cfg(feature = "nightly")]
-//     fn exec_closure_pe<
-//         F: FnOnce() -> T
-//
-//
-//             + serde::ser::Serialize
-//             + serde::de::DeserializeOwned
-//             + std::clone::Clone
-//             + 'static,
-//         T: std::any::Any
-//
-//
-//             + serde::ser::Serialize
-//             + serde::de::DeserializeOwned
-//             + std::clone::Clone,
-//     >(
-//         &self,
-//         pe: usize,
-//         func: F,
-//     ) -> Box<dyn LamellarRequest<Output = F::Output>  > {
-//         assert!(pe < self.num_pes(), "invalid pe: {:?}", pe);
-//         trace!("[{:?}] world exec_closure_pe: [{:?}]", self.my_pe, pe);
-//         self.team_rt.exec_closure_pe(pe, func)
-//     }
-//     #[cfg(feature = "nightly")]
-//     fn exec_closure_on_return<
-//         F: FnOnce() -> T + serde::ser::Serialize + serde::de::DeserializeOwned + 'static,
-//         T: std::any::Any + serde::ser::Serialize + serde::de::DeserializeOwned + std::clone::Clone,
-//     >(
-//         &self,
-//         func: F,
-//     ) -> ClosureRet {
-//         self.team_rt.exec_closure_on_return(func)
-//     }
-// }
 
 //#[prof]
 impl RemoteMemoryRegion for LamellarWorld {
@@ -131,6 +76,7 @@ impl RemoteMemoryRegion for LamellarWorld {
     // ///
     // /// * `size` - number of elements of T to allocate a memory region for -- (not size in bytes)
     // ///
+    #[tracing::instrument(skip_all)]
     fn alloc_shared_mem_region<T: Dist>(&self, size: usize) -> SharedMemoryRegion<T> {
         self.barrier();
         self.team.alloc_shared_mem_region::<T>(size)
@@ -142,6 +88,7 @@ impl RemoteMemoryRegion for LamellarWorld {
     // ///
     // /// * `size` - number of elements of T to allocate a memory region for -- (not size in bytes)
     // ///
+    #[tracing::instrument(skip_all)]
     fn alloc_local_mem_region<T: Dist>(&self, size: usize) -> LocalMemoryRegion<T> {
         self.team.alloc_local_mem_region::<T>(size)
     }
@@ -170,16 +117,26 @@ impl RemoteMemoryRegion for LamellarWorld {
 //#[prof]
 impl LamellarWorld {
     /// gets the id of this pe (roughly equivalent to MPI Rank)
+    #[tracing::instrument(skip_all)]
     pub fn my_pe(&self) -> usize {
         self.my_pe
     }
     /// returns nummber of pe's in this execution
+    #[tracing::instrument(skip_all)]
     pub fn num_pes(&self) -> usize {
         self.num_pes
     }
 
+    pub fn block_on<F>(&self, f: F) -> F::Output
+    where
+        F: Future,
+    {
+        trace_span!("block_on").in_scope(|| self.team_rt.scheduler.block_on(f))
+    }
+
     /// return the number of megabytes sent
     #[allow(non_snake_case)]
+    #[tracing::instrument(skip_all)]
     pub fn MB_sent(&self) -> f64 {
         let mut sent = vec![];
         for (_backend, lamellae) in LAMELLAES.read().iter() {
@@ -193,6 +150,7 @@ impl LamellarWorld {
     // }
 
     /// create a team containing any number of pe's from the world using the provided LamellarArch (layout)
+    #[tracing::instrument(skip_all)]
     pub fn create_team_from_arch<L>(&self, arch: L) -> Option<Arc<LamellarTeam>>
     where
         L: LamellarArch + std::hash::Hash + 'static,
@@ -208,19 +166,22 @@ impl LamellarWorld {
     }
 
     /// return the team encompassing all pe's in the world
+    #[tracing::instrument(skip_all)]
     pub fn team(&self) -> Arc<LamellarTeam> {
         self.team.clone()
     }
-
+    #[tracing::instrument(skip_all)]
     pub fn barrier(&self) {
         self.team.barrier();
     }
+    #[tracing::instrument(skip_all)]
     pub fn wait_all(&self) {
         self.team.wait_all();
     }
 }
 
 impl Clone for LamellarWorld {
+    #[tracing::instrument(skip_all)]
     fn clone(&self) -> Self {
         self.ref_cnt.fetch_add(1, Ordering::SeqCst);
         LamellarWorld {
@@ -236,6 +197,7 @@ impl Clone for LamellarWorld {
 }
 //#[prof]
 impl Drop for LamellarWorld {
+    #[tracing::instrument(skip_all)]
     fn drop(&mut self) {
         let cnt = self.ref_cnt.fetch_sub(1, Ordering::SeqCst);
         if cnt == 1 {
@@ -265,6 +227,7 @@ impl Drop for LamellarWorld {
 }
 
 /// Lamellar World Builder used for customization
+#[derive(Debug)]
 pub struct LamellarWorldBuilder {
     primary_lamellae: Backend,
     // secondary_lamellae: HashSet<Backend>,
@@ -273,17 +236,34 @@ pub struct LamellarWorldBuilder {
 
 //#[prof]
 impl LamellarWorldBuilder {
+    #[tracing::instrument(skip_all)]
     pub fn new() -> LamellarWorldBuilder {
         // simple_logger::init().unwrap();
         // trace!("New world builder");
+        let scheduler = match std::env::var("LAMELLAR_SCHEDULER") {
+            Ok(val) => {
+                let scheduler = val.parse::<usize>().unwrap();
+                if scheduler == 0 {
+                    SchedulerType::WorkStealing
+                } else if scheduler == 1 {
+                    SchedulerType::NumaWorkStealing
+                } else if scheduler == 2 {
+                    SchedulerType::NumaWorkStealing2
+                } else {
+                    SchedulerType::WorkStealing
+                }
+            }
+            Err(_) => SchedulerType::WorkStealing,
+        };
         LamellarWorldBuilder {
             primary_lamellae: Default::default(),
             // secondary_lamellae: HashSet::new(),
-            scheduler: SchedulerType::WorkStealing,
+            scheduler: scheduler,
         }
     }
 
     /// specify the lamellae backend to use for this execution
+    #[tracing::instrument(skip_all)]
     pub fn with_lamellae(mut self, lamellae: Backend) -> LamellarWorldBuilder {
         self.primary_lamellae = lamellae;
         self
@@ -295,19 +275,21 @@ impl LamellarWorldBuilder {
     // }
 
     /// specify the scheduler to use for this execution
+    #[tracing::instrument(skip_all)]
     pub fn with_scheduler(mut self, sched: SchedulerType) -> LamellarWorldBuilder {
         self.scheduler = sched;
         self
     }
 
     /// Instantiate a world handle
+    #[tracing::instrument(skip_all)]
     pub fn build(self) -> LamellarWorld {
         // let teams = Arc::new(RwLock::new(HashMap::new()));
         let mut lamellae_builder = create_lamellae(self.primary_lamellae);
         let (my_pe, num_pes) = lamellae_builder.init_fabric();
         let sched_new = Arc::new(create_scheduler(
             self.scheduler,
-            // num_pes,
+            num_pes,
             // my_pe,
             // teams.clone(),
         ));

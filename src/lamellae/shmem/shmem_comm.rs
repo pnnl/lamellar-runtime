@@ -2,6 +2,7 @@ use crate::lamellae::comm::*;
 use crate::lamellae::command_queues::CommandQueue;
 use crate::lamellae::{
     AllocationType, Des, SerializeHeader, SerializedData, SerializedDataOps, SubData,
+    SERIALIZE_HEADER_LEN,
 };
 use crate::lamellar_alloc::{BTreeAlloc, LamellarAlloc};
 
@@ -17,6 +18,13 @@ struct MyShmem {
     len: usize,
     _shmem: Shmem,
 }
+
+impl std::fmt::Debug for MyShmem {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "MyShmem{{ data: {:?}, len: {:?} }}", self.data, self.len)
+    }
+}
+
 unsafe impl Sync for MyShmem {}
 unsafe impl Send for MyShmem {}
 
@@ -37,11 +45,12 @@ impl MyShmem {
 
 fn attach_to_shmem(size: usize, id: &str, header: usize, create: bool) -> MyShmem {
     let size = size + std::mem::size_of::<usize>();
-    let shmem_id = "lamellar_".to_owned() + &(size.to_string()) + "_" + id;
+    let shmem_id = "lamellar_shm/lamellar_".to_owned() + &(size.to_string()) + "_" + id;
     // let  m = if create {
     let mut retry = 0;
     let m = loop {
         match ShmemConf::new().size(size).os_id(shmem_id.clone()).create() {
+            // match ShmemConf::new().size(size).flink(shmem_id.clone()).create() {
             Ok(m) => {
                 // println!("created {:?}", shmem_id);
                 if create {
@@ -61,6 +70,7 @@ fn attach_to_shmem(size: usize, id: &str, header: usize, create: bool) -> MyShme
             | Err(ShmemError::MappingIdExists)
             | Err(ShmemError::MapOpenFailed(_)) => {
                 match ShmemConf::new().os_id(shmem_id.clone()).open() {
+                    // match ShmemConf::new().flink(shmem_id.clone()).open() {
                     Ok(m) => {
                         // println!("attached {:?}", shmem_id);
                         if create {
@@ -118,6 +128,7 @@ fn attach_to_shmem(size: usize, id: &str, header: usize, create: bool) -> MyShme
     }
 }
 
+#[derive(Debug)]
 struct ShmemAlloc {
     _shmem: MyShmem,
     mutex: *mut AtomicUsize,
@@ -253,6 +264,7 @@ impl ShmemAlloc {
     }
 }
 
+#[derive(Debug)]
 pub(crate) struct ShmemComm {
     // _shmem: MyShmem, //the global handle
     pub(crate) base_address: Arc<RwLock<usize>>, //start address of my segment
@@ -573,6 +585,7 @@ impl Drop for ShmemComm {
     }
 }
 
+#[derive(Debug)]
 pub(crate) struct ShmemData {
     pub(crate) addr: usize,          // process space address
     pub(crate) relative_addr: usize, //address allocated from shmem
@@ -597,11 +610,9 @@ impl ShmemData {
         Ok(ShmemData {
             addr: addr,
             relative_addr: relative_addr + ref_cnt_size,
-            data_start: addr
-                + std::mem::size_of::<AtomicUsize>()
-                + std::mem::size_of::<Option<SerializeHeader>>(),
+            data_start: addr + std::mem::size_of::<AtomicUsize>() + *SERIALIZE_HEADER_LEN,
             len: size, // + std::mem::size_of::<u64>(),
-            data_len: size - std::mem::size_of::<Option<SerializeHeader>>(),
+            data_len: size - *SERIALIZE_HEADER_LEN,
             shmem_comm: shmem_comm,
             alloc_size: alloc_size,
         })
@@ -609,7 +620,7 @@ impl ShmemData {
 }
 impl SerializedDataOps for ShmemData {
     fn header_as_bytes(&self) -> &mut [u8] {
-        let header_size = std::mem::size_of::<Option<SerializeHeader>>();
+        let header_size = *SERIALIZE_HEADER_LEN;
         unsafe {
             std::slice::from_raw_parts_mut(
                 (self.addr + std::mem::size_of::<AtomicUsize>()) as *mut u8,
@@ -629,10 +640,10 @@ impl SerializedDataOps for ShmemData {
 
 impl Des for ShmemData {
     fn deserialize_header(&self) -> Option<SerializeHeader> {
-        crate::deserialize(self.header_as_bytes(),false).unwrap()
+        crate::deserialize(self.header_as_bytes(), false).unwrap()
     }
     fn deserialize_data<T: serde::de::DeserializeOwned>(&self) -> Result<T, anyhow::Error> {
-        Ok(crate::deserialize(self.data_as_bytes(),true)?)
+        Ok(crate::deserialize(self.data_as_bytes(), true)?)
     }
     fn data_as_bytes(&self) -> &mut [u8] {
         unsafe { std::slice::from_raw_parts_mut((self.data_start) as *mut u8, self.data_len) }

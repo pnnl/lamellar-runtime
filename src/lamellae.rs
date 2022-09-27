@@ -1,4 +1,3 @@
-use crate::active_messaging::registered_active_message::AmId;
 use crate::active_messaging::Msg;
 use crate::lamellar_arch::LamellarArchRT;
 use crate::scheduler::Scheduler;
@@ -30,6 +29,11 @@ pub(crate) mod shmem_lamellae;
 use shmem::shmem_comm::ShmemData;
 use shmem_lamellae::{Shmem, ShmemBuilder};
 mod shmem;
+
+lazy_static! {
+    static ref SERIALIZE_HEADER_LEN: usize =
+        crate::serialized_size::<Option<SerializeHeader>>(&Some(Default::default()), false);
+}
 
 #[derive(
     serde::Serialize, serde::Deserialize, Debug, PartialEq, Eq, Ord, PartialOrd, Hash, Clone, Copy,
@@ -79,15 +83,13 @@ fn default_backend() -> Backend {
     };
 }
 
-#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug, Default)]
 pub(crate) struct SerializeHeader {
     pub(crate) msg: Msg,
-    pub(crate) team_hash: u64,
-    pub(crate) id: AmId,
 }
 
 #[enum_dispatch(Des, SubData, SerializedDataOps)]
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(crate) enum SerializedData {
     #[cfg(feature = "enable-rofi")]
     RofiData,
@@ -147,6 +149,7 @@ pub(crate) trait Ser {
 }
 
 #[enum_dispatch(LamellaeComm, LamellaeAM, LamellaeRDMA, Ser)]
+#[derive(Debug)]
 pub(crate) enum Lamellae {
     #[cfg(feature = "enable-rofi")]
     Rofi,
@@ -156,7 +159,7 @@ pub(crate) enum Lamellae {
 
 #[async_trait]
 #[enum_dispatch]
-pub(crate) trait LamellaeComm: LamellaeAM + LamellaeRDMA   {
+pub(crate) trait LamellaeComm: LamellaeAM + LamellaeRDMA {
     // this is a global barrier (hopefully using hardware)
     fn my_pe(&self) -> usize;
     fn num_pes(&self) -> usize;
@@ -170,7 +173,7 @@ pub(crate) trait LamellaeComm: LamellaeAM + LamellaeRDMA   {
 
 #[async_trait]
 #[enum_dispatch]
-pub(crate) trait LamellaeAM: Send  {
+pub(crate) trait LamellaeAM: Send {
     async fn send_to_pe_async(&self, pe: usize, data: SerializedData); //should never send to self... this is short circuited before request is serialized in the active message layer
     async fn send_to_pes_async(
         &self,
@@ -181,7 +184,7 @@ pub(crate) trait LamellaeAM: Send  {
 }
 
 #[enum_dispatch]
-pub(crate) trait LamellaeRDMA: Send + Sync  {
+pub(crate) trait LamellaeRDMA: Send + Sync {
     fn put(&self, pe: usize, src: &[u8], dst: usize);
     fn iput(&self, pe: usize, src: &[u8], dst: usize);
     fn put_all(&self, src: &[u8], dst: usize);

@@ -17,7 +17,7 @@ struct ReturnUsizeAM {
 
 #[lamellar::am]
 impl LamellarAM for ReturnUsizeAM {
-    fn exec(&self) -> usize {
+    async fn exec(&self) -> usize {
         println!(
             "\t\tin ReturnUsizeAM {:?} on pe {:?} ({:?})",
             self,
@@ -38,7 +38,7 @@ struct InitialAM {
 
 #[lamellar::am(return_am = "ReturnUsizeAM -> usize")] //we specify as a proc_macro argument the type of AM we are returning
 impl LamellarAM for InitialAM {
-    fn exec(&self) -> ReturnAM {
+    async fn exec(&self) -> ReturnAM {
         let current_hostname = hostname::get().unwrap().to_string_lossy().to_string();
         println!(
             "\tin  InitialAM {:?} on pe {:?} of {:?} ({:?})",
@@ -74,22 +74,18 @@ fn main() {
     if my_pe == 0 {
         println!("---------------------------------------------------------------");
         println!("Testing local am");
-        let res = world.exec_am_pe(my_pe, am.clone()).get();
+        let res = world.block_on(world.exec_am_pe(my_pe, am.clone()));
         assert_eq!(res, my_pe);
         println!("PE[{:?}] return result: {:?}", my_pe, res);
         println!("-----------------------------------");
         println!("Testing remote am");
-        let res = world.exec_am_pe(num_pes - 1, am.clone()).get();
+        let res = world.block_on(world.exec_am_pe(num_pes - 1, am.clone()));
         assert_eq!(res, num_pes - 1);
         println!("PE[{:?}] return result: {:?}", my_pe, res);
         println!("-----------------------------------");
         println!("Testing all am");
-        let res = world.exec_am_all(am).get();
-        assert_eq!(
-            res,
-            (0..num_pes)
-                .collect::<Vec<usize>>()
-        );
+        let res = world.block_on(world.exec_am_all(am));
+        assert_eq!(res, (0..num_pes).collect::<Vec<usize>>());
         println!("PE[{:?}] return result: {:?}", my_pe, res);
         println!("---------------------------------------------------------------");
     }

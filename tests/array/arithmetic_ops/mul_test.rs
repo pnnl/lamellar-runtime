@@ -1,5 +1,6 @@
-use lamellar::array::{DistributedIterator,
-    ArithmeticOps, AtomicArray, LocalLockAtomicArray, SerialIterator, UnsafeArray,
+use lamellar::array::{
+    ArithmeticOps, AtomicArray, DistributedIterator, LocalLockAtomicArray, SerialIterator,
+    UnsafeArray,
 };
 macro_rules! initialize_array {
     (UnsafeArray,$array:ident,$init_val:ident) => {

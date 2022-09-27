@@ -13,11 +13,13 @@ struct DataAM {
 
 #[lamellar::am]
 impl LamellarAM for DataAM {
-    fn exec() {}
+    async fn exec() {}
 }
 
 fn main() {
-    let world = lamellar::LamellarWorldBuilder::new().build();
+    let world = lamellar::LamellarWorldBuilder::new()
+        // .with_scheduler(lamellar::SchedulerType::WorkStealing)
+        .build();
     let my_pe = world.my_pe();
     let num_pes = world.num_pes();
     world.barrier();

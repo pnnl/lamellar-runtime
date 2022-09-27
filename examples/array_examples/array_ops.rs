@@ -1,6 +1,6 @@
-use lamellar::array::{DistributedIterator,
-    ArithmeticOps, AtomicArray, BitWiseOps, Distribution, ElementArithmeticOps, ElementBitWiseOps,
-    ElementOps,
+use lamellar::array::{
+    AccessOps, ArithmeticOps, AtomicArray, BitWiseOps, DistributedIterator, Distribution,
+    ElementArithmeticOps, ElementBitWiseOps, ElementOps,
 };
 
 #[lamellar::AmData(Default, Debug, ArithmeticOps, PartialEq, PartialOrd)]
@@ -79,7 +79,7 @@ fn test_add<T: std::fmt::Debug + ElementArithmeticOps + 'static>(
         reqs.push(array.fetch_add(i, add_val));
     }
     for (i, req) in reqs.drain(0..).enumerate() {
-        println!("i: {:?} {:?}", i, req.get());
+        println!("i: {:?} {:?}", i, array.block_on(req));
     }
     array.barrier();
     array.print();
@@ -110,7 +110,7 @@ fn test_sub<T: std::fmt::Debug + ElementArithmeticOps + 'static>(
         reqs.push(array.fetch_sub(i, sub_val));
     }
     for (i, req) in reqs.drain(0..).enumerate() {
-        println!("i: {:?} {:?}", i, req.get());
+        println!("i: {:?} {:?}", i, array.block_on(req));
     }
     array.barrier();
     array.print();
@@ -141,7 +141,7 @@ fn test_mul<T: std::fmt::Debug + ElementArithmeticOps + 'static>(
         reqs.push(array.fetch_mul(i, mul_val));
     }
     for (i, req) in reqs.drain(0..).enumerate() {
-        println!("i: {:?} {:?}", i, req.get());
+        println!("i: {:?} {:?}", i, array.block_on(req));
     }
     array.barrier();
     array.print();
@@ -172,7 +172,7 @@ fn test_div<T: std::fmt::Debug + ElementArithmeticOps + 'static>(
         reqs.push(array.fetch_div(i, div_val));
     }
     for (i, req) in reqs.drain(0..).enumerate() {
-        println!("i: {:?} {:?}", i, req.get());
+        println!("i: {:?} {:?}", i, array.block_on(req));
     }
     array.barrier();
     array.print();
@@ -208,7 +208,7 @@ fn test_and<T: std::fmt::Debug + ElementArithmeticOps + ElementBitWiseOps + 'sta
         reqs.push(array.fetch_bit_and(i, and_val));
     }
     for (i, req) in reqs.drain(0..).enumerate() {
-        println!("i: {:?} {:?}", i, req.get());
+        println!("i: {:?} {:?}", i, array.block_on(req));
     }
     array.barrier();
     array.print();
@@ -244,7 +244,7 @@ fn test_or<T: std::fmt::Debug + ElementBitWiseOps + 'static>(
         reqs.push(array.fetch_bit_or(i, or_val));
     }
     for (i, req) in reqs.drain(0..).enumerate() {
-        println!("i: {:?} {:?}", i, req.get());
+        println!("i: {:?} {:?}", i, array.block_on(req));
     }
     array.barrier();
     array.print();
@@ -278,7 +278,7 @@ fn test_store_load<T: std::fmt::Debug + ElementOps + 'static>(
         reqs.push(array.load(i));
     }
     for (i, req) in reqs.drain(0..).enumerate() {
-        println!("i: {:?} {:?}", i, req.get());
+        println!("i: {:?} {:?}", i, array.block_on(req));
     }
     array.barrier();
     array.print();
@@ -294,6 +294,7 @@ fn main() {
     let array_u8 = AtomicArray::<u8>::new(world.clone(), num_pes * 10, Distribution::Block); //intrinsic atomic,  bitwise
     let array_i128 = AtomicArray::<i128>::new(world.clone(), num_pes * 10, Distribution::Block); //non intrinsic atomic,  bitwise
     let array_custom = AtomicArray::<Custom>::new(world.clone(), num_pes * 10, Distribution::Block); //non intrinsic atomic, non bitwise
+    let array_bool = AtomicArray::<bool>::new(world.clone(), num_pes * 10, Distribution::Block);
 
     test_add(array_f64.clone(), 0.0, 1.0);
     test_add(array_u8.clone(), 0, 1);

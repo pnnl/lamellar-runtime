@@ -105,7 +105,7 @@ macro_rules! add_test{
             indices.shuffle(&mut rng);
             for idx in indices.iter() {//0..num_updates{
                 // let idx = rand_idx.sample(&mut rng);
-                array.add(idx,(10_usize.pow((my_pe*2)as u32)) as $t);
+                array.add(*idx,(10_usize.pow((my_pe*2)as u32)) as $t);
             }
             array.wait_all();
             array.barrier();
@@ -164,7 +164,7 @@ macro_rules! add_test{
             indices.shuffle(&mut rng);
             for idx in indices.iter(){ // in 0..num_updates{
                 // let idx = rand_idx.sample(&mut rng);
-                sub_array.add(idx,(10_usize.pow((my_pe*2)as u32)) as $t);
+                sub_array.add(*idx,(10_usize.pow((my_pe*2)as u32)) as $t);
             }
             sub_array.wait_all();
             sub_array.barrier();
@@ -224,7 +224,7 @@ macro_rules! add_test{
                 indices.shuffle(&mut rng);
                 for idx in indices.iter() {//0..num_updates{
                     // let idx = rand_idx.sample(&mut rng);
-                    sub_array.add(idx,(10_usize.pow((my_pe*2)as u32)) as $t);
+                    sub_array.add(*idx,(10_usize.pow((my_pe*2)as u32)) as $t);
                 }
                 sub_array.wait_all();
                 sub_array.barrier();
@@ -304,44 +304,44 @@ macro_rules! input_test{
             input_array.print();
             //individual T------------------------------
             for i in 0..array.len(){
-                array.add(i,1);
+                array.batch_add(i,1);
             }
             check_results!($array,array,num_pes,"T");
             //individual T------------------------------
             for i in 0..array.len(){
-                array.add(&i,1);
+                array.batch_add(&i,1);
             }
             check_results!($array,array,num_pes,"&T");
             //&[T]------------------------------
             let vec=(0..array.len()).collect::<Vec<usize>>();
             let slice = &vec[..];
-            array.add(slice,1);
+            array.batch_add(slice,1);
             check_results!($array,array,num_pes,"&[T]");
             //scoped &[T]------------------------------
             {
                 let vec=(0..array.len()).collect::<Vec<usize>>();
                 let slice = &vec[..];
-                array.add(slice,1);
+                array.batch_add(slice,1);
             }
             check_results!($array,array,num_pes,"scoped &[T]");
             // Vec<T>------------------------------
             let vec=(0..array.len()).collect::<Vec<usize>>();
-            array.add(vec,1);
+            array.batch_add(vec,1);
             check_results!($array,array,num_pes,"Vec<T>");
             // &Vec<T>------------------------------
             let vec=(0..array.len()).collect::<Vec<usize>>();
-            array.add(&vec,1);
+            array.batch_add(&vec,1);
             check_results!($array,array,num_pes,"&Vec<T>");
             // Scoped Vec<T>------------------------------
             {
                 let vec=(0..array.len()).collect::<Vec<usize>>();
-                array.add(vec,1);
+                array.batch_add(vec,1);
             }
             check_results!($array,array,num_pes,"scoped Vec<T>");
             // Scoped &Vec<T>------------------------------
             {
                 let vec=(0..array.len()).collect::<Vec<usize>>();
-                array.add(&vec,1);
+                array.batch_add(&vec,1);
             }
             check_results!($array,array,num_pes,"scoped &Vec<T>");
 
@@ -353,10 +353,10 @@ macro_rules! input_test{
                     slice[i]=i;
                 }
             }
-            array.add(lmr.clone(),1);
+            array.batch_add(lmr.clone(),1);
             check_results!($array,array,num_pes,"LMR<T>");
             // &LMR<T>------------------------------
-            array.add(&lmr,1);
+            array.batch_add(&lmr,1);
             check_results!($array,array,num_pes,"&LMR<T>");
             drop(lmr);
             // scoped LMR<T>------------------------------
@@ -368,7 +368,7 @@ macro_rules! input_test{
                         slice[i]=i;
                     }
                 }
-                array.add(lmr.clone(),1);
+                array.batch_add(lmr.clone(),1);
                 check_results!($array,array,num_pes,"scoped LMR<T>");
             }
             // scoped &LMR<T>------------------------------
@@ -380,7 +380,7 @@ macro_rules! input_test{
                         slice[i]=i;
                     }
                 }
-                array.add(&lmr,1);
+                array.batch_add(&lmr,1);
                 check_results!($array,array,num_pes,"scoped &LMR<T>");
             }
 
@@ -392,10 +392,10 @@ macro_rules! input_test{
                     slice[i]=i;
                 }
             }
-            array.add(smr.clone(),1);
+            array.batch_add(smr.clone(),1);
             check_results!($array,array,num_pes,"SMR<T>");
             // &SMR<T>------------------------------
-            array.add(&smr,1);
+            array.batch_add(&smr,1);
             check_results!($array,array,num_pes,"&SMR<T>");
             drop(smr);
             // scoped SMR<T>------------------------------
@@ -407,7 +407,7 @@ macro_rules! input_test{
                         slice[i]=i;
                     }
                 }
-                array.add(smr,1);
+                array.batch_add(smr,1);
                 check_results!($array,array,num_pes,"scoped SMR<T>");
             }
             // scoped &SMR<T>------------------------------
@@ -419,7 +419,7 @@ macro_rules! input_test{
                         slice[i]=i;
                     }
                 }
-                array.add(&smr,1);
+                array.batch_add(&smr,1);
                 check_results!($array,array,num_pes,"scoped &SMR<T>");
             }
 
@@ -427,7 +427,7 @@ macro_rules! input_test{
             // array.add(input_array.clone(),1);
             // check_results!($array,array,num_pes,"UnsafeArray<T>");
             // UnsafeArray<T>------------------------------
-            array.add(&input_array,1);
+            array.batch_add(&input_array,1);
             check_results!($array,array,num_pes,"&UnsafeArray<T>");
 
             // ReadOnlyArray<T>------------------------------
@@ -435,7 +435,7 @@ macro_rules! input_test{
             // array.add(input_array.clone(),1);
             // check_results!($array,array,num_pes,"ReadOnlyArray<T>");
             // ReadOnlyArray<T>------------------------------
-            array.add(&input_array,1);
+            array.batch_add(&input_array,1);
             check_results!($array,array,num_pes,"&ReadOnlyArray<T>");
 
             // AtomicArray<T>------------------------------
@@ -443,7 +443,7 @@ macro_rules! input_test{
             // array.add(input_array.clone(),1);
             // check_results!($array,array,num_pes,"AtomicArray<T>");
             // AtomicArray<T>------------------------------
-            array.add(&input_array,1);
+            array.batch_add(&input_array,1);
             check_results!($array,array,num_pes,"&AtomicArray<T>");
 
              // LocalLockAtomicArray<T>------------------------------
@@ -451,7 +451,7 @@ macro_rules! input_test{
             //  array.add(input_array.clone(),1);
             //  check_results!($array,array,num_pes,"LocalLockAtomicArray<T>");
              // LocalLockAtomicArray<T>------------------------------
-             array.add(&input_array,1);
+             array.batch_add(&input_array,1);
              check_results!($array,array,num_pes,"&LocalLockAtomicArray<T>");
        }
     }

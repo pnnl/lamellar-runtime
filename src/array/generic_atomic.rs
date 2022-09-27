@@ -183,13 +183,13 @@ impl<T: Dist + ElementBitWiseOps> BitOrAssign<T> for GenericAtomicElement<T> {
     }
 }
 
-#[lamellar_impl::AmDataRT(Clone)]
+#[lamellar_impl::AmDataRT(Clone, Debug)]
 pub struct GenericAtomicArray<T> {
     locks: Darc<Vec<Mutex<()>>>,
     pub(crate) array: UnsafeArray<T>,
 }
 
-#[lamellar_impl::AmDataRT(Clone)]
+#[lamellar_impl::AmDataRT(Clone, Debug)]
 pub struct GenericAtomicByteArray {
     locks: Darc<Vec<Mutex<()>>>,
     pub(crate) array: UnsafeByteArray,
@@ -214,7 +214,7 @@ impl GenericAtomicByteArray {
     }
 }
 
-#[lamellar_impl::AmLocalDataRT(Clone)]
+#[lamellar_impl::AmLocalDataRT(Clone, Debug)]
 pub struct GenericAtomicByteArrayWeak {
     locks: Darc<Vec<Mutex<()>>>,
     pub(crate) array: UnsafeByteArrayWeak,
@@ -229,13 +229,14 @@ impl GenericAtomicByteArrayWeak {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct GenericAtomicLocalData<T: Dist> {
     array: GenericAtomicArray<T>,
     start_index: usize,
     end_index: usize,
 }
 
+#[derive(Debug)]
 pub struct GenericAtomicLocalDataIter<T: Dist> {
     array: GenericAtomicArray<T>,
     index: usize,
@@ -370,6 +371,14 @@ impl<T: Dist> GenericAtomicArray<T> {
     pub fn barrier(&self) {
         self.array.barrier();
     }
+
+    pub fn block_on<F>(&self, f: F) -> F::Output
+    where
+        F: Future,
+    {
+        self.array.block_on(f)
+    }
+
     pub(crate) fn num_elems_local(&self) -> usize {
         self.array.num_elems_local()
     }
@@ -432,18 +441,22 @@ impl<T: Dist> GenericAtomicArray<T> {
     }
 
     pub fn into_unsafe(self) -> UnsafeArray<T> {
+        // println!("generic into_unsafe");
         self.array.into()
     }
 
     pub fn into_local_only(self) -> LocalOnlyArray<T> {
+        // println!("generic into_local_only");
         self.array.into()
     }
 
     pub fn into_read_only(self) -> ReadOnlyArray<T> {
+        // println!("generic into_read_only");
         self.array.into()
     }
 
     pub fn into_local_lock_atomic(self) -> LocalLockAtomicArray<T> {
+        // println!("generic into_local_lock_atomic");
         self.array.into()
     }
 
@@ -472,12 +485,14 @@ impl<T: Dist> GenericAtomicArray<T> {
 
 impl<T: Dist + 'static> GenericAtomicArray<T> {
     pub fn into_atomic(self) -> GenericAtomicArray<T> {
+        // println!("generic into_atomic");
         self.array.into()
     }
 }
 
 impl<T: Dist> From<UnsafeArray<T>> for GenericAtomicArray<T> {
     fn from(array: UnsafeArray<T>) -> Self {
+        // println!("generic from unsafe array");
         array.block_on_outstanding(DarcMode::GenericAtomicArray);
         let mut vec = vec![];
         for _i in 0..array.num_elems_local() {
@@ -545,6 +560,9 @@ impl<T: Dist> private::ArrayExecAm<T> for GenericAtomicArray<T> {
 }
 
 impl<T: Dist> private::LamellarArrayPrivate<T> for GenericAtomicArray<T> {
+    fn inner_array(&self) -> &UnsafeArray<T> {
+        &self.array
+    }
     fn local_as_ptr(&self) -> *const T {
         self.array.local_as_mut_ptr()
     }
@@ -613,16 +631,16 @@ impl<T: Dist + std::fmt::Debug> ArrayPrint<T> for GenericAtomicArray<T> {
 }
 
 impl<T: Dist + AmDist + 'static> GenericAtomicArray<T> {
-    pub fn reduce(&self, op: &str) -> Box<dyn LamellarRequest<Output = T>> {
+    pub fn reduce(&self, op: &str) -> Pin<Box<dyn Future<Output = T>>> {
         self.array.reduce(op)
     }
-    pub fn sum(&self) -> Box<dyn LamellarRequest<Output = T>> {
+    pub fn sum(&self) -> Pin<Box<dyn Future<Output = T>>> {
         self.array.reduce("sum")
     }
-    pub fn prod(&self) -> Box<dyn LamellarRequest<Output = T>> {
+    pub fn prod(&self) -> Pin<Box<dyn Future<Output = T>>> {
         self.array.reduce("prod")
     }
-    pub fn max(&self) -> Box<dyn LamellarRequest<Output = T>> {
+    pub fn max(&self) -> Pin<Box<dyn Future<Output = T>>> {
         self.array.reduce("max")
     }
 }

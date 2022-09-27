@@ -7,12 +7,12 @@ use crate::lamellar_team::{IntoLamellarTeam, LamellarTeamRT};
 use crate::memregion::Dist;
 use std::sync::Arc;
 
-#[lamellar_impl::AmDataRT(Clone)]
+#[lamellar_impl::AmDataRT(Clone, Debug)]
 pub struct ReadOnlyArray<T> {
     pub(crate) array: UnsafeArray<T>,
 }
 
-#[lamellar_impl::AmDataRT(Clone)]
+#[lamellar_impl::AmDataRT(Clone, Debug)]
 pub struct ReadOnlyByteArray {
     pub(crate) array: UnsafeByteArray,
 }
@@ -34,6 +34,14 @@ impl<T: Dist> ReadOnlyArray<T> {
     pub fn barrier(&self) {
         self.array.barrier();
     }
+
+    pub fn block_on<F>(&self, f: F) -> F::Output
+    where
+        F: Future,
+    {
+        self.array.block_on(f)
+    }
+
     pub(crate) fn num_elems_local(&self) -> usize {
         self.array.num_elems_local()
     }
@@ -69,14 +77,24 @@ impl<T: Dist> ReadOnlyArray<T> {
     pub fn iget<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(&self, index: usize, buf: U) {
         self.array.iget(index, buf)
     }
-    pub fn get<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(
+    pub fn internal_get<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(
         &self,
         index: usize,
         buf: U,
     ) -> Box<dyn LamellarArrayRequest<Output = ()>> {
+        self.array.internal_get(index, buf)
+    }
+    pub fn get<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(
+        &self,
+        index: usize,
+        buf: U,
+    ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
         self.array.get(index, buf)
     }
-    pub fn iat(&self, index: usize) -> Box<dyn LamellarArrayRequest<Output = T>> {
+    pub fn internal_at(&self, index: usize) -> Box<dyn LamellarArrayRequest<Output = T>> {
+        self.array.internal_at(index)
+    }
+    pub fn at(&self, index: usize) -> Pin<Box<dyn Future<Output = T> + Send>> {
         self.array.at(index)
     }
     pub fn local_as_slice(&self) -> &[T] {
@@ -108,18 +126,22 @@ impl<T: Dist> ReadOnlyArray<T> {
     }
 
     pub fn into_unsafe(self) -> UnsafeArray<T> {
+        // println!("readonly into_unsafe");
         self.array.into()
     }
 
     pub fn into_local_only(self) -> LocalOnlyArray<T> {
+        // println!("readonly into_local_only");
         self.array.into()
     }
 
     pub fn into_local_lock_atomic(self) -> LocalLockAtomicArray<T> {
+        // println!("readonly into_local_lock_atomic");
         self.array.into()
     }
 
     pub fn into_generic_atomic(self) -> GenericAtomicArray<T> {
+        // println!("readonly into_generic_atomic");
         self.array.into()
     }
 }
@@ -132,25 +154,29 @@ impl<T: Dist + 'static> ReadOnlyArray<T> {
 
 impl<T: Dist> From<UnsafeArray<T>> for ReadOnlyArray<T> {
     fn from(array: UnsafeArray<T>) -> Self {
+        // println!("readonly from UnsafeArray");
         array.block_on_outstanding(DarcMode::ReadOnlyArray);
         ReadOnlyArray { array: array }
     }
 }
 
-impl <T: Dist> From<LocalOnlyArray<T>> for ReadOnlyArray<T> {
+impl<T: Dist> From<LocalOnlyArray<T>> for ReadOnlyArray<T> {
     fn from(array: LocalOnlyArray<T>) -> Self {
+        // println!("readonly from LocalOnlyArray");
         unsafe { array.into_inner().into() }
     }
 }
 
-impl <T: Dist> From<AtomicArray<T>> for ReadOnlyArray<T> {
+impl<T: Dist> From<AtomicArray<T>> for ReadOnlyArray<T> {
     fn from(array: AtomicArray<T>) -> Self {
+        // println!("readonly from AtomicArray");
         unsafe { array.into_inner().into() }
     }
 }
 
-impl <T: Dist> From<LocalLockAtomicArray<T>> for ReadOnlyArray<T> {
+impl<T: Dist> From<LocalLockAtomicArray<T>> for ReadOnlyArray<T> {
     fn from(array: LocalLockAtomicArray<T>) -> Self {
+        // println!("readonly from LocalLockAtomicArray");
         unsafe { array.into_inner().into() }
     }
 }
@@ -171,16 +197,16 @@ impl<T: Dist> From<ReadOnlyByteArray> for ReadOnlyArray<T> {
 }
 
 impl<T: Dist + serde::Serialize + serde::de::DeserializeOwned + 'static> ReadOnlyArray<T> {
-    pub fn reduce(&self, op: &str) -> Box<dyn LamellarRequest<Output = T>> {
+    pub fn reduce(&self, op: &str) -> Pin<Box<dyn Future<Output = T>>> {
         self.array.reduce(op)
     }
-    pub fn sum(&self) -> Box<dyn LamellarRequest<Output = T>> {
+    pub fn sum(&self) -> Pin<Box<dyn Future<Output = T>>> {
         self.array.reduce("sum")
     }
-    pub fn prod(&self) -> Box<dyn LamellarRequest<Output = T>> {
+    pub fn prod(&self) -> Pin<Box<dyn Future<Output = T>>> {
         self.array.reduce("prod")
     }
-    pub fn max(&self) -> Box<dyn LamellarRequest<Output = T>> {
+    pub fn max(&self) -> Pin<Box<dyn Future<Output = T>>> {
         self.array.reduce("max")
     }
 }
@@ -194,14 +220,26 @@ impl<T: Dist> DistIteratorLauncher for ReadOnlyArray<T> {
         self.array.subarray_index_from_local(index, chunk_size)
     }
 
-    fn for_each<I, F>(&self, iter: &I, op: F) -> Box<dyn DistIterRequest<Output = ()>>
+    fn for_each<I, F>(&self, iter: &I, op: F) -> Pin<Box<dyn Future<Output = ()> + Send>>
     where
         I: DistributedIterator + 'static,
         F: Fn(I::Item) + AmLocal + Clone + 'static,
     {
         self.array.for_each(iter, op)
     }
-    fn for_each_async<I, F, Fut>(&self, iter: &I, op: F) -> Box<dyn DistIterRequest<Output = ()>>
+    fn for_each_with_schedule<I, F>(
+        &self,
+        sched: Schedule,
+        iter: &I,
+        op: F,
+    ) -> Pin<Box<dyn Future<Output = ()> + Send>>
+    where
+        I: DistributedIterator + 'static,
+        F: Fn(I::Item) + AmLocal + Clone + 'static,
+    {
+        self.array.for_each_with_schedule(sched, iter, op)
+    }
+    fn for_each_async<I, F, Fut>(&self, iter: &I, op: F) -> Pin<Box<dyn Future<Output = ()> + Send>>
     where
         I: DistributedIterator + 'static,
         F: Fn(I::Item) -> Fut + AmLocal + Clone + 'static,
@@ -209,7 +247,20 @@ impl<T: Dist> DistIteratorLauncher for ReadOnlyArray<T> {
     {
         self.array.for_each_async(iter, op)
     }
-    fn collect<I, A>(&self, iter: &I, d: Distribution) -> Box<dyn DistIterRequest<Output = A>>
+    fn for_each_async_with_schedule<I, F, Fut>(
+        &self,
+        sched: Schedule,
+        iter: &I,
+        op: F,
+    ) -> Pin<Box<dyn Future<Output = ()> + Send>>
+    where
+        I: DistributedIterator + 'static,
+        F: Fn(I::Item) -> Fut + AmLocal + Clone + 'static,
+        Fut: Future<Output = ()> + Send + 'static,
+    {
+        self.array.for_each_async_with_schedule(sched, iter, op)
+    }
+    fn collect<I, A>(&self, iter: &I, d: Distribution) -> Pin<Box<dyn Future<Output = A> + Send>>
     where
         I: DistributedIterator + 'static,
         I::Item: Dist,
@@ -221,7 +272,7 @@ impl<T: Dist> DistIteratorLauncher for ReadOnlyArray<T> {
         &self,
         iter: &I,
         d: Distribution,
-    ) -> Box<dyn DistIterRequest<Output = A>>
+    ) -> Pin<Box<dyn Future<Output = A> + Send>>
     where
         I: DistributedIterator + 'static,
         I::Item: Future<Output = B> + Send + 'static,
@@ -245,6 +296,9 @@ impl<T: Dist> private::ArrayExecAm<T> for ReadOnlyArray<T> {
 }
 
 impl<T: Dist> private::LamellarArrayPrivate<T> for ReadOnlyArray<T> {
+    fn inner_array(&self) -> &UnsafeArray<T> {
+        &self.array
+    }
     fn local_as_ptr(&self) -> *const T {
         self.array.local_as_ptr()
     }
@@ -286,6 +340,22 @@ impl<T: Dist> LamellarArray<T> for ReadOnlyArray<T> {
         self.array.pe_and_offset_for_global_index(index)
     }
 }
+impl<T: Dist + 'static> LamellarArrayInternalGet<T> for ReadOnlyArray<T> {
+    // fn iget<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(&self, index: usize, buf: U) {
+    //     self.iget(index, buf)
+    // }
+    fn internal_get<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(
+        &self,
+        index: usize,
+        buf: U,
+    ) -> Box<dyn LamellarArrayRequest<Output = ()>> {
+        self.internal_get(index, buf)
+    }
+    fn internal_at(&self, index: usize) -> Box<dyn LamellarArrayRequest<Output = T>> {
+        self.array.internal_at(index)
+    }
+}
+
 impl<T: Dist + 'static> LamellarArrayGet<T> for ReadOnlyArray<T> {
     // fn iget<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(&self, index: usize, buf: U) {
     //     self.iget(index, buf)
@@ -294,10 +364,10 @@ impl<T: Dist + 'static> LamellarArrayGet<T> for ReadOnlyArray<T> {
         &self,
         index: usize,
         buf: U,
-    ) -> Box<dyn LamellarArrayRequest<Output = ()>> {
+    ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
         self.get(index, buf)
     }
-    fn at(&self, index: usize) -> Box<dyn LamellarArrayRequest<Output = T>> {
+    fn at(&self, index: usize) -> Pin<Box<dyn Future<Output = T> + Send>> {
         self.array.at(index)
     }
 }

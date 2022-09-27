@@ -60,9 +60,9 @@ fn create_reduction(
             quote! {.copied()}
         };
 
-        array_impls.extend(quote!{
+        array_impls.extend(quote! {
             #[allow(non_camel_case_types)]
-            #[#am_data(Clone)]
+            #[#am_data(Clone,Debug)]
             struct #reduction_name{
                 data: #lamellar::array::#array_type<#typeident>,
                 start_pe: usize,
@@ -71,7 +71,7 @@ fn create_reduction(
 
             #[#am]
             impl LamellarAM for #reduction_name{
-                fn exec(&self) -> #typeident{
+                async fn exec(&self) -> #typeident{
                     if self.start_pe == self.end_pe{
                         // println!("[{:?}] root {:?} {:?}",__lamellar_current_pe,self.start_pe, self.end_pe);
                         let timer = std::time::Instant::now();
@@ -89,8 +89,8 @@ fn create_reduction(
                         let mid_pe = (self.start_pe + self.end_pe)/2;
                         let op = #op;
                         let timer = std::time::Instant::now();
-                        let left = __lamellar_team.exec_am_pe( self.start_pe,  #reduction_name { data: self.data.clone(), start_pe: self.start_pe, end_pe: mid_pe}).into_future();
-                        let right = __lamellar_team.exec_am_pe( mid_pe+1, #reduction_name { data: self.data.clone(), start_pe: mid_pe+1, end_pe: self.end_pe}).into_future();
+                        let left = __lamellar_team.exec_am_pe( self.start_pe,  #reduction_name { data: self.data.clone(), start_pe: self.start_pe, end_pe: mid_pe});//.into_future();
+                        let right = __lamellar_team.exec_am_pe( mid_pe+1, #reduction_name { data: self.data.clone(), start_pe: mid_pe+1, end_pe: self.end_pe});//.into_future();
                         let res = op(left.await,right.await);
 
                         // println!("[{:?}] {:?} {:?}",__lamellar_current_pe,res,timer.elapsed().as_secs_f64());
@@ -137,7 +137,6 @@ fn create_reduction(
         user_expanded
     }
 }
-
 
 pub(crate) fn __register_reduction(item: TokenStream) -> TokenStream {
     let args = parse_macro_input!(item as ReductionArgs);
@@ -187,8 +186,6 @@ pub(crate) fn __register_reduction(item: TokenStream) -> TokenStream {
     }
     TokenStream::from(output)
 }
-
-
 
 pub(crate) fn __generate_reductions_for_type(item: TokenStream) -> TokenStream {
     let mut output = quote! {};
@@ -240,7 +237,6 @@ pub(crate) fn __generate_reductions_for_type(item: TokenStream) -> TokenStream {
 
     TokenStream::from(output)
 }
-
 
 pub(crate) fn __generate_reductions_for_type_rt(item: TokenStream) -> TokenStream {
     let mut output = quote! {};
