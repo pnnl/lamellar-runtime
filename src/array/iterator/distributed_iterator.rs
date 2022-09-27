@@ -29,11 +29,12 @@ use crate::array::{
 }; //, LamellarArrayPut, LamellarArrayGet};
 
 use crate::active_messaging::AmLocal;
-use crate::scheduler::SchedulerQueue;
+// use crate::scheduler::SchedulerQueue;
 
 use async_trait::async_trait;
 use enum_dispatch::enum_dispatch;
-use futures::{future, Future, StreamExt};
+// use futures::{future, Future, StreamExt};
+use futures::Future;
 use std::marker::PhantomData;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -161,7 +162,7 @@ pub struct DistIterCollectHandle<T: Dist, A: From<UnsafeArray<T>> + AmLocal> {
 }
 
 impl<T: Dist, A: From<UnsafeArray<T>> + AmLocal> DistIterCollectHandle<T, A> {
-    async fn create_array(&self, local_vals: &Vec<T>) -> A {
+    fn create_array(&self, local_vals: &Vec<T>) -> A {
         self.team.barrier();
         let local_sizes =
             UnsafeArray::<usize>::new(self.team.clone(), self.team.num_pes, Distribution::Block);
@@ -176,17 +177,15 @@ impl<T: Dist, A: From<UnsafeArray<T>> + AmLocal> DistIterCollectHandle<T, A> {
         // local_sizes.print();
         local_sizes
             .ser_iter()
-            .into_stream()
+            .into_iter()
             .enumerate()
             .for_each(|(i, local_size)| {
                 size += local_size;
                 if i < my_pe {
                     my_start += local_size;
                 }
-                future::ready(())
-            })
-            .await;
-        // println!("my_start {} size {}",my_start,size);
+            });
+        // println!("my_start {} size {}", my_start, size);
         let array = UnsafeArray::<T>::new(self.team.clone(), size, self.distribution); //implcit barrier
         array.put(my_start, local_vals);
         array.into()
@@ -201,7 +200,7 @@ impl<T: Dist, A: From<UnsafeArray<T>> + AmLocal> DistIterRequest for DistIterCol
             let v = req.into_future().await;
             local_vals.extend(v);
         }
-        self.create_array(&local_vals).await
+        self.create_array(&local_vals)
     }
     fn wait(mut self: Box<Self>) -> Self::Output {
         let mut local_vals = vec![];
@@ -209,7 +208,7 @@ impl<T: Dist, A: From<UnsafeArray<T>> + AmLocal> DistIterRequest for DistIterCol
             let v = req.get();
             local_vals.extend(v);
         }
-        self.team.scheduler.block_on(self.create_array(&local_vals))
+        self.create_array(&local_vals)
     }
 }
 

@@ -47,25 +47,25 @@ where
         self.iter.advance_index(self.step_size - 1);
         Some(res)
     }
-    async fn async_next(mut self: Pin<&mut Self>) -> Option<Self::Item> {
-        // println!("async_next step_by");
-        let this = self.as_mut().project();
-        let res = this.iter.async_next().await?;
-        let step_size = *this.step_size;
-        self.as_mut()
-            .project()
-            .iter
-            .async_advance_index(step_size - 1)
-            .await;
-        Some(res)
-    }
+    // async fn async_next(mut self: Pin<&mut Self>) -> Option<Self::Item> {
+    //     // println!("async_next step_by");
+    //     let this = self.as_mut().project();
+    //     let res = this.iter.async_next().await?;
+    //     let step_size = *this.step_size;
+    //     self.as_mut()
+    //         .project()
+    //         .iter
+    //         .async_advance_index(step_size - 1)
+    //         .await;
+    //     Some(res)
+    // }
     fn advance_index(&mut self, count: usize) {
         self.iter.advance_index(count * self.step_size);
     }
-    async fn async_advance_index(mut self: Pin<&mut Self>, count: usize) {
-        let this = self.project();
-        this.iter.async_advance_index(count * *this.step_size).await
-    }
+    // async fn async_advance_index(mut self: Pin<&mut Self>, count: usize) {
+    //     let this = self.project();
+    //     this.iter.async_advance_index(count * *this.step_size).await
+    // }
     fn array(&self) -> Self::Array {
         self.iter.array()
     }
@@ -80,16 +80,16 @@ where
         self.iter.advance_index(self.step_size - 1);
         Some(res)
     }
-    async fn async_buffered_next(
-        mut self: Pin<&mut Self>,
-        mem_region: LocalMemoryRegion<u8>,
-    ) -> Option<Box<dyn LamellarArrayRequest<Output = ()>>> {
-        let this = self.as_mut().project();
-        let res = this.iter.async_buffered_next(mem_region).await?;
-        let this = self.as_mut().project();
-        this.iter.async_advance_index(*this.step_size - 1).await;
-        Some(res)
-    }
+    // async fn async_buffered_next(
+    //     mut self: Pin<&mut Self>,
+    //     mem_region: LocalMemoryRegion<u8>,
+    // ) -> Option<Box<dyn LamellarArrayRequest<Output = ()>>> {
+    //     let this = self.as_mut().project();
+    //     let res = this.iter.async_buffered_next(mem_region).await?;
+    //     let this = self.as_mut().project();
+    //     this.iter.async_advance_index(*this.step_size - 1).await;
+    //     Some(res)
+    // }
     fn from_mem_region(&self, mem_region: LocalMemoryRegion<u8>) -> Option<Self::Item> {
         self.iter.from_mem_region(mem_region)
     }

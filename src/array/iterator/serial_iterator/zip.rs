@@ -3,7 +3,7 @@ use crate::array::LamellarArrayRequest;
 use crate::LocalMemoryRegion;
 
 use async_trait::async_trait;
-use futures::join;
+// use futures::join;
 use pin_project::pin_project;
 
 struct ZipBufferedReq {
@@ -76,25 +76,25 @@ where
         let b = self.b.next()?;
         Some((a, b))
     }
-    async fn async_next(self: Pin<&mut Self>) -> Option<Self::Item> {
-        // println!("async_next zip");
-        let mut this = self.project();
-        let a = this.a.async_next(); //.await?;
-        let b = this.b.async_next(); //.await?;
+    // async fn async_next(self: Pin<&mut Self>) -> Option<Self::Item> {
+    //     // println!("async_next zip");
+    //     let this = self.project();
+    //     let a = this.a.async_next(); //.await?;
+    //     let b = this.b.async_next(); //.await?;
 
-        let a_b = join!(a, b);
-        Some((a_b.0?, a_b.1?))
-    }
+    //     let a_b = join!(a, b);
+    //     Some((a_b.0?, a_b.1?))
+    // }
     fn advance_index(&mut self, count: usize) {
         self.a.advance_index(count);
         self.b.advance_index(count);
     }
-    async fn async_advance_index(mut self: Pin<&mut Self>, count: usize) {
-        let this = self.project();
-        let a = this.a.async_advance_index(count);
-        let b = this.b.async_advance_index(count);
-        join!(a, b);
-    }
+    // async fn async_advance_index(mut self: Pin<&mut Self>, count: usize) {
+    //     let this = self.project();
+    //     let a = this.a.async_advance_index(count);
+    //     let b = this.b.async_advance_index(count);
+    //     join!(a, b);
+    // }
     fn array(&self) -> Self::Array {
         self.a.array()
     }
@@ -114,22 +114,22 @@ where
         reqs.push(self.b.buffered_next(b_sub_region)?);
         Some(Box::new(ZipBufferedReq { reqs }))
     }
-    async fn async_buffered_next(
-        mut self: Pin<&mut Self>,
-        mem_region: LocalMemoryRegion<u8>,
-    ) -> Option<Box<dyn LamellarArrayRequest<Output = ()>>> {
-        let this = self.as_mut().project();
-        let a_sub_region = mem_region.sub_region(0..this.a.item_size());
-        let mut reqs = vec![];
+    // async fn async_buffered_next(
+    //     mut self: Pin<&mut Self>,
+    //     mem_region: LocalMemoryRegion<u8>,
+    // ) -> Option<Box<dyn LamellarArrayRequest<Output = ()>>> {
+    //     let this = self.as_mut().project();
+    //     let a_sub_region = mem_region.sub_region(0..this.a.item_size());
+    //     let mut reqs = vec![];
 
-        reqs.push(this.a.async_buffered_next(a_sub_region).await?);
-        let this = self.as_mut().project();
-        let b_sub_region =
-            mem_region.sub_region(this.a.item_size()..this.a.item_size() + this.b.item_size());
+    //     reqs.push(this.a.async_buffered_next(a_sub_region).await?);
+    //     let this = self.as_mut().project();
+    //     let b_sub_region =
+    //         mem_region.sub_region(this.a.item_size()..this.a.item_size() + this.b.item_size());
 
-        reqs.push(this.b.async_buffered_next(b_sub_region).await?);
-        Some(Box::new(ZipBufferedReq { reqs }))
-    }
+    //     reqs.push(this.b.async_buffered_next(b_sub_region).await?);
+    //     Some(Box::new(ZipBufferedReq { reqs }))
+    // }
     fn from_mem_region(&self, mem_region: LocalMemoryRegion<u8>) -> Option<Self::Item> {
         let a_sub_region = mem_region.sub_region(0..self.a.item_size());
         let a = self.a.from_mem_region(a_sub_region)?;

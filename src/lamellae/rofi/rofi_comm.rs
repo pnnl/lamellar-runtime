@@ -627,16 +627,16 @@ impl Drop for RofiComm {
         // std::thread::sleep(std::time::Duration::from_millis(1000));
         // //we can probably do a final "put" to each node where we specify we we are done, then once all nodes have done this no further communication amongst them occurs...
 
-        println!(
-            "Rofi Drop #Gets: {:?} #Puts: {:?}",
-            self.get_cnt.load(Ordering::SeqCst),
-            self.put_cnt.load(Ordering::SeqCst)
-        );
-        println!(
-            "Rofi Drop #Get amt: {:?} #Put amt: {:?}",
-            self.get_amt.load(Ordering::SeqCst),
-            self.put_amt.load(Ordering::SeqCst)
-        );
+        // println!(
+        //     "Rofi Drop #Gets: {:?} #Puts: {:?}",
+        //     self.get_cnt.load(Ordering::SeqCst),
+        //     self.put_cnt.load(Ordering::SeqCst)
+        // );
+        // println!(
+        //     "Rofi Drop #Get amt: {:?} #Put amt: {:?}",
+        //     self.get_amt.load(Ordering::SeqCst),
+        //     self.put_amt.load(Ordering::SeqCst)
+        // );
         let _res = rofi_finit();
         // std::thread::sleep(std::time::Duration::from_millis(1000));
         // println!("[{:?}] dropping rofi comm", self.my_pe);

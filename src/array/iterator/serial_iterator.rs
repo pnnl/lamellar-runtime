@@ -2,7 +2,7 @@ mod copied_chunks;
 use copied_chunks::*;
 
 mod ignore;
-use futures_lite::FutureExt;
+// use futures_lite::FutureExt;
 use ignore::*;
 
 mod step_by;
@@ -22,13 +22,13 @@ use crate::LamellarTeamRT;
 use crate::LocalMemoryRegion;
 
 use async_trait::async_trait;
-use futures::{ready, Stream};
+// use futures::{ready, Stream};
 use pin_project::pin_project;
 use std::marker::PhantomData;
 use std::pin::Pin;
 use std::ptr::NonNull;
 use std::sync::Arc;
-use std::task::{Context, Poll};
+// use std::task::{Context, Poll};
 
 //todo: make an into_stream function
 #[async_trait]
@@ -43,19 +43,19 @@ pub trait SerialIterator {
     type ElemType: Dist + 'static;
     type Array: LamellarArrayInternalGet<Self::ElemType> + Send;
     fn next(&mut self) -> Option<Self::Item>;
-    async fn async_next(mut self: Pin<&mut Self>) -> Option<Self::Item>;
+    // async fn async_next(mut self: Pin<&mut Self>) -> Option<Self::Item>;
     fn advance_index(&mut self, count: usize);
-    async fn async_advance_index(mut self: Pin<&mut Self>, count: usize);
+    // async fn async_advance_index(mut self: Pin<&mut Self>, count: usize);
     fn array(&self) -> Self::Array;
     fn item_size(&self) -> usize;
     fn buffered_next(
         &mut self,
         mem_region: LocalMemoryRegion<u8>,
     ) -> Option<Box<dyn LamellarArrayRequest<Output = ()>>>;
-    async fn async_buffered_next(
-        mut self: Pin<&mut Self>,
-        mem_region: LocalMemoryRegion<u8>,
-    ) -> Option<Box<dyn LamellarArrayRequest<Output = ()>>>;
+    // async fn async_buffered_next(
+    //     mut self: Pin<&mut Self>,
+    //     mem_region: LocalMemoryRegion<u8>,
+    // ) -> Option<Box<dyn LamellarArrayRequest<Output = ()>>>;
 
     fn from_mem_region(&self, mem_region: LocalMemoryRegion<u8>) -> Option<Self::Item>;
     fn copied_chunks(self, chunk_size: usize) -> CopiedChunks<Self>
@@ -95,12 +95,12 @@ pub trait SerialIterator {
     {
         SerialIteratorIter { iter: self }
     }
-    fn into_stream(self) -> SerialIteratorAsyncIter<Self>
-    where
-        Self: Sized + Send,
-    {
-        SerialIteratorAsyncIter { iter: self }
-    }
+    // fn into_stream(self) -> SerialIteratorAsyncIter<Self>
+    // where
+    //     Self: Sized + Send,
+    // {
+    //     SerialIteratorAsyncIter { iter: self }
+    // }
 }
 
 pub struct SerialIteratorIter<I> {
@@ -116,23 +116,23 @@ where
     }
 }
 
-#[pin_project]
-pub struct SerialIteratorAsyncIter<I> {
-    #[pin]
-    pub(crate) iter: I,
-}
+// #[pin_project]
+// pub struct SerialIteratorAsyncIter<I> {
+//     #[pin]
+//     pub(crate) iter: I,
+// }
 
-impl<I> Stream for SerialIteratorAsyncIter<I>
-where
-    I: SerialIterator + Send,
-{
-    type Item = <I as SerialIterator>::Item;
-    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        let mut this = self.project();
-        let res = ready!(this.iter.async_next().poll(cx));
-        Poll::Ready(res)
-    }
-}
+// impl<I> Stream for SerialIteratorAsyncIter<I>
+// where
+//     I: SerialIterator + Send,
+// {
+//     type Item = <I as SerialIterator>::Item;
+//     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+//         let this = self.project();
+//         let res = ready!(this.iter.async_next().poll(cx));
+//         Poll::Ready(res)
+//     }
+// }
 
 struct SendNonNull<T: Dist + 'static>(NonNull<T>);
 
@@ -254,58 +254,58 @@ impl<'a, T: Dist + 'static, A: LamellarArrayInternalGet<T> + Clone + Send> Seria
         };
         res
     }
-    async fn async_next(mut self: Pin<&mut Self>) -> Option<Self::Item> {
-        let mut this = self.project();
-        // println!("async_next serial_iterator");
-        // println!("nexat {:?} {:?} {:?} {:?}",self.index,self.array.len(),self.buf_index,self.buf_0.len());
-        let array = this.array.clone();
-        let res = if *this.index < array.len() {
-            if *this.buf_index == this.buf_0.len() {
-                // println!("need to get new data");
-                //need to get new data
-                *this.buf_index = 0;
-                // self.fill_buffer(self.index);
-                if *this.index + this.buf_0.len() < array.len() {
-                    let req = array.internal_get(*this.index, &*this.buf_0);
-                    req.into_future().await;
-                } else {
-                    let sub_region = this.buf_0.sub_region(0..(array.len() - *this.index));
-                    let req = array.internal_get(*this.index, &sub_region);
-                    req.into_future().await;
-                }
-            }
-            // self.spin_for_valid(self.buf_index);
-            *this.index += 1;
-            *this.buf_index += 1;
-            unsafe {
-                this.ptr
-                    .0
-                    .as_ptr()
-                    .offset(*this.buf_index as isize - 1)
-                    .as_ref()
-            }
-        } else {
-            None
-        };
-        res
-    }
+    // async fn async_next(mut self: Pin<&mut Self>) -> Option<Self::Item> {
+    //     let this = self.project();
+    //     // println!("async_next serial_iterator");
+    //     // println!("nexat {:?} {:?} {:?} {:?}",self.index,self.array.len(),self.buf_index,self.buf_0.len());
+    //     let array = this.array.clone();
+    //     let res = if *this.index < array.len() {
+    //         if *this.buf_index == this.buf_0.len() {
+    //             // println!("need to get new data");
+    //             //need to get new data
+    //             *this.buf_index = 0;
+    //             // self.fill_buffer(self.index);
+    //             if *this.index + this.buf_0.len() < array.len() {
+    //                 let req = array.internal_get(*this.index, &*this.buf_0);
+    //                 req.into_future().await;
+    //             } else {
+    //                 let sub_region = this.buf_0.sub_region(0..(array.len() - *this.index));
+    //                 let req = array.internal_get(*this.index, &sub_region);
+    //                 req.into_future().await;
+    //             }
+    //         }
+    //         // self.spin_for_valid(self.buf_index);
+    //         *this.index += 1;
+    //         *this.buf_index += 1;
+    //         unsafe {
+    //             this.ptr
+    //                 .0
+    //                 .as_ptr()
+    //                 .offset(*this.buf_index as isize - 1)
+    //                 .as_ref()
+    //         }
+    //     } else {
+    //         None
+    //     };
+    //     res
+    // }
     fn advance_index(&mut self, count: usize) {
         self.index += count;
         self.buf_index = 0;
         // self.fill_buffer(0);
         self.array.internal_get(self.index, &self.buf_0).wait();
     }
-    async fn async_advance_index(mut self: Pin<&mut Self>, count: usize) {
-        let this = self.project();
-        *this.index += count;
-        *this.buf_index = 0;
-        // self.fill_buffer(0);
-        let req = this
-            .array
-            .internal_get(*this.index, &*this.buf_0)
-            .into_future();
-        req.await;
-    }
+    // async fn async_advance_index(mut self: Pin<&mut Self>, count: usize) {
+    //     let this = self.project();
+    //     *this.index += count;
+    //     *this.buf_index = 0;
+    //     // self.fill_buffer(0);
+    //     let req = this
+    //         .array
+    //         .internal_get(*this.index, &*this.buf_0)
+    //         .into_future();
+    //     req.await;
+    // }
     fn array(&self) -> Self::Array {
         self.array.clone()
     }
@@ -326,19 +326,19 @@ impl<'a, T: Dist + 'static, A: LamellarArrayInternalGet<T> + Clone + Send> Seria
             None
         }
     }
-    async fn async_buffered_next(
-        mut self: Pin<&mut Self>,
-        mem_region: LocalMemoryRegion<u8>,
-    ) -> Option<Box<dyn LamellarArrayRequest<Output = ()>>> {
-        if self.index < self.array.len() {
-            let mem_reg_t = mem_region.to_base::<Self::ElemType>();
-            let req = self.array.internal_get(self.index, &mem_reg_t);
-            self.index += mem_reg_t.len();
-            Some(req)
-        } else {
-            None
-        }
-    }
+    // async fn async_buffered_next(
+    //     mut self: Pin<&mut Self>,
+    //     mem_region: LocalMemoryRegion<u8>,
+    // ) -> Option<Box<dyn LamellarArrayRequest<Output = ()>>> {
+    //     if self.index < self.array.len() {
+    //         let mem_reg_t = mem_region.to_base::<Self::ElemType>();
+    //         let req = self.array.internal_get(self.index, &mem_reg_t);
+    //         self.index += mem_reg_t.len();
+    //         Some(req)
+    //     } else {
+    //         None
+    //     }
+    // }
     fn from_mem_region(&self, mem_region: LocalMemoryRegion<u8>) -> Option<Self::Item> {
         unsafe {
             let mem_reg_t = mem_region.to_base::<Self::ElemType>();

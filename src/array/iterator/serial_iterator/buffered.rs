@@ -1,13 +1,13 @@
 use crate::array::iterator::serial_iterator::*;
 use crate::array::LamellarArrayRequest;
 // use crate::LamellarArray;
-use crate::scheduler::SchedulerQueue;
+// use crate::scheduler::SchedulerQueue;
 use crate::LocalMemoryRegion;
 use std::collections::VecDeque;
 use std::ops::Deref;
 
 use async_trait::async_trait;
-use futures::Future;
+// use futures::Future;
 use pin_project::pin_project;
 #[pin_project]
 pub struct Buffered<I>
@@ -67,27 +67,27 @@ where
         // }
     }
 
-    fn initiate_buffer_async(self: Pin<&mut Self>) {
-        let mut this = self.project();
-        let array = this.iter.array();
-        let array_bytes = array.len() * std::mem::size_of::<<Self as SerialIterator>::ElemType>();
-        let size = std::cmp::min(this.iter.item_size(), array_bytes - *this.buf_index);
-        if size > 0 {
-            let mem_region = array.team().alloc_local_mem_region(size);
-            if let Some(req) = array
-                .team()
-                .scheduler
-                .block_on(this.iter.as_mut().async_buffered_next(mem_region.clone()))
-            {
-                this.reqs
-                    .push_back(Some((*this.buf_index, req, mem_region)));
-                *this.buf_index += size;
-            } else {
-                this.reqs.push_back(None);
-            }
-        }
-        // }
-    }
+    // fn initiate_buffer_async(self: Pin<&mut Self>) {
+    //     let mut this = self.project();
+    //     let array = this.iter.array();
+    //     let array_bytes = array.len() * std::mem::size_of::<<Self as SerialIterator>::ElemType>();
+    //     let size = std::cmp::min(this.iter.item_size(), array_bytes - *this.buf_index);
+    //     if size > 0 {
+    //         let mem_region = array.team().alloc_local_mem_region(size);
+    //         if let Some(req) = array
+    //             .team()
+    //             .scheduler
+    //             .block_on(this.iter.as_mut().async_buffered_next(mem_region.clone()))
+    //         {
+    //             this.reqs
+    //                 .push_back(Some((*this.buf_index, req, mem_region)));
+    //             *this.buf_index += size;
+    //         } else {
+    //             this.reqs.push_back(None);
+    //         }
+    //     }
+    //     // }
+    // }
 
     fn wait_on_buffer(&mut self, size: usize) -> Option<LocalMemoryRegion<u8>> {
         let (index, req, mem_region) =
@@ -102,24 +102,24 @@ where
         Some(mem_region)
     }
 
-    fn wait_on_buffer_async(
-        self: Pin<&mut Self>,
-        size: usize,
-    ) -> Option<Pin<Box<dyn Future<Output = LocalMemoryRegion<u8>> + Send>>> {
-        let this = self.project();
-        let (index, req, mem_region) =
-            if let Some((index, req, mem_region)) = this.reqs.pop_front().unwrap() {
-                (index, req.into_future(), mem_region)
-            } else {
-                return None;
-            };
-        assert_eq!(mem_region.len(), size);
-        assert_eq!(index, *this.index);
-        Some(Box::pin(async {
-            req.await;
-            mem_region
-        }))
-    }
+    // fn wait_on_buffer_async(
+    //     self: Pin<&mut Self>,
+    //     size: usize,
+    // ) -> Option<Pin<Box<dyn Future<Output = LocalMemoryRegion<u8>> + Send>>> {
+    //     let this = self.project();
+    //     let (index, req, mem_region) =
+    //         if let Some((index, req, mem_region)) = this.reqs.pop_front().unwrap() {
+    //             (index, req.into_future(), mem_region)
+    //         } else {
+    //             return None;
+    //         };
+    //     assert_eq!(mem_region.len(), size);
+    //     assert_eq!(index, *this.index);
+    //     Some(Box::pin(async {
+    //         req.await;
+    //         mem_region
+    //     }))
+    // }
 }
 
 pub struct BufferedItem<U> {
@@ -191,30 +191,30 @@ where
             None
         }
     }
-    async fn async_next(mut self: Pin<&mut Self>) -> Option<Self::Item> {
-        // println!("async_next buffered");
-        // println!("{:?} {:?}",self.index,self.array.len()/std::mem::size_of::<<Self as SerialIterator>::ElemType>());
-        // let this = self.as_mut().project();
-        let array = self.iter.array();
-        let array_bytes = array.len() * std::mem::size_of::<<Self as SerialIterator>::ElemType>();
-        if self.index < array_bytes {
-            let size = std::cmp::min(self.iter.item_size(), array_bytes - self.index);
-            // println!("getting {:?} {:?} {:?} {:?}",self.index,size,self.iter.item_size(),self.buf_index);
-            let mem_region = self.as_mut().wait_on_buffer_async(size)?;
-            let this = self.as_mut().project();
-            *this.index += size;
-            //if self.index % self.buf_index == 0 {
-            self.as_mut().initiate_buffer_async();
+    // async fn async_next(mut self: Pin<&mut Self>) -> Option<Self::Item> {
+    //     // println!("async_next buffered");
+    //     // println!("{:?} {:?}",self.index,self.array.len()/std::mem::size_of::<<Self as SerialIterator>::ElemType>());
+    //     // let this = self.as_mut().project();
+    //     let array = self.iter.array();
+    //     let array_bytes = array.len() * std::mem::size_of::<<Self as SerialIterator>::ElemType>();
+    //     if self.index < array_bytes {
+    //         let size = std::cmp::min(self.iter.item_size(), array_bytes - self.index);
+    //         // println!("getting {:?} {:?} {:?} {:?}",self.index,size,self.iter.item_size(),self.buf_index);
+    //         let mem_region = self.as_mut().wait_on_buffer_async(size)?;
+    //         let this = self.as_mut().project();
+    //         *this.index += size;
+    //         //if self.index % self.buf_index == 0 {
+    //         self.as_mut().initiate_buffer_async();
 
-            let mem_region = mem_region.await;
-            Some(BufferedItem {
-                item: self.project().iter.from_mem_region(mem_region.clone())?,
-                _mem_region: mem_region,
-            })
-        } else {
-            None
-        }
-    }
+    //         let mem_region = mem_region.await;
+    //         Some(BufferedItem {
+    //             item: self.project().iter.from_mem_region(mem_region.clone())?,
+    //             _mem_region: mem_region,
+    //         })
+    //     } else {
+    //         None
+    //     }
+    // }
     fn advance_index(&mut self, count: usize) {
         // println!("advance_index {:?} {:?} {:?} {:?}",self.index, count, count*self.chunk_size,self.array.len());
         self.iter.advance_index(count);
@@ -223,9 +223,9 @@ where
         //     self.fill_buffer(0, &self.mem_region.sub_region(..size));
         // }
     }
-    async fn async_advance_index(mut self: Pin<&mut Self>, count: usize) {
-        self.project().iter.async_advance_index(count).await
-    }
+    // async fn async_advance_index(mut self: Pin<&mut Self>, count: usize) {
+    //     self.project().iter.async_advance_index(count).await
+    // }
     fn array(&self) -> Self::Array {
         self.iter.array()
     }
@@ -240,12 +240,12 @@ where
         self.iter.buffered_next(mem_region)
     }
 
-    async fn async_buffered_next(
-        mut self: Pin<&mut Self>,
-        mem_region: LocalMemoryRegion<u8>,
-    ) -> Option<Box<dyn LamellarArrayRequest<Output = ()>>> {
-        self.project().iter.async_buffered_next(mem_region).await
-    }
+    // async fn async_buffered_next(
+    //     mut self: Pin<&mut Self>,
+    //     mem_region: LocalMemoryRegion<u8>,
+    // ) -> Option<Box<dyn LamellarArrayRequest<Output = ()>>> {
+    //     self.project().iter.async_buffered_next(mem_region).await
+    // }
     //im not actually sure what to do if another buffered iter is called after this one
     fn from_mem_region(&self, mem_region: LocalMemoryRegion<u8>) -> Option<Self::Item> {
         Some(BufferedItem {
