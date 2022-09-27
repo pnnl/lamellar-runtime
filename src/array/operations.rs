@@ -50,6 +50,7 @@ pub enum ArrayOpCmd<T: Dist> {
     CompareExchangeEps(T, T),
     Put,
     Get,
+    // CopyFromBuff,
 }
 
 impl<T: Dist> ArrayOpCmd<T> {
@@ -887,7 +888,7 @@ pub trait AccessOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
     fn batch_store<'a>(
         &self,
         index: impl OpInput<'a, usize>,
-        val: T,
+        val: impl OpInput<'a, T>,
     ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
         self.inner_array()
             .initiate_op(val, index, ArrayOpCmd::Store)
@@ -1066,7 +1067,7 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
     fn batch_bit_or<'a>(
         &self,
         index: impl OpInput<'a, usize>,
-        val: T,
+        val: impl OpInput<'a, T>,
     ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
         self.inner_array().initiate_op(val, index, ArrayOpCmd::Or)
     }
@@ -1139,6 +1140,27 @@ pub trait CompareExchangeEpsilonOps<T: ElementComparePartialEqOps>:
     }
 }
 
+// pub trait BufferOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
+//     #[tracing::instrument(skip_all)]
+//     fn copy_from_buffer<'a, U: MyInto<LamellarArrayInput<T>>>(
+//         &self,
+//         index: usize,
+//         buf: U,
+//     ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
+//         self.inner_array()
+//             .initiate_op(buf, index, ArrayOpCmd::CopyFromBuff);
+//     }
+//     #[tracing::instrument(skip_all)]
+//     fn batch_copy_from_buffer<'a, U: MyInto<LamellarArrayInput<T>>>(
+//         &self,
+//         index: impl OpInput<'a, usize>,
+//         old: T,
+//         buf: U,
+//     ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
+//         self.inner_array()
+//             .initiate_batch_op(buf, index, ArrayOpCmd::CopyFromBuff)
+//     }
+// }
 //perform the specified operation in place, returning the original value
 pub trait LocalArithmeticOps<T: Dist + ElementArithmeticOps> {
     fn local_add(&self, index: usize, val: T) {

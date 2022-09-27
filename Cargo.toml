@@ -215,6 +215,10 @@ name="unsafe_array_get_bw"
 path="examples/bandwidths/unsafe_array_get_bw.rs"
 
 [[example]]
+name="unsafe_array_store_bw"
+path="examples/bandwidths/unsafe_array_store_bw.rs"
+
+[[example]]
 name="unsafe_array_get_unchecked_bw"
 path="examples/bandwidths/unsafe_array_get_unchecked_bw.rs"
 

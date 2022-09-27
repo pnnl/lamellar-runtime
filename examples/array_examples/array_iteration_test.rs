@@ -38,13 +38,12 @@ fn main() {
     let tc = thread_cnts.clone();
 
     let timer = Instant::now();
-    block_array.dist_iter().for_each_with_schedule(
-        move |e| {
+    block_array
+        .dist_iter()
+        .for_each_with_schedule(Schedule::WorkStealing, move |e| {
             std::thread::sleep(Duration::from_millis((e * 1) as u64));
             *tc.lock().entry(std::thread::current().id()).or_insert(0) += e * 1;
-        },
-        Schedule::WorkStealing,
-    );
+        });
     block_array.wait_all();
     block_array.barrier();
     println!("elapsed time {:?}", timer.elapsed().as_secs_f64());
@@ -54,13 +53,12 @@ fn main() {
     let tc = thread_cnts.clone();
 
     let timer = Instant::now();
-    block_array.dist_iter().for_each_with_schedule(
-        move |e| {
+    block_array
+        .dist_iter()
+        .for_each_with_schedule(Schedule::Guided, move |e| {
             std::thread::sleep(Duration::from_millis((e * 1) as u64));
             *tc.lock().entry(std::thread::current().id()).or_insert(0) += e * 1;
-        },
-        Schedule::Guided,
-    );
+        });
     block_array.wait_all();
     block_array.barrier();
     println!("elapsed time {:?}", timer.elapsed().as_secs_f64());
@@ -70,13 +68,12 @@ fn main() {
     let tc = thread_cnts.clone();
 
     let timer = Instant::now();
-    block_array.dist_iter().for_each_with_schedule(
-        move |e| {
+    block_array
+        .dist_iter()
+        .for_each_with_schedule(Schedule::Dynamic, move |e| {
             std::thread::sleep(Duration::from_millis((e * 1) as u64));
             *tc.lock().entry(std::thread::current().id()).or_insert(0) += e * 1;
-        },
-        Schedule::Dynamic,
-    );
+        });
     block_array.wait_all();
     block_array.barrier();
     println!("elapsed time {:?}", timer.elapsed().as_secs_f64());
@@ -86,13 +83,12 @@ fn main() {
     let tc = thread_cnts.clone();
 
     let timer = Instant::now();
-    block_array.dist_iter().for_each_with_schedule(
-        move |e| {
+    block_array
+        .dist_iter()
+        .for_each_with_schedule(Schedule::Chunk(10), move |e| {
             std::thread::sleep(Duration::from_millis((e * 1) as u64));
             *tc.lock().entry(std::thread::current().id()).or_insert(0) += e * 1;
-        },
-        Schedule::Chunk(10),
-    );
+        });
     block_array.wait_all();
     block_array.barrier();
     println!("elapsed time {:?}", timer.elapsed().as_secs_f64());

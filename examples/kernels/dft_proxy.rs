@@ -286,6 +286,7 @@ fn dft_lamellar_array_opt_test(
         .for_each(|(i, chunk)| {
             let signal = chunk.clone();
             spectrum.dist_iter_mut().enumerate().for_each_with_schedule(
+                Schedule::Dynamic,
                 move |(k, spec_bin)| {
                     let mut sum = 0f64;
                     for (j, &x) in signal
@@ -301,7 +302,6 @@ fn dft_lamellar_array_opt_test(
                     // let _lock = LOCK.lock();
                     *spec_bin += sum;
                 },
-                Schedule::Dynamic,
             );
         });
     spectrum.wait_all();

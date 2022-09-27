@@ -218,7 +218,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         submit_cnt: usize,
         req_handles: Arc<Mutex<HashMap<usize, BufOpsRequest<T>>>>,
     ) {
-        println!("initiate_op_task");
+        // println!("initiate_op_task");
         let (pe_offsets, req_ids, req_cnt) = input.to_pe_offsets(self); //HashMap<usize, InputToValue<'a,T>>
 
         let res_offsets_map = OpReqOffsets::new();

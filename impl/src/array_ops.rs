@@ -479,7 +479,7 @@ fn create_buf_ops(
 
                 },
             }),
-            OpType::Atomic => match_stmts.extend(quote! {
+            OpType::Access => match_stmts.extend(quote! {
                 ArrayOpCmd::Store=>{
                     #assign
                 },
@@ -693,7 +693,7 @@ fn create_buf_ops(
 enum OpType {
     Arithmetic,
     Bitwise,
-    Atomic,
+    Access,
 }
 
 fn create_buffered_ops(
@@ -727,7 +727,7 @@ fn create_buffered_ops(
 
     let mut expanded = quote! {};
 
-    let mut optypes = vec![OpType::Arithmetic];
+    let mut optypes = vec![OpType::Arithmetic, OpType::Access];
     if bitwise {
         optypes.push(OpType::Bitwise);
     }
@@ -740,7 +740,7 @@ fn create_buffered_ops(
         bitwise,
     );
     expanded.extend(buf_op_impl);
-    optypes.push(OpType::Atomic);
+
     for (array_type, byte_array_type) in atomic_array_types {
         let buf_op_impl = create_buf_ops(
             typeident.clone(),
