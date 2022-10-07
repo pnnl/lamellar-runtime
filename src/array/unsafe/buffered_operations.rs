@@ -174,21 +174,21 @@ impl<T: Dist> OpAmInputToValue<T> {
             OpAmInputToValue::ManyToMany(indices, _) => indices.len(),
         }
     }
-    #[tracing::instrument(skip_all)]
-    pub fn num_bytes(&self) -> usize {
-        match self {
-            OpAmInputToValue::OneToOne(_, _) => std::mem::size_of::<(usize, T)>(),
-            OpAmInputToValue::OneToMany(_, vals) => {
-                std::mem::size_of::<usize>() + vals.len() * std::mem::size_of::<T>()
-            }
-            OpAmInputToValue::ManyToOne(indices, _) => {
-                indices.len() * std::mem::size_of::<usize>() + std::mem::size_of::<T>()
-            }
-            OpAmInputToValue::ManyToMany(indices, vals) => {
-                indices.len() * std::mem::size_of::<usize>() + vals.len() * std::mem::size_of::<T>()
-            }
-        }
-    }
+    // #[tracing::instrument(skip_all)]
+    // pub fn num_bytes(&self) -> usize {
+    //     match self {
+    //         OpAmInputToValue::OneToOne(_, _) => std::mem::size_of::<(usize, T)>(),
+    //         OpAmInputToValue::OneToMany(_, vals) => {
+    //             std::mem::size_of::<usize>() + vals.len() * std::mem::size_of::<T>()
+    //         }
+    //         OpAmInputToValue::ManyToOne(indices, _) => {
+    //             indices.len() * std::mem::size_of::<usize>() + std::mem::size_of::<T>()
+    //         }
+    //         OpAmInputToValue::ManyToMany(indices, vals) => {
+    //             indices.len() * std::mem::size_of::<usize>() + vals.len() * std::mem::size_of::<T>()
+    //         }
+    //     }
+    // }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -246,11 +246,13 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
                         op_data as *const InputToValue<T> as *const u8,
                         &req_ids[&pe],
                         res_map.clone(),
+                        self.inner.data.team.clone(),
                     ),
                     OpReturnType::None => {
                         let (first, complete) = buf_op.add_ops(
                             &op as *const ArrayOpCmd<T> as *const u8,
                             op_data as *const InputToValue<T> as *const u8,
+                            self.inner.data.team.clone(),
                         );
                         (first, complete, None)
                     }
@@ -386,19 +388,23 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         // println!("i_len {i_len} v_len {v_len}");
         if v_len > 0 && i_len > 0 {
             if v_len == 1 && i_len > 1 {
+                // println!("here 0");
                 let val = vals[0].first();
                 for i in indices.drain(..) {
                     i_v_iters.push(InputToValue::ManyToOne(i, val));
                 }
             } else if v_len > 1 && i_len == 1 {
+                // println!("here 1");
                 let idx = indices[0].first();
                 for v in vals.drain(..) {
                     i_v_iters.push(InputToValue::OneToMany(idx, v));
                 }
             } else if i_len == v_len {
                 if i_len == 1 {
+                    // println!("here 2");
                     i_v_iters.push(InputToValue::OneToOne(indices[0].first(), vals[0].first()));
                 } else {
+                    // println!("here 3");
                     for (i, v) in indices.iter().zip(vals.iter()) {
                         i_v_iters.push(InputToValue::ManyToMany(i.clone(), v.clone()));
                     }
@@ -410,7 +416,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
                 );
             }
 
-            // println!("i_v_iters len {:?}",i_v_iters.len());
+            // println!("i_v_iters len {:?}", i_v_iters.len());
 
             let num_sub_reqs = i_v_iters.len(); //Arc::new(AtomicUsize::new(i_v_iters.len()));
             let mut submit_cnt = num_sub_reqs - 1;

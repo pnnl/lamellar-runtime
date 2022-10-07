@@ -1107,9 +1107,16 @@ impl LamellarTeamRT {
         self: &Pin<Arc<LamellarTeamRT>>,
         size: usize,
     ) -> LocalMemoryRegion<T> {
-        let lmr: LocalMemoryRegion<T> =
-            LocalMemoryRegion::new(size, self, self.lamellae.clone()).into();
-        lmr
+        // let lmr: LocalMemoryRegion<T> =
+        //     LocalMemoryRegion::new(size, self, self.lamellae.clone()).into();
+        // lmr
+        let mut lmr = LocalMemoryRegion::try_new(size, self, self.lamellae.clone());
+        while let Err(_err) = lmr {
+            std::thread::yield_now();
+            self.lamellae.alloc_pool(size * std::mem::size_of::<T>());
+            lmr = LocalMemoryRegion::try_new(size, self, self.lamellae.clone());
+        }
+        lmr.expect("out of memory")
     }
 }
 

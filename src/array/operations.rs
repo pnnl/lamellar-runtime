@@ -18,6 +18,9 @@ use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::u8;
+
+pub static OPS_BUFFER_SIZE: usize = 10_000_000;
 
 #[derive(
     serde::Serialize,
@@ -46,11 +49,10 @@ pub enum ArrayOpCmd<T: Dist> {
     Store,
     Load,
     Swap,
-    CompareExchange(T),
-    CompareExchangeEps(T, T),
     Put,
     Get,
-    // CopyFromBuff,
+    CompareExchange(T),
+    CompareExchangeEps(T, T),
 }
 
 impl<T: Dist> ArrayOpCmd<T> {
@@ -79,6 +81,162 @@ impl<T: Dist> ArrayOpCmd<T> {
             | ArrayOpCmd::Put => 0, //we dont return anything
         }
     }
+
+    pub fn to_bytes(&self, buf: &mut [u8]) -> usize {
+        match self {
+            ArrayOpCmd::Add => {
+                buf[0] = 0;
+                1
+            }
+            ArrayOpCmd::FetchAdd => {
+                buf[0] = 1;
+                1
+            }
+            ArrayOpCmd::Sub => {
+                buf[0] = 2;
+                1
+            }
+            ArrayOpCmd::FetchSub => {
+                buf[0] = 3;
+                1
+            }
+            ArrayOpCmd::Mul => {
+                buf[0] = 4;
+                1
+            }
+            ArrayOpCmd::FetchMul => {
+                buf[0] = 5;
+                1
+            }
+            ArrayOpCmd::Div => {
+                buf[0] = 6;
+                1
+            }
+            ArrayOpCmd::FetchDiv => {
+                buf[0] = 7;
+                1
+            }
+            ArrayOpCmd::And => {
+                buf[0] = 8;
+                1
+            }
+            ArrayOpCmd::FetchAnd => {
+                buf[0] = 9;
+                1
+            }
+            ArrayOpCmd::Or => {
+                buf[0] = 10;
+                1
+            }
+            ArrayOpCmd::FetchOr => {
+                buf[0] = 11;
+                1
+            }
+            ArrayOpCmd::Store => {
+                buf[0] = 12;
+                1
+            }
+            ArrayOpCmd::Load => {
+                buf[0] = 13;
+                1
+            }
+            ArrayOpCmd::Swap => {
+                buf[0] = 14;
+                1
+            }
+            ArrayOpCmd::Put => {
+                buf[0] = 15;
+                1
+            }
+            ArrayOpCmd::Get => {
+                buf[0] = 16;
+                1
+            }
+            ArrayOpCmd::CompareExchange(val) => {
+                buf[0] = 17;
+                unsafe {
+                    std::ptr::copy_nonoverlapping(val as *const T, buf[1..].as_ptr() as *mut T, 1);
+                }
+                1 + std::mem::size_of::<T>()
+            }
+            ArrayOpCmd::CompareExchangeEps(val, eps) => {
+                buf[0] = 18;
+                let t_size = std::mem::size_of::<T>();
+                unsafe {
+                    std::ptr::copy_nonoverlapping(val as *const T, buf[1..].as_ptr() as *mut T, 1);
+                    std::ptr::copy_nonoverlapping(
+                        eps as *const T,
+                        buf[(1 + t_size)..].as_ptr() as *mut T,
+                        1,
+                    );
+                }
+                1 + 2 * std::mem::size_of::<T>()
+            }
+        }
+    }
+
+    pub fn num_bytes(&self) -> usize {
+        match self {
+            ArrayOpCmd::Add => 1,
+            ArrayOpCmd::FetchAdd => 1,
+            ArrayOpCmd::Sub => 1,
+            ArrayOpCmd::FetchSub => 1,
+            ArrayOpCmd::Mul => 1,
+            ArrayOpCmd::FetchMul => 1,
+            ArrayOpCmd::Div => 1,
+            ArrayOpCmd::FetchDiv => 1,
+            ArrayOpCmd::And => 1,
+            ArrayOpCmd::FetchAnd => 1,
+            ArrayOpCmd::Or => 1,
+            ArrayOpCmd::FetchOr => 1,
+            ArrayOpCmd::Store => 1,
+            ArrayOpCmd::Load => 1,
+            ArrayOpCmd::Swap => 1,
+            ArrayOpCmd::Put => 1,
+            ArrayOpCmd::Get => 1,
+            ArrayOpCmd::CompareExchange(_val) => 1 + std::mem::size_of::<T>(),
+            ArrayOpCmd::CompareExchangeEps(_val, _eps) => 1 + 2 * std::mem::size_of::<T>(),
+        }
+    }
+
+    pub fn from_bytes(buf: &[u8]) -> (Self, usize) {
+        let variant = buf[0];
+        match variant {
+            0 => (ArrayOpCmd::Add, 1),
+            1 => (ArrayOpCmd::FetchAdd, 1),
+            2 => (ArrayOpCmd::Sub, 1),
+            3 => (ArrayOpCmd::FetchSub, 1),
+            4 => (ArrayOpCmd::Mul, 1),
+            5 => (ArrayOpCmd::FetchMul, 1),
+            6 => (ArrayOpCmd::Div, 1),
+            7 => (ArrayOpCmd::FetchDiv, 1),
+            8 => (ArrayOpCmd::And, 1),
+            9 => (ArrayOpCmd::FetchAnd, 1),
+            10 => (ArrayOpCmd::Or, 1),
+            11 => (ArrayOpCmd::FetchOr, 1),
+            12 => (ArrayOpCmd::Store, 1),
+            13 => (ArrayOpCmd::Load, 1),
+            14 => (ArrayOpCmd::Swap, 1),
+            15 => (ArrayOpCmd::Put, 1),
+            16 => (ArrayOpCmd::Get, 1),
+            17 => {
+                let val = unsafe { *(buf[1..].as_ptr() as *const T) };
+                (
+                    ArrayOpCmd::CompareExchange(val),
+                    1 + std::mem::size_of::<T>(),
+                )
+            }
+            18 => {
+                let t_size = std::mem::size_of::<T>();
+                let val = unsafe { *(buf[1..].as_ptr() as *const T) };
+                let eps = unsafe { *(buf[(1 + t_size)..].as_ptr() as *const T) };
+                (ArrayOpCmd::CompareExchangeEps(val, eps), 1 + 2 * t_size)
+            }
+            _ => {
+                panic!("unrecognized Array Op Type");
+            }
+        }
+    }
 }
 
 #[derive(serde::Serialize, Clone, Debug)]
@@ -96,6 +254,196 @@ pub enum OpAmInputToValue<T: Dist> {
     OneToMany(usize, Vec<T>),
     ManyToOne(Vec<usize>, T),
     ManyToMany(Vec<usize>, Vec<T>),
+}
+
+impl<T: Dist> OpAmInputToValue<T> {
+    pub fn embed_vec<U>(data: &Vec<U>, buf: &mut [u8]) -> usize {
+        let mut size = 0;
+        // embed the data length
+        let len = data.len();
+        unsafe {
+            std::ptr::copy_nonoverlapping(
+                &len as *const usize,
+                buf[size..].as_ptr() as *mut usize,
+                1,
+            )
+        };
+        size += std::mem::size_of::<usize>();
+        // ---- end data length ----
+        // embed the data
+        unsafe {
+            std::ptr::copy_nonoverlapping(data.as_ptr(), buf[size..].as_ptr() as *mut U, len)
+        };
+        size += len * std::mem::size_of::<U>();
+        // ---- end data ====
+        size
+    }
+    pub fn embed_single_val<U>(val: U, buf: &mut [u8]) -> usize {
+        // embed the val
+        unsafe { std::ptr::copy_nonoverlapping(&val as *const U, buf.as_ptr() as *mut U, 1) };
+        std::mem::size_of::<U>()
+        // ---- end val ----
+    }
+    pub fn to_bytes(self, buf: &mut [u8]) -> usize {
+        match self {
+            OpAmInputToValue::OneToOne(idx, val) => {
+                // embed the enum type
+                let mut size = 0;
+                buf[size] = 0;
+                size += 1;
+                // ----- end type -----
+                // embed the index
+                size += OpAmInputToValue::<T>::embed_single_val(idx, &mut buf[size..]);
+                // ---- end index ----
+                // embed the value
+                size += OpAmInputToValue::<T>::embed_single_val(val, &mut buf[size..]);
+                // -- end value --
+                size
+            }
+            OpAmInputToValue::OneToMany(idx, vals) => {
+                // embed the enum type
+                let mut size = 0;
+                buf[size] = 1;
+                size += 1;
+                // ----- end type -----
+                // embed the index
+                size += OpAmInputToValue::<T>::embed_single_val(idx, &mut buf[size..]);
+                // ---- end index ----
+                // embed the vals
+                size += OpAmInputToValue::<T>::embed_vec(&vals, &mut buf[size..]);
+                // ---- end vals ----
+                size
+            }
+            OpAmInputToValue::ManyToOne(idxs, val) => {
+                // embed the enum type
+                let mut size = 0;
+                buf[size] = 2;
+                size += 1;
+                // ----- end type -----
+                // embed the indices
+                size += OpAmInputToValue::<T>::embed_vec(&idxs, &mut buf[size..]);
+                // ---- end indices ----
+                // embed the val
+                size += OpAmInputToValue::<T>::embed_single_val(val, &mut buf[size..]);
+                // ---- end val ----
+                size
+            }
+            OpAmInputToValue::ManyToMany(idxs, vals) => {
+                // embed the enum type
+                let mut size = 0;
+                buf[size] = 3;
+                size += 1;
+                // ----- end type -----
+                // embed the indices
+                size += OpAmInputToValue::<T>::embed_vec(&idxs, &mut buf[size..]);
+                // ---- end indices ----
+                // embed the vals
+                size += OpAmInputToValue::<T>::embed_vec(&vals, &mut buf[size..]);
+                // ---- end vals ----
+                size
+            }
+        }
+    }
+    pub fn vec_size<U>(data: &Vec<U>) -> usize {
+        let mut size = 0;
+        let len = data.len();
+        size += std::mem::size_of::<usize>(); //the length
+        size += len * std::mem::size_of::<U>();
+        size
+    }
+    pub fn single_val_size<U>(_val: U) -> usize {
+        std::mem::size_of::<U>()
+    }
+    pub fn num_bytes(&self) -> usize {
+        match self {
+            OpAmInputToValue::OneToOne(idx, val) => {
+                let mut size = 0;
+                size += 1;
+                size += OpAmInputToValue::<T>::single_val_size(idx);
+                size += OpAmInputToValue::<T>::single_val_size(val);
+                size
+            }
+            OpAmInputToValue::OneToMany(idx, vals) => {
+                let mut size = 0;
+                size += 1;
+                size += OpAmInputToValue::<T>::single_val_size(idx);
+                size += OpAmInputToValue::<T>::vec_size(&vals);
+                size
+            }
+            OpAmInputToValue::ManyToOne(idxs, val) => {
+                let mut size = 0;
+                size += 1;
+                size += OpAmInputToValue::<T>::vec_size(&idxs);
+                size += OpAmInputToValue::<T>::single_val_size(val);
+                size
+            }
+            OpAmInputToValue::ManyToMany(idxs, vals) => {
+                let mut size = 0;
+                size += 1;
+                size += OpAmInputToValue::<T>::vec_size(&idxs);
+                size += OpAmInputToValue::<T>::vec_size(&vals);
+                size
+            }
+        }
+    }
+}
+
+pub enum RemoteOpAmInputToValue<'a, T: Dist> {
+    OneToOne(&'a usize, &'a T),
+    OneToMany(&'a usize, &'a [T]),
+    ManyToOne(&'a [usize], &'a T),
+    ManyToMany(&'a [usize], &'a [T]),
+}
+
+impl<'a, T: Dist> RemoteOpAmInputToValue<'a, T> {
+    pub fn unpack_slice<U>(buf: &[u8]) -> (&[U], usize) {
+        let mut size = 0;
+        let len = unsafe { &*(buf[size..].as_ptr() as *const usize) };
+        size += std::mem::size_of::<usize>();
+        let vals = unsafe { std::slice::from_raw_parts(buf[size..].as_ptr() as *const U, *len) };
+        size += len * std::mem::size_of::<T>();
+        (vals, size)
+    }
+    pub fn from_bytes(buf: &'a [u8]) -> (Self, usize) {
+        let mut size = 0;
+        let variant = buf[size];
+        size += 1;
+        match variant {
+            0 => {
+                let idx = unsafe { &*(buf[size..].as_ptr() as *const usize) };
+                size += std::mem::size_of::<usize>();
+                let val = unsafe { &*(buf[size..].as_ptr() as *const T) };
+                size += std::mem::size_of::<T>();
+                (RemoteOpAmInputToValue::OneToOne(idx, val), size)
+            }
+            1 => {
+                let idx = unsafe { &*(buf[size..].as_ptr() as *const usize) };
+                size += std::mem::size_of::<usize>();
+                let (vals, vals_bytes) = RemoteOpAmInputToValue::<T>::unpack_slice(&buf[size..]);
+                size += vals_bytes;
+                (RemoteOpAmInputToValue::OneToMany(idx, vals), size)
+            }
+            2 => {
+                let (idxs, idxs_bytes) = RemoteOpAmInputToValue::<T>::unpack_slice(&buf[size..]);
+                size += idxs_bytes;
+                let val = unsafe { &*(buf[size..].as_ptr() as *const T) };
+                size += std::mem::size_of::<T>();
+
+                (RemoteOpAmInputToValue::ManyToOne(idxs, val), size)
+            }
+            3 => {
+                let (idxs, idxs_bytes) = RemoteOpAmInputToValue::<T>::unpack_slice(&buf[size..]);
+                size += idxs_bytes;
+                let (vals, vals_bytes) = RemoteOpAmInputToValue::<T>::unpack_slice(&buf[size..]);
+                size += vals_bytes;
+
+                (RemoteOpAmInputToValue::ManyToMany(idxs, vals), size)
+            }
+            _ => {
+                panic!("unrecognized OpAmInputToValue Type");
+            }
+        }
+    }
 }
 
 #[derive(Clone, serde::Serialize, Debug)]
@@ -461,7 +809,12 @@ impl<'a, T: Dist + ElementOps> OpInput<'a, T> for &NativeAtomicArray<T> {
 // }
 
 pub trait BufferOp: Sync + Send {
-    fn add_ops(&self, op: *const u8, op_data: *const u8) -> (bool, Arc<AtomicBool>);
+    fn add_ops(
+        &self,
+        op: *const u8,
+        op_data: *const u8,
+        team: Pin<Arc<LamellarTeamRT>>,
+    ) -> (bool, Arc<AtomicBool>);
     fn add_fetch_ops(
         &self,
         pe: usize,
@@ -469,6 +822,7 @@ pub trait BufferOp: Sync + Send {
         op_data: *const u8,
         req_ids: &Vec<usize>,
         res_map: OpResults,
+        team: Pin<Arc<LamellarTeamRT>>,
     ) -> (bool, Arc<AtomicBool>, Option<OpResultOffsets>);
 
     fn into_arc_am(

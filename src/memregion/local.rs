@@ -303,13 +303,13 @@ pub struct LocalMemoryRegion<T: Dist> {
 }
 
 impl<T: Dist> LocalMemoryRegion<T> {
-    pub(crate) fn new(
-        size: usize,
-        team: &std::pin::Pin<Arc<LamellarTeamRT>>,
-        lamellae: Arc<Lamellae>,
-    ) -> LocalMemoryRegion<T> {
-        LocalMemoryRegion::try_new(size, team, lamellae).expect("out of memory")
-    }
+    // pub(crate) fn new(
+    //     size: usize,
+    //     team: &std::pin::Pin<Arc<LamellarTeamRT>>,
+    //     lamellae: Arc<Lamellae>,
+    // ) -> LocalMemoryRegion<T> {
+    //     LocalMemoryRegion::try_new(size, team, lamellae).expect("out of memory")
+    // }
     pub(crate) fn try_new(
         size: usize,
         team: &std::pin::Pin<Arc<LamellarTeamRT>>,

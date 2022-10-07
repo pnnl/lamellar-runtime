@@ -1,6 +1,7 @@
 use crate::lamellar_request::LamellarRequest;
 use crate::memregion::{
     local::LocalMemoryRegion, shared::SharedMemoryRegion, Dist, LamellarMemoryRegion,
+    RemoteMemoryRegion,
 };
 use crate::{active_messaging::*, LamellarTeamRT};
 // use crate::Darc;
