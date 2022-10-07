@@ -922,19 +922,24 @@ fn create_buffered_ops(
                 ArrayOpCmd,
                 LamellarArrayPut,
                 OpResultOffsets,
+                RemoteOpAmInputToValue,
                 PeOpResults,OpResults,
                 OpAmInputToValue};
             // #bitwise_mod
             use __lamellar::array;
+            use __lamellar::LamellarTeamRT;
             // #bitwise_mod
             use __lamellar::Darc;
             use __lamellar::LamellarArray;
             use __lamellar::LamellarRequest;
             use __lamellar::RemoteActiveMessage;
-            use __lamellar::memregion::RemoteMemoryRegion;
+            // use __lamellar::memregion::{RemoteMemoryRegion};
+            use __lamellar::LocalMemoryRegion;
+            use __lamellar::RemoteMemoryRegion;
             use std::sync::Arc;
             use parking_lot::{Mutex,RwLock};
             use std::sync::atomic::{Ordering,AtomicBool,AtomicUsize};
+            use std::pin::Pin;
             #expanded
         };
     };

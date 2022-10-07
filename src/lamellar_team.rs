@@ -1103,7 +1103,7 @@ impl LamellarTeamRT {
     /// * `size` - number of elements of T to allocate a memory region for -- (not size in bytes)
     ///
     #[tracing::instrument(skip_all)]
-    pub(crate) fn alloc_local_mem_region<T: Dist>(
+    pub fn alloc_local_mem_region<T: Dist>(
         self: &Pin<Arc<LamellarTeamRT>>,
         size: usize,
     ) -> LocalMemoryRegion<T> {
