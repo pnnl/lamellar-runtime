@@ -224,7 +224,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         let res_offsets_map = OpReqOffsets::new();
         let res_map = OpResults::new();
         let mut complete_cnt = Vec::new();
-        // println!("pe_offsets size {:?}",pe_offsets);
+        // println!("pe_offsets size {:?}",pe_offsets.len());
 
         // println!("req_cnt: {:?}",req_cnt);
         let req = pe_offsets
@@ -237,6 +237,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
                     .data
                     .req_cnt
                     .fetch_add(op_data.len(), Ordering::SeqCst);
+                // println!("added to req_cnt: {} {}",stall_mark+op_data.len(),op_data.len());
                 let buf_op = self.inner.data.op_buffers.read()[pe].clone();
 
                 let (first, complete, res_offsets) = match ret_type {
@@ -263,12 +264,13 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
                 if first {
                     // let res_map = res_map.clone();
                     let array = self.clone();
-                    self.inner
+                    let _team_cnt =self.inner
                         .data
                         .team
                         .team_counters
                         .outstanding_reqs
                         .fetch_add(1, Ordering::SeqCst); // we need to tell the world we have a request pending
+                    // println!("updated team cnt: {}",_team_cnt +1);
                     self.inner.data.team.scheduler.submit_task(async move {
                         // println!("starting");
                         let mut wait_cnt = 0;
@@ -320,20 +322,23 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
                                 .team_counters
                                 .outstanding_reqs
                                 .fetch_sub(1, Ordering::SeqCst); //remove our pending req now that it has actually been submitted;
+                            // println!("updated team cnt: {}",_cnt1 -1);
                             let _cnt2 = array.inner.data.req_cnt.fetch_sub(len, Ordering::SeqCst);
+                            // println!("removed frm req_cnt: {} {}",_cnt2-len,len);
                             complete.store(true, Ordering::Relaxed);
 
                             // println!("indirect cnts {:?}->{:?} {:?}->{:?} -- {:?}",cnt1,cnt1-1,cnt2,cnt2-len,len);
                         } else {
                             // println!("here {:?} {:?} ",ams.len(),len);
                             // complete.store(true, Ordering::Relaxed);
-                            array
+                            let _team_cnt = array
                                 .inner
                                 .data
                                 .team
                                 .team_counters
                                 .outstanding_reqs
                                 .fetch_sub(1, Ordering::SeqCst);
+                            // println!("updated team cnt: {} but not sure I should be here",_team_cnt -1);
                             complete.store(true, Ordering::Relaxed);
                         }
                     });
@@ -598,6 +603,8 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
     //     self.initiate_op(val,index,ArrayOpCmd::Put)
     // }
 }
+
+impl<T: ElementOps + 'static> ReadOnlyOps<T> for UnsafeArray<T> {}
 
 impl<T: ElementOps + 'static> AccessOps<T> for UnsafeArray<T> {}
 

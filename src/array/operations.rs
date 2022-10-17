@@ -1232,21 +1232,7 @@ impl<T> ElementCompareEqOps for T where T: std::cmp::Eq + AmDist + Dist {}
 pub trait ElementComparePartialEqOps: std::cmp::PartialEq + AmDist + Dist + Sized {}
 impl<T> ElementComparePartialEqOps for T where T: std::cmp::PartialEq + AmDist + Dist {}
 
-pub trait AccessOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
-    #[tracing::instrument(skip_all)]
-    fn store<'a>(&self, index: usize, val: T) -> Pin<Box<dyn Future<Output = ()> + Send>> {
-        self.inner_array()
-            .initiate_op(val, index, ArrayOpCmd::Store)
-    }
-    #[tracing::instrument(skip_all)]
-    fn batch_store<'a>(
-        &self,
-        index: impl OpInput<'a, usize>,
-        val: impl OpInput<'a, T>,
-    ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
-        self.inner_array()
-            .initiate_op(val, index, ArrayOpCmd::Store)
-    }
+pub trait ReadOnlyOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
     #[tracing::instrument(skip_all)]
     fn load<'a>(&self, index: usize) -> Pin<Box<dyn Future<Output = T> + Send>> {
         let dummy_val = self.inner_array().dummy_val(); //we dont actually do anything with this except satisfy apis;
@@ -1261,6 +1247,23 @@ pub trait AccessOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
         let dummy_val = self.inner_array().dummy_val(); //we dont actually do anything with this except satisfy apis;
         self.inner_array()
             .initiate_batch_fetch_op(dummy_val, index, ArrayOpCmd::Load)
+    }
+}
+
+pub trait AccessOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
+    #[tracing::instrument(skip_all)]
+    fn store<'a>(&self, index: usize, val: T) -> Pin<Box<dyn Future<Output = ()> + Send>> {
+        self.inner_array()
+            .initiate_op(val, index, ArrayOpCmd::Store)
+    }
+    #[tracing::instrument(skip_all)]
+    fn batch_store<'a>(
+        &self,
+        index: impl OpInput<'a, usize>,
+        val: impl OpInput<'a, T>,
+    ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
+        self.inner_array()
+            .initiate_op(val, index, ArrayOpCmd::Store)
     }
     #[tracing::instrument(skip_all)]
     fn swap<'a>(&self, index: usize, val: T) -> Pin<Box<dyn Future<Output = T> + Send>> {

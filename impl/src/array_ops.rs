@@ -367,7 +367,23 @@ fn create_buf_ops(
 
             },
         )
-    } else {
+    } else if array_type == "ReadOnlyArray" {
+        (
+            quote! { panic!("assign a valid op for Read Only Arrays");},                                           //lhs
+            quote! { panic!("assign/store not a valid op for Read Only Arrays");},                                     //assign
+            quote! { panic!("fetch_add not a valid op for Read Only Arrays"); }, //fetch_add -- we lock the index before this point so its actually atomic
+            quote! { panic!("fetch_sub not a valid op for Read Only Arrays"); }, //fetch_sub --we lock the index before this point so its actually atomic
+            quote! { panic!("fetch_mul not a valid op for Read Only Arrays"); }, //fetch_mul --we lock the index before this point so its actually atomic
+            quote! { panic!("fetch_div not a valid op for Read Only Arrays"); }, //fetch_div --we lock the index before this point so its actually atomic
+            quote! { panic!("fetch_and not a valid op for Read Only Arrays"); }, //fetch_and --we lock the index before this point so its actually atomic
+            quote! { panic!("fetch_or not a valid op for Read Only Arrays"); }, //fetch_or --we lock the index before this point so its actually atomic
+            quote! {slice[index]},                                           //load
+            quote! { panic!("swap not a valid op for Read Only Arrays"); }, //swap we lock the index before this point so its actually atomic
+            quote! { panic!("compare exchange not a valid op for Read Only Arrays"); }, // compare_exchange -- we lock the index before this point so its actually atomic
+            quote! { panic!("compare exchange eps not a valid op for Read Only Arrays"); }, //compare exchange epsilon
+        )
+    }
+    else{
         (
             quote! {slice[index]},                                           //lhs
             quote! {slice[index] = val},                                     //assign
@@ -438,6 +454,11 @@ fn create_buf_ops(
             quote! {}, //no explicit lock since the slice handle is a lock guard
             quote! {let mut slice = self.data.write_local_data();}, //this is the lock
         )
+    } else if array_type == "ReadOnlyArray" {
+        (
+            quote! {}, //no explicit lock since the slice handle is a lock guard
+            quote! {let slice = self.data.local_data();}, //this is the lock
+        )
     } else {
         (
             quote! {}, //no lock cause either readonly or unsafe
@@ -489,9 +510,6 @@ fn create_buf_ops(
                 ArrayOpCmd::Store=>{
                     #assign
                 },
-                ArrayOpCmd::Load=>{
-                    #res_t res_t[0] =  #load;
-                },
                 ArrayOpCmd::Swap=>{
                     #swap
                 },
@@ -501,6 +519,11 @@ fn create_buf_ops(
                 ArrayOpCmd::CompareExchangeEps(old,eps) =>{
                     #compare_exchange_eps
                 }
+            }),
+            OpType::ReadOnly => match_stmts.extend(quote! {
+                ArrayOpCmd::Load=>{
+                    #res_t res_t[0] =  #load;
+                },
             }),
         }
     }
@@ -568,7 +591,6 @@ fn create_buf_ops(
                 }
                 else {
                     if bufs.last().unwrap().1 + op_size+data_size > #lamellar::array::OPS_BUFFER_SIZE{
-                        
                         bufs.push((team.alloc_local_mem_region(std::cmp::max(#lamellar::array::OPS_BUFFER_SIZE, op_size+data_size)),0));
                     }
                 }
@@ -600,7 +622,6 @@ fn create_buf_ops(
                 }
                 // println!("{:?}",res_offsets);
                 // let first = buf.len() == 0;
-                let _temp = self.cur_len.fetch_add(op_data.len(),Ordering::SeqCst);
                 // buf.push((op,op_data));
                 let first = bufs.len() == 0;
                 let op_size = op.num_bytes();
@@ -616,6 +637,7 @@ fn create_buf_ops(
                 let mut buf: &mut (LocalMemoryRegion<u8>, usize) = bufs.last_mut().unwrap();
                 
                 let _temp = self.cur_len.fetch_add(op_data.len(),Ordering::SeqCst);
+                // println!("array_op cur_len {} {}",_temp,op_data.len());
                 let mut buf_slice = unsafe{buf.0.as_mut_slice().unwrap()};
                 
                 buf.1 += op.to_bytes(&mut buf_slice[(buf.1)..]);
@@ -634,6 +656,7 @@ fn create_buf_ops(
                 // println!("buf len {:?}",buf.len());
                 let mut ops = Vec::new();
                 let len = self.cur_len.load(Ordering::SeqCst);
+                // println!("into_arc_am: cur_len {}",len);
                 self.cur_len.store(0,Ordering::SeqCst);
                 std::mem::swap(&mut ops,  &mut bufs);
                 let mut complete = Arc::new(AtomicBool::new(false));
@@ -850,6 +873,7 @@ enum OpType {
     Arithmetic,
     Bitwise,
     Access,
+    ReadOnly
 }
 
 fn create_buffered_ops(
@@ -883,7 +907,19 @@ fn create_buffered_ops(
 
     let mut expanded = quote! {};
 
-    let mut optypes = vec![OpType::Arithmetic, OpType::Access];
+    let mut optypes = vec![OpType::ReadOnly];//, vec![OpType::Arithmetic, OpType::Access];
+
+    let buf_op_impl = create_buf_ops(
+        typeident.clone(),
+        quote::format_ident!("ReadOnlyArray"),
+        quote::format_ident!("ReadOnlyByteArrayWeak"),
+        &optypes,
+        rt,
+        bitwise,
+    );
+    expanded.extend(buf_op_impl);
+    optypes.push(OpType::Arithmetic);
+    optypes.push(OpType::Access);
     if bitwise {
         optypes.push(OpType::Bitwise);
     }
@@ -908,6 +944,8 @@ fn create_buffered_ops(
         );
         expanded.extend(buf_op_impl)
     }
+
+    
 
     let user_expanded = quote_spanned! {expanded.span()=>
         const _: () = {

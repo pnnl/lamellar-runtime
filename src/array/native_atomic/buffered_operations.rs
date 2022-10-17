@@ -22,6 +22,8 @@ pub struct NativeAtomicArrayOpBuf {
 
 crate::inventory::collect!(NativeAtomicArrayOpBuf);
 
+impl<T: ElementOps + 'static> ReadOnlyOps<T> for NativeAtomicArray<T> {}
+
 impl<T: ElementOps + 'static> AccessOps<T> for NativeAtomicArray<T> {}
 
 impl<T: ElementArithmeticOps + 'static> ArithmeticOps<T> for NativeAtomicArray<T> {}

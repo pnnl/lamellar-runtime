@@ -22,6 +22,8 @@ pub struct LocalLockAtomicArrayOpBuf {
 
 crate::inventory::collect!(LocalLockAtomicArrayOpBuf);
 
+impl<T: ElementOps + 'static> ReadOnlyOps<T> for LocalLockAtomicArray<T> {}
+
 impl<T: ElementOps + 'static> AccessOps<T> for LocalLockAtomicArray<T> {}
 
 impl<T: ElementArithmeticOps + 'static> ArithmeticOps<T> for LocalLockAtomicArray<T> {}

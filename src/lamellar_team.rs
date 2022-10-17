@@ -826,7 +826,7 @@ impl LamellarTeamRT {
             data: Mutex::new(HashMap::new()),
             team_outstanding_reqs: self.team_counters.outstanding_reqs.clone(),
             world_outstanding_reqs: self.world_counters.outstanding_reqs.clone(),
-            tg_outstanding_reqs: tg_outstanding_reqs,
+            tg_outstanding_reqs: tg_outstanding_reqs.clone(),
             user_handle: AtomicBool::new(true),
         });
         let req_result = Arc::new(LamellarRequestResult { req: req.clone() });
@@ -843,6 +843,8 @@ impl LamellarTeamRT {
 
         self.world_counters.add_send_req(self.num_pes);
         self.team_counters.add_send_req(self.num_pes);
+        // println!("cnts: t: {} w: {} tg: {:?}",self.team_counters.outstanding_reqs.load(Ordering::Relaxed),self.world_counters.outstanding_reqs.load(Ordering::Relaxed), tg_outstanding_reqs.as_ref().map(|x| x.load(Ordering::Relaxed)));
+
         // println!("team counter: {:?}", self.team_counters.outstanding_reqs);
         let func: LamellarArcAm = Arc::new(am);
         let world = if let Some(world) = &self.world {
@@ -889,7 +891,7 @@ impl LamellarTeamRT {
     where
         F: RemoteActiveMessage + LamellarAM + AmDist,
     {
-        // println!("team exec am pe");
+        // println!("team exec am pe tg");
         prof_start!(pre);
         let tg_outstanding_reqs = match task_group_cnts {
             Some(task_group_cnts) => {
@@ -905,7 +907,7 @@ impl LamellarTeamRT {
             data: Cell::new(None),
             team_outstanding_reqs: self.team_counters.outstanding_reqs.clone(),
             world_outstanding_reqs: self.world_counters.outstanding_reqs.clone(),
-            tg_outstanding_reqs: tg_outstanding_reqs,
+            tg_outstanding_reqs: tg_outstanding_reqs.clone(),
             user_handle: AtomicBool::new(true),
         });
         let req_result = Arc::new(LamellarRequestResult { req: req.clone() });
@@ -917,6 +919,8 @@ impl LamellarTeamRT {
         };
         self.world_counters.add_send_req(1);
         self.team_counters.add_send_req(1);
+        // println!("cnts: t: {} w: {} tg: {:?}",self.team_counters.outstanding_reqs.load(Ordering::Relaxed),self.world_counters.outstanding_reqs.load(Ordering::Relaxed), tg_outstanding_reqs.as_ref().map(|x| x.load(Ordering::Relaxed)));
+
 
         // println!("req_id: {:?}", id);
         let world = if let Some(world) = &self.world {
@@ -966,7 +970,7 @@ impl LamellarTeamRT {
             data: Cell::new(None),
             team_outstanding_reqs: self.team_counters.outstanding_reqs.clone(),
             world_outstanding_reqs: self.world_counters.outstanding_reqs.clone(),
-            tg_outstanding_reqs: tg_outstanding_reqs,
+            tg_outstanding_reqs: tg_outstanding_reqs.clone(),
             user_handle: AtomicBool::new(true),
         });
         let req_result = Arc::new(LamellarRequestResult { req: req.clone() });
@@ -977,6 +981,8 @@ impl LamellarTeamRT {
         };
         self.world_counters.add_send_req(1);
         self.team_counters.add_send_req(1);
+        // println!("cnts: t: {} w: {} tg: {:?}",self.team_counters.outstanding_reqs.load(Ordering::Relaxed),self.world_counters.outstanding_reqs.load(Ordering::Relaxed), tg_outstanding_reqs.as_ref().map(|x| x.load(Ordering::Relaxed)));
+
         let world = if let Some(world) = &self.world {
             world.clone()
         } else {
@@ -1035,7 +1041,7 @@ impl LamellarTeamRT {
             data: Cell::new(None),
             team_outstanding_reqs: self.team_counters.outstanding_reqs.clone(),
             world_outstanding_reqs: self.world_counters.outstanding_reqs.clone(),
-            tg_outstanding_reqs: tg_outstanding_reqs,
+            tg_outstanding_reqs: tg_outstanding_reqs.clone(),
             user_handle: AtomicBool::new(true),
         });
         let req_result = Arc::new(LamellarRequestResult { req: req.clone() });
@@ -1049,6 +1055,7 @@ impl LamellarTeamRT {
         prof_start!(counters);
         self.world_counters.add_send_req(1);
         self.team_counters.add_send_req(1);
+        // println!("cnts: t: {} w: {} tg: {:?}",self.team_counters.outstanding_reqs.load(Ordering::Relaxed),self.world_counters.outstanding_reqs.load(Ordering::Relaxed), tg_outstanding_reqs.as_ref().map(|x| x.load(Ordering::Relaxed)));
         prof_end!(counters);
         prof_start!(any);
         let func: LamellarArcLocalAm = Arc::new(am);

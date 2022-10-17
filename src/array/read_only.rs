@@ -6,6 +6,27 @@ use crate::darc::DarcMode;
 use crate::lamellar_team::{IntoLamellarTeam, LamellarTeamRT};
 use crate::memregion::Dist;
 use std::sync::Arc;
+use std::any::TypeId;
+
+type BufFn = fn(ReadOnlyByteArrayWeak) -> Arc<dyn BufferOp>;
+
+lazy_static! {
+    pub(crate) static ref BUFOPS: HashMap<TypeId, BufFn> = {
+        let mut map = HashMap::new();
+        for op in crate::inventory::iter::<ReadOnlyArrayOpBuf> {
+            map.insert(op.id.clone(), op.op);
+        }
+        map
+    };
+}
+
+pub struct ReadOnlyArrayOpBuf {
+    pub id: TypeId,
+    pub op: BufFn,
+}
+
+crate::inventory::collect!(ReadOnlyArrayOpBuf);
+
 
 #[lamellar_impl::AmDataRT(Clone, Debug)]
 pub struct ReadOnlyArray<T> {
@@ -16,6 +37,26 @@ pub struct ReadOnlyArray<T> {
 pub struct ReadOnlyByteArray {
     pub(crate) array: UnsafeByteArray,
 }
+impl ReadOnlyByteArray {
+    pub fn downgrade(array: &ReadOnlyByteArray) -> ReadOnlyByteArrayWeak {
+        ReadOnlyByteArrayWeak {
+            array: UnsafeByteArray::downgrade(&array.array),
+        }
+    }
+}
+
+#[lamellar_impl::AmLocalDataRT(Clone, Debug)]
+pub struct ReadOnlyByteArrayWeak {
+    pub(crate) array: UnsafeByteArrayWeak,
+}
+
+impl ReadOnlyByteArrayWeak {
+    pub fn upgrade(&self) -> Option<ReadOnlyByteArray> {
+        Some(ReadOnlyByteArray {
+            array: self.array.upgrade()?,
+        })
+    }
+}
 
 //#[prof]
 impl<T: Dist> ReadOnlyArray<T> {
@@ -24,8 +65,20 @@ impl<T: Dist> ReadOnlyArray<T> {
         array_size: usize,
         distribution: Distribution,
     ) -> ReadOnlyArray<T> {
+
+        let mut array = UnsafeArray::new(team, array_size, distribution);
+        if let Some(func) = BUFOPS.get(&TypeId::of::<T>()) {
+            let mut op_bufs = array.inner.data.op_buffers.write();
+            let bytearray = ReadOnlyByteArray {
+                array: array.clone().into(),
+            };
+
+            for pe in 0..op_bufs.len() {
+                op_bufs[pe] = func(ReadOnlyByteArray::downgrade(&bytearray));
+            }
+        }
         ReadOnlyArray {
-            array: UnsafeArray::new(team, array_size, distribution),
+            array: array,
         }
     }
     pub fn wait_all(&self) {
@@ -156,6 +209,16 @@ impl<T: Dist> From<UnsafeArray<T>> for ReadOnlyArray<T> {
     fn from(array: UnsafeArray<T>) -> Self {
         // println!("readonly from UnsafeArray");
         array.block_on_outstanding(DarcMode::ReadOnlyArray);
+        if let Some(func) = BUFOPS.get(&TypeId::of::<T>()) {
+            
+            let bytearray = ReadOnlyByteArray {
+                array: array.clone().into(),
+            };
+            let mut op_bufs = array.inner.data.op_buffers.write();
+            for pe in 0..array.inner.data.num_pes {
+                op_bufs.push(func(ReadOnlyByteArray::downgrade(&bytearray)));
+            }
+        }
         ReadOnlyArray { array: array }
     }
 }
@@ -387,6 +450,8 @@ impl<T: Dist + std::fmt::Debug> ReadOnlyArray<T> {
         self.array.print()
     }
 }
+
+impl<T: ElementOps + 'static> ReadOnlyOps<T> for ReadOnlyArray<T> {}
 
 // impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> LamellarArrayReduce<T>
 //     for ReadOnlyArray<T>
