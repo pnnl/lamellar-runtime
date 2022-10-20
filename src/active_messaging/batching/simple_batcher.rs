@@ -65,6 +65,7 @@ impl Batcher for SimpleBatcher {
         scheduler: &(impl SchedulerQueue + Sync + std::fmt::Debug),
         stall_mark: usize,
     ) {
+        // println!("add_remote_am_to_batch");
         let batch = match req_data.dst {
             Some(dst) => self.batched_ams[dst].clone(),
             None => self.batched_ams.last().unwrap().clone(),
@@ -92,6 +93,7 @@ impl Batcher for SimpleBatcher {
         scheduler: &(impl SchedulerQueue + Sync + std::fmt::Debug),
         stall_mark: usize,
     ) {
+        // println!("add_return_am_to_batch");
         let batch = match req_data.dst {
             Some(dst) => self.batched_ams[dst].clone(),
             None => self.batched_ams.last().unwrap().clone(),
@@ -118,6 +120,7 @@ impl Batcher for SimpleBatcher {
         scheduler: &(impl SchedulerQueue + Sync + std::fmt::Debug),
         stall_mark: usize,
     ) {
+        // println!("add_data_am_to_batch");
         let batch = match req_data.dst {
             Some(dst) => self.batched_ams[dst].clone(),
             None => self.batched_ams.last().unwrap().clone(),
@@ -142,6 +145,7 @@ impl Batcher for SimpleBatcher {
         scheduler: &(impl SchedulerQueue + Sync + std::fmt::Debug),
         stall_mark: usize,
     ) {
+        // println!("add_unit_am_to_batch");
         let batch = match req_data.dst {
             Some(dst) => self.batched_ams[dst].clone(),
             None => self.batched_ams.last().unwrap().clone(),
@@ -205,6 +209,7 @@ impl SimpleBatcher {
         mut stall_mark: usize,
         scheduler: &(impl SchedulerQueue + Sync + std::fmt::Debug),
     ) {
+        // println!("create_tx_task");
         let cur_stall_mark = self.stall_mark.clone();
         scheduler.submit_task(async move {
             while stall_mark != cur_stall_mark.load(Ordering::SeqCst)
@@ -283,6 +288,7 @@ impl SimpleBatcher {
         i: &mut usize,
         cmd: Cmd,
     ) {
+        // println!("serialize_am");
         crate::serialize_into(&mut data_buf[*i..*i + *CMD_LEN], &cmd, false).unwrap();
         *i += *CMD_LEN;
 
@@ -318,6 +324,7 @@ impl SimpleBatcher {
         data_buf: &mut [u8],
         i: &mut usize,
     ) {
+        // println!("serialize_data");
         crate::serialize_into(&mut data_buf[*i..*i + *CMD_LEN], &Cmd::Data, false).unwrap();
         *i += *CMD_LEN;
         let data_size = data_size - (*CMD_LEN + *DATA_HEADER_LEN);
@@ -338,6 +345,7 @@ impl SimpleBatcher {
 
     #[tracing::instrument(skip_all)]
     fn serialize_unit(req_data: ReqMetaData, data_buf: &mut [u8], i: &mut usize) {
+        // println!("serialize_unit");
         crate::serialize_into(&mut data_buf[*i..*i + *CMD_LEN], &Cmd::Unit, false).unwrap();
         *i += *CMD_LEN;
 
@@ -355,6 +363,7 @@ impl SimpleBatcher {
 
     #[tracing::instrument(skip_all)]
     fn create_header(src: usize) -> SerializeHeader {
+        // println!("create_header");
         let msg = Msg {
             src: src as u16,
             cmd: Cmd::BatchedMsg,
@@ -368,6 +377,7 @@ impl SimpleBatcher {
         size: usize,
         lamellae: &Arc<Lamellae>,
     ) -> SerializedData {
+        // println!("create_data_buf");
         let header = Some(header);
         let mut data = lamellae.serialize_header(header.clone(), size);
         while let Err(err) = data {
@@ -393,6 +403,7 @@ impl SimpleBatcher {
         scheduler: &(impl SchedulerQueue + Sync + std::fmt::Debug),
         ame: &RegisteredActiveMessages,
     ) {
+        // println!("exec_am");
         let am_header: AmHeader =
             crate::deserialize(&data[*i..*i + *AM_HEADER_LEN], false).unwrap();
         let (team, world) =
@@ -443,6 +454,7 @@ impl SimpleBatcher {
         scheduler: &(impl SchedulerQueue + Sync + std::fmt::Debug),
         ame: &RegisteredActiveMessages,
     ) {
+        // println!("exec_return_am");
         let am_header: AmHeader =
             crate::deserialize(&data[*i..*i + *AM_HEADER_LEN], false).unwrap();
         let (team, world) =

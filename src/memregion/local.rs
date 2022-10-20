@@ -171,7 +171,7 @@ impl crate::DarcSerde for MemRegionHandle {
         //         panic!("can only access MemRegionHandles within team members ({:?})", err);
         //     }
         // }
-        // // println!("deserailized mrh: {:?}",self.inner);
+        // println!("deserailized mrh: {:?}",self.inner); 
     }
 }
 
@@ -190,7 +190,7 @@ impl Drop for MemRegionHandle {
 
         let mut mrh_map = ONE_SIDED_MEM_REGIONS.lock();
         let cnt = self.inner.local_ref.fetch_sub(1, Ordering::SeqCst);
-        // println!("dropping {:?}",self.inner);
+        // println!("mem region dropping {:?}",self.inner);
         if cnt == 1
             && self
                 .inner
@@ -321,7 +321,7 @@ impl<T: Dist> LocalMemoryRegion<T> {
             AllocationType::Local,
         )?;
         let pe = mr.pe;
-        // println!("new local memory region {:?}", mr.addr());
+       
         let id = ID_COUNTER.fetch_add(1, Ordering::Relaxed);
         let mrh = MemRegionHandle {
             inner: Arc::new(MemRegionHandleInner {
@@ -336,6 +336,8 @@ impl<T: Dist> LocalMemoryRegion<T> {
                 local_dropped: AtomicBool::new(false),
             }),
         };
+
+        // println!("new local memory region {:?} ", mrh);
 
         ONE_SIDED_MEM_REGIONS
             .lock()
@@ -425,6 +427,21 @@ impl<T: Dist> LocalMemoryRegion<T> {
 
     pub fn iter(&self) -> std::slice::Iter<'_, T> {
         self.as_slice().unwrap().iter()
+    }
+
+    pub fn data_local(&self) -> bool{
+        if self.pe == self.mr.inner.my_id.1 {
+            if let Ok(addr) = self.mr.inner.mr.addr() {
+                true
+            }
+            else {
+                false
+            }
+        }
+        else {
+            false
+        }
+
     }
 }
 

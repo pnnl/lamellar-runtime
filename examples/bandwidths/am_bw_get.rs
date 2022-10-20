@@ -29,7 +29,8 @@ impl LamellarAM for DataAM {
             self.array.get_unchecked(self.index, local.clone());
 
             while local_slice[self.length - 1] == 255u8 {
-                async_std::task::yield_now().await;
+                // async_std::task::yield_now().await;
+                std::thread::yield_now();
             }
         }
     }

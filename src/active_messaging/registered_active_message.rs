@@ -104,22 +104,25 @@ impl ActiveMessageEngine for RegisteredActiveMessages {
         scheduler: &(impl SchedulerQueue + Sync + std::fmt::Debug),
         stall_mark: usize,
     ) {
+        // println!("{am:?}");
         match am {
             Am::All(req_data, am) => {
                 let am_id = *(AMS_IDS.get(&am.get_id()).unwrap());
                 let am_size = am.serialized_size();
-                if am_size < crate::active_messaging::BATCH_AM_SIZE {
-                    self.batcher.add_remote_am_to_batch(
-                        req_data.clone(),
-                        am.clone(),
-                        am_id,
-                        am_size,
-                        scheduler,
-                        stall_mark,
-                    );
-                } else if req_data.team.lamellae.backend() != Backend::Local {
-                    self.send_am(req_data.clone(), am.clone(), am_id, am_size, Cmd::Am)
-                        .await;
+                if req_data.team.lamellae.backend() != Backend::Local {
+                    if am_size < crate::active_messaging::BATCH_AM_SIZE {
+                        self.batcher.add_remote_am_to_batch(
+                            req_data.clone(),
+                            am.clone(),
+                            am_id,
+                            am_size,
+                            scheduler,
+                            stall_mark,
+                        );
+                    } else {
+                        self.send_am(req_data.clone(), am.clone(), am_id, am_size, Cmd::Am)
+                            .await;
+                    }
                 }
                 let world = LamellarTeam::new(None, req_data.world.clone(), true);
                 let team = LamellarTeam::new(Some(world.clone()), req_data.team.clone(), true);
@@ -223,6 +226,7 @@ impl ActiveMessageEngine for RegisteredActiveMessages {
         lamellae: Arc<Lamellae>,
         scheduler: &(impl SchedulerQueue + Sync + std::fmt::Debug),
     ) {
+        // println!("exec_msg");
         let data = ser_data.data_as_bytes();
         let mut i = 0;
         match msg.cmd {
@@ -301,6 +305,7 @@ impl RegisteredActiveMessages {
 
     #[tracing::instrument(skip_all)]
     async fn send_data_am(&self, req_data: ReqMetaData, data: LamellarResultArc, data_size: usize) {
+        // println!("send_data_am");
         let header = self.create_header(&req_data, Cmd::Data);
         let data_buf = self
             .create_data_buf(header, data_size + *DATA_HEADER_LEN, &req_data.lamellae)
@@ -323,6 +328,8 @@ impl RegisteredActiveMessages {
 
     #[tracing::instrument(skip_all)]
     async fn send_unit_am(&self, req_data: ReqMetaData) {
+        // println!("send_unit_am");
+
         let header = self.create_header(&req_data, Cmd::Unit);
         let data_buf = self
             .create_data_buf(header, *UNIT_HEADER_LEN, &req_data.lamellae)
@@ -355,6 +362,8 @@ impl RegisteredActiveMessages {
         size: usize,
         lamellae: &Arc<Lamellae>,
     ) -> SerializedData {
+        // println!("create_data_buf");
+
         let header = Some(header);
         let mut data = lamellae.serialize_header(header.clone(), size);
         while let Err(err) = data {
@@ -379,6 +388,7 @@ impl RegisteredActiveMessages {
         world: Arc<LamellarTeam>,
         team: Arc<LamellarTeam>,
     ) {
+        // println!("exec_local_am");
         match am
             .exec(
                 req_data.team.world_pe,
@@ -421,6 +431,7 @@ impl RegisteredActiveMessages {
         lamellae: &Arc<Lamellae>,
         scheduler: &(impl SchedulerQueue + Sync + std::fmt::Debug),
     ) {
+        // println!("exec_am");
         let am_header: AmHeader =
             crate::deserialize(&data[*i..*i + *AM_HEADER_LEN], false).unwrap();
         let (team, world) =
@@ -470,6 +481,7 @@ impl RegisteredActiveMessages {
         i: &mut usize,
         lamellae: &Arc<Lamellae>,
     ) {
+        // println!("exec_return_am");
         let am_header: AmHeader =
             crate::deserialize(&data[*i..*i + *AM_HEADER_LEN], false).unwrap();
         let (team, world) =
@@ -499,6 +511,7 @@ impl RegisteredActiveMessages {
         i: &mut usize,
         ser_data: &SerializedData,
     ) {
+        // println!("exec_data_am");
         let data_header: DataHeader =
             crate::deserialize(&data_buf[*i..*i + *DATA_HEADER_LEN], false).unwrap();
         *i += *DATA_HEADER_LEN;
@@ -513,6 +526,7 @@ impl RegisteredActiveMessages {
 
     #[tracing::instrument(skip_all)]
     pub(crate) async fn exec_unit_am(&self, msg: &Msg, data: &[u8], i: &mut usize) {
+        // println!("exec_unit_am");
         let unit_header: UnitHeader =
             crate::deserialize(&data[*i..*i + *UNIT_HEADER_LEN], false).unwrap();
         *i += *UNIT_HEADER_LEN;

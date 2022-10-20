@@ -626,6 +626,7 @@ fn create_buf_ops(
                 let first = bufs.len() == 0;
                 let op_size = op.num_bytes();
                 let data_size = op_data.num_bytes();
+                // println!("add_fetch_ops {:?} {:?}",op_size,data_size);
                 if first {
                     bufs.push((team.alloc_local_mem_region(std::cmp::max(#lamellar::array::OPS_BUFFER_SIZE, op_size+data_size)),0));
                 }
@@ -749,14 +750,21 @@ fn create_buf_ops(
             async fn get_ops(&self, team: &std::sync::Arc<#lamellar::LamellarTeam>) -> #lamellar::LocalMemoryRegion<u8>{
                 // println!("get_ops {:?}",self.ops2.len());
                 unsafe{
-                    let serialized_ops = team.alloc_local_mem_region::<u8>(self.ops2.len());
-                    let local_slice = serialized_ops.as_mut_slice().unwrap();
-                    local_slice[self.ops2.len()- 1] = 255u8;
-                    self.ops2.get_unchecked(0, serialized_ops.clone());
-
-                    while local_slice[self.ops2.len()- 1] == 255u8 {
-                        async_std::task::yield_now().await;
+                    let serialized_ops = if self.ops2.data_local(){
+                        self.ops2.clone()
                     }
+                    else{
+                        let serialized_ops = team.alloc_local_mem_region::<u8>(self.ops2.len());
+                        let local_slice = serialized_ops.as_mut_slice().unwrap();
+                        local_slice[self.ops2.len()- 1] = 255u8;
+                        self.ops2.get_unchecked(0, serialized_ops.clone());
+
+                        while local_slice[self.ops2.len()- 1] == 255u8 {
+                            // async_std::task::yield_now().await;
+                            std::thread::yield_now();
+                        }
+                        serialized_ops
+                    };
                     serialized_ops
                     // self.ops2.iget(0,serialized_ops.clone());
                     // #lamellar::deserialize(serialized_ops.as_mut_slice().unwrap(),false).unwrap()
