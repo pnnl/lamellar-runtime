@@ -53,7 +53,7 @@ impl<T: Dist> UnsafeArray<T> {
             while ((worker as f64 * elems_per_thread).round() as usize) < num_elems_local {
                 let start_i = (worker as f64 * elems_per_thread).round() as usize;
                 let end_i = ((worker + 1) as f64 * elems_per_thread).round() as usize;
-                reqs.push(self.inner.data.task_group.exec_am_local(ForEachStatic {
+                reqs.push(self.inner.data.task_group.exec_am_local_inner(ForEachStatic {
                     op: op.clone(),
                     data: iter.clone(),
                     start_i: start_i,
@@ -81,7 +81,7 @@ impl<T: Dist> UnsafeArray<T> {
             let cur_i = Arc::new(AtomicUsize::new(0));
             // println!("ranges {:?}", ranges);
             for _ in 0..std::cmp::min(num_workers, num_elems_local) {
-                reqs.push(self.inner.data.task_group.exec_am_local(ForEachDynamic {
+                reqs.push(self.inner.data.task_group.exec_am_local_inner(ForEachDynamic {
                     op: op.clone(),
                     data: iter.clone(),
                     cur_i: cur_i.clone(),
@@ -128,7 +128,7 @@ impl<T: Dist> UnsafeArray<T> {
                     self.inner
                         .data
                         .task_group
-                        .exec_am_local(ForEachWorkStealing {
+                        .exec_am_local_inner(ForEachWorkStealing {
                             op: op.clone(),
                             data: iter.clone(),
                             range: sibling.clone(),
@@ -191,7 +191,7 @@ impl<T: Dist> UnsafeArray<T> {
             let range_i = Arc::new(AtomicUsize::new(0));
             // println!("ranges {:?}", ranges);
             for _ in 0..std::cmp::min(num_workers, num_elems_local_orig) {
-                reqs.push(self.inner.data.task_group.exec_am_local(ForEachChunk {
+                reqs.push(self.inner.data.task_group.exec_am_local_inner(ForEachChunk {
                     op: op.clone(),
                     data: iter.clone(),
                     ranges: ranges.clone(),
@@ -231,7 +231,7 @@ impl<T: Dist> UnsafeArray<T> {
             let range_i = Arc::new(AtomicUsize::new(0));
             // println!("ranges {:?}", ranges);
             for _ in 0..std::cmp::min(num_workers, num_chunks) {
-                reqs.push(self.inner.data.task_group.exec_am_local(ForEachChunk {
+                reqs.push(self.inner.data.task_group.exec_am_local_inner(ForEachChunk {
                     op: op.clone(),
                     data: iter.clone(),
                     ranges: ranges.clone(),
@@ -273,7 +273,7 @@ impl<T: Dist> UnsafeArray<T> {
                     self.inner
                         .data
                         .task_group
-                        .exec_am_local(ForEachAsyncStatic {
+                        .exec_am_local_inner(ForEachAsyncStatic {
                             op: op.clone(),
                             data: iter.clone(),
                             start_i: start_i,
@@ -311,7 +311,7 @@ impl<T: Dist> UnsafeArray<T> {
                     self.inner
                         .data
                         .task_group
-                        .exec_am_local(ForEachAsyncDynamic {
+                        .exec_am_local_inner(ForEachAsyncDynamic {
                             op: op.clone(),
                             data: iter.clone(),
                             cur_i: cur_i.clone(),
@@ -360,7 +360,7 @@ impl<T: Dist> UnsafeArray<T> {
                     self.inner
                         .data
                         .task_group
-                        .exec_am_local(ForEachAsyncWorkStealing {
+                        .exec_am_local_inner(ForEachAsyncWorkStealing {
                             op: op.clone(),
                             data: iter.clone(),
                             range: sibling.clone(),
@@ -428,7 +428,7 @@ impl<T: Dist> UnsafeArray<T> {
             let range_i = Arc::new(AtomicUsize::new(0));
             // println!("ranges {:?}", ranges);
             for _ in 0..std::cmp::min(num_workers, num_elems_local_orig) {
-                reqs.push(self.inner.data.task_group.exec_am_local(ForEachAsyncChunk {
+                reqs.push(self.inner.data.task_group.exec_am_local_inner(ForEachAsyncChunk {
                     op: op.clone(),
                     data: iter.clone(),
                     ranges: ranges.clone(),
@@ -467,7 +467,7 @@ impl<T: Dist> UnsafeArray<T> {
             let range_i = Arc::new(AtomicUsize::new(0));
             // println!("ranges {:?}", ranges);
             for _ in 0..std::cmp::min(num_workers, num_elems_local) {
-                reqs.push(self.inner.data.task_group.exec_am_local(ForEachAsyncChunk {
+                reqs.push(self.inner.data.task_group.exec_am_local_inner(ForEachAsyncChunk {
                     op: op.clone(),
                     data: iter.clone(),
                     ranges: ranges.clone(),
@@ -573,7 +573,7 @@ impl<T: Dist> DistIteratorLauncher for UnsafeArray<T> {
             while ((worker as f64 * elems_per_thread).round() as usize) < num_elems_local {
                 let start_i = (worker as f64 * elems_per_thread).round() as usize;
                 let end_i = ((worker + 1) as f64 * elems_per_thread).round() as usize;
-                reqs.push(self.inner.data.task_group.exec_am_local(Collect {
+                reqs.push(self.inner.data.task_group.exec_am_local_inner(Collect {
                     data: iter.clone(),
                     start_i: start_i,
                     end_i: end_i,
@@ -618,7 +618,7 @@ impl<T: Dist> DistIteratorLauncher for UnsafeArray<T> {
             while ((worker as f64 * elems_per_thread).round() as usize) < num_elems_local {
                 let start_i = (worker as f64 * elems_per_thread).round() as usize;
                 let end_i = ((worker + 1) as f64 * elems_per_thread).round() as usize;
-                reqs.push(self.inner.data.task_group.exec_am_local(CollectAsync {
+                reqs.push(self.inner.data.task_group.exec_am_local_inner(CollectAsync {
                     data: iter.clone(),
                     start_i: start_i,
                     end_i: end_i,

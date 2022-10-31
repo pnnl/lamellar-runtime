@@ -94,7 +94,7 @@ impl Barrier {
             while *pe != barrier_id {
                 // std::thread::yield_now();
                 self.scheduler.exec_task();
-                if s.elapsed().as_secs_f64() > 10.0 {
+                if s.elapsed().as_secs_f64() > 600.0 {
                     self.print_bar();
                     s = Instant::now();
                 }

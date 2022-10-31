@@ -8,6 +8,7 @@ use crate::scheduler::{ReqId, SchedulerQueue};
 use async_trait::async_trait;
 
 // use crossbeam::utils::CachePadded;
+use futures::Future;
 use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::marker::PhantomData;
@@ -307,6 +308,43 @@ pub struct LamellarTaskGroup {
     rt_local_req: Arc<LamellarRequestResult>, //for exec_local requests
 }
 
+impl ActiveMessaging for LamellarTaskGroup {
+    #[tracing::instrument(skip_all)]
+    fn wait_all(&self) {
+        self.wait_all();
+    }
+
+    #[tracing::instrument(skip_all)]
+    fn barrier(&self) {
+        self.team.barrier();
+    }
+
+    #[tracing::instrument(skip_all)]
+    fn exec_am_all<F>(&self, am: F) -> Pin<Box<dyn Future<Output = Vec<F::Output>> + Send>>
+    where
+        F: RemoteActiveMessage + LamellarAM + Serde + AmDist,
+    {
+        // trace!("[{:?}] team exec am all request", self.team.world_pe);
+        self.exec_am_all_inner(am).into_future()
+    }
+
+    #[tracing::instrument(skip_all)]
+    fn exec_am_pe<F>(&self, pe: usize, am: F) -> Pin<Box<dyn Future<Output = F::Output> + Send>>
+    where
+        F: RemoteActiveMessage + LamellarAM + Serde + AmDist,
+    {
+        self.exec_am_pe_inner(pe, am).into_future()
+    }
+
+    #[tracing::instrument(skip_all)]
+    fn exec_am_local<F>(&self, am: F) -> Pin<Box<dyn Future<Output = F::Output> + Send>>
+    where
+        F: LamellarActiveMessage + LocalAM + 'static,
+    {
+        self.exec_am_local_inner(am).into_future()
+    }
+}
+
 impl LamellarTaskGroup {
     pub fn new<U: Into<IntoLamellarTeam>>(team: U) -> LamellarTaskGroup {
         let team = team.into().team.clone();
@@ -357,12 +395,12 @@ impl LamellarTaskGroup {
             rt_local_req: rt_local_req,
         }
     }
-
-    pub fn wait_all(&self) {
+    
+    fn wait_all(&self) {
         let mut temp_now = Instant::now();
         while self.counters.outstanding_reqs.load(Ordering::SeqCst) > 0 {
             self.team.scheduler.exec_task();
-            if temp_now.elapsed() > Duration::new(60, 0) {
+            if temp_now.elapsed() > Duration::new(600, 0) {
                 println!(
                     "in task group wait_all mype: {:?} cnt: {:?} {:?}",
                     self.team.world_pe,
@@ -377,7 +415,7 @@ impl LamellarTaskGroup {
         }
     }
 
-    pub fn exec_am_all<F>(&self, am: F) -> Box<dyn LamellarMultiRequest<Output = F::Output>>
+    pub(crate) fn exec_am_all_inner<F>(&self, am: F) -> Box<dyn LamellarMultiRequest<Output = F::Output>>
     where
         F: RemoteActiveMessage + LamellarAM + Serde + AmDist,
     {
@@ -420,7 +458,7 @@ impl LamellarTaskGroup {
         })
     }
 
-    pub fn exec_am_pe<F>(&self, pe: usize, am: F) -> Box<dyn LamellarRequest<Output = F::Output>>
+    pub(crate) fn exec_am_pe_inner<F>(&self, pe: usize, am: F) -> Box<dyn LamellarRequest<Output = F::Output>>
     where
         F: RemoteActiveMessage + LamellarAM + Serde + AmDist,
     {
@@ -459,7 +497,7 @@ impl LamellarTaskGroup {
         })
     }
 
-    pub fn exec_am_local<F>(&self, am: F) -> Box<dyn LamellarRequest<Output = F::Output>>
+    pub(crate) fn exec_am_local_inner<F>(&self, am: F) -> Box<dyn LamellarRequest<Output = F::Output>>
     where
         F: LamellarActiveMessage + LocalAM + 'static,
     {

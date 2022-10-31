@@ -773,7 +773,7 @@ impl LamellarTeamRT {
         {
             // std::thread::yield_now();
             self.scheduler.exec_task(); //mmight as well do useful work while we wait
-            if temp_now.elapsed() > Duration::new(60, 0) {
+            if temp_now.elapsed() > Duration::new(600, 0) {
                 println!(
                     "in team wait_all mype: {:?} cnt: {:?} {:?}",
                     self.world_pe,

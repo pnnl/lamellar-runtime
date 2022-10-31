@@ -82,7 +82,7 @@ impl WorkStealingThread {
                     }
                 });
                 if let Some(runnable) = omsg {
-                    if !worker.active.load(Ordering::SeqCst) && timer.elapsed().as_secs_f64() > 60.0
+                    if !worker.active.load(Ordering::SeqCst) && timer.elapsed().as_secs_f64() > 600.0
                     {
                         println!("runnable {:?}", runnable);
                         println!(
@@ -96,7 +96,7 @@ impl WorkStealingThread {
                     runnable.run();
                 }
                 if !worker.active.load(Ordering::SeqCst)
-                    && timer.elapsed().as_secs_f64() > 60.0
+                    && timer.elapsed().as_secs_f64() > 600.0
                     && (worker.work_q.len() > 0 || worker.work_inj.len() > 0)
                 {
                     println!(
@@ -107,7 +107,7 @@ impl WorkStealingThread {
                     );
                     timer = std::time::Instant::now();
                 }
-                if timer.elapsed().as_secs_f64() > 60.0 {
+                if timer.elapsed().as_secs_f64() > 600.0 {
                     println!(
                         "work_q size {:?} work inj size {:?} num_tasks {:?}",
                         worker.work_q.len(),

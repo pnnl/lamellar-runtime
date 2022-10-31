@@ -1,5 +1,5 @@
 use lamellar::array::{
-    AccessOps, ArithmeticOps, AtomicArray, BitWiseOps, DistributedIterator, Distribution,
+    AccessOps, ReadOnlyOps, ArithmeticOps, AtomicArray, BitWiseOps, DistributedIterator, Distribution,
     ElementArithmeticOps, ElementBitWiseOps, ElementOps,
 };
 

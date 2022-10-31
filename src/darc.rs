@@ -315,7 +315,7 @@ impl<T> DarcInner<T> {
         while am_counters.outstanding_reqs.load(Ordering::SeqCst) > 0 {
             // std::thread::yield_now();
             team.scheduler.exec_task(); //mmight as well do useful work while we wait
-            if temp_now.elapsed() > Duration::new(60, 0) {
+            if temp_now.elapsed() > Duration::new(600, 0) {
                 //|| first{
                 println!(
                     "in darc wait_all mype: {:?} cnt: {:?} {:?}",
