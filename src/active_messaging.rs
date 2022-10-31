@@ -218,16 +218,24 @@ impl AMCounters {
 }
 
 pub trait ActiveMessaging {
+    
+    /// Wait for all active messages local to `self` to finish.
     fn wait_all(&self);
+
+    /// Wait for all PE's to reach the barrier.
     fn barrier(&self);
+
+    /// Send an active message to every PE, including `self`.
     fn exec_am_all<F>(&self, am: F) -> Pin<Box<dyn Future<Output = Vec<F::Output>> + Send>>
-    //Box<dyn LamellarMultiRequest<Output = F::Output>>
     where
         F: RemoteActiveMessage + LamellarAM + Serde + AmDist;
+
+    /// Send an active message to a specific PE.
     fn exec_am_pe<F>(&self, pe: usize, am: F) -> Pin<Box<dyn Future<Output = F::Output> + Send>>
-    //Box<dyn LamellarRequest<Output = F::Output>>
     where
         F: RemoteActiveMessage + LamellarAM + Serde + AmDist;
+
+    /// Send an active message to `self`.
     fn exec_am_local<F>(&self, am: F) -> Pin<Box<dyn Future<Output = F::Output> + Send>>
     where
         F: LamellarActiveMessage + LocalAM + 'static;
