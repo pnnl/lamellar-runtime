@@ -43,14 +43,15 @@ impl MyShmem {
     }
 }
 
-fn attach_to_shmem(size: usize, id: &str, header: usize, create: bool) -> MyShmem {
+fn attach_to_shmem(job_id: usize, size: usize, id: &str, header: usize, create: bool) -> MyShmem {
     let size = size + std::mem::size_of::<usize>();
-    let shmem_id = "lamellar_shm/lamellar_".to_owned() + &(size.to_string()) + "_" + id;
+
+    let shmem_id =
+        "lamellar_".to_owned() + &(job_id.to_string()) + "_" + &(size.to_string()) + "_" + id;
     // let  m = if create {
     let mut retry = 0;
     let m = loop {
         match ShmemConf::new().size(size).os_id(shmem_id.clone()).create() {
-            // match ShmemConf::new().size(size).flink(shmem_id.clone()).create() {
             Ok(m) => {
                 // println!("created {:?}", shmem_id);
                 if create {
@@ -70,7 +71,6 @@ fn attach_to_shmem(size: usize, id: &str, header: usize, create: bool) -> MyShme
             | Err(ShmemError::MappingIdExists)
             | Err(ShmemError::MapOpenFailed(_)) => {
                 match ShmemConf::new().os_id(shmem_id.clone()).open() {
-                    // match ShmemConf::new().flink(shmem_id.clone()).open() {
                     Ok(m) => {
                         // println!("attached {:?}", shmem_id);
                         if create {
@@ -138,6 +138,7 @@ struct ShmemAlloc {
     // barrier3: *mut usize,
     my_pe: usize,
     num_pes: usize,
+    job_id: usize,
 }
 
 unsafe impl Sync for ShmemAlloc {}
@@ -148,7 +149,7 @@ impl ShmemAlloc {
         let size = std::mem::size_of::<AtomicUsize>()
             + std::mem::size_of::<usize>()
             + std::mem::size_of::<usize>() * num_pes * 2;
-        let shmem = attach_to_shmem(size, "alloc", job_id, pe == 0);
+        let shmem = attach_to_shmem(job_id, size, "alloc", job_id, pe == 0);
         let data = unsafe { std::slice::from_raw_parts_mut(shmem.as_ptr(), size) };
         if pe == 0 {
             for i in data {
@@ -174,6 +175,7 @@ impl ShmemAlloc {
             // barrier3: unsafe { base_ptr.add(std::mem::size_of::<AtomicUsize>() + std::mem::size_of::<usize>()) as *mut usize + std::mem::size_of::<usize>()*num_pes*2},
             my_pe: pe,
             num_pes: num_pes,
+            job_id: job_id,
         }
     }
     unsafe fn alloc<I>(&self, size: usize, pes: I) -> (MyShmem, usize, Vec<usize>)
@@ -229,6 +231,7 @@ impl ShmemAlloc {
 
         // println!("going to attach to shmem {:?} {:?} {:?} {:?} {:?}",size*pes_len,*self.id,self.my_pe, barrier1,barrier2);
         let shmem = attach_to_shmem(
+            self.job_id,
             size * pes_len,
             &((*self.id).to_string()),
             *self.id,

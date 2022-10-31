@@ -174,21 +174,21 @@ impl<T: Dist> OpAmInputToValue<T> {
             OpAmInputToValue::ManyToMany(indices, _) => indices.len(),
         }
     }
-    #[tracing::instrument(skip_all)]
-    pub fn num_bytes(&self) -> usize {
-        match self {
-            OpAmInputToValue::OneToOne(_, _) => std::mem::size_of::<(usize, T)>(),
-            OpAmInputToValue::OneToMany(_, vals) => {
-                std::mem::size_of::<usize>() + vals.len() * std::mem::size_of::<T>()
-            }
-            OpAmInputToValue::ManyToOne(indices, _) => {
-                indices.len() * std::mem::size_of::<usize>() + std::mem::size_of::<T>()
-            }
-            OpAmInputToValue::ManyToMany(indices, vals) => {
-                indices.len() * std::mem::size_of::<usize>() + vals.len() * std::mem::size_of::<T>()
-            }
-        }
-    }
+    // #[tracing::instrument(skip_all)]
+    // pub fn num_bytes(&self) -> usize {
+    //     match self {
+    //         OpAmInputToValue::OneToOne(_, _) => std::mem::size_of::<(usize, T)>(),
+    //         OpAmInputToValue::OneToMany(_, vals) => {
+    //             std::mem::size_of::<usize>() + vals.len() * std::mem::size_of::<T>()
+    //         }
+    //         OpAmInputToValue::ManyToOne(indices, _) => {
+    //             indices.len() * std::mem::size_of::<usize>() + std::mem::size_of::<T>()
+    //         }
+    //         OpAmInputToValue::ManyToMany(indices, vals) => {
+    //             indices.len() * std::mem::size_of::<usize>() + vals.len() * std::mem::size_of::<T>()
+    //         }
+    //     }
+    // }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -224,7 +224,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         let res_offsets_map = OpReqOffsets::new();
         let res_map = OpResults::new();
         let mut complete_cnt = Vec::new();
-        // println!("pe_offsets size {:?}",pe_offsets);
+        // println!("pe_offsets size {:?}",pe_offsets.len());
 
         // println!("req_cnt: {:?}",req_cnt);
         let req = pe_offsets
@@ -237,6 +237,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
                     .data
                     .req_cnt
                     .fetch_add(op_data.len(), Ordering::SeqCst);
+                // println!("added to req_cnt: {} {}",stall_mark+op_data.len(),op_data.len());
                 let buf_op = self.inner.data.op_buffers.read()[pe].clone();
 
                 let (first, complete, res_offsets) = match ret_type {
@@ -246,11 +247,13 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
                         op_data as *const InputToValue<T> as *const u8,
                         &req_ids[&pe],
                         res_map.clone(),
+                        self.inner.data.team.clone(),
                     ),
                     OpReturnType::None => {
                         let (first, complete) = buf_op.add_ops(
                             &op as *const ArrayOpCmd<T> as *const u8,
                             op_data as *const InputToValue<T> as *const u8,
+                            self.inner.data.team.clone(),
                         );
                         (first, complete, None)
                     }
@@ -261,12 +264,13 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
                 if first {
                     // let res_map = res_map.clone();
                     let array = self.clone();
-                    self.inner
+                    let _team_cnt =self.inner
                         .data
                         .team
                         .team_counters
                         .outstanding_reqs
                         .fetch_add(1, Ordering::SeqCst); // we need to tell the world we have a request pending
+                    // println!("updated team cnt: {}",_team_cnt +1);
                     self.inner.data.team.scheduler.submit_task(async move {
                         // println!("starting");
                         let mut wait_cnt = 0;
@@ -318,20 +322,23 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
                                 .team_counters
                                 .outstanding_reqs
                                 .fetch_sub(1, Ordering::SeqCst); //remove our pending req now that it has actually been submitted;
+                            // println!("updated team cnt: {}",_cnt1 -1);
                             let _cnt2 = array.inner.data.req_cnt.fetch_sub(len, Ordering::SeqCst);
+                            // println!("removed frm req_cnt: {} {}",_cnt2-len,len);
                             complete.store(true, Ordering::Relaxed);
 
                             // println!("indirect cnts {:?}->{:?} {:?}->{:?} -- {:?}",cnt1,cnt1-1,cnt2,cnt2-len,len);
                         } else {
                             // println!("here {:?} {:?} ",ams.len(),len);
                             // complete.store(true, Ordering::Relaxed);
-                            array
+                            let _team_cnt = array
                                 .inner
                                 .data
                                 .team
                                 .team_counters
                                 .outstanding_reqs
                                 .fetch_sub(1, Ordering::SeqCst);
+                            // println!("updated team cnt: {} but not sure I should be here",_team_cnt -1);
                             complete.store(true, Ordering::Relaxed);
                         }
                     });
@@ -386,19 +393,23 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         // println!("i_len {i_len} v_len {v_len}");
         if v_len > 0 && i_len > 0 {
             if v_len == 1 && i_len > 1 {
+                // println!("here 0");
                 let val = vals[0].first();
                 for i in indices.drain(..) {
                     i_v_iters.push(InputToValue::ManyToOne(i, val));
                 }
             } else if v_len > 1 && i_len == 1 {
+                // println!("here 1");
                 let idx = indices[0].first();
                 for v in vals.drain(..) {
                     i_v_iters.push(InputToValue::OneToMany(idx, v));
                 }
             } else if i_len == v_len {
                 if i_len == 1 {
+                    // println!("here 2");
                     i_v_iters.push(InputToValue::OneToOne(indices[0].first(), vals[0].first()));
                 } else {
+                    // println!("here 3");
                     for (i, v) in indices.iter().zip(vals.iter()) {
                         i_v_iters.push(InputToValue::ManyToMany(i.clone(), v.clone()));
                     }
@@ -410,7 +421,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
                 );
             }
 
-            // println!("i_v_iters len {:?}",i_v_iters.len());
+            // println!("i_v_iters len {:?}", i_v_iters.len());
 
             let num_sub_reqs = i_v_iters.len(); //Arc::new(AtomicUsize::new(i_v_iters.len()));
             let mut submit_cnt = num_sub_reqs - 1;
@@ -592,6 +603,8 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
     //     self.initiate_op(val,index,ArrayOpCmd::Put)
     // }
 }
+
+impl<T: ElementOps + 'static> ReadOnlyOps<T> for UnsafeArray<T> {}
 
 impl<T: ElementOps + 'static> AccessOps<T> for UnsafeArray<T> {}
 

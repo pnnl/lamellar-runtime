@@ -46,8 +46,9 @@ impl LamellarRequestAddResult for TaskGroupRequestHandleInner {
         self.data.lock().insert(sub_id, data);
     }
     fn update_counters(&self) {
-        self.team_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
-        self.world_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
+        let _team_reqs = self.team_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
+        let _world_req = self.world_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
+        // println!("tg update counter team {} world {}",_team_reqs-1,_world_req-1);
         if let Some(tg_outstanding_reqs) = self.tg_outstanding_reqs.clone() {
             tg_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
         }
@@ -140,8 +141,9 @@ impl LamellarRequestAddResult for TaskGroupMultiRequestHandleInner {
             .insert(pe, data);
     }
     fn update_counters(&self) {
-        self.team_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
-        self.world_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
+        let _team_reqs = self.team_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
+        let _world_req = self.world_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
+        // println!("tg update counter team {} world {}",_team_reqs-1,_world_req-1);
         if let Some(tg_outstanding_reqs) = self.tg_outstanding_reqs.clone() {
             tg_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
         }
@@ -245,8 +247,9 @@ impl LamellarRequestAddResult for TaskGroupLocalRequestHandleInner {
         };
     }
     fn update_counters(&self) {
-        self.team_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
-        self.world_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
+        let _team_reqs = self.team_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
+        let _world_req = self.world_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
+        // println!("tg update counter team {} world {}",_team_reqs-1,_world_req-1);
         if let Some(tg_outstanding_reqs) = self.tg_outstanding_reqs.clone() {
             tg_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
         }
@@ -382,6 +385,8 @@ impl LamellarTaskGroup {
         self.team.team_counters.add_send_req(self.team.num_pes);
         self.team.world_counters.add_send_req(self.team.num_pes);
         self.counters.add_send_req(self.team.num_pes);
+        // println!("cnts: t: {} w: {} self: {:?}",self.team.team_counters.outstanding_reqs.load(Ordering::Relaxed),self.team.world_counters.outstanding_reqs.load(Ordering::Relaxed), self.counters.outstanding_reqs.load(Ordering::Relaxed));
+
         self.cnt.fetch_add(1, Ordering::SeqCst);
         let func: LamellarArcAm = Arc::new(am);
         let world = if let Some(world) = &self.team.world {
@@ -423,6 +428,8 @@ impl LamellarTaskGroup {
         self.team.team_counters.add_send_req(1);
         self.team.world_counters.add_send_req(1);
         self.counters.add_send_req(1);
+        // println!("cnts: t: {} w: {} self: {:?}",self.team.team_counters.outstanding_reqs.load(Ordering::Relaxed),self.team.world_counters.outstanding_reqs.load(Ordering::Relaxed), self.counters.outstanding_reqs.load(Ordering::Relaxed));
+
         self.cnt.fetch_add(1, Ordering::SeqCst);
         let func: LamellarArcAm = Arc::new(am);
         let world = if let Some(world) = &self.team.world {
@@ -460,6 +467,8 @@ impl LamellarTaskGroup {
         self.team.team_counters.add_send_req(1);
         self.team.world_counters.add_send_req(1);
         self.counters.add_send_req(1);
+        // println!("cnts: t: {} w: {} self: {:?}",self.team.team_counters.outstanding_reqs.load(Ordering::Relaxed),self.team.world_counters.outstanding_reqs.load(Ordering::Relaxed), self.counters.outstanding_reqs.load(Ordering::Relaxed));
+
         self.cnt.fetch_add(1, Ordering::SeqCst);
         let func: LamellarArcLocalAm = Arc::new(am);
         let world = if let Some(world) = &self.team.world {

@@ -1,6 +1,7 @@
 use crate::lamellar_request::LamellarRequest;
 use crate::memregion::{
     local::LocalMemoryRegion, shared::SharedMemoryRegion, Dist, LamellarMemoryRegion,
+    RemoteMemoryRegion,
 };
 use crate::{active_messaging::*, LamellarTeamRT};
 // use crate::Darc;
@@ -21,7 +22,7 @@ pub use r#unsafe::{
     operations::UnsafeArrayOpBuf, UnsafeArray, UnsafeByteArray, UnsafeByteArrayWeak,
 };
 pub(crate) mod read_only;
-pub use read_only::{ReadOnlyArray, ReadOnlyByteArray};
+pub use read_only::{ReadOnlyArray, ReadOnlyByteArray, ReadOnlyByteArrayWeak, ReadOnlyArrayOpBuf};
 
 pub(crate) mod local_only;
 pub use local_only::LocalOnlyArray;

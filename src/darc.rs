@@ -318,7 +318,7 @@ impl<T> DarcInner<T> {
             if temp_now.elapsed() > Duration::new(60, 0) {
                 //|| first{
                 println!(
-                    "in team wait_all mype: {:?} cnt: {:?} {:?}",
+                    "in darc wait_all mype: {:?} cnt: {:?} {:?}",
                     team.world_pe,
                     am_counters.send_req_cnt.load(Ordering::SeqCst),
                     am_counters.outstanding_reqs.load(Ordering::SeqCst),

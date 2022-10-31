@@ -100,8 +100,9 @@ impl LamellarRequestAddResult for LamellarRequestHandleInner {
     }
     #[tracing::instrument(skip_all)]
     fn update_counters(&self) {
-        self.team_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
-        self.world_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
+        let _team_reqs = self.team_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
+        let _world_req = self.world_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
+        // println!("update counter team {} world {}",_team_reqs-1,_world_req-1);
         if let Some(tg_outstanding_reqs) = self.tg_outstanding_reqs.clone() {
             tg_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
         }
@@ -199,8 +200,9 @@ impl LamellarRequestAddResult for LamellarMultiRequestHandleInner {
         //     self.team_outstanding_reqs.load(Ordering::SeqCst),
         //     self.world_outstanding_reqs.load(Ordering::SeqCst)
         // );
-        self.team_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
-        self.world_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
+        let _team_reqs = self.team_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
+        let _world_req = self.world_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
+        // println!("update counter team {} world {}",_team_reqs-1,_world_req-1);
         if let Some(tg_outstanding_reqs) = self.tg_outstanding_reqs.clone() {
             tg_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
         }
@@ -316,8 +318,9 @@ impl LamellarRequestAddResult for LamellarLocalRequestHandleInner {
     }
     #[tracing::instrument(skip_all)]
     fn update_counters(&self) {
-        self.team_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
-        self.world_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
+        let _team_reqs = self.team_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
+        let _world_req = self.world_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
+        // println!("update counter team {} world {}",_team_reqs-1,_world_req-1);
         if let Some(tg_outstanding_reqs) = self.tg_outstanding_reqs.clone() {
             tg_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
         }

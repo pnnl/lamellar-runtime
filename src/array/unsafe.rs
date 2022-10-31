@@ -551,7 +551,7 @@ impl<T: Dist> LamellarArray<T> for UnsafeArray<T> {
             if temp_now.elapsed() > Duration::new(60, 0) {
                 //|| first{
                 println!(
-                    "in team wait_all mype: {:?} cnt: {:?} {:?} {:?}",
+                    "in array wait_all mype: {:?} cnt: {:?} {:?} {:?}",
                     self.inner.data.team.world_pe,
                     self.inner
                         .data

@@ -589,7 +589,7 @@ impl InnerCQ {
                 }
             }
             if do_alloc {
-                println!("need to alloc new pool");
+                // println!("need to alloc new pool");
                 self.send_alloc_inner(&mut alloc_buf, min_size);
             }
         }

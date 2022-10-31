@@ -1,8 +1,6 @@
 #!/bin/bash
 
 rm -r /dev/shm/lamellar_*  2> /dev/null #cleanup incase any previous run failed unexpectedly
-rm -r ./lamellar_shm/ 2> /dev/null #cleanup incase any previous run failed unexpected
-# mkdir lamellar_shm
 #echo "$HOSTNAME"
 NUMPES=1
 
@@ -37,7 +35,7 @@ fi
 #outfile=${pe}_shmem_test.out
 #let
 echo "$pe $S_CORE $E_CORE $NPROC"
-LAMELLAE_BACKEND="shmem" LAMELLAR_MEM_SIZE=$((1*1024*1024*1024)) LAMELLAR_THREADS=${THREADS:-$((NPROC/NUMPES))} LAMELLAR_NUM_PES=$NUMPES LAMELLAR_PE_ID=$pe LAMELLAR_JOB_ID=$JOBID lldb $bin "${@:2}" -o 'run' -o 'bt' &>$pe.out &
+LAMELLAE_BACKEND="shmem" LAMELLAR_MEM_SIZE=$((1*1024*1024*1024)) LAMELLAR_THREADS=${THREADS:-$((NPROC/NUMPES))} LAMELLAR_NUM_PES=$NUMPES LAMELLAR_PE_ID=$pe LAMELLAR_JOB_ID=$JOBID $bin "${@:2}"  &
 S_CORE=$(($E_CORE + 1 ))
 E_CORE=$(($S_CORE + $THREADS))
 done

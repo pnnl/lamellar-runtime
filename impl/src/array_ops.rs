@@ -317,7 +317,7 @@ fn create_buf_ops(
                 #res_t res_t[0] = old;
             },
             quote! { //compare_exchange
-                let old = match slice[index].compare_exchange(*old, val, Ordering::SeqCst, Ordering::SeqCst) {
+                let old = match slice[index].compare_exchange(old, val, Ordering::SeqCst, Ordering::SeqCst) {
                     Ok(old) => {
                         results_u8[results_offset] = 0;
                         results_offset+=1;
@@ -332,7 +332,7 @@ fn create_buf_ops(
                 #res_t res_t[0] = old;
             },
             quote! { //compare exchange epsilon
-                let old = match slice[index].compare_exchange(*old, val, Ordering::SeqCst, Ordering::SeqCst) {
+                let old = match slice[index].compare_exchange(old, val, Ordering::SeqCst, Ordering::SeqCst) {
                     Ok(orig) => { //woohoo dont need to do worry about the epsilon
                         results_u8[results_offset] = 0;
                         results_offset+=1;
@@ -341,7 +341,7 @@ fn create_buf_ops(
                     Err(orig) => { //we dont match exactly, so we need to do the epsilon check
                         let mut done = false;
                         let mut orig = orig;
-                        while (orig.abs_diff(*old) as #typeident) < *eps && !done{ //keep trying while under epsilon
+                        while (orig.abs_diff(old) as #typeident) < eps && !done{ //keep trying while under epsilon
                             orig = match slice[index].compare_exchange(orig, val, Ordering::SeqCst, Ordering::SeqCst) {
                                 Ok(old_val) => { //we did it!
                                     done = true;
@@ -367,7 +367,23 @@ fn create_buf_ops(
 
             },
         )
-    } else {
+    } else if array_type == "ReadOnlyArray" {
+        (
+            quote! { panic!("assign a valid op for Read Only Arrays");},                                           //lhs
+            quote! { panic!("assign/store not a valid op for Read Only Arrays");},                                     //assign
+            quote! { panic!("fetch_add not a valid op for Read Only Arrays"); }, //fetch_add -- we lock the index before this point so its actually atomic
+            quote! { panic!("fetch_sub not a valid op for Read Only Arrays"); }, //fetch_sub --we lock the index before this point so its actually atomic
+            quote! { panic!("fetch_mul not a valid op for Read Only Arrays"); }, //fetch_mul --we lock the index before this point so its actually atomic
+            quote! { panic!("fetch_div not a valid op for Read Only Arrays"); }, //fetch_div --we lock the index before this point so its actually atomic
+            quote! { panic!("fetch_and not a valid op for Read Only Arrays"); }, //fetch_and --we lock the index before this point so its actually atomic
+            quote! { panic!("fetch_or not a valid op for Read Only Arrays"); }, //fetch_or --we lock the index before this point so its actually atomic
+            quote! {slice[index]},                                           //load
+            quote! { panic!("swap not a valid op for Read Only Arrays"); }, //swap we lock the index before this point so its actually atomic
+            quote! { panic!("compare exchange not a valid op for Read Only Arrays"); }, // compare_exchange -- we lock the index before this point so its actually atomic
+            quote! { panic!("compare exchange eps not a valid op for Read Only Arrays"); }, //compare exchange epsilon
+        )
+    }
+    else{
         (
             quote! {slice[index]},                                           //lhs
             quote! {slice[index] = val},                                     //assign
@@ -381,12 +397,12 @@ fn create_buf_ops(
             quote! {#res_t res_t[0] =  slice[index]; slice[index] = val; }, //swap we lock the index before this point so its actually atomic
             quote! {  // compare_exchange -- we lock the index before this point so its actually atomic
                 // println!("old : {:?} val : {:?} s[i] {:?}", *old, val, slice[index]);
-                 let old = if *old == slice[index]{
+                 let old = if old == slice[index]{
                     // println!("the same!");
                     slice[index] = val;
                     results_u8[results_offset] = 0;
                     results_offset+=1;
-                    *old
+                    old
                 } else {
                     // println!("different!");
                     results_u8[results_offset] = 1;
@@ -396,17 +412,23 @@ fn create_buf_ops(
                 #res_t res_t[0] = old;
             },
             quote! { //compare exchange epsilon
-                let same = if *old > slice[index] {
-                    *old - slice[index] < *eps
+                // let same = if *old > slice[index] {
+                //     *old - slice[index] < *eps
+                // }
+                // else{
+                //     slice[index] - *old < *eps
+                // };
+                let same = if old > slice[index] {
+                    old - slice[index] < eps
                 }
                 else{
-                    slice[index] - *old < *eps
+                    slice[index] - old < eps
                 };
                 let old = if same {
                     slice[index] = val;
                     results_u8[results_offset] = 0;
                     results_offset+=1;
-                    *old
+                    old
                 } else {
                     results_u8[results_offset] = 1;
                     results_offset+=1;
@@ -431,6 +453,11 @@ fn create_buf_ops(
         (
             quote! {}, //no explicit lock since the slice handle is a lock guard
             quote! {let mut slice = self.data.write_local_data();}, //this is the lock
+        )
+    } else if array_type == "ReadOnlyArray" {
+        (
+            quote! {}, //no explicit lock since the slice handle is a lock guard
+            quote! {let slice = self.data.local_data();}, //this is the lock
         )
     } else {
         (
@@ -483,9 +510,6 @@ fn create_buf_ops(
                 ArrayOpCmd::Store=>{
                     #assign
                 },
-                ArrayOpCmd::Load=>{
-                    #res_t res_t[0] =  #load;
-                },
                 ArrayOpCmd::Swap=>{
                     #swap
                 },
@@ -495,6 +519,11 @@ fn create_buf_ops(
                 ArrayOpCmd::CompareExchangeEps(old,eps) =>{
                     #compare_exchange_eps
                 }
+            }),
+            OpType::ReadOnly => match_stmts.extend(quote! {
+                ArrayOpCmd::Load=>{
+                    #res_t res_t[0] =  #load;
+                },
             }),
         }
     }
@@ -520,28 +549,26 @@ fn create_buf_ops(
 
     expanded.extend(quote! {
         struct #buf_op_name{
-            // data: #lamellar::array::#array_type<#typeident>,
             data: #lamellar::array::#byte_array_type,
-            // ops: Mutex<Vec<(ArrayOpCmd,Vec<(usize,#typeident)>)>>,
-            ops: Mutex<Vec<(ArrayOpCmd<#typeident>,#lamellar::array::OpAmInputToValue<#typeident>)>>,
+            // ops: Mutex<Vec<(ArrayOpCmd<#typeident>,#lamellar::array::OpAmInputToValue<#typeident>)>>,
+            new_ops: Mutex<Vec<(LocalMemoryRegion<u8>,usize)>>,
             cur_len: AtomicUsize, //this could probably just be a normal usize cause we only update it after we get ops lock
             complete: RwLock<Arc<AtomicBool>>,
-            // result_cnt:  RwLock<Arc<AtomicUsize>>,
             results_offset: RwLock<Arc<AtomicUsize>>,
             results:  RwLock<PeOpResults>,
         }
         #[#am_data(Debug)]
         struct #am_buf_name{
-            // wait: Darc<AtomicUsize>,
             data: #lamellar::array::#array_type<#typeident>,
-            // ops: Vec<(ArrayOpCmd,Vec<(usize,#typeident)>)>,
-            ops: Vec<(ArrayOpCmd<#typeident>,#lamellar::array::OpAmInputToValue<#typeident>)>,
+            // ops: Vec<(ArrayOpCmd<#typeident>,#lamellar::array::OpAmInputToValue<#typeident>)>,
+            // new_ops: Vec<LocalMemoryRegion<u8>>,
+            ops2: LocalMemoryRegion<u8>,
             res_buf_size: usize,
             orig_pe: usize,
         }
         impl #lamellar::array::BufferOp for #buf_op_name{
             #[tracing::instrument(skip_all)]
-            fn add_ops(&self, op_ptr: *const u8, op_data_ptr: *const u8) -> (bool,Arc<AtomicBool>){
+            fn add_ops(&self, op_ptr: *const u8, op_data_ptr: *const u8, team: Pin<Arc<LamellarTeamRT>>) -> (bool,Arc<AtomicBool>){
                 let span1 = tracing::trace_span!("convert");
                 let _guard = span1.enter();
                 let op_data = unsafe{(&*(op_data_ptr as *const #lamellar::array::InputToValue<'_,#typeident>)).as_op_am_input()};
@@ -549,30 +576,76 @@ fn create_buf_ops(
                 drop(_guard);
                 let span2 = tracing::trace_span!("lock");
                 let _guard = span2.enter();
-                let mut buf = self.ops.lock();
+                let mut bufs = self.new_ops.lock();
+
+                // let mut buf = self.ops.lock();
+
                 drop(_guard);
                 let span3 = tracing::trace_span!("update");
                 let _guard = span3.enter();
-                let first = buf.len() == 0;
+                let first = bufs.len() == 0;
+                let op_size = op.num_bytes();
+                let data_size = op_data.num_bytes();
+                if first {
+                    bufs.push((team.alloc_local_mem_region(std::cmp::max(#lamellar::array::OPS_BUFFER_SIZE,op_size+data_size)),0));
+                }
+                else {
+                    if bufs.last().unwrap().1 + op_size+data_size > #lamellar::array::OPS_BUFFER_SIZE{
+                        bufs.push((team.alloc_local_mem_region(std::cmp::max(#lamellar::array::OPS_BUFFER_SIZE, op_size+data_size)),0));
+                    }
+                }
+                let mut buf: &mut (LocalMemoryRegion<u8>, usize) = bufs.last_mut().unwrap();
+                
                 let _temp = self.cur_len.fetch_add(op_data.len(),Ordering::SeqCst);
-                buf.push((op,op_data));
+                let mut buf_slice = unsafe{buf.0.as_mut_slice().unwrap()};
+                
+                buf.1 += op.to_bytes(&mut buf_slice[(buf.1)..]);
+                buf.1 += op_data.to_bytes(&mut buf_slice[(buf.1)..]);
+                // if buf.1 > #lamellar::array::OPS_BUFFER_SIZE {
+                //     println!("{} {} {}",buf.1,op_size,data_size);
+                // }
+                // buf.push((op,op_data));
                 drop(_guard);
                 (first,self.complete.read().clone())
             }
             #[tracing::instrument(skip_all)]
-            fn add_fetch_ops(&self, pe: usize, op_ptr: *const u8, op_data_ptr: *const u8, req_ids: &Vec<usize>, res_map: OpResults) -> (bool,Arc<AtomicBool>,Option<OpResultOffsets>){
+            fn add_fetch_ops(&self, pe: usize, op_ptr: *const u8, op_data_ptr: *const u8, req_ids: &Vec<usize>, res_map: OpResults, team: Pin<Arc<LamellarTeamRT>>) -> (bool,Arc<AtomicBool>,Option<OpResultOffsets>){
                 let op_data = unsafe{(&*(op_data_ptr as *const #lamellar::array::InputToValue<'_,#typeident>)).as_op_am_input()};
                 let op = unsafe{*(op_ptr as *const ArrayOpCmd<#typeident>)};
                 let mut res_offsets = vec![];
-                let mut buf = self.ops.lock();
+                // let mut buf = self.ops.lock();
+                let mut bufs = self.new_ops.lock();
+
                 for rid in req_ids{
                     let res_size = op.result_size();
                     res_offsets.push((*rid,self.results_offset.read().fetch_add(res_size,Ordering::SeqCst),res_size));
                 }
                 // println!("{:?}",res_offsets);
-                let first = buf.len() == 0;
+                // let first = buf.len() == 0;
+                // buf.push((op,op_data));
+                let first = bufs.len() == 0;
+                let op_size = op.num_bytes();
+                let data_size = op_data.num_bytes();
+                // println!("add_fetch_ops {:?} {:?}",op_size,data_size);
+                if first {
+                    bufs.push((team.alloc_local_mem_region(std::cmp::max(#lamellar::array::OPS_BUFFER_SIZE, op_size+data_size)),0));
+                }
+                else {
+                    if bufs.last().unwrap().1 + op_size+data_size > #lamellar::array::OPS_BUFFER_SIZE{
+                        bufs.push((team.alloc_local_mem_region(std::cmp::max(#lamellar::array::OPS_BUFFER_SIZE, op_size+data_size)),0));
+                    }
+                }
+                let mut buf: &mut (LocalMemoryRegion<u8>, usize) = bufs.last_mut().unwrap();
+                
                 let _temp = self.cur_len.fetch_add(op_data.len(),Ordering::SeqCst);
-                buf.push((op,op_data));
+                // println!("array_op cur_len {} {}",_temp,op_data.len());
+                let mut buf_slice = unsafe{buf.0.as_mut_slice().unwrap()};
+                
+                buf.1 += op.to_bytes(&mut buf_slice[(buf.1)..]);
+                buf.1 += op_data.to_bytes(&mut buf_slice[(buf.1)..]);
+                // if buf.1 >= #lamellar::array::OPS_BUFFER_SIZE {
+                //     println!("{} {} {}",buf.1,op_size,data_size);
+                // }
                 res_map.insert(pe,self.results.read().clone());
                 (first,self.complete.read().clone(),Some(res_offsets))
             }
@@ -580,12 +653,13 @@ fn create_buf_ops(
             fn into_arc_am(&self,sub_array: std::ops::Range<usize>)-> (Vec<Arc<dyn RemoteActiveMessage + Sync + Send>>,usize,Arc<AtomicBool>, PeOpResults){
                 // println!("into arc am {:?}",stringify!(#am_buf_name));
                 let mut ams: Vec<Arc<dyn RemoteActiveMessage + Sync + Send>> = Vec::new();
-                let mut buf = self.ops.lock();
+                let mut bufs = self.new_ops.lock();
                 // println!("buf len {:?}",buf.len());
                 let mut ops = Vec::new();
                 let len = self.cur_len.load(Ordering::SeqCst);
+                // println!("into_arc_am: cur_len {}",len);
                 self.cur_len.store(0,Ordering::SeqCst);
-                std::mem::swap(&mut ops,  &mut buf);
+                std::mem::swap(&mut ops,  &mut bufs);
                 let mut complete = Arc::new(AtomicBool::new(false));
                 std::mem::swap(&mut complete, &mut self.complete.write());
                 // println!(" complete{:?}",complete);
@@ -602,27 +676,108 @@ fn create_buf_ops(
                 // Vec<(ArrayOpCmd,)> == op_i;
                 // Vec<(Vec<usize>,#typeident)>
                 let data: #lamellar::array::#array_type<#typeident> = self.data.upgrade().expect("array invalid").into();
-                while op_i >= 0 {
-                    while op_i >= 0 && (cur_size + ops[op_i as usize].1.num_bytes() < 10000000) {
-                        cur_size += ops[op_i as usize].1.num_bytes();
-                        op_i -= 1isize;
-                    }
-                    let new_ops = ops.split_off((op_i+ 1 as isize) as usize);
-                    // println!("cur_size: {:?} i {:?} len {:?} ops_len {:?}",cur_size ,op_i, new_ops.len(),ops.len());
+                for (lmr,size) in ops.drain(..){
+
                     let mut am = #am_buf_name{
                         // wait: wait.clone(),
                         data: data.sub_array(sub_array.clone()),
-                        ops: new_ops,
+                        ops2: lmr.sub_region(0..size),
                         res_buf_size: result_buf_size,
                         orig_pe: data.my_pe(),
                     };
                     ams.push(Arc::new(am));
-                    cur_size = 0;
                 }
+                // while op_i >= 0 {
+                //     let mut op_size = 0; #lamellar::serialized_size::<(ArrayOpCmd<#typeident>,#lamellar::array::OpAmInputToValue<#typeident>)>(&ops[op_i as usize],false);
+                //     while op_i >= 0 && (cur_size + op_size < 10000000) {
+                //         // println!("cur_size: {:?} i {:?} len {:?} ops_len {:?}",cur_size ,op_i,op_size,ops.len());
+                //         cur_size += op_size;
+                //         op_i -= 1isize;
+                //         if op_i >= 0{
+                //             op_size =  #lamellar::serialized_size::<(ArrayOpCmd<#typeident>,#lamellar::array::OpAmInputToValue<#typeident>)>(&ops[op_i as usize],false);
+                //         }
+                //     }
+                //     let new_ops = ops.split_off((op_i+ 1 as isize) as usize);
+                    
+                //     // println!("cur_size: {:?} i {:?} len {:?} ops_len {:?}",cur_size ,op_i, new_ops.len(),ops.len());
+                //     let mut am = #am_buf_name{
+                //         // wait: wait.clone(),
+                //         data: data.sub_array(sub_array.clone()),
+                //         ops: new_ops,
+                //         res_buf_size: result_buf_size,
+                //         orig_pe: data.my_pe(),
+                //     };
+                //     ams.push(Arc::new(am));
+                //     cur_size = 0;
+                // }
+
+                // while op_i >= 0 {
+                //     let mut op_size = 0; #lamellar::serialized_size::<(ArrayOpCmd<#typeident>,#lamellar::array::OpAmInputToValue<#typeident>)>(&ops[op_i as usize],false);
+                //     while op_i >= 0 && (cur_size + op_size < 10000000) {
+                //         // println!("cur_size: {:?} i {:?} len {:?} ops_len {:?}",cur_size ,op_i,op_size,ops.len());
+                //         cur_size += op_size;
+                //         op_i -= 1isize;
+                //         if op_i >= 0{
+                //             op_size =  #lamellar::serialized_size::<(ArrayOpCmd<#typeident>,#lamellar::array::OpAmInputToValue<#typeident>)>(&ops[op_i as usize],false);
+                //         }
+                //     }
+                //     let new_ops = ops.split_off((op_i+ 1 as isize) as usize);
+                //     let new_ops_size = #lamellar::serialized_size::<Vec<(ArrayOpCmd<#typeident>,#lamellar::array::OpAmInputToValue<#typeident>)>>(&new_ops,false);
+                //     // println!("cur_size: {:?} new_ops_size {:?} i {:?} len {:?} ops_len {:?}",cur_size,new_ops_size ,op_i, new_ops.len(),ops.len());
+                //     let serialized_ops = data.team().alloc_local_mem_region(new_ops_size);
+                //     // println!("cur_size: {:?} i {:?} len {:?} ops_len {:?}",cur_size ,op_i, new_ops.len(),ops.len());
+                //     unsafe{#lamellar::serialize_into(serialized_ops.as_mut_slice().unwrap(),&new_ops,false).unwrap();}
+                    
+                //     let mut am = #am_buf_name{
+                //         // wait: wait.clone(),
+                //         data: data.sub_array(sub_array.clone()),
+                //         ops: vec![],
+                //         ops2: serialized_ops,
+                //         res_buf_size: result_buf_size,
+                //         orig_pe: data.my_pe(),
+                //     };
+                //     ams.push(Arc::new(am));
+                //     cur_size = 0;
+                // }
                 ams.reverse();
                 // println!("ams len: {:?}",ams.len());
                 // }
                 (ams,len,complete,results)
+            }
+        }
+
+        impl #am_buf_name{
+            async fn get_ops(&self, team: &std::sync::Arc<#lamellar::LamellarTeam>) -> #lamellar::LocalMemoryRegion<u8>{
+                // println!("get_ops {:?}",self.ops2.len());
+                unsafe{
+                    let serialized_ops = if self.ops2.data_local(){
+                        self.ops2.clone()
+                    }
+                    else{
+                        let serialized_ops = team.alloc_local_mem_region::<u8>(self.ops2.len());
+                        let local_slice = serialized_ops.as_mut_slice().unwrap();
+                        local_slice[self.ops2.len()- 1] = 255u8;
+                        self.ops2.get_unchecked(0, serialized_ops.clone());
+
+                        while local_slice[self.ops2.len()- 1] == 255u8 {
+                            // async_std::task::yield_now().await;
+                            std::thread::yield_now();
+                        }
+                        serialized_ops
+                    };
+                    serialized_ops
+                    // self.ops2.iget(0,serialized_ops.clone());
+                    // #lamellar::deserialize(serialized_ops.as_mut_slice().unwrap(),false).unwrap()
+                }
+            }
+
+            fn get_op<'a>(&self, buf: &'a [u8]) -> (usize,(ArrayOpCmd<#typeident>,RemoteOpAmInputToValue<'a,#typeident>)){
+                let mut bytes_read = 0;
+                let (cmd,size) = ArrayOpCmd::from_bytes(buf);
+                bytes_read += size;
+                let (data,size) = RemoteOpAmInputToValue::from_bytes(& buf[bytes_read..]);
+                bytes_read += size;
+                (bytes_read,(cmd,data))
             }
         }
         #[#am]
@@ -641,28 +796,59 @@ fn create_buf_ops(
                 let mut results_offset=0;
                 // println!("{:?} {:?} {:?}",results_u8.len(),u8_len,results_offset);
                 // let mut results_slice = unsafe{std::slice::from_raw_parts_mut(results_u8.as_mut_ptr() as *mut #typeident,self.num_fetch_ops)};
-                for (op, ops) in &self.ops { //(ArrayOpCmd,OpAmInputToValue)
+                
+                let local_ops = self.get_ops(&lamellar::team).await;
+                let local_ops_slice = local_ops.as_slice().unwrap();
+                let mut cur_index = 0;
+                while cur_index <  local_ops_slice.len(){
+                    let (bytes_read,(op,ops)) = self.get_op(&local_ops_slice[cur_index..]);
+                    cur_index += bytes_read;
                     match ops{
-                        OpAmInputToValue::OneToOne(index,val) => {
+                        RemoteOpAmInputToValue::OneToOne(index,val) => {
+                            // let index = *index;
+                            // let val = *val;
                             #inner_op
                         },
-                        OpAmInputToValue::OneToMany(index,vals) => {
+                        RemoteOpAmInputToValue::OneToMany(index,vals) => {
                             for val in vals{ //there maybe an optimization here where we grab the index lock outside of the loop
                                 #inner_op
                             }
                         },
-                        OpAmInputToValue::ManyToOne(indices,val) => {
+                        RemoteOpAmInputToValue::ManyToOne(indices,val) => {
                             for index in indices{
                                 #inner_op
                             }
                         },
-                        OpAmInputToValue::ManyToMany(indices,vals) => {
+                        RemoteOpAmInputToValue::ManyToMany(indices,vals) => {
                             for (index,val) in indices.iter().zip(vals.iter()){
                                 #inner_op
                             }
                         },
                     }
                 }
+                // for (op, ops) in &local_ops { //(ArrayOpCmd,OpAmInputToValue)
+                // for (op, ops) in &self.ops { //(ArrayOpCmd,OpAmInputToValue)
+                //     match ops{
+                //         OpAmInputToValue::OneToOne(index,val) => {
+                //             #inner_op
+                //         },
+                //         OpAmInputToValue::OneToMany(index,vals) => {
+                //             for val in vals{ //there maybe an optimization here where we grab the index lock outside of the loop
+                //                 #inner_op
+                //             }
+                //         },
+                //         OpAmInputToValue::ManyToOne(indices,val) => {
+                //             for index in indices{
+                //                 #inner_op
+                //             }
+                //         },
+                //         OpAmInputToValue::ManyToMany(indices,vals) => {
+                //             for (index,val) in indices.iter().zip(vals.iter()){
+                //                 #inner_op
+                //             }
+                //         },
+                //     }
+                // }
                 unsafe { results_u8.set_len(results_offset)};
                 // println!("{:?} {:?} {:?} {:?}",results_u8.len(),u8_len,results_offset,results_u8);
                 results_u8
@@ -672,7 +858,8 @@ fn create_buf_ops(
         fn #dist_am_buf_name(array: #lamellar::array::#byte_array_type) -> Arc<dyn #lamellar::array::BufferOp>{
                 Arc::new(#buf_op_name{
                     data: array,
-                    ops: Mutex::new(Vec::new()),
+                    // ops: Mutex::new(Vec::new()),
+                    new_ops: Mutex::new(Vec::new()),
                     cur_len: AtomicUsize::new(0),
                     complete: RwLock::new(Arc::new(AtomicBool::new(false))),
                     results_offset: RwLock::new(Arc::new(AtomicUsize::new(0))),
@@ -694,6 +881,7 @@ enum OpType {
     Arithmetic,
     Bitwise,
     Access,
+    ReadOnly
 }
 
 fn create_buffered_ops(
@@ -727,7 +915,19 @@ fn create_buffered_ops(
 
     let mut expanded = quote! {};
 
-    let mut optypes = vec![OpType::Arithmetic, OpType::Access];
+    let mut optypes = vec![OpType::ReadOnly];//, vec![OpType::Arithmetic, OpType::Access];
+
+    let buf_op_impl = create_buf_ops(
+        typeident.clone(),
+        quote::format_ident!("ReadOnlyArray"),
+        quote::format_ident!("ReadOnlyByteArrayWeak"),
+        &optypes,
+        rt,
+        bitwise,
+    );
+    expanded.extend(buf_op_impl);
+    optypes.push(OpType::Arithmetic);
+    optypes.push(OpType::Access);
     if bitwise {
         optypes.push(OpType::Bitwise);
     }
@@ -753,6 +953,8 @@ fn create_buffered_ops(
         expanded.extend(buf_op_impl)
     }
 
+    
+
     let user_expanded = quote_spanned! {expanded.span()=>
         const _: () = {
             extern crate lamellar as __lamellar;
@@ -766,18 +968,24 @@ fn create_buffered_ops(
                 ArrayOpCmd,
                 LamellarArrayPut,
                 OpResultOffsets,
+                RemoteOpAmInputToValue,
                 PeOpResults,OpResults,
                 OpAmInputToValue};
             // #bitwise_mod
             use __lamellar::array;
+            use __lamellar::LamellarTeamRT;
             // #bitwise_mod
             use __lamellar::Darc;
             use __lamellar::LamellarArray;
             use __lamellar::LamellarRequest;
             use __lamellar::RemoteActiveMessage;
+            // use __lamellar::memregion::{RemoteMemoryRegion};
+            use __lamellar::LocalMemoryRegion;
+            use __lamellar::RemoteMemoryRegion;
             use std::sync::Arc;
             use parking_lot::{Mutex,RwLock};
             use std::sync::atomic::{Ordering,AtomicBool,AtomicUsize};
+            use std::pin::Pin;
             #expanded
         };
     };

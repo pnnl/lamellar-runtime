@@ -212,6 +212,7 @@ impl AMCounters {
     }
     pub(crate) fn add_send_req(&self, num: usize) {
         let _num_reqs = self.outstanding_reqs.fetch_add(num, Ordering::SeqCst);
+        // println!("add_send_req {}",_num_reqs+1);
         self.send_req_cnt.fetch_add(num, Ordering::SeqCst);
     }
 }
