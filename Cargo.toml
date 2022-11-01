@@ -396,3 +396,18 @@ path="examples/darc_examples/darc.rs"
 name="stress_test"
 path="examples/darc_examples/stress_test.rs"
 
+##------------ Hello Worlds examples ------------------##
+[[example]]
+name="hello_world_am"
+path="examples/hello_world/hello_world_am.rs"
+
+[[example]]
+name="hello_world_array"
+path="examples/hello_world/hello_world_array.rs"
+
+[[example]]
+name="hello_world_array_iteration"
+path="examples/hello_world/hello_world_array_iteration.rs"
+
+
+
