@@ -664,7 +664,7 @@ impl InnerCQ {
                 //while we are waiting to push our data might as well try to advance the buffers
                 self.progress_transfers(dst, &mut cmd_buffer);
                 self.try_sending_buffer(dst, &mut cmd_buffer);
-                if timer.elapsed().as_secs_f64() > 60.0 {
+                if timer.elapsed().as_secs_f64() > 600.0 {
                     let send_buf = self.send_buffer.lock();
                     println!("waiting to add cmd to cmd buffer {:?}", cmd_buffer);
                     println!("send_buf: {:?}", send_buf);
@@ -709,7 +709,7 @@ impl InnerCQ {
                         break;
                     }
                 }
-                if timer.elapsed().as_secs_f64() > 60.0 {
+                if timer.elapsed().as_secs_f64() > 600.0 {
                     println!("waiting to send cmd buffer {:?}", cmd_buffer);
                     let send_buf = self.send_buffer.lock();
                     println!("send_buf addr {:?}", send_buf.as_ptr());
@@ -831,7 +831,7 @@ impl InnerCQ {
                     // self.put_amt.fetch_add(send_buf[dst].as_bytes().len(),Ordering::Relaxed);
                     break;
                 }
-                if timer.elapsed().as_secs_f64() > 30.0 {
+                if timer.elapsed().as_secs_f64() > 300.0 {
                     let send_buf = self.send_buffer.lock();
                     // println!("waiting to add cmd to cmd buffer {:?}",cmd_buffer);
                     println!("send_buf: {:?}", send_buf);

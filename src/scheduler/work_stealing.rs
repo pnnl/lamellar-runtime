@@ -222,6 +222,27 @@ impl AmeSchedulerQueue for WorkStealingInner {
         });
     }
 
+    fn submit_immediate_task<F>(&self, future: F)
+    where
+        F: Future<Output = ()>,
+    {
+        trace_span!("submit_task").in_scope(|| {
+            let num_tasks = self.num_tasks.clone();
+            let future2 = async move {
+                // println!("exec task {:?}",num_tasks.load(Ordering::Relaxed)+1);
+                num_tasks.fetch_add(1, Ordering::Relaxed);
+                future.await;
+                num_tasks.fetch_sub(1, Ordering::Relaxed);
+                // println!("done task {:?}",num_tasks.load(Ordering::Relaxed));
+            };
+            let work_inj = self.work_inj.clone();
+            let schedule = move |runnable| work_inj.push(runnable);
+            let (runnable, task) = unsafe { async_task::spawn_unchecked(future2, schedule) }; //safe //safe as contents are sync+send... may need to do something to enforce lifetime bounds
+            runnable.run();//try to run immediately
+            task.detach();
+        });
+    }
+
     fn block_on<F>(&self, future: F) -> F::Output
     where
         F: Future,
@@ -231,9 +252,10 @@ impl AmeSchedulerQueue for WorkStealingInner {
             let schedule = move |runnable| work_inj.push(runnable);
             let (runnable, mut task) = unsafe { async_task::spawn_unchecked(future, schedule) }; //safe //safe as contents are sync+send... may need to do something to enforce lifetime bounds
             let waker = runnable.waker();
-            runnable.schedule();
+            runnable.run(); //try to run immediately
             while !task.is_finished() {
                 self.exec_task();
+                // std::thread::yield_now();
             }
             let cx = &mut async_std::task::Context::from_waker(&waker);
             if let async_std::task::Poll::Ready(output) = task.poll(cx) {
@@ -312,6 +334,13 @@ impl SchedulerQueue for WorkStealing {
         F: Future<Output = ()>,
     {
         self.inner.submit_task(future);
+    }
+
+    fn submit_immediate_task<F>(&self, future: F)
+    where
+        F: Future<Output = ()>,
+    {
+        self.inner.submit_immediate_task(future);
     }
 
     fn exec_task(&self) {

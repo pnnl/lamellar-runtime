@@ -10,11 +10,11 @@ use std::sync::Arc;
 pub(crate) mod work_stealing;
 use work_stealing::{WorkStealing, WorkStealingInner};
 
-pub(crate) mod numa_work_stealing;
-use numa_work_stealing::{NumaWorkStealing, NumaWorkStealingInner};
+// pub(crate) mod numa_work_stealing;
+// use numa_work_stealing::{NumaWorkStealing, NumaWorkStealingInner};
 
-pub(crate) mod numa_work_stealing2;
-use numa_work_stealing2::{NumaWorkStealing2, NumaWorkStealing2Inner};
+// pub(crate) mod numa_work_stealing2;
+// use numa_work_stealing2::{NumaWorkStealing2, NumaWorkStealing2Inner};
 
 #[derive(
     Copy,
@@ -35,16 +35,16 @@ pub(crate) struct ReqId {
 #[derive(Debug)]
 pub enum SchedulerType {
     WorkStealing,
-    NumaWorkStealing,
-    NumaWorkStealing2,
+    // NumaWorkStealing,
+    // NumaWorkStealing2,
 }
 
 #[enum_dispatch(AmeSchedulerQueue)]
 #[derive(Debug)]
 pub(crate) enum AmeScheduler {
     WorkStealingInner,
-    NumaWorkStealingInner,
-    NumaWorkStealing2Inner,
+    // NumaWorkStealingInner,
+    // NumaWorkStealing2Inner,
 }
 #[enum_dispatch]
 pub(crate) trait AmeSchedulerQueue {
@@ -64,6 +64,9 @@ pub(crate) trait AmeSchedulerQueue {
     fn submit_task<F>(&self, future: F)
     where
         F: Future<Output = ()>;
+    fn submit_immediate_task<F>(&self, future: F)
+    where
+        F: Future<Output = ()>;
     fn exec_task(&self);
 
     fn block_on<F>(&self, future: F) -> F::Output
@@ -78,14 +81,17 @@ pub(crate) trait AmeSchedulerQueue {
 #[derive(Debug)]
 pub(crate) enum Scheduler {
     WorkStealing,
-    NumaWorkStealing,
-    NumaWorkStealing2,
+    // NumaWorkStealing,
+    // NumaWorkStealing2,
 }
 #[enum_dispatch]
 pub(crate) trait SchedulerQueue {
     fn submit_am(&self, am: Am); //serialized active message
     fn submit_work(&self, msg: SerializedData, lamellae: Arc<Lamellae>); //serialized active message
     fn submit_task<F>(&self, future: F)
+    where
+        F: Future<Output = ()>;
+    fn submit_immediate_task<F>(&self, future: F)
     where
         F: Future<Output = ()>;
     fn submit_task_node<F>(&self, future: F, node: usize)
@@ -109,11 +115,11 @@ pub(crate) fn create_scheduler(
         SchedulerType::WorkStealing => {
             Scheduler::WorkStealing(work_stealing::WorkStealing::new(num_pes))
         }
-        SchedulerType::NumaWorkStealing => {
-            Scheduler::NumaWorkStealing(numa_work_stealing::NumaWorkStealing::new(num_pes))
-        }
-        SchedulerType::NumaWorkStealing2 => {
-            Scheduler::NumaWorkStealing2(numa_work_stealing2::NumaWorkStealing2::new(num_pes))
-        }
+        // SchedulerType::NumaWorkStealing => {
+        //     Scheduler::NumaWorkStealing(numa_work_stealing::NumaWorkStealing::new(num_pes))
+        // }
+        // SchedulerType::NumaWorkStealing2 => {
+        //     Scheduler::NumaWorkStealing2(numa_work_stealing2::NumaWorkStealing2::new(num_pes))
+        // }
     }
 }

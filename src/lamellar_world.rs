@@ -245,11 +245,13 @@ impl LamellarWorldBuilder {
                 let scheduler = val.parse::<usize>().unwrap();
                 if scheduler == 0 {
                     SchedulerType::WorkStealing
-                } else if scheduler == 1 {
-                    SchedulerType::NumaWorkStealing
-                } else if scheduler == 2 {
-                    SchedulerType::NumaWorkStealing2
-                } else {
+                }
+                // else if scheduler == 1 {
+                //     SchedulerType::NumaWorkStealing
+                // } else if scheduler == 2 {
+                //     SchedulerType::NumaWorkStealing2
+                // } 
+                else {
                     SchedulerType::WorkStealing
                 }
             }

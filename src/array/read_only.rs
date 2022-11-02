@@ -66,7 +66,7 @@ impl<T: Dist> ReadOnlyArray<T> {
         distribution: Distribution,
     ) -> ReadOnlyArray<T> {
 
-        let mut array = UnsafeArray::new(team, array_size, distribution);
+        let array = UnsafeArray::new(team, array_size, distribution);
         if let Some(func) = BUFOPS.get(&TypeId::of::<T>()) {
             let mut op_bufs = array.inner.data.op_buffers.write();
             let bytearray = ReadOnlyByteArray {
@@ -215,7 +215,7 @@ impl<T: Dist> From<UnsafeArray<T>> for ReadOnlyArray<T> {
                 array: array.clone().into(),
             };
             let mut op_bufs = array.inner.data.op_buffers.write();
-            for pe in 0..array.inner.data.num_pes {
+            for _pe in 0..array.inner.data.num_pes {
                 op_bufs.push(func(ReadOnlyByteArray::downgrade(&bytearray)));
             }
         }

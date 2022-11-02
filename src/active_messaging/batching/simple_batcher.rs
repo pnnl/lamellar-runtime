@@ -12,6 +12,7 @@ const MAX_BATCH_SIZE: usize = 1_000_000;
 struct SimpleBatcherInner {
     batch: Arc<Mutex<Vec<(ReqMetaData, LamellarData, usize)>>>, //reqid,data,data size,team addr
     size: Arc<AtomicUsize>,
+    batch_id: Arc<AtomicUsize>,
     pe: Option<usize>,
 }
 
@@ -21,19 +22,20 @@ impl SimpleBatcherInner {
         SimpleBatcherInner {
             batch: Arc::new(Mutex::new(Vec::new())),
             size: Arc::new(AtomicUsize::new(0)),
+            batch_id: Arc::new(AtomicUsize::new(0)), 
             pe: pe,
         }
     }
 
     #[tracing::instrument(skip_all)]
-    fn add(&self, req_data: ReqMetaData, data: LamellarData, size: usize) -> bool {
+    fn add(&self, req_data: ReqMetaData, data: LamellarData, size: usize) -> usize {
         // println!("adding to batch");
         //return true if this is the first am in the batch
         let mut batch = self.batch.lock();
         let size = size + *CMD_LEN;
         batch.push((req_data, data, size));
-        self.size.fetch_add(size, Ordering::Relaxed);
-        batch.len() == 1
+        // batch.len() == 1
+        self.size.fetch_add(size, Ordering::Relaxed)
     }
 
     #[tracing::instrument(skip_all)]
@@ -41,6 +43,8 @@ impl SimpleBatcherInner {
         let mut batch = self.batch.lock();
         let size = self.size.load(Ordering::Relaxed);
         self.size.store(0, Ordering::Relaxed);
+        let _batch_id = self.batch_id.fetch_add(1,Ordering::SeqCst);
+        // println!("batch_id {_batch_id} swapped");
         let mut new_vec = Vec::new();
         std::mem::swap(&mut *batch, &mut new_vec);
         (new_vec, size)
@@ -63,9 +67,10 @@ impl Batcher for SimpleBatcher {
         am_id: AmId,
         am_size: usize,
         scheduler: &(impl SchedulerQueue + Sync + std::fmt::Debug),
-        stall_mark: usize,
+        mut stall_mark: usize,
     ) {
         // println!("add_remote_am_to_batch");
+        //let dst =req_data.dst;
         let batch = match req_data.dst {
             Some(dst) => self.batched_ams[dst].clone(),
             None => self.batched_ams.last().unwrap().clone(),
@@ -73,13 +78,30 @@ impl Batcher for SimpleBatcher {
         if stall_mark == 0 {
             self.stall_mark.fetch_add(1, Ordering::Relaxed);
         }
-        if batch.add(
+        let size = batch.add(
             req_data,
             LamellarData::Am(am, am_id),
             am_size + *AM_HEADER_LEN,
-        ) {
-            // it true this means we need to create a tx task.
-            self.create_tx_task(batch, stall_mark, scheduler);
+        );
+        if size == 0 {//first data in batch, schedule a transfer task
+            let batch_id = batch.batch_id.load(Ordering::SeqCst);
+            // println!("remote batch_id {batch_id} created {dst:?}");
+            let cur_stall_mark = self.stall_mark.clone();
+            scheduler.submit_task(async move{
+                while stall_mark != cur_stall_mark.load(Ordering::SeqCst)
+                    && batch.size.load(Ordering::SeqCst) < MAX_BATCH_SIZE && batch_id == batch.batch_id.load(Ordering::SeqCst)
+                {
+                    stall_mark = cur_stall_mark.load(Ordering::Relaxed);
+                    async_std::task::yield_now().await;
+                }
+                if batch_id == batch.batch_id.load(Ordering::SeqCst) { //this batch is still valid
+                    self.create_tx_task(batch).await;
+                }
+            });
+        }
+        else if size >= MAX_BATCH_SIZE {
+            // println!("remote size: {:?} {dst:?}",size);
+            scheduler.submit_immediate_task(self.create_tx_task(batch));
         }
     }
 
@@ -91,9 +113,10 @@ impl Batcher for SimpleBatcher {
         am_id: AmId,
         am_size: usize,
         scheduler: &(impl SchedulerQueue + Sync + std::fmt::Debug),
-        stall_mark: usize,
+        mut stall_mark: usize,
     ) {
         // println!("add_return_am_to_batch");
+        //let dst =req_data.dst;
         let batch = match req_data.dst {
             Some(dst) => self.batched_ams[dst].clone(),
             None => self.batched_ams.last().unwrap().clone(),
@@ -101,13 +124,30 @@ impl Batcher for SimpleBatcher {
         if stall_mark == 0 {
             self.stall_mark.fetch_add(1, Ordering::Relaxed);
         }
-        if batch.add(
+        let size = batch.add(
             req_data,
             LamellarData::Return(am, am_id),
             am_size + *AM_HEADER_LEN,
-        ) {
-            // it true this means we need to create a tx task.
-            self.create_tx_task(batch, stall_mark, scheduler);
+        );
+        if size == 0 {//first data in batch, schedule a transfer task
+            let batch_id = batch.batch_id.load(Ordering::SeqCst);
+            // println!("return batch_id {batch_id} created {dst:?}");
+            let cur_stall_mark = self.stall_mark.clone();
+            scheduler.submit_task(async move{
+                while stall_mark != cur_stall_mark.load(Ordering::SeqCst)
+                    && batch.size.load(Ordering::SeqCst) < MAX_BATCH_SIZE && batch_id == batch.batch_id.load(Ordering::SeqCst)
+                {
+                    stall_mark = cur_stall_mark.load(Ordering::Relaxed);
+                    async_std::task::yield_now().await;
+                }
+                if batch_id == batch.batch_id.load(Ordering::SeqCst) { //this batch is still valid
+                    self.create_tx_task(batch).await;
+                }
+            });
+        }
+        else if size >= MAX_BATCH_SIZE {
+            // println!("return size: {:?} {dst:?}",size);
+            scheduler.submit_immediate_task(self.create_tx_task(batch));
         }
     }
 
@@ -118,9 +158,10 @@ impl Batcher for SimpleBatcher {
         data: LamellarResultArc,
         data_size: usize,
         scheduler: &(impl SchedulerQueue + Sync + std::fmt::Debug),
-        stall_mark: usize,
+        mut stall_mark: usize,
     ) {
         // println!("add_data_am_to_batch");
+        //let dst =req_data.dst;
         let batch = match req_data.dst {
             Some(dst) => self.batched_ams[dst].clone(),
             None => self.batched_ams.last().unwrap().clone(),
@@ -128,13 +169,30 @@ impl Batcher for SimpleBatcher {
         if stall_mark == 0 {
             self.stall_mark.fetch_add(1, Ordering::Relaxed);
         }
-        if batch.add(
+        let size = batch.add(
             req_data,
             LamellarData::Data(data),
             data_size + *DATA_HEADER_LEN,
-        ) {
-            // it true this means we need to create a tx task.
-            self.create_tx_task(batch, stall_mark, scheduler);
+        );
+        if size == 0 {//first data in batch, schedule a transfer task
+            let batch_id = batch.batch_id.load(Ordering::SeqCst);
+            // println!("data batch_id {batch_id} created {dst:?}");
+            let cur_stall_mark = self.stall_mark.clone();
+            scheduler.submit_task(async move{
+                while stall_mark != cur_stall_mark.load(Ordering::SeqCst)
+                    && batch.size.load(Ordering::SeqCst) < MAX_BATCH_SIZE && batch_id == batch.batch_id.load(Ordering::SeqCst)
+                {
+                    stall_mark = cur_stall_mark.load(Ordering::Relaxed);
+                    async_std::task::yield_now().await;
+                }
+                if batch_id == batch.batch_id.load(Ordering::SeqCst) { //this batch is still valid
+                    self.create_tx_task(batch).await;
+                }
+            });
+        }
+        else if size >= MAX_BATCH_SIZE {
+            // println!("data size: {:?} {dst:?}",size);
+            scheduler.submit_immediate_task(self.create_tx_task(batch));
         }
     }
 
@@ -143,9 +201,10 @@ impl Batcher for SimpleBatcher {
         &self,
         req_data: ReqMetaData,
         scheduler: &(impl SchedulerQueue + Sync + std::fmt::Debug),
-        stall_mark: usize,
+        mut stall_mark: usize,
     ) {
         // println!("add_unit_am_to_batch");
+        //let dst =req_data.dst;
         let batch = match req_data.dst {
             Some(dst) => self.batched_ams[dst].clone(),
             None => self.batched_ams.last().unwrap().clone(),
@@ -153,9 +212,26 @@ impl Batcher for SimpleBatcher {
         if stall_mark == 0 {
             self.stall_mark.fetch_add(1, Ordering::Relaxed);
         }
-        if batch.add(req_data, LamellarData::Unit, *UNIT_HEADER_LEN) {
-            // it true this means we need to create a tx task.
-            self.create_tx_task(batch, stall_mark, scheduler);
+        let size = batch.add(req_data, LamellarData::Unit, *UNIT_HEADER_LEN);
+        if size == 0 {//first data in batch, schedule a transfer task
+            let batch_id = batch.batch_id.load(Ordering::SeqCst);
+            // println!("unit batch_id {batch_id} created {dst:?}");
+            let cur_stall_mark = self.stall_mark.clone();
+            scheduler.submit_task(async move{
+                while stall_mark != cur_stall_mark.load(Ordering::SeqCst)
+                    && batch.size.load(Ordering::SeqCst) < MAX_BATCH_SIZE && batch_id == batch.batch_id.load(Ordering::SeqCst)
+                {
+                    stall_mark = cur_stall_mark.load(Ordering::Relaxed);
+                    async_std::task::yield_now().await;
+                }
+                if batch_id == batch.batch_id.load(Ordering::SeqCst) { //this batch is still valid
+                    self.create_tx_task(batch).await;
+                }
+            });
+        }
+        else if size >= MAX_BATCH_SIZE {
+            // println!("unit size: {:?} {dst:?}",size);
+            scheduler.submit_immediate_task(self.create_tx_task(batch));
         }
     }
 
@@ -203,23 +279,14 @@ impl SimpleBatcher {
     }
 
     #[tracing::instrument(skip_all)]
-    fn create_tx_task(
+    async fn create_tx_task(
         &self,
         batch: SimpleBatcherInner,
-        mut stall_mark: usize,
-        scheduler: &(impl SchedulerQueue + Sync + std::fmt::Debug),
     ) {
         // println!("create_tx_task");
-        let cur_stall_mark = self.stall_mark.clone();
-        scheduler.submit_task(async move {
-            while stall_mark != cur_stall_mark.load(Ordering::SeqCst)
-                && batch.size.load(Ordering::SeqCst) < MAX_BATCH_SIZE
-            {
-                stall_mark = cur_stall_mark.load(Ordering::Relaxed);
-                async_std::task::yield_now().await;
-            }
-            let (buf, size) = batch.swap();
+        let (buf, size) = batch.swap();
 
+        if size > 0 {
             let lamellae = buf[0].0.lamellae.clone();
             let arch = buf[0].0.team.arch.clone();
             let header = SimpleBatcher::create_header(buf[0].0.team.world_pe);
@@ -275,7 +342,8 @@ impl SimpleBatcher {
             //     cnts
             // );
             lamellae.send_to_pes_async(batch.pe, arch, data_buf).await;
-        });
+        }
+        
     }
 
     #[tracing::instrument(skip_all)]

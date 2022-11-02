@@ -431,7 +431,7 @@ impl<T: Dist> LocalMemoryRegion<T> {
 
     pub fn data_local(&self) -> bool{
         if self.pe == self.mr.inner.my_id.1 {
-            if let Ok(addr) = self.mr.inner.mr.addr() {
+            if let Ok(_addr) = self.mr.inner.mr.addr() {
                 true
             }
             else {
