@@ -240,6 +240,14 @@ impl<T: fmt::Debug> fmt::Debug for GlobalRwDarcWriteGuard<'_, T> {
     }
 }
 
+/// A global read-write `Darc`
+/// 
+/// A remote PE can send an active message, but it must acquire 
+/// the global lock before modifying. 
+/// - Contrast with a `LocalRwDarc`, where each local PE has a local lock.
+/// - Contrast with a `Darc`, which also has local ownership but does not 
+///   allow modification unless the wrapped object itself provides it, e.g.
+///   `AtomicUsize` or `Mutex<..>`.
 #[derive(serde::Serialize, serde::Deserialize, Debug)]
 pub struct GlobalRwDarc<T: 'static> {
     // pub(crate) darc: Darc<RwLock<Box<(T,MyRwLock)>>>,

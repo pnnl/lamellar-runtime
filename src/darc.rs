@@ -57,6 +57,7 @@ impl LamellarAM for FinishedAm {
     }
 }
 
+#[doc(hidden)]
 #[repr(C)]
 pub struct DarcInner<T> {
     my_pe: usize,                // with respect to LamellarArch used to create this object
@@ -75,6 +76,22 @@ pub struct DarcInner<T> {
 unsafe impl<T: Send> Send for DarcInner<T> {}
 unsafe impl<T: Sync> Sync for DarcInner<T> {}
 
+
+/// Distributed atomic reference counter
+/// 
+/// The atomic reference counter, `Arc`, is a backbone of safe
+/// concurrent programming in Rust, and, in particular, *shared ownership*.
+/// 
+/// The `Darc` provides a similar abstraction within a *distributed* environment.
+/// - `Darc`'s have global lifetime, meaning that values remain valid and accessible 
+///   as long as one reference exists on any PE.
+/// - Inner mutability is disallowed by default.
+/// 
+/// `Darc`'s are intended to be passed via active messages.
+/// - They allow distributed
+///   accesss to and manipulation of generic Rust objects.  The inner object can exist
+///   on the Rust heap or in a registered memory region.
+/// - They are instantiated in registered memory regions.
 pub struct Darc<T: 'static> {
     inner: *mut DarcInner<T>,
     src_pe: usize,
