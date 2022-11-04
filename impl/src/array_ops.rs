@@ -567,8 +567,8 @@ fn create_buf_ops(
     expanded.extend(quote! {
         struct #buf_op_name{
             data: #lamellar::array::#byte_array_type,
-            // ops: Mutex<Vec<(ArrayOpCmd<#typeident>,#lamellar::array::OpAmInputToValue<#typeident>)>>,
-            new_ops: Mutex<Vec<(LocalMemoryRegion<u8>,usize)>>,
+            ops: Mutex<Vec<(Vec<u8>,usize)>>,
+            // new_ops: Mutex<Vec<(LocalMemoryRegion<u8>,usize)>>,
             cur_len: AtomicUsize, //this could probably just be a normal usize cause we only update it after we get ops lock
             complete: RwLock<Arc<AtomicBool>>,
             results_offset: RwLock<Arc<AtomicUsize>>,
@@ -578,8 +578,9 @@ fn create_buf_ops(
         struct #am_buf_name{
             data: #lamellar::array::#array_type<#typeident>,
             // ops: Vec<(ArrayOpCmd<#typeident>,#lamellar::array::OpAmInputToValue<#typeident>)>,
+            ops: Vec<u8>,
             // new_ops: Vec<LocalMemoryRegion<u8>>,
-            ops2: LocalMemoryRegion<u8>,
+            // ops2: LocalMemoryRegion<u8>,
             res_buf_size: usize,
             orig_pe: usize,
         }
@@ -593,7 +594,8 @@ fn create_buf_ops(
                 drop(_guard);
                 let span2 = tracing::trace_span!("lock");
                 let _guard = span2.enter();
-                let mut bufs = self.new_ops.lock();
+                // let mut bufs = self.new_ops.lock();
+                let mut bufs = self.ops.lock();
 
                 // let mut buf = self.ops.lock();
 
@@ -604,16 +606,28 @@ fn create_buf_ops(
                 let op_size = op.num_bytes();
                 let data_size = op_data.num_bytes();
                 if first {
-                    bufs.push((team.alloc_local_mem_region(std::cmp::max(#lamellar::array::OPS_BUFFER_SIZE,op_size+data_size)),0));
+                    // bufs.push((team.alloc_local_mem_region(std::cmp::max(#lamellar::array::OPS_BUFFER_SIZE,op_size+data_size)),0));
+                    let mut v = Vec::with_capacity(std::cmp::max(#lamellar::array::OPS_BUFFER_SIZE, op_size+data_size));
+                    unsafe {v.set_len(std::cmp::max(#lamellar::array::OPS_BUFFER_SIZE, op_size+data_size));}
+                    bufs.push((v,0));
                 }
                 else {
                     if bufs.last().unwrap().1 + op_size+data_size > #lamellar::array::OPS_BUFFER_SIZE{
-                        bufs.push((team.alloc_local_mem_region(std::cmp::max(#lamellar::array::OPS_BUFFER_SIZE, op_size+data_size)),0));
+                        // bufs.push((team.alloc_local_mem_region(std::cmp::max(#lamellar::array::OPS_BUFFER_SIZE, op_size+data_size)),0));
+                        let mut v = Vec::with_capacity(std::cmp::max(#lamellar::array::OPS_BUFFER_SIZE, op_size+data_size));
+                        unsafe {v.set_len(std::cmp::max(#lamellar::array::OPS_BUFFER_SIZE, op_size+data_size));}
+                        bufs.push((v,0));
                     }
                 }
-                let mut buf: &mut (LocalMemoryRegion<u8>, usize) = bufs.last_mut().unwrap();
+                // let mut buf: &mut (LocalMemoryRegion<u8>, usize) = bufs.last_mut().unwrap();
+                let mut buf: &mut (Vec<u8>, usize) = bufs.last_mut().unwrap();
+
                 let _temp = self.cur_len.fetch_add(op_data.len(),Ordering::SeqCst);
-                let mut buf_slice = unsafe{buf.0.as_mut_slice().unwrap()};
+
+                // let mut buf_slice = unsafe{buf.0.as_mut_slice().unwrap()};
+
+                let mut buf_slice = buf.0.as_mut_slice();
+
                 buf.1 += op.to_bytes(&mut buf_slice[(buf.1)..]);
                 buf.1 += op_data.to_bytes(&mut buf_slice[(buf.1)..]);
                 // if buf.1 > #lamellar::array::OPS_BUFFER_SIZE {
@@ -629,8 +643,8 @@ fn create_buf_ops(
                 let op_data = unsafe{(&*(op_data_ptr as *const #lamellar::array::InputToValue<'_,#typeident>)).as_op_am_input()};
                 let op = unsafe{*(op_ptr as *const ArrayOpCmd<#typeident>)};
                 let mut res_offsets = vec![];
-                // let mut buf = self.ops.lock();
-                let mut bufs = self.new_ops.lock();
+                let mut bufs = self.ops.lock();
+                // let mut bufs = self.new_ops.lock();
                 // println!("add_fetch_op got lock {} {:?} {:?}",pe,std::thread::current().id(),std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH));
 
                 for rid in req_ids{
@@ -645,17 +659,26 @@ fn create_buf_ops(
                 let data_size = op_data.num_bytes();
                 // println!("add_fetch_ops {:?} {:?}",op_size,data_size);
                 if first {
-                    bufs.push((team.alloc_local_mem_region(std::cmp::max(#lamellar::array::OPS_BUFFER_SIZE, op_size+data_size)),0));
+                    // bufs.push((team.alloc_local_mem_region(std::cmp::max(#lamellar::array::OPS_BUFFER_SIZE, op_size+data_size)),0));
+                    let mut v = Vec::with_capacity(std::cmp::max(#lamellar::array::OPS_BUFFER_SIZE, op_size+data_size));
+                    unsafe {v.set_len(std::cmp::max(#lamellar::array::OPS_BUFFER_SIZE, op_size+data_size));}
+                    bufs.push((v,0));
                 }
                 else {
                     if bufs.last().unwrap().1 + op_size+data_size > #lamellar::array::OPS_BUFFER_SIZE{
                         // println!("here");
-                        bufs.push((team.alloc_local_mem_region(std::cmp::max(#lamellar::array::OPS_BUFFER_SIZE, op_size+data_size)),0));
+                        // bufs.push((team.alloc_local_mem_region(std::cmp::max(#lamellar::array::OPS_BUFFER_SIZE, op_size+data_size)),0));
+                        let mut v = Vec::with_capacity(std::cmp::max(#lamellar::array::OPS_BUFFER_SIZE, op_size+data_size));
+                        unsafe {v.set_len(std::cmp::max(#lamellar::array::OPS_BUFFER_SIZE, op_size+data_size));}
+                        bufs.push((v,0));
                     }
                 }
-                let mut buf: &mut (LocalMemoryRegion<u8>, usize) = bufs.last_mut().unwrap();
+                // let mut buf: &mut (LocalMemoryRegion<u8>, usize) = bufs.last_mut().unwrap();
+                let mut buf: &mut (Vec<u8>, usize) = bufs.last_mut().unwrap();
                 let _temp = self.cur_len.fetch_add(op_data.len(),Ordering::SeqCst);
-                let mut buf_slice = unsafe{buf.0.as_mut_slice().unwrap()};
+                // let mut buf_slice = unsafe{buf.0.as_mut_slice().unwrap()};
+                let mut buf_slice = buf.0.as_mut_slice();
+
                 buf.1 += op.to_bytes(&mut buf_slice[(buf.1)..]);
                 buf.1 += op_data.to_bytes(&mut buf_slice[(buf.1)..]);
                 res_map.insert(pe,self.results.read().clone());
@@ -668,7 +691,8 @@ fn create_buf_ops(
                 // println!("into_arc_am {} {:?} {:?}",pe,std::thread::current().id(),std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH));
 
                 let mut ams: Vec<Arc<dyn RemoteActiveMessage + Sync + Send>> = Vec::new();
-                let mut bufs = self.new_ops.lock();
+                // let mut bufs = self.new_ops.lock();
+                let mut bufs = self.ops.lock();
                 // println!("into_arc_am got lock {} {:?} {:?}",pe,std::thread::current().id(),std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH));
 
                 // println!("buf len {:?}",buf.len());
@@ -687,12 +711,13 @@ fn create_buf_ops(
                 let mut cur_size = 0;
                 let mut op_i = ops.len() as isize-1;
                 let data: #lamellar::array::#array_type<#typeident> = self.data.upgrade().expect("array invalid").into();
-                for (lmr,size) in ops.drain(..){
-
+                for (mut lmr,size) in ops.drain(..){
+                    unsafe { lmr.set_len(size);}
                     let mut am = #am_buf_name{
                         // wait: wait.clone(),
+                        ops: lmr,
                         data: data.sub_array(sub_array.clone()),
-                        ops2: lmr.sub_region(0..size),
+                        // ops2: lmr.sub_region(0..size),
                         res_buf_size: result_buf_size,
                         orig_pe: data.my_pe(),
                     };
@@ -705,30 +730,30 @@ fn create_buf_ops(
         }
 
         impl #am_buf_name{
-            async fn get_ops(&self, team: &std::sync::Arc<#lamellar::LamellarTeam>) -> #lamellar::LocalMemoryRegion<u8>{
-                // println!("get_ops {:?}",self.ops2.len());
-                unsafe{
-                    let serialized_ops = if self.ops2.data_local(){
-                        self.ops2.clone()
-                    }
-                    else{
-                        let serialized_ops = team.alloc_local_mem_region::<u8>(self.ops2.len());
-                        let local_slice = serialized_ops.as_mut_slice().unwrap();
-                        local_slice[self.ops2.len()- 1] = 255u8;
-                        // self.ops2.get_unchecked(0, serialized_ops.clone());
-                        self.ops2.iget(0, serialized_ops.clone());
+            // async fn get_ops(&self, team: &std::sync::Arc<#lamellar::LamellarTeam>) -> #lamellar::LocalMemoryRegion<u8>{
+            //     // println!("get_ops {:?}",self.ops2.len());
+            //     unsafe{
+            //         let serialized_ops = if self.ops2.data_local(){
+            //             self.ops2.clone()
+            //         }
+            //         else{
+            //             let serialized_ops = team.alloc_local_mem_region::<u8>(self.ops2.len());
+            //             let local_slice = serialized_ops.as_mut_slice().unwrap();
+            //             local_slice[self.ops2.len()- 1] = 255u8;
+            //             // self.ops2.get_unchecked(0, serialized_ops.clone());
+            //             self.ops2.iget(0, serialized_ops.clone());
 
-                        while local_slice[self.ops2.len()- 1] == 255u8 {
-                            // async_std::task::yield_now().await;
-                            std::thread::yield_now();
-                        }
-                        serialized_ops
-                    };
-                    serialized_ops
-                    // self.ops2.iget(0,serialized_ops.clone());
-                    // #lamellar::deserialize(serialized_ops.as_mut_slice().unwrap(),false).unwrap()
-                }
-            }
+            //             while local_slice[self.ops2.len()- 1] == 255u8 {
+            //                 // async_std::task::yield_now().await;
+            //                 std::thread::yield_now();
+            //             }
+            //             serialized_ops
+            //         };
+            //         serialized_ops
+            //         // self.ops2.iget(0,serialized_ops.clone());
+            //         // #lamellar::deserialize(serialized_ops.as_mut_slice().unwrap(),false).unwrap()
+            //     }
+            // }
 
             fn get_op<'a>(&self, buf: &'a [u8]) -> (usize,(ArrayOpCmd<#typeident>,RemoteOpAmInputToValue<'a,#typeident>)){
                 let mut bytes_read = 0;
@@ -756,8 +781,9 @@ fn create_buf_ops(
                 let mut results_offset=0;
                 // println!("{:?} {:?} {:?}",results_u8.len(),u8_len,results_offset);
                 // let mut results_slice = unsafe{std::slice::from_raw_parts_mut(results_u8.as_mut_ptr() as *mut #typeident,self.num_fetch_ops)};
-                let local_ops = self.get_ops(&lamellar::team).await;
-                let local_ops_slice = local_ops.as_slice().unwrap();
+                // let local_ops = self.get_ops(&lamellar::team).await;
+                // let local_ops_slice = local_ops.as_slice().unwrap();
+                let local_ops_slice = &self.ops;
                 let mut cur_index = 0;
                 while cur_index <  local_ops_slice.len(){
                     let (bytes_read,(op,ops)) = self.get_op(&local_ops_slice[cur_index..]);
@@ -819,8 +845,8 @@ fn create_buf_ops(
         fn #dist_am_buf_name(array: #lamellar::array::#byte_array_type) -> Arc<dyn #lamellar::array::BufferOp>{
                 Arc::new(#buf_op_name{
                     data: array,
-                    // ops: Mutex::new(Vec::new()),
-                    new_ops: Mutex::new(Vec::new()),
+                    ops: Mutex::new(Vec::new()),
+                    // new_ops: Mutex::new(Vec::new()),
                     cur_len: AtomicUsize::new(0),
                     complete: RwLock::new(Arc::new(AtomicBool::new(false))),
                     results_offset: RwLock::new(Arc::new(AtomicUsize::new(0))),
