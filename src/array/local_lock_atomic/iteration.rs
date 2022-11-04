@@ -127,6 +127,12 @@ impl<'a, T: Dist> std::fmt::Debug for LocalLockAtomicDistIterMut<'a, T> {
     }
 }
 
+// impl <'a, T:Dist> Drop for LocalLockAtomicDistIterMut<'a, T> {
+//     fn drop(&mut self){
+//         println!("dist_iter thread {:?} drop lock",std::thread::current().id());
+//     }
+// }
+
 // impl<'a, T: Dist> LocalLockAtomicDistIterMut<'a, T> {
 //     pub(crate) fn new(data: LocalLockAtomicArray<T>,lock: Arc<RwLockWriteGuard<'a, Box<()>>>, cur_i: usize, cnt: usize) -> Self {
 //         // println!("new dist iter {:?} {:? } {:?}",cur_i, cnt, cur_i+cnt);
@@ -220,6 +226,7 @@ impl<T: Dist + 'static> LocalLockAtomicArray<T> {
 
     pub fn dist_iter_mut(&self) -> LocalLockAtomicDistIterMut<'static, T> {
         let lock = Arc::new(self.lock.write());
+        // println!("dist_iter thread {:?} got lock",std::thread::current().id());
         // self.barrier();
         // LocalLockAtomicDistIterMut::new(self.clone(), lock, 0, 0)
         LocalLockAtomicDistIterMut {

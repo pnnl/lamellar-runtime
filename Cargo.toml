@@ -49,6 +49,7 @@ tracing-futures = "0.2"
 tracing-flame = "0.2"
 pin-project = "1.0"
 
+membarrier="0.2.2"
 
 
 

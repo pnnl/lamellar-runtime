@@ -145,12 +145,12 @@ pub struct DistIterForEachHandle {
 impl DistIterRequest for DistIterForEachHandle {
     type Output = ();
     async fn into_future(mut self: Box<Self>) -> Self::Output {
-        for req in self.reqs.drain(0..) {
+        for req in self.reqs.drain(..) {
             req.into_future().await;
         }
     }
     fn wait(mut self: Box<Self>) -> Self::Output {
-        for req in self.reqs.drain(0..) {
+        for req in self.reqs.drain(..) {
             req.get();
         }
     }

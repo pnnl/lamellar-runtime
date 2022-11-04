@@ -20,12 +20,13 @@ where
 {
     async fn exec(&self) {
         let mut iter = self.data.init(self.start_i, self.end_i - self.start_i);
+        // println!("for each static thread {:?} {} {} {}",std::thread::current().id(),self.start_i, self.end_i, self.end_i - self.start_i);
         // let mut cnt = 0;
         while let Some(elem) = iter.next() {
             (&self.op)(elem);
             // cnt += 1;
         }
-        // println!("elems processed {:?}", cnt);
+        // println!("thread {:?} elems processed {:?}",std::thread::current().id(), cnt);
     }
 }
 

@@ -55,141 +55,7 @@ pub(crate) enum BufOpsRequest<T: Dist> {
     Result(Box<ArrayOpResultHandleInner<T>>),
 }
 
-impl<'a, T: Dist> InputToValue<'a, T> {
-    #[tracing::instrument(skip_all)]
-    fn len(&self) -> usize {
-        match self {
-            InputToValue::OneToOne(_, _) => 1,
-            InputToValue::OneToMany(_, vals) => vals.len(),
-            InputToValue::ManyToOne(indices, _) => indices.len(),
-            InputToValue::ManyToMany(indices, _) => indices.len(),
-        }
-    }
-    // fn num_bytes(&self) -> usize{
-    //     match self{
-    //         InputToValue::OneToOne(_,_) => std::mem::size_of::<(usize,T)>(),
-    //         InputToValue::OneToMany(_,vals) => std::mem::size_of::<usize>()+ vals.len() * std::mem::size_of::<T>(),
-    //         InputToValue::ManyToOne(indices,_) => indices.len() * std::mem::size_of::<usize>() + std::mem::size_of::<T>(),
-    //         InputToValue::ManyToMany(indices,vals) => indices.len() * std::mem::size_of::<usize>() +  vals.len() * std::mem::size_of::<T>(),
-    //     }
-    // }
-    #[tracing::instrument(skip_all)]
-    fn to_pe_offsets(
-        self,
-        array: &UnsafeArray<T>,
-    ) -> (
-        HashMap<usize, InputToValue<'a, T>>,
-        HashMap<usize, Vec<usize>>,
-        usize,
-    ) {
-        let mut pe_offsets = HashMap::new();
-        let mut req_ids = HashMap::new();
-        match self {
-            InputToValue::OneToOne(index, value) => {
-                let (pe, local_index) = array.calc_pe_and_offset(index);
-                pe_offsets.insert(pe, InputToValue::OneToOne(local_index, value));
-                req_ids.insert(pe, vec![0]);
-                (pe_offsets, req_ids, 1)
-            }
-            InputToValue::OneToMany(index, values) => {
-                let (pe, local_index) = array.calc_pe_and_offset(index);
-                let vals_len = values.len();
-                req_ids.insert(pe, (0..vals_len).collect());
-                pe_offsets.insert(pe, InputToValue::OneToMany(local_index, values));
 
-                (pe_offsets, req_ids, vals_len)
-            }
-            InputToValue::ManyToOne(indices, value) => {
-                let mut temp_pe_offsets = HashMap::new();
-                let mut req_cnt = 0;
-                for index in indices.iter() {
-                    let (pe, local_index) = array.calc_pe_and_offset(index);
-                    temp_pe_offsets
-                        .entry(pe)
-                        .or_insert(vec![])
-                        .push(local_index);
-                    req_ids.entry(pe).or_insert(vec![]).push(req_cnt);
-                    req_cnt += 1;
-                }
-
-                for (pe, local_indices) in temp_pe_offsets {
-                    pe_offsets.insert(
-                        pe,
-                        InputToValue::ManyToOne(OpInputEnum::Vec(local_indices), value),
-                    );
-                }
-
-                (pe_offsets, req_ids, indices.len())
-            }
-            InputToValue::ManyToMany(indices, values) => {
-                let mut temp_pe_offsets = HashMap::new();
-                let mut req_cnt = 0;
-                for (index, val) in indices.iter().zip(values.iter()) {
-                    let (pe, local_index) = array.calc_pe_and_offset(index);
-                    let data = temp_pe_offsets.entry(pe).or_insert((vec![], vec![]));
-                    data.0.push(local_index);
-                    data.1.push(val);
-                    req_ids.entry(pe).or_insert(vec![]).push(req_cnt);
-                    req_cnt += 1;
-                }
-                for (pe, (local_indices, vals)) in temp_pe_offsets {
-                    pe_offsets.insert(
-                        pe,
-                        InputToValue::ManyToMany(
-                            OpInputEnum::Vec(local_indices),
-                            OpInputEnum::Vec(vals),
-                        ),
-                    );
-                }
-                (pe_offsets, req_ids, indices.len())
-            }
-        }
-    }
-}
-impl<'a, T: Dist + serde::Serialize + serde::de::DeserializeOwned> InputToValue<'a, T> {
-    #[tracing::instrument(skip_all)]
-    pub fn as_op_am_input(&self) -> OpAmInputToValue<T> {
-        match self {
-            InputToValue::OneToOne(index, value) => OpAmInputToValue::OneToOne(*index, *value),
-            InputToValue::OneToMany(index, values) => {
-                OpAmInputToValue::OneToMany(*index, values.iter().collect())
-            }
-            InputToValue::ManyToOne(indices, value) => {
-                OpAmInputToValue::ManyToOne(indices.iter().collect(), *value)
-            }
-            InputToValue::ManyToMany(indices, values) => {
-                OpAmInputToValue::ManyToMany(indices.iter().collect(), values.iter().collect())
-            }
-        }
-    }
-}
-
-impl<T: Dist> OpAmInputToValue<T> {
-    #[tracing::instrument(skip_all)]
-    pub fn len(&self) -> usize {
-        match self {
-            OpAmInputToValue::OneToOne(_, _) => 1,
-            OpAmInputToValue::OneToMany(_, vals) => vals.len(),
-            OpAmInputToValue::ManyToOne(indices, _) => indices.len(),
-            OpAmInputToValue::ManyToMany(indices, _) => indices.len(),
-        }
-    }
-    // #[tracing::instrument(skip_all)]
-    // pub fn num_bytes(&self) -> usize {
-    //     match self {
-    //         OpAmInputToValue::OneToOne(_, _) => std::mem::size_of::<(usize, T)>(),
-    //         OpAmInputToValue::OneToMany(_, vals) => {
-    //             std::mem::size_of::<usize>() + vals.len() * std::mem::size_of::<T>()
-    //         }
-    //         OpAmInputToValue::ManyToOne(indices, _) => {
-    //             indices.len() * std::mem::size_of::<usize>() + std::mem::size_of::<T>()
-    //         }
-    //         OpAmInputToValue::ManyToMany(indices, vals) => {
-    //             indices.len() * std::mem::size_of::<usize>() + vals.len() * std::mem::size_of::<T>()
-    //         }
-    //     }
-    // }
-}
 
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum OpReturnType {
@@ -288,7 +154,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
                         }
 
                         let (ams, len, complete, results) =
-                            buf_op.into_arc_am(array.sub_array_range());
+                            buf_op.into_arc_am(pe,array.sub_array_range());
                         // println!("pe{:?} ams: {:?} len{:?}",pe,ams.len(),len);
                         if len > 0 {
                             let mut res = Vec::new();
@@ -390,7 +256,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         let (mut vals, v_len) = val.as_op_input();
         let mut i_v_iters = vec![];
         let req_handles = Arc::new(Mutex::new(HashMap::new()));
-        // println!("i_len {i_len} v_len {v_len}");
+        // println!("i_len {i_len} indices len {} v_len {v_len} vals len {}",indices.len(),vals.len());
         if v_len > 0 && i_len > 0 {
             if v_len == 1 && i_len > 1 {
                 // println!("here 0");

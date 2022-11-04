@@ -247,6 +247,127 @@ pub enum InputToValue<'a, T: Dist> {
     ManyToMany(OpInputEnum<'a, usize>, OpInputEnum<'a, T>),
 }
 
+impl<'a, T: Dist> InputToValue<'a, T> {
+    #[tracing::instrument(skip_all)]
+    pub(crate) fn len(&self) -> usize {
+        match self {
+            InputToValue::OneToOne(_, _) => 1,
+            InputToValue::OneToMany(_, vals) => vals.len(),
+            InputToValue::ManyToOne(indices, _) => indices.len(),
+            InputToValue::ManyToMany(indices, _) => indices.len(),
+        }
+    }
+    // fn num_bytes(&self) -> usize{
+    //     match self{
+    //         InputToValue::OneToOne(_,_) => std::mem::size_of::<(usize,T)>(),
+    //         InputToValue::OneToMany(_,vals) => std::mem::size_of::<usize>()+ vals.len() * std::mem::size_of::<T>(),
+    //         InputToValue::ManyToOne(indices,_) => indices.len() * std::mem::size_of::<usize>() + std::mem::size_of::<T>(),
+    //         InputToValue::ManyToMany(indices,vals) => indices.len() * std::mem::size_of::<usize>() +  vals.len() * std::mem::size_of::<T>(),
+    //     }
+    // }
+    #[tracing::instrument(skip_all)]
+    pub(crate) fn to_pe_offsets(
+        self,
+        array: &UnsafeArray<T>,
+    ) -> (
+        HashMap<usize, InputToValue<'a, T>>,
+        HashMap<usize, Vec<usize>>,
+        usize,
+    ) {
+        let mut pe_offsets = HashMap::new();
+        let mut req_ids = HashMap::new();
+        match self {
+            InputToValue::OneToOne(index, value) => {
+                let (pe, local_index) = array.calc_pe_and_offset(index);
+                pe_offsets.insert(pe, InputToValue::OneToOne(local_index, value));
+                req_ids.insert(pe, vec![0]);
+                (pe_offsets, req_ids, 1)
+            }
+            InputToValue::OneToMany(index, values) => {
+                let (pe, local_index) = array.calc_pe_and_offset(index);
+                let vals_len = values.len();
+                req_ids.insert(pe, (0..vals_len).collect());
+                pe_offsets.insert(pe, InputToValue::OneToMany(local_index, values));
+
+                (pe_offsets, req_ids, vals_len)
+            }
+            InputToValue::ManyToOne(indices, value) => {
+                let mut temp_pe_offsets = HashMap::new();
+                let mut req_cnt = 0;
+                for index in indices.iter() {
+                    let (pe, local_index) = array.calc_pe_and_offset(index);
+                    temp_pe_offsets
+                        .entry(pe)
+                        .or_insert(vec![])
+                        .push(local_index);
+                    req_ids.entry(pe).or_insert(vec![]).push(req_cnt);
+                    req_cnt += 1;
+                }
+
+                for (pe, local_indices) in temp_pe_offsets {
+                    pe_offsets.insert(
+                        pe,
+                        InputToValue::ManyToOne(OpInputEnum::Vec(local_indices), value),
+                    );
+                }
+
+                (pe_offsets, req_ids, indices.len())
+            }
+            InputToValue::ManyToMany(indices, values) => {
+                let mut temp_pe_offsets = HashMap::new();
+                let mut req_cnt = 0;
+                for (index, val) in indices.iter().zip(values.iter()) {
+                    let (pe, local_index) = array.calc_pe_and_offset(index);
+                    let data = temp_pe_offsets.entry(pe).or_insert((vec![], vec![]));
+                    data.0.push(local_index);
+                    data.1.push(val);
+                    req_ids.entry(pe).or_insert(vec![]).push(req_cnt);
+                    req_cnt += 1;
+                }
+                for (pe, (local_indices, vals)) in temp_pe_offsets {
+                    pe_offsets.insert(
+                        pe,
+                        InputToValue::ManyToMany(
+                            OpInputEnum::Vec(local_indices),
+                            OpInputEnum::Vec(vals),
+                        ),
+                    );
+                }
+                (pe_offsets, req_ids, indices.len())
+            }
+        }
+    }
+}
+impl<'a, T: Dist + serde::Serialize + serde::de::DeserializeOwned> InputToValue<'a, T> {
+    #[tracing::instrument(skip_all)]
+    pub fn as_op_am_input(&self) -> OpAmInputToValue<T> {
+        match self {
+            InputToValue::OneToOne(index, value) => OpAmInputToValue::OneToOne(*index, *value),
+            InputToValue::OneToMany(index, values) => {
+                OpAmInputToValue::OneToMany(*index, values.iter().collect())
+            }
+            InputToValue::ManyToOne(indices, value) => {
+                OpAmInputToValue::ManyToOne(indices.iter().collect(), *value)
+            }
+            InputToValue::ManyToMany(indices, values) => {
+                OpAmInputToValue::ManyToMany(indices.iter().collect(), values.iter().collect())
+            }
+        }
+    }
+}
+
+impl<T: Dist> OpAmInputToValue<T> {
+    #[tracing::instrument(skip_all)]
+    pub fn len(&self) -> usize {
+        match self {
+            OpAmInputToValue::OneToOne(_, _) => 1,
+            OpAmInputToValue::OneToMany(_, vals) => vals.len(),
+            OpAmInputToValue::ManyToOne(indices, _) => indices.len(),
+            OpAmInputToValue::ManyToMany(indices, _) => indices.len(),
+        }
+    }
+}
+
 #[derive(serde::Serialize, serde::Deserialize, Debug)]
 #[serde(bound = "T: Dist + serde::Serialize + serde::de::DeserializeOwned")]
 pub enum OpAmInputToValue<T: Dist> {
@@ -571,9 +692,9 @@ impl<'a, T: Dist> OpInput<'a, T> for Vec<T> {
             Ok(n) => n.parse::<usize>().unwrap(),
             Err(_) => 10000,
         };
-        let num = len / num_per_batch;
+        let num = (len as f32 / num_per_batch as f32).ceil() as usize;
         // println!("num: {}", num);
-        for i in (0..num).rev() {
+        for i in (1..num).rev() {
             let temp = self.split_off(i * num_per_batch);
             // println!("temp: {:?} {:?} {:?}", temp,i ,i * num_per_batch);
             iters.push(OpInputEnum::Vec(temp));
@@ -827,6 +948,7 @@ pub trait BufferOp: Sync + Send {
 
     fn into_arc_am(
         &self,
+        pe: usize,
         sub_array: std::ops::Range<usize>,
     ) -> (
         Vec<LamellarArcAm>,
@@ -1106,6 +1228,7 @@ impl<T: Dist> LamellarRequest for ArrayOpBatchResultHandle<T> {
     type Output = Vec<Result<T, T>>;
     #[tracing::instrument(skip_all)]
     async fn into_future(mut self: Box<Self>) -> Self::Output {
+        // println!("num_reqs: {}",self.reqs.len());
         let mut res = vec![];
         for req in self.reqs.drain(..) {
             res.extend(req.into_future().await);
@@ -1134,8 +1257,18 @@ impl<T: Dist> ArrayOpResultHandleInner<T> {
 
             for (pe, res) in self.results.lock().iter() {
                 let res = res.lock();
-                // println!("{:?}",res.len());
-                for (rid, offset, len) in self.indices.lock().get(pe).unwrap().iter() {
+                // println!("{pe} {:?}",res.len());
+                // let mut rids = std::collections::HashSet::new();
+                let res_offsets_lock = self.indices.lock();
+                let res_offsets =res_offsets_lock.get(pe).unwrap();
+                // println!("{pe} {:?} {:?}",res_offsets[0],res_offsets.last());
+                for (rid, offset, len) in res_offsets.iter() {
+                    // if rids.contains(rid){
+                    //     println!("uhhh ohhhhh not sure this should be possible {:?}",rid);
+                    // }
+                    // else{
+                    //     rids.insert(rid);
+                    // }
                     let ok: bool;
                     let mut offset = *offset;
                     let mut len = *len;
@@ -1176,6 +1309,7 @@ impl<T: Dist> LamellarRequest for ArrayOpResultHandleInner<T> {
     type Output = Vec<Result<T, T>>;
     #[tracing::instrument(skip_all)]
     async fn into_future(mut self: Box<Self>) -> Self::Output {
+        // println!("comp size: {}",self.complete.len());
         for comp in &self.complete {
             while comp.load(Ordering::Relaxed) == false {
                 async_std::task::yield_now().await;
@@ -1274,7 +1408,7 @@ pub trait AccessOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
     fn batch_swap<'a>(
         &self,
         index: impl OpInput<'a, usize>,
-        val: T,
+        val: impl OpInput<'a, T>,
     ) -> Pin<Box<dyn Future<Output = Vec<T>> + Send>> {
         self.inner_array()
             .initiate_batch_fetch_op(val, index, ArrayOpCmd::Swap)
@@ -1290,7 +1424,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     fn batch_add<'a>(
         &self,
         index: impl OpInput<'a, usize>,
-        val: T,
+        val: impl OpInput<'a, T>,
     ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
         self.inner_array().initiate_op(val, index, ArrayOpCmd::Add)
     }
@@ -1303,7 +1437,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     fn batch_fetch_add<'a>(
         &self,
         index: impl OpInput<'a, usize>,
-        val: T,
+        val: impl OpInput<'a, T>,
     ) -> Pin<Box<dyn Future<Output = Vec<T>> + Send>> {
         self.inner_array()
             .initiate_batch_fetch_op(val, index, ArrayOpCmd::FetchAdd)
@@ -1317,7 +1451,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     fn batch_sub<'a>(
         &self,
         index: impl OpInput<'a, usize>,
-        val: T,
+        val: impl OpInput<'a, T>,
     ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
         self.inner_array().initiate_op(val, index, ArrayOpCmd::Sub)
     }
@@ -1330,7 +1464,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     fn batch_fetch_sub<'a>(
         &self,
         index: impl OpInput<'a, usize>,
-        val: T,
+        val: impl OpInput<'a, T>,
     ) -> Pin<Box<dyn Future<Output = Vec<T>> + Send>> {
         self.inner_array()
             .initiate_batch_fetch_op(val, index, ArrayOpCmd::FetchSub)
@@ -1343,7 +1477,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     fn batch_mul<'a>(
         &self,
         index: impl OpInput<'a, usize>,
-        val: T,
+        val: impl OpInput<'a, T>,
     ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
         self.inner_array().initiate_op(val, index, ArrayOpCmd::Mul)
     }
@@ -1356,7 +1490,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     fn batch_fetch_mul<'a>(
         &self,
         index: impl OpInput<'a, usize>,
-        val: T,
+        val: impl OpInput<'a, T>,
     ) -> Pin<Box<dyn Future<Output = Vec<T>> + Send>> {
         self.inner_array()
             .initiate_batch_fetch_op(val, index, ArrayOpCmd::FetchMul)
@@ -1369,7 +1503,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     fn batch_div<'a>(
         &self,
         index: impl OpInput<'a, usize>,
-        val: T,
+        val: impl OpInput<'a, T>,
     ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
         self.inner_array().initiate_op(val, index, ArrayOpCmd::Div)
     }
@@ -1382,7 +1516,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     fn batch_fetch_div<'a>(
         &self,
         index: impl OpInput<'a, usize>,
-        val: T,
+        val: impl OpInput<'a, T>,
     ) -> Pin<Box<dyn Future<Output = Vec<T>> + Send>> {
         self.inner_array()
             .initiate_batch_fetch_op(val, index, ArrayOpCmd::FetchDiv)
@@ -1398,7 +1532,7 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
     fn batch_bit_and<'a>(
         &self,
         index: impl OpInput<'a, usize>,
-        val: T,
+        val: impl OpInput<'a, T>,
     ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
         self.inner_array().initiate_op(val, index, ArrayOpCmd::And)
     }
@@ -1411,7 +1545,7 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
     fn batch_fetch_bit_and<'a>(
         &self,
         index: impl OpInput<'a, usize>,
-        val: T,
+        val: impl OpInput<'a, T>,
     ) -> Pin<Box<dyn Future<Output = Vec<T>> + Send>> {
         self.inner_array()
             .initiate_batch_fetch_op(val, index, ArrayOpCmd::FetchAnd)
@@ -1437,7 +1571,7 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
     fn batch_fetch_bit_or<'a>(
         &self,
         index: impl OpInput<'a, usize>,
-        val: T,
+        val: impl OpInput<'a, T>,
     ) -> Pin<Box<dyn Future<Output = Vec<T>> + Send>> {
         self.inner_array()
             .initiate_batch_fetch_op(val, index, ArrayOpCmd::FetchOr)
@@ -1460,7 +1594,7 @@ pub trait CompareExchangeOps<T: ElementCompareEqOps>: private::LamellarArrayPriv
         &self,
         index: impl OpInput<'a, usize>,
         old: T,
-        new: T,
+        new: impl OpInput<'a, T>,
     ) -> Pin<Box<dyn Future<Output = Vec<Result<T, T>>> + Send>> {
         self.inner_array()
             .initiate_batch_result_op(new, index, ArrayOpCmd::CompareExchange(old))
@@ -1486,7 +1620,7 @@ pub trait CompareExchangeEpsilonOps<T: ElementComparePartialEqOps>:
         &self,
         index: impl OpInput<'a, usize>,
         old: T,
-        new: T,
+        new: impl OpInput<'a, T>,
         eps: T,
     ) -> Pin<Box<dyn Future<Output = Vec<Result<T, T>>> + Send>> {
         self.inner_array().initiate_batch_result_op(
