@@ -68,7 +68,7 @@ impl TeamAmBatcherInner {
         TeamAmBatcherInner {
             batch: Arc::new(Mutex::new((HashMap::new(), HashMap::new(), Vec::new()))),
             size: Arc::new(AtomicUsize::new(0)),
-            batch_id: Arc::new(AtomicUsize::new(0)), 
+            batch_id: Arc::new(AtomicUsize::new(0)),
             pe: pe,
         }
     }
@@ -161,7 +161,7 @@ impl TeamAmBatcherInner {
         std::mem::swap(&mut batch.2, &mut new_batch.2);
         let size = self.size.load(Ordering::SeqCst);
         self.size.store(0, Ordering::SeqCst);
-        let _batch_id = self.batch_id.fetch_add(1,Ordering::SeqCst);
+        let _batch_id = self.batch_id.fetch_add(1, Ordering::SeqCst);
         // println!("batch_id {batch_id} swapped");
         (new_batch.0, new_batch.1, new_batch.2, size)
     }
@@ -192,19 +192,22 @@ impl Batcher for TeamAmBatcher {
         if stall_mark == 0 {
             self.stall_mark.fetch_add(1, Ordering::Relaxed);
         }
-        let size =  batch.add_am(req_data.clone(), LamellarData::Am(am, am_id), am_size);
-        if size == 0 { //first data in batch, schedule a transfer task
+        let size = batch.add_am(req_data.clone(), LamellarData::Am(am, am_id), am_size);
+        if size == 0 {
+            //first data in batch, schedule a transfer task
             let batch_id = batch.batch_id.load(Ordering::SeqCst);
             // println!("remote batch_id {batch_id} created");
             let cur_stall_mark = self.stall_mark.clone();
-            scheduler.submit_task(async move{
+            scheduler.submit_task(async move {
                 while stall_mark != cur_stall_mark.load(Ordering::SeqCst)
-                    && batch.size.load(Ordering::SeqCst) < MAX_BATCH_SIZE && batch_id == batch.batch_id.load(Ordering::SeqCst)
+                    && batch.size.load(Ordering::SeqCst) < MAX_BATCH_SIZE
+                    && batch_id == batch.batch_id.load(Ordering::SeqCst)
                 {
                     stall_mark = cur_stall_mark.load(Ordering::Relaxed);
                     async_std::task::yield_now().await;
                 }
-                if batch_id == batch.batch_id.load(Ordering::SeqCst) { //this batch is still valid
+                if batch_id == batch.batch_id.load(Ordering::SeqCst) {
+                    //this batch is still valid
                     self.create_tx_task(
                         batch,
                         // stall_mark,
@@ -212,11 +215,12 @@ impl Batcher for TeamAmBatcher {
                         req_data.lamellae.clone(),
                         req_data.team.arch.clone(),
                         req_data.team.world_pe,
-                    ).await;
+                    )
+                    .await;
                 }
             });
-        }
-        else if size >= MAX_BATCH_SIZE{ //batch is full, transfer now
+        } else if size >= MAX_BATCH_SIZE {
+            //batch is full, transfer now
             // println!("remote size: {:?}",size);
             scheduler.submit_immediate_task(self.create_tx_task(
                 batch,
@@ -247,18 +251,21 @@ impl Batcher for TeamAmBatcher {
             self.stall_mark.fetch_add(1, Ordering::Relaxed);
         }
         let size = batch.add_am(req_data.clone(), LamellarData::Return(am, am_id), am_size);
-        if size == 0 { //first data in batch, schedule a transfer task
+        if size == 0 {
+            //first data in batch, schedule a transfer task
             let batch_id = batch.batch_id.load(Ordering::SeqCst);
             // println!("return batch_id {batch_id} created");
             let cur_stall_mark = self.stall_mark.clone();
-            scheduler.submit_task(async move{
+            scheduler.submit_task(async move {
                 while stall_mark != cur_stall_mark.load(Ordering::SeqCst)
-                    && batch.size.load(Ordering::SeqCst) < MAX_BATCH_SIZE && batch_id == batch.batch_id.load(Ordering::SeqCst)
+                    && batch.size.load(Ordering::SeqCst) < MAX_BATCH_SIZE
+                    && batch_id == batch.batch_id.load(Ordering::SeqCst)
                 {
                     stall_mark = cur_stall_mark.load(Ordering::Relaxed);
                     async_std::task::yield_now().await;
                 }
-                if batch_id == batch.batch_id.load(Ordering::SeqCst) { //this batch is still valid
+                if batch_id == batch.batch_id.load(Ordering::SeqCst) {
+                    //this batch is still valid
                     self.create_tx_task(
                         batch,
                         // stall_mark,
@@ -266,11 +273,12 @@ impl Batcher for TeamAmBatcher {
                         req_data.lamellae.clone(),
                         req_data.team.arch.clone(),
                         req_data.team.world_pe,
-                    ).await;
+                    )
+                    .await;
                 }
             });
-        }
-        else if size >= MAX_BATCH_SIZE{ //batch is full, transfer now
+        } else if size >= MAX_BATCH_SIZE {
+            //batch is full, transfer now
             // println!("return size: {:?}",size);
             scheduler.submit_immediate_task(self.create_tx_task(
                 batch,
@@ -304,18 +312,21 @@ impl Batcher for TeamAmBatcher {
             LamellarData::Data(data),
             data_size + *DATA_HEADER_LEN,
         );
-        if size == 0 { //first data in batch, schedule a transfer task
+        if size == 0 {
+            //first data in batch, schedule a transfer task
             let batch_id = batch.batch_id.load(Ordering::SeqCst);
             // println!("data batch_id {batch_id} created");
             let cur_stall_mark = self.stall_mark.clone();
-            scheduler.submit_task(async move{
+            scheduler.submit_task(async move {
                 while stall_mark != cur_stall_mark.load(Ordering::SeqCst)
-                    && batch.size.load(Ordering::SeqCst) < MAX_BATCH_SIZE && batch_id == batch.batch_id.load(Ordering::SeqCst)
+                    && batch.size.load(Ordering::SeqCst) < MAX_BATCH_SIZE
+                    && batch_id == batch.batch_id.load(Ordering::SeqCst)
                 {
                     stall_mark = cur_stall_mark.load(Ordering::Relaxed);
                     async_std::task::yield_now().await;
                 }
-                if batch_id == batch.batch_id.load(Ordering::SeqCst) { //this batch is still valid
+                if batch_id == batch.batch_id.load(Ordering::SeqCst) {
+                    //this batch is still valid
                     self.create_tx_task(
                         batch,
                         // stall_mark,
@@ -323,11 +334,12 @@ impl Batcher for TeamAmBatcher {
                         req_data.lamellae.clone(),
                         req_data.team.arch.clone(),
                         req_data.team.world_pe,
-                    ).await;
+                    )
+                    .await;
                 }
             });
-        }
-        else if size >= MAX_BATCH_SIZE{ //batch is full, transfer now
+        } else if size >= MAX_BATCH_SIZE {
+            //batch is full, transfer now
             // println!("data size: {:?}",size);
             scheduler.submit_immediate_task(self.create_tx_task(
                 batch,
@@ -355,18 +367,21 @@ impl Batcher for TeamAmBatcher {
             self.stall_mark.fetch_add(1, Ordering::Relaxed);
         }
         let size = batch.add_non_am(req_data.clone(), LamellarData::Unit, *UNIT_HEADER_LEN);
-        if size == 0 { //first data in batch, schedule a transfer task
+        if size == 0 {
+            //first data in batch, schedule a transfer task
             let batch_id = batch.batch_id.load(Ordering::SeqCst);
             // println!("unit batch_id {batch_id} created");
             let cur_stall_mark = self.stall_mark.clone();
-            scheduler.submit_task(async move{
+            scheduler.submit_task(async move {
                 while stall_mark != cur_stall_mark.load(Ordering::SeqCst)
-                    && batch.size.load(Ordering::SeqCst) < MAX_BATCH_SIZE && batch_id == batch.batch_id.load(Ordering::SeqCst)
+                    && batch.size.load(Ordering::SeqCst) < MAX_BATCH_SIZE
+                    && batch_id == batch.batch_id.load(Ordering::SeqCst)
                 {
                     stall_mark = cur_stall_mark.load(Ordering::Relaxed);
                     async_std::task::yield_now().await;
                 }
-                if batch_id == batch.batch_id.load(Ordering::SeqCst) { //this batch is still valid
+                if batch_id == batch.batch_id.load(Ordering::SeqCst) {
+                    //this batch is still valid
                     self.create_tx_task(
                         batch,
                         // stall_mark,
@@ -374,11 +389,12 @@ impl Batcher for TeamAmBatcher {
                         req_data.lamellae.clone(),
                         req_data.team.arch.clone(),
                         req_data.team.world_pe,
-                    ).await;
+                    )
+                    .await;
                 }
             });
-        }
-        else if size >= MAX_BATCH_SIZE{ //batch is full, transfer now
+        } else if size >= MAX_BATCH_SIZE {
+            //batch is full, transfer now
             // println!("unit size: {:?}",size);
             scheduler.submit_immediate_task(self.create_tx_task(
                 batch,

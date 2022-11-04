@@ -395,7 +395,7 @@ impl LamellarTaskGroup {
             rt_local_req: rt_local_req,
         }
     }
-    
+
     fn wait_all(&self) {
         let mut temp_now = Instant::now();
         while self.counters.outstanding_reqs.load(Ordering::SeqCst) > 0 {
@@ -415,7 +415,10 @@ impl LamellarTaskGroup {
         }
     }
 
-    pub(crate) fn exec_am_all_inner<F>(&self, am: F) -> Box<dyn LamellarMultiRequest<Output = F::Output>>
+    pub(crate) fn exec_am_all_inner<F>(
+        &self,
+        am: F,
+    ) -> Box<dyn LamellarMultiRequest<Output = F::Output>>
     where
         F: RemoteActiveMessage + LamellarAM + Serde + AmDist,
     {
@@ -458,7 +461,11 @@ impl LamellarTaskGroup {
         })
     }
 
-    pub(crate) fn exec_am_pe_inner<F>(&self, pe: usize, am: F) -> Box<dyn LamellarRequest<Output = F::Output>>
+    pub(crate) fn exec_am_pe_inner<F>(
+        &self,
+        pe: usize,
+        am: F,
+    ) -> Box<dyn LamellarRequest<Output = F::Output>>
     where
         F: RemoteActiveMessage + LamellarAM + Serde + AmDist,
     {
@@ -497,7 +504,10 @@ impl LamellarTaskGroup {
         })
     }
 
-    pub(crate) fn exec_am_local_inner<F>(&self, am: F) -> Box<dyn LamellarRequest<Output = F::Output>>
+    pub(crate) fn exec_am_local_inner<F>(
+        &self,
+        am: F,
+    ) -> Box<dyn LamellarRequest<Output = F::Output>>
     where
         F: LamellarActiveMessage + LocalAM + 'static,
     {

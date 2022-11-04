@@ -109,8 +109,10 @@ impl ActiveMessageEngine for RegisteredActiveMessages {
             Am::All(req_data, am) => {
                 let am_id = *(AMS_IDS.get(&am.get_id()).unwrap());
                 let am_size = am.serialized_size();
-                
-                if req_data.team.lamellae.backend() != Backend::Local && (req_data.team.num_pes() > 1 || req_data.team.team_pe_id().is_err()) {
+
+                if req_data.team.lamellae.backend() != Backend::Local
+                    && (req_data.team.num_pes() > 1 || req_data.team.team_pe_id().is_err())
+                {
                     // println!(" {} {} {}, {}, {}",req_data.team.lamellae.backend() != Backend::Local,req_data.team.num_pes() > 1, req_data.team.team_pe_id().is_err(),(req_data.team.num_pes() > 1 || req_data.team.team_pe_id().is_err()),req_data.team.lamellae.backend() != Backend::Local && (req_data.team.num_pes() > 1 || req_data.team.team_pe_id().is_err()) );
                     if am_size < crate::active_messaging::BATCH_AM_SIZE {
                         self.batcher.add_remote_am_to_batch(

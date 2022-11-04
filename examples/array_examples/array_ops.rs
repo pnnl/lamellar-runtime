@@ -1,6 +1,6 @@
 use lamellar::array::{
-    AccessOps, ReadOnlyOps, ArithmeticOps, AtomicArray, BitWiseOps, DistributedIterator, Distribution,
-    ElementArithmeticOps, ElementBitWiseOps, ElementOps,
+    AccessOps, ArithmeticOps, AtomicArray, BitWiseOps, DistributedIterator, Distribution,
+    ElementArithmeticOps, ElementBitWiseOps, ElementOps, ReadOnlyOps,
 };
 
 #[lamellar::AmData(Default, Debug, ArithmeticOps, PartialEq, PartialOrd)]

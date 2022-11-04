@@ -71,7 +71,3 @@ fn main() {
     std::thread::sleep(std::time::Duration::from_millis(10000 as u64));
     world.barrier();
 }
-
-
-
-

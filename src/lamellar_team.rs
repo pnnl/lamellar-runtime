@@ -921,7 +921,6 @@ impl LamellarTeamRT {
         self.team_counters.add_send_req(1);
         // println!("cnts: t: {} w: {} tg: {:?}",self.team_counters.outstanding_reqs.load(Ordering::Relaxed),self.world_counters.outstanding_reqs.load(Ordering::Relaxed), tg_outstanding_reqs.as_ref().map(|x| x.load(Ordering::Relaxed)));
 
-
         // println!("req_id: {:?}", id);
         let world = if let Some(world) = &self.world {
             world.clone()

@@ -1260,7 +1260,7 @@ impl<T: Dist> ArrayOpResultHandleInner<T> {
                 // println!("{pe} {:?}",res.len());
                 // let mut rids = std::collections::HashSet::new();
                 let res_offsets_lock = self.indices.lock();
-                let res_offsets =res_offsets_lock.get(pe).unwrap();
+                let res_offsets = res_offsets_lock.get(pe).unwrap();
                 // println!("{pe} {:?} {:?}",res_offsets[0],res_offsets.last());
                 for (rid, offset, len) in res_offsets.iter() {
                     // if rids.contains(rid){

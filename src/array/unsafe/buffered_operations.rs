@@ -55,8 +55,6 @@ pub(crate) enum BufOpsRequest<T: Dist> {
     Result(Box<ArrayOpResultHandleInner<T>>),
 }
 
-
-
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum OpReturnType {
     None,
@@ -130,13 +128,14 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
                 if first {
                     // let res_map = res_map.clone();
                     let array = self.clone();
-                    let _team_cnt =self.inner
+                    let _team_cnt = self
+                        .inner
                         .data
                         .team
                         .team_counters
                         .outstanding_reqs
                         .fetch_add(1, Ordering::SeqCst); // we need to tell the world we have a request pending
-                    // println!("updated team cnt: {}",_team_cnt +1);
+                                                         // println!("updated team cnt: {}",_team_cnt +1);
                     self.inner.data.team.scheduler.submit_task(async move {
                         // println!("starting");
                         let mut wait_cnt = 0;
@@ -154,7 +153,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
                         }
 
                         let (ams, len, complete, results) =
-                            buf_op.into_arc_am(pe,array.sub_array_range());
+                            buf_op.into_arc_am(pe, array.sub_array_range());
                         // println!("pe{:?} ams: {:?} len{:?}",pe,ams.len(),len);
                         if len > 0 {
                             let mut res = Vec::new();
@@ -188,7 +187,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
                                 .team_counters
                                 .outstanding_reqs
                                 .fetch_sub(1, Ordering::SeqCst); //remove our pending req now that it has actually been submitted;
-                            // println!("updated team cnt: {}",_cnt1 -1);
+                                                                 // println!("updated team cnt: {}",_cnt1 -1);
                             let _cnt2 = array.inner.data.req_cnt.fetch_sub(len, Ordering::SeqCst);
                             // println!("removed frm req_cnt: {} {}",_cnt2-len,len);
                             complete.store(true, Ordering::Relaxed);

@@ -53,12 +53,17 @@ impl<T: Dist> UnsafeArray<T> {
             while ((worker as f64 * elems_per_thread).round() as usize) < num_elems_local {
                 let start_i = (worker as f64 * elems_per_thread).round() as usize;
                 let end_i = ((worker + 1) as f64 * elems_per_thread).round() as usize;
-                reqs.push(self.inner.data.task_group.exec_am_local_inner(ForEachStatic {
-                    op: op.clone(),
-                    data: iter.clone(),
-                    start_i: start_i,
-                    end_i: end_i,
-                }));
+                reqs.push(
+                    self.inner
+                        .data
+                        .task_group
+                        .exec_am_local_inner(ForEachStatic {
+                            op: op.clone(),
+                            data: iter.clone(),
+                            start_i: start_i,
+                            end_i: end_i,
+                        }),
+                );
                 worker += 1;
             }
         }
@@ -81,12 +86,17 @@ impl<T: Dist> UnsafeArray<T> {
             let cur_i = Arc::new(AtomicUsize::new(0));
             // println!("ranges {:?}", ranges);
             for _ in 0..std::cmp::min(num_workers, num_elems_local) {
-                reqs.push(self.inner.data.task_group.exec_am_local_inner(ForEachDynamic {
-                    op: op.clone(),
-                    data: iter.clone(),
-                    cur_i: cur_i.clone(),
-                    max_i: num_elems_local,
-                }));
+                reqs.push(
+                    self.inner
+                        .data
+                        .task_group
+                        .exec_am_local_inner(ForEachDynamic {
+                            op: op.clone(),
+                            data: iter.clone(),
+                            cur_i: cur_i.clone(),
+                            max_i: num_elems_local,
+                        }),
+                );
             }
         }
         Box::new(DistIterForEachHandle { reqs: reqs }).into_future()
@@ -191,12 +201,17 @@ impl<T: Dist> UnsafeArray<T> {
             let range_i = Arc::new(AtomicUsize::new(0));
             // println!("ranges {:?}", ranges);
             for _ in 0..std::cmp::min(num_workers, num_elems_local_orig) {
-                reqs.push(self.inner.data.task_group.exec_am_local_inner(ForEachChunk {
-                    op: op.clone(),
-                    data: iter.clone(),
-                    ranges: ranges.clone(),
-                    range_i: range_i.clone(),
-                }));
+                reqs.push(
+                    self.inner
+                        .data
+                        .task_group
+                        .exec_am_local_inner(ForEachChunk {
+                            op: op.clone(),
+                            data: iter.clone(),
+                            ranges: ranges.clone(),
+                            range_i: range_i.clone(),
+                        }),
+                );
             }
         }
         Box::new(DistIterForEachHandle { reqs: reqs }).into_future()
@@ -231,12 +246,17 @@ impl<T: Dist> UnsafeArray<T> {
             let range_i = Arc::new(AtomicUsize::new(0));
             // println!("ranges {:?}", ranges);
             for _ in 0..std::cmp::min(num_workers, num_chunks) {
-                reqs.push(self.inner.data.task_group.exec_am_local_inner(ForEachChunk {
-                    op: op.clone(),
-                    data: iter.clone(),
-                    ranges: ranges.clone(),
-                    range_i: range_i.clone(),
-                }));
+                reqs.push(
+                    self.inner
+                        .data
+                        .task_group
+                        .exec_am_local_inner(ForEachChunk {
+                            op: op.clone(),
+                            data: iter.clone(),
+                            ranges: ranges.clone(),
+                            range_i: range_i.clone(),
+                        }),
+                );
             }
         }
         Box::new(DistIterForEachHandle { reqs: reqs }).into_future()
@@ -356,17 +376,14 @@ impl<T: Dist> UnsafeArray<T> {
                 worker += 1;
             }
             for sibling in &siblings {
-                reqs.push(
-                    self.inner
-                        .data
-                        .task_group
-                        .exec_am_local_inner(ForEachAsyncWorkStealing {
-                            op: op.clone(),
-                            data: iter.clone(),
-                            range: sibling.clone(),
-                            siblings: siblings.clone(),
-                        }),
-                );
+                reqs.push(self.inner.data.task_group.exec_am_local_inner(
+                    ForEachAsyncWorkStealing {
+                        op: op.clone(),
+                        data: iter.clone(),
+                        range: sibling.clone(),
+                        siblings: siblings.clone(),
+                    },
+                ));
             }
         }
         Box::new(DistIterForEachHandle { reqs: reqs }).into_future()
@@ -428,12 +445,17 @@ impl<T: Dist> UnsafeArray<T> {
             let range_i = Arc::new(AtomicUsize::new(0));
             // println!("ranges {:?}", ranges);
             for _ in 0..std::cmp::min(num_workers, num_elems_local_orig) {
-                reqs.push(self.inner.data.task_group.exec_am_local_inner(ForEachAsyncChunk {
-                    op: op.clone(),
-                    data: iter.clone(),
-                    ranges: ranges.clone(),
-                    range_i: range_i.clone(),
-                }));
+                reqs.push(
+                    self.inner
+                        .data
+                        .task_group
+                        .exec_am_local_inner(ForEachAsyncChunk {
+                            op: op.clone(),
+                            data: iter.clone(),
+                            ranges: ranges.clone(),
+                            range_i: range_i.clone(),
+                        }),
+                );
             }
         }
         Box::new(DistIterForEachHandle { reqs: reqs }).into_future()
@@ -467,12 +489,17 @@ impl<T: Dist> UnsafeArray<T> {
             let range_i = Arc::new(AtomicUsize::new(0));
             // println!("ranges {:?}", ranges);
             for _ in 0..std::cmp::min(num_workers, num_elems_local) {
-                reqs.push(self.inner.data.task_group.exec_am_local_inner(ForEachAsyncChunk {
-                    op: op.clone(),
-                    data: iter.clone(),
-                    ranges: ranges.clone(),
-                    range_i: range_i.clone(),
-                }));
+                reqs.push(
+                    self.inner
+                        .data
+                        .task_group
+                        .exec_am_local_inner(ForEachAsyncChunk {
+                            op: op.clone(),
+                            data: iter.clone(),
+                            ranges: ranges.clone(),
+                            range_i: range_i.clone(),
+                        }),
+                );
             }
         }
         Box::new(DistIterForEachHandle { reqs: reqs }).into_future()
@@ -618,12 +645,17 @@ impl<T: Dist> DistIteratorLauncher for UnsafeArray<T> {
             while ((worker as f64 * elems_per_thread).round() as usize) < num_elems_local {
                 let start_i = (worker as f64 * elems_per_thread).round() as usize;
                 let end_i = ((worker + 1) as f64 * elems_per_thread).round() as usize;
-                reqs.push(self.inner.data.task_group.exec_am_local_inner(CollectAsync {
-                    data: iter.clone(),
-                    start_i: start_i,
-                    end_i: end_i,
-                    _phantom: PhantomData,
-                }));
+                reqs.push(
+                    self.inner
+                        .data
+                        .task_group
+                        .exec_am_local_inner(CollectAsync {
+                            data: iter.clone(),
+                            start_i: start_i,
+                            end_i: end_i,
+                            _phantom: PhantomData,
+                        }),
+                );
                 worker += 1;
             }
         }

@@ -82,7 +82,8 @@ impl WorkStealingThread {
                     }
                 });
                 if let Some(runnable) = omsg {
-                    if !worker.active.load(Ordering::SeqCst) && timer.elapsed().as_secs_f64() > 600.0
+                    if !worker.active.load(Ordering::SeqCst)
+                        && timer.elapsed().as_secs_f64() > 600.0
                     {
                         println!("runnable {:?}", runnable);
                         println!(
@@ -238,7 +239,7 @@ impl AmeSchedulerQueue for WorkStealingInner {
             let work_inj = self.work_inj.clone();
             let schedule = move |runnable| work_inj.push(runnable);
             let (runnable, task) = unsafe { async_task::spawn_unchecked(future2, schedule) }; //safe //safe as contents are sync+send... may need to do something to enforce lifetime bounds
-            runnable.run();//try to run immediately
+            runnable.run(); //try to run immediately
             task.detach();
         });
     }

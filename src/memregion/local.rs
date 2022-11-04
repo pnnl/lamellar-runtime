@@ -171,7 +171,7 @@ impl crate::DarcSerde for MemRegionHandle {
         //         panic!("can only access MemRegionHandles within team members ({:?})", err);
         //     }
         // }
-        // println!("deserailized mrh: {:?}",self.inner); 
+        // println!("deserailized mrh: {:?}",self.inner);
     }
 }
 
@@ -321,7 +321,7 @@ impl<T: Dist> LocalMemoryRegion<T> {
             AllocationType::Local,
         )?;
         let pe = mr.pe;
-       
+
         let id = ID_COUNTER.fetch_add(1, Ordering::Relaxed);
         let mrh = MemRegionHandle {
             inner: Arc::new(MemRegionHandleInner {
@@ -429,19 +429,16 @@ impl<T: Dist> LocalMemoryRegion<T> {
         self.as_slice().unwrap().iter()
     }
 
-    pub fn data_local(&self) -> bool{
+    pub fn data_local(&self) -> bool {
         if self.pe == self.mr.inner.my_id.1 {
             if let Ok(_addr) = self.mr.inner.mr.addr() {
                 true
-            }
-            else {
+            } else {
                 false
             }
-        }
-        else {
+        } else {
             false
         }
-
     }
 }
 

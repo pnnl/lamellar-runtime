@@ -373,21 +373,20 @@ fn create_buf_ops(
         )
     } else if array_type == "ReadOnlyArray" {
         (
-            quote! { panic!("assign a valid op for Read Only Arrays");},                                           //lhs
-            quote! { panic!("assign/store not a valid op for Read Only Arrays");},                                     //assign
+            quote! { panic!("assign a valid op for Read Only Arrays");}, //lhs
+            quote! { panic!("assign/store not a valid op for Read Only Arrays");}, //assign
             quote! { panic!("fetch_add not a valid op for Read Only Arrays"); }, //fetch_add -- we lock the index before this point so its actually atomic
             quote! { panic!("fetch_sub not a valid op for Read Only Arrays"); }, //fetch_sub --we lock the index before this point so its actually atomic
             quote! { panic!("fetch_mul not a valid op for Read Only Arrays"); }, //fetch_mul --we lock the index before this point so its actually atomic
             quote! { panic!("fetch_div not a valid op for Read Only Arrays"); }, //fetch_div --we lock the index before this point so its actually atomic
             quote! { panic!("fetch_and not a valid op for Read Only Arrays"); }, //fetch_and --we lock the index before this point so its actually atomic
             quote! { panic!("fetch_or not a valid op for Read Only Arrays"); }, //fetch_or --we lock the index before this point so its actually atomic
-            quote! {slice[index]},                                           //load
+            quote! {slice[index]},                                              //load
             quote! { panic!("swap not a valid op for Read Only Arrays"); }, //swap we lock the index before this point so its actually atomic
             quote! { panic!("compare exchange not a valid op for Read Only Arrays"); }, // compare_exchange -- we lock the index before this point so its actually atomic
             quote! { panic!("compare exchange eps not a valid op for Read Only Arrays"); }, //compare exchange epsilon
         )
-    }
-    else{
+    } else {
         (
             quote! {slice[index]},                                           //lhs
             quote! {slice[index] = val},                                     //assign
@@ -613,10 +612,8 @@ fn create_buf_ops(
                     }
                 }
                 let mut buf: &mut (LocalMemoryRegion<u8>, usize) = bufs.last_mut().unwrap();
-                
                 let _temp = self.cur_len.fetch_add(op_data.len(),Ordering::SeqCst);
                 let mut buf_slice = unsafe{buf.0.as_mut_slice().unwrap()};
-                
                 buf.1 += op.to_bytes(&mut buf_slice[(buf.1)..]);
                 buf.1 += op_data.to_bytes(&mut buf_slice[(buf.1)..]);
                 // if buf.1 > #lamellar::array::OPS_BUFFER_SIZE {
@@ -657,10 +654,8 @@ fn create_buf_ops(
                     }
                 }
                 let mut buf: &mut (LocalMemoryRegion<u8>, usize) = bufs.last_mut().unwrap();
-                
                 let _temp = self.cur_len.fetch_add(op_data.len(),Ordering::SeqCst);
                 let mut buf_slice = unsafe{buf.0.as_mut_slice().unwrap()};
-                
                 buf.1 += op.to_bytes(&mut buf_slice[(buf.1)..]);
                 buf.1 += op_data.to_bytes(&mut buf_slice[(buf.1)..]);
                 res_map.insert(pe,self.results.read().clone());
@@ -761,7 +756,6 @@ fn create_buf_ops(
                 let mut results_offset=0;
                 // println!("{:?} {:?} {:?}",results_u8.len(),u8_len,results_offset);
                 // let mut results_slice = unsafe{std::slice::from_raw_parts_mut(results_u8.as_mut_ptr() as *mut #typeident,self.num_fetch_ops)};
-                
                 let local_ops = self.get_ops(&lamellar::team).await;
                 let local_ops_slice = local_ops.as_slice().unwrap();
                 let mut cur_index = 0;
@@ -848,7 +842,7 @@ enum OpType {
     Arithmetic,
     Bitwise,
     Access,
-    ReadOnly
+    ReadOnly,
 }
 
 fn create_buffered_ops(
@@ -882,7 +876,7 @@ fn create_buffered_ops(
 
     let mut expanded = quote! {};
 
-    let mut optypes = vec![OpType::ReadOnly];//, vec![OpType::Arithmetic, OpType::Access];
+    let mut optypes = vec![OpType::ReadOnly]; //, vec![OpType::Arithmetic, OpType::Access];
 
     let buf_op_impl = create_buf_ops(
         typeident.clone(),
@@ -919,8 +913,6 @@ fn create_buffered_ops(
         );
         expanded.extend(buf_op_impl)
     }
-
-    
 
     let user_expanded = quote_spanned! {expanded.span()=>
         const _: () = {

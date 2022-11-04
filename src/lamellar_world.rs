@@ -250,7 +250,7 @@ impl LamellarWorldBuilder {
                 //     SchedulerType::NumaWorkStealing
                 // } else if scheduler == 2 {
                 //     SchedulerType::NumaWorkStealing2
-                // } 
+                // }
                 else {
                     SchedulerType::WorkStealing
                 }

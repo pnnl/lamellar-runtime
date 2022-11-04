@@ -44,7 +44,7 @@ use parking_lot::Mutex;
 use rand::seq::SliceRandom;
 use rand::thread_rng;
 
-#[derive(Debug,Clone)]
+#[derive(Debug, Clone)]
 pub enum Schedule {
     Static,
     Dynamic,      //single element
@@ -52,7 +52,6 @@ pub enum Schedule {
     Guided,       // chunks that get smaller over time
     WorkStealing, // static initially but other threads can steal
 }
-
 
 #[lamellar_impl::AmLocalDataRT(Clone)]
 pub(crate) struct Collect<I>

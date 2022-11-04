@@ -223,7 +223,7 @@ impl<T: Dist> LocalLockAtomicArray<T> {
     }
 
     pub fn write_local_data(&self) -> LocalLockAtomicMutLocalData<'_, T> {
-        let lock =  self.lock.write();
+        let lock = self.lock.write();
         let data = LocalLockAtomicMutLocalData {
             data: unsafe { self.array.local_as_mut_slice() },
             _index: 0,
@@ -249,7 +249,7 @@ impl<T: Dist> LocalLockAtomicArray<T> {
 
     #[doc(hidden)]
     pub fn local_as_mut_slice(&self) -> LocalLockAtomicMutLocalData<'_, T> {
-        let the_lock =  self.lock.write();
+        let the_lock = self.lock.write();
         let lock = LocalLockAtomicMutLocalData {
             data: unsafe { self.array.local_as_mut_slice() },
             _index: 0,

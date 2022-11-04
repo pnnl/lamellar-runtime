@@ -3,7 +3,7 @@
 /// contains a vector of N bytes
 /// the active message simply returns immediately.
 /// --------------------------------------------------------------------
-use lamellar::{LamellarTaskGroup,ActiveMessaging};
+use lamellar::{ActiveMessaging, LamellarTaskGroup};
 use std::time::Instant;
 
 #[lamellar::AmData(Clone, Debug)]
