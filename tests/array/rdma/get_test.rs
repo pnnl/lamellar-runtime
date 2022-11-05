@@ -102,6 +102,7 @@ macro_rules! get_test{
             let _my_pe = world.my_pe();
             let array_total_len = $len;
             let mem_seg_len = array_total_len;
+            #[allow(unused_mut)]
             let mut success = true;
             #[allow(unused_mut)]
             let mut array: $array::<$t> = $array::<$t>::new(world.team(), array_total_len, $dist).into(); //convert into abstract LamellarArray, distributed len is total_len

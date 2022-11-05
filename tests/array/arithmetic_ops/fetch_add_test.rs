@@ -31,9 +31,7 @@ macro_rules! initialize_array {
 
 macro_rules! check_val{
     (UnsafeArray,$val:ident,$max_val:ident,$valid:ident) => {
-       if $val > $max_val{//because unsafe we might lose some updates, but val should never be greater than max_val
-           $valid = false;
-       }
+       // UnsafeArray updates will be nondeterminstic so should not ever be considered safe/valid so for testing sake we just say they are
     };
     (AtomicArray,$val:ident,$max_val:ident,$valid:ident) => {
         if (($val - $max_val)as f32).abs() > 0.0001{//all updates should be preserved
@@ -47,6 +45,19 @@ macro_rules! check_val{
     };
 }
 
+macro_rules! insert_prev{
+    (UnsafeArray,$val:ident,$prevs:ident) => {
+       // UnsafeArray updates will be nondeterminstic so should not ever be considered safe/valid so for testing sake we just say they are
+       true
+    };
+    (AtomicArray,$val:ident,$prevs:ident) => {
+        $prevs.insert($val)
+    };
+    (LocalLockAtomicArray,$val:ident,$prevs:ident) => {
+        $prevs.insert($val)
+    };
+}
+
 macro_rules! max_updates {
     ($t:ty,$num_pes:ident) => {
         if <$t>::MAX as u128 > (1000 * $num_pes) as u128 {
@@ -57,7 +68,7 @@ macro_rules! max_updates {
     };
 }
 
-macro_rules! add_test{
+macro_rules! fetch_add_test{
     ($array:ident, $t:ty, $len:expr, $dist:ident) =>{
        {
             let world = lamellar::LamellarWorldBuilder::new().build();
@@ -67,6 +78,7 @@ macro_rules! add_test{
 
             let mut rng = rand::thread_rng();
             let rand_idx = Uniform::from(0..array_total_len);
+            #[allow(unused_mut)]
             let mut success = true;
             let array: $array::<$t> = $array::<$t>::new(world.team(), array_total_len, $dist).into(); //convert into abstract LamellarArray, distributed len is total_len
 
@@ -77,31 +89,17 @@ macro_rules! add_test{
             array.wait_all();
             array.barrier();
             for idx in 0..array.len(){
-                let mut prev = init_val;
-                #[cfg(feature="non-buffered-array-ops")]
-                {
-                    for i in 0..(pe_max_val as usize){
-                        let val =  world.block_on(array.fetch_add(idx,1 as $t));
-                        if val < prev{
-                            println!("full 1: {:?} {:?} {:?}",i,val,prev);
-                            success = false;
-                        }
-                        prev = val;
-                    }
+                let mut reqs = vec![];
+                for _i in 0..(pe_max_val as usize){
+                    reqs.push(array.fetch_add(idx,1 as $t));
                 }
-                #[cfg(not(feature="non-buffered-array-ops"))]
-                {
-                    let mut reqs = vec![];
-                    for _i in 0..(pe_max_val as usize){
-                        reqs.push(array.fetch_add(idx,1 as $t));
-                    }
-                    for req in reqs{
-                        let val =  world.block_on(req);
-                        if val < prev{
-                            println!("full 1: {:?} {:?}",val,prev);
-                            success = false;
-                        }
-                        prev = val;
+                #[allow(unused_mut)]
+                let mut prevs: std::collections::HashSet<u128> = std::collections::HashSet::new();
+                for req in reqs{
+                    let val =  world.block_on(req) as u128;
+                    if ! insert_prev!($array,val,prevs){
+                        println!("full 1: {:?} {:?}",val,prevs);
+                        success = false;
                     }
                 }
             }
@@ -120,36 +118,14 @@ macro_rules! add_test{
             array.wait_all();
             array.barrier();
             let num_updates=max_updates!($t,num_pes);
-            // let mut prev_vals = vec![init_val;array.len()];
-            #[cfg(feature="non-buffered-array-ops")]
-            {
-                for i in 0..num_updates{
-                    let idx = rand_idx.sample(&mut rng);
-                        let val =  world.block_on(array.fetch_add(idx,1 as $t));
-                        if val < prev_vals[idx]{
-                            println!("full 3: {:?} {:?} {:?}",i,val,prev_vals[idx]);
-                            success = false;
-                        }
-                        prev_vals[idx]=val;
-                }
-
+            let mut reqs = vec![];
+            // println!("2------------");
+            for _i in 0..num_updates{
+                let idx = rand_idx.sample(&mut rng);
+                reqs.push((array.fetch_add(idx,1 as $t),idx))
             }
-            #[cfg(not(feature="non-buffered-array-ops"))]
-            {
-                let mut reqs = vec![];
-                // println!("2------------");
-                for _i in 0..num_updates{
-                    let idx = rand_idx.sample(&mut rng);
-                    reqs.push((array.fetch_add(idx,1 as $t),idx))
-                }
-                for (req,_idx) in reqs{
-                    let _val =  world.block_on(req);
-                    // if val < prev_vals[idx]{
-                    //     println!("full 3:  {:?} {:?}",val,prev_vals[idx]);
-                    //     success = false;
-                    // }
-                    // prev_vals[idx]=val;
-                }
+            for (req,_idx) in reqs{
+                let _val =  world.block_on(req) as usize;
             }
             array.barrier();
             let sum = array.ser_iter().into_iter().fold(0,|acc,x| acc+ *x as usize);
@@ -172,33 +148,20 @@ macro_rules! add_test{
             let sub_array = array.sub_array(start_i..end_i);
             array.barrier();
             for idx in 0..sub_array.len(){
-                let mut prev = init_val;
-                #[cfg(feature="non-buffered-array-ops")]
-                {
-                    for i in 0..(pe_max_val as usize){
-                        let val =  world.block_on(sub_array.fetch_add(idx,1 as $t));
-                        if val < prev{
-                            println!("half 1: {:?} {:?} {:?}",i,val,prev);
-                            success = false;
-                        }
-                        prev = val;
+                let mut reqs = vec![];
+                for _i in 0..(pe_max_val as usize){
+                    reqs.push(sub_array.fetch_add(idx,1 as $t));
+                }
+                #[allow(unused_mut)]
+                let mut prevs: std::collections::HashSet<u128> = std::collections::HashSet::new();
+                for req in reqs{
+                    let val =  world.block_on(req) as u128;
+                    if ! insert_prev!($array,val,prevs){
+                        println!("half 1: {:?} {:?}",val,prevs);
+                        success = false;
                     }
                 }
-                #[cfg(not(feature="non-buffered-array-ops"))]
-                {
-                    let mut reqs = vec![];
-                    for _i in 0..(pe_max_val as usize){
-                        reqs.push(sub_array.fetch_add(idx,1 as $t));
-                    }
-                    for req in reqs{
-                        let val =  world.block_on(req);
-                        if val < prev{
-                            println!("half 1: {:?} {:?}",val,prev);
-                            success = false;
-                        }
-                        prev = val;
-                    }
-                }
+                
             }
             array.barrier();
             for (i,elem) in sub_array.ser_iter().into_iter().enumerate(){
@@ -214,35 +177,13 @@ macro_rules! add_test{
             array.wait_all();
             array.barrier();
             let num_updates=max_updates!($t,num_pes);
-            // let mut prev_vals = vec![init_val;sub_array.len()];
-            #[cfg(feature="non-buffered-array-ops")]
-            {
-                for i in 0..num_updates{
-                    let idx = rand_idx.sample(&mut rng);
-                    let val =  world.block_on(sub_array.fetch_add(idx,1 as $t));
-                        if val < prev_vals[idx]{
-                            println!("half 3: {:?} {:?} {:?}",i,val,prev_vals[idx]);
-                            success = false;
-                        }
-                        prev_vals[idx]=val;
-                }
-
+            let mut reqs = vec![];
+            for _i in 0..num_updates{
+                let idx = rand_idx.sample(&mut rng);
+                reqs.push((sub_array.fetch_add(idx,1 as $t),idx))
             }
-            #[cfg(not(feature="non-buffered-array-ops"))]
-            {
-                let mut reqs = vec![];
-                for _i in 0..num_updates{
-                    let idx = rand_idx.sample(&mut rng);
-                    reqs.push((sub_array.fetch_add(idx,1 as $t),idx))
-                }
-                for (req,_idx) in reqs{
-                    let _val =  world.block_on(req);
-                    // if val < prev_vals[idx]{
-                    //     println!("half 3:  {:?} {:?}",val,prev_vals[idx]);
-                    //     success = false;
-                    // }
-                    // prev_vals[idx]=val;
-                }
+            for (req,_idx) in reqs{
+                let _val =  world.block_on(req) as usize;
             }
             array.barrier();
             let sum = sub_array.ser_iter().into_iter().fold(0,|acc,x| acc+ *x as usize);
@@ -268,33 +209,20 @@ macro_rules! add_test{
                 let sub_array = array.sub_array(start_i..end_i);
                 array.barrier();
                 for idx in 0..sub_array.len(){
-                    let mut prev = init_val;
-                    #[cfg(feature="non-buffered-array-ops")]
-                    {
-                        for i in 0..(pe_max_val as usize){
-                            let val =  world.block_on(sub_array.fetch_add(idx,1 as $t));
-                            if val < prev{
-                                println!("pe 1: {:?} {:?} {:?}",i,val,prev);
-                                success = false;
-                            }
-                            prev = val;
+                    let mut reqs = vec![];
+                    for _i in 0..(pe_max_val as usize){
+                        reqs.push(sub_array.fetch_add(idx,1 as $t));
+                    }
+                    #[allow(unused_mut)]
+                    let mut prevs: std::collections::HashSet<u128> = std::collections::HashSet::new();
+                    for req in reqs{
+                        let val =  world.block_on(req) as u128;
+                        if ! insert_prev!($array,val,prevs){
+                            println!("pe 1: {:?} {:?}",val,prevs);
+                            success = false;
                         }
                     }
-                    #[cfg(not(feature="non-buffered-array-ops"))]
-                    {
-                        let mut reqs = vec![];
-                        for _i in 0..(pe_max_val as usize){
-                            reqs.push(sub_array.fetch_add(idx,1 as $t));
-                        }
-                        for req in reqs{
-                            let val =  world.block_on(req);
-                            if val < prev{
-                                println!("pe 1: {:?} {:?}",val,prev);
-                                success = false;
-                            }
-                            prev = val;
-                        }
-                    }
+                    
                 }
                 sub_array.barrier();
                 for (i,elem) in sub_array.ser_iter().into_iter().enumerate(){
@@ -310,35 +238,13 @@ macro_rules! add_test{
                 sub_array.wait_all();
                 sub_array.barrier();
                 let num_updates=max_updates!($t,num_pes);
-                // let mut prev_vals = vec![init_val;sub_array.len()];
-                #[cfg(feature="non-buffered-array-ops")]
-                {
-                    for i in 0..num_updates{
-                        let idx = rand_idx.sample(&mut rng);
-                        let val =  world.block_on(sub_array.fetch_add(idx,1 as $t));
-                            if val < prev_vals[idx]{
-                                println!("pe 3: {:?} {:?} {:?}",i,val,prev_vals[idx]);
-                                success = false;
-                            }
-                            prev_vals[idx]=val;
-                    }
-
+                let mut reqs = vec![];
+                for _i in 0..num_updates{
+                    let idx = rand_idx.sample(&mut rng);
+                    reqs.push((sub_array.fetch_add(idx,1 as $t),idx))
                 }
-                #[cfg(not(feature="non-buffered-array-ops"))]
-                {
-                    let mut reqs = vec![];
-                    for _i in 0..num_updates{
-                        let idx = rand_idx.sample(&mut rng);
-                        reqs.push((sub_array.fetch_add(idx,1 as $t),idx))
-                    }
-                    for (req,_idx) in reqs{
-                        let _val =  world.block_on(req);
-                        // if val < prev_vals[idx]{
-                        //     println!("pe 3:  {:?} {:?}",val,prev_vals[idx]);
-                        //     success = false;
-                        // }
-                        // prev_vals[idx]=val;
-                    }
+                for (req,_idx) in reqs{
+                    let _val =  world.block_on(req) as usize;
                 }
                 sub_array.barrier();
                 let sum = sub_array.ser_iter().into_iter().fold(0,|acc,x| acc+ *x as usize);
@@ -390,6 +296,7 @@ macro_rules! initialize_array2 {
 macro_rules! check_results {
     ($array_ty:ident, $array:ident, $num_pes:ident, $reqs:ident, $test:expr) => {
         // println!("++++++++++++++++++++++++++++++++++++++++++++++");
+        #[allow(unused_mut)]
         let mut success = true;
         $array.wait_all();
         $array.barrier();
@@ -645,56 +552,56 @@ fn main() {
 
     match array.as_str() {
         "UnsafeArray" => match elem.as_str() {
-            "u8" => add_test!(UnsafeArray, u8, len, dist_type),
-            "u16" => add_test!(UnsafeArray, u16, len, dist_type),
-            "u32" => add_test!(UnsafeArray, u32, len, dist_type),
-            "u64" => add_test!(UnsafeArray, u64, len, dist_type),
-            "u128" => add_test!(UnsafeArray, u128, len, dist_type),
-            "usize" => add_test!(UnsafeArray, usize, len, dist_type),
-            "i8" => add_test!(UnsafeArray, i8, len, dist_type),
-            "i16" => add_test!(UnsafeArray, i16, len, dist_type),
-            "i32" => add_test!(UnsafeArray, i32, len, dist_type),
-            "i64" => add_test!(UnsafeArray, i64, len, dist_type),
-            "i128" => add_test!(UnsafeArray, i128, len, dist_type),
-            "isize" => add_test!(UnsafeArray, isize, len, dist_type),
-            "f32" => add_test!(UnsafeArray, f32, len, dist_type),
-            "f64" => add_test!(UnsafeArray, f64, len, dist_type),
+            "u8" => fetch_add_test!(UnsafeArray, u8, len, dist_type),
+            "u16" => fetch_add_test!(UnsafeArray, u16, len, dist_type),
+            "u32" => fetch_add_test!(UnsafeArray, u32, len, dist_type),
+            "u64" => fetch_add_test!(UnsafeArray, u64, len, dist_type),
+            "u128" => fetch_add_test!(UnsafeArray, u128, len, dist_type),
+            "usize" => fetch_add_test!(UnsafeArray, usize, len, dist_type),
+            "i8" => fetch_add_test!(UnsafeArray, i8, len, dist_type),
+            "i16" => fetch_add_test!(UnsafeArray, i16, len, dist_type),
+            "i32" => fetch_add_test!(UnsafeArray, i32, len, dist_type),
+            "i64" => fetch_add_test!(UnsafeArray, i64, len, dist_type),
+            "i128" => fetch_add_test!(UnsafeArray, i128, len, dist_type),
+            "isize" => fetch_add_test!(UnsafeArray, isize, len, dist_type),
+            "f32" => fetch_add_test!(UnsafeArray, f32, len, dist_type),
+            "f64" => fetch_add_test!(UnsafeArray, f64, len, dist_type),
             "input" => input_test!(UnsafeArray, len, dist_type),
             _ => eprintln!("unsupported element type"),
         },
         "AtomicArray" => match elem.as_str() {
-            "u8" => add_test!(AtomicArray, u8, len, dist_type),
-            "u16" => add_test!(AtomicArray, u16, len, dist_type),
-            "u32" => add_test!(AtomicArray, u32, len, dist_type),
-            "u64" => add_test!(AtomicArray, u64, len, dist_type),
-            "u128" => add_test!(AtomicArray, u128, len, dist_type),
-            "usize" => add_test!(AtomicArray, usize, len, dist_type),
-            "i8" => add_test!(AtomicArray, i8, len, dist_type),
-            "i16" => add_test!(AtomicArray, i16, len, dist_type),
-            "i32" => add_test!(AtomicArray, i32, len, dist_type),
-            "i64" => add_test!(AtomicArray, i64, len, dist_type),
-            "i128" => add_test!(AtomicArray, i128, len, dist_type),
-            "isize" => add_test!(AtomicArray, isize, len, dist_type),
-            "f32" => add_test!(AtomicArray, f32, len, dist_type),
-            "f64" => add_test!(AtomicArray, f64, len, dist_type),
+            "u8" => fetch_add_test!(AtomicArray, u8, len, dist_type),
+            "u16" => fetch_add_test!(AtomicArray, u16, len, dist_type),
+            "u32" => fetch_add_test!(AtomicArray, u32, len, dist_type),
+            "u64" => fetch_add_test!(AtomicArray, u64, len, dist_type),
+            "u128" => fetch_add_test!(AtomicArray, u128, len, dist_type),
+            "usize" => fetch_add_test!(AtomicArray, usize, len, dist_type),
+            "i8" => fetch_add_test!(AtomicArray, i8, len, dist_type),
+            "i16" => fetch_add_test!(AtomicArray, i16, len, dist_type),
+            "i32" => fetch_add_test!(AtomicArray, i32, len, dist_type),
+            "i64" => fetch_add_test!(AtomicArray, i64, len, dist_type),
+            "i128" => fetch_add_test!(AtomicArray, i128, len, dist_type),
+            "isize" => fetch_add_test!(AtomicArray, isize, len, dist_type),
+            "f32" => fetch_add_test!(AtomicArray, f32, len, dist_type),
+            "f64" => fetch_add_test!(AtomicArray, f64, len, dist_type),
             "input" => input_test!(AtomicArray, len, dist_type),
             _ => eprintln!("unsupported element type"),
         },
         "LocalLockAtomicArray" => match elem.as_str() {
-            "u8" => add_test!(LocalLockAtomicArray, u8, len, dist_type),
-            "u16" => add_test!(LocalLockAtomicArray, u16, len, dist_type),
-            "u32" => add_test!(LocalLockAtomicArray, u32, len, dist_type),
-            "u64" => add_test!(LocalLockAtomicArray, u64, len, dist_type),
-            "u128" => add_test!(LocalLockAtomicArray, u128, len, dist_type),
-            "usize" => add_test!(LocalLockAtomicArray, usize, len, dist_type),
-            "i8" => add_test!(LocalLockAtomicArray, i8, len, dist_type),
-            "i16" => add_test!(LocalLockAtomicArray, i16, len, dist_type),
-            "i32" => add_test!(LocalLockAtomicArray, i32, len, dist_type),
-            "i64" => add_test!(LocalLockAtomicArray, i64, len, dist_type),
-            "i128" => add_test!(LocalLockAtomicArray, i128, len, dist_type),
-            "isize" => add_test!(LocalLockAtomicArray, isize, len, dist_type),
-            "f32" => add_test!(LocalLockAtomicArray, f32, len, dist_type),
-            "f64" => add_test!(LocalLockAtomicArray, f64, len, dist_type),
+            "u8" => fetch_add_test!(LocalLockAtomicArray, u8, len, dist_type),
+            "u16" => fetch_add_test!(LocalLockAtomicArray, u16, len, dist_type),
+            "u32" => fetch_add_test!(LocalLockAtomicArray, u32, len, dist_type),
+            "u64" => fetch_add_test!(LocalLockAtomicArray, u64, len, dist_type),
+            "u128" => fetch_add_test!(LocalLockAtomicArray, u128, len, dist_type),
+            "usize" => fetch_add_test!(LocalLockAtomicArray, usize, len, dist_type),
+            "i8" => fetch_add_test!(LocalLockAtomicArray, i8, len, dist_type),
+            "i16" => fetch_add_test!(LocalLockAtomicArray, i16, len, dist_type),
+            "i32" => fetch_add_test!(LocalLockAtomicArray, i32, len, dist_type),
+            "i64" => fetch_add_test!(LocalLockAtomicArray, i64, len, dist_type),
+            "i128" => fetch_add_test!(LocalLockAtomicArray, i128, len, dist_type),
+            "isize" => fetch_add_test!(LocalLockAtomicArray, isize, len, dist_type),
+            "f32" => fetch_add_test!(LocalLockAtomicArray, f32, len, dist_type),
+            "f64" => fetch_add_test!(LocalLockAtomicArray, f64, len, dist_type),
             "input" => input_test!(LocalLockAtomicArray, len, dist_type),
             _ => eprintln!("unsupported element type"),
         },

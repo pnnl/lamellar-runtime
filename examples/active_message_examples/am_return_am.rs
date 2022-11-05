@@ -5,8 +5,7 @@
 /// PE but does not return any data to the user.
 /// it tests executing the AM localy, executing remotely, and executing on all PEs
 /// --------------------------------------------------------------------
-use lamellar::{ActiveMessaging, SchedulerType};
-// use lamellar::{Backend, SchedulerType};
+use lamellar::{ActiveMessaging};
 
 //--Active message returning an active message that returns nothing--//
 #[lamellar::AmData(Clone, Debug)]
@@ -60,7 +59,7 @@ fn main() {
         // .with_lamellae(Default::default()) //if enable-rofi feature is active default is rofi, otherwise local
         //.with_lamellae( Backend::Rofi ) //explicity set the lamellae backend
         //.with_lamellae( Backend::Local )
-        .with_scheduler(SchedulerType::NumaWorkStealing2) //currently the only type of thread scheduler
+        // .with_scheduler(SchedulerType::WorkStealing) //currently the only type of thread scheduler
         .build();
     let my_pe = world.my_pe();
     let num_pes = world.num_pes();

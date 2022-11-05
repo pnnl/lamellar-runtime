@@ -12,7 +12,7 @@ use lamellar::array::{
 fn main() {
     let world = lamellar::LamellarWorldBuilder::new().build();
     let num_pes = world.num_pes();
-    let my_pe = world.my_pe();
+    let _my_pe = world.my_pe();
     let local_length = 10; //if you want to ensure each thread processes data make this >= LAMELLAR_THREADS environment variable
     let global_length = num_pes * local_length;
 

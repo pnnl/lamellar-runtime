@@ -854,7 +854,7 @@ fn create_buf_ops(
                 })
         }
         inventory::submit! {
-            #![crate = #lamellar]
+            // #![crate = #lamellar]
             #lamellar::array::#reg_name{
                 id: std::any::TypeId::of::<#typeident>(),
                 op: #dist_am_buf_name,

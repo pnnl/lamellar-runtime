@@ -19,22 +19,15 @@ use registered_active_message::RegisteredActiveMessages; //, AMS_EXECS};
 
 pub(crate) mod batching;
 
-#[cfg(feature = "nightly")]
-pub(crate) mod remote_closures;
-#[cfg(feature = "nightly")]
-pub(crate) use remote_closures::RemoteClosures;
-#[cfg(feature = "nightly")]
-use remote_closures::{exec_closure_cmd, process_closure_request};
-
 const BATCH_AM_SIZE: usize = 100000;
 
-pub trait AmLocal: Sync + Send {}
+pub trait SyncSend: Sync + Send {}
 
-impl<T: Sync + Send> AmLocal for T {}
+impl<T: Sync + Send> SyncSend for T {}
 
-pub trait AmDist: serde::ser::Serialize + serde::de::DeserializeOwned + AmLocal + 'static {}
+pub trait AmDist: serde::ser::Serialize + serde::de::DeserializeOwned + SyncSend + 'static {}
 
-impl<T: serde::ser::Serialize + serde::de::DeserializeOwned + AmLocal + 'static> AmDist for T {}
+impl<T: serde::ser::Serialize + serde::de::DeserializeOwned + SyncSend + 'static> AmDist for T {}
 
 #[derive(
     serde::Serialize, serde::Deserialize, Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord,
@@ -43,6 +36,7 @@ pub(crate) enum ExecType {
     Am(Cmd),
     Runtime(Cmd),
 }
+
 
 pub trait DarcSerde {
     fn ser(&self, num_pes: usize);
@@ -54,7 +48,7 @@ impl<T> DarcSerde for &T {
     fn des(&self, _cur_pe: Result<usize, IdError>) {}
 }
 
-pub trait LamellarSerde: AmLocal {
+pub trait LamellarSerde: SyncSend {
     fn serialized_size(&self) -> usize;
     fn serialize_into(&self, buf: &mut [u8]);
 }
@@ -76,7 +70,7 @@ pub trait LamellarActiveMessage: DarcSerde {
         world: Arc<LamellarTeam>,
         team: Arc<LamellarTeam>,
     ) -> std::pin::Pin<Box<dyn std::future::Future<Output = LamellarReturn> + Send>>;
-    fn get_id(&self) -> String;
+    fn get_id(&self) -> &'static str;
 }
 
 pub(crate) type LamellarArcLocalAm = Arc<dyn LamellarActiveMessage + Sync + Send>;
@@ -86,11 +80,17 @@ pub(crate) type LamellarResultArc = Arc<dyn LamellarSerde + Sync + Send>;
 
 pub trait Serde: serde::ser::Serialize + serde::de::DeserializeOwned {}
 
-pub trait LocalAM: AmLocal {
-    type Output: AmLocal;
+/// The trait representing an active message that can only be executed locally, i.e. from the PE that initiated it
+/// (SyncSend is a blanket impl for Sync + Send)
+pub trait LocalAM: SyncSend {
+    /// The type of the output returned by the active message
+    type Output: SyncSend;
 }
 
+/// The trait representing an active message that can be executed remotely
+/// (SyncSend is a blanket impl for serde::Serialize + serde::Deserialize + Sync + Send + 'static)
 pub trait LamellarAM {
+    /// The type of the output returned by the active message
     type Output: AmDist;
 }
 
@@ -218,16 +218,142 @@ impl AMCounters {
 }
 
 pub trait ActiveMessaging {
+    /// blocks calling thread until all remote tasks (e.g. active mesages, array operations)
+    /// initiated by the calling PE have completed.
+    ///
+    /// Note: this is not a distributed synchronization primitive (i.e. it has no knowledge of a Remote PEs tasks)
+    /// # Examples
+    ///```
+    /// use lamellar::ActiveMessaging;
+    ///
+    /// let world =  let world = lamellar::LamellarWorldBuilder::new().build();
+    /// world.exec_am_all(...); 
+    /// world.wait_all(); //block until the previous am has finished
+    ///```
     fn wait_all(&self);
+
+    /// Global synchronization method which blocks calling thread until all PEs in the barrier group (e.g. World, Team, Array) have entered
+    ///
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::ActiveMessaging;
+    ///
+    /// let world =  let world = lamellar::LamellarWorldBuilder::new().build();
+    /// //do some work
+    /// world.barrier(); //block until all PEs have entered the barrier
+    ///```
     fn barrier(&self);
+
+    /// launch and execute an active message on every PE (including originating PE).
+    ///
+    /// Expects as input an instance of a struct thats been defined using the lamellar::am procedural macros.
+    ///
+    /// Returns a future allow the user to poll for complete and retrive the result of the Active Message stored within a vector,
+    /// each index in the vector corresponds to the data returned by the corresponding PE
+    /// 
+    /// NOTE: lamellar active messages are not lazy, i.e. you do not need to drive the returned future to launch the computation,
+    /// the future is only used to check for completeion and/or retrieving any returned data
+    /// # Examples
+    ///```
+    /// use lamellar::ActiveMessaging;
+    ///
+    /// #[lamellar::AmData(/*derivable traits*/)]
+    /// struct Am{
+    /// // can contain anything that impls Serialize, Deserialize, Sync, Send   
+    /// }
+    ///
+    /// #[lamellar::am]
+    /// impl LamellarAM for Am{
+    ///     async fn exec(self) -> usize { //can return nothing or any type that impls Serialize, Deserialize, Sync, Send 
+    ///         //do some remote computation
+    ///         lamellar::current_pe //return the executing pe
+    ///     }
+    /// }
+    /// //----------------
+    ///
+    /// let world =  let world = lamellar::LamellarWorldBuilder::new().build();
+    /// let request = world.exec_am_all(Am{...}); //launch am on all pes
+    /// let results = world.block_on(request); //block until am has executed and retrieve the data
+    /// for i in 0..world.num_pes(){
+    ///     assert_eq!(i,results[i]);
+    /// }
+    ///```
     fn exec_am_all<F>(&self, am: F) -> Pin<Box<dyn Future<Output = Vec<F::Output>> + Send>>
     //Box<dyn LamellarMultiRequest<Output = F::Output>>
     where
         F: RemoteActiveMessage + LamellarAM + Serde + AmDist;
+    
+    /// launch and execute an active message on a specifc PE.
+    ///
+    /// Expects as input the PE to execute on and an instance of a struct thats been defined using the lamellar::am procedural macros.
+    ///
+    /// Returns a future allow the user to poll for complete and retrive the result of the Active Message
+    ///
+    /// 
+    /// NOTE: lamellar active messages are not lazy, i.e. you do not need to drive the returned future to launch the computation,
+    /// the future is only used to check for completeion and/or retrieving any returned data
+    /// # Examples
+    ///```
+    /// use lamellar::ActiveMessaging;
+    ///
+    /// #[lamellar::AmData(/*derivable traits*/)]
+    /// struct Am{
+    /// // can contain anything that impls Serialize, Deserialize, Sync, Send   
+    /// }
+    ///
+    /// #[lamellar::am]
+    /// impl LamellarAM for Am{
+    ///     async fn exec(self) -> usize { //can return nothing or any type that impls Serialize, Deserialize, Sync, Send 
+    ///         //do some remote computation
+    ///         lamellar::current_pe //return the executing pe
+    ///     }
+    /// }
+    /// //----------------
+    ///
+    /// let world =  let world = lamellar::LamellarWorldBuilder::new().build();
+    /// let request = world.exec_am_pe(world.num_pes()-1, Am{...}); //launch am on all pes
+    /// let result = world.block_on(request); //block until am has executed
+    /// assert_eq!(world.num_pes()-1,result);
+    ///```
     fn exec_am_pe<F>(&self, pe: usize, am: F) -> Pin<Box<dyn Future<Output = F::Output> + Send>>
     //Box<dyn LamellarRequest<Output = F::Output>>
     where
         F: RemoteActiveMessage + LamellarAM + Serde + AmDist;
+
+
+    /// launch and execute an active message on the calling PE.
+    ///
+    /// Expects as input an instance of a struct thats been defined using the lamellar::local_am procedural macros.
+    ///
+    /// Returns a future allow the user to poll for complete and retrive the result of the Active Message.
+    ///
+    /// 
+    /// NOTE: lamellar active messages are not lazy, i.e. you do not need to drive the returned future to launch the computation,
+    /// the future is only used to check for completeion and/or retrieving any returned data.
+    /// # Examples
+    ///```
+    /// use lamellar::ActiveMessaging;
+    ///
+    /// #[lamellar::AmLocalData(/*derivable traits*/)]
+    /// struct Am{
+    /// // can contain anything that impls Sync, Send   
+    /// }
+    ///
+    /// #[lamellar::local_am]
+    /// impl LamellarAM for Am{
+    ///     async fn exec(self) -> usize { //can return nothing or any type that impls Serialize, Deserialize, Sync, Send 
+    ///         //do some remote computation
+    ///         lamellar::current_pe //return the executing pe
+    ///     }
+    /// }
+    /// //----------------
+    ///
+    /// let world =  let world = lamellar::LamellarWorldBuilder::new().build();
+    /// let request = world.exec_am_local(Am{...}); //launch am on all pes
+    /// let result = world.block_on(request); //block until am has executed
+    /// assert_eq!(world.my_pe(),result);
+    ///```
     fn exec_am_local<F>(&self, am: F) -> Pin<Box<dyn Future<Output = F::Output> + Send>>
     where
         F: LamellarActiveMessage + LocalAM + 'static;
@@ -314,100 +440,3 @@ impl ActiveMessageEngine for ActiveMessageEngineType {
         }
     }
 }
-
-// //maybe make this a struct then we could hold the pending counters...
-// pub(crate) struct ActiveMessageEngineS {
-//     // teams: Arc<RwLock<HashMap<u64, Weak<LamellarTeamRT>>>>,
-//     // my_pe: usize,
-//     batched_am: Arc<RegisteredActiveMessages>,
-// }
-
-// //#[prof]
-// // impl Drop for ActiveMessageEngine {
-// //     fn drop(&mut self) {
-// //         trace!("[{:?}] AME dropping", self.my_pe);
-// //     }
-// // }
-
-// //#[prof]
-// impl ActiveMessageEngine {
-//     pub(crate) fn new(
-//         // my_pe: usize,
-//         scheduler: Arc<AmeScheduler>,
-//         // teams: Arc<RwLock<HashMap<u64, Weak<LamellarTeamRT>>>>,
-//         stall_mark: Arc<AtomicUsize>,
-//         batch_id_start: usize,
-//         scheduler_mask: usize,
-//     ) -> Self {
-//         // trace!("registered funcs {:?}", AMS_EXECS.len(),);
-//         ActiveMessageEngine {
-//             // teams: teams,
-//             // my_pe: my_pe,
-//             batched_am: Arc::new(RegisteredActiveMessages::new(
-//                 scheduler,
-//                 stall_mark,
-//                 batch_id_start,
-//                 scheduler_mask,
-//             )),
-//         }
-//     }
-
-//     pub(crate) async fn process_msg_new(&self, req_data: ReqData) {
-//         // trace!("[{:?}] process msg: {:?}",self.my_pe, &req_data);
-//         // let addr = req_data.lamellae.local_addr(req_data.src,req_data)
-//         // let (team, world) = self.get_team_and_world(req_data.team.team_hash);
-//         let world = LamellarTeam::new(None, req_data.world.clone(), true);
-//         let team = LamellarTeam::new(Some(world.clone()), req_data.team.clone(), true);
-
-//         match req_data.cmd.clone() {
-//             ExecType::Runtime(_cmd) => {}
-//             ExecType::Am(_) => self.batched_am.process_am_req(req_data, world, team).await,
-//         }
-//     }
-
-//     pub(crate) fn get_team_and_world(
-//         &self,
-//         team_hash: usize,
-//     ) -> (Arc<LamellarTeam>, Arc<LamellarTeam>) {
-//         let team_rt = unsafe {
-//             let team_ptr = team_hash as *mut *const LamellarTeamRT;
-//             // println!("{:x} {:?} {:?} {:?}", team_hash,team_ptr, (team_hash as *mut (*const LamellarTeamRT)).as_ref(), (*(team_hash as *mut (*const LamellarTeamRT))).as_ref());
-//             Arc::increment_strong_count(*team_ptr);
-//             Pin::new_unchecked(Arc::from_raw(*team_ptr))
-//         };
-//         let world_rt = if let Some(world) = team_rt.world.clone() {
-//             world
-//         } else {
-//             team_rt.clone()
-//         };
-//         let world = LamellarTeam::new(None, world_rt, true);
-//         let team = LamellarTeam::new(Some(world.clone()), team_rt, true);
-//         (team, world)
-//     }
-
-//     pub(crate) async fn exec_msg(
-//         &self,
-//         ame: Arc<ActiveMessageEngine>,
-//         msg: Msg,
-//         ser_data: SerializedData,
-//         lamellae: Arc<Lamellae>,
-//         team_hash: usize,
-//     ) {
-//         let (team, world) = self.get_team_and_world(team_hash);
-//         match msg.cmd.clone() {
-//             ExecType::Am(cmd) => {
-//                 self.batched_am
-//                     .process_batched_am(ame, cmd, msg, ser_data, lamellae, world, team)
-//                     .await;
-//             } //execute a remote am
-//             ExecType::Runtime(_cmd) => {}
-//         }
-//     }
-
-//     fn send_data_to_user_handle(req_id: ReqId, pe: u16, data: InternalResult) {
-//         // println!("returned req_id: {:?}", req_id);
-//         let req = unsafe { Arc::from_raw(req_id.id as *const LamellarRequestResult) };
-//         // println!("strong count recv: {:?} ",Arc::strong_count(&req));
-//         req.add_result(pe as usize, req_id.sub_id, data);
-//     }
-// }

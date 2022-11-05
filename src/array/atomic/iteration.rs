@@ -38,14 +38,14 @@ impl<T: Dist> AtomicDistIter<T> {
 // impl<T: Dist + 'static> AtomicDistIter<T> {
 //     pub fn for_each<F>(&self, op: F) -> DistIterForEachHandle
 //     where
-//         F: Fn(AtomicElement<T>) + AmLocal + Clone + 'static,
+//         F: Fn(AtomicElement<T>) + SyncSend + Clone + 'static,
 //     {
 //         self.data.clone().for_each(self, op)
 //     }
 //     pub fn for_each_async<F, Fut>(&self, op: F) -> DistIterForEachHandle
 //     where
-//         F: Fn(AtomicElement<T>) -> Fut + AmLocal + Clone + 'static,
-//         Fut: Future<Output = ()> + AmLocal + Clone + 'static,
+//         F: Fn(AtomicElement<T>) -> Fut + SyncSend + Clone + 'static,
+//         Fut: Future<Output = ()> + SyncSend + Clone + 'static,
 //     {
 //         self.data.clone().for_each_async(self, op)
 //     }

@@ -63,7 +63,7 @@ pub use operations::*;
 pub(crate) type ReduceGen = fn(LamellarByteArray, usize) -> LamellarArcAm;
 
 lazy_static! {
-    pub(crate) static ref REDUCE_OPS: HashMap<(std::any::TypeId, String), ReduceGen> = {
+    pub(crate) static ref REDUCE_OPS: HashMap<(std::any::TypeId, &'static str), ReduceGen> = {
         let mut temp = HashMap::new();
         for reduction_type in crate::inventory::iter::<ReduceKey> {
             temp.insert(
@@ -77,7 +77,7 @@ lazy_static! {
 
 pub struct ReduceKey {
     pub id: std::any::TypeId,
-    pub name: String,
+    pub name: &'static str,
     pub gen: ReduceGen,
 }
 crate::inventory::collect!(ReduceKey);
@@ -499,7 +499,7 @@ pub trait LamellarArrayReduce<T>: LamellarArrayGet<T>
 where
     T: Dist + AmDist + 'static,
 {
-    fn get_reduction_op(&self, op: String) -> LamellarArcAm;
+    fn get_reduction_op(&self, op: &str) -> LamellarArcAm;
     fn reduce(&self, op: &str) -> Pin<Box<dyn Future<Output = T>>>;
     fn sum(&self) -> Pin<Box<dyn Future<Output = T>>>;
     fn max(&self) -> Pin<Box<dyn Future<Output = T>>>;

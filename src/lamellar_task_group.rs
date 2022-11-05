@@ -268,7 +268,7 @@ impl<T: 'static> TaskGroupLocalRequestHandle<T> {
 }
 
 #[async_trait]
-impl<T: AmLocal + 'static> LamellarRequest for TaskGroupLocalRequestHandle<T> {
+impl<T: SyncSend + 'static> LamellarRequest for TaskGroupLocalRequestHandle<T> {
     type Output = T;
     async fn into_future(mut self: Box<Self>) -> Self::Output {
         let mut res = self.inner.data.lock().remove(&self.sub_id);

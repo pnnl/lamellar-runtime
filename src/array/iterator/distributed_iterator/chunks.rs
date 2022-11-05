@@ -29,14 +29,14 @@ where
 // {
 //     pub fn for_each<F>(&self, op: F)
 //     where
-//         F: Fn(Chunk<I>) + AmLocal  + Clone + 'static,
+//         F: Fn(Chunk<I>) + SyncSend  + Clone + 'static,
 //     {
 //         self.iter.array().for_each(self, op);
 //     }
 //     pub fn for_each_async<F, Fut>(&self, op: F)
 //     where
-//         F: Fn(Chunk<I>) -> Fut + AmLocal  + Clone + 'static,
-//         Fut: Future<Output = ()> + AmLocal  + Clone + 'static,
+//         F: Fn(Chunk<I>) -> Fut + SyncSend  + Clone + 'static,
+//         Fut: Future<Output = ()> + SyncSend  + Clone + 'static,
 //     {
 //         self.iter.array().for_each_async(self, op);
 //     }

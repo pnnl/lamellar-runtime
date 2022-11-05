@@ -1,4 +1,3 @@
-use futures::StreamExt;
 use lamellar::array::{
     iterator::distributed_iterator::Schedule, DistributedIterator, Distribution,
     LocalLockAtomicArray, SerialIterator, UnsafeArray,
@@ -13,7 +12,6 @@ use lamellar::array::{
 /// to the C matrix are only performed locally, requiring no additional data transfer.
 ///----------------------------------------------------------------------------------
 use matrixmultiply::sgemm;
-use std::sync::Arc;
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();

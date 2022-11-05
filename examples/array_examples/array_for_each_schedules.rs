@@ -1,5 +1,5 @@
 use lamellar::array::{
-    iterator::distributed_iterator::Schedule, DistributedIterator, Distribution, SerialIterator,
+    iterator::distributed_iterator::Schedule, DistributedIterator, Distribution,
     UnsafeArray,
 };
 

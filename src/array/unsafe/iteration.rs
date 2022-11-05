@@ -33,7 +33,7 @@ impl<T: Dist> UnsafeArray<T> {
     fn for_each_static<I, F>(&self, iter: &I, op: F) -> Pin<Box<dyn Future<Output = ()> + Send>>
     where
         I: DistributedIterator + 'static,
-        F: Fn(I::Item) + AmLocal + Clone + 'static,
+        F: Fn(I::Item) + SyncSend + Clone + 'static,
     {
         let mut reqs = Vec::new();
         if let Ok(_my_pe) = self.inner.data.team.team_pe_id() {
@@ -73,7 +73,7 @@ impl<T: Dist> UnsafeArray<T> {
     fn for_each_dynamic<I, F>(&self, iter: &I, op: F) -> Pin<Box<dyn Future<Output = ()> + Send>>
     where
         I: DistributedIterator + 'static,
-        F: Fn(I::Item) + AmLocal + Clone + 'static,
+        F: Fn(I::Item) + SyncSend + Clone + 'static,
     {
         let mut reqs = Vec::new();
         if let Ok(_my_pe) = self.inner.data.team.team_pe_id() {
@@ -109,7 +109,7 @@ impl<T: Dist> UnsafeArray<T> {
     ) -> Pin<Box<dyn Future<Output = ()> + Send>>
     where
         I: DistributedIterator + 'static,
-        F: Fn(I::Item) + AmLocal + Clone + 'static,
+        F: Fn(I::Item) + SyncSend + Clone + 'static,
     {
         let mut reqs = Vec::new();
         if let Ok(_my_pe) = self.inner.data.team.team_pe_id() {
@@ -153,7 +153,7 @@ impl<T: Dist> UnsafeArray<T> {
     fn for_each_guided<I, F>(&self, iter: &I, op: F) -> Pin<Box<dyn Future<Output = ()> + Send>>
     where
         I: DistributedIterator + 'static,
-        F: Fn(I::Item) + AmLocal + Clone + 'static,
+        F: Fn(I::Item) + SyncSend + Clone + 'static,
     {
         let mut reqs = Vec::new();
         if let Ok(_my_pe) = self.inner.data.team.team_pe_id() {
@@ -225,7 +225,7 @@ impl<T: Dist> UnsafeArray<T> {
     ) -> Pin<Box<dyn Future<Output = ()> + Send>>
     where
         I: DistributedIterator + 'static,
-        F: Fn(I::Item) + AmLocal + Clone + 'static,
+        F: Fn(I::Item) + SyncSend + Clone + 'static,
     {
         let mut reqs = Vec::new();
         if let Ok(_my_pe) = self.inner.data.team.team_pe_id() {
@@ -269,7 +269,7 @@ impl<T: Dist> UnsafeArray<T> {
     ) -> Pin<Box<dyn Future<Output = ()> + Send>>
     where
         I: DistributedIterator + 'static,
-        F: Fn(I::Item) -> Fut + AmLocal + Clone + 'static,
+        F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
         Fut: Future<Output = ()> + Send + 'static,
     {
         let mut reqs = Vec::new();
@@ -313,7 +313,7 @@ impl<T: Dist> UnsafeArray<T> {
     ) -> Pin<Box<dyn Future<Output = ()> + Send>>
     where
         I: DistributedIterator + 'static,
-        F: Fn(I::Item) -> Fut + AmLocal + Clone + 'static,
+        F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
         Fut: Future<Output = ()> + Send + 'static,
     {
         let mut reqs = Vec::new();
@@ -350,7 +350,7 @@ impl<T: Dist> UnsafeArray<T> {
     ) -> Pin<Box<dyn Future<Output = ()> + Send>>
     where
         I: DistributedIterator + 'static,
-        F: Fn(I::Item) -> Fut + AmLocal + Clone + 'static,
+        F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
         Fut: Future<Output = ()> + Send + 'static,
     {
         let mut reqs = Vec::new();
@@ -396,7 +396,7 @@ impl<T: Dist> UnsafeArray<T> {
     ) -> Pin<Box<dyn Future<Output = ()> + Send>>
     where
         I: DistributedIterator + 'static,
-        F: Fn(I::Item) -> Fut + AmLocal + Clone + 'static,
+        F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
         Fut: Future<Output = ()> + Send + 'static,
     {
         let mut reqs = Vec::new();
@@ -469,7 +469,7 @@ impl<T: Dist> UnsafeArray<T> {
     ) -> Pin<Box<dyn Future<Output = ()> + Send>>
     where
         I: DistributedIterator + 'static,
-        F: Fn(I::Item) -> Fut + AmLocal + Clone + 'static,
+        F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
         Fut: Future<Output = ()> + Send + 'static,
     {
         let mut reqs = Vec::new();
@@ -527,7 +527,7 @@ impl<T: Dist> DistIteratorLauncher for UnsafeArray<T> {
     fn for_each<I, F>(&self, iter: &I, op: F) -> Pin<Box<dyn Future<Output = ()> + Send>>
     where
         I: DistributedIterator + 'static,
-        F: Fn(I::Item) + AmLocal + Clone + 'static,
+        F: Fn(I::Item) + SyncSend + Clone + 'static,
     {
         self.for_each_static(iter, op)
     }
@@ -540,7 +540,7 @@ impl<T: Dist> DistIteratorLauncher for UnsafeArray<T> {
     ) -> Pin<Box<dyn Future<Output = ()> + Send>>
     where
         I: DistributedIterator + 'static,
-        F: Fn(I::Item) + AmLocal + Clone + 'static,
+        F: Fn(I::Item) + SyncSend + Clone + 'static,
     {
         match sched {
             Schedule::Static => self.for_each_static(iter, op),
@@ -554,7 +554,7 @@ impl<T: Dist> DistIteratorLauncher for UnsafeArray<T> {
     fn for_each_async<I, F, Fut>(&self, iter: &I, op: F) -> Pin<Box<dyn Future<Output = ()> + Send>>
     where
         I: DistributedIterator + 'static,
-        F: Fn(I::Item) -> Fut + AmLocal + Clone + 'static,
+        F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
         Fut: Future<Output = ()> + Send + 'static,
     {
         self.for_each_async_static(iter, op)
@@ -568,7 +568,7 @@ impl<T: Dist> DistIteratorLauncher for UnsafeArray<T> {
     ) -> Pin<Box<dyn Future<Output = ()> + Send>>
     where
         I: DistributedIterator + 'static,
-        F: Fn(I::Item) -> Fut + AmLocal + Clone + 'static,
+        F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
         Fut: Future<Output = ()> + Send + 'static,
     {
         match sched {
@@ -584,7 +584,7 @@ impl<T: Dist> DistIteratorLauncher for UnsafeArray<T> {
     where
         I: DistributedIterator + 'static,
         I::Item: Dist,
-        A: From<UnsafeArray<I::Item>> + AmLocal + 'static,
+        A: From<UnsafeArray<I::Item>> + SyncSend + 'static,
     {
         let mut reqs = Vec::new();
         if let Ok(_my_pe) = self.inner.data.team.team_pe_id() {
@@ -626,7 +626,7 @@ impl<T: Dist> DistIteratorLauncher for UnsafeArray<T> {
         I: DistributedIterator + 'static,
         I::Item: Future<Output = B> + Send + 'static,
         B: Dist,
-        A: From<UnsafeArray<B>> + AmLocal + 'static,
+        A: From<UnsafeArray<B>> + SyncSend + 'static,
     {
         let mut reqs = Vec::new();
         if let Ok(_my_pe) = self.inner.data.team.team_pe_id() {

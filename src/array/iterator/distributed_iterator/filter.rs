@@ -18,18 +18,18 @@ where
 // impl<I,F> Filter<I,F>
 // where
 //     I: DistributedIterator + 'static,
-//     F: FnMut(&I::Item) -> bool + AmLocal + Clone + 'static,
+//     F: FnMut(&I::Item) -> bool + SyncSend + Clone + 'static,
 // {
 //     pub fn for_each<G>(&self, op: G)
 //     where
-//         G: Fn(I::Item) + AmLocal  + Clone + 'static,
+//         G: Fn(I::Item) + SyncSend  + Clone + 'static,
 //     {
 //         self.iter.array().for_each(self, op);
 //     }
 //     pub fn for_each_async<G, Fut>(&self, op: G)
 //     where
-//         G: Fn(I::Item) -> Fut + AmLocal  + Clone + 'static,
-//         Fut: Future<Output = ()> + AmLocal + 'static,
+//         G: Fn(I::Item) -> Fut + SyncSend  + Clone + 'static,
+//         Fut: Future<Output = ()> + SyncSend + 'static,
 //     {
 //         self.iter.array().for_each_async(self, op);
 //     }
@@ -38,7 +38,7 @@ where
 impl<I, F> DistributedIterator for Filter<I, F>
 where
     I: DistributedIterator,
-    F: FnMut(&I::Item) -> bool + AmLocal + Clone + 'static,
+    F: FnMut(&I::Item) -> bool + SyncSend + Clone + 'static,
 {
     type Item = I::Item;
     type Array = <I as DistributedIterator>::Array;

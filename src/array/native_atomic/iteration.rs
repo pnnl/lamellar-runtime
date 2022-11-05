@@ -43,14 +43,14 @@ impl<T: Dist> std::fmt::Debug for NativeAtomicDistIter<T> {
 // impl<T: Dist + 'static> NativeAtomicDistIter<T> {
 //     pub fn for_each<F>(&self, op: F)
 //     where
-//         F: Fn(NativeAtomicElement<T>) + AmLocal + Clone + 'static,
+//         F: Fn(NativeAtomicElement<T>) + SyncSend + Clone + 'static,
 //     {
 //         self.data.clone().for_each(self, op);
 //     }
 //     pub fn for_each_async<F, Fut>(&self, op: F)
 //     where
-//         F: Fn(NativeAtomicElement<T>) -> Fut + AmLocal + Clone + 'static,
-//         Fut: Future<Output = ()> + AmLocal + 'static,
+//         F: Fn(NativeAtomicElement<T>) -> Fut + SyncSend + Clone + 'static,
+//         Fut: Future<Output = ()> + SyncSend + 'static,
 //     {
 //         self.data.clone().for_each_async(self, op);
 //     }
@@ -141,7 +141,7 @@ impl<T: Dist> DistIteratorLauncher for NativeAtomicArray<T> {
     fn for_each<I, F>(&self, iter: &I, op: F) -> Pin<Box<dyn Future<Output = ()> + Send>>
     where
         I: DistributedIterator + 'static,
-        F: Fn(I::Item) + AmLocal + Clone + 'static,
+        F: Fn(I::Item) + SyncSend + Clone + 'static,
     {
         self.array.for_each(iter, op)
     }
@@ -153,14 +153,14 @@ impl<T: Dist> DistIteratorLauncher for NativeAtomicArray<T> {
     ) -> Pin<Box<dyn Future<Output = ()> + Send>>
     where
         I: DistributedIterator + 'static,
-        F: Fn(I::Item) + AmLocal + Clone + 'static,
+        F: Fn(I::Item) + SyncSend + Clone + 'static,
     {
         self.array.for_each_with_schedule(sched, iter, op)
     }
     fn for_each_async<I, F, Fut>(&self, iter: &I, op: F) -> Pin<Box<dyn Future<Output = ()> + Send>>
     where
         I: DistributedIterator + 'static,
-        F: Fn(I::Item) -> Fut + AmLocal + Clone + 'static,
+        F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
         Fut: Future<Output = ()> + Send + 'static,
     {
         self.array.for_each_async(iter, op)
@@ -173,7 +173,7 @@ impl<T: Dist> DistIteratorLauncher for NativeAtomicArray<T> {
     ) -> Pin<Box<dyn Future<Output = ()> + Send>>
     where
         I: DistributedIterator + 'static,
-        F: Fn(I::Item) -> Fut + AmLocal + Clone + 'static,
+        F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
         Fut: Future<Output = ()> + Send + 'static,
     {
         self.array.for_each_async_with_schedule(sched, iter, op)
@@ -183,7 +183,7 @@ impl<T: Dist> DistIteratorLauncher for NativeAtomicArray<T> {
     where
         I: DistributedIterator + 'static,
         I::Item: Dist,
-        A: From<UnsafeArray<I::Item>> + AmLocal + 'static,
+        A: From<UnsafeArray<I::Item>> + SyncSend + 'static,
     {
         self.array.collect(iter, d)
     }
@@ -196,7 +196,7 @@ impl<T: Dist> DistIteratorLauncher for NativeAtomicArray<T> {
         I: DistributedIterator + 'static,
         I::Item: Future<Output = B> + Send + 'static,
         B: Dist,
-        A: From<UnsafeArray<B>> + AmLocal + 'static,
+        A: From<UnsafeArray<B>> + SyncSend + 'static,
     {
         self.array.collect_async(iter, d)
     }

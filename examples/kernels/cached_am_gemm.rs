@@ -82,9 +82,7 @@ async fn get_sub_mat(mat: &SubMatrix, sub_mat: &LocalMemoryRegion<f32>) {
         let offset = (row + start_row) * mat.cols + (start_col);
         let data = sub_mat.sub_region(row * mat.block_size..(row + 1) * mat.block_size);
         DATA_CNT.fetch_add(data.len() * std::mem::size_of::<f32>(), Ordering::Relaxed);
-        unsafe {
-            mat.mat.iget(mat.pe, offset, data.clone());
-        }
+        mat.mat.iget(mat.pe, offset, data.clone());
     }
 
     // while sub_mat_slice[sub_mat.len() - 1].is_nan() {
@@ -201,7 +199,7 @@ fn main() {
         println!("starting");
     }
     let mut tot_mb = 0.0f64;
-    let mut data_cnt = 0;
+    let data_cnt = 0;
     for bs in [2000, 1000, 500].iter() {
         let block_size = *bs;
         let m_blocks = m / block_size;

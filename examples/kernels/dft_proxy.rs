@@ -417,7 +417,8 @@ fn main() {
     //     .unwrap_or_else(|| false);
     let run_single_node = false;
 
-    let mut rng = StdRng::seed_from_u64(10);
+    // let mut rng = StdRng::seed_from_u64(10);
+    let mut rng: StdRng = SeedableRng::seed_from_u64(10);
 
     if !run_single_node {
         let world = lamellar::LamellarWorldBuilder::new().build();
@@ -440,7 +441,7 @@ fn main() {
 
         unsafe {
             for i in full_signal.as_mut_slice().unwrap() {
-                *i = rng.gen_range(0.0, 1.0);
+                *i = rng.gen_range(0.0..1.0);
             }
             let full_signal_clone = full_signal.clone();
             full_signal_array
@@ -662,7 +663,7 @@ fn main() {
         let mut full_signal = vec![0.0; array_len];
         let mut full_spectrum = vec![0.0; array_len];
         for i in full_signal.iter_mut() {
-            *i = rng.gen_range(0.0, 1.0);
+            *i = rng.gen_range(0.0..1.0);
         }
 
         let mut times = vec![vec![]; 2];

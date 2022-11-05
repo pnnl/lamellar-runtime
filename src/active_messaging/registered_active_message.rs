@@ -18,7 +18,7 @@ const AM_ID_START: AmId = 1;
 pub(crate) type UnpackFn = fn(&[u8], Result<usize, IdError>) -> LamellarArcAm;
 pub(crate) type AmId = i32;
 lazy_static! {
-    pub(crate) static ref AMS_IDS: HashMap<String, AmId> = {
+    pub(crate) static ref AMS_IDS: HashMap<&'static str, AmId> = {
         let mut ams = vec![];
         for am in crate::inventory::iter::<RegisteredAm> {
             ams.push(am.name.clone());
@@ -58,7 +58,7 @@ lazy_static! {
 
 pub struct RegisteredAm {
     pub exec: UnpackFn,
-    pub name: String,
+    pub name: &'static str,
 }
 crate::inventory::collect!(RegisteredAm);
 
@@ -107,7 +107,7 @@ impl ActiveMessageEngine for RegisteredActiveMessages {
         // println!("{am:?}");
         match am {
             Am::All(req_data, am) => {
-                let am_id = *(AMS_IDS.get(&am.get_id()).unwrap());
+                let am_id = *(AMS_IDS.get(am.get_id()).unwrap());
                 let am_size = am.serialized_size();
 
                 if req_data.team.lamellae.backend() != Backend::Local

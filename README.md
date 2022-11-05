@@ -24,6 +24,7 @@ Currently three such Lamellae exist, one used for single node (single process) d
 
 NEWS
 ----
+* November 2022: Alpha release -- v0.5
 * March 2022: Alpha release -- v0.4
 * April 2021: Alpha release -- v0.3
 * September 2020: Add support for "local" lamellae, prep for crates.io release -- v0.2.1
@@ -49,7 +50,7 @@ fn main() {
 }
 ```
 
-# Creating and executing a Registered Active Message
+# HelloWorld -- Creating and executing a Registered Active Message
 ```rust
 use lamellar::ActiveMessaging;
 
@@ -63,7 +64,7 @@ struct HelloWorld {
 impl LamellarAM for HelloWorld {
     fn exec(&self) {
         println!(
-            "Hello pe {:?} of {:?}, I'm pe {:?}",
+            "Hello pe {:?} of {:?}, I'm from pe {:?}",
             lamellar::current_pe,
             lamellar::num_pes,
             self.my_pe

@@ -4,8 +4,8 @@ use lamellar::array::{
 use rand::seq::SliceRandom;
 use rand::SeedableRng;
 
-use tracing_flame::FlameLayer;
-use tracing_subscriber::{fmt, prelude::*, registry::Registry};
+// use tracing_flame::FlameLayer;
+// use tracing_subscriber::{fmt, prelude::*, registry::Registry};
 
 // fn setup_global_subscriber() -> impl Drop {
 //     let fmt_layer = fmt::Layer::default();

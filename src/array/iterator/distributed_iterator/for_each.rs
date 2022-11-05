@@ -16,7 +16,7 @@ where
 impl<I, F> LamellarAm for ForEachStatic<I, F>
 where
     I: DistributedIterator + 'static,
-    F: Fn(I::Item) + AmLocal + 'static,
+    F: Fn(I::Item) + SyncSend + 'static,
 {
     async fn exec(&self) {
         let mut iter = self.data.init(self.start_i, self.end_i - self.start_i);
@@ -46,7 +46,7 @@ where
 impl<I, F> LamellarAm for ForEachDynamic<I, F>
 where
     I: DistributedIterator + 'static,
-    F: Fn(I::Item) + AmLocal + 'static,
+    F: Fn(I::Item) + SyncSend + 'static,
 {
     async fn exec(&self) {
         // println!("in for each {:?} {:?}", self.start_i, self.end_i);
@@ -80,7 +80,7 @@ where
 impl<I, F> LamellarAm for ForEachChunk<I, F>
 where
     I: DistributedIterator + 'static,
-    F: Fn(I::Item) + AmLocal + 'static,
+    F: Fn(I::Item) + SyncSend + 'static,
 {
     async fn exec(&self) {
         // println!("in for each {:?} {:?}", self.start_i, self.end_i);
@@ -153,7 +153,7 @@ where
 impl<I, F> LamellarAm for ForEachWorkStealing<I, F>
 where
     I: DistributedIterator + 'static,
-    F: Fn(I::Item) + AmLocal + 'static,
+    F: Fn(I::Item) + SyncSend + 'static,
 {
     async fn exec(&self) {
         // println!("in for each {:?} {:?}", self.start_i, self.end_i);
@@ -190,7 +190,7 @@ where
 pub(crate) struct ForEachAsyncStatic<I, F, Fut>
 where
     I: DistributedIterator,
-    F: Fn(I::Item) -> Fut + AmLocal + Clone,
+    F: Fn(I::Item) -> Fut + SyncSend + Clone,
     Fut: Future<Output = ()> + Send,
 {
     pub(crate) op: F,
@@ -202,7 +202,7 @@ where
 impl<I, F, Fut> std::fmt::Debug for ForEachAsyncStatic<I, F, Fut>
 where
     I: DistributedIterator,
-    F: Fn(I::Item) -> Fut + AmLocal + Clone,
+    F: Fn(I::Item) -> Fut + SyncSend + Clone,
     Fut: Future<Output = ()> + Send,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -218,7 +218,7 @@ where
 impl<I, F, Fut> LamellarAm for ForEachAsyncStatic<I, F, Fut>
 where
     I: DistributedIterator + 'static,
-    F: Fn(I::Item) -> Fut + AmLocal + Clone + 'static,
+    F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
     Fut: Future<Output = ()> + Send + 'static,
 {
     async fn exec(&self) {
@@ -233,7 +233,7 @@ where
 pub(crate) struct ForEachAsyncDynamic<I, F, Fut>
 where
     I: DistributedIterator,
-    F: Fn(I::Item) -> Fut + AmLocal + Clone,
+    F: Fn(I::Item) -> Fut + SyncSend + Clone,
     Fut: Future<Output = ()> + Send,
 {
     pub(crate) op: F,
@@ -246,7 +246,7 @@ where
 impl<I, F, Fut> LamellarAm for ForEachAsyncDynamic<I, F, Fut>
 where
     I: DistributedIterator + 'static,
-    F: Fn(I::Item) -> Fut + AmLocal + Clone + 'static,
+    F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
     Fut: Future<Output = ()> + Send + 'static,
 {
     async fn exec(&self) {
@@ -269,7 +269,7 @@ where
 pub(crate) struct ForEachAsyncChunk<I, F, Fut>
 where
     I: DistributedIterator,
-    F: Fn(I::Item) -> Fut + AmLocal + Clone,
+    F: Fn(I::Item) -> Fut + SyncSend + Clone,
     Fut: Future<Output = ()> + Send,
 {
     pub(crate) op: F,
@@ -282,7 +282,7 @@ where
 impl<I, F, Fut> LamellarAm for ForEachAsyncChunk<I, F, Fut>
 where
     I: DistributedIterator + 'static,
-    F: Fn(I::Item) -> Fut + AmLocal + Clone + 'static,
+    F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
     Fut: Future<Output = ()> + Send + 'static,
 {
     async fn exec(&self) {
@@ -305,7 +305,7 @@ where
 pub(crate) struct ForEachAsyncWorkStealing<I, F, Fut>
 where
     I: DistributedIterator,
-    F: Fn(I::Item) -> Fut + AmLocal + Clone,
+    F: Fn(I::Item) -> Fut + SyncSend + Clone,
     Fut: Future<Output = ()> + Send,
 {
     pub(crate) op: F,
@@ -317,7 +317,7 @@ where
 impl<I, F, Fut> LamellarAm for ForEachAsyncWorkStealing<I, F, Fut>
 where
     I: DistributedIterator + 'static,
-    F: Fn(I::Item) -> Fut + AmLocal + Clone + 'static,
+    F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
     Fut: Future<Output = ()> + Send + 'static,
 {
     async fn exec(&self) {

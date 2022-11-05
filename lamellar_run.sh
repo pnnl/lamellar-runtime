@@ -27,16 +27,16 @@ S_CORE=$((0))
 E_CORE=$(($S_CORE + $THREADS))
 for pe in $(seq 0 $ENDPE)
 do
-echo "$pe $S_CORE $E_CORE $NPROC"
+echo "$pe $S_CORE $((E_CORE-1)) $NPROC ${@:2}"
 if [ "$E_CORE" -gt "$NPROC" ]; then
 echo "more threads ${E_CORE} than cores ${NPROC} "
 exit
 fi
 #outfile=${pe}_shmem_test.out
 #let
-echo "$pe $S_CORE $E_CORE $NPROC"
-LAMELLAE_BACKEND="shmem" LAMELLAR_MEM_SIZE=$((1*1024*1024*1024)) LAMELLAR_THREADS=${THREADS:-$((NPROC/NUMPES))} LAMELLAR_NUM_PES=$NUMPES LAMELLAR_PE_ID=$pe LAMELLAR_JOB_ID=$JOBID $bin "${@:2}"  &
-S_CORE=$(($E_CORE + 1 ))
+# echo "$pe $S_CORE $E_CORE $NPROC"
+LAMELLAE_BACKEND="shmem" LAMELLAR_MEM_SIZE=$((1*1024*1024*1024)) LAMELLAR_THREADS=${THREADS:-$((NPROC/NUMPES))} LAMELLAR_NUM_PES=$NUMPES LAMELLAR_PE_ID=$pe LAMELLAR_JOB_ID=$JOBID taskset --cpu-list $S_CORE-$((E_CORE-1))  $bin  "${@:2}"  &
+S_CORE=$(($E_CORE ))
 E_CORE=$(($S_CORE + $THREADS))
 done
 #LAMELLAE_BACKEND="shmem" LAMELLAR_THREADS=${THREADS:-$((NPROC/NUMPES))} LAMELLAR_NUM_PES=$NUMPES LAMELLAR_PE_ID=0 LAMELLAR_JOB_ID=$JOBID taskset --cpu-list 0-15 $bin "${@:2}" &

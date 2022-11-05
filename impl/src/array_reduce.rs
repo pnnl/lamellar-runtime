@@ -113,10 +113,10 @@ fn create_reduction(
         }
 
         #lamellar::inventory::submit! {
-            #![crate = #lamellar]
+            // #![crate = #lamellar]
             #lamellar::ReduceKey{
                 id: std::any::TypeId::of::<#typeident>(),
-                name: stringify!(#reduction).to_string(),
+                name: stringify!(#reduction),//.to_string(),
                 gen: #reduction_gen
             }
         }

@@ -470,10 +470,10 @@ impl<T: Dist + serde::Serialize + serde::de::DeserializeOwned + 'static> UnsafeA
     }
 
     pub(crate) fn reduce_req(&self, op: &str) -> Box<dyn LamellarRequest<Output = T>> {
-        self.reduce_data(self.get_reduction_op(op.to_string()))
+        self.reduce_data(self.get_reduction_op(op))
     }
     pub fn reduce(&self, op: &str) -> Pin<Box<dyn Future<Output = T>>> {
-        self.reduce_data(self.get_reduction_op(op.to_string()))
+        self.reduce_data(self.get_reduction_op(op))
             .into_future()
     }
     pub fn sum(&self) -> Pin<Box<dyn Future<Output = T>>> {
@@ -613,7 +613,7 @@ impl<T: Dist + std::fmt::Debug> ArrayPrint<T> for UnsafeArray<T> {
 }
 
 impl<T: Dist + AmDist + 'static> LamellarArrayReduce<T> for UnsafeArray<T> {
-    fn get_reduction_op(&self, op: String) -> LamellarArcAm {
+    fn get_reduction_op(&self, op: &str) -> LamellarArcAm {
         //do this the same way we did add...
         // unsafe {
         REDUCE_OPS

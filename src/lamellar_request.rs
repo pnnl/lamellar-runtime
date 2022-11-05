@@ -1,4 +1,4 @@
-use crate::active_messaging::{AmDist, AmLocal, LamellarAny};
+use crate::active_messaging::{AmDist, SyncSend, LamellarAny};
 use crate::lamellae::{Des, SerializedData};
 use crate::lamellar_arch::LamellarArchRT;
 use async_trait::async_trait;
@@ -339,7 +339,7 @@ impl<T: 'static> LamellarLocalRequestHandle<T> {
 }
 
 #[async_trait]
-impl<T: AmLocal + 'static> LamellarRequest for LamellarLocalRequestHandle<T> {
+impl<T: SyncSend + 'static> LamellarRequest for LamellarLocalRequestHandle<T> {
     type Output = T;
     #[tracing::instrument(skip_all)]
     async fn into_future(mut self: Box<Self>) -> Self::Output {

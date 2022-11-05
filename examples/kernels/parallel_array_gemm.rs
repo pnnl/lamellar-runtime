@@ -1,4 +1,3 @@
-use futures::StreamExt;
 /// ----------------Lamellar Parallel Array GEMM---------------------------------------------------
 /// This performs a distributed GEMM, iteratively performing dot products of rows from the A matrix
 /// with columns fro the B matrix. Each pe only iterates over the local rows of the A matrix simultaneously,

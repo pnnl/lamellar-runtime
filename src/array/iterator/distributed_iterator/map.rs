@@ -18,7 +18,7 @@ where
 // impl<B,I,F> Map<I,F>
 // where
 //     I: DistributedIterator + 'static,
-//     F: FnMut(I::Item) -> B + AmLocal + Clone + 'static,
+//     F: FnMut(I::Item) -> B + SyncSend + Clone + 'static,
 //     B: Send + 'static
 // {
 //     pub fn for_each<G>(&self, op: G)
@@ -39,7 +39,7 @@ where
 impl<B, I, F> DistributedIterator for Map<I, F>
 where
     I: DistributedIterator,
-    F: FnMut(I::Item) -> B + AmLocal + Clone + 'static,
+    F: FnMut(I::Item) -> B + SyncSend + Clone + 'static,
     B: Send,
 {
     type Item = B;

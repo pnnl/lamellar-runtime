@@ -18,19 +18,19 @@ where
 // impl<B,I,F> FilterMap<I,F>
 // where
 //     I: DistributedIterator + 'static,
-//     F: FnMut(I::Item) -> Option<B> + AmLocal + Clone + 'static,
+//     F: FnMut(I::Item) -> Option<B> + SyncSend + Clone + 'static,
 //     B: Send + 'static
 // {
 //     pub fn for_each<G>(&self, op: G)
 //     where
-//         G: Fn(B) + AmLocal  + Clone + 'static,
+//         G: Fn(B) + SyncSend  + Clone + 'static,
 //     {
 //         self.iter.array().for_each(self, op);
 //     }
 //     pub fn for_each_async<G, Fut>(&self, op: G)
 //     where
-//         G: Fn(B) -> Fut + AmLocal  + Clone + 'static,
-//         Fut: Future<Output = ()> + AmLocal + 'static,
+//         G: Fn(B) -> Fut + SyncSend  + Clone + 'static,
+//         Fut: Future<Output = ()> + SyncSend + 'static,
 //     {
 //         self.iter.array().for_each_async(self, op);
 //     }
@@ -39,7 +39,7 @@ where
 impl<B, I, F> DistributedIterator for FilterMap<I, F>
 where
     I: DistributedIterator,
-    F: FnMut(I::Item) -> Option<B> + AmLocal + Clone + 'static,
+    F: FnMut(I::Item) -> Option<B> + SyncSend + Clone + 'static,
     B: Send,
 {
     type Item = B;
