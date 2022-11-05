@@ -15,6 +15,15 @@ use crate::lamellar_team::IntoLamellarTeam;
 use crate::lamellar_world::LAMELLAES;
 use crate::IdError;
 
+/// A local read-write `Darc`
+/// 
+/// Each PE maintains its own local read-write lock associated with the `LocalRwDarc`.
+/// A remote PE can still send an active message, but it must acquire 
+/// the local lock before modifying. 
+/// - Contrast with a `GlobalRwDarc`, which has a single global lock.
+/// - Contrast with a `Darc`, which also has local ownership but does not 
+///   allow modification unless the wrapped object itself provides it, e.g.
+///   `AtomicUsize` or `Mutex<..>`.
 #[derive(serde::Serialize, serde::Deserialize, Debug)]
 pub struct LocalRwDarc<T: 'static> {
     #[serde(
