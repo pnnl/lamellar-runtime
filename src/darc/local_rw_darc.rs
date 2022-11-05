@@ -18,8 +18,10 @@ use crate::IdError;
 /// A local read-write `Darc`
 /// 
 /// Each PE maintains its own local read-write lock associated with the `LocalRwDarc`.
-/// A remote PE can still send an active message, but it must acquire 
-/// the local lock before modifying. 
+/// Whenever the interior object is accessed on a PE the local lock is required to be aquired.
+/// When a thread aquires a Write lock it is guaranteed to the only thread with access to 
+/// the interior object with respect to the PE it is executing on (no guarantees are made about what is occuring on other PEs). 
+/// When a thread aquires a Read lock it may be one of many threads on the PE with access, but none of them will have mutable access.
 /// - Contrast with a `GlobalRwDarc`, which has a single global lock.
 /// - Contrast with a `Darc`, which also has local ownership but does not 
 ///   allow modification unless the wrapped object itself provides it, e.g.
@@ -65,6 +67,7 @@ impl<T> LocalRwDarc<T> {
         self.darc.inner()
     }
 
+    #[doc(hidden)]
     pub fn serialize_update_cnts(&self, cnt: usize) {
         // println!("serialize darc cnts");
         // if self.darc.src_pe == cur_pe{
@@ -76,6 +79,7 @@ impl<T> LocalRwDarc<T> {
         // println!("done serialize darc cnts");
     }
 
+    #[doc(hidden)]
     pub fn deserialize_update_cnts(&self) {
         // println!("deserialize darc? cnts");
         // if self.darc.src_pe != cur_pe{
@@ -86,6 +90,7 @@ impl<T> LocalRwDarc<T> {
         // println!("done deserialize darc cnts");
     }
 
+    #[doc(hidden)]
     pub fn print(&self) {
         let rel_addr =
             unsafe { self.darc.inner as usize - (*self.inner().team).lamellae.base_addr() };
@@ -198,6 +203,7 @@ impl<T: fmt::Display> fmt::Display for LocalRwDarc<T> {
     }
 }
 
+#[doc(hidden)]
 pub fn localrw_serialize<S, T>(localrw: &LocalRwDarc<T>, s: S) -> Result<S::Ok, S::Error>
 where
     S: Serializer,
@@ -205,6 +211,7 @@ where
     __NetworkDarc::<T>::from(&localrw.darc).serialize(s)
 }
 
+#[doc(hidden)]
 pub fn localrw_serialize2<S, T>(
     localrw: &Darc<Arc<RwLock<Box<T>>>>,
     s: S,
@@ -218,6 +225,7 @@ where
     ndarc.serialize(s)
 }
 
+#[doc(hidden)]
 pub fn localrw_from_ndarc<'de, D, T>(deserializer: D) -> Result<LocalRwDarc<T>, D::Error>
 where
     D: Deserializer<'de>,
@@ -232,6 +240,7 @@ where
     Ok(rwdarc)
 }
 
+#[doc(hidden)]
 pub fn localrw_from_ndarc2<'de, D, T>(
     deserializer: D,
 ) -> Result<Darc<Arc<RwLock<Box<T>>>>, D::Error>

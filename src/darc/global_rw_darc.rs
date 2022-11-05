@@ -242,8 +242,12 @@ impl<T: fmt::Debug> fmt::Debug for GlobalRwDarcWriteGuard<'_, T> {
 
 /// A global read-write `Darc`
 /// 
-/// A remote PE can send an active message, but it must acquire 
-/// the global lock before modifying. 
+/// A single global read-write lock is associated with the `GlobalRwDarc`.
+/// Whenever the interior object is accessed (on any PE) the global lock is required to be aquired.
+/// When a thread aquires a Write lock it is guaranteed to the only thread with access to 
+/// the interior object across the entire distributed environment. When a thread aquires a Read lock
+/// it may be one of many threads accross the distributed envrionment with access, but none of them will have mutable access.
+/// NOTE: Grabbing the lock is a distributed operation and can come with a significant performance penalty
 /// - Contrast with a `LocalRwDarc`, where each local PE has a local lock.
 /// - Contrast with a `Darc`, which also has local ownership but does not 
 ///   allow modification unless the wrapped object itself provides it, e.g.
@@ -290,6 +294,7 @@ impl<T> GlobalRwDarc<T> {
         self.darc.inner()
     }
 
+    #[doc(hidden)]
     pub fn serialize_update_cnts(&self, cnt: usize) {
         // println!("serialize darc cnts");
         // if self.darc.src_pe == cur_pe{
@@ -301,6 +306,7 @@ impl<T> GlobalRwDarc<T> {
         // println!("done serialize darc cnts");
     }
 
+    #[doc(hidden)]
     pub fn deserialize_update_cnts(&self) {
         // println!("deserialize darc? cnts");
         // if self.darc.src_pe != cur_pe{
@@ -311,6 +317,7 @@ impl<T> GlobalRwDarc<T> {
                                                             // println!("done deserialize darc cnts");
     }
 
+    #[doc(hidden)]
     pub fn print(&self) {
         let rel_addr =
             unsafe { self.darc.inner as usize - (*self.inner().team).lamellae.base_addr() };
@@ -502,6 +509,7 @@ impl<T: fmt::Display> fmt::Display for GlobalRwDarc<T> {
     }
 }
 
+#[doc(hidden)]
 pub fn globalrw_serialize<S, T>(localrw: &GlobalRwDarc<T>, s: S) -> Result<S::Ok, S::Error>
 where
     S: Serializer,
@@ -509,6 +517,7 @@ where
     __NetworkDarc::<T>::from(&localrw.darc).serialize(s)
 }
 
+#[doc(hidden)]
 pub fn globalrw_from_ndarc<'de, D, T>(deserializer: D) -> Result<GlobalRwDarc<T>, D::Error>
 where
     D: Deserializer<'de>,

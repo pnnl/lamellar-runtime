@@ -15,6 +15,7 @@ lazy_static! {
     };
 }
 
+#[doc(hidden)]
 pub struct GenericAtomicArrayOpBuf {
     pub id: TypeId,
     pub op: BufFn,

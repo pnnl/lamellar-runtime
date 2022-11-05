@@ -19,6 +19,7 @@ use std::any::TypeId;
 // use std::ops::{Deref, DerefMut};
 
 use std::ops::{AddAssign, BitAndAssign, BitOrAssign, DivAssign, MulAssign, SubAssign};
+#[doc(hidden)]
 pub struct GenericAtomicElement<T> {
     array: GenericAtomicArray<T>,
     local_index: usize,
@@ -183,12 +184,15 @@ impl<T: Dist + ElementBitWiseOps> BitOrAssign<T> for GenericAtomicElement<T> {
     }
 }
 
+#[doc(hidden)]
 #[lamellar_impl::AmDataRT(Clone, Debug)]
 pub struct GenericAtomicArray<T> {
     locks: Darc<Vec<Mutex<()>>>,
     pub(crate) array: UnsafeArray<T>,
 }
 
+
+#[doc(hidden)]
 #[lamellar_impl::AmDataRT(Clone, Debug)]
 pub struct GenericAtomicByteArray {
     locks: Darc<Vec<Mutex<()>>>,
@@ -206,6 +210,7 @@ impl GenericAtomicByteArray {
         self.locks[index].lock()
     }
 
+    #[doc(hidden)]
     pub fn downgrade(array: &GenericAtomicByteArray) -> GenericAtomicByteArrayWeak {
         GenericAtomicByteArrayWeak {
             locks: array.locks.clone(),
@@ -214,6 +219,7 @@ impl GenericAtomicByteArray {
     }
 }
 
+#[doc(hidden)]
 #[lamellar_impl::AmLocalDataRT(Clone, Debug)]
 pub struct GenericAtomicByteArrayWeak {
     locks: Darc<Vec<Mutex<()>>>,
@@ -221,6 +227,7 @@ pub struct GenericAtomicByteArrayWeak {
 }
 
 impl GenericAtomicByteArrayWeak {
+    #[doc(hidden)]
     pub fn upgrade(&self) -> Option<GenericAtomicByteArray> {
         Some(GenericAtomicByteArray {
             locks: self.locks.clone(),
@@ -229,6 +236,7 @@ impl GenericAtomicByteArrayWeak {
     }
 }
 
+#[doc(hidden)]
 #[derive(Clone, Debug)]
 pub struct GenericAtomicLocalData<T: Dist> {
     array: GenericAtomicArray<T>,
@@ -236,6 +244,7 @@ pub struct GenericAtomicLocalData<T: Dist> {
     end_index: usize,
 }
 
+#[doc(hidden)]
 #[derive(Debug)]
 pub struct GenericAtomicLocalDataIter<T: Dist> {
     array: GenericAtomicArray<T>,

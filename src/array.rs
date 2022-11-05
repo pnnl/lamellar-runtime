@@ -75,6 +75,7 @@ lazy_static! {
     };
 }
 
+#[doc(hidden)]
 pub struct ReduceKey {
     pub id: std::any::TypeId,
     pub name: &'static str,
@@ -105,6 +106,7 @@ pub enum Distribution {
     Cyclic,
 }
 
+#[doc(hidden)]
 #[derive(Hash, std::cmp::PartialEq, std::cmp::Eq, Clone)]
 pub enum ArrayRdmaCmd {
     Put,
@@ -113,6 +115,7 @@ pub enum ArrayRdmaCmd {
     GetAm,
 }
 
+#[doc(hidden)]
 #[async_trait]
 pub trait LamellarArrayRequest: Sync + Send {
     type Output;
@@ -170,6 +173,7 @@ pub enum LamellarArrayInput<T: Dist> {
     // UnsafeArray(UnsafeArray<T>),
 }
 
+
 pub trait LamellarWrite {}
 pub trait LamellarRead {}
 
@@ -224,10 +228,12 @@ impl<T: Dist> MyFrom<&Vec<T>> for LamellarArrayInput<T> {
 //     }
 // }
 
+#[doc(hidden)]
 pub trait MyFrom<T: ?Sized> {
     fn my_from(val: T, team: &Pin<Arc<LamellarTeamRT>>) -> Self;
 }
 
+#[doc(hidden)]
 pub trait MyInto<T: ?Sized> {
     fn my_into(self, team: &Pin<Arc<LamellarTeamRT>>) -> T;
 }
@@ -259,6 +265,7 @@ pub enum LamellarReadArray<T: Dist + 'static> {
     LocalLockAtomicArray(LocalLockAtomicArray<T>),
 }
 
+#[doc(hidden)]
 #[enum_dispatch]
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 pub enum LamellarByteArray {
@@ -342,6 +349,7 @@ pub(crate) mod private {
     use enum_dispatch::enum_dispatch;
     use std::pin::Pin;
     use std::sync::Arc;
+    #[doc(hidden)]
     #[enum_dispatch(LamellarReadArray<T>,LamellarWriteArray<T>)]
     pub trait LamellarArrayPrivate<T: Dist> {
         // // fn my_pe(&self) -> usize;
@@ -353,6 +361,7 @@ pub(crate) mod private {
         unsafe fn into_inner(self) -> UnsafeArray<T>;
     }
 
+    #[doc(hidden)]
     #[enum_dispatch(LamellarReadArray<T>,LamellarWriteArray<T>)]
     pub(crate) trait ArrayExecAm<T: Dist> {
         fn team(&self) -> Pin<Arc<LamellarTeamRT>>;
@@ -431,6 +440,7 @@ pub trait SubArray<T: Dist>: LamellarArray<T> {
     fn global_index(&self, sub_index: usize) -> usize;
 }
 
+#[doc(hidden)]
 #[enum_dispatch(LamellarReadArray<T>,LamellarWriteArray<T>)]
 pub trait LamellarArrayGet<T: Dist + 'static>: LamellarArray<T> {
     // this is non blocking call
@@ -458,6 +468,7 @@ pub trait LamellarArrayGet<T: Dist + 'static>: LamellarArray<T> {
     fn at(&self, index: usize) -> Pin<Box<dyn Future<Output = T> + Send>>;
 }
 
+#[doc(hidden)]
 #[enum_dispatch(LamellarReadArray<T>,LamellarWriteArray<T>)]
 pub trait LamellarArrayInternalGet<T: Dist + 'static>: LamellarArray<T> {
     fn internal_get<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(
@@ -470,6 +481,7 @@ pub trait LamellarArrayInternalGet<T: Dist + 'static>: LamellarArray<T> {
     fn internal_at(&self, index: usize) -> Box<dyn LamellarArrayRequest<Output = T>>;
 }
 
+#[doc(hidden)]
 #[enum_dispatch(LamellarWriteArray<T>)]
 pub trait LamellarArrayPut<T: Dist>: LamellarArray<T> {
     //put data from buf into self
@@ -480,6 +492,7 @@ pub trait LamellarArrayPut<T: Dist>: LamellarArray<T> {
     ) -> Pin<Box<dyn Future<Output = ()> + Send>>;
 }
 
+#[doc(hidden)]
 #[enum_dispatch(LamellarWriteArray<T>)]
 pub(crate) trait LamellarArrayInternalPut<T: Dist>: LamellarArray<T> {
     //put data from buf into self
@@ -490,6 +503,7 @@ pub(crate) trait LamellarArrayInternalPut<T: Dist>: LamellarArray<T> {
     ) -> Box<dyn LamellarArrayRequest<Output = ()>>;
 }
 
+#[doc(hidden)]
 pub trait ArrayPrint<T: Dist + std::fmt::Debug>: LamellarArray<T> {
     fn print(&self);
 }

@@ -25,6 +25,7 @@ pub struct LocalLockAtomicArray<T> {
     pub(crate) array: UnsafeArray<T>,
 }
 
+#[doc(hidden)]
 #[lamellar_impl::AmDataRT(Clone, Debug)]
 pub struct LocalLockAtomicByteArray {
     lock: LocalRwDarc<()>,
@@ -40,6 +41,7 @@ impl LocalLockAtomicByteArray {
     }
 }
 
+#[doc(hidden)]
 #[lamellar_impl::AmLocalDataRT(Clone, Debug)]
 pub struct LocalLockAtomicByteArrayWeak {
     lock: LocalRwDarc<()>,
@@ -80,6 +82,7 @@ impl<T: Dist> DerefMut for LocalLockAtomicMutLocalData<'_, T> {
         self.data
     }
 }
+
 
 #[derive(Debug)]
 pub struct LocalLockAtomicLocalData<'a, T: Dist> {

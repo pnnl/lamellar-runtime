@@ -92,6 +92,32 @@ unsafe impl<T: Sync> Sync for DarcInner<T> {}
 ///   accesss to and manipulation of generic Rust objects.  The inner object can exist
 ///   on the Rust heap or in a registered memory region.
 /// - They are instantiated in registered memory regions.
+/// 
+/// #Example
+///```
+/// use lamellar::{ActiveMessaging, Darc};
+/// use std::sync::atomic::{AtomicUsize, Ordering};
+/// use std::sync::Arc;
+///
+/// #[lamellar::AmData(Clone)]
+/// struct DarcAm {
+///     counter: Darc<AtomicUsize>, //each pe has a local atomicusize
+/// }
+/// 
+/// #[lamellar::am]
+/// impl LamellarAm for DarcAm {
+///     async fn exec(self) {
+///         self.counter.fetch_add(1, Ordering::SeqCst); //this only updates atomic on the executing pe
+///     }
+///  }
+/// -------------
+/// let darc_counter = Darc::new(world, AtomicUsize::new(0)).unwrap();
+/// world.exec_am_all(DarcAm {counter: darc_counter.clone()});
+/// darc_counter.fetch_all(my_pe, Ordering::SeqCst);
+/// world.wait_all(); // wait for my active message to return
+/// world.barrier(); //at this point all updates will have been performed
+/// assert_eq!(darc_counter.load(Oredering::SeqCst),num_pes+my_pe); //NOTE: the value of darc_counter will be different on each PE
+///```
 pub struct Darc<T: 'static> {
     inner: *mut DarcInner<T>,
     src_pe: usize,
@@ -371,6 +397,7 @@ impl<T> fmt::Debug for DarcInner<T> {
 }
 
 impl<T> Darc<T> {
+    #[doc(hidden)]
     pub fn downgrade(the_darc: &Darc<T>) -> WeakDarc<T> {
         // println!("downgrading darc ");
         // the_darc.print();
@@ -404,6 +431,7 @@ impl<T> Darc<T> {
         unsafe { std::slice::from_raw_parts_mut(inner.mode_addr as *mut DarcMode, inner.num_pes) }
     }
 
+    #[doc(hidden)]
     pub fn serialize_update_cnts(&self, cnt: usize) {
         // println!("serialize darc cnts");
         self.inner()
@@ -412,6 +440,7 @@ impl<T> Darc<T> {
         // println!("done serialize darc cnts");
     }
 
+    #[doc(hidden)]
     pub fn deserialize_update_cnts(&self) {
         // println!("deserialize darc? cnts");
         self.inner().inc_pe_ref_count(self.src_pe, 1);
@@ -420,6 +449,7 @@ impl<T> Darc<T> {
         // println!("done deserialize darc cnts");
     }
 
+    #[doc(hidden)]
     pub fn print(&self) {
         let rel_addr = unsafe { self.inner as usize - (*self.inner().team).lamellae.base_addr() };
         println!(

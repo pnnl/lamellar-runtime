@@ -35,25 +35,9 @@ lazy_static! {
     };
 }
 
-// pub trait AtomicOps {
-//     type Atomic;
-//     fn as_native_atomic(&self) -> &Self::Atomic;
-//     fn fetch_add(&self, val: Self) -> Self;
-//     fn fetch_sub(&mut self, val: Self) -> Self;
-//     fn fetch_mul(&mut self, val: Self) -> Self;
-//     fn fetch_div(&mut self, val: Self) -> Self;
-//     fn fetch_bit_and(&mut self, val: Self) -> Self;
-//     fn fetch_bit_or(&mut self, val: Self) -> Self;
-//     fn compare_exchange(&mut self, current: Self, new: Self) -> Result<Self, Self>
-//     where
-//         Self: Sized;
-// fn load(&mut self) -> Self;
-//     fn store(&mut self, val: Self);
-//     fn swap(&mut self, val: Self) -> Self;
-// }
-
 use std::ops::{AddAssign, BitAndAssign, BitOrAssign, DivAssign, MulAssign, SubAssign};
 
+#[doc(hidden)]
 pub enum AtomicElement<T: Dist> {
     NativeAtomicElement(NativeAtomicElement<T>),
     GenericAtomicElement(GenericAtomicElement<T>),
@@ -79,6 +63,7 @@ impl<T: Dist> AtomicElement<T> {
         }
     }
 }
+
 impl<T: ElementArithmeticOps> AtomicElement<T> {
     pub fn fetch_add(&self, val: T) -> T {
         match self {
@@ -199,6 +184,7 @@ impl<T: Dist + ElementBitWiseOps> BitOrAssign<T> for AtomicElement<T> {
     }
 }
 
+
 #[enum_dispatch(LamellarArray<T>,LamellarArrayGet<T>,LamellarArrayInternalGet<T>,LamellarArrayPut<T>,LamellarArrayInternalPut<T>,ArrayExecAm<T>,LamellarArrayPrivate<T>,DistIteratorLauncher,)]
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
 #[serde(bound = "T: Dist + serde::Serialize + serde::de::DeserializeOwned + 'static")]
@@ -222,6 +208,7 @@ impl<T: Dist + 'static> crate::DarcSerde for AtomicArray<T> {
     }
 }
 
+#[doc(hidden)]
 #[enum_dispatch]
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 pub enum AtomicByteArray {
@@ -262,6 +249,7 @@ impl crate::DarcSerde for AtomicByteArray {
     }
 }
 
+#[doc(hidden)]
 #[enum_dispatch]
 #[derive(Clone)]
 pub enum AtomicByteArrayWeak {
@@ -281,6 +269,7 @@ impl AtomicByteArrayWeak {
         }
     }
 }
+
 
 pub struct AtomicLocalData<T: Dist> {
     array: AtomicArray<T>,
@@ -454,6 +443,7 @@ impl<T: Dist> AtomicArray<T> {
             AtomicArray::GenericAtomicArray(array) => array.__local_as_mut_slice(),
         }
     }
+
     pub fn sub_array<R: std::ops::RangeBounds<usize>>(&self, range: R) -> AtomicArray<T> {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.sub_array(range).into(),

@@ -38,6 +38,7 @@ lazy_static! {
     };
 }
 
+#[doc(hidden)]
 pub struct UnsafeArrayOpBuf {
     pub id: TypeId,
     pub op: BufFn,

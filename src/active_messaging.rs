@@ -218,7 +218,6 @@ impl AMCounters {
 }
 
 pub trait ActiveMessaging {
-<<<<<<< HEAD
     /// launch and execute an active message on every PE (including originating PE).
     ///
     /// Expects as input an instance of a struct thats been defined using the lamellar::am procedural macros.
@@ -253,20 +252,9 @@ pub trait ActiveMessaging {
     ///     assert_eq!(i,results[i]);
     /// }
     ///```
-=======
-    
-    /// Wait for all active messages local to `self` to finish.
-    fn wait_all(&self);
-
-    /// Wait for all PE's to reach the barrier.
-    fn barrier(&self);
-
-    /// Send an active message to every PE, including `self`.
->>>>>>> origin/dev_greg
     fn exec_am_all<F>(&self, am: F) -> Pin<Box<dyn Future<Output = Vec<F::Output>> + Send>>
     where
         F: RemoteActiveMessage + LamellarAM + Serde + AmDist;
-<<<<<<< HEAD
     
     /// launch and execute an active message on a specifc PE.
     ///
@@ -300,15 +288,10 @@ pub trait ActiveMessaging {
     /// let result = world.block_on(request); //block until am has executed
     /// assert_eq!(world.num_pes()-1,result);
     ///```
-=======
-
-    /// Send an active message to a specific PE.
->>>>>>> origin/dev_greg
     fn exec_am_pe<F>(&self, pe: usize, am: F) -> Pin<Box<dyn Future<Output = F::Output> + Send>>
     where
         F: RemoteActiveMessage + LamellarAM + Serde + AmDist;
 
-<<<<<<< HEAD
 
     /// launch and execute an active message on the calling PE.
     ///
@@ -342,9 +325,6 @@ pub trait ActiveMessaging {
     /// let result = world.block_on(request); //block until am has executed
     /// assert_eq!(world.my_pe(),result);
     ///```
-=======
-    /// Send an active message to `self`.
->>>>>>> origin/dev_greg
     fn exec_am_local<F>(&self, am: F) -> Pin<Box<dyn Future<Output = F::Output> + Send>>
     where
         F: LamellarActiveMessage + LocalAM + 'static;

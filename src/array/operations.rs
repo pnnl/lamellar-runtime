@@ -20,8 +20,10 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::u8;
 
+#[doc(hidden)]
 pub static OPS_BUFFER_SIZE: usize = 10_000_000;
 
+#[doc(hidden)]
 #[derive(
     serde::Serialize,
     serde::Deserialize,
@@ -239,6 +241,7 @@ impl<T: Dist> ArrayOpCmd<T> {
     }
 }
 
+#[doc(hidden)]
 #[derive(serde::Serialize, Clone, Debug)]
 pub enum InputToValue<'a, T: Dist> {
     OneToOne(usize, T),
@@ -368,6 +371,7 @@ impl<T: Dist> OpAmInputToValue<T> {
     }
 }
 
+#[doc(hidden)]
 #[derive(serde::Serialize, serde::Deserialize, Debug)]
 #[serde(bound = "T: Dist + serde::Serialize + serde::de::DeserializeOwned")]
 pub enum OpAmInputToValue<T: Dist> {
@@ -509,6 +513,7 @@ impl<T: Dist> OpAmInputToValue<T> {
     }
 }
 
+#[doc(hidden)]
 pub enum RemoteOpAmInputToValue<'a, T: Dist> {
     OneToOne(&'a usize, &'a T),
     OneToMany(&'a usize, &'a [T]),
@@ -567,6 +572,7 @@ impl<'a, T: Dist> RemoteOpAmInputToValue<'a, T> {
     }
 }
 
+#[doc(hidden)]
 #[derive(Clone, serde::Serialize, Debug)]
 pub enum OpInputEnum<'a, T: Dist> {
     Val(T),
@@ -928,7 +934,7 @@ impl<'a, T: Dist + ElementOps> OpInput<'a, T> for &NativeAtomicArray<T> {
 //         (&self).as_op_input()
 //     }
 // }
-
+#[doc(hidden)]
 pub trait BufferOp: Sync + Send {
     fn add_ops(
         &self,
@@ -958,7 +964,10 @@ pub trait BufferOp: Sync + Send {
     );
 }
 
+#[doc(hidden)]
 pub type OpResultOffsets = Vec<(usize, usize, usize)>; //reqid,offset,len
+
+#[doc(hidden)]
 pub struct OpReqOffsets(Arc<Mutex<HashMap<usize, OpResultOffsets>>>); //pe
 impl OpReqOffsets {
     #[tracing::instrument(skip_all)]
@@ -989,7 +998,10 @@ impl std::fmt::Debug for OpReqOffsets {
     }
 }
 
+#[doc(hidden)]
 pub type PeOpResults = Arc<Mutex<Vec<u8>>>;
+
+#[doc(hidden)]
 pub struct OpResults(Arc<Mutex<HashMap<usize, PeOpResults>>>);
 impl OpResults {
     #[tracing::instrument(skip_all)]
@@ -1631,28 +1643,7 @@ pub trait CompareExchangeEpsilonOps<T: ElementComparePartialEqOps>:
     }
 }
 
-// pub trait BufferOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
-//     #[tracing::instrument(skip_all)]
-//     fn copy_from_buffer<'a, U: MyInto<LamellarArrayInput<T>>>(
-//         &self,
-//         index: usize,
-//         buf: U,
-//     ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
-//         self.inner_array()
-//             .initiate_op(buf, index, ArrayOpCmd::CopyFromBuff);
-//     }
-//     #[tracing::instrument(skip_all)]
-//     fn batch_copy_from_buffer<'a, U: MyInto<LamellarArrayInput<T>>>(
-//         &self,
-//         index: impl OpInput<'a, usize>,
-//         old: T,
-//         buf: U,
-//     ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
-//         self.inner_array()
-//             .initiate_batch_op(buf, index, ArrayOpCmd::CopyFromBuff)
-//     }
-// }
-//perform the specified operation in place, returning the original value
+#[doc(hidden)]
 pub trait LocalArithmeticOps<T: Dist + ElementArithmeticOps> {
     fn local_add(&self, index: usize, val: T) {
         self.local_fetch_add(index, val);
@@ -1672,6 +1663,7 @@ pub trait LocalArithmeticOps<T: Dist + ElementArithmeticOps> {
     fn local_fetch_div(&self, index: usize, val: T) -> T;
 }
 
+#[doc(hidden)]
 pub trait LocalBitWiseOps<T: Dist + ElementBitWiseOps> {
     fn local_bit_and(&self, index: usize, val: T) {
         self.local_fetch_bit_and(index, val);
@@ -1683,12 +1675,14 @@ pub trait LocalBitWiseOps<T: Dist + ElementBitWiseOps> {
     fn local_fetch_bit_or(&self, index: usize, val: T) -> T;
 }
 
+#[doc(hidden)]
 pub trait LocalAtomicOps<T: Dist + ElementOps> {
     fn local_load(&self, index: usize, val: T) -> T;
     fn local_store(&self, index: usize, val: T);
     fn local_swap(&self, index: usize, val: T) -> T;
 }
 
+#[doc(hidden)]
 pub struct LocalOpResult<T: Dist> {
     val: T,
 }
