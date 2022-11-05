@@ -136,7 +136,7 @@ pub use crate::darc::local_rw_darc::LocalRwDarc;
 pub use crate::darc::local_rw_darc::{localrw_from_ndarc, localrw_serialize};
 pub use crate::darc::Darc;
 
-pub use crate::lamellar_request::{LamellarRequest, LamellarRequestHandle};
+pub use crate::lamellar_request::{LamellarRequest};
 
 pub use crate::memregion::Dist;
 pub use crate::memregion::{

@@ -36,14 +36,7 @@ pub struct LamellarWorld {
 
 //#[prof]
 impl ActiveMessaging for LamellarWorld {
-    #[tracing::instrument(skip_all)]
-    fn wait_all(&self) {
-        self.team.wait_all();
-    }
-    #[tracing::instrument(skip_all)]
-    fn barrier(&self) {
-        self.team.barrier();
-    }
+   
     #[tracing::instrument(skip_all)]
     fn exec_am_all<F>(&self, am: F) -> Pin<Box<dyn Future<Output = Vec<F::Output>> + Send>>
     where
@@ -65,6 +58,14 @@ impl ActiveMessaging for LamellarWorld {
         F: LamellarActiveMessage + LocalAM + 'static,
     {
         self.team.exec_am_local(am)
+    }
+    #[tracing::instrument(skip_all)]
+    fn wait_all(&self) {
+        self.team.wait_all();
+    }
+    #[tracing::instrument(skip_all)]
+    fn barrier(&self) {
+        self.team.barrier();
     }
 }
 

@@ -37,16 +37,13 @@ use tracing::*;
 // when the outer handle is dropped, we do the appropriate barriers and then remove the inner team from the runtime data structures
 // this should allow for the inner team to persist while at least one user handle exists in the world.
 
-/// an abstraction used to group pes into distributed computational units
+/// an abstraction used to group PEs into distributed computational units
 ///
 /// actions taking place on a team, only execute on members of the team.
 pub struct LamellarTeam {
     pub(crate) world: Option<Arc<LamellarTeam>>,
     pub(crate) team: Pin<Arc<LamellarTeamRT>>,
-    // pub(crate) teams: Arc<RwLock<HashMap<u64, Weak<LamellarTeamRT>>>>,
-    pub(crate) am_team: bool, //need a reference to this so we can clean up after dropping the team
-                              // pub(crate) alloc_mutex: Arc<RwLock<Option<GlobalRwDarc<()>>>>, // in world drop set to none
-                              // pub(crate) alloc_barrier: Arc<RwLock<Option<Darc<Barrier>>>>, // in world drop set to none
+    pub(crate) am_team: bool, 
 }
 
 //#[prof]
@@ -105,6 +102,16 @@ impl LamellarTeam {
     }
 
     /// create a subteam containing any number of pe's from this team using the provided LamellarArch (layout)
+    ///
+    /// # Examples
+    ///```
+    /// //assume we have a parent team "team"
+    /// let even_team = team.create_team_from_arch(StridedArch::new(
+    ///                                            0, // start pe
+    ///                                            2,// stride
+    ///                                            (team.num_pes() / 2.0), //num pes in team
+    /// ));
+    ///```
     #[tracing::instrument(skip_all)]
     pub fn create_subteam_from_arch<L>(
         parent: Arc<LamellarTeam>,
@@ -122,33 +129,29 @@ impl LamellarTeam {
             LamellarTeamRT::create_subteam_from_arch(world.team.clone(), parent.team.clone(), arch)
         {
             let team = LamellarTeam::new(Some(world), team.clone(), parent.am_team);
-            // parent
-            //     .teams
-            //     .write()
-            //     .insert(team.team.remote_ptr_addr as u64, Arc::downgrade(&team.team));
             Some(team)
         } else {
             None
         }
     }
 
-    /// visual representation of the team
+    /// text based representation of the team
     #[tracing::instrument(skip_all)]
     pub fn print_arch(&self) {
         self.team.print_arch()
     }
 
-    /// blocks execution until all members of the team have called
+    /// team wide synchronization method which blocks calling thread until all PEs in the team have entered
     ///
-    /// only blocks pes which are members of this team
+    /// # Examples
+    ///```
+    /// //do some work
+    /// team.barrier(); //block until all PEs have entered the barrier
+    ///```
     #[tracing::instrument(skip_all)]
     pub fn barrier(&self) {
         self.team.barrier()
     }
-
-    // pub(crate) async fn alloc_new_pool(self: &Arc<LamellarTeam>, min_size: usize) {
-    //     self.team.lamellae.alloc_pool(min_size);
-    // }
 }
 
 impl std::fmt::Debug for LamellarTeam {
@@ -162,18 +165,7 @@ impl std::fmt::Debug for LamellarTeam {
 }
 
 // #[prof]
-//todo see if we can impl deref dor Arc<lamellarteam>
 impl ActiveMessaging for Arc<LamellarTeam> {
-    #[tracing::instrument(skip_all)]
-    fn wait_all(&self) {
-        self.team.wait_all();
-    }
-
-    #[tracing::instrument(skip_all)]
-    fn barrier(&self) {
-        self.team.barrier();
-    }
-
     #[tracing::instrument(skip_all)]
     fn exec_am_all<F>(&self, am: F) -> Pin<Box<dyn Future<Output = Vec<F::Output>> + Send>>
     where
@@ -198,15 +190,19 @@ impl ActiveMessaging for Arc<LamellarTeam> {
     {
         self.team.exec_am_local_tg(am, None).into_future()
     }
+
+    #[tracing::instrument(skip_all)]
+    fn wait_all(&self) {
+        self.team.wait_all();
+    }
+
+    #[tracing::instrument(skip_all)]
+    fn barrier(&self) {
+        self.team.barrier();
+    }
 }
 
 impl RemoteMemoryRegion for Arc<LamellarTeam> {
-    /// allocate a shared memory region from the asymmetric heap
-    ///
-    /// # Arguments
-    ///
-    /// * `size` - number of elements of T to allocate a memory region for -- (not size in bytes)
-    ///
     #[tracing::instrument(skip_all)]
     fn alloc_shared_mem_region<T: Dist>(&self, size: usize) -> SharedMemoryRegion<T> {
         self.team.barrier.barrier();
@@ -223,12 +219,6 @@ impl RemoteMemoryRegion for Arc<LamellarTeam> {
         mr
     }
 
-    /// allocate a local memory region from the asymmetric heap
-    ///
-    /// # Arguments
-    ///
-    /// * `size` - number of elements of T to allocate a memory region for -- (not size in bytes)
-    ///
     #[tracing::instrument(skip_all)]
     fn alloc_local_mem_region<T: Dist>(&self, size: usize) -> LocalMemoryRegion<T> {
         let mut lmr = LocalMemoryRegion::try_new(size, &self.team, self.team.lamellae.clone());

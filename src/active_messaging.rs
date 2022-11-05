@@ -88,7 +88,7 @@ pub trait LocalAM: SyncSend {
 }
 
 /// The trait representing an active message that can be executed remotely
-/// (SyncSend is a blanket impl for serde::Serialize + serde::Deserialize + Sync + Send + 'static)
+/// (AmDist is a blanket impl for serde::Serialize + serde::Deserialize + Sync + Send + 'static)
 pub trait LamellarAM {
     /// The type of the output returned by the active message
     type Output: AmDist;
@@ -218,33 +218,6 @@ impl AMCounters {
 }
 
 pub trait ActiveMessaging {
-    /// blocks calling thread until all remote tasks (e.g. active mesages, array operations)
-    /// initiated by the calling PE have completed.
-    ///
-    /// Note: this is not a distributed synchronization primitive (i.e. it has no knowledge of a Remote PEs tasks)
-    /// # Examples
-    ///```
-    /// use lamellar::ActiveMessaging;
-    ///
-    /// let world =  let world = lamellar::LamellarWorldBuilder::new().build();
-    /// world.exec_am_all(...); 
-    /// world.wait_all(); //block until the previous am has finished
-    ///```
-    fn wait_all(&self);
-
-    /// Global synchronization method which blocks calling thread until all PEs in the barrier group (e.g. World, Team, Array) have entered
-    ///
-    ///
-    /// # Examples
-    ///```
-    /// use lamellar::ActiveMessaging;
-    ///
-    /// let world =  let world = lamellar::LamellarWorldBuilder::new().build();
-    /// //do some work
-    /// world.barrier(); //block until all PEs have entered the barrier
-    ///```
-    fn barrier(&self);
-
     /// launch and execute an active message on every PE (including originating PE).
     ///
     /// Expects as input an instance of a struct thats been defined using the lamellar::am procedural macros.
@@ -357,6 +330,32 @@ pub trait ActiveMessaging {
     fn exec_am_local<F>(&self, am: F) -> Pin<Box<dyn Future<Output = F::Output> + Send>>
     where
         F: LamellarActiveMessage + LocalAM + 'static;
+    
+    /// blocks calling thread until all remote tasks (e.g. active mesages, array operations)
+    /// initiated by the calling PE have completed.
+    ///
+    /// Note: this is not a distributed synchronization primitive (i.e. it has no knowledge of a Remote PEs tasks)
+    /// # Examples
+    ///```
+    /// use lamellar::ActiveMessaging;
+    ///
+    /// let world =  let world = lamellar::LamellarWorldBuilder::new().build();
+    /// world.exec_am_all(...); 
+    /// world.wait_all(); //block until the previous am has finished
+    ///```
+    fn wait_all(&self);
+
+    /// Global synchronization method which blocks calling thread until all PEs in the barrier group (e.g. World, Team, Array) have entered
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::ActiveMessaging;
+    ///
+    /// let world =  let world = lamellar::LamellarWorldBuilder::new().build();
+    /// //do some work
+    /// world.barrier(); //block until all PEs have entered the barrier
+    ///```
+    fn barrier(&self);
 }
 
 #[async_trait]
