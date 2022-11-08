@@ -20,6 +20,7 @@ lazy_static! {
     };
 }
 
+#[doc(hidden)]
 pub struct UnsafeArrayOp {
     pub id: (ArrayOpCmd, TypeId),
     pub op: OpFn,
@@ -39,6 +40,7 @@ lazy_static! {
     };
 }
 
+#[doc(hidden)]
 pub struct UnsafeArrayOpBuf {
     pub id: TypeId,
     pub op: BufFn,

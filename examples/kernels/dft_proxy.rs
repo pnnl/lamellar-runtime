@@ -33,7 +33,7 @@ struct ReduceAM {
 #[lamellar::am]
 impl LamellarAM for ReduceAM {
     async fn exec(self) -> f64 {
-        self.spectrum.as_slice().unwrap().iter().sum::<f64>()
+        unsafe {self.spectrum.as_slice().unwrap().iter().sum::<f64>()}
     }
 }
 
@@ -51,7 +51,7 @@ impl LamellarAM for LocalSumAM {
     async fn exec() {
         let spectrum_slice = unsafe { self.spectrum.as_mut_slice().unwrap() };
         let k_prime = self.k + self.pe * spectrum_slice.len();
-        let signal = self.signal.as_slice().unwrap();
+        let signal = unsafe {self.signal.as_slice().unwrap()};
         let mut sum = 0.0;
         for (i, &x) in signal.iter().enumerate() {
             let i_prime = i + lamellar::current_pe as usize * signal.len();
@@ -90,7 +90,7 @@ fn dft_lamellar(
     global_sig_len: usize,
     spectrum: SharedMemoryRegion<f64>,
 ) -> f64 {
-    let spectrum_slice = spectrum.as_slice().unwrap();
+    let spectrum_slice = unsafe {spectrum.as_slice().unwrap()};
     let add_spec = world.alloc_shared_mem_region::<f64>(spectrum_slice.len());
 
     let timer = Instant::now();
@@ -109,7 +109,7 @@ fn dft_lamellar(
         }
         let mut add_spec_vec = vec![0.0; spectrum_slice.len()];
         world.wait_all();
-        add_spec_vec.copy_from_slice(add_spec.as_slice().unwrap());
+        add_spec_vec.copy_from_slice(unsafe {add_spec.as_slice().unwrap()});
         world.exec_am_pe(
             pe,
             RemoteSumAM {
@@ -251,15 +251,17 @@ fn dft_lamellar_array_opt(
                 .enumerate()
                 .for_each(move |(k, spec_bin)| {
                     let mut sum = 0f64;
-                    for (j, &x) in signal
-                        .iter()
-                        .enumerate()
-                        .map(|(j, x)| (j + i * buf_size, x))
-                    {
-                        let angle =
-                            -1f64 * (j * k) as f64 * 2f64 * std::f64::consts::PI / sig_len as f64;
-                        let twiddle = angle * (angle.cos() + angle * angle.sin());
-                        sum = sum + twiddle * x;
+                    unsafe {
+                        for (j, &x) in signal
+                            .iter()
+                            .enumerate()
+                            .map(|(j, x)| (j + i * buf_size, x))
+                        {
+                            let angle =
+                                -1f64 * (j * k) as f64 * 2f64 * std::f64::consts::PI / sig_len as f64;
+                            let twiddle = angle * (angle.cos() + angle * angle.sin());
+                            sum = sum + twiddle * x;
+                        }
                     }
                     // let _lock = LOCK.lock();
                     *spec_bin += sum;
@@ -289,15 +291,17 @@ fn dft_lamellar_array_opt_test(
                 Schedule::Dynamic,
                 move |(k, spec_bin)| {
                     let mut sum = 0f64;
-                    for (j, &x) in signal
-                        .iter()
-                        .enumerate()
-                        .map(|(j, x)| (j + i * buf_size, x))
-                    {
-                        let angle =
-                            -1f64 * (j * k) as f64 * 2f64 * std::f64::consts::PI / sig_len as f64;
-                        let twiddle = angle * (angle.cos() + angle * angle.sin());
-                        sum = sum + twiddle * x;
+                    unsafe {
+                        for (j, &x) in signal
+                            .iter()
+                            .enumerate()
+                            .map(|(j, x)| (j + i * buf_size, x))
+                        {
+                            let angle =
+                                -1f64 * (j * k) as f64 * 2f64 * std::f64::consts::PI / sig_len as f64;
+                            let twiddle = angle * (angle.cos() + angle * angle.sin());
+                            sum = sum + twiddle * x;
+                        }
                     }
                     // let _lock = LOCK.lock();
                     *spec_bin += sum;
@@ -330,15 +334,17 @@ fn dft_lamellar_array_opt_2(
                 .enumerate()
                 .for_each(move |(k, mut spec_bin)| {
                     let mut sum = 0f64;
-                    for (j, &x) in signal
-                        .iter()
-                        .enumerate()
-                        .map(|(j, x)| (j + i * buf_size, x))
-                    {
-                        let angle =
-                            -1f64 * (j * k) as f64 * 2f64 * std::f64::consts::PI / sig_len as f64;
-                        let twiddle = angle * (angle.cos() + angle * angle.sin());
-                        sum = sum + twiddle * x;
+                    unsafe {
+                        for (j, &x) in signal
+                            .iter()
+                            .enumerate()
+                            .map(|(j, x)| (j + i * buf_size, x))
+                        {
+                            let angle =
+                                -1f64 * (j * k) as f64 * 2f64 * std::f64::consts::PI / sig_len as f64;
+                            let twiddle = angle * (angle.cos() + angle * angle.sin());
+                            sum = sum + twiddle * x;
+                        }
                     }
                     spec_bin += sum;
                 });
@@ -370,15 +376,17 @@ fn dft_lamellar_array_opt_3(
                 .for_each(move |(k, spec_bin)| {
                     //we are accessing each element independently so free to mutate
                     let mut sum = 0f64;
-                    for (j, &x) in signal
-                        .iter()
-                        .enumerate()
-                        .map(|(j, x)| (j + i * buf_size, x))
-                    {
-                        let angle =
-                            -1f64 * (j * k) as f64 * 2f64 * std::f64::consts::PI / sig_len as f64;
-                        let twiddle = angle * (angle.cos() + angle * angle.sin());
-                        sum = sum + twiddle * x;
+                    unsafe {
+                        for (j, &x) in signal
+                            .iter()
+                            .enumerate()
+                            .map(|(j, x)| (j + i * buf_size, x))
+                        {
+                            let angle =
+                                -1f64 * (j * k) as f64 * 2f64 * std::f64::consts::PI / sig_len as f64;
+                            let twiddle = angle * (angle.cos() + angle * angle.sin());
+                            sum = sum + twiddle * x;
+                        }
                     }
                     *spec_bin += sum;
                 });
@@ -430,9 +438,9 @@ fn main() {
         let partial_sum = world.alloc_shared_mem_region::<f64>(num_pes);
         let partial_spectrum = world.alloc_shared_mem_region::<f64>(array_len);
         let partial_signal = world.alloc_shared_mem_region::<f64>(array_len);
-        let full_signal = world.alloc_local_mem_region::<f64>(global_len);
-        let full_spectrum = world.alloc_local_mem_region::<f64>(global_len);
-        let magic = world.alloc_local_mem_region::<f64>(num_pes);
+        let full_signal = world.alloc_one_sided_mem_region::<f64>(global_len);
+        let full_spectrum = world.alloc_one_sided_mem_region::<f64>(global_len);
+        let magic = world.alloc_one_sided_mem_region::<f64>(num_pes);
 
         let full_spectrum_array =
             UnsafeArray::<f64>::new(world.team(), global_len, Distribution::Block);

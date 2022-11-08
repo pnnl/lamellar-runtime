@@ -2,7 +2,7 @@
 //!
 //! Lamellar provides several different communication patterns to distributed applications.
 //! First, Lamellar allows for sending and executing user defined active messages on remote nodes in a distributed environments.
-//! User first implement runtime exported trait (LamellarAM) for their data structures and then call a procedural macro (#[lamellar::am]) on the implementation.
+//! User first implement runtime exported trait (LamellarAM) for their data structures and then call a procedural macro (#\[lamellar::am\]) on the implementation.
 //! The procedural macro procudes all the nescessary code to enable remote execution of the active message.
 //!
 //! Lamellar also provides PGAS capabilities through multiple interfaces.
@@ -140,7 +140,7 @@ pub use crate::lamellar_request::{LamellarRequest};
 
 pub use crate::memregion::Dist;
 pub use crate::memregion::{
-    local::LocalMemoryRegion, shared::SharedMemoryRegion, LamellarMemoryRegion, RemoteMemoryRegion,
+    one_sided::OneSidedMemoryRegion, shared::SharedMemoryRegion, LamellarMemoryRegion, RemoteMemoryRegion,
 };
 
 pub use crate::lamellae::Backend;

@@ -79,13 +79,14 @@ unsafe impl<T: Sync> Sync for DarcInner<T> {}
 
 /// Distributed atomic reference counter
 /// 
-/// The atomic reference counter, `Arc`, is a backbone of safe
+/// The atomic reference counter, [`Arc`][std::sync::Arc], is a backbone of safe
 /// concurrent programming in Rust, and, in particular, *shared ownership*.
 /// 
 /// The `Darc` provides a similar abstraction within a *distributed* environment.
-/// - `Darc`'s have global lifetime, meaning that values remain valid and accessible 
+/// - `Darc`'s have global lifetime, meaning that the pointed too objects remain valid and accessible 
 ///   as long as one reference exists on any PE.
-/// - Inner mutability is disallowed by default.
+/// - Inner mutability is disallowed by default. If you need to mutate through a Darc use [`Mutex`][std::sync::Mutex], [`RwLock`][std::sync::RwLock], or one of the [`Atomic`][std::sync::atomic]
+/// types. Alternatively you can also use a [`LocalRwDarc`] or [`GlobalRwDarc`]. 
 /// 
 /// `Darc`'s are intended to be passed via active messages.
 /// - They allow distributed
@@ -144,6 +145,7 @@ impl<'de, T: 'static> Deserialize<'de> for Darc<T> {
     }
 }
 
+#[doc(hidden)]
 #[derive(Debug)]
 pub struct WeakDarc<T: 'static> {
     inner: *mut DarcInner<T>,
@@ -463,6 +465,19 @@ impl<T> Darc<T> {
 }
 
 impl<T> Darc<T> {
+    /// Constructs a new `Darc<T>` on the PEs specified by team.
+    /// 
+    /// This is a blocking collective call amongst all PEs in the team, only returning once every PE in the team has completed the call.
+    ///
+    /// Returns an error if this PE is not a part of team
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use lamellar::Darc;
+    ///
+    /// let five = Darc::new(5);
+    /// ```
     pub fn new<U: Into<IntoLamellarTeam>>(team: U, item: T) -> Result<Darc<T>, IdError> {
         Darc::try_new_with_drop(team, item, DarcMode::Darc, None)
     }
@@ -539,6 +554,20 @@ impl<T> Darc<T> {
         self.inner().block_on_outstanding(state, extra_cnt);
     }
 
+    /// Converts this Darc into a [LocalRwDarc]
+    ///
+    /// This is a blocking collective call amongst all PEs in the Darc's team, only returning once every PE in the team has completed the call.
+    ///
+    /// Furthermore, this call will block while any additional references outside of the one making this call exist on each PE. It is not possible for the
+    /// pointed to object to wrapped by both a Darc and a LocalRwDarc simultaneously (on any PE).
+    ///
+    /// # Example
+    /// ```
+    /// use lamellar::{Darc,LocalRwDarc};
+    ///
+    /// let five = Darc::new(5);
+    /// let five_as_localdarc = five.into_localrw(); 
+    /// ```
     pub fn into_localrw(self) -> LocalRwDarc<T> {
         let inner = self.inner();
         let _cur_pe = inner.team().world_pe;
@@ -556,6 +585,20 @@ impl<T> Darc<T> {
         LocalRwDarc { darc: d }
     }
 
+    /// Converts this Darc into a [GlobalRwDarc]
+    ///
+    /// This is a blocking collective call amongst all PEs in the Darc's team, only returning once every PE in the team has completed the call.
+    ///
+    /// Furthermore, this call will block while any additional references outside of the one making this call exist on each PE. It is not possible for the
+    /// pointed to object to wrapped by both a GlobalRwDarc and a Darc simultaneously (on any PE).
+    ///
+    /// # Example
+    /// ```
+    /// use lamellar::{GlobalRwDarc,Darc};
+    ///
+    /// let five = Darc::new(5);
+    /// let five_as_globaldarc = five.into_globalrw(); 
+    /// ```
     pub fn into_globalrw(self) -> GlobalRwDarc<T> {
         let inner = self.inner();
         let _cur_pe = inner.team().world_pe;
@@ -827,6 +870,7 @@ impl<T: 'static> LamellarAM for DroppedWaitAM<T> {
     }
 }
 
+#[doc(hidden)]
 #[derive(serde::Deserialize, serde::Serialize)]
 pub struct __NetworkDarc<T> {
     inner_addr: usize,

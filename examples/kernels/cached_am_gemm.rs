@@ -13,7 +13,7 @@
 /// note this example only works for block that do not span multiple pes.
 ///---------------------------------------------------------------------------------
 use lamellar::ActiveMessaging;
-use lamellar::{LocalMemoryRegion, RemoteMemoryRegion, SharedMemoryRegion};
+use lamellar::{OneSidedMemoryRegion, RemoteMemoryRegion, SharedMemoryRegion};
 use lazy_static::lazy_static;
 use matrixmultiply::sgemm;
 use parking_lot::Mutex;
@@ -72,7 +72,7 @@ impl SubMatrix {
         }
     }
 }
-async fn get_sub_mat(mat: &SubMatrix, sub_mat: &LocalMemoryRegion<f32>) {
+async fn get_sub_mat(mat: &SubMatrix, sub_mat: &OneSidedMemoryRegion<f32>) {
     let start_row = mat.row_block * mat.block_size;
     let start_col = mat.col_block * mat.block_size;
     let sub_mat_slice = unsafe { sub_mat.as_mut_slice().unwrap() };
@@ -82,7 +82,7 @@ async fn get_sub_mat(mat: &SubMatrix, sub_mat: &LocalMemoryRegion<f32>) {
         let offset = (row + start_row) * mat.cols + (start_col);
         let data = sub_mat.sub_region(row * mat.block_size..(row + 1) * mat.block_size);
         DATA_CNT.fetch_add(data.len() * std::mem::size_of::<f32>(), Ordering::Relaxed);
-        mat.mat.iget(mat.pe, offset, data.clone());
+        unsafe { mat.mat.blocking_get(mat.pe, offset, data.clone())};
     }
 
     // while sub_mat_slice[sub_mat.len() - 1].is_nan() {
@@ -104,7 +104,7 @@ struct MatMulAM {
 impl LamellarAM for MatMulAM {
     async fn exec() {
         let b =
-            lamellar::world.alloc_local_mem_region::<f32>(self.b.block_size * self.b.block_size);
+            lamellar::world.alloc_one_sided_mem_region::<f32>(self.b.block_size * self.b.block_size);
         get_sub_mat(&self.b, &b).await;
         // we dont actually want to alloc a shared memory region as there is an implicit barrier here
         // introduces sync point and potential for deadlock
@@ -119,7 +119,7 @@ impl LamellarAM for MatMulAM {
             a.row_block = row;
             let mut c = self.c.clone();
             c.row_block = row;
-            let sub_a = lamellar::world.alloc_local_mem_region::<f32>(a.block_size * a.block_size);
+            let sub_a = lamellar::world.alloc_one_sided_mem_region::<f32>(a.block_size * a.block_size);
             get_sub_mat(&a, &sub_a).await; //this should be local copy so returns immediately
             do_gemm(&sub_a, &b, c, self.block_size);
         }
@@ -127,8 +127,8 @@ impl LamellarAM for MatMulAM {
 }
 
 fn do_gemm(
-    a: &LocalMemoryRegion<f32>,
-    b: &LocalMemoryRegion<f32>,
+    a: &OneSidedMemoryRegion<f32>,
+    b: &OneSidedMemoryRegion<f32>,
     c: SubMatrix,
     block_size: usize,
 ) {

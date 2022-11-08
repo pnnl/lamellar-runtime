@@ -568,7 +568,7 @@ fn create_buf_ops(
         struct #buf_op_name{
             data: #lamellar::array::#byte_array_type,
             ops: Mutex<Vec<(Vec<u8>,usize)>>,
-            // new_ops: Mutex<Vec<(LocalMemoryRegion<u8>,usize)>>,
+            // new_ops: Mutex<Vec<(OneSidedMemoryRegion<u8>,usize)>>,
             cur_len: AtomicUsize, //this could probably just be a normal usize cause we only update it after we get ops lock
             complete: RwLock<Arc<AtomicBool>>,
             results_offset: RwLock<Arc<AtomicUsize>>,
@@ -579,8 +579,8 @@ fn create_buf_ops(
             data: #lamellar::array::#array_type<#typeident>,
             // ops: Vec<(ArrayOpCmd<#typeident>,#lamellar::array::OpAmInputToValue<#typeident>)>,
             ops: Vec<u8>,
-            // new_ops: Vec<LocalMemoryRegion<u8>>,
-            // ops2: LocalMemoryRegion<u8>,
+            // new_ops: Vec<OneSidedMemoryRegion<u8>>,
+            // ops2: OneSidedMemoryRegion<u8>,
             res_buf_size: usize,
             orig_pe: usize,
         }
@@ -606,20 +606,20 @@ fn create_buf_ops(
                 let op_size = op.num_bytes();
                 let data_size = op_data.num_bytes();
                 if first {
-                    // bufs.push((team.alloc_local_mem_region(std::cmp::max(#lamellar::array::OPS_BUFFER_SIZE,op_size+data_size)),0));
+                    // bufs.push((team.alloc_one_sided_mem_region(std::cmp::max(#lamellar::array::OPS_BUFFER_SIZE,op_size+data_size)),0));
                     let mut v = Vec::with_capacity(std::cmp::max(#lamellar::array::OPS_BUFFER_SIZE, op_size+data_size));
                     unsafe {v.set_len(std::cmp::max(#lamellar::array::OPS_BUFFER_SIZE, op_size+data_size));}
                     bufs.push((v,0));
                 }
                 else {
                     if bufs.last().unwrap().1 + op_size+data_size > #lamellar::array::OPS_BUFFER_SIZE{
-                        // bufs.push((team.alloc_local_mem_region(std::cmp::max(#lamellar::array::OPS_BUFFER_SIZE, op_size+data_size)),0));
+                        // bufs.push((team.alloc_one_sided_mem_region(std::cmp::max(#lamellar::array::OPS_BUFFER_SIZE, op_size+data_size)),0));
                         let mut v = Vec::with_capacity(std::cmp::max(#lamellar::array::OPS_BUFFER_SIZE, op_size+data_size));
                         unsafe {v.set_len(std::cmp::max(#lamellar::array::OPS_BUFFER_SIZE, op_size+data_size));}
                         bufs.push((v,0));
                     }
                 }
-                // let mut buf: &mut (LocalMemoryRegion<u8>, usize) = bufs.last_mut().unwrap();
+                // let mut buf: &mut (OneSidedMemoryRegion<u8>, usize) = bufs.last_mut().unwrap();
                 let mut buf: &mut (Vec<u8>, usize) = bufs.last_mut().unwrap();
 
                 let _temp = self.cur_len.fetch_add(op_data.len(),Ordering::SeqCst);
@@ -659,7 +659,7 @@ fn create_buf_ops(
                 let data_size = op_data.num_bytes();
                 // println!("add_fetch_ops {:?} {:?}",op_size,data_size);
                 if first {
-                    // bufs.push((team.alloc_local_mem_region(std::cmp::max(#lamellar::array::OPS_BUFFER_SIZE, op_size+data_size)),0));
+                    // bufs.push((team.alloc_one_sided_mem_region(std::cmp::max(#lamellar::array::OPS_BUFFER_SIZE, op_size+data_size)),0));
                     let mut v = Vec::with_capacity(std::cmp::max(#lamellar::array::OPS_BUFFER_SIZE, op_size+data_size));
                     unsafe {v.set_len(std::cmp::max(#lamellar::array::OPS_BUFFER_SIZE, op_size+data_size));}
                     bufs.push((v,0));
@@ -667,13 +667,13 @@ fn create_buf_ops(
                 else {
                     if bufs.last().unwrap().1 + op_size+data_size > #lamellar::array::OPS_BUFFER_SIZE{
                         // println!("here");
-                        // bufs.push((team.alloc_local_mem_region(std::cmp::max(#lamellar::array::OPS_BUFFER_SIZE, op_size+data_size)),0));
+                        // bufs.push((team.alloc_one_sided_mem_region(std::cmp::max(#lamellar::array::OPS_BUFFER_SIZE, op_size+data_size)),0));
                         let mut v = Vec::with_capacity(std::cmp::max(#lamellar::array::OPS_BUFFER_SIZE, op_size+data_size));
                         unsafe {v.set_len(std::cmp::max(#lamellar::array::OPS_BUFFER_SIZE, op_size+data_size));}
                         bufs.push((v,0));
                     }
                 }
-                // let mut buf: &mut (LocalMemoryRegion<u8>, usize) = bufs.last_mut().unwrap();
+                // let mut buf: &mut (OneSidedMemoryRegion<u8>, usize) = bufs.last_mut().unwrap();
                 let mut buf: &mut (Vec<u8>, usize) = bufs.last_mut().unwrap();
                 let _temp = self.cur_len.fetch_add(op_data.len(),Ordering::SeqCst);
                 // let mut buf_slice = unsafe{buf.0.as_mut_slice().unwrap()};
@@ -730,14 +730,14 @@ fn create_buf_ops(
         }
 
         impl #am_buf_name{
-            // async fn get_ops(&self, team: &std::sync::Arc<#lamellar::LamellarTeam>) -> #lamellar::LocalMemoryRegion<u8>{
+            // async fn get_ops(&self, team: &std::sync::Arc<#lamellar::LamellarTeam>) -> #lamellar::OneSidedMemoryRegion<u8>{
             //     // println!("get_ops {:?}",self.ops2.len());
             //     unsafe{
             //         let serialized_ops = if self.ops2.data_local(){
             //             self.ops2.clone()
             //         }
             //         else{
-            //             let serialized_ops = team.alloc_local_mem_region::<u8>(self.ops2.len());
+            //             let serialized_ops = team.alloc_one_sided_mem_region::<u8>(self.ops2.len());
             //             let local_slice = serialized_ops.as_mut_slice().unwrap();
             //             local_slice[self.ops2.len()- 1] = 255u8;
             //             // self.ops2.get_unchecked(0, serialized_ops.clone());
@@ -965,7 +965,7 @@ fn create_buffered_ops(
             use __lamellar::LamellarRequest;
             use __lamellar::RemoteActiveMessage;
             // use __lamellar::memregion::{RemoteMemoryRegion};
-            use __lamellar::LocalMemoryRegion;
+            use __lamellar::OneSidedMemoryRegion;
             use __lamellar::RemoteMemoryRegion;
             use std::sync::Arc;
             use parking_lot::{Mutex,RwLock};

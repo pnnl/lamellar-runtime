@@ -27,7 +27,7 @@ impl<T: Dist + 'static> NativeAtomicArray<T> {
     }
 
     pub(crate) fn internal_at(&self, index: usize) -> Box<dyn LamellarArrayRequest<Output = T>> {
-        let buf: LocalMemoryRegion<T> = self.array.team().alloc_local_mem_region(1);
+        let buf: OneSidedMemoryRegion<T> = self.array.team().alloc_one_sided_mem_region(1);
         let req = self.exec_am_local(InitGetAm {
             array: self.clone(),
             index: index,

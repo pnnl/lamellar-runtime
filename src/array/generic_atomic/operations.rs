@@ -19,6 +19,7 @@ lazy_static! {
     };
 }
 
+#[doc(hidden)]
 pub struct GenericAtomicArrayOp {
     pub id: (ArrayOpCmd, TypeId),
     pub op: OpFn,
@@ -38,6 +39,7 @@ lazy_static! {
     };
 }
 
+#[doc(hidden)]
 pub struct GenericAtomicArrayOpBuf {
     pub id: TypeId,
     pub op: BufFn,

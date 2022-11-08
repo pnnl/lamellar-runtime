@@ -12,6 +12,32 @@ use std::sync::Arc;
 
 use std::ops::Bound;
 
+
+/// A Shared Memory Region is a [RemoteMemoryRegion] that has only been allocated on multiple PEs.
+///
+/// The memory region provides RDMA access to any PE which has a handle to the region.
+///
+/// SharedMemoryRegions implement distributed reference counting, so their handles can be sent along in active messages
+/// to other Remote PE's, and it is gauranteed that the memory regions on each PE will remain valid as long as a single reference
+/// exists on any PE anywhere in the distributed system (even if the original allocating PEs drops all local references to the memory region)
+///
+/// SharedMemoryRegions are constructed using either the LamellarWorld instance or a LamellarTeam instance.
+///
+/// Memory Regions are low-level unsafe abstraction not really intended for use in higher-level applications
+/// 
+/// # Warning
+/// Unless you are very confident in low level distributed memory access it is highly recommended you utilize the
+/// [LamellarArray][crate::array::LamellarArray]  interface to construct and interact with distributed memory.
+///
+/// # Examples
+///
+/// 
+///```
+/// use lamellar::{SharedMemoryRegion, RemoteMemoryRegion};
+///
+/// let world_mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(1000); 
+/// let team_mem_region: SharedMemoryRegion<usize> = some_team.alloc_shared_mem_region(1000); 
+/// ```
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 pub struct SharedMemoryRegion<T: Dist> {
     pub(crate) mr: Darc<MemoryRegion<u8>>,
@@ -46,6 +72,8 @@ impl<T: Dist> crate::DarcSerde for SharedMemoryRegion<T> {
     }
 }
 
+
+
 impl<T: Dist> SharedMemoryRegion<T> {
     pub(crate) fn new(
         size: usize,
@@ -77,18 +105,101 @@ impl<T: Dist> SharedMemoryRegion<T> {
             phantom: PhantomData,
         })
     }
+    /// The length (in number of elements of `T`) of the local segment of the memory region (i.e. not the global length of the memory region)  
+    ///
+    /// # Example
+    ///```
+    /// use lamellar::SharedMemoryRegion;
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(1000); 
+    /// assert_eq!(mem_region.len(),1000)
     pub fn len(&self) -> usize {
         RegisteredMemoryRegion::<T>::len(self)
     }
+
+    /// "Puts" (copies) data from a local memory location into a remote memory location on the specified PE
+    ///
+    /// # Arguments
+    ///
+    /// * `pe` - id of remote PE to grab data from
+    /// * `index` - offset into the remote memory window
+    /// * `data` - A LamellarMemoryRegion (either shared or onesided) that has data local to this PE,
+    /// the data buffer may not be safe to upon return from this call, currently the user is responsible for completion detection,
+    /// or you may use the similar iput call (with a potential performance penalty);
+    ///
+    /// # Safety
+    /// This call is always unsafe as mutual exclusitivity is not enforced, i.e. many other reader/writers can exist simultaneously. 
+    /// Additionally, when this call returns the underlying fabric provider may or may not have already copied the data buffer
+    ///
+    /// # Panics
+    /// Panics if "data" does not have any local data on this PE
+    /// Panics if index is out of bounds
+    /// Panics if PE is out of bounds
     pub unsafe fn put<U: Into<LamellarMemoryRegion<T>>>(&self, pe: usize, index: usize, data: U) {
         MemoryRegionRDMA::<T>::put(self, pe, index, data);
     }
-    pub fn iput<U: Into<LamellarMemoryRegion<T>>>(&self, pe: usize, index: usize, data: U) {
-        MemoryRegionRDMA::<T>::iput(self, pe, index, data);
+
+    /// Blocking "Puts" (copies) data from a local memory location into a remote memory location on the specified PE.
+    ///
+    /// This function blocks until the data in the data buffer has been transfered out of this PE, this does not imply that it has arrived at the remote destination though
+    /// # Arguments
+    ///
+    /// * `pe` - id of remote PE to grab data from
+    /// * `index` - offset into the remote memory window
+    /// * `data` - A LamellarMemoryRegion (either shared or onesided) that has data local to this PE,
+    /// the data buffer is free to be reused upon return of this function.
+    ///
+    /// # Safety
+    /// This call is always unsafe as mutual exclusitivity is not enforced, i.e. many other reader/writers can exist simultaneously. 
+    ///
+    /// # Panics
+    /// Panics if "data" does not have any local data on this PE
+    /// Panics if index is out of bounds
+    /// Panics if PE is out of bounds
+    pub unsafe fn blocking_put<U: Into<LamellarMemoryRegion<T>>>(&self, pe: usize, index: usize, data: U) {
+        MemoryRegionRDMA::<T>::blocking_put(self, pe, index, data);
     }
+
+    /// "Puts" (copies) data from a local memory location into a remote memory location on all PEs containing the memory region
+    /// 
+    /// This is similar to broad cast
+    ///
+    /// # Arguments
+    ///
+    /// * `index` - offset into the remote memory window
+    /// * `data` - A LamellarMemoryRegion (either shared or onesided) that has data local to this PE,
+    /// the data buffer may not be safe to upon return from this call, currently the user is responsible for completion detection,
+    /// or you may use the similar iput call (with a potential performance penalty);
+    ///
+    /// # Safety
+    /// This call is always unsafe as mutual exclusitivity is not enforced, i.e. many other reader/writers can exist simultaneously. 
+    /// Additionally, when this call returns the underlying fabric provider may or may not have already copied the data buffer
+    ///
+    /// # Panics
+    /// Panics if "data" does not have any local data on this PE
+    /// Panics if index is out of bounds
     pub unsafe fn put_all<U: Into<LamellarMemoryRegion<T>>>(&self, index: usize, data: U) {
         MemoryRegionRDMA::<T>::put_all(self, index, data);
     }
+
+    /// "Gets" (copies) data from remote memory location on the specified PE into the provided data buffer.
+    /// After calling this function, the data may or may not have actually arrived into the data buffer.
+    /// The user is responsible for transmission termination detection
+    ///
+    /// # Arguments
+    ///
+    /// * `pe` - id of remote PE to grab data from
+    /// * `index` - offset into the remote memory window
+    /// * `data` - A LamellarMemoryRegion (either shared or onesided) that has data local to this PE
+    ///
+    /// # Safety
+    /// This call is always unsafe as mutual exclusitivity is not enforced, i.e. many other reader/writers can exist simultaneously. 
+    /// Additionally, when this call returns the underlying fabric provider may or may not have already copied data into the data buffer.
+    ///
+    /// # Panics
+    /// Panics if "data" does not have any local data on this PE
+    /// Panics if index is out of bounds
+    /// Panics if PE is out of bounds
     pub unsafe fn get_unchecked<U: Into<LamellarMemoryRegion<T>>>(
         &self,
         pe: usize,
@@ -97,22 +208,72 @@ impl<T: Dist> SharedMemoryRegion<T> {
     ) {
         MemoryRegionRDMA::<T>::get_unchecked(self, pe, index, data);
     }
-    pub fn iget<U: Into<LamellarMemoryRegion<T>>>(&self, pe: usize, index: usize, data: U) {
-        MemoryRegionRDMA::<T>::iget(self, pe, index, data);
+
+    /// Blocking "Gets" (copies) data from remote memory location on the specified PE into the provided data buffer.
+    /// After calling this function, the data is guaranteed to be placed in the data buffer
+    ///
+    /// # Arguments
+    ///
+    /// * `pe` - id of remote PE to grab data from
+    /// * `index` - offset into the remote memory window
+    /// * `data` - A LamellarMemoryRegion (either shared or onesided) that has data local to this PE
+    ///
+    /// # Safety
+    /// This call is always unsafe as mutual exclusitivity is not enforced, i.e. many other reader/writers can exist simultaneously.
+    ///
+    /// # Panics
+    /// Panics if "data" does not have any local data on this PE
+    /// Panics if index is out of bounds
+    /// Panics if PE is out of bounds
+    pub unsafe fn blocking_get<U: Into<LamellarMemoryRegion<T>>>(&self, pe: usize, index: usize, data: U) {
+        MemoryRegionRDMA::<T>::blocking_get(self, pe, index, data);
     }
+
+    /// Create a sub region of this OneSidedMemoryRegion using the provided range
+    ///
+    /// # Panics
+    /// panics if the end range is larger than the length of the memory region
     pub fn sub_region<R: std::ops::RangeBounds<usize>>(&self, range: R) -> LamellarMemoryRegion<T> {
         SubRegion::<T>::sub_region(self, range)
     }
-    pub fn as_slice(&self) -> MemResult<&[T]> {
+
+    /// Return a slice of the local (to the calling PE) data of the memory region
+    ///
+    /// Returns an error if the PE does not contain any local data associated with this memory region
+    ///
+    /// # Safety
+    /// this call is always unsafe as there is no gaurantee that there do not exist mutable references elsewhere in the distributed system.
+    pub unsafe fn as_slice(&self) -> MemResult<&[T]> {
         RegisteredMemoryRegion::<T>::as_slice(self)
     }
+
+    /// Return a mutable slice of the local (to the calling PE) data of the memory region
+    ///
+    /// Returns an error if the PE does not contain any local data associated with this memory region
+    ///
+    /// # Safety
+    /// this call is always unsafe as there is no gaurantee that there do not exist other mutable references elsewhere in the distributed system.
     pub unsafe fn as_mut_slice(&self) -> MemResult<&mut [T]> {
         RegisteredMemoryRegion::<T>::as_mut_slice(self)
     }
-    pub fn as_ptr(&self) -> MemResult<*const T> {
+
+    /// Return a ptr to the local (to the calling PE) data of the memory region
+    ///
+    /// Returns an error if the PE does not contain any local data associated with this memory region
+    ///
+    /// # Safety
+    /// this call is always unsafe as there is no gaurantee that there do not exist mutable references elsewhere in the distributed system.
+    pub unsafe fn as_ptr(&self) -> MemResult<*const T> {
         RegisteredMemoryRegion::<T>::as_ptr(self)
     }
-    pub fn as_mut_ptr(&self) -> MemResult<*mut T> {
+
+    /// Return a mutable ptr to the local (to the calling PE) data of the memory region
+    ///
+    /// Returns an error if the PE does not contain any local data associated with this memory region
+    ///
+    /// # Safety
+    /// this call is always unsafe as there is no gaurantee that there do not exist mutable references elsewhere in the distributed system.
+    pub unsafe fn as_mut_ptr(&self) -> MemResult<*mut T> {
         RegisteredMemoryRegion::<T>::as_mut_ptr(self)
     }
 }
@@ -122,7 +283,7 @@ impl<T: Dist + serde::Serialize> SharedMemoryRegion<T> {
     where
         S: serde::Serializer,
     {
-        self.as_slice().unwrap().serialize(s)
+        unsafe {self.as_slice().unwrap().serialize(s)}
     }
 }
 //account for subregion stuff
@@ -137,10 +298,10 @@ impl<T: Dist> RegisteredMemoryRegion<T> for SharedMemoryRegion<T> {
             Err(MemNotLocalError {})
         }
     }
-    fn at(&self, index: usize) -> MemResult<&T> {
+    unsafe fn at(&self, index: usize) -> MemResult<&T> {
         self.mr.casted_at::<T>(index)
     }
-    fn as_slice(&self) -> MemResult<&[T]> {
+    unsafe fn as_slice(&self) -> MemResult<&[T]> {
         if let Ok(slice) = self.mr.as_casted_slice::<T>() {
             Ok(&slice[self.sub_region_offset..(self.sub_region_offset + self.sub_region_size)])
         } else {
@@ -154,14 +315,14 @@ impl<T: Dist> RegisteredMemoryRegion<T> for SharedMemoryRegion<T> {
             Err(MemNotLocalError {})
         }
     }
-    fn as_ptr(&self) -> MemResult<*const T> {
+    unsafe fn as_ptr(&self) -> MemResult<*const T> {
         if let Ok(addr) = self.addr() {
             Ok(addr as *const T)
         } else {
             Err(MemNotLocalError {})
         }
     }
-    fn as_mut_ptr(&self) -> MemResult<*mut T> {
+    unsafe fn as_mut_ptr(&self) -> MemResult<*mut T> {
         if let Ok(addr) = self.addr() {
             Ok(addr as *mut T)
         } else {
@@ -227,8 +388,8 @@ impl<T: Dist> MemoryRegionRDMA<T> for SharedMemoryRegion<T> {
     unsafe fn put<U: Into<LamellarMemoryRegion<T>>>(&self, pe: usize, index: usize, data: U) {
         self.mr.put(pe, self.sub_region_offset + index, data);
     }
-    fn iput<U: Into<LamellarMemoryRegion<T>>>(&self, pe: usize, index: usize, data: U) {
-        self.mr.iput(pe, self.sub_region_offset + index, data);
+    unsafe fn blocking_put<U: Into<LamellarMemoryRegion<T>>>(&self, pe: usize, index: usize, data: U) {
+        self.mr.blocking_put(pe, self.sub_region_offset + index, data);
     }
     unsafe fn put_all<U: Into<LamellarMemoryRegion<T>>>(&self, index: usize, data: U) {
         self.mr.put_all(self.sub_region_offset + index, data);
@@ -242,8 +403,8 @@ impl<T: Dist> MemoryRegionRDMA<T> for SharedMemoryRegion<T> {
         self.mr
             .get_unchecked(pe, self.sub_region_offset + index, data);
     }
-    fn iget<U: Into<LamellarMemoryRegion<T>>>(&self, pe: usize, index: usize, data: U) {
-        self.mr.iget(pe, self.sub_region_offset + index, data);
+    unsafe fn blocking_get<U: Into<LamellarMemoryRegion<T>>>(&self, pe: usize, index: usize, data: U) {
+        self.mr.blocking_get(pe, self.sub_region_offset + index, data);
     }
 }
 
@@ -251,9 +412,9 @@ impl<T: Dist> RTMemoryRegionRDMA<T> for SharedMemoryRegion<T> {
     unsafe fn put_slice(&self, pe: usize, index: usize, data: &[T]) {
         self.mr.put_slice(pe, self.sub_region_offset + index, data)
     }
-    unsafe fn iget_slice(&self, pe: usize, index: usize, data: &mut [T]) {
+    unsafe fn blocking_get_slice(&self, pe: usize, index: usize, data: &mut [T]) {
         // println!("iget_slice {:?} {:?}",pe,self.sub_region_offset + index);
-        self.mr.iget_slice(pe, self.sub_region_offset + index, data)
+        self.mr.blocking_get_slice(pe, self.sub_region_offset + index, data)
     }
 }
 

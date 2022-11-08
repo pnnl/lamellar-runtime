@@ -103,16 +103,95 @@ impl<T> LocalRwDarc<T> {
         );
     }
 
+    /// Aquires a reader lock of this LocalRwDarc local to this PE.
+    ///
+    /// The current THREAD will be blocked until the lock has been acquired.
+    ///
+    /// This function will not return while any writer currentl has access to the lock
+    ///
+    /// Returns an RAII guard which will drop the read access of the wrlock when dropped
+    ///
+    /// # Note
+    /// the aquired lock is only with respect to this PE, the locks on the other PEs will be in their own states
+    ///
+    /// # Examples
+    /// 
+    ///```
+    /// use lamellar::{ActiveMessaging, LocalRwDarc};
+    /// #[lamellar::AmData(Clone)]
+    /// struct DarcAm {
+    ///     counter: LocalRwDarc<usize>, //each pe has a local atomicusize
+    /// }
+    /// 
+    /// #[lamellar::am]
+    /// impl LamellarAm for DarcAm {
+    ///     async fn exec(self) {
+    ///         let counter = self.counter.read(); //block until we get the write lock
+    ///         println!("the current counter value on pe {} = {}",lamellar::current_pe,counter);
+    ///     }
+    ///  }
+    /// -------------
+    /// let counter = GlobalRwDarc::new(world, 0).unwrap();
+    /// world.exec_am_all(DarcAm {counter: counter.clone()});
+    /// let guard = world.block_on(counter.async_read());
+    /// println!("the current counter value on pe {} main thread = {}",my_pe,guard);
+    ///```
     pub fn read(&self) -> ArcRwLockReadGuard<RawRwLock, Box<T>> {
         self.darc.read_arc()
     }
 
+    /// Aquires the writer lock of this LocalRwDarc local to this PE.
+    ///
+    /// The current THREAD will be blocked until the lock has been acquired.
+    ///
+    /// This function will not return while another writer or any readers currently have access to the lock
+    ///
+    /// Returns an RAII guard which will drop the write access of the wrlock when dropped
+    ///
+    /// # Note
+    /// the aquired lock is only with respect to this PE, the locks on the other PEs will be in their own states
+    ///
+    /// # Examples
+    /// 
+    ///```
+    /// use lamellar::{ActiveMessaging, LocalRwDarc};
+    /// #[lamellar::AmData(Clone)]
+    /// struct DarcAm {
+    ///     counter: LocalRwDarc<usize>, //each pe has a local atomicusize
+    /// }
+    /// 
+    /// #[lamellar::am]
+    /// impl LamellarAm for DarcAm {
+    ///     async fn exec(self) {
+    ///         let counter = self.counter.write(); //block until we get the write lock
+    ///        counter += 1; 
+    ///     }
+    ///  }
+    /// -------------
+    /// let counter = GlobalRwDarc::new(world, 0).unwrap();
+    /// world.exec_am_all(DarcAm {counter: counter.clone()});
+    /// let guard = counter.write();
+    /// guard += my_pe;
+    ///```
     pub fn write(&self) -> ArcRwLockWriteGuard<RawRwLock, Box<T>> {
         self.darc.write_arc()
     }
 }
 
 impl<T> LocalRwDarc<T> {
+    /// Constructs a new `LocalRwDarc<T>` on the PEs specified by team.
+    /// 
+    /// This is a blocking collective call amongst all PEs in the team, only returning once every PE in the team has completed the call.
+    ///
+    /// Returns an error if this PE is not a part of team
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use lamellar::LocalRwDarc;
+    ///
+    /// let five = LocalRwDarc::new(5);
+    /// ```
     pub fn new<U: Into<IntoLamellarTeam>>(team: U, item: T) -> Result<LocalRwDarc<T>, IdError> {
         Ok(LocalRwDarc {
             darc: Darc::try_new(
@@ -123,16 +202,31 @@ impl<T> LocalRwDarc<T> {
         })
     }
 
-    pub fn try_new<U: Into<IntoLamellarTeam>>(team: U, item: T) -> Result<LocalRwDarc<T>, IdError> {
-        Ok(LocalRwDarc {
-            darc: Darc::try_new(
-                team,
-                Arc::new(RwLock::new(Box::new(item))),
-                DarcMode::LocalRw,
-            )?,
-        })
-    }
+    // pub(crate) fn try_new<U: Into<IntoLamellarTeam>>(team: U, item: T) -> Result<LocalRwDarc<T>, IdError> {
+    //     Ok(LocalRwDarc {
+    //         darc: Darc::try_new(
+    //             team,
+    //             Arc::new(RwLock::new(Box::new(item))),
+    //             DarcMode::LocalRw,
+    //         )?,
+    //     })
+    // }
 
+
+    /// Converts this LocalRwDarc into a regular [Darc]
+    ///
+    /// This is a blocking collective call amongst all PEs in the LocalRwDarc's team, only returning once every PE in the team has completed the call.
+    ///
+    /// Furthermore, this call will block while any additional references outside of the one making this call exist on each PE. It is not possible for the
+    /// pointed to object to wrapped by both a Darc and a LocalRwDarc simultaneously (on any PE).
+    ///
+    /// # Example
+    /// ```
+    /// use lamellar::{Darc,LocalRwDarc};
+    ///
+    /// let five = LocalRwDarc::new(5);
+    /// let five_as_darc = five.into_darc(); 
+    /// ```
     pub fn into_darc(self) -> Darc<T> {
         let inner = self.inner();
         // println!("into_darc");
@@ -159,6 +253,21 @@ impl<T> LocalRwDarc<T> {
         d
     }
 
+
+    /// Converts this LocalRwDarc into a [GlobalRwDarc]
+    ///
+    /// This is a blocking collective call amongst all PEs in the LocalRwDarc's team, only returning once every PE in the team has completed the call.
+    ///
+    /// Furthermore, this call will block while any additional references outside of the one making this call exist on each PE. It is not possible for the
+    /// pointed to object to wrapped by both a GlobalRwDarc and a LocalRwDarc simultaneously (on any PE).
+    ///
+    /// # Example
+    /// ```
+    /// use lamellar::{GlobalRwDarc,LocalRwDarc};
+    ///
+    /// let five = LocalRwDarc::new(5);
+    /// let five_as_globaldarc = five.into_globalrw(); 
+    /// ```
     pub fn into_globalrw(self) -> GlobalRwDarc<T> {
         let inner = self.inner();
         // println!("into_darc");

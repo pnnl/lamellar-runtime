@@ -44,6 +44,7 @@ macro_rules! impl_atomic_ops{
                 unsafe { &*(self as *const $A as *mut $A as *mut Self::Atomic) }
             }
         }
+        #[doc(hidden)]
         pub struct $C<'a>(pub &'a $B);
         impl AddAssign<$A> for $C<'_>{
             fn add_assign(&mut self, val: $A) {
@@ -544,6 +545,8 @@ macro_rules! impl_compare_exchange_eps {
 }
 
 use std::ops::{AddAssign, BitAndAssign, BitOrAssign, DivAssign, MulAssign, SubAssign};
+
+#[doc(hidden)]
 pub struct NativeAtomicElement<T> {
     array: NativeAtomicArray<T>,
     local_index: usize,
@@ -636,12 +639,14 @@ impl<T: Dist + std::fmt::Debug> std::fmt::Debug for NativeAtomicElement<T> {
     }
 }
 
+#[doc(hidden)]
 #[lamellar_impl::AmDataRT(Clone, Debug)]
 pub struct NativeAtomicArray<T> {
     pub(crate) array: UnsafeArray<T>,
     pub(crate) orig_t: NativeAtomicType,
 }
 
+#[doc(hidden)]
 #[lamellar_impl::AmDataRT(Clone, Debug)]
 pub struct NativeAtomicByteArray {
     pub(crate) array: UnsafeByteArray,
@@ -656,6 +661,7 @@ impl NativeAtomicByteArray {
     }
 }
 
+#[doc(hidden)]
 #[lamellar_impl::AmLocalDataRT(Clone, Debug)]
 pub struct NativeAtomicByteArrayWeak {
     pub(crate) array: UnsafeByteArrayWeak,
@@ -671,6 +677,7 @@ impl NativeAtomicByteArrayWeak {
     }
 }
 
+#[doc(hidden)]
 #[derive(Clone, Debug)]
 pub struct NativeAtomicLocalData<T> {
     // + NativeAtomicOps> {
@@ -679,6 +686,7 @@ pub struct NativeAtomicLocalData<T> {
     end_index: usize,
 }
 
+#[doc(hidden)]
 #[derive(Debug)]
 pub struct NativeAtomicLocalDataIter<T: Dist> {
     //+ NativeAtomicOps> {
@@ -1086,6 +1094,7 @@ impl<T: Dist + AmDist + 'static> NativeAtomicArray<T> {
 }
 
 //for use within RDMA active messages to atomically read/write values
+#[doc(hidden)]
 #[derive(serde::Serialize, serde::Deserialize, Clone, Copy, Debug)]
 pub enum NativeAtomicType {
     I8,

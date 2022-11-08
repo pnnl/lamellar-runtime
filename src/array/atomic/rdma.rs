@@ -5,6 +5,7 @@ use crate::array::*;
 use crate::memregion::Dist;
 
 type GetFn = fn(AtomicByteArray, usize, usize) -> LamellarArcAm;
+#[doc(hidden)]
 pub struct AtomicArrayGet {
     pub id: TypeId,
     pub op: GetFn,
@@ -22,6 +23,7 @@ lazy_static! {
 }
 
 type PutFn = fn(AtomicByteArray, usize, usize, Vec<u8>) -> LamellarArcAm;
+#[doc(hidden)]
 pub struct AtomicArrayPut {
     pub id: TypeId,
     pub op: PutFn,

@@ -453,6 +453,7 @@ impl<T: Dist + std::fmt::Debug> ArrayPrint<T> for LocalLockAtomicArray<T> {
     }
 }
 
+#[doc(hidden)]
 pub struct LocalLockAtomicArrayReduceHandle<T: Dist + AmDist> {
     req: Box<dyn LamellarRequest<Output = T>>,
     _lock_guard: ArcRwLockReadGuard<RawRwLock, Box<()>>,

@@ -20,6 +20,7 @@ lazy_static! {
     };
 }
 
+#[doc(hidden)]
 pub struct ReadOnlyArrayOpBuf {
     pub id: TypeId,
     pub op: BufFn,
@@ -32,6 +33,7 @@ pub struct ReadOnlyArray<T> {
     pub(crate) array: UnsafeArray<T>,
 }
 
+#[doc(hidden)]
 #[lamellar_impl::AmDataRT(Clone, Debug)]
 pub struct ReadOnlyByteArray {
     pub(crate) array: UnsafeByteArray,
@@ -44,6 +46,7 @@ impl ReadOnlyByteArray {
     }
 }
 
+#[doc(hidden)]
 #[lamellar_impl::AmLocalDataRT(Clone, Debug)]
 pub struct ReadOnlyByteArrayWeak {
     pub(crate) array: UnsafeByteArrayWeak,

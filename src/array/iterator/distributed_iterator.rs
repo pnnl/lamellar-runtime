@@ -130,6 +130,7 @@ pub trait DistIterRequest {
     fn wait(self: Box<Self>) -> Self::Output;
 }
 
+#[doc(hidden)]
 pub struct DistIterForEachHandle {
     pub(crate) reqs: Vec<Box<dyn LamellarRequest<Output = ()>>>,
 }
@@ -155,6 +156,7 @@ impl DistIterRequest for DistIterForEachHandle {
     }
 }
 
+#[doc(hidden)]
 pub struct DistIterCollectHandle<T: Dist, A: From<UnsafeArray<T>> + SyncSend> {
     pub(crate) reqs: Vec<Box<dyn LamellarRequest<Output = Vec<T>>>>,
     pub(crate) distribution: Distribution,

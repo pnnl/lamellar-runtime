@@ -10,6 +10,7 @@ use crate::memregion::Dist;
 //     RawRwLock,
 // };
 
+#[doc(hidden)]
 #[derive(Clone)]
 pub struct GenericAtomicDistIter<T: Dist> {
     data: GenericAtomicArray<T>,

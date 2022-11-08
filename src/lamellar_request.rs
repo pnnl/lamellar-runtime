@@ -74,6 +74,7 @@ impl std::fmt::Debug for LamellarRequestHandleInner {
 // we use the ready bool to protect access to the data field
 unsafe impl Sync for LamellarRequestHandleInner {}
 
+#[doc(hidden)]
 #[derive(Debug)]
 pub struct LamellarRequestHandle<T: AmDist> {
     pub(crate) inner: Arc<LamellarRequestHandleInner>,
@@ -169,6 +170,7 @@ pub(crate) struct LamellarMultiRequestHandleInner {
     pub(crate) user_handle: AtomicBool, //we can use this flag to optimize what happens when the request returns
 }
 
+#[doc(hidden)]
 #[derive(Debug)]
 pub struct LamellarMultiRequestHandle<T: AmDist> {
     pub(crate) inner: Arc<LamellarMultiRequestHandleInner>,
@@ -287,6 +289,7 @@ impl std::fmt::Debug for LamellarLocalRequestHandleInner {
 // we use the ready bool to protect access to the data field
 unsafe impl Sync for LamellarLocalRequestHandleInner {}
 
+#[doc(hidden)]
 #[derive(Debug)]
 pub struct LamellarLocalRequestHandle<T> {
     pub(crate) inner: Arc<LamellarLocalRequestHandleInner>,

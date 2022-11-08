@@ -9,7 +9,7 @@ use crate::array::*;
 
 use crate::lamellar_request::LamellarRequest;
 use crate::memregion::{
-    local::LocalMemoryRegion, shared::SharedMemoryRegion, Dist, LamellarMemoryRegion,
+    one_sided::OneSidedMemoryRegion, shared::SharedMemoryRegion, Dist, LamellarMemoryRegion,
 };
 // use crate::Darc;
 use async_trait::async_trait;
@@ -739,14 +739,14 @@ impl<'a, T: Dist> OpInput<'a, T> for &LamellarMemoryRegion<T> {
     }
 }
 
-impl<'a, T: Dist> OpInput<'a, T> for &LocalMemoryRegion<T> {
+impl<'a, T: Dist> OpInput<'a, T> for &OneSidedMemoryRegion<T> {
     #[tracing::instrument(skip_all)]
     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
         LamellarMemoryRegion::from(self).as_op_input()
     }
 }
 
-impl<'a, T: Dist> OpInput<'a, T> for LocalMemoryRegion<T> {
+impl<'a, T: Dist> OpInput<'a, T> for OneSidedMemoryRegion<T> {
     #[tracing::instrument(skip_all)]
     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
         LamellarMemoryRegion::from(self).as_op_input()

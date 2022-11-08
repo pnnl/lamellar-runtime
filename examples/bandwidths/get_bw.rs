@@ -12,7 +12,7 @@ fn main() {
     let my_pe = world.my_pe();
     let num_pes = world.num_pes();
     let mem_reg = world.alloc_shared_mem_region::<u8>(MEMREG_LEN);
-    let data = world.alloc_local_mem_region::<u8>(MEMREG_LEN);
+    let data = world.alloc_one_sided_mem_region::<u8>(MEMREG_LEN);
     for j in 0..MEMREG_LEN as usize {
         unsafe {
             data.as_mut_slice().unwrap()[j] = my_pe as u8;
@@ -65,7 +65,7 @@ fn main() {
             println!("issue time: {:?}", timer.elapsed());
             world.wait_all();
         }
-        let data_slice = data.as_slice().unwrap();
+        let data_slice = unsafe {data.as_slice().unwrap()};
         if my_pe == 0 {
             for j in (0..2_u64.pow(exp) as usize).step_by(num_bytes as usize) {
                 while data_slice[(j + num_bytes as usize) - 1] == my_pe as u8 {

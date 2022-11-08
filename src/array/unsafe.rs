@@ -64,6 +64,7 @@ pub struct UnsafeArray<T> {
     phantom: PhantomData<T>,
 }
 
+#[doc(hidden)]
 #[lamellar_impl::AmDataRT(Clone, Debug)]
 pub struct UnsafeByteArray {
     pub(crate) inner: UnsafeArrayInner,
@@ -77,6 +78,7 @@ impl UnsafeByteArray {
     }
 }
 
+#[doc(hidden)]
 #[lamellar_impl::AmLocalDataRT(Clone, Debug)]
 pub struct UnsafeByteArrayWeak {
     pub(crate) inner: UnsafeArrayInnerWeak,

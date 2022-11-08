@@ -1,6 +1,6 @@
 use crate::array::iterator::serial_iterator::*;
 use crate::array::LamellarArrayRequest;
-use crate::LocalMemoryRegion;
+use crate::OneSidedMemoryRegion;
 
 use async_trait::async_trait;
 use pin_project::pin_project;
@@ -74,7 +74,7 @@ where
     }
     fn buffered_next(
         &mut self,
-        mem_region: LocalMemoryRegion<u8>,
+        mem_region: OneSidedMemoryRegion<u8>,
     ) -> Option<Box<dyn LamellarArrayRequest<Output = ()>>> {
         let res = self.iter.buffered_next(mem_region)?;
         self.iter.advance_index(self.step_size - 1);
@@ -82,7 +82,7 @@ where
     }
     // async fn async_buffered_next(
     //     mut self: Pin<&mut Self>,
-    //     mem_region: LocalMemoryRegion<u8>,
+    //     mem_region: OneSidedMemoryRegion<u8>,
     // ) -> Option<Box<dyn LamellarArrayRequest<Output = ()>>> {
     //     let this = self.as_mut().project();
     //     let res = this.iter.async_buffered_next(mem_region).await?;
@@ -90,7 +90,7 @@ where
     //     this.iter.async_advance_index(*this.step_size - 1).await;
     //     Some(res)
     // }
-    fn from_mem_region(&self, mem_region: LocalMemoryRegion<u8>) -> Option<Self::Item> {
+    fn from_mem_region(&self, mem_region: OneSidedMemoryRegion<u8>) -> Option<Self::Item> {
         self.iter.from_mem_region(mem_region)
     }
 }

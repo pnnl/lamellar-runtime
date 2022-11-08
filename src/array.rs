@@ -1,6 +1,6 @@
 use crate::lamellar_request::LamellarRequest;
 use crate::memregion::{
-    local::LocalMemoryRegion, shared::SharedMemoryRegion, Dist, LamellarMemoryRegion,
+    one_sided::OneSidedMemoryRegion, shared::SharedMemoryRegion, Dist, LamellarMemoryRegion,
     // RemoteMemoryRegion,
 };
 use crate::{active_messaging::*, LamellarTeamRT};
@@ -145,7 +145,7 @@ impl LamellarArrayRequest for ArrayRdmaHandle {
 
 struct ArrayRdmaAtHandle<T: Dist> {
     reqs: Vec<Box<dyn LamellarRequest<Output = ()>>>,
-    buf: LocalMemoryRegion<T>,
+    buf: OneSidedMemoryRegion<T>,
 }
 #[async_trait]
 impl<T: Dist> LamellarArrayRequest for ArrayRdmaAtHandle<T> {
@@ -154,13 +154,13 @@ impl<T: Dist> LamellarArrayRequest for ArrayRdmaAtHandle<T> {
         for req in self.reqs.drain(0..) {
             req.into_future().await;
         }
-        self.buf.as_slice().unwrap()[0]
+        unsafe{self.buf.as_slice().unwrap()[0]}
     }
     fn wait(mut self: Box<Self>) -> Self::Output {
         for req in self.reqs.drain(0..) {
             req.get();
         }
-        self.buf.as_slice().unwrap()[0]
+        unsafe{self.buf.as_slice().unwrap()[0]}
     }
 }
 
@@ -169,7 +169,7 @@ impl<T: Dist> LamellarArrayRequest for ArrayRdmaAtHandle<T> {
 pub enum LamellarArrayInput<T: Dist> {
     LamellarMemRegion(LamellarMemoryRegion<T>),
     SharedMemRegion(SharedMemoryRegion<T>), //when used as input/output we are only using the local data
-    LocalMemRegion(LocalMemoryRegion<T>),
+    LocalMemRegion(OneSidedMemoryRegion<T>),
     // UnsafeArray(UnsafeArray<T>),
 }
 
@@ -181,7 +181,7 @@ impl<T: Dist> LamellarRead for T {}
 
 impl<T: Dist> MyFrom<&T> for LamellarArrayInput<T> {
     fn my_from(val: &T, team: &Pin<Arc<LamellarTeamRT>>) -> Self {
-        let buf: LocalMemoryRegion<T> = team.alloc_local_mem_region(1);
+        let buf: OneSidedMemoryRegion<T> = team.alloc_one_sided_mem_region(1);
         unsafe {
             buf.as_mut_slice().unwrap()[0] = val.clone();
         }
@@ -191,7 +191,7 @@ impl<T: Dist> MyFrom<&T> for LamellarArrayInput<T> {
 
 impl<T: Dist> MyFrom<T> for LamellarArrayInput<T> {
     fn my_from(val: T, team: &Pin<Arc<LamellarTeamRT>>) -> Self {
-        let buf: LocalMemoryRegion<T> = team.alloc_local_mem_region(1);
+        let buf: OneSidedMemoryRegion<T> = team.alloc_one_sided_mem_region(1);
         unsafe {
             buf.as_mut_slice().unwrap()[0] = val;
         }
@@ -201,7 +201,7 @@ impl<T: Dist> MyFrom<T> for LamellarArrayInput<T> {
 
 impl<T: Dist> MyFrom<Vec<T>> for LamellarArrayInput<T> {
     fn my_from(vals: Vec<T>, team: &Pin<Arc<LamellarTeamRT>>) -> Self {
-        let buf: LocalMemoryRegion<T> = team.alloc_local_mem_region(vals.len());
+        let buf: OneSidedMemoryRegion<T> = team.alloc_one_sided_mem_region(vals.len());
         unsafe {
             std::ptr::copy_nonoverlapping(vals.as_ptr(), buf.as_mut_ptr().unwrap(), vals.len());
         }
@@ -210,7 +210,7 @@ impl<T: Dist> MyFrom<Vec<T>> for LamellarArrayInput<T> {
 }
 impl<T: Dist> MyFrom<&Vec<T>> for LamellarArrayInput<T> {
     fn my_from(vals: &Vec<T>, team: &Pin<Arc<LamellarTeamRT>>) -> Self {
-        let buf: LocalMemoryRegion<T> = team.alloc_local_mem_region(vals.len());
+        let buf: OneSidedMemoryRegion<T> = team.alloc_one_sided_mem_region(vals.len());
         unsafe {
             std::ptr::copy_nonoverlapping(vals.as_ptr(), buf.as_mut_ptr().unwrap(), vals.len());
         }
@@ -220,7 +220,7 @@ impl<T: Dist> MyFrom<&Vec<T>> for LamellarArrayInput<T> {
 
 // impl<T: AmDist+ Clone + 'static> MyFrom<T> for LamellarArrayInput<T> {
 //     fn my_from(val: T, team: &Arc<LamellarTeamRT>) -> Self {
-//         let buf: LocalMemoryRegion<T> = team.alloc_local_mem_region(1);
+//         let buf: OneSidedMemoryRegion<T> = team.alloc_one_sided_mem_region(1);
 //         unsafe {
 //             buf.as_mut_slice().unwrap()[0] = val;
 //         }

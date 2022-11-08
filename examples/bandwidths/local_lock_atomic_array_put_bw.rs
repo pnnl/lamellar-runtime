@@ -15,7 +15,7 @@ fn main() {
     let num_pes = world.num_pes();
     let array: LocalLockAtomicArray<u8> =
         LocalLockAtomicArray::new(&world, ARRAY_LEN * num_pes, Distribution::Block);
-    let data = world.alloc_local_mem_region::<u8>(ARRAY_LEN);
+    let data = world.alloc_one_sided_mem_region::<u8>(ARRAY_LEN);
     unsafe {
         for i in data.as_mut_slice().unwrap() {
             *i = my_pe as u8;

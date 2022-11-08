@@ -55,7 +55,7 @@ impl<T: Dist> UnsafeArray<T> {
                     },
                     ArrayRdmaCmd::Get(immediate) => unsafe {
                         if immediate {
-                            self.inner.data.mem_region.iget(
+                            self.inner.data.mem_region.blocking_get(
                                 pe,
                                 offset,
                                 buf.sub_region(buf_index..(buf_index + len)),
@@ -127,21 +127,23 @@ impl<T: Dist> UnsafeArray<T> {
                     .inner
                     .data
                     .team
-                    .alloc_local_mem_region::<T>(num_elems_pe);
-                for i in 0..std::cmp::min(buf.len(), num_pes) {
-                    let mut k = 0;
-                    let pe = (start_pe + i) % num_pes;
-                    let offset = global_index / num_pes + overflow;
-                    for j in (i..buf.len()).step_by(num_pes) {
-                        unsafe { temp_memreg.put(k, buf.sub_region(j..=j)) };
-                        k += 1;
-                    }
-                    self.inner
-                        .data
-                        .mem_region
-                        .iput(pe, offset, temp_memreg.sub_region(0..k));
-                    if pe + 1 == num_pes {
-                        overflow += 1;
+                    .alloc_one_sided_mem_region::<T>(num_elems_pe);
+                unsafe {
+                    for i in 0..std::cmp::min(buf.len(), num_pes) {
+                        let mut k = 0;
+                        let pe = (start_pe + i) % num_pes;
+                        let offset = global_index / num_pes + overflow;
+                        for j in (i..buf.len()).step_by(num_pes) {
+                            temp_memreg.put(k, buf.sub_region(j..=j));
+                            k += 1;
+                        }
+                        self.inner
+                            .data
+                            .mem_region
+                            .blocking_put(pe, offset, temp_memreg.sub_region(0..k));
+                        if pe + 1 == num_pes {
+                            overflow += 1;
+                        }
                     }
                 }
             }
@@ -151,7 +153,7 @@ impl<T: Dist> UnsafeArray<T> {
                         .inner
                         .data
                         .team
-                        .alloc_local_mem_region::<T>(num_elems_pe);
+                        .alloc_one_sided_mem_region::<T>(num_elems_pe);
                     let mut k = 0;
                     let pe = (start_pe + i) % num_pes;
                     // let offset = global_index / num_pes + overflow;
@@ -165,7 +167,7 @@ impl<T: Dist> UnsafeArray<T> {
                         array: self.clone().into(),
                         start_index: index,
                         len: buf.len(),
-                        data: temp_memreg.to_base::<u8>().into(),
+                        data: unsafe {temp_memreg.to_base::<u8>().into()},
                         pe: self.inner.data.my_pe,
                     };
                     reqs.push(self.exec_am_pe(pe, am));
@@ -181,7 +183,7 @@ impl<T: Dist> UnsafeArray<T> {
                             .inner
                             .data
                             .team
-                            .alloc_local_mem_region::<T>(num_elems_pe);
+                            .alloc_one_sided_mem_region::<T>(num_elems_pe);
                         let rem = buf.len() % num_pes;
                         // let temp_buf: LamellarMemoryRegion<T> = buf.my_into(&self.inner.data.team);
                         for i in 0..std::cmp::min(buf.len(), num_pes) {
@@ -189,7 +191,7 @@ impl<T: Dist> UnsafeArray<T> {
                             let offset = global_index / num_pes + overflow;
                             let num_elems = (num_elems_pe - 1) + if i < rem { 1 } else { 0 };
                             // println!("i {:?} pe {:?} num_elems {:?} offset {:?} rem {:?}",i,pe,num_elems,offset,rem);
-                            self.inner.data.mem_region.iget(
+                            self.inner.data.mem_region.blocking_get(
                                 pe,
                                 offset,
                                 temp_memreg.sub_region(0..num_elems),
@@ -222,7 +224,7 @@ impl<T: Dist> UnsafeArray<T> {
                         .inner
                         .data
                         .team
-                        .alloc_local_mem_region::<T>(num_elems_pe);
+                        .alloc_one_sided_mem_region::<T>(num_elems_pe);
                     let pe = (start_pe + i) % num_pes;
                     let offset = global_index / num_pes + overflow;
                     let num_elems = (num_elems_pe - 1) + if i < rem { 1 } else { 0 };
@@ -230,7 +232,7 @@ impl<T: Dist> UnsafeArray<T> {
                     let am = UnsafeCyclicGetAm {
                         array: self.clone().into(),
                         data: unsafe { buf.clone().to_base::<u8>() },
-                        temp_data: temp_memreg.sub_region(0..num_elems).to_base::<u8>().into(),
+                        temp_data: unsafe{temp_memreg.sub_region(0..num_elems).to_base::<u8>().into()},
                         i: i,
                         pe: pe,
                         my_pe: self.inner.data.my_pe,
@@ -348,7 +350,7 @@ impl<T: Dist> UnsafeArray<T> {
     }
 
     pub(crate) fn internal_at(&self, index: usize) -> Box<dyn LamellarArrayRequest<Output = T>> {
-        let buf: LocalMemoryRegion<T> = self.team().alloc_local_mem_region(1);
+        let buf: OneSidedMemoryRegion<T> = self.team().alloc_one_sided_mem_region(1);
         self.iget(index, &buf);
         Box::new(ArrayRdmaAtHandle {
             reqs: vec![],
@@ -612,24 +614,24 @@ impl UnsafeArrayInner {
 struct UnsafeBlockGetAm {
     array: UnsafeByteArray, //inner of the indices we need to place data into
     offset: usize,
-    data: LamellarMemoryRegion<u8>, //change this to an enum which is a vector or localmemoryregion depending on data size
+    data: LamellarMemoryRegion<u8>, //change this to an enum which is a vector or OneSidedMemoryRegion depending on data size
     pe: usize,
 }
 
 #[lamellar_impl::rt_am_local]
 impl LamellarAm for UnsafeBlockGetAm {
     async fn exec(self) {
-        self.array.inner.data.mem_region.iget(
+        unsafe {self.array.inner.data.mem_region.blocking_get(
             self.pe,
             self.offset * self.array.inner.elem_size,
             self.data.clone(),
-        );
+        )};
     }
 }
 #[lamellar_impl::AmLocalDataRT(Debug)]
 struct UnsafeCyclicGetAm {
     array: UnsafeByteArray, //inner of the indices we need to place data into
-    data: LamellarMemoryRegion<u8>, //change this to an enum which is a vector or localmemoryregion depending on data size
+    data: LamellarMemoryRegion<u8>, //change this to an enum which is a vector or OneSidedMemoryRegion depending on data size
     temp_data: LamellarMemoryRegion<u8>,
     i: usize,
     pe: usize,
@@ -641,11 +643,13 @@ struct UnsafeCyclicGetAm {
 #[lamellar_impl::rt_am_local]
 impl LamellarAm for UnsafeCyclicGetAm {
     async fn exec(self) {
-        self.array.inner.data.mem_region.iget(
-            self.pe,
-            self.offset * self.array.inner.elem_size,
-            self.temp_data.clone(),
-        );
+        unsafe {
+            self.array.inner.data.mem_region.blocking_get(
+                self.pe,
+                self.offset * self.array.inner.elem_size,
+                self.temp_data.clone(),
+            );
+        }
         for (k, j) in (self.i..self.data.len() / self.array.inner.elem_size)
             .step_by(self.num_pes)
             .enumerate()
@@ -673,7 +677,7 @@ struct UnsafePutAm {
     array: UnsafeByteArray,         //byte representation of the array
     start_index: usize,             //index with respect to inner (of type T)
     len: usize,                     //len of buf (with respect to original type T)
-    data: LamellarMemoryRegion<u8>, //change this to an enum which is a vector or localmemoryregion depending on data size
+    data: LamellarMemoryRegion<u8>, //change this to an enum which is a vector or OneSidedMemoryRegion depending on data size
     pe: usize,
 }
 #[lamellar_impl::rt_am]
@@ -687,7 +691,7 @@ impl LamellarAm for UnsafePutAm {
                 .local_elements_for_range(self.start_index, self.len)
             {
                 Some((elems, _)) => {
-                    self.data.iget_slice(self.pe, 0, elems);
+                    self.data.blocking_get_slice(self.pe, 0, elems);
                 }
                 None => {}
             }

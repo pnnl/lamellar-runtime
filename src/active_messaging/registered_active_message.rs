@@ -56,6 +56,7 @@ lazy_static! {
     };
 }
 
+#[doc(hidden)]
 pub struct RegisteredAm {
     pub exec: UnpackFn,
     pub name: &'static str,

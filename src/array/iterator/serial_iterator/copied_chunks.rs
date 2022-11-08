@@ -1,7 +1,7 @@
 use crate::array::iterator::serial_iterator::*;
 use crate::array::LamellarArrayRequest;
 // use crate::LamellarArray;
-use crate::LocalMemoryRegion;
+use crate::OneSidedMemoryRegion;
 use pin_project::pin_project;
 
 use async_trait::async_trait;
@@ -14,7 +14,7 @@ where
     #[pin]
     iter: I,
     // array: LamellarArray<I::ElemType>,
-    // mem_region: LocalMemoryRegion<I::ElemType>,
+    // mem_region: OneSidedMemoryRegion<I::ElemType>,
     index: usize,
     chunk_size: usize,
 }
@@ -26,7 +26,7 @@ where
     pub(crate) fn new(iter: I, chunk_size: usize) -> CopiedChunks<I> {
         // let array = iter.array().clone(); //.to_base::<u8>();
         // println!("len: {:?}",array.len());
-        // let mem_region = iter.array().team().alloc_local_mem_region(chunk_size);//*iter.array().size_of_elem());
+        // let mem_region = iter.array().team().alloc_one_sided_mem_region(chunk_size);//*iter.array().size_of_elem());
         let chunks = CopiedChunks {
             iter,
             // array,
@@ -38,9 +38,9 @@ where
         chunks
     }
 
-    fn get_buffer(&self, size: usize) -> LocalMemoryRegion<<I as SerialIterator>::ElemType> {
-        let mem_region: LocalMemoryRegion<<I as SerialIterator>::ElemType> =
-            self.array().team().alloc_local_mem_region(size);
+    fn get_buffer(&self, size: usize) -> OneSidedMemoryRegion<<I as SerialIterator>::ElemType> {
+        let mem_region: OneSidedMemoryRegion<<I as SerialIterator>::ElemType> =
+            self.array().team().alloc_one_sided_mem_region(size);
         self.array().internal_get(self.index, &mem_region).wait();
         mem_region
     }
@@ -48,12 +48,12 @@ where
     // fn get_buffer_async(
     //     self: &Pin<&mut Self>,
     //     size: usize,
-    // ) -> Pin<Box<dyn Future<Output = LocalMemoryRegion<<I as SerialIterator>::ElemType>> + Send>>
+    // ) -> Pin<Box<dyn Future<Output = OneSidedMemoryRegion<<I as SerialIterator>::ElemType>> + Send>>
     // {
     //     // let this = self.project();
     //     let array = self.iter.array();
-    //     let mem_region: LocalMemoryRegion<<I as SerialIterator>::ElemType> =
-    //         array.team().alloc_local_mem_region(size);
+    //     let mem_region: OneSidedMemoryRegion<<I as SerialIterator>::ElemType> =
+    //         array.team().alloc_one_sided_mem_region(size);
     //     let index = self.index;
     //     let req = array.internal_get(index, &mem_region).into_future();
     //     Box::pin(async {
@@ -69,7 +69,7 @@ where
 //     I: SerialIterator + SerialAsyncIterator,
 // {
 //     type ElemType = <I as SerialAsyncIterator>::ElemType;
-//     type Item = LocalMemoryRegion<<I as SerialAsyncIterator>::ElemType>;
+//     type Item = OneSidedMemoryRegion<<I as SerialAsyncIterator>::ElemType>;
 //     type Array = <I as SerialAsyncIterator>::Array;
 //     async fn async_next(self: Pin<&mut Self>) -> Option<Self::Item> {
 //         // println!("{:?} {:?}",self.index,self.array.len()/std::mem::size_of::<<Self as SerialIterator>::ElemType>());
@@ -90,7 +90,7 @@ where
     I: SerialIterator + Send,
 {
     type ElemType = I::ElemType;
-    type Item = LocalMemoryRegion<I::ElemType>;
+    type Item = OneSidedMemoryRegion<I::ElemType>;
     type Array = I::Array;
     fn next(&mut self) -> Option<Self::Item> {
         // println!("{:?} {:?}",self.index,self.array.len()/std::mem::size_of::<<Self as SerialIterator>::ElemType>());
@@ -140,11 +140,11 @@ where
     }
     fn buffered_next(
         &mut self,
-        mem_region: LocalMemoryRegion<u8>,
+        mem_region: OneSidedMemoryRegion<u8>,
     ) -> Option<Box<dyn LamellarArrayRequest<Output = ()>>> {
         let array = self.array();
         if self.index < array.len() {
-            let mem_reg_t = mem_region.to_base::<I::ElemType>();
+            let mem_reg_t = unsafe{mem_region.to_base::<I::ElemType>()};
             let req = array.internal_get(self.index, &mem_reg_t);
             self.index += mem_reg_t.len();
             Some(req)
@@ -154,7 +154,7 @@ where
     }
     // async fn async_buffered_next(
     //     mut self: Pin<&mut Self>,
-    //     mem_region: LocalMemoryRegion<u8>,
+    //     mem_region: OneSidedMemoryRegion<u8>,
     // ) -> Option<Box<dyn LamellarArrayRequest<Output = ()>>> {
     //     let array = self.array();
     //     if self.index < array.len() {
@@ -167,8 +167,8 @@ where
     //         None
     //     }
     // }
-    fn from_mem_region(&self, mem_region: LocalMemoryRegion<u8>) -> Option<Self::Item> {
-        let mem_reg_t = mem_region.to_base::<I::ElemType>();
+    fn from_mem_region(&self, mem_region: OneSidedMemoryRegion<u8>) -> Option<Self::Item> {
+        let mem_reg_t = unsafe{mem_region.to_base::<I::ElemType>()};
         Some(mem_reg_t)
     }
 }
@@ -177,7 +177,7 @@ where
 // where
 //     I: SerialIterator + Iterator
 // {
-//     type Item = LocalMemoryRegion<I::ElemType>;
+//     type Item = OneSidedMemoryRegion<I::ElemType>;
 //     fn next(&mut self) -> Option<Self::Item> {
 //         <Self as SerialIterator>::next(self)
 //     }
@@ -191,14 +191,14 @@ where
 // where
 //     I: SerialIterator + Stream + Unpin
 // {
-//     type Item = LocalMemoryRegion<I::ElemType>;
+//     type Item = OneSidedMemoryRegion<I::ElemType>;
 //     fn poll_next(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
 //         // println!("{:?} {:?}",self.index,self.array.len()/std::mem::size_of::<<Self as SerialIterator>::ElemType>());
 //         println!("async getting {:?} {:?}",self.index,self.chunk_size);
 //         if self.index < self.array.len(){
 //             let size = std::cmp::min(self.chunk_size, self.array.len() - self.index);
 //             // self.fill_buffer(0, &self.mem_region.sub_region(..size));
-//             let mem_region: LocalMemoryRegion<I::ElemType> = self.array.team().alloc_local_mem_region(size);
+//             let mem_region: OneSidedMemoryRegion<I::ElemType> = self.array.team().alloc_one_sided_mem_region(size);
 //             self.fill_buffer(101010101, &mem_region);
 //             if self.check_for_valid(101010101,&mem_region){
 //                 self.index += size;

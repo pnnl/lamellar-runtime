@@ -19,7 +19,7 @@ use crate::array::LamellarArrayRequest;
 use crate::memregion::Dist;
 use crate::LamellarArray;
 use crate::LamellarTeamRT;
-use crate::LocalMemoryRegion;
+use crate::OneSidedMemoryRegion;
 
 use async_trait::async_trait;
 // use futures::{ready, Stream};
@@ -50,14 +50,14 @@ pub trait SerialIterator {
     fn item_size(&self) -> usize;
     fn buffered_next(
         &mut self,
-        mem_region: LocalMemoryRegion<u8>,
+        mem_region: OneSidedMemoryRegion<u8>,
     ) -> Option<Box<dyn LamellarArrayRequest<Output = ()>>>;
     // async fn async_buffered_next(
     //     mut self: Pin<&mut Self>,
-    //     mem_region: LocalMemoryRegion<u8>,
+    //     mem_region: OneSidedMemoryRegion<u8>,
     // ) -> Option<Box<dyn LamellarArrayRequest<Output = ()>>>;
 
-    fn from_mem_region(&self, mem_region: LocalMemoryRegion<u8>) -> Option<Self::Item>;
+    fn from_mem_region(&self, mem_region: OneSidedMemoryRegion<u8>) -> Option<Self::Item>;
     fn copied_chunks(self, chunk_size: usize) -> CopiedChunks<Self>
     where
         Self: Sized + Send,
@@ -143,8 +143,8 @@ unsafe impl<T: Dist + 'static> Send for SendNonNull<T> {}
 #[pin_project]
 pub struct LamellarArrayIter<'a, T: Dist + 'static, A: LamellarArrayInternalGet<T>> {
     array: A,
-    buf_0: LocalMemoryRegion<T>,
-    // buf_1: LocalMemoryRegion<T>,
+    buf_0: OneSidedMemoryRegion<T>,
+    // buf_1: OneSidedMemoryRegion<T>,
     index: usize,
     buf_index: usize,
     ptr: SendNonNull<T>,
@@ -160,13 +160,13 @@ impl<'a, T: Dist + 'static, A: LamellarArrayInternalGet<T>> LamellarArrayIter<'a
         team: Pin<Arc<LamellarTeamRT>>,
         buf_size: usize,
     ) -> LamellarArrayIter<'a, T, A> {
-        let buf_0 = team.alloc_local_mem_region(buf_size);
+        let buf_0 = team.alloc_one_sided_mem_region(buf_size);
         array.internal_get(0, &buf_0).wait();
-        let ptr = SendNonNull(NonNull::new(buf_0.as_mut_ptr().unwrap()).unwrap());
+        let ptr = unsafe {SendNonNull(NonNull::new(buf_0.as_mut_ptr().unwrap()).unwrap())};
         let iter = LamellarArrayIter {
             array: array,
             buf_0: buf_0,
-            // buf_1: team.alloc_local_mem_region(buf_size),
+            // buf_1: team.alloc_one_sided_mem_region(buf_size),
             index: 0,
             buf_index: 0,
             ptr: ptr,
@@ -315,10 +315,10 @@ impl<'a, T: Dist + 'static, A: LamellarArrayInternalGet<T> + Clone + Send> Seria
     }
     fn buffered_next(
         &mut self,
-        mem_region: LocalMemoryRegion<u8>,
+        mem_region: OneSidedMemoryRegion<u8>,
     ) -> Option<Box<dyn LamellarArrayRequest<Output = ()>>> {
         if self.index < self.array.len() {
-            let mem_reg_t = mem_region.to_base::<Self::ElemType>();
+            let mem_reg_t = unsafe{mem_region.to_base::<Self::ElemType>()};
             let req = self.array.internal_get(self.index, &mem_reg_t);
             self.index += mem_reg_t.len();
             Some(req)
@@ -328,7 +328,7 @@ impl<'a, T: Dist + 'static, A: LamellarArrayInternalGet<T> + Clone + Send> Seria
     }
     // async fn async_buffered_next(
     //     mut self: Pin<&mut Self>,
-    //     mem_region: LocalMemoryRegion<u8>,
+    //     mem_region: OneSidedMemoryRegion<u8>,
     // ) -> Option<Box<dyn LamellarArrayRequest<Output = ()>>> {
     //     if self.index < self.array.len() {
     //         let mem_reg_t = mem_region.to_base::<Self::ElemType>();
@@ -339,7 +339,7 @@ impl<'a, T: Dist + 'static, A: LamellarArrayInternalGet<T> + Clone + Send> Seria
     //         None
     //     }
     // }
-    fn from_mem_region(&self, mem_region: LocalMemoryRegion<u8>) -> Option<Self::Item> {
+    fn from_mem_region(&self, mem_region: OneSidedMemoryRegion<u8>) -> Option<Self::Item> {
         unsafe {
             let mem_reg_t = mem_region.to_base::<Self::ElemType>();
             mem_reg_t.as_ptr().unwrap().as_ref()

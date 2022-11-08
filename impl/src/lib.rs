@@ -581,7 +581,13 @@ fn derive_am_data(
         let (traits, serde_temp_2, fields, ser, des) =
             process_fields(args, &data.fields, crate_header, local);
         let vis = data.vis.to_token_stream();
+        let mut attributes = quote!();
+        for attr in data.attrs{
+            let tokens = attr.clone().to_token_stream();
+            attributes.extend(quote! {#tokens});
+        }
         output.extend(quote! {
+            #attributes
             #traits
             #serde_temp_2
             #vis struct #name #impl_generics #where_clause{

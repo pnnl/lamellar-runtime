@@ -6,14 +6,14 @@
 /// and reduces the need to copy + serialize/deserialize larges amounts
 /// of data (on the critical path)
 /// --------------------------------------------------------------------
-use lamellar::{ActiveMessaging, LocalMemoryRegion, RemoteMemoryRegion};
+use lamellar::{ActiveMessaging, OneSidedMemoryRegion, RemoteMemoryRegion};
 use std::time::Instant;
 
 const ARRAY_LEN: usize = 1 * 1024 * 1024 * 1024;
 
 #[lamellar::AmData(Clone, Debug)]
 struct DataAM {
-    array: LocalMemoryRegion<u8>,
+    array: OneSidedMemoryRegion<u8>,
     index: usize,
     length: usize,
 }
@@ -23,7 +23,7 @@ impl LamellarAM for DataAM {
     async fn exec(&self) {
         unsafe {
             // let local = lamellar::team.local_array::<u8>(self.length, 255u8);
-            let local = lamellar::team.alloc_local_mem_region::<u8>(self.length);
+            let local = lamellar::team.alloc_one_sided_mem_region::<u8>(self.length);
             let local_slice = local.as_mut_slice().unwrap();
             local_slice[self.length - 1] = 255u8;
             self.array.get_unchecked(self.index, local.clone());
@@ -40,8 +40,8 @@ fn main() {
     let world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();
     let num_pes = world.num_pes();
-    let array = world.alloc_local_mem_region::<u8>(ARRAY_LEN);
-    let data = world.alloc_local_mem_region::<u8>(ARRAY_LEN);
+    let array = world.alloc_one_sided_mem_region::<u8>(ARRAY_LEN);
+    let data = world.alloc_one_sided_mem_region::<u8>(ARRAY_LEN);
     unsafe {
         for i in data.as_mut_slice().unwrap() {
             *i = my_pe as u8;

@@ -19,6 +19,7 @@ lazy_static! {
     };
 }
 
+#[doc(hidden)]
 pub struct NativeAtomicArrayOp {
     pub id: (ArrayOpCmd, TypeId),
     pub op: OpFn,
@@ -37,7 +38,7 @@ lazy_static! {
         map
     };
 }
-
+#[doc(hidden)]
 pub struct NativeAtomicArrayOpBuf {
     pub id: TypeId,
     pub op: BufFn,

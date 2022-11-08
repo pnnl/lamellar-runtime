@@ -5,7 +5,7 @@ use crate::lamellar_arch::{GlobalArch, IdError, LamellarArch, LamellarArchEnum, 
 use crate::lamellar_request::*;
 use crate::lamellar_world::LamellarWorld;
 use crate::memregion::{
-    local::LocalMemoryRegion, shared::SharedMemoryRegion, Dist, LamellarMemoryRegion, MemoryRegion,
+    one_sided::OneSidedMemoryRegion, shared::SharedMemoryRegion, Dist, LamellarMemoryRegion, MemoryRegion,
     RemoteMemoryRegion,
 };
 use crate::scheduler::{ReqId, Scheduler, SchedulerQueue};
@@ -37,9 +37,23 @@ use tracing::*;
 // when the outer handle is dropped, we do the appropriate barriers and then remove the inner team from the runtime data structures
 // this should allow for the inner team to persist while at least one user handle exists in the world.
 
-/// an abstraction used to group PEs into distributed computational units
+/// An abstraction used to group PEs into distributed computational units.
 ///
-/// actions taking place on a team, only execute on members of the team.
+/// The [ActiveMessaging] trait is implemented for `Arc<LamellarTeam>`, new LamellarTeams will always be returned as `Arc<LamellarTeam>`.
+///
+/// Actions taking place on a team, only execute on members of the team.
+/// # Examples
+///```
+/// use lamellar::ActiveMessaging;
+/// use lamellar::array::AtomicArray;
+///
+/// // we can launch and await the results of active messages on a given team
+/// let req = team.exec_am_all(...);
+/// let result = team.block_on(req);
+/// // we can also create a distributed array so that its data only resides on the members of the team.
+/// let even_pes = team.create_subteam_from_arch(...);
+/// let array: AtomicArray<usize> = AtomicArray::new(even_pes, ...);
+/// ```
 pub struct LamellarTeam {
     pub(crate) world: Option<Arc<LamellarTeam>>,
     pub(crate) team: Pin<Arc<LamellarTeamRT>>,
@@ -200,6 +214,13 @@ impl ActiveMessaging for Arc<LamellarTeam> {
     fn barrier(&self) {
         self.team.barrier();
     }
+
+    fn block_on<F>(&self, f: F) -> F::Output
+    where
+        F: Future,
+    {
+        trace_span!("block_on").in_scope(|| self.team.scheduler.block_on(f))
+    }
 }
 
 impl RemoteMemoryRegion for Arc<LamellarTeam> {
@@ -220,14 +241,14 @@ impl RemoteMemoryRegion for Arc<LamellarTeam> {
     }
 
     #[tracing::instrument(skip_all)]
-    fn alloc_local_mem_region<T: Dist>(&self, size: usize) -> LocalMemoryRegion<T> {
-        let mut lmr = LocalMemoryRegion::try_new(size, &self.team, self.team.lamellae.clone());
+    fn alloc_one_sided_mem_region<T: Dist>(&self, size: usize) -> OneSidedMemoryRegion<T> {
+        let mut lmr = OneSidedMemoryRegion::try_new(size, &self.team, self.team.lamellae.clone());
         while let Err(_err) = lmr {
             std::thread::yield_now();
             self.team
                 .lamellae
                 .alloc_pool(size * std::mem::size_of::<T>());
-            lmr = LocalMemoryRegion::try_new(size, &self.team, self.team.lamellae.clone());
+            lmr = OneSidedMemoryRegion::try_new(size, &self.team, self.team.lamellae.clone());
         }
         lmr.expect("out of memory")
     }
@@ -307,6 +328,7 @@ impl From<Pin<Arc<LamellarTeamRT>>> for LamellarTeamRemotePtr {
     }
 }
 
+#[doc(hidden)]
 pub struct LamellarTeamRT {
     #[allow(dead_code)]
     pub(crate) world: Option<Pin<Arc<LamellarTeamRT>>>,
@@ -1099,18 +1121,18 @@ impl LamellarTeamRT {
     /// * `size` - number of elements of T to allocate a memory region for -- (not size in bytes)
     ///
     #[tracing::instrument(skip_all)]
-    pub fn alloc_local_mem_region<T: Dist>(
+    pub fn alloc_one_sided_mem_region<T: Dist>(
         self: &Pin<Arc<LamellarTeamRT>>,
         size: usize,
-    ) -> LocalMemoryRegion<T> {
-        // let lmr: LocalMemoryRegion<T> =
-        //     LocalMemoryRegion::new(size, self, self.lamellae.clone()).into();
+    ) -> OneSidedMemoryRegion<T> {
+        // let lmr: OneSidedMemoryRegion<T> =
+        //     OneSidedMemoryRegion::new(size, self, self.lamellae.clone()).into();
         // lmr
-        let mut lmr = LocalMemoryRegion::try_new(size, self, self.lamellae.clone());
+        let mut lmr = OneSidedMemoryRegion::try_new(size, self, self.lamellae.clone());
         while let Err(_err) = lmr {
             std::thread::yield_now();
             self.lamellae.alloc_pool(size * std::mem::size_of::<T>());
-            lmr = LocalMemoryRegion::try_new(size, self, self.lamellae.clone());
+            lmr = OneSidedMemoryRegion::try_new(size, self, self.lamellae.clone());
         }
         lmr.expect("out of memory")
     }

@@ -20,12 +20,12 @@ fn main() {
         // instatiates a shared memory region on every PE in world
         // all other pes can put/get into this region
         let array = world.alloc_shared_mem_region::<u8>(ARRAY_LEN);
-        let array_slice = array.as_slice().unwrap(); //we can unwrap because we know array is local
+        let array_slice = unsafe{array.as_slice().unwrap()}; //we can unwrap because we know array is local
 
         // instatiates a local array whos memory is registered with
         // the underlying network device, so that it can be used
         // as the src buffer in a put or as the dst buffer in a get
-        let data = world.alloc_local_mem_region::<u8>(ARRAY_LEN);
+        let data = world.alloc_one_sided_mem_region::<u8>(ARRAY_LEN);
         let data_slice = unsafe { data.as_mut_slice().unwrap() }; //we can unwrap because we know data is local
         for elem in data_slice {
             *elem = my_pe as u8;
@@ -95,7 +95,7 @@ fn main() {
         let mut index = my_pe;
         //stripe pe ids accross all shared mem regions
 
-        // let data  = world.alloc_local_mem_region::<u8>(1);
+        // let data  = world.alloc_one_sided_mem_region::<u8>(1);
         // unsafe{data.as_mut_slice().unwrap()[0]=my_pe as u8;}
         while index < ARRAY_LEN {
             let cur_index = index;

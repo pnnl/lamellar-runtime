@@ -11,7 +11,7 @@
 /// conversely this means elements of a column are distributed across pes)
 ///----------------------------------------------------------------------------------
 use futures::future;
-use lamellar::{ActiveMessaging, LocalMemoryRegion, RemoteMemoryRegion, SharedMemoryRegion};
+use lamellar::{ActiveMessaging, OneSidedMemoryRegion, RemoteMemoryRegion, SharedMemoryRegion};
 use lazy_static::lazy_static;
 use matrixmultiply::sgemm;
 use parking_lot::Mutex;
@@ -67,7 +67,7 @@ impl SubMatrix {
         }
     }
 }
-async fn get_sub_mat(mat: &SubMatrix, sub_mat: &LocalMemoryRegion<f32>) {
+async fn get_sub_mat(mat: &SubMatrix, sub_mat: &OneSidedMemoryRegion<f32>) {
     let start_row = mat.row_block * mat.block_size;
     let start_col = mat.col_block * mat.block_size;
     let sub_mat_slice = unsafe { sub_mat.as_mut_slice().unwrap() };
@@ -96,8 +96,8 @@ struct NaiveMM {
 #[lamellar::am]
 impl LamellarAM for NaiveMM {
     async fn exec() {
-        let a = lamellar::world.alloc_local_mem_region(self.a.block_size * self.a.block_size); //the tile for the A matrix
-        let b = lamellar::world.alloc_local_mem_region(self.b.block_size * self.b.block_size); //the tile for the B matrix
+        let a = lamellar::world.alloc_one_sided_mem_region(self.a.block_size * self.a.block_size); //the tile for the A matrix
+        let b = lamellar::world.alloc_one_sided_mem_region(self.b.block_size * self.b.block_size); //the tile for the B matrix
         let b_fut = get_sub_mat(&self.b, &b); //b is remote so we will launch "gets" for this data first
         let a_fut = get_sub_mat(&self.a, &a);
         let a_b_fut = future::join(a_fut, b_fut);

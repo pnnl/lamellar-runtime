@@ -19,6 +19,7 @@ use std::any::TypeId;
 // use std::ops::{Deref, DerefMut};
 
 use std::ops::{AddAssign, BitAndAssign, BitOrAssign, DivAssign, MulAssign, SubAssign};
+
 #[doc(hidden)]
 pub struct GenericAtomicElement<T> {
     array: GenericAtomicArray<T>,

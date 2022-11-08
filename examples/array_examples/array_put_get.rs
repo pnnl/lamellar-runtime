@@ -33,7 +33,7 @@ fn main() {
         let cyclic_array =
             UnsafeArray::<usize>::new(world.team(), total_len, Distribution::Cyclic).into();
         let shared_mem_region = world.alloc_shared_mem_region(total_len).into(); //Convert into abstract LamellarMemoryRegion
-        let local_mem_region = world.alloc_local_mem_region(total_len).into();
+        let local_mem_region = world.alloc_one_sided_mem_region(total_len).into();
         initialize_array(&block_array);
         initialize_array(&cyclic_array);
         initialize_mem_region(&shared_mem_region);

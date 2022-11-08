@@ -11,6 +11,7 @@ use crate::memregion::Dist;
 //     RawRwLock,
 // };
 
+#[doc(hidden)]
 #[derive(Clone)]
 pub struct NativeAtomicDistIter<T: Dist> {
     data: NativeAtomicArray<T>,

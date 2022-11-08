@@ -3,7 +3,7 @@ use crate::lamellae::{create_lamellae, Backend, Lamellae, LamellaeComm, Lamellae
 use crate::lamellar_arch::LamellarArch;
 use crate::lamellar_team::{LamellarTeam, LamellarTeamRT};
 use crate::memregion::{
-    local::LocalMemoryRegion, shared::SharedMemoryRegion, Dist, RemoteMemoryRegion,
+    one_sided::OneSidedMemoryRegion, shared::SharedMemoryRegion, Dist, RemoteMemoryRegion,
 };
 use crate::scheduler::{create_scheduler, SchedulerQueue, SchedulerType};
 use lamellar_prof::*;
@@ -23,7 +23,13 @@ lazy_static! {
         RwLock::new(HashMap::new());
 }
 
-/// Represents all the pe's (processing elements) within a given distributed execution
+/// An abstraction representing all the PE's (processing elements) within a given distributed execution.
+///
+/// Constructing a LamellarWorld is necessesary to perform any remote operations or distributed communications.
+///
+/// A LamellarWorld instance can launch and await the result of [active messages][ActiveMessaging], 
+/// can create distributed [memory regions][RemoteMemoryRegion] and [LamellarArrays][array], 
+/// create [sub teams][LamellarWorld::create_team_from_arch] of PEs, and be used to construct [LamellarTaskGroups][crate::lamellar_task_group::LamellarTaskGroup].
 #[derive(Debug)]
 pub struct LamellarWorld {
     team: Arc<LamellarTeam>,
@@ -67,6 +73,13 @@ impl ActiveMessaging for LamellarWorld {
     fn barrier(&self) {
         self.team.barrier();
     }
+
+    fn block_on<F>(&self, f: F) -> F::Output
+    where
+        F: Future,
+    {
+        trace_span!("block_on").in_scope(|| self.team_rt.scheduler.block_on(f))
+    }
 }
 
 //#[prof]
@@ -90,8 +103,8 @@ impl RemoteMemoryRegion for LamellarWorld {
     // /// * `size` - number of elements of T to allocate a memory region for -- (not size in bytes)
     // ///
     #[tracing::instrument(skip_all)]
-    fn alloc_local_mem_region<T: Dist>(&self, size: usize) -> LocalMemoryRegion<T> {
-        self.team.alloc_local_mem_region::<T>(size)
+    fn alloc_one_sided_mem_region<T: Dist>(&self, size: usize) -> OneSidedMemoryRegion<T> {
+        self.team.alloc_one_sided_mem_region::<T>(size)
     }
 
     // /// release a remote memory region from the asymmetric heap
@@ -110,24 +123,56 @@ impl RemoteMemoryRegion for LamellarWorld {
     // ///
     // /// * `region` - the region to free
     // ///
-    // fn free_local_memory_region<T: AmDist+ 'static>(&self, region: LocalMemoryRegion<T>) {
+    // fn free_local_memory_region<T: AmDist+ 'static>(&self, region: OneSidedMemoryRegion<T>) {
     //     self.team.free_local_memory_region(region)
     // }
 }
 
 //#[prof]
 impl LamellarWorld {
-    /// gets the id of this pe (roughly equivalent to MPI Rank)
+    /// Returns the id of this PE (roughly equivalent to MPI Rank)
+    ///
+    /// # Examples
+    ///```
+    /// let my_pe = world.my_pe();
+    ///```
     #[tracing::instrument(skip_all)]
     pub fn my_pe(&self) -> usize {
         self.my_pe
     }
-    /// returns nummber of pe's in this execution
+    /// Returns nummber of PE's in this execution
+    ///
+    /// # Examples
+    ///```
+    /// let num_pes = world.num_pes();
+    ///```
     #[tracing::instrument(skip_all)]
     pub fn num_pes(&self) -> usize {
         self.num_pes
     }
 
+    /// Run a future to completion on the current thread
+    ///
+    /// This function will block the caller until the given future has completed, the future is executed within the Lamellar threadpool
+    ///
+    /// Users can await any future, including those returned from lamellar remote operations
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::ActiveMessaging;
+    ///
+    /// let request = world.exec_am_local(Am{...}); //launch am on all pes
+    /// let result = world.block_on(request); //block until am has executed
+    /// // you can also directly pass an async block
+    /// world.block_on(async move {
+    ///     let file = async_std::fs::File.open(...);.await;
+    ///     for pe in 0..num_pes{
+    ///         let data = file.read(...).await;
+    ///         world.exec_am_pe(pe,DataAm{data}).await;
+    ///     }
+    ///     world.exec_am_all(...).await;
+    /// });
+    ///```
     pub fn block_on<F>(&self, f: F) -> F::Output
     where
         F: Future,
@@ -135,7 +180,8 @@ impl LamellarWorld {
         trace_span!("block_on").in_scope(|| self.team_rt.scheduler.block_on(f))
     }
 
-    /// return the number of megabytes sent
+  
+    #[doc(hidden)]
     #[allow(non_snake_case)]
     #[tracing::instrument(skip_all)]
     pub fn MB_sent(&self) -> f64 {
@@ -146,11 +192,18 @@ impl LamellarWorld {
         sent[0]
     }
 
-    // pub fn team_barrier(&self) {
-    //     self.team.barrier();
-    // }
 
     /// create a team containing any number of pe's from the world using the provided LamellarArch (layout)
+    ///
+    /// # Examples
+    ///```
+    ///
+    /// let even_team = world.create_team_from_arch(StridedArch::new(
+    ///                                            0, // start pe
+    ///                                            2,// stride
+    ///                                            (world.num_pes() / 2.0), //num pes in team
+    /// ));
+    ///```
     #[tracing::instrument(skip_all)]
     pub fn create_team_from_arch<L>(&self, arch: L) -> Option<Arc<LamellarTeam>>
     where
@@ -166,15 +219,19 @@ impl LamellarWorld {
         }
     }
 
-    /// return the team encompassing all pe's in the world
+    #[doc(hidden)]
     #[tracing::instrument(skip_all)]
     pub fn team(&self) -> Arc<LamellarTeam> {
         self.team.clone()
     }
+
+    #[doc(hidden)]
     #[tracing::instrument(skip_all)]
     pub fn barrier(&self) {
         self.team.barrier();
     }
+
+    #[doc(hidden)]
     #[tracing::instrument(skip_all)]
     pub fn wait_all(&self) {
         self.team.wait_all();
@@ -227,7 +284,22 @@ impl Drop for LamellarWorld {
     }
 }
 
-/// Lamellar World Builder used for customization
+/// An implementation of the Builder design pattern, used to construct an instance of a LamellarWorld.
+///
+/// Allows for customizing the way the world is built.
+/// 
+/// Currently this includes being able to specify the [crate::lamellae] backend and workpool scheduler type.
+///
+/// # Examples
+///
+///```
+/// use lamellar::{LamellarWorldBuilder,Backend,SchedulerType};
+///
+/// let world = LamellarWorldBuilder::new()
+///                             .with_lamellae(Backend::Rofi)
+///                             .with_scheduler(SchedulerType::WorkStealing)
+///                             .build();
+///```
 #[derive(Debug)]
 pub struct LamellarWorldBuilder {
     primary_lamellae: Backend,
@@ -237,6 +309,7 @@ pub struct LamellarWorldBuilder {
 
 //#[prof]
 impl LamellarWorldBuilder {
+    /// Construct a new lamellar world builder
     #[tracing::instrument(skip_all)]
     pub fn new() -> LamellarWorldBuilder {
         // simple_logger::init().unwrap();
@@ -265,7 +338,15 @@ impl LamellarWorldBuilder {
         }
     }
 
-    /// specify the lamellae backend to use for this execution
+    /// Specify the lamellae backend to use for this execution
+    /// # Examples
+    ///
+    ///```
+    /// use lamellar::{LamellarWorldBuilder,Backend};
+    ///
+    /// let builder = LamellarWorldBuilder::new()
+    ///                             .with_lamellae(Backend::Local);
+    ///```
     #[tracing::instrument(skip_all)]
     pub fn with_lamellae(mut self, lamellae: Backend) -> LamellarWorldBuilder {
         self.primary_lamellae = lamellae;
@@ -277,14 +358,32 @@ impl LamellarWorldBuilder {
     //     self
     // }
 
-    /// specify the scheduler to use for this execution
+    /// Specify the scheduler to use for this execution
+    /// # Examples
+    ///
+    ///```
+    /// use lamellar::{LamellarWorldBuilder,SchedulerType};
+    ///
+    /// let builder = LamellarWorldBuilder::new()
+    ///                             .with_scheduler(SchedulerType::WorkStealing);
+    ///```
     #[tracing::instrument(skip_all)]
     pub fn with_scheduler(mut self, sched: SchedulerType) -> LamellarWorldBuilder {
         self.scheduler = sched;
         self
     }
 
-    /// Instantiate a world handle
+    /// Instantiate a LamellarWorld object
+    /// # Examples
+    ///
+    ///```
+    /// use lamellar::{LamellarWorldBuilder,Backend,SchedulerType};
+    ///
+    /// let world = LamellarWorldBuilder::new()
+    ///                             .with_lamellae(Backend::Rofi)
+    ///                             .with_scheduler(SchedulerType::WorkStealing)
+    ///                             .build();
+    ///```
     #[tracing::instrument(skip_all)]
     pub fn build(self) -> LamellarWorld {
         // let teams = Arc::new(RwLock::new(HashMap::new()));

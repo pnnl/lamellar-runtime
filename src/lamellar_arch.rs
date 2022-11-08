@@ -3,11 +3,23 @@ use lamellar_prof::prof;
 use std::sync::Arc;
 // use std::collections::hash_map::DefaultHasher;
 
+
+/// An abstraction which represents the PEs that are associated with a Lamellar team
 pub trait LamellarArch: Send + Sync {
+    /// The number of  PEs in the team defined by this LamellarArch
     fn num_pes(&self) -> usize;
+    /// The id of the first (lowest numbered) PE in the team 
     fn start_pe(&self) -> usize; //with respect to parent (maybe this should be min possible pe?)
+    /// The id of the first (highest numbered) PE in the team 
     fn end_pe(&self) -> usize; //with respect to parent (maybe this should be max possible pe?)
+    //TODO expand example
+    /// Converts a (sub)team PE id into the id space of the Parent team 
+    ///
+    /// Returns an error if the pe does not exist in the team
     fn parent_pe_id(&self, team_pe: &usize) -> ArchResult<usize>; // need global id so the lamellae knows who to communicate -- this should this be parent pe?
+    /// Converts a Parent team PE id into the id space of the team specified by this LamellarArch
+    ///
+    /// Returns an error if the pe does not exist in the team
     fn team_pe_id(&self, parent_pe: &usize) -> ArchResult<usize>; // team id is for user convenience, ids == 0..num_pes-1
 }
 
@@ -222,6 +234,7 @@ impl Iterator for LamellarArchRTiter {
     }
 }
 
+#[doc(hidden)]
 #[derive(Copy, Clone, std::hash::Hash, Debug)]
 pub struct GlobalArch {
     pub(crate) num_pes: usize,
@@ -267,6 +280,19 @@ impl LamellarArch for GlobalArch {
     }
 }
 
+/// A grouping of PE's forming a team using a "strided" based distribution pattern.
+///
+/// # examples
+///
+///```
+/// use lamellar::StridedArch;
+///
+/// //create a team consisting of the "even" PEs in the world
+/// let first_half_team = world.create_team_from_arch(StridedArch::new(
+///    0,                                      // start pe
+///    2,                                      // stride
+///    (num_pes as f64 / 2.0).ceil() as usize, //num_pes in team
+/// ));
 #[derive(Copy, Clone, std::hash::Hash, Debug)]
 pub struct StridedArch {
     pub(crate) num_pes: usize,
@@ -277,6 +303,19 @@ pub struct StridedArch {
 
 #[prof]
 impl StridedArch {
+    /// Construct a new StrideArch using a starting PE, the stride length, and the number of PEs to include in the Block
+    ///
+    /// # Examples
+    ///
+    ///```
+    /// use lamellar::BlockedArch;
+    ///
+    /// StridedArch::new(
+    ///    0, //start pe
+    ///    4, //stride
+    ///    5, //num_pes in team
+    /// );
+    /// // the team will consist of the 5 pes => 0,4,8,12,16
     pub fn new(start_pe: usize, stride: usize, num_team_pes: usize) -> StridedArch {
         let mut end_pe = start_pe;
         for _i in 1..num_team_pes {
@@ -336,6 +375,20 @@ impl LamellarArch for StridedArch {
     }
 }
 
+/// A grouping of PE's forming a team using a "block" based distribution pattern.
+///
+/// PEs in the group are contiguous (with respect to their PE id, not necessarily their pyhsical location in the distributed envrionment).
+///
+/// # examples
+///
+///```
+/// use lamellar::BlockedArch;
+///
+/// //create a team consisting of the first half of PEs in the world
+/// let first_half_team = world.create_team_from_arch(BlockedArch::new(
+///    0,                                      //start pe
+///    (num_pes as f64 / 2.0).ceil() as usize, //num_pes in team
+/// ));
 #[derive(Copy, Clone, std::hash::Hash, Debug)]
 pub struct BlockedArch {
     pub(crate) num_pes: usize,
@@ -345,6 +398,18 @@ pub struct BlockedArch {
 
 #[prof]
 impl BlockedArch {
+    /// Construct a new Block using a starting PE and the number of PEs to include in the Block
+    ///
+    /// # Examples
+    ///
+    ///```
+    /// use lamellar::BlockedArch;
+    ///
+    /// BlockedArch::new(
+    ///    4, //start pe
+    ///    5, //num_pes in team
+    /// );
+    /// // the team will consist of the 5 pes => 4,5,6,7,8
     pub fn new(start_pe: usize, num_team_pes: usize) -> BlockedArch {
         BlockedArch {
             num_pes: num_team_pes,

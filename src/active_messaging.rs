@@ -94,6 +94,7 @@ pub trait LamellarAM {
     type Output: AmDist;
 }
 
+#[doc(hidden)]
 pub enum LamellarReturn {
     LocalData(LamellarAny),
     LocalAm(LamellarArcAm),
@@ -354,6 +355,32 @@ pub trait ActiveMessaging {
     /// world.barrier(); //block until all PEs have entered the barrier
     ///```
     fn barrier(&self);
+
+    /// Run a future to completion on the current thread
+    ///
+    /// This function will block the caller until the given future has completed, the future is executed within the Lamellar threadpool
+    ///
+    /// Users can await any future, including those returned from lamellar remote operations
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::ActiveMessaging;
+    ///
+    /// let request = world.exec_am_local(Am{...}); //launch am on all pes
+    /// let result = world.block_on(request); //block until am has executed
+    /// // you can also directly pass an async block
+    /// world.block_on(async move {
+    ///     let file = async_std::fs::File.open(...);.await;
+    ///     for pe in 0..num_pes{
+    ///         let data = file.read(...).await;
+    ///         world.exec_am_pe(pe,DataAm{data}).await;
+    ///     }
+    ///     world.exec_am_all(...).await;
+    /// });
+    ///```
+    fn block_on<F>(&self, f: F) -> F::Output
+    where
+        F: Future;
 }
 
 #[async_trait]

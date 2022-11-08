@@ -410,7 +410,7 @@ macro_rules! input_test{
             check_results!($array,array,num_pes,reqs,"scoped &Vec<T>");
 
             // LMR<T>------------------------------
-            let lmr=world.alloc_local_mem_region(array.len());
+            let lmr=world.alloc_one_sided_mem_region(array.len());
             let mut reqs = vec![];
             unsafe{
                 let slice = lmr.as_mut_slice().unwrap();
@@ -428,7 +428,7 @@ macro_rules! input_test{
             // scoped LMR<T>------------------------------
             let mut reqs = vec![];
             {
-                let lmr=world.alloc_local_mem_region(array.len());
+                let lmr=world.alloc_one_sided_mem_region(array.len());
                 unsafe{
                     let slice = lmr.as_mut_slice().unwrap();
                     for i in 0..array.len(){
@@ -441,7 +441,7 @@ macro_rules! input_test{
             // scoped &LMR<T>------------------------------
             let mut reqs = vec![];
             {
-                let lmr=world.alloc_local_mem_region(array.len());
+                let lmr=world.alloc_one_sided_mem_region(array.len());
                 unsafe{
                     let slice = lmr.as_mut_slice().unwrap();
                     for i in 0..array.len(){

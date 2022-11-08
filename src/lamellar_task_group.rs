@@ -26,6 +26,7 @@ pub(crate) struct TaskGroupRequestHandleInner {
     tg_outstanding_reqs: Option<Arc<AtomicUsize>>,
 }
 
+#[doc(hidden)]
 #[derive(Debug)]
 pub struct TaskGroupRequestHandle<T: AmDist> {
     inner: Arc<TaskGroupRequestHandleInner>,
@@ -117,6 +118,7 @@ pub(crate) struct TaskGroupMultiRequestHandleInner {
     tg_outstanding_reqs: Option<Arc<AtomicUsize>>,
 }
 
+#[doc(hidden)]
 #[derive(Debug)]
 pub struct TaskGroupMultiRequestHandle<T: AmDist> {
     inner: Arc<TaskGroupMultiRequestHandleInner>,
@@ -223,6 +225,7 @@ pub(crate) struct TaskGroupLocalRequestHandleInner {
     tg_outstanding_reqs: Option<Arc<AtomicUsize>>,
 }
 
+#[doc(hidden)]
 #[derive(Debug)]
 pub struct TaskGroupLocalRequestHandle<T> {
     inner: Arc<TaskGroupLocalRequestHandleInner>,
@@ -289,6 +292,30 @@ impl<T: SyncSend + 'static> LamellarRequest for TaskGroupLocalRequestHandle<T> {
     }
 }
 
+
+/// An abstraction for representing a set of active messages as single group.
+/// 
+/// This allows a user to wait on all the tasks in this group to finish executing.
+/// This is in contrast to either waiting for a single request to finish, or to waiting for all tasks launched by a team to finish.
+///
+/// A given team can construct multiple independent Task Groups at a time
+///
+/// # Examples
+///
+///```
+/// use lamellar::{ActiveMessaging, LamellarTaskGroup};
+///
+/// let task_group_1 = LamellarTaskGroup(world); //associate the task group with the world
+/// let task_group_2 = LamellarTaskGroup(sub_team); //we can also associate the task group with a team/sub_team
+///
+/// task_group_1.exec_am_all(...);
+/// for pe in 0..num_pes{
+///    task_group_2.exec_am_pe(pe,...);
+/// }
+/// task_group_1.wait_all(); //only need to wait for active messages launched with task_group_1 to finish
+/// //do interesting work
+/// task_group_2.wait_all(); //only need to wait for active messages launched with task_group_1 to finish
+/// ```
 #[derive(Debug)]
 pub struct LamellarTaskGroup {
     team: Pin<Arc<LamellarTeamRT>>,
@@ -343,9 +370,27 @@ impl ActiveMessaging for LamellarTaskGroup {
     {
         self.exec_am_local_inner(am).into_future()
     }
+
+    fn block_on<F>(&self, f: F) -> F::Output
+    where
+        F: Future,
+    {
+        tracing::trace_span!("block_on").in_scope(|| self.team.scheduler.block_on(f))
+    }
 }
 
+
 impl LamellarTaskGroup {
+    /// Construct a new Task group associated with the provided team
+    ///
+    /// # Examples
+    ///
+    ///```
+    /// use lamellar::{ActiveMessaging, LamellarTaskGroup};
+    ///
+    /// let task_group_1 = LamellarTaskGroup(world); //associate the task group with the world
+    /// let task_group_2 = LamellarTaskGroup(sub_team); //we can also associate the task group with a team/sub_team
+    ///```
     pub fn new<U: Into<IntoLamellarTeam>>(team: U) -> LamellarTaskGroup {
         let team = team.into().team.clone();
         let counters = AMCounters::new();

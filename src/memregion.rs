@@ -9,8 +9,8 @@ use std::sync::Arc;
 pub(crate) mod shared;
 use shared::SharedMemoryRegion;
 
-pub(crate) mod local;
-use local::LocalMemoryRegion;
+pub(crate) mod one_sided;
+use one_sided::OneSidedMemoryRegion;
 
 use enum_dispatch::enum_dispatch;
 
@@ -27,6 +27,8 @@ impl std::fmt::Display for MemNotLocalError {
 
 impl std::error::Error for MemNotLocalError {}
 
+
+/// Trait representing types that can be used in remote operations
 pub trait Dist:
     Sync + Send + Copy + serde::ser::Serialize + serde::de::DeserializeOwned + 'static
 {
@@ -36,12 +38,13 @@ pub trait Dist:
 // {
 // }
 
+#[doc(hidden)]
 #[enum_dispatch(RegisteredMemoryRegion<T>, MemRegionId, AsBase, SubRegion<T>, MemoryRegionRDMA<T>, RTMemoryRegionRDMA<T>)]
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
 #[serde(bound = "T: Dist + serde::Serialize + serde::de::DeserializeOwned")]
 pub enum LamellarMemoryRegion<T: Dist> {
     Shared(SharedMemoryRegion<T>),
-    Local(LocalMemoryRegion<T>),
+    Local(OneSidedMemoryRegion<T>),
     // Unsafe(UnsafeArray<T>),
 }
 
@@ -152,15 +155,60 @@ impl<T: Dist> MyFrom<LamellarMemoryRegion<T>> for LamellarArrayInput<T> {
     }
 }
 
+/// An  abstraction for a memory region that has been registered with the underlying lamellae (network provider)
+/// allowing for RDMA operations.
+///
+/// Memory Regions are low-level unsafe abstraction not really intended for use in higher-level applications
+/// 
+/// # Warning
+/// Unless you are very confident in low level distributed memory access it is highly recommended you utilize the
+/// [LamellarArray] interface to construct and interact with distributed memory.
 #[enum_dispatch]
 pub trait RegisteredMemoryRegion<T: Dist> {
+    /// The length (in number of elements of `T`) of the local segment of the memory region (i.e. not the global length of the memory region)  
     fn len(&self) -> usize;
+    #[doc(hidden)]
     fn addr(&self) -> MemResult<usize>;
-    fn as_slice(&self) -> MemResult<&[T]>;
-    fn at(&self, index: usize) -> MemResult<&T>;
+
+    /// Return a slice of the local (to the calling PE) data of the memory region
+    ///
+    /// Returns an error if the PE does not contain any local data associated with this memory region
+    ///
+    /// # Safety
+    /// this call is always unsafe as there is no gaurantee that there do not exist mutable references elsewhere in the distributed system.
+    unsafe fn as_slice(&self) -> MemResult<&[T]>;
+
+    /// Return a reference to the local (to the calling PE) element located by the provided index
+    ///
+    /// Returns an error if the index is out of bounds or the PE does not contain any local data associated with this memory region
+    ///
+    /// # Safety
+    /// this call is always unsafe as there is no gaurantee that there do not exist mutable references elsewhere in the distributed system.
+    unsafe fn at(&self, index: usize) -> MemResult<&T>;
+
+    /// Return a mutable slice of the local (to the calling PE) data of the memory region
+    ///
+    /// Returns an error if the PE does not contain any local data associated with this memory region
+    ///
+    /// # Safety
+    /// this call is always unsafe as there is no gaurantee that there do not exist other mutable references elsewhere in the distributed system.
     unsafe fn as_mut_slice(&self) -> MemResult<&mut [T]>;
-    fn as_ptr(&self) -> MemResult<*const T>;
-    fn as_mut_ptr(&self) -> MemResult<*mut T>;
+
+    /// Return a ptr to the local (to the calling PE) data of the memory region
+    ///
+    /// Returns an error if the PE does not contain any local data associated with this memory region
+    ///
+    /// # Safety
+    /// this call is always unsafe as there is no gaurantee that there do not exist mutable references elsewhere in the distributed system.
+    unsafe fn as_ptr(&self) -> MemResult<*const T>;
+
+    /// Return a mutable ptr to the local (to the calling PE) data of the memory region
+    ///
+    /// Returns an error if the PE does not contain any local data associated with this memory region
+    ///
+    /// # Safety
+    /// this call is always unsafe as there is no gaurantee that there do not exist mutable references elsewhere in the distributed system.
+    unsafe fn as_mut_ptr(&self) -> MemResult<*mut T>;
 }
 
 #[enum_dispatch]
@@ -172,6 +220,7 @@ pub(crate) trait MemRegionId {
 // because we want MemRegion to impl RegisteredMemoryRegion (so that it can be used in Shared + Local)
 // but MemRegion should not return LamellarMemoryRegions directly (as both SubRegion and AsBase require)
 // we will implement seperate functions for MemoryRegion itself.
+#[doc(hidden)]
 #[enum_dispatch]
 pub trait SubRegion<T: Dist> {
     fn sub_region<R: std::ops::RangeBounds<usize>>(&self, range: R) -> LamellarMemoryRegion<T>;
@@ -184,22 +233,87 @@ pub(crate) trait AsBase {
 
 #[enum_dispatch]
 pub trait MemoryRegionRDMA<T: Dist> {
+    /// "Puts" (copies) data from a local memory location into a remote memory location on the specified PE
+    ///
+    /// # Arguments
+    ///
+    /// * `pe` - id of remote PE to grab data from
+    /// * `index` - offset into the remote memory window
+    /// * `data` - address (which is "registered" with network device) of local input buffer that will be put into the remote memory
+    /// the data buffer may not be safe to upon return from this call, currently the user is responsible for completion detection,
+    /// or you may use the similar iput call (with a potential performance penalty);
+    ///
+    /// # Safety
+    /// This call is always unsafe as mutual exclusitivity is not enforced, i.e. many other reader/writers can exist simultaneously. 
+    /// Additionally, when this call returns the underlying fabric provider may or may not have already copied the data buffer
     unsafe fn put<U: Into<LamellarMemoryRegion<T>>>(&self, pe: usize, index: usize, data: U);
-    fn iput<U: Into<LamellarMemoryRegion<T>>>(&self, pe: usize, index: usize, data: U);
+
+    /// Blocking "Puts" (copies) data from a local memory location into a remote memory location on the specified PE.
+    ///
+    /// This function blocks until the data in the data buffer has been transfered out of this PE, this does not imply that it has arrived at the remote destination though
+    /// # Arguments
+    ///
+    /// * `pe` - id of remote PE to grab data from
+    /// * `index` - offset into the remote memory window
+    /// * `data` - address (which is "registered" with network device) of local input buffer that will be put into the remote memory
+    /// the data buffer is free to be reused upon return of this function.
+    ///
+    /// # Safety
+    /// This call is always unsafe as mutual exclusitivity is not enforced, i.e. many other reader/writers can exist simultaneously. 
+    unsafe fn blocking_put<U: Into<LamellarMemoryRegion<T>>>(&self, pe: usize, index: usize, data: U);
+
+    /// "Puts" (copies) data from a local memory location into a remote memory location on all PEs containing the memory region
+    /// 
+    /// This is similar to broad cast
+    ///
+    /// # Arguments
+    ///
+    /// * `index` - offset into the remote memory window
+    /// * `data` - address (which is "registered" with network device) of local input buffer that will be put into the remote memory
+    /// the data buffer may not be safe to upon return from this call, currently the user is responsible for completion detection,
+    /// or you may use the similar iput call (with a potential performance penalty);
+    ///
+    /// # Safety
+    /// This call is always unsafe as mutual exclusitivity is not enforced, i.e. many other reader/writers can exist simultaneously. 
+    /// Additionally, when this call returns the underlying fabric provider may or may not have already copied the data buffer
     unsafe fn put_all<U: Into<LamellarMemoryRegion<T>>>(&self, index: usize, data: U);
+
+    /// "Gets" (copies) data from remote memory location on the specified PE into the provided data buffer.
+    /// After calling this function, the data may or may not have actually arrived into the data buffer.
+    /// The user is responsible for transmission termination detection
+    ///
+    /// # Arguments
+    ///
+    /// * `pe` - id of remote PE to grab data from
+    /// * `index` - offset into the remote memory window
+    /// * `data` - address (which is "registered" with network device) of destination buffer to store result of the get
+    /// # Safety
+    /// This call is always unsafe as mutual exclusitivity is not enforced, i.e. many other reader/writers can exist simultaneously. 
+    /// Additionally, when this call returns the underlying fabric provider may or may not have already copied data into the data buffer.
     unsafe fn get_unchecked<U: Into<LamellarMemoryRegion<T>>>(
         &self,
         pe: usize,
         index: usize,
         data: U,
     );
-    fn iget<U: Into<LamellarMemoryRegion<T>>>(&self, pe: usize, index: usize, data: U);
+
+    /// Blocking "Gets" (copies) data from remote memory location on the specified PE into the provided data buffer.
+    /// After calling this function, the data is guaranteed to be placed in the data buffer
+    ///
+    /// # Arguments
+    ///
+    /// * `pe` - id of remote PE to grab data from
+    /// * `index` - offset into the remote memory window
+    /// * `data` - address (which is "registered" with network device) of destination buffer to store result of the get
+    /// # Safety
+    /// This call is always unsafe as mutual exclusitivity is not enforced, i.e. many other reader/writers can exist simultaneously. 
+    unsafe fn blocking_get<U: Into<LamellarMemoryRegion<T>>>(&self, pe: usize, index: usize, data: U);
 }
 
 #[enum_dispatch]
 pub(crate) trait RTMemoryRegionRDMA<T: Dist> {
     unsafe fn put_slice(&self, pe: usize, index: usize, data: &[T]);
-    unsafe fn iget_slice(&self, pe: usize, index: usize, data: &mut [T]);
+    unsafe fn blocking_get_slice(&self, pe: usize, index: usize, data: &mut [T]);
 }
 
 //#[prof]
@@ -396,7 +510,7 @@ impl<T: Dist> MemoryRegion<T> {
     /// * `data` - address (which is "registered" with network device) of local input buffer that will be put into the remote memory
     /// the data buffer is free to be reused upon return of this function.
     #[tracing::instrument(skip_all)]
-    pub(crate) fn iput<R: Dist, U: Into<LamellarMemoryRegion<R>>>(
+    pub(crate) unsafe fn blocking_put<R: Dist, U: Into<LamellarMemoryRegion<R>>>(
         &self,
         pe: usize,
         index: usize,
@@ -407,7 +521,7 @@ impl<T: Dist> MemoryRegion<T> {
         if (index + data.len()) * std::mem::size_of::<R>() <= self.num_bytes {
             let num_bytes = data.len() * std::mem::size_of::<R>();
             if let Ok(ptr) = data.as_ptr() {
-                let bytes = unsafe { std::slice::from_raw_parts(ptr as *const u8, num_bytes) };
+                let bytes = std::slice::from_raw_parts(ptr as *const u8, num_bytes);
                 self.rdma
                     .iput(pe, bytes, self.addr + index * std::mem::size_of::<R>())
             } else {
@@ -485,7 +599,7 @@ impl<T: Dist> MemoryRegion<T> {
     /// * `data` - address (which is "registered" with network device) of destination buffer to store result of the get
     ///    data will be present within the buffer once this returns.
     #[tracing::instrument(skip_all)]
-    pub(crate) fn iget<R: Dist, U: Into<LamellarMemoryRegion<R>>>(
+    pub(crate) unsafe fn blocking_get<R: Dist, U: Into<LamellarMemoryRegion<R>>>(
         &self,
         pe: usize,
         index: usize,
@@ -495,7 +609,7 @@ impl<T: Dist> MemoryRegion<T> {
         if (index + data.len()) * std::mem::size_of::<R>() <= self.num_bytes {
             let num_bytes = data.len() * std::mem::size_of::<R>();
             if let Ok(ptr) = data.as_mut_ptr() {
-                let bytes = unsafe { std::slice::from_raw_parts_mut(ptr as *mut u8, num_bytes) };
+                let bytes = std::slice::from_raw_parts_mut(ptr as *mut u8, num_bytes);
                 // println!("getting {:?} {:?} {:?} {:?} {:?} {:?} {:?}",pe,index,std::mem::size_of::<R>(),data.len(), num_bytes,self.size, self.num_bytes);
                 self.rdma
                     .iget(pe, self.addr + index * std::mem::size_of::<R>(), bytes);
@@ -549,12 +663,11 @@ impl<T: Dist> MemoryRegion<T> {
     /// * `data` - address (which is "registered" with network device) of destination buffer to store result of the get
     ///    data will be present within the buffer once this returns.
     #[tracing::instrument(skip_all)]
-    pub(crate) fn iget_slice<R: Dist>(&self, pe: usize, index: usize, data: &mut [R]) {
+    pub(crate) unsafe fn blocking_get_slice<R: Dist>(&self, pe: usize, index: usize, data: &mut [R]) {
         // let data = data.into();
         if (index + data.len()) * std::mem::size_of::<R>() <= self.num_bytes {
             let num_bytes = data.len() * std::mem::size_of::<R>();
-            let bytes =
-                unsafe { std::slice::from_raw_parts_mut(data.as_mut_ptr() as *mut u8, num_bytes) };
+            let bytes = std::slice::from_raw_parts_mut(data.as_mut_ptr() as *mut u8, num_bytes);
             // println!("getting {:?} {:?} {:?} {:?} {:?} {:?} {:?}",pe,index,std::mem::size_of::<R>(),data.len(), num_bytes,self.size, self.num_bytes);
 
             self.rdma
@@ -722,26 +835,11 @@ pub trait RemoteMemoryRegion {
     /// # Arguments
     ///
     /// * `size` - number of elements of T to allocate a memory region for -- (not size in bytes)
-    fn alloc_local_mem_region<T: Dist + std::marker::Sized>(
+    fn alloc_one_sided_mem_region<T: Dist + std::marker::Sized>(
         &self,
         size: usize,
-    ) -> LocalMemoryRegion<T>;
+    ) -> OneSidedMemoryRegion<T>;
 
-    // /// release a shared memory region from the asymmetric heap
-    // ///
-    // /// # Arguments
-    // ///
-    // /// * `region` - the region to free
-    // ///
-    // fn free_shared_memory_region<T: AmDist+ 'static>(&self, region: SharedMemoryRegion<T>);
-
-    // /// release a shared memory region from the asymmetric heap
-    // ///
-    // /// # Arguments
-    // ///
-    // /// * `region` - the region to free
-    // ///
-    // fn free_local_memory_region<T: AmDist+ 'static>(&self, region: LocalMemoryRegion<T>);
 }
 
 impl<T: Dist> Drop for MemoryRegion<T> {

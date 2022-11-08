@@ -38,7 +38,7 @@ fn main() {
     println!("my local size {:?}", my_local_size);
     let block_array = UnsafeArray::<usize>::new(world.team(), total_len, Distribution::Block);
     let cyclic_array = UnsafeArray::<usize>::new(world.team(), total_len, Distribution::Cyclic);
-    let local_mem_region = world.alloc_local_mem_region(total_len);
+    let local_mem_region = world.alloc_one_sided_mem_region(total_len);
     world.barrier();
     if my_pe == 0 {
         unsafe {
@@ -48,7 +48,7 @@ fn main() {
                 i += 1
             }
         }
-        println!("{:?}", local_mem_region.as_slice().unwrap());
+        println!("{:?}", unsafe {local_mem_region.as_slice().unwrap()});
         // let index = ((len_per_pe * (my_pe) as f32).round() as usize) % total_len;
 
         world.block_on(block_array.put(0, &local_mem_region));
@@ -75,7 +75,7 @@ fn main() {
         println!(
             "[{:?}] get from block array {:?}",
             my_pe,
-            local_mem_region.as_slice()
+            unsafe {local_mem_region.as_slice()}
         );
     }
 
@@ -91,7 +91,7 @@ fn main() {
         println!(
             "[{:?}] get from cyclic array {:?}",
             my_pe,
-            local_mem_region.as_slice()
+            unsafe {local_mem_region.as_slice()}
         );
     }
 

@@ -1,6 +1,6 @@
 use crate::array::iterator::serial_iterator::*;
 use crate::array::LamellarArrayRequest;
-use crate::LocalMemoryRegion;
+use crate::OneSidedMemoryRegion;
 
 use async_trait::async_trait;
 // use futures::join;
@@ -103,7 +103,7 @@ where
     }
     fn buffered_next(
         &mut self,
-        mem_region: LocalMemoryRegion<u8>,
+        mem_region: OneSidedMemoryRegion<u8>,
     ) -> Option<Box<dyn LamellarArrayRequest<Output = ()>>> {
         let a_sub_region = mem_region.sub_region(0..self.a.item_size());
         let mut reqs = vec![];
@@ -116,7 +116,7 @@ where
     }
     // async fn async_buffered_next(
     //     mut self: Pin<&mut Self>,
-    //     mem_region: LocalMemoryRegion<u8>,
+    //     mem_region: OneSidedMemoryRegion<u8>,
     // ) -> Option<Box<dyn LamellarArrayRequest<Output = ()>>> {
     //     let this = self.as_mut().project();
     //     let a_sub_region = mem_region.sub_region(0..this.a.item_size());
@@ -130,7 +130,7 @@ where
     //     reqs.push(this.b.async_buffered_next(b_sub_region).await?);
     //     Some(Box::new(ZipBufferedReq { reqs }))
     // }
-    fn from_mem_region(&self, mem_region: LocalMemoryRegion<u8>) -> Option<Self::Item> {
+    fn from_mem_region(&self, mem_region: OneSidedMemoryRegion<u8>) -> Option<Self::Item> {
         let a_sub_region = mem_region.sub_region(0..self.a.item_size());
         let a = self.a.from_mem_region(a_sub_region)?;
         let b_sub_region =
