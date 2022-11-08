@@ -28,7 +28,7 @@ use crate::array::{
     AtomicArray, Distribution, GenericAtomicArray, LamellarArray, NativeAtomicArray, UnsafeArray,
 }; //, LamellarArrayPut, LamellarArrayGet};
 
-use crate::active_messaging::SyncSend ;
+use crate::active_messaging::SyncSend;
 // use crate::scheduler::SchedulerQueue;
 
 use async_trait::async_trait;
@@ -430,8 +430,10 @@ impl<T: Dist, A: LamellarArray<T>> DistIter<'_, T, A> {
 //     }
 // }
 
-impl<T: Dist + 'static, A: LamellarArray<T> + DistIteratorLauncher + SyncSend + Clone + 'static>
-    DistributedIterator for DistIter<'static, T, A>
+impl<
+        T: Dist + 'static,
+        A: LamellarArray<T> + DistIteratorLauncher + SyncSend + Clone + 'static,
+    > DistributedIterator for DistIter<'static, T, A>
 {
     type Item = &'static T;
     type Array = A;
@@ -535,8 +537,10 @@ impl<T: Dist, A: LamellarArray<T>> DistIterMut<'_, T, A> {
 //     }
 // }
 
-impl<T: Dist + 'static, A: LamellarArray<T> + SyncSend + DistIteratorLauncher + Clone + 'static>
-    DistributedIterator for DistIterMut<'static, T, A>
+impl<
+        T: Dist + 'static,
+        A: LamellarArray<T> + SyncSend + DistIteratorLauncher + Clone + 'static,
+    > DistributedIterator for DistIterMut<'static, T, A>
 {
     type Item = &'static mut T;
     type Array = A;

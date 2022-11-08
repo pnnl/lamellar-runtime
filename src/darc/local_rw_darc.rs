@@ -16,14 +16,14 @@ use crate::lamellar_world::LAMELLAES;
 use crate::IdError;
 
 /// A local read-write `Darc`
-/// 
+///
 /// Each PE maintains its own local read-write lock associated with the `LocalRwDarc`.
 /// Whenever the interior object is accessed on a PE the local lock is required to be aquired.
-/// When a thread aquires a Write lock it is guaranteed to the only thread with access to 
-/// the interior object with respect to the PE it is executing on (no guarantees are made about what is occuring on other PEs). 
+/// When a thread aquires a Write lock it is guaranteed to the only thread with access to
+/// the interior object with respect to the PE it is executing on (no guarantees are made about what is occuring on other PEs).
 /// When a thread aquires a Read lock it may be one of many threads on the PE with access, but none of them will have mutable access.
 /// - Contrast with a `GlobalRwDarc`, which has a single global lock.
-/// - Contrast with a `Darc`, which also has local ownership but does not 
+/// - Contrast with a `Darc`, which also has local ownership but does not
 ///   allow modification unless the wrapped object itself provides it, e.g.
 ///   `AtomicUsize` or `Mutex<..>`.
 #[derive(serde::Serialize, serde::Deserialize, Debug)]
@@ -115,14 +115,14 @@ impl<T> LocalRwDarc<T> {
     /// the aquired lock is only with respect to this PE, the locks on the other PEs will be in their own states
     ///
     /// # Examples
-    /// 
+    ///
     ///```
     /// use lamellar::{ActiveMessaging, LocalRwDarc};
     /// #[lamellar::AmData(Clone)]
     /// struct DarcAm {
     ///     counter: LocalRwDarc<usize>, //each pe has a local atomicusize
     /// }
-    /// 
+    ///
     /// #[lamellar::am]
     /// impl LamellarAm for DarcAm {
     ///     async fn exec(self) {
@@ -152,19 +152,19 @@ impl<T> LocalRwDarc<T> {
     /// the aquired lock is only with respect to this PE, the locks on the other PEs will be in their own states
     ///
     /// # Examples
-    /// 
+    ///
     ///```
     /// use lamellar::{ActiveMessaging, LocalRwDarc};
     /// #[lamellar::AmData(Clone)]
     /// struct DarcAm {
     ///     counter: LocalRwDarc<usize>, //each pe has a local atomicusize
     /// }
-    /// 
+    ///
     /// #[lamellar::am]
     /// impl LamellarAm for DarcAm {
     ///     async fn exec(self) {
     ///         let counter = self.counter.write(); //block until we get the write lock
-    ///        counter += 1; 
+    ///        counter += 1;
     ///     }
     ///  }
     /// -------------
@@ -180,7 +180,7 @@ impl<T> LocalRwDarc<T> {
 
 impl<T> LocalRwDarc<T> {
     /// Constructs a new `LocalRwDarc<T>` on the PEs specified by team.
-    /// 
+    ///
     /// This is a blocking collective call amongst all PEs in the team, only returning once every PE in the team has completed the call.
     ///
     /// Returns an error if this PE is not a part of team
@@ -212,7 +212,6 @@ impl<T> LocalRwDarc<T> {
     //     })
     // }
 
-
     /// Converts this LocalRwDarc into a regular [Darc]
     ///
     /// This is a blocking collective call amongst all PEs in the LocalRwDarc's team, only returning once every PE in the team has completed the call.
@@ -225,7 +224,7 @@ impl<T> LocalRwDarc<T> {
     /// use lamellar::{Darc,LocalRwDarc};
     ///
     /// let five = LocalRwDarc::new(5);
-    /// let five_as_darc = five.into_darc(); 
+    /// let five_as_darc = five.into_darc();
     /// ```
     pub fn into_darc(self) -> Darc<T> {
         let inner = self.inner();
@@ -253,7 +252,6 @@ impl<T> LocalRwDarc<T> {
         d
     }
 
-
     /// Converts this LocalRwDarc into a [GlobalRwDarc]
     ///
     /// This is a blocking collective call amongst all PEs in the LocalRwDarc's team, only returning once every PE in the team has completed the call.
@@ -266,7 +264,7 @@ impl<T> LocalRwDarc<T> {
     /// use lamellar::{GlobalRwDarc,LocalRwDarc};
     ///
     /// let five = LocalRwDarc::new(5);
-    /// let five_as_globaldarc = five.into_globalrw(); 
+    /// let five_as_globaldarc = five.into_globalrw();
     /// ```
     pub fn into_globalrw(self) -> GlobalRwDarc<T> {
         let inner = self.inner();

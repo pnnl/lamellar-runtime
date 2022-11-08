@@ -475,8 +475,7 @@ impl<T: Dist + serde::Serialize + serde::de::DeserializeOwned + 'static> UnsafeA
         self.reduce_data(self.get_reduction_op(op))
     }
     pub fn reduce(&self, op: &str) -> Pin<Box<dyn Future<Output = T>>> {
-        self.reduce_data(self.get_reduction_op(op))
-            .into_future()
+        self.reduce_data(self.get_reduction_op(op)).into_future()
     }
     pub fn sum(&self) -> Pin<Box<dyn Future<Output = T>>> {
         self.reduce("sum")

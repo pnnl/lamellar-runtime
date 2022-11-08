@@ -137,10 +137,11 @@ impl<T: Dist> UnsafeArray<T> {
                             temp_memreg.put(k, buf.sub_region(j..=j));
                             k += 1;
                         }
-                        self.inner
-                            .data
-                            .mem_region
-                            .blocking_put(pe, offset, temp_memreg.sub_region(0..k));
+                        self.inner.data.mem_region.blocking_put(
+                            pe,
+                            offset,
+                            temp_memreg.sub_region(0..k),
+                        );
                         if pe + 1 == num_pes {
                             overflow += 1;
                         }
@@ -167,7 +168,7 @@ impl<T: Dist> UnsafeArray<T> {
                         array: self.clone().into(),
                         start_index: index,
                         len: buf.len(),
-                        data: unsafe {temp_memreg.to_base::<u8>().into()},
+                        data: unsafe { temp_memreg.to_base::<u8>().into() },
                         pe: self.inner.data.my_pe,
                     };
                     reqs.push(self.exec_am_pe(pe, am));
@@ -232,7 +233,9 @@ impl<T: Dist> UnsafeArray<T> {
                     let am = UnsafeCyclicGetAm {
                         array: self.clone().into(),
                         data: unsafe { buf.clone().to_base::<u8>() },
-                        temp_data: unsafe{temp_memreg.sub_region(0..num_elems).to_base::<u8>().into()},
+                        temp_data: unsafe {
+                            temp_memreg.sub_region(0..num_elems).to_base::<u8>().into()
+                        },
                         i: i,
                         pe: pe,
                         my_pe: self.inner.data.my_pe,
@@ -621,11 +624,13 @@ struct UnsafeBlockGetAm {
 #[lamellar_impl::rt_am_local]
 impl LamellarAm for UnsafeBlockGetAm {
     async fn exec(self) {
-        unsafe {self.array.inner.data.mem_region.blocking_get(
-            self.pe,
-            self.offset * self.array.inner.elem_size,
-            self.data.clone(),
-        )};
+        unsafe {
+            self.array.inner.data.mem_region.blocking_get(
+                self.pe,
+                self.offset * self.array.inner.elem_size,
+                self.data.clone(),
+            )
+        };
     }
 }
 #[lamellar_impl::AmLocalDataRT(Debug)]

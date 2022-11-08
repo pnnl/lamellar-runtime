@@ -144,7 +144,7 @@ where
     ) -> Option<Box<dyn LamellarArrayRequest<Output = ()>>> {
         let array = self.array();
         if self.index < array.len() {
-            let mem_reg_t = unsafe{mem_region.to_base::<I::ElemType>()};
+            let mem_reg_t = unsafe { mem_region.to_base::<I::ElemType>() };
             let req = array.internal_get(self.index, &mem_reg_t);
             self.index += mem_reg_t.len();
             Some(req)
@@ -168,7 +168,7 @@ where
     //     }
     // }
     fn from_mem_region(&self, mem_region: OneSidedMemoryRegion<u8>) -> Option<Self::Item> {
-        let mem_reg_t = unsafe{mem_region.to_base::<I::ElemType>()};
+        let mem_reg_t = unsafe { mem_region.to_base::<I::ElemType>() };
         Some(mem_reg_t)
     }
 }

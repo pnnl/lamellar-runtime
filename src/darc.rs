@@ -76,24 +76,23 @@ pub struct DarcInner<T> {
 unsafe impl<T: Send> Send for DarcInner<T> {}
 unsafe impl<T: Sync> Sync for DarcInner<T> {}
 
-
 /// Distributed atomic reference counter
-/// 
+///
 /// The atomic reference counter, [`Arc`][std::sync::Arc], is a backbone of safe
 /// concurrent programming in Rust, and, in particular, *shared ownership*.
-/// 
+///
 /// The `Darc` provides a similar abstraction within a *distributed* environment.
-/// - `Darc`'s have global lifetime, meaning that the pointed too objects remain valid and accessible 
+/// - `Darc`'s have global lifetime, meaning that the pointed too objects remain valid and accessible
 ///   as long as one reference exists on any PE.
 /// - Inner mutability is disallowed by default. If you need to mutate through a Darc use [`Mutex`][std::sync::Mutex], [`RwLock`][std::sync::RwLock], or one of the [`Atomic`][std::sync::atomic]
-/// types. Alternatively you can also use a [`LocalRwDarc`] or [`GlobalRwDarc`]. 
-/// 
+/// types. Alternatively you can also use a [`LocalRwDarc`] or [`GlobalRwDarc`].
+///
 /// `Darc`'s are intended to be passed via active messages.
 /// - They allow distributed
 ///   accesss to and manipulation of generic Rust objects.  The inner object can exist
 ///   on the Rust heap or in a registered memory region.
 /// - They are instantiated in registered memory regions.
-/// 
+///
 /// #Example
 ///```
 /// use lamellar::{ActiveMessaging, Darc};
@@ -104,7 +103,7 @@ unsafe impl<T: Sync> Sync for DarcInner<T> {}
 /// struct DarcAm {
 ///     counter: Darc<AtomicUsize>, //each pe has a local atomicusize
 /// }
-/// 
+///
 /// #[lamellar::am]
 /// impl LamellarAm for DarcAm {
 ///     async fn exec(self) {
@@ -466,7 +465,7 @@ impl<T> Darc<T> {
 
 impl<T> Darc<T> {
     /// Constructs a new `Darc<T>` on the PEs specified by team.
-    /// 
+    ///
     /// This is a blocking collective call amongst all PEs in the team, only returning once every PE in the team has completed the call.
     ///
     /// Returns an error if this PE is not a part of team
@@ -566,7 +565,7 @@ impl<T> Darc<T> {
     /// use lamellar::{Darc,LocalRwDarc};
     ///
     /// let five = Darc::new(5);
-    /// let five_as_localdarc = five.into_localrw(); 
+    /// let five_as_localdarc = five.into_localrw();
     /// ```
     pub fn into_localrw(self) -> LocalRwDarc<T> {
         let inner = self.inner();
@@ -597,7 +596,7 @@ impl<T> Darc<T> {
     /// use lamellar::{GlobalRwDarc,Darc};
     ///
     /// let five = Darc::new(5);
-    /// let five_as_globaldarc = five.into_globalrw(); 
+    /// let five_as_globaldarc = five.into_globalrw();
     /// ```
     pub fn into_globalrw(self) -> GlobalRwDarc<T> {
         let inner = self.inner();

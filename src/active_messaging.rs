@@ -37,7 +37,6 @@ pub(crate) enum ExecType {
     Runtime(Cmd),
 }
 
-
 pub trait DarcSerde {
     fn ser(&self, num_pes: usize);
     fn des(&self, cur_pe: Result<usize, IdError>);
@@ -225,7 +224,7 @@ pub trait ActiveMessaging {
     ///
     /// Returns a future allow the user to poll for complete and retrive the result of the Active Message stored within a vector,
     /// each index in the vector corresponds to the data returned by the corresponding PE
-    /// 
+    ///
     /// NOTE: lamellar active messages are not lazy, i.e. you do not need to drive the returned future to launch the computation,
     /// the future is only used to check for completeion and/or retrieving any returned data
     /// # Examples
@@ -239,7 +238,7 @@ pub trait ActiveMessaging {
     ///
     /// #[lamellar::am]
     /// impl LamellarAM for Am{
-    ///     async fn exec(self) -> usize { //can return nothing or any type that impls Serialize, Deserialize, Sync, Send 
+    ///     async fn exec(self) -> usize { //can return nothing or any type that impls Serialize, Deserialize, Sync, Send
     ///         //do some remote computation
     ///         lamellar::current_pe //return the executing pe
     ///     }
@@ -256,14 +255,14 @@ pub trait ActiveMessaging {
     fn exec_am_all<F>(&self, am: F) -> Pin<Box<dyn Future<Output = Vec<F::Output>> + Send>>
     where
         F: RemoteActiveMessage + LamellarAM + Serde + AmDist;
-    
+
     /// launch and execute an active message on a specifc PE.
     ///
     /// Expects as input the PE to execute on and an instance of a struct thats been defined using the lamellar::am procedural macros.
     ///
     /// Returns a future allow the user to poll for complete and retrive the result of the Active Message
     ///
-    /// 
+    ///
     /// NOTE: lamellar active messages are not lazy, i.e. you do not need to drive the returned future to launch the computation,
     /// the future is only used to check for completeion and/or retrieving any returned data
     /// # Examples
@@ -277,7 +276,7 @@ pub trait ActiveMessaging {
     ///
     /// #[lamellar::am]
     /// impl LamellarAM for Am{
-    ///     async fn exec(self) -> usize { //can return nothing or any type that impls Serialize, Deserialize, Sync, Send 
+    ///     async fn exec(self) -> usize { //can return nothing or any type that impls Serialize, Deserialize, Sync, Send
     ///         //do some remote computation
     ///         lamellar::current_pe //return the executing pe
     ///     }
@@ -293,14 +292,13 @@ pub trait ActiveMessaging {
     where
         F: RemoteActiveMessage + LamellarAM + Serde + AmDist;
 
-
     /// launch and execute an active message on the calling PE.
     ///
     /// Expects as input an instance of a struct thats been defined using the lamellar::local_am procedural macros.
     ///
     /// Returns a future allow the user to poll for complete and retrive the result of the Active Message.
     ///
-    /// 
+    ///
     /// NOTE: lamellar active messages are not lazy, i.e. you do not need to drive the returned future to launch the computation,
     /// the future is only used to check for completeion and/or retrieving any returned data.
     /// # Examples
@@ -314,7 +312,7 @@ pub trait ActiveMessaging {
     ///
     /// #[lamellar::local_am]
     /// impl LamellarAM for Am{
-    ///     async fn exec(self) -> usize { //can return nothing or any type that impls Serialize, Deserialize, Sync, Send 
+    ///     async fn exec(self) -> usize { //can return nothing or any type that impls Serialize, Deserialize, Sync, Send
     ///         //do some remote computation
     ///         lamellar::current_pe //return the executing pe
     ///     }
@@ -329,7 +327,7 @@ pub trait ActiveMessaging {
     fn exec_am_local<F>(&self, am: F) -> Pin<Box<dyn Future<Output = F::Output> + Send>>
     where
         F: LamellarActiveMessage + LocalAM + 'static;
-    
+
     /// blocks calling thread until all remote tasks (e.g. active mesages, array operations)
     /// initiated by the calling PE have completed.
     ///
@@ -339,7 +337,7 @@ pub trait ActiveMessaging {
     /// use lamellar::ActiveMessaging;
     ///
     /// let world =  let world = lamellar::LamellarWorldBuilder::new().build();
-    /// world.exec_am_all(...); 
+    /// world.exec_am_all(...);
     /// world.wait_all(); //block until the previous am has finished
     ///```
     fn wait_all(&self);

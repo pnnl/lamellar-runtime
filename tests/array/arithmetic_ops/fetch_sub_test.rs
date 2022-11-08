@@ -24,17 +24,19 @@ macro_rules! initialize_array {
     };
 }
 
-macro_rules! check_val{
+macro_rules! check_val {
     (UnsafeArray,$val:ident,$min_val:ident,$valid:ident) => {
-       // UnsafeArray updates will be nondeterminstic so should not ever be considered safe/valid so for testing sake we just say they are
+        // UnsafeArray updates will be nondeterminstic so should not ever be considered safe/valid so for testing sake we just say they are
     };
     (AtomicArray,$val:ident,$min_val:ident,$valid:ident) => {
-        if (($val - $min_val)as f32).abs() > 0.0001{//all updates should be preserved
+        if (($val - $min_val) as f32).abs() > 0.0001 {
+            //all updates should be preserved
             $valid = false;
         }
     };
     (LocalLockAtomicArray,$val:ident,$min_val:ident,$valid:ident) => {
-        if (($val - $min_val)as f32).abs()  > 0.0001{//all updates should be preserved
+        if (($val - $min_val) as f32).abs() > 0.0001 {
+            //all updates should be preserved
             $valid = false;
         }
     };
@@ -115,7 +117,7 @@ macro_rules! fetch_sub_test{
             array.wait_all();
             array.barrier();
             // let mut prev_vals = vec![tot_updates as $t;array.len()];
-        
+
             let mut reqs = vec![];
             // println!("2------------");
             for _i in 0..num_updates{
@@ -125,7 +127,7 @@ macro_rules! fetch_sub_test{
             for (req,_idx) in reqs{
                 let _val =  world.block_on(req);
             }
-            
+
             array.barrier();
             let sum = array.ser_iter().into_iter().fold(0,|acc,x| acc+ *x as usize);
             let calced_sum = tot_updates as usize  * (array.len()-1);
@@ -244,7 +246,7 @@ macro_rules! fetch_sub_test{
                 for (req,_idx) in reqs{
                     let _val =  world.block_on(req);
                 }
-                
+
                 sub_array.barrier();
                 let sum = sub_array.ser_iter().into_iter().fold(0,|acc,x| acc+ *x as usize);
                 let calced_sum = tot_updates as usize  * (sub_array.len()-1);

@@ -5,8 +5,8 @@ use crate::lamellar_arch::{GlobalArch, IdError, LamellarArch, LamellarArchEnum, 
 use crate::lamellar_request::*;
 use crate::lamellar_world::LamellarWorld;
 use crate::memregion::{
-    one_sided::OneSidedMemoryRegion, shared::SharedMemoryRegion, Dist, LamellarMemoryRegion, MemoryRegion,
-    RemoteMemoryRegion,
+    one_sided::OneSidedMemoryRegion, shared::SharedMemoryRegion, Dist, LamellarMemoryRegion,
+    MemoryRegion, RemoteMemoryRegion,
 };
 use crate::scheduler::{ReqId, Scheduler, SchedulerQueue};
 #[cfg(feature = "nightly")]
@@ -57,7 +57,7 @@ use tracing::*;
 pub struct LamellarTeam {
     pub(crate) world: Option<Arc<LamellarTeam>>,
     pub(crate) team: Pin<Arc<LamellarTeamRT>>,
-    pub(crate) am_team: bool, 
+    pub(crate) am_team: bool,
 }
 
 //#[prof]

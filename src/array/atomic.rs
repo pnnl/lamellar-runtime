@@ -184,7 +184,6 @@ impl<T: Dist + ElementBitWiseOps> BitOrAssign<T> for AtomicElement<T> {
     }
 }
 
-
 /// A distributed array containing atomic elements. (See [array::LamellarArray] for more inforamation on distributed arrays in lamellar)
 ///
 /// If the type of the Array is an integer type (U8, usize, i32, i16, etc.) the array will use the appropriate Atomic* type underneath.
@@ -277,7 +276,6 @@ impl AtomicByteArrayWeak {
         }
     }
 }
-
 
 pub struct AtomicLocalData<T: Dist> {
     array: AtomicArray<T>,

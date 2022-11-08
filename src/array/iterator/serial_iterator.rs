@@ -162,7 +162,7 @@ impl<'a, T: Dist + 'static, A: LamellarArrayInternalGet<T>> LamellarArrayIter<'a
     ) -> LamellarArrayIter<'a, T, A> {
         let buf_0 = team.alloc_one_sided_mem_region(buf_size);
         array.internal_get(0, &buf_0).wait();
-        let ptr = unsafe {SendNonNull(NonNull::new(buf_0.as_mut_ptr().unwrap()).unwrap())};
+        let ptr = unsafe { SendNonNull(NonNull::new(buf_0.as_mut_ptr().unwrap()).unwrap()) };
         let iter = LamellarArrayIter {
             array: array,
             buf_0: buf_0,
@@ -318,7 +318,7 @@ impl<'a, T: Dist + 'static, A: LamellarArrayInternalGet<T> + Clone + Send> Seria
         mem_region: OneSidedMemoryRegion<u8>,
     ) -> Option<Box<dyn LamellarArrayRequest<Output = ()>>> {
         if self.index < self.array.len() {
-            let mem_reg_t = unsafe{mem_region.to_base::<Self::ElemType>()};
+            let mem_reg_t = unsafe { mem_region.to_base::<Self::ElemType>() };
             let req = self.array.internal_get(self.index, &mem_reg_t);
             self.index += mem_reg_t.len();
             Some(req)

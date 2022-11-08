@@ -27,7 +27,6 @@ impl std::fmt::Display for MemNotLocalError {
 
 impl std::error::Error for MemNotLocalError {}
 
-
 /// Trait representing types that can be used in remote operations
 pub trait Dist:
     Sync + Send + Copy + serde::ser::Serialize + serde::de::DeserializeOwned + 'static
@@ -159,7 +158,7 @@ impl<T: Dist> MyFrom<LamellarMemoryRegion<T>> for LamellarArrayInput<T> {
 /// allowing for RDMA operations.
 ///
 /// Memory Regions are low-level unsafe abstraction not really intended for use in higher-level applications
-/// 
+///
 /// # Warning
 /// Unless you are very confident in low level distributed memory access it is highly recommended you utilize the
 /// [LamellarArray] interface to construct and interact with distributed memory.
@@ -244,7 +243,7 @@ pub trait MemoryRegionRDMA<T: Dist> {
     /// or you may use the similar iput call (with a potential performance penalty);
     ///
     /// # Safety
-    /// This call is always unsafe as mutual exclusitivity is not enforced, i.e. many other reader/writers can exist simultaneously. 
+    /// This call is always unsafe as mutual exclusitivity is not enforced, i.e. many other reader/writers can exist simultaneously.
     /// Additionally, when this call returns the underlying fabric provider may or may not have already copied the data buffer
     unsafe fn put<U: Into<LamellarMemoryRegion<T>>>(&self, pe: usize, index: usize, data: U);
 
@@ -259,11 +258,16 @@ pub trait MemoryRegionRDMA<T: Dist> {
     /// the data buffer is free to be reused upon return of this function.
     ///
     /// # Safety
-    /// This call is always unsafe as mutual exclusitivity is not enforced, i.e. many other reader/writers can exist simultaneously. 
-    unsafe fn blocking_put<U: Into<LamellarMemoryRegion<T>>>(&self, pe: usize, index: usize, data: U);
+    /// This call is always unsafe as mutual exclusitivity is not enforced, i.e. many other reader/writers can exist simultaneously.
+    unsafe fn blocking_put<U: Into<LamellarMemoryRegion<T>>>(
+        &self,
+        pe: usize,
+        index: usize,
+        data: U,
+    );
 
     /// "Puts" (copies) data from a local memory location into a remote memory location on all PEs containing the memory region
-    /// 
+    ///
     /// This is similar to broad cast
     ///
     /// # Arguments
@@ -274,7 +278,7 @@ pub trait MemoryRegionRDMA<T: Dist> {
     /// or you may use the similar iput call (with a potential performance penalty);
     ///
     /// # Safety
-    /// This call is always unsafe as mutual exclusitivity is not enforced, i.e. many other reader/writers can exist simultaneously. 
+    /// This call is always unsafe as mutual exclusitivity is not enforced, i.e. many other reader/writers can exist simultaneously.
     /// Additionally, when this call returns the underlying fabric provider may or may not have already copied the data buffer
     unsafe fn put_all<U: Into<LamellarMemoryRegion<T>>>(&self, index: usize, data: U);
 
@@ -288,7 +292,7 @@ pub trait MemoryRegionRDMA<T: Dist> {
     /// * `index` - offset into the remote memory window
     /// * `data` - address (which is "registered" with network device) of destination buffer to store result of the get
     /// # Safety
-    /// This call is always unsafe as mutual exclusitivity is not enforced, i.e. many other reader/writers can exist simultaneously. 
+    /// This call is always unsafe as mutual exclusitivity is not enforced, i.e. many other reader/writers can exist simultaneously.
     /// Additionally, when this call returns the underlying fabric provider may or may not have already copied data into the data buffer.
     unsafe fn get_unchecked<U: Into<LamellarMemoryRegion<T>>>(
         &self,
@@ -306,8 +310,13 @@ pub trait MemoryRegionRDMA<T: Dist> {
     /// * `index` - offset into the remote memory window
     /// * `data` - address (which is "registered" with network device) of destination buffer to store result of the get
     /// # Safety
-    /// This call is always unsafe as mutual exclusitivity is not enforced, i.e. many other reader/writers can exist simultaneously. 
-    unsafe fn blocking_get<U: Into<LamellarMemoryRegion<T>>>(&self, pe: usize, index: usize, data: U);
+    /// This call is always unsafe as mutual exclusitivity is not enforced, i.e. many other reader/writers can exist simultaneously.
+    unsafe fn blocking_get<U: Into<LamellarMemoryRegion<T>>>(
+        &self,
+        pe: usize,
+        index: usize,
+        data: U,
+    );
 }
 
 #[enum_dispatch]
@@ -663,7 +672,12 @@ impl<T: Dist> MemoryRegion<T> {
     /// * `data` - address (which is "registered" with network device) of destination buffer to store result of the get
     ///    data will be present within the buffer once this returns.
     #[tracing::instrument(skip_all)]
-    pub(crate) unsafe fn blocking_get_slice<R: Dist>(&self, pe: usize, index: usize, data: &mut [R]) {
+    pub(crate) unsafe fn blocking_get_slice<R: Dist>(
+        &self,
+        pe: usize,
+        index: usize,
+        data: &mut [R],
+    ) {
         // let data = data.into();
         if (index + data.len()) * std::mem::size_of::<R>() <= self.num_bytes {
             let num_bytes = data.len() * std::mem::size_of::<R>();
@@ -839,7 +853,6 @@ pub trait RemoteMemoryRegion {
         &self,
         size: usize,
     ) -> OneSidedMemoryRegion<T>;
-
 }
 
 impl<T: Dist> Drop for MemoryRegion<T> {

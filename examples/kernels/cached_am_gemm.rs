@@ -82,7 +82,7 @@ async fn get_sub_mat(mat: &SubMatrix, sub_mat: &OneSidedMemoryRegion<f32>) {
         let offset = (row + start_row) * mat.cols + (start_col);
         let data = sub_mat.sub_region(row * mat.block_size..(row + 1) * mat.block_size);
         DATA_CNT.fetch_add(data.len() * std::mem::size_of::<f32>(), Ordering::Relaxed);
-        unsafe { mat.mat.blocking_get(mat.pe, offset, data.clone())};
+        unsafe { mat.mat.blocking_get(mat.pe, offset, data.clone()) };
     }
 
     // while sub_mat_slice[sub_mat.len() - 1].is_nan() {
@@ -103,8 +103,8 @@ struct MatMulAM {
 #[lamellar::am]
 impl LamellarAM for MatMulAM {
     async fn exec() {
-        let b =
-            lamellar::world.alloc_one_sided_mem_region::<f32>(self.b.block_size * self.b.block_size);
+        let b = lamellar::world
+            .alloc_one_sided_mem_region::<f32>(self.b.block_size * self.b.block_size);
         get_sub_mat(&self.b, &b).await;
         // we dont actually want to alloc a shared memory region as there is an implicit barrier here
         // introduces sync point and potential for deadlock
@@ -119,7 +119,8 @@ impl LamellarAM for MatMulAM {
             a.row_block = row;
             let mut c = self.c.clone();
             c.row_block = row;
-            let sub_a = lamellar::world.alloc_one_sided_mem_region::<f32>(a.block_size * a.block_size);
+            let sub_a =
+                lamellar::world.alloc_one_sided_mem_region::<f32>(a.block_size * a.block_size);
             get_sub_mat(&a, &sub_a).await; //this should be local copy so returns immediately
             do_gemm(&sub_a, &b, c, self.block_size);
         }

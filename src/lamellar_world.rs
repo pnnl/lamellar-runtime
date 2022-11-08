@@ -27,8 +27,8 @@ lazy_static! {
 ///
 /// Constructing a LamellarWorld is necessesary to perform any remote operations or distributed communications.
 ///
-/// A LamellarWorld instance can launch and await the result of [active messages][ActiveMessaging], 
-/// can create distributed [memory regions][RemoteMemoryRegion] and [LamellarArrays][array], 
+/// A LamellarWorld instance can launch and await the result of [active messages][ActiveMessaging],
+/// can create distributed [memory regions][RemoteMemoryRegion] and [LamellarArrays][array],
 /// create [sub teams][LamellarWorld::create_team_from_arch] of PEs, and be used to construct [LamellarTaskGroups][crate::lamellar_task_group::LamellarTaskGroup].
 #[derive(Debug)]
 pub struct LamellarWorld {
@@ -42,7 +42,6 @@ pub struct LamellarWorld {
 
 //#[prof]
 impl ActiveMessaging for LamellarWorld {
-   
     #[tracing::instrument(skip_all)]
     fn exec_am_all<F>(&self, am: F) -> Pin<Box<dyn Future<Output = Vec<F::Output>> + Send>>
     where
@@ -180,7 +179,6 @@ impl LamellarWorld {
         trace_span!("block_on").in_scope(|| self.team_rt.scheduler.block_on(f))
     }
 
-  
     #[doc(hidden)]
     #[allow(non_snake_case)]
     #[tracing::instrument(skip_all)]
@@ -191,7 +189,6 @@ impl LamellarWorld {
         }
         sent[0]
     }
-
 
     /// create a team containing any number of pe's from the world using the provided LamellarArch (layout)
     ///
@@ -287,7 +284,7 @@ impl Drop for LamellarWorld {
 /// An implementation of the Builder design pattern, used to construct an instance of a LamellarWorld.
 ///
 /// Allows for customizing the way the world is built.
-/// 
+///
 /// Currently this includes being able to specify the [crate::lamellae] backend and workpool scheduler type.
 ///
 /// # Examples

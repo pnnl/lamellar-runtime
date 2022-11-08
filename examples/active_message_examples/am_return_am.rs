@@ -5,7 +5,7 @@
 /// PE but does not return any data to the user.
 /// it tests executing the AM localy, executing remotely, and executing on all PEs
 /// --------------------------------------------------------------------
-use lamellar::{ActiveMessaging};
+use lamellar::ActiveMessaging;
 
 //--Active message returning an active message that returns nothing--//
 #[lamellar::AmData(Clone, Debug)]

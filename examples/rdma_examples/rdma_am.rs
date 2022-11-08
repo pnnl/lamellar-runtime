@@ -26,7 +26,9 @@ struct RdmaLocalMRAM {
 #[lamellar::am]
 impl LamellarAM for RdmaAM {
     async fn exec(&self) {
-        unsafe {println!("\t in RdmaAM on pe {:?}, originating from pe {:?}\n\tlocal segement of array: {:?}..{:?}",lamellar::current_pe, self.orig_pe,  &self.array.as_slice().unwrap()[0..10], &self.array.as_slice().unwrap()[ARRAY_LEN-10..]);}
+        unsafe {
+            println!("\t in RdmaAM on pe {:?}, originating from pe {:?}\n\tlocal segement of array: {:?}..{:?}",lamellar::current_pe, self.orig_pe,  &self.array.as_slice().unwrap()[0..10], &self.array.as_slice().unwrap()[ARRAY_LEN-10..]);
+        }
 
         //get the original nodes data
         let local = lamellar::world.alloc_one_sided_mem_region::<u8>(ARRAY_LEN);
@@ -116,8 +118,10 @@ fn main() {
         println!("------------------------------------------------------------");
     }
     world.barrier();
-    println!("[{:?}] Before {:?}", my_pe, unsafe {array.as_slice()});
-    println!("[{:?}] Before {:?}", my_pe, unsafe {local_array.as_slice()});
+    println!("[{:?}] Before {:?}", my_pe, unsafe { array.as_slice() });
+    println!("[{:?}] Before {:?}", my_pe, unsafe {
+        local_array.as_slice()
+    });
     world.barrier();
     if my_pe == 0 {
         println!("------------------------------------------------------------");
@@ -149,7 +153,9 @@ fn main() {
 
     world.wait_all();
     world.barrier();
-    println!("[{:?}] after {:?}", my_pe, unsafe {local_array.as_slice()});
+    println!("[{:?}] after {:?}", my_pe, unsafe {
+        local_array.as_slice()
+    });
     world.barrier();
     if my_pe == 0 {
         println!("------------------------------------------------------------");

@@ -33,7 +33,7 @@ struct ReduceAM {
 #[lamellar::am]
 impl LamellarAM for ReduceAM {
     async fn exec(self) -> f64 {
-        unsafe {self.spectrum.as_slice().unwrap().iter().sum::<f64>()}
+        unsafe { self.spectrum.as_slice().unwrap().iter().sum::<f64>() }
     }
 }
 
@@ -51,7 +51,7 @@ impl LamellarAM for LocalSumAM {
     async fn exec() {
         let spectrum_slice = unsafe { self.spectrum.as_mut_slice().unwrap() };
         let k_prime = self.k + self.pe * spectrum_slice.len();
-        let signal = unsafe {self.signal.as_slice().unwrap()};
+        let signal = unsafe { self.signal.as_slice().unwrap() };
         let mut sum = 0.0;
         for (i, &x) in signal.iter().enumerate() {
             let i_prime = i + lamellar::current_pe as usize * signal.len();
@@ -90,7 +90,7 @@ fn dft_lamellar(
     global_sig_len: usize,
     spectrum: SharedMemoryRegion<f64>,
 ) -> f64 {
-    let spectrum_slice = unsafe {spectrum.as_slice().unwrap()};
+    let spectrum_slice = unsafe { spectrum.as_slice().unwrap() };
     let add_spec = world.alloc_shared_mem_region::<f64>(spectrum_slice.len());
 
     let timer = Instant::now();
@@ -109,7 +109,7 @@ fn dft_lamellar(
         }
         let mut add_spec_vec = vec![0.0; spectrum_slice.len()];
         world.wait_all();
-        add_spec_vec.copy_from_slice(unsafe {add_spec.as_slice().unwrap()});
+        add_spec_vec.copy_from_slice(unsafe { add_spec.as_slice().unwrap() });
         world.exec_am_pe(
             pe,
             RemoteSumAM {
@@ -257,8 +257,8 @@ fn dft_lamellar_array_opt(
                             .enumerate()
                             .map(|(j, x)| (j + i * buf_size, x))
                         {
-                            let angle =
-                                -1f64 * (j * k) as f64 * 2f64 * std::f64::consts::PI / sig_len as f64;
+                            let angle = -1f64 * (j * k) as f64 * 2f64 * std::f64::consts::PI
+                                / sig_len as f64;
                             let twiddle = angle * (angle.cos() + angle * angle.sin());
                             sum = sum + twiddle * x;
                         }
@@ -297,8 +297,8 @@ fn dft_lamellar_array_opt_test(
                             .enumerate()
                             .map(|(j, x)| (j + i * buf_size, x))
                         {
-                            let angle =
-                                -1f64 * (j * k) as f64 * 2f64 * std::f64::consts::PI / sig_len as f64;
+                            let angle = -1f64 * (j * k) as f64 * 2f64 * std::f64::consts::PI
+                                / sig_len as f64;
                             let twiddle = angle * (angle.cos() + angle * angle.sin());
                             sum = sum + twiddle * x;
                         }
@@ -340,8 +340,8 @@ fn dft_lamellar_array_opt_2(
                             .enumerate()
                             .map(|(j, x)| (j + i * buf_size, x))
                         {
-                            let angle =
-                                -1f64 * (j * k) as f64 * 2f64 * std::f64::consts::PI / sig_len as f64;
+                            let angle = -1f64 * (j * k) as f64 * 2f64 * std::f64::consts::PI
+                                / sig_len as f64;
                             let twiddle = angle * (angle.cos() + angle * angle.sin());
                             sum = sum + twiddle * x;
                         }
@@ -382,8 +382,8 @@ fn dft_lamellar_array_opt_3(
                             .enumerate()
                             .map(|(j, x)| (j + i * buf_size, x))
                         {
-                            let angle =
-                                -1f64 * (j * k) as f64 * 2f64 * std::f64::consts::PI / sig_len as f64;
+                            let angle = -1f64 * (j * k) as f64 * 2f64 * std::f64::consts::PI
+                                / sig_len as f64;
                             let twiddle = angle * (angle.cos() + angle * angle.sin());
                             sum = sum + twiddle * x;
                         }

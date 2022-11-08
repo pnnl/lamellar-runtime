@@ -109,7 +109,7 @@ fn main() {
                 .into_iter() // convert to normal rust iterator
                 .take(blocksize) // we only need to take blocksize columns
                 .fold(Vec::new(), |mut vec, x| {
-                    vec.extend_from_slice(unsafe {x.as_slice().unwrap()});
+                    vec.extend_from_slice(unsafe { x.as_slice().unwrap() });
                     vec
                 });
             //     .enumerate()

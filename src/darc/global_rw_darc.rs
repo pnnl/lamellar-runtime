@@ -241,15 +241,15 @@ impl<T: fmt::Debug> fmt::Debug for GlobalRwDarcWriteGuard<'_, T> {
 }
 
 /// A global read-write `Darc`
-/// 
+///
 /// A single global read-write lock is associated with the `GlobalRwDarc`.
 /// Whenever the interior object is accessed (on any PE) the global lock is required to be aquired.
-/// When a thread aquires a Write lock it is guaranteed to the only thread with access to 
+/// When a thread aquires a Write lock it is guaranteed to the only thread with access to
 /// the interior object across the entire distributed environment. When a thread aquires a Read lock
 /// it may be one of many threads accross the distributed envrionment with access, but none of them will have mutable access.
 /// NOTE: Grabbing the lock is a distributed operation and can come with a significant performance penalty
 /// - Contrast with a `LocalRwDarc`, where each local PE has a local lock.
-/// - Contrast with a `Darc`, which also has local ownership but does not 
+/// - Contrast with a `Darc`, which also has local ownership but does not
 ///   allow modification unless the wrapped object itself provides it, e.g.
 ///   `AtomicUsize` or `Mutex<..>`.
 #[derive(serde::Serialize, serde::Deserialize, Debug)]
@@ -346,7 +346,7 @@ impl<T> GlobalRwDarc<T> {
     /// struct DarcAm {
     ///     counter: GlobalRwDarc<usize>, //each pe has a local atomicusize
     /// }
-    /// 
+    ///
     /// #[lamellar::am]
     /// impl LamellarAm for DarcAm {
     ///     async fn exec(self) {
@@ -405,7 +405,7 @@ impl<T> GlobalRwDarc<T> {
     /// struct DarcAm {
     ///     counter: GlobalRwDarc<usize>, //each pe has a local atomicusize
     /// }
-    /// 
+    ///
     /// #[lamellar::am]
     /// impl LamellarAm for DarcAm {
     ///     async fn exec(self) {
@@ -504,7 +504,7 @@ impl<T> GlobalRwDarc<T> {
     /// Do not use this function in an asynchronous context (i.e. a Lamellar Active message), instead use [GlobalRwDarc::async_write]
     ///
     /// # Examples
-    
+
     ///```
     /// use lamellar::GlobalRwDarc;
     /// #[lamellar::AmData(Clone)]
@@ -542,7 +542,7 @@ impl<T> GlobalRwDarc<T> {
 
 impl<T> GlobalRwDarc<T> {
     /// Constructs a new `GlobalRwDarc<T>` on the PEs specified by team.
-    /// 
+    ///
     /// This is a blocking collective call amongst all PEs in the team, only returning once every PE in the team has completed the call.
     ///
     /// Returns an error if this PE is not a part of team
@@ -580,7 +580,7 @@ impl<T> GlobalRwDarc<T> {
     //     })
     // }
 
-     /// Converts this GlobalRwDarc into a regular [Darc]
+    /// Converts this GlobalRwDarc into a regular [Darc]
     ///
     /// This is a blocking collective call amongst all PEs in the GlobalRwDarc's team, only returning once every PE in the team has completed the call.
     ///
@@ -592,7 +592,7 @@ impl<T> GlobalRwDarc<T> {
     /// use lamellar::{Darc,GlobalRwDarc};
     ///
     /// let five = GlobalRwDarc::new(5);
-    /// let five_as_darc = five.into_darc(); 
+    /// let five_as_darc = five.into_darc();
     /// ```
     pub fn into_darc(self) -> Darc<T> {
         let inner = self.inner();
@@ -622,7 +622,7 @@ impl<T> GlobalRwDarc<T> {
     /// use lamellar::{GlobalRwDarc,LocalRwDarc};
     ///
     /// let five = GlobalRwDarc::new(5);
-    /// let five_as_localdarc = five.into_localrw(); 
+    /// let five_as_localdarc = five.into_localrw();
     /// ```
     pub fn into_localrw(self) -> LocalRwDarc<T> {
         let inner = self.inner();

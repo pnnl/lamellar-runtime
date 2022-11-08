@@ -192,7 +192,6 @@ pub struct GenericAtomicArray<T> {
     pub(crate) array: UnsafeArray<T>,
 }
 
-
 #[doc(hidden)]
 #[lamellar_impl::AmDataRT(Clone, Debug)]
 pub struct GenericAtomicByteArray {

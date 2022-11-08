@@ -61,7 +61,7 @@ fn main() {
             world.wait_all();
         }
         if my_pe == num_pes - 1 {
-            let array_slice = unsafe {array.as_slice().unwrap()};
+            let array_slice = unsafe { array.as_slice().unwrap() };
             for j in (0..2_u64.pow(exp) as usize).step_by(num_bytes as usize) {
                 while *(&array_slice[(j + num_bytes as usize) - 1]) != 0 as u8 {
                     std::thread::yield_now()

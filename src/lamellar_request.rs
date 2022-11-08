@@ -1,4 +1,4 @@
-use crate::active_messaging::{AmDist, SyncSend, LamellarAny};
+use crate::active_messaging::{AmDist, LamellarAny, SyncSend};
 use crate::lamellae::{Des, SerializedData};
 use crate::lamellar_arch::LamellarArchRT;
 use async_trait::async_trait;

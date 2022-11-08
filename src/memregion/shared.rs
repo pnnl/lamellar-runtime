@@ -12,7 +12,6 @@ use std::sync::Arc;
 
 use std::ops::Bound;
 
-
 /// A Shared Memory Region is a [RemoteMemoryRegion] that has only been allocated on multiple PEs.
 ///
 /// The memory region provides RDMA access to any PE which has a handle to the region.
@@ -24,19 +23,19 @@ use std::ops::Bound;
 /// SharedMemoryRegions are constructed using either the LamellarWorld instance or a LamellarTeam instance.
 ///
 /// Memory Regions are low-level unsafe abstraction not really intended for use in higher-level applications
-/// 
+///
 /// # Warning
 /// Unless you are very confident in low level distributed memory access it is highly recommended you utilize the
 /// [LamellarArray][crate::array::LamellarArray]  interface to construct and interact with distributed memory.
 ///
 /// # Examples
 ///
-/// 
+///
 ///```
 /// use lamellar::{SharedMemoryRegion, RemoteMemoryRegion};
 ///
-/// let world_mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(1000); 
-/// let team_mem_region: SharedMemoryRegion<usize> = some_team.alloc_shared_mem_region(1000); 
+/// let world_mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(1000);
+/// let team_mem_region: SharedMemoryRegion<usize> = some_team.alloc_shared_mem_region(1000);
 /// ```
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 pub struct SharedMemoryRegion<T: Dist> {
@@ -71,8 +70,6 @@ impl<T: Dist> crate::DarcSerde for SharedMemoryRegion<T> {
         // self.mr.print();
     }
 }
-
-
 
 impl<T: Dist> SharedMemoryRegion<T> {
     pub(crate) fn new(
@@ -111,7 +108,7 @@ impl<T: Dist> SharedMemoryRegion<T> {
     ///```
     /// use lamellar::SharedMemoryRegion;
     ///
-    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(1000); 
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(1000);
     /// assert_eq!(mem_region.len(),1000)
     pub fn len(&self) -> usize {
         RegisteredMemoryRegion::<T>::len(self)
@@ -128,7 +125,7 @@ impl<T: Dist> SharedMemoryRegion<T> {
     /// or you may use the similar iput call (with a potential performance penalty);
     ///
     /// # Safety
-    /// This call is always unsafe as mutual exclusitivity is not enforced, i.e. many other reader/writers can exist simultaneously. 
+    /// This call is always unsafe as mutual exclusitivity is not enforced, i.e. many other reader/writers can exist simultaneously.
     /// Additionally, when this call returns the underlying fabric provider may or may not have already copied the data buffer
     ///
     /// # Panics
@@ -150,18 +147,23 @@ impl<T: Dist> SharedMemoryRegion<T> {
     /// the data buffer is free to be reused upon return of this function.
     ///
     /// # Safety
-    /// This call is always unsafe as mutual exclusitivity is not enforced, i.e. many other reader/writers can exist simultaneously. 
+    /// This call is always unsafe as mutual exclusitivity is not enforced, i.e. many other reader/writers can exist simultaneously.
     ///
     /// # Panics
     /// Panics if "data" does not have any local data on this PE
     /// Panics if index is out of bounds
     /// Panics if PE is out of bounds
-    pub unsafe fn blocking_put<U: Into<LamellarMemoryRegion<T>>>(&self, pe: usize, index: usize, data: U) {
+    pub unsafe fn blocking_put<U: Into<LamellarMemoryRegion<T>>>(
+        &self,
+        pe: usize,
+        index: usize,
+        data: U,
+    ) {
         MemoryRegionRDMA::<T>::blocking_put(self, pe, index, data);
     }
 
     /// "Puts" (copies) data from a local memory location into a remote memory location on all PEs containing the memory region
-    /// 
+    ///
     /// This is similar to broad cast
     ///
     /// # Arguments
@@ -172,7 +174,7 @@ impl<T: Dist> SharedMemoryRegion<T> {
     /// or you may use the similar iput call (with a potential performance penalty);
     ///
     /// # Safety
-    /// This call is always unsafe as mutual exclusitivity is not enforced, i.e. many other reader/writers can exist simultaneously. 
+    /// This call is always unsafe as mutual exclusitivity is not enforced, i.e. many other reader/writers can exist simultaneously.
     /// Additionally, when this call returns the underlying fabric provider may or may not have already copied the data buffer
     ///
     /// # Panics
@@ -193,7 +195,7 @@ impl<T: Dist> SharedMemoryRegion<T> {
     /// * `data` - A LamellarMemoryRegion (either shared or onesided) that has data local to this PE
     ///
     /// # Safety
-    /// This call is always unsafe as mutual exclusitivity is not enforced, i.e. many other reader/writers can exist simultaneously. 
+    /// This call is always unsafe as mutual exclusitivity is not enforced, i.e. many other reader/writers can exist simultaneously.
     /// Additionally, when this call returns the underlying fabric provider may or may not have already copied data into the data buffer.
     ///
     /// # Panics
@@ -225,7 +227,12 @@ impl<T: Dist> SharedMemoryRegion<T> {
     /// Panics if "data" does not have any local data on this PE
     /// Panics if index is out of bounds
     /// Panics if PE is out of bounds
-    pub unsafe fn blocking_get<U: Into<LamellarMemoryRegion<T>>>(&self, pe: usize, index: usize, data: U) {
+    pub unsafe fn blocking_get<U: Into<LamellarMemoryRegion<T>>>(
+        &self,
+        pe: usize,
+        index: usize,
+        data: U,
+    ) {
         MemoryRegionRDMA::<T>::blocking_get(self, pe, index, data);
     }
 
@@ -283,7 +290,7 @@ impl<T: Dist + serde::Serialize> SharedMemoryRegion<T> {
     where
         S: serde::Serializer,
     {
-        unsafe {self.as_slice().unwrap().serialize(s)}
+        unsafe { self.as_slice().unwrap().serialize(s) }
     }
 }
 //account for subregion stuff
@@ -388,8 +395,14 @@ impl<T: Dist> MemoryRegionRDMA<T> for SharedMemoryRegion<T> {
     unsafe fn put<U: Into<LamellarMemoryRegion<T>>>(&self, pe: usize, index: usize, data: U) {
         self.mr.put(pe, self.sub_region_offset + index, data);
     }
-    unsafe fn blocking_put<U: Into<LamellarMemoryRegion<T>>>(&self, pe: usize, index: usize, data: U) {
-        self.mr.blocking_put(pe, self.sub_region_offset + index, data);
+    unsafe fn blocking_put<U: Into<LamellarMemoryRegion<T>>>(
+        &self,
+        pe: usize,
+        index: usize,
+        data: U,
+    ) {
+        self.mr
+            .blocking_put(pe, self.sub_region_offset + index, data);
     }
     unsafe fn put_all<U: Into<LamellarMemoryRegion<T>>>(&self, index: usize, data: U) {
         self.mr.put_all(self.sub_region_offset + index, data);
@@ -403,8 +416,14 @@ impl<T: Dist> MemoryRegionRDMA<T> for SharedMemoryRegion<T> {
         self.mr
             .get_unchecked(pe, self.sub_region_offset + index, data);
     }
-    unsafe fn blocking_get<U: Into<LamellarMemoryRegion<T>>>(&self, pe: usize, index: usize, data: U) {
-        self.mr.blocking_get(pe, self.sub_region_offset + index, data);
+    unsafe fn blocking_get<U: Into<LamellarMemoryRegion<T>>>(
+        &self,
+        pe: usize,
+        index: usize,
+        data: U,
+    ) {
+        self.mr
+            .blocking_get(pe, self.sub_region_offset + index, data);
     }
 }
 
@@ -414,7 +433,8 @@ impl<T: Dist> RTMemoryRegionRDMA<T> for SharedMemoryRegion<T> {
     }
     unsafe fn blocking_get_slice(&self, pe: usize, index: usize, data: &mut [T]) {
         // println!("iget_slice {:?} {:?}",pe,self.sub_region_offset + index);
-        self.mr.blocking_get_slice(pe, self.sub_region_offset + index, data)
+        self.mr
+            .blocking_get_slice(pe, self.sub_region_offset + index, data)
     }
 }
 

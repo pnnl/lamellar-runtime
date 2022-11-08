@@ -1,6 +1,5 @@
 use lamellar::array::{
-    iterator::distributed_iterator::Schedule, DistributedIterator, Distribution,
-    UnsafeArray,
+    iterator::distributed_iterator::Schedule, DistributedIterator, Distribution, UnsafeArray,
 };
 
 use parking_lot::Mutex;

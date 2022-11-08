@@ -277,11 +277,11 @@ fn main() {
             .ignore(4)
             .into_iter()
         {
-            println!("{:?}", unsafe {chunk.as_slice()});
+            println!("{:?}", unsafe { chunk.as_slice() });
         }
         println!("-----");
         for chunk in cyclic_array.ser_iter().copied_chunks(10).into_iter() {
-            println!("{:?}", unsafe {chunk.as_slice()});
+            println!("{:?}", unsafe { chunk.as_slice() });
         }
 
         println!("-----");
@@ -300,7 +300,9 @@ fn main() {
             .zip(block_array.ser_iter().copied_chunks(10))
             .into_iter()
         {
-            unsafe {println!("{:?} {:?}", a.as_slice(), b.as_slice());}
+            unsafe {
+                println!("{:?} {:?}", a.as_slice(), b.as_slice());
+            }
         }
     }
 

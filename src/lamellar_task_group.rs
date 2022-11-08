@@ -292,9 +292,8 @@ impl<T: SyncSend + 'static> LamellarRequest for TaskGroupLocalRequestHandle<T> {
     }
 }
 
-
 /// An abstraction for representing a set of active messages as single group.
-/// 
+///
 /// This allows a user to wait on all the tasks in this group to finish executing.
 /// This is in contrast to either waiting for a single request to finish, or to waiting for all tasks launched by a team to finish.
 ///
@@ -378,7 +377,6 @@ impl ActiveMessaging for LamellarTaskGroup {
         tracing::trace_span!("block_on").in_scope(|| self.team.scheduler.block_on(f))
     }
 }
-
 
 impl LamellarTaskGroup {
     /// Construct a new Task group associated with the provided team

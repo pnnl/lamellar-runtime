@@ -1,6 +1,9 @@
 use crate::lamellar_request::LamellarRequest;
 use crate::memregion::{
-    one_sided::OneSidedMemoryRegion, shared::SharedMemoryRegion, Dist, LamellarMemoryRegion,
+    one_sided::OneSidedMemoryRegion,
+    shared::SharedMemoryRegion,
+    Dist,
+    LamellarMemoryRegion,
     // RemoteMemoryRegion,
 };
 use crate::{active_messaging::*, LamellarTeamRT};
@@ -154,13 +157,13 @@ impl<T: Dist> LamellarArrayRequest for ArrayRdmaAtHandle<T> {
         for req in self.reqs.drain(0..) {
             req.into_future().await;
         }
-        unsafe{self.buf.as_slice().unwrap()[0]}
+        unsafe { self.buf.as_slice().unwrap()[0] }
     }
     fn wait(mut self: Box<Self>) -> Self::Output {
         for req in self.reqs.drain(0..) {
             req.get();
         }
-        unsafe{self.buf.as_slice().unwrap()[0]}
+        unsafe { self.buf.as_slice().unwrap()[0] }
     }
 }
 
@@ -172,7 +175,6 @@ pub enum LamellarArrayInput<T: Dist> {
     LocalMemRegion(OneSidedMemoryRegion<T>),
     // UnsafeArray(UnsafeArray<T>),
 }
-
 
 pub trait LamellarWrite {}
 pub trait LamellarRead {}

@@ -26,22 +26,25 @@ macro_rules! initialize_array {
     };
 }
 
-macro_rules! check_val{
+macro_rules! check_val {
     (UnsafeArray,$val:ident,$max_val:ident,$valid:ident) => {
-       // UnsafeArray updates will be nondeterminstic so should not ever be considered safe/valid so for testing sake we just say they are
+        // UnsafeArray updates will be nondeterminstic so should not ever be considered safe/valid so for testing sake we just say they are
     };
     (AtomicArray,$val:ident,$max_val:ident,$valid:ident) => {
-        if (($val - $max_val)as f32).abs() > 0.0001{//all updates should be preserved
+        if (($val - $max_val) as f32).abs() > 0.0001 {
+            //all updates should be preserved
             $valid = false;
         }
     };
     (GenericAtomicArray,$val:ident,$max_val:ident,$valid:ident) => {
-        if (($val - $max_val)as f32).abs() > 0.0001{//all updates should be preserved
+        if (($val - $max_val) as f32).abs() > 0.0001 {
+            //all updates should be preserved
             $valid = false;
         }
     };
     (LocalLockAtomicArray,$val:ident,$max_val:ident,$valid:ident) => {
-        if (($val - $max_val)as f32).abs()  > 0.0001{//all updates should be preserved
+        if (($val - $max_val) as f32).abs() > 0.0001 {
+            //all updates should be preserved
             $valid = false;
         }
     };

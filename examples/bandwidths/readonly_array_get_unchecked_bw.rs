@@ -66,7 +66,7 @@ fn main() {
             println!("issue time: {:?}", timer.elapsed());
             world.wait_all();
         }
-        let data_slice = unsafe {data.as_slice().unwrap()};
+        let data_slice = unsafe { data.as_slice().unwrap() };
         if my_pe == 0 {
             for j in (0..2_u64.pow(exp) as usize).step_by(num_bytes as usize) {
                 while data_slice[(j + num_bytes as usize) - 1] == my_pe as u8 {

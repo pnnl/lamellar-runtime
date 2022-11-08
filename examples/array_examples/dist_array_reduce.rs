@@ -48,7 +48,7 @@ fn main() {
                 i += 1
             }
         }
-        println!("{:?}", unsafe {local_mem_region.as_slice().unwrap()});
+        println!("{:?}", unsafe { local_mem_region.as_slice().unwrap() });
         // let index = ((len_per_pe * (my_pe) as f32).round() as usize) % total_len;
 
         world.block_on(block_array.put(0, &local_mem_region));
@@ -72,11 +72,9 @@ fn main() {
     world.barrier();
     std::thread::sleep(std::time::Duration::from_secs(1));
     if my_pe == 0 {
-        println!(
-            "[{:?}] get from block array {:?}",
-            my_pe,
-            unsafe {local_mem_region.as_slice()}
-        );
+        println!("[{:?}] get from block array {:?}", my_pe, unsafe {
+            local_mem_region.as_slice()
+        });
     }
 
     unsafe {
@@ -88,11 +86,9 @@ fn main() {
     world.barrier();
     std::thread::sleep(std::time::Duration::from_secs(1));
     if my_pe == 0 {
-        println!(
-            "[{:?}] get from cyclic array {:?}",
-            my_pe,
-            unsafe {local_mem_region.as_slice()}
-        );
+        println!("[{:?}] get from cyclic array {:?}", my_pe, unsafe {
+            local_mem_region.as_slice()
+        });
     }
 
     world.barrier();

@@ -3,17 +3,16 @@ use lamellar_prof::prof;
 use std::sync::Arc;
 // use std::collections::hash_map::DefaultHasher;
 
-
 /// An abstraction which represents the PEs that are associated with a Lamellar team
 pub trait LamellarArch: Send + Sync {
     /// The number of  PEs in the team defined by this LamellarArch
     fn num_pes(&self) -> usize;
-    /// The id of the first (lowest numbered) PE in the team 
+    /// The id of the first (lowest numbered) PE in the team
     fn start_pe(&self) -> usize; //with respect to parent (maybe this should be min possible pe?)
-    /// The id of the first (highest numbered) PE in the team 
+    /// The id of the first (highest numbered) PE in the team
     fn end_pe(&self) -> usize; //with respect to parent (maybe this should be max possible pe?)
-    //TODO expand example
-    /// Converts a (sub)team PE id into the id space of the Parent team 
+                               //TODO expand example
+    /// Converts a (sub)team PE id into the id space of the Parent team
     ///
     /// Returns an error if the pe does not exist in the team
     fn parent_pe_id(&self, team_pe: &usize) -> ArchResult<usize>; // need global id so the lamellae knows who to communicate -- this should this be parent pe?

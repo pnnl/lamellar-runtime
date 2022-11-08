@@ -20,7 +20,7 @@ fn main() {
         // instatiates a shared memory region on every PE in world
         // all other pes can put/get into this region
         let array = world.alloc_shared_mem_region::<u8>(ARRAY_LEN);
-        let array_slice = unsafe{array.as_slice().unwrap()}; //we can unwrap because we know array is local
+        let array_slice = unsafe { array.as_slice().unwrap() }; //we can unwrap because we know array is local
 
         // instatiates a local array whos memory is registered with
         // the underlying network device, so that it can be used

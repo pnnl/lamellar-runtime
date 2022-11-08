@@ -83,7 +83,6 @@ impl<T: Dist> DerefMut for LocalLockAtomicMutLocalData<'_, T> {
     }
 }
 
-
 #[derive(Debug)]
 pub struct LocalLockAtomicLocalData<'a, T: Dist> {
     pub(crate) data: &'a [T],
