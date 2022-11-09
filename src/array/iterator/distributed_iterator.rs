@@ -44,6 +44,17 @@ use parking_lot::Mutex;
 use rand::seq::SliceRandom;
 use rand::thread_rng;
 
+/// The Schedule type controls how elements of a LamellarArray are distributed to threads when 
+/// calling `for_each_with_schedule` on a distributed iterator.
+/// 
+/// Inspired by then OpenMP schedule parameter
+///
+/// # Possible Options
+/// - Static: Each thread recieves a static range of elements to iterate over, the range length is roughly array.local_data().len()/number of threads on pe
+/// - Dynaimc: Each thread processes a single element at a time
+/// - Chunk(usize): Each thread prcesses chunk sized range of elements at a time.
+/// - Guided: Similar to chunks, but the chunks decrease in size over time
+/// - WorkStealing: Intially allocated the same range as static, but allows idle threads to steal work from busy threads
 #[derive(Debug, Clone)]
 pub enum Schedule {
     Static,
@@ -123,6 +134,7 @@ where
     }
 }
 
+#[doc(hidden)]
 #[async_trait]
 pub trait DistIterRequest {
     type Output;
@@ -141,6 +153,7 @@ pub struct DistIterForEachHandle {
 //     }
 // }
 
+#[doc(hidden)]
 #[async_trait]
 impl DistIterRequest for DistIterForEachHandle {
     type Output = ();
@@ -215,13 +228,52 @@ impl<T: Dist, A: From<UnsafeArray<T>> + SyncSend> DistIterRequest for DistIterCo
     }
 }
 
+
 #[enum_dispatch]
 pub trait DistIteratorLauncher {
+    /// Calls a closure on each element of a Distributed Iterator in parallel and distributed on each PE (which owns data of the iterated array).
+    /// 
+    /// Calling this function invokes an implicit barrier across all PEs in the Array, after this barrier no further communication is performed
+    /// as each PE will only process elements local to itself
+    ///
+    /// Currently the static schedule is work distribution policy for the threads
+    ///
+    /// This function returns a future which can be used to poll for completion of the iteration.
+    /// Note calling this function launches the iteration regardless of if the returned future is used or not.
+    ///
+    /// #Example
+    ///```
+    /// use lamellar::array::{
+    ///     DistributedIterator, Distribution, ReadOnlyArray,
+    /// };
+    ///
+    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(...);
+    ///
+    /// array.dist_iter().for_each(|elem| println!("{:?} {elem}",std::thread::current().id()));
+    ///```
     fn for_each<I, F>(&self, iter: &I, op: F) -> Pin<Box<dyn Future<Output = ()> + Send>>
     where
         I: DistributedIterator + 'static,
         F: Fn(I::Item) + SyncSend + Clone + 'static;
 
+    /// Calls a closure on each element of a Distributed Iterator in parallel and distributed on each PE (which owns data of the iterated array) using the specififed schedule policy.
+    /// 
+    /// Calling this function invokes an implicit barrier across all PEs in the Array, after this barrier no further communication is performed
+    /// as each PE will only process elements local to itself
+    ///
+    /// This function returns a future which can be used to poll for completion of the iteration.
+    /// Note calling this function launches the iteration regardless of if the returned future is used or not.
+    ///
+    /// #Example
+    ///```
+    /// use lamellar::array::{
+    ///     iterator::distributed_iterator::Schedule, DistributedIterator, Distribution, ReadOnlyArray,
+    /// };
+    ///
+    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(...);
+    ///
+    /// array.dist_iter().for_each_with_schedule(Schedule::WorkStealing, |elem| println!("{:?} {elem}",std::thread::current().id()));
+    ///```
     fn for_each_with_schedule<I, F>(
         &self,
         sched: Schedule,
@@ -232,6 +284,38 @@ pub trait DistIteratorLauncher {
         I: DistributedIterator + 'static,
         F: Fn(I::Item) + SyncSend + Clone + 'static;
 
+    /// Calls a closure and immediately awaits the result on each element of a Distributed Iterator in parallel and distributed on each PE (which owns data of the iterated array).
+    /// 
+    /// Calling this function invokes an implicit barrier across all PEs in the Array, after this barrier no further communication is performed
+    /// as each PE will only process elements local to itself
+    ///
+    /// Currently the static schedule is work distribution policy for the threads
+    ///
+    /// The supplied closure must return a future.
+    /// 
+    /// Each thread will only drive a single future at a time. 
+    ///
+    /// This function returns a future which can be used to poll for completion of the iteration.
+    /// Note calling this function launches the iteration regardless of if the returned future is used or not.
+    ///
+    /// #Example
+    ///```
+    /// use lamellar::array::{
+    ///     iterator::distributed_iterator::Schedule, DistributedIterator, Distribution, ReadOnlyArray,
+    /// };
+    ///
+    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(...);
+    ///
+    /// array.dist_iter().for_each_async(|elem| async move { 
+    ///     async_std::task::yield_now().await;
+    ///     println!("{:?} {elem}",std::thread::current().id())
+    /// });
+    /// 
+    /// // essentially gets converted into (on each thread)
+    /// for fut in array.iter(){
+    ///     fut.await;
+    /// }
+    ///```
     fn for_each_async<I, F, Fut>(
         &self,
         iter: &I,
@@ -242,6 +326,36 @@ pub trait DistIteratorLauncher {
         F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
         Fut: Future<Output = ()> + Send + 'static;
 
+    /// Calls a closure and immediately awaits the result on each element of a Distributed Iterator in parallel and distributed on each PE (which owns data of the iterated array).
+    /// 
+    /// Calling this function invokes an implicit barrier across all PEs in the Array, after this barrier no further communication is performed
+    /// as each PE will only process elements local to itself
+    ///
+    /// The supplied closure must return a future.
+    /// 
+    /// Each thread will only drive a single future at a time. 
+    ///
+    /// This function returns a future which can be used to poll for completion of the iteration.
+    /// Note calling this function launches the iteration regardless of if the returned future is used or not.
+    ///
+    /// #Example
+    ///```
+    /// use lamellar::array::{
+    ///     DistributedIterator, Distribution, ReadOnlyArray,
+    /// };
+    ///
+    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(...);
+    ///
+    /// array.dist_iter().for_each_with_schedule(Schedule::Chunks(10),|elem| async move { 
+    ///     async_std::task::yield_now().await;
+    ///     println!("{:?} {elem}",std::thread::current().id())
+    /// });
+    ///
+    /// // essentially gets converted into (on each thread)
+    /// for fut in array.iter(){
+    ///     fut.await;
+    /// }
+    ///```
     fn for_each_async_with_schedule<I, F, Fut>(
         &self,
         sched: Schedule,
@@ -253,12 +367,63 @@ pub trait DistIteratorLauncher {
         F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
         Fut: Future<Output = ()> + Send + 'static;
 
+    /// Collects the elements of the distributed iterator into a new LamellarArray
+    ///
+    /// Calling this function invokes an implicit barrier across all PEs in the Array.
+    ///
+    /// This function returns a future which needs to be driven to completion to retrieve the new LamellarArray.
+    /// Calling await on the future will invoke an implicit barrier (allocating the resources for a new array).
+    ///
+    /// Creating the new array potentially results in data transfers depending on the distribution mode and the fact there is no gaurantee 
+    /// that each PE will contribute an equal number of elements to the new array, and currently LamellarArrays
+    /// distribute data across the PEs as evenly as possible.
+    /// 
+    ///```
+    /// use lamellar::array::{
+    ///     DistributedIterator, Distribution, ReadOnlyArray, AtomicArray
+    /// };
+    ///
+    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(...);
+    ///
+    /// let req = array.dist_iter().filter(|elem|  elem < 10).collect::<AtomicArray<usize>>(Distribution::Block);
+    /// let new_array = array.block_on(req);
+    ///```
     fn collect<I, A>(&self, iter: &I, d: Distribution) -> Pin<Box<dyn Future<Output = A> + Send>>
     where
         I: DistributedIterator + 'static,
         I::Item: Dist,
         A: From<UnsafeArray<I::Item>> + SyncSend + 'static;
-
+    /// Collects the awaited elements of the distributed iterator into a new LamellarArray
+    ///
+    /// Calling this function invokes an implicit barrier across all PEs in the Array.
+    ///
+    /// Each element from the iterator must return a Future
+    ///
+    /// Each thread will only drive a single future at a time. 
+    ///
+    /// This function returns a future which needs to be driven to completion to retrieve the new LamellarArray.
+    /// Calling await on the future will invoke an implicit barrier (allocating the resources for a new array).
+    ///
+    /// Creating the new array potentially results in data transfers depending on the distribution mode and the fact there is no gaurantee 
+    /// that each PE will contribute an equal number of elements to the new array, and currently LamellarArrays
+    /// distribute data across the PEs as evenly as possible.
+    /// 
+    ///```
+    /// use lamellar::array::{
+    ///     DistributedIterator, Distribution, ReadOnlyArray, AtomicArray
+    /// };
+    ///
+    /// let array: AtomicArray<usize> = AtomicArray::new(...);
+    /// let array_clone = array.clone();
+    /// let req = array.dist_iter().map(|elem|  array_clone.fetch_add(elem,1000)).collect_async::<ReadOnlyArray<usize>>(Distribution::Cyclic);
+    /// let new_array = array.block_on(req);
+    ///
+    /// // collect_asyncessentially gets converted into (on each thread)
+    /// let mut data = vec![];
+    /// for fut in array.iter(){
+    ///     data.push(fut.await);
+    /// }
+    ///```
     fn collect_async<I, A, B>(
         &self,
         iter: &I,
@@ -270,8 +435,13 @@ pub trait DistIteratorLauncher {
         B: Dist,
         A: From<UnsafeArray<B>> + SyncSend + 'static;
 
+    #[doc(hidden)]
     fn global_index_from_local(&self, index: usize, chunk_size: usize) -> Option<usize>;
+
+    #[doc(hidden)]
     fn subarray_index_from_local(&self, index: usize, chunk_size: usize) -> Option<usize>;
+
+    #[doc(hidden)]
     fn team(&self) -> Pin<Arc<LamellarTeamRT>>;
 }
 
@@ -284,7 +454,6 @@ pub trait DistributedIterator: SyncSend + Clone + 'static {
     fn elems(&self, in_elems: usize) -> usize;
     fn global_index(&self, index: usize) -> Option<usize>;
     fn subarray_index(&self, index: usize) -> Option<usize>;
-    // fn chunk_size(&self) -> usize;
     fn advance_index(&mut self, count: usize);
 
     fn enumerate(self) -> Enumerate<Self> {
@@ -325,12 +494,52 @@ pub trait DistributedIterator: SyncSend + Clone + 'static {
     fn zip<I: DistributedIterator>(self, iter: I) -> Zip<Self, I> {
         Zip::new(self, iter)
     }
+
+    /// Calls a closure on each element of a Distributed Iterator in parallel and distributed on each PE (which owns data of the iterated array).
+    /// 
+    /// Calling this function invokes an implicit barrier across all PEs in the Array, after this barrier no further communication is performed
+    /// as each PE will only process elements local to itself
+    ///
+    /// Currently the static schedule is work distribution policy for the threads
+    ///
+    /// This function returns a future which can be used to poll for completion of the iteration.
+    /// Note calling this function launches the iteration regardless of if the returned future is used or not.
+    ///
+    /// #Example
+    ///```
+    /// use lamellar::array::{
+    ///     DistributedIterator, Distribution, ReadOnlyArray,
+    /// };
+    ///
+    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(...);
+    ///
+    /// array.dist_iter().for_each(|elem| println!("{:?} {elem}",std::thread::current().id()));
+    ///```
     fn for_each<F>(&self, op: F) -> Pin<Box<dyn Future<Output = ()> + Send>>
     where
         F: Fn(Self::Item) + SyncSend + Clone + 'static,
     {
         self.array().for_each(self, op)
     }
+
+    /// Calls a closure on each element of a Distributed Iterator in parallel and distributed on each PE (which owns data of the iterated array) using the specififed schedule policy.
+    /// 
+    /// Calling this function invokes an implicit barrier across all PEs in the Array, after this barrier no further communication is performed
+    /// as each PE will only process elements local to itself
+    ///
+    /// This function returns a future which can be used to poll for completion of the iteration.
+    /// Note calling this function launches the iteration regardless of if the returned future is used or not.
+    ///
+    /// #Example
+    ///```
+    /// use lamellar::array::{
+    ///     iterator::distributed_iterator::Schedule, DistributedIterator, Distribution, ReadOnlyArray,
+    /// };
+    ///
+    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(...);
+    ///
+    /// array.dist_iter().for_each_with_schedule(Schedule::WorkStealing, |elem| println!("{:?} {elem}",std::thread::current().id()));
+    ///```
     fn for_each_with_schedule<F>(
         &self,
         sched: Schedule,
@@ -341,6 +550,39 @@ pub trait DistributedIterator: SyncSend + Clone + 'static {
     {
         self.array().for_each_with_schedule(sched, self, op)
     }
+
+     /// Calls a closure and immediately awaits the result on each element of a Distributed Iterator in parallel and distributed on each PE (which owns data of the iterated array).
+    /// 
+    /// Calling this function invokes an implicit barrier across all PEs in the Array, after this barrier no further communication is performed
+    /// as each PE will only process elements local to itself
+    ///
+    /// Currently the static schedule is work distribution policy for the threads
+    ///
+    /// The supplied closure must return a future.
+    /// 
+    /// Each thread will only drive a single future at a time. 
+    ///
+    /// This function returns a future which can be used to poll for completion of the iteration.
+    /// Note calling this function launches the iteration regardless of if the returned future is used or not.
+    ///
+    /// #Example
+    ///```
+    /// use lamellar::array::{
+    ///     iterator::distributed_iterator::Schedule, DistributedIterator, Distribution, ReadOnlyArray,
+    /// };
+    ///
+    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(...);
+    ///
+    /// array.dist_iter().for_each_async(|elem| async move { 
+    ///     async_std::task::yield_now().await;
+    ///     println!("{:?} {elem}",std::thread::current().id())
+    /// });
+    /// 
+    /// // essentially gets converted into (on each thread)
+    /// for fut in array.iter(){
+    ///     fut.await;
+    /// }
+    ///```
     fn for_each_async<F, Fut>(&self, op: F) -> Pin<Box<dyn Future<Output = ()> + Send>>
     where
         F: Fn(Self::Item) -> Fut + SyncSend + Clone + 'static,
@@ -348,6 +590,37 @@ pub trait DistributedIterator: SyncSend + Clone + 'static {
     {
         self.array().for_each_async(self, op)
     }
+
+    /// Calls a closure and immediately awaits the result on each element of a Distributed Iterator in parallel and distributed on each PE (which owns data of the iterated array).
+    /// 
+    /// Calling this function invokes an implicit barrier across all PEs in the Array, after this barrier no further communication is performed
+    /// as each PE will only process elements local to itself
+    ///
+    /// The supplied closure must return a future.
+    /// 
+    /// Each thread will only drive a single future at a time. 
+    ///
+    /// This function returns a future which can be used to poll for completion of the iteration.
+    /// Note calling this function launches the iteration regardless of if the returned future is used or not.
+    ///
+    /// #Example
+    ///```
+    /// use lamellar::array::{
+    ///     DistributedIterator, Distribution, ReadOnlyArray,
+    /// };
+    ///
+    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(...);
+    ///
+    /// array.dist_iter().for_each_with_schedule(Schedule::Chunks(10),|elem| async move { 
+    ///     async_std::task::yield_now().await;
+    ///     println!("{:?} {elem}",std::thread::current().id())
+    /// });
+    ///
+    /// // essentially gets converted into (on each thread)
+    /// for fut in array.iter(){
+    ///     fut.await;
+    /// }
+    ///```
     fn for_each_async_with_schedule<F, Fut>(
         &self,
         sched: Schedule,
@@ -359,6 +632,28 @@ pub trait DistributedIterator: SyncSend + Clone + 'static {
     {
         self.array().for_each_async_with_schedule(sched, self, op)
     }
+
+     /// Collects the elements of the distributed iterator into a new LamellarArray
+    ///
+    /// Calling this function invokes an implicit barrier across all PEs in the Array.
+    ///
+    /// This function returns a future which needs to be driven to completion to retrieve the new LamellarArray.
+    /// Calling await on the future will invoke an implicit barrier (allocating the resources for a new array).
+    ///
+    /// Creating the new array potentially results in data transfers depending on the distribution mode and the fact there is no gaurantee 
+    /// that each PE will contribute an equal number of elements to the new array, and currently LamellarArrays
+    /// distribute data across the PEs as evenly as possible.
+    /// 
+    ///```
+    /// use lamellar::array::{
+    ///     DistributedIterator, Distribution, ReadOnlyArray, AtomicArray
+    /// };
+    ///
+    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(...);
+    ///
+    /// let req = array.dist_iter().filter(|elem|  elem < 10).collect::<AtomicArray<usize>>(Distribution::Block);
+    /// let new_array = array.block_on(req);
+    ///```
     fn collect<A>(&self, d: Distribution) -> Pin<Box<dyn Future<Output = A> + Send>>
     where
         // &'static Self: DistributedIterator + 'static,
@@ -367,6 +662,38 @@ pub trait DistributedIterator: SyncSend + Clone + 'static {
     {
         self.array().collect(self, d)
     }
+
+    /// Collects the awaited elements of the distributed iterator into a new LamellarArray
+    ///
+    /// Calling this function invokes an implicit barrier across all PEs in the Array.
+    ///
+    /// Each element from the iterator must return a Future
+    ///
+    /// Each thread will only drive a single future at a time. 
+    ///
+    /// This function returns a future which needs to be driven to completion to retrieve the new LamellarArray.
+    /// Calling await on the future will invoke an implicit barrier (allocating the resources for a new array).
+    ///
+    /// Creating the new array potentially results in data transfers depending on the distribution mode and the fact there is no gaurantee 
+    /// that each PE will contribute an equal number of elements to the new array, and currently LamellarArrays
+    /// distribute data across the PEs as evenly as possible.
+    /// 
+    ///```
+    /// use lamellar::array::{
+    ///     DistributedIterator, Distribution, ReadOnlyArray, AtomicArray
+    /// };
+    ///
+    /// let array: AtomicArray<usize> = AtomicArray::new(...);
+    /// let array_clone = array.clone();
+    /// let req = array.dist_iter().map(|elem|  array_clone.fetch_add(elem,1000)).collect_async::<ReadOnlyArray<usize>>(Distribution::Cyclic);
+    /// let new_array = array.block_on(req);
+    ///
+    /// // collect_asyncessentially gets converted into (on each thread)
+    /// let mut data = vec![];
+    /// for fut in array.iter(){
+    ///     data.push(fut.await);
+    /// }
+    ///```
     fn collect_async<A, T>(&self, d: Distribution) -> Pin<Box<dyn Future<Output = A> + Send>>
     where
         // &'static Self: DistributedIterator + 'static,

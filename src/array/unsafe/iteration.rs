@@ -529,6 +529,7 @@ impl<T: Dist> DistIteratorLauncher for UnsafeArray<T> {
         I: DistributedIterator + 'static,
         F: Fn(I::Item) + SyncSend + Clone + 'static,
     {
+        self.barrier();
         self.for_each_static(iter, op)
     }
 
@@ -542,6 +543,7 @@ impl<T: Dist> DistIteratorLauncher for UnsafeArray<T> {
         I: DistributedIterator + 'static,
         F: Fn(I::Item) + SyncSend + Clone + 'static,
     {
+        self.barrier();
         match sched {
             Schedule::Static => self.for_each_static(iter, op),
             Schedule::Dynamic => self.for_each_dynamic(iter, op),
@@ -557,6 +559,7 @@ impl<T: Dist> DistIteratorLauncher for UnsafeArray<T> {
         F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
         Fut: Future<Output = ()> + Send + 'static,
     {
+        self.barrier();
         self.for_each_async_static(iter, op)
     }
 
@@ -571,6 +574,7 @@ impl<T: Dist> DistIteratorLauncher for UnsafeArray<T> {
         F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
         Fut: Future<Output = ()> + Send + 'static,
     {
+        self.barrier();
         match sched {
             Schedule::Static => self.for_each_async_static(iter, op),
             Schedule::Dynamic => self.for_each_async_dynamic(iter, op),
@@ -586,6 +590,7 @@ impl<T: Dist> DistIteratorLauncher for UnsafeArray<T> {
         I::Item: Dist,
         A: From<UnsafeArray<I::Item>> + SyncSend + 'static,
     {
+        self.barrier();
         let mut reqs = Vec::new();
         if let Ok(_my_pe) = self.inner.data.team.team_pe_id() {
             let num_workers = match std::env::var("LAMELLAR_THREADS") {
@@ -628,6 +633,7 @@ impl<T: Dist> DistIteratorLauncher for UnsafeArray<T> {
         B: Dist,
         A: From<UnsafeArray<B>> + SyncSend + 'static,
     {
+        self.barrier();
         let mut reqs = Vec::new();
         if let Ok(_my_pe) = self.inner.data.team.team_pe_id() {
             let num_workers = match std::env::var("LAMELLAR_THREADS") {
