@@ -184,13 +184,14 @@ impl<T: Dist + ElementBitWiseOps> BitOrAssign<T> for AtomicElement<T> {
     }
 }
 
+
 /// A distributed array containing atomic elements. (See [array::LamellarArray] for more inforamation on distributed arrays in lamellar)
 ///
 /// If the type of the Array is an integer type (U8, usize, i32, i16, etc.) the array will use the appropriate Atomic* type underneath.
 /// If it is any other type `T: Dist` then the array will construct a mutex for each element in the array to manage access.
 ///
 /// # Safety
-/// All access to the individual elements in this array type are protect either via a language/compiler supported atomic type or by a mutex
+/// All access to the individual elements in this array type are protected either via a language/compiler supported atomic type or by a mutex
 #[enum_dispatch(LamellarArray<T>,LamellarArrayGet<T>,LamellarArrayInternalGet<T>,LamellarArrayPut<T>,LamellarArrayInternalPut<T>,ArrayExecAm<T>,LamellarArrayPrivate<T>,DistIteratorLauncher,)]
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
 #[serde(bound = "T: Dist + serde::Serialize + serde::de::DeserializeOwned + 'static")]
@@ -265,6 +266,7 @@ pub enum AtomicByteArrayWeak {
 }
 
 impl AtomicByteArrayWeak {
+    #[doc(hidden)]
     pub fn upgrade(&self) -> Option<AtomicByteArray> {
         match self {
             AtomicByteArrayWeak::NativeAtomicByteArrayWeak(array) => {
@@ -276,6 +278,7 @@ impl AtomicByteArrayWeak {
         }
     }
 }
+
 
 pub struct AtomicLocalData<T: Dist> {
     array: AtomicArray<T>,

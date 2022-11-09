@@ -1,3 +1,27 @@
+//! LamellarArrays provide a safe and highlevel abstraction of a distributed array.
+//! 
+//! By distributed, we mean that the memory backing the array is physically located on multiple distributed PEs in they system.
+//!
+//! LamellarArrays provide: 
+//!     - RDMA like `put` and `get` APIs 
+//!     - Element Wise operations (e.g. add, fetch_add, or, compare_exchange, etc)
+//!     - Distributed and Onesided Iteration
+//!     - Distributed Reductions
+//!     - Block or Cyclic layouts
+//!     - Sub Arrays
+//!
+//! # Safety
+//! Array Data Lifetimes: LamellarArrays are built upon [Darcs][Darc] (Distributed Atomic Reference Counting Pointers) and as such have distributed lifetime management.
+//! This means that as long as a single reference to an array exists anywhere in the distributed system, the data for the entire array will remain valid on every PE (even though a given PE may have dropped all its local references).
+//! While the compiler handles lifetimes within the context of a single PE, our distributed lifetime management relies on "garbage collecting active messages" to ensure all remote references have been accounted for.  
+//!
+//! We provide several array types, each with their own saftey gaurantees with respect to how data is accessed (further detail can be found in the documentation for each type)
+//!     - [UnsafeArray]: No safety gaurantees - PEs are free to read/write to anywhere in the array with no access control
+//!     - [ReadOnlyArray]: No write access is permitted, and thus PEs are free to read from anywhere in the array with no access control
+//!     - [AtomicArray]: Each Element is atomic (either instrisically are enforced via the runtime)
+//!         - NativeAtomicArray: utilizes the language atomic types e.g AtomicUsize, AtomicI8, etc.
+//!         - GenericAtomicArray: Each element is protected by a 1-byte mutex
+//!     - [LocalLockArray]: The data on each PE is protected by a local RwLock
 use crate::lamellar_request::LamellarRequest;
 use crate::memregion::{
     one_sided::OneSidedMemoryRegion,
@@ -103,6 +127,24 @@ lamellar_impl::generate_ops_for_type_rt!(true, false, i128);
 lamellar_impl::generate_reductions_for_type_rt!(false, f32, f64);
 lamellar_impl::generate_ops_for_type_rt!(false, false, f32, f64);
 
+/// Specifies the distributed data layout of a LamellarArray
+///
+/// Block: The indicies of the elements on each PE are sequential
+///
+/// Cyclic: The indicies of the elements on each PE have a stride equal to the number of PEs associated with the array
+///
+/// # Examples
+/// assume we have 4 PEs
+/// ## Block
+///```
+/// let block_array = LamellarArray::new(world,12,Distribution::Block);
+/// block array index location  = PE0 [0,1,2,3],  PE1 [4,5,6,7],  PE2 [8,9,10,11], PE3 [12,13,14,15]
+///```
+/// ## Cyclic
+///```
+/// let cyclic_array = LamellarArray::new(world,12,Distribution::Cyclic);
+/// cyclic array index location = PE0 [0,4,8,12], PE1 [1,5,9,13], PE2 [2,6,10,14], PE3 [3,7,11,15]
+///```
 #[derive(serde::Serialize, serde::Deserialize, Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Distribution {
     Block,
@@ -255,6 +297,7 @@ impl<T: Dist> MyFrom<&LamellarArrayInput<T>> for LamellarArrayInput<T> {
     }
 }
 
+/// Represents the array types that allow Read operations
 #[enum_dispatch]
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 #[serde(bound = "T: Dist + serde::Serialize + serde::de::DeserializeOwned + 'static")]
@@ -262,8 +305,6 @@ pub enum LamellarReadArray<T: Dist + 'static> {
     UnsafeArray(UnsafeArray<T>),
     ReadOnlyArray(ReadOnlyArray<T>),
     AtomicArray(AtomicArray<T>),
-    // NativeAtomicArray(NativeAtomicArray<T>),
-    // GenericAtomicArray(GenericAtomicArray<T>),
     LocalLockAtomicArray(LocalLockAtomicArray<T>),
 }
 
@@ -287,8 +328,6 @@ impl<T: Dist + 'static> crate::DarcSerde for LamellarReadArray<T> {
             LamellarReadArray::UnsafeArray(array) => array.ser(num_pes),
             LamellarReadArray::ReadOnlyArray(array) => array.ser(num_pes),
             LamellarReadArray::AtomicArray(array) => array.ser(num_pes),
-            // LamellarReadArray::NativeAtomicArray(array) => array.ser(num_pes),
-            // LamellarReadArray::GenericAtomicArray(array) => array.ser(num_pes),
             LamellarReadArray::LocalLockAtomicArray(array) => array.ser(num_pes),
         }
     }
@@ -298,21 +337,19 @@ impl<T: Dist + 'static> crate::DarcSerde for LamellarReadArray<T> {
             LamellarReadArray::UnsafeArray(array) => array.des(cur_pe),
             LamellarReadArray::ReadOnlyArray(array) => array.des(cur_pe),
             LamellarReadArray::AtomicArray(array) => array.des(cur_pe),
-            // LamellarReadArray::NativeAtomicArray(array) => array.des(cur_pe),
-            // LamellarReadArray::GenericAtomicArray(array) => array.des(cur_pe),
             LamellarReadArray::LocalLockAtomicArray(array) => array.des(cur_pe),
         }
     }
 }
 
+
+/// Represents the array types that allow write  operations
 #[enum_dispatch]
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 #[serde(bound = "T: Dist + serde::Serialize + serde::de::DeserializeOwned")]
 pub enum LamellarWriteArray<T: Dist> {
     UnsafeArray(UnsafeArray<T>),
     AtomicArray(AtomicArray<T>),
-    // NativeAtomicArray(NativeAtomicArray<T>),
-    // GenericAtomicArray(GenericAtomicArray<T>),
     LocalLockAtomicArray(LocalLockAtomicArray<T>),
 }
 
@@ -322,8 +359,6 @@ impl<T: Dist + 'static> crate::DarcSerde for LamellarWriteArray<T> {
         match self {
             LamellarWriteArray::UnsafeArray(array) => array.ser(num_pes),
             LamellarWriteArray::AtomicArray(array) => array.ser(num_pes),
-            // LamellarWriteArray::NativeAtomicArray(array) => array.ser(num_pes),
-            // LamellarWriteArray::GenericAtomicArray(array) => array.ser(num_pes),
             LamellarWriteArray::LocalLockAtomicArray(array) => array.ser(num_pes),
         }
     }
@@ -332,8 +367,6 @@ impl<T: Dist + 'static> crate::DarcSerde for LamellarWriteArray<T> {
         match self {
             LamellarWriteArray::UnsafeArray(array) => array.des(cur_pe),
             LamellarWriteArray::AtomicArray(array) => array.des(cur_pe),
-            // LamellarWriteArray::NativeAtomicArray(array) => array.des(cur_pe),
-            // LamellarWriteArray::GenericAtomicArray(array) => array.des(cur_pe),
             LamellarWriteArray::LocalLockAtomicArray(array) => array.des(cur_pe),
         }
     }
@@ -401,14 +434,25 @@ pub(crate) mod private {
     }
 }
 
+/// Represents a distributed array, providing some convenience functions for getting simple information about the array
+/// This is intended for use within the runtime, but needs to be public due to its use in Proc Macros
+#[doc(hidden)]
 #[enum_dispatch(LamellarReadArray<T>,LamellarWriteArray<T>)]
 pub trait LamellarArray<T: Dist>: private::LamellarArrayPrivate<T> {
+    /// Returns the team used to construct this array, the PEs in the team represent the same PEs which have a slice of data of the array
     fn team(&self) -> Pin<Arc<LamellarTeamRT>>;
+    /// Return the current PE of the calling thread
     fn my_pe(&self) -> usize;
+    /// Return the number of elements of the array local to this PE
     fn num_elems_local(&self) -> usize;
+    /// Return the total number of elements in the array
     fn len(&self) -> usize;
+    /// Block calling thread untill all PEs associated with this array enter the barrier
     fn barrier(&self);
+    /// Wait for all remote tasks launched by this array to complete
     fn wait_all(&self);
+    /// given a global index, calculate the PE and offset on that PE where the element actually resides.
+    /// Returns None if the index is Out of bounds
     fn pe_and_offset_for_global_index(&self, index: usize) -> Option<(usize, usize)>;
 
     // /// Returns a distributed iterator for the LamellarArray
@@ -436,27 +480,24 @@ pub trait LamellarArray<T: Dist>: private::LamellarArrayPrivate<T> {
     // pub fn buffered_iter(&self, buf_size: usize) -> LamellarArrayIter<'_, T> ;
 }
 
+
+/// Sub arrays are contiguous subsets of the elements of an array.
+///
+/// A sub array increments the parent arrays reference count, so the same lifetime guarantees apply to the subarray
+/// 
+/// There can exist mutliple subarrays to the same parent array and creating sub arrays are onesided operations
 pub trait SubArray<T: Dist>: LamellarArray<T> {
     type Array: LamellarArray<T>;
+    /// Given a range of indices, construct a sub array representing the elements in that range
     fn sub_array<R: std::ops::RangeBounds<usize>>(&self, range: R) -> Self::Array;
+    
+    /// Convert a sub array based index into the index space of the original array
     fn global_index(&self, sub_index: usize) -> usize;
 }
 
 #[doc(hidden)]
 #[enum_dispatch(LamellarReadArray<T>,LamellarWriteArray<T>)]
 pub trait LamellarArrayGet<T: Dist + 'static>: LamellarArray<T> {
-    // this is non blocking call
-    // the runtime does not manage checking for completion of message transmission
-    // the user is responsible for ensuring the buffer remains valid
-    // unsafe fn get_unchecked<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(
-    //     &self,
-    //     index: usize,
-    //     buf: U,
-    // );
-
-    // a safe synchronous call that blocks untils the data as all been transfered
-    // get data from self and write into buf
-    // fn iget<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(&self, index: usize, dst: U);
 
     // async get
     // get data from self and write into buf
@@ -527,8 +568,6 @@ impl<T: Dist + AmDist + 'static> LamellarWriteArray<T> {
         match self {
             LamellarWriteArray::UnsafeArray(array) => array.reduce(op),
             LamellarWriteArray::AtomicArray(array) => array.reduce(op),
-            // LamellarWriteArray::NativeAtomicArray(array) => array.reduce(op),
-            // LamellarWriteArray::GenericAtomicArray(array) => array.reduce(op),
             LamellarWriteArray::LocalLockAtomicArray(array) => array.reduce(op),
         }
     }
@@ -536,8 +575,6 @@ impl<T: Dist + AmDist + 'static> LamellarWriteArray<T> {
         match self {
             LamellarWriteArray::UnsafeArray(array) => array.sum(),
             LamellarWriteArray::AtomicArray(array) => array.sum(),
-            // LamellarWriteArray::NativeAtomicArray(array) => array.sum(),
-            // LamellarWriteArray::GenericAtomicArray(array) => array.sum(),
             LamellarWriteArray::LocalLockAtomicArray(array) => array.sum(),
         }
     }
@@ -545,8 +582,6 @@ impl<T: Dist + AmDist + 'static> LamellarWriteArray<T> {
         match self {
             LamellarWriteArray::UnsafeArray(array) => array.max(),
             LamellarWriteArray::AtomicArray(array) => array.max(),
-            // LamellarWriteArray::NativeAtomicArray(array) => array.max(),
-            // LamellarWriteArray::GenericAtomicArray(array) => array.max(),
             LamellarWriteArray::LocalLockAtomicArray(array) => array.max(),
         }
     }
@@ -554,8 +589,6 @@ impl<T: Dist + AmDist + 'static> LamellarWriteArray<T> {
         match self {
             LamellarWriteArray::UnsafeArray(array) => array.prod(),
             LamellarWriteArray::AtomicArray(array) => array.prod(),
-            // LamellarWriteArray::NativeAtomicArray(array) => array.prod(),
-            // LamellarWriteArray::GenericAtomicArray(array) => array.prod(),
             LamellarWriteArray::LocalLockAtomicArray(array) => array.prod(),
         }
     }
@@ -566,8 +599,6 @@ impl<T: Dist + AmDist + 'static> LamellarReadArray<T> {
         match self {
             LamellarReadArray::UnsafeArray(array) => array.reduce(op),
             LamellarReadArray::AtomicArray(array) => array.reduce(op),
-            // LamellarReadArray::NativeAtomicArray(array) => array.reduce(op),
-            // LamellarReadArray::GenericAtomicArray(array) => array.reduce(op),
             LamellarReadArray::LocalLockAtomicArray(array) => array.reduce(op),
             LamellarReadArray::ReadOnlyArray(array) => array.reduce(op),
         }
@@ -576,8 +607,6 @@ impl<T: Dist + AmDist + 'static> LamellarReadArray<T> {
         match self {
             LamellarReadArray::UnsafeArray(array) => array.sum(),
             LamellarReadArray::AtomicArray(array) => array.sum(),
-            // LamellarReadArray::NativeAtomicArray(array) => array.sum(),
-            // LamellarReadArray::GenericAtomicArray(array) => array.sum(),
             LamellarReadArray::LocalLockAtomicArray(array) => array.sum(),
             LamellarReadArray::ReadOnlyArray(array) => array.sum(),
         }
@@ -586,8 +615,6 @@ impl<T: Dist + AmDist + 'static> LamellarReadArray<T> {
         match self {
             LamellarReadArray::UnsafeArray(array) => array.max(),
             LamellarReadArray::AtomicArray(array) => array.max(),
-            // LamellarReadArray::NativeAtomicArray(array) => array.max(),
-            // LamellarReadArray::GenericAtomicArray(array) => array.max(),
             LamellarReadArray::LocalLockAtomicArray(array) => array.max(),
             LamellarReadArray::ReadOnlyArray(array) => array.max(),
         }
@@ -596,8 +623,6 @@ impl<T: Dist + AmDist + 'static> LamellarReadArray<T> {
         match self {
             LamellarReadArray::UnsafeArray(array) => array.prod(),
             LamellarReadArray::AtomicArray(array) => array.prod(),
-            // LamellarReadArray::NativeAtomicArray(array) => array.prod(),
-            // LamellarReadArray::GenericAtomicArray(array) => array.prod(),
             LamellarReadArray::LocalLockAtomicArray(array) => array.prod(),
             LamellarReadArray::ReadOnlyArray(array) => array.prod(),
         }

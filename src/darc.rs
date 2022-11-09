@@ -82,7 +82,7 @@ unsafe impl<T: Sync> Sync for DarcInner<T> {}
 /// concurrent programming in Rust, and, in particular, *shared ownership*.
 ///
 /// The `Darc` provides a similar abstraction within a *distributed* environment.
-/// - `Darc`'s have global lifetime, meaning that the pointed too objects remain valid and accessible
+/// - `Darc`'s have global lifetime, meaning that the pointed to objects remain valid and accessible
 ///   as long as one reference exists on any PE.
 /// - Inner mutability is disallowed by default. If you need to mutate through a Darc use [`Mutex`][std::sync::Mutex], [`RwLock`][std::sync::RwLock], or one of the [`Atomic`][std::sync::atomic]
 /// types. Alternatively you can also use a [`LocalRwDarc`] or [`GlobalRwDarc`].

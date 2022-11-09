@@ -50,14 +50,15 @@ impl std::fmt::Debug for UnsafeArrayData {
     }
 }
 
-// impl Drop for UnsafeArrayData {
-//     fn drop(&mut self) {
-//         // println!("unsafe array data dropping1");
-//         self.op_buffers.write().clear();
-//     }
-// }
-
-//need to calculate num_elems_local dynamically
+/// An unsafe abstraction of a distributed array.
+///
+/// This array type provides no gaurantees on how data it's data is being accessed, either localy or from remote PEs.
+///
+/// UnsafeArrays are really intended for use in the runtime as the foundation for our safe array types.
+///
+/// # Warning
+/// Unless you are very confident in low level distributed memory access it is highly recommended you utilize the
+/// the other LamellarArray types ([AtomicArray],[LocalLockArray],[ReadOnlyArray]) to construct and interact with distributed memory.
 #[lamellar_impl::AmDataRT(Clone, Debug)]
 pub struct UnsafeArray<T> {
     pub(crate) inner: UnsafeArrayInner,
@@ -98,7 +99,6 @@ impl UnsafeByteArrayWeak {
 pub(crate) struct UnsafeArrayInner {
     pub(crate) data: Darc<UnsafeArrayData>,
     pub(crate) distribution: Distribution,
-    // wait: Darc<AtomicUsize>,
     orig_elem_per_pe: f64,
     elem_size: usize, //for bytes array will be size of T, for T array will be 1
     offset: usize,    //relative to size of T
@@ -109,7 +109,6 @@ pub(crate) struct UnsafeArrayInner {
 pub(crate) struct UnsafeArrayInnerWeak {
     pub(crate) data: WeakDarc<UnsafeArrayData>,
     pub(crate) distribution: Distribution,
-    // wait: Darc<AtomicUsize>,
     orig_elem_per_pe: f64,
     elem_size: usize, //for bytes array will be size of T, for T array will be 1
     offset: usize,    //relative to size of T
@@ -131,6 +130,19 @@ pub(crate) struct UnsafeArrayInnerWeak {
 
 //#[prof]
 impl<T: Dist + 'static> UnsafeArray<T> {
+    /// Construct a new UnsafeArray whose data will be distributed on the PE's specified by the team.
+    /// 
+    /// # Arguments
+    ///
+    /// * `team` - the team specifying which PEs will own data of the array
+    /// * `array_size` - the total number of elements in the array ( each pe will own roughly array_size/num_pe elements) 
+    /// * `[distribution][Distribution]` - how data is distributed amongst the arrays
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::UnsafeArray;
+    ///
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic)
     pub fn new<U: Into<IntoLamellarTeam>>(
         team: U,
         array_size: usize,
@@ -174,12 +186,6 @@ impl<T: Dist + 'static> UnsafeArray<T> {
             }),
         )
         .expect("trying to create array on non team member");
-        // let wait = Darc::try_new(
-        //     team.clone(),
-        //     AtomicUsize::new(0),
-        //     crate::darc::DarcMode::Darc,
-        // )
-        // .expect("trying to create array on non team member");
         let array = UnsafeArray {
             inner: UnsafeArrayInner {
                 data: data,
@@ -214,13 +220,48 @@ impl<T: Dist + 'static> UnsafeArray<T> {
             }
         }
     }
+
+    /// blocks calling thread until all remote tasks (e.g. element wise operations)
+    /// initiated by the calling PE have completed.
+    ///
+    /// Note: this is not a distributed synchronization primitive (i.e. it has no knowledge of a Remote PEs tasks)
+    /// # Examples
+    ///```
+    /// use lamellar::array::ArithmeticOps;
+    ///
+    /// for i in 0..100{
+    ///     array.add(i,1);
+    /// }
+    /// array.wait_all(); //block until the previous am has finished
+    ///```
     pub fn wait_all(&self) {
         <UnsafeArray<T> as LamellarArray<T>>::wait_all(self);
     }
+
+    /// Global synchronization method which blocks calling thread until all PEs in the owning Array data have entered the barrier
+    ///
+    /// # Examples
+    ///```
+    /// array.barrier(); //block until all PEs have entered the barrier
+    ///```
     pub fn barrier(&self) {
         self.inner.data.team.barrier();
     }
 
+    /// Run a future to completion on the current thread
+    ///
+    /// This function will block the caller until the given future has completed, the future is executed within the Lamellar threadpool
+    ///
+    /// Users can await any future, including those returned from lamellar remote operations
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::ArithmeticOps;
+    ///
+    /// let request = array.fetch_add(10,1000); //fetch index 10 and add 1000 to it 
+    /// let result = array.block_on(request); //block until am has executed
+    /// // we also could have used world.block_on() or team.block_on()
+    ///```
     pub fn block_on<F>(&self, f: F) -> F::Output
     where
         F: Future,
@@ -228,19 +269,46 @@ impl<T: Dist + 'static> UnsafeArray<T> {
         self.inner.data.team.scheduler.block_on(f)
     }
 
+    /// Change the distribution this array handle uses to index into the data of the array.
+    ///
+    /// This is a oneside call and does not redistribute the actual data, it simple changes how the array is indexed for this particular handle.
     pub fn use_distribution(mut self, distribution: Distribution) -> Self {
         self.inner.distribution = distribution;
         self
     }
 
+    /// Return the number of PEs containing data for this array
     pub fn num_pes(&self) -> usize {
         self.inner.data.num_pes
     }
 
+    /// Return the total number of elements in this array
     pub fn len(&self) -> usize {
         self.inner.size
     }
 
+    /// Given a global array index, return the PE and local offset to actual data
+    ///
+    /// # Panics
+    /// panics if the global index is out of bounds
+    /// # Examples
+    /// assume we have 4 PEs
+    /// ## Block
+    ///```
+    /// use lamellar::array::UnsafeArray;
+    ///
+    /// let block_array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic)
+    /// // block array index location  = PE0 [0,1,2,3],  PE1 [4,5,6,7],  PE2 [8,9,10,11], PE3 [12,13,14,15]
+    /// let (pe,offset) = block_index.calc_pe_and_offset(6);
+    /// assert_eq!((pe,offset) ,(1,2));
+    ///```
+    /// ## Cyclic
+    ///```
+    /// let cyclic_array = LamellarArray::new(world,12,Distribution::Cyclic);
+    /// // cyclic array index location = PE0 [0,4,8,12], PE1 [1,5,9,13], PE2 [2,6,10,14], PE3 [3,7,11,15]
+    /// let (pe,offset) = cyclic_array.calc_pe_and_offset(6);
+    /// assert_eq!((pe,offset) ,(2,1));
+    ///```
     #[tracing::instrument(skip_all)]
     pub fn calc_pe_and_offset(&self, i: usize) -> (usize, usize) {
         if let Some(pe) = self.inner.pe_for_dist_index(i) {
@@ -255,6 +323,7 @@ impl<T: Dist + 'static> UnsafeArray<T> {
         }
     }
 
+    
     pub unsafe fn local_as_slice(&self) -> &[T] {
         self.local_as_mut_slice()
     }
