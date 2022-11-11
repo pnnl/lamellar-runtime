@@ -1,4 +1,4 @@
-use crate::array::iterator::distributed_iterator::*;
+use crate::array::iterator::local_iterator::*;
 
 //ignores the first n elements of iterator I per pe (this implys that n * num_pes elements are ignored in total)
 #[derive(Clone, Debug)]
@@ -10,29 +10,28 @@ pub struct StepBy<I> {
 
 impl<I> StepBy<I>
 where
-    I: IndexedDistributedIterator,
+    I: IndexedLocalIterator,
 {
     pub(crate) fn new(iter: I, step_size: usize, add_one: usize) -> StepBy<I> {
-        // println!("new StepBy {:?} ",step_size);
         StepBy { iter, step_size, add_one }
     }
 }
 
-
-impl<I> DistributedIterator for StepBy<I>
+impl<I> LocalIterator for StepBy<I>
 where
-    I: IndexedDistributedIterator,
+    I: IndexedLocalIterator,
 {
-    type Item = <I as DistributedIterator>::Item;
-    type Array = <I as DistributedIterator>::Array;
+    type Item = <I as LocalIterator>::Item;
+    type Array = <I as LocalIterator>::Array;
     fn init(&self, in_start_i: usize, cnt: usize) -> StepBy<I> {
         let mut iter = self.iter.init(in_start_i * self.step_size,  cnt * self.step_size);
         let mut offset_index = 0;
 
         // make sure we start from a valid step interval element
         if let Some(mut iterator_index) = iter.iterator_index(in_start_i* self.step_size+offset_index){
+            // println!("{:?} StepBy init {in_start_i} {iterator_index}",std::thread::current().id());
             while iterator_index % self.step_size != 0 { 
-                // println!("{:?} StepBy init {} {} {} {iterator_index}",std::thread::current().id(),in_start_i* self.step_size+offset_index,cnt * self.step_size,self.step_size);
+                // println!("{:?} StepBy init {in_start_i} {} {} {} {iterator_index}",std::thread::current().id(),in_start_i* self.step_size+offset_index,cnt * self.step_size,self.step_size);
                 offset_index +=1;
                 match iter.iterator_index(in_start_i* self.step_size+offset_index) {
                     Some(i) => iterator_index = i,
@@ -68,42 +67,31 @@ where
     fn array(&self) -> Self::Array {
         self.iter.array()
     }
+
     fn next(&mut self) -> Option<Self::Item> {
-        
-        if let Some(res) = self.iter.next(){
-            // println!("{:?} StepBy next ",std::thread::current().id());
-            self.iter.advance_index(self.step_size - 1); //-1 cause iter.next() already advanced by 1
-            Some(res)
-        }
-        else{
-            // println!("{:?} StepBy done ",std::thread::current().id());
-            None
-        }
+        let res = self.iter.next();
+        self.iter.advance_index(self.step_size - 1); //-1 cause iter.next() already advanced by 1
+        res
     }
+
     fn elems(&self, in_elems: usize) -> usize {
         let in_elems = self.iter.elems(in_elems);
         (in_elems as f32 / self.step_size as f32).ceil() as usize
     }
-    // fn global_index(&self, index: usize) -> Option<usize> {
-    //     let g_index = self.iter.global_index(index * self.step_size)? / self.step_size;
-    //     // println!("step_by index: {:?} global_index {:?}", index,g_index);
-    //     Some(g_index)
-    // }
+
     fn subarray_index(&self, index: usize) -> Option<usize> {
         let g_index = self.iter.subarray_index(index * self.step_size)? / self.step_size; 
         Some(g_index)
     }
-
+    
     fn advance_index(&mut self, count: usize) {
-        let count = count * self.step_size;
         self.iter.advance_index(count);
-        // println!("{:?} \t StepBy advance index {count}",std::thread::current().id());
     }
 }
 
-impl<I> IndexedDistributedIterator for StepBy<I>
+impl<I> IndexedLocalIterator for StepBy<I>
 where
-    I: IndexedDistributedIterator,
+    I: IndexedLocalIterator,
 {
     fn iterator_index(&self, index: usize) -> Option<usize> {
         if let Some(mut g_index) = self.iter.iterator_index(index * self.step_size){
@@ -117,4 +105,3 @@ where
         } 
     }
 }
-

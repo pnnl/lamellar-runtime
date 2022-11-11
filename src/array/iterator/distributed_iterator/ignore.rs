@@ -45,8 +45,8 @@ where
                 }
             }
             iter.advance_index(ignore_index-in_start_i);
-            let val = Ignore::new(iter, self.count,ignore_index);
-            // println!("{:?} Ignore init {ignore_index} {len} {:?} {ignore_index}",std::thread::current().id(),self.count);
+            let val = Ignore::new(iter, self.count,ignore_index-in_start_i);
+            // println!("{:?} Ignore init {ignore_index} {len} {:?} {}",std::thread::current().id(),self.count,ignore_index-in_start_i);
             val
         }
         else {

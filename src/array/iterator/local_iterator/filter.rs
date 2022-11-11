@@ -1,4 +1,4 @@
-use crate::array::iterator::distributed_iterator::*;
+use crate::array::iterator::local_iterator::*;
 
 #[derive(Clone, Debug)]
 pub struct Filter<I, F> {
@@ -7,7 +7,7 @@ pub struct Filter<I, F> {
 }
 impl<I, F> Filter<I, F>
 where
-    I: DistributedIterator,
+    I: LocalIterator,
 {
     pub(crate) fn new(iter: I, f: F) -> Filter<I, F> {
         // println!("new Filter {:?} ",count);
@@ -15,15 +15,14 @@ where
     }
 }
 
-impl<I, F> DistributedIterator for Filter<I, F>
+impl<I, F> LocalIterator for Filter<I, F>
 where
-    I: DistributedIterator,
+    I: LocalIterator,
     F: FnMut(&I::Item) -> bool + SyncSend + Clone + 'static,
 {
     type Item = I::Item;
-    type Array = <I as DistributedIterator>::Array;
+    type Array = <I as LocalIterator>::Array;
     fn init(&self, start_i: usize, cnt: usize) -> Filter<I, F> {
-        
         let val = Filter::new(self.iter.init(start_i, cnt), self.f.clone());
         // println!("{:?} Filter init {start_i} {cnt}",std::thread::current().id());
         val
@@ -44,6 +43,7 @@ where
 
     fn elems(&self, in_elems: usize) -> usize {
         let in_elems = self.iter.elems(in_elems);
+        // println!("enumerate elems {:?}",in_elems);
         in_elems
     }
     // fn global_index(&self, index: usize) -> Option<usize> {
@@ -58,6 +58,5 @@ where
     }
     fn advance_index(&mut self, count: usize) {
         self.iter.advance_index(count);
-        // println!("{:?} \t Filter advance index {count}",std::thread::current().id());
     }
 }
