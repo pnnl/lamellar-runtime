@@ -7,7 +7,7 @@ pub struct Map<I, F> {
 }
 impl<I, F> Map<I, F>
 where
-    I: DistributedIterator,
+    I: IndexedDistributedIterator,
 {
     pub(crate) fn new(iter: I, f: F) -> Map<I, F> {
         // println!("new Map {:?} ",count);
@@ -15,30 +15,9 @@ where
     }
 }
 
-// impl<B,I,F> Map<I,F>
-// where
-//     I: DistributedIterator + 'static,
-//     F: FnMut(I::Item) -> B + SyncSend + Clone + 'static,
-//     B: Send + 'static
-// {
-//     pub fn for_each<G>(&self, op: G)
-//     where
-//         G: Fn(B)   + Clone + 'static,
-//     {
-//         self.iter.array().for_each(self, op);
-//     }
-//     pub fn for_each_async<G, Fut>(&self, op: G)
-//     where
-//         G: Fn(B) -> Fut   + Clone + 'static,
-//         Fut: Future<Output = ()>  + 'static,
-//     {
-//         self.iter.array().for_each_async(self, op);
-//     }
-// }
-
 impl<B, I, F> DistributedIterator for Map<I, F>
 where
-    I: DistributedIterator,
+    I: IndexedDistributedIterator,
     F: FnMut(I::Item) -> B + SyncSend + Clone + 'static,
     B: Send,
 {
@@ -60,13 +39,13 @@ where
         // println!("enumerate elems {:?}",in_elems);
         in_elems
     }
-    fn global_index(&self, index: usize) -> Option<usize> {
-        let g_index = self.iter.global_index(index);
-        // println!("enumerate index: {:?} global_index {:?}", index,g_index);
-        g_index
-    }
+    // fn global_index(&self, index: usize) -> Option<usize> {
+    //     let g_index = self.iter.global_index(index);
+    //     // println!("enumerate index: {:?} global_index {:?}", index,g_index);
+    //     g_index
+    // }
     fn subarray_index(&self, index: usize) -> Option<usize> {
-        let g_index = self.iter.subarray_index(index); //not sure if this works...
+        let g_index = self.iter.subarray_index(index); 
                                                        // println!("enumerate index: {:?} global_index {:?}", index,g_index);
         g_index
     }
@@ -74,3 +53,17 @@ where
         self.iter.advance_index(count);
     }
 }
+
+impl<B, I, F>  IndexedDistributedIterator for Map<I,F>
+where
+    I: IndexedDistributedIterator,
+    F: FnMut(I::Item) -> B + SyncSend + Clone + 'static,
+    B: Send,
+{
+    fn iterator_index(&self, index: usize) -> Option<usize> {
+        let g_index = self.iter.iterator_index(index); 
+                                                       // println!("enumerate index: {:?} global_index {:?}", index,g_index);
+        g_index
+    }
+}
+

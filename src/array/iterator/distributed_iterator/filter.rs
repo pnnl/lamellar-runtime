@@ -43,37 +43,41 @@ where
     type Item = I::Item;
     type Array = <I as DistributedIterator>::Array;
     fn init(&self, start_i: usize, cnt: usize) -> Filter<I, F> {
-        // println!("init enumerate start_i: {:?} cnt {:?} end_i {:?}",start_i, cnt, start_i+cnt );
-        Filter::new(self.iter.init(start_i, cnt), self.f.clone())
+        
+        let val = Filter::new(self.iter.init(start_i, cnt), self.f.clone());
+        // println!("{:?} Filter init {start_i} {cnt}",std::thread::current().id());
+        val
     }
     fn array(&self) -> Self::Array {
         self.iter.array()
     }
     fn next(&mut self) -> Option<Self::Item> {
         while let Some(next) = self.iter.next() {
+            // println!("{:?} Filter next",std::thread::current().id());
             if (self.f)(&next) {
                 return Some(next);
             }
         }
+        // println!("{:?} Filter done",std::thread::current().id());
         None
     }
 
     fn elems(&self, in_elems: usize) -> usize {
         let in_elems = self.iter.elems(in_elems);
-        // println!("enumerate elems {:?}",in_elems);
         in_elems
     }
-    fn global_index(&self, index: usize) -> Option<usize> {
-        let g_index = self.iter.global_index(index);
-        // println!("enumerate index: {:?} global_index {:?}", index,g_index);
-        g_index
-    }
+    // fn global_index(&self, index: usize) -> Option<usize> {
+    //     let g_index = self.iter.global_index(index);
+    //     // println!("enumerate index: {:?} global_index {:?}", index,g_index);
+    //     g_index
+    // }
     fn subarray_index(&self, index: usize) -> Option<usize> {
-        let g_index = self.iter.subarray_index(index); //not sure if this works...
+        let g_index = self.iter.subarray_index(index); 
                                                        // println!("enumerate index: {:?} global_index {:?}", index,g_index);
         g_index
     }
     fn advance_index(&mut self, count: usize) {
         self.iter.advance_index(count);
+        // println!("{:?} \t Filter advance index {count}",std::thread::current().id());
     }
 }

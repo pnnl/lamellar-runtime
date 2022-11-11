@@ -7,8 +7,8 @@ pub struct Zip<A, B> {
 }
 impl<A, B> Zip<A, B>
 where
-    A: DistributedIterator,
-    B: DistributedIterator,
+    A: IndexedDistributedIterator,
+    B: IndexedDistributedIterator,
 {
     pub(crate) fn new(a: A, b: B) -> Zip<A, B> {
         // println!("new Zip {:?} ",count);
@@ -54,8 +54,8 @@ where
 
 impl<A, B> DistributedIterator for Zip<A, B>
 where
-    A: DistributedIterator,
-    B: DistributedIterator,
+    A: IndexedDistributedIterator,
+    B: IndexedDistributedIterator,
 {
     type Item = (
         <A as DistributedIterator>::Item,
@@ -80,13 +80,13 @@ where
         // println!("enumerate elems {:?}",in_elems);
         in_elems
     }
-    fn global_index(&self, index: usize) -> Option<usize> {
-        let g_index = self.a.global_index(index); //not sure if this works...
-                                                  // println!("enumerate index: {:?} global_index {:?}", index,g_index);
-        g_index
-    }
+    // fn global_index(&self, index: usize) -> Option<usize> {
+    //     let g_index = self.a.global_index(index); 
+    //                                               // println!("enumerate index: {:?} global_index {:?}", index,g_index);
+    //     g_index
+    // }
     fn subarray_index(&self, index: usize) -> Option<usize> {
-        let g_index = self.a.subarray_index(index); //not sure if this works...
+        let g_index = self.a.subarray_index(index); 
                                                     // println!("enumerate index: {:?} global_index {:?}", index,g_index);
         g_index
     }
@@ -98,3 +98,10 @@ where
         self.b.advance_index(count);
     }
 }
+
+impl<A,B> IndexedDistributedIterator for Zip<A, B>
+where
+    A: IndexedDistributedIterator,
+    B: IndexedDistributedIterator,
+{}
+

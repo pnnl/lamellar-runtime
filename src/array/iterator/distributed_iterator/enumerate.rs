@@ -3,56 +3,45 @@ use crate::array::iterator::distributed_iterator::*;
 #[derive(Clone, Debug)]
 pub struct Enumerate<I> {
     iter: I,
-    count: usize,
+    cur_index: usize,
 }
 impl<I> Enumerate<I>
 where
-    I: DistributedIterator,
+    I: IndexedDistributedIterator,
 {
-    pub(crate) fn new(iter: I, count: usize) -> Enumerate<I> {
+    pub(crate) fn new(iter: I, cur_index: usize) -> Enumerate<I> {
         // println!("new Enumerate {:?} ",count);
-        Enumerate { iter, count }
+        Enumerate { iter, cur_index }
     }
 }
 
-// impl<I> Enumerate<I>
-// where
-//     I: DistributedIterator + 'static,
-// {
-//     pub fn for_each<F>(&self, op: F)
-//     where
-//         F: Fn((usize, <I as DistributedIterator>::Item)) + SyncSend  + Clone + 'static,
-//     {
-//         self.iter.array().for_each(self, op);
-//     }
-//     pub fn for_each_async<F, Fut>(&self, op: F)
-//     where
-//         F: Fn((usize, <I as DistributedIterator>::Item)) -> Fut + SyncSend  + Clone + 'static,
-//         Fut: Future<Output = ()> + SyncSend  + Clone + 'static,
-//     {
-//         self.iter.array().for_each_async(self, op);
-//     }
-// }
-
 impl<I> DistributedIterator for Enumerate<I>
 where
-    I: DistributedIterator,
+    I: IndexedDistributedIterator,
 {
     type Item = (usize, <I as DistributedIterator>::Item);
     type Array = <I as DistributedIterator>::Array;
     fn init(&self, start_i: usize, cnt: usize) -> Enumerate<I> {
-        // println!("init enumerate start_i: {:?} cnt {:?} end_i {:?}",start_i, cnt, start_i+cnt );
-        Enumerate::new(self.iter.init(start_i, cnt), start_i)
+        let iter = self.iter.init(start_i, cnt);
+        let val = Enumerate::new(iter, start_i);
+        // println!("{:?} Enumerate init {start_i} {cnt} {start_i}",std::thread::current().id());
+        val
     }
     fn array(&self) -> Self::Array {
         self.iter.array()
     }
     fn next(&mut self) -> Option<Self::Item> {
-        let a = self.iter.next()?;
-        let i = self.subarray_index(self.count)?;
-        // println!("enumerate next {:?} i: {:?}",self.count,i);
-        self.count += 1;
-        Some((i, a))
+        if let Some(a) = self.iter.next(){
+            let i = self.iterator_index(self.cur_index)?;
+            // println!("{:?} Enumerate next {:?} i: {:?}",std::thread::current().id(),self.cur_index,i);
+            self.cur_index += 1;
+            Some((i, a))
+        }
+        else {
+            // println!("{:?} Enumerate done",std::thread::current().id());
+            None
+        }
+        
     }
 
     fn elems(&self, in_elems: usize) -> usize {
@@ -60,13 +49,13 @@ where
         // println!("enumerate elems {:?}",in_elems);
         in_elems
     }
-    fn global_index(&self, index: usize) -> Option<usize> {
-        let g_index = self.iter.global_index(index);
-        // println!("enumerate index: {:?} global_index {:?}", index,g_index);
-        g_index
-    }
+    // fn global_index(&self, index: usize) -> Option<usize> {
+    //     let g_index = self.iter.global_index(index);
+    //     // println!("enumerate index: {:?} global_index {:?}", index,g_index);
+    //     g_index
+    // }
     fn subarray_index(&self, index: usize) -> Option<usize> {
-        let g_index = self.iter.subarray_index(index); //not sure if this works...
+        let g_index = self.iter.subarray_index(index); 
                                                        // println!("enumerate index: {:?} global_index {:?}", index,g_index);
         g_index
     }
@@ -75,6 +64,19 @@ where
     // }
     fn advance_index(&mut self, count: usize) {
         self.iter.advance_index(count);
-        self.count += count;
+        // println!("{:?} \t Enumerate advance index {count}",std::thread::current().id());
+        self.cur_index += count;
     }
+}
+
+impl<I> IndexedDistributedIterator for Enumerate<I>
+where
+    I: IndexedDistributedIterator,
+{
+    fn iterator_index(&self, index: usize) -> Option<usize> {
+        let g_index = self.iter.iterator_index(index); 
+        // println!("{:?} \t Enumerate iterator index {index} {g_index:?}",std::thread::current().id());
+        g_index
+    }
+
 }

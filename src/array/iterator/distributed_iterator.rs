@@ -1,4 +1,4 @@
-mod chunks;
+// mod chunks;
 mod enumerate;
 mod filter;
 mod filter_map;
@@ -7,9 +7,9 @@ mod ignore;
 mod map;
 mod step_by;
 mod take;
-mod zip;
+// mod zip;
 
-use chunks::*;
+// use chunks::*;
 use enumerate::*;
 use filter::*;
 use filter_map::*;
@@ -17,15 +17,16 @@ use ignore::*;
 use map::*;
 use step_by::*;
 use take::*;
-use zip::*;
+// use zip::*;
 
 use crate::memregion::Dist;
-use crate::LamellarRequest;
+use crate::lamellar_request::LamellarRequest;
 use crate::LamellarTeamRT;
 // use crate::LamellarArray;
-use crate::array::iterator::serial_iterator::SerialIterator;
+use crate::array::iterator::one_sided_iterator::OneSidedIterator;
+use crate::array::iterator::Schedule;
 use crate::array::{
-    AtomicArray, Distribution, GenericAtomicArray, LamellarArray, NativeAtomicArray, UnsafeArray,
+    AtomicArray, Distribution, GenericAtomicArray, LamellarArray, NativeAtomicArray, UnsafeArray, 
 }; //, LamellarArrayPut, LamellarArrayGet};
 
 use crate::active_messaging::SyncSend;
@@ -44,25 +45,7 @@ use parking_lot::Mutex;
 use rand::seq::SliceRandom;
 use rand::thread_rng;
 
-/// The Schedule type controls how elements of a LamellarArray are distributed to threads when 
-/// calling `for_each_with_schedule` on a distributed iterator.
-/// 
-/// Inspired by then OpenMP schedule parameter
-///
-/// # Possible Options
-/// - Static: Each thread recieves a static range of elements to iterate over, the range length is roughly array.local_data().len()/number of threads on pe
-/// - Dynaimc: Each thread processes a single element at a time
-/// - Chunk(usize): Each thread prcesses chunk sized range of elements at a time.
-/// - Guided: Similar to chunks, but the chunks decrease in size over time
-/// - WorkStealing: Intially allocated the same range as static, but allows idle threads to steal work from busy threads
-#[derive(Debug, Clone)]
-pub enum Schedule {
-    Static,
-    Dynamic,      //single element
-    Chunk(usize), //dynamic but with multiple elements
-    Guided,       // chunks that get smaller over time
-    WorkStealing, // static initially but other threads can steal
-}
+
 
 #[lamellar_impl::AmLocalDataRT(Clone)]
 pub(crate) struct Collect<I>
@@ -192,7 +175,7 @@ impl<T: Dist, A: From<UnsafeArray<T>> + SyncSend> DistIterCollectHandle<T, A> {
         let my_pe = self.team.team_pe.expect("pe not part of team");
         // local_sizes.print();
         local_sizes
-            .ser_iter()
+            .onesided_iter()
             .into_iter()
             .enumerate()
             .for_each(|(i, local_size)| {
@@ -441,24 +424,44 @@ pub trait DistIteratorLauncher {
     #[doc(hidden)]
     fn subarray_index_from_local(&self, index: usize, chunk_size: usize) -> Option<usize>;
 
+    // #[doc(hidden)]
+    // fn subarray_pe_and_offset_for_global_index(&self, index: usize, chunk_size: usize) -> Option<(usize,usize)>;
+
     #[doc(hidden)]
     fn team(&self) -> Pin<Arc<LamellarTeamRT>>;
 }
 
 pub trait DistributedIterator: SyncSend + Clone + 'static {
+    /// The type of item this distributed iterator produces
     type Item: Send;
+
+    /// The array to which this distributed iterator was created from
     type Array: DistIteratorLauncher;
+
+    /// Internal method used to initalize this distributed iterator to the correct element and correct length.
+    /// 
+    /// Because we know the number of elements of the array on each PE we can specify the index to start from.
     fn init(&self, start_i: usize, cnt: usize) -> Self;
+
+    /// Return the original array this distributed iterator belongs too
     fn array(&self) -> Self::Array;
+
+    /// Return the next element in the iterator, otherwise return None
     fn next(&mut self) -> Option<Self::Item>;
+
+    /// Return the maximum number of elements in the iterator
+    ///
+    /// the actual number of return elements maybe be less (e.g. using a filter iterator)
     fn elems(&self, in_elems: usize) -> usize;
-    fn global_index(&self, index: usize) -> Option<usize>;
+
+    // /// given a local index return return the corresponding index from the original array
+    // fn global_index(&self, index: usize) -> Option<usize>;
+
+    /// given a local index return the corresponding global subarray index ( or None otherwise)
     fn subarray_index(&self, index: usize) -> Option<usize>;
     fn advance_index(&mut self, count: usize);
 
-    fn enumerate(self) -> Enumerate<Self> {
-        Enumerate::new(self, 0)
-    }
+
     fn filter<F>(self, op: F) -> Filter<Self, F>
     where
         F: Fn(&Self::Item) -> bool + Clone + 'static,
@@ -471,30 +474,8 @@ pub trait DistributedIterator: SyncSend + Clone + 'static {
         R: Send + 'static,
     {
         FilterMap::new(self, op)
-    }
-    fn chunks(self, size: usize) -> Chunks<Self> {
-        Chunks::new(self, 0, 0, size)
-    }
-    fn ignore(self, count: usize) -> Ignore<Self> {
-        Ignore::new(self, count)
-    }
-    fn map<F, R>(self, op: F) -> Map<Self, F>
-    where
-        F: Fn(Self::Item) -> R + Clone + 'static,
-        R: Send + 'static,
-    {
-        Map::new(self, op)
-    }
-    fn step_by(self, step_size: usize) -> StepBy<Self> {
-        StepBy::new(self, step_size)
-    }
-    fn take(self, count: usize) -> Take<Self> {
-        Take::new(self, count)
-    }
-    fn zip<I: DistributedIterator>(self, iter: I) -> Zip<Self, I> {
-        Zip::new(self, iter)
-    }
-
+    } 
+    
     /// Calls a closure on each element of a Distributed Iterator in parallel and distributed on each PE (which owns data of the iterated array).
     /// 
     /// Calling this function invokes an implicit barrier across all PEs in the Array, after this barrier no further communication is performed
@@ -705,6 +686,37 @@ pub trait DistributedIterator: SyncSend + Clone + 'static {
     }
 }
 
+pub trait IndexedDistributedIterator: DistributedIterator + SyncSend + Clone + 'static {
+    fn enumerate(self) -> Enumerate<Self> {
+        Enumerate::new(self, 0)
+    }
+    // fn chunks(self, size: usize) -> Chunks<Self> {
+    //     Chunks::new(self, 0, 0, size)
+    // }
+    fn map<F, R>(self, op: F) -> Map<Self, F>
+    where
+        F: Fn(Self::Item) -> R + Clone + 'static,
+        R: Send + 'static,
+    {
+        Map::new(self, op)
+    }
+    fn ignore(self, count: usize) -> Ignore<Self> {
+        Ignore::new(self, count,0)
+    }
+    fn step_by(self, step_size: usize) -> StepBy<Self> {
+        StepBy::new(self, step_size, 0)
+    }
+    fn take(self, count: usize) -> Take<Self> {
+        Take::new(self, count, 0)
+    }
+    // fn zip<I: IndexedDistributedIterator>(self, iter: I) -> Zip<Self, I> {
+    //     Zip::new(self, iter)
+    // }
+
+    /// given an local index return the corresponding global iterator index ( or None otherwise)
+    fn iterator_index(&self, index: usize) -> Option<usize>;
+}
+
 #[derive(Clone)]
 pub struct DistIter<'a, T: Dist + 'static, A: LamellarArray<T>> {
     data: A,
@@ -767,6 +779,7 @@ impl<
     fn init(&self, start_i: usize, cnt: usize) -> Self {
         let max_i = self.data.num_elems_local();
         // println!("init dist iter start_i: {:?} cnt {:?} end_i: {:?} max_i: {:?}",start_i,cnt, start_i+cnt,max_i);
+        // println!("{:?} DistIter init {start_i} {cnt} {} {}",std::thread::current().id(), start_i+cnt,max_i);
         DistIter {
             data: self.data.clone(),
             cur_i: std::cmp::min(start_i, max_i),
@@ -778,8 +791,8 @@ impl<
         self.data.clone()
     }
     fn next(&mut self) -> Option<Self::Item> {
-        // println!("dist iter next cur: {:?} end {:?}",self.cur_i,self.end_i);
         if self.cur_i < self.end_i {
+            // println!("{:?} DistIter next cur: {:?} end {:?} Some left",std::thread::current().id(),self.cur_i,self.end_i);
             self.cur_i += 1;
             unsafe {
                 self.data
@@ -788,6 +801,8 @@ impl<
                     .as_ref()
             }
         } else {
+            
+            // println!("{:?} DistIter next cur: {:?} end {:?} Done",std::thread::current().id(),self.cur_i,self.end_i);
             None
         }
     }
@@ -795,11 +810,11 @@ impl<
         // println!("dist iter elems {:?}",in_elems);
         in_elems
     }
-    fn global_index(&self, index: usize) -> Option<usize> {
-        let g_index = self.data.global_index_from_local(index, 1);
-        // println!("dist_iter index: {:?} global_index {:?}", index,g_index);
-        g_index
-    }
+    // fn global_index(&self, index: usize) -> Option<usize> {
+    //     let g_index = self.data.global_index_from_local(index, 1);
+    //     // println!("dist_iter index: {:?} global_index {:?}", index,g_index);
+    //     g_index
+    // }
     fn subarray_index(&self, index: usize) -> Option<usize> {
         let g_index = self.data.subarray_index_from_local(index, 1);
         // println!("dist_iter index: {:?} global_index {:?}", index,g_index);
@@ -809,8 +824,20 @@ impl<
     //     1
     // }
     fn advance_index(&mut self, count: usize) {
+        // println!("{:?} \t DistIter advance index {} {} {}",std::thread::current().id(),count,self.cur_i + count, self.end_i);
         self.cur_i = std::cmp::min(self.cur_i + count, self.end_i);
     }
+}
+
+impl<
+        T: Dist + 'static,
+        A: LamellarArray<T> + SyncSend + DistIteratorLauncher + Clone + 'static,
+    > IndexedDistributedIterator for DistIter<'static, T, A> {
+        fn iterator_index(&self, index: usize) -> Option<usize> {
+            let g_index = self.data.subarray_index_from_local(index, 1);
+            // println!("{:?} \t DistIter iterator index {index} {g_index:?}",std::thread::current().id());
+            g_index
+        }
 }
 
 #[derive(Clone)]
@@ -902,11 +929,11 @@ impl<
     fn elems(&self, in_elems: usize) -> usize {
         in_elems
     }
-    fn global_index(&self, index: usize) -> Option<usize> {
-        let g_index = self.data.global_index_from_local(index, 1);
-        // println!("dist_iter index: {:?} global_index {:?}", index,g_index);
-        g_index
-    }
+    // fn global_index(&self, index: usize) -> Option<usize> {
+    //     let g_index = self.data.global_index_from_local(index, 1);
+    //     // println!("dist_iter index: {:?} global_index {:?}", index,g_index);
+    //     g_index
+    // }
     fn subarray_index(&self, index: usize) -> Option<usize> {
         let g_index = self.data.subarray_index_from_local(index, 1);
         g_index
@@ -918,3 +945,16 @@ impl<
         self.cur_i = std::cmp::min(self.cur_i + count, self.end_i);
     }
 }
+
+impl<
+        T: Dist + 'static,
+        A: LamellarArray<T> + SyncSend + DistIteratorLauncher + Clone + 'static,
+    > IndexedDistributedIterator for DistIterMut<'static, T, A> {
+        fn iterator_index(&self, index: usize) -> Option<usize> {
+            let g_index = self.data.subarray_index_from_local(index, 1);
+
+            g_index
+        }
+}
+
+

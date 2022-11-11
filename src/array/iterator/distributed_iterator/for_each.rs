@@ -120,6 +120,10 @@ impl ForEachWorkStealer {
             None
         }
     }
+    fn set_done(&self){
+        let mut range = self.range.lock();
+        range.0 = range.1;
+    }
 
     fn steal(&self) -> Option<(usize, usize)> {
         let mut range = self.range.lock();
@@ -156,18 +160,24 @@ where
     F: Fn(I::Item) + SyncSend + 'static,
 {
     async fn exec(&self) {
-        // println!("in for each {:?} {:?}", self.start_i, self.end_i);
+        
         let (start, end) = *self.range.range.lock();
+        // println!("{:?} ForEachWorkStealing {:?} {:?}",std::thread::current().id(), start, end);
         let mut iter = self.data.init(start, end - start);
-        while self.range.next().is_some() {
+        while self.range.next().is_some() { 
             if let Some(elem) = iter.next() {
                 (&self.op)(elem);
             }
+            else{ 
+                self.range.set_done();
+            }
         }
+        // println!("{:?} ForEachWorkStealing done with my range",std::thread::current().id());
         let mut rng = thread_rng();
         let mut workers = (0..self.siblings.len()).collect::<Vec<usize>>();
         workers.shuffle(&mut rng);
         while let Some(worker) = workers.pop() {
+            // println!("{:?} ForEachWorkStealing stealing from sibling",std::thread::current().id());
             if let Some((start, end)) = self.siblings[worker].steal() {
                 let mut iter = self.data.init(start, end - start);
                 self.range.set_range(start, end);
@@ -175,12 +185,15 @@ where
                     if let Some(elem) = iter.next() {
                         (&self.op)(elem);
                     }
+                    else{ 
+                        self.range.set_done();
+                    }
                 }
                 workers = (0..self.siblings.len()).collect::<Vec<usize>>();
                 workers.shuffle(&mut rng);
             }
         }
-        // println!("done in for each");
+        // println!("{:?} ForEachWorkStealing done",std::thread::current().id());
     }
 }
 

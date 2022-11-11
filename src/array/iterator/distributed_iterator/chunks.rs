@@ -10,7 +10,7 @@ pub struct Chunks<I> {
 
 impl<I> Chunks<I>
 where
-    I: DistributedIterator,
+    I: IndexedDistributedIterator,
 {
     pub(crate) fn new(iter: I, cur_i: usize, cnt: usize, chunk_size: usize) -> Chunks<I> {
         // println!("new Chunks {:?} {:?} {:?} {:?}",cur_i ,cnt, cur_i+cnt,chunk_size);
@@ -23,28 +23,9 @@ where
     }
 }
 
-// impl<I> Chunks<I>
-// where
-//     I: DistributedIterator + 'static,
-// {
-//     pub fn for_each<F>(&self, op: F)
-//     where
-//         F: Fn(Chunk<I>) + SyncSend  + Clone + 'static,
-//     {
-//         self.iter.array().for_each(self, op);
-//     }
-//     pub fn for_each_async<F, Fut>(&self, op: F)
-//     where
-//         F: Fn(Chunk<I>) -> Fut + SyncSend  + Clone + 'static,
-//         Fut: Future<Output = ()> + SyncSend  + Clone + 'static,
-//     {
-//         self.iter.array().for_each_async(self, op);
-//     }
-// }
-
 impl<I> DistributedIterator for Chunks<I>
 where
-    I: DistributedIterator,
+    I: IndexedDistributedIterator,
 {
     type Item = Chunk<I>;
     type Array = <I as DistributedIterator>::Array;
@@ -86,13 +67,13 @@ where
         // println!("chunk elems {:?} {:?}",in_elems, elems);
         elems
     }
-    fn global_index(&self, index: usize) -> Option<usize> {
-        let g_index = self.iter.global_index(index * self.chunk_size)? / self.chunk_size;
-        // println!("chunks index: {:?} global_index {:?}", index,g_index);
-        Some(g_index)
-    }
+    // fn global_index(&self, index: usize) -> Option<usize> {
+    //     let g_index = self.iter.global_index(index * self.chunk_size)? / self.chunk_size;
+    //     // println!("chunks index: {:?} global_index {:?}", index,g_index);
+    //     Some(g_index)
+    // }
     fn subarray_index(&self, index: usize) -> Option<usize> {
-        let g_index = self.iter.subarray_index(index * self.chunk_size)? / self.chunk_size; //not sure if this works...
+        let g_index = self.iter.subarray_index(index * self.chunk_size)? / self.chunk_size; 
                                                                                             // println!("enumerate index: {:?} global_index {:?}", index,g_index);
         Some(g_index)
     }
@@ -103,6 +84,12 @@ where
         self.cur_i = std::cmp::min(self.cur_i + count, self.end_i);
     }
 }
+
+impl<I> IndexedDistributedIterator for Chunks<I>
+where
+    I: IndexedDistributedIterator,
+{}
+
 
 #[derive(Clone)]
 pub struct Chunk<I> {
