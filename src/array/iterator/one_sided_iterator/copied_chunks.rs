@@ -1,7 +1,7 @@
-use crate::array::iterator::serial_iterator::*;
+use crate::array::iterator::one_sided_iterator::*;
 use crate::array::LamellarArrayRequest;
 // use crate::LamellarArray;
-use crate::OneSidedMemoryRegion;
+use crate::memregion::OneSidedMemoryRegion;
 use pin_project::pin_project;
 
 use async_trait::async_trait;
@@ -9,7 +9,7 @@ use async_trait::async_trait;
 #[pin_project]
 pub struct CopiedChunks<I>
 where
-    I: SerialIterator + Send,
+    I: OneSidedIterator + Send,
 {
     #[pin]
     iter: I,
@@ -21,7 +21,7 @@ where
 
 impl<I> CopiedChunks<I>
 where
-    I: SerialIterator + Send,
+    I: OneSidedIterator + Send,
 {
     pub(crate) fn new(iter: I, chunk_size: usize) -> CopiedChunks<I> {
         // let array = iter.array().clone(); //.to_base::<u8>();
@@ -38,8 +38,8 @@ where
         chunks
     }
 
-    fn get_buffer(&self, size: usize) -> OneSidedMemoryRegion<<I as SerialIterator>::ElemType> {
-        let mem_region: OneSidedMemoryRegion<<I as SerialIterator>::ElemType> =
+    fn get_buffer(&self, size: usize) -> OneSidedMemoryRegion<<I as OneSidedIterator>::ElemType> {
+        let mem_region: OneSidedMemoryRegion<<I as OneSidedIterator>::ElemType> =
             self.array().team().alloc_one_sided_mem_region(size);
         self.array().internal_get(self.index, &mem_region).wait();
         mem_region
@@ -48,11 +48,11 @@ where
     // fn get_buffer_async(
     //     self: &Pin<&mut Self>,
     //     size: usize,
-    // ) -> Pin<Box<dyn Future<Output = OneSidedMemoryRegion<<I as SerialIterator>::ElemType>> + Send>>
+    // ) -> Pin<Box<dyn Future<Output = OneSidedMemoryRegion<<I as OneSidedIterator>::ElemType>> + Send>>
     // {
     //     // let this = self.project();
     //     let array = self.iter.array();
-    //     let mem_region: OneSidedMemoryRegion<<I as SerialIterator>::ElemType> =
+    //     let mem_region: OneSidedMemoryRegion<<I as OneSidedIterator>::ElemType> =
     //         array.team().alloc_one_sided_mem_region(size);
     //     let index = self.index;
     //     let req = array.internal_get(index, &mem_region).into_future();
@@ -66,13 +66,13 @@ where
 #[async_trait]
 // impl<I> SerialAsyncIterator for CopiedChunks<I>
 // where
-//     I: SerialIterator + SerialAsyncIterator,
+//     I: OneSidedIterator + SerialAsyncIterator,
 // {
 //     type ElemType = <I as SerialAsyncIterator>::ElemType;
 //     type Item = OneSidedMemoryRegion<<I as SerialAsyncIterator>::ElemType>;
 //     type Array = <I as SerialAsyncIterator>::Array;
 //     async fn async_next(self: Pin<&mut Self>) -> Option<Self::Item> {
-//         // println!("{:?} {:?}",self.index,self.array.len()/std::mem::size_of::<<Self as SerialIterator>::ElemType>());
+//         // println!("{:?} {:?}",self.index,self.array.len()/std::mem::size_of::<<Self as OneSidedIterator>::ElemType>());
 //         let array = self.array();
 //         if self.index < array.len() {
 //             let size = std::cmp::min(self.chunk_size, array.len() - self.index);
@@ -85,15 +85,15 @@ where
 //         }
 //     }
 // }
-impl<I> SerialIterator for CopiedChunks<I>
+impl<I> OneSidedIterator for CopiedChunks<I>
 where
-    I: SerialIterator + Send,
+    I: OneSidedIterator + Send,
 {
     type ElemType = I::ElemType;
     type Item = OneSidedMemoryRegion<I::ElemType>;
     type Array = I::Array;
     fn next(&mut self) -> Option<Self::Item> {
-        // println!("{:?} {:?}",self.index,self.array.len()/std::mem::size_of::<<Self as SerialIterator>::ElemType>());
+        // println!("{:?} {:?}",self.index,self.array.len()/std::mem::size_of::<<Self as OneSidedIterator>::ElemType>());
         let array = self.array();
         if self.index < array.len() {
             let size = std::cmp::min(self.chunk_size, array.len() - self.index);
@@ -108,7 +108,7 @@ where
     // async fn async_next(self: Pin<&mut Self>) -> Option<Self::Item> {
     //     // println!("async_next copied_chunks");
     //     // let mut this = self.project();
-    //     // println!("{:?} {:?}",self.index,self.array.len()/std::mem::size_of::<<Self as SerialIterator>::ElemType>());
+    //     // println!("{:?} {:?}",self.index,self.array.len()/std::mem::size_of::<<Self as OneSidedIterator>::ElemType>());
     //     let array = self.iter.array();
     //     if self.index < array.len() {
     //         let size = std::cmp::min(self.chunk_size, array.len() - self.index);
@@ -175,11 +175,11 @@ where
 
 // impl<I> Iterator for CopiedChunks<I>
 // where
-//     I: SerialIterator + Iterator
+//     I: OneSidedIterator + Iterator
 // {
 //     type Item = OneSidedMemoryRegion<I::ElemType>;
 //     fn next(&mut self) -> Option<Self::Item> {
-//         <Self as SerialIterator>::next(self)
+//         <Self as OneSidedIterator>::next(self)
 //     }
 // }
 
@@ -189,11 +189,11 @@ where
 
 // impl<I> Stream for CopiedChunks<I>
 // where
-//     I: SerialIterator + Stream + Unpin
+//     I: OneSidedIterator + Stream + Unpin
 // {
 //     type Item = OneSidedMemoryRegion<I::ElemType>;
 //     fn poll_next(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-//         // println!("{:?} {:?}",self.index,self.array.len()/std::mem::size_of::<<Self as SerialIterator>::ElemType>());
+//         // println!("{:?} {:?}",self.index,self.array.len()/std::mem::size_of::<<Self as OneSidedIterator>::ElemType>());
 //         println!("async getting {:?} {:?}",self.index,self.chunk_size);
 //         if self.index < self.array.len(){
 //             let size = std::cmp::min(self.chunk_size, self.array.len() - self.index);

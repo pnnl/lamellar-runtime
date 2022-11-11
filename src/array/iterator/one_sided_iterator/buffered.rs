@@ -1,8 +1,8 @@
-use crate::array::iterator::serial_iterator::*;
+use crate::array::iterator::one_sided_iterator::*;
 use crate::array::LamellarArrayRequest;
 // use crate::LamellarArray;
 // use crate::scheduler::SchedulerQueue;
-use crate::OneSidedMemoryRegion;
+use crate::memregion::OneSidedMemoryRegion;
 use std::collections::VecDeque;
 use std::ops::Deref;
 
@@ -12,7 +12,7 @@ use pin_project::pin_project;
 #[pin_project]
 pub struct Buffered<I>
 where
-    I: SerialIterator + Send,
+    I: OneSidedIterator + Send,
 {
     #[pin]
     iter: I,
@@ -31,7 +31,7 @@ where
 
 impl<I> Buffered<I>
 where
-    I: SerialIterator + Send,
+    I: OneSidedIterator + Send,
 {
     pub(crate) fn new(iter: I, buf_size: usize) -> Buffered<I> {
         // let array = iter.array().clone(); //.to_base::<u8>();
@@ -53,7 +53,7 @@ where
 
     fn initiate_buffer(&mut self) {
         let array = self.iter.array();
-        let array_bytes = array.len() * std::mem::size_of::<<Self as SerialIterator>::ElemType>();
+        let array_bytes = array.len() * std::mem::size_of::<<Self as OneSidedIterator>::ElemType>();
         let size = std::cmp::min(self.iter.item_size(), array_bytes - self.buf_index);
         if size > 0 {
             let mem_region = array.team().alloc_one_sided_mem_region(size);
@@ -70,7 +70,7 @@ where
     // fn initiate_buffer_async(self: Pin<&mut Self>) {
     //     let mut this = self.project();
     //     let array = this.iter.array();
-    //     let array_bytes = array.len() * std::mem::size_of::<<Self as SerialIterator>::ElemType>();
+    //     let array_bytes = array.len() * std::mem::size_of::<<Self as OneSidedIterator>::ElemType>();
     //     let size = std::cmp::min(this.iter.item_size(), array_bytes - *this.buf_index);
     //     if size > 0 {
     //         let mem_region = array.team().alloc_one_sided_mem_region(size);
@@ -137,15 +137,15 @@ impl<U> Deref for BufferedItem<U> {
 #[async_trait]
 // impl<I> SerialAsyncIterator for Buffered<I>
 // where
-//     I: SerialIterator + SerialAsyncIterator,
+//     I: OneSidedIterator + SerialAsyncIterator,
 // {
 //     type ElemType = <I as SerialAsyncIterator>::ElemType;
 //     type Item = BufferedItem<<I as SerialAsyncIterator>::Item>;
 //     type Array = <I as SerialAsyncIterator>::Array;
 //     async fn async_next(self: Pin<&mut Self>) -> Option<Self::Item> {
-//         // println!("{:?} {:?}",self.index,self.array.len()/std::mem::size_of::<<Self as SerialIterator>::ElemType>());
+//         // println!("{:?} {:?}",self.index,self.array.len()/std::mem::size_of::<<Self as OneSidedIterator>::ElemType>());
 //         let array = self.array();
-//         let array_bytes = array.len() * std::mem::size_of::<<Self as SerialIterator>::ElemType>();
+//         let array_bytes = array.len() * std::mem::size_of::<<Self as OneSidedIterator>::ElemType>();
 //         if self.index < array_bytes {
 //             let size = std::cmp::min(self.iter.item_size(), array_bytes - self.index);
 //             // println!("getting {:?} {:?} {:?} {:?}",self.index,size,self.iter.item_size(),self.buf_index);
@@ -164,17 +164,17 @@ impl<U> Deref for BufferedItem<U> {
 //     }
 // }
 
-impl<I> SerialIterator for Buffered<I>
+impl<I> OneSidedIterator for Buffered<I>
 where
-    I: SerialIterator + Send,
+    I: OneSidedIterator + Send,
 {
     type ElemType = I::ElemType;
     type Item = BufferedItem<I::Item>;
     type Array = I::Array;
     fn next(&mut self) -> Option<Self::Item> {
-        // println!("{:?} {:?}",self.index,self.array.len()/std::mem::size_of::<<Self as SerialIterator>::ElemType>());
+        // println!("{:?} {:?}",self.index,self.array.len()/std::mem::size_of::<<Self as OneSidedIterator>::ElemType>());
         let array = self.array();
-        let array_bytes = array.len() * std::mem::size_of::<<Self as SerialIterator>::ElemType>();
+        let array_bytes = array.len() * std::mem::size_of::<<Self as OneSidedIterator>::ElemType>();
         if self.index < array_bytes {
             let size = std::cmp::min(self.iter.item_size(), array_bytes - self.index);
             // println!("getting {:?} {:?} {:?} {:?}",self.index,size,self.iter.item_size(),self.buf_index);
@@ -193,10 +193,10 @@ where
     }
     // async fn async_next(mut self: Pin<&mut Self>) -> Option<Self::Item> {
     //     // println!("async_next buffered");
-    //     // println!("{:?} {:?}",self.index,self.array.len()/std::mem::size_of::<<Self as SerialIterator>::ElemType>());
+    //     // println!("{:?} {:?}",self.index,self.array.len()/std::mem::size_of::<<Self as OneSidedIterator>::ElemType>());
     //     // let this = self.as_mut().project();
     //     let array = self.iter.array();
-    //     let array_bytes = array.len() * std::mem::size_of::<<Self as SerialIterator>::ElemType>();
+    //     let array_bytes = array.len() * std::mem::size_of::<<Self as OneSidedIterator>::ElemType>();
     //     if self.index < array_bytes {
     //         let size = std::cmp::min(self.iter.item_size(), array_bytes - self.index);
     //         // println!("getting {:?} {:?} {:?} {:?}",self.index,size,self.iter.item_size(),self.buf_index);
@@ -257,11 +257,11 @@ where
 
 // impl<I> Iterator for Buffered<I>
 // where
-//     I: SerialIterator + Iterator
+//     I: OneSidedIterator + Iterator
 // {
 //     type Item = OneSidedMemoryRegion<I::ElemType>;
 //     fn next(&mut self) -> Option<Self::Item> {
-//         <Self as SerialIterator>::next(self)
+//         <Self as OneSidedIterator>::next(self)
 //     }
 // }
 
@@ -271,11 +271,11 @@ where
 
 // impl<I> Stream for Buffered<I>
 // where
-//     I: SerialIterator + Stream + Unpin
+//     I: OneSidedIterator + Stream + Unpin
 // {
 //     type Item = OneSidedMemoryRegion<I::ElemType>;
 //     fn poll_next(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-//         // println!("{:?} {:?}",self.index,self.array.len()/std::mem::size_of::<<Self as SerialIterator>::ElemType>());
+//         // println!("{:?} {:?}",self.index,self.array.len()/std::mem::size_of::<<Self as OneSidedIterator>::ElemType>());
 //         println!("async getting {:?} {:?}",self.index,self.chunk_size);
 //         if self.index < self.array.len(){
 //             let size = std::cmp::min(self.chunk_size, self.array.len() - self.index);

@@ -1,6 +1,6 @@
-use crate::array::iterator::serial_iterator::*;
+use crate::array::iterator::one_sided_iterator::*;
 use crate::array::LamellarArrayRequest;
-use crate::OneSidedMemoryRegion;
+use crate::memregion::OneSidedMemoryRegion;
 
 use async_trait::async_trait;
 // use futures::join;
@@ -37,8 +37,8 @@ pub struct Zip<A, B> {
 
 impl<A, B> Zip<A, B>
 where
-    A: SerialIterator + Send,
-    B: SerialIterator + Send,
+    A: OneSidedIterator + Send,
+    B: OneSidedIterator + Send,
 {
     pub(crate) fn new(a: A, b: B) -> Self {
         Zip { a, b }
@@ -48,8 +48,8 @@ where
 #[async_trait]
 // impl<A, B> SerialAsyncIterator for Zip<A, B>
 // where
-//     A: SerialIterator + SerialAsyncIterator,
-//     B: SerialIterator + SerialAsyncIterator,
+//     A: OneSidedIterator + SerialAsyncIterator,
+//     B: OneSidedIterator + SerialAsyncIterator,
 // {
 //     type ElemType = <A as SerialAsyncIterator>::ElemType;
 //     type Item = (
@@ -63,13 +63,13 @@ where
 //         Some((a, b))
 //     }
 // }
-impl<A, B> SerialIterator for Zip<A, B>
+impl<A, B> OneSidedIterator for Zip<A, B>
 where
-    A: SerialIterator + Send,
-    B: SerialIterator + Send,
+    A: OneSidedIterator + Send,
+    B: OneSidedIterator + Send,
 {
     type ElemType = A::ElemType;
-    type Item = (<A as SerialIterator>::Item, <B as SerialIterator>::Item);
+    type Item = (<A as OneSidedIterator>::Item, <B as OneSidedIterator>::Item);
     type Array = A::Array;
     fn next(&mut self) -> Option<Self::Item> {
         let a = self.a.next()?;
@@ -143,17 +143,17 @@ where
 // impl<A, B>  Iterator
 // for Zip<A, B>
 // where
-//     I: SerialIterator+Iterator,
+//     I: OneSidedIterator+Iterator,
 // {
-//     type Item = <I as SerialIterator>::Item;
+//     type Item = <I as OneSidedIterator>::Item;
 //     fn next(&mut self) -> Option<Self::Item> {
-//         <Self as SerialIterator>::next(self)
+//         <Self as OneSidedIterator>::next(self)
 //     }
 // }
 
 // impl<A, B> Stream for Zip<A, B>
 // where
-//     I: SerialIterator + Stream + Unpin
+//     I: OneSidedIterator + Stream + Unpin
 // {
 //     type Item = <I as Stream>::Item;
 //     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {

@@ -1,6 +1,6 @@
-use crate::array::iterator::serial_iterator::*;
+use crate::array::iterator::one_sided_iterator::*;
 use crate::array::LamellarArrayRequest;
-use crate::OneSidedMemoryRegion;
+use crate::memregion::OneSidedMemoryRegion;
 
 use async_trait::async_trait;
 use pin_project::pin_project;
@@ -14,7 +14,7 @@ pub struct StepBy<I> {
 
 impl<I> StepBy<I>
 where
-    I: SerialIterator + Send,
+    I: OneSidedIterator + Send,
 {
     pub(crate) fn new(iter: I, step_size: usize) -> Self {
         StepBy { iter, step_size }
@@ -24,7 +24,7 @@ where
 #[async_trait]
 // impl<I> SerialAsyncIterator for StepBy<I>
 // where
-//     I: SerialIterator + SerialAsyncIterator,
+//     I: OneSidedIterator + SerialAsyncIterator,
 // {
 //     type ElemType = <I as SerialAsyncIterator>::ElemType;
 //     type Item = <I as SerialAsyncIterator>::Item;
@@ -35,12 +35,12 @@ where
 //         Some(res)
 //     }
 // }
-impl<I> SerialIterator for StepBy<I>
+impl<I> OneSidedIterator for StepBy<I>
 where
-    I: SerialIterator + Send,
+    I: OneSidedIterator + Send,
 {
     type ElemType = I::ElemType;
-    type Item = <I as SerialIterator>::Item;
+    type Item = <I as OneSidedIterator>::Item;
     type Array = I::Array;
     fn next(&mut self) -> Option<Self::Item> {
         let res = self.iter.next()?;
@@ -97,17 +97,17 @@ where
 
 // impl<I> Iterator for StepBy<I>
 // where
-//     I: SerialIterator + Iterator,
+//     I: OneSidedIterator + Iterator,
 // {
-//     type Item = <I as SerialIterator>::Item;
+//     type Item = <I as OneSidedIterator>::Item;
 //     fn next(&mut self) -> Option<Self::Item> {
-//         <Self as SerialIterator>::next(self)
+//         <Self as OneSidedIterator>::next(self)
 //     }
 // }
 
 // impl<I> Stream for StepBy<I>
 // where
-//     I: SerialIterator + Stream + Unpin
+//     I: OneSidedIterator + Stream + Unpin
 // {
 //     type Item = <I as Stream>::Item;
 //     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {

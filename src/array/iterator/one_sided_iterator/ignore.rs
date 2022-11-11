@@ -1,6 +1,6 @@
-use crate::array::iterator::serial_iterator::*;
+use crate::array::iterator::one_sided_iterator::*;
 use crate::array::LamellarArrayRequest;
-use crate::OneSidedMemoryRegion;
+use crate::memregion::OneSidedMemoryRegion;
 
 use async_trait::async_trait;
 use pin_project::pin_project;
@@ -13,7 +13,7 @@ pub struct Ignore<I> {
 
 impl<I> Ignore<I>
 where
-    I: SerialIterator + Send,
+    I: OneSidedIterator + Send,
 {
     pub(crate) fn new(mut iter: I, count: usize) -> Self {
         iter.advance_index(count);
@@ -24,7 +24,7 @@ where
 #[async_trait]
 // impl<I> SerialAsyncIterator for Ignore<I>
 // where
-//     I: SerialIterator + SerialAsyncIterator,
+//     I: OneSidedIterator + SerialAsyncIterator,
 // {
 //     type ElemType = <I as SerialAsyncIterator>::ElemType;
 //     type Item = <I as SerialAsyncIterator>::Item;
@@ -33,12 +33,12 @@ where
 //         self.iter.async_next().await
 //     }
 // }
-impl<I> SerialIterator for Ignore<I>
+impl<I> OneSidedIterator for Ignore<I>
 where
-    I: SerialIterator + Send,
+    I: OneSidedIterator + Send,
 {
     type ElemType = I::ElemType;
-    type Item = <I as SerialIterator>::Item;
+    type Item = <I as OneSidedIterator>::Item;
     type Array = I::Array;
     fn next(&mut self) -> Option<Self::Item> {
         self.iter.next()
@@ -81,17 +81,17 @@ where
 // impl<I>  Iterator
 // for Ignore<I>
 // where
-//     I: SerialIterator+Iterator,
+//     I: OneSidedIterator+Iterator,
 // {
-//     type Item = <I as SerialIterator>::Item;
+//     type Item = <I as OneSidedIterator>::Item;
 //     fn next(&mut self) -> Option<Self::Item> {
-//         <Self as SerialIterator>::next(self)
+//         <Self as OneSidedIterator>::next(self)
 //     }
 // }
 
 // impl<I> Stream for Ignore<I>
 // where
-//     I: SerialIterator + Stream + Unpin
+//     I: OneSidedIterator + Stream + Unpin
 // {
 //     type Item = <I as Stream>::Item;
 //     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {

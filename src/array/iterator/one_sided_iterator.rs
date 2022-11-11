@@ -14,12 +14,10 @@ use zip::*;
 mod buffered;
 use buffered::*;
 
-use crate::array::LamellarArrayInternalGet;
-use crate::array::LamellarArrayRequest;
-use crate::memregion::Dist;
-use crate::LamellarArray;
+use crate::array::{LamellarArray, LamellarArrayRequest, LamellarArrayInternalGet};
+use crate::memregion::{Dist,OneSidedMemoryRegion};
+
 use crate::LamellarTeamRT;
-use crate::OneSidedMemoryRegion;
 
 use async_trait::async_trait;
 // use futures::{ready, Stream};
@@ -38,7 +36,7 @@ use std::sync::Arc;
 //     type Array: LamellarArrayInternalGet<Self::ElemType>;
 //     async fn async_next(self: Pin<&mut Self>) -> Option<Self::Item>;
 // }
-pub trait SerialIterator {
+pub trait OneSidedIterator {
     type Item: Send;
     type ElemType: Dist + 'static;
     type Array: LamellarArrayInternalGet<Self::ElemType> + Send;
@@ -79,7 +77,7 @@ pub trait SerialIterator {
     fn zip<I>(self, iter: I) -> Zip<Self, I>
     where
         Self: Sized + Send,
-        I: SerialIterator + Sized + Send,
+        I: OneSidedIterator + Sized + Send,
     {
         Zip::new(self, iter)
     }
@@ -89,44 +87,44 @@ pub trait SerialIterator {
     {
         Buffered::new(self, buf_size)
     }
-    fn into_iter(self) -> SerialIteratorIter<Self>
+    fn into_iter(self) -> OneSidedIteratorIter<Self>
     where
         Self: Sized + Send,
     {
-        SerialIteratorIter { iter: self }
+        OneSidedIteratorIter { iter: self }
     }
-    // fn into_stream(self) -> SerialIteratorAsyncIter<Self>
+    // fn into_stream(self) -> OneSidedIteratorAsyncIter<Self>
     // where
     //     Self: Sized + Send,
     // {
-    //     SerialIteratorAsyncIter { iter: self }
+    //     OneSidedIteratorAsyncIter { iter: self }
     // }
 }
 
-pub struct SerialIteratorIter<I> {
+pub struct OneSidedIteratorIter<I> {
     pub(crate) iter: I,
 }
-impl<I> Iterator for SerialIteratorIter<I>
+impl<I> Iterator for OneSidedIteratorIter<I>
 where
-    I: SerialIterator,
+    I: OneSidedIterator,
 {
-    type Item = <I as SerialIterator>::Item;
+    type Item = <I as OneSidedIterator>::Item;
     fn next(&mut self) -> Option<Self::Item> {
         self.iter.next()
     }
 }
 
 // #[pin_project]
-// pub struct SerialIteratorAsyncIter<I> {
+// pub struct OneSidedIteratorAsyncIter<I> {
 //     #[pin]
 //     pub(crate) iter: I,
 // }
 
-// impl<I> Stream for SerialIteratorAsyncIter<I>
+// impl<I> Stream for OneSidedIteratorAsyncIter<I>
 // where
-//     I: SerialIterator + Send,
+//     I: OneSidedIterator + Send,
 // {
-//     type Item = <I as SerialIterator>::Item;
+//     type Item = <I as OneSidedIterator>::Item;
 //     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
 //         let this = self.project();
 //         let res = ready!(this.iter.async_next().poll(cx));
@@ -218,7 +216,7 @@ impl<'a, T: Dist + 'static, A: LamellarArrayInternalGet<T>> LamellarArrayIter<'a
 }
 
 #[async_trait]
-impl<'a, T: Dist + 'static, A: LamellarArrayInternalGet<T> + Clone + Send> SerialIterator
+impl<'a, T: Dist + 'static, A: LamellarArrayInternalGet<T> + Clone + Send> OneSidedIterator
     for LamellarArrayIter<'a, T, A>
 {
     type ElemType = T;
@@ -256,7 +254,7 @@ impl<'a, T: Dist + 'static, A: LamellarArrayInternalGet<T> + Clone + Send> Seria
     }
     // async fn async_next(mut self: Pin<&mut Self>) -> Option<Self::Item> {
     //     let this = self.project();
-    //     // println!("async_next serial_iterator");
+    //     // println!("async_next one_sided_iterator");
     //     // println!("nexat {:?} {:?} {:?} {:?}",self.index,self.array.len(),self.buf_index,self.buf_0.len());
     //     let array = this.array.clone();
     //     let res = if *this.index < array.len() {
@@ -352,7 +350,7 @@ impl<'a, T: Dist + 'static, A: LamellarArrayInternalGet<T> + Clone + Send> Seria
 // {
 //     type Item = &'a T;
 //     fn next(&mut self) -> Option<Self::Item> {
-//         <Self as SerialIterator>::next(self)
+//         <Self as OneSidedIterator>::next(self)
 //     }
 // }
 
