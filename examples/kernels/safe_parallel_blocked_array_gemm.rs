@@ -100,7 +100,7 @@ fn main() {
             // for (j, col) in b
             let b_block: Vec<f32> = b
                 .onesided_iter() // OneSidedIterator (each pe will iterate through entirety of b)
-                .copied_chunks(blocksize) //chunks columns by blocksize  -- manages efficent transfer and placement of data into a local memory region
+                .chunks(blocksize) //chunks columns by blocksize  -- manages efficent transfer and placement of data into a local memory region
                 .skip(*k_blk * n_blks * blocksize + j_blk) // skip previously transfered submatrices
                 .step_by(n_blks) //grab chunk from next column in submatrix
                 .into_iter() // convert to normal rust iterator

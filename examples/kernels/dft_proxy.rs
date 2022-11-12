@@ -237,8 +237,8 @@ fn dft_lamellar_array_opt(
     let sig_len = signal.len();
     signal
         .onesided_iter()
-        .copied_chunks(buf_size)
-        .buffered(2)
+        .chunks(buf_size)
+        // .buffered(2)
         .into_iter()
         .enumerate()
         .for_each(|(i, chunk)| {
@@ -278,8 +278,8 @@ fn dft_lamellar_array_opt_test(
     let sig_len = signal.len();
     signal
         .onesided_iter()
-        .copied_chunks(buf_size)
-        .buffered(2)
+        .chunks(buf_size)
+        // .buffered(2)
         .into_iter()
         .enumerate()
         .for_each(|(i, chunk)| {
@@ -320,8 +320,8 @@ fn dft_lamellar_array_opt_2(
     let sig_len = signal.len();
     signal
         .onesided_iter()
-        .copied_chunks(buf_size)
-        .buffered(2)
+        .chunks(buf_size)
+        // .buffered(2)
         .into_iter()
         .enumerate()
         .for_each(|(i, chunk)| {
@@ -361,8 +361,8 @@ fn dft_lamellar_array_opt_3(
     let sig_len = signal.len();
     signal
         .onesided_iter()
-        .copied_chunks(buf_size)
-        .buffered(2)
+        .chunks(buf_size)
+        // .buffered(2)
         .into_iter()
         .enumerate()
         .for_each(|(i, chunk)| {

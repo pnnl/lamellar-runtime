@@ -19,7 +19,6 @@ where
     index: usize,
     buf_index: usize,
     buf_size: usize,
-    // buf: OneSidedMemoryRegion<u8>,
     reqs: VecDeque<
         Option<(
             usize,
@@ -64,30 +63,7 @@ where
                 self.reqs.push_back(None);
             }
         }
-        // }
     }
-
-    // fn initiate_buffer_async(self: Pin<&mut Self>) {
-    //     let mut this = self.project();
-    //     let array = this.iter.array();
-    //     let array_bytes = array.len() * std::mem::size_of::<<Self as OneSidedIterator>::ElemType>();
-    //     let size = std::cmp::min(this.iter.item_size(), array_bytes - *this.buf_index);
-    //     if size > 0 {
-    //         let mem_region = array.team().alloc_one_sided_mem_region(size);
-    //         if let Some(req) = array
-    //             .team()
-    //             .scheduler
-    //             .block_on(this.iter.as_mut().async_buffered_next(mem_region.clone()))
-    //         {
-    //             this.reqs
-    //                 .push_back(Some((*this.buf_index, req, mem_region)));
-    //             *this.buf_index += size;
-    //         } else {
-    //             this.reqs.push_back(None);
-    //         }
-    //     }
-    //     // }
-    // }
 
     fn wait_on_buffer(&mut self, size: usize) -> Option<OneSidedMemoryRegion<u8>> {
         let (index, req, mem_region) =
@@ -101,25 +77,6 @@ where
         req.wait();
         Some(mem_region)
     }
-
-    // fn wait_on_buffer_async(
-    //     self: Pin<&mut Self>,
-    //     size: usize,
-    // ) -> Option<Pin<Box<dyn Future<Output = OneSidedMemoryRegion<u8>> + Send>>> {
-    //     let this = self.project();
-    //     let (index, req, mem_region) =
-    //         if let Some((index, req, mem_region)) = this.reqs.pop_front().unwrap() {
-    //             (index, req.into_future(), mem_region)
-    //         } else {
-    //             return None;
-    //         };
-    //     assert_eq!(mem_region.len(), size);
-    //     assert_eq!(index, *this.index);
-    //     Some(Box::pin(async {
-    //         req.await;
-    //         mem_region
-    //     }))
-    // }
 }
 
 pub struct BufferedItem<U> {
@@ -134,35 +91,7 @@ impl<U> Deref for BufferedItem<U> {
     }
 }
 
-#[async_trait]
-// impl<I> SerialAsyncIterator for Buffered<I>
-// where
-//     I: OneSidedIterator + SerialAsyncIterator,
-// {
-//     type ElemType = <I as SerialAsyncIterator>::ElemType;
-//     type Item = BufferedItem<<I as SerialAsyncIterator>::Item>;
-//     type Array = <I as SerialAsyncIterator>::Array;
-//     async fn async_next(self: Pin<&mut Self>) -> Option<Self::Item> {
-//         // println!("{:?} {:?}",self.index,self.array.len()/std::mem::size_of::<<Self as OneSidedIterator>::ElemType>());
-//         let array = self.array();
-//         let array_bytes = array.len() * std::mem::size_of::<<Self as OneSidedIterator>::ElemType>();
-//         if self.index < array_bytes {
-//             let size = std::cmp::min(self.iter.item_size(), array_bytes - self.index);
-//             // println!("getting {:?} {:?} {:?} {:?}",self.index,size,self.iter.item_size(),self.buf_index);
-//             let mem_region = self.wait_on_buffer_async(size).await?;
-//             self.index += size;
-//             //if self.index % self.buf_index == 0 {
-//             self.initiate_buffer();
-//             //}
-//             Some(BufferedItem {
-//                 item: self.iter.from_mem_region(mem_region.clone())?,
-//                 _mem_region: mem_region,
-//             })
-//         } else {
-//             None
-//         }
-//     }
-// }
+
 
 impl<I> OneSidedIterator for Buffered<I>
 where
@@ -191,41 +120,10 @@ where
             None
         }
     }
-    // async fn async_next(mut self: Pin<&mut Self>) -> Option<Self::Item> {
-    //     // println!("async_next buffered");
-    //     // println!("{:?} {:?}",self.index,self.array.len()/std::mem::size_of::<<Self as OneSidedIterator>::ElemType>());
-    //     // let this = self.as_mut().project();
-    //     let array = self.iter.array();
-    //     let array_bytes = array.len() * std::mem::size_of::<<Self as OneSidedIterator>::ElemType>();
-    //     if self.index < array_bytes {
-    //         let size = std::cmp::min(self.iter.item_size(), array_bytes - self.index);
-    //         // println!("getting {:?} {:?} {:?} {:?}",self.index,size,self.iter.item_size(),self.buf_index);
-    //         let mem_region = self.as_mut().wait_on_buffer_async(size)?;
-    //         let this = self.as_mut().project();
-    //         *this.index += size;
-    //         //if self.index % self.buf_index == 0 {
-    //         self.as_mut().initiate_buffer_async();
-
-    //         let mem_region = mem_region.await;
-    //         Some(BufferedItem {
-    //             item: self.project().iter.from_mem_region(mem_region.clone())?,
-    //             _mem_region: mem_region,
-    //         })
-    //     } else {
-    //         None
-    //     }
-    // }
     fn advance_index(&mut self, count: usize) {
         // println!("advance_index {:?} {:?} {:?} {:?}",self.index, count, count*self.chunk_size,self.array.len());
         self.iter.advance_index(count);
-        // if self.index < self.array.len(){
-        //     let size = std::cmp::min(self.chunk_size, self.array.len() - self.index);
-        //     self.fill_buffer(0, &self.mem_region.sub_region(..size));
-        // }
     }
-    // async fn async_advance_index(mut self: Pin<&mut Self>, count: usize) {
-    //     self.project().iter.async_advance_index(count).await
-    // }
     fn array(&self) -> Self::Array {
         self.iter.array()
     }
@@ -240,12 +138,6 @@ where
         self.iter.buffered_next(mem_region)
     }
 
-    // async fn async_buffered_next(
-    //     mut self: Pin<&mut Self>,
-    //     mem_region: OneSidedMemoryRegion<u8>,
-    // ) -> Option<Box<dyn LamellarArrayRequest<Output = ()>>> {
-    //     self.project().iter.async_buffered_next(mem_region).await
-    // }
     //im not actually sure what to do if another buffered iter is called after this one
     fn from_mem_region(&self, mem_region: OneSidedMemoryRegion<u8>) -> Option<Self::Item> {
         Some(BufferedItem {

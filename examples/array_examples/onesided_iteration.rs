@@ -60,20 +60,20 @@ fn main() {
     println!("--------------------------------------------------------");
 
     // in addition to the buffered iters we also provide a method to iterate over chunks of a lamellar array, via
-    // the copied_chunks() method. Called on a LamellarArrayIterator this creates a chunk sized OneSidedMemoryRegion,
+    // the chunks() method. Called on a OneSidedIterator this creates a chunk sized OneSidedMemoryRegion,
     // and then puts the appropriate date based on the iteration index into that region
 
     if my_pe == 0 {
         for chunk in block_array
             .onesided_iter()
-            .copied_chunks(10)
+            .chunks(10)
             .skip(4)
             .into_iter()
         {
             println!("{:?}", unsafe { chunk.as_slice() });
         }
         println!("-----");
-        for chunk in cyclic_array.onesided_iter().copied_chunks(10).into_iter() {
+        for chunk in cyclic_array.onesided_iter().chunks(10).into_iter() {
             println!("{:?}", unsafe { chunk.as_slice() });
         }
 
@@ -89,8 +89,8 @@ fn main() {
         println!("-----");
         for (a, b) in cyclic_array
             .onesided_iter()
-            .copied_chunks(10)
-            .zip(block_array.onesided_iter().copied_chunks(10))
+            .chunks(10)
+            .zip(block_array.onesided_iter().chunks(10))
             .into_iter()
         {
             unsafe {

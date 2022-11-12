@@ -474,13 +474,13 @@ pub trait LamellarArray<T: Dist>: private::LamellarArrayPrivate<T> {
     // /// Returns an iterator for the LamellarArray, all iteration occurs on the PE
     // /// where this was called, data that is not local to the PE is automatically
     // /// copied and transferred
-    // pub fn onesided_iter(&self) -> LamellarArrayIter<'_, T> ;
+    // pub fn onesided_iter(&self) -> OneSidedIter<'_, T> ;
 
     // /// Returns an iterator for the LamellarArray, all iteration occurs on the PE
     // /// where this was called, data that is not local to the PE is automatically
     // /// copied and transferred, array data is buffered to more efficiently make
     // /// use of network buffers
-    // pub fn buffered_onesided_iter(&self, buf_size: usize) -> LamellarArrayIter<'_, T> ;
+    // pub fn buffered_onesided_iter(&self, buf_size: usize) -> OneSidedIter<'_, T> ;
 }
 
 

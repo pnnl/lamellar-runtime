@@ -1,7 +1,7 @@
 //! Parallel iteration of a PE's local segment of a LamellarArray
 //!
 //! This module provides parallel iteration capabilities for the local segments of LamellarArrays,
-//! similar to the `ParallelIterators` provided by the [Rayon][https://docs.rs/rayon/latest/rayon/] crate.
+//! similar to the `ParallelIterators` provided by the [Rayon]<https://docs.rs/rayon/latest/rayon/> crate.
 //! 
 //! These iterators are purely local to the calling PE, no data transfer occurs.
 mod chunks;
@@ -759,7 +759,7 @@ pub trait IndexedLocalIterator: LocalIterator + SyncSend + Clone + 'static {
     /// array_B.dist_iter_mut().enumerate().for_each(|(i,elem)| *elem = i);
     /// array_B.wait_all();
     ///
-    /// array_A.local_iter().zip(array_B).for_each(|elem_A,elem_B| println!("PE: {my_pe} A: {elem_A} B: {elem_B}"));
+    /// array_A.local_iter().zip(array_B.local_iter()).for_each(|elem_A,elem_B| println!("PE: {my_pe} A: {elem_A} B: {elem_B}"));
     /// array_A.wait_all();
     ///```
     /// Possible output on a 4 PE (1 thread/PE) execution (ordering is likey to be random with respect to PEs)

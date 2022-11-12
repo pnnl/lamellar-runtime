@@ -1,6 +1,6 @@
 use crate::array::iterator::distributed_iterator::*;
 use crate::array::iterator::local_iterator::*;
-use crate::array::iterator::one_sided_iterator::LamellarArrayIter;
+use crate::array::iterator::one_sided_iterator::OneSidedIter;
 use crate::array::iterator::Schedule;
 use crate::array::private::LamellarArrayPrivate;
 use crate::array::*;
@@ -165,12 +165,12 @@ impl<T: Dist> ReadOnlyArray<T> {
         LocalIter::new(self.clone().into(), 0, 0)
     }
 
-    pub fn onesided_iter(&self) -> LamellarArrayIter<'_, T, ReadOnlyArray<T>> {
-        LamellarArrayIter::new(self.clone().into(), self.array.team().clone(), 1)
+    pub fn onesided_iter(&self) -> OneSidedIter<'_, T, ReadOnlyArray<T>> {
+        OneSidedIter::new(self.clone().into(), self.array.team().clone(), 1)
     }
 
-    pub fn buffered_onesided_iter(&self, buf_size: usize) -> LamellarArrayIter<'_, T, ReadOnlyArray<T>> {
-        LamellarArrayIter::new(
+    pub fn buffered_onesided_iter(&self, buf_size: usize) -> OneSidedIter<'_, T, ReadOnlyArray<T>> {
+        OneSidedIter::new(
             self.clone().into(),
             self.array.team().clone(),
             std::cmp::min(buf_size, self.len()),
@@ -566,7 +566,7 @@ impl<T: ElementOps + 'static> ReadOnlyOps<T> for ReadOnlyArray<T> {}
 //     for &'a ReadOnlyArray<T>
 // {
 //     type Item = &'a T;
-//     type IntoIter = OneSidedIteratorIter<LamellarArrayIter<'a, T>>;
+//     type IntoIter = OneSidedIteratorIter<OneSidedIter<'a, T>>;
 //     fn into_iter(self) -> Self::IntoIter {
 //         OneSidedIteratorIter {
 //             iter: self.onesided_iter(),

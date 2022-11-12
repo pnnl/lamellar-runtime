@@ -1,8 +1,14 @@
-mod copied_chunks;
-use copied_chunks::*;
+//! One-sided iteration of a LamellarArray on a single PE
+//!
+//! This module provides serial iteration of an entire LamellarArray on the calling PE.
+//! The resulting OneSidedIterator can be converted in to standard Iterator, to allow
+//! using all the functionality and capabilities those provide.
+//!
+//! These iterators will automatically transfer data in from Remote PEs as needed
+mod chunks;
+use chunks::*;
 
 mod skip;
-// use futures_lite::FutureExt;
 use skip::*;
 
 mod step_by;
@@ -11,15 +17,16 @@ use step_by::*;
 mod zip;
 use zip::*;
 
-mod buffered;
-use buffered::*;
+//TODO: further test the buffered iter
+// mod buffered;
+// use buffered::*;
 
-use crate::array::{LamellarArray, LamellarArrayRequest, LamellarArrayInternalGet};
+use crate::array::{LamellarArray, LamellarArrayInternalGet};
 use crate::memregion::{Dist,OneSidedMemoryRegion};
 
 use crate::LamellarTeamRT;
 
-use async_trait::async_trait;
+// use async_trait::async_trait;
 // use futures::{ready, Stream};
 use pin_project::pin_project;
 use std::marker::PhantomData;
@@ -28,52 +35,179 @@ use std::ptr::NonNull;
 use std::sync::Arc;
 // use std::task::{Context, Poll};
 
-//todo: make an into_stream function
-#[async_trait]
-// pub trait SerialAsyncIterator {
-//     type Item;
-//     type ElemType: Dist + 'static;
-//     type Array: LamellarArrayInternalGet<Self::ElemType>;
-//     async fn async_next(self: Pin<&mut Self>) -> Option<Self::Item>;
-// }
-pub trait OneSidedIterator {
-    type Item: Send;
-    type ElemType: Dist + 'static;
-    type Array: LamellarArrayInternalGet<Self::ElemType> + Send;
-    fn next(&mut self) -> Option<Self::Item>;
-    // async fn async_next(mut self: Pin<&mut Self>) -> Option<Self::Item>;
-    fn advance_index(&mut self, count: usize);
-    // async fn async_advance_index(mut self: Pin<&mut Self>, count: usize);
-    fn array(&self) -> Self::Array;
-    fn item_size(&self) -> usize;
-    fn buffered_next(
-        &mut self,
-        mem_region: OneSidedMemoryRegion<u8>,
-    ) -> Option<Box<dyn LamellarArrayRequest<Output = ()>>>;
-    // async fn async_buffered_next(
-    //     mut self: Pin<&mut Self>,
-    //     mem_region: OneSidedMemoryRegion<u8>,
-    // ) -> Option<Box<dyn LamellarArrayRequest<Output = ()>>>;
 
-    fn from_mem_region(&self, mem_region: OneSidedMemoryRegion<u8>) -> Option<Self::Item>;
-    fn copied_chunks(self, chunk_size: usize) -> CopiedChunks<Self>
+/// An interface for dealing with one sided iterators of LamellarArrays
+///
+/// The functions in this trait are available on all one-sided iterators, typically
+/// the provided iterator functions are optimized versions of the standard Iterator equivalents to reduce data movement assoicated with handling distributed arrays
+///
+/// Additonaly functionality can be found by converting these iterators into Standard Iterators (with potential loss in data movement optimizations)
+pub trait OneSidedIterator {
+    /// The type of item this distributed iterator produces
+    type Item: Send;
+
+    /// The underlying element type of the Array this iterator belongs to
+    type ElemType: Dist + 'static;
+
+    /// The orgininal array that created this iterator
+    type Array: LamellarArrayInternalGet<Self::ElemType> + Send;
+
+    /// Return the next element in the iterator, otherwise return None
+    fn next(&mut self) -> Option<Self::Item>;
+
+    /// advance the internal iterator localtion by count elements
+    fn advance_index(&mut self, count: usize);
+
+    /// Return the original array this distributed iterator belongs too
+    fn array(&self) -> Self::Array;
+
+    /// The size of the returned Item
+    fn item_size(&self) -> usize {
+        std::mem::size_of::<Self::Item>()
+    }
+
+
+
+    // /// Buffer (fetch/get) the next element in the array into the provided memory region (transferring data from a remote PE if necessary)
+    // fn buffered_next(
+    //     &mut self,
+    //     mem_region: OneSidedMemoryRegion<u8>,
+    // ) -> Option<Pin<Box<Future<()>>>>;
+
+    // /// return the first `Self::Item` from a `u8` buffer
+    // fn from_mem_region(&self, mem_region: OneSidedMemoryRegion<u8>) -> Option<Self::Item>;
+
+    /// Split an iterator into fixed-sized chunks
+    ///
+    /// Returns an iterator that returns OneSidedMemoryRegions of the chunked array.
+    /// If the number of elements is not evenly divisible by `size`, the last chunk may be shorter than `size`
+    /// # Example
+    ///```
+    /// use lamellar::array::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder.build();
+    /// let array = LocalLockAtomicArray::new::<usize>(&world,24,Distribution::Block);
+    /// let my_pe = world.my_pe();
+    /// array.dist_iter_mut().for_each(|e| *e = world.my_pe()); //initialize array using a distributed iterator
+    /// array.wait_all();
+    /// if my_pe == 0 {
+    ///     for chunk in array.onesided_iter().chunks(5).into_iter() { //convert into a standard Iterator
+    ///         // SAFETY: chunk is safe in this instance because this will be the only handle to the memory region, 
+    ///         // and the runtime has verified that data is already placed in it
+    ///         println!("PE: {my_pe} chunk: {:?}",unsafe {chunk.as_slice()}); 
+    ///     }
+    /// }
+    /// ```
+    /// Output on a 4 PE execution 
+    ///```
+    /// PE: 0 chunk: [0, 0, 0, 0, 0]
+    /// PE: 0 chunk: [0, 1, 1, 1, 1]
+    /// PE: 0 chunk: [1, 1, 2, 2, 2]
+    /// PE: 0 chunk: [2, 2, 2, 3, 3]
+    /// PE: 0 chunk: [3, 3, 3, 3]
+    ///```
+    fn chunks(self, chunk_size: usize) -> Chunks<Self>
     where
         Self: Sized + Send,
     {
-        CopiedChunks::new(self, chunk_size)
+        Chunks::new(self, chunk_size)
     }
+
+    /// An iterator that skips the first `n` elements
+    ///
+    /// # Example
+    ///```
+    /// use lamellar::array::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder.build();
+    /// let array = LocalLockAtomicArray::new::<usize>(&world,8,Distribution::Block);
+    /// let my_pe = world.my_pe();
+    /// array.dist_iter_mut().for_each(|e| *e = world.my_pe()); //initialize array using a distributed iterator
+    /// array.wait_all();
+    /// if my_pe == 0 {
+    ///     for elem in array.onesided_iter().skip(3).into_iter() {  //convert into a standard Iterator
+    ///         println!("PE: {my_pe} elem: {elem}");
+    ///     }
+    /// }
+    /// ```
+    /// Output on a 4 PE execution 
+    ///```
+    /// PE: 0 elem: 1
+    /// PE: 0 elem: 2
+    /// PE: 0 elem: 2
+    /// PE: 0 elem: 3
+    /// PE: 0 elem: 3
+    ///```
     fn skip(self, count: usize) -> Skip<Self>
     where
         Self: Sized + Send,
     {
         Skip::new(self, count)
     }
+
+    /// An iterator that steps by `step_size` elements
+    ///
+    /// # Example
+    ///```
+    /// use lamellar::array::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder.build();
+    /// let array = LocalLockAtomicArray::new::<usize>(&world,8,Distribution::Block);
+    /// let my_pe = world.my_pe();
+    /// array.dist_iter_mut().for_each(|e| *e = world.my_pe()); //initialize array using a distributed iterator
+    /// array.wait_all();
+    /// if my_pe == 0 {
+    ///     for elem in array.onesided_iter().step_by(3).into_iter() { //convert into a standard Iterator
+    ///         println!("PE: {my_pe} elem: {elem}");
+    ///     }
+    /// }
+    ///```
+    /// Output on a 4 PE execution 
+    ///```
+    /// PE: 0 elem: 0
+    /// PE: 0 elem: 2
+    /// PE: 0 elem: 3
+    ///```
     fn step_by(self, step_size: usize) -> StepBy<Self>
     where
         Self: Sized + Send,
     {
         StepBy::new(self, step_size)
     }
+
+    /// Iterates over tuples `(A,B)` where the `A` items are from this iterator and the `B` items are from the iter in the argument.
+    /// If the two iterators or of unequal length, the returned iterator will be equal in length to the shorter of the two.
+    ///
+    /// # Example
+    ///```
+    /// use lamellar::array::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder.build();
+    /// let array_A = LocalLockAtomicArray::new::<usize>(&world,8,Distribution::Block);
+    /// let array_B: LocalLockAtomicArray<usize> = LocalLockAtomicArray::new(&world,12,Distribution::Block);
+    /// let my_pe = world.my_pe();
+    /// //initialize arrays using a distributed iterator
+    /// array_A.dist_iter_mut().for_each(|e| *e = world.my_pe()); 
+    /// array_B.dist_iter_mut().enumerate().for_each(|(i,elem)| *elem = i);
+    /// world.wait_all(); // instead of waiting on both arrays in separate calls, just wait for all tasks at the world level
+    ///
+    /// if my_pe == 0 {
+    ///     for (elemA,elemB) in array_A.onesided_iter().zip(array_B.onesided_iter()).into_iter() { //convert into a standard Iterator
+    ///         println!("PE: {my_pe} A: {elem_A} B: {elem_B}");
+    ///     }
+    /// }
+    /// ```
+    /// Output on a 4 PE execution 
+    ///```
+    /// PE: 0 A: 0 B: 0
+    /// PE: 0 A: 0 B: 1
+    /// PE: 0 A: 1 B: 2
+    /// PE: 0 A: 1 B: 3
+    /// PE: 0 A: 2 B: 4
+    /// PE: 0 A: 2 B: 5
+    /// PE: 0 A: 3 B: 6
+    /// PE: 0 A: 3 B: 7
+    ///```
     fn zip<I>(self, iter: I) -> Zip<Self, I>
     where
         Self: Sized + Send,
@@ -81,29 +215,62 @@ pub trait OneSidedIterator {
     {
         Zip::new(self, iter)
     }
-    fn buffered(self, buf_size: usize) -> Buffered<Self>
-    where
-        Self: Sized + Send,
-    {
-        Buffered::new(self, buf_size)
-    }
+
+    // fn buffered(self, buf_size: usize) -> Buffered<Self>
+    // where
+    //     Self: Sized + Send,
+    // {
+    //     Buffered::new(self, buf_size)
+    // }
+
+    /// Convert this one-sided iterator into a standard Rust Iterator, enabling one to use any of the functions available on `Iterator`s
+    ///
+    /// # Example
+    ///```
+    /// use lamellar::array::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder.build();
+    /// let array = LocalLockAtomicArray::new::<usize>(&world,8,Distribution::Block);
+    /// let my_pe = world.my_pe();
+    /// array.dist_iter_mut().for_each(|e| *e = world.my_pe()); //initialize array using a distributed iterator
+    /// array.wait_all();
+    /// if my_pe == 0 {
+    ///     let sum = array.onesided_iter().into_iter().take(4).map(|elem| elem as f64).sum::<f64>();
+    ///     println!("Sum: {sum}")
+    /// }
+    /// ```
+    ///  Output on a 4 PE execution 
+    ///```
+    /// Sum: 2.0
+    ///```
     fn into_iter(self) -> OneSidedIteratorIter<Self>
     where
         Self: Sized + Send,
     {
         OneSidedIteratorIter { iter: self }
     }
-    // fn into_stream(self) -> OneSidedIteratorAsyncIter<Self>
-    // where
-    //     Self: Sized + Send,
-    // {
-    //     OneSidedIteratorAsyncIter { iter: self }
-    // }
 }
 
+/// An immutable standard Rust Iterator backed by a OneSidedIterator
+///
+/// This struct is created by calling [into_iter][OneSidedIterator::into_iter] a OneSidedIterator
+///
+/// # Examples
+///```
+/// use lamellar::array::prelude::*;
+///
+/// let world = LamellarWorldBuilder.build();
+/// let array = AtomicArray::new::<usize>(&world,100,Distribution::Block);
+///
+/// let std_iter = array.onesided_iter().into_iter();
+/// for e in std_iter {
+///     println!("{e}");
+/// }
+///```
 pub struct OneSidedIteratorIter<I> {
     pub(crate) iter: I,
 }
+
 impl<I> Iterator for OneSidedIteratorIter<I>
 where
     I: OneSidedIterator,
@@ -114,110 +281,61 @@ where
     }
 }
 
-// #[pin_project]
-// pub struct OneSidedIteratorAsyncIter<I> {
-//     #[pin]
-//     pub(crate) iter: I,
-// }
-
-// impl<I> Stream for OneSidedIteratorAsyncIter<I>
-// where
-//     I: OneSidedIterator + Send,
-// {
-//     type Item = <I as OneSidedIterator>::Item;
-//     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-//         let this = self.project();
-//         let res = ready!(this.iter.async_next().poll(cx));
-//         Poll::Ready(res)
-//     }
-// }
-
 struct SendNonNull<T: Dist + 'static>(NonNull<T>);
 
 // This is safe because Lamellar Arrays are allocated from Rofi, and thus cannot be moved
 // the pointer will remain valid for the lifetime of the array
 unsafe impl<T: Dist + 'static> Send for SendNonNull<T> {}
 
+
+/// An immutable one sided iterator of a LamellarArray
+///
+/// This struct is created by calling [one_sided_iter] on any of the LamellarArray types
+///
+/// # Examples
+///```
+/// use lamellar::array::prelude::*;
+///
+/// let world = LamellarWorldBuilder.build();
+/// let array = AtomicArray::new::<usize>(&world,100,Distribution::Block);
+///
+/// let one_sided_iter = array.onesided_iter();
+///```
 #[pin_project]
-pub struct LamellarArrayIter<'a, T: Dist + 'static, A: LamellarArrayInternalGet<T>> {
+pub struct OneSidedIter<'a, T: Dist + 'static, A: LamellarArrayInternalGet<T>> {
     array: A,
     buf_0: OneSidedMemoryRegion<T>,
-    // buf_1: OneSidedMemoryRegion<T>,
     index: usize,
     buf_index: usize,
     ptr: SendNonNull<T>,
     _marker: PhantomData<&'a T>,
 }
 
-// unsafe impl<'a, T: Dist + 'static, A: LamellarArrayGet<T>> Sync for LamellarArrayIter<'a, T, A> {}
-// unsafe impl<'a, T: Dist + 'static, A: LamellarArrayGet<T>> Send for LamellarArrayIter<'a, T, A> {}
 
-impl<'a, T: Dist + 'static, A: LamellarArrayInternalGet<T>> LamellarArrayIter<'a, T, A> {
+impl<'a, T: Dist + 'static, A: LamellarArrayInternalGet<T>> OneSidedIter<'a, T, A> {
     pub(crate) fn new(
         array: A,
         team: Pin<Arc<LamellarTeamRT>>,
         buf_size: usize,
-    ) -> LamellarArrayIter<'a, T, A> {
+    ) -> OneSidedIter<'a, T, A> {
         let buf_0 = team.alloc_one_sided_mem_region(buf_size);
         array.internal_get(0, &buf_0).wait();
         let ptr = unsafe { SendNonNull(NonNull::new(buf_0.as_mut_ptr().unwrap()).unwrap()) };
-        let iter = LamellarArrayIter {
+        let iter = OneSidedIter {
             array: array,
             buf_0: buf_0,
-            // buf_1: team.alloc_one_sided_mem_region(buf_size),
             index: 0,
             buf_index: 0,
             ptr: ptr,
             _marker: PhantomData,
         };
-        // iter.fill_buffer(0);
 
         iter
     }
-    // fn fill_buffer(&self, index: usize) {
-    //     let end_i = std::cmp::min(index + self.buf_0.len(), self.array.len()) - index;
-    //     let buf_0 = self.buf_0.sub_region(..end_i);
-    //     let buf_0_u8 = buf_0.clone().to_base::<u8>();
-    //     let buf_0_slice = unsafe { buf_0_u8.as_mut_slice().unwrap() };
-    //     let buf_1 = self.buf_1.sub_region(..end_i);
-    //     let buf_1_u8 = buf_1.clone().to_base::<u8>();
-    //     let buf_1_slice = unsafe { buf_1_u8.as_mut_slice().unwrap() };
-    //     for i in 0..buf_0_slice.len() {
-    //         buf_0_slice[i] = 0;
-    //         buf_1_slice[i] = 1;
-    //     }
-    //     self.array.get(index, &buf_0);
-    //     self.array.get(index, &buf_1);
-    // }
-    // fn spin_for_valid(&self, index: usize) {
-    //     let buf_0_temp = self.buf_0.sub_region(index..=index).to_base::<u8>();
-    //     let buf_0 = buf_0_temp.as_slice().unwrap();
-    //     let buf_1_temp = self.buf_1.sub_region(index..=index).to_base::<u8>();
-    //     let buf_1 = buf_1_temp.as_slice().unwrap();
-    //     for i in 0..buf_0.len() {
-    //         while buf_0[i] != buf_1[i] {
-    //             std::thread::yield_now();
-    //         }
-    //     }
-    // }
-
-    // fn check_for_valid(&self, index: usize) -> bool {
-    //     let buf_0_temp = self.buf_0.sub_region(index..=index).to_base::<u8>();
-    //     let buf_0 = buf_0_temp.as_slice().unwrap();
-    //     let buf_1_temp = self.buf_1.sub_region(index..=index).to_base::<u8>();
-    //     let buf_1 = buf_1_temp.as_slice().unwrap();
-    //     for i in 0..buf_0.len() {
-    //         if buf_0[i] != buf_1[i] {
-    //             return false;
-    //         }
-    //     }
-    //     true
-    // }
 }
 
-#[async_trait]
 impl<'a, T: Dist + 'static, A: LamellarArrayInternalGet<T> + Clone + Send> OneSidedIterator
-    for LamellarArrayIter<'a, T, A>
+    for OneSidedIter<'a, T, A>
 {
     type ElemType = T;
     type Item = &'a T;
@@ -252,58 +370,13 @@ impl<'a, T: Dist + 'static, A: LamellarArrayInternalGet<T> + Clone + Send> OneSi
         };
         res
     }
-    // async fn async_next(mut self: Pin<&mut Self>) -> Option<Self::Item> {
-    //     let this = self.project();
-    //     // println!("async_next one_sided_iterator");
-    //     // println!("nexat {:?} {:?} {:?} {:?}",self.index,self.array.len(),self.buf_index,self.buf_0.len());
-    //     let array = this.array.clone();
-    //     let res = if *this.index < array.len() {
-    //         if *this.buf_index == this.buf_0.len() {
-    //             // println!("need to get new data");
-    //             //need to get new data
-    //             *this.buf_index = 0;
-    //             // self.fill_buffer(self.index);
-    //             if *this.index + this.buf_0.len() < array.len() {
-    //                 let req = array.internal_get(*this.index, &*this.buf_0);
-    //                 req.into_future().await;
-    //             } else {
-    //                 let sub_region = this.buf_0.sub_region(0..(array.len() - *this.index));
-    //                 let req = array.internal_get(*this.index, &sub_region);
-    //                 req.into_future().await;
-    //             }
-    //         }
-    //         // self.spin_for_valid(self.buf_index);
-    //         *this.index += 1;
-    //         *this.buf_index += 1;
-    //         unsafe {
-    //             this.ptr
-    //                 .0
-    //                 .as_ptr()
-    //                 .offset(*this.buf_index as isize - 1)
-    //                 .as_ref()
-    //         }
-    //     } else {
-    //         None
-    //     };
-    //     res
-    // }
+   
     fn advance_index(&mut self, count: usize) {
         self.index += count;
         self.buf_index = 0;
         // self.fill_buffer(0);
         self.array.internal_get(self.index, &self.buf_0).wait();
     }
-    // async fn async_advance_index(mut self: Pin<&mut Self>, count: usize) {
-    //     let this = self.project();
-    //     *this.index += count;
-    //     *this.buf_index = 0;
-    //     // self.fill_buffer(0);
-    //     let req = this
-    //         .array
-    //         .internal_get(*this.index, &*this.buf_0)
-    //         .into_future();
-    //     req.await;
-    // }
     fn array(&self) -> Self::Array {
         self.array.clone()
     }
@@ -311,25 +384,12 @@ impl<'a, T: Dist + 'static, A: LamellarArrayInternalGet<T> + Clone + Send> OneSi
     fn item_size(&self) -> usize {
         std::mem::size_of::<T>()
     }
-    fn buffered_next(
-        &mut self,
-        mem_region: OneSidedMemoryRegion<u8>,
-    ) -> Option<Box<dyn LamellarArrayRequest<Output = ()>>> {
-        if self.index < self.array.len() {
-            let mem_reg_t = unsafe { mem_region.to_base::<Self::ElemType>() };
-            let req = self.array.internal_get(self.index, &mem_reg_t);
-            self.index += mem_reg_t.len();
-            Some(req)
-        } else {
-            None
-        }
-    }
-    // async fn async_buffered_next(
-    //     mut self: Pin<&mut Self>,
+    // fn buffered_next(
+    //     &mut self,
     //     mem_region: OneSidedMemoryRegion<u8>,
     // ) -> Option<Box<dyn LamellarArrayRequest<Output = ()>>> {
     //     if self.index < self.array.len() {
-    //         let mem_reg_t = mem_region.to_base::<Self::ElemType>();
+    //         let mem_reg_t = unsafe { mem_region.to_base::<Self::ElemType>() };
     //         let req = self.array.internal_get(self.index, &mem_reg_t);
     //         self.index += mem_reg_t.len();
     //         Some(req)
@@ -337,53 +397,11 @@ impl<'a, T: Dist + 'static, A: LamellarArrayInternalGet<T> + Clone + Send> OneSi
     //         None
     //     }
     // }
-    fn from_mem_region(&self, mem_region: OneSidedMemoryRegion<u8>) -> Option<Self::Item> {
-        unsafe {
-            let mem_reg_t = mem_region.to_base::<Self::ElemType>();
-            mem_reg_t.as_ptr().unwrap().as_ref()
-        }
-    }
+    
+    // fn from_mem_region(&self, mem_region: OneSidedMemoryRegion<u8>) -> Option<Self::Item> {
+    //     unsafe {
+    //         let mem_reg_t = mem_region.to_base::<Self::ElemType>();
+    //         mem_reg_t.as_ptr().unwrap().as_ref()
+    //     }
+    // }
 }
-
-// impl<'a, T: AmDist+ Clone > Iterator
-// for LamellarArrayIter<'a, T>
-// {
-//     type Item = &'a T;
-//     fn next(&mut self) -> Option<Self::Item> {
-//         <Self as OneSidedIterator>::next(self)
-//     }
-// }
-
-// use futures::task::{Context, Poll};
-// use futures::Stream;
-// use std::pin::Pin;
-
-// impl<'a, T: AmDist+ Clone + Unpin > Stream
-// for LamellarArrayIter<'a, T>
-// {
-// type Item = &'a T;
-// fn poll_next(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-//     let res = if self.index < self.array.len() {
-//         if self.buf_index == self.buf_0.len() {
-//             //need to get new data
-//             self.buf_index = 0;
-//             self.fill_buffer(self.index);
-//         }
-//         if self.check_for_valid(self.buf_index) {
-//             self.index += 1;
-//             self.buf_index += 1;
-//             Poll::Ready(unsafe {
-//                 self.ptr
-//                     .as_ptr()
-//                     .offset(self.buf_index as isize - 1)
-//                     .as_ref()
-//             })
-//         } else {
-//             Poll::Pending
-//         }
-//     } else {
-//         Poll::Ready(None)
-//     };
-//     res
-// }
-// }

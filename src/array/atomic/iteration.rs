@@ -2,7 +2,7 @@ use crate::array::atomic::*;
 
 use crate::array::iterator::distributed_iterator::{DistIteratorLauncher, DistributedIterator, IndexedDistributedIterator};
 use crate::array::iterator::local_iterator::{ LocalIterator};
-use crate::array::iterator::one_sided_iterator::LamellarArrayIter;
+use crate::array::iterator::one_sided_iterator::OneSidedIter;
 use crate::array::*;
 use crate::memregion::Dist;
 
@@ -183,12 +183,12 @@ impl<T: Dist> AtomicArray<T> {
 }
 
 impl<T: Dist> AtomicArray<T> {
-    pub fn onesided_iter(&self) -> LamellarArrayIter<'_, T, AtomicArray<T>> {
-        LamellarArrayIter::new(self.clone().into(), LamellarArray::team(self).clone(), 1)
+    pub fn onesided_iter(&self) -> OneSidedIter<'_, T, AtomicArray<T>> {
+        OneSidedIter::new(self.clone().into(), LamellarArray::team(self).clone(), 1)
     }
 
-    pub fn buffered_onesided_iter(&self, buf_size: usize) -> LamellarArrayIter<'_, T, AtomicArray<T>> {
-        LamellarArrayIter::new(
+    pub fn buffered_onesided_iter(&self, buf_size: usize) -> OneSidedIter<'_, T, AtomicArray<T>> {
+        OneSidedIter::new(
             self.clone().into(),
             LamellarArray::team(self).clone(),
             std::cmp::min(buf_size, self.len()),

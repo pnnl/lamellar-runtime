@@ -8,7 +8,7 @@ use crate::array::iterator::Schedule;
 // {
 //     DistIter, DistIterMut, DistIteratorLauncher, DistributedIterator, ForEach, ForEachAsync, DistIterForEachHandle, DistIterCollectHandle
 // };
-use crate::array::iterator::one_sided_iterator::LamellarArrayIter;
+use crate::array::iterator::one_sided_iterator::OneSidedIter;
 use crate::array::*;
 use crate::memregion::Dist;
 
@@ -29,12 +29,12 @@ impl<T: Dist> UnsafeArray<T> {
         LocalIterMut::new(self.clone().into(), 0, 0)
     }
 
-    pub fn onesided_iter(&self) -> LamellarArrayIter<'_, T, UnsafeArray<T>> {
-        LamellarArrayIter::new(self.clone().into(), self.inner.data.team.clone(), 1)
+    pub fn onesided_iter(&self) -> OneSidedIter<'_, T, UnsafeArray<T>> {
+        OneSidedIter::new(self.clone().into(), self.inner.data.team.clone(), 1)
     }
 
-    pub fn buffered_onesided_iter(&self, buf_size: usize) -> LamellarArrayIter<'_, T, UnsafeArray<T>> {
-        LamellarArrayIter::new(
+    pub fn buffered_onesided_iter(&self, buf_size: usize) -> OneSidedIter<'_, T, UnsafeArray<T>> {
+        OneSidedIter::new(
             self.clone().into(),
             self.inner.data.team.clone(),
             std::cmp::min(buf_size, self.len()),

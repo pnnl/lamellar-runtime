@@ -61,7 +61,7 @@ fn main() {
     let rows_pe = m / num_pes;
     let start = std::time::Instant::now();
     b.onesided_iter() // OneSidedIterator (each pe will iterate through entirety of b)
-        .copied_chunks(p) //chunk flat array into columns -- manages efficent transfer and placement of data into a local memory region
+        .chunks(p) //chunk flat array into columns -- manages efficent transfer and placement of data into a local memory region
         .into_iter() // convert into normal rust iterator
         .enumerate()
         .for_each(|(j, col)| {

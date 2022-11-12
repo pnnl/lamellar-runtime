@@ -2,7 +2,7 @@ use crate::array::generic_atomic::*;
 
 use crate::array::iterator::distributed_iterator::*;
 use crate::array::iterator::local_iterator::*;
-use crate::array::iterator::one_sided_iterator::LamellarArrayIter;
+use crate::array::iterator::one_sided_iterator::OneSidedIter;
 use crate::array::iterator::Schedule;
 // use crate::array::private::LamellarArrayPrivate;
 use crate::array::*;
@@ -194,15 +194,15 @@ impl<T: Dist + 'static> GenericAtomicArray<T> {
         }
     }
 
-    pub fn onesided_iter(&self) -> LamellarArrayIter<'_, T, GenericAtomicArray<T>> {
-        LamellarArrayIter::new(self.clone().into(), self.array.team().clone(), 1)
+    pub fn onesided_iter(&self) -> OneSidedIter<'_, T, GenericAtomicArray<T>> {
+        OneSidedIter::new(self.clone().into(), self.array.team().clone(), 1)
     }
 
     pub fn buffered_onesided_iter(
         &self,
         buf_size: usize,
-    ) -> LamellarArrayIter<'_, T, GenericAtomicArray<T>> {
-        LamellarArrayIter::new(
+    ) -> OneSidedIter<'_, T, GenericAtomicArray<T>> {
+        OneSidedIter::new(
             self.clone().into(),
             self.array.team().clone(),
             std::cmp::min(buf_size, self.len()),
