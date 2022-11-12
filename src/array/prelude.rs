@@ -11,7 +11,7 @@ pub use crate::array::local_lock_atomic::LocalLockAtomicArray;
 
 pub use crate::array::iterator::Schedule;
 pub use crate::array::iterator::distributed_iterator::{DistributedIterator,IndexedDistributedIterator};
-pub use crate::array::iterator::local_iterator::{LocalIterator};
+pub use crate::array::iterator::local_iterator::{LocalIterator,IndexedLocalIterator};
 pub use crate::array::iterator::one_sided_iterator::{OneSidedIterator, OneSidedIteratorIter};
 
 pub use crate::array::operations::{

@@ -1,7 +1,4 @@
-use lamellar::array::{
-    AccessOps, ArithmeticOps, AtomicArray, BitWiseOps, DistributedIterator, Distribution,
-    ElementArithmeticOps, ElementBitWiseOps, ElementOps, ReadOnlyOps,
-};
+use lamellar::array::prelude::*;
 
 #[lamellar::AmData(Default, Debug, ArithmeticOps, PartialEq, PartialOrd)]
 struct Custom {

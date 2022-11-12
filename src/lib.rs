@@ -67,7 +67,7 @@
 //!
 //! # Creating, initializing, and iterating through a distributed array
 //! ```
-//! use lamellar::array::{DistributedIterator,DistributedIterator, Distribution, SerialIterator, UnsafeArray};
+//! use lamellar::array::{DistributedIterator,DistributedIterator, Distribution, OneSidedIterator, UnsafeArray};
 //!
 //! fn main(){
 //!     let world = lamellar::LamellarWorldBuilder::new().build();
@@ -77,7 +77,7 @@
 //!     block_array.wait_all();
 //!     block_array.barrier();
 //!     if my_pe == 0{
-//!         for (i,elem) in block_array.ser_iter().into_iter().enumerate(){ //iterate through entire array on pe 0 (automatically transfering remote data)
+//!         for (i,elem) in block_array.onesided_iter().into_iter().enumerate(){ //iterate through entire array on pe 0 (automatically transfering remote data)
 //!             println!("i: {} = {})",i,elem);
 //!         }
 //!     }
@@ -98,10 +98,13 @@ pub extern crate tracing;
 #[doc(hidden)]
 pub use tracing::*;
 
-mod active_messaging;
+pub mod active_messaging;
+pub use active_messaging::prelude::*;
 pub mod array;
+pub use array::prelude::*;
 mod barrier;
-mod darc;
+pub mod darc;
+pub use darc::prelude::*;
 mod lamellae;
 mod lamellar_alloc;
 mod lamellar_arch;
@@ -109,7 +112,8 @@ mod lamellar_request;
 mod lamellar_task_group;
 mod lamellar_team;
 mod lamellar_world;
-mod memregion;
+pub mod memregion;
+pub use memregion::prelude::*;
 mod scheduler;
 mod utils;
 pub use utils::*;
@@ -118,50 +122,23 @@ pub use utils::*;
 use lamellar_prof::init_prof;
 init_prof!();
 
-#[doc(hidden)]
-pub use crate::active_messaging::{
-    registered_active_message::RegisteredAm, DarcSerde, LamellarActiveMessage, LamellarResultSerde,
-    LamellarReturn, LamellarSerde, RemoteActiveMessage, Serde,
-};
-pub use crate::active_messaging::{ActiveMessaging, LamellarAM, LocalAM};
-
-#[doc(hidden)]
-pub use crate::array::{ArrayOpCmd, LamellarArray, ReduceKey};
-
-pub use crate::darc::global_rw_darc::GlobalRwDarc;
-#[doc(hidden)]
-pub use crate::darc::global_rw_darc::{globalrw_from_ndarc, globalrw_serialize};
-pub use crate::darc::local_rw_darc::LocalRwDarc;
-#[doc(hidden)]
-pub use crate::darc::local_rw_darc::{localrw_from_ndarc, localrw_serialize};
-pub use crate::darc::Darc;
-
 pub use crate::lamellar_request::LamellarRequest;
 
-pub use crate::memregion::Dist;
-pub use crate::memregion::{
-    one_sided::OneSidedMemoryRegion, shared::SharedMemoryRegion, LamellarMemoryRegion,
-    RemoteMemoryRegion,
-};
-
-pub use crate::lamellae::Backend;
 pub use crate::lamellar_arch::{BlockedArch, IdError, LamellarArch, StridedArch};
-pub use crate::lamellar_task_group::LamellarTaskGroup;
-pub use crate::lamellar_world::*;
+pub use crate::lamellae::Backend;
 pub use crate::scheduler::SchedulerType;
-
 pub use crate::lamellar_team::LamellarTeam;
 #[doc(hidden)]
 pub use crate::lamellar_team::LamellarTeamRT;
+pub use crate::lamellar_task_group::LamellarTaskGroup;
+pub use crate::lamellar_world::*;
+
 
 extern crate lamellar_impl;
 pub use lamellar_impl::{
     am, generate_ops_for_type, generate_reductions_for_type, local_am, register_reduction, AmData,
     AmLocalData, ArithmeticOps, Dist,
 };
-
-// #[doc(hidden)]
-// pub use lamellar_impl::DarcSerdeRT;
 
 #[doc(hidden)]
 pub use inventory;

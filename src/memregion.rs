@@ -6,11 +6,13 @@ use core::marker::PhantomData;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
+pub mod prelude;
+
 pub(crate) mod shared;
-use shared::SharedMemoryRegion;
+pub use shared::SharedMemoryRegion;
 
 pub(crate) mod one_sided;
-use one_sided::OneSidedMemoryRegion;
+pub use one_sided::OneSidedMemoryRegion;
 
 use enum_dispatch::enum_dispatch;
 
@@ -64,7 +66,7 @@ impl<T: Dist + serde::Serialize> LamellarMemoryRegion<T> {
     }
 }
 
-impl<T: Dist> crate::DarcSerde for LamellarMemoryRegion<T> {
+impl<T: Dist> crate::active_messaging::DarcSerde for LamellarMemoryRegion<T> {
     #[tracing::instrument(skip_all)]
     fn ser(&self, num_pes: usize) {
         // println!("in shared ser");

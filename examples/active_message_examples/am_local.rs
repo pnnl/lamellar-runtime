@@ -4,7 +4,8 @@
 /// the active message struct does not need to be serialize/deserialize
 /// (although currently outputs still need to be)
 /// --------------------------------------------------------------------
-use lamellar::ActiveMessaging;
+// use lamellar::ActiveMessaging;
+use lamellar::active_messaging::prelude::*;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -70,7 +71,7 @@ impl LamellarAM for AmReturnUsize {
 //-----------------------------------------------------------------//
 
 fn main() {
-    let world = lamellar::LamellarWorldBuilder::new().build();
+    let world = LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();
     let _num_pes = world.num_pes();
     world.barrier();

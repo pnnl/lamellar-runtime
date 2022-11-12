@@ -89,7 +89,7 @@ fn main() {
 
 # Creating, initializing, and iterating through a distributed array
 ```rust
-use lamellar::array::{DistributedIterator,Distribution, SerialIterator, UnsafeArray};
+use lamellar::array::{DistributedIterator,Distribution, OneSidedIterator, UnsafeArray};
 
 fn main() {
     let world = lamellar::LamellarWorldBuilder::new().build();
@@ -103,7 +103,7 @@ fn main() {
     block_array.barrier();
     block_array.print();
     if my_pe == 0 {
-        for (i, elem) in block_array.ser_iter().into_iter().enumerate() {
+        for (i, elem) in block_array.onesided_iter().into_iter().enumerate() {
             //iterate through entire array on pe 0 (automatically transfering remote data)
             println!("i: {} = {}", i, elem);
         }

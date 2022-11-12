@@ -129,7 +129,7 @@ fn main() {
                 i,
                 elem
             );
-            async move { (i, elem, barray.fetch_add(i, *elem).await) }
+            async move { (i, elem, barray.load(i).await) }
         })
         .for_each_async(move |i| async move {
             println!(

@@ -1,8 +1,4 @@
-use lamellar::array::{
-    ArithmeticOps, AtomicArray, DistributedIterator, LocalLockAtomicArray, SerialIterator,
-    UnsafeArray,
-};
-
+use lamellar::array::prelude::*;
 macro_rules! initialize_array {
     (UnsafeArray,$array:ident,$init_val:ident) => {
         $array.dist_iter_mut().for_each(move |x| *x = $init_val);
@@ -76,7 +72,7 @@ macro_rules! div_test{
             array.wait_all();
             array.barrier();
             // array.print();
-            for (i,elem) in array.ser_iter().into_iter().enumerate(){
+            for (i,elem) in array.onesided_iter().into_iter().enumerate(){
                 let val = *elem;
                 check_val!($array,val,one,success);
                 if !success{
@@ -101,7 +97,7 @@ macro_rules! div_test{
             }
             sub_array.wait_all();
             sub_array.barrier();
-            for (i,elem) in sub_array.ser_iter().into_iter().enumerate(){
+            for (i,elem) in sub_array.onesided_iter().into_iter().enumerate(){
                 let val = *elem;
                 check_val!($array,val,one,success);
                 if !success{
@@ -126,7 +122,7 @@ macro_rules! div_test{
                 }
                 sub_array.wait_all();
                 sub_array.barrier();
-                for (i,elem) in sub_array.ser_iter().into_iter().enumerate(){
+                for (i,elem) in sub_array.onesided_iter().into_iter().enumerate(){
                     let val = *elem;
                     check_val!($array,val,one,success);
                     if !success{

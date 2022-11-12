@@ -286,16 +286,24 @@ name="array_put_get"
 path="examples/array_examples/array_put_get.rs"
 
 [[example]]
-name="array_iteration"
-path="examples/array_examples/array_iteration.rs"
+name="onesided_iteration"
+path="examples/array_examples/onesided_iteration.rs"
+
+[[example]]
+name="local_iteration"
+path="examples/array_examples/local_iteration.rs"
+
+[[example]]
+name="distributed_iteration"
+path="examples/array_examples/distributed_iteration.rs"
 
 [[example]]
 name="array_for_each_schedules"
 path="examples/array_examples/array_for_each_schedules.rs"
 
-[[example]]
-name="local_only_array"
-path="examples/array_examples/local_only_array.rs"
+#[[example]]
+#name="local_only_array"
+#path="examples/array_examples/local_only_array.rs"
 
 [[example]]
 name="generic_array"

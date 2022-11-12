@@ -19,6 +19,8 @@ use crate::lamellar_world::LAMELLAES;
 use crate::scheduler::SchedulerQueue;
 use crate::IdError;
 
+pub mod prelude;
+
 pub(crate) mod local_rw_darc;
 use local_rw_darc::LocalRwDarc;
 
@@ -34,7 +36,7 @@ pub(crate) enum DarcMode {
     GlobalRw,
     UnsafeArray,
     ReadOnlyArray,
-    LocalOnlyArray,
+    // LocalOnlyArray,
     // AtomicArray,
     GenericAtomicArray,
     NativeAtomicArray,
@@ -189,7 +191,7 @@ impl<T> Clone for WeakDarc<T> {
     }
 }
 
-impl<T> crate::DarcSerde for Darc<T> {
+impl<T> crate::active_messaging::DarcSerde for Darc<T> {
     fn ser(&self, num_pes: usize) {
         self.serialize_update_cnts(num_pes);
     }
@@ -714,9 +716,11 @@ impl<T: 'static> Drop for Darc<T> {
                 launch_drop!(DarcMode::UnsafeArray, inner, self.inner);
             } else if local_mode!(DarcMode::ReadOnlyArray, mode_refs, inner) {
                 launch_drop!(DarcMode::ReadOnlyArray, inner, self.inner);
-            } else if local_mode!(DarcMode::LocalOnlyArray, mode_refs, inner) {
-                launch_drop!(DarcMode::LocalOnlyArray, inner, self.inner);
-            } else if local_mode!(DarcMode::LocalLockAtomicArray, mode_refs, inner) {
+            } 
+            // else if local_mode!(DarcMode::LocalOnlyArray, mode_refs, inner) {
+            //     launch_drop!(DarcMode::LocalOnlyArray, inner, self.inner);
+            // } 
+            else if local_mode!(DarcMode::LocalLockAtomicArray, mode_refs, inner) {
                 launch_drop!(DarcMode::LocalLockAtomicArray, inner, self.inner);
             } else if local_mode!(DarcMode::GenericAtomicArray, mode_refs, inner) {
                 launch_drop!(DarcMode::GenericAtomicArray, inner, self.inner);

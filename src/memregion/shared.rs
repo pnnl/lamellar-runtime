@@ -45,17 +45,10 @@ pub struct SharedMemoryRegion<T: Dist> {
     phantom: PhantomData<T>,
 }
 
-impl<T: Dist> crate::DarcSerde for SharedMemoryRegion<T> {
+impl<T: Dist> crate::active_messaging::DarcSerde for SharedMemoryRegion<T> {
     fn ser(&self, num_pes: usize) {
         // println!("in shared ser");
-        // match cur_pe {
-        //     Ok(cur_pe) => {
         self.mr.serialize_update_cnts(num_pes);
-        //     }
-        //     Err(err) => {
-        //         panic!("can only access darcs within team members ({:?})", err);
-        //     }
-        // }
     }
     fn des(&self, cur_pe: Result<usize, crate::IdError>) {
         // println!("in shared des");

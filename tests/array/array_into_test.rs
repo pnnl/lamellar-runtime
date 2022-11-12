@@ -1,6 +1,4 @@
-use lamellar::array::{
-    AtomicArray, Distribution, LocalLockAtomicArray, LocalOnlyArray, ReadOnlyArray, UnsafeArray,
-};
+use lamellar::array::prelude::*;
 macro_rules! into_test {
     ($array1:ident, $array2:ident) => {{
         let world = lamellar::LamellarWorldBuilder::new().build();
@@ -16,7 +14,7 @@ macro_rules! match_array2 {
     ($array_ty:ident, $array2_str:tt) => {
         match $array2_str.as_str() {
             "UnsafeArray" => into_test!($array_ty, UnsafeArray),
-            "LocalOnlyArray" => into_test!($array_ty, LocalOnlyArray),
+            // "LocalOnlyArray" => into_test!($array_ty, LocalOnlyArray),
             "ReadOnlyArray" => into_test!($array_ty, ReadOnlyArray),
             "AtomicArray" => into_test!($array_ty, AtomicArray),
             "LocalLockAtomicArray" => into_test!($array_ty, LocalLockAtomicArray),
@@ -32,7 +30,7 @@ fn main() {
 
     match array1.as_str() {
         "UnsafeArray" => match_array2!(UnsafeArray, array2),
-        "LocalOnlyArray" => match_array2!(LocalOnlyArray, array2),
+        // "LocalOnlyArray" => match_array2!(LocalOnlyArray, array2),
         "ReadOnlyArray" => match_array2!(ReadOnlyArray, array2),
         "AtomicArray" => match_array2!(AtomicArray, array2),
         "LocalLockAtomicArray" => match_array2!(LocalLockAtomicArray, array2),

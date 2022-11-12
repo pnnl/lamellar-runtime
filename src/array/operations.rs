@@ -1340,9 +1340,11 @@ impl<T: Dist> LamellarRequest for ArrayOpResultHandleInner<T> {
     }
 }
 
+#[doc(hidden)]
 pub trait ElementOps: AmDist + Dist + Sized {}
 impl<T> ElementOps for T where T: AmDist + Dist {}
 
+#[doc(hidden)]
 pub trait ElementArithmeticOps:
     std::ops::AddAssign
     + std::ops::SubAssign
@@ -1353,6 +1355,8 @@ pub trait ElementArithmeticOps:
     + Sized
 {
 }
+
+#[doc(hidden)]
 impl<T> ElementArithmeticOps for T where
     T: std::ops::AddAssign
         + std::ops::SubAssign
@@ -1363,20 +1367,26 @@ impl<T> ElementArithmeticOps for T where
 {
 }
 
+#[doc(hidden)]
 pub trait ElementBitWiseOps:
     std::ops::BitAndAssign + std::ops::BitOrAssign + AmDist + Dist + Sized
 {
 }
+
+#[doc(hidden)]
 impl<T> ElementBitWiseOps for T where
     T: std::ops::BitAndAssign + std::ops::BitOrAssign + AmDist + Dist
 {
 }
 
+#[doc(hidden)]
 pub trait ElementCompareEqOps: std::cmp::Eq + AmDist + Dist + Sized {}
 impl<T> ElementCompareEqOps for T where T: std::cmp::Eq + AmDist + Dist {}
 
+#[doc(hidden)]
 pub trait ElementComparePartialEqOps: std::cmp::PartialEq + AmDist + Dist + Sized {}
 impl<T> ElementComparePartialEqOps for T where T: std::cmp::PartialEq + AmDist + Dist {}
+
 
 pub trait ReadOnlyOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
     #[tracing::instrument(skip_all)]

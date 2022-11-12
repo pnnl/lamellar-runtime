@@ -2,7 +2,7 @@
 use rand::distributions::{Distribution, Uniform};
 use std::time::Instant;
 
-use lamellar::ActiveMessaging;
+use lamellar::active_messaging::prelude::*;
 // use lamellar::{Backend, SchedulerType};
 
 // use tracing_flame::FlameLayer;
@@ -108,7 +108,7 @@ impl LamellarAM for ReturnVecAM {
 
 fn main() {
     // let _guard = setup_global_subscriber();
-    let world = lamellar::LamellarWorldBuilder::new()
+    let world = LamellarWorldBuilder::new()
         //.with_lamellae(Default::default()) //if enable-rofi feature is active default is rofi, otherwise local
         //.with_lamellae( Backend::Rofi ) //explicity set the lamellae backend to rofi, with the default provider
         //.with_lamellae( Backend::RofiShm ) //explicity set the lamellae backend to rofi, specifying the shm provider

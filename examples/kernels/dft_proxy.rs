@@ -5,12 +5,9 @@
 /// we include the distributed Lamellar Implemtation
 /// as well as a (single process) shared memory version using Rayon.
 /// --------------------------------------------------------------------
-use lamellar::array::{
-    iterator::distributed_iterator::Schedule, AtomicArray, DistributedIterator, Distribution,
-    LocalLockAtomicArray, ReadOnlyArray, SerialIterator, UnsafeArray,
-};
-use lamellar::{ActiveMessaging, LamellarWorld};
-use lamellar::{RemoteMemoryRegion, SharedMemoryRegion};
+use lamellar::array::prelude::*;
+use lamellar::active_messaging::prelude::*;
+use lamellar::memregion::prelude::*;
 use parking_lot::Mutex;
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
@@ -158,7 +155,7 @@ fn dft_rayon(signal: &[f64], spectrum: &mut [f64]) -> f64 {
 
 // the easiest implementation using lamellar arrays, although not terribly performant
 // because each iteration of the outer loop is transferring the entirety of the signal array
-// without an reuse, using a buffered_iter helps to ensure the transfers are efficient, but
+// without an reuse, using a buffered_onesided_iter helps to ensure the transfers are efficient, but
 // a lot of (needless) data transfer happens
 fn dft_lamellar_array(signal: UnsafeArray<f64>, spectrum: UnsafeArray<f64>) -> f64 {
     let timer = Instant::now();
@@ -168,7 +165,7 @@ fn dft_lamellar_array(signal: UnsafeArray<f64>, spectrum: UnsafeArray<f64>) -> f
         .enumerate()
         .for_each(move |(k, spec_bin)| {
             let mut sum = 0f64;
-            for (i, &x) in signal_clone.buffered_iter(1000).into_iter().enumerate() {
+            for (i, &x) in signal_clone.buffered_onesided_iter(1000).into_iter().enumerate() {
                 let angle = -1f64 * (i * k) as f64 * 2f64 * std::f64::consts::PI
                     / signal_clone.len() as f64;
                 let twiddle = angle * (angle.cos() + angle * angle.sin());
@@ -183,7 +180,7 @@ fn dft_lamellar_array(signal: UnsafeArray<f64>, spectrum: UnsafeArray<f64>) -> f
 
 // the easiest implementation using lamellar arrays, although not terribly performance
 // because each iteration of the outer loop is transferring the entirety of the signal array
-// without any reuse, using a buffered_iter helps to ensure the transfers are efficient, but
+// without any reuse, using a buffered_onesided_iter helps to ensure the transfers are efficient, but
 // a lot of (needless) data transfer happens
 fn dft_lamellar_array_2(signal: ReadOnlyArray<f64>, spectrum: AtomicArray<f64>) -> f64 {
     let timer = Instant::now();
@@ -193,7 +190,7 @@ fn dft_lamellar_array_2(signal: ReadOnlyArray<f64>, spectrum: AtomicArray<f64>) 
         .enumerate()
         .for_each(move |(k, spec_bin)| {
             let mut sum = 0f64;
-            for (i, &x) in signal_clone.buffered_iter(1000).into_iter().enumerate() {
+            for (i, &x) in signal_clone.buffered_onesided_iter(1000).into_iter().enumerate() {
                 let angle = -1f64 * (i * k) as f64 * 2f64 * std::f64::consts::PI
                     / signal_clone.len() as f64;
                 let twiddle = angle * (angle.cos() + angle * angle.sin());
@@ -210,7 +207,7 @@ fn dft_lamellar_array_2(signal: ReadOnlyArray<f64>, spectrum: AtomicArray<f64>) 
 fn dft_lamellar_array_swapped(signal: UnsafeArray<f64>, spectrum: UnsafeArray<f64>) -> f64 {
     let timer = Instant::now();
     let signal_len = signal.len();
-    for (i, x) in signal.ser_iter().into_iter().enumerate() {
+    for (i, x) in signal.onesided_iter().into_iter().enumerate() {
         let x = (*x).clone();
         spectrum
             .dist_iter_mut()
@@ -239,7 +236,7 @@ fn dft_lamellar_array_opt(
     let timer = Instant::now();
     let sig_len = signal.len();
     signal
-        .ser_iter()
+        .onesided_iter()
         .copied_chunks(buf_size)
         .buffered(2)
         .into_iter()
@@ -280,7 +277,7 @@ fn dft_lamellar_array_opt_test(
     let timer = Instant::now();
     let sig_len = signal.len();
     signal
-        .ser_iter()
+        .onesided_iter()
         .copied_chunks(buf_size)
         .buffered(2)
         .into_iter()
@@ -322,7 +319,7 @@ fn dft_lamellar_array_opt_2(
     let timer = Instant::now();
     let sig_len = signal.len();
     signal
-        .ser_iter()
+        .onesided_iter()
         .copied_chunks(buf_size)
         .buffered(2)
         .into_iter()
@@ -363,7 +360,7 @@ fn dft_lamellar_array_opt_3(
     let timer = Instant::now();
     let sig_len = signal.len();
     signal
-        .ser_iter()
+        .onesided_iter()
         .copied_chunks(buf_size)
         .buffered(2)
         .into_iter()

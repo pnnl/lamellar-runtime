@@ -1,6 +1,4 @@
-use lamellar::array::{
-    AtomicArray, CompareExchangeEpsilonOps, CompareExchangeOps, DistributedIterator, Distribution,
-};
+use lamellar::array::prelude::*;
 use rand::seq::SliceRandom;
 use rand::SeedableRng;
 

@@ -14,8 +14,12 @@ use std::pin::Pin;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc; //, Weak};
 
+pub mod prelude;
+
 pub(crate) mod registered_active_message;
 use registered_active_message::RegisteredActiveMessages; //, AMS_EXECS};
+#[doc(hidden)]
+pub use registered_active_message::RegisteredAm;
 
 pub(crate) mod batching;
 

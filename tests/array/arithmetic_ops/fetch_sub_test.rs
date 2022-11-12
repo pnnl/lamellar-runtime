@@ -1,7 +1,4 @@
-use lamellar::array::{
-    ArithmeticOps, AtomicArray, DistributedIterator, LocalLockAtomicArray, SerialIterator,
-    UnsafeArray,
-};
+use lamellar::array::prelude::*;
 
 use rand::distributions::Distribution;
 use rand::distributions::Uniform;
@@ -103,7 +100,7 @@ macro_rules! fetch_sub_test{
                 }
             }
             array.barrier();
-            for (i,elem) in array.ser_iter().into_iter().enumerate(){
+            for (i,elem) in array.onesided_iter().into_iter().enumerate(){
                 let val = *elem;
                 check_val!($array,val,zero,success);
                 if !success{
@@ -129,7 +126,7 @@ macro_rules! fetch_sub_test{
             }
 
             array.barrier();
-            let sum = array.ser_iter().into_iter().fold(0,|acc,x| acc+ *x as usize);
+            let sum = array.onesided_iter().into_iter().fold(0,|acc,x| acc+ *x as usize);
             let calced_sum = tot_updates as usize  * (array.len()-1);
             check_val!($array,sum,calced_sum,success);
             if !success{
@@ -164,7 +161,7 @@ macro_rules! fetch_sub_test{
                 }
             }
             sub_array.barrier();
-            for (i,elem) in sub_array.ser_iter().into_iter().enumerate(){
+            for (i,elem) in sub_array.onesided_iter().into_iter().enumerate(){
                 let val = *elem;
                 check_val!($array,val,zero,success);
                 if !success{
@@ -188,7 +185,7 @@ macro_rules! fetch_sub_test{
                 let _val =  world.block_on(req);
             }
             sub_array.barrier();
-            let sum = sub_array.ser_iter().into_iter().fold(0,|acc,x| acc+ *x as usize);
+            let sum = sub_array.onesided_iter().into_iter().fold(0,|acc,x| acc+ *x as usize);
             let calced_sum = tot_updates as usize  * (sub_array.len()-1);
             check_val!($array,sum,calced_sum,success);
             if !success{
@@ -224,7 +221,7 @@ macro_rules! fetch_sub_test{
                     }
                 }
                 sub_array.barrier();
-                for (i,elem) in sub_array.ser_iter().into_iter().enumerate(){
+                for (i,elem) in sub_array.onesided_iter().into_iter().enumerate(){
                     let val = *elem;
                     check_val!($array,val,zero,success);
                     if !success{
@@ -248,7 +245,7 @@ macro_rules! fetch_sub_test{
                 }
 
                 sub_array.barrier();
-                let sum = sub_array.ser_iter().into_iter().fold(0,|acc,x| acc+ *x as usize);
+                let sum = sub_array.onesided_iter().into_iter().fold(0,|acc,x| acc+ *x as usize);
                 let calced_sum = tot_updates as usize  * (sub_array.len()-1);
                 check_val!($array,sum,calced_sum,success);
                 if !success{

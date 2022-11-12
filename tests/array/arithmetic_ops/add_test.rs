@@ -1,8 +1,5 @@
-use lamellar::array::{
-    ArithmeticOps, AtomicArray, DistributedIterator, LocalLockAtomicArray, SerialIterator,
-    UnsafeArray,
-};
-use lamellar::RemoteMemoryRegion;
+use lamellar::array::prelude::*;
+use lamellar::memregion::prelude::*;
 
 use rand::distributions::Uniform;
 use rand::seq::SliceRandom;
@@ -86,7 +83,7 @@ macro_rules! add_test{
             }
             array.wait_all();
             array.barrier();
-            for (i,elem) in array.ser_iter().into_iter().enumerate(){
+            for (i,elem) in array.onesided_iter().into_iter().enumerate(){
                 let val = *elem;
                 check_val!($array,val,max_val,success);
                 if !success{
@@ -113,7 +110,7 @@ macro_rules! add_test{
             }
             array.wait_all();
             array.barrier();
-            for (i,elem) in array.ser_iter().into_iter().enumerate(){
+            for (i,elem) in array.onesided_iter().into_iter().enumerate(){
                 let val = *elem;
                 check_val!($array,val,max_val,success);
                 if !success{
@@ -123,7 +120,7 @@ macro_rules! add_test{
             if !success{
                 array.print()
             }
-            // let sum = array.ser_iter().into_iter().fold(0,|acc,x| acc+ *x as usize);
+            // let sum = array.onesided_iter().into_iter().fold(0,|acc,x| acc+ *x as usize);
             // let tot_updates = indices.len()/10 * max_val as usize;
             // check_val!($array,sum,tot_updates,success);
             // if !success{
@@ -148,7 +145,7 @@ macro_rules! add_test{
             }
             sub_array.wait_all();
             sub_array.barrier();
-            for (i,elem) in sub_array.ser_iter().into_iter().enumerate(){
+            for (i,elem) in sub_array.onesided_iter().into_iter().enumerate(){
                 let val = *elem;
                 check_val!($array,val,max_val,success);
                 if !success{
@@ -172,7 +169,7 @@ macro_rules! add_test{
             }
             sub_array.wait_all();
             sub_array.barrier();
-            for (i,elem) in sub_array.ser_iter().into_iter().enumerate(){
+            for (i,elem) in sub_array.onesided_iter().into_iter().enumerate(){
                 let val = *elem;
                 check_val!($array,val,max_val,success);
                 if !success{
@@ -182,7 +179,7 @@ macro_rules! add_test{
             if !success{
                 array.print()
             }
-            // let sum = sub_array.ser_iter().into_iter().fold(0,|acc,x| acc+ *x as usize);
+            // let sum = sub_array.onesided_iter().into_iter().fold(0,|acc,x| acc+ *x as usize);
             // let tot_updates = indices.len()/10 * max_val as usize;
             // check_val!($array,sum,tot_updates,success);
             // if !success{
@@ -208,7 +205,7 @@ macro_rules! add_test{
                 }
                 sub_array.wait_all();
                 sub_array.barrier();
-                for (i,elem) in sub_array.ser_iter().into_iter().enumerate(){
+                for (i,elem) in sub_array.onesided_iter().into_iter().enumerate(){
                     let val = *elem;
                     check_val!($array,val,max_val,success);
                     if !success{
@@ -232,7 +229,7 @@ macro_rules! add_test{
                 }
                 sub_array.wait_all();
                 sub_array.barrier();
-                for (i,elem) in sub_array.ser_iter().into_iter().enumerate(){
+                for (i,elem) in sub_array.onesided_iter().into_iter().enumerate(){
                     let val = *elem;
                     check_val!($array,val,max_val,success);
                     if !success{
@@ -242,7 +239,7 @@ macro_rules! add_test{
                 if !success{
                     array.print()
                 }
-                // let sum = sub_array.ser_iter().into_iter().fold(0,|acc,x| acc+ *x as usize);
+                // let sum = sub_array.onesided_iter().into_iter().fold(0,|acc,x| acc+ *x as usize);
                 // let tot_updates = indices.len()/10 * max_val as usize;
                 // check_val!($array,sum,tot_updates,success);
                 // if !success{
@@ -267,7 +264,7 @@ macro_rules! check_results {
         let mut success = true;
         $array.wait_all();
         $array.barrier();
-        for (i, elem) in $array.ser_iter().into_iter().enumerate() {
+        for (i, elem) in $array.onesided_iter().into_iter().enumerate() {
             let val = *elem;
             check_val!($array_ty, val, $num_pes, success);
             if !success {

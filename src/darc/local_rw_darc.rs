@@ -38,7 +38,7 @@ pub struct LocalRwDarc<T: 'static> {
 unsafe impl<T: Send> Send for LocalRwDarc<T> {}
 unsafe impl<T: Sync> Sync for LocalRwDarc<T> {}
 
-impl<T> crate::DarcSerde for LocalRwDarc<T> {
+impl<T> crate::active_messaging::DarcSerde for LocalRwDarc<T> {
     fn ser(&self, num_pes: usize) {
         // println!("in local darc ser");
         // match cur_pe {
@@ -310,13 +310,28 @@ impl<T: fmt::Display> fmt::Display for LocalRwDarc<T> {
     }
 }
 
-#[doc(hidden)]
-pub fn localrw_serialize<S, T>(localrw: &LocalRwDarc<T>, s: S) -> Result<S::Ok, S::Error>
-where
-    S: Serializer,
-{
-    __NetworkDarc::<T>::from(&localrw.darc).serialize(s)
-}
+// #[doc(hidden)]
+// pub fn localrw_serialize<S, T>(localrw: &LocalRwDarc<T>, s: S) -> Result<S::Ok, S::Error>
+// where
+//     S: Serializer,
+// {
+//     __NetworkDarc::<T>::from(&localrw.darc).serialize(s)
+// }
+
+// #[doc(hidden)]
+// pub fn localrw_from_ndarc<'de, D, T>(deserializer: D) -> Result<LocalRwDarc<T>, D::Error>
+// where
+//     D: Deserializer<'de>,
+// {
+//     // println!("lrwdarc1 from net darc");
+//     let ndarc: __NetworkDarc<T> = Deserialize::deserialize(deserializer)?;
+//     let rwdarc = LocalRwDarc {
+//         darc: Darc::from(ndarc),
+//     };
+//     // println!("lrwdarc from net darc");
+//     // rwdarc.print();
+//     Ok(rwdarc)
+// }
 
 #[doc(hidden)]
 pub fn localrw_serialize2<S, T>(
@@ -330,21 +345,6 @@ where
     let ndarc = __NetworkDarc::<T>::from(localrw);
     // println!("ndarc size {:?} {:?}",crate::serialized_size(&ndarc,false),crate::serialized_size(&ndarc,true));
     ndarc.serialize(s)
-}
-
-#[doc(hidden)]
-pub fn localrw_from_ndarc<'de, D, T>(deserializer: D) -> Result<LocalRwDarc<T>, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    // println!("lrwdarc1 from net darc");
-    let ndarc: __NetworkDarc<T> = Deserialize::deserialize(deserializer)?;
-    let rwdarc = LocalRwDarc {
-        darc: Darc::from(ndarc),
-    };
-    // println!("lrwdarc from net darc");
-    // rwdarc.print();
-    Ok(rwdarc)
 }
 
 #[doc(hidden)]

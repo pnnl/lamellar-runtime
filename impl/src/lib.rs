@@ -155,7 +155,7 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_type: AmType) -> 
             AmType::NoReturn => (
                 quote_spanned! {last_stmt.span()=>
                     #last_stmt
-                    #lamellar::LamellarReturn::Unit
+                    #lamellar::active_messaging::LamellarReturn::Unit
                 },
                 false,
             ),
@@ -183,7 +183,7 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_type: AmType) -> 
         }
     } else {
         (
-            quote_spanned! {func_span=> #lamellar::LamellarReturn::Unit },
+            quote_spanned! {func_span=> #lamellar::active_messaging::LamellarReturn::Unit },
             false,
         )
     };
@@ -212,19 +212,19 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_type: AmType) -> 
     };
     let ret_struct = quote::format_ident!("{}Result", orig_name);
     let mut am = quote! {
-        impl #impl_generics #lamellar::LocalAM for #orig_name #ty_generics #where_clause{
+        impl #impl_generics #lamellar::active_messaging::LocalAM for #orig_name #ty_generics #where_clause{
             type Output = #ret_type;
         }
     };
     if !local {
         am.extend(quote!{
-            impl #impl_generics #lamellar::LamellarAM for #orig_name #ty_generics #where_clause {
+            impl #impl_generics #lamellar::active_messaging::LamellarAM for #orig_name #ty_generics #where_clause {
                 type Output = #ret_type;
             }
 
-            impl  #impl_generics #lamellar::Serde for #orig_name #ty_generics #where_clause {}
+            impl  #impl_generics #lamellar::active_messaging::Serde for #orig_name #ty_generics #where_clause {}
 
-            impl #impl_generics #lamellar::LamellarSerde for #orig_name #ty_generics #where_clause {
+            impl #impl_generics #lamellar::active_messaging::LamellarSerde for #orig_name #ty_generics #where_clause {
                 fn serialized_size(&self)->usize{
                     // println!("serialized size: {:?}", #lamellar::serialized_size(self));
                     #lamellar::serialized_size(self,true)
@@ -237,7 +237,7 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_type: AmType) -> 
                 }
             }
 
-            impl #impl_generics #lamellar::LamellarResultSerde for #orig_name #ty_generics #where_clause {
+            impl #impl_generics #lamellar::active_messaging::LamellarResultSerde for #orig_name #ty_generics #where_clause {
                 fn serialized_result_size(&self,result: & Box<dyn std::any::Any + Sync + Send>)->usize{
                     let result  = result.downcast_ref::<#ret_type>().unwrap();
                     #lamellar::serialized_size(result,true)
@@ -263,8 +263,8 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_type: AmType) -> 
             if !local {
                 quote! {
                     let ret = match __local{ //should probably just separate these into exec_local exec_remote to get rid of a conditional...
-                        true => #lamellar::LamellarReturn::LocalData(Box::new(#last_expr)),
-                        false => #lamellar::LamellarReturn::RemoteData(std::sync::Arc::new (#ret_struct{
+                        true => #lamellar::active_messaging::LamellarReturn::LocalData(Box::new(#last_expr)),
+                        false => #lamellar::active_messaging::LamellarReturn::RemoteData(std::sync::Arc::new (#ret_struct{
                             val: #remote_last_expr,
                             // _phantom: std::marker::PhantomData
                         })),
@@ -273,7 +273,7 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_type: AmType) -> 
                 }
             } else {
                 quote! {
-                    #lamellar::LamellarReturn::LocalData(Box::new(#last_expr))
+                    #lamellar::active_messaging::LamellarReturn::LocalData(Box::new(#last_expr))
                 }
             }
         }
@@ -281,12 +281,12 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_type: AmType) -> 
             if !local {
                 quote! {
                     let ret = match __local{
-                        true => #lamellar::LamellarReturn::LocalAm(
+                        true => #lamellar::active_messaging::LamellarReturn::LocalAm(
                             std::sync::Arc::new (
                                 #last_expr
                             )
                         ),
-                        false => #lamellar::LamellarReturn::RemoteAm(
+                        false => #lamellar::active_messaging::LamellarReturn::RemoteAm(
                             std::sync::Arc::new (
                                 #last_expr
                             )
@@ -296,7 +296,7 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_type: AmType) -> 
                 }
             } else {
                 quote! {
-                    #lamellar::LamellarReturn::LocalAm(
+                    #lamellar::active_messaging::LamellarReturn::LocalAm(
                         std::sync::Arc::new (
                             #last_expr
                         )
@@ -309,8 +309,8 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_type: AmType) -> 
     let my_name = quote! {stringify!(#orig_name)};
 
     let mut expanded = quote_spanned! {temp.span()=>
-        impl #impl_generics #lamellar::LamellarActiveMessage for #orig_name #ty_generics #where_clause {
-            fn exec(self: std::sync::Arc<Self>,__lamellar_current_pe: usize,__lamellar_num_pes: usize, __local: bool, __lamellar_world: std::sync::Arc<#lamellar::LamellarTeam>, __lamellar_team: std::sync::Arc<#lamellar::LamellarTeam>) -> std::pin::Pin<Box<dyn std::future::Future<Output=#lamellar::LamellarReturn> + Send >>{
+        impl #impl_generics #lamellar::active_messaging::LamellarActiveMessage for #orig_name #ty_generics #where_clause {
+            fn exec(self: std::sync::Arc<Self>,__lamellar_current_pe: usize,__lamellar_num_pes: usize, __local: bool, __lamellar_world: std::sync::Arc<#lamellar::LamellarTeam>, __lamellar_team: std::sync::Arc<#lamellar::LamellarTeam>) -> std::pin::Pin<Box<dyn std::future::Future<Output=#lamellar::active_messaging::LamellarReturn> + Send >>{
                 Box::pin( async move {
                     #temp
                     #ret_statement
@@ -353,7 +353,7 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_type: AmType) -> 
         });
         if !local {
             expanded.extend(quote_spanned! {temp.span()=>
-                impl #impl_generics #lamellar::LamellarSerde for #ret_struct #ty_generics #where_clause {
+                impl #impl_generics #lamellar::active_messaging::LamellarSerde for #ret_struct #ty_generics #where_clause {
                     fn serialized_size(&self)->usize{
                         #lamellar::serialized_size(&self.val,true)
                     }
@@ -367,21 +367,21 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_type: AmType) -> 
 
     if !local {
         expanded.extend( quote_spanned! {temp.span()=>
-            impl #impl_generics #lamellar::RemoteActiveMessage for #orig_name #ty_generics #where_clause {
-                fn as_local(self: std::sync::Arc<Self>) -> std::sync::Arc<dyn #lamellar::LamellarActiveMessage + Send + Sync>{
+            impl #impl_generics #lamellar::active_messaging::RemoteActiveMessage for #orig_name #ty_generics #where_clause {
+                fn as_local(self: std::sync::Arc<Self>) -> std::sync::Arc<dyn #lamellar::active_messaging::LamellarActiveMessage + Send + Sync>{
                     self
                 }
             }
-            fn #orig_name_unpack #impl_generics (bytes: &[u8], cur_pe: Result<usize,#lamellar::IdError>) -> std::sync::Arc<dyn #lamellar::RemoteActiveMessage + Sync + Send>  {
+            fn #orig_name_unpack #impl_generics (bytes: &[u8], cur_pe: Result<usize,#lamellar::IdError>) -> std::sync::Arc<dyn #lamellar::active_messaging::RemoteActiveMessage + Sync + Send>  {
                 // println!("bytes len {:?} bytes {:?}",bytes.len(),bytes);
                 let __lamellar_data: std::sync::Arc<#orig_name #ty_generics> = std::sync::Arc::new(#lamellar::deserialize(&bytes,true).unwrap());
-                <#orig_name #ty_generics as #lamellar::DarcSerde>::des(&__lamellar_data,cur_pe);
+                <#orig_name #ty_generics as #lamellar::active_messaging::DarcSerde>::des(&__lamellar_data,cur_pe);
                 __lamellar_data
             }
 
             #lamellar::inventory::submit! {
                 // #![crate = #lamellar]
-                #lamellar::RegisteredAm{
+                #lamellar::active_messaging::RegisteredAm{
                     exec: #orig_name_unpack,
                     name: stringify!(#orig_name)//.to_string()
                 }
@@ -593,7 +593,7 @@ fn derive_am_data(
             #vis struct #name #impl_generics #where_clause{
                 #fields
             }
-            impl #impl_generics #lamellar::DarcSerde for #name #ty_generics #where_clause{
+            impl #impl_generics #lamellar::active_messaging::DarcSerde for #name #ty_generics #where_clause{
                 fn ser (&self,  num_pes: usize) {
                     // println!("in outer ser");
                     #ser

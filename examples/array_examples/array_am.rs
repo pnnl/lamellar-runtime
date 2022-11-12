@@ -5,7 +5,7 @@
 /// a remote pes or put data into a remote pes. In the example,
 /// the handles are used on remote pes to access data on the PE which launched the AM
 ///----------------------------------------------------------------
-use lamellar::array::{Distribution, UnsafeArray};
+use lamellar::array::prelude::*;
 use lamellar::{ActiveMessaging, RemoteMemoryRegion};
 
 const ARRAY_LEN: usize = 100;

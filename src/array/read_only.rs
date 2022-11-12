@@ -1,5 +1,7 @@
 use crate::array::iterator::distributed_iterator::*;
-use crate::array::iterator::serial_iterator::LamellarArrayIter;
+use crate::array::iterator::local_iterator::*;
+use crate::array::iterator::one_sided_iterator::LamellarArrayIter;
+use crate::array::iterator::Schedule;
 use crate::array::private::LamellarArrayPrivate;
 use crate::array::*;
 use crate::darc::DarcMode;
@@ -159,11 +161,15 @@ impl<T: Dist> ReadOnlyArray<T> {
         DistIter::new(self.clone().into(), 0, 0)
     }
 
-    pub fn ser_iter(&self) -> LamellarArrayIter<'_, T, ReadOnlyArray<T>> {
+    pub fn local_iter(&self) -> LocalIter<'static, T, ReadOnlyArray<T>> {
+        LocalIter::new(self.clone().into(), 0, 0)
+    }
+
+    pub fn onesided_iter(&self) -> LamellarArrayIter<'_, T, ReadOnlyArray<T>> {
         LamellarArrayIter::new(self.clone().into(), self.array.team().clone(), 1)
     }
 
-    pub fn buffered_iter(&self, buf_size: usize) -> LamellarArrayIter<'_, T, ReadOnlyArray<T>> {
+    pub fn buffered_onesided_iter(&self, buf_size: usize) -> LamellarArrayIter<'_, T, ReadOnlyArray<T>> {
         LamellarArrayIter::new(
             self.clone().into(),
             self.array.team().clone(),
@@ -182,10 +188,10 @@ impl<T: Dist> ReadOnlyArray<T> {
         self.array.into()
     }
 
-    pub fn into_local_only(self) -> LocalOnlyArray<T> {
-        // println!("readonly into_local_only");
-        self.array.into()
-    }
+    // pub fn into_local_only(self) -> LocalOnlyArray<T> {
+    //     // println!("readonly into_local_only");
+    //     self.array.into()
+    // }
 
     pub fn into_local_lock_atomic(self) -> LocalLockAtomicArray<T> {
         // println!("readonly into_local_lock_atomic");
@@ -221,12 +227,12 @@ impl<T: Dist> From<UnsafeArray<T>> for ReadOnlyArray<T> {
     }
 }
 
-impl<T: Dist> From<LocalOnlyArray<T>> for ReadOnlyArray<T> {
-    fn from(array: LocalOnlyArray<T>) -> Self {
-        // println!("readonly from LocalOnlyArray");
-        unsafe { array.into_inner().into() }
-    }
-}
+// impl<T: Dist> From<LocalOnlyArray<T>> for ReadOnlyArray<T> {
+//     fn from(array: LocalOnlyArray<T>) -> Self {
+//         // println!("readonly from LocalOnlyArray");
+//         unsafe { array.into_inner().into() }
+//     }
+// }
 
 impl<T: Dist> From<AtomicArray<T>> for ReadOnlyArray<T> {
     fn from(array: AtomicArray<T>) -> Self {
@@ -280,6 +286,10 @@ impl<T: Dist> DistIteratorLauncher for ReadOnlyArray<T> {
     fn subarray_index_from_local(&self, index: usize, chunk_size: usize) -> Option<usize> {
         self.array.subarray_index_from_local(index, chunk_size)
     }
+
+    // fn subarray_pe_and_offset_for_global_index(&self, index: usize, chunk_size: usize) -> Option<(usize,usize)> {
+    //     self.array.subarray_pe_and_offset_for_global_index(index, chunk_size)
+    // }
 
     fn for_each<I, F>(&self, iter: &I, op: F) -> Pin<Box<dyn Future<Output = ()> + Send>>
     where
@@ -342,6 +352,81 @@ impl<T: Dist> DistIteratorLauncher for ReadOnlyArray<T> {
     {
         self.array.collect_async(iter, d)
     }
+    fn team(&self) -> Pin<Arc<LamellarTeamRT>> {
+        self.array.team().clone()
+    }
+}
+
+impl<T: Dist> LocalIteratorLauncher for ReadOnlyArray<T> {
+    fn local_global_index_from_local(&self, index: usize, chunk_size: usize) -> Option<usize> {
+        self.array.local_global_index_from_local(index, chunk_size)
+    }
+
+    fn local_subarray_index_from_local(&self, index: usize, chunk_size: usize) -> Option<usize> {
+        self.array.local_subarray_index_from_local(index, chunk_size)
+    }
+
+    fn local_for_each<I, F>(&self, iter: &I, op: F) -> Pin<Box<dyn Future<Output = ()> + Send>>
+    where
+        I: LocalIterator + 'static,
+        F: Fn(I::Item) + SyncSend + Clone + 'static,
+    {
+        self.array.local_for_each(iter, op)
+    }
+    fn local_for_each_with_schedule<I, F>(
+        &self,
+        sched: Schedule,
+        iter: &I,
+        op: F,
+    ) -> Pin<Box<dyn Future<Output = ()> + Send>>
+    where
+        I: LocalIterator + 'static,
+        F: Fn(I::Item) + SyncSend + Clone + 'static,
+    {
+        self.array.local_for_each_with_schedule(sched, iter, op)
+    }
+    fn local_for_each_async<I, F, Fut>(&self, iter: &I, op: F) -> Pin<Box<dyn Future<Output = ()> + Send>>
+    where
+        I: LocalIterator + 'static,
+        F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
+        Fut: Future<Output = ()> + Send + 'static,
+    {
+        self.array.local_for_each_async(iter, op)
+    }
+    fn local_for_each_async_with_schedule<I, F, Fut>(
+        &self,
+        sched: Schedule,
+        iter: &I,
+        op: F,
+    ) -> Pin<Box<dyn Future<Output = ()> + Send>>
+    where
+        I: LocalIterator + 'static,
+        F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
+        Fut: Future<Output = ()> + Send + 'static,
+    {
+        self.array.local_for_each_async_with_schedule(sched, iter, op)
+    }
+    // fn local_collect<I, A>(&self, iter: &I, d: Distribution) -> Pin<Box<dyn Future<Output = A> + Send>>
+    // where
+    //     I: LocalIterator + 'static,
+    //     I::Item: Dist,
+    //     A: From<UnsafeArray<I::Item>> + SyncSend + 'static,
+    // {
+    //     self.array.local_collect(iter, d)
+    // }
+    // fn local_collect_async<I, A, B>(
+    //     &self,
+    //     iter: &I,
+    //     d: Distribution,
+    // ) -> Pin<Box<dyn Future<Output = A> + Send>>
+    // where
+    //     I: LocalIterator + 'static,
+    //     I::Item: Future<Output = B> + Send + 'static,
+    //     B: Dist,
+    //     A: From<UnsafeArray<B>> + SyncSend + 'static,
+    // {
+    //     self.array.local_collect_async(iter, d)
+    // }
     fn team(&self) -> Pin<Arc<LamellarTeamRT>> {
         self.array.team().clone()
     }
@@ -481,10 +566,10 @@ impl<T: ElementOps + 'static> ReadOnlyOps<T> for ReadOnlyArray<T> {}
 //     for &'a ReadOnlyArray<T>
 // {
 //     type Item = &'a T;
-//     type IntoIter = SerialIteratorIter<LamellarArrayIter<'a, T>>;
+//     type IntoIter = OneSidedIteratorIter<LamellarArrayIter<'a, T>>;
 //     fn into_iter(self) -> Self::IntoIter {
-//         SerialIteratorIter {
-//             iter: self.ser_iter(),
+//         OneSidedIteratorIter {
+//             iter: self.onesided_iter(),
 //         }
 //     }
 // }

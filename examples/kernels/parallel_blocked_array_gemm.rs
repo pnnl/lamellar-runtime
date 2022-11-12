@@ -1,4 +1,4 @@
-use lamellar::array::{DistributedIterator, Distribution, SerialIterator, UnsafeArray};
+use lamellar::array::prelude::*;
 /// ----------------Lamellar Parallel Blocked Array GEMM---------------------------------------------------
 /// This performs a distributed GEMM by partitioning the global matrices (stored in LamellarArrya)
 /// into sub matrices, and then performing GEMMS on the sub matrices.
@@ -96,7 +96,7 @@ fn main() {
         let k_blk = block.k;
         // println!("j_blk: {}, k_blk: {}", j_blk, k_blk);
         let b_block = b
-            .ser_iter() // SerialIterator (each pe will iterate through entirety of b)
+            .onesided_iter() // OneSidedIterator (each pe will iterate through entirety of b)
             .copied_chunks(blocksize) //chunks columns by blocksize  -- manages efficent transfer and placement of data into a local memory region
             .ignore(k_blk * n_blks * blocksize + j_blk) // skip previously transfered submatrices
             .step_by(n_blks) //grab chunk from next column in submatrix

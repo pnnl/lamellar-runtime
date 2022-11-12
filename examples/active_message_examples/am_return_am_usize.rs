@@ -5,7 +5,8 @@
 /// PE and itself retuns a usize as the final result.
 /// it tests executing the AM localy, executing remotely, and executing on all PEs
 /// --------------------------------------------------------------------
-use lamellar::ActiveMessaging;
+// use lamellar::ActiveMessaging;
+use lamellar::active_messaging::prelude::*;
 // use lamellar::{Backend, SchedulerType};
 
 //--the returned active message that will execute automically upon arrival at the originating node --//

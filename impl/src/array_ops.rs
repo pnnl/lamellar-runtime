@@ -962,9 +962,8 @@ fn create_buffered_ops(
             // #bitwise_mod
             use __lamellar::Darc;
             use __lamellar::LamellarArray;
+            use __lamellar::active_messaging::RemoteActiveMessage;
             use __lamellar::LamellarRequest;
-            use __lamellar::RemoteActiveMessage;
-            // use __lamellar::memregion::{RemoteMemoryRegion};
             use __lamellar::OneSidedMemoryRegion;
             use __lamellar::RemoteMemoryRegion;
             use std::sync::Arc;
@@ -1115,11 +1114,10 @@ fn create_ops(
     let user_expanded = quote_spanned! {expanded.span()=>
         const _: () = {
             extern crate lamellar as __lamellar;
-            use __lamellar::array::{AtomicArray,AtomicByteArray,GenericAtomicArray,NativeAtomicArray,LocalLockAtomicArray,LocalLockAtomicByteArray,LocalArithmeticOps,LocalAtomicOps,ArrayOpCmd,LamellarArrayPut};
+            use __lamellar::array::{LamellarArray,AtomicArray,AtomicByteArray,GenericAtomicArray,NativeAtomicArray,LocalLockAtomicArray,LocalLockAtomicByteArray,LocalArithmeticOps,LocalAtomicOps,ArrayOpCmd,LamellarArrayPut};
             #bitwise_mod
-            use __lamellar::LamellarArray;
+            use __lamellar::active_messaging::RemoteActiveMessage;
             use __lamellar::LamellarRequest;
-            use __lamellar::RemoteActiveMessage;
             use std::sync::Arc;
             use parking_lot::Mutex;
             #expanded

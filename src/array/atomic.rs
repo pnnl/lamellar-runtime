@@ -192,7 +192,7 @@ impl<T: Dist + ElementBitWiseOps> BitOrAssign<T> for AtomicElement<T> {
 ///
 /// # Safety
 /// All access to the individual elements in this array type are protected either via a language/compiler supported atomic type or by a mutex
-#[enum_dispatch(LamellarArray<T>,LamellarArrayGet<T>,LamellarArrayInternalGet<T>,LamellarArrayPut<T>,LamellarArrayInternalPut<T>,ArrayExecAm<T>,LamellarArrayPrivate<T>,DistIteratorLauncher,)]
+#[enum_dispatch(LamellarArray<T>,LamellarArrayGet<T>,LamellarArrayInternalGet<T>,LamellarArrayPut<T>,LamellarArrayInternalPut<T>,ArrayExecAm<T>,LamellarArrayPrivate<T>,DistIteratorLauncher,LocalIteratorLauncher)]
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
 #[serde(bound = "T: Dist + serde::Serialize + serde::de::DeserializeOwned + 'static")]
 pub enum AtomicArray<T: Dist> {
@@ -200,7 +200,7 @@ pub enum AtomicArray<T: Dist> {
     GenericAtomicArray(GenericAtomicArray<T>),
 }
 
-impl<T: Dist + 'static> crate::DarcSerde for AtomicArray<T> {
+impl<T: Dist + 'static> crate::active_messaging::DarcSerde for AtomicArray<T> {
     fn ser(&self, num_pes: usize) {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.ser(num_pes),
@@ -241,7 +241,7 @@ impl AtomicByteArray {
     }
 }
 
-impl crate::DarcSerde for AtomicByteArray {
+impl crate::active_messaging::DarcSerde for AtomicByteArray {
     fn ser(&self, num_pes: usize) {
         match self {
             AtomicByteArray::NativeAtomicByteArray(array) => array.ser(num_pes),
@@ -466,13 +466,13 @@ impl<T: Dist> AtomicArray<T> {
             AtomicArray::GenericAtomicArray(array) => array.into(),
         }
     }
-    pub fn into_local_only(self) -> LocalOnlyArray<T> {
-        // println!("atomic into_local_only");
-        match self {
-            AtomicArray::NativeAtomicArray(array) => array.array.into(),
-            AtomicArray::GenericAtomicArray(array) => array.array.into(),
-        }
-    }
+    // pub fn into_local_only(self) -> LocalOnlyArray<T> {
+    //     // println!("atomic into_local_only");
+    //     match self {
+    //         AtomicArray::NativeAtomicArray(array) => array.array.into(),
+    //         AtomicArray::GenericAtomicArray(array) => array.array.into(),
+    //     }
+    // }
     pub fn into_read_only(self) -> ReadOnlyArray<T> {
         // println!("atomic into_read_only");
         match self {
@@ -507,12 +507,12 @@ impl<T: Dist + 'static> From<UnsafeArray<T>> for AtomicArray<T> {
     }
 }
 
-impl<T: Dist + 'static> From<LocalOnlyArray<T>> for AtomicArray<T> {
-    fn from(array: LocalOnlyArray<T>) -> Self {
-        // println!("Converting from LocalOnlyArray to AtomicArray");
-        unsafe { array.into_inner().into() }
-    }
-}
+// impl<T: Dist + 'static> From<LocalOnlyArray<T>> for AtomicArray<T> {
+//     fn from(array: LocalOnlyArray<T>) -> Self {
+//         // println!("Converting from LocalOnlyArray to AtomicArray");
+//         unsafe { array.into_inner().into() }
+//     }
+// }
 impl<T: Dist + 'static> From<ReadOnlyArray<T>> for AtomicArray<T> {
     fn from(array: ReadOnlyArray<T>) -> Self {
         // println!("Converting from ReadOnlyArray to AtomicArray");

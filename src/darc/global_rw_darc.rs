@@ -265,7 +265,7 @@ pub struct GlobalRwDarc<T: 'static> {
 unsafe impl<T: Send> Send for GlobalRwDarc<T> {}
 unsafe impl<T: Sync> Sync for GlobalRwDarc<T> {}
 
-impl<T> crate::DarcSerde for GlobalRwDarc<T> {
+impl<T> crate::active_messaging::DarcSerde for GlobalRwDarc<T> {
     fn ser(&self, num_pes: usize) {
         // println!("in global rw darc ser");
         // match cur_pe {
@@ -659,28 +659,28 @@ impl<T: fmt::Display> fmt::Display for GlobalRwDarc<T> {
     }
 }
 
-#[doc(hidden)]
-pub fn globalrw_serialize<S, T>(localrw: &GlobalRwDarc<T>, s: S) -> Result<S::Ok, S::Error>
-where
-    S: Serializer,
-{
-    __NetworkDarc::<T>::from(&localrw.darc).serialize(s)
-}
+// #[doc(hidden)]
+// pub fn globalrw_serialize<S, T>(localrw: &GlobalRwDarc<T>, s: S) -> Result<S::Ok, S::Error>
+// where
+//     S: Serializer,
+// {
+//     __NetworkDarc::<T>::from(&localrw.darc).serialize(s)
+// }
 
-#[doc(hidden)]
-pub fn globalrw_from_ndarc<'de, D, T>(deserializer: D) -> Result<GlobalRwDarc<T>, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    let ndarc: __NetworkDarc<T> = Deserialize::deserialize(deserializer)?;
-    // println!("gdarc from net darc");
-    let rwdarc = GlobalRwDarc {
-        darc: Darc::from(ndarc),
-    };
-    // println!("lrwdarc from net darc");
-    // rwdarc.print();
-    Ok(rwdarc)
-}
+// #[doc(hidden)]
+// pub fn globalrw_from_ndarc<'de, D, T>(deserializer: D) -> Result<GlobalRwDarc<T>, D::Error>
+// where
+//     D: Deserializer<'de>,
+// {
+//     let ndarc: __NetworkDarc<T> = Deserialize::deserialize(deserializer)?;
+//     // println!("gdarc from net darc");
+//     let rwdarc = GlobalRwDarc {
+//         darc: Darc::from(ndarc),
+//     };
+//     // println!("lrwdarc from net darc");
+//     // rwdarc.print();
+//     Ok(rwdarc)
+// }
 
 pub(crate) fn globalrw_serialize2<S, T>(
     globalrw: &Darc<DistRwLock<T>>,

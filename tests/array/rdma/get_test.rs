@@ -1,8 +1,5 @@
-use lamellar::array::{
-    AtomicArray, DistributedIterator, Distribution, LocalLockAtomicArray, ReadOnlyArray,
-    UnsafeArray,
-};
-use lamellar::{Dist, LamellarMemoryRegion, RemoteMemoryRegion};
+use lamellar::array::prelude::*;
+use lamellar::memregion::prelude::*;
 
 fn initialize_mem_region<T: Dist + std::ops::AddAssign>(
     memregion: &LamellarMemoryRegion<T>,

@@ -289,10 +289,10 @@ impl<T: Dist> LocalLockAtomicArray<T> {
         self.array.into()
     }
 
-    pub fn into_local_only(self) -> LocalOnlyArray<T> {
-        // println!("locallock into_local_only");
-        self.array.into()
-    }
+    // pub fn into_local_only(self) -> LocalOnlyArray<T> {
+    //     // println!("locallock into_local_only");
+    //     self.array.into()
+    // }
 
     pub fn into_read_only(self) -> ReadOnlyArray<T> {
         // println!("locallock into_read_only");
@@ -334,12 +334,12 @@ impl<T: Dist> From<UnsafeArray<T>> for LocalLockAtomicArray<T> {
     }
 }
 
-impl<T: Dist> From<LocalOnlyArray<T>> for LocalLockAtomicArray<T> {
-    fn from(array: LocalOnlyArray<T>) -> Self {
-        // println!("locallock from localonly");
-        unsafe { array.into_inner().into() }
-    }
-}
+// impl<T: Dist> From<LocalOnlyArray<T>> for LocalLockAtomicArray<T> {
+//     fn from(array: LocalOnlyArray<T>) -> Self {
+//         // println!("locallock from localonly");
+//         unsafe { array.into_inner().into() }
+//     }
+// }
 
 impl<T: Dist> From<AtomicArray<T>> for LocalLockAtomicArray<T> {
     fn from(array: AtomicArray<T>) -> Self {

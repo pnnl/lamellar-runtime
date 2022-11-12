@@ -454,10 +454,10 @@ impl<T: Dist> GenericAtomicArray<T> {
         self.array.into()
     }
 
-    pub fn into_local_only(self) -> LocalOnlyArray<T> {
-        // println!("generic into_local_only");
-        self.array.into()
-    }
+    // pub fn into_local_only(self) -> LocalOnlyArray<T> {
+    //     // println!("generic into_local_only");
+    //     self.array.into()
+    // }
 
     pub fn into_read_only(self) -> ReadOnlyArray<T> {
         // println!("generic into_read_only");

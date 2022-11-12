@@ -1,7 +1,4 @@
-use lamellar::array::{
-    AtomicArray, CompareExchangeEpsilonOps, CompareExchangeOps, DistributedIterator,
-    LocalLockAtomicArray,
-};
+use lamellar::array::prelude::*;
 
 macro_rules! initialize_array {
     (UnsafeArray,$array:ident,$init_val:ident) => {

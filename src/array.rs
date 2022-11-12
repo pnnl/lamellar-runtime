@@ -44,6 +44,8 @@ use std::sync::Arc;
 
 // use serde::de::DeserializeOwned;
 
+pub mod prelude;
+
 pub(crate) mod r#unsafe;
 pub use r#unsafe::{
     operations::UnsafeArrayOpBuf, UnsafeArray, UnsafeByteArray, UnsafeByteArrayWeak,
@@ -51,8 +53,8 @@ pub use r#unsafe::{
 pub(crate) mod read_only;
 pub use read_only::{ReadOnlyArray, ReadOnlyArrayOpBuf, ReadOnlyByteArray, ReadOnlyByteArrayWeak};
 
-pub(crate) mod local_only;
-pub use local_only::LocalOnlyArray;
+// pub(crate) mod local_only;
+// pub use local_only::LocalOnlyArray;
 
 pub(crate) mod atomic;
 pub use atomic::{
@@ -82,7 +84,7 @@ pub use local_lock_atomic::{
 
 pub mod iterator;
 pub use iterator::distributed_iterator::DistributedIterator;
-pub use iterator::serial_iterator::{SerialIterator, SerialIteratorIter};
+pub use iterator::one_sided_iterator::{OneSidedIterator, OneSidedIteratorIter};
 
 pub(crate) mod operations;
 pub use operations::*;
@@ -321,7 +323,7 @@ pub enum LamellarByteArray {
     LocalLockAtomicArray(LocalLockAtomicByteArray),
 }
 
-impl<T: Dist + 'static> crate::DarcSerde for LamellarReadArray<T> {
+impl<T: Dist + 'static> crate::active_messaging::DarcSerde for LamellarReadArray<T> {
     fn ser(&self, num_pes: usize) {
         // println!("in shared ser");
         match self {
@@ -353,7 +355,7 @@ pub enum LamellarWriteArray<T: Dist> {
     LocalLockAtomicArray(LocalLockAtomicArray<T>),
 }
 
-impl<T: Dist + 'static> crate::DarcSerde for LamellarWriteArray<T> {
+impl<T: Dist + 'static> crate::active_messaging::DarcSerde for LamellarWriteArray<T> {
     fn ser(&self, num_pes: usize) {
         // println!("in shared ser");
         match self {
@@ -471,13 +473,13 @@ pub trait LamellarArray<T: Dist>: private::LamellarArrayPrivate<T> {
     // /// Returns an iterator for the LamellarArray, all iteration occurs on the PE
     // /// where this was called, data that is not local to the PE is automatically
     // /// copied and transferred
-    // pub fn ser_iter(&self) -> LamellarArrayIter<'_, T> ;
+    // pub fn onesided_iter(&self) -> LamellarArrayIter<'_, T> ;
 
     // /// Returns an iterator for the LamellarArray, all iteration occurs on the PE
     // /// where this was called, data that is not local to the PE is automatically
     // /// copied and transferred, array data is buffered to more efficiently make
     // /// use of network buffers
-    // pub fn buffered_iter(&self, buf_size: usize) -> LamellarArrayIter<'_, T> ;
+    // pub fn buffered_onesided_iter(&self, buf_size: usize) -> LamellarArrayIter<'_, T> ;
 }
 
 

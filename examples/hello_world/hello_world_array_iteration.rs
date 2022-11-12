@@ -2,13 +2,7 @@
 /// This example highlights how to create a Lamellar Array
 /// as well as use various iterators to print and modifiy its data
 /// --------------------------------------------------------------------
-use lamellar::array::{
-    AtomicArray, // needed to construct AtomicArrays
-    //using the array submodule
-    DistributedIterator, // needed for dist_iter_mut()
-    Distribution,        // needed Distribution::{Block,Cyclic}
-    SerialIterator,      // needed for ser_iter()
-};
+use lamellar::array::prelude::*;
 
 fn main() {
     let world = lamellar::LamellarWorldBuilder::new().build();
@@ -23,7 +17,7 @@ fn main() {
     if my_pe == 0 {
         //we only want to print the array on pe 0
         array
-            .ser_iter() // create a one sided iterator (manages data movement)
+            .onesided_iter() // create a one sided iterator (manages data movement)
             .into_iter() // turn into a normal Rust iterator
             .for_each(|elem| print!("{elem} "));
         println!("");
@@ -55,7 +49,7 @@ fn main() {
     if my_pe == 0 {
         //we only want to print the array on pe 0
         array
-            .ser_iter() // create a one sided iterator (manages data movement)
+            .onesided_iter() // create a one sided iterator (manages data movement)
             .into_iter() // turn into a normal Rust iterator
             .for_each(|elem| print!("{elem} "));
         println!("");

@@ -151,7 +151,7 @@ pub(crate) mod memregion_handle_serde {
     }
 }
 
-impl crate::DarcSerde for MemRegionHandle {
+impl crate::active_messaging::DarcSerde for MemRegionHandle {
     fn ser(&self, num_pes: usize) {
         // match cur_pe {
         //     Ok(cur_pe) => {

@@ -1,6 +1,4 @@
-use lamellar::array::{
-    AtomicArray, BitWiseOps, DistributedIterator, LocalLockAtomicArray, SerialIterator, UnsafeArray,
-};
+use lamellar::array::prelude::*;
 
 macro_rules! initialize_array {
     (UnsafeArray,$array:ident,$init_val:ident) => {
@@ -82,7 +80,7 @@ macro_rules! fetch_and_test{
             array.wait_all();
             array.barrier();
             // array.print();
-            for (i,elem) in array.ser_iter().into_iter().enumerate(){
+            for (i,elem) in array.onesided_iter().into_iter().enumerate(){
                 let val = *elem;
                 check_val!($array,val,final_val,success);
                 if !success{
@@ -129,7 +127,7 @@ macro_rules! fetch_and_test{
             sub_array.wait_all();
             sub_array.barrier();
             // sub_array.print();
-            for (i,elem) in sub_array.ser_iter().into_iter().enumerate(){
+            for (i,elem) in sub_array.onesided_iter().into_iter().enumerate(){
                 let val = *elem;
                 check_val!($array,val,final_val,success);
                 if !success{
@@ -177,7 +175,7 @@ macro_rules! fetch_and_test{
                 sub_array.wait_all();
                 sub_array.barrier();
                 // sub_array.print();
-                for (i,elem) in sub_array.ser_iter().into_iter().enumerate(){
+                for (i,elem) in sub_array.onesided_iter().into_iter().enumerate(){
                     let val = *elem;
                     check_val!($array,val,final_val,success);
                     if !success{

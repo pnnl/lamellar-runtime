@@ -1,9 +1,5 @@
-use lamellar::array::{
-    ArithmeticOps, AtomicArray, DistributedIterator, LocalLockAtomicArray, SerialIterator,
-    UnsafeArray,
-};
-
-use lamellar::RemoteMemoryRegion;
+use lamellar::array::prelude::*;
+use lamellar::memregion::prelude::*;
 
 use rand::distributions::Distribution;
 use rand::distributions::Uniform;
@@ -107,7 +103,7 @@ macro_rules! fetch_add_test{
             }
             // array.wait_all();
             array.barrier();
-            for (i,elem) in array.ser_iter().into_iter().enumerate(){
+            for (i,elem) in array.onesided_iter().into_iter().enumerate(){
                 let val = *elem;
                 check_val!($array,val,max_val,success);
                 if !success{
@@ -130,7 +126,7 @@ macro_rules! fetch_add_test{
                 let _val =  world.block_on(req) as usize;
             }
             array.barrier();
-            let sum = array.ser_iter().into_iter().fold(0,|acc,x| acc+ *x as usize);
+            let sum = array.onesided_iter().into_iter().fold(0,|acc,x| acc+ *x as usize);
             let tot_updates = num_updates * num_pes;
             check_val!($array,sum,tot_updates,success);
             if !success{
@@ -166,7 +162,7 @@ macro_rules! fetch_add_test{
 
             }
             array.barrier();
-            for (i,elem) in sub_array.ser_iter().into_iter().enumerate(){
+            for (i,elem) in sub_array.onesided_iter().into_iter().enumerate(){
                 let val = *elem;
                 check_val!($array,val,max_val,success);
                 if !success{
@@ -188,7 +184,7 @@ macro_rules! fetch_add_test{
                 let _val =  world.block_on(req) as usize;
             }
             array.barrier();
-            let sum = sub_array.ser_iter().into_iter().fold(0,|acc,x| acc+ *x as usize);
+            let sum = sub_array.onesided_iter().into_iter().fold(0,|acc,x| acc+ *x as usize);
             let tot_updates = num_updates * num_pes;
             check_val!($array,sum,tot_updates,success);
             if !success{
@@ -227,7 +223,7 @@ macro_rules! fetch_add_test{
 
                 }
                 sub_array.barrier();
-                for (i,elem) in sub_array.ser_iter().into_iter().enumerate(){
+                for (i,elem) in sub_array.onesided_iter().into_iter().enumerate(){
                     let val = *elem;
                     check_val!($array,val,max_val,success);
                     if !success{
@@ -249,7 +245,7 @@ macro_rules! fetch_add_test{
                     let _val =  world.block_on(req) as usize;
                 }
                 sub_array.barrier();
-                let sum = sub_array.ser_iter().into_iter().fold(0,|acc,x| acc+ *x as usize);
+                let sum = sub_array.onesided_iter().into_iter().fold(0,|acc,x| acc+ *x as usize);
                 let tot_updates = num_updates * num_pes;
                 check_val!($array,sum,tot_updates,success);
                 if !success{
@@ -316,7 +312,7 @@ macro_rules! check_results {
                 req_cnt+=1;
             }
         }
-        for (i, elem) in $array.ser_iter().into_iter().enumerate() {
+        for (i, elem) in $array.onesided_iter().into_iter().enumerate() {
             let val = *elem;
             let real_val = i + $num_pes;
             check_val!($array_ty, real_val, val, success);

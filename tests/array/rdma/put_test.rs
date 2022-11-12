@@ -1,8 +1,5 @@
-use lamellar::array::{
-    AtomicArray, DistributedIterator, Distribution, LocalLockAtomicArray, SerialIterator,
-    UnsafeArray,
-};
-use lamellar::{Dist, LamellarMemoryRegion, RemoteMemoryRegion};
+use lamellar::array::prelude::*;
+use lamellar::memregion::prelude::*;
 
 fn initialize_mem_region<T: Dist + std::ops::AddAssign>(
     memregion: &LamellarMemoryRegion<T>,
@@ -58,7 +55,7 @@ macro_rules! put_test{
                 }
                 array.wait_all();
                 array.barrier();
-                for (i,elem) in array.ser_iter().into_iter().enumerate().take( num_txs * tx_size){
+                for (i,elem) in array.onesided_iter().into_iter().enumerate().take( num_txs * tx_size){
                     if ((i as $t - *elem) as f32).abs() > 0.0001 {
                         println!("{:?} {:?} {:?}",i as $t,*elem,((i as $t - *elem) as f32).abs());
                         success = false;
@@ -90,7 +87,7 @@ macro_rules! put_test{
                 }
                 array.wait_all();
                 sub_array.barrier();
-                for (i,elem) in sub_array.ser_iter().into_iter().enumerate().take( num_txs * tx_size){
+                for (i,elem) in sub_array.onesided_iter().into_iter().enumerate().take( num_txs * tx_size){
                     if ((i as $t - *elem) as f32).abs() > 0.0001 {
                         println!("{:?} {:?} {:?}",i as $t,*elem,((i as $t - *elem) as f32).abs());
                         success = false;
@@ -125,7 +122,7 @@ macro_rules! put_test{
                     }
                     array.wait_all();
                     sub_array.barrier();
-                    for (i,elem) in sub_array.ser_iter().into_iter().enumerate().take( num_txs * tx_size){
+                    for (i,elem) in sub_array.onesided_iter().into_iter().enumerate().take( num_txs * tx_size){
                         if ((i as $t - *elem) as f32).abs() > 0.0001 {
                             println!("{:?} {:?} {:?}",i as $t,*elem,((i as $t - *elem) as f32).abs());
                             success = false;

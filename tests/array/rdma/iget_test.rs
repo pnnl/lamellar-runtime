@@ -1,5 +1,5 @@
-use lamellar::array::{DistributedIterator, Distribution, ReadOnlyArray, UnsafeArray};
-use lamellar::{Dist, LamellarMemoryRegion, RemoteMemoryRegion};
+use lamellar::array::prelude::*;
+use lamellar::memregion::prelude::*;
 
 // fn initialize_array<T: Dist>(array: &UnsafeArray<T>,init_val: T) {
 //     array.dist_iter_mut().for_each(move |x| *x = init_val);

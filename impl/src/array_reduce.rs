@@ -105,7 +105,7 @@ fn create_reduction(
 
     let expanded = quote! {
         fn  #reduction_gen (data: #lamellar::array::LamellarByteArray, num_pes: usize)
-        -> std::sync::Arc<dyn #lamellar::RemoteActiveMessage + Sync + Send>{
+        -> std::sync::Arc<dyn #lamellar::active_messaging::RemoteActiveMessage + Sync + Send>{
             match data{
                 #gen_match_stmts
             }
@@ -114,7 +114,7 @@ fn create_reduction(
 
         #lamellar::inventory::submit! {
             // #![crate = #lamellar]
-            #lamellar::ReduceKey{
+            #lamellar::array::ReduceKey{
                 id: std::any::TypeId::of::<#typeident>(),
                 name: stringify!(#reduction),//.to_string(),
                 gen: #reduction_gen

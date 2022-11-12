@@ -1,6 +1,4 @@
-use lamellar::array::{
-    iterator::distributed_iterator::Schedule, DistributedIterator, Distribution, UnsafeArray,
-};
+use lamellar::array::prelude::*;
 
 use parking_lot::Mutex;
 use std::collections::HashMap;
