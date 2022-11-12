@@ -60,11 +60,7 @@ where
         };
         elems
     }
-    fn subarray_index(&self, index: usize) -> Option<usize> {
-        let g_index = self.iter.subarray_index(index * self.chunk_size)? / self.chunk_size; 
-                                                                                            // println!("enumerate index: {:?} global_index {:?}", index,g_index);
-        Some(g_index)
-    }
+     
     fn advance_index(&mut self, count: usize) {
         self.cur_i = std::cmp::min(self.cur_i + count, self.end_i);
     }

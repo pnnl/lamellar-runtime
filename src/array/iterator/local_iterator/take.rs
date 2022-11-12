@@ -1,6 +1,6 @@
 use crate::array::iterator::local_iterator::*;
 
-//ignores the first n elements of iterator I per pe (this implys that n * num_pes elements are ignored in total)
+//skips the first n elements of iterator I per pe (this implys that n * num_pes elements are skipd in total)
 #[derive(Clone, Debug)]
 pub struct Take<I> {
     iter: I,
@@ -41,10 +41,7 @@ where
         let in_elems = self.iter.elems(in_elems);
         std::cmp::min(in_elems, self.take_count)
     }
-    fn subarray_index(&self, index: usize) -> Option<usize> {
-        let g_index = self.iter.subarray_index(index); 
-        g_index
-    }
+    
     fn advance_index(&mut self, count: usize) {
         self.iter.advance_index(count);
     }

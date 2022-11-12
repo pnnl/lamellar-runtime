@@ -67,7 +67,7 @@ fn main() {
         for chunk in block_array
             .onesided_iter()
             .copied_chunks(10)
-            .ignore(4)
+            .skip(4)
             .into_iter()
         {
             println!("{:?}", unsafe { chunk.as_slice() });

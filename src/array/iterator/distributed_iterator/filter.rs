@@ -51,11 +51,11 @@ where
     //     // println!("enumerate index: {:?} global_index {:?}", index,g_index);
     //     g_index
     // }
-    fn subarray_index(&self, index: usize) -> Option<usize> {
-        let g_index = self.iter.subarray_index(index); 
-                                                       // println!("enumerate index: {:?} global_index {:?}", index,g_index);
-        g_index
-    }
+    // fn subarray_index(&self, index: usize) -> Option<usize> {
+    //     let g_index = self.iter.subarray_index(index); 
+    //                                                    // println!("enumerate index: {:?} global_index {:?}", index,g_index);
+    //     g_index
+    // }
     fn advance_index(&mut self, count: usize) {
         self.iter.advance_index(count);
         // println!("{:?} \t Filter advance index {count}",std::thread::current().id());

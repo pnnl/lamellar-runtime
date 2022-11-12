@@ -1,6 +1,6 @@
 use crate::array::iterator::distributed_iterator::*;
 
-//ignores the first n elements of iterator I per pe (this implys that n * num_pes elements are ignored in total)
+//skips the first n elements of iterator I per pe (this implys that n * num_pes elements are skipd in total)
 #[derive(Clone, Debug)]
 pub struct Take<I> {
     iter: I,
@@ -79,11 +79,11 @@ where
     //     // println!("take index: {:?} global_index {:?}", index,g_index);
     //     g_index
     // }
-    fn subarray_index(&self, index: usize) -> Option<usize> {
-        let g_index = self.iter.subarray_index(index); 
-                                                       // println!("enumerate index: {:?} global_index {:?}", index,g_index);
-        g_index
-    }
+    // fn subarray_index(&self, index: usize) -> Option<usize> {
+    //     let g_index = self.iter.subarray_index(index); 
+    //                                                    // println!("enumerate index: {:?} global_index {:?}", index,g_index);
+    //     g_index
+    // }
     // fn chunk_size(&self) -> usize {
     //     self.iter.chunk_size()
     // }

@@ -48,11 +48,6 @@ where
         let in_elems = self.iter.elems(in_elems);
         in_elems
     }
-
-    fn subarray_index(&self, index: usize) -> Option<usize> {
-        let g_index = self.iter.subarray_index(index); 
-        g_index
-    }
     
     fn advance_index(&mut self, count: usize) {
         self.iter.advance_index(count);

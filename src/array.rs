@@ -3,25 +3,25 @@
 //! By distributed, we mean that the memory backing the array is physically located on multiple distributed PEs in they system.
 //!
 //! LamellarArrays provide: 
-//!     - RDMA like `put` and `get` APIs 
-//!     - Element Wise operations (e.g. add, fetch_add, or, compare_exchange, etc)
-//!     - Distributed and Onesided Iteration
-//!     - Distributed Reductions
-//!     - Block or Cyclic layouts
-//!     - Sub Arrays
+//!  - RDMA like `put` and `get` APIs 
+//!  - Element Wise operations (e.g. add, fetch_add, or, compare_exchange, etc)
+//!  - Distributed and Onesided Iteration
+//!  - Distributed Reductions
+//!  - Block or Cyclic layouts
+//!  - Sub Arrays
 //!
 //! # Safety
-//! Array Data Lifetimes: LamellarArrays are built upon [Darcs][Darc] (Distributed Atomic Reference Counting Pointers) and as such have distributed lifetime management.
+//! Array Data Lifetimes: LamellarArrays are built upon [Darcs][crate::darc::Darc] (Distributed Atomic Reference Counting Pointers) and as such have distributed lifetime management.
 //! This means that as long as a single reference to an array exists anywhere in the distributed system, the data for the entire array will remain valid on every PE (even though a given PE may have dropped all its local references).
 //! While the compiler handles lifetimes within the context of a single PE, our distributed lifetime management relies on "garbage collecting active messages" to ensure all remote references have been accounted for.  
 //!
 //! We provide several array types, each with their own saftey gaurantees with respect to how data is accessed (further detail can be found in the documentation for each type)
-//!     - [UnsafeArray]: No safety gaurantees - PEs are free to read/write to anywhere in the array with no access control
-//!     - [ReadOnlyArray]: No write access is permitted, and thus PEs are free to read from anywhere in the array with no access control
-//!     - [AtomicArray]: Each Element is atomic (either instrisically are enforced via the runtime)
-//!         - NativeAtomicArray: utilizes the language atomic types e.g AtomicUsize, AtomicI8, etc.
-//!         - GenericAtomicArray: Each element is protected by a 1-byte mutex
-//!     - [LocalLockArray]: The data on each PE is protected by a local RwLock
+//!  - [UnsafeArray]: No safety gaurantees - PEs are free to read/write to anywhere in the array with no access control
+//!  - [ReadOnlyArray]: No write access is permitted, and thus PEs are free to read from anywhere in the array with no access control
+//!  - [AtomicArray]: Each Element is atomic (either instrisically are enforced via the runtime)
+//!      - NativeAtomicArray: utilizes the language atomic types e.g AtomicUsize, AtomicI8, etc.
+//!      - GenericAtomicArray: Each element is protected by a 1-byte mutex
+//!  - [LocalLockArray]: The data on each PE is protected by a local RwLock
 use crate::lamellar_request::LamellarRequest;
 use crate::memregion::{
     one_sided::OneSidedMemoryRegion,
@@ -84,7 +84,8 @@ pub use local_lock_atomic::{
 
 pub mod iterator;
 pub use iterator::distributed_iterator::DistributedIterator;
-pub use iterator::one_sided_iterator::{OneSidedIterator, OneSidedIteratorIter};
+pub use iterator::local_iterator::LocalIterator;
+pub use iterator::one_sided_iterator::OneSidedIterator;
 
 pub(crate) mod operations;
 pub use operations::*;

@@ -40,10 +40,10 @@ fn main() {
     // currently we offer Enumurator,
 
     println!("--------------------------------------------------------");
-    println!("block ignore enumerate step_by");
+    println!("block skip enumerate step_by");
     block_array
         .local_iter()
-        .ignore(2)
+        .skip(2)
         .enumerate()
         .step_by(3)
         .for_each(move |(i, elem)| {
@@ -62,7 +62,7 @@ fn main() {
     // block_array
     //     .local_iter()
     //     .zip(cyclic_array.local_iter())
-    //     .ignore(2)
+    //     .skip(2)
     //     .enumerate()
     //     .chunks(4)
     //     .step_by(3)
@@ -76,12 +76,12 @@ fn main() {
     // block_array.barrier();
 
     println!("--------------------------------------------------------");
-    println!("cyclic ignore enumerate");
+    println!("cyclic skip enumerate");
 
     cyclic_array
         .local_iter()
         .enumerate()
-        .ignore(2)
+        .skip(2)
         .for_each(move |(i, elem)| {
             println!(
                 "[pe({:?})-{:?}] i: {:?} {:?}",
@@ -221,10 +221,10 @@ fn main() {
     // new_block_array.print();
 
     println!("--------------------------------------------------------");
-    println!("block ignore enumerate");
+    println!("block skip enumerate");
     block_array
         .local_iter()
-        .ignore(10)
+        .skip(10)
         .enumerate()
         .for_each(move |(i, elem)| {
             println!(
@@ -242,10 +242,10 @@ fn main() {
 
 
     println!("--------------------------------------------------------");
-    println!("block ignore  step_by enumerate");
+    println!("block skip  step_by enumerate");
     block_array
         .local_iter()
-        .ignore(10)
+        .skip(10)
         .step_by(3)
         .enumerate()
         .for_each(move |(i, elem)| {
@@ -262,11 +262,11 @@ fn main() {
         block_array.barrier();
 
     println!("--------------------------------------------------------");
-    println!("block take ignore enumerate");
+    println!("block take skip enumerate");
     block_array
         .local_iter()
         .take(60)
-        .ignore(10)
+        .skip(10)
         .enumerate()
         .for_each(move |(i, elem)| {
             println!(
@@ -283,11 +283,11 @@ fn main() {
 
 
     println!("--------------------------------------------------------");
-    println!("block take ignore take enumerate");
+    println!("block take skip take enumerate");
     block_array
         .local_iter()
         .take(60)
-        .ignore(10)
+        .skip(10)
         .take(30)
         .enumerate()
         .for_each(move |(i, elem)| {

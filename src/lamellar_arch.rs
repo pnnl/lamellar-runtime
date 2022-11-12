@@ -22,6 +22,7 @@ pub trait LamellarArch: Send + Sync {
     fn team_pe_id(&self, parent_pe: &usize) -> ArchResult<usize>; // team id is for user convenience, ids == 0..num_pes-1
 }
 
+/// An error that occurs when trying to access a PE that does not exist on a team/subteam
 #[derive(Debug, Clone, Copy)]
 pub struct IdError {
     pub parent_pe: usize,

@@ -1,9 +1,9 @@
 mod copied_chunks;
 use copied_chunks::*;
 
-mod ignore;
+mod skip;
 // use futures_lite::FutureExt;
-use ignore::*;
+use skip::*;
 
 mod step_by;
 use step_by::*;
@@ -62,11 +62,11 @@ pub trait OneSidedIterator {
     {
         CopiedChunks::new(self, chunk_size)
     }
-    fn ignore(self, count: usize) -> Ignore<Self>
+    fn skip(self, count: usize) -> Skip<Self>
     where
         Self: Sized + Send,
     {
-        Ignore::new(self, count)
+        Skip::new(self, count)
     }
     fn step_by(self, step_size: usize) -> StepBy<Self>
     where

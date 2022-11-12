@@ -3,7 +3,7 @@ pub mod local_iterator;
 pub mod one_sided_iterator;
 
 /// The Schedule type controls how elements of a LamellarArray are distributed to threads when 
-/// calling `for_each_with_schedule` on a distributed iterator.
+/// calling `for_each_with_schedule` on a local or distributed iterator.
 /// 
 /// Inspired by then OpenMP schedule parameter
 ///

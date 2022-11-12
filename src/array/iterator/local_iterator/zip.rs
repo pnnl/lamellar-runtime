@@ -43,11 +43,7 @@ where
         // println!("enumerate elems {:?}",in_elems);
         in_elems
     }
-    fn subarray_index(&self, index: usize) -> Option<usize> {
-        let g_index = self.a.subarray_index(index); 
-                                                    // println!("enumerate index: {:?} global_index {:?}", index,g_index);
-        g_index
-    }
+    
     fn advance_index(&mut self, count: usize) {
         self.a.advance_index(count);
         self.b.advance_index(count);

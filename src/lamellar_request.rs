@@ -16,6 +16,7 @@ pub(crate) enum InternalResult {
     Unit,
 }
 
+#[doc(hidden)]
 #[async_trait]
 pub trait LamellarRequest: Sync + Send {
     type Output;
@@ -23,6 +24,7 @@ pub trait LamellarRequest: Sync + Send {
     fn get(&self) -> Self::Output;
 }
 
+#[doc(hidden)]
 #[async_trait]
 pub trait LamellarMultiRequest: Sync + Send {
     type Output;

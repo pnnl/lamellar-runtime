@@ -98,7 +98,7 @@ fn main() {
         let b_block = b
             .onesided_iter() // OneSidedIterator (each pe will iterate through entirety of b)
             .copied_chunks(blocksize) //chunks columns by blocksize  -- manages efficent transfer and placement of data into a local memory region
-            .ignore(k_blk * n_blks * blocksize + j_blk) // skip previously transfered submatrices
+            .skip(k_blk * n_blks * blocksize + j_blk) // skip previously transfered submatrices
             .step_by(n_blks) //grab chunk from next column in submatrix
             // .buffered(100)
             .into_iter() // convert to normal rust iterator
@@ -122,7 +122,7 @@ fn main() {
             let a_vec = unsafe {
                 a.local_as_slice()
                     .chunks(blocksize)
-                    .skip(i_blk * m_blks * blocksize + k_blk) //ignore previously visited submatrices
+                    .skip(i_blk * m_blks * blocksize + k_blk) //skip previously visited submatrices
                     .step_by(m_blks) //grab chunk from the next row in submatrix
                     .take(blocksize) //we only need to take blocksize rows
                     .flatten()
@@ -131,7 +131,7 @@ fn main() {
             };
             // a.dist_iter() //DistributedIterator (each pe will iterate through only its local data -- in parallel)
             //     .chunks(blocksize) //chunks rows by blocksize
-            //     .ignore(i_blk * m_blks * blocksize + k_blk) //ignore previously visited submatrices
+            //     .skip(i_blk * m_blks * blocksize + k_blk) //skip previously visited submatrices
             //     .step_by(m_blks) //grab chunk from the next row in submatrix
             //     .take(blocksize) //we only need to take blocksize rows
             //     .chunks(blocksize) //currently a "hack" for Iterate::collect()

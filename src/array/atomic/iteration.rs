@@ -115,10 +115,10 @@ impl<T: Dist> DistributedIterator for AtomicDistIter<T> {
     //     let g_index = self.data.global_index_from_local(index, 1);
     //     g_index
     // }
-    fn subarray_index(&self, index: usize) -> Option<usize> {
-        let g_index = self.data.subarray_index_from_local(index, 1);
-        g_index
-    }
+    // fn subarray_index(&self, index: usize) -> Option<usize> {
+    //     let g_index = self.data.subarray_index_from_local(index, 1);
+    //     g_index
+    // }
     fn advance_index(&mut self, count: usize) {
         self.cur_i = std::cmp::min(self.cur_i + count, self.end_i);
     }
@@ -158,14 +158,7 @@ impl<T: Dist> LocalIterator for AtomicLocalIter<T> {
     fn elems(&self, in_elems: usize) -> usize {
         in_elems
     }
-    // fn global_index(&self, index: usize) -> Option<usize> {
-    //     let g_index = self.data.global_index_from_local(index, 1);
-    //     g_index
-    // }
-    fn subarray_index(&self, index: usize) -> Option<usize> {
-        let g_index = self.data.subarray_index_from_local(index, 1);
-        g_index
-    }
+    
     fn advance_index(&mut self, count: usize) {
         self.cur_i = std::cmp::min(self.cur_i + count, self.end_i);
     }

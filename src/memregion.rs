@@ -163,7 +163,7 @@ impl<T: Dist> MyFrom<LamellarMemoryRegion<T>> for LamellarArrayInput<T> {
 ///
 /// # Warning
 /// Unless you are very confident in low level distributed memory access it is highly recommended you utilize the
-/// [LamellarArray] interface to construct and interact with distributed memory.
+/// [LamellarArray][crate::array::LamellarArray] interface to construct and interact with distributed memory.
 #[enum_dispatch]
 pub trait RegisteredMemoryRegion<T: Dist> {
     /// The length (in number of elements of `T`) of the local segment of the memory region (i.e. not the global length of the memory region)  

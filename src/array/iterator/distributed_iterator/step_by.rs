@@ -1,6 +1,6 @@
 use crate::array::iterator::distributed_iterator::*;
 
-//ignores the first n elements of iterator I per pe (this implys that n * num_pes elements are ignored in total)
+//skips the first n elements of iterator I per pe (this implys that n * num_pes elements are skipd in total)
 #[derive(Clone, Debug)]
 pub struct StepBy<I> {
     iter: I,
@@ -89,10 +89,10 @@ where
     //     // println!("step_by index: {:?} global_index {:?}", index,g_index);
     //     Some(g_index)
     // }
-    fn subarray_index(&self, index: usize) -> Option<usize> {
-        let g_index = self.iter.subarray_index(index * self.step_size)? / self.step_size; 
-        Some(g_index)
-    }
+    // fn subarray_index(&self, index: usize) -> Option<usize> {
+    //     let g_index = self.iter.subarray_index(index * self.step_size)? / self.step_size; 
+    //     Some(g_index)
+    // }
 
     fn advance_index(&mut self, count: usize) {
         let count = count * self.step_size;
