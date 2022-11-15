@@ -62,6 +62,7 @@ pub use atomic::{
     AtomicArray,
     AtomicByteArray, //AtomicOps
     AtomicByteArrayWeak,
+    AtomicLocalData,
 };
 
 pub(crate) mod generic_atomic;
@@ -221,7 +222,10 @@ pub enum LamellarArrayInput<T: Dist> {
     // UnsafeArray(UnsafeArray<T>),
 }
 
+#[doc(hidden)]
 pub trait LamellarWrite {}
+
+#[doc(hidden)]
 pub trait LamellarRead {}
 
 impl<T: Dist> LamellarRead for T {}

@@ -1,7 +1,7 @@
 //! Parallel iteration of a PE's local segment of a LamellarArray
 //!
 //! This module provides parallel iteration capabilities for the local segments of LamellarArrays,
-//! similar to the `ParallelIterators` provided by the [Rayon]<https://docs.rs/rayon/latest/rayon/> crate.
+//! similar to the `ParallelIterators` provided by the (Rayon)<https://docs.rs/rayon/latest/rayon/> crate.
 //! 
 //! These iterators are purely local to the calling PE, no data transfer occurs.
 mod chunks;
@@ -789,7 +789,7 @@ pub trait IndexedLocalIterator: LocalIterator + SyncSend + Clone + 'static {
 
 /// Immutable LamellarArray local iterator
 ///
-/// This struct is created by calling [local_iter] on any of the LamellarArray types
+/// This struct is created by calling `local_iter` on any of the LamellarArray types
 ///
 /// # Examples
 ///```
@@ -893,7 +893,7 @@ impl<
 
 /// Mutable LamellarArray local iterator
 ///
-/// This struct is created by calling [local_iter_mut] on any of the [LamellarArrayWrite][crate::array::LamellarArrayWrite] types
+/// This struct is created by calling `local_iter_mut` on any of the [LamellarWriteArray][crate::array::LamellarWriteArray] types
 ///
 /// # Examples
 ///```

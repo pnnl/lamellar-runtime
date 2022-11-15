@@ -25,10 +25,14 @@ pub(crate) mod batching;
 
 const BATCH_AM_SIZE: usize = 100000;
 
+/// Supertrait specifing `Sync` + `Send`
 pub trait SyncSend: Sync + Send {}
 
 impl<T: Sync + Send> SyncSend for T {}
 
+/// Supertrait specifying a Type can be used in (remote)ActiveMessages
+///
+/// Types must impl [Serialize][serde::ser::Serialize], [Deserialize][serde::de::DeserializeOwned], and [SyncSend]
 pub trait AmDist: serde::ser::Serialize + serde::de::DeserializeOwned + SyncSend + 'static {}
 
 impl<T: serde::ser::Serialize + serde::de::DeserializeOwned + SyncSend + 'static> AmDist for T {}
@@ -41,6 +45,7 @@ pub(crate) enum ExecType {
     Runtime(Cmd),
 }
 
+#[doc(hidden)]
 pub trait DarcSerde {
     fn ser(&self, num_pes: usize);
     fn des(&self, cur_pe: Result<usize, IdError>);
@@ -51,19 +56,24 @@ impl<T> DarcSerde for &T {
     fn des(&self, _cur_pe: Result<usize, IdError>) {}
 }
 
+#[doc(hidden)]
 pub trait LamellarSerde: SyncSend {
     fn serialized_size(&self) -> usize;
     fn serialize_into(&self, buf: &mut [u8]);
 }
+
+#[doc(hidden)]
 pub trait LamellarResultSerde: LamellarSerde {
     fn serialized_result_size(&self, result: &LamellarAny) -> usize;
     fn serialize_result_into(&self, buf: &mut [u8], result: &LamellarAny);
 }
 
+#[doc(hidden)]
 pub trait RemoteActiveMessage: LamellarActiveMessage + LamellarSerde + LamellarResultSerde {
     fn as_local(self: Arc<Self>) -> LamellarArcLocalAm;
 }
 
+#[doc(hidden)]
 pub trait LamellarActiveMessage: DarcSerde {
     fn exec(
         self: Arc<Self>,

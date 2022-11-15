@@ -290,7 +290,7 @@ unsafe impl<T: Dist + 'static> Send for SendNonNull<T> {}
 
 /// An immutable one sided iterator of a LamellarArray
 ///
-/// This struct is created by calling [one_sided_iter] on any of the LamellarArray types
+/// This struct is created by calling `onesided_iter` on any of the LamellarArray types
 ///
 /// # Examples
 ///```

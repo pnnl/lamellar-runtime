@@ -735,7 +735,7 @@ pub trait IndexedDistributedIterator: DistributedIterator + SyncSend + Clone + '
 
 /// Immutable LamellarArray distributed iterator
 ///
-/// This struct is created by calling [dist_iter] on any of the LamellarArray types
+/// This struct is created by calling `dist_iter` on any of the LamellarArray types
 ///
 /// # Examples
 ///```
@@ -837,7 +837,7 @@ impl<
 
 /// Mutable LamellarArray distributed iterator
 ///
-/// This struct is created by calling [dist_iter_mut] on any of the [LamellarArrayWrite][crate::array::LamellarArrayWrite] types
+/// This struct is created by calling `dist_iter_mut` on any of the [LamellarWriteArray][crate::array::LamellarWriteArray] types
 ///
 /// # Examples
 ///```

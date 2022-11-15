@@ -647,7 +647,34 @@ impl<'a, T: Dist> OpInputEnum<'_, T> {
     }
 }
 
+/// This trait is used the represent the input to a batched LamellarArray element-wise operation.
+///
+/// Valid inputs are essentially "safe" list like data structures:
+///
+/// - T and &T
+/// - &\[T\]
+///     - the local data of a read only array is directly the underlying slice
+///     - ```read_only_array.local_data();```
+/// - Vec\[T\] and &Ve\[T\]
+/// - [AtomicLocalData][crate::array::atomic::AtomicLocalData]
+///     - ```atomic_array.local_data();```
+/// - [LocalLockLocalData][crate::array::local_lock_atomic::LocalLockLocalData] 
+///     - ```local_lock_array.read_local_data();```
+///     - ```local_lock_array.write_local_data();```
+///
+/// The array `LocalData` structures provide protections to ensure the safety gaurantees promised by the given array type are enforced even when accessing the PE's local data 'directly'.
+/// 
+/// It is possible to use a LamellarMemoryRegion or UnsafeArray as the parent source, but these will require unsafe calls to retrieve the underlying slices
+/// the retrieved slices can then be used for the batched operation
+///```
+/// unsafe { onesided_mem_region.as_slice().expect("not on allocating PE") };
+/// unsafe { shared_mem_region.as_slice() };
+/// unsafe { unsafe_array.local_data() };
+///```
+///
+/// Currently it is not recommended to try to implement this for your types. Rather you should try to convert to a slice if possible.
 pub trait OpInput<'a, T: Dist> {
+    #[doc(hidden)]
     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize); //(Vec<(Box<dyn Iterator<Item = T>    + '_>,usize)>,usize);
 }
 
@@ -980,6 +1007,7 @@ impl<'a, T: Dist + ElementOps> OpInput<'a, T> for NativeAtomicLocalData<T>{
         (&self).as_op_input()
     }
 }
+
 #[doc(hidden)]
 pub trait BufferOp: Sync + Send {
     fn add_ops(
@@ -1386,61 +1414,160 @@ impl<T: Dist> LamellarRequest for ArrayOpResultHandleInner<T> {
     }
 }
 
-#[doc(hidden)]
-pub trait ElementOps: AmDist + Dist + Sized {}
-impl<T> ElementOps for T where T: AmDist + Dist {}
+/// Supertrait specifying that array elements must be [Sized] and must be able to be used in remote operations [Dist].
+pub trait ElementOps:  Dist + Sized {}
+impl<T> ElementOps for T where T:  Dist {}
 
-#[doc(hidden)]
+/// Supertrait specifying elements of the array support remote arithmetic assign operations
+/// - Addition ```+=```
+/// - Subtraction ```-=```
+/// - Multiplication ```*=```
+/// - Division ```/=```
 pub trait ElementArithmeticOps:
     std::ops::AddAssign
     + std::ops::SubAssign
     + std::ops::MulAssign
     + std::ops::DivAssign
-    + AmDist
     + Dist
     + Sized
 {
 }
 
-#[doc(hidden)]
 impl<T> ElementArithmeticOps for T where
     T: std::ops::AddAssign
         + std::ops::SubAssign
         + std::ops::MulAssign
         + std::ops::DivAssign
-        + AmDist
         + Dist
 {
 }
 
-#[doc(hidden)]
+/// Supertrait specifying elements of the array support remote bitwise operations
+/// - And ```&```
+/// - Or ```|```
 pub trait ElementBitWiseOps:
-    std::ops::BitAndAssign + std::ops::BitOrAssign + AmDist + Dist + Sized
+    std::ops::BitAndAssign + std::ops::BitOrAssign  + Dist + Sized //+ AmDist
 {
 }
 
 #[doc(hidden)]
 impl<T> ElementBitWiseOps for T where
-    T: std::ops::BitAndAssign + std::ops::BitOrAssign + AmDist + Dist
+    T: std::ops::BitAndAssign + std::ops::BitOrAssign  + Dist //+ AmDist
 {
 }
 
-#[doc(hidden)]
-pub trait ElementCompareEqOps: std::cmp::Eq + AmDist + Dist + Sized {}
-impl<T> ElementCompareEqOps for T where T: std::cmp::Eq + AmDist + Dist {}
 
-#[doc(hidden)]
-pub trait ElementComparePartialEqOps: std::cmp::PartialEq + AmDist + Dist + Sized {}
-impl<T> ElementComparePartialEqOps for T where T: std::cmp::PartialEq + AmDist + Dist {}
+/// Supertrait specifying elements of the array support remote Equality operations
+/// - ```==```
+/// - ```!=```
+pub trait ElementCompareEqOps: std::cmp::Eq  + Dist + Sized //+ AmDist
+{}
+impl<T> ElementCompareEqOps for T where T: std::cmp::Eq  + Dist //+ AmDist
+{}
+
+/// Supertrait specifying elements of the array support remote Partial Equality operations
+/// - ```<=``` 
+/// - ```>=```
+pub trait ElementComparePartialEqOps: std::cmp::PartialEq  + Dist + Sized //+ AmDist
+{}
+impl<T> ElementComparePartialEqOps for T where T: std::cmp::PartialEq  + Dist //+ AmDist
+{}
 
 
+/// The interface for remotely reading elements
+///
+/// these operations can be performed using any LamellarArray type
+///
+/// Both single element operations and batched element operations are provided
+///
+/// Generally if you are performing a large number of operations it will be better to 
+/// use a batched version instead of multiple single element opertations. While the
+/// Runtime internally performs message aggregation for both single element and batched
+/// operations, single element operates have to be treated as individual requests, resulting
+/// in allocation and bookkeeping overheads. A single batched call on the other hand is treated 
+/// as a single request by the runtime.
+///
+/// The results of a batched operation are returned to the user in the same order as the input indices.
+///
+/// # Note
+/// For both single index and batched operations there are nor guarantees to the order in which individual operations occur
+///
+/// # Example
+///```
+/// use lamellar::array::prelude::*;
+///
+/// let world = LamellarWorldBuilder.build();
+/// let array = AtomicArray::new::<usize>(&world,100,Distribution::Block);
+///
+/// let indices = vec![3,54,12,88,29,68];
+/// let reqs = indices.iter().map(|i| array.load(i)).collect::<Vec<_>>();
+/// let vals_1 = array.block_on(async move {
+///      reqs.iter().map(|req| req.await).collect::<Vec<_>>() 
+/// });
+/// let req = array.load(indices);
+/// let vals_2 = array.block_on(req);
+/// for (v1,v2) in vals1.iter().zip(vals2.iter()){
+///     assert_eq!(v1 == v2);
+/// }
+///```
 pub trait ReadOnlyOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
+    /// This call returns the value of the element at the specified index
+    ///
+    /// A future is returned as the result of this call, which is used to retrieve
+    /// the result after the (possibly remote) operation as finished.
+    ///
+    /// # Note
+    /// This future is only lazy with respect to retrieving the result, not
+    /// with respect to launching the operation. That is, the operation will
+    /// occur regardless of if the future is ever polled or not, Enabling
+    /// a "fire and forget" programming model.
+    ///
+    /// # Examples
+    ///
+    ///```
+    /// use lamellar::array::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder.build();
+    /// let array = AtomicArray::new::<usize>(&world,100,Distribution::Block);
+    ///
+    /// let req = array.load(53);
+    /// let val = array.block_on(req);
+    ///```
     #[tracing::instrument(skip_all)]
     fn load<'a>(&self, index: usize) -> Pin<Box<dyn Future<Output = T> + Send>> {
         let dummy_val = self.inner_array().dummy_val(); //we dont actually do anything with this except satisfy apis;
         self.inner_array()
             .initiate_fetch_op(dummy_val, index, ArrayOpCmd::Load)
     }
+
+    /// This call performs a batched vesion of the [load][ReadOnlyOps::load] function,
+    /// return a vector of values rather than a single value.
+    ///
+    /// Instead of a single index, this function expects a list of indicies to load
+    /// (See the [OpInput] documentation for a description of valid input containers)
+    ///
+    /// A future is returned as the result of this call, which is used to retrieve
+    /// the results after the (possibly remote) operations have finished.
+    ///
+    /// # Note
+    /// This future is only lazy with respect to retrieving the result, not
+    /// with respect to launching the operation. That is, the operation will
+    /// occur regardless of if the future is ever polled or not, Enabling
+    /// a "fire and forget" programming model.
+    ///
+    /// # Examples
+    ///
+    ///```
+    /// use lamellar::array::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder.build();
+    /// let array = AtomicArray::new::<usize>(&world,100,Distribution::Block);
+    ///
+    /// let indices = vec![3,54,12,88,29,68];
+    /// let req = array.load(indices);
+    /// let vals = array.block_on(req);
+    /// assert_eq!(vals.len() == indicies.len());
+    ///```
     #[tracing::instrument(skip_all)]
     fn batch_load<'a>(
         &self,
@@ -1452,6 +1579,64 @@ pub trait ReadOnlyOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
     }
 }
 
+/// The interface for remotely writing elements
+///
+/// these operations can be performed using any LamellarArray type
+///
+/// Both single element operations and batched element operations are provided
+///
+/// Generally if you are performing a large number of operations it will be better to 
+/// use a batched version instead of multiple single element opertations. While the
+/// Runtime internally performs message aggregation for both single element and batched
+/// operations, single element operates have to be treated as individual requests, resulting
+/// in allocation and bookkeeping overheads. A single batched call on the other hand is treated 
+/// as a single request by the runtime. (See [ReadOnlyOps] for an example comparing single vs batched load operations of a list of indices)
+///
+/// The results of a batched operation are returned to the user in the same order as the input indices.
+///
+/// # Note
+/// For both single index and batched operations there are nor guarantees to the order in which individual operations occur
+///
+/// # Batched Types
+/// Three types of batched operations can be performed
+/// ## One Value - Many Indicies
+/// In this type, the same value will be applied to the provided indices
+///```
+/// use lamellar::array::prelude::*;
+///
+/// let world = LamellarWorldBuilder.build();
+/// let array = AtomicArray::new::<usize>(&world,100,Distribution::Block);
+///
+/// let indices = vec![3,54,12,88,29,68];
+/// let val = 10;
+/// array.block_on(array.store(indices,val));
+///```
+/// ## Many Values - One Index
+/// In this type, multiple values will be applied to the given index
+///```
+/// use lamellar::array::prelude::*;
+///
+/// let world = LamellarWorldBuilder.build();
+/// let array = AtomicArray::new::<usize>(&world,100,Distribution::Block);
+///
+/// let vals = vec![3,54,12,88,29,68];
+/// let index = 10;
+/// array.block_on(array.store(index,vals));
+///```
+/// ## Many Values - Many Indicies
+/// In this type, values and indices have a one-to-one correspondance.
+///
+/// If the two lists are unequal in length, the longer of the two will be truncated so that it matches the length of the shorter
+///```
+/// use lamellar::array::prelude::*;
+///
+/// let world = LamellarWorldBuilder.build();
+/// let array = AtomicArray::new::<usize>(&world,100,Distribution::Block);
+///
+/// let indices = vec![3,54,12,88,29,68];
+/// let vals = vec![12,2,1,10000,12,13];
+/// array.block_on(array.store(indices,vals));
+///```
 pub trait AccessOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
     #[tracing::instrument(skip_all)]
     fn store<'a>(&self, index: usize, val: T) -> Pin<Box<dyn Future<Output = ()> + Send>> {
