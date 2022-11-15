@@ -1,7 +1,7 @@
 use crate::array::atomic::*;
 
-use crate::array::iterator::distributed_iterator::{DistIteratorLauncher, DistributedIterator, IndexedDistributedIterator};
-use crate::array::iterator::local_iterator::{ LocalIterator};
+use crate::array::iterator::distributed_iterator::{ DistIteratorLauncher, DistributedIterator, IndexedDistributedIterator};
+use crate::array::iterator::local_iterator::{  LocalIterator, IndexedLocalIterator};
 use crate::array::iterator::one_sided_iterator::OneSidedIter;
 use crate::array::*;
 use crate::memregion::Dist;
@@ -67,21 +67,6 @@ impl<T: Dist> AtomicLocalIter<T> {
         }
     }
 }
-// impl<T: Dist + 'static> AtomicDistIter<T> {
-//     pub fn for_each<F>(&self, op: F) -> DistIterForEachHandle
-//     where
-//         F: Fn(AtomicElement<T>) + SyncSend + Clone + 'static,
-//     {
-//         self.data.clone().for_each(self, op)
-//     }
-//     pub fn for_each_async<F, Fut>(&self, op: F) -> DistIterForEachHandle
-//     where
-//         F: Fn(AtomicElement<T>) -> Fut + SyncSend + Clone + 'static,
-//         Fut: Future<Output = ()> + SyncSend + Clone + 'static,
-//     {
-//         self.data.clone().for_each_async(self, op)
-//     }
-// }
 
 impl<T: Dist> DistributedIterator for AtomicDistIter<T> {
     type Item = AtomicElement<T>;
@@ -111,21 +96,13 @@ impl<T: Dist> DistributedIterator for AtomicDistIter<T> {
     fn elems(&self, in_elems: usize) -> usize {
         in_elems
     }
-    // fn global_index(&self, index: usize) -> Option<usize> {
-    //     let g_index = self.data.global_index_from_local(index, 1);
-    //     g_index
-    // }
-    // fn subarray_index(&self, index: usize) -> Option<usize> {
-    //     let g_index = self.data.subarray_index_from_local(index, 1);
-    //     g_index
-    // }
     fn advance_index(&mut self, count: usize) {
         self.cur_i = std::cmp::min(self.cur_i + count, self.end_i);
     }
 }
 impl<T: Dist> IndexedDistributedIterator for AtomicDistIter<T> {
     fn iterator_index(&self, index: usize) -> Option<usize> {
-        let g_index = self.data.subarray_index_from_local(index, 1); 
+        let g_index = self.data.subarray_index_from_local(index,1);
         g_index
     }
 }
@@ -164,6 +141,17 @@ impl<T: Dist> LocalIterator for AtomicLocalIter<T> {
     }
 }
 
+impl<T: Dist + 'static> IndexedLocalIterator for AtomicLocalIter<T> {
+    fn iterator_index(&self, index: usize) -> Option<usize> {
+        if index < self.data.len(){
+            Some(index) //everyone at this point as calculated the actual index (cause we are local only) so just return it
+        }
+        else {
+            None
+        }
+    }
+}
+
 impl<T: Dist> AtomicArray<T> {
     pub fn dist_iter(&self) -> AtomicDistIter<T> {
         AtomicDistIter::new(self.clone(), 0, 0)
@@ -180,9 +168,7 @@ impl<T: Dist> AtomicArray<T> {
     pub fn local_iter_mut(&self) -> AtomicLocalIter<T> {
         AtomicLocalIter::new(self.clone(), 0, 0)
     }
-}
 
-impl<T: Dist> AtomicArray<T> {
     pub fn onesided_iter(&self) -> OneSidedIter<'_, T, AtomicArray<T>> {
         OneSidedIter::new(self.clone().into(), LamellarArray::team(self).clone(), 1)
     }
@@ -195,3 +181,156 @@ impl<T: Dist> AtomicArray<T> {
         )
     }
 }
+
+// impl<T: Dist> DistIteratorLauncher for AtomicArray<T> {
+//     fn global_index_from_local(&self, index: usize, chunk_size: usize) -> Option<usize> {
+//         self.data.global_index_from_local(index, chunk_size)
+//     }
+
+//     fn subarray_index_from_local(&self, index: usize, chunk_size: usize) -> Option<usize> {
+//         self.data.subarray_index_from_local(index, chunk_size)
+//     }
+
+//     fn for_each<I, F>(&self, iter: &I, op: F) -> Pin<Box<dyn Future<Output = ()> + Send>>
+//     where
+//         I: DistributedIterator + 'static,
+//         F: Fn(I::Item) + SyncSend + Clone + 'static,
+//     {
+//         self.data.for_each(iter, op)
+//     }
+//     fn for_each_with_schedule<I, F>(
+//         &self,
+//         sched: Schedule,
+//         iter: &I,
+//         op: F,
+//     ) -> Pin<Box<dyn Future<Output = ()> + Send>>
+//     where
+//         I: DistributedIterator + 'static,
+//         F: Fn(I::Item) + SyncSend + Clone + 'static,
+//     {
+//         self.data.for_each_with_schedule(sched, iter, op)
+//     }
+//     fn for_each_async<I, F, Fut>(&self, iter: &I, op: F) -> Pin<Box<dyn Future<Output = ()> + Send>>
+//     where
+//         I: DistributedIterator + 'static,
+//         F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
+//         Fut: Future<Output = ()> + Send + 'static,
+//     {
+//         self.data.for_each_async(iter, op)
+//     }
+//     fn for_each_async_with_schedule<I, F, Fut>(
+//         &self,
+//         sched: Schedule,
+//         iter: &I,
+//         op: F,
+//     ) -> Pin<Box<dyn Future<Output = ()> + Send>>
+//     where
+//         I: DistributedIterator + 'static,
+//         F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
+//         Fut: Future<Output = ()> + Send + 'static,
+//     {
+//         self.data.for_each_async_with_schedule(sched, iter, op)
+//     }
+
+//     fn collect<I, A>(&self, iter: &I, d: Distribution) -> Pin<Box<dyn Future<Output = A> + Send>>
+//     where
+//         I: DistributedIterator + 'static,
+//         I::Item: Dist,
+//         A: From<UnsafeArray<I::Item>> + SyncSend + 'static,
+//     {
+//         self.data.collect(iter, d)
+//     }
+//     fn collect_async<I, A, B>(
+//         &self,
+//         iter: &I,
+//         d: Distribution,
+//     ) -> Pin<Box<dyn Future<Output = A> + Send>>
+//     where
+//         I: DistributedIterator + 'static,
+//         I::Item: Future<Output = B> + Send + 'static,
+//         B: Dist,
+//         A: From<UnsafeArray<B>> + SyncSend + 'static,
+//     {
+//         self.data.collect_async(iter, d)
+//     }
+//     fn team(&self) -> Pin<Arc<LamellarTeamRT>> {
+//         self.data.team().clone()
+//     }
+// }
+
+// impl<T: Dist> LocalIteratorLauncher for AtomicArray<T> {
+//     fn local_global_index_from_local(&self, index: usize, chunk_size: usize) -> Option<usize> {
+//         self.data.local_global_index_from_local(index, chunk_size)
+//     }
+
+//     fn local_subarray_index_from_local(&self, index: usize, chunk_size: usize) -> Option<usize> {
+//         self.data.local_subarray_index_from_local(index, chunk_size)
+//     }
+
+//     fn local_for_each<I, F>(&self, iter: &I, op: F) -> Pin<Box<dyn Future<Output = ()> + Send>>
+//     where
+//         I: LocalIterator + 'static,
+//         F: Fn(I::Item) + SyncSend + Clone + 'static,
+//     {
+//         self.data.local_for_each(iter, op)
+//     }
+//     fn local_for_each_with_schedule<I, F>(
+//         &self,
+//         sched: Schedule,
+//         iter: &I,
+//         op: F,
+//     ) -> Pin<Box<dyn Future<Output = ()> + Send>>
+//     where
+//         I: LocalIterator + 'static,
+//         F: Fn(I::Item) + SyncSend + Clone + 'static,
+//     {
+//         self.data.local_for_each_with_schedule(sched, iter, op)
+//     }
+//     fn local_for_each_async<I, F, Fut>(&self, iter: &I, op: F) -> Pin<Box<dyn Future<Output = ()> + Send>>
+//     where
+//         I: LocalIterator + 'static,
+//         F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
+//         Fut: Future<Output = ()> + Send + 'static,
+//     {
+//         self.data.local_for_each_async(iter, op)
+//     }
+//     fn local_for_each_async_with_schedule<I, F, Fut>(
+//         &self,
+//         sched: Schedule,
+//         iter: &I,
+//         op: F,
+//     ) -> Pin<Box<dyn Future<Output = ()> + Send>>
+//     where
+//         I: LocalIterator + 'static,
+//         F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
+//         Fut: Future<Output = ()> + Send + 'static,
+//     {
+//         self.data.local_for_each_async_with_schedule(sched, iter, op)
+//     }
+
+//     // fn local_collect<I, A>(&self, iter: &I, d: Distribution) -> Pin<Box<dyn Future<Output = A> + Send>>
+//     // where
+//     //     I: LocalIterator + 'static,
+//     //     I::Item: Dist,
+//     //     A: From<UnsafeArray<I::Item>> + SyncSend + 'static,
+//     // {
+//     //     self.data.local_collect(iter, d)
+//     // }
+//     // fn local_collect_async<I, A, B>(
+//     //     &self,
+//     //     iter: &I,
+//     //     d: Distribution,
+//     // ) -> Pin<Box<dyn Future<Output = A> + Send>>
+//     // where
+//     //     I: LocalIterator + 'static,
+//     //     I::Item: Future<Output = B> + Send + 'static,
+//     //     B: Dist,
+//     //     A: From<UnsafeArray<B>> + SyncSend + 'static,
+//     // {
+//     //     self.data.local_collect_async(iter, d)
+//     // }
+    
+//     fn team(&self) -> Pin<Arc<LamellarTeamRT>> {
+//         self.data.team().clone()
+//     }
+// }

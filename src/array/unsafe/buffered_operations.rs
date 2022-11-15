@@ -7,24 +7,6 @@ use crate::lamellar_request::LamellarRequest;
 use std::any::TypeId;
 use std::collections::HashMap;
 
-// type OpFn = fn(*const u8, UnsafeByteArray, usize) -> LamellarArcAm;
-
-// lazy_static! {
-//     static ref OPS: HashMap<(ArrayOpCmd, TypeId), OpFn> = {
-//         let mut map = HashMap::new();
-//         for op in crate::inventory::iter::<UnsafeArrayOp> {
-//             map.insert(op.id.clone(), op.op);
-//         }
-//         map
-//     };
-// }
-
-// pub struct UnsafeArrayOp<T: Dist> {
-//     pub id: (ArrayOpCmd, TypeId),
-//     pub op: OpFn,
-// }
-
-// crate::inventory::collect!(UnsafeArrayOp);
 
 type BufFn = fn(UnsafeByteArrayWeak) -> Arc<dyn BufferOp>;
 
@@ -48,9 +30,6 @@ crate::inventory::collect!(UnsafeArrayOpBuf);
 
 #[derive(Debug)]
 pub(crate) enum BufOpsRequest<T: Dist> {
-    // NoFetch(Box<dyn LamellarRequest<Output = ()>  >),
-    // Fetch(Box<dyn LamellarRequest<Output = Vec<T>>  >),
-    // Result(Box<dyn LamellarRequest<Output = Vec<Result<T,T>>>  >),
     NoFetch(Box<ArrayOpHandleInner>),
     Fetch(Box<ArrayOpFetchHandleInner<T>>),
     Result(Box<ArrayOpResultHandleInner<T>>),

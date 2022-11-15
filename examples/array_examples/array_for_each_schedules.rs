@@ -11,11 +11,11 @@ fn main() {
     let world = lamellar::LamellarWorldBuilder::new().build();
     let _my_pe = world.my_pe();
     let num_pes = world.num_pes();
-    let block_array = UnsafeArray::<usize>::new(world.team(), ARRAY_LEN, Distribution::Block);
+    let block_array = AtomicArray::<usize>::new(world.team(), ARRAY_LEN, Distribution::Block);
     block_array
         .dist_iter_mut()
         .enumerate()
-        .for_each(move |(i, e)| *e = i % (ARRAY_LEN / num_pes));
+        .for_each(move |(i, e)| e.store( i % (ARRAY_LEN / num_pes)));
     world.wait_all();
 
     let thread_cnts: Arc<Mutex<HashMap<ThreadId, usize>>> = Arc::new(Mutex::new(HashMap::new()));
@@ -23,8 +23,8 @@ fn main() {
     let timer = Instant::now();
     let tc = thread_cnts.clone();
     block_array.dist_iter().for_each(move |e| {
-        std::thread::sleep(Duration::from_millis((e * 1) as u64));
-        *tc.lock().entry(std::thread::current().id()).or_insert(0) += e * 1;
+        std::thread::sleep(Duration::from_millis((e.load() * 1) as u64));
+        *tc.lock().entry(std::thread::current().id()).or_insert(0) += e.load() * 1;
     });
     block_array.wait_all();
     block_array.barrier();
@@ -38,8 +38,8 @@ fn main() {
     block_array
         .dist_iter()
         .for_each_with_schedule(Schedule::WorkStealing, move |e| {
-            std::thread::sleep(Duration::from_millis((e * 1) as u64));
-            *tc.lock().entry(std::thread::current().id()).or_insert(0) += e * 1;
+            std::thread::sleep(Duration::from_millis((e.load() * 1) as u64));
+            *tc.lock().entry(std::thread::current().id()).or_insert(0) += e.load() * 1;
         });
     block_array.wait_all();
     block_array.barrier();
@@ -53,8 +53,8 @@ fn main() {
     block_array
         .dist_iter()
         .for_each_with_schedule(Schedule::Guided, move |e| {
-            std::thread::sleep(Duration::from_millis((e * 1) as u64));
-            *tc.lock().entry(std::thread::current().id()).or_insert(0) += e * 1;
+            std::thread::sleep(Duration::from_millis((e.load() * 1) as u64));
+            *tc.lock().entry(std::thread::current().id()).or_insert(0) += e.load() * 1;
         });
     block_array.wait_all();
     block_array.barrier();
@@ -68,8 +68,8 @@ fn main() {
     block_array
         .dist_iter()
         .for_each_with_schedule(Schedule::Dynamic, move |e| {
-            std::thread::sleep(Duration::from_millis((e * 1) as u64));
-            *tc.lock().entry(std::thread::current().id()).or_insert(0) += e * 1;
+            std::thread::sleep(Duration::from_millis((e.load() * 1) as u64));
+            *tc.lock().entry(std::thread::current().id()).or_insert(0) += e.load() * 1;
         });
     block_array.wait_all();
     block_array.barrier();
@@ -83,8 +83,8 @@ fn main() {
     block_array
         .dist_iter()
         .for_each_with_schedule(Schedule::Chunk(10), move |e| {
-            std::thread::sleep(Duration::from_millis((e * 1) as u64));
-            *tc.lock().entry(std::thread::current().id()).or_insert(0) += e * 1;
+            std::thread::sleep(Duration::from_millis((e.load() * 1) as u64));
+            *tc.lock().entry(std::thread::current().id()).or_insert(0) += e.load() * 1;
         });
     block_array.wait_all();
     block_array.barrier();

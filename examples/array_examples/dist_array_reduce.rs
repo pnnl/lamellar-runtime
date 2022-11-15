@@ -48,12 +48,12 @@ fn main() {
                 *elem = i;
                 i += 1
             }
-        }
-        println!("{:?}", unsafe { local_mem_region.as_slice().unwrap() });
-        // let index = ((len_per_pe * (my_pe) as f32).round() as usize) % total_len;
+            println!("{:?}", local_mem_region.as_slice().unwrap() );
+            // let index = ((len_per_pe * (my_pe) as f32).round() as usize) % total_len;
 
-        world.block_on(block_array.put(0, &local_mem_region));
-        world.block_on(cyclic_array.put(0, &local_mem_region));
+            world.block_on(block_array.put(0, &local_mem_region));
+            world.block_on(cyclic_array.put(0, &local_mem_region));
+        }
     }
     world.barrier();
     std::thread::sleep(std::time::Duration::from_secs(1));
@@ -115,21 +115,24 @@ fn main() {
     //     block_array.add(i, 10);
     // }
     // block_array.for_each_mut(|x| *x += *x);
-    world.block_on(cyclic_array.dist_iter_mut().for_each(|x| *x += *x));
-    world.block_on(
-        cyclic_array
-            .dist_iter()
-            .enumerate()
-            .for_each(|x| println!("x: {:?}", x)),
-    );
+    unsafe{
+        world.block_on(cyclic_array.dist_iter_mut().for_each(|x| *x += *x));
+        world.block_on(
+            cyclic_array
+                .dist_iter()
+                .enumerate()
+                .for_each(|x| println!("x: {:?}", x)),
+        );
+    
     // cyclic_array.dist_iter().for_each(|x| println!("x: {:?}", x));
 
-    world.block_on(
-        block_array
-            .dist_iter()
-            .enumerate()
-            .for_each(|x| println!("x: {:?}", x)),
-    );
+        world.block_on(
+            block_array
+                .dist_iter()
+                .enumerate()
+                .for_each(|x| println!("x: {:?}", x)),
+        );
+    }
     // block_array.dist_iter().for_each(|x| println!("x: {:?}", x));
     // block_array.for_each(|x| println!("x: {:?}", x));
     // cyclic_array.for_each_mut(|x| *x += *x);

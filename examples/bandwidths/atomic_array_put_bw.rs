@@ -2,9 +2,8 @@
 /// Test the bandwidth between two PEs using an RDMA Put of N bytes
 /// from a local array into a remote PE.
 /// --------------------------------------------------------------------
-// use lamellar::ActiveMessaging;
-use lamellar::array::{DistributedIterator, Distribution, UnsafeArray};
-use lamellar::RemoteMemoryRegion;
+use lamellar::array::prelude::*;
+use lamellar::memregion::prelude::*;
 use std::time::Instant;
 
 const ARRAY_LEN: usize = 1024 * 1024 * 1024;
@@ -13,7 +12,7 @@ fn main() {
     let world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();
     let num_pes = world.num_pes();
-    let array: UnsafeArray<u8> = UnsafeArray::new(&world, ARRAY_LEN * num_pes, Distribution::Block);
+    let array: LocalLockArray<u8> = LocalLockArray::new(&world, ARRAY_LEN * num_pes, Distribution::Block);
     let data = world.alloc_one_sided_mem_region::<u8>(ARRAY_LEN);
     unsafe {
         for i in data.as_mut_slice().unwrap() {
@@ -22,8 +21,8 @@ fn main() {
     }
     array
         .dist_iter_mut()
-        .for_each(move |elem| *elem = 255 as u8); //this is pretty slow for atomic arrays as we perform an atomic store for 2^30 elements
-    let mut array = array.into_atomic(); //so we simply convert the unsafe array to atomic after initalization
+        .for_each(move |elem| *elem = 255 as u8); //this is can be pretty slow for atomic arrays as we perform an atomic store for 2^30 elements, local lock tends to perform better
+    let mut array = array.into_atomic(); //so we simply convert the LocalLockArray array to atomic after initalization
 
     world.barrier();
     let s = Instant::now();
@@ -102,7 +101,7 @@ fn main() {
         //         i.store(255 as u8);
         //     }
         // };
-        let temp = array.into_unsafe();
+        let temp = array.into_local_lock();
         temp.dist_iter_mut().for_each(move |elem| *elem = 255 as u8); //this is pretty slow for atomic arrays as we perform an atomic store for 2^30 elements
         array = temp.into_atomic();
         world.barrier();

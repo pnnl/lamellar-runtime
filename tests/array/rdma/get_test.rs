@@ -17,11 +17,13 @@ fn initialize_mem_region<T: Dist + std::ops::AddAssign>(
 
 macro_rules! initialize_array {
     (UnsafeArray,$array:ident,$t:ty) => {
+        unsafe{
         $array
             .dist_iter_mut()
             .enumerate()
             .for_each(move |(i, x)| *x = i as $t);
         $array.wait_all();
+        }
     };
     (AtomicArray,$array:ident,$t:ty) => {
         $array
@@ -30,7 +32,7 @@ macro_rules! initialize_array {
             .for_each(move |(i, x)| x.store(i as $t));
         $array.wait_all();
     };
-    (LocalLockAtomicArray,$array:ident,$t:ty) => {
+    (LocalLockArray,$array:ident,$t:ty) => {
         $array
             .dist_iter_mut()
             .enumerate()
@@ -41,22 +43,26 @@ macro_rules! initialize_array {
         // println!("into unsafe");
         let temp = $array.into_unsafe();
         // println!("unsafe");
+        unsafe{
         temp.dist_iter_mut()
             .enumerate()
             .for_each(move |(i, x)| *x = i as $t);
         temp.wait_all();
         $array = temp.into_read_only();
+        }
     };
 }
 
 macro_rules! initialize_array_range {
     (UnsafeArray,$array:ident,$t:ty,$range:expr) => {{
+        unsafe {
         let subarray = $array.sub_array($range);
         subarray
             .dist_iter_mut()
             .enumerate()
             .for_each(move |(i, x)| *x = i as $t);
         subarray.wait_all();
+        }
     }};
     (AtomicArray,$array:ident,$t:ty,$range:expr) => {{
         let subarray = $array.sub_array($range);
@@ -66,7 +72,7 @@ macro_rules! initialize_array_range {
             .for_each(move |(i, x)| x.store(i as $t));
         subarray.wait_all();
     }};
-    (LocalLockAtomicArray,$array:ident,$t:ty,$range:expr) => {{
+    (LocalLockArray,$array:ident,$t:ty,$range:expr) => {{
         let subarray = $array.sub_array($range);
         subarray
             .dist_iter_mut()
@@ -78,13 +84,16 @@ macro_rules! initialize_array_range {
         // println!("into unsafe");
         let temp = $array.into_unsafe();
         // println!("unsafe");
-        let subarray = temp.sub_array($range);
-        subarray
-            .dist_iter_mut()
-            .enumerate()
-            .for_each(move |(i, x)| *x = i as $t);
-        subarray.wait_all();
-        drop(subarray);
+        unsafe{
+            let subarray = temp.sub_array($range);
+            subarray
+                .dist_iter_mut()
+                .enumerate()
+                .for_each(move |(i, x)| *x = i as $t);
+            
+            subarray.wait_all();
+            drop(subarray);
+        }
         println!("into read only");
         $array = temp.into_read_only();
         println!("read only");
@@ -281,21 +290,21 @@ fn main() {
             "f64" => get_test!(AtomicArray, f64, len, dist_type),
             _ => eprintln!("unsupported element type"),
         },
-        "LocalLockAtomicArray" => match elem.as_str() {
-            "u8" => get_test!(LocalLockAtomicArray, u8, len, dist_type),
-            "u16" => get_test!(LocalLockAtomicArray, u16, len, dist_type),
-            "u32" => get_test!(LocalLockAtomicArray, u32, len, dist_type),
-            "u64" => get_test!(LocalLockAtomicArray, u64, len, dist_type),
-            "u128" => get_test!(LocalLockAtomicArray, u128, len, dist_type),
-            "usize" => get_test!(LocalLockAtomicArray, usize, len, dist_type),
-            "i8" => get_test!(LocalLockAtomicArray, i8, len, dist_type),
-            "i16" => get_test!(LocalLockAtomicArray, i16, len, dist_type),
-            "i32" => get_test!(LocalLockAtomicArray, i32, len, dist_type),
-            "i64" => get_test!(LocalLockAtomicArray, i64, len, dist_type),
-            "i128" => get_test!(LocalLockAtomicArray, i128, len, dist_type),
-            "isize" => get_test!(LocalLockAtomicArray, isize, len, dist_type),
-            "f32" => get_test!(LocalLockAtomicArray, f32, len, dist_type),
-            "f64" => get_test!(LocalLockAtomicArray, f64, len, dist_type),
+        "LocalLockArray" => match elem.as_str() {
+            "u8" => get_test!(LocalLockArray, u8, len, dist_type),
+            "u16" => get_test!(LocalLockArray, u16, len, dist_type),
+            "u32" => get_test!(LocalLockArray, u32, len, dist_type),
+            "u64" => get_test!(LocalLockArray, u64, len, dist_type),
+            "u128" => get_test!(LocalLockArray, u128, len, dist_type),
+            "usize" => get_test!(LocalLockArray, usize, len, dist_type),
+            "i8" => get_test!(LocalLockArray, i8, len, dist_type),
+            "i16" => get_test!(LocalLockArray, i16, len, dist_type),
+            "i32" => get_test!(LocalLockArray, i32, len, dist_type),
+            "i64" => get_test!(LocalLockArray, i64, len, dist_type),
+            "i128" => get_test!(LocalLockArray, i128, len, dist_type),
+            "isize" => get_test!(LocalLockArray, isize, len, dist_type),
+            "f32" => get_test!(LocalLockArray, f32, len, dist_type),
+            "f64" => get_test!(LocalLockArray, f64, len, dist_type),
             _ => eprintln!("unsupported element type"),
         },
         "ReadOnlyArray" => match elem.as_str() {

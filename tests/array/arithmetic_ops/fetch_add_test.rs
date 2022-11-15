@@ -6,7 +6,7 @@ use rand::distributions::Uniform;
 
 macro_rules! initialize_array {
     (UnsafeArray,$array:ident,$init_val:ident) => {
-        $array.dist_iter_mut().for_each(move |x| *x = $init_val);
+        unsafe {$array.dist_iter_mut().for_each(move |x| *x = $init_val)};
         $array.wait_all();
         $array.barrier();
     };
@@ -18,7 +18,7 @@ macro_rules! initialize_array {
         $array.wait_all();
         $array.barrier();
     };
-    (LocalLockAtomicArray,$array:ident,$init_val:ident) => {
+    (LocalLockArray,$array:ident,$init_val:ident) => {
         $array.dist_iter_mut().for_each(move |x| *x = $init_val);
         $array.wait_all();
         $array.barrier();
@@ -35,7 +35,7 @@ macro_rules! check_val {
             $valid = false;
         }
     };
-    (LocalLockAtomicArray,$val:ident,$max_val:ident,$valid:ident) => {
+    (LocalLockArray,$val:ident,$max_val:ident,$valid:ident) => {
         if (($val - $max_val) as f32).abs() > 0.0001 {
             //all updates should be preserved
             $valid = false;
@@ -51,7 +51,7 @@ macro_rules! insert_prev{
     (AtomicArray,$val:ident,$prevs:ident) => {
         $prevs.insert($val)
     };
-    (LocalLockAtomicArray,$val:ident,$prevs:ident) => {
+    (LocalLockArray,$val:ident,$prevs:ident) => {
         $prevs.insert($val)
     };
 }
@@ -103,7 +103,8 @@ macro_rules! fetch_add_test{
             }
             // array.wait_all();
             array.barrier();
-            for (i,elem) in array.onesided_iter().into_iter().enumerate(){
+            #[allow(unused_unsafe)]
+            for (i,elem) in unsafe{ array.onesided_iter().into_iter().enumerate()}{
                 let val = *elem;
                 check_val!($array,val,max_val,success);
                 if !success{
@@ -126,7 +127,8 @@ macro_rules! fetch_add_test{
                 let _val =  world.block_on(req) as usize;
             }
             array.barrier();
-            let sum = array.onesided_iter().into_iter().fold(0,|acc,x| acc+ *x as usize);
+            #[allow(unused_unsafe)]
+            let sum = unsafe{array.onesided_iter().into_iter().fold(0,|acc,x| acc+ *x as usize)};
             let tot_updates = num_updates * num_pes;
             check_val!($array,sum,tot_updates,success);
             if !success{
@@ -162,7 +164,8 @@ macro_rules! fetch_add_test{
 
             }
             array.barrier();
-            for (i,elem) in sub_array.onesided_iter().into_iter().enumerate(){
+            #[allow(unused_unsafe)]
+            for (i,elem) in unsafe{ sub_array.onesided_iter().into_iter().enumerate()} {
                 let val = *elem;
                 check_val!($array,val,max_val,success);
                 if !success{
@@ -184,7 +187,8 @@ macro_rules! fetch_add_test{
                 let _val =  world.block_on(req) as usize;
             }
             array.barrier();
-            let sum = sub_array.onesided_iter().into_iter().fold(0,|acc,x| acc+ *x as usize);
+            #[allow(unused_unsafe)]
+            let sum = unsafe {sub_array.onesided_iter().into_iter().fold(0,|acc,x| acc+ *x as usize)};
             let tot_updates = num_updates * num_pes;
             check_val!($array,sum,tot_updates,success);
             if !success{
@@ -223,7 +227,8 @@ macro_rules! fetch_add_test{
 
                 }
                 sub_array.barrier();
-                for (i,elem) in sub_array.onesided_iter().into_iter().enumerate(){
+                #[allow(unused_unsafe)]
+                for (i,elem) in unsafe{sub_array.onesided_iter().into_iter().enumerate()}{
                     let val = *elem;
                     check_val!($array,val,max_val,success);
                     if !success{
@@ -245,7 +250,8 @@ macro_rules! fetch_add_test{
                     let _val =  world.block_on(req) as usize;
                 }
                 sub_array.barrier();
-                let sum = sub_array.onesided_iter().into_iter().fold(0,|acc,x| acc+ *x as usize);
+                #[allow(unused_unsafe)]
+                let sum = unsafe{sub_array.onesided_iter().into_iter().fold(0,|acc,x| acc+ *x as usize)};
                 let tot_updates = num_updates * num_pes;
                 check_val!($array,sum,tot_updates,success);
                 if !success{
@@ -266,10 +272,11 @@ macro_rules! fetch_add_test{
 
 macro_rules! initialize_array2 {
     (UnsafeArray,$array:ident,$init_val:ident) => {
-        $array
+        #[allow(unused_unsafe)]
+        unsafe {$array
             .dist_iter_mut()
             .enumerate()
-            .for_each(move |(i, x)| *x = i);
+            .for_each(move |(i, x)| *x = i)};
         $array.wait_all();
         $array.barrier();
     };
@@ -281,7 +288,7 @@ macro_rules! initialize_array2 {
         $array.wait_all();
         $array.barrier();
     };
-    (LocalLockAtomicArray,$array:ident,$init_val:ident) => {
+    (LocalLockArray,$array:ident,$init_val:ident) => {
         $array
             .dist_iter_mut()
             .enumerate()
@@ -312,7 +319,8 @@ macro_rules! check_results {
                 req_cnt+=1;
             }
         }
-        for (i, elem) in $array.onesided_iter().into_iter().enumerate() {
+        #[allow(unused_unsafe)]
+        for (i, elem) in unsafe { $array.onesided_iter().into_iter().enumerate() }{
             let val = *elem;
             let real_val = i + $num_pes;
             check_val!($array_ty, real_val, val, success);
@@ -348,10 +356,12 @@ macro_rules! input_test{
             // let init_val=0;
             initialize_array2!($array, array, init_val);
             if $dist == lamellar::array::Distribution::Block{
-                input_array.dist_iter_mut().enumerate().for_each(move |(i,x)| {/*println!("i: {:?}",i);*/ *x = i%array_total_len});
+                #[allow(unused_unsafe)]
+                unsafe { input_array.dist_iter_mut().enumerate().for_each(move |(i,x)| {/*println!("i: {:?}",i);*/ *x = i%array_total_len});}
             }
             else{
-                input_array.dist_iter_mut().enumerate().for_each(move |(i,x)| {/*println!("i: {:?}",i);*/ *x = i/num_pes});
+                #[allow(unused_unsafe)]
+                unsafe { input_array.dist_iter_mut().enumerate().for_each(move |(i,x)| {/*println!("i: {:?}",i);*/ *x = i/num_pes});}
             }
 
             array.wait_all();
@@ -407,99 +417,37 @@ macro_rules! input_test{
             }
             check_results!($array,array,num_pes,reqs,"scoped &Vec<T>");
 
-            // LMR<T>------------------------------
-            let lmr=world.alloc_one_sided_mem_region(array.len());
+            // scoped &LMR<T>------------------------------
             let mut reqs = vec![];
-            unsafe{
+            unsafe {
+                let lmr=world.alloc_one_sided_mem_region(array.len());
                 let slice = lmr.as_mut_slice().unwrap();
                 for i in 0..array.len(){
                     slice[i]=i;
                 }
-            }
-            reqs.push(array.batch_fetch_add(lmr.clone(),1));
-            check_results!($array,array,num_pes,reqs,"LMR<T>");
-            // &LMR<T>------------------------------
-            let mut reqs = vec![];
-            reqs.push(array.batch_fetch_add(&lmr,1));
-            check_results!($array,array,num_pes,reqs,"&LMR<T>");
-            drop(lmr);
-            // scoped LMR<T>------------------------------
-            let mut reqs = vec![];
-            {
-                let lmr=world.alloc_one_sided_mem_region(array.len());
-                unsafe{
-                    let slice = lmr.as_mut_slice().unwrap();
-                    for i in 0..array.len(){
-                        slice[i]=i;
-                    }
-                }
-                reqs.push(array.batch_fetch_add(lmr.clone(),1));
-                check_results!($array,array,num_pes,reqs,"scoped LMR<T>");
-            }
-            // scoped &LMR<T>------------------------------
-            let mut reqs = vec![];
-            {
-                let lmr=world.alloc_one_sided_mem_region(array.len());
-                unsafe{
-                    let slice = lmr.as_mut_slice().unwrap();
-                    for i in 0..array.len(){
-                        slice[i]=i;
-                    }
-                }
-                reqs.push(array.batch_fetch_add(&lmr,1));
+                reqs.push(array.batch_fetch_add(slice,1));
                 check_results!($array,array,num_pes,reqs,"scoped &LMR<T>");
             }
 
-            // SMR<T>------------------------------
+            // scoped SMR<T>------------------------------
             let mut reqs = vec![];
-            let smr=world.alloc_shared_mem_region(array.len());
-            unsafe{
+            unsafe {
+                let smr=world.alloc_shared_mem_region(array.len());
                 let slice = smr.as_mut_slice().unwrap();
                 for i in 0..array.len(){
                     slice[i]=i;
                 }
-            }
-            reqs.push(array.batch_fetch_add(smr.clone(),1));
-            check_results!($array,array,num_pes,reqs,"SMR<T>");
-            // &SMR<T>------------------------------
-            let mut reqs = vec![];
-            reqs.push(array.batch_fetch_add(&smr,1));
-            check_results!($array,array,num_pes,reqs,"&SMR<T>");
-            drop(smr);
-            // scoped SMR<T>------------------------------
-            let mut reqs = vec![];
-            {
-                let smr=world.alloc_shared_mem_region(array.len());
-                unsafe{
-                    let slice = smr.as_mut_slice().unwrap();
-                    for i in 0..array.len(){
-                        slice[i]=i;
-                    }
-                }
-                reqs.push(array.batch_fetch_add(smr,1));
+                
+                reqs.push(array.batch_fetch_add(slice,1));
                 check_results!($array,array,num_pes,reqs,"scoped SMR<T>");
             }
-            // scoped &SMR<T>------------------------------
-            let mut reqs = vec![];
-            {
-                let smr=world.alloc_shared_mem_region(array.len());
-                unsafe{
-                    let slice = smr.as_mut_slice().unwrap();
-                    for i in 0..array.len(){
-                        slice[i]=i;
-                    }
-                }
-                reqs.push(array.batch_fetch_add(&smr,1));
-                check_results!($array,array,num_pes,reqs,"scoped &SMR<T>");
-            }
-
             // UnsafeArray<T>------------------------------
             // let mut reqs = vec![];
             // reqs.push(array.fetch_add(input_array.clone(),1));
             // check_results!($array,array,num_pes,reqs,"UnsafeArray<T>");
             // UnsafeArray<T>------------------------------
             let mut reqs = vec![];
-            reqs.push(array.batch_fetch_add(&input_array,1));
+            reqs.push(array.batch_fetch_add(unsafe{input_array.local_data()},1));
             check_results!($array,array,num_pes,reqs,"&UnsafeArray<T>");
 
             // ReadOnlyArray<T>------------------------------
@@ -509,7 +457,7 @@ macro_rules! input_test{
             // check_results!($array,array,num_pes,reqs,"ReadOnlyArray<T>");
             // ReadOnlyArray<T>------------------------------
             let mut reqs = vec![];
-            reqs.push(array.batch_fetch_add(&input_array,1));
+            reqs.push(array.batch_fetch_add(input_array.local_data(),1));
             check_results!($array,array,num_pes,reqs,"&ReadOnlyArray<T>");
 
             // AtomicArray<T>------------------------------
@@ -519,18 +467,18 @@ macro_rules! input_test{
             // check_results!($array,array,num_pes,reqs,"AtomicArray<T>");
             // AtomicArray<T>------------------------------
             let mut reqs = vec![];
-            reqs.push(array.batch_fetch_add(&input_array,1));
+            reqs.push(array.batch_fetch_add(&input_array.local_data(),1));
             check_results!($array,array,num_pes,reqs,"&AtomicArray<T>");
 
-             // LocalLockAtomicArray<T>------------------------------
+             // LocalLockArray<T>------------------------------
             //  let mut reqs = vec![];
-             let input_array = input_array.into_local_lock_atomic();
+             let input_array = input_array.into_local_lock();
             //  reqs.push(array.fetch_add(input_array.clone(),1));
-            //  check_results!($array,array,num_pes,reqs,"LocalLockAtomicArray<T>");
-             // LocalLockAtomicArray<T>------------------------------
+            //  check_results!($array,array,num_pes,reqs,"LocalLockArray<T>");
+             // LocalLockArray<T>------------------------------
              let mut reqs = vec![];
-             reqs.push(array.batch_fetch_add(&input_array,1));
-             check_results!($array,array,num_pes,reqs,"&LocalLockAtomicArray<T>");
+             reqs.push(array.batch_fetch_add(&input_array.local_data(),1));
+             check_results!($array,array,num_pes,reqs,"&LocalLockArray<T>");
        }
     }
 }
@@ -585,22 +533,22 @@ fn main() {
             "input" => input_test!(AtomicArray, len, dist_type),
             _ => eprintln!("unsupported element type"),
         },
-        "LocalLockAtomicArray" => match elem.as_str() {
-            "u8" => fetch_add_test!(LocalLockAtomicArray, u8, len, dist_type),
-            "u16" => fetch_add_test!(LocalLockAtomicArray, u16, len, dist_type),
-            "u32" => fetch_add_test!(LocalLockAtomicArray, u32, len, dist_type),
-            "u64" => fetch_add_test!(LocalLockAtomicArray, u64, len, dist_type),
-            "u128" => fetch_add_test!(LocalLockAtomicArray, u128, len, dist_type),
-            "usize" => fetch_add_test!(LocalLockAtomicArray, usize, len, dist_type),
-            "i8" => fetch_add_test!(LocalLockAtomicArray, i8, len, dist_type),
-            "i16" => fetch_add_test!(LocalLockAtomicArray, i16, len, dist_type),
-            "i32" => fetch_add_test!(LocalLockAtomicArray, i32, len, dist_type),
-            "i64" => fetch_add_test!(LocalLockAtomicArray, i64, len, dist_type),
-            "i128" => fetch_add_test!(LocalLockAtomicArray, i128, len, dist_type),
-            "isize" => fetch_add_test!(LocalLockAtomicArray, isize, len, dist_type),
-            "f32" => fetch_add_test!(LocalLockAtomicArray, f32, len, dist_type),
-            "f64" => fetch_add_test!(LocalLockAtomicArray, f64, len, dist_type),
-            "input" => input_test!(LocalLockAtomicArray, len, dist_type),
+        "LocalLockArray" => match elem.as_str() {
+            "u8" => fetch_add_test!(LocalLockArray, u8, len, dist_type),
+            "u16" => fetch_add_test!(LocalLockArray, u16, len, dist_type),
+            "u32" => fetch_add_test!(LocalLockArray, u32, len, dist_type),
+            "u64" => fetch_add_test!(LocalLockArray, u64, len, dist_type),
+            "u128" => fetch_add_test!(LocalLockArray, u128, len, dist_type),
+            "usize" => fetch_add_test!(LocalLockArray, usize, len, dist_type),
+            "i8" => fetch_add_test!(LocalLockArray, i8, len, dist_type),
+            "i16" => fetch_add_test!(LocalLockArray, i16, len, dist_type),
+            "i32" => fetch_add_test!(LocalLockArray, i32, len, dist_type),
+            "i64" => fetch_add_test!(LocalLockArray, i64, len, dist_type),
+            "i128" => fetch_add_test!(LocalLockArray, i128, len, dist_type),
+            "isize" => fetch_add_test!(LocalLockArray, isize, len, dist_type),
+            "f32" => fetch_add_test!(LocalLockArray, f32, len, dist_type),
+            "f64" => fetch_add_test!(LocalLockArray, f64, len, dist_type),
+            "input" => input_test!(LocalLockArray, len, dist_type),
             _ => eprintln!("unsupported element type"),
         },
         _ => eprintln!("unsupported array type"),

@@ -5,8 +5,8 @@ fn main() {
     let world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();
     let _num_pes = world.num_pes();
-    let block_array = UnsafeArray::<usize>::new(world.team(), ARRAY_LEN, Distribution::Block);
-    let cyclic_array = UnsafeArray::<usize>::new(world.team(), ARRAY_LEN, Distribution::Cyclic);
+    let block_array = AtomicArray::<usize>::new(world.team(), ARRAY_LEN, Distribution::Block);
+    let cyclic_array = AtomicArray::<usize>::new(world.team(), ARRAY_LEN, Distribution::Cyclic);
 
     // We expose multiple ways to iterate over a lamellar array
     // the first approach introduces what we call a distributed iterator (inspired by Rayon's parallel iterators).
@@ -23,8 +23,8 @@ fn main() {
     //for example lets initialize our arrays, where we store the value of my_pe to each local element a pe owns
     block_dist_iter
         .enumerate()
-        .for_each(move |(i, elem)| *elem = i);
-    cyclic_dist_iter.for_each(move |elem| *elem = my_pe);
+        .for_each(move |(i, elem)| elem.store(i));
+    cyclic_dist_iter.for_each(move |elem| elem.store(my_pe));
     //for_each is asynchronous so we must wait on the array for the operations to complete
     // we are working on providing a request handle which can be used to check for completion
     block_array.wait_all();
@@ -153,8 +153,8 @@ fn main() {
             .map(move |(i, elem)| {
                 let barray = barray.clone();
                 async move {
-                    barray.add(i, *elem).await;
-                    barray.fetch_sub(i, *elem).await
+                    barray.add(i, elem.load()).await;
+                    barray.fetch_sub(i,  elem.load()).await
                 }
             })
             .collect_async::<ReadOnlyArray<usize>, _>(Distribution::Block),
@@ -168,7 +168,7 @@ fn main() {
     block_array
         .dist_iter()
         .enumerate()
-        .filter(|(_, elem)| *elem % 4 == 0)
+        .filter(|(_, elem)|  elem.load() % 4 == 0)
         .for_each(move |(i, elem)| {
             println!(
                 "[pe({:?})-{:?}] i: {:?} {:?}",
@@ -188,8 +188,8 @@ fn main() {
         .dist_iter()
         .enumerate()
         .filter_map(|(i, elem)| {
-            if *elem % 4 == 0 {
-                Some((i, *elem as f32))
+            if  elem.load() % 4 == 0 {
+                Some((i,  elem.load() as f32))
             } else {
                 None
             }

@@ -142,7 +142,7 @@ pub(crate) fn __register_reduction(item: TokenStream) -> TokenStream {
     let args = parse_macro_input!(item as ReductionArgs);
     let mut output = quote! {};
     let array_types: Vec<syn::Ident> = vec![
-        quote::format_ident!("LocalLockAtomicArray"),
+        quote::format_ident!("LocalLockArray"),
         quote::format_ident!("AtomicArray"),
         quote::format_ident!("GenericAtomicArray"),
         quote::format_ident!("UnsafeArray"),
@@ -190,7 +190,7 @@ pub(crate) fn __register_reduction(item: TokenStream) -> TokenStream {
 pub(crate) fn __generate_reductions_for_type(item: TokenStream) -> TokenStream {
     let mut output = quote! {};
     let read_array_types: Vec<syn::Ident> = vec![
-        quote::format_ident!("LocalLockAtomicArray"),
+        quote::format_ident!("LocalLockArray"),
         quote::format_ident!("AtomicArray"),
         quote::format_ident!("GenericAtomicArray"),
         quote::format_ident!("UnsafeArray"),
@@ -252,7 +252,7 @@ pub(crate) fn __generate_reductions_for_type_rt(item: TokenStream) -> TokenStrea
     };
 
     let mut read_array_types: Vec<syn::Ident> = vec![
-        quote::format_ident!("LocalLockAtomicArray"),
+        quote::format_ident!("LocalLockArray"),
         quote::format_ident!("AtomicArray"),
         quote::format_ident!("GenericAtomicArray"),
         quote::format_ident!("UnsafeArray"),

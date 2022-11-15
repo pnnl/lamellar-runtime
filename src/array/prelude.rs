@@ -6,7 +6,7 @@ pub use crate::array::read_only::ReadOnlyArray;
 pub use crate::array::atomic::AtomicArray;
 pub use crate::array::generic_atomic::GenericAtomicArray;
 pub use crate::array::native_atomic::NativeAtomicArray;
-pub use crate::array::local_lock_atomic::LocalLockAtomicArray;
+pub use crate::array::local_lock_atomic::LocalLockArray;
 
 
 pub use crate::array::iterator::Schedule;

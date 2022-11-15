@@ -184,6 +184,15 @@ impl<T: Dist + ElementBitWiseOps> BitOrAssign<T> for AtomicElement<T> {
     }
 }
 
+impl<T: Dist + std::fmt::Debug> std::fmt::Debug for AtomicElement<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            AtomicElement::NativeAtomicElement(array) => array.fmt(f),
+            AtomicElement::GenericAtomicElement(array) => array.fmt(f),
+        }
+    }
+}
+
 
 /// A distributed array containing atomic elements. (See [crate::array::LamellarArray] for more inforamation on distributed arrays in lamellar)
 ///
@@ -281,7 +290,7 @@ impl AtomicByteArrayWeak {
 
 
 pub struct AtomicLocalData<T: Dist> {
-    array: AtomicArray<T>,
+    pub(crate) array: AtomicArray<T>,
 }
 
 pub struct AtomicLocalDataIter<T: Dist> {
@@ -419,6 +428,13 @@ impl<T: Dist> AtomicArray<T> {
         }
     }
 
+    // pub(crate) fn subarray_index_from_local(&self, index: usize) -> Option<usize> {
+    //     match self {
+    //         AtomicArray::NativeAtomicArray(array) => array.subarray_index_from_local(index),
+    //         AtomicArray::GenericAtomicArray(array) => array.subarray_index_from_local(index),
+    //     }
+    // }
+
     pub fn len(&self) -> usize {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.len(),
@@ -480,8 +496,8 @@ impl<T: Dist> AtomicArray<T> {
             AtomicArray::GenericAtomicArray(array) => array.array.into(),
         }
     }
-    pub fn into_local_lock_atomic(self) -> LocalLockAtomicArray<T> {
-        // println!("atomic into_local_lock_atomic");
+    pub fn into_local_lock(self) -> LocalLockArray<T> {
+        // println!("atomic into_local_lock");
         match self {
             AtomicArray::NativeAtomicArray(array) => array.array.into(),
             AtomicArray::GenericAtomicArray(array) => array.array.into(),
@@ -519,9 +535,9 @@ impl<T: Dist + 'static> From<ReadOnlyArray<T>> for AtomicArray<T> {
         unsafe { array.into_inner().into() }
     }
 }
-impl<T: Dist + 'static> From<LocalLockAtomicArray<T>> for AtomicArray<T> {
-    fn from(array: LocalLockAtomicArray<T>) -> Self {
-        // println!("Converting from LocalLockAtomicArray to AtomicArray");
+impl<T: Dist + 'static> From<LocalLockArray<T>> for AtomicArray<T> {
+    fn from(array: LocalLockArray<T>) -> Self {
+        // println!("Converting from LocalLockArray to AtomicArray");
         unsafe { array.into_inner().into() }
     }
 }
@@ -571,70 +587,8 @@ impl<T: Dist + serde::Serialize + serde::de::DeserializeOwned + 'static> AtomicA
     }
 }
 
-// impl<T: Dist> private::ArrayExecAm<T> for AtomicArray<T> {
-//     fn team(&self) -> Pin<Arc<LamellarTeamRT>> {
-//         self.array.team().clone()
-//     }
-//     fn team_counters(&self) -> Arc<AMCounters> {
-//         self.array.team_counters()
-//     }
-// }
-
-// impl<T: Dist> private::LamellarArrayPrivate<T> for AtomicArray<T> {
-//     fn local_as_ptr(&self) -> *const T {
-//         self.array.local_as_mut_ptr()
-//     }
-//     fn local_as_mut_ptr(&self) -> *mut T {
-//         self.array.local_as_mut_ptr()
-//     }
-//     fn pe_for_dist_index(&self, index: usize) -> Option<usize> {
-//         self.array.pe_for_dist_index(index)
-//     }
-//     fn pe_offset_for_dist_index(&self, pe: usize, index: usize) -> Option<usize> {
-//         self.array.pe_offset_for_dist_index(pe, index)
-//     }
-//     unsafe fn into_inner(self) -> UnsafeArray<T> {
-//         self.array
-//     }
-// }
-
-// impl<T: Dist> LamellarArray<T> for AtomicArray<T> {
-//     fn my_pe(&self) -> usize {
-//         self.array.my_pe()
-//     }
-//     fn team(&self) -> Pin<Arc<LamellarTeamRT>> {
-//         self.array.team().clone()
-//     }
-//     fn num_elems_local(&self) -> usize {
-//         self.num_elems_local()
-//     }
-//     fn len(&self) -> usize {
-//         self.len()
-//     }
-//     fn barrier(&self) {
-//         self.barrier();
-//     }
-//     fn wait_all(&self) {
-//         self.array.wait_all()
-//         // println!("done in wait all {:?}",std::time::SystemTime::now());
-//     }
-//     fn pe_and_offset_for_global_index(&self, index: usize) -> Option<(usize, usize)> {
-//         self.array.pe_and_offset_for_global_index(index)
-//     }
-// }
-
 impl<T: Dist> LamellarWrite for AtomicArray<T> {}
 impl<T: Dist> LamellarRead for AtomicArray<T> {}
-
-// impl<T: Dist> SubArray<T> for AtomicArray<T> {
-//     type Array = AtomicArray<T>;
-//     fn sub_array<R: std::ops::RangeBounds<usize>>(&self, range: R) -> Self::Array {
-//         self.sub_array(range).into()
-//     }
-//     fn global_index(&self, sub_index: usize) -> usize {
-//         self.array.global_index(sub_index)
-//     }
-// }
 
 impl<T: Dist + std::fmt::Debug> AtomicArray<T> {
     pub fn print(&self) {

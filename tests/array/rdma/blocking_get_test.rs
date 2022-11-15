@@ -23,10 +23,10 @@ fn initialize_mem_region<T: Dist + std::ops::AddAssign>(
 
 macro_rules! initialize_array {
     (UnsafeArray,$array:ident,$t:ty) => {
-        $array
+        unsafe{$array
             .dist_iter_mut()
             .enumerate()
-            .for_each(move |(i, x)| *x = i as $t);
+            .for_each(move |(i, x)| *x = i as $t);}
         $array.wait_all();
     };
     (AtomicArray,$array:ident,$t:ty) => {
@@ -36,7 +36,7 @@ macro_rules! initialize_array {
             .for_each(move |(i, x)| x.store(i as $t));
         $array.wait_all();
     };
-    (LocalLockAtomicArray,$array:ident,$t:ty) => {
+    (LocalLockArray,$array:ident,$t:ty) => {
         $array
             .dist_iter_mut()
             .enumerate()
@@ -45,9 +45,9 @@ macro_rules! initialize_array {
     };
     (ReadOnlyArray,$array:ident,$t:ty) => {
         let temp = $array.into_unsafe();
-        temp.dist_iter_mut()
+        unsafe {temp.dist_iter_mut()
             .enumerate()
-            .for_each(move |(i, x)| *x = i as $t);
+            .for_each(move |(i, x)| *x = i as $t);}
         temp.wait_all();
         $array = temp.into_read_only();
     };
@@ -56,10 +56,10 @@ macro_rules! initialize_array {
 macro_rules! initialize_array_range {
     (UnsafeArray,$array:ident,$t:ty,$range:expr) => {{
         let subarray = $array.sub_array($range);
-        subarray
+        unsafe{subarray
             .dist_iter_mut()
             .enumerate()
-            .for_each(move |(i, x)| *x = i as $t);
+            .for_each(move |(i, x)| *x = i as $t);}
         subarray.wait_all();
     }};
     (AtomicArray,$array:ident,$t:ty,$range:expr) => {{
@@ -70,7 +70,7 @@ macro_rules! initialize_array_range {
             .for_each(move |(i, x)| x.store(i as $t));
         subarray.wait_all();
     }};
-    (LocalLockAtomicArray,$array:ident,$t:ty,$range:expr) => {{
+    (LocalLockArray,$array:ident,$t:ty,$range:expr) => {{
         let subarray = $array.sub_array($range);
         subarray
             .dist_iter_mut()
@@ -81,17 +81,17 @@ macro_rules! initialize_array_range {
     (ReadOnlyArray,$array:ident,$t:ty,$range:expr) => {{
         let temp = $array.into_unsafe();
         let subarray = temp.sub_array($range);
-        subarray
+        unsafe{subarray
             .dist_iter_mut()
             .enumerate()
-            .for_each(move |(i, x)| *x = i as $t);
+            .for_each(move |(i, x)| *x = i as $t);}
         subarray.wait_all();
         drop(subarray);
         $array = temp.into_read_only();
     }};
 }
 
-macro_rules! iget_test{
+macro_rules! blocking_get_test{
     ($array:ident, $t:ty, $len:expr, $dist:ident) =>{
        {
             let world = lamellar::LamellarWorldBuilder::new().build();
@@ -115,7 +115,7 @@ macro_rules! iget_test{
                 let num_txs = mem_seg_len/tx_size;
                 for tx in (0..num_txs){
                     // unsafe{println!("tx_size {:?} tx {:?} sindex: {:?} eindex: {:?} {:?}",tx_size,tx, tx*tx_size,std::cmp::min(mem_seg_len,(tx+1)*tx_size),&shared_mem_region.sub_region(tx*tx_size..std::cmp::min(mem_seg_len,(tx+1)*tx_size)).as_slice());}
-                    array.iget(tx*tx_size,&shared_mem_region.sub_region(tx*tx_size..std::cmp::min(mem_seg_len,(tx+1)*tx_size)));
+                    array.blocking_get(tx*tx_size,&shared_mem_region.sub_region(tx*tx_size..std::cmp::min(mem_seg_len,(tx+1)*tx_size)));
                 }
                 array.barrier();
                 // unsafe{println!("{:?}",shared_mem_region.as_slice());}
@@ -151,7 +151,7 @@ macro_rules! iget_test{
                 let num_txs = half_len/tx_size;
                 for tx in (0..num_txs){
                     // unsafe{println!("tx_size {:?} tx {:?} sindex: {:?} eindex: {:?} {:?}",tx_size,tx, tx*tx_size,std::cmp::min(half_len,(tx+1)*tx_size),&shared_mem_region.sub_region(tx*tx_size..std::cmp::min(half_len,(tx+1)*tx_size)).as_slice());}
-                    sub_array.iget(tx*tx_size,&shared_mem_region.sub_region(tx*tx_size..std::cmp::min(half_len,(tx+1)*tx_size)));
+                    sub_array.blocking_get(tx*tx_size,&shared_mem_region.sub_region(tx*tx_size..std::cmp::min(half_len,(tx+1)*tx_size)));
                 }
                 sub_array.barrier();
                 // unsafe{println!("{:?}",shared_mem_region.as_slice());}
@@ -191,7 +191,7 @@ macro_rules! iget_test{
                     let num_txs = len/tx_size;
                     for tx in (0..num_txs){
                         // unsafe{println!("tx_size {:?} tx {:?} sindex: {:?} eindex: {:?} {:?}",tx_size,tx, tx*tx_size,std::cmp::min(len,(tx+1)*tx_size),&shared_mem_region.sub_region(tx*tx_size..std::cmp::min(mem_seg_len,(tx+1)*tx_size)).as_slice());}
-                        sub_array.iget(tx*tx_size,&shared_mem_region.sub_region(tx*tx_size..std::cmp::min(len,(tx+1)*tx_size)));
+                        sub_array.blocking_get(tx*tx_size,&shared_mem_region.sub_region(tx*tx_size..std::cmp::min(len,(tx+1)*tx_size)));
                     }
                     sub_array.barrier();
                     unsafe{
@@ -235,71 +235,71 @@ fn main() {
 
     match array.as_str() {
         "UnsafeArray" => match elem.as_str() {
-            "u8" => iget_test!(UnsafeArray, u8, len, dist_type),
-            "u16" => iget_test!(UnsafeArray, u16, len, dist_type),
-            "u32" => iget_test!(UnsafeArray, u32, len, dist_type),
-            "u64" => iget_test!(UnsafeArray, u64, len, dist_type),
-            "u128" => iget_test!(UnsafeArray, u128, len, dist_type),
-            "usize" => iget_test!(UnsafeArray, usize, len, dist_type),
-            "i8" => iget_test!(UnsafeArray, i8, len, dist_type),
-            "i16" => iget_test!(UnsafeArray, i16, len, dist_type),
-            "i32" => iget_test!(UnsafeArray, i32, len, dist_type),
-            "i64" => iget_test!(UnsafeArray, i64, len, dist_type),
-            "i128" => iget_test!(UnsafeArray, i128, len, dist_type),
-            "isize" => iget_test!(UnsafeArray, isize, len, dist_type),
-            "f32" => iget_test!(UnsafeArray, f32, len, dist_type),
-            "f64" => iget_test!(UnsafeArray, f64, len, dist_type),
+            "u8" => blocking_get_test!(UnsafeArray, u8, len, dist_type),
+            "u16" => blocking_get_test!(UnsafeArray, u16, len, dist_type),
+            "u32" => blocking_get_test!(UnsafeArray, u32, len, dist_type),
+            "u64" => blocking_get_test!(UnsafeArray, u64, len, dist_type),
+            "u128" => blocking_get_test!(UnsafeArray, u128, len, dist_type),
+            "usize" => blocking_get_test!(UnsafeArray, usize, len, dist_type),
+            "i8" => blocking_get_test!(UnsafeArray, i8, len, dist_type),
+            "i16" => blocking_get_test!(UnsafeArray, i16, len, dist_type),
+            "i32" => blocking_get_test!(UnsafeArray, i32, len, dist_type),
+            "i64" => blocking_get_test!(UnsafeArray, i64, len, dist_type),
+            "i128" => blocking_get_test!(UnsafeArray, i128, len, dist_type),
+            "isize" => blocking_get_test!(UnsafeArray, isize, len, dist_type),
+            "f32" => blocking_get_test!(UnsafeArray, f32, len, dist_type),
+            "f64" => blocking_get_test!(UnsafeArray, f64, len, dist_type),
             _ => eprintln!("unsupported element type"),
         },
         // "AtomicArray" => match elem.as_str() {
-        //     "u8" => iget_test!(AtomicArray, u8, len, dist_type),
-        //     "u16" => iget_test!(AtomicArray, u16, len, dist_type),
-        //     "u32" => iget_test!(AtomicArray, u32, len, dist_type),
-        //     "u64" => iget_test!(AtomicArray, u64, len, dist_type),
-        //     "u128" => iget_test!(AtomicArray, u128, len, dist_type),
-        //     "usize" => iget_test!(AtomicArray, usize, len, dist_type),
-        //     "i8" => iget_test!(AtomicArray, i8, len, dist_type),
-        //     "i16" => iget_test!(AtomicArray, i16, len, dist_type),
-        //     "i32" => iget_test!(AtomicArray, i32, len, dist_type),
-        //     "i64" => iget_test!(AtomicArray, i64, len, dist_type),
-        //     "i128" => iget_test!(AtomicArray, i128, len, dist_type),
-        //     "isize" => iget_test!(AtomicArray, isize, len, dist_type),
-        //     "f32" => iget_test!(AtomicArray, f32, len, dist_type),
-        //     "f64" => iget_test!(AtomicArray, f64, len, dist_type),
+        //     "u8" => blocking_get_test!(AtomicArray, u8, len, dist_type),
+        //     "u16" => blocking_get_test!(AtomicArray, u16, len, dist_type),
+        //     "u32" => blocking_get_test!(AtomicArray, u32, len, dist_type),
+        //     "u64" => blocking_get_test!(AtomicArray, u64, len, dist_type),
+        //     "u128" => blocking_get_test!(AtomicArray, u128, len, dist_type),
+        //     "usize" => blocking_get_test!(AtomicArray, usize, len, dist_type),
+        //     "i8" => blocking_get_test!(AtomicArray, i8, len, dist_type),
+        //     "i16" => blocking_get_test!(AtomicArray, i16, len, dist_type),
+        //     "i32" => blocking_get_test!(AtomicArray, i32, len, dist_type),
+        //     "i64" => blocking_get_test!(AtomicArray, i64, len, dist_type),
+        //     "i128" => blocking_get_test!(AtomicArray, i128, len, dist_type),
+        //     "isize" => blocking_get_test!(AtomicArray, isize, len, dist_type),
+        //     "f32" => blocking_get_test!(AtomicArray, f32, len, dist_type),
+        //     "f64" => blocking_get_test!(AtomicArray, f64, len, dist_type),
         //     _ => eprintln!("unsupported element type"),
         // },
-        // "LocalLockAtomicArray" => match elem.as_str() {
-        //     "u8" => iget_test!(LocalLockAtomicArray, u8, len, dist_type),
-        //     "u16" => iget_test!(LocalLockAtomicArray, u16, len, dist_type),
-        //     "u32" => iget_test!(LocalLockAtomicArray, u32, len, dist_type),
-        //     "u64" => iget_test!(LocalLockAtomicArray, u64, len, dist_type),
-        //     "u128" => iget_test!(LocalLockAtomicArray, u128, len, dist_type),
-        //     "usize" => iget_test!(LocalLockAtomicArray, usize, len, dist_type),
-        //     "i8" => iget_test!(LocalLockAtomicArray, i8, len, dist_type),
-        //     "i16" => iget_test!(LocalLockAtomicArray, i16, len, dist_type),
-        //     "i32" => iget_test!(LocalLockAtomicArray, i32, len, dist_type),
-        //     "i64" => iget_test!(LocalLockAtomicArray, i64, len, dist_type),
-        //     "i128" => iget_test!(LocalLockAtomicArray, i128, len, dist_type),
-        //     "isize" => iget_test!(LocalLockAtomicArray, isize, len, dist_type),
-        //     "f32" => iget_test!(LocalLockAtomicArray, f32, len, dist_type),
-        //     "f64" => iget_test!(LocalLockAtomicArray, f64, len, dist_type),
+        // "LocalLockArray" => match elem.as_str() {
+        //     "u8" => blocking_get_test!(LocalLockArray, u8, len, dist_type),
+        //     "u16" => blocking_get_test!(LocalLockArray, u16, len, dist_type),
+        //     "u32" => blocking_get_test!(LocalLockArray, u32, len, dist_type),
+        //     "u64" => blocking_get_test!(LocalLockArray, u64, len, dist_type),
+        //     "u128" => blocking_get_test!(LocalLockArray, u128, len, dist_type),
+        //     "usize" => blocking_get_test!(LocalLockArray, usize, len, dist_type),
+        //     "i8" => blocking_get_test!(LocalLockArray, i8, len, dist_type),
+        //     "i16" => blocking_get_test!(LocalLockArray, i16, len, dist_type),
+        //     "i32" => blocking_get_test!(LocalLockArray, i32, len, dist_type),
+        //     "i64" => blocking_get_test!(LocalLockArray, i64, len, dist_type),
+        //     "i128" => blocking_get_test!(LocalLockArray, i128, len, dist_type),
+        //     "isize" => blocking_get_test!(LocalLockArray, isize, len, dist_type),
+        //     "f32" => blocking_get_test!(LocalLockArray, f32, len, dist_type),
+        //     "f64" => blocking_get_test!(LocalLockArray, f64, len, dist_type),
         //     _ => eprintln!("unsupported element type"),
         // },
         "ReadOnlyArray" => match elem.as_str() {
-            "u8" => iget_test!(ReadOnlyArray, u8, len, dist_type),
-            "u16" => iget_test!(ReadOnlyArray, u16, len, dist_type),
-            "u32" => iget_test!(ReadOnlyArray, u32, len, dist_type),
-            "u64" => iget_test!(ReadOnlyArray, u64, len, dist_type),
-            "u128" => iget_test!(ReadOnlyArray, u128, len, dist_type),
-            "usize" => iget_test!(ReadOnlyArray, usize, len, dist_type),
-            "i8" => iget_test!(ReadOnlyArray, i8, len, dist_type),
-            "i16" => iget_test!(ReadOnlyArray, i16, len, dist_type),
-            "i32" => iget_test!(ReadOnlyArray, i32, len, dist_type),
-            "i64" => iget_test!(ReadOnlyArray, i64, len, dist_type),
-            "i128" => iget_test!(ReadOnlyArray, i128, len, dist_type),
-            "isize" => iget_test!(ReadOnlyArray, isize, len, dist_type),
-            "f32" => iget_test!(ReadOnlyArray, f32, len, dist_type),
-            "f64" => iget_test!(ReadOnlyArray, f64, len, dist_type),
+            "u8" => blocking_get_test!(ReadOnlyArray, u8, len, dist_type),
+            "u16" => blocking_get_test!(ReadOnlyArray, u16, len, dist_type),
+            "u32" => blocking_get_test!(ReadOnlyArray, u32, len, dist_type),
+            "u64" => blocking_get_test!(ReadOnlyArray, u64, len, dist_type),
+            "u128" => blocking_get_test!(ReadOnlyArray, u128, len, dist_type),
+            "usize" => blocking_get_test!(ReadOnlyArray, usize, len, dist_type),
+            "i8" => blocking_get_test!(ReadOnlyArray, i8, len, dist_type),
+            "i16" => blocking_get_test!(ReadOnlyArray, i16, len, dist_type),
+            "i32" => blocking_get_test!(ReadOnlyArray, i32, len, dist_type),
+            "i64" => blocking_get_test!(ReadOnlyArray, i64, len, dist_type),
+            "i128" => blocking_get_test!(ReadOnlyArray, i128, len, dist_type),
+            "isize" => blocking_get_test!(ReadOnlyArray, isize, len, dist_type),
+            "f32" => blocking_get_test!(ReadOnlyArray, f32, len, dist_type),
+            "f64" => blocking_get_test!(ReadOnlyArray, f64, len, dist_type),
             _ => eprintln!("unsupported element type"),
         },
         _ => eprintln!("unsupported array type"),

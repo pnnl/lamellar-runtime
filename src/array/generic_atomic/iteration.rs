@@ -121,7 +121,7 @@ impl<T: Dist> DistributedIterator for GenericAtomicDistIter<T> {
 }
 impl<T: Dist> IndexedDistributedIterator for GenericAtomicDistIter<T> {
     fn iterator_index(&self, index: usize) -> Option<usize> {
-        let g_index = self.data.subarray_index_from_local(index, 1);
+        let g_index = self.data.subarray_index_from_local(index,1);
         g_index
     }
 }

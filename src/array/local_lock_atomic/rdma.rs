@@ -4,7 +4,7 @@ use crate::array::LamellarWrite;
 use crate::array::*;
 use crate::memregion::{AsBase, Dist, RTMemoryRegionRDMA, RegisteredMemoryRegion};
 
-impl<T: Dist + 'static> LocalLockAtomicArray<T> {
+impl<T: Dist + 'static> LocalLockArray<T> {
     // pub fn iget<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(&self, index: usize, buf: U) {
     //     // println!("here");
     //     self.exec_am_local(InitGetAm {
@@ -84,7 +84,7 @@ impl<T: Dist + 'static> LocalLockAtomicArray<T> {
     }
 }
 
-impl<T: Dist + 'static> LamellarArrayInternalGet<T> for LocalLockAtomicArray<T> {
+impl<T: Dist + 'static> LamellarArrayInternalGet<T> for LocalLockArray<T> {
     // fn iget<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(&self, index: usize, buf: U) {
     //     self.iget(index, buf)
     // }
@@ -100,7 +100,7 @@ impl<T: Dist + 'static> LamellarArrayInternalGet<T> for LocalLockAtomicArray<T> 
     }
 }
 
-impl<T: Dist + 'static> LamellarArrayGet<T> for LocalLockAtomicArray<T> {
+impl<T: Dist + 'static> LamellarArrayGet<T> for LocalLockArray<T> {
     // fn iget<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(&self, index: usize, buf: U) {
     //     self.iget(index, buf)
     // }
@@ -116,7 +116,7 @@ impl<T: Dist + 'static> LamellarArrayGet<T> for LocalLockAtomicArray<T> {
     }
 }
 
-impl<T: Dist> LamellarArrayInternalPut<T> for LocalLockAtomicArray<T> {
+impl<T: Dist> LamellarArrayInternalPut<T> for LocalLockArray<T> {
     fn internal_put<U: MyInto<LamellarArrayInput<T>> + LamellarRead>(
         &self,
         index: usize,
@@ -126,7 +126,7 @@ impl<T: Dist> LamellarArrayInternalPut<T> for LocalLockAtomicArray<T> {
     }
 }
 
-impl<T: Dist> LamellarArrayPut<T> for LocalLockAtomicArray<T> {
+impl<T: Dist> LamellarArrayPut<T> for LocalLockArray<T> {
     fn put<U: MyInto<LamellarArrayInput<T>> + LamellarRead>(
         &self,
         index: usize,
@@ -138,7 +138,7 @@ impl<T: Dist> LamellarArrayPut<T> for LocalLockAtomicArray<T> {
 
 #[lamellar_impl::AmLocalDataRT(Debug)]
 struct InitGetAm<T: Dist> {
-    array: LocalLockAtomicArray<T>, //inner of the indices we need to place data into
+    array: LocalLockArray<T>, //inner of the indices we need to place data into
     index: usize,                   //relative to inner
     buf: LamellarArrayInput<T>,
 }
@@ -201,7 +201,7 @@ impl<T: Dist + 'static> LamellarAm for InitGetAm<T> {
 
 #[lamellar_impl::AmDataRT(Debug)]
 struct LocalLockRemoteGetAm {
-    array: LocalLockAtomicByteArray, //inner of the indices we need to place data into
+    array: LocalLockByteArray, //inner of the indices we need to place data into
     start_index: usize,
     len: usize,
 }
@@ -228,7 +228,7 @@ impl LamellarAm for LocalLockRemoteGetAm {
 
 #[lamellar_impl::AmLocalDataRT(Debug)]
 struct InitPutAm<T: Dist> {
-    array: LocalLockAtomicArray<T>, //inner of the indices we need to place data into
+    array: LocalLockArray<T>, //inner of the indices we need to place data into
     index: usize,                   //relative to inner
     buf: LamellarArrayInput<T>,
 }
@@ -327,7 +327,7 @@ impl<T: Dist + 'static> LamellarAm for InitPutAm<T> {
 
 #[lamellar_impl::AmDataRT(Debug)]
 struct LocalLockRemotePutAm {
-    array: LocalLockAtomicByteArray, //inner of the indices we need to place data into
+    array: LocalLockByteArray, //inner of the indices we need to place data into
     start_index: usize,
     len: usize,
     data: Vec<u8>,

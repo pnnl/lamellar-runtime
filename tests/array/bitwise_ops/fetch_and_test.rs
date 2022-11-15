@@ -2,7 +2,7 @@ use lamellar::array::prelude::*;
 
 macro_rules! initialize_array {
     (UnsafeArray,$array:ident,$init_val:ident) => {
-        $array.dist_iter_mut().for_each(move |x| *x = $init_val);
+        unsafe{$array.dist_iter_mut().for_each(move |x| *x = $init_val);}
         $array.wait_all();
         $array.barrier();
     };
@@ -11,7 +11,7 @@ macro_rules! initialize_array {
         $array.wait_all();
         $array.barrier();
     };
-    (LocalLockAtomicArray,$array:ident,$init_val:ident) => {
+    (LocalLockArray,$array:ident,$init_val:ident) => {
         $array.dist_iter_mut().for_each(move |x| *x = $init_val);
         $array.wait_all();
         $array.barrier();
@@ -28,7 +28,7 @@ macro_rules! check_val {
             $valid = false;
         }
     };
-    (LocalLockAtomicArray,$val:ident,$max_val:ident,$valid:ident) => {
+    (LocalLockArray,$val:ident,$max_val:ident,$valid:ident) => {
         if (($val - $max_val) as f32).abs() > 0.0001 {
             //all updates should be preserved
             $valid = false;
@@ -80,7 +80,8 @@ macro_rules! fetch_and_test{
             array.wait_all();
             array.barrier();
             // array.print();
-            for (i,elem) in array.onesided_iter().into_iter().enumerate(){
+            #[allow(unused_unsafe)]
+            for (i,elem) in unsafe{array.onesided_iter().into_iter().enumerate()}{
                 let val = *elem;
                 check_val!($array,val,final_val,success);
                 if !success{
@@ -127,7 +128,8 @@ macro_rules! fetch_and_test{
             sub_array.wait_all();
             sub_array.barrier();
             // sub_array.print();
-            for (i,elem) in sub_array.onesided_iter().into_iter().enumerate(){
+            #[allow(unused_unsafe)]
+            for (i,elem) in unsafe{sub_array.onesided_iter().into_iter().enumerate()}{
                 let val = *elem;
                 check_val!($array,val,final_val,success);
                 if !success{
@@ -175,7 +177,8 @@ macro_rules! fetch_and_test{
                 sub_array.wait_all();
                 sub_array.barrier();
                 // sub_array.print();
-                for (i,elem) in sub_array.onesided_iter().into_iter().enumerate(){
+                #[allow(unused_unsafe)]
+                for (i,elem) in unsafe{sub_array.onesided_iter().into_iter().enumerate()}{
                     let val = *elem;
                     check_val!($array,val,final_val,success);
                     if !success{
@@ -239,19 +242,19 @@ fn main() {
             "isize" => fetch_and_test!(AtomicArray, isize, len, dist_type),
             _ => eprintln!("unsupported element type"),
         },
-        "LocalLockAtomicArray" => match elem.as_str() {
-            "u8" => fetch_and_test!(LocalLockAtomicArray, u8, len, dist_type),
-            "u16" => fetch_and_test!(LocalLockAtomicArray, u16, len, dist_type),
-            "u32" => fetch_and_test!(LocalLockAtomicArray, u32, len, dist_type),
-            "u64" => fetch_and_test!(LocalLockAtomicArray, u64, len, dist_type),
-            "u128" => fetch_and_test!(LocalLockAtomicArray, u128, len, dist_type),
-            "usize" => fetch_and_test!(LocalLockAtomicArray, usize, len, dist_type),
-            "i8" => fetch_and_test!(LocalLockAtomicArray, i8, len, dist_type),
-            "i16" => fetch_and_test!(LocalLockAtomicArray, i16, len, dist_type),
-            "i32" => fetch_and_test!(LocalLockAtomicArray, i32, len, dist_type),
-            "i64" => fetch_and_test!(LocalLockAtomicArray, i64, len, dist_type),
-            "i128" => fetch_and_test!(LocalLockAtomicArray, i128, len, dist_type),
-            "isize" => fetch_and_test!(LocalLockAtomicArray, isize, len, dist_type),
+        "LocalLockArray" => match elem.as_str() {
+            "u8" => fetch_and_test!(LocalLockArray, u8, len, dist_type),
+            "u16" => fetch_and_test!(LocalLockArray, u16, len, dist_type),
+            "u32" => fetch_and_test!(LocalLockArray, u32, len, dist_type),
+            "u64" => fetch_and_test!(LocalLockArray, u64, len, dist_type),
+            "u128" => fetch_and_test!(LocalLockArray, u128, len, dist_type),
+            "usize" => fetch_and_test!(LocalLockArray, usize, len, dist_type),
+            "i8" => fetch_and_test!(LocalLockArray, i8, len, dist_type),
+            "i16" => fetch_and_test!(LocalLockArray, i16, len, dist_type),
+            "i32" => fetch_and_test!(LocalLockArray, i32, len, dist_type),
+            "i64" => fetch_and_test!(LocalLockArray, i64, len, dist_type),
+            "i128" => fetch_and_test!(LocalLockArray, i128, len, dist_type),
+            "isize" => fetch_and_test!(LocalLockArray, isize, len, dist_type),
             _ => eprintln!("unsupported element type"),
         },
         _ => eprintln!("unsupported array type"),

@@ -5,8 +5,8 @@ fn main() {
     let world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();
     let _num_pes = world.num_pes();
-    let block_array = UnsafeArray::<usize>::new(world.team(), ARRAY_LEN, Distribution::Block);
-    let cyclic_array = UnsafeArray::<usize>::new(world.team(), ARRAY_LEN, Distribution::Cyclic);
+    let block_array = AtomicArray::<usize>::new(world.team(), ARRAY_LEN, Distribution::Block);
+    let cyclic_array = AtomicArray::<usize>::new(world.team(), ARRAY_LEN, Distribution::Cyclic);
 
     // We expose multiple ways to iterate over a lamellar array
     // the first approach introduces what we call a distributed iterator (inspired by Rayon's parallel iterators).
@@ -23,8 +23,8 @@ fn main() {
     //for example lets initialize our arrays, where we store the value of my_pe to each local element a pe owns
     block_local_iter
         .enumerate()
-        .for_each(move |(i, elem)| *elem = i);
-    cyclic_local_iter.for_each(move |elem| *elem = my_pe);
+        .for_each(move |(i, elem)| elem.store(i));
+    cyclic_local_iter.for_each(move |elem|  elem.store(my_pe));
     //for_each is asynchronous so we must wait on the array for the operations to complete
     // we are working on providing a request handle which can be used to check for completion
     block_array.wait_all();
@@ -129,7 +129,7 @@ fn main() {
                 i,
                 elem
             );
-            async move { (i, elem, barray.load(i).await + *elem) }
+            async move { (i, elem.load(), barray.load(i).await + elem.load()) }
         })
         .for_each_async(move |i| async move {
             println!(
@@ -169,8 +169,8 @@ fn main() {
         .local_iter()
         .enumerate()
         .filter(|(_, elem)| {
-            println!("{:?} filter op {} {}",std::thread::current().id(),*elem,*elem % 4 == 0);
-            *elem % 4 == 0
+            println!("{:?} filter op {} {}",std::thread::current().id(),elem.load(),elem.load() % 4 == 0);
+            elem.load() % 4 == 0
         })
         .for_each(move |(i, elem)| {
             println!(
@@ -191,8 +191,8 @@ fn main() {
         .local_iter()
         .enumerate()
         .filter_map(|(i, elem)| {
-            if *elem % 4 == 0 {
-                Some((i, *elem as f32))
+            if elem.load() % 4 == 0 {
+                Some((i, elem.load() as f32))
             } else {
                 None
             }

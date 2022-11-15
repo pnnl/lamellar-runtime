@@ -78,8 +78,8 @@ pub use native_atomic::{
 
 pub(crate) mod local_lock_atomic;
 pub use local_lock_atomic::{
-    operations::LocalLockAtomicArrayOpBuf, LocalLockAtomicArray, LocalLockAtomicByteArray,
-    LocalLockAtomicByteArrayWeak, LocalLockAtomicLocalData,
+    operations::LocalLockArrayOpBuf, LocalLockArray, LocalLockByteArray,
+    LocalLockByteArrayWeak, LocalLockLocalData,
 };
 
 pub mod iterator;
@@ -308,7 +308,7 @@ pub enum LamellarReadArray<T: Dist + 'static> {
     UnsafeArray(UnsafeArray<T>),
     ReadOnlyArray(ReadOnlyArray<T>),
     AtomicArray(AtomicArray<T>),
-    LocalLockAtomicArray(LocalLockAtomicArray<T>),
+    LocalLockArray(LocalLockArray<T>),
 }
 
 #[doc(hidden)]
@@ -321,7 +321,7 @@ pub enum LamellarByteArray {
     AtomicArray(AtomicByteArray),
     NativeAtomicArray(NativeAtomicByteArray),
     GenericAtomicArray(GenericAtomicByteArray),
-    LocalLockAtomicArray(LocalLockAtomicByteArray),
+    LocalLockArray(LocalLockByteArray),
 }
 
 impl<T: Dist + 'static> crate::active_messaging::DarcSerde for LamellarReadArray<T> {
@@ -331,7 +331,7 @@ impl<T: Dist + 'static> crate::active_messaging::DarcSerde for LamellarReadArray
             LamellarReadArray::UnsafeArray(array) => array.ser(num_pes),
             LamellarReadArray::ReadOnlyArray(array) => array.ser(num_pes),
             LamellarReadArray::AtomicArray(array) => array.ser(num_pes),
-            LamellarReadArray::LocalLockAtomicArray(array) => array.ser(num_pes),
+            LamellarReadArray::LocalLockArray(array) => array.ser(num_pes),
         }
     }
     fn des(&self, cur_pe: Result<usize, crate::IdError>) {
@@ -340,7 +340,7 @@ impl<T: Dist + 'static> crate::active_messaging::DarcSerde for LamellarReadArray
             LamellarReadArray::UnsafeArray(array) => array.des(cur_pe),
             LamellarReadArray::ReadOnlyArray(array) => array.des(cur_pe),
             LamellarReadArray::AtomicArray(array) => array.des(cur_pe),
-            LamellarReadArray::LocalLockAtomicArray(array) => array.des(cur_pe),
+            LamellarReadArray::LocalLockArray(array) => array.des(cur_pe),
         }
     }
 }
@@ -353,7 +353,7 @@ impl<T: Dist + 'static> crate::active_messaging::DarcSerde for LamellarReadArray
 pub enum LamellarWriteArray<T: Dist> {
     UnsafeArray(UnsafeArray<T>),
     AtomicArray(AtomicArray<T>),
-    LocalLockAtomicArray(LocalLockAtomicArray<T>),
+    LocalLockArray(LocalLockArray<T>),
 }
 
 impl<T: Dist + 'static> crate::active_messaging::DarcSerde for LamellarWriteArray<T> {
@@ -362,7 +362,7 @@ impl<T: Dist + 'static> crate::active_messaging::DarcSerde for LamellarWriteArra
         match self {
             LamellarWriteArray::UnsafeArray(array) => array.ser(num_pes),
             LamellarWriteArray::AtomicArray(array) => array.ser(num_pes),
-            LamellarWriteArray::LocalLockAtomicArray(array) => array.ser(num_pes),
+            LamellarWriteArray::LocalLockArray(array) => array.ser(num_pes),
         }
     }
     fn des(&self, cur_pe: Result<usize, crate::IdError>) {
@@ -370,7 +370,7 @@ impl<T: Dist + 'static> crate::active_messaging::DarcSerde for LamellarWriteArra
         match self {
             LamellarWriteArray::UnsafeArray(array) => array.des(cur_pe),
             LamellarWriteArray::AtomicArray(array) => array.des(cur_pe),
-            LamellarWriteArray::LocalLockAtomicArray(array) => array.des(cur_pe),
+            LamellarWriteArray::LocalLockArray(array) => array.des(cur_pe),
         }
     }
 }
@@ -379,7 +379,7 @@ pub(crate) mod private {
     use crate::active_messaging::*;
     use crate::array::{
         AtomicArray, /*NativeAtomicArray, GenericAtomicArray,*/ LamellarReadArray,
-        LamellarWriteArray, LocalLockAtomicArray, ReadOnlyArray, UnsafeArray,
+        LamellarWriteArray, LocalLockArray, ReadOnlyArray, UnsafeArray,
     };
     use crate::lamellar_request::{LamellarMultiRequest, LamellarRequest};
     use crate::memregion::Dist;
@@ -450,10 +450,56 @@ pub trait LamellarArray<T: Dist>: private::LamellarArrayPrivate<T> {
     fn num_elems_local(&self) -> usize;
     /// Return the total number of elements in the array
     fn len(&self) -> usize;
-    /// Block calling thread untill all PEs associated with this array enter the barrier
+
+    /// Global synchronization method which blocks calling thread until all PEs in the owning Array data have entered the barrier
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder.build();
+    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Cyclic);
+    /// 
+    /// array.barrier();
+    ///```
     fn barrier(&self);
-    /// Wait for all remote tasks launched by this array to complete
+
+    /// blocks calling thread until all remote tasks (e.g. element wise operations)
+    /// initiated by the calling PE have completed.
+    ///
+    /// Note: this is not a distributed synchronization primitive (i.e. it has no knowledge of a Remote PEs tasks)
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder.build();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic);
+    ///
+    /// for i in 0..100{
+    ///     array.add(i,1);
+    /// }
+    /// array.wait_all(); //block until the previous add operations have finished
+    ///```
     fn wait_all(&self);
+
+    /// Run a future to completion on the current thread
+    ///
+    /// This function will block the caller until the given future has completed, the future is executed within the Lamellar threadpool
+    ///
+    /// Users can await any future, including those returned from lamellar remote operations
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder.build();
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic);
+    ///
+    /// let request = array.fetch_add(10,1000); //fetch index 10 and add 1000 to it 
+    /// let result = array.block_on(request); //block until am has executed
+    /// // we also could have used world.block_on() or team.block_on()
+    ///```
+    fn block_on<F>(&self, f: F) -> F::Output
+    where
+        F: Future;
+
     /// given a global index, calculate the PE and offset on that PE where the element actually resides.
     /// Returns None if the index is Out of bounds
     fn pe_and_offset_for_global_index(&self, index: usize) -> Option<(usize, usize)>;
@@ -571,28 +617,28 @@ impl<T: Dist + AmDist + 'static> LamellarWriteArray<T> {
         match self {
             LamellarWriteArray::UnsafeArray(array) => array.reduce(op),
             LamellarWriteArray::AtomicArray(array) => array.reduce(op),
-            LamellarWriteArray::LocalLockAtomicArray(array) => array.reduce(op),
+            LamellarWriteArray::LocalLockArray(array) => array.reduce(op),
         }
     }
     pub fn sum(&self) -> Pin<Box<dyn Future<Output = T>>> {
         match self {
             LamellarWriteArray::UnsafeArray(array) => array.sum(),
             LamellarWriteArray::AtomicArray(array) => array.sum(),
-            LamellarWriteArray::LocalLockAtomicArray(array) => array.sum(),
+            LamellarWriteArray::LocalLockArray(array) => array.sum(),
         }
     }
     pub fn max(&self) -> Pin<Box<dyn Future<Output = T>>> {
         match self {
             LamellarWriteArray::UnsafeArray(array) => array.max(),
             LamellarWriteArray::AtomicArray(array) => array.max(),
-            LamellarWriteArray::LocalLockAtomicArray(array) => array.max(),
+            LamellarWriteArray::LocalLockArray(array) => array.max(),
         }
     }
     pub fn prod(&self) -> Pin<Box<dyn Future<Output = T>>> {
         match self {
             LamellarWriteArray::UnsafeArray(array) => array.prod(),
             LamellarWriteArray::AtomicArray(array) => array.prod(),
-            LamellarWriteArray::LocalLockAtomicArray(array) => array.prod(),
+            LamellarWriteArray::LocalLockArray(array) => array.prod(),
         }
     }
 }
@@ -602,7 +648,7 @@ impl<T: Dist + AmDist + 'static> LamellarReadArray<T> {
         match self {
             LamellarReadArray::UnsafeArray(array) => array.reduce(op),
             LamellarReadArray::AtomicArray(array) => array.reduce(op),
-            LamellarReadArray::LocalLockAtomicArray(array) => array.reduce(op),
+            LamellarReadArray::LocalLockArray(array) => array.reduce(op),
             LamellarReadArray::ReadOnlyArray(array) => array.reduce(op),
         }
     }
@@ -610,7 +656,7 @@ impl<T: Dist + AmDist + 'static> LamellarReadArray<T> {
         match self {
             LamellarReadArray::UnsafeArray(array) => array.sum(),
             LamellarReadArray::AtomicArray(array) => array.sum(),
-            LamellarReadArray::LocalLockAtomicArray(array) => array.sum(),
+            LamellarReadArray::LocalLockArray(array) => array.sum(),
             LamellarReadArray::ReadOnlyArray(array) => array.sum(),
         }
     }
@@ -618,7 +664,7 @@ impl<T: Dist + AmDist + 'static> LamellarReadArray<T> {
         match self {
             LamellarReadArray::UnsafeArray(array) => array.max(),
             LamellarReadArray::AtomicArray(array) => array.max(),
-            LamellarReadArray::LocalLockAtomicArray(array) => array.max(),
+            LamellarReadArray::LocalLockArray(array) => array.max(),
             LamellarReadArray::ReadOnlyArray(array) => array.max(),
         }
     }
@@ -626,7 +672,7 @@ impl<T: Dist + AmDist + 'static> LamellarReadArray<T> {
         match self {
             LamellarReadArray::UnsafeArray(array) => array.prod(),
             LamellarReadArray::AtomicArray(array) => array.prod(),
-            LamellarReadArray::LocalLockAtomicArray(array) => array.prod(),
+            LamellarReadArray::LocalLockArray(array) => array.prod(),
             LamellarReadArray::ReadOnlyArray(array) => array.prod(),
         }
     }

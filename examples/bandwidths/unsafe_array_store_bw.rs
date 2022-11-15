@@ -3,8 +3,8 @@
 /// from a distributed array into a local memory region.
 /// --------------------------------------------------------------------
 // use lamellar::ActiveMessaging;
-use lamellar::array::{AccessOps, DistributedIterator, Distribution, UnsafeArray};
-use lamellar::RemoteMemoryRegion;
+use lamellar::array::prelude::*;
+use lamellar::memregion::prelude::*;
 use std::time::Instant;
 
 const ARRAY_LEN: usize = 1024 * 1024 * 1024;
@@ -19,10 +19,10 @@ fn main() {
         for i in data.as_mut_slice().unwrap() {
             *i = my_pe as u8;
         }
+        array
+            .dist_iter_mut()
+            .for_each(move |elem| *elem = num_pes as u8);
     }
-    array
-        .dist_iter_mut()
-        .for_each(move |elem| *elem = num_pes as u8);
     array.wait_all();
     array.barrier();
 
@@ -56,7 +56,7 @@ fn main() {
                 let sub_reg = data.sub_region(j..(j + num_bytes as usize));
 
                 // array.get(ARRAY_LEN * (num_pes - 1), &sub_reg);
-                array.batch_store(ARRAY_LEN * (num_pes - 1), &sub_reg);
+                unsafe{array.batch_store(ARRAY_LEN * (num_pes - 1), sub_reg.as_slice().unwrap())};
                 sub_time += sub_timer.elapsed().as_secs_f64();
                 sum += num_bytes * 1 as u64;
                 cnt += 1;

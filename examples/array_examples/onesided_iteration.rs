@@ -5,14 +5,14 @@ fn main() {
     let world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();
     let _num_pes = world.num_pes();
-    let block_array = UnsafeArray::<usize>::new(world.team(), ARRAY_LEN, Distribution::Block);
-    let cyclic_array = UnsafeArray::<usize>::new(world.team(), ARRAY_LEN, Distribution::Cyclic);
+    let block_array = AtomicArray::<usize>::new(world.team(), ARRAY_LEN, Distribution::Block);
+    let cyclic_array = AtomicArray::<usize>::new(world.team(), ARRAY_LEN, Distribution::Cyclic);
 
     //we are going to initialize the data on each PE by directly accessing its local data
-    unsafe{
-        block_array.mut_local_data().iter_mut().for_each(|e| *e = my_pe);
-        cyclic_array.mut_local_data().iter_mut().for_each(|e| *e = my_pe);
-    }
+    
+        block_array.mut_local_data().iter().for_each(|e| e.store(my_pe));
+        cyclic_array.mut_local_data().iter().for_each(|e| e.store(my_pe));
+    
 
     // In this example we will make use of a onesided iterator which
     // enables us to iterate over the entire array on a single PE.

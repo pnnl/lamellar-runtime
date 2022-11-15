@@ -49,22 +49,23 @@ pub enum LamellarMemoryRegion<T: Dist> {
     // Unsafe(UnsafeArray<T>),
 }
 
-impl<T: Dist + serde::Serialize> LamellarMemoryRegion<T> {
-    #[tracing::instrument(skip_all)]
-    pub(crate) fn serialize_local_data<S>(
-        mr: &LamellarMemoryRegion<T>,
-        s: S,
-    ) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        match mr {
-            LamellarMemoryRegion::Shared(mr) => mr.serialize_local_data(s),
-            LamellarMemoryRegion::Local(mr) => mr.serialize_local_data(s),
-            // LamellarMemoryRegion::Unsafe(mr) => mr.serialize_local_data(s),
-        }
-    }
-}
+// This could be useful for if we want to transfer the actual data instead of the pointer
+// impl<T: Dist + serde::Serialize> LamellarMemoryRegion<T> {
+//     #[tracing::instrument(skip_all)]
+//     pub(crate) fn serialize_local_data<S>(
+//         mr: &LamellarMemoryRegion<T>,
+//         s: S,
+//     ) -> Result<S::Ok, S::Error>
+//     where
+//         S: serde::Serializer,
+//     {
+//         match mr {
+//             LamellarMemoryRegion::Shared(mr) => mr.serialize_local_data(s),
+//             LamellarMemoryRegion::Local(mr) => mr.serialize_local_data(s),
+//             // LamellarMemoryRegion::Unsafe(mr) => mr.serialize_local_data(s),
+//         }
+//     }
+// }
 
 impl<T: Dist> crate::active_messaging::DarcSerde for LamellarMemoryRegion<T> {
     #[tracing::instrument(skip_all)]

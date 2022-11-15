@@ -157,22 +157,25 @@ fn dft_rayon(signal: &[f64], spectrum: &mut [f64]) -> f64 {
 // because each iteration of the outer loop is transferring the entirety of the signal array
 // without an reuse, using a buffered_onesided_iter helps to ensure the transfers are efficient, but
 // a lot of (needless) data transfer happens
+#[allow(dead_code)]
 fn dft_lamellar_array(signal: UnsafeArray<f64>, spectrum: UnsafeArray<f64>) -> f64 {
     let timer = Instant::now();
     let signal_clone = signal.clone();
-    spectrum
-        .dist_iter_mut()
-        .enumerate()
-        .for_each(move |(k, spec_bin)| {
-            let mut sum = 0f64;
-            for (i, &x) in signal_clone.buffered_onesided_iter(1000).into_iter().enumerate() {
-                let angle = -1f64 * (i * k) as f64 * 2f64 * std::f64::consts::PI
-                    / signal_clone.len() as f64;
-                let twiddle = angle * (angle.cos() + angle * angle.sin());
-                sum = sum + twiddle * x;
-            }
-            *spec_bin = sum
-        });
+    unsafe {
+        spectrum
+            .dist_iter_mut()
+            .enumerate()
+            .for_each(move |(k, spec_bin)| {
+                let mut sum = 0f64;
+                for (i, &x) in signal_clone.buffered_onesided_iter(1000).into_iter().enumerate() {
+                    let angle = -1f64 * (i * k) as f64 * 2f64 * std::f64::consts::PI
+                        / signal_clone.len() as f64;
+                    let twiddle = angle * (angle.cos() + angle * angle.sin());
+                    sum = sum + twiddle * x;
+                }
+                *spec_bin = sum
+            });
+    }
     spectrum.wait_all();
     spectrum.barrier();
     timer.elapsed().as_secs_f64()
@@ -182,6 +185,7 @@ fn dft_lamellar_array(signal: UnsafeArray<f64>, spectrum: UnsafeArray<f64>) -> f
 // because each iteration of the outer loop is transferring the entirety of the signal array
 // without any reuse, using a buffered_onesided_iter helps to ensure the transfers are efficient, but
 // a lot of (needless) data transfer happens
+#[allow(dead_code)]
 fn dft_lamellar_array_2(signal: ReadOnlyArray<f64>, spectrum: AtomicArray<f64>) -> f64 {
     let timer = Instant::now();
     let signal_clone = signal.clone();
@@ -207,18 +211,21 @@ fn dft_lamellar_array_2(signal: ReadOnlyArray<f64>, spectrum: AtomicArray<f64>) 
 fn dft_lamellar_array_swapped(signal: UnsafeArray<f64>, spectrum: UnsafeArray<f64>) -> f64 {
     let timer = Instant::now();
     let signal_len = signal.len();
-    for (i, x) in signal.onesided_iter().into_iter().enumerate() {
-        let x = (*x).clone();
-        spectrum
-            .dist_iter_mut()
-            .enumerate()
-            .for_each(move |(k, spec_bin)| {
-                let angle =
-                    -1f64 * (i * k) as f64 * 2f64 * std::f64::consts::PI / signal_len as f64;
-                let twiddle = angle * (angle.cos() + angle * angle.sin());
-                let _lock = LOCK.lock();
-                *spec_bin += twiddle * x;
-            });
+    
+    unsafe {
+        for (i, x) in signal.onesided_iter().into_iter().enumerate() {
+            let x = (*x).clone();
+            spectrum
+                .dist_iter_mut()
+                .enumerate()
+                .for_each(move |(k, spec_bin)| {
+                    let angle =
+                        -1f64 * (i * k) as f64 * 2f64 * std::f64::consts::PI / signal_len as f64;
+                    let twiddle = angle * (angle.cos() + angle * angle.sin());
+                    let _lock = LOCK.lock();
+                    *spec_bin += twiddle * x;
+                });
+        }
     }
     spectrum.wait_all();
     spectrum.barrier();
@@ -235,20 +242,20 @@ fn dft_lamellar_array_opt(
 ) -> f64 {
     let timer = Instant::now();
     let sig_len = signal.len();
-    signal
-        .onesided_iter()
-        .chunks(buf_size)
-        // .buffered(2)
-        .into_iter()
-        .enumerate()
-        .for_each(|(i, chunk)| {
-            let signal = chunk.clone();
-            spectrum
-                .dist_iter_mut()
-                .enumerate()
-                .for_each(move |(k, spec_bin)| {
-                    let mut sum = 0f64;
-                    unsafe {
+    unsafe{
+        signal
+            .onesided_iter()
+            .chunks(buf_size)
+            // .buffered(2)
+            .into_iter()
+            .enumerate()
+            .for_each(|(i, chunk)| {
+                let signal = chunk.clone();
+                spectrum
+                    .dist_iter_mut()
+                    .enumerate()
+                    .for_each(move |(k, spec_bin)| {
+                        let mut sum = 0f64;
                         for (j, &x) in signal
                             .iter()
                             .enumerate()
@@ -259,11 +266,12 @@ fn dft_lamellar_array_opt(
                             let twiddle = angle * (angle.cos() + angle * angle.sin());
                             sum = sum + twiddle * x;
                         }
-                    }
-                    // let _lock = LOCK.lock();
-                    *spec_bin += sum;
-                });
-        });
+                        
+                        // let _lock = LOCK.lock();
+                        *spec_bin += sum;
+                    });
+            });
+    }
     spectrum.wait_all();
     spectrum.barrier();
     timer.elapsed().as_secs_f64()
@@ -276,19 +284,19 @@ fn dft_lamellar_array_opt_test(
 ) -> f64 {
     let timer = Instant::now();
     let sig_len = signal.len();
-    signal
-        .onesided_iter()
-        .chunks(buf_size)
-        // .buffered(2)
-        .into_iter()
-        .enumerate()
-        .for_each(|(i, chunk)| {
-            let signal = chunk.clone();
-            spectrum.dist_iter_mut().enumerate().for_each_with_schedule(
-                Schedule::Dynamic,
-                move |(k, spec_bin)| {
-                    let mut sum = 0f64;
-                    unsafe {
+    unsafe{
+        signal
+            .onesided_iter()
+            .chunks(buf_size)
+            // .buffered(2)
+            .into_iter()
+            .enumerate()
+            .for_each(|(i, chunk)| {
+                let signal = chunk.clone();
+                spectrum.dist_iter_mut().enumerate().for_each_with_schedule(
+                    Schedule::Dynamic,
+                    move |(k, spec_bin)| {
+                        let mut sum = 0f64;
                         for (j, &x) in signal
                             .iter()
                             .enumerate()
@@ -299,12 +307,13 @@ fn dft_lamellar_array_opt_test(
                             let twiddle = angle * (angle.cos() + angle * angle.sin());
                             sum = sum + twiddle * x;
                         }
-                    }
-                    // let _lock = LOCK.lock();
-                    *spec_bin += sum;
-                },
-            );
-        });
+                    
+                        // let _lock = LOCK.lock();
+                        *spec_bin += sum;
+                    },
+                );
+            });
+    }
     spectrum.wait_all();
     spectrum.barrier();
     timer.elapsed().as_secs_f64()
@@ -354,7 +363,7 @@ fn dft_lamellar_array_opt_2(
 // same as above but uses safe collective atomic arrays
 fn dft_lamellar_array_opt_3(
     signal: ReadOnlyArray<f64>,
-    spectrum: LocalLockAtomicArray<f64>,
+    spectrum: LocalLockArray<f64>,
     buf_size: usize,
 ) -> f64 {
     let timer = Instant::now();
@@ -368,7 +377,7 @@ fn dft_lamellar_array_opt_3(
         .for_each(|(i, chunk)| {
             let signal = chunk.clone();
             spectrum
-                .dist_iter_mut() //this locks the LocalLockAtomicArray
+                .dist_iter_mut() //this locks the LocalLockArray
                 .enumerate()
                 .for_each(move |(k, spec_bin)| {
                     //we are accessing each element independently so free to mutate
@@ -495,9 +504,9 @@ fn main() {
             world.barrier();
 
             //--------------lamellar array--------------------------
-            full_spectrum_array
+            unsafe{full_spectrum_array
                 .dist_iter_mut()
-                .for_each(|elem| *elem = 0.0);
+                .for_each(|elem| *elem = 0.0);}
             full_spectrum_array.wait_all();
             full_spectrum_array.barrier();
 
@@ -541,9 +550,9 @@ fn main() {
             // world.barrier();
 
             //------------optimized lamellar array----------------
-            full_spectrum_array
+            unsafe{full_spectrum_array
                 .dist_iter_mut()
-                .for_each(|elem| *elem = 0.0);
+                .for_each(|elem| *elem = 0.0);}
             full_spectrum_array.wait_all();
             full_spectrum_array.barrier();
             // let timer = Instant::now();
@@ -557,9 +566,9 @@ fn main() {
             }
 
             //--------------lamellar array--------------------------
-            full_spectrum_array
+            unsafe{full_spectrum_array
                 .dist_iter_mut()
-                .for_each(|elem| *elem = 0.0);
+                .for_each(|elem| *elem = 0.0);}
             full_spectrum_array.wait_all();
             full_spectrum_array.barrier();
             times[3].push(dft_lamellar_array_opt_test(
@@ -617,7 +626,7 @@ fn main() {
             }
         }
 
-        let full_spectrum_array = full_spectrum_array.into_local_lock_atomic();
+        let full_spectrum_array = full_spectrum_array.into_local_lock();
         for _i in 0..num_trials {
             // let timer = Instant::now();
             times[5].push(dft_lamellar_array_opt_3(
@@ -659,7 +668,7 @@ fn main() {
                 times[4].iter().sum::<f64>() / times[2].len() as f64
             );
             println!(
-                "optimized LocalLockAtomicArray time: {:?}",
+                "optimized LocalLockArray time: {:?}",
                 times[5].iter().sum::<f64>() / times[2].len() as f64
             );
         }

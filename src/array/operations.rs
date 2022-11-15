@@ -3,14 +3,14 @@ use crate::array::generic_atomic::*;
 use crate::array::local_lock_atomic::*;
 use crate::array::native_atomic::*;
 use crate::array::r#unsafe::*;
-use crate::array::read_only::*;
+// use crate::array::read_only::*;
 
 use crate::array::*;
 
 use crate::lamellar_request::LamellarRequest;
-use crate::memregion::{
-    one_sided::OneSidedMemoryRegion, shared::SharedMemoryRegion, Dist, LamellarMemoryRegion,
-};
+// use crate::memregion::{
+//     one_sided::OneSidedMemoryRegion, Dist, 
+// };
 // use crate::Darc;
 use async_trait::async_trait;
 use parking_lot::Mutex;
@@ -578,14 +578,17 @@ pub enum OpInputEnum<'a, T: Dist> {
     Val(T),
     Slice(&'a [T]),
     Vec(Vec<T>),
-    #[serde(serialize_with = "LamellarMemoryRegion::serialize_local_data")]
-    MemoryRegion(LamellarMemoryRegion<T>),
+    NativeAtomicArray(NativeAtomicLocalData<T>),
+    GenericAtomicArray(GenericAtomicLocalData<T>),
+    LocalLockArray(LocalLockLocalData<'a, T>),
+    // while it would be convienient to directly use the following, doing so
+    // is ambiguous with respect to both safety (Memregions and UnsafeArray)
+    // but also it hides the fact we are only operating on the local segment of an array or memory region
+    // #[serde(serialize_with = "OneSidedMemoryRegion::serialize_local_data")]
+    // MemoryRegion(OneSidedMemoryRegion<T>),
     // UnsafeArray(UnsafeArray<T>),
     // ReadOnlyArray(ReadOnlyArray<T>),
     // AtomicArray(AtomicArray<T>),
-    NativeAtomicArray(NativeAtomicLocalData<T>),
-    GenericAtomicArray(GenericAtomicLocalData<T>),
-    LocalLockAtomicArray(LocalLockAtomicLocalData<'a, T>),
 }
 
 impl<'a, T: Dist> OpInputEnum<'_, T> {
@@ -595,18 +598,18 @@ impl<'a, T: Dist> OpInputEnum<'_, T> {
             OpInputEnum::Val(v) => Box::new(std::iter::repeat(v).map(|elem| *elem)),
             OpInputEnum::Slice(s) => Box::new(s.iter().map(|elem| *elem)),
             OpInputEnum::Vec(v) => Box::new(v.iter().map(|elem| *elem)),
-            OpInputEnum::MemoryRegion(mr) => Box::new(
-                unsafe { mr.as_slice() }
-                    .expect("memregion not local")
-                    .iter()
-                    .map(|elem| *elem),
-            ),
+            // OpInputEnum::MemoryRegion(mr) => Box::new(
+            //     unsafe { mr.as_slice() }
+            //         .expect("memregion not local")
+            //         .iter()
+            //         .map(|elem| *elem),
+            // ),
             // OpInputEnum::UnsafeArray(a) => Box::new(unsafe{a.local_data()}.iter().map(|elem| *elem)),
             // OpInputEnum::ReadOnlyArray(a) => Box::new(a.local_data().iter().map(|elem| *elem)),
             // OpInputEnum::AtomicArray(a) => Box::new(a.local_data().iter().map(|elem| elem.load())),
             OpInputEnum::NativeAtomicArray(a) => Box::new(a.iter().map(|elem| elem.load())),
             OpInputEnum::GenericAtomicArray(a) => Box::new(a.iter().map(|elem| elem.load())),
-            OpInputEnum::LocalLockAtomicArray(a) => Box::new(a.iter().map(|elem| *elem)),
+            OpInputEnum::LocalLockArray(a) => Box::new(a.iter().map(|elem| *elem)),
         }
     }
     #[tracing::instrument(skip_all)]
@@ -615,15 +618,15 @@ impl<'a, T: Dist> OpInputEnum<'_, T> {
             OpInputEnum::Val(_) => 1,
             OpInputEnum::Slice(s) => s.len(),
             OpInputEnum::Vec(v) => v.len(),
-            OpInputEnum::MemoryRegion(mr) => {
-                unsafe { mr.as_slice() }.expect("memregion not local").len()
-            }
+            // OpInputEnum::MemoryRegion(mr) => {
+            //     unsafe { mr.as_slice() }.expect("memregion not local").len()
+            // }
             // OpInputEnum::UnsafeArray(a) => unsafe{a.local_data()}.len(),
             // OpInputEnum::ReadOnlyArray(a) => a.local_data().len(),
             // OpInputEnum::AtomicArray(a) => unsafe{a.__local_as_slice().len()},
             OpInputEnum::NativeAtomicArray(a) => a.len(),
             OpInputEnum::GenericAtomicArray(a) => a.len(),
-            OpInputEnum::LocalLockAtomicArray(a) => a.len(),
+            OpInputEnum::LocalLockArray(a) => a.len(),
         }
     }
 
@@ -633,13 +636,13 @@ impl<'a, T: Dist> OpInputEnum<'_, T> {
             OpInputEnum::Val(v) => *v,
             OpInputEnum::Slice(s) => *s.first().expect("slice is empty"),
             OpInputEnum::Vec(v) => *v.first().expect("vec is empty"),
-            OpInputEnum::MemoryRegion(mr) => *unsafe { mr.as_slice() }
-                .expect("memregion not local")
-                .first()
-                .expect("memregion is empty"),
+            // OpInputEnum::MemoryRegion(mr) => *unsafe { mr.as_slice() }
+            //     .expect("memregion not local")
+            //     .first()
+            //     .expect("memregion is empty"),
             OpInputEnum::NativeAtomicArray(a) => a.at(0).load(),
             OpInputEnum::GenericAtomicArray(a) => a.at(0).load(),
-            OpInputEnum::LocalLockAtomicArray(a) => *a.first().expect("array is empty"),
+            OpInputEnum::LocalLockArray(a) => *a.first().expect("array is empty"),
         }
     }
 }
@@ -682,7 +685,37 @@ impl<'a, T: Dist> OpInput<'a, T> for &'a [T] {
     }
 }
 
+impl<'a, T: Dist> OpInput<'a, T> for &'a mut [T] {
+    #[tracing::instrument(skip_all)]
+    fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
+        let len = self.len();
+        let mut iters = vec![];
+        let num_per_batch = match std::env::var("LAMELLAR_OP_BATCH") {
+            Ok(n) => n.parse::<usize>().unwrap(), //+ 1 to account for main thread
+            Err(_) => 10000,                      //+ 1 to account for main thread
+        };
+        let num = len / num_per_batch;
+        for i in 0..num {
+            let temp = &self[(i * num_per_batch)..((i + 1) * num_per_batch)];
+            iters.push(OpInputEnum::Slice(temp));
+        }
+        let rem = len % num_per_batch;
+        if rem > 0 {
+            let temp = &self[(num * num_per_batch)..(num * num_per_batch) + rem];
+            iters.push(OpInputEnum::Slice(temp));
+        }
+        (iters, len)
+    }
+}
+
 impl<'a, T: Dist> OpInput<'a, T> for &'a Vec<T> {
+    #[tracing::instrument(skip_all)]
+    fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
+        (&self[..]).as_op_input()
+    }
+}
+
+impl<'a, T: Dist> OpInput<'a, T> for &'a mut Vec<T> {
     #[tracing::instrument(skip_all)]
     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
         (&self[..]).as_op_input()
@@ -715,66 +748,67 @@ impl<'a, T: Dist> OpInput<'a, T> for Vec<T> {
     }
 }
 
-impl<'a, T: Dist> OpInput<'a, T> for &LamellarMemoryRegion<T> {
-    #[tracing::instrument(skip_all)]
-    fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
-        let slice = unsafe { self.as_slice() }.expect("mem region not local");
-        let len = slice.len();
-        let mut iters = vec![];
-        let num_per_batch = match std::env::var("LAMELLAR_OP_BATCH") {
-            Ok(n) => n.parse::<usize>().unwrap(),
-            Err(_) => 10000,
-        };
-        let num = len / num_per_batch;
-        for i in 0..num {
-            let sub_region = self.sub_region((i * num_per_batch)..((i + 1) * num_per_batch));
-            iters.push(OpInputEnum::MemoryRegion(sub_region));
-        }
-        let rem = len % num_per_batch;
-        if rem > 0 {
-            let sub_region = self.sub_region((num * num_per_batch)..(num * num_per_batch) + rem);
-            iters.push(OpInputEnum::MemoryRegion(sub_region));
-        }
-        (iters, len)
-    }
-}
+// impl<'a, T: Dist> OpInput<'a, T> for &OneSidedMemoryRegion<T> {
+//     #[tracing::instrument(skip_all)]
+//     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
+//         let slice = unsafe { self.as_slice() }.expect("mem region not local");
+//         let len = slice.len();
+//         let mut iters = vec![];
+//         let num_per_batch = match std::env::var("LAMELLAR_OP_BATCH") {
+//             Ok(n) => n.parse::<usize>().unwrap(),
+//             Err(_) => 10000,
+//         };
+//         let num = len / num_per_batch;
+//         for i in 0..num {
+//             let sub_region = self.sub_region((i * num_per_batch)..((i + 1) * num_per_batch));
+//             iters.push(OpInputEnum::MemoryRegion(sub_region));
+//         }
+//         let rem = len % num_per_batch;
+//         if rem > 0 {
+//             let sub_region = self.sub_region((num * num_per_batch)..(num * num_per_batch) + rem);
+//             iters.push(OpInputEnum::MemoryRegion(sub_region));
+//         }
+//         (iters, len)
+//     }
+// }
 
-impl<'a, T: Dist> OpInput<'a, T> for &OneSidedMemoryRegion<T> {
-    #[tracing::instrument(skip_all)]
-    fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
-        LamellarMemoryRegion::from(self).as_op_input()
-    }
-}
+// // impl<'a, T: Dist> OpInput<'a, T> for &OneSidedMemoryRegion<T> {
+// //     #[tracing::instrument(skip_all)]
+// //     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
+// //         LamellarMemoryRegion::from(self).as_op_input()
+// //     }
+// // }
 
-impl<'a, T: Dist> OpInput<'a, T> for OneSidedMemoryRegion<T> {
-    #[tracing::instrument(skip_all)]
-    fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
-        LamellarMemoryRegion::from(self).as_op_input()
-    }
-}
+// impl<'a, T: Dist> OpInput<'a, T> for OneSidedMemoryRegion<T> {
+//     #[tracing::instrument(skip_all)]
+//     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
+//         // LamellarMemoryRegion::from(self).as_op_input()
+//         (&self).as_op_input()
+//     }
+// }
 
-impl<'a, T: Dist> OpInput<'a, T> for &SharedMemoryRegion<T> {
-    #[tracing::instrument(skip_all)]
-    fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
-        LamellarMemoryRegion::from(self).as_op_input()
-    }
-}
+// impl<'a, T: Dist> OpInput<'a, T> for &SharedMemoryRegion<T> {
+//     #[tracing::instrument(skip_all)]
+//     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
+//         LamellarMemoryRegion::from(self).as_op_input()
+//     }
+// }
 
-impl<'a, T: Dist> OpInput<'a, T> for SharedMemoryRegion<T> {
-    #[tracing::instrument(skip_all)]
-    fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
-        LamellarMemoryRegion::from(self).as_op_input()
-    }
-}
+// impl<'a, T: Dist> OpInput<'a, T> for SharedMemoryRegion<T> {
+//     #[tracing::instrument(skip_all)]
+//     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
+//         LamellarMemoryRegion::from(self).as_op_input()
+//     }
+// }
 
-impl<'a, T: Dist> OpInput<'a, T> for &'a UnsafeArray<T> {
-    #[tracing::instrument(skip_all)]
-    fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
-        let slice = unsafe { self.local_as_slice() };
-        // let slice = unsafe { std::mem::transmute::<&'_ [T], &'a [T]>(slice) }; //this is safe in the context of buffered_ops because we know we wait for all the requests to submit before we return
-        slice.as_op_input()
-    }
-}
+// impl<'a, T: Dist> OpInput<'a, T> for &'a UnsafeArray<T> {
+//     #[tracing::instrument(skip_all)]
+//     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
+//         let slice = unsafe { self.local_as_slice() };
+//         // let slice = unsafe { std::mem::transmute::<&'_ [T], &'a [T]>(slice) }; //this is safe in the context of buffered_ops because we know we wait for all the requests to submit before we return
+//         slice.as_op_input()
+//     }
+// }
 
 // impl<'a, T: Dist> OpInput<'a, T> for UnsafeArray<T>{
 //     fn  as_op_input(self) -> (Vec<OpInputEnum<'a,T>>,usize) {
@@ -782,14 +816,14 @@ impl<'a, T: Dist> OpInput<'a, T> for &'a UnsafeArray<T> {
 //     }
 // }
 
-impl<'a, T: Dist> OpInput<'a, T> for &'a ReadOnlyArray<T> {
-    #[tracing::instrument(skip_all)]
-    fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
-        let slice = self.local_as_slice();
-        // let slice = unsafe { std::mem::transmute::<&'_ [T], &'a [T]>(slice) }; //this is safe in the context of buffered_ops because we know we wait for all the requests to submit before we return
-        slice.as_op_input()
-    }
-}
+// impl<'a, T: Dist> OpInput<'a, T> for &'a ReadOnlyArray<T> {
+//     #[tracing::instrument(skip_all)]
+//     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
+//         let slice = self.local_as_slice();
+//         // let slice = unsafe { std::mem::transmute::<&'_ [T], &'a [T]>(slice) }; //this is safe in the context of buffered_ops because we know we wait for all the requests to submit before we return
+//         slice.as_op_input()
+//     }
+// }
 
 // impl<'a, T: Dist> OpInput<'a, T> for ReadOnlyArray<T>{
 //     fn  as_op_input(self) -> (Vec<OpInputEnum<'a,T>>,usize) {
@@ -797,15 +831,16 @@ impl<'a, T: Dist> OpInput<'a, T> for &'a ReadOnlyArray<T> {
 //     }
 // }
 
-impl<'a, T: Dist> OpInput<'a, T> for &'a LocalLockAtomicArray<T> {
+impl<'a, T: Dist> OpInput<'a, T> for &'a LocalLockLocalData<'_,T> {
     #[tracing::instrument(skip_all)]
     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
         // let slice=unsafe{self.__local_as_slice()};
-        let slice = self.read_local_data();
-        let len = slice.len();
+        // let slice = self.read_local_data();
+        // let slice = self.clone();
+        let len = self.len();
         let mut iters = vec![];
-        let my_pe = self.my_pe();
-        if let Some(_start_index) = self.array.inner.start_index_for_pe(my_pe) {
+        let my_pe = self.array.my_pe();
+        if let Some(_start_index) = self.array.array.inner.start_index_for_pe(my_pe) {
             //just to check that the array is local
             let num_per_batch = match std::env::var("LAMELLAR_OP_BATCH") {
                 Ok(n) => n.parse::<usize>().unwrap(), //+ 1 to account for main thread
@@ -815,36 +850,44 @@ impl<'a, T: Dist> OpInput<'a, T> for &'a LocalLockAtomicArray<T> {
             // println!("num: {} len {:?} npb {:?}", num, len, num_per_batch);
             for i in 0..num {
                 // let sub_array = self.sub_array((start_index+(i*num_per_batch))..(start_index+((i+1)*num_per_batch)));
-                let sub_data = self
-                    .read_local_data()
+                let sub_data = self.clone()
                     .into_sub_data(i * num_per_batch, (i + 1) * num_per_batch);
-                iters.push(OpInputEnum::LocalLockAtomicArray(sub_data));
+                iters.push(OpInputEnum::LocalLockArray(sub_data));
             }
             let rem = len % num_per_batch;
             if rem > 0 {
                 // let sub_array = self.sub_array((start_index+(num*num_per_batch))..(start_index+(num*num_per_batch) + rem));
-                let sub_data = self
-                    .read_local_data()
+                let sub_data = self.clone()
                     .into_sub_data(num * num_per_batch, num * num_per_batch + rem);
-                iters.push(OpInputEnum::LocalLockAtomicArray(sub_data));
+                iters.push(OpInputEnum::LocalLockArray(sub_data));
             }
         }
         (iters, len)
     }
 }
 
-// impl<'a, T: Dist> OpInput<'a, T> for LocalLockAtomicArray<T>{
+// impl<'a, T: Dist> OpInput<'a, T> for LocalLockArray<T>{
 //     fn  as_op_input(self) -> (Vec<OpInputEnum<'a,T>>,usize) {
 //         (&self).as_op_input()
 //     }
 // }
 
-impl<'a, T: Dist + ElementOps> OpInput<'a, T> for &AtomicArray<T> {
+impl<'a, T: Dist + ElementOps> OpInput<'a, T> for &AtomicLocalData<T> {
     #[tracing::instrument(skip_all)]
     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
-        match self {
-            &AtomicArray::GenericAtomicArray(ref a) => a.as_op_input(),
-            &AtomicArray::NativeAtomicArray(ref a) => a.as_op_input(),
+        match self.array.clone() {
+            AtomicArray::GenericAtomicArray(a) => a.local_data().as_op_input(),
+            AtomicArray::NativeAtomicArray(a) => a.local_data().as_op_input(),
+        }
+    }
+}
+
+impl<'a, T: Dist + ElementOps> OpInput<'a, T> for AtomicLocalData<T> {
+    #[tracing::instrument(skip_all)]
+    fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
+        match self.array {
+            AtomicArray::GenericAtomicArray(a) => a.local_data().as_op_input(),
+            AtomicArray::NativeAtomicArray(a) => a.local_data().as_op_input(),
         }
     }
 }
@@ -855,15 +898,16 @@ impl<'a, T: Dist + ElementOps> OpInput<'a, T> for &AtomicArray<T> {
 //     }
 // }
 
-impl<'a, T: Dist + ElementOps> OpInput<'a, T> for &GenericAtomicArray<T> {
+impl<'a, T: Dist + ElementOps> OpInput<'a, T> for &GenericAtomicLocalData<T> {
     #[tracing::instrument(skip_all)]
     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
-        let slice = unsafe { self.__local_as_slice() };
-        let len = slice.len();
-        let local_data = self.local_data();
+        // let slice = unsafe { self.__local_as_slice() };
+        
+        let local_data = self.clone();
+        let len = local_data.len();
         let mut iters = vec![];
-        let my_pe = self.my_pe();
-        if let Some(_start_index) = self.array.inner.start_index_for_pe(my_pe) {
+        let my_pe = self.array.my_pe();
+        if let Some(_start_index) = self.array.array.inner.start_index_for_pe(my_pe) {
             //just to check that the array is local
             let num_per_batch = match std::env::var("LAMELLAR_OP_BATCH") {
                 Ok(n) => n.parse::<usize>().unwrap(), //+ 1 to account for main thread
@@ -887,21 +931,23 @@ impl<'a, T: Dist + ElementOps> OpInput<'a, T> for &GenericAtomicArray<T> {
     }
 }
 
-// impl<'a, T: Dist + ElementOps> OpInput<'a, T> for GenericAtomicArray<T>{
-//     fn  as_op_input(self) -> (Vec<OpInputEnum<'a,T>>,usize) {
-//         (&self).as_op_input()
-//     }
-// }
+impl<'a, T: Dist + ElementOps> OpInput<'a, T> for GenericAtomicLocalData<T>{
+    fn  as_op_input(self) -> (Vec<OpInputEnum<'a,T>>,usize) {
+        (&self).as_op_input()
+    }
+}
 
-impl<'a, T: Dist + ElementOps> OpInput<'a, T> for &NativeAtomicArray<T> {
+impl<'a, T: Dist + ElementOps> OpInput<'a, T> for &NativeAtomicLocalData<T> {
     #[tracing::instrument(skip_all)]
     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
-        let slice = unsafe { self.__local_as_slice() };
-        let len = slice.len();
-        let local_data = self.local_data();
+        // let slice = unsafe { self.__local_as_slice() };
+        // let len = slice.len();
+        // let local_data = self.local_data();
+        let local_data = self.clone();
+        let len = local_data.len();
         let mut iters = vec![];
-        let my_pe = self.my_pe();
-        if let Some(_start_index) = self.array.inner.start_index_for_pe(my_pe) {
+        let my_pe = self.array.my_pe();
+        if let Some(_start_index) = self.array.array.inner.start_index_for_pe(my_pe) {
             //just to check that the array is local
             let num_per_batch = match std::env::var("LAMELLAR_OP_BATCH") {
                 Ok(n) => n.parse::<usize>().unwrap(), //+ 1 to account for main thread
@@ -929,11 +975,11 @@ impl<'a, T: Dist + ElementOps> OpInput<'a, T> for &NativeAtomicArray<T> {
     }
 }
 
-// impl<'a, T: Dist + ElementOps> OpInput<'a, T> for NativeAtomicArray<T>{
-//     fn  as_op_input(self) -> (Vec<OpInputEnum<'a,T>>,usize) {
-//         (&self).as_op_input()
-//     }
-// }
+impl<'a, T: Dist + ElementOps> OpInput<'a, T> for NativeAtomicLocalData<T>{
+    fn  as_op_input(self) -> (Vec<OpInputEnum<'a,T>>,usize) {
+        (&self).as_op_input()
+    }
+}
 #[doc(hidden)]
 pub trait BufferOp: Sync + Send {
     fn add_ops(

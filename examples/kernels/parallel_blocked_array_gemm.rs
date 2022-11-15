@@ -16,7 +16,7 @@ lazy_static! {
     static ref LOCK: Mutex<()> = Mutex::new(());
 }
 
-#[lamellar::AmData(Dist, Debug, Copy, Clone)]
+#[lamellar::AmData(Dist, Debug, Copy, Clone, Default)]
 struct Block {
     j: usize,
     k: usize,
@@ -40,9 +40,9 @@ fn main() {
     let n = dim; // a cols b rows
     let p = dim; // b & c cols
 
-    let a = UnsafeArray::<f32>::new(&world, m * n, Distribution::Block); //row major
-    let b = UnsafeArray::<f32>::new(&world, n * p, Distribution::Block); //col major
-    let c = UnsafeArray::<f32>::new(&world, m * p, Distribution::Block); //row major
+    let a = LocalLockArray::<f32>::new(&world, m * n, Distribution::Block); //row major
+    let b = LocalLockArray::<f32>::new(&world, n * p, Distribution::Block); //col major
+    let c = AtomicArray::<f32>::new(&world, m * p, Distribution::Block); //row major
                                                                          //initialize
     a.dist_iter_mut()
         .enumerate()
@@ -57,9 +57,11 @@ fn main() {
             *x = 0 as f32;
         }
     });
-    c.dist_iter_mut().for_each(|x| *x = 0.0);
+    c.dist_iter_mut().for_each(|x| x.store(0.0));
     world.wait_all();
     world.barrier();
+    let a = a.into_read_only();
+    let b = b.into_read_only();
 
     let num_gops = ((2 * dim * dim * dim) - dim * dim) as f64 / 1_000_000_000.0; // accurate for square matrices
     let blocksize = dim / num_pes;
@@ -74,15 +76,16 @@ fn main() {
     // we construct a global array where each pe will contain the sequence (0..n_blks)
     // we can then call dist_iter() on this array to iterate over the range in parallel on each PE
     let nblks_array =
-        UnsafeArray::<Block>::new(&world, (n_blks * n_blks) * num_pes, Distribution::Block);
-    nblks_array
+    LocalLockArray::<Block>::new(&world, (n_blks * n_blks) * num_pes, Distribution::Block);
+    world.block_on(nblks_array
         .dist_iter_mut()
         .enumerate()
         .for_each(move |(g_i, x)| {
             let i = g_i % (n_blks * n_blks);
             x.j = i / n_blks;
             x.k = i % n_blks
-        });
+        }));
+    let nblks_array = nblks_array.into_read_only();
 
     let start = std::time::Instant::now();
     let a = a.clone();
@@ -119,16 +122,14 @@ fn main() {
             // iterate of the local submatrix rows of a
             let c = c_clone.clone();
             let b_block_vec = b_block_vec.clone();
-            let a_vec = unsafe {
-                a.local_as_slice()
+            let a_vec = a.local_as_slice()
                     .chunks(blocksize)
                     .skip(i_blk * m_blks * blocksize + k_blk) //skip previously visited submatrices
                     .step_by(m_blks) //grab chunk from the next row in submatrix
                     .take(blocksize) //we only need to take blocksize rows
                     .flatten()
                     .copied() //get values instead of references
-                    .collect::<Vec<f32>>()
-            };
+                    .collect::<Vec<f32>>();
             // a.dist_iter() //DistributedIterator (each pe will iterate through only its local data -- in parallel)
             //     .chunks(blocksize) //chunks rows by blocksize
             //     .skip(i_blk * m_blks * blocksize + k_blk) //skip previously visited submatrices
@@ -166,14 +167,14 @@ fn main() {
                 );
             }
 
-            let c_slice = unsafe { c.local_as_mut_slice() };
+            let c_slice =  c.mut_local_data();
             let _lock = LOCK.lock();
 
             for row in 0..blocksize {
                 let row_offset = (i_blk * blocksize + row) * n;
                 for col in 0..blocksize {
                     let col_offset = j_blk * blocksize + col;
-                    c_slice[row_offset + col_offset] += c_vec[row * blocksize + col];
+                    c_slice.at(row_offset + col_offset).fetch_add(c_vec[row * blocksize + col]);
                     //we know all updates to c are local so directly update the raw data
                     // we could use the array.add interface by calculating the global index: let g_i_blk = i_blk + my_pe *m_blks_pe; and replacing it in row_offset
                     // c.add(row_offset+col_offset,c_vec[row*blocksize + col]); -- but some overheads are introduce from PGAS calculations performed by the runtime, and since its all local updates we can avoid them

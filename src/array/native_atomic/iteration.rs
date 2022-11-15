@@ -53,32 +53,6 @@ impl<T: Dist> std::fmt::Debug for NativeAtomicLocalIter<T> {
     }
 }
 
-// impl<T: Dist > NativeAtomicDistIter<T> {
-//     pub(crate) fn new(data: NativeAtomicArray<T>, cur_i: usize, cnt: usize) -> Self {
-//         // println!("new dist iter {:?} {:? } {:?}",cur_i, cnt, cur_i+cnt);
-//         NativeAtomicDistIter {
-//             data,
-//             cur_i,
-//             end_i: cur_i + cnt,
-//         }
-//     }
-// }
-// impl<T: Dist + 'static> NativeAtomicDistIter<T> {
-//     pub fn for_each<F>(&self, op: F)
-//     where
-//         F: Fn(NativeAtomicElement<T>) + SyncSend + Clone + 'static,
-//     {
-//         self.data.clone().for_each(self, op);
-//     }
-//     pub fn for_each_async<F, Fut>(&self, op: F)
-//     where
-//         F: Fn(NativeAtomicElement<T>) -> Fut + SyncSend + Clone + 'static,
-//         Fut: Future<Output = ()> + SyncSend + 'static,
-//     {
-//         self.data.clone().for_each_async(self, op);
-//     }
-// }
-
 impl<T: Dist> DistributedIterator for NativeAtomicDistIter<T> {
     type Item = NativeAtomicElement<T>;
     type Array = NativeAtomicArray<T>;
@@ -218,10 +192,6 @@ impl<T: Dist> DistIteratorLauncher for NativeAtomicArray<T> {
     fn subarray_index_from_local(&self, index: usize, chunk_size: usize) -> Option<usize> {
         self.array.subarray_index_from_local(index, chunk_size)
     }
-
-    // fn subarray_pe_and_offset_for_global_index(&self, index: usize, chunk_size: usize) -> Option<(usize,usize)> {
-    //     self.array.subarray_pe_and_offset_for_global_index(index, chunk_size)
-    // }
 
     fn for_each<I, F>(&self, iter: &I, op: F) -> Pin<Box<dyn Future<Output = ()> + Send>>
     where

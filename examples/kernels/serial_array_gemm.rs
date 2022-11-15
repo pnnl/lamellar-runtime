@@ -23,10 +23,12 @@ fn main() {
     let n = dim; // a cols b rows
     let p = dim; // b & c cols
 
-    let a = UnsafeArray::<f32>::new(&world, m * n, Distribution::Block); //row major
-    let b = UnsafeArray::<f32>::new(&world, n * p, Distribution::Block); //col major
-    let c = UnsafeArray::<f32>::new(&world, m * p, Distribution::Block); //row major
+    let a = LocalLockArray::<f32>::new(&world, m * n, Distribution::Block); //row major
+    let b = LocalLockArray::<f32>::new(&world, n * p, Distribution::Block); //col major
+    let c = AtomicArray::<f32>::new(&world, m * p, Distribution::Block); //row major
                                                                          //initialize matrices
+
+
     a.dist_iter_mut()
         .enumerate()
         .for_each(|(i, x)| *x = i as f32);
@@ -40,10 +42,13 @@ fn main() {
             *x = 0 as f32;
         }
     });
-    c.dist_iter_mut().for_each(|x| *x = 0.0);
+    c.dist_iter_mut().for_each(|x| x.store(0.0));
 
     world.wait_all();
     world.barrier();
+
+    let a = a.into_read_only();
+    let b = b.into_read_only();
 
     let num_gops = ((2 * dim * dim * dim) - dim * dim) as f64 / 1_000_000_000.0; // accurate for square matrices
 
@@ -69,7 +74,7 @@ fn main() {
                         let b_val = b_c.at(j + k * n);
                         sum += a_val.await * b_val.await;
                     }
-                    c_c.put(j + i * m, &sum); // could also do c.add(j+i*m,sum), but each element of c will only be updated once so put is faster
+                    c_c.store(j + i * m, sum); // could also do c.add(j+i*m,sum), but each element of c will only be updated once so store is slightly faster
                 }
             }
         });

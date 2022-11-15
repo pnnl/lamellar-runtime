@@ -9,7 +9,7 @@ use crate::LAMELLAES;
 
 use core::marker::PhantomData;
 use parking_lot::Mutex;
-use serde::ser::Serialize;
+// use serde::ser::Serialize;
 use std::collections::HashMap;
 use std::ops::Bound;
 use std::pin::Pin;
@@ -619,14 +619,15 @@ impl<T: Dist> OneSidedMemoryRegion<T> {
     }
 }
 
-impl<T: Dist + serde::Serialize> OneSidedMemoryRegion<T> {
-    pub(crate) fn serialize_local_data<S>(&self, s: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        unsafe { self.as_slice().unwrap().serialize(s) }
-    }
-}
+// This could be useful for if we want to transfer the actual data instead of the pointer
+// impl<T: Dist + serde::Serialize> OneSidedMemoryRegion<T> {
+//     pub(crate) fn serialize_local_data<S>(&self, s: S) -> Result<S::Ok, S::Error>
+//     where
+//         S: serde::Serializer,
+//     {
+//         unsafe { self.as_slice().unwrap().serialize(s) }
+//     }
+// }
 
 impl<T: Dist> RegisteredMemoryRegion<T> for OneSidedMemoryRegion<T> {
     fn len(&self) -> usize {

@@ -98,8 +98,8 @@ name = "put_test"
 path = "tests/array/rdma/put_test.rs"
 
 [[example]]
-name = "iget_test"
-path = "tests/array/rdma/iget_test.rs"
+name = "blocking_get_test"
+path = "tests/array/rdma/blocking_get_test.rs"
 
 [[example]]
 name = "get_test"

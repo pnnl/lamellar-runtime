@@ -128,8 +128,8 @@ impl<T: Dist> ReadOnlyArray<T> {
     ) {
         self.array.get_unchecked(index, buf)
     }
-    pub fn iget<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(&self, index: usize, buf: U) {
-        self.array.iget(index, buf)
+    pub fn blocking_get<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(&self, index: usize, buf: U) {
+        self.array.blocking_get(index, buf)
     }
     pub fn internal_get<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(
         &self,
@@ -193,8 +193,8 @@ impl<T: Dist> ReadOnlyArray<T> {
     //     self.array.into()
     // }
 
-    pub fn into_local_lock_atomic(self) -> LocalLockAtomicArray<T> {
-        // println!("readonly into_local_lock_atomic");
+    pub fn into_local_lock(self) -> LocalLockArray<T> {
+        // println!("readonly into_local_lock");
         self.array.into()
     }
 
@@ -241,9 +241,9 @@ impl<T: Dist> From<AtomicArray<T>> for ReadOnlyArray<T> {
     }
 }
 
-impl<T: Dist> From<LocalLockAtomicArray<T>> for ReadOnlyArray<T> {
-    fn from(array: LocalLockAtomicArray<T>) -> Self {
-        // println!("readonly from LocalLockAtomicArray");
+impl<T: Dist> From<LocalLockArray<T>> for ReadOnlyArray<T> {
+    fn from(array: LocalLockArray<T>) -> Self {
+        // println!("readonly from LocalLockArray");
         unsafe { array.into_inner().into() }
     }
 }
@@ -481,6 +481,11 @@ impl<T: Dist> LamellarArray<T> for ReadOnlyArray<T> {
     fn wait_all(&self) {
         self.array.wait_all()
         // println!("done in wait all {:?}",std::time::SystemTime::now());
+    }
+    fn block_on<F>(&self, f: F) -> F::Output
+    where
+        F: Future {
+            self.array.block_on(f)
     }
     fn pe_and_offset_for_global_index(&self, index: usize) -> Option<(usize, usize)> {
         self.array.pe_and_offset_for_global_index(index)

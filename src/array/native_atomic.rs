@@ -681,7 +681,7 @@ impl NativeAtomicByteArrayWeak {
 #[derive(Clone, Debug)]
 pub struct NativeAtomicLocalData<T> {
     // + NativeAtomicOps> {
-    array: NativeAtomicArray<T>,
+    pub(crate) array: NativeAtomicArray<T>,
     start_index: usize,
     end_index: usize,
 }
@@ -887,6 +887,10 @@ impl<T: Dist> NativeAtomicArray<T> {
         self.array.pe_offset_for_dist_index(pe, index)
     }
 
+    // pub(crate) fn subarray_index_from_local(&self, index: usize) -> Option<usize> {
+    //     self.array.subarray_index_from_local(index)
+    // }
+
     pub fn len(&self) -> usize {
         self.array.len()
     }
@@ -1047,6 +1051,11 @@ impl<T: Dist> LamellarArray<T> for NativeAtomicArray<T> {
     fn wait_all(&self) {
         self.array.wait_all()
         // println!("done in wait all {:?}",std::time::SystemTime::now());
+    }
+    fn block_on<F>(&self, f: F) -> F::Output
+    where
+        F: Future {
+            self.array.block_on(f)
     }
     fn pe_and_offset_for_global_index(&self, index: usize) -> Option<(usize, usize)> {
         self.array.pe_and_offset_for_global_index(index)

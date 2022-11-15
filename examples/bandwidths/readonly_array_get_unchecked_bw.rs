@@ -2,9 +2,8 @@
 /// Test the bandwidth between two PEs using an RDMA get of N bytes
 /// from a distributed array into a local memory region.
 /// --------------------------------------------------------------------
-// use lamellar::ActiveMessaging;
-use lamellar::array::{DistributedIterator, Distribution, UnsafeArray};
-use lamellar::RemoteMemoryRegion;
+use lamellar::array::prelude::*;
+use lamellar::memregion::prelude::*;
 use std::time::Instant;
 
 const ARRAY_LEN: usize = 1024 * 1024 * 1024;
@@ -23,9 +22,9 @@ fn main() {
         //     *i = num_pes as u8;
         // }
     }
-    array
-        .dist_iter_mut()
-        .for_each(move |elem| *elem = num_pes as u8);
+    unsafe {array
+        .local_iter_mut()
+        .for_each(move |elem| *elem = num_pes as u8);}
     array.wait_all();
     array.barrier();
     let array = array.into_read_only();

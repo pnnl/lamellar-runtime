@@ -6,7 +6,8 @@ use rand::seq::SliceRandom;
 
 macro_rules! initialize_array {
     (UnsafeArray,$array:ident,$init_val:ident) => {
-        $array.dist_iter_mut().for_each(move |x| *x = $init_val);
+        #[allow(unused_unsafe)]
+        unsafe {$array.dist_iter_mut().for_each(move |x| *x = $init_val)};
         $array.wait_all();
         $array.barrier();
     };
@@ -16,7 +17,7 @@ macro_rules! initialize_array {
         $array.barrier();
         // println!("----------------------------------------------");
     };
-    (LocalLockAtomicArray,$array:ident,$init_val:ident) => {
+    (LocalLockArray,$array:ident,$init_val:ident) => {
         $array.dist_iter_mut().for_each(move |x| *x = $init_val);
         $array.wait_all();
         $array.barrier();
@@ -36,7 +37,7 @@ macro_rules! check_val {
             $valid = false;
         }
     };
-    (LocalLockAtomicArray,$val:ident,$max_val:ident,$valid:ident) => {
+    (LocalLockArray,$val:ident,$max_val:ident,$valid:ident) => {
         if (($val - $max_val) as f64).abs() > 0.0001 {
             //all updates should be preserved
             $valid = false;
@@ -83,7 +84,8 @@ macro_rules! add_test{
             }
             array.wait_all();
             array.barrier();
-            for (i,elem) in array.onesided_iter().into_iter().enumerate(){
+            #[allow(unused_unsafe)]
+            for (i,elem) in unsafe {array.onesided_iter().into_iter().enumerate()}{
                 let val = *elem;
                 check_val!($array,val,max_val,success);
                 if !success{
@@ -110,7 +112,8 @@ macro_rules! add_test{
             }
             array.wait_all();
             array.barrier();
-            for (i,elem) in array.onesided_iter().into_iter().enumerate(){
+            #[allow(unused_unsafe)]
+            for (i,elem) in unsafe{ array.onesided_iter().into_iter().enumerate()}{
                 let val = *elem;
                 check_val!($array,val,max_val,success);
                 if !success{
@@ -145,7 +148,8 @@ macro_rules! add_test{
             }
             sub_array.wait_all();
             sub_array.barrier();
-            for (i,elem) in sub_array.onesided_iter().into_iter().enumerate(){
+            #[allow(unused_unsafe)]
+            for (i,elem) in unsafe { sub_array.onesided_iter().into_iter().enumerate()}{
                 let val = *elem;
                 check_val!($array,val,max_val,success);
                 if !success{
@@ -169,7 +173,8 @@ macro_rules! add_test{
             }
             sub_array.wait_all();
             sub_array.barrier();
-            for (i,elem) in sub_array.onesided_iter().into_iter().enumerate(){
+            #[allow(unused_unsafe)]
+            for (i,elem) in  unsafe{sub_array.onesided_iter().into_iter().enumerate()}{
                 let val = *elem;
                 check_val!($array,val,max_val,success);
                 if !success{
@@ -205,7 +210,8 @@ macro_rules! add_test{
                 }
                 sub_array.wait_all();
                 sub_array.barrier();
-                for (i,elem) in sub_array.onesided_iter().into_iter().enumerate(){
+                #[allow(unused_unsafe)]
+                for (i,elem) in unsafe{sub_array.onesided_iter().into_iter().enumerate()}{
                     let val = *elem;
                     check_val!($array,val,max_val,success);
                     if !success{
@@ -229,7 +235,8 @@ macro_rules! add_test{
                 }
                 sub_array.wait_all();
                 sub_array.barrier();
-                for (i,elem) in sub_array.onesided_iter().into_iter().enumerate(){
+                #[allow(unused_unsafe)]
+                for (i,elem) in unsafe{sub_array.onesided_iter().into_iter().enumerate()}{
                     let val = *elem;
                     check_val!($array,val,max_val,success);
                     if !success{
@@ -264,7 +271,8 @@ macro_rules! check_results {
         let mut success = true;
         $array.wait_all();
         $array.barrier();
-        for (i, elem) in $array.onesided_iter().into_iter().enumerate() {
+        #[allow(unused_unsafe)]
+        for (i, elem) in unsafe{$array.onesided_iter().into_iter().enumerate()} {
             let val = *elem;
             check_val!($array_ty, val, $num_pes, success);
             if !success {
@@ -282,6 +290,7 @@ macro_rules! check_results {
     };
 }
 
+
 macro_rules! input_test{
     ($array:ident,  $len:expr, $dist:ident) =>{
        {
@@ -295,11 +304,14 @@ macro_rules! input_test{
             let input_array: UnsafeArray::<usize> = UnsafeArray::<usize>::new(world.team(), array_total_len*num_pes, $dist).into(); //convert into abstract LamellarArray, distributed len is total_len
             let init_val=0;
             initialize_array!($array, array, init_val);
-            if $dist == lamellar::array::Distribution::Block{
-                input_array.dist_iter_mut().enumerate().for_each(move |(i,x)| {println!("i: {:?}",i);*x = i%array_total_len});
-            }
-            else{
-                input_array.dist_iter_mut().enumerate().for_each(move |(i,x)| {println!("i: {:?}",i);*x = i/num_pes});
+            #[allow(unused_unsafe)]
+            unsafe {
+                if $dist == lamellar::array::Distribution::Block{
+                    input_array.dist_iter_mut().enumerate().for_each(move |(i,x)| {println!("i: {:?}",i);*x = i%array_total_len});
+                }
+                else{
+                    input_array.dist_iter_mut().enumerate().for_each(move |(i,x)| {println!("i: {:?}",i);*x = i/num_pes});
+                }
             }
             input_array.wait_all();
             input_array.barrier();
@@ -348,88 +360,36 @@ macro_rules! input_test{
             check_results!($array,array,num_pes,"scoped &Vec<T>");
 
             // LMR<T>------------------------------
-            let lmr=world.alloc_one_sided_mem_region(array.len());
+            
             unsafe{
+                let lmr=world.alloc_one_sided_mem_region(array.len());
                 let slice = lmr.as_mut_slice().unwrap();
                 for i in 0..array.len(){
                     slice[i]=i;
                 }
+                array.batch_add(slice,1);
+                check_results!($array,array,num_pes,"LMR<T>");
             }
-            array.batch_add(lmr.clone(),1);
-            check_results!($array,array,num_pes,"LMR<T>");
-            // &LMR<T>------------------------------
-            array.batch_add(&lmr,1);
-            check_results!($array,array,num_pes,"&LMR<T>");
-            drop(lmr);
-            // scoped LMR<T>------------------------------
-            {
-                let lmr=world.alloc_one_sided_mem_region(array.len());
-                unsafe{
-                    let slice = lmr.as_mut_slice().unwrap();
-                    for i in 0..array.len(){
-                        slice[i]=i;
-                    }
-                }
-                array.batch_add(lmr.clone(),1);
-                check_results!($array,array,num_pes,"scoped LMR<T>");
-            }
-            // scoped &LMR<T>------------------------------
-            {
-                let lmr=world.alloc_one_sided_mem_region(array.len());
-                unsafe{
-                    let slice = lmr.as_mut_slice().unwrap();
-                    for i in 0..array.len(){
-                        slice[i]=i;
-                    }
-                }
-                array.batch_add(&lmr,1);
-                check_results!($array,array,num_pes,"scoped &LMR<T>");
-            }
+            
 
             // SMR<T>------------------------------
-            let smr=world.alloc_shared_mem_region(array.len());
             unsafe{
+                let smr=world.alloc_shared_mem_region(array.len());
+                
                 let slice = smr.as_mut_slice().unwrap();
                 for i in 0..array.len(){
                     slice[i]=i;
                 }
-            }
-            array.batch_add(smr.clone(),1);
-            check_results!($array,array,num_pes,"SMR<T>");
-            // &SMR<T>------------------------------
-            array.batch_add(&smr,1);
-            check_results!($array,array,num_pes,"&SMR<T>");
-            drop(smr);
-            // scoped SMR<T>------------------------------
-            {
-                let smr=world.alloc_shared_mem_region(array.len());
-                unsafe{
-                    let slice = smr.as_mut_slice().unwrap();
-                    for i in 0..array.len(){
-                        slice[i]=i;
-                    }
-                }
-                array.batch_add(smr,1);
-                check_results!($array,array,num_pes,"scoped SMR<T>");
-            }
-            // scoped &SMR<T>------------------------------
-            {
-                let smr=world.alloc_shared_mem_region(array.len());
-                unsafe{
-                    let slice = smr.as_mut_slice().unwrap();
-                    for i in 0..array.len(){
-                        slice[i]=i;
-                    }
-                }
-                array.batch_add(&smr,1);
-                check_results!($array,array,num_pes,"scoped &SMR<T>");
+                
+                array.batch_add(slice,1);
+                check_results!($array,array,num_pes,"SMR<T>");
             }
 
             // UnsafeArray<T>------------------------------
             // array.add(input_array.clone(),1);
             // check_results!($array,array,num_pes,"UnsafeArray<T>");
             // UnsafeArray<T>------------------------------
-            array.batch_add(&input_array,1);
+            array.batch_add(unsafe{input_array.local_data()},1);
             check_results!($array,array,num_pes,"&UnsafeArray<T>");
 
             // ReadOnlyArray<T>------------------------------
@@ -437,7 +397,7 @@ macro_rules! input_test{
             // array.add(input_array.clone(),1);
             // check_results!($array,array,num_pes,"ReadOnlyArray<T>");
             // ReadOnlyArray<T>------------------------------
-            array.batch_add(&input_array,1);
+            array.batch_add(input_array.local_data(),1);
             check_results!($array,array,num_pes,"&ReadOnlyArray<T>");
 
             // AtomicArray<T>------------------------------
@@ -445,16 +405,16 @@ macro_rules! input_test{
             // array.add(input_array.clone(),1);
             // check_results!($array,array,num_pes,"AtomicArray<T>");
             // AtomicArray<T>------------------------------
-            array.batch_add(&input_array,1);
+            array.batch_add(&input_array.local_data(),1);
             check_results!($array,array,num_pes,"&AtomicArray<T>");
 
-             // LocalLockAtomicArray<T>------------------------------
-             let input_array = input_array.into_local_lock_atomic();
+             // LocalLockArray<T>------------------------------
+             let input_array = input_array.into_local_lock();
             //  array.add(input_array.clone(),1);
-            //  check_results!($array,array,num_pes,"LocalLockAtomicArray<T>");
-             // LocalLockAtomicArray<T>------------------------------
-             array.batch_add(&input_array,1);
-             check_results!($array,array,num_pes,"&LocalLockAtomicArray<T>");
+            //  check_results!($array,array,num_pes,"LocalLockArray<T>");
+             // LocalLockArray<T>------------------------------
+             array.batch_add(&input_array.local_data(),1);
+             check_results!($array,array,num_pes,"&LocalLockArray<T>");
        }
     }
 }
@@ -509,22 +469,22 @@ fn main() {
             "input" => input_test!(AtomicArray, len, dist_type),
             _ => eprintln!("unsupported element type"),
         },
-        "LocalLockAtomicArray" => match elem.as_str() {
-            "u8" => add_test!(LocalLockAtomicArray, u8, len, dist_type),
-            "u16" => add_test!(LocalLockAtomicArray, u16, len, dist_type),
-            "u32" => add_test!(LocalLockAtomicArray, u32, len, dist_type),
-            "u64" => add_test!(LocalLockAtomicArray, u64, len, dist_type),
-            "u128" => add_test!(LocalLockAtomicArray, u128, len, dist_type),
-            "usize" => add_test!(LocalLockAtomicArray, usize, len, dist_type),
-            "i8" => add_test!(LocalLockAtomicArray, i8, len, dist_type),
-            "i16" => add_test!(LocalLockAtomicArray, i16, len, dist_type),
-            "i32" => add_test!(LocalLockAtomicArray, i32, len, dist_type),
-            "i64" => add_test!(LocalLockAtomicArray, i64, len, dist_type),
-            "i128" => add_test!(LocalLockAtomicArray, i128, len, dist_type),
-            "isize" => add_test!(LocalLockAtomicArray, isize, len, dist_type),
-            "f32" => add_test!(LocalLockAtomicArray, f32, len, dist_type),
-            "f64" => add_test!(LocalLockAtomicArray, f64, len, dist_type),
-            "input" => input_test!(LocalLockAtomicArray, len, dist_type),
+        "LocalLockArray" => match elem.as_str() {
+            "u8" => add_test!(LocalLockArray, u8, len, dist_type),
+            "u16" => add_test!(LocalLockArray, u16, len, dist_type),
+            "u32" => add_test!(LocalLockArray, u32, len, dist_type),
+            "u64" => add_test!(LocalLockArray, u64, len, dist_type),
+            "u128" => add_test!(LocalLockArray, u128, len, dist_type),
+            "usize" => add_test!(LocalLockArray, usize, len, dist_type),
+            "i8" => add_test!(LocalLockArray, i8, len, dist_type),
+            "i16" => add_test!(LocalLockArray, i16, len, dist_type),
+            "i32" => add_test!(LocalLockArray, i32, len, dist_type),
+            "i64" => add_test!(LocalLockArray, i64, len, dist_type),
+            "i128" => add_test!(LocalLockArray, i128, len, dist_type),
+            "isize" => add_test!(LocalLockArray, isize, len, dist_type),
+            "f32" => add_test!(LocalLockArray, f32, len, dist_type),
+            "f64" => add_test!(LocalLockArray, f64, len, dist_type),
+            "input" => input_test!(LocalLockArray, len, dist_type),
             _ => eprintln!("unsupported element type"),
         },
         _ => eprintln!("unsupported array type"),

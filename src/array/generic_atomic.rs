@@ -185,6 +185,14 @@ impl<T: Dist + ElementBitWiseOps> BitOrAssign<T> for GenericAtomicElement<T> {
     }
 }
 
+impl<T: Dist + std::fmt::Debug> std::fmt::Debug for GenericAtomicElement<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let _lock = self.array.lock_index(self.local_index);
+        let current_val = unsafe { self.array.__local_as_mut_slice()[self.local_index] };
+        write!(f,"{current_val:?}")
+    }
+}
+
 #[doc(hidden)]
 #[lamellar_impl::AmDataRT(Clone, Debug)]
 pub struct GenericAtomicArray<T> {
@@ -239,7 +247,7 @@ impl GenericAtomicByteArrayWeak {
 #[doc(hidden)]
 #[derive(Clone, Debug)]
 pub struct GenericAtomicLocalData<T: Dist> {
-    array: GenericAtomicArray<T>,
+    pub(crate) array: GenericAtomicArray<T>,
     start_index: usize,
     end_index: usize,
 }
@@ -413,6 +421,10 @@ impl<T: Dist> GenericAtomicArray<T> {
         self.array.pe_offset_for_dist_index(pe, index)
     }
 
+    // pub(crate) fn subarray_index_from_local(&self, index: usize) -> Option<usize> {
+    //     self.array.inner.subarray_index_from_local(index)
+    // }
+
     pub fn len(&self) -> usize {
         self.array.len()
     }
@@ -464,8 +476,8 @@ impl<T: Dist> GenericAtomicArray<T> {
         self.array.into()
     }
 
-    pub fn into_local_lock_atomic(self) -> LocalLockAtomicArray<T> {
-        // println!("generic into_local_lock_atomic");
+    pub fn into_local_lock(self) -> LocalLockArray<T> {
+        // println!("generic into_local_lock");
         self.array.into()
     }
 
@@ -608,6 +620,11 @@ impl<T: Dist> LamellarArray<T> for GenericAtomicArray<T> {
     fn wait_all(&self) {
         self.array.wait_all()
         // println!("done in wait all {:?}",std::time::SystemTime::now());
+    }
+    fn block_on<F>(&self, f: F) -> F::Output
+    where
+        F: Future {
+            self.array.block_on(f)
     }
     fn pe_and_offset_for_global_index(&self, index: usize) -> Option<(usize, usize)> {
         self.array.pe_and_offset_for_global_index(index)

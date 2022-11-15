@@ -2,9 +2,9 @@
 /// Test the bandwidth between two PEs using an array Put of N bytes
 /// from local memory region into a distributed array.
 /// --------------------------------------------------------------------
-// use lamellar::ActiveMessaging;
-use lamellar::array::{Distribution, UnsafeArray};
-use lamellar::RemoteMemoryRegion;
+
+use lamellar::array::prelude::*;
+use lamellar::memregion::prelude::*;
 use std::time::Instant;
 
 const ARRAY_LEN: usize = 1024 * 1024 * 1024;

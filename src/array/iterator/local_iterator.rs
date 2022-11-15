@@ -175,7 +175,7 @@ impl<T: Dist, A: From<UnsafeArray<T>> + SyncSend> LocalIterCollectHandle<T, A> {
         let mut my_start = 0;
         let my_pe = self.team.team_pe.expect("pe not part of team");
         // local_sizes.print();
-        local_sizes
+        unsafe {local_sizes
             .onesided_iter()
             .into_iter()
             .enumerate()
@@ -185,6 +185,7 @@ impl<T: Dist, A: From<UnsafeArray<T>> + SyncSend> LocalIterCollectHandle<T, A> {
                     my_start += local_size;
                 }
             });
+        }
         // println!("my_start {} size {}", my_start, size);
         let array = UnsafeArray::<T>::new(self.team.clone(), size, self.distribution); //implcit barrier
         array.put(my_start, local_vals);
@@ -318,7 +319,7 @@ pub trait LocalIterator: SyncSend + Clone + 'static {
     /// use lamellar::array::prelude::*;
     ///
     /// let world = LamellarWorldBuilder.build();
-    /// let array = LocalLockAtomicArray::new::<usize>(&world,8,Distribution::Block);
+    /// let array = LocalLockArray::new::<usize>(&world,8,Distribution::Block);
     /// let my_pe = world.my_pe();
     ///
     /// let init_iter = array.local_iter_mut().for_each(|e| *e = my_pe); //initialize array
@@ -351,7 +352,7 @@ pub trait LocalIterator: SyncSend + Clone + 'static {
     /// use lamellar::array::prelude::*;
     ///
     /// let world = LamellarWorldBuilder.build();
-    /// let array = LocalLockAtomicArray::new::<usize>(&world,8,Distribution::Block);
+    /// let array = LocalLockArray::new::<usize>(&world,8,Distribution::Block);
     ///
     /// array.local_iter().for_each(|e| *e = world.my_pe()); //initialize array
     /// array.wait_all();
@@ -752,7 +753,7 @@ pub trait IndexedLocalIterator: LocalIterator + SyncSend + Clone + 'static {
     ///
     /// let world = LamellarWorldBuilder.build();
     /// let array_A: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,16,Distribution::Block);
-    /// let array_B: LocalLockAtomicArray<usize> = LocalLockAtomicArray::new(&world,12,Distribution::Block);
+    /// let array_B: LocalLockArray<usize> = LocalLockArray::new(&world,12,Distribution::Block);
     /// let my_pe = world.my_pe();
     ///
     /// //initalize array_B

@@ -11,7 +11,7 @@ macro_rules! initialize_array {
         $array.wait_all();
         $array.barrier();
     };
-    (LocalLockAtomicArray,$array:ident,$init_val:ident) => {
+    (LocalLockArray,$array:ident,$init_val:ident) => {
         $array.dist_iter_mut().for_each(move |x| *x = $init_val);
         $array.wait_all();
         $array.barrier();
@@ -28,7 +28,7 @@ macro_rules! check_val {
             $valid = false;
         }
     };
-    (LocalLockAtomicArray,$val:ident,$max_val:ident,$valid:ident) => {
+    (LocalLockArray,$val:ident,$max_val:ident,$valid:ident) => {
         if (($val - $max_val) as f32).abs() > 0.0001 {
             //all updates should be preserved
             $valid = false;
@@ -228,21 +228,21 @@ fn main() {
             "f64" => load_store_test!(AtomicArray, f64, len, dist_type),
             _ => eprintln!("unsupported element type"),
         },
-        "LocalLockAtomicArray" => match elem.as_str() {
-            "u8" => load_store_test!(LocalLockAtomicArray, u8, len, dist_type),
-            "u16" => load_store_test!(LocalLockAtomicArray, u16, len, dist_type),
-            "u32" => load_store_test!(LocalLockAtomicArray, u32, len, dist_type),
-            "u64" => load_store_test!(LocalLockAtomicArray, u64, len, dist_type),
-            "u128" => load_store_test!(LocalLockAtomicArray, u128, len, dist_type),
-            "usize" => load_store_test!(LocalLockAtomicArray, usize, len, dist_type),
-            "i8" => load_store_test!(LocalLockAtomicArray, i8, len, dist_type),
-            "i16" => load_store_test!(LocalLockAtomicArray, i16, len, dist_type),
-            "i32" => load_store_test!(LocalLockAtomicArray, i32, len, dist_type),
-            "i64" => load_store_test!(LocalLockAtomicArray, i64, len, dist_type),
-            "i128" => load_store_test!(LocalLockAtomicArray, i128, len, dist_type),
-            "isize" => load_store_test!(LocalLockAtomicArray, isize, len, dist_type),
-            "f32" => load_store_test!(LocalLockAtomicArray, f32, len, dist_type),
-            "f64" => load_store_test!(LocalLockAtomicArray, f64, len, dist_type),
+        "LocalLockArray" => match elem.as_str() {
+            "u8" => load_store_test!(LocalLockArray, u8, len, dist_type),
+            "u16" => load_store_test!(LocalLockArray, u16, len, dist_type),
+            "u32" => load_store_test!(LocalLockArray, u32, len, dist_type),
+            "u64" => load_store_test!(LocalLockArray, u64, len, dist_type),
+            "u128" => load_store_test!(LocalLockArray, u128, len, dist_type),
+            "usize" => load_store_test!(LocalLockArray, usize, len, dist_type),
+            "i8" => load_store_test!(LocalLockArray, i8, len, dist_type),
+            "i16" => load_store_test!(LocalLockArray, i16, len, dist_type),
+            "i32" => load_store_test!(LocalLockArray, i32, len, dist_type),
+            "i64" => load_store_test!(LocalLockArray, i64, len, dist_type),
+            "i128" => load_store_test!(LocalLockArray, i128, len, dist_type),
+            "isize" => load_store_test!(LocalLockArray, isize, len, dist_type),
+            "f32" => load_store_test!(LocalLockArray, f32, len, dist_type),
+            "f64" => load_store_test!(LocalLockArray, f64, len, dist_type),
             _ => eprintln!("unsupported element type"),
         },
         _ => eprintln!("unsupported array type"),

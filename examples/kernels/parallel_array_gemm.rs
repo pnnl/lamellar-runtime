@@ -35,21 +35,24 @@ fn main() {
     let a = UnsafeArray::<f32>::new(&world, m * n, Distribution::Block); //row major
     let b = UnsafeArray::<f32>::new(&world, n * p, Distribution::Block); //col major
     let c = UnsafeArray::<f32>::new(&world, m * p, Distribution::Block); //row major
-                                                                         //initialize matrices
-    a.dist_iter_mut()
-        .enumerate()
-        .for_each(|(i, x)| *x = i as f32);
-    b.dist_iter_mut().enumerate().for_each(move |(i, x)| {
-        //identity matrix
-        let row = i / dim;
-        let col = i % dim;
-        if row == col {
-            *x = 1 as f32
-        } else {
-            *x = 0 as f32;
-        }
-    });
-    c.dist_iter_mut().for_each(|x| *x = 0.0);
+     
+    //initialize matrices
+    unsafe {
+        a.local_iter_mut()
+            .enumerate()
+            .for_each(|(i, x)| *x = i as f32);
+        b.dist_iter_mut().enumerate().for_each(move |(i, x)| { //need global index so use dist_iter
+            //identity matrix
+            let row = i / dim;
+            let col = i % dim;
+            if row == col {
+                *x = 1 as f32
+            } else {
+                *x = 0 as f32;
+            }
+        });
+        c.dist_iter_mut().for_each(|x| *x = 0.0);
+}
 
     world.wait_all();
     world.barrier();
@@ -60,25 +63,27 @@ fn main() {
     // parallelizes over rows of a
     let rows_pe = m / num_pes;
     let start = std::time::Instant::now();
-    b.onesided_iter() // OneSidedIterator (each pe will iterate through entirety of b)
-        .chunks(p) //chunk flat array into columns -- manages efficent transfer and placement of data into a local memory region
-        .into_iter() // convert into normal rust iterator
-        .enumerate()
-        .for_each(|(j, col)| {
-            let col = col.clone();
-            let c = c.clone();
-            a.local_iter() //DistributedIterator (each pe will iterate through only its local data -- in parallel)
-                .chunks(n) // chunk by the row size
-                .enumerate()
-                .for_each(move |(i, row)| {
-                    let sum = unsafe {col.iter().zip(row).map(|(&i1, &i2)| i1 * i2).sum::<f32>()}; // dot product using rust iters... but MatrixMultiply is faster
-                    let _lock = LOCK.lock();
-                    unsafe { c.local_as_mut_slice()[j + (i % rows_pe) * m] += sum };
-                    //we know all updates to c are local so directly update the raw data
-                    //we could also use:
-                    //c.add(j+i*m,sum) -- but some overheads are introduce from PGAS calculations performed by the runtime, and since its all local updates we can avoid them
-                });
-        });
+    unsafe {
+        b.onesided_iter() // OneSidedIterator (each pe will iterate through entirety of b)
+            .chunks(p) //chunk flat array into columns -- manages efficent transfer and placement of data into a local memory region
+            .into_iter() // convert into normal rust iterator
+            .enumerate()
+            .for_each(|(j, col)| {
+                let col = col.clone();
+                let c = c.clone();
+                a.local_iter() //DistributedIterator (each pe will iterate through only its local data -- in parallel)
+                    .chunks(n) // chunk by the row size
+                    .enumerate()
+                    .for_each(move |(i, row)| {
+                        let sum = col.iter().zip(row).map(|(&i1, &i2)| i1 * i2).sum::<f32>(); // dot product using rust iters... but MatrixMultiply is faster
+                        let _lock = LOCK.lock(); //this lock is to protect writes into c, is c was an AtomicArray or LocalLockArray we could remove this
+                        c.local_as_mut_slice()[j + (i % rows_pe) * m] += sum;
+                        //we know all updates to c are local so directly update the raw data
+                        //we could also use:
+                        //c.add(j+i*m,sum) -- but some overheads are introduce from PGAS calculations performed by the runtime, and since its all local updates we can avoid them
+                    });
+            });
+    }
     world.wait_all();
     world.barrier();
     let elapsed = start.elapsed().as_secs_f64();
@@ -87,11 +92,13 @@ fn main() {
     if my_pe == 0 {
         println!("elapsed {:?} Gflops: {:?}", elapsed, num_gops / elapsed,);
     }
-    world.block_on(c.dist_iter_mut().enumerate().for_each(|(i, x)| {
-        //check that c == a
-        if *x != i as f32 {
-            println!("error {:?} {:?}", x, i);
-        }
-        *x = 0.0
-    }));
+    unsafe {
+        world.block_on(c.dist_iter_mut().enumerate().for_each(|(i, x)| {
+            //check that c == a
+            if *x != i as f32 {
+                println!("error {:?} {:?}", x, i);
+            }
+            *x = 0.0
+        }));
+    }
 }

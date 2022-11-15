@@ -6,7 +6,7 @@ use crate::memregion::*;
 use core::marker::PhantomData;
 #[cfg(feature = "enable-prof")]
 use lamellar_prof::*;
-use serde::ser::Serialize;
+// use serde::ser::Serialize;
 use std::pin::Pin;
 use std::sync::Arc;
 
@@ -107,7 +107,7 @@ impl<T: Dist> SharedMemoryRegion<T> {
         RegisteredMemoryRegion::<T>::len(self)
     }
 
-    /// "Puts" (copies) data from a local memory location into a remote memory location on the specified PE
+    /// "Puts" (copies) `data` from a local memory location into a this shared memory region at the provided offset on the specified PE
     ///
     /// # Arguments
     ///
@@ -125,8 +125,8 @@ impl<T: Dist> SharedMemoryRegion<T> {
     /// Panics if "data" does not have any local data on this PE
     /// Panics if index is out of bounds
     /// Panics if PE is out of bounds
-    pub unsafe fn put<U: Into<LamellarMemoryRegion<T>>>(&self, pe: usize, index: usize, data: U) {
-        MemoryRegionRDMA::<T>::put(self, pe, index, data);
+    pub unsafe fn put<U: Into<LamellarMemoryRegion<T>>>(&self, pe: usize, offset: usize, data: U) {
+        MemoryRegionRDMA::<T>::put(self, pe, offset, data);
     }
 
     /// Blocking "Puts" (copies) data from a local memory location into a remote memory location on the specified PE.
@@ -278,14 +278,17 @@ impl<T: Dist> SharedMemoryRegion<T> {
     }
 }
 
-impl<T: Dist + serde::Serialize> SharedMemoryRegion<T> {
-    pub(crate) fn serialize_local_data<S>(&self, s: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        unsafe { self.as_slice().unwrap().serialize(s) }
-    }
-}
+
+// This could be useful for if we want to transfer the actual data instead of the pointer
+// impl<T: Dist + serde::Serialize> SharedMemoryRegion<T> {
+//     pub(crate) fn serialize_local_data<S>(&self, s: S) -> Result<S::Ok, S::Error>
+//     where
+//         S: serde::Serializer,
+//     {
+//         unsafe { self.as_slice().unwrap().serialize(s) }
+//     }
+// }
+
 //account for subregion stuff
 impl<T: Dist> RegisteredMemoryRegion<T> for SharedMemoryRegion<T> {
     fn len(&self) -> usize {

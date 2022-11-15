@@ -52,7 +52,7 @@ impl std::fmt::Debug for UnsafeArrayData {
 
 /// An unsafe abstraction of a distributed array.
 ///
-/// This array type provides no gaurantees on how data it's data is being accessed, either localy or from remote PEs.
+/// This array type provides no gaurantees on how it's data is being accessed, either locally or from remote PEs.
 ///
 /// UnsafeArrays are really intended for use in the runtime as the foundation for our safe array types.
 ///
@@ -140,9 +140,10 @@ impl<T: Dist + 'static> UnsafeArray<T> {
     ///
     /// # Examples
     ///```
-    /// use lamellar::array::UnsafeArray;
+    /// use lamellar::array::prelude::*;
     ///
-    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic)
+    /// let world = LamellarWorldBuilder.build();
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic);
     pub fn new<U: Into<IntoLamellarTeam>>(
         team: U,
         array_size: usize,
@@ -221,68 +222,103 @@ impl<T: Dist + 'static> UnsafeArray<T> {
         }
     }
 
-    /// blocks calling thread until all remote tasks (e.g. element wise operations)
-    /// initiated by the calling PE have completed.
-    ///
-    /// Note: this is not a distributed synchronization primitive (i.e. it has no knowledge of a Remote PEs tasks)
-    /// # Examples
-    ///```
-    /// use lamellar::array::ArithmeticOps;
-    ///
-    /// for i in 0..100{
-    ///     array.add(i,1);
-    /// }
-    /// array.wait_all(); //block until the previous am has finished
-    ///```
-    pub fn wait_all(&self) {
-        <UnsafeArray<T> as LamellarArray<T>>::wait_all(self);
-    }
+    // /// blocks calling thread until all remote tasks (e.g. element wise operations)
+    // /// initiated by the calling PE have completed.
+    // ///
+    // /// Note: this is not a distributed synchronization primitive (i.e. it has no knowledge of a Remote PEs tasks)
+    // /// # Examples
+    // ///```
+    // /// use lamellar::array::prelude::*;
+    // /// let world = LamellarWorldBuilder.build();
+    // /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic);
+    // ///
+    // /// for i in 0..100{
+    // ///     array.add(i,1);
+    // /// }
+    // /// array.wait_all(); //block until the previous add operations have finished
+    // ///```
+    // pub fn wait_all(&self) {
+    //     <UnsafeArray<T> as LamellarArray<T>>::wait_all(self);
+    // }
 
-    /// Global synchronization method which blocks calling thread until all PEs in the owning Array data have entered the barrier
-    ///
-    /// # Examples
-    ///```
-    /// array.barrier(); //block until all PEs have entered the barrier
-    ///```
-    pub fn barrier(&self) {
-        self.inner.data.team.barrier();
-    }
+    // /// Global synchronization method which blocks calling thread until all PEs in the owning Array data have entered the barrier
+    // ///
+    // /// # Examples
+    // ///```
+    // /// use lamellar::array::prelude::*;
+    // /// let world = LamellarWorldBuilder.build();
+    // /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic);
+    // /// 
+    // /// array.barrier();
+    // ///```
+    // pub fn barrier(&self) {
+    //     self.inner.data.team.barrier();
+    // }
 
-    /// Run a future to completion on the current thread
-    ///
-    /// This function will block the caller until the given future has completed, the future is executed within the Lamellar threadpool
-    ///
-    /// Users can await any future, including those returned from lamellar remote operations
-    ///
-    /// # Examples
-    ///```
-    /// use lamellar::array::ArithmeticOps;
-    ///
-    /// let request = array.fetch_add(10,1000); //fetch index 10 and add 1000 to it 
-    /// let result = array.block_on(request); //block until am has executed
-    /// // we also could have used world.block_on() or team.block_on()
-    ///```
-    pub fn block_on<F>(&self, f: F) -> F::Output
-    where
-        F: Future,
-    {
-        self.inner.data.team.scheduler.block_on(f)
-    }
+    // /// Run a future to completion on the current thread
+    // ///
+    // /// This function will block the caller until the given future has completed, the future is executed within the Lamellar threadpool
+    // ///
+    // /// Users can await any future, including those returned from lamellar remote operations
+    // ///
+    // /// # Examples
+    // ///```
+    // /// use lamellar::array::prelude::*;
+    // /// let world = LamellarWorldBuilder.build();
+    // /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic);
+    // ///
+    // /// let request = array.fetch_add(10,1000); //fetch index 10 and add 1000 to it 
+    // /// let result = array.block_on(request); //block until am has executed
+    // /// // we also could have used world.block_on() or team.block_on()
+    // ///```
+    // pub fn block_on<F>(&self, f: F) -> F::Output
+    // where
+    //     F: Future,
+    // {
+    //     self.inner.data.team.scheduler.block_on(f)
+    // }
 
     /// Change the distribution this array handle uses to index into the data of the array.
     ///
-    /// This is a oneside call and does not redistribute the actual data, it simple changes how the array is indexed for this particular handle.
+    /// This is a one-sided call and does not redistribute the actual data, it simple changes how the array is indexed for this particular handle.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder.build();
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic);
+    /// // do something interesting... or not
+    /// let block_view = array.clone().use_distribution(Distribution::Block);
+    ///```
     pub fn use_distribution(mut self, distribution: Distribution) -> Self {
         self.inner.distribution = distribution;
         self
     }
 
     /// Return the number of PEs containing data for this array
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder.build();
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic);
+    /// 
+    /// assert_eq!(world.num_pes(),array.num_pes());
+    ///```
     pub fn num_pes(&self) -> usize {
         self.inner.data.num_pes
     }
 
     /// Return the total number of elements in this array
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder.build();
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic);
+    /// 
+    /// assert_eq!(100,array.len());
+    ///```
     pub fn len(&self) -> usize {
         self.inner.size
     }
@@ -291,11 +327,13 @@ impl<T: Dist + 'static> UnsafeArray<T> {
     ///
     /// # Panics
     /// panics if the global index is out of bounds
+    ///
     /// # Examples
     /// assume we have 4 PEs
     /// ## Block
     ///```
-    /// use lamellar::array::UnsafeArray;
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder.build();
     ///
     /// let block_array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic)
     /// // block array index location  = PE0 [0,1,2,3],  PE1 [4,5,6,7],  PE2 [8,9,10,11], PE3 [12,13,14,15]
@@ -304,7 +342,10 @@ impl<T: Dist + 'static> UnsafeArray<T> {
     ///```
     /// ## Cyclic
     ///```
-    /// let cyclic_array = LamellarArray::new(world,12,Distribution::Cyclic);
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder.build();
+    ///
+    /// let cyclic_array UnsafeArray<usize> = UnsafeArray::new(world,12,Distribution::Cyclic);
     /// // cyclic array index location = PE0 [0,4,8,12], PE1 [1,5,9,13], PE2 [2,6,10,14], PE3 [3,7,11,15]
     /// let (pe,offset) = cyclic_array.calc_pe_and_offset(6);
     /// assert_eq!((pe,offset) ,(2,1));
@@ -323,10 +364,48 @@ impl<T: Dist + 'static> UnsafeArray<T> {
         }
     }
 
-    
+    /// Return the calling PE's local data as an immutable slice
+    ///
+    /// # Safety
+    /// Data in UnsafeArrays are always unsafe as there are no protections on how remote PE's may access this PE's local data.
+    /// It is also possible to have mutable and immutable references to this arrays data on the same PE
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder.build();
+    /// let my_pe = world.my_pe();
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic);
+    ///
+    /// unsafe { 
+    ///     let slice = array.local_as_slice();
+    ///     println!("PE{my_pe} data: {slice:?}");
+    /// }
+    ///```
     pub unsafe fn local_as_slice(&self) -> &[T] {
         self.local_as_mut_slice()
     }
+
+    /// Return the calling PE's local data as a mutable slice
+    ///
+    /// # Safety
+    /// Data in UnsafeArrays are always unsafe as there are no protections on how remote PE's may access this PE's local data.
+    /// It is also possible to have mutable and immutable references to this arrays data on the same PE
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder.build();
+    /// let my_pe = world.my_pe();
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic);
+    ///
+    /// unsafe {
+    ///     let slice =  array.local_as_mut_slice();
+    ///     for elem in slice{
+    ///         *elem += 1;
+    ///     }
+    /// }
+    ///```
     pub unsafe fn local_as_mut_slice(&self) -> &mut [T] {
         let u8_slice = self.inner.local_as_mut_slice();
         // println!("u8 slice {:?} u8_len {:?} len {:?}",u8_slice,u8_slice.len(),u8_slice.len()/std::mem::size_of::<T>());
@@ -336,10 +415,47 @@ impl<T: Dist + 'static> UnsafeArray<T> {
         )
     }
 
+    /// Return the calling PE's local data as an immutable slice
+    ///
+    /// # Safety
+    /// Data in UnsafeArrays are always unsafe as there are no protections on how remote PE's may access this PE's local data.
+    /// It is also possible to have mutable and immutable references to this arrays data on the same PE
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder.build();
+    /// let my_pe = world.my_pe();
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic);
+    /// unsafe { 
+    ///     let slice = array.local_data();
+    ///     println!("PE{my_pe} data: {slice:?}");
+    /// }
+    ///```
     pub unsafe fn local_data(&self) -> &[T] {
         self.local_as_mut_slice()
     }
 
+    /// Return the calling PE's local data as a mutable slice
+    ///
+    /// # Safety
+    /// Data in UnsafeArrays are always unsafe as there are no protections on how remote PE's may access this PE's local data.
+    /// It is also possible to have mutable and immutable references to this arrays data on the same PE
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder.build();
+    /// let my_pe = world.my_pe();
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic);
+    ///
+    /// unsafe { 
+    ///     let slice = array.mut_local_data();
+    ///     for elem in slice{
+    ///         *elem += 1;
+    ///     }
+    /// }
+    ///```
     pub unsafe fn mut_local_data(&self) -> &mut [T] {
         self.local_as_mut_slice()
     }
@@ -350,6 +466,22 @@ impl<T: Dist + 'static> UnsafeArray<T> {
         u8_ptr as *mut T
     }
 
+    /// Create a sub array of this UnsafeArray which consists of the elements specified by the range
+    ///
+    /// Note: it is possible that the subarray does not contain any data on this PE
+    ///
+    /// # Panic
+    /// This call will panic if the end of the range exceeds the size of the array.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder.build();
+    /// let my_pe = world.my_pe();
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic);
+    ///
+    /// let sub_array = array.sub_array(25..75);
+    ///```
     pub fn sub_array<R: std::ops::RangeBounds<usize>>(&self, range: R) -> UnsafeArray<T> {
         let start = match range.start_bound() {
             //inclusive
@@ -379,9 +511,25 @@ impl<T: Dist + 'static> UnsafeArray<T> {
         }
     }
 
+    /// Return the index range with respect to the original array over which this array handle represents)
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder.build();
+    /// let my_pe = world.my_pe();
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic);
+    ///
+    /// assert_eq!(array.sub_array_range(),(0..100));
+    /// 
+    /// let sub_array = array.sub_array(25..75);
+    /// assert_eq!(sub_array.sub_array_range(),(25..75));
+    ///```
     pub fn sub_array_range(&self) -> std::ops::Range<usize> {
         self.inner.offset..(self.inner.offset + self.inner.size)
     }
+
+    
     pub(crate) fn team(&self) -> Pin<Arc<LamellarTeamRT>> {
         self.inner.data.team.clone()
     }
@@ -395,6 +543,42 @@ impl<T: Dist + 'static> UnsafeArray<T> {
         // self.inner.data.print();
     }
 
+    /// Convert this UnsafeArray into a (safe) [ReadOnlyArray][crate::array::ReadOnlyArray]
+    ///
+    /// This is a collective and blocking function which will only return when there is at most a single reference on each PE
+    /// to this Array, and that reference is currently calling this function.
+    ///
+    /// When it returns, it is gauranteed that there are only  `ReadOnlyArray` handles to the underlying data
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder.build();
+    /// let my_pe = world.my_pe();
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic);
+    ///
+    /// let read_only_array = array.into_read_only();
+    ///```
+    ///
+    /// # Warning
+    /// Because this call blocks there is the possibility for deadlock to occur, as highlighted below:
+    ///``` 
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder.build();
+    /// let my_pe = world.my_pe();
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic);
+    ///
+    /// let array1 = array.clone();
+    /// let mut_slice = unsafe {array1.local_as_mut_slice()};
+    ///
+    /// // no borrows to this specific instance (array) so it can enter the "into_read_only" call
+    /// // but array1 will not be dropped until after mut_slice is dropped. 
+    /// // Given the ordering of these calls we will get stuck in "into_read_only" as it
+    /// // waits for the reference count to go down to "1" (but we will never be able to drop mut_slice/array1).
+    /// let ro_array = array.into_read_only(); 
+    /// ro_array.print();
+    /// println!("{mut_slice:?}");
+    ///```
     pub fn into_read_only(self) -> ReadOnlyArray<T> {
         // println!("unsafe into read only");
         self.into()
@@ -405,7 +589,42 @@ impl<T: Dist + 'static> UnsafeArray<T> {
     //     self.into()
     // }
 
-    pub fn into_local_lock_atomic(self) -> LocalLockAtomicArray<T> {
+    /// Convert this UnsafeArray into a (safe) [LocalLockArray][crate::array::LocalLockArray]
+    ///
+    /// This is a collective and blocking function which will only return when there is at most a single reference on each PE
+    /// to this Array, and that reference is currently calling this function.
+    ///
+    /// When it returns, it is gauranteed that there are only `LocalLockArray` handles to the underlying data
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder.build();
+    /// let my_pe = world.my_pe();
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic);
+    ///
+    /// let read_only_array = array.into_local_lock();
+    ///```
+    /// # Warning
+    /// Because this call blocks there is the possibility for deadlock to occur, as highlighted below:
+    ///``` 
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder.build();
+    /// let my_pe = world.my_pe();
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic);
+    ///
+    /// let array1 = array.clone();
+    /// let mut_slice = unsafe {array1.local_as_mut_slice()};
+    ///
+    /// // no borrows to this specific instance (array) so it can enter the "into_local_lock" call
+    /// // but array1 will not be dropped until after mut_slice is dropped. 
+    /// // Given the ordering of these calls we will get stuck in "iinto_local_lock" as it
+    /// // waits for the reference count to go down to "1" (but we will never be able to drop mut_slice/array1).
+    /// let ro_array = array.into_local_lock(); 
+    /// ro_array.print();
+    /// println!("{mut_slice:?}");
+    ///```
+    pub fn into_local_lock(self) -> LocalLockArray<T> {
         // println!("unsafe into local lock atomic");
         self.into()
     }
@@ -423,6 +642,41 @@ impl<T: Dist + 'static> UnsafeArray<T> {
 // }
 
 impl<T: Dist + 'static> UnsafeArray<T> {
+    /// Convert this UnsafeArray into a (safe) [AtomicArray][crate::array::AtomicArray]
+    ///
+    /// This is a collective and blocking function which will only return when there is at most a single reference on each PE
+    /// to this Array, and that reference is currently calling this function.
+    ///
+    /// When it returns, it is gauranteed that there are only `AtomicArray` handles to the underlying data
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder.build();
+    /// let my_pe = world.my_pe();
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic);
+    ///
+    /// let read_only_array = array.into_local_lock();
+    ///```
+    /// # Warning
+    /// Because this call blocks there is the possibility for deadlock to occur, as highlighted below:
+    ///``` 
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder.build();
+    /// let my_pe = world.my_pe();
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic);
+    ///
+    /// let array1 = array.clone();
+    /// let mut_slice = unsafe {array1.local_as_mut_slice()};
+    ///
+    /// // no borrows to this specific instance (array) so it can enter the "into_atomic" call
+    /// // but array1 will not be dropped until after mut_slice is dropped. 
+    /// // Given the ordering of these calls we will get stuck in "into_atomic" as it
+    /// // waits for the reference count to go down to "1" (but we will never be able to drop mut_slice/array1).
+    /// let ro_array = array.into_local_lock(); 
+    /// ro_array.print();
+    /// println!("{mut_slice:?}");
+    ///```
     pub fn into_atomic(self) -> AtomicArray<T> {
         // println!("unsafe into atomic");
         self.into()
@@ -472,8 +726,8 @@ impl<T: Dist> From<GenericAtomicArray<T>> for UnsafeArray<T> {
     }
 }
 
-impl<T: Dist> From<LocalLockAtomicArray<T>> for UnsafeArray<T> {
-    fn from(array: LocalLockAtomicArray<T>) -> Self {
+impl<T: Dist> From<LocalLockArray<T>> for UnsafeArray<T> {
+    fn from(array: LocalLockArray<T>) -> Self {
         // println!("unsafe from local lock atomic");
         array.array.block_on_outstanding(DarcMode::UnsafeArray);
         array.array.inner.data.op_buffers.write().clear();
@@ -602,7 +856,7 @@ impl<T: Dist> LamellarArray<T> for UnsafeArray<T> {
         self.len()
     }
     fn barrier(&self) {
-        self.barrier();
+        self.inner.data.team.barrier();
     }
     fn wait_all(&self) {
         let mut temp_now = Instant::now();
@@ -642,6 +896,13 @@ impl<T: Dist> LamellarArray<T> for UnsafeArray<T> {
         self.inner.data.task_group.wait_all();
         // println!("done in wait all {:?}",std::time::SystemTime::now());
     }
+
+    fn block_on<F>(&self, f: F) -> F::Output
+    where
+        F: Future {
+        self.inner.data.team.scheduler.block_on(f)
+    }
+
     #[tracing::instrument(skip_all)]
     fn pe_and_offset_for_global_index(&self, index: usize) -> Option<(usize, usize)> {
         let pe = self.inner.pe_for_dist_index(index)?;

@@ -28,9 +28,9 @@ fn main() {
     let n = dim; // a cols b rows
     let p = dim; // b & c cols
 
-    let a = UnsafeArray::<f32>::new(&world, m * n, Distribution::Block); //row major -- we will change this into a readonly array after initialization
-    let b = UnsafeArray::<f32>::new(&world, n * p, Distribution::Block); //col major -- we will change this into a readonly array after initialization
-    let c = LocalLockAtomicArray::<f32>::new(&world, m * p, Distribution::Block); //row major
+    let a = LocalLockArray::<f32>::new(&world, m * n, Distribution::Block); //row major -- we will change this into a readonly array after initialization
+    let b = LocalLockArray::<f32>::new(&world, n * p, Distribution::Block); //col major -- we will change this into a readonly array after initialization
+    let c = LocalLockArray::<f32>::new(&world, m * p, Distribution::Block); //row major
                                                                                   //initialize
     a.dist_iter_mut()
         .enumerate()
@@ -64,14 +64,14 @@ fn main() {
     // this is a "hack" until we support something like (0..n_blks).dist_iter()
     // we construct a global array where each pe will contain the sequence (0..n_blks)
     // we can then call dist_iter() on this array to iterate over the range in parallel on each PE
-    let nblks_array = UnsafeArray::new(&world, n_blks * num_pes, Distribution::Block);
+    let nblks_array = LocalLockArray::new(&world, n_blks * num_pes, Distribution::Block);
     world.block_on(
         nblks_array
             .dist_iter_mut()
             .enumerate()
             .for_each(move |(i, x)| *x = i % n_blks),
     );
-    let m_blks_pe_array = UnsafeArray::new(&world, m_blks_pe * num_pes, Distribution::Block);
+    let m_blks_pe_array = LocalLockArray::new(&world, m_blks_pe * num_pes, Distribution::Block);
     world.block_on(
         m_blks_pe_array
             .dist_iter_mut()
@@ -79,6 +79,8 @@ fn main() {
             .for_each(move |(i, x)| *x = i % m_blks_pe),
     );
     world.barrier();
+    let nblks_array = nblks_array.into_read_only();
+    let m_blks_pe_array = m_blks_pe_array.into_read_only();
     println!("{blocksize} {m_blks} {m_blks_pe} {n_blks} {p_blks}");
 
     let start = std::time::Instant::now();

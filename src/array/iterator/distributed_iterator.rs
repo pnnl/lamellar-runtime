@@ -179,7 +179,7 @@ impl<T: Dist, A: From<UnsafeArray<T>> + SyncSend> DistIterCollectHandle<T, A> {
         let mut my_start = 0;
         let my_pe = self.team.team_pe.expect("pe not part of team");
         // local_sizes.print();
-        local_sizes
+        unsafe { local_sizes
             .onesided_iter()
             .into_iter()
             .enumerate()
@@ -189,6 +189,7 @@ impl<T: Dist, A: From<UnsafeArray<T>> + SyncSend> DistIterCollectHandle<T, A> {
                     my_start += local_size;
                 }
             });
+        }
         // println!("my_start {} size {}", my_start, size);
         let array = UnsafeArray::<T>::new(self.team.clone(), size, self.distribution); //implcit barrier
         array.put(my_start, local_vals);
@@ -330,7 +331,7 @@ pub trait DistributedIterator: SyncSend + Clone + 'static {
     /// use lamellar::array::prelude::*;
     ///
     /// let world = LamellarWorldBuilder.build();
-    /// let array = LocalLockAtomicArray::new::<usize>(&world,8,Distribution::Block);
+    /// let array = LocalLockArray::new::<usize>(&world,8,Distribution::Block);
     /// let my_pe = world.my_pe();
     ///
     /// let init_iter = array.dist_iter_mut().for_each(|e| *e = my_pe); //initialize array
@@ -363,7 +364,7 @@ pub trait DistributedIterator: SyncSend + Clone + 'static {
     /// use lamellar::array::prelude::*;
     ///
     /// let world = LamellarWorldBuilder.build();
-    /// let array = LocalLockAtomicArray::new::<usize>(&world,8,Distribution::Block);
+    /// let array = LocalLockArray::new::<usize>(&world,8,Distribution::Block);
     ///
     /// array.dist_iter_mut().for_each(|e| *e = world.my_pe()); //initialize array
     /// array.wait_all();

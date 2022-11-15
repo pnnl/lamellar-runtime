@@ -27,13 +27,13 @@ macro_rules! create_test {
             #[test]
             #[serial]
             #[allow(non_snake_case)]
-            fn [<$array _ $dist _ $elem _ $num_pes _ $len _ iget>](){
+            fn [<$array _ $dist _ $elem _ $num_pes _ $len _ blocking_get>](){
                 let mut d = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
                 d.push("lamellar_run.sh");
                 let result = Command::new(d.into_os_string())
                     .arg(format!("-N={}",$num_pes))
                     .arg("-T=4")
-                    .arg("./target/release/examples/iget_test")
+                    .arg("./target/release/examples/blocking_get_test")
                     .arg(stringify!($array))
                     .arg($dist)
                     .arg(stringify!($elem))
@@ -80,13 +80,13 @@ macro_rules! iter_dist_types {
     }
 }
 
-macro_rules! create_iget_tests {
+macro_rules! create_blocking_get_tests {
     ( ($($array:ty),*), $dist:tt, $elem:tt, $num_pes:tt, $len:tt) =>{
         $(iter_dist_types!($array,$dist,$elem,$num_pes,$len);)*
     }
 }
 
-create_iget_tests!(
+create_blocking_get_tests!(
     (UnsafeArray, ReadOnlyArray),
     ("Block", "Cyclic"),
     (u8, u16, u32, u128, usize, i8, i16, i32, i128, isize, f32, f64),

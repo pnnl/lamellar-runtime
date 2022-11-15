@@ -1,8 +1,8 @@
-use lamellar::array::{DistributedIterator, Distribution, UnsafeArray};
-use lamellar::{LamellarMemoryRegion, RemoteMemoryRegion};
+use lamellar::array::prelude::*;
+use lamellar::memregion::prelude::*;
 
 fn initialize_array(array: &UnsafeArray<usize>) {
-    array.dist_iter_mut().for_each(|x| *x = 0);
+    unsafe {array.dist_iter_mut().for_each(|x| *x = 0)};
     array.wait_all();
     array.barrier();
 }
@@ -21,8 +21,9 @@ fn main() {
     let args: Vec<String> = std::env::args().collect();
     let world = lamellar::LamellarWorldBuilder::new().build();
     world.block_on(async {
+        
         let _num_pes = world.num_pes();
-        let _my_pe = world.my_pe();
+        let my_pe = world.my_pe();
         let total_len = args
             .get(1)
             .and_then(|s| s.parse::<usize>().ok())
@@ -42,18 +43,63 @@ fn main() {
         world.barrier();
 
         // puts/gets with memregions
-        let start = std::time::Instant::now();
-        block_array.put(0, &shared_mem_region).await; //uses the local data of the shared memregion
-        block_array.put(0, &local_mem_region).await;
-        cyclic_array.put(0, &shared_mem_region).await;
-        cyclic_array.put(0, &local_mem_region).await;
-        println!("put elapsed {:?}", start.elapsed().as_secs_f64());
-        world.barrier();
-        // can use subregions
         unsafe {
+            block_array.print();
+            world.barrier();
+            println!("PE{my_pe}, smr {:?}",shared_mem_region.as_slice());
+            world.barrier();
             let start = std::time::Instant::now();
-            block_array.get_unchecked(0, shared_mem_region.sub_region(0..total_len / 2)); //uses local data of the shared memregion
-            block_array.get_unchecked(0, local_mem_region.sub_region(0..total_len / 2));
+            if my_pe == 0{block_array.put(0, &shared_mem_region).await}; //uses the local data of the shared memregion
+            world.barrier();
+            block_array.print();
+            world.barrier();
+            println!("PE{my_pe}, smr {:?}",shared_mem_region.as_slice());
+            world.barrier();
+            println!("PE{my_pe}, lmr {:?}",local_mem_region.as_slice());
+            world.barrier();
+            if my_pe == 0{block_array.put(0, &local_mem_region).await};
+            world.barrier();
+            block_array.print();
+            println!("PE{my_pe}, lmr {:?}",local_mem_region.as_slice());
+            world.barrier();
+
+            cyclic_array.print();
+            world.barrier();
+            if my_pe == 0{cyclic_array.put(0, &shared_mem_region).await};
+            world.barrier();
+            cyclic_array.print();
+            world.barrier();
+            println!("PE{my_pe}, smr {:?}",shared_mem_region.as_slice());
+            world.barrier();
+            println!("PE{my_pe}, lmr {:?}",local_mem_region.as_slice());
+            world.barrier();
+            if my_pe == 0{cyclic_array.put(0, &local_mem_region).await};
+            world.barrier();
+            cyclic_array.print();
+            println!("put elapsed {:?}", start.elapsed().as_secs_f64());
+            world.barrier();
+        
+            initialize_array(&block_array);
+            initialize_array(&cyclic_array);
+        // can use subregions
+            
+            block_array.print();
+            world.barrier();
+            println!("PE{my_pe}, smr {:?}",shared_mem_region.as_slice());
+            world.barrier();
+            let start = std::time::Instant::now();
+            block_array.print();
+            world.barrier();
+            println!("PE{my_pe}, smr {:?}",shared_mem_region.as_slice());
+            world.barrier();
+            if my_pe == 0{ block_array.get_unchecked(0, shared_mem_region.sub_region(0..total_len / 2))}; //uses local data of the shared memregion
+            println!("PE{my_pe}, lmr {:?}",local_mem_region.as_slice());
+            world.barrier();
+            if my_pe == 0{block_array.get_unchecked(0, local_mem_region.sub_region(0..total_len / 2))};
+            world.barrier();
+            block_array.print();
+            println!("PE{my_pe}, lmr {:?}",local_mem_region.as_slice());
+            world.barrier();
             println!("get_unchecked elapsed {:?}", start.elapsed().as_secs_f64());
         }
         let start = std::time::Instant::now();

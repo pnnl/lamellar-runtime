@@ -466,7 +466,7 @@ fn create_buf_ops(
             quote! {}, //no lock since its native atomic
             quote! { #slice },
         )
-    } else if array_type == "LocalLockAtomicArray" {
+    } else if array_type == "LocalLockArray" {
         (
             quote! {}, //no explicit lock since the slice handle is a lock guard
             quote! {let mut slice = self.data.write_local_data();}, //this is the lock
@@ -884,8 +884,8 @@ fn create_buffered_ops(
     };
 
     let mut atomic_array_types: Vec<(syn::Ident, syn::Ident)> = vec![(
-        quote::format_ident!("LocalLockAtomicArray"),
-        quote::format_ident!("LocalLockAtomicByteArrayWeak"),
+        quote::format_ident!("LocalLockArray"),
+        quote::format_ident!("LocalLockByteArrayWeak"),
     )];
 
     if native {
@@ -947,7 +947,7 @@ fn create_buffered_ops(
                 AtomicArray,AtomicByteArray,AtomicByteArrayWeak,
                 GenericAtomicArray,
                 NativeAtomicArray,
-                LocalLockAtomicArray,LocalLockAtomicByteArray,LocalLockAtomicByteArrayWeak,
+                LocalLockArray,LocalLockByteArray,LocalLockByteArrayWeak,
                 LocalArithmeticOps,LocalAtomicOps,
                 UnsafeArray, UnsafeByteArray, UnsafeByteArrayWeak,
                 ArrayOpCmd,
@@ -995,8 +995,8 @@ fn create_ops(
 
     let mut write_array_types: Vec<(syn::Ident, syn::Ident)> = vec![
         (
-            quote::format_ident!("LocalLockAtomicArray"),
-            quote::format_ident!("LocalLockAtomicByteArrayWeak"),
+            quote::format_ident!("LocalLockArray"),
+            quote::format_ident!("LocalLockByteArrayWeak"),
         ),
         (
             quote::format_ident!("AtomicArray"),
@@ -1047,8 +1047,8 @@ fn create_ops(
 
     let atomic_array_types: Vec<(syn::Ident, syn::Ident)> = vec![
         (
-            quote::format_ident!("LocalLockAtomicArray"),
-            quote::format_ident!("LocalLockAtomicByteArrayWeak"),
+            quote::format_ident!("LocalLockArray"),
+            quote::format_ident!("LocalLockByteArrayWeak"),
         ),
         (
             quote::format_ident!("AtomicArray"),
@@ -1114,7 +1114,7 @@ fn create_ops(
     let user_expanded = quote_spanned! {expanded.span()=>
         const _: () = {
             extern crate lamellar as __lamellar;
-            use __lamellar::array::{LamellarArray,AtomicArray,AtomicByteArray,GenericAtomicArray,NativeAtomicArray,LocalLockAtomicArray,LocalLockAtomicByteArray,LocalArithmeticOps,LocalAtomicOps,ArrayOpCmd,LamellarArrayPut};
+            use __lamellar::array::{LamellarArray,AtomicArray,AtomicByteArray,GenericAtomicArray,NativeAtomicArray,LocalLockArray,LocalLockByteArray,LocalArithmeticOps,LocalAtomicOps,ArrayOpCmd,LamellarArrayPut};
             #bitwise_mod
             use __lamellar::active_messaging::RemoteActiveMessage;
             use __lamellar::LamellarRequest;
