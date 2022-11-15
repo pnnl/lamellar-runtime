@@ -1490,7 +1490,7 @@ impl<T> ElementComparePartialEqOps for T where T: std::cmp::PartialEq  + Dist //
 /// The results of a batched operation are returned to the user in the same order as the input indices.
 ///
 /// # Note
-/// For both single index and batched operations there are nor guarantees to the order in which individual operations occur
+/// For both single index and batched operations there are no guarantees to the order in which individual operations occur
 ///
 /// # Example
 ///```
@@ -1564,7 +1564,7 @@ pub trait ReadOnlyOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
     /// let array = AtomicArray::new::<usize>(&world,100,Distribution::Block);
     ///
     /// let indices = vec![3,54,12,88,29,68];
-    /// let req = array.load(indices);
+    /// let req = array.batch_load(indices);
     /// let vals = array.block_on(req);
     /// assert_eq!(vals.len() == indicies.len());
     ///```
@@ -1581,7 +1581,7 @@ pub trait ReadOnlyOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
 
 /// The interface for remotely writing elements
 ///
-/// these operations can be performed using any LamellarArray type
+/// these operations can be performed using any [LamellarWriteArray]  type
 ///
 /// Both single element operations and batched element operations are provided
 ///
@@ -1595,7 +1595,7 @@ pub trait ReadOnlyOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
 /// The results of a batched operation are returned to the user in the same order as the input indices.
 ///
 /// # Note
-/// For both single index and batched operations there are nor guarantees to the order in which individual operations occur
+/// For both single index and batched operations there are no guarantees to the order in which individual operations occur (an individal operation is guaranteed to be atomic though).
 ///
 /// # Batched Types
 /// Three types of batched operations can be performed
@@ -1609,7 +1609,7 @@ pub trait ReadOnlyOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
 ///
 /// let indices = vec![3,54,12,88,29,68];
 /// let val = 10;
-/// array.block_on(array.store(indices,val));
+/// array.block_on(array.batch_store(indices,val));
 ///```
 /// ## Many Values - One Index
 /// In this type, multiple values will be applied to the given index
@@ -1621,7 +1621,7 @@ pub trait ReadOnlyOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
 ///
 /// let vals = vec![3,54,12,88,29,68];
 /// let index = 10;
-/// array.block_on(array.store(index,vals));
+/// array.block_on(array.batch_store(index,vals));
 ///```
 /// ## Many Values - Many Indicies
 /// In this type, values and indices have a one-to-one correspondance.
@@ -1635,14 +1635,63 @@ pub trait ReadOnlyOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
 ///
 /// let indices = vec![3,54,12,88,29,68];
 /// let vals = vec![12,2,1,10000,12,13];
-/// array.block_on(array.store(indices,vals));
+/// array.block_on(array.batch_store(indices,vals));
 ///```
 pub trait AccessOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
+    /// This call stores the supplied `val` into the element specified by `index`
+    ///
+    /// A future is returned as the result of this call, which is used to detect when the operation has completed
+    ///
+    /// # Note
+    /// This future is only lazy with respect to checking for completion, not
+    /// with respect to launching the operation. That is, the operation will
+    /// occur regardless of if the future is ever polled or not, Enabling
+    /// a "fire and forget" programming model.
+    ///
+    /// # Examples
+    ///
+    ///```
+    /// use lamellar::array::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder.build();
+    /// let array = AtomicArray::new::<usize>(&world,100,Distribution::Block);
+    ///
+    /// let idx = 53;
+    /// let val = 10;
+    /// let req = array.store(idx,val);
+    /// array.block_on(req);
+    ///```
     #[tracing::instrument(skip_all)]
     fn store<'a>(&self, index: usize, val: T) -> Pin<Box<dyn Future<Output = ()> + Send>> {
         self.inner_array()
             .initiate_op(val, index, ArrayOpCmd::Store)
     }
+
+    /// This call performs a batched vesion of the [store][AccessOps::store] function,
+    ///
+    /// Instead of a single value and index this function expects a list of `vals`, or a list of `indices` or both.
+    /// Please see the general [AccessOps] documentation for more information on batch operation input
+    ///
+    /// A future is returned as the result of this call, which is used to detect when the operation has completed
+    ///
+    /// # Note
+    /// This future is only lazy with respect to checking for completion, not
+    /// with respect to launching the operation. That is, the operation will
+    /// occur regardless of if the future is ever polled or not, Enabling
+    /// a "fire and forget" programming model.
+    ///
+    /// # Examples
+    ///
+    ///```
+    /// use lamellar::array::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder.build();
+    /// let array = AtomicArray::new::<usize>(&world,100,Distribution::Block);
+    ///
+    /// let indices = vec![3,54,12,88,29,68];
+    /// let req = array.batch_store(indices,10);
+    /// array.block_on(req);
+    ///```
     #[tracing::instrument(skip_all)]
     fn batch_store<'a>(
         &self,
@@ -1652,11 +1701,63 @@ pub trait AccessOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
         self.inner_array()
             .initiate_op(val, index, ArrayOpCmd::Store)
     }
+
+    /// This call swaps the supplied `val` into the element specified by `index`, returning the old value
+    ///
+    /// A future is returned as the result of this call, which is used to retrieve
+    /// the results after the (possibly remote) operations have finished.
+    ///
+    /// # Note
+    /// This future is only lazy with respect to retrieving the result, not
+    /// with respect to launching the operation. That is, the operation will
+    /// occur regardless of if the future is ever polled or not, Enabling
+    /// a "fire and forget" programming model.
+    ///
+    /// # Examples
+    ///
+    ///```
+    /// use lamellar::array::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder.build();
+    /// let array = AtomicArray::new::<usize>(&world,100,Distribution::Block);
+    ///
+    /// let idx = 53;
+    /// let new = 10;
+    /// let req = array.swap(idx,new);
+    /// let old = array.block_on(req);
+    ///```
     #[tracing::instrument(skip_all)]
     fn swap<'a>(&self, index: usize, val: T) -> Pin<Box<dyn Future<Output = T> + Send>> {
         self.inner_array()
             .initiate_fetch_op(val, index, ArrayOpCmd::Swap)
     }
+
+    /// This call performs a batched vesion of the [swap][AccessOps::swap] function,
+    ///
+    /// Instead of a single value and index this function expects a list of `vals`, or a list of `indices` or both.
+    /// Please see the general [AccessOps] documentation for more information on batch operation input
+    ///
+    /// A future is returned as the result of this call, which is used to retrieve
+    /// the results after the (possibly remote) operations have finished.
+    ///
+    /// # Note
+    /// This future is only lazy with respect to checking for completion, not
+    /// with respect to launching the operation. That is, the operation will
+    /// occur regardless of if the future is ever polled or not, Enabling
+    /// a "fire and forget" programming model.
+    ///
+    /// # Examples
+    ///
+    ///```
+    /// use lamellar::array::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder.build();
+    /// let array = AtomicArray::new::<usize>(&world,100,Distribution::Block);
+    ///
+    /// let indices = vec![3,54,12,88,29,68];
+    /// let req = array.batch_swap(indices,10);
+    /// let old_vals = array.block_on(req);
+    ///```
     #[tracing::instrument(skip_all)]
     fn batch_swap<'a>(
         &self,
@@ -1668,11 +1769,119 @@ pub trait AccessOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
     }
 }
 
+
+/// The interface for performing remote arithmetic operations on array elements
+///
+/// these operations can be performed using any [LamellarWriteArray] type
+///
+/// Both single element operations and batched element operations are provided
+///
+/// Generally if you are performing a large number of operations it will be better to 
+/// use a batched version instead of multiple single element opertations. While the
+/// Runtime internally performs message aggregation for both single element and batched
+/// operations, single element operates have to be treated as individual requests, resulting
+/// in allocation and bookkeeping overheads. A single batched call on the other hand is treated 
+/// as a single request by the runtime. (See [ReadOnlyOps] for an example comparing single vs batched load operations of a list of indices)
+///
+/// The results of a batched operation are returned to the user in the same order as the input indices.
+///
+/// # Note
+/// For both single index and batched operations there are no guarantees to the order in which individual operations occur (an individal operation is guaranteed to be atomic though).
+///
+/// # Batched Types
+/// Three types of batched operations can be performed
+/// ## One Value - Many Indicies
+/// In this type, the same value will be applied to the provided indices
+///```
+/// use lamellar::array::prelude::*;
+///
+/// let world = LamellarWorldBuilder.build();
+/// let array = AtomicArray::new::<usize>(&world,100,Distribution::Block);
+///
+/// let indices = vec![3,54,12,88,29,68];
+/// let val = 10;
+/// array.block_on(array.batch_fetch_add(indices,val));
+///```
+/// ## Many Values - One Index
+/// In this type, multiple values will be applied to the given index
+///```
+/// use lamellar::array::prelude::*;
+///
+/// let world = LamellarWorldBuilder.build();
+/// let array = AtomicArray::new::<usize>(&world,100,Distribution::Block);
+///
+/// let vals = vec![3,54,12,88,29,68];
+/// let index = 10;
+/// array.block_on(array.batch_sub(index,vals));
+///```
+/// ## Many Values - Many Indicies
+/// In this type, values and indices have a one-to-one correspondance.
+///
+/// If the two lists are unequal in length, the longer of the two will be truncated so that it matches the length of the shorter
+///```
+/// use lamellar::array::prelude::*;
+///
+/// let world = LamellarWorldBuilder.build();
+/// let array = AtomicArray::new::<usize>(&world,100,Distribution::Block);
+///
+/// let indices = vec![3,54,12,88,29,68];
+/// let vals = vec![12,2,1,10000,12,13];
+/// array.block_on(array.batch_fetch_mul(indices,vals));
+///```
 pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayPrivate<T> {
+    /// This call adds the supplied `val` into the element specified by `index`
+    ///
+    /// A future is returned as the result of this call, which is used to detect when the operation has completed
+    ///
+    /// # Note
+    /// This future is only lazy with respect to checking for completion, not
+    /// with respect to launching the operation. That is, the operation will
+    /// occur regardless of if the future is ever polled or not, Enabling
+    /// a "fire and forget" programming model.
+    ///
+    /// # Examples
+    ///
+    ///```
+    /// use lamellar::array::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder.build();
+    /// let array = AtomicArray::new::<usize>(&world,100,Distribution::Block);
+    ///
+    /// let idx = 53;
+    /// let val = 10;
+    /// let req = array.add(idx,val);
+    /// array.block_on(req);
+    ///```
     #[tracing::instrument(skip_all)]
     fn add(&self, index: usize, val: T) -> Pin<Box<dyn Future<Output = ()> + Send>> {
         self.inner_array().initiate_op(val, index, ArrayOpCmd::Add)
     }
+
+    /// This call performs a batched vesion of the [add][ArithmeticOps::add] function,
+    ///
+    /// Instead of a single value and index this function expects a list of `vals`, or a list of `indices` or both.
+    /// Please see the general [ArithmeticOps] documentation for more information on batch operation input
+    ///
+    /// A future is returned as the result of this call, which is used to detect when the operation has completed
+    ///
+    /// # Note
+    /// This future is only lazy with respect to checking for completion, not
+    /// with respect to launching the operation. That is, the operation will
+    /// occur regardless of if the future is ever polled or not, Enabling
+    /// a "fire and forget" programming model.
+    ///
+    /// # Examples
+    ///
+    ///```
+    /// use lamellar::array::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder.build();
+    /// let array = AtomicArray::new::<usize>(&world,100,Distribution::Block);
+    ///
+    /// let indices = vec![3,54,12,88,29,68];
+    /// let req = array.batch_add(indices,10);
+    /// array.block_on(req);
+    ///```
     #[tracing::instrument(skip_all)]
     fn batch_add<'a>(
         &self,
@@ -1681,11 +1890,63 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
         self.inner_array().initiate_op(val, index, ArrayOpCmd::Add)
     }
+
+    /// This call adds the supplied `val` into the element specified by `index`, returning the old value
+    ///
+    /// A future is returned as the result of this call, which is used to retrieve
+    /// the result after the (possibly remote) operation has finished.
+    ///
+    /// # Note
+    /// This future is only lazy with respect to retrieving the result, not
+    /// with respect to launching the operation. That is, the operation will
+    /// occur regardless of if the future is ever polled or not, Enabling
+    /// a "fire and forget" programming model.
+    ///
+    /// # Examples
+    ///
+    ///```
+    /// use lamellar::array::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder.build();
+    /// let array = AtomicArray::new::<usize>(&world,100,Distribution::Block);
+    ///
+    /// let idx = 53;
+    /// let val = 10;
+    /// let req = array.fetch_add(idx,val);
+    /// let old = array.block_on(req);
+    ///```
     #[tracing::instrument(skip_all)]
     fn fetch_add(&self, index: usize, val: T) -> Pin<Box<dyn Future<Output = T> + Send>> {
         self.inner_array()
             .initiate_fetch_op(val, index, ArrayOpCmd::FetchAdd)
     }
+
+    /// This call performs a batched vesion of the [fetch_add][ArithmeticOps::fetch_add] function,
+    ///
+    /// Instead of a single value and index this function expects a list of `vals`, or a list of `indices` or both.
+    /// Please see the general [ArithmeticOps] documentation for more information on batch operation input
+    ///
+    /// A future is returned as the result of this call, which is used to retrieve
+    /// the results after the (possibly remote) operations have finished.
+    ///
+    /// # Note
+    /// This future is only lazy with respect to checking for completion, not
+    /// with respect to launching the operation. That is, the operation will
+    /// occur regardless of if the future is ever polled or not, Enabling
+    /// a "fire and forget" programming model.
+    ///
+    /// # Examples
+    ///
+    ///```
+    /// use lamellar::array::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder.build();
+    /// let array = AtomicArray::new::<usize>(&world,100,Distribution::Block);
+    ///
+    /// let indices = vec![3,54,12,88,29,68];
+    /// let req = array.batch_fetch_add(indices,10);
+    /// let old_vals = array.block_on(req);
+    ///```
     #[tracing::instrument(skip_all)]
     fn batch_fetch_add<'a>(
         &self,
@@ -1696,10 +1957,59 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
             .initiate_batch_fetch_op(val, index, ArrayOpCmd::FetchAdd)
     }
 
+     /// This call subtracts the supplied `val` from the element specified by `index`
+    ///
+    /// A future is returned as the result of this call, which is used to detect when the operation has completed
+    ///
+    /// # Note
+    /// This future is only lazy with respect to checking for completion, not
+    /// with respect to launching the operation. That is, the operation will
+    /// occur regardless of if the future is ever polled or not, Enabling
+    /// a "fire and forget" programming model.
+    ///
+    /// # Examples
+    ///
+    ///```
+    /// use lamellar::array::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder.build();
+    /// let array = AtomicArray::new::<usize>(&world,100,Distribution::Block);
+    ///
+    /// let idx = 53;
+    /// let val = 10;
+    /// let req = array.sub(idx,val);
+    /// array.block_on(req);
+    ///```
     #[tracing::instrument(skip_all)]
     fn sub<'a>(&self, index: usize, val: T) -> Pin<Box<dyn Future<Output = ()> + Send>> {
         self.inner_array().initiate_op(val, index, ArrayOpCmd::Sub)
     }
+
+    /// This call performs a batched vesion of the [sub][ArithmeticOps::sub] function,
+    ///
+    /// Instead of a single value and index this function expects a list of `vals`, or a list of `indices` or both.
+    /// Please see the general [ArithmeticOps] documentation for more information on batch operation input
+    ///
+    /// A future is returned as the result of this call, which is used to detect when the operation has completed
+    ///
+    /// # Note
+    /// This future is only lazy with respect to checking for completion, not
+    /// with respect to launching the operation. That is, the operation will
+    /// occur regardless of if the future is ever polled or not, Enabling
+    /// a "fire and forget" programming model.
+    ///
+    /// # Examples
+    ///
+    ///```
+    /// use lamellar::array::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder.build();
+    /// let array = AtomicArray::new::<usize>(&world,100,Distribution::Block);
+    ///
+    /// let indices = vec![3,54,12,88,29,68];
+    /// let req = array.batch_sub(indices,10);
+    /// array.block_on(req);
+    ///```
     #[tracing::instrument(skip_all)]
     fn batch_sub<'a>(
         &self,
@@ -1708,11 +2018,63 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
         self.inner_array().initiate_op(val, index, ArrayOpCmd::Sub)
     }
+
+    /// This call subtracts the supplied `val` from the element specified by `index`, returning the old value
+    ///
+    /// A future is returned as the result of this call, which is used to retrieve
+    /// the result after the (possibly remote) operation has finished.
+    ///
+    /// # Note
+    /// This future is only lazy with respect to retrieving the result, not
+    /// with respect to launching the operation. That is, the operation will
+    /// occur regardless of if the future is ever polled or not, Enabling
+    /// a "fire and forget" programming model.
+    ///
+    /// # Examples
+    ///
+    ///```
+    /// use lamellar::array::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder.build();
+    /// let array = AtomicArray::new::<usize>(&world,100,Distribution::Block);
+    ///
+    /// let idx = 53;
+    /// let val = 10;
+    /// let req = array.fetch_sub(idx,val);
+    /// let old = array.block_on(req);
+    ///```
     #[tracing::instrument(skip_all)]
     fn fetch_sub<'a>(&self, index: usize, val: T) -> Pin<Box<dyn Future<Output = T> + Send>> {
         self.inner_array()
             .initiate_fetch_op(val, index, ArrayOpCmd::FetchSub)
     }
+
+    /// This call performs a batched vesion of the [fetch_sub][ArithmeticOps::fetch_sub] function,
+    ///
+    /// Instead of a single value and index this function expects a list of `vals`, or a list of `indices` or both.
+    /// Please see the general [ArithmeticOps] documentation for more information on batch operation input
+    ///
+    /// A future is returned as the result of this call, which is used to retrieve
+    /// the results after the (possibly remote) operations have finished.
+    ///
+    /// # Note
+    /// This future is only lazy with respect to checking for completion, not
+    /// with respect to launching the operation. That is, the operation will
+    /// occur regardless of if the future is ever polled or not, Enabling
+    /// a "fire and forget" programming model.
+    ///
+    /// # Examples
+    ///
+    ///```
+    /// use lamellar::array::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder.build();
+    /// let array = AtomicArray::new::<usize>(&world,100,Distribution::Block);
+    ///
+    /// let indices = vec![3,54,12,88,29,68];
+    /// let req = array.batch_fetch_sub(indices,10);
+    /// let old_vals = array.block_on(req);
+    ///```
     #[tracing::instrument(skip_all)]
     fn batch_fetch_sub<'a>(
         &self,
@@ -1722,10 +2084,60 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
         self.inner_array()
             .initiate_batch_fetch_op(val, index, ArrayOpCmd::FetchSub)
     }
+
+     /// This call multiplies the supplied `val` by the element specified by `index` and stores the result.
+    ///
+    /// A future is returned as the result of this call, which is used to detect when the operation has completed
+    ///
+    /// # Note
+    /// This future is only lazy with respect to checking for completion, not
+    /// with respect to launching the operation. That is, the operation will
+    /// occur regardless of if the future is ever polled or not, Enabling
+    /// a "fire and forget" programming model.
+    ///
+    /// # Examples
+    ///
+    ///```
+    /// use lamellar::array::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder.build();
+    /// let array = AtomicArray::new::<usize>(&world,100,Distribution::Block);
+    ///
+    /// let idx = 53;
+    /// let val = 10;
+    /// let req = array.mul(idx,val);
+    /// array.block_on(req);
+    ///```
     #[tracing::instrument(skip_all)]
     fn mul<'a>(&self, index: usize, val: T) -> Pin<Box<dyn Future<Output = ()> + Send>> {
         self.inner_array().initiate_op(val, index, ArrayOpCmd::Mul)
     }
+
+    /// This call performs a batched vesion of the [mul][ArithmeticOps::mul] function,
+    ///
+    /// Instead of a single value and index this function expects a list of `vals`, or a list of `indices` or both.
+    /// Please see the general [ArithmeticOps] documentation for more information on batch operation input
+    ///
+    /// A future is returned as the result of this call, which is used to detect when the operation has completed
+    ///
+    /// # Note
+    /// This future is only lazy with respect to checking for completion, not
+    /// with respect to launching the operation. That is, the operation will
+    /// occur regardless of if the future is ever polled or not, Enabling
+    /// a "fire and forget" programming model.
+    ///
+    /// # Examples
+    ///
+    ///```
+    /// use lamellar::array::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder.build();
+    /// let array = AtomicArray::new::<usize>(&world,100,Distribution::Block);
+    ///
+    /// let indices = vec![3,54,12,88,29,68];
+    /// let req = array.batch_mul(indices,10);
+    /// array.block_on(req);
+    ///```
     #[tracing::instrument(skip_all)]
     fn batch_mul<'a>(
         &self,
@@ -1734,11 +2146,63 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
         self.inner_array().initiate_op(val, index, ArrayOpCmd::Mul)
     }
+
+    /// This call multiplies the supplied `val` with the element specified by `index`, returning the old value
+    ///
+    /// A future is returned as the result of this call, which is used to retrieve
+    /// the result after the (possibly remote) operation has finished.
+    ///
+    /// # Note
+    /// This future is only lazy with respect to retrieving the result, not
+    /// with respect to launching the operation. That is, the operation will
+    /// occur regardless of if the future is ever polled or not, Enabling
+    /// a "fire and forget" programming model.
+    ///
+    /// # Examples
+    ///
+    ///```
+    /// use lamellar::array::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder.build();
+    /// let array = AtomicArray::new::<usize>(&world,100,Distribution::Block);
+    ///
+    /// let idx = 53;
+    /// let val = 10;
+    /// let req = array.fetch_mul(idx,val);
+    /// let old = array.block_on(req);
+    ///```
     #[tracing::instrument(skip_all)]
     fn fetch_mul<'a>(&self, index: usize, val: T) -> Pin<Box<dyn Future<Output = T> + Send>> {
         self.inner_array()
             .initiate_fetch_op(val, index, ArrayOpCmd::FetchMul)
     }
+
+    /// This call performs a batched vesion of the [fetch_mul][ArithmeticOps::fetch_mul] function,
+    ///
+    /// Instead of a single value and index this function expects a list of `vals`, or a list of `indices` or both.
+    /// Please see the general [ArithmeticOps] documentation for more information on batch operation input
+    ///
+    /// A future is returned as the result of this call, which is used to retrieve
+    /// the results after the (possibly remote) operations have finished.
+    ///
+    /// # Note
+    /// This future is only lazy with respect to checking for completion, not
+    /// with respect to launching the operation. That is, the operation will
+    /// occur regardless of if the future is ever polled or not, Enabling
+    /// a "fire and forget" programming model.
+    ///
+    /// # Examples
+    ///
+    ///```
+    /// use lamellar::array::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder.build();
+    /// let array = AtomicArray::new::<usize>(&world,100,Distribution::Block);
+    ///
+    /// let indices = vec![3,54,12,88,29,68];
+    /// let req = array.batch_fetch_mul(indices,10);
+    /// let old_vals = array.block_on(req);
+    ///```
     #[tracing::instrument(skip_all)]
     fn batch_fetch_mul<'a>(
         &self,
@@ -1748,10 +2212,60 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
         self.inner_array()
             .initiate_batch_fetch_op(val, index, ArrayOpCmd::FetchMul)
     }
+
+     /// This call divides the element specified by `index` with the supplied `val` and stores the result 
+    ///
+    /// A future is returned as the result of this call, which is used to detect when the operation has completed
+    ///
+    /// # Note
+    /// This future is only lazy with respect to checking for completion, not
+    /// with respect to launching the operation. That is, the operation will
+    /// occur regardless of if the future is ever polled or not, Enabling
+    /// a "fire and forget" programming model.
+    ///
+    /// # Examples
+    ///
+    ///```
+    /// use lamellar::array::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder.build();
+    /// let array = AtomicArray::new::<usize>(&world,100,Distribution::Block);
+    ///
+    /// let idx = 53;
+    /// let val = 10;
+    /// let req = array.div(idx,val);
+    /// array.block_on(req);
+    ///```
     #[tracing::instrument(skip_all)]
     fn div<'a>(&self, index: usize, val: T) -> Pin<Box<dyn Future<Output = ()> + Send>> {
         self.inner_array().initiate_op(val, index, ArrayOpCmd::Div)
     }
+
+    /// This call performs a batched vesion of the [div][ArithmeticOps::div] function,
+    ///
+    /// Instead of a single value and index this function expects a list of `vals`, or a list of `indices` or both.
+    /// Please see the general [ArithmeticOps] documentation for more information on batch operation input
+    ///
+    /// A future is returned as the result of this call, which is used to detect when the operation has completed
+    ///
+    /// # Note
+    /// This future is only lazy with respect to checking for completion, not
+    /// with respect to launching the operation. That is, the operation will
+    /// occur regardless of if the future is ever polled or not, Enabling
+    /// a "fire and forget" programming model.
+    ///
+    /// # Examples
+    ///
+    ///```
+    /// use lamellar::array::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder.build();
+    /// let array = AtomicArray::new::<usize>(&world,100,Distribution::Block);
+    ///
+    /// let indices = vec![3,54,12,88,29,68];
+    /// let req = array.batch_div(indices,10);
+    /// array.block_on(req);
+    ///```
     #[tracing::instrument(skip_all)]
     fn batch_div<'a>(
         &self,
@@ -1760,11 +2274,63 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
         self.inner_array().initiate_op(val, index, ArrayOpCmd::Div)
     }
+
+    /// This call divides the element specified by `index` with the supplied `val`, returning the old value
+    ///
+    /// A future is returned as the result of this call, which is used to retrieve
+    /// the result after the (possibly remote) operation has finished.
+    ///
+    /// # Note
+    /// This future is only lazy with respect to retrieving the result, not
+    /// with respect to launching the operation. That is, the operation will
+    /// occur regardless of if the future is ever polled or not, Enabling
+    /// a "fire and forget" programming model.
+    ///
+    /// # Examples
+    ///
+    ///```
+    /// use lamellar::array::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder.build();
+    /// let array = AtomicArray::new::<usize>(&world,100,Distribution::Block);
+    ///
+    /// let idx = 53;
+    /// let val = 10;
+    /// let req = array.fetch_div(idx,val);
+    /// let old = array.block_on(req);
+    ///```
     #[tracing::instrument(skip_all)]
     fn fetch_div<'a>(&self, index: usize, val: T) -> Pin<Box<dyn Future<Output = T> + Send>> {
         self.inner_array()
             .initiate_fetch_op(val, index, ArrayOpCmd::FetchDiv)
     }
+
+    /// This call performs a batched vesion of the [fetch_div][ArithmeticOps::fetch_div] function,
+    ///
+    /// Instead of a single value and index this function expects a list of `vals`, or a list of `indices` or both.
+    /// Please see the general [ArithmeticOps] documentation for more information on batch operation input
+    ///
+    /// A future is returned as the result of this call, which is used to retrieve
+    /// the results after the (possibly remote) operations have finished.
+    ///
+    /// # Note
+    /// This future is only lazy with respect to checking for completion, not
+    /// with respect to launching the operation. That is, the operation will
+    /// occur regardless of if the future is ever polled or not, Enabling
+    /// a "fire and forget" programming model.
+    ///
+    /// # Examples
+    ///
+    ///```
+    /// use lamellar::array::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder.build();
+    /// let array = AtomicArray::new::<usize>(&world,100,Distribution::Block);
+    ///
+    /// let indices = vec![3,54,12,88,29,68];
+    /// let req = array.batch_fetch_div(indices,10);
+    /// let old_vals = array.block_on(req);
+    ///```
     #[tracing::instrument(skip_all)]
     fn batch_fetch_div<'a>(
         &self,
@@ -1776,11 +2342,119 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     }
 }
 
+
+/// The interface for performing remote bitwise operations on array elements
+///
+/// these operations can be performed using any [LamellarWriteArray] type
+///
+/// Both single element operations and batched element operations are provided
+///
+/// Generally if you are performing a large number of operations it will be better to 
+/// use a batched version instead of multiple single element opertations. While the
+/// Runtime internally performs message aggregation for both single element and batched
+/// operations, single element operates have to be treated as individual requests, resulting
+/// in allocation and bookkeeping overheads. A single batched call on the other hand is treated 
+/// as a single request by the runtime. (See [ReadOnlyOps] for an example comparing single vs batched load operations of a list of indices)
+///
+/// The results of a batched operation are returned to the user in the same order as the input indices.
+///
+/// # Note
+/// For both single index and batched operations there are no guarantees to the order in which individual operations occur (an individal operation is guaranteed to be atomic though).
+///
+/// # Batched Types
+/// Three types of batched operations can be performed
+/// ## One Value - Many Indicies
+/// In this type, the same value will be applied to the provided indices
+///```
+/// use lamellar::array::prelude::*;
+///
+/// let world = LamellarWorldBuilder.build();
+/// let array = AtomicArray::new::<usize>(&world,100,Distribution::Block);
+///
+/// let indices = vec![3,54,12,88,29,68];
+/// let val = 0b100101001;
+/// array.block_on(array.batch_fetch_bit_and(indices,val));
+///```
+/// ## Many Values - One Index
+/// In this type, multiple values will be applied to the given index
+///```
+/// use lamellar::array::prelude::*;
+///
+/// let world = LamellarWorldBuilder.build();
+/// let array = AtomicArray::new::<usize>(&world,100,Distribution::Block);
+///
+/// let vals = vec![0x3,0x54,0b11101,88,29,0x68];
+/// let index = 10;
+/// array.block_on(array.batch_bit_or(index,vals));
+///```
+/// ## Many Values - Many Indicies
+/// In this type, values and indices have a one-to-one correspondance.
+///
+/// If the two lists are unequal in length, the longer of the two will be truncated so that it matches the length of the shorter
+///```
+/// use lamellar::array::prelude::*;
+///
+/// let world = LamellarWorldBuilder.build();
+/// let array = AtomicArray::new::<usize>(&world,100,Distribution::Block);
+///
+/// let indices = vec![3,54,12,88,29,68];
+/// let vals = vec![0x12,2,1,0b10000,12,0x13];
+/// array.block_on(array.batch_fetch_bit_or(indices,vals));
+///```
 pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
+    /// This call performs a bitwise `and` with the element specified by `index` and the supplied `val`.
+    ///
+    /// A future is returned as the result of this call, which is used to detect when the operation has completed.
+    ///
+    /// # Note
+    /// This future is only lazy with respect to checking for completion, not
+    /// with respect to launching the operation. That is, the operation will
+    /// occur regardless of if the future is ever polled or not, Enabling
+    /// a "fire and forget" programming model.
+    ///
+    /// # Examples
+    ///
+    ///```
+    /// use lamellar::array::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder.build();
+    /// let array = AtomicArray::new::<usize>(&world,100,Distribution::Block);
+    ///
+    /// let idx = 53;
+    /// let val = 0b100101001;
+    /// let req = array.bit_and(idx,val);
+    /// array.block_on(req);
+    ///```
     #[tracing::instrument(skip_all)]
     fn bit_and<'a>(&self, index: usize, val: T) -> Pin<Box<dyn Future<Output = ()> + Send>> {
         self.inner_array().initiate_op(val, index, ArrayOpCmd::And)
     }
+
+    /// This call performs a batched vesion of the [bit_and][BitWiseOps::bit_and] function,
+    ///
+    /// Instead of a single value and index this function expects a list of `vals`, or a list of `indices` or both.
+    /// Please see the general [BitWiseOps] documentation for more information on batch operation input
+    ///
+    /// A future is returned as the result of this call, which is used to detect when the operation has completed
+    ///
+    /// # Note
+    /// This future is only lazy with respect to checking for completion, not
+    /// with respect to launching the operation. That is, the operation will
+    /// occur regardless of if the future is ever polled or not, Enabling
+    /// a "fire and forget" programming model.
+    ///
+    /// # Examples
+    ///
+    ///```
+    /// use lamellar::array::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder.build();
+    /// let array = AtomicArray::new::<usize>(&world,100,Distribution::Block);
+    ///
+    /// let indices = vec![3,54,12,88,29,68];
+    /// let req = array.batch_bit_and(indices,10);
+    /// array.block_on(req);
+    ///```
     #[tracing::instrument(skip_all)]
     fn batch_bit_and<'a>(
         &self,
@@ -1789,11 +2463,63 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
     ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
         self.inner_array().initiate_op(val, index, ArrayOpCmd::And)
     }
+
+    /// This call performs a bitwise `and` with the element specified by `index` and the supplied `val`, returning the old value
+    ///
+    /// A future is returned as the result of this call, which is used to retrieve
+    /// the result after the (possibly remote) operation has finished.
+    ///
+    /// # Note
+    /// This future is only lazy with respect to retrieving the result, not
+    /// with respect to launching the operation. That is, the operation will
+    /// occur regardless of if the future is ever polled or not, Enabling
+    /// a "fire and forget" programming model.
+    ///
+    /// # Examples
+    ///
+    ///```
+    /// use lamellar::array::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder.build();
+    /// let array = AtomicArray::new::<usize>(&world,100,Distribution::Block);
+    ///
+    /// let idx = 53;
+    /// let val = 10;
+    /// let req = array.fetch_bit_and(idx,val);
+    /// let old = array.block_on(req);
+    ///```
     #[tracing::instrument(skip_all)]
     fn fetch_bit_and<'a>(&self, index: usize, val: T) -> Pin<Box<dyn Future<Output = T> + Send>> {
         self.inner_array()
             .initiate_fetch_op(val, index, ArrayOpCmd::FetchAnd)
     }
+
+    /// This call performs a batched vesion of the [fetch_bit_and][BitWiseOps::fetch_bit_and] function,
+    ///
+    /// Instead of a single value and index this function expects a list of `vals`, or a list of `indices` or both.
+    /// Please see the general [BitWiseOps] documentation for more information on batch operation input
+    ///
+    /// A future is returned as the result of this call, which is used to retrieve
+    /// the results after the (possibly remote) operations have finished.
+    ///
+    /// # Note
+    /// This future is only lazy with respect to checking for completion, not
+    /// with respect to launching the operation. That is, the operation will
+    /// occur regardless of if the future is ever polled or not, Enabling
+    /// a "fire and forget" programming model.
+    ///
+    /// # Examples
+    ///
+    ///```
+    /// use lamellar::array::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder.build();
+    /// let array = AtomicArray::new::<usize>(&world,100,Distribution::Block);
+    ///
+    /// let indices = vec![3,54,12,88,29,68];
+    /// let req = array.batch_fetch_bit_and(indices,10);
+    /// let old_vals = array.block_on(req);
+    ///```
     #[tracing::instrument(skip_all)]
     fn batch_fetch_bit_and<'a>(
         &self,
@@ -1803,10 +2529,60 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
         self.inner_array()
             .initiate_batch_fetch_op(val, index, ArrayOpCmd::FetchAnd)
     }
+
+    /// This call performs a bitwise `or` with the element specified by `index` and the supplied `val`.
+    ///
+    /// A future is returned as the result of this call, which is used to detect when the operation has completed.
+    ///
+    /// # Note
+    /// This future is only lazy with respect to checking for completion, not
+    /// with respect to launching the operation. That is, the operation will
+    /// occur regardless of if the future is ever polled or not, Enabling
+    /// a "fire and forget" programming model.
+    ///
+    /// # Examples
+    ///
+    ///```
+    /// use lamellar::array::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder.build();
+    /// let array = AtomicArray::new::<usize>(&world,100,Distribution::Block);
+    ///
+    /// let idx = 53;
+    /// let val = 0b100101001;
+    /// let req = array.bit_or(idx,val);
+    /// array.block_on(req);
+    ///```
     #[tracing::instrument(skip_all)]
     fn bit_or<'a>(&self, index: usize, val: T) -> Pin<Box<dyn Future<Output = ()> + Send>> {
         self.inner_array().initiate_op(val, index, ArrayOpCmd::Or)
     }
+
+    /// This call performs a batched vesion of the [bit_or][BitWiseOps::bit_or] function,
+    ///
+    /// Instead of a single value and index this function expects a list of `vals`, or a list of `indices` or both.
+    /// Please see the general [BitWiseOps] documentation for more information on batch operation input
+    ///
+    /// A future is returned as the result of this call, which is used to detect when the operation has completed
+    ///
+    /// # Note
+    /// This future is only lazy with respect to checking for completion, not
+    /// with respect to launching the operation. That is, the operation will
+    /// occur regardless of if the future is ever polled or not, Enabling
+    /// a "fire and forget" programming model.
+    ///
+    /// # Examples
+    ///
+    ///```
+    /// use lamellar::array::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder.build();
+    /// let array = AtomicArray::new::<usize>(&world,100,Distribution::Block);
+    ///
+    /// let indices = vec![3,54,12,88,29,68];
+    /// let req = array.batch_bit_or(indices,10);
+    /// array.block_on(req);
+    ///```
     #[tracing::instrument(skip_all)]
     fn batch_bit_or<'a>(
         &self,
@@ -1815,11 +2591,63 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
     ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
         self.inner_array().initiate_op(val, index, ArrayOpCmd::Or)
     }
+
+    /// This call performs a bitwise `or` with the element specified by `index` and the supplied `val`, returning the old value
+    ///
+    /// A future is returned as the result of this call, which is used to retrieve
+    /// the result after the (possibly remote) operation has finished.
+    ///
+    /// # Note
+    /// This future is only lazy with respect to retrieving the result, not
+    /// with respect to launching the operation. That is, the operation will
+    /// occur regardless of if the future is ever polled or not, Enabling
+    /// a "fire and forget" programming model.
+    ///
+    /// # Examples
+    ///
+    ///```
+    /// use lamellar::array::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder.build();
+    /// let array = AtomicArray::new::<usize>(&world,100,Distribution::Block);
+    ///
+    /// let idx = 53;
+    /// let val = 10;
+    /// let req = array.fetch_bit_or(idx,val);
+    /// let old = array.block_on(req);
+    ///```
     #[tracing::instrument(skip_all)]
     fn fetch_bit_or<'a>(&self, index: usize, val: T) -> Pin<Box<dyn Future<Output = T> + Send>> {
         self.inner_array()
             .initiate_fetch_op(val, index, ArrayOpCmd::FetchOr)
     }
+
+    /// This call performs a batched vesion of the [fetch_bit_or][BitWiseOps::fetch_bit_or] function,
+    ///
+    /// Instead of a single value and index this function expects a list of `vals`, or a list of `indices` or both.
+    /// Please see the general [BitWiseOps] documentation for more information on batch operation input
+    ///
+    /// A future is returned as the result of this call, which is used to retrieve
+    /// the results after the (possibly remote) operations have finished.
+    ///
+    /// # Note
+    /// This future is only lazy with respect to checking for completion, not
+    /// with respect to launching the operation. That is, the operation will
+    /// occur regardless of if the future is ever polled or not, Enabling
+    /// a "fire and forget" programming model.
+    ///
+    /// # Examples
+    ///
+    ///```
+    /// use lamellar::array::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder.build();
+    /// let array = AtomicArray::new::<usize>(&world,100,Distribution::Block);
+    ///
+    /// let indices = vec![3,54,12,88,29,68];
+    /// let req = array.batch_fetch_bit_or(indices,10);
+    /// let old_vals = array.block_on(req);
+    ///```
     #[tracing::instrument(skip_all)]
     fn batch_fetch_bit_or<'a>(
         &self,
@@ -1831,55 +2659,305 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
     }
 }
 
+/// The interface for performing remote compare and exchange operations on array elements
+///
+/// these operations can be performed using any [LamellarWriteArray] type
+///
+/// Both single element operations and batched element operations are provided
+///
+/// Generally if you are performing a large number of operations it will be better to 
+/// use a batched version instead of multiple single element opertations. While the
+/// Runtime internally performs message aggregation for both single element and batched
+/// operations, single element operates have to be treated as individual requests, resulting
+/// in allocation and bookkeeping overheads. A single batched call on the other hand is treated 
+/// as a single request by the runtime. (See [ReadOnlyOps] for an example comparing single vs batched load operations of a list of indices)
+///
+/// The results of a batched operation are returned to the user in the same order as the input indices.
+///
+/// # Note
+/// For both single index and batched operations there are no guarantees to the order in which individual operations occur (an individal operation is guaranteed to be atomic though)
+///
+/// # Batched Types
+/// Three types of batched operations can be performed
+///
+/// Currently only the indicies and new values can be batched, for all the batch types below you can only pass a single `current val` which will be used in each individual operation of the batch
+/// We plan to support batched `current vals` in a future release.
+/// ## One Value - Many Indicies
+/// In this type, the same value will be applied to the provided indices
+///```
+/// use lamellar::array::prelude::*;
+///
+/// let world = LamellarWorldBuilder.build();
+/// let array = AtomicArray::new::<usize>(&world,100,Distribution::Block);
+///
+/// let indices = vec![3,54,12,88,29,68];
+/// let current = 0;
+/// let new = 10;
+/// array.block_on(array.batch_compare_exchange(indices,current,new));
+///```
+/// ## Many Values - One Index
+/// In this type, multiple values will be applied to the given index
+///```
+/// use lamellar::array::prelude::*;
+///
+/// let world = LamellarWorldBuilder.build();
+/// let array = AtomicArray::new::<usize>(&world,100,Distribution::Block);
+///
+/// let new_vals = vec![3,54,11101,88,29,68];
+/// let current = 0;
+/// let index = 10;
+/// array.block_on(array.batch_compare_exchange(index,current,new_vals));
+///```
+/// ## Many Values - Many Indicies
+/// In this type, values and indices have a one-to-one correspondance.
+///
+/// If the two lists are unequal in length, the longer of the two will be truncated so that it matches the length of the shorter
+///```
+/// use lamellar::array::prelude::*;
+///
+/// let world = LamellarWorldBuilder.build();
+/// let array = AtomicArray::new::<usize>(&world,100,Distribution::Block);
+///
+/// let indices = vec![3,54,12,88,29,68];
+/// let new_vals = vec![12,2,1,10000,12,13];
+/// let current = 0;
+/// array.block_on(array.batch_compare_exchange(indices,current,new_vals));
+///```
 pub trait CompareExchangeOps<T: ElementCompareEqOps>: private::LamellarArrayPrivate<T> {
+    /// This call stores the `new` value into the element specified by `index` if the current value is the same as `current`.
+    ///
+    /// the return value is a result indicating whether the new value was written into the element and contains the previous value.
+    /// On success this previous value is gauranteed to be equal to `current`
+    ///
+    /// A future is returned as the result of this call, which is used to detect when the operation has completed and retrieve the returned value.
+    ///
+    /// # Note
+    /// This future is only lazy with respect to checking for completion, not
+    /// with respect to launching the operation. That is, the operation will
+    /// occur regardless of if the future is ever polled or not, Enabling
+    /// a "fire and forget" programming model.
+    ///
+    /// # Examples
+    ///
+    ///```
+    /// use lamellar::array::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder.build();
+    /// let array = AtomicArray::new::<usize>(&world,100,Distribution::Block);
+    ///
+    /// let idx = 53;
+    /// let val = 10;
+    /// let current = 0;
+    /// let req = array.compare_exchange(idx,current,val);
+    /// let result = array.block_on(req);
+    ///```
     #[tracing::instrument(skip_all)]
     fn compare_exchange<'a>(
         &self,
         index: usize,
-        old: T,
+        current: T,
         new: T,
     ) -> Pin<Box<dyn Future<Output = Result<T, T>> + Send>> {
         self.inner_array()
-            .initiate_result_op(new, index, ArrayOpCmd::CompareExchange(old))
+            .initiate_result_op(new, index, ArrayOpCmd::CompareExchange(current))
     }
+
+    /// This call performs a batched vesion of the [compare_exchange][CompareExchangeOps::compare_exchange] function,
+    ///
+    /// Instead of a single value and index this function expects a list of (new)`vals`, or a list of `indices` or both.
+    /// Note that presently only a single `current` value can be provided, and will be used for all operations in the batch.
+    /// Please see the general [CompareExchangeOps] documentation for more information on batch operation input
+    ///
+    /// A future is returned as the result of this call, which is used to retrieve
+    /// the results after the (possibly remote) operations have finished.
+    ///
+    /// # Note
+    /// This future is only lazy with respect to checking for completion, not
+    /// with respect to launching the operation. That is, the operation will
+    /// occur regardless of if the future is ever polled or not, Enabling
+    /// a "fire and forget" programming model.
+    ///
+    /// # Examples
+    ///
+    ///```
+    /// use lamellar::array::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder.build();
+    /// let array = AtomicArray::new::<usize>(&world,100,Distribution::Block);
+    ///
+    /// let indices = vec![3,54,12,88,29,68];
+    /// let current = 0;
+    /// let req = array.batch_compare_exchange(indices,current,10);
+    /// let results = array.block_on(req);
+    ///```
     #[tracing::instrument(skip_all)]
     fn batch_compare_exchange<'a>(
         &self,
         index: impl OpInput<'a, usize>,
-        old: T,
+        ocurrentld: T,
         new: impl OpInput<'a, T>,
     ) -> Pin<Box<dyn Future<Output = Vec<Result<T, T>>> + Send>> {
         self.inner_array()
-            .initiate_batch_result_op(new, index, ArrayOpCmd::CompareExchange(old))
+            .initiate_batch_result_op(new, index, ArrayOpCmd::CompareExchange(current))
     }
 }
 
+
+/// The interface for performing remote compare and exchange operations within a given epsilon on array elements
+///
+/// Useful for element types that only impl [PartialEq][std::cmp::PartialEq] instead of [Eq][std::cmp::Eq] (e.g `f32`,`f64`).
+///
+/// These operations can be performed using any [LamellarWriteArray] type
+///
+/// Both single element operations and batched element operations are provided
+///
+/// Generally if you are performing a large number of operations it will be better to 
+/// use a batched version instead of multiple single element opertations. While the
+/// Runtime internally performs message aggregation for both single element and batched
+/// operations, single element operates have to be treated as individual requests, resulting
+/// in allocation and bookkeeping overheads. A single batched call on the other hand is treated 
+/// as a single request by the runtime. (See [ReadOnlyOps] for an example comparing single vs batched load operations of a list of indices)
+///
+/// The results of a batched operation are returned to the user in the same order as the input indices.
+///
+/// # Note
+/// For both single index and batched operations there are no guarantees to the order in which individual operations occur (an individal operation is guaranteed to be atomic though).
+///
+/// # Batched Types
+/// Three types of batched operations can be performed
+///
+/// Currently only the indicies and new values can be batched, for all the batch types below you can only pass a single `current val` and a single `epsilon` which will be used in each individual operation of the batch
+/// We plan to support batched `current vals` and `epsilons` in a future release.
+///
+/// ## One Value - Many Indicies
+/// In this type, the same value will be applied to the provided indices
+///```
+/// use lamellar::array::prelude::*;
+///
+/// let world = LamellarWorldBuilder.build();
+/// let array = AtomicArray::new::<f32>(&world,100,Distribution::Block);
+///
+/// let indices = vec![3,54,11101,88,29,68];
+/// let current = 0.0;
+/// let new = 10.5;
+/// let epsilon = 0.1;
+/// array.block_on(array.batch_compare_exchange(indices,current,new,epsilon));
+///```
+/// ## Many Values - One Index
+/// In this type, multiple values will be applied to the given index
+///```
+/// use lamellar::array::prelude::*;
+///
+/// let world = LamellarWorldBuilder.build();
+/// let array = AtomicArray::new::<f32>(&world,100,Distribution::Block);
+///
+/// let new_vals = vec![3.0,54.8,12.9,88.1,29.2,68.9];
+/// let current = 0;
+/// let index = 10;
+/// let epsilon = 0.1;
+/// array.block_on(array.batch_compare_exchange(index,current,new_vals,epsilon));
+///```
+/// ## Many Values - Many Indicies
+/// In this type, values and indices have a one-to-one correspondance.
+///
+/// If the two lists are unequal in length, the longer of the two will be truncated so that it matches the length of the shorter
+///```
+/// use lamellar::array::prelude::*;
+///
+/// let world = LamellarWorldBuilder.build();
+/// let array = AtomicArray::new::<f32>(&world,100,Distribution::Block);
+///
+/// let indices = vec![3,54,12,88,29,68];
+/// let new_vals = vec![12.1,2.321,1.7,10000.0,12.4,13.7];
+/// let current = 0;
+/// let epsilon = 0.1;
+/// array.block_on(array.batch_compare_exchange(indices,current,new_vals,epsilon));
+///```
 pub trait CompareExchangeEpsilonOps<T: ElementComparePartialEqOps>:
     private::LamellarArrayPrivate<T>
 {
+    /// This call stores the `new` value into the element specified by `index` if the current value is the same as `current` plus or minus `epslion`.
+    /// e.g. ``` if current - epsilon < array[index] && array[index] < current + epsilon { array[index] = new }```
+    ///
+    /// The return value is a result indicating whether the new value was written into the element and contains the previous value.
+    /// On success this previous value is gauranteed to be within epsilon of `current`
+    ///
+    /// A future is returned as the result of this call, which is used to detect when the operation has completed and retrieve the returned value.
+    ///
+    /// # Note
+    /// This future is only lazy with respect to checking for completion, not
+    /// with respect to launching the operation. That is, the operation will
+    /// occur regardless of if the future is ever polled or not, Enabling
+    /// a "fire and forget" programming model.
+    ///
+    /// # Examples
+    ///
+    ///```
+    /// use lamellar::array::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder.build();
+    /// let array = AtomicArray::new::<f32>(&world,100,Distribution::Block);
+    ///
+    /// let idx = 53;
+    /// let val = 10.3;
+    /// let current = 0;
+    /// let epsilon = 0.1
+    /// let req = array.compare_exchange_epsilon(idx,current,val,epsilon);
+    /// let result = array.block_on(req);
+    ///```
     #[tracing::instrument(skip_all)]
     fn compare_exchange_epsilon<'a>(
         &self,
         index: usize,
-        old: T,
+        current: T,
         new: T,
         eps: T,
     ) -> Pin<Box<dyn Future<Output = Result<T, T>> + Send>> {
         self.inner_array()
-            .initiate_result_op(new, index, ArrayOpCmd::CompareExchangeEps(old, eps))
+            .initiate_result_op(new, index, ArrayOpCmd::CompareExchangeEps(current, eps))
     }
+
+    /// This call performs a batched vesion of the [compare_exchange_epsilon][CompareExchangeEpsilonOps::compare_exchange_epsilon] function,
+    ///
+    /// Instead of a single value and index this function expects a list of (new)`vals`, or a list of `indices` or both.
+    /// Note that presently only a single `current` value and a single `epsilon` value can be provided, and they will be used for all operations in the batch.
+    /// Please see the general [CompareExchangeEpsilonOps] documentation for more information on batch operation input
+    ///
+    /// A future is returned as the result of this call, which is used to retrieve
+    /// the results after the (possibly remote) operations have finished.
+    ///
+    /// # Note
+    /// This future is only lazy with respect to checking for completion, not
+    /// with respect to launching the operation. That is, the operation will
+    /// occur regardless of if the future is ever polled or not, Enabling
+    /// a "fire and forget" programming model.
+    ///
+    /// # Examples
+    ///
+    ///```
+    /// use lamellar::array::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder.build();
+    /// let array = AtomicArray::new::<usize>(&world,100,Distribution::Block);
+    ///
+    /// let indices = vec![3,54,12,88,29,68];
+    /// let current = 0.0;
+    /// let epsilon = 0.001
+    /// let req = array.batch_compare_exchange_epsilon(indices,current,10.321,epsilon);
+    /// let results = array.block_on(req);
+    ///```
     #[tracing::instrument(skip_all)]
     fn batch_compare_exchange_epsilon<'a>(
         &self,
         index: impl OpInput<'a, usize>,
-        old: T,
+        current: T,
         new: impl OpInput<'a, T>,
         eps: T,
     ) -> Pin<Box<dyn Future<Output = Vec<Result<T, T>>> + Send>> {
         self.inner_array().initiate_batch_result_op(
             new,
             index,
-            ArrayOpCmd::CompareExchangeEps(old, eps),
+            ArrayOpCmd::CompareExchangeEps(current, eps),
         )
     }
 }
