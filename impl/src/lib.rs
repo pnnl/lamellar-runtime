@@ -890,6 +890,7 @@ pub fn generate_ops_for_type_rt(item: TokenStream) -> TokenStream {
 ///     ArrayOps, // needed to derive various LamellarArray Op traits
 ///     Default, // needed to be able to initialize a LamellarArray
 ///     PartialEq, // needed for CompareExchangeEpsilonOps
+///     PartialOrd, // needed for CompareExchangeEpsilonOps
 /// )] // Notice we use `lamellar::AmData` instead of `derive`
 /// struct Custom {
 ///     int: usize,
@@ -944,18 +945,18 @@ pub fn generate_ops_for_type_rt(item: TokenStream) -> TokenStream {
 ///
 /// fn main(){
 ///     let world = LamellarWorldBuilder.build();
-///     let array = AtomicArray::new::<Custom>(&world,100,Distribution::Block);
+///     let array = AtomicArray::<Custom>::new(&world,100,Distribution::Block);
 ///
 ///     // now we are free to call various operations on the array!
 ///
-///     array.block_on( async move {
+///     world.block_on( async move {
 ///         let val = Custom{int: 20, float: 6.2};
 ///         array.add(10,Custom{int: 20, val}).await;
 ///         let indices = vec![9,19,99,53,10];
 ///         let current = val;
 ///         let new = Custom{int: 3, float: 89.99};
 ///         let epsilon = Custom{int: 0, float: 0.01};
-///         let results = array.batch_compare_exchange_eps(indices,current,new,epsilon).await;
+///         let results = array.batch_compare_exchange_epsilon(indices,current,new,epsilon).await;
 ///     });
 /// }
 #[proc_macro_error]

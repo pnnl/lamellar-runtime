@@ -585,23 +585,23 @@ fn create_buf_ops(
             orig_pe: usize,
         }
         impl #lamellar::array::BufferOp for #buf_op_name{
-            #[tracing::instrument(skip_all)]
+            // #[#lamellar::tracing::instrument(skip_all)]
             fn add_ops(&self, op_ptr: *const u8, op_data_ptr: *const u8, team: Pin<Arc<LamellarTeamRT>>) -> (bool,Arc<AtomicBool>){
-                let span1 = tracing::trace_span!("convert");
-                let _guard = span1.enter();
+                // let span1 = #lamellar::tracing::trace_span!("convert");
+                // let _guard = span1.enter();
                 let op_data = unsafe{(&*(op_data_ptr as *const #lamellar::array::InputToValue<'_,#typeident>)).as_op_am_input()};
                 let op = unsafe{*(op_ptr as *const ArrayOpCmd<#typeident>)};
-                drop(_guard);
-                let span2 = tracing::trace_span!("lock");
-                let _guard = span2.enter();
+                // drop(_guard);
+                // let span2 = #lamellar::tracing::trace_span!("lock");
+                // let _guard = span2.enter();
                 // let mut bufs = self.new_ops.lock();
                 let mut bufs = self.ops.lock();
 
                 // let mut buf = self.ops.lock();
 
-                drop(_guard);
-                let span3 = tracing::trace_span!("update");
-                let _guard = span3.enter();
+                // drop(_guard);
+                // let span3 = #lamellar::tracing::trace_span!("update");
+                // let _guard = span3.enter();
                 let first = bufs.len() == 0;
                 let op_size = op.num_bytes();
                 let data_size = op_data.num_bytes();
@@ -634,10 +634,10 @@ fn create_buf_ops(
                 //     println!("{} {} {}",buf.1,op_size,data_size);
                 // }
                 // buf.push((op,op_data));
-                drop(_guard);
+                // drop(_guard);
                 (first,self.complete.read().clone())
             }
-            #[tracing::instrument(skip_all)]
+            // #[#lamellar::tracing::instrument(skip_all)]
             fn add_fetch_ops(&self, pe: usize, op_ptr: *const u8, op_data_ptr: *const u8, req_ids: &Vec<usize>, res_map: OpResults, team: Pin<Arc<LamellarTeamRT>>) -> (bool,Arc<AtomicBool>,Option<OpResultOffsets>){
                 // println!("add_fetch_op {} {:?} {:?}",pe,std::thread::current().id(),std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH));
                 let op_data = unsafe{(&*(op_data_ptr as *const #lamellar::array::InputToValue<'_,#typeident>)).as_op_am_input()};
@@ -685,7 +685,7 @@ fn create_buf_ops(
                 // println!("add_fetch_op leaving {} {:?} {:?} {:?} {:?}",pe,std::thread::current().id(),std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH),res_offsets[0],res_offsets.last());
                 (first,self.complete.read().clone(),Some(res_offsets))
             }
-            #[tracing::instrument(skip_all)]
+            // #[#lamellar::tracing::instrument(skip_all)]
             fn into_arc_am(&self, pe: usize, sub_array: std::ops::Range<usize>)-> (Vec<Arc<dyn RemoteActiveMessage + Sync + Send>>,usize,Arc<AtomicBool>, PeOpResults){
                 // println!("into arc am {:?}",stringify!(#am_buf_name));
                 // println!("into_arc_am {} {:?} {:?}",pe,std::thread::current().id(),std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH));
@@ -967,7 +967,10 @@ fn create_buffered_ops(
             use __lamellar::OneSidedMemoryRegion;
             use __lamellar::RemoteMemoryRegion;
             use std::sync::Arc;
-            use parking_lot::{Mutex,RwLock};
+            use __lamellar::parking_lot::{Mutex,RwLock};
+            // use __lamellar::tracing::*;
+            use __lamellar::async_trait;
+            use __lamellar::inventory;
             use std::sync::atomic::{Ordering,AtomicBool,AtomicUsize};
             use std::pin::Pin;
             #expanded

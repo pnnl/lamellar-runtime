@@ -73,8 +73,8 @@
 //! In this example we simply send a `HelloWorld` from every PE to every other PE using `exec_am_all` (please see the [ActiveMessaging] trait documentation for further details).
 //! `exec_am_all` returns a `Future` which we can use to await the completion of our operation.
 //!
-//! Sample output for the above example on a 2 PE system may look something like
-//!```
+//! Sample output for the above example on a 2 PE system may look something like (exact ordering is nondeterministic due to asynchronous behavior)
+//!```text
 //! Hello World, I'm from PE 0
 //! Hello World, I'm from PE 1
 //! Hello World, I'm from PE 0
@@ -83,13 +83,38 @@
 //!
 //! What if we wanted to actuall know where we are currently executing?
 
-/// # Lamellar AM DSL
-/// This lamellar [am] macro also parses the provided code block for the presence of keywords from a small DSL, specifically searching for the following token streams:
-/// - ```lamellar::current_pe``` - return the world id of the PE this active message is executing on
-/// - ```lamellar::num_pes``` - return the number of PEs in the world
-/// - ```lamellar::world``` - return a reference to the instantiated LamellarWorld
-/// - ```lamellar::team``` - return a reference to the LamellarTeam responsible for launching this AM
-
+//! # Lamellar AM DSL
+//! This lamellar [am] macro also parses the provided code block for the presence of keywords from a small DSL, specifically searching for the following token streams:
+//! - ```lamellar::current_pe``` - return the world id of the PE this active message is executing on
+//! - ```lamellar::num_pes``` - return the number of PEs in the world
+//! - ```lamellar::world``` - return a reference to the instantiated LamellarWorld
+//! - ```lamellar::team``` - return a reference to the LamellarTeam responsible for launching this AM
+//!
+//! Given this functionality, we can adapt the above active message body to this:
+//!```
+//! #[lamellar::am]
+//! impl LamellarAM for HelloWorld {
+//!     async fn exec(self) {
+//!         println!(
+//!             "Hello World on PE {:?} of {:?}, I'm from PE {:?}",
+//!             lamellar::current_pe,
+//!             lamellar::num_pes,
+//!             self.originial_pe,
+//!         );
+//!     }
+//! }
+//!```
+//! the new Sample output for the above example on a 2 PE system may look something like (exact ordering is nondeterministic due to asynchronous behavior)
+//!```text
+//! Hello World on PE 0 of 2, I'm from PE 0
+//! Hello World on PE 0 of 2, I'm from PE 1
+//! Hello World on PE 1 of 2, I'm from PE 0
+//! Hello World on PE 1 of 2, I'm from PE 1
+//!```
+//! # Active Messages with return data
+//! ## normal data
+//! ## another active message
+//! # Nested Active Messages
 use crate::lamellae::{Lamellae, LamellaeRDMA, SerializedData};
 use crate::lamellar_arch::IdError;
 use crate::lamellar_request::{InternalResult, LamellarRequestResult};
