@@ -1,5 +1,5 @@
 //! Active Messages are a computing model where messages contain both data (that you want to compute something with) and metadata
-//! that tells the message how to process its data when it arrives at its destination, e.g. a function pointer. The Wikipedia Page<https://en.wikipedia.org/wiki/Active_message>
+//! that tells the message how to process its data when it arrives at its destination, e.g. a function pointer. The Wikipedia Page <https://en.wikipedia.org/wiki/Active_message>
 //! provides a short overview.
 //!
 //! Lamellar is built upon asynchronous active messages, and provides users with an interface to construct their own active messages.
@@ -13,7 +13,16 @@
 //! Further details are provided in the documentation for each macro but at a high level to implement and active message we need to
 //! define the data to be transfered in a message and then define what to do with that data when we arrive at the destination.
 //!
-//! # Example
+//! The following examples will cover the following topics
+//! - Construncting your first Active Message
+//! - Lamellar AM DSL
+//! - Lamellar AM return types
+//!     - returning plain old data
+//!     - returning active messages
+//!     - returning active messages that reutrn data
+//! - Nested Active Messages
+//!
+//! # Examples
 //! Let's implement a simple active message below:
 //!
 //! First lets define the data we would like to transfer
@@ -63,7 +72,7 @@
 //!     //Send a Hello World Active Message to all pes
 //!     let request = world.exec_am_all(
 //!         HelloWorld {
-//!             originial_pe: Arc::new(Mutex::new(my_pe)),
+//!             originial_pe: my_pe,
 //!         }
 //!     );
 //!     //wait for the request to complete
@@ -112,9 +121,208 @@
 //! Hello World on PE 1 of 2, I'm from PE 1
 //!```
 //! # Active Messages with return data
-//! ## normal data
-//! ## another active message
+//! In the above examples, we simply launched a remote active message but did not return an result back to the originating PE.
+//! Lamellar supports return both "plain old data"(as long as it impls [AmDist]) and other active messages themselves.
+//!
+//! ## Returning normal data
+//! Lamellar Active Messages support returning data and it is as simple as specifying the return type in the implementation of the `exec` function.
+//!```
+//! #[lamellar::am]
+//! impl LamellarAM for HelloWorld {
+//!     async fn exec(self) -> usize { //specify we are returning a usize
+//!         println!(
+//!             "Hello World on PE {:?} of {:?}, I'm from PE {:?}",
+//!             lamellar::current_pe,
+//!             lamellar::num_pes,
+//!             self.originial_pe,
+//!         );
+//!     }
+//! }
+//!```
+//! Retrieving the result is as simple as assigning a variable to the awaited request
+//!```
+//! fn main(){
+//!     let world = lamellar::LamellarWorldBuilder::new().build();
+//!     let my_pe = world.my_pe();
+//!     //Send a Hello World Active Message to all pes
+//!     let request = world.exec_am_all(
+//!         HelloWorld {
+//!             originial_pe: my_pe,
+//!         }
+//!     );
+//!     //wait for the request to complete
+//!     let results = world.block_on(request);
+//!     println!("PE {my_pe} {results:?}");
+//! }
+//!```
+//! The new Sample output for the above example on a 2 PE system may look something like (exact ordering is nondeterministic due to asynchronous behavior)
+//!```text
+//! Hello World on PE 0 of 2, I'm from PE 0
+//! Hello World on PE 0 of 2, I'm from PE 1
+//! Hello World on PE 1 of 2, I'm from PE 0
+//! Hello World on PE 1 of 2, I'm from PE 1
+//! PE 0 [0,1]
+//! PE 1 [0,1]
+//!```
+//! ## Returning Active Messages
+//! Lamellar also provides the ability to return another active message as a result.
+//!
+//! This active message will execute automatically when it arrives back at the originating node as intended as a sort of callback mechanism.
+//!
+//! Returning an active messages requires a few more changes to our code.
+//! First we will define our new active message
+//!```
+//! #[AmData(Debug,Clone)]
+//! struct ReturnAm{
+//!     original_pe: usize,
+//!     remote_pe: usize,
+//! }
+//!
+//! #[lamellar::am]
+//! impl LamellarAm for ReturnAm{
+//!     fn exec(self) {
+//!         println!("initiated on PE {} visited PE {} finishing on PE {}",self.original_pe,self.remote_pe,lamellar::current_pe)
+//!     }
+//! }
+//!```
+//! With that defined we can now modify our original Active Message to return this new `ReturnAm` type.
+//! The main change is that we need to explicitly tell the macro we are returning an active message and we provide the name of the active message we are returning
+//!```
+//! #[lamellar::am(return_am = "ReturnAM")] //we explicitly tell the macro we are returning an AM
+//! impl LamellarAM for HelloWorld {
+//!     async fn exec(self) -> usize { //specify we are returning a usize
+//!         println!(
+//!             "Hello World on PE {:?} of {:?}, I'm from PE {:?}",
+//!             lamellar::current_pe,
+//!             lamellar::num_pes,
+//!             self.originial_pe,
+//!         );
+//!         ReturnAm{ //simply return an instance of the AM
+//!             original_pe: self.original_pe,
+//!             remote_pe: lamellar::current_pe,
+//!         }
+//!     }
+//! }
+//!```
+//! We do not need to modify any of the code in our main function, so the new Sample output for the above example on a 2 PE system may look something like (exact ordering is nondeterministic due to asynchronous behavior)
+//!```text
+//! Hello World on PE 0 of 2, I'm from PE 0
+//! Hello World on PE 0 of 2, I'm from PE 1
+//! Hello World on PE 1 of 2, I'm from PE 0
+//! Hello World on PE 1 of 2, I'm from PE 1
+//! initiated on PE 0 visited PE 0 finishing on PE 0
+//! initiated on PE 0 visited PE 1 finishing on PE 0
+//! initiated on PE 1 visited PE 0 finishing on PE 1
+//! initiated on PE 1 visited PE 0 finishing on PE 1
+//! PE 0 [(),()]
+//! PE 1 [(),()]
+//!```
+//! By examining the above output we can see that printing the results of the request returns the unit type (well a Vector of unit types because of the `exec_am_all` call).
+//! This is because our returned AM does not return any data itself.
+//!```
+//! let results = world.block_on(request);
+//! println!("PE {my_pe} {results:?}");
+//!```
+//! ## Returning Active Messages which return data
+//! Lamellar does support returning an Active Message which then returns some data.
+//! First we need to update `ReturnAm` to actually return some data
+//!```
+//! #[lamellar::am]
+//! impl LamellarAm for ReturnAm{
+//!     fn exec(self) -> (usize,usize) {
+//!         println!("initiated on PE {} visited PE {} finishing on PE {}",self.original_pe,self.remote_pe,lamellar::current_pe)
+//!         (self.original_pe,self.remote_pe)
+//!     }
+//! }
+//!```
+//! Next we need to make an additional change to the  `HelloWorld` am to specify that our returned am will return data itself.
+//! we do this in the argument to the [am] procedural macro
+//!```
+//! #[lamellar::am(return_am = "ReturnAM -> (usize,usize)")] //we explicitly tell the macro we are returning an AM which itself returns data
+//! impl LamellarAM for HelloWorld {
+//!     async fn exec(self) -> usize { //specify we are returning a usize
+//!         println!(
+//!             "Hello World on PE {:?} of {:?}, I'm from PE {:?}",
+//!             lamellar::current_pe,
+//!             lamellar::num_pes,
+//!             self.originial_pe,
+//!         );
+//!         ReturnAm{ //simply return an instance of the AM
+//!             original_pe: self.original_pe,
+//!             remote_pe: lamellar::current_pe,
+//!         }
+//!     }
+//! }
+//!```
+//! With those changes, the new Sample output for the above example on a 2 PE system may look something like (exact ordering is nondeterministic due to asynchronous behavior)
+//!```text
+//! Hello World on PE 0 of 2, I'm from PE 0
+//! Hello World on PE 0 of 2, I'm from PE 1
+//! Hello World on PE 1 of 2, I'm from PE 0
+//! Hello World on PE 1 of 2, I'm from PE 1
+//! initiated on PE 0 visited PE 0 finishing on PE 0
+//! initiated on PE 0 visited PE 1 finishing on PE 0
+//! initiated on PE 1 visited PE 0 finishing on PE 1
+//! initiated on PE 1 visited PE 0 finishing on PE 1
+//! PE 0 [(0,0),(0,1)]
+//! PE 1 [(1,0),(1,1)]
+//!```
 //! # Nested Active Messages
+//! Lamellar Active Messages support nested active messages, i.e launching a new active message from within an executing active message.
+//!
+//! This functionality can be used to setup active message dependencies, enable recursive active messages, ect.
+//! In the following example we will construct a recursive active message that performs a ring like commincation pattern accross PEs, which
+//! will return the reverse order in which it vistited the PE's.
+//!```
+//! use lamellar::active_messaging::prelude::*;
+//! #[AmData(Debug,Clone)]
+//! struct RingAm {
+//!    originial_pe: usize, //this will be are recursion terminating condition
+//! } 
+//! #[lamellar::am]
+//! impl LamellarAm for RingAm{
+//!     async fn exec(self) -> Vec<usize>{
+//!         if self.original_pe == lamellar::current_pe { //terminate the recursion!
+//!             vec![lamellar::current_pe] //return a new path with the current_pe as the start
+//!         }
+//!         else { //launch another active message
+//!             let next_pe = (lamellar::current_pe + 1 )% lamellar::num_pes; //account for wrap arround
+//!             let req = lamellar::team.exec_am_pe(next_pe, self.clone());//we can clone self because we don't need to modify any data
+//!             let path = req.await; // exec_am_*() calls return a future we used to get the result from
+//!             path.push(lamellar::current_pe); //update the path with the PE and return
+//!             path 
+//!         }
+//!     }
+//! }
+//! 
+//! fn main(){
+//!     let world = lamellar::LamellarWorldBuilder::new().build();
+//!     let my_pe = world.my_pe();
+//!     let num_pes = world.num_pes();
+//!     //Send initial message to right neighbor
+//!     let next_pe = (my_pe + 1) % num_pes; //account for wrap arround
+//!     let request = world.exec_am_pe(
+//!         next_pe,
+//!         RingAm {
+//!             originial_pe: my_pe
+//!         }
+//!     );
+//!     //wait for the request to complete
+//!     let results = world.block_on(request);
+//!     println!("PE {my_pe} {results:?}");
+//! }
+//!```
+//! The key thing to notice in this example is how we wait for a request to finish will change depending on the context we are executing in.
+//! When we are in the active message we are already in an asychronous context so we can simply `await` the future returned to us by the `exec_am_pe()` call.
+//! This is in contrast to the main function where we must use a `block_on` call to drive the future an retrieve the result.
+//!
+//! The sample output for the above example on a 4 PE system may look something like (exact ordering is nondeterministic due to asynchronous behavior)
+//!```text
+//! PE 0 [0,3,2,1]
+//! PE 1 [1,0,3,2]
+//! PE 2 [2,1,0,3]
+//! PE 3 [3,2,1,0]
+//!```
 use crate::lamellae::{Lamellae, LamellaeRDMA, SerializedData};
 use crate::lamellar_arch::IdError;
 use crate::lamellar_request::{InternalResult, LamellarRequestResult};
@@ -180,12 +388,7 @@ pub use lamellar_impl::AmLocalData;
 /// to a Map containing specialized deserialization functions that convert a slice of bytes into the appropriate data type on the remote PE.
 /// Finally, a worker thread will call that deserialized objects `exec()` function to execute the actual active message.
 ///
-/// # Lamellar AM DSL
-/// This macro also parses the provided code block for the presence of keywords from a small DSL, specifically searching for the following token streams:
-/// - ```lamellar::current_pe``` - return the world id of the PE this active message is executing on
-/// - ```lamellar::num_pes``` - return the number of PEs in the world
-/// - ```lamellar::world``` - return a reference to the instantiated LamellarWorld
-/// - ```lamellar::team``` - return a reference to the LamellarTeam responsible for launching this AM
+/// Please see the [Active Messaging][crate::active_messaging] module level documentation for more details
 ///
 pub use lamellar_impl::am;
 
@@ -193,12 +396,7 @@ pub use lamellar_impl::am;
 ///
 /// This essentially constructs and registers the Active Message with the runtime. (LocalAms *do not* perform any serialization/deserialization)
 ///
-/// # Lamellar AM DSL
-/// This macro also parses the provided code block for the presence of keywords from a small DSL, specifically searching for the following token streams:
-/// - ```lamellar::current_pe``` - return the world id of the PE this active message is executing on
-/// - ```lamellar::num_pes``` - return the number of PEs in the world
-/// - ```lamellar::world``` - return a reference to the instantiated LamellarWorld
-/// - ```lamellar::team``` - return a reference to the LamellarTeam responsible for launching this AM
+/// Please see the [Active Messaging][crate::active_messaging] module level documentation for more details
 ///
 pub use lamellar_impl::local_am;
 
@@ -412,6 +610,7 @@ impl AMCounters {
     }
 }
 
+/// The interface for launching, executing, and managing Lamellar Active Messages .
 pub trait ActiveMessaging {
     /// launch and execute an active message on every PE (including originating PE).
     ///
@@ -424,7 +623,7 @@ pub trait ActiveMessaging {
     /// the future is only used to check for completeion and/or retrieving any returned data
     /// # Examples
     ///```
-    /// use lamellar::ActiveMessaging;
+    /// use lamellar::active_messaging::prelude::*;
     ///
     /// #[lamellar::AmData(/*derivable traits*/)]
     /// struct Am{
@@ -462,7 +661,7 @@ pub trait ActiveMessaging {
     /// the future is only used to check for completeion and/or retrieving any returned data
     /// # Examples
     ///```
-    /// use lamellar::ActiveMessaging;
+    /// use lamellar::active_messaging::prelude::*;
     ///
     /// #[lamellar::AmData(/*derivable traits*/)]
     /// struct Am{
@@ -498,7 +697,7 @@ pub trait ActiveMessaging {
     /// the future is only used to check for completeion and/or retrieving any returned data.
     /// # Examples
     ///```
-    /// use lamellar::ActiveMessaging;
+    /// use lamellar::active_messaging::prelude::*;
     ///
     /// #[lamellar::AmLocalData(/*derivable traits*/)]
     /// struct Am{
@@ -529,7 +728,7 @@ pub trait ActiveMessaging {
     /// Note: this is not a distributed synchronization primitive (i.e. it has no knowledge of a Remote PEs tasks)
     /// # Examples
     ///```
-    /// use lamellar::ActiveMessaging;
+    /// use lamellar::active_messaging::prelude::*;
     ///
     /// let world =  let world = lamellar::LamellarWorldBuilder::new().build();
     /// world.exec_am_all(...);
@@ -541,7 +740,7 @@ pub trait ActiveMessaging {
     ///
     /// # Examples
     ///```
-    /// use lamellar::ActiveMessaging;
+    /// use lamellar::active_messaging::prelude::*;
     ///
     /// let world =  let world = lamellar::LamellarWorldBuilder::new().build();
     /// //do some work
@@ -557,7 +756,7 @@ pub trait ActiveMessaging {
     ///
     /// # Examples
     ///```
-    /// use lamellar::ActiveMessaging;
+    /// use lamellar::active_messaging::prelude::*;
     ///
     /// let request = world.exec_am_local(Am{...}); //launch am on all pes
     /// let result = world.block_on(request); //block until am has executed

@@ -387,7 +387,7 @@ pub trait LocalIterator: SyncSend + Clone + 'static {
     /// This function returns a future which can be used to poll for completion of the iteration.
     /// Note calling this function launches the iteration regardless of if the returned future is used or not.
     ///
-    /// # Example
+    /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
     ///
@@ -418,7 +418,7 @@ pub trait LocalIterator: SyncSend + Clone + 'static {
     /// This function returns a future which can be used to poll for completion of the iteration.
     /// Note calling this function launches the iteration regardless of if the returned future is used or not.
     ///
-    /// # Example
+    /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
     ///
@@ -451,7 +451,7 @@ pub trait LocalIterator: SyncSend + Clone + 'static {
     ///
     /// This function returns a future which needs to be driven to completion to retrieve the new container.
     ///
-    /// # Example
+    /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
     ///
@@ -479,7 +479,7 @@ pub trait LocalIterator: SyncSend + Clone + 'static {
     ///
     /// This function returns a future which needs to be driven to completion to retrieve the new container.
     /// 
-    /// # Example
+    /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
     ///
@@ -508,7 +508,7 @@ pub trait IndexedLocalIterator: LocalIterator + SyncSend + Clone + 'static {
     /// This function returns a future which can be used to poll for completion of the iteration.
     /// Note calling this function launches the iteration regardless of if the returned future is used or not.
     ///
-    /// # Example
+    /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
     ///
@@ -538,7 +538,7 @@ pub trait IndexedLocalIterator: LocalIterator + SyncSend + Clone + 'static {
     /// This function returns a future which can be used to poll for completion of the iteration.
     /// Note calling this function launches the iteration regardless of if the returned future is used or not.
     ///
-    /// # Example
+    /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
     ///
@@ -565,7 +565,7 @@ pub trait IndexedLocalIterator: LocalIterator + SyncSend + Clone + 'static {
 
     /// yields the local (to the calling PE) index along with each element
     ///
-    /// # Example
+    /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
     ///
@@ -595,7 +595,7 @@ pub trait IndexedLocalIterator: LocalIterator + SyncSend + Clone + 'static {
     ///
     /// Returns an iterator that itself returns [Iterator]s over the chunked slices of the array.
     /// If the number of elements is not evenly divisible by `size`, the last chunk may be shorter than `size`
-    /// # Example
+    /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
     ///
@@ -626,7 +626,7 @@ pub trait IndexedLocalIterator: LocalIterator + SyncSend + Clone + 'static {
 
     /// Applies `op` to each element producing a new iterator with the results
     ///
-    /// # Example
+    /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
     ///
@@ -658,7 +658,7 @@ pub trait IndexedLocalIterator: LocalIterator + SyncSend + Clone + 'static {
 
     /// An iterator that skips the first `n` elements
     ///
-    /// # Example
+    /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
     ///
@@ -682,7 +682,7 @@ pub trait IndexedLocalIterator: LocalIterator + SyncSend + Clone + 'static {
 
     /// An iterator that steps by `step_size` elements
     ///
-    /// # Example
+    /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
     ///
@@ -714,7 +714,7 @@ pub trait IndexedLocalIterator: LocalIterator + SyncSend + Clone + 'static {
 
     /// An iterator that takes the first `n` elements
     ///
-    /// # Example
+    /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
     ///
@@ -747,7 +747,7 @@ pub trait IndexedLocalIterator: LocalIterator + SyncSend + Clone + 'static {
     /// Iterates over tuples `(A,B)` where the `A` items are from this iterator and the `B` items are from the iter in the argument.
     /// If the two iterators or of unequal length, the returned iterator will be equal in lenght to the shorter of the two.
     ///
-    /// # Example
+    /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
     ///

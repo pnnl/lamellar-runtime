@@ -97,7 +97,7 @@ impl<T: Dist> SharedMemoryRegion<T> {
     }
     /// The length (in number of elements of `T`) of the local segment of the memory region (i.e. not the global length of the memory region)  
     ///
-    /// # Example
+    /// # Examples
     ///```
     /// use lamellar::SharedMemoryRegion;
     ///

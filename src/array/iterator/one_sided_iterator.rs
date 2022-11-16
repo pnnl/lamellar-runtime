@@ -81,7 +81,7 @@ pub trait OneSidedIterator {
     ///
     /// Returns an iterator that returns OneSidedMemoryRegions of the chunked array.
     /// If the number of elements is not evenly divisible by `size`, the last chunk may be shorter than `size`
-    /// # Example
+    /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
     ///
@@ -115,7 +115,7 @@ pub trait OneSidedIterator {
 
     /// An iterator that skips the first `n` elements
     ///
-    /// # Example
+    /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
     ///
@@ -147,7 +147,7 @@ pub trait OneSidedIterator {
 
     /// An iterator that steps by `step_size` elements
     ///
-    /// # Example
+    /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
     ///
@@ -178,7 +178,7 @@ pub trait OneSidedIterator {
     /// Iterates over tuples `(A,B)` where the `A` items are from this iterator and the `B` items are from the iter in the argument.
     /// If the two iterators or of unequal length, the returned iterator will be equal in length to the shorter of the two.
     ///
-    /// # Example
+    /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
     ///
@@ -225,7 +225,7 @@ pub trait OneSidedIterator {
 
     /// Convert this one-sided iterator into a standard Rust Iterator, enabling one to use any of the functions available on `Iterator`s
     ///
-    /// # Example
+    /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
     ///

@@ -400,7 +400,7 @@ pub trait DistributedIterator: SyncSend + Clone + 'static {
     /// This function returns a future which can be used to poll for completion of the iteration.
     /// Note calling this function launches the iteration regardless of if the returned future is used or not.
     ///
-    /// # Example
+    /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
     ///
@@ -433,7 +433,7 @@ pub trait DistributedIterator: SyncSend + Clone + 'static {
     /// This function returns a future which can be used to poll for completion of the iteration.
     /// Note calling this function launches the iteration regardless of if the returned future is used or not.
     ///
-    /// # Example
+    /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
     ///
@@ -471,7 +471,7 @@ pub trait DistributedIterator: SyncSend + Clone + 'static {
     /// that each PE will contribute an equal number of elements to the new array, and currently LamellarArrays
     /// distribute data across the PEs as evenly as possible.
     /// 
-    /// # Example
+    /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
     ///
@@ -505,7 +505,7 @@ pub trait DistributedIterator: SyncSend + Clone + 'static {
     /// that each PE will contribute an equal number of elements to the new array, and currently LamellarArrays
     /// distribute data across the PEs as evenly as possible.
     /// 
-    /// # Example
+    /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
     ///
@@ -536,7 +536,7 @@ pub trait IndexedDistributedIterator: DistributedIterator + SyncSend + Clone + '
     /// This function returns a future which can be used to poll for completion of the iteration.
     /// Note calling this function launches the iteration regardless of if the returned future is used or not.
     ///
-    /// # Example
+    /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
     ///
@@ -569,7 +569,7 @@ pub trait IndexedDistributedIterator: DistributedIterator + SyncSend + Clone + '
     /// This function returns a future which can be used to poll for completion of the iteration.
     /// Note calling this function launches the iteration regardless of if the returned future is used or not.
     ///
-    /// # Example
+    /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
     ///
@@ -596,7 +596,7 @@ pub trait IndexedDistributedIterator: DistributedIterator + SyncSend + Clone + '
 
     /// yields the global array index along with each element
     ///
-    /// # Example
+    /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
     ///
@@ -625,7 +625,7 @@ pub trait IndexedDistributedIterator: DistributedIterator + SyncSend + Clone + '
 
     /// Applies `op` to each element producing a new iterator with the results
     ///
-    /// # Example
+    /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
     ///
@@ -657,7 +657,7 @@ pub trait IndexedDistributedIterator: DistributedIterator + SyncSend + Clone + '
 
     /// An iterator that skips the first `n` elements
     ///
-    /// # Example
+    /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
     ///
@@ -682,7 +682,7 @@ pub trait IndexedDistributedIterator: DistributedIterator + SyncSend + Clone + '
 
     /// An iterator that steps by `step_size` elements
     ///
-    /// # Example
+    /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
     ///
@@ -705,7 +705,7 @@ pub trait IndexedDistributedIterator: DistributedIterator + SyncSend + Clone + '
 
     /// An iterator that takes the first `n` elements
     ///
-    /// # Example
+    /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
     ///

@@ -1490,7 +1490,7 @@ impl<T> ElementComparePartialEqOps for T where T: std::cmp::PartialEq + std::cmp
 /// # Note
 /// For both single index and batched operations there are no guarantees to the order in which individual operations occur
 ///
-/// # Example
+/// # Examples
 ///```
 /// use lamellar::array::prelude::*;
 ///

@@ -33,6 +33,7 @@ pub use crate::array::operations::{
 };
 // pub use crate::array::operations::*;
 
+#[doc(hidden)]
 pub use crate::active_messaging::{am,local_am,AmData,AmLocalData};
 pub use crate::{
     // generate_ops_for_type,

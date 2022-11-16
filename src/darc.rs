@@ -562,7 +562,7 @@ impl<T> Darc<T> {
     /// Furthermore, this call will block while any additional references outside of the one making this call exist on each PE. It is not possible for the
     /// pointed to object to wrapped by both a Darc and a LocalRwDarc simultaneously (on any PE).
     ///
-    /// # Example
+    /// # Examples
     /// ```
     /// use lamellar::{Darc,LocalRwDarc};
     ///
@@ -593,7 +593,7 @@ impl<T> Darc<T> {
     /// Furthermore, this call will block while any additional references outside of the one making this call exist on each PE. It is not possible for the
     /// pointed to object to wrapped by both a GlobalRwDarc and a Darc simultaneously (on any PE).
     ///
-    /// # Example
+    /// # Examples
     /// ```
     /// use lamellar::{GlobalRwDarc,Darc};
     ///
