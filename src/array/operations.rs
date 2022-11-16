@@ -418,7 +418,7 @@ impl<T: Dist> OpAmInputToValue<T> {
                 size += 1;
                 // ----- end type -----
                 // embed the index
-                size += OpAmInputToValue::<T>::embed_single_val(idx, &mut buf[size..]);
+                size += OpAmInputToValue::<usize>::embed_single_val(idx, &mut buf[size..]);
                 // ---- end index ----
                 // embed the value
                 size += OpAmInputToValue::<T>::embed_single_val(val, &mut buf[size..]);
@@ -432,7 +432,7 @@ impl<T: Dist> OpAmInputToValue<T> {
                 size += 1;
                 // ----- end type -----
                 // embed the index
-                size += OpAmInputToValue::<T>::embed_single_val(idx, &mut buf[size..]);
+                size += OpAmInputToValue::<usize>::embed_single_val(idx, &mut buf[size..]);
                 // ---- end index ----
                 // embed the vals
                 size += OpAmInputToValue::<T>::embed_vec(&vals, &mut buf[size..]);
@@ -446,7 +446,7 @@ impl<T: Dist> OpAmInputToValue<T> {
                 size += 1;
                 // ----- end type -----
                 // embed the indices
-                size += OpAmInputToValue::<T>::embed_vec(&idxs, &mut buf[size..]);
+                size += OpAmInputToValue::<usize>::embed_vec(&idxs, &mut buf[size..]);
                 // ---- end indices ----
                 // embed the val
                 size += OpAmInputToValue::<T>::embed_single_val(val, &mut buf[size..]);
@@ -460,7 +460,7 @@ impl<T: Dist> OpAmInputToValue<T> {
                 size += 1;
                 // ----- end type -----
                 // embed the indices
-                size += OpAmInputToValue::<T>::embed_vec(&idxs, &mut buf[size..]);
+                size += OpAmInputToValue::<usize>::embed_vec(&idxs, &mut buf[size..]);
                 // ---- end indices ----
                 // embed the vals
                 size += OpAmInputToValue::<T>::embed_vec(&vals, &mut buf[size..]);
@@ -484,28 +484,28 @@ impl<T: Dist> OpAmInputToValue<T> {
             OpAmInputToValue::OneToOne(idx, val) => {
                 let mut size = 0;
                 size += 1;
-                size += OpAmInputToValue::<T>::single_val_size(idx);
+                size += OpAmInputToValue::<usize>::single_val_size(idx);
                 size += OpAmInputToValue::<T>::single_val_size(val);
                 size
             }
             OpAmInputToValue::OneToMany(idx, vals) => {
                 let mut size = 0;
                 size += 1;
-                size += OpAmInputToValue::<T>::single_val_size(idx);
+                size += OpAmInputToValue::<usize>::single_val_size(idx);
                 size += OpAmInputToValue::<T>::vec_size(&vals);
                 size
             }
             OpAmInputToValue::ManyToOne(idxs, val) => {
                 let mut size = 0;
                 size += 1;
-                size += OpAmInputToValue::<T>::vec_size(&idxs);
+                size += OpAmInputToValue::<usize>::vec_size(&idxs);
                 size += OpAmInputToValue::<T>::single_val_size(val);
                 size
             }
             OpAmInputToValue::ManyToMany(idxs, vals) => {
                 let mut size = 0;
                 size += 1;
-                size += OpAmInputToValue::<T>::vec_size(&idxs);
+                size += OpAmInputToValue::<usize>::vec_size(&idxs);
                 size += OpAmInputToValue::<T>::vec_size(&vals);
                 size
             }
@@ -550,7 +550,7 @@ impl<'a, T: Dist> RemoteOpAmInputToValue<'a, T> {
                 (RemoteOpAmInputToValue::OneToMany(idx, vals), size)
             }
             2 => {
-                let (idxs, idxs_bytes) = RemoteOpAmInputToValue::<T>::unpack_slice(&buf[size..]);
+                let (idxs, idxs_bytes) = RemoteOpAmInputToValue::<usize>::unpack_slice(&buf[size..]);
                 size += idxs_bytes;
                 let val = unsafe { &*(buf[size..].as_ptr() as *const T) };
                 size += std::mem::size_of::<T>();
@@ -558,7 +558,7 @@ impl<'a, T: Dist> RemoteOpAmInputToValue<'a, T> {
                 (RemoteOpAmInputToValue::ManyToOne(idxs, val), size)
             }
             3 => {
-                let (idxs, idxs_bytes) = RemoteOpAmInputToValue::<T>::unpack_slice(&buf[size..]);
+                let (idxs, idxs_bytes) = RemoteOpAmInputToValue::<usize>::unpack_slice(&buf[size..]);
                 size += idxs_bytes;
                 let (vals, vals_bytes) = RemoteOpAmInputToValue::<T>::unpack_slice(&buf[size..]);
                 size += vals_bytes;
