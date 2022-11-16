@@ -1,6 +1,6 @@
 #[doc(hidden)]
 // pub use crate::array::{ArrayOpCmd, LamellarArray, ReduceKey, Distribution};
-pub use crate::array::{Distribution,LamellarArray};
+pub use crate::array::{Distribution,LamellarArray,ArrayOps};
 pub use crate::array::r#unsafe::UnsafeArray;
 pub use crate::array::read_only::ReadOnlyArray;
 pub use crate::array::atomic::AtomicArray;
@@ -33,7 +33,7 @@ pub use crate::array::operations::{
 };
 // pub use crate::array::operations::*;
 
-
+pub use crate::active_messaging::{am,local_am,AmData,AmLocalData};
 pub use crate::{
     // generate_ops_for_type,
     generate_reductions_for_type,register_reduction,};
