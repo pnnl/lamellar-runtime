@@ -1,6 +1,6 @@
 //! LamellarArrays provide a safe and highlevel abstraction of a distributed array.
 //! 
-//! By distributed, we mean that the memory backing the array is physically located on multiple distributed PEs in they system.
+//! By distributed, we mean that the memory backing the array is physically located on multiple distributed PEs in the system.
 //!
 //! LamellarArrays provide: 
 //!  - RDMA like `put` and `get` APIs 
@@ -18,7 +18,7 @@
 //! We provide several array types, each with their own saftey gaurantees with respect to how data is accessed (further detail can be found in the documentation for each type)
 //!  - [UnsafeArray]: No safety gaurantees - PEs are free to read/write to anywhere in the array with no access control
 //!  - [ReadOnlyArray]: No write access is permitted, and thus PEs are free to read from anywhere in the array with no access control
-//!  - [AtomicArray]: Each Element is atomic (either instrisically are enforced via the runtime)
+//!  - [AtomicArray]: Each Element is atomic (either instrisically or enforced via the runtime)
 //!      - NativeAtomicArray: utilizes the language atomic types e.g AtomicUsize, AtomicI8, etc.
 //!      - GenericAtomicArray: Each element is protected by a 1-byte mutex
 //!  - [LocalLockArray]: The data on each PE is protected by a local RwLock

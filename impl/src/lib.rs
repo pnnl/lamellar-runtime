@@ -943,7 +943,7 @@ pub fn generate_ops_for_type_rt(item: TokenStream) -> TokenStream {
 ///     int: usize,
 ///     float: f32,
 /// }
-/// //need to impl various arithmetic ops if we want to be able to perform remore arithmetic operations with this type
+/// //need to impl various arithmetic ops if we want to be able to perform remote arithmetic operations with this type
 /// impl std::ops::AddAssign for Custom {
 ///     fn add_assign(&mut self, other: Self) {
 ///         *self = Self {
