@@ -1,6 +1,6 @@
 use lamellar::array::prelude::*;
 
-#[lamellar::AmData(Default, Debug, ArithmeticOps, PartialEq, PartialOrd)]
+#[lamellar::AmData(Default, Debug, ArrayOps, PartialEq, PartialOrd)]
 struct Custom {
     int: usize,
     float: f32,

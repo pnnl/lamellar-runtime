@@ -34,7 +34,9 @@ pub use crate::array::operations::{
 // pub use crate::array::operations::*;
 
 
-pub use crate::{generate_ops_for_type,generate_reductions_for_type,register_reduction,};
+pub use crate::{
+    // generate_ops_for_type,
+    generate_reductions_for_type,register_reduction,};
 pub use crate::lamellar_team::LamellarTeam;
 #[doc(hidden)]
 pub use crate::lamellar_team::LamellarTeamRT;

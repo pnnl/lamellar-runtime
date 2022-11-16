@@ -218,8 +218,12 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_type: AmType) -> 
     };
     if !local {
         am.extend(quote!{
+            #[async_trait::async_trait]
             impl #impl_generics #lamellar::active_messaging::LamellarAM for #orig_name #ty_generics #where_clause {
                 type Output = #ret_type;
+                async fn exec(self) -> Self::Output{
+                    panic!("this should never be called")
+                }
             }
 
             impl  #impl_generics #lamellar::active_messaging::Serde for #orig_name #ty_generics #where_clause {}
@@ -613,6 +617,32 @@ fn derive_am_data(
     TokenStream::from(output)
 }
 
+
+/// This macro is used to setup the attributed type so that it can be used within remote active messages.
+///
+/// For this derivation to succeed all members of the data structure must impl [AmDist] (which it self is a blanket impl)
+///
+///```
+/// AmDist: serde::ser::Serialize + serde::de::DeserializeOwned + Sync + Send + 'static {}
+/// impl<T: serde::ser::Serialize + serde::de::DeserializeOwned + Sync + Send + 'static> AmDist for T {}
+///```
+///
+/// Typically you will use this macro in place of `#[derive()]`, as it will manage deriving both the traits 
+/// that are provided as well as those require by Lamellar for active messaging.
+///
+/// Generally this is paired with the [lamellar::am][am] macro on an implementation of the [LamellarAM], to associate a remote function with this data.
+/// (if you simply want this type to able to be included in other active messages, implementing [LamellarAM] can be omitted )
+///
+/// #Examples
+///
+///```
+/// use lamellar::active_messaging::prelude::*;
+/// 
+/// #[AmData(Debug,Clone)]
+/// struct HelloWorld {
+///    originial_pe: usize,
+/// }
+///```
 #[allow(non_snake_case)]
 #[proc_macro_error]
 #[proc_macro_attribute]
@@ -620,6 +650,26 @@ pub fn AmData(args: TokenStream, input: TokenStream) -> TokenStream {
     derive_am_data(input, args, "lamellar".to_string(), false)
 }
 
+/// This macro is used to setup the attributed type so that it can be used within local active messages.
+///
+/// Typically you will use this macro in place of `#[derive()]`, as it will manage deriving both the traits 
+/// that are provided as well as those require by Lamellar for active messaging.
+///
+/// This macro relaxes the Serialize/Deserialize trait bounds required by the [AmData] macro
+///
+/// Generally this is paired with the [lamellar::local_am][local_am] macro on an implementation of the [LamellarAM], to associate a local function with this data.
+/// (if you simply want this type to able to be included in other active messages, implementing [LamellarAM] can be omitted )
+///
+/// #Examples
+///
+///```
+/// use lamellar::active_messaging::prelude::*;
+/// 
+/// #[AmLocalData(Debug,Clone)]
+/// struct HelloWorld {
+///    originial_pe: Arc<Mutex<usize>>, //lamellar disallows serializing/deserializing Arc and Mutex
+/// }
+///```
 #[allow(non_snake_case)]
 #[proc_macro_error]
 #[proc_macro_attribute]
@@ -627,6 +677,7 @@ pub fn AmLocalData(args: TokenStream, input: TokenStream) -> TokenStream {
     derive_am_data(input, args, "lamellar".to_string(), true)
 }
 
+#[doc(hidden)]
 #[allow(non_snake_case)]
 #[proc_macro_error]
 #[proc_macro_attribute]
@@ -634,6 +685,7 @@ pub fn AmDataRT(args: TokenStream, input: TokenStream) -> TokenStream {
     derive_am_data(input, args, "crate".to_string(), false)
 }
 
+#[doc(hidden)]
 #[allow(non_snake_case)]
 #[proc_macro_error]
 #[proc_macro_attribute]
@@ -682,30 +734,132 @@ fn parse_am(args: TokenStream, input: TokenStream, local: bool, rt: bool) -> Tok
     output
 }
 
+/// This macro is used to associate an implemenation of [LamellarAM] for type that has used the [AmData] attribute macro
+///
+/// This essentially constructs and registers the Active Message with the runtime. It is responsible for ensuring all data
+/// within the active message is properly serialize and deserialized, including any returned results.
+///
+/// Each active message implementation is assigned a unique ID at runtime initialization, these IDs are then used as the key
+/// to a Map containing specialized deserialization functions that convert a slice of bytes into the appropriate data type on the remote PE.
+/// Finally, a worker thread will call that deserialized objects `exec()` function to execute the actual active message.
+///
+/// # Lamellar AM DSL
+/// This macro also parses the provided code block for the presence of keywords from a small DSL, specifically searching for the following token streams:
+/// - ```lamellar::current_pe``` - return the world id of the PE this active message is executing on
+/// - ```lamellar::num_pes``` - return the number of PEs in the world
+/// - ```lamellar::world``` - return a reference to the instantiated LamellarWorld
+/// - ```lamellar::team``` - return a reference to the LamellarTeam responsible for launching this AM
+///
+/// #Examples
+///
+///```
+/// use lamellar::active_messaging::prelude::*;
+/// 
+/// #[AmData(Debug,Clone)]
+/// struct HelloWorld {
+///    originial_pe: Arc<Mutex<usize>>,
+/// }
+///
+/// #[lamellar::am]
+/// impl LamellarAM for HelloWorld {
+///     async fn exec(self) {
+///         println!(
+///             "Hello World  on PE {:?} of {:?} using thread {:?}, received from PE {:?}",
+///             lamellar::current_pe,
+///             lamellar::num_pes,
+///             std::thread::current().id(),
+///             self.originial_pe.lock(),
+///         );
+///     }
+/// }
+/// fn main() {
+///     let world = lamellar::LamellarWorldBuilder::new().build();
+///     let my_pe = world.my_pe();
+///     world.barrier();
+/// 
+///     //Send a Hello World Active Message to all pes
+///     let request = world.exec_am_all(HelloWorld {
+///         originial_pe: Arc::new(Mutex::new(my_pe)),
+///     });
+/// 
+///     //wait for the request to complete
+///     world.block_on(request);
+/// } //when world drops there is an implicit world.barrier() that occurs
+///```
 #[proc_macro_error]
 #[proc_macro_attribute]
 pub fn am(args: TokenStream, input: TokenStream) -> TokenStream {
     parse_am(args, input, false, false)
 }
 
+/// This macro is used to associate an implemenation of [LamellarAM] for a data structure that has used the [AmLocalData] attribute macro
+///
+/// This essentially constructs and registers the Active Message with the runtime. (LocalAms *do not* perform any serialization/deserialization)
+///
+/// # Lamellar AM DSL
+/// This macro also parses the provided code block for the presence of keywords from a small DSL, specifically searching for the following token streams:
+/// - ```lamellar::current_pe``` - return the world id of the PE this active message is executing on
+/// - ```lamellar::num_pes``` - return the number of PEs in the world
+/// - ```lamellar::world``` - return a reference to the instantiated LamellarWorld
+/// - ```lamellar::team``` - return a reference to the LamellarTeam responsible for launching this AM
+/// #Examples
+///
+///```
+/// use lamellar::active_messaging::prelude::*;
+/// 
+/// #[AmData(Debug,Clone)]
+/// struct HelloWorld {
+///    originial_pe: usize,
+/// }
+///
+/// #[lamellar::am]
+/// impl LamellarAM for HelloWorld {
+///     async fn exec(self) {
+///         println!(
+///             "Hello World  on PE {:?} of {:?} using thread {:?}, received from PE {:?}",
+///             lamellar::current_pe,
+///             lamellar::num_pes,
+///             std::thread::current().id(),
+///             self.originial_pe,
+///         );
+///     }
+/// }
+/// fn main() {
+///     let world = lamellar::LamellarWorldBuilder::new().build();
+///     let my_pe = world.my_pe();
+///     world.barrier();
+/// 
+///     //Send a Hello World Active Message to all pes
+///     let request = world.exec_am_all(HelloWorld {
+///         originial_pe: my_pe,
+///     });
+/// 
+///     //wait for the request to complete
+///     world.block_on(request);
+/// } //when world drops there is an implicit world.barrier() that occurs
+///```
 #[proc_macro_error]
 #[proc_macro_attribute]
 pub fn local_am(args: TokenStream, input: TokenStream) -> TokenStream {
     parse_am(args, input, true, false)
 }
 
+#[doc(hidden)]
 #[proc_macro_error]
 #[proc_macro_attribute]
 pub fn rt_am(args: TokenStream, input: TokenStream) -> TokenStream {
     parse_am(args, input, false, true)
 }
 
+#[doc(hidden)]
 #[proc_macro_error]
 #[proc_macro_attribute]
 pub fn rt_am_local(args: TokenStream, input: TokenStream) -> TokenStream {
     parse_am(args, input, true, true)
 }
 
+
+#[doc(hidden)]
 #[proc_macro_error]
 #[proc_macro_derive(Dist)]
 pub fn derive_dist(input: TokenStream) -> TokenStream {
@@ -736,26 +890,125 @@ pub fn generate_reductions_for_type(item: TokenStream) -> TokenStream {
     array_reduce::__generate_reductions_for_type(item)
 }
 
+#[doc(hidden)]
 #[proc_macro_error]
 #[proc_macro]
 pub fn generate_reductions_for_type_rt(item: TokenStream) -> TokenStream {
     array_reduce::__generate_reductions_for_type_rt(item)
 }
 
-#[proc_macro_error]
-#[proc_macro]
-pub fn generate_ops_for_type(item: TokenStream) -> TokenStream {
-    array_ops::__generate_ops_for_type(item)
-}
 
+// / This macro automatically implements various LamellarArray "Op" traits for user defined types
+// / 
+// / The following "Op" traits will be implemented:
+// / - [AccessOps][lamellar::array::AccessOps]
+// / - [ArithmeticOps][lamellar::array::AccessOps]
+// / - [BitWiseOps][lamellar::array::AccessOps]
+// / - [CompareExchangeEpsilonOps][lamellar::array::AccessOps]
+// / - [CompareExchangeOps][lamellar::array::AccessOps]
+// / 
+// / The required trait bounds can be found by viewing each "Op" traits documentation.
+// / Generally though the type must be able to be used in an active message, 
+// / # Examples
+// /
+// /```
+// / use lamellar::array::prelude::*;
+// #[proc_macro_error]
+// #[proc_macro]
+// pub fn generate_ops_for_type(item: TokenStream) -> TokenStream {
+//     array_ops::__generate_ops_for_type(item)
+// }
+
+#[doc(hidden)]
 #[proc_macro_error]
 #[proc_macro]
 pub fn generate_ops_for_type_rt(item: TokenStream) -> TokenStream {
     array_ops::__generate_ops_for_type_rt(item)
 }
 
+
+/// 
+/// This derive macro is intended to be used with the [macro@AmData] attribute macro to enable a user defined type to be used in ActiveMessages
+/// # Examples
+///
+///```
+/// use lamellar::array::prelude::*;
+///
+/// #[lamellar::AmData( 
+///     ArrayOps, // needed to derive various LamellarArray Op traits
+///     Default, // needed to be able to initialize a LamellarArray
+///     PartialEq, // needed for CompareExchangeEpsilonOps
+/// )] // Notice we use `lamellar::AmData` instead of `derive`
+/// struct Custom {
+///     int: usize,
+///     float: f32,
+/// }
+/// //need to impl various arithmetic ops if we want to be able to perform remore arithmetic operations with this type
+/// impl std::ops::AddAssign for Custom {
+///     fn add_assign(&mut self, other: Self) {
+///         *self = Self {
+///             int: self.int + other.int,
+///             float: self.float + other.float,
+///         }
+///     }
+/// }
+/// 
+/// impl std::ops::SubAssign for Custom {
+///     fn sub_assign(&mut self, other: Self) {
+///         *self = Self {
+///             int: self.int - other.int,
+///             float: self.float - other.float,
+///         }
+///     }
+/// }
+/// 
+/// impl std::ops::Sub for Custom {
+///     type Output = Self;
+///     fn sub(self, other: Self) -> Self {
+///         Self {
+///             int: self.int - other.int,
+///             float: self.float - other.float,
+///         }
+///     }
+/// }
+/// 
+/// impl std::ops::MulAssign for Custom {
+///     fn mul_assign(&mut self, other: Self) {
+///         *self = Self {
+///             int: self.int * other.int,
+///             float: self.float * other.float,
+///         }
+///     }
+/// }
+/// 
+/// impl std::ops::DivAssign for Custom {
+///     fn div_assign(&mut self, other: Self) {
+///         *self = Self {
+///             int: self.int / other.int,
+///             float: self.float / other.float,
+///         }
+///     }
+/// }
+///
+/// fn main(){
+///     let world = LamellarWorldBuilder.build();
+///     let array = AtomicArray::new::<Custom>(&world,100,Distribution::Block);
+///
+///     // now we are free to call various operations on the array!
+///
+///     array.block_on( async move {
+///         let val = Custom{int: 20, float: 6.2};
+///         array.add(10,Custom{int: 20, val}).await;
+///         let indices = vec![9,19,99,53,10];
+///         let current = val;
+///         let new = Custom{int: 3, float: 89.99};
+///         let epsilon = Custom{int: 0, float: 0.01};
+///         let results = array.batch_compare_exchange_eps(indices,current,new,epsilon).await;
+///     });
+/// }
+
 #[proc_macro_error]
-#[proc_macro_derive(ArithmeticOps)]
+#[proc_macro_derive(ArrayOps)]
 pub fn derive_arrayops(input: TokenStream) -> TokenStream {
     array_ops::__derive_arrayops(input)
 }

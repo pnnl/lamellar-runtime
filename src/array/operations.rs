@@ -1466,8 +1466,6 @@ impl<T> ElementCompareEqOps for T where T: std::cmp::Eq  + Dist //+ AmDist
 {}
 
 /// Supertrait specifying elements of the array support remote Partial Equality operations
-/// - ```<=``` 
-/// - ```>=```
 pub trait ElementComparePartialEqOps: std::cmp::PartialEq  + Dist + Sized //+ AmDist
 {}
 impl<T> ElementComparePartialEqOps for T where T: std::cmp::PartialEq  + Dist //+ AmDist
@@ -2794,7 +2792,7 @@ pub trait CompareExchangeOps<T: ElementCompareEqOps>: private::LamellarArrayPriv
     fn batch_compare_exchange<'a>(
         &self,
         index: impl OpInput<'a, usize>,
-        ocurrentld: T,
+        current: T,
         new: impl OpInput<'a, T>,
     ) -> Pin<Box<dyn Future<Output = Vec<Result<T, T>>> + Send>> {
         self.inner_array()

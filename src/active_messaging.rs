@@ -102,9 +102,11 @@ pub trait LocalAM: SyncSend {
 
 /// The trait representing an active message that can be executed remotely
 /// (AmDist is a blanket impl for serde::Serialize + serde::Deserialize + Sync + Send + 'static)
+#[async_trait]
 pub trait LamellarAM {
     /// The type of the output returned by the active message
     type Output: AmDist;
+    async fn exec(self) -> Self::Output;
 }
 
 #[doc(hidden)]

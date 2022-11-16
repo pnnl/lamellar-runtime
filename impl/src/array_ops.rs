@@ -1130,39 +1130,39 @@ fn create_ops(
     }
 }
 
-pub(crate) fn __generate_ops_for_type(item: TokenStream) -> TokenStream {
-    let mut output = quote! {};
-    let items = item
-        .to_string()
-        .split(",")
-        .map(|i| i.to_owned())
-        .collect::<Vec<String>>();
-    let bitwise = if let Ok(val) = syn::parse_str::<syn::LitBool>(&items[0]) {
-        val.value
-    } else {
-        panic! ("first argument of generate_ops_for_type expects 'true' or 'false' specifying whether type implements bitwise operations");
-    };
-    let native = false; // since this is a user defined type, we assume it does not have native support for atomic operations
-    for t in items[1..].iter() {
-        let the_type = syn::parse_str::<syn::Type>(&t).unwrap();
-        // let (wrapped_impl, wrapped_type) = create_wrapped_type(&the_type, bitwise);
-        // output.extend(wrapped_impl);
-        println!("{:?}", the_type);
-        // let typeident = quote::format_ident!("{:}", t.trim());
-        output.extend(quote! {impl Dist for #the_type {}});
-        #[cfg(feature = "non-buffered-array-ops")]
-        output.extend(create_ops(the_type.clone(), bitwise, native, false));
-        #[cfg(not(feature = "non-buffered-array-ops"))]
-        output.extend(create_buffered_ops(
-            the_type.clone(),
-            bitwise,
-            native,
-            false,
-        ));
-        // output.extend(gen_atomic_rdma(typeident.clone(), false));
-    }
-    TokenStream::from(output)
-}
+// pub(crate) fn __generate_ops_for_type(item: TokenStream) -> TokenStream {
+//     let mut output = quote! {};
+//     let items = item
+//         .to_string()
+//         .split(",")
+//         .map(|i| i.to_owned())
+//         .collect::<Vec<String>>();
+//     let bitwise = if let Ok(val) = syn::parse_str::<syn::LitBool>(&items[0]) {
+//         val.value
+//     } else {
+//         panic! ("first argument of generate_ops_for_type expects 'true' or 'false' specifying whether type implements bitwise operations");
+//     };
+//     let native = false; // since this is a user defined type, we assume it does not have native support for atomic operations
+//     for t in items[1..].iter() {
+//         let the_type = syn::parse_str::<syn::Type>(&t).unwrap();
+//         // let (wrapped_impl, wrapped_type) = create_wrapped_type(&the_type, bitwise);
+//         // output.extend(wrapped_impl);
+//         println!("{:?}", the_type);
+//         // let typeident = quote::format_ident!("{:}", t.trim());
+//         output.extend(quote! {impl Dist for #the_type {}});
+//         #[cfg(feature = "non-buffered-array-ops")]
+//         output.extend(create_ops(the_type.clone(), bitwise, native, false));
+//         #[cfg(not(feature = "non-buffered-array-ops"))]
+//         output.extend(create_buffered_ops(
+//             the_type.clone(),
+//             bitwise,
+//             native,
+//             false,
+//         ));
+//         // output.extend(gen_atomic_rdma(typeident.clone(), false));
+//     }
+//     TokenStream::from(output)
+// }
 
 pub(crate) fn __generate_ops_for_type_rt(item: TokenStream) -> TokenStream {
     let mut output = quote! {};
