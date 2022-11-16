@@ -1415,7 +1415,7 @@ impl<T: Dist> LamellarRequest for ArrayOpResultHandleInner<T> {
 }
 
 /// Supertrait specifying that array elements must be [Sized] and must be able to be used in remote operations [Dist].
-pub trait ElementOps:  Dist + Sized {}
+pub trait ElementOps: Dist + Sized {}
 impl<T> ElementOps for T where T:  Dist {}
 
 /// Supertrait specifying elements of the array support remote arithmetic assign operations

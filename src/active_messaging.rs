@@ -1,3 +1,95 @@
+//! Active Messages are a computing model where messages contain both data (that you want to compute something with) and metadata
+//! that tells the message how to process its data when it arrives at its destination, e.g. a function pointer. The Wikipedia Page<https://en.wikipedia.org/wiki/Active_message>
+//! provides a short overview.
+//!
+//! Lamellar is built upon asynchronous active messages, and provides users with an interface to construct their own active messages.
+//! 
+//! This interface is exposed through multiple Rust procedural macros.
+//! - [AmData]
+//! - [am]
+//! - [AmLocalData]
+//! - [local_am]
+//!
+//! Further details are provided in the documentation for each macro but at a high level to implement and active message we need to
+//! define the data to be transfered in a message and then define what to do with that data when we arrive at the destination.
+//!
+//! # Example
+//! Let's implement a simple active message below:
+//!
+//! First lets define the data we would like to transfer
+//!```
+//!#[derive(Debug,Clone)]
+//! struct HelloWorld {
+//!    originial_pe: usize, //this will contain the ID of the PE this data originated from
+//! } 
+//!```
+//! This looks like a pretty normal (if simple) struct, we next have to let the runtime know we would like this data
+//! to be used in an active message, so we need to apply the [AmData] macro, this is done by replacing the `derive` macro:
+//!```
+//! use lamellar::active_messaging::prelude::*;
+//!#[AmData(Debug,Clone)]
+//! struct HelloWorld {
+//!    originial_pe: usize, //this will contain the ID of the PE this data originated from
+//! } 
+//!```
+//! This change allows the compiler to implement the proper traits (related to Serialization and Deserialization) that will let this data type
+//! be used in an active message.
+//! 
+//! Next we now need to define the processing that we would like to take place when a message arrives at another PE
+//!
+//! For this we use the [am] macro on an implementation of the [LamellarAM] trait
+//!```
+//! #[lamellar::am]
+//! impl LamellarAM for HelloWorld {
+//!     async fn exec(self) {
+//!         println!(
+//!             "Hello World, I'm from PE {:?}",
+//!             self.originial_pe,
+//!         );
+//!     }
+//! }
+//!```
+//! The [am] macro parses the provided implementation and performs a number of transformations to the code to enable execution of the active message.
+//! This macro is responsible for generating the code which will perform serialization/deserialization of both the active message data and any returned data.
+//!
+//! Each active message implementation is assigned a unique ID at runtime initialization, these IDs are then used as the key
+//! to a Map containing specialized deserialization functions that convert a slice of bytes into the appropriate data type on the remote PE.
+//! 
+//! The final step is to actually launch an active message and await its result
+//!```
+//! fn main(){
+//!     let world = lamellar::LamellarWorldBuilder::new().build();
+//!     let my_pe = world.my_pe();
+//!     //Send a Hello World Active Message to all pes
+//!     let request = world.exec_am_all(
+//!         HelloWorld {
+//!             originial_pe: Arc::new(Mutex::new(my_pe)),
+//!         }
+//!     );
+//!     //wait for the request to complete
+//!     world.block_on(request);
+//! }
+//!```
+//! In this example we simply send a `HelloWorld` from every PE to every other PE using `exec_am_all` (please see the [ActiveMessaging] trait documentation for further details).
+//! `exec_am_all` returns a `Future` which we can use to await the completion of our operation.
+//!
+//! Sample output for the above example on a 2 PE system may look something like
+//!```
+//! Hello World, I'm from PE 0
+//! Hello World, I'm from PE 1
+//! Hello World, I'm from PE 0
+//! Hello World, I'm from PE 1
+//!```
+//!
+//! What if we wanted to actuall know where we are currently executing?
+
+/// # Lamellar AM DSL
+/// This lamellar [am] macro also parses the provided code block for the presence of keywords from a small DSL, specifically searching for the following token streams:
+/// - ```lamellar::current_pe``` - return the world id of the PE this active message is executing on
+/// - ```lamellar::num_pes``` - return the number of PEs in the world
+/// - ```lamellar::world``` - return a reference to the instantiated LamellarWorld
+/// - ```lamellar::team``` - return a reference to the LamellarTeam responsible for launching this AM
+
 use crate::lamellae::{Lamellae, LamellaeRDMA, SerializedData};
 use crate::lamellar_arch::IdError;
 use crate::lamellar_request::{InternalResult, LamellarRequestResult};
@@ -25,7 +117,68 @@ pub(crate) mod batching;
 
 const BATCH_AM_SIZE: usize = 100000;
 
-/// Supertrait specifing `Sync` + `Send`
+/// This macro is used to setup the attributed type so that it can be used within remote active messages.
+///
+/// For this derivation to succeed all members of the data structure must impl [AmDist] (which it self is a blanket impl)
+///
+///```
+/// AmDist: serde::ser::Serialize + serde::de::DeserializeOwned + Sync + Send + 'static {}
+/// impl<T: serde::ser::Serialize + serde::de::DeserializeOwned + Sync + Send + 'static> AmDist for T {}
+///```
+///
+/// Typically you will use this macro in place of `#[derive()]`, as it will manage deriving both the traits 
+/// that are provided as well as those require by Lamellar for active messaging.
+///
+/// Generally this is paired with the [lamellar::am][am] macro on an implementation of the [LamellarAM], to associate a remote function with this data.
+/// (if you simply want this type to able to be included in other active messages, implementing [LamellarAM] can be omitted )
+///
+pub use lamellar_impl::AmData;
+
+/// This macro is used to setup the attributed type so that it can be used within local active messages.
+///
+/// Typically you will use this macro in place of `#[derive()]`, as it will manage deriving both the traits 
+/// that are provided as well as those require by Lamellar for active messaging.
+///
+/// This macro relaxes the Serialize/Deserialize trait bounds required by the [AmData] macro
+///
+/// Generally this is paired with the [lamellar::local_am][local_am] macro on an implementation of the [LamellarAM], to associate a local function with this data.
+/// (if you simply want this type to able to be included in other active messages, implementing [LamellarAM] can be omitted )
+///
+pub use lamellar_impl::AmLocalData;
+
+/// This macro is used to associate an implemenation of [LamellarAM] for type that has used the [AmData] attribute macro
+///
+/// This essentially constructs and registers the Active Message with the runtime. It is responsible for ensuring all data
+/// within the active message is properly serialize and deserialized, including any returned results.
+///
+/// Each active message implementation is assigned a unique ID at runtime initialization, these IDs are then used as the key
+/// to a Map containing specialized deserialization functions that convert a slice of bytes into the appropriate data type on the remote PE.
+/// Finally, a worker thread will call that deserialized objects `exec()` function to execute the actual active message.
+///
+/// # Lamellar AM DSL
+/// This macro also parses the provided code block for the presence of keywords from a small DSL, specifically searching for the following token streams:
+/// - ```lamellar::current_pe``` - return the world id of the PE this active message is executing on
+/// - ```lamellar::num_pes``` - return the number of PEs in the world
+/// - ```lamellar::world``` - return a reference to the instantiated LamellarWorld
+/// - ```lamellar::team``` - return a reference to the LamellarTeam responsible for launching this AM
+///
+pub use lamellar_impl::am;
+
+/// This macro is used to associate an implemenation of [LamellarAM] for a data structure that has used the [AmLocalData] attribute macro
+///
+/// This essentially constructs and registers the Active Message with the runtime. (LocalAms *do not* perform any serialization/deserialization)
+///
+/// # Lamellar AM DSL
+/// This macro also parses the provided code block for the presence of keywords from a small DSL, specifically searching for the following token streams:
+/// - ```lamellar::current_pe``` - return the world id of the PE this active message is executing on
+/// - ```lamellar::num_pes``` - return the number of PEs in the world
+/// - ```lamellar::world``` - return a reference to the instantiated LamellarWorld
+/// - ```lamellar::team``` - return a reference to the LamellarTeam responsible for launching this AM
+///
+pub use lamellar_impl::local_am;
+
+
+/// Supertrait specifying `Sync` + `Send`
 pub trait SyncSend: Sync + Send {}
 
 impl<T: Sync + Send> SyncSend for T {}
@@ -91,6 +244,7 @@ pub(crate) type LamellarArcAm = Arc<dyn RemoteActiveMessage + Sync + Send>;
 pub(crate) type LamellarAny = Box<dyn std::any::Any + Sync + Send>;
 pub(crate) type LamellarResultArc = Arc<dyn LamellarSerde + Sync + Send>;
 
+/// Supertrait specifying `serde::ser::Serialize` + `serde::de::DeserializeOwned`
 pub trait Serde: serde::ser::Serialize + serde::de::DeserializeOwned {}
 
 /// The trait representing an active message that can only be executed locally, i.e. from the PE that initiated it

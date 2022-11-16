@@ -526,10 +526,10 @@ fn process_fields(
             trait_strs
                 .entry(String::from("Clone"))
                 .or_insert(quote! {Clone});
-        } else if t.contains("ArithmeticOps") {
+        } else if t.contains("ArrayOps") {
             trait_strs
-                .entry(String::from("ArithmeticOps"))
-                .or_insert(quote! {#lamellar::ArithmeticOps});
+                .entry(String::from("ArrayOps"))
+                .or_insert(quote! {#lamellar::ArrayOps});
             trait_strs
                 .entry(String::from("Dist"))
                 .or_insert(quote! {#lamellar::Dist});
@@ -551,7 +551,6 @@ fn process_fields(
     }
     for t in trait_strs {
         // let temp = quote::format_ident!("{}", t);
-        // print!("{:?}, ",t.0);
         let temp = t.1;
         impls.extend(quote! {#temp, });
     }
@@ -618,21 +617,7 @@ fn derive_am_data(
 }
 
 
-/// This macro is used to setup the attributed type so that it can be used within remote active messages.
-///
-/// For this derivation to succeed all members of the data structure must impl [AmDist] (which it self is a blanket impl)
-///
-///```
-/// AmDist: serde::ser::Serialize + serde::de::DeserializeOwned + Sync + Send + 'static {}
-/// impl<T: serde::ser::Serialize + serde::de::DeserializeOwned + Sync + Send + 'static> AmDist for T {}
-///```
-///
-/// Typically you will use this macro in place of `#[derive()]`, as it will manage deriving both the traits 
-/// that are provided as well as those require by Lamellar for active messaging.
-///
-/// Generally this is paired with the [lamellar::am][am] macro on an implementation of the [LamellarAM], to associate a remote function with this data.
-/// (if you simply want this type to able to be included in other active messages, implementing [LamellarAM] can be omitted )
-///
+
 /// #Examples
 ///
 ///```
@@ -650,16 +635,7 @@ pub fn AmData(args: TokenStream, input: TokenStream) -> TokenStream {
     derive_am_data(input, args, "lamellar".to_string(), false)
 }
 
-/// This macro is used to setup the attributed type so that it can be used within local active messages.
-///
-/// Typically you will use this macro in place of `#[derive()]`, as it will manage deriving both the traits 
-/// that are provided as well as those require by Lamellar for active messaging.
-///
-/// This macro relaxes the Serialize/Deserialize trait bounds required by the [AmData] macro
-///
-/// Generally this is paired with the [lamellar::local_am][local_am] macro on an implementation of the [LamellarAM], to associate a local function with this data.
-/// (if you simply want this type to able to be included in other active messages, implementing [LamellarAM] can be omitted )
-///
+
 /// #Examples
 ///
 ///```
@@ -734,22 +710,7 @@ fn parse_am(args: TokenStream, input: TokenStream, local: bool, rt: bool) -> Tok
     output
 }
 
-/// This macro is used to associate an implemenation of [LamellarAM] for type that has used the [AmData] attribute macro
-///
-/// This essentially constructs and registers the Active Message with the runtime. It is responsible for ensuring all data
-/// within the active message is properly serialize and deserialized, including any returned results.
-///
-/// Each active message implementation is assigned a unique ID at runtime initialization, these IDs are then used as the key
-/// to a Map containing specialized deserialization functions that convert a slice of bytes into the appropriate data type on the remote PE.
-/// Finally, a worker thread will call that deserialized objects `exec()` function to execute the actual active message.
-///
-/// # Lamellar AM DSL
-/// This macro also parses the provided code block for the presence of keywords from a small DSL, specifically searching for the following token streams:
-/// - ```lamellar::current_pe``` - return the world id of the PE this active message is executing on
-/// - ```lamellar::num_pes``` - return the number of PEs in the world
-/// - ```lamellar::world``` - return a reference to the instantiated LamellarWorld
-/// - ```lamellar::team``` - return a reference to the LamellarTeam responsible for launching this AM
-///
+
 /// #Examples
 ///
 ///```
@@ -792,16 +753,7 @@ pub fn am(args: TokenStream, input: TokenStream) -> TokenStream {
     parse_am(args, input, false, false)
 }
 
-/// This macro is used to associate an implemenation of [LamellarAM] for a data structure that has used the [AmLocalData] attribute macro
-///
-/// This essentially constructs and registers the Active Message with the runtime. (LocalAms *do not* perform any serialization/deserialization)
-///
-/// # Lamellar AM DSL
-/// This macro also parses the provided code block for the presence of keywords from a small DSL, specifically searching for the following token streams:
-/// - ```lamellar::current_pe``` - return the world id of the PE this active message is executing on
-/// - ```lamellar::num_pes``` - return the number of PEs in the world
-/// - ```lamellar::world``` - return a reference to the instantiated LamellarWorld
-/// - ```lamellar::team``` - return a reference to the LamellarTeam responsible for launching this AM
+
 /// #Examples
 ///
 ///```
@@ -883,7 +835,7 @@ pub fn derive_dist(input: TokenStream) -> TokenStream {
 pub fn register_reduction(item: TokenStream) -> TokenStream {
     array_reduce::__register_reduction(item)
 }
-
+ 
 #[proc_macro_error]
 #[proc_macro]
 pub fn generate_reductions_for_type(item: TokenStream) -> TokenStream {
@@ -1006,7 +958,6 @@ pub fn generate_ops_for_type_rt(item: TokenStream) -> TokenStream {
 ///         let results = array.batch_compare_exchange_eps(indices,current,new,epsilon).await;
 ///     });
 /// }
-
 #[proc_macro_error]
 #[proc_macro_derive(ArrayOps)]
 pub fn derive_arrayops(input: TokenStream) -> TokenStream {

@@ -31,10 +31,9 @@ impl std::error::Error for MemNotLocalError {}
 
 /// Trait representing types that can be used in remote operations
 /// 
-/// Requires types to impl [AmDist] so they can be used in active messages
 /// as well as [Copy] so we can perform bitwise copies
 pub trait Dist:
-    AmDist + Sync + Send + Copy + serde::ser::Serialize + serde::de::DeserializeOwned + 'static
+AmDist + Sync + Send + Copy + serde::ser::Serialize + serde::de::DeserializeOwned + 'static
     // AmDist + Copy
 {
 }

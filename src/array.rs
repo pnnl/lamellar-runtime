@@ -44,6 +44,18 @@ use std::sync::Arc;
 
 // use serde::de::DeserializeOwned;
 
+/// This macro automatically derives various LamellarArray "Op" traits for user defined types
+/// 
+/// The following "Op" traits will be implemented:
+/// - [AccessOps][crate::array::operations::AccessOps]
+/// - [ArithmeticOps][crate::array::operations::ArithmeticOps]
+/// - [BitWiseOps][crate::array::operations::BitWiseOps]
+/// - [CompareExchangeEpsilonOps][crate::array::operations::CompareExchangeEpsilonOps]
+/// - [CompareExchangeOps][crate::array::operations::CompareExchangeOps]
+/// 
+/// The required trait bounds can be found by viewing each "Op" traits documentation.
+pub use lamellar_impl::ArrayOps;
+
 pub mod prelude;
 
 pub(crate) mod r#unsafe;
