@@ -1,3 +1,10 @@
+//! Memory regions are unsafe low-level abstractions around shared memory segments that have been allocated by a lamellae provider.
+//!
+//! These memory region APIs provide the functionality to perform RDMA operations on the shared memory segments, and are at the core
+//! of how the Runtime communicates in a distributed environment (or using shared memory when using the `shmem` backend).
+//!
+//! # Warning
+//! This is a low-level module, unless you are very comfortable/confident in low level distributed memory (and even then) it is highly recommended you use the [LamellarArrays][crate::array] and [Active Messaging][crate::active_messaging] interfaces to perform distributed communications and computation.
 use crate::array::{LamellarArrayInput, LamellarRead, LamellarWrite, MyFrom};
 use crate::lamellae::{AllocationType, Backend, Lamellae, LamellaeComm, LamellaeRDMA};
 use crate::lamellar_team::LamellarTeamRT;
@@ -6,6 +13,7 @@ use core::marker::PhantomData;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
+#[doc(hidden)]
 pub mod prelude;
 
 pub(crate) mod shared;
@@ -16,6 +24,15 @@ pub use one_sided::OneSidedMemoryRegion;
 
 use enum_dispatch::enum_dispatch;
 
+
+/// This error occurs when you are trying to directly access data locally on a PE through a memregion handle,
+/// but that PE does not contain any data for that memregion
+///
+/// This can occur when tryin to get the local data from a [OneSidedMemoryRegion] on any PE but the one which created it. 
+///
+/// It can also occur if a subteam creates a shared memory region, and then a PE that does not exist in the team tries to access local data directly.
+///
+/// In both these cases the solution would be to use the memregion handle to perfrom a `get` operation, transferring the data from a remote node into a local buffer.
 #[derive(Debug, Clone)]
 pub struct MemNotLocalError;
 
@@ -236,6 +253,8 @@ pub(crate) trait AsBase {
     unsafe fn to_base<B: Dist>(self) -> LamellarMemoryRegion<B>;
 }
 
+
+/// The Inteface for exposing RDMA operations on a memory region. These provide the actual mechanism for performing a transfer.
 #[enum_dispatch]
 pub trait MemoryRegionRDMA<T: Dist> {
     /// "Puts" (copies) data from a local memory location into a remote memory location on the specified PE
@@ -839,6 +858,7 @@ impl<T: Dist> MemRegionId for MemoryRegion<T> {
     }
 }
 
+/// The interface for allocating shared and onesided memory regions
 pub trait RemoteMemoryRegion {
     /// allocate a shared memory region from the asymmetric heap
     ///

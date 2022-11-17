@@ -1,3 +1,48 @@
+//! Distributed Atomic Reference Counter-- a distriubted extension of an [`Arc`][std::sync::Arc] called a [Darc][crate::darc].
+//! The atomic reference counter, [`Arc`][std::sync::Arc], is a backbone of safe
+//! concurrent programming in Rust, and, in particular, *shared ownership*.
+//!
+//! The `Darc` provides a similar abstraction within a *distributed* environment.
+//! - `Darc`'s have global lifetime tracking and management, meaning that the pointed to objects remain valid and accessible
+//!   as long as one reference exists on any PE.
+//! - Inner mutability is disallowed by default. If you need to mutate through a Darc use [`Mutex`][std::sync::Mutex], [`RwLock`][std::sync::RwLock], or one of the [`Atomic`][std::sync::atomic]
+//! types. Alternatively you can also use a [`LocalRwDarc`] or [`GlobalRwDarc`].
+//!
+//! `Darc`'s are intended to be passed via active messages.
+//! - They allow distributed
+//!   accesss to and manipulation of generic Rust objects.  The inner object can exist
+//!   on the Rust heap or in a registered memory region.
+//! - They are instantiated in registered memory regions.
+//! # Examples
+//!```
+//! use lamellar::active_messaging::prelude::*;
+//! use lamellar::darc::prelude::*;
+//! use std::sync::atomic::{AtomicUsize, Ordering};
+//! use std::sync::Arc;
+//!
+//! #[lamellar::AmData(Clone)]
+//! struct DarcAm {
+//!     counter: Darc<AtomicUsize>, //each pe has a local atomicusize
+//! }
+//!
+//! #[lamellar::am]
+//! impl LamellarAm for DarcAm {
+//!     async fn exec(self) {
+//!         self.counter.fetch_add(1, Ordering::SeqCst); //this only updates atomic on the executing pe
+//!     }
+//!  }
+//! 
+//! fn main(){
+//!     let world = LamellarWorldBuilder::new().build();
+//!     let my_pe = world.my_pe();
+//!     let darc_counter = Darc::new(world, AtomicUsize::new(0)).unwrap();
+//!     world.exec_am_all(DarcAm {counter: darc_counter.clone()});
+//!     darc_counter.fetch_add(my_pe, Ordering::SeqCst);
+//!     world.wait_all(); // wait for my active message to return
+//!     world.barrier(); //at this point all updates will have been performed
+//!     assert_eq!(darc_counter.load(Oredering::SeqCst),num_pes+my_pe); //NOTE: the value of darc_counter will be different on each PE
+//! }
+///```
 use core::marker::PhantomData;
 use futures::Future;
 use parking_lot::RwLock;
@@ -19,13 +64,15 @@ use crate::lamellar_world::LAMELLAES;
 use crate::scheduler::SchedulerQueue;
 use crate::IdError;
 
+#[doc(hidden)]
 pub mod prelude;
 
 pub(crate) mod local_rw_darc;
-use local_rw_darc::LocalRwDarc;
+pub use local_rw_darc::LocalRwDarc;
 
 pub(crate) mod global_rw_darc;
-use global_rw_darc::{DistRwLock, GlobalRwDarc};
+use global_rw_darc::{DistRwLock};
+pub use global_rw_darc::GlobalRwDarc;
 
 #[repr(u8)]
 #[derive(PartialEq, Debug, Copy, Clone)]
@@ -95,9 +142,10 @@ unsafe impl<T: Sync> Sync for DarcInner<T> {}
 ///   on the Rust heap or in a registered memory region.
 /// - They are instantiated in registered memory regions.
 ///
-/// #Example
+/// # Examples
 ///```
-/// use lamellar::{ActiveMessaging, Darc};
+/// use lamellar::active_messaging::prelude::*;
+/// use lamellar::darc::prelude::*;
 /// use std::sync::atomic::{AtomicUsize, Ordering};
 /// use std::sync::Arc;
 ///
@@ -112,13 +160,17 @@ unsafe impl<T: Sync> Sync for DarcInner<T> {}
 ///         self.counter.fetch_add(1, Ordering::SeqCst); //this only updates atomic on the executing pe
 ///     }
 ///  }
-/// -------------
-/// let darc_counter = Darc::new(world, AtomicUsize::new(0)).unwrap();
-/// world.exec_am_all(DarcAm {counter: darc_counter.clone()});
-/// darc_counter.fetch_all(my_pe, Ordering::SeqCst);
-/// world.wait_all(); // wait for my active message to return
-/// world.barrier(); //at this point all updates will have been performed
-/// assert_eq!(darc_counter.load(Oredering::SeqCst),num_pes+my_pe); //NOTE: the value of darc_counter will be different on each PE
+/// 
+/// fn main(){
+///     let world = LamellarWorldBuilder::new().build();
+///     let my_pe = world.my_pe();
+///     let darc_counter = Darc::new(world, AtomicUsize::new(0)).unwrap();
+///     world.exec_am_all(DarcAm {counter: darc_counter.clone()});
+///     darc_counter.fetch_add(my_pe, Ordering::SeqCst);
+///     world.wait_all(); // wait for my active message to return
+///     world.barrier(); //at this point all updates will have been performed
+///     assert_eq!(darc_counter.load(Oredering::SeqCst),num_pes+my_pe); //NOTE: the value of darc_counter will be different on each PE
+/// }
 ///```
 pub struct Darc<T: 'static> {
     inner: *mut DarcInner<T>,

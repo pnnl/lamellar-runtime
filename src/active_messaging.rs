@@ -339,6 +339,7 @@ use std::pin::Pin;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc; //, Weak};
 
+#[doc(hidden)]
 pub mod prelude;
 
 pub(crate) mod registered_active_message;

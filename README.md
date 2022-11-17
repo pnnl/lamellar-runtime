@@ -34,82 +34,112 @@ NEWS
 EXAMPLES
 --------
 
+Below are a few small examples highlighting some of the features of lamellar, more in-depth examples can be found in the documentation for the various features.
 # Selecting a Lamellae and constructing a lamellar world instance
-```rust
+You can select which backend to use at runtime as shown below:
+```
 use lamellar::Backend;
-fn main() {
-    let world = lamellar::LamellarWorldBuilder::new()
-        .with_lamellae(Default::default()) //if "enable-rofi" feature is active default is rofi, otherwise  default is local
-        //.with_lamellae( Backend::Rofi ) //explicity set the lamellae backend to rofi, using the provider specified by the LAMELLAR_ROFI_PROVIDER env var ("verbs" or "shm")
+fn main(){
+ let mut world = lamellar::LamellarWorldBuilder::new()
+        .with_lamellae( Default::default() ) //if "enable-rofi" feature is active default is rofi, otherwise  default is `Local`
+        //.with_lamellae( Backend::Rofi ) //explicity set the lamellae backend to rofi,
+        //.with_lamellae( Backend::Local ) //explicity set the lamellae backend to local
+        //.with_lamellae( Backend::Shmem ) //explicity set the lamellae backend to use shared memory
         .build();
-
-    let num_pes = world.num_pes();
-    let my_pe = world.my_pe();
-
-    println!("num_pes {:?}, my_pe {:?}", num_pes, my_pe);
 }
 ```
+or by setting the following envrionment variable:
+```LAMELLAE_BACKEND="lamellae"``` where lamellae is one of `local`, `shmem`, or `rofi`.
 
-# HelloWorld -- Creating and executing a Registered Active Message
-```rust
-use lamellar::ActiveMessaging;
+# Creating and executing a Registered Active Message
+Please refer to the [Active Messaging][crate::active_messaging] documentation for more details and examples
+```
+use lamellar::active_messaging::prelude::*;
 
-#[lamellar::AmData(Debug, Clone)]
-struct HelloWorld {
-    //the "input data" we are sending with our active message
+#[AmData(Debug, Clone)] // `AmData` is a macro used in place of `derive` 
+struct HelloWorld { //the "input data" we are sending with our active message
     my_pe: usize, // "pe" is processing element == a node
 }
 
-#[lamellar::am]
+#[lamellar::am] // at a highlevel registers this LamellarAM implemenatation with the runtime for remote execution
 impl LamellarAM for HelloWorld {
-    fn exec(&self) {
+    async fn exec(&self) {
         println!(
-            "Hello pe {:?} of {:?}, I'm from pe {:?}",
-            lamellar::current_pe,
+            "Hello pe {:?} of {:?}, I'm pe {:?}",
+            lamellar::current_pe, 
             lamellar::num_pes,
             self.my_pe
         );
     }
 }
 
-fn main() {
-    let world = lamellar::LamellarWorldBuilder::new().build();
+fn main(){
+    let mut world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();
     let num_pes = world.num_pes();
     let am = HelloWorld { my_pe: my_pe };
-    for pe in 0..num_pes {
-        world.exec_am_pe(pe, am.clone()); // explicitly launch on each PE
+    for pe in 0..num_pes{
+        world.exec_am_pe(pe,am.clone()); // explicitly launch on each PE
     }
     world.wait_all(); // wait for all active messages to finish
-    world.barrier(); // synchronize with other pes
-    let handle = world.exec_am_all(am.clone()); //also possible to execute on every PE with a single call
-    handle.get(); //both exec_am_all and exec_am_pe return request handles that can be used to access any returned result
+    world.barrier();  // synchronize with other pes
+    let request = world.exec_am_all(am.clone()); //also possible to execute on every PE with a single call
+    world.block_on(request); //both exec_am_all and exec_am_pe return futures that can be used to wait for completion and access any returned result
 }
 ```
 
 # Creating, initializing, and iterating through a distributed array
-```rust
-use lamellar::array::{DistributedIterator,Distribution, OneSidedIterator, UnsafeArray};
+Please refer to the [LamellarArray][crate::array] documentation for more details and examples
+```
+use lamellar::array::prelude::*;
 
-fn main() {
+fn main(){
     let world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();
-    let num_pes = world.num_pes();
-    let block_array = UnsafeArray::<usize>::new(world.team(), num_pes * 5, Distribution::Block); //we also support Cyclic distribution.
-    block_array
-        .dist_iter_mut()
-        .for_each(move |elem| *elem = my_pe); //simultaneosuly initialize array accross all pes, each pe only updates its local data
+    let block_array = AtomicArray::<usize>::new(&world, 1000, Distribution::Block); //we also support Cyclic distribution.
+    block_array.dist_iter_mut().enumerate().for_each(move |elem| *elem = my_pe); //simultaneosuly initialize array accross all pes, each pe only updates its local data
     block_array.wait_all();
     block_array.barrier();
-    block_array.print();
-    if my_pe == 0 {
-        for (i, elem) in block_array.onesided_iter().into_iter().enumerate() {
-            //iterate through entire array on pe 0 (automatically transfering remote data)
-            println!("i: {} = {}", i, elem);
+    if my_pe == 0{
+        for (i,elem) in block_array.onesided_iter().into_iter().enumerate(){ //iterate through entire array on pe 0 (automatically transfering remote data)
+            println!("i: {} = {})",i,elem);
         }
     }
 }
 ```
+
+# Utilizing a Darc within an active message
+Please refer to the [Darc][crate::darc] documentation for more details and examples
+```
+use lamellar::active_messaging::prelude::*;
+use std::sync::atomic::{AtomicUsize,Ordering};
+
+#[AmData(Debug, Clone)] // `AmData` is a macro used in place of `derive` 
+struct DarcAm { //the "input data" we are sending with our active message
+    cnt: Darc<AtomicUsize>, // count how many times each PE executes an active message
+}
+
+#[lamellar::am] // at a highlevel registers this LamellarAM implemenatation with the runtime for remote execution
+impl LamellarAM for DarcAm {
+    async fn exec(&self) {
+        self.cnt.fetch_add(1,Ordering::SeqCst);
+    }
+}
+
+fn main(){
+    let mut world = lamellar::LamellarWorldBuilder::new().build();
+    let my_pe = world.my_pe();
+    let num_pes = world.num_pes();
+    let cnt = Darc::new(&world, AtomicUsize::new());
+    for pe in 0..num_pes{
+        world.exec_am_pe(pe,DarcAm{cnt: cnt.clone()}); // explicitly launch on each PE
+    }
+    world.exec_am_all(am.clone()); //also possible to execute on every PE with a single call
+    cnt.fetch_add(1,Ordering::SeqCst); //this is valid as well!
+    world.wait_all(); // wait for all active messages to finish
+    world.barrier();  // synchronize with other pes
+    assert_eq!(cnt.load(Ordering::SeqCst),num_pes*2 + 1);
+}
 
 A number of more complete examples can be found in the examples folder. Sub directories loosely group examples by the feature they are illustrating
 
@@ -120,7 +150,7 @@ For a workstation, simply copy the following to the dependency section of you Ca
 
 ``` lamellar = "0.4"```
 
-If planning to use within a distributed HPC system a few more steps maybe necessessary (this also works on single workstations):
+If planning to use within a distributed HPC system a few more steps may be necessessary (this also works on single workstations):
 
 1. ensure Libfabric (with support for the verbs provider) is installed on your system (https://github.com/ofiwg/libfabric) 
 2. set the OFI_DIR envrionment variable to the install location of Libfabric, this directory should contain both the following directories:
@@ -242,7 +272,7 @@ current the variable can be set to:
 `rofi` -- multi-process, multi-node
 
 
-Internally, Lamellar utilizes memory pools of RDMAable memory for internal Runtime data structures and buffers, this allocation pool is also used to construct `LamellarLocalMemRegions` (as this operation does not require communication with other PE's). Additional memory pools are dynamically allocated accross the system as needed. This can be a fairly expensive operation (as the operation is synchronous across all pes) so the runtime will print a message at the end of execution with how many additional pools were allocated. 
+Internally, Lamellar utilizes memory pools of RDMAable memory for Runtime data structures and buffers, this allocation pool is also used to construct `LamellarLocalMemRegions` (as this operation does not require communication with other PE's). Additional memory pools are dynamically allocated accross the system as needed. This can be a fairly expensive operation (as the operation is synchronous across all pes) so the runtime will print a message at the end of execution with how many additional pools were allocated. 
 To alleviate potential impacts to performance lamellar exposes the `LAMELLAR_MEM_SIZE` environment variable to set the default size of these allocation pools. 
 The default size is 1GB per process.
 For example, setting to 20GB could be accomplished with `LAMELLAR_MEM_SIZE=$((20*1024*1024*1024))`.
@@ -297,10 +327,17 @@ implemented.
 
 CONTACTS
 --------
+
+Current Team Members
+
 Ryan Friese     - ryan.friese@pnnl.gov  
 Roberto Gioiosa - roberto.gioiosa@pnnl.gov
 Erdal Mutlu     - erdal.mutlu@pnnl.gov  
 Joseph Cottam   - joseph.cottam@pnnl.gov
+Greg Roek       - gregory.roek@pnnl.gov
+
+Past Team Members
+
 Mark Raugas     - mark.raugas@pnnl.gov  
 
 ## License

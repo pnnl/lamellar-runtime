@@ -56,6 +56,7 @@ use std::sync::Arc;
 /// The required trait bounds can be found by viewing each "Op" traits documentation.
 pub use lamellar_impl::ArrayOps;
 
+#[doc(hidden)]
 pub mod prelude;
 
 pub(crate) mod r#unsafe;
@@ -95,9 +96,13 @@ pub use local_lock_atomic::{
     LocalLockByteArrayWeak, LocalLockLocalData,
 };
 
+
 pub mod iterator;
+#[doc(hidden)]
 pub use iterator::distributed_iterator::DistributedIterator;
+#[doc(hidden)]
 pub use iterator::local_iterator::LocalIterator;
+#[doc(hidden)]
 pub use iterator::one_sided_iterator::OneSidedIterator;
 
 pub(crate) mod operations;
