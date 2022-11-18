@@ -647,25 +647,22 @@ impl<'a, T: Dist> OpInputEnum<'_, T> {
     }
 }
 
-/// This trait is used the represent the input to a batched LamellarArray element-wise operation.
+/// This trait is used to represent the input to a batched LamellarArray element-wise operation.
 ///
-/// Valid inputs are essentially "safe" list like data structures:
-///
-/// - T and &T
-/// - &\[T\]
-///     - the local data of a read only array is directly the underlying slice
-///     - ```read_only_array.local_data();```
-/// - Vec\[T\] and &Ve\[T\]
-/// - [AtomicLocalData][crate::array::atomic::AtomicLocalData]
-///     - ```atomic_array.local_data();```
-/// - [LocalLockLocalData][crate::array::local_lock_atomic::LocalLockLocalData] 
-///     - ```local_lock_array.read_local_data();```
-///     - ```local_lock_array.write_local_data();```
-///
-/// The array `LocalData` structures provide protections to ensure the safety gaurantees promised by the given array type are enforced even when accessing the PE's local data 'directly'.
+/// # Contents 
+/// - [Overview](#overview)
+/// - [Batch-compatible input types and type conversion methods](#batch-compatible-input-types-and-type-conversion-methods)
 /// 
-/// It is possible to use a LamellarMemoryRegion or UnsafeArray as the parent source, but these will require unsafe calls to retrieve the underlying slices
-/// the retrieved slices can then be used for the batched operation
+/// # Overview
+/// 
+/// Valid inputs to batched operations are essentially "safe" list-like data structures, which provide 
+/// protections to ensure the safety gaurantees promised by the given array type 
+/// are enforced even when accessing the PE's local data 'directly'.  See a list of
+/// [batch-compatible input types and type conversion methods](#batch-compatible-input-types-and-type-conversion-methods)
+/// below.
+/// 
+/// It is possible to use a LamellarMemoryRegion or UnsafeArray as the parent source, but these will require unsafe calls to retrieve the underlying slices. 
+/// The retrieved slices can then be used for the batched operation
 ///```
 /// unsafe { onesided_mem_region.as_slice().expect("not on allocating PE") };
 /// unsafe { shared_mem_region.as_slice() };
@@ -673,6 +670,27 @@ impl<'a, T: Dist> OpInputEnum<'_, T> {
 ///```
 ///
 /// Currently it is not recommended to try to implement this for your types. Rather you should try to convert to a slice if possible.
+/// 
+/// # Batch-compatible input types and type conversion methods
+/// 
+/// Methods that return a batch-compatible input type:
+/// - `local_data`
+/// - `mut_local_data`
+/// - `read_local_data`
+/// - `write_local_data`
+/// 
+/// Batch-compatible input types:
+/// - T and &T
+/// - &\[T\]
+///     - the local data of a [ReadOnlyArray](crate::array::ReadOnlyArray) is directly the underlying slice
+///     - ```read_only_array.local_data();```
+/// - Vec\[T\] and &Vec\[T\]
+/// - [AtomicLocalData][crate::array::atomic::AtomicLocalData]
+///     - ```atomic_array.local_data();```
+/// - [LocalLockLocalData][crate::array::local_lock_atomic::LocalLockLocalData] 
+///     - ```local_lock_array.read_local_data();```
+///     - ```local_lock_array.write_local_data();```
+/// 
 pub trait OpInput<'a, T: Dist> {
     #[doc(hidden)]
     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize); //(Vec<(Box<dyn Iterator<Item = T>    + '_>,usize)>,usize);
@@ -1474,14 +1492,14 @@ impl<T> ElementComparePartialEqOps for T where T: std::cmp::PartialEq + std::cmp
 
 /// The interface for remotely reading elements
 ///
-/// these operations can be performed using any LamellarArray type
+/// These operations can be performed using any LamellarArray type.
 ///
 /// Both single element operations and batched element operations are provided
 ///
 /// Generally if you are performing a large number of operations it will be better to 
 /// use a batched version instead of multiple single element opertations. While the
 /// Runtime internally performs message aggregation for both single element and batched
-/// operations, single element operates have to be treated as individual requests, resulting
+/// operations, single element operations have to be treated as individual requests, resulting
 /// in allocation and bookkeeping overheads. A single batched call on the other hand is treated 
 /// as a single request by the runtime.
 ///
@@ -1579,7 +1597,7 @@ pub trait ReadOnlyOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
 
 /// The interface for remotely writing elements
 ///
-/// these operations can be performed using any [LamellarWriteArray]  type
+/// These operations can be performed using any [LamellarWriteArray]  type
 ///
 /// Both single element operations and batched element operations are provided
 ///
@@ -1770,7 +1788,7 @@ pub trait AccessOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
 
 /// The interface for performing remote arithmetic operations on array elements
 ///
-/// these operations can be performed using any [LamellarWriteArray] type
+/// These operations can be performed using any [LamellarWriteArray] type
 ///
 /// Both single element operations and batched element operations are provided
 ///
@@ -2343,7 +2361,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
 
 /// The interface for performing remote bitwise operations on array elements
 ///
-/// these operations can be performed using any [LamellarWriteArray] type
+/// These operations can be performed using any [LamellarWriteArray] type
 ///
 /// Both single element operations and batched element operations are provided
 ///
@@ -2659,7 +2677,7 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
 
 /// The interface for performing remote compare and exchange operations on array elements
 ///
-/// these operations can be performed using any [LamellarWriteArray] type
+/// These operations can be performed using any [LamellarWriteArray] type
 ///
 /// Both single element operations and batched element operations are provided
 ///

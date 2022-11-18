@@ -883,20 +883,29 @@ pub fn generate_ops_for_type_rt(item: TokenStream) -> TokenStream {
 /// This derive macro is intended to be used with the [macro@AmData] attribute macro to enable a user defined type to be used in ActiveMessages
 /// # Examples
 ///
-///```
-/// use lamellar::array::prelude::*;
-///
+/// ```
+/// // this import includes everything we need
+/// use lamellar::array::prelude::*; 
+/// 
+/// 
 /// #[lamellar::AmData( 
-///     ArrayOps, // needed to derive various LamellarArray Op traits
-///     Default, // needed to be able to initialize a LamellarArray
-///     PartialEq, // needed for CompareExchangeEpsilonOps
-///     PartialOrd, // needed for CompareExchangeEpsilonOps
-/// )] // Notice we use `lamellar::AmData` instead of `derive`
+///     // Lamellar traits
+///     ArrayOps,      // needed to derive various LamellarArray Op traits
+///     Default,       // needed to be able to initialize a LamellarArray
+///     //  Notice we use `lamellar::AmData` instead of `derive`
+///     //  for common traits, e.g. Debug, Clone.    
+///     PartialEq,     // needed for CompareExchangeEpsilonOps
+///     PartialOrd,    // needed for CompareExchangeEpsilonOps
+///     Debug,         // any addition traits you want derived 
+///     Clone, 
+/// )] 
 /// struct Custom {
 ///     int: usize,
 ///     float: f32,
 /// }
-/// //need to impl various arithmetic ops if we want to be able to perform remote arithmetic operations with this type
+/// 
+/// // We need to impl various arithmetic ops if we want to be able to 
+/// // perform remote arithmetic operations with this type
 /// impl std::ops::AddAssign for Custom {
 ///     fn add_assign(&mut self, other: Self) {
 ///         *self = Self {
@@ -942,23 +951,82 @@ pub fn generate_ops_for_type_rt(item: TokenStream) -> TokenStream {
 ///         }
 ///     }
 /// }
-///
+/// 
 /// fn main(){
-///     let world = LamellarWorldBuilder.build();
-///     let array = AtomicArray::<Custom>::new(&world,100,Distribution::Block);
-///
-///     // now we are free to call various operations on the array!
-///
-///     world.block_on( async move {
-///         let val = Custom{int: 20, float: 6.2};
-///         array.add(10,Custom{int: 20, val}).await;
-///         let indices = vec![9,19,99,53,10];
+/// 
+///     // initialize
+///     // -----------
+///     
+///     let world = LamellarWorldBuilder::new().build(); // the world
+///     
+///     let array =  // the atomic distributed array
+///         AtomicArray::<Custom>::new(&world,3,Distribution::Block); 
+/// 
+///     println!();
+///     println!("initialize a length-3 array:\n");  // print the entries
+///     array.dist_iter()
+///         .enumerate()
+///         .for_each(|(i,entry)| println!("entry {:?}: {:?}", i, entry ) );
+///     array.wait_all();
+///     
+///     // call various operations on the array!
+///     // -------------------------------------
+/// 
+///     world.block_on( async move {  // we will just use the world as our future driver so we dont have to deal with cloneing array
+/// 
+///         println!();
+///         println!("add (1, 0.01) to the first entry:\n");
+///         let val = Custom{int: 1, float: 0.01};
+///         array.add(0, val ).await;
+///         array.dist_iter().enumerate().for_each(|(i,entry)| println!("entry {:?}: {:?}", i, entry ) );
+///         array.wait_all();
+/// 
+///         println!();
+///         println!("batch compare/exchange:");    
+///         let indices = vec![0,1,2,];
 ///         let current = val;
-///         let new = Custom{int: 3, float: 89.99};
+///         let new = Custom{int: 1, float: 0.0};
 ///         let epsilon = Custom{int: 0, float: 0.01};
-///         let results = array.batch_compare_exchange_epsilon(indices,current,new,epsilon).await;
+///         let _results = array.batch_compare_exchange_epsilon(indices,current,new,epsilon).await; 
+///         println!();
+///         println!("(1) the updatd array");
+///         array.dist_iter().enumerate().for_each(|(i,entry)| println!("entry {:?}: {:?}", i, entry ) );
+///         array.wait_all();
+///         println!();
+///         println!("(2) the return values");        
+///         for (i, entry) in _results.iter().enumerate() { println!("entry {:?}: {:?}", i, entry ) }
 ///     });
+/// 
+///     // inspect the results
+///     // -------------------------------------    
+///     // NB:  because thewe're working with multithreaded async
+///     //      environments, entries may be printed out of order
+///     //
+///     // initialize a length-3 array:
+///     //
+///     // entry 1: Custom { int: 0, float: 0.0 }
+///     // entry 0: Custom { int: 0, float: 0.0 }
+///     // entry 2: Custom { int: 0, float: 0.0 }
+///     //
+///     // add (1, 0.01) to the first entry:
+///     //
+///     // entry 0: Custom { int: 1, float: 0.01 }
+///     // entry 2: Custom { int: 0, float: 0.0 }
+///     // entry 1: Custom { int: 0, float: 0.0 }
+///     //
+///     // batch compare/exchange:
+///     //
+///     // (1) the updatd array
+///     // entry 0: Custom { int: 1, float: 0.0 }
+///     // entry 1: Custom { int: 0, float: 0.0 }
+///     // entry 2: Custom { int: 0, float: 0.0 }
+///     //
+///     // (2) the return values
+///     // entry 0: Ok(Custom { int: 1, float: 0.01 })
+///     // entry 1: Err(Custom { int: 0, float: 0.0 })
+///     // entry 2: Err(Custom { int: 0, float: 0.0 })   
 /// }
+/// ```
 #[proc_macro_error]
 #[proc_macro_derive(ArrayOps)]
 pub fn derive_arrayops(input: TokenStream) -> TokenStream {

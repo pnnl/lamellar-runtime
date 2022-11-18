@@ -507,14 +507,23 @@ pub trait DistributedIterator: SyncSend + Clone + 'static {
     /// 
     /// # Example
     ///```
-    /// use lamellar::array::prelude::*;
-    ///
-    /// let world = LamellarWorldBuilder.build();
+    /// // initialize a world and an atomic array
+    /// let world = LamellarWorldBuilder::new().build(); 
     /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Block);
-    ///
-    /// let array_clone = array.clone();
-    /// let req = array.dist_iter().map(|elem|  array_clone.fetch_add(elem,1000)).collect_async::<ReadOnlyArray<usize>>(Distribution::Cyclic);
-    /// let new_array = array.block_on(req);
+    /// 
+    /// // clone the array; this doesn't duplicate the underlying
+    /// // data but it does create a second pointer that we can
+    /// // discard when necessary
+    /// let array_clone = array.clone(); 
+    /// 
+    /// // run collect
+    /// let req 
+    ///     = array_clone.dist_iter().map(
+    ///         move |elem|  
+    ///         array_clone
+    ///             .fetch_add(elem.load(),1000))
+    ///             .collect_async::<ReadOnlyArray<usize>,_>(Distribution::Cyclic);
+    /// let _new_array = array.block_on(req);
     ///```
     fn collect_async<A, T>(&self, d: Distribution) -> Pin<Box<dyn Future<Output = A> + Send>>
     where

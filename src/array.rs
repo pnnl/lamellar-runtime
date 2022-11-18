@@ -2,19 +2,24 @@
 //! 
 //! By distributed, we mean that the memory backing the array is physically located on multiple distributed PEs in the system.
 //!
-//! LamellarArrays provide: 
+//! # Features
+//!  - [Safety](#safety)
+//!  - [Multiple array types](#multiple-array-types)
 //!  - RDMA like `put` and `get` APIs 
 //!  - Element Wise operations (e.g. add, fetch_add, or, compare_exchange, etc)
+//!  - Batched operations (batch_add, batch_fetch_add, etc.)
 //!  - Distributed and Onesided Iteration
 //!  - Distributed Reductions
 //!  - Block or Cyclic layouts
 //!  - Sub Arrays
+//!  - [Type conversion](#type-conversion)
 //!
 //! # Safety
 //! Array Data Lifetimes: LamellarArrays are built upon [Darcs][crate::darc::Darc] (Distributed Atomic Reference Counting Pointers) and as such have distributed lifetime management.
 //! This means that as long as a single reference to an array exists anywhere in the distributed system, the data for the entire array will remain valid on every PE (even though a given PE may have dropped all its local references).
 //! While the compiler handles lifetimes within the context of a single PE, our distributed lifetime management relies on "garbage collecting active messages" to ensure all remote references have been accounted for.  
 //!
+//! # Multiple array types
 //! We provide several array types, each with their own saftey gaurantees with respect to how data is accessed (further detail can be found in the documentation for each type)
 //!  - [UnsafeArray]: No safety gaurantees - PEs are free to read/write to anywhere in the array with no access control
 //!  - [ReadOnlyArray]: No write access is permitted, and thus PEs are free to read from anywhere in the array with no access control
@@ -22,6 +27,14 @@
 //!      - NativeAtomicArray: utilizes the language atomic types e.g AtomicUsize, AtomicI8, etc.
 //!      - GenericAtomicArray: Each element is protected by a 1-byte mutex
 //!  - [LocalLockArray]: The data on each PE is protected by a local RwLock
+//! 
+//! # Type conversion
+//! We offer a variety of methods to convert between array types.
+//! - `into_atomic`, `into_read_only`, etc., convert between disributed array types.
+//! - `collect` and `collect_async` provide functionality analogous to the [collect](https://doc.rust-lang.org/std/iter/trait.Iterator.html#method.collect) method for Rust iterators
+//! - Some types are specially designed to serve as inputs to batched operations.
+//!   Conversion to these types is supported by a variety of functions:
+//!   `local_data`, `read_local_data`, `write_local_data`, etc. convert to slices and other data types.  See [OpInput](crate::array::OpInput) for details.
 use crate::lamellar_request::LamellarRequest;
 use crate::memregion::{
     one_sided::OneSidedMemoryRegion,
