@@ -51,65 +51,38 @@ macro_rules! swap{
             initialize_array!($array, array, init_val);
             array.wait_all();
             array.barrier();
-            #[cfg(feature="non-buffered-array-ops")]
-            {
-                for idx in 0..array.len(){
-
-                    if idx%num_pes == my_pe{
-                        let val =  world.block_on(array.swap(idx,my_pe as $t));
-                        check_val!($array,val,init_val,success);
-                        if !success{
-                            println!("{:?} {:?} {:?}",idx,val,init_val);
-                        }
-                    }
+            
+            let mut reqs = vec![];
+            for idx in 0..array.len(){
+                if idx%num_pes == my_pe{
+                    reqs.push((array.swap(idx,my_pe as $t),idx));
                 }
             }
-            #[cfg(not(feature="non-buffered-array-ops"))]
-            {
-                let mut reqs = vec![];
-                for idx in 0..array.len(){
-                    if idx%num_pes == my_pe{
-                        reqs.push((array.swap(idx,my_pe as $t),idx));
-                    }
-                }
-                for (req,idx) in reqs{
-                    let val =  world.block_on(req);
-                    check_val!($array,val,init_val,success);
-                    if !success{
-                        println!("{:?} {:?} {:?}",idx,val,init_val);
-                    }
+            for (req,idx) in reqs{
+                let val =  world.block_on(req);
+                check_val!($array,val,init_val,success);
+                if !success{
+                    println!("{:?} {:?} {:?}",idx,val,init_val);
                 }
             }
+            
             array.wait_all();
             array.barrier();
-            #[cfg(feature="non-buffered-array-ops")]
-            {
-                for idx in 0..array.len(){
-                    let val =  world.block_on(array.load(idx));
-                    let check_val = (idx%num_pes) as $t;
-                    let val = val;
-                    check_val!($array,val,check_val,success);
-                    if !success{
-                        println!("{:?} {:?} {:?}",idx,val,check_val);
-                    }
+            
+            let mut reqs = vec![];
+            for idx in 0..array.len(){
+                reqs.push((array.load(idx),idx));
+            }
+            for (req,idx) in reqs{
+                let val =  world.block_on(req);
+                let check_val = (idx%num_pes) as $t;
+                let val = val;
+                check_val!($array,val,check_val,success);
+                if !success{
+                    println!("{:?} {:?} {:?}",idx,val,check_val);
                 }
             }
-            #[cfg(not(feature="non-buffered-array-ops"))]
-            {
-                let mut reqs = vec![];
-                for idx in 0..array.len(){
-                    reqs.push((array.load(idx),idx));
-                }
-                for (req,idx) in reqs{
-                    let val =  world.block_on(req);
-                    let check_val = (idx%num_pes) as $t;
-                    let val = val;
-                    check_val!($array,val,check_val,success);
-                    if !success{
-                        println!("{:?} {:?} {:?}",idx,val,check_val);
-                    }
-                }
-            }
+            
             array.barrier();
             initialize_array!($array, array, init_val);
             array.wait_all();
@@ -122,64 +95,38 @@ macro_rules! swap{
             let end_i = start_i + half_len;
             let sub_array = array.sub_array(start_i..end_i);
             sub_array.barrier();
-            #[cfg(feature="non-buffered-array-ops")]
-            {
-                for idx in 0..sub_array.len(){
-                    if idx%num_pes == my_pe{
-                        let val =  world.block_on(sub_array.swap(idx,my_pe as $t));
-                        check_val!($array,val,init_val,success);
-                        if !success{
-                            println!("{:?} {:?} {:?}",idx,val,init_val);
-                        }
-                    }
+            
+            let mut reqs = vec![];
+            for idx in 0..sub_array.len(){
+                if idx%num_pes == my_pe{
+                    reqs.push((sub_array.swap(idx,my_pe as $t),idx));
                 }
             }
-            #[cfg(not(feature="non-buffered-array-ops"))]
-            {
-                let mut reqs = vec![];
-                for idx in 0..sub_array.len(){
-                    if idx%num_pes == my_pe{
-                        reqs.push((sub_array.swap(idx,my_pe as $t),idx));
-                    }
-                }
-                for (req,idx) in reqs{
-                    let val =  world.block_on(req);
-                    check_val!($array,val,init_val,success);
-                    if !success{
-                        println!("{:?} {:?} {:?}",idx,val,init_val);
-                    }
+            for (req,idx) in reqs{
+                let val =  world.block_on(req);
+                check_val!($array,val,init_val,success);
+                if !success{
+                    println!("{:?} {:?} {:?}",idx,val,init_val);
                 }
             }
+            
             sub_array.wait_all();
             sub_array.barrier();
-            #[cfg(feature="non-buffered-array-ops")]
-            {
-                for idx in 0..sub_array.len(){
-                    let val =  world.block_on(sub_array.load(idx));
-                    let check_val = (idx%num_pes) as $t;
-                    let val = val;
-                    check_val!($array,val,check_val,success);
-                    if !success{
-                        println!("{:?} {:?} {:?}",idx,val,check_val);
-                    }
+            
+            let mut reqs = vec![];
+            for idx in 0..sub_array.len(){
+                reqs.push((sub_array.load(idx),idx));
+            }
+            for (req,idx) in reqs{
+                let val =  world.block_on(req);
+                let check_val = (idx%num_pes) as $t;
+                let val = val;
+                check_val!($array,val,check_val,success);
+                if !success{
+                    println!("{:?} {:?} {:?}",idx,val,check_val);
                 }
             }
-            #[cfg(not(feature="non-buffered-array-ops"))]
-            {
-                let mut reqs = vec![];
-                for idx in 0..sub_array.len(){
-                    reqs.push((sub_array.load(idx),idx));
-                }
-                for (req,idx) in reqs{
-                    let val =  world.block_on(req);
-                    let check_val = (idx%num_pes) as $t;
-                    let val = val;
-                    check_val!($array,val,check_val,success);
-                    if !success{
-                        println!("{:?} {:?} {:?}",idx,val,check_val);
-                    }
-                }
-            }
+            
             sub_array.barrier();
             initialize_array!($array, array, init_val);
             sub_array.wait_all();
@@ -194,64 +141,38 @@ macro_rules! swap{
                 let end_i = start_i+len;
                 let sub_array = array.sub_array(start_i..end_i);
                 sub_array.barrier();
-                #[cfg(feature="non-buffered-array-ops")]
-                {
-                    for idx in 0..sub_array.len(){
-                        if idx%num_pes == my_pe{
-                            let val =  world.block_on(sub_array.swap(idx,my_pe as $t));
-                            check_val!($array,val,init_val,success);
-                            if !success{
-                                println!("{:?} {:?} {:?}",idx,val,init_val);
-                            }
-                        }
+                
+                let mut reqs = vec![];
+                for idx in 0..sub_array.len(){
+                    if idx%num_pes == my_pe{
+                        reqs.push((sub_array.swap(idx,my_pe as $t),idx));
                     }
                 }
-                #[cfg(not(feature="non-buffered-array-ops"))]
-                {
-                    let mut reqs = vec![];
-                    for idx in 0..sub_array.len(){
-                        if idx%num_pes == my_pe{
-                            reqs.push((sub_array.swap(idx,my_pe as $t),idx));
-                        }
-                    }
-                    for (req,idx) in reqs{
-                        let val =  world.block_on(req);
-                        check_val!($array,val,init_val,success);
-                        if !success{
-                            println!("{:?} {:?} {:?}",idx,val,init_val);
-                        }
+                for (req,idx) in reqs{
+                    let val =  world.block_on(req);
+                    check_val!($array,val,init_val,success);
+                    if !success{
+                        println!("{:?} {:?} {:?}",idx,val,init_val);
                     }
                 }
+                
                 sub_array.wait_all();
                 sub_array.barrier();
-                #[cfg(feature="non-buffered-array-ops")]
-                {
-                    for idx in 0..sub_array.len(){
-                        let val =  world.block_on(sub_array.load(idx));
-                        let check_val = (idx%num_pes) as $t;
-                        let val = val;
-                    check_val!($array,val,check_val,success);
-                        if !success{
-                            println!("{:?} {:?} {:?}",idx,val,check_val);
-                        }
+                
+                let mut reqs = vec![];
+                for idx in 0..sub_array.len(){
+                    reqs.push((sub_array.load(idx),idx));
+                }
+                for (req,idx) in reqs{
+                    let val =  world.block_on(req);
+                    let check_val = (idx%num_pes) as $t;
+                    let val = val;
+                check_val!($array,val,check_val,success);
+                    if !success{
+                        println!("{:?} {:?} {:?}",idx,val,check_val);
                     }
                 }
-                #[cfg(not(feature="non-buffered-array-ops"))]
-                {
-                    let mut reqs = vec![];
-                    for idx in 0..sub_array.len(){
-                        reqs.push((sub_array.load(idx),idx));
-                    }
-                    for (req,idx) in reqs{
-                        let val =  world.block_on(req);
-                        let check_val = (idx%num_pes) as $t;
-                        let val = val;
-                    check_val!($array,val,check_val,success);
-                        if !success{
-                            println!("{:?} {:?} {:?}",idx,val,check_val);
-                        }
-                    }
-                }
+                
                 sub_array.barrier();
                 initialize_array!($array, array, init_val);
                 sub_array.wait_all();

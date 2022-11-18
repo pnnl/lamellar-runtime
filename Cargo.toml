@@ -70,7 +70,6 @@ members = ["impl"]
 [features]
 enable-rofi=["rofisys","libc"]
 enable-prof=["lamellar-prof/enable-prof"]
-non-buffered-array-ops=[]
 slurm-test=[]
 default=[]
 

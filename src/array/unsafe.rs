@@ -1,11 +1,6 @@
 mod iteration;
-#[cfg(feature = "non-buffered-array-ops")]
-pub(crate) mod operations;
 
-#[cfg(not(feature = "non-buffered-array-ops"))]
-pub(crate) mod buffered_operations;
-#[cfg(not(feature = "non-buffered-array-ops"))]
-pub(crate) use buffered_operations as operations;
+pub(crate) mod operations;
 mod rdma;
 
 use crate::active_messaging::*;
@@ -34,9 +29,7 @@ pub(crate) struct UnsafeArrayData {
     pub(crate) task_group: Arc<LamellarTaskGroup>,
     pub(crate) my_pe: usize,
     pub(crate) num_pes: usize,
-    #[cfg(not(feature = "non-buffered-array-ops"))]
     pub(crate) op_buffers: RwLock<Vec<Arc<dyn BufferOp>>>,
-    #[cfg(not(feature = "non-buffered-array-ops"))]
     req_cnt: Arc<AtomicUsize>,
 }
 
@@ -204,6 +197,17 @@ impl<T: Dist + 'static> UnsafeArray<T> {
         // println!("after buffered ops");
         // array.inner.data.print();
         array
+    }
+
+    // This is called when constructing a new array to setup the operation buffers
+    fn create_buffered_ops(&self) {
+        if let Some(func) = BUFOPS.get(&TypeId::of::<T>()) {
+            let mut op_bufs = self.inner.data.op_buffers.write();
+            let bytearray: UnsafeByteArray = self.clone().into();
+            for _pe in 0..self.inner.data.num_pes {
+                op_bufs.push(func(UnsafeByteArray::downgrade(&bytearray)))
+            }
+        }
     }
 
     /// Change the distribution this array handle uses to index into the data of the array.

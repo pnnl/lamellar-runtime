@@ -1,8 +1,5 @@
-#[cfg(not(feature = "non-buffered-array-ops"))]
-pub(crate) mod buffered_operations;
+pub(crate) mod operations;
 mod iteration;
-#[cfg(not(feature = "non-buffered-array-ops"))]
-// pub(crate) use buffered_operations as operations;
 pub(crate) mod rdma;
 pub use rdma::{AtomicArrayGet, AtomicArrayPut};
 
@@ -534,7 +531,7 @@ impl<T: Dist> AtomicLocalData<T> {
     /// let first_local_val = local_data.get_mut(0).unwrap(); //local data length is 25
     ///```
     pub fn get_mut(&self, index: usize) -> Option<AtomicElement<T>> {
-        Some(self.array.get_element(index))
+        self.array.get_element(index)
     }
 
     /// Returns the number of local elements on the PE
@@ -598,7 +595,7 @@ impl<T: Dist> Iterator for AtomicLocalDataIter<T> {
         if self.index < self.array.num_elems_local() {
             let index = self.index;
             self.index += 1;
-            Some(self.array.get_element(index))
+            self.array.get_element(index)
         } else {
             None
         }
@@ -629,10 +626,10 @@ impl<T: Dist + std::default::Default + 'static> AtomicArray<T> {
     }
 }
 impl<T: Dist + 'static> AtomicArray<T> {
-    pub(crate) fn get_element(&self, index: usize) -> AtomicElement<T> {
+    pub(crate) fn get_element(&self, index: usize) -> Option<AtomicElement<T>> {
         match self {
-            AtomicArray::NativeAtomicArray(array) => array.get_element(index).into(),
-            AtomicArray::GenericAtomicArray(array) => array.get_element(index).into(),
+            AtomicArray::NativeAtomicArray(array) => Some(array.get_element(index)?.into()),
+            AtomicArray::GenericAtomicArray(array) => Some(array.get_element(index)?.into()),
         }
     }
 }

@@ -1,8 +1,5 @@
-#[cfg(not(feature = "non-buffered-array-ops"))]
-pub(crate) mod buffered_operations;
+pub(crate) mod operations;
 pub(crate) mod iteration;
-#[cfg(not(feature = "non-buffered-array-ops"))]
-pub(crate) use buffered_operations as operations;
 mod rdma;
 use crate::array::atomic::AtomicElement;
 use crate::array::generic_atomic::operations::BUFOPS;
@@ -377,8 +374,8 @@ impl<T: Dist + std::default::Default> GenericAtomicArray<T> {
 }
 
 impl<T: Dist> GenericAtomicArray<T> {
-    pub(crate) fn get_element(&self, index: usize) -> GenericAtomicElement<T> {
-        if index > self.__local_as_slice().len(){
+    pub(crate) fn get_element(&self, index: usize) -> Option<GenericAtomicElement<T>> {
+        if index > unsafe{self.__local_as_slice().len()}{//We are only directly accessing the local slice for its len
             Some(
                 GenericAtomicElement {
                     array: self.clone(),

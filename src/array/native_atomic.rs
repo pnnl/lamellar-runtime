@@ -1,8 +1,5 @@
-#[cfg(not(feature = "non-buffered-array-ops"))]
-pub(crate) mod buffered_operations;
+pub(crate) mod operations;
 pub(crate) mod iteration;
-#[cfg(not(feature = "non-buffered-array-ops"))]
-pub(crate) use buffered_operations as operations;
 mod rdma;
 use crate::array::atomic::AtomicElement;
 use crate::array::native_atomic::operations::BUFOPS;
@@ -825,7 +822,7 @@ impl<T: Dist> NativeAtomicArray<T> {
         self.orig_t
     }
     pub(crate) fn get_element(&self, index: usize) -> Option<NativeAtomicElement<T>> {
-        if index < self.__local_as_slice().len(){
+        if index < unsafe{self.__local_as_slice().len()}{ //We are only directly accessing the local slice for its len
             Some(
                 NativeAtomicElement {
                     array: self.clone(),

@@ -1,12 +1,11 @@
 //! Provides various iterator types for LamellarArrays
 pub mod distributed_iterator;
-use crate::array::iterator::distributed_iterator::{DistIter,DistIterMut,DistributedIterator};
+use crate::array::iterator::distributed_iterator::{DistributedIterator};
 pub mod local_iterator;
-use crate::array::iterator::local_iterator::{LocalIter,LocalIterMut,LocalIterator};
+use crate::array::iterator::local_iterator::{LocalIterator};
 pub mod one_sided_iterator;
-use crate::array::iterator::one_sided_iterator::{OneSidedIter,OneSidedIterator};
+use crate::array::iterator::one_sided_iterator::{OneSidedIterator};
 
-use crate::array::{LamellarArray,LamellarArrayGet};
 use crate::memregion::Dist;
 
 /// The Schedule type controls how elements of a LamellarArray are distributed to threads when 
@@ -32,7 +31,7 @@ pub enum Schedule {
 
 /// The interface for creating the various lamellar array iterator types
 /// 
-/// This is only implemented for Safe Array types, [UnsafeArray] directly provides unsafe versions of the same functions
+/// This is only implemented for Safe Array types, [UnsafeArray][crate::array::UnsafeArray] directly provides unsafe versions of the same functions
 pub trait LamellarArrayIterators<T: Dist>{
     type DistIter: DistributedIterator;
     type LocalIter: LocalIterator;
@@ -112,7 +111,7 @@ pub trait LamellarArrayIterators<T: Dist>{
 
 /// The interface for creating the various lamellar array mutable iterator types
 /// 
-/// This is only implemented for Safe Array types, [UnsafeArray] directly provides unsafe versions of the same functions
+/// This is only implemented for Safe Array types, [UnsafeArray][crate::array::UnsafeArray] directly provides unsafe versions of the same functions
 pub trait LamellarArrayMutIterators<T: Dist>{
     /// Reference to the array being iterated
     // type Array: LamellarArray<T>;

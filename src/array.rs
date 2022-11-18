@@ -93,7 +93,7 @@ pub use native_atomic::{
 pub(crate) mod local_lock_atomic;
 pub use local_lock_atomic::{
     operations::LocalLockArrayOpBuf, LocalLockArray, LocalLockByteArray,
-    LocalLockByteArrayWeak, LocalLockLocalData,
+    LocalLockByteArrayWeak, LocalLockLocalData,LocalLockMutLocalData
 };
 
 

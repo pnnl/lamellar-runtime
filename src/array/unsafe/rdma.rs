@@ -282,11 +282,6 @@ impl<T: Dist> UnsafeArray<T> {
     /// This is a low-level API, unless you are very confident in low level distributed memory access it is highly recommended
     /// you use a safe Array type and utilize the LamellarArray load/store operations instead.
     ///
-    /// # Arguments
-    ///
-    /// * `index` - index of this array we want to start the put at
-    /// * `buf` - A lamellae registered memory segment containing the data we want to put into this array.
-    ///
     /// # Safety
     /// This call is always unsafe as mutual exclusitivity is not enforced, i.e. many other reader/writers can exist simultaneously.
     /// Additionally, when this call returns the underlying fabric provider may or may not have already copied the data buffer
@@ -308,23 +303,22 @@ impl<T: Dist> UnsafeArray<T> {
     ///                          .enumerate(){ //initialize mem_region
     ///         *elem = i;
     ///     }
-    ///     array.wait_all();
-    ///     array.barrier();
-    ///     println!("PE{my_pe array data: {:?}",array.local_data());
-    ///     if my_pe == 0 { //only perfrom the transfer from one PE
-    ///         array.put_unchecked(0,&buf);
-    ///         println!();
-    ///     }
-    ///     // wait for the data to show up
-    ///     for elem in array.local_data(){
-    ///         while elem == buf.len(){
-    ///             std::thread::yield_now();    
-    ///         }
-    ///     }
-    ///    
-    ///     println!("PE{my_pe array data: {:?}",array.local_data());
-    ///     
     /// }
+    /// array.wait_all();
+    /// array.barrier();
+    /// println!("PE{my_pe array data: {:?}",array.local_data());
+    /// if my_pe == 0 { //only perfrom the transfer from one PE
+    ///     unsafe {array.put_unchecked(0,&buf);}
+    ///     println!();
+    /// }
+    /// // wait for the data to show up
+    /// for elem in array.local_data(){
+    ///     while elem == buf.len(){
+    ///         std::thread::yield_now();    
+    ///     }
+    /// }
+    ///    
+    /// println!("PE{my_pe array data: {:?}",array.local_data());
     ///```
     /// Possible output on A 4 PE system (ordering with respect to PEs may change)
     ///```
@@ -353,11 +347,6 @@ impl<T: Dist> UnsafeArray<T> {
     /// The runtime provides no internal mechanism to check for completion when using this call.
     /// i.e. this means the user themselves will be responsible for determining when the transfer is complete
     ///
-    /// # Arguments
-    ///
-    /// * `index` - index of this array we want to start the get at
-    /// * `buf` - A lamellae registered memory segment containing which we will place data into
-    ///
     /// # Safety
     /// This call is always unsafe as mutual exclusitivity is not enforced, i.e. many other reader/writers can exist simultaneously.
     /// Additionally, when this call returns the underlying fabric provider may or may not have already copied the data buffer
@@ -372,27 +361,27 @@ impl<T: Dist> UnsafeArray<T> {
     /// let array = UnsafeArray::new::<usize>(&world,12,Distribution::Block);
     /// let buf = world.alloc_one_sided_mem_region(12).into();
     /// unsafe { 
-    ///     array.dist_iter_mut().enumerate().for_each(|(i,elem)| *elem = i); //we will used this val as completion detection
+    ///     array.dist_iter_mut().enumerate().for_each(|(i,elem)| *elem = i); 
     ///     for elem in buf.as_mut_slice()
     ///                          .expect("we just created it so we know its local") { //initialize mem_region
-    ///         *elem = buf.len();
+    ///         *elem = buf.len(); //we will used this val as completion detection
     ///     }
-    ///     array.wait_all();
-    ///     array.barrier();
-    ///     println!("PE{my_pe array data: {:?}",buf.as_slice().unwrap());
-    ///     if my_pe == 0 { //only perfrom the transfer from one PE
-    ///         array.put_unchecked(0,&buf);
-    ///         println!();
-    ///     }
-    ///     // wait for the data to show up
-    ///     for elem in buf.as_slice().unwrap(){
-    ///         while elem == buf.len(){
-    ///             std::thread::yield_now();    
-    ///         }
-    ///     }
-    ///    
-    ///     println!("PE{my_pe buf data: {:?}",buf.as_slice().unwrap()); 
     /// }
+    /// array.wait_all();
+    /// array.barrier();
+    /// println!("PE{my_pe array data: {:?}",buf.as_slice().unwrap());
+    /// if my_pe == 0 { //only perfrom the transfer from one PE
+    ///     unsafe {array.get_unchecked(0,&buf)};
+    ///     println!();
+    /// }
+    /// // wait for the data to show up
+    /// for elem in buf.as_slice().unwrap(){
+    ///     while elem == buf.len(){
+    ///         std::thread::yield_now();    
+    ///     }
+    /// }
+    ///    
+    /// println!("PE{my_pe buf data: {:?}",buf.as_slice().unwrap());
     ///```
     /// Possible output on A 4 PE system (ordering with respect to PEs may change)
     ///```
@@ -418,11 +407,6 @@ impl<T: Dist> UnsafeArray<T> {
     /// The length of the Get is dictated by the length of the buffer.
     /// 
     /// When this function returns, `buf` will have been populated with the results of the `get`
-    ///
-    /// # Arguments
-    ///
-    /// * `index` - index of this array we want to start the get at
-    /// * `buf` - A lamellae registered memory segment containing which we will place data into
     ///
     /// # Safety
     /// This call is always unsafe as mutual exclusitivity is not enforced, i.e. many other reader/writers can exist simultaneously.
@@ -479,11 +463,6 @@ impl<T: Dist> UnsafeArray<T> {
     /// The length of the Get is dictated by the length of the buffer.
     /// 
     /// This call returns a future that can be awaited to determine when the `put` has finished
-    ///
-    /// # Arguments
-    ///
-    /// * `index` - index of this array we want to start the get at
-    /// * `buf` - A lamellae registered memory segment containing which we will place data into
     ///
     /// # Safety
     /// This call is always unsafe as mutual exclusitivity is not enforced, i.e. many other reader/writers can exist simultaneously.
@@ -546,10 +525,6 @@ impl<T: Dist> UnsafeArray<T> {
     /// Retrieves the element in this array located at the specified `index`
     /// 
     /// This call returns a future that can be awaited to retrieve to requested element
-    ///
-    /// # Arguments
-    ///
-    /// * `index` - index of the element in this array we want to retrieve
     ///
     /// # Safety
     /// This call is always unsafe as mutual exclusitivity is not enforced, i.e. many other reader/writers can exist simultaneously.

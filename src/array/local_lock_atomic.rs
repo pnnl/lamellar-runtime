@@ -1,8 +1,5 @@
-#[cfg(not(feature = "non-buffered-array-ops"))]
-pub(crate) mod buffered_operations;
+pub(crate) mod operations;
 mod iteration;
-#[cfg(not(feature = "non-buffered-array-ops"))]
-pub(crate) use buffered_operations as operations;
 mod rdma;
 use crate::array::local_lock_atomic::operations::BUFOPS;
 use crate::array::private::LamellarArrayPrivate;
