@@ -2,12 +2,7 @@
 /// This example highlights how to create a Lamellar Array
 /// as then perform simple add operations on its elements
 /// --------------------------------------------------------------------
-use lamellar::array::{
-    ArithmeticOps, // needed for array.add(...);
-    AtomicArray,   // needed to construct AtomicArrays
-    //using the array submodule
-    Distribution, // needed Distribution::{Block,Cyclic}
-};
+use lamellar::array::prelude::*;
 
 fn main() {
     let world = lamellar::LamellarWorldBuilder::new().build();

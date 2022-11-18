@@ -3,6 +3,7 @@ use crate::array::atomic::*;
 use crate::array::iterator::distributed_iterator::{ DistIteratorLauncher, DistributedIterator, IndexedDistributedIterator};
 use crate::array::iterator::local_iterator::{  LocalIterator, IndexedLocalIterator};
 use crate::array::iterator::one_sided_iterator::OneSidedIter;
+use crate::array::iterator::{LamellarArrayIterators,LamellarArrayMutIterators};
 use crate::array::*;
 use crate::memregion::Dist;
 
@@ -88,7 +89,7 @@ impl<T: Dist> DistributedIterator for AtomicDistIter<T> {
         // println!("{:?} {:?}",self.cur_i,self.end_i);
         if self.cur_i < self.end_i {
             self.cur_i += 1;
-            Some(self.data.get_element(self.cur_i - 1))
+            self.data.get_element(self.cur_i - 1)
         } else {
             None
         }
@@ -127,7 +128,7 @@ impl<T: Dist> LocalIterator for AtomicLocalIter<T> {
         // println!("{:?} {:?}",self.cur_i,self.end_i);
         if self.cur_i < self.end_i {
             self.cur_i += 1;
-            Some(self.data.get_element(self.cur_i - 1))
+            self.data.get_element(self.cur_i - 1)
         } else {
             None
         }
@@ -152,33 +153,42 @@ impl<T: Dist + 'static> IndexedLocalIterator for AtomicLocalIter<T> {
     }
 }
 
-impl<T: Dist> AtomicArray<T> {
-    pub fn dist_iter(&self) -> AtomicDistIter<T> {
+impl<T: Dist> LamellarArrayIterators<T> for AtomicArray<T> {
+    // type Array = AtomicArray<T>;
+    type DistIter = AtomicDistIter<T>;
+    type LocalIter = AtomicLocalIter<T>;
+    type OnesidedIter = OneSidedIter<'static, T, Self>;
+    fn dist_iter(&self) -> Self::DistIter {
         AtomicDistIter::new(self.clone(), 0, 0)
     }
 
-    pub fn dist_iter_mut(&self) -> AtomicDistIter<T> {
-        AtomicDistIter::new(self.clone(), 0, 0)
-    }
-
-    pub fn local_iter(&self) -> AtomicLocalIter<T> {
+    fn local_iter(&self) -> Self::LocalIter {
         AtomicLocalIter::new(self.clone(), 0, 0)
     }
 
-    pub fn local_iter_mut(&self) -> AtomicLocalIter<T> {
-        AtomicLocalIter::new(self.clone(), 0, 0)
-    }
-
-    pub fn onesided_iter(&self) -> OneSidedIter<'_, T, AtomicArray<T>> {
+    fn onesided_iter(&self) -> Self::OnesidedIter {
         OneSidedIter::new(self.clone().into(), LamellarArray::team(self).clone(), 1)
     }
 
-    pub fn buffered_onesided_iter(&self, buf_size: usize) -> OneSidedIter<'_, T, AtomicArray<T>> {
+    fn buffered_onesided_iter(&self, buf_size: usize) -> Self::OnesidedIter {
         OneSidedIter::new(
             self.clone().into(),
             LamellarArray::team(self).clone(),
             std::cmp::min(buf_size, self.len()),
         )
+    }
+}
+
+impl<T: Dist> LamellarArrayMutIterators<T> for AtomicArray<T> {
+    type DistIter = AtomicDistIter<T>;
+    type LocalIter = AtomicLocalIter<T>;
+
+    fn dist_iter_mut(&self) -> Self::DistIter {
+        AtomicDistIter::new(self.clone(), 0, 0)
+    }
+
+    fn local_iter_mut(&self) -> Self::LocalIter {
+        AtomicLocalIter::new(self.clone(), 0, 0)
     }
 }
 

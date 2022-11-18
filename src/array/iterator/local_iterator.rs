@@ -31,7 +31,7 @@ use crate::LamellarTeamRT;
 use crate::array::iterator::one_sided_iterator::OneSidedIterator;
 use crate::array::iterator::Schedule;
 use crate::array::{
-    AtomicArray, Distribution, LamellarArray, UnsafeArray,
+    AtomicArray, Distribution, LamellarArray, UnsafeArray, LamellarArrayPut
 }; 
 
 use crate::active_messaging::SyncSend;
@@ -188,7 +188,10 @@ impl<T: Dist, A: From<UnsafeArray<T>> + SyncSend> LocalIterCollectHandle<T, A> {
         }
         // println!("my_start {} size {}", my_start, size);
         let array = UnsafeArray::<T>::new(self.team.clone(), size, self.distribution); //implcit barrier
-        array.put(my_start, local_vals);
+
+        // safe because only a single reference to array on each PE
+        // we calculate my_start so that each pes local vals are guaranteed to not overwrite another pes values.
+        unsafe {array.put(my_start, local_vals)};
         array.into()
     }
 }

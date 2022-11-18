@@ -4,7 +4,7 @@ use crate::array::local_lock_atomic::*;
 use crate::array::iterator::distributed_iterator::*;
 use crate::array::iterator::local_iterator::*;
 use crate::array::iterator::one_sided_iterator::OneSidedIter;
-use crate::array::iterator::Schedule;
+use crate::array::iterator::{Schedule,LamellarArrayIterators,LamellarArrayMutIterators};
 use crate::array::private::LamellarArrayPrivate;
 use crate::array::*;
 use crate::memregion::Dist;
@@ -298,8 +298,13 @@ impl<T: Dist + 'static> IndexedLocalIterator for LocalLockLocalIterMut<'static, 
     }
 }
 
-impl<T: Dist + 'static> LocalLockArray<T> {
-    pub fn dist_iter(&self) -> LocalLockDistIter<'static, T> {
+impl<T: Dist> LamellarArrayIterators<T> for LocalLockArray<T> {
+    // type Array = LocalLockArray<T>;
+    type DistIter = LocalLockDistIter<'static,T>;
+    type LocalIter = LocalLockLocalIter<'static,T>;
+    type OnesidedIter = OneSidedIter<'static, T, Self>;
+
+    fn dist_iter(&self) -> Self::DistIter {
         let lock = Arc::new(self.lock.read());
         self.barrier();
         LocalLockDistIter {
@@ -311,7 +316,38 @@ impl<T: Dist + 'static> LocalLockArray<T> {
         }
     }
 
-    pub fn dist_iter_mut(&self) -> LocalLockDistIterMut<'static, T> {
+    fn local_iter(&self) -> Self::LocalIter {
+        let lock = Arc::new(self.lock.read());
+        LocalLockLocalIter {
+            data: self.clone(),
+            lock: lock,
+            cur_i: 0,
+            end_i: 0,
+            _marker: PhantomData,
+        }
+    }
+
+    fn onesided_iter(&self) -> Self::OnesidedIter {
+        OneSidedIter::new(self.clone().into(), self.array.team_rt().clone(), 1)
+    }
+
+    fn buffered_onesided_iter(
+        &self,
+        buf_size: usize,
+    ) -> Self::OnesidedIter {
+        OneSidedIter::new(
+            self.clone().into(),
+            self.array.team_rt().clone(),
+            std::cmp::min(buf_size, self.len()),
+        )
+    }
+}
+
+impl<T: Dist> LamellarArrayMutIterators<T> for LocalLockArray<T> {
+    type DistIter = LocalLockDistIterMut<'static,T>;
+    type LocalIter = LocalLockLocalIterMut<'static,T>;
+
+    fn dist_iter_mut(&self) -> Self::DistIter {
         let lock = Arc::new(self.lock.write());
         self.barrier();
         // println!("dist_iter thread {:?} got lock",std::thread::current().id());
@@ -324,18 +360,7 @@ impl<T: Dist + 'static> LocalLockArray<T> {
         }
     }
 
-    pub fn local_iter(&self) -> LocalLockLocalIter<'static, T> {
-        let lock = Arc::new(self.lock.read());
-        LocalLockLocalIter {
-            data: self.clone(),
-            lock: lock,
-            cur_i: 0,
-            end_i: 0,
-            _marker: PhantomData,
-        }
-    }
-
-    pub fn local_iter_mut(&self) -> LocalLockLocalIterMut<'static, T> {
+    fn local_iter_mut(&self) -> Self::LocalIter {
         let lock = Arc::new(self.lock.write());
         LocalLockLocalIterMut {
             data: self.clone(),
@@ -344,21 +369,6 @@ impl<T: Dist + 'static> LocalLockArray<T> {
             end_i: 0,
             _marker: PhantomData,
         }
-    }
-
-    pub fn onesided_iter(&self) -> OneSidedIter<'_, T, LocalLockArray<T>> {
-        OneSidedIter::new(self.clone().into(), self.array.team().clone(), 1)
-    }
-
-    pub fn buffered_onesided_iter(
-        &self,
-        buf_size: usize,
-    ) -> OneSidedIter<'_, T, LocalLockArray<T>> {
-        OneSidedIter::new(
-            self.clone().into(),
-            self.array.team().clone(),
-            std::cmp::min(buf_size, self.len()),
-        )
     }
 }
 
@@ -438,7 +448,7 @@ impl<T: Dist> DistIteratorLauncher for LocalLockArray<T> {
         self.array.collect_async(iter, d)
     }
     fn team(&self) -> Pin<Arc<LamellarTeamRT>> {
-        self.array.team().clone()
+        self.array.team_rt().clone()
     }
 }
 
@@ -515,6 +525,6 @@ impl<T: Dist> LocalIteratorLauncher for LocalLockArray<T> {
     // }
     
     fn team(&self) -> Pin<Arc<LamellarTeamRT>> {
-        self.array.team().clone()
+        self.array.team_rt().clone()
     }
 }

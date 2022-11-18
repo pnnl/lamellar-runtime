@@ -5,7 +5,7 @@
 //!
 //! # Warning
 //! This is a low-level module, unless you are very comfortable/confident in low level distributed memory (and even then) it is highly recommended you use the [LamellarArrays][crate::array] and [Active Messaging][crate::active_messaging] interfaces to perform distributed communications and computation.
-use crate::array::{LamellarArrayInput, LamellarRead, LamellarWrite, MyFrom};
+use crate::array::{LamellarArrayRdmaInput,LamellarArrayRdmaOutput, LamellarRead, LamellarWrite, TeamFrom};
 use crate::lamellae::{AllocationType, Backend, Lamellae, LamellaeComm, LamellaeRDMA};
 use crate::lamellar_team::LamellarTeamRT;
 use crate::active_messaging::AmDist;
@@ -138,42 +138,67 @@ impl<T: Dist> LamellarMemoryRegion<T> {
     }
 }
 
-impl<T: Dist> From<&LamellarMemoryRegion<T>> for LamellarArrayInput<T> {
+impl<T: Dist> From<LamellarArrayRdmaOutput<T>> for LamellarMemoryRegion<T> {
+    #[tracing::instrument(skip_all)]
+    fn from(output: LamellarArrayRdmaOutput<T>) -> Self {
+        match output{
+            LamellarArrayRdmaOutput::LamellarMemRegion(mr) => mr,
+            LamellarArrayRdmaOutput::SharedMemRegion(mr) => mr.into(),
+            LamellarArrayRdmaOutput::LocalMemRegion(mr) => mr.into(),
+        }
+    }
+}
+
+impl<T: Dist> From<LamellarArrayRdmaInput<T>> for LamellarMemoryRegion<T> {
+    #[tracing::instrument(skip_all)]
+    fn from(input: LamellarArrayRdmaInput<T>) -> Self {
+        match input{
+            LamellarArrayRdmaInput::LamellarMemRegion(mr) => mr,
+            LamellarArrayRdmaInput::SharedMemRegion(mr) => mr.into(),
+            LamellarArrayRdmaInput::LocalMemRegion(mr) => mr.into(),
+        }
+    }
+}
+
+impl<T: Dist> From<&LamellarMemoryRegion<T>> for LamellarArrayRdmaInput<T> {
     #[tracing::instrument(skip_all)]
     fn from(mr: &LamellarMemoryRegion<T>) -> Self {
-        LamellarArrayInput::LamellarMemRegion(mr.clone())
-        // match mr.clone(){
-        //     LamellarMemoryRegion::Shared(mr) => LamellarArrayInput::SharedMemRegion(mr),
-        //     LamellarMemoryRegion::Local(mr) => LamellarArrayInput::LocalMemRegion(mr),
-        // }
+        LamellarArrayRdmaInput::LamellarMemRegion(mr.clone())
     }
 }
 
-impl<T: Dist> MyFrom<&LamellarMemoryRegion<T>> for LamellarArrayInput<T> {
+impl<T: Dist> TeamFrom<&LamellarMemoryRegion<T>> for LamellarArrayRdmaInput<T> {
     #[tracing::instrument(skip_all)]
-    fn my_from(mr: &LamellarMemoryRegion<T>, _team: &std::pin::Pin<Arc<LamellarTeamRT>>) -> Self {
-        LamellarArrayInput::LamellarMemRegion(mr.clone())
-        // match mr.clone(){
-        //     LamellarMemoryRegion::Shared(mr) => LamellarArrayInput::SharedMemRegion(mr),
-        //     LamellarMemoryRegion::Local(mr) => LamellarArrayInput::LocalMemRegion(mr),
-        // }
+    fn team_from(mr: &LamellarMemoryRegion<T>, _team: &std::pin::Pin<Arc<LamellarTeamRT>>) -> Self {
+        LamellarArrayRdmaInput::LamellarMemRegion(mr.clone())
     }
 }
 
-// impl<T: Dist> From<LamellarMemoryRegion<T>> for LamellarArrayInput<T> {
-//     fn from(mr: LamellarMemoryRegion<T>) -> Self {
-//         LamellarArrayInput::LamellarMemRegion(mr)
-//     }
-// }
-
-impl<T: Dist> MyFrom<LamellarMemoryRegion<T>> for LamellarArrayInput<T> {
+impl<T: Dist> TeamFrom<LamellarMemoryRegion<T>> for LamellarArrayRdmaInput<T> {
     #[tracing::instrument(skip_all)]
-    fn my_from(mr: LamellarMemoryRegion<T>, _team: &std::pin::Pin<Arc<LamellarTeamRT>>) -> Self {
-        LamellarArrayInput::LamellarMemRegion(mr)
-        // match mr{
-        //     LamellarMemoryRegion::Shared(mr) => LamellarArrayInput::SharedMemRegion(mr),
-        //     LamellarMemoryRegion::Local(mr) => LamellarArrayInput::LocalMemRegion(mr),
-        // }
+    fn team_from(mr: LamellarMemoryRegion<T>, _team: &std::pin::Pin<Arc<LamellarTeamRT>>) -> Self {
+        LamellarArrayRdmaInput::LamellarMemRegion(mr)
+    }
+}
+
+impl<T: Dist> From<&LamellarMemoryRegion<T>> for LamellarArrayRdmaOutput<T> {
+    #[tracing::instrument(skip_all)]
+    fn from(mr: &LamellarMemoryRegion<T>) -> Self {
+        LamellarArrayRdmaOutput::LamellarMemRegion(mr.clone())
+    }
+}
+
+impl<T: Dist> TeamFrom<&LamellarMemoryRegion<T>> for LamellarArrayRdmaOutput<T> {
+    #[tracing::instrument(skip_all)]
+    fn team_from(mr: &LamellarMemoryRegion<T>, _team: &std::pin::Pin<Arc<LamellarTeamRT>>) -> Self {
+        LamellarArrayRdmaOutput::LamellarMemRegion(mr.clone())
+    }
+}
+
+impl<T: Dist> TeamFrom<LamellarMemoryRegion<T>> for LamellarArrayRdmaOutput<T> {
+    #[tracing::instrument(skip_all)]
+    fn team_from(mr: LamellarMemoryRegion<T>, _team: &std::pin::Pin<Arc<LamellarTeamRT>>) -> Self {
+        LamellarArrayRdmaOutput::LamellarMemRegion(mr)
     }
 }
 

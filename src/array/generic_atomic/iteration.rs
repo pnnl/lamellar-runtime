@@ -3,8 +3,7 @@ use crate::array::generic_atomic::*;
 use crate::array::iterator::distributed_iterator::*;
 use crate::array::iterator::local_iterator::*;
 use crate::array::iterator::one_sided_iterator::OneSidedIter;
-use crate::array::iterator::Schedule;
-// use crate::array::private::LamellarArrayPrivate;
+use crate::array::iterator::{Schedule,LamellarArrayIterators,LamellarArrayMutIterators};
 use crate::array::*;
 use crate::memregion::Dist;
 // use parking_lot::{
@@ -161,8 +160,12 @@ impl<T: Dist> LocalIterator for GenericAtomicLocalIter<T> {
     }
 }
 
-impl<T: Dist + 'static> GenericAtomicArray<T> {
-    pub fn dist_iter(&self) -> GenericAtomicDistIter<T> {
+impl<T: Dist > LamellarArrayIterators<T> for GenericAtomicArray<T> {
+    // type Array = GenericAtomicArray<T>;
+    type DistIter = GenericAtomicDistIter<T>;
+    type LocalIter = GenericAtomicLocalIter<T>;
+    type OnesidedIter = OneSidedIter<'static, T, Self>;
+    fn dist_iter(&self) -> Self::DistIter {
         GenericAtomicDistIter {
             data: self.clone(),
             cur_i: 0,
@@ -170,15 +173,7 @@ impl<T: Dist + 'static> GenericAtomicArray<T> {
         }
     }
 
-    pub fn dist_iter_mut(&self) -> GenericAtomicDistIter<T> {
-        GenericAtomicDistIter {
-            data: self.clone(),
-            cur_i: 0,
-            end_i: 0,
-        }
-    }
-
-    pub fn local_iter(&self) -> GenericAtomicLocalIter<T> {
+    fn local_iter(&self) -> Self::LocalIter {
         GenericAtomicLocalIter {
             data: self.clone(),
             cur_i: 0,
@@ -186,27 +181,40 @@ impl<T: Dist + 'static> GenericAtomicArray<T> {
         }
     }
 
-    pub fn local_iter_mut(&self) -> GenericAtomicLocalIter<T> {
-        GenericAtomicLocalIter {
-            data: self.clone(),
-            cur_i: 0,
-            end_i: 0,
-        }
+    fn onesided_iter(&self) -> Self::OnesidedIter {
+        OneSidedIter::new(self.clone().into(), self.array.team_rt().clone(), 1)
     }
 
-    pub fn onesided_iter(&self) -> OneSidedIter<'_, T, GenericAtomicArray<T>> {
-        OneSidedIter::new(self.clone().into(), self.array.team().clone(), 1)
-    }
-
-    pub fn buffered_onesided_iter(
+    fn buffered_onesided_iter(
         &self,
         buf_size: usize,
-    ) -> OneSidedIter<'_, T, GenericAtomicArray<T>> {
+    ) ->  Self::OnesidedIter {
         OneSidedIter::new(
             self.clone().into(),
-            self.array.team().clone(),
+            self.array.team_rt().clone(),
             std::cmp::min(buf_size, self.len()),
         )
+    }
+}
+
+impl<T: Dist > LamellarArrayMutIterators<T> for GenericAtomicArray<T> {
+    type DistIter = GenericAtomicDistIter<T>;
+    type LocalIter = GenericAtomicLocalIter<T>;
+
+    fn dist_iter_mut(&self) -> Self::DistIter {
+        GenericAtomicDistIter {
+            data: self.clone(),
+            cur_i: 0,
+            end_i: 0,
+        }
+    }
+
+    fn local_iter_mut(&self) -> Self::LocalIter {
+        GenericAtomicLocalIter {
+            data: self.clone(),
+            cur_i: 0,
+            end_i: 0,
+        }
     }
 }
 
@@ -286,7 +294,7 @@ impl<T: Dist> DistIteratorLauncher for GenericAtomicArray<T> {
         self.array.collect_async(iter, d)
     }
     fn team(&self) -> Pin<Arc<LamellarTeamRT>> {
-        self.array.team().clone()
+        self.array.team_rt().clone()
     }
 }
 
@@ -362,6 +370,6 @@ impl<T: Dist> LocalIteratorLauncher for GenericAtomicArray<T> {
     //     self.array.local_collect_async(iter, d)
     // }
     fn team(&self) -> Pin<Arc<LamellarTeamRT>> {
-        self.array.team().clone()
+        self.array.team_rt().clone()
     }
 }

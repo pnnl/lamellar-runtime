@@ -1,6 +1,6 @@
 #[doc(hidden)]
 // pub use crate::array::{ArrayOpCmd, LamellarArray, ReduceKey, Distribution};
-pub use crate::array::{Distribution,LamellarArray,ArrayOps};
+pub use crate::array::{Distribution,LamellarArray,ArrayOps,SubArray, LamellarArrayGet, LamellarArrayPut};
 pub use crate::array::r#unsafe::UnsafeArray;
 pub use crate::array::read_only::ReadOnlyArray;
 pub use crate::array::atomic::AtomicArray;
@@ -9,7 +9,7 @@ pub use crate::array::native_atomic::NativeAtomicArray;
 pub use crate::array::local_lock_atomic::LocalLockArray;
 
 
-pub use crate::array::iterator::Schedule;
+pub use crate::array::iterator::{Schedule,LamellarArrayIterators,LamellarArrayMutIterators};
 pub use crate::array::iterator::distributed_iterator::{DistributedIterator,IndexedDistributedIterator};
 pub use crate::array::iterator::local_iterator::{LocalIterator,IndexedLocalIterator};
 pub use crate::array::iterator::one_sided_iterator::{OneSidedIterator, OneSidedIteratorIter};

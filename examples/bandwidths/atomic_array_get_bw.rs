@@ -54,7 +54,7 @@ fn main() {
             for j in (0..2_u64.pow(exp) as usize).step_by(num_bytes as usize) {
                 let sub_timer = Instant::now();
                 let sub_reg = data.sub_region(j..(j + num_bytes as usize));
-                array.get(ARRAY_LEN * (num_pes - 1), &sub_reg);
+                unsafe {array.get(ARRAY_LEN * (num_pes - 1), &sub_reg);}
                 // println!("j: {:?}",j);
                 // unsafe { array.put_slice(num_pes - 1, j, &data[..num_bytes as usize]) };
                 sub_time += sub_timer.elapsed().as_secs_f64();

@@ -281,13 +281,13 @@ impl<'a, T: Dist> InputToValue<'a, T> {
         let mut req_ids = HashMap::new();
         match self {
             InputToValue::OneToOne(index, value) => {
-                let (pe, local_index) = array.calc_pe_and_offset(index);
+                let (pe, local_index) = array.pe_and_offset_for_global_index(index).expect("array index out of bounds");
                 pe_offsets.insert(pe, InputToValue::OneToOne(local_index, value));
                 req_ids.insert(pe, vec![0]);
                 (pe_offsets, req_ids, 1)
             }
             InputToValue::OneToMany(index, values) => {
-                let (pe, local_index) = array.calc_pe_and_offset(index);
+                let (pe, local_index) = array.pe_and_offset_for_global_index(index).expect("array index out of bounds");
                 let vals_len = values.len();
                 req_ids.insert(pe, (0..vals_len).collect());
                 pe_offsets.insert(pe, InputToValue::OneToMany(local_index, values));
@@ -298,7 +298,7 @@ impl<'a, T: Dist> InputToValue<'a, T> {
                 let mut temp_pe_offsets = HashMap::new();
                 let mut req_cnt = 0;
                 for index in indices.iter() {
-                    let (pe, local_index) = array.calc_pe_and_offset(index);
+                    let (pe, local_index) = array.pe_and_offset_for_global_index(index).expect("array index out of bounds");
                     temp_pe_offsets
                         .entry(pe)
                         .or_insert(vec![])
@@ -320,7 +320,7 @@ impl<'a, T: Dist> InputToValue<'a, T> {
                 let mut temp_pe_offsets = HashMap::new();
                 let mut req_cnt = 0;
                 for (index, val) in indices.iter().zip(values.iter()) {
-                    let (pe, local_index) = array.calc_pe_and_offset(index);
+                    let (pe, local_index) = array.pe_and_offset_for_global_index(index).expect("array index out of bounds");
                     let data = temp_pe_offsets.entry(pe).or_insert((vec![], vec![]));
                     data.0.push(local_index);
                     data.1.push(val);
@@ -653,7 +653,7 @@ impl<'a, T: Dist> OpInputEnum<'_, T> {
 ///
 /// - T and &T
 /// - &\[T\]
-///     - the local data of a read only array is directly the underlying slice
+///     - the local data of a [ReadOnlyArray] is directly the underlying slice
 ///     - ```read_only_array.local_data();```
 /// - Vec\[T\] and &Ve\[T\]
 /// - [AtomicLocalData][crate::array::atomic::AtomicLocalData]
@@ -2875,6 +2875,7 @@ pub trait CompareExchangeEpsilonOps<T: ElementComparePartialEqOps>:
     private::LamellarArrayPrivate<T>
 {
     /// This call stores the `new` value into the element specified by `index` if the current value is the same as `current` plus or minus `epslion`.
+    ///
     /// e.g. ``` if current - epsilon < array[index] && array[index] < current + epsilon { array[index] = new }```
     ///
     /// The return value is a result indicating whether the new value was written into the element and contains the previous value.

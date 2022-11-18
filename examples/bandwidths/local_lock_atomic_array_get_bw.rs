@@ -2,9 +2,8 @@
 /// Test the bandwidth between two PEs using an RDMA Put of N bytes
 /// from a local array into a remote PE.
 /// --------------------------------------------------------------------
-// use lamellar::ActiveMessaging;
-use lamellar::array::{DistributedIterator, Distribution, LocalLockArray};
-use lamellar::RemoteMemoryRegion;
+use lamellar::array::prelude::*;
+use lamellar::memregion::prelude::*;
 use std::time::Instant;
 
 const ARRAY_LEN: usize = 1024 * 1024 * 1024;
@@ -59,7 +58,7 @@ fn main() {
             for j in (0..2_u64.pow(exp) as usize).step_by(num_bytes as usize) {
                 let sub_timer = Instant::now();
                 let sub_reg = data.sub_region(j..(j + num_bytes as usize));
-                array.get(ARRAY_LEN * (num_pes - 1), &sub_reg);
+                unsafe {array.get(ARRAY_LEN * (num_pes - 1), &sub_reg);}
                 // println!("j: {:?}",j);
                 // unsafe { array.put_slice(num_pes - 1, j, &data[..num_bytes as usize]) };
                 sub_time += sub_timer.elapsed().as_secs_f64();

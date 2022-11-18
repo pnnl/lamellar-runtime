@@ -36,6 +36,9 @@ use std::sync::Arc;
 // use std::task::{Context, Poll};
 
 
+//TODO: Think about an active message based method for transfering data that performs data reducing iterators before sending
+// i.e. for something like step_by(N) we know that only every N elements actually needs to get sent...
+
 /// An interface for dealing with one sided iterators of LamellarArrays
 ///
 /// The functions in this trait are available on all one-sided iterators, typically
@@ -319,7 +322,9 @@ impl<'a, T: Dist + 'static, A: LamellarArrayInternalGet<T>> OneSidedIter<'a, T, 
         buf_size: usize,
     ) -> OneSidedIter<'a, T, A> {
         let buf_0 = team.alloc_one_sided_mem_region(buf_size);
-        array.internal_get(0, &buf_0).wait();
+        // potentially unsafe depending on the array type (i.e. UnsafeArray - which requries unsafe to construct an iterator), 
+        // but safe with respect to the buf_0 as this is the only reference
+        unsafe {array.internal_get(0, &buf_0).wait()};
         let ptr = unsafe { SendNonNull(NonNull::new(buf_0.as_mut_ptr().unwrap()).unwrap()) };
         let iter = OneSidedIter {
             array: array,
@@ -349,10 +354,15 @@ impl<'a, T: Dist + 'static, A: LamellarArrayInternalGet<T> + Clone + Send> OneSi
                 self.buf_index = 0;
                 // self.fill_buffer(self.index);
                 if self.index + self.buf_0.len() < self.array.len() {
-                    self.array.internal_get(self.index, &self.buf_0).wait();
+                    // potentially unsafe depending on the array type (i.e. UnsafeArray - which requries unsafe to construct an iterator), 
+                    // but safe with respect to the buf_0 as we have consumed all its content and this is the only reference
+                    unsafe {self.array.internal_get(self.index, &self.buf_0).wait();}
                 } else {
                     let sub_region = self.buf_0.sub_region(0..(self.array.len() - self.index));
-                    self.array.internal_get(self.index, &sub_region).wait();
+                    // potentially unsafe depending on the array type (i.e. UnsafeArray - which requries unsafe to construct an iterator), 
+                    // but safe with respect to the buf_0 as we have consumed all its content and this is the only reference
+                    // sub_region is set to the remaining size of the array so we will not have an out of bounds issue
+                    unsafe {self.array.internal_get(self.index, &sub_region).wait();}
                 }
             }
             // self.spin_for_valid(self.buf_index);
@@ -373,9 +383,22 @@ impl<'a, T: Dist + 'static, A: LamellarArrayInternalGet<T> + Clone + Send> OneSi
    
     fn advance_index(&mut self, count: usize) {
         self.index += count;
-        self.buf_index = 0;
-        // self.fill_buffer(0);
-        self.array.internal_get(self.index, &self.buf_0).wait();
+        self.buf_index += count;
+        if self.buf_index == self.buf_0.len() {
+            self.buf_index = 0;
+            // self.fill_buffer(0);
+            if self.index + self.buf_0.len() < self.array.len() {
+                // potentially unsafe depending on the array type (i.e. UnsafeArray - which requries unsafe to construct an iterator), 
+                // but safe with respect to the buf_0 as we have consumed all its content and this is the only reference
+                unsafe {self.array.internal_get(self.index, &self.buf_0).wait();}
+            } else {
+                let sub_region = self.buf_0.sub_region(0..(self.array.len() - self.index));
+                // potentially unsafe depending on the array type (i.e. UnsafeArray - which requries unsafe to construct an iterator), 
+                // but safe with respect to the buf_0 as we have consumed all its content and this is the only reference
+                // sub_region is set to the remaining size of the array so we will not have an out of bounds issue
+                unsafe {self.array.internal_get(self.index, &sub_region).wait();}
+            }
+        }
     }
     fn array(&self) -> Self::Array {
         self.array.clone()

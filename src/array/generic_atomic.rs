@@ -26,6 +26,7 @@ pub struct GenericAtomicElement<T> {
     local_index: usize,
 }
 
+
 impl<T: Dist> From<GenericAtomicElement<T>> for AtomicElement<T> {
     fn from(element: GenericAtomicElement<T>) -> AtomicElement<T> {
         AtomicElement::GenericAtomicElement(element)
@@ -193,7 +194,11 @@ impl<T: Dist + std::fmt::Debug> std::fmt::Debug for GenericAtomicElement<T> {
     }
 }
 
-#[doc(hidden)]
+/// A variant of an [AtomicArray] providing atomic access for any type that implements [Dist][crate::memregion::Dist].
+///
+/// Atomicity is gauranteed by constructing a 1-Byte mutex for each element in the array.
+///
+/// Generally any operation on this array type will be performed via an internal runtime Active Message, i.e. direct RDMA operations are not allowed
 #[lamellar_impl::AmDataRT(Clone, Debug)]
 pub struct GenericAtomicArray<T> {
     locks: Darc<Vec<Mutex<()>>>,
@@ -338,8 +343,7 @@ impl<T: Dist> Iterator for GenericAtomicLocalDataIter<T> {
 }
 
 impl<T: Dist + std::default::Default> GenericAtomicArray<T> {
-    // Send + Copy  == Dist
-    pub fn new<U: Clone + Into<IntoLamellarTeam>>(
+    pub(crate) fn new<U: Clone + Into<IntoLamellarTeam>>(
         team: U,
         array_size: usize,
         distribution: Distribution,
@@ -374,31 +378,38 @@ impl<T: Dist + std::default::Default> GenericAtomicArray<T> {
 
 impl<T: Dist> GenericAtomicArray<T> {
     pub(crate) fn get_element(&self, index: usize) -> GenericAtomicElement<T> {
-        GenericAtomicElement {
-            array: self.clone(),
-            local_index: index,
+        if index > self.__local_as_slice().len(){
+            Some(
+                GenericAtomicElement {
+                    array: self.clone(),
+                    local_index: index,
+                }
+            )
+        }
+        else {
+            None
         }
     }
 }
 
 impl<T: Dist> GenericAtomicArray<T> {
-    pub fn wait_all(&self) {
-        self.array.wait_all();
-    }
-    pub fn barrier(&self) {
-        self.array.barrier();
-    }
+    // pub fn wait_all(&self) {
+    //     self.array.wait_all();
+    // }
+    // pub fn barrier(&self) {
+    //     self.array.barrier();
+    // }
 
-    pub fn block_on<F>(&self, f: F) -> F::Output
-    where
-        F: Future,
-    {
-        self.array.block_on(f)
-    }
+    // pub fn block_on<F>(&self, f: F) -> F::Output
+    // where
+    //     F: Future,
+    // {
+    //     self.array.block_on(f)
+    // }
 
-    pub(crate) fn num_elems_local(&self) -> usize {
-        self.array.num_elems_local()
-    }
+    // pub(crate) fn num_elems_local(&self) -> usize {
+    //     self.array.num_elems_local()
+    // }
 
     pub fn use_distribution(self, distribution: Distribution) -> Self {
         GenericAtomicArray {
@@ -407,27 +418,27 @@ impl<T: Dist> GenericAtomicArray<T> {
         }
     }
 
-    pub fn num_pes(&self) -> usize {
-        self.array.num_pes()
-    }
-
-    #[doc(hidden)]
-    pub fn pe_for_dist_index(&self, index: usize) -> Option<usize> {
-        self.array.pe_for_dist_index(index)
-    }
-
-    #[doc(hidden)]
-    pub fn pe_offset_for_dist_index(&self, pe: usize, index: usize) -> Option<usize> {
-        self.array.pe_offset_for_dist_index(pe, index)
-    }
-
-    // pub(crate) fn subarray_index_from_local(&self, index: usize) -> Option<usize> {
-    //     self.array.inner.subarray_index_from_local(index)
+    // pub fn num_pes(&self) -> usize {
+    //     self.array.num_pes()
     // }
 
-    pub fn len(&self) -> usize {
-        self.array.len()
-    }
+    // #[doc(hidden)]
+    // pub fn pe_for_dist_index(&self, index: usize) -> Option<usize> {
+    //     self.array.pe_for_dist_index(index)
+    // }
+
+    // #[doc(hidden)]
+    // pub fn pe_offset_for_dist_index(&self, pe: usize, index: usize) -> Option<usize> {
+    //     self.array.pe_offset_for_dist_index(pe, index)
+    // }
+
+    // // pub(crate) fn subarray_index_from_local(&self, index: usize) -> Option<usize> {
+    // //     self.array.inner.subarray_index_from_local(index)
+    // // }
+
+    // pub fn len(&self) -> usize {
+    //     self.array.len()
+    // }
 
     pub fn local_data(&self) -> GenericAtomicLocalData<T> {
         GenericAtomicLocalData {
@@ -454,12 +465,12 @@ impl<T: Dist> GenericAtomicArray<T> {
         self.array.local_as_mut_slice()
     }
 
-    pub fn sub_array<R: std::ops::RangeBounds<usize>>(&self, range: R) -> Self {
-        GenericAtomicArray {
-            locks: self.locks.clone(),
-            array: self.array.sub_array(range),
-        }
-    }
+    // pub fn sub_array<R: std::ops::RangeBounds<usize>>(&self, range: R) -> Self {
+    //     GenericAtomicArray {
+    //         locks: self.locks.clone(),
+    //         array: self.array.sub_array(range),
+    //     }
+    // }
 
     pub fn into_unsafe(self) -> UnsafeArray<T> {
         // println!("generic into_unsafe");
@@ -573,7 +584,7 @@ impl<T: Dist> From<GenericAtomicByteArray> for AtomicArray<T> {
 
 impl<T: Dist> private::ArrayExecAm<T> for GenericAtomicArray<T> {
     fn team(&self) -> Pin<Arc<LamellarTeamRT>> {
-        self.array.team().clone()
+        self.array.team_rt().clone()
     }
     fn team_counters(&self) -> Arc<AMCounters> {
         self.array.team_counters()
@@ -602,20 +613,23 @@ impl<T: Dist> private::LamellarArrayPrivate<T> for GenericAtomicArray<T> {
 }
 
 impl<T: Dist> LamellarArray<T> for GenericAtomicArray<T> {
+    fn team(&self) -> Pin<Arc<LamellarTeamRT>> {
+        self.array.team_rt().clone()
+    }
     fn my_pe(&self) -> usize {
         self.array.my_pe()
     }
-    fn team(&self) -> Pin<Arc<LamellarTeamRT>> {
-        self.array.team().clone()
-    }
-    fn num_elems_local(&self) -> usize {
-        self.num_elems_local()
+    fn num_pes(&self) -> usize {
+        self.array.num_pes()
     }
     fn len(&self) -> usize {
-        self.len()
+        self.array.len()
+    }
+    fn num_elems_local(&self) -> usize {
+        self.array.num_elems_local()
     }
     fn barrier(&self) {
-        self.barrier();
+        self.array.barrier();
     }
     fn wait_all(&self) {
         self.array.wait_all()
@@ -637,7 +651,10 @@ impl<T: Dist> LamellarRead for GenericAtomicArray<T> {}
 impl<T: Dist> SubArray<T> for GenericAtomicArray<T> {
     type Array = GenericAtomicArray<T>;
     fn sub_array<R: std::ops::RangeBounds<usize>>(&self, range: R) -> Self::Array {
-        self.sub_array(range).into()
+        GenericAtomicArray {
+            locks: self.locks.clone(),
+            array: self.array.sub_array(range),
+        }
     }
     fn global_index(&self, sub_index: usize) -> usize {
         self.array.global_index(sub_index)

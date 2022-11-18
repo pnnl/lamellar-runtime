@@ -35,45 +35,45 @@ fn type_to_string(ty: &syn::Type) -> String {
     }
 }
 
-#[cfg(feature = "non-buffered-array-ops")]
-fn gen_write_array_impls(
-    typeident: syn::Ident,
-    array_types: &Vec<(syn::Ident, syn::Ident)>,
-    ops: &Vec<(syn::Ident, bool)>,
-    rt: bool,
-) -> proc_macro2::TokenStream {
-    let lamellar = if rt {
-        quote::format_ident!("crate")
-    } else {
-        quote::format_ident!("__lamellar")
-    };
+// #[cfg(feature = "non-buffered-array-ops")]
+// fn gen_write_array_impls(
+//     typeident: syn::Ident,
+//     array_types: &Vec<(syn::Ident, syn::Ident)>,
+//     ops: &Vec<(syn::Ident, bool)>,
+//     rt: bool,
+// ) -> proc_macro2::TokenStream {
+//     let lamellar = if rt {
+//         quote::format_ident!("crate")
+//     } else {
+//         quote::format_ident!("__lamellar")
+//     };
 
-    let mut write_array_impl = quote! {};
-    for (op, fetch) in ops.clone().into_iter() {
-        let mut match_stmts = quote! {};
-        for (array_type, _) in array_types {
-            match_stmts.extend(quote! {
-                #lamellar::array::LamellarWriteArray::#array_type(inner) => inner.#op(index,val),
-            });
-        }
-        let return_type = match fetch {
-            true => {
-                quote! { Box<dyn #lamellar::LamellarRequest<Output = #typeident>  > }
-            }
-            false => {
-                quote! {Option<Box<dyn #lamellar::LamellarRequest<Output = ()>  >>}
-            }
-        };
-        write_array_impl.extend(quote! {
-            fn #op(&self,index: usize, val: #typeident)-> #return_type{
-                match self{
-                    #match_stmts
-                }
-            }
-        });
-    }
-    write_array_impl
-}
+//     let mut write_array_impl = quote! {};
+//     for (op, fetch) in ops.clone().into_iter() {
+//         let mut match_stmts = quote! {};
+//         for (array_type, _) in array_types {
+//             match_stmts.extend(quote! {
+//                 #lamellar::array::LamellarWriteArray::#array_type(inner) => inner.#op(index,val),
+//             });
+//         }
+//         let return_type = match fetch {
+//             true => {
+//                 quote! { Box<dyn #lamellar::LamellarRequest<Output = #typeident>  > }
+//             }
+//             false => {
+//                 quote! {Option<Box<dyn #lamellar::LamellarRequest<Output = ()>  >>}
+//             }
+//         };
+//         write_array_impl.extend(quote! {
+//             fn #op(&self,index: usize, val: #typeident)-> #return_type{
+//                 match self{
+//                     #match_stmts
+//                 }
+//             }
+//         });
+//     }
+//     write_array_impl
+// }
 
 fn native_atomic_slice(
     typeident: &syn::Type,
@@ -943,34 +943,41 @@ fn create_buffered_ops(
     let user_expanded = quote_spanned! {expanded.span()=>
         const _: () = {
             extern crate lamellar as __lamellar;
+            use __lamellar::array::prelude::*;
+            use __lamellar::active_messaging::prelude::*;
+            use __lamellar::memregion::prelude::*;
+            use __lamellar::darc::prelude::*;
             use __lamellar::array::{
-                AtomicArray,AtomicByteArray,AtomicByteArrayWeak,
-                GenericAtomicArray,
-                NativeAtomicArray,
-                LocalLockArray,LocalLockByteArray,LocalLockByteArrayWeak,
-                LocalArithmeticOps,LocalAtomicOps,
-                UnsafeArray, UnsafeByteArray, UnsafeByteArrayWeak,
+            //     AtomicArray,AtomicByteArray,AtomicByteArrayWeak,
+            //     GenericAtomicArray,
+            //     NativeAtomicArray,
+            //     LocalLockArray,LocalLockByteArray,LocalLockByteArrayWeak,
+            //     LocalArithmeticOps,LocalAtomicOps,
+            //     UnsafeArray, UnsafeByteArray, UnsafeByteArrayWeak,
                 ArrayOpCmd,
-                LamellarArrayPut,
+            //     LamellarArrayPut,
                 OpResultOffsets,
                 RemoteOpAmInputToValue,
-                PeOpResults,OpResults,
-                OpAmInputToValue};
-            // #bitwise_mod
-            use __lamellar::array;
-            use __lamellar::LamellarTeamRT;
-            // #bitwise_mod
-            use __lamellar::Darc;
-            use __lamellar::LamellarArray;
+                PeOpResults,
+                OpResults,
+                // OpAmInputToValue
+            };
+            // // #bitwise_mod
+            // use __lamellar::array;
+            // use __lamellar::LamellarTeamRT;
+            // // #bitwise_mod
+            // use __lamellar::Darc;
+            // use __lamellar::LamellarArray;
             use __lamellar::active_messaging::RemoteActiveMessage;
-            use __lamellar::LamellarRequest;
-            use __lamellar::OneSidedMemoryRegion;
-            use __lamellar::RemoteMemoryRegion;
-            use std::sync::Arc;
+            // use __lamellar::LamellarRequest;
+            // use __lamellar::OneSidedMemoryRegion;
+            // use __lamellar::RemoteMemoryRegion;
+            
             use __lamellar::parking_lot::{Mutex,RwLock};
             // use __lamellar::tracing::*;
             use __lamellar::async_trait;
             use __lamellar::inventory;
+            use std::sync::Arc;
             use std::sync::atomic::{Ordering,AtomicBool,AtomicUsize};
             use std::pin::Pin;
             #expanded

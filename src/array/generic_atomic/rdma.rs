@@ -4,55 +4,49 @@ use crate::array::LamellarWrite;
 use crate::array::*;
 use crate::memregion::{AsBase, Dist, RTMemoryRegionRDMA, RegisteredMemoryRegion};
 
-impl<T: Dist + 'static> GenericAtomicArray<T> {
-    pub(crate) fn internal_get<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(
+impl<T: Dist> LamellarArrayInternalGet<T> for GenericAtomicArray<T> {
+    unsafe fn internal_get<U: Into<LamellarMemoryRegion<T>>>(
         &self,
         index: usize,
         buf: U,
     ) -> Box<dyn LamellarArrayRequest<Output = ()>> {
+        
         let req = self.exec_am_local(InitGetAm {
             array: self.clone(),
             index: index,
-            buf: buf.my_into(&self.array.team()),
+            buf: buf.into(),
         });
         Box::new(ArrayRdmaHandle { reqs: vec![req] })
     }
-
-    pub fn get<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(
-        &self,
-        index: usize,
-        buf: U,
-    ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
-        self.internal_get(index, buf).into_future()
-    }
-
-    pub(crate) fn internal_at(&self, index: usize) -> Box<dyn LamellarArrayRequest<Output = T>> {
-        let buf: OneSidedMemoryRegion<T> = self.array.team().alloc_one_sided_mem_region(1);
+    unsafe fn internal_at(&self, index: usize) -> Box<dyn LamellarArrayRequest<Output = T>> {
+        let buf: OneSidedMemoryRegion<T> = self.array.team_rt().alloc_one_sided_mem_region(1);
         let req = self.exec_am_local(InitGetAm {
             array: self.clone(),
             index: index,
-            buf: buf.clone().my_into(&self.array.team()),
+            buf: buf.clone().into(),
         });
         Box::new(ArrayRdmaAtHandle {
             reqs: vec![req],
             buf: buf,
         })
     }
+}
 
-    pub fn at(&self, index: usize) -> Pin<Box<dyn Future<Output = T> + Send>> {
-        self.internal_at(index).into_future()
+impl<T: Dist> LamellarArrayGet<T> for GenericAtomicArray<T> {
+    unsafe fn get<U: TeamInto<LamellarArrayRdmaOutput<T>> + LamellarWrite>(
+        &self,
+        index: usize,
+        buf: U,
+    ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
+        self.internal_get(index, buf.team_into(&self.array.team_rt())).into_future()
     }
+    fn at(&self, index: usize) -> Pin<Box<dyn Future<Output = T> + Send>> {
+        unsafe{self.internal_at(index).into_future()}
+    }
+}
 
-    // pub fn iput<U: MyInto<LamellarArrayInput<T>> + LamellarRead>(&self, index: usize, buf: U) {
-    //     self.exec_am_local(InitPutAm {
-    //         array: self.clone(),
-    //         index: index,
-    //         buf: buf.my_into(&self.array.team()),
-    //     })
-    //     .get();
-    // }
-
-    pub(crate) fn internal_put<U: MyInto<LamellarArrayInput<T>> + LamellarRead>(
+impl<T: Dist> LamellarArrayInternalPut<T> for GenericAtomicArray<T> {
+    unsafe fn internal_put<U: Into<LamellarMemoryRegion<T>>>(
         &self,
         index: usize,
         buf: U,
@@ -60,69 +54,19 @@ impl<T: Dist + 'static> GenericAtomicArray<T> {
         let req = self.exec_am_local(InitPutAm {
             array: self.clone(),
             index: index,
-            buf: buf.my_into(&self.array.team()),
+            buf: buf.into(),
         });
         Box::new(ArrayRdmaHandle { reqs: vec![req] })
-    }
-
-    pub fn put<U: MyInto<LamellarArrayInput<T>> + LamellarRead>(
-        &self,
-        index: usize,
-        buf: U,
-    ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
-        self.internal_put(index, buf).into_future()
-    }
-}
-
-impl<T: Dist + 'static> LamellarArrayInternalGet<T> for GenericAtomicArray<T> {
-    // fn iget<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(&self, index: usize, buf: U) {
-    //     self.iget(index, buf)
-    // }
-    fn internal_get<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(
-        &self,
-        index: usize,
-        buf: U,
-    ) -> Box<dyn LamellarArrayRequest<Output = ()>> {
-        self.internal_get(index, buf)
-    }
-    fn internal_at(&self, index: usize) -> Box<dyn LamellarArrayRequest<Output = T>> {
-        self.internal_at(index)
-    }
-}
-
-impl<T: Dist + 'static> LamellarArrayGet<T> for GenericAtomicArray<T> {
-    // fn iget<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(&self, index: usize, buf: U) {
-    //     self.iget(index, buf)
-    // }
-    fn get<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(
-        &self,
-        index: usize,
-        buf: U,
-    ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
-        self.get(index, buf)
-    }
-    fn at(&self, index: usize) -> Pin<Box<dyn Future<Output = T> + Send>> {
-        self.at(index)
-    }
-}
-
-impl<T: Dist> LamellarArrayInternalPut<T> for GenericAtomicArray<T> {
-    fn internal_put<U: MyInto<LamellarArrayInput<T>> + LamellarRead>(
-        &self,
-        index: usize,
-        buf: U,
-    ) -> Box<dyn LamellarArrayRequest<Output = ()>> {
-        self.internal_put(index, buf)
     }
 }
 
 impl<T: Dist> LamellarArrayPut<T> for GenericAtomicArray<T> {
-    fn put<U: MyInto<LamellarArrayInput<T>> + LamellarRead>(
+    unsafe fn put<U: TeamInto<LamellarArrayRdmaInput<T>> + LamellarRead>(
         &self,
         index: usize,
         buf: U,
     ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
-        self.put(index, buf)
+        unsafe{self.internal_put(index, buf.team_into(&self.array.team_rt())).into_future()}
     }
 }
 
@@ -130,7 +74,7 @@ impl<T: Dist> LamellarArrayPut<T> for GenericAtomicArray<T> {
 struct InitGetAm<T: Dist> {
     array: GenericAtomicArray<T>, //inner of the indices we need to place data into
     index: usize,                 //relative to inner
-    buf: LamellarArrayInput<T>,
+    buf: LamellarMemoryRegion<T>,
 }
 
 #[lamellar_impl::rt_am_local]
@@ -245,7 +189,7 @@ impl LamellarAm for GenericAtomicRemoteGetAm {
 struct InitPutAm<T: Dist> {
     array: GenericAtomicArray<T>, //inner of the indices we need to place data into
     index: usize,                 //relative to inner
-    buf: LamellarArrayInput<T>,
+    buf: LamellarMemoryRegion<T>,
 }
 
 #[lamellar_impl::rt_am_local]

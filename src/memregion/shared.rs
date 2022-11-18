@@ -449,16 +449,29 @@ impl<T: Dist> From<&SharedMemoryRegion<T>> for LamellarMemoryRegion<T> {
     }
 }
 
-impl<T: Dist> From<&SharedMemoryRegion<T>> for LamellarArrayInput<T> {
+impl<T: Dist> From<&SharedMemoryRegion<T>> for LamellarArrayRdmaOutput<T> {
     fn from(smr: &SharedMemoryRegion<T>) -> Self {
         // println!("from");
-        LamellarArrayInput::SharedMemRegion(smr.clone())
+        LamellarArrayRdmaOutput::SharedMemRegion(smr.clone())
     }
 }
 
-impl<T: Dist> MyFrom<&SharedMemoryRegion<T>> for LamellarArrayInput<T> {
-    fn my_from(smr: &SharedMemoryRegion<T>, _team: &std::pin::Pin<Arc<LamellarTeamRT>>) -> Self {
-        LamellarArrayInput::SharedMemRegion(smr.clone())
+impl<T: Dist> TeamFrom<&SharedMemoryRegion<T>> for LamellarArrayRdmaOutput<T> {
+    fn team_from(smr: &SharedMemoryRegion<T>, _team: &std::pin::Pin<Arc<LamellarTeamRT>>) -> Self {
+        LamellarArrayRdmaOutput::SharedMemRegion(smr.clone())
+    }
+}
+
+impl<T: Dist> From<&SharedMemoryRegion<T>> for LamellarArrayRdmaInput<T> {
+    fn from(smr: &SharedMemoryRegion<T>) -> Self {
+        // println!("from");
+        LamellarArrayRdmaInput::SharedMemRegion(smr.clone())
+    }
+}
+
+impl<T: Dist> TeamFrom<&SharedMemoryRegion<T>> for LamellarArrayRdmaInput<T> {
+    fn team_from(smr: &SharedMemoryRegion<T>, _team: &std::pin::Pin<Arc<LamellarTeamRT>>) -> Self {
+        LamellarArrayRdmaInput::SharedMemRegion(smr.clone())
     }
 }
 

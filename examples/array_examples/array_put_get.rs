@@ -104,18 +104,22 @@ fn main() {
         }
         let start = std::time::Instant::now();
 
-        cyclic_array
-            .get(0, shared_mem_region.sub_region(0..total_len / 2))
-            .await;
-        cyclic_array
-            .get(0, local_mem_region.sub_region(0..total_len / 2))
-            .await;
+        unsafe{
+            cyclic_array
+                .get(0, shared_mem_region.sub_region(0..total_len / 2))
+                .await;
+            cyclic_array
+                .get(0, local_mem_region.sub_region(0..total_len / 2))
+                .await;
+        }
 
         println!("get elapsed {:?}", start.elapsed().as_secs_f64());
         world.barrier();
         // puts/gets using single values
-        block_array.put(total_len - 1, &12345).await;
-        cyclic_array.put(total_len - 1, &12345).await;
+        unsafe {
+            block_array.put(total_len - 1, &12345).await;
+            cyclic_array.put(total_len - 1, &12345).await;
+        }
         world.barrier();
     });
 
