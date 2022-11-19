@@ -3,12 +3,12 @@
 //! By distributed, we mean that the memory backing the array is physically located on multiple distributed PEs in they system.
 //!
 //! LamellarArrays provide: 
-//!  - RDMA like `put` and `get` APIs 
-//!  - Element Wise operations (e.g. add, fetch_add, or, compare_exchange, etc)
-//!  - Distributed and Onesided Iteration
+//!  - RDMA like [put][crate::array::LamellarArrayPut] and  [get][crate::array::LamellarArrayGet] APIs 
+//!  - Element Wise operations (e.g. [load/store][crate::array::AccessOps], [add][crate::array::ArithmeticOps], [fetch_and][crate::array::BitWiseOps], [compare_exchange][crate::array::CompareExchangeOps], etc)
+//!  - [Distributed][crate::array::iterator::distributed_iterator], [Local][crate::array::iterator::local_iterator], and [Onesided][crate::array::iterator::one_sided_iterator] Iteration
 //!  - Distributed Reductions
-//!  - Block or Cyclic layouts
-//!  - Sub Arrays
+//!  - [Block][crate::array::Distribution::Block] or [Cyclic][crate::array::Distribution::Cyclic] data layouts
+//!  - [Sub Arrays][crate::array::SubArray]
 //!
 //! # Safety
 //! Array Data Lifetimes: LamellarArrays are built upon [Darcs][crate::darc::Darc] (Distributed Atomic Reference Counting Pointers) and as such have distributed lifetime management.
@@ -924,80 +924,357 @@ pub trait ArrayPrint<T: Dist + std::fmt::Debug>: LamellarArray<T> {
     fn print(&self);
 }
 
-// #[enum_dispatch(LamellarWriteArray<T>,LamellarReadArray<T>)]
+
+// pub(crate) trait LamellarArrayReduceInner<T>: LamellarArrayInternalGet<T>
+// where
+//     T: Dist + AmDist + 'static,
+// {
+//     fn get_reduction_op(&self, op: &str) -> LamellarArcAm;
+//     fn reduce_data(&self, func: LamellarArcAm) -> Box<dyn LamellarRequest<Output = T>>;
+//     fn reduce_req(&self, op: &str) -> Box<dyn LamellarRequest<Output = T>>;
+// }
+
+/// An interface for performing distributed reductions accross a lamellar array.
+///
+/// This trait exposes a few common reductions implemented by the runtime
+/// as well as the ability the launch user defined reductions that have been registered with the runtime at compile time
+/// 
+/// Please see the documentation for the [register_reduction][lamellar_impl::register_reduction] procedural macro for
+/// more details and examples on how to create your own reductions.
+///
+/// Currently these are one sided reductions, meaning the calling PE will initiate the reduction, and launch the appropriate Active Messages
+/// with out requiring synchronization with the other PEs
+///
+/// We plan to expose a collective reductions (e.g. reduce_all) in a future release, as well as support for broadcast operations.
+///
+/// # Safety
+/// This trait is only implelemted by the safe array types, for UnsafeArray we expose unsafe APIs of the functions.
+///
+/// One thing to consider is that due to being a one sided reduction, safety is only gauranteed with respect to Atomicity of individual elements,
+/// not with respect to the entire global array. This means that while one PE is performing a reduction, other PEs can atomically update their local
+/// elements. While this is technically safe with respect to the integrity of an indivdual element (and with respect to the compiler),
+/// it may not be your desired behavior. 
+///
+/// To be clear this behavior is not an artifact of lamellar, but rather the language itself,
+/// for example if you have an `Arc<Vec<AtomicUsize>>` shared on multiple threads, you could safely update the elements from each thread,
+/// but performing a reduction could result in safe but non deterministic results.
+///
+/// In Lamellar converting to a [ReadOnlyArray] before the reduction is a straightforward workaround to enusre the data is not changing during the reduction.
+///
+/// # Examples
+/// We provide a series of examples illustrating the above issues
+///```
+/// use lamellar::array::prelude::*; 
+/// let world = LamellarWorldBuilder.build();
+/// let array = AtomicArray::new::<usize>(&world,1000000,Distribution::Block);
+///
+/// let array_clone = array.clone()
+/// array.local_iterator().for_each(|_| {
+///     let index = rand::thread_rng().gen_range(0..array_clone.len());
+///     array_clone.add(index,1); //randomly at one to an element in the array.
+/// })
+/// let sum = array.sum(); // atomic updates still possibly happening, output non deterministic
+/// println!("sum {sum}");
+///```
+/// Waiting for local operations to finish not enough by itself
+///```
+/// use lamellar::array::prelude::*; 
+/// let world = LamellarWorldBuilder.build();
+/// let array = AtomicArray::new::<usize>(&world,1000000,Distribution::Block);
+/// let array_clone = array.clone()
+/// let req = array.local_iterator().for_each(|_| {
+///     let index = rand::thread_rng().gen_range(0..array_clone.len());
+///     array_clone.add(index,1); //randomly at one to an element in the array.
+/// });
+/// array.block_on(req); 
+/// let sum = array.sum(); // atomic updates still possibly happening (on remote nodes), output non deterministic
+/// println!("sum {sum}");
+///```
+/// Need to add a barrier after local operations on all PEs have finished
+///```
+/// use lamellar::array::prelude::*; 
+/// let world = LamellarWorldBuilder.build();
+/// let num_pes = world.num_pes();
+/// let array = AtomicArray::new::<usize>(&world,1000000,Distribution::Block);
+/// let array_clone = array.clone()
+/// let req = array.local_iterator().for_each(|_| {
+///     let index = rand::thread_rng().gen_range(0..array_clone.len());
+///     array_clone.add(index,1); //randomly at one to an element in the array.
+/// });
+/// array.block_on(req); 
+/// array.barrier()
+/// let sum = array.sum(); // No updates occuring anywhere anymore so we have a deterministic result
+/// assert_eq!(array.len()*num_pes,sum);
+///```
+/// Alternatively we can convert our AtomicArray into a ReadOnlyArray before the reduction
+/// ```
+/// use lamellar::array::prelude::*; 
+/// let world = LamellarWorldBuilder.build();
+/// let num_pes = world.num_pes();
+/// let array = AtomicArray::new::<usize>(&world,1000000,Distribution::Block);
+/// let array_clone = array.clone()
+/// let req = array.local_iterator().for_each(|_| {
+///     let index = rand::thread_rng().gen_range(0..array_clone.len());
+///     array_clone.add(index,1); //randomly at one to an element in the array.
+/// });
+/// let array = array.into_read_only(); //only returns once there is a single reference remaining on each PE
+/// let sum = array.sum(); // No updates occuring anywhere anymore so we have a deterministic result
+/// assert_eq!(array.len()*num_pes,sum);
+///```
+/// Finally we are inlcuding a `Arc<Vec<AtomicUsize>>` highlightin the same issue
+///```
+/// use std::sync::atomic::{AtomicUsize,Ordering};
+/// use std::sync::Arc;
+/// use std::thread;
+
+/// use rand::prelude::*;
+/// use std::time::Duration;
+
+/// let  mut data = vec![];
+/// for _i in 0..1000{
+///     data.push(AtomicUsize::new(0));
+/// }
+/// let shared_data = Arc::new(data);
+/// for _i in 0..4{
+///     let shared_data = shared_data.clone();
+///     thread::spawn ( move ||{
+///         let mut rng = rand::thread_rng();
+///         for _i in 0..10000{
+///             let index = rng.gen_range(0..shared_data.len());
+///             shared_data[index].fetch_add(1,Ordering::SeqCst);
+///         }
+///     });
+/// }
+/// let mut sum = shared_data.iter().map(|elem| elem.load(Ordering::SeqCst)).reduce(|sum,item| sum+item).expect("iter has more than one element");
+/// println!{"sum {sum:?}"};
+/// while sum < 40000 {
+///     sum = shared_data.iter().map(|elem| elem.load(Ordering::SeqCst)).reduce(|sum,item| sum+item).expect("iter has more than one element");
+///     println!{"sum {sum:?}"};
+/// }
+///```
 pub trait LamellarArrayReduce<T>: LamellarArrayInternalGet<T>
 where
     T: Dist + AmDist + 'static,
 {
-    fn get_reduction_op(&self, op: &str) -> LamellarArcAm;
-    fn reduce(&self, op: &str) -> Pin<Box<dyn Future<Output = T>>>;
+    /// Perform a reduction on the entire distributed array, returning the value to the calling PE.
+    ///
+    /// Please see the documentation for the [register_reduction][lamellar_impl::register_reduction] procedural macro for
+    /// more details and examples on how to create your own reductions.
+    ///
+    /// # Examples
+    /// ```
+    /// use lamellar::array::prelude::*; 
+    /// let world = LamellarWorldBuilder.build();
+    /// let num_pes = world.num_pes();
+    /// let array = AtomicArray::new::<usize>(&world,1000000,Distribution::Block);
+    /// let array_clone = array.clone()
+    /// let req = array.local_iterator().for_each(|_| {
+    ///     let index = rand::thread_rng().gen_range(0..array_clone.len());
+    ///     array_clone.add(index,1); //randomly at one to an element in the array.
+    /// });
+    /// let array = array.into_read_only(); //only returns once there is a single reference remaining on each PE
+    /// let sum = array.reduce("sum"); // equivalent to calling array.sum()
+    /// assert_eq!(array.len()*num_pes,sum);
+    ///```
+    fn reduce(&self, reduction: &str) -> Pin<Box<dyn Future<Output = T>>>;
+}
+
+/// Interface for common arithmetic based reductions
+pub trait LamellarArrayArithmeticReduce<T>: LamellarArrayReduce<T>
+where
+    T: Dist + AmDist + ElementArithmeticOps + 'static,
+{
+    /// Perform a sum reduction on the entire distributed array, returning the value to the calling PE.
+    ///
+    /// This equivalent to `reduce("sum")`.
+    /// 
+    /// # Examples
+    /// ```
+    /// use lamellar::array::prelude::*; 
+    /// let world = LamellarWorldBuilder.build();
+    /// let num_pes = world.num_pes();
+    /// let array = AtomicArray::new::<usize>(&world,1000000,Distribution::Block);
+    /// let array_clone = array.clone()
+    /// let req = array.local_iterator().for_each(|_| {
+    ///     let index = rand::thread_rng().gen_range(0..array_clone.len());
+    ///     array_clone.add(index,1); //randomly at one to an element in the array.
+    /// });
+    /// let array = array.into_read_only(); //only returns once there is a single reference remaining on each PE
+    /// let sum = array.sum(); 
+    /// assert_eq!(array.len()*num_pes,sum);
+    ///```
     fn sum(&self) -> Pin<Box<dyn Future<Output = T>>>;
-    fn max(&self) -> Pin<Box<dyn Future<Output = T>>>;
+
+    /// Perform a production reduction on the entire distributed array, returning the value to the calling PE.
+    ///
+    /// This equivalent to `reduce("prod")`.
+    /// 
+    /// # Examples
+    /// ```
+    /// use lamellar::array::prelude::*; 
+    /// let world = LamellarWorldBuilder.build();
+    /// let num_pes = world.num_pes();
+    /// let array = AtomicArray::new::<usize>(&world,10,Distribution::Block);
+    /// let array_clone = array.clone()
+    /// let req = array.local_iterator().for_each(|_| {
+    ///     let index = rand::thread_rng().gen_range(0..array_clone.len());
+    ///     array_clone.add(index,1); //randomly at one to an element in the array.
+    /// });
+    /// let array = array.into_read_only(); //only returns once there is a single reference remaining on each PE
+    /// let prod = array.prod(); 
+    /// assert_eq!(num_pes.pow(array.len()),prod);
+    ///```
     fn prod(&self) -> Pin<Box<dyn Future<Output = T>>>;
 }
 
-impl<T: Dist + AmDist + 'static> LamellarWriteArray<T> {
-    pub fn reduce(&self, op: &str) -> Pin<Box<dyn Future<Output = T>>> {
-        match self {
-            LamellarWriteArray::UnsafeArray(array) => array.reduce(op),
-            LamellarWriteArray::AtomicArray(array) => array.reduce(op),
-            LamellarWriteArray::LocalLockArray(array) => array.reduce(op),
-        }
-    }
-    pub fn sum(&self) -> Pin<Box<dyn Future<Output = T>>> {
-        match self {
-            LamellarWriteArray::UnsafeArray(array) => array.sum(),
-            LamellarWriteArray::AtomicArray(array) => array.sum(),
-            LamellarWriteArray::LocalLockArray(array) => array.sum(),
-        }
-    }
-    pub fn max(&self) -> Pin<Box<dyn Future<Output = T>>> {
-        match self {
-            LamellarWriteArray::UnsafeArray(array) => array.max(),
-            LamellarWriteArray::AtomicArray(array) => array.max(),
-            LamellarWriteArray::LocalLockArray(array) => array.max(),
-        }
-    }
-    pub fn prod(&self) -> Pin<Box<dyn Future<Output = T>>> {
-        match self {
-            LamellarWriteArray::UnsafeArray(array) => array.prod(),
-            LamellarWriteArray::AtomicArray(array) => array.prod(),
-            LamellarWriteArray::LocalLockArray(array) => array.prod(),
-        }
-    }
+/// Interface for common compare based reductions
+pub trait LamellarArrayCompareReduce<T>: LamellarArrayReduce<T>
+where
+    T: Dist + AmDist + ElementComparePartialEqOps + 'static,
+{
+    /// Find the max element in the entire destributed array, returning to the calling PE
+    ///
+    /// This equivalent to `reduce("max")`.
+    /// 
+    /// # Examples
+    /// ```
+    /// use lamellar::array::prelude::*; 
+    /// let world = LamellarWorldBuilder.build();
+    /// let num_pes = world.num_pes();
+    /// let array = AtomicArray::new::<usize>(&world,10,Distribution::Block);
+    /// let array_clone = array.clone()
+    /// let req = array.dist_iterator().enumerate().for_each(|i,elem| elem.store(i*2));
+    /// let array = array.into_read_only(); //only returns once there is a single reference remaining on each PE
+    /// let max = array.max(); 
+    /// assert_eq!((array.len()-1)*2,max);
+    ///```
+    fn max(&self) -> Pin<Box<dyn Future<Output = T>>>;
+    /// Find the min element in the entire destributed array, returning to the calling PE
+    ///
+    /// This equivalent to `reduce("min")`.
+    /// 
+    /// # Examples
+    /// ```
+    /// use lamellar::array::prelude::*; 
+    /// let world = LamellarWorldBuilder.build();
+    /// let num_pes = world.num_pes();
+    /// let array = AtomicArray::new::<usize>(&world,10,Distribution::Block);
+    /// let array_clone = array.clone()
+    /// let req = array.dist_iterator().enumerate().for_each(|i,elem| elem.store(i*2));
+    /// let array = array.into_read_only(); //only returns once there is a single reference remaining on each PE
+    /// let min = array.min(); 
+    /// assert_eq!(0,min);
+    ///```
+    fn min(&self) -> Pin<Box<dyn Future<Output = T>>>;
 }
 
-impl<T: Dist + AmDist + 'static> LamellarReadArray<T> {
-    pub fn reduce(&self, op: &str) -> Pin<Box<dyn Future<Output = T>>> {
-        match self {
-            LamellarReadArray::UnsafeArray(array) => array.reduce(op),
-            LamellarReadArray::AtomicArray(array) => array.reduce(op),
-            LamellarReadArray::LocalLockArray(array) => array.reduce(op),
-            LamellarReadArray::ReadOnlyArray(array) => array.reduce(op),
-        }
-    }
-    pub fn sum(&self) -> Pin<Box<dyn Future<Output = T>>> {
-        match self {
-            LamellarReadArray::UnsafeArray(array) => array.sum(),
-            LamellarReadArray::AtomicArray(array) => array.sum(),
-            LamellarReadArray::LocalLockArray(array) => array.sum(),
-            LamellarReadArray::ReadOnlyArray(array) => array.sum(),
-        }
-    }
-    pub fn max(&self) -> Pin<Box<dyn Future<Output = T>>> {
-        match self {
-            LamellarReadArray::UnsafeArray(array) => array.max(),
-            LamellarReadArray::AtomicArray(array) => array.max(),
-            LamellarReadArray::LocalLockArray(array) => array.max(),
-            LamellarReadArray::ReadOnlyArray(array) => array.max(),
-        }
-    }
-    pub fn prod(&self) -> Pin<Box<dyn Future<Output = T>>> {
-        match self {
-            LamellarReadArray::UnsafeArray(array) => array.prod(),
-            LamellarReadArray::AtomicArray(array) => array.prod(),
-            LamellarReadArray::LocalLockArray(array) => array.prod(),
-            LamellarReadArray::ReadOnlyArray(array) => array.prod(),
-        }
-    }
-}
+
+/// This procedural macro is used to enable the execution of user defined reductions on LamellarArrays.
+///
+/// The general form of using this macro is:
+/// ```register_reduction!(name,closure,type1,type2,...)```
+/// - `name` is how the reduction will be registered with runtime and used to launch the reduction
+/// - `closure` is the user defined reduction and takes the form of:
+///     - ```FnMut(T, T -> T```
+/// - `type1`, `type2`,... are the types for which we would like this reduction to work for
+///     - reductions get implemented as [Active Messages][crate::active_messaging] and as such must use concrete types (no generics) to register correctly
+/// 
+/// The procedural macro will appropriately construct various implmentation so that the safety guarantees of each lamellary array type are maintained.
+///
+/// # Panics
+/// This will panic at Runtime initialization if the name of the reduction is duplicated.
+///
+/// # Examples
+/// Recreating the "Sum" reduction
+/// ```
+/// use lamellar::array::prelude::*;
+///
+/// register_reduction!(
+///     my_sum, // the name of our new reduction
+///     |acc,elem| acc+elem , //the reduction closure
+///     usize, // will be implementd for usize,f32, and i32
+///     f32,
+///     i32,
+/// )
+/// let world = LamellarWorldBuilder.build();
+/// let num_pes = world.num_pes();
+/// let array = AtomicArray::new::<usize>(&world,1000000,Distribution::Block);
+/// let array_clone = array.clone()
+/// let req = array.local_iterator().for_each(|_| {
+///     let index = rand::thread_rng().gen_range(0..array_clone.len());
+///     array_clone.add(index,1); //randomly at one to an element in the array.
+/// });
+/// let array = array.into_read_only(); //only returns once there is a single reference remaining on each PE
+/// let sum = array.sum(); 
+/// let my_sum = array.reduce("my_sum"); //pass a &str containing the reduction to use
+/// assert_eq!(sum,my_sum);
+///```
+pub use lamellar_impl::register_reduction;
+
+
+
+// impl<T: Dist + AmDist + 'static> LamellarWriteArray<T> {
+//     pub fn reduce(&self, op: &str) -> Pin<Box<dyn Future<Output = T>>> {
+//         match self {
+//             LamellarWriteArray::UnsafeArray(array) => array.reduce(op),
+//             LamellarWriteArray::AtomicArray(array) => array.reduce(op),
+//             LamellarWriteArray::LocalLockArray(array) => array.reduce(op),
+//         }
+//     }
+//     pub fn sum(&self) -> Pin<Box<dyn Future<Output = T>>> {
+//         match self {
+//             LamellarWriteArray::UnsafeArray(array) => array.sum(),
+//             LamellarWriteArray::AtomicArray(array) => array.sum(),
+//             LamellarWriteArray::LocalLockArray(array) => array.sum(),
+//         }
+//     }
+//     pub fn max(&self) -> Pin<Box<dyn Future<Output = T>>> {
+//         match self {
+//             LamellarWriteArray::UnsafeArray(array) => array.max(),
+//             LamellarWriteArray::AtomicArray(array) => array.max(),
+//             LamellarWriteArray::LocalLockArray(array) => array.max(),
+//         }
+//     }
+//     pub fn prod(&self) -> Pin<Box<dyn Future<Output = T>>> {
+//         match self {
+//             LamellarWriteArray::UnsafeArray(array) => array.prod(),
+//             LamellarWriteArray::AtomicArray(array) => array.prod(),
+//             LamellarWriteArray::LocalLockArray(array) => array.prod(),
+//         }
+//     }
+// }
+
+// impl<T: Dist + AmDist + 'static> LamellarReadArray<T> {
+//     pub fn reduce(&self, op: &str) -> Pin<Box<dyn Future<Output = T>>> {
+//         match self {
+//             LamellarReadArray::UnsafeArray(array) => array.reduce(op),
+//             LamellarReadArray::AtomicArray(array) => array.reduce(op),
+//             LamellarReadArray::LocalLockArray(array) => array.reduce(op),
+//             LamellarReadArray::ReadOnlyArray(array) => array.reduce(op),
+//         }
+//     }
+//     pub fn sum(&self) -> Pin<Box<dyn Future<Output = T>>> {
+//         match self {
+//             LamellarReadArray::UnsafeArray(array) => array.sum(),
+//             LamellarReadArray::AtomicArray(array) => array.sum(),
+//             LamellarReadArray::LocalLockArray(array) => array.sum(),
+//             LamellarReadArray::ReadOnlyArray(array) => array.sum(),
+//         }
+//     }
+//     pub fn max(&self) -> Pin<Box<dyn Future<Output = T>>> {
+//         match self {
+//             LamellarReadArray::UnsafeArray(array) => array.max(),
+//             LamellarReadArray::AtomicArray(array) => array.max(),
+//             LamellarReadArray::LocalLockArray(array) => array.max(),
+//             LamellarReadArray::ReadOnlyArray(array) => array.max(),
+//         }
+//     }
+//     pub fn prod(&self) -> Pin<Box<dyn Future<Output = T>>> {
+//         match self {
+//             LamellarReadArray::UnsafeArray(array) => array.prod(),
+//             LamellarReadArray::AtomicArray(array) => array.prod(),
+//             LamellarReadArray::LocalLockArray(array) => array.prod(),
+//             LamellarReadArray::ReadOnlyArray(array) => array.prod(),
+//         }
+//     }
+// }

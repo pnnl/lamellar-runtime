@@ -836,11 +836,12 @@ pub fn register_reduction(item: TokenStream) -> TokenStream {
     array_reduce::__register_reduction(item)
 }
  
-#[proc_macro_error]
-#[proc_macro]
-pub fn generate_reductions_for_type(item: TokenStream) -> TokenStream {
-    array_reduce::__generate_reductions_for_type(item)
-}
+// probalby should turn this into a derive macro
+// #[proc_macro_error]
+// #[proc_macro]
+// pub fn generate_reductions_for_type(item: TokenStream) -> TokenStream { 
+//     array_reduce::__generate_reductions_for_type(item)
+// }
 
 #[doc(hidden)]
 #[proc_macro_error]

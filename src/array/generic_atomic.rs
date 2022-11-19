@@ -553,6 +553,16 @@ impl<T: Dist> From<GenericAtomicArray<T>> for GenericAtomicByteArray {
         }
     }
 }
+
+impl<T: Dist> From<GenericAtomicArray<T>> for LamellarByteArray {
+    fn from(array: GenericAtomicArray<T>) -> Self {
+        LamellarByteArray::GenericAtomicArray(GenericAtomicByteArray {
+            locks: array.locks.clone(),
+            array: array.array.into(),
+        })
+    }
+}
+
 impl<T: Dist> From<GenericAtomicArray<T>> for AtomicByteArray {
     fn from(array: GenericAtomicArray<T>) -> Self {
         AtomicByteArray::GenericAtomicByteArray(GenericAtomicByteArray {
@@ -670,37 +680,24 @@ impl<T: Dist + std::fmt::Debug> ArrayPrint<T> for GenericAtomicArray<T> {
     }
 }
 
-impl<T: Dist + AmDist + 'static> GenericAtomicArray<T> {
-    pub fn reduce(&self, op: &str) -> Pin<Box<dyn Future<Output = T>>> {
-        self.array.reduce(op)
-    }
-    pub fn sum(&self) -> Pin<Box<dyn Future<Output = T>>> {
-        self.array.reduce("sum")
-    }
-    pub fn prod(&self) -> Pin<Box<dyn Future<Output = T>>> {
-        self.array.reduce("prod")
-    }
-    pub fn max(&self) -> Pin<Box<dyn Future<Output = T>>> {
-        self.array.reduce("max")
+impl<T: Dist + AmDist + 'static,> LamellarArrayReduce<T> for GenericAtomicArray<T> {
+    fn reduce(&self, op: &str) -> Pin<Box<dyn Future<Output = T>>> {
+        self.array.reduce_data(op,self.clone().into()).into_future()
     }
 }
-
-// impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> LamellarArrayReduce<T>
-//     for GenericAtomicArray<T>
-// {
-//     fn get_reduction_op(&self, op: String) -> LamellarArcAm {
-//         self.array.get_reduction_op(op)
-//     }
-//     fn reduce(&self, op: &str) -> Box<dyn LamellarRequest<Output = T>  > {
-//         self.reduce(op)
-//     }
-//     fn sum(&self) -> Box<dyn LamellarRequest<Output = T>  > {
-//         self.sum()
-//     }
-//     fn max(&self) -> Box<dyn LamellarRequest<Output = T>  > {
-//         self.max()
-//     }
-//     fn prod(&self) -> Box<dyn LamellarRequest<Output = T>  > {
-//         self.prod()
-//     }
-// }
+impl<T: Dist + AmDist + ElementArithmeticOps + 'static,> LamellarArrayArithmeticReduce<T> for GenericAtomicArray<T> {
+    fn sum(&self) -> Pin<Box<dyn Future<Output = T>>> {
+        self.reduce("sum")
+    }
+    fn prod(&self) -> Pin<Box<dyn Future<Output = T>>> {
+        self.reduce("prod")
+    }
+}
+impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static,> LamellarArrayCompareReduce<T> for GenericAtomicArray<T> {
+    fn max(&self) -> Pin<Box<dyn Future<Output = T>>> {
+        self.reduce("max")
+    }
+    fn min(&self) -> Pin<Box<dyn Future<Output = T>>> {
+        self.reduce("min")
+    }
+}

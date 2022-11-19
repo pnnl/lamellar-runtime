@@ -546,6 +546,14 @@ impl<T: Dist> From<LocalLockArray<T>> for LocalLockByteArray {
         }
     }
 }
+impl<T: Dist> From<LocalLockArray<T>> for LamellarByteArray {
+    fn from(array: LocalLockArray<T>) -> Self {
+        LamellarByteArray::LocalLockArray(LocalLockByteArray {
+            lock: array.lock.clone(),
+            array: array.array.into(),
+        })
+    }
+}
 impl<T: Dist> From<LocalLockByteArray> for LocalLockArray<T> {
     fn from(array: LocalLockByteArray) -> Self {
         LocalLockArray {
@@ -663,38 +671,30 @@ impl<T: Dist + AmDist> LamellarRequest for LocalLockArrayReduceHandle<T> {
     }
 }
 
-impl<T: Dist + AmDist + 'static> LocalLockArray<T> {
-    pub fn reduce(&self, op: &str) -> Pin<Box<dyn Future<Output = T>>> {
+impl<T: Dist + AmDist + 'static> LamellarArrayReduce<T> for LocalLockArray<T> {
+    fn reduce(&self, op: &str) -> Pin<Box<dyn Future<Output = T>>> {
         let lock = self.lock.read();
         Box::new(LocalLockArrayReduceHandle {
-            req: self.array.reduce_req(op),
+            req: self.array.reduce_data(op,self.clone().into()),
             _lock_guard: lock,
         })
         .into_future()
     }
-    pub fn sum(&self) -> Pin<Box<dyn Future<Output = T>>> {
-        let lock = self.lock.read();
-        Box::new(LocalLockArrayReduceHandle {
-            req: self.array.reduce_req("sum"),
-            _lock_guard: lock,
-        })
-        .into_future()
+}
+impl<T: Dist + AmDist + ElementArithmeticOps + 'static,> LamellarArrayArithmeticReduce<T> for LocalLockArray<T> {
+    fn sum(&self) -> Pin<Box<dyn Future<Output = T>>> {
+        self.reduce("sum")
     }
-    pub fn prod(&self) -> Pin<Box<dyn Future<Output = T>>> {
-        let lock = self.lock.read();
-        Box::new(LocalLockArrayReduceHandle {
-            req: self.array.reduce_req("prod"),
-            _lock_guard: lock,
-        })
-        .into_future()
+    fn prod(&self) -> Pin<Box<dyn Future<Output = T>>> {
+        self.reduce("prod")
     }
-    pub fn max(&self) -> Pin<Box<dyn Future<Output = T>>> {
-        let lock = self.lock.read();
-        Box::new(LocalLockArrayReduceHandle {
-            req: self.array.reduce_req("max"),
-            _lock_guard: lock,
-        })
-        .into_future()
+}
+impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static,> LamellarArrayCompareReduce<T> for LocalLockArray<T> {
+    fn max(&self) -> Pin<Box<dyn Future<Output = T>>> {
+        self.reduce("max")
+    }
+    fn min(&self) -> Pin<Box<dyn Future<Output = T>>> {
+        self.reduce("min")
     }
 }
 

@@ -584,39 +584,21 @@ impl<T: Dist> From<UnsafeArray<T>> for LamellarByteArray {
     }
 }
 
-impl<T: Dist + serde::Serialize + serde::de::DeserializeOwned + 'static> UnsafeArray<T> {
-    pub(crate) fn reduce_data(&self, func: LamellarArcAm) -> Box<dyn LamellarRequest<Output = T>> {
-        if let Ok(my_pe) = self.inner.data.team.team_pe_id() {
-            self.inner.data.team.exec_arc_am_pe::<T>(
-                my_pe,
-                func,
-                Some(self.inner.data.array_counters.clone()),
-            )
-        } else {
-            self.inner.data.team.exec_arc_am_pe::<T>(
-                0,
-                func,
-                Some(self.inner.data.array_counters.clone()),
-            )
-        }
-    }
-
-    pub(crate) fn reduce_req(&self, op: &str) -> Box<dyn LamellarRequest<Output = T>> {
-        self.reduce_data(self.get_reduction_op(op))
-    }
-    pub fn reduce(&self, op: &str) -> Pin<Box<dyn Future<Output = T>>> {
-        self.reduce_data(self.get_reduction_op(op)).into_future()
-    }
-    pub fn sum(&self) -> Pin<Box<dyn Future<Output = T>>> {
-        self.reduce("sum")
-    }
-    pub fn prod(&self) -> Pin<Box<dyn Future<Output = T>>> {
-        self.reduce("prod")
-    }
-    pub fn max(&self) -> Pin<Box<dyn Future<Output = T>>> {
-        self.reduce("max")
-    }
-}
+// impl<T: Dist + serde::Serialize + serde::de::DeserializeOwned + 'static> UnsafeArray<T> {
+    
+//     pub fn reduce(&self, op: &str) -> Pin<Box<dyn Future<Output = T>>> {
+//         self.reduce_data(self.get_reduction_op(op)).into_future()
+//     }
+//     pub fn sum(&self) -> Pin<Box<dyn Future<Output = T>>> {
+//         self.reduce("sum")
+//     }
+//     pub fn prod(&self) -> Pin<Box<dyn Future<Output = T>>> {
+//         self.reduce("prod")
+//     }
+//     pub fn max(&self) -> Pin<Box<dyn Future<Output = T>>> {
+//         self.reduce("max")
+//     }
+// }
 
 impl<T: Dist> private::ArrayExecAm<T> for UnsafeArray<T> {
     fn team(&self) -> Pin<Arc<LamellarTeamRT>> {
@@ -785,29 +767,173 @@ impl<T: Dist + std::fmt::Debug> ArrayPrint<T> for UnsafeArray<T> {
     }
 }
 
-impl<T: Dist + AmDist + 'static> LamellarArrayReduce<T> for UnsafeArray<T> {
-    fn get_reduction_op(&self, op: &str) -> LamellarArcAm {
-        //do this the same way we did add...
-        // unsafe {
+impl<T: Dist + AmDist + 'static> UnsafeArray<T> {
+    pub(crate) fn get_reduction_op(&self, op: &str, byte_array: LamellarByteArray) -> LamellarArcAm {
         REDUCE_OPS
             .get(&(std::any::TypeId::of::<T>(), op))
             .expect("unexpected reduction type")(
-            self.clone().into(),
+            byte_array,
             self.inner.data.team.num_pes(),
         )
-        // }
     }
-    fn reduce(&self, op: &str) -> Pin<Box<dyn Future<Output = T>>> {
-        self.reduce(op)
+    pub(crate) fn reduce_data(&self,op: &str, byte_array: LamellarByteArray) -> Box<dyn LamellarRequest<Output = T>> {
+        let func = self.get_reduction_op(op,byte_array);
+        if let Ok(my_pe) = self.inner.data.team.team_pe_id() {
+            self.inner.data.team.exec_arc_am_pe::<T>(
+                my_pe,
+                func,
+                Some(self.inner.data.array_counters.clone()),
+            )
+        } else {
+            self.inner.data.team.exec_arc_am_pe::<T>(
+                0,
+                func,
+                Some(self.inner.data.array_counters.clone()),
+            )
+        }
     }
-    fn sum(&self) -> Pin<Box<dyn Future<Output = T>>> {
-        self.sum()
+    
+}
+
+// This is esentially impl LamellarArrayReduce, but we man to explicity have UnsafeArray expose unsafe functions
+impl<T: Dist + AmDist + 'static> UnsafeArray<T> {
+
+    /// Perform a reduction on the entire distributed array, returning the value to the calling PE.
+    ///
+    /// Please see the documentation for the [register_reduction][lamellar_impl::register_reduction] procedural macro for
+    /// more details and examples on how to create your own reductions.
+    ///
+    /// # Safety
+    /// Data in UnsafeArrays are always unsafe as there are no protections on how remote PE's or local threads may access this PE's local data.
+    /// Any updates to local data are not guaranteed to be Atomic.
+    ///
+    /// # Examples
+    /// ```
+    /// use lamellar::array::prelude::*; 
+    /// let world = LamellarWorldBuilder.build();
+    /// let num_pes = world.num_pes();
+    /// let array = AtomicArray::new::<usize>(&world,1000000,Distribution::Block);
+    /// let array_clone = array.clone()
+    /// let req = array.local_iterator().for_each(|_| {
+    ///     let index = rand::thread_rng().gen_range(0..array_clone.len());
+    ///     array_clone.add(index,1); //randomly at one to an element in the array.
+    /// });
+    /// let array = array.into_read_only(); //only returns once there is a single reference remaining on each PE
+    /// let sum = array.reduce("sum"); // equivalent to calling array.sum()
+    /// assert_eq!(array.len()*num_pes,sum);
+    ///```
+    pub unsafe fn reduce(&self, op: &str) -> Pin<Box<dyn Future<Output = T>>> {
+        self.reduce_data(op,self.clone().into()).into_future()
     }
-    fn max(&self) -> Pin<Box<dyn Future<Output = T>>> {
-        self.max()
+
+    /// Perform a sum reduction on the entire distributed array, returning the value to the calling PE.
+    ///
+    /// This equivalent to `reduce("sum")`.
+    ///
+    /// # Safety
+    /// Data in UnsafeArrays are always unsafe as there are no protections on how remote PE's or local threads may access this PE's local data.
+    /// Any updates to local data are not guaranteed to be Atomic.
+    ///
+    /// # Examples
+    /// ```
+    /// use lamellar::array::prelude::*; 
+    /// let world = LamellarWorldBuilder.build();
+    /// let num_pes = world.num_pes();
+    /// let array = UnsafeArray::new::<usize>(&world,1000000,Distribution::Block);
+    /// let array_clone = array.clone()
+    /// unsafe { // THIS IS NOT SAFE -- we are randomly updating elements, no protections, updates may be lost... DONT DO THIS
+    ///     let req = array.local_iterator().for_each(|_| {
+    ///         let index = rand::thread_rng().gen_range(0..array_clone.len());
+    ///        array_clone.add(index,1); //randomly at one to an element in the array.
+    ///     });
+    /// }
+    /// array.wait_all();
+    /// array.barrier()
+    /// let sum = unsafe{array.sum()}; //Safe in this instance as we have ensured no updates are currently happening
+    /// assert_eq!(array.len()*num_pes,sum);//this may or may not fail
+    ///```
+    pub unsafe fn sum(&self) -> Pin<Box<dyn Future<Output = T>>> {
+        self.reduce("sum")
     }
-    fn prod(&self) -> Pin<Box<dyn Future<Output = T>>> {
-        self.prod()
+
+    /// Perform a production reduction on the entire distributed array, returning the value to the calling PE.
+    ///
+    /// This equivalent to `reduce("prod")`.
+    ///
+    /// # Safety
+    /// Data in UnsafeArrays are always unsafe as there are no protections on how remote PE's or local threads may access this PE's local data.
+    /// Any updates to local data are not guaranteed to be Atomic.
+    ///
+    /// # Examples
+    /// ```
+    /// use lamellar::array::prelude::*; 
+    /// let world = LamellarWorldBuilder.build();
+    /// let num_pes = world.num_pes();
+    /// let array = UnsafeArray::new::<usize>(&world,10,Distribution::Block);
+    /// let array_clone = array.clone()
+    /// unsafe { // THIS IS NOT SAFE -- we are randomly updating elements, no protections, updates may be lost... DONT DO THIS
+    ///     array.local_iterator().for_each(|_| {
+    ///         let index = rand::thread_rng().gen_range(0..array_clone.len());
+    ///         array_clone.add(index,1); //randomly at one to an element in the array.
+    ///     })
+    /// };
+    /// array.wait_all();
+    /// array.barrier()
+    /// let prod = unsafe{array.prod()}; //Safe in this instance as we have ensured no updates are currently happening
+    /// assert_eq!(num_pes.pow(array.len()),prod); //this may or may not fail
+    ///```
+    pub unsafe fn prod(&self) -> Pin<Box<dyn Future<Output = T>>> {
+        self.reduce("prod")
+    }
+
+    /// Find the max element in the entire destributed array, returning to the calling PE
+    ///
+    /// This equivalent to `reduce("max")`.
+    ///
+    /// # Safety
+    /// Data in UnsafeArrays are always unsafe as there are no protections on how remote PE's or local threads may access this PE's local data.
+    /// Any updates to local data are not guaranteed to be Atomic.
+    ///
+    /// # Examples
+    /// ```
+    /// use lamellar::array::prelude::*; 
+    /// let world = LamellarWorldBuilder.build();
+    /// let num_pes = world.num_pes();
+    /// let array = UnsafeArray::new::<usize>(&world,10,Distribution::Block);
+    /// let array_clone = array.clone()
+    /// unsafe{array.dist_iterator().enumerate().for_each(|i,elem| elem.store(i*2))}; //safe as we are accessing in a data parallel fashion
+    /// array.wait_all();
+    /// array.barrier()
+    /// let max = unsafe{array.max()}; //Safe in this instance as we have ensured no updates are currently happening
+    /// assert_eq!((array.len()-1)*2,max);
+    ///```
+    pub unsafe fn max(&self) -> Pin<Box<dyn Future<Output = T>>> {
+        self.reduce("max")
+    }
+
+    /// Find the min element in the entire destributed array, returning to the calling PE
+    ///
+    /// This equivalent to `reduce("min")`.
+    ///
+    /// # Safety
+    /// Data in UnsafeArrays are always unsafe as there are no protections on how remote PE's or local threads may access this PE's local data.
+    /// Any updates to local data are not guaranteed to be Atomic.
+    ///
+    /// # Examples
+    /// ```
+    /// use lamellar::array::prelude::*; 
+    /// let world = LamellarWorldBuilder.build();
+    /// let num_pes = world.num_pes();
+    /// let array = AtomicArray::new::<usize>(&world,10,Distribution::Block);
+    /// let array_clone = array.clone()
+    /// unsafe{array.dist_iterator().enumerate().for_each(|i,elem| elem.store(i*2))}; //safe as we are accessing in a data parallel fashion
+    /// array.wait_all();
+    /// array.barrier()
+    /// let min = unsafe{array.min()}; //Safe in this instance as we have ensured no updates are currently happening
+    /// assert_eq!(0,min);
+    ///```
+    pub unsafe fn min(&self) -> Pin<Box<dyn Future<Output = T>>> {
+        self.reduce("min")
     }
 }
 

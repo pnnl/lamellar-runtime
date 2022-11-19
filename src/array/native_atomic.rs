@@ -914,6 +914,16 @@ impl<T: Dist> From<NativeAtomicArray<T>> for NativeAtomicByteArray {
 }
 
 #[doc(hidden)]
+impl<T: Dist> From<NativeAtomicArray<T>> for LamellarByteArray {
+    fn from(array: NativeAtomicArray<T>) -> Self {
+        LamellarByteArray::NativeAtomicArray(NativeAtomicByteArray {
+            array: array.array.into(),
+            orig_t: array.orig_t,
+        })
+    }
+}
+
+#[doc(hidden)]
 impl<T: Dist> From<NativeAtomicArray<T>> for AtomicByteArray {
     fn from(array: NativeAtomicArray<T>) -> Self {
         AtomicByteArray::NativeAtomicByteArray(NativeAtomicByteArray {
@@ -1045,19 +1055,25 @@ impl<T: Dist + std::fmt::Debug> ArrayPrint<T> for NativeAtomicArray<T> {
     }
 }
 
-#[doc(hidden)]
-impl<T: Dist + AmDist + 'static> NativeAtomicArray<T> {
-    pub fn reduce(&self, op: &str) -> Pin<Box<dyn Future<Output = T>>> {
-        self.array.reduce(op)
+impl<T: Dist + AmDist + 'static,> LamellarArrayReduce<T> for NativeAtomicArray<T> {
+    fn reduce(&self, op: &str) -> Pin<Box<dyn Future<Output = T>>> {
+        self.array.reduce_data(op,self.clone().into()).into_future()
     }
-    pub fn sum(&self) -> Pin<Box<dyn Future<Output = T>>> {
-        self.array.reduce("sum")
+}
+impl<T: Dist + AmDist + ElementArithmeticOps + 'static,> LamellarArrayArithmeticReduce<T> for NativeAtomicArray<T> {
+    fn sum(&self) -> Pin<Box<dyn Future<Output = T>>> {
+        self.reduce("sum")
     }
-    pub fn prod(&self) -> Pin<Box<dyn Future<Output = T>>> {
-        self.array.reduce("prod")
+    fn prod(&self) -> Pin<Box<dyn Future<Output = T>>> {
+        self.reduce("prod")
     }
-    pub fn max(&self) -> Pin<Box<dyn Future<Output = T>>> {
-        self.array.reduce("max")
+}
+impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static,> LamellarArrayCompareReduce<T> for NativeAtomicArray<T> {
+    fn max(&self) -> Pin<Box<dyn Future<Output = T>>> {
+        self.reduce("max")
+    }
+    fn min(&self) -> Pin<Box<dyn Future<Output = T>>> {
+        self.reduce("min")
     }
 }
 

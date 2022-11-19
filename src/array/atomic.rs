@@ -890,6 +890,15 @@ impl<T: Dist> From<AtomicArray<T>> for AtomicByteArray {
     }
 }
 
+impl<T: Dist> From<AtomicArray<T>> for LamellarByteArray {
+    fn from(array: AtomicArray<T>) -> Self {
+        match array {
+            AtomicArray::NativeAtomicArray(array) => array.into(),
+            AtomicArray::GenericAtomicArray(array) => array.into(),
+        }
+    }
+}
+
 impl<T: Dist> From<AtomicByteArray> for AtomicArray<T> {
     fn from(array: AtomicByteArray) -> Self {
         match array {

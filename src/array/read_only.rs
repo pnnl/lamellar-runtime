@@ -28,6 +28,7 @@ pub struct ReadOnlyArrayOpBuf {
 
 crate::inventory::collect!(ReadOnlyArrayOpBuf);
 
+/// A safe abstraction of a distributed array, providing only read access.
 #[lamellar_impl::AmDataRT(Clone, Debug)]
 pub struct ReadOnlyArray<T> {
     pub(crate) array: UnsafeArray<T>,
@@ -336,19 +337,33 @@ impl<T: Dist> From<ReadOnlyByteArray> for ReadOnlyArray<T> {
         }
     }
 }
+impl<T: Dist> From<ReadOnlyArray<T>> for LamellarByteArray {
+    fn from(array: ReadOnlyArray<T>) -> Self {
+        LamellarByteArray::ReadOnlyArray(ReadOnlyByteArray {
+            array: array.array.into(),
+        })
+    }
+}
 
-impl<T: Dist + serde::Serialize + serde::de::DeserializeOwned + 'static> ReadOnlyArray<T> {
-    pub fn reduce(&self, op: &str) -> Pin<Box<dyn Future<Output = T>>> {
-        self.array.reduce(op)
+impl<T: Dist + AmDist + 'static,> LamellarArrayReduce<T> for ReadOnlyArray<T> {
+    fn reduce(&self, op: &str) -> Pin<Box<dyn Future<Output = T>>> {
+        self.array.reduce_data(op,self.clone().into()).into_future()
     }
-    pub fn sum(&self) -> Pin<Box<dyn Future<Output = T>>> {
-        self.array.reduce("sum")
+}
+impl<T: Dist + AmDist + ElementArithmeticOps + 'static,> LamellarArrayArithmeticReduce<T> for ReadOnlyArray<T> {
+    fn sum(&self) -> Pin<Box<dyn Future<Output = T>>> {
+        self.reduce("sum")
     }
-    pub fn prod(&self) -> Pin<Box<dyn Future<Output = T>>> {
-        self.array.reduce("prod")
+    fn prod(&self) -> Pin<Box<dyn Future<Output = T>>> {
+        self.reduce("prod")
     }
-    pub fn max(&self) -> Pin<Box<dyn Future<Output = T>>> {
-        self.array.reduce("max")
+}
+impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static,> LamellarArrayCompareReduce<T> for ReadOnlyArray<T> {
+    fn max(&self) -> Pin<Box<dyn Future<Output = T>>> {
+        self.reduce("max")
+    }
+    fn min(&self) -> Pin<Box<dyn Future<Output = T>>> {
+        self.reduce("min")
     }
 }
 
@@ -436,46 +451,4 @@ impl<T: Dist + std::fmt::Debug> ReadOnlyArray<T> {
 
 impl<T: ElementOps + 'static> ReadOnlyOps<T> for ReadOnlyArray<T> {}
 
-// impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> LamellarArrayReduce<T>
-//     for ReadOnlyArray<T>
-// {
 
-//     fn get_reduction_op(&self, op: String) -> LamellarArcAm {
-//         REDUCE_OPS
-//             .get(&(std::any::TypeId::of::<T>(), op))
-//             .expect("unexpected reduction type")(
-//             self.clone().into(),
-//             self.inner.team.num_pes(),
-//         )
-//     }
-//     fn reduce(&self, op: &str) -> Box<dyn LamellarRequest<Output = T>  > {
-//         self.reduce(op)
-//     }
-//     fn sum(&self) -> Box<dyn LamellarRequest<Output = T>  > {
-//         self.sum()
-//     }
-//     fn max(&self) -> Box<dyn LamellarRequest<Output = T>  > {
-//         self.max()
-//     }
-//     fn prod(&self) -> Box<dyn LamellarRequest<Output = T>  > {
-//         self.prod()
-//     }
-// }
-
-// impl<'a, T: Dist > IntoIterator
-//     for &'a ReadOnlyArray<T>
-// {
-//     type Item = &'a T;
-//     type IntoIter = OneSidedIteratorIter<OneSidedIter<'a, T>>;
-//     fn into_iter(self) -> Self::IntoIter {
-//         OneSidedIteratorIter {
-//             iter: self.onesided_iter(),
-//         }
-//     }
-// }
-
-// impl < T> Drop for ReadOnlyArray<T>{
-//     fn drop(&mut self){
-//         println!("dropping array!!!");
-//     }
-// }

@@ -270,6 +270,8 @@ pub use utils::*;
 use lamellar_prof::init_prof;
 init_prof!();
 
+
+
 #[doc(hidden)]
 pub use crate::lamellar_request::LamellarRequest;
 pub use crate::lamellar_arch::{BlockedArch, IdError, LamellarArch, StridedArch};
@@ -283,11 +285,10 @@ pub use crate::lamellar_world::*;
 
 
 extern crate lamellar_impl;
-// use lamellar_impl;
 #[doc(hidden)]
-pub use lamellar_impl::{
-    generate_reductions_for_type, register_reduction, Dist,
-};
+pub use lamellar_impl::Dist;
+// use lamellar_impl;
+
 
 
 #[doc(hidden)]

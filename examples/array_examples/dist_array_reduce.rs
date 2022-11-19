@@ -11,7 +11,7 @@ use lamellar::memregion::prelude::*;
 use std::time::Instant;
 
 lamellar::register_reduction!(
-    min,
+    my_min,
     |a, b| {
         if a < b {
             a
@@ -96,10 +96,10 @@ fn main() {
     if my_pe == 0 {
         println!("starting dist");
         let mut timer = Instant::now();
-        let cyclic_sum = world.block_on(cyclic_array.sum());
+        let cyclic_sum = world.block_on(unsafe{cyclic_array.sum()});
         let cyclic_dist_time = timer.elapsed().as_secs_f64();
         timer = Instant::now();
-        let block_sum = world.block_on(block_array.sum()); //need to figure out why this calculation is wrong...
+        let block_sum = world.block_on(unsafe{block_array.sum()}); //need to figure out why this calculation is wrong...
         let block_dist_time = timer.elapsed().as_secs_f64();
         let calculated_sum = (total_len / 2) * (0 + 99);
         println!(
@@ -107,8 +107,8 @@ fn main() {
             cyclic_sum, cyclic_dist_time, block_sum, block_dist_time, calculated_sum
         );
 
-        let block_min = world.block_on(block_array.reduce("min"));
-        let cyclic_min = world.block_on(block_array.reduce("min"));
+        let block_min = world.block_on(unsafe{block_array.reduce("my_min")});
+        let cyclic_min = world.block_on(unsafe{block_array.reduce("my_min")});
         println!("block min: {:?} cyclic min: {:?}", block_min, cyclic_min);
     }
     // for i in 0..total_len {
@@ -136,7 +136,8 @@ fn main() {
                     .for_each(|x| println!("x: {:?}", x))
             }
         );
-    
+    let block_array = block_array.into_read_only();
+    block_array.sum();
     // block_array.dist_iter().for_each(|x| println!("x: {:?}", x));
     // block_array.for_each(|x| println!("x: {:?}", x));
     // cyclic_array.for_each_mut(|x| *x += *x);
