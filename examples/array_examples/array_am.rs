@@ -118,7 +118,7 @@ fn main() {
     world.barrier();
 
     if my_pe == 0 {
-        let sum = world.block_on(array.sum());
+        let sum = world.block_on(unsafe{array.sum()});
         println!("sum: {:?}", sum);
         println!("------------------------------------------------------------");
     }
