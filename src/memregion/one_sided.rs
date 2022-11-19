@@ -315,7 +315,7 @@ impl LamellarAM for MemRegionDropWaitAm {
 ///```
 /// use lamellar::{OneSidedMemoryRegion, RemoteMemoryRegion};
 ///
-/// let world_mem_region: OneSidedMemoryRegion<usize> = world.alloc_one_sided_mem_region(1000);
+/// let world_mem_region: OneSidedMemoryRegion<usize> = world.alloc_one_sided_mem_region::<usize>(1000);
 /// let team_mem_region: OneSidedMemoryRegion<usize> = some_team.alloc_one_sided_mem_region(1000);
 /// ```
 #[lamellar_impl::AmDataRT(Clone)]
@@ -381,7 +381,7 @@ impl<T: Dist> OneSidedMemoryRegion<T> {
     ///```
     /// use lamellar::OneSidedMemoryRegion;
     ///
-    /// let mem_region: OneSidedMemoryRegion<usize> = world.alloc_one_sided_mem_region(1000);
+    /// let mem_region: OneSidedMemoryRegion<usize> = world.alloc_one_sided_mem_region::<usize>(1000);
     /// assert_eq!(mem_region.len(),1000)
     pub fn len(&self) -> usize {
         RegisteredMemoryRegion::<T>::len(self)

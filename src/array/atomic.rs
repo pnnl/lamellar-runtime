@@ -51,7 +51,7 @@ impl<T: Dist> AtomicElement<T> {
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
     /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic);
     ///
@@ -72,7 +72,7 @@ impl<T: Dist> AtomicElement<T> {
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
     /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic);
     ///
@@ -93,7 +93,7 @@ impl<T: Dist> AtomicElement<T> {
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
     /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic);
     ///
@@ -116,7 +116,7 @@ impl<T: ElementArithmeticOps> AtomicElement<T> {
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
     /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic);
     ///
@@ -136,7 +136,7 @@ impl<T: ElementArithmeticOps> AtomicElement<T> {
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
     /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic);
     ///
@@ -157,7 +157,7 @@ impl<T: ElementArithmeticOps> AtomicElement<T> {
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
     /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic);
     ///
@@ -178,7 +178,7 @@ impl<T: ElementArithmeticOps> AtomicElement<T> {
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
     /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic);
     ///
@@ -204,7 +204,7 @@ impl<T: Dist + std::cmp::Eq> AtomicElement<T> {
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
     /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic);
     ///
@@ -234,7 +234,7 @@ impl<T: Dist + std::cmp::PartialEq + std::cmp::PartialOrd + std::ops::Sub<Output
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
     /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic);
     ///
@@ -261,7 +261,7 @@ impl<T: ElementBitWiseOps + 'static> AtomicElement<T> {
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
     /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic);
     ///
@@ -281,7 +281,7 @@ impl<T: ElementBitWiseOps + 'static> AtomicElement<T> {
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
     /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic);
     ///
@@ -497,7 +497,7 @@ impl<T: Dist> AtomicLocalData<T> {
     ///```
     /// use lamellar::array::prelude::*;
     ///
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
     /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic);
     /// 
@@ -522,7 +522,7 @@ impl<T: Dist> AtomicLocalData<T> {
     ///```
     /// use lamellar::array::prelude::*;
     ///
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
     /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic);
     /// 
@@ -541,7 +541,7 @@ impl<T: Dist> AtomicLocalData<T> {
     ///```
     /// use lamellar::array::prelude::*;
     ///
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
     /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic);
     /// 
@@ -560,7 +560,7 @@ impl<T: Dist> AtomicLocalData<T> {
     ///```
     /// use lamellar::array::prelude::*;
     ///
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
     /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic);
     /// 
@@ -610,7 +610,7 @@ impl<T: Dist + std::default::Default + 'static> AtomicArray<T> {
     ///```
     /// use lamellar::array::prelude::*;
     ///
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let array: AtomicArray<f32> = AtomicArray::new(&world,100,Distribution::Cyclic);
     pub fn new<U: Clone + Into<IntoLamellarTeam>>(
         team: U,
@@ -642,7 +642,7 @@ impl<T: Dist> AtomicArray<T> {
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic);
     /// // do something interesting... or not
     /// let block_view = array.clone().use_distribution(Distribution::Block);
@@ -661,7 +661,7 @@ impl<T: Dist> AtomicArray<T> {
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
     /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic);
     ///
@@ -681,7 +681,7 @@ impl<T: Dist> AtomicArray<T> {
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
     /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic);
     ///
@@ -722,7 +722,7 @@ impl<T: Dist> AtomicArray<T> {
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
     /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic);
     ///
@@ -733,7 +733,7 @@ impl<T: Dist> AtomicArray<T> {
     /// Because this call blocks there is the possibility for deadlock to occur, as highlighted below:
     ///``` 
     /// use lamellar::array::prelude::*;
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
     /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic);
     ///
@@ -773,7 +773,7 @@ impl<T: Dist> AtomicArray<T> {
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
     /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic);
     ///
@@ -783,7 +783,7 @@ impl<T: Dist> AtomicArray<T> {
     /// Because this call blocks there is the possibility for deadlock to occur, as highlighted below:
     ///``` 
     /// use lamellar::array::prelude::*;
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
     /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic);
     ///
@@ -816,7 +816,7 @@ impl<T: Dist> AtomicArray<T> {
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
     /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic);
     ///
@@ -826,7 +826,7 @@ impl<T: Dist> AtomicArray<T> {
     /// Because this call blocks there is the possibility for deadlock to occur, as highlighted below:
     ///``` 
     /// use lamellar::array::prelude::*;
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
     /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic);
     ///

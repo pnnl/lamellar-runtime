@@ -171,13 +171,17 @@ lamellar_impl::generate_ops_for_type_rt!(false, false, f32, f64);
 /// assume we have 4 PEs
 /// ## Block
 ///```
-/// let block_array = LamellarArray::new(world,12,Distribution::Block);
-/// block array index location  = PE0 [0,1,2,3],  PE1 [4,5,6,7],  PE2 [8,9,10,11], PE3 [12,13,14,15]
+/// use lamellar::array::prelude::*;
+/// let world = LamellarWorldBuilder::new().build();
+/// let block_array = AtomicArray::<usize>::new(world,12,Distribution::Block);
+/// //block array index location  = PE0 [0,1,2,3],  PE1 [4,5,6,7],  PE2 [8,9,10,11], PE3 [12,13,14,15]
 ///```
 /// ## Cyclic
 ///```
-/// let cyclic_array = LamellarArray::new(world,12,Distribution::Cyclic);
-/// cyclic array index location = PE0 [0,4,8,12], PE1 [1,5,9,13], PE2 [2,6,10,14], PE3 [3,7,11,15]
+/// use lamellar::array::prelude::*;
+/// let world = LamellarWorldBuilder::new().build();
+/// let cyclic_array = AtomicArray::<usize>::new(world,12,Distribution::Cyclic);
+/// //cyclic array index location = PE0 [0,4,8,12], PE1 [1,5,9,13], PE2 [2,6,10,14], PE3 [3,7,11,15]
 ///```
 #[derive(serde::Serialize, serde::Deserialize, Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Distribution {
@@ -499,7 +503,7 @@ pub trait LamellarArray<T: Dist>: private::LamellarArrayPrivate<T> {
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let array: LocalLockArray<usize> = LocalLockArray::new(&world,100,Distribution::Cyclic);
     /// 
     /// let a_team = array.team();
@@ -510,7 +514,7 @@ pub trait LamellarArray<T: Dist>: private::LamellarArrayPrivate<T> {
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let array: LocalLockArray<usize> = LocalLockArray::new(&world,100,Distribution::Cyclic);
     /// 
     /// assert_eq!(world.my_pe(),array.my_pe());
@@ -522,7 +526,7 @@ pub trait LamellarArray<T: Dist>: private::LamellarArrayPrivate<T> {
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let array: LocalLockArray<usize> = LocalLockArray::new(&world,100,Distribution::Cyclic);
     /// 
     /// assert_eq!(world.num_pes(),array.num_pes());
@@ -534,7 +538,7 @@ pub trait LamellarArray<T: Dist>: private::LamellarArrayPrivate<T> {
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic);
     /// 
     /// assert_eq!(100,array.len());
@@ -545,9 +549,9 @@ pub trait LamellarArray<T: Dist>: private::LamellarArrayPrivate<T> {
     ///
     /// # Examples
     /// Assume a 4 PE system
-    ///```
+    ///```no_run //assert is for 4 PEs
     /// use lamellar::array::prelude::*;
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let array: ReadOnlyArray<i8> = ReadOnlyArray::new(&world,100,Distribution::Cyclic);
     /// 
     /// assert_eq!(25,array.num_elems_local());
@@ -561,7 +565,7 @@ pub trait LamellarArray<T: Dist>: private::LamellarArrayPrivate<T> {
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic);
     /// // do something interesting... or not
     /// let block_view = array.clone().use_distribution(Distribution::Block);
@@ -573,7 +577,7 @@ pub trait LamellarArray<T: Dist>: private::LamellarArrayPrivate<T> {
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Cyclic);
     /// 
     /// array.barrier();
@@ -587,7 +591,7 @@ pub trait LamellarArray<T: Dist>: private::LamellarArrayPrivate<T> {
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic);
     ///
     /// for i in 0..100{
@@ -606,7 +610,7 @@ pub trait LamellarArray<T: Dist>: private::LamellarArrayPrivate<T> {
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic);
     ///
     /// let request = array.fetch_add(10,1000); //fetch index 10 and add 1000 to it 
@@ -622,23 +626,23 @@ pub trait LamellarArray<T: Dist>: private::LamellarArrayPrivate<T> {
     /// # Examples
     /// assume we have 4 PEs
     /// ## Block
-    ///```
+    ///```no_run //assert is for 4 PEs
     /// use lamellar::array::prelude::*;
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     ///
-    /// let block_array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic)
+    /// let block_array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Block);
     /// // block array index location  = PE0 [0,1,2,3],  PE1 [4,5,6,7],  PE2 [8,9,10,11], PE3 [12,13,14,15]
-    /// let (pe,offset) = block_index.pe_and_offset_for_global_index(6);
+    /// let  Some((pe,offset)) = block_array.pe_and_offset_for_global_index(6) else { panic!("out of bounds");};
     /// assert_eq!((pe,offset) ,(1,2));
     ///```
     /// ## Cyclic
-    ///```
+    ///```no_run //assert is for 4 PEs
     /// use lamellar::array::prelude::*;
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     ///
-    /// let cyclic_array UnsafeArray<usize> = UnsafeArray::new(world,12,Distribution::Cyclic);
+    /// let cyclic_array: UnsafeArray<usize> = UnsafeArray::new(world,12,Distribution::Cyclic);
     /// // cyclic array index location = PE0 [0,4,8,12], PE1 [1,5,9,13], PE2 [2,6,10,14], PE3 [3,7,11,15]
-    /// let (pe,offset) = cyclic_array.pe_and_offset_for_global_index(6);
+    /// let Some((pe,offset)) = cyclic_array.pe_and_offset_for_global_index(6) else { panic!("out of bounds");};
     /// assert_eq!((pe,offset) ,(2,1));
     ///```
     fn pe_and_offset_for_global_index(&self, index: usize) -> Option<(usize, usize)>;
@@ -686,7 +690,7 @@ pub trait SubArray<T: Dist>: LamellarArray<T> {
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
     /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic);
     ///
@@ -704,7 +708,7 @@ pub trait SubArray<T: Dist>: LamellarArray<T> {
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
     /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic);
     ///
@@ -744,10 +748,10 @@ pub trait LamellarArrayGet<T: Dist>: LamellarArrayInternalGet<T> {
     /// use lamellar::array::prelude::*;
     /// use lamellar::memregion::prelude::*;
     ///
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array = LocalLockArray::new::<usize>(&world,12,Distribution::Block);
-    /// let buf = world.alloc_one_sided_mem_region(12).into();
+    /// let array = LocalLockArray::<usize>::new(&world,12,Distribution::Block);
+    /// let buf = world.alloc_one_sided_mem_region::<usize>(12);
     /// array.dist_iter_mut().enumerate().for_each(|(i,elem)| *elem = i); //we will used this val as completion detection
     /// unsafe { // we just created buf and have not shared it so free to mutate safely
     ///     for elem in buf.as_mut_slice()
@@ -757,16 +761,16 @@ pub trait LamellarArrayGet<T: Dist>: LamellarArrayInternalGet<T> {
     /// }
     /// array.wait_all();
     /// array.barrier();
-    /// println!("PE{my_pe array data: {:?}",buf.as_slice().unwrap());
+    /// println!("PE{my_pe} array data: {:?}",unsafe{buf.as_slice().unwrap()});
     /// if my_pe == 0 { //only perfrom the transfer from one PE
     ///     println!();
     ///      unsafe { world.block_on(array.get(0,&buf))}; //safe because we have not shared buf, and we block immediately on the request 
     /// }
-    /// println!("PE{my_pe buf data: {:?}",unsafe{buf.as_slice().unwrap()}); 
+    /// println!("PE{my_pe} buf data: {:?}",unsafe{buf.as_slice().unwrap()}); 
     /// 
     ///```
     /// Possible output on A 4 PE system (ordering with respect to PEs may change)
-    ///```
+    ///```text
     /// PE0: buf data [12,12,12,12,12,12,12,12,12,12,12,12]
     /// PE1: buf data [12,12,12,12,12,12,12,12,12,12,12,12]
     /// PE2: buf data [12,12,12,12,12,12,12,12,12,12,12,12]
@@ -800,22 +804,21 @@ pub trait LamellarArrayGet<T: Dist>: LamellarArrayInternalGet<T> {
     /// use lamellar::array::prelude::*;
     /// use lamellar::memregion::prelude::*;
     ///
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array = AtomicArray::new::<usize>(&world,12,Distribution::Block);
-    /// unsafe { 
-    ///     array.dist_iter_mut().enumerate().for_each(|(i,elem)| *elem = my_pe); //we will used this val as completion detection
-    ///     array.wait_all();
-    ///     array.barrier();
-    ///     println!("PE{my_pe array data: {:?}",buf.as_slice().unwrap());
-    ///     let index = ((my_pe+1)%num_pes) * array.num_elems_local(); // get first index on PE to the right (with wrap arround)
-    ///     let at_req = array.at(index);
-    ///     let val = array.block_on(at_req);
-    ///     println!("PE{my_pe array[{index}] = {val}"); 
-    /// }
+    /// let num_pes = world.num_pes();
+    /// let array = LocalLockArray::<usize>::new(&world,12,Distribution::Block);
+    /// array.dist_iter_mut().enumerate().for_each(move |(i,elem)| *elem = my_pe); //we will used this val as completion detection
+    /// array.wait_all();
+    /// array.barrier();
+    /// println!("PE{my_pe} array data: {:?}",array.read_local_data());
+    /// let index = ((my_pe+1)%num_pes) * array.num_elems_local(); // get first index on PE to the right (with wrap arround)
+    /// let at_req = array.at(index);
+    /// let val = array.block_on(at_req);
+    /// println!("PE{my_pe} array[{index}] = {val}"); 
     ///```
     /// Possible output on A 4 PE system (ordering with respect to PEs may change)
-    ///```
+    ///```text
     /// PE0: buf data [0,0,0]
     /// PE1: buf data [1,1,1]
     /// PE2: buf data [2,2,2]
@@ -873,12 +876,12 @@ pub trait LamellarArrayPut<T: Dist>: LamellarArrayInternalPut<T> {
     /// use lamellar::array::prelude::*;
     /// use lamellar::memregion::prelude::*;
     ///
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array = LocalLockArray::new::<usize>(&world,12,Distribution::Block);
-    /// let buf = world.alloc_one_sided_mem_region(12).into();
-    /// 
-    /// array.dist_iter_mut().for_each(|elem| *elem = buf.len()); //we will used this val as completion detection
+    /// let array = LocalLockArray::<usize>::new(&world,12,Distribution::Block);
+    /// let buf = world.alloc_one_sided_mem_region::<usize>(12);
+    /// let len = buf.len();
+    /// array.dist_iter_mut().for_each(move |elem| *elem = len); //we will used this val as completion detection
     ///
     /// //Safe as we are this is the only reference to buf   
     /// unsafe {
@@ -891,19 +894,19 @@ pub trait LamellarArrayPut<T: Dist>: LamellarArrayInternalPut<T> {
     /// }
     /// array.wait_all();
     /// array.barrier();
-    /// println!("PE{my_pe array data: {:?}",array.local_data());
+    /// println!("PE{my_pe} array data: {:?}",array.local_data());
     /// if my_pe == 0 { //only perfrom the transfer from one PE
     ///     array.block_on( unsafe {  array.put(0,&buf) } );
     ///     println!();
     /// }
     /// array.barrier(); //block other PEs until PE0 has finised "putting" the data
     ///    
-    /// println!("PE{my_pe array data: {:?}",array.local_data());
+    /// println!("PE{my_pe} array data: {:?}",array.local_data());
     ///     
     /// 
     ///```
     /// Possible output on A 4 PE system (ordering with respect to PEs may change)
-    ///```
+    ///```text
     /// PE0: array data [12,12,12]
     /// PE1: array data [12,12,12]
     /// PE2: array data [12,12,12]
@@ -978,60 +981,64 @@ pub trait ArrayPrint<T: Dist + std::fmt::Debug>: LamellarArray<T> {
 /// We provide a series of examples illustrating the above issues
 ///```
 /// use lamellar::array::prelude::*; 
-/// let world = LamellarWorldBuilder.build();
-/// let array = AtomicArray::new::<usize>(&world,1000000,Distribution::Block);
+/// let world = LamellarWorldBuilder::new().build();
+/// let array = AtomicArray::<usize>::new(&world,1000000,Distribution::Block);
+/// use rand::Rng;
 ///
-/// let array_clone = array.clone()
-/// array.local_iterator().for_each(|_| {
+/// let array_clone = array.clone();
+/// array.local_iter().for_each(move |_| {
 ///     let index = rand::thread_rng().gen_range(0..array_clone.len());
 ///     array_clone.add(index,1); //randomly at one to an element in the array.
-/// })
-/// let sum = array.sum(); // atomic updates still possibly happening, output non deterministic
+/// });
+/// let sum = array.block_on(array.sum()); // atomic updates still possibly happening, output non deterministic
 /// println!("sum {sum}");
 ///```
 /// Waiting for local operations to finish not enough by itself
 ///```
 /// use lamellar::array::prelude::*; 
-/// let world = LamellarWorldBuilder.build();
-/// let array = AtomicArray::new::<usize>(&world,1000000,Distribution::Block);
-/// let array_clone = array.clone()
-/// let req = array.local_iterator().for_each(|_| {
+/// use rand::Rng;
+/// let world = LamellarWorldBuilder::new().build();
+/// let array = AtomicArray::<usize>::new(&world,1000000,Distribution::Block);
+/// let array_clone = array.clone();
+/// let req = array.local_iter().for_each(move |_| {
 ///     let index = rand::thread_rng().gen_range(0..array_clone.len());
 ///     array_clone.add(index,1); //randomly at one to an element in the array.
 /// });
 /// array.block_on(req); 
-/// let sum = array.sum(); // atomic updates still possibly happening (on remote nodes), output non deterministic
+/// let sum = array.block_on(array.sum()); // atomic updates still possibly happening (on remote nodes), output non deterministic
 /// println!("sum {sum}");
 ///```
 /// Need to add a barrier after local operations on all PEs have finished
 ///```
 /// use lamellar::array::prelude::*; 
-/// let world = LamellarWorldBuilder.build();
+/// use rand::Rng;
+/// let world = LamellarWorldBuilder::new().build();
 /// let num_pes = world.num_pes();
-/// let array = AtomicArray::new::<usize>(&world,1000000,Distribution::Block);
-/// let array_clone = array.clone()
-/// let req = array.local_iterator().for_each(|_| {
+/// let array = AtomicArray::<usize>::new(&world,1000000,Distribution::Block);
+/// let array_clone = array.clone();
+/// let req = array.local_iter().for_each(move |_| {
 ///     let index = rand::thread_rng().gen_range(0..array_clone.len());
 ///     array_clone.add(index,1); //randomly at one to an element in the array.
 /// });
 /// array.block_on(req); 
-/// array.barrier()
-/// let sum = array.sum(); // No updates occuring anywhere anymore so we have a deterministic result
+/// array.barrier();
+/// let sum = array.block_on(array.sum()); // No updates occuring anywhere anymore so we have a deterministic result
 /// assert_eq!(array.len()*num_pes,sum);
 ///```
 /// Alternatively we can convert our AtomicArray into a ReadOnlyArray before the reduction
 /// ```
 /// use lamellar::array::prelude::*; 
-/// let world = LamellarWorldBuilder.build();
+/// use rand::Rng;
+/// let world = LamellarWorldBuilder::new().build();
 /// let num_pes = world.num_pes();
-/// let array = AtomicArray::new::<usize>(&world,1000000,Distribution::Block);
-/// let array_clone = array.clone()
-/// let req = array.local_iterator().for_each(|_| {
+/// let array = AtomicArray::<usize>::new(&world,1000000,Distribution::Block);
+/// let array_clone = array.clone();
+/// let req = array.local_iter().for_each(move |_| {
 ///     let index = rand::thread_rng().gen_range(0..array_clone.len());
 ///     array_clone.add(index,1); //randomly at one to an element in the array.
 /// });
 /// let array = array.into_read_only(); //only returns once there is a single reference remaining on each PE
-/// let sum = array.sum(); // No updates occuring anywhere anymore so we have a deterministic result
+/// let sum = array.block_on(array.sum()); // No updates occuring anywhere anymore so we have a deterministic result
 /// assert_eq!(array.len()*num_pes,sum);
 ///```
 /// Finally we are inlcuding a `Arc<Vec<AtomicUsize>>` highlightin the same issue
@@ -1077,16 +1084,18 @@ where
     /// # Examples
     /// ```
     /// use lamellar::array::prelude::*; 
-    /// let world = LamellarWorldBuilder.build();
+    /// use rand::Rng;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
     /// let num_pes = world.num_pes();
-    /// let array = AtomicArray::new::<usize>(&world,1000000,Distribution::Block);
-    /// let array_clone = array.clone()
-    /// let req = array.local_iterator().for_each(|_| {
+    /// let array = AtomicArray::<usize>::new(&world,1000000,Distribution::Block);
+    /// let array_clone = array.clone();
+    /// let req = array.local_iter().for_each(move |_| {
     ///     let index = rand::thread_rng().gen_range(0..array_clone.len());
     ///     array_clone.add(index,1); //randomly at one to an element in the array.
     /// });
     /// let array = array.into_read_only(); //only returns once there is a single reference remaining on each PE
-    /// let sum = array.reduce("sum"); // equivalent to calling array.sum()
+    /// let sum = array.block_on(array.reduce("sum")); // equivalent to calling array.sum()
     /// assert_eq!(array.len()*num_pes,sum);
     ///```
     fn reduce(&self, reduction: &str) -> Pin<Box<dyn Future<Output = T>>>;
@@ -1104,16 +1113,17 @@ where
     /// # Examples
     /// ```
     /// use lamellar::array::prelude::*; 
-    /// let world = LamellarWorldBuilder.build();
+    /// use rand::Rng;
+    /// let world = LamellarWorldBuilder::new().build();
     /// let num_pes = world.num_pes();
-    /// let array = AtomicArray::new::<usize>(&world,1000000,Distribution::Block);
-    /// let array_clone = array.clone()
-    /// let req = array.local_iterator().for_each(|_| {
+    /// let array = AtomicArray::<usize>::new(&world,1000000,Distribution::Block);
+    /// let array_clone = array.clone();
+    /// let req = array.local_iter().for_each(move |_| {
     ///     let index = rand::thread_rng().gen_range(0..array_clone.len());
     ///     array_clone.add(index,1); //randomly at one to an element in the array.
     /// });
     /// let array = array.into_read_only(); //only returns once there is a single reference remaining on each PE
-    /// let sum = array.sum(); 
+    /// let sum = array.block_on(array.sum()); 
     /// assert_eq!(array.len()*num_pes,sum);
     ///```
     fn sum(&self) -> Pin<Box<dyn Future<Output = T>>>;
@@ -1125,17 +1135,19 @@ where
     /// # Examples
     /// ```
     /// use lamellar::array::prelude::*; 
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let num_pes = world.num_pes();
-    /// let array = AtomicArray::new::<usize>(&world,10,Distribution::Block);
-    /// let array_clone = array.clone()
-    /// let req = array.local_iterator().for_each(|_| {
-    ///     let index = rand::thread_rng().gen_range(0..array_clone.len());
-    ///     array_clone.add(index,1); //randomly at one to an element in the array.
+    /// let array = AtomicArray::<usize>::new(&world,10,Distribution::Block);
+    /// let req = array.local_iter().enumerate().for_each(move |(i,elem)| {
+    ///     elem.store(i+1);
     /// });
+    /// array.print();
+    /// array.wait_all();
+    /// array.print();
     /// let array = array.into_read_only(); //only returns once there is a single reference remaining on each PE
-    /// let prod = array.prod(); 
-    /// assert_eq!(num_pes.pow(array.len()),prod);
+    /// array.print();
+    /// let prod =  array.block_on(array.prod()); 
+    /// assert_eq!((1..=array.len()).product::<usize>(),prod);
     ///```
     fn prod(&self) -> Pin<Box<dyn Future<Output = T>>>;
 }
@@ -1152,13 +1164,12 @@ where
     /// # Examples
     /// ```
     /// use lamellar::array::prelude::*; 
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let num_pes = world.num_pes();
-    /// let array = AtomicArray::new::<usize>(&world,10,Distribution::Block);
-    /// let array_clone = array.clone()
-    /// let req = array.dist_iterator().enumerate().for_each(|i,elem| elem.store(i*2));
+    /// let array = AtomicArray::<usize>::new(&world,10,Distribution::Block);
+    /// let req = array.dist_iter().enumerate().for_each(move |(i,elem)| elem.store(i*2));
     /// let array = array.into_read_only(); //only returns once there is a single reference remaining on each PE
-    /// let max = array.max(); 
+    /// let max = array.block_on(array.max()); 
     /// assert_eq!((array.len()-1)*2,max);
     ///```
     fn max(&self) -> Pin<Box<dyn Future<Output = T>>>;
@@ -1169,13 +1180,12 @@ where
     /// # Examples
     /// ```
     /// use lamellar::array::prelude::*; 
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let num_pes = world.num_pes();
-    /// let array = AtomicArray::new::<usize>(&world,10,Distribution::Block);
-    /// let array_clone = array.clone()
-    /// let req = array.dist_iterator().enumerate().for_each(|i,elem| elem.store(i*2));
+    /// let array = AtomicArray::<usize>::new(&world,10,Distribution::Block);
+    /// let req = array.dist_iter().enumerate().for_each(move |(i,elem)| elem.store(i*2));
     /// let array = array.into_read_only(); //only returns once there is a single reference remaining on each PE
-    /// let min = array.min(); 
+    /// let min = array.block_on(array.min()); 
     /// assert_eq!(0,min);
     ///```
     fn min(&self) -> Pin<Box<dyn Future<Output = T>>>;
@@ -1201,6 +1211,7 @@ where
 /// Recreating the "Sum" reduction
 /// ```
 /// use lamellar::array::prelude::*;
+/// use rand::Rng;
 ///
 /// register_reduction!(
 ///     my_sum, // the name of our new reduction
@@ -1208,18 +1219,18 @@ where
 ///     usize, // will be implementd for usize,f32, and i32
 ///     f32,
 ///     i32,
-/// )
-/// let world = LamellarWorldBuilder.build();
+/// );
+/// let world = LamellarWorldBuilder::new().build();
 /// let num_pes = world.num_pes();
-/// let array = AtomicArray::new::<usize>(&world,1000000,Distribution::Block);
-/// let array_clone = array.clone()
-/// let req = array.local_iterator().for_each(|_| {
+/// let array = AtomicArray::<usize>::new(&world,1000000,Distribution::Block);
+/// let array_clone = array.clone();
+/// let req = array.local_iter().for_each(move |_| {
 ///     let index = rand::thread_rng().gen_range(0..array_clone.len());
 ///     array_clone.add(index,1); //randomly at one to an element in the array.
 /// });
 /// let array = array.into_read_only(); //only returns once there is a single reference remaining on each PE
-/// let sum = array.sum(); 
-/// let my_sum = array.reduce("my_sum"); //pass a &str containing the reduction to use
+/// let sum = array.block_on(array.sum()); 
+/// let my_sum = array.block_on(array.reduce("my_sum")); //pass a &str containing the reduction to use
 /// assert_eq!(sum,my_sum);
 ///```
 pub use lamellar_impl::register_reduction;

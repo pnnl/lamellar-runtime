@@ -78,7 +78,7 @@ impl<T: Dist> ReadOnlyArray<T> {
     ///```
     /// use lamellar::array::prelude::*;
     ///
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Cyclic);
     pub fn new<U: Into<IntoLamellarTeam>>(
         team: U,
@@ -106,7 +106,7 @@ impl<T: Dist> ReadOnlyArray<T> {
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Cyclic);
     /// // do something interesting... or not
     /// let block_view = array.clone().use_distribution(Distribution::Block);
@@ -124,7 +124,7 @@ impl<T: Dist> ReadOnlyArray<T> {
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
     /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Cyclic);
     ///
@@ -142,7 +142,7 @@ impl<T: Dist> ReadOnlyArray<T> {
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
     /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Cyclic);
     ///
@@ -167,7 +167,7 @@ impl<T: Dist> ReadOnlyArray<T> {
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
     /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Cyclic);
     ///
@@ -178,7 +178,7 @@ impl<T: Dist> ReadOnlyArray<T> {
     /// Because this call blocks there is the possibility for deadlock to occur, as highlighted below:
     ///``` 
     /// use lamellar::array::prelude::*;
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
     /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Cyclic);
     ///
@@ -213,7 +213,7 @@ impl<T: Dist> ReadOnlyArray<T> {
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
     /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Cyclic);
     ///
@@ -223,7 +223,7 @@ impl<T: Dist> ReadOnlyArray<T> {
     /// Because this call blocks there is the possibility for deadlock to occur, as highlighted below:
     ///``` 
     /// use lamellar::array::prelude::*;
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
     /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Cyclic);
     ///
@@ -255,7 +255,7 @@ impl<T: Dist + 'static> ReadOnlyArray<T> {
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
     /// let array: ReadOnlyArray<usize> = UnsaReadOnlyArrayfeArray::new(&world,100,Distribution::Cyclic);
     ///
@@ -265,7 +265,7 @@ impl<T: Dist + 'static> ReadOnlyArray<T> {
     /// Because this call blocks there is the possibility for deadlock to occur, as highlighted below:
     ///``` 
     /// use lamellar::array::prelude::*;
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
     /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Cyclic);
     ///

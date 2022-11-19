@@ -291,12 +291,12 @@ impl<T: Dist> UnsafeArray<T> {
     /// use lamellar::array::prelude::*;
     /// use lamellar::memregion::prelude::*;
     ///
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array = UnsafeArray::new::<usize>(&world,12,Distribution::Block);
-    /// let buf = world.alloc_one_sided_mem_region(12).into();
+    /// let array = UnsafeArray::<usize>::new(&world,12,Distribution::Block);
+    /// let buf = world.alloc_one_sided_mem_region::<usize>(12);
     /// unsafe { 
-    ///     array.dist_iter_mut().for_each(|elem| *elem = buf.len()); //we will used this val as completion detection
+    ///     array.dist_iter_mut().for_each(move |elem| *elem = buf.len()); //we will used this val as completion detection
     ///     for (i,elem) in buf.as_mut_slice()
     ///                          .expect("we just created it so we know its local")
     ///                          .iter_mut()
@@ -306,7 +306,7 @@ impl<T: Dist> UnsafeArray<T> {
     /// }
     /// array.wait_all();
     /// array.barrier();
-    /// println!("PE{my_pe array data: {:?}",array.local_data());
+    /// println!("PE{my_pe} array data: {:?}",array.local_data());
     /// if my_pe == 0 { //only perfrom the transfer from one PE
     ///     unsafe {array.put_unchecked(0,&buf);}
     ///     println!();
@@ -318,7 +318,7 @@ impl<T: Dist> UnsafeArray<T> {
     ///     }
     /// }
     ///    
-    /// println!("PE{my_pe array data: {:?}",array.local_data());
+    /// println!("PE{my_pe} array data: {:?}",array.local_data());
     ///```
     /// Possible output on A 4 PE system (ordering with respect to PEs may change)
     ///```
@@ -356,10 +356,10 @@ impl<T: Dist> UnsafeArray<T> {
     /// use lamellar::array::prelude::*;
     /// use lamellar::memregion::prelude::*;
     ///
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array = UnsafeArray::new::<usize>(&world,12,Distribution::Block);
-    /// let buf = world.alloc_one_sided_mem_region(12).into();
+    /// let array = UnsafeArray::<usize>::new(&world,12,Distribution::Block);
+    /// let buf = world.alloc_one_sided_mem_region::<usize>(12);
     /// unsafe { 
     ///     array.dist_iter_mut().enumerate().for_each(|(i,elem)| *elem = i); 
     ///     for elem in buf.as_mut_slice()
@@ -369,7 +369,7 @@ impl<T: Dist> UnsafeArray<T> {
     /// }
     /// array.wait_all();
     /// array.barrier();
-    /// println!("PE{my_pe array data: {:?}",buf.as_slice().unwrap());
+    /// println!("PE{my_pe} array data: {:?}",unsafe{buf.as_slice().unwrap()});
     /// if my_pe == 0 { //only perfrom the transfer from one PE
     ///     unsafe {array.get_unchecked(0,&buf)};
     ///     println!();
@@ -381,7 +381,7 @@ impl<T: Dist> UnsafeArray<T> {
     ///     }
     /// }
     ///    
-    /// println!("PE{my_pe buf data: {:?}",buf.as_slice().unwrap());
+    /// println!("PE{my_pe} buf data: {:?}",unsafe{buf.as_slice().unwrap()});
     ///```
     /// Possible output on A 4 PE system (ordering with respect to PEs may change)
     ///```
@@ -417,10 +417,10 @@ impl<T: Dist> UnsafeArray<T> {
     /// use lamellar::array::prelude::*;
     /// use lamellar::memregion::prelude::*;
     ///
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array = UnsafeArray::new::<usize>(&world,12,Distribution::Block);
-    /// let buf = world.alloc_one_sided_mem_region(12).into();
+    /// let array = UnsafeArray::<usize>::new(&world,12,Distribution::Block);
+    /// let buf = world.alloc_one_sided_mem_region::<usize>(12);
     /// unsafe { 
     ///     array.dist_iter_mut().enumerate().for_each(|(i,elem)| *elem = i); //we will used this val as completion detection
     ///     for elem in buf.as_mut_slice()
@@ -429,13 +429,13 @@ impl<T: Dist> UnsafeArray<T> {
     ///     }
     ///     array.wait_all();
     ///     array.barrier();
-    ///     println!("PE{my_pe array data: {:?}",buf.as_slice().unwrap());
+    ///     println!("PE{my_pe} array data: {:?}",unsafe{buf.as_slice().unwrap()});
     ///     if my_pe == 0 { //only perfrom the transfer from one PE
     ///          println!();
     ///         array.blocking_get(0,&buf);
     ///         
     ///     }
-    ///     println!("PE{my_pe buf data: {:?}",buf.as_slice().unwrap()); 
+    ///     println!("PE{my_pe} buf data: {:?}",unsafe{buf.as_slice().unwrap()}); 
     /// }
     ///```
     /// Possible output on A 4 PE system (ordering with respect to PEs may change)
@@ -473,10 +473,10 @@ impl<T: Dist> UnsafeArray<T> {
     /// use lamellar::array::prelude::*;
     /// use lamellar::memregion::prelude::*;
     ///
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array = UnsafeArray::new::<usize>(&world,12,Distribution::Block);
-    /// let buf = world.alloc_one_sided_mem_region(12).into();
+    /// let array = UnsafeArray::<usize>::new(&world,12,Distribution::Block);
+    /// let buf = world.alloc_one_sided_mem_region::<usize>(12);
     /// unsafe { 
     ///     array.dist_iter_mut().enumerate().for_each(|(i,elem)| *elem = i); //we will used this val as completion detection
     ///     for elem in buf.as_mut_slice()
@@ -485,13 +485,13 @@ impl<T: Dist> UnsafeArray<T> {
     ///     }
     ///     array.wait_all();
     ///     array.barrier();
-    ///     println!("PE{my_pe array data: {:?}",buf.as_slice().unwrap());
+    ///     println!("PE{my_pe} array data: {:?}",unsafe{buf.as_slice().unwrap()});
     ///     if my_pe == 0 { //only perfrom the transfer from one PE
     ///          println!();
     ///         let req = array.get(0,&buf);
     ///         world.block_on(req);
     ///     }
-    ///     println!("PE{my_pe buf data: {:?}",buf.as_slice().unwrap()); 
+    ///     println!("PE{my_pe} buf data: {:?}",unsafe{buf.as_slice().unwrap()}); 
     /// }
     ///```
     /// Possible output on A 4 PE system (ordering with respect to PEs may change)
@@ -535,18 +535,18 @@ impl<T: Dist> UnsafeArray<T> {
     /// use lamellar::array::prelude::*;
     /// use lamellar::memregion::prelude::*;
     ///
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array = UnsafeArray::new::<usize>(&world,12,Distribution::Block);
+    /// let array = UnsafeArray::<usize>::new(&world,12,Distribution::Block);
     /// unsafe { 
     ///     array.dist_iter_mut().enumerate().for_each(|(i,elem)| *elem = my_pe); //we will used this val as completion detection
     ///     array.wait_all();
     ///     array.barrier();
-    ///     println!("PE{my_pe array data: {:?}",buf.as_slice().unwrap());
+    ///     println!("PE{my_pe} array data: {:?}",unsafe{buf.as_slice().unwrap()});
     ///     let index = ((my_pe+1)%num_pes) * array.num_elems_local(); // get first index on PE to the right (with wrap arround)
     ///     let at_req = array.at(index);
     ///     let val = array.block_on(at_req);
-    ///     println!("PE{my_pe array[{index}] = {val}"); 
+    ///     println!("PE{my_pe} array[{index}] = {val}"); 
     /// }
     ///```
     /// Possible output on A 4 PE system (ordering with respect to PEs may change)

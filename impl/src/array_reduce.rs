@@ -78,7 +78,6 @@ fn create_reduction(
                         let timer = std::time::Instant::now();
                         #[allow(unused_unsafe)]
                         let data_slice = unsafe {self.data.local_data()};
-                        // println!("data: {:?}",data_slice);
                         // let first = data_slice.first().unwrap().clone();
                         // let res = data_slice[1..].iter().fold(first, #op );
                         let res = data_slice.iter()#iter_chain.reduce(#op).unwrap();
@@ -129,6 +128,7 @@ fn create_reduction(
     let user_expanded = quote_spanned! {expanded.span()=>
         const _: () = {
             extern crate lamellar as __lamellar;
+            use __lamellar::active_messaging::prelude::*;
             use __lamellar::array::{LamellarArrayPut};
             #expanded
         };

@@ -44,12 +44,12 @@ pub trait LamellarArrayIterators<T: Dist>{
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
     /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Cyclic);
     ///
     /// world.block_on(
-    ///     array.dist_iter().for_each(|elem| println!("PE{my_pe} elem {elem}"));
+    ///     array.dist_iter().for_each(move |elem| println!("PE{my_pe} elem {elem}"));
     /// );
     ///```
     fn dist_iter(&self) -> Self::DistIter;
@@ -59,12 +59,12 @@ pub trait LamellarArrayIterators<T: Dist>{
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
     /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic);
     ///
     /// world.block_on(
-    ///     array.local_iter().for_each(|elem| println!("PE{my_pe} elem {}",elem.load())); // "load" is specific to AtomicArray elements, other types can deref the element directly"
+    ///     array.local_iter().for_each(move |elem| println!("PE{my_pe} elem {}",elem.load())); // "load" is specific to AtomicArray elements, other types can deref the element directly"
     /// );
     ///```
     fn local_iter(&self) -> Self::LocalIter;
@@ -74,7 +74,7 @@ pub trait LamellarArrayIterators<T: Dist>{
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
     /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Cyclic);
     ///
@@ -96,7 +96,7 @@ pub trait LamellarArrayIterators<T: Dist>{
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
     /// let array: LocalLockArray<usize> = LocalLockArray::new(&world,100,Distribution::Cyclic);
     /// 
@@ -125,12 +125,12 @@ pub trait LamellarArrayMutIterators<T: Dist>{
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
     /// let array: LockLockArray<usize> = LockLockArray::new(&world,100,Distribution::Cyclic);
     ///
     /// world.block_on(
-    ///     array.dist_iter_mut().for_each(|elem| *elem = my_pe);
+    ///     array.dist_iter_mut().for_each(move |elem| *elem = my_pe);
     /// );
     ///```
     fn dist_iter_mut(&self) -> Self::DistIter;
@@ -140,12 +140,12 @@ pub trait LamellarArrayMutIterators<T: Dist>{
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
     /// let array: LocalLockArray<usize> = LockLockArray::new(&world,100,Distribution::Cyclic);
     ///
     /// world.block_on(
-    ///    array.local_iter_mut().for_each(|elem| *elem = my_pe);
+    ///    array.local_iter_mut().for_each(move |elem| *elem = my_pe);
     /// );
     fn local_iter_mut(&self) -> Self::LocalIter;
 

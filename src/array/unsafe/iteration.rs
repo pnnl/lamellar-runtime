@@ -23,13 +23,13 @@ impl<T: Dist> UnsafeArray<T> {
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
     /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic);
     ///
     /// unsafe { 
     ///     world.block_on(
-    ///         array.dist_iter().for_each(|elem| println!("PE{my_pe} elem {elem}"));
+    ///         array.dist_iter().for_each(move |elem| println!("PE{my_pe} elem {elem}"));
     ///     );
     /// }
     ///```
@@ -47,13 +47,13 @@ impl<T: Dist> UnsafeArray<T> {
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
     /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic);
     ///
     /// unsafe { 
     ///     world.block_on(
-    ///         array.dist_iter_mut().for_each(|elem| *elem = my_pe);
+    ///         array.dist_iter_mut().for_each(move |elem| *elem = my_pe);
     ///     );
     /// }
     ///```
@@ -69,13 +69,13 @@ impl<T: Dist> UnsafeArray<T> {
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
     /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic);
     ///
     /// unsafe { 
     ///     world.block_on(
-    ///         array.local_iter().for_each(|elem| println!("PE{my_pe} elem {elem}"));
+    ///         array.local_iter().for_each(move |elem| println!("PE{my_pe} elem {elem}"));
     ///     );
     /// }
     ///```
@@ -91,13 +91,13 @@ impl<T: Dist> UnsafeArray<T> {
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
     /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic);
     ///
     /// unsafe { 
     ///     world.block_on(
-    ///         array.local_iter_mut().for_each(|elem| *elem = my_pe);
+    ///         array.local_iter_mut().for_each(move |elem| *elem = my_pe);
     ///     );
     /// }
     pub unsafe fn local_iter_mut(&self) -> LocalIterMut<'static, T, UnsafeArray<T>> {
@@ -112,7 +112,7 @@ impl<T: Dist> UnsafeArray<T> {
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
     /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic);
     ///
@@ -141,7 +141,7 @@ impl<T: Dist> UnsafeArray<T> {
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
     /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic);
     ///

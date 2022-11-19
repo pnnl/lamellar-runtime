@@ -1511,8 +1511,8 @@ impl<T> ElementComparePartialEqOps for T where T: std::cmp::PartialEq + std::cmp
 ///```
 /// use lamellar::array::prelude::*;
 ///
-/// let world = LamellarWorldBuilder.build();
-/// let array = AtomicArray::new::<usize>(&world,100,Distribution::Block);
+/// let world = LamellarWorldBuilder::new().build();
+/// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block);
 ///
 /// let indices = vec![3,54,12,88,29,68];
 /// let reqs = indices.iter().map(|i| array.load(i)).collect::<Vec<_>>();
@@ -1542,8 +1542,8 @@ pub trait ReadOnlyOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
     ///```
     /// use lamellar::array::prelude::*;
     ///
-    /// let world = LamellarWorldBuilder.build();
-    /// let array = AtomicArray::new::<usize>(&world,100,Distribution::Block);
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block);
     ///
     /// let req = array.load(53);
     /// let val = array.block_on(req);
@@ -1575,8 +1575,8 @@ pub trait ReadOnlyOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
     ///```
     /// use lamellar::array::prelude::*;
     ///
-    /// let world = LamellarWorldBuilder.build();
-    /// let array = AtomicArray::new::<usize>(&world,100,Distribution::Block);
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block);
     ///
     /// let indices = vec![3,54,12,88,29,68];
     /// let req = array.batch_load(indices);
@@ -1619,8 +1619,8 @@ pub trait ReadOnlyOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
 ///```
 /// use lamellar::array::prelude::*;
 ///
-/// let world = LamellarWorldBuilder.build();
-/// let array = AtomicArray::new::<usize>(&world,100,Distribution::Block);
+/// let world = LamellarWorldBuilder::new().build();
+/// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block);
 ///
 /// let indices = vec![3,54,12,88,29,68];
 /// let val = 10;
@@ -1631,8 +1631,8 @@ pub trait ReadOnlyOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
 ///```
 /// use lamellar::array::prelude::*;
 ///
-/// let world = LamellarWorldBuilder.build();
-/// let array = AtomicArray::new::<usize>(&world,100,Distribution::Block);
+/// let world = LamellarWorldBuilder::new().build();
+/// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block);
 ///
 /// let vals = vec![3,54,12,88,29,68];
 /// let index = 10;
@@ -1645,8 +1645,8 @@ pub trait ReadOnlyOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
 ///```
 /// use lamellar::array::prelude::*;
 ///
-/// let world = LamellarWorldBuilder.build();
-/// let array = AtomicArray::new::<usize>(&world,100,Distribution::Block);
+/// let world = LamellarWorldBuilder::new().build();
+/// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block);
 ///
 /// let indices = vec![3,54,12,88,29,68];
 /// let vals = vec![12,2,1,10000,12,13];
@@ -1668,8 +1668,8 @@ pub trait AccessOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
     ///```
     /// use lamellar::array::prelude::*;
     ///
-    /// let world = LamellarWorldBuilder.build();
-    /// let array = AtomicArray::new::<usize>(&world,100,Distribution::Block);
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block);
     ///
     /// let idx = 53;
     /// let val = 10;
@@ -1700,8 +1700,8 @@ pub trait AccessOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
     ///```
     /// use lamellar::array::prelude::*;
     ///
-    /// let world = LamellarWorldBuilder.build();
-    /// let array = AtomicArray::new::<usize>(&world,100,Distribution::Block);
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block);
     ///
     /// let indices = vec![3,54,12,88,29,68];
     /// let req = array.batch_store(indices,10);
@@ -1733,8 +1733,8 @@ pub trait AccessOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
     ///```
     /// use lamellar::array::prelude::*;
     ///
-    /// let world = LamellarWorldBuilder.build();
-    /// let array = AtomicArray::new::<usize>(&world,100,Distribution::Block);
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block);
     ///
     /// let idx = 53;
     /// let new = 10;
@@ -1766,8 +1766,8 @@ pub trait AccessOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
     ///```
     /// use lamellar::array::prelude::*;
     ///
-    /// let world = LamellarWorldBuilder.build();
-    /// let array = AtomicArray::new::<usize>(&world,100,Distribution::Block);
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block);
     ///
     /// let indices = vec![3,54,12,88,29,68];
     /// let req = array.batch_swap(indices,10);
@@ -1810,8 +1810,8 @@ pub trait AccessOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
 ///```
 /// use lamellar::array::prelude::*;
 ///
-/// let world = LamellarWorldBuilder.build();
-/// let array = AtomicArray::new::<usize>(&world,100,Distribution::Block);
+/// let world = LamellarWorldBuilder::new().build();
+/// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block);
 ///
 /// let indices = vec![3,54,12,88,29,68];
 /// let val = 10;
@@ -1822,8 +1822,8 @@ pub trait AccessOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
 ///```
 /// use lamellar::array::prelude::*;
 ///
-/// let world = LamellarWorldBuilder.build();
-/// let array = AtomicArray::new::<usize>(&world,100,Distribution::Block);
+/// let world = LamellarWorldBuilder::new().build();
+/// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block);
 ///
 /// let vals = vec![3,54,12,88,29,68];
 /// let index = 10;
@@ -1836,8 +1836,8 @@ pub trait AccessOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
 ///```
 /// use lamellar::array::prelude::*;
 ///
-/// let world = LamellarWorldBuilder.build();
-/// let array = AtomicArray::new::<usize>(&world,100,Distribution::Block);
+/// let world = LamellarWorldBuilder::new().build();
+/// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block);
 ///
 /// let indices = vec![3,54,12,88,29,68];
 /// let vals = vec![12,2,1,10000,12,13];
@@ -1859,8 +1859,8 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     ///```
     /// use lamellar::array::prelude::*;
     ///
-    /// let world = LamellarWorldBuilder.build();
-    /// let array = AtomicArray::new::<usize>(&world,100,Distribution::Block);
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block);
     ///
     /// let idx = 53;
     /// let val = 10;
@@ -1890,8 +1890,8 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     ///```
     /// use lamellar::array::prelude::*;
     ///
-    /// let world = LamellarWorldBuilder.build();
-    /// let array = AtomicArray::new::<usize>(&world,100,Distribution::Block);
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block);
     ///
     /// let indices = vec![3,54,12,88,29,68];
     /// let req = array.batch_add(indices,10);
@@ -1922,8 +1922,8 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     ///```
     /// use lamellar::array::prelude::*;
     ///
-    /// let world = LamellarWorldBuilder.build();
-    /// let array = AtomicArray::new::<usize>(&world,100,Distribution::Block);
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block);
     ///
     /// let idx = 53;
     /// let val = 10;
@@ -1955,8 +1955,8 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     ///```
     /// use lamellar::array::prelude::*;
     ///
-    /// let world = LamellarWorldBuilder.build();
-    /// let array = AtomicArray::new::<usize>(&world,100,Distribution::Block);
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block);
     ///
     /// let indices = vec![3,54,12,88,29,68];
     /// let req = array.batch_fetch_add(indices,10);
@@ -1987,8 +1987,8 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     ///```
     /// use lamellar::array::prelude::*;
     ///
-    /// let world = LamellarWorldBuilder.build();
-    /// let array = AtomicArray::new::<usize>(&world,100,Distribution::Block);
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block);
     ///
     /// let idx = 53;
     /// let val = 10;
@@ -2018,8 +2018,8 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     ///```
     /// use lamellar::array::prelude::*;
     ///
-    /// let world = LamellarWorldBuilder.build();
-    /// let array = AtomicArray::new::<usize>(&world,100,Distribution::Block);
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block);
     ///
     /// let indices = vec![3,54,12,88,29,68];
     /// let req = array.batch_sub(indices,10);
@@ -2050,8 +2050,8 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     ///```
     /// use lamellar::array::prelude::*;
     ///
-    /// let world = LamellarWorldBuilder.build();
-    /// let array = AtomicArray::new::<usize>(&world,100,Distribution::Block);
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block);
     ///
     /// let idx = 53;
     /// let val = 10;
@@ -2083,8 +2083,8 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     ///```
     /// use lamellar::array::prelude::*;
     ///
-    /// let world = LamellarWorldBuilder.build();
-    /// let array = AtomicArray::new::<usize>(&world,100,Distribution::Block);
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block);
     ///
     /// let indices = vec![3,54,12,88,29,68];
     /// let req = array.batch_fetch_sub(indices,10);
@@ -2115,8 +2115,8 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     ///```
     /// use lamellar::array::prelude::*;
     ///
-    /// let world = LamellarWorldBuilder.build();
-    /// let array = AtomicArray::new::<usize>(&world,100,Distribution::Block);
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block);
     ///
     /// let idx = 53;
     /// let val = 10;
@@ -2146,8 +2146,8 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     ///```
     /// use lamellar::array::prelude::*;
     ///
-    /// let world = LamellarWorldBuilder.build();
-    /// let array = AtomicArray::new::<usize>(&world,100,Distribution::Block);
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block);
     ///
     /// let indices = vec![3,54,12,88,29,68];
     /// let req = array.batch_mul(indices,10);
@@ -2178,8 +2178,8 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     ///```
     /// use lamellar::array::prelude::*;
     ///
-    /// let world = LamellarWorldBuilder.build();
-    /// let array = AtomicArray::new::<usize>(&world,100,Distribution::Block);
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block);
     ///
     /// let idx = 53;
     /// let val = 10;
@@ -2211,8 +2211,8 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     ///```
     /// use lamellar::array::prelude::*;
     ///
-    /// let world = LamellarWorldBuilder.build();
-    /// let array = AtomicArray::new::<usize>(&world,100,Distribution::Block);
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block);
     ///
     /// let indices = vec![3,54,12,88,29,68];
     /// let req = array.batch_fetch_mul(indices,10);
@@ -2243,8 +2243,8 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     ///```
     /// use lamellar::array::prelude::*;
     ///
-    /// let world = LamellarWorldBuilder.build();
-    /// let array = AtomicArray::new::<usize>(&world,100,Distribution::Block);
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block);
     ///
     /// let idx = 53;
     /// let val = 10;
@@ -2274,8 +2274,8 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     ///```
     /// use lamellar::array::prelude::*;
     ///
-    /// let world = LamellarWorldBuilder.build();
-    /// let array = AtomicArray::new::<usize>(&world,100,Distribution::Block);
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block);
     ///
     /// let indices = vec![3,54,12,88,29,68];
     /// let req = array.batch_div(indices,10);
@@ -2306,8 +2306,8 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     ///```
     /// use lamellar::array::prelude::*;
     ///
-    /// let world = LamellarWorldBuilder.build();
-    /// let array = AtomicArray::new::<usize>(&world,100,Distribution::Block);
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block);
     ///
     /// let idx = 53;
     /// let val = 10;
@@ -2339,8 +2339,8 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     ///```
     /// use lamellar::array::prelude::*;
     ///
-    /// let world = LamellarWorldBuilder.build();
-    /// let array = AtomicArray::new::<usize>(&world,100,Distribution::Block);
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block);
     ///
     /// let indices = vec![3,54,12,88,29,68];
     /// let req = array.batch_fetch_div(indices,10);
@@ -2383,8 +2383,8 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
 ///```
 /// use lamellar::array::prelude::*;
 ///
-/// let world = LamellarWorldBuilder.build();
-/// let array = AtomicArray::new::<usize>(&world,100,Distribution::Block);
+/// let world = LamellarWorldBuilder::new().build();
+/// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block);
 ///
 /// let indices = vec![3,54,12,88,29,68];
 /// let val = 0b100101001;
@@ -2395,8 +2395,8 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
 ///```
 /// use lamellar::array::prelude::*;
 ///
-/// let world = LamellarWorldBuilder.build();
-/// let array = AtomicArray::new::<usize>(&world,100,Distribution::Block);
+/// let world = LamellarWorldBuilder::new().build();
+/// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block);
 ///
 /// let vals = vec![0x3,0x54,0b11101,88,29,0x68];
 /// let index = 10;
@@ -2409,8 +2409,8 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
 ///```
 /// use lamellar::array::prelude::*;
 ///
-/// let world = LamellarWorldBuilder.build();
-/// let array = AtomicArray::new::<usize>(&world,100,Distribution::Block);
+/// let world = LamellarWorldBuilder::new().build();
+/// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block);
 ///
 /// let indices = vec![3,54,12,88,29,68];
 /// let vals = vec![0x12,2,1,0b10000,12,0x13];
@@ -2432,8 +2432,8 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
     ///```
     /// use lamellar::array::prelude::*;
     ///
-    /// let world = LamellarWorldBuilder.build();
-    /// let array = AtomicArray::new::<usize>(&world,100,Distribution::Block);
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block);
     ///
     /// let idx = 53;
     /// let val = 0b100101001;
@@ -2463,8 +2463,8 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
     ///```
     /// use lamellar::array::prelude::*;
     ///
-    /// let world = LamellarWorldBuilder.build();
-    /// let array = AtomicArray::new::<usize>(&world,100,Distribution::Block);
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block);
     ///
     /// let indices = vec![3,54,12,88,29,68];
     /// let req = array.batch_bit_and(indices,10);
@@ -2495,8 +2495,8 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
     ///```
     /// use lamellar::array::prelude::*;
     ///
-    /// let world = LamellarWorldBuilder.build();
-    /// let array = AtomicArray::new::<usize>(&world,100,Distribution::Block);
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block);
     ///
     /// let idx = 53;
     /// let val = 10;
@@ -2528,8 +2528,8 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
     ///```
     /// use lamellar::array::prelude::*;
     ///
-    /// let world = LamellarWorldBuilder.build();
-    /// let array = AtomicArray::new::<usize>(&world,100,Distribution::Block);
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block);
     ///
     /// let indices = vec![3,54,12,88,29,68];
     /// let req = array.batch_fetch_bit_and(indices,10);
@@ -2560,8 +2560,8 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
     ///```
     /// use lamellar::array::prelude::*;
     ///
-    /// let world = LamellarWorldBuilder.build();
-    /// let array = AtomicArray::new::<usize>(&world,100,Distribution::Block);
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block);
     ///
     /// let idx = 53;
     /// let val = 0b100101001;
@@ -2591,8 +2591,8 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
     ///```
     /// use lamellar::array::prelude::*;
     ///
-    /// let world = LamellarWorldBuilder.build();
-    /// let array = AtomicArray::new::<usize>(&world,100,Distribution::Block);
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block);
     ///
     /// let indices = vec![3,54,12,88,29,68];
     /// let req = array.batch_bit_or(indices,10);
@@ -2623,8 +2623,8 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
     ///```
     /// use lamellar::array::prelude::*;
     ///
-    /// let world = LamellarWorldBuilder.build();
-    /// let array = AtomicArray::new::<usize>(&world,100,Distribution::Block);
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block);
     ///
     /// let idx = 53;
     /// let val = 10;
@@ -2656,8 +2656,8 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
     ///```
     /// use lamellar::array::prelude::*;
     ///
-    /// let world = LamellarWorldBuilder.build();
-    /// let array = AtomicArray::new::<usize>(&world,100,Distribution::Block);
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block);
     ///
     /// let indices = vec![3,54,12,88,29,68];
     /// let req = array.batch_fetch_bit_or(indices,10);
@@ -2702,8 +2702,8 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
 ///```
 /// use lamellar::array::prelude::*;
 ///
-/// let world = LamellarWorldBuilder.build();
-/// let array = AtomicArray::new::<usize>(&world,100,Distribution::Block);
+/// let world = LamellarWorldBuilder::new().build();
+/// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block);
 ///
 /// let indices = vec![3,54,12,88,29,68];
 /// let current = 0;
@@ -2715,8 +2715,8 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
 ///```
 /// use lamellar::array::prelude::*;
 ///
-/// let world = LamellarWorldBuilder.build();
-/// let array = AtomicArray::new::<usize>(&world,100,Distribution::Block);
+/// let world = LamellarWorldBuilder::new().build();
+/// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block);
 ///
 /// let new_vals = vec![3,54,11101,88,29,68];
 /// let current = 0;
@@ -2730,8 +2730,8 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
 ///```
 /// use lamellar::array::prelude::*;
 ///
-/// let world = LamellarWorldBuilder.build();
-/// let array = AtomicArray::new::<usize>(&world,100,Distribution::Block);
+/// let world = LamellarWorldBuilder::new().build();
+/// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block);
 ///
 /// let indices = vec![3,54,12,88,29,68];
 /// let new_vals = vec![12,2,1,10000,12,13];
@@ -2757,8 +2757,8 @@ pub trait CompareExchangeOps<T: ElementCompareEqOps>: private::LamellarArrayPriv
     ///```
     /// use lamellar::array::prelude::*;
     ///
-    /// let world = LamellarWorldBuilder.build();
-    /// let array = AtomicArray::new::<usize>(&world,100,Distribution::Block);
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block);
     ///
     /// let idx = 53;
     /// let val = 10;
@@ -2797,8 +2797,8 @@ pub trait CompareExchangeOps<T: ElementCompareEqOps>: private::LamellarArrayPriv
     ///```
     /// use lamellar::array::prelude::*;
     ///
-    /// let world = LamellarWorldBuilder.build();
-    /// let array = AtomicArray::new::<usize>(&world,100,Distribution::Block);
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block);
     ///
     /// let indices = vec![3,54,12,88,29,68];
     /// let current = 0;
@@ -2849,7 +2849,7 @@ pub trait CompareExchangeOps<T: ElementCompareEqOps>: private::LamellarArrayPriv
 ///```
 /// use lamellar::array::prelude::*;
 ///
-/// let world = LamellarWorldBuilder.build();
+/// let world = LamellarWorldBuilder::new().build();
 /// let array = AtomicArray::new::<f32>(&world,100,Distribution::Block);
 ///
 /// let indices = vec![3,54,11101,88,29,68];
@@ -2863,7 +2863,7 @@ pub trait CompareExchangeOps<T: ElementCompareEqOps>: private::LamellarArrayPriv
 ///```
 /// use lamellar::array::prelude::*;
 ///
-/// let world = LamellarWorldBuilder.build();
+/// let world = LamellarWorldBuilder::new().build();
 /// let array = AtomicArray::new::<f32>(&world,100,Distribution::Block);
 ///
 /// let new_vals = vec![3.0,54.8,12.9,88.1,29.2,68.9];
@@ -2879,7 +2879,7 @@ pub trait CompareExchangeOps<T: ElementCompareEqOps>: private::LamellarArrayPriv
 ///```
 /// use lamellar::array::prelude::*;
 ///
-/// let world = LamellarWorldBuilder.build();
+/// let world = LamellarWorldBuilder::new().build();
 /// let array = AtomicArray::new::<f32>(&world,100,Distribution::Block);
 ///
 /// let indices = vec![3,54,12,88,29,68];
@@ -2911,7 +2911,7 @@ pub trait CompareExchangeEpsilonOps<T: ElementComparePartialEqOps>:
     ///```
     /// use lamellar::array::prelude::*;
     ///
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let array = AtomicArray::new::<f32>(&world,100,Distribution::Block);
     ///
     /// let idx = 53;
@@ -2953,8 +2953,8 @@ pub trait CompareExchangeEpsilonOps<T: ElementComparePartialEqOps>:
     ///```
     /// use lamellar::array::prelude::*;
     ///
-    /// let world = LamellarWorldBuilder.build();
-    /// let array = AtomicArray::new::<usize>(&world,100,Distribution::Block);
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block);
     ///
     /// let indices = vec![3,54,12,88,29,68];
     /// let current = 0.0;

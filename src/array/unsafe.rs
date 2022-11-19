@@ -129,7 +129,7 @@ impl<T: Dist + 'static> UnsafeArray<T> {
     ///```
     /// use lamellar::array::prelude::*;
     ///
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic);
     pub fn new<U: Into<IntoLamellarTeam>>(
         team: U,
@@ -217,7 +217,7 @@ impl<T: Dist + 'static> UnsafeArray<T> {
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic);
     /// // do something interesting... or not
     /// let block_view = array.clone().use_distribution(Distribution::Block);
@@ -236,7 +236,7 @@ impl<T: Dist + 'static> UnsafeArray<T> {
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
     /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic);
     ///
@@ -258,7 +258,7 @@ impl<T: Dist + 'static> UnsafeArray<T> {
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
     /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic);
     ///
@@ -287,7 +287,7 @@ impl<T: Dist + 'static> UnsafeArray<T> {
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
     /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic);
     /// unsafe { 
@@ -308,7 +308,7 @@ impl<T: Dist + 'static> UnsafeArray<T> {
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
     /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic);
     ///
@@ -334,7 +334,7 @@ impl<T: Dist + 'static> UnsafeArray<T> {
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
     /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic);
     ///
@@ -370,7 +370,7 @@ impl<T: Dist + 'static> UnsafeArray<T> {
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
     /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic);
     ///
@@ -381,7 +381,7 @@ impl<T: Dist + 'static> UnsafeArray<T> {
     /// Because this call blocks there is the possibility for deadlock to occur, as highlighted below:
     ///``` 
     /// use lamellar::array::prelude::*;
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
     /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic);
     ///
@@ -416,7 +416,7 @@ impl<T: Dist + 'static> UnsafeArray<T> {
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
     /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic);
     ///
@@ -426,7 +426,7 @@ impl<T: Dist + 'static> UnsafeArray<T> {
     /// Because this call blocks there is the possibility for deadlock to occur, as highlighted below:
     ///``` 
     /// use lamellar::array::prelude::*;
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
     /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic);
     ///
@@ -459,7 +459,7 @@ impl<T: Dist + 'static> UnsafeArray<T> {
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
     /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic);
     ///
@@ -469,7 +469,7 @@ impl<T: Dist + 'static> UnsafeArray<T> {
     /// Because this call blocks there is the possibility for deadlock to occur, as highlighted below:
     ///``` 
     /// use lamellar::array::prelude::*;
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
     /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic);
     ///
@@ -810,11 +810,11 @@ impl<T: Dist + AmDist + 'static> UnsafeArray<T> {
     /// # Examples
     /// ```
     /// use lamellar::array::prelude::*; 
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let num_pes = world.num_pes();
-    /// let array = AtomicArray::new::<usize>(&world,1000000,Distribution::Block);
+    /// let array = AtomicArray::<usize>::new(&world,1000000,Distribution::Block);
     /// let array_clone = array.clone()
-    /// let req = array.local_iterator().for_each(|_| {
+    /// let req = array.local_iter().for_each(move |_| {
     ///     let index = rand::thread_rng().gen_range(0..array_clone.len());
     ///     array_clone.add(index,1); //randomly at one to an element in the array.
     /// });
@@ -837,12 +837,12 @@ impl<T: Dist + AmDist + 'static> UnsafeArray<T> {
     /// # Examples
     /// ```
     /// use lamellar::array::prelude::*; 
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let num_pes = world.num_pes();
-    /// let array = UnsafeArray::new::<usize>(&world,1000000,Distribution::Block);
+    /// let array = UnsafeArray::<usize>::new(&world,1000000,Distribution::Block);
     /// let array_clone = array.clone()
     /// unsafe { // THIS IS NOT SAFE -- we are randomly updating elements, no protections, updates may be lost... DONT DO THIS
-    ///     let req = array.local_iterator().for_each(|_| {
+    ///     let req = array.local_iter().for_each(move |_| {
     ///         let index = rand::thread_rng().gen_range(0..array_clone.len());
     ///        array_clone.add(index,1); //randomly at one to an element in the array.
     ///     });
@@ -867,12 +867,12 @@ impl<T: Dist + AmDist + 'static> UnsafeArray<T> {
     /// # Examples
     /// ```
     /// use lamellar::array::prelude::*; 
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let num_pes = world.num_pes();
-    /// let array = UnsafeArray::new::<usize>(&world,10,Distribution::Block);
+    /// let array = UnsafeArray::<usize>::new(&world,10,Distribution::Block);
     /// let array_clone = array.clone()
     /// unsafe { // THIS IS NOT SAFE -- we are randomly updating elements, no protections, updates may be lost... DONT DO THIS
-    ///     array.local_iterator().for_each(|_| {
+    ///     array.local_iter().for_each(move |_| {
     ///         let index = rand::thread_rng().gen_range(0..array_clone.len());
     ///         array_clone.add(index,1); //randomly at one to an element in the array.
     ///     })
@@ -897,11 +897,11 @@ impl<T: Dist + AmDist + 'static> UnsafeArray<T> {
     /// # Examples
     /// ```
     /// use lamellar::array::prelude::*; 
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let num_pes = world.num_pes();
-    /// let array = UnsafeArray::new::<usize>(&world,10,Distribution::Block);
+    /// let array = UnsafeArray::<usize>::new(&world,10,Distribution::Block);
     /// let array_clone = array.clone()
-    /// unsafe{array.dist_iterator().enumerate().for_each(|i,elem| elem.store(i*2))}; //safe as we are accessing in a data parallel fashion
+    /// unsafe{array.dist_iter().enumerate().for_each(|(i,elem)| elem.store(i*2))}; //safe as we are accessing in a data parallel fashion
     /// array.wait_all();
     /// array.barrier()
     /// let max = unsafe{array.max()}; //Safe in this instance as we have ensured no updates are currently happening
@@ -922,11 +922,11 @@ impl<T: Dist + AmDist + 'static> UnsafeArray<T> {
     /// # Examples
     /// ```
     /// use lamellar::array::prelude::*; 
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let num_pes = world.num_pes();
-    /// let array = AtomicArray::new::<usize>(&world,10,Distribution::Block);
+    /// let array = AtomicArray::<usize>::new(&world,10,Distribution::Block);
     /// let array_clone = array.clone()
-    /// unsafe{array.dist_iterator().enumerate().for_each(|i,elem| elem.store(i*2))}; //safe as we are accessing in a data parallel fashion
+    /// unsafe{array.dist_iter().enumerate().for_each(|(i,elem)| elem.store(i*2))}; //safe as we are accessing in a data parallel fashion
     /// array.wait_all();
     /// array.barrier()
     /// let min = unsafe{array.min()}; //Safe in this instance as we have ensured no updates are currently happening

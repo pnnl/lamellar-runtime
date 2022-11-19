@@ -21,10 +21,10 @@ impl<T: Dist> ReadOnlyArray<T> {
     /// use lamellar::array::prelude::*;
     /// use lamellar::memregion::prelude::*;
     ///
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array = ReadOnlyArray::new::<usize>(&world,12,Distribution::Block);
-    /// let buf = world.alloc_one_sided_mem_region(12).into();
+    /// let array = ReadOnlyArray::<usize>::new(&world,12,Distribution::Block);
+    /// let buf = world.alloc_one_sided_mem_region::<usize>(12);
     /// unsafe { 
     ///     for elem in buf.as_mut_slice()
     ///                          .expect("we just created it so we know its local") { //initialize mem_region
@@ -33,7 +33,7 @@ impl<T: Dist> ReadOnlyArray<T> {
     /// }
     /// array.wait_all();
     /// array.barrier();
-    /// println!("PE{my_pe array data: {:?}",buf.as_slice().unwrap());
+    /// println!("PE{my_pe} array data: {:?}",unsafe{buf.as_slice().unwrap()});
     /// if my_pe == 0 { //only perfrom the transfer from one PE
     ///     unsafe {array.put_unchecked(0,&buf)} ;
     ///     println!();
@@ -45,7 +45,7 @@ impl<T: Dist> ReadOnlyArray<T> {
     ///     }
     /// }
     ///    
-    /// println!("PE{my_pe buf data: {:?}",buf.as_slice().unwrap()); 
+    /// println!("PE{my_pe} buf data: {:?}",unsafe{buf.as_slice().unwrap()}); 
     /// 
     ///```
     /// Possible output on A 4 PE system (ordering with respect to PEs may change)
@@ -85,10 +85,10 @@ impl<T: Dist> ReadOnlyArray<T> {
     /// use lamellar::array::prelude::*;
     /// use lamellar::memregion::prelude::*;
     ///
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array = ReadOnlyArray::new::<usize>(&world,12,Distribution::Block);
-    /// let buf = world.alloc_one_sided_mem_region(12).into();
+    /// let array = ReadOnlyArray::<usize>::new(&world,12,Distribution::Block);
+    /// let buf = world.alloc_one_sided_mem_region::<usize>(12);
     /// unsafe { 
     ///     for elem in buf.as_mut_slice()
     ///                          .expect("we just created it so we know its local") { //initialize mem_region
@@ -97,12 +97,12 @@ impl<T: Dist> ReadOnlyArray<T> {
     /// }
     /// array.wait_all();
     /// array.barrier();
-    /// println!("PE{my_pe array data: {:?}",buf.as_slice().unwrap());
+    /// println!("PE{my_pe} array data: {:?}",unsafe{buf.as_slice().unwrap()});
     /// if my_pe == 0 { //only perfrom the transfer from one PE
     ///     println!();
     ///     unsafe{ array.blocking_get(0,&buf);}
     /// }
-    /// println!("PE{my_pe buf data: {:?}",buf.as_slice().unwrap()); 
+    /// println!("PE{my_pe} buf data: {:?}",unsafe{buf.as_slice().unwrap()}); 
     ///```
     /// Possible output on A 4 PE system (ordering with respect to PEs may change)
     ///```
