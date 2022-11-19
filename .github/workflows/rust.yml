@@ -19,6 +19,6 @@ jobs:
     - name: UpdateRust
       run: rustup update stable
     - name: Build
-      run: rustup -V && cargo build --verbose
+      run: rustup -V && cargo build --verbose --examples
     # - name: Run tests
     #  run: cargo test --verbose

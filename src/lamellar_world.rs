@@ -285,7 +285,7 @@ impl Drop for LamellarWorld {
 ///
 /// Allows for customizing the way the world is built.
 ///
-/// Currently this includes being able to specify the [crate::lamellae] backend and workpool scheduler type.
+/// Currently this includes being able to specify the lamellae [Backend][crate::Backend] and workpool scheduler type.
 ///
 /// # Examples
 ///
