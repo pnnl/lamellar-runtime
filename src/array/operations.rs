@@ -9,7 +9,7 @@ use crate::array::*;
 
 use crate::lamellar_request::LamellarRequest;
 // use crate::memregion::{
-//     one_sided::OneSidedMemoryRegion, Dist, 
+//     one_sided::OneSidedMemoryRegion, Dist,
 // };
 // use crate::Darc;
 use async_trait::async_trait;
@@ -281,13 +281,17 @@ impl<'a, T: Dist> InputToValue<'a, T> {
         let mut req_ids = HashMap::new();
         match self {
             InputToValue::OneToOne(index, value) => {
-                let (pe, local_index) = array.pe_and_offset_for_global_index(index).expect("array index out of bounds");
+                let (pe, local_index) = array
+                    .pe_and_offset_for_global_index(index)
+                    .expect("array index out of bounds");
                 pe_offsets.insert(pe, InputToValue::OneToOne(local_index, value));
                 req_ids.insert(pe, vec![0]);
                 (pe_offsets, req_ids, 1)
             }
             InputToValue::OneToMany(index, values) => {
-                let (pe, local_index) = array.pe_and_offset_for_global_index(index).expect("array index out of bounds");
+                let (pe, local_index) = array
+                    .pe_and_offset_for_global_index(index)
+                    .expect("array index out of bounds");
                 let vals_len = values.len();
                 req_ids.insert(pe, (0..vals_len).collect());
                 pe_offsets.insert(pe, InputToValue::OneToMany(local_index, values));
@@ -298,7 +302,9 @@ impl<'a, T: Dist> InputToValue<'a, T> {
                 let mut temp_pe_offsets = HashMap::new();
                 let mut req_cnt = 0;
                 for index in indices.iter() {
-                    let (pe, local_index) = array.pe_and_offset_for_global_index(index).expect("array index out of bounds");
+                    let (pe, local_index) = array
+                        .pe_and_offset_for_global_index(index)
+                        .expect("array index out of bounds");
                     temp_pe_offsets
                         .entry(pe)
                         .or_insert(vec![])
@@ -320,7 +326,9 @@ impl<'a, T: Dist> InputToValue<'a, T> {
                 let mut temp_pe_offsets = HashMap::new();
                 let mut req_cnt = 0;
                 for (index, val) in indices.iter().zip(values.iter()) {
-                    let (pe, local_index) = array.pe_and_offset_for_global_index(index).expect("array index out of bounds");
+                    let (pe, local_index) = array
+                        .pe_and_offset_for_global_index(index)
+                        .expect("array index out of bounds");
                     let data = temp_pe_offsets.entry(pe).or_insert((vec![], vec![]));
                     data.0.push(local_index);
                     data.1.push(val);
@@ -550,7 +558,8 @@ impl<'a, T: Dist> RemoteOpAmInputToValue<'a, T> {
                 (RemoteOpAmInputToValue::OneToMany(idx, vals), size)
             }
             2 => {
-                let (idxs, idxs_bytes) = RemoteOpAmInputToValue::<usize>::unpack_slice(&buf[size..]);
+                let (idxs, idxs_bytes) =
+                    RemoteOpAmInputToValue::<usize>::unpack_slice(&buf[size..]);
                 size += idxs_bytes;
                 let val = unsafe { &*(buf[size..].as_ptr() as *const T) };
                 size += std::mem::size_of::<T>();
@@ -558,7 +567,8 @@ impl<'a, T: Dist> RemoteOpAmInputToValue<'a, T> {
                 (RemoteOpAmInputToValue::ManyToOne(idxs, val), size)
             }
             3 => {
-                let (idxs, idxs_bytes) = RemoteOpAmInputToValue::<usize>::unpack_slice(&buf[size..]);
+                let (idxs, idxs_bytes) =
+                    RemoteOpAmInputToValue::<usize>::unpack_slice(&buf[size..]);
                 size += idxs_bytes;
                 let (vals, vals_bytes) = RemoteOpAmInputToValue::<T>::unpack_slice(&buf[size..]);
                 size += vals_bytes;
@@ -649,12 +659,12 @@ impl<'a, T: Dist> OpInputEnum<'_, T> {
 
 /// This trait is used to represent the input to a batched LamellarArray element-wise operation.
 ///
-/// # Contents 
+/// # Contents
 /// - [Overview](#overview)
 /// - [Batch-compatible input types and type conversion methods](#batch-compatible-input-types-and-type-conversion-methods)
-/// 
+///
 /// # Overview
-/// 
+///
 /// Valid inputs to batched operations are essentially "safe" list-like data structures, such as `Vec<T>` and slice `&[T]`.
 /// We have also provided functions on the LamellarArray types that allow you to access a PE's local data. These functions
 /// appropriately protect the local data so the the safety guarantees of the given array type are maintained.
@@ -662,15 +672,15 @@ impl<'a, T: Dist> OpInputEnum<'_, T> {
 /// below.
 ///
 /// Currently it is not recommended to try to implement this for your types. Rather you should try to convert to a slice if possible.
-/// 
+///
 /// # Batch-compatible input types and type conversion methods
-/// 
+///
 /// Methods that return a batch-compatible input type (and the array type that provides it):
 /// - `local_data`- ([AtomicArray][crate::array::AtomicArray], [ReadOnlyArray][crate::array::ReadOnlyArray])
 /// - `mut_local_data` - ([AtomicArray][crate::array::AtomicArray], [ReadOnlyArray][crate::array::ReadOnlyArray])
 /// - `read_local_data` - ([LocalLockArray][crate::array::LocalLockArray])
 /// - `write_local_data` -([LocalLockArray][crate::array::LocalLockArray])
-/// 
+///
 /// Batch-compatible input types:
 /// - T and &T
 /// - &\[T\]
@@ -679,11 +689,11 @@ impl<'a, T: Dist> OpInputEnum<'_, T> {
 /// - Vec\[T\] and &Vec\[T\]
 /// - [AtomicLocalData][crate::array::atomic::AtomicLocalData]
 ///     - ```atomic_array.local_data();```
-/// - [LocalLockLocalData][crate::array::local_lock_atomic::LocalLockLocalData] 
+/// - [LocalLockLocalData][crate::array::local_lock_atomic::LocalLockLocalData]
 ///     - ```local_lock_array.read_local_data();```
 ///     - ```local_lock_array.write_local_data();```
-/// 
-/// It is possible to use a LamellarMemoryRegion or UnsafeArray as the parent source, but these will require unsafe calls to retrieve the underlying slices. 
+///
+/// It is possible to use a LamellarMemoryRegion or UnsafeArray as the parent source, but these will require unsafe calls to retrieve the underlying slices.
 /// The retrieved slices can then be used for the batched operation
 ///```
 /// unsafe { onesided_mem_region.as_slice().expect("not on allocating PE") };
@@ -875,7 +885,7 @@ impl<'a, T: Dist> OpInput<'a, T> for Vec<T> {
 //     }
 // }
 
-impl<'a, T: Dist> OpInput<'a, T> for &'a LocalLockLocalData<'_,T> {
+impl<'a, T: Dist> OpInput<'a, T> for &'a LocalLockLocalData<'_, T> {
     #[tracing::instrument(skip_all)]
     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
         // let slice=unsafe{self.__local_as_slice()};
@@ -894,14 +904,16 @@ impl<'a, T: Dist> OpInput<'a, T> for &'a LocalLockLocalData<'_,T> {
             // println!("num: {} len {:?} npb {:?}", num, len, num_per_batch);
             for i in 0..num {
                 // let sub_array = self.sub_array((start_index+(i*num_per_batch))..(start_index+((i+1)*num_per_batch)));
-                let sub_data = self.clone()
+                let sub_data = self
+                    .clone()
                     .into_sub_data(i * num_per_batch, (i + 1) * num_per_batch);
                 iters.push(OpInputEnum::LocalLockArray(sub_data));
             }
             let rem = len % num_per_batch;
             if rem > 0 {
                 // let sub_array = self.sub_array((start_index+(num*num_per_batch))..(start_index+(num*num_per_batch) + rem));
-                let sub_data = self.clone()
+                let sub_data = self
+                    .clone()
                     .into_sub_data(num * num_per_batch, num * num_per_batch + rem);
                 iters.push(OpInputEnum::LocalLockArray(sub_data));
             }
@@ -946,7 +958,7 @@ impl<'a, T: Dist + ElementOps> OpInput<'a, T> for &GenericAtomicLocalData<T> {
     #[tracing::instrument(skip_all)]
     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
         // let slice = unsafe { self.__local_as_slice() };
-        
+
         let local_data = self.clone();
         let len = local_data.len();
         let mut iters = vec![];
@@ -975,8 +987,8 @@ impl<'a, T: Dist + ElementOps> OpInput<'a, T> for &GenericAtomicLocalData<T> {
     }
 }
 
-impl<'a, T: Dist + ElementOps> OpInput<'a, T> for GenericAtomicLocalData<T>{
-    fn  as_op_input(self) -> (Vec<OpInputEnum<'a,T>>,usize) {
+impl<'a, T: Dist + ElementOps> OpInput<'a, T> for GenericAtomicLocalData<T> {
+    fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
         (&self).as_op_input()
     }
 }
@@ -1019,8 +1031,8 @@ impl<'a, T: Dist + ElementOps> OpInput<'a, T> for &NativeAtomicLocalData<T> {
     }
 }
 
-impl<'a, T: Dist + ElementOps> OpInput<'a, T> for NativeAtomicLocalData<T>{
-    fn  as_op_input(self) -> (Vec<OpInputEnum<'a,T>>,usize) {
+impl<'a, T: Dist + ElementOps> OpInput<'a, T> for NativeAtomicLocalData<T> {
+    fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
         (&self).as_op_input()
     }
 }
@@ -1433,7 +1445,7 @@ impl<T: Dist> LamellarRequest for ArrayOpResultHandleInner<T> {
 
 /// Supertrait specifying that array elements must be [Sized] and must be able to be used in remote operations [Dist].
 pub trait ElementOps: Dist + Sized {}
-impl<T> ElementOps for T where T:  Dist {}
+impl<T> ElementOps for T where T: Dist {}
 
 /// Supertrait specifying elements of the array support remote arithmetic assign operations
 /// - Addition ```+=```
@@ -1441,53 +1453,48 @@ impl<T> ElementOps for T where T:  Dist {}
 /// - Multiplication ```*=```
 /// - Division ```/=```
 pub trait ElementArithmeticOps:
-    std::ops::AddAssign
-    + std::ops::SubAssign
-    + std::ops::MulAssign
-    + std::ops::DivAssign
-    + Dist
-    + Sized
+    std::ops::AddAssign + std::ops::SubAssign + std::ops::MulAssign + std::ops::DivAssign + Dist + Sized
 {
 }
 
 impl<T> ElementArithmeticOps for T where
-    T: std::ops::AddAssign
-        + std::ops::SubAssign
-        + std::ops::MulAssign
-        + std::ops::DivAssign
-        + Dist
+    T: std::ops::AddAssign + std::ops::SubAssign + std::ops::MulAssign + std::ops::DivAssign + Dist
 {
 }
 
 /// Supertrait specifying elements of the array support remote bitwise operations
 /// - And ```&```
 /// - Or ```|```
-pub trait ElementBitWiseOps:
-    std::ops::BitAndAssign + std::ops::BitOrAssign  + Dist + Sized //+ AmDist
+pub trait ElementBitWiseOps: std::ops::BitAndAssign + std::ops::BitOrAssign + Dist + Sized
+//+ AmDist
 {
 }
 
 #[doc(hidden)]
 impl<T> ElementBitWiseOps for T where
-    T: std::ops::BitAndAssign + std::ops::BitOrAssign  + Dist //+ AmDist
+    T: std::ops::BitAndAssign + std::ops::BitOrAssign + Dist //+ AmDist
 {
 }
-
 
 /// Supertrait specifying elements of the array support remote Equality operations
 /// - ```==```
 /// - ```!=```
-pub trait ElementCompareEqOps: std::cmp::Eq  + Dist + Sized //+ AmDist
-{}
-impl<T> ElementCompareEqOps for T where T: std::cmp::Eq  + Dist //+ AmDist
-{}
+pub trait ElementCompareEqOps: std::cmp::Eq + Dist + Sized //+ AmDist
+{
+}
+impl<T> ElementCompareEqOps for T where T: std::cmp::Eq + Dist //+ AmDist,
+{
+}
 
 /// Supertrait specifying elements of the array support remote Partial Equality operations
-pub trait ElementComparePartialEqOps: std::cmp::PartialEq  + std::cmp::PartialOrd  +Dist + Sized //+ AmDist
-{}
-impl<T> ElementComparePartialEqOps for T where T: std::cmp::PartialEq + std::cmp::PartialOrd + Dist //+ AmDist
-{}
-
+pub trait ElementComparePartialEqOps:
+    std::cmp::PartialEq + std::cmp::PartialOrd + Dist + Sized //+ AmDist
+{
+}
+impl<T> ElementComparePartialEqOps for T where
+    T: std::cmp::PartialEq + std::cmp::PartialOrd + Dist //+ AmDist
+{
+}
 
 /// The interface for remotely reading elements
 ///
@@ -1495,11 +1502,11 @@ impl<T> ElementComparePartialEqOps for T where T: std::cmp::PartialEq + std::cmp
 ///
 /// Both single element operations and batched element operations are provided
 ///
-/// Generally if you are performing a large number of operations it will be better to 
+/// Generally if you are performing a large number of operations it will be better to
 /// use a batched version instead of multiple single element opertations. While the
 /// Runtime internally performs message aggregation for both single element and batched
 /// operations, single element operations have to be treated as individual requests, resulting
-/// in allocation and bookkeeping overheads. A single batched call on the other hand is treated 
+/// in allocation and bookkeeping overheads. A single batched call on the other hand is treated
 /// as a single request by the runtime.
 ///
 /// The results of a batched operation are returned to the user in the same order as the input indices.
@@ -1517,7 +1524,7 @@ impl<T> ElementComparePartialEqOps for T where T: std::cmp::PartialEq + std::cmp
 /// let indices = vec![3,54,12,88,29,68];
 /// let reqs = indices.iter().map(|i| array.load(i)).collect::<Vec<_>>();
 /// let vals_1 = array.block_on(async move {
-///      reqs.iter().map(|req| req.await).collect::<Vec<_>>() 
+///      reqs.iter().map(|req| req.await).collect::<Vec<_>>()
 /// });
 /// let req = array.load(indices);
 /// let vals_2 = array.block_on(req);
@@ -1600,11 +1607,11 @@ pub trait ReadOnlyOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
 ///
 /// Both single element operations and batched element operations are provided
 ///
-/// Generally if you are performing a large number of operations it will be better to 
+/// Generally if you are performing a large number of operations it will be better to
 /// use a batched version instead of multiple single element opertations. While the
 /// Runtime internally performs message aggregation for both single element and batched
 /// operations, single element operates have to be treated as individual requests, resulting
-/// in allocation and bookkeeping overheads. A single batched call on the other hand is treated 
+/// in allocation and bookkeeping overheads. A single batched call on the other hand is treated
 /// as a single request by the runtime. (See [ReadOnlyOps] for an example comparing single vs batched load operations of a list of indices)
 ///
 /// The results of a batched operation are returned to the user in the same order as the input indices.
@@ -1784,18 +1791,17 @@ pub trait AccessOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
     }
 }
 
-
 /// The interface for performing remote arithmetic operations on array elements
 ///
 /// These operations can be performed using any [LamellarWriteArray] type
 ///
 /// Both single element operations and batched element operations are provided
 ///
-/// Generally if you are performing a large number of operations it will be better to 
+/// Generally if you are performing a large number of operations it will be better to
 /// use a batched version instead of multiple single element opertations. While the
 /// Runtime internally performs message aggregation for both single element and batched
 /// operations, single element operates have to be treated as individual requests, resulting
-/// in allocation and bookkeeping overheads. A single batched call on the other hand is treated 
+/// in allocation and bookkeeping overheads. A single batched call on the other hand is treated
 /// as a single request by the runtime. (See [ReadOnlyOps] for an example comparing single vs batched load operations of a list of indices)
 ///
 /// The results of a batched operation are returned to the user in the same order as the input indices.
@@ -1972,7 +1978,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
             .initiate_batch_fetch_op(val, index, ArrayOpCmd::FetchAdd)
     }
 
-     /// This call subtracts the supplied `val` from the element specified by `index`
+    /// This call subtracts the supplied `val` from the element specified by `index`
     ///
     /// A future is returned as the result of this call, which is used to detect when the operation has completed
     ///
@@ -2100,7 +2106,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
             .initiate_batch_fetch_op(val, index, ArrayOpCmd::FetchSub)
     }
 
-     /// This call multiplies the supplied `val` by the element specified by `index` and stores the result.
+    /// This call multiplies the supplied `val` by the element specified by `index` and stores the result.
     ///
     /// A future is returned as the result of this call, which is used to detect when the operation has completed
     ///
@@ -2228,7 +2234,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
             .initiate_batch_fetch_op(val, index, ArrayOpCmd::FetchMul)
     }
 
-     /// This call divides the element specified by `index` with the supplied `val` and stores the result 
+    /// This call divides the element specified by `index` with the supplied `val` and stores the result
     ///
     /// A future is returned as the result of this call, which is used to detect when the operation has completed
     ///
@@ -2357,18 +2363,17 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     }
 }
 
-
 /// The interface for performing remote bitwise operations on array elements
 ///
 /// These operations can be performed using any [LamellarWriteArray] type
 ///
 /// Both single element operations and batched element operations are provided
 ///
-/// Generally if you are performing a large number of operations it will be better to 
+/// Generally if you are performing a large number of operations it will be better to
 /// use a batched version instead of multiple single element opertations. While the
 /// Runtime internally performs message aggregation for both single element and batched
 /// operations, single element operates have to be treated as individual requests, resulting
-/// in allocation and bookkeeping overheads. A single batched call on the other hand is treated 
+/// in allocation and bookkeeping overheads. A single batched call on the other hand is treated
 /// as a single request by the runtime. (See [ReadOnlyOps] for an example comparing single vs batched load operations of a list of indices)
 ///
 /// The results of a batched operation are returned to the user in the same order as the input indices.
@@ -2680,11 +2685,11 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
 ///
 /// Both single element operations and batched element operations are provided
 ///
-/// Generally if you are performing a large number of operations it will be better to 
+/// Generally if you are performing a large number of operations it will be better to
 /// use a batched version instead of multiple single element opertations. While the
 /// Runtime internally performs message aggregation for both single element and batched
 /// operations, single element operates have to be treated as individual requests, resulting
-/// in allocation and bookkeeping overheads. A single batched call on the other hand is treated 
+/// in allocation and bookkeeping overheads. A single batched call on the other hand is treated
 /// as a single request by the runtime. (See [ReadOnlyOps] for an example comparing single vs batched load operations of a list of indices)
 ///
 /// The results of a batched operation are returned to the user in the same order as the input indices.
@@ -2812,11 +2817,13 @@ pub trait CompareExchangeOps<T: ElementCompareEqOps>: private::LamellarArrayPriv
         current: T,
         new: impl OpInput<'a, T>,
     ) -> Pin<Box<dyn Future<Output = Vec<Result<T, T>>> + Send>> {
-        self.inner_array()
-            .initiate_batch_result_op(new, index, ArrayOpCmd::CompareExchange(current))
+        self.inner_array().initiate_batch_result_op(
+            new,
+            index,
+            ArrayOpCmd::CompareExchange(current),
+        )
     }
 }
-
 
 /// The interface for performing remote compare and exchange operations within a given epsilon on array elements
 ///
@@ -2826,11 +2833,11 @@ pub trait CompareExchangeOps<T: ElementCompareEqOps>: private::LamellarArrayPriv
 ///
 /// Both single element operations and batched element operations are provided
 ///
-/// Generally if you are performing a large number of operations it will be better to 
+/// Generally if you are performing a large number of operations it will be better to
 /// use a batched version instead of multiple single element opertations. While the
 /// Runtime internally performs message aggregation for both single element and batched
 /// operations, single element operates have to be treated as individual requests, resulting
-/// in allocation and bookkeeping overheads. A single batched call on the other hand is treated 
+/// in allocation and bookkeeping overheads. A single batched call on the other hand is treated
 /// as a single request by the runtime. (See [ReadOnlyOps] for an example comparing single vs batched load operations of a list of indices)
 ///
 /// The results of a batched operation are returned to the user in the same order as the input indices.
@@ -2929,8 +2936,11 @@ pub trait CompareExchangeEpsilonOps<T: ElementComparePartialEqOps>:
         new: T,
         eps: T,
     ) -> Pin<Box<dyn Future<Output = Result<T, T>> + Send>> {
-        self.inner_array()
-            .initiate_result_op(new, index, ArrayOpCmd::CompareExchangeEps(current, eps))
+        self.inner_array().initiate_result_op(
+            new,
+            index,
+            ArrayOpCmd::CompareExchangeEps(current, eps),
+        )
     }
 
     /// This call performs a batched vesion of the [compare_exchange_epsilon][CompareExchangeEpsilonOps::compare_exchange_epsilon] function,

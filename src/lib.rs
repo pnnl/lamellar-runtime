@@ -42,8 +42,8 @@
 //! # Network Backends
 //!
 //! Lamellar relies on network providers called Lamellae to perform the transfer of data throughout the system.
-//! Currently three such Lamellae exist: 
-//! - `local` -  used for single-PE (single system, single process) development (this is the default), 
+//! Currently three such Lamellae exist:
+//! - `local` -  used for single-PE (single system, single process) development (this is the default),
 //! - `shmem` -  used for multi-PE (single system, multi-process) development, useful for emulating distributed environments (communicates through shared memory)
 //! - `rofi` - used for multi-PE (multi system, multi-process) distributed development, based on the Rust OpenFabrics Interface Transport Layer (ROFI) (<https://github.com/pnnl/rofi>).
 //!     - By default support for Rofi is disabled as using it relies on both the Rofi c-library and the libfabrics library, which may not be installed on your system.
@@ -54,7 +54,7 @@
 //!
 //! Additional information on using each of the lamellae backends can be found below in the `Running Lamellar Applications` section
 //!
-//! Examples 
+//! Examples
 //! --------
 //! Our repository also provides numerous examples highlighting various features of the runtime: <https://github.com/pnnl/lamellar-runtime/tree/master/examples>
 //!
@@ -82,7 +82,7 @@
 //! ```
 //! use lamellar::active_messaging::prelude::*;
 //!
-//! #[AmData(Debug, Clone)] // `AmData` is a macro used in place of `derive` 
+//! #[AmData(Debug, Clone)] // `AmData` is a macro used in place of `derive`
 //! struct HelloWorld { //the "input data" we are sending with our active message
 //!     my_pe: usize, // "pe" is processing element == a node
 //! }
@@ -92,7 +92,7 @@
 //!     async fn exec(&self) {
 //!         println!(
 //!             "Hello pe {:?} of {:?}, I'm pe {:?}",
-//!             lamellar::current_pe, 
+//!             lamellar::current_pe,
 //!             lamellar::num_pes,
 //!             self.my_pe
 //!         );
@@ -140,7 +140,7 @@
 //! use lamellar::active_messaging::prelude::*;
 //! use std::sync::atomic::{AtomicUsize,Ordering};
 //!
-//! #[AmData(Debug, Clone)] // `AmData` is a macro used in place of `derive` 
+//! #[AmData(Debug, Clone)] // `AmData` is a macro used in place of `derive`
 //! struct DarcAm { //the "input data" we are sending with our active message
 //!     cnt: Darc<AtomicUsize>, // count how many times each PE executes an active message
 //! }
@@ -167,25 +167,25 @@
 //!     assert_eq!(cnt.load(Ordering::SeqCst),num_pes*2 + 1);
 //! }
 //!```
-//! # Using Lamellar 
+//! # Using Lamellar
 //! Lamellar is capable of running on single node workstations as well as distributed HPC systems.
 //! For a workstation, simply copy the following to the dependency section of you Cargo.toml file:
-//! 
+//!
 //!``` lamellar = "0.5" ```
-//! 
+//!
 //! If planning to use within a distributed HPC system a few more steps may be necessessary (this also works on single workstations):
-//! 
-//! 1. ensure Libfabric (with support for the verbs provider) is installed on your system <https://github.com/ofiwg/libfabric> 
+//!
+//! 1. ensure Libfabric (with support for the verbs provider) is installed on your system <https://github.com/ofiwg/libfabric>
 //! 2. set the OFI_DIR envrionment variable to the install location of Libfabric, this directory should contain both the following directories:
 //!     * lib
 //!     * include
 //! 3. copy the following to your Cargo.toml file:
-//! 
+//!
 //! ```lamellar = { version = "0.5", features = ["enable-rofi"]}```
-//! 
-//! 
+//!
+//!
 //! For both envrionments, build your application as normal
-//! 
+//!
 //! ```cargo build (--release)```
 //! # Running Lamellar Applications
 //! There are a number of ways to run Lamellar applications, mostly dictated by the lamellae you want to use.
@@ -203,21 +203,21 @@
 //! 1. allocate compute nodes on the cluster:
 //!     - ```salloc -N 2```
 //! 2. launch application using cluster launcher
-//!     - ```srun -N 2 -mpi=pmi2 ./target/release/<appname>``` 
+//!     - ```srun -N 2 -mpi=pmi2 ./target/release/<appname>```
 //!         - `pmi2` library is required to grab info about the allocated nodes and helps set up initial handshakes
-//! 
+//!
 //! # Environment Variables
 //! Lamellar exposes an number of envrionment variables that can used to control application execution at runtime
 //! - `LAMELLAR_THREADS` - The number of worker threads used within a lamellar PE
 //!     -  `export LAMELLAR_THREADS=10`
 //! - `LAMELLAE_BACKEND` - the backend used during execution. Note that if a backend is explicity set in the world builder, this variable is ignored.
 //!     - possible values
-//!         - `local` 
-//!         - `shmem` 
+//!         - `local`
+//!         - `shmem`
 //!         - `rofi`
 //! - `LAMELLAR_MEM_SIZE` - Specify the initial size of the Runtime "RDMAable" memory pool. Defaults to 1GB
 //!     - `export LAMELLAR_MEM_SIZE=$((20*1024*1024*1024))` 20GB memory pool
-//!     - Internally, Lamellar utilizes memory pools of RDMAable memory for Runtime data structures (e.g. [Darcs][crate::Darc], [OneSidedMemoryRegion][crate::memregion::OneSidedMemoryRegion],etc), aggregation buffers, and message queues.Additional memory pools are dynamically allocated across the system as needed. This can be a fairly expensive operation (as the operation is synchronous across all pes) so the runtime will print a message at the end of execution with how many additional pools were allocated. 
+//!     - Internally, Lamellar utilizes memory pools of RDMAable memory for Runtime data structures (e.g. [Darcs][crate::Darc], [OneSidedMemoryRegion][crate::memregion::OneSidedMemoryRegion],etc), aggregation buffers, and message queues.Additional memory pools are dynamically allocated across the system as needed. This can be a fairly expensive operation (as the operation is synchronous across all pes) so the runtime will print a message at the end of execution with how many additional pools were allocated.
 //!         - if you find you are dynamically allocating new memory pools, try setting `LAMELLAR_MEM_SIZE` to a larger value
 //!     - Note: when running multiple PEs on a single system, the total allocated memory for the pools would be equal to `LAMELLAR_MEM_SIZE * number of processes`
 //!
@@ -234,9 +234,9 @@ pub use serde::*;
 #[doc(hidden)]
 pub extern crate tracing;
 #[doc(hidden)]
-pub use tracing::*;
-#[doc(hidden)]
 pub use parking_lot;
+#[doc(hidden)]
+pub use tracing::*;
 
 #[doc(hidden)]
 pub use async_trait;
@@ -270,26 +270,21 @@ pub use utils::*;
 use lamellar_prof::init_prof;
 init_prof!();
 
-
-
+pub use crate::lamellae::Backend;
+pub use crate::lamellar_arch::{BlockedArch, IdError, LamellarArch, StridedArch};
 #[doc(hidden)]
 pub use crate::lamellar_request::LamellarRequest;
-pub use crate::lamellar_arch::{BlockedArch, IdError, LamellarArch, StridedArch};
-pub use crate::lamellae::Backend;
-pub use crate::scheduler::SchedulerType;
+pub use crate::lamellar_task_group::LamellarTaskGroup;
 pub use crate::lamellar_team::LamellarTeam;
 #[doc(hidden)]
 pub use crate::lamellar_team::LamellarTeamRT;
-pub use crate::lamellar_task_group::LamellarTaskGroup;
 pub use crate::lamellar_world::*;
-
+pub use crate::scheduler::SchedulerType;
 
 extern crate lamellar_impl;
 #[doc(hidden)]
 pub use lamellar_impl::Dist;
 // use lamellar_impl;
-
-
 
 #[doc(hidden)]
 pub use inventory;

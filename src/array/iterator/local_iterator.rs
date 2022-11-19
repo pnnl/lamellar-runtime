@@ -2,15 +2,15 @@
 //!
 //! This module provides parallel iteration capabilities for the local segments of LamellarArrays,
 //! similar to the `ParallelIterators` provided by the (Rayon)<https://docs.rs/rayon/latest/rayon/> crate.
-//! 
+//!
 //! These iterators are purely local to the calling PE, no data transfer occurs.
 mod chunks;
 mod enumerate;
 mod filter;
 mod filter_map;
 pub(crate) mod for_each;
-mod skip;
 mod map;
+mod skip;
 mod step_by;
 mod take;
 mod zip;
@@ -19,20 +19,18 @@ use chunks::*;
 use enumerate::*;
 use filter::*;
 use filter_map::*;
-use skip::*;
 use map::*;
+use skip::*;
 use step_by::*;
 use take::*;
 use zip::*;
 
-use crate::memregion::Dist;
-use crate::lamellar_request::LamellarRequest;
-use crate::LamellarTeamRT;
 use crate::array::iterator::one_sided_iterator::OneSidedIterator;
 use crate::array::iterator::Schedule;
-use crate::array::{
-    AtomicArray, Distribution, LamellarArray, UnsafeArray, LamellarArrayPut
-}; 
+use crate::array::{AtomicArray, Distribution, LamellarArray, LamellarArrayPut, UnsafeArray};
+use crate::lamellar_request::LamellarRequest;
+use crate::memregion::Dist;
+use crate::LamellarTeamRT;
 
 use crate::active_messaging::SyncSend;
 
@@ -175,28 +173,31 @@ impl<T: Dist, A: From<UnsafeArray<T>> + SyncSend> LocalIterCollectHandle<T, A> {
         let mut my_start = 0;
         let my_pe = self.team.team_pe.expect("pe not part of team");
         // local_sizes.print();
-        unsafe {local_sizes
-            .onesided_iter()
-            .into_iter()
-            .enumerate()
-            .for_each(|(i, local_size)| {
-                size += local_size;
-                if i < my_pe {
-                    my_start += local_size;
-                }
-            });
+        unsafe {
+            local_sizes
+                .onesided_iter()
+                .into_iter()
+                .enumerate()
+                .for_each(|(i, local_size)| {
+                    size += local_size;
+                    if i < my_pe {
+                        my_start += local_size;
+                    }
+                });
         }
         // println!("my_start {} size {}", my_start, size);
         let array = UnsafeArray::<T>::new(self.team.clone(), size, self.distribution); //implcit barrier
 
         // safe because only a single reference to array on each PE
         // we calculate my_start so that each pes local vals are guaranteed to not overwrite another pes values.
-        unsafe {array.put(my_start, local_vals)};
+        unsafe { array.put(my_start, local_vals) };
         array.into()
     }
 }
 #[async_trait]
-impl<T: Dist, A: From<UnsafeArray<T>> + SyncSend> LocalIterRequest for LocalIterCollectHandle<T, A> {
+impl<T: Dist, A: From<UnsafeArray<T>> + SyncSend> LocalIterRequest
+    for LocalIterCollectHandle<T, A>
+{
     type Output = A;
     async fn into_future(mut self: Box<Self>) -> Self::Output {
         let mut local_vals = vec![];
@@ -255,7 +256,6 @@ pub trait LocalIteratorLauncher {
         F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
         Fut: Future<Output = ()> + Send + 'static;
 
-    
     // fn local_collect<I, A>(&self, iter: &I, d: Distribution) -> Pin<Box<dyn Future<Output = A> + Send>>
     // where
     //     I: LocalIterator + 'static,
@@ -272,7 +272,6 @@ pub trait LocalIteratorLauncher {
     //     I::Item: Future<Output = B> + Send + 'static,
     //     B: Dist,
     //     A: From<UnsafeArray<B>> + SyncSend + 'static;
-    
 
     #[doc(hidden)]
     fn local_global_index_from_local(&self, index: usize, chunk_size: usize) -> Option<usize>;
@@ -286,7 +285,7 @@ pub trait LocalIteratorLauncher {
 
 /// An interface for dealing with parallel local iterators (intended as the Lamellar version of the Rayon ParellelIterator trait)
 ///
-/// The functions in this trait are available on all local iterators. 
+/// The functions in this trait are available on all local iterators.
 /// Additonaly functionality can be found in the [IndexedLocalIterator] trait:
 /// these methods are only available for local iterators where the number of elements is known in advance (e.g. after invoking `filter` these methods would be unavailable)
 
@@ -298,7 +297,7 @@ pub trait LocalIterator: SyncSend + Clone + 'static {
     type Array: LocalIteratorLauncher;
 
     /// Internal method used to initalize this distributed iterator to the correct element and correct length.
-    /// 
+    ///
     /// Because we know the number of elements of the array on each PE we can specify the index to start from.
     fn init(&self, start_i: usize, cnt: usize) -> Self;
 
@@ -381,7 +380,6 @@ pub trait LocalIterator: SyncSend + Clone + 'static {
     {
         FilterMap::new(self, op)
     }
-    
 
     /// Calls a closure on each element of a Local Iterator in parallel on the calling PE (the PE must have some local data of the array).
     ///
@@ -415,8 +413,8 @@ pub trait LocalIterator: SyncSend + Clone + 'static {
     /// This call is utilizes the [Schedule::Static][crate::array::iterator::Schedule] policy.
     ///
     /// The supplied closure must return a future.
-    /// 
-    /// Each thread will only drive a single future at a time. 
+    ///
+    /// Each thread will only drive a single future at a time.
     ///
     /// This function returns a future which can be used to poll for completion of the iteration.
     /// Note calling this function launches the iteration regardless of if the returned future is used or not.
@@ -428,7 +426,7 @@ pub trait LocalIterator: SyncSend + Clone + 'static {
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block);
     ///
-    /// let iter = array.local_iter().for_each_async(|elem| async move { 
+    /// let iter = array.local_iter().for_each_async(|elem| async move {
     ///     async_std::task::yield_now().await;
     ///     println!("{:?} {elem}",std::thread::current().id())
     /// });
@@ -448,7 +446,6 @@ pub trait LocalIterator: SyncSend + Clone + 'static {
         self.array().local_for_each_async(self, op)
     }
 
-    
     /*
     /// Collects the elements of the local iterator into the specified container type
     ///
@@ -478,10 +475,10 @@ pub trait LocalIterator: SyncSend + Clone + 'static {
     /// Collects the elements of the local iterator into the specified container type
     /// Each element from the iterator must return a Future
     ///
-    /// Each thread will only drive a single future at a time. 
+    /// Each thread will only drive a single future at a time.
     ///
     /// This function returns a future which needs to be driven to completion to retrieve the new container.
-    /// 
+    ///
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
@@ -507,7 +504,7 @@ pub trait LocalIterator: SyncSend + Clone + 'static {
 /// An interface for dealing with local iterators which are indexable, meaning it returns an iterator of known length
 pub trait IndexedLocalIterator: LocalIterator + SyncSend + Clone + 'static {
     /// Calls a closure on each element of a Local Iterator in parallel on the calling PE (the PE must have some local data of the array) using the specififed schedule policy.
-    /// 
+    ///
     /// This function returns a future which can be used to poll for completion of the iteration.
     /// Note calling this function launches the iteration regardless of if the returned future is used or not.
     ///
@@ -531,12 +528,12 @@ pub trait IndexedLocalIterator: LocalIterator + SyncSend + Clone + 'static {
     {
         self.array().local_for_each_with_schedule(sched, self, op)
     }
-    
+
     /// Calls a closure on each element of a Local Iterator in parallel on the calling PE (the PE must have some local data of the array) using the specififed schedule policy.
     ///
     /// The supplied closure must return a future.
-    /// 
-    /// Each thread will only drive a single future at a time. 
+    ///
+    /// Each thread will only drive a single future at a time.
     ///
     /// This function returns a future which can be used to poll for completion of the iteration.
     /// Note calling this function launches the iteration regardless of if the returned future is used or not.
@@ -548,7 +545,7 @@ pub trait IndexedLocalIterator: LocalIterator + SyncSend + Clone + 'static {
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block);
     ///
-    /// array.local_iter().for_each_with_schedule(Schedule::Chunks(10),|elem| async move { 
+    /// array.local_iter().for_each_with_schedule(Schedule::Chunks(10),|elem| async move {
     ///     async_std::task::yield_now().await;
     ///     println!("{:?} {elem}",std::thread::current().id())
     /// });
@@ -563,7 +560,8 @@ pub trait IndexedLocalIterator: LocalIterator + SyncSend + Clone + 'static {
         F: Fn(Self::Item) -> Fut + SyncSend + Clone + 'static,
         Fut: Future<Output = ()> + Send + 'static,
     {
-        self.array().local_for_each_async_with_schedule(sched, self, op)
+        self.array()
+            .local_for_each_async_with_schedule(sched, self, op)
     }
 
     /// yields the local (to the calling PE) index along with each element
@@ -712,7 +710,7 @@ pub trait IndexedLocalIterator: LocalIterator + SyncSend + Clone + 'static {
     /// PE: 3 i: 6 elem: 0
     ///```
     fn step_by(self, step_size: usize) -> StepBy<Self> {
-        StepBy::new(self, step_size,0)
+        StepBy::new(self, step_size, 0)
     }
 
     /// An iterator that takes the first `n` elements
@@ -788,7 +786,6 @@ pub trait IndexedLocalIterator: LocalIterator + SyncSend + Clone + 'static {
     /// given an local index return the corresponding local iterator index ( or None otherwise)
     fn iterator_index(&self, index: usize) -> Option<usize>;
 }
-
 
 /// Immutable LamellarArray local iterator
 ///
@@ -881,18 +878,17 @@ impl<
 impl<
         T: Dist + 'static,
         A: LamellarArray<T> + SyncSend + LocalIteratorLauncher + Clone + 'static,
-    > IndexedLocalIterator for LocalIter<'static, T, A> {
-        fn iterator_index(&self, index: usize) -> Option<usize> {
-            // println!("{:?} \t LocalIter iterator index {index} {:?}",std::thread::current().id(),self.cur_i);
-            if index < self.data.len(){
-                Some(index) //everyone at this point as calculated the actual index (cause we are local only) so just return it
-            }
-            else {
-                None
-            }
+    > IndexedLocalIterator for LocalIter<'static, T, A>
+{
+    fn iterator_index(&self, index: usize) -> Option<usize> {
+        // println!("{:?} \t LocalIter iterator index {index} {:?}",std::thread::current().id(),self.cur_i);
+        if index < self.data.len() {
+            Some(index) //everyone at this point as calculated the actual index (cause we are local only) so just return it
+        } else {
+            None
         }
+    }
 }
-
 
 /// Mutable LamellarArray local iterator
 ///
@@ -985,14 +981,14 @@ impl<
 impl<
         T: Dist + 'static,
         A: LamellarArray<T> + SyncSend + LocalIteratorLauncher + Clone + 'static,
-    > IndexedLocalIterator for LocalIterMut<'static, T, A> {
-        fn iterator_index(&self, index: usize) -> Option<usize> {
-            // println!("{:?} \t LocalIterMut iterator index {index} {:?}",std::thread::current().id(),self.cur_i);
-            if index < self.data.len(){
-                Some(index) //everyone at this point as calculated the actual index (cause we are local only) so just return it
-            }
-            else {
-                None
-            }
+    > IndexedLocalIterator for LocalIterMut<'static, T, A>
+{
+    fn iterator_index(&self, index: usize) -> Option<usize> {
+        // println!("{:?} \t LocalIterMut iterator index {index} {:?}",std::thread::current().id(),self.cur_i);
+        if index < self.data.len() {
+            Some(index) //everyone at this point as calculated the actual index (cause we are local only) so just return it
+        } else {
+            None
         }
+    }
 }

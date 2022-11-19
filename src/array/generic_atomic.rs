@@ -1,5 +1,5 @@
-pub(crate) mod operations;
 pub(crate) mod iteration;
+pub(crate) mod operations;
 mod rdma;
 use crate::array::atomic::AtomicElement;
 use crate::array::generic_atomic::operations::BUFOPS;
@@ -22,7 +22,6 @@ pub struct GenericAtomicElement<T> {
     array: GenericAtomicArray<T>,
     local_index: usize,
 }
-
 
 impl<T: Dist> From<GenericAtomicElement<T>> for AtomicElement<T> {
     fn from(element: GenericAtomicElement<T>) -> AtomicElement<T> {
@@ -187,7 +186,7 @@ impl<T: Dist + std::fmt::Debug> std::fmt::Debug for GenericAtomicElement<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let _lock = self.array.lock_index(self.local_index);
         let current_val = unsafe { self.array.__local_as_mut_slice()[self.local_index] };
-        write!(f,"{current_val:?}")
+        write!(f, "{current_val:?}")
     }
 }
 
@@ -375,15 +374,13 @@ impl<T: Dist + std::default::Default> GenericAtomicArray<T> {
 
 impl<T: Dist> GenericAtomicArray<T> {
     pub(crate) fn get_element(&self, index: usize) -> Option<GenericAtomicElement<T>> {
-        if index > unsafe{self.__local_as_slice().len()}{//We are only directly accessing the local slice for its len
-            Some(
-                GenericAtomicElement {
-                    array: self.clone(),
-                    local_index: index,
-                }
-            )
-        }
-        else {
+        if index > unsafe { self.__local_as_slice().len() } {
+            //We are only directly accessing the local slice for its len
+            Some(GenericAtomicElement {
+                array: self.clone(),
+                local_index: index,
+            })
+        } else {
             None
         }
     }
@@ -644,8 +641,9 @@ impl<T: Dist> LamellarArray<T> for GenericAtomicArray<T> {
     }
     fn block_on<F>(&self, f: F) -> F::Output
     where
-        F: Future {
-            self.array.block_on(f)
+        F: Future,
+    {
+        self.array.block_on(f)
     }
     fn pe_and_offset_for_global_index(&self, index: usize) -> Option<(usize, usize)> {
         self.array.pe_and_offset_for_global_index(index)
@@ -680,12 +678,16 @@ impl<T: Dist + std::fmt::Debug> ArrayPrint<T> for GenericAtomicArray<T> {
     }
 }
 
-impl<T: Dist + AmDist + 'static,> LamellarArrayReduce<T> for GenericAtomicArray<T> {
+impl<T: Dist + AmDist + 'static> LamellarArrayReduce<T> for GenericAtomicArray<T> {
     fn reduce(&self, op: &str) -> Pin<Box<dyn Future<Output = T>>> {
-        self.array.reduce_data(op,self.clone().into()).into_future()
+        self.array
+            .reduce_data(op, self.clone().into())
+            .into_future()
     }
 }
-impl<T: Dist + AmDist + ElementArithmeticOps + 'static,> LamellarArrayArithmeticReduce<T> for GenericAtomicArray<T> {
+impl<T: Dist + AmDist + ElementArithmeticOps + 'static> LamellarArrayArithmeticReduce<T>
+    for GenericAtomicArray<T>
+{
     fn sum(&self) -> Pin<Box<dyn Future<Output = T>>> {
         self.reduce("sum")
     }
@@ -693,7 +695,9 @@ impl<T: Dist + AmDist + ElementArithmeticOps + 'static,> LamellarArrayArithmetic
         self.reduce("prod")
     }
 }
-impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static,> LamellarArrayCompareReduce<T> for GenericAtomicArray<T> {
+impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static> LamellarArrayCompareReduce<T>
+    for GenericAtomicArray<T>
+{
     fn max(&self) -> Pin<Box<dyn Future<Output = T>>> {
         self.reduce("max")
     }

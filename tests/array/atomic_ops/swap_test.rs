@@ -51,7 +51,7 @@ macro_rules! swap{
             initialize_array!($array, array, init_val);
             array.wait_all();
             array.barrier();
-            
+
             let mut reqs = vec![];
             for idx in 0..array.len(){
                 if idx%num_pes == my_pe{
@@ -65,10 +65,10 @@ macro_rules! swap{
                     println!("{:?} {:?} {:?}",idx,val,init_val);
                 }
             }
-            
+
             array.wait_all();
             array.barrier();
-            
+
             let mut reqs = vec![];
             for idx in 0..array.len(){
                 reqs.push((array.load(idx),idx));
@@ -82,7 +82,7 @@ macro_rules! swap{
                     println!("{:?} {:?} {:?}",idx,val,check_val);
                 }
             }
-            
+
             array.barrier();
             initialize_array!($array, array, init_val);
             array.wait_all();
@@ -95,7 +95,7 @@ macro_rules! swap{
             let end_i = start_i + half_len;
             let sub_array = array.sub_array(start_i..end_i);
             sub_array.barrier();
-            
+
             let mut reqs = vec![];
             for idx in 0..sub_array.len(){
                 if idx%num_pes == my_pe{
@@ -109,10 +109,10 @@ macro_rules! swap{
                     println!("{:?} {:?} {:?}",idx,val,init_val);
                 }
             }
-            
+
             sub_array.wait_all();
             sub_array.barrier();
-            
+
             let mut reqs = vec![];
             for idx in 0..sub_array.len(){
                 reqs.push((sub_array.load(idx),idx));
@@ -126,7 +126,7 @@ macro_rules! swap{
                     println!("{:?} {:?} {:?}",idx,val,check_val);
                 }
             }
-            
+
             sub_array.barrier();
             initialize_array!($array, array, init_val);
             sub_array.wait_all();
@@ -141,7 +141,7 @@ macro_rules! swap{
                 let end_i = start_i+len;
                 let sub_array = array.sub_array(start_i..end_i);
                 sub_array.barrier();
-                
+
                 let mut reqs = vec![];
                 for idx in 0..sub_array.len(){
                     if idx%num_pes == my_pe{
@@ -155,10 +155,10 @@ macro_rules! swap{
                         println!("{:?} {:?} {:?}",idx,val,init_val);
                     }
                 }
-                
+
                 sub_array.wait_all();
                 sub_array.barrier();
-                
+
                 let mut reqs = vec![];
                 for idx in 0..sub_array.len(){
                     reqs.push((sub_array.load(idx),idx));
@@ -172,7 +172,7 @@ macro_rules! swap{
                         println!("{:?} {:?} {:?}",idx,val,check_val);
                     }
                 }
-                
+
                 sub_array.barrier();
                 initialize_array!($array, array, init_val);
                 sub_array.wait_all();

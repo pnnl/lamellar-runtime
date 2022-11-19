@@ -3,7 +3,7 @@
 //! provides a short overview.
 //!
 //! Lamellar is built upon asynchronous active messages, and provides users with an interface to construct their own active messages.
-//! 
+//!
 //! This interface is exposed through multiple Rust procedural macros.
 //! - [AmData]
 //! - [am]
@@ -30,7 +30,7 @@
 //!#[derive(Debug,Clone)]
 //! struct HelloWorld {
 //!    originial_pe: usize, //this will contain the ID of the PE this data originated from
-//! } 
+//! }
 //!```
 //! This looks like a pretty normal (if simple) struct, we next have to let the runtime know we would like this data
 //! to be used in an active message, so we need to apply the [AmData] macro, this is done by replacing the `derive` macro:
@@ -39,11 +39,11 @@
 //!#[AmData(Debug,Clone)]
 //! struct HelloWorld {
 //!    originial_pe: usize, //this will contain the ID of the PE this data originated from
-//! } 
+//! }
 //!```
 //! This change allows the compiler to implement the proper traits (related to Serialization and Deserialization) that will let this data type
 //! be used in an active message.
-//! 
+//!
 //! Next we now need to define the processing that we would like to take place when a message arrives at another PE
 //!
 //! For this we use the [am] macro on an implementation of the [LamellarAM] trait
@@ -63,7 +63,7 @@
 //!
 //! Each active message implementation is assigned a unique ID at runtime initialization, these IDs are then used as the key
 //! to a Map containing specialized deserialization functions that convert a slice of bytes into the appropriate data type on the remote PE.
-//! 
+//!
 //! The final step is to actually launch an active message and await its result
 //!```
 //! fn main(){
@@ -278,7 +278,7 @@
 //! #[AmData(Debug,Clone)]
 //! struct RingAm {
 //!    originial_pe: usize, //this will be are recursion terminating condition
-//! } 
+//! }
 //! #[lamellar::am]
 //! impl LamellarAm for RingAm{
 //!     async fn exec(self) -> Vec<usize>{
@@ -290,11 +290,11 @@
 //!             let req = lamellar::team.exec_am_pe(next_pe, self.clone());//we can clone self because we don't need to modify any data
 //!             let path = req.await; // exec_am_*() calls return a future we used to get the result from
 //!             path.push(lamellar::current_pe); //update the path with the PE and return
-//!             path 
+//!             path
 //!         }
 //!     }
 //! }
-//! 
+//!
 //! fn main(){
 //!     let world = lamellar::LamellarWorldBuilder::new().build();
 //!     let my_pe = world.my_pe();
@@ -360,7 +360,7 @@ const BATCH_AM_SIZE: usize = 100000;
 /// impl<T: serde::ser::Serialize + serde::de::DeserializeOwned + Sync + Send + 'static> AmDist for T {}
 ///```
 ///
-/// Typically you will use this macro in place of `#[derive()]`, as it will manage deriving both the traits 
+/// Typically you will use this macro in place of `#[derive()]`, as it will manage deriving both the traits
 /// that are provided as well as those require by Lamellar for active messaging.
 ///
 /// Generally this is paired with the [lamellar::am][am] macro on an implementation of the [LamellarAM], to associate a remote function with this data.
@@ -370,7 +370,7 @@ pub use lamellar_impl::AmData;
 
 /// This macro is used to setup the attributed type so that it can be used within local active messages.
 ///
-/// Typically you will use this macro in place of `#[derive()]`, as it will manage deriving both the traits 
+/// Typically you will use this macro in place of `#[derive()]`, as it will manage deriving both the traits
 /// that are provided as well as those require by Lamellar for active messaging.
 ///
 /// This macro relaxes the Serialize/Deserialize trait bounds required by the [AmData] macro
@@ -400,7 +400,6 @@ pub use lamellar_impl::am;
 /// Please see the [Active Messaging][crate::active_messaging] module level documentation for more details
 ///
 pub use lamellar_impl::local_am;
-
 
 /// Supertrait specifying `Sync` + `Send`
 pub trait SyncSend: Sync + Send {}

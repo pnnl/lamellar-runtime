@@ -31,7 +31,7 @@ fn main() {
     let a = LocalLockArray::<f32>::new(&world, m * n, Distribution::Block); //row major -- we will change this into a readonly array after initialization
     let b = LocalLockArray::<f32>::new(&world, n * p, Distribution::Block); //col major -- we will change this into a readonly array after initialization
     let c = LocalLockArray::<f32>::new(&world, m * p, Distribution::Block); //row major
-                                                                                  //initialize
+                                                                            //initialize
     a.dist_iter_mut()
         .enumerate()
         .for_each(|(i, x)| *x = i as f32);

@@ -1,5 +1,5 @@
-pub(crate) mod operations;
 pub(crate) mod iteration;
+pub(crate) mod operations;
 mod rdma;
 use crate::array::atomic::AtomicElement;
 use crate::array::native_atomic::operations::BUFOPS;
@@ -551,13 +551,11 @@ pub struct NativeAtomicElement<T> {
     local_index: usize,
 }
 
-
 impl<T: Dist> From<NativeAtomicElement<T>> for AtomicElement<T> {
     fn from(element: NativeAtomicElement<T>) -> AtomicElement<T> {
         AtomicElement::NativeAtomicElement(element)
     }
 }
-
 
 impl<T: Dist> NativeAtomicElement<T> {
     pub fn load(&self) -> T {
@@ -598,13 +596,11 @@ impl<T: ElementBitWiseOps + 'static> NativeAtomicElement<T> {
     }
 }
 
-
 impl<T: Dist + ElementArithmeticOps> AddAssign<T> for NativeAtomicElement<T> {
     fn add_assign(&mut self, val: T) {
         self.fetch_add(val);
     }
 }
-
 
 impl<T: Dist + ElementArithmeticOps> SubAssign<T> for NativeAtomicElement<T> {
     fn sub_assign(&mut self, val: T) {
@@ -612,20 +608,17 @@ impl<T: Dist + ElementArithmeticOps> SubAssign<T> for NativeAtomicElement<T> {
     }
 }
 
-
 impl<T: Dist + ElementArithmeticOps> MulAssign<T> for NativeAtomicElement<T> {
     fn mul_assign(&mut self, val: T) {
         self.fetch_mul(val);
     }
 }
 
-
 impl<T: Dist + ElementArithmeticOps> DivAssign<T> for NativeAtomicElement<T> {
     fn div_assign(&mut self, val: T) {
         self.fetch_div(val);
     }
 }
-
 
 impl<T: Dist + ElementBitWiseOps> BitAndAssign<T> for NativeAtomicElement<T> {
     fn bitand_assign(&mut self, val: T) {
@@ -822,15 +815,13 @@ impl<T: Dist> NativeAtomicArray<T> {
         self.orig_t
     }
     pub(crate) fn get_element(&self, index: usize) -> Option<NativeAtomicElement<T>> {
-        if index < unsafe{self.__local_as_slice().len()}{ //We are only directly accessing the local slice for its len
-            Some(
-                NativeAtomicElement {
-                    array: self.clone(),
-                    local_index: index,
-                }
-            )
-        }
-        else {
+        if index < unsafe { self.__local_as_slice().len() } {
+            //We are only directly accessing the local slice for its len
+            Some(NativeAtomicElement {
+                array: self.clone(),
+                local_index: index,
+            })
+        } else {
             None
         }
     }
@@ -838,7 +829,6 @@ impl<T: Dist> NativeAtomicArray<T> {
 
 #[doc(hidden)]
 impl<T: Dist> NativeAtomicArray<T> {
-    
     pub fn use_distribution(self, distribution: Distribution) -> Self {
         NativeAtomicArray {
             array: self.array.use_distribution(distribution),
@@ -1012,8 +1002,9 @@ impl<T: Dist> LamellarArray<T> for NativeAtomicArray<T> {
     }
     fn block_on<F>(&self, f: F) -> F::Output
     where
-        F: Future {
-            self.array.block_on(f)
+        F: Future,
+    {
+        self.array.block_on(f)
     }
     fn pe_and_offset_for_global_index(&self, index: usize) -> Option<(usize, usize)> {
         self.array.pe_and_offset_for_global_index(index)
@@ -1047,7 +1038,6 @@ impl<T: Dist + std::fmt::Debug> NativeAtomicArray<T> {
     }
 }
 
-
 #[doc(hidden)]
 impl<T: Dist + std::fmt::Debug> ArrayPrint<T> for NativeAtomicArray<T> {
     fn print(&self) {
@@ -1055,12 +1045,16 @@ impl<T: Dist + std::fmt::Debug> ArrayPrint<T> for NativeAtomicArray<T> {
     }
 }
 
-impl<T: Dist + AmDist + 'static,> LamellarArrayReduce<T> for NativeAtomicArray<T> {
+impl<T: Dist + AmDist + 'static> LamellarArrayReduce<T> for NativeAtomicArray<T> {
     fn reduce(&self, op: &str) -> Pin<Box<dyn Future<Output = T>>> {
-        self.array.reduce_data(op,self.clone().into()).into_future()
+        self.array
+            .reduce_data(op, self.clone().into())
+            .into_future()
     }
 }
-impl<T: Dist + AmDist + ElementArithmeticOps + 'static,> LamellarArrayArithmeticReduce<T> for NativeAtomicArray<T> {
+impl<T: Dist + AmDist + ElementArithmeticOps + 'static> LamellarArrayArithmeticReduce<T>
+    for NativeAtomicArray<T>
+{
     fn sum(&self) -> Pin<Box<dyn Future<Output = T>>> {
         self.reduce("sum")
     }
@@ -1068,7 +1062,9 @@ impl<T: Dist + AmDist + ElementArithmeticOps + 'static,> LamellarArrayArithmetic
         self.reduce("prod")
     }
 }
-impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static,> LamellarArrayCompareReduce<T> for NativeAtomicArray<T> {
+impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static> LamellarArrayCompareReduce<T>
+    for NativeAtomicArray<T>
+{
     fn max(&self) -> Pin<Box<dyn Future<Output = T>>> {
         self.reduce("max")
     }

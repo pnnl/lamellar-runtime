@@ -1,5 +1,5 @@
-pub(crate) mod operations;
 mod iteration;
+pub(crate) mod operations;
 pub(crate) mod rdma;
 pub use rdma::{AtomicArrayGet, AtomicArrayPut};
 
@@ -36,7 +36,7 @@ use std::ops::{AddAssign, BitAndAssign, BitOrAssign, DivAssign, MulAssign, SubAs
 
 // #[doc(hidden)]
 /// An abstraction of an atomic element either via language supported Atomic integer types or through the use of an accompanying mutex.
-/// 
+///
 /// This type is returned when iterating over an AtomicArray as well as when accessing local elements through an [AtomicLocalData] handle.
 pub enum AtomicElement<T: Dist> {
     NativeAtomicElement(NativeAtomicElement<T>),
@@ -359,7 +359,6 @@ impl<T: Dist + std::fmt::Debug> std::fmt::Debug for AtomicElement<T> {
     }
 }
 
-
 ///A safe abstraction of a distributed array, providing read/write access protect by atomic elements
 ///
 /// If the type of the Array is an integer type (U8, usize, i32, i16, etc.) the array will use the appropriate Atomic* type underneath.
@@ -500,13 +499,12 @@ impl<T: Dist> AtomicLocalData<T> {
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
     /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic);
-    /// 
+    ///
     /// let local_data = array.local_data();
     ///
     /// let first_local_val = local_data.at(0);
     ///```
     pub fn at(&self, index: usize) -> AtomicElement<T> {
-
         let Some(val) = self.array.get_element(index) else {
             panic!("AtomicLocalData index {index} out of bounds");
         };
@@ -525,7 +523,7 @@ impl<T: Dist> AtomicLocalData<T> {
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
     /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic);
-    /// 
+    ///
     /// let local_data = array.local_data();
     ///
     /// let first_local_val = local_data.get_mut(0).unwrap(); //local data length is 25
@@ -544,7 +542,7 @@ impl<T: Dist> AtomicLocalData<T> {
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
     /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic);
-    /// 
+    ///
     /// let local_data = array.local_data();
     ///
     /// assert_eq!(25,local_data.len());
@@ -563,7 +561,7 @@ impl<T: Dist> AtomicLocalData<T> {
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
     /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic);
-    /// 
+    ///
     /// let local_data = array.local_data();
     ///
     /// for elem in local_data.iter() {
@@ -656,7 +654,7 @@ impl<T: Dist> AtomicArray<T> {
 
     /// Return the calling PE's local data as an [AtomicLocalData], which allows safe access to local elements.   
     ///
-    /// Because each element is Atomic, this handle to the local data can be used to both read and write individual elements safely. 
+    /// Because each element is Atomic, this handle to the local data can be used to both read and write individual elements safely.
     ///
     /// # Examples
     ///```
@@ -676,7 +674,7 @@ impl<T: Dist> AtomicArray<T> {
 
     /// Return the calling PE's local data as an [AtomicLocalData], which allows safe mutable access to local elements.   
     ///
-    /// Because each element is Atomic, this handle to the local data can be used to both read and write individual elements safely. 
+    /// Because each element is Atomic, this handle to the local data can be used to both read and write individual elements safely.
     ///
     /// # Examples
     ///```
@@ -731,7 +729,7 @@ impl<T: Dist> AtomicArray<T> {
     ///
     /// # Warning
     /// Because this call blocks there is the possibility for deadlock to occur, as highlighted below:
-    ///``` 
+    ///```
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
@@ -741,10 +739,10 @@ impl<T: Dist> AtomicArray<T> {
     /// let slice = array1.local_data();
     ///
     /// // no borrows to this specific instance (array) so it can enter the "into_unsafe" call
-    /// // but array1 will not be dropped until after 'slice' is dropped. 
+    /// // but array1 will not be dropped until after 'slice' is dropped.
     /// // Given the ordering of these calls we will get stuck in "into_unsafe" as it
     /// // waits for the reference count to go down to "1" (but we will never be able to drop slice/array1).
-    /// let unsafe_array = array.into_unsafe(); 
+    /// let unsafe_array = array.into_unsafe();
     /// unsafe_array.print();
     /// println!("{slice:?}");
     ///```
@@ -781,7 +779,7 @@ impl<T: Dist> AtomicArray<T> {
     ///```
     /// # Warning
     /// Because this call blocks there is the possibility for deadlock to occur, as highlighted below:
-    ///``` 
+    ///```
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
@@ -791,10 +789,10 @@ impl<T: Dist> AtomicArray<T> {
     /// let slice = unsafe {array1.local_data()};
     ///
     /// // no borrows to this specific instance (array) so it can enter the "into_read_only" call
-    /// // but array1 will not be dropped until after mut_slice is dropped. 
+    /// // but array1 will not be dropped until after mut_slice is dropped.
     /// // Given the ordering of these calls we will get stuck in "into_read_only" as it
     /// // waits for the reference count to go down to "1" (but we will never be able to drop slice/array1).
-    /// let read_only_array = array.into_read_only(); 
+    /// let read_only_array = array.into_read_only();
     /// read_only_array.print();
     /// println!("{slice:?}");
     ///```
@@ -824,7 +822,7 @@ impl<T: Dist> AtomicArray<T> {
     ///```
     /// # Warning
     /// Because this call blocks there is the possibility for deadlock to occur, as highlighted below:
-    ///``` 
+    ///```
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
@@ -834,10 +832,10 @@ impl<T: Dist> AtomicArray<T> {
     /// let slice = unsafe {array1.local_data()};
     ///
     /// // no borrows to this specific instance (array) so it can enter the "into_local_lock" call
-    /// // but array1 will not be dropped until after mut_slice is dropped. 
+    /// // but array1 will not be dropped until after mut_slice is dropped.
     /// // Given the ordering of these calls we will get stuck in "into_local_lock" as it
     /// // waits for the reference count to go down to "1" (but we will never be able to drop slice/array1).
-    /// let local_lock_array = array.into_local_lock(); 
+    /// let local_lock_array = array.into_local_lock();
     /// local_lock_array.print();
     /// println!("{slice:?}");
     ///```

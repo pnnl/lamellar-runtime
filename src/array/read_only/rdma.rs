@@ -1,11 +1,10 @@
 use crate::array::*;
 
 impl<T: Dist> ReadOnlyArray<T> {
-
     /// Performs a raw RDMA "Get" of the data in this array starting at the provided index into the specified buffer
     ///
     /// The length of the Get is dictated by the length of the buffer.
-    /// 
+    ///
     /// The runtime provides no internal mechanism to check for completion when using this call.
     /// i.e. this means the user themselves will be responsible for determining when the transfer is complete
     ///
@@ -25,7 +24,7 @@ impl<T: Dist> ReadOnlyArray<T> {
     /// let my_pe = world.my_pe();
     /// let array = ReadOnlyArray::<usize>::new(&world,12,Distribution::Block);
     /// let buf = world.alloc_one_sided_mem_region::<usize>(12);
-    /// unsafe { 
+    /// unsafe {
     ///     for elem in buf.as_mut_slice()
     ///                          .expect("we just created it so we know its local") { //initialize mem_region
     ///         *elem = buf.len(); //we will used this val as completion detection
@@ -45,8 +44,8 @@ impl<T: Dist> ReadOnlyArray<T> {
     ///     }
     /// }
     ///    
-    /// println!("PE{my_pe} buf data: {:?}",unsafe{buf.as_slice().unwrap()}); 
-    /// 
+    /// println!("PE{my_pe} buf data: {:?}",unsafe{buf.as_slice().unwrap()});
+    ///
     ///```
     /// Possible output on A 4 PE system (ordering with respect to PEs may change)
     ///```
@@ -71,7 +70,7 @@ impl<T: Dist> ReadOnlyArray<T> {
     /// Performs a blocking (active message based) "Get" of the data in this array starting at the provided index into the specified buffer
     ///
     /// The length of the Get is dictated by the length of the buffer.
-    /// 
+    ///
     /// When this function returns, `buf` will have been populated with the results of the `get`
     ///
     /// # Safety
@@ -89,7 +88,7 @@ impl<T: Dist> ReadOnlyArray<T> {
     /// let my_pe = world.my_pe();
     /// let array = ReadOnlyArray::<usize>::new(&world,12,Distribution::Block);
     /// let buf = world.alloc_one_sided_mem_region::<usize>(12);
-    /// unsafe { 
+    /// unsafe {
     ///     for elem in buf.as_mut_slice()
     ///                          .expect("we just created it so we know its local") { //initialize mem_region
     ///         *elem = buf.len();
@@ -102,7 +101,7 @@ impl<T: Dist> ReadOnlyArray<T> {
     ///     println!();
     ///     unsafe{ array.blocking_get(0,&buf);}
     /// }
-    /// println!("PE{my_pe} buf data: {:?}",unsafe{buf.as_slice().unwrap()}); 
+    /// println!("PE{my_pe} buf data: {:?}",unsafe{buf.as_slice().unwrap()});
     ///```
     /// Possible output on A 4 PE system (ordering with respect to PEs may change)
     ///```
@@ -116,7 +115,11 @@ impl<T: Dist> ReadOnlyArray<T> {
     /// PE3: buf data [12,12,12,12,12,12,12,12,12,12,12,12]
     /// PE0: buf data  [0,0,0,0,0,0,0,0,0,0,0,0] //we only did the "get" on PE0, also likely to be printed last since the other PEs do not wait for PE0 in this example
     ///```
-    pub unsafe fn blocking_get<U: TeamInto<LamellarArrayRdmaOutput<T>> + LamellarWrite>(&self, index: usize, buf: U) {
+    pub unsafe fn blocking_get<U: TeamInto<LamellarArrayRdmaOutput<T>> + LamellarWrite>(
+        &self,
+        index: usize,
+        buf: U,
+    ) {
         self.array.blocking_get(index, buf)
     }
 }
@@ -143,6 +146,6 @@ impl<T: Dist + 'static> LamellarArrayGet<T> for ReadOnlyArray<T> {
         self.array.get(index, buf)
     }
     fn at(&self, index: usize) -> Pin<Box<dyn Future<Output = T> + Send>> {
-        unsafe {self.array.at(index)}
+        unsafe { self.array.at(index) }
     }
 }

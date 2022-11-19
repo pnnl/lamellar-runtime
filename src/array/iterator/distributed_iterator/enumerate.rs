@@ -31,17 +31,15 @@ where
         self.iter.array()
     }
     fn next(&mut self) -> Option<Self::Item> {
-        if let Some(a) = self.iter.next(){
+        if let Some(a) = self.iter.next() {
             let i = self.iterator_index(self.cur_index)?;
             // println!("{:?} Enumerate next {:?} i: {:?}",std::thread::current().id(),self.cur_index,i);
             self.cur_index += 1;
             Some((i, a))
-        }
-        else {
+        } else {
             // println!("{:?} Enumerate done",std::thread::current().id());
             None
         }
-        
     }
 
     fn elems(&self, in_elems: usize) -> usize {
@@ -55,7 +53,7 @@ where
     //     g_index
     // }
     // fn subarray_index(&self, index: usize) -> Option<usize> {
-    //     let g_index = self.iter.subarray_index(index); 
+    //     let g_index = self.iter.subarray_index(index);
     //                                                    // println!("enumerate index: {:?} global_index {:?}", index,g_index);
     //     g_index
     // }
@@ -74,9 +72,8 @@ where
     I: IndexedDistributedIterator,
 {
     fn iterator_index(&self, index: usize) -> Option<usize> {
-        let g_index = self.iter.iterator_index(index); 
+        let g_index = self.iter.iterator_index(index);
         // println!("{:?} \t Enumerate iterator index {index} {g_index:?}",std::thread::current().id());
         g_index
     }
-
 }

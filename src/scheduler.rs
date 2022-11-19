@@ -32,7 +32,6 @@ pub(crate) struct ReqId {
     pub(crate) sub_id: usize,
 }
 
-
 /// The available worker thread scheduling algorithms
 #[derive(Debug)]
 pub enum SchedulerType {

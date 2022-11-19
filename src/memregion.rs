@@ -5,10 +5,12 @@
 //!
 //! # Warning
 //! This is a low-level module, unless you are very comfortable/confident in low level distributed memory (and even then) it is highly recommended you use the [LamellarArrays][crate::array] and [Active Messaging][crate::active_messaging] interfaces to perform distributed communications and computation.
-use crate::array::{LamellarArrayRdmaInput,LamellarArrayRdmaOutput, LamellarRead, LamellarWrite, TeamFrom};
+use crate::active_messaging::AmDist;
+use crate::array::{
+    LamellarArrayRdmaInput, LamellarArrayRdmaOutput, LamellarRead, LamellarWrite, TeamFrom,
+};
 use crate::lamellae::{AllocationType, Backend, Lamellae, LamellaeComm, LamellaeRDMA};
 use crate::lamellar_team::LamellarTeamRT;
-use crate::active_messaging::AmDist;
 use core::marker::PhantomData;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
@@ -24,11 +26,10 @@ pub use one_sided::OneSidedMemoryRegion;
 
 use enum_dispatch::enum_dispatch;
 
-
 /// This error occurs when you are trying to directly access data locally on a PE through a memregion handle,
 /// but that PE does not contain any data for that memregion
 ///
-/// This can occur when tryin to get the local data from a [OneSidedMemoryRegion] on any PE but the one which created it. 
+/// This can occur when tryin to get the local data from a [OneSidedMemoryRegion] on any PE but the one which created it.
 ///
 /// It can also occur if a subteam creates a shared memory region, and then a PE that does not exist in the team tries to access local data directly.
 ///
@@ -47,11 +48,11 @@ impl std::fmt::Display for MemNotLocalError {
 impl std::error::Error for MemNotLocalError {}
 
 /// Trait representing types that can be used in remote operations
-/// 
+///
 /// as well as [Copy] so we can perform bitwise copies
 pub trait Dist:
-AmDist + Sync + Send + Copy + serde::ser::Serialize + serde::de::DeserializeOwned + 'static
-    // AmDist + Copy
+    AmDist + Sync + Send + Copy + serde::ser::Serialize + serde::de::DeserializeOwned + 'static
+// AmDist + Copy
 {
 }
 // impl<T: Send  + Copy + std::fmt::Debug + 'static>
@@ -141,7 +142,7 @@ impl<T: Dist> LamellarMemoryRegion<T> {
 impl<T: Dist> From<LamellarArrayRdmaOutput<T>> for LamellarMemoryRegion<T> {
     #[tracing::instrument(skip_all)]
     fn from(output: LamellarArrayRdmaOutput<T>) -> Self {
-        match output{
+        match output {
             LamellarArrayRdmaOutput::LamellarMemRegion(mr) => mr,
             LamellarArrayRdmaOutput::SharedMemRegion(mr) => mr.into(),
             LamellarArrayRdmaOutput::LocalMemRegion(mr) => mr.into(),
@@ -152,7 +153,7 @@ impl<T: Dist> From<LamellarArrayRdmaOutput<T>> for LamellarMemoryRegion<T> {
 impl<T: Dist> From<LamellarArrayRdmaInput<T>> for LamellarMemoryRegion<T> {
     #[tracing::instrument(skip_all)]
     fn from(input: LamellarArrayRdmaInput<T>) -> Self {
-        match input{
+        match input {
             LamellarArrayRdmaInput::LamellarMemRegion(mr) => mr,
             LamellarArrayRdmaInput::SharedMemRegion(mr) => mr.into(),
             LamellarArrayRdmaInput::LocalMemRegion(mr) => mr.into(),
@@ -277,7 +278,6 @@ pub trait SubRegion<T: Dist> {
 pub(crate) trait AsBase {
     unsafe fn to_base<B: Dist>(self) -> LamellarMemoryRegion<B>;
 }
-
 
 /// The Inteface for exposing RDMA operations on a memory region. These provide the actual mechanism for performing a transfer.
 #[enum_dispatch]

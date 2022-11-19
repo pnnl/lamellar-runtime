@@ -278,7 +278,6 @@ impl<T: Dist> SharedMemoryRegion<T> {
     }
 }
 
-
 // This could be useful for if we want to transfer the actual data instead of the pointer
 // impl<T: Dist + serde::Serialize> SharedMemoryRegion<T> {
 //     pub(crate) fn serialize_local_data<S>(&self, s: S) -> Result<S::Ok, S::Error>

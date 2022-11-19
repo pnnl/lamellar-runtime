@@ -33,10 +33,7 @@ impl<T: ElementBitWiseOps + 'static> BitWiseOps<T> for LocalLockArray<T> {}
 
 impl<T: ElementCompareEqOps + 'static> CompareExchangeOps<T> for LocalLockArray<T> {}
 
-impl<T: ElementComparePartialEqOps + 'static> CompareExchangeEpsilonOps<T>
-    for LocalLockArray<T>
-{
-}
+impl<T: ElementComparePartialEqOps + 'static> CompareExchangeEpsilonOps<T> for LocalLockArray<T> {}
 
 // // impl<T: Dist + std::ops::AddAssign> LocalLockArray<T> {
 // impl<T: ElementArithmeticOps> LocalArithmeticOps<T> for LocalLockArray<T> {

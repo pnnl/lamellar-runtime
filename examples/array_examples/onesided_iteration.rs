@@ -9,10 +9,15 @@ fn main() {
     let cyclic_array = AtomicArray::<usize>::new(world.team(), ARRAY_LEN, Distribution::Cyclic);
 
     //we are going to initialize the data on each PE by directly accessing its local data
-    
-        block_array.mut_local_data().iter().for_each(|e| e.store(my_pe));
-        cyclic_array.mut_local_data().iter().for_each(|e| e.store(my_pe));
-    
+
+    block_array
+        .mut_local_data()
+        .iter()
+        .for_each(|e| e.store(my_pe));
+    cyclic_array
+        .mut_local_data()
+        .iter()
+        .for_each(|e| e.store(my_pe));
 
     // In this example we will make use of a onesided iterator which
     // enables us to iterate over the entire array on a single PE.
@@ -23,7 +28,8 @@ fn main() {
     // we do not currently provide a mutable one sided iterator.
 
     if my_pe == 0 {
-        for elem in block_array.onesided_iter().into_iter() { //we can convert from a oneside iterator into a rust iterator
+        for elem in block_array.onesided_iter().into_iter() {
+            //we can convert from a oneside iterator into a rust iterator
             print!("{:?} ", elem);
         }
         println!("");
@@ -64,12 +70,7 @@ fn main() {
     // and then puts the appropriate date based on the iteration index into that region
 
     if my_pe == 0 {
-        for chunk in block_array
-            .onesided_iter()
-            .chunks(10)
-            .skip(4)
-            .into_iter()
-        {
+        for chunk in block_array.onesided_iter().chunks(10).skip(4).into_iter() {
             println!("{:?}", unsafe { chunk.as_slice() });
         }
         println!("-----");

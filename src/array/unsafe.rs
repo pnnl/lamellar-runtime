@@ -240,7 +240,7 @@ impl<T: Dist + 'static> UnsafeArray<T> {
     /// let my_pe = world.my_pe();
     /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic);
     ///
-    /// unsafe { 
+    /// unsafe {
     ///     let slice = array.local_as_slice();
     ///     println!("PE{my_pe} data: {slice:?}");
     /// }
@@ -290,7 +290,7 @@ impl<T: Dist + 'static> UnsafeArray<T> {
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
     /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic);
-    /// unsafe { 
+    /// unsafe {
     ///     let slice = array.local_data();
     ///     println!("PE{my_pe} data: {slice:?}");
     /// }
@@ -312,7 +312,7 @@ impl<T: Dist + 'static> UnsafeArray<T> {
     /// let my_pe = world.my_pe();
     /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic);
     ///
-    /// unsafe { 
+    /// unsafe {
     ///     let slice = array.mut_local_data();
     ///     for elem in slice{
     ///         *elem += 1;
@@ -339,7 +339,7 @@ impl<T: Dist + 'static> UnsafeArray<T> {
     /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic);
     ///
     /// assert_eq!(array.sub_array_range(),(0..100));
-    /// 
+    ///
     /// let sub_array = array.sub_array(25..75);
     /// assert_eq!(sub_array.sub_array_range(),(25..75));
     ///```
@@ -379,7 +379,7 @@ impl<T: Dist + 'static> UnsafeArray<T> {
     ///
     /// # Warning
     /// Because this call blocks there is the possibility for deadlock to occur, as highlighted below:
-    ///``` 
+    ///```
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
@@ -389,10 +389,10 @@ impl<T: Dist + 'static> UnsafeArray<T> {
     /// let mut_slice = unsafe {array1.local_as_mut_slice()};
     ///
     /// // no borrows to this specific instance (array) so it can enter the "into_read_only" call
-    /// // but array1 will not be dropped until after mut_slice is dropped. 
+    /// // but array1 will not be dropped until after mut_slice is dropped.
     /// // Given the ordering of these calls we will get stuck in "into_read_only" as it
     /// // waits for the reference count to go down to "1" (but we will never be able to drop mut_slice/array1).
-    /// let ro_array = array.into_read_only(); 
+    /// let ro_array = array.into_read_only();
     /// ro_array.print();
     /// println!("{mut_slice:?}");
     ///```
@@ -424,7 +424,7 @@ impl<T: Dist + 'static> UnsafeArray<T> {
     ///```
     /// # Warning
     /// Because this call blocks there is the possibility for deadlock to occur, as highlighted below:
-    ///``` 
+    ///```
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
@@ -434,10 +434,10 @@ impl<T: Dist + 'static> UnsafeArray<T> {
     /// let mut_slice = unsafe {array1.local_as_mut_slice()};
     ///
     /// // no borrows to this specific instance (array) so it can enter the "into_local_lock" call
-    /// // but array1 will not be dropped until after mut_slice is dropped. 
+    /// // but array1 will not be dropped until after mut_slice is dropped.
     /// // Given the ordering of these calls we will get stuck in "iinto_local_lock" as it
     /// // waits for the reference count to go down to "1" (but we will never be able to drop mut_slice/array1).
-    /// let local_lock_array = array.into_local_lock(); 
+    /// let local_lock_array = array.into_local_lock();
     /// local_lock_array.print();
     /// println!("{mut_slice:?}");
     ///```
@@ -446,7 +446,6 @@ impl<T: Dist + 'static> UnsafeArray<T> {
         self.into()
     }
 }
-
 
 impl<T: Dist + 'static> UnsafeArray<T> {
     /// Convert this UnsafeArray into a (safe) [AtomicArray][crate::array::AtomicArray]
@@ -467,7 +466,7 @@ impl<T: Dist + 'static> UnsafeArray<T> {
     ///```
     /// # Warning
     /// Because this call blocks there is the possibility for deadlock to occur, as highlighted below:
-    ///``` 
+    ///```
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
@@ -477,10 +476,10 @@ impl<T: Dist + 'static> UnsafeArray<T> {
     /// let mut_slice = unsafe {array1.local_as_mut_slice()};
     ///
     /// // no borrows to this specific instance (array) so it can enter the "into_atomic" call
-    /// // but array1 will not be dropped until after mut_slice is dropped. 
+    /// // but array1 will not be dropped until after mut_slice is dropped.
     /// // Given the ordering of these calls we will get stuck in "into_atomic" as it
     /// // waits for the reference count to go down to "1" (but we will never be able to drop mut_slice/array1).
-    /// let atomic_array = array.into_local_lock(); 
+    /// let atomic_array = array.into_local_lock();
     /// atomic_array.print();
     /// println!("{mut_slice:?}");
     ///```
@@ -585,7 +584,7 @@ impl<T: Dist> From<UnsafeArray<T>> for LamellarByteArray {
 }
 
 // impl<T: Dist + serde::Serialize + serde::de::DeserializeOwned + 'static> UnsafeArray<T> {
-    
+
 //     pub fn reduce(&self, op: &str) -> Pin<Box<dyn Future<Output = T>>> {
 //         self.reduce_data(self.get_reduction_op(op)).into_future()
 //     }
@@ -638,7 +637,7 @@ impl<T: Dist> LamellarArray<T> for UnsafeArray<T> {
     fn my_pe(&self) -> usize {
         self.inner.data.my_pe
     }
-    
+
     fn num_pes(&self) -> usize {
         self.inner.data.num_pes
     }
@@ -650,8 +649,6 @@ impl<T: Dist> LamellarArray<T> for UnsafeArray<T> {
     fn num_elems_local(&self) -> usize {
         self.inner.num_elems_local()
     }
-
-   
 
     fn barrier(&self) {
         self.inner.data.team.barrier();
@@ -698,7 +695,8 @@ impl<T: Dist> LamellarArray<T> for UnsafeArray<T> {
 
     fn block_on<F>(&self, f: F) -> F::Output
     where
-        F: Future {
+        F: Future,
+    {
         self.inner.data.team.scheduler.block_on(f)
     }
 
@@ -768,16 +766,21 @@ impl<T: Dist + std::fmt::Debug> ArrayPrint<T> for UnsafeArray<T> {
 }
 
 impl<T: Dist + AmDist + 'static> UnsafeArray<T> {
-    pub(crate) fn get_reduction_op(&self, op: &str, byte_array: LamellarByteArray) -> LamellarArcAm {
+    pub(crate) fn get_reduction_op(
+        &self,
+        op: &str,
+        byte_array: LamellarByteArray,
+    ) -> LamellarArcAm {
         REDUCE_OPS
             .get(&(std::any::TypeId::of::<T>(), op))
-            .expect("unexpected reduction type")(
-            byte_array,
-            self.inner.data.team.num_pes(),
-        )
+            .expect("unexpected reduction type")(byte_array, self.inner.data.team.num_pes())
     }
-    pub(crate) fn reduce_data(&self,op: &str, byte_array: LamellarByteArray) -> Box<dyn LamellarRequest<Output = T>> {
-        let func = self.get_reduction_op(op,byte_array);
+    pub(crate) fn reduce_data(
+        &self,
+        op: &str,
+        byte_array: LamellarByteArray,
+    ) -> Box<dyn LamellarRequest<Output = T>> {
+        let func = self.get_reduction_op(op, byte_array);
         if let Ok(my_pe) = self.inner.data.team.team_pe_id() {
             self.inner.data.team.exec_arc_am_pe::<T>(
                 my_pe,
@@ -792,12 +795,10 @@ impl<T: Dist + AmDist + 'static> UnsafeArray<T> {
             )
         }
     }
-    
 }
 
 // This is esentially impl LamellarArrayReduce, but we man to explicity have UnsafeArray expose unsafe functions
 impl<T: Dist + AmDist + 'static> UnsafeArray<T> {
-
     /// Perform a reduction on the entire distributed array, returning the value to the calling PE.
     ///
     /// Please see the documentation for the [register_reduction][lamellar_impl::register_reduction] procedural macro for
@@ -809,7 +810,7 @@ impl<T: Dist + AmDist + 'static> UnsafeArray<T> {
     ///
     /// # Examples
     /// ```
-    /// use lamellar::array::prelude::*; 
+    /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let num_pes = world.num_pes();
     /// let array = AtomicArray::<usize>::new(&world,1000000,Distribution::Block);
@@ -823,7 +824,7 @@ impl<T: Dist + AmDist + 'static> UnsafeArray<T> {
     /// assert_eq!(array.len()*num_pes,sum);
     ///```
     pub unsafe fn reduce(&self, op: &str) -> Pin<Box<dyn Future<Output = T>>> {
-        self.reduce_data(op,self.clone().into()).into_future()
+        self.reduce_data(op, self.clone().into()).into_future()
     }
 
     /// Perform a sum reduction on the entire distributed array, returning the value to the calling PE.
@@ -836,7 +837,7 @@ impl<T: Dist + AmDist + 'static> UnsafeArray<T> {
     ///
     /// # Examples
     /// ```
-    /// use lamellar::array::prelude::*; 
+    /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let num_pes = world.num_pes();
     /// let array = UnsafeArray::<usize>::new(&world,1000000,Distribution::Block);
@@ -866,7 +867,7 @@ impl<T: Dist + AmDist + 'static> UnsafeArray<T> {
     ///
     /// # Examples
     /// ```
-    /// use lamellar::array::prelude::*; 
+    /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let num_pes = world.num_pes();
     /// let array = UnsafeArray::<usize>::new(&world,10,Distribution::Block);
@@ -896,7 +897,7 @@ impl<T: Dist + AmDist + 'static> UnsafeArray<T> {
     ///
     /// # Examples
     /// ```
-    /// use lamellar::array::prelude::*; 
+    /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let num_pes = world.num_pes();
     /// let array = UnsafeArray::<usize>::new(&world,10,Distribution::Block);
@@ -921,7 +922,7 @@ impl<T: Dist + AmDist + 'static> UnsafeArray<T> {
     ///
     /// # Examples
     /// ```
-    /// use lamellar::array::prelude::*; 
+    /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let num_pes = world.num_pes();
     /// let array = AtomicArray::<usize>::new(&world,10,Distribution::Block);

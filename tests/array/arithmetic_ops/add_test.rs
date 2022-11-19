@@ -7,7 +7,9 @@ use rand::seq::SliceRandom;
 macro_rules! initialize_array {
     (UnsafeArray,$array:ident,$init_val:ident) => {
         #[allow(unused_unsafe)]
-        unsafe {$array.dist_iter_mut().for_each(move |x| *x = $init_val)};
+        unsafe {
+            $array.dist_iter_mut().for_each(move |x| *x = $init_val)
+        };
         $array.wait_all();
         $array.barrier();
     };
@@ -272,7 +274,7 @@ macro_rules! check_results {
         $array.wait_all();
         $array.barrier();
         #[allow(unused_unsafe)]
-        for (i, elem) in unsafe{$array.onesided_iter().into_iter().enumerate()} {
+        for (i, elem) in unsafe { $array.onesided_iter().into_iter().enumerate() } {
             let val = *elem;
             check_val!($array_ty, val, $num_pes, success);
             if !success {
@@ -289,7 +291,6 @@ macro_rules! check_results {
         $array.barrier();
     };
 }
-
 
 macro_rules! input_test{
     ($array:ident,  $len:expr, $dist:ident) =>{
@@ -360,7 +361,7 @@ macro_rules! input_test{
             check_results!($array,array,num_pes,"scoped &Vec<T>");
 
             // LMR<T>------------------------------
-            
+
             unsafe{
                 let lmr=world.alloc_one_sided_mem_region(array.len());
                 let slice = lmr.as_mut_slice().unwrap();
@@ -370,17 +371,17 @@ macro_rules! input_test{
                 array.batch_add(slice,1);
                 check_results!($array,array,num_pes,"LMR<T>");
             }
-            
+
 
             // SMR<T>------------------------------
             unsafe{
                 let smr=world.alloc_shared_mem_region(array.len());
-                
+
                 let slice = smr.as_mut_slice().unwrap();
                 for i in 0..array.len(){
                     slice[i]=i;
                 }
-                
+
                 array.batch_add(slice,1);
                 check_results!($array,array,num_pes,"SMR<T>");
             }

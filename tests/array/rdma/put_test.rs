@@ -17,7 +17,9 @@ fn initialize_mem_region<T: Dist + std::ops::AddAssign>(
 
 macro_rules! initialize_array {
     (UnsafeArray,$array:ident,$init_val:ident) => {
-        unsafe{$array.dist_iter_mut().for_each(move |x| *x = $init_val);}
+        unsafe {
+            $array.dist_iter_mut().for_each(move |x| *x = $init_val);
+        }
     };
     (AtomicArray,$array:ident,$init_val:ident) => {
         $array.dist_iter().for_each(move |x| x.store($init_val));

@@ -22,7 +22,7 @@ use zip::*;
 // use buffered::*;
 
 use crate::array::{LamellarArray, LamellarArrayInternalGet};
-use crate::memregion::{Dist,OneSidedMemoryRegion};
+use crate::memregion::{Dist, OneSidedMemoryRegion};
 
 use crate::LamellarTeamRT;
 
@@ -34,7 +34,6 @@ use std::pin::Pin;
 use std::ptr::NonNull;
 use std::sync::Arc;
 // use std::task::{Context, Poll};
-
 
 //TODO: Think about an active message based method for transfering data that performs data reducing iterators before sending
 // i.e. for something like step_by(N) we know that only every N elements actually needs to get sent...
@@ -69,8 +68,6 @@ pub trait OneSidedIterator {
         std::mem::size_of::<Self::Item>()
     }
 
-
-
     // /// Buffer (fetch/get) the next element in the array into the provided memory region (transferring data from a remote PE if necessary)
     // fn buffered_next(
     //     &mut self,
@@ -95,13 +92,13 @@ pub trait OneSidedIterator {
     /// array.wait_all();
     /// if my_pe == 0 {
     ///     for chunk in array.onesided_iter().chunks(5).into_iter() { //convert into a standard Iterator
-    ///         // SAFETY: chunk is safe in this instance because this will be the only handle to the memory region, 
+    ///         // SAFETY: chunk is safe in this instance because this will be the only handle to the memory region,
     ///         // and the runtime has verified that data is already placed in it
-    ///         println!("PE: {my_pe} chunk: {:?}",unsafe {chunk.as_slice()}); 
+    ///         println!("PE: {my_pe} chunk: {:?}",unsafe {chunk.as_slice()});
     ///     }
     /// }
     /// ```
-    /// Output on a 4 PE execution 
+    /// Output on a 4 PE execution
     ///```
     /// PE: 0 chunk: [0, 0, 0, 0, 0]
     /// PE: 0 chunk: [0, 1, 1, 1, 1]
@@ -133,7 +130,7 @@ pub trait OneSidedIterator {
     ///     }
     /// }
     /// ```
-    /// Output on a 4 PE execution 
+    /// Output on a 4 PE execution
     ///```
     /// PE: 0 elem: 1
     /// PE: 0 elem: 2
@@ -165,7 +162,7 @@ pub trait OneSidedIterator {
     ///     }
     /// }
     ///```
-    /// Output on a 4 PE execution 
+    /// Output on a 4 PE execution
     ///```
     /// PE: 0 elem: 0
     /// PE: 0 elem: 2
@@ -190,7 +187,7 @@ pub trait OneSidedIterator {
     /// let array_B: LocalLockArray<usize> = LocalLockArray::new(&world,12,Distribution::Block);
     /// let my_pe = world.my_pe();
     /// //initialize arrays using a distributed iterator
-    /// array_A.dist_iter_mut().for_each(|e| *e = world.my_pe()); 
+    /// array_A.dist_iter_mut().for_each(|e| *e = world.my_pe());
     /// array_B.dist_iter_mut().enumerate().for_each(|(i,elem)| *elem = i);
     /// world.wait_all(); // instead of waiting on both arrays in separate calls, just wait for all tasks at the world level
     ///
@@ -200,7 +197,7 @@ pub trait OneSidedIterator {
     ///     }
     /// }
     /// ```
-    /// Output on a 4 PE execution 
+    /// Output on a 4 PE execution
     ///```
     /// PE: 0 A: 0 B: 0
     /// PE: 0 A: 0 B: 1
@@ -242,7 +239,7 @@ pub trait OneSidedIterator {
     ///     println!("Sum: {sum}")
     /// }
     /// ```
-    ///  Output on a 4 PE execution 
+    ///  Output on a 4 PE execution
     ///```
     /// Sum: 2.0
     ///```
@@ -290,7 +287,6 @@ struct SendNonNull<T: Dist + 'static>(NonNull<T>);
 // the pointer will remain valid for the lifetime of the array
 unsafe impl<T: Dist + 'static> Send for SendNonNull<T> {}
 
-
 /// An immutable one sided iterator of a LamellarArray
 ///
 /// This struct is created by calling `onesided_iter` on any of the LamellarArray types
@@ -314,7 +310,6 @@ pub struct OneSidedIter<'a, T: Dist + 'static, A: LamellarArrayInternalGet<T>> {
     _marker: PhantomData<&'a T>,
 }
 
-
 impl<'a, T: Dist + 'static, A: LamellarArrayInternalGet<T>> OneSidedIter<'a, T, A> {
     pub(crate) fn new(
         array: A,
@@ -322,9 +317,9 @@ impl<'a, T: Dist + 'static, A: LamellarArrayInternalGet<T>> OneSidedIter<'a, T, 
         buf_size: usize,
     ) -> OneSidedIter<'a, T, A> {
         let buf_0 = team.alloc_one_sided_mem_region(buf_size);
-        // potentially unsafe depending on the array type (i.e. UnsafeArray - which requries unsafe to construct an iterator), 
+        // potentially unsafe depending on the array type (i.e. UnsafeArray - which requries unsafe to construct an iterator),
         // but safe with respect to the buf_0 as this is the only reference
-        unsafe {array.internal_get(0, &buf_0).wait()};
+        unsafe { array.internal_get(0, &buf_0).wait() };
         let ptr = unsafe { SendNonNull(NonNull::new(buf_0.as_mut_ptr().unwrap()).unwrap()) };
         let iter = OneSidedIter {
             array: array,
@@ -354,15 +349,19 @@ impl<'a, T: Dist + 'static, A: LamellarArrayInternalGet<T> + Clone + Send> OneSi
                 self.buf_index = 0;
                 // self.fill_buffer(self.index);
                 if self.index + self.buf_0.len() < self.array.len() {
-                    // potentially unsafe depending on the array type (i.e. UnsafeArray - which requries unsafe to construct an iterator), 
+                    // potentially unsafe depending on the array type (i.e. UnsafeArray - which requries unsafe to construct an iterator),
                     // but safe with respect to the buf_0 as we have consumed all its content and this is the only reference
-                    unsafe {self.array.internal_get(self.index, &self.buf_0).wait();}
+                    unsafe {
+                        self.array.internal_get(self.index, &self.buf_0).wait();
+                    }
                 } else {
                     let sub_region = self.buf_0.sub_region(0..(self.array.len() - self.index));
-                    // potentially unsafe depending on the array type (i.e. UnsafeArray - which requries unsafe to construct an iterator), 
+                    // potentially unsafe depending on the array type (i.e. UnsafeArray - which requries unsafe to construct an iterator),
                     // but safe with respect to the buf_0 as we have consumed all its content and this is the only reference
                     // sub_region is set to the remaining size of the array so we will not have an out of bounds issue
-                    unsafe {self.array.internal_get(self.index, &sub_region).wait();}
+                    unsafe {
+                        self.array.internal_get(self.index, &sub_region).wait();
+                    }
                 }
             }
             // self.spin_for_valid(self.buf_index);
@@ -380,7 +379,7 @@ impl<'a, T: Dist + 'static, A: LamellarArrayInternalGet<T> + Clone + Send> OneSi
         };
         res
     }
-   
+
     fn advance_index(&mut self, count: usize) {
         self.index += count;
         self.buf_index += count;
@@ -388,15 +387,19 @@ impl<'a, T: Dist + 'static, A: LamellarArrayInternalGet<T> + Clone + Send> OneSi
             self.buf_index = 0;
             // self.fill_buffer(0);
             if self.index + self.buf_0.len() < self.array.len() {
-                // potentially unsafe depending on the array type (i.e. UnsafeArray - which requries unsafe to construct an iterator), 
+                // potentially unsafe depending on the array type (i.e. UnsafeArray - which requries unsafe to construct an iterator),
                 // but safe with respect to the buf_0 as we have consumed all its content and this is the only reference
-                unsafe {self.array.internal_get(self.index, &self.buf_0).wait();}
+                unsafe {
+                    self.array.internal_get(self.index, &self.buf_0).wait();
+                }
             } else {
                 let sub_region = self.buf_0.sub_region(0..(self.array.len() - self.index));
-                // potentially unsafe depending on the array type (i.e. UnsafeArray - which requries unsafe to construct an iterator), 
+                // potentially unsafe depending on the array type (i.e. UnsafeArray - which requries unsafe to construct an iterator),
                 // but safe with respect to the buf_0 as we have consumed all its content and this is the only reference
                 // sub_region is set to the remaining size of the array so we will not have an out of bounds issue
-                unsafe {self.array.internal_get(self.index, &sub_region).wait();}
+                unsafe {
+                    self.array.internal_get(self.index, &sub_region).wait();
+                }
             }
         }
     }
@@ -420,7 +423,7 @@ impl<'a, T: Dist + 'static, A: LamellarArrayInternalGet<T> + Clone + Send> OneSi
     //         None
     //     }
     // }
-    
+
     // fn from_mem_region(&self, mem_region: OneSidedMemoryRegion<u8>) -> Option<Self::Item> {
     //     unsafe {
     //         let mem_reg_t = mem_region.to_base::<Self::ElemType>();

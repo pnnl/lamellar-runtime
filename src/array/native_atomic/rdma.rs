@@ -36,10 +36,11 @@ impl<T: Dist> LamellarArrayGet<T> for NativeAtomicArray<T> {
         index: usize,
         buf: U,
     ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
-        self.internal_get(index, buf.team_into(&self.array.team_rt())).into_future()
+        self.internal_get(index, buf.team_into(&self.array.team_rt()))
+            .into_future()
     }
     fn at(&self, index: usize) -> Pin<Box<dyn Future<Output = T> + Send>> {
-        unsafe{self.internal_at(index).into_future()}
+        unsafe { self.internal_at(index).into_future() }
     }
 }
 
@@ -64,7 +65,10 @@ impl<T: Dist> LamellarArrayPut<T> for NativeAtomicArray<T> {
         index: usize,
         buf: U,
     ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
-        unsafe{self.internal_put(index, buf.team_into(&self.array.team_rt())).into_future()}
+        unsafe {
+            self.internal_put(index, buf.team_into(&self.array.team_rt()))
+                .into_future()
+        }
     }
 }
 

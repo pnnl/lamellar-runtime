@@ -71,7 +71,7 @@ macro_rules! load_store_test{
                     println!("{:?} {:?} {:?}",idx,val,check_val);
                 }
             }
-            
+
             array.barrier();
             initialize_array!($array, array, init_val);
             array.wait_all();
@@ -91,7 +91,7 @@ macro_rules! load_store_test{
             }
             sub_array.wait_all();
             sub_array.barrier();
-          
+
             let mut reqs = vec![];
             for idx in 0..sub_array.len(){
                 reqs.push((sub_array.load(idx),idx));
@@ -105,7 +105,7 @@ macro_rules! load_store_test{
                     println!("{:?} {:?} {:?}",idx,val,check_val);
                 }
             }
-            
+
             sub_array.barrier();
             initialize_array!($array, array, init_val);
             sub_array.wait_all();
@@ -127,7 +127,7 @@ macro_rules! load_store_test{
                 }
                 sub_array.wait_all();
                 sub_array.barrier();
-                
+
                 let mut reqs = vec![];
                 for idx in 0..sub_array.len(){
                     reqs.push((sub_array.load(idx),idx));
@@ -141,7 +141,7 @@ macro_rules! load_store_test{
                         println!("{:?} {:?} {:?}",idx,val,check_val);
                     }
                 }
-                
+
                 sub_array.barrier();
                 initialize_array!($array, array, init_val);
                 sub_array.wait_all();

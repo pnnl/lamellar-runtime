@@ -1,8 +1,5 @@
-
 pub use crate::memregion::{
-    Dist,
-    OneSidedMemoryRegion, SharedMemoryRegion, LamellarMemoryRegion,
-    RemoteMemoryRegion,
+    Dist, LamellarMemoryRegion, OneSidedMemoryRegion, RemoteMemoryRegion, SharedMemoryRegion,
 };
 
 pub use crate::lamellar_team::LamellarTeam;

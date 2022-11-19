@@ -120,7 +120,7 @@ impl ForEachWorkStealer {
             None
         }
     }
-    fn set_done(&self){
+    fn set_done(&self) {
         let mut range = self.range.lock();
         range.0 = range.1;
     }
@@ -160,15 +160,13 @@ where
     F: Fn(I::Item) + SyncSend + 'static,
 {
     async fn exec(&self) {
-        
         let (start, end) = *self.range.range.lock();
         // println!("{:?} ForEachWorkStealing {:?} {:?}",std::thread::current().id(), start, end);
         let mut iter = self.data.init(start, end - start);
-        while self.range.next().is_some() { 
+        while self.range.next().is_some() {
             if let Some(elem) = iter.next() {
                 (&self.op)(elem);
-            }
-            else{ 
+            } else {
                 self.range.set_done();
             }
         }
@@ -184,8 +182,7 @@ where
                 while self.range.next().is_some() {
                     if let Some(elem) = iter.next() {
                         (&self.op)(elem);
-                    }
-                    else{ 
+                    } else {
                         self.range.set_done();
                     }
                 }

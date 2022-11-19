@@ -23,7 +23,6 @@ where
     type Item = I::Item;
     type Array = <I as DistributedIterator>::Array;
     fn init(&self, start_i: usize, cnt: usize) -> Filter<I, F> {
-        
         let val = Filter::new(self.iter.init(start_i, cnt), self.f.clone());
         // println!("{:?} Filter init {start_i} {cnt}",std::thread::current().id());
         val
@@ -52,7 +51,7 @@ where
     //     g_index
     // }
     // fn subarray_index(&self, index: usize) -> Option<usize> {
-    //     let g_index = self.iter.subarray_index(index); 
+    //     let g_index = self.iter.subarray_index(index);
     //                                                    // println!("enumerate index: {:?} global_index {:?}", index,g_index);
     //     g_index
     // }

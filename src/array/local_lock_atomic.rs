@@ -1,5 +1,5 @@
-pub(crate) mod operations;
 mod iteration;
+pub(crate) mod operations;
 mod rdma;
 use crate::array::local_lock_atomic::operations::BUFOPS;
 use crate::array::private::LamellarArrayPrivate;
@@ -15,7 +15,6 @@ use parking_lot::{
 };
 use std::any::TypeId;
 use std::ops::{Deref, DerefMut};
-
 
 /// A safe abstraction of a distributed array, providing read/write access protected by locks.
 ///
@@ -139,7 +138,7 @@ impl<'a, T: Dist> LocalLockLocalData<'a, T> {
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
     /// let array: LocalLockArray<usize> = LocalLockArray::new(&world,100,Distribution::Cyclic);
-    /// 
+    ///
     /// let local_data = array.read_local_data();
     /// let sub_data = local_data.clone().into_sub_data(10,20); // clone() essentially increases the references to the read lock by 1.
     /// assert_eq!(local_data[10],sub_data[0]);
@@ -221,7 +220,6 @@ impl<T: Dist + std::default::Default> LocalLockArray<T> {
 }
 
 impl<T: Dist> LocalLockArray<T> {
-
     /// Change the distribution this array handle uses to index into the data of the array.
     ///
     /// This is a one-sided call and does not redistribute or modify the actual data, it simply changes how the array is indexed for this particular handle.
@@ -243,7 +241,7 @@ impl<T: Dist> LocalLockArray<T> {
 
     /// Return the calling PE's local data as a [LocalLockLocalData], which allows safe immutable access to local elements.   
     ///
-    /// Calling this function will result in a local read lock being captured on the array 
+    /// Calling this function will result in a local read lock being captured on the array
     ///
     /// # Examples
     ///```
@@ -267,7 +265,7 @@ impl<T: Dist> LocalLockArray<T> {
 
     /// Return the calling PE's local data as a [LocalLockMutLocalData], which allows safe mutable access to local elements.   
     ///
-    /// Calling this function will result in the local write lock being captured on the array 
+    /// Calling this function will result in the local write lock being captured on the array
     ///
     /// # Examples
     ///```
@@ -320,7 +318,7 @@ impl<T: Dist> LocalLockArray<T> {
 
     /// Return the calling PE's local data as a [LocalLockLocalData], which allows safe immutable access to local elements.   
     ///
-    /// Calling this function will result in a local read lock being captured on the array 
+    /// Calling this function will result in a local read lock being captured on the array
     ///
     /// While this call is safe, it may be more clear to use the [read_local_data()][LocalLockArray::read_local_data] function.
     ///
@@ -340,7 +338,7 @@ impl<T: Dist> LocalLockArray<T> {
 
     /// Return the calling PE's local data as a [LocalLockMutLocalData], which allows safe immutable access to local elements.   
     ///
-    /// Calling this function will result in a local read lock being captured on the array 
+    /// Calling this function will result in a local read lock being captured on the array
     ///
     /// While this call is safe, it may be more clear to use the [write_local_data()][LocalLockArray::write_local_data] function.
     ///
@@ -385,7 +383,7 @@ impl<T: Dist> LocalLockArray<T> {
     ///
     /// # Warning
     /// Because this call blocks there is the possibility for deadlock to occur, as highlighted below:
-    ///``` 
+    ///```
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
@@ -395,10 +393,10 @@ impl<T: Dist> LocalLockArray<T> {
     /// let slice = array1.local_data();
     ///
     /// // no borrows to this specific instance (array) so it can enter the "into_unsafe" call
-    /// // but array1 will not be dropped until after 'slice' is dropped. 
+    /// // but array1 will not be dropped until after 'slice' is dropped.
     /// // Given the ordering of these calls we will get stuck in "into_unsafe" as it
     /// // waits for the reference count to go down to "1" (but we will never be able to drop slice/array1).
-    /// let unsafe_array = array.into_unsafe(); 
+    /// let unsafe_array = array.into_unsafe();
     /// unsafe_array.print();
     /// println!("{slice:?}");
     pub fn into_unsafe(self) -> UnsafeArray<T> {
@@ -429,7 +427,7 @@ impl<T: Dist> LocalLockArray<T> {
     ///```
     /// # Warning
     /// Because this call blocks there is the possibility for deadlock to occur, as highlighted below:
-    ///``` 
+    ///```
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
@@ -439,10 +437,10 @@ impl<T: Dist> LocalLockArray<T> {
     /// let slice = unsafe {array1.local_data()};
     ///
     /// // no borrows to this specific instance (array) so it can enter the "into_read_only" call
-    /// // but array1 will not be dropped until after mut_slice is dropped. 
+    /// // but array1 will not be dropped until after mut_slice is dropped.
     /// // Given the ordering of these calls we will get stuck in "into_read_only" as it
     /// // waits for the reference count to go down to "1" (but we will never be able to drop slice/array1).
-    /// let read_only_array = array.into_read_only(); 
+    /// let read_only_array = array.into_read_only();
     /// read_only_array.print();
     /// println!("{slice:?}");
     ///```
@@ -450,44 +448,43 @@ impl<T: Dist> LocalLockArray<T> {
         // println!("locallock into_read_only");
         self.array.into()
     }
-
 }
 
 /// Convert this LocalLockArray into a (safe) [AtomicArray][crate::array::AtomicArray]
-    ///
-    /// This is a collective and blocking function which will only return when there is at most a single reference on each PE
-    /// to this Array, and that reference is currently calling this function.
-    ///
-    /// When it returns, it is gauranteed that there are only `AtomicArray` handles to the underlying data
-    ///
-    /// # Examples
-    ///```
-    /// use lamellar::array::prelude::*;
-    /// let world = LamellarWorldBuilder::new().build();
-    /// let my_pe = world.my_pe();
-    /// let array: LocalLockArray<usize> = LocalLockArray::new(&world,100,Distribution::Cyclic);
-    ///
-    /// let atomic_array = array.into_atomic();
-    ///```
-    /// # Warning
-    /// Because this call blocks there is the possibility for deadlock to occur, as highlighted below:
-    ///``` 
-    /// use lamellar::array::prelude::*;
-    /// let world = LamellarWorldBuilder::new().build();
-    /// let my_pe = world.my_pe();
-    /// let array: LocalLockArray<usize> = LocalLockArray::new(&world,100,Distribution::Cyclic);
-    ///
-    /// let array1 = array.clone();
-    /// let slice = unsafe {array1.local_data()};
-    ///
-    /// // no borrows to this specific instance (array) so it can enter the "into_atomic" call
-    /// // but array1 will not be dropped until after mut_slice is dropped. 
-    /// // Given the ordering of these calls we will get stuck in "into_atomic" as it
-    /// // waits for the reference count to go down to "1" (but we will never be able to drop slice/array1).
-    /// let atomic_array = array.into_atomic(); 
-    /// atomic_array.print();
-    /// println!("{slice:?}");
-    ///```
+///
+/// This is a collective and blocking function which will only return when there is at most a single reference on each PE
+/// to this Array, and that reference is currently calling this function.
+///
+/// When it returns, it is gauranteed that there are only `AtomicArray` handles to the underlying data
+///
+/// # Examples
+///```
+/// use lamellar::array::prelude::*;
+/// let world = LamellarWorldBuilder::new().build();
+/// let my_pe = world.my_pe();
+/// let array: LocalLockArray<usize> = LocalLockArray::new(&world,100,Distribution::Cyclic);
+///
+/// let atomic_array = array.into_atomic();
+///```
+/// # Warning
+/// Because this call blocks there is the possibility for deadlock to occur, as highlighted below:
+///```
+/// use lamellar::array::prelude::*;
+/// let world = LamellarWorldBuilder::new().build();
+/// let my_pe = world.my_pe();
+/// let array: LocalLockArray<usize> = LocalLockArray::new(&world,100,Distribution::Cyclic);
+///
+/// let array1 = array.clone();
+/// let slice = unsafe {array1.local_data()};
+///
+/// // no borrows to this specific instance (array) so it can enter the "into_atomic" call
+/// // but array1 will not be dropped until after mut_slice is dropped.
+/// // Given the ordering of these calls we will get stuck in "into_atomic" as it
+/// // waits for the reference count to go down to "1" (but we will never be able to drop slice/array1).
+/// let atomic_array = array.into_atomic();
+/// atomic_array.print();
+/// println!("{slice:?}");
+///```
 impl<T: Dist + 'static> LocalLockArray<T> {
     pub fn into_atomic(self) -> AtomicArray<T> {
         // println!("locallock into_atomic");
@@ -618,8 +615,9 @@ impl<T: Dist> LamellarArray<T> for LocalLockArray<T> {
     }
     fn block_on<F>(&self, f: F) -> F::Output
     where
-        F: Future {
-            self.array.block_on(f)
+        F: Future,
+    {
+        self.array.block_on(f)
     }
     fn pe_and_offset_for_global_index(&self, index: usize) -> Option<(usize, usize)> {
         self.array.pe_and_offset_for_global_index(index)
@@ -675,13 +673,15 @@ impl<T: Dist + AmDist + 'static> LamellarArrayReduce<T> for LocalLockArray<T> {
     fn reduce(&self, op: &str) -> Pin<Box<dyn Future<Output = T>>> {
         let lock = self.lock.read();
         Box::new(LocalLockArrayReduceHandle {
-            req: self.array.reduce_data(op,self.clone().into()),
+            req: self.array.reduce_data(op, self.clone().into()),
             _lock_guard: lock,
         })
         .into_future()
     }
 }
-impl<T: Dist + AmDist + ElementArithmeticOps + 'static,> LamellarArrayArithmeticReduce<T> for LocalLockArray<T> {
+impl<T: Dist + AmDist + ElementArithmeticOps + 'static> LamellarArrayArithmeticReduce<T>
+    for LocalLockArray<T>
+{
     fn sum(&self) -> Pin<Box<dyn Future<Output = T>>> {
         self.reduce("sum")
     }
@@ -689,7 +689,9 @@ impl<T: Dist + AmDist + ElementArithmeticOps + 'static,> LamellarArrayArithmetic
         self.reduce("prod")
     }
 }
-impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static,> LamellarArrayCompareReduce<T> for LocalLockArray<T> {
+impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static> LamellarArrayCompareReduce<T>
+    for LocalLockArray<T>
+{
     fn max(&self) -> Pin<Box<dyn Future<Output = T>>> {
         self.reduce("max")
     }

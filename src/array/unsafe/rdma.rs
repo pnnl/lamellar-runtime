@@ -3,7 +3,7 @@ use crate::array::r#unsafe::*;
 use crate::array::*;
 use crate::lamellar_request::LamellarRequest;
 use crate::memregion::{
-    AsBase, Dist, MemoryRegionRDMA, RTMemoryRegionRDMA, RegisteredMemoryRegion
+    AsBase, Dist, MemoryRegionRDMA, RTMemoryRegionRDMA, RegisteredMemoryRegion,
 };
 
 // use tracing::*;
@@ -274,7 +274,7 @@ impl<T: Dist> UnsafeArray<T> {
     /// Performs a raw RDMA "Put" of the data in the specified buffer into this array starting from the provided index
     ///
     /// The length of the Put is dictated by the length of the buffer.
-    /// 
+    ///
     /// The runtime provides no internal mechanism to check for completion when using this call.
     /// i.e. this means the user themselves will be responsible for determining when the transfer is complete
     ///
@@ -295,7 +295,7 @@ impl<T: Dist> UnsafeArray<T> {
     /// let my_pe = world.my_pe();
     /// let array = UnsafeArray::<usize>::new(&world,12,Distribution::Block);
     /// let buf = world.alloc_one_sided_mem_region::<usize>(12);
-    /// unsafe { 
+    /// unsafe {
     ///     array.dist_iter_mut().for_each(move |elem| *elem = buf.len()); //we will used this val as completion detection
     ///     for (i,elem) in buf.as_mut_slice()
     ///                          .expect("we just created it so we know its local")
@@ -332,18 +332,29 @@ impl<T: Dist> UnsafeArray<T> {
     /// PE2: array data [6,7,8]
     /// PE3: array data [9,10,11]
     ///```
-    pub unsafe fn put_unchecked<U: TeamInto<LamellarArrayRdmaInput<T>>>(&self, index: usize, buf: U) {
-        
+    pub unsafe fn put_unchecked<U: TeamInto<LamellarArrayRdmaInput<T>>>(
+        &self,
+        index: usize,
+        buf: U,
+    ) {
         match self.inner.distribution {
-            Distribution::Block => self.block_op(ArrayRdmaCmd::Put, index, buf.team_into(&self.inner.data.team)),
-            Distribution::Cyclic => self.cyclic_op(ArrayRdmaCmd::Put, index, buf.team_into(&self.inner.data.team)),
+            Distribution::Block => self.block_op(
+                ArrayRdmaCmd::Put,
+                index,
+                buf.team_into(&self.inner.data.team),
+            ),
+            Distribution::Cyclic => self.cyclic_op(
+                ArrayRdmaCmd::Put,
+                index,
+                buf.team_into(&self.inner.data.team),
+            ),
         };
     }
 
     /// Performs a raw RDMA "Get" of the data in this array starting at the provided index into the specified buffer
     ///
     /// The length of the Get is dictated by the length of the buffer.
-    /// 
+    ///
     /// The runtime provides no internal mechanism to check for completion when using this call.
     /// i.e. this means the user themselves will be responsible for determining when the transfer is complete
     ///
@@ -360,8 +371,8 @@ impl<T: Dist> UnsafeArray<T> {
     /// let my_pe = world.my_pe();
     /// let array = UnsafeArray::<usize>::new(&world,12,Distribution::Block);
     /// let buf = world.alloc_one_sided_mem_region::<usize>(12);
-    /// unsafe { 
-    ///     array.dist_iter_mut().enumerate().for_each(|(i,elem)| *elem = i); 
+    /// unsafe {
+    ///     array.dist_iter_mut().enumerate().for_each(|(i,elem)| *elem = i);
     ///     for elem in buf.as_mut_slice()
     ///                          .expect("we just created it so we know its local") { //initialize mem_region
     ///         *elem = buf.len(); //we will used this val as completion detection
@@ -395,17 +406,29 @@ impl<T: Dist> UnsafeArray<T> {
     /// PE3: buf data [12,12,12,12,12,12,12,12,12,12,12,12]
     /// PE0: buf data [0,1,2,3,4,5,6,7,8,9,10,11] //we only did the "get" on PE0, also likely to be printed last since the other PEs do not wait for PE0 in this example
     ///```
-    pub unsafe fn get_unchecked<U: TeamInto<LamellarArrayRdmaOutput<T>>>(&self, index: usize, buf: U) {
+    pub unsafe fn get_unchecked<U: TeamInto<LamellarArrayRdmaOutput<T>>>(
+        &self,
+        index: usize,
+        buf: U,
+    ) {
         match self.inner.distribution {
-            Distribution::Block => self.block_op(ArrayRdmaCmd::Get(false), index, buf.team_into(&self.inner.data.team)),
-            Distribution::Cyclic => self.cyclic_op(ArrayRdmaCmd::Get(false), index, buf.team_into(&self.inner.data.team)),
+            Distribution::Block => self.block_op(
+                ArrayRdmaCmd::Get(false),
+                index,
+                buf.team_into(&self.inner.data.team),
+            ),
+            Distribution::Cyclic => self.cyclic_op(
+                ArrayRdmaCmd::Get(false),
+                index,
+                buf.team_into(&self.inner.data.team),
+            ),
         };
     }
 
     /// Performs a blocking (active message based) "Get" of the data in this array starting at the provided index into the specified buffer
     ///
     /// The length of the Get is dictated by the length of the buffer.
-    /// 
+    ///
     /// When this function returns, `buf` will have been populated with the results of the `get`
     ///
     /// # Safety
@@ -421,7 +444,7 @@ impl<T: Dist> UnsafeArray<T> {
     /// let my_pe = world.my_pe();
     /// let array = UnsafeArray::<usize>::new(&world,12,Distribution::Block);
     /// let buf = world.alloc_one_sided_mem_region::<usize>(12);
-    /// unsafe { 
+    /// unsafe {
     ///     array.dist_iter_mut().enumerate().for_each(|(i,elem)| *elem = i); //we will used this val as completion detection
     ///     for elem in buf.as_mut_slice()
     ///                          .expect("we just created it so we know its local") { //initialize mem_region
@@ -435,7 +458,7 @@ impl<T: Dist> UnsafeArray<T> {
     ///         array.blocking_get(0,&buf);
     ///         
     ///     }
-    ///     println!("PE{my_pe} buf data: {:?}",unsafe{buf.as_slice().unwrap()}); 
+    ///     println!("PE{my_pe} buf data: {:?}",unsafe{buf.as_slice().unwrap()});
     /// }
     ///```
     /// Possible output on A 4 PE system (ordering with respect to PEs may change)
@@ -450,18 +473,30 @@ impl<T: Dist> UnsafeArray<T> {
     /// PE3: buf data [12,12,12,12,12,12,12,12,12,12,12,12]
     /// PE0: buf data [0,1,2,3,4,5,6,7,8,9,10,11] //we only did the "get" on PE0, also likely to be printed last since the other PEs do not wait for PE0 in this example
     ///```
-    pub unsafe fn blocking_get<U: TeamInto<LamellarArrayRdmaOutput<T>>>(&self, index: usize, buf: U) {
+    pub unsafe fn blocking_get<U: TeamInto<LamellarArrayRdmaOutput<T>>>(
+        &self,
+        index: usize,
+        buf: U,
+    ) {
         // println!("unsafe iget {:?}",index);
         match self.inner.distribution {
-            Distribution::Block => self.block_op(ArrayRdmaCmd::Get(true), index, buf.team_into(&self.inner.data.team)),
-            Distribution::Cyclic => self.cyclic_op(ArrayRdmaCmd::Get(true), index, buf.team_into(&self.inner.data.team)),
+            Distribution::Block => self.block_op(
+                ArrayRdmaCmd::Get(true),
+                index,
+                buf.team_into(&self.inner.data.team),
+            ),
+            Distribution::Cyclic => self.cyclic_op(
+                ArrayRdmaCmd::Get(true),
+                index,
+                buf.team_into(&self.inner.data.team),
+            ),
         };
     }
 
     /// Performs an (active message based) "Get" of the data in this array starting at the provided index into the specified buffer
     ///
     /// The length of the Get is dictated by the length of the buffer.
-    /// 
+    ///
     /// This call returns a future that can be awaited to determine when the `put` has finished
     ///
     /// # Safety
@@ -477,7 +512,7 @@ impl<T: Dist> UnsafeArray<T> {
     /// let my_pe = world.my_pe();
     /// let array = UnsafeArray::<usize>::new(&world,12,Distribution::Block);
     /// let buf = world.alloc_one_sided_mem_region::<usize>(12);
-    /// unsafe { 
+    /// unsafe {
     ///     array.dist_iter_mut().enumerate().for_each(|(i,elem)| *elem = i); //we will used this val as completion detection
     ///     for elem in buf.as_mut_slice()
     ///                          .expect("we just created it so we know its local") { //initialize mem_region
@@ -491,7 +526,7 @@ impl<T: Dist> UnsafeArray<T> {
     ///         let req = array.get(0,&buf);
     ///         world.block_on(req);
     ///     }
-    ///     println!("PE{my_pe} buf data: {:?}",unsafe{buf.as_slice().unwrap()}); 
+    ///     println!("PE{my_pe} buf data: {:?}",unsafe{buf.as_slice().unwrap()});
     /// }
     ///```
     /// Possible output on A 4 PE system (ordering with respect to PEs may change)
@@ -510,10 +545,14 @@ impl<T: Dist> UnsafeArray<T> {
     where
         U: TeamInto<LamellarArrayRdmaOutput<T>>,
     {
-        self.internal_get(index, buf.team_into(&self.inner.data.team)).into_future()
+        self.internal_get(index, buf.team_into(&self.inner.data.team))
+            .into_future()
     }
 
-    pub(crate) unsafe fn internal_at(&self, index: usize) -> Box<dyn LamellarArrayRequest<Output = T>> {
+    pub(crate) unsafe fn internal_at(
+        &self,
+        index: usize,
+    ) -> Box<dyn LamellarArrayRequest<Output = T>> {
         let buf: OneSidedMemoryRegion<T> = self.team_rt().alloc_one_sided_mem_region(1);
         self.blocking_get(index, &buf);
         Box::new(ArrayRdmaAtHandle {
@@ -523,7 +562,7 @@ impl<T: Dist> UnsafeArray<T> {
     }
 
     /// Retrieves the element in this array located at the specified `index`
-    /// 
+    ///
     /// This call returns a future that can be awaited to retrieve to requested element
     ///
     /// # Safety
@@ -538,7 +577,7 @@ impl<T: Dist> UnsafeArray<T> {
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
     /// let array = UnsafeArray::<usize>::new(&world,12,Distribution::Block);
-    /// unsafe { 
+    /// unsafe {
     ///     array.dist_iter_mut().enumerate().for_each(|(i,elem)| *elem = my_pe); //we will used this val as completion detection
     ///     array.wait_all();
     ///     array.barrier();
@@ -546,7 +585,7 @@ impl<T: Dist> UnsafeArray<T> {
     ///     let index = ((my_pe+1)%num_pes) * array.num_elems_local(); // get first index on PE to the right (with wrap arround)
     ///     let at_req = array.at(index);
     ///     let val = array.block_on(at_req);
-    ///     println!("PE{my_pe} array[{index}] = {val}"); 
+    ///     println!("PE{my_pe} array[{index}] = {val}");
     /// }
     ///```
     /// Possible output on A 4 PE system (ordering with respect to PEs may change)
@@ -581,7 +620,7 @@ impl<T: Dist> UnsafeArray<T> {
 //     }
 // }
 
-impl<T: Dist > LamellarArrayInternalGet<T> for UnsafeArray<T> {
+impl<T: Dist> LamellarArrayInternalGet<T> for UnsafeArray<T> {
     unsafe fn internal_get<U: Into<LamellarMemoryRegion<T>>>(
         &self,
         index: usize,
@@ -619,12 +658,12 @@ impl<T: Dist> LamellarArrayPut<T> for UnsafeArray<T> {
         index: usize,
         buf: U,
     ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
-        self.internal_put(index, buf.team_into(&self.inner.data.team)).into_future()
+        self.internal_put(index, buf.team_into(&self.inner.data.team))
+            .into_future()
     }
 }
 
 impl UnsafeByteArray {
-
     pub(crate) unsafe fn local_elements_for_range(
         &self,
         index: usize,

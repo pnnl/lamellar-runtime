@@ -60,7 +60,7 @@ where
         };
         elems
     }
-     
+
     fn advance_index(&mut self, count: usize) {
         self.cur_i = std::cmp::min(self.cur_i + count, self.end_i);
     }
@@ -71,10 +71,9 @@ where
     I: IndexedLocalIterator,
 {
     fn iterator_index(&self, index: usize) -> Option<usize> {
-        let i_index = self.iter.iterator_index(index); 
+        let i_index = self.iter.iterator_index(index);
         i_index
     }
-
 }
 
 #[derive(Clone)]
@@ -91,4 +90,3 @@ where
         self.iter.next()
     }
 }
-

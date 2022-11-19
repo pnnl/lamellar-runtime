@@ -14,11 +14,13 @@ where
 {
     pub(crate) fn new(iter: I, count: usize, start_i: usize) -> Skip<I> {
         // println!("new Skip {:?} ",count);
-        Skip { iter, count, skip_index: start_i }
+        Skip {
+            iter,
+            count,
+            skip_index: start_i,
+        }
     }
 }
-
-
 
 impl<I> DistributedIterator for Skip<I>
 where
@@ -31,8 +33,8 @@ where
         let mut skip_index = in_start_i;
 
         //now we need to see how many elements to skip
-        if let Some( mut iterator_index) = iter.iterator_index(skip_index){
-            while (iterator_index as isize - self.count as isize) < 0{
+        if let Some(mut iterator_index) = iter.iterator_index(skip_index) {
+            while (iterator_index as isize - self.count as isize) < 0 {
                 skip_index += 1;
                 match iter.iterator_index(skip_index) {
                     Some(i) => iterator_index = i,
@@ -40,19 +42,18 @@ where
                         iter.advance_index(len);
                         let val = Skip::new(iter, self.count, skip_index);
                         // println!("{:?} Skip nothing init {skip_index} {len} {:?} {skip_index}",std::thread::current().id(),self.count);
-                        return val
-                    }, // skip more elements that in iterator
+                        return val;
+                    } // skip more elements that in iterator
                 }
             }
-            iter.advance_index(skip_index-in_start_i);
-            let val = Skip::new(iter, self.count,skip_index-in_start_i);
+            iter.advance_index(skip_index - in_start_i);
+            let val = Skip::new(iter, self.count, skip_index - in_start_i);
             // println!("{:?} Skip init {skip_index} {len} {:?} {}",std::thread::current().id(),self.count,skip_index-in_start_i);
             val
-        }
-        else {
+        } else {
             iter.advance_index(len);
-            let val = Skip::new(iter, self.count,in_start_i); // nothing to iterate so set len to 0
-            // println!("{:?} Skip nothing init {in_start_i} {len} {:?} {in_start_i}",std::thread::current().id(),self.count);
+            let val = Skip::new(iter, self.count, in_start_i); // nothing to iterate so set len to 0
+                                                               // println!("{:?} Skip nothing init {in_start_i} {len} {:?} {in_start_i}",std::thread::current().id(),self.count);
             val
         }
     }
@@ -60,7 +61,6 @@ where
         self.iter.array()
     }
     fn next(&mut self) -> Option<Self::Item> {
-        
         let val = self.iter.next();
         // println!("skip next {}",self.skip_index);
         // if val.is_some() {
@@ -82,7 +82,7 @@ where
     //     g_index
     // }
     // fn subarray_index(&self, index: usize) -> Option<usize> {
-    //     let g_index = self.iter.subarray_index(index); 
+    //     let g_index = self.iter.subarray_index(index);
     //                                                    // println!("enumerate index: {:?} global_index {:?}", index,g_index);
     //     g_index
     // }
@@ -98,18 +98,16 @@ where
     I: IndexedDistributedIterator,
 {
     fn iterator_index(&self, index: usize) -> Option<usize> {
-       
         let Some(i_index) = self.iter.iterator_index(index+self.skip_index) else {
             // println!("{:?} \t Skip iterator index  {index} {} None",std::thread::current().id(),self.skip_index);
             return None;
-        }; 
-       
+        };
+
         let i_index = i_index as isize - self.count as isize;
         if i_index >= 0 {
             // println!("{:?} \t Skip iterator index  {index} {} {i_index}",std::thread::current().id(),self.skip_index);
             Some(i_index as usize)
-        }  
-        else{
+        } else {
             // println!("{:?} \t Skip iterator index  {index} {} None",std::thread::current().id(),self.skip_index);
             None
         }

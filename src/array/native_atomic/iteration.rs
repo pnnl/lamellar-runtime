@@ -4,7 +4,7 @@ use crate::array::native_atomic::*;
 use crate::array::iterator::distributed_iterator::*;
 use crate::array::iterator::local_iterator::*;
 use crate::array::iterator::one_sided_iterator::OneSidedIter;
-use crate::array::iterator::{Schedule,LamellarArrayIterators,LamellarArrayMutIterators};
+use crate::array::iterator::{LamellarArrayIterators, LamellarArrayMutIterators, Schedule};
 // use crate::array::private::LamellarArrayPrivate;
 use crate::array::*;
 use crate::memregion::Dist;
@@ -132,7 +132,7 @@ impl<T: Dist> LocalIterator for NativeAtomicLocalIter<T> {
     fn elems(&self, in_elems: usize) -> usize {
         in_elems
     }
-    
+
     fn advance_index(&mut self, count: usize) {
         self.cur_i = std::cmp::min(self.cur_i + count, self.end_i);
     }
@@ -172,7 +172,7 @@ impl<T: Dist> LamellarArrayIterators<T> for NativeAtomicArray<T> {
     }
 }
 
-impl<T: Dist> LamellarArrayMutIterators<T> for  NativeAtomicArray<T> {
+impl<T: Dist> LamellarArrayMutIterators<T> for NativeAtomicArray<T> {
     type DistIter = NativeAtomicDistIter<T>;
     type LocalIter = NativeAtomicLocalIter<T>;
 
@@ -276,7 +276,8 @@ impl<T: Dist> LocalIteratorLauncher for NativeAtomicArray<T> {
     }
 
     fn local_subarray_index_from_local(&self, index: usize, chunk_size: usize) -> Option<usize> {
-        self.array.local_subarray_index_from_local(index, chunk_size)
+        self.array
+            .local_subarray_index_from_local(index, chunk_size)
     }
 
     fn local_for_each<I, F>(&self, iter: &I, op: F) -> Pin<Box<dyn Future<Output = ()> + Send>>
@@ -298,7 +299,11 @@ impl<T: Dist> LocalIteratorLauncher for NativeAtomicArray<T> {
     {
         self.array.local_for_each_with_schedule(sched, iter, op)
     }
-    fn local_for_each_async<I, F, Fut>(&self, iter: &I, op: F) -> Pin<Box<dyn Future<Output = ()> + Send>>
+    fn local_for_each_async<I, F, Fut>(
+        &self,
+        iter: &I,
+        op: F,
+    ) -> Pin<Box<dyn Future<Output = ()> + Send>>
     where
         I: LocalIterator + 'static,
         F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
@@ -317,7 +322,8 @@ impl<T: Dist> LocalIteratorLauncher for NativeAtomicArray<T> {
         F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
         Fut: Future<Output = ()> + Send + 'static,
     {
-        self.array.local_for_each_async_with_schedule(sched, iter, op)
+        self.array
+            .local_for_each_async_with_schedule(sched, iter, op)
     }
 
     // fn local_collect<I, A>(&self, iter: &I, d: Distribution) -> Pin<Box<dyn Future<Output = A> + Send>>

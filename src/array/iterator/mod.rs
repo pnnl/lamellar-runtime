@@ -1,16 +1,16 @@
 //! Provides various iterator types for LamellarArrays
 pub mod distributed_iterator;
-use crate::array::iterator::distributed_iterator::{DistributedIterator};
+use crate::array::iterator::distributed_iterator::DistributedIterator;
 pub mod local_iterator;
-use crate::array::iterator::local_iterator::{LocalIterator};
+use crate::array::iterator::local_iterator::LocalIterator;
 pub mod one_sided_iterator;
-use crate::array::iterator::one_sided_iterator::{OneSidedIterator};
+use crate::array::iterator::one_sided_iterator::OneSidedIterator;
 
 use crate::memregion::Dist;
 
-/// The Schedule type controls how elements of a LamellarArray are distributed to threads when 
+/// The Schedule type controls how elements of a LamellarArray are distributed to threads when
 /// calling `for_each_with_schedule` on a local or distributed iterator.
-/// 
+///
 /// Inspired by then OpenMP schedule parameter
 ///
 /// # Possible Options
@@ -28,17 +28,16 @@ pub enum Schedule {
     WorkStealing, // static initially but other threads can steal
 }
 
-
 /// The interface for creating the various lamellar array iterator types
-/// 
+///
 /// This is only implemented for Safe Array types, [UnsafeArray][crate::array::UnsafeArray] directly provides unsafe versions of the same functions
-pub trait LamellarArrayIterators<T: Dist>{
+pub trait LamellarArrayIterators<T: Dist> {
     type DistIter: DistributedIterator;
     type LocalIter: LocalIterator;
     type OnesidedIter: OneSidedIterator;
 
     /// Create an immutable [DistributedIterator][crate::array::DistributedIterator] for this array
-    /// 
+    ///
     /// This is a collective and blocking call that will not return until all PE's in the array have entered
     ///
     /// # Examples
@@ -86,7 +85,7 @@ pub trait LamellarArrayIterators<T: Dist>{
     ///```
     fn onesided_iter(&self) -> Self::OnesidedIter;
 
-    /// Create an immutable [OneSidedIterator][crate::array::OneSidedIterator] for this array 
+    /// Create an immutable [OneSidedIterator][crate::array::OneSidedIterator] for this array
     /// which will transfer and buffer `buf_size` elements at a time (to more efficient utilize the underlying lamellae network)
     ///
     /// The buffering is transparent to the user.
@@ -99,7 +98,7 @@ pub trait LamellarArrayIterators<T: Dist>{
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
     /// let array: LocalLockArray<usize> = LocalLockArray::new(&world,100,Distribution::Cyclic);
-    /// 
+    ///
     /// if my_pe == 0 {
     ///     for elem in array.buffered_onesided_iter(100).into_iter() { // "into_iter()" converts into a standard Rust Iterator
     ///         println!("PE{my_pe} elem {elem}");
@@ -110,16 +109,16 @@ pub trait LamellarArrayIterators<T: Dist>{
 }
 
 /// The interface for creating the various lamellar array mutable iterator types
-/// 
+///
 /// This is only implemented for Safe Array types, [UnsafeArray][crate::array::UnsafeArray] directly provides unsafe versions of the same functions
-pub trait LamellarArrayMutIterators<T: Dist>{
+pub trait LamellarArrayMutIterators<T: Dist> {
     /// Reference to the array being iterated
     // type Array: LamellarArray<T>;
     type DistIter: DistributedIterator;
     type LocalIter: LocalIterator;
 
     /// Create a mutable [DistributedIterator][crate::array::DistributedIterator] for this array
-    /// 
+    ///
     /// This is a collective and blocking call that will not return until all PE's in the array have entered
     ///
     /// # Examples
@@ -136,7 +135,7 @@ pub trait LamellarArrayMutIterators<T: Dist>{
     fn dist_iter_mut(&self) -> Self::DistIter;
 
     /// Create a mutable [LocalIterator][crate::array::LocalIterator] for this array
-    /// 
+    ///
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
@@ -148,5 +147,4 @@ pub trait LamellarArrayMutIterators<T: Dist>{
     ///    array.local_iter_mut().for_each(move |elem| *elem = my_pe);
     /// );
     fn local_iter_mut(&self) -> Self::LocalIter;
-
 }

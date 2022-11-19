@@ -67,7 +67,7 @@ impl ReadOnlyByteArrayWeak {
 /// to modify this array locally or from remote PEs.
 ///
 /// Thanks to this gaurantee there is the potential for increased performance when ready remote data in this
-/// array type as locking or atomic access is uneeded. For certain operations like `get()` it is possible to 
+/// array type as locking or atomic access is uneeded. For certain operations like `get()` it is possible to
 /// directly do an RDMA transfer.
 impl<T: Dist> ReadOnlyArray<T> {
     /// Construct a new ReadOnlyArray with a length of `array_size` whose data will be layed out with the provided `distribution` on the PE's specified by the `team`.
@@ -153,7 +153,6 @@ impl<T: Dist> ReadOnlyArray<T> {
         unsafe { self.array.local_as_mut_slice() }
     }
 
-    
     /// Convert this ReadOnlyArray into an [UnsafeArray][crate::array::UnsafeArray]
     ///
     /// This is a collective and blocking function which will only return when there is at most a single reference on each PE
@@ -176,7 +175,7 @@ impl<T: Dist> ReadOnlyArray<T> {
     ///
     /// # Warning
     /// Because this call blocks there is the possibility for deadlock to occur, as highlighted below:
-    ///``` 
+    ///```
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
@@ -186,10 +185,10 @@ impl<T: Dist> ReadOnlyArray<T> {
     /// let slice = array1.local_data();
     ///
     /// // no borrows to this specific instance (array) so it can enter the "into_unsafe" call
-    /// // but array1 will not be dropped until after 'slice' is dropped. 
+    /// // but array1 will not be dropped until after 'slice' is dropped.
     /// // Given the ordering of these calls we will get stuck in "into_unsafe" as it
     /// // waits for the reference count to go down to "1" (but we will never be able to drop slice/array1).
-    /// let unsafe_array = array.into_unsafe(); 
+    /// let unsafe_array = array.into_unsafe();
     /// unsafe_array.print();
     /// println!("{slice:?}");
     ///```
@@ -221,7 +220,7 @@ impl<T: Dist> ReadOnlyArray<T> {
     ///```
     /// # Warning
     /// Because this call blocks there is the possibility for deadlock to occur, as highlighted below:
-    ///``` 
+    ///```
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
@@ -231,10 +230,10 @@ impl<T: Dist> ReadOnlyArray<T> {
     /// let slice = unsafe {array1.local_data()};
     ///
     /// // no borrows to this specific instance (array) so it can enter the "into_local_lock" call
-    /// // but array1 will not be dropped until after mut_slice is dropped. 
+    /// // but array1 will not be dropped until after mut_slice is dropped.
     /// // Given the ordering of these calls we will get stuck in "into_local_lock" as it
     /// // waits for the reference count to go down to "1" (but we will never be able to drop slice/array1).
-    /// let local_lock_array = array.into_local_lock(); 
+    /// let local_lock_array = array.into_local_lock();
     /// local_lock_array.print();
     /// println!("{slice:?}");
     ///```
@@ -263,7 +262,7 @@ impl<T: Dist + 'static> ReadOnlyArray<T> {
     ///```
     /// # Warning
     /// Because this call blocks there is the possibility for deadlock to occur, as highlighted below:
-    ///``` 
+    ///```
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
@@ -273,10 +272,10 @@ impl<T: Dist + 'static> ReadOnlyArray<T> {
     /// let slice = array1.local_data();
     ///
     /// // no borrows to this specific instance (array) so it can enter the "into_atomic" call
-    /// // but array1 will not be dropped until after slice is dropped. 
+    /// // but array1 will not be dropped until after slice is dropped.
     /// // Given the ordering of these calls we will get stuck in "into_atomic" as it
     /// // waits for the reference count to go down to "1" (but we will never be able to drop slice/array1).
-    /// let atomic_array = array.into_local_lock(); 
+    /// let atomic_array = array.into_local_lock();
     /// atomic_array.print();
     /// println!("{slice:?}");
     ///```
@@ -345,12 +344,16 @@ impl<T: Dist> From<ReadOnlyArray<T>> for LamellarByteArray {
     }
 }
 
-impl<T: Dist + AmDist + 'static,> LamellarArrayReduce<T> for ReadOnlyArray<T> {
+impl<T: Dist + AmDist + 'static> LamellarArrayReduce<T> for ReadOnlyArray<T> {
     fn reduce(&self, op: &str) -> Pin<Box<dyn Future<Output = T>>> {
-        self.array.reduce_data(op,self.clone().into()).into_future()
+        self.array
+            .reduce_data(op, self.clone().into())
+            .into_future()
     }
 }
-impl<T: Dist + AmDist + ElementArithmeticOps + 'static,> LamellarArrayArithmeticReduce<T> for ReadOnlyArray<T> {
+impl<T: Dist + AmDist + ElementArithmeticOps + 'static> LamellarArrayArithmeticReduce<T>
+    for ReadOnlyArray<T>
+{
     fn sum(&self) -> Pin<Box<dyn Future<Output = T>>> {
         self.reduce("sum")
     }
@@ -358,7 +361,9 @@ impl<T: Dist + AmDist + ElementArithmeticOps + 'static,> LamellarArrayArithmetic
         self.reduce("prod")
     }
 }
-impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static,> LamellarArrayCompareReduce<T> for ReadOnlyArray<T> {
+impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static> LamellarArrayCompareReduce<T>
+    for ReadOnlyArray<T>
+{
     fn max(&self) -> Pin<Box<dyn Future<Output = T>>> {
         self.reduce("max")
     }
@@ -422,14 +427,14 @@ impl<T: Dist> LamellarArray<T> for ReadOnlyArray<T> {
     }
     fn block_on<F>(&self, f: F) -> F::Output
     where
-        F: Future {
-            self.array.block_on(f)
+        F: Future,
+    {
+        self.array.block_on(f)
     }
     fn pe_and_offset_for_global_index(&self, index: usize) -> Option<(usize, usize)> {
         self.array.pe_and_offset_for_global_index(index)
     }
 }
-
 
 impl<T: Dist> SubArray<T> for ReadOnlyArray<T> {
     type Array = ReadOnlyArray<T>;
@@ -450,5 +455,3 @@ impl<T: Dist + std::fmt::Debug> ReadOnlyArray<T> {
 }
 
 impl<T: ElementOps + 'static> ReadOnlyOps<T> for ReadOnlyArray<T> {}
-
-

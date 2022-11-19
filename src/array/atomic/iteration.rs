@@ -1,9 +1,11 @@
 use crate::array::atomic::*;
 
-use crate::array::iterator::distributed_iterator::{ DistIteratorLauncher, DistributedIterator, IndexedDistributedIterator};
-use crate::array::iterator::local_iterator::{  LocalIterator, IndexedLocalIterator};
+use crate::array::iterator::distributed_iterator::{
+    DistIteratorLauncher, DistributedIterator, IndexedDistributedIterator,
+};
+use crate::array::iterator::local_iterator::{IndexedLocalIterator, LocalIterator};
 use crate::array::iterator::one_sided_iterator::OneSidedIter;
-use crate::array::iterator::{LamellarArrayIterators,LamellarArrayMutIterators};
+use crate::array::iterator::{LamellarArrayIterators, LamellarArrayMutIterators};
 use crate::array::*;
 use crate::memregion::Dist;
 
@@ -103,7 +105,7 @@ impl<T: Dist> DistributedIterator for AtomicDistIter<T> {
 }
 impl<T: Dist> IndexedDistributedIterator for AtomicDistIter<T> {
     fn iterator_index(&self, index: usize) -> Option<usize> {
-        let g_index = self.data.subarray_index_from_local(index,1);
+        let g_index = self.data.subarray_index_from_local(index, 1);
         g_index
     }
 }
@@ -136,7 +138,7 @@ impl<T: Dist> LocalIterator for AtomicLocalIter<T> {
     fn elems(&self, in_elems: usize) -> usize {
         in_elems
     }
-    
+
     fn advance_index(&mut self, count: usize) {
         self.cur_i = std::cmp::min(self.cur_i + count, self.end_i);
     }
@@ -144,10 +146,9 @@ impl<T: Dist> LocalIterator for AtomicLocalIter<T> {
 
 impl<T: Dist + 'static> IndexedLocalIterator for AtomicLocalIter<T> {
     fn iterator_index(&self, index: usize) -> Option<usize> {
-        if index < self.data.len(){
+        if index < self.data.len() {
             Some(index) //everyone at this point as calculated the actual index (cause we are local only) so just return it
-        }
-        else {
+        } else {
             None
         }
     }
@@ -339,7 +340,7 @@ impl<T: Dist> LamellarArrayMutIterators<T> for AtomicArray<T> {
 //     // {
 //     //     self.data.local_collect_async(iter, d)
 //     // }
-    
+
 //     fn team(&self) -> Pin<Arc<LamellarTeamRT>> {
 //         self.data.team().clone()
 //     }

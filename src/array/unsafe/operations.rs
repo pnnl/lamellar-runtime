@@ -7,7 +7,6 @@ use crate::lamellar_request::LamellarRequest;
 use std::any::TypeId;
 use std::collections::HashMap;
 
-
 type BufFn = fn(UnsafeByteArrayWeak) -> Arc<dyn BufferOp>;
 
 lazy_static! {

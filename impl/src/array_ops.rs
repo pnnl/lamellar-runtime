@@ -35,7 +35,6 @@ fn type_to_string(ty: &syn::Type) -> String {
     }
 }
 
-
 fn native_atomic_slice(
     typeident: &syn::Type,
     lamellar: &proc_macro2::Ident,
@@ -933,7 +932,7 @@ fn create_buffered_ops(
             // use __lamellar::LamellarRequest;
             // use __lamellar::OneSidedMemoryRegion;
             // use __lamellar::RemoteMemoryRegion;
-            
+
             use __lamellar::parking_lot::{Mutex,RwLock};
             // use __lamellar::tracing::*;
             use __lamellar::async_trait;

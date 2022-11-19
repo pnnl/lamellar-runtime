@@ -3,10 +3,9 @@ use crate::array::read_only::*;
 use crate::array::iterator::distributed_iterator::*;
 use crate::array::iterator::local_iterator::*;
 use crate::array::iterator::one_sided_iterator::OneSidedIter;
-use crate::array::iterator::{Schedule,LamellarArrayIterators};
+use crate::array::iterator::{LamellarArrayIterators, Schedule};
 use crate::array::*;
 use crate::memregion::Dist;
-
 
 impl<T: Dist> LamellarArrayIterators<T> for ReadOnlyArray<T> {
     // type Array = ReadOnlyArray<T>;
@@ -21,7 +20,7 @@ impl<T: Dist> LamellarArrayIterators<T> for ReadOnlyArray<T> {
         LocalIter::new(self.clone().into(), 0, 0)
     }
 
-    fn onesided_iter(&self) -> Self::OnesidedIter{
+    fn onesided_iter(&self) -> Self::OnesidedIter {
         OneSidedIter::new(self.clone().into(), self.array.team_rt().clone(), 1)
     }
 
@@ -119,7 +118,8 @@ impl<T: Dist> LocalIteratorLauncher for ReadOnlyArray<T> {
     }
 
     fn local_subarray_index_from_local(&self, index: usize, chunk_size: usize) -> Option<usize> {
-        self.array.local_subarray_index_from_local(index, chunk_size)
+        self.array
+            .local_subarray_index_from_local(index, chunk_size)
     }
 
     fn local_for_each<I, F>(&self, iter: &I, op: F) -> Pin<Box<dyn Future<Output = ()> + Send>>
@@ -141,7 +141,11 @@ impl<T: Dist> LocalIteratorLauncher for ReadOnlyArray<T> {
     {
         self.array.local_for_each_with_schedule(sched, iter, op)
     }
-    fn local_for_each_async<I, F, Fut>(&self, iter: &I, op: F) -> Pin<Box<dyn Future<Output = ()> + Send>>
+    fn local_for_each_async<I, F, Fut>(
+        &self,
+        iter: &I,
+        op: F,
+    ) -> Pin<Box<dyn Future<Output = ()> + Send>>
     where
         I: LocalIterator + 'static,
         F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
@@ -160,7 +164,8 @@ impl<T: Dist> LocalIteratorLauncher for ReadOnlyArray<T> {
         F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
         Fut: Future<Output = ()> + Send + 'static,
     {
-        self.array.local_for_each_async_with_schedule(sched, iter, op)
+        self.array
+            .local_for_each_async_with_schedule(sched, iter, op)
     }
     // fn local_collect<I, A>(&self, iter: &I, d: Distribution) -> Pin<Box<dyn Future<Output = A> + Send>>
     // where

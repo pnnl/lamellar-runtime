@@ -31,7 +31,7 @@
 //!         self.counter.fetch_add(1, Ordering::SeqCst); //this only updates atomic on the executing pe
 //!     }
 //!  }
-//! 
+//!
 //! fn main(){
 //!     let world = LamellarWorldBuilder::new().build();
 //!     let my_pe = world.my_pe();
@@ -71,7 +71,7 @@ pub(crate) mod local_rw_darc;
 pub use local_rw_darc::LocalRwDarc;
 
 pub(crate) mod global_rw_darc;
-use global_rw_darc::{DistRwLock};
+use global_rw_darc::DistRwLock;
 pub use global_rw_darc::GlobalRwDarc;
 
 #[repr(u8)]
@@ -160,7 +160,7 @@ unsafe impl<T: Sync> Sync for DarcInner<T> {}
 ///         self.counter.fetch_add(1, Ordering::SeqCst); //this only updates atomic on the executing pe
 ///     }
 ///  }
-/// 
+///
 /// fn main(){
 ///     let world = LamellarWorldBuilder::new().build();
 ///     let my_pe = world.my_pe();
@@ -768,10 +768,10 @@ impl<T: 'static> Drop for Darc<T> {
                 launch_drop!(DarcMode::UnsafeArray, inner, self.inner);
             } else if local_mode!(DarcMode::ReadOnlyArray, mode_refs, inner) {
                 launch_drop!(DarcMode::ReadOnlyArray, inner, self.inner);
-            } 
+            }
             // else if local_mode!(DarcMode::LocalOnlyArray, mode_refs, inner) {
             //     launch_drop!(DarcMode::LocalOnlyArray, inner, self.inner);
-            // } 
+            // }
             else if local_mode!(DarcMode::LocalLockArray, mode_refs, inner) {
                 launch_drop!(DarcMode::LocalLockArray, inner, self.inner);
             } else if local_mode!(DarcMode::GenericAtomicArray, mode_refs, inner) {

@@ -1,3 +1,4 @@
+use lamellar::active_messaging::prelude::*;
 /// ------------Lamellar Bandwidth: DFT Proxy  -------------------------
 /// This example is inspired from peforming a naive DFT
 /// it does not actually calculate a DFT as we simply perform the transform
@@ -6,7 +7,6 @@
 /// as well as a (single process) shared memory version using Rayon.
 /// --------------------------------------------------------------------
 use lamellar::array::prelude::*;
-use lamellar::active_messaging::prelude::*;
 use lamellar::memregion::prelude::*;
 use parking_lot::Mutex;
 use rand::rngs::StdRng;
@@ -167,7 +167,11 @@ fn dft_lamellar_array(signal: UnsafeArray<f64>, spectrum: UnsafeArray<f64>) -> f
             .enumerate()
             .for_each(move |(k, spec_bin)| {
                 let mut sum = 0f64;
-                for (i, &x) in signal_clone.buffered_onesided_iter(1000).into_iter().enumerate() {
+                for (i, &x) in signal_clone
+                    .buffered_onesided_iter(1000)
+                    .into_iter()
+                    .enumerate()
+                {
                     let angle = -1f64 * (i * k) as f64 * 2f64 * std::f64::consts::PI
                         / signal_clone.len() as f64;
                     let twiddle = angle * (angle.cos() + angle * angle.sin());
@@ -194,7 +198,11 @@ fn dft_lamellar_array_2(signal: ReadOnlyArray<f64>, spectrum: AtomicArray<f64>) 
         .enumerate()
         .for_each(move |(k, spec_bin)| {
             let mut sum = 0f64;
-            for (i, &x) in signal_clone.buffered_onesided_iter(1000).into_iter().enumerate() {
+            for (i, &x) in signal_clone
+                .buffered_onesided_iter(1000)
+                .into_iter()
+                .enumerate()
+            {
                 let angle = -1f64 * (i * k) as f64 * 2f64 * std::f64::consts::PI
                     / signal_clone.len() as f64;
                 let twiddle = angle * (angle.cos() + angle * angle.sin());
@@ -211,7 +219,7 @@ fn dft_lamellar_array_2(signal: ReadOnlyArray<f64>, spectrum: AtomicArray<f64>) 
 fn dft_lamellar_array_swapped(signal: UnsafeArray<f64>, spectrum: UnsafeArray<f64>) -> f64 {
     let timer = Instant::now();
     let signal_len = signal.len();
-    
+
     unsafe {
         for (i, x) in signal.onesided_iter().into_iter().enumerate() {
             let x = (*x).clone();
@@ -242,7 +250,7 @@ fn dft_lamellar_array_opt(
 ) -> f64 {
     let timer = Instant::now();
     let sig_len = signal.len();
-    unsafe{
+    unsafe {
         signal
             .onesided_iter()
             .chunks(buf_size)
@@ -266,7 +274,7 @@ fn dft_lamellar_array_opt(
                             let twiddle = angle * (angle.cos() + angle * angle.sin());
                             sum = sum + twiddle * x;
                         }
-                        
+
                         // let _lock = LOCK.lock();
                         *spec_bin += sum;
                     });
@@ -284,7 +292,7 @@ fn dft_lamellar_array_opt_test(
 ) -> f64 {
     let timer = Instant::now();
     let sig_len = signal.len();
-    unsafe{
+    unsafe {
         signal
             .onesided_iter()
             .chunks(buf_size)
@@ -307,7 +315,7 @@ fn dft_lamellar_array_opt_test(
                             let twiddle = angle * (angle.cos() + angle * angle.sin());
                             sum = sum + twiddle * x;
                         }
-                    
+
                         // let _lock = LOCK.lock();
                         *spec_bin += sum;
                     },
@@ -504,9 +512,11 @@ fn main() {
             world.barrier();
 
             //--------------lamellar array--------------------------
-            unsafe{full_spectrum_array
-                .dist_iter_mut()
-                .for_each(|elem| *elem = 0.0);}
+            unsafe {
+                full_spectrum_array
+                    .dist_iter_mut()
+                    .for_each(|elem| *elem = 0.0);
+            }
             full_spectrum_array.wait_all();
             full_spectrum_array.barrier();
 
@@ -550,9 +560,11 @@ fn main() {
             // world.barrier();
 
             //------------optimized lamellar array----------------
-            unsafe{full_spectrum_array
-                .dist_iter_mut()
-                .for_each(|elem| *elem = 0.0);}
+            unsafe {
+                full_spectrum_array
+                    .dist_iter_mut()
+                    .for_each(|elem| *elem = 0.0);
+            }
             full_spectrum_array.wait_all();
             full_spectrum_array.barrier();
             // let timer = Instant::now();
@@ -566,9 +578,11 @@ fn main() {
             }
 
             //--------------lamellar array--------------------------
-            unsafe{full_spectrum_array
-                .dist_iter_mut()
-                .for_each(|elem| *elem = 0.0);}
+            unsafe {
+                full_spectrum_array
+                    .dist_iter_mut()
+                    .for_each(|elem| *elem = 0.0);
+            }
             full_spectrum_array.wait_all();
             full_spectrum_array.barrier();
             times[3].push(dft_lamellar_array_opt_test(

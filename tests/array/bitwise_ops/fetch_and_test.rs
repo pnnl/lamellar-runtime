@@ -2,7 +2,9 @@ use lamellar::array::prelude::*;
 
 macro_rules! initialize_array {
     (UnsafeArray,$array:ident,$init_val:ident) => {
-        unsafe{$array.dist_iter_mut().for_each(move |x| *x = $init_val);}
+        unsafe {
+            $array.dist_iter_mut().for_each(move |x| *x = $init_val);
+        }
         $array.wait_all();
         $array.barrier();
     };
@@ -53,7 +55,7 @@ macro_rules! fetch_and_test{
             array.wait_all();
             array.barrier();
             let my_val = !(1 as $t << my_pe);
-           
+
             let mut reqs = vec![];
             for idx in 0..array.len(){
                 reqs.push((array.fetch_bit_and(idx,my_val),idx));
@@ -90,7 +92,7 @@ macro_rules! fetch_and_test{
             let sub_array = array.sub_array(start_i..end_i);
             sub_array.barrier();
             // sub_array.print();
-            
+
             let mut reqs = vec![];
             for idx in 0..sub_array.len(){
                 reqs.push((sub_array.fetch_bit_and(idx,my_val),idx));
@@ -102,7 +104,7 @@ macro_rules! fetch_and_test{
                     success = false;
                 }
             }
-            
+
             sub_array.wait_all();
             sub_array.barrier();
             // sub_array.print();
@@ -128,7 +130,7 @@ macro_rules! fetch_and_test{
                 let end_i = start_i+len;
                 let sub_array = array.sub_array(start_i..end_i);
                 sub_array.barrier();
-                
+
                 let mut reqs = vec![];
                 for idx in 0..sub_array.len(){
                     reqs.push((sub_array.fetch_bit_and(idx,my_val),idx));
@@ -140,7 +142,7 @@ macro_rules! fetch_and_test{
                         success = false;
                     }
                 }
-                
+
                 sub_array.wait_all();
                 sub_array.barrier();
                 // sub_array.print();

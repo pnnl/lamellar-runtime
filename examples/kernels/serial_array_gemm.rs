@@ -28,7 +28,6 @@ fn main() {
     let c = AtomicArray::<f32>::new(&world, m * p, Distribution::Block); //row major
                                                                          //initialize matrices
 
-
     a.dist_iter_mut()
         .enumerate()
         .for_each(|(i, x)| *x = i as f32);

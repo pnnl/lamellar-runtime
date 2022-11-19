@@ -23,10 +23,12 @@ fn initialize_mem_region<T: Dist + std::ops::AddAssign>(
 
 macro_rules! initialize_array {
     (UnsafeArray,$array:ident,$t:ty) => {
-        unsafe{$array
-            .dist_iter_mut()
-            .enumerate()
-            .for_each(move |(i, x)| *x = i as $t);}
+        unsafe {
+            $array
+                .dist_iter_mut()
+                .enumerate()
+                .for_each(move |(i, x)| *x = i as $t);
+        }
         $array.wait_all();
     };
     (AtomicArray,$array:ident,$t:ty) => {
@@ -45,9 +47,11 @@ macro_rules! initialize_array {
     };
     (ReadOnlyArray,$array:ident,$t:ty) => {
         let temp = $array.into_unsafe();
-        unsafe {temp.dist_iter_mut()
-            .enumerate()
-            .for_each(move |(i, x)| *x = i as $t);}
+        unsafe {
+            temp.dist_iter_mut()
+                .enumerate()
+                .for_each(move |(i, x)| *x = i as $t);
+        }
         temp.wait_all();
         $array = temp.into_read_only();
     };
@@ -56,10 +60,12 @@ macro_rules! initialize_array {
 macro_rules! initialize_array_range {
     (UnsafeArray,$array:ident,$t:ty,$range:expr) => {{
         let subarray = $array.sub_array($range);
-        unsafe{subarray
-            .dist_iter_mut()
-            .enumerate()
-            .for_each(move |(i, x)| *x = i as $t);}
+        unsafe {
+            subarray
+                .dist_iter_mut()
+                .enumerate()
+                .for_each(move |(i, x)| *x = i as $t);
+        }
         subarray.wait_all();
     }};
     (AtomicArray,$array:ident,$t:ty,$range:expr) => {{
@@ -81,10 +87,12 @@ macro_rules! initialize_array_range {
     (ReadOnlyArray,$array:ident,$t:ty,$range:expr) => {{
         let temp = $array.into_unsafe();
         let subarray = temp.sub_array($range);
-        unsafe{subarray
-            .dist_iter_mut()
-            .enumerate()
-            .for_each(move |(i, x)| *x = i as $t);}
+        unsafe {
+            subarray
+                .dist_iter_mut()
+                .enumerate()
+                .for_each(move |(i, x)| *x = i as $t);
+        }
         subarray.wait_all();
         drop(subarray);
         $array = temp.into_read_only();

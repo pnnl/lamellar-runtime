@@ -40,15 +40,15 @@ lazy_static! {
     };
 }
 
-impl<T: Dist > LamellarArrayGet<T> for AtomicArray<T> {
+impl<T: Dist> LamellarArrayGet<T> for AtomicArray<T> {
     unsafe fn get<U: TeamInto<LamellarArrayRdmaOutput<T>> + LamellarWrite>(
         &self,
         index: usize,
         buf: U,
     ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
         match self {
-            AtomicArray::NativeAtomicArray(array) => array.get(index,buf),
-            AtomicArray::GenericAtomicArray(array) => array.get(index,buf),
+            AtomicArray::NativeAtomicArray(array) => array.get(index, buf),
+            AtomicArray::GenericAtomicArray(array) => array.get(index, buf),
         }
     }
     fn at(&self, index: usize) -> Pin<Box<dyn Future<Output = T> + Send>> {
@@ -59,16 +59,15 @@ impl<T: Dist > LamellarArrayGet<T> for AtomicArray<T> {
     }
 }
 
-impl<T: Dist > LamellarArrayPut<T> for AtomicArray<T> {
+impl<T: Dist> LamellarArrayPut<T> for AtomicArray<T> {
     unsafe fn put<U: TeamInto<LamellarArrayRdmaInput<T>> + LamellarRead>(
         &self,
         index: usize,
         buf: U,
     ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
         match self {
-            AtomicArray::NativeAtomicArray(array) => array.put(index,buf),
-            AtomicArray::GenericAtomicArray(array) => array.put(index,buf),
+            AtomicArray::NativeAtomicArray(array) => array.put(index, buf),
+            AtomicArray::GenericAtomicArray(array) => array.put(index, buf),
         }
     }
 }
-

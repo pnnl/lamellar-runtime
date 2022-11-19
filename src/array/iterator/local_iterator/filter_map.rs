@@ -65,7 +65,7 @@ where
         // println!("enumerate elems {:?}",in_elems);
         in_elems
     }
-    
+
     fn advance_index(&mut self, count: usize) {
         self.iter.advance_index(count);
     }

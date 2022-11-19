@@ -40,10 +40,11 @@ impl<T: Dist> LamellarArrayGet<T> for LocalLockArray<T> {
         index: usize,
         buf: U,
     ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
-        self.internal_get(index,  buf.team_into(&self.array.team_rt())).into_future()
+        self.internal_get(index, buf.team_into(&self.array.team_rt()))
+            .into_future()
     }
     fn at(&self, index: usize) -> Pin<Box<dyn Future<Output = T> + Send>> {
-        unsafe {self.internal_at(index).into_future()}
+        unsafe { self.internal_at(index).into_future() }
     }
 }
 
@@ -68,15 +69,17 @@ impl<T: Dist> LamellarArrayPut<T> for LocalLockArray<T> {
         index: usize,
         buf: U,
     ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
-        unsafe{self.internal_put(index,  buf.team_into(&self.array.team_rt())).into_future()}
-        
+        unsafe {
+            self.internal_put(index, buf.team_into(&self.array.team_rt()))
+                .into_future()
+        }
     }
 }
 
 #[lamellar_impl::AmLocalDataRT(Debug)]
 struct InitGetAm<T: Dist> {
     array: LocalLockArray<T>, //inner of the indices we need to place data into
-    index: usize,                   //relative to inner
+    index: usize,             //relative to inner
     buf: LamellarMemoryRegion<T>,
 }
 
@@ -166,7 +169,7 @@ impl LamellarAm for LocalLockRemoteGetAm {
 #[lamellar_impl::AmLocalDataRT(Debug)]
 struct InitPutAm<T: Dist> {
     array: LocalLockArray<T>, //inner of the indices we need to place data into
-    index: usize,                   //relative to inner
+    index: usize,             //relative to inner
     buf: LamellarMemoryRegion<T>,
 }
 
