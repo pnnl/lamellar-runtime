@@ -695,7 +695,7 @@ impl<'a, T: Dist> OpInputEnum<'_, T> {
 ///
 /// It is possible to use a LamellarMemoryRegion or UnsafeArray as the parent source, but these will require unsafe calls to retrieve the underlying slices.
 /// The retrieved slices can then be used for the batched operation
-///```
+///```ignore
 /// unsafe { onesided_mem_region.as_slice().expect("not on allocating PE") };
 /// unsafe { shared_mem_region.as_slice() };
 /// unsafe { unsafe_array.local_data() };
@@ -1517,19 +1517,21 @@ impl<T> ElementComparePartialEqOps for T where
 /// # Examples
 ///```
 /// use lamellar::array::prelude::*;
+/// use futures::future::join_all;
 ///
 /// let world = LamellarWorldBuilder::new().build();
 /// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block);
 ///
 /// let indices = vec![3,54,12,88,29,68];
-/// let reqs = indices.iter().map(|i| array.load(i)).collect::<Vec<_>>();
+/// let reqs = indices.iter().map(|i| array.load(*i)).collect::<Vec<_>>();
 /// let vals_1 = array.block_on(async move {
-///      reqs.iter().map(|req| req.await).collect::<Vec<_>>()
+///     // reqs.into_iter().map(|req| req.await).collect::<Vec<_>>()
+///     join_all(reqs).await
 /// });
-/// let req = array.load(indices);
+/// let req = array.batch_load(indices);
 /// let vals_2 = array.block_on(req);
-/// for (v1,v2) in vals1.iter().zip(vals2.iter()){
-///     assert_eq!(v1 == v2);
+/// for (v1,v2) in vals_1.iter().zip(vals_2.iter()){
+///     assert_eq!(v1,v2);
 /// }
 ///```
 pub trait ReadOnlyOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
@@ -1586,9 +1588,9 @@ pub trait ReadOnlyOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
     /// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block);
     ///
     /// let indices = vec![3,54,12,88,29,68];
-    /// let req = array.batch_load(indices);
+    /// let req = array.batch_load(indices.clone());
     /// let vals = array.block_on(req);
-    /// assert_eq!(vals.len() == indicies.len());
+    /// assert_eq!(vals.len(),indices.len());
     ///```
     #[tracing::instrument(skip_all)]
     fn batch_load<'a>(
@@ -2857,13 +2859,13 @@ pub trait CompareExchangeOps<T: ElementCompareEqOps>: private::LamellarArrayPriv
 /// use lamellar::array::prelude::*;
 ///
 /// let world = LamellarWorldBuilder::new().build();
-/// let array = AtomicArray::new::<f32>(&world,100,Distribution::Block);
+/// let array = AtomicArray::<f32>::new(&world,100,Distribution::Block);
 ///
-/// let indices = vec![3,54,11101,88,29,68];
+/// let indices = vec![3,54,11,88,29,68];
 /// let current = 0.0;
 /// let new = 10.5;
 /// let epsilon = 0.1;
-/// array.block_on(array.batch_compare_exchange(indices,current,new,epsilon));
+/// array.block_on(array.batch_compare_exchange_epsilon(indices,current,new,epsilon));
 ///```
 /// ## Many Values - One Index
 /// In this type, multiple values will be applied to the given index
@@ -2871,13 +2873,13 @@ pub trait CompareExchangeOps<T: ElementCompareEqOps>: private::LamellarArrayPriv
 /// use lamellar::array::prelude::*;
 ///
 /// let world = LamellarWorldBuilder::new().build();
-/// let array = AtomicArray::new::<f32>(&world,100,Distribution::Block);
+/// let array = AtomicArray::<f32>::new(&world,100,Distribution::Block);
 ///
 /// let new_vals = vec![3.0,54.8,12.9,88.1,29.2,68.9];
-/// let current = 0;
+/// let current = 0.0;
 /// let index = 10;
 /// let epsilon = 0.1;
-/// array.block_on(array.batch_compare_exchange(index,current,new_vals,epsilon));
+/// array.block_on(array.batch_compare_exchange_epsilon(index,current,new_vals,epsilon));
 ///```
 /// ## Many Values - Many Indicies
 /// In this type, values and indices have a one-to-one correspondance.
@@ -2887,13 +2889,13 @@ pub trait CompareExchangeOps<T: ElementCompareEqOps>: private::LamellarArrayPriv
 /// use lamellar::array::prelude::*;
 ///
 /// let world = LamellarWorldBuilder::new().build();
-/// let array = AtomicArray::new::<f32>(&world,100,Distribution::Block);
+/// let array = AtomicArray::<f32>::new(&world,100,Distribution::Block);
 ///
 /// let indices = vec![3,54,12,88,29,68];
 /// let new_vals = vec![12.1,2.321,1.7,10000.0,12.4,13.7];
-/// let current = 0;
+/// let current = 0.0;
 /// let epsilon = 0.1;
-/// array.block_on(array.batch_compare_exchange(indices,current,new_vals,epsilon));
+/// array.block_on(array.batch_compare_exchange_epsilon(indices,current,new_vals,epsilon));
 ///```
 pub trait CompareExchangeEpsilonOps<T: ElementComparePartialEqOps>:
     private::LamellarArrayPrivate<T>
@@ -2919,12 +2921,12 @@ pub trait CompareExchangeEpsilonOps<T: ElementComparePartialEqOps>:
     /// use lamellar::array::prelude::*;
     ///
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array = AtomicArray::new::<f32>(&world,100,Distribution::Block);
+    /// let array = AtomicArray::<f32>::new(&world,100,Distribution::Block);
     ///
     /// let idx = 53;
     /// let val = 10.3;
-    /// let current = 0;
-    /// let epsilon = 0.1
+    /// let current = 0.0;
+    /// let epsilon = 0.1;
     /// let req = array.compare_exchange_epsilon(idx,current,val,epsilon);
     /// let result = array.block_on(req);
     ///```
@@ -2964,11 +2966,11 @@ pub trait CompareExchangeEpsilonOps<T: ElementComparePartialEqOps>:
     /// use lamellar::array::prelude::*;
     ///
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block);
+    /// let array = AtomicArray::<f32>::new(&world,100,Distribution::Block);
     ///
     /// let indices = vec![3,54,12,88,29,68];
     /// let current = 0.0;
-    /// let epsilon = 0.001
+    /// let epsilon = 0.001;
     /// let req = array.batch_compare_exchange_epsilon(indices,current,10.321,epsilon);
     /// let results = array.block_on(req);
     ///```

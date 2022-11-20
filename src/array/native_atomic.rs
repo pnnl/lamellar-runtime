@@ -47,7 +47,7 @@ macro_rules! impl_atomic_ops{
         pub struct $C<'a>(pub &'a $B);
         impl AddAssign<$A> for $C<'_>{
             fn add_assign(&mut self, val: $A) {
-                println!("add_assign");
+                // println!("add_assign");
             //    self.0.as_native_atomic().fetch_add(val,Ordering::SeqCst);
                self.0.fetch_add(val,Ordering::SeqCst);
 
