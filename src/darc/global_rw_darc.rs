@@ -341,7 +341,9 @@ impl<T> GlobalRwDarc<T> {
     /// # Examples
     ///
     ///```
-    /// use lamellar::{ActiveMessaging, GlobalRwDarc};
+    /// use lamellar::darc::prelude::*;
+    /// use lamellar::active_messaging::*;
+    ///
     /// #[lamellar::AmData(Clone)]
     /// struct DarcAm {
     ///     counter: GlobalRwDarc<usize>, //each pe has a local atomicusize
@@ -351,14 +353,18 @@ impl<T> GlobalRwDarc<T> {
     /// impl LamellarAm for DarcAm {
     ///     async fn exec(self) {
     ///         let counter = self.counter.async_read().await; // await until we get the write lock
-    ///         println!("the current counter value on pe {} = {}",lamellar::current_pe,counter);
+    ///         println!("the current counter value on pe {} = {}",lamellar::current_pe,*counter);
     ///     }
     ///  }
-    /// -------------
-    /// let counter = GlobalRwDarc::new(world, 0).unwrap();
+    /// //-------------
+    /// 
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    ///
+    /// let counter = GlobalRwDarc::new(&world, 0).unwrap();
     /// world.exec_am_all(DarcAm {counter: counter.clone()});
     /// let guard = world.block_on(counter.async_read());
-    /// println!("the current counter value on pe {} main thread = {}",my_pe,guard);
+    /// println!("the current counter value on pe {} main thread = {}",my_pe,*guard);
     /// drop(guard); //release the
     /// world.wait_all(); // wait for my active message to return
     /// world.barrier(); //at this point all updates will have been performed
@@ -400,7 +406,9 @@ impl<T> GlobalRwDarc<T> {
     /// # Examples
     ///
     ///```
-    /// use lamellar::{ActiveMessaging, GlobalRwDarc};
+    /// use lamellar::darc::prelude::*;
+    /// use lamellar::active_messaging::*;
+    ///
     /// #[lamellar::AmData(Clone)]
     /// struct DarcAm {
     ///     counter: GlobalRwDarc<usize>, //each pe has a local atomicusize
@@ -409,15 +417,19 @@ impl<T> GlobalRwDarc<T> {
     /// #[lamellar::am]
     /// impl LamellarAm for DarcAm {
     ///     async fn exec(self) {
-    ///         let counter = self.counter.async_write().await; // await until we get the write lock
-    ///        counter += 1; // although we have the global lock, we are still only modifying the data local to this PE
+    ///         let mut counter = self.counter.async_write().await; // await until we get the write lock
+    ///         *counter += 1; // although we have the global lock, we are still only modifying the data local to this PE
     ///     }
     ///  }
-    /// -------------
-    /// let counter = GlobalRwDarc::new(world, 0).unwrap();
+    /// //-------------
+    /// 
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    ///
+    /// let counter = GlobalRwDarc::new(&world, 0).unwrap();
     /// world.exec_am_all(DarcAm {counter: counter.clone()});
-    /// let guard = world.block_on(counter.async_write());
-    /// guard += my_pe;
+    /// let mut guard = world.block_on(counter.async_write());
+    /// *guard += my_pe;
     /// drop(guard); //release the
     /// world.wait_all(); // wait for my active message to return
     /// world.barrier(); //at this point all updates will have been performed
@@ -460,13 +472,15 @@ impl<T> GlobalRwDarc<T> {
     ///
     /// # Examples
     ///```
-    /// use lamellar::GlobalRwDarc;
-    /// #[lamellar::AmData(Clone)]
+    /// use lamellar::darc::prelude::*;
     ///
-    /// let counter = GlobalRwDarc::new(world, 0).unwrap();
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    ///
+    /// let counter = GlobalRwDarc::new(&world, 0).unwrap();
     /// // do interesting work
     /// let guard = counter.read(); //blocks current thread until aquired
-    /// println!("the current counter value on pe {} main thread = {}",my_pe,guard);
+    /// println!("the current counter value on pe {} main thread = {}",my_pe,*guard);
     ///```
     pub fn read(&self) -> GlobalRwDarcReadGuard<'_, T> {
         // println!("read");
@@ -506,13 +520,15 @@ impl<T> GlobalRwDarc<T> {
     /// # Examples
 
     ///```
-    /// use lamellar::GlobalRwDarc;
-    /// #[lamellar::AmData(Clone)]
+    /// use lamellar::darc::prelude::*;
     ///
-    /// let counter = GlobalRwDarc::new(world, 0).unwrap();
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    ///
+    /// let counter = GlobalRwDarc::new(&world, 0).unwrap();
     /// // do interesting work
-    /// let guard = counter.write(); //blocks current thread until aquired
-    /// guard += my_pe;
+    /// let mut guard = counter.write(); //blocks current thread until aquired
+    /// *guard += my_pe;
     ///```
     pub fn write(&self) -> GlobalRwDarcWriteGuard<'_, T> {
         // println!("write");
@@ -550,9 +566,11 @@ impl<T> GlobalRwDarc<T> {
     /// # Examples
     ///
     /// ```
-    /// use lamellar::GlobalRwDarc;
+    /// use lamellar::darc::prelude::*;
     ///
-    /// let five = GlobalRwDarc::new(5);
+    /// let world = LamellarWorldBuilder::new().build();
+    ///
+    /// let five = GlobalRwDarc::new(&world,5).expect("PE in world team");
     /// ```
     pub fn new<U: Clone + Into<IntoLamellarTeam>>(
         team: U,
@@ -589,9 +607,11 @@ impl<T> GlobalRwDarc<T> {
     ///
     /// # Examples
     /// ```
-    /// use lamellar::{Darc,GlobalRwDarc};
+    /// use lamellar::darc::prelude::*;
     ///
-    /// let five = GlobalRwDarc::new(5);
+    /// let world = LamellarWorldBuilder::new().build();
+    ///
+    /// let five = GlobalRwDarc::new(&world,5).expect("PE in world team");
     /// let five_as_darc = five.into_darc();
     /// ```
     pub fn into_darc(self) -> Darc<T> {
@@ -619,9 +639,11 @@ impl<T> GlobalRwDarc<T> {
     ///
     /// # Examples
     /// ```
-    /// use lamellar::{GlobalRwDarc,LocalRwDarc};
+    /// use lamellar::darc::prelude::*;
     ///
-    /// let five = GlobalRwDarc::new(5);
+    /// let world = LamellarWorldBuilder::new().build();
+    ///
+    /// let five = GlobalRwDarc::new(&world,5).expect("PE in world team");
     /// let five_as_localdarc = five.into_localrw();
     /// ```
     pub fn into_localrw(self) -> LocalRwDarc<T> {

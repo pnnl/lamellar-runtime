@@ -35,12 +35,13 @@
 //! fn main(){
 //!     let world = LamellarWorldBuilder::new().build();
 //!     let my_pe = world.my_pe();
-//!     let darc_counter = Darc::new(world, AtomicUsize::new(0)).unwrap();
+//!     let num_pes = world.num_pes();
+//!     let darc_counter = Darc::new(&world, AtomicUsize::new(0)).unwrap();
 //!     world.exec_am_all(DarcAm {counter: darc_counter.clone()});
 //!     darc_counter.fetch_add(my_pe, Ordering::SeqCst);
 //!     world.wait_all(); // wait for my active message to return
 //!     world.barrier(); //at this point all updates will have been performed
-//!     assert_eq!(darc_counter.load(Oredering::SeqCst),num_pes+my_pe); //NOTE: the value of darc_counter will be different on each PE
+//!     assert_eq!(darc_counter.load(Ordering::SeqCst),num_pes+my_pe); //NOTE: the value of darc_counter will be different on each PE
 //! }
 ///```
 use core::marker::PhantomData;
@@ -164,12 +165,13 @@ unsafe impl<T: Sync> Sync for DarcInner<T> {}
 /// fn main(){
 ///     let world = LamellarWorldBuilder::new().build();
 ///     let my_pe = world.my_pe();
-///     let darc_counter = Darc::new(world, AtomicUsize::new(0)).unwrap();
+///     let num_pes = world.num_pes();
+///     let darc_counter = Darc::new(&world, AtomicUsize::new(0)).unwrap();
 ///     world.exec_am_all(DarcAm {counter: darc_counter.clone()});
 ///     darc_counter.fetch_add(my_pe, Ordering::SeqCst);
 ///     world.wait_all(); // wait for my active message to return
 ///     world.barrier(); //at this point all updates will have been performed
-///     assert_eq!(darc_counter.load(Oredering::SeqCst),num_pes+my_pe); //NOTE: the value of darc_counter will be different on each PE
+///     assert_eq!(darc_counter.load(Ordering::SeqCst),num_pes+my_pe); //NOTE: the value of darc_counter will be different on each PE
 /// }
 ///```
 pub struct Darc<T: 'static> {
@@ -527,9 +529,11 @@ impl<T> Darc<T> {
     /// # Examples
     ///
     /// ```
-    /// use lamellar::Darc;
+    /// use lamellar::darc::prelude::*;
     ///
-    /// let five = Darc::new(5);
+    /// let world = LamellarWorldBuilder::new().build();
+    ///
+    /// let five = Darc::new(&world,5).expect("PE in world team");
     /// ```
     pub fn new<U: Into<IntoLamellarTeam>>(team: U, item: T) -> Result<Darc<T>, IdError> {
         Darc::try_new_with_drop(team, item, DarcMode::Darc, None)
@@ -616,9 +620,11 @@ impl<T> Darc<T> {
     ///
     /// # Examples
     /// ```
-    /// use lamellar::{Darc,LocalRwDarc};
+    /// use lamellar::darc::prelude::*;
     ///
-    /// let five = Darc::new(5);
+    /// let world = LamellarWorldBuilder::new().build();
+    ///
+    /// let five = Darc::new(&world,5).expect("PE in world team");
     /// let five_as_localdarc = five.into_localrw();
     /// ```
     pub fn into_localrw(self) -> LocalRwDarc<T> {
@@ -647,9 +653,11 @@ impl<T> Darc<T> {
     ///
     /// # Examples
     /// ```
-    /// use lamellar::{GlobalRwDarc,Darc};
+    /// use lamellar::darc::prelude::*;
     ///
-    /// let five = Darc::new(5);
+    /// let world = LamellarWorldBuilder::new().build();
+    ///
+    /// let five = Darc::new(&world,5).expect("PE in world team");
     /// let five_as_globaldarc = five.into_globalrw();
     /// ```
     pub fn into_globalrw(self) -> GlobalRwDarc<T> {

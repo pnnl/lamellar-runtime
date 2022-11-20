@@ -117,7 +117,8 @@ impl<T> LocalRwDarc<T> {
     /// # Examples
     ///
     ///```
-    /// use lamellar::{ActiveMessaging, LocalRwDarc};
+    /// use lamellar::darc::prelude::*;
+    /// use lamellar::active_messaging::prelude::*;
     /// #[lamellar::AmData(Clone)]
     /// struct DarcAm {
     ///     counter: LocalRwDarc<usize>, //each pe has a local atomicusize
@@ -130,11 +131,13 @@ impl<T> LocalRwDarc<T> {
     ///         println!("the current counter value on pe {} = {}",lamellar::current_pe,counter);
     ///     }
     ///  }
-    /// -------------
-    /// let counter = GlobalRwDarc::new(world, 0).unwrap();
+    /// //-------------
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let counter = LocalRwDarc::new(&world, 0).unwrap();
     /// world.exec_am_all(DarcAm {counter: counter.clone()});
-    /// let guard = world.block_on(counter.async_read());
-    /// println!("the current counter value on pe {} main thread = {}",my_pe,guard);
+    /// let guard = counter.read();
+    /// println!("the current counter value on pe {} main thread = {}",my_pe,*guard);
     ///```
     pub fn read(&self) -> ArcRwLockReadGuard<RawRwLock, Box<T>> {
         self.darc.read_arc()
@@ -154,7 +157,8 @@ impl<T> LocalRwDarc<T> {
     /// # Examples
     ///
     ///```
-    /// use lamellar::{ActiveMessaging, LocalRwDarc};
+    /// use lamellar::darc::prelude::*;
+    /// use lamellar::active_messaging::prelude::*;
     /// #[lamellar::AmData(Clone)]
     /// struct DarcAm {
     ///     counter: LocalRwDarc<usize>, //each pe has a local atomicusize
@@ -163,15 +167,17 @@ impl<T> LocalRwDarc<T> {
     /// #[lamellar::am]
     /// impl LamellarAm for DarcAm {
     ///     async fn exec(self) {
-    ///         let counter = self.counter.write(); //block until we get the write lock
-    ///        counter += 1;
+    ///         let mut counter = self.counter.write(); //block until we get the write lock
+    ///         **counter += 1;
     ///     }
     ///  }
-    /// -------------
-    /// let counter = GlobalRwDarc::new(world, 0).unwrap();
+    /// //-------------
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let counter = LocalRwDarc::new(&world, 0).unwrap();
     /// world.exec_am_all(DarcAm {counter: counter.clone()});
-    /// let guard = counter.write();
-    /// guard += my_pe;
+    /// let mut guard = counter.write();
+    /// **guard += my_pe;
     ///```
     pub fn write(&self) -> ArcRwLockWriteGuard<RawRwLock, Box<T>> {
         self.darc.write_arc()
@@ -188,9 +194,11 @@ impl<T> LocalRwDarc<T> {
     /// # Examples
     ///
     /// ```
-    /// use lamellar::LocalRwDarc;
+    /// use lamellar::darc::prelude::*;
     ///
-    /// let five = LocalRwDarc::new(5);
+    /// let world = LamellarWorldBuilder::new().build();
+    ///
+    /// let five = LocalRwDarc::new(&world,5).expect("PE in world team");
     /// ```
     pub fn new<U: Into<IntoLamellarTeam>>(team: U, item: T) -> Result<LocalRwDarc<T>, IdError> {
         Ok(LocalRwDarc {
@@ -221,9 +229,11 @@ impl<T> LocalRwDarc<T> {
     ///
     /// # Examples
     /// ```
-    /// use lamellar::{Darc,LocalRwDarc};
+    /// use lamellar::darc::prelude::*;
     ///
-    /// let five = LocalRwDarc::new(5);
+    /// let world = LamellarWorldBuilder::new().build();
+    ///
+    /// let five = LocalRwDarc::new(&world,5).expect("PE in world team");
     /// let five_as_darc = five.into_darc();
     /// ```
     pub fn into_darc(self) -> Darc<T> {
@@ -233,7 +243,7 @@ impl<T> LocalRwDarc<T> {
         inner.block_on_outstanding(DarcMode::Darc, 0);
         // println!("after block on outstanding");
         inner.local_cnt.fetch_add(1, Ordering::SeqCst); //we add this here because to account for moving inner into d
-                                                        // let item = unsafe { Box::from_raw(inner.item as *mut Arc<RwLock<Box<T>>>).into_inner() };
+                                                        // let item = unsafe { Box::from_raw(inner.item as *mut Arc<RwLock<T>>).into_inner() };
         let mut arc_item =
             unsafe { (*Box::from_raw(inner.item as *mut Arc<RwLock<Box<T>>>)).clone() };
 
@@ -261,9 +271,11 @@ impl<T> LocalRwDarc<T> {
     ///
     /// # Examples
     /// ```
-    /// use lamellar::{GlobalRwDarc,LocalRwDarc};
+    /// use lamellar::darc::prelude::*;
     ///
-    /// let five = LocalRwDarc::new(5);
+    /// let world = LamellarWorldBuilder::new().build();
+    ///
+    /// let five = LocalRwDarc::new(&world,5).expect("PE in world team");
     /// let five_as_globaldarc = five.into_globalrw();
     /// ```
     pub fn into_globalrw(self) -> GlobalRwDarc<T> {
