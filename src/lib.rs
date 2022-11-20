@@ -123,7 +123,7 @@
 //!     let world = lamellar::LamellarWorldBuilder::new().build();
 //!     let my_pe = world.my_pe();
 //!     let block_array = AtomicArray::<usize>::new(&world, 1000, Distribution::Block); //we also support Cyclic distribution.
-//!     block_array.dist_iter_mut().enumerate().for_each(move |elem| *elem = my_pe); //simultaneosuly initialize array accross all pes, each pe only updates its local data
+//!     block_array.dist_iter_mut().enumerate().for_each(move |(i,elem)| elem.store(i)); //simultaneosuly initialize array accross all pes, each pe only updates its local data
 //!     block_array.wait_all();
 //!     block_array.barrier();
 //!     if my_pe == 0{
@@ -138,6 +138,7 @@
 //! Please refer to the [Darc][crate::darc] documentation for more details and examples
 //!```
 //! use lamellar::active_messaging::prelude::*;
+//! use lamellar::darc::prelude::*;
 //! use std::sync::atomic::{AtomicUsize,Ordering};
 //!
 //! #[AmData(Debug, Clone)] // `AmData` is a macro used in place of `derive`
@@ -156,11 +157,11 @@
 //!     let mut world = lamellar::LamellarWorldBuilder::new().build();
 //!     let my_pe = world.my_pe();
 //!     let num_pes = world.num_pes();
-//!     let cnt = Darc::new(&world, AtomicUsize::new());
+//!     let cnt = Darc::new(&world, AtomicUsize::new(0)).expect("Current PE is in world team");
 //!     for pe in 0..num_pes{
 //!         world.exec_am_pe(pe,DarcAm{cnt: cnt.clone()}); // explicitly launch on each PE
 //!     }
-//!     world.exec_am_all(am.clone()); //also possible to execute on every PE with a single call
+//!     world.exec_am_all(DarcAm{cnt: cnt.clone()}); //also possible to execute on every PE with a single call
 //!     cnt.fetch_add(1,Ordering::SeqCst); //this is valid as well!
 //!     world.wait_all(); // wait for all active messages to finish
 //!     world.barrier();  // synchronize with other pes

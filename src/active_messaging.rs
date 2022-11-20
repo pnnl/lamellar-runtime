@@ -29,16 +29,16 @@
 //!```
 //!#[derive(Debug,Clone)]
 //! struct HelloWorld {
-//!    originial_pe: usize, //this will contain the ID of the PE this data originated from
+//!    original_pe: usize, //this will contain the ID of the PE this data originated from
 //! }
 //!```
 //! This looks like a pretty normal (if simple) struct, we next have to let the runtime know we would like this data
 //! to be used in an active message, so we need to apply the [AmData] macro, this is done by replacing the `derive` macro:
 //!```
 //! use lamellar::active_messaging::prelude::*;
-//!#[AmData(Debug,Clone)]
+//! #[AmData(Debug,Clone)]
 //! struct HelloWorld {
-//!    originial_pe: usize, //this will contain the ID of the PE this data originated from
+//!    original_pe: usize, //this will contain the ID of the PE this data originated from
 //! }
 //!```
 //! This change allows the compiler to implement the proper traits (related to Serialization and Deserialization) that will let this data type
@@ -48,12 +48,17 @@
 //!
 //! For this we use the [am] macro on an implementation of the [LamellarAM] trait
 //!```
+//! # use lamellar::active_messaging::prelude::*;
+//! # #[AmData(Debug,Clone)]
+//! # struct HelloWorld {
+//! #    original_pe: usize, //this will contain the ID of the PE this data originated from
+//! # }
 //! #[lamellar::am]
 //! impl LamellarAM for HelloWorld {
 //!     async fn exec(self) {
 //!         println!(
 //!             "Hello World, I'm from PE {:?}",
-//!             self.originial_pe,
+//!             self.original_pe,
 //!         );
 //!     }
 //! }
@@ -66,13 +71,27 @@
 //!
 //! The final step is to actually launch an active message and await its result
 //!```
+//! # use lamellar::active_messaging::prelude::*;
+//! # #[AmData(Debug,Clone)]
+//! # struct HelloWorld {
+//! #    original_pe: usize, //this will contain the ID of the PE this data originated from
+//! # }
+//! # #[lamellar::am]
+//! # impl LamellarAM for HelloWorld {
+//! #     async fn exec(self) {
+//! #         println!(
+//! #             "Hello World, I'm from PE {:?}",
+//! #             self.original_pe,
+//! #         );
+//! #     }
+//! # }
 //! fn main(){
 //!     let world = lamellar::LamellarWorldBuilder::new().build();
 //!     let my_pe = world.my_pe();
 //!     //Send a Hello World Active Message to all pes
 //!     let request = world.exec_am_all(
 //!         HelloWorld {
-//!             originial_pe: my_pe,
+//!             original_pe: my_pe,
 //!         }
 //!     );
 //!     //wait for the request to complete
@@ -101,6 +120,11 @@
 //!
 //! Given this functionality, we can adapt the above active message body to this:
 //!```
+//! # use lamellar::active_messaging::prelude::*;
+//! # #[AmData(Debug,Clone)]
+//! # struct HelloWorld {
+//! #    original_pe: usize, //this will contain the ID of the PE this data originated from
+//! # }
 //! #[lamellar::am]
 //! impl LamellarAM for HelloWorld {
 //!     async fn exec(self) {
@@ -108,10 +132,22 @@
 //!             "Hello World on PE {:?} of {:?}, I'm from PE {:?}",
 //!             lamellar::current_pe,
 //!             lamellar::num_pes,
-//!             self.originial_pe,
+//!             self.original_pe,
 //!         );
 //!     }
 //! }
+//! # fn main(){
+//! #     let world = lamellar::LamellarWorldBuilder::new().build();
+//! #     let my_pe = world.my_pe();
+//! #     //Send a Hello World Active Message to all pes
+//! #     let request = world.exec_am_all(
+//! #         HelloWorld {
+//! #             original_pe: my_pe,
+//! #         }
+//! #     );
+//! #     //wait for the request to complete
+//! #     world.block_on(request);
+//! # }
 //!```
 //! the new Sample output for the above example on a 2 PE system may look something like (exact ordering is nondeterministic due to asynchronous behavior)
 //!```text
@@ -127,6 +163,11 @@
 //! ## Returning normal data
 //! Lamellar Active Messages support returning data and it is as simple as specifying the return type in the implementation of the `exec` function.
 //!```
+//! # use lamellar::active_messaging::prelude::*;
+//! # #[AmData(Debug,Clone)]
+//! # struct HelloWorld {
+//! #    original_pe: usize, //this will contain the ID of the PE this data originated from
+//! # }
 //! #[lamellar::am]
 //! impl LamellarAM for HelloWorld {
 //!     async fn exec(self) -> usize { //specify we are returning a usize
@@ -134,20 +175,50 @@
 //!             "Hello World on PE {:?} of {:?}, I'm from PE {:?}",
 //!             lamellar::current_pe,
 //!             lamellar::num_pes,
-//!             self.originial_pe,
+//!             self.original_pe,
 //!         );
+//!         lamellar::current_pe
 //!     }
 //! }
+//! # fn main(){
+//! #     let world = lamellar::LamellarWorldBuilder::new().build();
+//! #     let my_pe = world.my_pe();
+//! #     //Send a Hello World Active Message to all pes
+//! #     let request = world.exec_am_all(
+//! #         HelloWorld {
+//! #             original_pe: my_pe,
+//! #         }
+//! #     );
+//! #     //wait for the request to complete
+//! #     world.block_on(request);
+//! # }
 //!```
 //! Retrieving the result is as simple as assigning a variable to the awaited request
 //!```
+//! # use lamellar::active_messaging::prelude::*;
+//! # #[AmData(Debug,Clone)]
+//! # struct HelloWorld {
+//! #    original_pe: usize, //this will contain the ID of the PE this data originated from
+//! # }
+//! # #[lamellar::am]
+//! # impl LamellarAM for HelloWorld {
+//! #     async fn exec(self) -> usize { //specify we are returning a usize
+//! #         println!(
+//! #             "Hello World on PE {:?} of {:?}, I'm from PE {:?}",
+//! #             lamellar::current_pe,
+//! #             lamellar::num_pes,
+//! #             self.original_pe,
+//! #         );
+//! #         lamellar::current_pe
+//! #     }
+//! # }
 //! fn main(){
 //!     let world = lamellar::LamellarWorldBuilder::new().build();
 //!     let my_pe = world.my_pe();
 //!     //Send a Hello World Active Message to all pes
 //!     let request = world.exec_am_all(
 //!         HelloWorld {
-//!             originial_pe: my_pe,
+//!             original_pe: my_pe,
 //!         }
 //!     );
 //!     //wait for the request to complete
@@ -172,6 +243,7 @@
 //! Returning an active messages requires a few more changes to our code.
 //! First we will define our new active message
 //!```
+//! # use lamellar::active_messaging::prelude::*;
 //! #[AmData(Debug,Clone)]
 //! struct ReturnAm{
 //!     original_pe: usize,
@@ -180,14 +252,30 @@
 //!
 //! #[lamellar::am]
 //! impl LamellarAm for ReturnAm{
-//!     fn exec(self) {
-//!         println!("initiated on PE {} visited PE {} finishing on PE {}",self.original_pe,self.remote_pe,lamellar::current_pe)
+//!     async fn exec(self) {
+//!         println!("initiated on PE {} visited PE {} finishing on PE {}",self.original_pe,self.remote_pe,lamellar::current_pe);
 //!     }
 //! }
 //!```
 //! With that defined we can now modify our original Active Message to return this new `ReturnAm` type.
 //! The main change is that we need to explicitly tell the macro we are returning an active message and we provide the name of the active message we are returning
 //!```
+//! # use lamellar::active_messaging::prelude::*;
+//! #[AmData(Debug,Clone)]
+//! # struct ReturnAm{
+//! #     original_pe: usize,
+//! #     remote_pe: usize,
+//! # }
+//! #[lamellar::am]
+//! # impl LamellarAm for ReturnAm{
+//! #     async fn exec(self) {
+//! #         println!("initiated on PE {} visited PE {} finishing on PE {}",self.original_pe,self.remote_pe,lamellar::current_pe);
+//! #     }
+//! # }
+//! # #[AmData(Debug,Clone)]
+//! # struct HelloWorld {
+//! #    original_pe: usize, //this will contain the ID of the PE this data originated from
+//! # }
 //! #[lamellar::am(return_am = "ReturnAM")] //we explicitly tell the macro we are returning an AM
 //! impl LamellarAM for HelloWorld {
 //!     async fn exec(self) -> usize { //specify we are returning a usize
@@ -195,7 +283,7 @@
 //!             "Hello World on PE {:?} of {:?}, I'm from PE {:?}",
 //!             lamellar::current_pe,
 //!             lamellar::num_pes,
-//!             self.originial_pe,
+//!             self.original_pe,
 //!         );
 //!         ReturnAm{ //simply return an instance of the AM
 //!             original_pe: self.original_pe,
@@ -203,6 +291,19 @@
 //!         }
 //!     }
 //! }
+//! # fn main(){
+//! #     let world = lamellar::LamellarWorldBuilder::new().build();
+//! #     let my_pe = world.my_pe();
+//! #     //Send a Hello World Active Message to all pes
+//! #     let request = world.exec_am_all(
+//! #         HelloWorld {
+//! #             original_pe: my_pe,
+//! #         }
+//! #     );
+//! #     //wait for the request to complete
+//! #     let results = world.block_on(request);
+//! #     println!("PE {my_pe} {results:?}");
+//! # }
 //!```
 //! We do not need to modify any of the code in our main function, so the new Sample output for the above example on a 2 PE system may look something like (exact ordering is nondeterministic due to asynchronous behavior)
 //!```text
@@ -219,18 +320,21 @@
 //!```
 //! By examining the above output we can see that printing the results of the request returns the unit type (well a Vector of unit types because of the `exec_am_all` call).
 //! This is because our returned AM does not return any data itself.
-//!```
-//! let results = world.block_on(request);
-//! println!("PE {my_pe} {results:?}");
-//!```
+//!
 //! ## Returning Active Messages which return data
 //! Lamellar does support returning an Active Message which then returns some data.
 //! First we need to update `ReturnAm` to actually return some data
 //!```
+//! # use lamellar::active_messaging::prelude::*;
+//! #[AmData(Debug,Clone)]
+//! # struct ReturnAm{
+//! #     original_pe: usize,
+//! #     remote_pe: usize,
+//! # }
 //! #[lamellar::am]
 //! impl LamellarAm for ReturnAm{
-//!     fn exec(self) -> (usize,usize) {
-//!         println!("initiated on PE {} visited PE {} finishing on PE {}",self.original_pe,self.remote_pe,lamellar::current_pe)
+//!     async fn exec(self) -> (usize,usize) {
+//!         println!("initiated on PE {} visited PE {} finishing on PE {}",self.original_pe,self.remote_pe,lamellar::current_pe);
 //!         (self.original_pe,self.remote_pe)
 //!     }
 //! }
@@ -238,6 +342,23 @@
 //! Next we need to make an additional change to the  `HelloWorld` am to specify that our returned am will return data itself.
 //! we do this in the argument to the [am] procedural macro
 //!```
+//! # use lamellar::active_messaging::prelude::*;
+//! #[AmData(Debug,Clone)]
+//! # struct ReturnAm{
+//! #     original_pe: usize,
+//! #     remote_pe: usize,
+//! # }
+//! # #[lamellar::am]
+//! # impl LamellarAm for ReturnAm{
+//! #     async fn exec(self) -> (usize,usize) {
+//! #         println!("initiated on PE {} visited PE {} finishing on PE {}",self.original_pe,self.remote_pe,lamellar::current_pe);
+//! #         (self.original_pe,self.remote_pe)
+//! #     }
+//! # }
+//! # #[AmData(Debug,Clone)]
+//! # struct HelloWorld {
+//! #    original_pe: usize, //this will contain the ID of the PE this data originated from
+//! # }
 //! #[lamellar::am(return_am = "ReturnAM -> (usize,usize)")] //we explicitly tell the macro we are returning an AM which itself returns data
 //! impl LamellarAM for HelloWorld {
 //!     async fn exec(self) -> usize { //specify we are returning a usize
@@ -245,7 +366,7 @@
 //!             "Hello World on PE {:?} of {:?}, I'm from PE {:?}",
 //!             lamellar::current_pe,
 //!             lamellar::num_pes,
-//!             self.originial_pe,
+//!             self.original_pe,
 //!         );
 //!         ReturnAm{ //simply return an instance of the AM
 //!             original_pe: self.original_pe,
@@ -253,6 +374,19 @@
 //!         }
 //!     }
 //! }
+//! # fn main(){
+//! #     let world = lamellar::LamellarWorldBuilder::new().build();
+//! #     let my_pe = world.my_pe();
+//! #     //Send a Hello World Active Message to all pes
+//! #     let request = world.exec_am_all(
+//! #         HelloWorld {
+//! #             original_pe: my_pe,
+//! #         }
+//! #     );
+//! #     //wait for the request to complete
+//! #     let results = world.block_on(request);
+//! #     println!("PE {my_pe} {results:?}");
+//! # }
 //!```
 //! With those changes, the new Sample output for the above example on a 2 PE system may look something like (exact ordering is nondeterministic due to asynchronous behavior)
 //!```text
@@ -277,19 +411,20 @@
 //! use lamellar::active_messaging::prelude::*;
 //! #[AmData(Debug,Clone)]
 //! struct RingAm {
-//!    originial_pe: usize, //this will be are recursion terminating condition
+//!    original_pe: usize, //this will be are recursion terminating condition
 //! }
 //! #[lamellar::am]
 //! impl LamellarAm for RingAm{
 //!     async fn exec(self) -> Vec<usize>{
-//!         if self.original_pe == lamellar::current_pe { //terminate the recursion!
-//!             vec![lamellar::current_pe] //return a new path with the current_pe as the start
+//!         let cur_pe = lamellar::current_pe;
+//!         if self.original_pe ==  cur_pe{ //terminate the recursion!
+//!             vec![cur_pe] //return a new path with the current_pe as the start
 //!         }
 //!         else { //launch another active message
-//!             let next_pe = (lamellar::current_pe + 1 )% lamellar::num_pes; //account for wrap arround
-//!             let req = lamellar::team.exec_am_pe(next_pe, self.clone());//we can clone self because we don't need to modify any data
-//!             let path = req.await; // exec_am_*() calls return a future we used to get the result from
-//!             path.push(lamellar::current_pe); //update the path with the PE and return
+//!             let next_pe = (cur_pe + 1 ) % lamellar::num_pes; //account for wrap arround
+//!             let req = lamellar::team.exec_am_pe(next_pe, RingAm{original_pe: self.original_pe});//we can clone self because we don't need to modify any data
+//!             let mut path = req.await; // exec_am_*() calls return a future we used to get the result from
+//!             path.push(cur_pe); //update the path with the PE and return
 //!             path
 //!         }
 //!     }
@@ -304,7 +439,7 @@
 //!     let request = world.exec_am_pe(
 //!         next_pe,
 //!         RingAm {
-//!             originial_pe: my_pe
+//!             original_pe: my_pe
 //!         }
 //!     );
 //!     //wait for the request to complete
@@ -355,7 +490,7 @@ const BATCH_AM_SIZE: usize = 100000;
 ///
 /// For this derivation to succeed all members of the data structure must impl [AmDist] (which it self is a blanket impl)
 ///
-///```
+///```ignore
 /// AmDist: serde::ser::Serialize + serde::de::DeserializeOwned + Sync + Send + 'static {}
 /// impl<T: serde::ser::Serialize + serde::de::DeserializeOwned + Sync + Send + 'static> AmDist for T {}
 ///```
@@ -625,22 +760,24 @@ pub trait ActiveMessaging {
     ///```
     /// use lamellar::active_messaging::prelude::*;
     ///
-    /// #[lamellar::AmData(/*derivable traits*/)]
+    /// #[lamellar::AmData(Debug,Clone)]
     /// struct Am{
     /// // can contain anything that impls Serialize, Deserialize, Sync, Send   
+    ///     val: usize
     /// }
     ///
     /// #[lamellar::am]
     /// impl LamellarAM for Am{
     ///     async fn exec(self) -> usize { //can return nothing or any type that impls Serialize, Deserialize, Sync, Send
     ///         //do some remote computation
+    ///         println!("hello from PE{}",self.val);
     ///         lamellar::current_pe //return the executing pe
     ///     }
     /// }
     /// //----------------
     ///
-    /// let world =  let world = lamellar::LamellarWorldBuilder::new().build();
-    /// let request = world.exec_am_all(Am{...}); //launch am on all pes
+    /// let world = lamellar::LamellarWorldBuilder::new().build();
+    /// let request = world.exec_am_all(Am{val: world.my_pe()}); //launch am on all pes
     /// let results = world.block_on(request); //block until am has executed and retrieve the data
     /// for i in 0..world.num_pes(){
     ///     assert_eq!(i,results[i]);
@@ -663,22 +800,24 @@ pub trait ActiveMessaging {
     ///```
     /// use lamellar::active_messaging::prelude::*;
     ///
-    /// #[lamellar::AmData(/*derivable traits*/)]
+    /// #[lamellar::AmData(Debug,Clone)]
     /// struct Am{
     /// // can contain anything that impls Serialize, Deserialize, Sync, Send   
+    ///     val: usize
     /// }
     ///
     /// #[lamellar::am]
     /// impl LamellarAM for Am{
     ///     async fn exec(self) -> usize { //can return nothing or any type that impls Serialize, Deserialize, Sync, Send
     ///         //do some remote computation
+    ///         println!("hello from PE{}",self.val);
     ///         lamellar::current_pe //return the executing pe
     ///     }
     /// }
     /// //----------------
     ///
-    /// let world =  let world = lamellar::LamellarWorldBuilder::new().build();
-    /// let request = world.exec_am_pe(world.num_pes()-1, Am{...}); //launch am on all pes
+    /// let world = lamellar::LamellarWorldBuilder::new().build();
+    /// let request = world.exec_am_pe(world.num_pes()-1, Am{val: world.my_pe()}); //launch am on all pes
     /// let result = world.block_on(request); //block until am has executed
     /// assert_eq!(world.num_pes()-1,result);
     ///```
@@ -698,23 +837,28 @@ pub trait ActiveMessaging {
     /// # Examples
     ///```
     /// use lamellar::active_messaging::prelude::*;
+    /// use parking_lot::Mutex;
+    /// use std::sync::Arc;
     ///
-    /// #[lamellar::AmLocalData(/*derivable traits*/)]
+    /// #[lamellar::AmLocalData(Debug,Clone)]
     /// struct Am{
-    /// // can contain anything that impls Sync, Send   
+    /// // can contain anything that impls Sync, Send  
+    ///     val: Arc<Mutex<f32>>, 
     /// }
     ///
     /// #[lamellar::local_am]
     /// impl LamellarAM for Am{
     ///     async fn exec(self) -> usize { //can return nothing or any type that impls Serialize, Deserialize, Sync, Send
-    ///         //do some remote computation
+    ///         //do some  computation
+    ///         let mut val = self.val.lock();
+    ///         *val += lamellar::current_pe as f32; 
     ///         lamellar::current_pe //return the executing pe
     ///     }
     /// }
     /// //----------------
     ///
-    /// let world =  let world = lamellar::LamellarWorldBuilder::new().build();
-    /// let request = world.exec_am_local(Am{...}); //launch am on all pes
+    /// let world = lamellar::LamellarWorldBuilder::new().build();
+    /// let request = world.exec_am_local(Am{val: Arc::new(Mutex::new(0.0))}); //launch am locally
     /// let result = world.block_on(request); //block until am has executed
     /// assert_eq!(world.my_pe(),result);
     ///```
@@ -728,10 +872,25 @@ pub trait ActiveMessaging {
     /// Note: this is not a distributed synchronization primitive (i.e. it has no knowledge of a Remote PEs tasks)
     /// # Examples
     ///```
-    /// use lamellar::active_messaging::prelude::*;
+    /// # use lamellar::active_messaging::prelude::*;
+    /// # 
+    /// # #[lamellar::AmData(Debug,Clone)]
+    /// # struct Am{
+    /// # // can contain anything that impls Sync, Send  
+    /// #     val: usize, 
+    /// # }
     ///
-    /// let world =  let world = lamellar::LamellarWorldBuilder::new().build();
-    /// world.exec_am_all(...);
+    /// # #[lamellar::am]
+    /// # impl LamellarAM for Am{
+    /// #     async fn exec(self) -> usize { //can return nothing or any type that impls Serialize, Deserialize, Sync, Send
+    /// #         //do some remote computation
+    /// #          println!("hello from PE{}",self.val);
+    /// #         lamellar::current_pe //return the executing pe
+    /// #     }
+    /// # }
+    /// # 
+    /// # let world = lamellar::LamellarWorldBuilder::new().build();
+    /// world.exec_am_all(Am{val: world.my_pe()});
     /// world.wait_all(); //block until the previous am has finished
     ///```
     fn wait_all(&self);
@@ -742,7 +901,7 @@ pub trait ActiveMessaging {
     ///```
     /// use lamellar::active_messaging::prelude::*;
     ///
-    /// let world =  let world = lamellar::LamellarWorldBuilder::new().build();
+    /// let world = lamellar::LamellarWorldBuilder::new().build();
     /// //do some work
     /// world.barrier(); //block until all PEs have entered the barrier
     ///```
@@ -755,19 +914,39 @@ pub trait ActiveMessaging {
     /// Users can await any future, including those returned from lamellar remote operations
     ///
     /// # Examples
-    ///```
-    /// use lamellar::active_messaging::prelude::*;
-    ///
-    /// let request = world.exec_am_local(Am{...}); //launch am on all pes
+    ///```no_run  
+    /// # use lamellar::active_messaging::prelude::*;
+    /// use async_std::fs::File;
+    /// use async_std::prelude::*;
+    /// # #[lamellar::AmData(Debug,Clone)]
+    /// # struct Am{
+    /// # // can contain anything that impls Sync, Send  
+    /// #     val: usize, 
+    /// # }
+    /// # 
+    /// # #[lamellar::am]
+    /// # impl LamellarAM for Am{
+    /// #     async fn exec(self) -> usize { //can return nothing or any type that impls Serialize, Deserialize, Sync, Send
+    /// #         //do some remote computation
+    /// #          println!("hello from PE{}",self.val);
+    /// #         lamellar::current_pe //return the executing pe
+    /// #     }
+    /// # }
+    /// # 
+    /// # let world = lamellar::LamellarWorldBuilder::new().build();
+    /// # let num_pes = world.num_pes();
+    /// let request = world.exec_am_all(Am{val: world.my_pe()}); //launch am locally
     /// let result = world.block_on(request); //block until am has executed
     /// // you can also directly pass an async block
+    /// let world_clone = world.clone();
     /// world.block_on(async move {
-    ///     let file = async_std::fs::File.open(...);.await;
+    ///     let mut file = async_std::fs::File::open("a.txt").await.unwrap();
+    ///     let mut buf = vec![0u8;1000];
     ///     for pe in 0..num_pes{
-    ///         let data = file.read(...).await;
-    ///         world.exec_am_pe(pe,DataAm{data}).await;
+    ///         let data = file.read(&mut buf).await.unwrap();
+    ///         world_clone.exec_am_pe(pe,Am{val: data}).await;
     ///     }
-    ///     world.exec_am_all(...).await;
+    ///     world_clone.exec_am_all(Am{val: buf[0] as usize}).await;
     /// });
     ///```
     fn block_on<F>(&self, f: F) -> F::Output

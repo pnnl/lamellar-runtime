@@ -380,9 +380,9 @@ path="examples/kernels/parallel_blocked_array_gemm.rs"
 name="safe_parallel_blocked_array_gemm"
 path="examples/kernels/safe_parallel_blocked_array_gemm.rs"
 
-[[example]]
-name="safe_parallel_blocked_array_gemm_2"
-path="examples/kernels/safe_parallel_blocked_array_gemm_2.rs"
+#[[example]]
+#name="safe_parallel_blocked_array_gemm_2"
+#path="examples/kernels/safe_parallel_blocked_array_gemm_2.rs"
 
 
 ##------------ Miscellaneous Examples -----------------##
