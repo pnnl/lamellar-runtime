@@ -374,7 +374,7 @@ impl<T: Dist + std::default::Default> GenericAtomicArray<T> {
 
 impl<T: Dist> GenericAtomicArray<T> {
     pub(crate) fn get_element(&self, index: usize) -> Option<GenericAtomicElement<T>> {
-        if index > unsafe { self.__local_as_slice().len() } {
+        if index < unsafe { self.__local_as_slice().len() } {
             //We are only directly accessing the local slice for its len
             Some(GenericAtomicElement {
                 array: self.clone(),

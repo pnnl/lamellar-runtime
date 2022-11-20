@@ -47,6 +47,7 @@ macro_rules! impl_atomic_ops{
         pub struct $C<'a>(pub &'a $B);
         impl AddAssign<$A> for $C<'_>{
             fn add_assign(&mut self, val: $A) {
+                println!("add_assign");
             //    self.0.as_native_atomic().fetch_add(val,Ordering::SeqCst);
                self.0.fetch_add(val,Ordering::SeqCst);
 
@@ -229,35 +230,35 @@ macro_rules! impl_mul_div {
             *match $self.array.orig_t {
                 //deref to the original type
                 NativeAtomicType::I8 => {
-                    compare_exchange_op!(i8, AtomicI8, $self, $val, $op) as *const i8 as *mut T
+                    &compare_exchange_op!(i8, AtomicI8, $self, $val, $op) as *const i8 as *mut T
                 }
                 NativeAtomicType::I16 => {
-                    compare_exchange_op!(i16, AtomicI16, $self, $val, $op) as *const i16 as *mut T
+                    &compare_exchange_op!(i16, AtomicI16, $self, $val, $op) as *const i16 as *mut T
                 }
                 NativeAtomicType::I32 => {
-                    compare_exchange_op!(i32, AtomicI32, $self, $val, $op) as *const i32 as *mut T
+                    &compare_exchange_op!(i32, AtomicI32, $self, $val, $op) as *const i32 as *mut T
                 }
                 NativeAtomicType::I64 => {
-                    compare_exchange_op!(i64, AtomicI64, $self, $val, $op) as *const i64 as *mut T
+                    &compare_exchange_op!(i64, AtomicI64, $self, $val, $op) as *const i64 as *mut T
                 }
                 NativeAtomicType::Isize => {
-                    compare_exchange_op!(isize, AtomicIsize, $self, $val, $op) as *const isize
+                    &compare_exchange_op!(isize, AtomicIsize, $self, $val, $op) as *const isize
                         as *mut T
                 }
                 NativeAtomicType::U8 => {
-                    compare_exchange_op!(u8, AtomicU8, $self, $val, $op) as *const u8 as *mut T
+                    &compare_exchange_op!(u8, AtomicU8, $self, $val, $op) as *const u8 as *mut T
                 }
                 NativeAtomicType::U16 => {
-                    compare_exchange_op!(u16, AtomicU16, $self, $val, $op) as *const u16 as *mut T
+                    &compare_exchange_op!(u16, AtomicU16, $self, $val, $op) as *const u16 as *mut T
                 }
                 NativeAtomicType::U32 => {
-                    compare_exchange_op!(u32, AtomicU32, $self, $val, $op) as *const u32 as *mut T
+                    &compare_exchange_op!(u32, AtomicU32, $self, $val, $op) as *const u32 as *mut T
                 }
                 NativeAtomicType::U64 => {
-                    compare_exchange_op!(u64, AtomicU64, $self, $val, $op) as *const u64 as *mut T
+                    &compare_exchange_op!(u64, AtomicU64, $self, $val, $op) as *const u64 as *mut T
                 }
                 NativeAtomicType::Usize => {
-                    compare_exchange_op!(usize, AtomicUsize, $self, $val, $op) as *const usize
+                    &compare_exchange_op!(usize, AtomicUsize, $self, $val, $op) as *const usize
                         as *mut T
                 }
             }
@@ -271,36 +272,35 @@ macro_rules! impl_add_sub_and_or {
             let slice = $self.array.__local_as_mut_slice();
             *match $self.array.orig_t {
                 //deref to the original type
-                NativeAtomicType::I8 => slice_as_atomic!(i8, AtomicI8, slice)[$self.local_index]
+                NativeAtomicType::I8 => &slice_as_atomic!(i8, AtomicI8, slice)[$self.local_index]
                     .$op(as_type!($val, i8), Ordering::SeqCst)
                     as *const i8 as *mut T,
-                NativeAtomicType::I16 => slice_as_atomic!(i16, AtomicI16, slice)[$self.local_index]
+                NativeAtomicType::I16 => &slice_as_atomic!(i16, AtomicI16, slice)[$self.local_index]
                     .$op(as_type!($val, i16), Ordering::SeqCst)
                     as *const i16 as *mut T,
-                NativeAtomicType::I32 => slice_as_atomic!(i32, AtomicI32, slice)[$self.local_index]
+                NativeAtomicType::I32 => &slice_as_atomic!(i32, AtomicI32, slice)[$self.local_index]
                     .$op(as_type!($val, i32), Ordering::SeqCst)
                     as *const i32 as *mut T,
-                NativeAtomicType::I64 => slice_as_atomic!(i64, AtomicI64, slice)[$self.local_index]
+                NativeAtomicType::I64 => &slice_as_atomic!(i64, AtomicI64, slice)[$self.local_index]
                     .$op(as_type!($val, i64), Ordering::SeqCst)
                     as *const i64 as *mut T,
-                NativeAtomicType::Isize => slice_as_atomic!(isize, AtomicIsize, slice)
+                NativeAtomicType::Isize => &slice_as_atomic!(isize, AtomicIsize, slice)
                     [$self.local_index]
                     .$op(as_type!($val, isize), Ordering::SeqCst)
                     as *const isize as *mut T,
-                NativeAtomicType::U8 => slice_as_atomic!(u8, AtomicU8, slice)[$self.local_index]
+                NativeAtomicType::U8 => &slice_as_atomic!(u8, AtomicU8, slice)[$self.local_index]
                     .$op(as_type!($val, u8), Ordering::SeqCst)
                     as *const u8 as *mut T,
-                NativeAtomicType::U16 => slice_as_atomic!(u16, AtomicU16, slice)[$self.local_index]
+                NativeAtomicType::U16 => &slice_as_atomic!(u16, AtomicU16, slice)[$self.local_index]
                     .$op(as_type!($val, u16), Ordering::SeqCst)
                     as *const u16 as *mut T,
-                NativeAtomicType::U32 => slice_as_atomic!(u32, AtomicU32, slice)[$self.local_index]
+                NativeAtomicType::U32 => &slice_as_atomic!(u32, AtomicU32, slice)[$self.local_index]
                     .$op(as_type!($val, u32), Ordering::SeqCst)
                     as *const u32 as *mut T,
-                NativeAtomicType::U64 => slice_as_atomic!(u64, AtomicU64, slice)[$self.local_index]
+                NativeAtomicType::U64 => &slice_as_atomic!(u64, AtomicU64, slice)[$self.local_index]
                     .$op(as_type!($val, u64), Ordering::SeqCst)
                     as *const u64 as *mut T,
-                NativeAtomicType::Usize => slice_as_atomic!(usize, AtomicUsize, slice)
-                    [$self.local_index]
+                NativeAtomicType::Usize => &slice_as_atomic!(usize, AtomicUsize, slice)[$self.local_index]
                     .$op(as_type!($val, usize), Ordering::SeqCst)
                     as *const usize as *mut T,
             }
@@ -417,34 +417,34 @@ macro_rules! impl_swap {
             *match $self.array.orig_t {
                 //deref to the original type
                 NativeAtomicType::I8 => {
-                    compare_exchange_op!(i8, AtomicI8, $self, $val) as *const i8 as *mut T
+                    &compare_exchange_op!(i8, AtomicI8, $self, $val) as *const i8 as *mut T
                 }
                 NativeAtomicType::I16 => {
-                    compare_exchange_op!(i16, AtomicI16, $self, $val) as *const i16 as *mut T
+                    &compare_exchange_op!(i16, AtomicI16, $self, $val) as *const i16 as *mut T
                 }
                 NativeAtomicType::I32 => {
-                    compare_exchange_op!(i32, AtomicI32, $self, $val) as *const i32 as *mut T
+                    &compare_exchange_op!(i32, AtomicI32, $self, $val) as *const i32 as *mut T
                 }
                 NativeAtomicType::I64 => {
-                    compare_exchange_op!(i64, AtomicI64, $self, $val) as *const i64 as *mut T
+                    &compare_exchange_op!(i64, AtomicI64, $self, $val) as *const i64 as *mut T
                 }
                 NativeAtomicType::Isize => {
-                    compare_exchange_op!(isize, AtomicIsize, $self, $val) as *const isize as *mut T
+                    &compare_exchange_op!(isize, AtomicIsize, $self, $val) as *const isize as *mut T
                 }
                 NativeAtomicType::U8 => {
-                    compare_exchange_op!(u8, AtomicU8, $self, $val) as *const u8 as *mut T
+                    &compare_exchange_op!(u8, AtomicU8, $self, $val) as *const u8 as *mut T
                 }
                 NativeAtomicType::U16 => {
-                    compare_exchange_op!(u16, AtomicU16, $self, $val) as *const u16 as *mut T
+                    &compare_exchange_op!(u16, AtomicU16, $self, $val) as *const u16 as *mut T
                 }
                 NativeAtomicType::U32 => {
-                    compare_exchange_op!(u32, AtomicU32, $self, $val) as *const u32 as *mut T
+                    &compare_exchange_op!(u32, AtomicU32, $self, $val) as *const u32 as *mut T
                 }
                 NativeAtomicType::U64 => {
-                    compare_exchange_op!(u64, AtomicU64, $self, $val) as *const u64 as *mut T
+                    &compare_exchange_op!(u64, AtomicU64, $self, $val) as *const u64 as *mut T
                 }
                 NativeAtomicType::Usize => {
-                    compare_exchange_op!(usize, AtomicUsize, $self, $val) as *const usize as *mut T
+                    &compare_exchange_op!(usize, AtomicUsize, $self, $val) as *const usize as *mut T
                 }
             }
         }

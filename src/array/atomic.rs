@@ -57,6 +57,10 @@ impl<T: Dist> AtomicElement<T> {
     ///
     /// let local_data = array.local_data();
     /// println!("PE{my_pe} elem: {:?}",local_data.at(10).load());
+    ///
+    /// # let array2: AtomicArray<f32>  = AtomicArray::new(&world,100,Distribution::Block); // test genericatomic
+    /// # let local_data = array2.local_data();
+    /// # println!("PE{my_pe} elem: {:?}",local_data.at(10).load());
     ///```
     pub fn load(&self) -> T {
         match self {
@@ -78,6 +82,10 @@ impl<T: Dist> AtomicElement<T> {
     ///
     /// let local_data = array.local_data();
     /// local_data.at(10).store(19);
+    ///
+    /// # let array2: AtomicArray<f32>  = AtomicArray::new(&world,100,Distribution::Block); // test genericatomic
+    /// # let local_data = array2.local_data();
+    /// # local_data.at(10).store(19.0);
     ///```
     pub fn store(&self, val: T) {
         match self {
@@ -99,6 +107,10 @@ impl<T: Dist> AtomicElement<T> {
     ///
     /// let local_data = array.local_data();
     /// let old_val = local_data.at(10).swap(19);
+    ///
+    /// # let array2: AtomicArray<f32>  = AtomicArray::new(&world,100,Distribution::Block); // test genericatomic
+    /// # let local_data = array2.local_data();
+    /// # let old_val = local_data.at(10).swap(19.0);
     ///```
     pub fn swap(&self, val: T) -> T {
         match self {
@@ -122,6 +134,10 @@ impl<T: ElementArithmeticOps> AtomicElement<T> {
     ///
     /// let local_data = array.local_data();
     /// let old_val = local_data.at(10).fetch_add(19);
+    ///
+    /// # let array2: AtomicArray<f32>  = AtomicArray::new(&world,100,Distribution::Block); // test genericatomic
+    /// # let local_data = array2.local_data();
+    /// # let old_val = local_data.at(10).fetch_add(19.0);
     ///```
     pub fn fetch_add(&self, val: T) -> T {
         match self {
@@ -142,6 +158,10 @@ impl<T: ElementArithmeticOps> AtomicElement<T> {
     ///
     /// let local_data = array.local_data();
     /// let old_val = local_data.at(10).fetch_sub(19);
+    ///
+    /// # let array2: AtomicArray<f32>  = AtomicArray::new(&world,100,Distribution::Block); // test genericatomic
+    /// # let local_data = array2.local_data();
+    /// # let old_val = local_data.at(10).fetch_sub(19.0);
     ///```
     pub fn fetch_sub(&self, val: T) -> T {
         match self {
@@ -163,6 +183,10 @@ impl<T: ElementArithmeticOps> AtomicElement<T> {
     ///
     /// let local_data = array.local_data();
     /// let old_val = local_data.at(10).fetch_mul(19);
+    ///
+    /// # let array2: AtomicArray<f32>  = AtomicArray::new(&world,100,Distribution::Block); // test genericatomic
+    /// # let local_data = array2.local_data();
+    /// # let old_val = local_data.at(10).fetch_mul(19.0);
     ///```
     pub fn fetch_mul(&self, val: T) -> T {
         match self {
@@ -184,6 +208,10 @@ impl<T: ElementArithmeticOps> AtomicElement<T> {
     ///
     /// let local_data = array.local_data();
     /// let old_val = local_data.at(10).fetch_div(19);
+    ///
+    /// # let array2: AtomicArray<f32>  = AtomicArray::new(&world,100,Distribution::Block); // test genericatomic
+    /// # let local_data = array2.local_data();
+    /// # let old_val = local_data.at(10).fetch_div(19.0);
     ///```
     pub fn fetch_div(&self, val: T) -> T {
         match self {
@@ -240,6 +268,10 @@ impl<T: Dist + std::cmp::PartialEq + std::cmp::PartialOrd + std::ops::Sub<Output
     ///
     /// let local_data = array.local_data();
     /// let result = local_data.at(10).compare_exchange_epsilon(19,10,1);
+    ///
+    /// # let array2: AtomicArray<f32>  = AtomicArray::new(&world,100,Distribution::Block); // test genericatomic
+    /// # let local_data = array2.local_data();
+    /// # let result = local_data.at(10).compare_exchange_epsilon(19.0,10.0,0.1);
     ///```
     pub fn compare_exchange_epsilon(&self, current: T, new: T, eps: T) -> Result<T, T> {
         match self {
@@ -266,7 +298,7 @@ impl<T: ElementBitWiseOps + 'static> AtomicElement<T> {
     /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic);
     ///
     /// let local_data = array.local_data();
-    /// let old_val = local_data.at(10).fetch_and(b0011);
+    /// let old_val = local_data.at(10).fetch_and(0b0011);
     ///```
     pub fn fetch_and(&self, val: T) -> T {
         match self {
@@ -286,7 +318,7 @@ impl<T: ElementBitWiseOps + 'static> AtomicElement<T> {
     /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic);
     ///
     /// let local_data = array.local_data();
-    /// let old_val = local_data.at(10).fetch_or(b0011);
+    /// let old_val = local_data.at(10).fetch_or(0b0011);
     ///```
     pub fn fetch_or(&self, val: T) -> T {
         match self {
@@ -517,7 +549,7 @@ impl<T: Dist> AtomicLocalData<T> {
     ///
     /// # Examples
     /// Assume 4 PE system
-    ///```
+    ///```no_run
     /// use lamellar::array::prelude::*;
     ///
     /// let world = LamellarWorldBuilder::new().build();
@@ -536,7 +568,7 @@ impl<T: Dist> AtomicLocalData<T> {
     ///
     /// # Examples
     /// Assume 4 PE system
-    ///```
+    ///```no_run
     /// use lamellar::array::prelude::*;
     ///
     /// let world = LamellarWorldBuilder::new().build();
@@ -555,7 +587,7 @@ impl<T: Dist> AtomicLocalData<T> {
     ///
     /// # Examples
     /// Assume 4 PE system
-    ///```
+    ///```no_run
     /// use lamellar::array::prelude::*;
     ///
     /// let world = LamellarWorldBuilder::new().build();
@@ -565,7 +597,7 @@ impl<T: Dist> AtomicLocalData<T> {
     /// let local_data = array.local_data();
     ///
     /// for elem in local_data.iter() {
-    ///    println!("elem {elem}",elem.load());
+    ///    println!("elem {:?}",elem.load());
     /// }
     ///```
     pub fn iter(&self) -> AtomicLocalDataIter<T> {
@@ -729,7 +761,7 @@ impl<T: Dist> AtomicArray<T> {
     ///
     /// # Warning
     /// Because this call blocks there is the possibility for deadlock to occur, as highlighted below:
-    ///```
+    ///```no_run
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
@@ -744,7 +776,7 @@ impl<T: Dist> AtomicArray<T> {
     /// // waits for the reference count to go down to "1" (but we will never be able to drop slice/array1).
     /// let unsafe_array = array.into_unsafe();
     /// unsafe_array.print();
-    /// println!("{slice:?}");
+    /// println!("{:?}",slice.at(0).load());
     ///```
     pub fn into_unsafe(self) -> UnsafeArray<T> {
         // println!("atomic into_unsafe");
@@ -779,7 +811,7 @@ impl<T: Dist> AtomicArray<T> {
     ///```
     /// # Warning
     /// Because this call blocks there is the possibility for deadlock to occur, as highlighted below:
-    ///```
+    ///```no_run
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
@@ -794,7 +826,7 @@ impl<T: Dist> AtomicArray<T> {
     /// // waits for the reference count to go down to "1" (but we will never be able to drop slice/array1).
     /// let read_only_array = array.into_read_only();
     /// read_only_array.print();
-    /// println!("{slice:?}");
+    /// println!("{:?}",slice.at(0).load());
     ///```
     pub fn into_read_only(self) -> ReadOnlyArray<T> {
         // println!("atomic into_read_only");
@@ -822,7 +854,7 @@ impl<T: Dist> AtomicArray<T> {
     ///```
     /// # Warning
     /// Because this call blocks there is the possibility for deadlock to occur, as highlighted below:
-    ///```
+    ///```no_run
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
@@ -837,7 +869,7 @@ impl<T: Dist> AtomicArray<T> {
     /// // waits for the reference count to go down to "1" (but we will never be able to drop slice/array1).
     /// let local_lock_array = array.into_local_lock();
     /// local_lock_array.print();
-    /// println!("{slice:?}");
+    /// println!("{:?}",slice.at(0).load());
     ///```
     pub fn into_local_lock(self) -> LocalLockArray<T> {
         // println!("atomic into_local_lock");
