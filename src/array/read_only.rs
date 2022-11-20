@@ -256,7 +256,7 @@ impl<T: Dist + 'static> ReadOnlyArray<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: ReadOnlyArray<usize> = UnsaReadOnlyArrayfeArray::new(&world,100,Distribution::Cyclic);
+    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Cyclic);
     ///
     /// let atomic_array = array.into_local_lock();
     ///```

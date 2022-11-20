@@ -998,7 +998,8 @@ pub trait ArrayPrint<T: Dist + std::fmt::Debug>: LamellarArray<T> {
 ///     let index = rand::thread_rng().gen_range(0..array_clone.len());
 ///     array_clone.add(index,1); //randomly at one to an element in the array.
 /// });
-/// array.block_on(req);
+/// array.block_on(req);// this is not sufficient, we also need to "wait_all" as each "add" call is another request
+/// array.wait_all();
 /// let sum = array.block_on(array.sum()); // atomic updates still possibly happening (on remote nodes), output non deterministic
 /// println!("sum {sum}");
 ///```
@@ -1014,7 +1015,8 @@ pub trait ArrayPrint<T: Dist + std::fmt::Debug>: LamellarArray<T> {
 ///     let index = rand::thread_rng().gen_range(0..array_clone.len());
 ///     array_clone.add(index,1); //randomly at one to an element in the array.
 /// });
-/// array.block_on(req);
+/// array.block_on(req);// this is not sufficient, we also need to "wait_all" as each "add" call is another request
+/// array.wait_all();
 /// array.barrier();
 /// let sum = array.block_on(array.sum()); // No updates occuring anywhere anymore so we have a deterministic result
 /// assert_eq!(array.len()*num_pes,sum);
@@ -1132,14 +1134,11 @@ where
     /// let world = LamellarWorldBuilder::new().build();
     /// let num_pes = world.num_pes();
     /// let array = AtomicArray::<usize>::new(&world,10,Distribution::Block);
-    /// let req = array.local_iter().enumerate().for_each(move |(i,elem)| {
+    /// let req = array.dist_iter().enumerate().for_each(move |(i,elem)| {
     ///     elem.store(i+1);
     /// });
-    /// array.print();
     /// array.wait_all();
-    /// array.print();
-    /// let array = array.into_read_only(); //only returns once there is a single reference remaining on each PE
-    /// array.print();
+    /// array.barrier();
     /// let prod =  array.block_on(array.prod());
     /// assert_eq!((1..=array.len()).product::<usize>(),prod);
     ///```

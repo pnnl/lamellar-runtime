@@ -34,13 +34,15 @@ impl<T: Dist> ReadOnlyArray<T> {
     /// array.barrier();
     /// println!("PE{my_pe} array data: {:?}",unsafe{buf.as_slice().unwrap()});
     /// if my_pe == 0 { //only perfrom the transfer from one PE
-    ///     unsafe {array.put_unchecked(0,&buf)} ;
+    ///     unsafe {array.get_unchecked(0,&buf)} ;
     ///     println!();
     /// }
     /// // wait for the data to show up
-    /// for elem in buf.as_slice().unwrap(){
-    ///     while elem == buf.len(){
-    ///         std::thread::yield_now();    
+    /// unsafe {
+    ///     for elem in buf.as_slice().unwrap(){
+    ///         while *elem == buf.len(){
+    ///             std::thread::yield_now();    
+    ///         }
     ///     }
     /// }
     ///    
@@ -48,7 +50,7 @@ impl<T: Dist> ReadOnlyArray<T> {
     ///
     ///```
     /// Possible output on A 4 PE system (ordering with respect to PEs may change)
-    ///```
+    ///```text
     /// PE0: buf data [12,12,12,12,12,12,12,12,12,12,12,12]
     /// PE1: buf data [12,12,12,12,12,12,12,12,12,12,12,12]
     /// PE2: buf data [12,12,12,12,12,12,12,12,12,12,12,12]
@@ -104,7 +106,7 @@ impl<T: Dist> ReadOnlyArray<T> {
     /// println!("PE{my_pe} buf data: {:?}",unsafe{buf.as_slice().unwrap()});
     ///```
     /// Possible output on A 4 PE system (ordering with respect to PEs may change)
-    ///```
+    ///```text
     /// PE0: buf data [12,12,12,12,12,12,12,12,12,12,12,12]
     /// PE1: buf data [12,12,12,12,12,12,12,12,12,12,12,12]
     /// PE2: buf data [12,12,12,12,12,12,12,12,12,12,12,12]

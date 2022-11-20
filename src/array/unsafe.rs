@@ -329,20 +329,20 @@ impl<T: Dist + 'static> UnsafeArray<T> {
         u8_ptr as *mut T
     }
 
-    /// Return the index range with respect to the original array over which this array handle represents)
-    ///
-    /// # Examples
-    ///```
-    /// use lamellar::array::prelude::*;
-    /// let world = LamellarWorldBuilder::new().build();
-    /// let my_pe = world.my_pe();
-    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic);
-    ///
-    /// assert_eq!(array.sub_array_range(),(0..100));
-    ///
-    /// let sub_array = array.sub_array(25..75);
-    /// assert_eq!(sub_array.sub_array_range(),(25..75));
-    ///```
+    // / Return the index range with respect to the original array over which this array handle represents)
+    // /
+    // / # Examples
+    // /```
+    // / use lamellar::array::prelude::*;
+    // / let world = LamellarWorldBuilder::new().build();
+    // / let my_pe = world.my_pe();
+    // / let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic);
+    // /
+    // / assert_eq!(array.sub_array_range(),(0..100));
+    // /
+    // / let sub_array = array.sub_array(25..75);
+    // / assert_eq!(sub_array.sub_array_range(),(25..75));
+    // /```
     pub(crate) fn sub_array_range(&self) -> std::ops::Range<usize> {
         self.inner.offset..(self.inner.offset + self.inner.size)
     }
@@ -811,17 +811,21 @@ impl<T: Dist + AmDist + 'static> UnsafeArray<T> {
     /// # Examples
     /// ```
     /// use lamellar::array::prelude::*;
+    /// use rand::Rng;
     /// let world = LamellarWorldBuilder::new().build();
     /// let num_pes = world.num_pes();
     /// let array = AtomicArray::<usize>::new(&world,1000000,Distribution::Block);
-    /// let array_clone = array.clone()
-    /// let req = array.local_iter().for_each(move |_| {
-    ///     let index = rand::thread_rng().gen_range(0..array_clone.len());
-    ///     array_clone.add(index,1); //randomly at one to an element in the array.
-    /// });
-    /// let array = array.into_read_only(); //only returns once there is a single reference remaining on each PE
-    /// let sum = array.reduce("sum"); // equivalent to calling array.sum()
-    /// assert_eq!(array.len()*num_pes,sum);
+    /// let array_clone = array.clone();
+    /// unsafe { // THIS IS NOT SAFE -- we are randomly updating elements, no protections, updates may be lost... DONT DO THIS
+    ///     let req = array.local_iter().for_each(move |_| {
+    ///         let index = rand::thread_rng().gen_range(0..array_clone.len());
+    ///        array_clone.add(index,1); //randomly at one to an element in the array.
+    ///     });
+    /// }
+    /// array.wait_all();
+    /// array.barrier();
+    /// let sum = array.block_on(array.reduce("sum")); // equivalent to calling array.sum()
+    /// //assert_eq!(array.len()*num_pes,sum); // may or may not fail
     ///```
     pub unsafe fn reduce(&self, op: &str) -> Pin<Box<dyn Future<Output = T>>> {
         self.reduce_data(op, self.clone().into()).into_future()
@@ -838,10 +842,11 @@ impl<T: Dist + AmDist + 'static> UnsafeArray<T> {
     /// # Examples
     /// ```
     /// use lamellar::array::prelude::*;
+    /// use rand::Rng;
     /// let world = LamellarWorldBuilder::new().build();
     /// let num_pes = world.num_pes();
     /// let array = UnsafeArray::<usize>::new(&world,1000000,Distribution::Block);
-    /// let array_clone = array.clone()
+    /// let array_clone = array.clone();
     /// unsafe { // THIS IS NOT SAFE -- we are randomly updating elements, no protections, updates may be lost... DONT DO THIS
     ///     let req = array.local_iter().for_each(move |_| {
     ///         let index = rand::thread_rng().gen_range(0..array_clone.len());
@@ -849,9 +854,9 @@ impl<T: Dist + AmDist + 'static> UnsafeArray<T> {
     ///     });
     /// }
     /// array.wait_all();
-    /// array.barrier()
-    /// let sum = unsafe{array.sum()}; //Safe in this instance as we have ensured no updates are currently happening
-    /// assert_eq!(array.len()*num_pes,sum);//this may or may not fail
+    /// array.barrier();
+    /// let sum = array.block_on(unsafe{array.sum()}); //Safe in this instance as we have ensured no updates are currently happening
+    /// // assert_eq!(array.len()*num_pes,sum);//this may or may not fail
     ///```
     pub unsafe fn sum(&self) -> Pin<Box<dyn Future<Output = T>>> {
         self.reduce("sum")
@@ -868,20 +873,22 @@ impl<T: Dist + AmDist + 'static> UnsafeArray<T> {
     /// # Examples
     /// ```
     /// use lamellar::array::prelude::*;
+    /// use rand::Rng;
     /// let world = LamellarWorldBuilder::new().build();
     /// let num_pes = world.num_pes();
     /// let array = UnsafeArray::<usize>::new(&world,10,Distribution::Block);
-    /// let array_clone = array.clone()
-    /// unsafe { // THIS IS NOT SAFE -- we are randomly updating elements, no protections, updates may be lost... DONT DO THIS
-    ///     array.local_iter().for_each(move |_| {
-    ///         let index = rand::thread_rng().gen_range(0..array_clone.len());
-    ///         array_clone.add(index,1); //randomly at one to an element in the array.
-    ///     })
-    /// };
+    /// unsafe { 
+    ///     let req = array.dist_iter_mut().enumerate().for_each(move |(i,elem)| {
+    ///         *elem = i+1;
+    ///     });
+    /// }
+    /// array.print();
     /// array.wait_all();
-    /// array.barrier()
-    /// let prod = unsafe{array.prod()}; //Safe in this instance as we have ensured no updates are currently happening
-    /// assert_eq!(num_pes.pow(array.len()),prod); //this may or may not fail
+    /// array.print();
+    /// let array = array.into_read_only(); //only returns once there is a single reference remaining on each PE
+    /// array.print();
+    /// let prod =  array.block_on(array.prod());
+    /// assert_eq!((1..=array.len()).product::<usize>(),prod);
     ///```
     pub unsafe fn prod(&self) -> Pin<Box<dyn Future<Output = T>>> {
         self.reduce("prod")
@@ -901,11 +908,12 @@ impl<T: Dist + AmDist + 'static> UnsafeArray<T> {
     /// let world = LamellarWorldBuilder::new().build();
     /// let num_pes = world.num_pes();
     /// let array = UnsafeArray::<usize>::new(&world,10,Distribution::Block);
-    /// let array_clone = array.clone()
-    /// unsafe{array.dist_iter().enumerate().for_each(|(i,elem)| elem.store(i*2))}; //safe as we are accessing in a data parallel fashion
+    /// let array_clone = array.clone();
+    /// unsafe{array.dist_iter_mut().enumerate().for_each(|(i,elem)| *elem = i*2)}; //safe as we are accessing in a data parallel fashion
     /// array.wait_all();
-    /// array.barrier()
-    /// let max = unsafe{array.max()}; //Safe in this instance as we have ensured no updates are currently happening
+    /// array.barrier();
+    /// let max_req = unsafe{array.max()}; //Safe in this instance as we have ensured no updates are currently happening
+    /// let max = array.block_on(max_req);
     /// assert_eq!((array.len()-1)*2,max);
     ///```
     pub unsafe fn max(&self) -> Pin<Box<dyn Future<Output = T>>> {
@@ -925,12 +933,13 @@ impl<T: Dist + AmDist + 'static> UnsafeArray<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let num_pes = world.num_pes();
-    /// let array = AtomicArray::<usize>::new(&world,10,Distribution::Block);
-    /// let array_clone = array.clone()
-    /// unsafe{array.dist_iter().enumerate().for_each(|(i,elem)| elem.store(i*2))}; //safe as we are accessing in a data parallel fashion
+    /// let array = UnsafeArray::<usize>::new(&world,10,Distribution::Block);
+    /// let array_clone = array.clone();
+    /// unsafe{array.dist_iter_mut().enumerate().for_each(|(i,elem)| *elem = i*2)}; //safe as we are accessing in a data parallel fashion
     /// array.wait_all();
-    /// array.barrier()
-    /// let min = unsafe{array.min()}; //Safe in this instance as we have ensured no updates are currently happening
+    /// array.barrier();
+    /// let min_req = unsafe{array.min()}; //Safe in this instance as we have ensured no updates are currently happening
+    /// let min = array.block_on(min_req);
     /// assert_eq!(0,min);
     ///```
     pub unsafe fn min(&self) -> Pin<Box<dyn Future<Output = T>>> {
