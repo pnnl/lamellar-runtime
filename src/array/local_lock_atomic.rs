@@ -468,7 +468,7 @@ impl<T: Dist> LocalLockArray<T> {
 ///```
 /// # Warning
 /// Because this call blocks there is the possibility for deadlock to occur, as highlighted below:
-///```
+///```no_run
 /// use lamellar::array::prelude::*;
 /// let world = LamellarWorldBuilder::new().build();
 /// let my_pe = world.my_pe();

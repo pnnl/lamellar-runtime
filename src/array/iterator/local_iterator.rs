@@ -324,17 +324,17 @@ pub trait LocalIterator: SyncSend + Clone + 'static {
     /// let array = LocalLockArray::<usize>::new(&world,8,Distribution::Block);
     /// let my_pe = world.my_pe();
     ///
-    /// let init_iter = array.local_iter_mut().for_each(|e| *e = my_pe); //initialize array
+    /// let init_iter = array.local_iter_mut().for_each(move|e| *e = my_pe); //initialize array
     /// let filter_iter = array.local_iter()
     ///                        .enumerate() //we can call enumerate before the filter
-    ///                        .filter(|(_,e)| e%2 == 1).for_each(|(i,e)| println!("PE: {my_pe} i: {i} elem: {e}"));
+    ///                        .filter(|(_,e)| **e%2 == 1).for_each(move|(i,e)| println!("PE: {my_pe} i: {i} elem: {e}"));
     /// world.block_on(async move {
     ///     init_iter.await;
     ///     filter_iter.await;
     /// });
     ///```
     /// Possible output on a 4 PE (1 thread/PE) execution (ordering is likey to be random with respect to PEs)
-    ///```
+    ///```text
     /// PE: 1 i: 0 elem: 1
     /// PE: 1 i: 1 elem: 1
     /// PE: 3 i: 0 elem: 3
@@ -355,8 +355,9 @@ pub trait LocalIterator: SyncSend + Clone + 'static {
     ///
     /// let world = LamellarWorldBuilder::new().build();
     /// let array = LocalLockArray::<usize>::new(&world,8,Distribution::Block);
+    /// let my_pe = world.my_pe();
     ///
-    /// array.local_iter().for_each(|e| *e = world.my_pe()); //initialize array
+    /// array.local_iter_mut().for_each(move|e| *e = my_pe); //initialize array
     /// array.wait_all();
     /// let filter_iter = array.local_iter()
     ///                        .enumerate() //we can call enumerate before the filter
@@ -364,10 +365,10 @@ pub trait LocalIterator: SyncSend + Clone + 'static {
     ///     if *e%2 == 0{ Some((i,*e as f32)) }
     ///     else { None }
     /// });
-    /// world.block_on(filter_iter.for_each(|(i,e)| println!("PE: {my_pe} i: {i} elem: {e}")));
+    /// world.block_on(filter_iter.for_each(move|(i,e)| println!("PE: {my_pe} i: {i} elem: {e}")));
     ///```
     /// Possible output on a 4 PE (1 thread/PE) execution (ordering is likey to be random with respect to PEs)
-    ///```
+    ///```text
     /// PE: 0 i: 0 elem: 0.0
     /// PE: 0 i: 1 elem: 0.0
     /// PE: 2 i: 0 elem: 2.0
@@ -433,7 +434,7 @@ pub trait LocalIterator: SyncSend + Clone + 'static {
     /// world.block_on(iter);
     /// ```
     /// essentially the for_each_async call gets converted into (on each thread)
-    ///```
+    ///```ignore
     /// for fut in array.iter(){
     ///     fut.await;
     /// }
@@ -545,7 +546,7 @@ pub trait IndexedLocalIterator: LocalIterator + SyncSend + Clone + 'static {
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block);
     ///
-    /// array.local_iter().for_each_with_schedule(Schedule::Chunks(10),|elem| async move {
+    /// array.local_iter().for_each_async_with_schedule(Schedule::Chunk(10),|elem| async move {
     ///     async_std::task::yield_now().await;
     ///     println!("{:?} {elem}",std::thread::current().id())
     /// });
@@ -574,11 +575,11 @@ pub trait IndexedLocalIterator: LocalIterator + SyncSend + Clone + 'static {
     /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,8,Distribution::Block);
     /// let my_pe = world.my_pe();
     ///
-    /// array.local_iter().enumerate().for_each(|(i,elem)| println!("PE: {my_pe} i: {i} elem: {elem}"));
+    /// array.local_iter().enumerate().for_each(move|(i,elem)| println!("PE: {my_pe} i: {i} elem: {elem}"));
     /// array.wait_all();
     ///```
     /// Possible output on a 4 PE (1 thread/PE) execution (ordering is likey to be random with respect to PEs)
-    ///```
+    ///```text
     /// PE: 0 i: 0 elem: 0
     /// PE: 0 i: 1 elem: 0
     /// PE: 1 i: 0 elem: 0
@@ -604,14 +605,14 @@ pub trait IndexedLocalIterator: LocalIterator + SyncSend + Clone + 'static {
     /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,40,Distribution::Block);
     /// let my_pe = world.my_pe();
     ///
-    /// array.local_iter().chunks(5).enumerate().for_each(|i,chunk| {
-    ///     let chunk_vec: Vec<usize> = chunk.collect();
+    /// array.local_iter().chunks(5).enumerate().for_each(move|(i,chunk)| {
+    ///     let chunk_vec: Vec<usize> = chunk.map(|elem| *elem).collect();
     ///     println!("PE: {my_pe} i: {i} chunk: {chunk_vec:?}");
     /// });
     /// array.wait_all();
     /// ```
     /// Possible output on a 4 PE (1 thread/PE) execution (ordering is likey to be random with respect to PEs)
-    ///```
+    ///```text
     /// PE: 0 i: 0 chunk: [0, 0, 0, 0, 0]
     /// PE: 0 i: 1 chunk: [0, 0, 0, 0, 0]
     /// PE: 1 i: 0 chunk: [0, 0, 0, 0, 0]
@@ -635,11 +636,11 @@ pub trait IndexedLocalIterator: LocalIterator + SyncSend + Clone + 'static {
     /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,8,Distribution::Block);
     /// let my_pe = world.my_pe();
     ///
-    /// array.local_iter().map(|elem| *elem as f64).enumerate().for_each(|(i,elem)| println!("PE: {my_pe} i: {i} elem: {elem}"));
+    /// array.local_iter().map(|elem| *elem as f64).enumerate().for_each(move|(i,elem)| println!("PE: {my_pe} i: {i} elem: {elem}"));
     /// array.wait_all();
     ///```
     /// Possible output on a 4 PE (1 thread/PE) execution (ordering is likey to be random with respect to PEs)
-    ///```
+    ///```text
     /// PE: 0 i: 0 elem: 0.0
     /// PE: 0 i: 1 elem: 0.0
     /// PE: 1 i: 0 elem: 0.0
@@ -667,11 +668,11 @@ pub trait IndexedLocalIterator: LocalIterator + SyncSend + Clone + 'static {
     /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,16,Distribution::Block);
     /// let my_pe = world.my_pe();
     ///
-    /// array.local_iter().enumerate().skip(3).for_each(|(i,elem)| println!("PE: {my_pe} i: {i} elem: {elem}"));
+    /// array.local_iter().enumerate().skip(3).for_each(move|(i,elem)| println!("PE: {my_pe} i: {i} elem: {elem}"));
     /// array.wait_all();
     ///```
     /// Possible output on a 4 PE (1 thread/PE) execution (ordering is likey to be random with respect to PEs)
-    ///```
+    ///```text
     /// PE: 0 i:3 elem: 0
     /// PE: 1 i:3 elem: 0
     /// PE: 2 i:3 elem: 0
@@ -691,11 +692,11 @@ pub trait IndexedLocalIterator: LocalIterator + SyncSend + Clone + 'static {
     /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,28,Distribution::Block);
     /// let my_pe = world.my_pe();
     ///
-    /// array.local_iter().enumerate().step_by(3).for_each(|(i,elem)| println!("PE: {my_pe} i: {i} elem: {elem}"));
+    /// array.local_iter().enumerate().step_by(3).for_each(move|(i,elem)| println!("PE: {my_pe} i: {i} elem: {elem}"));
     /// array.wait_all();
     ///```
     /// Possible output on a 4 PE (1 thread/PE) execution (ordering is likey to be random with respect to PEs)
-    ///```
+    ///```text
     /// PE: 0 i: 0 elem: 0
     /// PE: 0 i: 3 elem: 0
     /// PE: 0 i: 6 elem: 0
@@ -723,11 +724,11 @@ pub trait IndexedLocalIterator: LocalIterator + SyncSend + Clone + 'static {
     /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,16,Distribution::Block);
     /// let my_pe = world.my_pe();
     ///
-    /// array.local_iter().enumerate().take(3).for_each(|(i,elem)| println!("PE: {my_pe} i: {i} elem: {elem}"));
+    /// array.local_iter().enumerate().take(3).for_each(move|(i,elem)| println!("PE: {my_pe} i: {i} elem: {elem}"));
     /// array.wait_all();
     ///```
     /// Possible output on a 4 PE (1 thread/PE) execution (ordering is likey to be random with respect to PEs)
-    ///```
+    ///```text
     /// PE: 0 i: 0 elem: 0
     /// PE: 0 i: 1 elem: 0
     /// PE: 0 i: 2 elem: 0
@@ -758,14 +759,14 @@ pub trait IndexedLocalIterator: LocalIterator + SyncSend + Clone + 'static {
     /// let my_pe = world.my_pe();
     ///
     /// //initalize array_B
-    /// array_B.dist_iter_mut().enumerate().for_each(|(i,elem)| *elem = i);
+    /// array_B.dist_iter_mut().enumerate().for_each(move|(i,elem)| *elem = i);
     /// array_B.wait_all();
     ///
-    /// array_A.local_iter().zip(array_B.local_iter()).for_each(|elem_A,elem_B| println!("PE: {my_pe} A: {elem_A} B: {elem_B}"));
+    /// array_A.local_iter().zip(array_B.local_iter()).for_each(move|(elem_A,elem_B)| println!("PE: {my_pe} A: {elem_A} B: {elem_B}"));
     /// array_A.wait_all();
     ///```
     /// Possible output on a 4 PE (1 thread/PE) execution (ordering is likey to be random with respect to PEs)
-    ///```
+    ///```text
     /// PE: 0 A: 0 B: 0
     /// PE: 0 A: 0 B: 1
     /// PE: 0 A: 0 B: 2
@@ -798,7 +799,7 @@ pub trait IndexedLocalIterator: LocalIterator + SyncSend + Clone + 'static {
 /// let world = LamellarWorldBuilder::new().build();
 /// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block);
 ///
-/// let local_iter = array.local_iter().for_each(|e| println!("{e}"));
+/// let local_iter = array.local_iter().for_each(move|e| println!("{}",e.load()));
 /// world.block_on(local_iter);
 ///```
 #[derive(Clone)]
@@ -900,8 +901,9 @@ impl<
 ///
 /// let world = LamellarWorldBuilder::new().build();
 /// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block);
+/// let my_pe = world.my_pe();
 ///
-/// let local_iter = array.local_iter_mut().for_each(|e| *e = world.my_pe() );
+/// let local_iter = array.local_iter_mut().for_each(move|e| e.store(my_pe) );
 /// world.block_on(local_iter);
 ///```
 #[derive(Clone)]
