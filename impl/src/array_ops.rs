@@ -908,30 +908,13 @@ fn create_buffered_ops(
             use __lamellar::memregion::prelude::*;
             use __lamellar::darc::prelude::*;
             use __lamellar::array::{
-            //     AtomicArray,AtomicByteArray,AtomicByteArrayWeak,
-            //     GenericAtomicArray,
-            //     NativeAtomicArray,
-            //     LocalLockArray,LocalLockByteArray,LocalLockByteArrayWeak,
-            //     LocalArithmeticOps,LocalAtomicOps,
-            //     UnsafeArray, UnsafeByteArray, UnsafeByteArrayWeak,
                 ArrayOpCmd,
-            //     LamellarArrayPut,
                 OpResultOffsets,
                 RemoteOpAmInputToValue,
                 PeOpResults,
                 OpResults,
-                // OpAmInputToValue
             };
-            // // #bitwise_mod
-            // use __lamellar::array;
-            // use __lamellar::LamellarTeamRT;
-            // // #bitwise_mod
-            // use __lamellar::Darc;
-            // use __lamellar::LamellarArray;
             use __lamellar::active_messaging::RemoteActiveMessage;
-            // use __lamellar::LamellarRequest;
-            // use __lamellar::OneSidedMemoryRegion;
-            // use __lamellar::RemoteMemoryRegion;
 
             use __lamellar::parking_lot::{Mutex,RwLock};
             // use __lamellar::tracing::*;

@@ -161,7 +161,8 @@ impl<T: Dist> MemRegionId for SharedMemoryRegion<T> {
 }
 
 impl<T: Dist> SubRegion<T> for SharedMemoryRegion<T> {
-    fn sub_region<R: std::ops::RangeBounds<usize>>(&self, range: R) -> LamellarMemoryRegion<T> {
+    type Region = SharedMemoryRegion<T>;
+    fn sub_region<R: std::ops::RangeBounds<usize>>(&self, range: R) -> Self::Region {
         let start = match range.start_bound() {
             //inclusive
             Bound::Included(idx) => *idx,
@@ -187,7 +188,6 @@ impl<T: Dist> SubRegion<T> for SharedMemoryRegion<T> {
             sub_region_size: (end - start),
             phantom: PhantomData,
         }
-        .into()
     }
 }
 

@@ -126,10 +126,4 @@ fn main() {
         println!("sum: {:?}", sum);
         println!("------------------------------------------------------------");
     }
-
-    let array1 = array.clone();
-    let mut_slice = unsafe { array1.local_as_mut_slice() };
-    let ro_array = array.into_read_only();
-    ro_array.print();
-    println!("{mut_slice:?}");
 }

@@ -61,7 +61,7 @@ pub trait Dist:
 // }
 
 #[doc(hidden)]
-#[enum_dispatch(RegisteredMemoryRegion<T>, MemRegionId, AsBase, SubRegion<T>, MemoryRegionRDMA<T>, RTMemoryRegionRDMA<T>)]
+#[enum_dispatch(RegisteredMemoryRegion<T>, MemRegionId, AsBase, MemoryRegionRDMA<T>, RTMemoryRegionRDMA<T>)]
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
 #[serde(bound = "T: Dist + serde::Serialize + serde::de::DeserializeOwned")]
 pub enum LamellarMemoryRegion<T: Dist> {
@@ -129,15 +129,25 @@ impl<T: Dist> LamellarMemoryRegion<T> {
         }
     }
 
-    #[tracing::instrument(skip_all)]
-    pub fn sub_region<R: std::ops::RangeBounds<usize>>(&self, range: R) -> LamellarMemoryRegion<T> {
+    // #[tracing::instrument(skip_all)]
+    // pub fn sub_region<R: std::ops::RangeBounds<usize>>(&self, range: R) -> LamellarMemoryRegion<T> {
+    //     match self {
+    //         LamellarMemoryRegion::Shared(memregion) => memregion.sub_region(range).into(),
+    //         LamellarMemoryRegion::Local(memregion) => memregion.sub_region(range).into(),
+    //         // LamellarMemoryRegion::Unsafe(memregion) => memregion.sub_region(range).into(),
+    //     }
+    // }
+}
+impl<T: Dist> SubRegion<T> for LamellarMemoryRegion<T>{
+    type Region = LamellarMemoryRegion<T>;
+    fn sub_region<R: std::ops::RangeBounds<usize>>(&self, range: R) -> Self::Region {
         match self {
             LamellarMemoryRegion::Shared(memregion) => memregion.sub_region(range).into(),
             LamellarMemoryRegion::Local(memregion) => memregion.sub_region(range).into(),
-            // LamellarMemoryRegion::Unsafe(memregion) => memregion.sub_region(range).into(),
         }
     }
 }
+
 
 impl<T: Dist> From<LamellarArrayRdmaOutput<T>> for LamellarMemoryRegion<T> {
     #[tracing::instrument(skip_all)]
@@ -319,6 +329,8 @@ pub(crate) trait MemRegionId {
     fn id(&self) -> usize;
 }
 
+
+// RegisteredMemoryRegion<T>, MemRegionId, AsBase, SubRegion<T>, MemoryRegionRDMA<T>, RTMemoryRegionRDMA<T>
 // we seperate SubRegion and AsBase out as their own traits
 // because we want MemRegion to impl RegisteredMemoryRegion (so that it can be used in Shared + Local)
 // but MemRegion should not return LamellarMemoryRegions directly (as both SubRegion and AsBase require)
@@ -326,6 +338,7 @@ pub(crate) trait MemRegionId {
 #[doc(hidden)]
 #[enum_dispatch]
 pub trait SubRegion<T: Dist> {
+    type Region: RegisteredMemoryRegion<T> + MemoryRegionRDMA<T>;
     /// Create a sub region of this OneSidedMemoryRegion using the provided range
     ///
     /// # Panics
@@ -342,7 +355,7 @@ pub trait SubRegion<T: Dist> {
     /// 
     /// let sub_region = mem_region.sub_region(30..70);
     ///```
-    fn sub_region<R: std::ops::RangeBounds<usize>>(&self, range: R) -> LamellarMemoryRegion<T>;
+    fn sub_region<R: std::ops::RangeBounds<usize>>(&self, range: R) -> Self::Region;
 }
 
 #[enum_dispatch]

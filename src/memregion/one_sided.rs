@@ -728,7 +728,8 @@ impl<T: Dist> MemRegionId for OneSidedMemoryRegion<T> {
 }
 
 impl<T: Dist> SubRegion<T> for OneSidedMemoryRegion<T> {
-    fn sub_region<R: std::ops::RangeBounds<usize>>(&self, range: R) -> LamellarMemoryRegion<T> {
+    type Region = OneSidedMemoryRegion<T>;
+    fn sub_region<R: std::ops::RangeBounds<usize>>(&self, range: R) -> Self::Region {
         let start = match range.start_bound() {
             //inclusive
             Bound::Included(idx) => *idx,
@@ -755,7 +756,7 @@ impl<T: Dist> SubRegion<T> for OneSidedMemoryRegion<T> {
             sub_region_offset: self.sub_region_offset + start,
             sub_region_size: (end - start),
             phantom: PhantomData,
-        }.into()
+        }
     }
 }
 

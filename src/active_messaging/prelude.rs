@@ -15,5 +15,7 @@ pub use crate::LamellarTaskGroup;
 pub use crate::lamellar_team::LamellarTeamRT;
 pub use crate::lamellar_world::LamellarWorld;
 pub use crate::lamellar_world::LamellarWorldBuilder;
+pub use crate::async_trait;
+pub use crate::inventory;
 
 // pub use crate::parking_lot;
