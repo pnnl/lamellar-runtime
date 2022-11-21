@@ -302,18 +302,43 @@ impl<T: SyncSend + 'static> LamellarRequest for TaskGroupLocalRequestHandle<T> {
 /// # Examples
 ///
 ///```
-/// use lamellar::{ActiveMessaging, LamellarTaskGroup};
+/// use lamellar::active_messaging::prelude::*;
 ///
-/// let task_group_1 = LamellarTaskGroup(world); //associate the task group with the world
-/// let task_group_2 = LamellarTaskGroup(sub_team); //we can also associate the task group with a team/sub_team
+/// #[AmData(Debug,Clone)]
+/// struct Am{ 
+///     world_pe: usize,
+///     team_pe: Option<usize>,
+/// }
 ///
-/// task_group_1.exec_am_all(...);
-/// for pe in 0..num_pes{
-///    task_group_2.exec_am_pe(pe,...);
+/// #[lamellar::am]
+/// impl LamellarAm for Am{
+///     async fn exec(self) {
+///         println!("Hello from world PE{:?}, team PE{:?}",self.world_pe, self.team_pe);
+///     }
+/// }
+/// let world = LamellarWorldBuilder::new().build();
+/// let num_pes = world.num_pes();
+/// let world_pe = world.my_pe();
+///
+/// //create a team consisting of the "even" PEs in the world
+/// let even_pes = world.create_team_from_arch(StridedArch::new(
+///    0,                                      // start pe
+///    2,                                      // stride
+///    (num_pes as f64 / 2.0).ceil() as usize, //num_pes in team
+/// )).expect("PE in world team");
+/// let team_pe = match even_pes.team_pe_id(){
+///     Ok(pe) => Some(pe),
+///     Err(_) => None,
+/// };
+/// let task_group_1 = LamellarTaskGroup::new(&world); //associate the task group with the world
+/// let task_group_2 = LamellarTaskGroup::new(&even_pes); //we can also associate the task group with a team/sub_team
+/// task_group_1.exec_am_all(Am{world_pe,team_pe});
+/// for pe in 0..even_pes.num_pes(){
+///    task_group_2.exec_am_pe(pe,Am{world_pe,team_pe});
 /// }
 /// task_group_1.wait_all(); //only need to wait for active messages launched with task_group_1 to finish
 /// //do interesting work
-/// task_group_2.wait_all(); //only need to wait for active messages launched with task_group_1 to finish
+/// task_group_2.wait_all(); //only need to wait for active messages launched with task_group_2 to finish
 /// ```
 #[derive(Debug)]
 pub struct LamellarTaskGroup {
@@ -384,10 +409,10 @@ impl LamellarTaskGroup {
     /// # Examples
     ///
     ///```
-    /// use lamellar::{ActiveMessaging, LamellarTaskGroup};
+    /// use lamellar::active_messaging::prelude::*;
     ///
-    /// let task_group_1 = LamellarTaskGroup(world); //associate the task group with the world
-    /// let task_group_2 = LamellarTaskGroup(sub_team); //we can also associate the task group with a team/sub_team
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let task_group = LamellarTaskGroup::new(&world); //associate the task group with the world
     ///```
     pub fn new<U: Into<IntoLamellarTeam>>(team: U) -> LamellarTaskGroup {
         let team = team.into().team.clone();

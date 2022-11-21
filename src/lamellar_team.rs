@@ -44,15 +44,41 @@ use tracing::*;
 /// Actions taking place on a team, only execute on members of the team.
 /// # Examples
 ///```
-/// use lamellar::ActiveMessaging;
-/// use lamellar::array::AtomicArray;
+/// use lamellar::active_messaging::prelude::*;
+/// use lamellar::array::prelude::*;
 ///
+/// #[AmData(Debug,Clone)]
+/// struct Am{ 
+///     world_pe: usize,
+///     team_pe: Option<usize>,
+/// }
+///
+/// #[lamellar::am]
+/// impl LamellarAm for Am{
+///     async fn exec(self) {
+///         println!("Hello from world PE{:?}, team PE{:?}",self.world_pe, self.team_pe);
+///     }
+/// }
+///
+/// let world = LamellarWorldBuilder::new().build();
+/// let num_pes = world.num_pes();
+/// let world_pe = world.my_pe();
+///
+/// //create a team consisting of the "even" PEs in the world
+/// let even_pes = world.create_team_from_arch(StridedArch::new(
+///    0,                                      // start pe
+///    2,                                      // stride
+///    (num_pes as f64 / 2.0).ceil() as usize, //num_pes in team
+/// )).expect("PE in world team");
+/// let team_pe = match even_pes.team_pe_id(){
+///     Ok(pe) => Some(pe),
+///     Err(_) => None,
+/// };
 /// // we can launch and await the results of active messages on a given team
-/// let req = team.exec_am_all(...);
-/// let result = team.block_on(req);
+/// let req = even_pes.exec_am_all(Am{world_pe,team_pe});
+/// let result = even_pes.block_on(req);
 /// // we can also create a distributed array so that its data only resides on the members of the team.
-/// let even_pes = team.create_subteam_from_arch(...);
-/// let array: AtomicArray<usize> = AtomicArray::new(even_pes, ...);
+/// let array: AtomicArray<usize> = AtomicArray::new(&even_pes, 100,Distribution::Block);
 /// ```
 pub struct LamellarTeam {
     pub(crate) world: Option<Arc<LamellarTeam>>,
@@ -90,26 +116,100 @@ impl LamellarTeam {
         the_team
     }
 
-    /// return a list of (world-based) pe ids representing the members of the team
+    /// Return a list of (world-based) pe ids representing the members of the team
+    /// # Examples
+    ///```
+    /// use lamellar::active_messaging::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let num_pes = world.num_pes();
+    ///
+    /// //create a team consisting of the "even" PEs in the world
+    /// let even_pes = world.create_team_from_arch(StridedArch::new(
+    ///    0,                                      // start pe
+    ///    2,                                      // stride
+    ///    (num_pes as f64 / 2.0).ceil() as usize, //num_pes in team
+    /// )).expect("PE in world team");
+    /// let pes = even_pes.get_pes();
+    ///
+    /// for (a,b) in (0..num_pes).step_by(2).zip(pes.iter()){
+    ///     assert_eq!(a,*b);
+    /// }
+    ///```
     #[allow(dead_code)]
     #[tracing::instrument(skip_all)]
     pub fn get_pes(&self) -> Vec<usize> {
         self.team.arch.team_iter().collect::<Vec<usize>>()
     }
 
-    /// return number of pes in team
+    /// Return number of pes in team
+    /// # Examples
+    ///```
+    /// use lamellar::active_messaging::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let num_pes = world.num_pes();
+    ///
+    /// //create a team consisting of the "even" PEs in the world
+    /// let even_pes = world.create_team_from_arch(StridedArch::new(
+    ///    0,                                      // start pe
+    ///    2,                                      // stride
+    ///    (num_pes as f64 / 2.0).ceil() as usize, //num_pes in team
+    /// )).expect("PE in world team");
+    /// let pes = even_pes.get_pes();
+    ///
+    /// assert_eq!((num_pes as f64 / 2.0).ceil() as usize,even_pes.num_pes());
+    ///```
     #[tracing::instrument(skip_all)]
     pub fn num_pes(&self) -> usize {
         self.team.arch.num_pes()
     }
 
-    /// return the world-based id of this pe
+    /// Return the world-based id of this pe
+    /// # Examples
+    ///```
+    /// use lamellar::active_messaging::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let num_pes = world.num_pes();
+    /// let my_pe = world.my_pe();
+    ///
+    /// //create a team consisting of the "even" PEs in the world
+    /// let even_pes = world.create_team_from_arch(StridedArch::new(
+    ///    0,                                      // start pe
+    ///    2,                                      // stride
+    ///    (num_pes as f64 / 2.0).ceil() as usize, //num_pes in team
+    /// )).expect("PE in world team");
+    /// let pes = even_pes.get_pes();
+    ///
+    /// assert_eq!(my_pe,even_pes.world_pe_id());
+    ///```
     #[tracing::instrument(skip_all)]
     pub fn world_pe_id(&self) -> usize {
         self.team.world_pe
     }
 
-    /// return the team-based id of this pe
+    /// Return the team-based id of this pe
+    /// # Examples
+    ///```
+    /// use lamellar::active_messaging::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let num_pes = world.num_pes();
+    /// let my_pe = world.my_pe();
+    ///
+    /// //create a team consisting of the "even" PEs in the world
+    /// let even_pes = world.create_team_from_arch(StridedArch::new(
+    ///    0,                                      // start pe
+    ///    2,                                      // stride
+    ///    (num_pes as f64 / 2.0).ceil() as usize, //num_pes in team
+    /// )).expect("PE in world team");
+    /// let pes = even_pes.get_pes();
+    ///
+    /// if let Ok(team_pe) = even_pes.team_pe_id(){
+    ///    assert!(my_pe %2 == 0);
+    /// }
+    ///```
     #[tracing::instrument(skip_all)]
     pub fn team_pe_id(&self) -> Result<usize, IdError> {
         self.team.arch.team_pe(self.team.world_pe)
@@ -119,12 +219,17 @@ impl LamellarTeam {
     ///
     /// # Examples
     ///```
-    /// //assume we have a parent team "team"
-    /// let even_team = team.create_team_from_arch(StridedArch::new(
-    ///                                            0, // start pe
-    ///                                            2,// stride
-    ///                                            (team.num_pes() / 2.0), //num pes in team
-    /// ));
+    /// use lamellar::active_messaging::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let num_pes = world.num_pes();
+    ///
+    /// //create a team consisting of the "even" PEs in the world
+    /// let even_pes = world.create_team_from_arch(StridedArch::new(
+    ///    0,                                      // start pe
+    ///    2,                                      // stride
+    ///    (num_pes as f64 / 2.0).ceil() as usize, //num_pes in team
+    /// )).expect("PE in world team");
     ///```
     #[tracing::instrument(skip_all)]
     pub fn create_subteam_from_arch<L>(
@@ -149,7 +254,22 @@ impl LamellarTeam {
         }
     }
 
-    /// text based representation of the team
+    /// Text based representation of the team
+    /// # Examples
+    ///```
+    /// use lamellar::active_messaging::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let num_pes = world.num_pes();
+    ///
+    /// //create a team consisting of the "even" PEs in the world
+    /// let even_pes = world.create_team_from_arch(StridedArch::new(
+    ///    0,                                      // start pe
+    ///    2,                                      // stride
+    ///    (num_pes as f64 / 2.0).ceil() as usize, //num_pes in team
+    /// )).expect("PE in world team");
+    /// even_pes.print_arch();
+    ///```
     #[tracing::instrument(skip_all)]
     pub fn print_arch(&self) {
         self.team.print_arch()
@@ -159,8 +279,18 @@ impl LamellarTeam {
     ///
     /// # Examples
     ///```
+    /// use lamellar::active_messaging::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let num_pes = world.num_pes();
+    ///
+    /// //create a team consisting of the "even" PEs in the world
+    /// let even_pes = world.create_team_from_arch(StridedArch::new(
+    ///    0,                                      // start pe
+    ///    2,                                      // stride
+    ///    (num_pes as f64 / 2.0).ceil() as usize, //num_pes in team
+    /// )).expect("PE in world team");
     /// //do some work
-    /// team.barrier(); //block until all PEs have entered the barrier
+    /// even_pes.barrier(); //block until all PEs have entered the barrier
     ///```
     #[tracing::instrument(skip_all)]
     pub fn barrier(&self) {
@@ -265,9 +395,25 @@ impl From<Pin<Arc<LamellarTeamRT>>> for IntoLamellarTeam {
         IntoLamellarTeam { team: team.clone() }
     }
 }
+impl From<&Pin<Arc<LamellarTeamRT>>> for IntoLamellarTeam {
+    #[tracing::instrument(skip_all)]
+    fn from(team: &Pin<Arc<LamellarTeamRT>>) -> Self {
+        IntoLamellarTeam { team: team.clone() }
+    }
+}
+
 impl From<Arc<LamellarTeam>> for IntoLamellarTeam {
     #[tracing::instrument(skip_all)]
     fn from(team: Arc<LamellarTeam>) -> Self {
+        IntoLamellarTeam {
+            team: team.team.clone(),
+        }
+    }
+}
+
+impl From<&Arc<LamellarTeam>> for IntoLamellarTeam {
+    #[tracing::instrument(skip_all)]
+    fn from(team: &Arc<LamellarTeam>) -> Self {
         IntoLamellarTeam {
             team: team.team.clone(),
         }

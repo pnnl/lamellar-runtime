@@ -7,6 +7,7 @@ pub use crate::darc::local_rw_darc::LocalRwDarc;
 pub use crate::darc::Darc;
 
 pub use crate::lamellar_team::LamellarTeam;
+pub use crate::lamellar_arch::*;
 #[doc(hidden)]
 pub use crate::lamellar_team::LamellarTeamRT;
 pub use crate::lamellar_world::LamellarWorld;
