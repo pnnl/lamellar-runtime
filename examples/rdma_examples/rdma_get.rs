@@ -3,7 +3,7 @@
 /// and performing an RDMA get of remote data from the region into
 /// a local buffer
 ///----------------------------------------------------------------
-use lamellar::RemoteMemoryRegion;
+use lamellar::memregion::prelude::*;
 
 const ARRAY_LEN: usize = 100;
 

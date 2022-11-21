@@ -25,7 +25,7 @@ pub use crate::array::operations::{
 // pub use crate::array::operations::*;
 
 #[doc(hidden)]
-pub use crate::active_messaging::{am, local_am, AmData, AmLocalData,ActiveMessaging};
+pub use crate::active_messaging::ActiveMessaging;
 pub use crate::memregion::RegisteredMemoryRegion;
 pub use crate::lamellar_team::LamellarTeam;
 pub use crate::lamellar_arch::*;

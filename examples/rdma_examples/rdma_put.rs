@@ -3,7 +3,7 @@
 /// and performing an RDMA put of local data into the region located
 /// on a remote PE.
 ///----------------------------------------------------------------
-use lamellar::RemoteMemoryRegion;
+use lamellar::memregion::prelude::*;
 
 const ARRAY_LEN: usize = 100;
 

@@ -11,7 +11,8 @@
 /// conversely this means elements of a column are distributed across pes)
 ///----------------------------------------------------------------------------------
 use futures::future;
-use lamellar::{ActiveMessaging, OneSidedMemoryRegion, RemoteMemoryRegion, SharedMemoryRegion};
+use lamellar::active_messaging::prelude::*;
+use lamellar::memregion::prelude::*;
 use lazy_static::lazy_static;
 use matrixmultiply::sgemm;
 use parking_lot::Mutex;

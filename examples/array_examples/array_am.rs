@@ -6,7 +6,7 @@
 /// the handles are used on remote pes to access data on the PE which launched the AM
 ///----------------------------------------------------------------
 use lamellar::array::prelude::*;
-use lamellar::{ActiveMessaging, RemoteMemoryRegion};
+use lamellar::memregion::prelude::*;
 
 const ARRAY_LEN: usize = 100;
 
