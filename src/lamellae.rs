@@ -35,7 +35,7 @@ lazy_static! {
         crate::serialized_size::<Option<SerializeHeader>>(&Some(Default::default()), false);
 }
 
-/// The list of availalbe lamellae backends, used to specify how data is transfered between PEs
+/// The list of available lamellae backends, used to specify how data is transfered between PEs
 #[derive(
     serde::Serialize, serde::Deserialize, Debug, PartialEq, Eq, Ord, PartialOrd, Hash, Clone, Copy,
 )]

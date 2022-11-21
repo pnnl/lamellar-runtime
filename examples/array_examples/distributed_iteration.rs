@@ -154,7 +154,7 @@ fn main() {
                 let barray = barray.clone();
                 async move {
                     barray.add(i, elem.load()).await;
-                    barray.fetch_sub(i,  elem.load()).await
+                    barray.fetch_sub(i, elem.load()).await
                 }
             })
             .collect_async::<ReadOnlyArray<usize>, _>(Distribution::Block),
@@ -168,7 +168,7 @@ fn main() {
     block_array
         .dist_iter()
         .enumerate()
-        .filter(|(_, elem)|  elem.load() % 4 == 0)
+        .filter(|(_, elem)| elem.load() % 4 == 0)
         .for_each(move |(i, elem)| {
             println!(
                 "[pe({:?})-{:?}] i: {:?} {:?}",
@@ -181,15 +181,14 @@ fn main() {
     block_array.wait_all();
     block_array.barrier();
 
-
     println!("--------------------------------------------------------");
     println!("block enumerate filter_map");
     block_array
         .dist_iter()
         .enumerate()
         .filter_map(|(i, elem)| {
-            if  elem.load() % 4 == 0 {
-                Some((i,  elem.load() as f32))
+            if elem.load() % 4 == 0 {
+                Some((i, elem.load() as f32))
             } else {
                 None
             }
@@ -233,10 +232,8 @@ fn main() {
             )
         });
 
-        block_array.wait_all();
-        block_array.barrier();
-
-
+    block_array.wait_all();
+    block_array.barrier();
 
     println!("--------------------------------------------------------");
     println!("block skip  step_by enumerate");
@@ -255,8 +252,8 @@ fn main() {
             )
         });
 
-        block_array.wait_all();
-        block_array.barrier();
+    block_array.wait_all();
+    block_array.barrier();
 
     println!("--------------------------------------------------------");
     println!("block take skip enumerate");
@@ -275,9 +272,8 @@ fn main() {
             )
         });
 
-        block_array.wait_all();
-        block_array.barrier();
-
+    block_array.wait_all();
+    block_array.barrier();
 
     println!("--------------------------------------------------------");
     println!("block take skip take enumerate");
@@ -297,11 +293,8 @@ fn main() {
             )
         });
 
-        block_array.wait_all();
-        block_array.barrier();
-
+    block_array.wait_all();
+    block_array.barrier();
 
     println!("--------------------------------------------------------");
-
-
 }

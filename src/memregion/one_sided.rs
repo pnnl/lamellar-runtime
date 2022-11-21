@@ -315,7 +315,7 @@ impl LamellarAM for MemRegionDropWaitAm {
 ///```
 /// use lamellar::{OneSidedMemoryRegion, RemoteMemoryRegion};
 ///
-/// let world_mem_region: OneSidedMemoryRegion<usize> = world.alloc_one_sided_mem_region(1000);
+/// let world_mem_region: OneSidedMemoryRegion<usize> = world.alloc_one_sided_mem_region::<usize>(1000);
 /// let team_mem_region: OneSidedMemoryRegion<usize> = some_team.alloc_one_sided_mem_region(1000);
 /// ```
 #[lamellar_impl::AmDataRT(Clone)]
@@ -377,11 +377,11 @@ impl<T: Dist> OneSidedMemoryRegion<T> {
     }
     /// The length (in number of elements of `T`) of the local segment of the memory region (i.e. not the global length of the memory region)  
     ///
-    /// # Example
+    /// # Examples
     ///```
     /// use lamellar::OneSidedMemoryRegion;
     ///
-    /// let mem_region: OneSidedMemoryRegion<usize> = world.alloc_one_sided_mem_region(1000);
+    /// let mem_region: OneSidedMemoryRegion<usize> = world.alloc_one_sided_mem_region::<usize>(1000);
     /// assert_eq!(mem_region.len(),1000)
     pub fn len(&self) -> usize {
         RegisteredMemoryRegion::<T>::len(self)
@@ -839,6 +839,7 @@ impl<T: Dist> std::fmt::Debug for OneSidedMemoryRegion<T> {
 impl<T: Dist> LamellarWrite for OneSidedMemoryRegion<T> {}
 impl<T: Dist> LamellarWrite for &OneSidedMemoryRegion<T> {}
 impl<T: Dist> LamellarRead for OneSidedMemoryRegion<T> {}
+impl<T: Dist> LamellarRead for &OneSidedMemoryRegion<T> {}
 
 impl<T: Dist> From<&OneSidedMemoryRegion<T>> for LamellarMemoryRegion<T> {
     fn from(smr: &OneSidedMemoryRegion<T>) -> Self {
@@ -846,21 +847,39 @@ impl<T: Dist> From<&OneSidedMemoryRegion<T>> for LamellarMemoryRegion<T> {
     }
 }
 
-impl<T: Dist> From<&OneSidedMemoryRegion<T>> for LamellarArrayInput<T> {
+impl<T: Dist> From<&OneSidedMemoryRegion<T>> for LamellarArrayRdmaInput<T> {
     fn from(smr: &OneSidedMemoryRegion<T>) -> Self {
-        LamellarArrayInput::LocalMemRegion(smr.clone())
+        LamellarArrayRdmaInput::LocalMemRegion(smr.clone())
     }
 }
 
-impl<T: Dist> MyFrom<&OneSidedMemoryRegion<T>> for LamellarArrayInput<T> {
-    fn my_from(smr: &OneSidedMemoryRegion<T>, _team: &Pin<Arc<LamellarTeamRT>>) -> Self {
-        LamellarArrayInput::LocalMemRegion(smr.clone())
+impl<T: Dist> TeamFrom<&OneSidedMemoryRegion<T>> for LamellarArrayRdmaInput<T> {
+    fn team_from(smr: &OneSidedMemoryRegion<T>, _team: &Pin<Arc<LamellarTeamRT>>) -> Self {
+        LamellarArrayRdmaInput::LocalMemRegion(smr.clone())
     }
 }
 
-impl<T: Dist> MyFrom<OneSidedMemoryRegion<T>> for LamellarArrayInput<T> {
-    fn my_from(smr: OneSidedMemoryRegion<T>, _team: &Pin<Arc<LamellarTeamRT>>) -> Self {
-        LamellarArrayInput::LocalMemRegion(smr)
+impl<T: Dist> TeamFrom<OneSidedMemoryRegion<T>> for LamellarArrayRdmaInput<T> {
+    fn team_from(smr: OneSidedMemoryRegion<T>, _team: &Pin<Arc<LamellarTeamRT>>) -> Self {
+        LamellarArrayRdmaInput::LocalMemRegion(smr)
+    }
+}
+
+impl<T: Dist> From<&OneSidedMemoryRegion<T>> for LamellarArrayRdmaOutput<T> {
+    fn from(smr: &OneSidedMemoryRegion<T>) -> Self {
+        LamellarArrayRdmaOutput::LocalMemRegion(smr.clone())
+    }
+}
+
+impl<T: Dist> TeamFrom<&OneSidedMemoryRegion<T>> for LamellarArrayRdmaOutput<T> {
+    fn team_from(smr: &OneSidedMemoryRegion<T>, _team: &Pin<Arc<LamellarTeamRT>>) -> Self {
+        LamellarArrayRdmaOutput::LocalMemRegion(smr.clone())
+    }
+}
+
+impl<T: Dist> TeamFrom<OneSidedMemoryRegion<T>> for LamellarArrayRdmaOutput<T> {
+    fn team_from(smr: OneSidedMemoryRegion<T>, _team: &Pin<Arc<LamellarTeamRT>>) -> Self {
+        LamellarArrayRdmaOutput::LocalMemRegion(smr)
     }
 }
 

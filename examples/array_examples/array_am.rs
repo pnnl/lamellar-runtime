@@ -35,7 +35,9 @@ impl LamellarAM for RdmaAM {
         let local = lamellar::world.alloc_one_sided_mem_region::<u8>(ARRAY_LEN);
         let local_slice = unsafe { local.as_mut_slice().unwrap() };
         local_slice[ARRAY_LEN - 1] = num_pes as u8;
-        self.array.get(0, &local).await;
+        unsafe {
+            self.array.get(0, &local).await;
+        }
         // while local_slice[ARRAY_LEN - 1] == num_pes as u8 {
         //     async_std::task::yield_now().await;
         // }
@@ -45,7 +47,9 @@ impl LamellarAM for RdmaAM {
 
         //update an element on the original node
         local_slice[0] = lamellar::current_pe as u8;
-        self.array.put(my_index, &local.sub_region(0..=0)).await;
+        unsafe {
+            self.array.put(my_index, &local.sub_region(0..=0)).await;
+        }
     }
 }
 
@@ -72,7 +76,7 @@ fn main() {
                 *i = 255_u8;
             }
         }
-        world.block_on(array.put(0, &local_mem_region));
+        world.block_on(unsafe { array.put(0, &local_mem_region) });
     }
     println!("here!!! {:?}", my_pe);
     array.print();
@@ -118,13 +122,13 @@ fn main() {
     world.barrier();
 
     if my_pe == 0 {
-        let sum = world.block_on(array.sum());
+        let sum = world.block_on(unsafe { array.sum() });
         println!("sum: {:?}", sum);
         println!("------------------------------------------------------------");
     }
 
     let array1 = array.clone();
-    let mut_slice = unsafe {array1.local_as_mut_slice()};
+    let mut_slice = unsafe { array1.local_as_mut_slice() };
     let ro_array = array.into_read_only();
     ro_array.print();
     println!("{mut_slice:?}");

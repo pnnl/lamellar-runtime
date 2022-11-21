@@ -1,17 +1,17 @@
 //! LamellarArrays provide a safe and highlevel abstraction of a distributed array.
-//! 
+//!
 //! By distributed, we mean that the memory backing the array is physically located on multiple distributed PEs in the system.
 //!
 //! # Features
 //!  - [Safety](#safety)
 //!  - [Multiple array types](#multiple-array-types)
-//!  - RDMA like `put` and `get` APIs 
-//!  - Element Wise operations (e.g. `add`, `fetch_add`, `or`, `compare_exchange`, etc.)
-//!  - Batched operations (`batch_add`, `batch_fetch_add`, etc.)
-//!  - Distributed and Onesided Iteration (`dist_iter`, `dist_iter_mut`, `onesided_iter`, etc.)
-//!  - Distributed Reductions (e.g. `reduce`),
-//!  - [Block or Cyclic memory layouts](crate::array::Distribution)
-//!  - [Sub Arrays](crate::array::SubArray)
+//!  - RDMA like [put][crate::array::LamellarArrayPut] and  [get][crate::array::LamellarArrayGet] APIs
+//!  - Element Wise operations (e.g. [load/store][crate::array::AccessOps], [add][crate::array::ArithmeticOps], [fetch_and][crate::array::BitWiseOps], [compare_exchange][crate::array::CompareExchangeOps], etc)
+//!  - Batched operations ([batch_add][crate::array::ArithmeticOps], [batch_fetch_add][crate::array::ArithmeticOps], etc.)
+//!  - [Distributed][crate::array::iterator::distributed_iterator], [Local][crate::array::iterator::local_iterator], and [Onesided][crate::array::iterator::one_sided_iterator] Iteration
+//!  - [Distributed Reductions][crate::array::LamellarArrayReduce]
+//!  - [Block][crate::array::Distribution::Block] or [Cyclic][crate::array::Distribution::Cyclic] data layouts
+//!  - [Sub Arrays][crate::array::SubArray]
 //!  - [Type conversion](#type-conversion)
 //!
 //! # Safety
@@ -24,17 +24,17 @@
 //!  - [UnsafeArray]: No safety gaurantees - PEs are free to read/write to anywhere in the array with no access control
 //!  - [ReadOnlyArray]: No write access is permitted, and thus PEs are free to read from anywhere in the array with no access control
 //!  - [AtomicArray]: Each Element is atomic (either instrisically or enforced via the runtime)
-//!      - NativeAtomicArray: utilizes the language atomic types e.g AtomicUsize, AtomicI8, etc.
-//!      - GenericAtomicArray: Each element is protected by a 1-byte mutex
+//!      - [NativeAtomicArray]: utilizes the language atomic types e.g AtomicUsize, AtomicI8, etc.
+//!      - [GenericAtomicArray]: Each element is protected by a 1-byte mutex
 //!  - [LocalLockArray]: The data on each PE is protected by a local RwLock
-//! 
+//!
 //! # Type conversion
 //! We offer a variety of methods to convert between array types.
 //! - `into_atomic`, `into_read_only`, etc., convert between disributed array types.
 //! - `collect` and `collect_async` provide functionality analogous to the [collect](https://doc.rust-lang.org/std/iter/trait.Iterator.html#method.collect) method for Rust iterators
-//! - Some types are specially designed to serve as inputs to batched operations.
-//!   Conversion to these types is supported by a variety of functions:
-//!   `local_data`, `read_local_data`, `write_local_data`, etc. convert to slices and other data types.  See [OpInput](crate::array::OpInput) for details.
+//! - We also provided access directy to the underlying local data of an array using functions (and container types) that preserver the safety guarantees of a given array type
+//!     -`local_data`, `read_local_data`, `write_local_data`, etc. convert to slices and other data types.
+//!     - Consequently, these functions can be used to create valid inputs for batched operations,  see [OpInput](crate::array::OpInput) for details.
 use crate::lamellar_request::LamellarRequest;
 use crate::memregion::{
     one_sided::OneSidedMemoryRegion,
@@ -58,17 +58,18 @@ use std::sync::Arc;
 // use serde::de::DeserializeOwned;
 
 /// This macro automatically derives various LamellarArray "Op" traits for user defined types
-/// 
+///
 /// The following "Op" traits will be implemented:
 /// - [AccessOps][crate::array::operations::AccessOps]
 /// - [ArithmeticOps][crate::array::operations::ArithmeticOps]
 /// - [BitWiseOps][crate::array::operations::BitWiseOps]
 /// - [CompareExchangeEpsilonOps][crate::array::operations::CompareExchangeEpsilonOps]
 /// - [CompareExchangeOps][crate::array::operations::CompareExchangeOps]
-/// 
+///
 /// The required trait bounds can be found by viewing each "Op" traits documentation.
 pub use lamellar_impl::ArrayOps;
 
+#[doc(hidden)]
 pub mod prelude;
 
 pub(crate) mod r#unsafe;
@@ -104,13 +105,16 @@ pub use native_atomic::{
 
 pub(crate) mod local_lock_atomic;
 pub use local_lock_atomic::{
-    operations::LocalLockArrayOpBuf, LocalLockArray, LocalLockByteArray,
-    LocalLockByteArrayWeak, LocalLockLocalData,
+    operations::LocalLockArrayOpBuf, LocalLockArray, LocalLockByteArray, LocalLockByteArrayWeak,
+    LocalLockLocalData, LocalLockMutLocalData,
 };
 
 pub mod iterator;
+#[doc(hidden)]
 pub use iterator::distributed_iterator::DistributedIterator;
+#[doc(hidden)]
 pub use iterator::local_iterator::LocalIterator;
+#[doc(hidden)]
 pub use iterator::one_sided_iterator::OneSidedIterator;
 
 pub(crate) mod operations;
@@ -166,13 +170,17 @@ lamellar_impl::generate_ops_for_type_rt!(false, false, f32, f64);
 /// assume we have 4 PEs
 /// ## Block
 ///```
-/// let block_array = LamellarArray::new(world,12,Distribution::Block);
-/// block array index location  = PE0 [0,1,2,3],  PE1 [4,5,6,7],  PE2 [8,9,10,11], PE3 [12,13,14,15]
+/// use lamellar::array::prelude::*;
+/// let world = LamellarWorldBuilder::new().build();
+/// let block_array = AtomicArray::<usize>::new(world,12,Distribution::Block);
+/// //block array index location  = PE0 [0,1,2,3],  PE1 [4,5,6,7],  PE2 [8,9,10,11], PE3 [12,13,14,15]
 ///```
 /// ## Cyclic
 ///```
-/// let cyclic_array = LamellarArray::new(world,12,Distribution::Cyclic);
-/// cyclic array index location = PE0 [0,4,8,12], PE1 [1,5,9,13], PE2 [2,6,10,14], PE3 [3,7,11,15]
+/// use lamellar::array::prelude::*;
+/// let world = LamellarWorldBuilder::new().build();
+/// let cyclic_array = AtomicArray::<usize>::new(world,12,Distribution::Cyclic);
+/// //cyclic array index location = PE0 [0,4,8,12], PE1 [1,5,9,13], PE2 [2,6,10,14], PE3 [3,7,11,15]
 ///```
 #[derive(serde::Serialize, serde::Deserialize, Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Distribution {
@@ -238,14 +246,28 @@ impl<T: Dist> LamellarArrayRequest for ArrayRdmaAtHandle<T> {
     }
 }
 
-#[enum_dispatch(RegisteredMemoryRegion<T>, SubRegion<T>, MyFrom<T>,MemoryRegionRDMA<T>,AsBase)]
+/// Registered memory regions that can be used as input to various LamellarArray RDMA operations.
+// #[enum_dispatch(RegisteredMemoryRegion<T>, SubRegion<T>, TeamFrom<T>,MemoryRegionRDMA<T>,AsBase)]
 #[derive(Clone, Debug)]
-pub enum LamellarArrayInput<T: Dist> {
+pub enum LamellarArrayRdmaInput<T: Dist> {
     LamellarMemRegion(LamellarMemoryRegion<T>),
     SharedMemRegion(SharedMemoryRegion<T>), //when used as input/output we are only using the local data
     LocalMemRegion(OneSidedMemoryRegion<T>),
     // UnsafeArray(UnsafeArray<T>),
 }
+impl<T: Dist> LamellarRead for LamellarArrayRdmaOutput<T> {}
+
+/// Registered memory regions that can be used as output to various LamellarArray RDMA operations.
+// #[enum_dispatch(RegisteredMemoryRegion<T>, SubRegion<T>, TeamFrom<T>,MemoryRegionRDMA<T>,AsBase)]
+#[derive(Clone, Debug)]
+pub enum LamellarArrayRdmaOutput<T: Dist> {
+    LamellarMemRegion(LamellarMemoryRegion<T>),
+    SharedMemRegion(SharedMemoryRegion<T>), //when used as input/output we are only using the local data
+    LocalMemRegion(OneSidedMemoryRegion<T>),
+    // UnsafeArray(UnsafeArray<T>),
+}
+
+impl<T: Dist> LamellarWrite for LamellarArrayRdmaOutput<T> {}
 
 #[doc(hidden)]
 pub trait LamellarWrite {}
@@ -253,79 +275,83 @@ pub trait LamellarWrite {}
 #[doc(hidden)]
 pub trait LamellarRead {}
 
-impl<T: Dist> LamellarRead for T {}
+// impl<T: Dist> LamellarRead for T {}
+impl<T: Dist> LamellarRead for &T {}
 
-impl<T: Dist> MyFrom<&T> for LamellarArrayInput<T> {
-    fn my_from(val: &T, team: &Pin<Arc<LamellarTeamRT>>) -> Self {
+impl<T: Dist> LamellarRead for Vec<T> {}
+impl<T: Dist> LamellarRead for &Vec<T> {}
+
+impl<T: Dist> TeamFrom<&T> for LamellarArrayRdmaInput<T> {
+    /// Constructs a single element [OneSidedMemoryRegion][crate::memregion::OneSidedMemoryRegion] and copies `val` into it
+    fn team_from(val: &T, team: &Pin<Arc<LamellarTeamRT>>) -> Self {
         let buf: OneSidedMemoryRegion<T> = team.alloc_one_sided_mem_region(1);
         unsafe {
             buf.as_mut_slice().unwrap()[0] = val.clone();
         }
-        LamellarArrayInput::LocalMemRegion(buf)
+        LamellarArrayRdmaInput::LocalMemRegion(buf)
     }
 }
 
-impl<T: Dist> MyFrom<T> for LamellarArrayInput<T> {
-    fn my_from(val: T, team: &Pin<Arc<LamellarTeamRT>>) -> Self {
+impl<T: Dist> TeamFrom<T> for LamellarArrayRdmaInput<T> {
+    /// Constructs a single element [OneSidedMemoryRegion][crate::memregion::OneSidedMemoryRegion] and copies `val` into it
+    fn team_from(val: T, team: &Pin<Arc<LamellarTeamRT>>) -> Self {
         let buf: OneSidedMemoryRegion<T> = team.alloc_one_sided_mem_region(1);
         unsafe {
             buf.as_mut_slice().unwrap()[0] = val;
         }
-        LamellarArrayInput::LocalMemRegion(buf)
+        LamellarArrayRdmaInput::LocalMemRegion(buf)
     }
 }
 
-impl<T: Dist> MyFrom<Vec<T>> for LamellarArrayInput<T> {
-    fn my_from(vals: Vec<T>, team: &Pin<Arc<LamellarTeamRT>>) -> Self {
+impl<T: Dist> TeamFrom<Vec<T>> for LamellarArrayRdmaInput<T> {
+    /// Constructs a [OneSidedMemoryRegion][crate::memregion::OneSidedMemoryRegion] equal in length to `vals` and copies `vals` into it
+    fn team_from(vals: Vec<T>, team: &Pin<Arc<LamellarTeamRT>>) -> Self {
         let buf: OneSidedMemoryRegion<T> = team.alloc_one_sided_mem_region(vals.len());
         unsafe {
             std::ptr::copy_nonoverlapping(vals.as_ptr(), buf.as_mut_ptr().unwrap(), vals.len());
         }
-        LamellarArrayInput::LocalMemRegion(buf)
+        LamellarArrayRdmaInput::LocalMemRegion(buf)
     }
 }
-impl<T: Dist> MyFrom<&Vec<T>> for LamellarArrayInput<T> {
-    fn my_from(vals: &Vec<T>, team: &Pin<Arc<LamellarTeamRT>>) -> Self {
+impl<T: Dist> TeamFrom<&Vec<T>> for LamellarArrayRdmaInput<T> {
+    /// Constructs a [OneSidedMemoryRegion][crate::memregion::OneSidedMemoryRegion] equal in length to `vals` and copies `vals` into it
+    fn team_from(vals: &Vec<T>, team: &Pin<Arc<LamellarTeamRT>>) -> Self {
         let buf: OneSidedMemoryRegion<T> = team.alloc_one_sided_mem_region(vals.len());
         unsafe {
             std::ptr::copy_nonoverlapping(vals.as_ptr(), buf.as_mut_ptr().unwrap(), vals.len());
         }
-        LamellarArrayInput::LocalMemRegion(buf)
+        LamellarArrayRdmaInput::LocalMemRegion(buf)
     }
 }
 
-// impl<T: AmDist+ Clone + 'static> MyFrom<T> for LamellarArrayInput<T> {
-//     fn my_from(val: T, team: &Arc<LamellarTeamRT>) -> Self {
-//         let buf: OneSidedMemoryRegion<T> = team.alloc_one_sided_mem_region(1);
-//         unsafe {
-//             buf.as_mut_slice().unwrap()[0] = val;
-//         }
-//         LamellarArrayInput::LocalMemRegion(buf)
-//     }
-// }
-
 #[doc(hidden)]
-pub trait MyFrom<T: ?Sized> {
-    fn my_from(val: T, team: &Pin<Arc<LamellarTeamRT>>) -> Self;
+pub trait TeamFrom<T: ?Sized> {
+    fn team_from(val: T, team: &Pin<Arc<LamellarTeamRT>>) -> Self;
 }
 
 #[doc(hidden)]
-pub trait MyInto<T: ?Sized> {
-    fn my_into(self, team: &Pin<Arc<LamellarTeamRT>>) -> T;
+pub trait TeamInto<T: ?Sized> {
+    fn team_into(self, team: &Pin<Arc<LamellarTeamRT>>) -> T;
 }
 
-impl<T, U> MyInto<U> for T
+impl<T, U> TeamInto<U> for T
 where
-    U: MyFrom<T>,
+    U: TeamFrom<T>,
 {
-    fn my_into(self, team: &Pin<Arc<LamellarTeamRT>>) -> U {
-        U::my_from(self, team)
+    fn team_into(self, team: &Pin<Arc<LamellarTeamRT>>) -> U {
+        U::team_from(self, team)
     }
 }
 
-impl<T: Dist> MyFrom<&LamellarArrayInput<T>> for LamellarArrayInput<T> {
-    fn my_from(lai: &LamellarArrayInput<T>, _team: &Pin<Arc<LamellarTeamRT>>) -> Self {
+impl<T: Dist> TeamFrom<&LamellarArrayRdmaInput<T>> for LamellarArrayRdmaInput<T> {
+    fn team_from(lai: &LamellarArrayRdmaInput<T>, _team: &Pin<Arc<LamellarTeamRT>>) -> Self {
         lai.clone()
+    }
+}
+
+impl<T: Dist> TeamFrom<&LamellarArrayRdmaOutput<T>> for LamellarArrayRdmaOutput<T> {
+    fn team_from(lao: &LamellarArrayRdmaOutput<T>, _team: &Pin<Arc<LamellarTeamRT>>) -> Self {
+        lao.clone()
     }
 }
 
@@ -373,7 +399,6 @@ impl<T: Dist + 'static> crate::active_messaging::DarcSerde for LamellarReadArray
         }
     }
 }
-
 
 /// Represents the array types that allow write  operations
 #[enum_dispatch]
@@ -472,22 +497,87 @@ pub(crate) mod private {
 #[enum_dispatch(LamellarReadArray<T>,LamellarWriteArray<T>)]
 pub trait LamellarArray<T: Dist>: private::LamellarArrayPrivate<T> {
     /// Returns the team used to construct this array, the PEs in the team represent the same PEs which have a slice of data of the array
-    fn team(&self) -> Pin<Arc<LamellarTeamRT>>;
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: LocalLockArray<usize> = LocalLockArray::new(&world,100,Distribution::Cyclic);
+    ///
+    /// let a_team = array.team();
+    ///```
+    fn team(&self) -> Pin<Arc<LamellarTeamRT>>; //todo turn this into Arc<LamellarTeam>
+
     /// Return the current PE of the calling thread
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: LocalLockArray<usize> = LocalLockArray::new(&world,100,Distribution::Cyclic);
+    ///
+    /// assert_eq!(world.my_pe(),array.my_pe());
+    ///```
     fn my_pe(&self) -> usize;
-    /// Return the number of elements of the array local to this PE
-    fn num_elems_local(&self) -> usize;
-    /// Return the total number of elements in the array
+
+    /// Return the number of PEs containing data for this array
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: LocalLockArray<usize> = LocalLockArray::new(&world,100,Distribution::Cyclic);
+    ///
+    /// assert_eq!(world.num_pes(),array.num_pes());
+    ///```
+    fn num_pes(&self) -> usize;
+
+    /// Return the total number of elements in this array
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic);
+    ///
+    /// assert_eq!(100,array.len());
+    ///```
     fn len(&self) -> usize;
+
+    /// Return the number of elements of the array local to this PE
+    ///
+    /// # Examples
+    /// Assume a 4 PE system
+    ///```no_run //assert is for 4 PEs
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: ReadOnlyArray<i8> = ReadOnlyArray::new(&world,100,Distribution::Cyclic);
+    ///
+    /// assert_eq!(25,array.num_elems_local());
+    ///```
+    fn num_elems_local(&self) -> usize;
+
+    /// Change the distribution this array handle uses to index into the data of the array.
+    ///
+    /// This is a one-sided call and does not redistribute the actual data, it simply changes how the array is indexed for this particular handle.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic);
+    /// // do something interesting... or not
+    /// let block_view = array.clone().use_distribution(Distribution::Block);
+    ///```
+    // fn use_distribution(self, distribution: Distribution) -> Self;
 
     /// Global synchronization method which blocks calling thread until all PEs in the owning Array data have entered the barrier
     ///
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Cyclic);
-    /// 
+    ///
     /// array.barrier();
     ///```
     fn barrier(&self);
@@ -499,7 +589,7 @@ pub trait LamellarArray<T: Dist>: private::LamellarArrayPrivate<T> {
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic);
     ///
     /// for i in 0..100{
@@ -518,10 +608,10 @@ pub trait LamellarArray<T: Dist>: private::LamellarArrayPrivate<T> {
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
-    /// let world = LamellarWorldBuilder.build();
-    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic);
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic);
     ///
-    /// let request = array.fetch_add(10,1000); //fetch index 10 and add 1000 to it 
+    /// let request = array.fetch_add(10,1000); //fetch index 10 and add 1000 to it
     /// let result = array.block_on(request); //block until am has executed
     /// // we also could have used world.block_on() or team.block_on()
     ///```
@@ -529,8 +619,30 @@ pub trait LamellarArray<T: Dist>: private::LamellarArrayPrivate<T> {
     where
         F: Future;
 
-    /// given a global index, calculate the PE and offset on that PE where the element actually resides.
+    /// Given a global index, calculate the PE and offset on that PE where the element actually resides.
     /// Returns None if the index is Out of bounds
+    /// # Examples
+    /// assume we have 4 PEs
+    /// ## Block
+    ///```no_run //assert is for 4 PEs
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    ///
+    /// let block_array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Block);
+    /// // block array index location  = PE0 [0,1,2,3],  PE1 [4,5,6,7],  PE2 [8,9,10,11], PE3 [12,13,14,15]
+    /// let  Some((pe,offset)) = block_array.pe_and_offset_for_global_index(6) else { panic!("out of bounds");};
+    /// assert_eq!((pe,offset) ,(1,2));
+    ///```
+    /// ## Cyclic
+    ///```no_run //assert is for 4 PEs
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    ///
+    /// let cyclic_array: UnsafeArray<usize> = UnsafeArray::new(world,12,Distribution::Cyclic);
+    /// // cyclic array index location = PE0 [0,4,8,12], PE1 [1,5,9,13], PE2 [2,6,10,14], PE3 [3,7,11,15]
+    /// let Some((pe,offset)) = cyclic_array.pe_and_offset_for_global_index(6) else { panic!("out of bounds");};
+    /// assert_eq!((pe,offset) ,(2,1));
+    ///```
     fn pe_and_offset_for_global_index(&self, index: usize) -> Option<(usize, usize)>;
 
     // /// Returns a distributed iterator for the LamellarArray
@@ -558,55 +670,249 @@ pub trait LamellarArray<T: Dist>: private::LamellarArrayPrivate<T> {
     // pub fn buffered_onesided_iter(&self, buf_size: usize) -> OneSidedIter<'_, T> ;
 }
 
-
 /// Sub arrays are contiguous subsets of the elements of an array.
 ///
 /// A sub array increments the parent arrays reference count, so the same lifetime guarantees apply to the subarray
-/// 
+///
 /// There can exist mutliple subarrays to the same parent array and creating sub arrays are onesided operations
 pub trait SubArray<T: Dist>: LamellarArray<T> {
     type Array: LamellarArray<T>;
-    /// Given a range of indices, construct a sub array representing the elements in that range
+    /// Create a sub array of this UnsafeArray which consists of the elements specified by the range
+    ///
+    /// Note: it is possible that the subarray does not contain any data on this PE
+    ///
+    /// # Panic
+    /// This call will panic if the end of the range exceeds the size of the array.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic);
+    ///
+    /// let sub_array = array.sub_array(25..75);
+    ///```
     fn sub_array<R: std::ops::RangeBounds<usize>>(&self, range: R) -> Self::Array;
-    
-    /// Convert a sub array based index into the index space of the original array
+
+    /// Create a sub array of this UnsafeArray which consists of the elements specified by the range
+    ///
+    /// Note: it is possible that the subarray does not contain any data on this PE
+    ///
+    /// # Panic
+    /// This call will panic if the end of the range exceeds the size of the array.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic);
+    ///
+    /// let sub_array = array.sub_array(25..75);
+    /// assert_eq!(25,sub_array.global_index(0));
+    ///```
     fn global_index(&self, sub_index: usize) -> usize;
 }
 
-#[doc(hidden)]
-#[enum_dispatch(LamellarReadArray<T>,LamellarWriteArray<T>)]
-pub trait LamellarArrayGet<T: Dist + 'static>: LamellarArray<T> {
-
-    // async get
-    // get data from self and write into buf
-    fn get<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(
+/// Interface defining low level APIs for copying data from an array into a buffer or local variable
+pub trait LamellarArrayGet<T: Dist>: LamellarArrayInternalGet<T> {
+    /// Performs an (active message based) "Get" of the data in this array starting at the provided `index` into the specified `dst`
+    ///
+    /// The length of the Get is dictated by the length of the buffer.
+    ///
+    /// This call returns a future that can be awaited to determine when the `get` has finished
+    ///
+    /// # Warning
+    /// This is a low-level API, unless you are very confident in low level distributed memory access it is highly recommended
+    /// you use a safe Array type and utilize the LamellarArray load/store operations instead.
+    ///
+    /// # Safety
+    /// when using this call we need to think about safety in terms of the array and the destination buffer
+    /// ## Arrays
+    /// - [UnsafeArray] - always unsafe as there are no protections on the arrays data.
+    /// - [AtomicArray] - technically safe, but potentially not what you want, `loads` of individual elements are atomic, but a copy of a range of elements its not atomic (we iterate through the range copying each element individually)
+    /// - [LocalLockArray] - always safe as we grab a local read lock before transfering the data (preventing any modifcation from happening on the array)
+    /// - [ReadOnlyArray] - always safe, read only arrays are never modified.
+    /// ## Destination Buffer
+    /// - [SharedMemoryRegion] - always unsafe as there are no guarantees that there may be other local and remote readers/writers.
+    /// - [OneSidedMemoryRegion] - always unsafe as there are no guarantees that there may be other local and remote readers/writers.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let array = LocalLockArray::<usize>::new(&world,12,Distribution::Block);
+    /// let buf = world.alloc_one_sided_mem_region::<usize>(12);
+    /// array.dist_iter_mut().enumerate().for_each(|(i,elem)| *elem = i); //we will used this val as completion detection
+    /// unsafe { // we just created buf and have not shared it so free to mutate safely
+    ///     for elem in buf.as_mut_slice()
+    ///                          .expect("we just created it so we know its local") { //initialize mem_region
+    ///         *elem = buf.len();
+    ///     }
+    /// }
+    /// array.wait_all();
+    /// array.barrier();
+    /// println!("PE{my_pe} array data: {:?}",unsafe{buf.as_slice().unwrap()});
+    /// if my_pe == 0 { //only perfrom the transfer from one PE
+    ///     println!();
+    ///      unsafe { world.block_on(array.get(0,&buf))}; //safe because we have not shared buf, and we block immediately on the request
+    /// }
+    /// println!("PE{my_pe} buf data: {:?}",unsafe{buf.as_slice().unwrap()});
+    ///
+    ///```
+    /// Possible output on A 4 PE system (ordering with respect to PEs may change)
+    ///```text
+    /// PE0: buf data [12,12,12,12,12,12,12,12,12,12,12,12]
+    /// PE1: buf data [12,12,12,12,12,12,12,12,12,12,12,12]
+    /// PE2: buf data [12,12,12,12,12,12,12,12,12,12,12,12]
+    /// PE3: buf data [12,12,12,12,12,12,12,12,12,12,12,12]
+    ///
+    /// PE1: buf data [12,12,12,12,12,12,12,12,12,12,12,12]
+    /// PE2: buf data [12,12,12,12,12,12,12,12,12,12,12,12]
+    /// PE3: buf data [12,12,12,12,12,12,12,12,12,12,12,12]
+    /// PE0: buf data [0,1,2,3,4,5,6,7,8,9,10,11] //we only did the "get" on PE0, also likely to be printed last since the other PEs do not wait for PE0 in this example
+    ///```
+    unsafe fn get<U: TeamInto<LamellarArrayRdmaOutput<T>> + LamellarWrite>(
         &self,
         index: usize,
         dst: U,
     ) -> Pin<Box<dyn Future<Output = ()> + Send>>;
 
-    // blocking call that gets the value stored and the provided index
+    /// Retrieves the element in this array located at the specified `index`
+    ///
+    /// This call returns a future that can be awaited to retrieve to requested element
+    ///
+    /// # Safety
+    /// when using this call we need to think about safety in terms of the array type
+    /// ## Arrays
+    /// - [UnsafeArray] - always unsafe as there are no protections on the arrays data.
+    /// - [AtomicArray] - always safe as loads of a single element are atomic
+    /// - [LocalLockArray] - always safe as we grab a local read lock before transfering the data (preventing any modifcation from happening on the array)
+    /// - [ReadOnlyArray] - always safe, read only arrays are never modified.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    /// let array = LocalLockArray::<usize>::new(&world,12,Distribution::Block);
+    /// array.dist_iter_mut().enumerate().for_each(move |(i,elem)| *elem = my_pe); //we will used this val as completion detection
+    /// array.wait_all();
+    /// array.barrier();
+    /// println!("PE{my_pe} array data: {:?}",array.read_local_data());
+    /// let index = ((my_pe+1)%num_pes) * array.num_elems_local(); // get first index on PE to the right (with wrap arround)
+    /// let at_req = array.at(index);
+    /// let val = array.block_on(at_req);
+    /// println!("PE{my_pe} array[{index}] = {val}");
+    ///```
+    /// Possible output on A 4 PE system (ordering with respect to PEs may change)
+    ///```text
+    /// PE0: buf data [0,0,0]
+    /// PE1: buf data [1,1,1]
+    /// PE2: buf data [2,2,2]
+    /// PE3: buf data [3,3,3]
+    ///
+    /// PE0: array[3] = 1
+    /// PE1: array[6] = 2
+    /// PE2: array[9] = 3
+    /// PE3: array[0] = 0
+    ///```
     fn at(&self, index: usize) -> Pin<Box<dyn Future<Output = T> + Send>>;
 }
 
 #[doc(hidden)]
 #[enum_dispatch(LamellarReadArray<T>,LamellarWriteArray<T>)]
-pub trait LamellarArrayInternalGet<T: Dist + 'static>: LamellarArray<T> {
-    fn internal_get<U: MyInto<LamellarArrayInput<T>> + LamellarWrite>(
+pub trait LamellarArrayInternalGet<T: Dist>: LamellarArray<T> {
+    unsafe fn internal_get<U: Into<LamellarMemoryRegion<T>>>(
         &self,
         index: usize,
         dst: U,
     ) -> Box<dyn LamellarArrayRequest<Output = ()>>;
 
     // blocking call that gets the value stored and the provided index
-    fn internal_at(&self, index: usize) -> Box<dyn LamellarArrayRequest<Output = T>>;
+    unsafe fn internal_at(&self, index: usize) -> Box<dyn LamellarArrayRequest<Output = T>>;
 }
 
-#[doc(hidden)]
-#[enum_dispatch(LamellarWriteArray<T>)]
-pub trait LamellarArrayPut<T: Dist>: LamellarArray<T> {
-    //put data from buf into self
-    fn put<U: MyInto<LamellarArrayInput<T>> + LamellarRead>(
+/// Interface defining low level APIs for copying data from a buffer or local variable into this array
+pub trait LamellarArrayPut<T: Dist>: LamellarArrayInternalPut<T> {
+    /// Performs an (active message based) "Put" of the data in the specified `src` buffer into this array starting from the provided `index`
+    ///
+    /// The length of the Put is dictated by the length of the `src` buffer.
+    ///
+    /// This call returns a future that can be awaited to determine when the `put` has finished
+    ///
+    /// # Warning
+    /// This is a low-level API, unless you are very confident in low level distributed memory access it is highly recommended
+    /// you use a safe Array type and utilize the LamellarArray load/store operations instead.
+    ///
+    ///
+    /// # Safety
+    /// when using this call we need to think about safety in terms of the array and the source buffer
+    /// ## Arrays
+    /// - [UnsafeArray] - always unsafe as there are no protections on the arrays data.
+    /// - [AtomicArray] - technically safe, but potentially not what you want, `stores` of individual elements are atomic, but writing to a range of elements its not atomic overall (we iterate through the range writing to each element individually)
+    /// - [LocalLockArray] - always safe as we grab a local write lock before writing the data (ensuring mutual exclusitivity when modifying the array)
+    /// ## Source Buffer
+    /// - [SharedMemoryRegion] - always unsafe as there are no guarantees that there may be other local and remote readers/writers
+    /// - [OneSidedMemoryRegion] - always unsafe as there are no guarantees that there may be other local and remote readers/writers
+    /// - `Vec`,`T` - always safe as ownership is transfered to the `Put`
+    /// - `&Vec`, `&T` - always safe as these are immutable borrows
+    ///
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let array = LocalLockArray::<usize>::new(&world,12,Distribution::Block);
+    /// let buf = world.alloc_one_sided_mem_region::<usize>(12);
+    /// let len = buf.len();
+    /// array.dist_iter_mut().for_each(move |elem| *elem = len); //we will used this val as completion detection
+    ///
+    /// //Safe as we are this is the only reference to buf   
+    /// unsafe {
+    ///     for (i,elem) in buf.as_mut_slice()
+    ///                       .expect("we just created it so we know its local")
+    ///                       .iter_mut()
+    ///                        .enumerate(){ //initialize mem_region
+    ///       *elem = i;
+    ///     }
+    /// }
+    /// array.wait_all();
+    /// array.barrier();
+    /// println!("PE{my_pe} array data: {:?}",array.local_data());
+    /// if my_pe == 0 { //only perfrom the transfer from one PE
+    ///     array.block_on( unsafe {  array.put(0,&buf) } );
+    ///     println!();
+    /// }
+    /// array.barrier(); //block other PEs until PE0 has finised "putting" the data
+    ///    
+    /// println!("PE{my_pe} array data: {:?}",array.local_data());
+    ///     
+    ///
+    ///```
+    /// Possible output on A 4 PE system (ordering with respect to PEs may change)
+    ///```text
+    /// PE0: array data [12,12,12]
+    /// PE1: array data [12,12,12]
+    /// PE2: array data [12,12,12]
+    /// PE3: array data [12,12,12]
+    ///
+    /// PE0: array data [0,1,2]
+    /// PE1: array data [3,4,5]
+    /// PE2: array data [6,7,8]
+    /// PE3: array data [9,10,11]
+    ///```
+    unsafe fn put<U: TeamInto<LamellarArrayRdmaInput<T>> + LamellarRead>(
         &self,
         index: usize,
         src: U,
@@ -615,9 +921,9 @@ pub trait LamellarArrayPut<T: Dist>: LamellarArray<T> {
 
 #[doc(hidden)]
 #[enum_dispatch(LamellarWriteArray<T>)]
-pub(crate) trait LamellarArrayInternalPut<T: Dist>: LamellarArray<T> {
+pub trait LamellarArrayInternalPut<T: Dist>: LamellarArray<T> {
     //put data from buf into self
-    fn internal_put<U: MyInto<LamellarArrayInput<T>> + LamellarRead>(
+    unsafe fn internal_put<U: Into<LamellarMemoryRegion<T>>>(
         &self,
         index: usize,
         src: U,
@@ -629,80 +935,361 @@ pub trait ArrayPrint<T: Dist + std::fmt::Debug>: LamellarArray<T> {
     fn print(&self);
 }
 
-// #[enum_dispatch(LamellarWriteArray<T>,LamellarReadArray<T>)]
-pub trait LamellarArrayReduce<T>: LamellarArrayGet<T>
+// pub(crate) trait LamellarArrayReduceInner<T>: LamellarArrayInternalGet<T>
+// where
+//     T: Dist + AmDist + 'static,
+// {
+//     fn get_reduction_op(&self, op: &str) -> LamellarArcAm;
+//     fn reduce_data(&self, func: LamellarArcAm) -> Box<dyn LamellarRequest<Output = T>>;
+//     fn reduce_req(&self, op: &str) -> Box<dyn LamellarRequest<Output = T>>;
+// }
+
+/// An interface for performing distributed reductions accross a lamellar array.
+///
+/// This trait exposes a few common reductions implemented by the runtime
+/// as well as the ability the launch user defined reductions that have been registered with the runtime at compile time
+///
+/// Please see the documentation for the [register_reduction][lamellar_impl::register_reduction] procedural macro for
+/// more details and examples on how to create your own reductions.
+///
+/// Currently these are one sided reductions, meaning the calling PE will initiate the reduction, and launch the appropriate Active Messages
+/// with out requiring synchronization with the other PEs
+///
+/// We plan to expose a collective reductions (e.g. reduce_all) in a future release, as well as support for broadcast operations.
+///
+/// # Safety
+/// This trait is only implelemted by the safe array types, for UnsafeArray we expose unsafe APIs of the functions.
+///
+/// One thing to consider is that due to being a one sided reduction, safety is only gauranteed with respect to Atomicity of individual elements,
+/// not with respect to the entire global array. This means that while one PE is performing a reduction, other PEs can atomically update their local
+/// elements. While this is technically safe with respect to the integrity of an indivdual element (and with respect to the compiler),
+/// it may not be your desired behavior.
+///
+/// To be clear this behavior is not an artifact of lamellar, but rather the language itself,
+/// for example if you have an `Arc<Vec<AtomicUsize>>` shared on multiple threads, you could safely update the elements from each thread,
+/// but performing a reduction could result in safe but non deterministic results.
+///
+/// In Lamellar converting to a [ReadOnlyArray] before the reduction is a straightforward workaround to enusre the data is not changing during the reduction.
+///
+/// # Examples
+/// We provide a series of examples illustrating the above issues
+///```
+/// use lamellar::array::prelude::*;
+/// let world = LamellarWorldBuilder::new().build();
+/// let array = AtomicArray::<usize>::new(&world,1000000,Distribution::Block);
+/// use rand::Rng;
+///
+/// let array_clone = array.clone();
+/// array.local_iter().for_each(move |_| {
+///     let index = rand::thread_rng().gen_range(0..array_clone.len());
+///     array_clone.add(index,1); //randomly at one to an element in the array.
+/// });
+/// let sum = array.block_on(array.sum()); // atomic updates still possibly happening, output non deterministic
+/// println!("sum {sum}");
+///```
+/// Waiting for local operations to finish not enough by itself
+///```
+/// use lamellar::array::prelude::*;
+/// use rand::Rng;
+/// let world = LamellarWorldBuilder::new().build();
+/// let array = AtomicArray::<usize>::new(&world,1000000,Distribution::Block);
+/// let array_clone = array.clone();
+/// let req = array.local_iter().for_each(move |_| {
+///     let index = rand::thread_rng().gen_range(0..array_clone.len());
+///     array_clone.add(index,1); //randomly at one to an element in the array.
+/// });
+/// array.block_on(req);
+/// let sum = array.block_on(array.sum()); // atomic updates still possibly happening (on remote nodes), output non deterministic
+/// println!("sum {sum}");
+///```
+/// Need to add a barrier after local operations on all PEs have finished
+///```
+/// use lamellar::array::prelude::*;
+/// use rand::Rng;
+/// let world = LamellarWorldBuilder::new().build();
+/// let num_pes = world.num_pes();
+/// let array = AtomicArray::<usize>::new(&world,1000000,Distribution::Block);
+/// let array_clone = array.clone();
+/// let req = array.local_iter().for_each(move |_| {
+///     let index = rand::thread_rng().gen_range(0..array_clone.len());
+///     array_clone.add(index,1); //randomly at one to an element in the array.
+/// });
+/// array.block_on(req);
+/// array.barrier();
+/// let sum = array.block_on(array.sum()); // No updates occuring anywhere anymore so we have a deterministic result
+/// assert_eq!(array.len()*num_pes,sum);
+///```
+/// Alternatively we can convert our AtomicArray into a ReadOnlyArray before the reduction
+/// ```
+/// use lamellar::array::prelude::*;
+/// use rand::Rng;
+/// let world = LamellarWorldBuilder::new().build();
+/// let num_pes = world.num_pes();
+/// let array = AtomicArray::<usize>::new(&world,1000000,Distribution::Block);
+/// let array_clone = array.clone();
+/// let req = array.local_iter().for_each(move |_| {
+///     let index = rand::thread_rng().gen_range(0..array_clone.len());
+///     array_clone.add(index,1); //randomly at one to an element in the array.
+/// });
+/// let array = array.into_read_only(); //only returns once there is a single reference remaining on each PE
+/// let sum = array.block_on(array.sum()); // No updates occuring anywhere anymore so we have a deterministic result
+/// assert_eq!(array.len()*num_pes,sum);
+///```
+/// Finally we are inlcuding a `Arc<Vec<AtomicUsize>>` highlightin the same issue
+///```
+/// use std::sync::atomic::{AtomicUsize,Ordering};
+/// use std::sync::Arc;
+/// use std::thread;
+
+/// use rand::prelude::*;
+/// use std::time::Duration;
+
+/// let  mut data = vec![];
+/// for _i in 0..1000{
+///     data.push(AtomicUsize::new(0));
+/// }
+/// let shared_data = Arc::new(data);
+/// for _i in 0..4{
+///     let shared_data = shared_data.clone();
+///     thread::spawn ( move ||{
+///         let mut rng = rand::thread_rng();
+///         for _i in 0..10000{
+///             let index = rng.gen_range(0..shared_data.len());
+///             shared_data[index].fetch_add(1,Ordering::SeqCst);
+///         }
+///     });
+/// }
+/// let mut sum = shared_data.iter().map(|elem| elem.load(Ordering::SeqCst)).reduce(|sum,item| sum+item).expect("iter has more than one element");
+/// println!{"sum {sum:?}"};
+/// while sum < 40000 {
+///     sum = shared_data.iter().map(|elem| elem.load(Ordering::SeqCst)).reduce(|sum,item| sum+item).expect("iter has more than one element");
+///     println!{"sum {sum:?}"};
+/// }
+///```
+pub trait LamellarArrayReduce<T>: LamellarArrayInternalGet<T>
 where
     T: Dist + AmDist + 'static,
 {
-    fn get_reduction_op(&self, op: &str) -> LamellarArcAm;
-    fn reduce(&self, op: &str) -> Pin<Box<dyn Future<Output = T>>>;
+    /// Perform a reduction on the entire distributed array, returning the value to the calling PE.
+    ///
+    /// Please see the documentation for the [register_reduction][lamellar_impl::register_reduction] procedural macro for
+    /// more details and examples on how to create your own reductions.
+    ///
+    /// # Examples
+    /// ```
+    /// use lamellar::array::prelude::*;
+    /// use rand::Rng;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let num_pes = world.num_pes();
+    /// let array = AtomicArray::<usize>::new(&world,1000000,Distribution::Block);
+    /// let array_clone = array.clone();
+    /// let req = array.local_iter().for_each(move |_| {
+    ///     let index = rand::thread_rng().gen_range(0..array_clone.len());
+    ///     array_clone.add(index,1); //randomly at one to an element in the array.
+    /// });
+    /// let array = array.into_read_only(); //only returns once there is a single reference remaining on each PE
+    /// let sum = array.block_on(array.reduce("sum")); // equivalent to calling array.sum()
+    /// assert_eq!(array.len()*num_pes,sum);
+    ///```
+    fn reduce(&self, reduction: &str) -> Pin<Box<dyn Future<Output = T>>>;
+}
+
+/// Interface for common arithmetic based reductions
+pub trait LamellarArrayArithmeticReduce<T>: LamellarArrayReduce<T>
+where
+    T: Dist + AmDist + ElementArithmeticOps + 'static,
+{
+    /// Perform a sum reduction on the entire distributed array, returning the value to the calling PE.
+    ///
+    /// This equivalent to `reduce("sum")`.
+    ///
+    /// # Examples
+    /// ```
+    /// use lamellar::array::prelude::*;
+    /// use rand::Rng;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let num_pes = world.num_pes();
+    /// let array = AtomicArray::<usize>::new(&world,1000000,Distribution::Block);
+    /// let array_clone = array.clone();
+    /// let req = array.local_iter().for_each(move |_| {
+    ///     let index = rand::thread_rng().gen_range(0..array_clone.len());
+    ///     array_clone.add(index,1); //randomly at one to an element in the array.
+    /// });
+    /// let array = array.into_read_only(); //only returns once there is a single reference remaining on each PE
+    /// let sum = array.block_on(array.sum());
+    /// assert_eq!(array.len()*num_pes,sum);
+    ///```
     fn sum(&self) -> Pin<Box<dyn Future<Output = T>>>;
-    fn max(&self) -> Pin<Box<dyn Future<Output = T>>>;
+
+    /// Perform a production reduction on the entire distributed array, returning the value to the calling PE.
+    ///
+    /// This equivalent to `reduce("prod")`.
+    ///
+    /// # Examples
+    /// ```
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let num_pes = world.num_pes();
+    /// let array = AtomicArray::<usize>::new(&world,10,Distribution::Block);
+    /// let req = array.local_iter().enumerate().for_each(move |(i,elem)| {
+    ///     elem.store(i+1);
+    /// });
+    /// array.print();
+    /// array.wait_all();
+    /// array.print();
+    /// let array = array.into_read_only(); //only returns once there is a single reference remaining on each PE
+    /// array.print();
+    /// let prod =  array.block_on(array.prod());
+    /// assert_eq!((1..=array.len()).product::<usize>(),prod);
+    ///```
     fn prod(&self) -> Pin<Box<dyn Future<Output = T>>>;
 }
 
-impl<T: Dist + AmDist + 'static> LamellarWriteArray<T> {
-    pub fn reduce(&self, op: &str) -> Pin<Box<dyn Future<Output = T>>> {
-        match self {
-            LamellarWriteArray::UnsafeArray(array) => array.reduce(op),
-            LamellarWriteArray::AtomicArray(array) => array.reduce(op),
-            LamellarWriteArray::LocalLockArray(array) => array.reduce(op),
-        }
-    }
-    pub fn sum(&self) -> Pin<Box<dyn Future<Output = T>>> {
-        match self {
-            LamellarWriteArray::UnsafeArray(array) => array.sum(),
-            LamellarWriteArray::AtomicArray(array) => array.sum(),
-            LamellarWriteArray::LocalLockArray(array) => array.sum(),
-        }
-    }
-    pub fn max(&self) -> Pin<Box<dyn Future<Output = T>>> {
-        match self {
-            LamellarWriteArray::UnsafeArray(array) => array.max(),
-            LamellarWriteArray::AtomicArray(array) => array.max(),
-            LamellarWriteArray::LocalLockArray(array) => array.max(),
-        }
-    }
-    pub fn prod(&self) -> Pin<Box<dyn Future<Output = T>>> {
-        match self {
-            LamellarWriteArray::UnsafeArray(array) => array.prod(),
-            LamellarWriteArray::AtomicArray(array) => array.prod(),
-            LamellarWriteArray::LocalLockArray(array) => array.prod(),
-        }
-    }
+/// Interface for common compare based reductions
+pub trait LamellarArrayCompareReduce<T>: LamellarArrayReduce<T>
+where
+    T: Dist + AmDist + ElementComparePartialEqOps + 'static,
+{
+    /// Find the max element in the entire destributed array, returning to the calling PE
+    ///
+    /// This equivalent to `reduce("max")`.
+    ///
+    /// # Examples
+    /// ```
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let num_pes = world.num_pes();
+    /// let array = AtomicArray::<usize>::new(&world,10,Distribution::Block);
+    /// let req = array.dist_iter().enumerate().for_each(move |(i,elem)| elem.store(i*2));
+    /// let array = array.into_read_only(); //only returns once there is a single reference remaining on each PE
+    /// let max = array.block_on(array.max());
+    /// assert_eq!((array.len()-1)*2,max);
+    ///```
+    fn max(&self) -> Pin<Box<dyn Future<Output = T>>>;
+    /// Find the min element in the entire destributed array, returning to the calling PE
+    ///
+    /// This equivalent to `reduce("min")`.
+    ///
+    /// # Examples
+    /// ```
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let num_pes = world.num_pes();
+    /// let array = AtomicArray::<usize>::new(&world,10,Distribution::Block);
+    /// let req = array.dist_iter().enumerate().for_each(move |(i,elem)| elem.store(i*2));
+    /// let array = array.into_read_only(); //only returns once there is a single reference remaining on each PE
+    /// let min = array.block_on(array.min());
+    /// assert_eq!(0,min);
+    ///```
+    fn min(&self) -> Pin<Box<dyn Future<Output = T>>>;
 }
 
-impl<T: Dist + AmDist + 'static> LamellarReadArray<T> {
-    pub fn reduce(&self, op: &str) -> Pin<Box<dyn Future<Output = T>>> {
-        match self {
-            LamellarReadArray::UnsafeArray(array) => array.reduce(op),
-            LamellarReadArray::AtomicArray(array) => array.reduce(op),
-            LamellarReadArray::LocalLockArray(array) => array.reduce(op),
-            LamellarReadArray::ReadOnlyArray(array) => array.reduce(op),
-        }
-    }
-    pub fn sum(&self) -> Pin<Box<dyn Future<Output = T>>> {
-        match self {
-            LamellarReadArray::UnsafeArray(array) => array.sum(),
-            LamellarReadArray::AtomicArray(array) => array.sum(),
-            LamellarReadArray::LocalLockArray(array) => array.sum(),
-            LamellarReadArray::ReadOnlyArray(array) => array.sum(),
-        }
-    }
-    pub fn max(&self) -> Pin<Box<dyn Future<Output = T>>> {
-        match self {
-            LamellarReadArray::UnsafeArray(array) => array.max(),
-            LamellarReadArray::AtomicArray(array) => array.max(),
-            LamellarReadArray::LocalLockArray(array) => array.max(),
-            LamellarReadArray::ReadOnlyArray(array) => array.max(),
-        }
-    }
-    pub fn prod(&self) -> Pin<Box<dyn Future<Output = T>>> {
-        match self {
-            LamellarReadArray::UnsafeArray(array) => array.prod(),
-            LamellarReadArray::AtomicArray(array) => array.prod(),
-            LamellarReadArray::LocalLockArray(array) => array.prod(),
-            LamellarReadArray::ReadOnlyArray(array) => array.prod(),
-        }
-    }
-}
+/// This procedural macro is used to enable the execution of user defined reductions on LamellarArrays.
+///
+/// The general form of using this macro is:
+/// ```register_reduction!(name,closure,type1,type2,...)```
+/// - `name` is how the reduction will be registered with runtime and used to launch the reduction
+/// - `closure` is the user defined reduction and takes the form of:
+///     - ```FnMut(T, T -> T```
+/// - `type1`, `type2`,... are the types for which we would like this reduction to work for
+///     - reductions get implemented as [Active Messages][crate::active_messaging] and as such must use concrete types (no generics) to register correctly
+///
+/// The procedural macro will appropriately construct various implmentation so that the safety guarantees of each lamellary array type are maintained.
+///
+/// # Panics
+/// This will panic at Runtime initialization if the name of the reduction is duplicated.
+///
+/// # Examples
+/// Recreating the "Sum" reduction
+/// ```
+/// use lamellar::array::prelude::*;
+/// use rand::Rng;
+///
+/// register_reduction!(
+///     my_sum, // the name of our new reduction
+///     |acc,elem| acc+elem , //the reduction closure
+///     usize, // will be implementd for usize,f32, and i32
+///     f32,
+///     i32,
+/// );
+/// let world = LamellarWorldBuilder::new().build();
+/// let num_pes = world.num_pes();
+/// let array = AtomicArray::<usize>::new(&world,1000000,Distribution::Block);
+/// let array_clone = array.clone();
+/// let req = array.local_iter().for_each(move |_| {
+///     let index = rand::thread_rng().gen_range(0..array_clone.len());
+///     array_clone.add(index,1); //randomly at one to an element in the array.
+/// });
+/// let array = array.into_read_only(); //only returns once there is a single reference remaining on each PE
+/// let sum = array.block_on(array.sum());
+/// let my_sum = array.block_on(array.reduce("my_sum")); //pass a &str containing the reduction to use
+/// assert_eq!(sum,my_sum);
+///```
+pub use lamellar_impl::register_reduction;
+
+// impl<T: Dist + AmDist + 'static> LamellarWriteArray<T> {
+//     pub fn reduce(&self, op: &str) -> Pin<Box<dyn Future<Output = T>>> {
+//         match self {
+//             LamellarWriteArray::UnsafeArray(array) => array.reduce(op),
+//             LamellarWriteArray::AtomicArray(array) => array.reduce(op),
+//             LamellarWriteArray::LocalLockArray(array) => array.reduce(op),
+//         }
+//     }
+//     pub fn sum(&self) -> Pin<Box<dyn Future<Output = T>>> {
+//         match self {
+//             LamellarWriteArray::UnsafeArray(array) => array.sum(),
+//             LamellarWriteArray::AtomicArray(array) => array.sum(),
+//             LamellarWriteArray::LocalLockArray(array) => array.sum(),
+//         }
+//     }
+//     pub fn max(&self) -> Pin<Box<dyn Future<Output = T>>> {
+//         match self {
+//             LamellarWriteArray::UnsafeArray(array) => array.max(),
+//             LamellarWriteArray::AtomicArray(array) => array.max(),
+//             LamellarWriteArray::LocalLockArray(array) => array.max(),
+//         }
+//     }
+//     pub fn prod(&self) -> Pin<Box<dyn Future<Output = T>>> {
+//         match self {
+//             LamellarWriteArray::UnsafeArray(array) => array.prod(),
+//             LamellarWriteArray::AtomicArray(array) => array.prod(),
+//             LamellarWriteArray::LocalLockArray(array) => array.prod(),
+//         }
+//     }
+// }
+
+// impl<T: Dist + AmDist + 'static> LamellarReadArray<T> {
+//     pub fn reduce(&self, op: &str) -> Pin<Box<dyn Future<Output = T>>> {
+//         match self {
+//             LamellarReadArray::UnsafeArray(array) => array.reduce(op),
+//             LamellarReadArray::AtomicArray(array) => array.reduce(op),
+//             LamellarReadArray::LocalLockArray(array) => array.reduce(op),
+//             LamellarReadArray::ReadOnlyArray(array) => array.reduce(op),
+//         }
+//     }
+//     pub fn sum(&self) -> Pin<Box<dyn Future<Output = T>>> {
+//         match self {
+//             LamellarReadArray::UnsafeArray(array) => array.sum(),
+//             LamellarReadArray::AtomicArray(array) => array.sum(),
+//             LamellarReadArray::LocalLockArray(array) => array.sum(),
+//             LamellarReadArray::ReadOnlyArray(array) => array.sum(),
+//         }
+//     }
+//     pub fn max(&self) -> Pin<Box<dyn Future<Output = T>>> {
+//         match self {
+//             LamellarReadArray::UnsafeArray(array) => array.max(),
+//             LamellarReadArray::AtomicArray(array) => array.max(),
+//             LamellarReadArray::LocalLockArray(array) => array.max(),
+//             LamellarReadArray::ReadOnlyArray(array) => array.max(),
+//         }
+//     }
+//     pub fn prod(&self) -> Pin<Box<dyn Future<Output = T>>> {
+//         match self {
+//             LamellarReadArray::UnsafeArray(array) => array.prod(),
+//             LamellarReadArray::AtomicArray(array) => array.prod(),
+//             LamellarReadArray::LocalLockArray(array) => array.prod(),
+//             LamellarReadArray::ReadOnlyArray(array) => array.prod(),
+//         }
+//     }
+// }

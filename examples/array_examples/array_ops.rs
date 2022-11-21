@@ -507,4 +507,3 @@ fn main() {
     array_custom.print();
     array_custom.barrier();
 }
-

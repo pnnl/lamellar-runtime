@@ -1,11 +1,21 @@
-use crate::array::{LamellarArrayInput, LamellarRead, LamellarWrite, MyFrom};
+//! Memory regions are unsafe low-level abstractions around shared memory segments that have been allocated by a lamellae provider.
+//!
+//! These memory region APIs provide the functionality to perform RDMA operations on the shared memory segments, and are at the core
+//! of how the Runtime communicates in a distributed environment (or using shared memory when using the `shmem` backend).
+//!
+//! # Warning
+//! This is a low-level module, unless you are very comfortable/confident in low level distributed memory (and even then) it is highly recommended you use the [LamellarArrays][crate::array] and [Active Messaging][crate::active_messaging] interfaces to perform distributed communications and computation.
+use crate::active_messaging::AmDist;
+use crate::array::{
+    LamellarArrayRdmaInput, LamellarArrayRdmaOutput, LamellarRead, LamellarWrite, TeamFrom,
+};
 use crate::lamellae::{AllocationType, Backend, Lamellae, LamellaeComm, LamellaeRDMA};
 use crate::lamellar_team::LamellarTeamRT;
-use crate::active_messaging::AmDist;
 use core::marker::PhantomData;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
+#[doc(hidden)]
 pub mod prelude;
 
 pub(crate) mod shared;
@@ -16,6 +26,14 @@ pub use one_sided::OneSidedMemoryRegion;
 
 use enum_dispatch::enum_dispatch;
 
+/// This error occurs when you are trying to directly access data locally on a PE through a memregion handle,
+/// but that PE does not contain any data for that memregion
+///
+/// This can occur when tryin to get the local data from a [OneSidedMemoryRegion] on any PE but the one which created it.
+///
+/// It can also occur if a subteam creates a shared memory region, and then a PE that does not exist in the team tries to access local data directly.
+///
+/// In both these cases the solution would be to use the memregion handle to perfrom a `get` operation, transferring the data from a remote node into a local buffer.
 #[derive(Debug, Clone)]
 pub struct MemNotLocalError;
 
@@ -30,11 +48,11 @@ impl std::fmt::Display for MemNotLocalError {
 impl std::error::Error for MemNotLocalError {}
 
 /// Trait representing types that can be used in remote operations
-/// 
+///
 /// as well as [Copy] so we can perform bitwise copies
 pub trait Dist:
-AmDist + Sync + Send + Copy + serde::ser::Serialize + serde::de::DeserializeOwned + 'static
-    // AmDist + Copy
+    AmDist + Sync + Send + Copy + serde::ser::Serialize + serde::de::DeserializeOwned + 'static
+// AmDist + Copy
 {
 }
 // impl<T: Send  + Copy + std::fmt::Debug + 'static>
@@ -121,42 +139,67 @@ impl<T: Dist> LamellarMemoryRegion<T> {
     }
 }
 
-impl<T: Dist> From<&LamellarMemoryRegion<T>> for LamellarArrayInput<T> {
+impl<T: Dist> From<LamellarArrayRdmaOutput<T>> for LamellarMemoryRegion<T> {
+    #[tracing::instrument(skip_all)]
+    fn from(output: LamellarArrayRdmaOutput<T>) -> Self {
+        match output {
+            LamellarArrayRdmaOutput::LamellarMemRegion(mr) => mr,
+            LamellarArrayRdmaOutput::SharedMemRegion(mr) => mr.into(),
+            LamellarArrayRdmaOutput::LocalMemRegion(mr) => mr.into(),
+        }
+    }
+}
+
+impl<T: Dist> From<LamellarArrayRdmaInput<T>> for LamellarMemoryRegion<T> {
+    #[tracing::instrument(skip_all)]
+    fn from(input: LamellarArrayRdmaInput<T>) -> Self {
+        match input {
+            LamellarArrayRdmaInput::LamellarMemRegion(mr) => mr,
+            LamellarArrayRdmaInput::SharedMemRegion(mr) => mr.into(),
+            LamellarArrayRdmaInput::LocalMemRegion(mr) => mr.into(),
+        }
+    }
+}
+
+impl<T: Dist> From<&LamellarMemoryRegion<T>> for LamellarArrayRdmaInput<T> {
     #[tracing::instrument(skip_all)]
     fn from(mr: &LamellarMemoryRegion<T>) -> Self {
-        LamellarArrayInput::LamellarMemRegion(mr.clone())
-        // match mr.clone(){
-        //     LamellarMemoryRegion::Shared(mr) => LamellarArrayInput::SharedMemRegion(mr),
-        //     LamellarMemoryRegion::Local(mr) => LamellarArrayInput::LocalMemRegion(mr),
-        // }
+        LamellarArrayRdmaInput::LamellarMemRegion(mr.clone())
     }
 }
 
-impl<T: Dist> MyFrom<&LamellarMemoryRegion<T>> for LamellarArrayInput<T> {
+impl<T: Dist> TeamFrom<&LamellarMemoryRegion<T>> for LamellarArrayRdmaInput<T> {
     #[tracing::instrument(skip_all)]
-    fn my_from(mr: &LamellarMemoryRegion<T>, _team: &std::pin::Pin<Arc<LamellarTeamRT>>) -> Self {
-        LamellarArrayInput::LamellarMemRegion(mr.clone())
-        // match mr.clone(){
-        //     LamellarMemoryRegion::Shared(mr) => LamellarArrayInput::SharedMemRegion(mr),
-        //     LamellarMemoryRegion::Local(mr) => LamellarArrayInput::LocalMemRegion(mr),
-        // }
+    fn team_from(mr: &LamellarMemoryRegion<T>, _team: &std::pin::Pin<Arc<LamellarTeamRT>>) -> Self {
+        LamellarArrayRdmaInput::LamellarMemRegion(mr.clone())
     }
 }
 
-// impl<T: Dist> From<LamellarMemoryRegion<T>> for LamellarArrayInput<T> {
-//     fn from(mr: LamellarMemoryRegion<T>) -> Self {
-//         LamellarArrayInput::LamellarMemRegion(mr)
-//     }
-// }
-
-impl<T: Dist> MyFrom<LamellarMemoryRegion<T>> for LamellarArrayInput<T> {
+impl<T: Dist> TeamFrom<LamellarMemoryRegion<T>> for LamellarArrayRdmaInput<T> {
     #[tracing::instrument(skip_all)]
-    fn my_from(mr: LamellarMemoryRegion<T>, _team: &std::pin::Pin<Arc<LamellarTeamRT>>) -> Self {
-        LamellarArrayInput::LamellarMemRegion(mr)
-        // match mr{
-        //     LamellarMemoryRegion::Shared(mr) => LamellarArrayInput::SharedMemRegion(mr),
-        //     LamellarMemoryRegion::Local(mr) => LamellarArrayInput::LocalMemRegion(mr),
-        // }
+    fn team_from(mr: LamellarMemoryRegion<T>, _team: &std::pin::Pin<Arc<LamellarTeamRT>>) -> Self {
+        LamellarArrayRdmaInput::LamellarMemRegion(mr)
+    }
+}
+
+impl<T: Dist> From<&LamellarMemoryRegion<T>> for LamellarArrayRdmaOutput<T> {
+    #[tracing::instrument(skip_all)]
+    fn from(mr: &LamellarMemoryRegion<T>) -> Self {
+        LamellarArrayRdmaOutput::LamellarMemRegion(mr.clone())
+    }
+}
+
+impl<T: Dist> TeamFrom<&LamellarMemoryRegion<T>> for LamellarArrayRdmaOutput<T> {
+    #[tracing::instrument(skip_all)]
+    fn team_from(mr: &LamellarMemoryRegion<T>, _team: &std::pin::Pin<Arc<LamellarTeamRT>>) -> Self {
+        LamellarArrayRdmaOutput::LamellarMemRegion(mr.clone())
+    }
+}
+
+impl<T: Dist> TeamFrom<LamellarMemoryRegion<T>> for LamellarArrayRdmaOutput<T> {
+    #[tracing::instrument(skip_all)]
+    fn team_from(mr: LamellarMemoryRegion<T>, _team: &std::pin::Pin<Arc<LamellarTeamRT>>) -> Self {
+        LamellarArrayRdmaOutput::LamellarMemRegion(mr)
     }
 }
 
@@ -236,6 +279,7 @@ pub(crate) trait AsBase {
     unsafe fn to_base<B: Dist>(self) -> LamellarMemoryRegion<B>;
 }
 
+/// The Inteface for exposing RDMA operations on a memory region. These provide the actual mechanism for performing a transfer.
 #[enum_dispatch]
 pub trait MemoryRegionRDMA<T: Dist> {
     /// "Puts" (copies) data from a local memory location into a remote memory location on the specified PE
@@ -839,6 +883,7 @@ impl<T: Dist> MemRegionId for MemoryRegion<T> {
     }
 }
 
+/// The interface for allocating shared and onesided memory regions
 pub trait RemoteMemoryRegion {
     /// allocate a shared memory region from the asymmetric heap
     ///

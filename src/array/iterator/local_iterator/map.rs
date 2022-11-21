@@ -36,7 +36,7 @@ where
         let in_elems = self.iter.elems(in_elems);
         in_elems
     }
-    
+
     fn advance_index(&mut self, count: usize) {
         self.iter.advance_index(count);
     }
@@ -49,8 +49,7 @@ where
     B: Send,
 {
     fn iterator_index(&self, index: usize) -> Option<usize> {
-        let i_index = self.iter.iterator_index(index); 
+        let i_index = self.iter.iterator_index(index);
         i_index
     }
-
 }

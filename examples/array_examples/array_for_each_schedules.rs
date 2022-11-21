@@ -15,7 +15,7 @@ fn main() {
     block_array
         .dist_iter_mut()
         .enumerate()
-        .for_each(move |(i, e)| e.store( i % (ARRAY_LEN / num_pes)));
+        .for_each(move |(i, e)| e.store(i % (ARRAY_LEN / num_pes)));
     world.wait_all();
 
     let thread_cnts: Arc<Mutex<HashMap<ThreadId, usize>>> = Arc::new(Mutex::new(HashMap::new()));

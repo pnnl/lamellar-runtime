@@ -1,3 +1,4 @@
+use lamellar::active_messaging::prelude::*;
 /// ------------Lamellar Example: Distributed Array Reductions -------------------------
 /// this is an experimental exmaple testing our initial design for reductions on distributed array
 /// we expect that the syntax and APIs illustrated are highly likey to change in future release.
@@ -6,12 +7,11 @@
 /// it is very similar to our registered active message interface.
 ///----------------------------------------------------------------
 use lamellar::array::prelude::*;
-use lamellar::active_messaging::prelude::*;
 use lamellar::memregion::prelude::*;
 use std::time::Instant;
 
 lamellar::register_reduction!(
-    min,
+    my_min,
     |a, b| {
         if a < b {
             a
@@ -48,7 +48,7 @@ fn main() {
                 *elem = i;
                 i += 1
             }
-            println!("{:?}", local_mem_region.as_slice().unwrap() );
+            println!("{:?}", local_mem_region.as_slice().unwrap());
             // let index = ((len_per_pe * (my_pe) as f32).round() as usize) % total_len;
 
             world.block_on(block_array.put(0, &local_mem_region));
@@ -69,7 +69,7 @@ fn main() {
             *elem = 0;
         }
     }
-    world.block_on(block_array.get(0, &local_mem_region));
+    world.block_on(unsafe { block_array.get(0, &local_mem_region) });
     world.barrier();
     std::thread::sleep(std::time::Duration::from_secs(1));
     if my_pe == 0 {
@@ -83,7 +83,7 @@ fn main() {
             *elem = 0;
         }
     }
-    world.block_on(cyclic_array.get(0, &local_mem_region));
+    world.block_on(unsafe { cyclic_array.get(0, &local_mem_region) });
     world.barrier();
     std::thread::sleep(std::time::Duration::from_secs(1));
     if my_pe == 0 {
@@ -96,10 +96,10 @@ fn main() {
     if my_pe == 0 {
         println!("starting dist");
         let mut timer = Instant::now();
-        let cyclic_sum = world.block_on(cyclic_array.sum());
+        let cyclic_sum = world.block_on(unsafe { cyclic_array.sum() });
         let cyclic_dist_time = timer.elapsed().as_secs_f64();
         timer = Instant::now();
-        let block_sum = world.block_on(block_array.sum()); //need to figure out why this calculation is wrong...
+        let block_sum = world.block_on(unsafe { block_array.sum() }); //need to figure out why this calculation is wrong...
         let block_dist_time = timer.elapsed().as_secs_f64();
         let calculated_sum = (total_len / 2) * (0 + 99);
         println!(
@@ -107,32 +107,33 @@ fn main() {
             cyclic_sum, cyclic_dist_time, block_sum, block_dist_time, calculated_sum
         );
 
-        let block_min = world.block_on(block_array.reduce("min"));
-        let cyclic_min = world.block_on(block_array.reduce("min"));
+        let block_min = world.block_on(unsafe { block_array.reduce("my_min") });
+        let cyclic_min = world.block_on(unsafe { block_array.reduce("my_min") });
         println!("block min: {:?} cyclic min: {:?}", block_min, cyclic_min);
     }
     // for i in 0..total_len {
     //     block_array.add(i, 10);
     // }
     // block_array.for_each_mut(|x| *x += *x);
-    unsafe{
-        world.block_on(cyclic_array.dist_iter_mut().for_each(|x| *x += *x));
-        world.block_on(
-            cyclic_array
-                .dist_iter()
-                .enumerate()
-                .for_each(|x| println!("x: {:?}", x)),
-        );
-    
+
+    world.block_on(unsafe { cyclic_array.dist_iter_mut().for_each(|x| *x += *x) });
+    world.block_on(unsafe {
+        cyclic_array
+            .dist_iter()
+            .enumerate()
+            .for_each(|x| println!("x: {:?}", x))
+    });
+
     // cyclic_array.dist_iter().for_each(|x| println!("x: {:?}", x));
 
-        world.block_on(
-            block_array
-                .dist_iter()
-                .enumerate()
-                .for_each(|x| println!("x: {:?}", x)),
-        );
-    }
+    world.block_on(unsafe {
+        block_array
+            .dist_iter()
+            .enumerate()
+            .for_each(|x| println!("x: {:?}", x))
+    });
+    let block_array = block_array.into_read_only();
+    block_array.sum();
     // block_array.dist_iter().for_each(|x| println!("x: {:?}", x));
     // block_array.for_each(|x| println!("x: {:?}", x));
     // cyclic_array.for_each_mut(|x| *x += *x);

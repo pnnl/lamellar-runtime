@@ -23,13 +23,10 @@ where
     type Item = <I as LocalIterator>::Item;
     type Array = <I as LocalIterator>::Array;
     fn init(&self, start_i: usize, cnt: usize) -> Take<I> {
-        let start_i = std::cmp::min(start_i,self.take_count);
-        let end_i = std::cmp::min(start_i+cnt, self.take_count);
-        let len = end_i-start_i;
-        Take::new(
-            self.iter.init(start_i, len),
-            self.take_count,
-        )
+        let start_i = std::cmp::min(start_i, self.take_count);
+        let end_i = std::cmp::min(start_i + cnt, self.take_count);
+        let len = end_i - start_i;
+        Take::new(self.iter.init(start_i, len), self.take_count)
     }
     fn array(&self) -> Self::Array {
         self.iter.array()
@@ -41,7 +38,7 @@ where
         let in_elems = self.iter.elems(in_elems);
         std::cmp::min(in_elems, self.take_count)
     }
-    
+
     fn advance_index(&mut self, count: usize) {
         self.iter.advance_index(count);
     }
@@ -52,9 +49,8 @@ where
     I: IndexedLocalIterator,
 {
     fn iterator_index(&self, index: usize) -> Option<usize> {
-        let i_index = self.iter.iterator_index(index); 
+        let i_index = self.iter.iterator_index(index);
         // println!("{:?} \t Enumerate iterator index {index} {g_index:?}",std::thread::current().id());
         i_index
     }
-
 }

@@ -20,10 +20,7 @@ where
     A: IndexedLocalIterator,
     B: IndexedLocalIterator,
 {
-    type Item = (
-        <A as LocalIterator>::Item,
-        <B as LocalIterator>::Item,
-    );
+    type Item = (<A as LocalIterator>::Item, <B as LocalIterator>::Item);
     type Array = <A as LocalIterator>::Array;
     fn init(&self, start_i: usize, cnt: usize) -> Zip<A, B> {
         // println!("init zip start_i: {:?} cnt {:?} end_i {:?}",start_i, cnt, start_i+cnt );
@@ -43,22 +40,20 @@ where
         // println!("enumerate elems {:?}",in_elems);
         in_elems
     }
-    
+
     fn advance_index(&mut self, count: usize) {
         self.a.advance_index(count);
         self.b.advance_index(count);
     }
 }
 
-
-impl<A,B> IndexedLocalIterator for Zip<A,B>
+impl<A, B> IndexedLocalIterator for Zip<A, B>
 where
     A: IndexedLocalIterator,
     B: IndexedLocalIterator,
 {
     fn iterator_index(&self, index: usize) -> Option<usize> {
-        let i_index = self.a.iterator_index(index); 
+        let i_index = self.a.iterator_index(index);
         i_index
     }
-
 }

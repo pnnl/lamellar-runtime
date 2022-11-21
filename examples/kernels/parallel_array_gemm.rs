@@ -35,13 +35,14 @@ fn main() {
     let a = UnsafeArray::<f32>::new(&world, m * n, Distribution::Block); //row major
     let b = UnsafeArray::<f32>::new(&world, n * p, Distribution::Block); //col major
     let c = UnsafeArray::<f32>::new(&world, m * p, Distribution::Block); //row major
-     
+
     //initialize matrices
     unsafe {
         a.local_iter_mut()
             .enumerate()
             .for_each(|(i, x)| *x = i as f32);
-        b.dist_iter_mut().enumerate().for_each(move |(i, x)| { //need global index so use dist_iter
+        b.dist_iter_mut().enumerate().for_each(move |(i, x)| {
+            //need global index so use dist_iter
             //identity matrix
             let row = i / dim;
             let col = i % dim;
@@ -52,7 +53,7 @@ fn main() {
             }
         });
         c.dist_iter_mut().for_each(|x| *x = 0.0);
-}
+    }
 
     world.wait_all();
     world.barrier();

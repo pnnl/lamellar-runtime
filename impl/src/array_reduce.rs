@@ -72,11 +72,12 @@ fn create_reduction(
             #[#am]
             impl LamellarAM for #reduction_name{
                 async fn exec(&self) -> #typeident{
+                    println!("{}",stringify!(#array_type));
                     if self.start_pe == self.end_pe{
                         // println!("[{:?}] root {:?} {:?}",__lamellar_current_pe,self.start_pe, self.end_pe);
                         let timer = std::time::Instant::now();
+                        #[allow(unused_unsafe)]
                         let data_slice = unsafe {self.data.local_data()};
-                        // println!("data: {:?}",data_slice);
                         // let first = data_slice.first().unwrap().clone();
                         // let res = data_slice[1..].iter().fold(first, #op );
                         let res = data_slice.iter()#iter_chain.reduce(#op).unwrap();
@@ -127,6 +128,7 @@ fn create_reduction(
     let user_expanded = quote_spanned! {expanded.span()=>
         const _: () = {
             extern crate lamellar as __lamellar;
+            use __lamellar::active_messaging::prelude::*;
             use __lamellar::array::{LamellarArrayPut};
             #expanded
         };
@@ -187,56 +189,56 @@ pub(crate) fn __register_reduction(item: TokenStream) -> TokenStream {
     TokenStream::from(output)
 }
 
-pub(crate) fn __generate_reductions_for_type(item: TokenStream) -> TokenStream {
-    let mut output = quote! {};
-    let read_array_types: Vec<syn::Ident> = vec![
-        quote::format_ident!("LocalLockArray"),
-        quote::format_ident!("AtomicArray"),
-        quote::format_ident!("GenericAtomicArray"),
-        quote::format_ident!("UnsafeArray"),
-        quote::format_ident!("ReadOnlyArray"),
-    ];
+// pub(crate) fn __generate_reductions_for_type(item: TokenStream) -> TokenStream {
+//     let mut output = quote! {};
+//     let read_array_types: Vec<syn::Ident> = vec![
+//         quote::format_ident!("LocalLockArray"),
+//         quote::format_ident!("AtomicArray"),
+//         quote::format_ident!("GenericAtomicArray"),
+//         quote::format_ident!("UnsafeArray"),
+//         quote::format_ident!("ReadOnlyArray"),
+//     ];
 
-    for t in item.to_string().split(",").collect::<Vec<&str>>() {
-        let typeident = quote::format_ident!("{:}", t.trim());
-        output.extend(create_reduction(
-            typeident.clone(),
-            "sum".to_string(),
-            quote! {
-                let data_slice = <lamellar::LamellarMemoryRegion<#typeident> as lamellar::RegisteredMemoryRegion>::as_slice(&self.data).unwrap();
-                let first = data_slice.first().unwrap().clone();
-                data_slice[1..].iter().fold(first,|acc,val|{ acc+val } )
-            },
-            &read_array_types,
-            false,
-            false
-        ));
-        output.extend(create_reduction(
-            typeident.clone(),
-            "prod".to_string(),
-            quote! {
-                let data_slice = <lamellar::LamellarMemoryRegion<#typeident> as lamellar::RegisteredMemoryRegion>::as_slice(&self.data).unwrap();
-                let first = data_slice.first().unwrap().clone();
-                data_slice[1..].iter().fold(first,|acc,val|{ acc*val } )
-            },
-            &read_array_types,
-            false,
-            false
-        ));
-        output.extend(create_reduction(
-            typeident.clone(),
-            "max".to_string(),
-            quote! {
-                *<lamellar::LamellarMemoryRegion<#typeident> as lamellar::RegisteredMemoryRegion>::as_slice(&self.data).unwrap().iter().max().unwrap()
-            },
-            &read_array_types,
-            false,
-            false
-        ));
-    }
+//     for t in item.to_string().split(",").collect::<Vec<&str>>() {
+//         let typeident = quote::format_ident!("{:}", t.trim());
+//         output.extend(create_reduction(
+//             typeident.clone(),
+//             "sum".to_string(),
+//             quote! {
+//                 let data_slice = <lamellar::LamellarMemoryRegion<#typeident> as lamellar::RegisteredMemoryRegion>::as_slice(&self.data).unwrap();
+//                 let first = data_slice.first().unwrap().clone();
+//                 data_slice[1..].iter().fold(first,|acc,val|{ acc+val } )
+//             },
+//             &read_array_types,
+//             false,
+//             false
+//         ));
+//         output.extend(create_reduction(
+//             typeident.clone(),
+//             "prod".to_string(),
+//             quote! {
+//                 let data_slice = <lamellar::LamellarMemoryRegion<#typeident> as lamellar::RegisteredMemoryRegion>::as_slice(&self.data).unwrap();
+//                 let first = data_slice.first().unwrap().clone();
+//                 data_slice[1..].iter().fold(first,|acc,val|{ acc*val } )
+//             },
+//             &read_array_types,
+//             false,
+//             false
+//         ));
+//         output.extend(create_reduction(
+//             typeident.clone(),
+//             "max".to_string(),
+//             quote! {
+//                 *<lamellar::LamellarMemoryRegion<#typeident> as lamellar::RegisteredMemoryRegion>::as_slice(&self.data).unwrap().iter().max().unwrap()
+//             },
+//             &read_array_types,
+//             false,
+//             false
+//         ));
+//     }
 
-    TokenStream::from(output)
-}
+//     TokenStream::from(output)
+// }
 
 pub(crate) fn __generate_reductions_for_type_rt(item: TokenStream) -> TokenStream {
     let mut output = quote! {};
@@ -291,6 +293,16 @@ pub(crate) fn __generate_reductions_for_type_rt(item: TokenStream) -> TokenStrea
             "max".to_string(),
             quote! {
                 |val1, val2| { if val1 > val2 {val1} else {val2} }
+            },
+            &read_array_types,
+            true,
+            native,
+        ));
+        output.extend(create_reduction(
+            typeident.clone(),
+            "min".to_string(),
+            quote! {
+                |val1, val2| { if val1 < val2 {val1} else {val2} }
             },
             &read_array_types,
             true,

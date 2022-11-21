@@ -97,7 +97,7 @@ impl<T: Dist> SharedMemoryRegion<T> {
     }
     /// The length (in number of elements of `T`) of the local segment of the memory region (i.e. not the global length of the memory region)  
     ///
-    /// # Example
+    /// # Examples
     ///```
     /// use lamellar::SharedMemoryRegion;
     ///
@@ -278,7 +278,6 @@ impl<T: Dist> SharedMemoryRegion<T> {
     }
 }
 
-
 // This could be useful for if we want to transfer the actual data instead of the pointer
 // impl<T: Dist + serde::Serialize> SharedMemoryRegion<T> {
 //     pub(crate) fn serialize_local_data<S>(&self, s: S) -> Result<S::Ok, S::Error>
@@ -449,16 +448,29 @@ impl<T: Dist> From<&SharedMemoryRegion<T>> for LamellarMemoryRegion<T> {
     }
 }
 
-impl<T: Dist> From<&SharedMemoryRegion<T>> for LamellarArrayInput<T> {
+impl<T: Dist> From<&SharedMemoryRegion<T>> for LamellarArrayRdmaOutput<T> {
     fn from(smr: &SharedMemoryRegion<T>) -> Self {
         // println!("from");
-        LamellarArrayInput::SharedMemRegion(smr.clone())
+        LamellarArrayRdmaOutput::SharedMemRegion(smr.clone())
     }
 }
 
-impl<T: Dist> MyFrom<&SharedMemoryRegion<T>> for LamellarArrayInput<T> {
-    fn my_from(smr: &SharedMemoryRegion<T>, _team: &std::pin::Pin<Arc<LamellarTeamRT>>) -> Self {
-        LamellarArrayInput::SharedMemRegion(smr.clone())
+impl<T: Dist> TeamFrom<&SharedMemoryRegion<T>> for LamellarArrayRdmaOutput<T> {
+    fn team_from(smr: &SharedMemoryRegion<T>, _team: &std::pin::Pin<Arc<LamellarTeamRT>>) -> Self {
+        LamellarArrayRdmaOutput::SharedMemRegion(smr.clone())
+    }
+}
+
+impl<T: Dist> From<&SharedMemoryRegion<T>> for LamellarArrayRdmaInput<T> {
+    fn from(smr: &SharedMemoryRegion<T>) -> Self {
+        // println!("from");
+        LamellarArrayRdmaInput::SharedMemRegion(smr.clone())
+    }
+}
+
+impl<T: Dist> TeamFrom<&SharedMemoryRegion<T>> for LamellarArrayRdmaInput<T> {
+    fn team_from(smr: &SharedMemoryRegion<T>, _team: &std::pin::Pin<Arc<LamellarTeamRT>>) -> Self {
+        LamellarArrayRdmaInput::SharedMemRegion(smr.clone())
     }
 }
 

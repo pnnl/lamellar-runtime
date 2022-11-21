@@ -12,7 +12,8 @@ fn main() {
     let world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();
     let num_pes = world.num_pes();
-    let array: LocalLockArray<u8> = LocalLockArray::new(&world, ARRAY_LEN * num_pes, Distribution::Block);
+    let array: LocalLockArray<u8> =
+        LocalLockArray::new(&world, ARRAY_LEN * num_pes, Distribution::Block);
     let data = world.alloc_one_sided_mem_region::<u8>(ARRAY_LEN);
     unsafe {
         for i in data.as_mut_slice().unwrap() {
@@ -54,7 +55,9 @@ fn main() {
             for j in (0..2_u64.pow(exp) as usize).step_by(num_bytes as usize) {
                 let sub_timer = Instant::now();
                 let sub_reg = data.sub_region(j..(j + num_bytes as usize));
-                array.get(ARRAY_LEN * (num_pes - 1), &sub_reg);
+                unsafe {
+                    array.get(ARRAY_LEN * (num_pes - 1), &sub_reg);
+                }
                 // println!("j: {:?}",j);
                 // unsafe { array.put_slice(num_pes - 1, j, &data[..num_bytes as usize]) };
                 sub_time += sub_timer.elapsed().as_secs_f64();

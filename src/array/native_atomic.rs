@@ -1,8 +1,5 @@
-#[cfg(not(feature = "non-buffered-array-ops"))]
-pub(crate) mod buffered_operations;
 pub(crate) mod iteration;
-#[cfg(not(feature = "non-buffered-array-ops"))]
-pub(crate) use buffered_operations as operations;
+pub(crate) mod operations;
 mod rdma;
 use crate::array::atomic::AtomicElement;
 use crate::array::native_atomic::operations::BUFOPS;
@@ -20,8 +17,10 @@ use serde::ser::SerializeSeq;
 use std::any::TypeId;
 // use std::ops::{Deref, DerefMut};
 
+#[doc(hidden)]
 pub trait NativeAtomic {}
 
+#[doc(hidden)]
 pub trait AsNativeAtomic {
     type Atomic;
     fn as_native_atomic(&self) -> &Self::Atomic;
@@ -48,6 +47,7 @@ macro_rules! impl_atomic_ops{
         pub struct $C<'a>(pub &'a $B);
         impl AddAssign<$A> for $C<'_>{
             fn add_assign(&mut self, val: $A) {
+                println!("add_assign");
             //    self.0.as_native_atomic().fetch_add(val,Ordering::SeqCst);
                self.0.fetch_add(val,Ordering::SeqCst);
 
@@ -230,35 +230,35 @@ macro_rules! impl_mul_div {
             *match $self.array.orig_t {
                 //deref to the original type
                 NativeAtomicType::I8 => {
-                    compare_exchange_op!(i8, AtomicI8, $self, $val, $op) as *const i8 as *mut T
+                    &compare_exchange_op!(i8, AtomicI8, $self, $val, $op) as *const i8 as *mut T
                 }
                 NativeAtomicType::I16 => {
-                    compare_exchange_op!(i16, AtomicI16, $self, $val, $op) as *const i16 as *mut T
+                    &compare_exchange_op!(i16, AtomicI16, $self, $val, $op) as *const i16 as *mut T
                 }
                 NativeAtomicType::I32 => {
-                    compare_exchange_op!(i32, AtomicI32, $self, $val, $op) as *const i32 as *mut T
+                    &compare_exchange_op!(i32, AtomicI32, $self, $val, $op) as *const i32 as *mut T
                 }
                 NativeAtomicType::I64 => {
-                    compare_exchange_op!(i64, AtomicI64, $self, $val, $op) as *const i64 as *mut T
+                    &compare_exchange_op!(i64, AtomicI64, $self, $val, $op) as *const i64 as *mut T
                 }
                 NativeAtomicType::Isize => {
-                    compare_exchange_op!(isize, AtomicIsize, $self, $val, $op) as *const isize
+                    &compare_exchange_op!(isize, AtomicIsize, $self, $val, $op) as *const isize
                         as *mut T
                 }
                 NativeAtomicType::U8 => {
-                    compare_exchange_op!(u8, AtomicU8, $self, $val, $op) as *const u8 as *mut T
+                    &compare_exchange_op!(u8, AtomicU8, $self, $val, $op) as *const u8 as *mut T
                 }
                 NativeAtomicType::U16 => {
-                    compare_exchange_op!(u16, AtomicU16, $self, $val, $op) as *const u16 as *mut T
+                    &compare_exchange_op!(u16, AtomicU16, $self, $val, $op) as *const u16 as *mut T
                 }
                 NativeAtomicType::U32 => {
-                    compare_exchange_op!(u32, AtomicU32, $self, $val, $op) as *const u32 as *mut T
+                    &compare_exchange_op!(u32, AtomicU32, $self, $val, $op) as *const u32 as *mut T
                 }
                 NativeAtomicType::U64 => {
-                    compare_exchange_op!(u64, AtomicU64, $self, $val, $op) as *const u64 as *mut T
+                    &compare_exchange_op!(u64, AtomicU64, $self, $val, $op) as *const u64 as *mut T
                 }
                 NativeAtomicType::Usize => {
-                    compare_exchange_op!(usize, AtomicUsize, $self, $val, $op) as *const usize
+                    &compare_exchange_op!(usize, AtomicUsize, $self, $val, $op) as *const usize
                         as *mut T
                 }
             }
@@ -272,36 +272,35 @@ macro_rules! impl_add_sub_and_or {
             let slice = $self.array.__local_as_mut_slice();
             *match $self.array.orig_t {
                 //deref to the original type
-                NativeAtomicType::I8 => slice_as_atomic!(i8, AtomicI8, slice)[$self.local_index]
+                NativeAtomicType::I8 => &slice_as_atomic!(i8, AtomicI8, slice)[$self.local_index]
                     .$op(as_type!($val, i8), Ordering::SeqCst)
                     as *const i8 as *mut T,
-                NativeAtomicType::I16 => slice_as_atomic!(i16, AtomicI16, slice)[$self.local_index]
+                NativeAtomicType::I16 => &slice_as_atomic!(i16, AtomicI16, slice)[$self.local_index]
                     .$op(as_type!($val, i16), Ordering::SeqCst)
                     as *const i16 as *mut T,
-                NativeAtomicType::I32 => slice_as_atomic!(i32, AtomicI32, slice)[$self.local_index]
+                NativeAtomicType::I32 => &slice_as_atomic!(i32, AtomicI32, slice)[$self.local_index]
                     .$op(as_type!($val, i32), Ordering::SeqCst)
                     as *const i32 as *mut T,
-                NativeAtomicType::I64 => slice_as_atomic!(i64, AtomicI64, slice)[$self.local_index]
+                NativeAtomicType::I64 => &slice_as_atomic!(i64, AtomicI64, slice)[$self.local_index]
                     .$op(as_type!($val, i64), Ordering::SeqCst)
                     as *const i64 as *mut T,
-                NativeAtomicType::Isize => slice_as_atomic!(isize, AtomicIsize, slice)
+                NativeAtomicType::Isize => &slice_as_atomic!(isize, AtomicIsize, slice)
                     [$self.local_index]
                     .$op(as_type!($val, isize), Ordering::SeqCst)
                     as *const isize as *mut T,
-                NativeAtomicType::U8 => slice_as_atomic!(u8, AtomicU8, slice)[$self.local_index]
+                NativeAtomicType::U8 => &slice_as_atomic!(u8, AtomicU8, slice)[$self.local_index]
                     .$op(as_type!($val, u8), Ordering::SeqCst)
                     as *const u8 as *mut T,
-                NativeAtomicType::U16 => slice_as_atomic!(u16, AtomicU16, slice)[$self.local_index]
+                NativeAtomicType::U16 => &slice_as_atomic!(u16, AtomicU16, slice)[$self.local_index]
                     .$op(as_type!($val, u16), Ordering::SeqCst)
                     as *const u16 as *mut T,
-                NativeAtomicType::U32 => slice_as_atomic!(u32, AtomicU32, slice)[$self.local_index]
+                NativeAtomicType::U32 => &slice_as_atomic!(u32, AtomicU32, slice)[$self.local_index]
                     .$op(as_type!($val, u32), Ordering::SeqCst)
                     as *const u32 as *mut T,
-                NativeAtomicType::U64 => slice_as_atomic!(u64, AtomicU64, slice)[$self.local_index]
+                NativeAtomicType::U64 => &slice_as_atomic!(u64, AtomicU64, slice)[$self.local_index]
                     .$op(as_type!($val, u64), Ordering::SeqCst)
                     as *const u64 as *mut T,
-                NativeAtomicType::Usize => slice_as_atomic!(usize, AtomicUsize, slice)
-                    [$self.local_index]
+                NativeAtomicType::Usize => &slice_as_atomic!(usize, AtomicUsize, slice)[$self.local_index]
                     .$op(as_type!($val, usize), Ordering::SeqCst)
                     as *const usize as *mut T,
             }
@@ -418,34 +417,34 @@ macro_rules! impl_swap {
             *match $self.array.orig_t {
                 //deref to the original type
                 NativeAtomicType::I8 => {
-                    compare_exchange_op!(i8, AtomicI8, $self, $val) as *const i8 as *mut T
+                    &compare_exchange_op!(i8, AtomicI8, $self, $val) as *const i8 as *mut T
                 }
                 NativeAtomicType::I16 => {
-                    compare_exchange_op!(i16, AtomicI16, $self, $val) as *const i16 as *mut T
+                    &compare_exchange_op!(i16, AtomicI16, $self, $val) as *const i16 as *mut T
                 }
                 NativeAtomicType::I32 => {
-                    compare_exchange_op!(i32, AtomicI32, $self, $val) as *const i32 as *mut T
+                    &compare_exchange_op!(i32, AtomicI32, $self, $val) as *const i32 as *mut T
                 }
                 NativeAtomicType::I64 => {
-                    compare_exchange_op!(i64, AtomicI64, $self, $val) as *const i64 as *mut T
+                    &compare_exchange_op!(i64, AtomicI64, $self, $val) as *const i64 as *mut T
                 }
                 NativeAtomicType::Isize => {
-                    compare_exchange_op!(isize, AtomicIsize, $self, $val) as *const isize as *mut T
+                    &compare_exchange_op!(isize, AtomicIsize, $self, $val) as *const isize as *mut T
                 }
                 NativeAtomicType::U8 => {
-                    compare_exchange_op!(u8, AtomicU8, $self, $val) as *const u8 as *mut T
+                    &compare_exchange_op!(u8, AtomicU8, $self, $val) as *const u8 as *mut T
                 }
                 NativeAtomicType::U16 => {
-                    compare_exchange_op!(u16, AtomicU16, $self, $val) as *const u16 as *mut T
+                    &compare_exchange_op!(u16, AtomicU16, $self, $val) as *const u16 as *mut T
                 }
                 NativeAtomicType::U32 => {
-                    compare_exchange_op!(u32, AtomicU32, $self, $val) as *const u32 as *mut T
+                    &compare_exchange_op!(u32, AtomicU32, $self, $val) as *const u32 as *mut T
                 }
                 NativeAtomicType::U64 => {
-                    compare_exchange_op!(u64, AtomicU64, $self, $val) as *const u64 as *mut T
+                    &compare_exchange_op!(u64, AtomicU64, $self, $val) as *const u64 as *mut T
                 }
                 NativeAtomicType::Usize => {
-                    compare_exchange_op!(usize, AtomicUsize, $self, $val) as *const usize as *mut T
+                    &compare_exchange_op!(usize, AtomicUsize, $self, $val) as *const usize as *mut T
                 }
             }
         }
@@ -638,8 +637,11 @@ impl<T: Dist + std::fmt::Debug> std::fmt::Debug for NativeAtomicElement<T> {
         write!(f, "{:?}", self.load())
     }
 }
-
-#[doc(hidden)]
+/// A variant of an [AtomicArray] providing atomic access for any integer type that has a corresponding Rust supported Atomic type (e.g. usize -> AtomicUsize)
+///
+/// Generally any operation on this array type will be performed via an internal runtime Active Message, i.e. direct RDMA operations are not allowed
+///
+/// You should not be directly interacting with this type, rather you should be operating on an [AtomicArray][crate::array::AtomicArray].
 #[lamellar_impl::AmDataRT(Clone, Debug)]
 pub struct NativeAtomicArray<T> {
     pub(crate) array: UnsafeArray<T>,
@@ -779,34 +781,6 @@ impl<T: Dist> Iterator for NativeAtomicLocalDataIter<T> {
     }
 }
 
-impl<T: Dist + NativeAtomic + std::default::Default> NativeAtomicArray<T> {
-    // Send + Copy  == Dist
-    pub fn new<U: Clone + Into<IntoLamellarTeam>>(
-        team: U,
-        array_size: usize,
-        distribution: Distribution,
-    ) -> NativeAtomicArray<T> {
-        // println!("new native atomic array 0");
-        let array = UnsafeArray::new(team.clone(), array_size, distribution);
-        if let Some(func) = BUFOPS.get(&TypeId::of::<T>()) {
-            let mut op_bufs = array.inner.data.op_buffers.write();
-            let bytearray = NativeAtomicByteArray {
-                array: array.clone().into(),
-                orig_t: NativeAtomicType::from::<T>(),
-            };
-
-            for pe in 0..op_bufs.len() {
-                op_bufs[pe] = func(NativeAtomicByteArray::downgrade(&bytearray));
-            }
-        }
-
-        NativeAtomicArray {
-            array: array,
-            orig_t: NativeAtomicType::from::<T>(),
-        }
-    }
-}
-
 impl<T: Dist + std::default::Default> NativeAtomicArray<T> {
     // Send + Copy  == Dist
     pub(crate) fn new_internal<U: Clone + Into<IntoLamellarTeam>>(
@@ -835,64 +809,31 @@ impl<T: Dist + std::default::Default> NativeAtomicArray<T> {
     }
 }
 
+#[doc(hidden)]
 impl<T: Dist> NativeAtomicArray<T> {
     pub fn native_type(&self) -> NativeAtomicType {
         self.orig_t
     }
-    pub(crate) fn get_element(&self, index: usize) -> NativeAtomicElement<T> {
-        NativeAtomicElement {
-            array: self.clone(),
-            local_index: index,
+    pub(crate) fn get_element(&self, index: usize) -> Option<NativeAtomicElement<T>> {
+        if index < unsafe { self.__local_as_slice().len() } {
+            //We are only directly accessing the local slice for its len
+            Some(NativeAtomicElement {
+                array: self.clone(),
+                local_index: index,
+            })
+        } else {
+            None
         }
     }
 }
 
+#[doc(hidden)]
 impl<T: Dist> NativeAtomicArray<T> {
-    pub fn wait_all(&self) {
-        self.array.wait_all();
-    }
-    pub fn barrier(&self) {
-        self.array.barrier();
-    }
-
-    pub fn block_on<F>(&self, f: F) -> F::Output
-    where
-        F: Future,
-    {
-        self.array.block_on(f)
-    }
-
-    pub(crate) fn num_elems_local(&self) -> usize {
-        self.array.num_elems_local()
-    }
-
     pub fn use_distribution(self, distribution: Distribution) -> Self {
         NativeAtomicArray {
             array: self.array.use_distribution(distribution),
             orig_t: self.orig_t,
         }
-    }
-
-    pub fn num_pes(&self) -> usize {
-        self.array.num_pes()
-    }
-
-    #[doc(hidden)]
-    pub fn pe_for_dist_index(&self, index: usize) -> Option<usize> {
-        self.array.pe_for_dist_index(index)
-    }
-
-    #[doc(hidden)]
-    pub fn pe_offset_for_dist_index(&self, pe: usize, index: usize) -> Option<usize> {
-        self.array.pe_offset_for_dist_index(pe, index)
-    }
-
-    // pub(crate) fn subarray_index_from_local(&self, index: usize) -> Option<usize> {
-    //     self.array.subarray_index_from_local(index)
-    // }
-
-    pub fn len(&self) -> usize {
-        self.array.len()
     }
 
     pub fn local_data(&self) -> NativeAtomicLocalData<T> {
@@ -911,20 +852,12 @@ impl<T: Dist> NativeAtomicArray<T> {
         }
     }
 
-    #[doc(hidden)]
     pub unsafe fn __local_as_slice(&self) -> &[T] {
         self.array.local_as_mut_slice()
     }
-    #[doc(hidden)]
+
     pub unsafe fn __local_as_mut_slice(&self) -> &mut [T] {
         self.array.local_as_mut_slice()
-    }
-
-    pub fn sub_array<R: std::ops::RangeBounds<usize>>(&self, range: R) -> Self {
-        NativeAtomicArray {
-            array: self.array.sub_array(range),
-            orig_t: self.orig_t,
-        }
     }
 
     pub fn into_unsafe(self) -> UnsafeArray<T> {
@@ -932,21 +865,13 @@ impl<T: Dist> NativeAtomicArray<T> {
         self.array.into()
     }
 
-    // pub fn into_local_only(self) -> LocalOnlyArray<T> {
-    //     // println!("native into_local_only");
-    //     self.array.into()
-    // }
-
     pub fn into_read_only(self) -> ReadOnlyArray<T> {
         // println!("native into_read_only");
         self.array.into()
     }
-
-    // pub fn into_generic_atomic(self) -> GenericAtomicArray<T> {
-    //     self.array.into()
-    // }
 }
 
+#[doc(hidden)]
 impl<T: Dist> From<UnsafeArray<T>> for NativeAtomicArray<T> {
     fn from(array: UnsafeArray<T>) -> Self {
         // println!("native from unsafe");
@@ -968,6 +893,7 @@ impl<T: Dist> From<UnsafeArray<T>> for NativeAtomicArray<T> {
     }
 }
 
+#[doc(hidden)]
 impl<T: Dist> From<NativeAtomicArray<T>> for NativeAtomicByteArray {
     fn from(array: NativeAtomicArray<T>) -> Self {
         NativeAtomicByteArray {
@@ -976,6 +902,18 @@ impl<T: Dist> From<NativeAtomicArray<T>> for NativeAtomicByteArray {
         }
     }
 }
+
+#[doc(hidden)]
+impl<T: Dist> From<NativeAtomicArray<T>> for LamellarByteArray {
+    fn from(array: NativeAtomicArray<T>) -> Self {
+        LamellarByteArray::NativeAtomicArray(NativeAtomicByteArray {
+            array: array.array.into(),
+            orig_t: array.orig_t,
+        })
+    }
+}
+
+#[doc(hidden)]
 impl<T: Dist> From<NativeAtomicArray<T>> for AtomicByteArray {
     fn from(array: NativeAtomicArray<T>) -> Self {
         AtomicByteArray::NativeAtomicByteArray(NativeAtomicByteArray {
@@ -984,6 +922,8 @@ impl<T: Dist> From<NativeAtomicArray<T>> for AtomicByteArray {
         })
     }
 }
+
+#[doc(hidden)]
 impl<T: Dist> From<NativeAtomicByteArray> for NativeAtomicArray<T> {
     fn from(array: NativeAtomicByteArray) -> Self {
         NativeAtomicArray {
@@ -992,6 +932,8 @@ impl<T: Dist> From<NativeAtomicByteArray> for NativeAtomicArray<T> {
         }
     }
 }
+
+#[doc(hidden)]
 impl<T: Dist> From<NativeAtomicByteArray> for AtomicArray<T> {
     fn from(array: NativeAtomicByteArray) -> Self {
         NativeAtomicArray {
@@ -1002,15 +944,17 @@ impl<T: Dist> From<NativeAtomicByteArray> for AtomicArray<T> {
     }
 }
 
+#[doc(hidden)]
 impl<T: Dist> private::ArrayExecAm<T> for NativeAtomicArray<T> {
     fn team(&self) -> Pin<Arc<LamellarTeamRT>> {
-        self.array.team().clone()
+        self.array.team_rt().clone()
     }
     fn team_counters(&self) -> Arc<AMCounters> {
         self.array.team_counters()
     }
 }
 
+#[doc(hidden)]
 impl<T: Dist> private::LamellarArrayPrivate<T> for NativeAtomicArray<T> {
     fn inner_array(&self) -> &UnsafeArray<T> {
         &self.array
@@ -1032,21 +976,25 @@ impl<T: Dist> private::LamellarArrayPrivate<T> for NativeAtomicArray<T> {
     }
 }
 
+#[doc(hidden)]
 impl<T: Dist> LamellarArray<T> for NativeAtomicArray<T> {
+    fn team(&self) -> Pin<Arc<LamellarTeamRT>> {
+        self.array.team_rt().clone()
+    }
     fn my_pe(&self) -> usize {
         self.array.my_pe()
     }
-    fn team(&self) -> Pin<Arc<LamellarTeamRT>> {
-        self.array.team().clone()
-    }
-    fn num_elems_local(&self) -> usize {
-        self.num_elems_local()
+    fn num_pes(&self) -> usize {
+        self.array.num_pes()
     }
     fn len(&self) -> usize {
-        self.len()
+        self.array.len()
+    }
+    fn num_elems_local(&self) -> usize {
+        self.array.num_elems_local()
     }
     fn barrier(&self) {
-        self.barrier();
+        self.array.barrier();
     }
     fn wait_all(&self) {
         self.array.wait_all()
@@ -1054,51 +1002,74 @@ impl<T: Dist> LamellarArray<T> for NativeAtomicArray<T> {
     }
     fn block_on<F>(&self, f: F) -> F::Output
     where
-        F: Future {
-            self.array.block_on(f)
+        F: Future,
+    {
+        self.array.block_on(f)
     }
     fn pe_and_offset_for_global_index(&self, index: usize) -> Option<(usize, usize)> {
         self.array.pe_and_offset_for_global_index(index)
     }
 }
 
+#[doc(hidden)]
 impl<T: Dist> LamellarWrite for NativeAtomicArray<T> {}
+
+#[doc(hidden)]
 impl<T: Dist> LamellarRead for NativeAtomicArray<T> {}
 
+#[doc(hidden)]
 impl<T: Dist> SubArray<T> for NativeAtomicArray<T> {
     type Array = NativeAtomicArray<T>;
     fn sub_array<R: std::ops::RangeBounds<usize>>(&self, range: R) -> Self::Array {
-        self.sub_array(range).into()
+        NativeAtomicArray {
+            array: self.array.sub_array(range),
+            orig_t: self.orig_t,
+        }
     }
     fn global_index(&self, sub_index: usize) -> usize {
         self.array.global_index(sub_index)
     }
 }
 
+#[doc(hidden)]
 impl<T: Dist + std::fmt::Debug> NativeAtomicArray<T> {
     pub fn print(&self) {
         self.array.print();
     }
 }
 
+#[doc(hidden)]
 impl<T: Dist + std::fmt::Debug> ArrayPrint<T> for NativeAtomicArray<T> {
     fn print(&self) {
         self.array.print()
     }
 }
 
-impl<T: Dist + AmDist + 'static> NativeAtomicArray<T> {
-    pub fn reduce(&self, op: &str) -> Pin<Box<dyn Future<Output = T>>> {
-        self.array.reduce(op)
+impl<T: Dist + AmDist + 'static> LamellarArrayReduce<T> for NativeAtomicArray<T> {
+    fn reduce(&self, op: &str) -> Pin<Box<dyn Future<Output = T>>> {
+        self.array
+            .reduce_data(op, self.clone().into())
+            .into_future()
     }
-    pub fn sum(&self) -> Pin<Box<dyn Future<Output = T>>> {
-        self.array.reduce("sum")
+}
+impl<T: Dist + AmDist + ElementArithmeticOps + 'static> LamellarArrayArithmeticReduce<T>
+    for NativeAtomicArray<T>
+{
+    fn sum(&self) -> Pin<Box<dyn Future<Output = T>>> {
+        self.reduce("sum")
     }
-    pub fn prod(&self) -> Pin<Box<dyn Future<Output = T>>> {
-        self.array.reduce("prod")
+    fn prod(&self) -> Pin<Box<dyn Future<Output = T>>> {
+        self.reduce("prod")
     }
-    pub fn max(&self) -> Pin<Box<dyn Future<Output = T>>> {
-        self.array.reduce("max")
+}
+impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static> LamellarArrayCompareReduce<T>
+    for NativeAtomicArray<T>
+{
+    fn max(&self) -> Pin<Box<dyn Future<Output = T>>> {
+        self.reduce("max")
+    }
+    fn min(&self) -> Pin<Box<dyn Future<Output = T>>> {
+        self.reduce("min")
     }
 }
 
@@ -1118,6 +1089,7 @@ pub enum NativeAtomicType {
     Usize,
 }
 
+#[doc(hidden)]
 impl NativeAtomicType {
     fn from<T: 'static>() -> NativeAtomicType {
         let t = TypeId::of::<T>();
@@ -1273,23 +1245,3 @@ impl NativeAtomicType {
         }
     }
 }
-
-// impl<T: Dist + serde::ser::Serialize + serde::de::DeserializeOwned + 'static> LamellarArrayReduce<T>
-//     for NativeAtomicArray<T>
-// {
-//     fn get_reduction_op(&self, op: String) -> LamellarArcAm {
-//         self.array.get_reduction_op(op)
-//     }
-//     fn reduce(&self, op: &str) -> Box<dyn LamellarRequest<Output = T>  > {
-//         self.reduce(op)
-//     }
-//     fn sum(&self) -> Box<dyn LamellarRequest<Output = T>  > {
-//         self.sum()
-//     }
-//     fn max(&self) -> Box<dyn LamellarRequest<Output = T>  > {
-//         self.max()
-//     }
-//     fn prod(&self) -> Box<dyn LamellarRequest<Output = T>  > {
-//         self.prod()
-//     }
-// }

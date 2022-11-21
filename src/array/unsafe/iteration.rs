@@ -2,8 +2,8 @@ use crate::array::r#unsafe::*;
 
 use crate::array::iterator::distributed_iterator::for_each::*;
 use crate::array::iterator::distributed_iterator::*;
-use crate::array::iterator::local_iterator::*;
 use crate::array::iterator::local_iterator;
+use crate::array::iterator::local_iterator::*;
 use crate::array::iterator::Schedule;
 // {
 //     DistIter, DistIterMut, DistIteratorLauncher, DistributedIterator, ForEach, ForEachAsync, DistIterForEachHandle, DistIterCollectHandle
@@ -14,7 +14,7 @@ use crate::memregion::Dist;
 
 impl<T: Dist> UnsafeArray<T> {
     /// Create an immutable [DistributedIterator][crate::array::DistributedIterator] for this UnsafeArray
-    /// 
+    ///
     /// This is a collective and blocking call that will not return until all PE's in the Array have entered
     ///
     /// # Safety
@@ -23,13 +23,13 @@ impl<T: Dist> UnsafeArray<T> {
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
     /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic);
     ///
-    /// unsafe { 
+    /// unsafe {
     ///     world.block_on(
-    ///         array.dist_iter().for_each(|elem| println!("PE{my_pe} elem {elem}"));
+    ///         array.dist_iter().for_each(move |elem| println!("PE{my_pe} elem {elem}"));
     ///     );
     /// }
     ///```
@@ -38,7 +38,7 @@ impl<T: Dist> UnsafeArray<T> {
     }
 
     /// Create a mutable [DistributedIterator][crate::array::DistributedIterator] for this UnsafeArray
-    /// 
+    ///
     /// This is a collective and blocking call that will not return until all PE's in the Array have entered
     ///
     /// # Safety
@@ -47,13 +47,13 @@ impl<T: Dist> UnsafeArray<T> {
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
     /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic);
     ///
-    /// unsafe { 
+    /// unsafe {
     ///     world.block_on(
-    ///         array.dist_iter_mut().for_each(|elem| *elem = my_pe);
+    ///         array.dist_iter_mut().for_each(move |elem| *elem = my_pe);
     ///     );
     /// }
     ///```
@@ -69,13 +69,13 @@ impl<T: Dist> UnsafeArray<T> {
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
     /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic);
     ///
-    /// unsafe { 
+    /// unsafe {
     ///     world.block_on(
-    ///         array.local_iter().for_each(|elem| println!("PE{my_pe} elem {elem}"));
+    ///         array.local_iter().for_each(move |elem| println!("PE{my_pe} elem {elem}"));
     ///     );
     /// }
     ///```
@@ -84,20 +84,20 @@ impl<T: Dist> UnsafeArray<T> {
     }
 
     /// Create a mutable [LocalIterator][crate::array::LocalIterator] for this UnsafeArray
-    /// 
+    ///
     /// # Safety
     /// Data in UnsafeArrays are always unsafe as there are no protections on how remote PE's may access any other PE's local data.
     /// It is also possible to have mutable and immutable references to this arrays data on the same PE
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
     /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic);
     ///
-    /// unsafe { 
+    /// unsafe {
     ///     world.block_on(
-    ///         array.local_iter_mut().for_each(|elem| *elem = my_pe);
+    ///         array.local_iter_mut().for_each(move |elem| *elem = my_pe);
     ///     );
     /// }
     pub unsafe fn local_iter_mut(&self) -> LocalIterMut<'static, T, UnsafeArray<T>> {
@@ -112,11 +112,11 @@ impl<T: Dist> UnsafeArray<T> {
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
     /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic);
     ///
-    /// unsafe { 
+    /// unsafe {
     ///     if my_pe == 0 {
     ///         for elem in array.onesided_iter().into_iter() { //"into_iter()" converts into a standard Rust Iterator
     ///             println!("PE{my_pe} elem {elem}");
@@ -128,7 +128,7 @@ impl<T: Dist> UnsafeArray<T> {
         OneSidedIter::new(self.clone().into(), self.inner.data.team.clone(), 1)
     }
 
-    /// Create an immutable [OneSidedIterator][crate::array::OneSidedIterator] for this UnsafeArray 
+    /// Create an immutable [OneSidedIterator][crate::array::OneSidedIterator] for this UnsafeArray
     /// which will transfer and buffer `buf_size` elements at a time (to more efficient utilize the underlying lamellae network)
     ///
     /// The buffering is transparent to the user.
@@ -141,11 +141,11 @@ impl<T: Dist> UnsafeArray<T> {
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
     /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic);
     ///
-    /// unsafe { 
+    /// unsafe {
     ///     if my_pe == 0 {
     ///         for elem in array.buffered_onesided_iter(100).into_iter() { // "into_iter()" converts into a standard Rust Iterator
     ///             println!("PE{my_pe} elem {elem}");
@@ -153,7 +153,10 @@ impl<T: Dist> UnsafeArray<T> {
     ///     }
     /// }
     ///```
-    pub unsafe fn buffered_onesided_iter(&self, buf_size: usize) -> OneSidedIter<'_, T, UnsafeArray<T>> {
+    pub unsafe fn buffered_onesided_iter(
+        &self,
+        buf_size: usize,
+    ) -> OneSidedIter<'_, T, UnsafeArray<T>> {
         OneSidedIter::new(
             self.clone().into(),
             self.inner.data.team.clone(),
@@ -250,7 +253,7 @@ impl<T: Dist> UnsafeArray<T> {
             };
             let num_elems_local = iter.elems(self.num_elems_local());
             let elems_per_thread = 1.0f64.max(num_elems_local as f64 / num_workers as f64);
-            
+
             let mut worker = 0;
             let mut siblings = Vec::new();
             while ((worker as f64 * elems_per_thread).round() as usize) < num_elems_local {
@@ -636,7 +639,11 @@ impl<T: Dist> UnsafeArray<T> {
         Box::new(DistIterForEachHandle { reqs: reqs }).into_future()
     }
 
-    fn local_for_each_static<I, F>(&self, iter: &I, op: F) -> Pin<Box<dyn Future<Output = ()> + Send>>
+    fn local_for_each_static<I, F>(
+        &self,
+        iter: &I,
+        op: F,
+    ) -> Pin<Box<dyn Future<Output = ()> + Send>>
     where
         I: LocalIterator + 'static,
         F: Fn(I::Item) + SyncSend + Clone + 'static,
@@ -659,24 +666,25 @@ impl<T: Dist> UnsafeArray<T> {
             while ((worker as f64 * elems_per_thread).round() as usize) < num_elems_local {
                 let start_i = (worker as f64 * elems_per_thread).round() as usize;
                 let end_i = ((worker + 1) as f64 * elems_per_thread).round() as usize;
-                reqs.push(
-                    self.inner
-                        .data
-                        .task_group
-                        .exec_am_local_inner(local_iterator::for_each::ForEachStatic {
-                            op: op.clone(),
-                            data: iter.clone(),
-                            start_i: start_i,
-                            end_i: end_i,
-                        }),
-                );
+                reqs.push(self.inner.data.task_group.exec_am_local_inner(
+                    local_iterator::for_each::ForEachStatic {
+                        op: op.clone(),
+                        data: iter.clone(),
+                        start_i: start_i,
+                        end_i: end_i,
+                    },
+                ));
                 worker += 1;
             }
         }
         Box::new(LocalIterForEachHandle { reqs: reqs }).into_future()
     }
 
-    fn local_for_each_dynamic<I, F>(&self, iter: &I, op: F) -> Pin<Box<dyn Future<Output = ()> + Send>>
+    fn local_for_each_dynamic<I, F>(
+        &self,
+        iter: &I,
+        op: F,
+    ) -> Pin<Box<dyn Future<Output = ()> + Send>>
     where
         I: LocalIterator + 'static,
         F: Fn(I::Item) + SyncSend + Clone + 'static,
@@ -692,17 +700,14 @@ impl<T: Dist> UnsafeArray<T> {
             let cur_i = Arc::new(AtomicUsize::new(0));
             // println!("ranges {:?}", ranges);
             for _ in 0..std::cmp::min(num_workers, num_elems_local) {
-                reqs.push(
-                    self.inner
-                        .data
-                        .task_group
-                        .exec_am_local_inner(local_iterator::for_each::ForEachDynamic {
-                            op: op.clone(),
-                            data: iter.clone(),
-                            cur_i: cur_i.clone(),
-                            max_i: num_elems_local,
-                        }),
-                );
+                reqs.push(self.inner.data.task_group.exec_am_local_inner(
+                    local_iterator::for_each::ForEachDynamic {
+                        op: op.clone(),
+                        data: iter.clone(),
+                        cur_i: cur_i.clone(),
+                        max_i: num_elems_local,
+                    },
+                ));
             }
         }
         Box::new(LocalIterForEachHandle { reqs: reqs }).into_future()
@@ -740,23 +745,24 @@ impl<T: Dist> UnsafeArray<T> {
                 worker += 1;
             }
             for sibling in &siblings {
-                reqs.push(
-                    self.inner
-                        .data
-                        .task_group
-                        .exec_am_local_inner(local_iterator::for_each::ForEachWorkStealing {
-                            op: op.clone(),
-                            data: iter.clone(),
-                            range: sibling.clone(),
-                            siblings: siblings.clone(),
-                        }),
-                );
+                reqs.push(self.inner.data.task_group.exec_am_local_inner(
+                    local_iterator::for_each::ForEachWorkStealing {
+                        op: op.clone(),
+                        data: iter.clone(),
+                        range: sibling.clone(),
+                        siblings: siblings.clone(),
+                    },
+                ));
             }
         }
         Box::new(LocalIterForEachHandle { reqs: reqs }).into_future()
     }
 
-    fn local_for_each_guided<I, F>(&self, iter: &I, op: F) -> Pin<Box<dyn Future<Output = ()> + Send>>
+    fn local_for_each_guided<I, F>(
+        &self,
+        iter: &I,
+        op: F,
+    ) -> Pin<Box<dyn Future<Output = ()> + Send>>
     where
         I: LocalIterator + 'static,
         F: Fn(I::Item) + SyncSend + Clone + 'static,
@@ -807,17 +813,14 @@ impl<T: Dist> UnsafeArray<T> {
             let range_i = Arc::new(AtomicUsize::new(0));
             // println!("ranges {:?}", ranges);
             for _ in 0..std::cmp::min(num_workers, num_elems_local_orig) {
-                reqs.push(
-                    self.inner
-                        .data
-                        .task_group
-                        .exec_am_local_inner(local_iterator::for_each::ForEachChunk {
-                            op: op.clone(),
-                            data: iter.clone(),
-                            ranges: ranges.clone(),
-                            range_i: range_i.clone(),
-                        }),
-                );
+                reqs.push(self.inner.data.task_group.exec_am_local_inner(
+                    local_iterator::for_each::ForEachChunk {
+                        op: op.clone(),
+                        data: iter.clone(),
+                        ranges: ranges.clone(),
+                        range_i: range_i.clone(),
+                    },
+                ));
             }
         }
         Box::new(LocalIterForEachHandle { reqs: reqs }).into_future()
@@ -852,17 +855,14 @@ impl<T: Dist> UnsafeArray<T> {
             let range_i = Arc::new(AtomicUsize::new(0));
             // println!("ranges {:?}", ranges);
             for _ in 0..std::cmp::min(num_workers, num_chunks) {
-                reqs.push(
-                    self.inner
-                        .data
-                        .task_group
-                        .exec_am_local_inner(local_iterator::for_each::ForEachChunk {
-                            op: op.clone(),
-                            data: iter.clone(),
-                            ranges: ranges.clone(),
-                            range_i: range_i.clone(),
-                        }),
-                );
+                reqs.push(self.inner.data.task_group.exec_am_local_inner(
+                    local_iterator::for_each::ForEachChunk {
+                        op: op.clone(),
+                        data: iter.clone(),
+                        ranges: ranges.clone(),
+                        range_i: range_i.clone(),
+                    },
+                ));
             }
         }
         Box::new(LocalIterForEachHandle { reqs: reqs }).into_future()
@@ -895,17 +895,14 @@ impl<T: Dist> UnsafeArray<T> {
             while ((worker as f64 * elems_per_thread).round() as usize) < num_elems_local {
                 let start_i = (worker as f64 * elems_per_thread).round() as usize;
                 let end_i = ((worker + 1) as f64 * elems_per_thread).round() as usize;
-                reqs.push(
-                    self.inner
-                        .data
-                        .task_group
-                        .exec_am_local_inner(local_iterator::for_each::ForEachAsyncStatic {
-                            op: op.clone(),
-                            data: iter.clone(),
-                            start_i: start_i,
-                            end_i: end_i,
-                        }),
-                );
+                reqs.push(self.inner.data.task_group.exec_am_local_inner(
+                    local_iterator::for_each::ForEachAsyncStatic {
+                        op: op.clone(),
+                        data: iter.clone(),
+                        start_i: start_i,
+                        end_i: end_i,
+                    },
+                ));
                 worker += 1;
             }
         }
@@ -933,17 +930,14 @@ impl<T: Dist> UnsafeArray<T> {
             let cur_i = Arc::new(AtomicUsize::new(0));
             // println!("ranges {:?}", ranges);
             for _ in 0..std::cmp::min(num_workers, num_elems_local) {
-                reqs.push(
-                    self.inner
-                        .data
-                        .task_group
-                        .exec_am_local_inner(local_iterator::for_each::ForEachAsyncDynamic {
-                            op: op.clone(),
-                            data: iter.clone(),
-                            cur_i: cur_i.clone(),
-                            max_i: num_elems_local,
-                        }),
-                );
+                reqs.push(self.inner.data.task_group.exec_am_local_inner(
+                    local_iterator::for_each::ForEachAsyncDynamic {
+                        op: op.clone(),
+                        data: iter.clone(),
+                        cur_i: cur_i.clone(),
+                        max_i: num_elems_local,
+                    },
+                ));
             }
         }
         Box::new(LocalIterForEachHandle { reqs: reqs }).into_future()
@@ -1051,17 +1045,14 @@ impl<T: Dist> UnsafeArray<T> {
             let range_i = Arc::new(AtomicUsize::new(0));
             // println!("ranges {:?}", ranges);
             for _ in 0..std::cmp::min(num_workers, num_elems_local_orig) {
-                reqs.push(
-                    self.inner
-                        .data
-                        .task_group
-                        .exec_am_local_inner(local_iterator::for_each::ForEachAsyncChunk {
-                            op: op.clone(),
-                            data: iter.clone(),
-                            ranges: ranges.clone(),
-                            range_i: range_i.clone(),
-                        }),
-                );
+                reqs.push(self.inner.data.task_group.exec_am_local_inner(
+                    local_iterator::for_each::ForEachAsyncChunk {
+                        op: op.clone(),
+                        data: iter.clone(),
+                        ranges: ranges.clone(),
+                        range_i: range_i.clone(),
+                    },
+                ));
             }
         }
         Box::new(LocalIterForEachHandle { reqs: reqs }).into_future()
@@ -1095,24 +1086,18 @@ impl<T: Dist> UnsafeArray<T> {
             let range_i = Arc::new(AtomicUsize::new(0));
             // println!("ranges {:?}", ranges);
             for _ in 0..std::cmp::min(num_workers, num_elems_local) {
-                reqs.push(
-                    self.inner
-                        .data
-                        .task_group
-                        .exec_am_local_inner(local_iterator::for_each::ForEachAsyncChunk {
-                            op: op.clone(),
-                            data: iter.clone(),
-                            ranges: ranges.clone(),
-                            range_i: range_i.clone(),
-                        }),
-                );
+                reqs.push(self.inner.data.task_group.exec_am_local_inner(
+                    local_iterator::for_each::ForEachAsyncChunk {
+                        op: op.clone(),
+                        data: iter.clone(),
+                        ranges: ranges.clone(),
+                        range_i: range_i.clone(),
+                    },
+                ));
             }
         }
         Box::new(LocalIterForEachHandle { reqs: reqs }).into_future()
     }
-
-
-
 }
 
 impl<T: Dist> DistIteratorLauncher for UnsafeArray<T> {
@@ -1296,7 +1281,6 @@ impl<T: Dist> DistIteratorLauncher for UnsafeArray<T> {
     }
 }
 
-
 impl<T: Dist> LocalIteratorLauncher for UnsafeArray<T> {
     fn local_global_index_from_local(&self, index: usize, chunk_size: usize) -> Option<usize> {
         // println!("global index cs:{:?}",chunk_size);
@@ -1317,7 +1301,7 @@ impl<T: Dist> LocalIteratorLauncher for UnsafeArray<T> {
 
     fn local_for_each<I, F>(&self, iter: &I, op: F) -> Pin<Box<dyn Future<Output = ()> + Send>>
     where
-        I:  LocalIterator + 'static,
+        I: LocalIterator + 'static,
         F: Fn(I::Item) + SyncSend + Clone + 'static,
     {
         self.local_for_each_static(iter, op)
@@ -1330,7 +1314,7 @@ impl<T: Dist> LocalIteratorLauncher for UnsafeArray<T> {
         op: F,
     ) -> Pin<Box<dyn Future<Output = ()> + Send>>
     where
-        I:  LocalIterator + 'static,
+        I: LocalIterator + 'static,
         F: Fn(I::Item) + SyncSend + Clone + 'static,
     {
         match sched {
@@ -1342,9 +1326,13 @@ impl<T: Dist> LocalIteratorLauncher for UnsafeArray<T> {
         }
     }
 
-    fn local_for_each_async<I, F, Fut>(&self, iter: &I, op: F) -> Pin<Box<dyn Future<Output = ()> + Send>>
+    fn local_for_each_async<I, F, Fut>(
+        &self,
+        iter: &I,
+        op: F,
+    ) -> Pin<Box<dyn Future<Output = ()> + Send>>
     where
-        I:  LocalIterator + 'static,
+        I: LocalIterator + 'static,
         F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
         Fut: Future<Output = ()> + Send + 'static,
     {
@@ -1358,7 +1346,7 @@ impl<T: Dist> LocalIteratorLauncher for UnsafeArray<T> {
         op: F,
     ) -> Pin<Box<dyn Future<Output = ()> + Send>>
     where
-        I:  LocalIterator + 'static,
+        I: LocalIterator + 'static,
         F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
         Fut: Future<Output = ()> + Send + 'static,
     {

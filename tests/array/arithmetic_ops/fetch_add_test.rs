@@ -6,7 +6,7 @@ use rand::distributions::Uniform;
 
 macro_rules! initialize_array {
     (UnsafeArray,$array:ident,$init_val:ident) => {
-        unsafe {$array.dist_iter_mut().for_each(move |x| *x = $init_val)};
+        unsafe { $array.dist_iter_mut().for_each(move |x| *x = $init_val) };
         $array.wait_all();
         $array.barrier();
     };
@@ -273,10 +273,12 @@ macro_rules! fetch_add_test{
 macro_rules! initialize_array2 {
     (UnsafeArray,$array:ident,$init_val:ident) => {
         #[allow(unused_unsafe)]
-        unsafe {$array
-            .dist_iter_mut()
-            .enumerate()
-            .for_each(move |(i, x)| *x = i)};
+        unsafe {
+            $array
+                .dist_iter_mut()
+                .enumerate()
+                .for_each(move |(i, x)| *x = i)
+        };
         $array.wait_all();
         $array.barrier();
     };
@@ -437,7 +439,7 @@ macro_rules! input_test{
                 for i in 0..array.len(){
                     slice[i]=i;
                 }
-                
+
                 reqs.push(array.batch_fetch_add(slice,1));
                 check_results!($array,array,num_pes,reqs,"scoped SMR<T>");
             }

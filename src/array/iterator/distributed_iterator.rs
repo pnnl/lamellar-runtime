@@ -2,8 +2,8 @@
 //!
 //! This module provides distriubuted iteration capabilities for lamellar arrays,
 //! where iteration over sub slices of the LamellarArray occurs in parallel on each PE.
-//! 
-//! We try to minimize data movement as much as possible, but the runtime will manage remote transfers 
+//!
+//! We try to minimize data movement as much as possible, but the runtime will manage remote transfers
 //! as necessary depending on the iterators used.
 
 // mod chunks;
@@ -11,8 +11,8 @@ mod enumerate;
 mod filter;
 mod filter_map;
 pub(crate) mod for_each;
-mod skip;
 mod map;
+mod skip;
 mod step_by;
 mod take;
 // mod zip;
@@ -21,20 +21,21 @@ mod take;
 use enumerate::*;
 use filter::*;
 use filter_map::*;
-use skip::*;
 use map::*;
+use skip::*;
 use step_by::*;
 use take::*;
 // use zip::*;
 
-use crate::memregion::Dist;
-use crate::lamellar_request::LamellarRequest;
-use crate::LamellarTeamRT;
 use crate::array::iterator::one_sided_iterator::OneSidedIterator;
 use crate::array::iterator::Schedule;
 use crate::array::{
-    AtomicArray, Distribution, GenericAtomicArray, LamellarArray, NativeAtomicArray, UnsafeArray, 
-}; 
+    AtomicArray, Distribution, GenericAtomicArray, LamellarArray, LamellarArrayPut,
+    NativeAtomicArray, UnsafeArray,
+};
+use crate::lamellar_request::LamellarRequest;
+use crate::memregion::Dist;
+use crate::LamellarTeamRT;
 
 use crate::active_messaging::SyncSend;
 
@@ -49,8 +50,6 @@ use std::sync::Arc;
 use parking_lot::Mutex;
 use rand::seq::SliceRandom;
 use rand::thread_rng;
-
-
 
 #[lamellar_impl::AmLocalDataRT(Clone)]
 pub(crate) struct Collect<I>
@@ -179,20 +178,24 @@ impl<T: Dist, A: From<UnsafeArray<T>> + SyncSend> DistIterCollectHandle<T, A> {
         let mut my_start = 0;
         let my_pe = self.team.team_pe.expect("pe not part of team");
         // local_sizes.print();
-        unsafe { local_sizes
-            .onesided_iter()
-            .into_iter()
-            .enumerate()
-            .for_each(|(i, local_size)| {
-                size += local_size;
-                if i < my_pe {
-                    my_start += local_size;
-                }
-            });
+        unsafe {
+            local_sizes
+                .onesided_iter()
+                .into_iter()
+                .enumerate()
+                .for_each(|(i, local_size)| {
+                    size += local_size;
+                    if i < my_pe {
+                        my_start += local_size;
+                    }
+                });
         }
         // println!("my_start {} size {}", my_start, size);
         let array = UnsafeArray::<T>::new(self.team.clone(), size, self.distribution); //implcit barrier
-        array.put(my_start, local_vals);
+
+        // safe because only a single reference to array on each PE
+        // we calculate my_start so that each pes local vals are guaranteed to not overwrite another pes values.
+        unsafe { array.put(my_start, local_vals) };
         array.into()
     }
 }
@@ -220,7 +223,6 @@ impl<T: Dist, A: From<UnsafeArray<T>> + SyncSend> DistIterRequest for DistIterCo
 #[doc(hidden)]
 #[enum_dispatch]
 pub trait DistIteratorLauncher {
-
     fn for_each<I, F>(&self, iter: &I, op: F) -> Pin<Box<dyn Future<Output = ()> + Send>>
     where
         I: DistributedIterator + 'static,
@@ -236,7 +238,6 @@ pub trait DistIteratorLauncher {
         I: DistributedIterator + 'static,
         F: Fn(I::Item) + SyncSend + Clone + 'static;
 
-
     fn for_each_async<I, F, Fut>(
         &self,
         iter: &I,
@@ -246,7 +247,7 @@ pub trait DistIteratorLauncher {
         I: DistributedIterator + 'static,
         F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
         Fut: Future<Output = ()> + Send + 'static;
-    
+
     fn for_each_async_with_schedule<I, F, Fut>(
         &self,
         sched: Schedule,
@@ -263,7 +264,7 @@ pub trait DistIteratorLauncher {
         I: DistributedIterator + 'static,
         I::Item: Dist,
         A: From<UnsafeArray<I::Item>> + SyncSend + 'static;
-    
+
     fn collect_async<I, A, B>(
         &self,
         iter: &I,
@@ -288,10 +289,9 @@ pub trait DistIteratorLauncher {
     fn team(&self) -> Pin<Arc<LamellarTeamRT>>;
 }
 
-
 /// An interface for dealing with distributed iterators (intended as a parallel and distributed version of the standard iterator trait)
 ///
-/// The functions in this trait are available on all distributed iterators. 
+/// The functions in this trait are available on all distributed iterators.
 /// Additonaly functionality can be found in the [IndexedDistributedIterator] trait:
 /// these methods are only available for distributed iterators where the number of elements is known in advance (e.g. after invoking `filter` these methods would be unavailable)
 pub trait DistributedIterator: SyncSend + Clone + 'static {
@@ -330,21 +330,21 @@ pub trait DistributedIterator: SyncSend + Clone + 'static {
     ///```
     /// use lamellar::array::prelude::*;
     ///
-    /// let world = LamellarWorldBuilder.build();
-    /// let array = LocalLockArray::new::<usize>(&world,8,Distribution::Block);
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array = LocalLockArray::<usize>::new(&world,8,Distribution::Block);
     /// let my_pe = world.my_pe();
     ///
-    /// let init_iter = array.dist_iter_mut().for_each(|e| *e = my_pe); //initialize array
+    /// let init_iter = array.dist_iter_mut().for_each(move|e| *e = my_pe); //initialize array
     /// let filter_iter = array.dist_iter()
     ///                        .enumerate() //we can call enumerate before the filter
-    ///                        .filter(|(_,e)| e%2 == 1).for_each(|(i,e)| println!("PE: {my_pe} i: {i} elem: {e}"));
+    ///                        .filter(|(_,e)| *e%2 == 1).for_each(move|(i,e)| println!("PE: {my_pe} i: {i} elem: {e}"));
     /// world.block_on(async move {
     ///     init_iter.await;
     ///     filter_iter.await;
     /// });
     ///```
     /// Possible output on a 4 PE (1 thread/PE) execution (ordering is likey to be random with respect to PEs)
-    ///```
+    ///```text
     /// PE: 1 i: 2 elem: 1
     /// PE: 1 i: 3 elem: 1
     /// PE: 3 i: 6 elem: 3
@@ -363,10 +363,11 @@ pub trait DistributedIterator: SyncSend + Clone + 'static {
     ///```
     /// use lamellar::array::prelude::*;
     ///
-    /// let world = LamellarWorldBuilder.build();
-    /// let array = LocalLockArray::new::<usize>(&world,8,Distribution::Block);
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array = LocalLockArray::<usize>::new(&world,8,Distribution::Block);
+    /// let my_pe = world.my_pe();
     ///
-    /// array.dist_iter_mut().for_each(|e| *e = world.my_pe()); //initialize array
+    /// array.dist_iter_mut().for_each(move|e| *e = my_pe); //initialize array
     /// array.wait_all();
     /// let filter_iter = array.dist_iter()
     ///                        .enumerate() //we can call enumerate before the filter
@@ -374,10 +375,10 @@ pub trait DistributedIterator: SyncSend + Clone + 'static {
     ///     if *e%2 == 0{ Some((i,*e as f32)) }
     ///     else { None }
     /// });
-    /// world.block_on(filter_iter.for_each(|(i,e)| println!("PE: {my_pe} i: {i} elem: {e}")));
+    /// world.block_on(filter_iter.for_each(move|(i,e)| println!("PE: {my_pe} i: {i} elem: {e}")));
     ///```
     /// Possible output on a 4 PE (1 thread/PE) execution (ordering is likey to be random with respect to PEs)
-    ///```
+    ///```text
     /// PE: 0 i: 0 elem: 0.0
     /// PE: 0 i: 1 elem: 0.0
     /// PE: 2 i: 4 elem: 2.0
@@ -389,10 +390,10 @@ pub trait DistributedIterator: SyncSend + Clone + 'static {
         R: Send + 'static,
     {
         FilterMap::new(self, op)
-    } 
-    
+    }
+
     /// Calls a closure on each element of a Distributed Iterator in parallel and distributed on each PE (which owns data of the iterated array).
-    /// 
+    ///
     /// Calling this function invokes an implicit barrier across all PEs in the Array
     ///
     /// This call is utilizes the [Schedule::Static][crate::array::iterator::Schedule] policy.
@@ -400,17 +401,17 @@ pub trait DistributedIterator: SyncSend + Clone + 'static {
     /// This function returns a future which can be used to poll for completion of the iteration.
     /// Note calling this function launches the iteration regardless of if the returned future is used or not.
     ///
-    /// # Example
+    /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
     ///
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block);
     ///
     /// world.block_on(
     ///     array
     ///         .dist_iter()
-    ///         .for_each(|elem| println!("{:?} {elem}",std::thread::current().id()))
+    ///         .for_each(move |elem| println!("{:?} {elem}",std::thread::current().id()))
     /// );
     ///```
     fn for_each<F>(&self, op: F) -> Pin<Box<dyn Future<Output = ()> + Send>>
@@ -421,33 +422,33 @@ pub trait DistributedIterator: SyncSend + Clone + 'static {
     }
 
     /// Calls a closure and immediately awaits the result on each element of a Distributed Iterator in parallel and distributed on each PE (which owns data of the iterated array).
-    /// 
+    ///
     /// Calling this function invokes an implicit barrier across all PEs in the Array
     ///
     /// This call is utilizes the [Schedule::Static][crate::array::iterator::Schedule] policy.
     ///
     /// The supplied closure must return a future.
-    /// 
-    /// Each thread will only drive a single future at a time. 
+    ///
+    /// Each thread will only drive a single future at a time.
     ///
     /// This function returns a future which can be used to poll for completion of the iteration.
     /// Note calling this function launches the iteration regardless of if the returned future is used or not.
     ///
-    /// # Example
+    /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
     ///
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block);
     ///
-    /// let iter = array.dist_iter().for_each_async(|elem| async move { 
+    /// let iter = array.dist_iter().for_each_async(|elem| async move {
     ///     async_std::task::yield_now().await;
     ///     println!("{:?} {elem}",std::thread::current().id())
     /// });
     /// world.block_on(iter);
     /// ```
     /// essentially the for_each_async call gets converted into (on each thread)
-    ///```
+    ///```ignore
     /// for fut in array.iter(){
     ///     fut.await;
     /// }
@@ -467,24 +468,27 @@ pub trait DistributedIterator: SyncSend + Clone + 'static {
     /// This function returns a future which needs to be driven to completion to retrieve the new LamellarArray.
     /// Calling await on the future will invoke an implicit barrier (allocating the resources for a new array).
     ///
-    /// Creating the new array potentially results in data transfers depending on the distribution mode and the fact there is no gaurantee 
+    /// Creating the new array potentially results in data transfers depending on the distribution mode and the fact there is no gaurantee
     /// that each PE will contribute an equal number of elements to the new array, and currently LamellarArrays
     /// distribute data across the PEs as evenly as possible.
-    /// 
-    /// # Example
+    ///
+    /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
     ///
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block);
     ///
-    /// let req = array.dist_iter().filter(|elem|  elem < 10).collect::<AtomicArray<usize>>(Distribution::Block);
+    /// let req = array.dist_iter()
+    ///                .map(|elem| *elem) //because of constraints of collect we need to convert from &usize to usize
+    ///                .filter(|elem|  *elem < 10) // (if we didnt do the previous map  we would have needed to do **elem)
+    ///                .collect::<AtomicArray<usize>>(Distribution::Block);
     /// let new_array = array.block_on(req); //wait on the collect request to get the new array
     ///```
     fn collect<A>(&self, d: Distribution) -> Pin<Box<dyn Future<Output = A> + Send>>
     where
         // &'static Self: DistributedIterator + 'static,
-        Self::Item: Dist,
+        Self::Item: Dist, 
         A: From<UnsafeArray<Self::Item>> + SyncSend + 'static,
     {
         self.array().collect(self, d)
@@ -496,28 +500,29 @@ pub trait DistributedIterator: SyncSend + Clone + 'static {
     ///
     /// Each element from the iterator must return a Future
     ///
-    /// Each thread will only drive a single future at a time. 
+    /// Each thread will only drive a single future at a time.
     ///
     /// This function returns a future which needs to be driven to completion to retrieve the new LamellarArray.
     /// Calling await on the future will invoke an implicit barrier (allocating the resources for a new array).
     ///
-    /// Creating the new array potentially results in data transfers depending on the distribution mode and the fact there is no gaurantee 
+    /// Creating the new array potentially results in data transfers depending on the distribution mode and the fact there is no gaurantee
     /// that each PE will contribute an equal number of elements to the new array, and currently LamellarArrays
     /// distribute data across the PEs as evenly as possible.
-    /// 
-    /// # Example
+    ///
+    /// # Examples
     ///```
+    /// use lamellar::array::prelude::*;
     /// // initialize a world and an atomic array
-    /// let world = LamellarWorldBuilder::new().build(); 
+    /// let world = LamellarWorldBuilder::new().build();
     /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Block);
-    /// 
+    ///
     /// // clone the array; this doesn't duplicate the underlying
     /// // data but it does create a second pointer that we can
     /// // discard when necessary
-    /// let array_clone = array.clone(); 
-    /// 
+    /// let array_clone = array.clone();
+    ///
     /// // run collect
-    /// let req 
+    /// let req
     ///     = array_clone.dist_iter().map(
     ///         move |elem|  
     ///         array_clone
@@ -539,17 +544,17 @@ pub trait DistributedIterator: SyncSend + Clone + 'static {
 /// An interface for dealing with distributed iterators which are indexable, meaning it returns an iterator of known length
 pub trait IndexedDistributedIterator: DistributedIterator + SyncSend + Clone + 'static {
     /// Calls a closure on each element of a Distributed Iterator in parallel and distributed on each PE (which owns data of the iterated array) using the specififed schedule policy.
-    /// 
+    ///
     /// Calling this function invokes an implicit barrier across all PEs in the Array
     ///
     /// This function returns a future which can be used to poll for completion of the iteration.
     /// Note calling this function launches the iteration regardless of if the returned future is used or not.
     ///
-    /// # Example
+    /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
     ///
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block);
     ///
     /// array.dist_iter().for_each_with_schedule(Schedule::WorkStealing, |elem| println!("{:?} {elem}",std::thread::current().id()));
@@ -567,25 +572,25 @@ pub trait IndexedDistributedIterator: DistributedIterator + SyncSend + Clone + '
     }
 
     /// Calls a closure and immediately awaits the result on each element of a Distributed Iterator in parallel and distributed on each PE (which owns data of the iterated array).
-    /// 
+    ///
     /// Calling this function invokes an implicit barrier across all PEs in the Array, after this barrier no further communication is performed
     /// as each PE will only process elements local to itself
     ///
     /// The supplied closure must return a future.
-    /// 
-    /// Each thread will only drive a single future at a time. 
+    ///
+    /// Each thread will only drive a single future at a time.
     ///
     /// This function returns a future which can be used to poll for completion of the iteration.
     /// Note calling this function launches the iteration regardless of if the returned future is used or not.
     ///
-    /// # Example
+    /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
     ///
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block);
     ///
-    /// array.dist_iter().for_each_with_schedule(Schedule::Chunks(10),|elem| async move { 
+    /// array.dist_iter().for_each_async_with_schedule(Schedule::Chunk(10),|elem| async move {
     ///     async_std::task::yield_now().await;
     ///     println!("{:?} {elem}",std::thread::current().id())
     /// });
@@ -605,19 +610,19 @@ pub trait IndexedDistributedIterator: DistributedIterator + SyncSend + Clone + '
 
     /// yields the global array index along with each element
     ///
-    /// # Example
+    /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
     ///
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,8,Distribution::Block);
     /// let my_pe = world.my_pe();
     ///
-    /// array.dist_iter().enumerate().for_each(|i,elem| println!("PE: {my_pe} i: {i} elem: {elem}"));
+    /// array.dist_iter().enumerate().for_each(move|(i,elem)| println!("PE: {my_pe} i: {i} elem: {elem}"));
     /// array.wait_all();
     ///```
     /// Possible output on a 4 PE (1 thread/PE) execution (ordering is likey to be random with respect to PEs)
-    ///```
+    ///```text
     /// PE: 0 i: 0 elem: 0
     /// PE: 0 i: 1 elem: 0
     /// PE: 1 i: 2 elem: 0
@@ -631,22 +636,21 @@ pub trait IndexedDistributedIterator: DistributedIterator + SyncSend + Clone + '
         Enumerate::new(self, 0)
     }
 
-
     /// Applies `op` to each element producing a new iterator with the results
     ///
-    /// # Example
+    /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
     ///
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,8,Distribution::Block);
     /// let my_pe = world.my_pe();
     ///
-    /// array.dist_iter().map(|elem| *elem as f64).enumerate().for_each(|i,elem| println!("PE: {my_pe} i: {i} elem: {elem}"));
+    /// array.dist_iter().map(|elem| *elem as f64).enumerate().for_each(move|(i,elem)| println!("PE: {my_pe} i: {i} elem: {elem}"));
     /// array.wait_all();
     ///```
     /// Possible output on a 4 PE (1 thread/PE) execution (ordering is likey to be random with respect to PEs)
-    ///```
+    ///```text
     /// PE: 0 i: 0 elem: 0.0
     /// PE: 0 i: 1 elem: 0.0
     /// PE: 1 i: 2 elem: 0.0
@@ -666,19 +670,19 @@ pub trait IndexedDistributedIterator: DistributedIterator + SyncSend + Clone + '
 
     /// An iterator that skips the first `n` elements
     ///
-    /// # Example
+    /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
     ///
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,8,Distribution::Block);
     /// let my_pe = world.my_pe();
     ///
-    /// array.dist_iter().enumerate().skip(3).for_each(|i,elem| println!("PE: {my_pe} i: {i} elem: {elem}"));
+    /// array.dist_iter().enumerate().skip(3).for_each(move|(i,elem)| println!("PE: {my_pe} i: {i} elem: {elem}"));
     /// array.wait_all();
     ///```
     /// Possible output on a 4 PE (1 thread/PE) execution (ordering is likey to be random with respect to PEs)
-    ///```
+    ///```text
     /// PE: 1 i:3 elem: 0
     /// PE: 2 i:4 elem: 0
     /// PE: 2 i:5 elem: 0
@@ -686,24 +690,24 @@ pub trait IndexedDistributedIterator: DistributedIterator + SyncSend + Clone + '
     /// PE: 3 i:7 elem: 0
     ///```
     fn skip(self, n: usize) -> Skip<Self> {
-        Skip::new(self, n,0)
+        Skip::new(self, n, 0)
     }
 
     /// An iterator that steps by `step_size` elements
     ///
-    /// # Example
+    /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
     ///
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,8,Distribution::Block);
     /// let my_pe = world.my_pe();
     ///
-    /// array.dist_iter().enumerate().step_by(3).for_each(|i,elem| println!("PE: {my_pe} i: {i} elem: {elem}"));
+    /// array.dist_iter().enumerate().step_by(3).for_each(move|(i,elem)| println!("PE: {my_pe} i: {i} elem: {elem}"));
     /// array.wait_all();
     ///```
     /// Possible output on a 4 PE (1 thread/PE) execution (ordering is likey to be random with respect to PEs)
-    ///```
+    ///```text
     /// PE: 0 i: 0 elem: 0
     /// PE: 1 i: 3 elem: 0
     /// PE: 3 i: 6 elem: 0
@@ -714,19 +718,19 @@ pub trait IndexedDistributedIterator: DistributedIterator + SyncSend + Clone + '
 
     /// An iterator that takes the first `n` elements
     ///
-    /// # Example
+    /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
     ///
-    /// let world = LamellarWorldBuilder.build();
+    /// let world = LamellarWorldBuilder::new().build();
     /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,8,Distribution::Block);
     /// let my_pe = world.my_pe();
     ///
-    /// array.dist_iter().enumerate().take(3).for_each(|i,elem| println!("PE: {my_pe} i: {i} elem: {elem}"));
+    /// array.dist_iter().enumerate().take(3).for_each(move|(i,elem)| println!("PE: {my_pe} i: {i} elem: {elem}"));
     /// array.wait_all();
     ///```
     /// Possible output on a 4 PE (1 thread/PE) execution (ordering is likey to be random with respect to PEs)
-    ///```
+    ///```text
     /// PE: 0 i: 0 elem: 0
     /// PE: 0 i: 1 elem: 0
     /// PE: 1 i: 2 elem: 0
@@ -750,10 +754,10 @@ pub trait IndexedDistributedIterator: DistributedIterator + SyncSend + Clone + '
 ///```
 /// use lamellar::array::prelude::*;
 ///
-/// let world = LamellarWorldBuilder.build();
-/// let array = AtomicArray::new::<usize>(&world,100,Distribution::Block);
+/// let world = LamellarWorldBuilder::new().build();
+/// let array = LocalLockArray::<usize>::new(&world,100,Distribution::Block);
 ///
-/// let dist_iter = array.dist_iter().for_each(|e| println!("{e}"));
+/// let dist_iter = array.dist_iter().for_each(move |e| println!("{e}"));
 /// world.block_on(dist_iter);
 ///```
 #[derive(Clone)]
@@ -819,7 +823,6 @@ impl<
                     .as_ref()
             }
         } else {
-            
             // println!("{:?} DistIter next cur: {:?} end {:?} Done",std::thread::current().id(),self.cur_i,self.end_i);
             None
         }
@@ -836,12 +839,13 @@ impl<
 impl<
         T: Dist + 'static,
         A: LamellarArray<T> + SyncSend + DistIteratorLauncher + Clone + 'static,
-    > IndexedDistributedIterator for DistIter<'static, T, A> {
-        fn iterator_index(&self, index: usize) -> Option<usize> {
-            let g_index = self.data.subarray_index_from_local(index, 1);
-            // println!("{:?} \t DistIter iterator index {index} {g_index:?}",std::thread::current().id());
-            g_index
-        }
+    > IndexedDistributedIterator for DistIter<'static, T, A>
+{
+    fn iterator_index(&self, index: usize) -> Option<usize> {
+        let g_index = self.data.subarray_index_from_local(index, 1);
+        // println!("{:?} \t DistIter iterator index {index} {g_index:?}",std::thread::current().id());
+        g_index
+    }
 }
 
 /// Mutable LamellarArray distributed iterator
@@ -852,10 +856,10 @@ impl<
 ///```
 /// use lamellar::array::prelude::*;
 ///
-/// let world = LamellarWorldBuilder.build();
-/// let array = AtomicArray::new::<usize>(&world,100,Distribution::Block);
-///
-/// let dist_iter = array.dist_iter_mut().for_each(|e| *e = world.my_pe() );
+/// let world = LamellarWorldBuilder::new().build();
+/// let array = LocalLockArray::<usize>::new(&world,100,Distribution::Block);
+/// let my_pe = world.my_pe();
+/// let dist_iter = array.dist_iter_mut().for_each(move |e| *e = my_pe );
 /// world.block_on(dist_iter);
 ///```
 #[derive(Clone)]
@@ -941,12 +945,11 @@ impl<
 impl<
         T: Dist + 'static,
         A: LamellarArray<T> + SyncSend + DistIteratorLauncher + Clone + 'static,
-    > IndexedDistributedIterator for DistIterMut<'static, T, A> {
-        fn iterator_index(&self, index: usize) -> Option<usize> {
-            let g_index = self.data.subarray_index_from_local(index, 1);
+    > IndexedDistributedIterator for DistIterMut<'static, T, A>
+{
+    fn iterator_index(&self, index: usize) -> Option<usize> {
+        let g_index = self.data.subarray_index_from_local(index, 1);
 
-            g_index
-        }
+        g_index
+    }
 }
-
-

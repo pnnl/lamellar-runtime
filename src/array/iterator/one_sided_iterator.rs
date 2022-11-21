@@ -22,7 +22,7 @@ use zip::*;
 // use buffered::*;
 
 use crate::array::{LamellarArray, LamellarArrayInternalGet};
-use crate::memregion::{Dist,OneSidedMemoryRegion};
+use crate::memregion::{Dist, OneSidedMemoryRegion};
 
 use crate::LamellarTeamRT;
 
@@ -35,6 +35,8 @@ use std::ptr::NonNull;
 use std::sync::Arc;
 // use std::task::{Context, Poll};
 
+//TODO: Think about an active message based method for transfering data that performs data reducing iterators before sending
+// i.e. for something like step_by(N) we know that only every N elements actually needs to get sent...
 
 /// An interface for dealing with one sided iterators of LamellarArrays
 ///
@@ -66,8 +68,6 @@ pub trait OneSidedIterator {
         std::mem::size_of::<Self::Item>()
     }
 
-
-
     // /// Buffer (fetch/get) the next element in the array into the provided memory region (transferring data from a remote PE if necessary)
     // fn buffered_next(
     //     &mut self,
@@ -81,25 +81,25 @@ pub trait OneSidedIterator {
     ///
     /// Returns an iterator that returns OneSidedMemoryRegions of the chunked array.
     /// If the number of elements is not evenly divisible by `size`, the last chunk may be shorter than `size`
-    /// # Example
+    /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
     ///
-    /// let world = LamellarWorldBuilder.build();
-    /// let array = LocalLockArray::new::<usize>(&world,24,Distribution::Block);
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array = LocalLockArray::<usize>::new(&world,24,Distribution::Block);
     /// let my_pe = world.my_pe();
-    /// array.dist_iter_mut().for_each(|e| *e = world.my_pe()); //initialize array using a distributed iterator
+    /// array.dist_iter_mut().for_each(move|e| *e = my_pe); //initialize array using a distributed iterator
     /// array.wait_all();
     /// if my_pe == 0 {
     ///     for chunk in array.onesided_iter().chunks(5).into_iter() { //convert into a standard Iterator
-    ///         // SAFETY: chunk is safe in this instance because this will be the only handle to the memory region, 
+    ///         // SAFETY: chunk is safe in this instance because this will be the only handle to the memory region,
     ///         // and the runtime has verified that data is already placed in it
-    ///         println!("PE: {my_pe} chunk: {:?}",unsafe {chunk.as_slice()}); 
+    ///         println!("PE: {my_pe} chunk: {:?}",unsafe {chunk.as_slice()});
     ///     }
     /// }
     /// ```
-    /// Output on a 4 PE execution 
-    ///```
+    /// Output on a 4 PE execution
+    ///```text
     /// PE: 0 chunk: [0, 0, 0, 0, 0]
     /// PE: 0 chunk: [0, 1, 1, 1, 1]
     /// PE: 0 chunk: [1, 1, 2, 2, 2]
@@ -115,14 +115,14 @@ pub trait OneSidedIterator {
 
     /// An iterator that skips the first `n` elements
     ///
-    /// # Example
+    /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
     ///
-    /// let world = LamellarWorldBuilder.build();
-    /// let array = LocalLockArray::new::<usize>(&world,8,Distribution::Block);
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array = LocalLockArray::<usize>::new(&world,8,Distribution::Block);
     /// let my_pe = world.my_pe();
-    /// array.dist_iter_mut().for_each(|e| *e = world.my_pe()); //initialize array using a distributed iterator
+    /// array.dist_iter_mut().for_each(move|e| *e = my_pe); //initialize array using a distributed iterator
     /// array.wait_all();
     /// if my_pe == 0 {
     ///     for elem in array.onesided_iter().skip(3).into_iter() {  //convert into a standard Iterator
@@ -130,8 +130,8 @@ pub trait OneSidedIterator {
     ///     }
     /// }
     /// ```
-    /// Output on a 4 PE execution 
-    ///```
+    /// Output on a 4 PE execution
+    ///```text
     /// PE: 0 elem: 1
     /// PE: 0 elem: 2
     /// PE: 0 elem: 2
@@ -147,14 +147,14 @@ pub trait OneSidedIterator {
 
     /// An iterator that steps by `step_size` elements
     ///
-    /// # Example
+    /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
     ///
-    /// let world = LamellarWorldBuilder.build();
-    /// let array = LocalLockArray::new::<usize>(&world,8,Distribution::Block);
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array = LocalLockArray::<usize>::new(&world,8,Distribution::Block);
     /// let my_pe = world.my_pe();
-    /// array.dist_iter_mut().for_each(|e| *e = world.my_pe()); //initialize array using a distributed iterator
+    /// array.dist_iter_mut().for_each(move|e| *e = my_pe); //initialize array using a distributed iterator
     /// array.wait_all();
     /// if my_pe == 0 {
     ///     for elem in array.onesided_iter().step_by(3).into_iter() { //convert into a standard Iterator
@@ -162,8 +162,8 @@ pub trait OneSidedIterator {
     ///     }
     /// }
     ///```
-    /// Output on a 4 PE execution 
-    ///```
+    /// Output on a 4 PE execution
+    ///```text
     /// PE: 0 elem: 0
     /// PE: 0 elem: 2
     /// PE: 0 elem: 3
@@ -178,27 +178,27 @@ pub trait OneSidedIterator {
     /// Iterates over tuples `(A,B)` where the `A` items are from this iterator and the `B` items are from the iter in the argument.
     /// If the two iterators or of unequal length, the returned iterator will be equal in length to the shorter of the two.
     ///
-    /// # Example
+    /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
     ///
-    /// let world = LamellarWorldBuilder.build();
-    /// let array_A = LocalLockArray::new::<usize>(&world,8,Distribution::Block);
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array_A = LocalLockArray::<usize>::new(&world,8,Distribution::Block);
     /// let array_B: LocalLockArray<usize> = LocalLockArray::new(&world,12,Distribution::Block);
     /// let my_pe = world.my_pe();
     /// //initialize arrays using a distributed iterator
-    /// array_A.dist_iter_mut().for_each(|e| *e = world.my_pe()); 
-    /// array_B.dist_iter_mut().enumerate().for_each(|(i,elem)| *elem = i);
+    /// array_A.dist_iter_mut().for_each(move|e| *e = my_pe);
+    /// array_B.dist_iter_mut().enumerate().for_each(move|(i,elem)| *elem = i);
     /// world.wait_all(); // instead of waiting on both arrays in separate calls, just wait for all tasks at the world level
     ///
     /// if my_pe == 0 {
     ///     for (elemA,elemB) in array_A.onesided_iter().zip(array_B.onesided_iter()).into_iter() { //convert into a standard Iterator
-    ///         println!("PE: {my_pe} A: {elem_A} B: {elem_B}");
+    ///         println!("PE: {my_pe} A: {elemA} B: {elemB}");
     ///     }
     /// }
     /// ```
-    /// Output on a 4 PE execution 
-    ///```
+    /// Output on a 4 PE execution
+    ///```text
     /// PE: 0 A: 0 B: 0
     /// PE: 0 A: 0 B: 1
     /// PE: 0 A: 1 B: 2
@@ -225,22 +225,22 @@ pub trait OneSidedIterator {
 
     /// Convert this one-sided iterator into a standard Rust Iterator, enabling one to use any of the functions available on `Iterator`s
     ///
-    /// # Example
+    /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
     ///
-    /// let world = LamellarWorldBuilder.build();
-    /// let array = LocalLockArray::new::<usize>(&world,8,Distribution::Block);
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array = LocalLockArray::<usize>::new(&world,8,Distribution::Block);
     /// let my_pe = world.my_pe();
-    /// array.dist_iter_mut().for_each(|e| *e = world.my_pe()); //initialize array using a distributed iterator
+    /// array.dist_iter_mut().for_each(move|e| *e = my_pe); //initialize array using a distributed iterator
     /// array.wait_all();
     /// if my_pe == 0 {
-    ///     let sum = array.onesided_iter().into_iter().take(4).map(|elem| elem as f64).sum::<f64>();
+    ///     let sum = array.onesided_iter().into_iter().take(4).map(|elem| *elem as f64).sum::<f64>();
     ///     println!("Sum: {sum}")
     /// }
     /// ```
-    ///  Output on a 4 PE execution 
-    ///```
+    ///  Output on a 4 PE execution
+    ///```text
     /// Sum: 2.0
     ///```
     fn into_iter(self) -> OneSidedIteratorIter<Self>
@@ -259,8 +259,8 @@ pub trait OneSidedIterator {
 ///```
 /// use lamellar::array::prelude::*;
 ///
-/// let world = LamellarWorldBuilder.build();
-/// let array = AtomicArray::new::<usize>(&world,100,Distribution::Block);
+/// let world = LamellarWorldBuilder::new().build();
+/// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block);
 ///
 /// let std_iter = array.onesided_iter().into_iter();
 /// for e in std_iter {
@@ -287,7 +287,6 @@ struct SendNonNull<T: Dist + 'static>(NonNull<T>);
 // the pointer will remain valid for the lifetime of the array
 unsafe impl<T: Dist + 'static> Send for SendNonNull<T> {}
 
-
 /// An immutable one sided iterator of a LamellarArray
 ///
 /// This struct is created by calling `onesided_iter` on any of the LamellarArray types
@@ -296,8 +295,8 @@ unsafe impl<T: Dist + 'static> Send for SendNonNull<T> {}
 ///```
 /// use lamellar::array::prelude::*;
 ///
-/// let world = LamellarWorldBuilder.build();
-/// let array = AtomicArray::new::<usize>(&world,100,Distribution::Block);
+/// let world = LamellarWorldBuilder::new().build();
+/// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block);
 ///
 /// let one_sided_iter = array.onesided_iter();
 ///```
@@ -311,7 +310,6 @@ pub struct OneSidedIter<'a, T: Dist + 'static, A: LamellarArrayInternalGet<T>> {
     _marker: PhantomData<&'a T>,
 }
 
-
 impl<'a, T: Dist + 'static, A: LamellarArrayInternalGet<T>> OneSidedIter<'a, T, A> {
     pub(crate) fn new(
         array: A,
@@ -319,7 +317,9 @@ impl<'a, T: Dist + 'static, A: LamellarArrayInternalGet<T>> OneSidedIter<'a, T, 
         buf_size: usize,
     ) -> OneSidedIter<'a, T, A> {
         let buf_0 = team.alloc_one_sided_mem_region(buf_size);
-        array.internal_get(0, &buf_0).wait();
+        // potentially unsafe depending on the array type (i.e. UnsafeArray - which requries unsafe to construct an iterator),
+        // but safe with respect to the buf_0 as this is the only reference
+        unsafe { array.internal_get(0, &buf_0).wait() };
         let ptr = unsafe { SendNonNull(NonNull::new(buf_0.as_mut_ptr().unwrap()).unwrap()) };
         let iter = OneSidedIter {
             array: array,
@@ -349,10 +349,19 @@ impl<'a, T: Dist + 'static, A: LamellarArrayInternalGet<T> + Clone + Send> OneSi
                 self.buf_index = 0;
                 // self.fill_buffer(self.index);
                 if self.index + self.buf_0.len() < self.array.len() {
-                    self.array.internal_get(self.index, &self.buf_0).wait();
+                    // potentially unsafe depending on the array type (i.e. UnsafeArray - which requries unsafe to construct an iterator),
+                    // but safe with respect to the buf_0 as we have consumed all its content and this is the only reference
+                    unsafe {
+                        self.array.internal_get(self.index, &self.buf_0).wait();
+                    }
                 } else {
                     let sub_region = self.buf_0.sub_region(0..(self.array.len() - self.index));
-                    self.array.internal_get(self.index, &sub_region).wait();
+                    // potentially unsafe depending on the array type (i.e. UnsafeArray - which requries unsafe to construct an iterator),
+                    // but safe with respect to the buf_0 as we have consumed all its content and this is the only reference
+                    // sub_region is set to the remaining size of the array so we will not have an out of bounds issue
+                    unsafe {
+                        self.array.internal_get(self.index, &sub_region).wait();
+                    }
                 }
             }
             // self.spin_for_valid(self.buf_index);
@@ -370,12 +379,29 @@ impl<'a, T: Dist + 'static, A: LamellarArrayInternalGet<T> + Clone + Send> OneSi
         };
         res
     }
-   
+
     fn advance_index(&mut self, count: usize) {
         self.index += count;
-        self.buf_index = 0;
-        // self.fill_buffer(0);
-        self.array.internal_get(self.index, &self.buf_0).wait();
+        self.buf_index += count;
+        if self.buf_index == self.buf_0.len() {
+            self.buf_index = 0;
+            // self.fill_buffer(0);
+            if self.index + self.buf_0.len() < self.array.len() {
+                // potentially unsafe depending on the array type (i.e. UnsafeArray - which requries unsafe to construct an iterator),
+                // but safe with respect to the buf_0 as we have consumed all its content and this is the only reference
+                unsafe {
+                    self.array.internal_get(self.index, &self.buf_0).wait();
+                }
+            } else {
+                let sub_region = self.buf_0.sub_region(0..(self.array.len() - self.index));
+                // potentially unsafe depending on the array type (i.e. UnsafeArray - which requries unsafe to construct an iterator),
+                // but safe with respect to the buf_0 as we have consumed all its content and this is the only reference
+                // sub_region is set to the remaining size of the array so we will not have an out of bounds issue
+                unsafe {
+                    self.array.internal_get(self.index, &sub_region).wait();
+                }
+            }
+        }
     }
     fn array(&self) -> Self::Array {
         self.array.clone()
@@ -397,7 +423,7 @@ impl<'a, T: Dist + 'static, A: LamellarArrayInternalGet<T> + Clone + Send> OneSi
     //         None
     //     }
     // }
-    
+
     // fn from_mem_region(&self, mem_region: OneSidedMemoryRegion<u8>) -> Option<Self::Item> {
     //     unsafe {
     //         let mem_reg_t = mem_region.to_base::<Self::ElemType>();

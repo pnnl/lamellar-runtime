@@ -2,7 +2,9 @@ use lamellar::array::prelude::*;
 
 macro_rules! initialize_array {
     (UnsafeArray,$array:ident,$init_val:ident) => {
-        unsafe{$array.dist_iter_mut().for_each(move |x| *x = $init_val);}
+        unsafe {
+            $array.dist_iter_mut().for_each(move |x| *x = $init_val);
+        }
         $array.wait_all();
         $array.barrier();
     };
@@ -53,30 +55,19 @@ macro_rules! fetch_and_test{
             array.wait_all();
             array.barrier();
             let my_val = !(1 as $t << my_pe);
-            #[cfg(feature="non-buffered-array-ops")]
-            {
-                for idx in 0..array.len(){
-                    let val = world.block_on(array.fetch_bit_and(idx,my_val));
-                    if (val & !my_val) != !my_val{
-                        println!("{:?} {:x} {:x} {:x}",idx,my_val,val,(val & !my_val));
-                        success = false;
-                    }
+
+            let mut reqs = vec![];
+            for idx in 0..array.len(){
+                reqs.push((array.fetch_bit_and(idx,my_val),idx));
+            }
+            for (req,idx) in reqs{
+                let val =  world.block_on(req);
+                if (val & !my_val) != !my_val{
+                    println!("1. {:?} {:x} {:x} {:x} {:x}",idx,my_val,!my_val,val,(val & !my_val));
+                    success = false;
                 }
             }
-            #[cfg(not(feature="non-buffered-array-ops"))]
-            {
-                let mut reqs = vec![];
-                for idx in 0..array.len(){
-                    reqs.push((array.fetch_bit_and(idx,my_val),idx));
-                }
-                for (req,idx) in reqs{
-                    let val =  world.block_on(req);
-                    if (val & !my_val) != !my_val{
-                        println!("1. {:?} {:x} {:x} {:x} {:x}",idx,my_val,!my_val,val,(val & !my_val));
-                        success = false;
-                    }
-                }
-            }
+
             array.wait_all();
             array.barrier();
             // array.print();
@@ -101,30 +92,19 @@ macro_rules! fetch_and_test{
             let sub_array = array.sub_array(start_i..end_i);
             sub_array.barrier();
             // sub_array.print();
-            #[cfg(feature="non-buffered-array-ops")]
-            {
-                for idx in 0..sub_array.len(){
-                    let val =  world.block_on(sub_array.fetch_bit_and(idx,my_val));
-                    if (val & !my_val) != !my_val{
-                        println!("{:?} {:x} {:x} {:x}",idx,my_val,val,(val & !my_val));
-                        success = false;
-                    }
+
+            let mut reqs = vec![];
+            for idx in 0..sub_array.len(){
+                reqs.push((sub_array.fetch_bit_and(idx,my_val),idx));
+            }
+            for (req,idx) in reqs{
+                let val =  world.block_on(req);
+                if (val & !my_val) != !my_val{
+                    println!("{:?} {:x} {:x} {:x}",idx,my_val,val,(val & !my_val));
+                    success = false;
                 }
             }
-            #[cfg(not(feature="non-buffered-array-ops"))]
-            {
-                let mut reqs = vec![];
-                for idx in 0..sub_array.len(){
-                    reqs.push((sub_array.fetch_bit_and(idx,my_val),idx));
-                }
-                for (req,idx) in reqs{
-                    let val =  world.block_on(req);
-                    if (val & !my_val) != !my_val{
-                        println!("{:?} {:x} {:x} {:x}",idx,my_val,val,(val & !my_val));
-                        success = false;
-                    }
-                }
-            }
+
             sub_array.wait_all();
             sub_array.barrier();
             // sub_array.print();
@@ -150,30 +130,19 @@ macro_rules! fetch_and_test{
                 let end_i = start_i+len;
                 let sub_array = array.sub_array(start_i..end_i);
                 sub_array.barrier();
-                #[cfg(feature="non-buffered-array-ops")]
-                {
-                    for idx in 0..sub_array.len(){
-                        let val =  world.block_on(sub_array.fetch_bit_and(idx,my_val));
-                        if (val & !my_val) != !my_val{
-                            println!("{:?} {:x} {:x} {:x}",idx,my_val,val,(val & !my_val));
-                            success = false;
-                        }
+
+                let mut reqs = vec![];
+                for idx in 0..sub_array.len(){
+                    reqs.push((sub_array.fetch_bit_and(idx,my_val),idx));
+                }
+                for (req,idx) in reqs{
+                    let val =  world.block_on(req);
+                    if (val & !my_val) != !my_val{
+                        println!("{:?} {:x} {:x} {:x}",idx,my_val,val,(val & !my_val));
+                        success = false;
                     }
                 }
-                #[cfg(not(feature="non-buffered-array-ops"))]
-                {
-                    let mut reqs = vec![];
-                    for idx in 0..sub_array.len(){
-                        reqs.push((sub_array.fetch_bit_and(idx,my_val),idx));
-                    }
-                    for (req,idx) in reqs{
-                        let val =  world.block_on(req);
-                        if (val & !my_val) != !my_val{
-                            println!("{:?} {:x} {:x} {:x}",idx,my_val,val,(val & !my_val));
-                            success = false;
-                        }
-                    }
-                }
+
                 sub_array.wait_all();
                 sub_array.barrier();
                 // sub_array.print();

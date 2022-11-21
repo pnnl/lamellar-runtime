@@ -35,46 +35,6 @@ fn type_to_string(ty: &syn::Type) -> String {
     }
 }
 
-#[cfg(feature = "non-buffered-array-ops")]
-fn gen_write_array_impls(
-    typeident: syn::Ident,
-    array_types: &Vec<(syn::Ident, syn::Ident)>,
-    ops: &Vec<(syn::Ident, bool)>,
-    rt: bool,
-) -> proc_macro2::TokenStream {
-    let lamellar = if rt {
-        quote::format_ident!("crate")
-    } else {
-        quote::format_ident!("__lamellar")
-    };
-
-    let mut write_array_impl = quote! {};
-    for (op, fetch) in ops.clone().into_iter() {
-        let mut match_stmts = quote! {};
-        for (array_type, _) in array_types {
-            match_stmts.extend(quote! {
-                #lamellar::array::LamellarWriteArray::#array_type(inner) => inner.#op(index,val),
-            });
-        }
-        let return_type = match fetch {
-            true => {
-                quote! { Box<dyn #lamellar::LamellarRequest<Output = #typeident>  > }
-            }
-            false => {
-                quote! {Option<Box<dyn #lamellar::LamellarRequest<Output = ()>  >>}
-            }
-        };
-        write_array_impl.extend(quote! {
-            fn #op(&self,index: usize, val: #typeident)-> #return_type{
-                match self{
-                    #match_stmts
-                }
-            }
-        });
-    }
-    write_array_impl
-}
-
 fn native_atomic_slice(
     typeident: &syn::Type,
     lamellar: &proc_macro2::Ident,
@@ -943,34 +903,41 @@ fn create_buffered_ops(
     let user_expanded = quote_spanned! {expanded.span()=>
         const _: () = {
             extern crate lamellar as __lamellar;
+            use __lamellar::array::prelude::*;
+            use __lamellar::active_messaging::prelude::*;
+            use __lamellar::memregion::prelude::*;
+            use __lamellar::darc::prelude::*;
             use __lamellar::array::{
-                AtomicArray,AtomicByteArray,AtomicByteArrayWeak,
-                GenericAtomicArray,
-                NativeAtomicArray,
-                LocalLockArray,LocalLockByteArray,LocalLockByteArrayWeak,
-                LocalArithmeticOps,LocalAtomicOps,
-                UnsafeArray, UnsafeByteArray, UnsafeByteArrayWeak,
+            //     AtomicArray,AtomicByteArray,AtomicByteArrayWeak,
+            //     GenericAtomicArray,
+            //     NativeAtomicArray,
+            //     LocalLockArray,LocalLockByteArray,LocalLockByteArrayWeak,
+            //     LocalArithmeticOps,LocalAtomicOps,
+            //     UnsafeArray, UnsafeByteArray, UnsafeByteArrayWeak,
                 ArrayOpCmd,
-                LamellarArrayPut,
+            //     LamellarArrayPut,
                 OpResultOffsets,
                 RemoteOpAmInputToValue,
-                PeOpResults,OpResults,
-                OpAmInputToValue};
-            // #bitwise_mod
-            use __lamellar::array;
-            use __lamellar::LamellarTeamRT;
-            // #bitwise_mod
-            use __lamellar::Darc;
-            use __lamellar::LamellarArray;
+                PeOpResults,
+                OpResults,
+                // OpAmInputToValue
+            };
+            // // #bitwise_mod
+            // use __lamellar::array;
+            // use __lamellar::LamellarTeamRT;
+            // // #bitwise_mod
+            // use __lamellar::Darc;
+            // use __lamellar::LamellarArray;
             use __lamellar::active_messaging::RemoteActiveMessage;
-            use __lamellar::LamellarRequest;
-            use __lamellar::OneSidedMemoryRegion;
-            use __lamellar::RemoteMemoryRegion;
-            use std::sync::Arc;
+            // use __lamellar::LamellarRequest;
+            // use __lamellar::OneSidedMemoryRegion;
+            // use __lamellar::RemoteMemoryRegion;
+
             use __lamellar::parking_lot::{Mutex,RwLock};
             // use __lamellar::tracing::*;
             use __lamellar::async_trait;
             use __lamellar::inventory;
+            use std::sync::Arc;
             use std::sync::atomic::{Ordering,AtomicBool,AtomicUsize};
             use std::pin::Pin;
             #expanded
@@ -982,190 +949,6 @@ fn create_buffered_ops(
         user_expanded
     }
 }
-
-#[cfg(feature = "non-buffered-array-ops")]
-fn create_ops(
-    typeident: syn::Type,
-    bitwise: bool,
-    native: bool,
-    rt: bool,
-) -> proc_macro2::TokenStream {
-    let lamellar = if rt {
-        quote::format_ident!("crate")
-    } else {
-        quote::format_ident!("__lamellar")
-    };
-
-    let mut write_array_types: Vec<(syn::Ident, syn::Ident)> = vec![
-        (
-            quote::format_ident!("LocalLockArray"),
-            quote::format_ident!("LocalLockByteArrayWeak"),
-        ),
-        (
-            quote::format_ident!("AtomicArray"),
-            quote::format_ident!("AtomicByteArrayWeak"),
-        ),
-        (
-            quote::format_ident!("GenericAtomicArray"),
-            quote::format_ident!("GenericAtomicByteArrayWeak"),
-        ),
-        (
-            quote::format_ident!("UnsafeArray"),
-            quote::format_ident!("UnsafeByteArrayWeak"),
-        ),
-    ];
-
-    if native {
-        write_array_types.push((
-            quote::format_ident!("NativeAtomicArray"),
-            quote::format_ident!("NativeAtomicByteArrayWeak"),
-        ));
-    }
-    let ops: Vec<(syn::Ident, bool)> = vec![
-        (quote::format_ident!("add"), false),
-        (quote::format_ident!("fetch_add"), true),
-        (quote::format_ident!("sub"), false),
-        (quote::format_ident!("fetch_sub"), true),
-        (quote::format_ident!("mul"), false),
-        (quote::format_ident!("fetch_mul"), true),
-        (quote::format_ident!("div"), false),
-        (quote::format_ident!("fetch_div"), true),
-    ];
-
-    let array_impls = gen_array_impls(
-        typeident.clone(),
-        &write_array_types,
-        &ops,
-        OpType::Arithmetic,
-        rt,
-    );
-    let write_array_impls = gen_write_array_impls(typeident.clone(), &write_array_types, &ops, rt);
-    let mut expanded = quote! {
-        #[allow(non_camel_case_types)]
-        impl #lamellar::array::ArithmeticOps<#typeident> for #lamellar::array::LamellarWriteArray<#typeident>{
-            #write_array_impls
-        }
-        #array_impls
-    };
-
-    let atomic_array_types: Vec<(syn::Ident, syn::Ident)> = vec![
-        (
-            quote::format_ident!("LocalLockArray"),
-            quote::format_ident!("LocalLockByteArrayWeak"),
-        ),
-        (
-            quote::format_ident!("AtomicArray"),
-            quote::format_ident!("AtomicByteArrayWeak"),
-        ),
-        (
-            quote::format_ident!("GenericAtomicArray"),
-            quote::format_ident!("GenericAtomicByteArrayWeak"),
-        ),
-    ];
-
-    if native {
-        atomic_array_types.push((
-            quote::format_ident!("NativeAtomicArray"),
-            quote::format_ident!("NativeAtomicByteArrayWeak"),
-        ));
-    }
-    let atomic_ops: Vec<(syn::Ident, bool)> = vec![
-        (quote::format_ident!("load"), true),
-        (quote::format_ident!("store"), false),
-        (quote::format_ident!("swap"), true),
-    ];
-    let array_impls = gen_array_impls(
-        typeident.clone(),
-        &atomic_array_types,
-        &atomic_ops,
-        OpType::Atomic,
-        rt,
-    );
-    expanded.extend(quote! {
-        #array_impls
-    });
-
-    let mut bitwise_mod = quote! {};
-    if bitwise {
-        let bitwise_ops: Vec<(syn::Ident, bool)> = vec![
-            (quote::format_ident!("bit_and"), false),
-            (quote::format_ident!("fetch_bit_and"), true),
-            (quote::format_ident!("bit_or"), false),
-            (quote::format_ident!("fetch_bit_or"), true),
-        ];
-
-        // let (array_impls,write_array_impl) = gen_op_impls(typeident.clone(),array_types,&bitwise_ops,true,rt);
-        let array_impls = gen_array_impls(
-            typeident.clone(),
-            &write_array_types,
-            &bitwise_ops,
-            OpType::Bitwise,
-            rt,
-        );
-        let write_array_impls =
-            gen_write_array_impls(typeident.clone(), &write_array_types, &bitwise_ops, rt);
-        expanded.extend(quote!{
-            #[allow(non_camel_case_types)]
-            impl #lamellar::array::BitWiseOps<#typeident> for #lamellar::array::LamellarWriteArray<#typeident>{
-                #write_array_impls
-            }
-            #array_impls
-        });
-        bitwise_mod.extend(quote! {use __lamellar::array::LocalBitWiseOps;});
-    }
-
-    let user_expanded = quote_spanned! {expanded.span()=>
-        const _: () = {
-            extern crate lamellar as __lamellar;
-            use __lamellar::array::{LamellarArray,AtomicArray,AtomicByteArray,GenericAtomicArray,NativeAtomicArray,LocalLockArray,LocalLockByteArray,LocalArithmeticOps,LocalAtomicOps,ArrayOpCmd,LamellarArrayPut};
-            #bitwise_mod
-            use __lamellar::active_messaging::RemoteActiveMessage;
-            use __lamellar::LamellarRequest;
-            use std::sync::Arc;
-            use parking_lot::Mutex;
-            #expanded
-        };
-    };
-    if lamellar == "crate" {
-        expanded
-    } else {
-        user_expanded
-    }
-}
-
-// pub(crate) fn __generate_ops_for_type(item: TokenStream) -> TokenStream {
-//     let mut output = quote! {};
-//     let items = item
-//         .to_string()
-//         .split(",")
-//         .map(|i| i.to_owned())
-//         .collect::<Vec<String>>();
-//     let bitwise = if let Ok(val) = syn::parse_str::<syn::LitBool>(&items[0]) {
-//         val.value
-//     } else {
-//         panic! ("first argument of generate_ops_for_type expects 'true' or 'false' specifying whether type implements bitwise operations");
-//     };
-//     let native = false; // since this is a user defined type, we assume it does not have native support for atomic operations
-//     for t in items[1..].iter() {
-//         let the_type = syn::parse_str::<syn::Type>(&t).unwrap();
-//         // let (wrapped_impl, wrapped_type) = create_wrapped_type(&the_type, bitwise);
-//         // output.extend(wrapped_impl);
-//         println!("{:?}", the_type);
-//         // let typeident = quote::format_ident!("{:}", t.trim());
-//         output.extend(quote! {impl Dist for #the_type {}});
-//         #[cfg(feature = "non-buffered-array-ops")]
-//         output.extend(create_ops(the_type.clone(), bitwise, native, false));
-//         #[cfg(not(feature = "non-buffered-array-ops"))]
-//         output.extend(create_buffered_ops(
-//             the_type.clone(),
-//             bitwise,
-//             native,
-//             false,
-//         ));
-//         // output.extend(gen_atomic_rdma(typeident.clone(), false));
-//     }
-//     TokenStream::from(output)
-// }
 
 pub(crate) fn __generate_ops_for_type_rt(item: TokenStream) -> TokenStream {
     let mut output = quote! {};
@@ -1188,42 +971,11 @@ pub(crate) fn __generate_ops_for_type_rt(item: TokenStream) -> TokenStream {
         let the_type = syn::parse_str::<syn::Type>(&t).unwrap();
         let typeident = quote::format_ident!("{:}", t.trim());
         output.extend(quote! {impl Dist for #typeident {}});
-        #[cfg(feature = "non-buffered-array-ops")]
-        output.extend(create_ops(typeident.clone(), bitwise, native, true));
-        #[cfg(not(feature = "non-buffered-array-ops"))]
         output.extend(create_buffered_ops(the_type.clone(), bitwise, native, true));
         // output.extend(gen_atomic_rdma(typeident.clone(), true));
     }
     TokenStream::from(output)
 }
-
-// fn create_wrapped_type(base_type:& syn::Type, bitwise: bool) -> (proc_macro2::TokenStream  ,syn::Type){
-//     let wrapped_type = quote::format_ident!("wrapped_{}", type_to_string(base_type));
-//     (if bitwise{
-//         quote!{
-//             const _: () = {
-//                 extern crate lamellar as __lamellar;
-//                 __lamellar::custom_derive! {
-//                     #[derive(Send, Sync, Copy, Debug, NewtypeAddAssign, NewtypeSubAssign, NewtypeMulAssign, NewtypeDivAssign, NewtypeBitAndAssign, NewtypeBitOrAssign )]
-//                     pub struct #wrapped_type(#base_type);
-//                 }
-//             };
-//         }
-//     }
-//     else{
-//         quote!{
-//             const _: () = {
-//                 extern crate lamellar as __lamellar;
-//                 use __lamellar::custom_derive::*;
-//                 use __lamellar::newtype_derive::*;
-//                 custom_derive! {
-//                     #[derive( Copy, Debug, NewtypeAddAssign, NewtypeSubAssign, NewtypeMulAssign, NewtypeDivAssign)]
-//                     pub struct #wrapped_type(#base_type);
-//                 }
-//             };
-//         }
-//     }, syn::parse_str::<syn::Type>(wrapped_type.to_string().as_str()).unwrap())
-// }
 
 pub(crate) fn __derive_arrayops(input: TokenStream) -> TokenStream {
     let mut output = quote! {};
@@ -1231,12 +983,7 @@ pub(crate) fn __derive_arrayops(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as syn::DeriveInput);
     let name = input.ident;
     let the_type: syn::Type = syn::parse_quote!(#name);
-    // let (wrapped_impl, wrapped_type) = create_wrapped_type(&the_type, false);
-    // output.extend(wrapped_impl);
 
-    #[cfg(feature = "non-buffered-array-ops")]
-    output.extend(create_ops(the_type.clone(), false, false, false));
-    #[cfg(not(feature = "non-buffered-array-ops"))]
     output.extend(create_buffered_ops(the_type.clone(), false, false, false));
     TokenStream::from(output)
 }

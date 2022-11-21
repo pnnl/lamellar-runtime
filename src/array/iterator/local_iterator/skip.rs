@@ -5,7 +5,7 @@ use crate::array::iterator::local_iterator::*;
 pub struct Skip<I> {
     iter: I,
     skip_count: usize,
-    skip_offset: usize
+    skip_offset: usize,
 }
 
 impl<I> Skip<I>
@@ -14,7 +14,11 @@ where
 {
     pub(crate) fn new(iter: I, skip_count: usize, skip_offset: usize) -> Skip<I> {
         // println!("new Skip {:?} ",count);
-        Skip { iter, skip_count, skip_offset }
+        Skip {
+            iter,
+            skip_count,
+            skip_offset,
+        }
     }
 }
 
@@ -27,11 +31,11 @@ where
     fn init(&self, in_start_i: usize, in_cnt: usize) -> Skip<I> {
         let mut iter = self.iter.init(in_start_i, in_cnt);
         let start_i = std::cmp::max(in_start_i, self.skip_count);
-        let advance = std::cmp::min(start_i - in_start_i, in_cnt); 
+        let advance = std::cmp::min(start_i - in_start_i, in_cnt);
 
         // let end_i = std::cmp::max(in_start_i + in_cnt, self.skip_count);
         // let cnt = std::cmp::min(in_cnt, end_i - start_i);
-        
+
         iter.advance_index(advance);
 
         let val = Skip::new(iter, self.skip_count, advance);
@@ -45,8 +49,7 @@ where
         let val = self.iter.next();
         if val.is_some() {
             // println!("{:?} Skip next {:?}",std::thread::current().id(),self.skip_count);
-        }
-        else {
+        } else {
             // println!("{:?} Skip done",std::thread::current().id());
         }
         val
@@ -55,7 +58,7 @@ where
         let in_elems = self.iter.elems(in_elems);
         std::cmp::max(0, in_elems - self.skip_count)
     }
-    
+
     fn advance_index(&mut self, count: usize) {
         self.iter.advance_index(count);
     }
@@ -69,14 +72,13 @@ where
         let Some(i_index) = self.iter.iterator_index(index+self.skip_offset) else {
             // println!("{:?} \t Skip iterator index  {index} {} None",std::thread::current().id(),self.skip_offset);
             return None;
-        }; 
-       
+        };
+
         let i_index = i_index as isize - self.skip_count as isize;
         if i_index >= 0 {
             // println!("{:?} \t Skip iterator index  {index} {} {i_index}",std::thread::current().id(),self.skip_offset);
             Some(i_index as usize)
-        }  
-        else{
+        } else {
             // println!("{:?} \t Skip iterator index  {index} {} None",std::thread::current().id(),self.skip_offset);
             None
         }

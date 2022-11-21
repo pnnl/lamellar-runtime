@@ -616,13 +616,11 @@ fn derive_am_data(
     TokenStream::from(output)
 }
 
-
-
-/// #Examples
+/// # Examples
 ///
 ///```
 /// use lamellar::active_messaging::prelude::*;
-/// 
+///
 /// #[AmData(Debug,Clone)]
 /// struct HelloWorld {
 ///    originial_pe: usize,
@@ -635,12 +633,11 @@ pub fn AmData(args: TokenStream, input: TokenStream) -> TokenStream {
     derive_am_data(input, args, "lamellar".to_string(), false)
 }
 
-
-/// #Examples
+/// # Examples
 ///
 ///```
 /// use lamellar::active_messaging::prelude::*;
-/// 
+///
 /// #[AmLocalData(Debug,Clone)]
 /// struct HelloWorld {
 ///    originial_pe: Arc<Mutex<usize>>, //lamellar disallows serializing/deserializing Arc and Mutex
@@ -710,12 +707,11 @@ fn parse_am(args: TokenStream, input: TokenStream, local: bool, rt: bool) -> Tok
     output
 }
 
-
-/// #Examples
+/// # Examples
 ///
 ///```
 /// use lamellar::active_messaging::prelude::*;
-/// 
+///
 /// #[AmData(Debug,Clone)]
 /// struct HelloWorld {
 ///    originial_pe: Arc<Mutex<usize>>,
@@ -737,12 +733,12 @@ fn parse_am(args: TokenStream, input: TokenStream, local: bool, rt: bool) -> Tok
 ///     let world = lamellar::LamellarWorldBuilder::new().build();
 ///     let my_pe = world.my_pe();
 ///     world.barrier();
-/// 
+///
 ///     //Send a Hello World Active Message to all pes
 ///     let request = world.exec_am_all(HelloWorld {
 ///         originial_pe: Arc::new(Mutex::new(my_pe)),
 ///     });
-/// 
+///
 ///     //wait for the request to complete
 ///     world.block_on(request);
 /// } //when world drops there is an implicit world.barrier() that occurs
@@ -753,12 +749,11 @@ pub fn am(args: TokenStream, input: TokenStream) -> TokenStream {
     parse_am(args, input, false, false)
 }
 
-
-/// #Examples
+/// # Examples
 ///
 ///```
 /// use lamellar::active_messaging::prelude::*;
-/// 
+///
 /// #[AmData(Debug,Clone)]
 /// struct HelloWorld {
 ///    originial_pe: usize,
@@ -780,12 +775,12 @@ pub fn am(args: TokenStream, input: TokenStream) -> TokenStream {
 ///     let world = lamellar::LamellarWorldBuilder::new().build();
 ///     let my_pe = world.my_pe();
 ///     world.barrier();
-/// 
+///
 ///     //Send a Hello World Active Message to all pes
 ///     let request = world.exec_am_all(HelloWorld {
 ///         originial_pe: my_pe,
 ///     });
-/// 
+///
 ///     //wait for the request to complete
 ///     world.block_on(request);
 /// } //when world drops there is an implicit world.barrier() that occurs
@@ -809,7 +804,6 @@ pub fn rt_am(args: TokenStream, input: TokenStream) -> TokenStream {
 pub fn rt_am_local(args: TokenStream, input: TokenStream) -> TokenStream {
     parse_am(args, input, true, true)
 }
-
 
 #[doc(hidden)]
 #[proc_macro_error]
@@ -835,12 +829,13 @@ pub fn derive_dist(input: TokenStream) -> TokenStream {
 pub fn register_reduction(item: TokenStream) -> TokenStream {
     array_reduce::__register_reduction(item)
 }
- 
-#[proc_macro_error]
-#[proc_macro]
-pub fn generate_reductions_for_type(item: TokenStream) -> TokenStream {
-    array_reduce::__generate_reductions_for_type(item)
-}
+
+// probalby should turn this into a derive macro
+// #[proc_macro_error]
+// #[proc_macro]
+// pub fn generate_reductions_for_type(item: TokenStream) -> TokenStream {
+//     array_reduce::__generate_reductions_for_type(item)
+// }
 
 #[doc(hidden)]
 #[proc_macro_error]
@@ -849,18 +844,17 @@ pub fn generate_reductions_for_type_rt(item: TokenStream) -> TokenStream {
     array_reduce::__generate_reductions_for_type_rt(item)
 }
 
-
 // / This macro automatically implements various LamellarArray "Op" traits for user defined types
-// / 
+// /
 // / The following "Op" traits will be implemented:
 // / - [AccessOps][lamellar::array::AccessOps]
 // / - [ArithmeticOps][lamellar::array::AccessOps]
 // / - [BitWiseOps][lamellar::array::AccessOps]
 // / - [CompareExchangeEpsilonOps][lamellar::array::AccessOps]
 // / - [CompareExchangeOps][lamellar::array::AccessOps]
-// / 
+// /
 // / The required trait bounds can be found by viewing each "Op" traits documentation.
-// / Generally though the type must be able to be used in an active message, 
+// / Generally though the type must be able to be used in an active message,
 // / # Examples
 // /
 // /```
@@ -878,17 +872,16 @@ pub fn generate_ops_for_type_rt(item: TokenStream) -> TokenStream {
     array_ops::__generate_ops_for_type_rt(item)
 }
 
-
-/// 
+///
 /// This derive macro is intended to be used with the [macro@AmData] attribute macro to enable a user defined type to be used in ActiveMessages
 /// # Examples
 ///
 /// ```
 /// // this import includes everything we need
-/// use lamellar::array::prelude::*; 
-/// 
-/// 
-/// #[lamellar::AmData( 
+/// use lamellar::array::prelude::*;
+///
+///
+/// #[lamellar::AmData(
 ///     // Lamellar traits
 ///     ArrayOps,      // needed to derive various LamellarArray Op traits
 ///     Default,       // needed to be able to initialize a LamellarArray
@@ -896,15 +889,15 @@ pub fn generate_ops_for_type_rt(item: TokenStream) -> TokenStream {
 ///     //  for common traits, e.g. Debug, Clone.    
 ///     PartialEq,     // needed for CompareExchangeEpsilonOps
 ///     PartialOrd,    // needed for CompareExchangeEpsilonOps
-///     Debug,         // any addition traits you want derived 
-///     Clone, 
-/// )] 
+///     Debug,         // any addition traits you want derived
+///     Clone,
+/// )]
 /// struct Custom {
 ///     int: usize,
 ///     float: f32,
 /// }
-/// 
-/// // We need to impl various arithmetic ops if we want to be able to 
+///
+/// // We need to impl various arithmetic ops if we want to be able to
 /// // perform remote arithmetic operations with this type
 /// impl std::ops::AddAssign for Custom {
 ///     fn add_assign(&mut self, other: Self) {
@@ -914,7 +907,7 @@ pub fn generate_ops_for_type_rt(item: TokenStream) -> TokenStream {
 ///         }
 ///     }
 /// }
-/// 
+///
 /// impl std::ops::SubAssign for Custom {
 ///     fn sub_assign(&mut self, other: Self) {
 ///         *self = Self {
@@ -923,7 +916,7 @@ pub fn generate_ops_for_type_rt(item: TokenStream) -> TokenStream {
 ///         }
 ///     }
 /// }
-/// 
+///
 /// impl std::ops::Sub for Custom {
 ///     type Output = Self;
 ///     fn sub(self, other: Self) -> Self {
@@ -933,7 +926,7 @@ pub fn generate_ops_for_type_rt(item: TokenStream) -> TokenStream {
 ///         }
 ///     }
 /// }
-/// 
+///
 /// impl std::ops::MulAssign for Custom {
 ///     fn mul_assign(&mut self, other: Self) {
 ///         *self = Self {
@@ -942,7 +935,7 @@ pub fn generate_ops_for_type_rt(item: TokenStream) -> TokenStream {
 ///         }
 ///     }
 /// }
-/// 
+///
 /// impl std::ops::DivAssign for Custom {
 ///     fn div_assign(&mut self, other: Self) {
 ///         *self = Self {
@@ -951,17 +944,17 @@ pub fn generate_ops_for_type_rt(item: TokenStream) -> TokenStream {
 ///         }
 ///     }
 /// }
-/// 
+///
 /// fn main(){
-/// 
+///
 ///     // initialize
 ///     // -----------
 ///     
 ///     let world = LamellarWorldBuilder::new().build(); // the world
 ///     
 ///     let array =  // the atomic distributed array
-///         AtomicArray::<Custom>::new(&world,3,Distribution::Block); 
-/// 
+///         AtomicArray::<Custom>::new(&world,3,Distribution::Block);
+///
 ///     println!();
 ///     println!("initialize a length-3 array:\n");  // print the entries
 ///     array.dist_iter()
@@ -971,23 +964,23 @@ pub fn generate_ops_for_type_rt(item: TokenStream) -> TokenStream {
 ///     
 ///     // call various operations on the array!
 ///     // -------------------------------------
-/// 
+///
 ///     world.block_on( async move {  // we will just use the world as our future driver so we dont have to deal with cloneing array
-/// 
+///
 ///         println!();
 ///         println!("add (1, 0.01) to the first entry:\n");
 ///         let val = Custom{int: 1, float: 0.01};
 ///         array.add(0, val ).await;
 ///         array.dist_iter().enumerate().for_each(|(i,entry)| println!("entry {:?}: {:?}", i, entry ) );
 ///         array.wait_all();
-/// 
+///
 ///         println!();
 ///         println!("batch compare/exchange:");    
 ///         let indices = vec![0,1,2,];
 ///         let current = val;
 ///         let new = Custom{int: 1, float: 0.0};
 ///         let epsilon = Custom{int: 0, float: 0.01};
-///         let _results = array.batch_compare_exchange_epsilon(indices,current,new,epsilon).await; 
+///         let _results = array.batch_compare_exchange_epsilon(indices,current,new,epsilon).await;
 ///         println!();
 ///         println!("(1) the updatd array");
 ///         array.dist_iter().enumerate().for_each(|(i,entry)| println!("entry {:?}: {:?}", i, entry ) );
@@ -996,7 +989,7 @@ pub fn generate_ops_for_type_rt(item: TokenStream) -> TokenStream {
 ///         println!("(2) the return values");        
 ///         for (i, entry) in _results.iter().enumerate() { println!("entry {:?}: {:?}", i, entry ) }
 ///     });
-/// 
+///
 ///     // inspect the results
 ///     // -------------------------------------    
 ///     // NB:  because thewe're working with multithreaded async

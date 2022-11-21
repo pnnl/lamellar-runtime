@@ -1,162 +1,23 @@
-use crate::array::native_atomic::*;
+use crate::array::read_only::*;
 
-// use crate::array::iterator::distributed_iterator::{DistIteratorLauncher, DistributedIterator};
 use crate::array::iterator::distributed_iterator::*;
 use crate::array::iterator::local_iterator::*;
 use crate::array::iterator::one_sided_iterator::OneSidedIter;
-use crate::array::iterator::{LamellarArrayIterators, LamellarArrayMutIterators, Schedule};
-// use crate::array::private::LamellarArrayPrivate;
+use crate::array::iterator::{LamellarArrayIterators, Schedule};
 use crate::array::*;
 use crate::memregion::Dist;
-// use parking_lot::{
-//     lock_api::{ArcRwLockReadGuard, ArcRwLockWriteGuard},
-//     RawRwLock,
-// };
 
-#[doc(hidden)]
-#[derive(Clone)]
-pub struct NativeAtomicDistIter<T: Dist> {
-    data: NativeAtomicArray<T>,
-    cur_i: usize,
-    end_i: usize,
-}
-
-impl<T: Dist> std::fmt::Debug for NativeAtomicDistIter<T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "NativeAtomicDistIter{{ data.len: {:?}, cur_i: {:?}, end_i: {:?} }}",
-            self.data.len(),
-            self.cur_i,
-            self.end_i
-        )
-    }
-}
-
-#[doc(hidden)]
-#[derive(Clone)]
-pub struct NativeAtomicLocalIter<T: Dist> {
-    data: NativeAtomicArray<T>,
-    cur_i: usize,
-    end_i: usize,
-}
-
-impl<T: Dist> std::fmt::Debug for NativeAtomicLocalIter<T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "NativeAtomicLocalIter{{ data.len: {:?}, cur_i: {:?}, end_i: {:?} }}",
-            self.data.len(),
-            self.cur_i,
-            self.end_i
-        )
-    }
-}
-
-impl<T: Dist> DistributedIterator for NativeAtomicDistIter<T> {
-    type Item = NativeAtomicElement<T>;
-    type Array = NativeAtomicArray<T>;
-    fn init(&self, start_i: usize, cnt: usize) -> Self {
-        let max_i = self.data.num_elems_local();
-        // println!("init dist iter start_i: {:?} cnt {:?} end_i: {:?} max_i: {:?}",start_i,cnt, start_i+cnt,max_i);
-        // println!("num_elems_local: {:?}",self.data.num_elems_local());
-        NativeAtomicDistIter {
-            data: self.data.clone(),
-            cur_i: std::cmp::min(start_i, max_i),
-            end_i: std::cmp::min(start_i + cnt, max_i),
-        }
-    }
-    fn array(&self) -> Self::Array {
-        self.data.clone()
-    }
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.cur_i < self.end_i {
-            self.cur_i += 1;
-            Some(NativeAtomicElement {
-                array: self.data.clone(),
-                local_index: self.cur_i - 1,
-            })
-        } else {
-            None
-        }
-    }
-    fn elems(&self, in_elems: usize) -> usize {
-        in_elems
-    }
-    // fn global_index(&self, index: usize) -> Option<usize> {
-    //     let g_index = self.data.global_index_from_local(index, 1);
-    //     g_index
-    // }
-    // fn subarray_index(&self, index: usize) -> Option<usize> {
-    //     let g_index = self.data.subarray_index_from_local(index, 1);
-    //     g_index
-    // }
-    fn advance_index(&mut self, count: usize) {
-        self.cur_i = std::cmp::min(self.cur_i + count, self.end_i);
-    }
-}
-impl<T: Dist> IndexedDistributedIterator for NativeAtomicDistIter<T> {
-    fn iterator_index(&self, index: usize) -> Option<usize> {
-        let g_index = self.data.subarray_index_from_local(index, 1);
-        g_index
-    }
-}
-
-impl<T: Dist> LocalIterator for NativeAtomicLocalIter<T> {
-    type Item = NativeAtomicElement<T>;
-    type Array = NativeAtomicArray<T>;
-    fn init(&self, start_i: usize, cnt: usize) -> Self {
-        let max_i = self.data.num_elems_local();
-        // println!("init dist iter start_i: {:?} cnt {:?} end_i: {:?} max_i: {:?}",start_i,cnt, start_i+cnt,max_i);
-        // println!("num_elems_local: {:?}",self.data.num_elems_local());
-        NativeAtomicLocalIter {
-            data: self.data.clone(),
-            cur_i: std::cmp::min(start_i, max_i),
-            end_i: std::cmp::min(start_i + cnt, max_i),
-        }
-    }
-    fn array(&self) -> Self::Array {
-        self.data.clone()
-    }
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.cur_i < self.end_i {
-            self.cur_i += 1;
-            Some(NativeAtomicElement {
-                array: self.data.clone(),
-                local_index: self.cur_i - 1,
-            })
-        } else {
-            None
-        }
-    }
-    fn elems(&self, in_elems: usize) -> usize {
-        in_elems
-    }
-
-    fn advance_index(&mut self, count: usize) {
-        self.cur_i = std::cmp::min(self.cur_i + count, self.end_i);
-    }
-}
-
-impl<T: Dist> LamellarArrayIterators<T> for NativeAtomicArray<T> {
-    // type Array = NativeAtomicArray<T>;
-    type DistIter = NativeAtomicDistIter<T>;
-    type LocalIter = NativeAtomicLocalIter<T>;
+impl<T: Dist> LamellarArrayIterators<T> for ReadOnlyArray<T> {
+    // type Array = ReadOnlyArray<T>;
+    type DistIter = DistIter<'static, T, Self>;
+    type LocalIter = LocalIter<'static, T, Self>;
     type OnesidedIter = OneSidedIter<'static, T, Self>;
     fn dist_iter(&self) -> Self::DistIter {
-        NativeAtomicDistIter {
-            data: self.clone(),
-            cur_i: 0,
-            end_i: 0,
-        }
+        DistIter::new(self.clone().into(), 0, 0)
     }
 
     fn local_iter(&self) -> Self::LocalIter {
-        NativeAtomicLocalIter {
-            data: self.clone(),
-            cur_i: 0,
-            end_i: 0,
-        }
+        LocalIter::new(self.clone().into(), 0, 0)
     }
 
     fn onesided_iter(&self) -> Self::OnesidedIter {
@@ -172,28 +33,7 @@ impl<T: Dist> LamellarArrayIterators<T> for NativeAtomicArray<T> {
     }
 }
 
-impl<T: Dist> LamellarArrayMutIterators<T> for NativeAtomicArray<T> {
-    type DistIter = NativeAtomicDistIter<T>;
-    type LocalIter = NativeAtomicLocalIter<T>;
-
-    fn dist_iter_mut(&self) -> Self::DistIter {
-        NativeAtomicDistIter {
-            data: self.clone(),
-            cur_i: 0,
-            end_i: 0,
-        }
-    }
-
-    fn local_iter_mut(&self) -> Self::LocalIter {
-        NativeAtomicLocalIter {
-            data: self.clone(),
-            cur_i: 0,
-            end_i: 0,
-        }
-    }
-}
-
-impl<T: Dist> DistIteratorLauncher for NativeAtomicArray<T> {
+impl<T: Dist> DistIteratorLauncher for ReadOnlyArray<T> {
     fn global_index_from_local(&self, index: usize, chunk_size: usize) -> Option<usize> {
         self.array.global_index_from_local(index, chunk_size)
     }
@@ -201,6 +41,10 @@ impl<T: Dist> DistIteratorLauncher for NativeAtomicArray<T> {
     fn subarray_index_from_local(&self, index: usize, chunk_size: usize) -> Option<usize> {
         self.array.subarray_index_from_local(index, chunk_size)
     }
+
+    // fn subarray_pe_and_offset_for_global_index(&self, index: usize, chunk_size: usize) -> Option<(usize,usize)> {
+    //     self.array.subarray_pe_and_offset_for_global_index(index, chunk_size)
+    // }
 
     fn for_each<I, F>(&self, iter: &I, op: F) -> Pin<Box<dyn Future<Output = ()> + Send>>
     where
@@ -242,7 +86,6 @@ impl<T: Dist> DistIteratorLauncher for NativeAtomicArray<T> {
     {
         self.array.for_each_async_with_schedule(sched, iter, op)
     }
-
     fn collect<I, A>(&self, iter: &I, d: Distribution) -> Pin<Box<dyn Future<Output = A> + Send>>
     where
         I: DistributedIterator + 'static,
@@ -264,13 +107,12 @@ impl<T: Dist> DistIteratorLauncher for NativeAtomicArray<T> {
     {
         self.array.collect_async(iter, d)
     }
-
     fn team(&self) -> Pin<Arc<LamellarTeamRT>> {
         self.array.team_rt().clone()
     }
 }
 
-impl<T: Dist> LocalIteratorLauncher for NativeAtomicArray<T> {
+impl<T: Dist> LocalIteratorLauncher for ReadOnlyArray<T> {
     fn local_global_index_from_local(&self, index: usize, chunk_size: usize) -> Option<usize> {
         self.array.local_global_index_from_local(index, chunk_size)
     }
@@ -325,7 +167,6 @@ impl<T: Dist> LocalIteratorLauncher for NativeAtomicArray<T> {
         self.array
             .local_for_each_async_with_schedule(sched, iter, op)
     }
-
     // fn local_collect<I, A>(&self, iter: &I, d: Distribution) -> Pin<Box<dyn Future<Output = A> + Send>>
     // where
     //     I: LocalIterator + 'static,
@@ -347,7 +188,6 @@ impl<T: Dist> LocalIteratorLauncher for NativeAtomicArray<T> {
     // {
     //     self.array.local_collect_async(iter, d)
     // }
-
     fn team(&self) -> Pin<Arc<LamellarTeamRT>> {
         self.array.team_rt().clone()
     }

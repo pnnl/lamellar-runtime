@@ -1,11 +1,9 @@
 // use lamellar::{
 //     ActiveMessaging, BlockedArch, OneSidedMemoryRegion, RemoteMemoryRegion, StridedArch,
 // };
-use lamellar::{
-     BlockedArch, StridedArch,
-};
 use lamellar::active_messaging::prelude::*;
 use lamellar::memregion::prelude::*;
+use lamellar::{BlockedArch, StridedArch};
 use std::time::Instant;
 
 use rand::distributions::{Distribution, Uniform};

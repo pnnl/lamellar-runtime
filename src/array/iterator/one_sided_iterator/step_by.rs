@@ -21,7 +21,6 @@ where
     }
 }
 
-
 impl<I> OneSidedIterator for StepBy<I>
 where
     I: OneSidedIterator + Send,
