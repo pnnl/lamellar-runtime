@@ -8,6 +8,7 @@ pub use crate::array::read_only::ReadOnlyArray;
 pub use crate::array::{
     register_reduction, ArrayOps, Distribution, LamellarArray, LamellarArrayArithmeticReduce,
     LamellarArrayCompareReduce, LamellarArrayGet, LamellarArrayPut, LamellarArrayReduce, SubArray,
+    LamellarWriteArray,LamellarReadArray
 };
 
 pub use crate::array::iterator::distributed_iterator::{

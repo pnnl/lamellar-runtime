@@ -938,29 +938,46 @@ impl<T: Dist> From<AtomicByteArray> for AtomicArray<T> {
     }
 }
 
-impl<T: Dist + serde::Serialize + serde::de::DeserializeOwned + 'static> AtomicArray<T> {
-    pub fn reduce(&self, op: &str) -> Pin<Box<dyn Future<Output = T>>> {
+impl<T: Dist + AmDist + 'static> LamellarArrayReduce<T>
+    for AtomicArray<T>
+{
+    fn reduce(&self,reduction: &str) -> Pin<Box<dyn Future<Output = T>>> {
         match self {
-            AtomicArray::NativeAtomicArray(array) => array.reduce(op),
-            AtomicArray::GenericAtomicArray(array) => array.reduce(op),
+            AtomicArray::NativeAtomicArray(array) => array.reduce(reduction),
+            AtomicArray::GenericAtomicArray(array) => array.reduce(reduction),
         }
     }
-    pub fn sum(&self) -> Pin<Box<dyn Future<Output = T>>> {
+}
+
+impl<T: Dist + AmDist + ElementArithmeticOps + 'static> LamellarArrayArithmeticReduce<T>
+    for AtomicArray<T>
+{
+    fn sum(&self) -> Pin<Box<dyn Future<Output = T>>> {
         match self {
-            AtomicArray::NativeAtomicArray(array) => array.reduce("sum"),
-            AtomicArray::GenericAtomicArray(array) => array.reduce("sum"),
+            AtomicArray::NativeAtomicArray(array) => array.sum(),
+            AtomicArray::GenericAtomicArray(array) => array.sum(),
         }
     }
-    pub fn prod(&self) -> Pin<Box<dyn Future<Output = T>>> {
+    fn prod(&self) -> Pin<Box<dyn Future<Output = T>>> {
         match self {
-            AtomicArray::NativeAtomicArray(array) => array.reduce("prod"),
-            AtomicArray::GenericAtomicArray(array) => array.reduce("prod"),
+            AtomicArray::NativeAtomicArray(array) => array.prod(),
+            AtomicArray::GenericAtomicArray(array) => array.prod(),
         }
     }
-    pub fn max(&self) -> Pin<Box<dyn Future<Output = T>>> {
+}
+impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static> LamellarArrayCompareReduce<T>
+    for AtomicArray<T>
+{
+    fn max(&self) -> Pin<Box<dyn Future<Output = T>>> {
         match self {
-            AtomicArray::NativeAtomicArray(array) => array.reduce("max"),
-            AtomicArray::GenericAtomicArray(array) => array.reduce("max"),
+            AtomicArray::NativeAtomicArray(array) => array.max(),
+            AtomicArray::GenericAtomicArray(array) => array.max(),
+        }
+    }
+    fn min(&self) -> Pin<Box<dyn Future<Output = T>>> {
+        match self {
+            AtomicArray::NativeAtomicArray(array) => array.min(),
+            AtomicArray::GenericAtomicArray(array) => array.min(),
         }
     }
 }

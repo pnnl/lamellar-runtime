@@ -583,21 +583,7 @@ impl<T: Dist> From<UnsafeArray<T>> for LamellarByteArray {
     }
 }
 
-// impl<T: Dist + serde::Serialize + serde::de::DeserializeOwned + 'static> UnsafeArray<T> {
 
-//     pub fn reduce(&self, op: &str) -> Pin<Box<dyn Future<Output = T>>> {
-//         self.reduce_data(self.get_reduction_op(op)).into_future()
-//     }
-//     pub fn sum(&self) -> Pin<Box<dyn Future<Output = T>>> {
-//         self.reduce("sum")
-//     }
-//     pub fn prod(&self) -> Pin<Box<dyn Future<Output = T>>> {
-//         self.reduce("prod")
-//     }
-//     pub fn max(&self) -> Pin<Box<dyn Future<Output = T>>> {
-//         self.reduce("max")
-//     }
-// }
 
 impl<T: Dist> private::ArrayExecAm<T> for UnsafeArray<T> {
     fn team(&self) -> Pin<Arc<LamellarTeamRT>> {

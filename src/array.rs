@@ -430,6 +430,97 @@ impl<T: Dist + 'static> crate::active_messaging::DarcSerde for LamellarWriteArra
     }
 }
 
+impl<T: Dist + AmDist + 'static> LamellarArrayReduce<T> for LamellarReadArray<T> {
+    fn reduce(&self, reduction: &str) -> Pin<Box<dyn Future<Output = T>>> {
+        match self {
+            LamellarReadArray::UnsafeArray(array) => unsafe{array.reduce(reduction)},
+            LamellarReadArray::AtomicArray(array) => array.reduce(reduction),
+            LamellarReadArray::LocalLockArray(array) => array.reduce(reduction),
+            LamellarReadArray::ReadOnlyArray(array) => array.reduce(reduction),
+        }
+    }
+}
+
+impl<T: Dist + AmDist + ElementArithmeticOps + 'static> LamellarArrayArithmeticReduce<T> for LamellarReadArray<T> {
+    fn sum(&self) -> Pin<Box<dyn Future<Output = T>>> {
+        match self {
+            LamellarReadArray::UnsafeArray(array) => unsafe{array.sum()},
+            LamellarReadArray::AtomicArray(array) => array.sum(),
+            LamellarReadArray::LocalLockArray(array) => array.sum(),
+            LamellarReadArray::ReadOnlyArray(array) => array.sum(),
+        }
+    }
+    fn prod(&self) -> Pin<Box<dyn Future<Output = T>>> {
+        match self {
+            LamellarReadArray::UnsafeArray(array) => unsafe{array.prod()},
+            LamellarReadArray::AtomicArray(array) => array.prod(),
+            LamellarReadArray::LocalLockArray(array) => array.prod(),
+            LamellarReadArray::ReadOnlyArray(array) => array.prod(),
+        }
+    }
+}
+impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static> LamellarArrayCompareReduce<T> for LamellarReadArray<T>{
+    fn max(&self) -> Pin<Box<dyn Future<Output = T>>> {
+        match self {
+            LamellarReadArray::UnsafeArray(array) => unsafe{array.max()},
+            LamellarReadArray::AtomicArray(array) => array.max(),
+            LamellarReadArray::LocalLockArray(array) => array.max(),
+            LamellarReadArray::ReadOnlyArray(array) => array.max(),
+        }
+    }
+    fn min(&self) -> Pin<Box<dyn Future<Output = T>>> {
+        match self {
+            LamellarReadArray::UnsafeArray(array) => unsafe{array.min()},
+            LamellarReadArray::AtomicArray(array) => array.min(),
+            LamellarReadArray::LocalLockArray(array) => array.min(),
+            LamellarReadArray::ReadOnlyArray(array) => array.min(),
+        }
+    }
+}
+
+impl<T: Dist + AmDist + 'static> LamellarArrayReduce<T> for LamellarWriteArray<T> {
+    fn reduce(&self, reduction: &str) -> Pin<Box<dyn Future<Output = T>>> {
+        match self {
+            LamellarWriteArray::UnsafeArray(array) => unsafe{array.reduce(reduction)},
+            LamellarWriteArray::AtomicArray(array) => array.reduce(reduction),
+            LamellarWriteArray::LocalLockArray(array) => array.reduce(reduction),
+        }
+    }
+}
+impl<T: Dist + AmDist + ElementArithmeticOps + 'static> LamellarArrayArithmeticReduce<T> for LamellarWriteArray<T>{
+    fn sum(&self) -> Pin<Box<dyn Future<Output = T>>> {
+        match self {
+            LamellarWriteArray::UnsafeArray(array) => unsafe{array.sum()},
+            LamellarWriteArray::AtomicArray(array) => array.sum(),
+            LamellarWriteArray::LocalLockArray(array) => array.sum(),
+        }
+    }
+    fn prod(&self) -> Pin<Box<dyn Future<Output = T>>> {
+        match self {
+            LamellarWriteArray::UnsafeArray(array) => unsafe{array.prod()},
+            LamellarWriteArray::AtomicArray(array) => array.prod(),
+            LamellarWriteArray::LocalLockArray(array) => array.prod(),
+        }
+    }
+}
+
+impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static> LamellarArrayCompareReduce<T> for LamellarWriteArray<T>{
+    fn max(&self) -> Pin<Box<dyn Future<Output = T>>> {
+        match self {
+            LamellarWriteArray::UnsafeArray(array) => unsafe{array.max()},
+            LamellarWriteArray::AtomicArray(array) => array.max(),
+            LamellarWriteArray::LocalLockArray(array) => array.max(),
+        }
+    }
+    fn min(&self) -> Pin<Box<dyn Future<Output = T>>> {
+        match self {
+            LamellarWriteArray::UnsafeArray(array) => unsafe{array.min()},
+            LamellarWriteArray::AtomicArray(array) => array.min(),
+            LamellarWriteArray::LocalLockArray(array) => array.min(),
+        }
+    }
+}
+
 pub(crate) mod private {
     use crate::active_messaging::*;
     use crate::array::{
@@ -1227,69 +1318,3 @@ where
 /// assert_eq!(sum,my_sum);
 ///```
 pub use lamellar_impl::register_reduction;
-
-// impl<T: Dist + AmDist + 'static> LamellarWriteArray<T> {
-//     pub fn reduce(&self, op: &str) -> Pin<Box<dyn Future<Output = T>>> {
-//         match self {
-//             LamellarWriteArray::UnsafeArray(array) => array.reduce(op),
-//             LamellarWriteArray::AtomicArray(array) => array.reduce(op),
-//             LamellarWriteArray::LocalLockArray(array) => array.reduce(op),
-//         }
-//     }
-//     pub fn sum(&self) -> Pin<Box<dyn Future<Output = T>>> {
-//         match self {
-//             LamellarWriteArray::UnsafeArray(array) => array.sum(),
-//             LamellarWriteArray::AtomicArray(array) => array.sum(),
-//             LamellarWriteArray::LocalLockArray(array) => array.sum(),
-//         }
-//     }
-//     pub fn max(&self) -> Pin<Box<dyn Future<Output = T>>> {
-//         match self {
-//             LamellarWriteArray::UnsafeArray(array) => array.max(),
-//             LamellarWriteArray::AtomicArray(array) => array.max(),
-//             LamellarWriteArray::LocalLockArray(array) => array.max(),
-//         }
-//     }
-//     pub fn prod(&self) -> Pin<Box<dyn Future<Output = T>>> {
-//         match self {
-//             LamellarWriteArray::UnsafeArray(array) => array.prod(),
-//             LamellarWriteArray::AtomicArray(array) => array.prod(),
-//             LamellarWriteArray::LocalLockArray(array) => array.prod(),
-//         }
-//     }
-// }
-
-// impl<T: Dist + AmDist + 'static> LamellarReadArray<T> {
-//     pub fn reduce(&self, op: &str) -> Pin<Box<dyn Future<Output = T>>> {
-//         match self {
-//             LamellarReadArray::UnsafeArray(array) => array.reduce(op),
-//             LamellarReadArray::AtomicArray(array) => array.reduce(op),
-//             LamellarReadArray::LocalLockArray(array) => array.reduce(op),
-//             LamellarReadArray::ReadOnlyArray(array) => array.reduce(op),
-//         }
-//     }
-//     pub fn sum(&self) -> Pin<Box<dyn Future<Output = T>>> {
-//         match self {
-//             LamellarReadArray::UnsafeArray(array) => array.sum(),
-//             LamellarReadArray::AtomicArray(array) => array.sum(),
-//             LamellarReadArray::LocalLockArray(array) => array.sum(),
-//             LamellarReadArray::ReadOnlyArray(array) => array.sum(),
-//         }
-//     }
-//     pub fn max(&self) -> Pin<Box<dyn Future<Output = T>>> {
-//         match self {
-//             LamellarReadArray::UnsafeArray(array) => array.max(),
-//             LamellarReadArray::AtomicArray(array) => array.max(),
-//             LamellarReadArray::LocalLockArray(array) => array.max(),
-//             LamellarReadArray::ReadOnlyArray(array) => array.max(),
-//         }
-//     }
-//     pub fn prod(&self) -> Pin<Box<dyn Future<Output = T>>> {
-//         match self {
-//             LamellarReadArray::UnsafeArray(array) => array.prod(),
-//             LamellarReadArray::AtomicArray(array) => array.prod(),
-//             LamellarReadArray::LocalLockArray(array) => array.prod(),
-//             LamellarReadArray::ReadOnlyArray(array) => array.prod(),
-//         }
-//     }
-// }
