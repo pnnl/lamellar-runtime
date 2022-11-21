@@ -214,6 +214,16 @@ impl<T: Dist> TeamFrom<LamellarMemoryRegion<T>> for LamellarArrayRdmaOutput<T> {
 #[enum_dispatch]
 pub trait RegisteredMemoryRegion<T: Dist> {
     /// The length (in number of elements of `T`) of the local segment of the memory region (i.e. not the global length of the memory region)  
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(1000);
+    /// assert_eq!(mem_region.len(),1000);
+    ///```
     fn len(&self) -> usize;
     #[doc(hidden)]
     fn addr(&self) -> MemResult<usize>;
@@ -224,6 +234,15 @@ pub trait RegisteredMemoryRegion<T: Dist> {
     ///
     /// # Safety
     /// this call is always unsafe as there is no gaurantee that there do not exist mutable references elsewhere in the distributed system.
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(1000);
+    /// let slice = unsafe{mem_region.as_slice().expect("PE is part of the world team")};
+    ///```
     unsafe fn as_slice(&self) -> MemResult<&[T]>;
 
     /// Return a reference to the local (to the calling PE) element located by the provided index
@@ -232,6 +251,15 @@ pub trait RegisteredMemoryRegion<T: Dist> {
     ///
     /// # Safety
     /// this call is always unsafe as there is no gaurantee that there do not exist mutable references elsewhere in the distributed system.
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(1000);
+    /// let val = unsafe{mem_region.at(999).expect("PE is part of the world team")};
+    ///```
     unsafe fn at(&self, index: usize) -> MemResult<&T>;
 
     /// Return a mutable slice of the local (to the calling PE) data of the memory region
@@ -240,6 +268,15 @@ pub trait RegisteredMemoryRegion<T: Dist> {
     ///
     /// # Safety
     /// this call is always unsafe as there is no gaurantee that there do not exist other mutable references elsewhere in the distributed system.
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(1000);
+    /// let slice =unsafe { mem_region.as_mut_slice().expect("PE is part of the world team")};
+    ///```
     unsafe fn as_mut_slice(&self) -> MemResult<&mut [T]>;
 
     /// Return a ptr to the local (to the calling PE) data of the memory region
@@ -248,6 +285,15 @@ pub trait RegisteredMemoryRegion<T: Dist> {
     ///
     /// # Safety
     /// this call is always unsafe as there is no gaurantee that there do not exist mutable references elsewhere in the distributed system.
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(1000);
+    /// let ptr = unsafe { mem_region.as_ptr().expect("PE is part of the world team")};
+    ///```
     unsafe fn as_ptr(&self) -> MemResult<*const T>;
 
     /// Return a mutable ptr to the local (to the calling PE) data of the memory region
@@ -256,6 +302,15 @@ pub trait RegisteredMemoryRegion<T: Dist> {
     ///
     /// # Safety
     /// this call is always unsafe as there is no gaurantee that there do not exist mutable references elsewhere in the distributed system.
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(1000);
+    /// let ptr = unsafe { mem_region.as_mut_ptr().expect("PE is part of the world team")};
+    ///```
     unsafe fn as_mut_ptr(&self) -> MemResult<*mut T>;
 }
 
@@ -271,6 +326,22 @@ pub(crate) trait MemRegionId {
 #[doc(hidden)]
 #[enum_dispatch]
 pub trait SubRegion<T: Dist> {
+    /// Create a sub region of this OneSidedMemoryRegion using the provided range
+    ///
+    /// # Panics
+    /// panics if the end range is larger than the length of the memory region
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(100);
+    /// 
+    /// let sub_region = mem_region.sub_region(30..70);
+    ///```
     fn sub_region<R: std::ops::RangeBounds<usize>>(&self, range: R) -> LamellarMemoryRegion<T>;
 }
 
@@ -284,31 +355,74 @@ pub(crate) trait AsBase {
 pub trait MemoryRegionRDMA<T: Dist> {
     /// "Puts" (copies) data from a local memory location into a remote memory location on the specified PE
     ///
-    /// # Arguments
-    ///
-    /// * `pe` - id of remote PE to grab data from
-    /// * `index` - offset into the remote memory window
-    /// * `data` - address (which is "registered" with network device) of local input buffer that will be put into the remote memory
-    /// the data buffer may not be safe to upon return from this call, currently the user is responsible for completion detection,
+    /// The data buffer may not be safe to upon return from this call, currently the user is responsible for completion detection,
     /// or you may use the similar iput call (with a potential performance penalty);
     ///
     /// # Safety
     /// This call is always unsafe as mutual exclusitivity is not enforced, i.e. many other reader/writers can exist simultaneously.
     /// Additionally, when this call returns the underlying fabric provider may or may not have already copied the data buffer
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let dst_mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes*10);
+    /// let src_mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(10);
+    /// unsafe{ for elem in dst_mem_region.as_mut_slice().expect("PE in world team") {*elem = num_pes;}}
+    /// unsafe{ for elem in src_mem_region.as_mut_slice().expect("PE in world team") {*elem = my_pe;}}
+    /// 
+    /// for pe in 0..num_pes{
+    ///    unsafe{dst_mem_region.put(pe,my_pe*src_mem_region.len(),&src_mem_region)};
+    /// }
+    /// unsafe {
+    ///     let dst_slice = dst_mem_region.as_slice().expect("PE in world team");
+    ///     for (i,elem) in dst_slice.iter().enumerate(){
+    ///         let pe = i / &src_mem_region.len(); 
+    ///         while *elem == num_pes{
+    ///             std::thread::yield_now();
+    ///         }
+    ///         assert_eq!(pe,*elem);
+    ///     }      
+    /// }
+    ///```
     unsafe fn put<U: Into<LamellarMemoryRegion<T>>>(&self, pe: usize, index: usize, data: U);
 
     /// Blocking "Puts" (copies) data from a local memory location into a remote memory location on the specified PE.
     ///
     /// This function blocks until the data in the data buffer has been transfered out of this PE, this does not imply that it has arrived at the remote destination though
-    /// # Arguments
-    ///
-    /// * `pe` - id of remote PE to grab data from
-    /// * `index` - offset into the remote memory window
-    /// * `data` - address (which is "registered" with network device) of local input buffer that will be put into the remote memory
-    /// the data buffer is free to be reused upon return of this function.
     ///
     /// # Safety
     /// This call is always unsafe as mutual exclusitivity is not enforced, i.e. many other reader/writers can exist simultaneously.
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let dst_mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes*10);
+    /// let src_mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(10);
+    /// unsafe{ for elem in dst_mem_region.as_mut_slice().expect("PE in world team") {*elem = num_pes;}}
+    /// unsafe{ for elem in src_mem_region.as_mut_slice().expect("PE in world team") {*elem = my_pe;}}
+    /// 
+    /// for pe in 0..num_pes{
+    ///    unsafe{dst_mem_region.blocking_put(pe,my_pe*src_mem_region.len(),&src_mem_region)};
+    /// }
+    /// unsafe {
+    ///     let dst_slice = dst_mem_region.as_slice().expect("PE in world team");
+    ///     for (i,elem) in dst_slice.iter().enumerate(){
+    ///         let pe = i / &src_mem_region.len(); 
+    ///         while *elem == num_pes{
+    ///             std::thread::yield_now();
+    ///         }
+    ///         assert_eq!(pe,*elem);
+    ///     }      
+    /// }
+    ///```
     unsafe fn blocking_put<U: Into<LamellarMemoryRegion<T>>>(
         &self,
         pe: usize,
@@ -318,32 +432,79 @@ pub trait MemoryRegionRDMA<T: Dist> {
 
     /// "Puts" (copies) data from a local memory location into a remote memory location on all PEs containing the memory region
     ///
-    /// This is similar to broad cast
+    /// This is similar to broadcast
     ///
-    /// # Arguments
-    ///
-    /// * `index` - offset into the remote memory window
-    /// * `data` - address (which is "registered" with network device) of local input buffer that will be put into the remote memory
-    /// the data buffer may not be safe to upon return from this call, currently the user is responsible for completion detection,
-    /// or you may use the similar iput call (with a potential performance penalty);
+    /// The data buffer may not be safe to upon return from this call, currently the user is responsible for completion detection
     ///
     /// # Safety
     /// This call is always unsafe as mutual exclusitivity is not enforced, i.e. many other reader/writers can exist simultaneously.
     /// Additionally, when this call returns the underlying fabric provider may or may not have already copied the data buffer
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let dst_mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes*10);
+    /// let src_mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(10);
+    /// unsafe{ for elem in dst_mem_region.as_mut_slice().expect("PE in world team") {*elem = num_pes;}}
+    /// unsafe{ for elem in src_mem_region.as_mut_slice().expect("PE in world team") {*elem = my_pe;}}
+    /// 
+    /// unsafe{dst_mem_region.put_all(my_pe*src_mem_region.len(),&src_mem_region)};
+    /// 
+    /// unsafe {
+    ///     let dst_slice = dst_mem_region.as_slice().expect("PE in world team");
+    ///     for (i,elem) in dst_slice.iter().enumerate(){
+    ///         let pe = i / &src_mem_region.len(); 
+    ///         while *elem == num_pes{
+    ///             std::thread::yield_now();
+    ///         }
+    ///         assert_eq!(pe,*elem);
+    ///     }      
+    /// }
+    ///```
     unsafe fn put_all<U: Into<LamellarMemoryRegion<T>>>(&self, index: usize, data: U);
 
     /// "Gets" (copies) data from remote memory location on the specified PE into the provided data buffer.
     /// After calling this function, the data may or may not have actually arrived into the data buffer.
     /// The user is responsible for transmission termination detection
     ///
-    /// # Arguments
-    ///
-    /// * `pe` - id of remote PE to grab data from
-    /// * `index` - offset into the remote memory window
-    /// * `data` - address (which is "registered" with network device) of destination buffer to store result of the get
     /// # Safety
     /// This call is always unsafe as mutual exclusitivity is not enforced, i.e. many other reader/writers can exist simultaneously.
     /// Additionally, when this call returns the underlying fabric provider may or may not have already copied data into the data buffer.
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let src_mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(10);
+    /// let dst_mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes*10);
+    ///
+    /// unsafe{ for elem in src_mem_region.as_mut_slice().expect("PE in world team") {*elem = my_pe;}}
+    /// unsafe{ for elem in dst_mem_region.as_mut_slice().expect("PE in world team") {*elem = num_pes;}}
+    /// 
+    /// for pe in 0..num_pes{
+    ///     let start_i = pe*src_mem_region.len();
+    ///     let end_i = start_i+src_mem_region.len();
+    ///     unsafe{src_mem_region.get_unchecked(pe,0,dst_mem_region.sub_region(start_i..end_i))};
+    /// }
+    /// 
+    /// unsafe {
+    ///     let dst_slice = dst_mem_region.as_slice().expect("PE in world team");
+    ///     for (i,elem) in dst_slice.iter().enumerate(){
+    ///         let pe = i / &src_mem_region.len(); 
+    ///         while *elem == num_pes{
+    ///             std::thread::yield_now();
+    ///         }
+    ///         assert_eq!(pe,*elem);
+    ///     }      
+    /// }
+    ///```
     unsafe fn get_unchecked<U: Into<LamellarMemoryRegion<T>>>(
         &self,
         pe: usize,
@@ -354,13 +515,36 @@ pub trait MemoryRegionRDMA<T: Dist> {
     /// Blocking "Gets" (copies) data from remote memory location on the specified PE into the provided data buffer.
     /// After calling this function, the data is guaranteed to be placed in the data buffer
     ///
-    /// # Arguments
-    ///
-    /// * `pe` - id of remote PE to grab data from
-    /// * `index` - offset into the remote memory window
-    /// * `data` - address (which is "registered" with network device) of destination buffer to store result of the get
     /// # Safety
     /// This call is always unsafe as mutual exclusitivity is not enforced, i.e. many other reader/writers can exist simultaneously.
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let src_mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(10);
+    /// let dst_mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes*10);
+    ///
+    /// unsafe{ for elem in src_mem_region.as_mut_slice().expect("PE in world team") {*elem = my_pe;}}
+    /// unsafe{ for elem in dst_mem_region.as_mut_slice().expect("PE in world team") {*elem = num_pes;}}
+    /// 
+    /// for pe in 0..num_pes{
+    ///     let start_i = pe*src_mem_region.len();
+    ///     let end_i = start_i+src_mem_region.len();
+    ///     unsafe{src_mem_region.blocking_get(pe,0,dst_mem_region.sub_region(start_i..end_i))};
+    /// }
+    /// 
+    /// unsafe {
+    ///     let dst_slice = dst_mem_region.as_slice().expect("PE in world team");
+    ///     for (i,elem) in dst_slice.iter().enumerate(){
+    ///         let pe = i / &src_mem_region.len(); 
+    ///         assert_eq!(pe,*elem);
+    ///     }      
+    /// }
+    ///```
     unsafe fn blocking_get<U: Into<LamellarMemoryRegion<T>>>(
         &self,
         pe: usize,

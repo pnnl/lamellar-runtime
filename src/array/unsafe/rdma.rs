@@ -3,7 +3,7 @@ use crate::array::r#unsafe::*;
 use crate::array::*;
 use crate::lamellar_request::LamellarRequest;
 use crate::memregion::{
-    AsBase, Dist, MemoryRegionRDMA, RTMemoryRegionRDMA, RegisteredMemoryRegion,
+    AsBase, Dist, MemoryRegionRDMA, RTMemoryRegionRDMA, RegisteredMemoryRegion,SubRegion
 };
 
 // use tracing::*;

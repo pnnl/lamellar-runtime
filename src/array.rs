@@ -41,6 +41,7 @@ use crate::memregion::{
     shared::SharedMemoryRegion,
     Dist,
     LamellarMemoryRegion,
+    RegisteredMemoryRegion
     // RemoteMemoryRegion,
 };
 use crate::{active_messaging::*, LamellarTeamRT};
