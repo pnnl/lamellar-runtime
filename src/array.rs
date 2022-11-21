@@ -6,12 +6,12 @@
 //!  - [Safety](#safety)
 //!  - [Multiple array types](#multiple-array-types)
 //!  - RDMA like `put` and `get` APIs 
-//!  - Element Wise operations (e.g. add, fetch_add, or, compare_exchange, etc)
-//!  - Batched operations (batch_add, batch_fetch_add, etc.)
-//!  - Distributed and Onesided Iteration
-//!  - Distributed Reductions
-//!  - Block or Cyclic layouts
-//!  - Sub Arrays
+//!  - Element Wise operations (e.g. `add`, `fetch_add`, `or`, `compare_exchange`, etc.)
+//!  - Batched operations (`batch_add`, `batch_fetch_add`, etc.)
+//!  - Distributed and Onesided Iteration (`dist_iter`, `dist_iter_mut`, `onesided_iter`, etc.)
+//!  - Distributed Reductions (e.g. `reduce`),
+//!  - [Block or Cyclic memory layouts](crate::array::Distribution)
+//!  - [Sub Arrays](crate::array::SubArray)
 //!  - [Type conversion](#type-conversion)
 //!
 //! # Safety
