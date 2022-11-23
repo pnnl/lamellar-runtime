@@ -1,4 +1,4 @@
-//! One-sided (i.e. serial, not distributed) iteration of a LamellarArray on a single PE
+//! One-sided (i.e. serial, not parallel) iteration of a LamellarArray on a single PE
 //!
 //! This module provides serial iteration of an entire LamellarArray on the calling PE.
 //! The resulting OneSidedIterator can be converted in to standard Iterator, to allow
@@ -42,9 +42,10 @@ use std::sync::Arc;
 //TODO: Think about an active message based method for transfering data that performs data reducing iterators before sending
 // i.e. for something like step_by(N) we know that only every N elements actually needs to get sent...
 
-/// An interface for dealing with one sided iterators of LamellarArrays
+/// An interface for dealing with one sided (i.e. serial, not parallel) iterators of LamellarArrays
 ///
-/// The functions in this trait are available on all one-sided iterators, typically
+/// The functions in this trait are available on all [one-sided iterators](crate::array::iterator::one_sided_iterator)
+/// (which run over the data of a distributed array in serial, unlike distributed iterators).  Typically
 /// the provided iterator functions are optimized versions of the standard Iterator equivalents to reduce data movement assoicated with handling distributed arrays
 ///
 /// Additonaly functionality can be found by converting these iterators into Standard Iterators (with potential loss in data movement optimizations)
