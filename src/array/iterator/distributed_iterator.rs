@@ -5,6 +5,10 @@
 //!
 //! We try to minimize data movement as much as possible, but the runtime will manage remote transfers
 //! as necessary depending on the iterators used.
+//! 
+//! # Examples
+//! 
+//! Examples can be found under [lamellar-runtime/examples/array_examples/](https://github.com/pnnl/lamellar-runtime/blob/dev/examples/array_examples)
 
 // mod chunks;
 mod enumerate;
@@ -396,7 +400,7 @@ pub trait DistributedIterator: SyncSend + Clone + 'static {
     ///
     /// Calling this function invokes an implicit barrier across all PEs in the Array
     ///
-    /// This call is utilizes the [Schedule::Static][crate::array::iterator::Schedule] policy.
+    /// This call utilizes the [Schedule::Static][crate::array::iterator::Schedule] policy.
     ///
     /// This function returns a future which can be used to poll for completion of the iteration.
     /// Note calling this function launches the iteration regardless of if the returned future is used or not.
@@ -425,7 +429,7 @@ pub trait DistributedIterator: SyncSend + Clone + 'static {
     ///
     /// Calling this function invokes an implicit barrier across all PEs in the Array
     ///
-    /// This call is utilizes the [Schedule::Static][crate::array::iterator::Schedule] policy.
+    /// This call utilizes the [Schedule::Static][crate::array::iterator::Schedule] policy.
     ///
     /// The supplied closure must return a future.
     ///

@@ -4,6 +4,10 @@
 //! similar to the `ParallelIterators` provided by the (Rayon)<https://docs.rs/rayon/latest/rayon/> crate.
 //!
 //! These iterators are purely local to the calling PE, no data transfer occurs.
+//! 
+//! # Examples
+//! 
+//! Examples can be found under [lamellar-runtime/examples/array_examples/](https://github.com/pnnl/lamellar-runtime/blob/dev/examples/array_examples)
 mod chunks;
 mod enumerate;
 mod filter;
@@ -384,7 +388,7 @@ pub trait LocalIterator: SyncSend + Clone + 'static {
 
     /// Calls a closure on each element of a Local Iterator in parallel on the calling PE (the PE must have some local data of the array).
     ///
-    /// This call is utilizes the [Schedule::Static][crate::array::iterator::Schedule] policy.
+    /// This call utilizes the [Schedule::Static][crate::array::iterator::Schedule] policy.
     ///
     /// This function returns a future which can be used to poll for completion of the iteration.
     /// Note calling this function launches the iteration regardless of if the returned future is used or not.
@@ -411,7 +415,7 @@ pub trait LocalIterator: SyncSend + Clone + 'static {
 
     /// Calls a closure and immediately awaits the result on each element of a Local Iterator in parallel on the calling PE (the PE must have some local data of the array).
     ///
-    /// This call is utilizes the [Schedule::Static][crate::array::iterator::Schedule] policy.
+    /// This call utilizes the [Schedule::Static][crate::array::iterator::Schedule] policy.
     ///
     /// The supplied closure must return a future.
     ///
@@ -747,7 +751,7 @@ pub trait IndexedLocalIterator: LocalIterator + SyncSend + Clone + 'static {
     }
 
     /// Iterates over tuples `(A,B)` where the `A` items are from this iterator and the `B` items are from the iter in the argument.
-    /// If the two iterators or of unequal length, the returned iterator will be equal in lenght to the shorter of the two.
+    /// If the two iterators or of unequal length, the returned iterator will be equal in length to the shorter of the two.
     ///
     /// # Examples
     ///```

@@ -5,6 +5,10 @@
 //! using all the functionality and capabilities those provide.
 //!
 //! These iterators will automatically transfer data in from Remote PEs as needed
+//! 
+//! # Examples
+//! 
+//! Examples can be found under [lamellar-runtime/examples/array_examples/](https://github.com/pnnl/lamellar-runtime/blob/dev/examples/array_examples)
 mod chunks;
 use chunks::*;
 

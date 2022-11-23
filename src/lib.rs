@@ -1,7 +1,7 @@
 //! Lamellar is an investigation of the applicability of the Rust systems programming language for HPC as an alternative to C and C++, with a focus on PGAS approaches.
 //!
 //! # Some Nomenclature
-//! Through out this documentation and APIs there are a few terms we end up reusing a lot, those terms and brief descriptions are provided below:
+//! Throughout this documentation and APIs there are a few terms we end up reusing a lot, those terms and brief descriptions are provided below:
 //! - `PE` - a processing element, typically a multi threaded process, for those familar with MPI, it corresponds to a Rank.
 //!     - Commonly you will create 1 PE per pyshical CPU socket on your system, but it is just as valid to have multiple PE's per CPU
 //!     - There may be some instances where `Node` (meaning a compute node) is used instead of `PE` in these cases they are interchangeable
