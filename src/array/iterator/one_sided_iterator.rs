@@ -1,4 +1,4 @@
-//! One-sided iteration of a LamellarArray on a single PE
+//! One-sided (i.e. serial, not distributed) iteration of a LamellarArray on a single PE
 //!
 //! This module provides serial iteration of an entire LamellarArray on the calling PE.
 //! The resulting OneSidedIterator can be converted in to standard Iterator, to allow
@@ -255,7 +255,9 @@ pub trait OneSidedIterator {
     }
 }
 
-/// An immutable standard Rust Iterator backed by a OneSidedIterator
+/// An immutable standard Rust Iterator backed by a [OneSidedIterator](crate::array::iterator::one_sided_iterator).
+/// 
+/// This object iterates over data in serial; compare with [distributed iterators](crate::array::iterator::distributed_iterator), which iterate over data in parallel.
 ///
 /// This struct is created by calling [into_iter][OneSidedIterator::into_iter] a OneSidedIterator
 ///
