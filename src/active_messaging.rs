@@ -261,12 +261,12 @@
 //! The main change is that we need to explicitly tell the macro we are returning an active message and we provide the name of the active message we are returning
 //!```
 //! # use lamellar::active_messaging::prelude::*;
-//! #[AmData(Debug,Clone)]
+//! # #[AmData(Debug,Clone)]
 //! # struct ReturnAm{
 //! #     original_pe: usize,
 //! #     remote_pe: usize,
 //! # }
-//! #[lamellar::am]
+//! # #[lamellar::am]
 //! # impl LamellarAm for ReturnAm{
 //! #     async fn exec(self) {
 //! #         println!("initiated on PE {} visited PE {} finishing on PE {}",self.original_pe,self.remote_pe,lamellar::current_pe);
@@ -276,7 +276,7 @@
 //! # struct HelloWorld {
 //! #    original_pe: usize, //this will contain the ID of the PE this data originated from
 //! # }
-//! #[lamellar::am(return_am = "ReturnAM")] //we explicitly tell the macro we are returning an AM
+//! #[lamellar::am(return_am = "ReturnAm")] //we explicitly tell the macro we are returning an AM
 //! impl LamellarAM for HelloWorld {
 //!     async fn exec(self) -> usize { //specify we are returning a usize
 //!         println!(
@@ -326,11 +326,12 @@
 //! First we need to update `ReturnAm` to actually return some data
 //!```
 //! # use lamellar::active_messaging::prelude::*;
-//! #[AmData(Debug,Clone)]
+//! # #[AmData(Debug,Clone)]
 //! # struct ReturnAm{
 //! #     original_pe: usize,
 //! #     remote_pe: usize,
 //! # }
+//! 
 //! #[lamellar::am]
 //! impl LamellarAm for ReturnAm{
 //!     async fn exec(self) -> (usize,usize) {
@@ -343,7 +344,7 @@
 //! we do this in the argument to the [am] procedural macro
 //!```
 //! # use lamellar::active_messaging::prelude::*;
-//! #[AmData(Debug,Clone)]
+//! # #[AmData(Debug,Clone)]
 //! # struct ReturnAm{
 //! #     original_pe: usize,
 //! #     remote_pe: usize,
@@ -359,6 +360,7 @@
 //! # struct HelloWorld {
 //! #    original_pe: usize, //this will contain the ID of the PE this data originated from
 //! # }
+//!
 //! #[lamellar::am(return_am = "ReturnAM -> (usize,usize)")] //we explicitly tell the macro we are returning an AM which itself returns data
 //! impl LamellarAM for HelloWorld {
 //!     async fn exec(self) -> usize { //specify we are returning a usize

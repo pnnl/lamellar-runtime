@@ -787,9 +787,8 @@ pub trait SubArray<T: Dist>: LamellarArray<T> {
     ///```
     fn sub_array<R: std::ops::RangeBounds<usize>>(&self, range: R) -> Self::Array;
 
-    /// Create a sub array of this UnsafeArray which consists of the elements specified by the range
+    /// Given an index with respect to the SubArray, return the index with respect to original array.
     ///
-    /// Note: it is possible that the subarray does not contain any data on this PE
     ///
     /// # Panic
     /// This call will panic if the end of the range exceeds the size of the array.

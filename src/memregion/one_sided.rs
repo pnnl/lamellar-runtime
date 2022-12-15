@@ -493,6 +493,7 @@ impl<T: Dist> OneSidedMemoryRegion<T> {
     /// Panics if index is out of bounds
     /// Panics if PE is out of bounds
     /// # Examples
+    ///```
     /// use lamellar::active_messaging::prelude::*;
     /// use lamellar::memregion::prelude::*;
     /// use std::time::{Duration, Instant};
@@ -543,6 +544,7 @@ impl<T: Dist> OneSidedMemoryRegion<T> {
     /// Panics if index is out of bounds
     /// Panics if PE is out of bounds
     /// # Examples
+    ///```
     /// use lamellar::active_messaging::prelude::*;
     /// use lamellar::memregion::prelude::*;
     /// use std::time::{Duration, Instant};

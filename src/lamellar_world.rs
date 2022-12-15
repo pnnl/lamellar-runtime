@@ -15,12 +15,13 @@ use futures::Future;
 use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::pin::Pin;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicUsize,AtomicBool, Ordering};
 use std::sync::Arc; //, Weak};
 
 lazy_static! {
     pub(crate) static ref LAMELLAES: RwLock<HashMap<Backend, Arc<Lamellae>>> =
         RwLock::new(HashMap::new());
+    pub(crate) static ref INIT: AtomicBool = AtomicBool::new(false);
 }
 
 /// An abstraction representing all the PE's (processing elements) within a given distributed execution.
@@ -343,6 +344,7 @@ impl LamellarWorldBuilder {
     ///```
     #[tracing::instrument(skip_all)]
     pub fn build(self) -> LamellarWorld {
+        assert_eq!(INIT.fetch_or(true, Ordering::SeqCst), false, "ERROR: Building more than one world is not allowed, you may want to consider cloning or creating a reference to first instance");
         // let teams = Arc::new(RwLock::new(HashMap::new()));
         let mut lamellae_builder = create_lamellae(self.primary_lamellae);
         let (my_pe, num_pes) = lamellae_builder.init_fabric();
