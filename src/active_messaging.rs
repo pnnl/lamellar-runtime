@@ -361,7 +361,7 @@
 //! #    original_pe: usize, //this will contain the ID of the PE this data originated from
 //! # }
 //!
-//! #[lamellar::am(return_am = "ReturnAM -> (usize,usize)")] //we explicitly tell the macro we are returning an AM which itself returns data
+//! #[lamellar::am(return_am = "ReturnAm -> (usize,usize)")] //we explicitly tell the macro we are returning an AM which itself returns data
 //! impl LamellarAM for HelloWorld {
 //!     async fn exec(self) -> usize { //specify we are returning a usize
 //!         println!(
