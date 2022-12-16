@@ -720,7 +720,7 @@ pub trait LamellarArray<T: Dist>: private::LamellarArrayPrivate<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     ///
-    /// let block_array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Block);
+    /// let block_array: UnsafeArray<usize> = UnsafeArray::new(&world,16,Distribution::Block);
     /// // block array index location  = PE0 [0,1,2,3],  PE1 [4,5,6,7],  PE2 [8,9,10,11], PE3 [12,13,14,15]
     /// let  Some((pe,offset)) = block_array.pe_and_offset_for_global_index(6) else { panic!("out of bounds");};
     /// assert_eq!((pe,offset) ,(1,2));
@@ -730,12 +730,91 @@ pub trait LamellarArray<T: Dist>: private::LamellarArrayPrivate<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     ///
-    /// let cyclic_array: UnsafeArray<usize> = UnsafeArray::new(world,12,Distribution::Cyclic);
+    /// let cyclic_array: UnsafeArray<usize> = UnsafeArray::new(world,16,Distribution::Cyclic);
     /// // cyclic array index location = PE0 [0,4,8,12], PE1 [1,5,9,13], PE2 [2,6,10,14], PE3 [3,7,11,15]
     /// let Some((pe,offset)) = cyclic_array.pe_and_offset_for_global_index(6) else { panic!("out of bounds");};
     /// assert_eq!((pe,offset) ,(2,1));
     ///```
     fn pe_and_offset_for_global_index(&self, index: usize) -> Option<(usize, usize)>;
+
+
+    /// Given a PE, return the global index of the first element on that PE
+    /// Returns None if no data exists on that PE
+    /// # Examples
+    /// assume we have 4 PEs
+    /// ## Block
+    ///```no_run //assert is for 4 PEs
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    ///
+    /// let block_array: UnsafeArray<usize> = UnsafeArray::new(&world,16,Distribution::Block);
+    /// // block array index location  = PE0 [0,1,2,3],  PE1 [4,5,6,7],  PE2 [8,9,10,11], PE3 [12,13,14,15]
+    /// let index = block_array.first_global_index_for_pe(0).unwrap();
+    /// assert_eq!(index , 0);
+    /// let index = block_array.first_global_index_for_pe(1).unwrap();
+    /// assert_eq!(index , 4);
+    /// let index = block_array.first_global_index_for_pe(2).unwrap();
+    /// assert_eq!(index , 8);
+    /// let index = block_array.first_global_index_for_pe(3).unwrap();
+    /// assert_eq!(index , 12);
+    ///```
+    /// ## Cyclic
+    ///```no_run //assert is for 4 PEs
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    ///
+    /// let cyclic_array: UnsafeArray<usize> = UnsafeArray::new(world,16,Distribution::Cyclic);
+    /// // cyclic array index location = PE0 [0,4,8,12], PE1 [1,5,9,13], PE2 [2,6,10,14], PE3 [3,7,11,15]
+    /// let Some((pe,offset)) = cyclic_array.pe_and_offset_for_global_index(6) else { panic!("out of bounds");};
+    /// let index = block_array.first_global_index_for_pe(0).unwrap();
+    /// assert_eq!(index , 0);
+    /// let index = block_array.first_global_index_for_pe(1).unwrap();
+    /// assert_eq!(index , 1);
+    /// let index = block_array.first_global_index_for_pe(2).unwrap();
+    /// assert_eq!(index , 2);
+    /// let index = block_array.first_global_index_for_pe(3).unwrap();
+    /// assert_eq!(index , 3);
+    ///```
+    fn first_global_index_for_pe(&self, pe: usize) -> Option<usize>;
+
+    /// Given a PE, return the global index of the first element on that PE
+    /// Returns None if no data exists on that PE
+    /// # Examples
+    /// assume we have 4 PEs
+    /// ## Block
+    ///```no_run //assert is for 4 PEs
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    ///
+    /// let block_array: UnsafeArray<usize> = UnsafeArray::new(&world,16,Distribution::Block);
+    /// // block array index location  = PE0 [0,1,2,3],  PE1 [4,5,6,7],  PE2 [8,9,10,11], PE3 [12,13,14,15]
+    /// let index = block_array.last_global_index_for_pe(0).unwrap();
+    /// assert_eq!(index , 3);
+    /// let index = block_array.last_global_index_for_pe(1).unwrap();
+    /// assert_eq!(index , 7);
+    /// let index = block_array.last_global_index_for_pe(2).unwrap();
+    /// assert_eq!(index , 11);
+    /// let index = block_array.last_global_index_for_pe(3).unwrap();
+    /// assert_eq!(index , 15);
+    ///```
+    /// ## Cyclic
+    ///```no_run //assert is for 4 PEs
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    ///
+    /// let cyclic_array: UnsafeArray<usize> = UnsafeArray::new(world,16,Distribution::Cyclic);
+    /// // cyclic array index location = PE0 [0,4,8,12], PE1 [1,5,9,13], PE2 [2,6,10,14], PE3 [3,7,11,15]
+    /// let Some((pe,offset)) = cyclic_array.pe_and_offset_for_global_index(6) else { panic!("out of bounds");};
+    /// let index = block_array.last_global_index_for_pe(0).unwrap();
+    /// assert_eq!(index , 12);
+    /// let index = block_array.last_global_index_for_pe(1).unwrap();
+    /// assert_eq!(index , 13);
+    /// let index = block_array.last_global_index_for_pe(2).unwrap();
+    /// assert_eq!(index , 14);
+    /// let index = block_array.last_global_index_for_pe(3).unwrap();
+    /// assert_eq!(index , 15);
+    ///```
+    fn last_global_index_for_pe(&self, pe: usize) -> Option<usize>;
 
     // /// Returns a distributed iterator for the LamellarArray
     // /// must be called accross all pes containing data in the array

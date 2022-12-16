@@ -137,6 +137,7 @@ impl<T: Dist + 'static> UnsafeArray<T> {
         distribution: Distribution,
     ) -> UnsafeArray<T> {
         let team = team.into().team.clone();
+        team.barrier();
         let task_group = LamellarTaskGroup::new(team.clone());
         let my_pe = team.team_pe_id().unwrap();
         let num_pes = team.num_pes();
@@ -692,6 +693,14 @@ impl<T: Dist> LamellarArray<T> for UnsafeArray<T> {
         let offset = self.inner.pe_offset_for_dist_index(pe, index)?;
         Some((pe, offset))
     }
+
+    fn first_global_index_for_pe(&self, pe: usize) -> Option<usize>{
+        self.inner.start_index_for_pe(pe)
+    }
+
+    fn last_global_index_for_pe(&self, pe: usize) -> Option<usize>{
+        self.inner.end_index_for_pe(pe)
+    }
 }
 
 impl<T: Dist> LamellarWrite for UnsafeArray<T> {}
@@ -1208,6 +1217,29 @@ impl UnsafeArrayInner {
                     }
                 }
                 None
+            }
+        }
+    }
+
+    //return index relative to the subarray
+    // #[tracing::instrument(skip_all)]
+    pub(crate) fn end_index_for_pe(&self, pe: usize) -> Option<usize> {
+        self.start_index_for_pe(pe)?;
+        match self.distribution {
+            Distribution::Block => {
+                if pe == self.pe_for_dist_index(self.size - 1).unwrap(){
+                    Some(self.size - 1)
+                }
+                else {  
+                    Some(self.start_index_for_pe(pe+1)? -1)
+                }
+            }
+            Distribution::Cyclic => {
+                let start_i = self.start_index_for_pe(pe)?;
+                let num_elems = self.num_elems_pe(pe);
+                let num_pes = self.data.num_pes;
+                let end_i = start_i + (num_elems-1) * num_pes;
+                Some(end_i)
             }
         }
     }
