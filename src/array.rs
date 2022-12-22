@@ -583,9 +583,8 @@ pub(crate) mod private {
     }
 }
 
-/// Represents a distributed array, providing some convenience functions for getting simple information about the array
-/// This is intended for use within the runtime, but needs to be public due to its use in Proc Macros
-#[doc(hidden)]
+/// Represents a distributed array, providing some convenience functions for getting simple information about the array.
+/// This is mostly intended for use within the runtime (specifically for use in Proc Macros) but the available functions may be useful to endusers as well.
 #[enum_dispatch(LamellarReadArray<T>,LamellarWriteArray<T>)]
 pub trait LamellarArray<T: Dist>: private::LamellarArrayPrivate<T> {
     /// Returns the team used to construct this array, the PEs in the team represent the same PEs which have a slice of data of the array

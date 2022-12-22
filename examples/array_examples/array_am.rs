@@ -127,37 +127,5 @@ fn main() {
         println!("------------------------------------------------------------");
     }
 
-    if my_pe == 0 {
-        for pe in 0..array.num_pes(){
-            let si = array.first_global_index_for_pe(pe);
-            let ei = array.last_global_index_for_pe(pe);
-            println!("PE: {pe} Si: {si:?} Ei: {ei:?}");
-        }
-
-        let sub_array = array.sub_array(33..66);
-
-        for pe in 0..sub_array.num_pes(){
-            let si = sub_array.first_global_index_for_pe(pe);
-            let ei = sub_array.last_global_index_for_pe(pe);
-            println!("PE: {pe} Si: {si:?} Ei: {ei:?}");
-        }
-    }
-
-    let array = UnsafeArray::<u8>::new(world.team(), ARRAY_LEN, Distribution::Cyclic);
-
-    if my_pe == 0 {
-        for pe in 0..array.num_pes(){
-            let si = array.first_global_index_for_pe(pe);
-            let ei = array.last_global_index_for_pe(pe);
-            println!("PE: {pe} Si: {si:?} Ei: {ei:?}");
-        }
-
-        let sub_array = array.sub_array(33..66);
-
-        for pe in 0..sub_array.num_pes(){
-            let si = sub_array.first_global_index_for_pe(pe);
-            let ei = sub_array.last_global_index_for_pe(pe);
-            println!("PE: {pe} Si: {si:?} Ei: {ei:?}");
-        }
-    }
+    
 }
