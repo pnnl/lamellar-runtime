@@ -52,8 +52,6 @@ fn main() {
     let world = LamellarWorldBuilder::new()
         //.with_lamellae(Default::default()) //if enable-rofi feature is active default is rofi, otherwise local
         //.with_lamellae( Backend::Rofi ) //explicity set the lamellae backend to rofi, with the default provider
-        //.with_lamellae( Backend::RofiShm ) //explicity set the lamellae backend to rofi, specifying the shm provider
-        //.with_lamellae( Backend::RofiVerbs ) //explicity set the lamellae backend to rofi, specifying the verbs provider
         //.with_lamellae( Backend::Local )
         // .with_scheduler(lamellar::SchedulerType::WorkStealing) //currently the only type of thread scheduler
         .build();
@@ -84,6 +82,7 @@ fn main() {
         assert!(res.iter().all(|x| *x == ()));
         println!("no return result: {:?}", res);
         println!("---------------------------------------------------------------");
+        
     }
 
     // println!("---------------------------------------------------------------");

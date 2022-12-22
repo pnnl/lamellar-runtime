@@ -434,6 +434,14 @@ impl<T: Dist> LamellarArray<T> for ReadOnlyArray<T> {
     fn pe_and_offset_for_global_index(&self, index: usize) -> Option<(usize, usize)> {
         self.array.pe_and_offset_for_global_index(index)
     }
+
+    fn first_global_index_for_pe(&self, pe: usize) -> Option<usize>{
+        self.array.first_global_index_for_pe(pe)
+    }
+
+    fn last_global_index_for_pe(&self, pe: usize) -> Option<usize>{
+        self.array.last_global_index_for_pe(pe)
+    }
 }
 
 impl<T: Dist> SubArray<T> for ReadOnlyArray<T> {

@@ -27,7 +27,7 @@ pub use crate::array::operations::{
 
 #[doc(hidden)]
 pub use crate::active_messaging::ActiveMessaging;
-pub use crate::memregion::RegisteredMemoryRegion;
+pub use crate::memregion::{RegisteredMemoryRegion,Dist};
 pub use crate::lamellar_team::LamellarTeam;
 pub use crate::lamellar_arch::*;
 #[doc(hidden)]
