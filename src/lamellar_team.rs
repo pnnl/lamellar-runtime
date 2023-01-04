@@ -117,6 +117,10 @@ impl LamellarTeam {
     }
 
     /// Return a list of (world-based) pe ids representing the members of the team
+    ///
+    /// # One-sided Operation
+    /// The result is returned only on the calling PE
+    ///
     /// # Examples
     ///```
     /// use lamellar::active_messaging::prelude::*;
@@ -143,6 +147,10 @@ impl LamellarTeam {
     }
 
     /// Return number of pes in team
+    ///
+    /// # One-sided Operation
+    /// The result is returned only on the calling PE
+    ///
     /// # Examples
     ///```
     /// use lamellar::active_messaging::prelude::*;
@@ -166,6 +174,10 @@ impl LamellarTeam {
     }
 
     /// Return the world-based id of this pe
+    ///
+    /// # One-sided Operation
+    /// The result is returned only on the calling PE
+    ///
     /// # Examples
     ///```
     /// use lamellar::active_messaging::prelude::*;
@@ -190,6 +202,10 @@ impl LamellarTeam {
     }
 
     /// Return the team-based id of this pe
+    ///
+    /// # One-sided Operation
+    /// The result is returned only on the calling PE
+    ///
     /// # Examples
     ///```
     /// use lamellar::active_messaging::prelude::*;
@@ -216,6 +232,10 @@ impl LamellarTeam {
     }
 
     /// create a subteam containing any number of pe's from this team using the provided LamellarArch (layout)
+    ///
+    /// # Collective Operation
+    /// Requrires all PEs present within `parent` to enter the call otherwise deadlock will occur.
+    /// Note that this *does* include the PEs that will not exist within the new subteam.
     ///
     /// # Examples
     ///```
@@ -255,6 +275,10 @@ impl LamellarTeam {
     }
 
     /// Text based representation of the team
+    ///
+    /// # One-sided Operation
+    /// the team architecture will only be printed on the calling PE
+    ///
     /// # Examples
     ///```
     /// use lamellar::active_messaging::prelude::*;
@@ -276,6 +300,9 @@ impl LamellarTeam {
     }
 
     /// team wide synchronization method which blocks calling thread until all PEs in the team have entered
+    ///
+    /// # Collective Operation
+    /// Requrires all PEs present within the team to enter the barrier otherwise deadlock will occur.
     ///
     /// # Examples
     ///```

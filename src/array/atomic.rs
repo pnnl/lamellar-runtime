@@ -635,6 +635,10 @@ impl<T: Dist> Iterator for AtomicLocalDataIter<T> {
 //#[prof]
 impl<T: Dist + std::default::Default + 'static> AtomicArray<T> {
     /// Construct a new AtomicArray with a length of `array_size` whose data will be layed out with the provided `distribution` on the PE's specified by the `team`.
+    /// `team` is commonly a [LamellarWorld][crate::LamellarWorld] or [LamellarTeam][crate::LamellarTeam] (instance or reference). 
+    ///
+    /// # Collective Operation
+    /// Requires all PEs associated with the `team` to enter the constructor call otherwise deadlock will occur (i.e. team barriers are being called internally)
     ///
     /// # Examples
     ///```
@@ -667,6 +671,7 @@ impl<T: Dist + 'static> AtomicArray<T> {
 impl<T: Dist> AtomicArray<T> {
     /// Change the distribution this array handle uses to index into the data of the array.
     ///
+    /// # One-sided Operation
     /// This is a one-sided call and does not redistribute or modify the actual data, it simply changes how the array is indexed for this particular handle.
     ///
     /// # Examples
@@ -688,6 +693,9 @@ impl<T: Dist> AtomicArray<T> {
     ///
     /// Because each element is Atomic, this handle to the local data can be used to both read and write individual elements safely.
     ///
+    /// # One-sided Operation
+    /// Only returns local data on the calling PE
+    ///
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
@@ -707,6 +715,9 @@ impl<T: Dist> AtomicArray<T> {
     /// Return the calling PE's local data as an [AtomicLocalData], which allows safe mutable access to local elements.   
     ///
     /// Because each element is Atomic, this handle to the local data can be used to both read and write individual elements safely.
+    ///
+    /// # One-sided Operation
+    /// Only returns local data on the calling PE
     ///
     /// # Examples
     ///```
@@ -748,6 +759,9 @@ impl<T: Dist> AtomicArray<T> {
     ///
     /// Note, that while this call itself is safe, and `UnsafeArray` unsurprisingly is not safe and thus you need to tread very carefully
     /// doing any operations with the resulting array.
+    ///
+    /// # Collective Operation
+    /// Requires all PEs associated with the `array` to enter the call otherwise deadlock will occur (i.e. team barriers are being called internally)
     ///
     /// # Examples
     ///```
@@ -800,6 +814,9 @@ impl<T: Dist> AtomicArray<T> {
     ///
     /// When it returns, it is gauranteed that there are only `ReadOnlyArray` handles to the underlying data
     ///
+    /// # Collective Operation
+    /// Requires all PEs associated with the `array` to enter the call otherwise deadlock will occur (i.e. team barriers are being called internally)
+    ///
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
@@ -842,6 +859,9 @@ impl<T: Dist> AtomicArray<T> {
     /// to this Array, and that reference is currently calling this function.
     ///
     /// When it returns, it is gauranteed that there are only `LocalLockArray` handles to the underlying data
+    ///
+    /// # Collective Operation
+    /// Requires all PEs associated with the `array` to enter the call otherwise deadlock will occur (i.e. team barriers are being called internally)
     ///
     /// # Examples
     ///```

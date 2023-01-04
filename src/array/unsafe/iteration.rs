@@ -15,7 +15,9 @@ use crate::memregion::Dist;
 impl<T: Dist> UnsafeArray<T> {
     /// Create an immutable [DistributedIterator][crate::array::DistributedIterator] for this UnsafeArray
     ///
-    /// This is a collective and blocking call that will not return until all PE's in the Array have entered
+    /// # Collective Operation
+    /// Requires all PEs associated with the array to enter the call otherwise deadlock will occur (i.e. barriers are being called internally)
+    /// Throughout execution of the iteration, data movement may occur amongst various PEs
     ///
     /// # Safety
     /// Data in UnsafeArrays are always unsafe as there are no protections on how remote PE's may access any other PE's local data.
@@ -39,7 +41,9 @@ impl<T: Dist> UnsafeArray<T> {
 
     /// Create a mutable [DistributedIterator][crate::array::DistributedIterator] for this UnsafeArray
     ///
-    /// This is a collective and blocking call that will not return until all PE's in the Array have entered
+    /// # Collective Operation
+    /// Requires all PEs associated with the array to enter the call otherwise deadlock will occur (i.e. barriers are being called internally)
+    /// Throughout execution of the iteration, data movement may occur amongst various PEs
     ///
     /// # Safety
     /// Data in UnsafeArrays are always unsafe as there are no protections on how remote PE's may access any other PE's local data.
@@ -66,6 +70,11 @@ impl<T: Dist> UnsafeArray<T> {
     /// # Safety
     /// Data in UnsafeArrays are always unsafe as there are no protections on how remote PE's may access any other PE's local data.
     /// It is also possible to have mutable and immutable references to this arrays data on the same PE
+    ///
+    /// # One-sided Operation
+    /// The iteration is launched and local to only the calling PE. 
+    /// No data movement from remote PEs is required
+    ///
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
@@ -88,6 +97,11 @@ impl<T: Dist> UnsafeArray<T> {
     /// # Safety
     /// Data in UnsafeArrays are always unsafe as there are no protections on how remote PE's may access any other PE's local data.
     /// It is also possible to have mutable and immutable references to this arrays data on the same PE
+    ///
+    /// # One-sided Operation
+    /// The iteration is launched and local to only the calling PE. 
+    /// No data movement from remote PEs is required
+    ///
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
@@ -109,6 +123,11 @@ impl<T: Dist> UnsafeArray<T> {
     /// # Safety
     /// Data in UnsafeArrays are always unsafe as there are no protections on how remote PE's may access any other PE's local data.
     /// It is also possible to have mutable and immutable references to this arrays data on the same PE
+    ///
+    /// # One-sided Operation
+    /// The iteration is launched and local to only the calling PE. 
+    /// Data movement will occur with the remote PEs to transfer their data to the calling PE
+    ///
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
@@ -138,6 +157,11 @@ impl<T: Dist> UnsafeArray<T> {
     /// # Safety
     /// Data in UnsafeArrays are always unsafe as there are no protections on how remote PE's may access any other PE's local data.
     /// It is also possible to have mutable and immutable references to this arrays data on the same PE
+    ///
+    /// # One-sided Operation
+    /// The iteration is launched and local to only the calling PE. 
+    /// Data movement will occur with the remote PEs to transfer their data to the calling PE
+    ///
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;

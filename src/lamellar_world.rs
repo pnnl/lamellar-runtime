@@ -100,6 +100,9 @@ impl RemoteMemoryRegion for LamellarWorld {
 impl LamellarWorld {
     /// Returns the id of this PE (roughly equivalent to MPI Rank)
     ///
+    /// # One-sided Operation
+    /// The result is returned only on the calling PE
+    ///
     /// # Examples
     ///```
     /// use lamellar::active_messaging::prelude::*;
@@ -112,6 +115,9 @@ impl LamellarWorld {
         self.my_pe
     }
     /// Returns nummber of PE's in this execution
+    ///
+    /// # One-sided Operation
+    /// The result is returned only on the calling PE
     ///
     /// # Examples
     ///```
@@ -139,6 +145,10 @@ impl LamellarWorld {
     }
 
     /// Create a team containing any number of pe's from the world using the provided LamellarArch (layout)
+    ///
+    /// # Collective Operation
+    /// Requrires all PEs present within the world to enter the call otherwise deadlock will occur.
+    /// Note that this *does* include the PEs that will not exist within the new team.
     ///
     /// # Examples
     ///```
@@ -253,6 +263,12 @@ pub struct LamellarWorldBuilder {
 //#[prof]
 impl LamellarWorldBuilder {
     /// Construct a new lamellar world builder
+    ///
+    /// # Collective Operation
+    /// While simply calling `new` is not collective by itself (i.e. there is no internal barrier that would deadlock, 
+    /// as the remote fabric is not initiated until after a call to `build`), it is necessary that the same
+    /// parameters are used by all PEs that will exist in the world.
+    ///
     /// # Examples
     ///
     ///```
@@ -297,6 +313,12 @@ impl LamellarWorldBuilder {
     }
 
     /// Specify the lamellae backend to use for this execution
+    ///
+    /// # Collective Operation
+    /// While simply calling `with_lamellae` is not collective by itself (i.e. there is no internal barrier that would deadlock, 
+    /// as the remote fabric is not initiated until after a call to `build`), it is necessary that the same
+    /// parameters are used by all PEs that will exist in the world.
+    ///
     /// # Examples
     ///
     ///```
@@ -317,6 +339,12 @@ impl LamellarWorldBuilder {
     // }
 
     /// Specify the scheduler to use for this execution
+    ///
+    /// # Collective Operation
+    /// While simply calling `with_scheduler` is not collective by itself (i.e. there is no internal barrier that would deadlock, 
+    /// as the remote fabric is not initiated until after a call to `build`), it is necessary that the same
+    /// parameters are used by all PEs that will exist in the world.
+    ///
     /// # Examples
     ///
     ///```
@@ -332,6 +360,10 @@ impl LamellarWorldBuilder {
     }
 
     /// Instantiate a LamellarWorld object
+    ///
+    /// # Collective Operation
+    /// Requires all PEs that will be in the world to enter the call otherwise deadlock will occur (i.e. internal barriers are called)
+    ///
     /// # Examples
     ///
     ///```

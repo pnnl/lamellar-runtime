@@ -589,6 +589,9 @@ pub(crate) mod private {
 pub trait LamellarArray<T: Dist>: private::LamellarArrayPrivate<T> {
     /// Returns the team used to construct this array, the PEs in the team represent the same PEs which have a slice of data of the array
     ///
+    /// # One-sided Operation
+    /// the result is returned only on the calling PE
+    ///
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
@@ -600,6 +603,10 @@ pub trait LamellarArray<T: Dist>: private::LamellarArrayPrivate<T> {
     fn team(&self) -> Pin<Arc<LamellarTeamRT>>; //todo turn this into Arc<LamellarTeam>
 
     /// Return the current PE of the calling thread
+    ///
+    /// # One-sided Operation
+    /// the result is returned only on the calling PE
+    ///
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
@@ -611,6 +618,9 @@ pub trait LamellarArray<T: Dist>: private::LamellarArrayPrivate<T> {
     fn my_pe(&self) -> usize;
 
     /// Return the number of PEs containing data for this array
+    ///
+    /// # One-sided Operation
+    /// the result is returned only on the calling PE
     ///
     /// # Examples
     ///```
@@ -624,6 +634,9 @@ pub trait LamellarArray<T: Dist>: private::LamellarArrayPrivate<T> {
 
     /// Return the total number of elements in this array
     ///
+    /// # One-sided Operation
+    /// the result is returned only on the calling PE
+    ///
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
@@ -635,6 +648,9 @@ pub trait LamellarArray<T: Dist>: private::LamellarArrayPrivate<T> {
     fn len(&self) -> usize;
 
     /// Return the number of elements of the array local to this PE
+    ///
+    /// # One-sided Operation
+    /// the result is returned only on the calling PE
     ///
     /// # Examples
     /// Assume a 4 PE system
@@ -663,6 +679,9 @@ pub trait LamellarArray<T: Dist>: private::LamellarArrayPrivate<T> {
 
     /// Global synchronization method which blocks calling thread until all PEs in the owning Array data have entered the barrier
     ///
+    /// # Collective Operation
+    /// Requires all PEs associated with the array to enter the barrier otherwise deadlock will occur
+    ///
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
@@ -676,7 +695,10 @@ pub trait LamellarArray<T: Dist>: private::LamellarArrayPrivate<T> {
     /// blocks calling thread until all remote tasks (e.g. element wise operations)
     /// initiated by the calling PE have completed.
     ///
-    /// Note: this is not a distributed synchronization primitive (i.e. it has no knowledge of a Remote PEs tasks)
+    /// # One-sided Operation
+    /// this is not a distributed synchronization primitive (i.e. it has no knowledge of a Remote PEs tasks), the calling thread will only wait for tasks
+    /// to finish that were initiated by the calling PE itself
+    ///
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
@@ -696,6 +718,9 @@ pub trait LamellarArray<T: Dist>: private::LamellarArrayPrivate<T> {
     ///
     /// Users can await any future, including those returned from lamellar remote operations
     ///
+    /// # One-sided Operation
+    /// this is not a distributed synchronization primitive and only blocks the calling thread until the given future has completed on the calling PE 
+    ///
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
@@ -712,6 +737,10 @@ pub trait LamellarArray<T: Dist>: private::LamellarArrayPrivate<T> {
 
     /// Given a global index, calculate the PE and offset on that PE where the element actually resides.
     /// Returns None if the index is Out of bounds
+    ///
+    /// # One-sided Operation
+    /// the result is returned only on the calling PE 
+    ///
     /// # Examples
     /// assume we have 4 PEs
     /// ## Block
@@ -739,6 +768,10 @@ pub trait LamellarArray<T: Dist>: private::LamellarArrayPrivate<T> {
 
     /// Given a PE, return the global index of the first element on that PE
     /// Returns None if no data exists on that PE
+    ///
+    /// # One-sided Operation
+    /// the result is returned only on the calling PE 
+    ///
     /// # Examples
     /// assume we have 4 PEs
     /// ## Block
@@ -778,6 +811,10 @@ pub trait LamellarArray<T: Dist>: private::LamellarArrayPrivate<T> {
 
     /// Given a PE, return the global index of the first element on that PE
     /// Returns None if no data exists on that PE
+    ///
+    /// # One-sided Operation
+    /// the result is returned only on the calling PE 
+    ///
     /// # Examples
     /// assume we have 4 PEs
     /// ## Block
@@ -851,6 +888,11 @@ pub trait SubArray<T: Dist>: LamellarArray<T> {
     ///
     /// Note: it is possible that the subarray does not contain any data on this PE
     ///
+    ///
+    /// # One-sided Operation
+    /// this does not affect how data in the array is distributed, nor require communication/coordination with other PEs in the array, 
+    /// rather it creates a handle on the calling PE which only has access to the elements in the specified range.
+    ///
     /// # Panic
     /// This call will panic if the end of the range exceeds the size of the array.
     ///
@@ -867,6 +909,8 @@ pub trait SubArray<T: Dist>: LamellarArray<T> {
 
     /// Given an index with respect to the SubArray, return the index with respect to original array.
     ///
+    /// # One-sided Operation
+    /// the result is returned only on the calling PE 
     ///
     /// # Panic
     /// This call will panic if the end of the range exceeds the size of the array.
@@ -906,6 +950,9 @@ pub trait LamellarArrayGet<T: Dist>: LamellarArrayInternalGet<T> {
     /// ## Destination Buffer
     /// - [SharedMemoryRegion] - always unsafe as there are no guarantees that there may be other local and remote readers/writers.
     /// - [OneSidedMemoryRegion] - always unsafe as there are no guarantees that there may be other local and remote readers/writers.
+    ///
+    /// # One-sided Operation
+    /// the remote transfer is initiated by the calling PE
     ///
     /// # Examples
     ///```
@@ -962,6 +1009,9 @@ pub trait LamellarArrayGet<T: Dist>: LamellarArrayInternalGet<T> {
     /// - [AtomicArray] - always safe as loads of a single element are atomic
     /// - [LocalLockArray] - always safe as we grab a local read lock before transfering the data (preventing any modifcation from happening on the array)
     /// - [ReadOnlyArray] - always safe, read only arrays are never modified.
+    ///
+    /// # One-sided Operation
+    /// the remote transfer is initiated by the calling PE
     ///
     /// # Examples
     ///```
@@ -1024,6 +1074,7 @@ pub trait LamellarArrayPut<T: Dist>: LamellarArrayInternalPut<T> {
     ///
     /// # Safety
     /// when using this call we need to think about safety in terms of the array and the source buffer
+    ///
     /// ## Arrays
     /// - [UnsafeArray] - always unsafe as there are no protections on the arrays data.
     /// - [AtomicArray] - technically safe, but potentially not what you want, `stores` of individual elements are atomic, but writing to a range of elements its not atomic overall (we iterate through the range writing to each element individually)
@@ -1034,6 +1085,8 @@ pub trait LamellarArrayPut<T: Dist>: LamellarArrayInternalPut<T> {
     /// - `Vec`,`T` - always safe as ownership is transfered to the `Put`
     /// - `&Vec`, `&T` - always safe as these are immutable borrows
     ///
+    /// # One-sided Operation
+    /// the remote transfer is initiated by the calling PE
     ///
     /// # Examples
     ///```
@@ -1099,8 +1152,28 @@ pub trait LamellarArrayInternalPut<T: Dist>: LamellarArray<T> {
     ) -> Box<dyn LamellarArrayRequest<Output = ()>>;
 }
 
-#[doc(hidden)]
+/// An interfacing allowing for conveiniently printing the data contained within a lamellar array
 pub trait ArrayPrint<T: Dist + std::fmt::Debug>: LamellarArray<T> {
+    /// Print the data within a lamellar array
+    ///
+    /// # Collective Operation
+    /// Requires all PEs associated with the array to enter the print call otherwise deadlock will occur (i.e. barriers are being called internally)
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let block_array = AtomicArray::<usize>::new(&world,100,Distribution::Block);
+    /// let cyclic_array = AtomicArray::<usize>::new(&world,100,Distribution::Block);
+    ///
+    /// block_array.dist_iter().zip(cyclic_array.dist_iter()).enumerate().for_each(move |i,(a,b)| {
+    ///     a.store(i);
+    ///     b.store(i);
+    /// });
+    /// block_array.print();
+    /// println!();
+    /// cyclic_array.print();
+    ///```
     fn print(&self);
 }
 
@@ -1246,6 +1319,10 @@ where
     /// Please see the documentation for the [register_reduction][lamellar_impl::register_reduction] procedural macro for
     /// more details and examples on how to create your own reductions.
     ///
+    /// # One-sided Operation
+    /// The calling PE is responsible for launching `Reduce` active messages on the other PEs associated with the array.
+    /// the returned reduction result is only available on the calling PE  
+    ///
     /// # Examples
     /// ```
     /// use lamellar::array::prelude::*;
@@ -1275,6 +1352,10 @@ where
     ///
     /// This equivalent to `reduce("sum")`.
     ///
+    /// # One-sided Operation
+    /// The calling PE is responsible for launching `Sum` active messages on the other PEs associated with the array.
+    /// the returned sum reduction result is only available on the calling PE  
+    ///
     /// # Examples
     /// ```
     /// use lamellar::array::prelude::*;
@@ -1296,6 +1377,10 @@ where
     /// Perform a production reduction on the entire distributed array, returning the value to the calling PE.
     ///
     /// This equivalent to `reduce("prod")`.
+    ///
+    /// # One-sided Operation
+    /// The calling PE is responsible for launching `Prod` active messages on the other PEs associated with the array.
+    /// the returned prod reduction result is only available on the calling PE  
     ///
     /// # Examples
     /// ```
@@ -1323,6 +1408,10 @@ where
     ///
     /// This equivalent to `reduce("max")`.
     ///
+    /// # One-sided Operation
+    /// The calling PE is responsible for launching `Max` active messages on the other PEs associated with the array.
+    /// the returned max reduction result is only available on the calling PE  
+    ///
     /// # Examples
     /// ```
     /// use lamellar::array::prelude::*;
@@ -1338,6 +1427,10 @@ where
     /// Find the min element in the entire destributed array, returning to the calling PE
     ///
     /// This equivalent to `reduce("min")`.
+    ///
+    /// # One-sided Operation
+    /// The calling PE is responsible for launching `Min` active messages on the other PEs associated with the array.
+    /// the returned min reduction result is only available on the calling PE  
     ///
     /// # Examples
     /// ```

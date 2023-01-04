@@ -124,6 +124,10 @@ pub(crate) struct UnsafeArrayInnerWeak {
 //#[prof]
 impl<T: Dist + 'static> UnsafeArray<T> {
     /// Construct a new UnsafeArray with a length of `array_size` whose data will be layed out with the provided `distribution` on the PE's specified by the `team`.
+    /// `team` is commonly a [LamellarWorld][crate::LamellarWorld] or [LamellarTeam][crate::LamellarTeam] (instance or reference). 
+    ///
+    /// # Collective Operation
+    /// Requires all PEs associated with the `team` to enter the constructor call otherwise deadlock will occur (i.e. team barriers are being called internally)
     ///
     /// # Examples
     ///```
@@ -213,6 +217,7 @@ impl<T: Dist + 'static> UnsafeArray<T> {
 
     /// Change the distribution this array handle uses to index into the data of the array.
     ///
+    /// # One-sided Operation
     /// This is a one-sided call and does not redistribute the modify actual data, it simply changes how the array is indexed for this particular handle.
     ///
     /// # Examples
@@ -233,6 +238,9 @@ impl<T: Dist + 'static> UnsafeArray<T> {
     /// # Safety
     /// Data in UnsafeArrays are always unsafe as there are no protections on how remote PE's may access this PE's local data.
     /// It is also possible to have mutable and immutable references to this arrays data on the same PE
+    ///
+    /// # One-sided Operation
+    /// Only returns local data on the calling PE
     ///
     /// # Examples
     ///```
@@ -255,6 +263,9 @@ impl<T: Dist + 'static> UnsafeArray<T> {
     /// # Safety
     /// Data in UnsafeArrays are always unsafe as there are no protections on how remote PE's may access this PE's local data.
     /// It is also possible to have mutable and immutable references to this arrays data on the same PE
+    ///
+    /// # One-sided Operation
+    /// Only returns local data on the calling PE
     ///
     /// # Examples
     ///```
@@ -285,6 +296,9 @@ impl<T: Dist + 'static> UnsafeArray<T> {
     /// Data in UnsafeArrays are always unsafe as there are no protections on how remote PE's may access this PE's local data.
     /// It is also possible to have mutable and immutable references to this arrays data on the same PE
     ///
+    /// # One-sided Operation
+    /// Only returns local data on the calling PE
+    ///
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
@@ -305,6 +319,9 @@ impl<T: Dist + 'static> UnsafeArray<T> {
     /// # Safety
     /// Data in UnsafeArrays are always unsafe as there are no protections on how remote PE's may access this PE's local data.
     /// It is also possible to have mutable and immutable references to this arrays data on the same PE
+    ///
+    /// # One-sided Operation
+    /// Only returns local data on the calling PE
     ///
     /// # Examples
     ///```
@@ -368,6 +385,9 @@ impl<T: Dist + 'static> UnsafeArray<T> {
     ///
     /// When it returns, it is gauranteed that there are only  `ReadOnlyArray` handles to the underlying data
     ///
+    /// # Collective Operation
+    /// Requires all PEs associated with the `array` to enter the call otherwise deadlock will occur (i.e. team barriers are being called internally)
+    ///
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
@@ -414,6 +434,9 @@ impl<T: Dist + 'static> UnsafeArray<T> {
     ///
     /// When it returns, it is gauranteed that there are only `LocalLockArray` handles to the underlying data
     ///
+    /// # Collective Operation
+    /// Requires all PEs associated with the `array` to enter the call otherwise deadlock will occur (i.e. team barriers are being called internally)
+    ///
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
@@ -455,6 +478,9 @@ impl<T: Dist + 'static> UnsafeArray<T> {
     /// to this Array, and that reference is currently calling this function.
     ///
     /// When it returns, it is gauranteed that there are only `AtomicArray` handles to the underlying data
+    ///
+    /// # Collective Operation
+    /// Requires all PEs associated with the `array` to enter the call otherwise deadlock will occur (i.e. team barriers are being called internally)
     ///
     /// # Examples
     ///```
@@ -803,6 +829,10 @@ impl<T: Dist + AmDist + 'static> UnsafeArray<T> {
     /// Data in UnsafeArrays are always unsafe as there are no protections on how remote PE's or local threads may access this PE's local data.
     /// Any updates to local data are not guaranteed to be Atomic.
     ///
+    /// # One-sided Operation
+    /// The calling PE is responsible for launching `Reduce` active messages on the other PEs associated with the array.
+    /// the returned reduction result is only available on the calling PE  
+    ///
     /// # Examples
     /// ```
     /// use lamellar::array::prelude::*;
@@ -834,6 +864,10 @@ impl<T: Dist + AmDist + 'static> UnsafeArray<T> {
     /// Data in UnsafeArrays are always unsafe as there are no protections on how remote PE's or local threads may access this PE's local data.
     /// Any updates to local data are not guaranteed to be Atomic.
     ///
+    /// # One-sided Operation
+    /// The calling PE is responsible for launching `Sum` active messages on the other PEs associated with the array.
+    /// the returned sum reduction result is only available on the calling PE  
+    ///
     /// # Examples
     /// ```
     /// use lamellar::array::prelude::*;
@@ -864,6 +898,10 @@ impl<T: Dist + AmDist + 'static> UnsafeArray<T> {
     /// # Safety
     /// Data in UnsafeArrays are always unsafe as there are no protections on how remote PE's or local threads may access this PE's local data.
     /// Any updates to local data are not guaranteed to be Atomic.
+    ///
+    /// # One-sided Operation
+    /// The calling PE is responsible for launching `Prod` active messages on the other PEs associated with the array.
+    /// the returned prod reduction result is only available on the calling PE  
     ///
     /// # Examples
     /// ```
@@ -897,6 +935,10 @@ impl<T: Dist + AmDist + 'static> UnsafeArray<T> {
     /// Data in UnsafeArrays are always unsafe as there are no protections on how remote PE's or local threads may access this PE's local data.
     /// Any updates to local data are not guaranteed to be Atomic.
     ///
+    /// # One-sided Operation
+    /// The calling PE is responsible for launching `Max` active messages on the other PEs associated with the array.
+    /// the returned max reduction result is only available on the calling PE  
+    ///
     /// # Examples
     /// ```
     /// use lamellar::array::prelude::*;
@@ -922,6 +964,10 @@ impl<T: Dist + AmDist + 'static> UnsafeArray<T> {
     /// # Safety
     /// Data in UnsafeArrays are always unsafe as there are no protections on how remote PE's or local threads may access this PE's local data.
     /// Any updates to local data are not guaranteed to be Atomic.
+    ///
+    /// # One-sided Operation
+    /// The calling PE is responsible for launching `Min` active messages on the other PEs associated with the array.
+    /// the returned min reduction result is only available on the calling PE  
     ///
     /// # Examples
     /// ```

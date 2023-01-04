@@ -185,6 +185,10 @@ impl<T: Dist> Deref for LocalLockLocalData<'_, T> {
 
 impl<T: Dist + std::default::Default> LocalLockArray<T> {
     /// Construct a new LocalLockArray with a length of `array_size` whose data will be layed out with the provided `distribution` on the PE's specified by the `team`.
+    /// `team` is commonly a [LamellarWorld][crate::LamellarWorld] or [LamellarTeam][crate::LamellarTeam] (instance or reference). 
+    ///
+    /// # Collective Operation
+    /// Requires all PEs associated with the `team` to enter the constructor call otherwise deadlock will occur (i.e. team barriers are being called internally)
     ///
     /// # Examples
     ///```
@@ -222,6 +226,7 @@ impl<T: Dist + std::default::Default> LocalLockArray<T> {
 impl<T: Dist> LocalLockArray<T> {
     /// Change the distribution this array handle uses to index into the data of the array.
     ///
+    /// # One-sided Operation
     /// This is a one-sided call and does not redistribute or modify the actual data, it simply changes how the array is indexed for this particular handle.
     ///
     /// # Examples
@@ -242,6 +247,9 @@ impl<T: Dist> LocalLockArray<T> {
     /// Return the calling PE's local data as a [LocalLockLocalData], which allows safe immutable access to local elements.   
     ///
     /// Calling this function will result in a local read lock being captured on the array
+    ///
+    /// # One-sided Operation
+    /// Only returns local data on the calling PE
     ///
     /// # Examples
     ///```
@@ -266,6 +274,9 @@ impl<T: Dist> LocalLockArray<T> {
     /// Return the calling PE's local data as a [LocalLockMutLocalData], which allows safe mutable access to local elements.   
     ///
     /// Calling this function will result in the local write lock being captured on the array
+    ///
+    /// # One-sided Operation
+    /// Only returns (mutable) local data on the calling PE
     ///
     /// # Examples
     ///```
@@ -322,6 +333,9 @@ impl<T: Dist> LocalLockArray<T> {
     ///
     /// While this call is safe, it may be more clear to use the [read_local_data()][LocalLockArray::read_local_data] function.
     ///
+    /// # One-sided Operation
+    /// Only returns local data on the calling PE
+    ///
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
@@ -341,6 +355,9 @@ impl<T: Dist> LocalLockArray<T> {
     /// Calling this function will result in a local read lock being captured on the array
     ///
     /// While this call is safe, it may be more clear to use the [write_local_data()][LocalLockArray::write_local_data] function.
+    ///
+    /// # One-sided Operation
+    /// Only returns local data on the calling PE
     ///
     /// # Examples
     ///```
@@ -370,6 +387,9 @@ impl<T: Dist> LocalLockArray<T> {
     ///
     /// Note, that while this call itself is safe, and `UnsafeArray` unsurprisingly is not safe and thus you need to tread very carefully
     /// doing any operations with the resulting array.
+    ///
+    /// # Collective Operation
+    /// Requires all PEs associated with the `array` to enter the call otherwise deadlock will occur (i.e. team barriers are being called internally)
     ///
     /// # Examples
     ///```
@@ -416,6 +436,9 @@ impl<T: Dist> LocalLockArray<T> {
     ///
     /// When it returns, it is gauranteed that there are only `ReadOnlyArray` handles to the underlying data
     ///
+    /// # Collective Operation
+    /// Requires all PEs associated with the `array` to enter the call otherwise deadlock will occur (i.e. team barriers are being called internally)
+    ///
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
@@ -450,42 +473,46 @@ impl<T: Dist> LocalLockArray<T> {
     }
 }
 
-/// Convert this LocalLockArray into a (safe) [AtomicArray][crate::array::AtomicArray]
-///
-/// This is a collective and blocking function which will only return when there is at most a single reference on each PE
-/// to this Array, and that reference is currently calling this function.
-///
-/// When it returns, it is gauranteed that there are only `AtomicArray` handles to the underlying data
-///
-/// # Examples
-///```
-/// use lamellar::array::prelude::*;
-/// let world = LamellarWorldBuilder::new().build();
-/// let my_pe = world.my_pe();
-/// let array: LocalLockArray<usize> = LocalLockArray::new(&world,100,Distribution::Cyclic);
-///
-/// let atomic_array = array.into_atomic();
-///```
-/// # Warning
-/// Because this call blocks there is the possibility for deadlock to occur, as highlighted below:
-///```no_run
-/// use lamellar::array::prelude::*;
-/// let world = LamellarWorldBuilder::new().build();
-/// let my_pe = world.my_pe();
-/// let array: LocalLockArray<usize> = LocalLockArray::new(&world,100,Distribution::Cyclic);
-///
-/// let array1 = array.clone();
-/// let slice = unsafe {array1.local_data()};
-///
-/// // no borrows to this specific instance (array) so it can enter the "into_atomic" call
-/// // but array1 will not be dropped until after mut_slice is dropped.
-/// // Given the ordering of these calls we will get stuck in "into_atomic" as it
-/// // waits for the reference count to go down to "1" (but we will never be able to drop slice/array1).
-/// let atomic_array = array.into_atomic();
-/// atomic_array.print();
-/// println!("{slice:?}");
-///```
+
 impl<T: Dist + 'static> LocalLockArray<T> {
+    /// Convert this LocalLockArray into a (safe) [AtomicArray][crate::array::AtomicArray]
+    ///
+    /// This is a collective and blocking function which will only return when there is at most a single reference on each PE
+    /// to this Array, and that reference is currently calling this function.
+    ///
+    /// When it returns, it is gauranteed that there are only `AtomicArray` handles to the underlying data
+    ///
+    /// # Collective Operation
+    /// Requires all PEs associated with the `array` to enter the call otherwise deadlock will occur (i.e. team barriers are being called internally)
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let array: LocalLockArray<usize> = LocalLockArray::new(&world,100,Distribution::Cyclic);
+    ///
+    /// let atomic_array = array.into_atomic();
+    ///```
+    /// # Warning
+    /// Because this call blocks there is the possibility for deadlock to occur, as highlighted below:
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let array: LocalLockArray<usize> = LocalLockArray::new(&world,100,Distribution::Cyclic);
+    ///
+    /// let array1 = array.clone();
+    /// let slice = unsafe {array1.local_data()};
+    ///
+    /// // no borrows to this specific instance (array) so it can enter the "into_atomic" call
+    /// // but array1 will not be dropped until after mut_slice is dropped.
+    /// // Given the ordering of these calls we will get stuck in "into_atomic" as it
+    /// // waits for the reference count to go down to "1" (but we will never be able to drop slice/array1).
+    /// let atomic_array = array.into_atomic();
+    /// atomic_array.print();
+    /// println!("{slice:?}");
+    ///```
     pub fn into_atomic(self) -> AtomicArray<T> {
         // println!("locallock into_atomic");
         self.array.into()

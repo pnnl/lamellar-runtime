@@ -286,6 +286,9 @@ impl<T: Dist> UnsafeArray<T> {
     /// This call is always unsafe as mutual exclusitivity is not enforced, i.e. many other reader/writers can exist simultaneously.
     /// Additionally, when this call returns the underlying fabric provider may or may not have already copied the data buffer
     ///
+    /// # One-sided Operation
+    /// the calling PE initaites the remote transfer
+    ///
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
@@ -363,6 +366,9 @@ impl<T: Dist> UnsafeArray<T> {
     /// This call is always unsafe as mutual exclusitivity is not enforced, i.e. many other reader/writers can exist simultaneously.
     /// Additionally, when this call returns the underlying fabric provider may or may not have already copied the data buffer
     ///
+    /// # One-sided Operation
+    /// the calling PE initaites the remote transfer
+    ///
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
@@ -436,6 +442,9 @@ impl<T: Dist> UnsafeArray<T> {
     /// This call is always unsafe as mutual exclusitivity is not enforced, i.e. many other reader/writers can exist simultaneously.
     /// Additionally, when this call returns the underlying fabric provider may or may not have already copied the data buffer
     ///
+    /// # One-sided Operation
+    /// the calling PE initaites the remote transfer
+    ///
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
@@ -504,6 +513,9 @@ impl<T: Dist> UnsafeArray<T> {
     /// This call is always unsafe as mutual exclusitivity is not enforced, i.e. many other reader/writers can exist simultaneously.
     /// Additionally, when this call returns the underlying fabric provider may or may not have already copied the data buffer
     ///
+    /// # One-sided Operation
+    /// the calling PE initaites the remote transfer
+    ///
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
@@ -569,6 +581,9 @@ impl<T: Dist> UnsafeArray<T> {
     /// # Safety
     /// This call is always unsafe as mutual exclusitivity is not enforced, i.e. many other reader/writers can exist simultaneously.
     /// Additionally, when this call returns the underlying fabric provider may or may not have already copied the data buffer
+    ///
+    /// # One-sided Operation
+    /// the calling PE initaites the remote transfer
     ///
     /// # Examples
     ///```
