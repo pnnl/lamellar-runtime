@@ -757,7 +757,12 @@ pub trait ActiveMessaging {
     /// each index in the vector corresponds to the data returned by the corresponding PE
     ///
     /// NOTE: lamellar active messages are not lazy, i.e. you do not need to drive the returned future to launch the computation,
-    /// the future is only used to check for completeion and/or retrieving any returned data
+    /// the future is only used to check for completion and/or retrieving any returned data
+    /// 
+    /// # One-sided Operation
+    /// The calling PE manages creating and transfering the active message to the remote PEs (without user intervention on the remote PEs).
+    /// If a result is returned it will only be available on the calling PE.
+    ///
     /// # Examples
     ///```
     /// use lamellar::active_messaging::prelude::*;
@@ -798,6 +803,11 @@ pub trait ActiveMessaging {
     ///
     /// NOTE: lamellar active messages are not lazy, i.e. you do not need to drive the returned future to launch the computation,
     /// the future is only used to check for completeion and/or retrieving any returned data
+    /// 
+    /// # One-sided Operation
+    /// The calling PE manages creating and transfering the active message to the remote PE (without user intervention on the remote PE).
+    /// If a result is returned it will only be available on the calling PE.
+    ///
     /// # Examples
     ///```
     /// use lamellar::active_messaging::prelude::*;
@@ -836,6 +846,11 @@ pub trait ActiveMessaging {
     ///
     /// NOTE: lamellar active messages are not lazy, i.e. you do not need to drive the returned future to launch the computation,
     /// the future is only used to check for completeion and/or retrieving any returned data.
+    /// 
+    /// # One-sided Operation
+    /// The calling PE manages creating and executing the active message local (remote PEs are not involved).
+    /// If a result is returned it will only be available on the calling PE.
+    ///
     /// # Examples
     ///```
     /// use lamellar::active_messaging::prelude::*;
@@ -871,7 +886,10 @@ pub trait ActiveMessaging {
     /// blocks calling thread until all remote tasks (e.g. active mesages, array operations)
     /// initiated by the calling PE have completed.
     ///
-    /// Note: this is not a distributed synchronization primitive (i.e. it has no knowledge of a Remote PEs tasks)
+    /// # One-sided Operation
+    /// this is not a distributed synchronization primitive (i.e. it has no knowledge of a Remote PEs tasks), the calling thread will only wait for tasks
+    /// to finish that were initiated by the calling PE itself
+    ///
     /// # Examples
     ///```
     /// # use lamellar::active_messaging::prelude::*;
@@ -899,6 +917,9 @@ pub trait ActiveMessaging {
 
     /// Global synchronization method which blocks calling thread until all PEs in the barrier group (e.g. World, Team, Array) have entered
     ///
+    /// # Collective Operation
+    /// Requires all PEs associated with the ActiveMessaging object to enter the barrier, otherwise deadlock will occur
+    ///
     /// # Examples
     ///```
     /// use lamellar::active_messaging::prelude::*;
@@ -914,6 +935,9 @@ pub trait ActiveMessaging {
     /// This function will block the caller until the given future has completed, the future is executed within the Lamellar threadpool
     ///
     /// Users can await any future, including those returned from lamellar remote operations
+    ///
+    /// # One-sided Operation
+    /// this is not a distributed synchronization primitive and only blocks the calling thread until the given future has completed on the calling PE 
     ///
     /// # Examples
     ///```no_run  

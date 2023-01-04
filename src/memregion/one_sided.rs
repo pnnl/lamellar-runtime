@@ -378,6 +378,9 @@ impl<T: Dist> OneSidedMemoryRegion<T> {
     /// This call is always unsafe as mutual exclusitivity is not enforced, i.e. many other reader/writers can exist simultaneously.
     /// Additionally, when this call returns the underlying fabric provider may or may not have already copied the data buffer
     ///
+    /// # One-sided Operation
+    /// the calling PE initaites the remote transfer
+    ///
     /// # Panics
     /// Panics if "data" does not have any local data on this PE
     /// Panics if index is out of bounds
@@ -434,6 +437,9 @@ impl<T: Dist> OneSidedMemoryRegion<T> {
     /// # Safety
     /// This call is always unsafe as mutual exclusitivity is not enforced, i.e. many other reader/writers can exist simultaneously.
     ///
+    /// # One-sided Operation
+    /// the calling PE initaites the remote transfer
+    ///
     /// # Panics
     /// Panics if "data" does not have any local data on this PE
     /// Panics if index is out of bounds
@@ -488,6 +494,9 @@ impl<T: Dist> OneSidedMemoryRegion<T> {
     /// This call is always unsafe as mutual exclusitivity is not enforced, i.e. many other reader/writers can exist simultaneously.
     /// Additionally, when this call returns the underlying fabric provider may or may not have already copied data into the data buffer.
     ///
+    /// # One-sided Operation
+    /// the calling PE initaites the remote transfer
+    ///
     /// # Panics
     /// Panics if "data" does not have any local data on this PE
     /// Panics if index is out of bounds
@@ -539,6 +548,9 @@ impl<T: Dist> OneSidedMemoryRegion<T> {
     /// # Safety
     /// This call is always unsafe as mutual exclusitivity is not enforced, i.e. many other reader/writers can exist simultaneously.
     ///
+    /// # One-sided Operation
+    /// the calling PE initaites the remote transfer
+    ///
     /// # Panics
     /// Panics if "data" does not have any local data on this PE
     /// Panics if index is out of bounds
@@ -586,6 +598,9 @@ impl<T: Dist> OneSidedMemoryRegion<T> {
 
     /// An iterator to data local to this PE
     ///
+    /// # One-sided Operation
+    /// the calling PE initaites the remote transfer
+    ///
     /// # Panics
     /// Panics if the calling PE does not contain any local data
      /// # Examples
@@ -607,6 +622,10 @@ impl<T: Dist> OneSidedMemoryRegion<T> {
     /// Checks for if the calling PE contains any local data
     ///
     /// Returns true if the PE does contain data, false otherwise
+    ///
+    /// # One-sided Operation
+    /// the calling PE initaites the remote transfer
+    ///
     /// # Examples
     ///```
     /// use lamellar::active_messaging::prelude::*;

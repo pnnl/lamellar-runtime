@@ -680,7 +680,7 @@ pub trait LamellarArray<T: Dist>: private::LamellarArrayPrivate<T> {
     /// Global synchronization method which blocks calling thread until all PEs in the owning Array data have entered the barrier
     ///
     /// # Collective Operation
-    /// Requires all PEs associated with the array to enter the barrier otherwise deadlock will occur
+    /// Requires all PEs associated with the array to enter the barrier, otherwise deadlock will occur
     ///
     /// # Examples
     ///```

@@ -526,6 +526,9 @@ impl<T> Darc<T> {
     ///
     /// Returns an error if this PE is not a part of team
     ///
+    /// # Collective Operation
+    /// Requires all PEs associated with the `team` to enter the constructor call otherwise deadlock will occur (i.e. team barriers are being called internally)
+    ///
     /// # Examples
     ///
     /// ```
@@ -618,6 +621,9 @@ impl<T> Darc<T> {
     /// Furthermore, this call will block while any additional references outside of the one making this call exist on each PE. It is not possible for the
     /// pointed to object to wrapped by both a Darc and a LocalRwDarc simultaneously (on any PE).
     ///
+    /// # Collective Operation
+    /// Requires all PEs associated with the `darc` to enter the call otherwise deadlock will occur (i.e. team barriers are being called internally)
+    ///
     /// # Examples
     /// ```
     /// use lamellar::darc::prelude::*;
@@ -650,6 +656,9 @@ impl<T> Darc<T> {
     ///
     /// Furthermore, this call will block while any additional references outside of the one making this call exist on each PE. It is not possible for the
     /// pointed to object to wrapped by both a GlobalRwDarc and a Darc simultaneously (on any PE).
+    ///
+    /// # Collective Operation
+    /// Requires all PEs associated with the `darc` to enter the call otherwise deadlock will occur (i.e. team barriers are being called internally)
     ///
     /// # Examples
     /// ```

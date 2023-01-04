@@ -111,6 +111,9 @@ impl<T> LocalRwDarc<T> {
     ///
     /// Returns an RAII guard which will drop the read access of the wrlock when dropped
     ///
+    /// # One-sided Operation
+    /// The calling PE is only aware of its own local lock and does not require coordination with other PEs
+    ///
     /// # Note
     /// the aquired lock is only with respect to this PE, the locks on the other PEs will be in their own states
     ///
@@ -150,6 +153,9 @@ impl<T> LocalRwDarc<T> {
     /// This function will not return while another writer or any readers currently have access to the lock
     ///
     /// Returns an RAII guard which will drop the write access of the wrlock when dropped
+    ///
+    /// # One-sided Operation
+    /// The calling PE is only aware of its own local lock and does not require coordination with other PEs
     ///
     /// # Note
     /// the aquired lock is only with respect to this PE, the locks on the other PEs will be in their own states
@@ -191,6 +197,9 @@ impl<T> LocalRwDarc<T> {
     ///
     /// Returns an error if this PE is not a part of team
     ///
+    /// # Collective Operation
+    /// Requires all PEs associated with the `darc` to enter the call otherwise deadlock will occur (i.e. team barriers are being called internally)
+    ///
     /// # Examples
     ///
     /// ```
@@ -226,6 +235,9 @@ impl<T> LocalRwDarc<T> {
     ///
     /// Furthermore, this call will block while any additional references outside of the one making this call exist on each PE. It is not possible for the
     /// pointed to object to wrapped by both a Darc and a LocalRwDarc simultaneously (on any PE).
+    ///
+    /// # Collective Operation
+    /// Requires all PEs associated with the `darc` to enter the call otherwise deadlock will occur (i.e. team barriers are being called internally)
     ///
     /// # Examples
     /// ```
@@ -268,6 +280,9 @@ impl<T> LocalRwDarc<T> {
     ///
     /// Furthermore, this call will block while any additional references outside of the one making this call exist on each PE. It is not possible for the
     /// pointed to object to wrapped by both a GlobalRwDarc and a LocalRwDarc simultaneously (on any PE).
+    ///
+    /// # Collective Operation
+    /// Requires all PEs associated with the `darc` to enter the call otherwise deadlock will occur (i.e. team barriers are being called internally)
     ///
     /// # Examples
     /// ```

@@ -338,6 +338,11 @@ impl<T> GlobalRwDarc<T> {
     ///
     /// Returns an RAII guard which will drop the read access of the wrlock when dropped
     ///
+    /// # One-sided Operation
+    /// The calling PE is responsible for creating and transfering the active message which aquires the lock.
+    /// Once aquired this specific instance of the read lock will only be held by the calling PE (until it is dropped)
+    /// Other PEs may have separately aquired read locks as well.
+    ///
     /// # Examples
     ///
     ///```
@@ -403,6 +408,10 @@ impl<T> GlobalRwDarc<T> {
     ///
     /// Returns an RAII guard which will drop the write access of the wrlock when dropped
     ///
+    /// # One-sided Operation
+    /// The calling PE is responsible for creating and transfering the active message which aquires the lock.
+    /// Once aquired the lock will only be held by the calling PE (until it is dropped)
+    ///
     /// # Examples
     ///
     ///```
@@ -467,6 +476,12 @@ impl<T> GlobalRwDarc<T> {
     ///
     /// Returns an RAII guard which will drop the read access of the wrlock when dropped
     ///
+    /// # One-sided Operation
+    /// The calling PE is responsible for creating and transfering the active message which aquires the lock.
+    /// Once aquired this specific instance of the read lock will only be held by the calling PE (until it is dropped)
+    /// Other PEs may have separately aquired read locks as well.
+    ///
+    ///
     /// # Note
     /// Do not use this function in an asynchronous context (i.e. a Lamellar Active message), instead use [GlobalRwDarc::async_read]
     ///
@@ -514,11 +529,14 @@ impl<T> GlobalRwDarc<T> {
     ///
     /// Returns an RAII guard which will drop the write access of the wrlock when dropped
     ///
+    /// # One-sided Operation
+    /// The calling PE is responsible for creating and transfering the active message which aquires the lock.
+    /// Once aquired the lock will only be held by the calling PE (until it is dropped)
+    ///
     /// # Note
     /// Do not use this function in an asynchronous context (i.e. a Lamellar Active message), instead use [GlobalRwDarc::async_write]
     ///
     /// # Examples
-
     ///```
     /// use lamellar::darc::prelude::*;
     ///
@@ -563,6 +581,9 @@ impl<T> GlobalRwDarc<T> {
     ///
     /// Returns an error if this PE is not a part of team
     ///
+    /// # Collective Operation
+    /// Requires all PEs associated with the `team` to enter the call otherwise deadlock will occur (i.e. team barriers are being called internally)
+    ///
     /// # Examples
     ///
     /// ```
@@ -605,6 +626,9 @@ impl<T> GlobalRwDarc<T> {
     /// Furthermore, this call will block while any additional references outside of the one making this call exist on each PE. It is not possible for the
     /// pointed to object to wrapped by both a Darc and a GlobalRwDarc simultaneously (on any PE).
     ///
+    /// # Collective Operation
+    /// Requires all PEs associated with the `darc` to enter the call otherwise deadlock will occur (i.e. team barriers are being called internally)
+    ///
     /// # Examples
     /// ```
     /// use lamellar::darc::prelude::*;
@@ -636,6 +660,9 @@ impl<T> GlobalRwDarc<T> {
     ///
     /// Furthermore, this call will block while any additional references outside of the one making this call exist on each PE. It is not possible for the
     /// pointed to object to wrapped by both a GlobalRwDarc and a LocalRwDarc simultaneously (on any PE).
+    ///
+    /// # Collective Operation
+    /// Requires all PEs associated with the `darc` to enter the call otherwise deadlock will occur (i.e. team barriers are being called internally)
     ///
     /// # Examples
     /// ```

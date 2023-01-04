@@ -225,6 +225,9 @@ impl<T: Dist> TeamFrom<LamellarMemoryRegion<T>> for LamellarArrayRdmaOutput<T> {
 pub trait RegisteredMemoryRegion<T: Dist> {
     /// The length (in number of elements of `T`) of the local segment of the memory region (i.e. not the global length of the memory region)  
     ///
+    /// # One-sided Operation
+    /// the result is returned only on the calling PE 
+    ///
     /// # Examples
     ///```
     /// use lamellar::memregion::prelude::*;
@@ -244,6 +247,10 @@ pub trait RegisteredMemoryRegion<T: Dist> {
     ///
     /// # Safety
     /// this call is always unsafe as there is no gaurantee that there do not exist mutable references elsewhere in the distributed system.
+    ///
+    /// # One-sided Operation
+    /// the result is returned only on the calling PE 
+    ///
     /// # Examples
     ///```
     /// use lamellar::memregion::prelude::*;
@@ -261,6 +268,10 @@ pub trait RegisteredMemoryRegion<T: Dist> {
     ///
     /// # Safety
     /// this call is always unsafe as there is no gaurantee that there do not exist mutable references elsewhere in the distributed system.
+    ///
+    /// # One-sided Operation
+    /// the result is returned only on the calling PE 
+    ///
     /// # Examples
     ///```
     /// use lamellar::memregion::prelude::*;
@@ -278,6 +289,10 @@ pub trait RegisteredMemoryRegion<T: Dist> {
     ///
     /// # Safety
     /// this call is always unsafe as there is no gaurantee that there do not exist other mutable references elsewhere in the distributed system.
+    ///
+    /// # One-sided Operation
+    /// the result is returned only on the calling PE 
+    ///
     /// # Examples
     ///```
     /// use lamellar::memregion::prelude::*;
@@ -295,6 +310,10 @@ pub trait RegisteredMemoryRegion<T: Dist> {
     ///
     /// # Safety
     /// this call is always unsafe as there is no gaurantee that there do not exist mutable references elsewhere in the distributed system.
+    ///
+    /// # One-sided Operation
+    /// the result is returned only on the calling PE 
+    ///
     /// # Examples
     ///```
     /// use lamellar::memregion::prelude::*;
@@ -312,6 +331,10 @@ pub trait RegisteredMemoryRegion<T: Dist> {
     ///
     /// # Safety
     /// this call is always unsafe as there is no gaurantee that there do not exist mutable references elsewhere in the distributed system.
+    ///
+    /// # One-sided Operation
+    /// the result is returned only on the calling PE 
+    ///
     /// # Examples
     ///```
     /// use lamellar::memregion::prelude::*;
@@ -339,7 +362,10 @@ pub(crate) trait MemRegionId {
 #[enum_dispatch]
 pub trait SubRegion<T: Dist> {
     type Region: RegisteredMemoryRegion<T> + MemoryRegionRDMA<T>;
-    /// Create a sub region of this OneSidedMemoryRegion using the provided range
+    /// Create a sub region of this RegisteredMemoryRegion using the provided range
+    ///
+    /// # One-sided Operation
+    /// the result is returned only on the calling PE 
     ///
     /// # Panics
     /// panics if the end range is larger than the length of the memory region
@@ -374,6 +400,10 @@ pub trait MemoryRegionRDMA<T: Dist> {
     /// # Safety
     /// This call is always unsafe as mutual exclusitivity is not enforced, i.e. many other reader/writers can exist simultaneously.
     /// Additionally, when this call returns the underlying fabric provider may or may not have already copied the data buffer
+    ///
+    /// # One-sided Operation
+    /// the calling PE initaites the remote transfer
+    ///
     /// # Examples
     ///```
     /// use lamellar::memregion::prelude::*;
@@ -409,6 +439,10 @@ pub trait MemoryRegionRDMA<T: Dist> {
     ///
     /// # Safety
     /// This call is always unsafe as mutual exclusitivity is not enforced, i.e. many other reader/writers can exist simultaneously.
+    ///
+    /// # One-sided Operation
+    /// the calling PE initaites the remote transfer
+    ///
     /// # Examples
     ///```
     /// use lamellar::memregion::prelude::*;
@@ -487,6 +521,10 @@ pub trait MemoryRegionRDMA<T: Dist> {
     /// # Safety
     /// This call is always unsafe as mutual exclusitivity is not enforced, i.e. many other reader/writers can exist simultaneously.
     /// Additionally, when this call returns the underlying fabric provider may or may not have already copied data into the data buffer.
+    ///
+    /// # One-sided Operation
+    /// the calling PE initaites the remote transfer
+    ///
     /// # Examples
     ///```
     /// use lamellar::memregion::prelude::*;
@@ -530,6 +568,10 @@ pub trait MemoryRegionRDMA<T: Dist> {
     ///
     /// # Safety
     /// This call is always unsafe as mutual exclusitivity is not enforced, i.e. many other reader/writers can exist simultaneously.
+    ///
+    /// # One-sided Operation
+    /// the calling PE initaites the remote transfer
+    ///
     /// # Examples
     ///```
     /// use lamellar::memregion::prelude::*;
@@ -1082,21 +1124,25 @@ impl<T: Dist> MemRegionId for MemoryRegion<T> {
 
 /// The interface for allocating shared and onesided memory regions
 pub trait RemoteMemoryRegion {
-    /// allocate a shared memory region from the asymmetric heap
+    /// Allocate a shared memory region from the asymmetric heap.
+    /// There will be `size` number of `T` elements on each PE.
     ///
-    /// # Arguments
+    /// # Collective Operation
+    /// Requires all PEs associated with the `array` to enter the call otherwise deadlock will occur (i.e. team barriers are being called internally)
     ///
-    /// * `size` - local number of elements of T to allocate a memory region for -- (not size in bytes)
     fn alloc_shared_mem_region<T: Dist + std::marker::Sized>(
         &self,
         size: usize,
     ) -> SharedMemoryRegion<T>;
 
-    /// allocate a shared memory region from the asymmetric heap
+    /// Allocate a one-sided memory region from the internal lamellar heap.
+    /// This region only exists on the calling PE, but the returned handle can be
+    /// sent to other PEs allowing remote access to the region.
+    /// There will be `size` number of `T` elements on the calling PE.
     ///
-    /// # Arguments
+    /// # One-sided Operation
+    /// the calling PE will allocate the memory region locally, without intervention from the other PEs.
     ///
-    /// * `size` - number of elements of T to allocate a memory region for -- (not size in bytes)
     fn alloc_one_sided_mem_region<T: Dist + std::marker::Sized>(
         &self,
         size: usize,

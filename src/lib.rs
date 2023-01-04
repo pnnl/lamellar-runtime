@@ -9,6 +9,10 @@
 //!     - consists of N PEs all capable of commnicating with one another
 //! - `Team` - A subset of the PEs that exist in the world
 //! - `AM` - short for [Active Message][crate::active_messaging]
+//! - `Collective Operation` - Generally means that all PEs (associated with a given distributed object) must explicitly participate in the operation, otherwise deadlock will occur.
+//!     - e.g. barriers, construction of new distributed objects
+//! - `One-sided Operation` - Generally means that only the calling PE is required for the operation to successfuly complete.
+//!     - e.g. accessing local data, waiting for local work to complete
 //!
 //! # Features
 //!
