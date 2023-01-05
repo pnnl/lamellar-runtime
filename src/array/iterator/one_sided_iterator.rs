@@ -260,7 +260,7 @@ pub trait OneSidedIterator {
 
 /// An immutable standard Rust Iterator backed by a [OneSidedIterator](crate::array::iterator::one_sided_iterator).
 /// 
-/// This object iterates over data in serial; compare with [distributed iterators](crate::array::iterator::distributed_iterator), which iterate over data in parallel.
+/// This object iterates over data serially on a single PE ; compare with [distributed iterators](crate::array::iterator::distributed_iterator), which iterate over data in on all PEs associate with the array.
 ///
 /// This struct is created by calling [into_iter][OneSidedIterator::into_iter] a OneSidedIterator
 ///
