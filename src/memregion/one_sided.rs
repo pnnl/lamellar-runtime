@@ -369,6 +369,7 @@ impl<T: Dist> OneSidedMemoryRegion<T> {
         })
     }
 
+    #[doc(alias("One-sided", "onesided"))]
     /// "Puts" (copies) data from a local memory location `data` into this memory region
     ///
     /// The data buffer may not be safe to use upon return from this call, currently the user is responsible for completion detection,
@@ -427,6 +428,7 @@ impl<T: Dist> OneSidedMemoryRegion<T> {
         MemoryRegionRDMA::<T>::put(self, self.pe, index, data);
     }
 
+    #[doc(alias("One-sided", "onesided"))]
     /// Blocking "Puts" (copies) data from a local memory location into a remote memory location on the specified PE.
     ///
     /// This function blocks until the data in the data buffer has been transfered out of this PE, this does not imply that it has arrived at the remote destination though
@@ -486,6 +488,7 @@ impl<T: Dist> OneSidedMemoryRegion<T> {
         MemoryRegionRDMA::<T>::blocking_put(self, self.pe, index, data);
     }
 
+    #[doc(alias("One-sided", "onesided"))]
     /// "Gets" (copies) data from (this) memory region into the provided `data` buffer.
     /// After calling this function, the data may or may not have actually arrived into the data buffer.
     /// The user is responsible for transmission termination detection
@@ -542,6 +545,7 @@ impl<T: Dist> OneSidedMemoryRegion<T> {
         MemoryRegionRDMA::<T>::get_unchecked(self, self.pe, index, data);
     }
 
+    #[doc(alias("One-sided", "onesided"))]
     /// Blocking "Gets" (copies) data from (this) memory region into the provided `data` buffer.
     /// After calling this function, the data is guaranteed to be placed in the data buffer
     ///
@@ -596,6 +600,7 @@ impl<T: Dist> OneSidedMemoryRegion<T> {
         MemoryRegionRDMA::<T>::blocking_get(self, self.pe, index, data);
     }
 
+    #[doc(alias("One-sided", "onesided"))]
     /// An iterator to data local to this PE
     ///
     /// # One-sided Operation
@@ -619,6 +624,7 @@ impl<T: Dist> OneSidedMemoryRegion<T> {
         self.as_slice().unwrap().iter()
     }
 
+    #[doc(alias("One-sided", "onesided"))]
     /// Checks for if the calling PE contains any local data
     ///
     /// Returns true if the PE does contain data, false otherwise

@@ -587,6 +587,7 @@ pub(crate) mod private {
 /// This is mostly intended for use within the runtime (specifically for use in Proc Macros) but the available functions may be useful to endusers as well.
 #[enum_dispatch(LamellarReadArray<T>,LamellarWriteArray<T>)]
 pub trait LamellarArray<T: Dist>: private::LamellarArrayPrivate<T> {
+    #[doc(alias("One-sided", "onesided"))]
     /// Returns the team used to construct this array, the PEs in the team represent the same PEs which have a slice of data of the array
     ///
     /// # One-sided Operation
@@ -602,6 +603,7 @@ pub trait LamellarArray<T: Dist>: private::LamellarArrayPrivate<T> {
     ///```
     fn team(&self) -> Pin<Arc<LamellarTeamRT>>; //todo turn this into Arc<LamellarTeam>
 
+    #[doc(alias("One-sided", "onesided"))]
     /// Return the current PE of the calling thread
     ///
     /// # One-sided Operation
@@ -617,6 +619,7 @@ pub trait LamellarArray<T: Dist>: private::LamellarArrayPrivate<T> {
     ///```
     fn my_pe(&self) -> usize;
 
+    #[doc(alias("One-sided", "onesided"))]
     /// Return the number of PEs containing data for this array
     ///
     /// # One-sided Operation
@@ -632,6 +635,7 @@ pub trait LamellarArray<T: Dist>: private::LamellarArrayPrivate<T> {
     ///```
     fn num_pes(&self) -> usize;
 
+    #[doc(alias("One-sided", "onesided"))]
     /// Return the total number of elements in this array
     ///
     /// # One-sided Operation
@@ -647,6 +651,7 @@ pub trait LamellarArray<T: Dist>: private::LamellarArrayPrivate<T> {
     ///```
     fn len(&self) -> usize;
 
+    #[doc(alias("One-sided", "onesided"))]
     /// Return the number of elements of the array local to this PE
     ///
     /// # One-sided Operation
@@ -677,6 +682,7 @@ pub trait LamellarArray<T: Dist>: private::LamellarArrayPrivate<T> {
     ///```
     // fn use_distribution(self, distribution: Distribution) -> Self;
 
+    #[doc(alias = "Collective")]
     /// Global synchronization method which blocks calling thread until all PEs in the owning Array data have entered the barrier
     ///
     /// # Collective Operation
@@ -692,6 +698,7 @@ pub trait LamellarArray<T: Dist>: private::LamellarArrayPrivate<T> {
     ///```
     fn barrier(&self);
 
+    #[doc(alias("One-sided", "onesided"))]
     /// blocks calling thread until all remote tasks (e.g. element wise operations)
     /// initiated by the calling PE have completed.
     ///
@@ -712,6 +719,7 @@ pub trait LamellarArray<T: Dist>: private::LamellarArrayPrivate<T> {
     ///```
     fn wait_all(&self);
 
+    #[doc(alias("One-sided", "onesided"))]
     /// Run a future to completion on the current thread
     ///
     /// This function will block the caller until the given future has completed, the future is executed within the Lamellar threadpool
@@ -735,6 +743,7 @@ pub trait LamellarArray<T: Dist>: private::LamellarArrayPrivate<T> {
     where
         F: Future;
 
+    #[doc(alias("One-sided", "onesided"))]
     /// Given a global index, calculate the PE and offset on that PE where the element actually resides.
     /// Returns None if the index is Out of bounds
     ///
@@ -766,6 +775,7 @@ pub trait LamellarArray<T: Dist>: private::LamellarArrayPrivate<T> {
     fn pe_and_offset_for_global_index(&self, index: usize) -> Option<(usize, usize)>;
 
 
+    #[doc(alias("One-sided", "onesided"))]
     /// Given a PE, return the global index of the first element on that PE
     /// Returns None if no data exists on that PE
     ///
@@ -809,6 +819,7 @@ pub trait LamellarArray<T: Dist>: private::LamellarArrayPrivate<T> {
     ///```
     fn first_global_index_for_pe(&self, pe: usize) -> Option<usize>;
 
+    #[doc(alias("One-sided", "onesided"))]
     /// Given a PE, return the global index of the first element on that PE
     /// Returns None if no data exists on that PE
     ///
@@ -884,6 +895,7 @@ pub trait LamellarArray<T: Dist>: private::LamellarArrayPrivate<T> {
 /// There can exist mutliple subarrays to the same parent array and creating sub arrays are onesided operations
 pub trait SubArray<T: Dist>: LamellarArray<T> {
     type Array: LamellarArray<T>;
+    #[doc(alias("One-sided", "onesided"))]
     /// Create a sub array of this UnsafeArray which consists of the elements specified by the range
     ///
     /// Note: it is possible that the subarray does not contain any data on this PE
@@ -907,6 +919,7 @@ pub trait SubArray<T: Dist>: LamellarArray<T> {
     ///```
     fn sub_array<R: std::ops::RangeBounds<usize>>(&self, range: R) -> Self::Array;
 
+    #[doc(alias("One-sided", "onesided"))]
     /// Given an index with respect to the SubArray, return the index with respect to original array.
     ///
     /// # One-sided Operation
@@ -930,6 +943,7 @@ pub trait SubArray<T: Dist>: LamellarArray<T> {
 
 /// Interface defining low level APIs for copying data from an array into a buffer or local variable
 pub trait LamellarArrayGet<T: Dist>: LamellarArrayInternalGet<T> {
+    #[doc(alias("One-sided", "onesided"))]
     /// Performs an (active message based) "Get" of the data in this array starting at the provided `index` into the specified `dst`
     ///
     /// The length of the Get is dictated by the length of the buffer.
@@ -998,6 +1012,7 @@ pub trait LamellarArrayGet<T: Dist>: LamellarArrayInternalGet<T> {
         dst: U,
     ) -> Pin<Box<dyn Future<Output = ()> + Send>>;
 
+    #[doc(alias("One-sided", "onesided"))]
     /// Retrieves the element in this array located at the specified `index`
     ///
     /// This call returns a future that can be awaited to retrieve to requested element
@@ -1061,6 +1076,7 @@ pub trait LamellarArrayInternalGet<T: Dist>: LamellarArray<T> {
 
 /// Interface defining low level APIs for copying data from a buffer or local variable into this array
 pub trait LamellarArrayPut<T: Dist>: LamellarArrayInternalPut<T> {
+    #[doc(alias("One-sided", "onesided"))]
     /// Performs an (active message based) "Put" of the data in the specified `src` buffer into this array starting from the provided `index`
     ///
     /// The length of the Put is dictated by the length of the `src` buffer.
@@ -1154,6 +1170,7 @@ pub trait LamellarArrayInternalPut<T: Dist>: LamellarArray<T> {
 
 /// An interfacing allowing for conveiniently printing the data contained within a lamellar array
 pub trait ArrayPrint<T: Dist + std::fmt::Debug>: LamellarArray<T> {
+    #[doc(alias = "Collective")]
     /// Print the data within a lamellar array
     ///
     /// # Collective Operation
@@ -1314,6 +1331,7 @@ pub trait LamellarArrayReduce<T>: LamellarArrayInternalGet<T>
 where
     T: Dist + AmDist + 'static,
 {
+    #[doc(alias("One-sided", "onesided"))]
     /// Perform a reduction on the entire distributed array, returning the value to the calling PE.
     ///
     /// Please see the documentation for the [register_reduction][lamellar_impl::register_reduction] procedural macro for
@@ -1348,6 +1366,7 @@ pub trait LamellarArrayArithmeticReduce<T>: LamellarArrayReduce<T>
 where
     T: Dist + AmDist + ElementArithmeticOps + 'static,
 {
+    #[doc(alias("One-sided", "onesided"))]
     /// Perform a sum reduction on the entire distributed array, returning the value to the calling PE.
     ///
     /// This equivalent to `reduce("sum")`.
@@ -1374,6 +1393,7 @@ where
     ///```
     fn sum(&self) -> Pin<Box<dyn Future<Output = T>>>;
 
+    #[doc(alias("One-sided", "onesided"))]
     /// Perform a production reduction on the entire distributed array, returning the value to the calling PE.
     ///
     /// This equivalent to `reduce("prod")`.
@@ -1404,6 +1424,7 @@ pub trait LamellarArrayCompareReduce<T>: LamellarArrayReduce<T>
 where
     T: Dist + AmDist + ElementComparePartialEqOps + 'static,
 {
+    #[doc(alias("One-sided", "onesided"))]
     /// Find the max element in the entire destributed array, returning to the calling PE
     ///
     /// This equivalent to `reduce("max")`.
@@ -1424,6 +1445,8 @@ where
     /// assert_eq!((array.len()-1)*2,max);
     ///```
     fn max(&self) -> Pin<Box<dyn Future<Output = T>>>;
+
+    #[doc(alias("One-sided", "onesided"))]
     /// Find the min element in the entire destributed array, returning to the calling PE
     ///
     /// This equivalent to `reduce("min")`.

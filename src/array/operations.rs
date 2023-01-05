@@ -1496,6 +1496,7 @@ impl<T> ElementComparePartialEqOps for T where
 {
 }
 
+#[doc(alias("One-sided", "onesided"))]
 /// The interface for remotely reading elements
 ///
 /// These operations can be performed using any LamellarArray type.
@@ -1608,6 +1609,7 @@ pub trait ReadOnlyOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
     }
 }
 
+#[doc(alias("One-sided", "onesided"))]
 /// The interface for remotely writing elements
 ///
 /// These operations can be performed using any [LamellarWriteArray]  type
@@ -1803,6 +1805,7 @@ pub trait AccessOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
     }
 }
 
+#[doc(alias("One-sided", "onesided"))]
 /// The interface for performing remote arithmetic operations on array elements
 ///
 /// These operations can be performed using any [LamellarWriteArray] type
@@ -2380,6 +2383,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     }
 }
 
+#[doc(alias("One-sided", "onesided"))]
 /// The interface for performing remote bitwise operations on array elements
 ///
 /// These operations can be performed using any [LamellarWriteArray] type
@@ -2701,6 +2705,7 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
     }
 }
 
+#[doc(alias("One-sided", "onesided"))]
 /// The interface for performing remote compare and exchange operations on array elements
 ///
 /// These operations can be performed using any [LamellarWriteArray] type
@@ -2852,6 +2857,7 @@ pub trait CompareExchangeOps<T: ElementCompareEqOps>: private::LamellarArrayPriv
     }
 }
 
+#[doc(alias("One-sided", "onesided"))]
 /// The interface for performing remote compare and exchange operations within a given epsilon on array elements
 ///
 /// Useful for element types that only impl [PartialEq][std::cmp::PartialEq] instead of [Eq][std::cmp::Eq] (e.g `f32`,`f64`).

@@ -98,6 +98,7 @@ impl RemoteMemoryRegion for LamellarWorld {
 
 //#[prof]
 impl LamellarWorld {
+    #[doc(alias("One-sided", "onesided"))]
     /// Returns the id of this PE (roughly equivalent to MPI Rank)
     ///
     /// # One-sided Operation
@@ -114,6 +115,8 @@ impl LamellarWorld {
     pub fn my_pe(&self) -> usize {
         self.my_pe
     }
+
+    #[doc(alias("One-sided", "onesided"))]
     /// Returns nummber of PE's in this execution
     ///
     /// # One-sided Operation
@@ -144,6 +147,7 @@ impl LamellarWorld {
         sent[0]
     }
 
+    #[doc(alias = "Collective")]
     /// Create a team containing any number of pe's from the world using the provided LamellarArch (layout)
     ///
     /// # Collective Operation
@@ -262,6 +266,7 @@ pub struct LamellarWorldBuilder {
 
 //#[prof]
 impl LamellarWorldBuilder {
+    #[doc(alias = "Collective")]
     /// Construct a new lamellar world builder
     ///
     /// # Collective Operation
@@ -312,6 +317,7 @@ impl LamellarWorldBuilder {
         }
     }
 
+    #[doc(alias = "Collective")]
     /// Specify the lamellae backend to use for this execution
     ///
     /// # Collective Operation
@@ -338,6 +344,7 @@ impl LamellarWorldBuilder {
     //     self
     // }
 
+    #[doc(alias = "Collective")]
     /// Specify the scheduler to use for this execution
     ///
     /// # Collective Operation
@@ -359,6 +366,7 @@ impl LamellarWorldBuilder {
         self
     }
 
+    #[doc(alias = "Collective")]
     /// Instantiate a LamellarWorld object
     ///
     /// # Collective Operation

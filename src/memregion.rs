@@ -223,6 +223,7 @@ impl<T: Dist> TeamFrom<LamellarMemoryRegion<T>> for LamellarArrayRdmaOutput<T> {
 /// [LamellarArray][crate::array::LamellarArray] interface to construct and interact with distributed memory.
 #[enum_dispatch]
 pub trait RegisteredMemoryRegion<T: Dist> {
+    #[doc(alias("One-sided", "onesided"))]
     /// The length (in number of elements of `T`) of the local segment of the memory region (i.e. not the global length of the memory region)  
     ///
     /// # One-sided Operation
@@ -241,6 +242,7 @@ pub trait RegisteredMemoryRegion<T: Dist> {
     #[doc(hidden)]
     fn addr(&self) -> MemResult<usize>;
 
+    #[doc(alias("One-sided", "onesided"))]
     /// Return a slice of the local (to the calling PE) data of the memory region
     ///
     /// Returns an error if the PE does not contain any local data associated with this memory region
@@ -262,6 +264,7 @@ pub trait RegisteredMemoryRegion<T: Dist> {
     ///```
     unsafe fn as_slice(&self) -> MemResult<&[T]>;
 
+    #[doc(alias("One-sided", "onesided"))]
     /// Return a reference to the local (to the calling PE) element located by the provided index
     ///
     /// Returns an error if the index is out of bounds or the PE does not contain any local data associated with this memory region
@@ -283,6 +286,7 @@ pub trait RegisteredMemoryRegion<T: Dist> {
     ///```
     unsafe fn at(&self, index: usize) -> MemResult<&T>;
 
+    #[doc(alias("One-sided", "onesided"))]
     /// Return a mutable slice of the local (to the calling PE) data of the memory region
     ///
     /// Returns an error if the PE does not contain any local data associated with this memory region
@@ -304,6 +308,7 @@ pub trait RegisteredMemoryRegion<T: Dist> {
     ///```
     unsafe fn as_mut_slice(&self) -> MemResult<&mut [T]>;
 
+    #[doc(alias("One-sided", "onesided"))]
     /// Return a ptr to the local (to the calling PE) data of the memory region
     ///
     /// Returns an error if the PE does not contain any local data associated with this memory region
@@ -325,6 +330,7 @@ pub trait RegisteredMemoryRegion<T: Dist> {
     ///```
     unsafe fn as_ptr(&self) -> MemResult<*const T>;
 
+    #[doc(alias("One-sided", "onesided"))]
     /// Return a mutable ptr to the local (to the calling PE) data of the memory region
     ///
     /// Returns an error if the PE does not contain any local data associated with this memory region
@@ -362,6 +368,7 @@ pub(crate) trait MemRegionId {
 #[enum_dispatch]
 pub trait SubRegion<T: Dist> {
     type Region: RegisteredMemoryRegion<T> + MemoryRegionRDMA<T>;
+    #[doc(alias("One-sided", "onesided"))]
     /// Create a sub region of this RegisteredMemoryRegion using the provided range
     ///
     /// # One-sided Operation
@@ -392,6 +399,7 @@ pub(crate) trait AsBase {
 /// The Inteface for exposing RDMA operations on a memory region. These provide the actual mechanism for performing a transfer.
 #[enum_dispatch]
 pub trait MemoryRegionRDMA<T: Dist> {
+    #[doc(alias("One-sided", "onesided"))]
     /// "Puts" (copies) data from a local memory location into a remote memory location on the specified PE
     ///
     /// The data buffer may not be safe to upon return from this call, currently the user is responsible for completion detection,
@@ -433,6 +441,7 @@ pub trait MemoryRegionRDMA<T: Dist> {
     ///```
     unsafe fn put<U: Into<LamellarMemoryRegion<T>>>(&self, pe: usize, index: usize, data: U);
 
+    #[doc(alias("One-sided", "onesided"))]
     /// Blocking "Puts" (copies) data from a local memory location into a remote memory location on the specified PE.
     ///
     /// This function blocks until the data in the data buffer has been transfered out of this PE, this does not imply that it has arrived at the remote destination though
@@ -514,6 +523,7 @@ pub trait MemoryRegionRDMA<T: Dist> {
     ///```
     unsafe fn put_all<U: Into<LamellarMemoryRegion<T>>>(&self, index: usize, data: U);
 
+    #[doc(alias("One-sided", "onesided"))]
     /// "Gets" (copies) data from remote memory location on the specified PE into the provided data buffer.
     /// After calling this function, the data may or may not have actually arrived into the data buffer.
     /// The user is responsible for transmission termination detection
@@ -563,6 +573,7 @@ pub trait MemoryRegionRDMA<T: Dist> {
         data: U,
     );
 
+    #[doc(alias("One-sided", "onesided"))]
     /// Blocking "Gets" (copies) data from remote memory location on the specified PE into the provided data buffer.
     /// After calling this function, the data is guaranteed to be placed in the data buffer
     ///
@@ -1124,6 +1135,7 @@ impl<T: Dist> MemRegionId for MemoryRegion<T> {
 
 /// The interface for allocating shared and onesided memory regions
 pub trait RemoteMemoryRegion {
+    #[doc(alias = "Collective")]
     /// Allocate a shared memory region from the asymmetric heap.
     /// There will be `size` number of `T` elements on each PE.
     ///
@@ -1135,6 +1147,7 @@ pub trait RemoteMemoryRegion {
         size: usize,
     ) -> SharedMemoryRegion<T>;
 
+    #[doc(alias("One-sided", "onesided"))]
     /// Allocate a one-sided memory region from the internal lamellar heap.
     /// This region only exists on the calling PE, but the returned handle can be
     /// sent to other PEs allowing remote access to the region.

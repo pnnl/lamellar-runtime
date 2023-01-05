@@ -103,6 +103,7 @@ impl<T> LocalRwDarc<T> {
         );
     }
 
+    #[doc(alias("One-sided", "onesided"))]
     /// Aquires a reader lock of this LocalRwDarc local to this PE.
     ///
     /// The current THREAD will be blocked until the lock has been acquired.
@@ -146,6 +147,7 @@ impl<T> LocalRwDarc<T> {
         self.darc.read_arc()
     }
 
+    #[doc(alias("One-sided", "onesided"))]
     /// Aquires the writer lock of this LocalRwDarc local to this PE.
     ///
     /// The current THREAD will be blocked until the lock has been acquired.
@@ -191,6 +193,7 @@ impl<T> LocalRwDarc<T> {
 }
 
 impl<T> LocalRwDarc<T> {
+    #[doc(alias = "Collective")]
     /// Constructs a new `LocalRwDarc<T>` on the PEs specified by team.
     ///
     /// This is a blocking collective call amongst all PEs in the team, only returning once every PE in the team has completed the call.
@@ -229,6 +232,7 @@ impl<T> LocalRwDarc<T> {
     //     })
     // }
 
+    #[doc(alias = "Collective")]
     /// Converts this LocalRwDarc into a regular [Darc]
     ///
     /// This is a blocking collective call amongst all PEs in the LocalRwDarc's team, only returning once every PE in the team has completed the call.
@@ -274,6 +278,7 @@ impl<T> LocalRwDarc<T> {
         d
     }
 
+    #[doc(alias = "Collective")]
     /// Converts this LocalRwDarc into a [GlobalRwDarc]
     ///
     /// This is a blocking collective call amongst all PEs in the LocalRwDarc's team, only returning once every PE in the team has completed the call.

@@ -36,6 +36,7 @@ pub trait LamellarArrayIterators<T: Dist> {
     type LocalIter: LocalIterator;
     type OnesidedIter: OneSidedIterator;
 
+    #[doc(alias = "Collective")]
     /// Create an immutable [DistributedIterator][crate::array::DistributedIterator] for this array
     ///
     /// # Collective Operation
@@ -55,6 +56,7 @@ pub trait LamellarArrayIterators<T: Dist> {
     ///```
     fn dist_iter(&self) -> Self::DistIter;
 
+    #[doc(alias("One-sided", "onesided"))]
     /// Create an immutable [LocalIterator][crate::array::LocalIterator] for this array
     ///
     /// # One-sided Operation
@@ -74,6 +76,7 @@ pub trait LamellarArrayIterators<T: Dist> {
     ///```
     fn local_iter(&self) -> Self::LocalIter;
 
+    #[doc(alias("One-sided", "onesided"))]
     /// Create an immutable [OneSidedIterator][crate::array::OneSidedIterator] for this array
     ///
     /// # One-sided Operation
@@ -95,6 +98,7 @@ pub trait LamellarArrayIterators<T: Dist> {
     ///```
     fn onesided_iter(&self) -> Self::OnesidedIter;
 
+    #[doc(alias("One-sided", "onesided"))]
     /// Create an immutable [OneSidedIterator][crate::array::OneSidedIterator] for this array
     /// which will transfer and buffer `buf_size` elements at a time (to more efficient utilize the underlying lamellae network)
     ///
@@ -131,6 +135,7 @@ pub trait LamellarArrayMutIterators<T: Dist> {
     type DistIter: DistributedIterator;
     type LocalIter: LocalIterator;
 
+    #[doc(alias = "Collective")]
     /// Create a mutable [DistributedIterator][crate::array::DistributedIterator] for this array
     ///
     /// # Collective Operation
@@ -150,6 +155,7 @@ pub trait LamellarArrayMutIterators<T: Dist> {
     ///```
     fn dist_iter_mut(&self) -> Self::DistIter;
 
+    #[doc(alias("One-sided", "onesided"))]
     /// Create a mutable [LocalIterator][crate::array::LocalIterator] for this array
     ///
     /// # One-sided Operation

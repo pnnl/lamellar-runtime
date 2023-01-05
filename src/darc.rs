@@ -348,8 +348,21 @@ impl<T> DarcInner<T> {
             if self.local_cnt.load(Ordering::SeqCst) == 1 + extra_cnt {
                 self.send_finished();
             }
-            if timer.elapsed().as_secs_f64() > 10.0 {
-                println!("waiting for outstanding 1 {:?}", self);
+            if timer.elapsed().as_secs_f64() > *crate::DEADLOCK_TIMEOUT {
+                println!("[WARNING] - Potential deadlock detected.\n\
+                    The runtime is currently waiting for all remaining references to this distributed object to be dropped.\n\
+                    This objected is likely a {:?} with {:?} remaining local references and {:?} remaining remote references\n\
+                    An example where this can occur can be found at https://docs.rs/lamellar/latest/lamellar/array/struct.ReadOnlyArray.html#method.into_local_lock\n\
+                    The deadlock timeout can be set via the LAMELLAR_DEADLOCK_TIMEOUT environment variable, the current timeout is {} seconds",
+                    unsafe {
+                        &std::slice::from_raw_parts_mut(self.mode_addr as *mut DarcMode, self.num_pes)
+                    },
+                    self.local_cnt.load(Ordering::SeqCst),
+                    self.dist_cnt.load(Ordering::SeqCst),
+                    *crate::DEADLOCK_TIMEOUT
+                );
+                // println!("waiting for outstanding 1 {:?}", self);
+
                 // let rel_addr = unsafe { self as *const DarcInner<T> as usize - (*(self.team)).lamellae.base_addr() };
                 // println!(
                 //     "--------\norig:  {:?} (0x{:x}) {:?}\n--------",
@@ -383,8 +396,19 @@ impl<T> DarcInner<T> {
                 if self.local_cnt.load(Ordering::SeqCst) == 1 + extra_cnt {
                     self.send_finished();
                 }
-                if timer.elapsed().as_secs_f64() > 10.0 {
-                    println!("waiting for outstanding 2 {:?}", self);
+                if timer.elapsed().as_secs_f64() > *crate::DEADLOCK_TIMEOUT {
+                    println!("[WARNING] -- Potential deadlock detected.\n\
+                    The runtime is currently waiting for all remaining references to this distributed object to be dropped.\n\
+                    This objected is likely a {:?} with {:?} remaining local references and {:?} remaining remote references\n\
+                    An example where this can occur can be found at https://docs.rs/lamellar/latest/lamellar/array/struct.ReadOnlyArray.html#method.into_local_lock\n\
+                    The deadlock timeout can be set via the LAMELLAR_DEADLOCK_TIMEOUT environment variable, the current timeout is {} seconds",
+                    unsafe {
+                        &std::slice::from_raw_parts_mut(self.mode_addr as *mut DarcMode, self.num_pes)
+                    },
+                    self.local_cnt.load(Ordering::SeqCst),
+                    self.dist_cnt.load(Ordering::SeqCst),
+                    *crate::DEADLOCK_TIMEOUT
+                );
                     timer = std::time::Instant::now();
                 }
                 std::thread::yield_now();
@@ -397,8 +421,19 @@ impl<T> DarcInner<T> {
             if self.local_cnt.load(Ordering::SeqCst) == 1 + extra_cnt {
                 self.send_finished();
             }
-            if timer.elapsed().as_secs_f64() > 10.0 {
-                println!("waiting for outstanding 3 {:?}", self);
+            if timer.elapsed().as_secs_f64() > *crate::DEADLOCK_TIMEOUT {
+                println!("[WARNING] --- Potential deadlock detected.\n\
+                    The runtime is currently waiting for all remaining references to this distributed object to be dropped.\n\
+                    This objected is likely a {:?} with {:?} remaining local references and {:?} remaining remote references\n\
+                    An example where this can occur can be found at https://docs.rs/lamellar/latest/lamellar/array/struct.ReadOnlyArray.html#method.into_local_lock\n\
+                    The deadlock timeout can be set via the LAMELLAR_DEADLOCK_TIMEOUT environment variable, the current timeout is {} seconds",
+                    unsafe {
+                        &std::slice::from_raw_parts_mut(self.mode_addr as *mut DarcMode, self.num_pes)
+                    },
+                    self.local_cnt.load(Ordering::SeqCst),
+                    self.dist_cnt.load(Ordering::SeqCst),
+                    *crate::DEADLOCK_TIMEOUT
+                );
                 timer = std::time::Instant::now();
             }
             std::thread::yield_now();
@@ -520,6 +555,7 @@ impl<T> Darc<T> {
 }
 
 impl<T> Darc<T> {
+    #[doc(alias = "Collective")]
     /// Constructs a new `Darc<T>` on the PEs specified by team.
     ///
     /// This is a blocking collective call amongst all PEs in the team, only returning once every PE in the team has completed the call.
@@ -614,6 +650,7 @@ impl<T> Darc<T> {
         self.inner().block_on_outstanding(state, extra_cnt);
     }
 
+    #[doc(alias = "Collective")]
     /// Converts this Darc into a [LocalRwDarc]
     ///
     /// This is a blocking collective call amongst all PEs in the Darc's team, only returning once every PE in the team has completed the call.
@@ -650,6 +687,7 @@ impl<T> Darc<T> {
         LocalRwDarc { darc: d }
     }
 
+    #[doc(alias = "Collective")]
     /// Converts this Darc into a [GlobalRwDarc]
     ///
     /// This is a blocking collective call amongst all PEs in the Darc's team, only returning once every PE in the team has completed the call.
@@ -851,13 +889,15 @@ impl<T: 'static> LamellarAM for DroppedWaitAM<T> {
                 if wrapped.inner.as_ref().local_cnt.load(Ordering::SeqCst) == 0 {
                     wrapped.inner.as_ref().send_finished();
                 }
-                if timeout.elapsed().as_secs_f64() > 5.0 {
-                    println!(
-                        "0. Darc trying to free! {:x} {:?} {:?} {:?}",
-                        self.inner_addr,
+                if timeout.elapsed().as_secs_f64() > *crate::DEADLOCK_TIMEOUT {
+                    println!("[WARNING] - Potential deadlock detected when trying to free distributed object.\n\
+                        The runtime is currently waiting for all remaining references to this distributed object to be dropped.\n\
+                        The current status of the object on each pe is {:?} with {:?} remaining local references and {:?} remaining remote references\n\
+                        the deadlock timeout can be set via the LAMELLAR_DEADLOCK_TIMEOUT environment variable, the current timeout is {} seconds",
                         mode_refs,
-                        wrapped.inner.as_ref().local_cnt.load(Ordering::SeqCst),
-                        wrapped.inner.as_ref().dist_cnt.load(Ordering::SeqCst)
+                        unsafe {wrapped.inner.as_ref().local_cnt.load(Ordering::SeqCst)},
+                        unsafe {wrapped.inner.as_ref().dist_cnt.load(Ordering::SeqCst)},
+                        *crate::DEADLOCK_TIMEOUT
                     );
                     timeout = std::time::Instant::now();
                 }
@@ -883,10 +923,15 @@ impl<T: 'static> LamellarAM for DroppedWaitAM<T> {
                         wrapped.inner.as_ref().send_finished();
                     }
                 }
-                if timeout.elapsed().as_secs_f64() > 5.0 {
-                    println!(
-                        "1. Darc trying to free! {:x} {:?}",
-                        self.inner_addr, mode_refs
+                if timeout.elapsed().as_secs_f64() > *crate::DEADLOCK_TIMEOUT {
+                    println!("[WARNING] -- Potential deadlock detected when trying to free distributed object.\n\
+                        The runtime is currently waiting for all remaining references to this distributed object to be dropped.\n\
+                        The current status of the object on each pe is {:?} with {:?} remaining local references and {:?} remaining remote references\n\
+                        the deadlock timeout can be set via the LAMELLAR_DEADLOCK_TIMEOUT environment variable, the current timeout is {} seconds",
+                        mode_refs,
+                        unsafe {wrapped.inner.as_ref().local_cnt.load(Ordering::SeqCst)},
+                        unsafe {wrapped.inner.as_ref().dist_cnt.load(Ordering::SeqCst)},
+                        *crate::DEADLOCK_TIMEOUT
                     );
                     timeout = std::time::Instant::now();
                 }
@@ -907,13 +952,15 @@ impl<T: 'static> LamellarAM for DroppedWaitAM<T> {
                 if wrapped.inner.as_ref().local_cnt.load(Ordering::SeqCst) == 0 {
                     wrapped.inner.as_ref().send_finished();
                 }
-                if timeout.elapsed().as_secs_f64() > 5.0 {
-                    println!(
-                        "2. Darc trying to free! {:x} {:?} {:?} {:?}",
-                        self.inner_addr,
+                if timeout.elapsed().as_secs_f64() > *crate::DEADLOCK_TIMEOUT {
+                    println!("[WARNING] --- Potential deadlock detected when trying to free distributed object.\n\
+                        The runtime is currently waiting for all remaining references to this distributed object to be dropped.\n\
+                        The current status of the object on each pe is {:?} with {:?} remaining local references and {:?} remaining remote references\n\
+                        the deadlock timeout can be set via the LAMELLAR_DEADLOCK_TIMEOUT environment variable, the current timeout is {} seconds",
                         mode_refs,
-                        wrapped.inner.as_ref().local_cnt.load(Ordering::SeqCst),
-                        wrapped.inner.as_ref().dist_cnt.load(Ordering::SeqCst)
+                        unsafe {wrapped.inner.as_ref().local_cnt.load(Ordering::SeqCst)},
+                        unsafe {wrapped.inner.as_ref().dist_cnt.load(Ordering::SeqCst)},
+                        *crate::DEADLOCK_TIMEOUT
                     );
                     timeout = std::time::Instant::now();
                 }

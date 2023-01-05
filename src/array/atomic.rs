@@ -634,6 +634,7 @@ impl<T: Dist> Iterator for AtomicLocalDataIter<T> {
 
 //#[prof]
 impl<T: Dist + std::default::Default + 'static> AtomicArray<T> {
+    #[doc(alias = "Collective")]
     /// Construct a new AtomicArray with a length of `array_size` whose data will be layed out with the provided `distribution` on the PE's specified by the `team`.
     /// `team` is commonly a [LamellarWorld][crate::LamellarWorld] or [LamellarTeam][crate::LamellarTeam] (instance or reference). 
     ///
@@ -669,6 +670,7 @@ impl<T: Dist + 'static> AtomicArray<T> {
 }
 
 impl<T: Dist> AtomicArray<T> {
+    #[doc(alias("One-sided", "onesided"))]
     /// Change the distribution this array handle uses to index into the data of the array.
     ///
     /// # One-sided Operation
@@ -689,6 +691,7 @@ impl<T: Dist> AtomicArray<T> {
         }
     }
 
+    #[doc(alias("One-sided", "onesided"))]
     /// Return the calling PE's local data as an [AtomicLocalData], which allows safe access to local elements.   
     ///
     /// Because each element is Atomic, this handle to the local data can be used to both read and write individual elements safely.
@@ -712,6 +715,7 @@ impl<T: Dist> AtomicArray<T> {
         }
     }
 
+    #[doc(alias("One-sided", "onesided"))]
     /// Return the calling PE's local data as an [AtomicLocalData], which allows safe mutable access to local elements.   
     ///
     /// Because each element is Atomic, this handle to the local data can be used to both read and write individual elements safely.
@@ -750,6 +754,7 @@ impl<T: Dist> AtomicArray<T> {
         }
     }
 
+    #[doc(alias = "Collective")]
     /// Convert this AtomicArray into an [UnsafeArray][crate::array::UnsafeArray]
     ///
     /// This is a collective and blocking function which will only return when there is at most a single reference on each PE
@@ -807,6 +812,7 @@ impl<T: Dist> AtomicArray<T> {
     //     }
     // }
 
+    #[doc(alias = "Collective")]
     /// Convert this AtomicArray into a (safe) [ReadOnlyArray][crate::array::ReadOnlyArray]
     ///
     /// This is a collective and blocking function which will only return when there is at most a single reference on each PE
@@ -853,6 +859,7 @@ impl<T: Dist> AtomicArray<T> {
         }
     }
 
+    #[doc(alias = "Collective")]
     /// Convert this AtomicArray into a (safe) [LocalLockArray][crate::array::LocalLockArray]
     ///
     /// This is a collective and blocking function which will only return when there is at most a single reference on each PE

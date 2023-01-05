@@ -271,6 +271,7 @@ impl<T: Dist> UnsafeArray<T> {
             .num_elements_on_pe_for_range(pe, start_index, len)
     }
 
+    #[doc(alias("One-sided", "onesided"))]
     /// Performs a raw RDMA "Put" of the data in the specified buffer into this array starting from the provided index
     ///
     /// The length of the Put is dictated by the length of the buffer.
@@ -355,6 +356,7 @@ impl<T: Dist> UnsafeArray<T> {
         };
     }
 
+    #[doc(alias("One-sided", "onesided"))]
     /// Performs a raw RDMA "Get" of the data in this array starting at the provided index into the specified buffer
     ///
     /// The length of the Get is dictated by the length of the buffer.
@@ -432,6 +434,7 @@ impl<T: Dist> UnsafeArray<T> {
         };
     }
 
+    #[doc(alias("One-sided", "onesided"))]
     /// Performs a blocking (active message based) "Get" of the data in this array starting at the provided index into the specified buffer
     ///
     /// The length of the Get is dictated by the length of the buffer.
@@ -503,6 +506,7 @@ impl<T: Dist> UnsafeArray<T> {
         };
     }
 
+    #[doc(alias("One-sided", "onesided"))]
     /// Performs an (active message based) "Get" of the data in this array starting at the provided index into the specified buffer
     ///
     /// The length of the Get is dictated by the length of the buffer.
@@ -574,6 +578,7 @@ impl<T: Dist> UnsafeArray<T> {
         })
     }
 
+    #[doc(alias("One-sided", "onesided"))]
     /// Retrieves the element in this array located at the specified `index`
     ///
     /// This call returns a future that can be awaited to retrieve to requested element

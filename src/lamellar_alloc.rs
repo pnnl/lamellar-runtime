@@ -219,8 +219,9 @@ impl LamellarAlloc for BTreeAlloc {
         let mut timer = std::time::Instant::now();
         while let None = val {
             val = self.try_malloc(size);
-            if timer.elapsed().as_secs_f64() > 10.0 {
-                println!("probably out of memory");
+            if timer.elapsed().as_secs_f64() > *crate::DEADLOCK_TIMEOUT {
+                println!("[WARNING]  Potential deadlock detected when trying to allocate more memory.\n\
+                The deadlock timeout can be set via the LAMELLAR_DEADLOCK_TIMEOUT environment variable, the current timeout is {} seconds",*crate::DEADLOCK_TIMEOUT);
                 timer = std::time::Instant::now();
             }
         }

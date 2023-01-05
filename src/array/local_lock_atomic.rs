@@ -184,6 +184,7 @@ impl<T: Dist> Deref for LocalLockLocalData<'_, T> {
 }
 
 impl<T: Dist + std::default::Default> LocalLockArray<T> {
+    #[doc(alias = "Collective")]
     /// Construct a new LocalLockArray with a length of `array_size` whose data will be layed out with the provided `distribution` on the PE's specified by the `team`.
     /// `team` is commonly a [LamellarWorld][crate::LamellarWorld] or [LamellarTeam][crate::LamellarTeam] (instance or reference). 
     ///
@@ -224,6 +225,7 @@ impl<T: Dist + std::default::Default> LocalLockArray<T> {
 }
 
 impl<T: Dist> LocalLockArray<T> {
+    #[doc(alias("One-sided", "onesided"))]
     /// Change the distribution this array handle uses to index into the data of the array.
     ///
     /// # One-sided Operation
@@ -244,6 +246,8 @@ impl<T: Dist> LocalLockArray<T> {
         }
     }
 
+    
+    #[doc(alias("One-sided", "onesided"))]
     /// Return the calling PE's local data as a [LocalLockLocalData], which allows safe immutable access to local elements.   
     ///
     /// Calling this function will result in a local read lock being captured on the array
@@ -271,6 +275,7 @@ impl<T: Dist> LocalLockArray<T> {
         }
     }
 
+    #[doc(alias("One-sided", "onesided"))]
     /// Return the calling PE's local data as a [LocalLockMutLocalData], which allows safe mutable access to local elements.   
     ///
     /// Calling this function will result in the local write lock being captured on the array
@@ -327,6 +332,7 @@ impl<T: Dist> LocalLockArray<T> {
         lock
     }
 
+    #[doc(alias("One-sided", "onesided"))]
     /// Return the calling PE's local data as a [LocalLockLocalData], which allows safe immutable access to local elements.   
     ///
     /// Calling this function will result in a local read lock being captured on the array
@@ -350,6 +356,7 @@ impl<T: Dist> LocalLockArray<T> {
         self.local_as_slice()
     }
 
+    #[doc(alias("One-sided", "onesided"))]
     /// Return the calling PE's local data as a [LocalLockMutLocalData], which allows safe immutable access to local elements.   
     ///
     /// Calling this function will result in a local read lock being captured on the array
@@ -378,6 +385,7 @@ impl<T: Dist> LocalLockArray<T> {
         self.array.local_as_mut_slice()
     }
 
+    #[doc(alias = "Collective")]
     /// Convert this LocalLockArray into an [UnsafeArray][crate::array::UnsafeArray]
     ///
     /// This is a collective and blocking function which will only return when there is at most a single reference on each PE
@@ -429,6 +437,7 @@ impl<T: Dist> LocalLockArray<T> {
     //     self.array.into()
     // }
 
+    #[doc(alias = "Collective")]
     /// Convert this LocalLockArray into a (safe) [ReadOnlyArray][crate::array::ReadOnlyArray]
     ///
     /// This is a collective and blocking function which will only return when there is at most a single reference on each PE
@@ -475,6 +484,7 @@ impl<T: Dist> LocalLockArray<T> {
 
 
 impl<T: Dist + 'static> LocalLockArray<T> {
+    #[doc(alias = "Collective")]
     /// Convert this LocalLockArray into a (safe) [AtomicArray][crate::array::AtomicArray]
     ///
     /// This is a collective and blocking function which will only return when there is at most a single reference on each PE

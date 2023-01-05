@@ -749,6 +749,7 @@ impl AMCounters {
 
 /// The interface for launching, executing, and managing Lamellar Active Messages .
 pub trait ActiveMessaging {
+    #[doc(alias("One-sided", "onesided"))]
     /// launch and execute an active message on every PE (including originating PE).
     ///
     /// Expects as input an instance of a struct thats been defined using the lamellar::am procedural macros.
@@ -794,6 +795,7 @@ pub trait ActiveMessaging {
     where
         F: RemoteActiveMessage + LamellarAM + Serde + AmDist;
 
+    #[doc(alias("One-sided", "onesided"))]
     /// launch and execute an active message on a specifc PE.
     ///
     /// Expects as input the PE to execute on and an instance of a struct thats been defined using the lamellar::am procedural macros.
@@ -837,6 +839,7 @@ pub trait ActiveMessaging {
     where
         F: RemoteActiveMessage + LamellarAM + Serde + AmDist;
 
+    #[doc(alias("One-sided", "onesided"))]
     /// launch and execute an active message on the calling PE.
     ///
     /// Expects as input an instance of a struct thats been defined using the lamellar::local_am procedural macros.
@@ -883,6 +886,7 @@ pub trait ActiveMessaging {
     where
         F: LamellarActiveMessage + LocalAM + 'static;
 
+    #[doc(alias("One-sided", "onesided"))]
     /// blocks calling thread until all remote tasks (e.g. active mesages, array operations)
     /// initiated by the calling PE have completed.
     ///
@@ -915,6 +919,8 @@ pub trait ActiveMessaging {
     ///```
     fn wait_all(&self);
 
+
+    #[doc(alias = "Collective")]
     /// Global synchronization method which blocks calling thread until all PEs in the barrier group (e.g. World, Team, Array) have entered
     ///
     /// # Collective Operation
@@ -930,6 +936,7 @@ pub trait ActiveMessaging {
     ///```
     fn barrier(&self);
 
+    #[doc(alias("One-sided", "onesided"))]
     /// Run a future to completion on the current thread
     ///
     /// This function will block the caller until the given future has completed, the future is executed within the Lamellar threadpool

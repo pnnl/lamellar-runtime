@@ -116,6 +116,7 @@ impl LamellarTeam {
         the_team
     }
 
+    #[doc(alias("One-sided", "onesided"))]
     /// Return a list of (world-based) pe ids representing the members of the team
     ///
     /// # One-sided Operation
@@ -146,6 +147,7 @@ impl LamellarTeam {
         self.team.arch.team_iter().collect::<Vec<usize>>()
     }
 
+    #[doc(alias("One-sided", "onesided"))]
     /// Return number of pes in team
     ///
     /// # One-sided Operation
@@ -173,6 +175,7 @@ impl LamellarTeam {
         self.team.arch.num_pes()
     }
 
+    #[doc(alias("One-sided", "onesided"))]
     /// Return the world-based id of this pe
     ///
     /// # One-sided Operation
@@ -201,6 +204,7 @@ impl LamellarTeam {
         self.team.world_pe
     }
 
+    #[doc(alias("One-sided", "onesided"))]
     /// Return the team-based id of this pe
     ///
     /// # One-sided Operation
@@ -231,6 +235,7 @@ impl LamellarTeam {
         self.team.arch.team_pe(self.team.world_pe)
     }
 
+    #[doc(alias = "Collective")]
     /// create a subteam containing any number of pe's from this team using the provided LamellarArch (layout)
     ///
     /// # Collective Operation
@@ -274,6 +279,7 @@ impl LamellarTeam {
         }
     }
 
+    #[doc(alias("One-sided", "onesided"))]
     /// Text based representation of the team
     ///
     /// # One-sided Operation
@@ -299,6 +305,7 @@ impl LamellarTeam {
         self.team.print_arch()
     }
 
+    #[doc(alias = "Collective")]
     /// team wide synchronization method which blocks calling thread until all PEs in the team have entered
     ///
     /// # Collective Operation
@@ -836,13 +843,21 @@ impl LamellarTeamRT {
         for pe in hash_buf.as_slice().unwrap() {
             while *pe == 0 {
                 std::thread::yield_now();
-                if s.elapsed().as_secs_f64() > 5.0 {
-                    println!(
-                        "[{:?}] ({:?})  hash: {:?}",
-                        self.world_pe,
-                        hash,
-                        hash_buf.as_slice().unwrap()
+                if s.elapsed().as_secs_f64() > *crate::DEADLOCK_TIMEOUT {
+                    let status = hash_buf.as_slice().unwrap().iter().enumerate().map(|(i,elem)| (i,*elem == hash)).collect::<Vec<_>>();
+                    println!("[WARNING]  Potential deadlock detected when trying construct a new LamellarTeam.\n\
+                        Creating a team is a collective operation requiring all PEs associated with the Parent Team (or LamellarWorld) to enter the call, not just the PEs that will be part of the new team.\n\
+                        The following indicates which PEs have not entered the call: {:?}\n\
+                        The deadlock timeout can be set via the LAMELLAR_DEADLOCK_TIMEOUT environment variable, the current timeout is {} seconds",
+                        status,
+                        *crate::DEADLOCK_TIMEOUT
                     );
+                    // println!(
+                    //     "[{:?}] ({:?})  hash: {:?}",
+                    //     self.world_pe,
+                    //     hash,
+                    //     hash_buf.as_slice().unwrap()
+                    // );
                     s = Instant::now();
                 }
             }
@@ -905,9 +920,13 @@ impl LamellarTeamRT {
         let mut s = Instant::now();
         for pe in self.dropped.as_slice().unwrap() {
             while *pe != 1 {
-                std::thread::yield_now();
-                if s.elapsed().as_secs_f64() > 5.0 {
-                    println!("[{:?}] ({:?})  ", self.world_pe, self.dropped.as_slice());
+                // std::thread::yield_now();
+                if s.elapsed().as_secs_f64() > *crate::DEADLOCK_TIMEOUT {
+                    println!("[WARNING]  Potential deadlock detected when trying to drop a LamellarTeam.\n\
+                        The following indicates the dropped status on each PE: {:?}\n\
+                        The deadlock timeout can be set via the LAMELLAR_DEADLOCK_TIMEOUT environment variable, the current timeout is {} seconds",
+                        self.dropped.as_slice(),
+                        *crate::DEADLOCK_TIMEOUT,);
                     s = Instant::now();
                 }
             }

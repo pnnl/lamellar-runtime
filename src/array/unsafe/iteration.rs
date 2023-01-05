@@ -13,6 +13,7 @@ use crate::array::*;
 use crate::memregion::Dist;
 
 impl<T: Dist> UnsafeArray<T> {
+    #[doc(alias = "Collective")]
     /// Create an immutable [DistributedIterator][crate::array::DistributedIterator] for this UnsafeArray
     ///
     /// # Collective Operation
@@ -39,6 +40,7 @@ impl<T: Dist> UnsafeArray<T> {
         DistIter::new(self.clone().into(), 0, 0)
     }
 
+    #[doc(alias = "Collective")]
     /// Create a mutable [DistributedIterator][crate::array::DistributedIterator] for this UnsafeArray
     ///
     /// # Collective Operation
@@ -65,6 +67,7 @@ impl<T: Dist> UnsafeArray<T> {
         DistIterMut::new(self.clone().into(), 0, 0)
     }
 
+    #[doc(alias("One-sided", "onesided"))]
     /// Create an immutable [LocalIterator][crate::array::LocalIterator] for this UnsafeArray
     ///
     /// # Safety
@@ -92,6 +95,7 @@ impl<T: Dist> UnsafeArray<T> {
         LocalIter::new(self.clone().into(), 0, 0)
     }
 
+    #[doc(alias("One-sided", "onesided"))]
     /// Create a mutable [LocalIterator][crate::array::LocalIterator] for this UnsafeArray
     ///
     /// # Safety
@@ -118,6 +122,7 @@ impl<T: Dist> UnsafeArray<T> {
         LocalIterMut::new(self.clone().into(), 0, 0)
     }
 
+    #[doc(alias("One-sided", "onesided"))]
     /// Create an immutable [OneSidedIterator][crate::array::OneSidedIterator] for this UnsafeArray
     ///
     /// # Safety
@@ -147,6 +152,7 @@ impl<T: Dist> UnsafeArray<T> {
         OneSidedIter::new(self.clone().into(), self.inner.data.team.clone(), 1)
     }
 
+    #[doc(alias("One-sided", "onesided"))]
     /// Create an immutable [OneSidedIterator][crate::array::OneSidedIterator] for this UnsafeArray
     /// which will transfer and buffer `buf_size` elements at a time (to more efficient utilize the underlying lamellae network)
     ///

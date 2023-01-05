@@ -330,6 +330,7 @@ impl<T> GlobalRwDarc<T> {
         );
     }
 
+    #[doc(alias("One-sided", "onesided"))]
     /// Launches an active message to gather a global read lock associated with this GlobalRwDarc.
     ///
     /// The current task will be blocked until the lock has been acquired.
@@ -400,6 +401,7 @@ impl<T> GlobalRwDarc<T> {
         // inner.item().read(remote_rwlock_addr)
     }
 
+    #[doc(alias("One-sided", "onesided"))]
     /// Launches an active message to gather the global write lock associated with this GlobalRwDarc.
     ///
     /// The current task will be blocked until the lock has been acquired.
@@ -468,6 +470,7 @@ impl<T> GlobalRwDarc<T> {
         }
     }
 
+    #[doc(alias("One-sided", "onesided"))]
     /// Launches an active message to gather a global read lock associated with this GlobalRwDarc.
     ///
     /// The current THREAD will be blocked until the lock has been acquired.
@@ -521,6 +524,7 @@ impl<T> GlobalRwDarc<T> {
         }
     }
 
+    #[doc(alias("One-sided", "onesided"))]
     /// Launches an active message to gather a global write lock associated with this GlobalRwDarc.
     ///
     /// The current THREAD will be blocked until the lock has been acquired.
@@ -575,6 +579,7 @@ impl<T> GlobalRwDarc<T> {
 }
 
 impl<T> GlobalRwDarc<T> {
+    #[doc(alias = "Collective")]
     /// Constructs a new `GlobalRwDarc<T>` on the PEs specified by team.
     ///
     /// This is a blocking collective call amongst all PEs in the team, only returning once every PE in the team has completed the call.
@@ -619,6 +624,7 @@ impl<T> GlobalRwDarc<T> {
     //     })
     // }
 
+    #[doc(alias = "Collective")]
     /// Converts this GlobalRwDarc into a regular [Darc]
     ///
     /// This is a blocking collective call amongst all PEs in the GlobalRwDarc's team, only returning once every PE in the team has completed the call.
@@ -654,6 +660,7 @@ impl<T> GlobalRwDarc<T> {
         d
     }
 
+    #[doc(alias = "Collective")]
     /// Converts this GlobalRwDarc into a [LocalRwDarc]
     ///
     /// This is a blocking collective call amongst all PEs in the GlobalRwDarc's team, only returning once every PE in the team has completed the call.
