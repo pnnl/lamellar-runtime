@@ -7,7 +7,7 @@
 //! 
 //! # Examples
 //! 
-//! Examples can be found under [lamellar-runtime/examples/array_examples/](https://github.com/pnnl/lamellar-runtime/blob/dev/examples/array_examples)
+//! Examples can be found under [lamellar-runtime/examples/array_examples/](https://github.com/pnnl/lamellar-runtime/tree/master/examples/array_examples)
 mod chunks;
 mod enumerate;
 mod filter;
@@ -751,7 +751,7 @@ pub trait IndexedLocalIterator: LocalIterator + SyncSend + Clone + 'static {
     }
 
     /// Iterates over tuples `(A,B)` where the `A` items are from this iterator and the `B` items are from the iter in the argument.
-    /// If the two iterators or of unequal length, the returned iterator will be equal in length to the shorter of the two.
+    /// If the two iterators are of unequal length, the returned iterator will be equal in length to the shorter of the two.
     ///
     /// # Examples
     ///```

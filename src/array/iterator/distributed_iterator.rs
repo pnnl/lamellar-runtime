@@ -8,7 +8,7 @@
 //! 
 //! # Examples
 //! 
-//! Examples can be found under [lamellar-runtime/examples/array_examples/](https://github.com/pnnl/lamellar-runtime/blob/dev/examples/array_examples)
+//! Examples can be found under [lamellar-runtime/examples/array_examples/](https://github.com/pnnl/lamellar-runtime/tree/master/examples/array_examples)
 
 // mod chunks;
 mod enumerate;

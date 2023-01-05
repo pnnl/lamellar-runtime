@@ -20,7 +20,7 @@
 //!
 //! # Examples 
 //! 
-//! Lamellar proides a variety of [examples](https://github.com/pnnl/lamellar-runtime/blob/dev/examples/array_examples) for common tasks, e.g. distributed iteration.
+//! Lamellar proides a variety of [examples](https://github.com/pnnl/lamellar-runtime/tree/master/examples/array_examples) for common tasks, e.g. distributed iteration.
 //! 
 //! # Safety
 //! Array Data Lifetimes: LamellarArrays are built upon [Darcs][crate::darc::Darc] (Distributed Atomic Reference Counting Pointers) and as such have distributed lifetime management.
@@ -40,12 +40,11 @@
 //! Lamellar offers a variety of methods to convert between different array types and other data structures.
 //! - `into_atomic`, `into_read_only`, etc., convert between disributed array types.
 //! - `collect` and `collect_async` provide functionality analogous to the [collect](https://doc.rust-lang.org/std/iter/trait.Iterator.html#method.collect) method for Rust iterators
-//! - We also provided access directy to the underlying local data of an array using functions (and container types) that preserver the safety guarantees of a given array type
+//! - We also provided access directy to the underlying local data of an array using functions (and container types) that preserve the safety guarantees of a given array type
 //!     -`local_data`, `read_local_data`, `write_local_data`, etc. convert to slices and other data types.
 //!     - Consequently, these functions can be used to create valid inputs for batched operations,  see [OpInput](crate::array::OpInput) for details.
 //! ```
-//! use lamellar::array::{UnsafeArray, Distribution, ReadOnlyArray};
-//! use lamellar::LamellarWorldBuilder;
+//! use lamellar::array::prelude::*;
 //! 
 //! // define an length-10 array of type UnsafeArray<usize>
 //! let world = LamellarWorldBuilder::new().build(); 

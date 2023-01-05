@@ -8,7 +8,7 @@
 //! 
 //! # Examples
 //! 
-//! Examples can be found under [lamellar-runtime/examples/array_examples/](https://github.com/pnnl/lamellar-runtime/blob/dev/examples/array_examples)
+//! Examples can be found under [lamellar-runtime/examples/array_examples/](https://github.com/pnnl/lamellar-runtime/tree/master/examples/array_examples)
 mod chunks;
 use chunks::*;
 
@@ -42,13 +42,15 @@ use std::sync::Arc;
 //TODO: Think about an active message based method for transfering data that performs data reducing iterators before sending
 // i.e. for something like step_by(N) we know that only every N elements actually needs to get sent...
 
-/// An interface for dealing with one sided (i.e. serial, not parallel) iterators of LamellarArrays
+/// An interface for dealing with one sided iterators of LamellarArrays
 ///
 /// The functions in this trait are available on all [one-sided iterators](crate::array::iterator::one_sided_iterator)
-/// (which run over the data of a distributed array in serial, unlike distributed iterators).  Typically
+/// (which run over the data of a distributed array on a single PE).  Typically
 /// the provided iterator functions are optimized versions of the standard Iterator equivalents to reduce data movement assoicated with handling distributed arrays
 ///
 /// Additonaly functionality can be found by converting these iterators into Standard Iterators (with potential loss in data movement optimizations)
+///
+/// Note that currently One Sided Iterators will iterate over the distributed array serially, we are planning a parallel version in a future release.
 pub trait OneSidedIterator {
     /// The type of item this distributed iterator produces
     type Item: Send;
