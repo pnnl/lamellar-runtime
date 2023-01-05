@@ -108,15 +108,15 @@ impl WorkStealingThread {
                     );
                     timer = std::time::Instant::now();
                 }
-                if timer.elapsed().as_secs_f64() > 600.0 {
-                    println!(
-                        "work_q size {:?} work inj size {:?} num_tasks {:?}",
-                        worker.work_q.len(),
-                        worker.work_inj.len(),
-                        num_tasks.load(Ordering::SeqCst)
-                    );
-                    timer = std::time::Instant::now()
-                }
+                // if timer.elapsed().as_secs_f64() > 600.0 {
+                //     println!(
+                //         "work_q size {:?} work inj size {:?} num_tasks {:?}",
+                //         worker.work_q.len(),
+                //         worker.work_inj.len(),
+                //         num_tasks.load(Ordering::SeqCst)
+                //     );
+                //     timer = std::time::Instant::now()
+                // }
             }
             fini_prof!();
             active_cnt.fetch_sub(1, Ordering::SeqCst);

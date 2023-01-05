@@ -261,12 +261,12 @@
 //! The main change is that we need to explicitly tell the macro we are returning an active message and we provide the name of the active message we are returning
 //!```
 //! # use lamellar::active_messaging::prelude::*;
-//! #[AmData(Debug,Clone)]
+//! # #[AmData(Debug,Clone)]
 //! # struct ReturnAm{
 //! #     original_pe: usize,
 //! #     remote_pe: usize,
 //! # }
-//! #[lamellar::am]
+//! # #[lamellar::am]
 //! # impl LamellarAm for ReturnAm{
 //! #     async fn exec(self) {
 //! #         println!("initiated on PE {} visited PE {} finishing on PE {}",self.original_pe,self.remote_pe,lamellar::current_pe);
@@ -276,7 +276,7 @@
 //! # struct HelloWorld {
 //! #    original_pe: usize, //this will contain the ID of the PE this data originated from
 //! # }
-//! #[lamellar::am(return_am = "ReturnAM")] //we explicitly tell the macro we are returning an AM
+//! #[lamellar::am(return_am = "ReturnAm")] //we explicitly tell the macro we are returning an AM
 //! impl LamellarAM for HelloWorld {
 //!     async fn exec(self) -> usize { //specify we are returning a usize
 //!         println!(
@@ -326,11 +326,12 @@
 //! First we need to update `ReturnAm` to actually return some data
 //!```
 //! # use lamellar::active_messaging::prelude::*;
-//! #[AmData(Debug,Clone)]
+//! # #[AmData(Debug,Clone)]
 //! # struct ReturnAm{
 //! #     original_pe: usize,
 //! #     remote_pe: usize,
 //! # }
+//! 
 //! #[lamellar::am]
 //! impl LamellarAm for ReturnAm{
 //!     async fn exec(self) -> (usize,usize) {
@@ -343,7 +344,7 @@
 //! we do this in the argument to the [am] procedural macro
 //!```
 //! # use lamellar::active_messaging::prelude::*;
-//! #[AmData(Debug,Clone)]
+//! # #[AmData(Debug,Clone)]
 //! # struct ReturnAm{
 //! #     original_pe: usize,
 //! #     remote_pe: usize,
@@ -359,7 +360,8 @@
 //! # struct HelloWorld {
 //! #    original_pe: usize, //this will contain the ID of the PE this data originated from
 //! # }
-//! #[lamellar::am(return_am = "ReturnAM -> (usize,usize)")] //we explicitly tell the macro we are returning an AM which itself returns data
+//!
+//! #[lamellar::am(return_am = "ReturnAm -> (usize,usize)")] //we explicitly tell the macro we are returning an AM which itself returns data
 //! impl LamellarAM for HelloWorld {
 //!     async fn exec(self) -> usize { //specify we are returning a usize
 //!         println!(
@@ -747,6 +749,7 @@ impl AMCounters {
 
 /// The interface for launching, executing, and managing Lamellar Active Messages .
 pub trait ActiveMessaging {
+    #[doc(alias("One-sided", "onesided"))]
     /// launch and execute an active message on every PE (including originating PE).
     ///
     /// Expects as input an instance of a struct thats been defined using the lamellar::am procedural macros.
@@ -755,7 +758,12 @@ pub trait ActiveMessaging {
     /// each index in the vector corresponds to the data returned by the corresponding PE
     ///
     /// NOTE: lamellar active messages are not lazy, i.e. you do not need to drive the returned future to launch the computation,
-    /// the future is only used to check for completeion and/or retrieving any returned data
+    /// the future is only used to check for completion and/or retrieving any returned data
+    /// 
+    /// # One-sided Operation
+    /// The calling PE manages creating and transfering the active message to the remote PEs (without user intervention on the remote PEs).
+    /// If a result is returned it will only be available on the calling PE.
+    ///
     /// # Examples
     ///```
     /// use lamellar::active_messaging::prelude::*;
@@ -787,6 +795,7 @@ pub trait ActiveMessaging {
     where
         F: RemoteActiveMessage + LamellarAM + Serde + AmDist;
 
+    #[doc(alias("One-sided", "onesided"))]
     /// launch and execute an active message on a specifc PE.
     ///
     /// Expects as input the PE to execute on and an instance of a struct thats been defined using the lamellar::am procedural macros.
@@ -796,6 +805,11 @@ pub trait ActiveMessaging {
     ///
     /// NOTE: lamellar active messages are not lazy, i.e. you do not need to drive the returned future to launch the computation,
     /// the future is only used to check for completeion and/or retrieving any returned data
+    /// 
+    /// # One-sided Operation
+    /// The calling PE manages creating and transfering the active message to the remote PE (without user intervention on the remote PE).
+    /// If a result is returned it will only be available on the calling PE.
+    ///
     /// # Examples
     ///```
     /// use lamellar::active_messaging::prelude::*;
@@ -825,6 +839,7 @@ pub trait ActiveMessaging {
     where
         F: RemoteActiveMessage + LamellarAM + Serde + AmDist;
 
+    #[doc(alias("One-sided", "onesided"))]
     /// launch and execute an active message on the calling PE.
     ///
     /// Expects as input an instance of a struct thats been defined using the lamellar::local_am procedural macros.
@@ -834,6 +849,11 @@ pub trait ActiveMessaging {
     ///
     /// NOTE: lamellar active messages are not lazy, i.e. you do not need to drive the returned future to launch the computation,
     /// the future is only used to check for completeion and/or retrieving any returned data.
+    /// 
+    /// # One-sided Operation
+    /// The calling PE manages creating and executing the active message local (remote PEs are not involved).
+    /// If a result is returned it will only be available on the calling PE.
+    ///
     /// # Examples
     ///```
     /// use lamellar::active_messaging::prelude::*;
@@ -866,10 +886,14 @@ pub trait ActiveMessaging {
     where
         F: LamellarActiveMessage + LocalAM + 'static;
 
+    #[doc(alias("One-sided", "onesided"))]
     /// blocks calling thread until all remote tasks (e.g. active mesages, array operations)
     /// initiated by the calling PE have completed.
     ///
-    /// Note: this is not a distributed synchronization primitive (i.e. it has no knowledge of a Remote PEs tasks)
+    /// # One-sided Operation
+    /// this is not a distributed synchronization primitive (i.e. it has no knowledge of a Remote PEs tasks), the calling thread will only wait for tasks
+    /// to finish that were initiated by the calling PE itself
+    ///
     /// # Examples
     ///```
     /// # use lamellar::active_messaging::prelude::*;
@@ -895,7 +919,12 @@ pub trait ActiveMessaging {
     ///```
     fn wait_all(&self);
 
+
+    #[doc(alias = "Collective")]
     /// Global synchronization method which blocks calling thread until all PEs in the barrier group (e.g. World, Team, Array) have entered
+    ///
+    /// # Collective Operation
+    /// Requires all PEs associated with the ActiveMessaging object to enter the barrier, otherwise deadlock will occur
     ///
     /// # Examples
     ///```
@@ -907,11 +936,15 @@ pub trait ActiveMessaging {
     ///```
     fn barrier(&self);
 
+    #[doc(alias("One-sided", "onesided"))]
     /// Run a future to completion on the current thread
     ///
     /// This function will block the caller until the given future has completed, the future is executed within the Lamellar threadpool
     ///
     /// Users can await any future, including those returned from lamellar remote operations
+    ///
+    /// # One-sided Operation
+    /// this is not a distributed synchronization primitive and only blocks the calling thread until the given future has completed on the calling PE 
     ///
     /// # Examples
     ///```no_run  

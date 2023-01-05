@@ -6,7 +6,7 @@
 /// the handles are used on remote pes to access data on the PE which launched the AM
 ///----------------------------------------------------------------
 use lamellar::array::prelude::*;
-use lamellar::{ActiveMessaging, RemoteMemoryRegion};
+use lamellar::memregion::prelude::*;
 
 const ARRAY_LEN: usize = 100;
 
@@ -127,9 +127,5 @@ fn main() {
         println!("------------------------------------------------------------");
     }
 
-    let array1 = array.clone();
-    let mut_slice = unsafe { array1.local_as_mut_slice() };
-    let ro_array = array.into_read_only();
-    ro_array.print();
-    println!("{mut_slice:?}");
+    
 }

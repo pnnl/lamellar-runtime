@@ -330,6 +330,7 @@ impl<T> GlobalRwDarc<T> {
         );
     }
 
+    #[doc(alias("One-sided", "onesided"))]
     /// Launches an active message to gather a global read lock associated with this GlobalRwDarc.
     ///
     /// The current task will be blocked until the lock has been acquired.
@@ -338,10 +339,17 @@ impl<T> GlobalRwDarc<T> {
     ///
     /// Returns an RAII guard which will drop the read access of the wrlock when dropped
     ///
+    /// # One-sided Operation
+    /// The calling PE is responsible for creating and transfering the active message which aquires the lock.
+    /// Once aquired this specific instance of the read lock will only be held by the calling PE (until it is dropped)
+    /// Other PEs may have separately aquired read locks as well.
+    ///
     /// # Examples
     ///
     ///```
-    /// use lamellar::{ActiveMessaging, GlobalRwDarc};
+    /// use lamellar::darc::prelude::*;
+    /// use lamellar::active_messaging::*;
+    ///
     /// #[lamellar::AmData(Clone)]
     /// struct DarcAm {
     ///     counter: GlobalRwDarc<usize>, //each pe has a local atomicusize
@@ -351,14 +359,18 @@ impl<T> GlobalRwDarc<T> {
     /// impl LamellarAm for DarcAm {
     ///     async fn exec(self) {
     ///         let counter = self.counter.async_read().await; // await until we get the write lock
-    ///         println!("the current counter value on pe {} = {}",lamellar::current_pe,counter);
+    ///         println!("the current counter value on pe {} = {}",lamellar::current_pe,*counter);
     ///     }
     ///  }
-    /// -------------
-    /// let counter = GlobalRwDarc::new(world, 0).unwrap();
+    /// //-------------
+    /// 
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    ///
+    /// let counter = GlobalRwDarc::new(&world, 0).unwrap();
     /// world.exec_am_all(DarcAm {counter: counter.clone()});
     /// let guard = world.block_on(counter.async_read());
-    /// println!("the current counter value on pe {} main thread = {}",my_pe,guard);
+    /// println!("the current counter value on pe {} main thread = {}",my_pe,*guard);
     /// drop(guard); //release the
     /// world.wait_all(); // wait for my active message to return
     /// world.barrier(); //at this point all updates will have been performed
@@ -389,6 +401,7 @@ impl<T> GlobalRwDarc<T> {
         // inner.item().read(remote_rwlock_addr)
     }
 
+    #[doc(alias("One-sided", "onesided"))]
     /// Launches an active message to gather the global write lock associated with this GlobalRwDarc.
     ///
     /// The current task will be blocked until the lock has been acquired.
@@ -397,10 +410,16 @@ impl<T> GlobalRwDarc<T> {
     ///
     /// Returns an RAII guard which will drop the write access of the wrlock when dropped
     ///
+    /// # One-sided Operation
+    /// The calling PE is responsible for creating and transfering the active message which aquires the lock.
+    /// Once aquired the lock will only be held by the calling PE (until it is dropped)
+    ///
     /// # Examples
     ///
     ///```
-    /// use lamellar::{ActiveMessaging, GlobalRwDarc};
+    /// use lamellar::darc::prelude::*;
+    /// use lamellar::active_messaging::*;
+    ///
     /// #[lamellar::AmData(Clone)]
     /// struct DarcAm {
     ///     counter: GlobalRwDarc<usize>, //each pe has a local atomicusize
@@ -409,15 +428,19 @@ impl<T> GlobalRwDarc<T> {
     /// #[lamellar::am]
     /// impl LamellarAm for DarcAm {
     ///     async fn exec(self) {
-    ///         let counter = self.counter.async_write().await; // await until we get the write lock
-    ///        counter += 1; // although we have the global lock, we are still only modifying the data local to this PE
+    ///         let mut counter = self.counter.async_write().await; // await until we get the write lock
+    ///         *counter += 1; // although we have the global lock, we are still only modifying the data local to this PE
     ///     }
     ///  }
-    /// -------------
-    /// let counter = GlobalRwDarc::new(world, 0).unwrap();
+    /// //-------------
+    /// 
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    ///
+    /// let counter = GlobalRwDarc::new(&world, 0).unwrap();
     /// world.exec_am_all(DarcAm {counter: counter.clone()});
-    /// let guard = world.block_on(counter.async_write());
-    /// guard += my_pe;
+    /// let mut guard = world.block_on(counter.async_write());
+    /// *guard += my_pe;
     /// drop(guard); //release the
     /// world.wait_all(); // wait for my active message to return
     /// world.barrier(); //at this point all updates will have been performed
@@ -447,6 +470,7 @@ impl<T> GlobalRwDarc<T> {
         }
     }
 
+    #[doc(alias("One-sided", "onesided"))]
     /// Launches an active message to gather a global read lock associated with this GlobalRwDarc.
     ///
     /// The current THREAD will be blocked until the lock has been acquired.
@@ -455,18 +479,26 @@ impl<T> GlobalRwDarc<T> {
     ///
     /// Returns an RAII guard which will drop the read access of the wrlock when dropped
     ///
+    /// # One-sided Operation
+    /// The calling PE is responsible for creating and transfering the active message which aquires the lock.
+    /// Once aquired this specific instance of the read lock will only be held by the calling PE (until it is dropped)
+    /// Other PEs may have separately aquired read locks as well.
+    ///
+    ///
     /// # Note
     /// Do not use this function in an asynchronous context (i.e. a Lamellar Active message), instead use [GlobalRwDarc::async_read]
     ///
     /// # Examples
     ///```
-    /// use lamellar::GlobalRwDarc;
-    /// #[lamellar::AmData(Clone)]
+    /// use lamellar::darc::prelude::*;
     ///
-    /// let counter = GlobalRwDarc::new(world, 0).unwrap();
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    ///
+    /// let counter = GlobalRwDarc::new(&world, 0).unwrap();
     /// // do interesting work
     /// let guard = counter.read(); //blocks current thread until aquired
-    /// println!("the current counter value on pe {} main thread = {}",my_pe,guard);
+    /// println!("the current counter value on pe {} main thread = {}",my_pe,*guard);
     ///```
     pub fn read(&self) -> GlobalRwDarcReadGuard<'_, T> {
         // println!("read");
@@ -492,6 +524,7 @@ impl<T> GlobalRwDarc<T> {
         }
     }
 
+    #[doc(alias("One-sided", "onesided"))]
     /// Launches an active message to gather a global write lock associated with this GlobalRwDarc.
     ///
     /// The current THREAD will be blocked until the lock has been acquired.
@@ -500,19 +533,24 @@ impl<T> GlobalRwDarc<T> {
     ///
     /// Returns an RAII guard which will drop the write access of the wrlock when dropped
     ///
+    /// # One-sided Operation
+    /// The calling PE is responsible for creating and transfering the active message which aquires the lock.
+    /// Once aquired the lock will only be held by the calling PE (until it is dropped)
+    ///
     /// # Note
     /// Do not use this function in an asynchronous context (i.e. a Lamellar Active message), instead use [GlobalRwDarc::async_write]
     ///
     /// # Examples
-
     ///```
-    /// use lamellar::GlobalRwDarc;
-    /// #[lamellar::AmData(Clone)]
+    /// use lamellar::darc::prelude::*;
     ///
-    /// let counter = GlobalRwDarc::new(world, 0).unwrap();
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    ///
+    /// let counter = GlobalRwDarc::new(&world, 0).unwrap();
     /// // do interesting work
-    /// let guard = counter.write(); //blocks current thread until aquired
-    /// guard += my_pe;
+    /// let mut guard = counter.write(); //blocks current thread until aquired
+    /// *guard += my_pe;
     ///```
     pub fn write(&self) -> GlobalRwDarcWriteGuard<'_, T> {
         // println!("write");
@@ -541,18 +579,24 @@ impl<T> GlobalRwDarc<T> {
 }
 
 impl<T> GlobalRwDarc<T> {
+    #[doc(alias = "Collective")]
     /// Constructs a new `GlobalRwDarc<T>` on the PEs specified by team.
     ///
     /// This is a blocking collective call amongst all PEs in the team, only returning once every PE in the team has completed the call.
     ///
     /// Returns an error if this PE is not a part of team
     ///
+    /// # Collective Operation
+    /// Requires all PEs associated with the `team` to enter the call otherwise deadlock will occur (i.e. team barriers are being called internally)
+    ///
     /// # Examples
     ///
     /// ```
-    /// use lamellar::GlobalRwDarc;
+    /// use lamellar::darc::prelude::*;
     ///
-    /// let five = GlobalRwDarc::new(5);
+    /// let world = LamellarWorldBuilder::new().build();
+    ///
+    /// let five = GlobalRwDarc::new(&world,5).expect("PE in world team");
     /// ```
     pub fn new<U: Clone + Into<IntoLamellarTeam>>(
         team: U,
@@ -580,6 +624,7 @@ impl<T> GlobalRwDarc<T> {
     //     })
     // }
 
+    #[doc(alias = "Collective")]
     /// Converts this GlobalRwDarc into a regular [Darc]
     ///
     /// This is a blocking collective call amongst all PEs in the GlobalRwDarc's team, only returning once every PE in the team has completed the call.
@@ -587,11 +632,16 @@ impl<T> GlobalRwDarc<T> {
     /// Furthermore, this call will block while any additional references outside of the one making this call exist on each PE. It is not possible for the
     /// pointed to object to wrapped by both a Darc and a GlobalRwDarc simultaneously (on any PE).
     ///
+    /// # Collective Operation
+    /// Requires all PEs associated with the `darc` to enter the call otherwise deadlock will occur (i.e. team barriers are being called internally)
+    ///
     /// # Examples
     /// ```
-    /// use lamellar::{Darc,GlobalRwDarc};
+    /// use lamellar::darc::prelude::*;
     ///
-    /// let five = GlobalRwDarc::new(5);
+    /// let world = LamellarWorldBuilder::new().build();
+    ///
+    /// let five = GlobalRwDarc::new(&world,5).expect("PE in world team");
     /// let five_as_darc = five.into_darc();
     /// ```
     pub fn into_darc(self) -> Darc<T> {
@@ -610,6 +660,7 @@ impl<T> GlobalRwDarc<T> {
         d
     }
 
+    #[doc(alias = "Collective")]
     /// Converts this GlobalRwDarc into a [LocalRwDarc]
     ///
     /// This is a blocking collective call amongst all PEs in the GlobalRwDarc's team, only returning once every PE in the team has completed the call.
@@ -617,11 +668,16 @@ impl<T> GlobalRwDarc<T> {
     /// Furthermore, this call will block while any additional references outside of the one making this call exist on each PE. It is not possible for the
     /// pointed to object to wrapped by both a GlobalRwDarc and a LocalRwDarc simultaneously (on any PE).
     ///
+    /// # Collective Operation
+    /// Requires all PEs associated with the `darc` to enter the call otherwise deadlock will occur (i.e. team barriers are being called internally)
+    ///
     /// # Examples
     /// ```
-    /// use lamellar::{GlobalRwDarc,LocalRwDarc};
+    /// use lamellar::darc::prelude::*;
     ///
-    /// let five = GlobalRwDarc::new(5);
+    /// let world = LamellarWorldBuilder::new().build();
+    ///
+    /// let five = GlobalRwDarc::new(&world,5).expect("PE in world team");
     /// let five_as_localdarc = five.into_localrw();
     /// ```
     pub fn into_localrw(self) -> LocalRwDarc<T> {

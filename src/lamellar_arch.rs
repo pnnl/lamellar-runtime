@@ -285,7 +285,10 @@ impl LamellarArch for GlobalArch {
 /// # examples
 ///
 ///```
-/// use lamellar::StridedArch;
+/// use lamellar::{LamellarWorldBuilder,StridedArch};
+/// 
+/// let world = LamellarWorldBuilder::new().build();
+/// let num_pes = world.num_pes();
 ///
 /// //create a team consisting of the "even" PEs in the world
 /// let first_half_team = world.create_team_from_arch(StridedArch::new(
@@ -308,7 +311,7 @@ impl StridedArch {
     /// # Examples
     ///
     ///```
-    /// use lamellar::BlockedArch;
+    /// use lamellar::StridedArch;
     ///
     /// StridedArch::new(
     ///    0, //start pe
@@ -382,7 +385,10 @@ impl LamellarArch for StridedArch {
 /// # examples
 ///
 ///```
-/// use lamellar::BlockedArch;
+/// use lamellar::{LamellarWorldBuilder,BlockedArch};
+/// 
+/// let world = LamellarWorldBuilder::new().build();
+/// let num_pes = world.num_pes();
 ///
 /// //create a team consisting of the first half of PEs in the world
 /// let first_half_team = world.create_team_from_arch(BlockedArch::new(

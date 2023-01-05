@@ -94,7 +94,13 @@ impl Barrier {
             while *pe != barrier_id {
                 // std::thread::yield_now();
                 self.scheduler.exec_task();
-                if s.elapsed().as_secs_f64() > 600.0 {
+                if s.elapsed().as_secs_f64() > *crate::DEADLOCK_TIMEOUT {
+                    println!("[WARNING] Potential deadlock detected.\n\
+                    Barrier is a collective operation requiring all PEs associated with the distributed object to enter the barrier call.\n\
+                    Please refer to https://docs.rs/lamellar/latest/lamellar/index.html?search=barrier for more information\n\
+                    Note that barriers are often called internally for many collective operations, including constructing new LamellarTeams, LamellarArrays, and Darcs, as well as distributed iteration\n\
+                    A full list of collective operations is found at https://docs.rs/lamellar/latest/lamellar/index.html?search=collective\n\
+                    The deadlock timeout can be set via the LAMELLAR_DEADLOCK_TIMEOUT environment variable, the current timeout is {} seconds",*crate::DEADLOCK_TIMEOUT);
                     self.print_bar();
                     s = Instant::now();
                 }

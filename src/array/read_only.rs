@@ -70,7 +70,12 @@ impl ReadOnlyByteArrayWeak {
 /// array type as locking or atomic access is uneeded. For certain operations like `get()` it is possible to
 /// directly do an RDMA transfer.
 impl<T: Dist> ReadOnlyArray<T> {
+    #[doc(alias = "Collective")]
     /// Construct a new ReadOnlyArray with a length of `array_size` whose data will be layed out with the provided `distribution` on the PE's specified by the `team`.
+    /// `team` is commonly a [LamellarWorld][crate::LamellarWorld] or [LamellarTeam][crate::LamellarTeam] (instance or reference). 
+    ///
+    /// # Collective Operation
+    /// Requires all PEs associated with the `team` to enter the constructor call otherwise deadlock will occur (i.e. team barriers are being called internally)
     ///
     /// It is not terribly useful to construct a new ReadOnlyArray as you will be unable to modify its data. Rather, it is common to convert
     /// some other array type into a ReadOnlyArray (using `into_read_only()`) after it has been initialized.
@@ -99,8 +104,10 @@ impl<T: Dist> ReadOnlyArray<T> {
         ReadOnlyArray { array: array }
     }
 
+    #[doc(alias("One-sided", "onesided"))]
     /// Change the distribution this array handle uses to index into the data of the array.
     ///
+    /// # One-sided Operation
     /// This is a one-sided call and does not redistribute or modify the actual data, it simply changes how the array is indexed for this particular handle.
     ///
     /// # Examples
@@ -117,9 +124,13 @@ impl<T: Dist> ReadOnlyArray<T> {
         }
     }
 
+    #[doc(alias("One-sided", "onesided"))]
     /// Return the calling PE's local data as an immutable slice
     ///
     /// Note: this is safe for ReadOnlyArrays because they cannot be modified either remotely or locally
+    ///
+    /// # One-sided Operation
+    /// Only returns local data on the calling PE
     ///
     /// # Examples
     ///```
@@ -135,9 +146,13 @@ impl<T: Dist> ReadOnlyArray<T> {
         unsafe { self.array.local_as_mut_slice() }
     }
 
+    #[doc(alias("One-sided", "onesided"))]
     /// Return the calling PE's local data as an immutable slice
     ///
     /// Note: this is safe for ReadOnlyArrays because they cannot be modified either remotely or locally
+    ///
+    /// # One-sided Operation
+    /// Only returns local data on the calling PE
     ///
     /// # Examples
     ///```
@@ -153,6 +168,7 @@ impl<T: Dist> ReadOnlyArray<T> {
         unsafe { self.array.local_as_mut_slice() }
     }
 
+    #[doc(alias = "Collective")]
     /// Convert this ReadOnlyArray into an [UnsafeArray][crate::array::UnsafeArray]
     ///
     /// This is a collective and blocking function which will only return when there is at most a single reference on each PE
@@ -162,6 +178,9 @@ impl<T: Dist> ReadOnlyArray<T> {
     ///
     /// Note, that while this call itself is safe, and `UnsafeArray` unsurprisingly is not safe and thus you need to tread very carefully
     /// doing any operations with the resulting array.
+    ///
+    /// # Collective Operation
+    /// Requires all PEs associated with the `array` to enter the call otherwise deadlock will occur (i.e. team barriers are being called internally)
     ///
     /// # Examples
     ///```
@@ -202,12 +221,16 @@ impl<T: Dist> ReadOnlyArray<T> {
     //     self.array.into()
     // }
 
+    #[doc(alias = "Collective")]
     /// Convert this ReadOnlyArray into a (safe) [LocalLockArray][crate::array::LocalLockArray]
     ///
     /// This is a collective and blocking function which will only return when there is at most a single reference on each PE
     /// to this Array, and that reference is currently calling this function.
     ///
     /// When it returns, it is gauranteed that there are only `LocalLockArray` handles to the underlying data
+    ///
+    /// # Collective Operation
+    /// Requires all PEs associated with the `array` to enter the call otherwise deadlock will occur (i.e. team barriers are being called internally)
     ///
     /// # Examples
     ///```
@@ -244,6 +267,7 @@ impl<T: Dist> ReadOnlyArray<T> {
 }
 
 impl<T: Dist + 'static> ReadOnlyArray<T> {
+    #[doc(alias = "Collective")]
     /// Convert this ReadOnlyArray into a (safe) [AtomicArray][crate::array::AtomicArray]
     ///
     /// This is a collective and blocking function which will only return when there is at most a single reference on each PE
@@ -251,12 +275,15 @@ impl<T: Dist + 'static> ReadOnlyArray<T> {
     ///
     /// When it returns, it is gauranteed that there are only `AtomicArray` handles to the underlying data
     ///
+    /// # Collective Operation
+    /// Requires all PEs associated with the `array` to enter the call otherwise deadlock will occur (i.e. team barriers are being called internally)
+    ///
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: ReadOnlyArray<usize> = UnsaReadOnlyArrayfeArray::new(&world,100,Distribution::Cyclic);
+    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Cyclic);
     ///
     /// let atomic_array = array.into_local_lock();
     ///```
@@ -433,6 +460,14 @@ impl<T: Dist> LamellarArray<T> for ReadOnlyArray<T> {
     }
     fn pe_and_offset_for_global_index(&self, index: usize) -> Option<(usize, usize)> {
         self.array.pe_and_offset_for_global_index(index)
+    }
+
+    fn first_global_index_for_pe(&self, pe: usize) -> Option<usize>{
+        self.array.first_global_index_for_pe(pe)
+    }
+
+    fn last_global_index_for_pe(&self, pe: usize) -> Option<usize>{
+        self.array.last_global_index_for_pe(pe)
     }
 }
 

@@ -13,9 +13,12 @@ use crate::array::*;
 use crate::memregion::Dist;
 
 impl<T: Dist> UnsafeArray<T> {
+    #[doc(alias = "Collective")]
     /// Create an immutable [DistributedIterator][crate::array::DistributedIterator] for this UnsafeArray
     ///
-    /// This is a collective and blocking call that will not return until all PE's in the Array have entered
+    /// # Collective Operation
+    /// Requires all PEs associated with the array to enter the call otherwise deadlock will occur (i.e. barriers are being called internally)
+    /// Throughout execution of the iteration, data movement may occur amongst various PEs
     ///
     /// # Safety
     /// Data in UnsafeArrays are always unsafe as there are no protections on how remote PE's may access any other PE's local data.
@@ -29,7 +32,7 @@ impl<T: Dist> UnsafeArray<T> {
     ///
     /// unsafe {
     ///     world.block_on(
-    ///         array.dist_iter().for_each(move |elem| println!("PE{my_pe} elem {elem}"));
+    ///         array.dist_iter().for_each(move |elem| println!("PE{my_pe} elem {elem}") )
     ///     );
     /// }
     ///```
@@ -37,9 +40,12 @@ impl<T: Dist> UnsafeArray<T> {
         DistIter::new(self.clone().into(), 0, 0)
     }
 
+    #[doc(alias = "Collective")]
     /// Create a mutable [DistributedIterator][crate::array::DistributedIterator] for this UnsafeArray
     ///
-    /// This is a collective and blocking call that will not return until all PE's in the Array have entered
+    /// # Collective Operation
+    /// Requires all PEs associated with the array to enter the call otherwise deadlock will occur (i.e. barriers are being called internally)
+    /// Throughout execution of the iteration, data movement may occur amongst various PEs
     ///
     /// # Safety
     /// Data in UnsafeArrays are always unsafe as there are no protections on how remote PE's may access any other PE's local data.
@@ -53,7 +59,7 @@ impl<T: Dist> UnsafeArray<T> {
     ///
     /// unsafe {
     ///     world.block_on(
-    ///         array.dist_iter_mut().for_each(move |elem| *elem = my_pe);
+    ///         array.dist_iter_mut().for_each(move |elem| *elem = my_pe)
     ///     );
     /// }
     ///```
@@ -61,11 +67,17 @@ impl<T: Dist> UnsafeArray<T> {
         DistIterMut::new(self.clone().into(), 0, 0)
     }
 
+    #[doc(alias("One-sided", "onesided"))]
     /// Create an immutable [LocalIterator][crate::array::LocalIterator] for this UnsafeArray
     ///
     /// # Safety
     /// Data in UnsafeArrays are always unsafe as there are no protections on how remote PE's may access any other PE's local data.
     /// It is also possible to have mutable and immutable references to this arrays data on the same PE
+    ///
+    /// # One-sided Operation
+    /// The iteration is launched and local to only the calling PE. 
+    /// No data movement from remote PEs is required
+    ///
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
@@ -75,7 +87,7 @@ impl<T: Dist> UnsafeArray<T> {
     ///
     /// unsafe {
     ///     world.block_on(
-    ///         array.local_iter().for_each(move |elem| println!("PE{my_pe} elem {elem}"));
+    ///         array.local_iter().for_each(move |elem| println!("PE{my_pe} elem {elem}"))
     ///     );
     /// }
     ///```
@@ -83,11 +95,17 @@ impl<T: Dist> UnsafeArray<T> {
         LocalIter::new(self.clone().into(), 0, 0)
     }
 
+    #[doc(alias("One-sided", "onesided"))]
     /// Create a mutable [LocalIterator][crate::array::LocalIterator] for this UnsafeArray
     ///
     /// # Safety
     /// Data in UnsafeArrays are always unsafe as there are no protections on how remote PE's may access any other PE's local data.
     /// It is also possible to have mutable and immutable references to this arrays data on the same PE
+    ///
+    /// # One-sided Operation
+    /// The iteration is launched and local to only the calling PE. 
+    /// No data movement from remote PEs is required
+    ///
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
@@ -97,18 +115,24 @@ impl<T: Dist> UnsafeArray<T> {
     ///
     /// unsafe {
     ///     world.block_on(
-    ///         array.local_iter_mut().for_each(move |elem| *elem = my_pe);
+    ///         array.local_iter_mut().for_each(move |elem| *elem = my_pe)
     ///     );
     /// }
     pub unsafe fn local_iter_mut(&self) -> LocalIterMut<'static, T, UnsafeArray<T>> {
         LocalIterMut::new(self.clone().into(), 0, 0)
     }
 
+    #[doc(alias("One-sided", "onesided"))]
     /// Create an immutable [OneSidedIterator][crate::array::OneSidedIterator] for this UnsafeArray
     ///
     /// # Safety
     /// Data in UnsafeArrays are always unsafe as there are no protections on how remote PE's may access any other PE's local data.
     /// It is also possible to have mutable and immutable references to this arrays data on the same PE
+    ///
+    /// # One-sided Operation
+    /// The iteration is launched and local to only the calling PE. 
+    /// Data movement will occur with the remote PEs to transfer their data to the calling PE
+    ///
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
@@ -128,6 +152,7 @@ impl<T: Dist> UnsafeArray<T> {
         OneSidedIter::new(self.clone().into(), self.inner.data.team.clone(), 1)
     }
 
+    #[doc(alias("One-sided", "onesided"))]
     /// Create an immutable [OneSidedIterator][crate::array::OneSidedIterator] for this UnsafeArray
     /// which will transfer and buffer `buf_size` elements at a time (to more efficient utilize the underlying lamellae network)
     ///
@@ -138,6 +163,11 @@ impl<T: Dist> UnsafeArray<T> {
     /// # Safety
     /// Data in UnsafeArrays are always unsafe as there are no protections on how remote PE's may access any other PE's local data.
     /// It is also possible to have mutable and immutable references to this arrays data on the same PE
+    ///
+    /// # One-sided Operation
+    /// The iteration is launched and local to only the calling PE. 
+    /// Data movement will occur with the remote PEs to transfer their data to the calling PE
+    ///
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;

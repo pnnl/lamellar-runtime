@@ -72,7 +72,7 @@ fn create_reduction(
             #[#am]
             impl LamellarAM for #reduction_name{
                 async fn exec(&self) -> #typeident{
-                    println!("{}",stringify!(#array_type));
+                    // println!("{}",stringify!(#array_type));
                     if self.start_pe == self.end_pe{
                         // println!("[{:?}] root {:?} {:?}",__lamellar_current_pe,self.start_pe, self.end_pe);
                         let timer = std::time::Instant::now();

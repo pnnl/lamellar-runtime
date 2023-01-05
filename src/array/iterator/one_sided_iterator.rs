@@ -26,7 +26,7 @@ use zip::*;
 // use buffered::*;
 
 use crate::array::{LamellarArray, LamellarArrayInternalGet};
-use crate::memregion::{Dist, OneSidedMemoryRegion};
+use crate::memregion::{Dist, OneSidedMemoryRegion, RegisteredMemoryRegion,SubRegion};
 
 use crate::LamellarTeamRT;
 
@@ -367,7 +367,7 @@ impl<'a, T: Dist + 'static, A: LamellarArrayInternalGet<T> + Clone + Send> OneSi
                     // but safe with respect to the buf_0 as we have consumed all its content and this is the only reference
                     // sub_region is set to the remaining size of the array so we will not have an out of bounds issue
                     unsafe {
-                        self.array.internal_get(self.index, &sub_region).wait();
+                        self.array.internal_get(self.index, sub_region).wait();
                     }
                 }
             }
@@ -405,7 +405,7 @@ impl<'a, T: Dist + 'static, A: LamellarArrayInternalGet<T> + Clone + Send> OneSi
                 // but safe with respect to the buf_0 as we have consumed all its content and this is the only reference
                 // sub_region is set to the remaining size of the array so we will not have an out of bounds issue
                 unsafe {
-                    self.array.internal_get(self.index, &sub_region).wait();
+                    self.array.internal_get(self.index, sub_region).wait();
                 }
             }
         }

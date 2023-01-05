@@ -36,9 +36,12 @@ pub trait LamellarArrayIterators<T: Dist> {
     type LocalIter: LocalIterator;
     type OnesidedIter: OneSidedIterator;
 
+    #[doc(alias = "Collective")]
     /// Create an immutable [DistributedIterator][crate::array::DistributedIterator] for this array
     ///
-    /// This is a collective and blocking call that will not return until all PE's in the array have entered
+    /// # Collective Operation
+    /// Requires all PEs associated with the array to enter the call otherwise deadlock will occur (i.e. barriers are being called internally)
+    /// Throughout execution of the iteration, data movement may occur amongst various PEs
     ///
     /// # Examples
     ///```
@@ -53,7 +56,12 @@ pub trait LamellarArrayIterators<T: Dist> {
     ///```
     fn dist_iter(&self) -> Self::DistIter;
 
+    #[doc(alias("One-sided", "onesided"))]
     /// Create an immutable [LocalIterator][crate::array::LocalIterator] for this array
+    ///
+    /// # One-sided Operation
+    /// The iteration is launched and local to only the calling PE. 
+    /// No data movement from remote PEs is required
     ///
     /// # Examples
     ///```
@@ -68,7 +76,12 @@ pub trait LamellarArrayIterators<T: Dist> {
     ///```
     fn local_iter(&self) -> Self::LocalIter;
 
+    #[doc(alias("One-sided", "onesided"))]
     /// Create an immutable [OneSidedIterator][crate::array::OneSidedIterator] for this array
+    ///
+    /// # One-sided Operation
+    /// The iteration is launched and local to only the calling PE. 
+    /// Data movement will occur with the remote PEs to transfer their data to the calling PE
     ///
     /// # Examples
     ///```
@@ -85,12 +98,17 @@ pub trait LamellarArrayIterators<T: Dist> {
     ///```
     fn onesided_iter(&self) -> Self::OnesidedIter;
 
+    #[doc(alias("One-sided", "onesided"))]
     /// Create an immutable [OneSidedIterator][crate::array::OneSidedIterator] for this array
     /// which will transfer and buffer `buf_size` elements at a time (to more efficient utilize the underlying lamellae network)
     ///
     /// The buffering is transparent to the user.
     ///
     /// This iterator typcially outperforms the non buffered version.
+    ///
+    /// # One-sided Operation
+    /// The iteration is launched and local to only the calling PE. 
+    /// Data movement will occur with the remote PEs to transfer their data to the calling PE
     ///
     /// # Examples
     ///```
@@ -117,9 +135,12 @@ pub trait LamellarArrayMutIterators<T: Dist> {
     type DistIter: DistributedIterator;
     type LocalIter: LocalIterator;
 
+    #[doc(alias = "Collective")]
     /// Create a mutable [DistributedIterator][crate::array::DistributedIterator] for this array
     ///
-    /// This is a collective and blocking call that will not return until all PE's in the array have entered
+    /// # Collective Operation
+    /// Requires all PEs associated with the array to enter the call otherwise deadlock will occur (i.e. barriers are being called internally)
+    /// Throughout execution of the iteration, data movement may occur amongst various PEs
     ///
     /// # Examples
     ///```
@@ -134,7 +155,12 @@ pub trait LamellarArrayMutIterators<T: Dist> {
     ///```
     fn dist_iter_mut(&self) -> Self::DistIter;
 
+    #[doc(alias("One-sided", "onesided"))]
     /// Create a mutable [LocalIterator][crate::array::LocalIterator] for this array
+    ///
+    /// # One-sided Operation
+    /// The iteration is launched and local to only the calling PE. 
+    /// No data movement from remote PEs is required
     ///
     /// # Examples
     ///```

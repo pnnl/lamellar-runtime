@@ -47,7 +47,7 @@ macro_rules! impl_atomic_ops{
         pub struct $C<'a>(pub &'a $B);
         impl AddAssign<$A> for $C<'_>{
             fn add_assign(&mut self, val: $A) {
-                println!("add_assign");
+                // println!("add_assign");
             //    self.0.as_native_atomic().fetch_add(val,Ordering::SeqCst);
                self.0.fetch_add(val,Ordering::SeqCst);
 
@@ -1008,6 +1008,13 @@ impl<T: Dist> LamellarArray<T> for NativeAtomicArray<T> {
     }
     fn pe_and_offset_for_global_index(&self, index: usize) -> Option<(usize, usize)> {
         self.array.pe_and_offset_for_global_index(index)
+    }
+    fn first_global_index_for_pe(&self, pe: usize) -> Option<usize>{
+        self.array.first_global_index_for_pe(pe)
+    }
+
+    fn last_global_index_for_pe(&self, pe: usize) -> Option<usize>{
+        self.array.last_global_index_for_pe(pe)
     }
 }
 

@@ -634,7 +634,12 @@ impl<T: Dist> Iterator for AtomicLocalDataIter<T> {
 
 //#[prof]
 impl<T: Dist + std::default::Default + 'static> AtomicArray<T> {
+    #[doc(alias = "Collective")]
     /// Construct a new AtomicArray with a length of `array_size` whose data will be layed out with the provided `distribution` on the PE's specified by the `team`.
+    /// `team` is commonly a [LamellarWorld][crate::LamellarWorld] or [LamellarTeam][crate::LamellarTeam] (instance or reference). 
+    ///
+    /// # Collective Operation
+    /// Requires all PEs associated with the `team` to enter the constructor call otherwise deadlock will occur (i.e. team barriers are being called internally)
     ///
     /// # Examples
     ///```
@@ -665,8 +670,10 @@ impl<T: Dist + 'static> AtomicArray<T> {
 }
 
 impl<T: Dist> AtomicArray<T> {
+    #[doc(alias("One-sided", "onesided"))]
     /// Change the distribution this array handle uses to index into the data of the array.
     ///
+    /// # One-sided Operation
     /// This is a one-sided call and does not redistribute or modify the actual data, it simply changes how the array is indexed for this particular handle.
     ///
     /// # Examples
@@ -684,9 +691,13 @@ impl<T: Dist> AtomicArray<T> {
         }
     }
 
+    #[doc(alias("One-sided", "onesided"))]
     /// Return the calling PE's local data as an [AtomicLocalData], which allows safe access to local elements.   
     ///
     /// Because each element is Atomic, this handle to the local data can be used to both read and write individual elements safely.
+    ///
+    /// # One-sided Operation
+    /// Only returns local data on the calling PE
     ///
     /// # Examples
     ///```
@@ -704,9 +715,13 @@ impl<T: Dist> AtomicArray<T> {
         }
     }
 
+    #[doc(alias("One-sided", "onesided"))]
     /// Return the calling PE's local data as an [AtomicLocalData], which allows safe mutable access to local elements.   
     ///
     /// Because each element is Atomic, this handle to the local data can be used to both read and write individual elements safely.
+    ///
+    /// # One-sided Operation
+    /// Only returns local data on the calling PE
     ///
     /// # Examples
     ///```
@@ -739,6 +754,7 @@ impl<T: Dist> AtomicArray<T> {
         }
     }
 
+    #[doc(alias = "Collective")]
     /// Convert this AtomicArray into an [UnsafeArray][crate::array::UnsafeArray]
     ///
     /// This is a collective and blocking function which will only return when there is at most a single reference on each PE
@@ -748,6 +764,9 @@ impl<T: Dist> AtomicArray<T> {
     ///
     /// Note, that while this call itself is safe, and `UnsafeArray` unsurprisingly is not safe and thus you need to tread very carefully
     /// doing any operations with the resulting array.
+    ///
+    /// # Collective Operation
+    /// Requires all PEs associated with the `array` to enter the call otherwise deadlock will occur (i.e. team barriers are being called internally)
     ///
     /// # Examples
     ///```
@@ -793,12 +812,16 @@ impl<T: Dist> AtomicArray<T> {
     //     }
     // }
 
+    #[doc(alias = "Collective")]
     /// Convert this AtomicArray into a (safe) [ReadOnlyArray][crate::array::ReadOnlyArray]
     ///
     /// This is a collective and blocking function which will only return when there is at most a single reference on each PE
     /// to this Array, and that reference is currently calling this function.
     ///
     /// When it returns, it is gauranteed that there are only `ReadOnlyArray` handles to the underlying data
+    ///
+    /// # Collective Operation
+    /// Requires all PEs associated with the `array` to enter the call otherwise deadlock will occur (i.e. team barriers are being called internally)
     ///
     /// # Examples
     ///```
@@ -836,12 +859,16 @@ impl<T: Dist> AtomicArray<T> {
         }
     }
 
+    #[doc(alias = "Collective")]
     /// Convert this AtomicArray into a (safe) [LocalLockArray][crate::array::LocalLockArray]
     ///
     /// This is a collective and blocking function which will only return when there is at most a single reference on each PE
     /// to this Array, and that reference is currently calling this function.
     ///
     /// When it returns, it is gauranteed that there are only `LocalLockArray` handles to the underlying data
+    ///
+    /// # Collective Operation
+    /// Requires all PEs associated with the `array` to enter the call otherwise deadlock will occur (i.e. team barriers are being called internally)
     ///
     /// # Examples
     ///```
@@ -938,29 +965,46 @@ impl<T: Dist> From<AtomicByteArray> for AtomicArray<T> {
     }
 }
 
-impl<T: Dist + serde::Serialize + serde::de::DeserializeOwned + 'static> AtomicArray<T> {
-    pub fn reduce(&self, op: &str) -> Pin<Box<dyn Future<Output = T>>> {
+impl<T: Dist + AmDist + 'static> LamellarArrayReduce<T>
+    for AtomicArray<T>
+{
+    fn reduce(&self,reduction: &str) -> Pin<Box<dyn Future<Output = T>>> {
         match self {
-            AtomicArray::NativeAtomicArray(array) => array.reduce(op),
-            AtomicArray::GenericAtomicArray(array) => array.reduce(op),
+            AtomicArray::NativeAtomicArray(array) => array.reduce(reduction),
+            AtomicArray::GenericAtomicArray(array) => array.reduce(reduction),
         }
     }
-    pub fn sum(&self) -> Pin<Box<dyn Future<Output = T>>> {
+}
+
+impl<T: Dist + AmDist + ElementArithmeticOps + 'static> LamellarArrayArithmeticReduce<T>
+    for AtomicArray<T>
+{
+    fn sum(&self) -> Pin<Box<dyn Future<Output = T>>> {
         match self {
-            AtomicArray::NativeAtomicArray(array) => array.reduce("sum"),
-            AtomicArray::GenericAtomicArray(array) => array.reduce("sum"),
+            AtomicArray::NativeAtomicArray(array) => array.sum(),
+            AtomicArray::GenericAtomicArray(array) => array.sum(),
         }
     }
-    pub fn prod(&self) -> Pin<Box<dyn Future<Output = T>>> {
+    fn prod(&self) -> Pin<Box<dyn Future<Output = T>>> {
         match self {
-            AtomicArray::NativeAtomicArray(array) => array.reduce("prod"),
-            AtomicArray::GenericAtomicArray(array) => array.reduce("prod"),
+            AtomicArray::NativeAtomicArray(array) => array.prod(),
+            AtomicArray::GenericAtomicArray(array) => array.prod(),
         }
     }
-    pub fn max(&self) -> Pin<Box<dyn Future<Output = T>>> {
+}
+impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static> LamellarArrayCompareReduce<T>
+    for AtomicArray<T>
+{
+    fn max(&self) -> Pin<Box<dyn Future<Output = T>>> {
         match self {
-            AtomicArray::NativeAtomicArray(array) => array.reduce("max"),
-            AtomicArray::GenericAtomicArray(array) => array.reduce("max"),
+            AtomicArray::NativeAtomicArray(array) => array.max(),
+            AtomicArray::GenericAtomicArray(array) => array.max(),
+        }
+    }
+    fn min(&self) -> Pin<Box<dyn Future<Output = T>>> {
+        match self {
+            AtomicArray::NativeAtomicArray(array) => array.min(),
+            AtomicArray::GenericAtomicArray(array) => array.min(),
         }
     }
 }

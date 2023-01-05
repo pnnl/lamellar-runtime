@@ -12,8 +12,8 @@
 ///
 /// note this example only works for block that do not span multiple pes.
 ///---------------------------------------------------------------------------------
-use lamellar::ActiveMessaging;
-use lamellar::{OneSidedMemoryRegion, RemoteMemoryRegion, SharedMemoryRegion};
+use lamellar::active_messaging::prelude::*;
+use lamellar::memregion::prelude::*;
 use lazy_static::lazy_static;
 use matrixmultiply::sgemm;
 use parking_lot::Mutex;

@@ -1,6 +1,6 @@
 [package]
 name = "lamellar"
-version = "0.5.0"
+version = "0.5.0-rc.2"
 authors = ["Ryan D. Friese <ryan.friese@pnnl.gov>",  "Roberto Gioiosa <roberto.gioiosa@pnnl.gov>", "Joseph Cottam <joseph.cottam@pnnl.gov>","Greg Roek <gregory.roek@pnnl.gov>","Erdal Mutlu <erdal.mutlu@pnnl.gov>"]
 edition = "2021"
 description = "Lamellar is an asynchronous tasking runtime for HPC systems developed in RUST."
@@ -12,7 +12,7 @@ keywords = ["hpc","runtime","pgas","distributed","asynchronous"]
 categories = ["asynchronous","concurrency", "network-programming","science"]
 
 [dependencies]
-lamellar-impl = { version = "0.5", path = "impl" }
+lamellar-impl = { version = "0.5.0-rc.1", path = "impl" }
 lamellar-prof = { version = "0.1.0", path = "lamellar-prof" }
 rofisys = { version ="0.2", optional = true }
 inventory = "0.1.11" #can't use 0.2+ due to TypeId::of being non const
@@ -315,6 +315,10 @@ path="examples/array_examples/array_ops.rs"
 [[example]]
 name="atomic_compare_exchange"
 path="examples/array_examples/atomic_compare_exchange.rs"
+
+[[example]]
+name="array_first_last_global_indices"
+path="examples/array_examples/array_first_last_global_indices.rs"
 
 #[[example]]
 #name="2d_array"

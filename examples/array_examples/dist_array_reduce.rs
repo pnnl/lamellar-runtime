@@ -1,4 +1,4 @@
-use lamellar::active_messaging::prelude::*;
+
 /// ------------Lamellar Example: Distributed Array Reductions -------------------------
 /// this is an experimental exmaple testing our initial design for reductions on distributed array
 /// we expect that the syntax and APIs illustrated are highly likey to change in future release.

@@ -2,7 +2,7 @@
 /// Test the bandwidth between two PEs using an RDMA Put of N bytes
 /// from a local array into a remote PE.
 /// --------------------------------------------------------------------
-use lamellar::RemoteMemoryRegion;
+use lamellar::memregion::prelude::*;
 use std::time::Instant;
 
 const ARRAY_LEN: usize = 2 * 1024 * 1024 * 1024;

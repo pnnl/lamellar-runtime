@@ -123,7 +123,12 @@ pub(crate) struct UnsafeArrayInnerWeak {
 
 //#[prof]
 impl<T: Dist + 'static> UnsafeArray<T> {
+    #[doc(alias = "Collective")]
     /// Construct a new UnsafeArray with a length of `array_size` whose data will be layed out with the provided `distribution` on the PE's specified by the `team`.
+    /// `team` is commonly a [LamellarWorld][crate::LamellarWorld] or [LamellarTeam][crate::LamellarTeam] (instance or reference). 
+    ///
+    /// # Collective Operation
+    /// Requires all PEs associated with the `team` to enter the constructor call otherwise deadlock will occur (i.e. team barriers are being called internally)
     ///
     /// # Examples
     ///```
@@ -137,6 +142,7 @@ impl<T: Dist + 'static> UnsafeArray<T> {
         distribution: Distribution,
     ) -> UnsafeArray<T> {
         let team = team.into().team.clone();
+        team.barrier();
         let task_group = LamellarTaskGroup::new(team.clone());
         let my_pe = team.team_pe_id().unwrap();
         let num_pes = team.num_pes();
@@ -210,8 +216,10 @@ impl<T: Dist + 'static> UnsafeArray<T> {
         }
     }
 
+    #[doc(alias("One-sided", "onesided"))]
     /// Change the distribution this array handle uses to index into the data of the array.
     ///
+    /// # One-sided Operation
     /// This is a one-sided call and does not redistribute the modify actual data, it simply changes how the array is indexed for this particular handle.
     ///
     /// # Examples
@@ -227,11 +235,15 @@ impl<T: Dist + 'static> UnsafeArray<T> {
         self
     }
 
+    #[doc(alias("One-sided", "onesided"))]
     /// Return the calling PE's local data as an immutable slice
     ///
     /// # Safety
     /// Data in UnsafeArrays are always unsafe as there are no protections on how remote PE's may access this PE's local data.
     /// It is also possible to have mutable and immutable references to this arrays data on the same PE
+    ///
+    /// # One-sided Operation
+    /// Only returns local data on the calling PE
     ///
     /// # Examples
     ///```
@@ -249,11 +261,15 @@ impl<T: Dist + 'static> UnsafeArray<T> {
         self.local_as_mut_slice()
     }
 
+    #[doc(alias("One-sided", "onesided"))]
     /// Return the calling PE's local data as a mutable slice
     ///
     /// # Safety
     /// Data in UnsafeArrays are always unsafe as there are no protections on how remote PE's may access this PE's local data.
     /// It is also possible to have mutable and immutable references to this arrays data on the same PE
+    ///
+    /// # One-sided Operation
+    /// Only returns local data on the calling PE
     ///
     /// # Examples
     ///```
@@ -278,11 +294,15 @@ impl<T: Dist + 'static> UnsafeArray<T> {
         )
     }
 
+    #[doc(alias("One-sided", "onesided"))]
     /// Return the calling PE's local data as an immutable slice
     ///
     /// # Safety
     /// Data in UnsafeArrays are always unsafe as there are no protections on how remote PE's may access this PE's local data.
     /// It is also possible to have mutable and immutable references to this arrays data on the same PE
+    ///
+    /// # One-sided Operation
+    /// Only returns local data on the calling PE
     ///
     /// # Examples
     ///```
@@ -299,11 +319,15 @@ impl<T: Dist + 'static> UnsafeArray<T> {
         self.local_as_mut_slice()
     }
 
+    #[doc(alias("One-sided", "onesided"))]
     /// Return the calling PE's local data as a mutable slice
     ///
     /// # Safety
     /// Data in UnsafeArrays are always unsafe as there are no protections on how remote PE's may access this PE's local data.
     /// It is also possible to have mutable and immutable references to this arrays data on the same PE
+    ///
+    /// # One-sided Operation
+    /// Only returns local data on the calling PE
     ///
     /// # Examples
     ///```
@@ -329,20 +353,20 @@ impl<T: Dist + 'static> UnsafeArray<T> {
         u8_ptr as *mut T
     }
 
-    /// Return the index range with respect to the original array over which this array handle represents)
-    ///
-    /// # Examples
-    ///```
-    /// use lamellar::array::prelude::*;
-    /// let world = LamellarWorldBuilder::new().build();
-    /// let my_pe = world.my_pe();
-    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic);
-    ///
-    /// assert_eq!(array.sub_array_range(),(0..100));
-    ///
-    /// let sub_array = array.sub_array(25..75);
-    /// assert_eq!(sub_array.sub_array_range(),(25..75));
-    ///```
+    // / Return the index range with respect to the original array over which this array handle represents)
+    // /
+    // / # Examples
+    // /```
+    // / use lamellar::array::prelude::*;
+    // / let world = LamellarWorldBuilder::new().build();
+    // / let my_pe = world.my_pe();
+    // / let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic);
+    // /
+    // / assert_eq!(array.sub_array_range(),(0..100));
+    // /
+    // / let sub_array = array.sub_array(25..75);
+    // / assert_eq!(sub_array.sub_array_range(),(25..75));
+    // /```
     pub(crate) fn sub_array_range(&self) -> std::ops::Range<usize> {
         self.inner.offset..(self.inner.offset + self.inner.size)
     }
@@ -360,12 +384,16 @@ impl<T: Dist + 'static> UnsafeArray<T> {
         // self.inner.data.print();
     }
 
+    #[doc(alias = "Collective")]
     /// Convert this UnsafeArray into a (safe) [ReadOnlyArray][crate::array::ReadOnlyArray]
     ///
     /// This is a collective and blocking function which will only return when there is at most a single reference on each PE
     /// to this Array, and that reference is currently calling this function.
     ///
     /// When it returns, it is gauranteed that there are only  `ReadOnlyArray` handles to the underlying data
+    ///
+    /// # Collective Operation
+    /// Requires all PEs associated with the `array` to enter the call otherwise deadlock will occur (i.e. team barriers are being called internally)
     ///
     /// # Examples
     ///```
@@ -406,12 +434,16 @@ impl<T: Dist + 'static> UnsafeArray<T> {
     //     self.into()
     // }
 
+    #[doc(alias = "Collective")]
     /// Convert this UnsafeArray into a (safe) [LocalLockArray][crate::array::LocalLockArray]
     ///
     /// This is a collective and blocking function which will only return when there is at most a single reference on each PE
     /// to this Array, and that reference is currently calling this function.
     ///
     /// When it returns, it is gauranteed that there are only `LocalLockArray` handles to the underlying data
+    ///
+    /// # Collective Operation
+    /// Requires all PEs associated with the `array` to enter the call otherwise deadlock will occur (i.e. team barriers are being called internally)
     ///
     /// # Examples
     ///```
@@ -448,12 +480,16 @@ impl<T: Dist + 'static> UnsafeArray<T> {
 }
 
 impl<T: Dist + 'static> UnsafeArray<T> {
+    #[doc(alias = "Collective")]
     /// Convert this UnsafeArray into a (safe) [AtomicArray][crate::array::AtomicArray]
     ///
     /// This is a collective and blocking function which will only return when there is at most a single reference on each PE
     /// to this Array, and that reference is currently calling this function.
     ///
     /// When it returns, it is gauranteed that there are only `AtomicArray` handles to the underlying data
+    ///
+    /// # Collective Operation
+    /// Requires all PEs associated with the `array` to enter the call otherwise deadlock will occur (i.e. team barriers are being called internally)
     ///
     /// # Examples
     ///```
@@ -583,21 +619,7 @@ impl<T: Dist> From<UnsafeArray<T>> for LamellarByteArray {
     }
 }
 
-// impl<T: Dist + serde::Serialize + serde::de::DeserializeOwned + 'static> UnsafeArray<T> {
 
-//     pub fn reduce(&self, op: &str) -> Pin<Box<dyn Future<Output = T>>> {
-//         self.reduce_data(self.get_reduction_op(op)).into_future()
-//     }
-//     pub fn sum(&self) -> Pin<Box<dyn Future<Output = T>>> {
-//         self.reduce("sum")
-//     }
-//     pub fn prod(&self) -> Pin<Box<dyn Future<Output = T>>> {
-//         self.reduce("prod")
-//     }
-//     pub fn max(&self) -> Pin<Box<dyn Future<Output = T>>> {
-//         self.reduce("max")
-//     }
-// }
 
 impl<T: Dist> private::ArrayExecAm<T> for UnsafeArray<T> {
     fn team(&self) -> Pin<Arc<LamellarTeamRT>> {
@@ -706,6 +728,14 @@ impl<T: Dist> LamellarArray<T> for UnsafeArray<T> {
         let offset = self.inner.pe_offset_for_dist_index(pe, index)?;
         Some((pe, offset))
     }
+
+    fn first_global_index_for_pe(&self, pe: usize) -> Option<usize>{
+        self.inner.start_index_for_pe(pe)
+    }
+
+    fn last_global_index_for_pe(&self, pe: usize) -> Option<usize>{
+        self.inner.end_index_for_pe(pe)
+    }
 }
 
 impl<T: Dist> LamellarWrite for UnsafeArray<T> {}
@@ -799,6 +829,7 @@ impl<T: Dist + AmDist + 'static> UnsafeArray<T> {
 
 // This is esentially impl LamellarArrayReduce, but we man to explicity have UnsafeArray expose unsafe functions
 impl<T: Dist + AmDist + 'static> UnsafeArray<T> {
+    #[doc(alias("One-sided", "onesided"))]
     /// Perform a reduction on the entire distributed array, returning the value to the calling PE.
     ///
     /// Please see the documentation for the [register_reduction][lamellar_impl::register_reduction] procedural macro for
@@ -808,25 +839,34 @@ impl<T: Dist + AmDist + 'static> UnsafeArray<T> {
     /// Data in UnsafeArrays are always unsafe as there are no protections on how remote PE's or local threads may access this PE's local data.
     /// Any updates to local data are not guaranteed to be Atomic.
     ///
+    /// # One-sided Operation
+    /// The calling PE is responsible for launching `Reduce` active messages on the other PEs associated with the array.
+    /// the returned reduction result is only available on the calling PE  
+    ///
     /// # Examples
     /// ```
     /// use lamellar::array::prelude::*;
+    /// use rand::Rng;
     /// let world = LamellarWorldBuilder::new().build();
     /// let num_pes = world.num_pes();
     /// let array = AtomicArray::<usize>::new(&world,1000000,Distribution::Block);
-    /// let array_clone = array.clone()
-    /// let req = array.local_iter().for_each(move |_| {
-    ///     let index = rand::thread_rng().gen_range(0..array_clone.len());
-    ///     array_clone.add(index,1); //randomly at one to an element in the array.
-    /// });
-    /// let array = array.into_read_only(); //only returns once there is a single reference remaining on each PE
-    /// let sum = array.reduce("sum"); // equivalent to calling array.sum()
-    /// assert_eq!(array.len()*num_pes,sum);
+    /// let array_clone = array.clone();
+    /// unsafe { // THIS IS NOT SAFE -- we are randomly updating elements, no protections, updates may be lost... DONT DO THIS
+    ///     let req = array.local_iter().for_each(move |_| {
+    ///         let index = rand::thread_rng().gen_range(0..array_clone.len());
+    ///        array_clone.add(index,1); //randomly at one to an element in the array.
+    ///     });
+    /// }
+    /// array.wait_all();
+    /// array.barrier();
+    /// let sum = array.block_on(array.reduce("sum")); // equivalent to calling array.sum()
+    /// //assert_eq!(array.len()*num_pes,sum); // may or may not fail
     ///```
     pub unsafe fn reduce(&self, op: &str) -> Pin<Box<dyn Future<Output = T>>> {
         self.reduce_data(op, self.clone().into()).into_future()
     }
 
+    #[doc(alias("One-sided", "onesided"))]
     /// Perform a sum reduction on the entire distributed array, returning the value to the calling PE.
     ///
     /// This equivalent to `reduce("sum")`.
@@ -835,13 +875,18 @@ impl<T: Dist + AmDist + 'static> UnsafeArray<T> {
     /// Data in UnsafeArrays are always unsafe as there are no protections on how remote PE's or local threads may access this PE's local data.
     /// Any updates to local data are not guaranteed to be Atomic.
     ///
+    /// # One-sided Operation
+    /// The calling PE is responsible for launching `Sum` active messages on the other PEs associated with the array.
+    /// the returned sum reduction result is only available on the calling PE  
+    ///
     /// # Examples
     /// ```
     /// use lamellar::array::prelude::*;
+    /// use rand::Rng;
     /// let world = LamellarWorldBuilder::new().build();
     /// let num_pes = world.num_pes();
     /// let array = UnsafeArray::<usize>::new(&world,1000000,Distribution::Block);
-    /// let array_clone = array.clone()
+    /// let array_clone = array.clone();
     /// unsafe { // THIS IS NOT SAFE -- we are randomly updating elements, no protections, updates may be lost... DONT DO THIS
     ///     let req = array.local_iter().for_each(move |_| {
     ///         let index = rand::thread_rng().gen_range(0..array_clone.len());
@@ -849,14 +894,15 @@ impl<T: Dist + AmDist + 'static> UnsafeArray<T> {
     ///     });
     /// }
     /// array.wait_all();
-    /// array.barrier()
-    /// let sum = unsafe{array.sum()}; //Safe in this instance as we have ensured no updates are currently happening
-    /// assert_eq!(array.len()*num_pes,sum);//this may or may not fail
+    /// array.barrier();
+    /// let sum = array.block_on(unsafe{array.sum()}); //Safe in this instance as we have ensured no updates are currently happening
+    /// // assert_eq!(array.len()*num_pes,sum);//this may or may not fail
     ///```
     pub unsafe fn sum(&self) -> Pin<Box<dyn Future<Output = T>>> {
         self.reduce("sum")
     }
 
+    #[doc(alias("One-sided", "onesided"))]
     /// Perform a production reduction on the entire distributed array, returning the value to the calling PE.
     ///
     /// This equivalent to `reduce("prod")`.
@@ -865,28 +911,35 @@ impl<T: Dist + AmDist + 'static> UnsafeArray<T> {
     /// Data in UnsafeArrays are always unsafe as there are no protections on how remote PE's or local threads may access this PE's local data.
     /// Any updates to local data are not guaranteed to be Atomic.
     ///
+    /// # One-sided Operation
+    /// The calling PE is responsible for launching `Prod` active messages on the other PEs associated with the array.
+    /// the returned prod reduction result is only available on the calling PE  
+    ///
     /// # Examples
     /// ```
     /// use lamellar::array::prelude::*;
+    /// use rand::Rng;
     /// let world = LamellarWorldBuilder::new().build();
     /// let num_pes = world.num_pes();
     /// let array = UnsafeArray::<usize>::new(&world,10,Distribution::Block);
-    /// let array_clone = array.clone()
-    /// unsafe { // THIS IS NOT SAFE -- we are randomly updating elements, no protections, updates may be lost... DONT DO THIS
-    ///     array.local_iter().for_each(move |_| {
-    ///         let index = rand::thread_rng().gen_range(0..array_clone.len());
-    ///         array_clone.add(index,1); //randomly at one to an element in the array.
-    ///     })
-    /// };
+    /// unsafe { 
+    ///     let req = array.dist_iter_mut().enumerate().for_each(move |(i,elem)| {
+    ///         *elem = i+1;
+    ///     });
+    /// }
+    /// array.print();
     /// array.wait_all();
-    /// array.barrier()
-    /// let prod = unsafe{array.prod()}; //Safe in this instance as we have ensured no updates are currently happening
-    /// assert_eq!(num_pes.pow(array.len()),prod); //this may or may not fail
+    /// array.print();
+    /// let array = array.into_read_only(); //only returns once there is a single reference remaining on each PE
+    /// array.print();
+    /// let prod =  array.block_on(array.prod());
+    /// assert_eq!((1..=array.len()).product::<usize>(),prod);
     ///```
     pub unsafe fn prod(&self) -> Pin<Box<dyn Future<Output = T>>> {
         self.reduce("prod")
     }
 
+    #[doc(alias("One-sided", "onesided"))]
     /// Find the max element in the entire destributed array, returning to the calling PE
     ///
     /// This equivalent to `reduce("max")`.
@@ -895,23 +948,29 @@ impl<T: Dist + AmDist + 'static> UnsafeArray<T> {
     /// Data in UnsafeArrays are always unsafe as there are no protections on how remote PE's or local threads may access this PE's local data.
     /// Any updates to local data are not guaranteed to be Atomic.
     ///
+    /// # One-sided Operation
+    /// The calling PE is responsible for launching `Max` active messages on the other PEs associated with the array.
+    /// the returned max reduction result is only available on the calling PE  
+    ///
     /// # Examples
     /// ```
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let num_pes = world.num_pes();
     /// let array = UnsafeArray::<usize>::new(&world,10,Distribution::Block);
-    /// let array_clone = array.clone()
-    /// unsafe{array.dist_iter().enumerate().for_each(|(i,elem)| elem.store(i*2))}; //safe as we are accessing in a data parallel fashion
+    /// let array_clone = array.clone();
+    /// unsafe{array.dist_iter_mut().enumerate().for_each(|(i,elem)| *elem = i*2)}; //safe as we are accessing in a data parallel fashion
     /// array.wait_all();
-    /// array.barrier()
-    /// let max = unsafe{array.max()}; //Safe in this instance as we have ensured no updates are currently happening
+    /// array.barrier();
+    /// let max_req = unsafe{array.max()}; //Safe in this instance as we have ensured no updates are currently happening
+    /// let max = array.block_on(max_req);
     /// assert_eq!((array.len()-1)*2,max);
     ///```
     pub unsafe fn max(&self) -> Pin<Box<dyn Future<Output = T>>> {
         self.reduce("max")
     }
 
+    #[doc(alias("One-sided", "onesided"))]
     /// Find the min element in the entire destributed array, returning to the calling PE
     ///
     /// This equivalent to `reduce("min")`.
@@ -920,17 +979,22 @@ impl<T: Dist + AmDist + 'static> UnsafeArray<T> {
     /// Data in UnsafeArrays are always unsafe as there are no protections on how remote PE's or local threads may access this PE's local data.
     /// Any updates to local data are not guaranteed to be Atomic.
     ///
+    /// # One-sided Operation
+    /// The calling PE is responsible for launching `Min` active messages on the other PEs associated with the array.
+    /// the returned min reduction result is only available on the calling PE  
+    ///
     /// # Examples
     /// ```
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let num_pes = world.num_pes();
-    /// let array = AtomicArray::<usize>::new(&world,10,Distribution::Block);
-    /// let array_clone = array.clone()
-    /// unsafe{array.dist_iter().enumerate().for_each(|(i,elem)| elem.store(i*2))}; //safe as we are accessing in a data parallel fashion
+    /// let array = UnsafeArray::<usize>::new(&world,10,Distribution::Block);
+    /// let array_clone = array.clone();
+    /// unsafe{array.dist_iter_mut().enumerate().for_each(|(i,elem)| *elem = i*2)}; //safe as we are accessing in a data parallel fashion
     /// array.wait_all();
-    /// array.barrier()
-    /// let min = unsafe{array.min()}; //Safe in this instance as we have ensured no updates are currently happening
+    /// array.barrier();
+    /// let min_req = unsafe{array.min()}; //Safe in this instance as we have ensured no updates are currently happening
+    /// let min = array.block_on(min_req);
     /// assert_eq!(0,min);
     ///```
     pub unsafe fn min(&self) -> Pin<Box<dyn Future<Output = T>>> {
@@ -1213,6 +1277,29 @@ impl UnsafeArrayInner {
                     }
                 }
                 None
+            }
+        }
+    }
+
+    //return index relative to the subarray
+    // #[tracing::instrument(skip_all)]
+    pub(crate) fn end_index_for_pe(&self, pe: usize) -> Option<usize> {
+        self.start_index_for_pe(pe)?;
+        match self.distribution {
+            Distribution::Block => {
+                if pe == self.pe_for_dist_index(self.size - 1).unwrap(){
+                    Some(self.size - 1)
+                }
+                else {  
+                    Some(self.start_index_for_pe(pe+1)? -1)
+                }
+            }
+            Distribution::Cyclic => {
+                let start_i = self.start_index_for_pe(pe)?;
+                let num_elems = self.num_elems_pe(pe);
+                let num_pes = self.data.num_pes;
+                let end_i = start_i + (num_elems-1) * num_pes;
+                Some(end_i)
             }
         }
     }

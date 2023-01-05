@@ -8,6 +8,7 @@ pub use crate::array::read_only::ReadOnlyArray;
 pub use crate::array::{
     register_reduction, ArrayOps, Distribution, LamellarArray, LamellarArrayArithmeticReduce,
     LamellarArrayCompareReduce, LamellarArrayGet, LamellarArrayPut, LamellarArrayReduce, SubArray,
+    LamellarWriteArray,LamellarReadArray
 };
 
 pub use crate::array::iterator::distributed_iterator::{
@@ -25,8 +26,10 @@ pub use crate::array::operations::{
 // pub use crate::array::operations::*;
 
 #[doc(hidden)]
-pub use crate::active_messaging::{am, local_am, AmData, AmLocalData};
+pub use crate::active_messaging::ActiveMessaging;
+pub use crate::memregion::{RegisteredMemoryRegion,Dist};
 pub use crate::lamellar_team::LamellarTeam;
+pub use crate::lamellar_arch::*;
 #[doc(hidden)]
 pub use crate::lamellar_team::LamellarTeamRT;
 pub use crate::lamellar_world::LamellarWorld;

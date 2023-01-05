@@ -9,6 +9,10 @@
 //!     - consists of N PEs all capable of commnicating with one another
 //! - `Team` - A subset of the PEs that exist in the world
 //! - `AM` - short for [Active Message][crate::active_messaging]
+//! - `Collective Operation` - Generally means that all PEs (associated with a given distributed object) must explicitly participate in the operation, otherwise deadlock will occur.
+//!     - e.g. barriers, construction of new distributed objects
+//! - `One-sided Operation` - Generally means that only the calling PE is required for the operation to successfuly complete.
+//!     - e.g. accessing local data, waiting for local work to complete
 //!
 //! # Features
 //!
@@ -303,6 +307,10 @@ pub use custom_derive;
 // pub extern crate newtype_derive;
 #[doc(hidden)]
 pub use newtype_derive;
+
+lazy_static! {
+    pub(crate) static ref DEADLOCK_TIMEOUT: f64 = std::env::var("LAMELLAR_DEADLOCK_TIMEOUT").unwrap_or("600".to_string()).parse::<usize>().unwrap_or(600) as f64;
+}
 
 lazy_static! {
     pub(crate) static ref BINCODE: bincode::config::WithOtherTrailing<bincode::DefaultOptions, bincode::config::AllowTrailing> =

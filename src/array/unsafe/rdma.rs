@@ -3,7 +3,7 @@ use crate::array::r#unsafe::*;
 use crate::array::*;
 use crate::lamellar_request::LamellarRequest;
 use crate::memregion::{
-    AsBase, Dist, MemoryRegionRDMA, RTMemoryRegionRDMA, RegisteredMemoryRegion,
+    AsBase, Dist, MemoryRegionRDMA, RTMemoryRegionRDMA, RegisteredMemoryRegion,SubRegion
 };
 
 // use tracing::*;
@@ -271,6 +271,7 @@ impl<T: Dist> UnsafeArray<T> {
             .num_elements_on_pe_for_range(pe, start_index, len)
     }
 
+    #[doc(alias("One-sided", "onesided"))]
     /// Performs a raw RDMA "Put" of the data in the specified buffer into this array starting from the provided index
     ///
     /// The length of the Put is dictated by the length of the buffer.
@@ -286,6 +287,9 @@ impl<T: Dist> UnsafeArray<T> {
     /// This call is always unsafe as mutual exclusitivity is not enforced, i.e. many other reader/writers can exist simultaneously.
     /// Additionally, when this call returns the underlying fabric provider may or may not have already copied the data buffer
     ///
+    /// # One-sided Operation
+    /// the calling PE initaites the remote transfer
+    ///
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
@@ -295,8 +299,9 @@ impl<T: Dist> UnsafeArray<T> {
     /// let my_pe = world.my_pe();
     /// let array = UnsafeArray::<usize>::new(&world,12,Distribution::Block);
     /// let buf = world.alloc_one_sided_mem_region::<usize>(12);
+    /// let buf_len = buf.len();
     /// unsafe {
-    ///     array.dist_iter_mut().for_each(move |elem| *elem = buf.len()); //we will used this val as completion detection
+    ///     array.dist_iter_mut().for_each(move |elem| *elem = buf_len); //we will used this val as completion detection
     ///     for (i,elem) in buf.as_mut_slice()
     ///                          .expect("we just created it so we know its local")
     ///                          .iter_mut()
@@ -306,22 +311,22 @@ impl<T: Dist> UnsafeArray<T> {
     /// }
     /// array.wait_all();
     /// array.barrier();
-    /// println!("PE{my_pe} array data: {:?}",array.local_data());
+    /// println!("PE{my_pe} array data: {:?}",unsafe{array.local_data()});
     /// if my_pe == 0 { //only perfrom the transfer from one PE
     ///     unsafe {array.put_unchecked(0,&buf);}
     ///     println!();
     /// }
     /// // wait for the data to show up
-    /// for elem in array.local_data(){
-    ///     while elem == buf.len(){
+    /// for elem in unsafe{array.local_data()}{
+    ///     while *elem == buf.len(){
     ///         std::thread::yield_now();    
     ///     }
     /// }
     ///    
-    /// println!("PE{my_pe} array data: {:?}",array.local_data());
+    /// println!("PE{my_pe} array data: {:?}",unsafe{array.local_data()});
     ///```
     /// Possible output on A 4 PE system (ordering with respect to PEs may change)
-    ///```
+    ///```text
     /// PE0: array data [12,12,12]
     /// PE1: array data [12,12,12]
     /// PE2: array data [12,12,12]
@@ -351,6 +356,7 @@ impl<T: Dist> UnsafeArray<T> {
         };
     }
 
+    #[doc(alias("One-sided", "onesided"))]
     /// Performs a raw RDMA "Get" of the data in this array starting at the provided index into the specified buffer
     ///
     /// The length of the Get is dictated by the length of the buffer.
@@ -361,6 +367,9 @@ impl<T: Dist> UnsafeArray<T> {
     /// # Safety
     /// This call is always unsafe as mutual exclusitivity is not enforced, i.e. many other reader/writers can exist simultaneously.
     /// Additionally, when this call returns the underlying fabric provider may or may not have already copied the data buffer
+    ///
+    /// # One-sided Operation
+    /// the calling PE initaites the remote transfer
     ///
     /// # Examples
     ///```
@@ -386,8 +395,8 @@ impl<T: Dist> UnsafeArray<T> {
     ///     println!();
     /// }
     /// // wait for the data to show up
-    /// for elem in buf.as_slice().unwrap(){
-    ///     while elem == buf.len(){
+    /// for elem in unsafe{buf.as_slice().unwrap()}{
+    ///     while *elem == buf.len(){
     ///         std::thread::yield_now();    
     ///     }
     /// }
@@ -395,7 +404,7 @@ impl<T: Dist> UnsafeArray<T> {
     /// println!("PE{my_pe} buf data: {:?}",unsafe{buf.as_slice().unwrap()});
     ///```
     /// Possible output on A 4 PE system (ordering with respect to PEs may change)
-    ///```
+    ///```text
     /// PE0: buf data [12,12,12,12,12,12,12,12,12,12,12,12]
     /// PE1: buf data [12,12,12,12,12,12,12,12,12,12,12,12]
     /// PE2: buf data [12,12,12,12,12,12,12,12,12,12,12,12]
@@ -425,6 +434,7 @@ impl<T: Dist> UnsafeArray<T> {
         };
     }
 
+    #[doc(alias("One-sided", "onesided"))]
     /// Performs a blocking (active message based) "Get" of the data in this array starting at the provided index into the specified buffer
     ///
     /// The length of the Get is dictated by the length of the buffer.
@@ -434,6 +444,9 @@ impl<T: Dist> UnsafeArray<T> {
     /// # Safety
     /// This call is always unsafe as mutual exclusitivity is not enforced, i.e. many other reader/writers can exist simultaneously.
     /// Additionally, when this call returns the underlying fabric provider may or may not have already copied the data buffer
+    ///
+    /// # One-sided Operation
+    /// the calling PE initaites the remote transfer
     ///
     /// # Examples
     ///```
@@ -462,7 +475,7 @@ impl<T: Dist> UnsafeArray<T> {
     /// }
     ///```
     /// Possible output on A 4 PE system (ordering with respect to PEs may change)
-    ///```
+    ///```text
     /// PE0: buf data [12,12,12,12,12,12,12,12,12,12,12,12]
     /// PE1: buf data [12,12,12,12,12,12,12,12,12,12,12,12]
     /// PE2: buf data [12,12,12,12,12,12,12,12,12,12,12,12]
@@ -493,6 +506,7 @@ impl<T: Dist> UnsafeArray<T> {
         };
     }
 
+    #[doc(alias("One-sided", "onesided"))]
     /// Performs an (active message based) "Get" of the data in this array starting at the provided index into the specified buffer
     ///
     /// The length of the Get is dictated by the length of the buffer.
@@ -502,6 +516,9 @@ impl<T: Dist> UnsafeArray<T> {
     /// # Safety
     /// This call is always unsafe as mutual exclusitivity is not enforced, i.e. many other reader/writers can exist simultaneously.
     /// Additionally, when this call returns the underlying fabric provider may or may not have already copied the data buffer
+    ///
+    /// # One-sided Operation
+    /// the calling PE initaites the remote transfer
     ///
     /// # Examples
     ///```
@@ -530,7 +547,7 @@ impl<T: Dist> UnsafeArray<T> {
     /// }
     ///```
     /// Possible output on A 4 PE system (ordering with respect to PEs may change)
-    ///```
+    ///```text
     /// PE0: buf data [12,12,12,12,12,12,12,12,12,12,12,12]
     /// PE1: buf data [12,12,12,12,12,12,12,12,12,12,12,12]
     /// PE2: buf data [12,12,12,12,12,12,12,12,12,12,12,12]
@@ -561,6 +578,7 @@ impl<T: Dist> UnsafeArray<T> {
         })
     }
 
+    #[doc(alias("One-sided", "onesided"))]
     /// Retrieves the element in this array located at the specified `index`
     ///
     /// This call returns a future that can be awaited to retrieve to requested element
@@ -569,6 +587,9 @@ impl<T: Dist> UnsafeArray<T> {
     /// This call is always unsafe as mutual exclusitivity is not enforced, i.e. many other reader/writers can exist simultaneously.
     /// Additionally, when this call returns the underlying fabric provider may or may not have already copied the data buffer
     ///
+    /// # One-sided Operation
+    /// the calling PE initaites the remote transfer
+    ///
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
@@ -576,12 +597,13 @@ impl<T: Dist> UnsafeArray<T> {
     ///
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
     /// let array = UnsafeArray::<usize>::new(&world,12,Distribution::Block);
     /// unsafe {
-    ///     array.dist_iter_mut().enumerate().for_each(|(i,elem)| *elem = my_pe); //we will used this val as completion detection
+    ///     array.dist_iter_mut().enumerate().for_each(move|(i,elem)| *elem = my_pe); //we will used this val as completion detection
     ///     array.wait_all();
     ///     array.barrier();
-    ///     println!("PE{my_pe} array data: {:?}",unsafe{buf.as_slice().unwrap()});
+    ///     println!("PE{my_pe} array data: {:?}",unsafe{array.local_data()});
     ///     let index = ((my_pe+1)%num_pes) * array.num_elems_local(); // get first index on PE to the right (with wrap arround)
     ///     let at_req = array.at(index);
     ///     let val = array.block_on(at_req);
@@ -589,7 +611,7 @@ impl<T: Dist> UnsafeArray<T> {
     /// }
     ///```
     /// Possible output on A 4 PE system (ordering with respect to PEs may change)
-    ///```
+    ///```text
     /// PE0: buf data [0,0,0]
     /// PE1: buf data [1,1,1]
     /// PE2: buf data [2,2,2]
