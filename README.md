@@ -305,7 +305,7 @@ HISTORY
 - version 0.4
   - Distributed Arcs (Darcs: distributed atomically reference counted objects)
   - LamellarArrays
-    - UnsafeArray, AtomicArray, LocalLockArray, ReadOnlyArray, LocalOnlyArray
+    - UnsafeArray, AtomicArray, LocalLockArray, GlobalLockArray, ReadOnlyArray, LocalOnlyArray
     - Distributed Iteration
     - Local Iteration
   - SHMEM backend

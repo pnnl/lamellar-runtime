@@ -905,6 +905,53 @@ impl<T: Dist> AtomicArray<T> {
             AtomicArray::GenericAtomicArray(array) => array.array.into(),
         }
     }
+
+    #[doc(alias = "Collective")]
+    /// Convert this AtomicArray into a (safe) [GlobalLockArray][crate::array::GlobalLockArray]
+    ///
+    /// This is a collective and blocking function which will only return when there is at most a single reference on each PE
+    /// to this Array, and that reference is currently calling this function.
+    ///
+    /// When it returns, it is gauranteed that there are only `GlobalLockArray` handles to the underlying data
+    ///
+    /// # Collective Operation
+    /// Requires all PEs associated with the `array` to enter the call otherwise deadlock will occur (i.e. team barriers are being called internally)
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic);
+    ///
+    /// let global_lock_array = array.into_global_lock();
+    ///```
+    /// # Warning
+    /// Because this call blocks there is the possibility for deadlock to occur, as highlighted below:
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic);
+    ///
+    /// let array1 = array.clone();
+    /// let slice = unsafe {array1.local_data()};
+    ///
+    /// // no borrows to this specific instance (array) so it can enter the "into_global_lock" call
+    /// // but array1 will not be dropped until after mut_slice is dropped.
+    /// // Given the ordering of these calls we will get stuck in "into_global_lock" as it
+    /// // waits for the reference count to go down to "1" (but we will never be able to drop slice/array1).
+    /// let global_lock_array = array.into_global_lock();
+    /// global_lock_array.print();
+    /// println!("{:?}",slice.at(0).load());
+    ///```
+    pub fn into_global_lock(self) -> GlobalLockArray<T> {
+        // println!("atomic into_global_lock");
+        match self {
+            AtomicArray::NativeAtomicArray(array) => array.array.into(),
+            AtomicArray::GenericAtomicArray(array) => array.array.into(),
+        }
+    }
 }
 
 impl<T: Dist + 'static> From<UnsafeArray<T>> for AtomicArray<T> {
@@ -934,6 +981,13 @@ impl<T: Dist + 'static> From<ReadOnlyArray<T>> for AtomicArray<T> {
 impl<T: Dist + 'static> From<LocalLockArray<T>> for AtomicArray<T> {
     fn from(array: LocalLockArray<T>) -> Self {
         // println!("Converting from LocalLockArray to AtomicArray");
+        unsafe { array.into_inner().into() }
+    }
+}
+
+impl<T: Dist + 'static> From<GlobalLockArray<T>> for AtomicArray<T> {
+    fn from(array: GlobalLockArray<T>) -> Self {
+        // println!("Converting from GlobalLockArray to AtomicArray");
         unsafe { array.into_inner().into() }
     }
 }

@@ -39,6 +39,13 @@ macro_rules! initialize_array {
             .for_each(move |(i, x)| *x = i as $t);
         $array.wait_all();
     };
+    (GlobalLockArray,$array:ident,$t:ty) => {
+        $array
+            .dist_iter_mut()
+            .enumerate()
+            .for_each(move |(i, x)| *x = i as $t);
+        $array.wait_all();
+    };
     (ReadOnlyArray,$array:ident,$t:ty) => {
         // println!("into unsafe");
         let temp = $array.into_unsafe();
@@ -73,6 +80,14 @@ macro_rules! initialize_array_range {
         subarray.wait_all();
     }};
     (LocalLockArray,$array:ident,$t:ty,$range:expr) => {{
+        let subarray = $array.sub_array($range);
+        subarray
+            .dist_iter_mut()
+            .enumerate()
+            .for_each(move |(i, x)| *x = i as $t);
+        subarray.wait_all();
+    }};
+    (GlobalLockArray,$array:ident,$t:ty,$range:expr) => {{
         let subarray = $array.sub_array($range);
         subarray
             .dist_iter_mut()
@@ -305,6 +320,23 @@ fn main() {
             "isize" => get_test!(LocalLockArray, isize, len, dist_type),
             "f32" => get_test!(LocalLockArray, f32, len, dist_type),
             "f64" => get_test!(LocalLockArray, f64, len, dist_type),
+            _ => eprintln!("unsupported element type"),
+        },
+        "GlobalLockArray" => match elem.as_str() {
+            "u8" => get_test!(GlobalLockArray, u8, len, dist_type),
+            "u16" => get_test!(GlobalLockArray, u16, len, dist_type),
+            "u32" => get_test!(GlobalLockArray, u32, len, dist_type),
+            "u64" => get_test!(GlobalLockArray, u64, len, dist_type),
+            "u128" => get_test!(GlobalLockArray, u128, len, dist_type),
+            "usize" => get_test!(GlobalLockArray, usize, len, dist_type),
+            "i8" => get_test!(GlobalLockArray, i8, len, dist_type),
+            "i16" => get_test!(GlobalLockArray, i16, len, dist_type),
+            "i32" => get_test!(GlobalLockArray, i32, len, dist_type),
+            "i64" => get_test!(GlobalLockArray, i64, len, dist_type),
+            "i128" => get_test!(GlobalLockArray, i128, len, dist_type),
+            "isize" => get_test!(GlobalLockArray, isize, len, dist_type),
+            "f32" => get_test!(GlobalLockArray, f32, len, dist_type),
+            "f64" => get_test!(GlobalLockArray, f64, len, dist_type),
             _ => eprintln!("unsupported element type"),
         },
         "ReadOnlyArray" => match elem.as_str() {

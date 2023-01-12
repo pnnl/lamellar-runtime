@@ -487,6 +487,11 @@ impl<T: Dist> GenericAtomicArray<T> {
         self.array.into()
     }
 
+    pub fn into_global_lock(self) -> GlobalLockArray<T> {
+        // println!("generic into_local_lock");
+        self.array.into()
+    }
+
     #[doc(hidden)]
     pub fn lock_index(&self, index: usize) -> MutexGuard<()> {
         // if let Some(ref locks) = *self.locks {

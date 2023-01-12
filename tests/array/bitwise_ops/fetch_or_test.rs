@@ -18,6 +18,11 @@ macro_rules! initialize_array {
         $array.wait_all();
         $array.barrier();
     };
+    (GlobalLockArray,$array:ident,$init_val:ident) => {
+        $array.dist_iter_mut().for_each(move |x| *x = $init_val);
+        $array.wait_all();
+        $array.barrier();
+    };
 }
 
 macro_rules! check_val {
@@ -31,6 +36,12 @@ macro_rules! check_val {
         }
     };
     (LocalLockArray,$val:ident,$max_val:ident,$valid:ident) => {
+        if (($val - $max_val) as f32).abs() > 0.0001 {
+            //all updates should be preserved
+            $valid = false;
+        }
+    };
+    (GlobalLockArray,$val:ident,$max_val:ident,$valid:ident) => {
         if (($val - $max_val) as f32).abs() > 0.0001 {
             //all updates should be preserved
             $valid = false;
@@ -224,6 +235,21 @@ fn main() {
             "i64" => fetch_or_test!(LocalLockArray, i64, len, dist_type),
             "i128" => fetch_or_test!(LocalLockArray, i128, len, dist_type),
             "isize" => fetch_or_test!(LocalLockArray, isize, len, dist_type),
+            _ => eprintln!("unsupported element type"),
+        },
+        "GlobalLockArray" => match elem.as_str() {
+            "u8" => fetch_or_test!(GlobalLockArray, u8, len, dist_type),
+            "u16" => fetch_or_test!(GlobalLockArray, u16, len, dist_type),
+            "u32" => fetch_or_test!(GlobalLockArray, u32, len, dist_type),
+            "u64" => fetch_or_test!(GlobalLockArray, u64, len, dist_type),
+            "u128" => fetch_or_test!(GlobalLockArray, u128, len, dist_type),
+            "usize" => fetch_or_test!(GlobalLockArray, usize, len, dist_type),
+            "i8" => fetch_or_test!(GlobalLockArray, i8, len, dist_type),
+            "i16" => fetch_or_test!(GlobalLockArray, i16, len, dist_type),
+            "i32" => fetch_or_test!(GlobalLockArray, i32, len, dist_type),
+            "i64" => fetch_or_test!(GlobalLockArray, i64, len, dist_type),
+            "i128" => fetch_or_test!(GlobalLockArray, i128, len, dist_type),
+            "isize" => fetch_or_test!(GlobalLockArray, isize, len, dist_type),
             _ => eprintln!("unsupported element type"),
         },
         _ => eprintln!("unsupported array type"),
