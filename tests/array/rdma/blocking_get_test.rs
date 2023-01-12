@@ -45,6 +45,13 @@ macro_rules! initialize_array {
             .for_each(move |(i, x)| *x = i as $t);
         $array.wait_all();
     };
+    (GlobalLockArray,$array:ident,$t:ty) => {
+        $array
+            .dist_iter_mut()
+            .enumerate()
+            .for_each(move |(i, x)| *x = i as $t);
+        $array.wait_all();
+    };
     (ReadOnlyArray,$array:ident,$t:ty) => {
         let temp = $array.into_unsafe();
         unsafe {
@@ -77,6 +84,14 @@ macro_rules! initialize_array_range {
         subarray.wait_all();
     }};
     (LocalLockArray,$array:ident,$t:ty,$range:expr) => {{
+        let subarray = $array.sub_array($range);
+        subarray
+            .dist_iter_mut()
+            .enumerate()
+            .for_each(move |(i, x)| *x = i as $t);
+        subarray.wait_all();
+    }};
+    (GlobalLockArray,$array:ident,$t:ty,$range:expr) => {{
         let subarray = $array.sub_array($range);
         subarray
             .dist_iter_mut()

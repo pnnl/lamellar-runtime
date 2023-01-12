@@ -35,6 +35,7 @@
 //!      - [NativeAtomicArray]: utilizes the language atomic types e.g AtomicUsize, AtomicI8, etc.
 //!      - [GenericAtomicArray]: Each element is protected by a 1-byte mutex
 //!  - [LocalLockArray]: The data on each PE is protected by a local RwLock
+//!  - [GlobalLockArray]: The data on each PE is protected by a global RwLock
 //!
 //! # Type conversion
 //! Lamellar offers a variety of methods to convert between different array types and other data structures.
@@ -52,6 +53,7 @@
 //!
 //! // convert between array types    
 //! let array = array.into_local_lock(); // LocalLockArray
+//! let array = array.into_global_lock(); // GlobalLockArray
 //! let array = array.into_atomic(); // AtomicArray
 //! let array = array.into_read_only(); // ReadOnlyArray
 //!
@@ -133,6 +135,12 @@ pub(crate) mod local_lock_atomic;
 pub use local_lock_atomic::{
     operations::LocalLockArrayOpBuf, LocalLockArray, LocalLockByteArray, LocalLockByteArrayWeak,
     LocalLockLocalData, LocalLockMutLocalData,
+};
+
+pub(crate) mod global_lock_atomic;
+pub use global_lock_atomic::{
+    operations::GlobalLockArrayOpBuf, GlobalLockArray, GlobalLockByteArray, GlobalLockByteArrayWeak,
+    GlobalLockLocalData, GlobalLockMutLocalData,
 };
 
 pub mod iterator;
@@ -390,6 +398,7 @@ pub enum LamellarReadArray<T: Dist + 'static> {
     ReadOnlyArray(ReadOnlyArray<T>),
     AtomicArray(AtomicArray<T>),
     LocalLockArray(LocalLockArray<T>),
+    GlobalLockArray(GlobalLockArray<T>),
 }
 
 #[doc(hidden)]
@@ -403,6 +412,7 @@ pub enum LamellarByteArray {
     NativeAtomicArray(NativeAtomicByteArray),
     GenericAtomicArray(GenericAtomicByteArray),
     LocalLockArray(LocalLockByteArray),
+    GlobalLockArray(GlobalLockByteArray),
 }
 
 impl<T: Dist + 'static> crate::active_messaging::DarcSerde for LamellarReadArray<T> {
@@ -413,6 +423,7 @@ impl<T: Dist + 'static> crate::active_messaging::DarcSerde for LamellarReadArray
             LamellarReadArray::ReadOnlyArray(array) => array.ser(num_pes, darcs),
             LamellarReadArray::AtomicArray(array) => array.ser(num_pes, darcs),
             LamellarReadArray::LocalLockArray(array) => array.ser(num_pes, darcs),
+            LamellarReadArray::GlobalLockArray(array) => array.ser(num_pes, darcs),
         }
     }
     fn des(&self, cur_pe: Result<usize, crate::IdError>) {
@@ -422,6 +433,7 @@ impl<T: Dist + 'static> crate::active_messaging::DarcSerde for LamellarReadArray
             LamellarReadArray::ReadOnlyArray(array) => array.des(cur_pe),
             LamellarReadArray::AtomicArray(array) => array.des(cur_pe),
             LamellarReadArray::LocalLockArray(array) => array.des(cur_pe),
+            LamellarReadArray::GlobalLockArray(array) => array.des(cur_pe),
         }
     }
 }
@@ -434,6 +446,7 @@ pub enum LamellarWriteArray<T: Dist> {
     UnsafeArray(UnsafeArray<T>),
     AtomicArray(AtomicArray<T>),
     LocalLockArray(LocalLockArray<T>),
+    GlobalLockArray(GlobalLockArray<T>),
 }
 
 impl<T: Dist + 'static> crate::active_messaging::DarcSerde for LamellarWriteArray<T> {
@@ -443,6 +456,7 @@ impl<T: Dist + 'static> crate::active_messaging::DarcSerde for LamellarWriteArra
             LamellarWriteArray::UnsafeArray(array) => array.ser(num_pes, darcs),
             LamellarWriteArray::AtomicArray(array) => array.ser(num_pes, darcs),
             LamellarWriteArray::LocalLockArray(array) => array.ser(num_pes, darcs),
+            LamellarWriteArray::GlobalLockArray(array) => array.ser(num_pes, darcs),
         }
     }
     fn des(&self, cur_pe: Result<usize, crate::IdError>) {
@@ -451,6 +465,7 @@ impl<T: Dist + 'static> crate::active_messaging::DarcSerde for LamellarWriteArra
             LamellarWriteArray::UnsafeArray(array) => array.des(cur_pe),
             LamellarWriteArray::AtomicArray(array) => array.des(cur_pe),
             LamellarWriteArray::LocalLockArray(array) => array.des(cur_pe),
+            LamellarWriteArray::GlobalLockArray(array) => array.des(cur_pe),
         }
     }
 }
@@ -461,6 +476,7 @@ impl<T: Dist + AmDist + 'static> LamellarArrayReduce<T> for LamellarReadArray<T>
             LamellarReadArray::UnsafeArray(array) => unsafe { array.reduce(reduction) },
             LamellarReadArray::AtomicArray(array) => array.reduce(reduction),
             LamellarReadArray::LocalLockArray(array) => array.reduce(reduction),
+            LamellarReadArray::GlobalLockArray(array) => array.reduce(reduction),
             LamellarReadArray::ReadOnlyArray(array) => array.reduce(reduction),
         }
     }
@@ -474,6 +490,7 @@ impl<T: Dist + AmDist + ElementArithmeticOps + 'static> LamellarArrayArithmeticR
             LamellarReadArray::UnsafeArray(array) => unsafe { array.sum() },
             LamellarReadArray::AtomicArray(array) => array.sum(),
             LamellarReadArray::LocalLockArray(array) => array.sum(),
+            LamellarReadArray::GlobalLockArray(array) => array.sum(),
             LamellarReadArray::ReadOnlyArray(array) => array.sum(),
         }
     }
@@ -482,6 +499,7 @@ impl<T: Dist + AmDist + ElementArithmeticOps + 'static> LamellarArrayArithmeticR
             LamellarReadArray::UnsafeArray(array) => unsafe { array.prod() },
             LamellarReadArray::AtomicArray(array) => array.prod(),
             LamellarReadArray::LocalLockArray(array) => array.prod(),
+            LamellarReadArray::GlobalLockArray(array) => array.prod(),
             LamellarReadArray::ReadOnlyArray(array) => array.prod(),
         }
     }
@@ -494,6 +512,7 @@ impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static> LamellarArrayCompa
             LamellarReadArray::UnsafeArray(array) => unsafe { array.max() },
             LamellarReadArray::AtomicArray(array) => array.max(),
             LamellarReadArray::LocalLockArray(array) => array.max(),
+            LamellarReadArray::GlobalLockArray(array) => array.max(),
             LamellarReadArray::ReadOnlyArray(array) => array.max(),
         }
     }
@@ -502,6 +521,7 @@ impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static> LamellarArrayCompa
             LamellarReadArray::UnsafeArray(array) => unsafe { array.min() },
             LamellarReadArray::AtomicArray(array) => array.min(),
             LamellarReadArray::LocalLockArray(array) => array.min(),
+            LamellarReadArray::GlobalLockArray(array) => array.min(),
             LamellarReadArray::ReadOnlyArray(array) => array.min(),
         }
     }
@@ -513,6 +533,7 @@ impl<T: Dist + AmDist + 'static> LamellarArrayReduce<T> for LamellarWriteArray<T
             LamellarWriteArray::UnsafeArray(array) => unsafe { array.reduce(reduction) },
             LamellarWriteArray::AtomicArray(array) => array.reduce(reduction),
             LamellarWriteArray::LocalLockArray(array) => array.reduce(reduction),
+            LamellarWriteArray::GlobalLockArray(array) => array.reduce(reduction),
         }
     }
 }
@@ -524,6 +545,7 @@ impl<T: Dist + AmDist + ElementArithmeticOps + 'static> LamellarArrayArithmeticR
             LamellarWriteArray::UnsafeArray(array) => unsafe { array.sum() },
             LamellarWriteArray::AtomicArray(array) => array.sum(),
             LamellarWriteArray::LocalLockArray(array) => array.sum(),
+            LamellarWriteArray::GlobalLockArray(array) => array.sum(),
         }
     }
     fn prod(&self) -> Pin<Box<dyn Future<Output = T>>> {
@@ -531,6 +553,7 @@ impl<T: Dist + AmDist + ElementArithmeticOps + 'static> LamellarArrayArithmeticR
             LamellarWriteArray::UnsafeArray(array) => unsafe { array.prod() },
             LamellarWriteArray::AtomicArray(array) => array.prod(),
             LamellarWriteArray::LocalLockArray(array) => array.prod(),
+            LamellarWriteArray::GlobalLockArray(array) => array.prod(),
         }
     }
 }
@@ -543,6 +566,7 @@ impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static> LamellarArrayCompa
             LamellarWriteArray::UnsafeArray(array) => unsafe { array.max() },
             LamellarWriteArray::AtomicArray(array) => array.max(),
             LamellarWriteArray::LocalLockArray(array) => array.max(),
+            LamellarWriteArray::GlobalLockArray(array) => array.max(),
         }
     }
     fn min(&self) -> Pin<Box<dyn Future<Output = T>>> {
@@ -550,6 +574,7 @@ impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static> LamellarArrayCompa
             LamellarWriteArray::UnsafeArray(array) => unsafe { array.min() },
             LamellarWriteArray::AtomicArray(array) => array.min(),
             LamellarWriteArray::LocalLockArray(array) => array.min(),
+            LamellarWriteArray::GlobalLockArray(array) => array.min(),
         }
     }
 }
@@ -558,7 +583,7 @@ pub(crate) mod private {
     use crate::active_messaging::*;
     use crate::array::{
         AtomicArray, /*NativeAtomicArray, GenericAtomicArray,*/ LamellarReadArray,
-        LamellarWriteArray, LocalLockArray, ReadOnlyArray, UnsafeArray,
+        LamellarWriteArray, LocalLockArray, GlobalLockArray, ReadOnlyArray, UnsafeArray,
     };
     use crate::lamellar_request::{LamellarMultiRequest, LamellarRequest};
     use crate::memregion::Dist;

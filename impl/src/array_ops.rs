@@ -431,6 +431,11 @@ fn create_buf_ops(
             quote! {}, //no explicit lock since the slice handle is a lock guard
             quote! {let mut slice = self.data.write_local_data();}, //this is the lock
         )
+    } else if array_type == "GlobalLockArray" {
+        (
+            quote! {}, //no explicit lock since the slice handle is a lock guard
+            quote! {let mut slice = self.data.async_write_local_data().await;}, //this is the lock
+        )
     } else if array_type == "ReadOnlyArray" {
         (
             quote! {}, //no explicit lock since the slice handle is a lock guard
@@ -846,7 +851,11 @@ fn create_buffered_ops(
     let mut atomic_array_types: Vec<(syn::Ident, syn::Ident)> = vec![(
         quote::format_ident!("LocalLockArray"),
         quote::format_ident!("LocalLockByteArrayWeak"),
-    )];
+    ),
+    (
+        quote::format_ident!("GlobalLockArray"),
+        quote::format_ident!("GlobalLockByteArrayWeak"),
+    ),];
 
     if native {
         atomic_array_types.push((

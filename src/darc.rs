@@ -89,6 +89,7 @@ pub(crate) enum DarcMode {
     GenericAtomicArray,
     NativeAtomicArray,
     LocalLockArray,
+    GlobalLockArray,
 }
 
 #[lamellar_impl::AmDataRT(Debug)]
@@ -846,6 +847,8 @@ impl<T: 'static> Drop for Darc<T> {
             // }
             else if local_mode!(DarcMode::LocalLockArray, mode_refs, inner) {
                 launch_drop!(DarcMode::LocalLockArray, inner, self.inner);
+            } else if local_mode!(DarcMode::GlobalLockArray, mode_refs, inner) {
+                launch_drop!(DarcMode::GlobalLockArray, inner, self.inner);
             } else if local_mode!(DarcMode::GenericAtomicArray, mode_refs, inner) {
                 launch_drop!(DarcMode::GenericAtomicArray, inner, self.inner);
             } else if local_mode!(DarcMode::NativeAtomicArray, mode_refs, inner) {

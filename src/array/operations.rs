@@ -588,9 +588,11 @@ pub enum OpInputEnum<'a, T: Dist> {
     Val(T),
     Slice(&'a [T]),
     Vec(Vec<T>),
-    NativeAtomicArray(NativeAtomicLocalData<T>),
-    GenericAtomicArray(GenericAtomicLocalData<T>),
-    LocalLockArray(LocalLockLocalData<'a, T>),
+    NativeAtomicLocalData(NativeAtomicLocalData<T>),
+    GenericAtomicLocalData(GenericAtomicLocalData<T>),
+    LocalLockLocalData(LocalLockLocalData<'a, T>),
+    GlobalLockLocalData(GlobalLockLocalData<'a, T>),
+    
     // while it would be convienient to directly use the following, doing so
     // is ambiguous with respect to both safety (Memregions and UnsafeArray)
     // but also it hides the fact we are only operating on the local segment of an array or memory region
@@ -599,6 +601,7 @@ pub enum OpInputEnum<'a, T: Dist> {
     // UnsafeArray(UnsafeArray<T>),
     // ReadOnlyArray(ReadOnlyArray<T>),
     // AtomicArray(AtomicArray<T>),
+    
 }
 
 impl<'a, T: Dist> OpInputEnum<'_, T> {
@@ -608,6 +611,10 @@ impl<'a, T: Dist> OpInputEnum<'_, T> {
             OpInputEnum::Val(v) => Box::new(std::iter::repeat(v).map(|elem| *elem)),
             OpInputEnum::Slice(s) => Box::new(s.iter().map(|elem| *elem)),
             OpInputEnum::Vec(v) => Box::new(v.iter().map(|elem| *elem)),
+            OpInputEnum::NativeAtomicLocalData(a) => Box::new(a.iter().map(|elem| elem.load())),
+            OpInputEnum::GenericAtomicLocalData(a) => Box::new(a.iter().map(|elem| elem.load())),
+            OpInputEnum::LocalLockLocalData(a) => Box::new(a.iter().map(|elem| *elem)),
+            OpInputEnum::GlobalLockLocalData(a) => Box::new(a.iter().map(|elem| *elem)),
             // OpInputEnum::MemoryRegion(mr) => Box::new(
             //     unsafe { mr.as_slice() }
             //         .expect("memregion not local")
@@ -617,9 +624,7 @@ impl<'a, T: Dist> OpInputEnum<'_, T> {
             // OpInputEnum::UnsafeArray(a) => Box::new(unsafe{a.local_data()}.iter().map(|elem| *elem)),
             // OpInputEnum::ReadOnlyArray(a) => Box::new(a.local_data().iter().map(|elem| *elem)),
             // OpInputEnum::AtomicArray(a) => Box::new(a.local_data().iter().map(|elem| elem.load())),
-            OpInputEnum::NativeAtomicArray(a) => Box::new(a.iter().map(|elem| elem.load())),
-            OpInputEnum::GenericAtomicArray(a) => Box::new(a.iter().map(|elem| elem.load())),
-            OpInputEnum::LocalLockArray(a) => Box::new(a.iter().map(|elem| *elem)),
+            
         }
     }
     #[tracing::instrument(skip_all)]
@@ -628,15 +633,17 @@ impl<'a, T: Dist> OpInputEnum<'_, T> {
             OpInputEnum::Val(_) => 1,
             OpInputEnum::Slice(s) => s.len(),
             OpInputEnum::Vec(v) => v.len(),
+            OpInputEnum::NativeAtomicLocalData(a) => a.len(),
+            OpInputEnum::GenericAtomicLocalData(a) => a.len(),
+            OpInputEnum::LocalLockLocalData(a) => a.len(),
+            OpInputEnum::GlobalLockLocalData(a) => a.len(),
             // OpInputEnum::MemoryRegion(mr) => {
             //     unsafe { mr.as_slice() }.expect("memregion not local").len()
             // }
             // OpInputEnum::UnsafeArray(a) => unsafe{a.local_data()}.len(),
             // OpInputEnum::ReadOnlyArray(a) => a.local_data().len(),
             // OpInputEnum::AtomicArray(a) => unsafe{a.__local_as_slice().len()},
-            OpInputEnum::NativeAtomicArray(a) => a.len(),
-            OpInputEnum::GenericAtomicArray(a) => a.len(),
-            OpInputEnum::LocalLockArray(a) => a.len(),
+            
         }
     }
 
@@ -646,13 +653,15 @@ impl<'a, T: Dist> OpInputEnum<'_, T> {
             OpInputEnum::Val(v) => *v,
             OpInputEnum::Slice(s) => *s.first().expect("slice is empty"),
             OpInputEnum::Vec(v) => *v.first().expect("vec is empty"),
+            OpInputEnum::NativeAtomicLocalData(a) => a.at(0).load(),
+            OpInputEnum::GenericAtomicLocalData(a) => a.at(0).load(),
+            OpInputEnum::LocalLockLocalData(a) => *a.first().expect("array is empty"),
+            OpInputEnum::GlobalLockLocalData(a) => *a.first().expect("array is empty"),
             // OpInputEnum::MemoryRegion(mr) => *unsafe { mr.as_slice() }
             //     .expect("memregion not local")
             //     .first()
             //     .expect("memregion is empty"),
-            OpInputEnum::NativeAtomicArray(a) => a.at(0).load(),
-            OpInputEnum::GenericAtomicArray(a) => a.at(0).load(),
-            OpInputEnum::LocalLockArray(a) => *a.first().expect("array is empty"),
+            
         }
     }
 }
@@ -678,8 +687,8 @@ impl<'a, T: Dist> OpInputEnum<'_, T> {
 /// Methods that return a batch-compatible input type (and the array type that provides it):
 /// - `local_data`- ([AtomicArray][crate::array::AtomicArray], [ReadOnlyArray][crate::array::ReadOnlyArray])
 /// - `mut_local_data` - ([AtomicArray][crate::array::AtomicArray], [ReadOnlyArray][crate::array::ReadOnlyArray])
-/// - `read_local_data` - ([LocalLockArray][crate::array::LocalLockArray])
-/// - `write_local_data` -([LocalLockArray][crate::array::LocalLockArray])
+/// - `read_local_data` - ([LocalLockArray][crate::array::LocalLockArray],[GlobalLockArray][crate::array::GlobalLockArray])
+/// - `write_local_data` -([LocalLockArray][crate::array::LocalLockArray],[GlobalLockArray][crate::array::GlobalLockArray])
 ///
 /// Batch-compatible input types:
 /// - T and &T
@@ -692,6 +701,9 @@ impl<'a, T: Dist> OpInputEnum<'_, T> {
 /// - [LocalLockLocalData][crate::array::local_lock_atomic::LocalLockLocalData]
 ///     - ```local_lock_array.read_local_data();```
 ///     - ```local_lock_array.write_local_data();```
+/// - [GlobalLockLocalData][crate::array::global_lock_atomic::GlobalLockLocalData]
+///     - ```global_lock_array.read_local_data();```
+///     - ```global_lock_array.write_local_data();```
 ///
 /// It is possible to use a LamellarMemoryRegion or UnsafeArray as the parent source, but these will require unsafe calls to retrieve the underlying slices.
 /// The retrieved slices can then be used for the batched operation
@@ -907,7 +919,7 @@ impl<'a, T: Dist> OpInput<'a, T> for &'a LocalLockLocalData<'_, T> {
                 let sub_data = self
                     .clone()
                     .into_sub_data(i * num_per_batch, (i + 1) * num_per_batch);
-                iters.push(OpInputEnum::LocalLockArray(sub_data));
+                iters.push(OpInputEnum::LocalLockLocalData(sub_data));
             }
             let rem = len % num_per_batch;
             if rem > 0 {
@@ -915,7 +927,44 @@ impl<'a, T: Dist> OpInput<'a, T> for &'a LocalLockLocalData<'_, T> {
                 let sub_data = self
                     .clone()
                     .into_sub_data(num * num_per_batch, num * num_per_batch + rem);
-                iters.push(OpInputEnum::LocalLockArray(sub_data));
+                iters.push(OpInputEnum::LocalLockLocalData(sub_data));
+            }
+        }
+        (iters, len)
+    }
+}
+
+impl<'a, T: Dist> OpInput<'a, T> for &'a GlobalLockLocalData<'_, T> {
+    #[tracing::instrument(skip_all)]
+    fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
+        // let slice=unsafe{self.__local_as_slice()};
+        // let slice = self.read_local_data();
+        // let slice = self.clone();
+        let len = self.len();
+        let mut iters = vec![];
+        let my_pe = self.array.my_pe();
+        if let Some(_start_index) = self.array.array.inner.start_index_for_pe(my_pe) {
+            //just to check that the array is local
+            let num_per_batch = match std::env::var("LAMELLAR_OP_BATCH") {
+                Ok(n) => n.parse::<usize>().unwrap(), //+ 1 to account for main thread
+                Err(_) => 10000,                      //+ 1 to account for main thread
+            };
+            let num = len / num_per_batch;
+            // println!("num: {} len {:?} npb {:?}", num, len, num_per_batch);
+            for i in 0..num {
+                // let sub_array = self.sub_array((start_index+(i*num_per_batch))..(start_index+((i+1)*num_per_batch)));
+                let sub_data = self
+                    .clone()
+                    .into_sub_data(i * num_per_batch, (i + 1) * num_per_batch);
+                iters.push(OpInputEnum::GlobalLockLocalData(sub_data));
+            }
+            let rem = len % num_per_batch;
+            if rem > 0 {
+                // let sub_array = self.sub_array((start_index+(num*num_per_batch))..(start_index+(num*num_per_batch) + rem));
+                let sub_data = self
+                    .clone()
+                    .into_sub_data(num * num_per_batch, num * num_per_batch + rem);
+                iters.push(OpInputEnum::GlobalLockLocalData(sub_data));
             }
         }
         (iters, len)
@@ -973,14 +1022,14 @@ impl<'a, T: Dist + ElementOps> OpInput<'a, T> for &GenericAtomicLocalData<T> {
             for i in 0..num {
                 // let sub_array = self.sub_array((start_index+(i*num_per_batch))..(start_index+((i+1)*num_per_batch)));
                 let sub_data = local_data.sub_data(i * num_per_batch, (i + 1) * num_per_batch);
-                iters.push(OpInputEnum::GenericAtomicArray(sub_data));
+                iters.push(OpInputEnum::GenericAtomicLocalData(sub_data));
             }
             let rem = len % num_per_batch;
             if rem > 0 {
                 // let sub_array = self.sub_array((start_index+(num*num_per_batch))..(start_index+(num*num_per_batch) + rem));
                 let sub_data =
                     local_data.sub_data(num * num_per_batch, (num * num_per_batch) + rem);
-                iters.push(OpInputEnum::GenericAtomicArray(sub_data));
+                iters.push(OpInputEnum::GenericAtomicLocalData(sub_data));
             }
         }
         (iters, len)
@@ -1017,14 +1066,14 @@ impl<'a, T: Dist + ElementOps> OpInput<'a, T> for &NativeAtomicLocalData<T> {
                 // for j in sub_data.clone().into_iter() {
                 //     println!("{:?} {:?}",i, j);
                 // }
-                iters.push(OpInputEnum::NativeAtomicArray(sub_data));
+                iters.push(OpInputEnum::NativeAtomicLocalData(sub_data));
             }
             let rem = len % num_per_batch;
             if rem > 0 {
                 // let sub_array = self.sub_array((start_index+(num*num_per_batch))..(start_index+(num*num_per_batch) + rem));
                 let sub_data =
                     local_data.sub_data(num * num_per_batch, (num * num_per_batch) + rem);
-                iters.push(OpInputEnum::NativeAtomicArray(sub_data));
+                iters.push(OpInputEnum::NativeAtomicLocalData(sub_data));
             }
         }
         (iters, len)
