@@ -58,8 +58,7 @@ use std::time::{Duration, Instant};
 
 // use tracing::*;
 
-
-use crate::active_messaging::{AMCounters,RemotePtr};
+use crate::active_messaging::{AMCounters, RemotePtr};
 use crate::lamellae::{AllocationType, Backend, LamellaeComm, LamellaeRDMA};
 use crate::lamellar_team::{IntoLamellarTeam, LamellarTeamRT};
 use crate::lamellar_world::LAMELLAES;
@@ -247,7 +246,7 @@ impl<T> Clone for WeakDarc<T> {
 }
 
 impl<T> crate::active_messaging::DarcSerde for Darc<T> {
-    fn ser(&self, num_pes: usize, darcs: &mut Vec<RemotePtr>){
+    fn ser(&self, num_pes: usize, darcs: &mut Vec<RemotePtr>) {
         self.serialize_update_cnts(num_pes);
         darcs.push(RemotePtr::NetworkDarc(self.clone().into()));
     }
@@ -546,7 +545,7 @@ impl<T> Darc<T> {
     }
 
     #[doc(hidden)]
-    pub fn inc_local_cnt(&self,cnt: usize) {
+    pub fn inc_local_cnt(&self, cnt: usize) {
         self.inner().local_cnt.fetch_add(cnt, Ordering::SeqCst);
     }
 
@@ -999,7 +998,7 @@ impl<T: 'static> LamellarAM for DroppedWaitAM<T> {
 }
 
 #[doc(hidden)]
-#[derive(serde::Deserialize, serde::Serialize,Clone)]
+#[derive(serde::Deserialize, serde::Serialize, Clone)]
 pub struct __NetworkDarc {
     inner_addr: usize,
     backend: Backend,

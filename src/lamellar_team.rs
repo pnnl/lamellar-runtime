@@ -48,7 +48,7 @@ use tracing::*;
 /// use lamellar::array::prelude::*;
 ///
 /// #[AmData(Debug,Clone)]
-/// struct Am{ 
+/// struct Am{
 ///     world_pe: usize,
 ///     team_pe: Option<usize>,
 /// }
@@ -844,7 +844,13 @@ impl LamellarTeamRT {
             while *pe == 0 {
                 std::thread::yield_now();
                 if s.elapsed().as_secs_f64() > *crate::DEADLOCK_TIMEOUT {
-                    let status = hash_buf.as_slice().unwrap().iter().enumerate().map(|(i,elem)| (i,*elem == hash)).collect::<Vec<_>>();
+                    let status = hash_buf
+                        .as_slice()
+                        .unwrap()
+                        .iter()
+                        .enumerate()
+                        .map(|(i, elem)| (i, *elem == hash))
+                        .collect::<Vec<_>>();
                     println!("[WARNING]  Potential deadlock detected when trying construct a new LamellarTeam.\n\
                         Creating a team is a collective operation requiring all PEs associated with the Parent Team (or LamellarWorld) to enter the call, not just the PEs that will be part of the new team.\n\
                         The following indicates which PEs have not entered the call: {:?}\n\

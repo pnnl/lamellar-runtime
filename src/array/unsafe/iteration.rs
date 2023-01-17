@@ -75,7 +75,7 @@ impl<T: Dist> UnsafeArray<T> {
     /// It is also possible to have mutable and immutable references to this arrays data on the same PE
     ///
     /// # One-sided Operation
-    /// The iteration is launched and local to only the calling PE. 
+    /// The iteration is launched and local to only the calling PE.
     /// No data movement from remote PEs is required
     ///
     /// # Examples
@@ -103,7 +103,7 @@ impl<T: Dist> UnsafeArray<T> {
     /// It is also possible to have mutable and immutable references to this arrays data on the same PE
     ///
     /// # One-sided Operation
-    /// The iteration is launched and local to only the calling PE. 
+    /// The iteration is launched and local to only the calling PE.
     /// No data movement from remote PEs is required
     ///
     /// # Examples
@@ -130,7 +130,7 @@ impl<T: Dist> UnsafeArray<T> {
     /// It is also possible to have mutable and immutable references to this arrays data on the same PE
     ///
     /// # One-sided Operation
-    /// The iteration is launched and local to only the calling PE. 
+    /// The iteration is launched and local to only the calling PE.
     /// Data movement will occur with the remote PEs to transfer their data to the calling PE
     ///
     /// # Examples
@@ -165,7 +165,7 @@ impl<T: Dist> UnsafeArray<T> {
     /// It is also possible to have mutable and immutable references to this arrays data on the same PE
     ///
     /// # One-sided Operation
-    /// The iteration is launched and local to only the calling PE. 
+    /// The iteration is launched and local to only the calling PE.
     /// Data movement will occur with the remote PEs to transfer their data to the calling PE
     ///
     /// # Examples

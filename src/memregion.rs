@@ -5,7 +5,7 @@
 //!
 //! # Warning
 //! This is a low-level module, unless you are very comfortable/confident in low level distributed memory (and even then) it is highly recommended you use the [LamellarArrays][crate::array] and [Active Messaging][crate::active_messaging] interfaces to perform distributed communications and computation.
-use crate::active_messaging::{AmDist,RemotePtr};
+use crate::active_messaging::{AmDist, RemotePtr};
 use crate::array::{
     LamellarArrayRdmaInput, LamellarArrayRdmaOutput, LamellarRead, LamellarWrite, TeamFrom,
 };
@@ -93,8 +93,8 @@ impl<T: Dist> crate::active_messaging::DarcSerde for LamellarMemoryRegion<T> {
     fn ser(&self, num_pes: usize, darcs: &mut Vec<RemotePtr>) {
         // println!("in shared ser");
         match self {
-            LamellarMemoryRegion::Shared(mr) => mr.ser(num_pes,darcs),
-            LamellarMemoryRegion::Local(mr) => mr.ser(num_pes,darcs),
+            LamellarMemoryRegion::Shared(mr) => mr.ser(num_pes, darcs),
+            LamellarMemoryRegion::Local(mr) => mr.ser(num_pes, darcs),
             // LamellarMemoryRegion::Unsafe(mr) => mr.ser(num_pes,darcs),
         }
     }
@@ -138,7 +138,7 @@ impl<T: Dist> LamellarMemoryRegion<T> {
     //     }
     // }
 }
-impl<T: Dist> SubRegion<T> for LamellarMemoryRegion<T>{
+impl<T: Dist> SubRegion<T> for LamellarMemoryRegion<T> {
     type Region = LamellarMemoryRegion<T>;
     fn sub_region<R: std::ops::RangeBounds<usize>>(&self, range: R) -> Self::Region {
         match self {
@@ -147,7 +147,6 @@ impl<T: Dist> SubRegion<T> for LamellarMemoryRegion<T>{
         }
     }
 }
-
 
 impl<T: Dist> From<LamellarArrayRdmaOutput<T>> for LamellarMemoryRegion<T> {
     #[tracing::instrument(skip_all)]
@@ -227,7 +226,7 @@ pub trait RegisteredMemoryRegion<T: Dist> {
     /// The length (in number of elements of `T`) of the local segment of the memory region (i.e. not the global length of the memory region)  
     ///
     /// # One-sided Operation
-    /// the result is returned only on the calling PE 
+    /// the result is returned only on the calling PE
     ///
     /// # Examples
     ///```
@@ -251,7 +250,7 @@ pub trait RegisteredMemoryRegion<T: Dist> {
     /// this call is always unsafe as there is no gaurantee that there do not exist mutable references elsewhere in the distributed system.
     ///
     /// # One-sided Operation
-    /// the result is returned only on the calling PE 
+    /// the result is returned only on the calling PE
     ///
     /// # Examples
     ///```
@@ -273,7 +272,7 @@ pub trait RegisteredMemoryRegion<T: Dist> {
     /// this call is always unsafe as there is no gaurantee that there do not exist mutable references elsewhere in the distributed system.
     ///
     /// # One-sided Operation
-    /// the result is returned only on the calling PE 
+    /// the result is returned only on the calling PE
     ///
     /// # Examples
     ///```
@@ -295,7 +294,7 @@ pub trait RegisteredMemoryRegion<T: Dist> {
     /// this call is always unsafe as there is no gaurantee that there do not exist other mutable references elsewhere in the distributed system.
     ///
     /// # One-sided Operation
-    /// the result is returned only on the calling PE 
+    /// the result is returned only on the calling PE
     ///
     /// # Examples
     ///```
@@ -317,7 +316,7 @@ pub trait RegisteredMemoryRegion<T: Dist> {
     /// this call is always unsafe as there is no gaurantee that there do not exist mutable references elsewhere in the distributed system.
     ///
     /// # One-sided Operation
-    /// the result is returned only on the calling PE 
+    /// the result is returned only on the calling PE
     ///
     /// # Examples
     ///```
@@ -339,7 +338,7 @@ pub trait RegisteredMemoryRegion<T: Dist> {
     /// this call is always unsafe as there is no gaurantee that there do not exist mutable references elsewhere in the distributed system.
     ///
     /// # One-sided Operation
-    /// the result is returned only on the calling PE 
+    /// the result is returned only on the calling PE
     ///
     /// # Examples
     ///```
@@ -358,7 +357,6 @@ pub(crate) trait MemRegionId {
     fn id(&self) -> usize;
 }
 
-
 // RegisteredMemoryRegion<T>, MemRegionId, AsBase, SubRegion<T>, MemoryRegionRDMA<T>, RTMemoryRegionRDMA<T>
 // we seperate SubRegion and AsBase out as their own traits
 // because we want MemRegion to impl RegisteredMemoryRegion (so that it can be used in Shared + Local)
@@ -372,7 +370,7 @@ pub trait SubRegion<T: Dist> {
     /// Create a sub region of this RegisteredMemoryRegion using the provided range
     ///
     /// # One-sided Operation
-    /// the result is returned only on the calling PE 
+    /// the result is returned only on the calling PE
     ///
     /// # Panics
     /// panics if the end range is larger than the length of the memory region
@@ -385,7 +383,7 @@ pub trait SubRegion<T: Dist> {
     /// let num_pes = world.num_pes();
     ///
     /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(100);
-    /// 
+    ///
     /// let sub_region = mem_region.sub_region(30..70);
     ///```
     fn sub_region<R: std::ops::RangeBounds<usize>>(&self, range: R) -> Self::Region;
@@ -424,14 +422,14 @@ pub trait MemoryRegionRDMA<T: Dist> {
     /// let src_mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(10);
     /// unsafe{ for elem in dst_mem_region.as_mut_slice().expect("PE in world team") {*elem = num_pes;}}
     /// unsafe{ for elem in src_mem_region.as_mut_slice().expect("PE in world team") {*elem = my_pe;}}
-    /// 
+    ///
     /// for pe in 0..num_pes{
     ///    unsafe{dst_mem_region.put(pe,my_pe*src_mem_region.len(),&src_mem_region)};
     /// }
     /// unsafe {
     ///     let dst_slice = dst_mem_region.as_slice().expect("PE in world team");
     ///     for (i,elem) in dst_slice.iter().enumerate(){
-    ///         let pe = i / &src_mem_region.len(); 
+    ///         let pe = i / &src_mem_region.len();
     ///         while *elem == num_pes{
     ///             std::thread::yield_now();
     ///         }
@@ -464,14 +462,14 @@ pub trait MemoryRegionRDMA<T: Dist> {
     /// let src_mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(10);
     /// unsafe{ for elem in dst_mem_region.as_mut_slice().expect("PE in world team") {*elem = num_pes;}}
     /// unsafe{ for elem in src_mem_region.as_mut_slice().expect("PE in world team") {*elem = my_pe;}}
-    /// 
+    ///
     /// for pe in 0..num_pes{
     ///    unsafe{dst_mem_region.blocking_put(pe,my_pe*src_mem_region.len(),&src_mem_region)};
     /// }
     /// unsafe {
     ///     let dst_slice = dst_mem_region.as_slice().expect("PE in world team");
     ///     for (i,elem) in dst_slice.iter().enumerate(){
-    ///         let pe = i / &src_mem_region.len(); 
+    ///         let pe = i / &src_mem_region.len();
     ///         while *elem == num_pes{
     ///             std::thread::yield_now();
     ///         }
@@ -507,13 +505,13 @@ pub trait MemoryRegionRDMA<T: Dist> {
     /// let src_mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(10);
     /// unsafe{ for elem in dst_mem_region.as_mut_slice().expect("PE in world team") {*elem = num_pes;}}
     /// unsafe{ for elem in src_mem_region.as_mut_slice().expect("PE in world team") {*elem = my_pe;}}
-    /// 
+    ///
     /// unsafe{dst_mem_region.put_all(my_pe*src_mem_region.len(),&src_mem_region)};
-    /// 
+    ///
     /// unsafe {
     ///     let dst_slice = dst_mem_region.as_slice().expect("PE in world team");
     ///     for (i,elem) in dst_slice.iter().enumerate(){
-    ///         let pe = i / &src_mem_region.len(); 
+    ///         let pe = i / &src_mem_region.len();
     ///         while *elem == num_pes{
     ///             std::thread::yield_now();
     ///         }
@@ -548,17 +546,17 @@ pub trait MemoryRegionRDMA<T: Dist> {
     ///
     /// unsafe{ for elem in src_mem_region.as_mut_slice().expect("PE in world team") {*elem = my_pe;}}
     /// unsafe{ for elem in dst_mem_region.as_mut_slice().expect("PE in world team") {*elem = num_pes;}}
-    /// 
+    ///
     /// for pe in 0..num_pes{
     ///     let start_i = pe*src_mem_region.len();
     ///     let end_i = start_i+src_mem_region.len();
     ///     unsafe{src_mem_region.get_unchecked(pe,0,dst_mem_region.sub_region(start_i..end_i))};
     /// }
-    /// 
+    ///
     /// unsafe {
     ///     let dst_slice = dst_mem_region.as_slice().expect("PE in world team");
     ///     for (i,elem) in dst_slice.iter().enumerate(){
-    ///         let pe = i / &src_mem_region.len(); 
+    ///         let pe = i / &src_mem_region.len();
     ///         while *elem == num_pes{
     ///             std::thread::yield_now();
     ///         }
@@ -596,17 +594,17 @@ pub trait MemoryRegionRDMA<T: Dist> {
     ///
     /// unsafe{ for elem in src_mem_region.as_mut_slice().expect("PE in world team") {*elem = my_pe;}}
     /// unsafe{ for elem in dst_mem_region.as_mut_slice().expect("PE in world team") {*elem = num_pes;}}
-    /// 
+    ///
     /// for pe in 0..num_pes{
     ///     let start_i = pe*src_mem_region.len();
     ///     let end_i = start_i+src_mem_region.len();
     ///     unsafe{src_mem_region.blocking_get(pe,0,dst_mem_region.sub_region(start_i..end_i))};
     /// }
-    /// 
+    ///
     /// unsafe {
     ///     let dst_slice = dst_mem_region.as_slice().expect("PE in world team");
     ///     for (i,elem) in dst_slice.iter().enumerate(){
-    ///         let pe = i / &src_mem_region.len(); 
+    ///         let pe = i / &src_mem_region.len();
     ///         assert_eq!(pe,*elem);
     ///     }      
     /// }

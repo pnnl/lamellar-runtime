@@ -1,5 +1,5 @@
-use crate::array::{LamellarRead, LamellarWrite};
 use crate::active_messaging::RemotePtr;
+use crate::array::{LamellarRead, LamellarWrite};
 use crate::darc::Darc;
 use crate::lamellae::AllocationType;
 use crate::memregion::*;
@@ -99,7 +99,6 @@ impl<T: Dist> SharedMemoryRegion<T> {
             phantom: PhantomData,
         })
     }
-
 }
 
 // This could be useful for if we want to transfer the actual data instead of the pointer

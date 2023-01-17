@@ -304,7 +304,7 @@ impl RegisteredActiveMessages {
             }
         };
         let mut darcs = vec![];
-        am.ser(darc_ser_cnt,&mut darcs);
+        am.ser(darc_ser_cnt, &mut darcs);
         am.serialize_into(&mut data_slice[i..]);
         req_data
             .lamellae
@@ -317,23 +317,27 @@ impl RegisteredActiveMessages {
         // println!("send_data_am");
         let header = self.create_header(&req_data, Cmd::Data);
         let mut darcs = vec![];
-        data.ser(1,&mut darcs); //1 because we are only sending back to the original PE
-        let darc_list_size = crate::serialized_size(&darcs,false);
+        data.ser(1, &mut darcs); //1 because we are only sending back to the original PE
+        let darc_list_size = crate::serialized_size(&darcs, false);
         let data_header = DataHeader {
             size: data_size,
             req_id: req_data.id,
             darc_list_size: darc_list_size,
         };
-        
+
         let data_buf = self
-            .create_data_buf(header, data_size + darc_list_size + *DATA_HEADER_LEN, &req_data.lamellae)
+            .create_data_buf(
+                header,
+                data_size + darc_list_size + *DATA_HEADER_LEN,
+                &req_data.lamellae,
+            )
             .await;
         let data_slice = data_buf.data_as_bytes();
 
         crate::serialize_into(&mut data_slice[0..*DATA_HEADER_LEN], &data_header, false).unwrap();
         let mut i = *DATA_HEADER_LEN;
 
-        crate::serialize_into(&mut data_slice[i..(i+darc_list_size)],&darcs,false).unwrap();
+        crate::serialize_into(&mut data_slice[i..(i + darc_list_size)], &darcs, false).unwrap();
         i += darc_list_size;
 
         data.serialize_into(&mut data_slice[i..]);
@@ -533,7 +537,8 @@ impl RegisteredActiveMessages {
             crate::deserialize(&data_buf[*i..*i + *DATA_HEADER_LEN], false).unwrap();
         *i += *DATA_HEADER_LEN;
 
-        let darcs: Vec<RemotePtr> = crate::deserialize(&data_buf[*i..*i + data_header.darc_list_size], false).unwrap();
+        let darcs: Vec<RemotePtr> =
+            crate::deserialize(&data_buf[*i..*i + data_header.darc_list_size], false).unwrap();
         *i += data_header.darc_list_size;
 
         let data = ser_data.sub_data(*i, *i + data_header.size);
@@ -542,7 +547,7 @@ impl RegisteredActiveMessages {
         self.send_data_to_user_handle(
             data_header.req_id,
             msg.src as usize,
-            InternalResult::Remote(data,darcs),
+            InternalResult::Remote(data, darcs),
         );
     }
 

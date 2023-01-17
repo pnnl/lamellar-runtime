@@ -3,14 +3,14 @@
 //! By distributed, we mean that the memory backing the array is physically located on multiple distributed PEs in the system.
 //!
 //! # Features
-//! 
+//!
 //! **Features**  include
 //!  - [Safety](#safety)
 //!  - [Multiple array types](#multiple-array-types)
 //!  - RDMA like [put][crate::array::LamellarArrayPut] and  [get][crate::array::LamellarArrayGet] APIs
 //!  - [Block][crate::array::Distribution::Block] or [Cyclic][crate::array::Distribution::Cyclic] data layouts
-//! 
-//! **Tools to work with arrays** include 
+//!
+//! **Tools to work with arrays** include
 //!  - [Conversion](#type-conversion) between different array types and other data structures
 //!  - Element Wise operations (e.g. [load/store][crate::array::AccessOps], [add][crate::array::ArithmeticOps], [fetch_and][crate::array::BitWiseOps], [compare_exchange][crate::array::CompareExchangeOps], etc)
 //!  - Batched operations ([batch_add][crate::array::ArithmeticOps], [batch_fetch_add][crate::array::ArithmeticOps], etc.)
@@ -18,10 +18,10 @@
 //!  - [Distributed Reductions][crate::array::LamellarArrayReduce]
 //!  - [Sub Arrays][crate::array::SubArray]
 //!
-//! # Examples 
-//! 
+//! # Examples
+//!
 //! Lamellar proides a variety of [examples](https://github.com/pnnl/lamellar-runtime/tree/master/examples/array_examples) for common tasks, e.g. distributed iteration.
-//! 
+//!
 //! # Safety
 //! Array Data Lifetimes: LamellarArrays are built upon [Darcs][crate::darc::Darc] (Distributed Atomic Reference Counting Pointers) and as such have distributed lifetime management.
 //! This means that as long as a single reference to an array exists anywhere in the distributed system, the data for the entire array will remain valid on every PE (even though a given PE may have dropped all its local references).
@@ -45,19 +45,19 @@
 //!     - Consequently, these functions can be used to create valid inputs for batched operations,  see [OpInput](crate::array::OpInput) for details.
 //! ```
 //! use lamellar::array::prelude::*;
-//! 
+//!
 //! // define an length-10 array of type UnsafeArray<usize>
-//! let world = LamellarWorldBuilder::new().build(); 
-//! let array =  UnsafeArray::<usize>::new(&world, 10,Distribution::Block); 
-//! 
+//! let world = LamellarWorldBuilder::new().build();
+//! let array =  UnsafeArray::<usize>::new(&world, 10,Distribution::Block);
+//!
 //! // convert between array types    
 //! let array = array.into_local_lock(); // LocalLockArray
 //! let array = array.into_atomic(); // AtomicArray
 //! let array = array.into_read_only(); // ReadOnlyArray
-//! 
+//!
 //! // get a reference to the underlying slice: &[usize]
 //! let local_data = array.local_data();
-//! 
+//!
 //! // export to Vec<usize>
 //! let vec = array.local_data().to_vec();
 //! ```
@@ -67,8 +67,7 @@ use crate::memregion::{
     shared::SharedMemoryRegion,
     Dist,
     LamellarMemoryRegion,
-    RegisteredMemoryRegion
-    // RemoteMemoryRegion,
+    RegisteredMemoryRegion, // RemoteMemoryRegion,
 };
 use crate::{active_messaging::*, LamellarTeamRT};
 // use crate::Darc;
@@ -410,10 +409,10 @@ impl<T: Dist + 'static> crate::active_messaging::DarcSerde for LamellarReadArray
     fn ser(&self, num_pes: usize, darcs: &mut Vec<RemotePtr>) {
         // println!("in shared ser");
         match self {
-            LamellarReadArray::UnsafeArray(array) => array.ser(num_pes,darcs),
-            LamellarReadArray::ReadOnlyArray(array) => array.ser(num_pes,darcs),
-            LamellarReadArray::AtomicArray(array) => array.ser(num_pes,darcs),
-            LamellarReadArray::LocalLockArray(array) => array.ser(num_pes,darcs),
+            LamellarReadArray::UnsafeArray(array) => array.ser(num_pes, darcs),
+            LamellarReadArray::ReadOnlyArray(array) => array.ser(num_pes, darcs),
+            LamellarReadArray::AtomicArray(array) => array.ser(num_pes, darcs),
+            LamellarReadArray::LocalLockArray(array) => array.ser(num_pes, darcs),
         }
     }
     fn des(&self, cur_pe: Result<usize, crate::IdError>) {
@@ -441,9 +440,9 @@ impl<T: Dist + 'static> crate::active_messaging::DarcSerde for LamellarWriteArra
     fn ser(&self, num_pes: usize, darcs: &mut Vec<RemotePtr>) {
         // println!("in shared ser");
         match self {
-            LamellarWriteArray::UnsafeArray(array) => array.ser(num_pes,darcs),
-            LamellarWriteArray::AtomicArray(array) => array.ser(num_pes,darcs),
-            LamellarWriteArray::LocalLockArray(array) => array.ser(num_pes,darcs),
+            LamellarWriteArray::UnsafeArray(array) => array.ser(num_pes, darcs),
+            LamellarWriteArray::AtomicArray(array) => array.ser(num_pes, darcs),
+            LamellarWriteArray::LocalLockArray(array) => array.ser(num_pes, darcs),
         }
     }
     fn des(&self, cur_pe: Result<usize, crate::IdError>) {
@@ -459,7 +458,7 @@ impl<T: Dist + 'static> crate::active_messaging::DarcSerde for LamellarWriteArra
 impl<T: Dist + AmDist + 'static> LamellarArrayReduce<T> for LamellarReadArray<T> {
     fn reduce(&self, reduction: &str) -> Pin<Box<dyn Future<Output = T>>> {
         match self {
-            LamellarReadArray::UnsafeArray(array) => unsafe{array.reduce(reduction)},
+            LamellarReadArray::UnsafeArray(array) => unsafe { array.reduce(reduction) },
             LamellarReadArray::AtomicArray(array) => array.reduce(reduction),
             LamellarReadArray::LocalLockArray(array) => array.reduce(reduction),
             LamellarReadArray::ReadOnlyArray(array) => array.reduce(reduction),
@@ -467,10 +466,12 @@ impl<T: Dist + AmDist + 'static> LamellarArrayReduce<T> for LamellarReadArray<T>
     }
 }
 
-impl<T: Dist + AmDist + ElementArithmeticOps + 'static> LamellarArrayArithmeticReduce<T> for LamellarReadArray<T> {
+impl<T: Dist + AmDist + ElementArithmeticOps + 'static> LamellarArrayArithmeticReduce<T>
+    for LamellarReadArray<T>
+{
     fn sum(&self) -> Pin<Box<dyn Future<Output = T>>> {
         match self {
-            LamellarReadArray::UnsafeArray(array) => unsafe{array.sum()},
+            LamellarReadArray::UnsafeArray(array) => unsafe { array.sum() },
             LamellarReadArray::AtomicArray(array) => array.sum(),
             LamellarReadArray::LocalLockArray(array) => array.sum(),
             LamellarReadArray::ReadOnlyArray(array) => array.sum(),
@@ -478,17 +479,19 @@ impl<T: Dist + AmDist + ElementArithmeticOps + 'static> LamellarArrayArithmeticR
     }
     fn prod(&self) -> Pin<Box<dyn Future<Output = T>>> {
         match self {
-            LamellarReadArray::UnsafeArray(array) => unsafe{array.prod()},
+            LamellarReadArray::UnsafeArray(array) => unsafe { array.prod() },
             LamellarReadArray::AtomicArray(array) => array.prod(),
             LamellarReadArray::LocalLockArray(array) => array.prod(),
             LamellarReadArray::ReadOnlyArray(array) => array.prod(),
         }
     }
 }
-impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static> LamellarArrayCompareReduce<T> for LamellarReadArray<T>{
+impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static> LamellarArrayCompareReduce<T>
+    for LamellarReadArray<T>
+{
     fn max(&self) -> Pin<Box<dyn Future<Output = T>>> {
         match self {
-            LamellarReadArray::UnsafeArray(array) => unsafe{array.max()},
+            LamellarReadArray::UnsafeArray(array) => unsafe { array.max() },
             LamellarReadArray::AtomicArray(array) => array.max(),
             LamellarReadArray::LocalLockArray(array) => array.max(),
             LamellarReadArray::ReadOnlyArray(array) => array.max(),
@@ -496,7 +499,7 @@ impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static> LamellarArrayCompa
     }
     fn min(&self) -> Pin<Box<dyn Future<Output = T>>> {
         match self {
-            LamellarReadArray::UnsafeArray(array) => unsafe{array.min()},
+            LamellarReadArray::UnsafeArray(array) => unsafe { array.min() },
             LamellarReadArray::AtomicArray(array) => array.min(),
             LamellarReadArray::LocalLockArray(array) => array.min(),
             LamellarReadArray::ReadOnlyArray(array) => array.min(),
@@ -507,40 +510,44 @@ impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static> LamellarArrayCompa
 impl<T: Dist + AmDist + 'static> LamellarArrayReduce<T> for LamellarWriteArray<T> {
     fn reduce(&self, reduction: &str) -> Pin<Box<dyn Future<Output = T>>> {
         match self {
-            LamellarWriteArray::UnsafeArray(array) => unsafe{array.reduce(reduction)},
+            LamellarWriteArray::UnsafeArray(array) => unsafe { array.reduce(reduction) },
             LamellarWriteArray::AtomicArray(array) => array.reduce(reduction),
             LamellarWriteArray::LocalLockArray(array) => array.reduce(reduction),
         }
     }
 }
-impl<T: Dist + AmDist + ElementArithmeticOps + 'static> LamellarArrayArithmeticReduce<T> for LamellarWriteArray<T>{
+impl<T: Dist + AmDist + ElementArithmeticOps + 'static> LamellarArrayArithmeticReduce<T>
+    for LamellarWriteArray<T>
+{
     fn sum(&self) -> Pin<Box<dyn Future<Output = T>>> {
         match self {
-            LamellarWriteArray::UnsafeArray(array) => unsafe{array.sum()},
+            LamellarWriteArray::UnsafeArray(array) => unsafe { array.sum() },
             LamellarWriteArray::AtomicArray(array) => array.sum(),
             LamellarWriteArray::LocalLockArray(array) => array.sum(),
         }
     }
     fn prod(&self) -> Pin<Box<dyn Future<Output = T>>> {
         match self {
-            LamellarWriteArray::UnsafeArray(array) => unsafe{array.prod()},
+            LamellarWriteArray::UnsafeArray(array) => unsafe { array.prod() },
             LamellarWriteArray::AtomicArray(array) => array.prod(),
             LamellarWriteArray::LocalLockArray(array) => array.prod(),
         }
     }
 }
 
-impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static> LamellarArrayCompareReduce<T> for LamellarWriteArray<T>{
+impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static> LamellarArrayCompareReduce<T>
+    for LamellarWriteArray<T>
+{
     fn max(&self) -> Pin<Box<dyn Future<Output = T>>> {
         match self {
-            LamellarWriteArray::UnsafeArray(array) => unsafe{array.max()},
+            LamellarWriteArray::UnsafeArray(array) => unsafe { array.max() },
             LamellarWriteArray::AtomicArray(array) => array.max(),
             LamellarWriteArray::LocalLockArray(array) => array.max(),
         }
     }
     fn min(&self) -> Pin<Box<dyn Future<Output = T>>> {
         match self {
-            LamellarWriteArray::UnsafeArray(array) => unsafe{array.min()},
+            LamellarWriteArray::UnsafeArray(array) => unsafe { array.min() },
             LamellarWriteArray::AtomicArray(array) => array.min(),
             LamellarWriteArray::LocalLockArray(array) => array.min(),
         }
@@ -753,7 +760,7 @@ pub trait LamellarArray<T: Dist>: private::LamellarArrayPrivate<T> {
     /// Users can await any future, including those returned from lamellar remote operations
     ///
     /// # One-sided Operation
-    /// this is not a distributed synchronization primitive and only blocks the calling thread until the given future has completed on the calling PE 
+    /// this is not a distributed synchronization primitive and only blocks the calling thread until the given future has completed on the calling PE
     ///
     /// # Examples
     ///```
@@ -774,7 +781,7 @@ pub trait LamellarArray<T: Dist>: private::LamellarArrayPrivate<T> {
     /// Returns None if the index is Out of bounds
     ///
     /// # One-sided Operation
-    /// the result is returned only on the calling PE 
+    /// the result is returned only on the calling PE
     ///
     /// # Examples
     /// assume we have 4 PEs
@@ -800,13 +807,12 @@ pub trait LamellarArray<T: Dist>: private::LamellarArrayPrivate<T> {
     ///```
     fn pe_and_offset_for_global_index(&self, index: usize) -> Option<(usize, usize)>;
 
-
     #[doc(alias("One-sided", "onesided"))]
     /// Given a PE, return the global index of the first element on that PE
     /// Returns None if no data exists on that PE
     ///
     /// # One-sided Operation
-    /// the result is returned only on the calling PE 
+    /// the result is returned only on the calling PE
     ///
     /// # Examples
     /// assume we have 4 PEs
@@ -850,7 +856,7 @@ pub trait LamellarArray<T: Dist>: private::LamellarArrayPrivate<T> {
     /// Returns None if no data exists on that PE
     ///
     /// # One-sided Operation
-    /// the result is returned only on the calling PE 
+    /// the result is returned only on the calling PE
     ///
     /// # Examples
     /// assume we have 4 PEs
@@ -928,7 +934,7 @@ pub trait SubArray<T: Dist>: LamellarArray<T> {
     ///
     ///
     /// # One-sided Operation
-    /// this does not affect how data in the array is distributed, nor require communication/coordination with other PEs in the array, 
+    /// this does not affect how data in the array is distributed, nor require communication/coordination with other PEs in the array,
     /// rather it creates a handle on the calling PE which only has access to the elements in the specified range.
     ///
     /// # Panic
@@ -949,7 +955,7 @@ pub trait SubArray<T: Dist>: LamellarArray<T> {
     /// Given an index with respect to the SubArray, return the index with respect to original array.
     ///
     /// # One-sided Operation
-    /// the result is returned only on the calling PE 
+    /// the result is returned only on the calling PE
     ///
     /// # Panic
     /// This call will panic if the end of the range exceeds the size of the array.

@@ -286,7 +286,7 @@ impl LamellarArch for GlobalArch {
 ///
 ///```
 /// use lamellar::{LamellarWorldBuilder,StridedArch};
-/// 
+///
 /// let world = LamellarWorldBuilder::new().build();
 /// let num_pes = world.num_pes();
 ///
@@ -386,7 +386,7 @@ impl LamellarArch for StridedArch {
 ///
 ///```
 /// use lamellar::{LamellarWorldBuilder,BlockedArch};
-/// 
+///
 /// let world = LamellarWorldBuilder::new().build();
 /// let num_pes = world.num_pes();
 ///

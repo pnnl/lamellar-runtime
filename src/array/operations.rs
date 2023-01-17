@@ -1482,7 +1482,7 @@ impl<T> ElementBitWiseOps for T where
 pub trait ElementCompareEqOps: std::cmp::Eq + Dist + Sized //+ AmDist
 {
 }
-impl<T> ElementCompareEqOps for T where T: std::cmp::Eq + Dist //+ AmDist,
+impl<T> ElementCompareEqOps for T where T: std::cmp::Eq + Dist //+ AmDist,,
 {
 }
 
@@ -1513,8 +1513,8 @@ impl<T> ElementComparePartialEqOps for T where
 /// The results of a batched operation are returned to the user in the same order as the input indices.
 ///
 /// # One-sided Operation
-/// performing either single or batched operations are both one-sided, with the calling PE performing any necessary work to 
-/// initate and execute active messages that are sent to remote PEs. 
+/// performing either single or batched operations are both one-sided, with the calling PE performing any necessary work to
+/// initate and execute active messages that are sent to remote PEs.
 /// For Ops that return results, the result will only be available on the calling PE.
 ///
 /// # Note
@@ -1626,10 +1626,10 @@ pub trait ReadOnlyOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
 /// The results of a batched operation are returned to the user in the same order as the input indices.
 ///
 /// # One-sided Operation
-/// performing either single or batched operations are both one-sided, with the calling PE performing any necessary work to 
-/// initate and execute active messages that are sent to remote PEs. 
+/// performing either single or batched operations are both one-sided, with the calling PE performing any necessary work to
+/// initate and execute active messages that are sent to remote PEs.
 /// For Ops that return results, the result will only be available on the calling PE.
-/// 
+///
 /// # Note
 /// For both single index and batched operations there are no guarantees to the order in which individual operations occur (an individal operation is guaranteed to be atomic though).
 ///
@@ -1822,10 +1822,10 @@ pub trait AccessOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
 /// The results of a batched operation are returned to the user in the same order as the input indices.
 ///
 /// # One-sided Operation
-/// performing either single or batched operations are both one-sided, with the calling PE performing any necessary work to 
-/// initate and execute active messages that are sent to remote PEs. 
+/// performing either single or batched operations are both one-sided, with the calling PE performing any necessary work to
+/// initate and execute active messages that are sent to remote PEs.
 /// For Ops that return results, the result will only be available on the calling PE.
-/// 
+///
 /// # Note
 /// For both single index and batched operations there are no guarantees to the order in which individual operations occur (an individal operation is guaranteed to be atomic though).
 ///
@@ -2400,10 +2400,10 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
 /// The results of a batched operation are returned to the user in the same order as the input indices.
 ///
 /// # One-sided Operation
-/// performing either single or batched operations are both one-sided, with the calling PE performing any necessary work to 
-/// initate and execute active messages that are sent to remote PEs. 
+/// performing either single or batched operations are both one-sided, with the calling PE performing any necessary work to
+/// initate and execute active messages that are sent to remote PEs.
 /// For Ops that return results, the result will only be available on the calling PE.
-/// 
+///
 /// # Note
 /// For both single index and batched operations there are no guarantees to the order in which individual operations occur (an individal operation is guaranteed to be atomic though).
 ///
@@ -2722,10 +2722,10 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
 /// The results of a batched operation are returned to the user in the same order as the input indices.
 ///
 /// # One-sided Operation
-/// performing either single or batched operations are both one-sided, with the calling PE performing any necessary work to 
-/// initate and execute active messages that are sent to remote PEs. 
+/// performing either single or batched operations are both one-sided, with the calling PE performing any necessary work to
+/// initate and execute active messages that are sent to remote PEs.
 /// For Ops that return results, the result will only be available on the calling PE.
-/// 
+///
 /// # Note
 /// For both single index and batched operations there are no guarantees to the order in which individual operations occur (an individal operation is guaranteed to be atomic though)
 ///
@@ -2876,10 +2876,10 @@ pub trait CompareExchangeOps<T: ElementCompareEqOps>: private::LamellarArrayPriv
 /// The results of a batched operation are returned to the user in the same order as the input indices.
 ///
 /// # One-sided Operation
-/// performing either single or batched operations are both one-sided, with the calling PE performing any necessary work to 
-/// initate and execute active messages that are sent to remote PEs. 
+/// performing either single or batched operations are both one-sided, with the calling PE performing any necessary work to
+/// initate and execute active messages that are sent to remote PEs.
 /// For Ops that return results, the result will only be available on the calling PE.
-/// 
+///
 /// # Note
 /// For both single index and batched operations there are no guarantees to the order in which individual operations occur (an individal operation is guaranteed to be atomic though).
 ///

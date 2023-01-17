@@ -1,5 +1,6 @@
 pub use crate::memregion::{
-    Dist, LamellarMemoryRegion, OneSidedMemoryRegion, RemoteMemoryRegion, SharedMemoryRegion,MemoryRegionRDMA,RegisteredMemoryRegion,SubRegion
+    Dist, LamellarMemoryRegion, MemoryRegionRDMA, OneSidedMemoryRegion, RegisteredMemoryRegion,
+    RemoteMemoryRegion, SharedMemoryRegion, SubRegion,
 };
 
 pub use crate::active_messaging::ActiveMessaging;

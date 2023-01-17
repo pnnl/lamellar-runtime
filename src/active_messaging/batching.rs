@@ -13,7 +13,7 @@ use async_trait::async_trait;
 enum LamellarData {
     Am(LamellarArcAm, AmId),
     Return(LamellarArcAm, AmId),
-    Data(LamellarResultArc,Vec<RemotePtr>,usize),
+    Data(LamellarResultArc, Vec<RemotePtr>, usize),
     Unit,
 }
 
@@ -22,7 +22,7 @@ impl std::fmt::Debug for LamellarData {
         match self {
             LamellarData::Am(_, _) => write!(f, "Am"),
             LamellarData::Return(_, _) => write!(f, "Return"),
-            LamellarData::Data(_,_,_) => write!(f, "Data"),
+            LamellarData::Data(_, _, _) => write!(f, "Data"),
             LamellarData::Unit => write!(f, "Unit"),
         }
     }

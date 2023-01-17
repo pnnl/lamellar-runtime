@@ -309,7 +309,10 @@ pub use custom_derive;
 pub use newtype_derive;
 
 lazy_static! {
-    pub(crate) static ref DEADLOCK_TIMEOUT: f64 = std::env::var("LAMELLAR_DEADLOCK_TIMEOUT").unwrap_or("600".to_string()).parse::<usize>().unwrap_or(600) as f64;
+    pub(crate) static ref DEADLOCK_TIMEOUT: f64 = std::env::var("LAMELLAR_DEADLOCK_TIMEOUT")
+        .unwrap_or("600".to_string())
+        .parse::<usize>()
+        .unwrap_or(600) as f64;
 }
 
 lazy_static! {

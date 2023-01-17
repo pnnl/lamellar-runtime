@@ -60,7 +60,7 @@ pub trait LamellarArrayIterators<T: Dist> {
     /// Create an immutable [LocalIterator][crate::array::LocalIterator] for this array
     ///
     /// # One-sided Operation
-    /// The iteration is launched and local to only the calling PE. 
+    /// The iteration is launched and local to only the calling PE.
     /// No data movement from remote PEs is required
     ///
     /// # Examples
@@ -80,7 +80,7 @@ pub trait LamellarArrayIterators<T: Dist> {
     /// Create an immutable [OneSidedIterator][crate::array::OneSidedIterator] for this array
     ///
     /// # One-sided Operation
-    /// The iteration is launched and local to only the calling PE. 
+    /// The iteration is launched and local to only the calling PE.
     /// Data movement will occur with the remote PEs to transfer their data to the calling PE
     ///
     /// # Examples
@@ -107,7 +107,7 @@ pub trait LamellarArrayIterators<T: Dist> {
     /// This iterator typcially outperforms the non buffered version.
     ///
     /// # One-sided Operation
-    /// The iteration is launched and local to only the calling PE. 
+    /// The iteration is launched and local to only the calling PE.
     /// Data movement will occur with the remote PEs to transfer their data to the calling PE
     ///
     /// # Examples
@@ -159,7 +159,7 @@ pub trait LamellarArrayMutIterators<T: Dist> {
     /// Create a mutable [LocalIterator][crate::array::LocalIterator] for this array
     ///
     /// # One-sided Operation
-    /// The iteration is launched and local to only the calling PE. 
+    /// The iteration is launched and local to only the calling PE.
     /// No data movement from remote PEs is required
     ///
     /// # Examples

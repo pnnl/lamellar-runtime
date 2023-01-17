@@ -331,7 +331,7 @@
 //! #     original_pe: usize,
 //! #     remote_pe: usize,
 //! # }
-//! 
+//!
 //! #[lamellar::am]
 //! impl LamellarAm for ReturnAm{
 //!     async fn exec(self) -> (usize,usize) {
@@ -460,12 +460,12 @@
 //! PE 2 [2,1,0,3]
 //! PE 3 [3,2,1,0]
 //!```
-use crate::darc::{__NetworkDarc};
-use crate::memregion::one_sided::NetMemRegionHandle;
+use crate::darc::__NetworkDarc;
 use crate::lamellae::{Lamellae, LamellaeRDMA, SerializedData};
 use crate::lamellar_arch::IdError;
 use crate::lamellar_request::{InternalResult, LamellarRequestResult};
 use crate::lamellar_team::{LamellarTeam, LamellarTeamRT};
+use crate::memregion::one_sided::NetMemRegionHandle;
 use crate::scheduler::{ReqId, SchedulerQueue};
 #[cfg(feature = "enable-prof")]
 use lamellar_prof::*;
@@ -561,14 +561,11 @@ pub(crate) enum ExecType {
 }
 
 #[doc(hidden)]
-#[derive(
-    serde::Serialize, serde::Deserialize, Clone, Debug
-)]
-pub enum RemotePtr{
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
+pub enum RemotePtr {
     NetworkDarc(__NetworkDarc),
     NetMemRegionHandle(NetMemRegionHandle),
 }
-
 
 #[doc(hidden)]
 pub trait DarcSerde {
@@ -774,7 +771,7 @@ pub trait ActiveMessaging {
     ///
     /// NOTE: lamellar active messages are not lazy, i.e. you do not need to drive the returned future to launch the computation,
     /// the future is only used to check for completion and/or retrieving any returned data
-    /// 
+    ///
     /// # One-sided Operation
     /// The calling PE manages creating and transfering the active message to the remote PEs (without user intervention on the remote PEs).
     /// If a result is returned it will only be available on the calling PE.
@@ -820,7 +817,7 @@ pub trait ActiveMessaging {
     ///
     /// NOTE: lamellar active messages are not lazy, i.e. you do not need to drive the returned future to launch the computation,
     /// the future is only used to check for completeion and/or retrieving any returned data
-    /// 
+    ///
     /// # One-sided Operation
     /// The calling PE manages creating and transfering the active message to the remote PE (without user intervention on the remote PE).
     /// If a result is returned it will only be available on the calling PE.
@@ -864,7 +861,7 @@ pub trait ActiveMessaging {
     ///
     /// NOTE: lamellar active messages are not lazy, i.e. you do not need to drive the returned future to launch the computation,
     /// the future is only used to check for completeion and/or retrieving any returned data.
-    /// 
+    ///
     /// # One-sided Operation
     /// The calling PE manages creating and executing the active message local (remote PEs are not involved).
     /// If a result is returned it will only be available on the calling PE.
@@ -878,7 +875,7 @@ pub trait ActiveMessaging {
     /// #[lamellar::AmLocalData(Debug,Clone)]
     /// struct Am{
     /// // can contain anything that impls Sync, Send  
-    ///     val: Arc<Mutex<f32>>, 
+    ///     val: Arc<Mutex<f32>>,
     /// }
     ///
     /// #[lamellar::local_am]
@@ -886,7 +883,7 @@ pub trait ActiveMessaging {
     ///     async fn exec(self) -> usize { //can return nothing or any type that impls Serialize, Deserialize, Sync, Send
     ///         //do some  computation
     ///         let mut val = self.val.lock();
-    ///         *val += lamellar::current_pe as f32; 
+    ///         *val += lamellar::current_pe as f32;
     ///         lamellar::current_pe //return the executing pe
     ///     }
     /// }
@@ -912,11 +909,11 @@ pub trait ActiveMessaging {
     /// # Examples
     ///```
     /// # use lamellar::active_messaging::prelude::*;
-    /// # 
+    /// #
     /// # #[lamellar::AmData(Debug,Clone)]
     /// # struct Am{
     /// # // can contain anything that impls Sync, Send  
-    /// #     val: usize, 
+    /// #     val: usize,
     /// # }
     ///
     /// # #[lamellar::am]
@@ -927,13 +924,12 @@ pub trait ActiveMessaging {
     /// #         lamellar::current_pe //return the executing pe
     /// #     }
     /// # }
-    /// # 
+    /// #
     /// # let world = lamellar::LamellarWorldBuilder::new().build();
     /// world.exec_am_all(Am{val: world.my_pe()});
     /// world.wait_all(); //block until the previous am has finished
     ///```
     fn wait_all(&self);
-
 
     #[doc(alias = "Collective")]
     /// Global synchronization method which blocks calling thread until all PEs in the barrier group (e.g. World, Team, Array) have entered
@@ -959,7 +955,7 @@ pub trait ActiveMessaging {
     /// Users can await any future, including those returned from lamellar remote operations
     ///
     /// # One-sided Operation
-    /// this is not a distributed synchronization primitive and only blocks the calling thread until the given future has completed on the calling PE 
+    /// this is not a distributed synchronization primitive and only blocks the calling thread until the given future has completed on the calling PE
     ///
     /// # Examples
     ///```no_run  
@@ -969,9 +965,9 @@ pub trait ActiveMessaging {
     /// # #[lamellar::AmData(Debug,Clone)]
     /// # struct Am{
     /// # // can contain anything that impls Sync, Send  
-    /// #     val: usize, 
+    /// #     val: usize,
     /// # }
-    /// # 
+    /// #
     /// # #[lamellar::am]
     /// # impl LamellarAM for Am{
     /// #     async fn exec(self) -> usize { //can return nothing or any type that impls Serialize, Deserialize, Sync, Send
@@ -980,7 +976,7 @@ pub trait ActiveMessaging {
     /// #         lamellar::current_pe //return the executing pe
     /// #     }
     /// # }
-    /// # 
+    /// #
     /// # let world = lamellar::LamellarWorldBuilder::new().build();
     /// # let num_pes = world.num_pes();
     /// let request = world.exec_am_all(Am{val: world.my_pe()}); //launch am locally

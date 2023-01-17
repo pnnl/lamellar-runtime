@@ -125,7 +125,7 @@ pub(crate) struct UnsafeArrayInnerWeak {
 impl<T: Dist + 'static> UnsafeArray<T> {
     #[doc(alias = "Collective")]
     /// Construct a new UnsafeArray with a length of `array_size` whose data will be layed out with the provided `distribution` on the PE's specified by the `team`.
-    /// `team` is commonly a [LamellarWorld][crate::LamellarWorld] or [LamellarTeam][crate::LamellarTeam] (instance or reference). 
+    /// `team` is commonly a [LamellarWorld][crate::LamellarWorld] or [LamellarTeam][crate::LamellarTeam] (instance or reference).
     ///
     /// # Collective Operation
     /// Requires all PEs associated with the `team` to enter the constructor call otherwise deadlock will occur (i.e. team barriers are being called internally)
@@ -619,8 +619,6 @@ impl<T: Dist> From<UnsafeArray<T>> for LamellarByteArray {
     }
 }
 
-
-
 impl<T: Dist> private::ArrayExecAm<T> for UnsafeArray<T> {
     fn team(&self) -> Pin<Arc<LamellarTeamRT>> {
         self.team_rt().clone()
@@ -729,11 +727,11 @@ impl<T: Dist> LamellarArray<T> for UnsafeArray<T> {
         Some((pe, offset))
     }
 
-    fn first_global_index_for_pe(&self, pe: usize) -> Option<usize>{
+    fn first_global_index_for_pe(&self, pe: usize) -> Option<usize> {
         self.inner.start_index_for_pe(pe)
     }
 
-    fn last_global_index_for_pe(&self, pe: usize) -> Option<usize>{
+    fn last_global_index_for_pe(&self, pe: usize) -> Option<usize> {
         self.inner.end_index_for_pe(pe)
     }
 }
@@ -922,7 +920,7 @@ impl<T: Dist + AmDist + 'static> UnsafeArray<T> {
     /// let world = LamellarWorldBuilder::new().build();
     /// let num_pes = world.num_pes();
     /// let array = UnsafeArray::<usize>::new(&world,10,Distribution::Block);
-    /// unsafe { 
+    /// unsafe {
     ///     let req = array.dist_iter_mut().enumerate().for_each(move |(i,elem)| {
     ///         *elem = i+1;
     ///     });
@@ -1287,18 +1285,17 @@ impl UnsafeArrayInner {
         self.start_index_for_pe(pe)?;
         match self.distribution {
             Distribution::Block => {
-                if pe == self.pe_for_dist_index(self.size - 1).unwrap(){
+                if pe == self.pe_for_dist_index(self.size - 1).unwrap() {
                     Some(self.size - 1)
-                }
-                else {  
-                    Some(self.start_index_for_pe(pe+1)? -1)
+                } else {
+                    Some(self.start_index_for_pe(pe + 1)? - 1)
                 }
             }
             Distribution::Cyclic => {
                 let start_i = self.start_index_for_pe(pe)?;
                 let num_elems = self.num_elems_pe(pe);
                 let num_pes = self.data.num_pes;
-                let end_i = start_i + (num_elems-1) * num_pes;
+                let end_i = start_i + (num_elems - 1) * num_pes;
                 Some(end_i)
             }
         }

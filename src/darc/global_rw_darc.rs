@@ -9,7 +9,7 @@ use std::sync::Arc;
 use crate::active_messaging::RemotePtr;
 use crate::darc::local_rw_darc::LocalRwDarc;
 use crate::darc::{Darc, DarcInner, DarcMode, __NetworkDarc};
-use crate::lamellae::{ LamellaeRDMA};
+use crate::lamellae::LamellaeRDMA;
 use crate::lamellar_team::{IntoLamellarTeam, LamellarTeamRT};
 use crate::IdError;
 
@@ -364,7 +364,7 @@ impl<T> GlobalRwDarc<T> {
     ///     }
     ///  }
     /// //-------------
-    /// 
+    ///
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
     ///
@@ -434,7 +434,7 @@ impl<T> GlobalRwDarc<T> {
     ///     }
     ///  }
     /// //-------------
-    /// 
+    ///
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
     ///

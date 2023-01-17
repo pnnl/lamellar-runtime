@@ -5,9 +5,9 @@
 //! using all the functionality and capabilities those provide.
 //!
 //! These iterators will automatically transfer data in from Remote PEs as needed
-//! 
+//!
 //! # Examples
-//! 
+//!
 //! Examples can be found under [lamellar-runtime/examples/array_examples/](https://github.com/pnnl/lamellar-runtime/tree/master/examples/array_examples)
 mod chunks;
 use chunks::*;
@@ -26,7 +26,7 @@ use zip::*;
 // use buffered::*;
 
 use crate::array::{LamellarArray, LamellarArrayInternalGet};
-use crate::memregion::{Dist, OneSidedMemoryRegion, RegisteredMemoryRegion,SubRegion};
+use crate::memregion::{Dist, OneSidedMemoryRegion, RegisteredMemoryRegion, SubRegion};
 
 use crate::LamellarTeamRT;
 
@@ -259,7 +259,7 @@ pub trait OneSidedIterator {
 }
 
 /// An immutable standard Rust Iterator backed by a [OneSidedIterator](crate::array::iterator::one_sided_iterator).
-/// 
+///
 /// This object iterates over data serially on a single PE ; compare with [distributed iterators](crate::array::iterator::distributed_iterator), which iterate over data in on all PEs associate with the array.
 ///
 /// This struct is created by calling [into_iter][OneSidedIterator::into_iter] a OneSidedIterator

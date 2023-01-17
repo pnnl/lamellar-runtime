@@ -4,9 +4,9 @@
 //! similar to the `ParallelIterators` provided by the (Rayon)<https://docs.rs/rayon/latest/rayon/> crate.
 //!
 //! These iterators are purely local to the calling PE, no data transfer occurs.
-//! 
+//!
 //! # Examples
-//! 
+//!
 //! Examples can be found under [lamellar-runtime/examples/array_examples/](https://github.com/pnnl/lamellar-runtime/tree/master/examples/array_examples)
 mod chunks;
 mod enumerate;

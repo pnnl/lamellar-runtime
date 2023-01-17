@@ -1,5 +1,5 @@
-use crate::array::{LamellarRead, LamellarWrite};
 use crate::active_messaging::RemotePtr;
+use crate::array::{LamellarRead, LamellarWrite};
 use crate::lamellae::{AllocationType, Lamellae};
 use crate::lamellar_team::LamellarTeamRemotePtr;
 use crate::memregion::*;
@@ -27,7 +27,7 @@ lazy_static! {
 static ID_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
 #[doc(hidden)]
-#[derive(serde::Serialize, serde::Deserialize,Clone, Debug)]
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
 pub struct NetMemRegionHandle {
     mr_addr: usize,
     mr_size: usize,
@@ -154,7 +154,8 @@ pub(crate) mod memregion_handle_serde {
 }
 
 impl crate::active_messaging::DarcSerde for MemRegionHandle {
-    fn ser(&self, num_pes: usize, darcs: &mut Vec<RemotePtr>) {//TODO need to be able to return NetMemRegionHandle
+    fn ser(&self, num_pes: usize, darcs: &mut Vec<RemotePtr>) {
+        //TODO need to be able to return NetMemRegionHandle
         // match cur_pe {
         //     Ok(cur_pe) => {
         self.inner.remote_sent.fetch_add(num_pes, Ordering::SeqCst);
@@ -164,7 +165,6 @@ impl crate::active_messaging::DarcSerde for MemRegionHandle {
         //     }
         // }
         darcs.push(RemotePtr::NetMemRegionHandle(self.inner.clone().into()));
-        
     }
     fn des(&self, _cur_pe: Result<usize, IdError>) {
         // match cur_pe {
@@ -415,12 +415,12 @@ impl<T: Dist> OneSidedMemoryRegion<T> {
     ///
     /// let mem_region: OneSidedMemoryRegion<usize> = world.alloc_one_sided_mem_region(num_pes*10);
     /// unsafe{ for elem in mem_region.as_mut_slice().expect("PE just created the memregion"){*elem = num_pes};}
-    /// 
+    ///
     /// world.exec_am_all(MemRegionAm{mem_region: mem_region.clone()});
-    /// 
+    ///
     /// unsafe {
     ///     for (i,elem) in mem_region.iter().enumerate(){
-    ///         let pe = i / 10; 
+    ///         let pe = i / 10;
     ///         while *elem == num_pes{
     ///             std::thread::yield_now();
     ///         }
@@ -475,12 +475,12 @@ impl<T: Dist> OneSidedMemoryRegion<T> {
     ///
     /// let mem_region: OneSidedMemoryRegion<usize> = world.alloc_one_sided_mem_region(num_pes*10);
     /// unsafe{ for elem in mem_region.as_mut_slice().expect("PE just created the memregion "){*elem = num_pes};}
-    /// 
+    ///
     /// world.exec_am_all(MemRegionAm{mem_region: mem_region.clone()});
-    /// 
+    ///
     /// unsafe {
     ///     for (i,elem) in mem_region.iter().enumerate(){
-    ///         let pe = i / 10; 
+    ///         let pe = i / 10;
     ///         while *elem == num_pes{
     ///             std::thread::yield_now();
     ///         }
@@ -542,7 +542,7 @@ impl<T: Dist> OneSidedMemoryRegion<T> {
     ///
     /// let mem_region: OneSidedMemoryRegion<usize> = world.alloc_one_sided_mem_region(num_pes*10);
     /// unsafe{ for elem in mem_region.as_mut_slice().expect("PE just created the memregion"){*elem = num_pes};}
-    /// 
+    ///
     /// world.exec_am_all(MemRegionAm{mem_region: mem_region.clone()});
     ///```
     pub unsafe fn get_unchecked<U: Into<LamellarMemoryRegion<T>>>(&self, index: usize, data: U) {
@@ -597,7 +597,7 @@ impl<T: Dist> OneSidedMemoryRegion<T> {
     ///
     /// let mem_region: OneSidedMemoryRegion<usize> = world.alloc_one_sided_mem_region(num_pes*10);
     /// unsafe{ for elem in mem_region.as_mut_slice().expect("PE just created the memregion"){*elem = num_pes};}
-    /// 
+    ///
     /// world.exec_am_all(MemRegionAm{mem_region: mem_region.clone()});
     ///```
     pub unsafe fn blocking_get<U: Into<LamellarMemoryRegion<T>>>(&self, index: usize, data: U) {
@@ -612,7 +612,7 @@ impl<T: Dist> OneSidedMemoryRegion<T> {
     ///
     /// # Panics
     /// Panics if the calling PE does not contain any local data
-     /// # Examples
+    /// # Examples
     ///```
     /// use lamellar::memregion::prelude::*;
     ///
@@ -659,7 +659,7 @@ impl<T: Dist> OneSidedMemoryRegion<T> {
     ///
     /// let mem_region: OneSidedMemoryRegion<usize> = world.alloc_one_sided_mem_region(num_pes*10);
     /// unsafe{ for elem in mem_region.as_mut_slice().expect("PE just created the memregion"){*elem = num_pes};}
-    /// 
+    ///
     /// world.exec_am_all(MemRegionAm{mem_region: mem_region.clone()});
     ///```
     pub fn data_local(&self) -> bool {
@@ -801,7 +801,8 @@ impl<T: Dist> AsBase for OneSidedMemoryRegion<T> {
             sub_region_offset: u8_offset / std::mem::size_of::<B>(),
             sub_region_size: u8_size / std::mem::size_of::<B>(),
             phantom: PhantomData,
-        }.into()
+        }
+        .into()
     }
 }
 

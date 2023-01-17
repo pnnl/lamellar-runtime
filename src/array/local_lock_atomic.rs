@@ -186,7 +186,7 @@ impl<T: Dist> Deref for LocalLockLocalData<'_, T> {
 impl<T: Dist + std::default::Default> LocalLockArray<T> {
     #[doc(alias = "Collective")]
     /// Construct a new LocalLockArray with a length of `array_size` whose data will be layed out with the provided `distribution` on the PE's specified by the `team`.
-    /// `team` is commonly a [LamellarWorld][crate::LamellarWorld] or [LamellarTeam][crate::LamellarTeam] (instance or reference). 
+    /// `team` is commonly a [LamellarWorld][crate::LamellarWorld] or [LamellarTeam][crate::LamellarTeam] (instance or reference).
     ///
     /// # Collective Operation
     /// Requires all PEs associated with the `team` to enter the constructor call otherwise deadlock will occur (i.e. team barriers are being called internally)
@@ -247,7 +247,6 @@ impl<T: Dist> LocalLockArray<T> {
         }
     }
 
-    
     #[doc(alias("One-sided", "onesided"))]
     /// Return the calling PE's local data as a [LocalLockLocalData], which allows safe immutable access to local elements.   
     ///
@@ -483,7 +482,6 @@ impl<T: Dist> LocalLockArray<T> {
     }
 }
 
-
 impl<T: Dist + 'static> LocalLockArray<T> {
     #[doc(alias = "Collective")]
     /// Convert this LocalLockArray into a (safe) [AtomicArray][crate::array::AtomicArray]
@@ -660,11 +658,11 @@ impl<T: Dist> LamellarArray<T> for LocalLockArray<T> {
     fn pe_and_offset_for_global_index(&self, index: usize) -> Option<(usize, usize)> {
         self.array.pe_and_offset_for_global_index(index)
     }
-    fn first_global_index_for_pe(&self, pe: usize) -> Option<usize>{
+    fn first_global_index_for_pe(&self, pe: usize) -> Option<usize> {
         self.array.first_global_index_for_pe(pe)
     }
 
-    fn last_global_index_for_pe(&self, pe: usize) -> Option<usize>{
+    fn last_global_index_for_pe(&self, pe: usize) -> Option<usize> {
         self.array.last_global_index_for_pe(pe)
     }
 }

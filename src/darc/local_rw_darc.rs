@@ -10,7 +10,7 @@ use std::sync::Arc;
 use crate::active_messaging::RemotePtr;
 use crate::darc::global_rw_darc::{DistRwLock, GlobalRwDarc};
 use crate::darc::{Darc, DarcInner, DarcMode, __NetworkDarc};
-use crate::lamellae::{LamellaeRDMA};
+use crate::lamellae::LamellaeRDMA;
 use crate::lamellar_team::IntoLamellarTeam;
 use crate::IdError;
 
@@ -38,7 +38,7 @@ unsafe impl<T: Send> Send for LocalRwDarc<T> {}
 unsafe impl<T: Sync> Sync for LocalRwDarc<T> {}
 
 impl<T> crate::active_messaging::DarcSerde for LocalRwDarc<T> {
-    fn ser(&self, num_pes: usize, darcs: &mut Vec<RemotePtr>){
+    fn ser(&self, num_pes: usize, darcs: &mut Vec<RemotePtr>) {
         // println!("in local darc ser");
         // match cur_pe {
         //     Ok(cur_pe) => {

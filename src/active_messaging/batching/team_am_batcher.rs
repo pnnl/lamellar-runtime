@@ -308,11 +308,11 @@ impl Batcher for TeamAmBatcher {
             self.stall_mark.fetch_add(1, Ordering::Relaxed);
         }
         let mut darcs = vec![];
-        data.ser(1,&mut darcs); //1 because we are only sending back to the original PE
-        let darc_list_size = crate::serialized_size(&darcs,false);
+        data.ser(1, &mut darcs); //1 because we are only sending back to the original PE
+        let darc_list_size = crate::serialized_size(&darcs, false);
         let size = batch.add_non_am(
             req_data.clone(),
-            LamellarData::Data(data,darcs,darc_list_size),
+            LamellarData::Data(data, darcs, darc_list_size),
             data_size + darc_list_size + *DATA_HEADER_LEN,
         );
         if size == 0 {
@@ -546,8 +546,16 @@ impl TeamAmBatcher {
                 LamellarData::Am(_, _) | LamellarData::Return(_, _) => {
                     panic!("should not have non am batch with am or return data");
                 }
-                LamellarData::Data(data,darcs,darc_list_size) => {
-                    TeamAmBatcher::serialize_data(req_data, data, size, data_slice, i, darcs, darc_list_size);
+                LamellarData::Data(data, darcs, darc_list_size) => {
+                    TeamAmBatcher::serialize_data(
+                        req_data,
+                        data,
+                        size,
+                        data_slice,
+                        i,
+                        darcs,
+                        darc_list_size,
+                    );
                 }
                 LamellarData::Unit => {
                     TeamAmBatcher::serialize_unit(req_data, data_slice, i);
@@ -587,7 +595,7 @@ impl TeamAmBatcher {
             }
         };
         let mut darcs = vec![];
-        am.ser(darc_ser_cnt,&mut darcs);
+        am.ser(darc_ser_cnt, &mut darcs);
         am.serialize_into(&mut data_buf[*i..*i + am_size]);
         *i += am_size;
     }
@@ -618,7 +626,7 @@ impl TeamAmBatcher {
         let data_header = DataHeader {
             size: data_size,
             req_id: req_data.id,
-            darc_list_size: darc_list_size 
+            darc_list_size: darc_list_size,
         };
         crate::serialize_into(
             &mut data_buf[*i..*i + *DATA_HEADER_LEN],
@@ -628,9 +636,9 @@ impl TeamAmBatcher {
         .unwrap();
         *i += *DATA_HEADER_LEN;
 
-        crate::serialize_into(&mut data_buf[*i..(*i+darc_list_size)],&darcs,false).unwrap();
+        crate::serialize_into(&mut data_buf[*i..(*i + darc_list_size)], &darcs, false).unwrap();
         *i += darc_list_size;
-        
+
         data.serialize_into(&mut data_buf[*i..*i + data_size]);
         *i += data_size;
     }

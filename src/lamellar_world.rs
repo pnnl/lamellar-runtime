@@ -15,7 +15,7 @@ use futures::Future;
 use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::pin::Pin;
-use std::sync::atomic::{AtomicUsize,AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc; //, Weak};
 
 lazy_static! {
@@ -134,8 +134,6 @@ impl LamellarWorld {
         self.num_pes
     }
 
- 
-
     #[doc(hidden)]
     #[allow(non_snake_case)]
     #[tracing::instrument(skip_all)]
@@ -187,7 +185,6 @@ impl LamellarWorld {
     pub fn team(&self) -> Arc<LamellarTeam> {
         self.team.clone()
     }
-
 }
 
 impl Clone for LamellarWorld {
@@ -270,7 +267,7 @@ impl LamellarWorldBuilder {
     /// Construct a new lamellar world builder
     ///
     /// # Collective Operation
-    /// While simply calling `new` is not collective by itself (i.e. there is no internal barrier that would deadlock, 
+    /// While simply calling `new` is not collective by itself (i.e. there is no internal barrier that would deadlock,
     /// as the remote fabric is not initiated until after a call to `build`), it is necessary that the same
     /// parameters are used by all PEs that will exist in the world.
     ///
@@ -321,7 +318,7 @@ impl LamellarWorldBuilder {
     /// Specify the lamellae backend to use for this execution
     ///
     /// # Collective Operation
-    /// While simply calling `with_lamellae` is not collective by itself (i.e. there is no internal barrier that would deadlock, 
+    /// While simply calling `with_lamellae` is not collective by itself (i.e. there is no internal barrier that would deadlock,
     /// as the remote fabric is not initiated until after a call to `build`), it is necessary that the same
     /// parameters are used by all PEs that will exist in the world.
     ///
@@ -348,7 +345,7 @@ impl LamellarWorldBuilder {
     /// Specify the scheduler to use for this execution
     ///
     /// # Collective Operation
-    /// While simply calling `with_scheduler` is not collective by itself (i.e. there is no internal barrier that would deadlock, 
+    /// While simply calling `with_scheduler` is not collective by itself (i.e. there is no internal barrier that would deadlock,
     /// as the remote fabric is not initiated until after a call to `build`), it is necessary that the same
     /// parameters are used by all PEs that will exist in the world.
     ///

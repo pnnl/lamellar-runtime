@@ -275,15 +275,21 @@ macro_rules! impl_add_sub_and_or {
                 NativeAtomicType::I8 => &slice_as_atomic!(i8, AtomicI8, slice)[$self.local_index]
                     .$op(as_type!($val, i8), Ordering::SeqCst)
                     as *const i8 as *mut T,
-                NativeAtomicType::I16 => &slice_as_atomic!(i16, AtomicI16, slice)[$self.local_index]
-                    .$op(as_type!($val, i16), Ordering::SeqCst)
-                    as *const i16 as *mut T,
-                NativeAtomicType::I32 => &slice_as_atomic!(i32, AtomicI32, slice)[$self.local_index]
-                    .$op(as_type!($val, i32), Ordering::SeqCst)
-                    as *const i32 as *mut T,
-                NativeAtomicType::I64 => &slice_as_atomic!(i64, AtomicI64, slice)[$self.local_index]
-                    .$op(as_type!($val, i64), Ordering::SeqCst)
-                    as *const i64 as *mut T,
+                NativeAtomicType::I16 => {
+                    &slice_as_atomic!(i16, AtomicI16, slice)[$self.local_index]
+                        .$op(as_type!($val, i16), Ordering::SeqCst) as *const i16
+                        as *mut T
+                }
+                NativeAtomicType::I32 => {
+                    &slice_as_atomic!(i32, AtomicI32, slice)[$self.local_index]
+                        .$op(as_type!($val, i32), Ordering::SeqCst) as *const i32
+                        as *mut T
+                }
+                NativeAtomicType::I64 => {
+                    &slice_as_atomic!(i64, AtomicI64, slice)[$self.local_index]
+                        .$op(as_type!($val, i64), Ordering::SeqCst) as *const i64
+                        as *mut T
+                }
                 NativeAtomicType::Isize => &slice_as_atomic!(isize, AtomicIsize, slice)
                     [$self.local_index]
                     .$op(as_type!($val, isize), Ordering::SeqCst)
@@ -291,16 +297,23 @@ macro_rules! impl_add_sub_and_or {
                 NativeAtomicType::U8 => &slice_as_atomic!(u8, AtomicU8, slice)[$self.local_index]
                     .$op(as_type!($val, u8), Ordering::SeqCst)
                     as *const u8 as *mut T,
-                NativeAtomicType::U16 => &slice_as_atomic!(u16, AtomicU16, slice)[$self.local_index]
-                    .$op(as_type!($val, u16), Ordering::SeqCst)
-                    as *const u16 as *mut T,
-                NativeAtomicType::U32 => &slice_as_atomic!(u32, AtomicU32, slice)[$self.local_index]
-                    .$op(as_type!($val, u32), Ordering::SeqCst)
-                    as *const u32 as *mut T,
-                NativeAtomicType::U64 => &slice_as_atomic!(u64, AtomicU64, slice)[$self.local_index]
-                    .$op(as_type!($val, u64), Ordering::SeqCst)
-                    as *const u64 as *mut T,
-                NativeAtomicType::Usize => &slice_as_atomic!(usize, AtomicUsize, slice)[$self.local_index]
+                NativeAtomicType::U16 => {
+                    &slice_as_atomic!(u16, AtomicU16, slice)[$self.local_index]
+                        .$op(as_type!($val, u16), Ordering::SeqCst) as *const u16
+                        as *mut T
+                }
+                NativeAtomicType::U32 => {
+                    &slice_as_atomic!(u32, AtomicU32, slice)[$self.local_index]
+                        .$op(as_type!($val, u32), Ordering::SeqCst) as *const u32
+                        as *mut T
+                }
+                NativeAtomicType::U64 => {
+                    &slice_as_atomic!(u64, AtomicU64, slice)[$self.local_index]
+                        .$op(as_type!($val, u64), Ordering::SeqCst) as *const u64
+                        as *mut T
+                }
+                NativeAtomicType::Usize => &slice_as_atomic!(usize, AtomicUsize, slice)
+                    [$self.local_index]
                     .$op(as_type!($val, usize), Ordering::SeqCst)
                     as *const usize as *mut T,
             }
@@ -1010,11 +1023,11 @@ impl<T: Dist> LamellarArray<T> for NativeAtomicArray<T> {
     fn pe_and_offset_for_global_index(&self, index: usize) -> Option<(usize, usize)> {
         self.array.pe_and_offset_for_global_index(index)
     }
-    fn first_global_index_for_pe(&self, pe: usize) -> Option<usize>{
+    fn first_global_index_for_pe(&self, pe: usize) -> Option<usize> {
         self.array.first_global_index_for_pe(pe)
     }
 
-    fn last_global_index_for_pe(&self, pe: usize) -> Option<usize>{
+    fn last_global_index_for_pe(&self, pe: usize) -> Option<usize> {
         self.array.last_global_index_for_pe(pe)
     }
 }

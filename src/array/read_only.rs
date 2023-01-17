@@ -72,7 +72,7 @@ impl ReadOnlyByteArrayWeak {
 impl<T: Dist> ReadOnlyArray<T> {
     #[doc(alias = "Collective")]
     /// Construct a new ReadOnlyArray with a length of `array_size` whose data will be layed out with the provided `distribution` on the PE's specified by the `team`.
-    /// `team` is commonly a [LamellarWorld][crate::LamellarWorld] or [LamellarTeam][crate::LamellarTeam] (instance or reference). 
+    /// `team` is commonly a [LamellarWorld][crate::LamellarWorld] or [LamellarTeam][crate::LamellarTeam] (instance or reference).
     ///
     /// # Collective Operation
     /// Requires all PEs associated with the `team` to enter the constructor call otherwise deadlock will occur (i.e. team barriers are being called internally)
@@ -463,11 +463,11 @@ impl<T: Dist> LamellarArray<T> for ReadOnlyArray<T> {
         self.array.pe_and_offset_for_global_index(index)
     }
 
-    fn first_global_index_for_pe(&self, pe: usize) -> Option<usize>{
+    fn first_global_index_for_pe(&self, pe: usize) -> Option<usize> {
         self.array.first_global_index_for_pe(pe)
     }
 
-    fn last_global_index_for_pe(&self, pe: usize) -> Option<usize>{
+    fn last_global_index_for_pe(&self, pe: usize) -> Option<usize> {
         self.array.last_global_index_for_pe(pe)
     }
 }

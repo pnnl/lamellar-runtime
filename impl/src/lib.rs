@@ -336,18 +336,15 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_type: AmType) -> 
 
         let am_data_header = if rt {
             if !local {
-                quote!{#[lamellar_impl::AmDataRT]}
+                quote! {#[lamellar_impl::AmDataRT]}
+            } else {
+                quote! {#[lamellar_impl::AmLocalDataRT]}
             }
-            else{
-                quote!{#[lamellar_impl::AmLocalDataRT]}
-            }
-        }
-        else {
-            if !local{
-                quote!{#[#lamellar::AmData]}
-            }
-            else{
-                quote!{#[#lamellar::AmLocalData]}
+        } else {
+            if !local {
+                quote! {#[#lamellar::AmData]}
+            } else {
+                quote! {#[#lamellar::AmLocalData]}
             }
         };
 

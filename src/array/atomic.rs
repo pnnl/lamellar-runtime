@@ -410,10 +410,10 @@ pub enum AtomicArray<T: Dist> {
 }
 
 impl<T: Dist + 'static> crate::active_messaging::DarcSerde for AtomicArray<T> {
-    fn ser(&self, num_pes: usize, darcs: &mut Vec<RemotePtr>){
+    fn ser(&self, num_pes: usize, darcs: &mut Vec<RemotePtr>) {
         match self {
-            AtomicArray::NativeAtomicArray(array) => array.ser(num_pes,darcs),
-            AtomicArray::GenericAtomicArray(array) => array.ser(num_pes,darcs),
+            AtomicArray::NativeAtomicArray(array) => array.ser(num_pes, darcs),
+            AtomicArray::GenericAtomicArray(array) => array.ser(num_pes, darcs),
         }
     }
     fn des(&self, cur_pe: Result<usize, crate::IdError>) {
@@ -469,8 +469,8 @@ impl AtomicByteArray {
 impl crate::active_messaging::DarcSerde for AtomicByteArray {
     fn ser(&self, num_pes: usize, darcs: &mut Vec<RemotePtr>) {
         match self {
-            AtomicByteArray::NativeAtomicByteArray(array) => array.ser(num_pes,darcs),
-            AtomicByteArray::GenericAtomicByteArray(array) => array.ser(num_pes,darcs),
+            AtomicByteArray::NativeAtomicByteArray(array) => array.ser(num_pes, darcs),
+            AtomicByteArray::GenericAtomicByteArray(array) => array.ser(num_pes, darcs),
         }
     }
 
@@ -636,7 +636,7 @@ impl<T: Dist> Iterator for AtomicLocalDataIter<T> {
 impl<T: Dist + std::default::Default + 'static> AtomicArray<T> {
     #[doc(alias = "Collective")]
     /// Construct a new AtomicArray with a length of `array_size` whose data will be layed out with the provided `distribution` on the PE's specified by the `team`.
-    /// `team` is commonly a [LamellarWorld][crate::LamellarWorld] or [LamellarTeam][crate::LamellarTeam] (instance or reference). 
+    /// `team` is commonly a [LamellarWorld][crate::LamellarWorld] or [LamellarTeam][crate::LamellarTeam] (instance or reference).
     ///
     /// # Collective Operation
     /// Requires all PEs associated with the `team` to enter the constructor call otherwise deadlock will occur (i.e. team barriers are being called internally)
@@ -965,10 +965,8 @@ impl<T: Dist> From<AtomicByteArray> for AtomicArray<T> {
     }
 }
 
-impl<T: Dist + AmDist + 'static> LamellarArrayReduce<T>
-    for AtomicArray<T>
-{
-    fn reduce(&self,reduction: &str) -> Pin<Box<dyn Future<Output = T>>> {
+impl<T: Dist + AmDist + 'static> LamellarArrayReduce<T> for AtomicArray<T> {
+    fn reduce(&self, reduction: &str) -> Pin<Box<dyn Future<Output = T>>> {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.reduce(reduction),
             AtomicArray::GenericAtomicArray(array) => array.reduce(reduction),

@@ -5,9 +5,9 @@
 //!
 //! We try to minimize data movement as much as possible, but the runtime will manage remote transfers
 //! as necessary depending on the iterators used.
-//! 
+//!
 //! # Examples
-//! 
+//!
 //! Examples can be found under [lamellar-runtime/examples/array_examples/](https://github.com/pnnl/lamellar-runtime/tree/master/examples/array_examples)
 
 // mod chunks;
@@ -492,7 +492,7 @@ pub trait DistributedIterator: SyncSend + Clone + 'static {
     fn collect<A>(&self, d: Distribution) -> Pin<Box<dyn Future<Output = A> + Send>>
     where
         // &'static Self: DistributedIterator + 'static,
-        Self::Item: Dist, 
+        Self::Item: Dist,
         A: From<UnsafeArray<Self::Item>> + SyncSend + 'static,
     {
         self.array().collect(self, d)
