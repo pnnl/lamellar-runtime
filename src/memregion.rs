@@ -5,7 +5,7 @@
 //!
 //! # Warning
 //! This is a low-level module, unless you are very comfortable/confident in low level distributed memory (and even then) it is highly recommended you use the [LamellarArrays][crate::array] and [Active Messaging][crate::active_messaging] interfaces to perform distributed communications and computation.
-use crate::active_messaging::AmDist;
+use crate::active_messaging::{AmDist,RemotePtr};
 use crate::array::{
     LamellarArrayRdmaInput, LamellarArrayRdmaOutput, LamellarRead, LamellarWrite, TeamFrom,
 };
@@ -90,12 +90,12 @@ pub enum LamellarMemoryRegion<T: Dist> {
 
 impl<T: Dist> crate::active_messaging::DarcSerde for LamellarMemoryRegion<T> {
     #[tracing::instrument(skip_all)]
-    fn ser(&self, num_pes: usize) {
+    fn ser(&self, num_pes: usize, darcs: &mut Vec<RemotePtr>) {
         // println!("in shared ser");
         match self {
-            LamellarMemoryRegion::Shared(mr) => mr.ser(num_pes),
-            LamellarMemoryRegion::Local(mr) => mr.ser(num_pes),
-            // LamellarMemoryRegion::Unsafe(mr) => mr.ser(num_pes),
+            LamellarMemoryRegion::Shared(mr) => mr.ser(num_pes,darcs),
+            LamellarMemoryRegion::Local(mr) => mr.ser(num_pes,darcs),
+            // LamellarMemoryRegion::Unsafe(mr) => mr.ser(num_pes,darcs),
         }
     }
     #[tracing::instrument(skip_all)]

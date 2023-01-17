@@ -407,13 +407,13 @@ pub enum LamellarByteArray {
 }
 
 impl<T: Dist + 'static> crate::active_messaging::DarcSerde for LamellarReadArray<T> {
-    fn ser(&self, num_pes: usize) {
+    fn ser(&self, num_pes: usize, darcs: &mut Vec<RemotePtr>) {
         // println!("in shared ser");
         match self {
-            LamellarReadArray::UnsafeArray(array) => array.ser(num_pes),
-            LamellarReadArray::ReadOnlyArray(array) => array.ser(num_pes),
-            LamellarReadArray::AtomicArray(array) => array.ser(num_pes),
-            LamellarReadArray::LocalLockArray(array) => array.ser(num_pes),
+            LamellarReadArray::UnsafeArray(array) => array.ser(num_pes,darcs),
+            LamellarReadArray::ReadOnlyArray(array) => array.ser(num_pes,darcs),
+            LamellarReadArray::AtomicArray(array) => array.ser(num_pes,darcs),
+            LamellarReadArray::LocalLockArray(array) => array.ser(num_pes,darcs),
         }
     }
     fn des(&self, cur_pe: Result<usize, crate::IdError>) {
@@ -438,12 +438,12 @@ pub enum LamellarWriteArray<T: Dist> {
 }
 
 impl<T: Dist + 'static> crate::active_messaging::DarcSerde for LamellarWriteArray<T> {
-    fn ser(&self, num_pes: usize) {
+    fn ser(&self, num_pes: usize, darcs: &mut Vec<RemotePtr>) {
         // println!("in shared ser");
         match self {
-            LamellarWriteArray::UnsafeArray(array) => array.ser(num_pes),
-            LamellarWriteArray::AtomicArray(array) => array.ser(num_pes),
-            LamellarWriteArray::LocalLockArray(array) => array.ser(num_pes),
+            LamellarWriteArray::UnsafeArray(array) => array.ser(num_pes,darcs),
+            LamellarWriteArray::AtomicArray(array) => array.ser(num_pes,darcs),
+            LamellarWriteArray::LocalLockArray(array) => array.ser(num_pes,darcs),
         }
     }
     fn des(&self, cur_pe: Result<usize, crate::IdError>) {

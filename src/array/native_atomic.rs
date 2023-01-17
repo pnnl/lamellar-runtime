@@ -790,6 +790,7 @@ impl<T: Dist + std::default::Default> NativeAtomicArray<T> {
     ) -> NativeAtomicArray<T> {
         // println!("new native atomic array 1");
         let array = UnsafeArray::new(team.clone(), array_size, distribution);
+        array.block_on_outstanding(DarcMode::NativeAtomicArray);
         if let Some(func) = BUFOPS.get(&TypeId::of::<T>()) {
             let mut op_bufs = array.inner.data.op_buffers.write();
             let bytearray = NativeAtomicByteArray {
@@ -797,8 +798,8 @@ impl<T: Dist + std::default::Default> NativeAtomicArray<T> {
                 orig_t: NativeAtomicType::from::<T>(),
             };
 
-            for pe in 0..op_bufs.len() {
-                op_bufs[pe] = func(NativeAtomicByteArray::downgrade(&bytearray));
+            for _pe in 0..array.num_pes() {
+                op_bufs.push(func(NativeAtomicByteArray::downgrade(&bytearray)));
             }
         }
 

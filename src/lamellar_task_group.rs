@@ -1,9 +1,11 @@
 use crate::active_messaging::*;
+use crate::memregion::one_sided::MemRegionHandleInner;
 use crate::lamellae::Des;
 use crate::lamellar_arch::LamellarArchRT;
 use crate::lamellar_request::*;
 use crate::lamellar_team::{IntoLamellarTeam, LamellarTeamRT};
 use crate::scheduler::{ReqId, SchedulerQueue};
+use crate::Darc;
 
 use async_trait::async_trait;
 
@@ -67,9 +69,24 @@ impl<T: AmDist> TaskGroupRequestHandle<T> {
                     panic!("unexpected result type");
                 }
             }
-            InternalResult::Remote(x) => {
-                if let Ok(result) = x.deserialize_data() {
-                    //crate::deserialize(&x) {
+            InternalResult::Remote(result,darcs) => {
+                if let Ok(result) = result.deserialize_data::<T>() {
+                    // we need to appropraiately set the reference counts if the returned data contains any Darcs
+                    // we "cheat" in that we dont actually care what the Darc wraps (hence the cast to ()) we just care
+                    // that the reference count is updated.
+                    for darc in darcs{
+                        match darc{
+                            RemotePtr::NetworkDarc(darc) => {
+                                let temp: Darc<()> = darc.into();
+                                temp.des(Ok(0));
+                                temp.inc_local_cnt(1); //we drop temp decreasing local count, but need to account for the actual real darc (and we unfourtunately cannot enforce the T: DarcSerde bound, or at least I havent figured out how to yet)
+                            }
+                            RemotePtr::NetMemRegionHandle(mr) => {
+                                let temp: Arc<MemRegionHandleInner> = mr.into();
+                                temp.local_ref.fetch_add(2,Ordering::SeqCst); // Need to increase by two, 1 for temp, 1 for result
+                            }
+                        }
+                    }
                     result
                 } else {
                     panic!("unexpected result type");
@@ -163,9 +180,24 @@ impl<T: AmDist> TaskGroupMultiRequestHandle<T> {
                     panic!("unexpected result type");
                 }
             }
-            InternalResult::Remote(x) => {
-                if let Ok(result) = x.deserialize_data() {
-                    //crate::deserialize(&x) {
+            InternalResult::Remote(result,darcs) => {
+                if let Ok(result) = result.deserialize_data::<T>() {
+                    // we need to appropraiately set the reference counts if the returned data contains any Darcs
+                    // we "cheat" in that we dont actually care what the Darc wraps (hence the cast to ()) we just care
+                    // that the reference count is updated.
+                    for darc in darcs{
+                        match darc{
+                            RemotePtr::NetworkDarc(darc) => {
+                                let temp: Darc<()> = darc.into();
+                                temp.des(Ok(0));
+                                temp.inc_local_cnt(1); //we drop temp decreasing local count, but need to account for the actual real darc (and we unfourtunately cannot enforce the T: DarcSerde bound, or at least I havent figured out how to yet)
+                            }
+                            RemotePtr::NetMemRegionHandle(mr) => {
+                                let temp: Arc<MemRegionHandleInner> = mr.into();
+                                temp.local_ref.fetch_add(2,Ordering::SeqCst); // Need to increase by two, 1 for temp, 1 for result
+                            }
+                        }
+                    }
                     result
                 } else {
                     panic!("unexpected result type");
@@ -246,7 +278,7 @@ impl LamellarRequestAddResult for TaskGroupLocalRequestHandleInner {
     fn add_result(&self, _pe: usize, sub_id: usize, data: InternalResult) {
         match data {
             InternalResult::Local(x) => self.data.lock().insert(sub_id, x),
-            InternalResult::Remote(_) => panic!("unexpected result type"),
+            InternalResult::Remote(_,_) => panic!("unexpected result type"),
             InternalResult::Unit => self.data.lock().insert(sub_id, Box::new(()) as LamellarAny),
         };
     }
@@ -373,7 +405,7 @@ impl ActiveMessaging for LamellarTaskGroup {
     #[tracing::instrument(skip_all)]
     fn exec_am_all<F>(&self, am: F) -> Pin<Box<dyn Future<Output = Vec<F::Output>> + Send>>
     where
-        F: RemoteActiveMessage + LamellarAM + Serde + AmDist,
+        F: RemoteActiveMessage + LamellarAM + Serde + AmDist
     {
         // trace!("[{:?}] team exec am all request", self.team.world_pe);
         self.exec_am_all_inner(am).into_future()
@@ -488,7 +520,7 @@ impl LamellarTaskGroup {
         am: F,
     ) -> Box<dyn LamellarMultiRequest<Output = F::Output>>
     where
-        F: RemoteActiveMessage + LamellarAM + Serde + AmDist,
+        F: RemoteActiveMessage + LamellarAM + Serde + AmDist
     {
         // println!("task group exec am all");
         self.team.team_counters.add_send_req(self.team.num_pes);

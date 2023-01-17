@@ -1,7 +1,9 @@
 use crate::array::{LamellarRead, LamellarWrite};
+use crate::active_messaging::RemotePtr;
 use crate::darc::Darc;
 use crate::lamellae::AllocationType;
 use crate::memregion::*;
+
 // use crate::active_messaging::AmDist;
 use core::marker::PhantomData;
 #[cfg(feature = "enable-prof")]
@@ -47,9 +49,10 @@ pub struct SharedMemoryRegion<T: Dist> {
 }
 
 impl<T: Dist> crate::active_messaging::DarcSerde for SharedMemoryRegion<T> {
-    fn ser(&self, num_pes: usize) {
+    fn ser(&self, num_pes: usize, darcs: &mut Vec<RemotePtr>) {
         // println!("in shared ser");
         self.mr.serialize_update_cnts(num_pes);
+        darcs.push(RemotePtr::NetworkDarc(self.mr.clone().into()));
     }
     fn des(&self, cur_pe: Result<usize, crate::IdError>) {
         // println!("in shared des");

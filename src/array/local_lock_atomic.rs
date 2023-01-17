@@ -203,6 +203,7 @@ impl<T: Dist + std::default::Default> LocalLockArray<T> {
         distribution: Distribution,
     ) -> LocalLockArray<T> {
         let array = UnsafeArray::new(team.clone(), array_size, distribution);
+        array.block_on_outstanding(DarcMode::LocalLockArray);
         let lock = LocalRwDarc::new(team, ()).unwrap();
 
         if let Some(func) = BUFOPS.get(&TypeId::of::<T>()) {
@@ -212,8 +213,8 @@ impl<T: Dist + std::default::Default> LocalLockArray<T> {
                 array: array.clone().into(),
             };
 
-            for pe in 0..op_bufs.len() {
-                op_bufs[pe] = func(LocalLockByteArray::downgrade(&bytearray));
+            for _pe in 0..array.num_pes() {
+                op_bufs.push(func(LocalLockByteArray::downgrade(&bytearray)));
             }
         }
 

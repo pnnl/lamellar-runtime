@@ -346,6 +346,7 @@ impl<T: Dist + std::default::Default> GenericAtomicArray<T> {
     ) -> GenericAtomicArray<T> {
         // println!("new generic_atomic array");
         let array = UnsafeArray::new(team.clone(), array_size, distribution);
+        array.block_on_outstanding(DarcMode::GenericAtomicArray);
         let mut vec = vec![];
         for _i in 0..array.num_elems_local() {
             vec.push(Mutex::new(()));
@@ -359,8 +360,8 @@ impl<T: Dist + std::default::Default> GenericAtomicArray<T> {
                 array: array.clone().into(),
             };
 
-            for pe in 0..op_bufs.len() {
-                op_bufs[pe] = func(GenericAtomicByteArray::downgrade(&bytearray));
+            for _pe in 0..array.num_pes() {
+                op_bufs.push(func(GenericAtomicByteArray::downgrade(&bytearray)));
             }
             // println!("{}", op_bufs.len());
         }

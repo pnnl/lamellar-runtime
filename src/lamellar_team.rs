@@ -472,7 +472,7 @@ impl From<LamellarWorld> for IntoLamellarTeam {
     }
 }
 
-#[derive(serde::Serialize, serde::Deserialize, Debug)]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
 pub(crate) struct LamellarTeamRemotePtr {
     pub(crate) addr: usize,
     pub(crate) pe: usize,

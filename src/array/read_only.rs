@@ -91,14 +91,15 @@ impl<T: Dist> ReadOnlyArray<T> {
         distribution: Distribution,
     ) -> ReadOnlyArray<T> {
         let array = UnsafeArray::new(team, array_size, distribution);
+        array.block_on_outstanding(DarcMode::ReadOnlyArray);
         if let Some(func) = BUFOPS.get(&TypeId::of::<T>()) {
             let mut op_bufs = array.inner.data.op_buffers.write();
             let bytearray = ReadOnlyByteArray {
                 array: array.clone().into(),
             };
 
-            for pe in 0..op_bufs.len() {
-                op_bufs[pe] = func(ReadOnlyByteArray::downgrade(&bytearray));
+            for _pe in 0..array.num_pes() {
+                op_bufs.push(func(ReadOnlyByteArray::downgrade(&bytearray)));
             }
         }
         ReadOnlyArray { array: array }

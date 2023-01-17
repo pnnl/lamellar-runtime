@@ -1,4 +1,5 @@
 use crate::array::{LamellarRead, LamellarWrite};
+use crate::active_messaging::RemotePtr;
 use crate::lamellae::{AllocationType, Lamellae};
 use crate::lamellar_team::LamellarTeamRemotePtr;
 use crate::memregion::*;
@@ -25,8 +26,9 @@ lazy_static! {
 
 static ID_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
-#[derive(serde::Serialize, serde::Deserialize)]
-struct NetMemRegionHandle {
+#[doc(hidden)]
+#[derive(serde::Serialize, serde::Deserialize,Clone, Debug)]
+pub struct NetMemRegionHandle {
     mr_addr: usize,
     mr_size: usize,
     mr_pe: usize,
@@ -108,7 +110,7 @@ impl From<Arc<MemRegionHandleInner>> for NetMemRegionHandle {
 pub(crate) struct MemRegionHandleInner {
     mr: MemoryRegion<u8>,
     team: Pin<Arc<LamellarTeamRT>>,
-    local_ref: AtomicUsize,
+    pub(crate) local_ref: AtomicUsize,
     remote_sent: AtomicUsize,
     remote_recv: AtomicUsize,
     my_id: (usize, usize),           //id,pe
@@ -152,7 +154,7 @@ pub(crate) mod memregion_handle_serde {
 }
 
 impl crate::active_messaging::DarcSerde for MemRegionHandle {
-    fn ser(&self, num_pes: usize) {
+    fn ser(&self, num_pes: usize, darcs: &mut Vec<RemotePtr>) {//TODO need to be able to return NetMemRegionHandle
         // match cur_pe {
         //     Ok(cur_pe) => {
         self.inner.remote_sent.fetch_add(num_pes, Ordering::SeqCst);
@@ -161,6 +163,8 @@ impl crate::active_messaging::DarcSerde for MemRegionHandle {
         //         panic!("can only access MemRegionHandles within team members ({:?})", err);
         //     }
         // }
+        darcs.push(RemotePtr::NetMemRegionHandle(self.inner.clone().into()));
+        
     }
     fn des(&self, _cur_pe: Result<usize, IdError>) {
         // match cur_pe {

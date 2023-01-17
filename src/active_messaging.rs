@@ -460,6 +460,8 @@
 //! PE 2 [2,1,0,3]
 //! PE 3 [3,2,1,0]
 //!```
+use crate::darc::{__NetworkDarc};
+use crate::memregion::one_sided::NetMemRegionHandle;
 use crate::lamellae::{Lamellae, LamellaeRDMA, SerializedData};
 use crate::lamellar_arch::IdError;
 use crate::lamellar_request::{InternalResult, LamellarRequestResult};
@@ -559,13 +561,23 @@ pub(crate) enum ExecType {
 }
 
 #[doc(hidden)]
+#[derive(
+    serde::Serialize, serde::Deserialize, Clone, Debug
+)]
+pub enum RemotePtr{
+    NetworkDarc(__NetworkDarc),
+    NetMemRegionHandle(NetMemRegionHandle),
+}
+
+
+#[doc(hidden)]
 pub trait DarcSerde {
-    fn ser(&self, num_pes: usize);
+    fn ser(&self, num_pes: usize, darcs: &mut Vec<RemotePtr>);
     fn des(&self, cur_pe: Result<usize, IdError>);
 }
 
 impl<T> DarcSerde for &T {
-    fn ser(&self, _num_pes: usize) {}
+    fn ser(&self, _num_pes: usize, _darcs: &mut Vec<RemotePtr>) {}
     fn des(&self, _cur_pe: Result<usize, IdError>) {}
 }
 
@@ -599,10 +611,13 @@ pub trait LamellarActiveMessage: DarcSerde {
     fn get_id(&self) -> &'static str;
 }
 
+#[doc(hidden)]
+pub trait LamellarResultDarcSerde: LamellarSerde + DarcSerde + Sync + Send {}
+
 pub(crate) type LamellarArcLocalAm = Arc<dyn LamellarActiveMessage + Sync + Send>;
 pub(crate) type LamellarArcAm = Arc<dyn RemoteActiveMessage + Sync + Send>;
 pub(crate) type LamellarAny = Box<dyn std::any::Any + Sync + Send>;
-pub(crate) type LamellarResultArc = Arc<dyn LamellarSerde + Sync + Send>;
+pub(crate) type LamellarResultArc = Arc<dyn LamellarResultDarcSerde + Sync + Send>;
 
 /// Supertrait specifying `serde::ser::Serialize` + `serde::de::DeserializeOwned`
 pub trait Serde: serde::ser::Serialize + serde::de::DeserializeOwned {}

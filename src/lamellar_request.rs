@@ -1,6 +1,8 @@
-use crate::active_messaging::{AmDist, LamellarAny, SyncSend};
+use crate::active_messaging::{AmDist, LamellarAny, SyncSend, DarcSerde,RemotePtr};
+use crate::memregion::one_sided::MemRegionHandleInner;
 use crate::lamellae::{Des, SerializedData};
 use crate::lamellar_arch::LamellarArchRT;
+use crate::darc::{Darc};
 use async_trait::async_trait;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -12,7 +14,7 @@ use std::collections::HashMap;
 #[derive(Debug)]
 pub(crate) enum InternalResult {
     Local(LamellarAny),     // a local result from a local am (possibly a returned one)
-    Remote(SerializedData), // a remte result from a remote am
+    Remote(SerializedData,Vec<RemotePtr>), // a remte result from a remote am
     Unit,
 }
 
@@ -51,12 +53,35 @@ impl std::fmt::Debug for LamellarRequestResult {
 
 impl LamellarRequestResult {
     #[tracing::instrument(skip_all)]
-    pub(crate) fn add_result(&self, pe: usize, sub_id: usize, data: InternalResult) {
+    pub(crate) fn add_result(&self, pe: usize, sub_id: usize, data: InternalResult)  -> bool{
+        let mut added = false;
         if self.req.user_held() {
             //if the user has dropped the handle, no need to actually do anything with the returned data
             self.req.add_result(pe as usize, sub_id, data);
+            added = true;
         }
+        else {
+            if let InternalResult::Remote(_,darcs) = data {
+                // we need to appropraiately set the reference counts if the returned data contains any Darcs
+                // we "cheat" in that we dont actually care what the Darc wraps (hence the cast to ()) we just care
+                // that the reference count is updated.
+                for darc in darcs{
+                    match darc{
+                        RemotePtr::NetworkDarc(darc) => {
+                            let temp: Darc<()> = darc.into();
+                            temp.des(Ok(0));
+                        }
+                        RemotePtr::NetMemRegionHandle(mr) => {
+                            let temp: Arc<MemRegionHandleInner> = mr.into();
+                            temp.local_ref.fetch_add(1,Ordering::SeqCst); 
+                        }
+                    }
+                }
+            }
+        }
+        
         self.req.update_counters();
+        added
     }
 }
 
@@ -123,9 +148,26 @@ impl<T: AmDist> LamellarRequestHandle<T> {
                     panic!("unexpected local result  of type ");
                 }
             }
-            InternalResult::Remote(x) => {
-                if let Ok(result) = x.deserialize_data() {
-                    //crate::deserialize(&x) {
+            InternalResult::Remote(x,darcs) => {
+                if let Ok(result) = x.deserialize_data::<T>() {
+                    // we need to appropraiately set the reference counts if the returned data contains any Darcs
+                    // we "cheat" in that we dont actually care what the Darc wraps (hence the cast to ()) we just care
+                    // that the reference count is updated.
+                    for darc in darcs{
+                        match darc{
+                            RemotePtr::NetworkDarc(darc) => {
+                                let temp: Darc<()> = darc.into();
+                                temp.des(Ok(0));
+                                temp.inc_local_cnt(1); //we drop temp decreasing local count, but need to account for the actual real darc (and we unfourtunately cannot enforce the T: DarcSerde bound, or at least I havent figured out how to yet)
+                            }
+                            RemotePtr::NetMemRegionHandle(mr) => {
+                                let temp: Arc<MemRegionHandleInner> = mr.into();
+                                temp.local_ref.fetch_add(2,Ordering::SeqCst); // Need to increase by two, 1 for temp, 1 for result
+                            }
+                        }
+                    }
+                    
+                    
                     result
                 } else {
                     panic!("unexpected remote result  of type ");
@@ -224,9 +266,24 @@ impl<T: AmDist> LamellarMultiRequestHandle<T> {
                     panic!("unexpected local result  of type ");
                 }
             }
-            InternalResult::Remote(x) => {
-                if let Ok(result) = x.deserialize_data() {
-                    //crate::deserialize(&x) {
+            InternalResult::Remote(x,darcs) => {
+                if let Ok(result) = x.deserialize_data::<T>() {
+                    // we need to appropraiately set the reference counts if the returned data contains any Darcs
+                    // we "cheat" in that we dont actually care what the Darc wraps (hence the cast to ()) we just care
+                    // that the reference count is updated.
+                    for darc in darcs{
+                        match darc{
+                            RemotePtr::NetworkDarc(darc) => {
+                                let temp: Darc<()> = darc.into();
+                                temp.des(Ok(0));
+                                temp.inc_local_cnt(1); //we drop temp decreasing local count, but need to account for the actual real darc (and we unfourtunately cannot enforce the T: DarcSerde bound, or at least I havent figured out how to yet)
+                            }
+                            RemotePtr::NetMemRegionHandle(mr) => {
+                                let temp: Arc<MemRegionHandleInner> = mr.into();
+                                temp.local_ref.fetch_add(2,Ordering::SeqCst); // Need to increase by two, 1 for temp, 1 for result
+                            }
+                        }
+                    }
                     result
                 } else {
                     panic!("unexpected remote result  of type ");
@@ -244,7 +301,7 @@ impl<T: AmDist> LamellarMultiRequestHandle<T> {
 }
 
 #[async_trait]
-impl<T: AmDist> LamellarMultiRequest for LamellarMultiRequestHandle<T> {
+impl<T: AmDist > LamellarMultiRequest for LamellarMultiRequestHandle<T> {
     type Output = T;
     #[tracing::instrument(skip_all)]
     async fn into_future(mut self: Box<Self>) -> Vec<Self::Output> {
@@ -315,7 +372,7 @@ impl LamellarRequestAddResult for LamellarLocalRequestHandleInner {
         // for a single request this is only called one time by a single runtime thread so use of the cell is safe
         match data {
             InternalResult::Local(x) => self.data.set(Some(x)),
-            InternalResult::Remote(_) => panic!("unexpected local result  of type "),
+            InternalResult::Remote(_,_) => panic!("unexpected local result  of type "),
             InternalResult::Unit => self.data.set(Some(Box::new(()) as LamellarAny)),
         }
 

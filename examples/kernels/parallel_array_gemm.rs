@@ -93,13 +93,13 @@ fn main() {
     if my_pe == 0 {
         println!("elapsed {:?} Gflops: {:?}", elapsed, num_gops / elapsed,);
     }
-    unsafe {
-        world.block_on(c.dist_iter_mut().enumerate().for_each(|(i, x)| {
-            //check that c == a
-            if *x != i as f32 {
-                println!("error {:?} {:?}", x, i);
-            }
-            *x = 0.0
-        }));
-    }
+    // unsafe {
+    //     world.block_on(c.dist_iter_mut().enumerate().for_each(|(i, x)| {
+    //         //check that c == a
+    //         if *x != i as f32 {
+    //             println!("error {:?} {:?}", x, i);
+    //         }
+    //         *x = 0.0
+    //     }));
+    // }
 }

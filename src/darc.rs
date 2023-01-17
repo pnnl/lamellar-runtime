@@ -58,7 +58,8 @@ use std::time::{Duration, Instant};
 
 // use tracing::*;
 
-use crate::active_messaging::AMCounters;
+
+use crate::active_messaging::{AMCounters,RemotePtr};
 use crate::lamellae::{AllocationType, Backend, LamellaeComm, LamellaeRDMA};
 use crate::lamellar_team::{IntoLamellarTeam, LamellarTeamRT};
 use crate::lamellar_world::LAMELLAES;
@@ -186,7 +187,7 @@ impl<T: 'static> serde::Serialize for Darc<T> {
     where
         S: serde::Serializer,
     {
-        __NetworkDarc::<T>::from(self).serialize(serializer)
+        __NetworkDarc::from(self).serialize(serializer)
     }
 }
 
@@ -195,7 +196,7 @@ impl<'de, T: 'static> Deserialize<'de> for Darc<T> {
     where
         D: Deserializer<'de>,
     {
-        let ndarc: __NetworkDarc<T> = Deserialize::deserialize(deserializer)?;
+        let ndarc: __NetworkDarc = Deserialize::deserialize(deserializer)?;
         Ok(ndarc.into())
     }
 }
@@ -246,8 +247,9 @@ impl<T> Clone for WeakDarc<T> {
 }
 
 impl<T> crate::active_messaging::DarcSerde for Darc<T> {
-    fn ser(&self, num_pes: usize) {
+    fn ser(&self, num_pes: usize, darcs: &mut Vec<RemotePtr>){
         self.serialize_update_cnts(num_pes);
+        darcs.push(RemotePtr::NetworkDarc(self.clone().into()));
     }
     fn des(&self, cur_pe: Result<usize, IdError>) {
         match cur_pe {
@@ -529,6 +531,7 @@ impl<T> Darc<T> {
         self.inner()
             .dist_cnt
             .fetch_add(cnt, std::sync::atomic::Ordering::SeqCst);
+        // self.print();
         // println!("done serialize darc cnts");
     }
 
@@ -538,7 +541,13 @@ impl<T> Darc<T> {
         self.inner().inc_pe_ref_count(self.src_pe, 1);
         self.inner().local_cnt.fetch_add(1, Ordering::SeqCst);
         // println!{"darc deserialized {:?} {:?}",self.inner,self.inner().local_cnt.load(Ordering::SeqCst)};
+        // self.print();
         // println!("done deserialize darc cnts");
+    }
+
+    #[doc(hidden)]
+    pub fn inc_local_cnt(&self,cnt: usize) {
+        self.inner().local_cnt.fetch_add(cnt, Ordering::SeqCst);
     }
 
     #[doc(hidden)]
@@ -990,22 +999,21 @@ impl<T: 'static> LamellarAM for DroppedWaitAM<T> {
 }
 
 #[doc(hidden)]
-#[derive(serde::Deserialize, serde::Serialize)]
-pub struct __NetworkDarc<T> {
+#[derive(serde::Deserialize, serde::Serialize,Clone)]
+pub struct __NetworkDarc {
     inner_addr: usize,
     backend: Backend,
     orig_world_pe: usize,
     orig_team_pe: usize,
-    phantom: PhantomData<T>,
 }
 
-impl<T> std::fmt::Debug for __NetworkDarc<T> {
+impl std::fmt::Debug for __NetworkDarc {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "NetworkDarc {{ inner_addr: {:x}, backend: {:?}, orig_world_pe: {:?}, orig_team_pe: {:?} }}", self.inner_addr, self.backend, self.orig_world_pe, self.orig_team_pe)
     }
 }
 
-impl<T> From<Darc<T>> for __NetworkDarc<T> {
+impl<T> From<Darc<T>> for __NetworkDarc {
     fn from(darc: Darc<T>) -> Self {
         // println!("net darc from darc");
         let team = &darc.inner().team();
@@ -1014,14 +1022,13 @@ impl<T> From<Darc<T>> for __NetworkDarc<T> {
             backend: team.lamellae.backend(),
             orig_world_pe: team.world_pe,
             orig_team_pe: team.team_pe.expect("darcs only valid on team members"),
-            phantom: PhantomData,
         };
         // darc.print();
         ndarc
     }
 }
 
-impl<T> From<&Darc<T>> for __NetworkDarc<T> {
+impl<T> From<&Darc<T>> for __NetworkDarc {
     fn from(darc: &Darc<T>) -> Self {
         // println!("net darc from darc");
         let team = &darc.inner().team();
@@ -1030,15 +1037,14 @@ impl<T> From<&Darc<T>> for __NetworkDarc<T> {
             backend: team.lamellae.backend(),
             orig_world_pe: team.world_pe,
             orig_team_pe: team.team_pe.expect("darcs only valid on team members"),
-            phantom: PhantomData,
         };
         // darc.print();
         ndarc
     }
 }
 
-impl<T> From<__NetworkDarc<T>> for Darc<T> {
-    fn from(ndarc: __NetworkDarc<T>) -> Self {
+impl<T> From<__NetworkDarc> for Darc<T> {
+    fn from(ndarc: __NetworkDarc) -> Self {
         if let Some(lamellae) = LAMELLAES.read().get(&ndarc.backend) {
             let darc = Darc {
                 inner: lamellae.local_addr(ndarc.orig_world_pe, ndarc.inner_addr)

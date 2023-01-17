@@ -89,6 +89,7 @@ pub(crate) struct AmHeader {
 pub(crate) struct DataHeader {
     pub(crate) size: usize,
     pub(crate) req_id: ReqId,
+    pub(crate) darc_list_size: usize,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Default, Debug)]
@@ -160,6 +161,7 @@ impl ActiveMessageEngine for RegisteredActiveMessages {
                 self.exec_local_am(req_data, am, world, team).await;
             }
             Am::Return(req_data, am) => {
+                // println!("Am::Return");
                 let am_id = *(AMS_IDS.get(&am.get_id()).unwrap());
                 let am_size = am.serialized_size();
                 if am_size < crate::active_messaging::BATCH_AM_SIZE {
@@ -172,6 +174,7 @@ impl ActiveMessageEngine for RegisteredActiveMessages {
                 }
             }
             Am::Data(req_data, data) => {
+                // println!("Am::Data");
                 let data_size = data.serialized_size();
                 if data_size < crate::active_messaging::BATCH_AM_SIZE {
                     self.batcher
@@ -300,7 +303,8 @@ impl RegisteredActiveMessages {
                 }
             }
         };
-        am.ser(darc_ser_cnt);
+        let mut darcs = vec![];
+        am.ser(darc_ser_cnt,&mut darcs);
         am.serialize_into(&mut data_slice[i..]);
         req_data
             .lamellae
@@ -312,17 +316,25 @@ impl RegisteredActiveMessages {
     async fn send_data_am(&self, req_data: ReqMetaData, data: LamellarResultArc, data_size: usize) {
         // println!("send_data_am");
         let header = self.create_header(&req_data, Cmd::Data);
-        let data_buf = self
-            .create_data_buf(header, data_size + *DATA_HEADER_LEN, &req_data.lamellae)
-            .await;
-        let data_slice = data_buf.data_as_bytes();
-
+        let mut darcs = vec![];
+        data.ser(1,&mut darcs); //1 because we are only sending back to the original PE
+        let darc_list_size = crate::serialized_size(&darcs,false);
         let data_header = DataHeader {
             size: data_size,
             req_id: req_data.id,
+            darc_list_size: darc_list_size,
         };
+        
+        let data_buf = self
+            .create_data_buf(header, data_size + darc_list_size + *DATA_HEADER_LEN, &req_data.lamellae)
+            .await;
+        let data_slice = data_buf.data_as_bytes();
+
         crate::serialize_into(&mut data_slice[0..*DATA_HEADER_LEN], &data_header, false).unwrap();
-        let i = *DATA_HEADER_LEN;
+        let mut i = *DATA_HEADER_LEN;
+
+        crate::serialize_into(&mut data_slice[i..(i+darc_list_size)],&darcs,false).unwrap();
+        i += darc_list_size;
 
         data.serialize_into(&mut data_slice[i..]);
         req_data
@@ -520,12 +532,17 @@ impl RegisteredActiveMessages {
         let data_header: DataHeader =
             crate::deserialize(&data_buf[*i..*i + *DATA_HEADER_LEN], false).unwrap();
         *i += *DATA_HEADER_LEN;
+
+        let darcs: Vec<RemotePtr> = crate::deserialize(&data_buf[*i..*i + data_header.darc_list_size], false).unwrap();
+        *i += data_header.darc_list_size;
+
         let data = ser_data.sub_data(*i, *i + data_header.size);
         *i += data_header.size;
+
         self.send_data_to_user_handle(
             data_header.req_id,
             msg.src as usize,
-            InternalResult::Remote(data),
+            InternalResult::Remote(data,darcs),
         );
     }
 

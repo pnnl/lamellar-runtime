@@ -1,4 +1,3 @@
-use core::marker::PhantomData;
 use parking_lot::{
     lock_api::{ArcRwLockReadGuard, ArcRwLockWriteGuard},
     RawRwLock, RwLock,
@@ -8,11 +7,11 @@ use std::fmt;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
+use crate::active_messaging::RemotePtr;
 use crate::darc::global_rw_darc::{DistRwLock, GlobalRwDarc};
 use crate::darc::{Darc, DarcInner, DarcMode, __NetworkDarc};
-use crate::lamellae::{LamellaeComm, LamellaeRDMA};
+use crate::lamellae::{LamellaeRDMA};
 use crate::lamellar_team::IntoLamellarTeam;
-use crate::lamellar_world::LAMELLAES;
 use crate::IdError;
 
 /// A local read-write `Darc`
@@ -39,7 +38,7 @@ unsafe impl<T: Send> Send for LocalRwDarc<T> {}
 unsafe impl<T: Sync> Sync for LocalRwDarc<T> {}
 
 impl<T> crate::active_messaging::DarcSerde for LocalRwDarc<T> {
-    fn ser(&self, num_pes: usize) {
+    fn ser(&self, num_pes: usize, darcs: &mut Vec<RemotePtr>){
         // println!("in local darc ser");
         // match cur_pe {
         //     Ok(cur_pe) => {
@@ -49,6 +48,7 @@ impl<T> crate::active_messaging::DarcSerde for LocalRwDarc<T> {
         //     panic!("can only access darcs within team members ({:?})", err);
         // }
         // }
+        darcs.push(RemotePtr::NetworkDarc(self.darc.clone().into()));
     }
     fn des(&self, cur_pe: Result<usize, IdError>) {
         match cur_pe {
@@ -374,7 +374,7 @@ where
     S: Serializer,
 {
     // __NetworkDarc::<T>::from(localrw).serialize(s)
-    let ndarc = __NetworkDarc::<T>::from(localrw);
+    let ndarc = __NetworkDarc::from(localrw);
     // println!("ndarc size {:?} {:?}",crate::serialized_size(&ndarc,false),crate::serialized_size(&ndarc,true));
     ndarc.serialize(s)
 }
@@ -387,7 +387,7 @@ where
     D: Deserializer<'de>,
 {
     // println!("lrwdarc2 from net darc");
-    let ndarc: __NetworkDarc<T> = Deserialize::deserialize(deserializer)?;
+    let ndarc: __NetworkDarc = Deserialize::deserialize(deserializer)?;
     // let rwdarc = LocalRwDarc {
     //     darc: ,
     // };
@@ -396,52 +396,50 @@ where
     Ok(Darc::from(ndarc))
 }
 
-impl<T> From<Darc<Arc<RwLock<Box<T>>>>> for __NetworkDarc<T> {
-    fn from(darc: Darc<Arc<RwLock<Box<T>>>>) -> Self {
-        // println!("rwdarc to net darc");
-        // darc.print();
-        let team = &darc.inner().team();
-        let ndarc = __NetworkDarc {
-            inner_addr: darc.inner as *const u8 as usize,
-            backend: team.lamellae.backend(),
-            orig_world_pe: team.world_pe,
-            orig_team_pe: team.team_pe.expect("darcs only valid on team members"),
-            phantom: PhantomData,
-        };
-        ndarc
-    }
-}
+// impl<T> From<Darc<Arc<RwLock<Box<T>>>>> for __NetworkDarc {
+//     fn from(darc: Darc<Arc<RwLock<Box<T>>>>) -> Self {
+//         // println!("rwdarc to net darc");
+//         // darc.print();
+//         let team = &darc.inner().team();
+//         let ndarc = __NetworkDarc {
+//             inner_addr: darc.inner as *const u8 as usize,
+//             backend: team.lamellae.backend(),
+//             orig_world_pe: team.world_pe,
+//             orig_team_pe: team.team_pe.expect("darcs only valid on team members"),
+//         };
+//         ndarc
+//     }
+// }
 
-impl<T> From<&Darc<Arc<RwLock<Box<T>>>>> for __NetworkDarc<T> {
-    fn from(darc: &Darc<Arc<RwLock<Box<T>>>>) -> Self {
-        // println!("rwdarc to net darc");
-        // darc.print();
-        let team = &darc.inner().team();
-        let ndarc = __NetworkDarc {
-            inner_addr: darc.inner as *const u8 as usize,
-            backend: team.lamellae.backend(),
-            orig_world_pe: team.world_pe,
-            orig_team_pe: team.team_pe.expect("darcs only valid on team members"),
-            phantom: PhantomData,
-        };
-        ndarc
-    }
-}
+// impl<T> From<&Darc<Arc<RwLock<Box<T>>>>> for __NetworkDarc {
+//     fn from(darc: &Darc<Arc<RwLock<Box<T>>>>) -> Self {
+//         // println!("rwdarc to net darc");
+//         // darc.print();
+//         let team = &darc.inner().team();
+//         let ndarc = __NetworkDarc {
+//             inner_addr: darc.inner as *const u8 as usize,
+//             backend: team.lamellae.backend(),
+//             orig_world_pe: team.world_pe,
+//             orig_team_pe: team.team_pe.expect("darcs only valid on team members"),
+//         };
+//         ndarc
+//     }
+// }
 
-impl<T> From<__NetworkDarc<T>> for Darc<Arc<RwLock<Box<T>>>> {
-    fn from(ndarc: __NetworkDarc<T>) -> Self {
-        // println!("rwdarc from net darc");
+// impl<T> From<__NetworkDarc> for Darc<Arc<RwLock<Box<T>>>> {
+//     fn from(ndarc: __NetworkDarc) -> Self {
+//         // println!("rwdarc from net darc");
 
-        if let Some(lamellae) = LAMELLAES.read().get(&ndarc.backend) {
-            let darc = Darc {
-                inner: lamellae.local_addr(ndarc.orig_world_pe, ndarc.inner_addr)
-                    as *mut DarcInner<Arc<RwLock<Box<T>>>>,
-                src_pe: ndarc.orig_team_pe,
-                // phantom: PhantomData,
-            };
-            darc
-        } else {
-            panic!("unexepected lamellae backend {:?}", &ndarc.backend);
-        }
-    }
-}
+//         if let Some(lamellae) = LAMELLAES.read().get(&ndarc.backend) {
+//             let darc = Darc {
+//                 inner: lamellae.local_addr(ndarc.orig_world_pe, ndarc.inner_addr)
+//                     as *mut DarcInner<Arc<RwLock<Box<T>>>>,
+//                 src_pe: ndarc.orig_team_pe,
+//                 // phantom: PhantomData,
+//             };
+//             darc
+//         } else {
+//             panic!("unexepected lamellae backend {:?}", &ndarc.backend);
+//         }
+//     }
+// }

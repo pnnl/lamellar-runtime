@@ -334,9 +334,26 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_type: AmType) -> 
     if let AmType::ReturnData(_) = am_type {
         // let generic_phantom = quote::format_ident!("std::marker::PhantomData{}", impl_generics);
 
+        let am_data_header = if rt {
+            if !local {
+                quote!{#[lamellar_impl::AmDataRT]}
+            }
+            else{
+                quote!{#[lamellar_impl::AmLocalDataRT]}
+            }
+        }
+        else {
+            if !local{
+                quote!{#[#lamellar::AmData]}
+            }
+            else{
+                quote!{#[#lamellar::AmLocalData]}
+            }
+        };
+
         let the_ret_struct = if vec_u8 {
             quote! {
-                #[derive(Debug)]
+                #am_data_header
                 struct #ret_struct #ty_generics #where_clause{
                     val: serde_bytes::ByteBuf,
                     // _phantom: std::marker::PhantomData<(#impl_generics)>,
@@ -344,7 +361,7 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_type: AmType) -> 
             }
         } else {
             quote! {
-                #[derive(Debug)]
+                #am_data_header
                 struct #ret_struct #ty_generics #where_clause{
                     val: #ret_type,
                     // _phantom: std::marker::PhantomData<(#impl_generics)>,
@@ -365,6 +382,8 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_type: AmType) -> 
                         #lamellar::serialize_into(buf,&self.val,true).unwrap();
                     }
                 }
+
+                impl #impl_generics #lamellar::active_messaging::LamellarResultDarcSerde for #ret_struct #ty_generics #where_clause{}
             });
         }
     }
@@ -442,7 +461,7 @@ fn process_fields(
                         #field,
                     });
                     ser.extend(quote_spanned! {field.span()=>
-                        (&self.#field_name).ser(num_pes);
+                        (&self.#field_name).ser(num_pes,darcs);
                     });
                     des.extend(quote_spanned! {field.span()=>
                         (&self.#field_name).des(cur_pe);
@@ -466,8 +485,7 @@ fn process_fields(
                             };
                             ind += 1;
                             ser.extend(quote_spanned! {field.span()=>
-
-                               ( &self.#field_name.#temp_ind).ser(num_pes);
+                               ( &self.#field_name.#temp_ind).ser(num_pes,darcs);
                             });
                             des.extend(quote_spanned! {field.span()=>
                                 (&self.#field_name.#temp_ind).des(cur_pe);
@@ -511,8 +529,9 @@ fn process_fields(
     let mut impls = quote! {};
     if !local {
         impls.extend(quote! { #my_ser, #my_de, });
+        // ser.extend(quote! { false });
     } else {
-        ser.extend(quote! {panic!{"should not serialize data in LocalAM"}});
+        ser.extend(quote! {panic!{"should not serialize data in LocalAM"} });
     }
     let mut trait_strs = HashMap::new();
     for t in args.to_string().split(",") {
@@ -583,6 +602,7 @@ fn derive_am_data(
 
         let (traits, serde_temp_2, fields, ser, des) =
             process_fields(args, &data.fields, crate_header, local);
+        // println!("{:?}",ser.to_string());
         let vis = data.vis.to_token_stream();
         let mut attributes = quote!();
         for attr in data.attrs {
@@ -597,7 +617,7 @@ fn derive_am_data(
                 #fields
             }
             impl #impl_generics #lamellar::active_messaging::DarcSerde for #name #ty_generics #where_clause{
-                fn ser (&self,  num_pes: usize) {
+                fn ser (&self,  num_pes: usize, darcs: &mut Vec<#lamellar::active_messaging::RemotePtr>){
                     // println!("in outer ser");
                     #ser
                 }

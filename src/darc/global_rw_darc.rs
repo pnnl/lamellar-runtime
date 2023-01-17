@@ -6,11 +6,11 @@ use std::ops::{Deref, DerefMut};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
+use crate::active_messaging::RemotePtr;
 use crate::darc::local_rw_darc::LocalRwDarc;
 use crate::darc::{Darc, DarcInner, DarcMode, __NetworkDarc};
-use crate::lamellae::{LamellaeComm, LamellaeRDMA};
+use crate::lamellae::{ LamellaeRDMA};
 use crate::lamellar_team::{IntoLamellarTeam, LamellarTeamRT};
-use crate::lamellar_world::LAMELLAES;
 use crate::IdError;
 
 #[derive(serde::Serialize, serde::Deserialize, Debug)]
@@ -266,7 +266,7 @@ unsafe impl<T: Send> Send for GlobalRwDarc<T> {}
 unsafe impl<T: Sync> Sync for GlobalRwDarc<T> {}
 
 impl<T> crate::active_messaging::DarcSerde for GlobalRwDarc<T> {
-    fn ser(&self, num_pes: usize) {
+    fn ser(&self, num_pes: usize, darcs: &mut Vec<RemotePtr>) {
         // println!("in global rw darc ser");
         // match cur_pe {
         //     Ok(cur_pe) => {
@@ -276,6 +276,7 @@ impl<T> crate::active_messaging::DarcSerde for GlobalRwDarc<T> {
         //         panic!("can only access darcs within team members ({:?})", err);
         //     }
         // }
+        darcs.push(RemotePtr::NetworkDarc(self.darc.clone().into()));
     }
     fn des(&self, cur_pe: Result<usize, IdError>) {
         match cur_pe {
@@ -745,7 +746,7 @@ pub(crate) fn globalrw_serialize2<S, T>(
 where
     S: Serializer,
 {
-    __NetworkDarc::<T>::from(globalrw).serialize(s)
+    __NetworkDarc::from(globalrw).serialize(s)
 }
 
 pub(crate) fn globalrw_from_ndarc2<'de, D, T>(
@@ -754,42 +755,41 @@ pub(crate) fn globalrw_from_ndarc2<'de, D, T>(
 where
     D: Deserializer<'de>,
 {
-    let ndarc: __NetworkDarc<T> = Deserialize::deserialize(deserializer)?;
+    let ndarc: __NetworkDarc = Deserialize::deserialize(deserializer)?;
     // println!("gdarc from net darc");
     // rwdarc.print();
     Ok(Darc::from(ndarc))
 }
 
-impl<T> From<&Darc<DistRwLock<T>>> for __NetworkDarc<T> {
-    fn from(darc: &Darc<DistRwLock<T>>) -> Self {
-        // println!("rwdarc to net darc");
-        // darc.print();
-        let team = &darc.inner().team();
-        let ndarc = __NetworkDarc {
-            inner_addr: darc.inner as *const u8 as usize,
-            backend: team.lamellae.backend(),
-            orig_world_pe: team.world_pe,
-            orig_team_pe: team.team_pe.expect("darcs only valid on team members"),
-            phantom: PhantomData,
-        };
-        ndarc
-    }
-}
+// impl<T> From<&Darc<DistRwLock<T>>> for __NetworkDarc {
+//     fn from(darc: &Darc<DistRwLock<T>>) -> Self {
+//         // println!("rwdarc to net darc");
+//         // darc.print();
+//         let team = &darc.inner().team();
+//         let ndarc = __NetworkDarc {
+//             inner_addr: darc.inner as *const u8 as usize,
+//             backend: team.lamellae.backend(),
+//             orig_world_pe: team.world_pe,
+//             orig_team_pe: team.team_pe.expect("darcs only valid on team members"),
+//         };
+//         ndarc
+//     }
+// }
 
-impl<T> From<__NetworkDarc<T>> for Darc<DistRwLock<T>> {
-    fn from(ndarc: __NetworkDarc<T>) -> Self {
-        // println!("rwdarc from net darc");
+// impl<T> From<__NetworkDarc> for Darc<DistRwLock<T>> {
+//     fn from(ndarc: __NetworkDarc) -> Self {
+//         // println!("rwdarc from net darc");
 
-        if let Some(lamellae) = LAMELLAES.read().get(&ndarc.backend) {
-            let darc = Darc {
-                inner: lamellae.local_addr(ndarc.orig_world_pe, ndarc.inner_addr)
-                    as *mut DarcInner<DistRwLock<T>>,
-                src_pe: ndarc.orig_team_pe,
-                // phantom: PhantomData,
-            };
-            darc
-        } else {
-            panic!("unexepected lamellae backend {:?}", &ndarc.backend);
-        }
-    }
-}
+//         if let Some(lamellae) = LAMELLAES.read().get(&ndarc.backend) {
+//             let darc = Darc {
+//                 inner: lamellae.local_addr(ndarc.orig_world_pe, ndarc.inner_addr)
+//                     as *mut DarcInner<DistRwLock<T>>,
+//                 src_pe: ndarc.orig_team_pe,
+//                 // phantom: PhantomData,
+//             };
+//             darc
+//         } else {
+//             panic!("unexepected lamellae backend {:?}", &ndarc.backend);
+//         }
+//     }
+// }
