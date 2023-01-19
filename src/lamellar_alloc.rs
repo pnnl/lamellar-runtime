@@ -221,7 +221,9 @@ impl LamellarAlloc for BTreeAlloc {
             val = self.try_malloc(size);
             if timer.elapsed().as_secs_f64() > *crate::DEADLOCK_TIMEOUT {
                 println!("[WARNING]  Potential deadlock detected when trying to allocate more memory.\n\
-                The deadlock timeout can be set via the LAMELLAR_DEADLOCK_TIMEOUT environment variable, the current timeout is {} seconds",*crate::DEADLOCK_TIMEOUT);
+                The deadlock timeout can be set via the LAMELLAR_DEADLOCK_TIMEOUT environment variable, the current timeout is {} seconds\n\
+                To view backtrace set RUST_LIB_BACKTRACE=1\n\
+                {}",*crate::DEADLOCK_TIMEOUT,std::backtrace::Backtrace::capture());
                 timer = std::time::Instant::now();
             }
         }

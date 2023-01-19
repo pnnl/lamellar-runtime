@@ -133,7 +133,7 @@ fn main() {
             //--------------
             let a = a.clone();
             let c_clone = c_clone.clone();
-            m_blks_pe_array.dist_iter().for_each_with_schedule(
+            m_blks_pe_array.local_iter().for_each_with_schedule(
                 Schedule::Chunk(m_blks_pe_array.len()),
                 move |i_blk| {
                     // for i_blk in 0..m_blks_pe {

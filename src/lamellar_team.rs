@@ -854,9 +854,9 @@ impl LamellarTeamRT {
                     println!("[WARNING]  Potential deadlock detected when trying construct a new LamellarTeam.\n\
                         Creating a team is a collective operation requiring all PEs associated with the Parent Team (or LamellarWorld) to enter the call, not just the PEs that will be part of the new team.\n\
                         The following indicates which PEs have not entered the call: {:?}\n\
-                        The deadlock timeout can be set via the LAMELLAR_DEADLOCK_TIMEOUT environment variable, the current timeout is {} seconds",
-                        status,
-                        *crate::DEADLOCK_TIMEOUT
+                        The deadlock timeout can be set via the LAMELLAR_DEADLOCK_TIMEOUT environment variable, the current timeout is {} seconds\n\
+                        To view backtrace set RUST_LIB_BACKTRACE=1\n\
+                        {}",status,*crate::DEADLOCK_TIMEOUT,std::backtrace::Backtrace::capture()
                     );
                     // println!(
                     //     "[{:?}] ({:?})  hash: {:?}",
@@ -930,9 +930,12 @@ impl LamellarTeamRT {
                 if s.elapsed().as_secs_f64() > *crate::DEADLOCK_TIMEOUT {
                     println!("[WARNING]  Potential deadlock detected when trying to drop a LamellarTeam.\n\
                         The following indicates the dropped status on each PE: {:?}\n\
-                        The deadlock timeout can be set via the LAMELLAR_DEADLOCK_TIMEOUT environment variable, the current timeout is {} seconds",
+                        The deadlock timeout can be set via the LAMELLAR_DEADLOCK_TIMEOUT environment variable, the current timeout is {} seconds\n\
+                        To view backtrace set RUST_LIB_BACKTRACE=1\n\
+                        {}",
                         self.dropped.as_slice(),
-                        *crate::DEADLOCK_TIMEOUT,);
+                        *crate::DEADLOCK_TIMEOUT,
+                        std::backtrace::Backtrace::capture());
                     s = Instant::now();
                 }
             }

@@ -354,13 +354,16 @@ impl<T> DarcInner<T> {
                     The runtime is currently waiting for all remaining references to this distributed object to be dropped.\n\
                     This objected is likely a {:?} with {:?} remaining local references and {:?} remaining remote references\n\
                     An example where this can occur can be found at https://docs.rs/lamellar/latest/lamellar/array/struct.ReadOnlyArray.html#method.into_local_lock\n\
-                    The deadlock timeout can be set via the LAMELLAR_DEADLOCK_TIMEOUT environment variable, the current timeout is {} seconds",
+                    The deadlock timeout can be set via the LAMELLAR_DEADLOCK_TIMEOUT environment variable, the current timeout is {} seconds\n\
+                    To view backtrace set RUST_LIB_BACKTRACE=1\n\
+                    {}",
                     unsafe {
                         &std::slice::from_raw_parts_mut(self.mode_addr as *mut DarcMode, self.num_pes)
                     },
                     self.local_cnt.load(Ordering::SeqCst),
                     self.dist_cnt.load(Ordering::SeqCst),
-                    *crate::DEADLOCK_TIMEOUT
+                    *crate::DEADLOCK_TIMEOUT,
+                    std::backtrace::Backtrace::capture()
                 );
                 // println!("waiting for outstanding 1 {:?}", self);
 
@@ -402,13 +405,16 @@ impl<T> DarcInner<T> {
                     The runtime is currently waiting for all remaining references to this distributed object to be dropped.\n\
                     This objected is likely a {:?} with {:?} remaining local references and {:?} remaining remote references\n\
                     An example where this can occur can be found at https://docs.rs/lamellar/latest/lamellar/array/struct.ReadOnlyArray.html#method.into_local_lock\n\
-                    The deadlock timeout can be set via the LAMELLAR_DEADLOCK_TIMEOUT environment variable, the current timeout is {} seconds",
+                    The deadlock timeout can be set via the LAMELLAR_DEADLOCK_TIMEOUT environment variable, the current timeout is {} seconds\n\
+                    To view backtrace set RUST_LIB_BACKTRACE=1\n\
+                    {}",
                     unsafe {
                         &std::slice::from_raw_parts_mut(self.mode_addr as *mut DarcMode, self.num_pes)
                     },
                     self.local_cnt.load(Ordering::SeqCst),
                     self.dist_cnt.load(Ordering::SeqCst),
-                    *crate::DEADLOCK_TIMEOUT
+                    *crate::DEADLOCK_TIMEOUT,
+                    std::backtrace::Backtrace::capture()
                 );
                     timer = std::time::Instant::now();
                 }
@@ -427,13 +433,16 @@ impl<T> DarcInner<T> {
                     The runtime is currently waiting for all remaining references to this distributed object to be dropped.\n\
                     This objected is likely a {:?} with {:?} remaining local references and {:?} remaining remote references\n\
                     An example where this can occur can be found at https://docs.rs/lamellar/latest/lamellar/array/struct.ReadOnlyArray.html#method.into_local_lock\n\
-                    The deadlock timeout can be set via the LAMELLAR_DEADLOCK_TIMEOUT environment variable, the current timeout is {} seconds",
+                    The deadlock timeout can be set via the LAMELLAR_DEADLOCK_TIMEOUT environment variable, the current timeout is {} seconds\n\
+                    To view backtrace set RUST_LIB_BACKTRACE=1\n\
+                    {}",
                     unsafe {
                         &std::slice::from_raw_parts_mut(self.mode_addr as *mut DarcMode, self.num_pes)
                     },
                     self.local_cnt.load(Ordering::SeqCst),
                     self.dist_cnt.load(Ordering::SeqCst),
-                    *crate::DEADLOCK_TIMEOUT
+                    *crate::DEADLOCK_TIMEOUT,
+                    std::backtrace::Backtrace::capture()
                 );
                 timer = std::time::Instant::now();
             }
@@ -901,11 +910,14 @@ impl<T: 'static> LamellarAM for DroppedWaitAM<T> {
                     println!("[WARNING] - Potential deadlock detected when trying to free distributed object.\n\
                         The runtime is currently waiting for all remaining references to this distributed object to be dropped.\n\
                         The current status of the object on each pe is {:?} with {:?} remaining local references and {:?} remaining remote references\n\
-                        the deadlock timeout can be set via the LAMELLAR_DEADLOCK_TIMEOUT environment variable, the current timeout is {} seconds",
+                        the deadlock timeout can be set via the LAMELLAR_DEADLOCK_TIMEOUT environment variable, the current timeout is {} seconds\n\
+                        To view backtrace set RUST_LIB_BACKTRACE=1\n\
+                        {}",
                         mode_refs,
                         unsafe {wrapped.inner.as_ref().local_cnt.load(Ordering::SeqCst)},
                         unsafe {wrapped.inner.as_ref().dist_cnt.load(Ordering::SeqCst)},
-                        *crate::DEADLOCK_TIMEOUT
+                        *crate::DEADLOCK_TIMEOUT,
+                        std::backtrace::Backtrace::capture()
                     );
                     timeout = std::time::Instant::now();
                 }
@@ -935,11 +947,14 @@ impl<T: 'static> LamellarAM for DroppedWaitAM<T> {
                     println!("[WARNING] -- Potential deadlock detected when trying to free distributed object.\n\
                         The runtime is currently waiting for all remaining references to this distributed object to be dropped.\n\
                         The current status of the object on each pe is {:?} with {:?} remaining local references and {:?} remaining remote references\n\
-                        the deadlock timeout can be set via the LAMELLAR_DEADLOCK_TIMEOUT environment variable, the current timeout is {} seconds",
+                        the deadlock timeout can be set via the LAMELLAR_DEADLOCK_TIMEOUT environment variable, the current timeout is {} seconds\n\
+                        To view backtrace set RUST_LIB_BACKTRACE=1\n\
+                        {}",
                         mode_refs,
                         unsafe {wrapped.inner.as_ref().local_cnt.load(Ordering::SeqCst)},
                         unsafe {wrapped.inner.as_ref().dist_cnt.load(Ordering::SeqCst)},
-                        *crate::DEADLOCK_TIMEOUT
+                        *crate::DEADLOCK_TIMEOUT,
+                        std::backtrace::Backtrace::capture()
                     );
                     timeout = std::time::Instant::now();
                 }
@@ -964,11 +979,14 @@ impl<T: 'static> LamellarAM for DroppedWaitAM<T> {
                     println!("[WARNING] --- Potential deadlock detected when trying to free distributed object.\n\
                         The runtime is currently waiting for all remaining references to this distributed object to be dropped.\n\
                         The current status of the object on each pe is {:?} with {:?} remaining local references and {:?} remaining remote references\n\
-                        the deadlock timeout can be set via the LAMELLAR_DEADLOCK_TIMEOUT environment variable, the current timeout is {} seconds",
+                        the deadlock timeout can be set via the LAMELLAR_DEADLOCK_TIMEOUT environment variable, the current timeout is {} seconds\n\
+                        To view backtrace set RUST_LIB_BACKTRACE=1\n\
+                        {}",
                         mode_refs,
                         unsafe {wrapped.inner.as_ref().local_cnt.load(Ordering::SeqCst)},
                         unsafe {wrapped.inner.as_ref().dist_cnt.load(Ordering::SeqCst)},
-                        *crate::DEADLOCK_TIMEOUT
+                        *crate::DEADLOCK_TIMEOUT,
+                        std::backtrace::Backtrace::capture()
                     );
                     timeout = std::time::Instant::now();
                 }

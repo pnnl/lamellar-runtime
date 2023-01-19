@@ -100,7 +100,9 @@ impl Barrier {
                     Please refer to https://docs.rs/lamellar/latest/lamellar/index.html?search=barrier for more information\n\
                     Note that barriers are often called internally for many collective operations, including constructing new LamellarTeams, LamellarArrays, and Darcs, as well as distributed iteration\n\
                     A full list of collective operations is found at https://docs.rs/lamellar/latest/lamellar/index.html?search=collective\n\
-                    The deadlock timeout can be set via the LAMELLAR_DEADLOCK_TIMEOUT environment variable, the current timeout is {} seconds",*crate::DEADLOCK_TIMEOUT);
+                    The deadlock timeout can be set via the LAMELLAR_DEADLOCK_TIMEOUT environment variable, the current timeout is {} seconds\n\
+                    To view backtrace set RUST_LIB_BACKTRACE=1\n\
+                    {}",*crate::DEADLOCK_TIMEOUT,std::backtrace::Backtrace::capture());
                     self.print_bar();
                     s = Instant::now();
                 }
