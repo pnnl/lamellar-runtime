@@ -12,6 +12,10 @@ Through out this readme and API documentation (https://docs.rs/lamellar/latest/l
     - consists of N PEs all capable of commnicating with one another
 - `Team` - A subset of the PEs that exist in the world
 - `AM` - short for [Active Message](https://docs.rs/lamellar/latest/lamellar/active_messaging)
+- `Collective Operation` - Generally means that all PEs (associated with a given distributed object) must explicitly participate in the operation, otherwise deadlock will occur.
+    - e.g. barriers, construction of new distributed objects
+- `One-sided Operation` - Generally means that only the calling PE is required for the operation to successfuly complete.
+    - e.g. accessing local data, waiting for local work to complete
 
 # Features
 
@@ -226,7 +230,7 @@ Lamellar exposes an number of envrionment variables that can used to control app
 
 NEWS
 ----
-* November 2022: Alpha release -- v0.5
+* January 2023: Alpha release -- v0.5
 * March 2022: Alpha release -- v0.4
 * April 2021: Alpha release -- v0.3
 * September 2020: Add support for "local" lamellae, prep for crates.io release -- v0.2.1

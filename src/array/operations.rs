@@ -1482,7 +1482,7 @@ impl<T> ElementBitWiseOps for T where
 pub trait ElementCompareEqOps: std::cmp::Eq + Dist + Sized //+ AmDist
 {
 }
-impl<T> ElementCompareEqOps for T where T: std::cmp::Eq + Dist //+ AmDist,,
+impl<T> ElementCompareEqOps for T where T: std::cmp::Eq + Dist //+ AmDist,,,
 {
 }
 
