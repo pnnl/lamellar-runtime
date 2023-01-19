@@ -232,8 +232,10 @@ fn create_buf_ops(
         fetch_sub,
         fetch_mul,
         fetch_div,
+        fetch_rem,
         fetch_and,
         fetch_or,
+        fetch_xor,
         load,
         swap,
         compare_exchange,
@@ -265,8 +267,19 @@ fn create_buf_ops(
                 }
                 #res_t res_t[0] = old;
             },
+            quote! { //fetch_rem
+                let mut old = slice[index].load(Ordering::SeqCst);
+                let mut new = old % val;
+                while slice[index].compare_exchange(old, new, Ordering::SeqCst, Ordering::SeqCst).is_err() {
+                    std::thread::yield_now();
+                    old = slice[index].load(Ordering::SeqCst);
+                    new = old % val;
+                }
+                #res_t res_t[0] = old;
+            },
             quote! {#res_t res_t[0] = slice[index].fetch_and(val, Ordering::SeqCst);}, //fetch_and
             quote! {#res_t res_t[0] = slice[index].fetch_or(val, Ordering::SeqCst);},  //fetch_or
+            quote! {#res_t res_t[0] = slice[index].fetch_xor(val, Ordering::SeqCst);},  //fetch_or
             quote! {slice[index].load(Ordering::SeqCst)},                              //load
             quote! { //swap
                 let mut old = slice[index].load(Ordering::SeqCst);
@@ -339,8 +352,10 @@ fn create_buf_ops(
             quote! { panic!("fetch_sub not a valid op for Read Only Arrays"); }, //fetch_sub --we lock the index before this point so its actually atomic
             quote! { panic!("fetch_mul not a valid op for Read Only Arrays"); }, //fetch_mul --we lock the index before this point so its actually atomic
             quote! { panic!("fetch_div not a valid op for Read Only Arrays"); }, //fetch_div --we lock the index before this point so its actually atomic
+            quote! { panic!("fetch_rem not a valid op for Read Only Arrays"); }, //fetch_rem --we lock the index before this point so its actually atomic
             quote! { panic!("fetch_and not a valid op for Read Only Arrays"); }, //fetch_and --we lock the index before this point so its actually atomic
             quote! { panic!("fetch_or not a valid op for Read Only Arrays"); }, //fetch_or --we lock the index before this point so its actually atomic
+            quote! { panic!("fetch_xor not a valid op for Read Only Arrays"); }, //fetch_xor --we lock the index before this point so its actually atomic
             quote! {slice[index]},                                              //load
             quote! { panic!("swap not a valid op for Read Only Arrays"); }, //swap we lock the index before this point so its actually atomic
             quote! { panic!("compare exchange not a valid op for Read Only Arrays"); }, // compare_exchange -- we lock the index before this point so its actually atomic
@@ -354,8 +369,11 @@ fn create_buf_ops(
             quote! {#res_t res_t[0] =  slice[index]; slice[index] -= val; }, //fetch_sub --we lock the index before this point so its actually atomic
             quote! {#res_t res_t[0] =  slice[index]; slice[index] *= val; }, //fetch_mul --we lock the index before this point so its actually atomic
             quote! {#res_t res_t[0] =  slice[index]; slice[index] /= val; }, //fetch_div --we lock the index before this point so its actually atomic
+            quote! {#res_t res_t[0] =  slice[index]; slice[index] %= val; }, //fetch_rem --we lock the index before this point so its actually atomic
             quote! {#res_t res_t[0] =  slice[index]; slice[index] &= val; }, //fetch_and --we lock the index before this point so its actually atomic
             quote! {#res_t res_t[0] =  slice[index]; slice[index] |= val; }, //fetch_or --we lock the index before this point so its actually atomic
+            quote! {#res_t res_t[0] =  slice[index]; slice[index] ^= val; }, //fetch_xor --we lock the index before this point so its actually atomic
+
             quote! {slice[index]},                                           //load
             quote! {#res_t res_t[0] =  slice[index]; slice[index] = val; }, //swap we lock the index before this point so its actually atomic
             quote! {  // compare_exchange -- we lock the index before this point so its actually atomic
@@ -468,6 +486,10 @@ fn create_buf_ops(
                 ArrayOpCmd::FetchDiv=>{
                     #fetch_div
                 },
+                ArrayOpCmd::Rem=>{ #lhs %= val },
+                ArrayOpCmd::FetchRem=>{
+                    #fetch_rem
+                },
                 ArrayOpCmd::Put => {#assign},
                 ArrayOpCmd::Get =>{
                     #res_t res_t[0] = #load;
@@ -483,9 +505,11 @@ fn create_buf_ops(
                 },
                 ArrayOpCmd::Or=>{#lhs |= val},
                 ArrayOpCmd::FetchOr=>{
-
                     #fetch_or
-
+                },
+                ArrayOpCmd::Xor=>{#lhs ^= val},
+                ArrayOpCmd::FetchXor=>{
+                    #fetch_xor
                 },
             }),
             OpType::Access => match_stmts.extend(quote! {
