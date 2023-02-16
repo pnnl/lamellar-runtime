@@ -277,7 +277,7 @@ impl<T: Dist> UnsafeArray<T> {
     /// The length of the Put is dictated by the length of the buffer.
     ///
     /// The runtime provides no internal mechanism to check for completion when using this call.
-    /// i.e. this means the user themselves will be responsible for determining when the transfer is complete
+    /// i.e. this means the users themselves will be responsible for determining when the transfer is complete
     ///
     /// # Warning
     /// This is a low-level API, unless you are very confident in low level distributed memory access it is highly recommended
@@ -362,7 +362,7 @@ impl<T: Dist> UnsafeArray<T> {
     /// The length of the Get is dictated by the length of the buffer.
     ///
     /// The runtime provides no internal mechanism to check for completion when using this call.
-    /// i.e. this means the user themselves will be responsible for determining when the transfer is complete
+    /// i.e. this means the users themselves will be responsible for determining when the transfer is complete
     ///
     /// # Safety
     /// This call is always unsafe as mutual exclusitivity is not enforced, i.e. many other reader/writers can exist simultaneously.

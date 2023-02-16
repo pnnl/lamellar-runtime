@@ -810,7 +810,7 @@ impl<T> GlobalRwDarc<T> {
     ///
     /// let counter = GlobalRwDarc::new(&world, 0).unwrap();
     /// world.exec_am_all(DarcAm {counter: counter.clone()});
-    /// let mut guard = world.block_on(counter.async_collective_write());
+    /// let mut guard = world.block_on(counter.collective_write());
     /// *guard += my_pe;
     /// drop(guard); //release the lock
     /// world.wait_all(); // wait for my active message to return

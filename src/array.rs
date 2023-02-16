@@ -1,4 +1,4 @@
-//! LamellarArrays provide a safe and highlevel abstraction of a distributed array.
+//! LamellarArrays provide a safe and high-level abstraction of a distributed array.
 //!
 //! By distributed, we mean that the memory backing the array is physically located on multiple distributed PEs in the system.
 //!
@@ -12,7 +12,7 @@
 //!
 //! **Tools to work with arrays** include
 //!  - [Conversion](#type-conversion) between different array types and other data structures
-//!  - Element Wise operations (e.g. [load/store][crate::array::AccessOps], [add][crate::array::ArithmeticOps], [fetch_and][crate::array::BitWiseOps], [compare_exchange][crate::array::CompareExchangeOps], etc)
+//!  - Element-wise operations (e.g. [load/store][crate::array::AccessOps], [add][crate::array::ArithmeticOps], [fetch_and][crate::array::BitWiseOps], [compare_exchange][crate::array::CompareExchangeOps], etc)
 //!  - Batched operations ([batch_add][crate::array::ArithmeticOps], [batch_fetch_add][crate::array::ArithmeticOps], etc.)
 //!  - [Distributed][crate::array::iterator::distributed_iterator], [Local][crate::array::iterator::local_iterator], and [Onesided][crate::array::iterator::one_sided_iterator] Iteration
 //!  - [Distributed Reductions][crate::array::LamellarArrayReduce]
@@ -20,7 +20,7 @@
 //!
 //! # Examples
 //!
-//! Lamellar proides a variety of [examples](https://github.com/pnnl/lamellar-runtime/tree/master/examples/array_examples) for common tasks, e.g. distributed iteration.
+//! Lamellar provides a variety of [examples](https://github.com/pnnl/lamellar-runtime/tree/master/examples/array_examples) for common tasks, e.g. distributed iteration.
 //!
 //! # Safety
 //! Array Data Lifetimes: LamellarArrays are built upon [Darcs][crate::darc::Darc] (Distributed Atomic Reference Counting Pointers) and as such have distributed lifetime management.
@@ -28,10 +28,10 @@
 //! While the compiler handles lifetimes within the context of a single PE, our distributed lifetime management relies on "garbage collecting active messages" to ensure all remote references have been accounted for.  
 //!
 //! # Multiple array types
-//! We provide several array types, each with their own saftey gaurantees with respect to how data is accessed (further detail can be found in the documentation for each type)
+//! We provide several array types, each with their own saftey gaurantees with respect to how data is accessed (further details can be found in the documentation for each type)
 //!  - [UnsafeArray]: No safety gaurantees - PEs are free to read/write to anywhere in the array with no access control
 //!  - [ReadOnlyArray]: No write access is permitted, and thus PEs are free to read from anywhere in the array with no access control
-//!  - [AtomicArray]: Each Element is atomic (either instrisically or enforced via the runtime)
+//!  - [AtomicArray]: Each Element is atomic (either instrinsically or enforced via the runtime)
 //!      - [NativeAtomicArray]: utilizes the language atomic types e.g AtomicUsize, AtomicI8, etc.
 //!      - [GenericAtomicArray]: Each element is protected by a 1-byte mutex
 //!  - [LocalLockArray]: The data on each PE is protected by a local RwLock
@@ -41,7 +41,7 @@
 //! Lamellar offers a variety of methods to convert between different array types and other data structures.
 //! - `into_atomic`, `into_read_only`, etc., convert between disributed array types.
 //! - `collect` and `collect_async` provide functionality analogous to the [collect](https://doc.rust-lang.org/std/iter/trait.Iterator.html#method.collect) method for Rust iterators
-//! - We also provided access directy to the underlying local data of an array using functions (and container types) that preserve the safety guarantees of a given array type
+//! - We also provided access directly to the underlying local data of an array using functions (and container types) that preserve the safety guarantees of a given array type
 //!     -`local_data`, `read_local_data`, `write_local_data`, etc. convert to slices and other data types.
 //!     - Consequently, these functions can be used to create valid inputs for batched operations,  see [OpInput](crate::array::OpInput) for details.
 //! ```

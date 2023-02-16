@@ -1,4 +1,4 @@
-//! Distributed Atomic Reference Counter-- a distriubted extension of an [`Arc`][std::sync::Arc] called a [Darc][crate::darc].
+//! Distributed Atomic Reference Counter-- a distributed extension of an [`Arc`][std::sync::Arc] called a [Darc][crate::darc].
 //! The atomic reference counter, [`Arc`][std::sync::Arc], is a backbone of safe
 //! concurrent programming in Rust, and, in particular, *shared ownership*.
 //!
