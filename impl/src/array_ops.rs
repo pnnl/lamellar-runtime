@@ -240,6 +240,10 @@ fn create_buf_ops(
         swap,
         compare_exchange,
         compare_exchange_eps,
+        shl,
+        fetch_shl,
+        shr,
+        fetch_shr,
     ) = if array_type == "NativeAtomicArray" {
         let (_slice, val) = native_atomic_slice(&typeident, &lamellar);
         (
@@ -341,7 +345,44 @@ fn create_buf_ops(
                     },
                 };
                 #res_t res_t[0] = old;
-
+            },
+            quote! { //shl
+                let mut old = slice[index].load(Ordering::SeqCst);
+                let mut new = old << val;
+                while slice[index].compare_exchange(old, new, Ordering::SeqCst, Ordering::SeqCst).is_err() {
+                    std::thread::yield_now();
+                    old = slice[index].load(Ordering::SeqCst);
+                    new = old << val;
+                }
+            },
+            quote! { //fetch_shl
+                let mut old = slice[index].load(Ordering::SeqCst);
+                let mut new = old << val;
+                while slice[index].compare_exchange(old, new, Ordering::SeqCst, Ordering::SeqCst).is_err() {
+                    std::thread::yield_now();
+                    old = slice[index].load(Ordering::SeqCst);
+                    new = old << val;
+                }
+                #res_t res_t[0] = old;
+            },
+            quote! { //shr
+                let mut old = slice[index].load(Ordering::SeqCst);
+                let mut new = old >> val;
+                while slice[index].compare_exchange(old, new, Ordering::SeqCst, Ordering::SeqCst).is_err() {
+                    std::thread::yield_now();
+                    old = slice[index].load(Ordering::SeqCst);
+                    new = old >> val;
+                }
+            },
+            quote! { //fetch_shr
+                let mut old = slice[index].load(Ordering::SeqCst);
+                let mut new = old >> val;
+                while slice[index].compare_exchange(old, new, Ordering::SeqCst, Ordering::SeqCst).is_err() {
+                    std::thread::yield_now();
+                    old = slice[index].load(Ordering::SeqCst);
+                    new = old >> val;
+                }
+                #res_t res_t[0] = old;
             },
         )
     } else if array_type == "ReadOnlyArray" {
@@ -360,6 +401,10 @@ fn create_buf_ops(
             quote! { panic!("swap not a valid op for Read Only Arrays"); }, //swap we lock the index before this point so its actually atomic
             quote! { panic!("compare exchange not a valid op for Read Only Arrays"); }, // compare_exchange -- we lock the index before this point so its actually atomic
             quote! { panic!("compare exchange eps not a valid op for Read Only Arrays"); }, //compare exchange epsilon
+            quote! { panic!("shl not a valid op for Read Only Arrays"); },//shl
+            quote! { panic!("fetch_shl not a valid op for Read Only Arrays"); },//fetch_shl
+            quote! { panic!("shr not a valid op for Read Only Arrays"); },//shr
+            quote! { panic!("fetch_shr not a valid op for Read Only Arrays"); },//fetch_shr
         )
     } else {
         (
@@ -431,6 +476,10 @@ fn create_buf_ops(
                 };
                 #res_t res_t[0] = old;
             },
+            quote! {slice[index] = slice[index] << val; }, //shl --we lock the index before this point so its actually atomic
+            quote! {#res_t res_t[0] =  slice[index]; slice[index] = slice[index] << val; }, //fetch_shl --we lock the index before this point so its actually atomic
+            quote! {slice[index] = slice[index] >> val; }, //shr --we lock the index before this point so its actually atomic
+            quote! {#res_t res_t[0] =  slice[index]; slice[index] = slice[index] >> val; }, //fetch_shr --we lock the index before this point so its actually atomic
         )
     };
     let (lock, slice) = if array_type == "GenericAtomicArray" {
@@ -529,6 +578,16 @@ fn create_buf_ops(
             OpType::ReadOnly => match_stmts.extend(quote! {
                 ArrayOpCmd::Load=>{
                     #res_t res_t[0] =  #load;
+                },
+            }),
+            OpType::Shift => match_stmts.extend(quote! {
+                ArrayOpCmd::Shl(val)=>{#shl},
+                ArrayOpCmd::FetchShl(val)=>{
+                    #fetch_shl
+                },
+                ArrayOpCmd::Shr(val)=>{#shr},
+                ArrayOpCmd::FetchShr(val)=>{
+                    #fetch_shr
                 },
             }),
         }
@@ -858,6 +917,7 @@ enum OpType {
     Bitwise,
     Access,
     ReadOnly,
+    Shift,
 }
 
 fn create_buffered_ops(
@@ -910,6 +970,7 @@ fn create_buffered_ops(
     optypes.push(OpType::Access);
     if bitwise {
         optypes.push(OpType::Bitwise);
+        optypes.push(OpType::Shift);
     }
     let buf_op_impl = create_buf_ops(
         typeident.clone(),

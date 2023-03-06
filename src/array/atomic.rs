@@ -32,7 +32,7 @@ lazy_static! {
     };
 }
 
-use std::ops::{AddAssign, BitAndAssign, BitOrAssign, DivAssign, MulAssign, SubAssign};
+use std::ops::{AddAssign, BitAndAssign, BitOrAssign, BitXorAssign, DivAssign, RemAssign, MulAssign, SubAssign, Shl, Shr};
 
 // #[doc(hidden)]
 /// An abstraction of an atomic element either via language supported Atomic integer types or through the use of an accompanying mutex.
@@ -328,6 +328,49 @@ impl<T: ElementBitWiseOps + 'static> AtomicElement<T> {
     }
 }
 
+impl<T: ElementShiftOps<Result = T> + 'static> AtomicElement<T> {
+    /// Atomically performs a left shift of `val` bits with the current value, returning the previous value
+    ///
+    /// Note: for native atomic types, [SeqCst][std::sync::atomic::Ordering::SeqCst] ordering is used
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world,16,Distribution::Cyclic);
+    ///
+    /// let local_data = array.local_data();
+    /// let old_val = local_data.at(10).fetch_shl(2);
+    ///```
+    pub fn fetch_shl(&self, val: usize) -> T {
+        match self {
+            AtomicElement::NativeAtomicElement(array) => array.fetch_shl(val).0,
+            AtomicElement::GenericAtomicElement(array) => array.fetch_shl(val),
+        }
+    }
+    /// Atomically performs a right shift of `val` bits with the current value, returning the previous value
+    ///
+    /// Note: for native atomic types, [SeqCst][std::sync::atomic::Ordering::SeqCst] ordering is used
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world,16,Distribution::Cyclic);
+    ///
+    /// let local_data = array.local_data();
+    /// let old_val = local_data.at(10).fetch_shr(2);
+    ///```
+    pub fn fetch_shr(&self, val: usize) -> T {
+        match self {
+            AtomicElement::NativeAtomicElement(array) => array.fetch_shr(val).0,
+            AtomicElement::GenericAtomicElement(array) => array.fetch_shr(val),
+        }
+    }
+}
+
 impl<T: Dist + ElementArithmeticOps> AddAssign<T> for AtomicElement<T> {
     fn add_assign(&mut self, val: T) {
         match self {
@@ -364,6 +407,15 @@ impl<T: Dist + ElementArithmeticOps> DivAssign<T> for AtomicElement<T> {
     }
 }
 
+impl<T: Dist + ElementArithmeticOps> RemAssign<T> for AtomicElement<T> {
+    fn rem_assign(&mut self, val: T) {
+        match self {
+            AtomicElement::NativeAtomicElement(array) => array.rem_assign(val),
+            AtomicElement::GenericAtomicElement(array) => array.rem_assign(val),
+        }
+    }
+}
+
 impl<T: Dist + ElementBitWiseOps> BitAndAssign<T> for AtomicElement<T> {
     fn bitand_assign(&mut self, val: T) {
         match self {
@@ -378,6 +430,35 @@ impl<T: Dist + ElementBitWiseOps> BitOrAssign<T> for AtomicElement<T> {
         match self {
             AtomicElement::NativeAtomicElement(array) => array.bitor_assign(val),
             AtomicElement::GenericAtomicElement(array) => array.bitor_assign(val),
+        }
+    }
+}
+
+impl<T: Dist + ElementBitWiseOps> BitXorAssign<T> for AtomicElement<T> {
+    fn bitxor_assign(&mut self, val: T) {
+        match self {
+            AtomicElement::NativeAtomicElement(array) => array.bitxor_assign(val),
+            AtomicElement::GenericAtomicElement(array) => array.bitxor_assign(val),
+        }
+    }
+}
+
+impl<T: Dist + ElementShiftOps<Result = T>> Shl<usize> for AtomicElement<T> {
+    type Output = T;
+    fn shl(self, val: usize) -> Self::Output {
+        match self {
+            AtomicElement::NativeAtomicElement(array) => array.shl(val),
+            AtomicElement::GenericAtomicElement(array) => array.shl(val),
+        }
+    }
+}
+
+impl<T: Dist + ElementShiftOps<Result = T>> Shr<usize> for AtomicElement<T> {
+    type Output = T;
+    fn shr(self, val: usize) -> Self::Output {
+        match self {
+            AtomicElement::NativeAtomicElement(array) => array.shr(val),
+            AtomicElement::GenericAtomicElement(array) => array.shr(val),
         }
     }
 }

@@ -61,6 +61,26 @@ impl std::ops::RemAssign for Custom {
     }
 }
 
+impl std::ops::Shl<usize> for Custom {
+    type Output = Self;
+    fn shl(self,val: usize) -> Self::Output{
+        Custom {
+            int: self.int << val,
+            float: self.float,
+        }
+    }
+}
+
+impl std::ops::Shr<usize> for Custom {
+    type Output = Self;
+    fn shr(self,val: usize) -> Self::Output{
+        Custom {
+            int: self.int >> val,
+            float: self.float,
+        }
+    }
+}
+
 fn test_add<T: std::fmt::Debug + ElementArithmeticOps + 'static>(
     array: AtomicArray<T>,
     init_val: T,
@@ -358,6 +378,68 @@ fn test_store_load<T: std::fmt::Debug + ElementOps + 'static>(
     array.barrier();
 }
 
+fn test_shl<T: std::fmt::Debug + ElementShiftOps<Result = T> + 'static>(
+    array: AtomicArray<T>,
+    init_val: T,
+    shl_val: usize,
+) {
+    array
+        .dist_iter_mut()
+        .for_each(move |elem| elem.store(init_val));
+    array.wait_all();
+    array.barrier();
+    array.print();
+    array.barrier();
+    for i in 0..array.len() {
+        array.shl(i, shl_val);
+    }
+    array.wait_all();
+    array.barrier();
+    array.print();
+    array.barrier();
+    let mut reqs = vec![];
+    for i in 0..array.len() {
+        reqs.push(array.fetch_shl(i, shl_val));
+    }
+    for (i, req) in reqs.drain(0..).enumerate() {
+        println!("i: {:?} {:?}", i, array.block_on(req));
+    }
+    array.barrier();
+    array.print();
+    array.barrier();
+}
+
+fn test_shr<T: std::fmt::Debug + ElementShiftOps<Result = T> + 'static>(
+    array: AtomicArray<T>,
+    init_val: T,
+    shr_val: usize,
+) {
+    array
+        .dist_iter_mut()
+        .for_each(move |elem| elem.store(init_val));
+    array.wait_all();
+    array.barrier();
+    array.print();
+    array.barrier();
+    for i in 0..array.len() {
+        array.shr(i, shr_val);
+    }
+    array.wait_all();
+    array.barrier();
+    array.print();
+    array.barrier();
+    let mut reqs = vec![];
+    for i in 0..array.len() {
+        reqs.push(array.fetch_shr(i, shr_val));
+    }
+    for (i, req) in reqs.drain(0..).enumerate() {
+        println!("i: {:?} {:?}", i, array.block_on(req));
+    }
+    array.barrier();
+    array.print();
+    array.barrier();
+}
+
 fn main() {
     // let args: Vec<String> = std::env::args().collect();
     let world = lamellar::LamellarWorldBuilder::new().build();
@@ -633,4 +715,64 @@ fn main() {
     array_custom.barrier();
     array_custom.print();
     array_custom.barrier();
+
+    println!("====================================================================");
+
+    test_shl(array_u8.clone(), 1, 3);
+    test_shl(array_i128.clone(), 1, 63);
+    test_shl(
+        array_custom.clone(),
+        Custom {
+            int: 1,
+            float: 1000.0,
+        },
+        15,
+    );
+    (&array_u8).shl(1, 3);
+    array_u8.wait_all();
+    array_u8.barrier();
+    array_u8.print();
+    array_u8.barrier();
+
+    (&array_i128).shl(1,63);
+    array_i128.wait_all();
+    array_i128.barrier();
+    array_i128.print();
+    array_i128.barrier();
+
+    (&array_custom).shl(1, 15);
+    array_custom.wait_all();
+    array_custom.barrier();
+    array_custom.print();
+    array_custom.barrier();
+    println!("====================================================================");
+
+    test_shr(array_u8.clone(), !0, 3);
+    test_shr(array_i128.clone(), !0, 63);
+    test_shr(
+        array_custom.clone(),
+        Custom {
+            int: !0,
+            float: 1000.0,
+        },
+        15,
+    );
+    (&array_u8).shr(1, 3);
+    array_u8.wait_all();
+    array_u8.barrier();
+    array_u8.print();
+    array_u8.barrier();
+
+    (&array_i128).shr(1,63);
+    array_i128.wait_all();
+    array_i128.barrier();
+    array_i128.print();
+    array_i128.barrier();
+
+    (&array_custom).shr(1, 15);
+    array_custom.wait_all();
+    array_custom.barrier();
+    array_custom.print();
+    array_custom.barrier();
+    println!("====================================================================");
 }

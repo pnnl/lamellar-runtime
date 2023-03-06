@@ -292,7 +292,6 @@ pub trait LocalIteratorLauncher {
 /// The functions in this trait are available on all local iterators.
 /// Additonaly functionality can be found in the [IndexedLocalIterator] trait:
 /// these methods are only available for local iterators where the number of elements is known in advance (e.g. after invoking `filter` these methods would be unavailable)
-
 pub trait LocalIterator: SyncSend + Clone + 'static {
     /// The type of item this distributed iterator produces
     type Item: Send;
