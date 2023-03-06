@@ -31,6 +31,8 @@ impl<T: ElementArithmeticOps + 'static> ArithmeticOps<T> for GlobalLockArray<T> 
 
 impl<T: ElementBitWiseOps + 'static> BitWiseOps<T> for GlobalLockArray<T> {}
 
+impl<T: ElementShiftOps<Result = T> + 'static> ShiftOps<T> for GlobalLockArray<T> {}
+
 impl<T: ElementCompareEqOps + 'static> CompareExchangeOps<T> for GlobalLockArray<T> {}
 
 impl<T: ElementComparePartialEqOps + 'static> CompareExchangeEpsilonOps<T> for GlobalLockArray<T> {}

@@ -15,7 +15,7 @@ use serde::ser::SerializeSeq;
 //     Mutex,MutexGuard
 // };
 use std::any::TypeId;
-use std::ops::{AddAssign, BitAndAssign, BitOrAssign, BitXorAssign, DivAssign, MulAssign, RemAssign, SubAssign};
+use std::ops::{AddAssign, BitAndAssign, BitOrAssign, BitXorAssign, DivAssign, MulAssign, RemAssign, SubAssign, Shl, Shr};
 // use std::ops::{Deref, DerefMut};
 
 #[doc(hidden)]
@@ -120,6 +120,18 @@ macro_rules! impl_atomic_ops{
             fn bitxor_assign(&mut self, val: $A) {
                 // self.0.as_native_atomic().fetch_or(val,Ordering::SeqCst);
                 self.0.fetch_xor(val,Ordering::SeqCst);
+            }
+        }
+        impl Shl<usize> for $C<'_> {
+            type Output = $A;
+            fn shl(self, val: usize ) -> Self::Output {
+                self.0.load(Ordering::SeqCst) << val
+            }
+        }
+        impl Shr<usize> for $C<'_> {
+            type Output = $A;
+            fn shr(self, val: usize ) -> Self::Output {
+                self.0.load(Ordering::SeqCst) >> val
             }
         }
     }
@@ -227,6 +239,21 @@ macro_rules! compare_exchange_op{
             }
         }
     };
+    ($A:ty, $B:ty, $C:ty, $self:ident, $val:ident, $op:tt ) => { //used for shift --can't fail
+        {
+            let slice = $self.array.__local_as_mut_slice();
+            let slice = slice_as_atomic!($A,$B,slice);
+            let val = $val;
+            let mut cur = slice[$self.local_index].load(Ordering::SeqCst);
+            let mut new = cur $op val;
+            while slice[$self.local_index].compare_exchange(cur,new,Ordering::SeqCst,Ordering::SeqCst).is_err(){
+                std::thread::yield_now();
+                cur = slice[$self.local_index].load(Ordering::SeqCst);
+                new = cur $op val;
+            }
+            (cur,new)
+        }
+    };
     ($A:ty, $B:ty, $self:ident, $val:ident, $op:tt ) => { //used for everything else --can't fail
         {
             let slice = $self.array.__local_as_mut_slice();
@@ -244,6 +271,48 @@ macro_rules! compare_exchange_op{
     };
 }
 
+macro_rules! impl_shift {
+    ($self:ident,$op:tt,$val:ident) => {
+        // mul, div
+        unsafe {
+            *match $self.array.orig_t {
+                //deref to the original type
+                NativeAtomicType::I8 => {
+                    &compare_exchange_op!(i8, AtomicI8, usize, $self, $val, $op) as *const (i8,i8) as *mut (T,T)
+                }
+                NativeAtomicType::I16 => {
+                    &compare_exchange_op!(i16, AtomicI16, usize, $self, $val, $op) as *const (i16,i16) as *mut (T,T)
+                }
+                NativeAtomicType::I32 => {
+                    &compare_exchange_op!(i32, AtomicI32, usize, $self, $val, $op) as *const (i32,i32) as *mut (T,T)
+                }
+                NativeAtomicType::I64 => {
+                    &compare_exchange_op!(i64, AtomicI64, usize, $self, $val, $op) as *const (i64,i64) as *mut (T,T)
+                }
+                NativeAtomicType::Isize => {
+                    &compare_exchange_op!(isize, AtomicIsize, usize, $self, $val, $op) as *const (isize,isize)
+                        as *mut (T,T)
+                }
+                NativeAtomicType::U8 => {
+                    &compare_exchange_op!(u8, AtomicU8, usize, $self, $val, $op) as *const (u8,u8) as *mut (T,T)
+                }
+                NativeAtomicType::U16 => {
+                    &compare_exchange_op!(u16, AtomicU16, usize, $self, $val, $op) as *const (u16,u16) as *mut (T,T)
+                }
+                NativeAtomicType::U32 => {
+                    &compare_exchange_op!(u32, AtomicU32, usize, $self, $val, $op) as *const (u32,u32) as *mut (T,T)
+                }
+                NativeAtomicType::U64 => {
+                    &compare_exchange_op!(u64, AtomicU64, usize, $self, $val, $op) as *const (u64,u64) as *mut (T,T)
+                }
+                NativeAtomicType::Usize => {
+                    &compare_exchange_op!(usize, AtomicUsize, usize, $self, $val, $op) as *const (usize,usize)
+                        as *mut (T,T)
+                }
+            }
+        }
+    };
+}
 macro_rules! impl_mul_div {
     ($self:ident,$op:tt,$val:ident) => {
         // mul, div
@@ -286,7 +355,7 @@ macro_rules! impl_mul_div {
         }
     };
 }
-macro_rules! impl_add_sub_and_or {
+macro_rules! impl_add_sub_and_or_xor {
     ($self:ident,$op:ident,$val:ident) => {
         //add,sub,and,or (returns value)
         unsafe {
@@ -608,10 +677,10 @@ impl<T: Dist> NativeAtomicElement<T> {
         impl_compare_exchange_eps!(self, old, new, eps)
     }
     pub fn fetch_add(&self, val: T) -> T {
-        impl_add_sub_and_or!(self, fetch_add, val)
+        impl_add_sub_and_or_xor!(self, fetch_add, val)
     }
     pub fn fetch_sub(&self, val: T) -> T {
-        impl_add_sub_and_or!(self, fetch_sub, val)
+        impl_add_sub_and_or_xor!(self, fetch_sub, val)
     }
     pub fn fetch_mul(&self, val: T) -> T {
         impl_mul_div!(self, * , val)
@@ -622,17 +691,23 @@ impl<T: Dist> NativeAtomicElement<T> {
     pub fn fetch_rem(&self, val: T) -> T {
         impl_mul_div!(self, %, val)
     }
+    pub fn fetch_shl(&self, val: usize) -> (T,T) { //result.0 is old value, result.1 is new value
+        impl_shift!(self, <<, val)
+    }
+    pub fn fetch_shr(&self, val: usize) -> (T,T) {  //result.0 is old value, result.1 is new value
+        impl_shift!(self, >>, val)
+    }
 }
 
 impl<T: ElementBitWiseOps + 'static> NativeAtomicElement<T> {
     pub fn fetch_and(&self, val: T) -> T {
-        impl_add_sub_and_or!(self, fetch_and, val)
+        impl_add_sub_and_or_xor!(self, fetch_and, val)
     }
     pub fn fetch_or(&self, val: T) -> T {
-        impl_add_sub_and_or!(self, fetch_or, val)
+        impl_add_sub_and_or_xor!(self, fetch_or, val)
     }
     pub fn fetch_xor(&self, val: T) -> T {
-        impl_add_sub_and_or!(self, fetch_xor, val)
+        impl_add_sub_and_or_xor!(self, fetch_xor, val)
     }
 }
 
@@ -681,6 +756,20 @@ impl<T: Dist + ElementBitWiseOps> BitOrAssign<T> for NativeAtomicElement<T> {
 impl<T: Dist + ElementBitWiseOps> BitXorAssign<T> for NativeAtomicElement<T> {
     fn bitxor_assign(&mut self, val: T) {
         self.fetch_xor(val);
+    }
+}
+
+impl<T: Dist + ElementShiftOps> Shl<usize> for NativeAtomicElement<T> {
+    type Output = T;
+    fn shl(self, val: usize) -> Self::Output {
+        self.fetch_shl(val).1
+    }
+}
+
+impl<T: Dist + ElementShiftOps> Shr<usize> for NativeAtomicElement<T> {
+    type Output = T;
+    fn shr(self, val: usize) -> Self::Output {
+        self.fetch_shr(val).1
     }
 }
 

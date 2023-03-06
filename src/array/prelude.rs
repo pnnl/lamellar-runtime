@@ -20,9 +20,9 @@ pub use crate::array::iterator::one_sided_iterator::{OneSidedIterator, OneSidedI
 pub use crate::array::iterator::{LamellarArrayIterators, LamellarArrayMutIterators, Schedule};
 
 pub use crate::array::operations::{
-    AccessOps, ArithmeticOps, BitWiseOps, CompareExchangeEpsilonOps, CompareExchangeOps,
-    ElementArithmeticOps, ElementBitWiseOps, ElementCompareEqOps, ElementComparePartialEqOps,
-    ElementOps, LocalArithmeticOps, LocalAtomicOps, LocalBitWiseOps, OpInput, ReadOnlyOps,
+    AccessOps, ArithmeticOps, BitWiseOps, CompareExchangeEpsilonOps, CompareExchangeOps, ShiftOps,
+    ElementArithmeticOps, ElementBitWiseOps, ElementCompareEqOps, ElementComparePartialEqOps, ElementShiftOps,
+    ElementOps, LocalArithmeticOps, LocalAtomicOps, LocalBitWiseOps, LocalShiftOps, OpInput, ReadOnlyOps,
 };
 // pub use crate::array::operations::*;
 
