@@ -32,7 +32,7 @@ lazy_static! {
     };
 }
 
-use std::ops::{AddAssign, BitAndAssign, BitOrAssign, BitXorAssign, DivAssign, RemAssign, MulAssign, SubAssign, Shl, Shr};
+use std::ops::{AddAssign, BitAndAssign, BitOrAssign, BitXorAssign, DivAssign, RemAssign, MulAssign, SubAssign, ShlAssign, ShrAssign};
 
 // #[doc(hidden)]
 /// An abstraction of an atomic element either via language supported Atomic integer types or through the use of an accompanying mutex.
@@ -328,7 +328,7 @@ impl<T: ElementBitWiseOps + 'static> AtomicElement<T> {
     }
 }
 
-impl<T: ElementShiftOps<Result = T> + 'static> AtomicElement<T> {
+impl<T: ElementShiftOps + 'static> AtomicElement<T> {
     /// Atomically performs a left shift of `val` bits with the current value, returning the previous value
     ///
     /// Note: for native atomic types, [SeqCst][std::sync::atomic::Ordering::SeqCst] ordering is used
@@ -343,9 +343,9 @@ impl<T: ElementShiftOps<Result = T> + 'static> AtomicElement<T> {
     /// let local_data = array.local_data();
     /// let old_val = local_data.at(10).fetch_shl(2);
     ///```
-    pub fn fetch_shl(&self, val: usize) -> T {
+    pub fn fetch_shl(&self, val: T) -> T {
         match self {
-            AtomicElement::NativeAtomicElement(array) => array.fetch_shl(val).0,
+            AtomicElement::NativeAtomicElement(array) => array.fetch_shl(val),
             AtomicElement::GenericAtomicElement(array) => array.fetch_shl(val),
         }
     }
@@ -363,9 +363,9 @@ impl<T: ElementShiftOps<Result = T> + 'static> AtomicElement<T> {
     /// let local_data = array.local_data();
     /// let old_val = local_data.at(10).fetch_shr(2);
     ///```
-    pub fn fetch_shr(&self, val: usize) -> T {
+    pub fn fetch_shr(&self, val: T) -> T {
         match self {
-            AtomicElement::NativeAtomicElement(array) => array.fetch_shr(val).0,
+            AtomicElement::NativeAtomicElement(array) => array.fetch_shr(val),
             AtomicElement::GenericAtomicElement(array) => array.fetch_shr(val),
         }
     }
@@ -443,22 +443,20 @@ impl<T: Dist + ElementBitWiseOps> BitXorAssign<T> for AtomicElement<T> {
     }
 }
 
-impl<T: Dist + ElementShiftOps<Result = T>> Shl<usize> for AtomicElement<T> {
-    type Output = T;
-    fn shl(self, val: usize) -> Self::Output {
+impl<T: Dist + ElementShiftOps> ShlAssign<T> for AtomicElement<T> {
+    fn shl_assign(&mut self, val: T) {
         match self {
-            AtomicElement::NativeAtomicElement(array) => array.shl(val),
-            AtomicElement::GenericAtomicElement(array) => array.shl(val),
+            AtomicElement::NativeAtomicElement(array) => array.shl_assign(val),
+            AtomicElement::GenericAtomicElement(array) => array.shl_assign(val),
         }
     }
 }
 
-impl<T: Dist + ElementShiftOps<Result = T>> Shr<usize> for AtomicElement<T> {
-    type Output = T;
-    fn shr(self, val: usize) -> Self::Output {
+impl<T: Dist + ElementShiftOps> ShrAssign<T> for AtomicElement<T> {
+    fn shr_assign(&mut self, val: T) {
         match self {
-            AtomicElement::NativeAtomicElement(array) => array.shr(val),
-            AtomicElement::GenericAtomicElement(array) => array.shr(val),
+            AtomicElement::NativeAtomicElement(array) => array.shr_assign(val),
+            AtomicElement::GenericAtomicElement(array) => array.shr_assign(val),
         }
     }
 }
