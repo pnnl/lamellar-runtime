@@ -32,7 +32,7 @@ impl<T: ElementArithmeticOps + 'static> ArithmeticOps<T> for AtomicArray<T> {}
 
 impl<T: ElementBitWiseOps + 'static> BitWiseOps<T> for AtomicArray<T> {}
 
-impl<T: ElementShiftOps<Result = T> + 'static> ShiftOps<T> for AtomicArray<T> {}
+impl<T: ElementShiftOps + 'static> ShiftOps<T> for AtomicArray<T> {}
 
 impl<T: ElementCompareEqOps + 'static> CompareExchangeOps<T> for AtomicArray<T> {}
 

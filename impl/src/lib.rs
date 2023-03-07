@@ -12,7 +12,7 @@ use std::collections::HashMap;
 
 use proc_macro::TokenStream;
 use proc_macro2::Span;
-use proc_macro_error::{abort, proc_macro_error};
+use proc_macro_error::{abort,abort_call_site, proc_macro_error};
 use quote::{quote, quote_spanned, ToTokens};
 use syn::parse_macro_input;
 use syn::spanned::Spanned;
@@ -433,7 +433,7 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_type: AmType) -> 
 }
 
 fn process_fields(
-    args: TokenStream,
+    args: syn::AttributeArgs,
     the_fields: &syn::Fields,
     crate_header: String,
     local: bool,
@@ -531,7 +531,21 @@ fn process_fields(
         ser.extend(quote! {panic!{"should not serialize data in LocalAM"} });
     }
     let mut trait_strs = HashMap::new();
-    for t in args.to_string().split(",") {
+    let mut attr_strs = HashMap::new();
+    // let content;
+    // if let Ok(temp)  = syn::parse::<syn::MetaList>(args.clone()).unwrap(){
+    // // let temp = parse_macro_input!(args as  syn::AttributeArgs);
+    //     println!("{temp:?}");
+    // }
+    // println!("{args:?}");
+    // parenthesized!(content in temp);
+    // for t in args.to_string().split(",") {
+    for a in args {
+        let t = a.to_token_stream().to_string();
+        // let t = match a {
+        //     syn::NestedMeta::Meta(m) => m.to_token_stream().to_string(),
+        //     syn::NestedMeta::Lit(l) => l.to_token_stream().to_string(),
+        // };
         if t.contains("Dist") {
             trait_strs
                 .entry(String::from("Dist"))
@@ -543,18 +557,35 @@ fn process_fields(
                 .entry(String::from("Clone"))
                 .or_insert(quote! {Clone});
         } else if t.contains("ArrayOps") {
-            trait_strs
-                .entry(String::from("ArrayOps"))
-                .or_insert(quote! {#lamellar::ArrayOps});
-            trait_strs
-                .entry(String::from("Dist"))
-                .or_insert(quote! {#lamellar::Dist});
-            trait_strs
-                .entry(String::from("Copy"))
-                .or_insert(quote! {Copy});
-            trait_strs
-                .entry(String::from("Clone"))
-                .or_insert(quote! {Clone});
+            if t.contains("("){
+                // println!("{:?} {:?} {:?}",t,t.find("("),t.find(")"));
+                let attrs = &t[t.find("(").unwrap()..t.find(")").expect("missing \")\" in when declaring ArrayOp macro")+1];
+                let attr_toks: proc_macro2::TokenStream = attrs.parse().unwrap();
+                attr_strs.entry(String::from("array_ops")).or_insert(quote!{ #[array_ops #attr_toks]});
+                trait_strs
+                    .entry(String::from("ArrayOps"))
+                    .or_insert(quote! {#lamellar::ArrayOps});
+                trait_strs
+                    .entry(String::from("Dist"))
+                    .or_insert(quote! {#lamellar::Dist});
+                trait_strs
+                    .entry(String::from("Copy"))
+                    .or_insert(quote! {Copy});
+                trait_strs
+                    .entry(String::from("Clone"))
+                    .or_insert(quote! {Clone});
+            }
+            else{
+                abort_call_site!("Trying to us the 'ArrayOp' macro but you must specify which array operations to derive, possible options include:
+                            Arithmetic - requires std::Ops::{AddAssign,SubAssign,MulAssign,DivAssign,RemAssign} to be implemented on your data type
+                            CompEx - compare exchange (epsilon) ops, requires std::cmp::{PartialEq,PartialOrd} to be implemented on your data type
+                            Bitwise - requires std::Ops::{BitAndAssign,BitOrAssign,BitXorAssign} to be implemented on your data type
+                            Shift - requires std::Ops::{ShlAssign,ShrAssign} to be implemented on you data type
+                            All - convienence attribute for when all you wish to derive all the above operations (note all the required traits must be implemented for your type)
+                            
+                        Usage example: #[AmData(ArrayOps(Arithmetic,Shift))]");
+            }
+            
         } else if !t.contains("serde::Serialize")
             && !t.contains("serde::Deserialize")
             && t.trim().len() > 0
@@ -573,18 +604,25 @@ fn process_fields(
     // println!();
     // println!("{:?}",impls);
     let traits = quote! { #[derive( #impls)] };
-    let serde_temp_2 = if crate_header != "crate" && !local {
+    let  serde_temp_2 = if crate_header != "crate" && !local {
         quote! {#[serde(crate = "lamellar::serde")]}
     } else {
         quote! {}
     };
+    let mut attrs = quote!{#serde_temp_2};
+    for (_,attr) in attr_strs{
+        attrs = quote!{
+            #attrs
+            #attr
+        };
+    }
 
-    (traits, serde_temp_2, fields, ser, des)
+    (traits, attrs, fields, ser, des)
 }
 
 fn derive_am_data(
     input: TokenStream,
-    args: TokenStream,
+    args:  syn::AttributeArgs,
     crate_header: String,
     local: bool,
 ) -> TokenStream {
@@ -597,7 +635,7 @@ fn derive_am_data(
         let generics = data.generics.clone();
         let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
 
-        let (traits, serde_temp_2, fields, ser, des) =
+        let (traits, attrs, fields, ser, des) =
             process_fields(args, &data.fields, crate_header, local);
         // println!("{:?}",ser.to_string());
         let vis = data.vis.to_token_stream();
@@ -609,7 +647,7 @@ fn derive_am_data(
         output.extend(quote! {
             #attributes
             #traits
-            #serde_temp_2
+            #attrs
             #vis struct #name #impl_generics #where_clause{
                 #fields
             }
@@ -647,6 +685,7 @@ fn derive_am_data(
 #[proc_macro_error]
 #[proc_macro_attribute]
 pub fn AmData(args: TokenStream, input: TokenStream) -> TokenStream {
+    let args = parse_macro_input!(args as syn::AttributeArgs);
     derive_am_data(input, args, "lamellar".to_string(), false)
 }
 
@@ -664,6 +703,7 @@ pub fn AmData(args: TokenStream, input: TokenStream) -> TokenStream {
 #[proc_macro_error]
 #[proc_macro_attribute]
 pub fn AmLocalData(args: TokenStream, input: TokenStream) -> TokenStream {
+    let args = parse_macro_input!(args as syn::AttributeArgs);
     derive_am_data(input, args, "lamellar".to_string(), true)
 }
 
@@ -672,6 +712,7 @@ pub fn AmLocalData(args: TokenStream, input: TokenStream) -> TokenStream {
 #[proc_macro_error]
 #[proc_macro_attribute]
 pub fn AmDataRT(args: TokenStream, input: TokenStream) -> TokenStream {
+    let args = parse_macro_input!(args as syn::AttributeArgs);
     derive_am_data(input, args, "crate".to_string(), false)
 }
 
@@ -680,6 +721,7 @@ pub fn AmDataRT(args: TokenStream, input: TokenStream) -> TokenStream {
 #[proc_macro_error]
 #[proc_macro_attribute]
 pub fn AmLocalDataRT(args: TokenStream, input: TokenStream) -> TokenStream {
+    let args = parse_macro_input!(args as syn::AttributeArgs);
     derive_am_data(input, args, "crate".to_string(), true)
 }
 
@@ -1038,7 +1080,7 @@ pub fn generate_ops_for_type_rt(item: TokenStream) -> TokenStream {
 /// }
 /// ```
 #[proc_macro_error]
-#[proc_macro_derive(ArrayOps)]
+#[proc_macro_derive(ArrayOps, attributes(array_ops))]
 pub fn derive_arrayops(input: TokenStream) -> TokenStream {
     array_ops::__derive_arrayops(input)
 }

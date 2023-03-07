@@ -71,10 +71,10 @@ pub enum ArrayOpCmd<T: Dist> {
     Get,
     CompareExchange(T),
     CompareExchangeEps(T, T),
-    Shl(usize),
-    FetchShl(usize),
-    Shr(usize),
-    FetchShr(usize),
+    Shl,
+    FetchShl,
+    Shr,
+    FetchShr,
 }
 
 impl<T: Dist> ArrayOpCmd<T> {
@@ -92,8 +92,8 @@ impl<T: Dist> ArrayOpCmd<T> {
             | ArrayOpCmd::FetchAnd
             | ArrayOpCmd::FetchOr
             | ArrayOpCmd::FetchXor
-            | ArrayOpCmd::FetchShl(_)
-            | ArrayOpCmd::FetchShr(_)
+            | ArrayOpCmd::FetchShl
+            | ArrayOpCmd::FetchShr
             | ArrayOpCmd::Load
             | ArrayOpCmd::Swap
             | ArrayOpCmd::Get => std::mem::size_of::<T>(), //just return value, assume never fails
@@ -105,8 +105,8 @@ impl<T: Dist> ArrayOpCmd<T> {
             | ArrayOpCmd::And
             | ArrayOpCmd::Or
             | ArrayOpCmd::Xor
-            | ArrayOpCmd::Shl(_)
-            | ArrayOpCmd::Shr(_)
+            | ArrayOpCmd::Shl
+            | ArrayOpCmd::Shr
             | ArrayOpCmd::Store
             | ArrayOpCmd::Put => 0, //we dont return anything
         }
@@ -218,33 +218,21 @@ impl<T: Dist> ArrayOpCmd<T> {
                 }
                 1 + 2 * std::mem::size_of::<T>()
             }
-            ArrayOpCmd::Shl(val) => {
+            ArrayOpCmd::Shl => {
                 buf[0] = 23;
-                unsafe {
-                    std::ptr::copy_nonoverlapping(val as *const usize, buf[1..].as_ptr() as *mut usize, 1);
-                }
-                1 + std::mem::size_of::<usize>()
+                1
             }
-            ArrayOpCmd::FetchShl(val) => {
+            ArrayOpCmd::FetchShl => {
                 buf[0] = 24;
-                unsafe {
-                    std::ptr::copy_nonoverlapping(val as *const usize, buf[1..].as_ptr() as *mut usize, 1);
-                }
-                1 + std::mem::size_of::<usize>()
+                1
             }
-            ArrayOpCmd::Shr(val) => {
+            ArrayOpCmd::Shr => {
                 buf[0] = 25;
-                unsafe {
-                    std::ptr::copy_nonoverlapping(val as *const usize, buf[1..].as_ptr() as *mut usize, 1);
-                }
-                1 + std::mem::size_of::<usize>()
+                1
             }
-            ArrayOpCmd::FetchShr(val) => {
+            ArrayOpCmd::FetchShr => {
                 buf[0] = 26;
-                unsafe {
-                    std::ptr::copy_nonoverlapping(val as *const usize, buf[1..].as_ptr() as *mut usize, 1);
-                }
-                1 + std::mem::size_of::<usize>()
+                1
             }
         }
     }
@@ -274,10 +262,10 @@ impl<T: Dist> ArrayOpCmd<T> {
             ArrayOpCmd::Get => 1,
             ArrayOpCmd::CompareExchange(_val) => 1 + std::mem::size_of::<T>(),
             ArrayOpCmd::CompareExchangeEps(_val, _eps) => 1 + 2 * std::mem::size_of::<T>(),
-            ArrayOpCmd::Shl(_) =>  1 + std::mem::size_of::<usize>(),
-            ArrayOpCmd::FetchShl(_) =>  1 + std::mem::size_of::<usize>(),
-            ArrayOpCmd::Shr(_) =>  1 + std::mem::size_of::<usize>(),
-            ArrayOpCmd::FetchShr(_) =>  1 + std::mem::size_of::<usize>(),
+            ArrayOpCmd::Shl =>  1,
+            ArrayOpCmd::FetchShl =>  1,
+            ArrayOpCmd::Shr =>  1,
+            ArrayOpCmd::FetchShr =>  1,
         }
     }
 
@@ -318,34 +306,10 @@ impl<T: Dist> ArrayOpCmd<T> {
                 let eps = unsafe { *(buf[(1 + t_size)..].as_ptr() as *const T) };
                 (ArrayOpCmd::CompareExchangeEps(val, eps), 1 + 2 * t_size)
             }
-            23 => {
-                let val = unsafe { *(buf[1..].as_ptr() as *const usize) };
-                (
-                    ArrayOpCmd::Shl(val),
-                    1 + std::mem::size_of::<usize>(),
-                )
-            }
-            24 => {
-                let val = unsafe { *(buf[1..].as_ptr() as *const usize) };
-                (
-                    ArrayOpCmd::FetchShl(val),
-                    1 + std::mem::size_of::<usize>(),
-                )
-            }
-            25 => {
-                let val = unsafe { *(buf[1..].as_ptr() as *const usize) };
-                (
-                    ArrayOpCmd::Shr(val),
-                    1 + std::mem::size_of::<usize>(),
-                )
-            }
-            26 => {
-                let val = unsafe { *(buf[1..].as_ptr() as *const usize) };
-                (
-                    ArrayOpCmd::FetchShr(val),
-                    1 + std::mem::size_of::<usize>(),
-                )
-            }
+            23 => (ArrayOpCmd::Shl,1),
+            24 => (ArrayOpCmd::FetchShl,1),
+            25 => (ArrayOpCmd::Shr,1),
+            26 => (ArrayOpCmd::FetchShr,1),
             _ => {
                 panic!("unrecognized Array Op Type");
             }

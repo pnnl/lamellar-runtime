@@ -31,7 +31,7 @@ impl<T: ElementArithmeticOps + 'static> ArithmeticOps<T> for GenericAtomicArray<
 
 impl<T: ElementBitWiseOps + 'static> BitWiseOps<T> for GenericAtomicArray<T> {}
 
-impl<T: ElementShiftOps<Result = T> + 'static> ShiftOps<T> for GenericAtomicArray<T> {}
+impl<T: ElementShiftOps + 'static> ShiftOps<T> for GenericAtomicArray<T> {}
 
 impl<T: ElementCompareEqOps + 'static> CompareExchangeOps<T> for GenericAtomicArray<T> {}
 
