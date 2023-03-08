@@ -2,29 +2,29 @@
 //!
 //! # Some Nomenclature
 //! Throughout this documentation and APIs there are a few terms we end up reusing a lot, those terms and brief descriptions are provided below:
-//! - `PE` - a processing element, typically a multi threaded process, for those familar with MPI, it corresponds to a Rank.
-//!     - Commonly you will create 1 PE per pyshical CPU socket on your system, but it is just as valid to have multiple PE's per CPU
+//! - `PE` - a processing element, typically a multi threaded process, for those familiar with MPI, it corresponds to a Rank.
+//!     - Commonly you will create 1 PE per psychical CPU socket on your system, but it is just as valid to have multiple PE's per CPU
 //!     - There may be some instances where `Node` (meaning a compute node) is used instead of `PE` in these cases they are interchangeable
 //! - `World` - an abstraction representing your distributed computing system
-//!     - consists of N PEs all capable of commnicating with one another
+//!     - consists of N PEs all capable of communicating with one another
 //! - `Team` - A subset of the PEs that exist in the world
 //! - `AM` - short for [Active Message][crate::active_messaging]
 //! - `Collective Operation` - Generally means that all PEs (associated with a given distributed object) must explicitly participate in the operation, otherwise deadlock will occur.
 //!     - e.g. barriers, construction of new distributed objects
-//! - `One-sided Operation` - Generally means that only the calling PE is required for the operation to successfuly complete.
+//! - `One-sided Operation` - Generally means that only the calling PE is required for the operation to successfully complete.
 //!     - e.g. accessing local data, waiting for local work to complete
 //!
 //! # Features
 //!
 //! Lamellar provides several different communication patterns and programming models to distributed applications, briefly highlighted below
 //! ## Active Messages
-//! Lamellar allows for sending and executing user defined active messages on remote PEs in a distributed environments.
+//! Lamellar allows for sending and executing user defined active messages on remote PEs in a distributed environment.
 //! User first implement runtime exported trait (LamellarAM) for their data structures and then call a procedural macro [#\[lamellar::am\]][crate::active_messaging::am] on the implementation.
-//! The procedural macro procudes all the nescessary code to enable remote execution of the active message.
+//! The procedural macro produces all the necessary code to enable remote execution of the active message.
 //! More details can be found in the [Active Messaging][crate::active_messaging] module documentation.
 //!
 //! ## Darcs (Distributed Arcs)
-//! Lamellar provides a distriubted extension of an [`Arc`][std::sync::Arc] called a [Darc][crate::darc].
+//! Lamellar provides a distributed extension of an [`Arc`][std::sync::Arc] called a [Darc][crate::darc].
 //! Darcs provide safe shared access to inner objects in a distributed environment, ensuring lifetimes and read/write accesses are enforced properly.
 //! More details can be found in the [Darc][crate::darc] module documentation.
 //!
@@ -50,7 +50,7 @@
 //! - `local` -  used for single-PE (single system, single process) development (this is the default),
 //! - `shmem` -  used for multi-PE (single system, multi-process) development, useful for emulating distributed environments (communicates through shared memory)
 //! - `rofi` - used for multi-PE (multi system, multi-process) distributed development, based on the Rust OpenFabrics Interface Transport Layer (ROFI) (<https://github.com/pnnl/rofi>).
-//!     - By default support for Rofi is disabled as using it relies on both the Rofi c-library and the libfabrics library, which may not be installed on your system.
+//!     - By default support for Rofi is disabled as using it relies on both the Rofi C-library and the libfabrics library, which may not be installed on your system.
 //!     - It can be enabled by adding ```features = ["enable-rofi"]``` to the lamellar entry in your `Cargo.toml` file
 //!
 //! The long term goal for lamellar is that you can develop using the `local` backend and then when you are ready to run distributed switch to the `rofi` backend with no changes to your code.
@@ -112,7 +112,7 @@
 //!         world.exec_am_pe(pe,am.clone()); // explicitly launch on each PE
 //!     }
 //!     world.wait_all(); // wait for all active messages to finish
-//!     world.barrier();  // synchronize with other pes
+//!     world.barrier();  // synchronize with other PEs
 //!     let request = world.exec_am_all(am.clone()); //also possible to execute on every PE with a single call
 //!     world.block_on(request); //both exec_am_all and exec_am_pe return futures that can be used to wait for completion and access any returned result
 //! }
@@ -127,7 +127,7 @@
 //!     let world = lamellar::LamellarWorldBuilder::new().build();
 //!     let my_pe = world.my_pe();
 //!     let block_array = AtomicArray::<usize>::new(&world, 1000, Distribution::Block); //we also support Cyclic distribution.
-//!     block_array.dist_iter_mut().enumerate().for_each(move |(i,elem)| elem.store(i)); //simultaneosuly initialize array accross all pes, each pe only updates its local data
+//!     block_array.dist_iter_mut().enumerate().for_each(move |(i,elem)| elem.store(i)); //simultaneosuly initialize array accross all PEs, each pe only updates its local data
 //!     block_array.wait_all();
 //!     block_array.barrier();
 //!     if my_pe == 0{
@@ -168,7 +168,7 @@
 //!     world.exec_am_all(DarcAm{cnt: cnt.clone()}); //also possible to execute on every PE with a single call
 //!     cnt.fetch_add(1,Ordering::SeqCst); //this is valid as well!
 //!     world.wait_all(); // wait for all active messages to finish
-//!     world.barrier();  // synchronize with other pes
+//!     world.barrier();  // synchronize with other PEs
 //!     assert_eq!(cnt.load(Ordering::SeqCst),num_pes*2 + 1);
 //! }
 //!```
@@ -178,10 +178,10 @@
 //!
 //!``` lamellar = "0.5" ```
 //!
-//! If planning to use within a distributed HPC system a few more steps may be necessessary (this also works on single workstations):
+//! If planning to use within a distributed HPC system a few more steps may be necessary (this also works on single workstations):
 //!
 //! 1. ensure Libfabric (with support for the verbs provider) is installed on your system <https://github.com/ofiwg/libfabric>
-//! 2. set the OFI_DIR envrionment variable to the install location of Libfabric, this directory should contain both the following directories:
+//! 2. set the OFI_DIR environment variable to the install location of Libfabric, this directory should contain both the following directories:
 //!     * lib
 //!     * include
 //! 3. copy the following to your Cargo.toml file:
@@ -189,7 +189,7 @@
 //! ```lamellar = { version = "0.5", features = ["enable-rofi"]}```
 //!
 //!
-//! For both envrionments, build your application as normal
+//! For both environments, build your application as normal
 //!
 //! ```cargo build (--release)```
 //! # Running Lamellar Applications
@@ -212,17 +212,17 @@
 //!         - `pmi2` library is required to grab info about the allocated nodes and helps set up initial handshakes
 //!
 //! # Environment Variables
-//! Lamellar exposes an number of envrionment variables that can used to control application execution at runtime
+//! Lamellar exposes a number of environment variables that can used to control application execution at runtime
 //! - `LAMELLAR_THREADS` - The number of worker threads used within a lamellar PE
 //!     -  `export LAMELLAR_THREADS=10`
-//! - `LAMELLAE_BACKEND` - the backend used during execution. Note that if a backend is explicity set in the world builder, this variable is ignored.
+//! - `LAMELLAE_BACKEND` - the backend used during execution. Note that if a backend is explicitly set in the world builder, this variable is ignored.
 //!     - possible values
 //!         - `local`
 //!         - `shmem`
 //!         - `rofi`
 //! - `LAMELLAR_MEM_SIZE` - Specify the initial size of the Runtime "RDMAable" memory pool. Defaults to 1GB
 //!     - `export LAMELLAR_MEM_SIZE=$((20*1024*1024*1024))` 20GB memory pool
-//!     - Internally, Lamellar utilizes memory pools of RDMAable memory for Runtime data structures (e.g. [Darcs][crate::Darc], [OneSidedMemoryRegion][crate::memregion::OneSidedMemoryRegion],etc), aggregation buffers, and message queues.Additional memory pools are dynamically allocated across the system as needed. This can be a fairly expensive operation (as the operation is synchronous across all pes) so the runtime will print a message at the end of execution with how many additional pools were allocated.
+//!     - Internally, Lamellar utilizes memory pools of RDMAable memory for Runtime data structures (e.g. [Darcs][crate::Darc], [OneSidedMemoryRegion][crate::memregion::OneSidedMemoryRegion],etc), aggregation buffers, and message queues. Additional memory pools are dynamically allocated across the system as needed. This can be a fairly expensive operation (as the operation is synchronous across all PEs) so the runtime will print a message at the end of execution with how many additional pools were allocated.
 //!         - if you find you are dynamically allocating new memory pools, try setting `LAMELLAR_MEM_SIZE` to a larger value
 //!     - Note: when running multiple PEs on a single system, the total allocated memory for the pools would be equal to `LAMELLAR_MEM_SIZE * number of processes`
 //!
