@@ -87,14 +87,21 @@ use std::sync::Arc;
 
 /// This macro automatically derives various LamellarArray "Op" traits for user defined types
 ///
-/// The following "Op" traits will be implemented:
+/// The following "Op" traits are automatically implemented:
 /// - [AccessOps][crate::array::operations::AccessOps]
-/// - [ArithmeticOps][crate::array::operations::ArithmeticOps]
-/// - [BitWiseOps][crate::array::operations::BitWiseOps]
-/// - [CompareExchangeEpsilonOps][crate::array::operations::CompareExchangeEpsilonOps]
-/// - [CompareExchangeOps][crate::array::operations::CompareExchangeOps]
+/// - [ReadOnlyOps][crate::array::operations::ReadOnlyOps]
 ///
-/// The required trait bounds can be found by viewing each "Op" traits documentation.
+/// Additionally, it is possible to pass any of the following as a list to [ArrayOps] to derive the associated traits
+/// - `Arithmetic` -- [ArithmeticOps][crate::array::operations::ArithmeticOps]
+///     - requires [AddAssign][std::ops::AddAssign], [SubAssign][std::ops::SubAssign], [MulAssign][std::ops::MulAssign], [DivAssign][std::ops::DivAssign], [RemAssign][std::ops::RemAssign] to be implemented on your data type
+/// - `Bitwise` -- [BitWiseOps][crate::array::operations::BitWiseOps]
+///     - requires [BitAndAssign][std::ops::BitAndAssign], [BitOrAssign][std::ops::BitOrAssign], [BitXorAssign][std::ops::BitXorAssign] to be implemented on your data type
+/// - `CompEx` -- [CompareExchangeEpsilonOps][crate::array::operations::CompareExchangeEpsilonOps], [CompareExchangeOps][crate::array::operations::CompareExchangeOps]
+///     - requires [PartialEq][std::cmp::PartialEq], [PartialOrd][std::cmp::PartialOrd] to be implemented on your data type
+/// - `Shift` -- [ShiftOps][crate::array::operations::ShiftOps]
+///     - requires [ShlAssign][std::ops::ShlAssign], [ShrAssign][std::ops::ShrAssign] to be implemented on you data type
+///
+/// Alternatively, if you plan to derive all the above traits you can simply supply `all` as the single argument to [ArrayOps]
 pub use lamellar_impl::ArrayOps;
 
 #[doc(hidden)]

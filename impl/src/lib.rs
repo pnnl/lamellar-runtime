@@ -12,7 +12,7 @@ use std::collections::HashMap;
 
 use proc_macro::TokenStream;
 use proc_macro2::Span;
-use proc_macro_error::{abort,abort_call_site, proc_macro_error};
+use proc_macro_error::{abort, proc_macro_error};
 use quote::{quote, quote_spanned, ToTokens};
 use syn::parse_macro_input;
 use syn::spanned::Spanned;
@@ -562,29 +562,30 @@ fn process_fields(
                 let attrs = &t[t.find("(").unwrap()..t.find(")").expect("missing \")\" in when declaring ArrayOp macro")+1];
                 let attr_toks: proc_macro2::TokenStream = attrs.parse().unwrap();
                 attr_strs.entry(String::from("array_ops")).or_insert(quote!{ #[array_ops #attr_toks]});
-                trait_strs
-                    .entry(String::from("ArrayOps"))
-                    .or_insert(quote! {#lamellar::ArrayOps});
-                trait_strs
-                    .entry(String::from("Dist"))
-                    .or_insert(quote! {#lamellar::Dist});
-                trait_strs
-                    .entry(String::from("Copy"))
-                    .or_insert(quote! {Copy});
-                trait_strs
-                    .entry(String::from("Clone"))
-                    .or_insert(quote! {Clone});
+                
             }
-            else{
-                abort_call_site!("Trying to us the 'ArrayOp' macro but you must specify which array operations to derive, possible options include:
-                            Arithmetic - requires std::Ops::{AddAssign,SubAssign,MulAssign,DivAssign,RemAssign} to be implemented on your data type
-                            CompEx - compare exchange (epsilon) ops, requires std::cmp::{PartialEq,PartialOrd} to be implemented on your data type
-                            Bitwise - requires std::Ops::{BitAndAssign,BitOrAssign,BitXorAssign} to be implemented on your data type
-                            Shift - requires std::Ops::{ShlAssign,ShrAssign} to be implemented on you data type
-                            All - convienence attribute for when all you wish to derive all the above operations (note all the required traits must be implemented for your type)
+            trait_strs
+                .entry(String::from("ArrayOps"))
+                .or_insert(quote! {#lamellar::ArrayOps});
+            trait_strs
+                .entry(String::from("Dist"))
+                .or_insert(quote! {#lamellar::Dist});
+            trait_strs
+                .entry(String::from("Copy"))
+                .or_insert(quote! {Copy});
+            trait_strs
+                .entry(String::from("Clone"))
+                .or_insert(quote! {Clone});
+            // else{
+            //     abort_call_site!("Trying to us the 'ArrayOp' macro but you must specify which array operations to derive, possible options include:
+            //                 Arithmetic - requires std::Ops::{AddAssign,SubAssign,MulAssign,DivAssign,RemAssign} to be implemented on your data type
+            //                 CompEx - compare exchange (epsilon) ops, requires std::cmp::{PartialEq,PartialOrd} to be implemented on your data type
+            //                 Bitwise - requires std::Ops::{BitAndAssign,BitOrAssign,BitXorAssign} to be implemented on your data type
+            //                 Shift - requires std::Ops::{ShlAssign,ShrAssign} to be implemented on you data type
+            //                 All - convienence attribute for when all you wish to derive all the above operations (note all the required traits must be implemented for your type)
                             
-                        Usage example: #[AmData(ArrayOps(Arithmetic,Shift))]");
-            }
+            //             Usage example: #[AmData(ArrayOps(Arithmetic,Shift))]");
+            // }
             
         } else if !t.contains("serde::Serialize")
             && !t.contains("serde::Deserialize")
@@ -932,7 +933,8 @@ pub fn generate_ops_for_type_rt(item: TokenStream) -> TokenStream {
 }
 
 ///
-/// This derive macro is intended to be used with the [macro@AmData] attribute macro to enable a user defined type to be used in ActiveMessages
+/// This derive macro is intended to be used with the [macro@AmData] attribute macro to enable a user defined type to be used in ActiveMessages.
+///
 /// # Examples
 ///
 /// ```
@@ -942,7 +944,7 @@ pub fn generate_ops_for_type_rt(item: TokenStream) -> TokenStream {
 ///
 /// #[lamellar::AmData(
 ///     // Lamellar traits
-///     ArrayOps,      // needed to derive various LamellarArray Op traits
+///     ArrayOps(Arithmetic,CompEx,Shift), // needed to derive various LamellarArray Op traits (provided as a list)
 ///     Default,       // needed to be able to initialize a LamellarArray
 ///     //  Notice we use `lamellar::AmData` instead of `derive`
 ///     //  for common traits, e.g. Debug, Clone.    
@@ -1001,6 +1003,17 @@ pub fn generate_ops_for_type_rt(item: TokenStream) -> TokenStream {
 ///             int: self.int / other.int,
 ///             float: self.float / other.float,
 ///         }
+///     }
+/// }
+/// impl std::ops::ShlAssign for Custom {
+///     fn shl_assign(&mut self,other: Custom){
+///         self.int <<= other.int;
+///     }
+/// }
+/// 
+/// impl std::ops::ShrAssign for Custom {
+///     fn shr_assign(&mut self,other: Custom){
+///         self.int >>= other.int;
 ///     }
 /// }
 ///
