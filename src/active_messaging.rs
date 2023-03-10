@@ -550,7 +550,7 @@ impl<T: Sync + Send> SyncSend for T {}
 /// Types must impl [Serialize][serde::ser::Serialize], [Deserialize][serde::de::DeserializeOwned], and [SyncSend]
 pub trait AmDist<'team>: serde::ser::Serialize + serde::de::DeserializeOwned + SyncSend + 'team {}
 
-impl<'team, T: serde::ser::Serialize + serde::de::DeserializeOwned + SyncSend + 'team> AmDist for T {}
+impl<'team, T: serde::ser::Serialize + serde::de::DeserializeOwned + SyncSend + 'team> AmDist<'team> for T {}
 
 #[derive(
     serde::Serialize, serde::Deserialize, Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord,
@@ -631,9 +631,9 @@ pub trait LocalAM: SyncSend {
 /// The trait representing an active message that can be executed remotely
 /// (AmDist is a blanket impl for serde::Serialize + serde::Deserialize + Sync + Send + 'static)
 #[async_trait]
-pub trait LamellarAM {
+pub trait LamellarAM<'team> {
     /// The type of the output returned by the active message
-    type Output: AmDist;
+    type Output: AmDist<'team>;
     async fn exec(self) -> Self::Output;
 }
 
