@@ -134,6 +134,22 @@ impl LamellarWorld {
         self.num_pes
     }
 
+    #[tracing::instrument(skip_all)]
+    pub async fn exec_am_all_future<F>(&self, am: F) -> Vec<F::Output>
+    where
+        F: RemoteActiveMessage + LamellarAM + Serde + AmDist,
+    {
+        self.team.exec_am_all(am).await
+    }
+    #[tracing::instrument(skip_all)]
+    pub async fn exec_am_pe_future<F>(&self, pe: usize, am: F) ->  F::Output
+    where
+        F: RemoteActiveMessage + LamellarAM + Serde + AmDist,
+    {
+        assert!(pe < self.num_pes(), "invalid pe: {:?}", pe);
+        self.team.exec_am_pe(pe, am).await
+    }
+
     #[doc(hidden)]
     #[allow(non_snake_case)]
     #[tracing::instrument(skip_all)]

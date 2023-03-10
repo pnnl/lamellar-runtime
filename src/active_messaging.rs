@@ -548,9 +548,9 @@ impl<T: Sync + Send> SyncSend for T {}
 /// Supertrait specifying a Type can be used in (remote)ActiveMessages
 ///
 /// Types must impl [Serialize][serde::ser::Serialize], [Deserialize][serde::de::DeserializeOwned], and [SyncSend]
-pub trait AmDist: serde::ser::Serialize + serde::de::DeserializeOwned + SyncSend + 'static {}
+pub trait AmDist<'team>: serde::ser::Serialize + serde::de::DeserializeOwned + SyncSend + 'team {}
 
-impl<T: serde::ser::Serialize + serde::de::DeserializeOwned + SyncSend + 'static> AmDist for T {}
+impl<'team, T: serde::ser::Serialize + serde::de::DeserializeOwned + SyncSend + 'team> AmDist for T {}
 
 #[derive(
     serde::Serialize, serde::Deserialize, Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord,
@@ -582,6 +582,8 @@ impl<T> DarcSerde for &T {
 pub trait LamellarSerde: SyncSend {
     fn serialized_size(&self) -> usize;
     fn serialize_into(&self, buf: &mut [u8]);
+    fn serialize(&self) -> Vec<u8>;
+    
 }
 
 #[doc(hidden)]
@@ -591,7 +593,7 @@ pub trait LamellarResultSerde: LamellarSerde {
 }
 
 #[doc(hidden)]
-pub trait RemoteActiveMessage: LamellarActiveMessage + LamellarSerde + LamellarResultSerde {
+pub trait RemoteActiveMessage: LamellarActiveMessage + LamellarSerde + LamellarResultSerde{
     fn as_local(self: Arc<Self>) -> LamellarArcLocalAm;
 }
 

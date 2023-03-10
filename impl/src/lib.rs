@@ -237,7 +237,9 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_type: AmType) -> 
                     // println!("buf_len: {:?} serialized size: {:?}",buf.len(), #lamellar::serialized_size(self));
                     #lamellar::serialize_into(buf,self,true).unwrap();
                     // println!("buf_len: {:?} serialized size: {:?} buf: {:?}",buf.len(), #lamellar::serialized_size(self,true), buf);
-
+                }
+                fn serialize(&self)->Vec<u8>{
+                    #lamellar::serialize(self,true).unwrap()
                 }
             }
 
@@ -377,6 +379,9 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_type: AmType) -> 
                     }
                     fn serialize_into(&self,buf: &mut [u8]){
                         #lamellar::serialize_into(buf,&self.val,true).unwrap();
+                    }
+                    fn serialize(&self)->Vec<u8>{
+                        #lamellar::serialize(self,true).unwrap()
                     }
                 }
 
