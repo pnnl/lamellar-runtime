@@ -54,14 +54,15 @@ fn main() {
         let task_group = LamellarTaskGroup::new(world.team());
         if my_pe == 0 {
             for _j in (num_bytes..(2_u64.pow(exp))).step_by(num_bytes as usize) {
-                let d = _data.clone();
                 let sub_timer = Instant::now();
-                task_group.exec_am_pe(num_pes - 1, DataAM { data: d }); //we explicity  captured _data and transfer it even though we do nothing with it
+                let d = _data.clone();
                 sub_time += sub_timer.elapsed().as_secs_f64();
+                task_group.exec_am_pe(num_pes - 1, DataAM { data: d }); //we explicity  captured _data and transfer it even though we do nothing with it
+                
                 sum += num_bytes * 1 as u64;
                 cnt += 1;
             }
-            println!("issue time: {:?}", timer.elapsed().as_secs_f64());
+            println!("issue time: {:?}", timer.elapsed().as_secs_f64() - sub_time);
         }
         task_group.wait_all();
         world.barrier();
@@ -74,7 +75,7 @@ fn main() {
                 num_bytes, //transfer size
                 cnt,  //num transfers
                 sum as f64/ 1048576.0,
-                cur_t, //transfer time
+                cur_t-sub_time, //transfer time
                 sub_time,
                 (sum as f64 / 1048576.0) / cur_t, // throughput of user payload
                 ((sum*(num_pes-1) as u64) as f64 / 1048576.0) / cur_t,

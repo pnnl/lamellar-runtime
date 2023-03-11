@@ -659,17 +659,18 @@ impl Drop for LamellarTaskGroup {
 }
 
 
-use std::borrow::Cow;
 // LocalAM LamellarAM LamellarSerde LamellarResultSerde LamellarResultDarcSerde LamellarActiveMessage RemoteActiveMessage
 // this is a special AM that embeds other AMs, we want to do some optimizations to avoid extra mem copies, and to satisfy various trait
 // bounds related to serialization and deserialization so we must implement all the required active message traits manually...
-struct TaskGroupAm<'a>{
-    ams: Cow<'a,[LamellarArcAm]>
+struct TaskGroupAm{
+    ams: Arc<Vec<LamellarArcAm>>,
+    si: usize,
+    ei: usize,
 }
 
-impl<'a> DarcSerde for TaskGroupAm<'a> {
+impl DarcSerde for TaskGroupAm {
     fn ser(&self,  num_pes: usize, darcs: &mut Vec<RemotePtr>){
-        for am in self.ams.iter(){
+        for am in &self.ams[self.si..self.ei]{
             am.ser(num_pes,darcs);
         }
     }
@@ -683,23 +684,23 @@ impl<'a> DarcSerde for TaskGroupAm<'a> {
 
 // impl Serde for TaskGroupAm {}
 
-impl<'a> LocalAM for TaskGroupAm<'a> {
+impl LocalAM for TaskGroupAm {
     type Output = Vec<Vec<u8>>;
 }
 
 #[async_trait::async_trait]
-impl<'a> LamellarAM for TaskGroupAm<'a> {
+impl LamellarAM for TaskGroupAm {
     type Output =  Vec<Vec<u8>>;
     async fn exec(self) -> Self::Output{
         panic!("this should never be called")
     }
 }
 
-impl<'a> LamellarSerde for TaskGroupAm<'a> {
+impl LamellarSerde for TaskGroupAm {
     fn serialized_size(&self)->usize{
         let mut size = 0;
         let id_size = crate::serialized_size(&AM_ID_START,true);
-        for am in self.ams.iter(){
+        for am in &self.ams[self.si..self.ei]{
             size += id_size;
             size += am.serialized_size();
         }
@@ -707,13 +708,15 @@ impl<'a> LamellarSerde for TaskGroupAm<'a> {
     }
     fn serialize_into(&self,buf: &mut [u8]){
         let mut i = 0;
-        for am in self.ams.iter(){
+        // let timer = std::time::Instant::now();
+        for am in &self.ams[self.si..self.ei]{
             let id =  *(AMS_IDS.get(am.get_id()).unwrap());
             crate::serialize_into(&mut buf[i..],&id,true).unwrap();
             i += crate::serialized_size(&id,true);
             am.serialize_into(&mut buf[i..]);
             i += am.serialized_size();
         }
+        // println!("serialize time: {:?} elem cnt {:?} ({}-{})", timer.elapsed().as_secs_f64(),self.ei-self.si,self.ei,self.si);
     }
     fn serialize(&self)->Vec<u8>{
         let ser_size = self.serialized_size();
@@ -723,7 +726,7 @@ impl<'a> LamellarSerde for TaskGroupAm<'a> {
     }
 }
 
-impl<'a> LamellarResultSerde for TaskGroupAm<'a> {
+impl LamellarResultSerde for TaskGroupAm {
     fn serialized_result_size(&self,result: & Box<dyn std::any::Any + Sync + Send>)->usize{
         let result  = result.downcast_ref::<Vec<Vec<u8>>>().unwrap();
         crate::serialized_size(result,true)
@@ -734,11 +737,19 @@ impl<'a> LamellarResultSerde for TaskGroupAm<'a> {
     }
 }
 
-impl<'a> LamellarActiveMessage for TaskGroupAm<'a> {
+impl LamellarActiveMessage for TaskGroupAm {
     fn exec(self: Arc<Self>,__lamellar_current_pe: usize, __lamellar_num_pes: usize, __local: bool, __lamellar_world: Arc<LamellarTeam>, __lamellar_team: Arc<LamellarTeam>) -> std::pin::Pin<Box<dyn std::future::Future<Output=LamellarReturn> + Send >>{
         Box::pin( async move {
-            self.ams.iter().map(|e| {e.clone().exec(__lamellar_current_pe,__lamellar_num_pes,__local,__lamellar_world.clone(),__lamellar_team.clone())}).collect::<futures::stream::FuturesOrdered<_>>().collect::<Vec<_>>().await;
-            LamellarReturn::RemoteData(Arc::new(TaskGroupAmReturn{val: vec![]}))
+            let timer = std::time::Instant::now();
+            self.ams[self.si..self.ei].iter().map(|e| {e.clone().exec(__lamellar_current_pe,__lamellar_num_pes,__local,__lamellar_world.clone(),__lamellar_team.clone())}).collect::<futures::stream::FuturesOrdered<_>>().collect::<Vec<_>>().await;
+            // for am in self.ams[self.si..self.ei].iter() {
+            //     am.clone().exec(__lamellar_current_pe,__lamellar_num_pes,__local,__lamellar_world.clone(),__lamellar_team.clone()).await;
+            // }
+            println!("exec time: {:?}", timer.elapsed().as_secs_f64());
+            match __local{
+                false => LamellarReturn::RemoteData(Arc::new(TaskGroupAmReturn{val: vec![]})),
+                true => LamellarReturn::LocalData(Box::<Vec<Vec<u8>>>::new(vec![]))
+            }
         })
     }
 
@@ -747,7 +758,7 @@ impl<'a> LamellarActiveMessage for TaskGroupAm<'a> {
     }
 }
 
-impl<'a> RemoteActiveMessage for TaskGroupAm<'a> {
+impl RemoteActiveMessage for TaskGroupAm {
     fn as_local(self: Arc<Self>) -> Arc<dyn LamellarActiveMessage + Send + Sync>{
         self
     }
@@ -767,8 +778,11 @@ fn task_group_am_unpack(bytes: &[u8], cur_pe: Result<usize,crate::IdError>) -> s
         i += am.serialized_size();
         ams.push(am);
     }
+    let ei = ams.len();
     let tg_am = TaskGroupAm{
-        ams: Cow::Owned(ams)
+        ams: Arc::new(ams),
+        si: 0,
+        ei: ei,
     };
     <TaskGroupAm as DarcSerde>::des(&tg_am,cur_pe);
     Arc::new(tg_am)
@@ -803,15 +817,14 @@ impl LamellarResultDarcSerde for TaskGroupAmReturn{}
 
 
 #[doc(hidden)]
-pub struct TaskGroupFutures<'a> {
+pub struct TaskGroupFutures {
     team: Pin<Arc<LamellarTeamRT>>,
     cnt: usize,
     reqs: BTreeMap<usize,(Vec<usize>,Vec<LamellarArcAm>,usize)>,
-    _lifetime: PhantomData<&'a ()>
 }
 
-impl<'a> TaskGroupFutures<'a>{
-    pub fn new<U: Into<IntoLamellarTeam>>(team: U) -> TaskGroupFutures<'a> {
+impl TaskGroupFutures{
+    pub fn new<U: Into<IntoLamellarTeam>>(team: U) -> TaskGroupFutures {
         TaskGroupFutures {
             team: team.into().team.clone(),
             cnt: 0,
@@ -842,58 +855,74 @@ impl<'a> TaskGroupFutures<'a>{
         self.cnt+=1;
     }
 
-    pub async fn exec(&self) {
+    pub async fn exec(&mut self) {
+        let timer = std::time::Instant::now();
         let mut reqs = vec![];
+        let mut reqs_all = vec![];
         // let mut all_req = None;
         let mut reqs_pes = vec![];
-        for (pe,the_ams) in self.reqs.iter() {
-            // let mut ams = vec![];
-            // std::mem::swap(&mut ams,&mut the_ams.1);
-            
-            if *pe == self.team.num_pes{
-                // all_req = Some(self.exec_am_all_inner(tg_am).into_future());
-            }
-            else{
-                if the_ams.2 > 100_000_000{
-                    let num_reqs = (the_ams.2 / 100_000_000) + 1;
-                    let req_size = the_ams.2/num_reqs;
-                    let mut temp_size = 0;
-                    let mut i = 0;
-                    let mut start_i = 0;
-                    let mut send = false;
-                    while i < the_ams.1.len() {
-                        let am_size = the_ams.1[i].serialized_size();
-                        if temp_size + am_size < 500_000_000 { //hard size limit
-                            temp_size += am_size;
-                            i+=1;
-                            if temp_size > 100_000_000{
-                                send = true
-                            }
-                        }
-                        else {
-                            send = true;
-                        }
-                        if send{
-                            let tg_am = TaskGroupAm{ams: Cow::Borrowed(&the_ams.1[start_i..i])};
-                            reqs.push(self.team.exec_arc_am_pe::<Vec<Vec<u8>>>(*pe,Arc::new(tg_am),None).into_future());
-                            send = false;
-                            start_i = i;
-                            temp_size = 0;
+        for (pe,the_ams) in self.reqs.iter_mut() {
+            let mut ams = vec![];
+            std::mem::swap(&mut ams,&mut the_ams.1);
+            let ams = Arc::new(ams);
+           
+            if the_ams.2 > 1_000_000{
+                let num_reqs = (the_ams.2 / 1_000_000) + 1;
+                let req_size = the_ams.2/num_reqs;
+                let mut temp_size = 0;
+                let mut i = 0;
+                let mut start_i = 0;
+                let mut send = false;
+                while i < ams.len() {
+                    let am_size = ams[i].serialized_size();
+                    if temp_size + am_size < 100_000_000 { //hard size limit
+                        temp_size += am_size;
+                        i+=1;
+                        if temp_size > req_size{
+                            send = true
                         }
                     }
-                    if temp_size > 0 {
-                        let tg_am = TaskGroupAm{ams: Cow::Borrowed(&the_ams.1[start_i..i])};
+                    else {
+                        send = true;
+                    }
+                    if send{
+                        let tg_am = TaskGroupAm{ams: ams.clone(), si: start_i, ei: i};
+                        if *pe == self.team.num_pes{
+                            reqs_all.push(self.team.exec_arc_am_all::<Vec<Vec<u8>>>(Arc::new(tg_am),None).into_future());
+                        }
+                        else{
+                            reqs.push(self.team.exec_arc_am_pe::<Vec<Vec<u8>>>(*pe,Arc::new(tg_am),None).into_future());
+                        }
+                        send = false;
+                        start_i = i;
+                        temp_size = 0;
+                    }
+                }
+                if temp_size > 0 {
+                    let tg_am = TaskGroupAm{ams: ams.clone(), si: start_i, ei: i};
+                    if *pe == self.team.num_pes{
+                        reqs_all.push(self.team.exec_arc_am_all::<Vec<Vec<u8>>>(Arc::new(tg_am),None).into_future());
+                    }
+                    else{
                         reqs.push(self.team.exec_arc_am_pe::<Vec<Vec<u8>>>(*pe,Arc::new(tg_am),None).into_future());
                     }
                 }
+            }
+            else{
+                let tg_am = TaskGroupAm{ams: ams.clone(), si: 0, ei: ams.len()};
+                if *pe == self.team.num_pes{
+                    reqs_all.push(self.team.exec_arc_am_all::<Vec<Vec<u8>>>(Arc::new(tg_am),None).into_future());
+                }
                 else{
-                    let tg_am = TaskGroupAm{ams: Cow::Borrowed(&the_ams.1)};
                     reqs.push(self.team.exec_arc_am_pe::<Vec<Vec<u8>>>(*pe,Arc::new(tg_am),None).into_future());
                 }
             }
+            
             reqs_pes.push(pe);
         }
+        println!("launch time: {:?} cnt: {:?}", timer.elapsed().as_secs_f64(),reqs.len());
         futures::future::join_all(reqs).await;
+        futures::future::join_all(reqs_all).await;
         // if let Some(req) = all_req{
         //     req.await;
         // }

@@ -621,7 +621,7 @@ impl<T> Darc<T> {
         let size = std::mem::size_of::<DarcInner<T>>()
             + team_rt.num_pes * std::mem::size_of::<usize>()
             + team_rt.num_pes * std::mem::size_of::<DarcMode>();
-        // println!("creating new darc");
+        println!("creating new darc");
         team_rt.barrier();
         // println!("creating new darc after barrier");
         let addr = team_rt.lamellae.alloc(size, alloc).expect("out of memory");
@@ -659,7 +659,7 @@ impl<T> Darc<T> {
         for elem in d.mode_as_mut_slice() {
             *elem = state;
         }
-        // d.print();
+        d.print();
         team_rt.barrier();
         Ok(d)
     }

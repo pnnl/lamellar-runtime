@@ -488,7 +488,7 @@ pub use registered_active_message::RegisteredAm;
 
 pub(crate) mod batching;
 
-const BATCH_AM_SIZE: usize = 100000;
+pub(crate)const BATCH_AM_SIZE: usize = 100_000;
 
 /// This macro is used to setup the attributed type so that it can be used within remote active messages.
 ///
@@ -548,9 +548,9 @@ impl<T: Sync + Send> SyncSend for T {}
 /// Supertrait specifying a Type can be used in (remote)ActiveMessages
 ///
 /// Types must impl [Serialize][serde::ser::Serialize], [Deserialize][serde::de::DeserializeOwned], and [SyncSend]
-pub trait AmDist<'team>: serde::ser::Serialize + serde::de::DeserializeOwned + SyncSend + 'team {}
+pub trait AmDist: serde::ser::Serialize + serde::de::DeserializeOwned + SyncSend + 'static{}
 
-impl<'team, T: serde::ser::Serialize + serde::de::DeserializeOwned + SyncSend + 'team> AmDist<'team> for T {}
+impl< T: serde::ser::Serialize + serde::de::DeserializeOwned + SyncSend + 'static> AmDist for T {}
 
 #[derive(
     serde::Serialize, serde::Deserialize, Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord,
@@ -631,9 +631,9 @@ pub trait LocalAM: SyncSend {
 /// The trait representing an active message that can be executed remotely
 /// (AmDist is a blanket impl for serde::Serialize + serde::Deserialize + Sync + Send + 'static)
 #[async_trait]
-pub trait LamellarAM<'team> {
+pub trait LamellarAM {
     /// The type of the output returned by the active message
-    type Output: AmDist<'team>;
+    type Output: AmDist;
     async fn exec(self) -> Self::Output;
 }
 
