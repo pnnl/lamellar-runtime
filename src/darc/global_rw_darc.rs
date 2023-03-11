@@ -20,6 +20,7 @@ enum LockType {
 }
 
 #[derive(Debug)]
+#[repr(C)]
 pub(crate) struct DistRwLock<T> {
     readers: AtomicUsize,
     writer: AtomicUsize,
