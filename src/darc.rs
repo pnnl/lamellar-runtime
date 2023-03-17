@@ -248,10 +248,13 @@ impl<T> Clone for WeakDarc<T> {
 
 impl<T> crate::active_messaging::DarcSerde for Darc<T> {
     fn ser(&self, num_pes: usize, darcs: &mut Vec<RemotePtr>) {
+        // println!("darc ser");
         self.serialize_update_cnts(num_pes);
         darcs.push(RemotePtr::NetworkDarc(self.clone().into()));
+        // self.print();
     }
     fn des(&self, cur_pe: Result<usize, IdError>) {
+        // println!("darc des");
         match cur_pe {
             Ok(_) => {
                 self.deserialize_update_cnts();
@@ -260,6 +263,7 @@ impl<T> crate::active_messaging::DarcSerde for Darc<T> {
                 panic!("can only access darcs within team members ({:?})", err);
             }
         }
+        // self.print();
     }
 }
 
@@ -621,7 +625,7 @@ impl<T> Darc<T> {
         let size = std::mem::size_of::<DarcInner<T>>()
             + team_rt.num_pes * std::mem::size_of::<usize>()
             + team_rt.num_pes * std::mem::size_of::<DarcMode>();
-        println!("creating new darc");
+        // println!("creating new darc");
         team_rt.barrier();
         // println!("creating new darc after barrier");
         let addr = team_rt.lamellae.alloc(size, alloc).expect("out of memory");
@@ -659,7 +663,8 @@ impl<T> Darc<T> {
         for elem in d.mode_as_mut_slice() {
             *elem = state;
         }
-        d.print();
+        // println!("created new darc");
+        // d.print();
         team_rt.barrier();
         Ok(d)
     }

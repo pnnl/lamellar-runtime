@@ -187,6 +187,10 @@ name="task_group_futures_am_bw"
 path="examples/bandwidths/task_group_futures_am_bw.rs"
 
 [[example]]
+name="task_group_typed_futures_am_bw"
+path="examples/bandwidths/task_group_typed_futures_am_bw.rs"
+
+[[example]]
 name="am_bw_get"
 path="examples/bandwidths/am_bw_get.rs"
 

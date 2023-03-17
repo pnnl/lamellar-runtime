@@ -279,10 +279,10 @@ pub use crate::lamellae::Backend;
 pub use crate::lamellar_arch::{BlockedArch, IdError, LamellarArch, StridedArch};
 #[doc(hidden)]
 pub use crate::lamellar_request::LamellarRequest;
-pub use crate::lamellar_task_group::{LamellarTaskGroup,TaskGroupFutures};
+pub use crate::lamellar_task_group::{LamellarTaskGroup,AmGroup};
 pub use crate::lamellar_team::LamellarTeam;
 #[doc(hidden)]
-pub use crate::lamellar_team::LamellarTeamRT;
+pub use crate::lamellar_team::{LamellarTeamRT,ArcLamellarTeam};
 pub use crate::lamellar_world::*;
 pub use crate::scheduler::SchedulerType;
 

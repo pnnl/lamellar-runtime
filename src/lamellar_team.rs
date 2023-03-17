@@ -330,6 +330,22 @@ impl LamellarTeam {
     pub fn barrier(&self) {
         self.team.barrier()
     }
+
+    #[doc(hidden)]
+    pub fn exec_am_group_pe<F>(&self, pe: usize, am: F) -> Pin<Box<dyn Future<Output = F::Output> + Send>>
+    where
+        F: RemoteActiveMessage + LamellarAM + crate::Serialize + 'static
+    {
+        self.team.exec_am_pe_tg(pe, am, None).into_future()
+    }
+
+    #[doc(hidden)]
+    pub fn exec_am_group_all<F>(&self, am: F) ->Pin<Box<dyn Future<Output = Vec<F::Output>> + Send>>
+    where
+        F: RemoteActiveMessage + LamellarAM + crate::Serialize + 'static
+    {
+        self.team.exec_am_all_tg(am, None).into_future()
+    }
 }
 
 impl std::fmt::Debug for LamellarTeam {
@@ -469,6 +485,39 @@ impl From<LamellarWorld> for IntoLamellarTeam {
         IntoLamellarTeam {
             team: world.team_rt.clone(),
         }
+    }
+}
+
+#[doc(hidden)]
+pub struct ArcLamellarTeam{
+    pub team: Arc<LamellarTeam>
+}
+
+impl From<Arc<LamellarTeam>> for ArcLamellarTeam {
+    #[tracing::instrument(skip_all)]
+    fn from(team: Arc<LamellarTeam>) -> Self {
+        ArcLamellarTeam{team}
+    }
+}
+
+impl From<&Arc<LamellarTeam>> for ArcLamellarTeam {
+    #[tracing::instrument(skip_all)]
+    fn from(team: &Arc<LamellarTeam>) -> Self {
+        ArcLamellarTeam{team: team.clone()}
+    }
+}
+
+impl From<&LamellarWorld> for ArcLamellarTeam {
+    #[tracing::instrument(skip_all)]
+    fn from(world: &LamellarWorld) -> Self {
+        ArcLamellarTeam{team: world.team()}
+    }
+}
+
+impl From<LamellarWorld> for ArcLamellarTeam {
+    #[tracing::instrument(skip_all)]
+    fn from(world: LamellarWorld) -> Self {
+        ArcLamellarTeam{team: world.team()}
     }
 }
 
@@ -1021,7 +1070,7 @@ impl LamellarTeamRT {
         task_group_cnts: Option<Arc<AMCounters>>,
     ) -> Box<dyn LamellarMultiRequest<Output = F::Output>>
     where
-        F: RemoteActiveMessage + LamellarAM + AmDist,
+        F: RemoteActiveMessage + LamellarAM + crate::Serialize + 'static,
     {
         // println!("team exec am all num_pes {:?}", self.num_pes);
         // trace!("[{:?}] team exec am all request", self.world_pe);
@@ -1102,7 +1151,7 @@ impl LamellarTeamRT {
         task_group_cnts: Option<Arc<AMCounters>>,
     ) -> Box<dyn LamellarRequest<Output = F::Output>>
     where
-        F: RemoteActiveMessage + LamellarAM + AmDist,
+        F: RemoteActiveMessage + LamellarAM + crate::Serialize + 'static,
     {
         // println!("team exec am pe tg");
         prof_start!(pre);

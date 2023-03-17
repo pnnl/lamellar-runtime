@@ -662,43 +662,44 @@ impl Drop for LamellarTaskGroup {
 // LocalAM LamellarAM LamellarSerde LamellarResultSerde LamellarResultDarcSerde LamellarActiveMessage RemoteActiveMessage
 // this is a special AM that embeds other AMs, we want to do some optimizations to avoid extra mem copies, and to satisfy various trait
 // bounds related to serialization and deserialization so we must implement all the required active message traits manually...
-struct TaskGroupAm{
+struct AmGroupAm{
     ams: Arc<Vec<LamellarArcAm>>,
     si: usize,
     ei: usize,
 }
 
-impl DarcSerde for TaskGroupAm {
+impl DarcSerde for AmGroupAm {
     fn ser(&self,  num_pes: usize, darcs: &mut Vec<RemotePtr>){
+        // println!("task group ser");
         for am in &self.ams[self.si..self.ei]{
-            am.ser(num_pes,darcs);
+            // println!("task group am ser");
+            (*am).ser(num_pes,darcs);
         }
     }
 
     fn des(&self,_cur_pe: Result<usize,  crate::IdError>){
+        // println!("task group des");
         // we dont actually do anything here, as each individual am will call its 
-        // own des funcion during the deserialization of the TaskGroupAm 
+        // own des funcion during the deserialization of the AmGroupAm 
     }
 }
 
-
-// impl Serde for TaskGroupAm {}
-
-impl LocalAM for TaskGroupAm {
+impl LocalAM for AmGroupAm {
     type Output = Vec<Vec<u8>>;
 }
 
 #[async_trait::async_trait]
-impl LamellarAM for TaskGroupAm {
+impl LamellarAM for AmGroupAm {
     type Output =  Vec<Vec<u8>>;
     async fn exec(self) -> Self::Output{
         panic!("this should never be called")
     }
 }
 
-impl LamellarSerde for TaskGroupAm {
+impl LamellarSerde for AmGroupAm {
     fn serialized_size(&self)->usize{
         let mut size = 0;
+        size +=crate::serialized_size(&0usize,true);
         let id_size = crate::serialized_size(&AM_ID_START,true);
         for am in &self.ams[self.si..self.ei]{
             size += id_size;
@@ -709,6 +710,9 @@ impl LamellarSerde for TaskGroupAm {
     fn serialize_into(&self,buf: &mut [u8]){
         let mut i = 0;
         // let timer = std::time::Instant::now();
+        let num = self.ei - self.si;
+        crate::serialize_into(&mut buf[i..],&num,true).unwrap();
+        i += crate::serialized_size(&num,true);
         for am in &self.ams[self.si..self.ei]{
             let id =  *(AMS_IDS.get(am.get_id()).unwrap());
             crate::serialize_into(&mut buf[i..],&id,true).unwrap();
@@ -726,7 +730,7 @@ impl LamellarSerde for TaskGroupAm {
     }
 }
 
-impl LamellarResultSerde for TaskGroupAm {
+impl LamellarResultSerde for AmGroupAm {
     fn serialized_result_size(&self,result: & Box<dyn std::any::Any + Sync + Send>)->usize{
         let result  = result.downcast_ref::<Vec<Vec<u8>>>().unwrap();
         crate::serialized_size(result,true)
@@ -737,7 +741,7 @@ impl LamellarResultSerde for TaskGroupAm {
     }
 }
 
-impl LamellarActiveMessage for TaskGroupAm {
+impl LamellarActiveMessage for AmGroupAm {
     fn exec(self: Arc<Self>,__lamellar_current_pe: usize, __lamellar_num_pes: usize, __local: bool, __lamellar_world: Arc<LamellarTeam>, __lamellar_team: Arc<LamellarTeam>) -> std::pin::Pin<Box<dyn std::future::Future<Output=LamellarReturn> + Send >>{
         Box::pin( async move {
             let timer = std::time::Instant::now();
@@ -745,62 +749,66 @@ impl LamellarActiveMessage for TaskGroupAm {
             // for am in self.ams[self.si..self.ei].iter() {
             //     am.clone().exec(__lamellar_current_pe,__lamellar_num_pes,__local,__lamellar_world.clone(),__lamellar_team.clone()).await;
             // }
-            println!("exec time: {:?}", timer.elapsed().as_secs_f64());
+            // println!("exec time: {:?}", timer.elapsed().as_secs_f64());
             match __local{
-                false => LamellarReturn::RemoteData(Arc::new(TaskGroupAmReturn{val: vec![]})),
+                false => LamellarReturn::RemoteData(Arc::new(AmGroupAmReturn{val: vec![]})),
                 true => LamellarReturn::LocalData(Box::<Vec<Vec<u8>>>::new(vec![]))
             }
         })
     }
 
     fn get_id(&self) -> &'static str{
-        "TaskGroupAm"
+        "AmGroupAm"
     }
 }
 
-impl RemoteActiveMessage for TaskGroupAm {
+impl RemoteActiveMessage for AmGroupAm {
     fn as_local(self: Arc<Self>) -> Arc<dyn LamellarActiveMessage + Send + Sync>{
         self
     }
 }
 
 
-fn task_group_am_unpack(bytes: &[u8], cur_pe: Result<usize,crate::IdError>) -> std::sync::Arc<dyn RemoteActiveMessage + Sync + Send> {
+fn am_group_am_unpack(bytes: &[u8], cur_pe: Result<usize,crate::IdError>) -> std::sync::Arc<dyn RemoteActiveMessage + Sync + Send> {
     let mut i = 0;
 
     let id_size = crate::serialized_size(&AM_ID_START,true);
     let mut ams = Vec::new();
-    
-    while i < bytes.len() {
-        let id: AmId = crate::deserialize(&bytes[i..i+id_size],true).unwrap();
+    let mut num: usize = crate::deserialize(&bytes[i..],true).unwrap();
+    i += crate::serialized_size(&num,true);
+    // println!("task group unpack");
+    while num > 0 {
+        let id: AmId = crate::deserialize(&bytes[i..],true).unwrap();
         i += id_size;
+        // println!("task group unpack am");
         let am = AMS_EXECS.get(&id).unwrap()(&bytes[i..], cur_pe);
         i += am.serialized_size();
         ams.push(am);
+        num -= 1;
     }
     let ei = ams.len();
-    let tg_am = TaskGroupAm{
+    let tg_am = AmGroupAm{
         ams: Arc::new(ams),
         si: 0,
         ei: ei,
     };
-    <TaskGroupAm as DarcSerde>::des(&tg_am,cur_pe);
+    <AmGroupAm as DarcSerde>::des(&tg_am,cur_pe);
     Arc::new(tg_am)
 }
 
 crate::inventory::submit!{
     RegisteredAm{
-        exec: task_group_am_unpack,
-        name: "TaskGroupAm"
+        exec: am_group_am_unpack,
+        name: "AmGroupAm"
     }
 }
 
 #[lamellar_impl::AmDataRT]
-struct TaskGroupAmReturn{
+struct AmGroupAmReturn{
     val: Vec<Vec<u8>>
 }
 
-impl LamellarSerde for TaskGroupAmReturn {
+impl LamellarSerde for AmGroupAmReturn {
     fn serialized_size(&self)->usize{
         crate::serialized_size(&self.val,true)
     }
@@ -812,20 +820,20 @@ impl LamellarSerde for TaskGroupAmReturn {
     }
 }
 
-impl LamellarResultDarcSerde for TaskGroupAmReturn{}
+impl LamellarResultDarcSerde for AmGroupAmReturn{}
 
 
 
 #[doc(hidden)]
-pub struct TaskGroupFutures {
+pub struct AmGroup {
     team: Pin<Arc<LamellarTeamRT>>,
     cnt: usize,
     reqs: BTreeMap<usize,(Vec<usize>,Vec<LamellarArcAm>,usize)>,
 }
 
-impl TaskGroupFutures{
-    pub fn new<U: Into<IntoLamellarTeam>>(team: U) -> TaskGroupFutures {
-        TaskGroupFutures {
+impl AmGroup{
+    pub fn new<U: Into<IntoLamellarTeam>>(team: U) -> AmGroup {
+        AmGroup {
             team: team.into().team.clone(),
             cnt: 0,
             reqs: BTreeMap::new(),
@@ -886,7 +894,8 @@ impl TaskGroupFutures{
                         send = true;
                     }
                     if send{
-                        let tg_am = TaskGroupAm{ams: ams.clone(), si: start_i, ei: i};
+                        let tg_am = AmGroupAm{ams: ams.clone(), si: start_i, ei: i};
+                        // println!("tg_am len {:?}",i-start_i);
                         if *pe == self.team.num_pes{
                             reqs_all.push(self.team.exec_arc_am_all::<Vec<Vec<u8>>>(Arc::new(tg_am),None).into_future());
                         }
@@ -899,7 +908,8 @@ impl TaskGroupFutures{
                     }
                 }
                 if temp_size > 0 {
-                    let tg_am = TaskGroupAm{ams: ams.clone(), si: start_i, ei: i};
+                    let tg_am = AmGroupAm{ams: ams.clone(), si: start_i, ei: i};
+                    // println!("tg_am len {:?}",i-start_i);
                     if *pe == self.team.num_pes{
                         reqs_all.push(self.team.exec_arc_am_all::<Vec<Vec<u8>>>(Arc::new(tg_am),None).into_future());
                     }
@@ -909,7 +919,8 @@ impl TaskGroupFutures{
                 }
             }
             else{
-                let tg_am = TaskGroupAm{ams: ams.clone(), si: 0, ei: ams.len()};
+                let tg_am = AmGroupAm{ams: ams.clone(), si: 0, ei: ams.len()};
+                // println!("tg_am len {:?}",ams.len());
                 if *pe == self.team.num_pes{
                     reqs_all.push(self.team.exec_arc_am_all::<Vec<Vec<u8>>>(Arc::new(tg_am),None).into_future());
                 }
@@ -920,7 +931,7 @@ impl TaskGroupFutures{
             
             reqs_pes.push(pe);
         }
-        println!("launch time: {:?} cnt: {:?}", timer.elapsed().as_secs_f64(),reqs.len());
+        println!("launch time: {:?} cnt: {:?} {:?}", timer.elapsed().as_secs_f64(),reqs.len(),reqs_all.len());
         futures::future::join_all(reqs).await;
         futures::future::join_all(reqs_all).await;
         // if let Some(req) = all_req{
@@ -933,3 +944,149 @@ impl TaskGroupFutures{
 }
 
 //TODO create a typed task group which will require the exact am type
+
+
+
+pub enum TypedAmGroupResult<T>{
+    Pe(usize,T),
+    All(Vec<T>),
+}
+
+
+
+// //throw all this into the proc macro...
+// #[doc(hidden)]
+// pub struct TypedAmGroup<T: LamellarCreateAmGroup + RemoteActiveMessage + LamellarAM + Serde + AmDist> {
+//     team: Pin<Arc<LamellarTeamRT>>,
+//     cnt: usize,
+//     reqs: BTreeMap<usize,(Vec<usize>,Box<dyn LamellarAmGroupAm<T> + Sync + Send>,usize)>,
+//     _phantom: PhantomData<T>
+// }
+
+// impl<T: LamellarCreateAmGroup + RemoteActiveMessage + LamellarAM + Serde + AmDist> TypedAmGroup<T>{
+//     pub fn new<U: Into<IntoLamellarTeam>>(team: U) -> TypedAmGroup<T> {
+//         TypedAmGroup {
+//             team: team.into().team.clone(),
+//             cnt: 0,
+//             reqs: BTreeMap::new(),
+//             _phantom: PhantomData
+//         }
+
+//     }
+//     pub fn add_am_all(&mut self, am: T) 
+//     {
+//         let req_queue = self.reqs.entry(self.team.num_pes).or_insert((Vec::new(),Box::new(T::create_am_group()),0));
+//         req_queue.2 += am.serialized_size();
+//         req_queue.0.push(self.cnt);
+//         req_queue.1.push(am);
+        
+//         self.cnt+=1;
+//     }
+
+//     pub fn add_am_pe(&mut self, pe: usize, am: T)
+//     {
+//         let req_queue = self.reqs.entry(pe).or_insert((Vec::new(),Vec::new(),0));
+//         req_queue.2 += am.serialized_size();
+//         req_queue.0.push(self.cnt);
+//         req_queue.1.push(am);
+//         self.cnt+=1;
+//     }
+
+//     pub async fn exec(&mut self) -> Vec<TypedAmGroupResult<T::Output>>{
+//         let timer = std::time::Instant::now();
+//         let mut reqs = vec![];
+//         let mut reqs_all = vec![];
+//         // let mut all_req = None;
+//         let mut reqs_pes = vec![];
+//         for (pe,the_ams) in self.reqs.iter_mut() {
+//             let mut ams = vec![];
+//             std::mem::swap(&mut ams,&mut the_ams.1);
+//             let ams = Arc::new(ams);
+           
+//             if the_ams.2 > 1_000_000{
+//                 let num_reqs = (the_ams.2 / 1_000_000) + 1;
+//                 let req_size = the_ams.2/num_reqs;
+//                 let mut temp_size = 0;
+//                 let mut i = 0;
+//                 let mut start_i = 0;
+//                 let mut send = false;
+//                 while i < ams.len() {
+//                     let am_size = ams[i].serialized_size();
+//                     if temp_size + am_size < 100_000_000 { //hard size limit
+//                         temp_size += am_size;
+//                         i+=1;
+//                         if temp_size > req_size{
+//                             send = true
+//                         }
+//                     }
+//                     else {
+//                         send = true;
+//                     }
+//                     if send{
+//                         let tg_am = AmGroupAm{ams: ams.clone(), si: start_i, ei: i};
+//                         // println!("tg_am len {:?}",i-start_i);
+//                         if *pe == self.team.num_pes{
+//                             reqs_all.push(self.team.exec_arc_am_all::<Vec<Vec<u8>>>(Arc::new(tg_am),None).into_future());
+//                         }
+//                         else{
+//                             reqs.push(self.team.exec_arc_am_pe::<Vec<Vec<u8>>>(*pe,Arc::new(tg_am),None).into_future());
+//                         }
+//                         send = false;
+//                         start_i = i;
+//                         temp_size = 0;
+//                     }
+//                 }
+//                 if temp_size > 0 {
+//                     let tg_am = AmGroupAm{ams: ams.clone(), si: start_i, ei: i};
+//                     // println!("tg_am len {:?}",i-start_i);
+//                     if *pe == self.team.num_pes{
+//                         reqs_all.push(self.team.exec_arc_am_all::<Vec<Vec<u8>>>(Arc::new(tg_am),None).into_future());
+//                     }
+//                     else{
+//                         reqs.push(self.team.exec_arc_am_pe::<Vec<Vec<u8>>>(*pe,Arc::new(tg_am),None).into_future());
+//                     }
+//                 }
+//             }
+//             else{
+//                 let tg_am = AmGroupAm{ams: ams.clone(), si: 0, ei: ams.len()};
+//                 // println!("tg_am len {:?}",ams.len());
+//                 if *pe == self.team.num_pes{
+//                     reqs_all.push(self.team.exec_arc_am_all::<Vec<Vec<u8>>>(Arc::new(tg_am),None).into_future());
+//                 }
+//                 else{
+//                     reqs.push(self.team.exec_arc_am_pe::<Vec<Vec<u8>>>(*pe,Arc::new(tg_am),None).into_future());
+//                 }
+//             }
+            
+//             reqs_pes.push(pe);
+//         }
+//         let mut res = vec![];
+//         println!("launch time: {:?} cnt: {:?} {:?}", timer.elapsed().as_secs_f64(),reqs.len(),reqs_all.len());
+//         let reqs = futures::future::join_all(reqs).await;
+//         let reqs_all = futures::future::join_all(reqs_all).await;
+
+//         for (req,pe) in reqs.iter().zip(reqs_pes.iter()){
+//             for r in req{
+//                 res.push(TypedAmGroupResult::Pe(**pe,crate::deserialize(r,true).unwrap()));
+//             }
+//         }
+
+//         for  req in reqs_all{
+//             for r in req {
+//                 let mut temps = vec![];
+//                 for pe in r{
+//                     temps.push( crate::deserialize(&pe,true).unwrap());
+//                 }
+//                 res.push(TypedAmGroupResult::All(temps));
+//             }
+//         }
+//         res
+//         // if let Some(req) = all_req{
+        
+//         //     req.await;
+//         // }
+
+//     }
+
+
+// }

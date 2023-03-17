@@ -697,10 +697,8 @@ impl<T> GlobalRwDarc<T> {
     /// println!("the current counter value on pe {} main thread = {}",my_pe,*guard);
     ///```
     pub fn read(&self) -> GlobalRwDarcReadGuard<T> {
-        println!("read");
+        // println!("read");
         let inner = self.inner();
-        self.darc.print();
-        println!("inner addr {:x}",inner as *const DarcInner<DistRwLock<T>> as *const () as usize);
         let team = inner.team();
         let remote_rwlock_addr = team.lamellae.remote_addr(
             0,

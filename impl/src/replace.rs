@@ -7,16 +7,16 @@ use regex::Regex;
 
 use crate::parse::FormatArgs;
 
-pub(crate) struct SelfReplace;
+pub(crate) struct SelfReplace{pub(crate) id: syn::Ident}
 pub(crate) struct LamellarDSLReplace;
 pub(crate) struct DarcReplace;
 
 impl VisitMut for SelfReplace {
     fn visit_ident_mut(&mut self, i: &mut syn::Ident) {
-        let span = i.span();
+        // let span = i.span();
         // println!("ident: {:?}",i);
         if i.to_string() == "self" {
-            *i = syn::Ident::new("__lamellar_data", span);
+            *i = self.id.clone();
         }
         // println!("ident: {:?}",i);
         syn::visit_mut::visit_ident_mut(self, i);
@@ -31,7 +31,7 @@ impl VisitMut for SelfReplace {
             let mut new_tok_str: String = tok_str[0].to_string();
             for i in 1..tok_str.len() {
                 new_tok_str +=
-                    &(",".to_owned() + &tok_str[i].to_string().replace("self", "__lamellar_data"));
+                    &(",".to_owned() + &tok_str[i].to_string().replace("self", &self.id.to_string()));
             }
             i.tokens = new_tok_str.parse().unwrap();
         } else {
