@@ -744,7 +744,7 @@ impl LamellarResultSerde for AmGroupAm {
 impl LamellarActiveMessage for AmGroupAm {
     fn exec(self: Arc<Self>,__lamellar_current_pe: usize, __lamellar_num_pes: usize, __local: bool, __lamellar_world: Arc<LamellarTeam>, __lamellar_team: Arc<LamellarTeam>) -> std::pin::Pin<Box<dyn std::future::Future<Output=LamellarReturn> + Send >>{
         Box::pin( async move {
-            let timer = std::time::Instant::now();
+            // let timer = std::time::Instant::now();
             self.ams[self.si..self.ei].iter().map(|e| {e.clone().exec(__lamellar_current_pe,__lamellar_num_pes,__local,__lamellar_world.clone(),__lamellar_team.clone())}).collect::<futures::stream::FuturesOrdered<_>>().collect::<Vec<_>>().await;
             // for am in self.ams[self.si..self.ei].iter() {
             //     am.clone().exec(__lamellar_current_pe,__lamellar_num_pes,__local,__lamellar_world.clone(),__lamellar_team.clone()).await;
@@ -947,11 +947,70 @@ impl AmGroup{
 
 
 
-pub enum TypedAmGroupResult<T>{
-    Pe(usize,T),
-    All(Vec<T>),
+pub enum AmGroupResult<'a,T>{
+    Pe(usize,&'a T),
+    All(TypedAmAllIter<'a, T>),
 }
 
+#[doc(hidden)]
+#[derive( enum_as_inner::EnumAsInner )]
+pub enum AmGroupReqs<T>{
+    Pe(Vec<(usize,Vec<T>)>),
+    All(Vec<Vec<Vec<T>>>),
+    Idx(Vec<(usize,usize,usize)> ),
+}
+
+pub struct TypedAmGroupResult<T>{ 
+    pes: Vec<(usize,Vec<T>)>,
+    all: Vec<Vec<Vec<T>>>,    
+    idx: Vec<(usize,usize,usize)>,
+    num_pes: usize
+}
+
+pub struct TypedAmAllIter<'a,T>{
+    all: &'a Vec<Vec<Vec<T>>>,
+    am_idx: usize,
+    req: usize,
+    cur_pe: usize,
+    num_pes: usize,
+}
+
+impl<'a, T> Iterator for TypedAmAllIter<'a, T> {
+    type Item=&'a T;
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.cur_pe < self.num_pes{
+            let cur_pe = self.cur_pe;
+            self.cur_pe += 1;
+            Some(&self.all[self.am_idx][cur_pe][self.req])
+        }
+        else {
+            None
+        }
+    }
+}
+
+
+impl<T> TypedAmGroupResult<T>{
+    pub fn new(pes: Vec<(usize,Vec<T>)>, all: Vec<Vec<Vec<T>>>,idx: Vec<(usize,usize,usize)>,num_pes: usize) -> Self {
+        // println!("idx: {idx:?}");
+        TypedAmGroupResult{pes,all,idx,num_pes}
+    }
+    pub fn at(&self, index: usize) -> AmGroupResult<T>{
+        let (pe,am_idx,req) = self.idx[index];
+        if pe < self.num_pes{
+            let val = self.pes.iter()
+                              .filter_map(|(the_pe,ams)| if *the_pe == pe { Some(ams)} else {None} )
+                              .enumerate()
+                              .find_map(|(i,ams)| if i == am_idx {Some(&ams[req])} else {None} ).expect("invalid index");
+            AmGroupResult::Pe(pe,val)
+        }
+        else {
+            AmGroupResult::All(TypedAmAllIter{all:&self.all,am_idx: am_idx,req: req,cur_pe: 0,num_pes: self.num_pes})
+        }
+    }
+}
+
+//vec<(usize,(vec<usize>,vec<(usize,usize)>))>
 
 
 // //throw all this into the proc macro...

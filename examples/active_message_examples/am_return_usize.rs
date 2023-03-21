@@ -3,7 +3,7 @@
 /// with multiple input types and returns a usize.
 /// it tests executing the AM localy, executing remotely, and executing on all PEs
 /// --------------------------------------------------------------------
-use lamellar::ActiveMessaging;
+use lamellar::active_messaging::prelude::*;
 // use lamellar::{Backend, SchedulerType};
 
 //----------------- Active message returning data--------------------//

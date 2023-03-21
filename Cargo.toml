@@ -48,6 +48,7 @@ tracing = "0.1.37"
 tracing-futures = "0.2.5"
 tracing-flame = "0.2.0"
 pin-project = "1.0.12"
+enum-as-inner = "0.5.1"
 
 
 [dev-dependencies]
@@ -68,7 +69,7 @@ members = ["impl"]
 
 #features are strictly additive.... can't have mutual exclusitivity
 [features]
-enable-rofi=["rofisys","libc"]
+enable-rofi=["rofisys", "libc"]
 enable-prof=["lamellar-prof/enable-prof"]
 slurm-test=[]
 default=[]
@@ -195,6 +196,10 @@ name="am_bw_get"
 path="examples/bandwidths/am_bw_get.rs"
 
 [[example]]
+name="am_group_bw_get"
+path="examples/bandwidths/am_group_bw_get.rs"
+
+[[example]]
 name="get_bw"
 path="examples/bandwidths/get_bw.rs"
 
@@ -254,6 +259,10 @@ path="examples/active_message_examples/am_no_return.rs"
 [[example]]
 name="am_return_usize"
 path="examples/active_message_examples/am_return_usize.rs"
+
+[[example]]
+name="am_return_ordered"
+path="examples/active_message_examples/am_return_ordered.rs"
 
 [[example]]
 name="am_return_am"
@@ -419,6 +428,10 @@ path="examples/darc_examples/darc.rs"
 [[example]]
 name="stress_test"
 path="examples/darc_examples/stress_test.rs"
+
+[[example]]
+name="string_darc"
+path="examples/darc_examples/string_darc.rs"
 
 ##------------ Hello Worlds examples ------------------##
 [[example]]

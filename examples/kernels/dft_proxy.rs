@@ -114,6 +114,52 @@ fn dft_lamellar(
                 add_spec: add_spec_vec,
             },
         );
+        world.wait_all();
+    }
+    world.wait_all();
+    world.barrier();
+    let time = timer.elapsed().as_secs_f64();
+    time
+}
+
+fn dft_lamellar_am_group(
+    world: &LamellarWorld,
+    my_pe: usize,
+    num_pes: usize,
+    signal: SharedMemoryRegion<f64>,
+    global_sig_len: usize,
+    spectrum: SharedMemoryRegion<f64>,
+) -> f64 {
+    let spectrum_slice = unsafe { spectrum.as_slice().unwrap() };
+    let add_spec = world.alloc_shared_mem_region::<f64>(spectrum_slice.len());
+
+    let timer = Instant::now();
+    
+    for pe in 0..num_pes {
+        let mut local_sum_group = typed_am_group!(LocalSumAM,world);
+        for k in 0..spectrum_slice.len() {
+            local_sum_group.add_am_pe(
+                my_pe,
+                LocalSumAM {
+                    spectrum: add_spec.clone(),
+                    signal: signal.clone(),
+                    global_sig_len: global_sig_len,
+                    k: k,
+                    pe: pe,
+                },
+            );
+        }
+        let mut add_spec_vec = vec![0.0; spectrum_slice.len()];
+        world.block_on(local_sum_group.exec());
+        add_spec_vec.copy_from_slice(unsafe { add_spec.as_slice().unwrap() });
+        world.exec_am_pe(
+            pe,
+            RemoteSumAM {
+                spectrum: spectrum.clone(),
+                add_spec: add_spec_vec,
+            },
+        );
+        world.wait_all();
     }
     world.wait_all();
     world.barrier();
@@ -511,6 +557,23 @@ fn main() {
 
             world.barrier();
 
+
+            //--------------lamellar Manual Active Message tg--------------------------
+            times[1].push(dft_lamellar_am_group(
+                &world,
+                my_pe,
+                num_pes,
+                partial_signal.clone(),
+                global_len,
+                partial_spectrum.clone(),
+            ));
+            if my_pe == 0 {
+                println!("am group i: {:?} {:?}", _i, times[1].last());
+            }
+            //-----------------------------------------------------
+
+            world.barrier();
+
             //--------------lamellar array--------------------------
             unsafe {
                 full_spectrum_array
@@ -665,10 +728,10 @@ fn main() {
                 "am time: {:?}",
                 times[0].iter().sum::<f64>() / times[0].len() as f64
             );
-            // println!(
-            //     "naive UnsafeArray array time: {:?}",
-            //     times[1].iter().sum::<f64>() / times[1].len() as f64
-            // );
+            println!(
+                "am group time: {:?}",
+                times[1].iter().sum::<f64>() / times[1].len() as f64
+            );
             println!(
                 "optimized UnsafeArray time: {:?}",
                 times[2].iter().sum::<f64>() / times[2].len() as f64

@@ -13,7 +13,7 @@ use std::collections::HashMap;
 
 use proc_macro::TokenStream;
 use proc_macro2::Span;
-use proc_macro_error::{abort, proc_macro_error,emit_error};
+use proc_macro_error::{abort, proc_macro_error};
 use quote::{quote, quote_spanned, ToTokens};
 use syn::parse_macro_input;
 use syn::spanned::Spanned;
@@ -98,14 +98,112 @@ fn get_expr(stmt: &syn::Stmt) -> Option<syn::Expr> {
     expr
 }
 
+fn replace_lamellar_dsl_new(fn_block: syn::Block) -> syn::Block {
+    let token_string = fn_block.to_token_stream().to_string();
+    let split_lamellar = token_string.split("lamellar").collect::<Vec<_>>();
+    let mut new_token_string = String::from(split_lamellar[0]);
+    let mut i = 1;
+    // while i <  split_lamellar.len()-1 
+    //     let s = split_lamellar[i];
+    for s in &split_lamellar[1..]{
+        if s.trim_start().starts_with("::") {
+            let temp = s.split_whitespace().collect::<Vec<_>>();
+            if temp[1].starts_with("current_pe"){
+                new_token_string += "__lamellar_current_pe";
+                new_token_string += s.split_once("current_pe").unwrap().1;
+            }
+            else if temp[1].starts_with("num_pes"){
+                new_token_string += "__lamellar_num_pes";
+                new_token_string += s.split_once("num_pes").unwrap().1;
+            }
+            else if temp[1].starts_with("world"){
+                new_token_string += "__lamellar_world";
+                new_token_string += s.split_once("world").unwrap().1;
+            }
+            else if temp[1].starts_with("team"){
+                new_token_string += "__lamellar_team";
+                new_token_string += s.split_once("team").unwrap().1;
+            }
+        }
+        else{
+            new_token_string += "lamellar"; 
+            new_token_string += s;
+        }
+    }
+    // println!("{token_string}");
+    // let mut new_token_string =token_string;
+    // // for s in "lamellar ::"[]
+    // if token_string.contains("lamellar ::"){
+    //     new_token_string = new_token_string.replace("lamellar :: current_pe","__lamellar_current_pe");
+    //     new_token_string = new_token_string.replace("lamellar :: num_pes","__lamellar_num_pes");
+    //     new_token_string = new_token_string.replace("lamellar :: world","__lamellar_world");
+    //     new_token_string = new_token_string.replace("lamellar :: team","__lamellar_team");
+    // if token_string.contains("lamellar") {
+    //     println!("{token_string}");
+    //     println!("{new_token_string}");
+    // }
+
+    match syn::parse_str(&new_token_string){
+        Ok(fn_block) => fn_block,
+        Err(_) => {
+            println!("{token_string}");
+            println!("{new_token_string}");
+            panic!("uuhh ohh");
+        }
+    }
+}
+
 fn replace_lamellar_dsl(mut stmt: syn::Stmt) -> syn::Stmt {
-    LamellarDSLReplace.visit_stmt_mut(&mut stmt);
-    stmt
+    let token_string = stmt.to_token_stream().to_string();
+    let mut new_token_string = token_string.replace("lamellar::current_pe","__lamellar_current_pe");
+    new_token_string = token_string.replace("lamellar::num_pes","__lamellar_num_pes");
+    new_token_string = token_string.replace("lamellar::world","__lamellar_world");
+    new_token_string = token_string.replace("lamellar::team","__lamellar_team");
+    
+    // println!("{token_string}");
+    // println!("{new_token_string}");
+    match syn::parse_str(&new_token_string){
+        Ok(stmt) => stmt,
+        Err(_) => {
+            println!("{token_string}");
+            println!("{new_token_string}");
+        panic!("uuhh ohh");
+        }
+    }
+    // stmt
 }
 
 fn replace_self(mut stmt: syn::Stmt, id: syn::Ident) -> syn::Stmt {
     SelfReplace{id}.visit_stmt_mut(&mut stmt);
     stmt
+}
+
+fn replace_self_new(fn_block: syn::Block, id: &str) -> syn::Block {
+    let token_string = fn_block.to_token_stream().to_string();
+    let split_self = token_string.split("self").collect::<Vec<_>>();
+    let mut new_token_string = String::from(split_self[0]);
+
+    for s in &split_self[1..]{
+        if s.trim_start().starts_with(".") {
+            new_token_string += id;
+        }
+        else{
+            new_token_string += "*";
+            new_token_string += id;
+        }
+        new_token_string += s;
+    }
+    
+    // let mut new_token_string = token_string.replace("self",id);
+    // let mut new_token_string = token_string.replace("self",id);
+    match syn::parse_str(&new_token_string){
+        Ok(fn_block) => fn_block,
+        Err(_) => {
+            println!("{token_string}");
+            println!("{new_token_string}");
+            panic!("uuhh ohh");
+        }
+    }
 }
 
 enum AmType {
@@ -156,8 +254,11 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_group: bool, am_t
     let mut exec_fn =
         get_impl_method("exec".to_string(), &input.items).expect("unable to extract exec body");
     let func_span = exec_fn.span();
+    // println!("{:?}",exec_fn.to_token_stream().to_string());
+    exec_fn = replace_lamellar_dsl_new(exec_fn);
     let (last_expr, vec_u8) = if let Some(stmt) = exec_fn.stmts.pop() {
-        let last_stmt = replace_lamellar_dsl(stmt.clone());
+        // let last_stmt = replace_lamellar_dsl(stmt.clone());
+        let last_stmt = stmt.clone();
         match am_type {
             AmType::NoReturn => (
                 quote_spanned! {last_stmt.span()=>
@@ -199,20 +300,23 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_group: bool, am_t
     let stmts = exec_fn.stmts;
 
     for stmt in stmts {
-        let new_stmt = replace_lamellar_dsl(stmt.clone());
+        // let new_stmt = replace_lamellar_dsl(stmt.clone());
         temp.extend(quote_spanned! {stmt.span()=>
-            #new_stmt
+            #stmt
         });
     }
 
     let orig_name = syn::Ident::new(&name, Span::call_site());
     let orig_name_unpack = quote::format_ident!("{}_unpack", orig_name.clone());
 
+    let mut is_return_am = false;
+
     let ret_type = {
         match am_type {
             AmType::NoReturn => quote! {()},
             AmType::ReturnData(ref output) => quote! {#output},
             AmType::ReturnAm(ref output) => {
+                is_return_am = true;
                 quote! {#output}
             }
         }
@@ -431,7 +535,7 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_group: bool, am_t
         });
     }
 
-    if am_group{
+    if am_group && !is_return_am {
         let am_group_am_name = quote::format_ident!("{}GroupAm",  orig_name);
         let am_group_am_name_local = quote::format_ident!("{}GroupAmLocal",  orig_name);
         let am_group_name = quote::format_ident!("{}Group",  orig_name);
@@ -441,17 +545,21 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_group: bool, am_t
 
 
         let mut temp = quote_spanned! {func_span=>};
-        let exec_fn =
+        let mut exec_fn =
         get_impl_method("exec".to_string(), &input.items).expect("unable to extract exec body");
+        exec_fn = replace_lamellar_dsl_new(exec_fn);
+        exec_fn = replace_self_new(exec_fn,"am");
         let stmts = exec_fn.stmts;
 
         for stmt in stmts {
-            let new_stmt = replace_lamellar_dsl(stmt.clone());
-            let new_stmt = replace_self(new_stmt,quote::format_ident!("am"));
+            // let new_stmt = replace_lamellar_dsl(stmt.clone());
+            // let new_stmt = stmt.clone();
+            // let new_stmt = replace_self(new_stmt,quote::format_ident!("am"));
             temp.extend(quote_spanned! {stmt.span()=>
-                #new_stmt
+                #stmt
             });
         }
+
 
         let ret_stmt = match am_type {
             AmType::NoReturn => {
@@ -513,7 +621,7 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_group: bool, am_t
             }
         };
 
-        let mut local_generics = generics.clone();
+        let local_generics = generics.clone();
         // if local_generics.params.len() == 0 {
         //     let lt = Token![<](Span::call_site());
         //     let gt = Token![>](Span::call_site());
@@ -523,7 +631,7 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_group: bool, am_t
         // local_generics.params.insert(0,syn::GenericParam::Lifetime(syn::LifetimeDef::new(syn::Lifetime::new("'am_group",Span::call_site()))));
         let (local_impl_generics, local_ty_generics, local_where_clause) = local_generics.split_for_impl();
 
-        println!("{:?} {:?} {:?}",local_impl_generics, local_ty_generics, local_where_clause);
+        // println!("{:?} {:?} {:?}",local_impl_generics, local_ty_generics, local_where_clause);
 
         expanded.extend(quote!{
             impl #impl_generics  #orig_name #ty_generics #where_clause{
@@ -636,9 +744,12 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_group: bool, am_t
             impl #impl_generics #lamellar::active_messaging::LamellarActiveMessage for #am_group_am_name #ty_generics #where_clause {
                 fn exec(self: std::sync::Arc<Self>,__lamellar_current_pe: usize,__lamellar_num_pes: usize, __local: bool, __lamellar_world: std::sync::Arc<#lamellar::LamellarTeam>, __lamellar_team: std::sync::Arc<#lamellar::LamellarTeam>) -> std::pin::Pin<Box<dyn std::future::Future<Output=#lamellar::active_messaging::LamellarReturn> + Send >>{
                     Box::pin( async move {
-                        let __res_vec = self.ams.iter().map(|am| {
+                        // let __res_vec = self.ams.iter().map(|am| async {
+                        //     #temp
+                        // }).collect::<Vec<_>>();
+                        let __res_vec = self.ams.iter().map(|am|  async  {
                             #temp
-                        }).collect::<Vec<_>>();
+                        }).collect::<futures::stream::FuturesOrdered<_>>().collect::<Vec<_>>().await;
                         #ret_stmt
                     }.instrument(#lamellar::tracing::trace_span!(#my_name))
                 )
@@ -652,10 +763,12 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_group: bool, am_t
 
             impl #local_impl_generics #lamellar::active_messaging::LamellarActiveMessage for #am_group_am_name_local #local_ty_generics #local_where_clause {
                 fn exec(self: std::sync::Arc<Self>,__lamellar_current_pe: usize,__lamellar_num_pes: usize, __local: bool, __lamellar_world: std::sync::Arc<#lamellar::LamellarTeam>, __lamellar_team: std::sync::Arc<#lamellar::LamellarTeam>) -> std::pin::Pin<Box<dyn std::future::Future<Output=#lamellar::active_messaging::LamellarReturn> + Send >>{
+                    let ams = self.ams.clone();
                     Box::pin( async move {
-                        let __res_vec = self.ams[self.si..self.ei].iter().map(|am| {
+                        // let __res_vec = futures::future::join_all(
+                        let __res_vec = ams[self.si..self.ei].iter().map(|am|  async {
                             #temp
-                        }).collect::<Vec<_>>();
+                        }).collect::<futures::stream::FuturesOrdered<_>>().collect::<Vec<_>>().await;
                         #ret_stmt
                     }.instrument(#lamellar::tracing::trace_span!(#my_name))
                     )   
@@ -731,6 +844,7 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_group: bool, am_t
 
             use #lamellar::active_messaging::LamellarSerde;
             impl #impl_generics #am_group_name #ty_generics #where_clause{
+                #[allow(unused)]
                 fn new(team: Arc<LamellarTeam>) -> #am_group_name #ty_generics{
                     #am_group_name {
                         team: team,
@@ -739,6 +853,7 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_group: bool, am_t
                     }
             
                 }
+                #[allow(unused)]
                 fn add_am_all(&mut self, am:  #orig_name #ty_generics) 
                 {
                     
@@ -748,7 +863,7 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_group: bool, am_t
                     req_queue.1.push(am);
                     self.cnt+=1;
                 }
-            
+                #[allow(unused)]
                 fn add_am_pe(&mut self, pe: usize, am:  #orig_name #ty_generics)
                 {
                     let req_queue = self.reqs.entry(pe).or_insert((Vec::new(),Vec::new(),0));
@@ -756,19 +871,55 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_group: bool, am_t
                     req_queue.0.push(self.cnt);
                     req_queue.1.push(am);
                     self.cnt+=1;
+                    // println!("cnt: {:?}",self.cnt);
                 }
-            
-                pub async fn exec(&mut self) {//-> Vec<TypedAmGroupResult<T::Output>>{
+                #[allow(unused)]
+                pub async fn exec(&mut self) -> #lamellar::TypedAmGroupResult<#ret_type>{
                     // let timer = std::time::Instant::now();
-                    let mut reqs = vec![];
-                    let mut reqs_all = vec![];
+
+                    let mut reqs: Vec<_> = Vec::new(); //: Vec<Pin<Box<dyn Future<Output = Vec<#ret_type>> + Send>>> = Vec::new();
+                    let mut reqs_all: Vec<Pin<Box<dyn Future<Output = Vec<Vec<#ret_type>>> + Send>>> = Vec::new();
+
                     // let mut all_req = None;
-                    let mut reqs_pes = vec![];
+                    let mut reqs_idx: BTreeMap<usize,(Vec<usize>,Vec<(usize,usize)>)> = BTreeMap::new();
+                    let num_pes = self.team.num_pes();
+                    // let num_workers = match std::env::var("LAMELLAR_THREADS") {
+                    //     Ok(n) => n.parse::<usize>().unwrap(),
+                    //     Err(_) => 4,
+                    // };
+
+                    // let num_workers = std::cmp::min(ams.len(),num_workers);
                     for (pe,the_ams) in self.reqs.iter_mut() {
-                        let mut ams = vec![];
+                        let mut ams: Vec<#orig_name #ty_generics> = Vec::new();
+                        let mut idx: Vec<usize> = Vec::new();
                         std::mem::swap(&mut ams,&mut the_ams.1);
+                        std::mem::swap(&mut idx,&mut the_ams.0);
                         
                         let ams = Arc::new(ams);
+                        // let idx = Arc::new(idx);
+                        let mut req_idx: Vec<(usize,usize)> = Vec::new();
+                        
+
+                        // let num_elems = ams.len()/num_workers;
+                        // // println!("num_elems {} num_workers {}",num_elems,num_workers);
+                        // for i in 0..(num_workers-1){
+                        //     // println!("si {} ei {}",i*num_elems,((i+1)*num_elems));
+                        //     let tg_am = #am_group_am_name_local{ams: ams.clone(), si: i*num_elems, ei: ((i+1)*num_elems)};
+                        //     if *pe == num_pes{
+                        //         reqs_all.push(self.team.exec_am_group_all(tg_am));
+                        //     }
+                        //     else{
+                        //         reqs.push(self.team.exec_am_group_pe(*pe,tg_am));
+                        //     }
+                        // }
+                        // // println!("si {} ei {}",(num_workers-1)*num_elems,ams.len());
+                        // let tg_am = #am_group_am_name_local{ams: ams.clone(), si: (num_workers-1)*num_elems, ei: ams.len()};
+                        // if *pe == num_pes{
+                        //     reqs_all.push(self.team.exec_am_group_all(tg_am));
+                        // }
+                        // else{
+                        //     reqs.push(self.team.exec_am_group_pe(*pe,tg_am));
+                        // }
                        
                         if the_ams.2 > 1_000_000{
                             let num_reqs = (the_ams.2 / 1_000_000) + 1;
@@ -795,8 +946,9 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_group: bool, am_t
                                         reqs_all.push(self.team.exec_am_group_all(tg_am));
                                     }
                                     else{
-                                        reqs.push(self.team.exec_am_group_pe(*pe,tg_am));
+                                        reqs.push(#am_group_name::am_pe(self.team.clone(),tg_am,*pe));
                                     }
+                                    req_idx.push((start_i, i));
                                     send = false;
                                     start_i = i;
                                     temp_size = 0;
@@ -808,8 +960,9 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_group: bool, am_t
                                     reqs_all.push(self.team.exec_am_group_all(tg_am));
                                 }
                                 else{
-                                    reqs.push(self.team.exec_am_group_pe(*pe,tg_am));
+                                    reqs.push(#am_group_name::am_pe(self.team.clone(),tg_am,*pe));
                                 }
+                                req_idx.push((start_i, i));
                             }
                         }
                         else{
@@ -818,49 +971,79 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_group: bool, am_t
                                 reqs_all.push(self.team.exec_am_group_all(tg_am));
                             }
                             else{
-                                reqs.push(self.team.exec_am_group_pe(*pe,tg_am));
+                                reqs.push(#am_group_name::am_pe(self.team.clone(),tg_am,*pe));
                             }
+                            req_idx.push((0, ams.len()));
                         }
-                        
-                        reqs_pes.push(pe);
+                        reqs_idx.insert(*pe,(idx,req_idx));
+                        // reqs_pes.push(pe);
                     }
 
-                    // let mut res = vec![];
-                    // println!("launch time: {:?} cnt: {:?} {:?}", timer.elapsed().as_secs_f64(),reqs.len(),reqs_all.len());
-                    let reqs = futures::future::join_all(reqs).await;
-                    let reqs_all = futures::future::join_all(reqs_all).await;
-            
-                    // for (req,pe) in reqs.iter().zip(reqs_pes.iter()){
-                    //     for r in req{
-                    //         res.push(TypedAmGroupResult::Pe(**pe,crate::deserialize(r,true).unwrap()));
-                    //     }
-                    // }
-            
-                    // for  req in reqs_all{
-                    //     for r in req {
-                    //         let mut temps = vec![];
-                    //         for pe in r{
-                    //             temps.push( crate::deserialize(&pe,true).unwrap());
-                    //         }
-                    //         res.push(TypedAmGroupResult::All(temps));
-                    //     }
-                    // }
-                    // res
+                    // println!("launch time: {:?} cnt: {:?} {:?} {:?}", timer.elapsed().as_secs_f64(),self.cnt,reqs.len(),reqs_all.len());
+                    
+                    let pes = futures::future::join_all(reqs);
+                    let all = futures::future::join_all(reqs_all);
+                    
+                    let res = futures::join!(
+                        pes,
+                        all,
+                        #am_group_name::create_idx(reqs_idx,self.cnt),
+                    );
+
+                    #lamellar::TypedAmGroupResult::new(
+                        res.0, //  res.0, //vec![],// res.0.into_pe().unwrap(),
+                        res.1, //vec![],//res.0.into_all().unwrap(),
+                        res.2,
+                        num_pes,
+                    )
+                }
+                async fn am_pe(team: Arc<LamellarTeam>, tg_am: #am_group_am_name_local #local_ty_generics ,pe: usize) -> (usize,Vec<#ret_type>){
+                    (pe, team.exec_am_group_pe(pe,tg_am).await)
+                }
+                async fn create_idx(reqs_idx: BTreeMap<usize,(Vec<usize>,Vec<(usize,usize)>)>,cnt: usize)->Vec<(usize,usize,usize)> {// Vec<(usize,usize,usize)> {//AmGroupReqs<#ret_type> {
+                    let mut idx_map: Vec<(usize,usize,usize)> = Vec::new();
+                    for _i in 0..cnt{
+                        idx_map.push((0,0,0));
+                    }
+                    for (pe, (idx, req_idx)) in reqs_idx {
+                        for (i, (si,ei)) in req_idx.iter().enumerate() {
+                            for (j, req) in (*si..*ei).enumerate() {
+                                idx_map[idx[req]] = (pe, i, j);
+                            }
+                        }
+                    }
+                    idx_map
                 }
             }
+
+            
+        
             
         });
 
         
     }
+    
+    let am_group_mods = if am_group && !is_return_am{
+       quote!{
+            use __lamellar::active_messaging::prelude::*;
+            use __lamellar::ser::SerializeSeq;
+            use std::sync::Arc;
+            use std::collections::BTreeMap;
+            use futures::StreamExt;
+            use std::pin::Pin;
+            use std::future::Future;
+        }
+    }
+    else{
+        quote!{}
+    };
 
     let user_expanded = quote_spanned! {expanded.span()=>
         const _: () = {
             extern crate lamellar as __lamellar;
             use __lamellar::tracing::*;
-            use __lamellar::ser::SerializeSeq;
-            use std::sync::Arc;
-            use std::collections::BTreeMap;
+            #am_group_mods
             #expanded
         };
     };
@@ -869,6 +1052,7 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_group: bool, am_t
         expanded.span()=>
         const _: () = {
             use tracing::*;
+            #am_group_mods
             #expanded
         };
     };

@@ -340,7 +340,7 @@ impl LamellarTeam {
     }
 
     #[doc(hidden)]
-    pub fn exec_am_group_all<F>(&self, am: F) ->Pin<Box<dyn Future<Output = Vec<F::Output>> + Send>>
+    pub fn exec_am_group_all<F>(&self, am: F) -> Pin<Box<dyn Future<Output = Vec<F::Output>> + Send>>
     where
         F: RemoteActiveMessage + LamellarAM + crate::Serialize + 'static
     {

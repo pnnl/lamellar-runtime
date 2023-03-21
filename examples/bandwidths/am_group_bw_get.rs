@@ -1,25 +1,55 @@
-/// ------------Lamellar Bandwidth: AM  -------------------------
+/// ------------Lamellar Bandwidth: AM +RDMA -------------------------
 /// Test the bandwidth between two PEs using an active message which
-/// contains a vector of N bytes
-/// the active message simply returns immediately.
+/// contians a handle to a SharedMemoryRegion, the active message
+/// then "gets" N bytes into a local array.
+/// This allows us to have multiple data transfers occuring in parallel
+/// and reduces the need to copy + serialize/deserialize larges amounts
+/// of data (on the critical path)
 /// --------------------------------------------------------------------
 use lamellar::active_messaging::prelude::*;
+use lamellar::memregion::prelude::*;
+
 use std::time::Instant;
+
+const ARRAY_LEN: usize = 1 * 1024 * 1024 * 1024;
 
 #[lamellar::AmData(Clone, Debug)]
 struct DataAM {
-    data: Vec<u8>,
+    array: OneSidedMemoryRegion<u8>,
+    index: usize,
+    length: usize,
 }
 
 #[lamellar::am]
 impl LamellarAM for DataAM {
-    async fn exec() {}
+    async fn exec(&self) {
+        unsafe {
+            // let local = lamellar::team.local_array::<u8>(self.length, 255u8);
+            let local = lamellar::team.alloc_one_sided_mem_region::<u8>(self.length);
+            let local_slice = local.as_mut_slice().unwrap();
+            local_slice[self.length - 1] = 255u8;
+            self.array.get_unchecked(self.index, local.clone());
+
+            while local_slice[self.length - 1] == 255u8 {
+                // async_std::task::yield_now().await;
+                std::thread::yield_now();
+            }
+        }
+    }
 }
 
 fn main() {
     let world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();
     let num_pes = world.num_pes();
+    let array = world.alloc_one_sided_mem_region::<u8>(ARRAY_LEN);
+    let data = world.alloc_one_sided_mem_region::<u8>(ARRAY_LEN);
+    unsafe {
+        for i in data.as_mut_slice().unwrap() {
+            *i = my_pe as u8;
+        }
+    }
+    unsafe { array.put(0, data.clone()) };
     world.barrier();
     let s = Instant::now();
     world.barrier();
@@ -32,11 +62,6 @@ fn main() {
     let mut bws = vec![];
     for i in 0..27 {
         let num_bytes = 2_u64.pow(i);
-        let mut _data: std::vec::Vec<u8> = Vec::new(); //vec![; num_bytes as usize];
-        for i in 0..num_bytes {
-            _data.push(i as u8);
-        }
-
         let old: f64 = world.MB_sent();
         let mut sum = 0;
         let mut cnt = 0;
@@ -46,33 +71,33 @@ fn main() {
         } else if num_bytes >= 4096 {
             exp = 30;
         }
-        // exp=10;
-
         let timer = Instant::now();
         let mut sub_time = 0f64;
-        // println!("starting next round");
-        
-        if my_pe == 0 {
-            let mut task_group = AmGroup::new(world.team());
-            for _j in (num_bytes..(2_u64.pow(exp))).step_by(num_bytes as usize) {
+        if my_pe == num_pes - 1 {
+            let mut am_group = typed_am_group!(DataAM,&world);
+            for _j in (0..(2_u64.pow(exp))).step_by(num_bytes as usize) {
                 let sub_timer = Instant::now();
-                let d = _data.clone();
+                am_group.add_am_pe(
+                    0,
+                    DataAM {
+                        array: array.clone(),
+                        index: 0 as usize,
+                        length: num_bytes as usize,
+                    },
+                );
                 sub_time += sub_timer.elapsed().as_secs_f64();
-                task_group.add_am_pe(num_pes - 1, DataAM { data: d }); //we explicity  captured _data and transfer it even though we do nothing with it
-                
                 sum += num_bytes * 1 as u64;
                 cnt += 1;
             }
-            println!("issue time: {:?}", timer.elapsed().as_secs_f64()-sub_time);
-            world.block_on(task_group.exec());
+            println!("issue time: {:?}", timer.elapsed().as_secs_f64());
+            world.block_on(am_group.exec());
         }
-        
         world.barrier();
-        let cur_t = timer.elapsed().as_secs_f64()-sub_time;
+        let cur_t = timer.elapsed().as_secs_f64();
         let cur: f64 = world.MB_sent();
-        if my_pe == 0 {
+        if my_pe == num_pes - 1 {
             println!(
-                "tx_size: {:?}B num_tx: {:?} num_bytes: {:?}MB time: {:?} (cp time: {:?})
+                "tx_size: {:?}B num_tx: {:?} num_bytes: {:?}MB time: {:?} (issue time: {:?})
                 throughput (avg): {:?}MB/s (cuml): {:?}MB/s total_bytes (w/ overhead) {:?}MB throughput (w/ overhead){:?} latency: {:?}us",
                 num_bytes, //transfer size
                 cnt,  //num transfers
@@ -87,10 +112,15 @@ fn main() {
             );
             bws.push((sum as f64 / 1048576.0) / cur_t);
         }
-        println!("finished round");
-        println!("======================================================================================");
+        unsafe {
+            let data = array.as_mut_slice().unwrap();
+            for j in 0..ARRAY_LEN as usize {
+                data[j] = my_pe as u8;
+            }
+        }
+        world.barrier();
     }
-    if my_pe == 0 {
+    if my_pe == num_pes - 1 {
         println!(
             "bandwidths: {}",
             bws.iter()
