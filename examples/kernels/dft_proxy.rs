@@ -13,6 +13,8 @@ use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
 use rayon::prelude::*;
 use std::time::Instant;
+use futures::FutureExt;
+use futures::StreamExt;
 #[macro_use]
 extern crate lazy_static;
 
@@ -43,7 +45,7 @@ struct LocalSumAM {
     pe: usize,
 }
 
-#[lamellar::am]
+#[lamellar::local_am]
 impl LamellarAM for LocalSumAM {
     async fn exec() {
         let spectrum_slice = unsafe { self.spectrum.as_mut_slice().unwrap() };
@@ -59,6 +61,32 @@ impl LamellarAM for LocalSumAM {
         }
         let _lock = LOCK.lock();
         spectrum_slice[self.k] = sum;
+    }
+}
+
+#[lamellar::AmData(Clone, Debug)]
+struct LocalSumAM2 {
+    local_len: usize,
+    signal: SharedMemoryRegion<f64>,
+    global_sig_len: usize,
+    k: usize,
+    pe: usize,
+}
+
+#[lamellar::am]
+impl LamellarAM for LocalSumAM2 {
+    async fn exec() -> f64{
+        let k_prime = self.k + self.pe * self.local_len;
+        let signal = unsafe { self.signal.as_slice().unwrap() };
+        let mut sum = 0.0;
+        for (i, &x) in signal.iter().enumerate() {
+            let i_prime = i + lamellar::current_pe as usize * signal.len();
+            let angle = -1f64 * (i_prime * k_prime) as f64 * 2f64 * std::f64::consts::PI
+                / self.global_sig_len as f64;
+            let twiddle = angle * (angle.cos() + angle * angle.sin());
+            sum = sum + twiddle * x;
+        }
+        sum
     }
 }
 
@@ -93,8 +121,7 @@ fn dft_lamellar(
     let timer = Instant::now();
     for pe in 0..num_pes {
         for k in 0..spectrum_slice.len() {
-            world.exec_am_pe(
-                my_pe,
+            world.exec_am_local(
                 LocalSumAM {
                     spectrum: add_spec.clone(),
                     signal: signal.clone(),
@@ -131,17 +158,18 @@ fn dft_lamellar_am_group(
     spectrum: SharedMemoryRegion<f64>,
 ) -> f64 {
     let spectrum_slice = unsafe { spectrum.as_slice().unwrap() };
-    let add_spec = world.alloc_shared_mem_region::<f64>(spectrum_slice.len());
+    let local_len = spectrum_slice.len();
 
     let timer = Instant::now();
     
+    let mut pe_groups = futures::stream::FuturesOrdered::new();
     for pe in 0..num_pes {
-        let mut local_sum_group = typed_am_group!(LocalSumAM,world);
-        for k in 0..spectrum_slice.len() {
+        let mut local_sum_group = typed_am_group!(LocalSumAM2,world);
+        for k in 0..local_len {
             local_sum_group.add_am_pe(
                 my_pe,
-                LocalSumAM {
-                    spectrum: add_spec.clone(),
+                LocalSumAM2 {
+                    local_len: local_len,
                     signal: signal.clone(),
                     global_sig_len: global_sig_len,
                     k: k,
@@ -149,19 +177,30 @@ fn dft_lamellar_am_group(
                 },
             );
         }
-        let mut add_spec_vec = vec![0.0; spectrum_slice.len()];
-        world.block_on(local_sum_group.exec());
-        add_spec_vec.copy_from_slice(unsafe { add_spec.as_slice().unwrap() });
-        world.exec_am_pe(
-            pe,
-            RemoteSumAM {
-                spectrum: spectrum.clone(),
-                add_spec: add_spec_vec,
-            },
-        );
-        world.wait_all();
+        let spec  = spectrum.clone();
+        pe_groups.push(async move{
+            let res = local_sum_group.exec().await;
+            let vec = (0..local_len).map(|i| {
+                if let AmGroupResult::Pe(_,val) = res.at(i){
+                    *val
+                }
+                else{
+                    panic!("cant reach")
+                }
+            }).collect::<Vec<_>>();
+            world.exec_am_pe(
+                pe,
+                RemoteSumAM {
+                    spectrum: spec,
+                    add_spec: vec,
+                },
+            ).await;
+        }); 
     }
-    world.wait_all();
+    world.block_on(
+        pe_groups.collect::<Vec<_>>()
+    );
+    
     world.barrier();
     let time = timer.elapsed().as_secs_f64();
     time
@@ -551,10 +590,10 @@ fn main() {
                 partial_spectrum.clone(),
             ));
             if my_pe == 0 {
-                println!("am i: {:?} {:?}", _i, times[0].last());
+                println!("am i: {:?} {:?} sum: {:?}", _i, times[0].last(), unsafe{partial_spectrum.as_slice().unwrap().iter().sum::<f64>()});
             }
             //-----------------------------------------------------
-
+            unsafe{partial_spectrum.as_mut_slice().unwrap().iter_mut().for_each(|e| *e = 0.0);}
             world.barrier();
 
 
@@ -568,8 +607,9 @@ fn main() {
                 partial_spectrum.clone(),
             ));
             if my_pe == 0 {
-                println!("am group i: {:?} {:?}", _i, times[1].last());
+                println!("am group i: {:?} {:?} sum: {:?}", _i, times[1].last(), unsafe{partial_spectrum.as_slice().unwrap().iter().sum::<f64>()});
             }
+            unsafe{partial_spectrum.as_mut_slice().unwrap().iter_mut().for_each(|e| *e = 0.0);}
             //-----------------------------------------------------
 
             world.barrier();

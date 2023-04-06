@@ -6,8 +6,8 @@ mod replace;
 mod array_ops;
 mod array_reduce;
 
-use crate::replace::LamellarDSLReplace;
-use crate::replace::SelfReplace;
+// use crate::replace::LamellarDSLReplace;
+// use crate::replace::SelfReplace;
 
 use std::collections::HashMap;
 
@@ -17,7 +17,7 @@ use proc_macro_error::{abort, proc_macro_error};
 use quote::{quote, quote_spanned, ToTokens};
 use syn::parse_macro_input;
 use syn::spanned::Spanned;
-use syn::visit_mut::VisitMut;
+// use syn::visit_mut::VisitMut;
 use syn::Token;
 use syn::parse::{Parse,ParseStream,Result};
 fn type_name(ty: &syn::Type) -> Option<String> {
@@ -102,7 +102,7 @@ fn replace_lamellar_dsl_new(fn_block: syn::Block) -> syn::Block {
     let token_string = fn_block.to_token_stream().to_string();
     let split_lamellar = token_string.split("lamellar").collect::<Vec<_>>();
     let mut new_token_string = String::from(split_lamellar[0]);
-    let mut i = 1;
+    // let mut i = 1;
     // while i <  split_lamellar.len()-1 
     //     let s = split_lamellar[i];
     for s in &split_lamellar[1..]{
@@ -153,30 +153,30 @@ fn replace_lamellar_dsl_new(fn_block: syn::Block) -> syn::Block {
     }
 }
 
-fn replace_lamellar_dsl(mut stmt: syn::Stmt) -> syn::Stmt {
-    let token_string = stmt.to_token_stream().to_string();
-    let mut new_token_string = token_string.replace("lamellar::current_pe","__lamellar_current_pe");
-    new_token_string = token_string.replace("lamellar::num_pes","__lamellar_num_pes");
-    new_token_string = token_string.replace("lamellar::world","__lamellar_world");
-    new_token_string = token_string.replace("lamellar::team","__lamellar_team");
+// fn replace_lamellar_dsl( stmt: syn::Stmt) -> syn::Stmt {
+//     let token_string = stmt.to_token_stream().to_string();
+//     let mut new_token_string = token_string.replace("lamellar::current_pe","__lamellar_current_pe");
+//     new_token_string = new_token_string.replace("lamellar::num_pes","__lamellar_num_pes");
+//     new_token_string = new_token_string.replace("lamellar::world","__lamellar_world");
+//     new_token_string = new_token_string.replace("lamellar::team","__lamellar_team");
     
-    // println!("{token_string}");
-    // println!("{new_token_string}");
-    match syn::parse_str(&new_token_string){
-        Ok(stmt) => stmt,
-        Err(_) => {
-            println!("{token_string}");
-            println!("{new_token_string}");
-        panic!("uuhh ohh");
-        }
-    }
-    // stmt
-}
+//     // println!("{token_string}");
+//     // println!("{new_token_string}");
+//     match syn::parse_str(&new_token_string){
+//         Ok(stmt) => stmt,
+//         Err(_) => {
+//             println!("{token_string}");
+//             println!("{new_token_string}");
+//         panic!("uuhh ohh");
+//         }
+//     }
+//     // stmt
+// }
 
-fn replace_self(mut stmt: syn::Stmt, id: syn::Ident) -> syn::Stmt {
-    SelfReplace{id}.visit_stmt_mut(&mut stmt);
-    stmt
-}
+// fn replace_self(mut stmt: syn::Stmt, id: syn::Ident) -> syn::Stmt {
+//     SelfReplace{id}.visit_stmt_mut(&mut stmt);
+//     stmt
+// }
 
 fn replace_self_new(fn_block: syn::Block, id: &str) -> syn::Block {
     let token_string = fn_block.to_token_stream().to_string();
@@ -874,7 +874,7 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_group: bool, am_t
                     // println!("cnt: {:?}",self.cnt);
                 }
                 #[allow(unused)]
-                pub async fn exec(&mut self) -> #lamellar::TypedAmGroupResult<#ret_type>{
+                pub async fn exec(mut self) -> #lamellar::TypedAmGroupResult<#ret_type>{
                     // let timer = std::time::Instant::now();
 
                     let mut reqs: Vec<_> = Vec::new(); //: Vec<Pin<Box<dyn Future<Output = Vec<#ret_type>> + Send>>> = Vec::new();

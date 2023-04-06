@@ -82,7 +82,7 @@ pub struct LocalLockMutLocalData<'a, T: Dist> {
 
 // impl<T: Dist> Drop for LocalLockMutLocalData<'_, T>{
 //     fn drop(&mut self){
-//         println!("release lock! {:?} {:?}",std::thread::current().id(),std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH));
+//         // println!("release lock! {:?} {:?}",std::thread::current().id(),std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH));
 //     }
 // }
 
@@ -306,13 +306,15 @@ impl<T: Dist> LocalLockArray<T> {
 
     // #[doc(hidden)] //todo create a custom macro to emit a warning saying use read_local_slice/write_local_slice intead
     pub(crate) fn local_as_slice(&self) -> LocalLockLocalData<'_, T> {
-        LocalLockLocalData {
+        let lock = LocalLockLocalData {
             array: self.clone(),
             data: unsafe { self.array.local_as_mut_slice() },
             index: 0,
             lock: self.lock.clone(),
             _lock_guard: self.lock.read(),
-        }
+        };
+        // println!("got read lock! {:?} {:?}",std::thread::current().id(),std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH));
+        lock
     }
     // #[doc(hidden)]
     // pub unsafe fn local_as_mut_slice(&self) -> &mut [T] {
@@ -328,7 +330,7 @@ impl<T: Dist> LocalLockArray<T> {
             _lock_guard: the_lock,
         };
         // println!("have lla write lock");
-        // println!("got lock! {:?} {:?}",std::thread::current().id(),std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH));
+        // println!("got write lock! {:?} {:?}",std::thread::current().id(),std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH));
         lock
     }
 

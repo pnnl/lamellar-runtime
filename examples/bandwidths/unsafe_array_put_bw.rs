@@ -39,7 +39,7 @@ fn main() {
         let mbs_o = world.MB_sent();
         let mut sum = 0;
         let mut cnt = 0;
-        let timer = Instant::now();
+        // let timer = Instant::now();
         let mut sub_time = 0f64;
         let mut exp = 20;
         if num_bytes <= 2048 {
@@ -47,6 +47,7 @@ fn main() {
         } else if num_bytes >= 4096 {
             exp = 30;
         }
+        let timer = Instant::now();
         if my_pe == 0 {
             for j in (0..2_u64.pow(exp) as usize).step_by(num_bytes as usize) {
                 let sub_timer = Instant::now();

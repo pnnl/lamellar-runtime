@@ -82,5 +82,6 @@ fn main() {
                 }
             }
         }
+        println!("Done!");
     }
 }
