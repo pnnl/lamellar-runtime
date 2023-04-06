@@ -1013,9 +1013,9 @@ fn generate_am(
         quote! {
             use __lamellar::active_messaging::prelude::*;
             use __lamellar::ser::SerializeSeq;
+            use __lamellar::futures::StreamExt;
             use std::sync::Arc;
             use std::collections::BTreeMap;
-            use futures::StreamExt;
             use std::pin::Pin;
             use std::future::Future;
         }
