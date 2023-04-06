@@ -751,7 +751,7 @@ fn generate_am(
                         // }).collect::<Vec<_>>();
                         let __res_vec = self.ams.iter().map(|am|  async  {
                             #temp
-                        }).collect::<futures::stream::FuturesOrdered<_>>().collect::<Vec<_>>().await;
+                        }).collect::<#lamellar::futures::stream::FuturesOrdered<_>>().collect::<Vec<_>>().await;
                         #ret_stmt
                     }.instrument(#lamellar::tracing::trace_span!(#my_name))
                 )
@@ -765,10 +765,10 @@ fn generate_am(
                 fn exec(self: std::sync::Arc<Self>,__lamellar_current_pe: usize,__lamellar_num_pes: usize, __local: bool, __lamellar_world: std::sync::Arc<#lamellar::LamellarTeam>, __lamellar_team: std::sync::Arc<#lamellar::LamellarTeam>) -> std::pin::Pin<Box<dyn std::future::Future<Output=#lamellar::active_messaging::LamellarReturn> + Send >>{
                     let ams = self.ams.clone();
                     Box::pin( async move {
-                        // let __res_vec = futures::future::join_all(
+                        // let __res_vec = #lamellar::futures::future::join_all(
                         let __res_vec = ams[self.si..self.ei].iter().map(|am|  async {
                             #temp
-                        }).collect::<futures::stream::FuturesOrdered<_>>().collect::<Vec<_>>().await;
+                        }).collect::<#lamellar::futures::stream::FuturesOrdered<_>>().collect::<Vec<_>>().await;
                         #ret_stmt
                     }.instrument(#lamellar::tracing::trace_span!(#my_name))
                     )
@@ -974,9 +974,9 @@ fn generate_am(
 
                     // println!("launch time: {:?} cnt: {:?} {:?} {:?}", timer.elapsed().as_secs_f64(),self.cnt,reqs.len(),reqs_all.len());
 
-                    let pes = futures::future::join_all(reqs);
-                    let all = futures::future::join_all(reqs_all);
-                    let res = futures::join!(
+                    let pes = #lamellar::futures::future::join_all(reqs);
+                    let all = #lamellar::futures::future::join_all(reqs_all);
+                    let res = #lamellar::futures::join!(
                         pes,
                         all,
                         #am_group_name::create_idx(reqs_idx,self.cnt),
