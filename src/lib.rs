@@ -245,6 +245,8 @@ pub use tracing::*;
 
 #[doc(hidden)]
 pub use async_trait;
+#[doc(hidden)]
+pub use futures;
 
 pub mod active_messaging;
 #[doc(hidden)]
