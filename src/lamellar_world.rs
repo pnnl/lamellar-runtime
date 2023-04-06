@@ -142,7 +142,7 @@ impl LamellarWorld {
         self.team.exec_am_all(am).await
     }
     #[tracing::instrument(skip_all)]
-    pub async fn exec_am_pe_future<F>(&self, pe: usize, am: F) ->  F::Output
+    pub async fn exec_am_pe_future<F>(&self, pe: usize, am: F) -> F::Output
     where
         F: RemoteActiveMessage + LamellarAM + Serde + AmDist,
     {

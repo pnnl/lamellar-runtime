@@ -279,10 +279,12 @@ pub use crate::lamellae::Backend;
 pub use crate::lamellar_arch::{BlockedArch, IdError, LamellarArch, StridedArch};
 #[doc(hidden)]
 pub use crate::lamellar_request::LamellarRequest;
-pub use crate::lamellar_task_group::{LamellarTaskGroup,AmGroup,TypedAmGroupResult,AmGroupResult,AmGroupReqs};
+pub use crate::lamellar_task_group::{
+    AmGroup, AmGroupReqs, AmGroupResult, LamellarTaskGroup, TypedAmGroupResult,
+};
 pub use crate::lamellar_team::LamellarTeam;
 #[doc(hidden)]
-pub use crate::lamellar_team::{LamellarTeamRT,ArcLamellarTeam};
+pub use crate::lamellar_team::{ArcLamellarTeam, LamellarTeamRT};
 pub use crate::lamellar_world::*;
 pub use crate::scheduler::SchedulerType;
 
@@ -358,7 +360,6 @@ where
     }
     Ok(())
 }
-
 
 #[doc(hidden)]
 pub fn deserialize<'a, T>(bytes: &'a [u8], var: bool) -> Result<T, anyhow::Error>

@@ -3,7 +3,8 @@ use crate::array::*;
 /// - And ```&```
 /// - Or ```|```
 /// - Xor ```^```
-pub trait ElementBitWiseOps: std::ops::BitAndAssign + std::ops::BitOrAssign + std::ops::BitXorAssign + Dist + Sized
+pub trait ElementBitWiseOps:
+    std::ops::BitAndAssign + std::ops::BitOrAssign + std::ops::BitXorAssign + Dist + Sized
 //+ AmDist
 {
 }

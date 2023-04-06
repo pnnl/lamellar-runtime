@@ -51,7 +51,7 @@ fn main() {
         let timer = Instant::now();
         let mut sub_time = 0f64;
         // println!("starting next round");
-        
+
         if my_pe == 0 {
             let mut task_group = AmGroup::new(world.team());
             for _j in (num_bytes..(2_u64.pow(exp))).step_by(num_bytes as usize) {
@@ -59,16 +59,16 @@ fn main() {
                 let d = _data.clone();
                 sub_time += sub_timer.elapsed().as_secs_f64();
                 task_group.add_am_pe(num_pes - 1, DataAM { data: d }); //we explicity  captured _data and transfer it even though we do nothing with it
-                
+
                 sum += num_bytes * 1 as u64;
                 cnt += 1;
             }
-            println!("issue time: {:?}", timer.elapsed().as_secs_f64()-sub_time);
+            println!("issue time: {:?}", timer.elapsed().as_secs_f64() - sub_time);
             world.block_on(task_group.exec());
         }
-        
+
         world.barrier();
-        let cur_t = timer.elapsed().as_secs_f64()-sub_time;
+        let cur_t = timer.elapsed().as_secs_f64() - sub_time;
         let cur: f64 = world.MB_sent();
         if my_pe == 0 {
             println!(

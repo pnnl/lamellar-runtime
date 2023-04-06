@@ -51,7 +51,7 @@ fn main() {
     let darc = Darc::new(&world, AtomicUsize::new(0)).unwrap();
     let width = 10;
     let s = Instant::now();
-    let mut tg = typed_am_group!(DataAM,&world);
+    let mut tg = typed_am_group!(DataAM, &world);
     for _i in 0..width {
         let pe = pes.sample(&mut rng);
         tg.add_am_pe(

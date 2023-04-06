@@ -59,11 +59,11 @@ fn main() {
                 let d = _data.clone();
                 sub_time += sub_timer.elapsed().as_secs_f64();
                 world.exec_am_pe(num_pes - 1, DataAM { data: d }); //we explicity  captured _data and transfer it even though we do nothing with it
-                
+
                 sum += num_bytes * 1 as u64;
                 cnt += 1;
             }
-            println!("issue time: {:?}", timer.elapsed().as_secs_f64()-sub_time);
+            println!("issue time: {:?}", timer.elapsed().as_secs_f64() - sub_time);
         }
         world.wait_all();
         world.barrier();

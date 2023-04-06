@@ -1,13 +1,12 @@
 use crate::array::*;
 
-
 /// Supertrait specifying elements of the array support remote Equality operations
 /// - ```==```
 /// - ```!=```
 pub trait ElementCompareEqOps: std::cmp::Eq + Dist + Sized //+ AmDist
 {
 }
-impl<T> ElementCompareEqOps for T where T: std::cmp::Eq + Dist //+ AmDist,,,
+impl<T> ElementCompareEqOps for T where T: std::cmp::Eq + Dist //+ AmDist,,,,,,,,,,,,
 {
 }
 

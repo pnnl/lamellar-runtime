@@ -74,7 +74,7 @@ fn main() {
         let timer = Instant::now();
         let mut sub_time = 0f64;
         if my_pe == num_pes - 1 {
-            let mut am_group = typed_am_group!(DataAM,&world);
+            let mut am_group = typed_am_group!(DataAM, &world);
             for _j in (0..(2_u64.pow(exp))).step_by(num_bytes as usize) {
                 let sub_timer = Instant::now();
                 am_group.add_am_pe(

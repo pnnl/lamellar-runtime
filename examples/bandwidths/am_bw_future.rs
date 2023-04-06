@@ -1,3 +1,5 @@
+use futures::stream::FuturesUnordered;
+use futures::stream::StreamExt;
 /// ------------Lamellar Bandwidth: AM  -------------------------
 /// Test the bandwidth between two PEs using an active message which
 /// contains a vector of N bytes
@@ -5,8 +7,6 @@
 /// --------------------------------------------------------------------
 use lamellar::ActiveMessaging;
 use std::time::Instant;
-use futures::stream::FuturesUnordered;
-use futures::stream::StreamExt;
 
 #[lamellar::AmData(Clone, Debug)]
 struct DataAM {
@@ -57,23 +57,32 @@ fn main() {
         // println!("starting next round");
         // let mut reqs = vec![];
         if my_pe == 0 {
-            let reqs = (num_bytes..(2_u64.pow(exp))).step_by(num_bytes as usize).map(|_|{
-                let sub_timer = Instant::now();
-                let d = _data.clone();
-                sub_time += sub_timer.elapsed().as_secs_f64();
-                let req = world.exec_am_pe_future(num_pes - 1, DataAM { data: d }); //we explicity  captured _data and transfer it even though we do nothing with it
-                
-                sum += num_bytes * 1 as u64;
-                cnt += 1;
-                req
-            }).collect::<FuturesUnordered<_>>();
-            println!("issue time: {:?}", timer.elapsed().as_secs_f64()-sub_time);
+            let reqs = (num_bytes..(2_u64.pow(exp)))
+                .step_by(num_bytes as usize)
+                .map(|_| {
+                    let sub_timer = Instant::now();
+                    let d = _data.clone();
+                    sub_time += sub_timer.elapsed().as_secs_f64();
+                    let req = world.exec_am_pe_future(num_pes - 1, DataAM { data: d }); //we explicity  captured _data and transfer it even though we do nothing with it
+
+                    sum += num_bytes * 1 as u64;
+                    cnt += 1;
+                    req
+                })
+                .collect::<FuturesUnordered<_>>();
+            println!("issue time: {:?}", timer.elapsed().as_secs_f64() - sub_time);
             world.block_on(reqs.collect::<Vec<_>>());
-            println!("block on time: {:?}", timer.elapsed().as_secs_f64()-sub_time);
+            println!(
+                "block on time: {:?}",
+                timer.elapsed().as_secs_f64() - sub_time
+            );
         }
-        
+
         world.wait_all();
-        println!("wait all time: {:?}", timer.elapsed().as_secs_f64()-sub_time);
+        println!(
+            "wait all time: {:?}",
+            timer.elapsed().as_secs_f64() - sub_time
+        );
         world.barrier();
         let cur_t = timer.elapsed().as_secs_f64();
         let cur: f64 = world.MB_sent();

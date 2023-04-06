@@ -56,28 +56,27 @@ fn main() {
         // println!("---------------------------------------------------------------");
         // let res = world.block_on(world.exec_am_all(AmReturnUsize{val1: 5}));
         // println!("res: {res:?}");
-        let mut ams = typed_am_group!(AmReturnUsize,&world);
+        let mut ams = typed_am_group!(AmReturnUsize, &world);
         let mut check = vec![];
-        for i in 0..num_ams{
-            let pe = rng.gen_range(0..(num_pes+1));
-            if pe == num_pes{
-                ams.add_am_all(AmReturnUsize{val1: i});
+        for i in 0..num_ams {
+            let pe = rng.gen_range(0..(num_pes + 1));
+            if pe == num_pes {
+                ams.add_am_all(AmReturnUsize { val1: i });
+            } else {
+                ams.add_am_pe(pe, AmReturnUsize { val1: i });
             }
-            else {
-                ams.add_am_pe(pe,AmReturnUsize{val1: i});
-            }
-            check.push((pe,i));
+            check.push((pe, i));
         }
         let results = world.block_on(ams.exec());
-        for (pe,i) in check{
-            match results.at(i){
-                AmGroupResult::Pe(the_pe,val)=> {
-                    assert_eq!(pe,the_pe);
-                    assert_eq!(i,*val);
-                },
-                AmGroupResult::All(vals)=> {
-                    for val in vals{
-                        assert_eq!(i,*val);
+        for (pe, i) in check {
+            match results.at(i) {
+                AmGroupResult::Pe(the_pe, val) => {
+                    assert_eq!(pe, the_pe);
+                    assert_eq!(i, *val);
+                }
+                AmGroupResult::All(vals) => {
+                    for val in vals {
+                        assert_eq!(i, *val);
                     }
                 }
             }

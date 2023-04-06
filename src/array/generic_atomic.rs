@@ -15,7 +15,10 @@ use serde::ser::SerializeSeq;
 use std::any::TypeId;
 // use std::ops::{Deref, DerefMut};
 
-use std::ops::{AddAssign, BitAndAssign, BitOrAssign, BitXorAssign, DivAssign, MulAssign, RemAssign, SubAssign, ShlAssign, ShrAssign};
+use std::ops::{
+    AddAssign, BitAndAssign, BitOrAssign, BitXorAssign, DivAssign, MulAssign, RemAssign, ShlAssign,
+    ShrAssign, SubAssign,
+};
 
 #[doc(hidden)]
 pub struct GenericAtomicElement<T> {
@@ -161,7 +164,7 @@ impl<T: ElementShiftOps + 'static> GenericAtomicElement<T> {
         unsafe {
             let old = self.array.__local_as_mut_slice()[self.local_index];
             self.array.__local_as_mut_slice()[self.local_index] <<= val;
-            old 
+            old
         }
     }
     pub fn fetch_shr(&self, val: T) -> T {
@@ -231,21 +234,19 @@ impl<T: Dist + ElementBitWiseOps> BitXorAssign<T> for GenericAtomicElement<T> {
     }
 }
 
-impl<T: Dist + ElementShiftOps > ShlAssign<T> for GenericAtomicElement<T> {
-    fn shl_assign(&mut self, val: T){
+impl<T: Dist + ElementShiftOps> ShlAssign<T> for GenericAtomicElement<T> {
+    fn shl_assign(&mut self, val: T) {
         let _lock = self.array.lock_index(self.local_index);
         unsafe { self.array.__local_as_mut_slice()[self.local_index].shl_assign(val) }
     }
 }
 
-impl<T: Dist + ElementShiftOps > ShrAssign<T> for GenericAtomicElement<T> {
+impl<T: Dist + ElementShiftOps> ShrAssign<T> for GenericAtomicElement<T> {
     fn shr_assign(&mut self, val: T) {
         let _lock = self.array.lock_index(self.local_index);
         unsafe { self.array.__local_as_mut_slice()[self.local_index].shr_assign(val) }
     }
 }
-
-
 
 impl<T: Dist + std::fmt::Debug> std::fmt::Debug for GenericAtomicElement<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

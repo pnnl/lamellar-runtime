@@ -1,6 +1,5 @@
 use crate::array::*;
 
-
 #[doc(alias("One-sided", "onesided"))]
 /// The interface for remotely writing elements
 ///

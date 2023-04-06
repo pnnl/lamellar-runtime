@@ -2,13 +2,10 @@ use crate::array::*;
 /// Supertrait specifying elements of the array support remote Shift operations
 /// - Left ```<<```
 /// - Right ```>>```
-pub trait ElementShiftOps: std::ops::ShlAssign + std::ops::ShrAssign + Dist + Sized 
-{
-}
+pub trait ElementShiftOps: std::ops::ShlAssign + std::ops::ShrAssign + Dist + Sized {}
 
 #[doc(hidden)]
-impl<T> ElementShiftOps for T where
-    T: std::ops::ShlAssign + std::ops::ShrAssign + Dist //+ AmDist
+impl<T> ElementShiftOps for T where T: std::ops::ShlAssign + std::ops::ShrAssign + Dist //+ AmDist,,,
 {
 }
 
@@ -138,7 +135,8 @@ pub trait ShiftOps<T: ElementShiftOps>: private::LamellarArrayPrivate<T> {
     ///```
     #[tracing::instrument(skip_all)]
     fn fetch_shl(&self, index: usize, val: T) -> Pin<Box<dyn Future<Output = T> + Send>> {
-        self.inner_array().initiate_fetch_op(val, index, ArrayOpCmd::FetchShl)
+        self.inner_array()
+            .initiate_fetch_op(val, index, ArrayOpCmd::FetchShl)
     }
 
     /// This call performs a batched vesion of the [fetch_shl][ShiftOps::fetch_shl] function,
@@ -173,7 +171,8 @@ pub trait ShiftOps<T: ElementShiftOps>: private::LamellarArrayPrivate<T> {
         index: impl OpInput<'a, usize>,
         val: impl OpInput<'a, T>,
     ) -> Pin<Box<dyn Future<Output = Vec<T>> + Send>> {
-        self.inner_array().initiate_batch_fetch_op(val, index, ArrayOpCmd::FetchShl)
+        self.inner_array()
+            .initiate_batch_fetch_op(val, index, ArrayOpCmd::FetchShl)
     }
 
     /// This call performs an in place right shift of `val` bits on the element specified by `index`.
@@ -264,7 +263,8 @@ pub trait ShiftOps<T: ElementShiftOps>: private::LamellarArrayPrivate<T> {
     ///```
     #[tracing::instrument(skip_all)]
     fn fetch_shr<'a>(&self, index: usize, val: T) -> Pin<Box<dyn Future<Output = T> + Send>> {
-        self.inner_array().initiate_fetch_op(val, index, ArrayOpCmd::FetchShr)
+        self.inner_array()
+            .initiate_fetch_op(val, index, ArrayOpCmd::FetchShr)
     }
 
     /// This call performs a batched vesion of the [fetch_shr][ShiftOps::fetch_shr] function,
@@ -299,7 +299,8 @@ pub trait ShiftOps<T: ElementShiftOps>: private::LamellarArrayPrivate<T> {
         index: impl OpInput<'a, usize>,
         val: impl OpInput<'a, T>,
     ) -> Pin<Box<dyn Future<Output = Vec<T>> + Send>> {
-        self.inner_array().initiate_batch_fetch_op(val, index, ArrayOpCmd::FetchShr)
+        self.inner_array()
+            .initiate_batch_fetch_op(val, index, ArrayOpCmd::FetchShr)
     }
 }
 

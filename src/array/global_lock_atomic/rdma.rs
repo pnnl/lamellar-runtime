@@ -2,9 +2,7 @@ use crate::array::global_lock_atomic::*;
 use crate::array::private::ArrayExecAm;
 use crate::array::LamellarWrite;
 use crate::array::*;
-use crate::memregion::{
-    AsBase, Dist, RTMemoryRegionRDMA, RegisteredMemoryRegion, SubRegion,
-};
+use crate::memregion::{AsBase, Dist, RTMemoryRegionRDMA, RegisteredMemoryRegion, SubRegion};
 
 impl<T: Dist> LamellarArrayInternalGet<T> for GlobalLockArray<T> {
     // fn iget<U: TeamInto<LamellarArrayRdmaOutput<T>> + LamellarWrite>(&self, index: usize, buf: U) {
@@ -81,7 +79,7 @@ impl<T: Dist> LamellarArrayPut<T> for GlobalLockArray<T> {
 #[lamellar_impl::AmLocalDataRT(Debug)]
 struct InitGetAm<T: Dist> {
     array: GlobalLockArray<T>, //inner of the indices we need to place data into
-    index: usize,             //relative to inner
+    index: usize,              //relative to inner
     buf: LamellarMemoryRegion<T>,
 }
 
@@ -171,7 +169,7 @@ impl LamellarAm for GlobalLockRemoteGetAm {
 #[lamellar_impl::AmLocalDataRT(Debug)]
 struct InitPutAm<T: Dist> {
     array: GlobalLockArray<T>, //inner of the indices we need to place data into
-    index: usize,             //relative to inner
+    index: usize,              //relative to inner
     buf: LamellarMemoryRegion<T>,
 }
 
@@ -205,12 +203,13 @@ impl<T: Dist + 'static> LamellarAm for InitPutAm<T> {
                                     array: self.array.clone().into(), //inner of the indices we need to place data into
                                     start_index: self.index,
                                     len: self.buf.len(),
-                                    data: u8_buf.sub_region(cur_index..(cur_index + u8_buf_len)).into(),
+                                    data: u8_buf
+                                        .sub_region(cur_index..(cur_index + u8_buf_len))
+                                        .into(),
                                     pe: self.array.my_pe(),
                                 };
                                 reqs.push(self.array.exec_am_pe(pe, remote_am).into_future());
-                            }
-                            else {
+                            } else {
                                 let remote_am = GlobalLockRemoteSmallPutAm {
                                     array: self.array.clone().into(), //inner of the indices we need to place data into
                                     start_index: self.index,
@@ -227,7 +226,8 @@ impl<T: Dist + 'static> LamellarAm for InitPutAm<T> {
                         }
                     }
                 }
-                Distribution::Cyclic => { //TODO think about optimized put similar to Unsafe
+                Distribution::Cyclic => {
+                    //TODO think about optimized put similar to Unsafe
                     let num_pes = ArrayExecAm::team(&self.array).num_pes();
                     let mut pe_u8_vecs: HashMap<usize, Vec<u8>> = HashMap::new();
                     let mut pe_t_slices: HashMap<usize, &mut [T]> = HashMap::new();

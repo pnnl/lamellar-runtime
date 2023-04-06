@@ -18,8 +18,8 @@ use quote::{quote, quote_spanned, ToTokens};
 use syn::parse_macro_input;
 use syn::spanned::Spanned;
 // use syn::visit_mut::VisitMut;
+use syn::parse::{Parse, ParseStream, Result};
 use syn::Token;
-use syn::parse::{Parse,ParseStream,Result};
 fn type_name(ty: &syn::Type) -> Option<String> {
     match ty {
         syn::Type::Path(syn::TypePath { qself: None, path }) => {
@@ -103,30 +103,26 @@ fn replace_lamellar_dsl_new(fn_block: syn::Block) -> syn::Block {
     let split_lamellar = token_string.split("lamellar").collect::<Vec<_>>();
     let mut new_token_string = String::from(split_lamellar[0]);
     // let mut i = 1;
-    // while i <  split_lamellar.len()-1 
+    // while i <  split_lamellar.len()-1
     //     let s = split_lamellar[i];
-    for s in &split_lamellar[1..]{
+    for s in &split_lamellar[1..] {
         if s.trim_start().starts_with("::") {
             let temp = s.split_whitespace().collect::<Vec<_>>();
-            if temp[1].starts_with("current_pe"){
+            if temp[1].starts_with("current_pe") {
                 new_token_string += "__lamellar_current_pe";
                 new_token_string += s.split_once("current_pe").unwrap().1;
-            }
-            else if temp[1].starts_with("num_pes"){
+            } else if temp[1].starts_with("num_pes") {
                 new_token_string += "__lamellar_num_pes";
                 new_token_string += s.split_once("num_pes").unwrap().1;
-            }
-            else if temp[1].starts_with("world"){
+            } else if temp[1].starts_with("world") {
                 new_token_string += "__lamellar_world";
                 new_token_string += s.split_once("world").unwrap().1;
-            }
-            else if temp[1].starts_with("team"){
+            } else if temp[1].starts_with("team") {
                 new_token_string += "__lamellar_team";
                 new_token_string += s.split_once("team").unwrap().1;
             }
-        }
-        else{
-            new_token_string += "lamellar"; 
+        } else {
+            new_token_string += "lamellar";
             new_token_string += s;
         }
     }
@@ -143,7 +139,7 @@ fn replace_lamellar_dsl_new(fn_block: syn::Block) -> syn::Block {
     //     println!("{new_token_string}");
     // }
 
-    match syn::parse_str(&new_token_string){
+    match syn::parse_str(&new_token_string) {
         Ok(fn_block) => fn_block,
         Err(_) => {
             println!("{token_string}");
@@ -159,7 +155,7 @@ fn replace_lamellar_dsl_new(fn_block: syn::Block) -> syn::Block {
 //     new_token_string = new_token_string.replace("lamellar::num_pes","__lamellar_num_pes");
 //     new_token_string = new_token_string.replace("lamellar::world","__lamellar_world");
 //     new_token_string = new_token_string.replace("lamellar::team","__lamellar_team");
-    
+
 //     // println!("{token_string}");
 //     // println!("{new_token_string}");
 //     match syn::parse_str(&new_token_string){
@@ -183,20 +179,19 @@ fn replace_self_new(fn_block: syn::Block, id: &str) -> syn::Block {
     let split_self = token_string.split("self").collect::<Vec<_>>();
     let mut new_token_string = String::from(split_self[0]);
 
-    for s in &split_self[1..]{
+    for s in &split_self[1..] {
         if s.trim_start().starts_with(".") {
             new_token_string += id;
-        }
-        else{
+        } else {
             new_token_string += "*";
             new_token_string += id;
         }
         new_token_string += s;
     }
-    
+
     // let mut new_token_string = token_string.replace("self",id);
     // let mut new_token_string = token_string.replace("self",id);
-    match syn::parse_str(&new_token_string){
+    match syn::parse_str(&new_token_string) {
         Ok(fn_block) => fn_block,
         Err(_) => {
             println!("{token_string}");
@@ -238,7 +233,13 @@ fn get_return_am_return_type(args: String) -> proc_macro2::TokenStream {
     }
 }
 
-fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_group: bool, am_type: AmType) -> TokenStream {
+fn generate_am(
+    input: syn::ItemImpl,
+    local: bool,
+    rt: bool,
+    am_group: bool,
+    am_type: AmType,
+) -> TokenStream {
     let name = type_name(&input.self_ty).expect("unable to find name");
     let lamellar = if rt {
         quote::format_ident!("crate")
@@ -446,30 +447,36 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_group: bool, am_t
 
     let (am_data_header, am_group_data_header, _am_group_header) = if rt {
         if !local {
-            (quote! {#[lamellar_impl::AmDataRT]},
-             quote! {#[lamellar_impl::AmGroupDataRT]},
-             quote! {#[lamellar_impl::am_group_rt]})
+            (
+                quote! {#[lamellar_impl::AmDataRT]},
+                quote! {#[lamellar_impl::AmGroupDataRT]},
+                quote! {#[lamellar_impl::am_group_rt]},
+            )
         } else {
-            (quote! {#[lamellar_impl::AmLocalDataRT]},
-            quote! {#[lamellar_impl::AmGroupDataRT]},
-            quote! {#[lamellar_impl::am_group_local_rt]})
+            (
+                quote! {#[lamellar_impl::AmLocalDataRT]},
+                quote! {#[lamellar_impl::AmGroupDataRT]},
+                quote! {#[lamellar_impl::am_group_local_rt]},
+            )
         }
     } else {
         if !local {
-            (quote! {#[#lamellar::AmData]},
-            quote! {#[#lamellar::AmGroupData]},
-            quote! {#[lamellar_impl::am_group]})
+            (
+                quote! {#[#lamellar::AmData]},
+                quote! {#[#lamellar::AmGroupData]},
+                quote! {#[lamellar_impl::am_group]},
+            )
         } else {
-            (quote! {#[#lamellar::AmLocalData]},
-            quote! {#[#lamellar::AmGroupData]},
-            quote! {#[lamellar_impl::am_group_local]})
+            (
+                quote! {#[#lamellar::AmLocalData]},
+                quote! {#[#lamellar::AmGroupData]},
+                quote! {#[lamellar_impl::am_group_local]},
+            )
         }
     };
 
     if let AmType::ReturnData(_) = am_type {
         // let generic_phantom = quote::format_ident!("std::marker::PhantomData{}", impl_generics);
-
-        
 
         let the_ret_struct = if vec_u8 {
             quote! {
@@ -536,19 +543,17 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_group: bool, am_t
     }
 
     if am_group && !is_return_am {
-        let am_group_am_name = quote::format_ident!("{}GroupAm",  orig_name);
-        let am_group_am_name_local = quote::format_ident!("{}GroupAmLocal",  orig_name);
-        let am_group_name = quote::format_ident!("{}Group",  orig_name);
-        let am_group_return = quote::format_ident!("{}Result",  am_group_name);
-        let am_group_am_name_unpack = quote::format_ident!("{}_unpack",am_group_am_name);
-
-
+        let am_group_am_name = quote::format_ident!("{}GroupAm", orig_name);
+        let am_group_am_name_local = quote::format_ident!("{}GroupAmLocal", orig_name);
+        let am_group_name = quote::format_ident!("{}Group", orig_name);
+        let am_group_return = quote::format_ident!("{}Result", am_group_name);
+        let am_group_am_name_unpack = quote::format_ident!("{}_unpack", am_group_am_name);
 
         let mut temp = quote_spanned! {func_span=>};
         let mut exec_fn =
-        get_impl_method("exec".to_string(), &input.items).expect("unable to extract exec body");
+            get_impl_method("exec".to_string(), &input.items).expect("unable to extract exec body");
         exec_fn = replace_lamellar_dsl_new(exec_fn);
-        exec_fn = replace_self_new(exec_fn,"am");
+        exec_fn = replace_self_new(exec_fn, "am");
         let stmts = exec_fn.stmts;
 
         for stmt in stmts {
@@ -559,7 +564,6 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_group: bool, am_t
                 #stmt
             });
         }
-
 
         let ret_stmt = match am_type {
             AmType::NoReturn => {
@@ -573,14 +577,13 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_group: bool, am_t
                             })),
                         }
                     }
-                }
-                else {
+                } else {
                     quote! {
                         #lamellar::active_messaging::LamellarReturn::LocalData(Box::new(__res_vec))
                     }
                 }
             }
-            AmType::ReturnData(ref _ret) =>{
+            AmType::ReturnData(ref _ret) => {
                 if !local {
                     quote! {
                         match __local{ //should probably just separate these into exec_local exec_remote to get rid of a conditional...
@@ -590,8 +593,7 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_group: bool, am_t
                             })),
                         }
                     }
-                }
-                else {
+                } else {
                     quote! {
                         #lamellar::active_messaging::LamellarReturn::LocalData(Box::new(__res_vec))
                     }
@@ -611,7 +613,6 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_group: bool, am_t
                     }
                 }
             }
-            
         };
 
         let am_group_return_struct = quote! {
@@ -629,7 +630,8 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_group: bool, am_t
         //     local_generics.gt_token = Some(gt);
         // }
         // local_generics.params.insert(0,syn::GenericParam::Lifetime(syn::LifetimeDef::new(syn::Lifetime::new("'am_group",Span::call_site()))));
-        let (local_impl_generics, local_ty_generics, local_where_clause) = local_generics.split_for_impl();
+        let (local_impl_generics, local_ty_generics, local_where_clause) =
+            local_generics.split_for_impl();
 
         // println!("{:?} {:?} {:?}",local_impl_generics, local_ty_generics, local_where_clause);
 
@@ -640,7 +642,7 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_group: bool, am_t
                 }
             }
 
-            #am_data_header 
+            #am_data_header
             struct #am_group_am_name  #impl_generics #where_clause{
                 #[Darc(iter)]
                 ams: Vec<#orig_name #ty_generics>
@@ -672,7 +674,7 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_group: bool, am_t
             }
 
             impl #local_impl_generics #lamellar::active_messaging::LocalAM for #am_group_am_name_local #local_ty_generics #local_where_clause {
-                type Output = Vec<#ret_type>; 
+                type Output = Vec<#ret_type>;
             }
 
             #[async_trait::async_trait]
@@ -753,9 +755,7 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_group: bool, am_t
                         #ret_stmt
                     }.instrument(#lamellar::tracing::trace_span!(#my_name))
                 )
-    
                 }
-    
                 fn get_id(&self) -> &'static str{
                     stringify!(#am_group_am_name)//.to_string()
                 }
@@ -771,19 +771,15 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_group: bool, am_t
                         }).collect::<futures::stream::FuturesOrdered<_>>().collect::<Vec<_>>().await;
                         #ret_stmt
                     }.instrument(#lamellar::tracing::trace_span!(#my_name))
-                    )   
+                    )
                 }
-    
                 fn get_id(&self) -> &'static str{
                     stringify!(#am_group_am_name)//.to_string()
                 }
             }
-
-            
         });
 
         if !local {
-            
             expanded.extend( quote_spanned! {input.span()=>
                 impl #impl_generics #lamellar::active_messaging::RemoteActiveMessage for #am_group_am_name #ty_generics #where_clause {
                     fn as_local(self: std::sync::Arc<Self>) -> std::sync::Arc<dyn #lamellar::active_messaging::LamellarActiveMessage + Send + Sync>{
@@ -801,7 +797,7 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_group: bool, am_t
                     <#am_group_am_name #ty_generics as #lamellar::active_messaging::DarcSerde>::des(&__lamellar_data,cur_pe);
                     __lamellar_data
                 }
-    
+
                 #lamellar::inventory::submit! {
                     // #![crate = #lamellar]
                     #lamellar::active_messaging::RegisteredAm{
@@ -809,7 +805,7 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_group: bool, am_t
                         name: stringify!(#am_group_am_name)//.to_string()
                     }
                 }
-            
+
                 #am_group_return_struct
 
                 impl #impl_generics #lamellar::active_messaging::LamellarSerde for #am_group_return #ty_generics #where_clause {
@@ -826,14 +822,12 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_group: bool, am_t
 
                 impl #impl_generics #lamellar::active_messaging::LamellarResultDarcSerde for #am_group_return #ty_generics #where_clause{}
             });
-        
-        }
-        else{
-            expanded.extend( quote_spanned! {input.span()=> 
+        } else {
+            expanded.extend(quote_spanned! {input.span()=>
                 #am_group_return_struct
             });
         }
-        
+
         expanded.extend( quote_spanned! {input.span()=>
              #[doc(hidden)]
             struct #am_group_name #impl_generics #where_clause{
@@ -851,12 +845,12 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_group: bool, am_t
                         cnt: 0,
                         reqs: BTreeMap::new(),
                     }
-            
+
                 }
                 #[allow(unused)]
-                fn add_am_all(&mut self, am:  #orig_name #ty_generics) 
+                fn add_am_all(&mut self, am:  #orig_name #ty_generics)
                 {
-                    
+
                     let req_queue = self.reqs.entry(self.team.num_pes()).or_insert((Vec::new(),Vec::new(),0));
                     req_queue.2 += am.serialized_size();
                     req_queue.0.push(self.cnt);
@@ -894,11 +888,10 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_group: bool, am_t
                         let mut idx: Vec<usize> = Vec::new();
                         std::mem::swap(&mut ams,&mut the_ams.1);
                         std::mem::swap(&mut idx,&mut the_ams.0);
-                        
+
                         let ams = Arc::new(ams);
                         // let idx = Arc::new(idx);
                         let mut req_idx: Vec<(usize,usize)> = Vec::new();
-                        
 
                         // let num_elems = ams.len()/num_workers;
                         // // println!("num_elems {} num_workers {}",num_elems,num_workers);
@@ -920,7 +913,7 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_group: bool, am_t
                         // else{
                         //     reqs.push(self.team.exec_am_group_pe(*pe,tg_am));
                         // }
-                       
+
                         if the_ams.2 > 1_000_000{
                             let num_reqs = (the_ams.2 / 1_000_000) + 1;
                             let req_size = the_ams.2/num_reqs;
@@ -980,10 +973,9 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_group: bool, am_t
                     }
 
                     // println!("launch time: {:?} cnt: {:?} {:?} {:?}", timer.elapsed().as_secs_f64(),self.cnt,reqs.len(),reqs_all.len());
-                    
+
                     let pes = futures::future::join_all(reqs);
                     let all = futures::future::join_all(reqs_all);
-                    
                     let res = futures::join!(
                         pes,
                         all,
@@ -1015,17 +1007,10 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_group: bool, am_t
                     idx_map
                 }
             }
-
-            
-        
-            
         });
-
-        
     }
-    
-    let am_group_mods = if am_group && !is_return_am{
-       quote!{
+    let am_group_mods = if am_group && !is_return_am {
+        quote! {
             use __lamellar::active_messaging::prelude::*;
             use __lamellar::ser::SerializeSeq;
             use std::sync::Arc;
@@ -1034,9 +1019,8 @@ fn generate_am(input: syn::ItemImpl, local: bool, rt: bool, am_group: bool, am_t
             use std::pin::Pin;
             use std::future::Future;
         }
-    }
-    else{
-        quote!{}
+    } else {
+        quote! {}
     };
 
     let user_expanded = quote_spanned! {expanded.span()=>
@@ -1087,12 +1071,11 @@ fn process_fields(
     for field in the_fields {
         if let syn::Type::Path(ref ty) = field.ty {
             if let Some(_seg) = ty.path.segments.first() {
-                if local{
+                if local {
                     fields.extend(quote_spanned! {field.span()=>
                         #field,
                     });
-                } 
-                else if group {
+                } else if group {
                     // println!("process fields in group 0");
                     let field_name = field.ident.clone();
                     if &field_name.clone().unwrap().to_string() == "ams" {
@@ -1110,17 +1093,20 @@ fn process_fields(
                     fields.extend(quote_spanned! {field.span()=>
                         #field,
                     });
-                }else {
+                } else {
                     let field_name = field.ident.clone();
-                    let darc_iter = field.attrs.iter().filter_map(|a| {
-                        if a.to_token_stream().to_string().contains("#[Darc(iter)]"){
-                            None
-                        }
-                        else {
-                            Some(a.clone())
-                        }
-                    }).collect::<Vec<_>>();
-                    if darc_iter.len() <  field.attrs.len(){
+                    let darc_iter = field
+                        .attrs
+                        .iter()
+                        .filter_map(|a| {
+                            if a.to_token_stream().to_string().contains("#[Darc(iter)]") {
+                                None
+                            } else {
+                                Some(a.clone())
+                            }
+                        })
+                        .collect::<Vec<_>>();
+                    if darc_iter.len() < field.attrs.len() {
                         ser.extend(quote_spanned! {field.span()=>
                             for e in (&self.#field_name).iter(){
                                 e.ser(num_pes,darcs);
@@ -1131,8 +1117,7 @@ fn process_fields(
                                 e.des(cur_pe);
                             }
                         });
-                    }
-                    else {
+                    } else {
                         ser.extend(quote_spanned! {field.span()=>
                             (&self.#field_name).ser(num_pes,darcs);
                         });
@@ -1174,8 +1159,7 @@ fn process_fields(
         } else if let syn::Type::Reference(ref _ty) = field.ty {
             if local {
                 panic!("references are not supported in Remote Active Messages");
-            } 
-            else if group {
+            } else if group {
                 // println!("process fields in group 0");
                 let field_name = field.ident.clone();
                 if &field_name.clone().unwrap().to_string() == "ams" {
@@ -1193,8 +1177,7 @@ fn process_fields(
                 fields.extend(quote_spanned! {field.span()=>
                     #field,
                 });
-            }
-            else {
+            } else {
                 fields.extend(quote_spanned! {field.span()=>
                     #field,
                 });
@@ -1224,12 +1207,10 @@ fn process_fields(
     if local {
         ser.extend(quote! {panic!{"should not serialize data in LocalAM"} });
         // ser.extend(quote! { false });
-    } 
-    else if group {
+    } else if group {
         // println!("process fields in group 1");
         // impls.extend(quote! { #my_ser });
-    }
-    else {
+    } else {
         impls.extend(quote! { #my_ser, #my_de, });
     }
     let mut trait_strs = HashMap::new();
@@ -1259,12 +1240,16 @@ fn process_fields(
                 .entry(String::from("Clone"))
                 .or_insert(quote! {Clone});
         } else if t.contains("ArrayOps") {
-            if t.contains("("){
+            if t.contains("(") {
                 // println!("{:?} {:?} {:?}",t,t.find("("),t.find(")"));
-                let attrs = &t[t.find("(").unwrap()..t.find(")").expect("missing \")\" in when declaring ArrayOp macro")+1];
+                let attrs = &t[t.find("(").unwrap()
+                    ..t.find(")")
+                        .expect("missing \")\" in when declaring ArrayOp macro")
+                        + 1];
                 let attr_toks: proc_macro2::TokenStream = attrs.parse().unwrap();
-                attr_strs.entry(String::from("array_ops")).or_insert(quote!{ #[array_ops #attr_toks]});
-                
+                attr_strs
+                    .entry(String::from("array_ops"))
+                    .or_insert(quote! { #[array_ops #attr_toks]});
             }
             trait_strs
                 .entry(String::from("ArrayOps"))
@@ -1285,10 +1270,9 @@ fn process_fields(
             //                 Bitwise - requires std::Ops::{BitAndAssign,BitOrAssign,BitXorAssign} to be implemented on your data type
             //                 Shift - requires std::Ops::{ShlAssign,ShrAssign} to be implemented on you data type
             //                 All - convienence attribute for when all you wish to derive all the above operations (note all the required traits must be implemented for your type)
-                            
+
             //             Usage example: #[AmData(ArrayOps(Arithmetic,Shift))]");
             // }
-            
         } else if !t.contains("serde::Serialize")
             && !t.contains("serde::Deserialize")
             && t.trim().len() > 0
@@ -1307,15 +1291,15 @@ fn process_fields(
     // println!();
     // println!("{:?}",impls);
     let traits = quote! { #[derive( #impls)] };
-    let  serde_temp_2 = if crate_header != "crate" && (!(local || group)) {
+    let serde_temp_2 = if crate_header != "crate" && (!(local || group)) {
         // println!("process fields serde_temp_2");
         quote! {#[serde(crate = "lamellar::serde")]}
     } else {
         quote! {}
     };
-    let mut attrs = quote!{#serde_temp_2};
-    for (_,attr) in attr_strs{
-        attrs = quote!{
+    let mut attrs = quote! {#serde_temp_2};
+    for (_, attr) in attr_strs {
+        attrs = quote! {
             #attrs
             #attr
         };
@@ -1326,7 +1310,7 @@ fn process_fields(
 
 fn derive_am_data(
     input: TokenStream,
-    args:  syn::AttributeArgs,
+    args: syn::AttributeArgs,
     crate_header: String,
     local: bool,
     group: bool,
@@ -1350,7 +1334,7 @@ fn derive_am_data(
             let tokens = attr.clone().to_token_stream();
             attributes.extend(quote! {#tokens});
         }
-        if rt{
+        if rt {
             output.extend(quote! {
                 #attributes
                 #traits
@@ -1358,7 +1342,6 @@ fn derive_am_data(
                 #vis struct #name #impl_generics #where_clause{
                     #fields
                 }
-                    
                 impl #impl_generics #lamellar::active_messaging::DarcSerde for #name #ty_generics #where_clause{
                     fn ser (&self,  num_pes: usize, darcs: &mut Vec<#lamellar::active_messaging::RemotePtr>){
                         // println!("in outer ser");
@@ -1369,10 +1352,8 @@ fn derive_am_data(
                         #des
                     }
                 }
-                
             });
-        }
-        else {
+        } else {
             output.extend(quote! {
                 #attributes
                 #traits
@@ -1381,7 +1362,6 @@ fn derive_am_data(
                     #fields
                 }
                 const _: () = {
-                   
                     extern crate lamellar as __lamellar;
                     impl #impl_generics __lamellar::active_messaging::DarcSerde for #name #ty_generics #where_clause{
                         fn ser (&self,  num_pes: usize, darcs: &mut Vec<#lamellar::active_messaging::RemotePtr>){
@@ -1442,7 +1422,6 @@ pub fn AmLocalData(args: TokenStream, input: TokenStream) -> TokenStream {
     derive_am_data(input, args, "lamellar".to_string(), true, false, false)
 }
 
-
 #[allow(non_snake_case)]
 #[proc_macro_error]
 #[proc_macro_attribute]
@@ -1469,7 +1448,13 @@ pub fn AmLocalDataRT(args: TokenStream, input: TokenStream) -> TokenStream {
     derive_am_data(input, args, "crate".to_string(), true, false, true)
 }
 
-fn parse_am(args: TokenStream, input: TokenStream, local: bool, rt: bool, am_group: bool) -> TokenStream {
+fn parse_am(
+    args: TokenStream,
+    input: TokenStream,
+    local: bool,
+    rt: bool,
+    am_group: bool,
+) -> TokenStream {
     let args = args.to_string();
     if args.len() > 0 {
         assert!(args.starts_with("return_am"), "#[lamellar::am] only accepts an (optional) argument of the form:
@@ -1760,7 +1745,7 @@ pub fn generate_ops_for_type_rt(item: TokenStream) -> TokenStream {
 ///         self.int <<= other.int;
 ///     }
 /// }
-/// 
+///
 /// impl std::ops::ShrAssign for Custom {
 ///     fn shr_assign(&mut self,other: Custom){
 ///         self.int >>= other.int;
@@ -1848,19 +1833,17 @@ pub fn derive_arrayops(input: TokenStream) -> TokenStream {
     array_ops::__derive_arrayops(input)
 }
 
-
-struct AmGroups{
+struct AmGroups {
     am: syn::TypePath,
-    team: syn::Expr
+    team: syn::Expr,
 }
 
-impl Parse for AmGroups{
+impl Parse for AmGroups {
     fn parse(input: ParseStream) -> Result<Self> {
         // println!("in am groups parse");
-        let am = if let Ok(syn::Type::Path(ty)) = input.parse(){
+        let am = if let Ok(syn::Type::Path(ty)) = input.parse() {
             ty.clone()
-        }
-        else {
+        } else {
             abort!(input.span(),"typed_am_group expects the first argument to be Struct name if your active message e.g. 
             #[AmData]
             Struct MyAmStruct {}
@@ -1874,33 +1857,29 @@ impl Parse for AmGroups{
         'typed_am_group!(...,world.clone())'
         'typed_am_group!(...,&team)', 
         'typed_am_group!(...,team.clone())'";
-        let team =if let Ok(expr) = input.parse::<syn::Expr>() {
+        let team = if let Ok(expr) = input.parse::<syn::Expr>() {
             match expr {
                 syn::Expr::Path(_) => expr.clone(),
                 syn::Expr::Reference(_) => expr.clone(),
                 syn::Expr::MethodCall(_) => expr.clone(),
-                _ => abort!(input.span(),team_error_msg),
+                _ => abort!(input.span(), team_error_msg),
             }
-        }
-        else{
-            abort!(input.span(),team_error_msg);
+        } else {
+            abort!(input.span(), team_error_msg);
         };
-        Ok(AmGroups{
-            am,
-            team
-        })
+        Ok(AmGroups { am, team })
     }
 }
 
 #[proc_macro_error]
 #[proc_macro]
-pub fn typed_am_group(input: TokenStream) -> TokenStream{
+pub fn typed_am_group(input: TokenStream) -> TokenStream {
     // println!("typed_am_group {:?}",input);
     let am_group: AmGroups = syn::parse(input).unwrap();
     let am_type = am_group.am;
     let team = am_group.team;
     quote! {
         #am_type::create_am_group(#team)
-    }.into()
-
+    }
+    .into()
 }

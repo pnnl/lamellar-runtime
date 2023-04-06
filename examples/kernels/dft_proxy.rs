@@ -1,3 +1,5 @@
+use futures::FutureExt;
+use futures::StreamExt;
 use lamellar::active_messaging::prelude::*;
 /// ------------Lamellar Bandwidth: DFT Proxy  -------------------------
 /// This example is inspired from peforming a naive DFT
@@ -13,8 +15,6 @@ use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
 use rayon::prelude::*;
 use std::time::Instant;
-use futures::FutureExt;
-use futures::StreamExt;
 #[macro_use]
 extern crate lazy_static;
 
@@ -75,7 +75,7 @@ struct LocalSumAM2 {
 
 #[lamellar::am]
 impl LamellarAM for LocalSumAM2 {
-    async fn exec() -> f64{
+    async fn exec() -> f64 {
         let k_prime = self.k + self.pe * self.local_len;
         let signal = unsafe { self.signal.as_slice().unwrap() };
         let mut sum = 0.0;
@@ -121,15 +121,13 @@ fn dft_lamellar(
     let timer = Instant::now();
     for pe in 0..num_pes {
         for k in 0..spectrum_slice.len() {
-            world.exec_am_local(
-                LocalSumAM {
-                    spectrum: add_spec.clone(),
-                    signal: signal.clone(),
-                    global_sig_len: global_sig_len,
-                    k: k,
-                    pe: pe,
-                },
-            );
+            world.exec_am_local(LocalSumAM {
+                spectrum: add_spec.clone(),
+                signal: signal.clone(),
+                global_sig_len: global_sig_len,
+                k: k,
+                pe: pe,
+            });
         }
         let mut add_spec_vec = vec![0.0; spectrum_slice.len()];
         world.wait_all();
@@ -161,10 +159,10 @@ fn dft_lamellar_am_group(
     let local_len = spectrum_slice.len();
 
     let timer = Instant::now();
-    
+
     let mut pe_groups = futures::stream::FuturesOrdered::new();
     for pe in 0..num_pes {
-        let mut local_sum_group = typed_am_group!(LocalSumAM2,world);
+        let mut local_sum_group = typed_am_group!(LocalSumAM2, world);
         for k in 0..local_len {
             local_sum_group.add_am_pe(
                 my_pe,
@@ -177,30 +175,31 @@ fn dft_lamellar_am_group(
                 },
             );
         }
-        let spec  = spectrum.clone();
-        pe_groups.push(async move{
+        let spec = spectrum.clone();
+        pe_groups.push(async move {
             let res = local_sum_group.exec().await;
-            let vec = (0..local_len).map(|i| {
-                if let AmGroupResult::Pe(_,val) = res.at(i){
-                    *val
-                }
-                else{
-                    panic!("cant reach")
-                }
-            }).collect::<Vec<_>>();
-            world.exec_am_pe(
-                pe,
-                RemoteSumAM {
-                    spectrum: spec,
-                    add_spec: vec,
-                },
-            ).await;
-        }); 
+            let vec = (0..local_len)
+                .map(|i| {
+                    if let AmGroupResult::Pe(_, val) = res.at(i) {
+                        *val
+                    } else {
+                        panic!("cant reach")
+                    }
+                })
+                .collect::<Vec<_>>();
+            world
+                .exec_am_pe(
+                    pe,
+                    RemoteSumAM {
+                        spectrum: spec,
+                        add_spec: vec,
+                    },
+                )
+                .await;
+        });
     }
-    world.block_on(
-        pe_groups.collect::<Vec<_>>()
-    );
-    
+    world.block_on(pe_groups.collect::<Vec<_>>());
+
     world.barrier();
     let time = timer.elapsed().as_secs_f64();
     time
@@ -590,12 +589,19 @@ fn main() {
                 partial_spectrum.clone(),
             ));
             if my_pe == 0 {
-                println!("am i: {:?} {:?} sum: {:?}", _i, times[0].last(), unsafe{partial_spectrum.as_slice().unwrap().iter().sum::<f64>()});
+                println!("am i: {:?} {:?} sum: {:?}", _i, times[0].last(), unsafe {
+                    partial_spectrum.as_slice().unwrap().iter().sum::<f64>()
+                });
             }
             //-----------------------------------------------------
-            unsafe{partial_spectrum.as_mut_slice().unwrap().iter_mut().for_each(|e| *e = 0.0);}
+            unsafe {
+                partial_spectrum
+                    .as_mut_slice()
+                    .unwrap()
+                    .iter_mut()
+                    .for_each(|e| *e = 0.0);
+            }
             world.barrier();
-
 
             //--------------lamellar Manual Active Message tg--------------------------
             times[1].push(dft_lamellar_am_group(
@@ -607,9 +613,20 @@ fn main() {
                 partial_spectrum.clone(),
             ));
             if my_pe == 0 {
-                println!("am group i: {:?} {:?} sum: {:?}", _i, times[1].last(), unsafe{partial_spectrum.as_slice().unwrap().iter().sum::<f64>()});
+                println!(
+                    "am group i: {:?} {:?} sum: {:?}",
+                    _i,
+                    times[1].last(),
+                    unsafe { partial_spectrum.as_slice().unwrap().iter().sum::<f64>() }
+                );
             }
-            unsafe{partial_spectrum.as_mut_slice().unwrap().iter_mut().for_each(|e| *e = 0.0);}
+            unsafe {
+                partial_spectrum
+                    .as_mut_slice()
+                    .unwrap()
+                    .iter_mut()
+                    .for_each(|e| *e = 0.0);
+            }
             //-----------------------------------------------------
 
             world.barrier();

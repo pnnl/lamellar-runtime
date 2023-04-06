@@ -7,7 +7,9 @@ use regex::Regex;
 
 use crate::parse::FormatArgs;
 
-pub(crate) struct SelfReplace{pub(crate) id: syn::Ident}
+pub(crate) struct SelfReplace {
+    pub(crate) id: syn::Ident,
+}
 pub(crate) struct LamellarDSLReplace;
 pub(crate) struct DarcReplace;
 
@@ -33,14 +35,13 @@ impl VisitMut for SelfReplace {
             let tok_str = tok_str.split(",").collect::<Vec<&str>>();
             let mut new_tok_str: String = tok_str[0].to_string();
             for i in 1..tok_str.len() {
-                let old_string =  &tok_str[i].to_string();
-                if old_string.contains("."){
-                new_tok_str +=
-                    &(",".to_owned() + &old_string.replace("self", &self.id.to_string()));
-                }
-                else{
+                let old_string = &tok_str[i].to_string();
+                if old_string.contains(".") {
                     new_tok_str +=
-                    &(",".to_owned() + &old_string.replace("self", &(String::from("*")+&self.id.to_string())));
+                        &(",".to_owned() + &old_string.replace("self", &self.id.to_string()));
+                } else {
+                    new_tok_str += &(",".to_owned()
+                        + &old_string.replace("self", &(String::from("*") + &self.id.to_string())));
                 }
             }
             i.tokens = new_tok_str.parse().unwrap();

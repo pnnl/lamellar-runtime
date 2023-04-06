@@ -9,17 +9,19 @@ use crate::array::*;
 use crate::lamellar_request::LamellarRequest;
 
 pub(crate) mod access;
-pub use access::{AccessOps,LocalAtomicOps};
+pub use access::{AccessOps, LocalAtomicOps};
 pub(crate) mod arithmetic;
-pub use arithmetic::{ArithmeticOps,LocalArithmeticOps,ElementArithmeticOps};
+pub use arithmetic::{ArithmeticOps, ElementArithmeticOps, LocalArithmeticOps};
 pub(crate) mod bitwise;
-pub use bitwise::{BitWiseOps,LocalBitWiseOps,ElementBitWiseOps};
+pub use bitwise::{BitWiseOps, ElementBitWiseOps, LocalBitWiseOps};
 pub(crate) mod compare_exchange;
-pub use compare_exchange::{CompareExchangeOps,CompareExchangeEpsilonOps,ElementCompareEqOps,ElementComparePartialEqOps};
+pub use compare_exchange::{
+    CompareExchangeEpsilonOps, CompareExchangeOps, ElementCompareEqOps, ElementComparePartialEqOps,
+};
 pub(crate) mod read_only;
-pub use read_only::{ReadOnlyOps};
+pub use read_only::ReadOnlyOps;
 pub(crate) mod shift;
-pub use shift::{ShiftOps, LocalShiftOps, ElementShiftOps};
+pub use shift::{ElementShiftOps, LocalShiftOps, ShiftOps};
 // use crate::memregion::{
 //     one_sided::OneSidedMemoryRegion, Dist,
 // };
@@ -28,6 +30,7 @@ use async_trait::async_trait;
 use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::marker::PhantomData;
+use std::slice::Chunks;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::u8;
@@ -262,10 +265,10 @@ impl<T: Dist> ArrayOpCmd<T> {
             ArrayOpCmd::Get => 1,
             ArrayOpCmd::CompareExchange(_val) => 1 + std::mem::size_of::<T>(),
             ArrayOpCmd::CompareExchangeEps(_val, _eps) => 1 + 2 * std::mem::size_of::<T>(),
-            ArrayOpCmd::Shl =>  1,
-            ArrayOpCmd::FetchShl =>  1,
-            ArrayOpCmd::Shr =>  1,
-            ArrayOpCmd::FetchShr =>  1,
+            ArrayOpCmd::Shl => 1,
+            ArrayOpCmd::FetchShl => 1,
+            ArrayOpCmd::Shr => 1,
+            ArrayOpCmd::FetchShr => 1,
         }
     }
 
@@ -306,10 +309,10 @@ impl<T: Dist> ArrayOpCmd<T> {
                 let eps = unsafe { *(buf[(1 + t_size)..].as_ptr() as *const T) };
                 (ArrayOpCmd::CompareExchangeEps(val, eps), 1 + 2 * t_size)
             }
-            23 => (ArrayOpCmd::Shl,1),
-            24 => (ArrayOpCmd::FetchShl,1),
-            25 => (ArrayOpCmd::Shr,1),
-            26 => (ArrayOpCmd::FetchShr,1),
+            23 => (ArrayOpCmd::Shl, 1),
+            24 => (ArrayOpCmd::FetchShl, 1),
+            25 => (ArrayOpCmd::Shr, 1),
+            26 => (ArrayOpCmd::FetchShr, 1),
             _ => {
                 panic!("unrecognized Array Op Type");
             }
@@ -668,7 +671,8 @@ pub enum OpInputEnum<'a, T: Dist> {
     GenericAtomicLocalData(GenericAtomicLocalData<T>),
     LocalLockLocalData(LocalLockLocalData<'a, T>),
     GlobalLockLocalData(GlobalLockLocalData<'a, T>),
-    
+    // Chunks(Chunks<'a, T>),
+
     // while it would be convienient to directly use the following, doing so
     // is ambiguous with respect to both safety (Memregions and UnsafeArray)
     // but also it hides the fact we are only operating on the local segment of an array or memory region
@@ -677,7 +681,6 @@ pub enum OpInputEnum<'a, T: Dist> {
     // UnsafeArray(UnsafeArray<T>),
     // ReadOnlyArray(ReadOnlyArray<T>),
     // AtomicArray(AtomicArray<T>),
-    
 }
 
 impl<'a, T: Dist> OpInputEnum<'_, T> {
@@ -700,7 +703,6 @@ impl<'a, T: Dist> OpInputEnum<'_, T> {
             // OpInputEnum::UnsafeArray(a) => Box::new(unsafe{a.local_data()}.iter().map(|elem| *elem)),
             // OpInputEnum::ReadOnlyArray(a) => Box::new(a.local_data().iter().map(|elem| *elem)),
             // OpInputEnum::AtomicArray(a) => Box::new(a.local_data().iter().map(|elem| elem.load())),
-            
         }
     }
     #[tracing::instrument(skip_all)]
@@ -719,7 +721,6 @@ impl<'a, T: Dist> OpInputEnum<'_, T> {
             // OpInputEnum::UnsafeArray(a) => unsafe{a.local_data()}.len(),
             // OpInputEnum::ReadOnlyArray(a) => a.local_data().len(),
             // OpInputEnum::AtomicArray(a) => unsafe{a.__local_as_slice().len()},
-            
         }
     }
 
@@ -737,7 +738,6 @@ impl<'a, T: Dist> OpInputEnum<'_, T> {
             //     .expect("memregion not local")
             //     .first()
             //     .expect("memregion is empty"),
-            
         }
     }
 }
@@ -864,31 +864,59 @@ impl<'a, T: Dist> OpInput<'a, T> for &'a mut Vec<T> {
     }
 }
 
+// impl<'a, T: Dist> OpInput<'a, T> for Vec<T> {
+//     #[tracing::instrument(skip_all)]
+//     fn as_op_input(mut self) -> (Vec<OpInputEnum<'a, T>>, usize) {
+//         let len = self.len();
+//         let mut iters = vec![];
+//         let num_per_batch = match std::env::var("LAMELLAR_OP_BATCH") {
+//             Ok(n) => n.parse::<usize>().unwrap(),
+//             Err(_) => 10000,
+//         };
+//         let num = (len as f32 / num_per_batch as f32).ceil() as usize;
+//         println!("num: {}", num);
+//         for i in (1..num).rev() {
+//             let temp = self.split_off(i * num_per_batch);
+//             // println!("temp: {:?} {:?} {:?}", temp,i ,i * num_per_batch);
+//             iters.push(OpInputEnum::Vec(temp));
+//         }
+//         let rem = len % num_per_batch;
+//         // println!("rem: {} {:?}", rem,self);
+//         // if rem > 0 || num == 1 {
+//         if self.len() > 0 {
+//             iters.push(OpInputEnum::Vec(self));
+//         }
+//         iters.reverse(); //the indice slices get pushed in from the back, but we want to return in order
+//         (iters, len)
+//     }
+// }
+
 impl<'a, T: Dist> OpInput<'a, T> for Vec<T> {
     #[tracing::instrument(skip_all)]
-    fn as_op_input(mut self) -> (Vec<OpInputEnum<'a, T>>, usize) {
+    fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
         let len = self.len();
-        let mut iters = vec![];
+        // let mut iters = vec![];
         let num_per_batch = match std::env::var("LAMELLAR_OP_BATCH") {
             Ok(n) => n.parse::<usize>().unwrap(),
             Err(_) => 10000,
         };
-        let num = (len as f32 / num_per_batch as f32).ceil() as usize;
-        // println!("num: {}", num);
-        for i in (1..num).rev() {
-            let temp = self.split_off(i * num_per_batch);
-            // println!("temp: {:?} {:?} {:?}", temp,i ,i * num_per_batch);
-            iters.push(OpInputEnum::Vec(temp));
-        }
-        let rem = len % num_per_batch;
-        // println!("rem: {} {:?}", rem,self);
-        if rem > 0 || num == 1 {
-            iters.push(OpInputEnum::Vec(self));
-        }
-        iters.reverse(); //the indice slices get pushed in from the back, but we want to return in order
+        let num = len / num_per_batch;
+        let iters = self
+            .chunks(num)
+            .map(|c| OpInputEnum::Vec(c.to_vec()))
+            .collect::<_>();
+
+        // iters.reverse(); //the indice slices get pushed in from the back, but we want to return in order
         (iters, len)
     }
 }
+
+// impl<'a, T: Dist, I: Iterator<Item=T>> OpInput<'a, T> for I {
+//     #[tracing::instrument(skip_all)]
+//     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
+//         self.collect::<Vec<T>>().as_op_input()
+//     }
+// }
 
 // impl<'a, T: Dist> OpInput<'a, T> for &OneSidedMemoryRegion<T> {
 //     #[tracing::instrument(skip_all)]

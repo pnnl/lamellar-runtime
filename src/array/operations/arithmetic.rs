@@ -1,6 +1,5 @@
 use crate::array::*;
 
-
 /// Supertrait specifying elements of the array support remote arithmetic assign operations
 /// - Addition ```+=```
 /// - Subtraction ```-=```
@@ -8,16 +7,25 @@ use crate::array::*;
 /// - Division ```/=```
 /// - Remainder ```%=```
 pub trait ElementArithmeticOps:
-    std::ops::AddAssign + std::ops::SubAssign + std::ops::MulAssign + std::ops::DivAssign  + std::ops::RemAssign + Dist + Sized
+    std::ops::AddAssign
+    + std::ops::SubAssign
+    + std::ops::MulAssign
+    + std::ops::DivAssign
+    + std::ops::RemAssign
+    + Dist
+    + Sized
 {
 }
 
 impl<T> ElementArithmeticOps for T where
-    T: std::ops::AddAssign + std::ops::SubAssign + std::ops::MulAssign + std::ops::DivAssign + std::ops::RemAssign + Dist
+    T: std::ops::AddAssign
+        + std::ops::SubAssign
+        + std::ops::MulAssign
+        + std::ops::DivAssign
+        + std::ops::RemAssign
+        + Dist
 {
 }
-
-
 
 #[doc(alias("One-sided", "onesided"))]
 /// The interface for performing remote arithmetic operations on array elements

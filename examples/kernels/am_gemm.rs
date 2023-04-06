@@ -184,7 +184,7 @@ fn main() {
         //A iteration:
         let mut tasks = 0;
         let start = std::time::Instant::now();
-        let mut task_group = typed_am_group!(NaiveMM,world.team());
+        let mut task_group = typed_am_group!(NaiveMM, world.team());
         for i in 0..a_pe_row_blks {
             //iterate over rows of A, (all tiles in a row are local)
             for j in 0..b_pe_col_blks {

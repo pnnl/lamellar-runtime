@@ -15,7 +15,10 @@ use serde::ser::SerializeSeq;
 //     Mutex,MutexGuard
 // };
 use std::any::TypeId;
-use std::ops::{AddAssign, BitAndAssign, BitOrAssign, BitXorAssign, DivAssign, MulAssign, RemAssign, SubAssign, ShlAssign, ShrAssign};
+use std::ops::{
+    AddAssign, BitAndAssign, BitOrAssign, BitXorAssign, DivAssign, MulAssign, RemAssign, ShlAssign,
+    ShrAssign, SubAssign,
+};
 // use std::ops::{Deref, DerefMut};
 
 #[doc(hidden)]
@@ -638,8 +641,6 @@ macro_rules! impl_compare_exchange_eps {
     };
 }
 
-
-
 #[doc(hidden)]
 pub struct NativeAtomicElement<T> {
     array: NativeAtomicArray<T>,
@@ -683,10 +684,12 @@ impl<T: Dist> NativeAtomicElement<T> {
     pub fn fetch_rem(&self, val: T) -> T {
         impl_mul_div!(self, %, val)
     }
-    pub fn fetch_shl(&self, val: T) -> T { //result.0 is old value, result.1 is new value
+    pub fn fetch_shl(&self, val: T) -> T {
+        //result.0 is old value, result.1 is new value
         impl_shift!(self, <<, val)
     }
-    pub fn fetch_shr(&self, val: T) -> T {  //result.0 is old value, result.1 is new value
+    pub fn fetch_shr(&self, val: T) -> T {
+        //result.0 is old value, result.1 is new value
         impl_shift!(self, >>, val)
     }
 }
@@ -752,13 +755,13 @@ impl<T: Dist + ElementBitWiseOps> BitXorAssign<T> for NativeAtomicElement<T> {
 }
 
 impl<T: Dist + ElementShiftOps> ShlAssign<T> for NativeAtomicElement<T> {
-    fn shl_assign(&mut self, val: T)  {
+    fn shl_assign(&mut self, val: T) {
         self.fetch_shl(val);
     }
 }
 
 impl<T: Dist + ElementShiftOps> ShrAssign<T> for NativeAtomicElement<T> {
-    fn shr_assign(&mut self, val: T)  {
+    fn shr_assign(&mut self, val: T) {
         self.fetch_shr(val);
     }
 }

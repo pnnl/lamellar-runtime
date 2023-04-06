@@ -283,7 +283,7 @@ fn create_buf_ops(
             },
             quote! {#res_t res_t[0] = slice[index].fetch_and(val, Ordering::SeqCst);}, //fetch_and
             quote! {#res_t res_t[0] = slice[index].fetch_or(val, Ordering::SeqCst);},  //fetch_or
-            quote! {#res_t res_t[0] = slice[index].fetch_xor(val, Ordering::SeqCst);},  //fetch_or
+            quote! {#res_t res_t[0] = slice[index].fetch_xor(val, Ordering::SeqCst);}, //fetch_or
             quote! {slice[index].load(Ordering::SeqCst)},                              //load
             quote! { //swap
                 let mut old = slice[index].load(Ordering::SeqCst);
@@ -397,14 +397,14 @@ fn create_buf_ops(
             quote! { panic!("fetch_and not a valid op for Read Only Arrays"); }, //fetch_and --we lock the index before this point so its actually atomic
             quote! { panic!("fetch_or not a valid op for Read Only Arrays"); }, //fetch_or --we lock the index before this point so its actually atomic
             quote! { panic!("fetch_xor not a valid op for Read Only Arrays"); }, //fetch_xor --we lock the index before this point so its actually atomic
-            quote! {slice[index]},                                              //load
+            quote! {slice[index]},                                               //load
             quote! { panic!("swap not a valid op for Read Only Arrays"); }, //swap we lock the index before this point so its actually atomic
             quote! { panic!("compare exchange not a valid op for Read Only Arrays"); }, // compare_exchange -- we lock the index before this point so its actually atomic
             quote! { panic!("compare exchange eps not a valid op for Read Only Arrays"); }, //compare exchange epsilon
-            quote! { panic!("shl not a valid op for Read Only Arrays"); },//shl
-            quote! { panic!("fetch_shl not a valid op for Read Only Arrays"); },//fetch_shl
-            quote! { panic!("shr not a valid op for Read Only Arrays"); },//shr
-            quote! { panic!("fetch_shr not a valid op for Read Only Arrays"); },//fetch_shr
+            quote! { panic!("shl not a valid op for Read Only Arrays"); },                  //shl
+            quote! { panic!("fetch_shl not a valid op for Read Only Arrays"); }, //fetch_shl
+            quote! { panic!("shr not a valid op for Read Only Arrays"); },       //shr
+            quote! { panic!("fetch_shr not a valid op for Read Only Arrays"); }, //fetch_shr
         )
     } else {
         (
@@ -418,7 +418,6 @@ fn create_buf_ops(
             quote! {#res_t res_t[0] =  slice[index]; slice[index] &= val; }, //fetch_and --we lock the index before this point so its actually atomic
             quote! {#res_t res_t[0] =  slice[index]; slice[index] |= val; }, //fetch_or --we lock the index before this point so its actually atomic
             quote! {#res_t res_t[0] =  slice[index]; slice[index] ^= val; }, //fetch_xor --we lock the index before this point so its actually atomic
-
             quote! {slice[index]},                                           //load
             quote! {#res_t res_t[0] =  slice[index]; slice[index] = val; }, //swap we lock the index before this point so its actually atomic
             quote! {  // compare_exchange -- we lock the index before this point so its actually atomic
@@ -914,7 +913,7 @@ fn create_buf_ops(
     expanded
 }
 
-#[derive(Debug,Clone)]
+#[derive(Debug, Clone)]
 enum OpType {
     Arithmetic,
     Bitwise,
@@ -936,14 +935,16 @@ fn create_buffered_ops(
         quote::format_ident!("__lamellar")
     };
 
-    let mut atomic_array_types: Vec<(syn::Ident, syn::Ident)> = vec![(
-        quote::format_ident!("LocalLockArray"),
-        quote::format_ident!("LocalLockByteArrayWeak"),
-    ),
-    (
-        quote::format_ident!("GlobalLockArray"),
-        quote::format_ident!("GlobalLockByteArrayWeak"),
-    ),];
+    let mut atomic_array_types: Vec<(syn::Ident, syn::Ident)> = vec![
+        (
+            quote::format_ident!("LocalLockArray"),
+            quote::format_ident!("LocalLockByteArrayWeak"),
+        ),
+        (
+            quote::format_ident!("GlobalLockArray"),
+            quote::format_ident!("GlobalLockByteArrayWeak"),
+        ),
+    ];
 
     if native {
         atomic_array_types.push((
@@ -959,7 +960,7 @@ fn create_buffered_ops(
 
     let mut expanded = quote! {};
 
-    let  ro_optypes = vec![OpType::ReadOnly]; //, vec![OpType::Arithmetic, OpType::Access];
+    let ro_optypes = vec![OpType::ReadOnly]; //, vec![OpType::Arithmetic, OpType::Access];
 
     let buf_op_impl = create_buf_ops(
         typeident.clone(),
@@ -969,7 +970,7 @@ fn create_buffered_ops(
         rt,
     );
     expanded.extend(buf_op_impl);
-    
+
     let buf_op_impl = create_buf_ops(
         typeident.clone(),
         quote::format_ident!("UnsafeArray"),
@@ -1030,7 +1031,12 @@ pub(crate) fn __generate_ops_for_type_rt(item: TokenStream) -> TokenStream {
         .split(",")
         .map(|i| i.to_owned())
         .collect::<Vec<String>>();
-    let mut op_types = vec![OpType::ReadOnly,OpType::Access,OpType::Arithmetic,OpType::CompEx];
+    let mut op_types = vec![
+        OpType::ReadOnly,
+        OpType::Access,
+        OpType::Arithmetic,
+        OpType::CompEx,
+    ];
     if let Ok(val) = syn::parse_str::<syn::LitBool>(&items[0]) {
         if val.value {
             op_types.push(OpType::Bitwise);
@@ -1049,7 +1055,12 @@ pub(crate) fn __generate_ops_for_type_rt(item: TokenStream) -> TokenStream {
         let the_type = syn::parse_str::<syn::Type>(&t).unwrap();
         let typeident = quote::format_ident!("{:}", t.trim());
         output.extend(quote! {impl Dist for #typeident {}});
-        output.extend(create_buffered_ops(the_type.clone(),op_types.clone(), native, true));
+        output.extend(create_buffered_ops(
+            the_type.clone(),
+            op_types.clone(),
+            native,
+            true,
+        ));
         // output.extend(gen_atomic_rdma(typeident.clone(), true));
     }
     TokenStream::from(output)
@@ -1062,17 +1073,17 @@ pub(crate) fn __derive_arrayops(input: TokenStream) -> TokenStream {
     let name = input.ident;
     let the_type: syn::Type = syn::parse_quote!(#name);
 
-    let mut op_types = vec![OpType::ReadOnly,OpType::Access];
+    let mut op_types = vec![OpType::ReadOnly, OpType::Access];
 
-    for attr in input.attrs{
+    for attr in input.attrs {
         if attr.to_token_stream().to_string().contains("array_ops") {
-            if let Ok(temp) = attr.parse_meta(){
-                match temp{
+            if let Ok(temp) = attr.parse_meta() {
+                match temp {
                     syn::Meta::Path(p) => println!("Not expected {p:?}"),
                     syn::Meta::NameValue(nv) => println!("Not expected {nv:?}"),
-                    syn::Meta::List(l) =>{
-                        for item in l.nested{
-                            match item.to_token_stream().to_string().as_str(){
+                    syn::Meta::List(l) => {
+                        for item in l.nested {
+                            match item.to_token_stream().to_string().as_str() {
                                 "Arithmetic" => op_types.push(OpType::Arithmetic),
                                 "CompEx" => op_types.push(OpType::CompEx),
                                 "Bitwise" => op_types.push(OpType::Bitwise),
@@ -1083,7 +1094,7 @@ pub(crate) fn __derive_arrayops(input: TokenStream) -> TokenStream {
                                     op_types.push(OpType::Bitwise);
                                     op_types.push(OpType::Shift);
                                 }
-                                &_ => abort!(item,"unexpected array op type"),
+                                &_ => abort!(item, "unexpected array op type"),
                             }
                         }
                     }
@@ -1092,6 +1103,11 @@ pub(crate) fn __derive_arrayops(input: TokenStream) -> TokenStream {
         }
     }
 
-    output.extend(create_buffered_ops(the_type.clone(),op_types, false, false));
+    output.extend(create_buffered_ops(
+        the_type.clone(),
+        op_types,
+        false,
+        false,
+    ));
     TokenStream::from(output)
 }

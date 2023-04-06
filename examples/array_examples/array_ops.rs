@@ -1,6 +1,12 @@
 use lamellar::array::prelude::*;
 
-#[lamellar::AmData(Default, Debug, ArrayOps(Arithmetic,CompEx,Shift), PartialEq, PartialOrd)]
+#[lamellar::AmData(
+    Default,
+    Debug,
+    ArrayOps(Arithmetic, CompEx, Shift),
+    PartialEq,
+    PartialOrd
+)]
 struct Custom {
     int: usize,
     float: f32,
@@ -62,13 +68,13 @@ impl std::ops::RemAssign for Custom {
 }
 
 impl std::ops::ShlAssign for Custom {
-    fn shl_assign(&mut self,other: Custom){
+    fn shl_assign(&mut self, other: Custom) {
         self.int <<= other.int;
     }
 }
 
 impl std::ops::ShrAssign for Custom {
-    fn shr_assign(&mut self,other: Custom){
+    fn shr_assign(&mut self, other: Custom) {
         self.int >>= other.int;
     }
 }
@@ -738,18 +744,18 @@ fn main() {
     array_u8.print();
     array_u8.barrier();
 
-    (&array_i128).shl(1,63);
+    (&array_i128).shl(1, 63);
     array_i128.wait_all();
     array_i128.barrier();
     array_i128.print();
     array_i128.barrier();
 
     (&array_custom).shl(
-        1, 
+        1,
         Custom {
             int: 15,
             float: 0.0,
-        }
+        },
     );
     array_custom.wait_all();
     array_custom.barrier();
@@ -776,14 +782,14 @@ fn main() {
     array_u8.print();
     array_u8.barrier();
 
-    (&array_i128).shr(1,63);
+    (&array_i128).shr(1, 63);
     array_i128.wait_all();
     array_i128.barrier();
     array_i128.print();
     array_i128.barrier();
 
     (&array_custom).shr(
-        1, 
+        1,
         Custom {
             int: 15,
             float: 0.0,

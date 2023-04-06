@@ -332,17 +332,24 @@ impl LamellarTeam {
     }
 
     #[doc(hidden)]
-    pub fn exec_am_group_pe<F>(&self, pe: usize, am: F) -> Pin<Box<dyn Future<Output = F::Output> + Send>>
+    pub fn exec_am_group_pe<F>(
+        &self,
+        pe: usize,
+        am: F,
+    ) -> Pin<Box<dyn Future<Output = F::Output> + Send>>
     where
-        F: RemoteActiveMessage + LamellarAM + crate::Serialize + 'static
+        F: RemoteActiveMessage + LamellarAM + crate::Serialize + 'static,
     {
         self.team.exec_am_pe_tg(pe, am, None).into_future()
     }
 
     #[doc(hidden)]
-    pub fn exec_am_group_all<F>(&self, am: F) -> Pin<Box<dyn Future<Output = Vec<F::Output>> + Send>>
+    pub fn exec_am_group_all<F>(
+        &self,
+        am: F,
+    ) -> Pin<Box<dyn Future<Output = Vec<F::Output>> + Send>>
     where
-        F: RemoteActiveMessage + LamellarAM + crate::Serialize + 'static
+        F: RemoteActiveMessage + LamellarAM + crate::Serialize + 'static,
     {
         self.team.exec_am_all_tg(am, None).into_future()
     }
@@ -489,35 +496,35 @@ impl From<LamellarWorld> for IntoLamellarTeam {
 }
 
 #[doc(hidden)]
-pub struct ArcLamellarTeam{
-    pub team: Arc<LamellarTeam>
+pub struct ArcLamellarTeam {
+    pub team: Arc<LamellarTeam>,
 }
 
 impl From<Arc<LamellarTeam>> for ArcLamellarTeam {
     #[tracing::instrument(skip_all)]
     fn from(team: Arc<LamellarTeam>) -> Self {
-        ArcLamellarTeam{team}
+        ArcLamellarTeam { team }
     }
 }
 
 impl From<&Arc<LamellarTeam>> for ArcLamellarTeam {
     #[tracing::instrument(skip_all)]
     fn from(team: &Arc<LamellarTeam>) -> Self {
-        ArcLamellarTeam{team: team.clone()}
+        ArcLamellarTeam { team: team.clone() }
     }
 }
 
 impl From<&LamellarWorld> for ArcLamellarTeam {
     #[tracing::instrument(skip_all)]
     fn from(world: &LamellarWorld) -> Self {
-        ArcLamellarTeam{team: world.team()}
+        ArcLamellarTeam { team: world.team() }
     }
 }
 
 impl From<LamellarWorld> for ArcLamellarTeam {
     #[tracing::instrument(skip_all)]
     fn from(world: LamellarWorld) -> Self {
-        ArcLamellarTeam{team: world.team()}
+        ArcLamellarTeam { team: world.team() }
     }
 }
 

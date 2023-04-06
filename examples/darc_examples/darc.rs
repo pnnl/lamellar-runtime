@@ -1,7 +1,7 @@
 use lamellar::active_messaging::prelude::*;
 use lamellar::darc::prelude::*;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
 
 #[lamellar::AmData(Clone)]
 struct DarcAm {
@@ -85,7 +85,7 @@ fn main() {
     // println!("here 6");
     if let Some(team) = even_team {
         let team_darc = Darc::new(team.clone(), AtomicUsize::new(10));
-        let mut tg = typed_am_group!(DarcAm,team.clone());
+        let mut tg = typed_am_group!(DarcAm, team.clone());
         println!("created team darc");
         if let Ok(team_darc) = team_darc {
             let test = team_darc.clone();

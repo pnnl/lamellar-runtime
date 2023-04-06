@@ -5,7 +5,9 @@ use crate::array::global_lock_atomic::operations::BUFOPS;
 use crate::array::private::LamellarArrayPrivate;
 use crate::array::r#unsafe::{UnsafeByteArray, UnsafeByteArrayWeak};
 use crate::array::*;
-use crate::darc::global_rw_darc::{GlobalRwDarc,GlobalRwDarcReadGuard,GlobalRwDarcWriteGuard,GlobalRwDarcCollectiveWriteGuard};
+use crate::darc::global_rw_darc::{
+    GlobalRwDarc, GlobalRwDarcCollectiveWriteGuard, GlobalRwDarcReadGuard, GlobalRwDarcWriteGuard,
+};
 use crate::darc::DarcMode;
 use crate::lamellar_team::{IntoLamellarTeam, LamellarTeamRT};
 use crate::memregion::Dist;
@@ -219,7 +221,7 @@ impl<T: Dist> Deref for GlobalLockLocalData<'_, T> {
 impl<T: Dist + std::default::Default> GlobalLockArray<T> {
     #[doc(alias = "Collective")]
     /// Construct a new GlobalLockArray with a length of `array_size` whose data will be layed out with the provided `distribution` on the PE's specified by the `team`.
-    /// `team` is commonly a [LamellarWorld][crate::LamellarWorld] or [LamellarTeam][crate::LamellarTeam] (instance or reference). 
+    /// `team` is commonly a [LamellarWorld][crate::LamellarWorld] or [LamellarTeam][crate::LamellarTeam] (instance or reference).
     ///
     /// # Collective Operation
     /// Requires all PEs associated with the `team` to enter the constructor call otherwise deadlock will occur (i.e. team barriers are being called internally)
@@ -279,7 +281,6 @@ impl<T: Dist> GlobalLockArray<T> {
         }
     }
 
-    
     #[doc(alias("One-sided", "onesided"))]
     /// Return the calling PE's local data as a [GlobalLockLocalData], which allows safe immutable access to local elements.   
     ///
@@ -657,7 +658,6 @@ impl<T: Dist> GlobalLockArray<T> {
     }
 }
 
-
 impl<T: Dist + 'static> GlobalLockArray<T> {
     #[doc(alias = "Collective")]
     /// Convert this GlobalLockArray into a (safe) [AtomicArray][crate::array::AtomicArray]
@@ -841,11 +841,11 @@ impl<T: Dist> LamellarArray<T> for GlobalLockArray<T> {
     fn pe_and_offset_for_global_index(&self, index: usize) -> Option<(usize, usize)> {
         self.array.pe_and_offset_for_global_index(index)
     }
-    fn first_global_index_for_pe(&self, pe: usize) -> Option<usize>{
+    fn first_global_index_for_pe(&self, pe: usize) -> Option<usize> {
         self.array.first_global_index_for_pe(pe)
     }
 
-    fn last_global_index_for_pe(&self, pe: usize) -> Option<usize>{
+    fn last_global_index_for_pe(&self, pe: usize) -> Option<usize> {
         self.array.last_global_index_for_pe(pe)
     }
 }

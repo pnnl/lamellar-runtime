@@ -17,7 +17,7 @@ use crate::IdError;
 enum LockType {
     Read,
     Write,
-    CollectiveWrite(usize)
+    CollectiveWrite(usize),
 }
 
 #[derive(Debug)]
@@ -93,9 +93,8 @@ impl<T> DistRwLock<T> {
         // first lets set the normal writer lock, but will set it to a unique id all the PEs should have (it is initialized to num_pes+1 and is incremented by one after each lock)
         if pe == 0 {
             self.async_writer_lock(collective_cnt).await;
-        }
-        else {
-            while self.writer.load(Ordering::SeqCst) != collective_cnt{
+        } else {
+            while self.writer.load(Ordering::SeqCst) != collective_cnt {
                 async_std::task::yield_now().await;
             }
             while self.readers.load(Ordering::SeqCst) != 0 {
@@ -105,13 +104,13 @@ impl<T> DistRwLock<T> {
         // at this point at least PE pe and PE 0 have entered the lock,
         // and PE 0 has obtained the global lock
         // we need to ensure everyone else has.
-        self.collective_writer.fetch_sub(1,Ordering::SeqCst);
-        while self.collective_writer.load(Ordering::SeqCst) != 0 { //
+        self.collective_writer.fetch_sub(1, Ordering::SeqCst);
+        while self.collective_writer.load(Ordering::SeqCst) != 0 {
+            //
             async_std::task::yield_now().await;
         }
         //at this point we have to global write lock and everyone has entered the collective write lock
     }
-
 
     /// # Safety
     ///
@@ -141,20 +140,27 @@ impl<T> DistRwLock<T> {
     async unsafe fn collective_writer_unlock(&self, pe: usize, collective_cnt: usize) {
         // println!("\t{pe} {collective_cnt} writer unlocking {:?} {:?} {:?}",self.readers.load(Ordering::SeqCst),self.writer.load(Ordering::SeqCst),self.collective_writer.load(Ordering::SeqCst));
         if collective_cnt != self.writer.load(Ordering::SeqCst) {
-            panic!("ERROR: Mismatched collective lock calls {collective_cnt} {:?}",self.writer.load(Ordering::SeqCst));
+            panic!(
+                "ERROR: Mismatched collective lock calls {collective_cnt} {:?}",
+                self.writer.load(Ordering::SeqCst)
+            );
         }
         // wait for everyone to enter the collective unlock call
-        let _temp = self.collective_writer.fetch_add(1,Ordering::SeqCst);
+        let _temp = self.collective_writer.fetch_add(1, Ordering::SeqCst);
         // println!("collective unlock PE{:?} {:?} {:?} {:?}",pe,temp,self.collective_writer.load(Ordering::SeqCst),self.team.num_pes);
-        while self.collective_writer.load(Ordering::SeqCst) != self.team.num_pes { //
+        while self.collective_writer.load(Ordering::SeqCst) != self.team.num_pes {
+            //
             async_std::task::yield_now().await;
         }
         //we have all entered the unlock
         //now have pe 0 unlock the global write lock (other PEs are free to finish)
-        if pe == 0{
-            if let Err(val) = self.writer
-                .compare_exchange(collective_cnt, self.team.num_pes, Ordering::SeqCst, Ordering::SeqCst)
-            {
+        if pe == 0 {
+            if let Err(val) = self.writer.compare_exchange(
+                collective_cnt,
+                self.team.num_pes,
+                Ordering::SeqCst,
+                Ordering::SeqCst,
+            ) {
                 panic!(
                     "should not be trying to unlock another pes lock {:?} {:?}",
                     pe, val
@@ -175,18 +181,18 @@ impl LamellarAM for LockAm {
     async fn exec() {
         // println!("In lock am {:?}",self);
         // let lock = {
-            let rwlock = unsafe { &*(self.rwlock_addr as *mut DarcInner<DistRwLock<()>>) }.item(); //we dont actually care about the "type" we wrap here, we just need access to the meta data for the darc 
-            match self.lock_type {
-                LockType::Read => {
-                    rwlock.async_reader_lock(self.orig_pe).await;
-                }
-                LockType::Write => {
-                    rwlock.async_writer_lock(self.orig_pe).await;
-                }
-                LockType::CollectiveWrite(cnt) => {
-                    rwlock.async_collective_writer_lock(self.orig_pe,cnt).await;
-                }
+        let rwlock = unsafe { &*(self.rwlock_addr as *mut DarcInner<DistRwLock<()>>) }.item(); //we dont actually care about the "type" we wrap here, we just need access to the meta data for the darc
+        match self.lock_type {
+            LockType::Read => {
+                rwlock.async_reader_lock(self.orig_pe).await;
             }
+            LockType::Write => {
+                rwlock.async_writer_lock(self.orig_pe).await;
+            }
+            LockType::CollectiveWrite(cnt) => {
+                rwlock.async_collective_writer_lock(self.orig_pe, cnt).await;
+            }
+        }
         // };
         // println!("finished lock am");
     }
@@ -207,14 +213,15 @@ impl LamellarAM for UnlockAm {
             match self.lock_type {
                 LockType::Read => rwlock.reader_unlock(self.orig_pe),
                 LockType::Write => rwlock.writer_unlock(self.orig_pe),
-                LockType::CollectiveWrite(cnt) => rwlock.collective_writer_unlock(self.orig_pe,cnt).await,
+                LockType::CollectiveWrite(cnt) => {
+                    rwlock.collective_writer_unlock(self.orig_pe, cnt).await
+                }
             }
         }
     }
 }
 
-
-pub struct GlobalRwDarcReadGuard< T: 'static> {
+pub struct GlobalRwDarcReadGuard<T: 'static> {
     rwlock: Darc<DistRwLock<T>>,
     marker: PhantomData<&'static mut T>,
     local_cnt: Arc<AtomicUsize>, //this allows us to immediately clone the read guard without launching an AM, and will prevent dropping the global guard until local copies are gone
@@ -229,8 +236,8 @@ impl<T> Deref for GlobalRwDarcReadGuard<T> {
 
 impl<T> Clone for GlobalRwDarcReadGuard<T> {
     fn clone(&self) -> Self {
-        self.local_cnt.fetch_add(1,Ordering::SeqCst);
-        GlobalRwDarcReadGuard{
+        self.local_cnt.fetch_add(1, Ordering::SeqCst);
+        GlobalRwDarcReadGuard {
             rwlock: self.rwlock.clone(),
             marker: PhantomData,
             local_cnt: self.local_cnt.clone(),
@@ -241,7 +248,7 @@ impl<T> Clone for GlobalRwDarcReadGuard<T> {
 impl<T> Drop for GlobalRwDarcReadGuard<T> {
     fn drop(&mut self) {
         // println!("dropping read guard");
-        if self.local_cnt.fetch_sub(1,Ordering::SeqCst) == 1{
+        if self.local_cnt.fetch_sub(1, Ordering::SeqCst) == 1 {
             let inner = self.rwlock.inner();
             let team = inner.team();
             let remote_rwlock_addr = team.lamellae.remote_addr(
@@ -578,7 +585,7 @@ impl<T> GlobalRwDarc<T> {
             0,
             inner as *const DarcInner<DistRwLock<T>> as *const () as usize,
         );
-        
+
         team.exec_am_pe_tg(
             0,
             LockAm {
@@ -627,7 +634,7 @@ impl<T> GlobalRwDarc<T> {
     ///     }
     ///  }
     /// //-------------
-    /// 
+    ///
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
     ///
@@ -647,7 +654,7 @@ impl<T> GlobalRwDarc<T> {
             0,
             inner as *const DarcInner<DistRwLock<T>> as *const () as usize,
         );
-        let collective_cnt = inner.item().collective_cnt.fetch_add(1,Ordering::SeqCst);
+        let collective_cnt = inner.item().collective_cnt.fetch_add(1, Ordering::SeqCst);
         team.exec_am_pe_tg(
             0,
             LockAm {
@@ -805,7 +812,7 @@ impl<T> GlobalRwDarc<T> {
     ///     }
     ///  }
     /// //-------------
-    /// 
+    ///
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
     ///
@@ -825,7 +832,7 @@ impl<T> GlobalRwDarc<T> {
             0,
             inner as *const DarcInner<DistRwLock<T>> as *const () as usize,
         );
-        let collective_cnt = inner.item().collective_cnt.fetch_add(1,Ordering::SeqCst);
+        let collective_cnt = inner.item().collective_cnt.fetch_add(1, Ordering::SeqCst);
         team.exec_am_pe_tg(
             0,
             LockAm {

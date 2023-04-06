@@ -146,8 +146,8 @@ pub use local_lock_atomic::{
 
 pub(crate) mod global_lock_atomic;
 pub use global_lock_atomic::{
-    operations::GlobalLockArrayOpBuf, GlobalLockArray, GlobalLockByteArray, GlobalLockByteArrayWeak,
-    GlobalLockLocalData, GlobalLockMutLocalData,
+    operations::GlobalLockArrayOpBuf, GlobalLockArray, GlobalLockByteArray,
+    GlobalLockByteArrayWeak, GlobalLockLocalData, GlobalLockMutLocalData,
 };
 
 pub mod iterator;
@@ -589,8 +589,9 @@ impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static> LamellarArrayCompa
 pub(crate) mod private {
     use crate::active_messaging::*;
     use crate::array::{
-        AtomicArray, /*NativeAtomicArray, GenericAtomicArray,*/ LamellarReadArray,
-        LamellarWriteArray, LocalLockArray, GlobalLockArray, ReadOnlyArray, UnsafeArray,
+        AtomicArray, GlobalLockArray,
+        /*NativeAtomicArray, GenericAtomicArray,*/ LamellarReadArray, LamellarWriteArray,
+        LocalLockArray, ReadOnlyArray, UnsafeArray,
     };
     use crate::lamellar_request::{LamellarMultiRequest, LamellarRequest};
     use crate::memregion::Dist;

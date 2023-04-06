@@ -10,7 +10,6 @@ use crate::array::*;
 use crate::darc::global_rw_darc::GlobalRwDarcReadGuard;
 use crate::memregion::Dist;
 
-
 #[doc(hidden)]
 #[derive(Clone)]
 pub struct GlobalLockDistIter<T: Dist> {

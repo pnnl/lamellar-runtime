@@ -32,7 +32,10 @@ lazy_static! {
     };
 }
 
-use std::ops::{AddAssign, BitAndAssign, BitOrAssign, BitXorAssign, DivAssign, RemAssign, MulAssign, SubAssign, ShlAssign, ShrAssign};
+use std::ops::{
+    AddAssign, BitAndAssign, BitOrAssign, BitXorAssign, DivAssign, MulAssign, RemAssign, ShlAssign,
+    ShrAssign, SubAssign,
+};
 
 // #[doc(hidden)]
 /// An abstraction of an atomic element either via language supported Atomic integer types or through the use of an accompanying mutex.

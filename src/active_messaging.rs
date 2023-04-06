@@ -488,7 +488,7 @@ pub use registered_active_message::RegisteredAm;
 
 pub(crate) mod batching;
 
-pub(crate)const BATCH_AM_SIZE: usize = 100_000;
+pub(crate) const BATCH_AM_SIZE: usize = 100_000;
 
 /// This macro is used to setup the attributed type so that it can be used within remote active messages.
 ///
@@ -543,7 +543,6 @@ pub use lamellar_impl::am;
 ///
 pub use lamellar_impl::local_am;
 
-
 /// This macro is used to construct an am group of a single am type.
 pub use lamellar_impl::typed_am_group;
 
@@ -555,9 +554,9 @@ impl<T: Sync + Send> SyncSend for T {}
 /// Supertrait specifying a Type can be used in (remote)ActiveMessages
 ///
 /// Types must impl [Serialize][serde::ser::Serialize], [Deserialize][serde::de::DeserializeOwned], and [SyncSend]
-pub trait AmDist: serde::ser::Serialize + serde::de::DeserializeOwned + SyncSend + 'static{}
+pub trait AmDist: serde::ser::Serialize + serde::de::DeserializeOwned + SyncSend + 'static {}
 
-impl< T: serde::ser::Serialize + serde::de::DeserializeOwned + SyncSend + 'static> AmDist for T {}
+impl<T: serde::ser::Serialize + serde::de::DeserializeOwned + SyncSend + 'static> AmDist for T {}
 
 #[derive(
     serde::Serialize, serde::Deserialize, Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord,
@@ -599,7 +598,7 @@ pub trait LamellarResultSerde: LamellarSerde {
 }
 
 #[doc(hidden)]
-pub trait RemoteActiveMessage: LamellarActiveMessage + LamellarSerde + LamellarResultSerde{
+pub trait RemoteActiveMessage: LamellarActiveMessage + LamellarSerde + LamellarResultSerde {
     fn as_local(self: Arc<Self>) -> LamellarArcLocalAm;
 }
 
@@ -620,11 +619,9 @@ pub trait LamellarActiveMessage: DarcSerde {
 pub trait LamellarResultDarcSerde: LamellarSerde + DarcSerde + Sync + Send {}
 
 pub(crate) type LamellarArcLocalAm = Arc<dyn LamellarActiveMessage + Sync + Send>;
-pub(crate) type LamellarArcAm = Arc<dyn RemoteActiveMessage + Sync + Send >;
+pub(crate) type LamellarArcAm = Arc<dyn RemoteActiveMessage + Sync + Send>;
 pub(crate) type LamellarAny = Box<dyn std::any::Any + Sync + Send>;
 pub(crate) type LamellarResultArc = Arc<dyn LamellarResultDarcSerde + Sync + Send>;
-
-
 
 /// Supertrait specifying `serde::ser::Serialize` + `serde::de::DeserializeOwned`
 pub trait Serde: serde::ser::Serialize + serde::de::DeserializeOwned {}
