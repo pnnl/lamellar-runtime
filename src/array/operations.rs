@@ -900,9 +900,8 @@ impl<'a, T: Dist> OpInput<'a, T> for Vec<T> {
             Ok(n) => n.parse::<usize>().unwrap(),
             Err(_) => 10000,
         };
-        let num = len / num_per_batch;
         let iters = self
-            .chunks(num)
+            .chunks(num_per_batch)
             .map(|c| OpInputEnum::Vec(c.to_vec()))
             .collect::<_>();
 
