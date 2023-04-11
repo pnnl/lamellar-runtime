@@ -49,6 +49,7 @@ tracing-futures = "0.2.5"
 tracing-flame = "0.2.0"
 pin-project = "1.0.12"
 enum-as-inner = "0.5.1"
+itertools = "0.10.5"
 
 
 [dev-dependencies]
@@ -336,6 +337,10 @@ path="examples/array_examples/array_for_each_schedules.rs"
 [[example]]
 name="generic_array"
 path="examples/array_examples/generic_array.rs"
+
+[[example]]
+name="array_batch_add"
+path="examples/array_examples/array_batch_add.rs"
 
 [[example]]
 name="array_ops"

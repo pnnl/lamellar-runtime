@@ -6,8 +6,14 @@ use crate::lamellar_request::LamellarRequest;
 // use crate::memregion::Dist;
 use std::any::TypeId;
 use std::collections::HashMap;
+use itertools::Itertools;
 
 type BufFn = fn(UnsafeByteArrayWeak) -> Arc<dyn BufferOp>;
+
+// type AddFn = fn(&UnsafeByteArray,&[usize],&[u8]);
+
+type AddFn = fn(&UnsafeByteArray,&[u8]);
+
 
 lazy_static! {
     pub(crate) static ref BUFOPS: HashMap<TypeId, BufFn> = {
@@ -15,6 +21,15 @@ lazy_static! {
         for op in crate::inventory::iter::<UnsafeArrayOpBuf> {
             map.insert(op.id.clone(), op.op);
         }
+        map
+    };
+
+    pub(crate) static ref NEWBUFOPS: HashMap<TypeId, AddFn> = {
+        let mut map: HashMap<TypeId, AddFn> = HashMap::new();
+        // for op in crate::inventory::iter::<UnsafeArrayOpBuf> {
+        //     map.insert(op.id.clone(), op.op);
+        // }
+        map.insert(TypeId::of::<usize>(),multi_multi_add_usize);
         map
     };
 }
@@ -444,15 +459,331 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         }
         Box::new(ArrayOpBatchResultHandle { reqs }).into_future()
     }
+}
 
-    // pub fn op_put(
-    //     &self,
-    //     index: impl OpInput<'a,usize>,
-    //     val: impl OpInput<'a,T>,
-    // ) -> Box<dyn LamellarRequest<Output = ()>  > {
-    //     self.initiate_op(val,index,ArrayOpCmd::Put)
+impl<T: AmDist + Dist + ElementArithmeticOps + 'static> UnsafeArray<T> {
+    pub fn new_add<'a>(
+        &self,
+        mut index: impl Iterator<Item = &'a usize> + Clone,
+        mut val: impl Iterator<Item =T> + Clone,
+    ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
+        match(index.clone().skip(1).next(),val.clone().skip(1).next()){
+            (Some(_),Some(_)) => {
+                self.add_multi_multi(index,val)
+            }
+            (Some(_),None) => {
+                // self.add_multi_single(index,val)
+                Box::pin(async{})
+            }
+            (None,Some(_)) => {
+                Box::pin(async{})
+                // self.add_single_multi(index,val)
+            }
+            (None,None) => {
+                self.add_multi_multi(index,val)
+            }   
+        }
+    }
+
+    fn add_multi_multi<'a>(&self,  index:  impl Iterator<Item = &'a usize>, val: impl Iterator<Item =  T>) -> Pin<Box<dyn Future<Output = ()> + Send>>{
+        let num_per_batch = match std::env::var("LAMELLAR_OP_BATCH") {
+            Ok(n) => n.parse::<usize>().unwrap(), //+ 1 to account for main thread
+            Err(_) => 10000,                      //+ 1 to account for main thread
+        };
+        println!("num_per_batch {:?}",num_per_batch);
+        let mut reqs = Arc::new(Mutex::new(Vec::new()));
+        let req_count = AtomicUsize::new(0);
+        let mut temp = Vec::with_capacity(num_per_batch);
+        index.zip(val).for_each( |idx_val| {
+            
+            temp.push(idx_val);
+            if temp.len() == num_per_batch {
+                let mut new_temp = Vec::with_capacity(num_per_batch);
+                std::mem::swap(&mut temp, &mut new_temp);
+                req_count.fetch_add(1,Ordering::Relaxed);
+                let mut all_reqs = reqs.clone();
+                self.inner.data.team.scheduler.submit_task(async move {
+                    let mut pe_buffers = HashMap::new();
+                    let mut reqs = new_temp.into_iter().filter_map(|(idx, val)| {
+                
+                        let (pe,index) = self.pe_and_offset_for_global_index(*idx).expect("index out of bounds");
+                        let buffer = pe_buffers.entry(pe).or_insert((MultiMultiAdd::new(self.clone()),0));
+                        buffer.0.append_idxs_vals(index, val);
+                        buffer.1 += 1;
+                        if  buffer.1 >= num_per_batch {
+                            let mut new_buffer = MultiMultiAdd::new(self.clone());
+                            std::mem::swap( &mut buffer.0, &mut new_buffer);
+                            buffer.1 = 0;
+                            // let am: MultiMultiAddRemote = new_buffer.into();
+                            Some(
+                                self.inner.data.team.exec_am_local_tg(
+                                    new_buffer,
+                                    Some(self.inner.data.array_counters.clone())
+                                ).into_future()
+                            )
+                        }
+                        else {
+                            None
+                        }
+                    }).collect::<Vec<_>>();
+                    for (pe,buffer) in pe_buffers.iter_mut() {
+                        if buffer.1 > 0 {
+                            
+                            let mut new_buffer = MultiMultiAdd::new(self.clone());
+                            std::mem::swap( &mut buffer.0, &mut new_buffer);
+                            reqs.push(
+
+                                self.inner.data.team.exec_am_local_tg(
+                                    new_buffer, 
+                                    Some(self.inner.data.array_counters.clone())
+                                ).into_future()
+                            );
+                        }
+                    } 
+                    // println!("reqs len {:?}",reqs.len());
+                    all_reqs.lock().extend(reqs);
+                });
+            }
+        }); 
+        if temp.len() > 0 {
+            req_count.fetch_add(1,Ordering::Relaxed);
+            let mut all_reqs = reqs.clone();
+            self.inner.data.team.scheduler.submit_task(async move {
+                let mut pe_buffers = HashMap::new();
+                let mut reqs = temp.into_iter().filter_map(|(idx, val)| {
+            
+                    let (pe,index) = self.pe_and_offset_for_global_index(*idx).expect("index out of bounds");
+                    let buffer = pe_buffers.entry(pe).or_insert((MultiMultiAdd::new(self.clone()),0));
+                    buffer.0.append_idxs_vals(index, val);
+                    buffer.1 += 1;
+                    if  buffer.1 >= num_per_batch {
+                        let mut new_buffer = MultiMultiAdd::new(self.clone());
+                        std::mem::swap( &mut buffer.0, &mut new_buffer);
+                        buffer.1 = 0;
+                        // let am: MultiMultiAddRemote = new_buffer.into();
+                        Some(
+                            self.inner.data.team.exec_am_local_tg(
+                                new_buffer,
+                                Some(self.inner.data.array_counters.clone())
+                            ).into_future()
+                        )
+                    }
+                    else {
+                        None
+                    }
+                }).collect::<Vec<_>>();
+                for (pe,buffer) in pe_buffers.iter_mut() {
+                    if buffer.1 > 0 {
+                        
+                        let mut new_buffer = MultiMultiAdd::new(self.clone());
+                        std::mem::swap( &mut buffer.0, &mut new_buffer);
+                        reqs.push(
+
+                            self.inner.data.team.exec_am_local_tg(
+                                new_buffer, 
+                                Some(self.inner.data.array_counters.clone())
+                            ).into_future()
+                        );
+                    }
+                } 
+                // println!("reqs len {:?}",reqs.len());
+                all_reqs.lock().extend(reqs);
+            });
+            temp = Vec::with_capacity(num_per_batch);
+        }  
+        Box::pin(async move{
+            let cnt = req_count.load(Ordering::Relaxed);
+            while reqs.lock().len() < cnt {
+                futures::future::pending().await
+            }
+            match Arc::try_unwrap(reqs){
+                Ok(reqs) => {
+                    futures::future::join_all(reqs.into_inner()).await;
+                }
+                Err(_) => {
+                    panic!("trying to return a fetch request for result operations");
+                } 
+            }
+        })
+    }
+
+    // fn add_single_multi(&self, mut index: impl Iterator<Item = usize>, mut vals: impl Iterator<Item = T>) -> Pin<Box<dyn Future<Output = ()> + Send>>{
+    //     let num_per_batch = match std::env::var("LAMELLAR_OP_BATCH") {
+    //         Ok(n) => n.parse::<usize>().unwrap(), //+ 1 to account for main thread
+    //         Err(_) => 10000,                      //+ 1 to account for main thread
+    //     };
+    //     let idx = index.next().unwrap();
+    //     let (pe,index) = self.pe_and_offset_for_global_index(idx).expect("index out of bounds");
+    //     let mut am = SingleMultiAdd{array: self.clone(), idx: index, val: vec![]};
+    //     let reqs = vals.filter_map(|val| {
+    //         am.val.push(val);
+    //         if am.val.len() > num_per_batch {
+    //             let mut new_am = SingleMultiAdd{array: self.clone(), idx: index, val: vec![]};
+    //             std::mem::swap(&mut am, &mut new_am);
+    //             let req = self.inner.data.team.exec_am_local_tg(
+    //                 new_am,
+    //                 Some(self.inner.data.array_counters.clone())
+    //             );
+                
+    //             Some(req.into_future())
+    //         }
+    //         else {
+    //             None
+    //         }
+    //     }).collect::<Vec<_>>();
+    //     Box::pin(async move{
+    //         futures::future::join_all(reqs).await;
+    //     })
+    // }
+
+    
+    // fn add_multi_single(&self, mut index: impl Iterator<Item = usize>, mut val: impl Iterator<Item = T>) -> Pin<Box<dyn Future<Output = ()> + Send>>{
+    //     let num_per_batch = match std::env::var("LAMELLAR_OP_BATCH") {
+    //         Ok(n) => n.parse::<usize>().unwrap(), //+ 1 to account for main thread
+    //         Err(_) => 10000,                      //+ 1 to account for main thread
+    //     };
+    //     let mut pe_buffers = HashMap::new();
+    //     let val = val.next().unwrap();
+    //     let reqs = index.filter_map(|idx| {
+    //         let (pe,index) = self.pe_and_offset_for_global_index(idx).expect("index out of bounds");
+    //         let buffer = pe_buffers.entry(pe).or_insert(MultiSingleAdd{array: self.clone(), idx: vec![], val: val});
+    //         buffer.idx.push(index);
+    //         if buffer.idx.len() > num_per_batch {
+    //             let mut new_buffer = MultiSingleAdd{array: self.clone(), idx: vec![], val: val};
+    //             std::mem::swap( buffer, &mut new_buffer);
+    //             Some(self.inner.data.team.exec_am_local_tg(
+    //                 new_buffer,
+    //                 Some(self.inner.data.array_counters.clone())
+    //             ).into_future())
+    //         }
+    //         else {
+    //             None
+    //         }
+    //     }).collect::<Vec<_>>();
+    //     Box::pin(async move{
+    //         futures::future::join_all(reqs).await;
+    //     })
     // }
 }
+
+
+fn multi_multi_add_usize(array: &UnsafeByteArray, idx_vals: &[u8]) {
+    let array: UnsafeArray<usize> = array.into();
+    let mut local_data = unsafe{array.mut_local_data()};
+    let idx_vals = unsafe {std::slice::from_raw_parts(idx_vals.as_ptr() as *const IdxVal<usize>, idx_vals.len()/std::mem::size_of::<IdxVal<usize>>())};
+    for elem in idx_vals{
+         local_data[elem.index] += elem.value;
+    }
+}
+
+#[repr(C)] //required as we reinterpret as bytes
+struct IdxVal<T>{
+    index: usize,
+    value: T,
+}
+
+impl<T> IdxVal<T> {
+    fn as_bytes(&self) -> &[u8] {
+        unsafe { std::slice::from_raw_parts(self as *const Self as *const u8, std::mem::size_of::<Self>()) }
+    }
+
+    // from_bytes(bytes: &[u8]) -> Self {
+    //     unsafe { std::ptr::read(bytes.as_ptr() as *const Self) }
+    // }
+}
+
+#[lamellar_impl::AmDataRT]
+struct MultiMultiAdd{
+    array: UnsafeByteArray,
+    idxs_vals: Vec<u8>,
+    // val: Vec<u8>,
+    // type_id: TypeId,
+}
+
+impl MultiMultiAdd {
+    fn new<T: Dist >(array: UnsafeArray<T>) -> Self {
+        Self { array:  array.into(), idxs_vals: Vec::new()} //, type_id: TypeId::of::<T>() }
+    }
+
+    fn append_idxs_vals<T: Dist>(&mut self, idx: usize, val: T) {
+        // idx_val as slice of u8
+        let idx_val = IdxVal { index: idx, value: val };
+        self.idxs_vals.extend_from_slice(idx_val.as_bytes());
+    }
+}
+
+#[lamellar_impl::rt_am]
+impl LamellarAm for MultiMultiAdd {
+    async fn exec(self)  {
+        let add_fn = NEWBUFOPS.get(&TypeId::of::<usize>()).unwrap();
+        add_fn(&self.array, &self.idxs_vals);
+    }
+}
+
+// impl<T> From<MultiMultiAdd<T>> for MultiMultiAdd {
+//     fn from(am: MultiMultiAdd<T>) -> Self {
+//         let u8_vec
+//         Self { array: am.array, idx: am.idx, val: am.val, type_id: TypeId::of::<T>() }
+//     }
+// }
+
+// #[lamellar_impl::AmLocalDataRT]
+// struct MultiMultiAdd<T>{
+//     array: UnsafeArray<T>,
+//     idx: Vec<usize>,
+//     val: Vec<T>,
+// }
+
+// impl<T:  AmDist> MultiMultiAdd<T> {
+//     fn new(array: UnsafeArray<T>) -> Self {
+//         Self { array, idx: Vec::new(), val: Vec::new() }
+//     }
+// }
+
+// #[lamellar_impl::rt_am_local]
+// impl<T:  Dist + ElementArithmeticOps > LamellarAm for MultiMultiAdd<T> {
+//     async fn exec(self)  {
+//         let mut local_data = unsafe{self.array.mut_local_data()};
+//        for (idx,val) in self.idx.iter().zip(self.val.iter()) {
+//             local_data[*idx] += *val;
+//        }
+//     }
+// }
+
+#[lamellar_impl::AmLocalDataRT]
+struct SingleMultiAdd<T>{
+    array: UnsafeArray<T>,
+    idx: usize,
+    val: Vec<T>,
+}
+
+#[lamellar_impl::rt_am_local]
+impl<T:  Dist + ElementArithmeticOps > LamellarAm for SingleMultiAdd<T> {
+    async fn exec(self)  {
+        let mut local_data = unsafe{self.array.mut_local_data()};
+        for val in self.val.iter() {
+            local_data[self.idx] += *val;
+        }
+    }
+}
+
+#[lamellar_impl::AmLocalDataRT]
+struct MultiSingleAdd<T>{
+    array: UnsafeArray<T>,
+    idx: Vec<usize>,
+    val: T,
+}
+
+#[lamellar_impl::rt_am_local]
+impl<T:  Dist + ElementArithmeticOps> LamellarAm for MultiSingleAdd<T> {
+    async fn exec(self)  {
+        let mut local_data = unsafe{self.array.mut_local_data()};
+        for idx in self.idx.iter() {
+            local_data[*idx] += self.val;
+        }
+    }
+}
+
 
 impl<T: ElementOps + 'static> ReadOnlyOps<T> for UnsafeArray<T> {}
 

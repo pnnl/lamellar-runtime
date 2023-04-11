@@ -701,7 +701,7 @@ pub enum OpInputEnum<'a, T: Dist> {
     GenericAtomicLocalData(GenericAtomicLocalData<T>),
     LocalLockLocalData(LocalLockLocalData<'a, T>),
     GlobalLockLocalData(GlobalLockLocalData<'a, T>),
-    // Chunks(Chunks<'a, T>),
+    // Iter(Box<dyn Iterator<Item = T> + 'a>),
 
     // while it would be convienient to directly use the following, doing so
     // is ambiguous with respect to both safety (Memregions and UnsafeArray)
@@ -771,6 +771,18 @@ impl<'a, T: Dist> OpInputEnum<'_, T> {
         }
     }
 }
+
+// impl<'a, T: Dist> From<&T> for OpInputEnum<'a, T> {
+//     fn from(v: T) -> Self {
+//         OpInputEnum::Val(v)
+//     }
+// }
+
+// impl<'a, T: Dist, I: Iterator<Item=T>> From<I> for OpInputEnum<'a, T> {
+//     fn from(v: I) -> Self {
+//         OpInputEnum::Iterator(Box::new(v))
+//     }
+// }
 
 /// This trait is used to represent the input to a batched LamellarArray element-wise operation.
 ///

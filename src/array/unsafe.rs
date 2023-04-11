@@ -665,9 +665,24 @@ impl<T: Dist> From<UnsafeByteArray> for UnsafeArray<T> {
     }
 }
 
+impl<T: Dist> From<&UnsafeByteArray> for UnsafeArray<T> {
+    fn from(array: &UnsafeByteArray) -> Self {
+        UnsafeArray {
+            inner: array.inner.clone(),
+            phantom: PhantomData,
+        }
+    }
+}
+
 impl<T: Dist> From<UnsafeArray<T>> for UnsafeByteArray {
     fn from(array: UnsafeArray<T>) -> Self {
         UnsafeByteArray { inner: array.inner }
+    }
+}
+
+impl<T: Dist> From<&UnsafeArray<T>> for UnsafeByteArray {
+    fn from(array: &UnsafeArray<T>) -> Self {
+        UnsafeByteArray { inner: array.inner.clone() }
     }
 }
 
