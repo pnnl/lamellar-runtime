@@ -746,7 +746,7 @@ fn create_buf_ops(
                 let mut bufs = self.ops.lock();
                 // println!("into_arc_am got lock {} {:?} {:?}",pe,std::thread::current().id(),std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH));
 
-                // println!("buf len {:?}",buf.len());
+                // println!("buf len {:?}",bufs.len());
                 let mut ops = Vec::new();
                 let len = self.cur_len.load(Ordering::SeqCst);
                 // println!("into_arc_am: cur_len {}",len);
@@ -818,6 +818,7 @@ fn create_buf_ops(
         #[#am]
         impl LamellarAM for #am_buf_name{ //eventually we can return fetchs here too...
             async fn exec(&self) -> Vec<u8>{
+                // let timer=std::time::Instant::now();
                 // println!("trying to get lock {:?} {:?}",std::thread::current().id(),std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH));
                 #slice
                 let u8_len = self.res_buf_size;
@@ -835,6 +836,7 @@ fn create_buf_ops(
                 // let local_ops = self.get_ops(&lamellar::team).await;
                 // let local_ops_slice = local_ops.as_slice().unwrap();
                 let local_ops_slice = &self.ops;
+                // println!("local_ops_slice size: {:?}",local_ops_slice.len());
                 let mut cur_index = 0;
                 while cur_index <  local_ops_slice.len(){
                     let (bytes_read,(op,ops)) = self.get_op(&local_ops_slice[cur_index..]);
@@ -851,6 +853,7 @@ fn create_buf_ops(
                             }
                         },
                         RemoteOpAmInputToValue::ManyToOne(indices,val) => {
+                            // println!("many to one: indices: {:?} {:?}",indices.len(),val);
                             for index in indices{
                                 #inner_op
                             }
@@ -888,6 +891,7 @@ fn create_buf_ops(
                 //     }
                 // }
                 unsafe { results_u8.set_len(results_offset)};
+                // println!("elapsed: {:?}", timer.elapsed().as_secs_f64());
                 // println!("{:?} {:?} {:?} {:?}",results_u8.len(),u8_len,results_offset,results_u8);
                 results_u8
             }
@@ -909,6 +913,647 @@ fn create_buf_ops(
             #lamellar::array::#reg_name{
                 id: std::any::TypeId::of::<#typeident>(),
                 op: #dist_am_buf_name,
+            }
+        }
+    });
+    expanded
+}
+
+
+
+fn create_buf_ops2(
+    typeident: syn::Type,
+    array_type: syn::Ident,
+    byte_array_type: syn::Ident,
+    optypes: &Vec<OpType>,
+    rt: bool,
+) -> proc_macro2::TokenStream {
+    let lamellar = if rt {
+        quote::format_ident!("crate")
+    } else {
+        quote::format_ident!("__lamellar")
+    };
+
+    let (am_data, am): (syn::Path, syn::Path) = if rt {
+        (
+            syn::parse("lamellar_impl::AmDataRT".parse().unwrap()).unwrap(),
+            syn::parse("lamellar_impl::rt_am".parse().unwrap()).unwrap(),
+        )
+    } else {
+        (
+            syn::parse("lamellar::AmData".parse().unwrap()).unwrap(),
+            syn::parse("lamellar::am".parse().unwrap()).unwrap(),
+        )
+    };
+
+    let mut expanded = quote! {};
+    let (
+        lhs,
+        assign,
+        fetch_add,
+        fetch_sub,
+        fetch_mul,
+        fetch_div,
+        fetch_rem,
+        fetch_and,
+        fetch_or,
+        fetch_xor,
+        load,
+        swap,
+        compare_exchange,
+        compare_exchange_eps,
+        shl,
+        fetch_shl,
+        shr,
+        fetch_shr,
+    ) = if array_type == "NativeAtomicArray" {
+        let (_slice, val) = native_atomic_slice(&typeident, &lamellar);
+        (
+            quote! { #val },                                                           //lhs
+            quote! {slice[index].store(val, Ordering::SeqCst)},                        //assign
+            quote! {
+                // #res_t res_t[0] = slice[index].fetch_add(val, Ordering::SeqCst);
+            }, //fetch_add
+            quote! {
+                //#res_t res_t[0] = slice[index].fetch_sub(val, Ordering::SeqCst);
+            }, //fetch_sub
+            quote! { //fetch_mul
+                let mut old = slice[index].load(Ordering::SeqCst);
+                let mut new = old * val;
+                while slice[index].compare_exchange(old, new, Ordering::SeqCst, Ordering::SeqCst).is_err() {
+                    std::thread::yield_now();
+                    old = slice[index].load(Ordering::SeqCst);
+                    new = old * val;
+                }
+                // #res_t res_t[0] = old;
+            },
+            quote! { //fetch_div
+                let mut old = slice[index].load(Ordering::SeqCst);
+                let mut new = old / val;
+                while slice[index].compare_exchange(old, new, Ordering::SeqCst, Ordering::SeqCst).is_err() {
+                    std::thread::yield_now();
+                    old = slice[index].load(Ordering::SeqCst);
+                    new = old / val;
+                }
+                // #res_t res_t[0] = old;
+            },
+            quote! { //fetch_rem
+                let mut old = slice[index].load(Ordering::SeqCst);
+                let mut new = old % val;
+                while slice[index].compare_exchange(old, new, Ordering::SeqCst, Ordering::SeqCst).is_err() {
+                    std::thread::yield_now();
+                    old = slice[index].load(Ordering::SeqCst);
+                    new = old % val;
+                }
+                // #res_t res_t[0] = old;
+            },
+            quote! {
+                // #res_t res_t[0] = slice[index].fetch_and(val, Ordering::SeqCst);
+            }, //fetch_and
+            quote! {
+                // #res_t res_t[0] = slice[index].fetch_or(val, Ordering::SeqCst);
+            },  //fetch_or
+            quote! {
+                // #res_t res_t[0] = slice[index].fetch_xor(val, Ordering::SeqCst);
+            }, //fetch_or
+            quote! {slice[index].load(Ordering::SeqCst)},                              //load
+            quote! { //swap
+                let mut old = slice[index].load(Ordering::SeqCst);
+                while slice[index].compare_exchange(old, val, Ordering::SeqCst, Ordering::SeqCst).is_err() {
+                    std::thread::yield_now();
+                    old = slice[index].load(Ordering::SeqCst);
+                }
+                // #res_t res_t[0] = old;
+            },
+            quote! { //compare_exchange
+                // println!("native atomic");
+                // if val == 4 || val == 55527435{
+                //     println!(" am i insane? {} {} {} {:?} {:?}",val,index,slice[index].load(Ordering::SeqCst),std::thread::current().id(),std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH));
+                // }
+                let old = match slice[index].compare_exchange(old, val, Ordering::SeqCst, Ordering::SeqCst) {
+                    Ok(old) => {
+                        // results_u8[results_offset] = 0;
+                        // results_offset+=1;
+                        old
+                    },
+                    Err(old) => {
+                        // results_u8[results_offset] = 1;
+                        // results_offset+=1;
+                        old
+                    },
+                };
+                // #res_t res_t[0] = old;
+            },
+            quote! { //compare exchange epsilon
+                let old = match slice[index].compare_exchange(old, val, Ordering::SeqCst, Ordering::SeqCst) {
+                    Ok(orig) => { //woohoo dont need to do worry about the epsilon
+                        // results_u8[results_offset] = 0;
+                        // results_offset+=1;
+                        val
+                    },
+                    Err(orig) => { //we dont match exactly, so we need to do the epsilon check
+                        let mut done = false;
+                        let mut orig = orig;
+                        while (orig.abs_diff(old) as #typeident) < eps && !done{ //keep trying while under epsilon
+                            orig = match slice[index].compare_exchange(orig, val, Ordering::SeqCst, Ordering::SeqCst) {
+                                Ok(old_val) => { //we did it!
+                                    done = true;
+                                    old_val
+                                },
+                                Err(old_val) => { //someone else exchanged first!
+                                    old_val
+                                },
+                            }
+                        }
+                        if done{
+                            // results_u8[results_offset] = 0;
+                            // results_offset+=1;
+                        }
+                        else{
+                            // results_u8[results_offset] = 1;
+                            // results_offset+=1;
+                        }
+                        orig
+                    },
+                };
+                // #res_t res_t[0] = old;
+            },
+            quote! { //shl
+                let mut old = slice[index].load(Ordering::SeqCst);
+                let mut new = old << val;
+                while slice[index].compare_exchange(old, new, Ordering::SeqCst, Ordering::SeqCst).is_err() {
+                    std::thread::yield_now();
+                    old = slice[index].load(Ordering::SeqCst);
+                    new = old << val;
+                }
+            },
+            quote! { //fetch_shl
+                let mut old = slice[index].load(Ordering::SeqCst);
+                let mut new = old << val;
+                while slice[index].compare_exchange(old, new, Ordering::SeqCst, Ordering::SeqCst).is_err() {
+                    std::thread::yield_now();
+                    old = slice[index].load(Ordering::SeqCst);
+                    new = old << val;
+                }
+                // #res_t res_t[0] = old;
+            },
+            quote! { //shr
+                let mut old = slice[index].load(Ordering::SeqCst);
+                let mut new = old >> val;
+                while slice[index].compare_exchange(old, new, Ordering::SeqCst, Ordering::SeqCst).is_err() {
+                    std::thread::yield_now();
+                    old = slice[index].load(Ordering::SeqCst);
+                    new = old >> val;
+                }
+            },
+            quote! { //fetch_shr
+                let mut old = slice[index].load(Ordering::SeqCst);
+                let mut new = old >> val;
+                while slice[index].compare_exchange(old, new, Ordering::SeqCst, Ordering::SeqCst).is_err() {
+                    std::thread::yield_now();
+                    old = slice[index].load(Ordering::SeqCst);
+                    new = old >> val;
+                }
+                // #res_t res_t[0] = old;
+            },
+        )
+    } else if array_type == "ReadOnlyArray" {
+        (
+            quote! { panic!("assign a valid op for Read Only Arrays");}, //lhs
+            quote! { panic!("assign/store not a valid op for Read Only Arrays");}, //assign
+            quote! { panic!("fetch_add not a valid op for Read Only Arrays"); }, //fetch_add -- we lock the index before this point so its actually atomic
+            quote! { panic!("fetch_sub not a valid op for Read Only Arrays"); }, //fetch_sub --we lock the index before this point so its actually atomic
+            quote! { panic!("fetch_mul not a valid op for Read Only Arrays"); }, //fetch_mul --we lock the index before this point so its actually atomic
+            quote! { panic!("fetch_div not a valid op for Read Only Arrays"); }, //fetch_div --we lock the index before this point so its actually atomic
+            quote! { panic!("fetch_rem not a valid op for Read Only Arrays"); }, //fetch_rem --we lock the index before this point so its actually atomic
+            quote! { panic!("fetch_and not a valid op for Read Only Arrays"); }, //fetch_and --we lock the index before this point so its actually atomic
+            quote! { panic!("fetch_or not a valid op for Read Only Arrays"); }, //fetch_or --we lock the index before this point so its actually atomic
+            quote! { panic!("fetch_xor not a valid op for Read Only Arrays"); }, //fetch_xor --we lock the index before this point so its actually atomic
+            quote! {slice[index]},                                               //load
+            quote! { panic!("swap not a valid op for Read Only Arrays"); }, //swap we lock the index before this point so its actually atomic
+            quote! { panic!("compare exchange not a valid op for Read Only Arrays"); }, // compare_exchange -- we lock the index before this point so its actually atomic
+            quote! { panic!("compare exchange eps not a valid op for Read Only Arrays"); }, //compare exchange epsilon
+            quote! { panic!("shl not a valid op for Read Only Arrays"); },                  //shl
+            quote! { panic!("fetch_shl not a valid op for Read Only Arrays"); }, //fetch_shl
+            quote! { panic!("shr not a valid op for Read Only Arrays"); },       //shr
+            quote! { panic!("fetch_shr not a valid op for Read Only Arrays"); }, //fetch_shr
+        )
+    } else {
+        (
+            quote! {slice[index]},                                           //lhs
+            quote! {slice[index] = val},                                     //assign
+            quote! {
+                // #res_t res_t[0] =  slice[index]; slice[index] += val; 
+            }, //fetch_add -- we lock the index before this point so its actually atomic
+            quote! {
+                // #res_t res_t[0] =  slice[index]; slice[index] -= val; 
+            }, //fetch_sub --we lock the index before this point so its actually atomic
+            quote! {
+                // #res_t res_t[0] =  slice[index]; slice[index] *= val; 
+            }, //fetch_mul --we lock the index before this point so its actually atomic
+            quote! {
+                // #res_t res_t[0] =  slice[index]; slice[index] /= val; 
+            }, //fetch_div --we lock the index before this point so its actually atomic
+            quote! {
+                // #res_t res_t[0] =  slice[index]; slice[index] %= val; 
+            }, //fetch_rem --we lock the index before this point so its actually atomic
+            quote! {
+                // #res_t res_t[0] =  slice[index]; slice[index] &= val; 
+            }, //fetch_and --we lock the index before this point so its actually atomic
+            quote! {
+                // #res_t res_t[0] =  slice[index]; slice[index] |= val; 
+            }, //fetch_or --we lock the index before this point so its actually atomic
+            quote! {
+                // #res_t res_t[0] =  slice[index]; slice[index] ^= val; 
+            }, //fetch_xor --we lock the index before this point so its actually atomic
+            quote! {slice[index]},                                           //load
+            quote! {
+                // #res_t res_t[0] =  slice[index]; slice[index] = val; 
+            }, //swap we lock the index before this point so its actually atomic
+            quote! {  // compare_exchange -- we lock the index before this point so its actually atomic
+                // println!("old : {:?} val : {:?} s[i] {:?}", *old, val, slice[index]);
+                // println!("not native atomic, {:?}",stringify!(#array_type));
+                // let selected_val = val == 4 as #typeident || val == 55527435 as #typeident || val == 22 as #typeident || val == 290162221 as #typeident || val == 10000016 as #typeident ;
+                // if selected_val{
+                //     println!(" am i insane? val: {} index: {} old: {} cur: {} {} {:?} {:?}",val,index, old, slice[index], old == slice[index],std::thread::current().id(),std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH));
+                // }
+                 let old = if old == slice[index]{
+                    // println!("the same!");
+                    // if selected_val{
+                    //     println!(" the same!!! val: {} index: {} old: {} cur: {} {} {:?} {:?}",val,index, old, slice[index], old == slice[index],std::thread::current().id(),std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH));
+                    // }
+                    slice[index] = val;
+                    // results_u8[results_offset] = 0;
+                    // results_offset+=1;
+                    old
+                } else {
+                    // println!("different!");
+                    // if selected_val{
+                    //     println!(" different!!! val: {} index: {} old: {} cur: {} {} {:?} {:?}",val,index, old, slice[index], old == slice[index],std::thread::current().id(),std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH));
+                    // }
+                    // results_u8[results_offset] = 1;
+                    // results_offset+=1;
+                    slice[index]
+                };
+                // if selected_val{
+                //     println!(" after am i insane? val: {} index: {} old: {} cur: {} {:?} {:?}",val,index, old, slice[index],std::thread::current().id(),std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH));
+                // }
+                // #res_t res_t[0] = old;
+            },
+            quote! { //compare exchange epsilon
+                // let same = if *old > slice[index] {
+                //     *old - slice[index] < *eps
+                // }
+                // else{
+                //     slice[index] - *old < *eps
+                // };
+                let same = if old > slice[index] {
+                    old - slice[index] < eps
+                }
+                else{
+                    slice[index] - old < eps
+                };
+                let old = if same {
+                    slice[index] = val;
+                    // results_u8[results_offset] = 0;
+                    // results_offset+=1;
+                    old
+                } else {
+                    // results_u8[results_offset] = 1;
+                    // results_offset+=1;
+                    slice[index]
+                };
+                // #res_t res_t[0] = old;
+            },
+            quote! { slice[index] <<= val; }, //shl --we lock the index before this point so its actually atomic
+            quote! {
+                // #res_t res_t[0] =  slice[index]; slice[index] <<= val; 
+            }, //fetch_shl --we lock the index before this point so its actually atomic
+            quote! { slice[index] >>= val; }, //shr --we lock the index before this point so its actually atomic
+            quote! {
+                // #res_t res_t[0] =  slice[index]; slice[index] >>= val;
+            }, //fetch_shr --we lock the index before this point so its actually atomic
+        )
+    };
+    let (lock, slice) = if array_type == "GenericAtomicArray" {
+        (
+            quote! {let _lock = self.data.lock_index(index);},
+            quote! {let mut slice = unsafe{self.data.__local_as_mut_slice()};},
+        )
+    } else if array_type == "NativeAtomicArray" {
+        let (slice, _val) = native_atomic_slice(&typeident, &lamellar);
+        (
+            quote! {}, //no lock since its native atomic
+            quote! { #slice },
+        )
+    } else if array_type == "LocalLockArray" {
+        (
+            quote! {}, //no explicit lock since the slice handle is a lock guard
+            quote! {let mut slice = self.data.write_local_data();}, //this is the lock
+        )
+    } else if array_type == "GlobalLockArray" {
+        (
+            quote! {}, //no explicit lock since the slice handle is a lock guard
+            quote! {let mut slice = self.data.async_write_local_data().await;}, //this is the lock
+        )
+    } else if array_type == "ReadOnlyArray" {
+        (
+            quote! {}, //no explicit lock since the slice handle is a lock guard
+            quote! {let slice = self.data.local_data();}, //this is the lock
+        )
+    } else {
+        (
+            quote! {}, //no lock cause either readonly or unsafe
+            quote! {let mut slice = unsafe{self.data.mut_local_data()};},
+        )
+    };
+
+    let mut match_stmts = quote! {};
+    for optype in optypes {
+        match optype {
+            OpType::Arithmetic => match_stmts.extend(quote! {
+                ArrayOpCmd::Add=>{ 
+                    for elem in idx_vals{
+                        let index = elem.index;
+                        let val = elem.val;
+                        #lock
+                        #lhs += val 
+                    }
+                },
+                ArrayOpCmd::FetchAdd=> {
+                    // for elem in idx_vals{
+                    //     let index = elem.index;
+                    //     let val = elem.val;
+                    //     #lock
+                    //     #fetch_add
+                    // }
+                },
+                ArrayOpCmd::Sub=>{
+                    for elem in idx_vals{
+                        let index = elem.index;
+                        let val = elem.val;
+                        #lock
+                        #lhs -= val
+                    }
+                },
+                ArrayOpCmd::FetchSub=>{
+                    // for elem in idx_vals{
+                    //     let index = elem.index;
+                    //     let val = elem.val;
+                    //     #lock
+                    //     #fetch_sub
+                    // }
+                },
+                ArrayOpCmd::Mul=>{ 
+                    for elem in idx_vals{
+                        let index = elem.index;
+                        let val = elem.val;
+                        #lock
+                        #lhs *= val
+                    }
+                },
+                ArrayOpCmd::FetchMul=>{
+                    // for elem in idx_vals{
+                    //     let index = elem.index;
+                    //     let val = elem.val;
+                    //     #lock
+                    //     #fetch_mul
+                    // }
+                },
+                ArrayOpCmd::Div=>{ 
+                    for elem in idx_vals{
+                        let index = elem.index;
+                        let val = elem.val;
+                        #lock
+                        #lhs /= val 
+                    }
+                },
+                ArrayOpCmd::FetchDiv=>{
+                    // for elem in idx_vals{
+                    //     let index = elem.index;
+                    //     let val = elem.val;
+                    //     #lock
+                    //     #fetch_div
+                    // }
+                },
+                ArrayOpCmd::Rem=>{ 
+                    for elem in idx_vals{
+                        let index = elem.index;
+                        let val = elem.val;
+                        #lock
+                        #lhs %= val 
+                    }
+                },
+                ArrayOpCmd::FetchRem=>{
+                    // for elem in idx_vals{
+                    //     let index = elem.index;
+                    //     let val = elem.val;
+                    //     #lock
+                    //     #fetch_rem
+                    // }
+                },
+                ArrayOpCmd::Put => {
+                    for elem in idx_vals{
+                        let index = elem.index;
+                        let val = elem.val;
+                        #lock
+                        #assign
+                    }
+                },
+                ArrayOpCmd::Get =>{
+                    // for elem in idx_vals{
+                    //     let index = elem.index;
+                    //     let val = elem.val;
+                    //     #lock
+                    //     #res_t res_t[0] = #load;
+                    // }
+                }
+            }),
+            OpType::Bitwise => match_stmts.extend(quote! {
+                ArrayOpCmd::And=>{
+                    for elem in idx_vals{
+                        let index = elem.index;
+                        let val = elem.val;
+                        #lock
+                        #lhs &= val
+                    }
+                },
+                ArrayOpCmd::FetchAnd=>{
+                    // for elem in idx_vals{
+                    //     let index = elem.index;
+                    //     let val = elem.val;
+                    //     #lock
+                    //     #fetch_and
+                    // }
+                },
+                ArrayOpCmd::Or=>{
+                    for elem in idx_vals{
+                        let index = elem.index;
+                        let val = elem.val;
+                        #lock
+                        #lhs |= val
+                    }
+                },
+                ArrayOpCmd::FetchOr=>{
+                    // for elem in idx_vals{
+                    //     let index = elem.index;
+                    //     let val = elem.val;
+                    //     #lock
+                    //     #fetch_or
+                    // }
+                },
+                ArrayOpCmd::Xor=>{
+                    for elem in idx_vals{
+                        let index = elem.index;
+                        let val = elem.val;
+                        #lock
+                        #lhs ^= val
+                    }
+                },
+                ArrayOpCmd::FetchXor=>{
+                    // for elem in idx_vals{
+                    //     let index = elem.index;
+                    //     let val = elem.val;
+                    //     #lock
+                    //     #fetch_xor
+                    // }
+                },
+            }),
+            OpType::Access => match_stmts.extend(quote! {
+                ArrayOpCmd::Store=>{
+                    for elem in idx_vals{
+                        let index = elem.index;
+                        let val = elem.val;
+                        #lock
+                        #assign
+                    }
+                },
+                ArrayOpCmd::Swap=>{
+                    for elem in idx_vals{
+                        let index = elem.index;
+                        let val = elem.val;
+                        #lock
+                        #swap
+                    }
+                },
+            }),
+            OpType::CompEx => match_stmts.extend(quote! {
+                ArrayOpCmd::CompareExchange(old) =>{
+                    for elem in idx_vals{
+                        let index = elem.index;
+                        let val = elem.val;
+                        #lock
+                        // #compare_exchange
+                    }
+                }
+                ArrayOpCmd::CompareExchangeEps(old,eps) =>{
+                    for elem in idx_vals{
+                        let index = elem.index;
+                        let val = elem.val;
+                        #lock
+                        // #compare_exchange_eps
+                    }
+                }
+            }),
+            OpType::ReadOnly => match_stmts.extend(quote! {
+                ArrayOpCmd::Load=>{
+                    // for elem in idx_vals{
+                    //     let index = elem.index;
+                    //     let val = elem.val;
+                    //     #lock
+                    //     #res_t res_t[0] =  #load;
+                    // }
+                },
+            }),
+            OpType::Shift => match_stmts.extend(quote! {
+                ArrayOpCmd::Shl=>{
+                    for elem in idx_vals{
+                        let index = elem.index;
+                        let val = elem.val;
+                        #lock
+                        #shl
+                    }
+                },
+                ArrayOpCmd::FetchShl=>{
+                    // for elem in idx_vals{
+                    //     let index = elem.index;
+                    //     let val = elem.val;
+                    //     #lock
+                    //     #fetch_shl
+                    // }
+                },
+                ArrayOpCmd::Shr=>{
+                    for elem in idx_vals{
+                        let index = elem.index;
+                        let val = elem.val;
+                        #lock
+                        #shr
+                    }
+                },
+                ArrayOpCmd::FetchShr=>{
+                    // for elem in idx_vals{
+                    //     let index = elem.index;
+                    //     let val = elem.val;
+                    //     #lock
+                    //     #fetch_shr
+                    // }
+                },
+            }),
+        }
+    }
+    match_stmts.extend(quote!{
+        _=> unreachable!("op: {:?} should not be possible in this context", self.op),
+    });
+
+    // let buf_op_name = quote::format_ident!("{}_{}_op_buf", array_type, type_to_string(&typeident));
+    let multi_multi_am_buf_name = quote::format_ident!("{}_{}_multi_multi_am_buf", array_type, type_to_string(&typeident));
+    let dist_multi_multi_am_buf_name =
+        quote::format_ident!("{}_{}_multi_multi_am", array_type, type_to_string(&typeident));
+    let reg_name = quote::format_ident!("{}OpBufNew", array_type);
+
+    // let inner_op = quote! {
+    //     let index = elem.index;
+    //     let val = elem.val;
+    //     #lock //this will get dropped at end of loop
+    //     let orig = #load;
+    //     // println!("before op: {:?} index: {:?} val {:?} results_index {:?} orig {:?}",op,index,val,results_u8,orig);
+
+    //     match op{
+    //     # match_stmts
+    //     _ => {panic!("shouldnt happen {:?}",op)}
+    //     }
+    // };
+
+    expanded.extend(quote! {
+        #[#am_data(Debug)]
+        struct #multi_multi_am_buf_name{
+            data: #lamellar::array::#array_type<#typeident>,
+            op: #lamellar::array::ArrayOpCmd<usize>,
+            idx_vals: Vec<u8>,
+        }
+        #[#am]
+        impl LamellarAM for #multi_multi_am_buf_name{ //eventually we can return fetchs here too...
+            async fn exec(&self) {
+                #slice
+                let idx_vals = unsafe {std::slice::from_raw_parts(self.idx_vals.as_ptr() as *const IdxVal<#typeident>, self.idx_vals.len()/std::mem::size_of::<IdxVal<#typeident>>())};
+                match self.op {
+                    #match_stmts
+                }
+            }
+        }
+        #[allow(non_snake_case)]
+        fn #dist_multi_multi_am_buf_name(array: #lamellar::array::#byte_array_type, op: #lamellar::array::ArrayOpCmd<usize>, idx_vals: Vec<u8>) -> Arc<dyn RemoteActiveMessage + Sync + Send>{
+                Arc::new(#multi_multi_am_buf_name{
+                    data: array.into(),
+                    op: op,
+                    idx_vals: idx_vals,
+                })
+        }
+        inventory::submit! {
+            // #![crate = #lamellar]
+            #lamellar::array::#reg_name{
+                id: std::any::TypeId::of::<#typeident>(),
+                op: #dist_multi_multi_am_buf_name,
             }
         }
     });
@@ -938,14 +1583,16 @@ fn create_buffered_ops(
         quote::format_ident!("__lamellar")
     };
 
-    let mut atomic_array_types: Vec<(syn::Ident, syn::Ident)> = vec![
+    let mut atomic_array_types: Vec<(syn::Ident, syn::Ident, syn::Ident)> = vec![
         (
             quote::format_ident!("LocalLockArray"),
             quote::format_ident!("LocalLockByteArrayWeak"),
+            quote::format_ident!("LocalLockByteArray"),
         ),
         (
             quote::format_ident!("GlobalLockArray"),
             quote::format_ident!("GlobalLockByteArrayWeak"),
+            quote::format_ident!("GlobalLockByteArray"),
         ),
     ];
 
@@ -953,11 +1600,13 @@ fn create_buffered_ops(
         atomic_array_types.push((
             quote::format_ident!("NativeAtomicArray"),
             quote::format_ident!("NativeAtomicByteArrayWeak"),
+            quote::format_ident!("NativeAtomicByteArray"),
         ));
     } else {
         atomic_array_types.push((
             quote::format_ident!("GenericAtomicArray"),
             quote::format_ident!("GenericAtomicByteArrayWeak"),
+            quote::format_ident!("GenericAtomicByteArray"),
         ));
     }
 
@@ -973,6 +1622,14 @@ fn create_buffered_ops(
         rt,
     );
     expanded.extend(buf_op_impl);
+    let buf_op_impl = create_buf_ops2(
+        typeident.clone(),
+        quote::format_ident!("ReadOnlyArray"),
+        quote::format_ident!("ReadOnlyByteArray"),
+        &ro_optypes,
+        rt,
+    );
+    expanded.extend(buf_op_impl);
 
     let buf_op_impl = create_buf_ops(
         typeident.clone(),
@@ -983,15 +1640,32 @@ fn create_buffered_ops(
     );
     expanded.extend(buf_op_impl);
 
-    for (array_type, byte_array_type) in atomic_array_types {
+    let buf_op_impl = create_buf_ops2(
+        typeident.clone(),
+        quote::format_ident!("UnsafeArray"),
+        quote::format_ident!("UnsafeByteArray"),
+        &optypes,
+        rt,
+    );
+    expanded.extend(buf_op_impl);
+
+    for (array_type, byte_array_type_weak, byte_array_type) in atomic_array_types {
         let buf_op_impl = create_buf_ops(
+            typeident.clone(),
+            array_type.clone(),
+            byte_array_type_weak.clone(),
+            &optypes,
+            rt,
+        );
+        expanded.extend(buf_op_impl);
+        let buf_op_impl = create_buf_ops2(
             typeident.clone(),
             array_type.clone(),
             byte_array_type.clone(),
             &optypes,
             rt,
         );
-        expanded.extend(buf_op_impl)
+        expanded.extend(buf_op_impl);
     }
 
     let user_expanded = quote_spanned! {expanded.span()=>
@@ -1217,3 +1891,5 @@ pub(crate) fn __derive_arrayops(input: TokenStream) -> TokenStream {
     ));
     TokenStream::from(output)
 }
+
+

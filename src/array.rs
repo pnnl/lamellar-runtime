@@ -111,10 +111,10 @@ pub mod prelude;
 
 pub(crate) mod r#unsafe;
 pub use r#unsafe::{
-    operations::UnsafeArrayOpBuf, UnsafeArray, UnsafeByteArray, UnsafeByteArrayWeak,
+    operations::{UnsafeArrayOpBuf,UnsafeArrayOpBufNew}, UnsafeArray, UnsafeByteArray, UnsafeByteArrayWeak,
 };
 pub(crate) mod read_only;
-pub use read_only::{ReadOnlyArray, ReadOnlyArrayOpBuf, ReadOnlyByteArray, ReadOnlyByteArrayWeak};
+pub use read_only::{ReadOnlyArray, ReadOnlyArrayOpBuf, ReadOnlyArrayOpBufNew, ReadOnlyByteArray, ReadOnlyByteArrayWeak};
 
 // pub(crate) mod local_only;
 // pub use local_only::LocalOnlyArray;
@@ -130,25 +130,25 @@ pub use atomic::{
 
 pub(crate) mod generic_atomic;
 pub use generic_atomic::{
-    operations::GenericAtomicArrayOpBuf, GenericAtomicArray, GenericAtomicByteArray,
+    operations::{GenericAtomicArrayOpBuf,GenericAtomicArrayOpBufNew}, GenericAtomicArray, GenericAtomicByteArray,
     GenericAtomicByteArrayWeak, GenericAtomicLocalData,
 };
 
 pub(crate) mod native_atomic;
 pub use native_atomic::{
-    operations::NativeAtomicArrayOpBuf, NativeAtomicArray, NativeAtomicByteArray,
+    operations::{NativeAtomicArrayOpBuf,NativeAtomicArrayOpBufNew}, NativeAtomicArray, NativeAtomicByteArray,
     NativeAtomicByteArrayWeak, NativeAtomicLocalData,
 };
 
 pub(crate) mod local_lock_atomic;
 pub use local_lock_atomic::{
-    operations::LocalLockArrayOpBuf, LocalLockArray, LocalLockByteArray, LocalLockByteArrayWeak,
+    operations::{LocalLockArrayOpBuf,LocalLockArrayOpBufNew}, LocalLockArray, LocalLockByteArray, LocalLockByteArrayWeak,
     LocalLockLocalData, LocalLockMutLocalData,
 };
 
 pub(crate) mod global_lock_atomic;
 pub use global_lock_atomic::{
-    operations::GlobalLockArrayOpBuf, GlobalLockArray, GlobalLockByteArray,
+    operations::{GlobalLockArrayOpBuf,GlobalLockArrayOpBufNew}, GlobalLockArray, GlobalLockByteArray,
     GlobalLockByteArrayWeak, GlobalLockLocalData, GlobalLockMutLocalData,
 };
 

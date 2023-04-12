@@ -4,11 +4,19 @@ use std::any::TypeId;
 use std::collections::HashMap;
 
 type BufFn = fn(NativeAtomicByteArrayWeak) -> Arc<dyn BufferOp>;
-
+type OpFn = fn(NativeAtomicByteArray,ArrayOpCmd<usize>,Vec<u8>) -> LamellarArcAm;
 lazy_static! {
     pub(crate) static ref BUFOPS: HashMap<TypeId, BufFn> = {
         let mut map = HashMap::new();
         for op in crate::inventory::iter::<NativeAtomicArrayOpBuf> {
+            map.insert(op.id.clone(), op.op);
+        }
+        map
+    };
+
+    pub(crate) static ref NEWBUFOPS: HashMap<TypeId, OpFn> = {
+        let mut map = HashMap::new();
+        for op in crate::inventory::iter::<NativeAtomicArrayOpBufNew> {
             map.insert(op.id.clone(), op.op);
         }
         map
@@ -21,7 +29,15 @@ pub struct NativeAtomicArrayOpBuf {
     pub op: BufFn,
 }
 
+#[doc(hidden)]
+pub struct NativeAtomicArrayOpBufNew {
+    pub id: TypeId,
+    pub op: OpFn,
+}
+
 crate::inventory::collect!(NativeAtomicArrayOpBuf);
+
+crate::inventory::collect!(NativeAtomicArrayOpBufNew);
 
 impl<T: ElementOps + 'static> ReadOnlyOps<T> for NativeAtomicArray<T> {}
 

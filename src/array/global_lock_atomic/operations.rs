@@ -4,11 +4,20 @@ use std::any::TypeId;
 use std::collections::HashMap;
 
 type BufFn = fn(GlobalLockByteArrayWeak) -> Arc<dyn BufferOp>;
+type OpFn = fn(GlobalLockByteArray,ArrayOpCmd<usize>,Vec<u8>) -> LamellarArcAm;
 
 lazy_static! {
     pub(crate) static ref BUFOPS: HashMap<TypeId, BufFn> = {
         let mut map = HashMap::new();
         for op in crate::inventory::iter::<GlobalLockArrayOpBuf> {
+            map.insert(op.id.clone(), op.op);
+        }
+        map
+    };
+
+    pub(crate) static ref NEWBUFOPS: HashMap<TypeId, OpFn> = {
+        let mut map = HashMap::new();
+        for op in crate::inventory::iter::<GlobalLockArrayOpBufNew> {
             map.insert(op.id.clone(), op.op);
         }
         map
@@ -21,7 +30,15 @@ pub struct GlobalLockArrayOpBuf {
     pub op: BufFn,
 }
 
+#[doc(hidden)]
+pub struct GlobalLockArrayOpBufNew {
+    pub id: TypeId,
+    pub op: OpFn,
+}
+
 crate::inventory::collect!(GlobalLockArrayOpBuf);
+
+crate::inventory::collect!(GlobalLockArrayOpBufNew);
 
 impl<T: ElementOps + 'static> ReadOnlyOps<T> for GlobalLockArray<T> {}
 

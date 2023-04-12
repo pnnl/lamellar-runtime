@@ -10,10 +10,20 @@ use std::sync::Arc;
 
 type BufFn = fn(ReadOnlyByteArrayWeak) -> Arc<dyn BufferOp>;
 
+type OpFn = fn(ReadOnlyByteArray,ArrayOpCmd<usize>,Vec<u8>) -> LamellarArcAm;
+
 lazy_static! {
     pub(crate) static ref BUFOPS: HashMap<TypeId, BufFn> = {
         let mut map = HashMap::new();
         for op in crate::inventory::iter::<ReadOnlyArrayOpBuf> {
+            map.insert(op.id.clone(), op.op);
+        }
+        map
+    };
+
+    pub(crate) static ref NEWBUFOPS: HashMap<TypeId, OpFn> = {
+        let mut map: HashMap<TypeId, OpFn> = HashMap::new();
+        for op in crate::inventory::iter::<ReadOnlyArrayOpBufNew> {
             map.insert(op.id.clone(), op.op);
         }
         map
@@ -26,7 +36,14 @@ pub struct ReadOnlyArrayOpBuf {
     pub op: BufFn,
 }
 
+#[doc(hidden)]
+pub struct ReadOnlyArrayOpBufNew {
+    pub id: TypeId,
+    pub op: OpFn,
+}
+
 crate::inventory::collect!(ReadOnlyArrayOpBuf);
+crate::inventory::collect!(ReadOnlyArrayOpBufNew);
 
 /// A safe abstraction of a distributed array, providing only read access.
 #[lamellar_impl::AmDataRT(Clone, Debug)]

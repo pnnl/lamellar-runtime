@@ -351,6 +351,20 @@ impl<T: Dist> ArrayOpCmd<T> {
 }
 
 #[doc(hidden)]
+#[repr(C)] //required as we reinterpret as bytes
+#[lamellar_impl::AmLocalDataRT]
+pub struct IdxVal<T>{
+    pub index: usize,
+    pub val: T,
+}
+
+impl<T> IdxVal<T> {
+    pub fn as_bytes(&self) -> &[u8] {
+        unsafe { std::slice::from_raw_parts(self as *const Self as *const u8, std::mem::size_of::<Self>()) }
+    }
+}
+
+#[doc(hidden)]
 #[derive(serde::Serialize, Clone, Debug)]
 pub enum InputToValue<'a, T: Dist> {
     OneToOne(usize, T),
