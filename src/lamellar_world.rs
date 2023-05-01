@@ -16,7 +16,8 @@ use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::sync::Arc; //, Weak};
+use std::sync::{Arc};
+use pin_weak::sync::PinWeak;
 
 lazy_static! {
     pub(crate) static ref LAMELLAES: RwLock<HashMap<Backend, Arc<Lamellae>>> =
@@ -436,6 +437,31 @@ impl LamellarWorldBuilder {
             .write()
             .insert(lamellae.backend(), lamellae.clone());
 
+        let weak_rt = PinWeak::downgrade(team_rt.clone());
+        std::panic::set_hook(Box::new(move |panic_info|{
+            if let Some(s) = panic_info.payload().downcast_ref::<&str>() {
+                println!("panic occurred: {s:?}");
+            } else {
+                println!("panic occurred");
+            }
+            if let Some(location) = panic_info.location() {
+                println!("panic occurred in file '{}' at line {}",
+                    location.file(),
+                    location.line(),
+                );
+            } else {
+                println!("panic occurred but can't get location information...");
+            }
+            
+            if let Some(rt) = weak_rt.upgrade(){
+                println!("trying to shutdown Lamellar Runtime gracefully");
+                rt.force_shutdown();
+            }
+            else {
+                println!("unable to shutdown Lamellar Runtime gracefully");
+            }
+
+        }));
         world.barrier();
         world
     }

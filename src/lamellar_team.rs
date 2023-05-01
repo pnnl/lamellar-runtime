@@ -699,6 +699,11 @@ impl LamellarTeamRT {
         team
     }
 
+    pub(crate) fn force_shutdown(&self) {
+        self.scheduler.force_shutdown();
+    }
+
+
     #[tracing::instrument(skip_all)]
     pub(crate) fn destroy(&self) {
         // println!("destroying team? {:?}", self.mem_regions.read().len());

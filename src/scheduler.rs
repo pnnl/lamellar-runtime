@@ -75,6 +75,7 @@ pub(crate) trait AmeSchedulerQueue {
         F: Future;
 
     fn shutdown(&self);
+    fn force_shutdown(&self);
     fn active(&self) -> bool;
 }
 
@@ -103,6 +104,7 @@ pub(crate) trait SchedulerQueue {
     where
         F: Future;
     fn shutdown(&self);
+    fn force_shutdown(&self);
     fn active(&self) -> bool;
 }
 
