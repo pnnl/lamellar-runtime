@@ -571,6 +571,9 @@ impl CommOps for ShmemComm {
     fn iget_relative<T: Remote>(&self, pe: usize, src_addr: usize, dst_addr: &mut [T]) {
         self.get(pe, src_addr + self.base_addr(), dst_addr);
     }
+    fn force_shutdown(&self){
+        
+    }
 }
 
 impl Drop for ShmemComm {

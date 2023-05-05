@@ -15,7 +15,7 @@ use futures::Future;
 use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::pin::Pin;
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, AtomicU8, Ordering};
 use std::sync::{Arc};
 use pin_weak::sync::PinWeak;
 
@@ -226,8 +226,10 @@ impl Drop for LamellarWorld {
         let cnt = self.ref_cnt.fetch_sub(1, Ordering::SeqCst);
         if cnt == 1 {
             // println!("[{:?}] world dropping", self.my_pe);
-            self.wait_all();
-            self.barrier();
+            if self.team.panic.load(Ordering::SeqCst) < 2{
+                self.wait_all();
+                self.barrier();
+            }
 
             self.team_rt.destroy();
             LAMELLAES.write().clear();
@@ -402,9 +404,11 @@ impl LamellarWorldBuilder {
         // let teams = Arc::new(RwLock::new(HashMap::new()));
         let mut lamellae_builder = create_lamellae(self.primary_lamellae);
         let (my_pe, num_pes) = lamellae_builder.init_fabric();
+        let panic = Arc::new(AtomicU8::new(0));
         let sched_new = Arc::new(create_scheduler(
             self.scheduler,
             num_pes,
+            panic.clone(),
             // my_pe,
             // teams.clone(),
         ));
@@ -417,6 +421,7 @@ impl LamellarWorldBuilder {
             sched_new.clone(),
             counters.clone(),
             lamellae.clone(),
+            panic.clone(),
             // teams.clone(),
         );
 
@@ -438,29 +443,22 @@ impl LamellarWorldBuilder {
             .insert(lamellae.backend(), lamellae.clone());
 
         let weak_rt = PinWeak::downgrade(team_rt.clone());
+        // let panics = team_rt.panic_info.clone();
         std::panic::set_hook(Box::new(move |panic_info|{
-            if let Some(s) = panic_info.payload().downcast_ref::<&str>() {
-                println!("panic occurred: {s:?}");
-            } else {
-                println!("panic occurred");
-            }
-            if let Some(location) = panic_info.location() {
-                println!("panic occurred in file '{}' at line {}",
-                    location.file(),
-                    location.line(),
-                );
-            } else {
-                println!("panic occurred but can't get location information...");
-            }
+            // panics.lock().push(format!("{panic_info}"));
+            // for p in panics.lock().iter(){
+            //     println!("{p}");
+            // }
+            println!("{panic_info}");
             
             if let Some(rt) = weak_rt.upgrade(){
-                println!("trying to shutdown Lamellar Runtime gracefully");
+                println!("trying to shutdown Lamellar Runtime");
                 rt.force_shutdown();
             }
             else {
                 println!("unable to shutdown Lamellar Runtime gracefully");
             }
-
+            // std::process::exit(1);
         }));
         world.barrier();
         world

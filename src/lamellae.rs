@@ -170,6 +170,8 @@ pub(crate) trait LamellaeComm: LamellaeAM + LamellaeRDMA {
     fn MB_sent(&self) -> f64;
     fn print_stats(&self);
     fn shutdown(&self);
+    fn force_shutdown(&self);
+    fn force_deinit(&self);
 }
 
 #[async_trait]

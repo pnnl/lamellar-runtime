@@ -18,7 +18,7 @@ use rand::prelude::*;
 // use std::collections::HashMap;
 use std::panic;
 use std::process;
-use std::sync::atomic::{AtomicBool, AtomicU8, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicU8, AtomicUsize, Ordering};
 use std::sync::Arc; //, Weak};
 use std::thread;
 // use std::time::Instant;
@@ -34,6 +34,7 @@ pub(crate) struct WorkStealingThread {
     work_q: Worker<async_task::Runnable>,
     work_flag: Arc<AtomicU8>,
     active: Arc<AtomicU8>,
+    panic: Arc<AtomicU8>,
 }
 
 //#[prof]
@@ -54,9 +55,9 @@ impl WorkStealingThread {
             let t = rand::distributions::Uniform::from(0..worker.work_stealers.len());
             let mut timer = std::time::Instant::now();
             // let mut cur_tasks = num_tasks.load(Ordering::SeqCst);
-            while (worker.active.load(Ordering::SeqCst) == ACTIVE
+            while worker.panic.load(Ordering::SeqCst) == 0 && (worker.active.load(Ordering::SeqCst) == ACTIVE
                 || !(worker.work_q.is_empty() && worker.work_inj.is_empty())
-                || num_tasks.load(Ordering::SeqCst) > 1) && worker.active.load(Ordering::SeqCst) != PANIC
+                || num_tasks.load(Ordering::SeqCst) > 1)
             {
                 // let ot = Instant::now();
                 // if cur_tasks != num_tasks.load(Ordering::SeqCst){
@@ -139,6 +140,7 @@ pub(crate) struct WorkStealingInner {
     active_cnt: Arc<AtomicUsize>,
     num_tasks: Arc<AtomicUsize>,
     stall_mark: Arc<AtomicUsize>,
+    panic: Arc<AtomicU8>,
 }
 
 impl AmeSchedulerQueue for WorkStealingInner {
@@ -276,8 +278,8 @@ impl AmeSchedulerQueue for WorkStealingInner {
         // println!("work stealing shuting down {:?}", self.active());
         self.active.store(FINISHED, Ordering::SeqCst);
         // println!("work stealing shuting down {:?}",self.active());
-        while self.active_cnt.load(Ordering::Relaxed) > 2
-            || self.num_tasks.load(Ordering::Relaxed) > 2
+        while self.panic.load(Ordering::SeqCst) == 0 && (self.active_cnt.load(Ordering::Relaxed) > 0 //num active threads
+            || self.num_tasks.load(Ordering::Relaxed) > 2)
         {
             //this should be the recvtask, and alloc_task
             std::thread::yield_now()
@@ -291,16 +293,28 @@ impl AmeSchedulerQueue for WorkStealingInner {
     }
 
     #[tracing::instrument(skip_all)]
+    fn shutdown_threads(&self) {
+        self.active.store(FINISHED, Ordering::SeqCst);
+    }
+
+    #[tracing::instrument(skip_all)]
     fn force_shutdown(&self) {
         // println!("work stealing shuting down {:?}", self.active());
         self.active.store(PANIC, Ordering::SeqCst);
         // println!("work stealing shuting down {:?}",self.active());
-        // while self.active_cnt.load(Ordering::Relaxed) > 2
-        //     || self.num_tasks.load(Ordering::Relaxed) > 2
-        // {
-        //     //this should be the recvtask, and alloc_task
-        //     std::thread::yield_now()
-        // }
+        let my_id = std::thread::current().id();
+        if self.threads.iter().any(|e| e.thread().id() == my_id){
+            // while self.active_cnt.load(Ordering::Relaxed) > 1 {//num active threads -- wait for all but myself
+            //     std::thread::yield_now()
+            // }
+            self.active_cnt.fetch_sub(1, Ordering::SeqCst); // I paniced so I wont actually decrement
+        }
+        else {
+            while self.active_cnt.load(Ordering::Relaxed) > 0 {//num active threads
+                self.exec_task();
+                std::thread::yield_now()
+            }
+        }
         // println!(
         //     "work stealing shut down {:?} {:?} {:?}",
         //     self.active(),
@@ -333,7 +347,7 @@ impl AmeSchedulerQueue for WorkStealingInner {
     #[tracing::instrument(skip_all)]
     fn active(&self) -> bool {
         // println!("sched active {:?} {:?}",self.active.load(Ordering::SeqCst) , self.num_tasks.load(Ordering::SeqCst));
-        self.active.load(Ordering::SeqCst) == ACTIVE || self.num_tasks.load(Ordering::SeqCst) > 2
+        self.active.load(Ordering::SeqCst) == ACTIVE || self.num_tasks.load(Ordering::SeqCst) > 3
     }
 }
 
@@ -390,6 +404,10 @@ impl SchedulerQueue for WorkStealing {
         self.inner.shutdown();
     }
 
+    fn shutdown_threads(&self) {
+        self.inner.shutdown_threads();
+    }
+
     fn force_shutdown(&self) {
         self.inner.force_shutdown();
     }
@@ -401,7 +419,7 @@ impl SchedulerQueue for WorkStealing {
 //#[prof]
 impl WorkStealingInner {
     #[tracing::instrument(skip_all)]
-    pub(crate) fn new(stall_mark: Arc<AtomicUsize>) -> WorkStealingInner {
+    pub(crate) fn new(stall_mark: Arc<AtomicUsize>, panic: Arc<AtomicU8>,) -> WorkStealingInner {
         // println!("new work stealing queue");
 
         let mut sched = WorkStealingInner {
@@ -413,6 +431,7 @@ impl WorkStealingInner {
             active_cnt: Arc::new(AtomicUsize::new(0)),
             num_tasks: Arc::new(AtomicUsize::new(0)),
             stall_mark: stall_mark,
+            panic: panic,
         };
         sched.init();
         sched
@@ -449,6 +468,7 @@ impl WorkStealingInner {
                 work_q: work_worker,
                 work_flag: self.work_flag.clone(),
                 active: self.active.clone(),
+                panic: self.panic.clone(),
                 // num_tasks: self.num_tasks.clone(),
             };
             self.threads.push(WorkStealingThread::run(
@@ -473,13 +493,14 @@ impl WorkStealing {
     #[tracing::instrument(skip_all)]
     pub(crate) fn new(
         num_pes: usize,
+        panic: Arc<AtomicU8>,
         // my_pe: usize,
         // teams: Arc<RwLock<HashMap<u64, Weak<LamellarTeamRT>>>>,
     ) -> WorkStealing {
         // println!("new work stealing queue");
         let stall_mark = Arc::new(AtomicUsize::new(0));
         let inner = Arc::new(AmeScheduler::WorkStealingInner(WorkStealingInner::new(
-            stall_mark.clone(),
+            stall_mark.clone(), panic.clone(),
         )));
 
         let batcher = match std::env::var("LAMELLAR_BATCHER") {

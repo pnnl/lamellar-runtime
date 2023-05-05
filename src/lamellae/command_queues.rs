@@ -48,6 +48,7 @@ enum Cmd {
     Print,
     Tx,
     Alloc,
+    Panic,
 }
 
 #[tracing::instrument(skip_all)]
@@ -309,6 +310,7 @@ impl CmdMsgBuffer {
                 // Cmd::Free => panic!("should not free before release"),
                 Cmd::Print => panic!("shoud not encounter Print here"),
                 Cmd::Alloc => panic!("should not encounter alloc here"),
+                Cmd::Panic => panic!("should not encounter panic here"),
             }
         } else {
             false
@@ -327,6 +329,7 @@ impl CmdMsgBuffer {
                 Cmd::Clear => panic!("should not clear before release"),
                 Cmd::Print => panic!("shoud not encounter Print here"),
                 Cmd::Alloc => panic!("should not encounter alloc here"),
+                Cmd::Panic => panic!("should not encounter panic here"),
             }
         }
         for buf_addr in freed_bufs {
@@ -397,6 +400,7 @@ struct InnerCQ {
     recv_buffer: Arc<Mutex<Box<[CmdMsg]>>>,
     free_buffer: Arc<Mutex<Box<[CmdMsg]>>>,
     alloc_buffer: Arc<Mutex<Box<[CmdMsg]>>>,
+    panic_buffer: Arc<Mutex<Box<[CmdMsg]>>>,
     cmd_buffers: Vec<Mutex<CmdMsgBuffer>>,
     release_cmd: Arc<Box<CmdMsg>>,
     clear_cmd: Arc<Box<CmdMsg>>,
@@ -410,6 +414,7 @@ struct InnerCQ {
     recv_cnt: Arc<AtomicUsize>,
     put_amt: Arc<AtomicUsize>,
     get_amt: Arc<AtomicUsize>,
+    active: Arc<AtomicU8>,
 }
 
 impl InnerCQ {
@@ -419,6 +424,7 @@ impl InnerCQ {
         recv_buffer_addr: usize,
         free_buffer_addr: usize,
         alloc_buffer_addr: usize,
+        panic_buffer_addr: usize,
         cmd_buffers_addrs: &Vec<Arc<Vec<usize>>>,
         release_cmd_addr: usize,
         clear_cmd_addr: usize,
@@ -426,6 +432,7 @@ impl InnerCQ {
         comm: Arc<Comm>,
         my_pe: usize,
         num_pes: usize,
+        active: Arc<AtomicU8>,
     ) -> InnerCQ {
         let mut cmd_buffers = vec![];
         let mut pe = 0;
@@ -493,6 +500,20 @@ impl InnerCQ {
             (*cmd).calc_hash();
         }
 
+        let mut panic_buffer = unsafe {
+            Box::from_raw(std::ptr::slice_from_raw_parts_mut(
+                panic_buffer_addr as *mut CmdMsg,
+                num_pes,
+            ))
+        };
+        for cmd in panic_buffer.iter_mut() {
+            (*cmd).daddr = 0;
+            (*cmd).dsize = 0;
+            (*cmd).cmd = Cmd::Clear;
+            (*cmd).msg_hash = 0;
+            (*cmd).calc_hash();
+        }
+
         let mut release_cmd = unsafe { Box::from_raw(release_cmd_addr as *mut CmdMsg) };
         release_cmd.daddr = 1;
         release_cmd.dsize = 1;
@@ -523,6 +544,7 @@ impl InnerCQ {
             recv_buffer: Arc::new(Mutex::new(recv_buffer)),
             free_buffer: Arc::new(Mutex::new(free_buffer)),
             alloc_buffer: Arc::new(Mutex::new(alloc_buffer)),
+            panic_buffer: Arc::new(Mutex::new(panic_buffer)),
             cmd_buffers: cmd_buffers,
             release_cmd: Arc::new(release_cmd),
             clear_cmd: Arc::new(clear_cmd),
@@ -536,6 +558,7 @@ impl InnerCQ {
             recv_cnt: Arc::new(AtomicUsize::new(0)),
             put_amt: Arc::new(AtomicUsize::new(0)),
             get_amt: Arc::new(AtomicUsize::new(0)),
+            active: active,
         }
     }
 
@@ -570,6 +593,7 @@ impl InnerCQ {
                     res
                 }
                 Cmd::Alloc => panic!("should not encounter alloc here"),
+                Cmd::Panic => panic!("should not encounter panic here"),
             }
         } else {
             None
@@ -593,6 +617,29 @@ impl InnerCQ {
                 self.send_alloc_inner(&mut alloc_buf, min_size);
             }
         }
+    }
+
+    #[tracing::instrument(skip_all)]
+    fn check_panic(&self) -> bool{
+        if let Some(panic_buf) = self.panic_buffer.try_lock() {
+            let mut paniced = false;
+            for pe in 0..self.num_pes {
+                if panic_buf[pe].cmd != Cmd::Clear {
+                    println!("panic_buf {:?}",panic_buf[pe]);
+                }
+                if panic_buf[pe].check_hash() && panic_buf[pe].cmd == Cmd::Panic {
+                    println!("panic_buf passed hash check{:?}",panic_buf[pe]);
+                    paniced = true;
+                    break;
+                }
+            }
+            if paniced {
+                self.active.store(CmdQStatus::Panic as u8 , Ordering::SeqCst);
+                return true;
+                // shutdown
+            }
+        }
+        return false;
     }
 
     #[tracing::instrument(skip_all)]
@@ -643,7 +690,7 @@ impl InnerCQ {
         // }
         let mut timer = std::time::Instant::now();
         self.pending_cmds.fetch_add(1, Ordering::SeqCst);
-        loop {
+        while self.active.load(Ordering::SeqCst) != CmdQStatus::Panic as u8 {
             {
                 //this is to tell the compiler we wont hold the mutex lock if we have to yield
                 let span = trace_span!("send loop 1");
@@ -679,7 +726,7 @@ impl InnerCQ {
             async_std::task::yield_now().await;
         }
         let mut im_waiting = false;
-        loop {
+        while self.active.load(Ordering::SeqCst) != CmdQStatus::Panic as u8{
             {
                 let span = trace_span!("send loop 2");
                 let _guard = span.enter();
@@ -739,6 +786,12 @@ impl InnerCQ {
     }
 
     #[tracing::instrument(skip_all)]
+    fn send_panic(&self) {
+        let mut panic_buf = self.panic_buffer.lock();
+        self.send_panic_inner(&mut panic_buf);
+    }
+
+    #[tracing::instrument(skip_all)]
     fn send_alloc_inner(&self, alloc_buf: &mut Box<[CmdMsg]>, min_size: usize) {
         if alloc_buf[self.my_pe].hash() == self.clear_cmd.hash() {
             let cmd = &mut alloc_buf[self.my_pe];
@@ -784,6 +837,25 @@ impl InnerCQ {
     }
 
     #[tracing::instrument(skip_all)]
+    fn send_panic_inner(&self, panic_buf: &mut Box<[CmdMsg]>) {
+        if panic_buf[self.my_pe].hash() == self.clear_cmd.hash() {
+            let cmd = &mut panic_buf[self.my_pe];
+            cmd.daddr = 0;
+            cmd.dsize = 0;
+            cmd.cmd = Cmd::Panic;
+            cmd.msg_hash = 0;
+            cmd.calc_hash();
+            for pe in 0..self.num_pes {
+                if pe != self.my_pe {
+                    println!("putting panic cmd to pe {:?} {cmd:?}",pe);
+                    self.comm.iput(pe, cmd.as_bytes(), cmd.as_addr()); // not sure if we need to make this put incase the other PEs are already down
+                }
+            }
+        }
+        
+    }
+
+    #[tracing::instrument(skip_all)]
     fn send_release(&self, dst: usize, cmd: CmdMsg) {
         // let cmd_buffer = self.cmd_buffers[dst].lock();
         // println!("sending release: {:?} cmd: {:?} {:?} {:?} 0x{:x} 0x{:x}",self.release_cmd,cmd,self.release_cmd.cmd_as_bytes(), cmd.cmd_as_bytes(),self.release_cmd.cmd_as_addr(),cmd.daddr + offset_of!(CmdMsg,cmd));
@@ -810,7 +882,7 @@ impl InnerCQ {
     #[tracing::instrument(skip_all)]
     async fn send_print(&self, dst: usize, cmd: CmdMsg) {
         let mut timer = std::time::Instant::now();
-        loop {
+        while self.active.load(Ordering::SeqCst) != CmdQStatus::Panic as u8 {
             {
                 // let mut cmd_buffer = self.cmd_buffers[dst].lock();
                 let mut send_buf = self.send_buffer.lock();
@@ -867,7 +939,7 @@ impl InnerCQ {
         self.comm.iget(src, local_daddr as usize, data_slice);
         // self.get_amt.fetch_add(data_slice.len(),Ordering::Relaxed);
         let mut timer = std::time::Instant::now();
-        while calc_hash(data_slice.as_ptr() as usize, data_slice.len()) != cmd.msg_hash {
+        while calc_hash(data_slice.as_ptr() as usize, data_slice.len()) != cmd.msg_hash && self.active.load(Ordering::SeqCst) != CmdQStatus::Panic as u8{
             async_std::task::yield_now().await;
             if timer.elapsed().as_secs_f64() > 15.0 {
                 println!(
@@ -892,7 +964,7 @@ impl InnerCQ {
         self.comm.iget(src, local_daddr as usize, data_slice);
         // self.get_amt.fetch_add(data_slice.len(),Ordering::Relaxed);
         let mut timer = std::time::Instant::now();
-        while calc_hash(data_slice.as_ptr() as usize, ser_data.len()) != cmd.msg_hash {
+        while calc_hash(data_slice.as_ptr() as usize, ser_data.len()) != cmd.msg_hash  && self.active.load(Ordering::SeqCst) != CmdQStatus::Panic as u8{
             async_std::task::yield_now().await;
             if timer.elapsed().as_secs_f64() > 15.0 {
                 println!(
@@ -914,7 +986,7 @@ impl InnerCQ {
         let mut ser_data = self.comm.new_serialized_data(cmd.dsize as usize);
         let mut timer = std::time::Instant::now();
         // let mut print = false;
-        while ser_data.is_err() {
+        while ser_data.is_err() && self.active.load(Ordering::SeqCst) != CmdQStatus::Panic as u8 {
             async_std::task::yield_now().await;
             // println!("cq 848 need to alloc memory {:?}",cmd.dsize);
             self.send_alloc(cmd.dsize);
@@ -955,7 +1027,7 @@ impl InnerCQ {
     async fn get_cmd_buf(&self, src: usize, cmd: CmdMsg) -> usize {
         let mut data = self.comm.rt_alloc(cmd.dsize as usize);
         let mut timer = std::time::Instant::now();
-        while data.is_err() {
+        while data.is_err() && self.active.load(Ordering::SeqCst) != CmdQStatus::Panic as u8{
             async_std::task::yield_now().await;
             // println!("cq 871 need to alloc memory {:?}",cmd.dsize);
             self.send_alloc(cmd.dsize);
@@ -993,6 +1065,9 @@ impl Drop for InnerCQ {
         Box::into_raw(old);
         let mut alloc_buffer = self.alloc_buffer.lock();
         let old = std::mem::take(&mut *alloc_buffer);
+        Box::into_raw(old);
+        let mut panic_buffer = self.panic_buffer.lock();
+        let old = std::mem::take(&mut *panic_buffer);
         Box::into_raw(old);
         let old = std::mem::replace(
             Arc::get_mut(&mut self.release_cmd).unwrap(),
@@ -1038,16 +1113,18 @@ pub(crate) struct CommandQueue {
     recv_buffer_addr: usize,
     free_buffer_addr: usize,
     alloc_buffer_addr: usize,
+    panic_buffer_addr: usize,
     release_cmd_addr: usize,
     clear_cmd_addr: usize,
     free_cmd_addr: usize,
     cmd_buffers_addrs: Vec<Arc<Vec<usize>>>,
     comm: Arc<Comm>,
+    active: Arc<AtomicU8>,
 }
 
 impl CommandQueue {
     #[tracing::instrument(skip_all)]
-    pub fn new(comm: Arc<Comm>, my_pe: usize, num_pes: usize) -> CommandQueue {
+    pub fn new(comm: Arc<Comm>, my_pe: usize, num_pes: usize,  active: Arc<AtomicU8>,) -> CommandQueue {
         let send_buffer_addr = comm
             .rt_alloc(num_pes * std::mem::size_of::<CmdMsg>())
             .unwrap();
@@ -1067,6 +1144,10 @@ impl CommandQueue {
             .rt_alloc(num_pes * std::mem::size_of::<CmdMsg>())
             .unwrap();
         // println!("alloc_buffer_addr {:x}",alloc_buffer_addr);
+        let panic_buffer_addr = comm
+            .rt_alloc(num_pes * std::mem::size_of::<CmdMsg>())
+            .unwrap();
+        // println!("panic_buffer_addr {:x}",panic_buffer_addr);
         let release_cmd_addr = comm.rt_alloc(std::mem::size_of::<CmdMsg>()).unwrap(); // + comm.base_addr();
                                                                                       // println!("release_cmd_addr {:x}",release_cmd_addr-comm.base_addr());
 
@@ -1093,6 +1174,7 @@ impl CommandQueue {
             recv_buffer_addr,
             free_buffer_addr,
             alloc_buffer_addr,
+            panic_buffer_addr,
             &cmd_buffers_addrs.clone(),
             release_cmd_addr,
             clear_cmd_addr,
@@ -1100,6 +1182,7 @@ impl CommandQueue {
             comm.clone(),
             my_pe,
             num_pes,
+            active.clone(),
         );
         CommandQueue {
             cq: Arc::new(cq),
@@ -1107,17 +1190,24 @@ impl CommandQueue {
             recv_buffer_addr: recv_buffer_addr,
             free_buffer_addr: free_buffer_addr,
             alloc_buffer_addr: alloc_buffer_addr,
+            panic_buffer_addr: panic_buffer_addr,
             release_cmd_addr: release_cmd_addr,
             clear_cmd_addr: clear_cmd_addr,
             free_cmd_addr: free_cmd_addr,
             cmd_buffers_addrs: cmd_buffers_addrs,
             comm: comm,
+            active: active,
         }
     }
 
     #[tracing::instrument(skip_all)]
     pub fn send_alloc(&self, min_size: usize) {
         self.cq.send_alloc(min_size)
+    }
+
+    #[tracing::instrument(skip_all)]
+    pub fn send_panic(&self) {
+        self.cq.send_panic()
     }
 
     #[tracing::instrument(skip_all)]
@@ -1149,10 +1239,26 @@ impl CommandQueue {
     }
 
     #[tracing::instrument(skip_all)]
-    pub async fn alloc_task(&self, scheduler: Arc<Scheduler>, _active: Arc<AtomicU8>) {
-        while scheduler.active() {
+    pub async fn alloc_task(&self, scheduler: Arc<Scheduler>) {
+        while scheduler.active() && self.active.load(Ordering::SeqCst) != CmdQStatus::Panic as u8{
             self.cq.check_alloc();
             async_std::task::yield_now().await;
+        }
+        // println!("leaving alloc_task task {:?}", scheduler.active());
+    }
+
+    #[tracing::instrument(skip_all)]
+    pub async fn panic_task(&self, scheduler: Arc<Scheduler>) {
+        let mut panic = false;
+        while scheduler.active() && !panic{
+            panic = self.cq.check_panic();
+            async_std::task::yield_now().await;
+        }
+
+        if panic {
+            println!("received panic from other PE");
+            // scheduler.force_shutdown();
+            panic!("received panic from other PE");
         }
         // println!("leaving alloc_task task {:?}", scheduler.active());
     }
@@ -1162,12 +1268,11 @@ impl CommandQueue {
         &self,
         scheduler: Arc<Scheduler>,
         lamellae: Arc<Lamellae>,
-        active: Arc<AtomicU8>,
     ) {
         let num_pes = lamellae.num_pes();
         let my_pe = lamellae.my_pe();
         // let mut timer= std::time::Instant::now();
-        while active.load(Ordering::SeqCst) == 1u8 || !self.cq.empty() || scheduler.active() {
+        while self.active.load(Ordering::SeqCst) == CmdQStatus::Active as u8 || !self.cq.empty() || scheduler.active() {
             for src in 0..num_pes {
                 if src != my_pe {
                     if let Some(cmd_buf_cmd) = self.cq.ready(src) {
@@ -1176,6 +1281,7 @@ impl CommandQueue {
                         // println!("recv_data {:?}",cmd_buf_cmd);
                         match cmd_buf_cmd.cmd {
                             Cmd::Alloc => panic!("should not encounter alloc here"),
+                            Cmd::Panic => panic!("should not encounter panic here"),
                             Cmd::Clear | Cmd::Release => {
                                 panic!("should not be possible to see cmd clear or release here")
                             }
@@ -1258,7 +1364,7 @@ impl CommandQueue {
             async_std::task::yield_now().await;
         }
         // println!("leaving recv_data task {:?}", scheduler.active());
-        active.store(2, Ordering::SeqCst);
+        self.active.store(CmdQStatus::Finished as u8, Ordering::SeqCst);
     }
 
     #[tracing::instrument(skip_all)]
@@ -1281,6 +1387,7 @@ impl Drop for CommandQueue {
         self.comm.rt_free(self.recv_buffer_addr); // - self.comm.base_addr());
         self.comm.rt_free(self.free_buffer_addr); // - self.comm.base_addr());
         self.comm.rt_free(self.alloc_buffer_addr);
+        self.comm.rt_free(self.panic_buffer_addr);
         self.comm.rt_free(self.release_cmd_addr); // - self.comm.base_addr());
         self.comm.rt_free(self.clear_cmd_addr); // - self.comm.base_addr());
         self.comm.rt_free(self.free_cmd_addr); // - self.comm.base_addr());
