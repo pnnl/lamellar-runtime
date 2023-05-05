@@ -6,6 +6,7 @@ use futures::Future;
 #[cfg(feature = "enable-prof")]
 use lamellar_prof::*;
 use std::sync::Arc;
+use std::sync::atomic::AtomicU8;
 
 pub(crate) mod work_stealing;
 use work_stealing::{WorkStealing, WorkStealingInner};
@@ -75,6 +76,7 @@ pub(crate) trait AmeSchedulerQueue {
         F: Future;
 
     fn shutdown(&self);
+    fn shutdown_threads(&self);
     fn force_shutdown(&self);
     fn active(&self) -> bool;
 }
@@ -104,6 +106,7 @@ pub(crate) trait SchedulerQueue {
     where
         F: Future;
     fn shutdown(&self);
+    fn shutdown_threads(&self);
     fn force_shutdown(&self);
     fn active(&self) -> bool;
 }
@@ -111,12 +114,13 @@ pub(crate) trait SchedulerQueue {
 pub(crate) fn create_scheduler(
     sched: SchedulerType,
     num_pes: usize,
+    panic: Arc<AtomicU8>,
     // my_pe: usize,
     // teams: Arc<RwLock<HashMap<u64, Weak<LamellarTeamRT>>>>,
 ) -> Scheduler {
     match sched {
         SchedulerType::WorkStealing => {
-            Scheduler::WorkStealing(work_stealing::WorkStealing::new(num_pes))
+            Scheduler::WorkStealing(work_stealing::WorkStealing::new(num_pes,panic))
         } // SchedulerType::NumaWorkStealing => {
           //     Scheduler::NumaWorkStealing(numa_work_stealing::NumaWorkStealing::new(num_pes))
           // }

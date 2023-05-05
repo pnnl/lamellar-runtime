@@ -114,6 +114,8 @@ impl LamellaeComm for Local {
     }
     fn print_stats(&self) {}
     fn shutdown(&self) {}
+    fn force_shutdown(&self) {}
+    fn force_deinit(&self) {}
 }
 
 //#[prof]

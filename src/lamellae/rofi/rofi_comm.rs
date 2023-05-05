@@ -606,6 +606,10 @@ impl CommOps for RofiComm {
         // println!("[{:?}]- gc: {:?} pc: {:?} iget_relative exit",self.my_pe,self.get_cnt.load(Ordering::SeqCst),self.put_cnt.load(Ordering::SeqCst));
         // println!("[{:?}]-({:?}) iget relative [{:?}] exit",self.my_pe,thread::current().id(),pe);
     }
+
+    fn force_shutdown(&self){
+        let _res = rofi_finit();
+    }
 }
 
 //#[prof]

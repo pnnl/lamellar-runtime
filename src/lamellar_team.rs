@@ -23,7 +23,7 @@ use parking_lot::Mutex;
 use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::marker::PhantomPinned;
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicU8, AtomicUsize,AtomicBool, Ordering};
 use std::sync::Arc; //, Weak};
 use std::time::{Duration, Instant};
 
@@ -84,6 +84,7 @@ pub struct LamellarTeam {
     pub(crate) world: Option<Arc<LamellarTeam>>,
     pub(crate) team: Pin<Arc<LamellarTeamRT>>,
     pub(crate) am_team: bool,
+    pub(crate) panic: Arc<AtomicU8>,
 }
 
 //#[prof]
@@ -101,11 +102,13 @@ impl LamellarTeam {
         //     println!{"new lam team: {:?} {:?} {:?} {:?}",&team_ptr,team_ptr, (team.remote_ptr_addr as *mut (*const LamellarTeamRT)).as_ref(), (*(team.remote_ptr_addr as *mut (*const LamellarTeamRT))).as_ref()};
 
         // }
+        let panic = team.panic.clone();
         let the_team = Arc::new(LamellarTeam {
             world,
             team,
             // teams,
             am_team,
+            panic,
         });
         // unsafe{
         //     let pinned_team = Pin::into_inner_unchecked(the_team.team.clone()).clone();
@@ -144,6 +147,8 @@ impl LamellarTeam {
     #[allow(dead_code)]
     #[tracing::instrument(skip_all)]
     pub fn get_pes(&self) -> Vec<usize> {
+        assert!(self.panic.load(Ordering::SeqCst) == 0);
+
         self.team.arch.team_iter().collect::<Vec<usize>>()
     }
 
@@ -172,6 +177,8 @@ impl LamellarTeam {
     ///```
     #[tracing::instrument(skip_all)]
     pub fn num_pes(&self) -> usize {
+        assert!(self.panic.load(Ordering::SeqCst) == 0);
+
         self.team.arch.num_pes()
     }
 
@@ -201,6 +208,8 @@ impl LamellarTeam {
     ///```
     #[tracing::instrument(skip_all)]
     pub fn world_pe_id(&self) -> usize {
+        assert!(self.panic.load(Ordering::SeqCst) == 0);
+
         self.team.world_pe
     }
 
@@ -232,6 +241,8 @@ impl LamellarTeam {
     ///```
     #[tracing::instrument(skip_all)]
     pub fn team_pe_id(&self) -> Result<usize, IdError> {
+        assert!(self.panic.load(Ordering::SeqCst) == 0);
+
         self.team.arch.team_pe(self.team.world_pe)
     }
 
@@ -264,6 +275,7 @@ impl LamellarTeam {
     where
         L: LamellarArch + std::hash::Hash + 'static,
     {
+        assert!(parent.panic.load(Ordering::SeqCst) == 0);
         let world = if let Some(world) = &parent.world {
             world.clone()
         } else {
@@ -302,6 +314,8 @@ impl LamellarTeam {
     ///```
     #[tracing::instrument(skip_all)]
     pub fn print_arch(&self) {
+        assert!(self.panic.load(Ordering::SeqCst) == 0);
+
         self.team.print_arch()
     }
 
@@ -328,6 +342,8 @@ impl LamellarTeam {
     ///```
     #[tracing::instrument(skip_all)]
     pub fn barrier(&self) {
+        assert!(self.panic.load(Ordering::SeqCst) == 0);
+
         self.team.barrier()
     }
 }
@@ -349,6 +365,8 @@ impl ActiveMessaging for Arc<LamellarTeam> {
     where
         F: RemoteActiveMessage + LamellarAM + Serde + AmDist,
     {
+        assert!(self.panic.load(Ordering::SeqCst) == 0);
+
         // trace!("[{:?}] team exec am all request", self.team.world_pe);
         self.team.exec_am_all_tg(am, None).into_future()
     }
@@ -358,6 +376,8 @@ impl ActiveMessaging for Arc<LamellarTeam> {
     where
         F: RemoteActiveMessage + LamellarAM + Serde + AmDist,
     {
+        assert!(self.panic.load(Ordering::SeqCst) == 0);
+
         self.team.exec_am_pe_tg(pe, am, None).into_future()
     }
 
@@ -366,16 +386,22 @@ impl ActiveMessaging for Arc<LamellarTeam> {
     where
         F: LamellarActiveMessage + LocalAM + 'static,
     {
+        assert!(self.panic.load(Ordering::SeqCst) == 0);
+
         self.team.exec_am_local_tg(am, None).into_future()
     }
 
     #[tracing::instrument(skip_all)]
     fn wait_all(&self) {
+        assert!(self.panic.load(Ordering::SeqCst) == 0);
+
         self.team.wait_all();
     }
 
     #[tracing::instrument(skip_all)]
     fn barrier(&self) {
+        assert!(self.panic.load(Ordering::SeqCst) == 0);
+
         self.team.barrier();
     }
 
@@ -383,6 +409,8 @@ impl ActiveMessaging for Arc<LamellarTeam> {
     where
         F: Future,
     {
+        assert!(self.panic.load(Ordering::SeqCst) == 0);
+
         trace_span!("block_on").in_scope(|| self.team.scheduler.block_on(f))
     }
 }
@@ -390,6 +418,8 @@ impl ActiveMessaging for Arc<LamellarTeam> {
 impl RemoteMemoryRegion for Arc<LamellarTeam> {
     #[tracing::instrument(skip_all)]
     fn alloc_shared_mem_region<T: Dist>(&self, size: usize) -> SharedMemoryRegion<T> {
+        assert!(self.panic.load(Ordering::SeqCst) == 0);
+
         self.team.barrier.barrier();
         let mr: SharedMemoryRegion<T> = if self.team.num_world_pes == self.team.num_pes {
             SharedMemoryRegion::new(size, self.team.clone(), AllocationType::Global)
@@ -406,6 +436,8 @@ impl RemoteMemoryRegion for Arc<LamellarTeam> {
 
     #[tracing::instrument(skip_all)]
     fn alloc_one_sided_mem_region<T: Dist>(&self, size: usize) -> OneSidedMemoryRegion<T> {
+        assert!(self.panic.load(Ordering::SeqCst) == 0);
+
         let mut lmr = OneSidedMemoryRegion::try_new(size, &self.team, self.team.lamellae.clone());
         while let Err(_err) = lmr {
             std::thread::yield_now();
@@ -531,6 +563,9 @@ pub struct LamellarTeamRT {
     dropped: MemoryRegion<usize>,
     pub(crate) remote_ptr_addr: usize,
     pub(crate) team_hash: u64,
+    pub(crate) panic: Arc<AtomicU8>,
+    pub(crate) tid: std::thread::ThreadId,
+    // pub(crate) main_panic: Arc<AtomicBool>,
     _pin: std::marker::PhantomPinned,
 }
 
@@ -561,6 +596,7 @@ impl LamellarTeamRT {
         scheduler: Arc<Scheduler>,
         world_counters: Arc<AMCounters>,
         lamellae: Arc<Lamellae>,
+        panic: Arc<AtomicU8>,
         // teams: Arc<RwLock<HashMap<u64, Weak<LamellarTeamRT>>>>,
     ) -> Pin<Arc<LamellarTeamRT>> {
         let arch = Arc::new(LamellarArchRT {
@@ -595,11 +631,15 @@ impl LamellarTeamRT {
                 lamellae.clone(),
                 arch.clone(),
                 scheduler.clone(),
+                panic.clone()
             ),
             dropped: MemoryRegion::new(num_pes, lamellae.clone(), alloc.clone()),
             remote_ptr_addr: lamellae
                 .alloc(std::mem::size_of::<*const LamellarTeamRT>(), alloc)
                 .unwrap(),
+            panic: panic.clone(),
+            tid: std::thread::current().id(),
+            // panic_info: Arc::new(Mutex::new(Vec::new())),
             _pin: PhantomPinned,
         };
 
@@ -644,57 +684,96 @@ impl LamellarTeamRT {
     }
 
     pub(crate) fn force_shutdown(&self) {
+        // println!("force_shutdown {:?} {:?}",self.tid, std::thread::current().id());
+        let first = self.panic.compare_exchange(0,1,Ordering::SeqCst,Ordering::SeqCst).is_ok();
+        if self.tid == std::thread::current().id() {
+            self.panic.store(2,Ordering::SeqCst);
+        }
         self.scheduler.force_shutdown();
+        if first {
+            self.lamellae.force_shutdown();
+        }
+        // if self.panic.compare_exchange(false,true,Ordering::SeqCst,Ordering::SeqCst).is_ok(){
+            // println!("Im first! {:?} {:?}",self.tid, std::thread::current().id());
+            
+        if self.tid == std::thread::current().id() {
+            // println!("Im main thread!");
+            self.mem_regions.write().clear();
+            self.sub_teams.write().clear();
+            // std::process::exit(1);
+            self.lamellae.force_deinit();
+            // std::process::exit(1);
+        }
+        // // }
+        // else if self.tid == std::thread::current().id() {
+        //     println!("Im main thread!");
+        //     self.scheduler.force_shutdown();
+        //     self.lamellae.force_shutdown();
+        //     self.mem_regions.write().clear();
+        //     self.sub_teams.write().clear();
+        //     // 
+        //     self.lamellae.force_deinit();
+        //     std::process::exit(1);
+        // }
+        // println!("force_shutdown done {:?} {:?}",self.tid, std::thread::current().id());
     }
 
 
     #[tracing::instrument(skip_all)]
     pub(crate) fn destroy(&self) {
         // println!("destroying team? {:?}", self.mem_regions.read().len());
-        // println!(
-        //     "in team destroy mype: {:?} cnt: {:?} {:?}",
-        //     self.world_pe,
-        //     self.team_counters.send_req_cnt.load(Ordering::SeqCst),
-        //     self.team_counters.outstanding_reqs.load(Ordering::SeqCst),
-        // );
-        // for _lmr in self.mem_regions.read().iter() {
-        //     // println!("lmr {:?}",_lmr);
-        //     //TODO: i have a gut feeling we might have an issue if a mem region was destroyed on one node, but not another
-        //     // add a barrier method that takes a message so if we are stuck in the barrier for a long time we can say that
-        //     // this is probably mismatched frees.
-        //     self.barrier.barrier();
-        // }
-        // println!("sechduler_new: {:?}", Arc::strong_count(&self.scheduler));
-        // println!("lamellae: {:?}", Arc::strong_count(&self.lamellae));
-        // println!("arch: {:?}", Arc::strong_count(&self.arch));
-        // println!(
-        //     "world_counters: {:?}",
-        //     Arc::strong_count(&self.world_counters)
-        // );
-        self.wait_all();
-        self.mem_regions.write().clear();
-        self.sub_teams.write().clear(); // not sure this is necessary or should be allowed? sub teams delete themselves from this map when dropped...
-                                        // what does it mean if we drop a parent team while a sub_team is valid?
-        if let None = &self.parent {
-            // println!("shutdown lamellae, going to shutdown scheduler");
-            self.scheduler.shutdown();
-            self.put_dropped();
-            self.drop_barrier();
-            self.lamellae.shutdown();
+        if self.panic.load(Ordering::SeqCst) ==0 {
+            
+            
+            // println!(
+            //     "in team destroy mype: {:?} cnt: {:?} {:?}",
+            //     self.world_pe,
+            //     self.team_counters.send_req_cnt.load(Ordering::SeqCst),
+            //     self.team_counters.outstanding_reqs.load(Ordering::SeqCst),
+            // );
+            // for _lmr in self.mem_regions.read().iter() {
+            //     // println!("lmr {:?}",_lmr);
+            //     //TODO: i have a gut feeling we might have an issue if a mem region was destroyed on one node, but not another
+            //     // add a barrier method that takes a message so if we are stuck in the barrier for a long time we can say that
+            //     // this is probably mismatched frees.
+            //     self.barrier.barrier();
+            // }
+            // println!("sechduler_new: {:?}", Arc::strong_count(&self.scheduler));
+            // println!("lamellae: {:?}", Arc::strong_count(&self.lamellae));
+            // println!("arch: {:?}", Arc::strong_count(&self.arch));
+            // println!(
+            //     "world_counters: {:?}",
+            //     Arc::strong_count(&self.world_counters)
+            // );
+            self.wait_all();
         }
-        // println!("sechduler_new: {:?}", Arc::strong_count(&self.scheduler));
-        // println!("lamellae: {:?}", Arc::strong_count(&self.lamellae));
-        // println!("arch: {:?}", Arc::strong_count(&self.arch));
-        // println!(
-        //     "world_counters: {:?}",
-        //     Arc::strong_count(&self.world_counters)
-        // );
-        // println!(
-        //     "in team destroy mype: {:?} cnt: {:?} {:?}",
-        //     self.world_pe,
-        //     self.team_counters.send_req_cnt.load(Ordering::SeqCst),
-        //     self.team_counters.outstanding_reqs.load(Ordering::SeqCst),
-        // );
+            self.mem_regions.write().clear();
+            self.sub_teams.write().clear(); // not sure this is necessary or should be allowed? sub teams delete themselves from this map when dropped...
+              
+        if  self.panic.load(Ordering::SeqCst) ==0 {// what does it mean if we drop a parent team while a sub_team is valid?
+            if let None = &self.parent {
+                // println!("shutdown lamellae, going to shutdown scheduler");
+                self.scheduler.shutdown_threads();
+                self.put_dropped();
+                self.drop_barrier();
+                self.lamellae.shutdown();
+                self.scheduler.shutdown();
+                
+            }
+        }
+            // println!("sechduler_new: {:?}", Arc::strong_count(&self.scheduler));
+            // println!("lamellae: {:?}", Arc::strong_count(&self.lamellae));
+            // println!("arch: {:?}", Arc::strong_count(&self.arch));
+            // println!(
+            //     "world_counters: {:?}",
+            //     Arc::strong_count(&self.world_counters)
+            // );
+            // println!(
+            //     "in team destroy mype: {:?} cnt: {:?} {:?}",
+            //     self.world_pe,
+            //     self.team_counters.send_req_cnt.load(Ordering::SeqCst),
+            //     self.team_counters.outstanding_reqs.load(Ordering::SeqCst),
+            // );
         // println!("team destroyed")
     }
     #[allow(dead_code)]
@@ -798,10 +877,14 @@ impl LamellarTeamRT {
                     parent.lamellae.clone(),
                     archrt,
                     parent.scheduler.clone(),
+                    parent.panic.clone(),
                 ),
                 team_hash: hash,
                 dropped: temp_buf,
                 remote_ptr_addr: remote_ptr_addr,
+                panic: parent.panic.clone(),
+                tid: parent.tid,
+                // panic_info: parent.panic_info.clone(),
                 _pin: PhantomPinned,
             };
             unsafe {
@@ -890,36 +973,38 @@ impl LamellarTeamRT {
 
     #[tracing::instrument(skip_all)]
     fn put_dropped(&self) {
-        if let Some(parent) = &self.parent {
-            let temp_slice = unsafe { self.dropped.as_mut_slice().unwrap() };
+        if self.panic.load(Ordering::SeqCst) ==0 {
+            if let Some(parent) = &self.parent {
+                let temp_slice = unsafe { self.dropped.as_mut_slice().unwrap() };
 
-            let my_index = parent
-                .arch
-                .team_pe(self.world_pe)
-                .expect("invalid parent pe");
-            temp_slice[my_index] = 1;
-            for world_pe in self.arch.team_iter() {
-                if world_pe != self.world_pe {
-                    unsafe {
-                        self.dropped.put_slice(
-                            world_pe,
-                            my_index,
-                            &temp_slice[my_index..=my_index],
-                        );
+                let my_index = parent
+                    .arch
+                    .team_pe(self.world_pe)
+                    .expect("invalid parent pe");
+                temp_slice[my_index] = 1;
+                for world_pe in self.arch.team_iter() {
+                    if world_pe != self.world_pe {
+                        unsafe {
+                            self.dropped.put_slice(
+                                world_pe,
+                                my_index,
+                                &temp_slice[my_index..=my_index],
+                            );
+                        }
                     }
                 }
-            }
-        } else {
-            let temp_slice = unsafe { self.dropped.as_mut_slice().unwrap() };
-            temp_slice[self.world_pe] = 1;
-            for world_pe in self.arch.team_iter() {
-                if world_pe != self.world_pe {
-                    unsafe {
-                        self.dropped.put_slice(
-                            world_pe,
-                            self.world_pe,
-                            &temp_slice[self.world_pe..=self.world_pe],
-                        );
+            } else {
+                let temp_slice = unsafe { self.dropped.as_mut_slice().unwrap() };
+                temp_slice[self.world_pe] = 1;
+                for world_pe in self.arch.team_iter() {
+                    if world_pe != self.world_pe {
+                        unsafe {
+                            self.dropped.put_slice(
+                                world_pe,
+                                self.world_pe,
+                                &temp_slice[self.world_pe..=self.world_pe],
+                            );
+                        }
                     }
                 }
             }
@@ -929,19 +1014,21 @@ impl LamellarTeamRT {
     #[tracing::instrument(skip_all)]
     fn drop_barrier(&self) {
         let mut s = Instant::now();
-        for pe in self.dropped.as_slice().unwrap() {
-            while *pe != 1 {
-                // std::thread::yield_now();
-                if s.elapsed().as_secs_f64() > *crate::DEADLOCK_TIMEOUT {
-                    println!("[WARNING]  Potential deadlock detected when trying to drop a LamellarTeam.\n\
-                        The following indicates the dropped status on each PE: {:?}\n\
-                        The deadlock timeout can be set via the LAMELLAR_DEADLOCK_TIMEOUT environment variable, the current timeout is {} seconds\n\
-                        To view backtrace set RUST_LIB_BACKTRACE=1\n\
-                        {}",
-                        self.dropped.as_slice(),
-                        *crate::DEADLOCK_TIMEOUT,
-                        std::backtrace::Backtrace::capture());
-                    s = Instant::now();
+        if self.panic.load(Ordering::SeqCst) ==0 {
+            for pe in self.dropped.as_slice().unwrap() {
+                while *pe != 1 {
+                    // std::thread::yield_now();
+                    if s.elapsed().as_secs_f64() > *crate::DEADLOCK_TIMEOUT {
+                        println!("[WARNING]  Potential deadlock detected when trying to drop a LamellarTeam.\n\
+                            The following indicates the dropped status on each PE: {:?}\n\
+                            The deadlock timeout can be set via the LAMELLAR_DEADLOCK_TIMEOUT environment variable, the current timeout is {} seconds\n\
+                            To view backtrace set RUST_LIB_BACKTRACE=1\n\
+                            {}",
+                            self.dropped.as_slice(),
+                            *crate::DEADLOCK_TIMEOUT,
+                            std::backtrace::Backtrace::capture());
+                        s = Instant::now();
+                    }
                 }
             }
         }
@@ -985,9 +1072,9 @@ impl LamellarTeamRT {
     #[tracing::instrument(skip_all)]
     fn wait_all(&self) {
         let mut temp_now = Instant::now();
-        while self.team_counters.outstanding_reqs.load(Ordering::SeqCst) > 0
+        while self.panic.load(Ordering::SeqCst) == 0  && (self.team_counters.outstanding_reqs.load(Ordering::SeqCst) > 0
             || (self.parent.is_none()
-                && self.world_counters.outstanding_reqs.load(Ordering::SeqCst) > 0)
+                && self.world_counters.outstanding_reqs.load(Ordering::SeqCst) > 0))
         {
             // std::thread::yield_now();
             self.scheduler.exec_task(); //mmight as well do useful work while we wait
@@ -1348,6 +1435,7 @@ impl LamellarTeamRT {
 impl Drop for LamellarTeamRT {
     #[tracing::instrument(skip_all)]
     fn drop(&mut self) {
+        // println!("LamellarTeamRT Drop");
         // println!("sechduler_new: {:?}", Arc::strong_count(&self.scheduler));
         // println!("lamellae: {:?}", Arc::strong_count(&self.lamellae));
         // println!("arch: {:?}", Arc::strong_count(&self.arch));
@@ -1367,51 +1455,59 @@ impl Drop for LamellarTeam {
     #[tracing::instrument(skip_all)]
     fn drop(&mut self) {
         // println!("team handle dropping {:?}", self.team.team_hash);
-        if !self.am_team {
-            //we only care about when the user handle gets dropped (not the team handles that are created for use in an active message)
-            if let Some(parent) = &self.team.parent {
-                // println!("not world?");
-                // println!(
-                //     "[{:?}] {:?} team handle dropping {:?} {:?}",
-                //     self.team.world_pe,
-                //     self.team.team_hash,
-                //     self.team.get_pes(),
-                //     self.team.dropped.as_slice()
-                // );
-                self.team.wait_all();
-                // println!("after wait all");
-                self.team.barrier();
-                // println!("after barrier");
-                self.team.put_dropped();
-                // println!("after put dropped");
-                // if let Ok(_my_index) = self.team.arch.team_pe(self.team.world_pe) {
-                if self.team.team_pe.is_ok() {
-                    self.team.drop_barrier();
+        
+        if self.panic.load(Ordering::SeqCst) == 0 {
+            if !self.am_team {
+                //we only care about when the user handle gets dropped (not the team handles that are created for use in an active message)
+                if let Some(parent) = &self.team.parent {
+                    // println!("not world?");
+                    // println!(
+                    //     "[{:?}] {:?} team handle dropping {:?} {:?}",
+                    //     self.team.world_pe,
+                    //     self.team.team_hash,
+                    //     self.team.get_pes(),
+                    //     self.team.dropped.as_slice()
+                    // );
+                    
+                        self.team.wait_all();
+                        // println!("after wait all");
+                        self.team.barrier();
+                        // println!("after barrier");
+                        self.team.put_dropped();
+                        // println!("after put dropped");
+                        // if let Ok(_my_index) = self.team.arch.team_pe(self.team.world_pe) {
+                        if self.team.team_pe.is_ok() {
+                            self.team.drop_barrier();
+                        }
+                    
+                    // println!("after drop barrier");
+                    // println!("removing {:?} ",self.team.id);
+                    parent.sub_teams.write().remove(&self.team.id);
                 }
-                // println!("after drop barrier");
-                // println!("removing {:?} ",self.team.id);
-                parent.sub_teams.write().remove(&self.team.id);
-            }
 
-            // else {
-            // println!("world team");
-            // println!(
-            //     "sechduler_new: {:?}",
-            //     Arc::strong_count(&self.team.scheduler)
-            // );
-            // println!("lamellae: {:?}", Arc::strong_count(&self.team.lamellae));
-            // println!("arch: {:?}", Arc::strong_count(&self.team.arch));
-            // println!(
-            //     "world_counters: {:?}",
-            //     Arc::strong_count(&self.team.world_counters)
-            // );
-            // println!("removing {:?} ", self.team.team_hash);
-            let team_ptr = self.team.remote_ptr_addr as *mut *const LamellarTeamRT;
-            unsafe {
-                let arc_team = Arc::from_raw(*team_ptr);
-                // println!("arc_team: {:?}", Arc::strong_count(&arc_team));
-                Pin::new_unchecked(arc_team); //allows us to drop the inner team
+                // else {
+                // println!("world team");
+                // println!(
+                //     "sechduler_new: {:?}",
+                //     Arc::strong_count(&self.team.scheduler)
+                // );
+                // println!("lamellae: {:?}", Arc::strong_count(&self.team.lamellae));
+                // println!("arch: {:?}", Arc::strong_count(&self.team.arch));
+                // println!(
+                //     "world_counters: {:?}",
+                //     Arc::strong_count(&self.team.world_counters)
+                // );
+                // println!("removing {:?} ", self.team.team_hash);
+                let team_ptr = self.team.remote_ptr_addr as *mut *const LamellarTeamRT;
+                unsafe {
+                    let arc_team = Arc::from_raw(*team_ptr);
+                    // println!("arc_team: {:?}", Arc::strong_count(&arc_team));
+                    Pin::new_unchecked(arc_team); //allows us to drop the inner team
+                }
             }
+        }
+        else{
+            assert!(self.panic.load(Ordering::SeqCst) == 2);
         }
         // else{
         //     println!("in world team!!!");

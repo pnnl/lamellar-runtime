@@ -8,6 +8,27 @@ use async_trait::async_trait;
 use enum_dispatch::enum_dispatch;
 use std::sync::Arc;
 
+
+
+#[repr(u8)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum CmdQStatus {
+    Active = 1,
+    Finished = 2,
+    ShuttingDown = 3,
+    Panic = 4,
+}
+
+// impl Into<u8> for CmdQStatus {
+//     fn into(self) -> u8 {
+//         self as u8
+//     }
+// }
+// const ACTIVE: u8 = 0;
+// const FINISHED: u8 = 1;
+// const SHUTING_DOWN: u8 = 2;
+// const PANIC: u8 = 3;
+
 #[derive(Debug, Clone, Copy)]
 pub enum AllocError {
     OutOfMemoryError(usize),
@@ -101,4 +122,5 @@ pub(crate) trait CommOps {
     fn iget_relative<T: Remote>(&self, pe: usize, src_addr: usize, dst_addr: &mut [T]);
     #[allow(non_snake_case)]
     fn MB_sent(&self) -> f64;
+    fn force_shutdown(&self);
 }
