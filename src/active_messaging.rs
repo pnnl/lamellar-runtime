@@ -1012,6 +1012,7 @@ pub(crate) trait ActiveMessageEngine {
         am: Am,
         scheduler: &(impl SchedulerQueue + Sync + std::fmt::Debug),
         stall_mark: usize,
+        immediate: bool,
     );
 
     async fn exec_msg(
@@ -1065,10 +1066,11 @@ impl ActiveMessageEngine for ActiveMessageEngineType {
         am: Am,
         scheduler: &(impl SchedulerQueue + Sync + std::fmt::Debug),
         stall_mark: usize,
+        immediate: bool,
     ) {
         match self {
             ActiveMessageEngineType::RegisteredActiveMessages(remote_am) => {
-                remote_am.process_msg(am, scheduler, stall_mark).await;
+                remote_am.process_msg(am, scheduler, stall_mark,immediate).await;
             }
         }
     }

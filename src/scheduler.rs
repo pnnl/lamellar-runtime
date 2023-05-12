@@ -55,6 +55,12 @@ pub(crate) trait AmeSchedulerQueue {
         ame: Arc<ActiveMessageEngineType>,
         am: Am,
     );
+    fn submit_am_immediate(
+        &self,
+        scheduler: &(impl SchedulerQueue + Sync + std::fmt::Debug),
+        ame: Arc<ActiveMessageEngineType>,
+        am: Am,
+    );
     fn submit_work(
         &self,
         scheduler: &(impl SchedulerQueue + Sync + std::fmt::Debug),
@@ -66,6 +72,9 @@ pub(crate) trait AmeSchedulerQueue {
     where
         F: Future<Output = ()>;
     fn submit_immediate_task<F>(&self, future: F)
+    where
+        F: Future<Output = ()>;
+    fn submit_immediate_task2<F>(&self, future: F)
     where
         F: Future<Output = ()>;
     fn exec_task(&self);
@@ -88,11 +97,15 @@ pub(crate) enum Scheduler {
 #[enum_dispatch]
 pub(crate) trait SchedulerQueue {
     fn submit_am(&self, am: Am); //serialized active message
+    fn submit_am_immediate(&self, am: Am); //serialized active message
     fn submit_work(&self, msg: SerializedData, lamellae: Arc<Lamellae>); //serialized active message
     fn submit_task<F>(&self, future: F)
     where
         F: Future<Output = ()>;
     fn submit_immediate_task<F>(&self, future: F)
+    where
+        F: Future<Output = ()>;
+    fn submit_immediate_task2<F>(&self, future: F)
     where
         F: Future<Output = ()>;
     fn submit_task_node<F>(&self, future: F, node: usize)

@@ -531,7 +531,7 @@ impl SimpleBatcher {
                     panic!("Should not be returning local data or AM from remote  am");
                 }
             };
-            ame.process_msg(am, scheduler, 0).await;
+            ame.process_msg(am, scheduler, 0, false).await;
         });
     }
 

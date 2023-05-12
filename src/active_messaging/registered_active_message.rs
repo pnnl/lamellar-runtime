@@ -105,6 +105,7 @@ impl ActiveMessageEngine for RegisteredActiveMessages {
         am: Am,
         scheduler: &(impl SchedulerQueue + Sync + std::fmt::Debug),
         stall_mark: usize,
+        immediate: bool,
     ) {
         // println!("{am:?}");
         match am {
@@ -116,7 +117,7 @@ impl ActiveMessageEngine for RegisteredActiveMessages {
                     && (req_data.team.num_pes() > 1 || req_data.team.team_pe_id().is_err())
                 {
                     // println!(" {} {} {}, {}, {}",req_data.team.lamellae.backend() != Backend::Local,req_data.team.num_pes() > 1, req_data.team.team_pe_id().is_err(),(req_data.team.num_pes() > 1 || req_data.team.team_pe_id().is_err()),req_data.team.lamellae.backend() != Backend::Local && (req_data.team.num_pes() > 1 || req_data.team.team_pe_id().is_err()) );
-                    if am_size < crate::active_messaging::BATCH_AM_SIZE {
+                    if am_size < crate::active_messaging::BATCH_AM_SIZE && !immediate {
                         self.batcher.add_remote_am_to_batch(
                             req_data.clone(),
                             am.clone(),
@@ -146,7 +147,7 @@ impl ActiveMessageEngine for RegisteredActiveMessages {
                 } else {
                     let am_id = *(AMS_IDS.get(&am.get_id()).unwrap());
                     let am_size = am.serialized_size();
-                    if am_size < crate::active_messaging::BATCH_AM_SIZE {
+                    if am_size < crate::active_messaging::BATCH_AM_SIZE && !immediate {
                         self.batcher.add_remote_am_to_batch(
                             req_data, am, am_id, am_size, scheduler, stall_mark,
                         );
@@ -164,7 +165,7 @@ impl ActiveMessageEngine for RegisteredActiveMessages {
                 // println!("Am::Return");
                 let am_id = *(AMS_IDS.get(&am.get_id()).unwrap());
                 let am_size = am.serialized_size();
-                if am_size < crate::active_messaging::BATCH_AM_SIZE {
+                if am_size < crate::active_messaging::BATCH_AM_SIZE && !immediate {
                     self.batcher.add_return_am_to_batch(
                         req_data, am, am_id, am_size, scheduler, stall_mark,
                     );
@@ -176,7 +177,7 @@ impl ActiveMessageEngine for RegisteredActiveMessages {
             Am::Data(req_data, data) => {
                 // println!("Am::Data");
                 let data_size = data.serialized_size();
-                if data_size < crate::active_messaging::BATCH_AM_SIZE {
+                if data_size < crate::active_messaging::BATCH_AM_SIZE && !immediate {
                     self.batcher
                         .add_data_am_to_batch(req_data, data, data_size, scheduler, stall_mark);
                 } else {
@@ -184,7 +185,7 @@ impl ActiveMessageEngine for RegisteredActiveMessages {
                 }
             }
             Am::Unit(req_data) => {
-                if *UNIT_HEADER_LEN < crate::active_messaging::BATCH_AM_SIZE {
+                if *UNIT_HEADER_LEN < crate::active_messaging::BATCH_AM_SIZE && !immediate {
                     self.batcher
                         .add_unit_am_to_batch(req_data, scheduler, stall_mark);
                 } else {
@@ -489,7 +490,7 @@ impl RegisteredActiveMessages {
                 panic!("Should not be returning local data or AM from remote  am");
             }
         };
-        self.process_msg(am, scheduler, 0).await; //0 just means we will force a stall_count loop
+        self.process_msg(am, scheduler, 0, false).await; //0 just means we will force a stall_count loop
                                                   // scheduler.submit_am(am);
                                                   //TODO: compare against: scheduler.submit_am(ame, am).await;
     }
