@@ -1092,6 +1092,17 @@ impl<T: Dist> From<AtomicArray<T>> for LamellarByteArray {
     }
 }
 
+impl<T: Dist> From<LamellarByteArray> for AtomicArray<T> {
+    fn from(array:LamellarByteArray) -> Self {
+        if let LamellarByteArray::AtomicArray(array) = array {
+            array.into()
+        }
+        else {
+            panic!("Expected LamellarByteArray::AtomicArray")
+        }
+    }
+}
+
 impl<T: Dist> From<AtomicByteArray> for AtomicArray<T> {
     fn from(array: AtomicByteArray) -> Self {
         match array {

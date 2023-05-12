@@ -692,6 +692,17 @@ impl<T: Dist> From<UnsafeArray<T>> for LamellarByteArray {
     }
 }
 
+impl<T: Dist> From<LamellarByteArray> for UnsafeArray<T> {
+    fn from(array:LamellarByteArray) -> Self {
+        if let LamellarByteArray::UnsafeArray(array) = array {
+            array.into()
+        }
+        else {
+            panic!("Expected LamellarByteArray::UnsafeArray")
+        }
+    }
+}
+
 impl<T: Dist> private::ArrayExecAm<T> for UnsafeArray<T> {
     fn team(&self) -> Pin<Arc<LamellarTeamRT>> {
         self.team_rt().clone()
@@ -719,6 +730,9 @@ impl<T: Dist> private::LamellarArrayPrivate<T> for UnsafeArray<T> {
 
     unsafe fn into_inner(self) -> UnsafeArray<T> {
         self
+    }
+    fn as_lamellar_byte_array(&self) -> LamellarByteArray {
+        self.clone().into()
     }
 }
 

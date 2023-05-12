@@ -125,8 +125,9 @@ pub trait AccessOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
         index: impl OpInput<'a, usize>,
         val: impl OpInput<'a, T>,
     ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
-        self.inner_array()
-            .initiate_op(val, index, ArrayOpCmd::Store)
+        // self.inner_array()
+        //     .initiate_op(val, index, ArrayOpCmd::Store)
+            self.inner_array().initiate_batch_op(val, index, ArrayOpCmd2::Store,self.as_lamellar_byte_array())
     }
 
     /// This call swaps the supplied `val` into the element specified by `index`, returning the old value

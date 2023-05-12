@@ -151,6 +151,9 @@ impl<T: Dist> private::LamellarArrayPrivate<T> for LocalOnlyArray<T> {
     unsafe fn into_inner(self) -> UnsafeArray<T> {
         self.array
     }
+    fn as_lamellar_byte_array(&self) -> LamellarByteArray {
+        self.clone().into()
+    }
 }
 
 impl<T: Dist> LamellarArray<T> for LocalOnlyArray<T> {

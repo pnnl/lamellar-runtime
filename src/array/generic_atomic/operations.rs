@@ -4,7 +4,9 @@ use std::any::TypeId;
 use std::collections::HashMap;
 
 type BufFn = fn(GenericAtomicByteArrayWeak) -> Arc<dyn BufferOp>;
-type OpFn = fn(GenericAtomicByteArray,ArrayOpCmd<usize>,Vec<u8>) -> LamellarArcAm;
+type MultiMultiFn = fn(GenericAtomicByteArray,ArrayOpCmd2,Vec<u8>) -> LamellarArcAm;
+type MultiSingleFn = fn(GenericAtomicByteArray,ArrayOpCmd2,Vec<u8>,Vec<usize>) -> LamellarArcAm;
+
 lazy_static! {
     pub(crate) static ref BUFOPS: HashMap<TypeId, BufFn> = {
         let mut map = HashMap::new();
@@ -14,9 +16,17 @@ lazy_static! {
         map
     };
 
-    pub(crate) static ref NEWBUFOPS: HashMap<TypeId, OpFn> = {
+    pub(crate) static ref MULTIMULTIOPS: HashMap<TypeId, MultiMultiFn> = {
         let mut map = HashMap::new();
-        for op in crate::inventory::iter::<GenericAtomicArrayOpBufNew> {
+        for op in crate::inventory::iter::<GenericAtomicArrayMultiMultiOps> {
+            map.insert(op.id.clone(), op.op);
+        }
+        map
+    };
+
+    pub(crate) static ref MULTISINGLEOPS: HashMap<TypeId, MultiSingleFn> = {
+        let mut map = HashMap::new();
+        for op in crate::inventory::iter::<GenericAtomicArrayMultiSingleOps> {
             map.insert(op.id.clone(), op.op);
         }
         map
@@ -30,14 +40,21 @@ pub struct GenericAtomicArrayOpBuf {
 }
 
 #[doc(hidden)]
-pub struct GenericAtomicArrayOpBufNew {
+pub struct GenericAtomicArrayMultiMultiOps {
     pub id: TypeId,
-    pub op: OpFn,
+    pub op: MultiMultiFn,
+}
+
+#[doc(hidden)]
+pub struct GenericAtomicArrayMultiSingleOps {
+    pub id: TypeId,
+    pub op: MultiSingleFn,
 }
 
 crate::inventory::collect!(GenericAtomicArrayOpBuf);
+crate::inventory::collect!(GenericAtomicArrayMultiMultiOps);
+crate::inventory::collect!(GenericAtomicArrayMultiSingleOps);
 
-crate::inventory::collect!(GenericAtomicArrayOpBufNew);
 
 impl<T: ElementOps + 'static> ReadOnlyOps<T> for GenericAtomicArray<T> {}
 

@@ -153,7 +153,8 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
         index: impl OpInput<'a, usize>,
         val: impl OpInput<'a, T>,
     ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
-        self.inner_array().initiate_op(val, index, ArrayOpCmd::Add)
+        // self.inner_array().initiate_op(val, index, ArrayOpCmd::Add)
+        self.inner_array().initiate_batch_op(val, index, ArrayOpCmd2::Add,self.as_lamellar_byte_array())
     }
 
     /// This call adds the supplied `val` into the element specified by `index`, returning the old value
@@ -281,7 +282,8 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
         index: impl OpInput<'a, usize>,
         val: impl OpInput<'a, T>,
     ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
-        self.inner_array().initiate_op(val, index, ArrayOpCmd::Sub)
+        // self.inner_array().initiate_op(val, index, ArrayOpCmd::Sub)
+        self.inner_array().initiate_batch_op(val, index, ArrayOpCmd2::Sub,self.as_lamellar_byte_array())
     }
 
     /// This call subtracts the supplied `val` from the element specified by `index`, returning the old value
@@ -409,7 +411,8 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
         index: impl OpInput<'a, usize>,
         val: impl OpInput<'a, T>,
     ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
-        self.inner_array().initiate_op(val, index, ArrayOpCmd::Mul)
+        // self.inner_array().initiate_op(val, index, ArrayOpCmd::Mul)
+        self.inner_array().initiate_batch_op(val, index, ArrayOpCmd2::Mul,self.as_lamellar_byte_array())
     }
 
     /// This call multiplies the supplied `val` with the element specified by `index`, returning the old value
@@ -537,7 +540,8 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
         index: impl OpInput<'a, usize>,
         val: impl OpInput<'a, T>,
     ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
-        self.inner_array().initiate_op(val, index, ArrayOpCmd::Div)
+        // self.inner_array().initiate_op(val, index, ArrayOpCmd::Div)
+        self.inner_array().initiate_batch_op(val, index, ArrayOpCmd2::Div,self.as_lamellar_byte_array())
     }
 
     /// This call divides the element specified by `index` with the supplied `val`, returning the old value
@@ -665,7 +669,8 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
         index: impl OpInput<'a, usize>,
         val: impl OpInput<'a, T>,
     ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
-        self.inner_array().initiate_op(val, index, ArrayOpCmd::Rem)
+        // self.inner_array().initiate_op(val, index, ArrayOpCmd::Rem)
+        self.inner_array().initiate_batch_op(val, index, ArrayOpCmd2::Rem,self.as_lamellar_byte_array())
     }
 
     /// This call divides the element specified by `index` with the supplied `val`, returning the old value

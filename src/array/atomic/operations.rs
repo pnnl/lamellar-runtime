@@ -5,7 +5,7 @@ use std::any::TypeId;
 use std::collections::HashMap;
 
 type BufFn = fn(AtomicByteArrayWeak) -> Arc<dyn BufferOp>;
-type OpFn = fn(UnsafeByteArray,ArrayOpCmd<usize>,Vec<u8>) -> LamellarArcAm;
+type OpFn = fn(UnsafeByteArray,ArrayOpCmd2,Vec<u8>) -> LamellarArcAm;
 
 
 lazy_static! {

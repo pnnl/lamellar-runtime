@@ -406,6 +406,7 @@ struct InnerCQ {
     num_pes: usize,
     send_waiting: Vec<Arc<AtomicBool>>,
     pending_cmds: Arc<AtomicUsize>,
+    active_cnt: Arc<AtomicUsize>,
     sent_cnt: Arc<AtomicUsize>,
     recv_cnt: Arc<AtomicUsize>,
     put_amt: Arc<AtomicUsize>,
@@ -532,6 +533,7 @@ impl InnerCQ {
             num_pes: num_pes,
             send_waiting: send_waiting,
             pending_cmds: Arc::new(AtomicUsize::new(0)),
+            active_cnt: Arc::new(AtomicUsize::new(0)),
             sent_cnt: Arc::new(AtomicUsize::new(0)),
             recv_cnt: Arc::new(AtomicUsize::new(0)),
             put_amt: Arc::new(AtomicUsize::new(0)),
@@ -642,6 +644,10 @@ impl InnerCQ {
         //     println!("wayyyyyy toooooo big!!!");
         // }
         let mut timer = std::time::Instant::now();
+        // while self.active_cnt.load(Ordering::SeqCst) > 4 {
+        //     async_std::task::yield_now().await;
+        // }
+        // self.active_cnt.fetch_add(1, Ordering::SeqCst);
         self.pending_cmds.fetch_add(1, Ordering::SeqCst);
         loop {
             {
@@ -723,6 +729,7 @@ impl InnerCQ {
             }
             async_std::task::yield_now().await;
         }
+        // self.active_cnt.fetch_sub(1, Ordering::SeqCst);
     }
 
     #[tracing::instrument(skip_all)]

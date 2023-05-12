@@ -10,8 +10,9 @@ use itertools::Itertools;
 
 type BufFn = fn(UnsafeByteArrayWeak) -> Arc<dyn BufferOp>;
 
-type OpFn = fn(UnsafeByteArray,ArrayOpCmd<usize>,Vec<u8>) -> LamellarArcAm;
-
+type MultiValMultiIdxFn = fn(LamellarByteArray,ArrayOpCmd2,Vec<u8>) -> LamellarArcAm;
+type SingleValMultiIdxFn = fn(LamellarByteArray,ArrayOpCmd2,Vec<u8>,Vec<usize>) -> LamellarArcAm;
+type MultiValSingleIdxFn = fn(LamellarByteArray,ArrayOpCmd2,Vec<u8>,usize) -> LamellarArcAm;
 
 lazy_static! {
     pub(crate) static ref BUFOPS: HashMap<TypeId, BufFn> = {
@@ -22,9 +23,24 @@ lazy_static! {
         map
     };
 
-    pub(crate) static ref NEWBUFOPS: HashMap<TypeId, OpFn> = {
-        let mut map: HashMap<TypeId, OpFn> = HashMap::new();
-        for op in crate::inventory::iter::<UnsafeArrayOpBufNew> {
+   
+    pub(crate) static ref MULTI_VAL_MULTI_IDX_OPS: HashMap<(TypeId,TypeId), MultiValMultiIdxFn> = {
+        let mut map = HashMap::new();
+        for op in crate::inventory::iter::<MultiValMultiIdxOps> {
+            map.insert(op.id.clone(), op.op);
+        }
+        map
+    };
+    pub(crate) static ref SINGLE_VAL_MULTI_IDX_OPS: HashMap<(TypeId,TypeId), SingleValMultiIdxFn> = {
+        let mut map = HashMap::new();
+        for op in crate::inventory::iter::<SingleValMultiIdxOps> {
+            map.insert(op.id.clone(), op.op);
+        }
+        map
+    };
+    pub(crate) static ref MULTI_VAL_SINGLE_IDX_OPS: HashMap<(TypeId,TypeId), MultiValSingleIdxFn> = {
+        let mut map = HashMap::new();
+        for op in crate::inventory::iter::<MultiValSingleIdxOps> {
             map.insert(op.id.clone(), op.op);
         }
         map
@@ -38,14 +54,28 @@ pub struct UnsafeArrayOpBuf {
 }
 
 #[doc(hidden)]
-pub struct UnsafeArrayOpBufNew {
-    pub id: TypeId,
-    pub op: OpFn,
+pub struct MultiValMultiIdxOps {
+    pub id: (TypeId,TypeId),
+    pub op: MultiValMultiIdxFn,
+}
+
+#[doc(hidden)]
+pub struct SingleValMultiIdxOps {
+    pub id: (TypeId,TypeId),
+    pub op: SingleValMultiIdxFn,
+}
+
+#[doc(hidden)]
+pub struct MultiValSingleIdxOps {
+    pub id: (TypeId,TypeId),
+    pub op: MultiValSingleIdxFn,
 }
 
 crate::inventory::collect!(UnsafeArrayOpBuf);
 
-crate::inventory::collect!(UnsafeArrayOpBufNew);
+crate::inventory::collect!(MultiValMultiIdxOps);
+crate::inventory::collect!(SingleValMultiIdxOps);
+crate::inventory::collect!(MultiValSingleIdxOps);
 
 #[derive(Debug)]
 pub(crate) enum BufOpsRequest<T: Dist> {
@@ -376,6 +406,34 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
     }
 
     #[tracing::instrument(skip_all)]
+    pub(crate) fn initiate_batch_op<'a>(
+        &self,
+        val: impl OpInput<'a, T>,
+        index: impl OpInput<'a, usize>,
+        op: ArrayOpCmd2,
+        byte_array: LamellarByteArray
+    ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
+        let (mut indices, i_len) = index.as_op_input(); 
+        let (mut vals, v_len) = val.as_op_input();
+        if v_len == 1 && i_len == 1 { //one to one
+            self.multi_val_multi_index(byte_array, vals, indices, op);
+        }
+        else if v_len > 1 && i_len == 1 { //many vals one index
+            self.multi_val_one_index(byte_array, vals, indices[0].first(), op);
+        }
+        else if v_len == 1 && i_len > 1 { //one val many indices
+            self.one_val_multi_indices(byte_array, vals[0].first(), indices, op);
+        }
+        else if v_len > 1 && i_len > 1 { //many vals many indices
+            self.multi_val_multi_index(byte_array, vals, indices, op);
+        }
+        else{ //no vals no indices
+            
+        }
+        Box::pin(async { () })
+    }
+
+    #[tracing::instrument(skip_all)]
     pub(crate) fn initiate_fetch_op<'a>(
         &self,
         val: impl OpInput<'a, T>,
@@ -464,216 +522,487 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         }
         Box::new(ArrayOpBatchResultHandle { reqs }).into_future()
     }
-}
 
-impl<T: AmDist + Dist + ElementArithmeticOps + 'static> UnsafeArray<T> {
-    pub fn new_add<'a>(
-        &self,
-        mut index: impl Iterator<Item = &'a usize> + Clone,
-        mut val: impl Iterator<Item =T> + Clone,
-    ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
-        match(index.clone().skip(1).next(),val.clone().skip(1).next()){
-            (Some(_),Some(_)) => {
-                self.add_multi_multi(index,val)
-            }
-            (Some(_),None) => {
-                // self.add_multi_single(index,val)
-                Box::pin(async{})
-            }
-            (None,Some(_)) => {
-                Box::pin(async{})
-                // self.add_single_multi(index,val)
-            }
-            (None,None) => {
-                self.add_multi_multi(index,val)
-            }   
-        }
-    }
-
-    fn add_multi_multi<'a>(&self,  index:  impl Iterator<Item = &'a usize>, val: impl Iterator<Item =  T>) -> Pin<Box<dyn Future<Output = ()> + Send>>{
+    fn one_val_multi_indices(&self, byte_array: LamellarByteArray, val: T, mut indices: Vec<OpInputEnum<usize>>, op: ArrayOpCmd2) -> Pin<Box<dyn Future<Output=()> + Send>>{
         let num_per_batch = match std::env::var("LAMELLAR_OP_BATCH") {
             Ok(n) => n.parse::<usize>().unwrap(), //+ 1 to account for main thread
             Err(_) => 10000,                      //+ 1 to account for main thread
         };
-        println!("num_per_batch {:?}",num_per_batch);
-        let mut reqs = Arc::new(Mutex::new(Vec::new()));
-        let req_count = AtomicUsize::new(0);
-        let mut temp = Vec::with_capacity(num_per_batch);
-        index.zip(val).for_each( |idx_val| {
-            
-            temp.push(idx_val);
-            if temp.len() == num_per_batch {
-                let mut new_temp = Vec::with_capacity(num_per_batch);
-                std::mem::swap(&mut temp, &mut new_temp);
-                req_count.fetch_add(1,Ordering::Relaxed);
-                let mut all_reqs = reqs.clone();
-                self.inner.data.team.scheduler.submit_task(async move {
-                    let mut pe_buffers = HashMap::new();
-                    let mut reqs = new_temp.into_iter().filter_map(|(idx, val)| {
-                
-                        let (pe,index) = self.pe_and_offset_for_global_index(*idx).expect("index out of bounds");
-                        let buffer = pe_buffers.entry(pe).or_insert((MultiMulti::new(self.clone(),ArrayOpCmd::Add),0));
-                        buffer.0.append_idxs_vals(index, val);
-                        buffer.1 += 1;
-                        if  buffer.1 >= num_per_batch {
-                            let mut new_buffer = MultiMulti::new(self.clone(),ArrayOpCmd::Add);
-                            std::mem::swap( &mut buffer.0, &mut new_buffer);
-                            buffer.1 = 0;
-                            // let am: MultiMultiAddRemote = new_buffer.into();
-                            Some(
-                                self.inner.data.team.exec_arc_am_pe::<()>(
-                                    pe,
-                                    new_buffer.into_am(),
-                                    Some(self.inner.data.array_counters.clone())
-                                ).into_future()
-                            )
-                        }
-                        else {
-                            None
-                        }
-                    }).collect::<Vec<_>>();
-                    for (pe,buffer) in pe_buffers.iter_mut() {
-                        if buffer.1 > 0 {
-                            
-                            let mut new_buffer = MultiMulti::new(self.clone(),ArrayOpCmd::Add);
-                            std::mem::swap( &mut buffer.0, &mut new_buffer);
-                            reqs.push(
-
-                                self.inner.data.team.exec_arc_am_pe::<()>(
-                                    *pe,
-                                    new_buffer.into_am(), 
-                                    Some(self.inner.data.array_counters.clone())
-                                ).into_future()
-                            );
-                        }
-                    } 
-                    // println!("reqs len {:?}",reqs.len());
-                    all_reqs.lock().extend(reqs);
-                });
-            }
-        }); 
-        if temp.len() > 0 {
-            req_count.fetch_add(1,Ordering::Relaxed);
-            let mut all_reqs = reqs.clone();
-            self.inner.data.team.scheduler.submit_task(async move {
-                let mut pe_buffers = HashMap::new();
-                let mut reqs = temp.into_iter().filter_map(|(idx, val)| {
-            
-                    let (pe,index) = self.pe_and_offset_for_global_index(*idx).expect("index out of bounds");
-                    let buffer = pe_buffers.entry(pe).or_insert((MultiMulti::new(self.clone(),ArrayOpCmd::Add),0));
-                    buffer.0.append_idxs_vals(index, val);
-                    buffer.1 += 1;
-                    if  buffer.1 >= num_per_batch {
-                        let mut new_buffer = MultiMulti::new(self.clone(),ArrayOpCmd::Add);
-                        std::mem::swap( &mut buffer.0, &mut new_buffer);
-                        buffer.1 = 0;
-                        // let am: MultiMultiAddRemote = new_buffer.into();
-                        Some(
-                            self.inner.data.team.exec_arc_am_pe::<()>(
-                                pe,
-                                new_buffer.into_am(),
-                                Some(self.inner.data.array_counters.clone())
-                            ).into_future()
-                        )
+        let num_pes = self.inner.data.team.num_pes();
+        let cnt = Arc::new(AtomicUsize::new(0));
+        let futures = Arc::new(Mutex::new(Vec::new()));
+        let num_reqs = indices.len();
+        
+        for index in indices.drain(..){
+            let cnt2 = cnt.clone();
+            // let index  = indices[i].iter();
+            let futures2 = futures.clone();
+            let byte_array2 = byte_array.clone();
+            self.inner.data.team.scheduler.submit_immediate_task2(async move {
+                let mut buffs = vec![Vec::with_capacity(num_per_batch); num_pes];
+                let mut reqs = Vec::new();
+                for idx in index.iter(){
+                    let (pe,local_index) = self.pe_and_offset_for_global_index(idx).unwrap();
+                    buffs[pe].push(local_index);
+                    if buffs[pe].len() >= num_per_batch {
+                        let mut new_buffer = Vec::with_capacity(num_per_batch);
+                        std::mem::swap( &mut buffs[pe], &mut new_buffer);
+                        let am = SingleValMultiIndex::new_with_vec(byte_array2.clone(), op ,new_buffer,val).into_am();
+                        reqs.push(self.inner.data.team.exec_arc_am_pe::<()>(
+                            pe,
+                            am, 
+                            Some(self.inner.data.array_counters.clone())
+                        ).into_future());
                     }
-                    else {
-                        None
-                    }
-                }).collect::<Vec<_>>();
-                for (pe,buffer) in pe_buffers.iter_mut() {
-                    if buffer.1 > 0 {
-                        
-                        let mut new_buffer = MultiMulti::new(self.clone(),ArrayOpCmd::Add);
-                        std::mem::swap( &mut buffer.0, &mut new_buffer);
-                        reqs.push(
-
-                            self.inner.data.team.exec_arc_am_pe::<()>(
-                                *pe,
-                                new_buffer.into_am(), 
-                                Some(self.inner.data.array_counters.clone())
-                            ).into_future()
-                        );
-                    }
-                } 
-                // println!("reqs len {:?}",reqs.len());
-                all_reqs.lock().extend(reqs);
-            });
-            temp = Vec::with_capacity(num_per_batch);
-        }  
-        Box::pin(async move{
-            let cnt = req_count.load(Ordering::Relaxed);
-            while reqs.lock().len() < cnt {
-                futures::future::pending().await
-            }
-            match Arc::try_unwrap(reqs){
-                Ok(reqs) => {
-                    futures::future::join_all(reqs.into_inner()).await;
+                    
                 }
-                Err(_) => {
-                    panic!("trying to return a fetch request for result operations");
-                } 
-            }
+                for (pe,buff) in buffs.into_iter().enumerate() {
+                    if buff.len() > 0 {
+                        let am = SingleValMultiIndex::new_with_vec(byte_array2.clone(),op,buff,val).into_am();
+                        reqs.push(self.inner.data.team.exec_arc_am_pe::<()>(
+                            pe,
+                            am, 
+                            Some(self.inner.data.array_counters.clone())
+                        ).into_future());
+                    }
+                }
+                futures2.lock().extend(reqs);
+                cnt2.fetch_add(1, Ordering::SeqCst);
+            });
+        }
+        while cnt.load(Ordering::SeqCst) < num_reqs{
+            std::thread::yield_now();
+        }
+        Box::pin(async move{
+            futures::future::join_all(futures.lock().drain(..)).await;
         })
     }
 
-    // fn add_single_multi(&self, mut index: impl Iterator<Item = usize>, mut vals: impl Iterator<Item = T>) -> Pin<Box<dyn Future<Output = ()> + Send>>{
-    //     let num_per_batch = match std::env::var("LAMELLAR_OP_BATCH") {
-    //         Ok(n) => n.parse::<usize>().unwrap(), //+ 1 to account for main thread
-    //         Err(_) => 10000,                      //+ 1 to account for main thread
-    //     };
-    //     let idx = index.next().unwrap();
-    //     let (pe,index) = self.pe_and_offset_for_global_index(idx).expect("index out of bounds");
-    //     let mut am = SingleMultiAdd{array: self.clone(), idx: index, val: vec![]};
-    //     let reqs = vals.filter_map(|val| {
-    //         am.val.push(val);
-    //         if am.val.len() > num_per_batch {
-    //             let mut new_am = SingleMultiAdd{array: self.clone(), idx: index, val: vec![]};
-    //             std::mem::swap(&mut am, &mut new_am);
-    //             let req = self.inner.data.team.exec_am_local_tg(
-    //                 new_am,
-    //                 Some(self.inner.data.array_counters.clone())
-    //             );
+    fn multi_val_one_index(&self, byte_array: LamellarByteArray, mut vals: Vec<OpInputEnum<T>>,  index: usize, op: ArrayOpCmd2) -> Pin<Box<dyn Future<Output=()> + Send>>{
+        let num_per_batch = match std::env::var("LAMELLAR_OP_BATCH") {
+            Ok(n) => n.parse::<usize>().unwrap(), //+ 1 to account for main thread
+            Err(_) => 10000,                      //+ 1 to account for main thread
+        };
+        let num_pes = self.inner.data.team.num_pes();
+        let cnt = Arc::new(AtomicUsize::new(0));
+        let futures = Arc::new(Mutex::new(Vec::new()));
+        let (pe,local_index) = self.pe_and_offset_for_global_index(index).unwrap();
+        let num_reqs = vals.len();
+        
+        for val in vals.drain(..){
+            let cnt2 = cnt.clone();
+            let futures2 = futures.clone();
+            let byte_array2 = byte_array.clone();
+            self.inner.data.team.scheduler.submit_immediate_task2(async move {
+                // let mut buffs = vec![Vec::with_capacity(num_per_batch); num_pes];
+                // let val_slice = val.as_slice();
+                let mut reqs = Vec::new();
+                val.as_vec_chunks(num_per_batch).into_iter().for_each(|val|{
+                    let am = MultiValSingleIndex::new_with_vec(byte_array2.clone(), op ,local_index, val).into_am();
+                        reqs.push(self.inner.data.team.exec_arc_am_pe::<()>(
+                            pe,
+                            am, 
+                            Some(self.inner.data.array_counters.clone())
+                        ).into_future());
+                });
                 
-    //             Some(req.into_future())
-    //         }
-    //         else {
-    //             None
-    //         }
-    //     }).collect::<Vec<_>>();
-    //     Box::pin(async move{
-    //         futures::future::join_all(reqs).await;
-    //     })
-    // }
+                futures2.lock().extend(reqs);
+                cnt2.fetch_add(1, Ordering::SeqCst);
+            });
+        }
+        while cnt.load(Ordering::SeqCst) < num_reqs{
+            std::thread::yield_now();
+        }
+        Box::pin(async move{
+            futures::future::join_all(futures.lock().drain(..)).await;
+        })
+    }
+
+    fn multi_val_multi_index(&self, byte_array: LamellarByteArray, mut vals: Vec<OpInputEnum<T>>, mut indices: Vec<OpInputEnum<usize>>, op: ArrayOpCmd2) -> Pin<Box<dyn Future<Output=()> + Send>>{
+        let num_per_batch = match std::env::var("LAMELLAR_OP_BATCH") {
+            Ok(n) => n.parse::<usize>().unwrap(), //+ 1 to account for main thread
+            Err(_) => 10000,                      //+ 1 to account for main thread
+        };
+        let bytes_per_batch = num_per_batch * std::mem::size_of::<IdxVal<T>>();
+        let num_pes = self.inner.data.team.num_pes();
+        let cnt = Arc::new(AtomicUsize::new(0));
+        let futures = Arc::new(Mutex::new(Vec::new()));
+        let num_reqs = vals.len();
+        
+        for (index,val) in indices.drain(..).zip(vals.drain(..)){
+            let cnt2 = cnt.clone();
+            let futures2 = futures.clone();
+            let byte_array2 = byte_array.clone();
+            self.inner.data.team.scheduler.submit_immediate_task2(async move {
+                let mut buffs = vec![Vec::with_capacity(bytes_per_batch); num_pes];
+                let mut reqs = Vec::new();
+                for (idx,val) in index.iter().zip(val.iter()){
+                    let (pe,local_index) = self.pe_and_offset_for_global_index(idx).unwrap();
+                    buffs[pe].extend_from_slice(IdxVal { index: local_index, val: val }.as_bytes());
+
+                    if buffs[pe].len() >= bytes_per_batch {
+                        let mut new_buffer = Vec::with_capacity(bytes_per_batch);
+                        std::mem::swap( &mut buffs[pe], &mut new_buffer);
+                        let am = MultiValMultiIndex::new_with_vec(byte_array2.clone(), op ,new_buffer).into_am();
+                        reqs.push(self.inner.data.team.exec_arc_am_pe::<()>(
+                            pe,
+                            am, 
+                            Some(self.inner.data.array_counters.clone())
+                        ).into_future());
+                    }
+                    
+                }
+                for (pe,buff) in buffs.into_iter().enumerate() {
+                    if buff.len() > 0 {
+                        let am = MultiValMultiIndex::new_with_vec(byte_array2.clone(),op,buff).into_am();
+                        reqs.push(self.inner.data.team.exec_arc_am_pe::<()>(
+                            pe,
+                            am, 
+                            Some(self.inner.data.array_counters.clone())
+                        ).into_future());
+                    }
+                }
+                futures2.lock().extend(reqs);
+                cnt2.fetch_add(1, Ordering::SeqCst);
+            });
+        }
+        while cnt.load(Ordering::SeqCst) < num_reqs{
+            std::thread::yield_now();
+        }
+        Box::pin(async move{
+            futures::future::join_all(futures.lock().drain(..)).await;
+        })
+    }
+}
+
+// impl<T: AmDist + Dist + ElementArithmeticOps + 'static> UnsafeArray<T> {
+//     pub fn new_add3<'a>(
+//         &self,
+//         mut index: impl OpInput<'a, usize>,
+//         mut val: impl OpInput<'a, T>,
+//     ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
+//         let (mut indices, i_len) = index.as_op_input(); //(Vec<OpInputEnum<'a, usize>>, usize);
+//         let (mut vals, v_len) = val.as_op_input();
+
+        
+//         // let mut reqs = vec![];
+//         let cnt = Arc::new(AtomicUsize::new(0));
+        
+//         for i in 0..indices.len(){
+//             let cnt2 = cnt.clone();
+//             let index  = indices[i].iter();
+//             let val = vals[0].iter();
+//             self.inner.data.team.scheduler.submit_task(async move {
+//                 self.add_multi_single3(index,val);
+//                 cnt2.fetch_add(1, Ordering::SeqCst);
+//             });
+//         }
+//         while cnt.load(Ordering::SeqCst) < indices.len(){
+//             std::thread::yield_now();
+//         }
+//         Box::pin(async move{
+//             // futures::future::join_all(reqs).await;
+//         })
+//     }
+//     pub fn new_add2<'a>(
+//         &self,
+//         // mut index: impl OpInput<'a, usize>,
+//         // mut val: impl OpInput<'a, T>,
+//         mut index: &'a[usize],
+//         mut val: T,
+//     ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
+//         let num_tasks = match std::env::var("LAMELLAR_THREADS") {
+//             Ok(n) => (n.parse::<usize>().unwrap() + 1)/2, //+ 1 to account for main thread
+//             Err(_) => 4,                      //+ 1 to account for main thread
+//         };
+//         let i_p_t = index.len()/num_tasks;
+        
+//         // let mut reqs = vec![];
+//         let cnt = Arc::new(AtomicUsize::new(0));
+        
+//         for i in 0..num_tasks{
+//             let cnt2 = cnt.clone();
+//             self.inner.data.team.scheduler.submit_task(async move {
+//                 self.add_multi_single2(&index[i*i_p_t..(i+1)*i_p_t],val);
+//                 cnt2.fetch_add(1, Ordering::SeqCst);
+//             });
+//         }
+//         while cnt.load(Ordering::SeqCst) < num_tasks{
+//             std::thread::yield_now();
+//         }
+//         Box::pin(async move{
+//             // futures::future::join_all(reqs).await;
+//         })
+//     }
+//     pub fn new_add<'a>(
+//         &self,
+//         mut index: impl Iterator<Item = &'a usize> + Clone,
+//         mut val: impl Iterator<Item =T> + Clone,
+//     ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
+//         match(index.clone().skip(1).next(),val.clone().skip(1).next()){
+//             (Some(_),Some(_)) => {
+//                 self.add_multi_multi(index,val)
+//             }
+//             (Some(_),None) => {
+//                 self.add_multi_single(index,val)
+//             }
+//             (None,Some(_)) => {
+//                 Box::pin(async{})
+//                 // self.add_single_multi(index,val)
+//             }
+//             (None,None) => {
+//                 self.add_multi_multi(index,val)
+//             }   
+//         }
+//     }
+
+//     fn add_multi_multi<'a>(&self,  index:  impl Iterator<Item = &'a usize>, val: impl Iterator<Item =  T>) -> Pin<Box<dyn Future<Output = ()> + Send>>{
+//         let num_per_batch = match std::env::var("LAMELLAR_OP_BATCH") {
+//             Ok(n) => n.parse::<usize>().unwrap(), //+ 1 to account for main thread
+//             Err(_) => 10000,                      //+ 1 to account for main thread
+//         };
+//         // println!("num_per_batch {:?}",num_per_batch);
+//         let mut reqs = Arc::new(Mutex::new(Vec::new()));
+//         let req_count = AtomicUsize::new(0);
+//         let mut temp = Vec::with_capacity(num_per_batch*5);
+//         index.zip(val).for_each( |idx_val| {
+//             temp.push(idx_val);
+//             if temp.len() == num_per_batch*5 {
+//                 let mut new_temp = Vec::with_capacity(num_per_batch*5);
+//                 std::mem::swap(&mut temp, &mut new_temp);
+//                 req_count.fetch_add(1,Ordering::Relaxed);
+//                 let mut all_reqs = reqs.clone();
+//                 self.inner.data.team.scheduler.submit_task(async move {
+//                     let mut pe_buffers = HashMap::new();
+//                     let mut reqs = new_temp.into_iter().filter_map(|(idx, val)| {
+                
+//                         let (pe,index) = self.pe_and_offset_for_global_index(*idx).expect("index out of bounds");
+//                         let buffer = pe_buffers.entry(pe).or_insert((MultiMulti::new(self.clone(),ArrayOpCmd2::Add),0));
+//                         buffer.0.append_idxs_vals(index, val);
+//                         buffer.1 += 1;
+//                         if  buffer.1 >= num_per_batch {
+//                             let mut new_buffer = MultiMulti::new(self.clone(),ArrayOpCmd2::Add);
+//                             std::mem::swap( &mut buffer.0, &mut new_buffer);
+//                             buffer.1 = 0;
+//                             // let am: MultiMultiAddRemote = new_buffer.into();
+//                             Some(
+//                                 self.inner.data.team.exec_arc_am_pe::<()>(
+//                                     pe,
+//                                     new_buffer.into_am(),
+//                                     Some(self.inner.data.array_counters.clone())
+//                                 ).into_future()
+//                             )
+//                         }
+//                         else {
+//                             None
+//                         }
+//                     }).collect::<Vec<_>>();
+//                     for (pe,buffer) in pe_buffers.iter_mut() {
+//                         if buffer.1 > 0 {
+                            
+//                             let mut new_buffer = MultiMulti::new(self.clone(),ArrayOpCmd2::Add);
+//                             std::mem::swap( &mut buffer.0, &mut new_buffer);
+//                             reqs.push(
+
+//                                 self.inner.data.team.exec_arc_am_pe::<()>(
+//                                     *pe,
+//                                     new_buffer.into_am(), 
+//                                     Some(self.inner.data.array_counters.clone())
+//                                 ).into_future()
+//                             );
+//                         }
+//                     } 
+//                     // println!("reqs len {:?}",reqs.len());
+//                     all_reqs.lock().extend(reqs);
+//                 });
+//             }
+//         }); 
+//         if temp.len() > 0 {
+//             req_count.fetch_add(1,Ordering::Relaxed);
+//             let mut all_reqs = reqs.clone();
+//             self.inner.data.team.scheduler.submit_task(async move {
+//                 let mut pe_buffers = HashMap::new();
+//                 let mut reqs = temp.into_iter().filter_map(|(idx, val)| {
+            
+//                     let (pe,index) = self.pe_and_offset_for_global_index(*idx).expect("index out of bounds");
+//                     let buffer = pe_buffers.entry(pe).or_insert((MultiMulti::new(self.clone(),ArrayOpCmd2::Add),0));
+//                     buffer.0.append_idxs_vals(index, val);
+//                     buffer.1 += 1;
+//                     if  buffer.1 >= num_per_batch {
+//                         let mut new_buffer = MultiMulti::new(self.clone(),ArrayOpCmd2::Add);
+//                         std::mem::swap( &mut buffer.0, &mut new_buffer);
+//                         buffer.1 = 0;
+//                         // let am: MultiMultiAddRemote = new_buffer.into();
+//                         Some(
+//                             self.inner.data.team.exec_arc_am_pe::<()>(
+//                                 pe,
+//                                 new_buffer.into_am(),
+//                                 Some(self.inner.data.array_counters.clone())
+//                             ).into_future()
+//                         )
+//                     }
+//                     else {
+//                         None
+//                     }
+//                 }).collect::<Vec<_>>();
+//                 for (pe,buffer) in pe_buffers.iter_mut() {
+//                     if buffer.1 > 0 {
+                        
+//                         let mut new_buffer = MultiMulti::new(self.clone(),ArrayOpCmd2::Add);
+//                         std::mem::swap( &mut buffer.0, &mut new_buffer);
+//                         reqs.push(
+
+//                             self.inner.data.team.exec_arc_am_pe::<()>(
+//                                 *pe,
+//                                 new_buffer.into_am(), 
+//                                 Some(self.inner.data.array_counters.clone())
+//                             ).into_future()
+//                         );
+//                     }
+//                 } 
+//                 // println!("reqs len {:?}",reqs.len());
+//                 all_reqs.lock().extend(reqs);
+//             });
+//             temp = Vec::with_capacity(num_per_batch);
+//         }  
+//         Box::pin(async move{
+//             let cnt = req_count.load(Ordering::Relaxed);
+//             while reqs.lock().len() < cnt {
+//                 futures::future::pending().await
+//             }
+//             match Arc::try_unwrap(reqs){
+//                 Ok(reqs) => {
+//                     futures::future::join_all(reqs.into_inner()).await;
+//                 }
+//                 Err(_) => {
+//                     panic!("trying to return a fetch request for result operations");
+//                 } 
+//             }
+//         })
+//     }
 
     
-    // fn add_multi_single(&self, mut index: impl Iterator<Item = usize>, mut val: impl Iterator<Item = T>) -> Pin<Box<dyn Future<Output = ()> + Send>>{
-    //     let num_per_batch = match std::env::var("LAMELLAR_OP_BATCH") {
-    //         Ok(n) => n.parse::<usize>().unwrap(), //+ 1 to account for main thread
-    //         Err(_) => 10000,                      //+ 1 to account for main thread
-    //     };
-    //     let mut pe_buffers = HashMap::new();
-    //     let val = val.next().unwrap();
-    //     let reqs = index.filter_map(|idx| {
-    //         let (pe,index) = self.pe_and_offset_for_global_index(idx).expect("index out of bounds");
-    //         let buffer = pe_buffers.entry(pe).or_insert(MultiSingleAdd{array: self.clone(), idx: vec![], val: val});
-    //         buffer.idx.push(index);
-    //         if buffer.idx.len() > num_per_batch {
-    //             let mut new_buffer = MultiSingleAdd{array: self.clone(), idx: vec![], val: val};
-    //             std::mem::swap( buffer, &mut new_buffer);
-    //             Some(self.inner.data.team.exec_am_local_tg(
-    //                 new_buffer,
-    //                 Some(self.inner.data.array_counters.clone())
-    //             ).into_future())
-    //         }
-    //         else {
-    //             None
-    //         }
-    //     }).collect::<Vec<_>>();
-    //     Box::pin(async move{
-    //         futures::future::join_all(reqs).await;
-    //     })
-    // }
-}
+
+//     fn add_multi_single<'a>(&self, mut  index:  impl Iterator<Item = &'a usize>, mut val: impl Iterator<Item =  T>) -> Pin<Box<dyn Future<Output = ()> + Send>>{
+//         // let big_timer = Instant::now();
+//         let num_per_batch = match std::env::var("LAMELLAR_OP_BATCH") {
+//             Ok(n) => n.parse::<usize>().unwrap(), //+ 1 to account for main thread
+//             Err(_) => 10000,                      //+ 1 to account for main thread
+//         };
+//         let num_pes = self.inner.data.team.num_pes();
+//         let mut buffs = vec![Vec::with_capacity(num_per_batch); num_pes];
+//         let val = val.next().unwrap();
+//         let mut reqs = Vec::new();
+//         for idx in index{
+//             let (pe,local_index) = self.pe_and_offset_for_global_index(*idx).unwrap();
+//             buffs[pe].push(local_index);
+//             if buffs[pe].len() >= num_per_batch {
+//                 let mut new_buffer = Vec::with_capacity(num_per_batch);
+//                 std::mem::swap( &mut buffs[pe], &mut new_buffer);
+//                 let am = SingleValMultiIndex::new_with_vec(self.clone(),ArrayOpCmd2::Add,new_buffer,val).into_am();
+//                 reqs.push(self.inner.data.team.exec_arc_am_pe::<()>(
+//                     pe,
+//                     am, 
+//                     Some(self.inner.data.array_counters.clone())
+//                 ).into_future());
+//             }
+            
+//         }
+//         for (pe,buff) in buffs.into_iter().enumerate() {
+//             if buff.len() > 0 {
+//                 let am = SingleValMultiIndex::new_with_vec(self.clone(),ArrayOpCmd2::Add,buff,val).into_am();
+//                 reqs.push(self.inner.data.team.exec_arc_am_pe::<()>(
+//                     pe,
+//                     am, 
+//                     Some(self.inner.data.array_counters.clone())
+//                 ).into_future());
+//             }
+//         }
+//         Box::pin(async move{
+//             futures::future::join_all(reqs).await;
+//         })
+//     }
+
+//     fn add_multi_single3<'a>(&self, mut  index:  impl Iterator<Item = usize>, mut val: impl Iterator<Item =  T>) -> Pin<Box<dyn Future<Output = ()> + Send>>{
+//         // let big_timer = Instant::now();
+//         let num_per_batch = match std::env::var("LAMELLAR_OP_BATCH") {
+//             Ok(n) => n.parse::<usize>().unwrap(), //+ 1 to account for main thread
+//             Err(_) => 10000,                      //+ 1 to account for main thread
+//         };
+//         let num_pes = self.inner.data.team.num_pes();
+//         let mut buffs = vec![Vec::with_capacity(num_per_batch); num_pes];
+//         let val = val.next().unwrap();
+//         let mut reqs = Vec::new();
+//         for idx in index{
+//             let (pe,local_index) = self.pe_and_offset_for_global_index(idx).unwrap();
+//             buffs[pe].push(local_index);
+//             if buffs[pe].len() >= num_per_batch {
+//                 let mut new_buffer = Vec::with_capacity(num_per_batch);
+//                 std::mem::swap( &mut buffs[pe], &mut new_buffer);
+//                 let am = SingleValMultiIndex::new_with_vec(self.clone(),ArrayOpCmd2::Add,new_buffer,val).into_am();
+//                 reqs.push(self.inner.data.team.exec_arc_am_pe::<()>(
+//                     pe,
+//                     am, 
+//                     Some(self.inner.data.array_counters.clone())
+//                 ).into_future());
+//             }
+            
+//         }
+//         for (pe,buff) in buffs.into_iter().enumerate() {
+//             if buff.len() > 0 {
+//                 let am = SingleValMultiIndex::new_with_vec(self.clone(),ArrayOpCmd2::Add,buff,val).into_am();
+//                 reqs.push(self.inner.data.team.exec_arc_am_pe::<()>(
+//                     pe,
+//                     am, 
+//                     Some(self.inner.data.array_counters.clone())
+//                 ).into_future());
+//             }
+//         }
+//         Box::pin(async move{
+//             futures::future::join_all(reqs).await;
+//         })
+//     }
+
+//     fn add_multi_single2<'a>(&self, mut  index: &'a[usize], mut val: T) -> Pin<Box<dyn Future<Output = ()> + Send>>{
+//         // let big_timer = Instant::now();
+//         let num_per_batch = match std::env::var("LAMELLAR_OP_BATCH") {
+//             Ok(n) => n.parse::<usize>().unwrap(), //+ 1 to account for main thread
+//             Err(_) => 10000,                      //+ 1 to account for main thread
+//         };
+//         let num_pes = self.inner.data.team.num_pes();
+//         let mut buffs = vec![Vec::with_capacity(num_per_batch); num_pes];
+//         let mut reqs = Vec::new();
+//         for idx in index{
+//             let (pe,local_index) = self.pe_and_offset_for_global_index(*idx).unwrap();
+//             buffs[pe].push(local_index);
+//             if buffs[pe].len() >= num_per_batch {
+//                 let mut new_buffer = Vec::with_capacity(num_per_batch);
+//                 std::mem::swap( &mut buffs[pe], &mut new_buffer);
+//                 let am = SingleValMultiIndex::new_with_vec(self.clone(),ArrayOpCmd2::Add,new_buffer,val).into_am();
+//                 reqs.push(self.inner.data.team.exec_arc_am_pe::<()>(
+//                     pe,
+//                     am, 
+//                     Some(self.inner.data.array_counters.clone())
+//                 ).into_future());
+//             }
+            
+//         }
+//         for (pe,buff) in buffs.into_iter().enumerate() {
+//             if buff.len() > 0 {
+//                 let am = SingleValMultiIndex::new_with_vec(self.clone(),ArrayOpCmd2::Add,buff,val).into_am();
+//                 reqs.push(self.inner.data.team.exec_arc_am_pe::<()>(
+//                     pe,
+//                     am, 
+//                     Some(self.inner.data.array_counters.clone())
+//                 ).into_future());
+//             }
+//         }
+
+//         Box::pin(async move{
+//             futures::future::join_all(reqs).await;
+//         })
+//     }
+// }
 
 
 // fn multi_multi_add_usize(array: &UnsafeByteArray, idx_vals: &[u8]) {
@@ -688,15 +1017,77 @@ impl<T: AmDist + Dist + ElementArithmeticOps + 'static> UnsafeArray<T> {
 
 
 // #[lamellar_impl::AmDataRT]
-struct MultiMulti{
-    array: UnsafeByteArray,
-    idxs_vals: Vec<u8>,
-    op: ArrayOpCmd<usize>,
+
+struct SingleValMultiIndex{
+    array: LamellarByteArray,
+    idx: Vec<usize>,
+    val: Vec<u8>,
+    op: ArrayOpCmd2,
 }
 
-impl MultiMulti {
-    fn new<T: Dist >(array: UnsafeArray<T>, op: ArrayOpCmd<usize>) -> Self {
+impl SingleValMultiIndex {
+    fn new<T: Dist >(array: LamellarByteArray, op:ArrayOpCmd2, val: T) -> Self {
+        let val_u8 = &val as *const T as *const u8;
+        Self { array:  array.into(), idx: Vec::new(), 
+            val: unsafe {std::slice::from_raw_parts(val_u8, std::mem::size_of::<T>())}.to_vec(),
+            op: op} //, type_id: TypeId::of::<T>() }
+    }
+
+    fn new_with_vec<T: Dist >(array: LamellarByteArray, op: ArrayOpCmd2, indices: Vec<usize>, val: T) -> Self {
+        let val_u8 = &val as *const T as *const u8;
+        Self { array:  array.into(), idx: indices,
+            val: unsafe {std::slice::from_raw_parts(val_u8, std::mem::size_of::<T>())}.to_vec(),
+            op: op} //, type_id: TypeId::of::<T>() }
+
+    }
+
+    fn into_am(self) -> LamellarArcAm {
+        SINGLE_VAL_MULTI_IDX_OPS.get(&(self.array.type_id(),TypeId::of::<usize>())).unwrap()(self.array,self.op,self.val,self.idx)
+    }
+}
+
+struct MultiValSingleIndex{
+    array: LamellarByteArray,
+    idx: usize,
+    val: Vec<u8>,
+    op: ArrayOpCmd2,
+}
+
+impl MultiValSingleIndex {
+    fn new<T: Dist >(array: LamellarByteArray, op:ArrayOpCmd2, index: usize) -> Self {
+        // let val_u8 = &val as *const T as *const u8;
+        Self { array:  array.into(), idx: index, 
+            val: Vec::new(),
+            op: op} //, type_id: TypeId::of::<T>() }
+    }
+
+    fn new_with_vec<T: Dist >(array: LamellarByteArray, op: ArrayOpCmd2, index: usize, val: Vec<T>) -> Self {
+        let val_u8 = val.as_ptr() as *const u8;
+
+        Self { array:  array.into(), idx: index,
+            val: unsafe {std::slice::from_raw_parts(val_u8, std::mem::size_of::<T>()*val.len())}.to_vec(),
+            op: op} //, type_id: TypeId::of::<T>() }
+
+    }
+
+    fn into_am(self) -> LamellarArcAm {
+        MULTI_VAL_SINGLE_IDX_OPS.get(&(self.array.type_id(),TypeId::of::<usize>())).unwrap()(self.array,self.op,self.val,self.idx)
+    }
+}
+
+struct MultiValMultiIndex{
+    array: LamellarByteArray,
+    idxs_vals: Vec<u8>,
+    op: ArrayOpCmd2
+}
+
+impl MultiValMultiIndex {
+    fn new(array: LamellarByteArray, op: ArrayOpCmd2) -> Self {
         Self { array:  array.into(), idxs_vals: Vec::new(), op: op} //, type_id: TypeId::of::<T>() }
+    }
+
+    fn new_with_vec(array: LamellarByteArray, op: ArrayOpCmd2, idxs_vals: Vec<u8>) -> Self {
+        Self { array:  array.into(), idxs_vals: idxs_vals, op: op} //, type_id: TypeId::of::<T>() }
     }
 
     fn append_idxs_vals<T: Dist>(&mut self, idx: usize, val: T) {
@@ -706,83 +1097,11 @@ impl MultiMulti {
     }
 
     fn into_am(self) -> LamellarArcAm {
-        NEWBUFOPS.get(&TypeId::of::<usize>()).unwrap()(self.array,self.op,self.idxs_vals)
+        MULTI_VAL_MULTI_IDX_OPS.get(&(self.array.type_id(),TypeId::of::<usize>())).unwrap()(self.array,self.op,self.idxs_vals)
     }
 }
 
-// #[lamellar_impl::rt_am]
-// // impl LamellarAm for MultiMulti {
-//     async fn exec(self)  {
-//         // let timer = std::time::Instant::now();
-//         let add_fn = NEWBUFOPS.get(&TypeId::of::<usize>()).unwrap();
-//         add_fn(&self.array, &self.idxs_vals);
-//         // println!("elapsed: {:?}", timer.elapsed().as_secs_f64());
-//     }
-// }
 
-// impl<T> From<MultiMultiAdd<T>> for MultiMultiAdd {
-//     fn from(am: MultiMultiAdd<T>) -> Self {
-//         let u8_vec
-//         Self { array: am.array, idx: am.idx, val: am.val, type_id: TypeId::of::<T>() }
-//     }
-// }
-
-// #[lamellar_impl::AmLocalDataRT]
-// struct MultiMultiAdd<T>{
-//     array: UnsafeArray<T>,
-//     idx: Vec<usize>,
-//     val: Vec<T>,
-// }
-
-// impl<T:  AmDist> MultiMultiAdd<T> {
-//     fn new(array: UnsafeArray<T>) -> Self {
-//         Self { array, idx: Vec::new(), val: Vec::new() }
-//     }
-// }
-
-// #[lamellar_impl::rt_am_local]
-// impl<T:  Dist + ElementArithmeticOps > LamellarAm for MultiMultiAdd<T> {
-//     async fn exec(self)  {
-//         let mut local_data = unsafe{self.array.mut_local_data()};
-//        for (idx,val) in self.idx.iter().zip(self.val.iter()) {
-//             local_data[*idx] += *val;
-//        }
-//     }
-// }
-
-#[lamellar_impl::AmLocalDataRT]
-struct SingleMultiAdd<T>{
-    array: UnsafeArray<T>,
-    idx: usize,
-    val: Vec<T>,
-}
-
-#[lamellar_impl::rt_am_local]
-impl<T:  Dist + ElementArithmeticOps > LamellarAm for SingleMultiAdd<T> {
-    async fn exec(self)  {
-        let mut local_data = unsafe{self.array.mut_local_data()};
-        for val in self.val.iter() {
-            local_data[self.idx] += *val;
-        }
-    }
-}
-
-#[lamellar_impl::AmLocalDataRT]
-struct MultiSingleAdd<T>{
-    array: UnsafeArray<T>,
-    idx: Vec<usize>,
-    val: T,
-}
-
-#[lamellar_impl::rt_am_local]
-impl<T:  Dist + ElementArithmeticOps> LamellarAm for MultiSingleAdd<T> {
-    async fn exec(self)  {
-        let mut local_data = unsafe{self.array.mut_local_data()};
-        for idx in self.idx.iter() {
-            local_data[*idx] += self.val;
-        }
-    }
-}
 
 
 impl<T: ElementOps + 'static> ReadOnlyOps<T> for UnsafeArray<T> {}

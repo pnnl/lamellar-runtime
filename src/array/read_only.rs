@@ -10,7 +10,8 @@ use std::sync::Arc;
 
 type BufFn = fn(ReadOnlyByteArrayWeak) -> Arc<dyn BufferOp>;
 
-type OpFn = fn(ReadOnlyByteArray,ArrayOpCmd<usize>,Vec<u8>) -> LamellarArcAm;
+type MultiMultiFn = fn(ReadOnlyByteArray,ArrayOpCmd2,Vec<u8>) -> LamellarArcAm;
+type MultiSingleFn = fn(ReadOnlyByteArray,ArrayOpCmd2,Vec<u8>,Vec<usize>) -> LamellarArcAm;
 
 lazy_static! {
     pub(crate) static ref BUFOPS: HashMap<TypeId, BufFn> = {
@@ -21,13 +22,22 @@ lazy_static! {
         map
     };
 
-    pub(crate) static ref NEWBUFOPS: HashMap<TypeId, OpFn> = {
-        let mut map: HashMap<TypeId, OpFn> = HashMap::new();
-        for op in crate::inventory::iter::<ReadOnlyArrayOpBufNew> {
+    pub(crate) static ref MULTIMULTIOPS: HashMap<TypeId, MultiMultiFn> = {
+        let mut map = HashMap::new();
+        for op in crate::inventory::iter::<ReadOnlyArrayMultiMultiOps> {
             map.insert(op.id.clone(), op.op);
         }
         map
     };
+
+    pub(crate) static ref MULTISINGLEOPS: HashMap<TypeId, MultiSingleFn> = {
+        let mut map = HashMap::new();
+        for op in crate::inventory::iter::<ReadOnlyArrayMultiSingleOps> {
+            map.insert(op.id.clone(), op.op);
+        }
+        map
+    };
+
 }
 
 #[doc(hidden)]
@@ -37,13 +47,20 @@ pub struct ReadOnlyArrayOpBuf {
 }
 
 #[doc(hidden)]
-pub struct ReadOnlyArrayOpBufNew {
+pub struct ReadOnlyArrayMultiMultiOps {
     pub id: TypeId,
-    pub op: OpFn,
+    pub op: MultiMultiFn,
+}
+
+#[doc(hidden)]
+pub struct ReadOnlyArrayMultiSingleOps {
+    pub id: TypeId,
+    pub op: MultiSingleFn,
 }
 
 crate::inventory::collect!(ReadOnlyArrayOpBuf);
-crate::inventory::collect!(ReadOnlyArrayOpBufNew);
+crate::inventory::collect!(ReadOnlyArrayMultiMultiOps);
+crate::inventory::collect!(ReadOnlyArrayMultiSingleOps);
 
 /// A safe abstraction of a distributed array, providing only read access.
 #[lamellar_impl::AmDataRT(Clone, Debug)]
@@ -440,6 +457,17 @@ impl<T: Dist> From<ReadOnlyArray<T>> for LamellarByteArray {
     }
 }
 
+impl<T: Dist> From<LamellarByteArray> for ReadOnlyArray<T> {
+    fn from(array:LamellarByteArray) -> Self {
+        if let LamellarByteArray::ReadOnlyArray(array) = array {
+            array.into()
+        }
+        else {
+            panic!("Expected LamellarByteArray::ReadOnlyArray")
+        }
+    }
+}
+
 impl<T: Dist + AmDist + 'static> LamellarArrayReduce<T> for ReadOnlyArray<T> {
     fn reduce(&self, op: &str) -> Pin<Box<dyn Future<Output = T>>> {
         self.array
@@ -495,6 +523,9 @@ impl<T: Dist> private::LamellarArrayPrivate<T> for ReadOnlyArray<T> {
     }
     unsafe fn into_inner(self) -> UnsafeArray<T> {
         self.array
+    }
+    fn as_lamellar_byte_array(&self) -> LamellarByteArray {
+        self.clone().into()
     }
 }
 

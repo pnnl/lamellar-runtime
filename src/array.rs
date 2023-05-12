@@ -111,10 +111,10 @@ pub mod prelude;
 
 pub(crate) mod r#unsafe;
 pub use r#unsafe::{
-    operations::{UnsafeArrayOpBuf,UnsafeArrayOpBufNew}, UnsafeArray, UnsafeByteArray, UnsafeByteArrayWeak,
+    operations::{UnsafeArrayOpBuf,MultiValMultiIdxOps,MultiValSingleIdxOps,SingleValMultiIdxOps}, UnsafeArray, UnsafeByteArray, UnsafeByteArrayWeak,
 };
 pub(crate) mod read_only;
-pub use read_only::{ReadOnlyArray, ReadOnlyArrayOpBuf, ReadOnlyArrayOpBufNew, ReadOnlyByteArray, ReadOnlyByteArrayWeak};
+pub use read_only::{ReadOnlyArray, ReadOnlyArrayOpBuf, ReadOnlyArrayMultiMultiOps, ReadOnlyArrayMultiSingleOps, ReadOnlyByteArray, ReadOnlyByteArrayWeak};
 
 // pub(crate) mod local_only;
 // pub use local_only::LocalOnlyArray;
@@ -130,25 +130,25 @@ pub use atomic::{
 
 pub(crate) mod generic_atomic;
 pub use generic_atomic::{
-    operations::{GenericAtomicArrayOpBuf,GenericAtomicArrayOpBufNew}, GenericAtomicArray, GenericAtomicByteArray,
+    operations::{GenericAtomicArrayOpBuf, GenericAtomicArrayMultiMultiOps, GenericAtomicArrayMultiSingleOps}, GenericAtomicArray, GenericAtomicByteArray,
     GenericAtomicByteArrayWeak, GenericAtomicLocalData,
 };
 
 pub(crate) mod native_atomic;
 pub use native_atomic::{
-    operations::{NativeAtomicArrayOpBuf,NativeAtomicArrayOpBufNew}, NativeAtomicArray, NativeAtomicByteArray,
+    operations::{NativeAtomicArrayOpBuf,NativeAtomicArrayMultiMultiOps, NativeAtomicArrayMultiSingleOps}, NativeAtomicArray, NativeAtomicByteArray,
     NativeAtomicByteArrayWeak, NativeAtomicLocalData,
 };
 
 pub(crate) mod local_lock_atomic;
 pub use local_lock_atomic::{
-    operations::{LocalLockArrayOpBuf,LocalLockArrayOpBufNew}, LocalLockArray, LocalLockByteArray, LocalLockByteArrayWeak,
+    operations::{LocalLockArrayOpBuf,LocalLockArrayMultiMultiOps, LocalLockArrayMultiSingleOps}, LocalLockArray, LocalLockByteArray, LocalLockByteArrayWeak,
     LocalLockLocalData, LocalLockMutLocalData,
 };
 
 pub(crate) mod global_lock_atomic;
 pub use global_lock_atomic::{
-    operations::{GlobalLockArrayOpBuf,GlobalLockArrayOpBufNew}, GlobalLockArray, GlobalLockByteArray,
+    operations::{GlobalLockArrayOpBuf,GlobalLockArrayMultiMultiOps, GlobalLockArrayMultiSingleOps}, GlobalLockArray, GlobalLockByteArray,
     GlobalLockByteArrayWeak, GlobalLockLocalData, GlobalLockMutLocalData,
 };
 
@@ -428,6 +428,20 @@ pub enum LamellarByteArray {
     GlobalLockArray(GlobalLockByteArray),
 }
 
+impl LamellarByteArray{
+    pub fn type_id(&self) -> std::any::TypeId {
+        match self{
+            LamellarByteArray::UnsafeArray(_) => std::any::TypeId::of::<UnsafeByteArray>(),
+            LamellarByteArray::ReadOnlyArray(_) => std::any::TypeId::of::<ReadOnlyByteArray>(),
+            LamellarByteArray::AtomicArray(_) => std::any::TypeId::of::<AtomicByteArray>(),
+            LamellarByteArray::NativeAtomicArray(_) => std::any::TypeId::of::<NativeAtomicByteArray>(),
+            LamellarByteArray::GenericAtomicArray(_) => std::any::TypeId::of::<GenericAtomicByteArray>(),
+            LamellarByteArray::LocalLockArray(_) => std::any::TypeId::of::<LocalLockByteArray>(),
+            LamellarByteArray::GlobalLockArray(_) => std::any::TypeId::of::<GlobalLockByteArray>(),
+        }
+    }
+}
+
 impl<T: Dist + 'static> crate::active_messaging::DarcSerde for LamellarReadArray<T> {
     fn ser(&self, num_pes: usize, darcs: &mut Vec<RemotePtr>) {
         // println!("in shared ser");
@@ -596,7 +610,7 @@ pub(crate) mod private {
     use crate::active_messaging::*;
     use crate::array::{
         AtomicArray, GlobalLockArray,
-        /*NativeAtomicArray, GenericAtomicArray,*/ LamellarReadArray, LamellarWriteArray,
+        /*NativeAtomicArray, GenericAtomicArray,*/ LamellarReadArray, LamellarWriteArray, LamellarByteArray,
         LocalLockArray, ReadOnlyArray, UnsafeArray,
     };
     use crate::lamellar_request::{LamellarMultiRequest, LamellarRequest};
@@ -615,6 +629,7 @@ pub(crate) mod private {
         fn pe_for_dist_index(&self, index: usize) -> Option<usize>;
         fn pe_offset_for_dist_index(&self, pe: usize, index: usize) -> Option<usize>;
         unsafe fn into_inner(self) -> UnsafeArray<T>;
+        fn as_lamellar_byte_array(&self) -> LamellarByteArray;
     }
 
     #[doc(hidden)]

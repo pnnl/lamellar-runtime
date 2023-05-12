@@ -139,7 +139,8 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
         index: impl OpInput<'a, usize>,
         val: impl OpInput<'a, T>,
     ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
-        self.inner_array().initiate_op(val, index, ArrayOpCmd::And)
+        // self.inner_array().initiate_op(val, index, ArrayOpCmd::And)
+        self.inner_array().initiate_batch_op(val, index, ArrayOpCmd2::And,self.as_lamellar_byte_array())
     }
 
     /// This call performs a bitwise `and` with the element specified by `index` and the supplied `val`, returning the old value
@@ -267,7 +268,8 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
         index: impl OpInput<'a, usize>,
         val: impl OpInput<'a, T>,
     ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
-        self.inner_array().initiate_op(val, index, ArrayOpCmd::Or)
+        // self.inner_array().initiate_op(val, index, ArrayOpCmd::Or)
+        self.inner_array().initiate_batch_op(val, index, ArrayOpCmd2::Or,self.as_lamellar_byte_array())
     }
 
     /// This call performs a bitwise `or` with the element specified by `index` and the supplied `val`, returning the old value
@@ -395,7 +397,8 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
         index: impl OpInput<'a, usize>,
         val: impl OpInput<'a, T>,
     ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
-        self.inner_array().initiate_op(val, index, ArrayOpCmd::Xor)
+        // self.inner_array().initiate_op(val, index, ArrayOpCmd::Xor)
+        self.inner_array().initiate_batch_op(val, index, ArrayOpCmd2::Xor,self.as_lamellar_byte_array())
     }
 
     /// This call performs a bitwise `xor` with the element specified by `index` and the supplied `val`, returning the old value

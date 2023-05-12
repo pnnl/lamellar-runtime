@@ -632,6 +632,17 @@ impl<T: Dist> From<GenericAtomicArray<T>> for LamellarByteArray {
     }
 }
 
+impl<T: Dist> From<LamellarByteArray> for GenericAtomicArray<T> {
+    fn from(array:LamellarByteArray) -> Self {
+        if let LamellarByteArray::GenericAtomicArray(array) = array {
+            array.into()
+        }
+        else {
+            panic!("Expected LamellarByteArray::GenericAtomicArray")
+        }
+    }
+}
+
 impl<T: Dist> From<GenericAtomicArray<T>> for AtomicByteArray {
     fn from(array: GenericAtomicArray<T>) -> Self {
         AtomicByteArray::GenericAtomicByteArray(GenericAtomicByteArray {
@@ -685,6 +696,9 @@ impl<T: Dist> private::LamellarArrayPrivate<T> for GenericAtomicArray<T> {
     }
     unsafe fn into_inner(self) -> UnsafeArray<T> {
         self.array
+    }
+    fn as_lamellar_byte_array(&self) -> LamellarByteArray {
+        self.clone().into()
     }
 }
 

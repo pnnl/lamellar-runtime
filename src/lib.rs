@@ -248,6 +248,9 @@ pub use async_trait;
 #[doc(hidden)]
 pub use futures;
 
+#[doc(hidden)]
+pub use futures;
+
 pub mod active_messaging;
 #[doc(hidden)]
 pub use active_messaging::prelude::*;

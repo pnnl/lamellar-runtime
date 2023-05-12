@@ -920,6 +920,42 @@ fn create_buf_ops(
 }
 
 
+fn gen_multi_val_multi_idx(op_type: proc_macro2::TokenStream, lock: &proc_macro2::TokenStream, op: proc_macro2::TokenStream) -> proc_macro2::TokenStream{
+    quote! {
+        #op_type =>{
+            for elem in idx_vals{
+                let index = elem.index;
+                let val = elem.val;
+                #lock
+                #op
+            }
+        }
+    }
+}
+
+fn gen_single_idx_multi_val(op_type: proc_macro2::TokenStream, lock: &proc_macro2::TokenStream, op: proc_macro2::TokenStream) -> proc_macro2::TokenStream{
+    quote! {
+        #op_type =>{
+            for index in self.indices.iter(){
+                let index = *index;
+                #lock
+                #op
+            }
+        }
+    }
+}
+
+fn gen_multi_val_single_idx(op_type: proc_macro2::TokenStream, lock: &proc_macro2::TokenStream, op: proc_macro2::TokenStream) -> proc_macro2::TokenStream{
+    quote! {
+        #op_type =>{
+            for val in vals.iter(){
+                let val = *val;
+                #lock
+                #op
+            }
+        }
+    }
+}
 
 fn create_buf_ops2(
     typeident: syn::Type,
@@ -1268,282 +1304,130 @@ fn create_buf_ops2(
         )
     };
 
-    let mut match_stmts = quote! {};
-    for optype in optypes {
-        match optype {
-            OpType::Arithmetic => match_stmts.extend(quote! {
-                ArrayOpCmd::Add=>{ 
-                    for elem in idx_vals{
-                        let index = elem.index;
-                        let val = elem.val;
-                        #lock
-                        #lhs += val 
-                    }
-                },
-                ArrayOpCmd::FetchAdd=> {
-                    // for elem in idx_vals{
-                    //     let index = elem.index;
-                    //     let val = elem.val;
-                    //     #lock
-                    //     #fetch_add
-                    // }
-                },
-                ArrayOpCmd::Sub=>{
-                    for elem in idx_vals{
-                        let index = elem.index;
-                        let val = elem.val;
-                        #lock
-                        #lhs -= val
-                    }
-                },
-                ArrayOpCmd::FetchSub=>{
-                    // for elem in idx_vals{
-                    //     let index = elem.index;
-                    //     let val = elem.val;
-                    //     #lock
-                    //     #fetch_sub
-                    // }
-                },
-                ArrayOpCmd::Mul=>{ 
-                    for elem in idx_vals{
-                        let index = elem.index;
-                        let val = elem.val;
-                        #lock
-                        #lhs *= val
-                    }
-                },
-                ArrayOpCmd::FetchMul=>{
-                    // for elem in idx_vals{
-                    //     let index = elem.index;
-                    //     let val = elem.val;
-                    //     #lock
-                    //     #fetch_mul
-                    // }
-                },
-                ArrayOpCmd::Div=>{ 
-                    for elem in idx_vals{
-                        let index = elem.index;
-                        let val = elem.val;
-                        #lock
-                        #lhs /= val 
-                    }
-                },
-                ArrayOpCmd::FetchDiv=>{
-                    // for elem in idx_vals{
-                    //     let index = elem.index;
-                    //     let val = elem.val;
-                    //     #lock
-                    //     #fetch_div
-                    // }
-                },
-                ArrayOpCmd::Rem=>{ 
-                    for elem in idx_vals{
-                        let index = elem.index;
-                        let val = elem.val;
-                        #lock
-                        #lhs %= val 
-                    }
-                },
-                ArrayOpCmd::FetchRem=>{
-                    // for elem in idx_vals{
-                    //     let index = elem.index;
-                    //     let val = elem.val;
-                    //     #lock
-                    //     #fetch_rem
-                    // }
-                },
-                ArrayOpCmd::Put => {
-                    for elem in idx_vals{
-                        let index = elem.index;
-                        let val = elem.val;
-                        #lock
-                        #assign
-                    }
-                },
-                ArrayOpCmd::Get =>{
-                    // for elem in idx_vals{
-                    //     let index = elem.index;
-                    //     let val = elem.val;
-                    //     #lock
-                    //     #res_t res_t[0] = #load;
-                    // }
+    let mut multi_val_multi_idx_match_stmts = quote! {};
+    let mut single_val_multi_idx_match_stmts = quote! {};
+    let mut multi_val_single_idx_match_stmts = quote! {};
+    let mut  all_match_stmts: Vec<(proc_macro2::TokenStream, fn(proc_macro2::TokenStream, & proc_macro2::TokenStream, proc_macro2::TokenStream) -> proc_macro2::TokenStream)> = vec![(multi_val_multi_idx_match_stmts,gen_multi_val_multi_idx),(single_val_multi_idx_match_stmts,gen_single_idx_multi_val),(multi_val_single_idx_match_stmts,gen_multi_val_single_idx)];
+    for  (match_stmts, gen_fn) in all_match_stmts.iter_mut() {
+        for optype in optypes {
+            match optype {
+                OpType::Arithmetic => {
+                    match_stmts.extend(gen_fn(quote! {ArrayOpCmd2::Add},&lock,quote!{ #lhs += val; })); 
+                    match_stmts.extend(gen_fn(quote! {ArrayOpCmd2::FetchAdd},&lock,quote!{}));//fetch_add.clone()));
+
+                    match_stmts.extend(gen_fn(quote! {ArrayOpCmd2::Sub},&lock,quote!{#lhs -= val; })); 
+                    match_stmts.extend(gen_fn(quote! {ArrayOpCmd2::FetchSub},&lock,quote!{}));//fetch_sub.clone()));
+
+                    match_stmts.extend(gen_fn(quote! {ArrayOpCmd2::Mul},&lock,quote!{#lhs *= val;})); 
+                    match_stmts.extend(gen_fn(quote! {ArrayOpCmd2::FetchMul},&lock,quote!{}));//fetch_mul.clone()));
+
+                    match_stmts.extend(gen_fn(quote! {ArrayOpCmd2::Div},&lock,quote!{#lhs /= val; })); 
+                    match_stmts.extend(gen_fn(quote! {ArrayOpCmd2::FetchDiv},&lock,quote!{}));//fetch_div.clone()));
+
+                    match_stmts.extend(gen_fn(quote! {ArrayOpCmd2::Rem},&lock,quote!{#lhs %= val; })); 
+                    match_stmts.extend(gen_fn(quote! {ArrayOpCmd2::FetchRem},&lock,quote!{}));//fetch_rem.clone()));
+                    
+                    match_stmts.extend(gen_fn(quote! {ArrayOpCmd2::Put},&lock,assign.clone())); 
+                    match_stmts.extend(gen_fn(quote! {ArrayOpCmd2::Get},&lock,quote!{}));//load.clone()));
                 }
-            }),
-            OpType::Bitwise => match_stmts.extend(quote! {
-                ArrayOpCmd::And=>{
-                    for elem in idx_vals{
-                        let index = elem.index;
-                        let val = elem.val;
-                        #lock
-                        #lhs &= val
-                    }
+                ,
+                OpType::Bitwise => {
+                    match_stmts.extend(gen_fn(quote! {ArrayOpCmd2::And},&lock,quote!{#lhs &= val; })); 
+                    match_stmts.extend(gen_fn(quote! {ArrayOpCmd2::FetchAnd},&lock,quote!{}));//fetch_and.clone()));
+                   
+                    match_stmts.extend(gen_fn(quote! {ArrayOpCmd2::Or},&lock,quote!{#lhs |= val; })); 
+                    match_stmts.extend(gen_fn(quote! {ArrayOpCmd2::FetchOr},&lock,quote!{}));//fetch_or.clone()));
+                    
+
+                    match_stmts.extend(gen_fn(quote! {ArrayOpCmd2::Xor},&lock,quote!{#lhs ^= val; })); 
+                    match_stmts.extend(gen_fn(quote! {ArrayOpCmd2::FetchXor},&lock,quote!{}));//fetch_xor.clone()));
+                    
                 },
-                ArrayOpCmd::FetchAnd=>{
-                    // for elem in idx_vals{
-                    //     let index = elem.index;
-                    //     let val = elem.val;
-                    //     #lock
-                    //     #fetch_and
+                OpType::Access => {
+                    match_stmts.extend(gen_fn(quote! {ArrayOpCmd2::Store},&lock,assign.clone())); 
+                    match_stmts.extend(gen_fn(quote! {ArrayOpCmd2::Swap},&lock,swap.clone()));//fetch_xor.clone()));
+                },
+                OpType::CompEx =>  {
+                    match_stmts.extend(gen_fn(quote! {ArrayOpCmd2::CompareExchange},&lock,quote!{}));
+                    match_stmts.extend(gen_fn(quote! {ArrayOpCmd2::CompareExchangeEps},&lock,quote!{}));
+                    // ArrayOpCmd::CompareExchange(old) =>{
+                    //     for elem in idx_vals{
+                    //         let index = elem.index;
+                    //         let val = elem.val;
+                    //         #lock
+                    //         // #compare_exchange
+                    //     }
+                    // }
+                    // ArrayOpCmd::CompareExchangeEps(old,eps) =>{
+                    //     for elem in idx_vals{
+                    //         let index = elem.index;
+                    //         let val = elem.val;
+                    //         #lock
+                    //         // #compare_exchange_eps
+                    //     }
                     // }
                 },
-                ArrayOpCmd::Or=>{
-                    for elem in idx_vals{
-                        let index = elem.index;
-                        let val = elem.val;
-                        #lock
-                        #lhs |= val
-                    }
+                OpType::ReadOnly => {
+                    match_stmts.extend(gen_fn(quote! {ArrayOpCmd2::Load},&lock,quote!{}));//quote!{#res_t res_t[0] =  #load;}));
                 },
-                ArrayOpCmd::FetchOr=>{
-                    // for elem in idx_vals{
-                    //     let index = elem.index;
-                    //     let val = elem.val;
-                    //     #lock
-                    //     #fetch_or
-                    // }
+                OpType::Shift => {
+                    match_stmts.extend(gen_fn(quote! {ArrayOpCmd2::Shl},&lock,shl.clone()));
+                    match_stmts.extend(gen_fn(quote! {ArrayOpCmd2::FetchShl},&lock,quote!{}));//,fetch_shl.clone()));
+                    match_stmts.extend(gen_fn(quote! {ArrayOpCmd2::Shr},&lock,shr.clone()));
+                    match_stmts.extend(gen_fn(quote! {ArrayOpCmd2::FetchShr},&lock,quote!{}));//,fetch_shr.clone()));
+                   
                 },
-                ArrayOpCmd::Xor=>{
-                    for elem in idx_vals{
-                        let index = elem.index;
-                        let val = elem.val;
-                        #lock
-                        #lhs ^= val
-                    }
-                },
-                ArrayOpCmd::FetchXor=>{
-                    // for elem in idx_vals{
-                    //     let index = elem.index;
-                    //     let val = elem.val;
-                    //     #lock
-                    //     #fetch_xor
-                    // }
-                },
-            }),
-            OpType::Access => match_stmts.extend(quote! {
-                ArrayOpCmd::Store=>{
-                    for elem in idx_vals{
-                        let index = elem.index;
-                        let val = elem.val;
-                        #lock
-                        #assign
-                    }
-                },
-                ArrayOpCmd::Swap=>{
-                    for elem in idx_vals{
-                        let index = elem.index;
-                        let val = elem.val;
-                        #lock
-                        #swap
-                    }
-                },
-            }),
-            OpType::CompEx => match_stmts.extend(quote! {
-                ArrayOpCmd::CompareExchange(old) =>{
-                    for elem in idx_vals{
-                        let index = elem.index;
-                        let val = elem.val;
-                        #lock
-                        // #compare_exchange
-                    }
-                }
-                ArrayOpCmd::CompareExchangeEps(old,eps) =>{
-                    for elem in idx_vals{
-                        let index = elem.index;
-                        let val = elem.val;
-                        #lock
-                        // #compare_exchange_eps
-                    }
-                }
-            }),
-            OpType::ReadOnly => match_stmts.extend(quote! {
-                ArrayOpCmd::Load=>{
-                    // for elem in idx_vals{
-                    //     let index = elem.index;
-                    //     let val = elem.val;
-                    //     #lock
-                    //     #res_t res_t[0] =  #load;
-                    // }
-                },
-            }),
-            OpType::Shift => match_stmts.extend(quote! {
-                ArrayOpCmd::Shl=>{
-                    for elem in idx_vals{
-                        let index = elem.index;
-                        let val = elem.val;
-                        #lock
-                        #shl
-                    }
-                },
-                ArrayOpCmd::FetchShl=>{
-                    // for elem in idx_vals{
-                    //     let index = elem.index;
-                    //     let val = elem.val;
-                    //     #lock
-                    //     #fetch_shl
-                    // }
-                },
-                ArrayOpCmd::Shr=>{
-                    for elem in idx_vals{
-                        let index = elem.index;
-                        let val = elem.val;
-                        #lock
-                        #shr
-                    }
-                },
-                ArrayOpCmd::FetchShr=>{
-                    // for elem in idx_vals{
-                    //     let index = elem.index;
-                    //     let val = elem.val;
-                    //     #lock
-                    //     #fetch_shr
-                    // }
-                },
-            }),
+            }
         }
+        match_stmts.extend(quote!{
+            _=> unreachable!("op: {:?} should not be possible in this context", self.op),
+        });
     }
-    match_stmts.extend(quote!{
-        _=> unreachable!("op: {:?} should not be possible in this context", self.op),
-    });
+    
 
     // let buf_op_name = quote::format_ident!("{}_{}_op_buf", array_type, type_to_string(&typeident));
-    let multi_multi_am_buf_name = quote::format_ident!("{}_{}_multi_multi_am_buf", array_type, type_to_string(&typeident));
-    let dist_multi_multi_am_buf_name =
-        quote::format_ident!("{}_{}_multi_multi_am", array_type, type_to_string(&typeident));
-    let reg_name = quote::format_ident!("{}OpBufNew", array_type);
+    let multi_val_multi_idx_am_buf_name = quote::format_ident!("{}_{}_multi_val_multi_idx_am_buf", array_type, type_to_string(&typeident));
+    let dist_multi_val_multi_idx_am_buf_name =
+        quote::format_ident!("{}_{}_multi_val_multi_idx_am", array_type, type_to_string(&typeident));
+    let multi_val_multi_idx_reg_name = quote::format_ident!("MultiValMultiIdxOps");
 
-    // let inner_op = quote! {
-    //     let index = elem.index;
-    //     let val = elem.val;
-    //     #lock //this will get dropped at end of loop
-    //     let orig = #load;
-    //     // println!("before op: {:?} index: {:?} val {:?} results_index {:?} orig {:?}",op,index,val,results_u8,orig);
+    let single_val_multi_idx_am_buf_name = quote::format_ident!("{}_{}_single_val_multi_idx_am_buf", array_type, type_to_string(&typeident));
+    let dist_single_val_multi_idx_am_buf_name =
+        quote::format_ident!("{}_{}_single_val_multi_idx_am", array_type, type_to_string(&typeident));
+    let single_val_multi_idx_reg_name = quote::format_ident!("SingleValMultiIdxOps");
 
-    //     match op{
-    //     # match_stmts
-    //     _ => {panic!("shouldnt happen {:?}",op)}
-    //     }
-    // };
+    let multi_val_single_idx_am_buf_name = quote::format_ident!("{}_{}_multi_val_single_idx_am_buf", array_type, type_to_string(&typeident));
+    let dist_multi_val_single_idx_am_buf_name =
+        quote::format_ident!("{}_{}_multi_val_single_idx_am", array_type, type_to_string(&typeident));
+    let multi_val_single_idx_reg_name = quote::format_ident!("MultiValSingleIdxOps");
+
+
+    let multi_val_multi_idx_match_stmts = all_match_stmts[0].0.clone();
+    let single_val_multi_idx_match_stmts = all_match_stmts[1].0.clone();
+    let multi_val_single_idx_match_stmts = all_match_stmts[2].0.clone();
 
     expanded.extend(quote! {
         #[#am_data(Debug)]
-        struct #multi_multi_am_buf_name{
+        struct #multi_val_multi_idx_am_buf_name{
             data: #lamellar::array::#array_type<#typeident>,
-            op: #lamellar::array::ArrayOpCmd<usize>,
+            op: #lamellar::array::ArrayOpCmd2,
             idx_vals: Vec<u8>,
         }
         #[#am]
-        impl LamellarAM for #multi_multi_am_buf_name{ //eventually we can return fetchs here too...
+        impl LamellarAM for #multi_val_multi_idx_am_buf_name{ //eventually we can return fetchs here too...
             async fn exec(&self) {
                 #slice
                 let idx_vals = unsafe {std::slice::from_raw_parts(self.idx_vals.as_ptr() as *const IdxVal<#typeident>, self.idx_vals.len()/std::mem::size_of::<IdxVal<#typeident>>())};
                 match self.op {
-                    #match_stmts
+                    #multi_val_multi_idx_match_stmts
                 }
             }
         }
         #[allow(non_snake_case)]
-        fn #dist_multi_multi_am_buf_name(array: #lamellar::array::#byte_array_type, op: #lamellar::array::ArrayOpCmd<usize>, idx_vals: Vec<u8>) -> Arc<dyn RemoteActiveMessage + Sync + Send>{
-                Arc::new(#multi_multi_am_buf_name{
+        fn #dist_multi_val_multi_idx_am_buf_name(array: #lamellar::array::LamellarByteArray, op: #lamellar::array::ArrayOpCmd2, idx_vals: Vec<u8>) -> Arc<dyn RemoteActiveMessage + Sync + Send>{
+
+        // fn #dist_multi_val_multi_idx_am_buf_name(array: #lamellar::array::#byte_array_type, op: #lamellar::array::ArrayOpCmd2, idx_vals: Vec<u8>) -> Arc<dyn RemoteActiveMessage + Sync + Send>{
+                Arc::new(#multi_val_multi_idx_am_buf_name{
                     data: array.into(),
                     op: op,
                     idx_vals: idx_vals,
@@ -1551,9 +1435,84 @@ fn create_buf_ops2(
         }
         inventory::submit! {
             // #![crate = #lamellar]
-            #lamellar::array::#reg_name{
-                id: std::any::TypeId::of::<#typeident>(),
-                op: #dist_multi_multi_am_buf_name,
+            #lamellar::array::#multi_val_multi_idx_reg_name{
+                id: (std::any::TypeId::of::<#byte_array_type>(),std::any::TypeId::of::<#typeident>()),
+                op: #dist_multi_val_multi_idx_am_buf_name,
+            }
+        }
+
+        #[#am_data(Debug)]
+        struct #single_val_multi_idx_am_buf_name{
+            data: #lamellar::array::#array_type<#typeident>,
+            op: #lamellar::array::ArrayOpCmd2,
+            val: #typeident,
+            indices: Vec<usize>,
+            
+        }
+        #[#am]
+        impl LamellarAM for #single_val_multi_idx_am_buf_name{ //eventually we can return fetchs here too...
+            async fn exec(&self) {
+                #slice
+                let val = self.val;
+                match self.op {
+                    #single_val_multi_idx_match_stmts
+                }
+            }
+        }
+        #[allow(non_snake_case)]
+        fn #dist_single_val_multi_idx_am_buf_name(array: #lamellar::array::LamellarByteArray, op: #lamellar::array::ArrayOpCmd2, val: Vec<u8>, indicies: Vec<usize>) -> Arc<dyn RemoteActiveMessage + Sync + Send>{
+                let val_slice = unsafe {std::slice::from_raw_parts(val.as_ptr() as *const #typeident, std::mem::size_of::<#typeident>())};
+                let val = val_slice[0];
+                Arc::new(#single_val_multi_idx_am_buf_name{
+                    data: array.into(),
+                    op: op,
+                    val: val,
+                    indices: indicies,
+                })
+        }
+        inventory::submit! {
+            // #![crate = #lamellar]
+            #lamellar::array::#single_val_multi_idx_reg_name{
+                id: (std::any::TypeId::of::<#byte_array_type>(),std::any::TypeId::of::<#typeident>()),
+                op: #dist_single_val_multi_idx_am_buf_name,
+            }
+        }
+
+        #[#am_data(Debug)]
+        struct #multi_val_single_idx_am_buf_name{
+            data: #lamellar::array::#array_type<#typeident>,
+            op: #lamellar::array::ArrayOpCmd2,
+            vals: Vec<u8>,
+            index: usize,
+            
+        }
+        #[#am]
+        impl LamellarAM for #multi_val_single_idx_am_buf_name{ //eventually we can return fetchs here too...
+            async fn exec(&self) {
+                #slice
+                let vals = unsafe {std::slice::from_raw_parts(self.vals.as_ptr() as *const #typeident, self.vals.len()/std::mem::size_of::<#typeident>())};
+                let index = self.index;
+                match self.op {
+                    #multi_val_single_idx_match_stmts
+                }
+            }
+        }
+        #[allow(non_snake_case)]
+        fn #dist_multi_val_single_idx_am_buf_name(array: #lamellar::array::LamellarByteArray, op: #lamellar::array::ArrayOpCmd2, vals: Vec<u8>, index: usize) -> Arc<dyn RemoteActiveMessage + Sync + Send>{
+                // let vals_slice = unsafe {std::slice::from_raw_parts(val.as_ptr() as *const #typeident, vals.len()/std::mem::size_of::<#typeident>())};
+                // let val = val_slice[0];
+                Arc::new(#multi_val_single_idx_am_buf_name{
+                    data: array.into(),
+                    op: op,
+                    vals: vals,
+                    index: index,
+                })
+        }
+        inventory::submit! {
+            // #![crate = #lamellar]
+            #lamellar::array::#multi_val_single_idx_reg_name{
+                id: (std::any::TypeId::of::<#byte_array_type>(),std::any::TypeId::of::<#typeident>()),
+                op: #dist_multi_val_single_idx_am_buf_name,
             }
         }
     });

@@ -1049,6 +1049,18 @@ impl<T: Dist> From<NativeAtomicArray<T>> for LamellarByteArray {
 }
 
 #[doc(hidden)]
+impl<T: Dist> From<LamellarByteArray> for NativeAtomicArray<T> {
+    fn from(array:LamellarByteArray) -> Self {
+        if let LamellarByteArray::NativeAtomicArray(array) = array {
+            array.into()
+        }
+        else {
+            panic!("Expected LamellarByteArray::NativeAtomicArray")
+        }
+    }
+}
+
+#[doc(hidden)]
 impl<T: Dist> From<NativeAtomicArray<T>> for AtomicByteArray {
     fn from(array: NativeAtomicArray<T>) -> Self {
         AtomicByteArray::NativeAtomicByteArray(NativeAtomicByteArray {
@@ -1108,6 +1120,9 @@ impl<T: Dist> private::LamellarArrayPrivate<T> for NativeAtomicArray<T> {
     }
     unsafe fn into_inner(self) -> UnsafeArray<T> {
         self.array
+    }
+    fn as_lamellar_byte_array(&self) -> LamellarByteArray {
+        self.clone().into()
     }
 }
 

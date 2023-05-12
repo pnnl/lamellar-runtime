@@ -640,6 +640,18 @@ impl<T: Dist> From<LocalLockArray<T>> for LamellarByteArray {
         })
     }
 }
+
+impl<T: Dist> From<LamellarByteArray> for LocalLockArray<T> {
+    fn from(array:LamellarByteArray) -> Self {
+        if let LamellarByteArray::LocalLockArray(array) = array {
+            array.into()
+        }
+        else {
+            panic!("Expected LamellarByteArray::LocalLockArray")
+        }
+    }
+}
+
 impl<T: Dist> From<LocalLockByteArray> for LocalLockArray<T> {
     fn from(array: LocalLockByteArray) -> Self {
         LocalLockArray {
@@ -676,6 +688,9 @@ impl<T: Dist> private::LamellarArrayPrivate<T> for LocalLockArray<T> {
     }
     unsafe fn into_inner(self) -> UnsafeArray<T> {
         self.array
+    }
+    fn as_lamellar_byte_array(&self) -> LamellarByteArray {
+        self.clone().into()
     }
 }
 
