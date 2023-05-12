@@ -476,14 +476,20 @@ fn generate_am(
     };
 
     if let AmType::ReturnData(_) = am_type {
+        let  generic_phantoms = generics.type_params().fold(quote!{}, |acc, t| {
+            let name =quote::format_ident!("_phantom_{}", t.ident.to_string().to_lowercase());
+            quote!{#acc
+            #name: std::marker::PhantomData<#t>,}
+        });
         // let generic_phantom = quote::format_ident!("std::marker::PhantomData{}", impl_generics);
+        // println!("{:?}", generic_phantoms);
 
         let the_ret_struct = if vec_u8 {
             quote! {
                 #am_data_header
                 struct #ret_struct #ty_generics #where_clause{
                     val: serde_bytes::ByteBuf,
-                    // _phantom: std::marker::PhantomData<(#impl_generics)>,
+                    #generic_phantoms
                 }
             }
         } else {
@@ -491,7 +497,7 @@ fn generate_am(
                 #am_data_header
                 struct #ret_struct #ty_generics #where_clause{
                     val: #ret_type,
-                    // _phantom: std::marker::PhantomData<(#impl_generics)>,
+                    #generic_phantoms
                 }
             }
         };

@@ -1,6 +1,7 @@
 use crate::array::r#unsafe::*;
 
 use crate::array::iterator::distributed_iterator::for_each::*;
+
 use crate::array::iterator::distributed_iterator::*;
 use crate::array::iterator::local_iterator;
 use crate::array::iterator::local_iterator::*;
@@ -1128,6 +1129,49 @@ impl<T: Dist> UnsafeArray<T> {
         }
         Box::new(LocalIterForEachHandle { reqs: reqs }).into_future()
     }
+
+    fn local_reduce_static<I, F>(
+        &self,
+        iter: &I,
+        op: F,
+    ) -> Pin<Box<dyn Future<Output =I::Item > + Send>>
+    where
+        I: LocalIterator + 'static,
+        I::Item: SyncSend,
+        F: Fn(I::Item, I::Item) -> I::Item + SyncSend + Clone + 'static,
+    {
+        let mut reqs = Vec::new();
+        if let Ok(_my_pe) = self.inner.data.team.team_pe_id() {
+            let num_workers = match std::env::var("LAMELLAR_THREADS") {
+                Ok(n) => n.parse::<usize>().unwrap(),
+                Err(_) => 4,
+            };
+            let num_elems_local = iter.elems(self.num_elems_local());
+            let elems_per_thread = 1.0f64.max(num_elems_local as f64 / num_workers as f64);
+
+            // println!(
+            //     "num_chunks {:?} chunks_thread {:?}",
+            //     num_elems_local, elems_per_thread
+            // );
+            let mut worker = 0;
+            let iter = iter.init(0, num_elems_local);
+            while ((worker as f64 * elems_per_thread).round() as usize) < num_elems_local {
+                let start_i = (worker as f64 * elems_per_thread).round() as usize;
+                let end_i = ((worker + 1) as f64 * elems_per_thread).round() as usize;
+                reqs.push(self.inner.data.task_group.exec_am_local_inner(
+                    local_iterator::reduce::ReduceStatic {
+                        op: op.clone(),
+                        data: iter.clone(),
+                        start_i: start_i,
+                        end_i: end_i,
+                    },
+                ));
+                worker += 1;
+            }
+        }
+        Box::new(local_iterator::reduce::LocalIterReduceHandle { reqs: reqs, op: op }).into_future()
+    }
+
 }
 
 impl<T: Dist> DistIteratorLauncher for UnsafeArray<T> {
@@ -1387,6 +1431,15 @@ impl<T: Dist> LocalIteratorLauncher for UnsafeArray<T> {
             Schedule::Guided => self.local_for_each_async_guided(iter, op),
             Schedule::WorkStealing => self.local_for_each_async_work_stealing(iter, op),
         }
+    }
+
+    fn local_reduce<I, F>(&self, iter: &I, op: F) -> Pin<Box<dyn Future<Output = I::Item> + Send>>
+    where
+        I: LocalIterator + 'static,
+        I::Item: SyncSend,
+        F: Fn(I::Item, I::Item) -> I::Item + SyncSend + Clone + 'static,
+    {
+        self.local_reduce_static(iter, op)
     }
 
     // fn local_collect<I, A>(&self, iter: &I, d: Distribution) -> Pin<Box<dyn Future<Output = A> + Send>>
