@@ -476,7 +476,7 @@ pub trait LocalIterator: SyncSend + Clone + 'static {
     fn reduce<F>(&self, op: F) -> Pin<Box<dyn Future<Output = Self::Item> + Send>>
     where
         // &'static Self: LocalIterator + 'static,
-        Self::Item: Dist,
+        Self::Item: SyncSend,
         F: Fn(Self::Item,Self::Item) -> Self::Item + SyncSend + Clone + 'static,
     {
         self.array().local_reduce(self, op)
