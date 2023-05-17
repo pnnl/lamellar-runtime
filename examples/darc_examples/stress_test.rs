@@ -1,4 +1,5 @@
-use lamellar::{ActiveMessaging, BlockedArch, Darc, StridedArch};
+use lamellar::active_messaging::prelude::*;
+use lamellar::darc::prelude::*;
 use std::sync::atomic::AtomicUsize;
 use std::time::Instant;
 
@@ -50,9 +51,10 @@ fn main() {
     let darc = Darc::new(&world, AtomicUsize::new(0)).unwrap();
     let width = 10;
     let s = Instant::now();
+    let mut tg = typed_am_group!(DataAM, &world);
     for _i in 0..width {
         let pe = pes.sample(&mut rng);
-        world.exec_am_pe(
+        tg.add_am_pe(
             pe,
             DataAM {
                 darc: darc.clone(),
@@ -62,7 +64,7 @@ fn main() {
             },
         );
     }
-    world.wait_all();
+    world.block_on(tg.exec());
     world.barrier();
     println!("time: {:?}", s.elapsed().as_secs_f64());
     let first_half_team = world

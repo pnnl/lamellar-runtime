@@ -1,6 +1,12 @@
 use lamellar::array::prelude::*;
 
-#[lamellar::AmData(Default, Debug, ArrayOps, PartialEq, PartialOrd)]
+#[lamellar::AmData(
+    Default,
+    Debug,
+    ArrayOps(Arithmetic, CompEx, Shift),
+    PartialEq,
+    PartialOrd
+)]
 struct Custom {
     int: usize,
     float: f32,
@@ -49,6 +55,27 @@ impl std::ops::DivAssign for Custom {
             int: self.int / other.int,
             float: self.float / other.float,
         }
+    }
+}
+
+impl std::ops::RemAssign for Custom {
+    fn rem_assign(&mut self, other: Self) {
+        *self = Self {
+            int: self.int % other.int,
+            float: self.float % other.float,
+        }
+    }
+}
+
+impl std::ops::ShlAssign for Custom {
+    fn shl_assign(&mut self, other: Custom) {
+        self.int <<= other.int;
+    }
+}
+
+impl std::ops::ShrAssign for Custom {
+    fn shr_assign(&mut self, other: Custom) {
+        self.int >>= other.int;
     }
 }
 
@@ -176,6 +203,37 @@ fn test_div<T: std::fmt::Debug + ElementArithmeticOps + 'static>(
     array.barrier();
 }
 
+fn test_rem<T: std::fmt::Debug + ElementArithmeticOps + 'static>(
+    array: AtomicArray<T>,
+    init_val: T,
+    rem_val: T,
+) {
+    array
+        .dist_iter_mut()
+        .for_each(move |elem| elem.store(init_val));
+    array.wait_all();
+    array.barrier();
+    array.print();
+    array.barrier();
+    for i in 0..array.len() {
+        array.rem(i, rem_val);
+    }
+    array.wait_all();
+    array.barrier();
+    array.print();
+    array.barrier();
+    let mut reqs = vec![];
+    for i in 0..array.len() {
+        reqs.push(array.fetch_rem(i, rem_val));
+    }
+    for (i, req) in reqs.drain(0..).enumerate() {
+        println!("i: {:?} {:?}", i, array.block_on(req));
+    }
+    array.barrier();
+    array.print();
+    array.barrier();
+}
+
 fn test_and<T: std::fmt::Debug + ElementArithmeticOps + ElementBitWiseOps + 'static>(
     array: AtomicArray<T>,
     init_val: T,
@@ -248,6 +306,42 @@ fn test_or<T: std::fmt::Debug + ElementBitWiseOps + 'static>(
     array.barrier();
 }
 
+fn test_xor<T: std::fmt::Debug + ElementBitWiseOps + 'static>(
+    array: AtomicArray<T>,
+    init_val: T,
+    xor_val: T,
+) {
+    array
+        .dist_iter_mut()
+        .for_each(move |elem| elem.store(init_val));
+    array.wait_all();
+    array.barrier();
+    array.print();
+    array.barrier();
+    for i in 0..array.len() {
+        array.bit_xor(i, xor_val);
+    }
+    array.wait_all();
+    array.barrier();
+    array.print();
+    array.barrier();
+    array
+        .dist_iter_mut()
+        .for_each(move |elem| elem.store(init_val));
+    array.wait_all();
+    array.barrier();
+    let mut reqs = vec![];
+    for i in 0..array.len() {
+        reqs.push(array.fetch_bit_xor(i, xor_val));
+    }
+    for (i, req) in reqs.drain(0..).enumerate() {
+        println!("i: {:?} {:?}", i, array.block_on(req));
+    }
+    array.barrier();
+    array.print();
+    array.barrier();
+}
+
 fn test_store_load<T: std::fmt::Debug + ElementOps + 'static>(
     array: AtomicArray<T>,
     init_val: T,
@@ -282,6 +376,68 @@ fn test_store_load<T: std::fmt::Debug + ElementOps + 'static>(
     array.barrier();
 }
 
+fn test_shl<T: std::fmt::Debug + ElementShiftOps + 'static>(
+    array: AtomicArray<T>,
+    init_val: T,
+    shl_val: T,
+) {
+    array
+        .dist_iter_mut()
+        .for_each(move |elem| elem.store(init_val));
+    array.wait_all();
+    array.barrier();
+    array.print();
+    array.barrier();
+    for i in 0..array.len() {
+        array.shl(i, shl_val);
+    }
+    array.wait_all();
+    array.barrier();
+    array.print();
+    array.barrier();
+    let mut reqs = vec![];
+    for i in 0..array.len() {
+        reqs.push(array.fetch_shl(i, shl_val));
+    }
+    for (i, req) in reqs.drain(0..).enumerate() {
+        println!("i: {:?} {:?}", i, array.block_on(req));
+    }
+    array.barrier();
+    array.print();
+    array.barrier();
+}
+
+fn test_shr<T: std::fmt::Debug + ElementShiftOps + 'static>(
+    array: AtomicArray<T>,
+    init_val: T,
+    shr_val: T,
+) {
+    array
+        .dist_iter_mut()
+        .for_each(move |elem| elem.store(init_val));
+    array.wait_all();
+    array.barrier();
+    array.print();
+    array.barrier();
+    for i in 0..array.len() {
+        array.shr(i, shr_val);
+    }
+    array.wait_all();
+    array.barrier();
+    array.print();
+    array.barrier();
+    let mut reqs = vec![];
+    for i in 0..array.len() {
+        reqs.push(array.fetch_shr(i, shr_val));
+    }
+    for (i, req) in reqs.drain(0..).enumerate() {
+        println!("i: {:?} {:?}", i, array.block_on(req));
+    }
+    array.barrier();
+    array.print();
+    array.barrier();
+}
+
 fn main() {
     // let args: Vec<String> = std::env::args().collect();
     let world = lamellar::LamellarWorldBuilder::new().build();
@@ -293,6 +449,7 @@ fn main() {
     let array_custom = AtomicArray::<Custom>::new(world.clone(), num_pes * 10, Distribution::Block); //non intrinsic atomic, non bitwise
     let _array_bool = AtomicArray::<bool>::new(world.clone(), num_pes * 10, Distribution::Block);
 
+    println!("ADD-----------------------");
     test_add(array_f64.clone(), 0.0, 1.0);
     test_add(array_u8.clone(), 0, 1);
     test_add(array_i128.clone(), 0, -1);
@@ -325,7 +482,7 @@ fn main() {
     array_custom.print();
     array_custom.barrier();
     println!("====================================================================");
-
+    println!("SUB-----------------------");
     test_sub(array_f64.clone(), 10.0, 1.0);
     test_sub(array_u8.clone(), 10, 1);
     test_sub(array_i128.clone(), -10, 1);
@@ -362,6 +519,7 @@ fn main() {
     array_custom.barrier();
     println!("====================================================================");
 
+    println!("MUL-----------------------");
     test_mul(array_f64.clone(), 1.0, 2.5);
     test_mul(array_u8.clone(), 1, 2);
     test_mul(array_i128.clone(), 1, -2);
@@ -395,6 +553,7 @@ fn main() {
     array_custom.barrier();
     println!("====================================================================");
 
+    println!("DIV-----------------------");
     test_div(array_f64.clone(), 1000.0, 2.5);
     test_div(array_u8.clone(), 255, 2);
     test_div(array_i128.clone(), 100000000, -2);
@@ -430,6 +589,45 @@ fn main() {
     array_custom.print();
     array_custom.barrier();
     println!("====================================================================");
+
+    println!("REM-----------------------");
+    test_rem(array_f64.clone(), 1000.0, 2.5);
+    test_rem(array_u8.clone(), 255, 2);
+    test_rem(array_i128.clone(), 100000000, -2);
+    test_rem(
+        array_custom.clone(),
+        Custom {
+            int: 1000,
+            float: 1000.0,
+        },
+        Custom { int: 2, float: 2.5 },
+    );
+    (&array_u8).rem(3, 2);
+    array_u8.wait_all();
+    array_u8.barrier();
+    array_u8.print();
+    array_u8.barrier();
+
+    (&array_i128).rem(3, 2);
+    array_i128.wait_all();
+    array_i128.barrier();
+    array_i128.print();
+    array_i128.barrier();
+
+    (&array_f64).rem(3, 2.5);
+    array_f64.wait_all();
+    array_f64.barrier();
+    array_f64.print();
+    array_f64.barrier();
+
+    (&array_custom).rem(3, Custom { int: 1, float: 2.5 });
+    array_custom.wait_all();
+    array_custom.barrier();
+    array_custom.print();
+    array_custom.barrier();
+    println!("====================================================================");
+
+    println!("AND-----------------------");
     let and_val = 1 << my_pe;
     println!("and_val:  {:?}", and_val);
     test_and(array_u8.clone(), 255, and_val);
@@ -448,6 +646,7 @@ fn main() {
     array_i128.barrier();
 
     println!("====================================================================");
+    println!("OR-----------------------");
     let or_val = 1 << my_pe;
     test_or(array_u8.clone(), 0, or_val);
     test_or(array_i128.clone(), 0, or_val.into());
@@ -463,7 +662,24 @@ fn main() {
     array_i128.barrier();
 
     println!("====================================================================");
+    println!("XOR-----------------------");
+    let xor_val = 1 << my_pe;
+    test_xor(array_u8.clone(), 0, xor_val);
+    test_xor(array_i128.clone(), 0, xor_val.into());
+    (&array_u8).bit_xor(3, 1 << num_pes);
+    array_u8.wait_all();
+    array_u8.barrier();
+    array_u8.print();
+    array_u8.barrier();
+    (&array_i128).bit_xor(3, 1 << num_pes);
+    array_i128.wait_all();
+    array_i128.barrier();
+    array_i128.print();
+    array_i128.barrier();
 
+    println!("====================================================================");
+
+    println!("STORE LOAD-----------------------");
     test_store_load(array_f64.clone(), 0.0, my_pe as f64, my_pe, num_pes);
     test_store_load(array_u8.clone(), 0, my_pe as u8, my_pe, num_pes);
     test_store_load(array_i128.clone(), 0, -(my_pe as i128), my_pe, num_pes);
@@ -506,4 +722,82 @@ fn main() {
     array_custom.barrier();
     array_custom.print();
     array_custom.barrier();
+
+    println!("====================================================================");
+    println!("SHL-----------------------");
+    test_shl(array_u8.clone(), 1, 3);
+    test_shl(array_i128.clone(), 1, 63);
+    test_shl(
+        array_custom.clone(),
+        Custom {
+            int: 1,
+            float: 1000.0,
+        },
+        Custom {
+            int: 15,
+            float: 0.0,
+        },
+    );
+    (&array_u8).shl(1, 3);
+    array_u8.wait_all();
+    array_u8.barrier();
+    array_u8.print();
+    array_u8.barrier();
+
+    (&array_i128).shl(1, 63);
+    array_i128.wait_all();
+    array_i128.barrier();
+    array_i128.print();
+    array_i128.barrier();
+
+    (&array_custom).shl(
+        1,
+        Custom {
+            int: 15,
+            float: 0.0,
+        },
+    );
+    array_custom.wait_all();
+    array_custom.barrier();
+    array_custom.print();
+    array_custom.barrier();
+    println!("====================================================================");
+    println!("SHR-----------------------");
+    test_shr(array_u8.clone(), !0, 3);
+    test_shr(array_i128.clone(), i128::MAX, 63);
+    test_shr(
+        array_custom.clone(),
+        Custom {
+            int: !0,
+            float: 1000.0,
+        },
+        Custom {
+            int: 15,
+            float: 0.0,
+        },
+    );
+    (&array_u8).shr(1, 3);
+    array_u8.wait_all();
+    array_u8.barrier();
+    array_u8.print();
+    array_u8.barrier();
+
+    (&array_i128).shr(1, 63);
+    array_i128.wait_all();
+    array_i128.barrier();
+    array_i128.print();
+    array_i128.barrier();
+
+    (&array_custom).shr(
+        1,
+        Custom {
+            int: 15,
+            float: 0.0,
+        },
+    );
+    array_custom.wait_all();
+    array_custom.barrier();
+    array_custom.print();
+    array_custom.barrier();
+    println!("====================================================================");
 }

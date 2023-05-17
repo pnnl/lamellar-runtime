@@ -15,6 +15,10 @@ use serde::ser::SerializeSeq;
 //     Mutex,MutexGuard
 // };
 use std::any::TypeId;
+use std::ops::{
+    AddAssign, BitAndAssign, BitOrAssign, BitXorAssign, DivAssign, MulAssign, RemAssign, ShlAssign,
+    ShrAssign, SubAssign,
+};
 // use std::ops::{Deref, DerefMut};
 
 #[doc(hidden)]
@@ -47,29 +51,20 @@ macro_rules! impl_atomic_ops{
         pub struct $C<'a>(pub &'a $B);
         impl AddAssign<$A> for $C<'_>{
             fn add_assign(&mut self, val: $A) {
-                // println!("add_assign");
-            //    self.0.as_native_atomic().fetch_add(val,Ordering::SeqCst);
                self.0.fetch_add(val,Ordering::SeqCst);
-
             }
         }
         impl SubAssign<$A> for $C<'_>{
             fn sub_assign(&mut self, val: $A) {
-            //    self.0.as_native_atomic().fetch_sub(val,Ordering::SeqCst);
                self.0.fetch_sub(val,Ordering::SeqCst);
-
             }
         }
         impl MulAssign<$A> for $C<'_>{
             fn mul_assign(&mut self, val: $A) {
-                // let mut cur = self.0.as_native_atomic().load(Ordering::SeqCst);
                 let mut cur = self.0.load(Ordering::SeqCst);
-
                 let mut new = cur*val;
-                // while self.0.as_native_atomic().compare_exchange(cur,new,Ordering::SeqCst,Ordering::SeqCst).is_err(){
                 while self.0.compare_exchange(cur,new,Ordering::SeqCst,Ordering::SeqCst).is_err(){
                     std::thread::yield_now();
-                    // cur = self.0.as_native_atomic().load(Ordering::SeqCst);
                     cur = self.0.load(Ordering::SeqCst);
                     new = cur*val;
                 }
@@ -77,28 +72,61 @@ macro_rules! impl_atomic_ops{
         }
         impl DivAssign<$A> for $C<'_>{
             fn div_assign(&mut self, val: $A) {
-                // let mut cur = self.0.as_native_atomic().load(Ordering::SeqCst);
                 let mut cur = self.0.load(Ordering::SeqCst);
                 let mut new = cur/val;
-                // while self.0.as_native_atomic().compare_exchange(cur,new,Ordering::SeqCst,Ordering::SeqCst).is_err(){
                 while self.0.compare_exchange(cur,new,Ordering::SeqCst,Ordering::SeqCst).is_err(){
                     std::thread::yield_now();
-                    // cur = self.0.as_native_atomic().load(Ordering::SeqCst);
                     cur = self.0.load(Ordering::SeqCst);
                     new = cur/val;
                 }
             }
         }
+        impl RemAssign<$A> for $C<'_>{
+            fn rem_assign(&mut self, val: $A) {
+                let mut cur = self.0.load(Ordering::SeqCst);
+                let mut new = cur%val;
+                while self.0.compare_exchange(cur,new,Ordering::SeqCst,Ordering::SeqCst).is_err(){
+                    std::thread::yield_now();
+                    cur = self.0.load(Ordering::SeqCst);
+                    new = cur%val;
+                }
+            }
+        }
         impl BitAndAssign<$A> for $C<'_>{
             fn bitand_assign(&mut self, val: $A) {
-                // self.0.as_native_atomic().fetch_and(val,Ordering::SeqCst);
                 self.0.fetch_and(val,Ordering::SeqCst);
             }
         }
         impl BitOrAssign<$A> for $C<'_>{
             fn bitor_assign(&mut self, val: $A) {
-                // self.0.as_native_atomic().fetch_or(val,Ordering::SeqCst);
                 self.0.fetch_or(val,Ordering::SeqCst);
+            }
+        }
+        impl BitXorAssign<$A> for $C<'_>{
+            fn bitxor_assign(&mut self, val: $A) {
+                self.0.fetch_xor(val,Ordering::SeqCst);
+            }
+        }
+        impl ShlAssign<$A> for $C<'_> {
+            fn shl_assign(&mut self, val: $A ) {
+                let mut cur = self.0.load(Ordering::SeqCst);
+                let mut new = cur<<val;
+                while self.0.compare_exchange(cur,new,Ordering::SeqCst,Ordering::SeqCst).is_err(){
+                    std::thread::yield_now();
+                    cur = self.0.load(Ordering::SeqCst);
+                    new = cur>>val;
+                }
+            }
+        }
+        impl ShrAssign<$A> for $C<'_> {
+            fn shr_assign(&mut self, val: $A )  {
+                let mut cur = self.0.load(Ordering::SeqCst);
+                let mut new = cur<<val;
+                while self.0.compare_exchange(cur,new,Ordering::SeqCst,Ordering::SeqCst).is_err(){
+                    std::thread::yield_now();
+                    cur = self.0.load(Ordering::SeqCst);
+                    new = cur>>val;
+                }
             }
         }
     }
@@ -206,6 +234,21 @@ macro_rules! compare_exchange_op{
             }
         }
     };
+    // ($A:ty, $B:ty, $C:ty, $self:ident, $val:ident, $op:tt ) => { //used for shift --can't fail
+    //     {
+    //         let slice = $self.array.__local_as_mut_slice();
+    //         let slice = slice_as_atomic!($A,$B,slice);
+    //         let val = $val;
+    //         let mut cur = slice[$self.local_index].load(Ordering::SeqCst);
+    //         let mut new = cur $op val;
+    //         while slice[$self.local_index].compare_exchange(cur,new,Ordering::SeqCst,Ordering::SeqCst).is_err(){
+    //             std::thread::yield_now();
+    //             cur = slice[$self.local_index].load(Ordering::SeqCst);
+    //             new = cur $op val;
+    //         }
+    //         (cur,new)
+    //     }
+    // };
     ($A:ty, $B:ty, $self:ident, $val:ident, $op:tt ) => { //used for everything else --can't fail
         {
             let slice = $self.array.__local_as_mut_slice();
@@ -223,6 +266,48 @@ macro_rules! compare_exchange_op{
     };
 }
 
+macro_rules! impl_shift {
+    ($self:ident,$op:tt,$val:ident) => {
+        // mul, div
+        unsafe {
+            *match $self.array.orig_t {
+                //deref to the original type
+                NativeAtomicType::I8 => {
+                    &compare_exchange_op!(i8, AtomicI8, $self, $val, $op) as *const i8 as *mut T
+                }
+                NativeAtomicType::I16 => {
+                    &compare_exchange_op!(i16, AtomicI16, $self, $val, $op) as *const i16 as *mut T
+                }
+                NativeAtomicType::I32 => {
+                    &compare_exchange_op!(i32, AtomicI32, $self, $val, $op) as *const i32 as *mut T
+                }
+                NativeAtomicType::I64 => {
+                    &compare_exchange_op!(i64, AtomicI64, $self, $val, $op) as *const i64 as *mut T
+                }
+                NativeAtomicType::Isize => {
+                    &compare_exchange_op!(isize, AtomicIsize, $self, $val, $op) as *const isize
+                        as *mut T
+                }
+                NativeAtomicType::U8 => {
+                    &compare_exchange_op!(u8, AtomicU8, $self, $val, $op) as *const u8 as *mut T
+                }
+                NativeAtomicType::U16 => {
+                    &compare_exchange_op!(u16, AtomicU16, $self, $val, $op) as *const u16 as *mut T
+                }
+                NativeAtomicType::U32 => {
+                    &compare_exchange_op!(u32, AtomicU32, $self, $val, $op) as *const u32 as *mut T
+                }
+                NativeAtomicType::U64 => {
+                    &compare_exchange_op!(u64, AtomicU64, $self, $val, $op) as *const u64 as *mut T
+                }
+                NativeAtomicType::Usize => {
+                    &compare_exchange_op!(usize, AtomicUsize, $self, $val, $op) as *const usize
+                        as *mut T
+                }
+            }
+        }
+    };
+}
 macro_rules! impl_mul_div {
     ($self:ident,$op:tt,$val:ident) => {
         // mul, div
@@ -265,7 +350,7 @@ macro_rules! impl_mul_div {
         }
     };
 }
-macro_rules! impl_add_sub_and_or {
+macro_rules! impl_add_sub_and_or_xor {
     ($self:ident,$op:ident,$val:ident) => {
         //add,sub,and,or (returns value)
         unsafe {
@@ -556,8 +641,6 @@ macro_rules! impl_compare_exchange_eps {
     };
 }
 
-use std::ops::{AddAssign, BitAndAssign, BitOrAssign, DivAssign, MulAssign, SubAssign};
-
 #[doc(hidden)]
 pub struct NativeAtomicElement<T> {
     array: NativeAtomicArray<T>,
@@ -587,10 +670,10 @@ impl<T: Dist> NativeAtomicElement<T> {
         impl_compare_exchange_eps!(self, old, new, eps)
     }
     pub fn fetch_add(&self, val: T) -> T {
-        impl_add_sub_and_or!(self, fetch_add, val)
+        impl_add_sub_and_or_xor!(self, fetch_add, val)
     }
     pub fn fetch_sub(&self, val: T) -> T {
-        impl_add_sub_and_or!(self, fetch_sub, val)
+        impl_add_sub_and_or_xor!(self, fetch_sub, val)
     }
     pub fn fetch_mul(&self, val: T) -> T {
         impl_mul_div!(self, * , val)
@@ -598,14 +681,28 @@ impl<T: Dist> NativeAtomicElement<T> {
     pub fn fetch_div(&self, val: T) -> T {
         impl_mul_div!(self, /, val)
     }
+    pub fn fetch_rem(&self, val: T) -> T {
+        impl_mul_div!(self, %, val)
+    }
+    pub fn fetch_shl(&self, val: T) -> T {
+        //result.0 is old value, result.1 is new value
+        impl_shift!(self, <<, val)
+    }
+    pub fn fetch_shr(&self, val: T) -> T {
+        //result.0 is old value, result.1 is new value
+        impl_shift!(self, >>, val)
+    }
 }
 
 impl<T: ElementBitWiseOps + 'static> NativeAtomicElement<T> {
     pub fn fetch_and(&self, val: T) -> T {
-        impl_add_sub_and_or!(self, fetch_and, val)
+        impl_add_sub_and_or_xor!(self, fetch_and, val)
     }
     pub fn fetch_or(&self, val: T) -> T {
-        impl_add_sub_and_or!(self, fetch_or, val)
+        impl_add_sub_and_or_xor!(self, fetch_or, val)
+    }
+    pub fn fetch_xor(&self, val: T) -> T {
+        impl_add_sub_and_or_xor!(self, fetch_xor, val)
     }
 }
 
@@ -633,6 +730,12 @@ impl<T: Dist + ElementArithmeticOps> DivAssign<T> for NativeAtomicElement<T> {
     }
 }
 
+impl<T: Dist + ElementArithmeticOps> RemAssign<T> for NativeAtomicElement<T> {
+    fn rem_assign(&mut self, val: T) {
+        self.fetch_rem(val);
+    }
+}
+
 impl<T: Dist + ElementBitWiseOps> BitAndAssign<T> for NativeAtomicElement<T> {
     fn bitand_assign(&mut self, val: T) {
         self.fetch_and(val);
@@ -642,6 +745,24 @@ impl<T: Dist + ElementBitWiseOps> BitAndAssign<T> for NativeAtomicElement<T> {
 impl<T: Dist + ElementBitWiseOps> BitOrAssign<T> for NativeAtomicElement<T> {
     fn bitor_assign(&mut self, val: T) {
         self.fetch_or(val);
+    }
+}
+
+impl<T: Dist + ElementBitWiseOps> BitXorAssign<T> for NativeAtomicElement<T> {
+    fn bitxor_assign(&mut self, val: T) {
+        self.fetch_xor(val);
+    }
+}
+
+impl<T: Dist + ElementShiftOps> ShlAssign<T> for NativeAtomicElement<T> {
+    fn shl_assign(&mut self, val: T) {
+        self.fetch_shl(val);
+    }
+}
+
+impl<T: Dist + ElementShiftOps> ShrAssign<T> for NativeAtomicElement<T> {
+    fn shr_assign(&mut self, val: T) {
+        self.fetch_shr(val);
     }
 }
 

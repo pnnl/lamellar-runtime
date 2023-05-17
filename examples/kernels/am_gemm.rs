@@ -184,7 +184,7 @@ fn main() {
         //A iteration:
         let mut tasks = 0;
         let start = std::time::Instant::now();
-        let task_group = lamellar::LamellarTaskGroup::new(world.team());
+        let mut task_group = typed_am_group!(NaiveMM, world.team());
         for i in 0..a_pe_row_blks {
             //iterate over rows of A, (all tiles in a row are local)
             for j in 0..b_pe_col_blks {
@@ -205,7 +205,7 @@ fn main() {
                         j,
                         block_size,
                     ); //B is distributed
-                    task_group.exec_am_pe(
+                    task_group.add_am_pe(
                         my_pe,
                         NaiveMM {
                             a: a_block,
@@ -218,7 +218,7 @@ fn main() {
                 }
             }
         }
-        world.wait_all();
+        world.block_on(task_group.exec());
         world.barrier();
         let elapsed = start.elapsed().as_secs_f64();
         if my_pe == 0 {

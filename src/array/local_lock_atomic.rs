@@ -82,7 +82,7 @@ pub struct LocalLockMutLocalData<'a, T: Dist> {
 
 // impl<T: Dist> Drop for LocalLockMutLocalData<'_, T>{
 //     fn drop(&mut self){
-//         println!("release lock! {:?} {:?}",std::thread::current().id(),std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH));
+//         // println!("release lock! {:?} {:?}",std::thread::current().id(),std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH));
 //     }
 // }
 
@@ -306,13 +306,15 @@ impl<T: Dist> LocalLockArray<T> {
 
     // #[doc(hidden)] //todo create a custom macro to emit a warning saying use read_local_slice/write_local_slice intead
     pub(crate) fn local_as_slice(&self) -> LocalLockLocalData<'_, T> {
-        LocalLockLocalData {
+        let lock = LocalLockLocalData {
             array: self.clone(),
             data: unsafe { self.array.local_as_mut_slice() },
             index: 0,
             lock: self.lock.clone(),
             _lock_guard: self.lock.read(),
-        }
+        };
+        // println!("got read lock! {:?} {:?}",std::thread::current().id(),std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH));
+        lock
     }
     // #[doc(hidden)]
     // pub unsafe fn local_as_mut_slice(&self) -> &mut [T] {
@@ -328,7 +330,7 @@ impl<T: Dist> LocalLockArray<T> {
             _lock_guard: the_lock,
         };
         // println!("have lla write lock");
-        // println!("got lock! {:?} {:?}",std::thread::current().id(),std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH));
+        // println!("got write lock! {:?} {:?}",std::thread::current().id(),std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH));
         lock
     }
 
@@ -480,6 +482,50 @@ impl<T: Dist> LocalLockArray<T> {
         // println!("locallock into_read_only");
         self.array.into()
     }
+
+    #[doc(alias = "Collective")]
+    /// Convert this LocalLockArray into a (safe) [GlobalLockArray][crate::array::GlobalLockArray]
+    ///
+    /// This is a collective and blocking function which will only return when there is at most a single reference on each PE
+    /// to this Array, and that reference is currently calling this function.
+    ///
+    /// When it returns, it is gauranteed that there are only `GlobalLockArray` handles to the underlying data
+    ///
+    /// # Collective Operation
+    /// Requires all PEs associated with the `array` to enter the call otherwise deadlock will occur (i.e. team barriers are being called internally)
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let array: LocalLockArray<usize> = LocalLockArray::new(&world,100,Distribution::Cyclic);
+    ///
+    /// let global_lock_array = array.into_global_lock();
+    ///```
+    /// # Warning
+    /// Because this call blocks there is the possibility for deadlock to occur, as highlighted below:
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let array: LocalLockArray<usize> = LocalLockArray::new(&world,100,Distribution::Cyclic);
+    ///
+    /// let array1 = array.clone();
+    /// let slice = unsafe {array1.local_data()};
+    ///
+    /// // no borrows to this specific instance (array) so it can enter the "into_global_lock" call
+    /// // but array1 will not be dropped until after mut_slice is dropped.
+    /// // Given the ordering of these calls we will get stuck in "into_global_lock" as it
+    /// // waits for the reference count to go down to "1" (but we will never be able to drop slice/array1).
+    /// let global_lock_array = array.into_global_lock();
+    /// global_lock_array.print();
+    /// println!("{slice:?}");
+    ///```
+    pub fn into_global_lock(self) -> GlobalLockArray<T> {
+        // println!("readonly into_global_lock");
+        self.array.into()
+    }
 }
 
 impl<T: Dist + 'static> LocalLockArray<T> {
@@ -567,6 +613,13 @@ impl<T: Dist> From<AtomicArray<T>> for LocalLockArray<T> {
 impl<T: Dist> From<ReadOnlyArray<T>> for LocalLockArray<T> {
     fn from(array: ReadOnlyArray<T>) -> Self {
         // println!("locallock from readonly");
+        unsafe { array.into_inner().into() }
+    }
+}
+
+impl<T: Dist> From<GlobalLockArray<T>> for LocalLockArray<T> {
+    fn from(array: GlobalLockArray<T>) -> Self {
+        // println!("LocalLockArray from GlobalLockArray");
         unsafe { array.into_inner().into() }
     }
 }

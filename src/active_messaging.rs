@@ -488,7 +488,7 @@ pub use registered_active_message::RegisteredAm;
 
 pub(crate) mod batching;
 
-const BATCH_AM_SIZE: usize = 100000;
+pub(crate) const BATCH_AM_SIZE: usize = 100_000;
 
 /// This macro is used to setup the attributed type so that it can be used within remote active messages.
 ///
@@ -519,6 +519,9 @@ pub use lamellar_impl::AmData;
 ///
 pub use lamellar_impl::AmLocalData;
 
+#[doc(hidden)]
+pub use lamellar_impl::AmGroupData;
+
 /// This macro is used to associate an implemenation of [LamellarAM] for type that has used the [AmData] attribute macro
 ///
 /// This essentially constructs and registers the Active Message with the runtime. It is responsible for ensuring all data
@@ -539,6 +542,9 @@ pub use lamellar_impl::am;
 /// Please see the [Active Messaging][crate::active_messaging] module level documentation for more details
 ///
 pub use lamellar_impl::local_am;
+
+/// This macro is used to construct an am group of a single am type.
+pub use lamellar_impl::typed_am_group;
 
 /// Supertrait specifying `Sync` + `Send`
 pub trait SyncSend: Sync + Send {}
@@ -582,6 +588,7 @@ impl<T> DarcSerde for &T {
 pub trait LamellarSerde: SyncSend {
     fn serialized_size(&self) -> usize;
     fn serialize_into(&self, buf: &mut [u8]);
+    fn serialize(&self) -> Vec<u8>;
 }
 
 #[doc(hidden)]

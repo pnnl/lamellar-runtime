@@ -32,7 +32,10 @@ lazy_static! {
     };
 }
 
-use std::ops::{AddAssign, BitAndAssign, BitOrAssign, DivAssign, MulAssign, SubAssign};
+use std::ops::{
+    AddAssign, BitAndAssign, BitOrAssign, BitXorAssign, DivAssign, MulAssign, RemAssign, ShlAssign,
+    ShrAssign, SubAssign,
+};
 
 // #[doc(hidden)]
 /// An abstraction of an atomic element either via language supported Atomic integer types or through the use of an accompanying mutex.
@@ -328,6 +331,49 @@ impl<T: ElementBitWiseOps + 'static> AtomicElement<T> {
     }
 }
 
+impl<T: ElementShiftOps + 'static> AtomicElement<T> {
+    /// Atomically performs a left shift of `val` bits with the current value, returning the previous value
+    ///
+    /// Note: for native atomic types, [SeqCst][std::sync::atomic::Ordering::SeqCst] ordering is used
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world,16,Distribution::Cyclic);
+    ///
+    /// let local_data = array.local_data();
+    /// let old_val = local_data.at(10).fetch_shl(2);
+    ///```
+    pub fn fetch_shl(&self, val: T) -> T {
+        match self {
+            AtomicElement::NativeAtomicElement(array) => array.fetch_shl(val),
+            AtomicElement::GenericAtomicElement(array) => array.fetch_shl(val),
+        }
+    }
+    /// Atomically performs a right shift of `val` bits with the current value, returning the previous value
+    ///
+    /// Note: for native atomic types, [SeqCst][std::sync::atomic::Ordering::SeqCst] ordering is used
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world,16,Distribution::Cyclic);
+    ///
+    /// let local_data = array.local_data();
+    /// let old_val = local_data.at(10).fetch_shr(2);
+    ///```
+    pub fn fetch_shr(&self, val: T) -> T {
+        match self {
+            AtomicElement::NativeAtomicElement(array) => array.fetch_shr(val),
+            AtomicElement::GenericAtomicElement(array) => array.fetch_shr(val),
+        }
+    }
+}
+
 impl<T: Dist + ElementArithmeticOps> AddAssign<T> for AtomicElement<T> {
     fn add_assign(&mut self, val: T) {
         match self {
@@ -364,6 +410,15 @@ impl<T: Dist + ElementArithmeticOps> DivAssign<T> for AtomicElement<T> {
     }
 }
 
+impl<T: Dist + ElementArithmeticOps> RemAssign<T> for AtomicElement<T> {
+    fn rem_assign(&mut self, val: T) {
+        match self {
+            AtomicElement::NativeAtomicElement(array) => array.rem_assign(val),
+            AtomicElement::GenericAtomicElement(array) => array.rem_assign(val),
+        }
+    }
+}
+
 impl<T: Dist + ElementBitWiseOps> BitAndAssign<T> for AtomicElement<T> {
     fn bitand_assign(&mut self, val: T) {
         match self {
@@ -378,6 +433,33 @@ impl<T: Dist + ElementBitWiseOps> BitOrAssign<T> for AtomicElement<T> {
         match self {
             AtomicElement::NativeAtomicElement(array) => array.bitor_assign(val),
             AtomicElement::GenericAtomicElement(array) => array.bitor_assign(val),
+        }
+    }
+}
+
+impl<T: Dist + ElementBitWiseOps> BitXorAssign<T> for AtomicElement<T> {
+    fn bitxor_assign(&mut self, val: T) {
+        match self {
+            AtomicElement::NativeAtomicElement(array) => array.bitxor_assign(val),
+            AtomicElement::GenericAtomicElement(array) => array.bitxor_assign(val),
+        }
+    }
+}
+
+impl<T: Dist + ElementShiftOps> ShlAssign<T> for AtomicElement<T> {
+    fn shl_assign(&mut self, val: T) {
+        match self {
+            AtomicElement::NativeAtomicElement(array) => array.shl_assign(val),
+            AtomicElement::GenericAtomicElement(array) => array.shl_assign(val),
+        }
+    }
+}
+
+impl<T: Dist + ElementShiftOps> ShrAssign<T> for AtomicElement<T> {
+    fn shr_assign(&mut self, val: T) {
+        match self {
+            AtomicElement::NativeAtomicElement(array) => array.shr_assign(val),
+            AtomicElement::GenericAtomicElement(array) => array.shr_assign(val),
         }
     }
 }
@@ -905,6 +987,53 @@ impl<T: Dist> AtomicArray<T> {
             AtomicArray::GenericAtomicArray(array) => array.array.into(),
         }
     }
+
+    #[doc(alias = "Collective")]
+    /// Convert this AtomicArray into a (safe) [GlobalLockArray][crate::array::GlobalLockArray]
+    ///
+    /// This is a collective and blocking function which will only return when there is at most a single reference on each PE
+    /// to this Array, and that reference is currently calling this function.
+    ///
+    /// When it returns, it is gauranteed that there are only `GlobalLockArray` handles to the underlying data
+    ///
+    /// # Collective Operation
+    /// Requires all PEs associated with the `array` to enter the call otherwise deadlock will occur (i.e. team barriers are being called internally)
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic);
+    ///
+    /// let global_lock_array = array.into_global_lock();
+    ///```
+    /// # Warning
+    /// Because this call blocks there is the possibility for deadlock to occur, as highlighted below:
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic);
+    ///
+    /// let array1 = array.clone();
+    /// let slice = unsafe {array1.local_data()};
+    ///
+    /// // no borrows to this specific instance (array) so it can enter the "into_global_lock" call
+    /// // but array1 will not be dropped until after mut_slice is dropped.
+    /// // Given the ordering of these calls we will get stuck in "into_global_lock" as it
+    /// // waits for the reference count to go down to "1" (but we will never be able to drop slice/array1).
+    /// let global_lock_array = array.into_global_lock();
+    /// global_lock_array.print();
+    /// println!("{:?}",slice.at(0).load());
+    ///```
+    pub fn into_global_lock(self) -> GlobalLockArray<T> {
+        // println!("atomic into_global_lock");
+        match self {
+            AtomicArray::NativeAtomicArray(array) => array.array.into(),
+            AtomicArray::GenericAtomicArray(array) => array.array.into(),
+        }
+    }
 }
 
 impl<T: Dist + 'static> From<UnsafeArray<T>> for AtomicArray<T> {
@@ -934,6 +1063,13 @@ impl<T: Dist + 'static> From<ReadOnlyArray<T>> for AtomicArray<T> {
 impl<T: Dist + 'static> From<LocalLockArray<T>> for AtomicArray<T> {
     fn from(array: LocalLockArray<T>) -> Self {
         // println!("Converting from LocalLockArray to AtomicArray");
+        unsafe { array.into_inner().into() }
+    }
+}
+
+impl<T: Dist + 'static> From<GlobalLockArray<T>> for AtomicArray<T> {
+    fn from(array: GlobalLockArray<T>) -> Self {
+        // println!("Converting from GlobalLockArray to AtomicArray");
         unsafe { array.into_inner().into() }
     }
 }

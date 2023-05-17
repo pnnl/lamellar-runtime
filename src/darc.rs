@@ -1,4 +1,4 @@
-//! Distributed Atomic Reference Counter-- a distriubted extension of an [`Arc`][std::sync::Arc] called a [Darc][crate::darc].
+//! Distributed Atomic Reference Counter-- a distributed extension of an [`Arc`][std::sync::Arc] called a [Darc][crate::darc].
 //! The atomic reference counter, [`Arc`][std::sync::Arc], is a backbone of safe
 //! concurrent programming in Rust, and, in particular, *shared ownership*.
 //!
@@ -89,6 +89,7 @@ pub(crate) enum DarcMode {
     GenericAtomicArray,
     NativeAtomicArray,
     LocalLockArray,
+    GlobalLockArray,
 }
 
 #[lamellar_impl::AmDataRT(Debug)]
@@ -247,10 +248,13 @@ impl<T> Clone for WeakDarc<T> {
 
 impl<T> crate::active_messaging::DarcSerde for Darc<T> {
     fn ser(&self, num_pes: usize, darcs: &mut Vec<RemotePtr>) {
+        // println!("darc ser");
         self.serialize_update_cnts(num_pes);
         darcs.push(RemotePtr::NetworkDarc(self.clone().into()));
+        // self.print();
     }
     fn des(&self, cur_pe: Result<usize, IdError>) {
+        // println!("darc des");
         match cur_pe {
             Ok(_) => {
                 self.deserialize_update_cnts();
@@ -259,6 +263,7 @@ impl<T> crate::active_messaging::DarcSerde for Darc<T> {
                 panic!("can only access darcs within team members ({:?})", err);
             }
         }
+        // self.print();
     }
 }
 
@@ -658,6 +663,7 @@ impl<T> Darc<T> {
         for elem in d.mode_as_mut_slice() {
             *elem = state;
         }
+        // println!("created new darc");
         // d.print();
         team_rt.barrier();
         Ok(d)
@@ -846,6 +852,8 @@ impl<T: 'static> Drop for Darc<T> {
             // }
             else if local_mode!(DarcMode::LocalLockArray, mode_refs, inner) {
                 launch_drop!(DarcMode::LocalLockArray, inner, self.inner);
+            } else if local_mode!(DarcMode::GlobalLockArray, mode_refs, inner) {
+                launch_drop!(DarcMode::GlobalLockArray, inner, self.inner);
             } else if local_mode!(DarcMode::GenericAtomicArray, mode_refs, inner) {
                 launch_drop!(DarcMode::GenericAtomicArray, inner, self.inner);
             } else if local_mode!(DarcMode::NativeAtomicArray, mode_refs, inner) {

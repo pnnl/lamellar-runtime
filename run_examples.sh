@@ -1,7 +1,7 @@
 #!/bin/bash
 
 
-
+target_dir=/home/scratch/$USER
 root=$PWD
 . $root/../junction-prep.rc
 
@@ -75,7 +75,7 @@ for toolchain in stable; do #nightly; do
   # cargo clean
 
 
-  cargo +$toolchain build --release --features enable-rofi  --examples
+  # cargo +$toolchain build --release --features enable-rofi  --examples
   mkdir -p ${toolchain}
   cd ${toolchain}
   for mode in release ; do
@@ -92,10 +92,10 @@ for toolchain in stable; do #nightly; do
         #   echo "performing ${test}"
         #   LAMELLAE_BACKEND="rofi" LAMELLAR_ROFI_PROVIDER="verbs" LAMELLAR_THREADS=63 srun --cpus-per-task=64 --cpu-bind=ldoms,v -N 2 --time 0:5:00 --mpi=pmi2 $root/target/release/examples/$test > ${test}_n2.out 2>&1 & 
         # done
-        sbatch --exclude=j004,j005,j036 --cpus-per-task=64 -N 2 --time 0:120:00 $root/batch_runner.sh $root $dir $mode 63 2
+        sbatch --exclude=j004,j005,j036 --cpus-per-task=64 -N 2 --time 0:120:00 $root/batch_runner.sh $root $dir $mode 63 2 $target_dir
         if [ $dir != "bandwidths" ]; then
-          sbatch --exclude=j004,j005,j036 --cpus-per-task=64 -N 8 --time 0:120:00 $root/batch_runner.sh $root $dir $mode 63 8
-          sbatch --exclude=j004,j005,j036 --cpus-per-task=32 -N 16 -n 32 --time 0:240:00 $root/batch_runner.sh $root $dir $mode 31 32
+          sbatch --exclude=j004,j005,j036 --cpus-per-task=64 -N 8 --time 0:120:00 $root/batch_runner.sh $root $dir $mode 63 8 $target_dir
+          sbatch --exclude=j004,j005,j036 --cpus-per-task=32 -N 16 -n 32 --time 0:240:00 $root/batch_runner.sh $root $dir $mode 31 32 $target_dir
                 
         #   for test in `ls $root/examples/$dir`; do
         #     test=`basename $test .rs`

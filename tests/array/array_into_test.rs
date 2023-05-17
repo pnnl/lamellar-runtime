@@ -18,6 +18,7 @@ macro_rules! match_array2 {
             "ReadOnlyArray" => into_test!($array_ty, ReadOnlyArray),
             "AtomicArray" => into_test!($array_ty, AtomicArray),
             "LocalLockArray" => into_test!($array_ty, LocalLockArray),
+            "GlobalLockArray" => into_test!($array_ty, GlobalLockArray),
             _ => panic!("Unknown array type: {}", $array2_str),
         }
     };
@@ -34,6 +35,7 @@ fn main() {
         "ReadOnlyArray" => match_array2!(ReadOnlyArray, array2),
         "AtomicArray" => match_array2!(AtomicArray, array2),
         "LocalLockArray" => match_array2!(LocalLockArray, array2),
+        "GlobalLockArray" => match_array2!(GlobalLockArray, array2),
         _ => panic!("Unknown array type: {}", array1),
     }
 }

@@ -1,3 +1,5 @@
+use futures::FutureExt;
+use futures::StreamExt;
 use lamellar::active_messaging::prelude::*;
 /// ------------Lamellar Bandwidth: DFT Proxy  -------------------------
 /// This example is inspired from peforming a naive DFT
@@ -43,7 +45,7 @@ struct LocalSumAM {
     pe: usize,
 }
 
-#[lamellar::am]
+#[lamellar::local_am]
 impl LamellarAM for LocalSumAM {
     async fn exec() {
         let spectrum_slice = unsafe { self.spectrum.as_mut_slice().unwrap() };
@@ -59,6 +61,32 @@ impl LamellarAM for LocalSumAM {
         }
         let _lock = LOCK.lock();
         spectrum_slice[self.k] = sum;
+    }
+}
+
+#[lamellar::AmData(Clone, Debug)]
+struct LocalSumAM2 {
+    local_len: usize,
+    signal: SharedMemoryRegion<f64>,
+    global_sig_len: usize,
+    k: usize,
+    pe: usize,
+}
+
+#[lamellar::am]
+impl LamellarAM for LocalSumAM2 {
+    async fn exec() -> f64 {
+        let k_prime = self.k + self.pe * self.local_len;
+        let signal = unsafe { self.signal.as_slice().unwrap() };
+        let mut sum = 0.0;
+        for (i, &x) in signal.iter().enumerate() {
+            let i_prime = i + lamellar::current_pe as usize * signal.len();
+            let angle = -1f64 * (i_prime * k_prime) as f64 * 2f64 * std::f64::consts::PI
+                / self.global_sig_len as f64;
+            let twiddle = angle * (angle.cos() + angle * angle.sin());
+            sum = sum + twiddle * x;
+        }
+        sum
     }
 }
 
@@ -93,16 +121,13 @@ fn dft_lamellar(
     let timer = Instant::now();
     for pe in 0..num_pes {
         for k in 0..spectrum_slice.len() {
-            world.exec_am_pe(
-                my_pe,
-                LocalSumAM {
-                    spectrum: add_spec.clone(),
-                    signal: signal.clone(),
-                    global_sig_len: global_sig_len,
-                    k: k,
-                    pe: pe,
-                },
-            );
+            world.exec_am_local(LocalSumAM {
+                spectrum: add_spec.clone(),
+                signal: signal.clone(),
+                global_sig_len: global_sig_len,
+                k: k,
+                pe: pe,
+            });
         }
         let mut add_spec_vec = vec![0.0; spectrum_slice.len()];
         world.wait_all();
@@ -114,8 +139,67 @@ fn dft_lamellar(
                 add_spec: add_spec_vec,
             },
         );
+        world.wait_all();
     }
     world.wait_all();
+    world.barrier();
+    let time = timer.elapsed().as_secs_f64();
+    time
+}
+
+fn dft_lamellar_am_group(
+    world: &LamellarWorld,
+    my_pe: usize,
+    num_pes: usize,
+    signal: SharedMemoryRegion<f64>,
+    global_sig_len: usize,
+    spectrum: SharedMemoryRegion<f64>,
+) -> f64 {
+    let spectrum_slice = unsafe { spectrum.as_slice().unwrap() };
+    let local_len = spectrum_slice.len();
+
+    let timer = Instant::now();
+
+    let mut pe_groups = futures::stream::FuturesOrdered::new();
+    for pe in 0..num_pes {
+        let mut local_sum_group = typed_am_group!(LocalSumAM2, world);
+        for k in 0..local_len {
+            local_sum_group.add_am_pe(
+                my_pe,
+                LocalSumAM2 {
+                    local_len: local_len,
+                    signal: signal.clone(),
+                    global_sig_len: global_sig_len,
+                    k: k,
+                    pe: pe,
+                },
+            );
+        }
+        let spec = spectrum.clone();
+        pe_groups.push(async move {
+            let res = local_sum_group.exec().await;
+            let vec = (0..local_len)
+                .map(|i| {
+                    if let AmGroupResult::Pe(_, val) = res.at(i) {
+                        *val
+                    } else {
+                        panic!("cant reach")
+                    }
+                })
+                .collect::<Vec<_>>();
+            world
+                .exec_am_pe(
+                    pe,
+                    RemoteSumAM {
+                        spectrum: spec,
+                        add_spec: vec,
+                    },
+                )
+                .await;
+        });
+    }
+    world.block_on(pe_groups.collect::<Vec<_>>());
+
     world.barrier();
     let time = timer.elapsed().as_secs_f64();
     time
@@ -505,7 +589,43 @@ fn main() {
                 partial_spectrum.clone(),
             ));
             if my_pe == 0 {
-                println!("am i: {:?} {:?}", _i, times[0].last());
+                println!("am i: {:?} {:?} sum: {:?}", _i, times[0].last(), unsafe {
+                    partial_spectrum.as_slice().unwrap().iter().sum::<f64>()
+                });
+            }
+            //-----------------------------------------------------
+            unsafe {
+                partial_spectrum
+                    .as_mut_slice()
+                    .unwrap()
+                    .iter_mut()
+                    .for_each(|e| *e = 0.0);
+            }
+            world.barrier();
+
+            //--------------lamellar Manual Active Message tg--------------------------
+            times[1].push(dft_lamellar_am_group(
+                &world,
+                my_pe,
+                num_pes,
+                partial_signal.clone(),
+                global_len,
+                partial_spectrum.clone(),
+            ));
+            if my_pe == 0 {
+                println!(
+                    "am group i: {:?} {:?} sum: {:?}",
+                    _i,
+                    times[1].last(),
+                    unsafe { partial_spectrum.as_slice().unwrap().iter().sum::<f64>() }
+                );
+            }
+            unsafe {
+                partial_spectrum
+                    .as_mut_slice()
+                    .unwrap()
+                    .iter_mut()
+                    .for_each(|e| *e = 0.0);
             }
             //-----------------------------------------------------
 
@@ -665,10 +785,10 @@ fn main() {
                 "am time: {:?}",
                 times[0].iter().sum::<f64>() / times[0].len() as f64
             );
-            // println!(
-            //     "naive UnsafeArray array time: {:?}",
-            //     times[1].iter().sum::<f64>() / times[1].len() as f64
-            // );
+            println!(
+                "am group time: {:?}",
+                times[1].iter().sum::<f64>() / times[1].len() as f64
+            );
             println!(
                 "optimized UnsafeArray time: {:?}",
                 times[2].iter().sum::<f64>() / times[2].len() as f64

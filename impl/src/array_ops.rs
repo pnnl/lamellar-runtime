@@ -1,5 +1,6 @@
 use proc_macro::TokenStream;
-use quote::{quote, quote_spanned};
+use proc_macro_error::abort;
+use quote::{quote, quote_spanned, ToTokens};
 use syn::parse_macro_input;
 use syn::spanned::Spanned;
 
@@ -200,7 +201,6 @@ fn create_buf_ops(
     byte_array_type: syn::Ident,
     optypes: &Vec<OpType>,
     rt: bool,
-    _bitwise: bool,
 ) -> proc_macro2::TokenStream {
     let lamellar = if rt {
         quote::format_ident!("crate")
@@ -232,12 +232,18 @@ fn create_buf_ops(
         fetch_sub,
         fetch_mul,
         fetch_div,
+        fetch_rem,
         fetch_and,
         fetch_or,
+        fetch_xor,
         load,
         swap,
         compare_exchange,
         compare_exchange_eps,
+        shl,
+        fetch_shl,
+        shr,
+        fetch_shr,
     ) = if array_type == "NativeAtomicArray" {
         let (_slice, val) = native_atomic_slice(&typeident, &lamellar);
         (
@@ -265,8 +271,19 @@ fn create_buf_ops(
                 }
                 #res_t res_t[0] = old;
             },
+            quote! { //fetch_rem
+                let mut old = slice[index].load(Ordering::SeqCst);
+                let mut new = old % val;
+                while slice[index].compare_exchange(old, new, Ordering::SeqCst, Ordering::SeqCst).is_err() {
+                    std::thread::yield_now();
+                    old = slice[index].load(Ordering::SeqCst);
+                    new = old % val;
+                }
+                #res_t res_t[0] = old;
+            },
             quote! {#res_t res_t[0] = slice[index].fetch_and(val, Ordering::SeqCst);}, //fetch_and
             quote! {#res_t res_t[0] = slice[index].fetch_or(val, Ordering::SeqCst);},  //fetch_or
+            quote! {#res_t res_t[0] = slice[index].fetch_xor(val, Ordering::SeqCst);}, //fetch_or
             quote! {slice[index].load(Ordering::SeqCst)},                              //load
             quote! { //swap
                 let mut old = slice[index].load(Ordering::SeqCst);
@@ -328,7 +345,44 @@ fn create_buf_ops(
                     },
                 };
                 #res_t res_t[0] = old;
-
+            },
+            quote! { //shl
+                let mut old = slice[index].load(Ordering::SeqCst);
+                let mut new = old << val;
+                while slice[index].compare_exchange(old, new, Ordering::SeqCst, Ordering::SeqCst).is_err() {
+                    std::thread::yield_now();
+                    old = slice[index].load(Ordering::SeqCst);
+                    new = old << val;
+                }
+            },
+            quote! { //fetch_shl
+                let mut old = slice[index].load(Ordering::SeqCst);
+                let mut new = old << val;
+                while slice[index].compare_exchange(old, new, Ordering::SeqCst, Ordering::SeqCst).is_err() {
+                    std::thread::yield_now();
+                    old = slice[index].load(Ordering::SeqCst);
+                    new = old << val;
+                }
+                #res_t res_t[0] = old;
+            },
+            quote! { //shr
+                let mut old = slice[index].load(Ordering::SeqCst);
+                let mut new = old >> val;
+                while slice[index].compare_exchange(old, new, Ordering::SeqCst, Ordering::SeqCst).is_err() {
+                    std::thread::yield_now();
+                    old = slice[index].load(Ordering::SeqCst);
+                    new = old >> val;
+                }
+            },
+            quote! { //fetch_shr
+                let mut old = slice[index].load(Ordering::SeqCst);
+                let mut new = old >> val;
+                while slice[index].compare_exchange(old, new, Ordering::SeqCst, Ordering::SeqCst).is_err() {
+                    std::thread::yield_now();
+                    old = slice[index].load(Ordering::SeqCst);
+                    new = old >> val;
+                }
+                #res_t res_t[0] = old;
             },
         )
     } else if array_type == "ReadOnlyArray" {
@@ -339,12 +393,18 @@ fn create_buf_ops(
             quote! { panic!("fetch_sub not a valid op for Read Only Arrays"); }, //fetch_sub --we lock the index before this point so its actually atomic
             quote! { panic!("fetch_mul not a valid op for Read Only Arrays"); }, //fetch_mul --we lock the index before this point so its actually atomic
             quote! { panic!("fetch_div not a valid op for Read Only Arrays"); }, //fetch_div --we lock the index before this point so its actually atomic
+            quote! { panic!("fetch_rem not a valid op for Read Only Arrays"); }, //fetch_rem --we lock the index before this point so its actually atomic
             quote! { panic!("fetch_and not a valid op for Read Only Arrays"); }, //fetch_and --we lock the index before this point so its actually atomic
             quote! { panic!("fetch_or not a valid op for Read Only Arrays"); }, //fetch_or --we lock the index before this point so its actually atomic
-            quote! {slice[index]},                                              //load
+            quote! { panic!("fetch_xor not a valid op for Read Only Arrays"); }, //fetch_xor --we lock the index before this point so its actually atomic
+            quote! {slice[index]},                                               //load
             quote! { panic!("swap not a valid op for Read Only Arrays"); }, //swap we lock the index before this point so its actually atomic
             quote! { panic!("compare exchange not a valid op for Read Only Arrays"); }, // compare_exchange -- we lock the index before this point so its actually atomic
             quote! { panic!("compare exchange eps not a valid op for Read Only Arrays"); }, //compare exchange epsilon
+            quote! { panic!("shl not a valid op for Read Only Arrays"); },                  //shl
+            quote! { panic!("fetch_shl not a valid op for Read Only Arrays"); }, //fetch_shl
+            quote! { panic!("shr not a valid op for Read Only Arrays"); },       //shr
+            quote! { panic!("fetch_shr not a valid op for Read Only Arrays"); }, //fetch_shr
         )
     } else {
         (
@@ -354,8 +414,10 @@ fn create_buf_ops(
             quote! {#res_t res_t[0] =  slice[index]; slice[index] -= val; }, //fetch_sub --we lock the index before this point so its actually atomic
             quote! {#res_t res_t[0] =  slice[index]; slice[index] *= val; }, //fetch_mul --we lock the index before this point so its actually atomic
             quote! {#res_t res_t[0] =  slice[index]; slice[index] /= val; }, //fetch_div --we lock the index before this point so its actually atomic
+            quote! {#res_t res_t[0] =  slice[index]; slice[index] %= val; }, //fetch_rem --we lock the index before this point so its actually atomic
             quote! {#res_t res_t[0] =  slice[index]; slice[index] &= val; }, //fetch_and --we lock the index before this point so its actually atomic
             quote! {#res_t res_t[0] =  slice[index]; slice[index] |= val; }, //fetch_or --we lock the index before this point so its actually atomic
+            quote! {#res_t res_t[0] =  slice[index]; slice[index] ^= val; }, //fetch_xor --we lock the index before this point so its actually atomic
             quote! {slice[index]},                                           //load
             quote! {#res_t res_t[0] =  slice[index]; slice[index] = val; }, //swap we lock the index before this point so its actually atomic
             quote! {  // compare_exchange -- we lock the index before this point so its actually atomic
@@ -413,6 +475,10 @@ fn create_buf_ops(
                 };
                 #res_t res_t[0] = old;
             },
+            quote! { slice[index] <<= val; }, //shl --we lock the index before this point so its actually atomic
+            quote! {#res_t res_t[0] =  slice[index]; slice[index] <<= val; }, //fetch_shl --we lock the index before this point so its actually atomic
+            quote! { slice[index] >>= val; }, //shr --we lock the index before this point so its actually atomic
+            quote! {#res_t res_t[0] =  slice[index]; slice[index] >>= val; }, //fetch_shr --we lock the index before this point so its actually atomic
         )
     };
     let (lock, slice) = if array_type == "GenericAtomicArray" {
@@ -430,6 +496,11 @@ fn create_buf_ops(
         (
             quote! {}, //no explicit lock since the slice handle is a lock guard
             quote! {let mut slice = self.data.write_local_data();}, //this is the lock
+        )
+    } else if array_type == "GlobalLockArray" {
+        (
+            quote! {}, //no explicit lock since the slice handle is a lock guard
+            quote! {let mut slice = self.data.async_write_local_data().await;}, //this is the lock
         )
     } else if array_type == "ReadOnlyArray" {
         (
@@ -463,6 +534,10 @@ fn create_buf_ops(
                 ArrayOpCmd::FetchDiv=>{
                     #fetch_div
                 },
+                ArrayOpCmd::Rem=>{ #lhs %= val },
+                ArrayOpCmd::FetchRem=>{
+                    #fetch_rem
+                },
                 ArrayOpCmd::Put => {#assign},
                 ArrayOpCmd::Get =>{
                     #res_t res_t[0] = #load;
@@ -478,9 +553,11 @@ fn create_buf_ops(
                 },
                 ArrayOpCmd::Or=>{#lhs |= val},
                 ArrayOpCmd::FetchOr=>{
-
                     #fetch_or
-
+                },
+                ArrayOpCmd::Xor=>{#lhs ^= val},
+                ArrayOpCmd::FetchXor=>{
+                    #fetch_xor
                 },
             }),
             OpType::Access => match_stmts.extend(quote! {
@@ -490,6 +567,8 @@ fn create_buf_ops(
                 ArrayOpCmd::Swap=>{
                     #swap
                 },
+            }),
+            OpType::CompEx => match_stmts.extend(quote! {
                 ArrayOpCmd::CompareExchange(old) =>{
                     #compare_exchange
                 }
@@ -500,6 +579,16 @@ fn create_buf_ops(
             OpType::ReadOnly => match_stmts.extend(quote! {
                 ArrayOpCmd::Load=>{
                     #res_t res_t[0] =  #load;
+                },
+            }),
+            OpType::Shift => match_stmts.extend(quote! {
+                ArrayOpCmd::Shl=>{#shl},
+                ArrayOpCmd::FetchShl=>{
+                    #fetch_shl
+                },
+                ArrayOpCmd::Shr=>{#shr},
+                ArrayOpCmd::FetchShr=>{
+                    #fetch_shr
                 },
             }),
         }
@@ -824,16 +913,19 @@ fn create_buf_ops(
     expanded
 }
 
+#[derive(Debug, Clone)]
 enum OpType {
     Arithmetic,
     Bitwise,
     Access,
+    CompEx,
     ReadOnly,
+    Shift,
 }
 
 fn create_buffered_ops(
     typeident: syn::Type,
-    bitwise: bool,
+    optypes: Vec<OpType>,
     native: bool,
     rt: bool,
 ) -> proc_macro2::TokenStream {
@@ -843,10 +935,16 @@ fn create_buffered_ops(
         quote::format_ident!("__lamellar")
     };
 
-    let mut atomic_array_types: Vec<(syn::Ident, syn::Ident)> = vec![(
-        quote::format_ident!("LocalLockArray"),
-        quote::format_ident!("LocalLockByteArrayWeak"),
-    )];
+    let mut atomic_array_types: Vec<(syn::Ident, syn::Ident)> = vec![
+        (
+            quote::format_ident!("LocalLockArray"),
+            quote::format_ident!("LocalLockByteArrayWeak"),
+        ),
+        (
+            quote::format_ident!("GlobalLockArray"),
+            quote::format_ident!("GlobalLockByteArrayWeak"),
+        ),
+    ];
 
     if native {
         atomic_array_types.push((
@@ -862,29 +960,23 @@ fn create_buffered_ops(
 
     let mut expanded = quote! {};
 
-    let mut optypes = vec![OpType::ReadOnly]; //, vec![OpType::Arithmetic, OpType::Access];
+    let ro_optypes = vec![OpType::ReadOnly]; //, vec![OpType::Arithmetic, OpType::Access];
 
     let buf_op_impl = create_buf_ops(
         typeident.clone(),
         quote::format_ident!("ReadOnlyArray"),
         quote::format_ident!("ReadOnlyByteArrayWeak"),
-        &optypes,
+        &ro_optypes,
         rt,
-        bitwise,
     );
     expanded.extend(buf_op_impl);
-    optypes.push(OpType::Arithmetic);
-    optypes.push(OpType::Access);
-    if bitwise {
-        optypes.push(OpType::Bitwise);
-    }
+
     let buf_op_impl = create_buf_ops(
         typeident.clone(),
         quote::format_ident!("UnsafeArray"),
         quote::format_ident!("UnsafeByteArrayWeak"),
         &optypes,
         rt,
-        bitwise,
     );
     expanded.extend(buf_op_impl);
 
@@ -895,7 +987,6 @@ fn create_buffered_ops(
             byte_array_type.clone(),
             &optypes,
             rt,
-            bitwise,
         );
         expanded.extend(buf_op_impl)
     }
@@ -940,8 +1031,18 @@ pub(crate) fn __generate_ops_for_type_rt(item: TokenStream) -> TokenStream {
         .split(",")
         .map(|i| i.to_owned())
         .collect::<Vec<String>>();
-    let bitwise = if let Ok(val) = syn::parse_str::<syn::LitBool>(&items[0]) {
-        val.value
+    let mut op_types = vec![
+        OpType::ReadOnly,
+        OpType::Access,
+        OpType::Arithmetic,
+        OpType::CompEx,
+    ];
+    if let Ok(val) = syn::parse_str::<syn::LitBool>(&items[0]) {
+        if val.value {
+            op_types.push(OpType::Bitwise);
+            op_types.push(OpType::Shift);
+        }
+        // val.value
     } else {
         panic! ("first argument of generate_ops_for_type expects 'true' or 'false' specifying whether type implements bitwise operations");
     };
@@ -954,7 +1055,12 @@ pub(crate) fn __generate_ops_for_type_rt(item: TokenStream) -> TokenStream {
         let the_type = syn::parse_str::<syn::Type>(&t).unwrap();
         let typeident = quote::format_ident!("{:}", t.trim());
         output.extend(quote! {impl Dist for #typeident {}});
-        output.extend(create_buffered_ops(the_type.clone(), bitwise, native, true));
+        output.extend(create_buffered_ops(
+            the_type.clone(),
+            op_types.clone(),
+            native,
+            true,
+        ));
         // output.extend(gen_atomic_rdma(typeident.clone(), true));
     }
     TokenStream::from(output)
@@ -967,6 +1073,41 @@ pub(crate) fn __derive_arrayops(input: TokenStream) -> TokenStream {
     let name = input.ident;
     let the_type: syn::Type = syn::parse_quote!(#name);
 
-    output.extend(create_buffered_ops(the_type.clone(), false, false, false));
+    let mut op_types = vec![OpType::ReadOnly, OpType::Access];
+
+    for attr in input.attrs {
+        if attr.to_token_stream().to_string().contains("array_ops") {
+            if let Ok(temp) = attr.parse_meta() {
+                match temp {
+                    syn::Meta::Path(p) => println!("Not expected {p:?}"),
+                    syn::Meta::NameValue(nv) => println!("Not expected {nv:?}"),
+                    syn::Meta::List(l) => {
+                        for item in l.nested {
+                            match item.to_token_stream().to_string().as_str() {
+                                "Arithmetic" => op_types.push(OpType::Arithmetic),
+                                "CompEx" => op_types.push(OpType::CompEx),
+                                "Bitwise" => op_types.push(OpType::Bitwise),
+                                "Shift" => op_types.push(OpType::Shift),
+                                "All" => {
+                                    op_types.push(OpType::Arithmetic);
+                                    op_types.push(OpType::CompEx);
+                                    op_types.push(OpType::Bitwise);
+                                    op_types.push(OpType::Shift);
+                                }
+                                &_ => abort!(item, "unexpected array op type"),
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    output.extend(create_buffered_ops(
+        the_type.clone(),
+        op_types,
+        false,
+        false,
+    ));
     TokenStream::from(output)
 }

@@ -73,20 +73,39 @@ impl<T: Dist> UnsafeArray<T> {
                         // unsafe{
                         //     println!("{:?} {:?},",buf.clone().to_base::<u8>().as_slice(), buf.sub_region(buf_index..(buf_index + len)).to_base::<u8>().as_slice());
                         // }
-                        let am = UnsafePutAm {
-                            array: self.clone().into(),
-                            start_index: index,
-                            len: buf.len(),
-                            data: unsafe {
-                                buf.sub_region(buf_index..(buf_index + len))
-                                    .to_base::<u8>()
-                                    .into()
-                            },
-                            pe: self.inner.data.my_pe,
-                        };
-                        reqs.push(self.exec_am_pe(pe, am));
+                        if buf.len() * std::mem::size_of::<T>()
+                            > crate::active_messaging::BATCH_AM_SIZE
+                        {
+                            let am = UnsafePutAm {
+                                array: self.clone().into(),
+                                start_index: index,
+                                len: buf.len(),
+                                data: unsafe {
+                                    buf.sub_region(buf_index..(buf_index + len))
+                                        .to_base::<u8>()
+                                        .into()
+                                },
+                                pe: self.inner.data.my_pe,
+                            };
+                            reqs.push(self.exec_am_pe(pe, am));
+                        } else {
+                            let am = UnsafeSmallPutAm {
+                                array: self.clone().into(),
+                                start_index: index,
+                                len: buf.len(),
+                                data: unsafe {
+                                    buf.sub_region(buf_index..(buf_index + len))
+                                        .to_base::<u8>()
+                                        .as_slice()
+                                        .unwrap()
+                                        .to_vec()
+                                },
+                            };
+                            reqs.push(self.exec_am_pe(pe, am));
+                        }
                     }
                     ArrayRdmaCmd::GetAm => {
+                        // if buf.len()*std::mem::size_of::<T>() > crate::active_messaging::BATCH_AM_SIZE{
                         let am = UnsafeBlockGetAm {
                             array: self.clone().into(),
                             offset: offset,
@@ -98,6 +117,20 @@ impl<T: Dist> UnsafeArray<T> {
                             pe: pe,
                         };
                         reqs.push(self.exec_am_local(am));
+                        // }
+                        // else {
+                        //     let am = UnsafeSmallBlockGetAm {
+                        //         array: self.clone().into(),
+                        //         offset: offset,
+                        //         data: unsafe {
+                        //             buf.sub_region(buf_index..(buf_index + len))
+                        //                 .to_base::<u8>()
+                        //                 .into()
+                        //         },
+                        //         pe: pe,
+                        //     };
+                        //     reqs.push(self.exec_am_local(am));
+                        // }
                     }
                 }
                 buf_index += len;
@@ -165,14 +198,33 @@ impl<T: Dist> UnsafeArray<T> {
                     }
                     // println!("{:?}",temp_memreg.clone().to_base::<u8>().as_slice());
                     // println!("si: {:?} ei {:?}",offset,offset+k);
-                    let am = UnsafePutAm {
-                        array: self.clone().into(),
-                        start_index: index,
-                        len: buf.len(),
-                        data: unsafe { temp_memreg.to_base::<u8>().into() },
-                        pe: self.inner.data.my_pe,
-                    };
-                    reqs.push(self.exec_am_pe(pe, am));
+
+                    if buf.len() * std::mem::size_of::<T>() > crate::active_messaging::BATCH_AM_SIZE
+                    {
+                        let am = UnsafePutAm {
+                            array: self.clone().into(),
+                            start_index: index,
+                            len: buf.len(),
+                            data: unsafe { temp_memreg.to_base::<u8>().into() },
+                            pe: self.inner.data.my_pe,
+                        };
+                        reqs.push(self.exec_am_pe(pe, am));
+                    } else {
+                        let am = UnsafeSmallPutAm {
+                            array: self.clone().into(),
+                            start_index: index,
+                            len: buf.len(),
+                            data: unsafe {
+                                temp_memreg
+                                    .to_base::<u8>()
+                                    .to_base::<u8>()
+                                    .as_slice()
+                                    .unwrap()
+                                    .to_vec()
+                            },
+                        };
+                        reqs.push(self.exec_am_pe(pe, am));
+                    }
                     if pe + 1 == num_pes {
                         overflow += 1;
                     }
@@ -220,6 +272,7 @@ impl<T: Dist> UnsafeArray<T> {
                 }
             }
             ArrayRdmaCmd::GetAm => {
+                // if buf.len()*std::mem::size_of::<T>() > crate::active_messaging::BATCH_AM_SIZE{
                 let rem = buf.len() % num_pes;
                 for i in 0..std::cmp::min(buf.len(), num_pes) {
                     let temp_memreg = self
@@ -248,6 +301,16 @@ impl<T: Dist> UnsafeArray<T> {
                         overflow += 1;
                     }
                 }
+                // }
+                // else {
+                //     let am = UnsafeSmallGetAm {
+                //         array: self.clone().into(),
+                //         offset: index,
+                //         data: unsafe { buf.clone().to_base::<u8>() },
+                //         pe: pe,
+                //     };
+                //     reqs.push(self.exec_am_local(am));
+                // }
             }
         }
         reqs
@@ -277,7 +340,7 @@ impl<T: Dist> UnsafeArray<T> {
     /// The length of the Put is dictated by the length of the buffer.
     ///
     /// The runtime provides no internal mechanism to check for completion when using this call.
-    /// i.e. this means the user themselves will be responsible for determining when the transfer is complete
+    /// i.e. this means the users themselves will be responsible for determining when the transfer is complete
     ///
     /// # Warning
     /// This is a low-level API, unless you are very confident in low level distributed memory access it is highly recommended
@@ -362,7 +425,7 @@ impl<T: Dist> UnsafeArray<T> {
     /// The length of the Get is dictated by the length of the buffer.
     ///
     /// The runtime provides no internal mechanism to check for completion when using this call.
-    /// i.e. this means the user themselves will be responsible for determining when the transfer is complete
+    /// i.e. this means the users themselves will be responsible for determining when the transfer is complete
     ///
     /// # Safety
     /// This call is always unsafe as mutual exclusitivity is not enforced, i.e. many other reader/writers can exist simultaneously.
@@ -648,9 +711,20 @@ impl<T: Dist> LamellarArrayInternalGet<T> for UnsafeArray<T> {
         index: usize,
         buf: U,
     ) -> Box<dyn LamellarArrayRequest<Output = ()>> {
-        let reqs = match self.inner.distribution {
-            Distribution::Block => self.block_op(ArrayRdmaCmd::GetAm, index, buf.into()),
-            Distribution::Cyclic => self.cyclic_op(ArrayRdmaCmd::GetAm, index, buf.into()),
+        let buf = buf.into();
+        let reqs = if buf.len() * std::mem::size_of::<T>() > crate::active_messaging::BATCH_AM_SIZE
+        {
+            match self.inner.distribution {
+                Distribution::Block => self.block_op(ArrayRdmaCmd::GetAm, index, buf),
+                Distribution::Cyclic => self.cyclic_op(ArrayRdmaCmd::GetAm, index, buf),
+            }
+        } else {
+            let req = self.exec_am_local(InitSmallGetAm {
+                array: self.clone(),
+                index: index,
+                buf: buf,
+            });
+            vec![req]
         };
         Box::new(ArrayRdmaHandle { reqs: reqs })
     }
@@ -883,6 +957,7 @@ impl LamellarAm for UnsafeBlockGetAm {
         };
     }
 }
+
 #[lamellar_impl::AmLocalDataRT(Debug)]
 struct UnsafeCyclicGetAm {
     array: UnsafeByteArray, //inner of the indices we need to place data into
@@ -927,6 +1002,90 @@ impl LamellarAm for UnsafeCyclicGetAm {
     }
 }
 
+#[lamellar_impl::AmLocalDataRT(Debug)]
+struct InitSmallGetAm<T: Dist> {
+    array: UnsafeArray<T>, //inner of the indices we need to place data into
+    index: usize,          //relative to inner
+    buf: LamellarMemoryRegion<T>,
+}
+
+#[lamellar_impl::rt_am_local]
+impl<T: Dist + 'static> LamellarAm for InitSmallGetAm<T> {
+    async fn exec(self) {
+        let mut reqs = vec![];
+        for pe in self
+            .array
+            .pes_for_range(self.index, self.buf.len())
+            .into_iter()
+        {
+            // println!("pe {:?}",pe);
+            let remote_am = UnsafeRemoteSmallGetAm {
+                array: self.array.clone().into(),
+                start_index: self.index,
+                len: self.buf.len(),
+            };
+            reqs.push(self.array.exec_am_pe(pe, remote_am).into_future());
+        }
+        unsafe {
+            match self.array.inner.distribution {
+                Distribution::Block => {
+                    let u8_buf = self.buf.clone().to_base::<u8>();
+                    let mut cur_index = 0;
+                    for req in reqs.drain(..) {
+                        let data = req.await;
+                        // println!("data recv {:?}",data.len());
+                        u8_buf.put_slice(lamellar::current_pe, cur_index, &data);
+                        cur_index += data.len();
+                    }
+                }
+                Distribution::Cyclic => {
+                    let buf_slice = self.buf.as_mut_slice().unwrap();
+                    let num_pes = reqs.len();
+                    for (start_index, req) in reqs.drain(..).enumerate() {
+                        let data = req.await;
+                        let data_t_ptr = data.as_ptr() as *const T;
+                        let data_t_len = if data.len() % std::mem::size_of::<T>() == 0 {
+                            data.len() / std::mem::size_of::<T>()
+                        } else {
+                            panic!("memory align error");
+                        };
+                        let data_t_slice = std::slice::from_raw_parts(data_t_ptr, data_t_len);
+                        for (i, val) in data_t_slice.iter().enumerate() {
+                            buf_slice[start_index + i * num_pes] = *val;
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[lamellar_impl::AmDataRT(Debug)]
+struct UnsafeRemoteSmallGetAm {
+    array: UnsafeByteArray, //inner of the indices we need to place data into
+    start_index: usize,
+    len: usize,
+}
+
+#[lamellar_impl::rt_am]
+impl LamellarAm for UnsafeRemoteSmallGetAm {
+    //we cant directly do a put from the array in to the data buf
+    //because we need to guarantee the put operation is atomic (maybe iput would work?)
+    async fn exec(self) -> Vec<u8> {
+        // println!("in remotegetam {:?} {:?}",self.start_index,self.len);
+        // let _lock = self.array.lock.read();
+        unsafe {
+            match self
+                .array
+                .local_elements_for_range(self.start_index, self.len)
+            {
+                Some((elems, _)) => elems.to_vec(),
+                None => vec![],
+            }
+        }
+    }
+}
+
 #[lamellar_impl::AmDataRT(Debug)]
 struct UnsafePutAm {
     array: UnsafeByteArray,         //byte representation of the array
@@ -948,6 +1107,35 @@ impl LamellarAm for UnsafePutAm {
                 Some((elems, _)) => {
                     self.data.blocking_get_slice(self.pe, 0, elems);
                 }
+                None => {}
+            }
+        };
+    }
+}
+
+#[lamellar_impl::AmDataRT(Debug)]
+struct UnsafeSmallPutAm {
+    array: UnsafeByteArray, //byte representation of the array
+    start_index: usize,     //index with respect to inner (of type T)
+    len: usize,             //len of buf (with respect to original type T)
+    data: Vec<u8>, //change this to an enum which is a vector or OneSidedMemoryRegion depending on data size
+                   // pe: usize,
+}
+#[lamellar_impl::rt_am]
+impl LamellarAm for UnsafeSmallPutAm {
+    async fn exec(self) {
+        unsafe {
+            // println!("unsafe put am: pe {:?} si {:?} len {:?}",self.pe,self.start_index,self.len);
+            match self
+                .array
+                .inner
+                .local_elements_for_range(self.start_index, self.len)
+            {
+                Some((elems, _)) => std::ptr::copy_nonoverlapping(
+                    self.data.as_ptr(),
+                    elems.as_mut_ptr(),
+                    elems.len(),
+                ),
                 None => {}
             }
         };

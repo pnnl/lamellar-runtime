@@ -9,7 +9,7 @@
 /// E.g. export LAMELLAR_THREADS=1
 /// this will show the blocking vs non-blocking nature of the the two active message types
 /// --------------------------------------------------------------------
-use lamellar::ActiveMessaging;
+use lamellar::active_messaging::prelude::*;
 
 use std::time::{Duration, Instant};
 
@@ -87,21 +87,26 @@ fn main() {
         println!("---------------------------------------------------------------");
         println!("Testing Std Sleep am");
         let mut timer = Instant::now();
+        let mut std_am_group = AmGroup::new(&world);
+        // let mut std_am_group = typed_am_group!(StdSleepAM,&world);
+
         for _i in 0..10 {
-            world.exec_am_all(std_am.clone()); //launch multiple tasks asyncronously
+            std_am_group.add_am_all(std_am.clone()); //launch multiple tasks asyncronously
         }
-        world.wait_all();
+        world.block_on(std_am_group.exec());
         println!(
             "time for std sleep tasks: {:?}",
             timer.elapsed().as_secs_f64()
         );
         println!("-----------------------------------");
         println!("Testing async Sleep am");
+        let mut async_am_group = AmGroup::new(&world);
+        // let mut async_am_group = typed_am_group!(AsyncSleepAM,&world);
         timer = Instant::now();
         for _i in 0..10 {
-            world.exec_am_all(async_am.clone()); //launch multiple tasks asyncronously
+            async_am_group.add_am_all(async_am.clone()); //launch multiple tasks asyncronously
         }
-        world.wait_all();
+        world.block_on(async_am_group.exec());
         println!(
             "time for async sleep tasks: {:?}",
             timer.elapsed().as_secs_f64()

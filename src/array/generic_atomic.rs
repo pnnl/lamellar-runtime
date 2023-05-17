@@ -15,7 +15,10 @@ use serde::ser::SerializeSeq;
 use std::any::TypeId;
 // use std::ops::{Deref, DerefMut};
 
-use std::ops::{AddAssign, BitAndAssign, BitOrAssign, DivAssign, MulAssign, SubAssign};
+use std::ops::{
+    AddAssign, BitAndAssign, BitOrAssign, BitXorAssign, DivAssign, MulAssign, RemAssign, ShlAssign,
+    ShrAssign, SubAssign,
+};
 
 #[doc(hidden)]
 pub struct GenericAtomicElement<T> {
@@ -82,6 +85,14 @@ impl<T: ElementArithmeticOps> GenericAtomicElement<T> {
             old
         }
     }
+    pub fn fetch_rem(&self, val: T) -> T {
+        let _lock = self.array.lock_index(self.local_index);
+        unsafe {
+            let old = self.array.__local_as_mut_slice()[self.local_index];
+            self.array.__local_as_mut_slice()[self.local_index] %= val;
+            old
+        }
+    }
 }
 
 impl<T: Dist + std::cmp::Eq> GenericAtomicElement<T> {
@@ -137,6 +148,33 @@ impl<T: ElementBitWiseOps + 'static> GenericAtomicElement<T> {
             old
         }
     }
+    pub fn fetch_xor(&self, val: T) -> T {
+        let _lock = self.array.lock_index(self.local_index);
+        unsafe {
+            let old = self.array.__local_as_mut_slice()[self.local_index];
+            self.array.__local_as_mut_slice()[self.local_index] ^= val;
+            old
+        }
+    }
+}
+
+impl<T: ElementShiftOps + 'static> GenericAtomicElement<T> {
+    pub fn fetch_shl(&self, val: T) -> T {
+        let _lock = self.array.lock_index(self.local_index);
+        unsafe {
+            let old = self.array.__local_as_mut_slice()[self.local_index];
+            self.array.__local_as_mut_slice()[self.local_index] <<= val;
+            old
+        }
+    }
+    pub fn fetch_shr(&self, val: T) -> T {
+        let _lock = self.array.lock_index(self.local_index);
+        unsafe {
+            let old = self.array.__local_as_mut_slice()[self.local_index];
+            self.array.__local_as_mut_slice()[self.local_index] >>= val;
+            old
+        }
+    }
 }
 
 impl<T: Dist + ElementArithmeticOps> AddAssign<T> for GenericAtomicElement<T> {
@@ -168,6 +206,13 @@ impl<T: Dist + ElementArithmeticOps> DivAssign<T> for GenericAtomicElement<T> {
     }
 }
 
+impl<T: Dist + ElementArithmeticOps> RemAssign<T> for GenericAtomicElement<T> {
+    fn rem_assign(&mut self, val: T) {
+        let _lock = self.array.lock_index(self.local_index);
+        unsafe { self.array.__local_as_mut_slice()[self.local_index] %= val }
+    }
+}
+
 impl<T: Dist + ElementBitWiseOps> BitAndAssign<T> for GenericAtomicElement<T> {
     fn bitand_assign(&mut self, val: T) {
         let _lock = self.array.lock_index(self.local_index);
@@ -179,6 +224,27 @@ impl<T: Dist + ElementBitWiseOps> BitOrAssign<T> for GenericAtomicElement<T> {
     fn bitor_assign(&mut self, val: T) {
         let _lock = self.array.lock_index(self.local_index);
         unsafe { self.array.__local_as_mut_slice()[self.local_index] |= val }
+    }
+}
+
+impl<T: Dist + ElementBitWiseOps> BitXorAssign<T> for GenericAtomicElement<T> {
+    fn bitxor_assign(&mut self, val: T) {
+        let _lock = self.array.lock_index(self.local_index);
+        unsafe { self.array.__local_as_mut_slice()[self.local_index] ^= val }
+    }
+}
+
+impl<T: Dist + ElementShiftOps> ShlAssign<T> for GenericAtomicElement<T> {
+    fn shl_assign(&mut self, val: T) {
+        let _lock = self.array.lock_index(self.local_index);
+        unsafe { self.array.__local_as_mut_slice()[self.local_index].shl_assign(val) }
+    }
+}
+
+impl<T: Dist + ElementShiftOps> ShrAssign<T> for GenericAtomicElement<T> {
+    fn shr_assign(&mut self, val: T) {
+        let _lock = self.array.lock_index(self.local_index);
+        unsafe { self.array.__local_as_mut_slice()[self.local_index].shr_assign(val) }
     }
 }
 
@@ -483,6 +549,11 @@ impl<T: Dist> GenericAtomicArray<T> {
     }
 
     pub fn into_local_lock(self) -> LocalLockArray<T> {
+        // println!("generic into_local_lock");
+        self.array.into()
+    }
+
+    pub fn into_global_lock(self) -> GlobalLockArray<T> {
         // println!("generic into_local_lock");
         self.array.into()
     }

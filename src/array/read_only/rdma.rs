@@ -6,12 +6,12 @@ impl<T: Dist> ReadOnlyArray<T> {
     /// The length of the Get is dictated by the length of the buffer.
     ///
     /// The runtime provides no internal mechanism to check for completion when using this call.
-    /// i.e. this means the user themselves will be responsible for determining when the transfer is complete
+    /// i.e. this means the users themselves will be responsible for determining when the transfer is complete
     ///
     ///
     /// # Safety
     /// This call is unsafe with respect to `buf` given that currently it must be one of the low-level [Memory Region][crate::memregion] types,
-    /// there will be no gaurantees that there doesn;t exist other readers/writers either locally or remotely.
+    /// there will be no gaurantees that there doesn't exist other readers/writers either locally or remotely.
     ///
     /// It is guaranteed though that the data in the ReadOnlyArray itself is immutable.
     ///
@@ -77,7 +77,7 @@ impl<T: Dist> ReadOnlyArray<T> {
     ///
     /// # Safety
     /// This call is unsafe with respect to `buf` given that currently it must be one of the low-level [Memory Region][crate::memregion] types,
-    /// there will be no gaurantees that there doesn;t exist other readers/writers either locally or remotely.
+    /// there will be no gaurantees that there doesn't exist other readers/writers either locally or remotely.
     ///
     /// It is guaranteed though that the data in the ReadOnlyArray itself is immutable.
     ///

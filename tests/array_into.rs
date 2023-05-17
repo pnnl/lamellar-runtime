@@ -51,5 +51,6 @@ create_into_tests!((
     LocalOnlyArray,
     ReadOnlyArray,
     AtomicArray,
-    LocalLockArray
+    LocalLockArray,
+    GlobalLockArray
 ));

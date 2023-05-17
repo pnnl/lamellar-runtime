@@ -7,31 +7,42 @@ use regex::Regex;
 
 use crate::parse::FormatArgs;
 
-pub(crate) struct SelfReplace;
+pub(crate) struct SelfReplace {
+    pub(crate) id: syn::Ident,
+}
 pub(crate) struct LamellarDSLReplace;
 pub(crate) struct DarcReplace;
 
 impl VisitMut for SelfReplace {
     fn visit_ident_mut(&mut self, i: &mut syn::Ident) {
-        let span = i.span();
+        // let span = i.span();
         // println!("ident: {:?}",i);
         if i.to_string() == "self" {
-            *i = syn::Ident::new("__lamellar_data", span);
+            *i = self.id.clone();
         }
         // println!("ident: {:?}",i);
         syn::visit_mut::visit_ident_mut(self, i);
     }
 
     fn visit_macro_mut(&mut self, i: &mut syn::Macro) {
+        println!("{i:?}");
         let args: Result<FormatArgs> = i.parse_body();
+
+        println!("{args:?}");
 
         if args.is_ok() {
             let tok_str = i.tokens.to_string();
             let tok_str = tok_str.split(",").collect::<Vec<&str>>();
             let mut new_tok_str: String = tok_str[0].to_string();
             for i in 1..tok_str.len() {
-                new_tok_str +=
-                    &(",".to_owned() + &tok_str[i].to_string().replace("self", "__lamellar_data"));
+                let old_string = &tok_str[i].to_string();
+                if old_string.contains(".") {
+                    new_tok_str +=
+                        &(",".to_owned() + &old_string.replace("self", &self.id.to_string()));
+                } else {
+                    new_tok_str += &(",".to_owned()
+                        + &old_string.replace("self", &(String::from("*") + &self.id.to_string())));
+                }
             }
             i.tokens = new_tok_str.parse().unwrap();
         } else {

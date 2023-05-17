@@ -355,7 +355,9 @@ impl<T: Dist> LamellarArrayMutIterators<T> for LocalLockArray<T> {
     }
 
     fn local_iter_mut(&self) -> Self::LocalIter {
+        // println!("trying to get write lock for iter");
         let lock = Arc::new(self.lock.write());
+        // println!("got write lock for iter");
         LocalLockLocalIterMut {
             data: self.clone(),
             lock: lock,

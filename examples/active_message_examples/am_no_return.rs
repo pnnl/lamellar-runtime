@@ -82,6 +82,13 @@ fn main() {
         assert!(res.iter().all(|x| *x == ()));
         println!("no return result: {:?}", res);
         println!("---------------------------------------------------------------");
+
+        println!("Task Group---------------------------------------------------------------");
+
+        // let mut am_group = typed_am_group!(AmNoReturn,world.clone());
+        // am_group.add_am_all(am.clone());
+        // am_group.add_am_pe(0,am.clone());
+        // world.block_on(am_group.exec());
     }
 
     // println!("---------------------------------------------------------------");

@@ -1,5 +1,6 @@
 pub use crate::array::atomic::AtomicArray;
 pub use crate::array::generic_atomic::GenericAtomicArray;
+pub use crate::array::global_lock_atomic::GlobalLockArray;
 pub use crate::array::local_lock_atomic::LocalLockArray;
 pub use crate::array::native_atomic::NativeAtomicArray;
 pub use crate::array::r#unsafe::UnsafeArray;
@@ -21,7 +22,8 @@ pub use crate::array::iterator::{LamellarArrayIterators, LamellarArrayMutIterato
 pub use crate::array::operations::{
     AccessOps, ArithmeticOps, BitWiseOps, CompareExchangeEpsilonOps, CompareExchangeOps,
     ElementArithmeticOps, ElementBitWiseOps, ElementCompareEqOps, ElementComparePartialEqOps,
-    ElementOps, LocalArithmeticOps, LocalAtomicOps, LocalBitWiseOps, OpInput, ReadOnlyOps,
+    ElementOps, ElementShiftOps, LocalArithmeticOps, LocalAtomicOps, LocalBitWiseOps,
+    LocalShiftOps, OpInput, ReadOnlyOps, ShiftOps,
 };
 // pub use crate::array::operations::*;
 

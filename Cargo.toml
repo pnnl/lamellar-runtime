@@ -48,6 +48,7 @@ tracing = "0.1.37"
 tracing-futures = "0.2.5"
 tracing-flame = "0.2.0"
 pin-project = "1.0.12"
+enum-as-inner = "0.5.1"
 
 
 [dev-dependencies]
@@ -68,7 +69,7 @@ members = ["impl"]
 
 #features are strictly additive.... can't have mutual exclusitivity
 [features]
-enable-rofi=["rofisys","libc"]
+enable-rofi=["rofisys", "libc"]
 enable-prof=["lamellar-prof/enable-prof"]
 slurm-test=[]
 default=[]
@@ -175,12 +176,28 @@ name="am_bw"
 path="examples/bandwidths/am_bw.rs"
 
 [[example]]
+name="am_bw_future"
+path="examples/bandwidths/am_bw_future.rs"
+
+[[example]]
 name="task_group_am_bw"
 path="examples/bandwidths/task_group_am_bw.rs"
 
 [[example]]
+name="task_group_futures_am_bw"
+path="examples/bandwidths/task_group_futures_am_bw.rs"
+
+[[example]]
+name="task_group_typed_futures_am_bw"
+path="examples/bandwidths/task_group_typed_futures_am_bw.rs"
+
+[[example]]
 name="am_bw_get"
 path="examples/bandwidths/am_bw_get.rs"
+
+[[example]]
+name="am_group_bw_get"
+path="examples/bandwidths/am_group_bw_get.rs"
 
 [[example]]
 name="get_bw"
@@ -207,6 +224,10 @@ name="local_lock_atomic_array_put_bw"
 path="examples/bandwidths/local_lock_atomic_array_put_bw.rs"
 
 [[example]]
+name="global_lock_atomic_array_put_bw"
+path="examples/bandwidths/global_lock_atomic_array_put_bw.rs"
+
+[[example]]
 name="unsafe_array_get_bw"
 path="examples/bandwidths/unsafe_array_get_bw.rs"
 
@@ -227,6 +248,10 @@ name="local_lock_atomic_array_get_bw"
 path="examples/bandwidths/local_lock_atomic_array_get_bw.rs"
 
 [[example]]
+name="global_lock_atomic_array_get_bw"
+path="examples/bandwidths/global_lock_atomic_array_get_bw.rs"
+
+[[example]]
 name="readonly_array_get_bw"
 path="examples/bandwidths/readonly_array_get_bw.rs"
 
@@ -242,6 +267,10 @@ path="examples/active_message_examples/am_no_return.rs"
 [[example]]
 name="am_return_usize"
 path="examples/active_message_examples/am_return_usize.rs"
+
+[[example]]
+name="am_return_ordered"
+path="examples/active_message_examples/am_return_ordered.rs"
 
 [[example]]
 name="am_return_am"
@@ -319,6 +348,10 @@ path="examples/array_examples/atomic_compare_exchange.rs"
 [[example]]
 name="array_first_last_global_indices"
 path="examples/array_examples/array_first_last_global_indices.rs"
+
+[[example]]
+name="global_lock_array"
+path="examples/array_examples/global_lock_array.rs"
 
 #[[example]]
 #name="2d_array"
@@ -403,6 +436,10 @@ path="examples/darc_examples/darc.rs"
 [[example]]
 name="stress_test"
 path="examples/darc_examples/stress_test.rs"
+
+[[example]]
+name="string_darc"
+path="examples/darc_examples/string_darc.rs"
 
 ##------------ Hello Worlds examples ------------------##
 [[example]]

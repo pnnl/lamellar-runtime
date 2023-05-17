@@ -1,4 +1,5 @@
-use lamellar::{ActiveMessaging, Darc, GlobalRwDarc, LocalRwDarc, StridedArch};
+use lamellar::active_messaging::prelude::*;
+use lamellar::darc::prelude::*;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
@@ -84,6 +85,7 @@ fn main() {
     // println!("here 6");
     if let Some(team) = even_team {
         let team_darc = Darc::new(team.clone(), AtomicUsize::new(10));
+        let mut tg = typed_am_group!(DarcAm, team.clone());
         println!("created team darc");
         if let Ok(team_darc) = team_darc {
             let test = team_darc.clone();
@@ -99,7 +101,10 @@ fn main() {
             };
             // println!("here 7");
             team.exec_am_pe(0, darc_am.clone());
-            team.exec_am_all(darc_am);
+            team.exec_am_all(darc_am.clone());
+            tg.add_am_pe(0, darc_am.clone());
+            tg.add_am_all(darc_am.clone());
+            team.block_on(tg.exec());
             // println!("here 8");
         } else {
             // println!("here");

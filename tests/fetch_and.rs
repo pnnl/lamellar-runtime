@@ -68,7 +68,7 @@ macro_rules! create_fetch_and_tests {
 }
 
 create_fetch_and_tests!(
-    (UnsafeArray, LocalLockArray, AtomicArray), // (UnsafeArray, AtomicArray, GenericAtomicArray, LocalLockArray),
+    (UnsafeArray, LocalLockArray, GlobalLockArray, AtomicArray), // (UnsafeArray, AtomicArray, GenericAtomicArray, LocalLockArray),
     ("Block", "Cyclic"),
     (u8, u16, u32, u128, usize, i8, i16, i32, i128, isize),
     (2, 3, 4),

@@ -13,7 +13,7 @@ use lamellar_prof::*;
 // use log::trace;
 use std::sync::Arc;
 
-const AM_ID_START: AmId = 1;
+pub(crate) const AM_ID_START: AmId = 1;
 
 pub(crate) type UnpackFn = fn(&[u8], Result<usize, IdError>) -> LamellarArcAm;
 pub(crate) type AmId = i32;

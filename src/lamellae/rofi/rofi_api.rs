@@ -92,6 +92,7 @@ pub(crate) fn rofi_local_addr(remote_pe: usize, remote_addr: usize) -> usize {
 
 pub(crate) fn rofi_remote_addr(pe: usize, local_addr: usize) -> usize {
     let addr = unsafe {
+        // println!("{:x} {:?} {:?} {:?}",local_addr,(local_addr as *mut u8) as *mut std::ffi::c_void,pe,pe as u32);
         rofisys::rofi_get_remote_addr((local_addr as *mut u8) as *mut std::ffi::c_void, pe as u32)
     };
     // println!("remote addr {:?} 0x{:x}", addr as *mut u8 ,addr as usize);
