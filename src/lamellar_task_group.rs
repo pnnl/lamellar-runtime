@@ -4,7 +4,7 @@ use crate::lamellar_arch::LamellarArchRT;
 use crate::lamellar_request::*;
 use crate::lamellar_team::{IntoLamellarTeam, LamellarTeam, LamellarTeamRT};
 use crate::memregion::one_sided::MemRegionHandleInner;
-use crate::scheduler::{ReqId, SchedulerQueue};
+use crate::scheduler::{ReqId, SchedulerQueue,Scheduler};
 use crate::Darc;
 
 use crate::active_messaging::registered_active_message::{AmId, AMS_EXECS, AMS_IDS, AM_ID_START};
@@ -29,6 +29,7 @@ pub(crate) struct TaskGroupRequestHandleInner {
     team_outstanding_reqs: Arc<AtomicUsize>,
     world_outstanding_reqs: Arc<AtomicUsize>,
     tg_outstanding_reqs: Option<Arc<AtomicUsize>>,
+    pub(crate) scheduler: Arc<Scheduler>,
 }
 
 #[doc(hidden)]
@@ -121,7 +122,8 @@ impl<T: AmDist> LamellarRequest for TaskGroupRequestHandle<T> {
     fn get(&self) -> Self::Output {
         let mut res = self.inner.data.lock().remove(&self.sub_id);
         while res.is_none() {
-            std::thread::yield_now();
+            // std::thread::yield_now();
+            self.inner.scheduler.exec_task();
             res = self.inner.data.lock().remove(&self.sub_id);
         }
         self.process_result(res.unwrap())
@@ -136,6 +138,7 @@ pub(crate) struct TaskGroupMultiRequestHandleInner {
     team_outstanding_reqs: Arc<AtomicUsize>,
     world_outstanding_reqs: Arc<AtomicUsize>,
     tg_outstanding_reqs: Option<Arc<AtomicUsize>>,
+    pub(crate) scheduler: Arc<Scheduler>,
 }
 
 #[doc(hidden)]
@@ -237,10 +240,12 @@ impl<T: AmDist> LamellarMultiRequest for TaskGroupMultiRequestHandle<T> {
 
     fn get(&self) -> Vec<Self::Output> {
         while !self.inner.data.lock().contains_key(&self.sub_id) {
-            std::thread::yield_now();
+            self.inner.scheduler.exec_task();
+            // std::thread::yield_now();
         }
         while self.inner.data.lock().get(&self.sub_id).unwrap().len() < self.inner.arch.num_pes() {
-            std::thread::yield_now();
+            self.inner.scheduler.exec_task();
+            // std::thread::yield_now();
         }
         let mut sub_id_map = self.inner.data.lock().remove(&self.sub_id).unwrap();
         let mut res = Vec::new();
@@ -258,6 +263,7 @@ pub(crate) struct TaskGroupLocalRequestHandleInner {
     team_outstanding_reqs: Arc<AtomicUsize>,
     world_outstanding_reqs: Arc<AtomicUsize>,
     tg_outstanding_reqs: Option<Arc<AtomicUsize>>,
+    pub(crate) scheduler: Arc<Scheduler>,
 }
 
 #[doc(hidden)]
@@ -320,7 +326,8 @@ impl<T: SyncSend + 'static> LamellarRequest for TaskGroupLocalRequestHandle<T> {
     fn get(&self) -> Self::Output {
         let mut res = self.inner.data.lock().remove(&self.sub_id);
         while res.is_none() {
-            std::thread::yield_now();
+            self.inner.scheduler.exec_task();
+            // std::thread::yield_now();
             res = self.inner.data.lock().remove(&self.sub_id);
         }
         self.process_result(res.unwrap())
@@ -459,6 +466,7 @@ impl LamellarTaskGroup {
             team_outstanding_reqs: team.team_counters.outstanding_reqs.clone(),
             world_outstanding_reqs: team.world_counters.outstanding_reqs.clone(),
             tg_outstanding_reqs: Some(counters.outstanding_reqs.clone()),
+            scheduler: team.scheduler.clone(),
         });
         let rt_req = Arc::new(LamellarRequestResult { req: req.clone() });
         let multi_req = Arc::new(TaskGroupMultiRequestHandleInner {
@@ -468,6 +476,7 @@ impl LamellarTaskGroup {
             team_outstanding_reqs: team.team_counters.outstanding_reqs.clone(),
             world_outstanding_reqs: team.world_counters.outstanding_reqs.clone(),
             tg_outstanding_reqs: Some(counters.outstanding_reqs.clone()),
+            scheduler: team.scheduler.clone(),
         });
         let rt_multi_req = Arc::new(LamellarRequestResult {
             req: multi_req.clone(),
@@ -478,6 +487,7 @@ impl LamellarTaskGroup {
             team_outstanding_reqs: team.team_counters.outstanding_reqs.clone(),
             world_outstanding_reqs: team.world_counters.outstanding_reqs.clone(),
             tg_outstanding_reqs: Some(counters.outstanding_reqs.clone()),
+            scheduler: team.scheduler.clone(),
         });
         let rt_local_req = Arc::new(LamellarRequestResult {
             req: local_req.clone(),

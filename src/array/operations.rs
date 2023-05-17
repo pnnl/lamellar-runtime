@@ -7,6 +7,7 @@ use crate::array::r#unsafe::*;
 use crate::array::*;
 
 use crate::lamellar_request::LamellarRequest;
+use crate::scheduler::{Scheduler,SchedulerQueue};
 
 pub(crate) mod access;
 pub use access::{AccessOps, LocalAtomicOps};
@@ -1294,6 +1295,7 @@ pub(crate) struct ArrayOpHandle {
 #[derive(Debug)]
 pub(crate) struct ArrayOpHandleInner {
     pub(crate) complete: Vec<Arc<AtomicBool>>,
+    pub(crate) scheduler: Arc<Scheduler>,
 }
 
 pub(crate) struct ArrayOpFetchHandle<T: Dist> {
@@ -1310,6 +1312,7 @@ pub(crate) struct ArrayOpFetchHandleInner<T: Dist> {
     pub(crate) complete: Vec<Arc<AtomicBool>>,
     pub(crate) results: OpResults,
     pub(crate) req_cnt: usize,
+    pub(crate) scheduler: Arc<Scheduler>,
     pub(crate) _phantom: PhantomData<T>,
 }
 
@@ -1326,6 +1329,7 @@ pub(crate) struct ArrayOpResultHandleInner<T> {
     pub(crate) complete: Vec<Arc<AtomicBool>>,
     pub(crate) results: OpResults,
     pub(crate) req_cnt: usize,
+    pub(crate) scheduler: Arc<Scheduler>,
     pub(crate) _phantom: PhantomData<T>,
 }
 
@@ -1364,7 +1368,8 @@ impl LamellarRequest for ArrayOpHandleInner {
     fn get(&self) -> Self::Output {
         for comp in &self.complete {
             while comp.load(Ordering::Relaxed) == false {
-                std::thread::yield_now();
+                // std::thread::yield_now();
+                self.scheduler.exec_task();
             }
         }
         ()
@@ -1466,7 +1471,8 @@ impl<T: Dist> LamellarRequest for ArrayOpFetchHandleInner<T> {
     fn get(&self) -> Self::Output {
         for comp in &self.complete {
             while comp.load(Ordering::Relaxed) == false {
-                std::thread::yield_now();
+                // std::thread::yield_now();
+                self.scheduler.exec_task();
             }
         }
         self.get_result()
@@ -1588,7 +1594,8 @@ impl<T: Dist> LamellarRequest for ArrayOpResultHandleInner<T> {
     fn get(&self) -> Self::Output {
         for comp in &self.complete {
             while comp.load(Ordering::Relaxed) == false {
-                std::thread::yield_now();
+                // std::thread::yield_now();
+                self.scheduler.exec_task();
             }
         }
         self.get_result()

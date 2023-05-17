@@ -201,6 +201,25 @@ impl LamellarWorld {
     pub fn team(&self) -> Arc<LamellarTeam> {
         self.team.clone()
     }
+
+
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Returns nummber of threads on this PE (including the main thread) 
+    ///
+    /// # One-sided Operation
+    /// The result is returned only on the calling PE
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::active_messaging::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let num_threads = world.num_threads();
+    ///```
+    pub fn num_threads(&self) -> usize {
+        self.team.num_threads()
+    }
 }
 
 impl Clone for LamellarWorld {
@@ -275,6 +294,7 @@ pub struct LamellarWorldBuilder {
     primary_lamellae: Backend,
     // secondary_lamellae: HashSet<Backend>,
     scheduler: SchedulerType,
+    num_threads: usize,
 }
 
 //#[prof]
@@ -323,10 +343,28 @@ impl LamellarWorldBuilder {
             }
             Err(_) => SchedulerType::WorkStealing,
         };
+        let num_threads = match std::env::var("LAMELLAR_THREADS") {
+            Ok(n) => if let Ok(num_threads) = n.parse::<usize>(){
+                if num_threads == 0 {
+                    panic!("LAMELLAR_THREADS must be greater than 0");
+                }
+                else if num_threads == 1 {
+                    num_threads
+                }
+                else {
+                    num_threads-1
+                }
+            }
+            else {
+                panic!("LAMELLAR_THREADS must be an integer greater than 0");
+            },
+            Err(_) => 4,
+        };
         LamellarWorldBuilder {
             primary_lamellae: Default::default(),
             // secondary_lamellae: HashSet::new(),
             scheduler: scheduler,
+            num_threads: num_threads,
         }
     }
 
@@ -379,6 +417,27 @@ impl LamellarWorldBuilder {
         self
     }
 
+    #[doc(alias = "One-sided")]
+    /// Specify the number of threads per PE to use for this execution (the Main thread is included in this count)
+    ///
+    /// # Onesided Operation
+    /// While calling `with_num_workers` is onesided and will not cause any issues if different PEs use different numbers of
+    /// workers(threads), performance is likely to be inconsistent from PE to PE depending on the number of threads
+    ///
+    /// # Examples
+    ///
+    ///```
+    /// use lamellar::{LamellarWorldBuilder,SchedulerType};
+    ///
+    /// let builder = LamellarWorldBuilder::new()
+    ///                             .set_num_workers(10);
+    ///```
+    #[tracing::instrument(skip_all)]
+    pub fn set_num_threads(mut self, num_threads: usize) -> LamellarWorldBuilder {
+        self.num_threads = num_threads;
+        self
+    }
+
     #[doc(alias = "Collective")]
     /// Instantiate a LamellarWorld object
     ///
@@ -401,10 +460,12 @@ impl LamellarWorldBuilder {
         // let teams = Arc::new(RwLock::new(HashMap::new()));
         let mut lamellae_builder = create_lamellae(self.primary_lamellae);
         let (my_pe, num_pes) = lamellae_builder.init_fabric();
+        
         let sched_new = Arc::new(create_scheduler(
             self.scheduler,
             num_pes,
-            // my_pe,
+            self.num_threads,
+            my_pe,
             // teams.clone(),
         ));
         let lamellae = lamellae_builder.init_lamellae(sched_new.clone());

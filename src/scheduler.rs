@@ -104,17 +104,19 @@ pub(crate) trait SchedulerQueue {
         F: Future;
     fn shutdown(&self);
     fn active(&self) -> bool;
+    fn num_workers(&self) -> usize;
 }
 
 pub(crate) fn create_scheduler(
     sched: SchedulerType,
     num_pes: usize,
-    // my_pe: usize,
+    num_workers: usize,
+    my_pe: usize,
     // teams: Arc<RwLock<HashMap<u64, Weak<LamellarTeamRT>>>>,
 ) -> Scheduler {
     match sched {
         SchedulerType::WorkStealing => {
-            Scheduler::WorkStealing(work_stealing::WorkStealing::new(num_pes))
+            Scheduler::WorkStealing(work_stealing::WorkStealing::new(num_pes,num_workers,my_pe))
         } // SchedulerType::NumaWorkStealing => {
           //     Scheduler::NumaWorkStealing(numa_work_stealing::NumaWorkStealing::new(num_pes))
           // }

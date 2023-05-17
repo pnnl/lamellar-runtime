@@ -392,7 +392,7 @@ impl NumaWorkStealingInner {
 
     fn init(&mut self) {
         let num_workers = match std::env::var("LAMELLAR_THREADS") {
-            Ok(n) => n.parse::<usize>().unwrap(),
+            Ok(n) => n.parse::<usize>().unwrap()-1,
             Err(_) => 4,
         };
         let core_ids = core_affinity::get_core_ids().unwrap();

@@ -39,10 +39,14 @@ impl WorkStealingThread {
         worker: WorkStealingThread,
         active_cnt: Arc<AtomicUsize>,
         num_tasks: Arc<AtomicUsize>,
+        _max_tasks: Arc<AtomicUsize>,
         id: CoreId,
+        _my_pe: usize,
     ) -> thread::JoinHandle<()> {
-        thread::spawn(move || {
-            // println!("TestSchdulerWorker thread running");
+        let builder = thread::Builder::new().name("worker_thread".into());
+        builder.spawn(move || {
+            // println!("TestSchdulerWorker thread running {:?} core: {:?}", std::thread::current().id(), id);
+            // let mut num_task_executed = 0;
             let _span = trace_span!("WorkStealingThread::run");
             core_affinity::set_for_current(id);
             active_cnt.fetch_add(1, Ordering::SeqCst);
@@ -108,20 +112,22 @@ impl WorkStealingThread {
                     );
                     timer = std::time::Instant::now();
                 }
-                // if timer.elapsed().as_secs_f64() > 600.0 {
+                // if timer.elapsed().as_secs_f64() > 6.0 && my_pe == 0  {
                 //     println!(
-                //         "work_q size {:?} work inj size {:?} num_tasks {:?}",
+                //         "work_q size {:?} work inj size {:?} num_tasks {:?} max_tasks {:?}",
                 //         worker.work_q.len(),
                 //         worker.work_inj.len(),
-                //         num_tasks.load(Ordering::SeqCst)
+                //         num_tasks.load(Ordering::SeqCst),
+                //         max_tasks.load(Ordering::SeqCst)
                 //     );
                 //     timer = std::time::Instant::now()
                 // }
+                std::thread::yield_now();
             }
             fini_prof!();
             active_cnt.fetch_sub(1, Ordering::SeqCst);
-            // println!("TestSchdulerWorker thread shutting down");
-        })
+            // println!("TestSchdulerWorker thread shutting down {:?} core: {:?}", std::thread::current().id(), id);
+        }).unwrap()
     }
 }
 
@@ -134,6 +140,7 @@ pub(crate) struct WorkStealingInner {
     active: Arc<AtomicBool>,
     active_cnt: Arc<AtomicUsize>,
     num_tasks: Arc<AtomicUsize>,
+    max_tasks: Arc<AtomicUsize>,
     stall_mark: Arc<AtomicUsize>,
 }
 
@@ -149,6 +156,7 @@ impl AmeSchedulerQueue for WorkStealingInner {
         // println!("submitting_req");
         // println!("submit req {:?}",self.num_tasks.load(Ordering::Relaxed)+1);
         let num_tasks = self.num_tasks.clone();
+        let max_tasks = self.max_tasks.clone();
         let stall_mark = self.stall_mark.fetch_add(1, Ordering::Relaxed);
         let future = async move {
             // println!("exec req {:?}",num_tasks.load(Ordering::Relaxed));
@@ -157,6 +165,7 @@ impl AmeSchedulerQueue for WorkStealingInner {
             ame.process_msg(am, scheduler, stall_mark).await;
             // println!("num tasks: {:?}",);
             num_tasks.fetch_sub(1, Ordering::Relaxed);
+            max_tasks.fetch_add(1, Ordering::Relaxed);
             // println!("done req {:?}",num_tasks.load(Ordering::Relaxed));
         };
         let work_inj = self.work_inj.clone();
@@ -178,6 +187,7 @@ impl AmeSchedulerQueue for WorkStealingInner {
         // let work_inj = self.work_inj.clone();
         // println!("submit work {:?}",self.num_tasks.load(Ordering::Relaxed));
         let num_tasks = self.num_tasks.clone();
+        let max_tasks = self.max_tasks.clone();
         let future = async move {
             // println!("exec work {:?}",num_tasks.load(Ordering::Relaxed)+1);
             num_tasks.fetch_add(1, Ordering::Relaxed);
@@ -193,6 +203,7 @@ impl AmeSchedulerQueue for WorkStealingInner {
             }
             // println!("num tasks: {:?}",);
             num_tasks.fetch_sub(1, Ordering::Relaxed);
+            max_tasks.fetch_add(1, Ordering::Relaxed);
             // println!("done work {:?}",num_tasks.load(Ordering::Relaxed));
         };
         let work_inj = self.work_inj.clone();
@@ -208,11 +219,13 @@ impl AmeSchedulerQueue for WorkStealingInner {
     {
         trace_span!("submit_task").in_scope(|| {
             let num_tasks = self.num_tasks.clone();
+            let max_tasks = self.max_tasks.clone();
             let future2 = async move {
                 // println!("exec task {:?}",num_tasks.load(Ordering::Relaxed)+1);
                 num_tasks.fetch_add(1, Ordering::Relaxed);
                 future.await;
                 num_tasks.fetch_sub(1, Ordering::Relaxed);
+                max_tasks.fetch_add(1, Ordering::Relaxed);
                 // println!("done task {:?}",num_tasks.load(Ordering::Relaxed));
             };
             let work_inj = self.work_inj.clone();
@@ -229,11 +242,13 @@ impl AmeSchedulerQueue for WorkStealingInner {
     {
         trace_span!("submit_task").in_scope(|| {
             let num_tasks = self.num_tasks.clone();
+            let max_tasks = self.max_tasks.clone();
             let future2 = async move {
                 // println!("exec task {:?}",num_tasks.load(Ordering::Relaxed)+1);
                 num_tasks.fetch_add(1, Ordering::Relaxed);
                 future.await;
                 num_tasks.fetch_sub(1, Ordering::Relaxed);
+                max_tasks.fetch_add(1, Ordering::Relaxed);
                 // println!("done task {:?}",num_tasks.load(Ordering::Relaxed));
             };
             let work_inj = self.work_inj.clone();
@@ -345,7 +360,8 @@ impl SchedulerQueue for WorkStealing {
     }
 
     fn exec_task(&self) {
-        self.inner.exec_task();
+       self.inner.exec_task();
+       std::thread::yield_now();
     }
 
     fn submit_task_node<F>(&self, future: F, _node: usize)
@@ -368,12 +384,15 @@ impl SchedulerQueue for WorkStealing {
     fn active(&self) -> bool {
         self.inner.active()
     }
+    fn num_workers(&self) -> usize {
+        self.max_num_threads
+    }
 }
 
 //#[prof]
 impl WorkStealingInner {
     #[tracing::instrument(skip_all)]
-    pub(crate) fn new(stall_mark: Arc<AtomicUsize>) -> WorkStealingInner {
+    pub(crate) fn new(stall_mark: Arc<AtomicUsize>, num_workers: usize, my_pe: usize) -> WorkStealingInner {
         // println!("new work stealing queue");
 
         let mut sched = WorkStealingInner {
@@ -384,20 +403,17 @@ impl WorkStealingInner {
             active: Arc::new(AtomicBool::new(true)),
             active_cnt: Arc::new(AtomicUsize::new(0)),
             num_tasks: Arc::new(AtomicUsize::new(0)),
+            max_tasks: Arc::new(AtomicUsize::new(0)),
             stall_mark: stall_mark,
         };
-        sched.init();
+        sched.init(num_workers, my_pe);
         sched
     }
 
     #[tracing::instrument(skip_all)]
-    fn init(&mut self) {
+    fn init(&mut self, num_workers: usize, my_pe: usize) {
         let mut work_workers: std::vec::Vec<crossbeam::deque::Worker<async_task::Runnable>> =
             vec![];
-        let num_workers = match std::env::var("LAMELLAR_THREADS") {
-            Ok(n) => n.parse::<usize>().unwrap(),
-            Err(_) => 4,
-        };
         for _i in 0..num_workers {
             let work_worker: crossbeam::deque::Worker<async_task::Runnable> =
                 crossbeam::deque::Worker::new_fifo();
@@ -427,7 +443,9 @@ impl WorkStealingInner {
                 worker,
                 self.active_cnt.clone(),
                 self.num_tasks.clone(),
+                self.max_tasks.clone(),
                 core_ids[i % core_ids.len()],
+                my_pe,
             ));
         }
         while self.active_cnt.load(Ordering::SeqCst) != self.threads.len() {
@@ -440,18 +458,22 @@ impl WorkStealingInner {
 pub(crate) struct WorkStealing {
     inner: Arc<AmeScheduler>,
     ame: Arc<ActiveMessageEngineType>,
+    max_num_threads: usize, //including the main thread
 }
 impl WorkStealing {
     #[tracing::instrument(skip_all)]
     pub(crate) fn new(
         num_pes: usize,
-        // my_pe: usize,
+        num_workers: usize,
+        my_pe: usize,
         // teams: Arc<RwLock<HashMap<u64, Weak<LamellarTeamRT>>>>,
     ) -> WorkStealing {
         // println!("new work stealing queue");
         let stall_mark = Arc::new(AtomicUsize::new(0));
         let inner = Arc::new(AmeScheduler::WorkStealingInner(WorkStealingInner::new(
             stall_mark.clone(),
+            num_workers,
+            my_pe,
         )));
 
         let batcher = match std::env::var("LAMELLAR_BATCHER") {
@@ -471,6 +493,7 @@ impl WorkStealing {
             ame: Arc::new(ActiveMessageEngineType::RegisteredActiveMessages(
                 RegisteredActiveMessages::new(batcher),
             )),
+            max_num_threads: num_workers,
         };
         sched
     }

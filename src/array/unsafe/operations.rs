@@ -197,6 +197,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
                             complete: complete_cnt.clone(),
                             results: res_map.clone(),
                             req_cnt: req_cnt,
+                            scheduler: self.inner.data.team.scheduler.clone(),
                             _phantom: PhantomData,
                         }))
                     }
@@ -206,11 +207,13 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
                             complete: complete_cnt.clone(),
                             results: res_map.clone(),
                             req_cnt: req_cnt,
+                            scheduler: self.inner.data.team.scheduler.clone(),
                             _phantom: PhantomData,
                         }))
                     }
                     OpReturnType::None => BufOpsRequest::NoFetch(Box::new(ArrayOpHandleInner {
                         complete: complete_cnt.clone(),
+                        scheduler: self.inner.data.team.scheduler.clone(),
                     })),
                 }
                 // }
@@ -304,6 +307,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
                             complete: Vec::new(),
                             results: OpResults::new(),
                             req_cnt: 0,
+                            scheduler: self.inner.data.team.scheduler.clone(),
                             _phantom: PhantomData,
                         }))
                     }
@@ -313,11 +317,13 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
                             complete: Vec::new(),
                             results: OpResults::new(),
                             req_cnt: 0,
+                            scheduler: self.inner.data.team.scheduler.clone(),
                             _phantom: PhantomData,
                         }))
                     }
                     OpReturnType::None => BufOpsRequest::NoFetch(Box::new(ArrayOpHandleInner {
                         complete: Vec::new(),
+                        scheduler: self.inner.data.team.scheduler.clone(),
                     })),
                 },
             );

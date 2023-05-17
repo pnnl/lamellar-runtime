@@ -3,11 +3,12 @@ use crate::darc::Darc;
 use crate::lamellae::{Des, SerializedData};
 use crate::lamellar_arch::LamellarArchRT;
 use crate::memregion::one_sided::MemRegionHandleInner;
+use crate::scheduler::{Scheduler,SchedulerQueue};
 use async_trait::async_trait;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 
-use parking_lot::Mutex;
+use parking_lot::{Mutex,Condvar};
 use std::cell::Cell;
 use std::collections::HashMap;
 
@@ -90,6 +91,7 @@ pub(crate) struct LamellarRequestHandleInner {
     pub(crate) team_outstanding_reqs: Arc<AtomicUsize>,
     pub(crate) world_outstanding_reqs: Arc<AtomicUsize>,
     pub(crate) tg_outstanding_reqs: Option<Arc<AtomicUsize>>,
+    pub(crate) scheduler: Arc<Scheduler>,
     pub(crate) user_handle: AtomicBool, //we can use this flag to optimize what happens when the request returns
 }
 impl std::fmt::Debug for LamellarRequestHandleInner {
@@ -195,7 +197,8 @@ impl<T: AmDist> LamellarRequest for LamellarRequestHandle<T> {
     #[tracing::instrument(skip_all)]
     fn get(&self) -> T {
         while !self.inner.ready.load(Ordering::SeqCst) {
-            std::thread::yield_now();
+            // std::thread::yield_now();
+            self.inner.scheduler.exec_task();
         }
         self.process_result(self.inner.data.replace(None).unwrap())
     }
@@ -209,6 +212,7 @@ pub(crate) struct LamellarMultiRequestHandleInner {
     pub(crate) team_outstanding_reqs: Arc<AtomicUsize>,
     pub(crate) world_outstanding_reqs: Arc<AtomicUsize>,
     pub(crate) tg_outstanding_reqs: Option<Arc<AtomicUsize>>,
+    pub(crate) scheduler: Arc<Scheduler>,
     pub(crate) user_handle: AtomicBool, //we can use this flag to optimize what happens when the request returns
 }
 
@@ -317,7 +321,8 @@ impl<T: AmDist> LamellarMultiRequest for LamellarMultiRequestHandle<T> {
     #[tracing::instrument(skip_all)]
     fn get(&self) -> Vec<T> {
         while self.inner.cnt.load(Ordering::SeqCst) > 0 {
-            std::thread::yield_now();
+            // std::thread::yield_now();
+            self.inner.scheduler.exec_task();
         }
         let mut res = vec![];
         let mut data = self.inner.data.lock();
@@ -329,17 +334,20 @@ impl<T: AmDist> LamellarMultiRequest for LamellarMultiRequestHandle<T> {
 }
 
 pub(crate) struct LamellarLocalRequestHandleInner {
-    pub(crate) ready: AtomicBool,
+    // pub(crate) ready: AtomicBool,
+    pub(crate) ready: (Mutex<bool>, Condvar),
+    // pub(crate) ready_cv: Condvar,
     pub(crate) data: Cell<Option<LamellarAny>>, //we only issue a single request, which the runtime will update, but the user also has a handle so we need a way to mutate
     pub(crate) team_outstanding_reqs: Arc<AtomicUsize>,
     pub(crate) world_outstanding_reqs: Arc<AtomicUsize>,
     pub(crate) tg_outstanding_reqs: Option<Arc<AtomicUsize>>,
+    pub(crate) scheduler: Arc<Scheduler>,
     pub(crate) user_handle: AtomicBool, //we can use this flag to optimize what happens when the request returns
 }
 
 impl std::fmt::Debug for LamellarLocalRequestHandleInner {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "LamellarLocalRequestHandleInner {{ ready: {:?}, team_outstanding_reqs {:?}, world_outstanding_reqs {:?}, tg_outstanding_reqs{:?}, user_handle {:?}}}", self.ready.load(Ordering::SeqCst), self.team_outstanding_reqs.load(Ordering::SeqCst), self.world_outstanding_reqs.load(Ordering::SeqCst), self.tg_outstanding_reqs.as_ref().map(|x| x.load(Ordering::SeqCst)), self.user_handle.load(Ordering::SeqCst))
+        write!(f, "LamellarLocalRequestHandleInner {{ ready: {:?}, team_outstanding_reqs {:?}, world_outstanding_reqs {:?}, tg_outstanding_reqs{:?}, user_handle {:?}}}", self.ready.0.lock(), self.team_outstanding_reqs.load(Ordering::SeqCst), self.world_outstanding_reqs.load(Ordering::SeqCst), self.tg_outstanding_reqs.as_ref().map(|x| x.load(Ordering::SeqCst)), self.user_handle.load(Ordering::SeqCst))
     }
 }
 
@@ -374,7 +382,9 @@ impl LamellarRequestAddResult for LamellarLocalRequestHandleInner {
             InternalResult::Unit => self.data.set(Some(Box::new(()) as LamellarAny)),
         }
 
-        self.ready.store(true, Ordering::SeqCst);
+        // self.ready.store(true, Ordering::SeqCst);
+        *self.ready.0.lock() = true;
+        self.ready.1.notify_one();
     }
     #[tracing::instrument(skip_all)]
     fn update_counters(&self) {
@@ -403,15 +413,19 @@ impl<T: SyncSend + 'static> LamellarRequest for LamellarLocalRequestHandle<T> {
     type Output = T;
     #[tracing::instrument(skip_all)]
     async fn into_future(mut self: Box<Self>) -> Self::Output {
-        while !self.inner.ready.load(Ordering::SeqCst) {
+        while !*self.inner.ready.0.lock() {
             async_std::task::yield_now().await;
         }
         self.process_result(self.inner.data.replace(None).unwrap())
     }
     #[tracing::instrument(skip_all)]
     fn get(&self) -> T {
-        while !self.inner.ready.load(Ordering::SeqCst) {
-            std::thread::yield_now();
+        // let mut ready_lock = self.inner.ready.0.lock();
+        // while !*ready_lock {
+        while !*self.inner.ready.0.lock() {
+            // std::thread::yield_now();
+            // self.inner.ready.1.wait(&mut ready_lock);
+            self.inner.scheduler.exec_task();
         }
         self.process_result(self.inner.data.replace(None).unwrap())
     }

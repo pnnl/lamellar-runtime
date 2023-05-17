@@ -19,8 +19,7 @@ use std::hash::{Hash, Hasher};
 use core::pin::Pin;
 use futures::Future;
 use lamellar_prof::*;
-use parking_lot::Mutex;
-use parking_lot::RwLock;
+use parking_lot::{Mutex,RwLock,Condvar};
 use std::collections::HashMap;
 use std::marker::PhantomPinned;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -173,6 +172,34 @@ impl LamellarTeam {
     #[tracing::instrument(skip_all)]
     pub fn num_pes(&self) -> usize {
         self.team.arch.num_pes()
+    }
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Returns nummber of threads on this PE (including the main thread) 
+    ///
+    /// # One-sided Operation
+    /// The result is returned only on the calling PE
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::active_messaging::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let num_pes = world.num_pes();
+    ///
+    /// //create a team consisting of the "even" PEs in the world
+    /// let even_pes = world.create_team_from_arch(StridedArch::new(
+    ///    0,                                      // start pe
+    ///    2,                                      // stride
+    ///    (num_pes as f64 / 2.0).ceil() as usize, //num_pes in team
+    /// )).expect("PE in world team");
+    /// let pes = even_pes.get_pes();
+    ///
+    /// assert_eq!((num_pes as f64 / 2.0).ceil() as usize,even_pes.num_pes());
+    ///```
+    #[tracing::instrument(skip_all)]
+    pub fn num_threads(&self) -> usize {
+        self.team.scheduler.num_workers()
     }
 
     #[doc(alias("One-sided", "onesided"))]
@@ -888,6 +915,11 @@ impl LamellarTeamRT {
         self.arch.num_pes()
     }
 
+    #[tracing::instrument(skip_all)]
+    pub fn num_threads(&self) -> usize {
+        self.scheduler.num_workers()
+    }
+
     #[cfg_attr(test, allow(unreachable_code), allow(unused_variables))]
     #[tracing::instrument(skip_all)]
     fn check_hash_vals(&self, hash: usize, hash_buf: &MemoryRegion<usize>, timeout: Duration) {
@@ -1097,6 +1129,7 @@ impl LamellarTeamRT {
             world_outstanding_reqs: self.world_counters.outstanding_reqs.clone(),
             tg_outstanding_reqs: tg_outstanding_reqs.clone(),
             user_handle: AtomicBool::new(true),
+            scheduler: self.scheduler.clone(),
         });
         let req_result = Arc::new(LamellarRequestResult { req: req.clone() });
         let req_ptr = Arc::into_raw(req_result);
@@ -1178,6 +1211,7 @@ impl LamellarTeamRT {
             world_outstanding_reqs: self.world_counters.outstanding_reqs.clone(),
             tg_outstanding_reqs: tg_outstanding_reqs.clone(),
             user_handle: AtomicBool::new(true),
+            scheduler: self.scheduler.clone(),
         });
         let req_result = Arc::new(LamellarRequestResult { req: req.clone() });
         let req_ptr = Arc::into_raw(req_result);
@@ -1239,6 +1273,7 @@ impl LamellarTeamRT {
             world_outstanding_reqs: self.world_counters.outstanding_reqs.clone(),
             tg_outstanding_reqs: tg_outstanding_reqs.clone(),
             user_handle: AtomicBool::new(true),
+            scheduler: self.scheduler.clone(),
         });
         let req_result = Arc::new(LamellarRequestResult { req: req.clone() });
         let req_ptr = Arc::into_raw(req_result);
@@ -1302,6 +1337,7 @@ impl LamellarTeamRT {
             world_outstanding_reqs: self.world_counters.outstanding_reqs.clone(),
             tg_outstanding_reqs: tg_outstanding_reqs.clone(),
             user_handle: AtomicBool::new(true),
+            scheduler: self.scheduler.clone(),
         });
         let req_result = Arc::new(LamellarRequestResult { req: req.clone() });
         let req_ptr = Arc::into_raw(req_result);
@@ -1367,12 +1403,13 @@ impl LamellarTeamRT {
             None => None,
         };
         let req = Arc::new(LamellarLocalRequestHandleInner {
-            ready: AtomicBool::new(false),
+            ready: (Mutex::new(false), Condvar::new()),
             data: Cell::new(None),
             team_outstanding_reqs: self.team_counters.outstanding_reqs.clone(),
             world_outstanding_reqs: self.world_counters.outstanding_reqs.clone(),
             tg_outstanding_reqs: tg_outstanding_reqs.clone(),
             user_handle: AtomicBool::new(true),
+            scheduler: self.scheduler.clone(),
         });
         let req_result = Arc::new(LamellarRequestResult { req: req.clone() });
         let req_ptr = Arc::into_raw(req_result);
