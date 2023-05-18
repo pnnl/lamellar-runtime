@@ -572,6 +572,8 @@ fn create_buf_ops(
                 ArrayOpCmd::CompareExchange(old) =>{
                     #compare_exchange
                 }
+            }),
+            OpType::CompExEps => match_stmts.extend(quote! {
                 ArrayOpCmd::CompareExchangeEps(old,eps) =>{
                     #compare_exchange_eps
                 }
@@ -919,6 +921,7 @@ enum OpType {
     Bitwise,
     Access,
     CompEx,
+    CompExEps,
     ReadOnly,
     Shift,
 }
@@ -1035,26 +1038,49 @@ pub(crate) fn __generate_ops_for_type_rt(item: TokenStream) -> TokenStream {
         OpType::ReadOnly,
         OpType::Access,
         OpType::Arithmetic,
-        OpType::CompEx,
+        OpType::CompExEps,
     ];
-    if let Ok(val) = syn::parse_str::<syn::LitBool>(&items[0]) {
+    let bitwise = if let Ok(val) = syn::parse_str::<syn::LitBool>(&items[0]) {
         if val.value {
             op_types.push(OpType::Bitwise);
             op_types.push(OpType::Shift);
         }
-        // val.value
+        // true
+        val.value
     } else {
         panic! ("first argument of generate_ops_for_type expects 'true' or 'false' specifying whether type implements bitwise operations");
     };
     let native = if let Ok(val) = syn::parse_str::<syn::LitBool>(&items[1]) {
         val.value
     } else {
-        panic! ("first argument of generate_ops_for_type expects 'true' or 'false' specifying whether types are native atomics");
+        panic! ("second argument of generate_ops_for_type expects 'true' or 'false' specifying whether types are native atomics");
     };
-    for t in items[2..].iter() {
+
+    let impl_eq = if let Ok(val) = syn::parse_str::<syn::LitBool>(&items[2]) {
+        val.value
+    } else {
+        panic! ("third argument of generate_ops_for_type expects 'true' or 'false' specifying whether types implement eq");
+    };
+    for t in items[3..].iter() {
         let the_type = syn::parse_str::<syn::Type>(&t).unwrap();
         let typeident = quote::format_ident!("{:}", t.trim());
-        output.extend(quote! {impl Dist for #typeident {}});
+        output.extend(quote! {
+            impl Dist for #typeident {}
+            impl crate::array::operations::ArrayOps for #typeident {}
+            impl ElementArithmeticOps for #typeident {}
+            impl ElementComparePartialEqOps for #typeident {}
+        });
+        if bitwise {
+            output.extend(quote! {
+                impl ElementBitWiseOps for #typeident {}
+                impl ElementShiftOps for #typeident {}
+            });
+        }
+        if impl_eq {
+            output.extend(quote! {
+                impl ElementCompareEqOps for #typeident {}
+            })
+        }
         output.extend(create_buffered_ops(
             the_type.clone(),
             op_types.clone(),
@@ -1066,6 +1092,33 @@ pub(crate) fn __generate_ops_for_type_rt(item: TokenStream) -> TokenStream {
     TokenStream::from(output)
 }
 
+pub(crate) fn __generate_ops_for_bool_rt() -> TokenStream {
+    let mut output = quote! {};
+    let op_types = vec![
+        OpType::ReadOnly,
+        OpType::Access,
+        OpType::CompEx,
+        OpType::Bitwise
+    ];
+
+    // let bool_type = syn::Type::
+    let the_type = syn::parse_str::<syn::Type>("bool").unwrap();
+    output.extend(quote! {
+        impl Dist for bool {}
+        impl crate::array::operations::ArrayOps for bool {}
+        impl ElementBitWiseOps for bool {}
+        impl ElementCompareEqOps for bool {}
+    });
+    output.extend(create_buffered_ops(
+        the_type.clone(),
+        op_types.clone(),
+        false,
+        true,
+    ));
+    // output.extend(gen_atomic_rdma(typeident.clone(), true));
+    TokenStream::from(output)
+}
+
 pub(crate) fn __derive_arrayops(input: TokenStream) -> TokenStream {
     let mut output = quote! {};
 
@@ -1074,6 +1127,7 @@ pub(crate) fn __derive_arrayops(input: TokenStream) -> TokenStream {
     let the_type: syn::Type = syn::parse_quote!(#name);
 
     let mut op_types = vec![OpType::ReadOnly, OpType::Access];
+    let mut element_wise_trait_impls = quote!{};
 
     for attr in input.attrs {
         if attr.to_token_stream().to_string().contains("array_ops") {
@@ -1084,15 +1138,60 @@ pub(crate) fn __derive_arrayops(input: TokenStream) -> TokenStream {
                     syn::Meta::List(l) => {
                         for item in l.nested {
                             match item.to_token_stream().to_string().as_str() {
-                                "Arithmetic" => op_types.push(OpType::Arithmetic),
-                                "CompEx" => op_types.push(OpType::CompEx),
-                                "Bitwise" => op_types.push(OpType::Bitwise),
-                                "Shift" => op_types.push(OpType::Shift),
+                                "Arithmetic" => {
+                                    op_types.push(OpType::Arithmetic);
+                                    element_wise_trait_impls.extend(
+                                        quote! {
+                                            impl lamellar::ElementArithmeticOps for #the_type {}
+                                        }
+                                    )
+                                },
+                                "CompExEps" => {
+                                    op_types.push(OpType::CompEx);
+                                    element_wise_trait_impls.extend(
+                                        quote! {
+                                            impl lamellar::ElementComparePartialEqOps for #the_type {}
+                                        }
+                                    )
+                                },
+                                "CompEx" => {
+                                    op_types.push(OpType::CompEx);
+                                    element_wise_trait_impls.extend(
+                                        quote! {
+                                            impl lamellar::ElementCompareEqOps for #the_type {}
+                                        }
+                                    )
+                                },
+                                "Bitwise" => {
+                                    op_types.push(OpType::Bitwise);
+                                    element_wise_trait_impls.extend(
+                                        quote! {
+                                            impl lamellar::ElementBitWiseOps for #the_type {}
+                                        }
+                                    )
+                                },
+                                "Shift" => {
+                                    op_types.push(OpType::Shift);
+                                    element_wise_trait_impls.extend(
+                                        quote! {
+                                            impl lamellar::ElementShiftOps for #the_type {}
+                                        }
+                                    )
+                                },
                                 "All" => {
                                     op_types.push(OpType::Arithmetic);
                                     op_types.push(OpType::CompEx);
                                     op_types.push(OpType::Bitwise);
                                     op_types.push(OpType::Shift);
+                                    element_wise_trait_impls.extend(
+                                        quote! {
+                                            impl lamellar::ElementArithmeticOps for #the_type {}
+                                            impl lamellar::ElementComparePartialEqOps for #the_type {}
+                                            impl lamellar::ElementCompareEqOps for #the_type {}
+                                            impl lamellar::ElementBitWiseOps for #the_type {}
+                                            impl lamellar::ElementShiftOps for #the_type {}
+                                        }
+                                    )
                                 }
                                 &_ => abort!(item, "unexpected array op type"),
                             }
@@ -1103,6 +1202,10 @@ pub(crate) fn __derive_arrayops(input: TokenStream) -> TokenStream {
         }
     }
 
+    output.extend(quote! {
+        impl lamellar::_ArrayOps for #the_type {}
+        #element_wise_trait_impls
+    });
     output.extend(create_buffered_ops(
         the_type.clone(),
         op_types,

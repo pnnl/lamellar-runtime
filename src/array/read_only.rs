@@ -69,7 +69,7 @@ impl ReadOnlyByteArrayWeak {
 /// Thanks to this gaurantee there is the potential for increased performance when ready remote data in this
 /// array type as locking or atomic access is uneeded. For certain operations like `get()` it is possible to
 /// directly do an RDMA transfer.
-impl<T: Dist> ReadOnlyArray<T> {
+impl<T: Dist  + ArrayOps > ReadOnlyArray<T> {
     #[doc(alias = "Collective")]
     /// Construct a new ReadOnlyArray with a length of `array_size` whose data will be layed out with the provided `distribution` on the PE's specified by the `team`.
     /// `team` is commonly a [LamellarWorld][crate::LamellarWorld] or [LamellarTeam][crate::LamellarTeam] (instance or reference).

@@ -31,7 +31,7 @@ use zip::*;
 
 use crate::array::iterator::one_sided_iterator::OneSidedIterator;
 use crate::array::iterator::Schedule;
-use crate::array::{AtomicArray, Distribution, LamellarArray, LamellarArrayPut, UnsafeArray};
+use crate::array::{AtomicArray, Distribution, LamellarArray, LamellarArrayPut, UnsafeArray,operations::ArrayOps};
 use crate::lamellar_request::LamellarRequest;
 use crate::memregion::Dist;
 use crate::LamellarTeamRT;
@@ -156,14 +156,14 @@ impl LocalIterRequest for LocalIterForEachHandle {
 }
 
 #[doc(hidden)]
-pub struct LocalIterCollectHandle<T: Dist, A: From<UnsafeArray<T>> + SyncSend> {
+pub struct LocalIterCollectHandle<T: Dist + ArrayOps, A: From<UnsafeArray<T>> + SyncSend> {
     pub(crate) reqs: Vec<Box<dyn LamellarRequest<Output = Vec<T>>>>,
     pub(crate) distribution: Distribution,
     pub(crate) team: Pin<Arc<LamellarTeamRT>>,
     pub(crate) _phantom: PhantomData<A>,
 }
 
-impl<T: Dist, A: From<UnsafeArray<T>> + SyncSend> LocalIterCollectHandle<T, A> {
+impl<T: Dist + ArrayOps, A: From<UnsafeArray<T>> + SyncSend> LocalIterCollectHandle<T, A> {
     fn create_array(&self, local_vals: &Vec<T>) -> A {
         self.team.barrier();
         let local_sizes =
@@ -199,7 +199,7 @@ impl<T: Dist, A: From<UnsafeArray<T>> + SyncSend> LocalIterCollectHandle<T, A> {
     }
 }
 #[async_trait]
-impl<T: Dist, A: From<UnsafeArray<T>> + SyncSend> LocalIterRequest
+impl<T: Dist + ArrayOps, A: From<UnsafeArray<T>> + SyncSend> LocalIterRequest
     for LocalIterCollectHandle<T, A>
 {
     type Output = A;

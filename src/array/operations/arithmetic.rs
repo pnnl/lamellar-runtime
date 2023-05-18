@@ -17,15 +17,17 @@ pub trait ElementArithmeticOps:
 {
 }
 
-impl<T> ElementArithmeticOps for T where
-    T: std::ops::AddAssign
-        + std::ops::SubAssign
-        + std::ops::MulAssign
-        + std::ops::DivAssign
-        + std::ops::RemAssign
-        + Dist
-{
-}
+// We dont want to auto derive this because we want to require that users
+// use the #[AmData(ArrayOps(Arithmetic))] macro to derive it for them
+// impl<T> ElementArithmeticOps for T where
+//     T: std::ops::AddAssign
+//         + std::ops::SubAssign
+//         + std::ops::MulAssign
+//         + std::ops::DivAssign
+//         + std::ops::RemAssign
+//         + Dist
+// {
+// }
 
 #[doc(alias("One-sided", "onesided"))]
 /// The interface for performing remote arithmetic operations on array elements

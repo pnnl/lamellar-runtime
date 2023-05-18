@@ -35,7 +35,7 @@ use crate::array::iterator::one_sided_iterator::OneSidedIterator;
 use crate::array::iterator::Schedule;
 use crate::array::{
     AtomicArray, Distribution, GenericAtomicArray, LamellarArray, LamellarArrayPut,
-    NativeAtomicArray, UnsafeArray,
+    NativeAtomicArray, UnsafeArray, operations::ArrayOps
 };
 use crate::lamellar_request::LamellarRequest;
 use crate::memregion::Dist;
@@ -161,14 +161,14 @@ impl DistIterRequest for DistIterForEachHandle {
 }
 
 #[doc(hidden)]
-pub struct DistIterCollectHandle<T: Dist, A: From<UnsafeArray<T>> + SyncSend> {
+pub struct DistIterCollectHandle<T: Dist + ArrayOps, A: From<UnsafeArray<T>> + SyncSend> {
     pub(crate) reqs: Vec<Box<dyn LamellarRequest<Output = Vec<T>>>>,
     pub(crate) distribution: Distribution,
     pub(crate) team: Pin<Arc<LamellarTeamRT>>,
     pub(crate) _phantom: PhantomData<A>,
 }
 
-impl<T: Dist, A: From<UnsafeArray<T>> + SyncSend> DistIterCollectHandle<T, A> {
+impl<T: Dist + ArrayOps, A: From<UnsafeArray<T>> + SyncSend> DistIterCollectHandle<T, A> {
     fn create_array(&self, local_vals: &Vec<T>) -> A {
         self.team.barrier();
         let local_sizes =
@@ -204,7 +204,7 @@ impl<T: Dist, A: From<UnsafeArray<T>> + SyncSend> DistIterCollectHandle<T, A> {
     }
 }
 #[async_trait]
-impl<T: Dist, A: From<UnsafeArray<T>> + SyncSend> DistIterRequest for DistIterCollectHandle<T, A> {
+impl<T: Dist + ArrayOps, A: From<UnsafeArray<T>> + SyncSend> DistIterRequest for DistIterCollectHandle<T, A> {
     type Output = A;
     async fn into_future(mut self: Box<Self>) -> Self::Output {
         let mut local_vals = vec![];
@@ -266,7 +266,7 @@ pub trait DistIteratorLauncher {
     fn collect<I, A>(&self, iter: &I, d: Distribution) -> Pin<Box<dyn Future<Output = A> + Send>>
     where
         I: DistributedIterator + 'static,
-        I::Item: Dist,
+        I::Item: Dist + ArrayOps,
         A: From<UnsafeArray<I::Item>> + SyncSend + 'static;
 
     fn collect_async<I, A, B>(
@@ -277,7 +277,7 @@ pub trait DistIteratorLauncher {
     where
         I: DistributedIterator + 'static,
         I::Item: Future<Output = B> + Send + 'static,
-        B: Dist,
+        B: Dist + ArrayOps,
         A: From<UnsafeArray<B>> + SyncSend + 'static;
 
     #[doc(hidden)]
@@ -492,7 +492,7 @@ pub trait DistributedIterator: SyncSend + Clone + 'static {
     fn collect<A>(&self, d: Distribution) -> Pin<Box<dyn Future<Output = A> + Send>>
     where
         // &'static Self: DistributedIterator + 'static,
-        Self::Item: Dist,
+        Self::Item: Dist + ArrayOps,
         A: From<UnsafeArray<Self::Item>> + SyncSend + 'static,
     {
         self.array().collect(self, d)
@@ -537,7 +537,7 @@ pub trait DistributedIterator: SyncSend + Clone + 'static {
     fn collect_async<A, T>(&self, d: Distribution) -> Pin<Box<dyn Future<Output = A> + Send>>
     where
         // &'static Self: DistributedIterator + 'static,
-        T: Dist,
+        T: Dist + ArrayOps,
         Self::Item: Future<Output = T> + Send + 'static,
         A: From<UnsafeArray<<Self::Item as Future>::Output>> + SyncSend + 'static,
     {

@@ -404,7 +404,7 @@ impl<T: Dist> Iterator for GenericAtomicLocalDataIter<T> {
     }
 }
 
-impl<T: Dist + std::default::Default> GenericAtomicArray<T> {
+impl<T: Dist  + ArrayOps + std::default::Default> GenericAtomicArray<T> {
     pub(crate) fn new<U: Clone + Into<IntoLamellarTeam>>(
         team: U,
         array_size: usize,

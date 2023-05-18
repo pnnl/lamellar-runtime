@@ -122,7 +122,7 @@ pub(crate) struct UnsafeArrayInnerWeak {
 // }
 
 //#[prof]
-impl<T: Dist + 'static> UnsafeArray<T> {
+impl<T: Dist + ArrayOps + 'static> UnsafeArray<T> {
     #[doc(alias = "Collective")]
     /// Construct a new UnsafeArray with a length of `array_size` whose data will be layed out with the provided `distribution` on the PE's specified by the `team`.
     /// `team` is commonly a [LamellarWorld][crate::LamellarWorld] or [LamellarTeam][crate::LamellarTeam] (instance or reference).
@@ -204,6 +204,10 @@ impl<T: Dist + 'static> UnsafeArray<T> {
         // array.inner.data.print();
         array
     }
+
+    
+}
+impl<T: Dist + 'static> UnsafeArray<T> {
 
     // This is called when constructing a new array to setup the operation buffers
     fn create_buffered_ops(&self) {

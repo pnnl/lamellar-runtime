@@ -1219,7 +1219,7 @@ impl<T: Dist> DistIteratorLauncher for UnsafeArray<T> {
     fn collect<I, A>(&self, iter: &I, d: Distribution) -> Pin<Box<dyn Future<Output = A> + Send>>
     where
         I: DistributedIterator + 'static,
-        I::Item: Dist,
+        I::Item: Dist + ArrayOps,
         A: From<UnsafeArray<I::Item>> + SyncSend + 'static,
     {
         self.barrier();
@@ -1262,7 +1262,7 @@ impl<T: Dist> DistIteratorLauncher for UnsafeArray<T> {
     where
         I: DistributedIterator + 'static,
         I::Item: Future<Output = B> + Send + 'static,
-        B: Dist,
+        B: Dist + ArrayOps,
         A: From<UnsafeArray<B>> + SyncSend + 'static,
     {
         self.barrier();

@@ -915,7 +915,7 @@ impl<T: Dist> Iterator for NativeAtomicLocalDataIter<T> {
     }
 }
 
-impl<T: Dist + std::default::Default> NativeAtomicArray<T> {
+impl<T: Dist  + ArrayOps + std::default::Default> NativeAtomicArray<T> {
     // Send + Copy  == Dist
     pub(crate) fn new_internal<U: Clone + Into<IntoLamellarTeam>>(
         team: U,

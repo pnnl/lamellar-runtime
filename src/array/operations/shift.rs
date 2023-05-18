@@ -4,10 +4,10 @@ use crate::array::*;
 /// - Right ```>>```
 pub trait ElementShiftOps: std::ops::ShlAssign + std::ops::ShrAssign + Dist + Sized {}
 
-#[doc(hidden)]
-impl<T> ElementShiftOps for T where T: std::ops::ShlAssign + std::ops::ShrAssign + Dist //+ AmDist,,,
-{
-}
+// #[doc(hidden)]
+// impl<T> ElementShiftOps for T where T: std::ops::ShlAssign + std::ops::ShrAssign + Dist //+ AmDist,,,
+// {
+// }
 
 #[doc(alias("One-sided", "onesided"))]
 /// The interface for performing remote Shift operations on array elements

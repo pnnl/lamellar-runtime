@@ -16,7 +16,7 @@ lazy_static! {
     static ref LOCK: Mutex<()> = Mutex::new(());
 }
 
-#[lamellar::AmData(Dist, Debug, Copy, Clone, Default)]
+#[lamellar::AmData(Dist, Debug, ArrayOps, Copy, Clone, Default)]
 struct Block {
     j: usize,
     k: usize,
