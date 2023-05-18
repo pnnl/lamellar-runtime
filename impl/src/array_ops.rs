@@ -1147,7 +1147,7 @@ pub(crate) fn __derive_arrayops(input: TokenStream) -> TokenStream {
                                     )
                                 },
                                 "CompExEps" => {
-                                    op_types.push(OpType::CompEx);
+                                    op_types.push(OpType::CompExEps);
                                     element_wise_trait_impls.extend(
                                         quote! {
                                             impl lamellar::ElementComparePartialEqOps for #the_type {}
@@ -1193,7 +1193,7 @@ pub(crate) fn __derive_arrayops(input: TokenStream) -> TokenStream {
                                         }
                                     )
                                 }
-                                &_ => abort!(item, "unexpected array op type"),
+                                &_ => abort!(item, "unexpected array op type, valid types are: Arithmetic, CompEx, CompExEps, Bitwise, Shift, All"),
                             }
                         }
                     }

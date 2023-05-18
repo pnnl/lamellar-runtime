@@ -1686,7 +1686,7 @@ pub fn generate_ops_for_bool_rt(_item: TokenStream) -> TokenStream {
 ///
 /// #[lamellar::AmData(
 ///     // Lamellar traits
-///     ArrayOps(Arithmetic,CompEx,Shift), // needed to derive various LamellarArray Op traits (provided as a list)
+///     ArrayOps(Arithmetic,CompExEps,Shift), // needed to derive various LamellarArray Op traits (provided as a list)
 ///     Default,       // needed to be able to initialize a LamellarArray
 ///     //  Notice we use `lamellar::AmData` instead of `derive`
 ///     //  for common traits, e.g. Debug, Clone.    
