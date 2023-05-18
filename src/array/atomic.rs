@@ -715,7 +715,7 @@ impl<T: Dist> Iterator for AtomicLocalDataIter<T> {
 }
 
 //#[prof]
-impl<T: Dist + std::default::Default + 'static> AtomicArray<T> {
+impl<T: Dist  + ArrayOps + std::default::Default + 'static> AtomicArray<T> {
     #[doc(alias = "Collective")]
     /// Construct a new AtomicArray with a length of `array_size` whose data will be layed out with the provided `distribution` on the PE's specified by the `team`.
     /// `team` is commonly a [LamellarWorld][crate::LamellarWorld] or [LamellarTeam][crate::LamellarTeam] (instance or reference).

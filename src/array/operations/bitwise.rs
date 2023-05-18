@@ -9,11 +9,11 @@ pub trait ElementBitWiseOps:
 {
 }
 
-#[doc(hidden)]
-impl<T> ElementBitWiseOps for T where
-    T: std::ops::BitAndAssign + std::ops::BitOrAssign + std::ops::BitXorAssign + Dist //+ AmDist
-{
-}
+// #[doc(hidden)]
+// impl<T> ElementBitWiseOps for T where
+//     T: std::ops::BitAndAssign + std::ops::BitOrAssign + std::ops::BitXorAssign + Dist //+ AmDist
+// {
+// }
 
 #[doc(alias("One-sided", "onesided"))]
 /// The interface for performing remote bitwise operations on array elements

@@ -39,6 +39,35 @@ use std::u8;
 #[doc(hidden)]
 pub static OPS_BUFFER_SIZE: usize = 10_000_000;
 
+
+/// A marker trait for types that can be used as an array 
+/// Users should not implement this directly, rather they should use the [macro@ArrayOps] derive macro
+/// by passing it as an argument to the [macro@AmData] attribute macro to automatically derive this trait.
+///
+/// # Examples
+///
+/// ```
+/// // this import includes everything we need
+/// use lamellar::array::prelude::*;
+///
+///
+/// #[lamellar::AmData(
+///     // Lamellar traits
+///     ArrayOps, // needed to derive the ArrayType trait (and additional traits required by the runtime)
+///     Default,       // needed to be able to initialize a LamellarArray
+///     //  Notice we use `lamellar::AmData` instead of `derive`
+///     //  for common traits, e.g. Debug, Clone.    
+///     PartialEq,     // needed for CompareExchangeEpsilonOps
+///     PartialOrd,    // needed for CompareExchangeEpsilonOps
+///     Debug,         // any addition traits you want derived
+///     Clone,
+/// )]
+/// struct Custom {
+///     int: usize,
+///     float: f32,
+/// }
+pub trait ArrayOps {}
+
 #[doc(hidden)]
 #[derive(
     serde::Serialize,

@@ -1667,6 +1667,13 @@ pub fn generate_ops_for_type_rt(item: TokenStream) -> TokenStream {
     array_ops::__generate_ops_for_type_rt(item)
 }
 
+#[doc(hidden)]
+#[proc_macro_error]
+#[proc_macro]
+pub fn generate_ops_for_bool_rt(_item: TokenStream) -> TokenStream {
+    array_ops::__generate_ops_for_bool_rt()
+}
+
 ///
 /// This derive macro is intended to be used with the [macro@AmData] attribute macro to enable a user defined type to be used in ActiveMessages.
 ///

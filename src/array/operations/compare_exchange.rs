@@ -6,19 +6,19 @@ use crate::array::*;
 pub trait ElementCompareEqOps: std::cmp::Eq + Dist + Sized //+ AmDist
 {
 }
-impl<T> ElementCompareEqOps for T where T: std::cmp::Eq + Dist //+ AmDist,,,,,,,,,,,,,
-{
-}
+// impl<T> ElementCompareEqOps for T where T: std::cmp::Eq + Dist //+ AmDist,,,,,,,,,,,,
+// {
+// }
 
 /// Supertrait specifying elements of the array support remote Partial Equality operations
 pub trait ElementComparePartialEqOps:
     std::cmp::PartialEq + std::cmp::PartialOrd + Dist + Sized //+ AmDist
 {
 }
-impl<T> ElementComparePartialEqOps for T where
-    T: std::cmp::PartialEq + std::cmp::PartialOrd + Dist //+ AmDist
-{
-}
+// impl<T> ElementComparePartialEqOps for T where
+//     T: std::cmp::PartialEq + std::cmp::PartialOrd + Dist //+ AmDist
+// {
+// }
 
 #[doc(alias("One-sided", "onesided"))]
 /// The interface for performing remote compare and exchange operations on array elements

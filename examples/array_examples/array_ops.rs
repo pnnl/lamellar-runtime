@@ -3,7 +3,7 @@ use lamellar::array::prelude::*;
 #[lamellar::AmData(
     Default,
     Debug,
-    ArrayOps(Arithmetic, CompEx, Shift),
+    ArrayOps(Arithmetic, CompExEps, Shift),
     PartialEq,
     PartialOrd
 )]

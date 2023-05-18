@@ -218,7 +218,7 @@ impl<T: Dist> Deref for GlobalLockLocalData<'_, T> {
     }
 }
 
-impl<T: Dist + std::default::Default> GlobalLockArray<T> {
+impl<T: Dist  + ArrayOps + std::default::Default> GlobalLockArray<T> {
     #[doc(alias = "Collective")]
     /// Construct a new GlobalLockArray with a length of `array_size` whose data will be layed out with the provided `distribution` on the PE's specified by the `team`.
     /// `team` is commonly a [LamellarWorld][crate::LamellarWorld] or [LamellarTeam][crate::LamellarTeam] (instance or reference).

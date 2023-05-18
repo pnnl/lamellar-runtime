@@ -1,11 +1,10 @@
-use lamellar::array::{AtomicArray, Distribution};
-use lamellar::{Dist, LamellarWorld};
+use lamellar::array::prelude::*;
 
 struct ArrayWrapper<T: Dist> {
     _array: AtomicArray<T>,
 }
 
-impl<T: Dist + Default> ArrayWrapper<T> {
+impl<T: Dist + ArrayOps + Default> ArrayWrapper<T> {
     fn new(world: LamellarWorld, len: usize) -> Self {
         ArrayWrapper {
             _array: AtomicArray::<T>::new(world, len, Distribution::Block),
