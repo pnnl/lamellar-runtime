@@ -96,12 +96,14 @@ use std::sync::Arc;
 ///     - requires [AddAssign][std::ops::AddAssign], [SubAssign][std::ops::SubAssign], [MulAssign][std::ops::MulAssign], [DivAssign][std::ops::DivAssign], [RemAssign][std::ops::RemAssign] to be implemented on your data type
 /// - `Bitwise` -- [BitWiseOps][crate::array::operations::BitWiseOps]
 ///     - requires [BitAndAssign][std::ops::BitAndAssign], [BitOrAssign][std::ops::BitOrAssign], [BitXorAssign][std::ops::BitXorAssign] to be implemented on your data type
-/// - `CompEx` -- [CompareExchangeEpsilonOps][crate::array::operations::CompareExchangeEpsilonOps], [CompareExchangeOps][crate::array::operations::CompareExchangeOps]
+/// - `CompEx` -- [CompareExchangeOps][crate::array::operations::CompareExchangeOps]
+///     - requires [PartialEq][std::cmp::PartialEq], [PartialOrd][std::cmp::PartialOrd] to be implemented on your data type
+/// - `CompExEps` -- [CompareExchangeEpsilonOps][crate::array::operations::CompareExchangeEpsilonOps]
 ///     - requires [PartialEq][std::cmp::PartialEq], [PartialOrd][std::cmp::PartialOrd] to be implemented on your data type
 /// - `Shift` -- [ShiftOps][crate::array::operations::ShiftOps]
 ///     - requires [ShlAssign][std::ops::ShlAssign], [ShrAssign][std::ops::ShrAssign] to be implemented on you data type
 ///
-/// Alternatively, if you plan to derive all the above traits you can simply supply `all` as the single argument to [ArrayOps]
+/// Alternatively, if you plan to derive all the above traits you can simply supply `All` as the single argument to [ArrayOps]
 pub use lamellar_impl::ArrayOps;
 
 #[doc(hidden)]
