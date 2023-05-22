@@ -44,52 +44,69 @@ impl WorkStealingThread {
         _my_pe: usize,
     ) -> thread::JoinHandle<()> {
         let builder = thread::Builder::new().name("worker_thread".into());
-        builder.spawn(move || {
-            // println!("TestSchdulerWorker thread running {:?} core: {:?}", std::thread::current().id(), id);
-            // let mut num_task_executed = 0;
-            let _span = trace_span!("WorkStealingThread::run");
-            core_affinity::set_for_current(id);
-            active_cnt.fetch_add(1, Ordering::SeqCst);
-            let mut rng = rand::thread_rng();
-            let t = rand::distributions::Uniform::from(0..worker.work_stealers.len());
-            let mut timer = std::time::Instant::now();
-            // let mut cur_tasks = num_tasks.load(Ordering::SeqCst);
-            while worker.active.load(Ordering::SeqCst)
-                || !(worker.work_q.is_empty() && worker.work_inj.is_empty())
-                || num_tasks.load(Ordering::SeqCst) > 1
-            {
-                // let ot = Instant::now();
-                // if cur_tasks != num_tasks.load(Ordering::SeqCst){
-                //     println!(
-                //         "work_q size {:?} work inj size {:?} num_tasks {:?}",
-                //         worker.work_q.len(),
-                //         worker.work_inj.len(),
-                //         num_tasks.load(Ordering::SeqCst)
-                //     );
-                //     cur_tasks = num_tasks.load(Ordering::SeqCst);
+        builder
+            .spawn(move || {
+                // println!("TestSchdulerWorker thread running {:?} core: {:?}", std::thread::current().id(), id);
+                // let mut num_task_executed = 0;
+                let _span = trace_span!("WorkStealingThread::run");
+                core_affinity::set_for_current(id);
+                active_cnt.fetch_add(1, Ordering::SeqCst);
+                let mut rng = rand::thread_rng();
+                let t = rand::distributions::Uniform::from(0..worker.work_stealers.len());
+                let mut timer = std::time::Instant::now();
+                // let mut cur_tasks = num_tasks.load(Ordering::SeqCst);
+                while worker.active.load(Ordering::SeqCst)
+                    || !(worker.work_q.is_empty() && worker.work_inj.is_empty())
+                    || num_tasks.load(Ordering::SeqCst) > 1
+                {
+                    // let ot = Instant::now();
+                    // if cur_tasks != num_tasks.load(Ordering::SeqCst){
+                    //     println!(
+                    //         "work_q size {:?} work inj size {:?} num_tasks {:?}",
+                    //         worker.work_q.len(),
+                    //         worker.work_inj.len(),
+                    //         num_tasks.load(Ordering::SeqCst)
+                    //     );
+                    //     cur_tasks = num_tasks.load(Ordering::SeqCst);
 
-                // }
-                let omsg = worker.work_q.pop().or_else(|| {
-                    if worker
-                        .work_flag
-                        .compare_exchange(0, 1, Ordering::SeqCst, Ordering::Relaxed)
-                        == Ok(0)
-                    {
-                        let ret = worker
-                            .work_inj
-                            .steal_batch_and_pop(&worker.work_q)
-                            .success();
-                        worker.work_flag.store(0, Ordering::SeqCst);
-                        ret
-                    } else {
-                        worker.work_stealers[t.sample(&mut rng)].steal().success()
+                    // }
+                    let omsg = worker.work_q.pop().or_else(|| {
+                        if worker.work_flag.compare_exchange(
+                            0,
+                            1,
+                            Ordering::SeqCst,
+                            Ordering::Relaxed,
+                        ) == Ok(0)
+                        {
+                            let ret = worker
+                                .work_inj
+                                .steal_batch_and_pop(&worker.work_q)
+                                .success();
+                            worker.work_flag.store(0, Ordering::SeqCst);
+                            ret
+                        } else {
+                            worker.work_stealers[t.sample(&mut rng)].steal().success()
+                        }
+                    });
+                    if let Some(runnable) = omsg {
+                        if !worker.active.load(Ordering::SeqCst)
+                            && timer.elapsed().as_secs_f64() > 600.0
+                        {
+                            println!("runnable {:?}", runnable);
+                            println!(
+                                "work_q size {:?} work inj size {:?} num_tasks {:?}",
+                                worker.work_q.len(),
+                                worker.work_inj.len(),
+                                num_tasks.load(Ordering::SeqCst)
+                            );
+                            timer = std::time::Instant::now();
+                        }
+                        runnable.run();
                     }
-                });
-                if let Some(runnable) = omsg {
                     if !worker.active.load(Ordering::SeqCst)
                         && timer.elapsed().as_secs_f64() > 600.0
+                        && (worker.work_q.len() > 0 || worker.work_inj.len() > 0)
                     {
-                        println!("runnable {:?}", runnable);
                         println!(
                             "work_q size {:?} work inj size {:?} num_tasks {:?}",
                             worker.work_q.len(),
@@ -98,36 +115,23 @@ impl WorkStealingThread {
                         );
                         timer = std::time::Instant::now();
                     }
-                    runnable.run();
+                    // if timer.elapsed().as_secs_f64() > 6.0 && my_pe == 0  {
+                    //     println!(
+                    //         "work_q size {:?} work inj size {:?} num_tasks {:?} max_tasks {:?}",
+                    //         worker.work_q.len(),
+                    //         worker.work_inj.len(),
+                    //         num_tasks.load(Ordering::SeqCst),
+                    //         max_tasks.load(Ordering::SeqCst)
+                    //     );
+                    //     timer = std::time::Instant::now()
+                    // }
+                    std::thread::yield_now();
                 }
-                if !worker.active.load(Ordering::SeqCst)
-                    && timer.elapsed().as_secs_f64() > 600.0
-                    && (worker.work_q.len() > 0 || worker.work_inj.len() > 0)
-                {
-                    println!(
-                        "work_q size {:?} work inj size {:?} num_tasks {:?}",
-                        worker.work_q.len(),
-                        worker.work_inj.len(),
-                        num_tasks.load(Ordering::SeqCst)
-                    );
-                    timer = std::time::Instant::now();
-                }
-                // if timer.elapsed().as_secs_f64() > 6.0 && my_pe == 0  {
-                //     println!(
-                //         "work_q size {:?} work inj size {:?} num_tasks {:?} max_tasks {:?}",
-                //         worker.work_q.len(),
-                //         worker.work_inj.len(),
-                //         num_tasks.load(Ordering::SeqCst),
-                //         max_tasks.load(Ordering::SeqCst)
-                //     );
-                //     timer = std::time::Instant::now()
-                // }
-                std::thread::yield_now();
-            }
-            fini_prof!();
-            active_cnt.fetch_sub(1, Ordering::SeqCst);
-            // println!("TestSchdulerWorker thread shutting down {:?} core: {:?}", std::thread::current().id(), id);
-        }).unwrap()
+                fini_prof!();
+                active_cnt.fetch_sub(1, Ordering::SeqCst);
+                // println!("TestSchdulerWorker thread shutting down {:?} core: {:?}", std::thread::current().id(), id);
+            })
+            .unwrap()
     }
 }
 
@@ -360,8 +364,8 @@ impl SchedulerQueue for WorkStealing {
     }
 
     fn exec_task(&self) {
-       self.inner.exec_task();
-       std::thread::yield_now();
+        self.inner.exec_task();
+        std::thread::yield_now();
     }
 
     fn submit_task_node<F>(&self, future: F, _node: usize)
@@ -392,7 +396,11 @@ impl SchedulerQueue for WorkStealing {
 //#[prof]
 impl WorkStealingInner {
     #[tracing::instrument(skip_all)]
-    pub(crate) fn new(stall_mark: Arc<AtomicUsize>, num_workers: usize, my_pe: usize) -> WorkStealingInner {
+    pub(crate) fn new(
+        stall_mark: Arc<AtomicUsize>,
+        num_workers: usize,
+        my_pe: usize,
+    ) -> WorkStealingInner {
         // println!("new work stealing queue");
 
         let mut sched = WorkStealingInner {

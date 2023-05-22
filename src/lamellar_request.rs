@@ -3,12 +3,12 @@ use crate::darc::Darc;
 use crate::lamellae::{Des, SerializedData};
 use crate::lamellar_arch::LamellarArchRT;
 use crate::memregion::one_sided::MemRegionHandleInner;
-use crate::scheduler::{Scheduler,SchedulerQueue};
+use crate::scheduler::{Scheduler, SchedulerQueue};
 use async_trait::async_trait;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 
-use parking_lot::{Mutex,Condvar};
+use parking_lot::{Condvar, Mutex};
 use std::cell::Cell;
 use std::collections::HashMap;
 

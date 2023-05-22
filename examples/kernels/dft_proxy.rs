@@ -1,4 +1,4 @@
-use futures::FutureExt;
+// use futures::FutureExt;
 use futures::StreamExt;
 use lamellar::active_messaging::prelude::*;
 /// ------------Lamellar Bandwidth: DFT Proxy  -------------------------
@@ -109,7 +109,7 @@ impl LamellarAM for RemoteSumAM {
 
 fn dft_lamellar(
     world: &LamellarWorld,
-    my_pe: usize,
+    _my_pe: usize,
     num_pes: usize,
     signal: SharedMemoryRegion<f64>,
     global_sig_len: usize,
@@ -176,7 +176,7 @@ fn dft_lamellar_am_group(
             );
         }
         let spec = spectrum.clone();
-        pe_groups.push(async move {
+        pe_groups.push_back(async move {
             let res = local_sum_group.exec().await;
             let vec = (0..local_len)
                 .map(|i| {

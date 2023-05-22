@@ -115,13 +115,15 @@ pub(crate) fn create_scheduler(
     // teams: Arc<RwLock<HashMap<u64, Weak<LamellarTeamRT>>>>,
 ) -> Scheduler {
     match sched {
-        SchedulerType::WorkStealing => {
-            Scheduler::WorkStealing(work_stealing::WorkStealing::new(num_pes,num_workers,my_pe))
-        } // SchedulerType::NumaWorkStealing => {
-          //     Scheduler::NumaWorkStealing(numa_work_stealing::NumaWorkStealing::new(num_pes))
-          // }
-          // SchedulerType::NumaWorkStealing2 => {
-          //     Scheduler::NumaWorkStealing2(numa_work_stealing2::NumaWorkStealing2::new(num_pes))
-          // }
+        SchedulerType::WorkStealing => Scheduler::WorkStealing(work_stealing::WorkStealing::new(
+            num_pes,
+            num_workers,
+            my_pe,
+        )), // SchedulerType::NumaWorkStealing => {
+            //     Scheduler::NumaWorkStealing(numa_work_stealing::NumaWorkStealing::new(num_pes))
+            // }
+            // SchedulerType::NumaWorkStealing2 => {
+            //     Scheduler::NumaWorkStealing2(numa_work_stealing2::NumaWorkStealing2::new(num_pes))
+            // }
     }
 }

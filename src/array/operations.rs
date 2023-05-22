@@ -7,7 +7,7 @@ use crate::array::r#unsafe::*;
 use crate::array::*;
 
 use crate::lamellar_request::LamellarRequest;
-use crate::scheduler::{Scheduler,SchedulerQueue};
+use crate::scheduler::{Scheduler, SchedulerQueue};
 
 pub(crate) mod access;
 pub use access::{AccessOps, LocalAtomicOps};

@@ -19,7 +19,7 @@ use std::hash::{Hash, Hasher};
 use core::pin::Pin;
 use futures::Future;
 use lamellar_prof::*;
-use parking_lot::{Mutex,RwLock,Condvar};
+use parking_lot::{Condvar, Mutex, RwLock};
 use std::collections::HashMap;
 use std::marker::PhantomPinned;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -175,7 +175,7 @@ impl LamellarTeam {
     }
 
     #[doc(alias("One-sided", "onesided"))]
-    /// Returns nummber of threads on this PE (including the main thread) 
+    /// Returns nummber of threads on this PE (including the main thread)
     ///
     /// # One-sided Operation
     /// The result is returned only on the calling PE

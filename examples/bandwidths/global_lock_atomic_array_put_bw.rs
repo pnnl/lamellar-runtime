@@ -45,7 +45,7 @@ fn main() {
         let mut cnt = 0;
         let timer = Instant::now();
         let mut sub_time = 0f64;
-        let mut exp = 4 + i;
+        let exp = 4 + i;
         // if num_bytes <= 2048 {
         //     exp = 18 + i;
         // } else if num_bytes >= 4096 {

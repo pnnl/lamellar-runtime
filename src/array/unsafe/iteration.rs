@@ -201,8 +201,8 @@ impl<T: Dist> UnsafeArray<T> {
     {
         let mut reqs = Vec::new();
         if let Ok(_my_pe) = self.inner.data.team.team_pe_id() {
-            let num_workers =  self.inner.data.team.num_threads();
-            
+            let num_workers = self.inner.data.team.num_threads();
+
             let num_elems_local = iter.elems(self.num_elems_local());
             let elems_per_thread = 1.0f64.max(num_elems_local as f64 / num_workers as f64);
 
@@ -239,7 +239,7 @@ impl<T: Dist> UnsafeArray<T> {
     {
         let mut reqs = Vec::new();
         if let Ok(_my_pe) = self.inner.data.team.team_pe_id() {
-            let num_workers =  self.inner.data.team.num_threads();
+            let num_workers = self.inner.data.team.num_threads();
             let num_elems_local = iter.elems(self.num_elems_local());
 
             let cur_i = Arc::new(AtomicUsize::new(0));
@@ -272,7 +272,7 @@ impl<T: Dist> UnsafeArray<T> {
     {
         let mut reqs = Vec::new();
         if let Ok(_my_pe) = self.inner.data.team.team_pe_id() {
-            let num_workers =  self.inner.data.team.num_threads();
+            let num_workers = self.inner.data.team.num_threads();
             let num_elems_local = iter.elems(self.num_elems_local());
             let elems_per_thread = 1.0f64.max(num_elems_local as f64 / num_workers as f64);
 
@@ -313,7 +313,7 @@ impl<T: Dist> UnsafeArray<T> {
     {
         let mut reqs = Vec::new();
         if let Ok(_my_pe) = self.inner.data.team.team_pe_id() {
-            let num_workers =  self.inner.data.team.num_threads();
+            let num_workers = self.inner.data.team.num_threads();
             let num_elems_local_orig = iter.elems(self.num_elems_local());
             let mut num_elems_local = num_elems_local_orig as f64;
             let mut elems_per_thread = num_elems_local / num_workers as f64;
@@ -382,7 +382,7 @@ impl<T: Dist> UnsafeArray<T> {
     {
         let mut reqs = Vec::new();
         if let Ok(_my_pe) = self.inner.data.team.team_pe_id() {
-            let num_workers =  self.inner.data.team.num_threads();
+            let num_workers = self.inner.data.team.num_threads();
             let num_elems_local = iter.elems(self.num_elems_local());
             let mut ranges = Vec::new();
             let mut cur_i = 0;
@@ -424,7 +424,7 @@ impl<T: Dist> UnsafeArray<T> {
     {
         let mut reqs = Vec::new();
         if let Ok(_my_pe) = self.inner.data.team.team_pe_id() {
-            let num_workers =  self.inner.data.team.num_threads();
+            let num_workers = self.inner.data.team.num_threads();
             let num_elems_local = iter.elems(self.num_elems_local());
             let elems_per_thread = 1.0f64.max(num_elems_local as f64 / num_workers as f64);
             // println!(
@@ -465,7 +465,7 @@ impl<T: Dist> UnsafeArray<T> {
     {
         let mut reqs = Vec::new();
         if let Ok(_my_pe) = self.inner.data.team.team_pe_id() {
-            let num_workers =  self.inner.data.team.num_threads();
+            let num_workers = self.inner.data.team.num_threads();
             let num_elems_local = iter.elems(self.num_elems_local());
 
             let cur_i = Arc::new(AtomicUsize::new(0));
@@ -499,7 +499,7 @@ impl<T: Dist> UnsafeArray<T> {
     {
         let mut reqs = Vec::new();
         if let Ok(_my_pe) = self.inner.data.team.team_pe_id() {
-            let num_workers =  self.inner.data.team.num_threads();
+            let num_workers = self.inner.data.team.num_threads();
             let num_elems_local = iter.elems(self.num_elems_local());
             let elems_per_thread = 1.0f64.max(num_elems_local as f64 / num_workers as f64);
             // println!(
@@ -542,7 +542,7 @@ impl<T: Dist> UnsafeArray<T> {
     {
         let mut reqs = Vec::new();
         if let Ok(_my_pe) = self.inner.data.team.team_pe_id() {
-            let num_workers =  self.inner.data.team.num_threads();
+            let num_workers = self.inner.data.team.num_threads();
             let num_elems_local_orig = iter.elems(self.num_elems_local());
             let mut num_elems_local = num_elems_local_orig as f64;
             let mut elems_per_thread = num_elems_local / num_workers as f64;
@@ -612,7 +612,7 @@ impl<T: Dist> UnsafeArray<T> {
     {
         let mut reqs = Vec::new();
         if let Ok(_my_pe) = self.inner.data.team.team_pe_id() {
-            let num_workers =  self.inner.data.team.num_threads();
+            let num_workers = self.inner.data.team.num_threads();
             let num_elems_local = iter.elems(self.num_elems_local());
             let mut ranges = Vec::new();
             let mut cur_i = 0;
@@ -651,7 +651,7 @@ impl<T: Dist> UnsafeArray<T> {
     {
         let mut reqs = Vec::new();
         if let Ok(_my_pe) = self.inner.data.team.team_pe_id() {
-            let num_workers =  self.inner.data.team.num_threads();
+            let num_workers = self.inner.data.team.num_threads();
             let num_elems_local = iter.elems(self.num_elems_local());
             let elems_per_thread = 1.0f64.max(num_elems_local as f64 / num_workers as f64);
 
@@ -689,7 +689,7 @@ impl<T: Dist> UnsafeArray<T> {
     {
         let mut reqs = Vec::new();
         if let Ok(_my_pe) = self.inner.data.team.team_pe_id() {
-            let num_workers =  self.inner.data.team.num_threads();
+            let num_workers = self.inner.data.team.num_threads();
             let num_elems_local = iter.elems(self.num_elems_local());
 
             let cur_i = Arc::new(AtomicUsize::new(0));
@@ -719,7 +719,7 @@ impl<T: Dist> UnsafeArray<T> {
     {
         let mut reqs = Vec::new();
         if let Ok(_my_pe) = self.inner.data.team.team_pe_id() {
-            let num_workers =  self.inner.data.team.num_threads();
+            let num_workers = self.inner.data.team.num_threads();
             let num_elems_local = iter.elems(self.num_elems_local());
             let elems_per_thread = 1.0f64.max(num_elems_local as f64 / num_workers as f64);
             // println!(
@@ -761,7 +761,7 @@ impl<T: Dist> UnsafeArray<T> {
     {
         let mut reqs = Vec::new();
         if let Ok(_my_pe) = self.inner.data.team.team_pe_id() {
-            let num_workers =  self.inner.data.team.num_threads();
+            let num_workers = self.inner.data.team.num_threads();
             let num_elems_local_orig = iter.elems(self.num_elems_local());
             let mut num_elems_local = num_elems_local_orig as f64;
             let mut elems_per_thread = num_elems_local / num_workers as f64;
@@ -827,7 +827,7 @@ impl<T: Dist> UnsafeArray<T> {
     {
         let mut reqs = Vec::new();
         if let Ok(_my_pe) = self.inner.data.team.team_pe_id() {
-            let num_workers =  self.inner.data.team.num_threads();
+            let num_workers = self.inner.data.team.num_threads();
             let num_elems_local = iter.elems(self.num_elems_local());
             let mut ranges = Vec::new();
             let mut cur_i = 0;
@@ -866,7 +866,7 @@ impl<T: Dist> UnsafeArray<T> {
     {
         let mut reqs = Vec::new();
         if let Ok(_my_pe) = self.inner.data.team.team_pe_id() {
-            let num_workers =  self.inner.data.team.num_threads();
+            let num_workers = self.inner.data.team.num_threads();
             let num_elems_local = iter.elems(self.num_elems_local());
             let elems_per_thread = 1.0f64.max(num_elems_local as f64 / num_workers as f64);
             // println!(
@@ -904,7 +904,7 @@ impl<T: Dist> UnsafeArray<T> {
     {
         let mut reqs = Vec::new();
         if let Ok(_my_pe) = self.inner.data.team.team_pe_id() {
-            let num_workers =  self.inner.data.team.num_threads();
+            let num_workers = self.inner.data.team.num_threads();
             let num_elems_local = iter.elems(self.num_elems_local());
 
             let cur_i = Arc::new(AtomicUsize::new(0));
@@ -935,7 +935,7 @@ impl<T: Dist> UnsafeArray<T> {
     {
         let mut reqs = Vec::new();
         if let Ok(_my_pe) = self.inner.data.team.team_pe_id() {
-            let num_workers =  self.inner.data.team.num_threads();
+            let num_workers = self.inner.data.team.num_threads();
             let num_elems_local = iter.elems(self.num_elems_local());
             let elems_per_thread = 1.0f64.max(num_elems_local as f64 / num_workers as f64);
             // println!(
@@ -978,7 +978,7 @@ impl<T: Dist> UnsafeArray<T> {
     {
         let mut reqs = Vec::new();
         if let Ok(_my_pe) = self.inner.data.team.team_pe_id() {
-            let num_workers =  self.inner.data.team.num_threads();
+            let num_workers = self.inner.data.team.num_threads();
             let num_elems_local_orig = iter.elems(self.num_elems_local());
             let mut num_elems_local = num_elems_local_orig as f64;
             let mut elems_per_thread = num_elems_local / num_workers as f64;
@@ -1045,7 +1045,7 @@ impl<T: Dist> UnsafeArray<T> {
     {
         let mut reqs = Vec::new();
         if let Ok(_my_pe) = self.inner.data.team.team_pe_id() {
-            let num_workers =  self.inner.data.team.num_threads();
+            let num_workers = self.inner.data.team.num_threads();
             let num_elems_local = iter.elems(self.num_elems_local());
             let mut ranges = Vec::new();
             let mut cur_i = 0;
@@ -1166,7 +1166,7 @@ impl<T: Dist> DistIteratorLauncher for UnsafeArray<T> {
         self.barrier();
         let mut reqs = Vec::new();
         if let Ok(_my_pe) = self.inner.data.team.team_pe_id() {
-            let num_workers =  self.inner.data.team.num_threads();
+            let num_workers = self.inner.data.team.num_threads();
             let num_elems_local = iter.elems(self.num_elems_local());
             let elems_per_thread = num_elems_local as f64 / num_workers as f64;
             // println!("num_chunks {:?} chunks_thread {:?}", num_elems_local, elems_per_thread);
@@ -1206,7 +1206,7 @@ impl<T: Dist> DistIteratorLauncher for UnsafeArray<T> {
         self.barrier();
         let mut reqs = Vec::new();
         if let Ok(_my_pe) = self.inner.data.team.team_pe_id() {
-            let num_workers =  self.inner.data.team.num_threads();
+            let num_workers = self.inner.data.team.num_threads();
             let num_elems_local = iter.elems(self.num_elems_local());
             let elems_per_thread = num_elems_local as f64 / num_workers as f64;
             println!(

@@ -202,10 +202,8 @@ impl LamellarWorld {
         self.team.clone()
     }
 
-
-
     #[doc(alias("One-sided", "onesided"))]
-    /// Returns nummber of threads on this PE (including the main thread) 
+    /// Returns nummber of threads on this PE (including the main thread)
     ///
     /// # One-sided Operation
     /// The result is returned only on the calling PE
@@ -344,20 +342,19 @@ impl LamellarWorldBuilder {
             Err(_) => SchedulerType::WorkStealing,
         };
         let num_threads = match std::env::var("LAMELLAR_THREADS") {
-            Ok(n) => if let Ok(num_threads) = n.parse::<usize>(){
-                if num_threads == 0 {
-                    panic!("LAMELLAR_THREADS must be greater than 0");
-                }
-                else if num_threads == 1 {
-                    num_threads
-                }
-                else {
-                    num_threads-1
+            Ok(n) => {
+                if let Ok(num_threads) = n.parse::<usize>() {
+                    if num_threads == 0 {
+                        panic!("LAMELLAR_THREADS must be greater than 0");
+                    } else if num_threads == 1 {
+                        num_threads
+                    } else {
+                        num_threads - 1
+                    }
+                } else {
+                    panic!("LAMELLAR_THREADS must be an integer greater than 0");
                 }
             }
-            else {
-                panic!("LAMELLAR_THREADS must be an integer greater than 0");
-            },
             Err(_) => 4,
         };
         LamellarWorldBuilder {
@@ -460,7 +457,7 @@ impl LamellarWorldBuilder {
         // let teams = Arc::new(RwLock::new(HashMap::new()));
         let mut lamellae_builder = create_lamellae(self.primary_lamellae);
         let (my_pe, num_pes) = lamellae_builder.init_fabric();
-        
+
         let sched_new = Arc::new(create_scheduler(
             self.scheduler,
             num_pes,
