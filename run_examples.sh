@@ -2,6 +2,7 @@
 
 
 target_dir=/home/scratch/$USER
+target_dir=$PWD/target
 root=$PWD
 . $root/../junction-prep.rc
 

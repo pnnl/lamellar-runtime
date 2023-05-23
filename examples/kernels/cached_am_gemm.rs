@@ -177,22 +177,31 @@ fn main() {
     let a = world.alloc_shared_mem_region::<f32>((m * n) / num_pes);
     let b = world.alloc_shared_mem_region::<f32>((n * p) / num_pes);
     let c = world.alloc_shared_mem_region::<f32>((m * p) / num_pes);
-    let c2 = world.alloc_shared_mem_region::<f32>((m * p) / num_pes);
+    // let c2 = world.alloc_shared_mem_region::<f32>((m * p) / num_pes);
     unsafe {
         let mut cnt = my_pe as f32 * ((m * n) / num_pes) as f32;
         for elem in a.as_mut_slice().unwrap() {
             *elem = cnt;
             cnt += 1.0;
         }
-        for elem in b.as_mut_slice().unwrap() {
-            *elem = 2.0;
+        for (i,elem) in b.as_mut_slice().unwrap().iter_mut().enumerate() {
+            let global_i = i + ((m * n) / num_pes) * my_pe ;
+            let row = global_i / n;
+            let col = global_i % n;
+            // println!("{global_i} {} {}", row, col);
+            if row == col {
+                *elem = 1.0;
+            }
+            else {
+                *elem = 0.0;
+            }
         }
         for elem in c.as_mut_slice().unwrap() {
             *elem = 0.0;
         }
-        for elem in c2.as_mut_slice().unwrap() {
-            *elem = 0.0;
-        }
+        // for elem in c2.as_mut_slice().unwrap() {
+        //     *elem = 0.0;
+        // }
     }
     let num_gops = ((2 * dim * dim * dim) - dim * dim) as f64 / 1_000_000_000.0; // accurate for square matrices
 
@@ -201,7 +210,8 @@ fn main() {
     }
     let mut tot_mb = 0.0f64;
     let data_cnt = 0;
-    for bs in [2000, 1000, 500].iter() {
+    // for bs in [2000, 1000, 500].iter() {
+    for bs in [elem_per_pe, elem_per_pe/2, elem_per_pe/4].iter() {
         let block_size = *bs;
         let m_blocks = m / block_size;
         let n_blocks = n / block_size;
@@ -218,7 +228,7 @@ fn main() {
         let start = std::time::Instant::now();
         for j in 0..b_pe_cols {
             // need to iterate over every column of be
-            let c_block = SubMatrix::new("C".to_owned(), c2.clone(), my_pe, m, n, 0, j, block_size);
+            let c_block = SubMatrix::new("C".to_owned(), c.clone(), my_pe, m, n, 0, j, block_size);
             let mut reqs = vec![];
             for k in 0..a_pe_cols {
                 // iterating over
@@ -268,5 +278,18 @@ fn main() {
             );
         }
         tot_mb = world.MB_sent();
+        // let mut same = true;
+        unsafe {
+            let error = a.as_slice().unwrap().iter().zip(c.as_slice().unwrap().iter()).any(|(a, c)| {
+                a!=c
+            });
+            if error {
+                println!("error");
+            }
+            for elem in c.as_mut_slice().unwrap().iter_mut() {
+                *elem = 0.0
+            }
+        }
+        world.barrier();
     }
 }

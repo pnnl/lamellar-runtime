@@ -127,6 +127,21 @@ impl LamellarAM for NaiveMM {
     }
 }
 
+// fn print_mat(world: &LamellarWorld, mat: &SharedMemoryRegion<f32>, cols: usize) {
+//     world.barrier();
+//     for pe in 0..world.num_pes() {
+//         if pe == world.my_pe() {
+//             unsafe {
+//                 for row in mat.as_slice().unwrap().chunks(cols) {
+//                     println!("{:?}", row);
+//                 }
+//             }
+//         }
+//         world.barrier();
+//     }
+//     world.barrier();
+// }
+
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let elem_per_pe = args
@@ -156,14 +171,26 @@ fn main() {
             *elem = cnt;
             cnt += 1.0;
         }
-        for elem in b.as_mut_slice().unwrap() {
-            *elem = 2.0;
+        for (i,elem) in b.as_mut_slice().unwrap().iter_mut().enumerate() {
+            let global_i = i + ((m * n) / num_pes) * my_pe ;
+            let row = global_i / n;
+            let col = global_i % n;
+            // println!("{global_i} {} {}", row, col);
+            if row == col {
+                *elem = 1.0;
+            }
+            else {
+                *elem = 0.0;
+            }
         }
         for elem in c.as_mut_slice().unwrap() {
             *elem = 0.0;
         }
     }
     world.barrier();
+    // print_mat(&world, &a, n);
+    // print_mat(&world, &b, p);
+    // world.barrier();
 
     let num_gops = ((2 * dim * dim * dim) - dim * dim) as f64 / 1_000_000_000.0; // accurate for square matrices
 
@@ -171,7 +198,8 @@ fn main() {
         println!("starting");
     }
     let mut tot_mb = 0.0f64;
-    for bs in [2000, 1000, 500].iter() {
+    // for bs in [2000, 1000, 500].iter() {
+    for bs in [elem_per_pe, elem_per_pe/2, elem_per_pe/4].iter() {
         let block_size = *bs;
         let m_blocks = m / block_size;
         let n_blocks = n / block_size;
@@ -232,7 +260,22 @@ fn main() {
                 tot_mb,
                 tasks
             );
+           
         }
+        // for pe in 0..num_pes{
+        //     if pe ==my_pe {
+                unsafe {
+        //             for row in c.as_slice().unwrap().chunks(m) {
+        //                 println!("{:?}", row);
+        //             }
+                    for elem in c.as_mut_slice().unwrap().iter_mut() {
+                        *elem = 0.0
+                    }
+                }
+        //     }
+        //     world.barrier();
+        // }
         tot_mb = world.MB_sent();
+
     }
 }

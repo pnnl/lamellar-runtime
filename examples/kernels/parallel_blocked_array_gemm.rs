@@ -8,13 +8,8 @@ use lamellar::array::prelude::*;
 /// and then iterate over the local A submatrices in the inner loop. Finally, all updates
 /// to the C matrix are only performed locally, requiring no additional data transfer.
 ///----------------------------------------------------------------------------------
-use lazy_static::lazy_static;
 use matrixmultiply::sgemm;
-use parking_lot::Mutex;
 use std::sync::Arc;
-lazy_static! {
-    static ref LOCK: Mutex<()> = Mutex::new(());
-}
 
 #[lamellar::AmData(Dist, Debug, ArrayOps, Copy, Clone, Default)]
 struct Block {
@@ -171,7 +166,7 @@ fn main() {
             }
 
             let c_slice = c.mut_local_data();
-            let _lock = LOCK.lock();
+            // let _lock = LOCK.lock();
 
             for row in 0..blocksize {
                 let row_offset = (i_blk * blocksize + row) * n;
