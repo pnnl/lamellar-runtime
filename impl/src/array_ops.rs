@@ -1057,6 +1057,9 @@ pub(crate) fn __generate_ops_for_type_rt(item: TokenStream) -> TokenStream {
     };
 
     let impl_eq = if let Ok(val) = syn::parse_str::<syn::LitBool>(&items[2]) {
+        if val.value {
+            op_types.push(OpType::CompEx);
+        }
         val.value
     } else {
         panic! ("third argument of generate_ops_for_type expects 'true' or 'false' specifying whether types implement eq");
