@@ -535,7 +535,6 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         
         for index in indices.drain(..){
             let cnt2 = cnt.clone();
-            // let index  = indices[i].iter();
             let futures2 = futures.clone();
             let byte_array2 = byte_array.clone();
             self.inner.data.team.scheduler.submit_immediate_task2(async move {
@@ -578,6 +577,8 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         })
     }
 
+    // in general this type of operation will likely incur terrible cache performance, the obvious optimization is to apply the updates locally then send it over,
+    // this clearly works for ops like add and mul, does it hold for sub (i think so? given that it is always array[i] - val), need to think about other ops as well...
     fn multi_val_one_index(&self, byte_array: LamellarByteArray, mut vals: Vec<OpInputEnum<T>>,  index: usize, op: ArrayOpCmd2) -> Pin<Box<dyn Future<Output=()> + Send>>{
         let num_per_batch = match std::env::var("LAMELLAR_OP_BATCH") {
             Ok(n) => n.parse::<usize>().unwrap(), //+ 1 to account for main thread
@@ -588,6 +589,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         let futures = Arc::new(Mutex::new(Vec::new()));
         let (pe,local_index) = self.pe_and_offset_for_global_index(index).unwrap();
         let num_reqs = vals.len();
+        // println!("num_reqs {:?}",num_reqs);
         
         for val in vals.drain(..){
             let cnt2 = cnt.clone();
@@ -605,7 +607,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
                             Some(self.inner.data.array_counters.clone())
                         ).into_future());
                 });
-                
+                // println!("reqs len {:?}",reqs.len());
                 futures2.lock().extend(reqs);
                 cnt2.fetch_add(1, Ordering::SeqCst);
             });
@@ -613,6 +615,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         while cnt.load(Ordering::SeqCst) < num_reqs{
             std::thread::yield_now();
         }
+        // println!("futures len {:?}",futures.lock().len());
         Box::pin(async move{
             futures::future::join_all(futures.lock().drain(..)).await;
         })

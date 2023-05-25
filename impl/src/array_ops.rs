@@ -948,9 +948,9 @@ fn gen_single_idx_multi_val(op_type: proc_macro2::TokenStream, lock: &proc_macro
 fn gen_multi_val_single_idx(op_type: proc_macro2::TokenStream, lock: &proc_macro2::TokenStream, op: proc_macro2::TokenStream) -> proc_macro2::TokenStream{
     quote! {
         #op_type =>{
+            #lock
             for val in vals.iter(){
                 let val = *val;
-                #lock
                 #op
             }
         }
@@ -1492,6 +1492,7 @@ fn create_buf_ops2(
                 #slice
                 let vals = unsafe {std::slice::from_raw_parts(self.vals.as_ptr() as *const #typeident, self.vals.len()/std::mem::size_of::<#typeident>())};
                 let index = self.index;
+                // println!("index {:?}", index);
                 match self.op {
                     #multi_val_single_idx_match_stmts
                 }

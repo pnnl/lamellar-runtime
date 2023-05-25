@@ -826,45 +826,91 @@ impl<'a, T: Dist> OpInputEnum<'_, T> {
         }
     }
 
-    #[tracing::instrument(skip_all)]
-    pub(crate) fn as_vec_chunks(&self, chunk_size: usize) -> Vec<Vec<T>> {
+    // #[tracing::instrument(skip_all)]
+    // pub(crate) fn as_vec_chunks(&self, chunk_size: usize) -> Vec<Vec<T>> {
+        
+    //     match self {
+    //         OpInputEnum::Val(v) => vec![vec![*v]],
+    //         OpInputEnum::Slice(s) => s.chunks(chunk_size).map(|chunk| chunk.to_vec()).collect(),
+    //         OpInputEnum::Vec(v) => v.chunks(chunk_size).map(|chunk| chunk.to_vec()).collect(),
+    //         OpInputEnum::NativeAtomicLocalData(a) => {
+    //             let mut vecs = vec![];
+    //             let mut data = Vec::with_capacity(chunk_size);
+    //             for elem in a.iter() {
+    //                 data.push(elem.load());
+    //                 if data.len() == chunk_size {
+    //                     vecs.push(data);
+    //                     data = Vec::with_capacity(chunk_size);
+    //                 }
+    //             }
+    //             if !data.is_empty() {
+    //                 vecs.push(data);
+    //             }
+    //             vecs
+    //         },
+    //         OpInputEnum::GenericAtomicLocalData(a) => {
+    //             let mut vecs = vec![];
+    //             let mut data = Vec::with_capacity(chunk_size);
+    //             for elem in a.iter() {
+    //                 data.push(elem.load());
+    //                 if data.len() == chunk_size {
+    //                     vecs.push(data);
+    //                     data = Vec::with_capacity(chunk_size);
+    //                 }
+    //             }
+    //             if !data.is_empty() {
+    //                 vecs.push(data);
+    //             }
+    //             vecs
+    //         },
+    //         OpInputEnum::LocalLockLocalData(a) =>   a.data.chunks(chunk_size).map(|chunk| chunk.to_vec()).collect(),
+    //         OpInputEnum::GlobalLockLocalData(a) =>   a.data.chunks(chunk_size).map(|chunk| chunk.to_vec()).collect(),
+    //         // OpInputEnum::MemoryRegion(mr) => *unsafe { mr.as_slice() }
+    //         //     .expect("memregion not local")
+    //         //     .first()
+    //         //     .expect("memregion is empty"),
+    //     }
+    // }
+
+    // #[tracing::instrument(skip_all)]
+    pub(crate) fn as_vec_chunks(&self, chunk_size: usize) -> Box<dyn Iterator<Item = Vec<T>> + '_> {
         
         match self {
-            OpInputEnum::Val(v) => vec![vec![*v]],
-            OpInputEnum::Slice(s) => s.chunks(chunk_size).map(|chunk| chunk.to_vec()).collect(),
-            OpInputEnum::Vec(v) => v.chunks(chunk_size).map(|chunk| chunk.to_vec()).collect(),
+            OpInputEnum::Val(v) => Box::new(vec![vec![*v]].into_iter()),
+            OpInputEnum::Slice(s) => Box::new(s.chunks(chunk_size).map(|chunk| chunk.to_vec())),
+            OpInputEnum::Vec(v) => Box::new(v.chunks(chunk_size).map(|chunk| chunk.to_vec())),
             OpInputEnum::NativeAtomicLocalData(a) => {
-                let mut vecs = vec![];
                 let mut data = Vec::with_capacity(chunk_size);
-                for elem in a.iter() {
+
+                Box::new(a.iter().enumerate().filter_map(move |(i,elem)| {
                     data.push(elem.load());
-                    if data.len() == chunk_size {
-                        vecs.push(data);
-                        data = Vec::with_capacity(chunk_size);
+                    if data.len() == chunk_size || i == a.len() - 1 {
+                        let mut new_data = Vec::with_capacity(chunk_size);
+                        std::mem::swap(&mut data, &mut new_data);
+                        Some(new_data)
                     }
-                }
-                if !data.is_empty() {
-                    vecs.push(data);
-                }
-                vecs
+                    else {
+                        None
+                    }
+                }))
             },
             OpInputEnum::GenericAtomicLocalData(a) => {
-                let mut vecs = vec![];
                 let mut data = Vec::with_capacity(chunk_size);
-                for elem in a.iter() {
+
+                Box::new(a.iter().enumerate().filter_map(move |(i,elem)| {
                     data.push(elem.load());
-                    if data.len() == chunk_size {
-                        vecs.push(data);
-                        data = Vec::with_capacity(chunk_size);
+                    if data.len() == chunk_size || i == a.len() - 1 {
+                        let mut new_data = Vec::with_capacity(chunk_size);
+                        std::mem::swap(&mut data, &mut new_data);
+                        Some(new_data)
                     }
-                }
-                if !data.is_empty() {
-                    vecs.push(data);
-                }
-                vecs
+                    else {
+                        None
+                    }
+                }))
             },
-            OpInputEnum::LocalLockLocalData(a) =>   a.data.chunks(chunk_size).map(|chunk| chunk.to_vec()).collect(),
-            OpInputEnum::GlobalLockLocalData(a) =>   a.data.chunks(chunk_size).map(|chunk| chunk.to_vec()).collect(),
+            OpInputEnum::LocalLockLocalData(a) =>   Box::new(a.data.chunks(chunk_size).map(|chunk| chunk.to_vec())),
+            OpInputEnum::GlobalLockLocalData(a) =>   Box::new(a.data.chunks(chunk_size).map(|chunk| chunk.to_vec())),
             // OpInputEnum::MemoryRegion(mr) => *unsafe { mr.as_slice() }
             //     .expect("memregion not local")
             //     .first()
