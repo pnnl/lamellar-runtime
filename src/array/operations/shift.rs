@@ -173,7 +173,7 @@ pub trait ShiftOps<T: ElementShiftOps>: private::LamellarArrayPrivate<T> {
         val: impl OpInput<'a, T>,
     ) -> Pin<Box<dyn Future<Output = Vec<T>> + Send>> {
         self.inner_array()
-            .initiate_batch_fetch_op(val, index, ArrayOpCmd::FetchShl)
+            .initiate_batch_fetch_op_2(val, index, ArrayOpCmd2::FetchShl,self.as_lamellar_byte_array())
     }
 
     /// This call performs an in place right shift of `val` bits on the element specified by `index`.
@@ -302,7 +302,7 @@ pub trait ShiftOps<T: ElementShiftOps>: private::LamellarArrayPrivate<T> {
         val: impl OpInput<'a, T>,
     ) -> Pin<Box<dyn Future<Output = Vec<T>> + Send>> {
         self.inner_array()
-            .initiate_batch_fetch_op(val, index, ArrayOpCmd::FetchShr)
+            .initiate_batch_fetch_op_2(val, index, ArrayOpCmd2::FetchShr,self.as_lamellar_byte_array())
     }
 }
 

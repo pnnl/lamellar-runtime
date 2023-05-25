@@ -109,6 +109,6 @@ pub trait ReadOnlyOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
     ) -> Pin<Box<dyn Future<Output = Vec<T>> + Send>> {
         let dummy_val = self.inner_array().dummy_val(); //we dont actually do anything with this except satisfy apis;
         self.inner_array()
-            .initiate_batch_fetch_op(dummy_val, index, ArrayOpCmd::Load)
+            .initiate_batch_fetch_op_2(dummy_val, index, ArrayOpCmd2::Load,self.as_lamellar_byte_array())
     }
 }

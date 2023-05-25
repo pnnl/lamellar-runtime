@@ -6,13 +6,14 @@ use crate::lamellar_request::LamellarRequest;
 // use crate::memregion::Dist;
 use std::any::TypeId;
 use std::collections::HashMap;
-use itertools::Itertools;
+// use itertools::Itertools;
 
 type BufFn = fn(UnsafeByteArrayWeak) -> Arc<dyn BufferOp>;
 
-type MultiValMultiIdxFn = fn(LamellarByteArray,ArrayOpCmd2,Vec<u8>) -> LamellarArcAm;
-type SingleValMultiIdxFn = fn(LamellarByteArray,ArrayOpCmd2,Vec<u8>,Vec<usize>) -> LamellarArcAm;
-type MultiValSingleIdxFn = fn(LamellarByteArray,ArrayOpCmd2,Vec<u8>,usize) -> LamellarArcAm;
+type MultiValMultiIdxFn = fn(LamellarByteArray,ArrayOpCmd2<Vec<u8>>,Vec<u8>) -> LamellarArcAm;
+type SingleValMultiIdxFn = fn(LamellarByteArray,ArrayOpCmd2<Vec<u8>>,Vec<u8>,Vec<usize>) -> LamellarArcAm;
+type MultiValSingleIdxFn = fn(LamellarByteArray,ArrayOpCmd2<Vec<u8>>,Vec<u8>,usize) -> LamellarArcAm;
+
 
 lazy_static! {
     pub(crate) static ref BUFOPS: HashMap<TypeId, BufFn> = {
@@ -24,21 +25,21 @@ lazy_static! {
     };
 
    
-    pub(crate) static ref MULTI_VAL_MULTI_IDX_OPS: HashMap<(TypeId,TypeId), MultiValMultiIdxFn> = {
+    pub(crate) static ref MULTI_VAL_MULTI_IDX_OPS: HashMap<(TypeId,TypeId,BatchReturnType), MultiValMultiIdxFn> = {
         let mut map = HashMap::new();
         for op in crate::inventory::iter::<MultiValMultiIdxOps> {
             map.insert(op.id.clone(), op.op);
         }
         map
     };
-    pub(crate) static ref SINGLE_VAL_MULTI_IDX_OPS: HashMap<(TypeId,TypeId), SingleValMultiIdxFn> = {
+    pub(crate) static ref SINGLE_VAL_MULTI_IDX_OPS: HashMap<(TypeId,TypeId,BatchReturnType), SingleValMultiIdxFn> = {
         let mut map = HashMap::new();
         for op in crate::inventory::iter::<SingleValMultiIdxOps> {
             map.insert(op.id.clone(), op.op);
         }
         map
     };
-    pub(crate) static ref MULTI_VAL_SINGLE_IDX_OPS: HashMap<(TypeId,TypeId), MultiValSingleIdxFn> = {
+    pub(crate) static ref MULTI_VAL_SINGLE_IDX_OPS: HashMap<(TypeId,TypeId,BatchReturnType), MultiValSingleIdxFn> = {
         let mut map = HashMap::new();
         for op in crate::inventory::iter::<MultiValSingleIdxOps> {
             map.insert(op.id.clone(), op.op);
@@ -55,19 +56,20 @@ pub struct UnsafeArrayOpBuf {
 
 #[doc(hidden)]
 pub struct MultiValMultiIdxOps {
-    pub id: (TypeId,TypeId),
+    pub id: (TypeId,TypeId,BatchReturnType),
     pub op: MultiValMultiIdxFn,
 }
 
+
 #[doc(hidden)]
 pub struct SingleValMultiIdxOps {
-    pub id: (TypeId,TypeId),
+    pub id: (TypeId,TypeId,BatchReturnType),
     pub op: SingleValMultiIdxFn,
 }
 
 #[doc(hidden)]
 pub struct MultiValSingleIdxOps {
-    pub id: (TypeId,TypeId),
+    pub id: (TypeId,TypeId,BatchReturnType),
     pub op: MultiValSingleIdxFn,
 }
 
@@ -410,27 +412,89 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         &self,
         val: impl OpInput<'a, T>,
         index: impl OpInput<'a, usize>,
-        op: ArrayOpCmd2,
+        op: ArrayOpCmd2<T>,
         byte_array: LamellarByteArray
     ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
         let (mut indices, i_len) = index.as_op_input(); 
         let (mut vals, v_len) = val.as_op_input();
         if v_len == 1 && i_len == 1 { //one to one
-            self.multi_val_multi_index(byte_array, vals, indices, op);
+            self.multi_val_multi_index::<()>(byte_array, vals, indices, op, BatchReturnType::None);
         }
         else if v_len > 1 && i_len == 1 { //many vals one index
-            self.multi_val_one_index(byte_array, vals, indices[0].first(), op);
+            self.multi_val_one_index::<()>(byte_array, vals, indices[0].first(), op, BatchReturnType::None);
         }
         else if v_len == 1 && i_len > 1 { //one val many indices
-            self.one_val_multi_indices(byte_array, vals[0].first(), indices, op);
+            self.one_val_multi_indices::<()>(byte_array, vals[0].first(), indices, op, BatchReturnType::None);
         }
         else if v_len > 1 && i_len > 1 { //many vals many indices
-            self.multi_val_multi_index(byte_array, vals, indices, op);
+            self.multi_val_multi_index::<()>(byte_array, vals, indices, op, BatchReturnType::None);
         }
         else{ //no vals no indices
             
         }
         Box::pin(async { () })
+    }
+
+    #[tracing::instrument(skip_all)]
+    pub(crate) fn initiate_batch_fetch_op_2<'a>(
+        &self,
+        val: impl OpInput<'a, T>,
+        index: impl OpInput<'a, usize>,
+        op: ArrayOpCmd2<T>,
+        byte_array: LamellarByteArray
+    ) -> Pin<Box<dyn Future<Output = Vec<T>> + Send>> {
+        let (mut indices, i_len) = index.as_op_input(); 
+        let (mut vals, v_len) = val.as_op_input();
+        let res = 
+        if v_len == 1 && i_len == 1 { //one to one
+            self.multi_val_multi_index::<Vec<T>>(byte_array, vals, indices, op, BatchReturnType::Vals)
+        }
+        else if v_len > 1 && i_len == 1 { //many vals one index
+            self.multi_val_one_index::<Vec<T>>(byte_array, vals, indices[0].first(), op, BatchReturnType::Vals)
+        }
+        else if v_len == 1 && i_len > 1 { //one val many indices
+            self.one_val_multi_indices::<Vec<T>>(byte_array, vals[0].first(), indices, op, BatchReturnType::Vals)
+        }
+        else if v_len > 1 && i_len > 1 { //many vals many indices
+            self.multi_val_multi_index::<Vec<T>>(byte_array, vals, indices, op, BatchReturnType::Vals)
+        }
+        else{ //no vals no indices
+            Box::pin(async { Vec::new() })
+        };
+        Box::pin(async {
+            res.await.into_iter().flatten().collect::<Vec<T>>()
+        })
+    }
+
+    #[tracing::instrument(skip_all)]
+    pub(crate) fn initiate_batch_result_op_2<'a>(
+        &self,
+        val: impl OpInput<'a, T>,
+        index: impl OpInput<'a, usize>,
+        op: ArrayOpCmd2<T>,
+        byte_array: LamellarByteArray
+    ) -> Pin<Box<dyn Future<Output = Vec<Result<T,T>>> + Send>> {
+        let (mut indices, i_len) = index.as_op_input(); 
+        let (mut vals, v_len) = val.as_op_input();
+        let res = 
+        if v_len == 1 && i_len == 1 { //one to one
+            self.multi_val_multi_index::<Vec<Result<T,T>>>(byte_array, vals, indices, op, BatchReturnType::Result)
+        }
+        else if v_len > 1 && i_len == 1 { //many vals one index
+            self.multi_val_one_index::<Vec<Result<T,T>>>(byte_array, vals, indices[0].first(), op, BatchReturnType::Result)
+        }
+        else if v_len == 1 && i_len > 1 { //one val many indices
+            self.one_val_multi_indices::<Vec<Result<T,T>>>(byte_array, vals[0].first(), indices, op, BatchReturnType::Result)
+        }
+        else if v_len > 1 && i_len > 1 { //many vals many indices
+            self.multi_val_multi_index::<Vec<Result<T,T>>>(byte_array, vals, indices, op, BatchReturnType::Result)
+        }
+        else{ //no vals no indices
+            Box::pin(async { Vec::new() })
+        };
+        Box::pin(async {
+            res.await.into_iter().flatten().collect::<Vec<Result<T,T>>>()
+        })
     }
 
     #[tracing::instrument(skip_all)]
@@ -523,7 +587,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         Box::new(ArrayOpBatchResultHandle { reqs }).into_future()
     }
 
-    fn one_val_multi_indices(&self, byte_array: LamellarByteArray, val: T, mut indices: Vec<OpInputEnum<usize>>, op: ArrayOpCmd2) -> Pin<Box<dyn Future<Output=()> + Send>>{
+    fn one_val_multi_indices<R: AmDist>(&self, byte_array: LamellarByteArray, val: T, mut indices: Vec<OpInputEnum<usize>>, op: ArrayOpCmd2<T>, ret: BatchReturnType) -> Pin<Box<dyn Future<Output=Vec<R>> + Send>>{
         let num_per_batch = match std::env::var("LAMELLAR_OP_BATCH") {
             Ok(n) => n.parse::<usize>().unwrap(), //+ 1 to account for main thread
             Err(_) => 10000,                      //+ 1 to account for main thread
@@ -546,8 +610,8 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
                     if buffs[pe].len() >= num_per_batch {
                         let mut new_buffer = Vec::with_capacity(num_per_batch);
                         std::mem::swap( &mut buffs[pe], &mut new_buffer);
-                        let am = SingleValMultiIndex::new_with_vec(byte_array2.clone(), op ,new_buffer,val).into_am();
-                        reqs.push(self.inner.data.team.exec_arc_am_pe::<()>(
+                        let am = SingleValMultiIndex::new_with_vec(byte_array2.clone(), op ,new_buffer,val).into_am(ret);
+                        reqs.push(self.inner.data.team.exec_arc_am_pe::<R>(
                             pe,
                             am, 
                             Some(self.inner.data.array_counters.clone())
@@ -557,8 +621,8 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
                 }
                 for (pe,buff) in buffs.into_iter().enumerate() {
                     if buff.len() > 0 {
-                        let am = SingleValMultiIndex::new_with_vec(byte_array2.clone(),op,buff,val).into_am();
-                        reqs.push(self.inner.data.team.exec_arc_am_pe::<()>(
+                        let am = SingleValMultiIndex::new_with_vec(byte_array2.clone(),op,buff,val).into_am(ret);
+                        reqs.push(self.inner.data.team.exec_arc_am_pe::<R>(
                             pe,
                             am, 
                             Some(self.inner.data.array_counters.clone())
@@ -573,13 +637,13 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
             std::thread::yield_now();
         }
         Box::pin(async move{
-            futures::future::join_all(futures.lock().drain(..)).await;
+            futures::future::join_all(futures.lock().drain(..)).await
         })
     }
 
     // in general this type of operation will likely incur terrible cache performance, the obvious optimization is to apply the updates locally then send it over,
     // this clearly works for ops like add and mul, does it hold for sub (i think so? given that it is always array[i] - val), need to think about other ops as well...
-    fn multi_val_one_index(&self, byte_array: LamellarByteArray, mut vals: Vec<OpInputEnum<T>>,  index: usize, op: ArrayOpCmd2) -> Pin<Box<dyn Future<Output=()> + Send>>{
+    fn multi_val_one_index<R: AmDist>(&self, byte_array: LamellarByteArray, mut vals: Vec<OpInputEnum<T>>,  index: usize, op: ArrayOpCmd2<T>, ret: BatchReturnType) -> Pin<Box<dyn Future<Output=Vec<R>> + Send>>{
         let num_per_batch = match std::env::var("LAMELLAR_OP_BATCH") {
             Ok(n) => n.parse::<usize>().unwrap(), //+ 1 to account for main thread
             Err(_) => 10000,                      //+ 1 to account for main thread
@@ -600,8 +664,8 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
                 // let val_slice = val.as_slice();
                 let mut reqs = Vec::new();
                 val.as_vec_chunks(num_per_batch).into_iter().for_each(|val|{
-                    let am = MultiValSingleIndex::new_with_vec(byte_array2.clone(), op ,local_index, val).into_am();
-                        reqs.push(self.inner.data.team.exec_arc_am_pe::<()>(
+                    let am = MultiValSingleIndex::new_with_vec(byte_array2.clone(), op ,local_index, val).into_am(ret);
+                        reqs.push(self.inner.data.team.exec_arc_am_pe::<R>(
                             pe,
                             am, 
                             Some(self.inner.data.array_counters.clone())
@@ -617,11 +681,11 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         }
         // println!("futures len {:?}",futures.lock().len());
         Box::pin(async move{
-            futures::future::join_all(futures.lock().drain(..)).await;
+            futures::future::join_all(futures.lock().drain(..)).await
         })
     }
 
-    fn multi_val_multi_index(&self, byte_array: LamellarByteArray, mut vals: Vec<OpInputEnum<T>>, mut indices: Vec<OpInputEnum<usize>>, op: ArrayOpCmd2) -> Pin<Box<dyn Future<Output=()> + Send>>{
+    fn multi_val_multi_index<R: AmDist>(&self, byte_array: LamellarByteArray, mut vals: Vec<OpInputEnum<T>>, mut indices: Vec<OpInputEnum<usize>>, op: ArrayOpCmd2<T>, ret: BatchReturnType) -> Pin<Box<dyn Future<Output=Vec<R>> + Send>>{
         let num_per_batch = match std::env::var("LAMELLAR_OP_BATCH") {
             Ok(n) => n.parse::<usize>().unwrap(), //+ 1 to account for main thread
             Err(_) => 10000,                      //+ 1 to account for main thread
@@ -646,8 +710,8 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
                     if buffs[pe].len() >= bytes_per_batch {
                         let mut new_buffer = Vec::with_capacity(bytes_per_batch);
                         std::mem::swap( &mut buffs[pe], &mut new_buffer);
-                        let am = MultiValMultiIndex::new_with_vec(byte_array2.clone(), op ,new_buffer).into_am();
-                        reqs.push(self.inner.data.team.exec_arc_am_pe::<()>(
+                        let am = MultiValMultiIndex::new_with_vec(byte_array2.clone(), op ,new_buffer).into_am(ret);
+                        reqs.push(self.inner.data.team.exec_arc_am_pe::<R>(
                             pe,
                             am, 
                             Some(self.inner.data.array_counters.clone())
@@ -657,8 +721,8 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
                 }
                 for (pe,buff) in buffs.into_iter().enumerate() {
                     if buff.len() > 0 {
-                        let am = MultiValMultiIndex::new_with_vec(byte_array2.clone(),op,buff).into_am();
-                        reqs.push(self.inner.data.team.exec_arc_am_pe::<()>(
+                        let am = MultiValMultiIndex::new_with_vec(byte_array2.clone(),op,buff).into_am(ret);
+                        reqs.push(self.inner.data.team.exec_arc_am_pe::<R>(
                             pe,
                             am, 
                             Some(self.inner.data.array_counters.clone())
@@ -673,7 +737,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
             std::thread::yield_now();
         }
         Box::pin(async move{
-            futures::future::join_all(futures.lock().drain(..)).await;
+            futures::future::join_all(futures.lock().drain(..)).await
         })
     }
 }
@@ -1021,31 +1085,39 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
 
 // #[lamellar_impl::AmDataRT]
 
+#[doc(hidden)]
+#[derive(Copy,Clone,Hash,std::cmp::Eq,std::cmp::PartialEq)]
+pub enum BatchReturnType{
+    None,
+    Vals,
+    Result,
+}
+
 struct SingleValMultiIndex{
     array: LamellarByteArray,
     idx: Vec<usize>,
     val: Vec<u8>,
-    op: ArrayOpCmd2,
+    op: ArrayOpCmd2<Vec<u8>>,
 }
 
 impl SingleValMultiIndex {
-    fn new<T: Dist >(array: LamellarByteArray, op:ArrayOpCmd2, val: T) -> Self {
-        let val_u8 = &val as *const T as *const u8;
-        Self { array:  array.into(), idx: Vec::new(), 
-            val: unsafe {std::slice::from_raw_parts(val_u8, std::mem::size_of::<T>())}.to_vec(),
-            op: op} //, type_id: TypeId::of::<T>() }
-    }
+    // fn new<T: Dist >(array: LamellarByteArray, op:ArrayOpCmd2<T>, val: T) -> Self {
+    //     let val_u8 = &val as *const T as *const u8;
+    //     Self { array:  array.into(), idx: Vec::new(), 
+    //         val: unsafe {std::slice::from_raw_parts(val_u8, std::mem::size_of::<T>())}.to_vec(),
+    //         op: op.into()} //, type_id: TypeId::of::<T>() }
+    // }
 
-    fn new_with_vec<T: Dist >(array: LamellarByteArray, op: ArrayOpCmd2, indices: Vec<usize>, val: T) -> Self {
+    fn new_with_vec<T: Dist >(array: LamellarByteArray, op: ArrayOpCmd2<T>, indices: Vec<usize>, val: T) -> Self {
         let val_u8 = &val as *const T as *const u8;
         Self { array:  array.into(), idx: indices,
             val: unsafe {std::slice::from_raw_parts(val_u8, std::mem::size_of::<T>())}.to_vec(),
-            op: op} //, type_id: TypeId::of::<T>() }
+            op: op.into()} //, type_id: TypeId::of::<T>() }
 
     }
 
-    fn into_am(self) -> LamellarArcAm {
-        SINGLE_VAL_MULTI_IDX_OPS.get(&(self.array.type_id(),TypeId::of::<usize>())).unwrap()(self.array,self.op,self.val,self.idx)
+    fn into_am(self,ret: BatchReturnType) -> LamellarArcAm {
+        SINGLE_VAL_MULTI_IDX_OPS.get(&(self.array.type_id(),TypeId::of::<usize>(),ret)).unwrap()(self.array,self.op,self.val,self.idx)
     }
 }
 
@@ -1053,44 +1125,44 @@ struct MultiValSingleIndex{
     array: LamellarByteArray,
     idx: usize,
     val: Vec<u8>,
-    op: ArrayOpCmd2,
+    op: ArrayOpCmd2<Vec<u8>>,
 }
 
 impl MultiValSingleIndex {
-    fn new<T: Dist >(array: LamellarByteArray, op:ArrayOpCmd2, index: usize) -> Self {
-        // let val_u8 = &val as *const T as *const u8;
-        Self { array:  array.into(), idx: index, 
-            val: Vec::new(),
-            op: op} //, type_id: TypeId::of::<T>() }
-    }
+    // fn new<T: Dist >(array: LamellarByteArray, op:ArrayOpCmd2, index: usize) -> Self {
+    //     // let val_u8 = &val as *const T as *const u8;
+    //     Self { array:  array.into(), idx: index, 
+    //         val: Vec::new(),
+    //         op: op} //, type_id: TypeId::of::<T>() }
+    // }
 
-    fn new_with_vec<T: Dist >(array: LamellarByteArray, op: ArrayOpCmd2, index: usize, val: Vec<T>) -> Self {
+    fn new_with_vec<T: Dist >(array: LamellarByteArray, op: ArrayOpCmd2<T>, index: usize, val: Vec<T>) -> Self {
         let val_u8 = val.as_ptr() as *const u8;
 
         Self { array:  array.into(), idx: index,
             val: unsafe {std::slice::from_raw_parts(val_u8, std::mem::size_of::<T>()*val.len())}.to_vec(),
-            op: op} //, type_id: TypeId::of::<T>() }
-
+            op: op.into()
+        } //, type_id: TypeId::of::<T>() }
     }
 
-    fn into_am(self) -> LamellarArcAm {
-        MULTI_VAL_SINGLE_IDX_OPS.get(&(self.array.type_id(),TypeId::of::<usize>())).unwrap()(self.array,self.op,self.val,self.idx)
+    fn into_am(self, ret: BatchReturnType) -> LamellarArcAm {
+        MULTI_VAL_SINGLE_IDX_OPS.get(&(self.array.type_id(),TypeId::of::<usize>(),ret)).unwrap()(self.array,self.op,self.val,self.idx)
     }
 }
 
 struct MultiValMultiIndex{
     array: LamellarByteArray,
     idxs_vals: Vec<u8>,
-    op: ArrayOpCmd2
+    op: ArrayOpCmd2<Vec<u8>>
 }
 
 impl MultiValMultiIndex {
-    fn new(array: LamellarByteArray, op: ArrayOpCmd2) -> Self {
-        Self { array:  array.into(), idxs_vals: Vec::new(), op: op} //, type_id: TypeId::of::<T>() }
-    }
+    // fn new(array: LamellarByteArray, op: ArrayOpCmd2<T>) -> Self {
+    //     Self { array:  array.into(), idxs_vals: Vec::new(), op: op.into()} //, type_id: TypeId::of::<T>() }
+    // }
 
-    fn new_with_vec(array: LamellarByteArray, op: ArrayOpCmd2, idxs_vals: Vec<u8>) -> Self {
-        Self { array:  array.into(), idxs_vals: idxs_vals, op: op} //, type_id: TypeId::of::<T>() }
+    fn new_with_vec<T: Dist>(array: LamellarByteArray, op: ArrayOpCmd2<T>, idxs_vals: Vec<u8>) -> Self {
+        Self { array:  array.into(), idxs_vals: idxs_vals, op: op.into()} //, type_id: TypeId::of::<T>() }
     }
 
     fn append_idxs_vals<T: Dist>(&mut self, idx: usize, val: T) {
@@ -1099,8 +1171,8 @@ impl MultiValMultiIndex {
         self.idxs_vals.extend_from_slice(idx_val.as_bytes());
     }
 
-    fn into_am(self) -> LamellarArcAm {
-        MULTI_VAL_MULTI_IDX_OPS.get(&(self.array.type_id(),TypeId::of::<usize>())).unwrap()(self.array,self.op,self.idxs_vals)
+    fn into_am(self, ret: BatchReturnType) -> LamellarArcAm {
+        MULTI_VAL_MULTI_IDX_OPS.get(&(self.array.type_id(),TypeId::of::<usize>(),ret)).unwrap()(self.array,self.op,self.idxs_vals)
     }
 }
 

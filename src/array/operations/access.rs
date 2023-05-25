@@ -193,7 +193,7 @@ pub trait AccessOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
         val: impl OpInput<'a, T>,
     ) -> Pin<Box<dyn Future<Output = Vec<T>> + Send>> {
         self.inner_array()
-            .initiate_batch_fetch_op(val, index, ArrayOpCmd::Swap)
+            .initiate_batch_fetch_op_2(val, index, ArrayOpCmd2::Swap,self.as_lamellar_byte_array())
     }
 }
 

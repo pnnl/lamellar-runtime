@@ -4,8 +4,8 @@ use std::any::TypeId;
 use std::collections::HashMap;
 
 type BufFn = fn(GenericAtomicByteArrayWeak) -> Arc<dyn BufferOp>;
-type MultiMultiFn = fn(GenericAtomicByteArray,ArrayOpCmd2,Vec<u8>) -> LamellarArcAm;
-type MultiSingleFn = fn(GenericAtomicByteArray,ArrayOpCmd2,Vec<u8>,Vec<usize>) -> LamellarArcAm;
+// type MultiMultiFn = fn(GenericAtomicByteArray,ArrayOpCmd2,Vec<u8>) -> LamellarArcAm;
+// type MultiSingleFn = fn(GenericAtomicByteArray,ArrayOpCmd2,Vec<u8>,Vec<usize>) -> LamellarArcAm;
 
 lazy_static! {
     pub(crate) static ref BUFOPS: HashMap<TypeId, BufFn> = {
@@ -16,21 +16,21 @@ lazy_static! {
         map
     };
 
-    pub(crate) static ref MULTIMULTIOPS: HashMap<TypeId, MultiMultiFn> = {
-        let mut map = HashMap::new();
-        for op in crate::inventory::iter::<GenericAtomicArrayMultiMultiOps> {
-            map.insert(op.id.clone(), op.op);
-        }
-        map
-    };
+    // pub(crate) static ref MULTIMULTIOPS: HashMap<TypeId, MultiMultiFn> = {
+    //     let mut map = HashMap::new();
+    //     for op in crate::inventory::iter::<GenericAtomicArrayMultiMultiOps> {
+    //         map.insert(op.id.clone(), op.op);
+    //     }
+    //     map
+    // };
 
-    pub(crate) static ref MULTISINGLEOPS: HashMap<TypeId, MultiSingleFn> = {
-        let mut map = HashMap::new();
-        for op in crate::inventory::iter::<GenericAtomicArrayMultiSingleOps> {
-            map.insert(op.id.clone(), op.op);
-        }
-        map
-    };
+    // pub(crate) static ref MULTISINGLEOPS: HashMap<TypeId, MultiSingleFn> = {
+    //     let mut map = HashMap::new();
+    //     for op in crate::inventory::iter::<GenericAtomicArrayMultiSingleOps> {
+    //         map.insert(op.id.clone(), op.op);
+    //     }
+    //     map
+    // };
 }
 
 #[doc(hidden)]
@@ -39,21 +39,21 @@ pub struct GenericAtomicArrayOpBuf {
     pub op: BufFn,
 }
 
-#[doc(hidden)]
-pub struct GenericAtomicArrayMultiMultiOps {
-    pub id: TypeId,
-    pub op: MultiMultiFn,
-}
+// #[doc(hidden)]
+// pub struct GenericAtomicArrayMultiMultiOps {
+//     pub id: TypeId,
+//     pub op: MultiMultiFn,
+// }
 
-#[doc(hidden)]
-pub struct GenericAtomicArrayMultiSingleOps {
-    pub id: TypeId,
-    pub op: MultiSingleFn,
-}
+// #[doc(hidden)]
+// pub struct GenericAtomicArrayMultiSingleOps {
+//     pub id: TypeId,
+//     pub op: MultiSingleFn,
+// }
 
 crate::inventory::collect!(GenericAtomicArrayOpBuf);
-crate::inventory::collect!(GenericAtomicArrayMultiMultiOps);
-crate::inventory::collect!(GenericAtomicArrayMultiSingleOps);
+// crate::inventory::collect!(GenericAtomicArrayMultiMultiOps);
+// crate::inventory::collect!(GenericAtomicArrayMultiSingleOps);
 
 
 impl<T: ElementOps + 'static> ReadOnlyOps<T> for GenericAtomicArray<T> {}

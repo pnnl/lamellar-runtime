@@ -164,10 +164,11 @@ pub trait CompareExchangeOps<T: ElementCompareEqOps>: private::LamellarArrayPriv
         current: T,
         new: impl OpInput<'a, T>,
     ) -> Pin<Box<dyn Future<Output = Vec<Result<T, T>>> + Send>> {
-        self.inner_array().initiate_batch_result_op(
+        self.inner_array().initiate_batch_result_op_2(
             new,
             index,
-            ArrayOpCmd::CompareExchange(current),
+            ArrayOpCmd2::CompareExchange(current),
+            self.as_lamellar_byte_array()
         )
     }
 }
@@ -333,10 +334,11 @@ pub trait CompareExchangeEpsilonOps<T: ElementComparePartialEqOps>:
         new: impl OpInput<'a, T>,
         eps: T,
     ) -> Pin<Box<dyn Future<Output = Vec<Result<T, T>>> + Send>> {
-        self.inner_array().initiate_batch_result_op(
+        self.inner_array().initiate_batch_result_op_2(
             new,
             index,
-            ArrayOpCmd::CompareExchangeEps(current, eps),
+            ArrayOpCmd2::CompareExchangeEps(current, eps),
+            self.as_lamellar_byte_array(),
         )
     }
 }

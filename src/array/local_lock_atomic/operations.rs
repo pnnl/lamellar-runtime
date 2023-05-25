@@ -4,8 +4,8 @@ use std::any::TypeId;
 use std::collections::HashMap;
 
 type BufFn = fn(LocalLockByteArrayWeak) -> Arc<dyn BufferOp>;
-type MultiMultiFn = fn(LocalLockByteArray,ArrayOpCmd2,Vec<u8>) -> LamellarArcAm;
-type MultiSingleFn = fn(LocalLockByteArray,ArrayOpCmd2,Vec<u8>,Vec<usize>) -> LamellarArcAm;
+// type MultiMultiFn = fn(LocalLockByteArray,ArrayOpCmd2,Vec<u8>) -> LamellarArcAm;
+// type MultiSingleFn = fn(LocalLockByteArray,ArrayOpCmd2,Vec<u8>,Vec<usize>) -> LamellarArcAm;
 
 lazy_static! {
     pub(crate) static ref BUFOPS: HashMap<TypeId, BufFn> = {
@@ -15,20 +15,20 @@ lazy_static! {
         }
         map
     };
-    pub(crate) static ref MULTIMULTIOPS: HashMap<TypeId, MultiMultiFn> = {
-        let mut map = HashMap::new();
-        for op in crate::inventory::iter::<LocalLockArrayMultiMultiOps> {
-            map.insert(op.id.clone(), op.op);
-        }
-        map
-    };
-    pub(crate) static ref MULTISINGLEOPS: HashMap<TypeId, MultiSingleFn> = {
-        let mut map = HashMap::new();
-        for op in crate::inventory::iter::<LocalLockArrayMultiSingleOps> {
-            map.insert(op.id.clone(), op.op);
-        }
-        map
-    };
+    // pub(crate) static ref MULTIMULTIOPS: HashMap<TypeId, MultiMultiFn> = {
+    //     let mut map = HashMap::new();
+    //     for op in crate::inventory::iter::<LocalLockArrayMultiMultiOps> {
+    //         map.insert(op.id.clone(), op.op);
+    //     }
+    //     map
+    // // };
+    // pub(crate) static ref MULTISINGLEOPS: HashMap<TypeId, MultiSingleFn> = {
+    //     let mut map = HashMap::new();
+    //     for op in crate::inventory::iter::<LocalLockArrayMultiSingleOps> {
+    //         map.insert(op.id.clone(), op.op);
+    //     }
+    //     map
+    // };
     
 }
 
@@ -37,20 +37,20 @@ pub struct LocalLockArrayOpBuf {
     pub id: TypeId,
     pub op: BufFn,
 }
-#[doc(hidden)]
-pub struct LocalLockArrayMultiMultiOps {
-    pub id: TypeId,
-    pub op: MultiMultiFn,
-}
-#[doc(hidden)]
-pub struct LocalLockArrayMultiSingleOps {
-    pub id: TypeId,
-    pub op: MultiSingleFn,
-}
+// #[doc(hidden)]
+// pub struct LocalLockArrayMultiMultiOps {
+//     pub id: TypeId,
+//     pub op: MultiMultiFn,
+// }
+// #[doc(hidden)]
+// pub struct LocalLockArrayMultiSingleOps {
+//     pub id: TypeId,
+//     pub op: MultiSingleFn,
+// }
 
 crate::inventory::collect!(LocalLockArrayOpBuf);
-crate::inventory::collect!(LocalLockArrayMultiMultiOps);
-crate::inventory::collect!(LocalLockArrayMultiSingleOps);
+// crate::inventory::collect!(LocalLockArrayMultiMultiOps);
+// crate::inventory::collect!(LocalLockArrayMultiSingleOps);
 
 impl<T: ElementOps + 'static> ReadOnlyOps<T> for LocalLockArray<T> {}
 

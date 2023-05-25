@@ -10,8 +10,8 @@ use std::sync::Arc;
 
 type BufFn = fn(ReadOnlyByteArrayWeak) -> Arc<dyn BufferOp>;
 
-type MultiMultiFn = fn(ReadOnlyByteArray,ArrayOpCmd2,Vec<u8>) -> LamellarArcAm;
-type MultiSingleFn = fn(ReadOnlyByteArray,ArrayOpCmd2,Vec<u8>,Vec<usize>) -> LamellarArcAm;
+// type MultiMultiFn = fn(ReadOnlyByteArray,ArrayOpCmd2,Vec<u8>) -> LamellarArcAm;
+// type MultiSingleFn = fn(ReadOnlyByteArray,ArrayOpCmd2,Vec<u8>,Vec<usize>) -> LamellarArcAm;
 
 lazy_static! {
     pub(crate) static ref BUFOPS: HashMap<TypeId, BufFn> = {
@@ -22,21 +22,21 @@ lazy_static! {
         map
     };
 
-    pub(crate) static ref MULTIMULTIOPS: HashMap<TypeId, MultiMultiFn> = {
-        let mut map = HashMap::new();
-        for op in crate::inventory::iter::<ReadOnlyArrayMultiMultiOps> {
-            map.insert(op.id.clone(), op.op);
-        }
-        map
-    };
+    // pub(crate) static ref MULTIMULTIOPS: HashMap<TypeId, MultiMultiFn> = {
+    //     let mut map = HashMap::new();
+    //     for op in crate::inventory::iter::<ReadOnlyArrayMultiMultiOps> {
+    //         map.insert(op.id.clone(), op.op);
+    //     }
+    //     map
+    // };
 
-    pub(crate) static ref MULTISINGLEOPS: HashMap<TypeId, MultiSingleFn> = {
-        let mut map = HashMap::new();
-        for op in crate::inventory::iter::<ReadOnlyArrayMultiSingleOps> {
-            map.insert(op.id.clone(), op.op);
-        }
-        map
-    };
+    // pub(crate) static ref MULTISINGLEOPS: HashMap<TypeId, MultiSingleFn> = {
+    //     let mut map = HashMap::new();
+    //     for op in crate::inventory::iter::<ReadOnlyArrayMultiSingleOps> {
+    //         map.insert(op.id.clone(), op.op);
+    //     }
+    //     map
+    // };
 
 }
 
@@ -46,21 +46,21 @@ pub struct ReadOnlyArrayOpBuf {
     pub op: BufFn,
 }
 
-#[doc(hidden)]
-pub struct ReadOnlyArrayMultiMultiOps {
-    pub id: TypeId,
-    pub op: MultiMultiFn,
-}
+// #[doc(hidden)]
+// pub struct ReadOnlyArrayMultiMultiOps {
+//     pub id: TypeId,
+//     pub op: MultiMultiFn,
+// }
 
-#[doc(hidden)]
-pub struct ReadOnlyArrayMultiSingleOps {
-    pub id: TypeId,
-    pub op: MultiSingleFn,
-}
+// #[doc(hidden)]
+// pub struct ReadOnlyArrayMultiSingleOps {
+//     pub id: TypeId,
+//     pub op: MultiSingleFn,
+// }
 
 crate::inventory::collect!(ReadOnlyArrayOpBuf);
-crate::inventory::collect!(ReadOnlyArrayMultiMultiOps);
-crate::inventory::collect!(ReadOnlyArrayMultiSingleOps);
+// crate::inventory::collect!(ReadOnlyArrayMultiMultiOps);
+// crate::inventory::collect!(ReadOnlyArrayMultiSingleOps);
 
 /// A safe abstraction of a distributed array, providing only read access.
 #[lamellar_impl::AmDataRT(Clone, Debug)]

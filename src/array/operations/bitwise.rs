@@ -206,7 +206,7 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
         val: impl OpInput<'a, T>,
     ) -> Pin<Box<dyn Future<Output = Vec<T>> + Send>> {
         self.inner_array()
-            .initiate_batch_fetch_op(val, index, ArrayOpCmd::FetchAnd)
+            .initiate_batch_fetch_op_2(val, index, ArrayOpCmd2::FetchAnd,self.as_lamellar_byte_array())
     }
 
     /// This call performs a bitwise `or` with the element specified by `index` and the supplied `val`.
@@ -335,7 +335,7 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
         val: impl OpInput<'a, T>,
     ) -> Pin<Box<dyn Future<Output = Vec<T>> + Send>> {
         self.inner_array()
-            .initiate_batch_fetch_op(val, index, ArrayOpCmd::FetchOr)
+            .initiate_batch_fetch_op_2(val, index, ArrayOpCmd2::FetchOr,self.as_lamellar_byte_array())
     }
 
     /// This call performs a bitwise `xor` with the element specified by `index` and the supplied `val`.
@@ -464,7 +464,7 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
         val: impl OpInput<'a, T>,
     ) -> Pin<Box<dyn Future<Output = Vec<T>> + Send>> {
         self.inner_array()
-            .initiate_batch_fetch_op(val, index, ArrayOpCmd::FetchXor)
+            .initiate_batch_fetch_op_2(val, index, ArrayOpCmd2::FetchXor,self.as_lamellar_byte_array())
     }
 }
 

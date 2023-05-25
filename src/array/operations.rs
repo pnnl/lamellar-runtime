@@ -121,7 +121,8 @@ pub enum ArrayOpCmd<T: Dist> {
     Debug,
     Copy,
 )]
-pub enum ArrayOpCmd2 {
+#[serde(bound = "T: AmDist + serde::Serialize + serde::de::DeserializeOwned")]
+pub enum ArrayOpCmd2<T: AmDist> {
     Add,
     FetchAdd,
     Sub,
@@ -143,12 +144,99 @@ pub enum ArrayOpCmd2 {
     Swap,
     Put,
     Get,
-    CompareExchange,
-    CompareExchangeEps,
+    CompareExchange(T),
+    CompareExchangeEps(T,T),
     Shl,
     FetchShl,
     Shr,
     FetchShr,
+}
+
+impl<T: Dist> From<ArrayOpCmd2<T>> for ArrayOpCmd2<Vec<u8>> {
+    fn from(cmd: ArrayOpCmd2<T>) -> Self {
+        match cmd {
+            ArrayOpCmd2::Add => ArrayOpCmd2::Add,
+            ArrayOpCmd2::FetchAdd => ArrayOpCmd2::FetchAdd,
+            ArrayOpCmd2::Sub => ArrayOpCmd2::Sub,
+            ArrayOpCmd2::FetchSub => ArrayOpCmd2::FetchSub,
+            ArrayOpCmd2::Mul => ArrayOpCmd2::Mul,
+            ArrayOpCmd2::FetchMul => ArrayOpCmd2::FetchMul,
+            ArrayOpCmd2::Div => ArrayOpCmd2::Div,
+            ArrayOpCmd2::FetchDiv => ArrayOpCmd2::FetchDiv,
+            ArrayOpCmd2::Rem => ArrayOpCmd2::Rem,
+            ArrayOpCmd2::FetchRem => ArrayOpCmd2::FetchRem,
+            ArrayOpCmd2::And => ArrayOpCmd2::And,
+            ArrayOpCmd2::FetchAnd => ArrayOpCmd2::FetchAnd,
+            ArrayOpCmd2::Or => ArrayOpCmd2::Or,
+            ArrayOpCmd2::FetchOr => ArrayOpCmd2::FetchOr,
+            ArrayOpCmd2::Xor => ArrayOpCmd2::Xor,
+            ArrayOpCmd2::FetchXor => ArrayOpCmd2::FetchXor,
+            ArrayOpCmd2::Store => ArrayOpCmd2::Store,
+            ArrayOpCmd2::Load => ArrayOpCmd2::Load,
+            ArrayOpCmd2::Swap => ArrayOpCmd2::Swap,
+            ArrayOpCmd2::Put => ArrayOpCmd2::Put,
+            ArrayOpCmd2::Get => ArrayOpCmd2::Get,
+            ArrayOpCmd2::CompareExchange(old) => {
+                let old_u8 = &old as *const T as *const u8;
+                let old_u8_vec = unsafe { std::slice::from_raw_parts(old_u8, std::mem::size_of::<T>()).to_vec() };
+                ArrayOpCmd2::CompareExchange(old_u8_vec)
+            },
+            ArrayOpCmd2::CompareExchangeEps(old,eps) => {
+                let old_u8 = &old as *const T as *const u8;
+                let old_u8_vec = unsafe { std::slice::from_raw_parts(old_u8, std::mem::size_of::<T>()).to_vec() };
+                let eps_u8 = &eps as *const T as *const u8;
+                let eps_u8_vec = unsafe { std::slice::from_raw_parts(eps_u8, std::mem::size_of::<T>()).to_vec() };
+                ArrayOpCmd2::CompareExchangeEps(old_u8_vec,eps_u8_vec)
+
+            }
+            ArrayOpCmd2::Shl => ArrayOpCmd2::Shl,
+            ArrayOpCmd2::FetchShl => ArrayOpCmd2::FetchShl,
+            ArrayOpCmd2::Shr => ArrayOpCmd2::Shr,
+            ArrayOpCmd2::FetchShr => ArrayOpCmd2::FetchShr,
+
+        }
+    }
+}
+
+impl<T: Dist> From<ArrayOpCmd2<Vec<u8>>> for ArrayOpCmd2<T> {
+    fn from(cmd: ArrayOpCmd2<Vec<u8>>) -> Self {
+        match cmd {
+            ArrayOpCmd2::Add => ArrayOpCmd2::Add,
+            ArrayOpCmd2::FetchAdd => ArrayOpCmd2::FetchAdd,
+            ArrayOpCmd2::Sub => ArrayOpCmd2::Sub,
+            ArrayOpCmd2::FetchSub => ArrayOpCmd2::FetchSub,
+            ArrayOpCmd2::Mul => ArrayOpCmd2::Mul,
+            ArrayOpCmd2::FetchMul => ArrayOpCmd2::FetchMul,
+            ArrayOpCmd2::Div => ArrayOpCmd2::Div,
+            ArrayOpCmd2::FetchDiv => ArrayOpCmd2::FetchDiv,
+            ArrayOpCmd2::Rem => ArrayOpCmd2::Rem,
+            ArrayOpCmd2::FetchRem => ArrayOpCmd2::FetchRem,
+            ArrayOpCmd2::And => ArrayOpCmd2::And,
+            ArrayOpCmd2::FetchAnd => ArrayOpCmd2::FetchAnd,
+            ArrayOpCmd2::Or => ArrayOpCmd2::Or,
+            ArrayOpCmd2::FetchOr => ArrayOpCmd2::FetchOr,
+            ArrayOpCmd2::Xor => ArrayOpCmd2::Xor,
+            ArrayOpCmd2::FetchXor => ArrayOpCmd2::FetchXor,
+            ArrayOpCmd2::Store => ArrayOpCmd2::Store,
+            ArrayOpCmd2::Load => ArrayOpCmd2::Load,
+            ArrayOpCmd2::Swap => ArrayOpCmd2::Swap,
+            ArrayOpCmd2::Put => ArrayOpCmd2::Put,
+            ArrayOpCmd2::Get => ArrayOpCmd2::Get,
+            ArrayOpCmd2::CompareExchange(old) => {
+                let old_t = unsafe { std::slice::from_raw_parts(old.as_ptr() as *const T, std::mem::size_of::<T>()) };
+                ArrayOpCmd2::CompareExchange(old_t[0])
+            },
+            ArrayOpCmd2::CompareExchangeEps(old,eps) => {
+                let old_t = unsafe { std::slice::from_raw_parts(old.as_ptr() as *const T, std::mem::size_of::<T>()) };
+                let eps_t = unsafe { std::slice::from_raw_parts(eps.as_ptr() as *const T, std::mem::size_of::<T>()) };
+                ArrayOpCmd2::CompareExchangeEps(old_t[0],eps_t[0])
+            },
+            ArrayOpCmd2::Shl => ArrayOpCmd2::Shl,
+            ArrayOpCmd2::FetchShl => ArrayOpCmd2::FetchShl,
+            ArrayOpCmd2::Shr => ArrayOpCmd2::Shr,
+            ArrayOpCmd2::FetchShr => ArrayOpCmd2::FetchShr,
+        }
+    }
 }
 
 impl<T: Dist> ArrayOpCmd<T> {
