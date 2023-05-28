@@ -245,8 +245,6 @@ pub use tracing::*;
 
 #[doc(hidden)]
 pub use async_trait;
-#[doc(hidden)]
-pub use futures;
 
 #[doc(hidden)]
 pub use futures;

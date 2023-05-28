@@ -83,7 +83,7 @@ fn main() {
         world.barrier();
         // let iter = vals.into_iter();
         timer = std::time::Instant::now();
-        array.batch_add(indices.iter(),(0..10_000_000).map(|_| 1));
+        // array.batch_add(indices.iter(),(0..10_000_000).map(|_| 1));
         if my_pe == 0 {
             println!("{:?}", timer.elapsed());
         }

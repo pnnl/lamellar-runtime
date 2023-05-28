@@ -294,10 +294,6 @@ fn create_buf_ops(
                 #res_t res_t[0] = old;
             },
             quote! { //compare_exchange
-                // println!("native atomic");
-                // if val == 4 || val == 55527435{
-                //     println!(" am i insane? {} {} {} {:?} {:?}",val,index,slice[index].load(Ordering::SeqCst),std::thread::current().id(),std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH));
-                // }
                 let old = match slice[index].compare_exchange(old, val, Ordering::SeqCst, Ordering::SeqCst) {
                     Ok(old) => {
                         results_u8[results_offset] = 0;
@@ -421,42 +417,19 @@ fn create_buf_ops(
             quote! {slice[index]},                                           //load
             quote! {#res_t res_t[0] =  slice[index]; slice[index] = val; }, //swap we lock the index before this point so its actually atomic
             quote! {  // compare_exchange -- we lock the index before this point so its actually atomic
-                // println!("old : {:?} val : {:?} s[i] {:?}", *old, val, slice[index]);
-                // println!("not native atomic, {:?}",stringify!(#array_type));
-                // let selected_val = val == 4 as #typeident || val == 55527435 as #typeident || val == 22 as #typeident || val == 290162221 as #typeident || val == 10000016 as #typeident ;
-                // if selected_val{
-                //     println!(" am i insane? val: {} index: {} old: {} cur: {} {} {:?} {:?}",val,index, old, slice[index], old == slice[index],std::thread::current().id(),std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH));
-                // }
                  let old = if old == slice[index]{
-                    // println!("the same!");
-                    // if selected_val{
-                    //     println!(" the same!!! val: {} index: {} old: {} cur: {} {} {:?} {:?}",val,index, old, slice[index], old == slice[index],std::thread::current().id(),std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH));
-                    // }
                     slice[index] = val;
                     results_u8[results_offset] = 0;
                     results_offset+=1;
                     old
                 } else {
-                    // println!("different!");
-                    // if selected_val{
-                    //     println!(" different!!! val: {} index: {} old: {} cur: {} {} {:?} {:?}",val,index, old, slice[index], old == slice[index],std::thread::current().id(),std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH));
-                    // }
                     results_u8[results_offset] = 1;
                     results_offset+=1;
                     slice[index]
                 };
-                // if selected_val{
-                //     println!(" after am i insane? val: {} index: {} old: {} cur: {} {:?} {:?}",val,index, old, slice[index],std::thread::current().id(),std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH));
-                // }
                 #res_t res_t[0] = old;
             },
             quote! { //compare exchange epsilon
-                // let same = if *old > slice[index] {
-                //     *old - slice[index] < *eps
-                // }
-                // else{
-                //     slice[index] - *old < *eps
-                // };
                 let same = if old > slice[index] {
                     old - slice[index] < eps
                 }
@@ -547,9 +520,7 @@ fn create_buf_ops(
             OpType::Bitwise => match_stmts.extend(quote! {
                 ArrayOpCmd::And=>{#lhs &= val},
                 ArrayOpCmd::FetchAnd=>{
-                    // println!("{:?} {:?}", val,#load);
                     #fetch_and
-                    // println!("{:?} {:?}\n", val,#load);
                 },
                 ArrayOpCmd::Or=>{#lhs |= val},
                 ArrayOpCmd::FetchOr=>{
@@ -607,7 +578,6 @@ fn create_buf_ops(
         let val = *val;
         #lock //this will get dropped at end of loop
         let orig = #load;
-        // println!("before op: {:?} index: {:?} val {:?} results_index {:?} orig {:?}",op,index,val,results_u8,orig);
 
         match op{
         # match_stmts
@@ -681,34 +651,25 @@ fn create_buf_ops(
 
                 buf.1 += op.to_bytes(&mut buf_slice[(buf.1)..]);
                 buf.1 += op_data.to_bytes(&mut buf_slice[(buf.1)..]);
-                // if buf.1 > #lamellar::array::OPS_BUFFER_SIZE {
-                //     println!("{} {} {}",buf.1,op_size,data_size);
-                // }
-                // buf.push((op,op_data));
-                // drop(_guard);
                 (first,self.complete.read().clone())
             }
             // #[#lamellar::tracing::instrument(skip_all)]
             fn add_fetch_ops(&self, pe: usize, op_ptr: *const u8, op_data_ptr: *const u8, req_ids: &Vec<usize>, res_map: OpResults, team: Pin<Arc<LamellarTeamRT>>) -> (bool,Arc<AtomicBool>,Option<OpResultOffsets>){
-                // println!("add_fetch_op {} {:?} {:?}",pe,std::thread::current().id(),std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH));
                 let op_data = unsafe{(&*(op_data_ptr as *const #lamellar::array::InputToValue<'_,#typeident>)).as_op_am_input()};
                 let op = unsafe{*(op_ptr as *const ArrayOpCmd<#typeident>)};
                 let mut res_offsets = vec![];
                 let mut bufs = self.ops.lock();
                 // let mut bufs = self.new_ops.lock();
-                // println!("add_fetch_op got lock {} {:?} {:?}",pe,std::thread::current().id(),std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH));
 
                 for rid in req_ids{
                     let res_size = op.result_size();
                     res_offsets.push((*rid,self.results_offset.read().fetch_add(res_size,Ordering::SeqCst),res_size));
                 }
-                // println!("{:?}",res_offsets);
                 // let first = buf.len() == 0;
                 // buf.push((op,op_data));
                 let first = bufs.len() == 0;
                 let op_size = op.num_bytes();
                 let data_size = op_data.num_bytes();
-                // println!("add_fetch_ops {:?} {:?}",op_size,data_size);
                 if first {
                     // bufs.push((team.alloc_one_sided_mem_region(std::cmp::max(#lamellar::array::OPS_BUFFER_SIZE, op_size+data_size)),0));
                     let mut v = Vec::with_capacity(std::cmp::max(#lamellar::array::OPS_BUFFER_SIZE, op_size+data_size));
@@ -717,7 +678,6 @@ fn create_buf_ops(
                 }
                 else {
                     if bufs.last().unwrap().1 + op_size+data_size > #lamellar::array::OPS_BUFFER_SIZE{
-                        // println!("here");
                         // bufs.push((team.alloc_one_sided_mem_region(std::cmp::max(#lamellar::array::OPS_BUFFER_SIZE, op_size+data_size)),0));
                         let mut v = Vec::with_capacity(std::cmp::max(#lamellar::array::OPS_BUFFER_SIZE, op_size+data_size));
                         unsafe {v.set_len(std::cmp::max(#lamellar::array::OPS_BUFFER_SIZE, op_size+data_size));}
@@ -733,23 +693,17 @@ fn create_buf_ops(
                 buf.1 += op.to_bytes(&mut buf_slice[(buf.1)..]);
                 buf.1 += op_data.to_bytes(&mut buf_slice[(buf.1)..]);
                 res_map.insert(pe,self.results.read().clone());
-                // println!("add_fetch_op leaving {} {:?} {:?} {:?} {:?}",pe,std::thread::current().id(),std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH),res_offsets[0],res_offsets.last());
                 (first,self.complete.read().clone(),Some(res_offsets))
             }
             // #[#lamellar::tracing::instrument(skip_all)]
             fn into_arc_am(&self, pe: usize, sub_array: std::ops::Range<usize>)-> (Vec<Arc<dyn RemoteActiveMessage + Sync + Send>>,usize,Arc<AtomicBool>, PeOpResults){
-                // println!("into arc am {:?}",stringify!(#am_buf_name));
-                // println!("into_arc_am {} {:?} {:?}",pe,std::thread::current().id(),std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH));
-
+              
                 let mut ams: Vec<Arc<dyn RemoteActiveMessage + Sync + Send>> = Vec::new();
                 // let mut bufs = self.new_ops.lock();
                 let mut bufs = self.ops.lock();
-                // println!("into_arc_am got lock {} {:?} {:?}",pe,std::thread::current().id(),std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH));
 
-                // println!("buf len {:?}",bufs.len());
                 let mut ops = Vec::new();
                 let len = self.cur_len.load(Ordering::SeqCst);
-                // println!("into_arc_am: cur_len {}",len);
                 self.cur_len.store(0,Ordering::SeqCst);
                 std::mem::swap(&mut ops,  &mut bufs);
                 let mut complete = Arc::new(AtomicBool::new(false));
@@ -774,7 +728,6 @@ fn create_buf_ops(
                     };
                     ams.push(Arc::new(am));
                 }
-                // println!("into_arc_am leaving {} num_ams {} {:?} {:?}",pe,ams.len(),std::thread::current().id(),std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH));
 
                 (ams,len,complete,results)
             }
@@ -782,7 +735,6 @@ fn create_buf_ops(
 
         impl #am_buf_name{
             // async fn get_ops(&self, team: &std::sync::Arc<#lamellar::LamellarTeam>) -> #lamellar::OneSidedMemoryRegion<u8>{
-            //     // println!("get_ops {:?}",self.ops2.len());
             //     unsafe{
             //         let serialized_ops = if self.ops2.data_local(){
             //             self.ops2.clone()
@@ -819,7 +771,6 @@ fn create_buf_ops(
         impl LamellarAM for #am_buf_name{ //eventually we can return fetchs here too...
             async fn exec(&self) -> Vec<u8>{
                 // let timer=std::time::Instant::now();
-                // println!("trying to get lock {:?} {:?}",std::thread::current().id(),std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH));
                 #slice
                 let u8_len = self.res_buf_size;
                 let mut results_u8: Vec<u8> = if u8_len > 0 {
@@ -831,12 +782,10 @@ fn create_buf_ops(
                     vec![]
                 };
                 let mut results_offset=0;
-                // println!("{:?} {:?} {:?}",results_u8.len(),u8_len,results_offset);
                 // let mut results_slice = unsafe{std::slice::from_raw_parts_mut(results_u8.as_mut_ptr() as *mut #typeident,self.num_fetch_ops)};
                 // let local_ops = self.get_ops(&lamellar::team).await;
                 // let local_ops_slice = local_ops.as_slice().unwrap();
                 let local_ops_slice = &self.ops;
-                // println!("local_ops_slice size: {:?}",local_ops_slice.len());
                 let mut cur_index = 0;
                 while cur_index <  local_ops_slice.len(){
                     let (bytes_read,(op,ops)) = self.get_op(&local_ops_slice[cur_index..]);
@@ -853,13 +802,11 @@ fn create_buf_ops(
                             }
                         },
                         RemoteOpAmInputToValue::ManyToOne(indices,val) => {
-                            // println!("many to one: indices: {:?} {:?}",indices.len(),val);
                             for index in indices{
                                 #inner_op
                             }
                         },
                         RemoteOpAmInputToValue::ManyToMany(indices,vals) => {
-                            // println!("starting index {:?} end index {:?} =--{:?} {:?}",vals[0], vals[vals.len()-1],vals.len(),indices.len());
                             for (index,val) in indices.iter().zip(vals.iter()){
                                 #inner_op
                             }
@@ -891,8 +838,6 @@ fn create_buf_ops(
                 //     }
                 // }
                 unsafe { results_u8.set_len(results_offset)};
-                // println!("elapsed: {:?}", timer.elapsed().as_secs_f64());
-                // println!("{:?} {:?} {:?} {:?}",results_u8.len(),u8_len,results_offset,results_u8);
                 results_u8
             }
         }
@@ -1062,29 +1007,12 @@ fn create_buf_ops2(
                 res.push(old);
             },
             quote! { //compare_exchange
-                // println!("native atomic");
-                // if val == 4 || val == 55527435{
-                //     println!(" am i insane? {} {} {} {:?} {:?}",val,index,slice[index].load(Ordering::SeqCst),std::thread::current().id(),std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH));
-                // }
-                let t_res = match slice[index].compare_exchange(old, val, Ordering::SeqCst, Ordering::SeqCst) {
-                    Ok(old) => {
-                        // results_u8[results_offset] = 0;
-                        // results_offset+=1;
-                        Ok(old)
-                    },
-                    Err(old) => {
-                        // results_u8[results_offset] = 1;
-                        // results_offset+=1;
-                        Err(old)
-                    },
-                };
+                let t_res = slice[index].compare_exchange(old, val, Ordering::SeqCst, Ordering::SeqCst);
                 res.push(t_res);
             },
             quote! { //compare exchange epsilon
                 let t_res = match slice[index].compare_exchange(old, val, Ordering::SeqCst, Ordering::SeqCst) {
                     Ok(orig) => { //woohoo dont need to do worry about the epsilon
-                        // results_u8[results_offset] = 0;
-                        // results_offset+=1;
                         Ok(val)
                     },
                     Err(orig) => { //we dont match exactly, so we need to do the epsilon check
@@ -1204,43 +1132,15 @@ fn create_buf_ops2(
                 res.push(slice[index]); slice[index] = val; 
             }, //swap we lock the index before this point so its actually atomic
             quote! {  // compare_exchange -- we lock the index before this point so its actually atomic
-                // println!("old : {:?} val : {:?} s[i] {:?}", *old, val, slice[index]);
-                // println!("not native atomic, {:?}",stringify!(#array_type));
-                // let selected_val = val == 4 as #typeident || val == 55527435 as #typeident || val == 22 as #typeident || val == 290162221 as #typeident || val == 10000016 as #typeident ;
-                // if selected_val{
-                //     println!(" am i insane? val: {} index: {} old: {} cur: {} {} {:?} {:?}",val,index, old, slice[index], old == slice[index],std::thread::current().id(),std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH));
-                // }
                  let t_res = if old == slice[index]{
-                    // println!("the same!");
-                    // if selected_val{
-                    //     println!(" the same!!! val: {} index: {} old: {} cur: {} {} {:?} {:?}",val,index, old, slice[index], old == slice[index],std::thread::current().id(),std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH));
-                    // }
                     slice[index] = val;
-                    // results_u8[results_offset] = 0;
-                    // results_offset+=1;
                     Ok(old)
                 } else {
-                    // println!("different!");
-                    // if selected_val{
-                    //     println!(" different!!! val: {} index: {} old: {} cur: {} {} {:?} {:?}",val,index, old, slice[index], old == slice[index],std::thread::current().id(),std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH));
-                    // }
-                    // results_u8[results_offset] = 1;
-                    // results_offset+=1;
                     Err(slice[index])
                 };
                 res.push(t_res);
-                // if selected_val{
-                //     println!(" after am i insane? val: {} index: {} old: {} cur: {} {:?} {:?}",val,index, old, slice[index],std::thread::current().id(),std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH));
-                // }
-                // #res_t res_t[0] = old;
             },
             quote! { //compare exchange epsilon
-                // let same = if *old > slice[index] {
-                //     *old - slice[index] < *eps
-                // }
-                // else{
-                //     slice[index] - *old < *eps
-                // };
                 let same = if old > slice[index] {
                     old - slice[index] < eps
                 }
@@ -1249,12 +1149,8 @@ fn create_buf_ops2(
                 };
                 let t_res = if same {
                     slice[index] = val;
-                    // results_u8[results_offset] = 0;
-                    // results_offset+=1;
                     Ok(old)
                 } else {
-                    // results_u8[results_offset] = 1;
-                    // results_offset+=1;
                     Err(slice[index])
                 };
                 res.push(t_res);
@@ -1398,10 +1294,8 @@ fn create_buf_ops2(
     for  (match_stmts, gen_fn) in all_match_stmts.iter_mut() {
         for optype in optypes {
             match optype {
-                OpType::CompEx =>  {
-                    match_stmts.extend(gen_fn(quote! {ArrayOpCmd2::CompareExchange(old)},&lock,compare_exchange.clone()));
-                    match_stmts.extend(gen_fn(quote! {ArrayOpCmd2::CompareExchangeEps(old,eps)},&lock,compare_exchange_eps.clone()));
-                },
+                OpType::CompEx =>  match_stmts.extend(gen_fn(quote! {ArrayOpCmd2::CompareExchange(old)},&lock,compare_exchange.clone())),
+                OpType::CompExEps =>  match_stmts.extend(gen_fn(quote! {ArrayOpCmd2::CompareExchangeEps(old,eps)},&lock,compare_exchange_eps.clone())),
                 _ => {} //current only ops that return results are CompEx, CompExEps
             }
         }
@@ -1536,7 +1430,6 @@ fn create_buf_ops2(
                     #slice
                     let vals = unsafe {std::slice::from_raw_parts(self.vals.as_ptr() as *const #typeident, self.vals.len()/std::mem::size_of::<#typeident>())};
                     let index = self.index;
-                    // println!("index {:?}", index);
                     match self.op {
                         #multi_val_single_idx_match_stmts
                     }
@@ -1560,118 +1453,120 @@ fn create_buf_ops2(
         });
 
         // ops that return a result
-        expanded.extend(quote! {
-            #[#am_data(Debug)]
-            struct #multi_val_multi_idx_am_buf_result_name{
-                data: #lamellar::array::#array_type<#typeident>,
-                op: #lamellar::array::ArrayOpCmd2<#typeident>,
-                idx_vals: Vec<u8>,
-            }
-            #[#am]
-            impl LamellarAM for #multi_val_multi_idx_am_buf_result_name{ //eventually we can return fetchs here too...
-                async fn exec(&self) -> Vec<Result<#typeident,#typeident>> {
-                    #slice
-                    let idx_vals = unsafe {std::slice::from_raw_parts(self.idx_vals.as_ptr() as *const IdxVal<#typeident>, self.idx_vals.len()/std::mem::size_of::<IdxVal<#typeident>>())};
-                    let mut res = Vec::new();
-                    match self.op {
-                        #multi_val_multi_idx_result_match_stmts
+        if optypes.contains(&OpType::CompEx) || optypes.contains(&OpType::CompExEps){
+            expanded.extend(quote! {
+                #[#am_data(Debug)]
+                struct #multi_val_multi_idx_am_buf_result_name{
+                    data: #lamellar::array::#array_type<#typeident>,
+                    op: #lamellar::array::ArrayOpCmd2<#typeident>,
+                    idx_vals: Vec<u8>,
+                }
+                #[#am]
+                impl LamellarAM for #multi_val_multi_idx_am_buf_result_name{ //eventually we can return fetchs here too...
+                    async fn exec(&self) -> Vec<Result<#typeident,#typeident>> {
+                        #slice
+                        let idx_vals = unsafe {std::slice::from_raw_parts(self.idx_vals.as_ptr() as *const IdxVal<#typeident>, self.idx_vals.len()/std::mem::size_of::<IdxVal<#typeident>>())};
+                        let mut res = Vec::new();
+                        match self.op {
+                            #multi_val_multi_idx_result_match_stmts
+                        }
+                        res
                     }
-                    res
                 }
-            }
-            #[allow(non_snake_case)]
-            fn #dist_multi_val_multi_idx_am_buf_result_name(array: #lamellar::array::LamellarByteArray, op: #lamellar::array::ArrayOpCmd2<Vec<u8>>, idx_vals: Vec<u8>) -> Arc<dyn RemoteActiveMessage + Sync + Send>{
-                    Arc::new(#multi_val_multi_idx_am_buf_result_name{
-                        data: array.into(),
-                        op: op.into(),
-                        idx_vals: idx_vals,
-                    })
-            }
-            inventory::submit! {
-                #lamellar::array::#multi_val_multi_idx_reg_name{
-                    id: (std::any::TypeId::of::<#byte_array_type>(),std::any::TypeId::of::<#typeident>(),#lamellar::array::BatchReturnType::Result),
-                    op: #dist_multi_val_multi_idx_am_buf_result_name,
+                #[allow(non_snake_case)]
+                fn #dist_multi_val_multi_idx_am_buf_result_name(array: #lamellar::array::LamellarByteArray, op: #lamellar::array::ArrayOpCmd2<Vec<u8>>, idx_vals: Vec<u8>) -> Arc<dyn RemoteActiveMessage + Sync + Send>{
+                        Arc::new(#multi_val_multi_idx_am_buf_result_name{
+                            data: array.into(),
+                            op: op.into(),
+                            idx_vals: idx_vals,
+                        })
                 }
-            }
+                inventory::submit! {
+                    #lamellar::array::#multi_val_multi_idx_reg_name{
+                        id: (std::any::TypeId::of::<#byte_array_type>(),std::any::TypeId::of::<#typeident>(),#lamellar::array::BatchReturnType::Result),
+                        op: #dist_multi_val_multi_idx_am_buf_result_name,
+                    }
+                }
 
-            #[#am_data(Debug)]
-            struct #single_val_multi_idx_am_buf_result_name{
-                data: #lamellar::array::#array_type<#typeident>,
-                op: #lamellar::array::ArrayOpCmd2<#typeident>,
-                val: #typeident,
-                indices: Vec<usize>,
-                
-            }
-            #[#am]
-            impl LamellarAM for #single_val_multi_idx_am_buf_result_name{ //eventually we can return fetchs here too...
-                async fn exec(&self) -> Vec<Result<#typeident,#typeident>> {
-                    #slice
-                    let val = self.val;
-                    let mut res = Vec::new();
-                    match self.op {
-                        #single_val_multi_idx_result_match_stmts
+                #[#am_data(Debug)]
+                struct #single_val_multi_idx_am_buf_result_name{
+                    data: #lamellar::array::#array_type<#typeident>,
+                    op: #lamellar::array::ArrayOpCmd2<#typeident>,
+                    val: #typeident,
+                    indices: Vec<usize>,
+                    
+                }
+                #[#am]
+                impl LamellarAM for #single_val_multi_idx_am_buf_result_name{ //eventually we can return fetchs here too...
+                    async fn exec(&self) -> Vec<Result<#typeident,#typeident>> {
+                        #slice
+                        let val = self.val;
+                        let mut res = Vec::new();
+                        match self.op {
+                            #single_val_multi_idx_result_match_stmts
+                        }
+                        res
                     }
-                    res
                 }
-            }
-            #[allow(non_snake_case)]
-            fn #dist_single_val_multi_idx_am_buf_result_name(array: #lamellar::array::LamellarByteArray, op: #lamellar::array::ArrayOpCmd2<Vec<u8>>, val: Vec<u8>, indicies: Vec<usize>) -> Arc<dyn RemoteActiveMessage + Sync + Send>{
-                    let val_slice = unsafe {std::slice::from_raw_parts(val.as_ptr() as *const #typeident, std::mem::size_of::<#typeident>())};
-                    let val = val_slice[0];
-                    Arc::new(#single_val_multi_idx_am_buf_result_name{
-                        data: array.into(),
-                        op: op.into(),
-                        val: val,
-                        indices: indicies,
-                    })
-            }
-            inventory::submit! {
-                #lamellar::array::#single_val_multi_idx_reg_name{
-                    id: (std::any::TypeId::of::<#byte_array_type>(),std::any::TypeId::of::<#typeident>(),#lamellar::array::BatchReturnType::Result),
-                    op: #dist_single_val_multi_idx_am_buf_result_name,
+                #[allow(non_snake_case)]
+                fn #dist_single_val_multi_idx_am_buf_result_name(array: #lamellar::array::LamellarByteArray, op: #lamellar::array::ArrayOpCmd2<Vec<u8>>, val: Vec<u8>, indicies: Vec<usize>) -> Arc<dyn RemoteActiveMessage + Sync + Send>{
+                        let val_slice = unsafe {std::slice::from_raw_parts(val.as_ptr() as *const #typeident, std::mem::size_of::<#typeident>())};
+                        let val = val_slice[0];
+                        Arc::new(#single_val_multi_idx_am_buf_result_name{
+                            data: array.into(),
+                            op: op.into(),
+                            val: val,
+                            indices: indicies,
+                        })
                 }
-            }
+                inventory::submit! {
+                    #lamellar::array::#single_val_multi_idx_reg_name{
+                        id: (std::any::TypeId::of::<#byte_array_type>(),std::any::TypeId::of::<#typeident>(),#lamellar::array::BatchReturnType::Result),
+                        op: #dist_single_val_multi_idx_am_buf_result_name,
+                    }
+                }
 
-            #[#am_data(Debug)]
-            struct #multi_val_single_idx_am_buf_result_name{
-                data: #lamellar::array::#array_type<#typeident>,
-                op: #lamellar::array::ArrayOpCmd2<#typeident>,
-                vals: Vec<u8>,
-                index: usize,
-                
-            }
-            #[#am]
-            impl LamellarAM for #multi_val_single_idx_am_buf_result_name{ //eventually we can return fetchs here too...
-                async fn exec(&self) -> Vec<Result<#typeident,#typeident>>  {
-                    #slice
-                    let vals = unsafe {std::slice::from_raw_parts(self.vals.as_ptr() as *const #typeident, self.vals.len()/std::mem::size_of::<#typeident>())};
-                    let index = self.index;
-                    // println!("index {:?}", index);
-                    let mut res = Vec::new();
-                    match self.op {
-                        #multi_val_single_idx_result_match_stmts
+                #[#am_data(Debug)]
+                struct #multi_val_single_idx_am_buf_result_name{
+                    data: #lamellar::array::#array_type<#typeident>,
+                    op: #lamellar::array::ArrayOpCmd2<#typeident>,
+                    vals: Vec<u8>,
+                    index: usize,
+                    
+                }
+                #[#am]
+                impl LamellarAM for #multi_val_single_idx_am_buf_result_name{ //eventually we can return fetchs here too...
+                    async fn exec(&self) -> Vec<Result<#typeident,#typeident>>  {
+                        #slice
+                        let vals = unsafe {std::slice::from_raw_parts(self.vals.as_ptr() as *const #typeident, self.vals.len()/std::mem::size_of::<#typeident>())};
+                        let index = self.index;
+                        let mut res = Vec::new();
+                        match self.op {
+                            #multi_val_single_idx_result_match_stmts
+                        }
+                        res
                     }
-                    res
                 }
-            }
-            #[allow(non_snake_case)]
-            fn #dist_multi_val_single_idx_am_buf_result_name(array: #lamellar::array::LamellarByteArray, op: #lamellar::array::ArrayOpCmd2<Vec<u8>>, vals: Vec<u8>, index: usize) -> Arc<dyn RemoteActiveMessage + Sync + Send>{
-                    Arc::new(#multi_val_single_idx_am_buf_result_name{
-                        data: array.into(),
-                        op: op.into(),
-                        vals: vals,
-                        index: index,
-                    })
-            }
-            inventory::submit! {
-                #lamellar::array::#multi_val_single_idx_reg_name{
-                    id: (std::any::TypeId::of::<#byte_array_type>(),std::any::TypeId::of::<#typeident>(),#lamellar::array::BatchReturnType::Result),
-                    op: #dist_multi_val_single_idx_am_buf_result_name,
+                #[allow(non_snake_case)]
+                fn #dist_multi_val_single_idx_am_buf_result_name(array: #lamellar::array::LamellarByteArray, op: #lamellar::array::ArrayOpCmd2<Vec<u8>>, vals: Vec<u8>, index: usize) -> Arc<dyn RemoteActiveMessage + Sync + Send>{
+                        Arc::new(#multi_val_single_idx_am_buf_result_name{
+                            data: array.into(),
+                            op: op.into(),
+                            vals: vals,
+                            index: index,
+                        })
                 }
-            }
-        });
+                inventory::submit! {
+                    #lamellar::array::#multi_val_single_idx_reg_name{
+                        id: (std::any::TypeId::of::<#byte_array_type>(),std::any::TypeId::of::<#typeident>(),#lamellar::array::BatchReturnType::Result),
+                        op: #dist_multi_val_single_idx_am_buf_result_name,
+                    }
+                }
+            });
+        }
     }
     //ops that return a value
+
     expanded.extend(quote! {
         #[#am_data(Debug)]
         struct #multi_val_multi_idx_am_buf_fetch_name{
@@ -1758,7 +1653,6 @@ fn create_buf_ops2(
                 #slice
                 let vals = unsafe {std::slice::from_raw_parts(self.vals.as_ptr() as *const #typeident, self.vals.len()/std::mem::size_of::<#typeident>())};
                 let index = self.index;
-                // println!("index {:?}", index);
                 let mut res = Vec::new();
                 match self.op {
                     #multi_val_single_idx_fetch_match_stmts
@@ -1788,7 +1682,7 @@ fn create_buf_ops2(
     expanded
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, std::cmp::PartialEq)]
 enum OpType {
     Arithmetic,
     Bitwise,
@@ -1905,10 +1799,17 @@ fn create_buffered_ops(
             use __lamellar::darc::prelude::*;
             use __lamellar::array::{
                 ArrayOpCmd,
+                ArrayOpCmd2,
                 OpResultOffsets,
                 RemoteOpAmInputToValue,
                 PeOpResults,
                 OpResults,
+                IdxVal,
+                ReadOnlyByteArray,
+                UnsafeByteArray,
+                LocalLockByteArray,
+                GlobalLockByteArray,
+                GenericAtomicByteArray,
             };
             use __lamellar::active_messaging::RemoteActiveMessage;
 

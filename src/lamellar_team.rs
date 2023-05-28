@@ -1398,6 +1398,7 @@ impl LamellarTeamRT {
             world_outstanding_reqs: self.world_counters.outstanding_reqs.clone(),
             tg_outstanding_reqs: tg_outstanding_reqs.clone(),
             user_handle: AtomicBool::new(true),
+            scheduler: self.scheduler.clone(),
         });
         let req_result = Arc::new(LamellarRequestResult { req: req.clone() });
         let req_ptr = Arc::into_raw(req_result);

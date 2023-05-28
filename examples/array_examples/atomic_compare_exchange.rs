@@ -28,6 +28,7 @@ fn main() {
     array.wait_all();
     array.barrier();
 
+    // array.print();
     for i in 0..array.len() {
         let mut fail_cnt = 0;
         let old = my_pe;
