@@ -1,5 +1,5 @@
 #!/bin/bash
-rm -r /dev/shm/lamellar_*  2> /dev/null #cleanup incase any previous run failed unexpectedly
+rm -rf /dev/shm/lamellar_*  2> /dev/null #cleanup incase any previous run failed unexpectedly
 
 NUMPES=1
 NPROC=`nproc --all`

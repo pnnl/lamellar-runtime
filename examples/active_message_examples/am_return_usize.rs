@@ -10,6 +10,7 @@ use lamellar::active_messaging::prelude::*;
 #[lamellar::AmData(Debug, Clone)]
 struct AmReturnUsize {
     val1: usize,
+    #[AmGroup(static)]
     val2: String,
 }
 
@@ -57,9 +58,17 @@ fn main() {
         println!("PE[{:?}] return result: {:?}", my_pe, res);
         println!("-----------------------------------");
         println!("Testing all am");
-        let res = world.block_on(world.exec_am_all(am));
+        let res = world.block_on(world.exec_am_all(am.clone()));
         assert_eq!(res, (0..num_pes).collect::<Vec<usize>>());
         println!("PE[{:?}] return result: {:?}", my_pe, res);
         println!("---------------------------------------------------------------");
     }
+
+    let mut am_group = typed_am_group!(AmReturnUsize, world.clone());
+    am_group.add_am_all(am.clone());
+    am_group.add_am_pe(0, am.clone());
+    world.block_on(am_group.exec());
+
+    world.barrier();
+
 }

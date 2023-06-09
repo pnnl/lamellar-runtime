@@ -236,6 +236,10 @@ pub extern crate serde;
 #[doc(hidden)]
 pub use serde::*;
 
+// #[doc(hidden)]
+pub extern crate serde_with;
+// pub use serde_with::*;
+
 #[doc(hidden)]
 pub extern crate tracing;
 #[doc(hidden)]
@@ -283,7 +287,7 @@ pub use crate::lamellar_arch::{BlockedArch, IdError, LamellarArch, StridedArch};
 #[doc(hidden)]
 pub use crate::lamellar_request::LamellarRequest;
 pub use crate::lamellar_task_group::{
-    AmGroup, AmGroupReqs, AmGroupResult, LamellarTaskGroup, TypedAmGroupResult,
+    AmGroup, /*AmGroupReqs,*/ AmGroupResult, LamellarTaskGroup, TypedAmGroupResult, TypedAmGroupUnitResult, TypedAmGroupValResult
 };
 pub use crate::lamellar_team::LamellarTeam;
 #[doc(hidden)]

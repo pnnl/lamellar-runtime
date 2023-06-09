@@ -6,6 +6,16 @@ mod replace;
 mod array_ops;
 mod array_reduce;
 
+mod gen_am;
+mod gen_am_group;
+
+mod field_info;
+
+use crate::gen_am::create_am_struct;
+use crate::gen_am_group::create_am_group_structs;
+
+use field_info::FieldInfo;
+
 // use crate::replace::LamellarDSLReplace;
 // use crate::replace::SelfReplace;
 
@@ -17,6 +27,8 @@ use proc_macro_error::{abort, proc_macro_error};
 use quote::{quote, quote_spanned, ToTokens};
 use syn::parse_macro_input;
 use syn::spanned::Spanned;
+use syn::punctuated::Punctuated;
+use syn::Meta;
 // use syn::visit_mut::VisitMut;
 use syn::parse::{Parse, ParseStream, Result};
 use syn::Token;
@@ -47,7 +59,7 @@ fn get_impl_associated_type(name: String, tys: &Vec<syn::ImplItem>) -> Option<sy
 fn get_return_of_method(name: String, tys: &Vec<syn::ImplItem>) -> Option<syn::Type> {
     for ty in tys {
         match ty {
-            syn::ImplItem::Method(ref item) => {
+            syn::ImplItem::Fn(ref item) => {
                 if item.sig.asyncness.is_some() {
                     if item.sig.ident.to_string() == name {
                         match item.sig.output.clone() {
@@ -72,7 +84,7 @@ fn get_return_of_method(name: String, tys: &Vec<syn::ImplItem>) -> Option<syn::T
 fn get_impl_method(name: String, tys: &Vec<syn::ImplItem>) -> Option<syn::Block> {
     for ty in tys {
         match ty {
-            syn::ImplItem::Method(ref item) => {
+            syn::ImplItem::Fn(ref item) => {
                 if item.sig.ident.to_string() == name {
                     return Some(item.block.clone());
                 }
@@ -85,11 +97,22 @@ fn get_impl_method(name: String, tys: &Vec<syn::ImplItem>) -> Option<syn::Block>
 
 fn get_expr(stmt: &syn::Stmt) -> Option<syn::Expr> {
     let expr = match stmt {
-        syn::Stmt::Semi(expr, _semi) => match expr.clone() {
-            syn::Expr::Return(expr) => Some(*(expr.expr.unwrap())),
-            _ => None,
+        syn::Stmt::Expr(expr, semi) => {
+            match expr.clone() {
+                syn::Expr::Return(expr) => Some(*(expr.expr.unwrap())),
+                _=> {
+                    if semi.is_some() {
+                        None
+                    }
+                    else {
+                        Some(expr.clone())
+                    }
+                }
+            }
         },
-        syn::Stmt::Expr(expr) => Some(expr.clone()),
+        syn::Stmt::Macro(_) => {
+            panic!("we currently do not support macros in return position, assign macro output to a variable, and return the variable");
+        }
         _ => {
             println!("something else!");
             None
@@ -188,9 +211,6 @@ fn replace_self_new(fn_block: syn::Block, id: &str) -> syn::Block {
         }
         new_token_string += s;
     }
-
-    // let mut new_token_string = token_string.replace("self",id);
-    // let mut new_token_string = token_string.replace("self",id);
     match syn::parse_str(&new_token_string) {
         Ok(fn_block) => fn_block,
         Err(_) => {
@@ -201,6 +221,8 @@ fn replace_self_new(fn_block: syn::Block, id: &str) -> syn::Block {
     }
 }
 
+
+#[derive(Clone)]
 enum AmType {
     NoReturn,
     ReturnData(syn::Type),
@@ -557,9 +579,6 @@ fn generate_am(
         let stmts = exec_fn.stmts;
 
         for stmt in stmts {
-            // let new_stmt = replace_lamellar_dsl(stmt.clone());
-            // let new_stmt = stmt.clone();
-            // let new_stmt = replace_self(new_stmt,quote::format_ident!("am"));
             temp.extend(quote_spanned! {stmt.span()=>
                 #stmt
             });
@@ -1048,23 +1067,35 @@ fn generate_am(
     }
 }
 
+
+
 fn process_fields(
-    args: syn::AttributeArgs,
+    args: Punctuated<syn::Meta, syn::Token![,]>,
     the_fields: &mut syn::Fields,
-    crate_header: String,
+    lamellar: &proc_macro2::TokenStream,
     local: bool,
     group: bool,
 ) -> (
     proc_macro2::TokenStream,
     proc_macro2::TokenStream,
-    proc_macro2::TokenStream,
-    proc_macro2::TokenStream,
-    proc_macro2::TokenStream,
+    FieldInfo,
+    FieldInfo,
 ) {
-    let lamellar = quote::format_ident!("{}", crate_header.clone());
-    let mut fields = quote! {};
-    let mut ser = quote! {};
-    let mut des = quote! {};
+    // let lamellar = quote::format_ident!("{}", crate_header.clone());
+    // let mut fields = quote! {};
+    // let mut ser = quote! {};
+    // let mut des = quote! {};
+    // let mut fnames: Vec<syn::Ident> = Vec::new();
+    // let mut ftypes: Vec<syn::Type> = Vec::new();
+
+    let mut fields = FieldInfo::new();
+    let mut static_fields = FieldInfo::new();
+
+    // let mut am_group_static_fields = quote! {};
+    // let mut static_ser = quote! {};
+    // let mut static_des = quote! {};
+    // let mut static_names: Vec<syn::Ident> = Vec::new();
+    // let mut static_types: Vec<syn::Type> = Vec::new();
 
     // println!("process_fields: {local:?} {group:?} ");
 
@@ -1072,140 +1103,187 @@ fn process_fields(
         if let syn::Type::Path(ref ty) = field.ty {
             if let Some(_seg) = ty.path.segments.first() {
                 if local {
-                    fields.extend(quote_spanned! {field.span()=>
-                        #field,
-                    });
-                } else if group {
-                    // println!("process fields in group 0");
+                    fields.add_field(field.clone(),false);
+                    // fields.extend(quote_spanned! {field.span()=>
+                    //     #field,
+                    // });
+                } 
+                // else if group {
+                //     // println!("process fields in group 0");
+                //     let field_name = field.ident.clone();
+                //     if &field_name.clone().unwrap().to_string() == "ams" {
+                //         ser.extend(quote_spanned! {field.span()=>
+                //             for e in (&self.ams[self.si..self.ei]).iter(){
+                //                 e.ser(num_pes,darcs);
+                //             }
+                //         });
+                //         des.extend(quote_spanned! {field.span()=>
+                //             for e in (&self.ams[self.si..self.ei]).iter(){
+                //                 e.des(cur_pe);
+                //             }
+                //         });
+                //     }
+                //     fields.extend(quote_spanned! {field.span()=>
+                //         #field,
+                //     });
+                // }
+                else {
                     let field_name = field.ident.clone();
-                    if &field_name.clone().unwrap().to_string() == "ams" {
-                        ser.extend(quote_spanned! {field.span()=>
-                            for e in (&self.ams[self.si..self.ei]).iter(){
-                                e.ser(num_pes,darcs);
-                            }
-                        });
-                        des.extend(quote_spanned! {field.span()=>
-                            for e in (&self.ams[self.si..self.ei]).iter(){
-                                e.des(cur_pe);
-                            }
-                        });
-                    }
-                    fields.extend(quote_spanned! {field.span()=>
-                        #field,
-                    });
-                } else {
-                    let field_name = field.ident.clone();
-                    let darc_iter = field
-                        .attrs
+    
+                    let mut static_field = false;
+                    let attrs = field.attrs.iter().filter_map(|a| {
+                        if a.to_token_stream().to_string().contains("#[AmGroup(static)]") {
+                            static_field = true;
+                            None
+                        }
+                        else {
+                            Some(a.clone())
+                        }
+                    }).collect::<Vec<_>>();
+
+                    let mut darc_iter = false;
+                    let attrs = attrs
                         .iter()
                         .filter_map(|a| {
                             if a.to_token_stream().to_string().contains("#[Darc(iter)]") {
+                                darc_iter = true;
                                 None
                             } else {
                                 Some(a.clone())
                             }
                         })
                         .collect::<Vec<_>>();
-                    if darc_iter.len() < field.attrs.len() {
-                        ser.extend(quote_spanned! {field.span()=>
-                            for e in (&self.#field_name).iter(){
-                                e.ser(num_pes,darcs);
-                            }
-                        });
-                        des.extend(quote_spanned! {field.span()=>
-                            for e in (&self.#field_name).iter(){
-                                e.des(cur_pe);
-                            }
-                        });
-                    } else {
-                        ser.extend(quote_spanned! {field.span()=>
-                            (&self.#field_name).ser(num_pes,darcs);
-                        });
-                        des.extend(quote_spanned! {field.span()=>
-                            (&self.#field_name).des(cur_pe);
-                        });
+                    field.attrs = attrs;
+                    if static_field{
+                        static_fields.add_field(field.clone(),darc_iter);
                     }
-                    field.attrs = darc_iter;
-                    fields.extend(quote_spanned! {field.span()=>
-                        #field,
-                    });
+                    else {
+                        fields.add_field(field.clone(),darc_iter);
+                    }
+                    // let (field_ser, field_des) = if darc_iter {
+                    //     let mut field_ser = quote! {};
+                    //     let mut field_des = quote! {};
+                    //     field_ser.extend(quote_spanned! {field.span()=>
+                    //         for e in (&self.#field_name).iter(){
+                    //             e.ser(num_pes,darcs);
+                    //         }
+                    //     });
+                    //     field_des.extend(quote_spanned! {field.span()=>
+                    //         for e in (&self.#field_name).iter(){
+                    //             e.des(cur_pe);
+                    //         }
+                    //     });
+                    //     (field_ser, field_des)
+                    // } else {
+                    //     let mut field_ser = quote! {};
+                    //     let mut field_des = quote! {};
+                    //     field_ser.extend(quote_spanned! {field.span()=>
+                    //         (&self.#field_name).ser(num_pes,darcs);
+                    //     });
+                    //     field_des.extend(quote_spanned! {field.span()=>
+                    //         (&self.#field_name).des(cur_pe);
+                    //     });
+                    //     (field_ser, field_des)
+                    // };
+                    // if static_field {
+                    //     am_group_static_fields.extend(quote_spanned! {field.span()=> #field,});
+                    //     static_ser.extend(quote_spanned! {field.span()=>  #field_ser});
+                    //     static_des.extend(quote_spanned! {field.span()=>  #field_des});
+                    //     static_names.push(field.ident.clone().unwrap());
+                    //     static_types.push(field.ty.clone());
+                    // }
+                    // else {
+                    //     fields.extend(quote_spanned! {field.span()=> #field,});
+                    //     ser.extend(quote_spanned! {field.span()=>  #field_ser});
+                    //     des.extend(quote_spanned! {field.span()=>  #field_des});
+                    //     fnames.push(field.ident.clone().unwrap());
+                    //     ftypes.push(field.ty.clone());
+                    // }
                 }
             }
         } else if let syn::Type::Tuple(ref ty) = field.ty {
-            let field_name = field.ident.clone();
-            let mut ind = 0;
-            for elem in &ty.elems {
-                if let syn::Type::Path(ref ty) = elem {
-                    if let Some(_seg) = ty.path.segments.first() {
-                        if !local {
-                            let temp_ind = syn::Index {
-                                index: ind,
-                                span: field.span(),
-                            };
-                            ind += 1;
-                            ser.extend(quote_spanned! {field.span()=>
-                               ( &self.#field_name.#temp_ind).ser(num_pes,darcs);
-                            });
-                            des.extend(quote_spanned! {field.span()=>
-                                (&self.#field_name.#temp_ind).des(cur_pe);
-                            });
-                        }
-                    }
-                }
-            }
-            fields.extend(quote_spanned! {field.span()=>
-                #field,
-            });
+            // let field_name = field.ident.clone();
+            // let mut ind = 0;
+            // for elem in &ty.elems {
+            //     if let syn::Type::Path(ref ty) = elem {
+            //         if let Some(_seg) = ty.path.segments.first() {
+            //             if !local {
+            //                 let temp_ind = syn::Index {
+            //                     index: ind,
+            //                     span: field.span(),
+            //                 };
+            //                 ind += 1;
+            //                 ser.extend(quote_spanned! {field.span()=>
+            //                    ( &self.#field_name.#temp_ind).ser(num_pes,darcs);
+            //                 });
+            //                 des.extend(quote_spanned! {field.span()=>
+            //                     (&self.#field_name.#temp_ind).des(cur_pe);
+            //                 });
+            //             }
+            //         }
+            //     }
+            // }
+            // fields.extend(quote_spanned! {field.span()=>
+            //     #field,
+            // });
+            fields.add_field(field.clone(),false);
         } else if let syn::Type::Reference(ref _ty) = field.ty {
-            if local {
+            if !local {
                 panic!("references are not supported in Remote Active Messages");
-            } else if group {
-                // println!("process fields in group 0");
-                let field_name = field.ident.clone();
-                if &field_name.clone().unwrap().to_string() == "ams" {
-                    ser.extend(quote_spanned! {field.span()=>
-                        for e in (&self.#field_name).iter(){
-                            e.ser(num_pes,darcs);
-                        }
-                    });
-                    des.extend(quote_spanned! {field.span()=>
-                        for e in (&self.#field_name).iter(){
-                            e.des(cur_pe);
-                        }
-                    });
-                }
-                fields.extend(quote_spanned! {field.span()=>
-                    #field,
-                });
+            } else if group{
+                // // println!("process fields in group 0");
+                // let field_name = field.ident.clone();
+                // if &field_name.clone().unwrap().to_string() == "ams" {
+                //     ser.extend(quote_spanned! {field.span()=>
+                //         for e in (&self.#field_name).iter(){
+                //             e.ser(num_pes,darcs);
+                //         }
+                //     });
+                //     des.extend(quote_spanned! {field.span()=>
+                //         for e in (&self.#field_name).iter(){
+                //             e.des(cur_pe);
+                //         }
+                //     });
+                // }
+                // fields.extend(quote_spanned! {field.span()=>
+                //     #field,
+                // });
             } else {
-                fields.extend(quote_spanned! {field.span()=>
-                    #field,
-                });
+                // fields.extend(quote_spanned! {field.span()=>
+                //     #field,
+                // });
+                fields.add_field(field.clone(),false);
             }
         } else {
             if !local {
                 panic!("unsupported type in Remote Active Message {:?}", field.ty);
             }
-            fields.extend(quote_spanned! {field.span()=>
-                #field,
-            });
+            // fields.extend(quote_spanned! {field.span()=>
+            //     #field,
+            // });
+            fields.add_field(field.clone(),false);
         }
     }
+
+    let mut  lamellar_str = lamellar.to_string();
+    if lamellar_str == "__lamellar" {
+        lamellar_str = "lamellar".to_string();
+    }
     let my_ser: syn::Path = syn::parse(
-        format!("{}::serde::Serialize", crate_header)
+        format!("{}::serde::Serialize", lamellar_str)
             .parse()
             .unwrap(),
     )
     .unwrap();
     let my_de: syn::Path = syn::parse(
-        format!("{}::serde::Deserialize", crate_header)
+        format!("{}::serde::Deserialize",lamellar_str)
             .parse()
             .unwrap(),
     )
     .unwrap();
     let mut impls = quote! {};
     if local {
-        ser.extend(quote! {panic!{"should not serialize data in LocalAM"} });
+        // ser.extend(quote! {panic!{"should not serialize data in LocalAM"} });
         // ser.extend(quote! { false });
     } else if group {
         // println!("process fields in group 1");
@@ -1291,7 +1369,7 @@ fn process_fields(
     // println!();
     // println!("{:?}",impls);
     let traits = quote! { #[derive( #impls)] };
-    let serde_temp_2 = if crate_header != "crate" && (!(local || group)) {
+    let serde_temp_2 = if lamellar.to_string() != "crate" && (!(local || group)) {
         // println!("process fields serde_temp_2");
         quote! {#[serde(crate = "lamellar::serde")]}
     } else {
@@ -1305,28 +1383,27 @@ fn process_fields(
         };
     }
 
-    (traits, attrs, fields, ser, des)
+    (traits, attrs, fields, static_fields)
 }
 
 fn derive_am_data(
     input: TokenStream,
-    args: syn::AttributeArgs,
-    crate_header: String,
+    args: Punctuated<syn::Meta, syn::Token![,]>,
+    lamellar: proc_macro2::TokenStream,
     local: bool,
     group: bool,
     rt: bool,
 ) -> TokenStream {
-    let lamellar = quote::format_ident!("{}", crate_header.clone());
+    // let lamellar = quote::format_ident!("{}", crate_header.clone());
     let input: syn::Item = parse_macro_input!(input);
     let mut output = quote! {};
 
     if let syn::Item::Struct(mut data) = input {
         let name = &data.ident;
         let generics = data.generics.clone();
-        let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
 
-        let (traits, attrs, fields, ser, des) =
-            process_fields(args, &mut data.fields, crate_header, local, group);
+        let (traits, attrs, fields, static_fields) =
+            process_fields(args, &mut data.fields, &lamellar, local, group);
         // println!("{:?}",ser.to_string());
         let vis = data.vis.to_token_stream();
         let mut attributes = quote!();
@@ -1334,50 +1411,67 @@ fn derive_am_data(
             let tokens = attr.clone().to_token_stream();
             attributes.extend(quote! {#tokens});
         }
-        if rt {
-            output.extend(quote! {
-                #attributes
-                #traits
-                #attrs
-                #vis struct #name #impl_generics #where_clause{
-                    #fields
-                }
-                impl #impl_generics #lamellar::active_messaging::DarcSerde for #name #ty_generics #where_clause{
-                    fn ser (&self,  num_pes: usize, darcs: &mut Vec<#lamellar::active_messaging::RemotePtr>){
-                        // println!("in outer ser");
-                        #ser
-                    }
-                    fn des (&self,cur_pe: Result<usize, #lamellar::IdError>){
-                        // println!("in outer des");
-                        #des
-                    }
-                }
-            });
+
+        let mut full_fields = quote!{
+            #fields
+            #static_fields
+        };
+
+        // println!("{}",full_fields.to_string());
+    
+        let mut full_ser = quote!{};
+        let mut full_des = quote!{};
+        if !local {
+            full_ser.extend(fields.ser());
+            full_ser.extend(static_fields.ser());
+            full_des.extend(fields.des());
+            full_des.extend(static_fields.des());
+        }
+
+    
+
+        let (orig_am,orig_am_traits) = create_am_struct(&generics, &attributes, &traits, &attrs, &vis, &name, &full_fields, &full_ser, &full_des, &lamellar, local);
+        let (am_group_structs, am_group_traits) = if !local && !rt {
+            // println!("{}",attributes.to_string());
+            // println!("{}",traits.to_string());
+            // println!("{}",attrs.to_string());
+            // println!("{}",vis.to_string());
+
+            create_am_group_structs(&generics, &attributes, &traits, &attrs, &vis, &name, &fields, &static_fields, &lamellar, local)
+            // quote!{}
         } else {
-            output.extend(quote! {
-                #attributes
-                #traits
-                #attrs
-                #vis struct #name #impl_generics #where_clause{
-                    #fields
-                }
+            (quote!{},quote!{})
+        };
+
+        if rt {
+            output.extend(quote!{
+                #orig_am
+                #am_group_structs
+                #orig_am_traits
+                #am_group_traits
+            });
+        }
+        else {  
+            output.extend(quote!{
+                #orig_am
+                #am_group_structs
                 const _: () = {
                     extern crate lamellar as __lamellar;
-                    impl #impl_generics __lamellar::active_messaging::DarcSerde for #name #ty_generics #where_clause{
-                        fn ser (&self,  num_pes: usize, darcs: &mut Vec<#lamellar::active_messaging::RemotePtr>){
-                            // println!("in outer ser");
-                            #ser
-                        }
-                        fn des (&self,cur_pe: Result<usize, #lamellar::IdError>){
-                            // println!("in outer des");
-                            #des
-                        }
-                    }
+                    use __lamellar::serde::ser::SerializeStruct;
+                    #orig_am_traits
+                    #am_group_traits
                 };
+
             });
-            // println!("{:?}",output.to_string());
+            
         }
+
+        // if !local && !rt {
+        //     println!("{}", output.to_string());
+        // }
     }
+
+    // println!("{}", output.to_string());
     // else if let syn::Item::Enum(data) = input{ //todo handle enums....
     // //     let name = &data.ident;
     // //     let generics = data.generics.clone();
@@ -1400,8 +1494,9 @@ fn derive_am_data(
 #[proc_macro_error]
 #[proc_macro_attribute]
 pub fn AmData(args: TokenStream, input: TokenStream) -> TokenStream {
-    let args = parse_macro_input!(args as syn::AttributeArgs);
-    derive_am_data(input, args, "lamellar".to_string(), false, false, false)
+    let args = parse_macro_input!(args with Punctuated<syn::Meta, syn::Token![,]>::parse_terminated);
+    // println!("here");
+    derive_am_data(input, args, quote!{__lamellar}, false, false, false)
 }
 
 /// # Examples
@@ -1418,16 +1513,16 @@ pub fn AmData(args: TokenStream, input: TokenStream) -> TokenStream {
 #[proc_macro_error]
 #[proc_macro_attribute]
 pub fn AmLocalData(args: TokenStream, input: TokenStream) -> TokenStream {
-    let args = parse_macro_input!(args as syn::AttributeArgs);
-    derive_am_data(input, args, "lamellar".to_string(), true, false, false)
+    let args = parse_macro_input!(args with Punctuated<syn::Meta, syn::Token![,]>::parse_terminated);
+    derive_am_data(input, args, quote!{__lamellar}, true, false, false)
 }
 
 #[allow(non_snake_case)]
 #[proc_macro_error]
 #[proc_macro_attribute]
 pub fn AmGroupData(args: TokenStream, input: TokenStream) -> TokenStream {
-    let args = parse_macro_input!(args as syn::AttributeArgs);
-    derive_am_data(input, args, "lamellar".to_string(), false, true, false)
+    let args = parse_macro_input!(args with Punctuated<syn::Meta, syn::Token![,]>::parse_terminated);
+    derive_am_data(input, args, quote!{__lamellar}, false, true, false)
 }
 
 #[doc(hidden)]
@@ -1435,8 +1530,8 @@ pub fn AmGroupData(args: TokenStream, input: TokenStream) -> TokenStream {
 #[proc_macro_error]
 #[proc_macro_attribute]
 pub fn AmDataRT(args: TokenStream, input: TokenStream) -> TokenStream {
-    let args = parse_macro_input!(args as syn::AttributeArgs);
-    derive_am_data(input, args, "crate".to_string(), false, false, true)
+    let args = parse_macro_input!(args with Punctuated<syn::Meta, syn::Token![,]>::parse_terminated);
+    derive_am_data(input, args, quote!{crate}, false, false, true)
 }
 
 #[doc(hidden)]
@@ -1444,8 +1539,8 @@ pub fn AmDataRT(args: TokenStream, input: TokenStream) -> TokenStream {
 #[proc_macro_error]
 #[proc_macro_attribute]
 pub fn AmLocalDataRT(args: TokenStream, input: TokenStream) -> TokenStream {
-    let args = parse_macro_input!(args as syn::AttributeArgs);
-    derive_am_data(input, args, "crate".to_string(), true, false, true)
+    let args = parse_macro_input!(args with Punctuated<syn::Meta, syn::Token![,]>::parse_terminated);
+    derive_am_data(input, args, quote!{crate}, true, false, true)
 }
 
 fn parse_am(
@@ -1453,7 +1548,7 @@ fn parse_am(
     input: TokenStream,
     local: bool,
     rt: bool,
-    am_group: bool,
+    _am_group: bool,
 ) -> TokenStream {
     let args = args.to_string();
     if args.len() > 0 {
@@ -1463,6 +1558,28 @@ fn parse_am(
     // println!("args: {:?}", args);
     let input: syn::Item = parse_macro_input!(input);
 
+    let lamellar = if rt {
+        // quote::format_ident!("crate")
+        quote!{crate}
+    } else {
+        // quote::format_ident!("__lamellar")
+        quote!{__lamellar}
+    };
+
+    let am_data_header = if rt {
+        if !local {
+            quote! {#[lamellar_impl::AmDataRT]}
+        } else {
+            quote! {#[lamellar_impl::AmLocalDataRT]}
+        }
+    } else {
+        if !local {
+            quote! {#[#lamellar::AmData]}
+        } else {
+            quote! {#[#lamellar::AmLocalData]}
+        }
+    };
+
     let output = match input.clone() {
         syn::Item::Impl(input) => {
             let output = get_return_of_method("exec".to_string(), &input.items);
@@ -1470,9 +1587,17 @@ fn parse_am(
                 Some(output) => {
                     if args.len() > 0 {
                         let output = get_return_am_return_type(args);
-                        generate_am(input, local, rt, am_group, AmType::ReturnAm(output))
+                        let mut impls = gen_am::generate_am(&input, local, AmType::ReturnAm(output.clone()), &lamellar, &am_data_header);
+                        if !rt && !local{
+                            impls.extend(gen_am_group::generate_am_group(&input, local, AmType::ReturnAm(output.clone()), &lamellar, &am_data_header));
+                        }
+                        impls
                     } else {
-                        generate_am(input, local, rt, am_group, AmType::ReturnData(output))
+                        let mut impls = gen_am::generate_am(&input, local, AmType::ReturnData(output.clone()), &lamellar, &am_data_header);
+                        if !rt && !local{
+                            impls.extend(gen_am_group::generate_am_group(&input, local,  AmType::ReturnData(output.clone()), &lamellar, &am_data_header));
+                        }
+                        impls
                     }
                 }
 
@@ -1482,7 +1607,11 @@ fn parse_am(
                         #[lamellar::am] only accepts an (optional) argument of the form:
                         #[lamellar::am(return_am = \"<am to exec upon return>\")]");
                     }
-                    generate_am(input, local, rt, am_group, AmType::NoReturn)
+                    let mut impls = gen_am::generate_am(&input, local, AmType::NoReturn, &lamellar, &am_data_header);
+                    if !rt && !local{
+                        impls.extend(gen_am_group::generate_am_group(&input, local, AmType::NoReturn, &lamellar, &am_data_header));
+                    }
+                    impls
                 }
             }
         }

@@ -29,6 +29,7 @@ lazy_static! {
         let mut duplicates = vec![];
         for am in ams {
             if !temp.contains_key(&am) {
+                // println!("{:?}", am);
                 temp.insert(am.clone(), cnt);
                 cnt += 1;
             } else {
@@ -110,6 +111,7 @@ impl ActiveMessageEngine for RegisteredActiveMessages {
         // println!("{am:?}");
         match am {
             Am::All(req_data, am) => {
+                // println!("{:?}",am.get_id());
                 let am_id = *(AMS_IDS.get(am.get_id()).unwrap());
                 let am_size = am.serialized_size();
 

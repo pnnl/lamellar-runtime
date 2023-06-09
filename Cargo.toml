@@ -50,6 +50,7 @@ tracing-flame = "0.2.0"
 pin-project = "1.0.12"
 enum-as-inner = "0.5.1"
 itertools = "0.10.5"
+serde_with = "3.0.0"
 
 
 [dev-dependencies]

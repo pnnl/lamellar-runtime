@@ -1936,55 +1936,60 @@ pub(crate) fn __derive_arrayops(input: TokenStream) -> TokenStream {
     let mut element_wise_trait_impls = quote!{};
 
     for attr in input.attrs {
-        if attr.to_token_stream().to_string().contains("array_ops") {
-            if let Ok(temp) = attr.parse_meta() {
-                match temp {
-                    syn::Meta::Path(p) => println!("Not expected {p:?}"),
-                    syn::Meta::NameValue(nv) => println!("Not expected {nv:?}"),
-                    syn::Meta::List(l) => {
-                        for item in l.nested {
-                            match item.to_token_stream().to_string().as_str() {
-                                "Arithmetic" => {
+        if attr.path().is_ident("array_ops") {
+            attr.parse_nested_meta(|temp| {
+                // match temp {
+                    // syn::Meta::Path(p) => println!("Not expected {p:?}"),
+                    // syn::Meta::NameValue(nv) => println!("Not expected {nv:?}"),
+                    // syn::Meta::List(l) => {
+                        // for item in l.nested {
+                            // match item.to_token_stream().to_string().as_str() {
+                                if temp.path.is_ident("Arithmetic") {
                                     op_types.push(OpType::Arithmetic);
                                     element_wise_trait_impls.extend(
                                         quote! {
                                             impl lamellar::ElementArithmeticOps for #the_type {}
                                         }
-                                    )
-                                },
-                                "CompExEps" => {
+                                    );
+                                    Ok(())
+                                }
+                                else if temp.path.is_ident("CompExEps") {
                                     op_types.push(OpType::CompExEps);
                                     element_wise_trait_impls.extend(
                                         quote! {
                                             impl lamellar::ElementComparePartialEqOps for #the_type {}
                                         }
-                                    )
-                                },
-                                "CompEx" => {
+                                    );
+                                    Ok(())
+                                }
+                                else if temp.path.is_ident("CompEx") {
                                     op_types.push(OpType::CompEx);
                                     element_wise_trait_impls.extend(
                                         quote! {
                                             impl lamellar::ElementCompareEqOps for #the_type {}
                                         }
-                                    )
-                                },
-                                "Bitwise" => {
+                                    );
+                                    Ok(())
+                                }
+                                else if temp.path.is_ident("Bitwise") {
                                     op_types.push(OpType::Bitwise);
                                     element_wise_trait_impls.extend(
                                         quote! {
                                             impl lamellar::ElementBitWiseOps for #the_type {}
                                         }
-                                    )
-                                },
-                                "Shift" => {
+                                    );
+                                    Ok(())
+                                }
+                                else if temp.path.is_ident("Shift") {
                                     op_types.push(OpType::Shift);
                                     element_wise_trait_impls.extend(
                                         quote! {
                                             impl lamellar::ElementShiftOps for #the_type {}
                                         }
-                                    )
-                                },
-                                "All" => {
+                                    );
+                                    Ok(())
+                                }
+                                else if temp.path.is_ident("All") {
                                     op_types.push(OpType::Arithmetic);
                                     op_types.push(OpType::CompEx);
                                     op_types.push(OpType::Bitwise);
@@ -1997,14 +2002,18 @@ pub(crate) fn __derive_arrayops(input: TokenStream) -> TokenStream {
                                             impl lamellar::ElementBitWiseOps for #the_type {}
                                             impl lamellar::ElementShiftOps for #the_type {}
                                         }
-                                    )
+                                    );
+                                    Ok(())
                                 }
-                                &_ => abort!(item, "unexpected array op type, valid types are: Arithmetic, CompEx, CompExEps, Bitwise, Shift, All"),
-                            }
-                        }
-                    }
-                }
-            }
+                                else {
+                                    Err(temp.error("unexpected array op type, valid types are: Arithmetic, CompEx, CompExEps, Bitwise, Shift, All"))
+                                }
+                                // &_ => abort!(item, "unexpected array op type, valid types are: Arithmetic, CompEx, CompExEps, Bitwise, Shift, All"),
+                            // }
+                //         }
+                //     }
+                // }
+            }).unwrap();
         }
     }
 

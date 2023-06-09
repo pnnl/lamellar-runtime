@@ -241,7 +241,7 @@ impl Drop for LamellarWorld {
     fn drop(&mut self) {
         let cnt = self.ref_cnt.fetch_sub(1, Ordering::SeqCst);
         if cnt == 1 {
-            println!("[{:?}] world dropping", self.my_pe);
+            // println!("[{:?}] world dropping", self.my_pe);
             self.wait_all();
             self.barrier();
 
@@ -262,7 +262,7 @@ impl Drop for LamellarWorld {
 
             fini_prof!();
         }
-        println!("[{:?}] world dropped", self.my_pe);
+        // println!("[{:?}] world dropped", self.my_pe);
     }
 }
 

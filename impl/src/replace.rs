@@ -50,6 +50,12 @@ impl VisitMut for SelfReplace {
         }
         syn::visit_mut::visit_macro_mut(self, i);
     }
+
+    // fn visit_expr_field_mut(&mut self, i: &mut syn::ExprField) {
+    //     if i.ident == "self" {
+    //         i.ident = self.id.clone();
+    //     }
+    // }
 }
 
 impl VisitMut for LamellarDSLReplace {

@@ -1013,22 +1013,37 @@ pub enum AmGroupResult<'a, T> {
     All(TypedAmAllIter<'a, T>),
 }
 
-#[doc(hidden)]
-#[derive(enum_as_inner::EnumAsInner)]
-pub enum AmGroupReqs<T> {
-    Pe(Vec<(usize, Vec<T>)>),
-    All(Vec<Vec<Vec<T>>>),
-    Idx(Vec<(usize, usize, usize)>),
+// #[doc(hidden)]
+// #[derive(enum_as_inner::EnumAsInner)]
+// pub enum AmGroupReqs<T> {
+//     Pe(Vec<(usize, Vec<T>)>),
+//     All(Vec<Vec<Vec<T>>>),
+//     Idx(Vec<(usize, usize, usize)>),
+// }
+
+pub enum TypedAmGroupResult<T>{
+    Unit(TypedAmGroupUnitResult),
+    Val(TypedAmGroupValResult<T>),
 }
 
-pub struct TypedAmGroupResult<T> {
+pub struct TypedAmGroupValResult<T> {
     pes: Vec<(usize, Vec<T>)>,
     all: Vec<Vec<Vec<T>>>,
     idx: Vec<(usize, usize, usize)>,
     num_pes: usize,
 }
 
-pub struct TypedAmAllIter<'a, T> {
+pub struct TypedAmGroupUnitResult {
+    idx: Vec<(usize, usize, usize)>,
+    num_pes: usize,
+}
+
+pub enum TypedAmAllIter<'a, T> {
+    Unit(std::iter::Take<std::iter::Repeat<()>>),
+    Val(TypedAmAllValIter<'a, T>),
+}
+
+pub struct TypedAmAllValIter<'a, T> {
     all: &'a Vec<Vec<Vec<T>>>,
     am_idx: usize,
     req: usize,
@@ -1036,7 +1051,7 @@ pub struct TypedAmAllIter<'a, T> {
     num_pes: usize,
 }
 
-impl<'a, T> Iterator for TypedAmAllIter<'a, T> {
+impl<'a, T> Iterator for TypedAmAllValIter<'a, T> {
     type Item = &'a T;
     fn next(&mut self) -> Option<Self::Item> {
         if self.cur_pe < self.num_pes {
@@ -1049,7 +1064,7 @@ impl<'a, T> Iterator for TypedAmAllIter<'a, T> {
     }
 }
 
-impl<T> TypedAmGroupResult<T> {
+impl<T> TypedAmGroupValResult<T> {
     pub fn new(
         pes: Vec<(usize, Vec<T>)>,
         all: Vec<Vec<Vec<T>>>,
@@ -1057,7 +1072,7 @@ impl<T> TypedAmGroupResult<T> {
         num_pes: usize,
     ) -> Self {
         // println!("idx: {idx:?}");
-        TypedAmGroupResult {
+        TypedAmGroupValResult {
             pes,
             all,
             idx,
@@ -1076,13 +1091,34 @@ impl<T> TypedAmGroupResult<T> {
                 .expect("invalid index");
             AmGroupResult::Pe(pe, val)
         } else {
-            AmGroupResult::All(TypedAmAllIter {
+            AmGroupResult::All(TypedAmAllIter::Val(TypedAmAllValIter {
                 all: &self.all,
                 am_idx: am_idx,
                 req: req,
                 cur_pe: 0,
                 num_pes: self.num_pes,
-            })
+            }))
+        }
+    }
+}
+
+impl TypedAmGroupUnitResult {
+    pub fn new(
+        idx: Vec<(usize, usize, usize)>,
+        num_pes: usize,
+    ) -> Self {
+        // println!("idx: {idx:?}");
+        TypedAmGroupUnitResult {
+            idx,
+            num_pes,
+        }
+    }
+    pub fn at(&self, index: usize) -> AmGroupResult<()> {
+        let (pe, _, _) = self.idx[index];
+        if pe < self.num_pes {
+            AmGroupResult::Pe(pe, &())
+        } else {
+            AmGroupResult::All(TypedAmAllIter::Unit(std::iter::repeat(()).take(self.num_pes)))
         }
     }
 }

@@ -5,7 +5,7 @@
 // };
 // pub use crate::active_messaging::{ActiveMessaging, LamellarAM, LocalAM};
 pub use crate::active_messaging::{
-    am, local_am, typed_am_group, ActiveMessaging, AmData, AmGroupData, AmLocalData,
+    am, local_am, typed_am_group, ActiveMessaging, AmData, AmGroupData, AmLocalData,LamellarSerde
 };
 
 pub use crate::async_trait;
@@ -17,6 +17,7 @@ pub use crate::lamellar_team::{IntoLamellarTeam, LamellarTeamRT};
 pub use crate::lamellar_world::LamellarWorld;
 pub use crate::lamellar_world::LamellarWorldBuilder;
 pub use crate::LamellarTaskGroup;
-pub use crate::{AmGroup, AmGroupReqs, AmGroupResult, TypedAmGroupResult};
+pub use crate::{AmGroup, /*AmGroupReqs,*/ AmGroupResult, TypedAmGroupResult,TypedAmGroupValResult,TypedAmGroupUnitResult};
+pub use crate::futures::StreamExt;
 
 // pub use crate::parking_lot;
