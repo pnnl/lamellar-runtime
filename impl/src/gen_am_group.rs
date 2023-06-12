@@ -8,6 +8,7 @@ use quote::{format_ident, quote, quote_spanned, ToTokens};
 use syn::punctuated::Punctuated;
 use syn::parse::Result;
 use syn::spanned::Spanned;
+use syn::parse_quote;
 fn replace_self_new(fn_block: syn::Block, id: &str) -> syn::Block {
     let mut block_token_string = String::from("{");
     for stmt in &fn_block.stmts {
@@ -68,6 +69,21 @@ fn wrap_field_access(field: &syn::ExprField, id: &str) -> syn::Expr {
     })
 }
 
+fn convert_to_method_call(field: &syn::ExprField) -> syn::Expr {
+    let mut ret = syn::Expr::Field(field.clone());
+    if let syn::Expr::Path(path) = field.base.as_ref() {
+        if let Some(ident) = path.path.get_ident() {
+            if ident == "self" {
+                let method_call: syn::ExprMethodCall = parse_quote! {
+                    #field(i)
+                };
+                ret = syn::Expr::MethodCall(method_call);
+            }
+        }
+    }
+    ret
+}
+
 fn replace_expr_self(expr: &syn::Expr, id: &str ) -> syn::Expr {
     let mut ret = expr.clone();
     match expr {
@@ -83,30 +99,12 @@ fn replace_expr_self(expr: &syn::Expr, id: &str ) -> syn::Expr {
             ret = syn::Expr::Call(call);
         }
         syn::Expr::Field(field) => {
-            let mut field = field.clone();
-            field.base = Box::new(replace_expr_self(field.base.as_ref(), id));
-            // if let syn::Expr::Path(path) = field.base.as_ref() {
-            //     if let Some(ident) = path.path.get_ident() {
-            //         if ident == "self" {
-            //             ret = wrap_field_access(field,id);
-            //         }
-                    
-            //     }
-            // }
-            ret = syn::Expr::Field(field);
+            ret = convert_to_method_call(field);
         }
         syn::Expr::Index(index) => {
             let mut index = index.clone();
             index.expr = Box::new(replace_expr_self(index.expr.as_ref(), id));
-            if let syn::Expr::Field(field) = index.index.as_ref() {
-                if let syn::Expr::Path(path) = field.base.as_ref() {
-                    if let Some(ident) = path.path.get_ident() {
-                        if ident == "self" {
-                            ret = wrap_field_access(field,id);
-                        }
-                    }
-                }
-            }
+            index.index = Box::new(replace_expr_self(index.index.as_ref(), id));
             ret = syn::Expr::Index(index);
         }
         syn::Expr::MethodCall(call) => {
@@ -119,24 +117,25 @@ fn replace_expr_self(expr: &syn::Expr, id: &str ) -> syn::Expr {
             call.args = new_args;
             ret = syn::Expr::MethodCall(call);
         }
-        syn::Expr::Path(path) => {
-            if let Some(ident) = path.path.get_ident() {
-                if ident == "self" {
-                    let mut path = syn::ExprPath {
-                        attrs: vec![],
-                        qself: None,
-                        path: syn::Path {
-                            leading_colon: None,
-                            segments: Punctuated::new(),
-                        },
-                    };
-                    path.path.segments.push(syn::PathSegment {
-                        ident: format_ident!("{}", id),
-                        arguments: syn::PathArguments::None,
-                    });
-                    ret = syn::Expr::Path(path);
-                }
-            }
+        syn::Expr::Path(path) => { //do nothing
+            // if let Some(ident) = path.path.get_ident() {
+            //     if ident == "self" {
+            //         let mut path = syn::ExprPath {
+            //             attrs: vec![],
+            //             qself: None,
+            //             path: syn::Path {
+            //                 leading_colon: None,
+            //                 segments: Punctuated::new(),
+            //             },
+            //         };
+            //         path.path.segments.push(syn::PathSegment {
+            //             ident: format_ident!("{}", id),
+            //             arguments: syn::PathArguments::None,
+            //         });
+            //         ret = syn::Expr::Path(path);
+            //     }
+            // }
+
         }
         syn::Expr::Paren(paren) => {
             let mut paren = paren.clone();
@@ -240,6 +239,77 @@ fn replace_self_new2(fn_block: syn::Block, id: &str) -> syn::Block {
     // new_block
 }
 
+fn replace_self_new3(fn_block: syn::Block, id: &str) -> syn::Block {
+    let mut new_block = fn_block.clone();
+    for stmt in &mut new_block.stmts {
+        match stmt {
+            syn::Stmt::Local(local) => {
+                // println!("{:#?}", local.init);
+                if let Some(init) = &mut local.init {
+                    init.expr = Box::new(replace_expr_self(init.expr.as_ref(), id));
+                }
+                // println!("{:#?}", local.init);
+            }
+            syn::Stmt::Item(item) => {
+                panic!(
+                    "Error unexpected item in lamellar am {}",
+                    item.to_token_stream().to_string()
+                );
+            }
+            syn::Stmt::Expr(expr, semi) => {
+                // println!("{:#?}", expr);
+                let new_expr = replace_expr_self(expr, id);
+                
+                *stmt = syn::Stmt::Expr(new_expr, semi.clone());
+                
+            }
+            syn::Stmt::Macro(mac) => {
+                // println!("{:#?}", mac);
+                let mut args: Result<FormatArgs> = mac.mac.parse_body();
+                // println!("{:#?}", args);
+                if let Ok(args) = args {
+                    let format_str =  args.format_string.clone();
+                    // let format_str = if args.format_string.to_token_stream().to_string().contains("self") {
+                    //     let temp_str = args.format_string.to_token_stream().to_string().replace("self", id)
+                    //     let format_str = syn::LitStr::new(&temp_str, args.span());
+                    // }
+                    // else {
+                    //     args.format_string.to_token_stream().to_string()
+                    // };
+                    let positional_args = args.positional_args.iter().map(|expr| {
+                        // println!("{:#?}", expr);
+                        let expr = replace_expr_self(expr, id);
+                        // println!("new: {:#?}", expr);
+                        expr
+                    }).collect::<Vec<_>>();
+
+                    let named_args = args.named_args.iter().map(|(name,expr)| {
+                        // println!("{:#?}", expr);
+                        let expr = replace_expr_self(expr, id);
+                        // println!("new: {:#?}", expr);
+                        expr
+                    }).collect::<Vec<_>>();
+
+                    let new_tokens = quote! {
+                        #format_str, #(#positional_args),*, #(#named_args),*
+                    };
+                    // println!("{:?}", new_tokens.to_token_stream().to_string());
+                    mac.mac.tokens=new_tokens;
+                }
+                else {
+                    println!("Warning: support for non format like macros are experimental --  {:#?}", mac.to_token_stream().to_string());
+                    let mac_string = mac.to_token_stream().to_string();
+                    let mac_string = mac_string.replace("self", id);
+                    let new_mac: syn::Macro = syn::parse_str(&mac_string).unwrap();
+                    println!("{:#?}", new_mac.to_token_stream().to_string());
+                    mac.mac = new_mac;
+                }
+            }
+        }
+    }
+    new_block
+}
+
 //maybe we simply create the original am using the lighter weight local clone of the static vars...
 // this would allow us to directly use the original exec body... instead of using getters, and not being able to call methods
 fn impl_am_group_remote_lamellar_active_message_trait(
@@ -261,6 +331,42 @@ fn impl_am_group_remote_lamellar_active_message_trait(
                     let __res_vec = self.ams.iter().map(|am|   {//async {
                         // let timer = std::time::Instant::now();
                         let am = self.as_orig_am(am);
+                        // time_cnt1.fetch_add(timer.elapsed().as_micros().try_into().unwrap(), std::sync::atomic::Ordering::Relaxed);
+                        // let timer = std::time::Instant::now();
+                        #am_group_body
+                        // time_cnt2.fetch_add(timer.elapsed().as_micros().try_into().unwrap(), std::sync::atomic::Ordering::Relaxed);
+                    // }).collect::<#lamellar::futures::stream::FuturesOrdered<_>>().collect::<Vec<_>>().await;
+                    }).collect::<Vec<_>>();
+                    // println!("remote tid: {:?} all_time: {:?} time1: {:?} time2: {:?}",std::thread::current().id(), all_time.elapsed(), time_cnt1.load(std::sync::atomic::Ordering::Relaxed)as f32/1000000.0, time_cnt2.load(std::sync::atomic::Ordering::Relaxed)as f32/1000000.0);
+                    #ret_stmt
+                    }.instrument(#lamellar::tracing::trace_span!(#trace_name))
+                )
+            }
+            fn get_id(&self) -> &'static str{
+                stringify!(#am_group_am_name)//.to_string()
+            }
+        }
+    }
+}
+
+fn impl_am_group_remote_lamellar_active_message_trait2(
+    generics: &syn::Generics,
+    am_group_am_name: &syn::Ident,
+    am_group_body: &proc_macro2::TokenStream,
+    ret_stmt: &proc_macro2::TokenStream,
+    lamellar: &proc_macro2::TokenStream,
+) -> proc_macro2::TokenStream {
+    let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
+    let trace_name = quote! {stringify!(#am_group_am_name)};
+    quote! {
+        impl #impl_generics #lamellar::active_messaging::LamellarActiveMessage for #am_group_am_name #ty_generics #where_clause {
+            fn exec(self: std::sync::Arc<Self>,__lamellar_current_pe: usize,__lamellar_num_pes: usize, __local: bool, __lamellar_world: std::sync::Arc<#lamellar::LamellarTeam>, __lamellar_team: std::sync::Arc<#lamellar::LamellarTeam>) -> std::pin::Pin<Box<dyn std::future::Future<Output=#lamellar::active_messaging::LamellarReturn> + Send >>{
+                Box::pin( async move {
+                    // let all_time = std::time::Instant::now();
+                    // let time_cnt1 = std::sync::atomic::AtomicUsize::new(0);
+                    // let time_cnt2 = std::sync::atomic::AtomicUsize::new(0);
+                    let __res_vec = (0..self.len()).map(|i|   {//async {
+                        // let timer = std::time::Instant::now();
                         // time_cnt1.fetch_add(timer.elapsed().as_micros().try_into().unwrap(), std::sync::atomic::Ordering::Relaxed);
                         // let timer = std::time::Instant::now();
                         #am_group_body
@@ -322,6 +428,25 @@ fn gen_am_group_remote_body(input: &syn::ItemImpl) -> proc_macro2::TokenStream {
         get_impl_method("exec".to_string(), &input.items).expect("unable to extract exec body");
     exec_fn = replace_lamellar_dsl_new(exec_fn);
     exec_fn = replace_self_new2(exec_fn, "am"); // we wont change self to am if its referencing a static_var
+
+    // println!("{}", exec_fn.to_token_stream().to_string());
+
+    let mut am_body = quote_spanned! { exec_fn.span()=>};
+    let stmts = exec_fn.stmts;
+
+    for stmt in stmts {
+        am_body.extend(quote_spanned! {stmt.span()=>
+            #stmt
+        });
+    }
+    am_body
+}
+
+fn gen_am_group_remote_body2(input: &syn::ItemImpl) -> proc_macro2::TokenStream {
+    let mut exec_fn =
+        get_impl_method("exec".to_string(), &input.items).expect("unable to extract exec body");
+    exec_fn = replace_lamellar_dsl_new(exec_fn);
+    exec_fn = replace_self_new3(exec_fn, "am"); // we wont change self to am if its referencing a static_var
 
     // println!("{}", exec_fn.to_token_stream().to_string());
 
@@ -426,6 +551,37 @@ fn impl_am_group_remote(
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
 
     let lamellar_active_message = impl_am_group_remote_lamellar_active_message_trait(
+        generics,
+        am_group_am_name,
+        am_group_body,
+        ret_stmt,
+        lamellar,
+    );
+    let local_am = impl_local_am_trait(generics, am_group_am_name, ret_type, lamellar);
+    let remote_trait_impls =
+        impl_remote_traits(generics, am_group_am_name, ret_type, lamellar, false);
+
+    quote! {
+        #lamellar_active_message
+        #local_am
+        #remote_trait_impls
+    }
+}
+
+fn impl_am_group_remote2(
+    generics: &syn::Generics,
+    am_type: &AmType,
+    inner_am_name: &syn::Ident,
+    am_group_am_name: &syn::Ident,
+    am_group_return_name: &syn::Ident,
+    am_group_body: &proc_macro2::TokenStream,
+    ret_type: &proc_macro2::TokenStream,
+    ret_stmt: &proc_macro2::TokenStream,
+    lamellar: &proc_macro2::TokenStream,
+) -> proc_macro2::TokenStream {
+    let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
+
+    let lamellar_active_message = impl_am_group_remote_lamellar_active_message_trait2(
         generics,
         am_group_am_name,
         am_group_body,
@@ -561,6 +717,7 @@ fn impl_am_group_user(
     inner_ret_type: &proc_macro2::TokenStream,
     lamellar: &proc_macro2::TokenStream,
 ) -> proc_macro2::TokenStream {
+    let am_group_remote_name2= get_am_group_name(&format_ident!("{}2", &am_name));
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
 
     let typed_am_group_result_type = match am_type {
@@ -602,18 +759,32 @@ fn impl_am_group_user(
             team: std::sync::Arc<#lamellar::LamellarTeam>,
             cnt: usize,
             reqs: std::collections::BTreeMap<usize,(Vec<usize>, Vec<#am_group_inner_name #ty_generics>,usize)>,
+            reqs2: std::collections::BTreeMap<usize,(Vec<usize>, #am_group_remote_name2 #ty_generics,usize)>,
             local_am: Option<#am_group_am_name_local #ty_generics>,
+            num_per_batch: usize,
+            pending_reqs: Vec<std::pin::Pin<Box<dyn std::future::Future<Output = (usize,#ret_type)> + Send>>>,
+            pending_reqs_all: Vec<std::pin::Pin<Box<dyn std::future::Future<Output = Vec<#ret_type>> + Send>>>,
+            pending_reqs_idx: std::collections::BTreeMap<usize,(Vec<usize>,Vec<(usize,usize)>)>
         }
 
     //  use #lamellar::active_messaging::LamellarSerde;
         impl #impl_generics #am_group_name_user #ty_generics #where_clause{
             #[allow(unused)]
             fn new(team: std::sync::Arc<#lamellar::LamellarTeam>) -> #am_group_name_user #ty_generics{
+                let num_per_batch = match std::env::var("LAMELLAR_OP_BATCH") {
+                    Ok(n) => n.parse::<usize>().unwrap(), //+ 1 to account for main thread
+                    Err(_) => 10000,                      //+ 1 to account for main thread
+                };
                 #am_group_name_user {
                     team: team,
                     cnt: 0,
                     reqs: std::collections::BTreeMap::new(),
-                    local_am: None
+                    reqs2: std::collections::BTreeMap::new(),
+                    local_am: None,
+                    num_per_batch: num_per_batch,
+                    pending_reqs: Vec::new(),
+                    pending_reqs_all: Vec::new(),
+                    pending_reqs_idx: std::collections::BTreeMap::new(),
                 }
             }
             #[allow(unused)]
@@ -621,11 +792,7 @@ fn impl_am_group_user(
             {
                 let req_queue = self.reqs.entry(self.team.num_pes()).or_insert_with(|| {
                     self.local_am = Some(am.as_am_group_local());
-                    let num_per_batch = match std::env::var("LAMELLAR_OP_BATCH") {
-                        Ok(n) => n.parse::<usize>().unwrap(), //+ 1 to account for main thread
-                        Err(_) => 10000,                      //+ 1 to account for main thread
-                    };
-                    (Vec::with_capacity(num_per_batch),Vec::with_capacity(num_per_batch),1000000)
+                    (Vec::with_capacity(self.num_per_batch),Vec::with_capacity(self.num_per_batch),1000000)
                 });
                 // req_queue.2 += am.serialized_size();
                 req_queue.0.push(self.cnt);
@@ -640,11 +807,7 @@ fn impl_am_group_user(
                 // }
                 let req_queue = self.reqs.entry(pe).or_insert_with(|| {
                     self.local_am = Some(am.as_am_group_local());
-                    let num_per_batch = match std::env::var("LAMELLAR_OP_BATCH") {
-                        Ok(n) => n.parse::<usize>().unwrap(), //+ 1 to account for main thread
-                        Err(_) => 10000,                      //+ 1 to account for main thread
-                    };
-                    (Vec::with_capacity(num_per_batch),Vec::with_capacity(num_per_batch),1000000)
+                    (Vec::with_capacity(self.num_per_batch),Vec::with_capacity(self.num_per_batch),1000000)
                 });
                 // req_queue.2 += am.serialized_size();
                 req_queue.0.push(self.cnt);
@@ -652,6 +815,51 @@ fn impl_am_group_user(
                 self.cnt+=1;
                 // println!("cnt: {:?}",self.cnt);
             }
+
+            #[allow(unused)]
+            fn add_am_all2(&mut self, am:  #am_name #ty_generics)
+            {
+                let req_queue = self.reqs2.entry(self.team.num_pes()).or_insert_with(|| {
+                    (Vec::with_capacity(self.num_per_batch),#am_group_remote_name2::new(&am),1000000)
+                });
+                
+                req_queue.0.push(self.cnt);
+                req_queue.1.add_am(am);
+                self.cnt+=1;
+                if self.cnt % self.num_per_batch == 0 {
+                    self.send_pe_buffer(self.team.num_pes());
+                }
+            }
+            #[allow(unused)]
+            fn add_am_pe2(&mut self, pe: usize, am:  #am_name #ty_generics)
+            {
+                
+                let req_queue = self.reqs2.entry(pe).or_insert_with(|| {
+                    (Vec::with_capacity(self.num_per_batch),#am_group_remote_name2::new(&am),1000000)
+                });
+                req_queue.0.push(self.cnt);
+                req_queue.1.add_am(am);
+                self.cnt+=1;
+                if self.cnt % self.num_per_batch == 0 {
+                    self.send_pe_buffer(pe);
+                }
+            }
+
+            fn send_pe_buffer(&mut self, pe: usize) {
+                if let Some((reqs,the_am,cnt)) = self.reqs2.remove(&pe){
+                    let mut req_idx: Vec<(usize,usize)> = Vec::new();
+                    let end_i = the_am.len();
+                    if pe == self.team.num_pes(){
+                        self.pending_reqs_all.push(self.team.exec_am_group_all(the_am));
+                    }
+                    else{
+                        self.pending_reqs.push(#am_group_name_user::am_pe2(self.team.clone(),the_am,pe));
+                    }
+                    req_idx.push((0, end_i));
+                    self.pending_reqs_idx.insert(pe,(reqs,req_idx));
+                }
+            }
+
             #[allow(unused)]
             pub async fn exec(mut self) -> #lamellar::TypedAmGroupResult<#inner_ret_type>{
                 let timer = std::time::Instant::now();
@@ -670,7 +878,6 @@ fn impl_am_group_user(
                     std::mem::swap(&mut idx,&mut the_ams.0);
 
                     let ams = std::sync::Arc::new(ams);
-                    // let idx = std::sync::Arc::new(idx);
                     let mut req_idx: Vec<(usize,usize)> = Vec::new();
 
                     if the_ams.2 > 1_000_000{
@@ -759,10 +966,6 @@ fn impl_am_group_user(
 
             #[allow(unused)]
             pub async fn exec2(mut self) -> #lamellar::TypedAmGroupResult<#inner_ret_type>{
-                let num_per_batch = match std::env::var("LAMELLAR_OP_BATCH") {
-                    Ok(n) => n.parse::<usize>().unwrap(), //+ 1 to account for main thread
-                    Err(_) => 10000,                      //+ 1 to account for main thread
-                };
                 let timer = std::time::Instant::now();
 
                 let mut reqs: Vec<_> = Vec::new();
@@ -779,11 +982,10 @@ fn impl_am_group_user(
                     std::mem::swap(&mut idx,&mut the_ams.0);
 
                     let ams = std::sync::Arc::new(ams);
-                    // let idx = std::sync::Arc::new(idx);
                     let mut req_idx: Vec<(usize,usize)> = Vec::new();
 
-                    for i in (0..ams.len()).step_by(num_per_batch){
-                        let end_i = std::cmp::min(i+num_per_batch,ams.len());
+                    for i in (0..ams.len()).step_by(self.num_per_batch){
+                        let end_i = std::cmp::min(i+self.num_per_batch,ams.len());
 
                         let mut tg_am =  local_am.clone();
                         tg_am.ams = ams.clone();
@@ -816,8 +1018,37 @@ fn impl_am_group_user(
 
                 #typed_am_group_result_type
             }
+
+            #[allow(unused)]
+            pub async fn exec3(mut self) -> #lamellar::TypedAmGroupResult<#inner_ret_type>{
+                
+                let timer = std::time::Instant::now();
+
+                for pe in 0..(self.team.num_pes()+1){
+                    self.send_pe_buffer(pe);
+                }
+                println!("launch time: {:?} ", timer.elapsed().as_secs_f64());
+
+                let pes = #lamellar::futures::future::join_all(self.pending_reqs);
+                let all = #lamellar::futures::future::join_all(self.pending_reqs_all);
+                let res = #lamellar::futures::join!(
+                    pes,
+                    all,
+                    #am_group_name_user::create_idx(self.pending_reqs_idx,self.cnt),
+                );
+
+                let num_pes = self.team.num_pes();
+                #typed_am_group_result_type
+            }
+
             async fn am_pe(team: std::sync::Arc<#lamellar::LamellarTeam>, tg_am: #am_group_am_name_local #ty_generics ,pe: usize) -> (usize,#ret_type){
                 (pe, team.exec_am_group_pe(pe,tg_am).await)
+            }
+            fn am_pe2(team: std::sync::Arc<#lamellar::LamellarTeam>, tg_am: #am_group_remote_name2 #ty_generics ,pe: usize) ->std::pin::Pin<Box<dyn std::future::Future<Output = (usize,#ret_type)> + Send>> {
+                let task = team.exec_am_group_pe(pe,tg_am);
+                Box::pin( async move {
+                    (pe, task.await)
+                })
             }
             async fn create_idx(reqs_idx: std::collections::BTreeMap<usize,(Vec<usize>,Vec<(usize,usize)>)>,cnt: usize)->Vec<(usize,usize,usize)> {// Vec<(usize,usize,usize)> {//AmGroupReqs<#ret_type> {
                 let mut idx_map: Vec<(usize,usize,usize)> = Vec::new();
@@ -847,10 +1078,12 @@ pub(crate) fn generate_am_group(
     let name = type_name(&input.self_ty).expect("unable to find name");
     let orig_name = syn::Ident::new(&name, Span::call_site());
     let am_group_am_name = get_am_group_name(&orig_name);
+    let am_group_am_name2 = get_am_group_name(&format_ident!{"{}2", &orig_name});
     let am_group_am_name_inner = get_inner_am_name(&orig_name);
     let am_group_am_name_local = get_am_group_local_name(&orig_name);
     let am_group_user_name = get_am_group_user_name(&orig_name);
     let am_group_return_name = get_am_group_return_name(&orig_name);
+    // let am_group_return_name2 = get_am_group_return_name(&format_ident!{"{}2", orig_name.to_string()});
     let inner_am_name = get_inner_am_name(&orig_name);
 
     let am_group_am_name_unpack = quote::format_ident!("{}_unpack", am_group_am_name);
@@ -867,6 +1100,7 @@ pub(crate) fn generate_am_group(
     };
 
     let am_group_remote_body = gen_am_group_remote_body(&input);
+    let am_group_remote_body2 = gen_am_group_remote_body2(&input);
     let am_group_local_body = gen_am_group_local_body(&input);
 
     let ret_stmt = gen_am_group_return_stmt(&am_type, &am_group_return_name, lamellar, false);
@@ -882,6 +1116,20 @@ pub(crate) fn generate_am_group(
         &ret_stmt,
         &lamellar,
     );
+
+
+    let am_group_remote2 = impl_am_group_remote2(
+        &generics,
+        &am_type,
+        &inner_am_name,
+        &am_group_am_name2,
+        &am_group_return_name,
+        &am_group_remote_body2,
+        &ret_type,
+        &ret_stmt,
+        &lamellar,
+    );
+
     let am_group_local = impl_am_group_local(
         &generics,
         &am_type,
@@ -925,6 +1173,8 @@ pub(crate) fn generate_am_group(
         }
 
         #am_group_remote
+
+        #am_group_remote2
 
         #am_group_local
 
@@ -1041,6 +1291,43 @@ fn create_am_group_inner(
         &fields.to_token_stream(),
         &fields.ser(),
         &fields.des(),
+        lamellar,
+        local,
+    );
+    let lamellar_serde = impl_lamellar_serde_trait(generics, &am_group_inner_name, lamellar);
+    (
+        inner_am,
+        quote! {
+            #lamellar_serde
+            #inner_am_traits
+        },
+    )
+}
+
+fn create_am_group_inner2(
+    generics: &syn::Generics,
+    attributes: &proc_macro2::TokenStream,
+    traits: &proc_macro2::TokenStream,
+    attrs: &proc_macro2::TokenStream,
+    vis: &proc_macro2::TokenStream,
+    name: &syn::Ident,
+    fields: &FieldInfo,
+    static_fields: &FieldInfo,
+    lamellar: &proc_macro2::TokenStream,
+    local: bool,
+) -> (proc_macro2::TokenStream, proc_macro2::TokenStream) {
+    let (_impl_generics, ty_generics, _where_clause) = generics.split_for_impl();
+    let am_group_inner_name = get_inner_am_name(&format_ident!("{}2", name));
+    let (inner_am, inner_am_traits) = create_am_struct(
+        generics,
+        attributes,
+        traits,
+        attrs,
+        vis,
+        &am_group_inner_name,
+        &fields.to_tokens_as_vecs(),
+        &fields.ser_as_vecs(),
+        &fields.des_as_vecs(),
         lamellar,
         local,
     );
@@ -1194,6 +1481,192 @@ fn create_am_group_remote(
                 #orig_am_ref
                 #orig_am
             }
+
+            #the_traits
+        },
+    )
+}
+
+
+fn gen_all_iter_type(mut field_types:  Vec<syn::Type>,mut fields: Vec<proc_macro2::TokenStream>,static_types: Vec<syn::Type>, static_fields: Vec<proc_macro2::TokenStream>) -> proc_macro2::TokenStream {
+    
+    fields.extend(static_fields);
+    field_types.extend(static_types.iter().map(|f| parse_quote!{&#f}));
+    let all_fields = fields;
+    let all_types = field_types;
+    let mut all_iter_types = quote!{};
+    let mut flat_types = quote!{};
+    if all_fields.len() == 1 {
+        all_iter_types = all_fields[0].clone();
+    }
+    else{
+        let first_type = &all_fields[0];
+        let first_elem_ty = &all_types[0];
+        all_iter_types = quote!{ std::iter::Zip<#first_type };
+        flat_types.extend(quote!{#first_elem_ty,});
+        for (ty,it) in all_fields[1..all_fields.len()-1].iter().zip(all_types[1..all_types.len()-1].iter()) {
+            all_iter_types =quote!{ std::iter::Zip< #all_iter_types, #it>, };
+            flat_types.extend(quote!{#ty,});
+        }
+        let last_type = &all_fields[all_fields.len()-1];
+        let last_elem_ty = &all_types[all_types.len()-1];
+        flat_types.extend(quote!{#last_elem_ty});
+        all_iter_types = quote!{#all_iter_types, #last_type>};
+        all_iter_types = quote!{std::iter::Map<#all_iter_types,(#flat_types)>};
+    }
+    all_iter_types = quote!{impl Iterator<Item = (#flat_types)> + '_};
+    all_iter_types
+}
+
+fn gen_all_iter_init(mut field_names: Vec<syn::Ident>,mut fields: Vec<proc_macro2::TokenStream>, static_names: Vec<syn::Ident>, static_fields: Vec<proc_macro2::TokenStream>) -> proc_macro2::TokenStream {
+    fields.extend(static_fields);
+    let all_fields = fields;
+    field_names.extend(static_names);
+    let all_names = field_names;
+    let mut all_iter_init = quote!{};
+    let mut nested_init = quote!{};
+    let mut flat_init = quote!{};
+    if all_fields.len() == 1 {
+        all_iter_init = all_fields[0].clone();
+    }
+    else{
+        let first_init = &all_fields[0];
+        let first_name = &all_names[0];
+        all_iter_init = quote!{ #first_init.zip };
+        nested_init = quote!(#first_name);
+        flat_init = quote!{#first_name};
+        for (n,it) in all_fields[1..all_fields.len()-1].iter().zip(all_names[1..all_names.len()-1].iter()) {
+            all_iter_init =quote!{ #all_iter_init(#it).zip };
+            nested_init = quote!((#nested_init,#n));
+            flat_init = quote!(#flat_init,#n);
+        }
+        let last_type = &all_fields[all_fields.len()-1];
+        let last_name = &all_names[all_names.len()-1];
+        all_iter_init = quote!{#all_iter_init(#last_type)};
+        nested_init = quote!((#nested_init,#last_name));
+        flat_init = quote!(#flat_init,#last_name);
+        all_iter_init = quote!{#all_iter_init.map(|#nested_init| (#flat_init))};
+    }
+    all_iter_init
+}
+
+fn create_am_group_remote2(
+    generics: &syn::Generics,
+    attributes: &proc_macro2::TokenStream,
+    traits: &proc_macro2::TokenStream,
+    attrs: &proc_macro2::TokenStream,
+    vis: &proc_macro2::TokenStream,
+    name: &syn::Ident,
+    fields: &FieldInfo,
+    static_fields: &FieldInfo,
+    lamellar: &proc_macro2::TokenStream,
+    local: bool,
+) -> (proc_macro2::TokenStream, proc_macro2::TokenStream) {
+    let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
+    let am_group_inner_name = get_inner_am_name(&format_ident!("{}2", name));
+    let am_group_name = get_am_group_name(&format_ident!("{}2", name));
+    let fields_as_vecs = fields.to_tokens_as_vecs();
+    let am_group_fields = quote! {
+        #static_fields
+        #fields_as_vecs
+        // ams: Vec<#am_group_inner_name #ty_generics>,
+    };
+    let mut am_group_ser = fields.ser_as_vecs();
+    am_group_ser.extend(static_fields.ser());
+
+    let mut am_group_des = fields.des_as_vecs();
+    am_group_des.extend(static_fields.des());
+
+    let (the_struct, the_traits) = create_am_struct(
+        generics,
+        attributes,
+        traits,
+        attrs,
+        vis,
+        &am_group_name,
+        &am_group_fields,
+        &am_group_ser,
+        &am_group_des,
+        lamellar,
+        local,
+    );
+    let orig_am_ref = create_as_orig_am_ref(generics, name, fields, static_fields, lamellar);
+    let orig_am = create_as_orig_am(generics, name, fields, static_fields, lamellar);
+
+    let field_iters = fields.gen_vec_iter();
+    let static_field_iters = static_fields.gen_repeat_iter();
+
+    let field_iter_types = fields.gen_vec_iter_types();
+    let static_field_iter_types = static_fields.gen_repeat_iter_types();
+
+    let field_iter_inits = fields.gen_iter_inits();
+    let static_field_iter_inits = static_fields.gen_iter_inits();
+
+    let all_iter_type= gen_all_iter_type(fields.types(), field_iter_types, static_fields.types(), static_field_iter_types);
+    let all_iter_init = gen_all_iter_init(fields.names(), field_iter_inits, static_fields.names(), static_field_iter_inits);
+    
+    
+    let field_getters = fields.gen_getters(false);
+    let static_field_getters = static_fields.gen_getters(true);
+
+    let field_inits = fields.names().iter().fold(quote!{}, |acc,n| quote!{
+        #acc
+        self.#n.push(am.#n);
+    });
+    let field_news = fields.names().iter().fold(quote!{}, |acc,n| quote!{
+        #acc
+        #n: vec![],
+    });
+
+    let my_len = if fields.names().len() > 0 {
+        let f = &fields.names()[0];
+        quote!{
+            self.#f.len()
+        }
+    }
+    else {
+        quote!{
+            1
+        }
+    };
+    let static_field_inits = static_fields.names().iter().fold(quote!{}, |acc,n| quote!{
+        #acc
+        #n: am.#n.clone(),
+    });
+
+    println!("{:?}",all_iter_type.to_string());
+    println!("{:?}",all_iter_init.to_string());
+    (
+        the_struct,
+        quote! {
+            impl #impl_generics #am_group_name #ty_generics #where_clause{
+                // #orig_am_ref
+                // #orig_am
+                // #field_iters
+                // #static_field_iters
+
+                #field_getters
+                #static_field_getters
+
+                fn new(am: &#name) -> Self {
+                    #am_group_name {
+                        #field_news
+                        #static_field_inits
+                    }
+                }
+
+                fn add_am(&mut self, am: #name) {
+                    #field_inits
+                }
+
+                fn len(&self) -> usize {
+                    #my_len
+                }
+                // fn iters(&self) -> #all_iter_type {
+                //     #all_iter_init
+                // }
+            }
+
 
             #the_traits
         },
@@ -1477,6 +1950,19 @@ pub(crate) fn create_am_group_structs(
         local,
     );
 
+    let (am_group_remote2, am_group_remote_traits2) = create_am_group_remote2(
+        generics,
+        attributes,
+        traits,
+        attrs,
+        vis,
+        name,
+        fields,
+        static_fields,
+        lamellar,
+        local,
+    );
+
     let (am_group_local, am_group_local_traits) = create_am_group_local(
         generics,
         attributes,
@@ -1501,6 +1987,7 @@ pub(crate) fn create_am_group_structs(
             #am_ref
             #am_group_inner
             #am_group_remote
+            #am_group_remote2
             #am_group_local
             // #am_group_local_ser
         },
@@ -1508,6 +1995,7 @@ pub(crate) fn create_am_group_structs(
 
             #am_group_inner_traits
             #am_group_remote_traits
+            #am_group_remote_traits2
             #am_group_local_traits
             // #am_group_local_ser_traits
         },

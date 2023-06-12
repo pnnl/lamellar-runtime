@@ -103,9 +103,9 @@ fn main() {
     }
 
     let mut am_group = typed_am_group!(AmNoReturn, world.clone());
-    am_group.add_am_all(am.clone());
-    am_group.add_am_pe(0, am.clone());
-    world.block_on(am_group.exec());
+    am_group.add_am_all2(am.clone());
+    am_group.add_am_pe2(0, am.clone());
+    world.block_on(am_group.exec3());
 
     // println!("---------------------------------------------------------------");
     // println!("Testing ring pattern am no return");
