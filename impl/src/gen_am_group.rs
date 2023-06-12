@@ -758,9 +758,9 @@ fn impl_am_group_user(
         struct #am_group_name_user #impl_generics #where_clause{
             team: std::sync::Arc<#lamellar::LamellarTeam>,
             cnt: usize,
-            reqs: std::collections::BTreeMap<usize,(Vec<usize>, Vec<#am_group_inner_name #ty_generics>,usize)>,
+            // reqs: std::collections::BTreeMap<usize,(Vec<usize>, Vec<#am_group_inner_name #ty_generics>,usize)>,
             reqs2: std::collections::BTreeMap<usize,(Vec<usize>, #am_group_remote_name2 #ty_generics,usize)>,
-            local_am: Option<#am_group_am_name_local #ty_generics>,
+            // local_am: Option<#am_group_am_name_local #ty_generics>,
             num_per_batch: usize,
             pending_reqs: Vec<std::pin::Pin<Box<dyn std::future::Future<Output = (usize,#ret_type)> + Send>>>,
             pending_reqs_all: Vec<std::pin::Pin<Box<dyn std::future::Future<Output = Vec<#ret_type>> + Send>>>,
@@ -778,43 +778,43 @@ fn impl_am_group_user(
                 #am_group_name_user {
                     team: team,
                     cnt: 0,
-                    reqs: std::collections::BTreeMap::new(),
+                    // reqs: std::collections::BTreeMap::new(),
                     reqs2: std::collections::BTreeMap::new(),
-                    local_am: None,
+                    // local_am: None,
                     num_per_batch: num_per_batch,
                     pending_reqs: Vec::new(),
                     pending_reqs_all: Vec::new(),
                     pending_reqs_idx: std::collections::BTreeMap::new(),
                 }
             }
-            #[allow(unused)]
-            fn add_am_all(&mut self, am:  #am_name #ty_generics)
-            {
-                let req_queue = self.reqs.entry(self.team.num_pes()).or_insert_with(|| {
-                    self.local_am = Some(am.as_am_group_local());
-                    (Vec::with_capacity(self.num_per_batch),Vec::with_capacity(self.num_per_batch),1000000)
-                });
-                // req_queue.2 += am.serialized_size();
-                req_queue.0.push(self.cnt);
-                req_queue.1.push(am.into_am_group_inner());
-                self.cnt+=1;
-            }
-            #[allow(unused)]
-            fn add_am_pe(&mut self, pe: usize, am:  #am_name #ty_generics)
-            {
-                // if self.local_am.is_none() {
-                //     self.local_am = Some(am.as_am_group_local());
-                // }
-                let req_queue = self.reqs.entry(pe).or_insert_with(|| {
-                    self.local_am = Some(am.as_am_group_local());
-                    (Vec::with_capacity(self.num_per_batch),Vec::with_capacity(self.num_per_batch),1000000)
-                });
-                // req_queue.2 += am.serialized_size();
-                req_queue.0.push(self.cnt);
-                req_queue.1.push(am.into_am_group_inner());
-                self.cnt+=1;
-                // println!("cnt: {:?}",self.cnt);
-            }
+            // #[allow(unused)]
+            // fn add_am_all(&mut self, am:  #am_name #ty_generics)
+            // {
+            //     let req_queue = self.reqs.entry(self.team.num_pes()).or_insert_with(|| {
+            //         self.local_am = Some(am.as_am_group_local());
+            //         (Vec::with_capacity(self.num_per_batch),Vec::with_capacity(self.num_per_batch),1000000)
+            //     });
+            //     // req_queue.2 += am.serialized_size();
+            //     req_queue.0.push(self.cnt);
+            //     req_queue.1.push(am.into_am_group_inner());
+            //     self.cnt+=1;
+            // }
+            // #[allow(unused)]
+            // fn add_am_pe(&mut self, pe: usize, am:  #am_name #ty_generics)
+            // {
+            //     // if self.local_am.is_none() {
+            //     //     self.local_am = Some(am.as_am_group_local());
+            //     // }
+            //     let req_queue = self.reqs.entry(pe).or_insert_with(|| {
+            //         self.local_am = Some(am.as_am_group_local());
+            //         (Vec::with_capacity(self.num_per_batch),Vec::with_capacity(self.num_per_batch),1000000)
+            //     });
+            //     // req_queue.2 += am.serialized_size();
+            //     req_queue.0.push(self.cnt);
+            //     req_queue.1.push(am.into_am_group_inner());
+            //     self.cnt+=1;
+            //     // println!("cnt: {:?}",self.cnt);
+            // }
 
             #[allow(unused)]
             fn add_am_all2(&mut self, am:  #am_name #ty_generics)
@@ -860,164 +860,164 @@ fn impl_am_group_user(
                 }
             }
 
-            #[allow(unused)]
-            pub async fn exec(mut self) -> #lamellar::TypedAmGroupResult<#inner_ret_type>{
-                let timer = std::time::Instant::now();
+            // #[allow(unused)]
+            // pub async fn exec(mut self) -> #lamellar::TypedAmGroupResult<#inner_ret_type>{
+            //     let timer = std::time::Instant::now();
 
-                let mut reqs: Vec<_> = Vec::new();
-                let mut reqs_all: Vec<std::pin::Pin<Box<dyn std::future::Future<Output = Vec<#ret_type>> + Send>>> = Vec::new();
-                let mut reqs_idx: std::collections::BTreeMap<usize,(Vec<usize>,Vec<(usize,usize)>)> = std::collections::BTreeMap::new();
-                let num_pes = self.team.num_pes();
+            //     let mut reqs: Vec<_> = Vec::new();
+            //     let mut reqs_all: Vec<std::pin::Pin<Box<dyn std::future::Future<Output = Vec<#ret_type>> + Send>>> = Vec::new();
+            //     let mut reqs_idx: std::collections::BTreeMap<usize,(Vec<usize>,Vec<(usize,usize)>)> = std::collections::BTreeMap::new();
+            //     let num_pes = self.team.num_pes();
 
-                let local_am = self.local_am.as_ref().expect("local am should exist");
+            //     let local_am = self.local_am.as_ref().expect("local am should exist");
 
-                for (pe,the_ams) in self.reqs.iter_mut() {
-                    let mut ams: Vec<#am_group_inner_name #ty_generics> = Vec::new();
-                    let mut idx: Vec<usize> = Vec::new();
-                    std::mem::swap(&mut ams,&mut the_ams.1);
-                    std::mem::swap(&mut idx,&mut the_ams.0);
+            //     for (pe,the_ams) in self.reqs.iter_mut() {
+            //         let mut ams: Vec<#am_group_inner_name #ty_generics> = Vec::new();
+            //         let mut idx: Vec<usize> = Vec::new();
+            //         std::mem::swap(&mut ams,&mut the_ams.1);
+            //         std::mem::swap(&mut idx,&mut the_ams.0);
 
-                    let ams = std::sync::Arc::new(ams);
-                    let mut req_idx: Vec<(usize,usize)> = Vec::new();
+            //         let ams = std::sync::Arc::new(ams);
+            //         let mut req_idx: Vec<(usize,usize)> = Vec::new();
 
-                    if the_ams.2 > 1_000_000{
-                        let num_reqs = (the_ams.2 / 1_000_000) + 1;
-                        let req_size = the_ams.2/num_reqs;
-                        let mut temp_size = 0;
-                        let mut i = 0;
-                        let mut start_i = 0;
-                        let mut send = false;
-                        while i < ams.len() {
-                            let am_size = ams[i].serialized_size();
-                            if temp_size + am_size < 100_000_000 { //hard size limit
-                                temp_size += am_size;
-                                i+=1;
-                                if temp_size > req_size{
-                                    send = true
-                                }
-                            }
-                            else {
-                                send = true;
-                            }
-                            if send{
-                                let mut tg_am = local_am.clone();
-                                tg_am.ams = ams.clone();
-                                tg_am.si = start_i;
-                                tg_am.ei = i;
-                                // let tg_am = #am_group_am_name_local{ams: ams.clone(), si: start_i, ei: i};
-                                if *pe == self.team.num_pes(){
-                                    reqs_all.push(self.team.exec_am_group_all(tg_am));
-                                }
-                                else{
-                                    reqs.push(#am_group_name_user::am_pe(self.team.clone(),tg_am,*pe));
-                                }
-                                req_idx.push((start_i, i));
-                                send = false;
-                                start_i = i;
-                                temp_size = 0;
-                            }
-                        }
-                        if temp_size > 0 {
-                            let mut tg_am =  local_am.clone();
-                            tg_am.ams = ams.clone();
-                            tg_am.si = start_i;
-                            tg_am.ei = i;
-                            // let tg_am = #am_group_am_name_local{ams: ams.clone(), si: start_i, ei: i};
-                            if *pe == self.team.num_pes(){
-                                reqs_all.push(self.team.exec_am_group_all(tg_am));
-                            }
-                            else{
-                                reqs.push(#am_group_name_user::am_pe(self.team.clone(),tg_am,*pe));
-                            }
-                            req_idx.push((start_i, i));
-                        }
-                    }
-                    else{
-                        let mut tg_am =  local_am.clone();
-                        tg_am.ams = ams.clone();
-                        tg_am.si = 0;
-                        tg_am.ei = ams.len();
-                        // let tg_am = #am_group_am_name_local{ams: ams.clone(), si: 0, ei: ams.len()};
-                        if *pe == self.team.num_pes(){
-                            reqs_all.push(self.team.exec_am_group_all(tg_am));
-                        }
-                        else{
-                            reqs.push(#am_group_name_user::am_pe(self.team.clone(),tg_am,*pe));
-                        }
-                        req_idx.push((0, ams.len()));
-                    }
-                    reqs_idx.insert(*pe,(idx,req_idx));
-                    // reqs_pes.push(pe);
-                }
+            //         if the_ams.2 > 1_000_000{
+            //             let num_reqs = (the_ams.2 / 1_000_000) + 1;
+            //             let req_size = the_ams.2/num_reqs;
+            //             let mut temp_size = 0;
+            //             let mut i = 0;
+            //             let mut start_i = 0;
+            //             let mut send = false;
+            //             while i < ams.len() {
+            //                 let am_size = ams[i].serialized_size();
+            //                 if temp_size + am_size < 100_000_000 { //hard size limit
+            //                     temp_size += am_size;
+            //                     i+=1;
+            //                     if temp_size > req_size{
+            //                         send = true
+            //                     }
+            //                 }
+            //                 else {
+            //                     send = true;
+            //                 }
+            //                 if send{
+            //                     let mut tg_am = local_am.clone();
+            //                     tg_am.ams = ams.clone();
+            //                     tg_am.si = start_i;
+            //                     tg_am.ei = i;
+            //                     // let tg_am = #am_group_am_name_local{ams: ams.clone(), si: start_i, ei: i};
+            //                     if *pe == self.team.num_pes(){
+            //                         reqs_all.push(self.team.exec_am_group_all(tg_am));
+            //                     }
+            //                     else{
+            //                         reqs.push(#am_group_name_user::am_pe(self.team.clone(),tg_am,*pe));
+            //                     }
+            //                     req_idx.push((start_i, i));
+            //                     send = false;
+            //                     start_i = i;
+            //                     temp_size = 0;
+            //                 }
+            //             }
+            //             if temp_size > 0 {
+            //                 let mut tg_am =  local_am.clone();
+            //                 tg_am.ams = ams.clone();
+            //                 tg_am.si = start_i;
+            //                 tg_am.ei = i;
+            //                 // let tg_am = #am_group_am_name_local{ams: ams.clone(), si: start_i, ei: i};
+            //                 if *pe == self.team.num_pes(){
+            //                     reqs_all.push(self.team.exec_am_group_all(tg_am));
+            //                 }
+            //                 else{
+            //                     reqs.push(#am_group_name_user::am_pe(self.team.clone(),tg_am,*pe));
+            //                 }
+            //                 req_idx.push((start_i, i));
+            //             }
+            //         }
+            //         else{
+            //             let mut tg_am =  local_am.clone();
+            //             tg_am.ams = ams.clone();
+            //             tg_am.si = 0;
+            //             tg_am.ei = ams.len();
+            //             // let tg_am = #am_group_am_name_local{ams: ams.clone(), si: 0, ei: ams.len()};
+            //             if *pe == self.team.num_pes(){
+            //                 reqs_all.push(self.team.exec_am_group_all(tg_am));
+            //             }
+            //             else{
+            //                 reqs.push(#am_group_name_user::am_pe(self.team.clone(),tg_am,*pe));
+            //             }
+            //             req_idx.push((0, ams.len()));
+            //         }
+            //         reqs_idx.insert(*pe,(idx,req_idx));
+            //         // reqs_pes.push(pe);
+            //     }
 
-                println!("launch time: {:?} cnt: {:?} {:?} {:?}", timer.elapsed().as_secs_f64(),self.cnt,reqs.len(),reqs_all.len());
+            //     println!("launch time: {:?} cnt: {:?} {:?} {:?}", timer.elapsed().as_secs_f64(),self.cnt,reqs.len(),reqs_all.len());
 
-                let pes = #lamellar::futures::future::join_all(reqs);
-                let all = #lamellar::futures::future::join_all(reqs_all);
-                let res = #lamellar::futures::join!(
-                    pes,
-                    all,
-                    #am_group_name_user::create_idx(reqs_idx,self.cnt),
-                );
-
-
-                #typed_am_group_result_type
-            }
-
-            #[allow(unused)]
-            pub async fn exec2(mut self) -> #lamellar::TypedAmGroupResult<#inner_ret_type>{
-                let timer = std::time::Instant::now();
-
-                let mut reqs: Vec<_> = Vec::new();
-                let mut reqs_all: Vec<std::pin::Pin<Box<dyn std::future::Future<Output = Vec<#ret_type>> + Send>>> = Vec::new();
-                let mut reqs_idx: std::collections::BTreeMap<usize,(Vec<usize>,Vec<(usize,usize)>)> = std::collections::BTreeMap::new();
-                let num_pes = self.team.num_pes();
-
-                let local_am = self.local_am.as_ref().expect("local am should exist");
-
-                for (pe,the_ams) in self.reqs.iter_mut() {
-                    let mut ams: Vec<#am_group_inner_name #ty_generics> = Vec::new();
-                    let mut idx: Vec<usize> = Vec::new();
-                    std::mem::swap(&mut ams,&mut the_ams.1);
-                    std::mem::swap(&mut idx,&mut the_ams.0);
-
-                    let ams = std::sync::Arc::new(ams);
-                    let mut req_idx: Vec<(usize,usize)> = Vec::new();
-
-                    for i in (0..ams.len()).step_by(self.num_per_batch){
-                        let end_i = std::cmp::min(i+self.num_per_batch,ams.len());
-
-                        let mut tg_am =  local_am.clone();
-                        tg_am.ams = ams.clone();
-                        tg_am.si = i;
-                        tg_am.ei = end_i;
-                        // let tg_am = #am_group_am_name_local{ams: ams.clone(), si: start_i, ei: i};
-                        if *pe == self.team.num_pes(){
-                            reqs_all.push(self.team.exec_am_group_all(tg_am));
-                        }
-                        else{
-                            reqs.push(#am_group_name_user::am_pe(self.team.clone(),tg_am,*pe));
-                        }
-                        req_idx.push((i, end_i));
-
-                    }
-                    reqs_idx.insert(*pe,(idx,req_idx));
-                    // reqs_pes.push(pe);
-                }
-
-                println!("launch time: {:?} cnt: {:?} {:?} {:?}", timer.elapsed().as_secs_f64(),self.cnt,reqs.len(),reqs_all.len());
-
-                let pes = #lamellar::futures::future::join_all(reqs);
-                let all = #lamellar::futures::future::join_all(reqs_all);
-                let res = #lamellar::futures::join!(
-                    pes,
-                    all,
-                    #am_group_name_user::create_idx(reqs_idx,self.cnt),
-                );
+            //     let pes = #lamellar::futures::future::join_all(reqs);
+            //     let all = #lamellar::futures::future::join_all(reqs_all);
+            //     let res = #lamellar::futures::join!(
+            //         pes,
+            //         all,
+            //         #am_group_name_user::create_idx(reqs_idx,self.cnt),
+            //     );
 
 
-                #typed_am_group_result_type
-            }
+            //     #typed_am_group_result_type
+            // }
+
+            // #[allow(unused)]
+            // pub async fn exec2(mut self) -> #lamellar::TypedAmGroupResult<#inner_ret_type>{
+            //     let timer = std::time::Instant::now();
+
+            //     let mut reqs: Vec<_> = Vec::new();
+            //     let mut reqs_all: Vec<std::pin::Pin<Box<dyn std::future::Future<Output = Vec<#ret_type>> + Send>>> = Vec::new();
+            //     let mut reqs_idx: std::collections::BTreeMap<usize,(Vec<usize>,Vec<(usize,usize)>)> = std::collections::BTreeMap::new();
+            //     let num_pes = self.team.num_pes();
+
+            //     let local_am = self.local_am.as_ref().expect("local am should exist");
+
+            //     for (pe,the_ams) in self.reqs.iter_mut() {
+            //         let mut ams: Vec<#am_group_inner_name #ty_generics> = Vec::new();
+            //         let mut idx: Vec<usize> = Vec::new();
+            //         std::mem::swap(&mut ams,&mut the_ams.1);
+            //         std::mem::swap(&mut idx,&mut the_ams.0);
+
+            //         let ams = std::sync::Arc::new(ams);
+            //         let mut req_idx: Vec<(usize,usize)> = Vec::new();
+
+            //         for i in (0..ams.len()).step_by(self.num_per_batch){
+            //             let end_i = std::cmp::min(i+self.num_per_batch,ams.len());
+
+            //             let mut tg_am =  local_am.clone();
+            //             tg_am.ams = ams.clone();
+            //             tg_am.si = i;
+            //             tg_am.ei = end_i;
+            //             // let tg_am = #am_group_am_name_local{ams: ams.clone(), si: start_i, ei: i};
+            //             if *pe == self.team.num_pes(){
+            //                 reqs_all.push(self.team.exec_am_group_all(tg_am));
+            //             }
+            //             else{
+            //                 reqs.push(#am_group_name_user::am_pe(self.team.clone(),tg_am,*pe));
+            //             }
+            //             req_idx.push((i, end_i));
+
+            //         }
+            //         reqs_idx.insert(*pe,(idx,req_idx));
+            //         // reqs_pes.push(pe);
+            //     }
+
+            //     println!("launch time: {:?} cnt: {:?} {:?} {:?}", timer.elapsed().as_secs_f64(),self.cnt,reqs.len(),reqs_all.len());
+
+            //     let pes = #lamellar::futures::future::join_all(reqs);
+            //     let all = #lamellar::futures::future::join_all(reqs_all);
+            //     let res = #lamellar::futures::join!(
+            //         pes,
+            //         all,
+            //         #am_group_name_user::create_idx(reqs_idx,self.cnt),
+            //     );
+
+
+            //     #typed_am_group_result_type
+            // }
 
             #[allow(unused)]
             pub async fn exec3(mut self) -> #lamellar::TypedAmGroupResult<#inner_ret_type>{
@@ -1041,9 +1041,9 @@ fn impl_am_group_user(
                 #typed_am_group_result_type
             }
 
-            async fn am_pe(team: std::sync::Arc<#lamellar::LamellarTeam>, tg_am: #am_group_am_name_local #ty_generics ,pe: usize) -> (usize,#ret_type){
-                (pe, team.exec_am_group_pe(pe,tg_am).await)
-            }
+            // async fn am_pe(team: std::sync::Arc<#lamellar::LamellarTeam>, tg_am: #am_group_am_name_local #ty_generics ,pe: usize) -> (usize,#ret_type){
+            //     (pe, team.exec_am_group_pe(pe,tg_am).await)
+            // }
             fn am_pe2(team: std::sync::Arc<#lamellar::LamellarTeam>, tg_am: #am_group_remote_name2 #ty_generics ,pe: usize) ->std::pin::Pin<Box<dyn std::future::Future<Output = (usize,#ret_type)> + Send>> {
                 let task = team.exec_am_group_pe(pe,tg_am);
                 Box::pin( async move {
@@ -1099,23 +1099,23 @@ pub(crate) fn generate_am_group(
         }
     };
 
-    let am_group_remote_body = gen_am_group_remote_body(&input);
+    // let am_group_remote_body = gen_am_group_remote_body(&input);
     let am_group_remote_body2 = gen_am_group_remote_body2(&input);
-    let am_group_local_body = gen_am_group_local_body(&input);
+    // let am_group_local_body = gen_am_group_local_body(&input);
 
     let ret_stmt = gen_am_group_return_stmt(&am_type, &am_group_return_name, lamellar, false);
 
-    let am_group_remote = impl_am_group_remote(
-        &generics,
-        &am_type,
-        &inner_am_name,
-        &am_group_am_name,
-        &am_group_return_name,
-        &am_group_remote_body,
-        &ret_type,
-        &ret_stmt,
-        &lamellar,
-    );
+    // let am_group_remote = impl_am_group_remote(
+    //     &generics,
+    //     &am_type,
+    //     &inner_am_name,
+    //     &am_group_am_name,
+    //     &am_group_return_name,
+    //     &am_group_remote_body,
+    //     &ret_type,
+    //     &ret_stmt,
+    //     &lamellar,
+    // );
 
 
     let am_group_remote2 = impl_am_group_remote2(
@@ -1130,18 +1130,18 @@ pub(crate) fn generate_am_group(
         &lamellar,
     );
 
-    let am_group_local = impl_am_group_local(
-        &generics,
-        &am_type,
-        &inner_am_name,
-        &am_group_am_name,
-        &am_group_am_name_local,
-        &am_group_return_name,
-        &am_group_local_body,
-        &ret_type,
-        &ret_stmt,
-        &lamellar,
-    );
+    // let am_group_local = impl_am_group_local(
+    //     &generics,
+    //     &am_type,
+    //     &inner_am_name,
+    //     &am_group_am_name,
+    //     &am_group_am_name_local,
+    //     &am_group_return_name,
+    //     &am_group_local_body,
+    //     &ret_type,
+    //     &ret_stmt,
+    //     &lamellar,
+    // );
 
     let am_group_return = impl_return_struct(
         &generics,
@@ -1172,11 +1172,11 @@ pub(crate) fn generate_am_group(
             }
         }
 
-        #am_group_remote
+        // #am_group_remote
 
         #am_group_remote2
 
-        #am_group_local
+        // #am_group_local
 
         #am_group_return
 
@@ -1911,44 +1911,44 @@ pub(crate) fn create_am_group_structs(
     lamellar: &proc_macro2::TokenStream,
     local: bool,
 ) -> (proc_macro2::TokenStream, proc_macro2::TokenStream) {
-    let am_ref = create_am_ref(
-        generics,
-        attributes,
-        traits,
-        attrs,
-        vis,
-        name,
-        fields,
-        static_fields,
-        lamellar,
-        local,
-    );
+    // let am_ref = create_am_ref(
+    //     generics,
+    //     attributes,
+    //     traits,
+    //     attrs,
+    //     vis,
+    //     name,
+    //     fields,
+    //     static_fields,
+    //     lamellar,
+    //     local,
+    // );
 
-    let (am_group_inner, am_group_inner_traits) = create_am_group_inner(
-        generics,
-        attributes,
-        traits,
-        attrs,
-        vis,
-        name,
-        fields,
-        static_fields,
-        lamellar,
-        local,
-    );
+    // let (am_group_inner, am_group_inner_traits) = create_am_group_inner(
+    //     generics,
+    //     attributes,
+    //     traits,
+    //     attrs,
+    //     vis,
+    //     name,
+    //     fields,
+    //     static_fields,
+    //     lamellar,
+    //     local,
+    // );
 
-    let (am_group_remote, am_group_remote_traits) = create_am_group_remote(
-        generics,
-        attributes,
-        traits,
-        attrs,
-        vis,
-        name,
-        fields,
-        static_fields,
-        lamellar,
-        local,
-    );
+    // let (am_group_remote, am_group_remote_traits) = create_am_group_remote(
+    //     generics,
+    //     attributes,
+    //     traits,
+    //     attrs,
+    //     vis,
+    //     name,
+    //     fields,
+    //     static_fields,
+    //     lamellar,
+    //     local,
+    // );
 
     let (am_group_remote2, am_group_remote_traits2) = create_am_group_remote2(
         generics,
@@ -1963,18 +1963,18 @@ pub(crate) fn create_am_group_structs(
         local,
     );
 
-    let (am_group_local, am_group_local_traits) = create_am_group_local(
-        generics,
-        attributes,
-        traits,
-        attrs,
-        vis,
-        name,
-        fields,
-        static_fields,
-        lamellar,
-        local,
-    );
+    // let (am_group_local, am_group_local_traits) = create_am_group_local(
+    //     generics,
+    //     attributes,
+    //     traits,
+    //     attrs,
+    //     vis,
+    //     name,
+    //     fields,
+    //     static_fields,
+    //     lamellar,
+    //     local,
+    // );
 
     // let (am_group_local_ser, am_group_local_ser_traits) = create_am_group_local_ser(generics, attributes, traits, attrs, vis, name, fields, static_fields, lamellar, local);
 
@@ -1984,19 +1984,19 @@ pub(crate) fn create_am_group_structs(
 
     (
         quote! {
-            #am_ref
-            #am_group_inner
-            #am_group_remote
+            // #am_ref
+            // #am_group_inner
+            // #am_group_remote
             #am_group_remote2
-            #am_group_local
+            // #am_group_local
             // #am_group_local_ser
         },
         quote! {
 
-            #am_group_inner_traits
-            #am_group_remote_traits
+            // #am_group_inner_traits
+            // #am_group_remote_traits
             #am_group_remote_traits2
-            #am_group_local_traits
+            // #am_group_local_traits
             // #am_group_local_ser_traits
         },
     )
