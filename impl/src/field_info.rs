@@ -1,6 +1,6 @@
 use quote::{quote,quote_spanned,ToTokens,format_ident};
 use syn::spanned::Spanned;
-use syn::parse_quote;
+// use syn::parse_quote;
 
 pub(crate) struct FieldInfo{
     fields: Vec<(syn::Field,bool)>,
@@ -80,7 +80,7 @@ impl FieldInfo{
         let field_name = field.ident.as_ref().unwrap();
         let mut ind = 0;
         for elem in &ty.elems {
-            if let syn::Type::Path(ref ty) = elem {
+            if let syn::Type::Path(ref _ty) = elem {
                 // if let Some(_seg) = ty.path.segments.first() {
                     let temp_ind = syn::Index {
                         index: ind,
@@ -159,7 +159,7 @@ impl FieldInfo{
         let field_name = field.ident.as_ref().unwrap();
         let mut ind = 0;
         for elem in &ty.elems {
-            if let syn::Type::Path(ref ty) = elem {
+            if let syn::Type::Path(ref _ty) = elem {
                 // if let Some(_seg) = ty.path.segments.first() {
                     let temp_ind = syn::Index {
                         index: ind,
@@ -179,26 +179,26 @@ impl FieldInfo{
         self.fields.iter().map(|(f,_)| f.ident.clone().unwrap()).collect()
     }
 
-    pub(crate) fn types(&self) -> Vec<syn::Type> {
-        self.fields.iter().map(|(f,_)| f.ty.clone()).collect()
-    }
-    pub(crate) fn types_as_vecs(&self) -> Vec<syn::Type> {
-        self.fields.iter().map(|(f,_)| f.ty.clone()).map(|ty| parse_quote!{Vec<#ty>}).collect()
-    }
+    // pub(crate) fn types(&self) -> Vec<syn::Type> {
+    //     self.fields.iter().map(|(f,_)| f.ty.clone()).collect()
+    // }
+    // pub(crate) fn types_as_vecs(&self) -> Vec<syn::Type> {
+    //     self.fields.iter().map(|(f,_)| f.ty.clone()).map(|ty| parse_quote!{Vec<#ty>}).collect()
+    // }
 
-    pub(crate) fn gen_vec_iter(&self) -> proc_macro2::TokenStream {
-        self.fields.iter().fold(quote!{},|mut iters,(f,_)| {
-            let field_name = f.ident.as_ref().unwrap();
-            let field_type = &f.ty;
-            let func_name = format_ident!("{}_iter",field_name);
-            iters.extend(quote!{
-                fn #func_name(&self) -> impl Iterator<Item = #field_type> + '_{ //} + std::slice::Iter<'_, #field_type> {
-                    self.#field_name.iter().map(|e| e.clone())
-                }
-            });
-            iters
-        })
-    }
+    // pub(crate) fn gen_vec_iter(&self) -> proc_macro2::TokenStream {
+    //     self.fields.iter().fold(quote!{},|mut iters,(f,_)| {
+    //         let field_name = f.ident.as_ref().unwrap();
+    //         let field_type = &f.ty;
+    //         let func_name = format_ident!("{}_iter",field_name);
+    //         iters.extend(quote!{
+    //             fn #func_name(&self) -> impl Iterator<Item = #field_type> + '_{ //} + std::slice::Iter<'_, #field_type> {
+    //                 self.#field_name.iter().map(|e| e.clone())
+    //             }
+    //         });
+    //         iters
+    //     })
+    // }
 
     pub(crate) fn gen_getters(&self,as_ref: bool) -> proc_macro2::TokenStream {
         let (as_ref,getter) = if as_ref {
@@ -228,45 +228,46 @@ impl FieldInfo{
     }
     
 
-    pub(crate) fn gen_vec_iter_types(&self) -> Vec<proc_macro2::TokenStream> { 
-        self.fields.iter().map(|(f,_)| {
-            let field_type = &f.ty;
-            quote!{std::slice::Iter<'_, #field_type>}
-        }).collect()
-    }
+    // pub(crate) fn gen_vec_iter_types(&self) -> Vec<proc_macro2::TokenStream> { 
+    //     self.fields.iter().map(|(f,_)| {
+    //         let field_type = &f.ty;
+    //         quote!{std::slice::Iter<'_, #field_type>}
+    //     }).collect()
+    // }
 
-    pub(crate) fn gen_repeat_iter(&self) -> proc_macro2::TokenStream {
-        self.fields.iter().fold(quote!{},|mut iters,(f,_)| {
-            let field_name = f.ident.as_ref().unwrap();
-            let field_type = &f.ty;
-            let func_name = format_ident!("{}_iter",field_name);
-            iters.extend(quote!{
-                fn #func_name(&self) -> std::iter::Repeat<&#field_type> {
-                    std::iter::repeat(&self.#field_name)
-                }
-            });
-            iters
-        })
-    }
+    // pub(crate) fn gen_repeat_iter(&self) -> proc_macro2::TokenStream {
+    //     self.fields.iter().fold(quote!{},|mut iters,(f,_)| {
+    //         let field_name = f.ident.as_ref().unwrap();
+    //         let field_type = &f.ty;
+    //         let func_name = format_ident!("{}_iter",field_name);
+    //         iters.extend(quote!{
+    //             fn #func_name(&self) -> std::iter::Repeat<&#field_type> {
+    //                 std::iter::repeat(&self.#field_name)
+    //             }
+    //         });
+    //         iters
+    //     })
+    // }
 
-    pub(crate) fn gen_repeat_iter_types(&self) -> Vec<proc_macro2::TokenStream> { 
-        self.fields.iter().map(|(f,_)| {
-            let field_type = &f.ty;
-            quote!{std::iter::Repeat<&#field_type>}
-        }).collect()
-    }
+    // pub(crate) fn gen_repeat_iter_types(&self) -> Vec<proc_macro2::TokenStream> { 
+    //     self.fields.iter().map(|(f,_)| {
+    //         let field_type = &f.ty;
+    //         quote!{std::iter::Repeat<&#field_type>}
+    //     }).collect()
+    // }
 
-    pub(crate) fn gen_iter_inits(&self) -> Vec<proc_macro2::TokenStream> {
-        self.fields.iter().map(|(f,_)| {
-            let field_name = f.ident.as_ref().unwrap();
-            let func_name = format_ident!("{}_iter",field_name);
-            quote!{self.#func_name()}
-        }).collect()
-    }
+    // pub(crate) fn gen_iter_inits(&self) -> Vec<proc_macro2::TokenStream> {
+    //     self.fields.iter().map(|(f,_)| {
+    //         let field_name = f.ident.as_ref().unwrap();
+    //         let func_name = format_ident!("{}_iter",field_name);
+    //         quote!{self.#func_name()}
+    //     }).collect()
+    // }
 
-    pub(crate) fn len(&self) -> usize {
-        self.fields.len()
-    }
+    // #[allow(unused)]
+    // pub(crate) fn len(&self) -> usize {
+    //     self.fields.len()
+    // }
 
     pub(crate) fn to_tokens_as_vecs(&self, )->proc_macro2::TokenStream {
         let mut tokens =quote!{};

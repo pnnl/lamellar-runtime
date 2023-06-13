@@ -1,6 +1,6 @@
 use proc_macro::TokenStream;
-use proc_macro_error::abort;
-use quote::{quote, quote_spanned, ToTokens};
+// use proc_macro_error::abort;
+use quote::{quote, quote_spanned};
 use syn::parse_macro_input;
 use syn::spanned::Spanned;
 

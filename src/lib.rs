@@ -287,7 +287,8 @@ pub use crate::lamellar_arch::{BlockedArch, IdError, LamellarArch, StridedArch};
 #[doc(hidden)]
 pub use crate::lamellar_request::LamellarRequest;
 pub use crate::lamellar_task_group::{
-    AmGroup, /*AmGroupReqs,*/ AmGroupResult, LamellarTaskGroup, TypedAmGroupResult, TypedAmGroupUnitResult, TypedAmGroupValResult
+    AmGroup,  AmGroupResult, LamellarTaskGroup, TypedAmGroupResult,
+    TypedAmGroupBatchReq, TypedAmGroupBatchResult, BaseAmGroupReq
 };
 pub use crate::lamellar_team::LamellarTeam;
 #[doc(hidden)]

@@ -1006,257 +1006,159 @@ impl AmGroup {
     }
 }
 
-//TODO create a typed task group which will require the exact am type
+
+
 
 pub enum AmGroupResult<'a, T> {
     Pe(usize, &'a T),
-    All(TypedAmAllIter<'a, T>),
+    All(std::slice::Iter<'a, T>),
 }
 
-// #[doc(hidden)]
-// #[derive(enum_as_inner::EnumAsInner)]
-// pub enum AmGroupReqs<T> {
-//     Pe(Vec<(usize, Vec<T>)>),
-//     All(Vec<Vec<Vec<T>>>),
-//     Idx(Vec<(usize, usize, usize)>),
-// }
+enum TypedAmAllIter<'a, T> {
+    Unit(std::iter::Take<std::iter::Repeat<()>>),
+    Val(std::slice::Iter<'a, T>),
+}
+
 
 pub enum TypedAmGroupResult<T>{
-    Unit(TypedAmGroupUnitResult),
+    Unit(TypedAmGroupUnitResult<T>),
     Val(TypedAmGroupValResult<T>),
 }
 
-pub struct TypedAmGroupValResult<T> {
-    pes: Vec<(usize, Vec<T>)>,
-    all: Vec<Vec<Vec<T>>>,
-    idx: Vec<(usize, usize, usize)>,
-    num_pes: usize,
-}
+impl<T> TypedAmGroupResult<T> {
+    pub fn unit(reqs: Vec<TypedAmGroupBatchResult<T>>, cnt: usize, num_pes: usize) -> Self {
+        TypedAmGroupResult::Unit(TypedAmGroupUnitResult::new( reqs, cnt, num_pes ))
+    }
 
-pub struct TypedAmGroupUnitResult {
-    idx: Vec<(usize, usize, usize)>,
-    num_pes: usize,
-}
+    pub fn val(reqs: Vec<TypedAmGroupBatchResult<T>>, cnt: usize, num_pes: usize) -> Self {
+        TypedAmGroupResult::Val(TypedAmGroupValResult::new( reqs, cnt, num_pes ))
+    }
 
-pub enum TypedAmAllIter<'a, T> {
-    Unit(std::iter::Take<std::iter::Repeat<()>>),
-    Val(TypedAmAllValIter<'a, T>),
-}
-
-pub struct TypedAmAllValIter<'a, T> {
-    all: &'a Vec<Vec<Vec<T>>>,
-    am_idx: usize,
-    req: usize,
-    cur_pe: usize,
-    num_pes: usize,
-}
-
-impl<'a, T> Iterator for TypedAmAllValIter<'a, T> {
-    type Item = &'a T;
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.cur_pe < self.num_pes {
-            let cur_pe = self.cur_pe;
-            self.cur_pe += 1;
-            Some(&self.all[self.am_idx][cur_pe][self.req])
-        } else {
-            None
+    pub fn at(&self, i: usize) -> AmGroupResult<'_, T> {
+        match self {
+            TypedAmGroupResult::Unit(res) => res.at(i),
+            TypedAmGroupResult::Val(res) => res.at(i),
         }
     }
+}
+
+pub enum BaseAmGroupReq<T>{
+    SinglePeUnit(std::pin::Pin<Box<dyn std::future::Future<Output =           T > + Send>>),
+    SinglePeVal( std::pin::Pin<Box<dyn std::future::Future<Output =      Vec<T> > + Send>>),
+    AllPeUnit(   std::pin::Pin<Box<dyn std::future::Future<Output =      Vec<T> > + Send>>),
+    AllPeVal(    std::pin::Pin<Box<dyn std::future::Future<Output = Vec<Vec<T>> > + Send>>),
+} 
+
+impl<T>  BaseAmGroupReq<T> {
+    async fn into_result(self) -> BaseAmGroupResult<T> {
+        match self {
+            BaseAmGroupReq::SinglePeUnit(reqs) => BaseAmGroupResult::SinglePeUnit(reqs.await),
+            BaseAmGroupReq::SinglePeVal(reqs) => BaseAmGroupResult::SinglePeVal(reqs.await),
+            BaseAmGroupReq::AllPeUnit(reqs) => BaseAmGroupResult::AllPeUnit(reqs.await),
+            BaseAmGroupReq::AllPeVal(reqs) => BaseAmGroupResult::AllPeVal(reqs.await),
+        }
+    }
+}
+
+pub enum BaseAmGroupResult<T> { // T here should be the inner most return type
+    SinglePeUnit(T),
+    SinglePeVal(Vec<T>),
+    AllPeUnit(Vec<T>),
+    AllPeVal(Vec<Vec<T>>),
+}
+
+pub struct TypedAmGroupBatchReq<T> {
+    pe: usize,
+    ids: Vec<usize>,
+    reqs: BaseAmGroupReq<T>,
+}
+
+pub struct TypedAmGroupBatchResult<T> {
+    pe: usize,
+    ids: Vec<usize>,
+    reqs: BaseAmGroupResult<T>,
+}
+
+impl<T>  TypedAmGroupBatchReq<T>{
+    pub fn new(pe: usize, ids: Vec<usize>, reqs: BaseAmGroupReq<T>) -> Self {
+        Self {
+            pe, ids, reqs
+        }
+    }
+
+    pub async fn into_result(self) -> TypedAmGroupBatchResult<T> {
+        TypedAmGroupBatchResult {
+            pe: self.pe,
+            ids: self.ids,
+            reqs: self.reqs.into_result().await,
+        }
+        
+    }
+}
+
+pub struct TypedAmGroupValResult<T> {
+    reqs: Vec<TypedAmGroupBatchResult<T>>,
+    cnt: usize,
+    num_pes: usize,
 }
 
 impl<T> TypedAmGroupValResult<T> {
     pub fn new(
-        pes: Vec<(usize, Vec<T>)>,
-        all: Vec<Vec<Vec<T>>>,
-        idx: Vec<(usize, usize, usize)>,
+        reqs: Vec<TypedAmGroupBatchResult<T>>,
+        cnt: usize,
         num_pes: usize,
     ) -> Self {
-        // println!("idx: {idx:?}");
         TypedAmGroupValResult {
-            pes,
-            all,
-            idx,
+            reqs,
+            cnt,
             num_pes,
         }
     }
-    pub fn at(&self, index: usize) -> AmGroupResult<T> {
-        let (pe, am_idx, req) = self.idx[index];
-        if pe < self.num_pes {
-            let val = self
-                .pes
-                .iter()
-                .filter_map(|(the_pe, ams)| if *the_pe == pe { Some(ams) } else { None })
-                .enumerate()
-                .find_map(|(i, ams)| if i == am_idx { Some(&ams[req]) } else { None })
-                .expect("invalid index");
-            AmGroupResult::Pe(pe, val)
-        } else {
-            AmGroupResult::All(TypedAmAllIter::Val(TypedAmAllValIter {
-                all: &self.all,
-                am_idx: am_idx,
-                req: req,
-                cur_pe: 0,
-                num_pes: self.num_pes,
-            }))
+    pub fn at(&self, index: usize) -> AmGroupResult<'_,T> {
+        assert!(index < self.cnt, "AmGroupResult index out of bounds");
+        for req in self.reqs.iter() {
+            if let Ok(idx) = req.ids.binary_search(&index) {
+                match &req.reqs {
+                    BaseAmGroupResult::SinglePeVal(res) => return AmGroupResult::Pe(req.pe, &res[idx]),
+                    BaseAmGroupResult::AllPeVal(res) => return AmGroupResult::All(res[idx].iter()),
+                    _ => unreachable!(),
+                }
+            }
         }
+        panic!("AmGroupResult index out of bounds");
     }
 }
 
-impl TypedAmGroupUnitResult {
+pub struct TypedAmGroupUnitResult<T> {
+    reqs: Vec<TypedAmGroupBatchResult<T>>,
+    cnt: usize,
+    num_pes: usize,
+}
+
+
+impl<T> TypedAmGroupUnitResult<T> {
     pub fn new(
-        idx: Vec<(usize, usize, usize)>,
+        reqs: Vec<TypedAmGroupBatchResult<T>>,
+        cnt: usize,
         num_pes: usize,
     ) -> Self {
-        // println!("idx: {idx:?}");
         TypedAmGroupUnitResult {
-            idx,
-            num_pes,
+            reqs,
+            cnt,
+            num_pes
         }
     }
-    pub fn at(&self, index: usize) -> AmGroupResult<()> {
-        let (pe, _, _) = self.idx[index];
-        if pe < self.num_pes {
-            AmGroupResult::Pe(pe, &())
-        } else {
-            AmGroupResult::All(TypedAmAllIter::Unit(std::iter::repeat(()).take(self.num_pes)))
+    pub fn at(&self, index: usize) -> AmGroupResult<'_,T> {
+        assert!(index < self.cnt, "AmGroupResult index out of bounds");
+        for req in self.reqs.iter() {
+            if let Ok(idx) = req.ids.binary_search(&index) {
+                match &req.reqs {
+                    BaseAmGroupResult::SinglePeUnit(res) => return AmGroupResult::Pe(req.pe, &res),
+                    BaseAmGroupResult::AllPeUnit(res) => return AmGroupResult::All(res.iter()),
+                    _ => unreachable!(),
+                }
+            }
         }
+        panic!("AmGroupResult index out of bounds");
     }
 }
-
-//vec<(usize,(vec<usize>,vec<(usize,usize)>))>
-
-// //throw all this into the proc macro...
-// #[doc(hidden)]
-// pub struct TypedAmGroup<T: LamellarCreateAmGroup + RemoteActiveMessage + LamellarAM + Serde + AmDist> {
-//     team: Pin<Arc<LamellarTeamRT>>,
-//     cnt: usize,
-//     reqs: BTreeMap<usize,(Vec<usize>,Box<dyn LamellarAmGroupAm<T> + Sync + Send>,usize)>,
-//     _phantom: PhantomData<T>
-// }
-
-// impl<T: LamellarCreateAmGroup + RemoteActiveMessage + LamellarAM + Serde + AmDist> TypedAmGroup<T>{
-//     pub fn new<U: Into<IntoLamellarTeam>>(team: U) -> TypedAmGroup<T> {
-//         TypedAmGroup {
-//             team: team.into().team.clone(),
-//             cnt: 0,
-//             reqs: BTreeMap::new(),
-//             _phantom: PhantomData
-//         }
-
-//     }
-//     pub fn add_am_all(&mut self, am: T)
-//     {
-//         let req_queue = self.reqs.entry(self.team.num_pes).or_insert((Vec::new(),Box::new(T::create_am_group()),0));
-//         req_queue.2 += am.serialized_size();
-//         req_queue.0.push(self.cnt);
-//         req_queue.1.push(am);
-
-//         self.cnt+=1;
-//     }
-
-//     pub fn add_am_pe(&mut self, pe: usize, am: T)
-//     {
-//         let req_queue = self.reqs.entry(pe).or_insert((Vec::new(),Vec::new(),0));
-//         req_queue.2 += am.serialized_size();
-//         req_queue.0.push(self.cnt);
-//         req_queue.1.push(am);
-//         self.cnt+=1;
-//     }
-
-//     pub async fn exec(&mut self) -> Vec<TypedAmGroupResult<T::Output>>{
-//         let timer = std::time::Instant::now();
-//         let mut reqs = vec![];
-//         let mut reqs_all = vec![];
-//         // let mut all_req = None;
-//         let mut reqs_pes = vec![];
-//         for (pe,the_ams) in self.reqs.iter_mut() {
-//             let mut ams = vec![];
-//             std::mem::swap(&mut ams,&mut the_ams.1);
-//             let ams = Arc::new(ams);
-
-//             if the_ams.2 > 1_000_000{
-//                 let num_reqs = (the_ams.2 / 1_000_000) + 1;
-//                 let req_size = the_ams.2/num_reqs;
-//                 let mut temp_size = 0;
-//                 let mut i = 0;
-//                 let mut start_i = 0;
-//                 let mut send = false;
-//                 while i < ams.len() {
-//                     let am_size = ams[i].serialized_size();
-//                     if temp_size + am_size < 100_000_000 { //hard size limit
-//                         temp_size += am_size;
-//                         i+=1;
-//                         if temp_size > req_size{
-//                             send = true
-//                         }
-//                     }
-//                     else {
-//                         send = true;
-//                     }
-//                     if send{
-//                         let tg_am = AmGroupAm{ams: ams.clone(), si: start_i, ei: i};
-//                         // println!("tg_am len {:?}",i-start_i);
-//                         if *pe == self.team.num_pes{
-//                             reqs_all.push(self.team.exec_arc_am_all::<Vec<Vec<u8>>>(Arc::new(tg_am),None).into_future());
-//                         }
-//                         else{
-//                             reqs.push(self.team.exec_arc_am_pe::<Vec<Vec<u8>>>(*pe,Arc::new(tg_am),None).into_future());
-//                         }
-//                         send = false;
-//                         start_i = i;
-//                         temp_size = 0;
-//                     }
-//                 }
-//                 if temp_size > 0 {
-//                     let tg_am = AmGroupAm{ams: ams.clone(), si: start_i, ei: i};
-//                     // println!("tg_am len {:?}",i-start_i);
-//                     if *pe == self.team.num_pes{
-//                         reqs_all.push(self.team.exec_arc_am_all::<Vec<Vec<u8>>>(Arc::new(tg_am),None).into_future());
-//                     }
-//                     else{
-//                         reqs.push(self.team.exec_arc_am_pe::<Vec<Vec<u8>>>(*pe,Arc::new(tg_am),None).into_future());
-//                     }
-//                 }
-//             }
-//             else{
-//                 let tg_am = AmGroupAm{ams: ams.clone(), si: 0, ei: ams.len()};
-//                 // println!("tg_am len {:?}",ams.len());
-//                 if *pe == self.team.num_pes{
-//                     reqs_all.push(self.team.exec_arc_am_all::<Vec<Vec<u8>>>(Arc::new(tg_am),None).into_future());
-//                 }
-//                 else{
-//                     reqs.push(self.team.exec_arc_am_pe::<Vec<Vec<u8>>>(*pe,Arc::new(tg_am),None).into_future());
-//                 }
-//             }
-
-//             reqs_pes.push(pe);
-//         }
-//         let mut res = vec![];
-//         println!("launch time: {:?} cnt: {:?} {:?}", timer.elapsed().as_secs_f64(),reqs.len(),reqs_all.len());
-//         let reqs = futures::future::join_all(reqs).await;
-//         let reqs_all = futures::future::join_all(reqs_all).await;
-
-//         for (req,pe) in reqs.iter().zip(reqs_pes.iter()){
-//             for r in req{
-//                 res.push(TypedAmGroupResult::Pe(**pe,crate::deserialize(r,true).unwrap()));
-//             }
-//         }
-
-//         for  req in reqs_all{
-//             for r in req {
-//                 let mut temps = vec![];
-//                 for pe in r{
-//                     temps.push( crate::deserialize(&pe,true).unwrap());
-//                 }
-//                 res.push(TypedAmGroupResult::All(temps));
-//             }
-//         }
-//         res
-//         // if let Some(req) = all_req{
-
-//         //     req.await;
-//         // }
-
-//     }
-
-// }

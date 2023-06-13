@@ -17,7 +17,8 @@ pub use crate::lamellar_team::{IntoLamellarTeam, LamellarTeamRT};
 pub use crate::lamellar_world::LamellarWorld;
 pub use crate::lamellar_world::LamellarWorldBuilder;
 pub use crate::LamellarTaskGroup;
-pub use crate::{AmGroup, /*AmGroupReqs,*/ AmGroupResult, TypedAmGroupResult,TypedAmGroupValResult,TypedAmGroupUnitResult};
+pub use crate::{AmGroup,  AmGroupResult, TypedAmGroupResult,
+    TypedAmGroupBatchReq, TypedAmGroupBatchResult, BaseAmGroupReq};
 pub use crate::futures::StreamExt;
 
 // pub use crate::parking_lot;

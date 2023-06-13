@@ -37,9 +37,9 @@ impl LamellarAM for AmNoReturn {
             lamellar::num_pes,
             hostname::get().unwrap()
         );
-        
+        let y = self.my_pe + self.test_var;
         // let x = self.test_1(self.my_pe);
-        println!("\t{:?} {:?} leaving", self.my_pe, self.test_var);
+        println!("\t{:?} {:?} {:?} leaving", self.my_pe, self.test_var,y);
     }
 }
 
@@ -103,9 +103,9 @@ fn main() {
     }
 
     let mut am_group = typed_am_group!(AmNoReturn, world.clone());
-    am_group.add_am_all2(am.clone());
-    am_group.add_am_pe2(0, am.clone());
-    world.block_on(am_group.exec3());
+    am_group.add_am_all(am.clone());
+    am_group.add_am_pe(0, am.clone());
+    world.block_on(am_group.exec());
 
     // println!("---------------------------------------------------------------");
     // println!("Testing ring pattern am no return");
