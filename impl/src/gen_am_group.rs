@@ -13,18 +13,25 @@ fn impl_am_group_remote_lamellar_active_message_trait(
     generics: &syn::Generics,
     am_group_am_name: &syn::Ident,
     am_group_body: &proc_macro2::TokenStream,
+    ret_contatiner: &proc_macro2::TokenStream,
+    ret_push: &proc_macro2::TokenStream,
     ret_stmt: &proc_macro2::TokenStream,
     lamellar: &proc_macro2::TokenStream,
 ) -> proc_macro2::TokenStream {
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
     let trace_name = quote! {stringify!(#am_group_am_name)};
+    println!("ret_contatiner: {}", ret_contatiner.to_string());
+    println!("ret_push: {}", ret_push.to_string());
+    println!("ret_stmt: {}", ret_stmt.to_string());
     quote! {
         impl #impl_generics #lamellar::active_messaging::LamellarActiveMessage for #am_group_am_name #ty_generics #where_clause {
             fn exec(self: std::sync::Arc<Self>,__lamellar_current_pe: usize,__lamellar_num_pes: usize, __local: bool, __lamellar_world: std::sync::Arc<#lamellar::LamellarTeam>, __lamellar_team: std::sync::Arc<#lamellar::LamellarTeam>) -> std::pin::Pin<Box<dyn std::future::Future<Output=#lamellar::active_messaging::LamellarReturn> + Send >>{
                 Box::pin( async move {
-                    let __res_vec = (0..self.len()).map(|i|   {
+                    #ret_contatiner
+                    (0..self.len()).map(|i| {
                         #am_group_body
-                    }).collect::<Vec<_>>();
+                    // }).collect::<Vec<_>>();
+                    }).for_each(|_e| #ret_push);
                     #ret_stmt
                     }.instrument(#lamellar::tracing::trace_span!(#trace_name))
                 )
@@ -63,53 +70,80 @@ fn gen_am_group_return_stmt(
     am_group_return_name: &syn::Ident,
     lamellar: &proc_macro2::TokenStream,
     local: bool,
-) -> proc_macro2::TokenStream {
+) -> (proc_macro2::TokenStream, proc_macro2::TokenStream, proc_macro2::TokenStream) {
     match am_type {
         AmType::NoReturn => {
             //quote!{#lamellar::active_messaging::LamellarReturn::Unit},
             if !local {
-                quote! {
-                    match __local{ //should probably just separate these into exec_local exec_remote to get rid of a conditional...
-                        true => #lamellar::active_messaging::LamellarReturn::LocalData(Box::new(())),
-                        false => #lamellar::active_messaging::LamellarReturn::RemoteData(std::sync::Arc::new (#am_group_return_name{
-                            val: (),
-                        })),
-                    }
-                }
+                (
+                    quote! {},
+                    quote! {},
+                    quote! {
+                        match __local{ //should probably just separate these into exec_local exec_remote to get rid of a conditional...
+                            true => #lamellar::active_messaging::LamellarReturn::LocalData(Box::new(())),
+                            false => #lamellar::active_messaging::LamellarReturn::RemoteData(std::sync::Arc::new (#am_group_return_name{
+                                val: (),
+                            })),
+                        }
+                    },
+                )
             } else {
-                quote! {
-                    #lamellar::active_messaging::LamellarReturn::LocalData(Box::new(__res_vec))
-                }
+                (
+                    quote! {},
+                    quote! {},
+                    quote! {#lamellar::active_messaging::LamellarReturn::LocalData(Box::new(())),}   
+                )
             }
         }
         AmType::ReturnData(ref _ret) => {
             if !local {
-                quote! {
-                    match __local{ //should probably just separate these into exec_local exec_remote to get rid of a conditional...
-                        true => #lamellar::active_messaging::LamellarReturn::LocalData(Box::new(__res_vec)),
-                        false => #lamellar::active_messaging::LamellarReturn::RemoteData(std::sync::Arc::new (#am_group_return_name{
-                            val: __res_vec,
-                        })),
+                (
+                    quote! {let mut __res_vec = Vec::new();},
+                    quote! {__res_vec.push(_e);},
+                    quote! {
+                        match __local{ //should probably just separate these into exec_local exec_remote to get rid of a conditional...
+                            true => #lamellar::active_messaging::LamellarReturn::LocalData(Box::new(__res_vec)),
+                            false => #lamellar::active_messaging::LamellarReturn::RemoteData(std::sync::Arc::new (#am_group_return_name{
+                                val: __res_vec,
+                            })),
+                        }
                     }
-                }
+                    
+                )
             } else {
-                quote! {
-                    #lamellar::active_messaging::LamellarReturn::LocalData(Box::new(__res_vec))
-                }
+                (
+                    quote! {let mut __res_vec = Vec::new();},
+                    quote! {__res_vec.push(_e);},
+                    quote! {
+                        #lamellar::active_messaging::LamellarReturn::LocalData(Box::new(__res_vec))
+                    },
+                    
+                )
             }
         }
-        AmType::ReturnAm(_) => {
+        AmType::ReturnAm(ref am) => {
+            let return_am_name: syn::Ident = format_ident!("{}", am.to_string());
+            let return_am_group_name = get_am_group_name(&return_am_name);
             if !local {
-                quote! {
-                        match __local{
-                        true => #lamellar::active_messaging::LamellarReturn::LocalAm(std::sync::Arc::new (__res_vec)),
-                        false => #lamellar::active_messaging::LamellarReturn::RemoteAm(std::sync::Arc::new (__res_vec)),
+                (
+                    quote! {let mut __am_group = #return_am_group_name::new(__lamellar_team.clone());},
+                    quote! {__am_group.add_am(_e);},
+                    quote! {
+                            match __local{
+                            true => #lamellar::active_messaging::LamellarReturn::LocalAm(std::sync::Arc::new (__am_group)),
+                            false => #lamellar::active_messaging::LamellarReturn::RemoteAm(std::sync::Arc::new (__am_group)),
+                        }
                     }
-                }
+                    ,
+                )
             } else {
-                quote! {
-                    #lamellar::active_messaging::LamellarReturn::LocalAm(std::sync::Arc::new (__res_vec))
-                }
+                (
+                    quote! {let mut __am_group = #return_am_group_name::new(__lamellar_team.clone());},
+                    quote! {__am_group.add_am(_e);},
+                    quote! {
+                        #lamellar::active_messaging::LamellarReturn::LocalAm(std::sync::Arc::new (__am_group))
+                    }
+                )
             }
         }
     }
@@ -120,6 +154,8 @@ fn impl_am_group_remote(
     am_group_am_name: &syn::Ident,
     am_group_body: &proc_macro2::TokenStream,
     ret_type: &proc_macro2::TokenStream,
+    ret_contatiner: &proc_macro2::TokenStream,
+    ret_push: &proc_macro2::TokenStream,
     ret_stmt: &proc_macro2::TokenStream,
     lamellar: &proc_macro2::TokenStream,
 ) -> proc_macro2::TokenStream {
@@ -127,6 +163,8 @@ fn impl_am_group_remote(
         generics,
         am_group_am_name,
         am_group_body,
+        ret_contatiner,
+        ret_push,
         ret_stmt,
         lamellar,
     );
@@ -172,12 +210,8 @@ fn impl_am_group_user(
                     num_pes
                 )
             },
-            quote!{
-                #lamellar::BaseAmGroupReq::AllPeUnit
-            },
-            quote!{
-                #lamellar::BaseAmGroupReq::SinglePeUnit
-            }
+            quote!{#lamellar::BaseAmGroupReq::AllPeUnit},
+            quote!{#lamellar::BaseAmGroupReq::SinglePeUnit}
         )},
         AmType::ReturnData(ref _output) => {(
             quote! {
@@ -187,12 +221,8 @@ fn impl_am_group_user(
                     num_pes
                 )
             },
-            quote!{
-                #lamellar::BaseAmGroupReq::AllPeVal
-            },
-            quote!{
-                #lamellar::BaseAmGroupReq::SinglePeVal
-            }
+            quote!{#lamellar::BaseAmGroupReq::AllPeVal},
+            quote!{#lamellar::BaseAmGroupReq::SinglePeVal}
         )},
         AmType::ReturnAm(ref _output) => {(
             quote! {
@@ -202,12 +232,8 @@ fn impl_am_group_user(
                     num_pes
                 )
             },
-            quote!{
-                #lamellar::BaseAmGroupReq::AllPeVal
-            },
-            quote!{
-                #lamellar::BaseAmGroupReq::SinglePeVal
-            }
+            quote!{#lamellar::BaseAmGroupReq::AllPeVal},
+            quote!{#lamellar::BaseAmGroupReq::SinglePeVal}
         )},
     };
 
@@ -321,13 +347,15 @@ pub(crate) fn generate_am_group(
 
     let am_group_remote_body = gen_am_group_remote_body2(&input);
 
-    let ret_stmt = gen_am_group_return_stmt(&am_type, &am_group_return_name, lamellar, false);
+    let (ret_contatiner,ret_push,ret_stmt) = gen_am_group_return_stmt(&am_type, &am_group_return_name, lamellar, false);
 
     let am_group_remote = impl_am_group_remote(
         &generics,
         &am_group_am_name,
         &am_group_remote_body,
         &ret_type,
+        &ret_contatiner,
+        &ret_push,
         &ret_stmt,
         &lamellar,
     );
