@@ -1011,19 +1011,72 @@ impl AmGroup {
 
 pub enum AmGroupResult<'a, T> {
     Pe(usize, &'a T),
-    All(std::slice::Iter<'a, T>),
+    All(TypedAmAllIter<'a, T>),
 }
 
-enum TypedAmAllIter<'a, T> {
+impl<'a, T: std::fmt::Debug> std::fmt::Debug for AmGroupResult<'a, T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            AmGroupResult::Pe(pe, req) => write!(f, "Pe({:?}, {:?})", pe, req),
+            AmGroupResult::All(req) => write!(f, "All({:?})", req),
+        }
+    }
+}
+
+
+pub enum TypedAmAllIter<'a, T> {
     Unit(std::iter::Take<std::iter::Repeat<()>>),
-    Val(std::slice::Iter<'a, T>),
+    Val(TypedAmAllValIter<'a, T>),
 }
 
+impl <'a, T: std::fmt::Debug> std::fmt::Debug for TypedAmAllIter<'a, T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TypedAmAllIter::Unit(iter) => write!(f, "{:?}", iter.clone().collect::<Vec<_>>()),
+            TypedAmAllIter::Val(iter) => write!(f, "{:?}", iter),
+        }
+    }
+}
+
+
+
+pub struct TypedAmAllValIter<'a, T> {
+    all: &'a Vec<Vec<T>>,
+    req: usize,
+    cur_pe: usize,
+    num_pes: usize,
+}
+
+impl <'a, T: std::fmt::Debug> std::fmt::Debug for TypedAmAllValIter<'a, T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "[")?;
+        for i in 0..self.num_pes {
+            write!(f, "{:?},", self.all[i][self.req])?;
+        }
+        write!(f, "]")
+    }
+}
+
+
+impl<'a, T> Iterator for TypedAmAllValIter<'a, T> {
+    type Item = &'a T;
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.cur_pe < self.num_pes {
+            let cur_pe = self.cur_pe;
+            self.cur_pe += 1;
+            Some(&self.all[cur_pe][self.req])
+        } else {
+            None
+        }
+    }
+}
 
 pub enum TypedAmGroupResult<T>{
     Unit(TypedAmGroupUnitResult<T>),
     Val(TypedAmGroupValResult<T>),
 }
+
+
 
 impl<T> TypedAmGroupResult<T> {
     pub fn unit(reqs: Vec<TypedAmGroupBatchResult<T>>, cnt: usize, num_pes: usize) -> Self {
@@ -1038,6 +1091,38 @@ impl<T> TypedAmGroupResult<T> {
         match self {
             TypedAmGroupResult::Unit(res) => res.at(i),
             TypedAmGroupResult::Val(res) => res.at(i),
+        }
+    }
+
+    pub fn len(&self) -> usize {
+        match self {
+            TypedAmGroupResult::Unit(res) => res.len(),
+            TypedAmGroupResult::Val(res) => res.len(),
+        }
+    }
+
+    pub fn iter(&self) -> TypedAmGroupResultIter<'_, T> {
+        TypedAmGroupResultIter{
+            index: 0,
+            results: self
+        }
+    }
+}
+
+pub struct TypedAmGroupResultIter<'a,T> {
+    index: usize,
+    results: &'a TypedAmGroupResult<T>
+}
+
+impl<'a,T> Iterator for TypedAmGroupResultIter<'a, T> {
+    type Item = AmGroupResult<'a, T>;
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.index < self.results.len() {
+            self.index += 1;
+            Some(self.results.at(self.index - 1))
+        }
+        else {
+            None
         }
     }
 }
@@ -1120,12 +1205,20 @@ impl<T> TypedAmGroupValResult<T> {
             if let Ok(idx) = req.ids.binary_search(&index) {
                 match &req.reqs {
                     BaseAmGroupResult::SinglePeVal(res) => return AmGroupResult::Pe(req.pe, &res[idx]),
-                    BaseAmGroupResult::AllPeVal(res) => return AmGroupResult::All(res[idx].iter()),
+                    BaseAmGroupResult::AllPeVal(res) => return AmGroupResult::All( TypedAmAllIter::Val(TypedAmAllValIter{
+                        all: res,
+                        cur_pe: 0,
+                        req: idx,
+                        num_pes: self.num_pes,
+                    })),
                     _ => unreachable!(),
                 }
             }
         }
         panic!("AmGroupResult index out of bounds");
+    }
+    pub fn len(&self) -> usize {
+        self.cnt
     }
 }
 
@@ -1154,11 +1247,14 @@ impl<T> TypedAmGroupUnitResult<T> {
             if let Ok(idx) = req.ids.binary_search(&index) {
                 match &req.reqs {
                     BaseAmGroupResult::SinglePeUnit(res) => return AmGroupResult::Pe(req.pe, &res),
-                    BaseAmGroupResult::AllPeUnit(res) => return AmGroupResult::All(res.iter()),
+                    BaseAmGroupResult::AllPeUnit(res) => return AmGroupResult::All( TypedAmAllIter::Unit(std::iter::repeat(()).take(self.num_pes))),
                     _ => unreachable!(),
                 }
             }
         }
         panic!("AmGroupResult index out of bounds");
+    }
+    pub fn len(&self) -> usize {
+        self.cnt
     }
 }

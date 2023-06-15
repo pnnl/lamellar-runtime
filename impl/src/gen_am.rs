@@ -243,7 +243,7 @@ fn gen_return_stmt(am_type: &AmType, last_stmt: &syn::Stmt, ret_struct_name: &sy
                 }
             }
         }
-        AmType::ReturnAm(_) => {
+        AmType::ReturnAm(_,_) => {
             let last_expr = get_expr(&last_stmt)
                 .expect("failed to get exec return value (try removing the last \";\")");
             if !local {
@@ -312,7 +312,7 @@ pub(crate) fn generate_am(
                 let return_struct = impl_return_struct(&generics, &am_data_header, &return_struct_name, &return_type, &lamellar, bytes_buf, local);
                 (return_type,return_struct)
             },
-            AmType::ReturnAm(ref output) => (quote! {#output},quote!{})
+            AmType::ReturnAm(ref am, ref output) => (quote! {#output},quote!{})
         }
     };
     

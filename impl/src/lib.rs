@@ -19,8 +19,8 @@ use am_data::derive_am_data;
 
 
 use proc_macro::TokenStream;
-use proc_macro_error::{abort, proc_macro_error};
-use quote::{quote, ToTokens};
+use proc_macro_error::{abort, proc_macro_error,emit_error};
+use quote::{quote, quote_spanned, ToTokens};
 use syn::parse_macro_input;
 use syn::spanned::Spanned;
 use syn::punctuated::Punctuated;
@@ -222,11 +222,11 @@ fn replace_lamellar_dsl_new(fn_block: syn::Block) -> syn::Block {
 enum AmType {
     NoReturn,
     ReturnData(syn::Type),
-    ReturnAm(proc_macro2::TokenStream),
+    ReturnAm(syn::Type, proc_macro2::TokenStream),
 }
 
-fn get_return_am_return_type(args: String) -> proc_macro2::TokenStream {
-    let return_am = args
+fn get_return_am_return_type(args: &String) -> (proc_macro2::TokenStream,proc_macro2::TokenStream) { 
+    let mut return_am = args
         .split("return_am")
         .collect::<Vec<&str>>()
         .last()
@@ -241,13 +241,16 @@ fn get_return_am_return_type(args: String) -> proc_macro2::TokenStream {
             .expect("error in lamellar::am argument")
             .trim()
             .to_string();
+        return_am = temp[0].trim_matches(&[' ', '"'][..]).to_string();
     }
+    let ret_am_type: syn::Type = syn::parse_str(&return_am).expect("invalid type");
     if return_type.len() > 0 {
         // let ident = syn::Ident::new(&return_type, Span::call_site());
         let ret_type: syn::Type = syn::parse_str(&return_type).expect("invalid type");
-        quote! {#ret_type}
+        
+        (quote_spanned! {return_am.span() => #ret_am_type},quote_spanned! {return_type.span() => #ret_type})
     } else {
-        quote! {()}
+        (quote!{#ret_am_type},quote! {()})
     }
 }
 
@@ -1547,8 +1550,10 @@ fn parse_am(
 ) -> TokenStream {
     let args = args.to_string();
     if args.len() > 0 {
-        assert!(args.starts_with("return_am"), "#[lamellar::am] only accepts an (optional) argument of the form:
-                                               #[lamellar::am(return_am = \"<am to exec upon return>\")]");
+        if !args.starts_with("return_am") {
+            abort!(args.span(),"#[lamellar::am] only accepts an (optional) argument of the form:
+            #[lamellar::am(return_am = \"<am to exec upon return>\")]");
+        }
     }
     // println!("args: {:?}", args);
     let input: syn::Item = parse_macro_input!(input);
@@ -1580,13 +1585,23 @@ fn parse_am(
     let output = match input.clone() {
         syn::Item::Impl(input) => {
             let output = get_return_of_method("exec".to_string(), &input.items);
+            if !rt {
+                println!("output: {:?}", output);
+            }
             match output {
                 Some(output) => {
                     if args.len() > 0 {
-                        let output = get_return_am_return_type(args);
-                        let mut impls = gen_am::generate_am(&input, local, AmType::ReturnAm(output.clone()), &lamellar, &am_data_header);
+                        let (return_am,return_output) = get_return_am_return_type(&args);
+                        if return_am.to_string() != output.to_token_stream().to_string() {
+                            emit_error!(return_am.span(), "am specified in attribute {} does not match return type {}",return_am,output.to_token_stream().to_string());
+                            abort!(output.span(),"am specified in attribute {} does not match return type {}",return_am,output.to_token_stream().to_string());
+                        }
+                        if !rt {
+                            println!("output: {:?}", output);
+                        }
+                        let mut impls = gen_am::generate_am(&input, local, AmType::ReturnAm(output.clone(),return_output.clone()), &lamellar, &am_data_header);
                         if !rt && !local{
-                            impls.extend(gen_am_group::generate_am_group(&input, local, AmType::ReturnAm(output.clone()), &lamellar, &am_group_data_header));
+                            impls.extend(gen_am_group::generate_am_group(&input, local, AmType::ReturnAm(output.clone(),return_output.clone()), &lamellar, &am_group_data_header));
                         }
                         impls
                     } else {

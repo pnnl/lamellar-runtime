@@ -63,13 +63,21 @@ fn main() {
         assert_eq!(res, (0..num_pes).collect::<Vec<usize>>());
         println!("PE[{:?}] return result: {:?}", my_pe, res);
         println!("---------------------------------------------------------------");
+        let mut am_group = typed_am_group!(AmReturnUsize, world.clone());
+        for i in 0..10 {
+            let am = AmReturnUsize {
+                val1: i,
+                val2: "test".to_string()
+            };
+            am_group.add_am_pe(i % num_pes, am.clone());
+            am_group.add_am_all(am.clone());
+        }
+        let res = world.block_on(am_group.exec());
+        for r in res.iter() {
+            println!("PE[{:?}] return result: {:?}", my_pe, r);
+        }
     }
 
-    let mut am_group = typed_am_group!(AmReturnUsize, world.clone());
-    am_group.add_am_all(am.clone());
-    am_group.add_am_pe(0, am.clone());
-    world.block_on(am_group.exec());
-
-    world.barrier();
+    
 
 }

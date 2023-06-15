@@ -4,7 +4,7 @@ use crate::{ get_impl_method, replace_lamellar_dsl_new, type_name, AmType};
 use crate::replace::ReplaceSelf;
 
 use proc_macro2::Span;
-use quote::{format_ident, quote, quote_spanned};
+use quote::{format_ident, quote, quote_spanned, ToTokens};
 use syn::spanned::Spanned;
 use syn::fold::Fold;
 
@@ -20,9 +20,9 @@ fn impl_am_group_remote_lamellar_active_message_trait(
 ) -> proc_macro2::TokenStream {
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
     let trace_name = quote! {stringify!(#am_group_am_name)};
-    println!("ret_contatiner: {}", ret_contatiner.to_string());
-    println!("ret_push: {}", ret_push.to_string());
-    println!("ret_stmt: {}", ret_stmt.to_string());
+    // println!("ret_contatiner: {}", ret_contatiner.to_string());
+    // println!("ret_push: {}", ret_push.to_string());
+    // println!("ret_stmt: {}", ret_stmt.to_string());
     quote! {
         impl #impl_generics #lamellar::active_messaging::LamellarActiveMessage for #am_group_am_name #ty_generics #where_clause {
             fn exec(self: std::sync::Arc<Self>,__lamellar_current_pe: usize,__lamellar_num_pes: usize, __local: bool, __lamellar_world: std::sync::Arc<#lamellar::LamellarTeam>, __lamellar_team: std::sync::Arc<#lamellar::LamellarTeam>) -> std::pin::Pin<Box<dyn std::future::Future<Output=#lamellar::active_messaging::LamellarReturn> + Send >>{
@@ -31,7 +31,7 @@ fn impl_am_group_remote_lamellar_active_message_trait(
                     (0..self.len()).map(|i| {
                         #am_group_body
                     // }).collect::<Vec<_>>();
-                    }).for_each(|_e| #ret_push);
+                    })#ret_push
                     #ret_stmt
                     }.instrument(#lamellar::tracing::trace_span!(#trace_name))
                 )
@@ -77,7 +77,7 @@ fn gen_am_group_return_stmt(
             if !local {
                 (
                     quote! {},
-                    quote! {},
+                    quote! { .reduce(|_,_| ());},
                     quote! {
                         match __local{ //should probably just separate these into exec_local exec_remote to get rid of a conditional...
                             true => #lamellar::active_messaging::LamellarReturn::LocalData(Box::new(())),
@@ -90,7 +90,7 @@ fn gen_am_group_return_stmt(
             } else {
                 (
                     quote! {},
-                    quote! {},
+                    quote! {.reduce(|_,_| ());},
                     quote! {#lamellar::active_messaging::LamellarReturn::LocalData(Box::new(())),}   
                 )
             }
@@ -99,7 +99,7 @@ fn gen_am_group_return_stmt(
             if !local {
                 (
                     quote! {let mut __res_vec = Vec::new();},
-                    quote! {__res_vec.push(_e);},
+                    quote! {.for_each(|_e| __res_vec.push(_e)); },
                     quote! {
                         match __local{ //should probably just separate these into exec_local exec_remote to get rid of a conditional...
                             true => #lamellar::active_messaging::LamellarReturn::LocalData(Box::new(__res_vec)),
@@ -113,7 +113,7 @@ fn gen_am_group_return_stmt(
             } else {
                 (
                     quote! {let mut __res_vec = Vec::new();},
-                    quote! {__res_vec.push(_e);},
+                    quote! {.for_each(|_e| __res_vec.push(_e)); },
                     quote! {
                         #lamellar::active_messaging::LamellarReturn::LocalData(Box::new(__res_vec))
                     },
@@ -121,13 +121,22 @@ fn gen_am_group_return_stmt(
                 )
             }
         }
-        AmType::ReturnAm(ref am) => {
-            let return_am_name: syn::Ident = format_ident!("{}", am.to_string());
+        AmType::ReturnAm(ref am, ref output) => {
+            println!("return_am: {}", am.to_token_stream().to_string());
+            let return_am_name: syn::Ident = format_ident!("{}", am.to_token_stream().to_string());
             let return_am_group_name = get_am_group_name(&return_am_name);
+            println!("return_am_group_name: {}", return_am_group_name.to_string());
             if !local {
                 (
-                    quote! {let mut __am_group = #return_am_group_name::new(__lamellar_team.clone());},
-                    quote! {__am_group.add_am(_e);},
+                    quote! {let mut __am_group: #return_am_group_name = },
+                    quote! {.fold::<Option<#return_am_group_name>, _>( None, |mut __amg, _e| {
+                        let mut __amg = match __amg{
+                            Some( __amg) => __amg,
+                            None => #return_am_group_name::new(&_e)
+                        };
+                        __amg.add_am(_e);
+                        Some(__amg)
+                    }).unwrap();},
                     quote! {
                             match __local{
                             true => #lamellar::active_messaging::LamellarReturn::LocalAm(std::sync::Arc::new (__am_group)),
@@ -138,8 +147,17 @@ fn gen_am_group_return_stmt(
                 )
             } else {
                 (
-                    quote! {let mut __am_group = #return_am_group_name::new(__lamellar_team.clone());},
-                    quote! {__am_group.add_am(_e);},
+                    quote! {let mut __am_group: #return_am_group_name = },
+                    quote! {.fold::<Option<#return_am_group_name>, _>( None, |mut __amg, _e| {
+                        match __amg{
+                            let mut __amg = match __amg{
+                                Some( __amg) => __amg,
+                                None => #return_am_group_name::new(&_e)
+                            };
+                            __amg.add_am(_e);
+                            Some(__amg)
+                        }
+                    }).unwrap();},
                     quote! {
                         #lamellar::active_messaging::LamellarReturn::LocalAm(std::sync::Arc::new (__am_group))
                     }
@@ -224,17 +242,30 @@ fn impl_am_group_user(
             quote!{#lamellar::BaseAmGroupReq::AllPeVal},
             quote!{#lamellar::BaseAmGroupReq::SinglePeVal}
         )},
-        AmType::ReturnAm(ref _output) => {(
-            quote! {
-                #lamellar::TypedAmGroupResult::val(
-                    results,
-                    self.cnt,
-                    num_pes
-                )
-            },
-            quote!{#lamellar::BaseAmGroupReq::AllPeVal},
-            quote!{#lamellar::BaseAmGroupReq::SinglePeVal}
-        )},
+        AmType::ReturnAm(ref _am, ref output) => {
+            if output.to_string() == "()"{(
+                quote! {
+                    #lamellar::TypedAmGroupResult::unit(
+                        results,
+                        self.cnt,
+                        num_pes
+                    )
+                },
+                quote!{#lamellar::BaseAmGroupReq::AllPeUnit},
+                quote!{#lamellar::BaseAmGroupReq::SinglePeUnit}
+            )}
+            else {(
+                quote! {
+                    #lamellar::TypedAmGroupResult::val(
+                        results,
+                        self.cnt,
+                        num_pes
+                    )
+                },
+                quote!{#lamellar::BaseAmGroupReq::AllPeVal},
+                quote!{#lamellar::BaseAmGroupReq::SinglePeVal}
+            )}
+        },
     };
 
 
@@ -341,7 +372,14 @@ pub(crate) fn generate_am_group(
         match am_type {
             AmType::NoReturn => (quote! {()}, quote! {()}),
             AmType::ReturnData(ref output) => (quote! {Vec<#output>}, quote! {#output}),
-            AmType::ReturnAm(ref output) => (quote! {Vec<#output>}, quote! {#output}),
+            AmType::ReturnAm(ref _am, ref output) => {
+                if output.to_string() == "()"{
+                    (quote! {()},quote!{()})
+                }
+                else {
+                    (quote! {Vec<#output>}, quote! {#output})
+                }
+            }
         }
     };
 

@@ -37,9 +37,9 @@ impl LamellarAM for AmNoReturn {
             lamellar::num_pes,
             hostname::get().unwrap()
         );
-        let y = self.my_pe + self.test_var;
+        // let y = self.my_pe + self.test_var as usize;
         // let x = self.test_1(self.my_pe);
-        println!("\t{:?} {:?} {:?} leaving", self.my_pe, self.test_var,y);
+        println!("\t{:?} {:?} leaving", self.my_pe, self.test_var);
     }
 }
 
@@ -100,12 +100,21 @@ fn main() {
         // am_group.add_am_all(am.clone());
         // am_group.add_am_pe(0,am.clone());
         // world.block_on(am_group.exec());
+
+        let mut am_group = typed_am_group!(AmNoReturn, world.clone());
+        for i in 0..10 {
+            am_group.add_am_pe(i % num_pes, AmNoReturn { my_pe: i, test_var: 10*(i as u16) });
+            am_group.add_am_all(AmNoReturn { my_pe: i, test_var: 10*(i as u16) });
+        }
+        let res = world.block_on(am_group.exec());
+        for r in res.iter() {
+            println!("PE[{:?}] return result: {:?}", my_pe, r);
+        }
     }
 
-    let mut am_group = typed_am_group!(AmNoReturn, world.clone());
-    am_group.add_am_all(am.clone());
-    am_group.add_am_pe(0, am.clone());
-    world.block_on(am_group.exec());
+
+
+    
 
     // println!("---------------------------------------------------------------");
     // println!("Testing ring pattern am no return");

@@ -5,7 +5,7 @@
 /// PE but does not return any data to the user.
 /// it tests executing the AM localy, executing remotely, and executing on all PEs
 /// --------------------------------------------------------------------
-use lamellar::ActiveMessaging;
+use lamellar::active_messaging::prelude::*;
 
 //--Active message returning an active message that returns nothing--//
 #[lamellar::AmData(Clone, Debug)]
@@ -19,14 +19,15 @@ impl LamellarAM for InitialAM {
     async fn exec(&self) -> ReturnAM {
         let current_hostname = hostname::get().unwrap().to_string_lossy().to_string();
         println!(
-            "\tin  InitialAM {:?} on pe {:?} of {:?} ({:?})",
+            "\tin  InitialAM {:?} {:?} on pe {:?} of {:?} ({:?})",
             self,
+            self.val1,
             lamellar::current_pe,
             lamellar::num_pes,
             &current_hostname
         );
         ReturnAM {
-            val1: lamellar::current_pe,
+            val1: lamellar::current_pe+ 100 * self.val1,
             val2: current_hostname,
         }
     }
@@ -45,8 +46,9 @@ struct ReturnAM {
 impl LamellarAM for ReturnAM {
     async fn exec(&self) {
         println!(
-            "\t\tin ReturnAM {:?} on pe {:?} ({:?})",
+            "\t\tin ReturnAM {:?} {:?} on pe {:?} ({:?})",
             self,
+            self.val1,
             lamellar::current_pe,
             hostname::get().unwrap()
         );
@@ -83,9 +85,24 @@ fn main() {
         println!("PE[{:?}] return result: {:?}", my_pe, res);
         println!("-----------------------------------");
         println!("Testing all am");
-        let res = world.block_on(world.exec_am_all(am));
+        let res = world.block_on(world.exec_am_all(am.clone()));
         assert!(res.iter().all(|x| *x == ()));
         println!("PE[{:?}] return result: {:?}", my_pe, res);
         println!("---------------------------------------------------------------");
+        let mut am_group = typed_am_group!(InitialAM,world.clone());
+        for i in 0..10 {
+            let am = InitialAM {
+                val1: i,
+                val2: hostname::get().unwrap().to_string_lossy().to_string(),
+            };
+            am_group.add_am_pe(i % num_pes, am.clone());
+            am_group.add_am_all(am.clone());
+        }
+        let res = world.block_on(am_group.exec());
+        for r in res.iter() {
+            println!("PE[{:?}] return result: {:?}", my_pe, r);
+        }
     }
+
+   
 }

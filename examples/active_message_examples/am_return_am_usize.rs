@@ -39,7 +39,7 @@ struct InitialAM {
 
 #[lamellar::am(return_am = "ReturnUsizeAM -> usize")] //we specify as a proc_macro argument the type of AM we are returning
 impl LamellarAM for InitialAM {
-    async fn exec(&self) -> ReturnAM {
+    async fn exec(&self) -> ReturnUsizeAM {
         let current_hostname = hostname::get().unwrap().to_string_lossy().to_string();
         println!(
             "\tin  InitialAM {:?} on pe {:?} of {:?} ({:?})",
@@ -89,5 +89,18 @@ fn main() {
         assert_eq!(res, (0..num_pes).collect::<Vec<usize>>());
         println!("PE[{:?}] return result: {:?}", my_pe, res);
         println!("---------------------------------------------------------------");
+        let mut am_group = typed_am_group!(InitialAM,world.clone());
+        for i in 0..10 {
+            let am = InitialAM {
+                val1: i,
+                val2: hostname::get().unwrap().to_string_lossy().to_string(),
+            };
+            am_group.add_am_pe(i % num_pes, am.clone());
+            am_group.add_am_all(am.clone());
+        }
+        let res = world.block_on(am_group.exec());
+        for r in res.iter() {
+            println!("PE[{:?}] return result: {:?}", my_pe, r);
+        }
     }
 }
