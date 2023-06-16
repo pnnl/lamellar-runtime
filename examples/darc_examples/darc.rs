@@ -23,7 +23,10 @@ impl LamellarAm for DarcAm {
         println!("lrw: {:?} ", self.lrw_darc.read());
         println!("global w: {:?}", self.global_darc.async_write().await);
         println!("global r: {:?}", self.global_darc.async_read().await);
+        let temp = *self.darc_tuple.0 + *self.darc_tuple.1;
+        println!("temp: {:?}", temp);
     }
+    
 }
 
 #[lamellar::AmData(Clone)]

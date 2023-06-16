@@ -106,8 +106,8 @@ fn get_expr(stmt: &syn::Stmt) -> Option<syn::Expr> {
                 }
             }
         },
-        syn::Stmt::Macro(_) => {
-            panic!("we currently do not support macros in return position, assign macro output to a variable, and return the variable");
+        syn::Stmt::Macro(mac) => {
+            abort!(mac.span(),"we currently do not support macros in return position, assign macro output to a variable, and return the variable");
         }
         _ => {
             println!("something else!");
@@ -117,56 +117,61 @@ fn get_expr(stmt: &syn::Stmt) -> Option<syn::Expr> {
     expr
 }
 
-fn replace_lamellar_dsl_new(fn_block: syn::Block) -> syn::Block {
-    let token_string = fn_block.to_token_stream().to_string();
-    let split_lamellar = token_string.split("lamellar").collect::<Vec<_>>();
-    let mut new_token_string = String::from(split_lamellar[0]);
-    // let mut i = 1;
-    // while i <  split_lamellar.len()-1
-    //     let s = split_lamellar[i];
-    for s in &split_lamellar[1..] {
-        if s.trim_start().starts_with("::") {
-            let temp = s.split_whitespace().collect::<Vec<_>>();
-            if temp[1].starts_with("current_pe") {
-                new_token_string += "__lamellar_current_pe";
-                new_token_string += s.split_once("current_pe").unwrap().1;
-            } else if temp[1].starts_with("num_pes") {
-                new_token_string += "__lamellar_num_pes";
-                new_token_string += s.split_once("num_pes").unwrap().1;
-            } else if temp[1].starts_with("world") {
-                new_token_string += "__lamellar_world";
-                new_token_string += s.split_once("world").unwrap().1;
-            } else if temp[1].starts_with("team") {
-                new_token_string += "__lamellar_team";
-                new_token_string += s.split_once("team").unwrap().1;
-            }
-        } else {
-            new_token_string += "lamellar";
-            new_token_string += s;
-        }
-    }
-    // println!("{token_string}");
-    // let mut new_token_string =token_string;
-    // // for s in "lamellar ::"[]
-    // if token_string.contains("lamellar ::"){
-    //     new_token_string = new_token_string.replace("lamellar :: current_pe","__lamellar_current_pe");
-    //     new_token_string = new_token_string.replace("lamellar :: num_pes","__lamellar_num_pes");
-    //     new_token_string = new_token_string.replace("lamellar :: world","__lamellar_world");
-    //     new_token_string = new_token_string.replace("lamellar :: team","__lamellar_team");
-    // if token_string.contains("lamellar") {
-    //     println!("{token_string}");
-    //     println!("{new_token_string}");
-    // }
+// fn replace_lamellar_dsl_new(fn_block: syn::Block) -> syn::Block {
+//     // for item in &fn_block.stmts {
+//     //     if item.to_token_stream().to_string().contains("lamellar") {
+//     //         println!("{item:?}");
+//     //     }
+//     // }
+//     let token_string = fn_block.to_token_stream().to_string();
+//     let split_lamellar = token_string.split("lamellar").collect::<Vec<_>>();
+//     let mut new_token_string = String::from(split_lamellar[0]);
+//     // let mut i = 1;
+//     // while i <  split_lamellar.len()-1
+//     //     let s = split_lamellar[i];
+//     for s in &split_lamellar[1..] {
+//         if s.trim_start().starts_with("::") {
+//             let temp = s.split_whitespace().collect::<Vec<_>>();
+//             if temp[1].starts_with("current_pe") {
+//                 new_token_string += "__lamellar_current_pe";
+//                 new_token_string += s.split_once("current_pe").unwrap().1;
+//             } else if temp[1].starts_with("num_pes") {
+//                 new_token_string += "__lamellar_num_pes";
+//                 new_token_string += s.split_once("num_pes").unwrap().1;
+//             } else if temp[1].starts_with("world") {
+//                 new_token_string += "__lamellar_world";
+//                 new_token_string += s.split_once("world").unwrap().1;
+//             } else if temp[1].starts_with("team") {
+//                 new_token_string += "__lamellar_team";
+//                 new_token_string += s.split_once("team").unwrap().1;
+//             }
+//         } else {
+//             new_token_string += "lamellar";
+//             new_token_string += s;
+//         }
+//     }
+//     // println!("{token_string}");
+//     // let mut new_token_string =token_string;
+//     // // for s in "lamellar ::"[]
+//     // if token_string.contains("lamellar ::"){
+//     //     new_token_string = new_token_string.replace("lamellar :: current_pe","__lamellar_current_pe");
+//     //     new_token_string = new_token_string.replace("lamellar :: num_pes","__lamellar_num_pes");
+//     //     new_token_string = new_token_string.replace("lamellar :: world","__lamellar_world");
+//     //     new_token_string = new_token_string.replace("lamellar :: team","__lamellar_team");
+//     // if token_string.contains("lamellar") {
+//     //     println!("{token_string}");
+//     //     println!("{new_token_string}");
+//     // }
 
-    match syn::parse_str(&new_token_string) {
-        Ok(fn_block) => fn_block,
-        Err(_) => {
-            println!("{token_string}");
-            println!("{new_token_string}");
-            panic!("uuhh ohh");
-        }
-    }
-}
+//     match syn::parse_str(&new_token_string) {
+//         Ok(fn_block) => fn_block,
+//         Err(_) => {
+//             println!("{token_string}");
+//             println!("{new_token_string}");
+//             panic!("uuhh ohh");
+//         }
+//     }
+// }
 
 // fn replace_lamellar_dsl( stmt: syn::Stmt) -> syn::Stmt {
 //     let token_string = stmt.to_token_stream().to_string();
@@ -225,33 +230,57 @@ enum AmType {
     ReturnAm(syn::Type, proc_macro2::TokenStream),
 }
 
-fn get_return_am_return_type(args: &String) -> (proc_macro2::TokenStream,proc_macro2::TokenStream) { 
-    let mut return_am = args
-        .split("return_am")
-        .collect::<Vec<&str>>()
-        .last()
-        .expect("error in lamellar::am argument")
-        .trim_matches(&['=', ' ', '"'][..])
-        .to_string();
-    let mut return_type = "".to_string();
-    if return_am.find("->") != None {
-        let temp = return_am.split("->").collect::<Vec<&str>>();
-        return_type = temp
-            .last()
-            .expect("error in lamellar::am argument")
-            .trim()
-            .to_string();
-        return_am = temp[0].trim_matches(&[' ', '"'][..]).to_string();
+fn get_return_am_return_type(args: &Punctuated<syn::Meta, syn::Token![,]>) -> Option<(proc_macro2::TokenStream,proc_macro2::TokenStream)> { 
+    for arg in args.iter() {
+        let arg_str = arg.to_token_stream().to_string();
+        if arg_str.contains("return_am") {
+            let mut the_am =  arg_str
+                .split("return_am")
+                .collect::<Vec<&str>>()
+                .last()
+                .expect("error in lamellar::am argument")
+                .trim_matches(&['=', ' ', '"'][..])
+                .to_string();
+            let mut return_type = "".to_string();
+            if the_am.find("->") != None {
+                let temp = the_am.split("->").collect::<Vec<&str>>();
+                return_type = temp
+                    .last()
+                    .expect("error in lamellar::am argument")
+                    .trim()
+                    .to_string();
+                    the_am = temp[0].trim_matches(&[' ', '"'][..]).to_string();
+            }
+            let ret_am_type: syn::Type = syn::parse_str(&the_am).expect("invalid type");
+            if return_type.len() > 0 {
+                // let ident = syn::Ident::new(&return_type, Span::call_site());
+                let ret_type: syn::Type = syn::parse_str(&return_type).expect("invalid type");
+                return Some((quote_spanned! {arg.span() => #ret_am_type},quote_spanned! {arg.span() => #ret_type}));
+            }
+            else {
+                return Some((quote!{#ret_am_type},quote! {()}));
+            }
+        }
     }
-    let ret_am_type: syn::Type = syn::parse_str(&return_am).expect("invalid type");
-    if return_type.len() > 0 {
-        // let ident = syn::Ident::new(&return_type, Span::call_site());
-        let ret_type: syn::Type = syn::parse_str(&return_type).expect("invalid type");
-        
-        (quote_spanned! {return_am.span() => #ret_am_type},quote_spanned! {return_type.span() => #ret_type})
-    } else {
-        (quote!{#ret_am_type},quote! {()})
+    None
+}
+
+fn check_for_am_group(args: &Punctuated<syn::Meta, syn::Token![,]>) -> bool { 
+    for arg in args.iter() {
+        let t = arg.to_token_stream().to_string();
+        if t.contains("AmGroup") {
+            if t.contains("(") {
+                let attrs = &t[t.find("(").unwrap()
+                    ..t.find(")")
+                        .expect("missing \")\" in when declaring ArrayOp macro")
+                        + 1];
+                if attrs.contains("false") {
+                    return false;
+                }
+            }
+        }
     }
+    true
 }
 
 // fn generate_am(
@@ -1548,13 +1577,15 @@ fn parse_am(
     rt: bool,
     _am_group: bool,
 ) -> TokenStream {
-    let args = args.to_string();
-    if args.len() > 0 {
-        if !args.starts_with("return_am") {
-            abort!(args.span(),"#[lamellar::am] only accepts an (optional) argument of the form:
-            #[lamellar::am(return_am = \"<am to exec upon return>\")]");
-        }
-    }
+    let args = parse_macro_input!(args with Punctuated<syn::Meta, syn::Token![,]>::parse_terminated);
+    
+    // let args = args.to_string();
+    // if args.len() > 0 {
+    //     if !args.starts_with("return_am") {
+    //         abort!(args.span(),"#[lamellar::am] only accepts an (optional) argument of the form:
+    //         #[lamellar::am(return_am = \"<am to exec upon return>\")]");
+    //     }
+    // }
     // println!("args: {:?}", args);
     let input: syn::Item = parse_macro_input!(input);
 
@@ -1581,32 +1612,27 @@ fn parse_am(
     };
 
     let am_group_data_header = quote! {#[#lamellar::AmGroupData]};
+    let create_am_group = check_for_am_group(&args);
 
     let output = match input.clone() {
         syn::Item::Impl(input) => {
             let output = get_return_of_method("exec".to_string(), &input.items);
-            if !rt {
-                println!("output: {:?}", output);
-            }
             match output {
                 Some(output) => {
-                    if args.len() > 0 {
-                        let (return_am,return_output) = get_return_am_return_type(&args);
+                    
+                    if let Some((return_am,return_output)) = get_return_am_return_type(&args){
                         if return_am.to_string() != output.to_token_stream().to_string() {
                             emit_error!(return_am.span(), "am specified in attribute {} does not match return type {}",return_am,output.to_token_stream().to_string());
                             abort!(output.span(),"am specified in attribute {} does not match return type {}",return_am,output.to_token_stream().to_string());
                         }
-                        if !rt {
-                            println!("output: {:?}", output);
-                        }
                         let mut impls = gen_am::generate_am(&input, local, AmType::ReturnAm(output.clone(),return_output.clone()), &lamellar, &am_data_header);
-                        if !rt && !local{
+                        if !rt && !local && create_am_group {
                             impls.extend(gen_am_group::generate_am_group(&input, local, AmType::ReturnAm(output.clone(),return_output.clone()), &lamellar, &am_group_data_header));
                         }
                         impls
                     } else {
                         let mut impls = gen_am::generate_am(&input, local, AmType::ReturnData(output.clone()), &lamellar, &am_data_header);
-                        if !rt && !local{
+                        if !rt && !local && create_am_group {
                             impls.extend(gen_am_group::generate_am_group(&input, local,  AmType::ReturnData(output.clone()), &lamellar, &am_group_data_header));
                         }
                         impls
@@ -1614,13 +1640,8 @@ fn parse_am(
                 }
 
                 None => {
-                    if args.len() > 0 {
-                        panic!("no return type detected (try removing the last \";\"), but parameters passed into [#lamellar::am]
-                        #[lamellar::am] only accepts an (optional) argument of the form:
-                        #[lamellar::am(return_am = \"<am to exec upon return>\")]");
-                    }
                     let mut impls = gen_am::generate_am(&input, local, AmType::NoReturn, &lamellar, &am_data_header);
-                    if !rt && !local{
+                    if !rt && !local && create_am_group {
                         impls.extend(gen_am_group::generate_am_group(&input, local, AmType::NoReturn, &lamellar, &am_group_data_header));
                     }
                     impls

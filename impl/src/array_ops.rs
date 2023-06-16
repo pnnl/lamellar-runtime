@@ -595,7 +595,7 @@ fn create_buf_ops(
             results_offset: RwLock<Arc<AtomicUsize>>,
             results:  RwLock<PeOpResults>,
         }
-        #[#am_data(Debug)]
+        #[#am_data(Debug,AmGroup(false))]
         struct #am_buf_name{
             data: #lamellar::array::#array_type<#typeident>,
             // ops: Vec<(ArrayOpCmd<#typeident>,#lamellar::array::OpAmInputToValue<#typeident>)>,
@@ -767,7 +767,7 @@ fn create_buf_ops(
                 (bytes_read,(cmd,data))
             }
         }
-        #[#am]
+        #[#am(AmGroup(false))]
         impl LamellarAM for #am_buf_name{ //eventually we can return fetchs here too...
             async fn exec(&self) -> Vec<u8>{
                 // let timer=std::time::Instant::now();
@@ -922,8 +922,8 @@ fn create_buf_ops2(
         )
     } else {
         (
-            syn::parse("lamellar::AmData".parse().unwrap()).unwrap(),
-            syn::parse("lamellar::am".parse().unwrap()).unwrap(),
+            syn::parse("__lamellar::AmData".parse().unwrap()).unwrap(),
+            syn::parse("__lamellar::am".parse().unwrap()).unwrap(),
         )
     };
 
@@ -1349,13 +1349,13 @@ fn create_buf_ops2(
     if array_type != "ReadOnlyArray" {
         // Updating ops that dont return anything
         expanded.extend(quote! {
-            #[#am_data(Debug)]
+            #[#am_data(Debug,AmGroup(false))]
             struct #multi_val_multi_idx_am_buf_name{
                 data: #lamellar::array::#array_type<#typeident>,
                 op: #lamellar::array::ArrayOpCmd2<#typeident>,
                 idx_vals: Vec<u8>,
             }
-            #[#am]
+            #[#am(AmGroup(false))]
             impl LamellarAM for #multi_val_multi_idx_am_buf_name{ //eventually we can return fetchs here too...
                 async fn exec(&self) {
                     #slice
@@ -1380,7 +1380,7 @@ fn create_buf_ops2(
                 }
             }            
 
-            #[#am_data(Debug)]
+            #[#am_data(Debug,AmGroup(false))]
             struct #single_val_multi_idx_am_buf_name{
                 data: #lamellar::array::#array_type<#typeident>,
                 op: #lamellar::array::ArrayOpCmd2<#typeident>,
@@ -1388,7 +1388,7 @@ fn create_buf_ops2(
                 indices: Vec<usize>,
                 
             }
-            #[#am]
+            #[#am(AmGroup(false))]
             impl LamellarAM for #single_val_multi_idx_am_buf_name{ //eventually we can return fetchs here too...
                 async fn exec(&self) {
                     #slice
@@ -1416,7 +1416,7 @@ fn create_buf_ops2(
                 }
             }
 
-            #[#am_data(Debug)]
+            #[#am_data(Debug,AmGroup(false))]
             struct #multi_val_single_idx_am_buf_name{
                 data: #lamellar::array::#array_type<#typeident>,
                 op: #lamellar::array::ArrayOpCmd2<#typeident>,
@@ -1424,7 +1424,7 @@ fn create_buf_ops2(
                 index: usize,
                 
             }
-            #[#am]
+            #[#am(AmGroup(false))]
             impl LamellarAM for #multi_val_single_idx_am_buf_name{ //eventually we can return fetchs here too...
                 async fn exec(&self) {
                     #slice
@@ -1455,13 +1455,13 @@ fn create_buf_ops2(
         // ops that return a result
         if optypes.contains(&OpType::CompEx) || optypes.contains(&OpType::CompExEps){
             expanded.extend(quote! {
-                #[#am_data(Debug)]
+                #[#am_data(Debug,AmGroup(false))]
                 struct #multi_val_multi_idx_am_buf_result_name{
                     data: #lamellar::array::#array_type<#typeident>,
                     op: #lamellar::array::ArrayOpCmd2<#typeident>,
                     idx_vals: Vec<u8>,
                 }
-                #[#am]
+                #[#am(AmGroup(false))]
                 impl LamellarAM for #multi_val_multi_idx_am_buf_result_name{ //eventually we can return fetchs here too...
                     async fn exec(&self) -> Vec<Result<#typeident,#typeident>> {
                         #slice
@@ -1488,7 +1488,7 @@ fn create_buf_ops2(
                     }
                 }
 
-                #[#am_data(Debug)]
+                #[#am_data(Debug,AmGroup(false))]
                 struct #single_val_multi_idx_am_buf_result_name{
                     data: #lamellar::array::#array_type<#typeident>,
                     op: #lamellar::array::ArrayOpCmd2<#typeident>,
@@ -1496,7 +1496,7 @@ fn create_buf_ops2(
                     indices: Vec<usize>,
                     
                 }
-                #[#am]
+                #[#am(AmGroup(false))]
                 impl LamellarAM for #single_val_multi_idx_am_buf_result_name{ //eventually we can return fetchs here too...
                     async fn exec(&self) -> Vec<Result<#typeident,#typeident>> {
                         #slice
@@ -1526,7 +1526,7 @@ fn create_buf_ops2(
                     }
                 }
 
-                #[#am_data(Debug)]
+                #[#am_data(Debug,AmGroup(false))]
                 struct #multi_val_single_idx_am_buf_result_name{
                     data: #lamellar::array::#array_type<#typeident>,
                     op: #lamellar::array::ArrayOpCmd2<#typeident>,
@@ -1534,7 +1534,7 @@ fn create_buf_ops2(
                     index: usize,
                     
                 }
-                #[#am]
+                #[#am(AmGroup(false))]
                 impl LamellarAM for #multi_val_single_idx_am_buf_result_name{ //eventually we can return fetchs here too...
                     async fn exec(&self) -> Vec<Result<#typeident,#typeident>>  {
                         #slice
@@ -1568,13 +1568,13 @@ fn create_buf_ops2(
     //ops that return a value
 
     expanded.extend(quote! {
-        #[#am_data(Debug)]
+        #[#am_data(Debug,AmGroup(false))]
         struct #multi_val_multi_idx_am_buf_fetch_name{
             data: #lamellar::array::#array_type<#typeident>,
             op: #lamellar::array::ArrayOpCmd2<#typeident>,
             idx_vals: Vec<u8>,
         }
-        #[#am]
+        #[#am(AmGroup(false))]
         impl LamellarAM for #multi_val_multi_idx_am_buf_fetch_name{ //eventually we can return fetchs here too...
             async fn exec(&self) -> Vec<#typeident> {
                 #slice
@@ -1601,7 +1601,7 @@ fn create_buf_ops2(
             }
         }
 
-        #[#am_data(Debug)]
+        #[#am_data(Debug,AmGroup(false))]
         struct #single_val_multi_idx_am_buf_fetch_name{
             data: #lamellar::array::#array_type<#typeident>,
             op: #lamellar::array::ArrayOpCmd2<#typeident>,
@@ -1609,7 +1609,7 @@ fn create_buf_ops2(
             indices: Vec<usize>,
             
         }
-        #[#am]
+        #[#am(AmGroup(false))]
         impl LamellarAM for #single_val_multi_idx_am_buf_fetch_name{ //eventually we can return fetchs here too...
             async fn exec(&self) -> Vec<#typeident>{
                 #slice
@@ -1639,7 +1639,7 @@ fn create_buf_ops2(
             }
         }
 
-        #[#am_data(Debug)]
+        #[#am_data(Debug,AmGroup(false))]
         struct #multi_val_single_idx_am_buf_fetch_name{
             data: #lamellar::array::#array_type<#typeident>,
             op: #lamellar::array::ArrayOpCmd2<#typeident>,
@@ -1647,7 +1647,7 @@ fn create_buf_ops2(
             index: usize,
             
         }
-        #[#am]
+        #[#am(AmGroup(false))]
         impl LamellarAM for #multi_val_single_idx_am_buf_fetch_name{ //eventually we can return fetchs here too...
             async fn exec(&self) -> Vec<#typeident> {
                 #slice
@@ -1699,11 +1699,7 @@ fn create_buffered_ops(
     native: bool,
     rt: bool,
 ) -> proc_macro2::TokenStream {
-    let lamellar = if rt {
-        quote::format_ident!("crate")
-    } else {
-        quote::format_ident!("__lamellar")
-    };
+    
 
     let mut atomic_array_types: Vec<(syn::Ident, syn::Ident, syn::Ident)> = vec![
         (
@@ -1790,44 +1786,13 @@ fn create_buffered_ops(
         expanded.extend(buf_op_impl);
     }
 
-    let user_expanded = quote_spanned! {expanded.span()=>
-        const _: () = {
-            extern crate lamellar as __lamellar;
-            use __lamellar::array::prelude::*;
-            use __lamellar::active_messaging::prelude::*;
-            use __lamellar::memregion::prelude::*;
-            use __lamellar::darc::prelude::*;
-            use __lamellar::array::{
-                ArrayOpCmd,
-                ArrayOpCmd2,
-                OpResultOffsets,
-                RemoteOpAmInputToValue,
-                PeOpResults,
-                OpResults,
-                IdxVal,
-                ReadOnlyByteArray,
-                UnsafeByteArray,
-                LocalLockByteArray,
-                GlobalLockByteArray,
-                GenericAtomicByteArray,
-            };
-            use __lamellar::active_messaging::RemoteActiveMessage;
-
-            use __lamellar::parking_lot::{Mutex,RwLock};
-            // use __lamellar::tracing::*;
-            use __lamellar::async_trait;
-            use __lamellar::inventory;
-            use std::sync::Arc;
-            use std::sync::atomic::{Ordering,AtomicBool,AtomicUsize};
-            use std::pin::Pin;
-            #expanded
-        };
-    };
-    if lamellar == "crate" {
-        expanded
-    } else {
-        user_expanded
-    }
+    expanded
+    
+    // if lamellar == "crate" {
+    //     expanded
+    // } else {
+    //     user_expanded
+    // }
 }
 
 pub(crate) fn __generate_ops_for_type_rt(item: TokenStream) -> TokenStream {
@@ -1926,88 +1891,81 @@ pub(crate) fn __generate_ops_for_bool_rt() -> TokenStream {
 }
 
 pub(crate) fn __derive_arrayops(input: TokenStream) -> TokenStream {
-    let mut output = quote! {};
 
     let input = parse_macro_input!(input as syn::DeriveInput);
-    let name = input.ident;
+    let name = input.ident.clone();
     let the_type: syn::Type = syn::parse_quote!(#name);
 
     let mut op_types = vec![OpType::ReadOnly, OpType::Access];
     let mut element_wise_trait_impls = quote!{};
 
-    for attr in input.attrs {
+    for attr in &input.attrs {
         if attr.path().is_ident("array_ops") {
             attr.parse_nested_meta(|temp| {
-                // match temp {
-                    // syn::Meta::Path(p) => println!("Not expected {p:?}"),
-                    // syn::Meta::NameValue(nv) => println!("Not expected {nv:?}"),
-                    // syn::Meta::List(l) => {
-                        // for item in l.nested {
-                            // match item.to_token_stream().to_string().as_str() {
-                                if temp.path.is_ident("Arithmetic") {
-                                    op_types.push(OpType::Arithmetic);
-                                    element_wise_trait_impls.extend(
-                                        quote! {
-                                            impl lamellar::ElementArithmeticOps for #the_type {}
-                                        }
-                                    );
-                                    Ok(())
-                                }
-                                else if temp.path.is_ident("CompExEps") {
-                                    op_types.push(OpType::CompExEps);
-                                    element_wise_trait_impls.extend(
-                                        quote! {
-                                            impl lamellar::ElementComparePartialEqOps for #the_type {}
-                                        }
-                                    );
-                                    Ok(())
-                                }
-                                else if temp.path.is_ident("CompEx") {
-                                    op_types.push(OpType::CompEx);
-                                    element_wise_trait_impls.extend(
-                                        quote! {
-                                            impl lamellar::ElementCompareEqOps for #the_type {}
-                                        }
-                                    );
-                                    Ok(())
-                                }
-                                else if temp.path.is_ident("Bitwise") {
-                                    op_types.push(OpType::Bitwise);
-                                    element_wise_trait_impls.extend(
-                                        quote! {
-                                            impl lamellar::ElementBitWiseOps for #the_type {}
-                                        }
-                                    );
-                                    Ok(())
-                                }
-                                else if temp.path.is_ident("Shift") {
-                                    op_types.push(OpType::Shift);
-                                    element_wise_trait_impls.extend(
-                                        quote! {
-                                            impl lamellar::ElementShiftOps for #the_type {}
-                                        }
-                                    );
-                                    Ok(())
-                                }
-                                else if temp.path.is_ident("All") {
-                                    op_types.push(OpType::Arithmetic);
-                                    op_types.push(OpType::CompEx);
-                                    op_types.push(OpType::Bitwise);
-                                    op_types.push(OpType::Shift);
-                                    element_wise_trait_impls.extend(
-                                        quote! {
-                                            impl lamellar::ElementArithmeticOps for #the_type {}
-                                            impl lamellar::ElementComparePartialEqOps for #the_type {}
-                                            impl lamellar::ElementCompareEqOps for #the_type {}
-                                            impl lamellar::ElementBitWiseOps for #the_type {}
-                                            impl lamellar::ElementShiftOps for #the_type {}
-                                        }
-                                    );
-                                    Ok(())
-                                }
-                                else {
-                                    Err(temp.error("unexpected array op type, valid types are: Arithmetic, CompEx, CompExEps, Bitwise, Shift, All"))
-                                }
+                if temp.path.is_ident("Arithmetic") {
+                    op_types.push(OpType::Arithmetic);
+                    element_wise_trait_impls.extend(
+                        quote! {
+                            impl __lamellar::ElementArithmeticOps for #the_type {}
+                        }
+                    );
+                    Ok(())
+                }
+                else if temp.path.is_ident("CompExEps") {
+                    op_types.push(OpType::CompExEps);
+                    element_wise_trait_impls.extend(
+                        quote! {
+                            impl __lamellar::ElementComparePartialEqOps for #the_type {}
+                        }
+                    );
+                    Ok(())
+                }
+                else if temp.path.is_ident("CompEx") {
+                    op_types.push(OpType::CompEx);
+                    element_wise_trait_impls.extend(
+                        quote! {
+                            impl __lamellar::ElementCompareEqOps for #the_type {}
+                        }
+                    );
+                    Ok(())
+                }
+                else if temp.path.is_ident("Bitwise") {
+                    op_types.push(OpType::Bitwise);
+                    element_wise_trait_impls.extend(
+                        quote! {
+                            impl __lamellar::ElementBitWiseOps for #the_type {}
+                        }
+                    );
+                    Ok(())
+                }
+                else if temp.path.is_ident("Shift") {
+                    op_types.push(OpType::Shift);
+                    element_wise_trait_impls.extend(
+                        quote! {
+                            impl __lamellar::ElementShiftOps for #the_type {}
+                        }
+                    );
+                    Ok(())
+                }
+                else if temp.path.is_ident("All") {
+                    op_types.push(OpType::Arithmetic);
+                    op_types.push(OpType::CompEx);
+                    op_types.push(OpType::Bitwise);
+                    op_types.push(OpType::Shift);
+                    element_wise_trait_impls.extend(
+                        quote! {
+                            impl __lamellar::ElementArithmeticOps for #the_type {}
+                            impl __lamellar::ElementComparePartialEqOps for #the_type {}
+                            impl __lamellar::ElementCompareEqOps for #the_type {}
+                            impl __lamellar::ElementBitWiseOps for #the_type {}
+                            impl __lamellar::ElementShiftOps for #the_type {}
+                        }
+                    );
+                    Ok(())
+                }
+                else {
+                    Err(temp.error("unexpected array op type, valid types are: Arithmetic, CompEx, CompExEps, Bitwise, Shift, All"))
+                }
                                 // &_ => abort!(item, "unexpected array op type, valid types are: Arithmetic, CompEx, CompExEps, Bitwise, Shift, All"),
                             // }
                 //         }
@@ -2016,17 +1974,49 @@ pub(crate) fn __derive_arrayops(input: TokenStream) -> TokenStream {
             }).unwrap();
         }
     }
-
-    output.extend(quote! {
-        impl lamellar::_ArrayOps for #the_type {}
-        #element_wise_trait_impls
-    });
-    output.extend(create_buffered_ops(
+    let buf_ops = create_buffered_ops(
         the_type.clone(),
         op_types,
         false,
         false,
-    ));
+    );
+
+    let output = quote_spanned! {input.span()=>
+        const _: () = {
+            extern crate lamellar as __lamellar;
+            use __lamellar::array::prelude::*;
+            use __lamellar::active_messaging::prelude::*;
+            use __lamellar::memregion::prelude::*;
+            use __lamellar::darc::prelude::*;
+            use __lamellar::array::{
+                ArrayOpCmd,
+                ArrayOpCmd2,
+                OpResultOffsets,
+                RemoteOpAmInputToValue,
+                PeOpResults,
+                OpResults,
+                IdxVal,
+                ReadOnlyByteArray,
+                UnsafeByteArray,
+                LocalLockByteArray,
+                GlobalLockByteArray,
+                GenericAtomicByteArray,
+            };
+            use __lamellar::active_messaging::RemoteActiveMessage;
+
+            use __lamellar::parking_lot::{Mutex,RwLock};
+            // use __lamellar::tracing::*;
+            use __lamellar::async_trait;
+            use __lamellar::inventory;
+            use std::sync::Arc;
+            use std::sync::atomic::{Ordering,AtomicBool,AtomicUsize};
+            use std::pin::Pin;
+
+            impl __lamellar::_ArrayOps for #the_type {}
+            #element_wise_trait_impls
+            #buf_ops
+        };
+    };
     TokenStream::from(output)
 }
 

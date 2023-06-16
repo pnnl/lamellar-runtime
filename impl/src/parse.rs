@@ -90,3 +90,60 @@ impl Parse for ReductionArgs {
         })
     }
 }
+
+#[derive(Debug)]
+pub(crate) enum VecArgs {
+    List(Vec<syn::Expr>),
+    Size((syn::Expr, syn::Expr)),
+}
+
+impl Parse for VecArgs {
+    fn parse(input: ParseStream) -> Result<Self> {
+        let first: syn::Expr = if let Ok(first) = input.parse::<syn::Lit>() {
+            syn::Expr::Lit(syn::ExprLit {
+                attrs: vec![],
+                lit: first,
+            })
+        }
+        else {
+            input.parse()?
+        };
+        if input.peek(Token![,]) {
+            let mut elems = vec![first];
+            while !input.is_empty() {
+                input.parse::<Token![,]>()?;
+                let elem = if let Ok(elem) = input.parse::<syn::Lit>() {
+                    syn::Expr::Lit(syn::ExprLit {
+                        attrs: vec![],
+                        lit: elem,
+                    })
+                }
+                else {
+                    input.parse()?
+                };
+                elems.push(elem);
+            }
+            Ok(VecArgs::List(elems))
+        }
+        else if input.peek(Token![;]) {
+            input.parse::<Token![;]>()?;
+            let second = if let Ok(second) = input.parse::<syn::Lit>() {
+                syn::Expr::Lit(syn::ExprLit {
+                    attrs: vec![],
+                    lit: second,
+                })
+            }
+            else {
+                input.parse()?
+            };
+            Ok(VecArgs::Size((first, second)))
+        }
+        else {
+            Err(syn::Error::new(
+                input.span(), "does not appear to be a vec macro",
+            ))
+        }
+    }
+}
+
+

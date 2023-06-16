@@ -1,17 +1,25 @@
 use syn::parse::Result;
 use syn::spanned::Spanned;
 use syn::visit_mut::VisitMut;
-use syn::punctuated::Punctuated;
-use syn::parse_quote;
-// use proc_macro2::Span;
-use regex::Regex;
-use quote::{ quote, ToTokens};
-// use proc_macro_error::proc_macro_error;
-use syn::fold::{Fold,fold_expr};
+use syn::{parse_quote,parse_quote_spanned};
+use quote::{ quote, ToTokens,quote_spanned, format_ident};
+use syn::fold::Fold;
 
-use crate::parse::FormatArgs;
+use crate::parse::{FormatArgs,VecArgs};
 
-pub(crate) struct ReplaceSelf;
+pub(crate) struct ReplaceSelf{
+    am_name: syn::Ident,
+    pub(crate) accessed_fields: std::collections::HashMap<syn::Ident,proc_macro2::TokenStream>,
+}
+
+impl ReplaceSelf {
+    pub(crate) fn new(am_name: syn::Ident) -> Self {
+        Self {
+            am_name,
+            accessed_fields: std::collections::HashMap::new(),
+        }
+    }
+}
 
 impl Fold for ReplaceSelf {
     fn fold_expr(&mut self, expr: syn::Expr) -> syn::Expr {
@@ -20,10 +28,14 @@ impl Fold for ReplaceSelf {
             if let syn::Expr::Path(path) = field.base.as_ref() {
                 if let Some(ident) = path.path.get_ident() {
                     if ident == "self" {
-                        let method_call: syn::ExprMethodCall = parse_quote! {
-                            #field(i)
-                        };
-                        expr = syn::Expr::MethodCall(method_call);
+                        let field_member = field.member.clone();
+                        let new_field_member = format_ident!("__{}",field_member);
+                        self.accessed_fields.insert(new_field_member.clone(),quote_spanned!{field.span()=> let #new_field_member = #field(i);});
+                        // let method_call: syn::ExprMethodCall = parse_quote! {
+                        //     #field(i)
+                        // };
+                        let path: syn::ExprPath = parse_quote!(#new_field_member);
+                        expr = syn::Expr::Path(path);
                     }
                 }
             }
@@ -32,31 +44,46 @@ impl Fold for ReplaceSelf {
     }
     fn fold_macro(&mut self, mac: syn::Macro) -> syn::Macro {
         let mut mac = mac.clone();
-        let args: Result<FormatArgs> = mac.parse_body();
+        let args: Result<FormatArgs> = mac.clone().parse_body();
+        let span = mac.span();
         if let Ok(args) = args {
             let format_str =  args.format_string.clone();
-            let positional_args = args.positional_args.iter().map(|expr| {
-                let expr = self.fold_expr(expr.clone());
-                expr
-            }).collect::<Vec<_>>();
+            let positional_args = args.positional_args.iter().fold(quote_spanned!(span=>), |acc,expr| { let expr = self.fold_expr(expr.clone()); quote!(#acc , #expr) });
+            let named_args = args.named_args.iter().fold(quote_spanned!(span=>), |acc,(_name,expr)| { let expr = self.fold_expr(expr.clone()); quote!(#acc , #expr) });
 
-            let named_args = args.named_args.iter().map(|(_name,expr)| {
-                let expr = self.fold_expr(expr.clone());
-                expr
-            }).collect::<Vec<_>>();
-
-            let new_tokens = quote! {
-                #format_str, #(#positional_args),*, #(#named_args),*
+            mac.tokens = quote_spanned! {mac.span()=>
+                #format_str #positional_args #named_args
             };
-            mac.tokens=new_tokens;
+           return mac;
+        }
+        let args: Result<VecArgs> = mac.clone().parse_body();
+        if let Ok(args) = args {
+            mac.tokens = match args {
+                VecArgs::List(args) => {
+                    args.iter().fold(quote_spanned!(span=>), |acc,expr| { let expr = self.fold_expr(expr.clone()); quote!(#acc , #expr) })
+                }
+                VecArgs::Size((elem,size)) => {
+                    let elem = self.fold_expr(elem.clone());
+                    let size = self.fold_expr(size.clone());
+                    quote!(#elem; #size)
+                }
+            };
+            return mac;
         }
         else {
-            println!("Warning: support for non format like macros are not currently support with AmGroups --  {:#?}", mac.to_token_stream().to_string());
-            // let mac_string = mac.to_token_stream().to_string();
-            // let mac_string = mac_string.replace("self", id);
-            // let new_mac: syn::Macro = syn::parse_str(&mac_string).unwrap();
-            // println!("{:#?}", new_mac.to_token_stream().to_string());
-            // mac = new_mac;
+            let mac_string = mac.to_token_stream().to_string();
+            if mac_string.contains("self.") {
+                println!("Warning: support for non format like macros are currently experimental with AmGroups ({:?} appears in {:?})", mac.clone().to_token_stream().to_string(),self.am_name.to_string());
+                println!("Below are a few workarounds that may work:");
+                println!("1. assign \"self.<field>\" to a local variable, and use that variable in the macro instead");
+                println!("2. If your active message fails to compile, first ensure it compiles when AmGroups are disabled by adding AmGroup(false) the at AmData macro, e.g. #[AmData(AmGroup(false))] on the LamellarAM attribute macro, e.g. #[am(AmGroup(false))]");
+                println!("  2.1 If you are able to successfully compile with AmGroups disabled, please open an issue at https://github.com/pnnl/lamellar-runtime/issues and include the following in the description: {:#?}", mac.to_token_stream().to_string());
+            
+                let mac_string = mac_string.replace("self.", "__");
+                let new_mac: syn::Macro = syn::parse_str(&mac_string).unwrap();
+                // println!("{:#?}", new_mac.to_token_stream().to_string());
+                mac = new_mac;
+            }
         }
         mac
     }
@@ -65,104 +92,68 @@ impl Fold for ReplaceSelf {
 pub(crate) struct LamellarDSLReplace;
 pub(crate) struct DarcReplace;
 
-impl VisitMut for LamellarDSLReplace {
-    fn visit_ident_mut(&mut self, i: &mut syn::Ident) {
-        let span = i.span();
-        match i.to_string().as_str() {
-            "lamellar::current_pe" => {
-                *i = syn::Ident::new("__lamellar_current_pe", span);
-            }
-            "lamellar::num_pes" => {
-                *i = syn::Ident::new("__lamellar_num_pes", span);
-            }
-            "lamellar::world" => {
-                *i = syn::Ident::new("__lamellar_world", span);
-            }
-            "lamellar::team" => {
-                *i = syn::Ident::new("__lamellar_team", span);
-            }
+impl Fold for LamellarDSLReplace {
+    fn fold_expr_path(&mut self, path: syn::ExprPath) -> syn::ExprPath {
+        let mut path = syn::fold::fold_expr_path(self, path);
+        let span = path.span();
+        let path_str = path.path.to_token_stream().to_string().chars().filter(|c| !c.is_whitespace()).collect::<String>();
+
+        match path_str.as_str() {
+            "lamellar::current_pe" => path = parse_quote_spanned!(span=> __lamellar_current_pe),
+            "lamellar::num_pes" => path = parse_quote_spanned!(span=> __lamellar_num_pes),
+            "lamellar::world" => path = parse_quote_spanned!(span=> __lamellar_world),
+            "lamellar::team" => path = parse_quote_spanned!(span=> __lamellar_team),
             _ => {}
         }
-        syn::visit_mut::visit_ident_mut(self, i);
+        path
     }
-    fn visit_path_mut(&mut self, i: &mut syn::Path) {
-        let span = i.span();
-        // println!("seg len: {:?}", i.segments.len());
-        if i.segments.len() == 2 {
-            if let Some(pathseg) = i.segments.first() {
-                if pathseg.ident.to_string() == "lamellar" {
-                    if let Some(pathseg) = i.segments.last() {
-                        match pathseg.ident.to_string().as_str() {
-                            "current_pe" => {
-                                (*i).segments = syn::punctuated::Punctuated::new();
-                                (*i).segments.push(syn::PathSegment {
-                                    ident: syn::Ident::new("__lamellar_current_pe", span),
-                                    arguments: syn::PathArguments::None,
-                                });
-                            }
-                            "num_pes" => {
-                                (*i).segments = syn::punctuated::Punctuated::new();
-                                (*i).segments.push(syn::PathSegment {
-                                    ident: syn::Ident::new("__lamellar_num_pes", span),
-                                    arguments: syn::PathArguments::None,
-                                });
-                            }
-                            "world" => {
-                                (*i).segments = syn::punctuated::Punctuated::new();
-                                (*i).segments.push(syn::PathSegment {
-                                    ident: syn::Ident::new("__lamellar_world", span),
-                                    arguments: syn::PathArguments::None,
-                                });
-                            }
-                            "team" => {
-                                (*i).segments = syn::punctuated::Punctuated::new();
-                                (*i).segments.push(syn::PathSegment {
-                                    ident: syn::Ident::new("__lamellar_team", span),
-                                    arguments: syn::PathArguments::None,
-                                });
-                            }
-                            _ => {}
-                        }
-                    }
-                }
-            }
+    fn fold_macro(&mut self, mac: syn::Macro) -> syn::Macro {
+
+        let mut mac = syn::fold::fold_macro(self,mac);
+        let span = mac.span();
+        let args: Result<FormatArgs> = mac.clone().parse_body();
+        if let Ok(args) = args {
+            let format_str =  args.format_string.clone();
+            let positional_args = args.positional_args.iter().fold(quote_spanned!(span=>), |acc,expr| { let expr = self.fold_expr(expr.clone()); quote!(#acc , #expr) });
+            let named_args = args.named_args.iter().fold(quote_spanned!(span=>), |acc,(_name,expr)| { let expr = self.fold_expr(expr.clone()); quote!(#acc , #expr) });
+
+            mac.tokens= quote_spanned! {mac.span()=>
+                #format_str #positional_args #named_args
+            };
+            return mac;
         }
-        syn::visit_mut::visit_path_mut(self, i);
-    }
 
-    fn visit_macro_mut(&mut self, i: &mut syn::Macro) {
-        let args: Result<FormatArgs> = i.parse_body();
-
-        if args.is_ok() {
-            let tok_str = i.tokens.to_string();
-            let tok_str = tok_str.split(",").collect::<Vec<&str>>();
-            let mut new_tok_str: String = tok_str[0].to_string();
-            let cur_pe_re = Regex::new("lamellar(?s:.)*::(?s:.)*current_pe").unwrap();
-            let num_pes_re = Regex::new("lamellar(?s:.)*::(?s:.)*num_pes").unwrap();
-            let world_re = Regex::new("lamellar(?s:.)*::(?s:.)*world").unwrap();
-            let team_re = Regex::new("lamellar(?s:.)*::(?s:.)*team").unwrap();
-            for i in 1..tok_str.len() {
-                if cur_pe_re.is_match(&tok_str[i].to_string()) {
-                    new_tok_str += &(",".to_owned() + "__lamellar_current_pe");
-                } else if num_pes_re.is_match(&tok_str[i].to_string()) {
-                    new_tok_str += &(",".to_owned() + "__lamellar_num_pes");
-                } else if world_re.is_match(&tok_str[i].to_string()) {
-                    new_tok_str += &(",".to_owned() + "__lamellar_world");
-                } else if team_re.is_match(&tok_str[i].to_string()) {
-                    new_tok_str += &(",".to_owned() + "__lamellar_team");
-                } else {
-                    new_tok_str += &(",".to_owned() + &tok_str[i].to_string());
+        let args: Result<VecArgs> = mac.clone().parse_body();
+        if let Ok(args) = args {
+            mac.tokens = match args {
+                VecArgs::List(args) => {
+                    args.iter().fold(quote_spanned!(span=>), |acc,expr| { let expr = self.fold_expr(expr.clone()); quote!(#acc , #expr) })
                 }
-            }
-            // println!("new_tok_str {:?}", new_tok_str);
-
-            i.tokens = new_tok_str.parse().unwrap();
-        } else {
-            // println!("warning unrecognized macro {:?} in lamellar::am expansion can currently only handle format like macros", i);
+                VecArgs::Size((elem,size)) => {
+                    let elem = self.fold_expr(elem.clone());
+                    let size = self.fold_expr(size.clone());
+                    quote!(#elem; #size)
+                }
+            };
+            return mac;
         }
-        syn::visit_mut::visit_macro_mut(self, i);
+        else {
+            //println!("Warning: support for non format like macros are not currently support with AmGroups --  {:#?}", mac.to_token_stream().to_string());
+            
+            let mac_string = mac.to_token_stream().to_string();
+            let mac_string = mac_string.replace("lamellar::current_pe", "__lamellar_current_pe");
+            let mac_string = mac_string.replace("lamellar::num_pes", "__lamellar_num_pes");
+            let mac_string = mac_string.replace("lamellar::world", "__lamellar_world");
+            let mac_string = mac_string.replace("lamellar::team", "__lamellar_team");
+            let mut new_mac: syn::Macro = syn::parse_str(&mac_string).unwrap();
+            new_mac = parse_quote_spanned!(span=> #new_mac);
+            // println!("{:#?}", new_mac.to_token_stream().to_string());
+            mac = new_mac;
+        }
+        mac
     }
 }
+
 
 impl VisitMut for DarcReplace {
     fn visit_ident_mut(&mut self, i: &mut syn::Ident) {

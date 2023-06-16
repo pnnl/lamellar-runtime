@@ -1,7 +1,7 @@
 use crate::field_info::FieldInfo;
 use crate::gen_am::*;
-use crate::{ get_impl_method, replace_lamellar_dsl_new, type_name, AmType};
-use crate::replace::ReplaceSelf;
+use crate::{ get_impl_method, type_name, AmType};
+use crate::replace::{ReplaceSelf, LamellarDSLReplace};
 
 use proc_macro2::Span;
 use quote::{format_ident, quote, quote_spanned, ToTokens};
@@ -28,10 +28,10 @@ fn impl_am_group_remote_lamellar_active_message_trait(
             fn exec(self: std::sync::Arc<Self>,__lamellar_current_pe: usize,__lamellar_num_pes: usize, __local: bool, __lamellar_world: std::sync::Arc<#lamellar::LamellarTeam>, __lamellar_team: std::sync::Arc<#lamellar::LamellarTeam>) -> std::pin::Pin<Box<dyn std::future::Future<Output=#lamellar::active_messaging::LamellarReturn> + Send >>{
                 Box::pin( async move {
                     #ret_contatiner
-                    (0..self.len()).map(|i| {
-                        #am_group_body
-                    // }).collect::<Vec<_>>();
-                    })#ret_push
+                    for i in 0..self.len(){
+                        let _e = { #am_group_body };
+                        #ret_push
+                    }
                     #ret_stmt
                     }.instrument(#lamellar::tracing::trace_span!(#trace_name))
                 )
@@ -43,17 +43,24 @@ fn impl_am_group_remote_lamellar_active_message_trait(
     }
 }
 
-fn gen_am_group_remote_body2(input: &syn::ItemImpl) -> proc_macro2::TokenStream {
+fn gen_am_group_remote_body2(am_name: &syn::Ident, input: &syn::ItemImpl) -> proc_macro2::TokenStream {
     let mut exec_fn =
         get_impl_method("exec".to_string(), &input.items).expect("unable to extract exec body");
-    exec_fn = replace_lamellar_dsl_new(exec_fn);
+    // exec_fn = replace_lamellar_dsl_new(exec_fn);
+    exec_fn = LamellarDSLReplace.fold_block(exec_fn);
 
     // exec_fn = replace_self(exec_fn, "am"); // we wont change self to am if its referencing a static_var
-    exec_fn = ReplaceSelf.fold_block(exec_fn);
+    let mut replace_self = ReplaceSelf::new(am_name.clone());
+    exec_fn = replace_self.fold_block(exec_fn);
 
     // println!("{}", exec_fn.to_token_stream().to_string());
+    let accessed_fields = replace_self.accessed_fields;
 
-    let mut am_body = quote_spanned! { exec_fn.span()=>};
+    let mut am_body = quote_spanned! { exec_fn.span()=>  };
+
+    for (_, field) in accessed_fields {
+        am_body.extend(quote!{#field});
+    }
     let stmts = exec_fn.stmts;
 
     for stmt in stmts {
@@ -77,7 +84,7 @@ fn gen_am_group_return_stmt(
             if !local {
                 (
                     quote! {},
-                    quote! { .reduce(|_,_| ());},
+                    quote! {},
                     quote! {
                         match __local{ //should probably just separate these into exec_local exec_remote to get rid of a conditional...
                             true => #lamellar::active_messaging::LamellarReturn::LocalData(Box::new(())),
@@ -90,7 +97,7 @@ fn gen_am_group_return_stmt(
             } else {
                 (
                     quote! {},
-                    quote! {.reduce(|_,_| ());},
+                    quote! {},
                     quote! {#lamellar::active_messaging::LamellarReturn::LocalData(Box::new(())),}   
                 )
             }
@@ -99,7 +106,9 @@ fn gen_am_group_return_stmt(
             if !local {
                 (
                     quote! {let mut __res_vec = Vec::new();},
-                    quote! {.for_each(|_e| __res_vec.push(_e)); },
+                    quote! {
+                        __res_vec.push(_e);
+                    },
                     quote! {
                         match __local{ //should probably just separate these into exec_local exec_remote to get rid of a conditional...
                             true => #lamellar::active_messaging::LamellarReturn::LocalData(Box::new(__res_vec)),
@@ -113,7 +122,9 @@ fn gen_am_group_return_stmt(
             } else {
                 (
                     quote! {let mut __res_vec = Vec::new();},
-                    quote! {.for_each(|_e| __res_vec.push(_e)); },
+                    quote! {
+                        __res_vec.push(_e);
+                    },
                     quote! {
                         #lamellar::active_messaging::LamellarReturn::LocalData(Box::new(__res_vec))
                     },
@@ -121,46 +132,48 @@ fn gen_am_group_return_stmt(
                 )
             }
         }
-        AmType::ReturnAm(ref am, ref output) => {
-            println!("return_am: {}", am.to_token_stream().to_string());
+        AmType::ReturnAm(ref am, ref _output) => {
             let return_am_name: syn::Ident = format_ident!("{}", am.to_token_stream().to_string());
             let return_am_group_name = get_am_group_name(&return_am_name);
-            println!("return_am_group_name: {}", return_am_group_name.to_string());
             if !local {
                 (
-                    quote! {let mut __am_group: #return_am_group_name = },
-                    quote! {.fold::<Option<#return_am_group_name>, _>( None, |mut __amg, _e| {
-                        let mut __amg = match __amg{
-                            Some( __amg) => __amg,
-                            None => #return_am_group_name::new(&_e)
-                        };
-                        __amg.add_am(_e);
-                        Some(__amg)
-                    }).unwrap();},
+                    quote! {let mut __am_group: Option<#return_am_group_name> = None;},
+                    quote! {
+                        match __am_group{
+                           Some( ref mut __amg) => __amg.add_am(_e),
+                           None => {
+                                let mut __amg = #return_am_group_name::new(&_e);
+                                __amg.add_am(_e);
+                                let mut new_am_group = Some(__amg);
+                                std::mem::swap(&mut __am_group, &mut new_am_group);
+                                
+                            }
+                        }
+                    }, 
                     quote! {
                             match __local{
-                            true => #lamellar::active_messaging::LamellarReturn::LocalAm(std::sync::Arc::new (__am_group)),
-                            false => #lamellar::active_messaging::LamellarReturn::RemoteAm(std::sync::Arc::new (__am_group)),
+                            true => #lamellar::active_messaging::LamellarReturn::LocalAm(std::sync::Arc::new (__am_group.unwrap())),
+                            false => #lamellar::active_messaging::LamellarReturn::RemoteAm(std::sync::Arc::new (__am_group.unwrap())),
                         }
-                    }
-                    ,
+                    },
                 )
             } else {
                 (
-                    quote! {let mut __am_group: #return_am_group_name = },
-                    quote! {.fold::<Option<#return_am_group_name>, _>( None, |mut __amg, _e| {
-                        match __amg{
-                            let mut __amg = match __amg{
-                                Some( __amg) => __amg,
-                                None => #return_am_group_name::new(&_e)
-                            };
-                            __amg.add_am(_e);
-                            Some(__amg)
-                        }
-                    }).unwrap();},
+                    quote! {let mut __am_group: Option<#return_am_group_name> = None;},
                     quote! {
-                        #lamellar::active_messaging::LamellarReturn::LocalAm(std::sync::Arc::new (__am_group))
-                    }
+                        match __am_group{
+                           Some( ref mut __amg) => __amg.add_am(_e),
+                           None => {
+                                let mut __amg = #return_am_group_name::new(&_e);
+                                __amg.add_am(_e);
+                                let mut new_am_group = Some(__amg);
+                                std::mem::swap(&mut __am_group, &mut new_am_group);
+                            }
+                        }
+                    }, 
+                    quote! {
+                        #lamellar::active_messaging::LamellarReturn::LocalAm(std::sync::Arc::new (__am_group.unwrap()))
+                    },
                 )
             }
         }
@@ -213,7 +226,6 @@ fn impl_am_group_user(
     am_name: &syn::Ident,
     am_group_remote_name: &syn::Ident,
     am_group_name_user: &syn::Ident,
-    ret_type: &proc_macro2::TokenStream,
     inner_ret_type: &proc_macro2::TokenStream,
     lamellar: &proc_macro2::TokenStream,
 ) -> proc_macro2::TokenStream {
@@ -383,7 +395,7 @@ pub(crate) fn generate_am_group(
         }
     };
 
-    let am_group_remote_body = gen_am_group_remote_body2(&input);
+    let am_group_remote_body = gen_am_group_remote_body2(&orig_name, &input);
 
     let (ret_contatiner,ret_push,ret_stmt) = gen_am_group_return_stmt(&am_type, &am_group_return_name, lamellar, false);
 
@@ -414,7 +426,6 @@ pub(crate) fn generate_am_group(
         &orig_name,
         &am_group_am_name,
         &am_group_user_name,
-        &ret_type,
         &inner_ret_type,
         &lamellar,
     );
@@ -481,6 +492,8 @@ fn create_am_group_remote(
     let mut am_group_des = fields.des_as_vecs();
     am_group_des.extend(static_fields.des());
 
+
+
     let (the_struct, the_traits) = create_am_struct(
         generics,
         attributes,
@@ -546,7 +559,6 @@ fn create_am_group_remote(
                     #my_len
                 }
             }
-
 
             #the_traits
         },

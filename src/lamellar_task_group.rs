@@ -1009,6 +1009,7 @@ impl AmGroup {
 
 
 
+#[derive(Clone)]
 pub enum AmGroupResult<'a, T> {
     Pe(usize, &'a T),
     All(TypedAmAllIter<'a, T>),
@@ -1024,22 +1025,63 @@ impl<'a, T: std::fmt::Debug> std::fmt::Debug for AmGroupResult<'a, T> {
 }
 
 
+#[derive(Clone)]
 pub enum TypedAmAllIter<'a, T> {
-    Unit(std::iter::Take<std::iter::Repeat<()>>),
+    Unit(TypedAmAllUnitIter<'a, T>),
     Val(TypedAmAllValIter<'a, T>),
 }
 
 impl <'a, T: std::fmt::Debug> std::fmt::Debug for TypedAmAllIter<'a, T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            TypedAmAllIter::Unit(iter) => write!(f, "{:?}", iter.clone().collect::<Vec<_>>()),
+            TypedAmAllIter::Unit(iter) => write!(f, "{:?}", iter),
             TypedAmAllIter::Val(iter) => write!(f, "{:?}", iter),
         }
     }
 }
 
+impl<'a, T> Iterator for TypedAmAllIter<'a, T> {
+    type  Item = &'a T;
+    fn next(&mut self) -> Option<Self::Item> {
+        match self {
+            TypedAmAllIter::Unit(iter) => iter.next(),
+            TypedAmAllIter::Val(iter) => iter.next(),
+        }
+    }
+}
+
+#[derive(Clone)]
+pub struct TypedAmAllUnitIter<'a, T> {
+    all: &'a Vec<T>,
+    cur_pe: usize,
+    num_pes: usize,
+}
+
+impl <'a, T: std::fmt::Debug> std::fmt::Debug for TypedAmAllUnitIter<'a, T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "[")?;
+        for i in 0..self.num_pes {
+            write!(f, "{:?},", self.all[i])?;
+        }
+        write!(f, "]")
+    }
+}
+
+impl<'a, T> Iterator for TypedAmAllUnitIter<'a, T> {
+    type Item = &'a T;
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.cur_pe < self.num_pes {
+            let cur_pe = self.cur_pe;
+            self.cur_pe += 1;
+            Some(&self.all[cur_pe])
+        } else {
+            None
+        }
+    }
+}
 
 
+#[derive(Clone)]
 pub struct TypedAmAllValIter<'a, T> {
     all: &'a Vec<Vec<T>>,
     req: usize,
@@ -1071,6 +1113,7 @@ impl<'a, T> Iterator for TypedAmAllValIter<'a, T> {
     }
 }
 
+#[derive(Clone)]
 pub enum TypedAmGroupResult<T>{
     Unit(TypedAmGroupUnitResult<T>),
     Val(TypedAmGroupValResult<T>),
@@ -1109,6 +1152,8 @@ impl<T> TypedAmGroupResult<T> {
     }
 }
 
+
+#[derive(Clone)]
 pub struct TypedAmGroupResultIter<'a,T> {
     index: usize,
     results: &'a TypedAmGroupResult<T>
@@ -1145,6 +1190,7 @@ impl<T>  BaseAmGroupReq<T> {
     }
 }
 
+#[derive(Clone)]
 pub enum BaseAmGroupResult<T> { // T here should be the inner most return type
     SinglePeUnit(T),
     SinglePeVal(Vec<T>),
@@ -1158,6 +1204,7 @@ pub struct TypedAmGroupBatchReq<T> {
     reqs: BaseAmGroupReq<T>,
 }
 
+#[derive(Clone)]
 pub struct TypedAmGroupBatchResult<T> {
     pe: usize,
     ids: Vec<usize>,
@@ -1181,6 +1228,7 @@ impl<T>  TypedAmGroupBatchReq<T>{
     }
 }
 
+#[derive(Clone)]
 pub struct TypedAmGroupValResult<T> {
     reqs: Vec<TypedAmGroupBatchResult<T>>,
     cnt: usize,
@@ -1222,6 +1270,7 @@ impl<T> TypedAmGroupValResult<T> {
     }
 }
 
+#[derive(Clone)]
 pub struct TypedAmGroupUnitResult<T> {
     reqs: Vec<TypedAmGroupBatchResult<T>>,
     cnt: usize,
@@ -1247,7 +1296,11 @@ impl<T> TypedAmGroupUnitResult<T> {
             if let Ok(idx) = req.ids.binary_search(&index) {
                 match &req.reqs {
                     BaseAmGroupResult::SinglePeUnit(res) => return AmGroupResult::Pe(req.pe, &res),
-                    BaseAmGroupResult::AllPeUnit(res) => return AmGroupResult::All( TypedAmAllIter::Unit(std::iter::repeat(()).take(self.num_pes))),
+                    BaseAmGroupResult::AllPeUnit(res) => return AmGroupResult::All( TypedAmAllIter::Unit(TypedAmAllUnitIter{
+                        all: res,
+                        cur_pe: 0,
+                        num_pes: self.num_pes,
+                    })),
                     _ => unreachable!(),
                 }
             }

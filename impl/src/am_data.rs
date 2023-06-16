@@ -10,6 +10,34 @@ use quote::{quote, ToTokens};
 use syn::parse_macro_input;
 use syn::punctuated::Punctuated;
 
+
+fn check_attrs(attrs: &Vec<syn::Attribute>) -> (bool,bool,Vec<syn::Attribute>) {
+    let mut static_field = false;
+    let attrs = attrs.iter().filter_map(|a| {
+        if a.to_token_stream().to_string().contains("#[AmGroup(static)]") {
+            static_field = true;
+            None
+        }
+        else {
+            Some(a.clone())
+        }
+    }).collect::<Vec<_>>();
+
+    let mut darc_iter = false;
+    let attrs = attrs
+        .iter()
+        .filter_map(|a| {
+            if a.to_token_stream().to_string().contains("#[Darc(iter)]") {
+                darc_iter = true;
+                None
+            } else {
+                Some(a.clone())
+            }
+        })
+        .collect::<Vec<_>>();
+    (static_field,darc_iter,attrs)
+}
+
 fn process_fields(
     args: Punctuated<syn::Meta, syn::Token![,]>,
     the_fields: &mut syn::Fields,
@@ -18,43 +46,24 @@ fn process_fields(
 ) -> (
     proc_macro2::TokenStream,
     proc_macro2::TokenStream,
+    proc_macro2::TokenStream,
+    proc_macro2::TokenStream,
     FieldInfo,
     FieldInfo,
+    bool
 ) {
     let mut fields = FieldInfo::new();
     let mut static_fields = FieldInfo::new();
 
     for field in the_fields {
+        
         if let syn::Type::Path(ref ty) = field.ty {
             if let Some(_seg) = ty.path.segments.first() {
                 if local {
                     fields.add_field(field.clone(),false);
                 } 
                 else {
-    
-                    let mut static_field = false;
-                    let attrs = field.attrs.iter().filter_map(|a| {
-                        if a.to_token_stream().to_string().contains("#[AmGroup(static)]") {
-                            static_field = true;
-                            None
-                        }
-                        else {
-                            Some(a.clone())
-                        }
-                    }).collect::<Vec<_>>();
-
-                    let mut darc_iter = false;
-                    let attrs = attrs
-                        .iter()
-                        .filter_map(|a| {
-                            if a.to_token_stream().to_string().contains("#[Darc(iter)]") {
-                                darc_iter = true;
-                                None
-                            } else {
-                                Some(a.clone())
-                            }
-                        })
-                        .collect::<Vec<_>>();
+                    let (static_field,darc_iter,attrs) = check_attrs(&field.attrs);
                     field.attrs = attrs;
                     if static_field{
                         static_fields.add_field(field.clone(),darc_iter);
@@ -65,7 +74,14 @@ fn process_fields(
                 }
             }
         } else if let syn::Type::Tuple(ref _ty) = field.ty {
-            fields.add_field(field.clone(),false);
+            let (static_field,darc_iter,attrs) = check_attrs(&field.attrs);
+            field.attrs = attrs;
+            if static_field{
+                static_fields.add_field(field.clone(),darc_iter);
+            }
+            else {
+                fields.add_field(field.clone(),darc_iter);
+            }
         } else if let syn::Type::Reference(ref _ty) = field.ty {
             if !local {
                 panic!("references are not supported in Remote Active Messages");
@@ -79,29 +95,34 @@ fn process_fields(
             fields.add_field(field.clone(),false);
         }
     }
-
-    let mut  lamellar_str = lamellar.to_string();
-    if lamellar_str == "__lamellar" {
-        lamellar_str = "lamellar".to_string();
+;
+    let mut lamellar = lamellar.clone();
+    if lamellar.to_string() == "__lamellar" {
+        lamellar = quote! {lamellar};
     }
-    let my_ser: syn::Path = syn::parse(
-        format!("{}::serde::Serialize", lamellar_str)
-            .parse()
-            .unwrap(),
-    )
-    .unwrap();
-    let my_de: syn::Path = syn::parse(
-        format!("{}::serde::Deserialize",lamellar_str)
-            .parse()
-            .unwrap(),
-    )
-    .unwrap();
+    // let my_ser: syn::Path = syn::parse(
+    //     format!("{}::serde::Serialize", lamellar_str)
+    //         .parse()
+    //         .unwrap(),
+    // )
+    // .unwrap();
+    // let my_de: syn::Path = syn::parse(
+    //     format!("{}::serde::Deserialize",lamellar_str)
+    //         .parse()
+    //         .unwrap(),
+    // )
+    // .unwrap();
     let mut impls = quote! {};
     if !local {
-        impls.extend(quote! { #my_ser, #my_de, });
+        impls.extend(quote! { #lamellar::serde::Serialize, #lamellar::serde::Deserialize, });
     }
     let mut trait_strs = HashMap::new();
+    let mut group_trait_strs = HashMap::new();
     let mut attr_strs = HashMap::new();
+
+
+
+    let mut create_am_group = true;
 
     for a in args {
         let t = a.to_token_stream().to_string();
@@ -138,7 +159,17 @@ fn process_fields(
             trait_strs
                 .entry(String::from("Clone"))
                 .or_insert(quote! {Clone});
-        } else if !t.contains("serde::Serialize")
+        }  else if t.contains("AmGroup") {
+            if t.contains("(") {
+                let attrs = &t[t.find("(").unwrap()
+                    ..t.find(")")
+                        .expect("missing \")\" in when declaring ArrayOp macro")
+                        + 1];
+                if attrs.contains("false") {
+                    create_am_group = false;
+                }
+            }
+        }else if !t.contains("serde::Serialize")
             && !t.contains("serde::Deserialize")
             && t.trim().len() > 0
         {
@@ -146,14 +177,26 @@ fn process_fields(
             trait_strs
                 .entry(t.trim().to_owned())
                 .or_insert(quote! {#temp});
+            if t.trim() != "Copy" {
+                group_trait_strs
+                    .entry(t.trim().to_owned())
+                    .or_insert(quote! {#temp});
+            }
         }
     }
+
+    let mut group_impls = impls.clone();
     for t in trait_strs {
         let temp = t.1;
         impls.extend(quote! {#temp, });
     }
+    for t in group_trait_strs {
+        let temp = t.1;
+        group_impls.extend(quote! {#temp, });
+    }
 
     let traits = quote! { #[derive( #impls)] };
+    let group_traits = quote! { #[derive( #group_impls)] };
     let serde_temp_2 = if lamellar.to_string() != "crate" && (!(local)) {
         quote! {#[serde(crate = "lamellar::serde")]}
     } else {
@@ -166,8 +209,8 @@ fn process_fields(
             #attr
         };
     }
-
-    (traits, attrs, fields, static_fields)
+    let group_attrs = quote! {#serde_temp_2};
+    (traits, group_traits, attrs, group_attrs, fields, static_fields, create_am_group)
 }
 
 pub(crate) fn derive_am_data(
@@ -185,8 +228,9 @@ pub(crate) fn derive_am_data(
         let name = &data.ident;
         let generics = data.generics.clone();
 
-        let (traits, attrs, fields, static_fields) =
+        let (traits, group_traits, attrs, group_attrs, fields, static_fields,create_am_group) =
             process_fields(args, &mut data.fields, &lamellar, local);
+            
         let vis = data.vis.to_token_stream();
         let mut attributes = quote!();
         for attr in data.attrs {
@@ -208,9 +252,11 @@ pub(crate) fn derive_am_data(
             full_des.extend(static_fields.des());
         }
 
+
         let (orig_am,orig_am_traits) = create_am_struct(&generics, &attributes, &traits, &attrs, &vis, &name, &full_fields, &full_ser, &full_des, &lamellar, local);
-        let (am_group_structs, am_group_traits) = if !local && !rt && !group {
-            create_am_group_structs(&generics, &attributes, &traits, &attrs, &vis, &name, &fields, &static_fields, &lamellar, local)
+        let (am_group_structs, am_group_traits) = if !local && !rt && !group && create_am_group{
+            
+            create_am_group_structs(&generics, &attributes, &group_traits, &group_attrs, &vis, &name, &fields, &static_fields, &lamellar, local)
         } else {
             (quote!{},quote!{})
         };

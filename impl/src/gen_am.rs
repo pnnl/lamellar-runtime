@@ -1,9 +1,11 @@
 
-use crate::{AmType,get_impl_method,replace_lamellar_dsl_new,get_expr,type_name};
+use crate::{AmType,get_impl_method,get_expr,type_name};
+use crate::replace::LamellarDSLReplace;
 
 use proc_macro2::Span;
 use quote::{quote, quote_spanned, ToTokens};
 use syn::spanned::Spanned;
+use syn::fold::Fold;
 
 
 fn impl_lamellar_active_message_trait(generics: &syn::Generics, am_name: &syn::Ident, am_body: &proc_macro2::TokenStream, lamellar: &proc_macro2::TokenStream) -> proc_macro2::TokenStream{
@@ -181,17 +183,18 @@ pub(crate)  fn impl_remote_traits(generics: &syn::Generics, am_name: &syn::Ident
 fn gen_am_body(input: &syn::ItemImpl, am_type: &AmType, ret_struct_name: &syn::Ident, lamellar: &proc_macro2::TokenStream, local: bool) -> (proc_macro2::TokenStream,bool) {
     let mut exec_fn =
         get_impl_method("exec".to_string(), &input.items).expect("unable to extract exec body");
-    let func_span = exec_fn.span();
-    exec_fn = replace_lamellar_dsl_new(exec_fn);
+    // let func_span = exec_fn.span();
+    // exec_fn = replace_lamellar_dsl_new(exec_fn);
+    exec_fn = LamellarDSLReplace.fold_block(exec_fn);
 
-    let mut am_body = quote_spanned! {func_span=>};
+    let mut am_body = quote_spanned! {exec_fn.span()=>};
     let mut stmts = exec_fn.stmts;
 
     let (ret_statement,bytes_buf) = if let Some(stmt) = stmts.pop(){
         gen_return_stmt(am_type, &stmt, &ret_struct_name, &lamellar, local)
     }
     else {
-        (quote!{},false)
+        (quote!{#lamellar::active_messaging::LamellarReturn::Unit},false)
     };
 
     for stmt in stmts {
@@ -312,7 +315,7 @@ pub(crate) fn generate_am(
                 let return_struct = impl_return_struct(&generics, &am_data_header, &return_struct_name, &return_type, &lamellar, bytes_buf, local);
                 (return_type,return_struct)
             },
-            AmType::ReturnAm(ref am, ref output) => (quote! {#output},quote!{})
+            AmType::ReturnAm(ref _am, ref output) => (quote! {#output},quote!{})
         }
     };
     

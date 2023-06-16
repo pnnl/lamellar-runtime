@@ -1,5 +1,6 @@
 use quote::{quote,quote_spanned,ToTokens,format_ident};
 use syn::spanned::Spanned;
+use proc_macro_error::abort;
 // use syn::parse_quote;
 
 pub(crate) struct FieldInfo{
@@ -25,9 +26,9 @@ impl FieldInfo{
                     ser.extend(self.ser_path(field,*darc_iter,false));
                 },
                 syn::Type::Tuple(ty) => {
-                    ser.extend(self.ser_tuple(field,&ty));
+                    ser.extend(self.ser_tuple(field,&ty,false));
                 }
-                _ => { panic!("unsupported type in Remote Active Message {:?}", field.ty);}
+                _ => { abort!(field.span(),"unsupported type in Remote Active Message {:?}", field.ty);}
             }
         }
         ser
@@ -41,9 +42,9 @@ impl FieldInfo{
                     ser.extend(self.ser_path(field,*darc_iter,true));
                 },
                 syn::Type::Tuple(ty) => {
-                    ser.extend(self.ser_tuple(field,&ty));
+                    ser.extend(self.ser_tuple(field,&ty,true));
                 }
-                _ => { panic!("unsupported type in Remote Active Message {:?}", field.ty);}
+                _ => { abort!(field.span(),"unsupported type in Remote Active Message {:?}", field.ty);}
             }
         }
         ser
@@ -75,22 +76,29 @@ impl FieldInfo{
     }
     
 
-    fn ser_tuple(&self, field: &syn::Field, ty: &syn::TypeTuple) -> proc_macro2::TokenStream {
+    fn ser_tuple(&self, field: &syn::Field, ty: &syn::TypeTuple, as_vecs: bool) -> proc_macro2::TokenStream {
         let mut ser = quote!{};
         let field_name = field.ident.as_ref().unwrap();
         let mut ind = 0;
         for elem in &ty.elems {
             if let syn::Type::Path(ref _ty) = elem {
-                // if let Some(_seg) = ty.path.segments.first() {
-                    let temp_ind = syn::Index {
-                        index: ind,
-                        span: field.span(),
-                    };
-                    ind += 1;
+                let temp_ind = syn::Index {
+                    index: ind,
+                    span: field.span(),
+                };
+                ind += 1;
+                if !as_vecs {
                     ser.extend(quote_spanned! {field.span()=>
                         ( &self.#field_name.#temp_ind).ser(num_pes,darcs);
                     });
-                // }
+                }
+                else {
+                    ser.extend(quote_spanned! {field.span()=> 
+                        for e in (&self.#field_name).iter(){
+                            e.#temp_ind.ser(num_pes,darcs);
+                        }
+                    })
+                }
             }
         }
         ser
@@ -104,9 +112,9 @@ impl FieldInfo{
                     des.extend(self.des_path(field,*darc_iter,false));
                 },
                 syn::Type::Tuple(ty) => {
-                    des.extend(self.des_tuple(field,&ty));
+                    des.extend(self.des_tuple(field,&ty, false));
                 }
-                _ => { panic!("unsupported type in Remote Active Message {:?}", field.ty);}
+                _ => { abort!(field.span(),"unsupported type in Remote Active Message {:?}", field.ty);}
             }
         }
         des
@@ -120,15 +128,15 @@ impl FieldInfo{
                     des.extend(self.des_path(field,*darc_iter,true));
                 },
                 syn::Type::Tuple(ty) => {
-                    des.extend(self.des_tuple(field,&ty));
+                    des.extend(self.des_tuple(field,&ty,true));
                 }
-                _ => { panic!("unsupported type in Remote Active Message {:?}", field.ty);}
+                _ => { abort!(field.span(),"unsupported type in Remote Active Message {:?}", field.ty);}
             }
         }
         des
     }
 
-    fn des_path(&self,field: &syn::Field, darc_iter: bool,as_vecs: bool) -> proc_macro2::TokenStream {
+    fn des_path(&self,field: &syn::Field, darc_iter: bool, as_vecs: bool) -> proc_macro2::TokenStream {
         let field_name = field.ident.as_ref().unwrap();
         
         if as_vecs && darc_iter { //both
@@ -154,22 +162,29 @@ impl FieldInfo{
         }
     }
 
-    fn des_tuple(&self, field: &syn::Field, ty: &syn::TypeTuple) -> proc_macro2::TokenStream {
+    fn des_tuple(&self, field: &syn::Field, ty: &syn::TypeTuple, as_vecs: bool) -> proc_macro2::TokenStream {
         let mut des = quote!{};
         let field_name = field.ident.as_ref().unwrap();
         let mut ind = 0;
         for elem in &ty.elems {
             if let syn::Type::Path(ref _ty) = elem {
-                // if let Some(_seg) = ty.path.segments.first() {
-                    let temp_ind = syn::Index {
-                        index: ind,
-                        span: field.span(),
-                    };
-                    ind += 1;
+                let temp_ind = syn::Index {
+                    index: ind,
+                    span: field.span(),
+                };
+                ind += 1;
+                if !as_vecs {
                     des.extend(quote_spanned! {field.span()=>
                         ( &self.#field_name.#temp_ind).des(cur_pe);
                     });
-                // }
+                }
+                else {
+                    des.extend(quote_spanned! {field.span()=>
+                        for e in (&self.#field_name).iter(){
+                            e.#temp_ind.des(cur_pe);
+                        }
+                    });
+                }
             }
         }
         des
