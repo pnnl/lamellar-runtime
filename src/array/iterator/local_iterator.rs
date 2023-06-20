@@ -12,8 +12,10 @@ mod chunks;
 mod enumerate;
 mod filter;
 mod filter_map;
+// pub(crate) mod fold;
 pub(crate) mod for_each;
 mod map;
+pub(crate) mod reduce;
 mod skip;
 mod step_by;
 mod take;
@@ -259,6 +261,12 @@ pub trait LocalIteratorLauncher {
         I: LocalIterator + 'static,
         F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
         Fut: Future<Output = ()> + Send + 'static;
+    
+    fn local_reduce<I, F>(&self, iter: &I, op: F) -> Pin<Box<dyn Future<Output = I::Item> + Send>>
+    where
+        I: LocalIterator + 'static,
+        I::Item: SyncSend,
+        F: Fn(I::Item, I::Item) -> I::Item + SyncSend + Clone + 'static;
 
     // fn local_collect<I, A>(&self, iter: &I, d: Distribution) -> Pin<Box<dyn Future<Output = A> + Send>>
     // where
@@ -448,6 +456,30 @@ pub trait LocalIterator: SyncSend + Clone + 'static {
         Fut: Future<Output = ()> + Send + 'static,
     {
         self.array().local_for_each_async(self, op)
+    }
+
+     
+    /// Reduces the elements of the local iterator using the provided closure
+    ///
+    /// This function returns a future which needs to be driven to completion to retrieve the new container.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block);
+    ///
+    /// let req = array.local_iter().reduce(|acc,elem| acc+elem);
+    /// let sum = array.block_on(req); //wait on the collect request to get the new array
+    ///```
+    fn reduce<F>(&self, op: F) -> Pin<Box<dyn Future<Output = Self::Item> + Send>>
+    where
+        // &'static Self: LocalIterator + 'static,
+        Self::Item: SyncSend,
+        F: Fn(Self::Item,Self::Item) -> Self::Item + SyncSend + Clone + 'static,
+    {
+        self.array().local_reduce(self, op)
     }
 
     /*

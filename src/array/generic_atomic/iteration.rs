@@ -351,6 +351,15 @@ impl<T: Dist> LocalIteratorLauncher for GenericAtomicArray<T> {
             .local_for_each_async_with_schedule(sched, iter, op)
     }
 
+    fn local_reduce<I, F>(&self, iter: &I, op: F) -> Pin<Box<dyn Future<Output = I::Item> + Send>>
+    where
+        I: LocalIterator + 'static,
+        I::Item: SyncSend,
+        F: Fn(I::Item, I::Item) -> I::Item + SyncSend + Clone + 'static,
+    {
+        self.array.local_reduce(iter, op)
+    }
+
     // fn local_collect<I, A>(&self, iter: &I, d: Distribution) -> Pin<Box<dyn Future<Output = A> + Send>>
     // where
     //     I: LocalIterator + 'static,
