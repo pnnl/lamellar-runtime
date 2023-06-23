@@ -333,16 +333,19 @@ macro_rules! input_test{
                 array.batch_add(i,1);
             }
             check_results!($array,array,num_pes,"T");
+            println!("passed T");
             //individual T------------------------------
             for i in 0..array.len(){
                 array.batch_add(&i,1);
             }
             check_results!($array,array,num_pes,"&T");
+            println!("passed &T");
             //&[T]------------------------------
             let vec=(0..array.len()).collect::<Vec<usize>>();
             let slice = &vec[..];
             array.batch_add(slice,1);
             check_results!($array,array,num_pes,"&[T]");
+            println!("passed &[T]");
             //scoped &[T]------------------------------
             {
                 let vec=(0..array.len()).collect::<Vec<usize>>();
@@ -350,26 +353,31 @@ macro_rules! input_test{
                 array.batch_add(slice,1);
             }
             check_results!($array,array,num_pes,"scoped &[T]");
+            println!("passed scoped &[T]");
             // Vec<T>------------------------------
             let vec=(0..array.len()).collect::<Vec<usize>>();
             array.batch_add(vec,1);
             check_results!($array,array,num_pes,"Vec<T>");
+            println!("passed Vec<T>");
             // &Vec<T>------------------------------
             let vec=(0..array.len()).collect::<Vec<usize>>();
             array.batch_add(&vec,1);
             check_results!($array,array,num_pes,"&Vec<T>");
+            println!("passed &Vec<T>");
             // Scoped Vec<T>------------------------------
             {
                 let vec=(0..array.len()).collect::<Vec<usize>>();
                 array.batch_add(vec,1);
             }
             check_results!($array,array,num_pes,"scoped Vec<T>");
+            println!("passed scoped Vec<T>");
             // Scoped &Vec<T>------------------------------
             {
                 let vec=(0..array.len()).collect::<Vec<usize>>();
                 array.batch_add(&vec,1);
             }
             check_results!($array,array,num_pes,"scoped &Vec<T>");
+            println!("passed scoped &Vec<T>");
 
             // LMR<T>------------------------------
 
@@ -381,6 +389,7 @@ macro_rules! input_test{
                 }
                 array.batch_add(slice,1);
                 check_results!($array,array,num_pes,"LMR<T>");
+                println!("passed LMR<T>");
             }
 
 
@@ -395,6 +404,7 @@ macro_rules! input_test{
 
                 array.batch_add(slice,1);
                 check_results!($array,array,num_pes,"SMR<T>");
+                println!("passed SMR<T>");
             }
 
             // UnsafeArray<T>------------------------------
@@ -403,6 +413,7 @@ macro_rules! input_test{
             // UnsafeArray<T>------------------------------
             array.batch_add(unsafe{input_array.local_data()},1);
             check_results!($array,array,num_pes,"&UnsafeArray<T>");
+            println!("passed &UnsafeArray<T>");
 
             // ReadOnlyArray<T>------------------------------
             let input_array = input_array.into_read_only();
@@ -411,6 +422,7 @@ macro_rules! input_test{
             // ReadOnlyArray<T>------------------------------
             array.batch_add(input_array.local_data(),1);
             check_results!($array,array,num_pes,"&ReadOnlyArray<T>");
+            println!("passed &ReadOnlyArray<T>");
 
             // AtomicArray<T>------------------------------
             let input_array = input_array.into_atomic();
@@ -419,6 +431,7 @@ macro_rules! input_test{
             // AtomicArray<T>------------------------------
             array.batch_add(&input_array.local_data(),1);
             check_results!($array,array,num_pes,"&AtomicArray<T>");
+            println!("passed &AtomicArray<T>");
 
             // LocalLockArray<T>------------------------------
             let input_array = input_array.into_local_lock();
@@ -427,6 +440,7 @@ macro_rules! input_test{
             // LocalLockArray<T>------------------------------
             array.batch_add(&input_array.local_data(),1);
             check_results!($array,array,num_pes,"&LocalLockArray<T>");
+            println!("passed &LocalLockArray<T>");
 
             // GlobalLockArray<T>------------------------------
             let input_array = input_array.into_global_lock();
@@ -435,6 +449,7 @@ macro_rules! input_test{
             // GlobalLockArray<T>------------------------------
             array.batch_add(&input_array.local_data(),1);
             check_results!($array,array,num_pes,"&GlobalLockArray<T>");
+            println!("passed &GlobalLockArray<T>");
        }
     }
 }

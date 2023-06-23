@@ -419,22 +419,22 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
     ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
         let (mut indices, i_len) = index.as_op_input(); 
         let (mut vals, v_len) = val.as_op_input();
-        if v_len == 1 && i_len == 1 { //one to one
-            self.multi_val_multi_index::<()>(byte_array, vals, indices, op, BatchReturnType::None);
+        let res: Pin<Box<dyn Future<Output = Vec<((),Vec<usize>)>> + Send>> = if v_len == 1 && i_len == 1 { //one to one
+            self.single_val_single_index::<()>(byte_array, vals[0].first(),  indices[0].first(), op, BatchReturnType::None)
         }
         else if v_len > 1 && i_len == 1 { //many vals one index
-            self.multi_val_one_index::<()>(byte_array, vals, indices[0].first(), op, BatchReturnType::None);
+            self.multi_val_one_index::<()>(byte_array, vals, indices[0].first(), op, BatchReturnType::None)
         }
         else if v_len == 1 && i_len > 1 { //one val many indices
-            self.one_val_multi_indices::<()>(byte_array, vals[0].first(), indices, op, BatchReturnType::None);
+            self.one_val_multi_indices::<()>(byte_array, vals[0].first(), indices, op, BatchReturnType::None)
         }
         else if v_len > 1 && i_len > 1 { //many vals many indices
-            self.multi_val_multi_index::<()>(byte_array, vals, indices, op, BatchReturnType::None);
+            self.multi_val_multi_index::<()>(byte_array, vals, indices, op, BatchReturnType::None)
         }
         else{ //no vals no indices
-            
-        }
-        Box::pin(async { () })
+            Box::pin(async { Vec::new() })
+        };
+        Box::pin(async { res.await; () })
     }
 
     #[tracing::instrument(skip_all)]
@@ -449,20 +449,16 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         let (mut vals, v_len) = val.as_op_input();
         let res: Pin<Box<dyn Future<Output = Vec<(Vec<T>,Vec<usize>)>> + Send>> = 
         if v_len == 1 && i_len == 1 { //one to one
-            self.multi_val_multi_index::<Vec<T>>(byte_array, vals, indices, op, BatchReturnType::Vals);
-            Box::pin(async { Vec::new() })
+            self.single_val_single_index::<Vec<T>>(byte_array, vals[0].first(),  indices[0].first(), op, BatchReturnType::Vals)
         }
         else if v_len > 1 && i_len == 1 { //many vals one index
-            self.multi_val_one_index::<Vec<T>>(byte_array, vals, indices[0].first(), op, BatchReturnType::Vals);
-            Box::pin(async { Vec::new() })
+            self.multi_val_one_index::<Vec<T>>(byte_array, vals, indices[0].first(), op, BatchReturnType::Vals)
         }
         else if v_len == 1 && i_len > 1 { //one val many indices
-            self.one_val_multi_indices::<Vec<T>>(byte_array, vals[0].first(), indices, op, BatchReturnType::Vals);
-            Box::pin(async { Vec::new() })
+            self.one_val_multi_indices::<Vec<T>>(byte_array, vals[0].first(), indices, op, BatchReturnType::Vals)
         }
         else if v_len > 1 && i_len > 1 { //many vals many indices
-            self.multi_val_multi_index::<Vec<T>>(byte_array, vals, indices, op, BatchReturnType::Vals);
-            Box::pin(async { Vec::new() })
+            self.multi_val_multi_index::<Vec<T>>(byte_array, vals, indices, op, BatchReturnType::Vals)
         }
         else{ //no vals no indices
             Box::pin(async { Vec::new() })
@@ -493,15 +489,13 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         
         let res: Pin<Box<dyn Future<Output = Vec<(Vec<Result<T,T>>,Vec<usize>)>> + Send>> = 
         if v_len == 1 && i_len == 1 { //one to one
-            self.multi_val_multi_index::<Vec<Result<T,T>>>(byte_array, vals, indices, op, BatchReturnType::Result)
+            self.single_val_single_index::<Vec<Result<T,T>>>(byte_array, vals[0].first(),  indices[0].first(), op, BatchReturnType::Result)
         }
         else if v_len > 1 && i_len == 1 { //many vals one index
-            self.multi_val_one_index::<Vec<Result<T,T>>>(byte_array, vals, indices[0].first(), op, BatchReturnType::Result);
-            Box::pin(async { Vec::new() })
+            self.multi_val_one_index::<Vec<Result<T,T>>>(byte_array, vals, indices[0].first(), op, BatchReturnType::Result)
         }
         else if v_len == 1 && i_len > 1 { //one val many indices
-            self.one_val_multi_indices::<Vec<Result<T,T>>>(byte_array, vals[0].first(), indices, op, BatchReturnType::Result);
-            Box::pin(async { Vec::new() })
+            self.one_val_multi_indices::<Vec<Result<T,T>>>(byte_array, vals[0].first(), indices, op, BatchReturnType::Result)
         }
         else if v_len > 1 && i_len > 1 { //many vals many indices
             self.multi_val_multi_index::<Vec<Result<T,T>>>(byte_array, vals, indices, op, BatchReturnType::Result)
@@ -759,6 +753,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
                         let mut new_res_buffer = Vec::with_capacity(num_per_batch);
                         std::mem::swap( &mut res_buffs[pe], &mut new_res_buffer);
 
+                        // println!("buff len {}",new_buffer.len());
                         let am = MultiValMultiIndex::new_with_vec(byte_array2.clone(), op ,new_buffer).into_am::<T>(ret);
                         let req = self.inner.data.team.exec_arc_am_pe::<R>(
                             pe,
@@ -771,6 +766,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
                 }
                 for (pe,(buff,res_buff)) in buffs.into_iter().zip(res_buffs.into_iter()).enumerate() {
                     if buff.len() > 0 {
+                        // println!("buff len {}",buff.len());
                         let am = MultiValMultiIndex::new_with_vec(byte_array2.clone(),op,buff).into_am::<T>(ret);
                         let req = self.inner.data.team.exec_arc_am_pe::<R>(
                             pe,
@@ -790,6 +786,25 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         }
         Box::pin(async move{
             futures::future::join_all(futures.lock().drain(..)).await
+        })
+    }
+
+    fn single_val_single_index<R: AmDist>(&self, byte_array: LamellarByteArray, val: T, index: usize, op: ArrayOpCmd2<T>, ret: BatchReturnType) -> Pin<Box<dyn Future<Output=Vec<(R,Vec<usize>)>> + Send>>{
+        
+        let (pe,local_index) = self.pe_and_offset_for_global_index(index).unwrap();
+        let mut buff = Vec::new();
+        buff.extend_from_slice(IdxVal { index: local_index, val: val }.as_bytes());
+        let res_buff = vec![0];
+        let am = MultiValMultiIndex::new_with_vec(byte_array.clone(),op,buff).into_am::<T>(ret);
+        let req = self.inner.data.team.exec_arc_am_pe::<R>(
+            pe,
+            am, 
+            Some(self.inner.data.array_counters.clone())
+        ).into_future();
+        let mut reqs =vec![Box::pin(async move {(req.await,res_buff)})];
+        
+        Box::pin(async move{
+            futures::future::join_all(reqs.drain(..)).await
         })
     }
 }

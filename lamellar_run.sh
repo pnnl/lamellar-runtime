@@ -1,6 +1,8 @@
 #!/bin/bash
 rm -rf /dev/shm/lamellar_*  2> /dev/null #cleanup incase any previous run failed unexpectedly
 
+# mkdir -p output
+
 NUMPES=1
 NPROC=`nproc --all`
 
@@ -31,7 +33,7 @@ for pe in $(seq 0 $ENDPE); do
     echo "more threads ${E_CORE} than cores ${NPROC} "
     exit
   fi
-  LAMELLAE_BACKEND="shmem" LAMELLAR_MEM_SIZE=$((1*1024*1024*1024)) LAMELLAR_THREADS=$((THREADS-1)) LAMELLAR_NUM_PES=$NUMPES LAMELLAR_PE_ID=$pe LAMELLAR_JOB_ID=$JOBID taskset --cpu-list $S_CORE-$((E_CORE-1))  $bin  "${@:2}"  &
+  LAMELLAE_BACKEND="shmem" LAMELLAR_MEM_SIZE=$((1*1024*1024*1024)) LAMELLAR_THREADS=$((THREADS-1)) LAMELLAR_NUM_PES=$NUMPES LAMELLAR_PE_ID=$pe LAMELLAR_JOB_ID=$JOBID taskset --cpu-list $S_CORE-$((E_CORE-1))  $bin  "${@:2}"   &
   S_CORE=$(($E_CORE ))
   E_CORE=$(($S_CORE + $THREADS))
 done
