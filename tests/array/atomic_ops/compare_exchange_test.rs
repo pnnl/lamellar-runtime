@@ -372,6 +372,37 @@ macro_rules! compare_exchange_epsilon_test{
     }
 }
 
+macro_rules! check_input{
+    ($array:ident, $req:ident) =>{
+        let mut res = $array.block_on($req);
+        for (i,r) in res.drain(..).enumerate(){
+            if let Err(val) = r {
+                println!("error i: {i} val: {val:?}");
+            }
+        }
+    };
+    ($array:ident, $req:ident, $array_ty:ident, $num_pes:ident, $my_pe:ident) =>{
+        let mut res = $array.block_on($req);
+        for (i,r) in res.drain(..).enumerate(){
+            if i% $num_pes == $my_pe {
+                if let Err(val) = r{
+                    println!("error i: {i} val: {val:?}");
+                }
+            }else {
+                match r{
+                    Ok(val) => println!("error i: {i} val: {val:?}"),
+                    Err(val) => {
+                        if val != i{
+                            println!("error i: {i} val: {val:?}");
+                        }
+                    }
+                }
+            }
+            
+        }
+    }
+}
+
 macro_rules! input_test{
     ($array:ident,  $len:expr, $dist:ident) =>{
        {
@@ -388,30 +419,10 @@ macro_rules! input_test{
             let idxs = (my_pe..array.len()).step_by(num_pes).collect::<Vec<_>>();
             let full_idxs = (0..array.len()).collect::<Vec<_>>();
             let req = array.batch_compare_exchange(idxs,num_pes,my_pe);
-            let mut res = array.block_on(req);
-            for (i,r) in res.drain(..).enumerate(){
-                if let Err(val) = r {
-                    println!("error i: {i} val: {val:?}");
-                }
-            }
+            check_input!(array,req);
             let req = array.batch_compare_exchange(full_idxs,my_pe,my_pe);
-            let mut res = array.block_on(req);
-            for (i,r) in res.drain(..).enumerate(){
-                if i%num_pes == my_pe {
-                    if let Err(val) = r{
-                        println!("error i: {i} val: {val:?}");
-                    }
-                }else {
-                    match r{
-                        Ok(val) => println!("error i: {i} val: {val:?}"),
-                        Err(val) => {
-                            if val != i{
-                                println!("error i: {i} val: {val:?}");
-                            }
-                        }
-                    }
-                }
-            }
+            check_input!(array,req,$array,num_pes,my_pe);
+            initialize_array!($array, array, init_val);
        }
     }
 }
