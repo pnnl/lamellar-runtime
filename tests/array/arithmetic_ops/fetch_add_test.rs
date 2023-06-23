@@ -35,19 +35,19 @@ macro_rules! check_val {
         // UnsafeArray updates will be nondeterminstic so should not ever be considered safe/valid so for testing sake we just say they are
     };
     (AtomicArray,$val:ident,$max_val:ident,$valid:ident) => {
-        if (($val - $max_val) as f32).abs() > 0.0001 {
+        if (($val as f64 - $max_val as f64) as f32).abs() > 0.0001 {
             //all updates should be preserved
             $valid = false;
         }
     };
     (LocalLockArray,$val:ident,$max_val:ident,$valid:ident) => {
-        if (($val - $max_val) as f32).abs() > 0.0001 {
+        if (($val as f64 - $max_val as f64) as f32).abs() > 0.0001 {
             //all updates should be preserved
             $valid = false;
         }
     };
     (GlobalLockArray,$val:ident,$max_val:ident,$valid:ident) => {
-        if (($val - $max_val) as f32).abs() > 0.0001 {
+        if (($val as f64 - $max_val as f64) as f32).abs() > 0.0001 {
             //all updates should be preserved
             $valid = false;
         }
@@ -324,6 +324,10 @@ macro_rules! initialize_array2 {
 
 macro_rules! check_results {
     ($array_ty:ident, $array:ident, $num_pes:ident, $reqs:ident, $test:expr) => {
+        let real_val = 0;
+        check_results!($array_ty, $array, $num_pes,real_val,$reqs, $test);
+    };
+    ($array_ty:ident, $array:ident, $num_pes:ident, $real_val: ident, $reqs:ident, $test:expr) => {
         // println!("++++++++++++++++++++++++++++++++++++++++++++++");
         #[allow(unused_mut)]
         let mut success = true;
@@ -334,6 +338,7 @@ macro_rules! check_results {
         for (i, req) in $reqs.drain(0..).enumerate() {
             let req =  $array.block_on(req);
             // println!("sub_req len: {:?}", req.len());
+            // println!("req: {:?}",req);
             for (j, res) in req.iter().enumerate() {
                 if !(res >= &0 && res < &(req_cnt + $num_pes)) {
                     success = false;
@@ -343,16 +348,28 @@ macro_rules! check_results {
                 req_cnt+=1;
             }
         }
+        // println!("here");
         #[allow(unused_unsafe)]
         for (i, elem) in unsafe { $array.onesided_iter().into_iter().enumerate() }{
             let val = *elem;
-            let real_val = i + $num_pes;
+            let real_val = if $real_val == 0 {
+                i + $num_pes
+            }
+            else{
+                if i >= $num_pes{
+                    break;
+                }
+                i + $real_val
+
+            };
+            // println!("val {:?} real_val {:?}", val, real_val);
             check_val!($array_ty, real_val, val, success);
             if !success {
-                println!("input {:?}: {:?} {:?} {:?}", $test, i, val, real_val);
+                // println!("input {:?}: {:?} {:?} {:?}", $test, i, val, real_val);
                 break;
             }
         }
+        // println!("here2");
         if !success {
             $array.print();
         }
@@ -403,10 +420,22 @@ macro_rules! input_test{
             }
             check_results!($array,array,num_pes,reqs,"&T");
             //&[T]------------------------------
-            let vec=(0..array.len()).collect::<Vec<usize>>();
-            let slice = &vec[..];
+            // multi_idx single val
+            let idx=(0..array.len()).collect::<Vec<usize>>();
+            let idx_slice = &idx[..];
+            let vals=vec![1;array.len()];
+            let vals_slice = &vals[..];
+            
             let mut reqs = vec![];
-            reqs.push(array.batch_fetch_add(slice,1));
+            reqs.push(array.batch_fetch_add(idx_slice,1));
+            check_results!($array,array,num_pes,reqs,"&[T]");
+            // single_idx multi_ val
+            reqs.push(array.batch_fetch_add(_my_pe,&vals));
+            let real_val = array.len();
+            check_results!($array,array,num_pes, real_val,reqs,"&[T]");
+            // multi_idx multi_ val
+            reqs.push(array.batch_fetch_add(idx_slice,vals_slice));
+            
             check_results!($array,array,num_pes,reqs,"&[T]");
             //scoped &[T]------------------------------
             let mut reqs = vec![];

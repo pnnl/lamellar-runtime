@@ -1505,6 +1505,7 @@ fn create_buf_ops2(
                         match self.op {
                             #single_val_multi_idx_result_match_stmts
                         }
+                        // println!("res: {:?}",res);
                         res
                     }
                 }
@@ -1544,6 +1545,7 @@ fn create_buf_ops2(
                         match self.op {
                             #multi_val_single_idx_result_match_stmts
                         }
+                        // println!("res: {:?}",res);
                         res
                     }
                 }
@@ -1583,6 +1585,7 @@ fn create_buf_ops2(
                 match self.op {
                     #multi_val_multi_idx_fetch_match_stmts
                 }
+                // println!("res: {:?}",res);
                 res
             }
         }
@@ -1618,6 +1621,7 @@ fn create_buf_ops2(
                 match self.op {
                     #single_val_multi_idx_fetch_match_stmts
                 }
+                // println!("res: {:?}",res);
                 res
             }
         }
@@ -1657,6 +1661,7 @@ fn create_buf_ops2(
                 match self.op {
                     #multi_val_single_idx_fetch_match_stmts
                 }
+                // println!("res: {:?}",res);
                 res
             }
         }

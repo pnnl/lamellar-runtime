@@ -445,8 +445,10 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         op: ArrayOpCmd2<T>,
         byte_array: LamellarByteArray
     ) -> Pin<Box<dyn Future<Output = Vec<T>> + Send>> {
+        // println!("here in batch fetch op 2");
         let (mut indices, i_len) = index.as_op_input(); 
         let (mut vals, v_len) = val.as_op_input();
+        // println!("i_len {:?} v_len {:?}",i_len,v_len );
         let res: Pin<Box<dyn Future<Output = Vec<(Vec<T>,Vec<usize>)>> + Send>> = 
         if v_len == 1 && i_len == 1 { //one to one
             self.single_val_single_index::<Vec<T>>(byte_array, vals[0].first(),  indices[0].first(), op, BatchReturnType::Vals)
@@ -461,12 +463,14 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
             self.multi_val_multi_index::<Vec<T>>(byte_array, vals, indices, op, BatchReturnType::Vals)
         }
         else{ //no vals no indices
+            panic!("should not be here");
             Box::pin(async { Vec::new() })
         };
         Box::pin(async {
             let mut results = Vec::with_capacity(std::cmp::max(i_len,v_len));
             unsafe {results.set_len(std::cmp::max(i_len,v_len));}
             for (mut vals,mut idxs) in res.await.into_iter(){
+                // println!("vals {:?} idx {:?}",vals.len(),idxs);
                 for (v,i) in vals.drain(..).zip(idxs.drain(..)){
                     results[i]=v;
                 }
@@ -617,18 +621,24 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         let num_reqs = indices.len();
         let mut start_i = 0;
         
-        for index in indices.drain(..){
+        // println!("single_val_multi_index");
+
+        for (i,index) in indices.drain(..).enumerate(){
             let cnt2 = cnt.clone();
             let futures2 = futures.clone();
             let byte_array2 = byte_array.clone();
             let len = index.len();
+            // println!("num_reqs {:?}",num_reqs);
             self.inner.data.team.scheduler.submit_immediate_task2(async move {
                 let mut buffs = vec![Vec::with_capacity(num_per_batch); num_pes];
                 let mut res_buffs =  vec![Vec::with_capacity(num_per_batch); num_pes];
                 let mut reqs: Vec<Pin<Box<dyn Future<Output=(R,Vec<usize>)> + Send>>> = Vec::new();
-                for idx in index.iter(){
+                let mut res_index = 0;
+                for (ii,idx) in index.iter().enumerate(){
+                    let j = ii + start_i;
                     let (pe,local_index) = self.pe_and_offset_for_global_index(idx).unwrap();
                     buffs[pe].push(local_index);
+                    res_buffs[pe].push(j);
                     if buffs[pe].len() >= num_per_batch {
                         let mut new_buffer = Vec::with_capacity(num_per_batch);
                         std::mem::swap( &mut buffs[pe], &mut new_buffer);
@@ -643,7 +653,6 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
                         ).into_future();
                         reqs.push(Box::pin(async move {(req.await,new_res_buffer)}));
                     }
-                    
                 }
                 for (pe,(buff,res_buff)) in buffs.into_iter().zip(res_buffs.into_iter()).enumerate() {
                     if buff.len() > 0 {
@@ -656,15 +665,19 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
                         reqs.push(Box::pin(async move {(req.await,res_buff)}));
                     }
                 }
+                // println!("reqs len {:?}",reqs.len());
                 futures2.lock().extend(reqs);
                 cnt2.fetch_add(1, Ordering::SeqCst);
             });
             start_i += len;
         }
+        
         while cnt.load(Ordering::SeqCst) < num_reqs{
             self.inner.data.team.scheduler.exec_task();
         }
+        // println!("futures len {:?}",futures.lock().len());
         Box::pin(async move{
+            // println!("futures len {:?}",futures.lock().len());
             futures::future::join_all(futures.lock().drain(..)).await
         })
     }
@@ -676,6 +689,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
             Ok(n) => n.parse::<usize>().unwrap(), //+ 1 to account for main thread
             Err(_) => 10000,                      //+ 1 to account for main thread
         };
+        // println!("multi_val_one_index");
         let num_pes = self.inner.data.team.num_pes();
         let cnt = Arc::new(AtomicUsize::new(0));
         let futures = Arc::new(Mutex::new(Vec::new()));
@@ -714,6 +728,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         }
         // println!("futures len {:?}",futures.lock().len());
         Box::pin(async move{
+            // println!("futures len {:?}",futures.lock().len());
             futures::future::join_all(futures.lock().drain(..)).await
         })
     }
@@ -741,7 +756,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
                 let mut buffs = vec![Vec::with_capacity(bytes_per_batch); num_pes];
                 let mut res_buffs =  vec![Vec::with_capacity(num_per_batch); num_pes];
                 let mut reqs: Vec<Pin<Box<dyn Future<Output=(R,Vec<usize>)> + Send>>> = Vec::new();
-                // let mut res_index = 0;
+                let mut res_index = 0;
                 for (ii,(idx,val)) in index.iter().zip(val.iter()).enumerate(){
                     let j = ii + start_i;
                     let (pe,local_index) = self.pe_and_offset_for_global_index(idx).unwrap();
@@ -785,6 +800,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
             self.inner.data.team.scheduler.exec_task();
         }
         Box::pin(async move{
+            // println!("futures len: {:?}",futures.lock().len());
             futures::future::join_all(futures.lock().drain(..)).await
         })
     }
