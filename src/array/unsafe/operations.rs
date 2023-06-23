@@ -705,6 +705,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
             self.inner.data.team.scheduler.submit_immediate_task2(async move {
                 // let mut buffs = vec![Vec::with_capacity(num_per_batch); num_pes];
                 // let val_slice = val.as_slice();
+                let mut inner_start_i = start_i;
                 let mut reqs:Vec<Pin<Box<dyn Future<Output=(R,Vec<usize>)> + Send>>> = Vec::new();
                 val.as_vec_chunks(num_per_batch).into_iter().for_each(|val|{
                     let val_len = val.len();
@@ -714,8 +715,10 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
                         am, 
                         Some(self.inner.data.array_counters.clone())
                     ).into_future();
-                    let res_buffer = (start_i..start_i+val_len).collect::<Vec<usize>>();
+                    // println!("start_i: {:?} inner_start_i {:?} val_len: {:?}",start_i,inner_start_i,val_len);
+                    let res_buffer = (inner_start_i..inner_start_i+val_len).collect::<Vec<usize>>();
                     reqs.push(Box::pin(async move {(req.await,res_buffer)}));
+                    inner_start_i += val_len;
                 });
                 // println!("reqs len {:?}",reqs.len());
                 futures2.lock().extend(reqs);

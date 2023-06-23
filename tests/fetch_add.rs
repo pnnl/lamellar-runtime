@@ -103,5 +103,5 @@ create_fetch_add_tests!(
     ("Block", "Cyclic"),
     (input),
     (2, 3, 4),
-    (4, 100, 1000)
+    (4, 100, 2000)
 );

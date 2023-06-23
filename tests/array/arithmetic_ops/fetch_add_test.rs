@@ -337,12 +337,19 @@ macro_rules! check_results {
         let mut req_cnt=0;
         for (i, req) in $reqs.drain(0..).enumerate() {
             let req =  $array.block_on(req);
-            // println!("sub_req len: {:?}", req.len());
-            // println!("req: {:?}",req);
+            
             for (j, res) in req.iter().enumerate() {
-                if !(res >= &0 && res < &(req_cnt + $num_pes)) {
+                let check_val = if $real_val == 0  {
+                    req_cnt + $num_pes
+                }
+                else{
+                    $num_pes + $real_val
+                };
+                // println!("return i: {:?} j: {:?} check_val: {:?} val: {:?}, real_val: {:?}", i, j, check_val, res, $real_val);
+
+                if !(res >= &0 && res < &check_val) {
                     success = false;
-                    println!("return i: {:?} j: {:?} req_cnt+npe: {:?} val: {:?}", i, j, req_cnt + $num_pes, res);
+                    println!("return i: {:?} j: {:?} check_val: {:?} val: {:?}, real_val: {:?}", i, j, check_val, res, $real_val);
                     break;
                 }
                 req_cnt+=1;
@@ -352,20 +359,22 @@ macro_rules! check_results {
         #[allow(unused_unsafe)]
         for (i, elem) in unsafe { $array.onesided_iter().into_iter().enumerate() }{
             let val = *elem;
-            let real_val = if $real_val == 0 {
+            let real_val = if $real_val == 0  {
                 i + $num_pes
             }
             else{
-                if i >= $num_pes{
-                    break;
+                if i >= $num_pes {
+                    i
                 }
-                i + $real_val
+                else{
+                    i + $real_val
+                }
 
             };
             // println!("val {:?} real_val {:?}", val, real_val);
             check_val!($array_ty, real_val, val, success);
             if !success {
-                // println!("input {:?}: {:?} {:?} {:?}", $test, i, val, real_val);
+                println!("input {:?}: {:?} {:?} {:?}", $test, i, val, real_val);
                 break;
             }
         }

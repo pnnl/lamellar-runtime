@@ -372,6 +372,50 @@ macro_rules! compare_exchange_epsilon_test{
     }
 }
 
+macro_rules! input_test{
+    ($array:ident,  $len:expr, $dist:ident) =>{
+       {
+            std::env::set_var("LAMELLAR_OP_BATCH","10");
+            let world = lamellar::LamellarWorldBuilder::new().build();
+            let num_pes = world.num_pes();
+            let my_pe = world.my_pe();
+            let array_total_len = $len;
+
+            // let mut success = true;
+            let array: $array::<usize> = $array::<usize>::new(world.team(), array_total_len, $dist).into(); //convert into abstract LamellarArray, distributed len is total_len
+            let init_val = num_pes;
+            initialize_array!($array, array, init_val);
+            let idxs = (my_pe..array.len()).step_by(num_pes).collect::<Vec<_>>();
+            let full_idxs = (0..array.len()).collect::<Vec<_>>();
+            let req = array.batch_compare_exchange(idxs,num_pes,my_pe);
+            let mut res = array.block_on(req);
+            for (i,r) in res.drain(..).enumerate(){
+                if let Err(val) = r {
+                    println!("error i: {i} val: {val:?}");
+                }
+            }
+            let req = array.batch_compare_exchange(full_idxs,my_pe,my_pe);
+            let mut res = array.block_on(req);
+            for (i,r) in res.drain(..).enumerate(){
+                if i%num_pes == my_pe {
+                    if let Err(val) = r{
+                        println!("error i: {i} val: {val:?}");
+                    }
+                }else {
+                    match r{
+                        Ok(val) => println!("error i: {i} val: {val:?}"),
+                        Err(val) => {
+                            if val != i{
+                                println!("error i: {i} val: {val:?}");
+                            }
+                        }
+                    }
+                }
+            }
+       }
+    }
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let array = args[1].clone();
@@ -401,6 +445,7 @@ fn main() {
             "isize" => compare_exchange_test!(AtomicArray, isize, len, dist_type),
             "f32" => compare_exchange_epsilon_test!(AtomicArray, f32, len, dist_type),
             "f64" => compare_exchange_epsilon_test!(AtomicArray, f64, len, dist_type),
+            "input" => input_test!(AtomicArray, len, dist_type),
             _ => eprintln!("unsupported element type"),
         },
         "LocalLockArray" => match elem.as_str() {
@@ -418,6 +463,7 @@ fn main() {
             "isize" => compare_exchange_test!(LocalLockArray, isize, len, dist_type),
             "f32" => compare_exchange_epsilon_test!(LocalLockArray, f32, len, dist_type),
             "f64" => compare_exchange_epsilon_test!(LocalLockArray, f64, len, dist_type),
+            "input" => input_test!(LocalLockArray, len, dist_type),
             _ => eprintln!("unsupported element type"),
         },
         "GlobalLockArray" => match elem.as_str() {
@@ -435,6 +481,7 @@ fn main() {
             "isize" => compare_exchange_test!(GlobalLockArray, isize, len, dist_type),
             "f32" => compare_exchange_epsilon_test!(GlobalLockArray, f32, len, dist_type),
             "f64" => compare_exchange_epsilon_test!(GlobalLockArray, f64, len, dist_type),
+            "input" => input_test!(GlobalLockArray, len, dist_type),
             _ => eprintln!("unsupported element type"),
         },
         _ => eprintln!("unsupported array type"),
