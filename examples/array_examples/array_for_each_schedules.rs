@@ -13,7 +13,7 @@ fn main() {
     let num_pes = world.num_pes();
     let block_array = AtomicArray::<usize>::new(world.team(), ARRAY_LEN, Distribution::Block);
     block_array
-        .dist_iter_mut()
+        .local_iter_mut()
         .enumerate()
         .for_each(move |(i, e)| e.store(i % (ARRAY_LEN / num_pes)));
     world.wait_all();
@@ -22,7 +22,7 @@ fn main() {
 
     let timer = Instant::now();
     let tc = thread_cnts.clone();
-    block_array.dist_iter().for_each(move |e| {
+    block_array.local_iter().for_each(move |e| {
         std::thread::sleep(Duration::from_millis((e.load() * 1) as u64));
         *tc.lock().entry(std::thread::current().id()).or_insert(0) += e.load() * 1;
     });
@@ -36,8 +36,8 @@ fn main() {
 
     let timer = Instant::now();
     block_array
-        .dist_iter()
-        .for_each_with_schedule(Schedule::WorkStealing, move |e| {
+        .local_iter()
+        .for_each_with_schedule2(Schedule::WorkStealing, move |e| {
             std::thread::sleep(Duration::from_millis((e.load() * 1) as u64));
             *tc.lock().entry(std::thread::current().id()).or_insert(0) += e.load() * 1;
         });
@@ -51,8 +51,8 @@ fn main() {
 
     let timer = Instant::now();
     block_array
-        .dist_iter()
-        .for_each_with_schedule(Schedule::Guided, move |e| {
+        .local_iter()
+        .for_each_with_schedule2(Schedule::Guided, move |e| {
             std::thread::sleep(Duration::from_millis((e.load() * 1) as u64));
             *tc.lock().entry(std::thread::current().id()).or_insert(0) += e.load() * 1;
         });
@@ -66,8 +66,8 @@ fn main() {
 
     let timer = Instant::now();
     block_array
-        .dist_iter()
-        .for_each_with_schedule(Schedule::Dynamic, move |e| {
+        .local_iter()
+        .for_each_with_schedule2(Schedule::Dynamic, move |e| {
             std::thread::sleep(Duration::from_millis((e.load() * 1) as u64));
             *tc.lock().entry(std::thread::current().id()).or_insert(0) += e.load() * 1;
         });
@@ -81,8 +81,8 @@ fn main() {
 
     let timer = Instant::now();
     block_array
-        .dist_iter()
-        .for_each_with_schedule(Schedule::Chunk(10), move |e| {
+        .local_iter()
+        .for_each_with_schedule2(Schedule::Chunk(10), move |e| {
             std::thread::sleep(Duration::from_millis((e.load() * 1) as u64));
             *tc.lock().entry(std::thread::current().id()).or_insert(0) += e.load() * 1;
         });

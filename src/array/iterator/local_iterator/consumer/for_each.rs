@@ -1,5 +1,52 @@
 use crate::array::iterator::local_iterator::*;
 
+#[doc(hidden)]
+pub struct LocalIterForEachHandle {
+    pub(crate) reqs: Vec<Box<dyn LamellarRequest<Output = ()>>>,
+}
+
+#[doc(hidden)]
+#[async_trait]
+impl LocalIterRequest for LocalIterForEachHandle {
+    type Output = ();
+    async fn into_future(mut self: Box<Self>) -> Self::Output {
+        for req in self.reqs.drain(..) {
+            req.into_future().await;
+        }
+    }
+    fn wait(mut self: Box<Self>) -> Self::Output {
+        for req in self.reqs.drain(..) {
+            req.get();
+        }
+    }
+}
+
+#[lamellar_impl::AmLocalDataRT(Clone)]
+pub(crate) struct ForEachAm<I,F>
+where
+    I: LocalIterator,
+    F: Fn(I::Item),
+{
+    pub(crate) op: F,
+    pub(crate) schedule: IterSchedule<I>,
+}
+
+
+
+#[lamellar_impl::rt_am_local]
+impl<I, F> LamellarAm for ForEachAm<I, F>
+where
+    I: LocalIterator + 'static,
+    F: Fn(I::Item) + SyncSend + 'static,
+{
+    async fn exec(&self) {
+        let mut iter = self.schedule.into_iter();
+        while let Some(elem) = iter.next(){
+            (&self.op)(elem);
+        }
+    }
+}
+
 #[lamellar_impl::AmLocalDataRT(Clone)]
 pub(crate) struct ForEachStatic<I, F>
 where
@@ -98,47 +145,8 @@ where
     }
 }
 
-#[derive(Clone, Debug)]
-pub(crate) struct ForEachWorkStealer {
-    pub(crate) range: Arc<Mutex<(usize, usize)>>, //start, end
-}
 
-impl ForEachWorkStealer {
-    fn set_range(&self, start: usize, end: usize) {
-        let mut range = self.range.lock();
-        range.0 = start;
-        range.1 = end;
-        // println!("{:?} set range {:?}", std::thread::current().id(), range);
-    }
 
-    fn next(&self) -> Option<usize> {
-        let mut range = self.range.lock();
-        range.0 += 1;
-        if range.0 <= range.1 {
-            Some(range.0)
-        } else {
-            None
-        }
-    }
-    fn set_done(&self) {
-        let mut range = self.range.lock();
-        range.0 = range.1;
-    }
-
-    fn steal(&self) -> Option<(usize, usize)> {
-        let mut range = self.range.lock();
-        let start = range.0;
-        let end = range.1;
-        // println!("{:?} stealing {:?}", std::thread::current().id(), range);
-        if end > start && end - start > 2 {
-            let new_end = (start + end) / 2;
-            range.1 = new_end;
-            Some((new_end, end))
-        } else {
-            None
-        }
-    }
-}
 
 #[lamellar_impl::AmLocalDataRT(Clone, Debug)]
 pub(crate) struct ForEachWorkStealing<I, F>
@@ -148,10 +156,10 @@ where
 {
     pub(crate) op: F,
     pub(crate) data: I,
-    pub(crate) range: ForEachWorkStealer,
+    pub(crate) range: IterWorkStealer,
     // pub(crate) ranges: Vec<(usize, usize)>,
     // pub(crate) range_i: Arc<AtomicUsize>,
-    pub(crate) siblings: Vec<ForEachWorkStealer>,
+    pub(crate) siblings: Vec<IterWorkStealer>,
 }
 #[lamellar_impl::rt_am_local]
 impl<I, F> LamellarAm for ForEachWorkStealing<I, F>
@@ -320,8 +328,8 @@ where
 {
     pub(crate) op: F,
     pub(crate) data: I,
-    pub(crate) range: ForEachWorkStealer,
-    pub(crate) siblings: Vec<ForEachWorkStealer>,
+    pub(crate) range: IterWorkStealer,
+    pub(crate) siblings: Vec<IterWorkStealer>,
 }
 #[lamellar_impl::rt_am_local]
 impl<I, F, Fut> LamellarAm for ForEachAsyncWorkStealing<I, F, Fut>

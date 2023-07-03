@@ -14,7 +14,7 @@ impl<T, F> LocalIterRequest for LocalIterReduceHandle <T,F>
 where
     T: Send,
     F: Fn(T, T) -> T + SyncSend + 'static{
-    type Output = T;
+    type Output = Option<T>
     async fn into_future(mut self: Box<Self>) -> Self::Output {
        
         futures::future::join_all(self.reqs.drain(..).map(|req| req.into_future())).await.into_iter().reduce(self.op).unwrap()
@@ -26,15 +26,10 @@ where
 }
 
 #[lamellar_impl::AmLocalDataRT(Clone)]
-pub(crate) struct ReduceStatic<I, F>
-// where
-//     I: LocalIterator,
-//     F: FnMut(I::Item, I::Item) -> I::Item,
+pub(crate) struct ReduceAm<I, F>
 {
     pub(crate) op: F,
-    pub(crate) data: I,
-    pub(crate) start_i: usize,
-    pub(crate) end_i: usize,
+    pub(crate) schedule: IterSchedule<I>,
 }
 
 #[lamellar_impl::rt_am_local]
@@ -44,13 +39,11 @@ where
     I::Item: SyncSend,
     F: Fn(I::Item, I::Item) -> I::Item + SyncSend + 'static,
 {
-    async fn exec(&self) -> I::Item{
-        let mut iter = self.data.init(self.start_i, self.end_i - self.start_i);
-        // println!("for each static thread {:?} {} {} {}",std::thread::current().id(),self.start_i, self.end_i, self.end_i - self.start_i);
-        // let mut cnt = 0;
-        let mut accum = iter.next().expect("iterator should not be empty");
+    async fn exec(&self) -> Option<I::Item>{
+        let mut iter = self.schedule.into_iter();
+        let mut accum = iter.next();
         while let Some(elem) = iter.next() {
-            accum =(self.op)(accum, elem);
+            accum = Some((self.op)(accum.unwrap(), elem));
             // cnt += 1;
         }
         accum
