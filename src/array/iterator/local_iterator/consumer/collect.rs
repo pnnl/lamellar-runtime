@@ -1,9 +1,50 @@
-use crate::array::iterator::local_iterator::*;
+use crate::array::iterator::local_iterator::consumer::*;
+use crate::array::iterator::one_sided_iterator::OneSidedIterator;
+use crate::array::{LamellarArray,LamellarArrayPut,Distribution};
+use crate::array::operations::ArrayOps; 
+use crate::array::r#unsafe::UnsafeArray;
+use crate::memregion::Dist;
+use crate::active_messaging::SyncSend;
 
+use async_trait::async_trait;
+use core::marker::PhantomData;
+
+#[derive(Clone,Debug)]
+pub struct Collect<I,A>{
+    pub(crate) iter: I,
+    pub(crate) distribution: Distribution,
+    pub(crate) _phantom: PhantomData<A>
+}
+
+impl<I,A> IterConsumer for Collect<I,A> 
+where
+    I: LocalIterator,
+    I::Item: Dist + ArrayOps,
+    A: From<UnsafeArray<I::Item>> + SyncSend + Clone,{
+    type AmOutput = Vec<(usize,I::Item)>;
+    type Output = A;
+    fn into_am(self, schedule: IterSchedule) -> LamellarArcLocalAm {
+        Arc::new(CollectAm{
+            iter: self.iter,
+            schedule
+        })
+    }
+    fn create_handle(self, team: Pin<Arc<LamellarTeamRT>>, reqs: Vec<Box<dyn LamellarRequest<Output = Self::AmOutput>>>) -> Box<dyn LocalIterRequest<Output = Self::Output>> {
+        Box::new(LocalIterCollectHandle {
+            reqs,
+            distribution: self.distribution,
+            team,
+            _phantom: self._phantom,
+        })
+    }
+    fn max_elems(&self, in_elems: usize) -> usize{
+        self.iter.elems(in_elems)
+    }
+}
 
 #[doc(hidden)]
 pub struct LocalIterCollectHandle<T: Dist + ArrayOps, A: From<UnsafeArray<T>> + SyncSend> {
-    pub(crate) reqs: Vec<Box<dyn LamellarRequest<Output = Vec<T>>>>,
+    pub(crate) reqs: Vec<Box<dyn LamellarRequest<Output = Vec<(usize,T)>>>>,
     pub(crate) distribution: Distribution,
     pub(crate) team: Pin<Arc<LamellarTeamRT>>,
     pub(crate) _phantom: PhantomData<A>,
@@ -50,37 +91,24 @@ impl<T: Dist + ArrayOps, A: From<UnsafeArray<T>> + SyncSend> LocalIterRequest
 {
     type Output = A;
     async fn into_future(mut self: Box<Self>) -> Self::Output {
-        let mut num_local_vals = 0;
-        let temp_vals = vec![];
+        let mut temp_vals = vec![];
         for req in self.reqs.drain(0..) {
             let v = req.into_future().await;
-            num_local_vals += v.len();
-            temp_vals.push(v);
+            temp_vals.extend(v);
         }
-        let mut local_vals = Vec::with_capacity(num_local_vals);
-        unsafe{ local_vals.set_len(num_local_vals);}
-        for vals in temp_vals.drain(0..){
-            for (i,val) in vals.drain(0..){
-                local_vals[i]=val;
-            }
-        }
+        temp_vals.sort_by(|a, b| a.0.cmp(&b.0));
+        let mut local_vals = temp_vals.into_iter().map(|v| v.1).collect();
         self.create_array(&local_vals)
     }
     fn wait(mut self: Box<Self>) -> Self::Output {
         let mut num_local_vals = 0;
-        let temp_vals = vec![];
+        let mut temp_vals = vec![];
         for req in self.reqs.drain(0..) {
             let v = req.get();
-            num_local_vals += v.len();
-            temp_vals.push(v);
+            temp_vals.extend(v);
         }
-        let mut local_vals = Vec::with_capacity(num_local_vals);
-        unsafe{ local_vals.set_len(num_local_vals);}
-        for vals in temp_vals.drain(0..){
-            for (i,val) in vals.drain(0..){
-                local_vals[i]=val;
-            }
-        }
+        temp_vals.sort_by(|a, b| a.0.cmp(&b.0));
+        let mut local_vals = temp_vals.into_iter().map(|v| v.1).collect();
         self.create_array(&local_vals)
     }
 }
@@ -90,7 +118,8 @@ pub(crate) struct CollectAm<I>
 where
     I: LocalIterator,
 {
-    pub(crate) schedule: IterSchedule<I>,
+    pub(crate) iter: I,
+    pub(crate) schedule: IterSchedule,
 }
 
 // impl<I> std::fmt::Debug for LocalCollect<I>
@@ -113,12 +142,8 @@ where
     I::Item: Sync,
 {
     async fn exec(&self) -> Vec<(usize,I::Item)> {
-        let mut iter = self.schedule.enumerate_iter()
-        let mut vec = Vec::new();
-        while let Some(i,elem) = iter.next() {
-            vec.push((i,elem));
-        }
-        vec
+        let mut iter = self.schedule.monotonic_iter(self.iter.clone());
+        iter.collect::<Vec<_>>()
     }
 }
 

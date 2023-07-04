@@ -13,6 +13,7 @@ mod enumerate;
 mod filter;
 mod filter_map;
 mod map;
+mod monotonic;
 mod skip;
 mod step_by;
 mod take;
@@ -26,6 +27,7 @@ use enumerate::*;
 use filter::*;
 use filter_map::*;
 use map::*;
+use monotonic::*;
 use skip::*;
 use step_by::*;
 use take::*;
@@ -107,11 +109,11 @@ pub trait LocalIteratorLauncher {
         F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
         Fut: Future<Output = ()> + Send + 'static;
     
-    fn local_reduce<I, F>(&self, iter: &I, op: F) -> Pin<Box<dyn Future<Output = I::Item> + Send>>
-    where
-        I: LocalIterator + 'static,
-        I::Item: SyncSend,
-        F: Fn(I::Item, I::Item) -> I::Item + SyncSend + Clone + 'static;
+    // fn local_reduce<I, F>(&self, iter: &I, op: F) -> Pin<Box<dyn Future<Output = I::Item> + Send>>
+    // where
+    //     I: LocalIterator + 'static,
+    //     I::Item: SyncSend,
+    //     F: Fn(I::Item, I::Item) -> I::Item + SyncSend + Clone + 'static;
 
     // fn local_collect<I, A>(&self, iter: &I, d: Distribution) -> Pin<Box<dyn Future<Output = A> + Send>>
     // where
@@ -221,7 +223,7 @@ pub trait LocalIterator: SyncSend + Clone + 'static {
     ///     if *e%2 == 0{ Some((i,*e as f32)) }
     ///     else { None }
     /// });
-    /// world.block_on(filter_iter.for_each(move|(i,e)| println!("PE: {my_pe} i: {i} elem: {e}")));
+    /// world.block_on(filter_iter.for_each(move|(i,e)| println!("PE: {my_pe} i: {i} elem: {e:?}")));
     ///```
     /// Possible output on a 4 PE (1 thread/PE) execution (ordering is likey to be random with respect to PEs)
     ///```text
@@ -237,6 +239,42 @@ pub trait LocalIterator: SyncSend + Clone + 'static {
     {
         FilterMap::new(self, op)
     }
+
+    /// Similar to the Enumerate iterator (which can only be applied to `IndexedLocalIterators`), but the yielded indicies are only
+    /// guaranteed to be unique and monotonically increasing, they should not be considered to have any relation to the underlying
+    /// location of data in the local array. 
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array = LocalLockArray::<usize>::new(&world,16,Distribution::Block);
+    /// let my_pe = world.my_pe();
+    ///
+    /// array.local_iter_mut().for_each(move|e| *e = my_pe); //initialize array
+    /// array.wait_all();
+    /// let filter_iter = array.local_iter()
+    ///                        .enumerate() //we can call enumerate before the filter
+    ///                        .filter_map(|(i,e)| {
+    ///                             if *e%2 == 0{ Some((i,*e as f32)) }
+    ///                             else { None }
+    ///                         })
+    ///                        .monotonic());
+    /// world.block_on(filter_iter.for_each(move|(j,(i,e))| println!("PE: {my_pe} j: {j} i: {i} elem: {e}")));
+    ///```
+    /// Possible output on a 4 PE (1 thread/PE) execution (ordering is likey to be random with respect to PEs)
+    ///```text
+    /// PE: 0 j: 0 i: 0 elem: 0.0
+    /// PE: 0 j: 1 i: 1 elem: 0.0
+    /// PE: 2 j: 0 i: 0 elem: 2.0
+    /// PE: 2 j: 1 i: 1 elem: 2.0
+    ///```
+    fn monotonic(self) -> Monotonic<Self>
+    {
+        Monotonic::new(self,0)
+    }
+
 
     /// Calls a closure on each element of a Local Iterator in parallel on the calling PE (the PE must have some local data of the array).
     ///
@@ -303,7 +341,7 @@ pub trait LocalIterator: SyncSend + Clone + 'static {
         self.array().local_for_each_async(self, op)
     }
 
-     
+    /* 
     /// Reduces the elements of the local iterator using the provided closure
     ///
     /// This function returns a future which needs to be driven to completion to retrieve the new container.
@@ -325,7 +363,7 @@ pub trait LocalIterator: SyncSend + Clone + 'static {
         F: Fn(Self::Item,Self::Item) -> Self::Item + SyncSend + Clone + 'static,
     {
         self.array().local_reduce(self, op)
-    }
+    }*/
 
     /*
     /// Collects the elements of the local iterator into the specified container type

@@ -3,17 +3,23 @@ pub(crate) mod count;
 pub(crate) mod for_each;
 pub(crate) mod reduce;
 
-use crate::array::iterator::local_iterator::LocalIterator;
-use collect::*;
-use count::*;
-use for_each::*;
-use reduce::*;
+pub(crate) use collect::*;
+pub(crate) use count::*;
+pub(crate) use for_each::*;
+pub(crate) use reduce::*;
+
+use crate::active_messaging::LamellarArcLocalAm;
+use crate::lamellar_request::LamellarRequest;
+use crate::lamellar_team::LamellarTeamRT;
+use crate::array::iterator::local_iterator::{LocalIterator,LocalIterRequest,Monotonic};
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize,Ordering};
+use std::pin::Pin;
 use parking_lot::Mutex;
 use rand::thread_rng;
 use rand::prelude::SliceRandom;
+
 
 
 #[derive(Clone, Debug)]
@@ -57,49 +63,45 @@ impl IterWorkStealer {
 }
 
 #[derive(Clone, Debug)]
-pub(crate) enum IterSchedule<I>{
-    Static(I,usize,usize),
-    Dynamic(I,Arc<AtomicUsize>,usize),
-    Chunk(I,Vec<(usize, usize)>, Arc<AtomicUsize>,),
-    WorkStealing(I,IterWorkStealer, Vec<IterWorkStealer>)
+pub(crate) enum IterSchedule{
+    Static(usize,usize),
+    Dynamic(Arc<AtomicUsize>,usize),
+    Chunk(Vec<(usize, usize)>, Arc<AtomicUsize>,),
+    WorkStealing(IterWorkStealer, Vec<IterWorkStealer>)
 }
 
-impl<I: LocalIterator> IntoIterator for &IterSchedule<I> {
-    type Item = I::Item;
-    type IntoIter = IterScheduleIter<I>;
-    fn into_iter(self) -> Self::IntoIter {
+impl IterSchedule {
+    fn init_iter<I: LocalIterator>(&self, iter: I) -> IterScheduleIter<I> {
         match self {
-            IterSchedule::Static(iter, start, end) => {
-                let iter = iter.init(*start,*end-*start);
-                IterScheduleIter::Static(iter)
+            IterSchedule::Static( start, end) => {
+                IterScheduleIter::Static(iter.init(*start,end-start))
             }
-            IterSchedule::Dynamic(iter, cur_i, max_i) => {
-                IterScheduleIter::Dynamic(iter.clone(), cur_i.clone(), *max_i)
+            IterSchedule::Dynamic(cur_i, max_i) => {
+                IterScheduleIter::Dynamic(iter, cur_i.clone(), *max_i)
             }
-            IterSchedule::Chunk(iter, ranges, range_i) => {
+            IterSchedule::Chunk(ranges, range_i) => {
                 IterScheduleIter::Chunk(iter.init(0,0), ranges.clone(),range_i.clone())
             }
-            IterSchedule::WorkStealing(iter, range, siblings) => {
+            IterSchedule::WorkStealing( range, siblings) => {
                 let (start, end) = *range.range.lock();
                 IterScheduleIter::WorkStealing(iter.init(start, end-start), range.clone(), siblings.clone())
             }
         }
     }
-    fn enumerate_iter(self){
+    fn monotonic_iter<I: LocalIterator>(&self, iter: I) -> IterScheduleIter<Monotonic<I>> {
         match self {
-            IterSchedule::Static(iter, start, end) => {
-                let iter = iter.enumerate().init(*start,*end-*start);
-                IterScheduleIter::Static(iter)
+            IterSchedule::Static(start, end) => {
+                IterScheduleIter::Static(iter.monotonic().init(*start,end-start))
             }
-            IterSchedule::Dynamic(iter, cur_i, max_i) => {
-                IterScheduleIter::Dynamic(iter.enumerate(), cur_i.clone(), *max_i)
+            IterSchedule::Dynamic(cur_i, max_i) => {
+                IterScheduleIter::Dynamic(iter.monotonic(), cur_i.clone(), *max_i)
             }
-            IterSchedule::Chunk(iter, ranges, range_i) => {
-                IterScheduleIter::Chunk(iter.enumerate().init(0,0), ranges.clone(),range_i.clone())
+            IterSchedule::Chunk(ranges, range_i) => {
+                IterScheduleIter::Chunk(iter.monotonic().init(0,0), ranges.clone(),range_i.clone())
             }
-            IterSchedule::WorkStealing(iter, range, siblings) => {
+            IterSchedule::WorkStealing(range, siblings) => {
                 let (start, end) = *range.range.lock();
-                IterScheduleIter::WorkStealing(iter.enumerate().init(start, end-start), range.clone(), siblings.clone())            }
+                IterScheduleIter::WorkStealing(iter.monotonic().init(start, end-start), range.clone(), siblings.clone())            }
         }
     }
 }
@@ -169,3 +171,106 @@ impl<I: LocalIterator> Iterator for IterScheduleIter<I> {
         }
     }
 }
+
+
+
+pub(crate) trait IterConsumer: Clone{
+    type AmOutput;
+    type Output;
+    fn into_am(self, schedule: IterSchedule) -> LamellarArcLocalAm;
+    fn create_handle(self, team: Pin<Arc<LamellarTeamRT>>, reqs: Vec<Box<dyn LamellarRequest<Output = Self::AmOutput>>>) -> Box<dyn LocalIterRequest<Output = Self::Output>>;
+    fn max_elems(&self, in_elems: usize) -> usize;
+}
+
+// #[derive(Clone, Debug)]
+// pub(crate) enum IterConsumer<I,A,T,F,R>{
+//     Collect(Distribution,PhantomData<A>),
+//     Count,
+//     ForEach(F),
+//     Reduce(R),
+// }
+
+
+// impl<I,A,T,F,R> IterConsumer<I,A,T,F,R> where
+//     I: LocalIterator + 'static,
+//     I::Item: SyncSend,
+//     A: From<UnsafeArray<T>> + SyncSend,
+//     T: Dist + ArrayOps
+//     F: Fn(I::Item) + SyncSend + Clone + 'static,
+//     R: Fn(I::Item, I::Item) -> I::Item + SyncSend + Clone + 'static,{
+    
+//     fn into_am<Am>(self, schedule: IterSchedule<I>) -> Am 
+//     where
+//         A: LamellarActiveMessage + LocalAM + 'static,{
+//         match self {
+//             IterConsumer::Collect(_) => {
+//                 CollectAm{
+//                     schedule
+//                 }
+//             }
+//             IterConsumer::Count => {
+//                 CountAm{
+//                     schedule
+//                 }
+//             }
+//             IterConsumer::ForEach(op) => {
+//                 ForEachAm{
+//                     op,
+//                     schedule,
+//                 }
+//             }
+//             IterConsumer::Reduce(op) => {
+//                 ReduceAm{
+//                     op,
+//                     schedule,
+//                 }
+//             }
+//         }
+//     }
+
+//     fn create_handle<O>(self, team: Pin<Arc<LamellarTeamRT>>, reqs: Vec<Box<dyn LamellarRequest<Output = O>>) -> IterConsumerHandle<A,T,F,R>{
+//         match self {
+//             IterConsumer::Collect(dist,phantom) => {
+//                 IterConsumerHandle::Collect(LocalIterCollectHandle{
+//                     reqs: reqs,
+//                     distribution: dist,
+//                     team: team,
+//                     _phantom: phantom,
+//                 })
+//             }
+//             IterConsumer::Count => {
+//                 IterConsumerHandle::Count(LocalIterCountHandle{
+//                     reqs: reqs,
+//                 })
+//             }
+//             IterConsumer::ForEach(_) => {
+//                 IterConsumerHandle::ForEach(LocalIterForEachHandle{
+//                     reqs: reqs,
+//                 })
+//             }
+//             IterConsumer::Reduce(op) => {
+//                 IterConsumerHandle::Reduce(LocalIterReduceHandle::<I::Item,R>{
+//                     reqs:reqs,
+//                     op: op
+//                 })
+//             }
+//         }
+//     }
+// }
+
+// pub(crate) enum IterConsumerHandle<A,T,F>{
+//     Collect(LocalIterCollectHandle<T,A>),
+//     Count(LocalIterCountHandle),
+//     ForEach(LocalIterForEachHandle),
+//     Reduce(LocalIterReduceHandle<T,F>)
+// }
+
+// #[async_trait]
+// impl<A,T,F> IterConsumerHandle<I,A,T,F,R> where
+//     A: From<UnsafeArray<T>> + SyncSend,
+//     T: Dist + ArrayOps
+//     F: Fn(I::Item) + SyncSend + Clone + 'static,
+//     R: Fn(I::Item, I::Item) -> I::Item + SyncSend + Clone + 'static,{
+
+
+

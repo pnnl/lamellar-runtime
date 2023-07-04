@@ -624,6 +624,14 @@ impl LamellarTaskGroup {
     where
         F: LamellarActiveMessage + LocalAM + 'static,
     {
+        self.exec_arc_am_local_inner(Arc::new(am))
+    }
+
+    pub(crate) fn exec_arc_am_local_inner<O: SyncSend + 'static>(
+        &self,
+        func: LamellarArcLocalAm,
+    ) -> Box<dyn LamellarRequest<Output = O>>
+    {
         // println!("task group exec am local");
         self.team.team_counters.add_send_req(1);
         self.team.world_counters.add_send_req(1);
@@ -631,7 +639,6 @@ impl LamellarTaskGroup {
         // println!("cnts: t: {} w: {} self: {:?}",self.team.team_counters.outstanding_reqs.load(Ordering::Relaxed),self.team.world_counters.outstanding_reqs.load(Ordering::Relaxed), self.counters.outstanding_reqs.load(Ordering::Relaxed));
 
         self.cnt.fetch_add(1, Ordering::SeqCst);
-        let func: LamellarArcLocalAm = Arc::new(am);
         let world = if let Some(world) = &self.team.world {
             world.clone()
         } else {

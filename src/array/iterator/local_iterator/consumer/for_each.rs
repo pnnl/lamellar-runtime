@@ -1,4 +1,42 @@
-use crate::array::iterator::local_iterator::*;
+// use crate::array::iterator::local_iterator::*;
+use crate::array::iterator::local_iterator::consumer::*;
+use crate::lamellar_team::LamellarTeamRT;
+use crate::active_messaging::SyncSend;
+
+use async_trait::async_trait;
+use futures::Future;
+use core::marker::PhantomData;
+
+
+#[derive(Clone, Debug)]
+pub struct ForEach<I,F> {
+    pub(crate) iter: I,
+    pub(crate) op: F,
+}
+
+impl<I,F> IterConsumer for ForEach<I,F>
+where
+    I: LocalIterator + 'static,
+    F: Fn(I::Item) + SyncSend + Clone + 'static,
+    {
+    type AmOutput = ();
+    type Output = ();
+    fn into_am(self, schedule: IterSchedule) -> LamellarArcLocalAm{
+        Arc::new(ForEachAm{
+            iter: self.iter,
+            op: self.op,
+            schedule
+        })
+    }
+    fn create_handle(self, team: Pin<Arc<LamellarTeamRT>>, reqs: Vec<Box<dyn LamellarRequest<Output = Self::AmOutput>>>) -> Box<dyn LocalIterRequest<Output = Self::Output>>{
+        Box::new(LocalIterForEachHandle {
+            reqs
+        })
+    }
+    fn max_elems(&self, in_elems: usize) -> usize{
+        self.iter.elems(in_elems)
+    }
+}
 
 #[doc(hidden)]
 pub struct LocalIterForEachHandle {
@@ -28,7 +66,8 @@ where
     F: Fn(I::Item),
 {
     pub(crate) op: F,
-    pub(crate) schedule: IterSchedule<I>,
+    pub(crate) iter: I,
+    pub(crate) schedule: IterSchedule
 }
 
 
@@ -40,7 +79,7 @@ where
     F: Fn(I::Item) + SyncSend + 'static,
 {
     async fn exec(&self) {
-        let mut iter = self.schedule.into_iter();
+        let mut iter = self.schedule.init_iter(self.iter.clone());
         while let Some(elem) = iter.next(){
             (&self.op)(elem);
         }
