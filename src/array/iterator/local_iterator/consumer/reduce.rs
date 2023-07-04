@@ -50,26 +50,29 @@ where
 {
     type Output = Option<T>;
     async fn into_future(mut self: Box<Self>) -> Self::Output {
-        let iter = futures::future::join_all(self.reqs
+        futures::future::join_all(self.reqs
             .drain(..)
             .map(|req| req.into_future()))
             .await
-            .into_iter();
-        let mut accum = iter.next();
-        while let Some(elem) = iter.next() {
-            accum = Some((self.op)(accum.unwrap(), elem));
-        }
-        accum
+            .into_iter()
+            .filter_map(|res| res)
+            .reduce(self.op)
+        // let mut accum = iter.next();
+        // while let Some(elem) = iter.next() {
+        //     accum = Some((self.op)(accum.unwrap(), elem));
+        // }
+        // accum
     }
     fn wait(mut self: Box<Self>) -> Self::Output {
-        let iter = self.reqs
+        self.reqs
             .drain(..)
-            .map(|req| req.get());
-        let mut accum = iter.next();
-        while let Some(elem) = iter.next() {
-            accum = Some((self.op)(accum.unwrap().unwrap(), elem.unwrap()));
-        }
-        accum
+            .filter_map(|req| req.get())
+            .reduce(self.op)
+        // let mut accum = iter.next();
+        // while let Some(elem) = iter.next() {
+        //     accum = Some((self.op)(accum.unwrap().unwrap(), elem.unwrap()));
+        // }
+        // accum
     }
 }
 

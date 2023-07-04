@@ -20,7 +20,7 @@ impl<I,A> IterConsumer for Collect<I,A>
 where
     I: LocalIterator,
     I::Item: Dist + ArrayOps,
-    A: From<UnsafeArray<I::Item>> + SyncSend + Clone,{
+    A: From<UnsafeArray<I::Item>> + SyncSend + Clone + 'static,{
     type AmOutput = Vec<(usize,I::Item)>;
     type Output = A;
     fn into_am(self, schedule: IterSchedule) -> LamellarArcLocalAm {
