@@ -250,7 +250,7 @@ pub trait DistIteratorLauncher {
     where
         I: DistributedIterator + 'static,
         F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
-        Fut: Future<Output = ()> + Send + 'static;
+        Fut: Future<Output = ()> + SyncSend + Clone + 'static;
 
     fn for_each_async_with_schedule<I, F, Fut>(
         &self,
@@ -261,13 +261,13 @@ pub trait DistIteratorLauncher {
     where
         I: DistributedIterator + 'static,
         F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
-        Fut: Future<Output = ()> + Send + 'static;
+        Fut: Future<Output = ()> + SyncSend + Clone + 'static;
 
     fn collect<I, A>(&self, iter: &I, d: Distribution) -> Pin<Box<dyn Future<Output = A> + Send>>
     where
         I: DistributedIterator + 'static,
         I::Item: Dist + ArrayOps,
-        A: From<UnsafeArray<I::Item>> + SyncSend + 'static;
+        A: From<UnsafeArray<I::Item>> + SyncSend + Clone + 'static;
 
     fn collect_async<I, A, B>(
         &self,
@@ -276,9 +276,9 @@ pub trait DistIteratorLauncher {
     ) -> Pin<Box<dyn Future<Output = A> + Send>>
     where
         I: DistributedIterator + 'static,
-        I::Item: Future<Output = B> + Send + 'static,
+        I::Item: Future<Output = B> + SyncSend + Clone + 'static,
         B: Dist + ArrayOps,
-        A: From<UnsafeArray<B>> + SyncSend + 'static;
+        A: From<UnsafeArray<B>> + SyncSend  + Clone +  'static;
 
     #[doc(hidden)]
     fn global_index_from_local(&self, index: usize, chunk_size: usize) -> Option<usize>;
@@ -460,7 +460,7 @@ pub trait DistributedIterator: SyncSend + Clone + 'static {
     fn for_each_async<F, Fut>(&self, op: F) -> Pin<Box<dyn Future<Output = ()> + Send>>
     where
         F: Fn(Self::Item) -> Fut + SyncSend + Clone + 'static,
-        Fut: Future<Output = ()> + Send + 'static,
+        Fut: Future<Output = ()> + SyncSend + Clone + 'static,
     {
         self.array().for_each_async(self, op)
     }
@@ -493,7 +493,7 @@ pub trait DistributedIterator: SyncSend + Clone + 'static {
     where
         // &'static Self: DistributedIterator + 'static,
         Self::Item: Dist + ArrayOps,
-        A: From<UnsafeArray<Self::Item>> + SyncSend + 'static,
+        A: From<UnsafeArray<Self::Item>> + SyncSend + Clone + 'static,
     {
         self.array().collect(self, d)
     }
@@ -538,8 +538,8 @@ pub trait DistributedIterator: SyncSend + Clone + 'static {
     where
         // &'static Self: DistributedIterator + 'static,
         T: Dist + ArrayOps,
-        Self::Item: Future<Output = T> + Send + 'static,
-        A: From<UnsafeArray<<Self::Item as Future>::Output>> + SyncSend + 'static,
+        Self::Item: Future<Output = T> + SyncSend + Clone + 'static,
+        A: From<UnsafeArray<<Self::Item as Future>::Output>> + SyncSend + Clone + 'static,
     {
         self.array().collect_async(self, d)
     }
@@ -607,7 +607,7 @@ pub trait IndexedDistributedIterator: DistributedIterator + SyncSend + Clone + '
     ) -> Pin<Box<dyn Future<Output = ()> + Send>>
     where
         F: Fn(Self::Item) -> Fut + SyncSend + Clone + 'static,
-        Fut: Future<Output = ()> + Send + 'static,
+        Fut: Future<Output = ()> + SyncSend + Clone + 'static,
     {
         self.array().for_each_async_with_schedule(sched, self, op)
     }

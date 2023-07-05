@@ -1036,6 +1036,15 @@ impl<T: Dist> AtomicArray<T> {
     }
 }
 
+impl<T: Dist + ArrayOps> TeamFrom<(Vec<T>,Distribution)> for AtomicArray<T> {
+    fn team_from(input: (Vec<T>,Distribution), team: &Pin<Arc<LamellarTeamRT>>) -> Self {
+        let (vals, distribution) = input;
+        let input = (&vals, distribution);
+        let array: UnsafeArray<T> = input.team_into(team);
+        array.into()
+    }
+}
+
 impl<T: Dist + 'static> From<UnsafeArray<T>> for AtomicArray<T> {
     fn from(array: UnsafeArray<T>) -> Self {
         // println!("Converting from UnsafeArray to AtomicArray");

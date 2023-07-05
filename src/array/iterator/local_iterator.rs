@@ -37,7 +37,7 @@ pub(crate) use consumer::*;
 
 use crate::array::iterator::one_sided_iterator::OneSidedIterator;
 use crate::array::iterator::Schedule;
-use crate::array::{AtomicArray, Distribution, LamellarArray, LamellarArrayPut, UnsafeArray,operations::ArrayOps};
+use crate::array::{AtomicArray, Distribution, LamellarArray, LamellarArrayPut, UnsafeArray,operations::ArrayOps, TeamFrom};
 use crate::lamellar_request::LamellarRequest;
 use crate::memregion::Dist;
 use crate::LamellarTeamRT;
@@ -96,7 +96,7 @@ pub trait LocalIteratorLauncher {
     where
         I: LocalIterator + 'static,
         F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
-        Fut: Future<Output = ()> + Send + 'static;
+        Fut: Future<Output = ()> + SyncSend + Clone + 'static;
 
     fn local_for_each_async_with_schedule<I, F, Fut>(
         &self,
@@ -107,19 +107,45 @@ pub trait LocalIteratorLauncher {
     where
         I: LocalIterator + 'static,
         F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
-        Fut: Future<Output = ()> + Send + 'static;
+        Fut: Future<Output = ()> + SyncSend + Clone + 'static;
     
-    // fn local_reduce<I, F>(&self, iter: &I, op: F) -> Pin<Box<dyn Future<Output = I::Item> + Send>>
+    fn local_reduce<I, F>(&self, iter: &I, op: F) -> Pin<Box<dyn Future<Output = Option<I::Item>> + Send>>
+    where
+        I: LocalIterator + 'static,
+        I::Item: SyncSend,
+        F: Fn(I::Item, I::Item) -> I::Item + SyncSend + Clone + 'static;
+    
+    fn local_reduce_with_schedule<I, F>(&self, sched: Schedule, iter: &I, op: F) -> Pin<Box<dyn Future<Output = Option<I::Item>> + Send>>
+    where
+        I: LocalIterator + 'static,
+        I::Item: SyncSend,
+        F: Fn(I::Item, I::Item) -> I::Item + SyncSend + Clone + 'static;
+
+    // fn local_reduce_async<I, F, Fut>(&self, iter: &I, op: F) -> Pin<Box<dyn Future<Output = Option<I::Item>> + Send>>
     // where
     //     I: LocalIterator + 'static,
     //     I::Item: SyncSend,
-    //     F: Fn(I::Item, I::Item) -> I::Item + SyncSend + Clone + 'static;
-
-    // fn local_collect<I, A>(&self, iter: &I, d: Distribution) -> Pin<Box<dyn Future<Output = A> + Send>>
+    //     F: Fn(I::Item, I::Item) -> Fut + SyncSend + Clone + 'static,
+    //     Fut: Future<Output = I::Item> + SyncSend + Clone + 'static;
+    
+    // fn local_reduce_async_with_schedule<I, F, Fut>(&self, sched: Schedule, iter: &I, op: F) -> Pin<Box<dyn Future<Output = Option<I::Item>> + Send>>
     // where
     //     I: LocalIterator + 'static,
-    //     I::Item: Dist,
-    //     A: From<UnsafeArray<I::Item>> + SyncSend + 'static;
+    //     I::Item: SyncSend,
+    //     F: Fn(I::Item, I::Item) -> Fut + SyncSend + Clone + 'static,
+    //     Fut: Future<Output = I::Item> + SyncSend + Clone + 'static;
+
+    fn local_collect<I, A>(&self, iter: &I, d: Distribution) -> Pin<Box<dyn Future<Output = A> + Send>>
+    where
+        I: LocalIterator + 'static,
+        I::Item: Dist + ArrayOps,
+        A: for<'a>  TeamFrom<(&'a Vec<I::Item>,Distribution)>  + SyncSend + Clone + 'static;
+
+    fn local_collect_with_schedule<I, A>(&self, sched: Schedule, iter: &I, d: Distribution) -> Pin<Box<dyn Future<Output = A> + Send>>
+    where
+        I: LocalIterator + 'static,
+        I::Item: Dist + ArrayOps,
+        A: for<'a>  TeamFrom<(&'a Vec<I::Item>,Distribution)>  + SyncSend + Clone + 'static;
 
     // fn local_collect_async<I, A, B>(
     //     &self,
@@ -128,9 +154,21 @@ pub trait LocalIteratorLauncher {
     // ) -> Pin<Box<dyn Future<Output = A> + Send>>
     // where
     //     I: LocalIterator + 'static,
-    //     I::Item: Future<Output = B> + Send + 'static,
-    //     B: Dist,
-    //     A: From<UnsafeArray<B>> + SyncSend + 'static;
+    //     I::Item: Future<Output = B> + SyncSend + Clone + 'static,
+    //     B: Dist + ArrayOps,
+    //     A: From<UnsafeArray<B>> + SyncSend  + Clone +  'static;
+    
+    // fn local_collect_async_with_schedule<I, A, B>(
+    //         &self,
+    //         sched: Schedule,
+    //         iter: &I,
+    //         d: Distribution,
+    //     ) -> Pin<Box<dyn Future<Output = A> + Send>>
+    //     where
+    //         I: LocalIterator + 'static,
+    //         I::Item: Future<Output = B> + SyncSend + Clone + 'static,
+    //         B: Dist + ArrayOps,
+    //         A: From<UnsafeArray<B>> + SyncSend  + Clone +  'static;
 
     #[doc(hidden)]
     fn local_global_index_from_local(&self, index: usize, chunk_size: usize) -> Option<usize>;
@@ -303,6 +341,32 @@ pub trait LocalIterator: SyncSend + Clone + 'static {
         self.array().local_for_each(self, op)
     }
 
+        /// Calls a closure on each element of a Local Iterator in parallel on the calling PE (the PE must have some local data of the array) using the specififed schedule policy.
+    ///
+    /// This function returns a future which can be used to poll for completion of the iteration.
+    /// Note calling this function launches the iteration regardless of if the returned future is used or not.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block);
+    ///
+    /// array.local_iter().for_each_with_schedule(Schedule::WorkStealing, |elem| println!("{:?} {elem}",std::thread::current().id()));
+    /// array.wait_all();
+    ///```
+    fn for_each_with_schedule<F>(
+        &self,
+        sched: Schedule,
+        op: F,
+    ) -> Pin<Box<dyn Future<Output = ()> + Send>>
+    where
+        F: Fn(Self::Item) + SyncSend + Clone + 'static,
+    {
+        self.array().local_for_each_with_schedule(sched, self, op)
+    }
+
     /// Calls a closure and immediately awaits the result on each element of a Local Iterator in parallel on the calling PE (the PE must have some local data of the array).
     ///
     /// This call utilizes the [Schedule::Static][crate::array::iterator::Schedule] policy.
@@ -336,119 +400,12 @@ pub trait LocalIterator: SyncSend + Clone + 'static {
     fn for_each_async<F, Fut>(&self, op: F) -> Pin<Box<dyn Future<Output = ()> + Send>>
     where
         F: Fn(Self::Item) -> Fut + SyncSend + Clone + 'static,
-        Fut: Future<Output = ()> + Send + 'static,
+        Fut: Future<Output = ()> + SyncSend + Clone + 'static,
     {
         self.array().local_for_each_async(self, op)
     }
 
-    /* 
-    /// Reduces the elements of the local iterator using the provided closure
-    ///
-    /// This function returns a future which needs to be driven to completion to retrieve the new container.
-    ///
-    /// # Examples
-    ///```
-    /// use lamellar::array::prelude::*;
-    ///
-    /// let world = LamellarWorldBuilder::new().build();
-    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block);
-    ///
-    /// let req = array.local_iter().reduce(|acc,elem| acc+elem);
-    /// let sum = array.block_on(req); //wait on the collect request to get the new array
-    ///```
-    fn reduce<F>(&self, op: F) -> Pin<Box<dyn Future<Output = Self::Item> + Send>>
-    where
-        // &'static Self: LocalIterator + 'static,
-        Self::Item: SyncSend,
-        F: Fn(Self::Item,Self::Item) -> Self::Item + SyncSend + Clone + 'static,
-    {
-        self.array().local_reduce(self, op)
-    }*/
-
-    /*
-    /// Collects the elements of the local iterator into the specified container type
-    ///
-    /// This function returns a future which needs to be driven to completion to retrieve the new container.
-    ///
-    /// # Examples
-    ///```
-    /// use lamellar::array::prelude::*;
-    ///
-    /// let world = LamellarWorldBuilder::new().build();
-    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block);
-    ///
-    /// let req = array.local_iter().filter(|elem|  elem < 10).collect::<Vec<usize>>(Distribution::Block);
-    /// let new_vec = array.block_on(req); //wait on the collect request to get the new array
-    ///```
-    fn collect<A>(&self, d: Distribution) -> Pin<Box<dyn Future<Output = A> + Send>>
-    where
-        // &'static Self: LocalIterator + 'static,
-        Self::Item: Dist,
-        A: From<UnsafeArray<Self::Item>> + SyncSend + 'static,
-    {
-        self.array().local_collect(self, d)
-    }
-    */
-
-    /*
-    /// Collects the elements of the local iterator into the specified container type
-    /// Each element from the iterator must return a Future
-    ///
-    /// Each thread will only drive a single future at a time.
-    ///
-    /// This function returns a future which needs to be driven to completion to retrieve the new container.
-    ///
-    /// # Examples
-    ///```
-    /// use lamellar::array::prelude::*;
-    ///
-    /// let world = LamellarWorldBuilder::new().build();
-    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Block);
-    ///
-    /// let array_clone = array.clone();
-    /// let req = array.dist_iter().map(|elem|  array_clone.fetch_add(elem,1000)).collect_async::<Vec<usize>>(Distribution::Cyclic);
-    /// let new_vec = array.block_on(req);
-    fn collect_async<A, T>(&self, d: Distribution) -> Pin<Box<dyn Future<Output = A> + Send>>
-    where
-        // &'static Self: LocalIterator + 'static,
-        T: Dist,
-        Self::Item: Future<Output = T> + Send + 'static,
-        A: From<UnsafeArray<<Self::Item as Future>::Output>> + SyncSend + 'static,
-    {
-        self.array().local_collect_async(self, d)
-    }
-    */
-}
-
-/// An interface for dealing with local iterators which are indexable, meaning it returns an iterator of known length
-pub trait IndexedLocalIterator: LocalIterator + SyncSend + Clone + 'static {
-    /// Calls a closure on each element of a Local Iterator in parallel on the calling PE (the PE must have some local data of the array) using the specififed schedule policy.
-    ///
-    /// This function returns a future which can be used to poll for completion of the iteration.
-    /// Note calling this function launches the iteration regardless of if the returned future is used or not.
-    ///
-    /// # Examples
-    ///```
-    /// use lamellar::array::prelude::*;
-    ///
-    /// let world = LamellarWorldBuilder::new().build();
-    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block);
-    ///
-    /// array.local_iter().for_each_with_schedule(Schedule::WorkStealing, |elem| println!("{:?} {elem}",std::thread::current().id()));
-    /// array.wait_all();
-    ///```
-    fn for_each_with_schedule<F>(
-        &self,
-        sched: Schedule,
-        op: F,
-    ) -> Pin<Box<dyn Future<Output = ()> + Send>>
-    where
-        F: Fn(Self::Item) + SyncSend + Clone + 'static,
-    {
-        self.array().local_for_each_with_schedule(sched, self, op)
-    }
-
-    /// Calls a closure on each element of a Local Iterator in parallel on the calling PE (the PE must have some local data of the array) using the specififed schedule policy.
+        /// Calls a closure on each element of a Local Iterator in parallel on the calling PE (the PE must have some local data of the array) using the specififed schedule policy.
     ///
     /// The supplied closure must return a future.
     ///
@@ -477,11 +434,164 @@ pub trait IndexedLocalIterator: LocalIterator + SyncSend + Clone + 'static {
     ) -> Pin<Box<dyn Future<Output = ()> + Send>>
     where
         F: Fn(Self::Item) -> Fut + SyncSend + Clone + 'static,
-        Fut: Future<Output = ()> + Send + 'static,
+        Fut: Future<Output = ()> + SyncSend + Clone + 'static,
     {
         self.array()
             .local_for_each_async_with_schedule(sched, self, op)
     }
+
+    
+    /// Reduces the elements of the local iterator using the provided closure
+    ///
+    /// This function returns a future which needs to be driven to completion to retrieve the new container.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block);
+    ///
+    /// let req = array.local_iter().reduce(|acc,elem| acc+elem);
+    /// let sum = array.block_on(req); //wait on the collect request to get the new array
+    ///```
+    fn reduce<F>(&self, op: F) -> Pin<Box<dyn Future<Output = Option<Self::Item>> + Send>>
+    where
+        // &'static Self: LocalIterator + 'static,
+        Self::Item: SyncSend,
+        F: Fn(Self::Item,Self::Item) -> Self::Item + SyncSend + Clone + 'static,
+    {
+        self.array().local_reduce(self, op)
+    }
+
+    /// Reduces the elements of the local iterator using the provided closure
+    ///
+    /// This function returns a future which needs to be driven to completion to retrieve the new container.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block);
+    ///
+    /// let req = array.local_iter().reduce(|acc,elem| acc+elem);
+    /// let sum = array.block_on(req); //wait on the collect request to get the new array
+    ///```
+    fn reduce_with_schedule<F>(&self, sched: Schedule, op: F) -> Pin<Box<dyn Future<Output = Option<Self::Item>> + Send>>
+    where
+        // &'static Self: LocalIterator + 'static,
+        Self::Item: SyncSend,
+        F: Fn(Self::Item,Self::Item) -> Self::Item + SyncSend + Clone + 'static,
+    {
+        self.array().local_reduce_with_schedule(sched, self, op)
+    }
+
+    // /// Reduces the elements of the local iterator using the provided closure
+    // ///
+    // /// This function returns a future which needs to be driven to completion to retrieve the new container.
+    // ///
+    // /// # Examples
+    // ///```
+    // /// use lamellar::array::prelude::*;
+    // ///
+    // /// let world = LamellarWorldBuilder::new().build();
+    // /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block);
+    // ///
+    // /// let req = array.local_iter().reduce(|acc,elem| acc+elem);
+    // /// let sum = array.block_on(req); //wait on the collect request to get the new array
+    // ///```
+    // fn reduce_async<F,Fut>(&self, op: F) -> Pin<Box<dyn Future<Output = Self::Item> + Send>>
+    // where
+    //     // &'static Self: LocalIterator + 'static,
+    //     Self::Item: SyncSend,
+    //     F: Fn(Self::Item,Self::Item) -> Fut + SyncSend + Clone + 'static,
+    //     Fut: Future<Output = Self::Item> + SyncSend + Clone + 'static,
+    // {
+    //     self.array().local_reduce_async(self, op)
+    // }
+
+    
+    /// Collects the elements of the local iterator into the specified container type
+    ///
+    /// This function returns a future which needs to be driven to completion to retrieve the new container.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block);
+    ///
+    /// let req = array.local_iter().filter(|elem|  elem < 10).collect::<Vec<usize>>(Distribution::Block);
+    /// let new_vec = array.block_on(req); //wait on the collect request to get the new array
+    ///```
+    fn collect<A>(&self, d: Distribution) -> Pin<Box<dyn Future<Output = A> + Send>>
+    where
+        // &'static Self: LocalIterator + 'static,
+        Self::Item: Dist + ArrayOps,
+        A: for<'a>  TeamFrom<(&'a Vec<Self::Item>,Distribution)> + SyncSend + Clone + 'static,
+    {
+        self.array().local_collect(self, d)
+    }
+
+    /// Collects the elements of the local iterator into the specified container type
+    ///
+    /// This function returns a future which needs to be driven to completion to retrieve the new container.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block);
+    ///
+    /// let req = array.local_iter().filter(|elem|  elem < 10).collect::<Vec<usize>>(Distribution::Block);
+    /// let new_vec = array.block_on(req); //wait on the collect request to get the new array
+    ///```
+    fn collect_with_schedule<A>(&self,sched: Schedule, d: Distribution) -> Pin<Box<dyn Future<Output = A> + Send>>
+    where
+        // &'static Self: LocalIterator + 'static,
+        Self::Item: Dist + ArrayOps,
+        A: for<'a>  TeamFrom<(&'a Vec<Self::Item>,Distribution)> + SyncSend + Clone + 'static,
+    {
+        self.array().local_collect_with_schedule(sched, self, d)
+    }
+    
+
+    
+    // /// Collects the elements of the local iterator into the specified container type
+    // /// Each element from the iterator must return a Future
+    // ///
+    // /// Each thread will only drive a single future at a time.
+    // ///
+    // /// This function returns a future which needs to be driven to completion to retrieve the new container.
+    // ///
+    // /// # Examples
+    // ///```
+    // /// use lamellar::array::prelude::*;
+    // ///
+    // /// let world = LamellarWorldBuilder::new().build();
+    // /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Block);
+    // ///
+    // /// let array_clone = array.clone();
+    // /// let req = array.dist_iter().map(|elem|  array_clone.fetch_add(elem,1000)).collect_async::<Vec<usize>>(Distribution::Cyclic);
+    // /// let new_vec = array.block_on(req);
+    // fn collect_async<A, T>(&self, d: Distribution) -> Pin<Box<dyn Future<Output = A> + Send>>
+    // where
+    //     // &'static Self: LocalIterator + 'static,
+    //     T: Dist,
+    //     Self::Item: Future<Output = T> + SyncSend + Clone + 'static,
+    //     A: From<UnsafeArray<<Self::Item as Future>::Output>> + SyncSend + Clone + 'static,
+    // {
+    //     self.array().local_collect_async(self, d)
+    // }
+
+    
+}
+
+/// An interface for dealing with local iterators which are indexable, meaning it returns an iterator of known length
+pub trait IndexedLocalIterator: LocalIterator + SyncSend + Clone + 'static {
 
     /// yields the local (to the calling PE) index along with each element
     ///
@@ -761,6 +871,8 @@ impl<
     type Array = A;
     fn init(&self, start_i: usize, cnt: usize) -> Self {
         let max_i = self.data.num_elems_local();
+        // println!("init local_iterator start_i: {:?} cnt {:?} end_i: {:?} max_i: {:?} {:?}",start_i,cnt, start_i+cnt,max_i,std::thread::current().id());
+
         // println!("{:?} LocalIter init {start_i} {cnt} {} {}",std::thread::current().id(), start_i+cnt,max_i);
         LocalIter {
             data: self.data.clone(),

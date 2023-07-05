@@ -115,8 +115,8 @@ impl<T: Dist> LocalIterator for AtomicLocalIter<T> {
     type Array = AtomicArray<T>;
     fn init(&self, start_i: usize, cnt: usize) -> Self {
         let max_i = self.data.num_elems_local();
-        // println!("init dist iter start_i: {:?} cnt {:?} end_i: {:?} max_i: {:?}",start_i,cnt, start_i+cnt,max_i);
-        // println!("num_elems_local: {:?}",self.data.num_elems_local());
+        // println!("init atomic start_i: {:?} cnt {:?} end_i: {:?} max_i: {:?} {:?}",start_i,cnt, start_i+cnt,max_i,std::thread::current().id());
+
         AtomicLocalIter {
             data: self.data.clone(),
             cur_i: std::cmp::min(start_i, max_i),
@@ -127,7 +127,8 @@ impl<T: Dist> LocalIterator for AtomicLocalIter<T> {
         self.data.clone()
     }
     fn next(&mut self) -> Option<Self::Item> {
-        // println!("{:?} {:?}",self.cur_i,self.end_i);
+        // println!("{:?} {:?} {:?} {:?}",self.cur_i,self.end_i,self.cur_i < self.end_i,std::thread::current().id());
+    
         if self.cur_i < self.end_i {
             self.cur_i += 1;
             self.data.get_element(self.cur_i - 1)
@@ -246,8 +247,8 @@ impl<T: Dist> LamellarArrayMutIterators<T> for AtomicArray<T> {
 //     fn collect<I, A>(&self, iter: &I, d: Distribution) -> Pin<Box<dyn Future<Output = A> + Send>>
 //     where
 //         I: DistributedIterator + 'static,
-//         I::Item: Dist,
-//         A: From<UnsafeArray<I::Item>> + SyncSend + 'static,
+//         I::Item: Dist + ArrayOps,
+//         A: From<UnsafeArray<I::Item>> + SyncSend + Clone + 'static,
 //     {
 //         self.data.collect(iter, d)
 //     }
@@ -258,9 +259,9 @@ impl<T: Dist> LamellarArrayMutIterators<T> for AtomicArray<T> {
 //     ) -> Pin<Box<dyn Future<Output = A> + Send>>
 //     where
 //         I: DistributedIterator + 'static,
-//         I::Item: Future<Output = B> + Send + 'static,
-//         B: Dist,
-//         A: From<UnsafeArray<B>> + SyncSend + 'static,
+//         I::Item: Future<Output = B> + SyncSend + Clone + 'static,
+//         B: Dist + ArrayOps,
+//         A: From<UnsafeArray<B>> + SyncSend  + Clone +  'static,
 //     {
 //         self.data.collect_async(iter, d)
 //     }
@@ -322,8 +323,8 @@ impl<T: Dist> LamellarArrayMutIterators<T> for AtomicArray<T> {
 //     // fn local_collect<I, A>(&self, iter: &I, d: Distribution) -> Pin<Box<dyn Future<Output = A> + Send>>
 //     // where
 //     //     I: LocalIterator + 'static,
-//     //     I::Item: Dist,
-//     //     A: From<UnsafeArray<I::Item>> + SyncSend + 'static,
+//     //     I::Item: Dist + ArrayOps,
+//     //     A: From<UnsafeArray<I::Item>> + SyncSend + Clone + 'static,
 //     // {
 //     //     self.data.local_collect(iter, d)
 //     // }
@@ -334,9 +335,9 @@ impl<T: Dist> LamellarArrayMutIterators<T> for AtomicArray<T> {
 //     // ) -> Pin<Box<dyn Future<Output = A> + Send>>
 //     // where
 //     //     I: LocalIterator + 'static,
-//     //     I::Item: Future<Output = B> + Send + 'static,
-//     //     B: Dist,
-//     //     A: From<UnsafeArray<B>> + SyncSend + 'static,
+//     //     I::Item: Future<Output = B> + SyncSend + Clone + 'static,
+//     //     B: Dist + ArrayOps,
+//     //     A: From<UnsafeArray<B>> + SyncSend  + Clone +  'static,
 //     // {
 //     //     self.data.local_collect_async(iter, d)
 //     // }

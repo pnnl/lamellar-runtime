@@ -132,10 +132,12 @@ impl<I: LocalIterator> Iterator for IterScheduleIter<I> {
             }
             IterScheduleIter::Chunk(iter, ranges, range_i) => {
                 let mut next = iter.next();
+                // println!("next {:?} {:?}", next.is_none(), std::thread::current().id());
                 if next.is_none(){
                     let ri = range_i.fetch_add(1, Ordering::Relaxed);
+                    // println!("range {:?} {:?}", ri, std::thread::current().id());
                     if ri < ranges.len() {
-                        *iter = iter.init(ranges[ri].0, ranges[ri].1);
+                        *iter = iter.init(ranges[ri].0, ranges[ri].1-ranges[ri].0);
                         next = iter.next();
                     }
                 }

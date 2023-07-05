@@ -371,12 +371,12 @@ impl<T: Dist> TeamFrom<&Vec<T>> for LamellarArrayRdmaInput<T> {
     }
 }
 
-#[doc(hidden)]
+// #[doc(hidden)]
 pub trait TeamFrom<T: ?Sized> {
     fn team_from(val: T, team: &Pin<Arc<LamellarTeamRT>>) -> Self;
 }
 
-#[doc(hidden)]
+// #[doc(hidden)]
 pub trait TeamInto<T: ?Sized> {
     fn team_into(self, team: &Pin<Arc<LamellarTeamRT>>) -> T;
 }
@@ -399,6 +399,12 @@ impl<T: Dist> TeamFrom<&LamellarArrayRdmaInput<T>> for LamellarArrayRdmaInput<T>
 impl<T: Dist> TeamFrom<&LamellarArrayRdmaOutput<T>> for LamellarArrayRdmaOutput<T> {
     fn team_from(lao: &LamellarArrayRdmaOutput<T>, _team: &Pin<Arc<LamellarTeamRT>>) -> Self {
         lao.clone()
+    }
+}
+
+impl <T: Clone> TeamFrom<(&Vec<T>,Distribution)> for Vec<T> {
+    fn team_from(vals: (&Vec<T>,Distribution), _team: &Pin<Arc<LamellarTeamRT>>) -> Self {
+        vals.0.to_vec()
     }
 }
 

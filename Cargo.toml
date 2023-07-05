@@ -328,8 +328,8 @@ name="distributed_iteration"
 path="examples/array_examples/distributed_iteration.rs"
 
 [[example]]
-name="array_for_each_schedules"
-path="examples/array_examples/array_for_each_schedules.rs"
+name="array_consumer_schedules"
+path="examples/array_examples/array_consumer_schedules.rs"
 
 #[[example]]
 #name="local_only_array"

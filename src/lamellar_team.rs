@@ -199,7 +199,7 @@ impl LamellarTeam {
     ///```
     #[tracing::instrument(skip_all)]
     pub fn num_threads(&self) -> usize {
-        self.team.scheduler.num_workers()
+        self.team.scheduler.num_workers() + 1// plus one for the main thread
     }
 
     #[doc(alias("One-sided", "onesided"))]
@@ -917,7 +917,7 @@ impl LamellarTeamRT {
 
     #[tracing::instrument(skip_all)]
     pub fn num_threads(&self) -> usize {
-        self.scheduler.num_workers()
+        self.scheduler.num_workers() + 1// plus one for the main thread
     }
 
     #[cfg_attr(test, allow(unreachable_code), allow(unused_variables))]

@@ -426,7 +426,7 @@ impl<T: Dist> UnsafeArray<T> {
     where
         I: DistributedIterator + 'static,
         F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
-        Fut: Future<Output = ()> + Send + 'static,
+        Fut: Future<Output = ()> + SyncSend + Clone + 'static,
     {
         let mut reqs = Vec::new();
         if let Ok(_my_pe) = self.inner.data.team.team_pe_id() {
@@ -467,7 +467,7 @@ impl<T: Dist> UnsafeArray<T> {
     where
         I: DistributedIterator + 'static,
         F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
-        Fut: Future<Output = ()> + Send + 'static,
+        Fut: Future<Output = ()> + SyncSend + Clone + 'static,
     {
         let mut reqs = Vec::new();
         if let Ok(_my_pe) = self.inner.data.team.team_pe_id() {
@@ -501,7 +501,7 @@ impl<T: Dist> UnsafeArray<T> {
     where
         I: DistributedIterator + 'static,
         F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
-        Fut: Future<Output = ()> + Send + 'static,
+        Fut: Future<Output = ()> + SyncSend + Clone + 'static,
     {
         let mut reqs = Vec::new();
         if let Ok(_my_pe) = self.inner.data.team.team_pe_id() {
@@ -544,7 +544,7 @@ impl<T: Dist> UnsafeArray<T> {
     where
         I: DistributedIterator + 'static,
         F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
-        Fut: Future<Output = ()> + Send + 'static,
+        Fut: Future<Output = ()> + SyncSend + Clone + 'static,
     {
         let mut reqs = Vec::new();
         if let Ok(_my_pe) = self.inner.data.team.team_pe_id() {
@@ -614,7 +614,7 @@ impl<T: Dist> UnsafeArray<T> {
     where
         I: DistributedIterator + 'static,
         F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
-        Fut: Future<Output = ()> + Send + 'static,
+        Fut: Future<Output = ()> + SyncSend + Clone + 'static,
     {
         let mut reqs = Vec::new();
         if let Ok(_my_pe) = self.inner.data.team.team_pe_id() {
@@ -708,7 +708,7 @@ impl<T: Dist> DistIteratorLauncher for UnsafeArray<T> {
     where
         I: DistributedIterator + 'static,
         F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
-        Fut: Future<Output = ()> + Send + 'static,
+        Fut: Future<Output = ()> + SyncSend + Clone + 'static,
     {
         self.barrier();
         self.for_each_async_static(iter, op)
@@ -723,7 +723,7 @@ impl<T: Dist> DistIteratorLauncher for UnsafeArray<T> {
     where
         I: DistributedIterator + 'static,
         F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
-        Fut: Future<Output = ()> + Send + 'static,
+        Fut: Future<Output = ()> + SyncSend + Clone + 'static,
     {
         self.barrier();
         match sched {
@@ -739,7 +739,7 @@ impl<T: Dist> DistIteratorLauncher for UnsafeArray<T> {
     where
         I: DistributedIterator + 'static,
         I::Item: Dist + ArrayOps,
-        A: From<UnsafeArray<I::Item>> + SyncSend + 'static,
+        A: From<UnsafeArray<I::Item>> + SyncSend + Clone + 'static,
     {
         self.barrier();
         let mut reqs = Vec::new();
@@ -777,9 +777,9 @@ impl<T: Dist> DistIteratorLauncher for UnsafeArray<T> {
     ) -> Pin<Box<dyn Future<Output = A> + Send>>
     where
         I: DistributedIterator + 'static,
-        I::Item: Future<Output = B> + Send + 'static,
+        I::Item: Future<Output = B> + SyncSend + Clone + 'static,
         B: Dist + ArrayOps,
-        A: From<UnsafeArray<B>> + SyncSend + 'static,
+        A: From<UnsafeArray<B>> + SyncSend  + Clone +  'static,
     {
         self.barrier();
         let mut reqs = Vec::new();

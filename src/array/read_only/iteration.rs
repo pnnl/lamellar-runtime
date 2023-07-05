@@ -69,7 +69,7 @@ impl<T: Dist> DistIteratorLauncher for ReadOnlyArray<T> {
     where
         I: DistributedIterator + 'static,
         F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
-        Fut: Future<Output = ()> + Send + 'static,
+        Fut: Future<Output = ()> + SyncSend + Clone + 'static,
     {
         self.array.for_each_async(iter, op)
     }
@@ -82,7 +82,7 @@ impl<T: Dist> DistIteratorLauncher for ReadOnlyArray<T> {
     where
         I: DistributedIterator + 'static,
         F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
-        Fut: Future<Output = ()> + Send + 'static,
+        Fut: Future<Output = ()> + SyncSend + Clone + 'static,
     {
         self.array.for_each_async_with_schedule(sched, iter, op)
     }
@@ -90,7 +90,7 @@ impl<T: Dist> DistIteratorLauncher for ReadOnlyArray<T> {
     where
         I: DistributedIterator + 'static,
         I::Item: Dist + ArrayOps,
-        A: From<UnsafeArray<I::Item>> + SyncSend + 'static,
+        A: From<UnsafeArray<I::Item>> + SyncSend + Clone + 'static,
     {
         self.array.collect(iter, d)
     }
@@ -101,9 +101,9 @@ impl<T: Dist> DistIteratorLauncher for ReadOnlyArray<T> {
     ) -> Pin<Box<dyn Future<Output = A> + Send>>
     where
         I: DistributedIterator + 'static,
-        I::Item: Future<Output = B> + Send + 'static,
+        I::Item: Future<Output = B> + SyncSend + Clone + 'static,
         B: Dist + ArrayOps,
-        A: From<UnsafeArray<B>> + SyncSend + 'static,
+        A: From<UnsafeArray<B>> + SyncSend  + Clone +  'static,
     {
         self.array.collect_async(iter, d)
     }
@@ -149,7 +149,7 @@ impl<T: Dist> LocalIteratorLauncher for ReadOnlyArray<T> {
     where
         I: LocalIterator + 'static,
         F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
-        Fut: Future<Output = ()> + Send + 'static,
+        Fut: Future<Output = ()> + SyncSend + Clone + 'static,
     {
         self.array.local_for_each_async(iter, op)
     }
@@ -162,28 +162,67 @@ impl<T: Dist> LocalIteratorLauncher for ReadOnlyArray<T> {
     where
         I: LocalIterator + 'static,
         F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
-        Fut: Future<Output = ()> + Send + 'static,
+        Fut: Future<Output = ()> + SyncSend + Clone + 'static,
     {
         self.array
             .local_for_each_async_with_schedule(sched, iter, op)
     }
+    fn local_reduce<I, F>(&self, iter: &I, op: F) -> Pin<Box<dyn Future<Output = Option<I::Item>> + Send>>
+    where
+        I: LocalIterator + 'static,
+        I::Item: SyncSend,
+        F: Fn(I::Item, I::Item) -> I::Item + SyncSend + Clone + 'static,
+    {
+        self.array.local_reduce(iter, op)
+    }
 
-    // fn local_reduce<I, F>(&self, iter: &I, op: F) -> Pin<Box<dyn Future<Output = I::Item> + Send>>
+    fn local_reduce_with_schedule<I, F>(&self, sched: Schedule, iter: &I, op: F) -> Pin<Box<dyn Future<Output = Option<I::Item>> + Send>>
+    where
+        I: LocalIterator + 'static,
+        I::Item: SyncSend,
+        F: Fn(I::Item, I::Item) -> I::Item + SyncSend + Clone + 'static,
+    {
+        self.array.local_reduce_with_schedule(sched, iter, op)
+    }
+
+    // fn local_reduce_async<I, F, Fut>(&self, iter: &I, op: F) -> Pin<Box<dyn Future<Output = Option<I::Item>> + Send>>
     // where
     //     I: LocalIterator + 'static,
     //     I::Item: SyncSend,
-    //     F: Fn(I::Item, I::Item) -> I::Item + SyncSend + Clone + 'static,
+    //     F: Fn(I::Item, I::Item) -> Fut + SyncSend + Clone + 'static,
+    //     Fut: Future<Output = I::Item> + SyncSend + Clone + 'static
     // {
-    //     self.array.local_reduce(iter, op)
+    //     self.array.local_reduce_async(iter, op)
     // }
-    // fn local_collect<I, A>(&self, iter: &I, d: Distribution) -> Pin<Box<dyn Future<Output = A> + Send>>
+
+    // fn local_reduce_async_with_schedule<I, F, Fut>(&self, sched: Schedule, iter: &I, op: F) -> Pin<Box<dyn Future<Output = Option<I::Item>> + Send>>
     // where
     //     I: LocalIterator + 'static,
-    //     I::Item: Dist,
-    //     A: From<UnsafeArray<I::Item>> + SyncSend + 'static,
+    //     I::Item: SyncSend,
+    //     F: Fn(I::Item, I::Item) -> Fut + SyncSend + Clone + 'static,
+    //     Fut: Future<Output = I::Item> + SyncSend + Clone + 'static
     // {
-    //     self.array.local_collect(iter, d)
+    //     self.array.local_reduce_async_with_schedule(sched, iter, op)
     // }
+
+    fn local_collect<I, A>(&self, iter: &I, d: Distribution) -> Pin<Box<dyn Future<Output = A> + Send>>
+    where
+        I: LocalIterator + 'static,
+        I::Item: Dist + ArrayOps,
+        A: for<'a>  TeamFrom<(&'a Vec<I::Item>,Distribution)> + SyncSend + Clone + 'static,
+    {
+        self.array.local_collect(iter, d)
+    }
+
+    fn local_collect_with_schedule<I, A>(&self, sched: Schedule, iter: &I, d: Distribution) -> Pin<Box<dyn Future<Output = A> + Send>>
+    where
+        I: LocalIterator + 'static,
+        I::Item: Dist + ArrayOps,
+        A: for<'a>  TeamFrom<(&'a Vec<I::Item>,Distribution)> + SyncSend + Clone + 'static,
+    {
+        self.array.local_collect_with_schedule(sched, iter, d)
+    }
+
     // fn local_collect_async<I, A, B>(
     //     &self,
     //     iter: &I,
@@ -191,12 +230,28 @@ impl<T: Dist> LocalIteratorLauncher for ReadOnlyArray<T> {
     // ) -> Pin<Box<dyn Future<Output = A> + Send>>
     // where
     //     I: LocalIterator + 'static,
-    //     I::Item: Future<Output = B> + Send + 'static,
-    //     B: Dist,
-    //     A: From<UnsafeArray<B>> + SyncSend + 'static,
+    //     I::Item: Future<Output = B> + SyncSend + Clone + 'static,
+    //     B: Dist + ArrayOps,
+    //     A: From<UnsafeArray<B>> + SyncSend  + Clone +  'static,
     // {
     //     self.array.local_collect_async(iter, d)
     // }
+
+    // fn local_collect_async_with_schedule<I, A, B>(
+    //     &self,
+    //     sched: Schedule,
+    //     iter: &I,
+    //     d: Distribution,
+    // ) -> Pin<Box<dyn Future<Output = A> + Send>>
+    // where
+    //     I: LocalIterator + 'static,
+    //     I::Item: Future<Output = B> + SyncSend + Clone + 'static,
+    //     B: Dist + ArrayOps,
+    //     A: From<UnsafeArray<B>> + SyncSend  + Clone +  'static,
+    // {
+    //     self.array.local_collect_async_with_schedule(sched, iter, d)
+    // }
+
     fn team(&self) -> Pin<Arc<LamellarTeamRT>> {
         self.array.team_rt().clone()
     }

@@ -1006,6 +1006,15 @@ impl<T: Dist> NativeAtomicArray<T> {
     }
 }
 
+impl<T: Dist + ArrayOps> TeamFrom<(Vec<T>,Distribution)> for NativeAtomicArray<T> {
+    fn team_from(input: (Vec<T>,Distribution), team: &Pin<Arc<LamellarTeamRT>>) -> Self {
+        let (vals, distribution) = input;
+        let input = (&vals, distribution);
+        let array: UnsafeArray<T> = input.team_into(team);
+        array.into()
+    }
+}
+
 #[doc(hidden)]
 impl<T: Dist> From<UnsafeArray<T>> for NativeAtomicArray<T> {
     fn from(array: UnsafeArray<T>) -> Self {
@@ -1091,7 +1100,7 @@ impl<T: Dist> From<NativeAtomicByteArray> for AtomicArray<T> {
     }
 }
 
-#[doc(hidden)]
+// #[doc(hidden)]
 impl<T: Dist> private::ArrayExecAm<T> for NativeAtomicArray<T> {
     fn team(&self) -> Pin<Arc<LamellarTeamRT>> {
         self.array.team_rt().clone()
