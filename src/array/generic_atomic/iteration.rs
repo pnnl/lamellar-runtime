@@ -71,7 +71,7 @@ impl<T: Dist> std::fmt::Debug for GenericAtomicLocalIter<T> {
 //     pub fn for_each_async<F, Fut>(&self, op: F) -> DistIterForEachHandle
 //     where
 //         F: Fn(GenericAtomicElement<T>) -> Fut + SyncSend + Clone + 'static,
-//         Fut: Future<Output = ()> + SyncSend + 'static,
+//         Fut: Future<Output = ()> + SyncSend + Clone + 'static,
 //     {
 //         self.data.clone().for_each_async(self, op)
 //     }
@@ -435,6 +435,20 @@ impl<T: Dist> LocalIteratorLauncher for GenericAtomicArray<T> {
     // {
     //     self.array.local_collect_async_with_schedule(sched, iter, d)
     // }
+
+    fn local_count<I>(&self, iter: &I) -> Pin<Box<dyn Future<Output = usize> + Send>>
+    where
+        I: LocalIterator + 'static
+    {
+        self.array.local_count(iter)
+    }
+    
+    fn local_count_with_schedule<I>(&self, sched: Schedule, iter: &I) -> Pin<Box<dyn Future<Output = usize> + Send>>
+    where
+        I: LocalIterator + 'static
+    {
+        self.array.local_count_with_schedule(sched, iter)
+    }
 
     fn team(&self) -> Pin<Arc<LamellarTeamRT>> {
         self.array.team_rt().clone()

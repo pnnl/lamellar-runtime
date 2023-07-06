@@ -133,7 +133,7 @@ impl<I, F, Fut> LamellarAm for ForEachAsyncAm<I, F, Fut>
 where
     I: LocalIterator + 'static,
     F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
-    Fut: Future<Output = ()> + SyncSend + Clone  + 'static,
+    Fut: Future<Output = ()> + SyncSend + Clone + 'static,
 {
     async fn exec(&self) {
         let mut iter = self.schedule.init_iter(self.iter.clone());

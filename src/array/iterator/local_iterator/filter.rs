@@ -32,7 +32,7 @@ where
     }
     fn next(&mut self) -> Option<Self::Item> {
         while let Some(next) = self.iter.next() {
-            // println!("{:?} Filter next",std::thread::current().id());
+            // println!("{:?} {:?} Filter next", (self.f)(&next),std::thread::current().id());
             if (self.f)(&next) {
                 return Some(next);
             }

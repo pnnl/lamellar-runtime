@@ -170,6 +170,14 @@ pub trait LocalIteratorLauncher {
     //         B: Dist + ArrayOps,
     //         A: From<UnsafeArray<B>> + SyncSend  + Clone +  'static;
 
+    fn local_count<I>(&self, iter: &I) -> Pin<Box<dyn Future<Output = usize> + Send>>
+    where
+        I: LocalIterator + 'static;
+    
+    fn local_count_with_schedule<I>(&self, sched: Schedule, iter: &I) -> Pin<Box<dyn Future<Output = usize> + Send>>
+    where
+        I: LocalIterator + 'static;
+
     #[doc(hidden)]
     fn local_global_index_from_local(&self, index: usize, chunk_size: usize) -> Option<usize>;
 
@@ -276,6 +284,39 @@ pub trait LocalIterator: SyncSend + Clone + 'static {
         R: Send + 'static,
     {
         FilterMap::new(self, op)
+    }
+
+
+    /// Applies `op` to each element producing a new iterator with the results
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,8,Distribution::Block);
+    /// let my_pe = world.my_pe();
+    ///
+    /// array.local_iter().map(|elem| *elem as f64).enumerate().for_each(move|(i,elem)| println!("PE: {my_pe} i: {i} elem: {elem}"));
+    /// array.wait_all();
+    ///```
+    /// Possible output on a 4 PE (1 thread/PE) execution (ordering is likey to be random with respect to PEs)
+    ///```text
+    /// PE: 0 i: 0 elem: 0.0
+    /// PE: 0 i: 1 elem: 0.0
+    /// PE: 1 i: 0 elem: 0.0
+    /// PE: 1 i: 1 elem: 0.0
+    /// PE: 2 i: 0 elem: 0.0
+    /// PE: 2 i: 1 elem: 0.0
+    /// PE: 3 i: 0 elem: 0.0
+    /// PE: 3 i: 1 elem: 0.0
+    ///```
+    fn map<F, R>(self, op: F) -> Map<Self, F>
+    where
+        F: Fn(Self::Item) -> R + Clone + 'static,
+        R: Send + 'static,
+    {
+        Map::new(self, op)
     }
 
     /// Similar to the Enumerate iterator (which can only be applied to `IndexedLocalIterators`), but the yielded indicies are only
@@ -587,6 +628,45 @@ pub trait LocalIterator: SyncSend + Clone + 'static {
     //     self.array().local_collect_async(self, d)
     // }
 
+
+    /// Counts the number of the elements of the local iterator
+    ///
+    /// This function returns a future which needs to be driven to completion to retrieve the new container.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block);
+    ///
+    /// let req = array.local_iter().filter(|elem|  elem < 10).collect::<Vec<usize>>(Distribution::Block);
+    /// let new_vec = array.block_on(req); //wait on the collect request to get the new array
+    ///```
+    fn count(&self) -> Pin<Box<dyn Future<Output = usize> + Send>>
+    {
+        self.array().local_count(self)
+    }
+
+    /// Counts the number of the elements of the local iterator
+    ///
+    /// This function returns a future which needs to be driven to completion to retrieve the new container.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block);
+    ///
+    /// let req = array.local_iter().filter(|elem|  elem < 10).collect::<Vec<usize>>(Distribution::Block);
+    /// let new_vec = array.block_on(req); //wait on the collect request to get the new array
+    ///```
+    fn count_with_schedule(&self,sched: Schedule) -> Pin<Box<dyn Future<Output = usize> + Send>>
+    {
+        self.array().local_count_with_schedule(sched,self)
+    }
+
     
 }
 
@@ -654,37 +734,37 @@ pub trait IndexedLocalIterator: LocalIterator + SyncSend + Clone + 'static {
         Chunks::new(self, 0, 0, size)
     }
 
-    /// Applies `op` to each element producing a new iterator with the results
-    ///
-    /// # Examples
-    ///```
-    /// use lamellar::array::prelude::*;
-    ///
-    /// let world = LamellarWorldBuilder::new().build();
-    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,8,Distribution::Block);
-    /// let my_pe = world.my_pe();
-    ///
-    /// array.local_iter().map(|elem| *elem as f64).enumerate().for_each(move|(i,elem)| println!("PE: {my_pe} i: {i} elem: {elem}"));
-    /// array.wait_all();
-    ///```
-    /// Possible output on a 4 PE (1 thread/PE) execution (ordering is likey to be random with respect to PEs)
-    ///```text
-    /// PE: 0 i: 0 elem: 0.0
-    /// PE: 0 i: 1 elem: 0.0
-    /// PE: 1 i: 0 elem: 0.0
-    /// PE: 1 i: 1 elem: 0.0
-    /// PE: 2 i: 0 elem: 0.0
-    /// PE: 2 i: 1 elem: 0.0
-    /// PE: 3 i: 0 elem: 0.0
-    /// PE: 3 i: 1 elem: 0.0
-    ///```
-    fn map<F, R>(self, op: F) -> Map<Self, F>
-    where
-        F: Fn(Self::Item) -> R + Clone + 'static,
-        R: Send + 'static,
-    {
-        Map::new(self, op)
-    }
+    // /// Applies `op` to each element producing a new iterator with the results
+    // ///
+    // /// # Examples
+    // ///```
+    // /// use lamellar::array::prelude::*;
+    // ///
+    // /// let world = LamellarWorldBuilder::new().build();
+    // /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,8,Distribution::Block);
+    // /// let my_pe = world.my_pe();
+    // ///
+    // /// array.local_iter().map(|elem| *elem as f64).enumerate().for_each(move|(i,elem)| println!("PE: {my_pe} i: {i} elem: {elem}"));
+    // /// array.wait_all();
+    // ///```
+    // /// Possible output on a 4 PE (1 thread/PE) execution (ordering is likey to be random with respect to PEs)
+    // ///```text
+    // /// PE: 0 i: 0 elem: 0.0
+    // /// PE: 0 i: 1 elem: 0.0
+    // /// PE: 1 i: 0 elem: 0.0
+    // /// PE: 1 i: 1 elem: 0.0
+    // /// PE: 2 i: 0 elem: 0.0
+    // /// PE: 2 i: 1 elem: 0.0
+    // /// PE: 3 i: 0 elem: 0.0
+    // /// PE: 3 i: 1 elem: 0.0
+    // ///```
+    // fn map<F, R>(self, op: F) -> MapIndexed<Self, F>
+    // where
+    //     F: Fn(Self::Item) -> R + Clone + 'static,
+    //     R: Send + 'static,
+    // {
+    //     MapIndexed::new(self, op)
+    // }
 
     /// An iterator that skips the first `n` elements
     ///

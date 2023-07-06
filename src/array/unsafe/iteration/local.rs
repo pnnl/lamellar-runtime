@@ -22,7 +22,7 @@ impl<T: Dist> UnsafeArray<T> {
         cons: C,
     ) -> Pin<Box<dyn Future<Output = O> + Send>>
     where
-        C: IterConsumer<AmOutput=AmO, Output=O>,
+        C: IterConsumer<AmOutput=AmO, Output=O> + Clone,
         AmO: SyncSend + 'static,
         O: SyncSend + 'static,{
         let mut reqs = Vec::new();
@@ -50,7 +50,7 @@ impl<T: Dist> UnsafeArray<T> {
         cons: C,
     ) -> Pin<Box<dyn Future<Output = O> + Send>>
     where
-        C: IterConsumer<AmOutput=AmO, Output=O>,
+        C: IterConsumer<AmOutput=AmO, Output=O> + Clone,
         AmO: SyncSend + 'static,
         O: SyncSend + 'static,{
         let mut reqs = Vec::new();
@@ -75,7 +75,7 @@ impl<T: Dist> UnsafeArray<T> {
         cons: C,
     ) -> Pin<Box<dyn Future<Output = O> + Send>>
     where
-        C: IterConsumer<AmOutput=AmO, Output=O>,
+        C: IterConsumer<AmOutput=AmO, Output=O> + Clone,
         AmO: SyncSend + 'static,
         O: SyncSend + 'static,{
         let mut reqs = Vec::new();
@@ -108,7 +108,7 @@ impl<T: Dist> UnsafeArray<T> {
         cons: C,
     ) -> Pin<Box<dyn Future<Output = O> + Send>>
     where
-        C: IterConsumer<AmOutput=AmO, Output=O>,
+        C: IterConsumer<AmOutput=AmO, Output=O> + Clone,
         AmO: SyncSend + 'static,
         O: SyncSend + 'static,{
         let mut reqs = Vec::new();
@@ -169,7 +169,7 @@ impl<T: Dist> UnsafeArray<T> {
         chunk_size: usize,
     ) -> Pin<Box<dyn Future<Output = O> + Send>>
     where
-        C: IterConsumer<AmOutput=AmO, Output=O>,
+        C: IterConsumer<AmOutput=AmO, Output=O> + Clone,
         AmO: SyncSend + 'static,
         O: SyncSend + 'static,{
         let mut reqs = Vec::new();
@@ -271,7 +271,7 @@ impl<T: Dist> LocalIteratorLauncher for UnsafeArray<T> {
     where
         I: LocalIterator + 'static,
         F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
-        Fut: Future<Output = ()> + SyncSend + Clone  + 'static,
+        Fut: Future<Output = ()> + SyncSend + Clone + 'static,
     {
         let for_each = ForEachAsync{
             iter: iter.clone(),
@@ -405,6 +405,29 @@ impl<T: Dist> LocalIteratorLauncher for UnsafeArray<T> {
     //         Schedule::WorkStealing => self.local_sched_work_stealing(collect),
     //     }
     // }
+
+    fn local_count<I>(&self, iter: &I) -> Pin<Box<dyn Future<Output = usize> + Send>>
+    where
+        I:  LocalIterator + 'static
+    {
+        self.local_count_with_schedule(Schedule::Static,iter)
+    }
+
+    fn local_count_with_schedule<I>(&self, sched: Schedule, iter: &I) -> Pin<Box<dyn Future<Output = usize> + Send>>
+    where
+        I:  LocalIterator + 'static,
+    {
+        let count = Count{
+            iter: iter.clone(),
+        };
+        match sched {
+            Schedule::Static => self.local_sched_static(count ),
+            Schedule::Dynamic => self.local_sched_dynamic(count),
+            Schedule::Chunk(size) => self.local_sched_chunk(count, size),
+            Schedule::Guided => self.local_sched_guided(count),
+            Schedule::WorkStealing => self.local_sched_work_stealing(count),
+        }
+    }
 
     fn team(&self) -> Pin<Arc<LamellarTeamRT>> {
         self.inner.data.team.clone()

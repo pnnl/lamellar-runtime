@@ -40,7 +40,9 @@ pub struct LocalIterCountHandle {
 impl LocalIterRequest for LocalIterCountHandle{
     type Output = usize;
     async fn into_future(mut self: Box<Self>) -> Self::Output {
-        futures::future::join_all(self.reqs.drain(..).map(|req| req.into_future())).await.into_iter().sum::<usize>()
+        let count = futures::future::join_all(self.reqs.drain(..).map(|req| req.into_future())).await.into_iter().sum::<usize>();
+        // println!("count: {} {:?}", count, std::thread::current().id());
+        count
     }
     fn wait(mut self: Box<Self>)  -> Self::Output {
         self.reqs.drain(..).map(|req| req.get()).into_iter().sum::<usize>()
@@ -61,10 +63,11 @@ where
 {
     async fn exec(&self) -> usize{
         let mut iter = self.schedule.init_iter(self.iter.clone());
-        let mut count = 0;
+        let mut count: usize  = 0;
         while let Some(_) = iter.next() {
             count += 1;
         }
+        // println!("count: {} {:?}", count, std::thread::current().id());
         count
     }
 }

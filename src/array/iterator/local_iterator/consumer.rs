@@ -36,9 +36,10 @@ impl IterWorkStealer {
 
     fn next(&self) -> Option<usize> {
         let mut range = self.range.lock();
+        let index = range.0;
         range.0 += 1;
         if range.0 <= range.1 {
-            Some(range.0)
+            Some(index)
         } else {
             None
         }
@@ -121,14 +122,16 @@ impl<I: LocalIterator> Iterator for IterScheduleIter<I> {
                 iter.next()
             }
             IterScheduleIter::Dynamic(iter, cur_i, max_i) => {
-                let ci = cur_i.fetch_add(1, Ordering::Relaxed);
-                if ci < *max_i {
+                let mut ci = cur_i.fetch_add(1, Ordering::Relaxed);
+                while ci < *max_i {
+                    // println!("ci {:?} maxi {:?} {:?}", ci, *max_i, std::thread::current().id());
                     *iter = iter.init(ci,1);
-                    iter.next()
+                    if let Some(elem) = iter.next() {
+                        return Some(elem);
+                    }
+                    ci = cur_i.fetch_add(1, Ordering::Relaxed);
                 }
-                else{
-                    None
-                }
+                None
             }
             IterScheduleIter::Chunk(iter, ranges, range_i) => {
                 let mut next = iter.next();
@@ -145,13 +148,14 @@ impl<I: LocalIterator> Iterator for IterScheduleIter<I> {
             }
             IterScheduleIter::WorkStealing(iter, range, siblings) => {
                 let mut inner_next = |iter: &mut I| {
-                    if range.next().is_some() {
+                    while let Some(ri) = range.next(){
+                        *iter = iter.init(ri,1);
                         if let Some(elem) = iter.next() {
                             return Some(elem);
                         }
-                        else{
-                            range.set_done();
-                        }
+                        // else{
+                        //     range.set_done();
+                        // }
                     }
                     None
                 };  
@@ -176,7 +180,7 @@ impl<I: LocalIterator> Iterator for IterScheduleIter<I> {
 
 
 
-pub(crate) trait IterConsumer: Clone{
+pub(crate) trait IterConsumer{
     type AmOutput;
     type Output;
     fn into_am(self, schedule: IterSchedule) -> LamellarArcLocalAm;

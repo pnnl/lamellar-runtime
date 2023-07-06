@@ -589,6 +589,20 @@ impl<T: Dist> LocalIteratorLauncher for LocalLockArray<T> {
     //     self.array.local_collect_async_with_schedule(sched, iter, d)
     // }
 
+    fn local_count<I>(&self, iter: &I) -> Pin<Box<dyn Future<Output = usize> + Send>>
+    where
+        I: LocalIterator + 'static
+    {
+        self.array.local_count(iter)
+    }
+    
+    fn local_count_with_schedule<I>(&self, sched: Schedule, iter: &I) -> Pin<Box<dyn Future<Output = usize> + Send>>
+    where
+        I: LocalIterator + 'static
+    {
+        self.array.local_count_with_schedule(sched, iter)
+    }
+
     fn team(&self) -> Pin<Arc<LamellarTeamRT>> {
         self.array.team_rt().clone()
     }
