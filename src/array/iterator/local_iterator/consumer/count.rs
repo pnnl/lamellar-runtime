@@ -1,5 +1,13 @@
-use crate::array::iterator::local_iterator::consumer::*;
+use crate::array::iterator::consumer::*;
+use crate::array::iterator::IterRequest;
+use crate::array::iterator::local_iterator::{LocalIterator};
+use crate::active_messaging::LamellarArcLocalAm;
+use crate::lamellar_request::LamellarRequest;
+use crate::lamellar_team::LamellarTeamRT;
+
 use async_trait::async_trait;
+use std::pin::Pin;
+use std::sync::Arc;
 
 #[derive(Clone, Debug)]
 pub struct Count<I> {
@@ -12,13 +20,20 @@ where
 {
     type AmOutput = usize;
     type Output = usize;
-    fn into_am(self, schedule: IterSchedule) -> LamellarArcLocalAm{
+    type Item = I::Item;
+    fn init(&self, start: usize, cnt: usize) -> Self{
+        self.init(start,cnt)
+    }
+    fn next(&mut self) -> Option<Self::Item> {
+        self.next()
+    }
+    fn into_am(&self, schedule: IterSchedule) -> LamellarArcLocalAm{
         Arc::new(CountAm{
-            iter: self.iter,
+            iter: self.clone(),
             schedule
         })
     }
-    fn create_handle(self, team: Pin<Arc<LamellarTeamRT>>, reqs: Vec<Box<dyn LamellarRequest<Output = Self::AmOutput>>>) -> Box<dyn LocalIterRequest<Output = Self::Output>>{
+    fn create_handle(self, team: Pin<Arc<LamellarTeamRT>>, reqs: Vec<Box<dyn LamellarRequest<Output = Self::AmOutput>>>) -> Box<dyn IterRequest<Output = Self::Output>>{
         Box::new(LocalIterCountHandle {
             reqs
         })
@@ -37,7 +52,7 @@ pub struct LocalIterCountHandle {
 
 #[doc(hidden)]
 #[async_trait]
-impl LocalIterRequest for LocalIterCountHandle{
+impl IterRequest for LocalIterCountHandle{
     type Output = usize;
     async fn into_future(mut self: Box<Self>) -> Self::Output {
         let count = futures::future::join_all(self.reqs.drain(..).map(|req| req.into_future())).await.into_iter().sum::<usize>();
@@ -52,14 +67,14 @@ impl LocalIterRequest for LocalIterCountHandle{
 
 #[lamellar_impl::AmLocalDataRT(Clone)]
 pub(crate) struct CountAm<I>{
-    pub(crate) iter: I,
+    pub(crate) iter: Count<I>,
     pub(crate) schedule: IterSchedule
 }
 
 #[lamellar_impl::rt_am_local]
 impl<I> LamellarAm for CountAm<I>
 where
-    I: LocalIterator + 'static,
+    I:  LocalIterator + 'static,
 {
     async fn exec(&self) -> usize{
         let mut iter = self.schedule.init_iter(self.iter.clone());

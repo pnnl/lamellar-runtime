@@ -28,13 +28,13 @@ where
 // {
 //     pub fn for_each<F>(&self, op: F)
 //     where
-//         F: Fn(<I as DistributedIterator>::Item)   + Clone + 'static,
+//         F: Fn(I::Item)   + Clone + 'static,
 //     {
 //         self.iter.array().for_each(self, op);
 //     }
 //     pub fn for_each_async<F, Fut>(&self, op: F)
 //     where
-//         F: Fn(<I as DistributedIterator>::Item) -> Fut   + Clone + 'static,
+//         F: Fn(I::Item) -> Fut   + Clone + 'static,
 //         Fut: Future<Output = ()>   + Clone + 'static,
 //     {
 //         self.iter.array().for_each_async(self, op);

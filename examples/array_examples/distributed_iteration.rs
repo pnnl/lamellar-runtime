@@ -143,25 +143,25 @@ fn main() {
     cyclic_array.barrier();
     block_array.print();
 
-    println!("--------------------------------------------------------");
-    println!("cyclic enumerate map async collect");
-    let barray = block_array.clone();
-    let new_array = world.block_on(
-        cyclic_array
-            .dist_iter()
-            .enumerate()
-            .map(move |(i, elem)| {
-                let barray = barray.clone();
-                async move {
-                    barray.add(i, elem.load()).await;
-                    barray.fetch_sub(i, elem.load()).await
-                }
-            })
-            .collect_async::<ReadOnlyArray<usize>, _>(Distribution::Block),
-    );
-    cyclic_array.barrier();
-    new_array.print();
-    block_array.print();
+    // println!("--------------------------------------------------------");
+    // println!("cyclic enumerate map async collect");
+    // let barray = block_array.clone();
+    // let new_array = world.block_on(
+    //     cyclic_array
+    //         .dist_iter()
+    //         .enumerate()
+    //         .map(move |(i, elem)| {
+    //             let barray = barray.clone();
+    //             async move {
+    //                 barray.add(i, elem.load()).await;
+    //                 barray.fetch_sub(i, elem.load()).await
+    //             }
+    //         })
+    //         .collect_async::<ReadOnlyArray<usize>, _>(Distribution::Block),
+    // );
+    // cyclic_array.barrier();
+    // new_array.print();
+    // block_array.print();
 
     println!("--------------------------------------------------------");
     println!("block enumerate filter");

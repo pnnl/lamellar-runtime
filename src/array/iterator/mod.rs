@@ -1,12 +1,25 @@
 //! Provides various iterator types for LamellarArrays
 pub mod distributed_iterator;
-use crate::array::iterator::distributed_iterator::DistributedIterator;
+use distributed_iterator::DistributedIterator;
 pub mod local_iterator;
-use crate::array::iterator::local_iterator::LocalIterator;
+use local_iterator::LocalIterator;
 pub mod one_sided_iterator;
-use crate::array::iterator::one_sided_iterator::OneSidedIterator;
+use one_sided_iterator::OneSidedIterator;
+pub mod consumer;
+use consumer::IterConsumer;
 
 use crate::memregion::Dist;
+
+use async_trait::async_trait;
+
+#[doc(hidden)]
+#[async_trait]
+pub trait IterRequest {
+    type Output;
+    async fn into_future(mut self: Box<Self>) -> Self::Output;
+    fn wait(self: Box<Self>) -> Self::Output;
+}
+
 
 /// The Schedule type controls how elements of a LamellarArray are distributed to threads when
 /// calling `for_each_with_schedule` on a local or distributed iterator.

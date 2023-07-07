@@ -1,9 +1,15 @@
-use crate::active_messaging::SyncSend;
-use crate::array::iterator::local_iterator::consumer::*;
+use crate::array::iterator::consumer::*;
+use crate::array::iterator::IterRequest;
+use crate::array::iterator::local_iterator::{LocalIterator};
+use crate::active_messaging::{SyncSend,LamellarArcLocalAm};
+use crate::lamellar_request::LamellarRequest;
+use crate::lamellar_team::LamellarTeamRT;
 
 use async_trait::async_trait;
 use futures::Future;
 use core::marker::PhantomData;
+use std::pin::Pin;
+use std::sync::Arc;
 
 #[derive(Clone, Debug)]
 pub struct Reduce<I, F> {
@@ -19,10 +25,17 @@ where
 {
     type AmOutput = Option<I::Item>;
     type Output = Option<I::Item>;
-    fn into_am(self, schedule: IterSchedule) -> LamellarArcLocalAm {
+    type Item = I::Item;
+    fn init(&self, start: usize, cnt: usize) -> Self{
+        self.init(start,cnt)
+    }
+    fn next(&mut self) -> Option<Self::Item> {
+        self.next()
+    }
+    fn into_am(&self, schedule: IterSchedule) -> LamellarArcLocalAm {
         Arc::new(ReduceAm {
-            iter: self.iter,
-            op: self.op,
+            iter: self.clone(),
+            op: self.op.clone(),
             schedule,
         })
     }
@@ -30,7 +43,7 @@ where
         self,
         team: Pin<Arc<LamellarTeamRT>>,
         reqs: Vec<Box<dyn LamellarRequest<Output = Self::AmOutput>>>,
-    ) -> Box<dyn LocalIterRequest<Output = Self::Output>> {
+    ) -> Box<dyn IterRequest<Output = Self::Output>> {
         Box::new(LocalIterReduceHandle { op: self.op, reqs })
     }
     fn max_elems(&self, in_elems: usize) -> usize {
@@ -66,7 +79,7 @@ where
 //         self,
 //         team: Pin<Arc<LamellarTeamRT>>,
 //         reqs: Vec<Box<dyn LamellarRequest<Output = Self::AmOutput>>>,
-//     ) -> Box<dyn LocalIterRequest<Output = Self::Output>> {
+//     ) -> Box<dyn IterRequest<Output = Self::Output>> {
 //         Box::new(LocalIterReduceHandle { op: self.op, reqs })
 //     }
 //     fn max_elems(&self, in_elems: usize) -> usize {
@@ -83,7 +96,7 @@ pub struct LocalIterReduceHandle<T, F> {
 
 #[doc(hidden)]
 #[async_trait]
-impl<T, F> LocalIterRequest for LocalIterReduceHandle<T, F>
+impl<T, F> IterRequest for LocalIterReduceHandle<T, F>
 where
     T: SyncSend,
     F: Fn(T, T) -> T + SyncSend + 'static,
@@ -109,16 +122,16 @@ where
 #[lamellar_impl::AmLocalDataRT(Clone)]
 pub(crate) struct ReduceAm<I, F> {
     pub(crate) op: F,
-    pub(crate) iter: I,
+    pub(crate) iter: Reduce<I,F>,
     pub(crate) schedule: IterSchedule,
 }
 
 #[lamellar_impl::rt_am_local]
 impl<I, F> LamellarAm for ReduceAm<I, F>
 where
-    I: LocalIterator + 'static,
+    I:  LocalIterator + 'static,
     I::Item: SyncSend,
-    F: Fn(I::Item, I::Item) -> I::Item + SyncSend + 'static,
+    F: Fn(I::Item, I::Item) -> I::Item + SyncSend + Clone + 'static,
 {
     async fn exec(&self) -> Option<I::Item> {
         let mut iter = self.schedule.init_iter(self.iter.clone());
@@ -132,33 +145,33 @@ where
     }
 }
 
-#[lamellar_impl::AmLocalDataRT(Clone)]
-pub(crate) struct ReduceAsyncAm<I, F, Fut> {
-    pub(crate) op: F,
-    pub(crate) iter: I,
-    pub(crate) schedule: IterSchedule,
-    pub(crate) _phantom: PhantomData<Fut>
-}
+// #[lamellar_impl::AmLocalDataRT(Clone)]
+// pub(crate) struct ReduceAsyncAm<I, F, Fut> {
+//     pub(crate) op: F,
+//     pub(crate) iter: I,
+//     pub(crate) schedule: IterSchedule,
+//     pub(crate) _phantom: PhantomData<Fut>
+// }
 
-#[lamellar_impl::rt_am_local]
-impl<I, F, Fut> LamellarAm for ReduceAsyncAm<I, F, Fut>
-where
-    I: LocalIterator + 'static,
-    I::Item: SyncSend,
-    F: Fn(I::Item, I::Item) -> Fut + SyncSend + Clone + 'static,
-    Fut: Future<Output = I::Item> + SyncSend + Clone + 'static,
-{
-    async fn exec(&self) -> Option<I::Item> {
-        let mut iter = self.schedule.init_iter(self.iter.clone());
-        let mut accum = iter.next();
-        while let Some(elem) = iter.next() {
-            accum = Some((self.op)(accum.unwrap(), elem).await);
-            // cnt += 1;
-        }
-        accum
-        // println!("thread {:?} elems processed {:?}",std::thread::current().id(), cnt);
-    }
-}
+// #[lamellar_impl::rt_am_local]
+// impl<I, F, Fut> LamellarAm for ReduceAsyncAm<I, F, Fut>
+// where
+//     I: LocalIterator + 'static,
+//     I::Item: SyncSend,
+//     F: Fn(I::Item, I::Item) -> Fut + SyncSend + Clone + 'static,
+//     Fut: Future<Output = I::Item> + SyncSend + Clone + 'static,
+// {
+//     async fn exec(&self) -> Option<I::Item> {
+//         let mut iter = self.schedule.init_iter(self.iter.clone());
+//         let mut accum = iter.next();
+//         while let Some(elem) = iter.next() {
+//             accum = Some((self.op)(accum.unwrap(), elem).await);
+//             // cnt += 1;
+//         }
+//         accum
+//         // println!("thread {:?} elems processed {:?}",std::thread::current().id(), cnt);
+//     }
+// }
 
 // we may want to support different scheduling strategies for fold
 //

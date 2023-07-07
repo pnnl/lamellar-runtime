@@ -7,7 +7,7 @@ pub struct Map<I, F> {
 }
 impl<I, F> Map<I, F>
 where
-    I: IndexedDistributedIterator,
+    I: DistributedIterator,
 {
     pub(crate) fn new(iter: I, f: F) -> Map<I, F> {
         // println!("new Map {:?} ",count);
@@ -17,7 +17,7 @@ where
 
 impl<B, I, F> DistributedIterator for Map<I, F>
 where
-    I: IndexedDistributedIterator,
+    I: DistributedIterator,
     F: FnMut(I::Item) -> B + SyncSend + Clone + 'static,
     B: Send,
 {
@@ -54,15 +54,15 @@ where
     }
 }
 
-impl<B, I, F> IndexedDistributedIterator for Map<I, F>
-where
-    I: IndexedDistributedIterator,
-    F: FnMut(I::Item) -> B + SyncSend + Clone + 'static,
-    B: Send,
-{
-    fn iterator_index(&self, index: usize) -> Option<usize> {
-        let g_index = self.iter.iterator_index(index);
-        // println!("enumerate index: {:?} global_index {:?}", index,g_index);
-        g_index
-    }
-}
+// impl<B, I, F> IndexedDistributedIterator for Map<I, F>
+// where
+//     I: IndexedDistributedIterator,
+//     F: FnMut(I::Item) -> B + SyncSend + Clone + 'static,
+//     B: Send,
+// {
+//     fn iterator_index(&self, index: usize) -> Option<usize> {
+//         let g_index = self.iter.iterator_index(index);
+//         // println!("enumerate index: {:?} global_index {:?}", index,g_index);
+//         g_index
+//     }
+// }

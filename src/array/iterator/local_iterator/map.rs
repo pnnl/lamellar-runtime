@@ -63,7 +63,7 @@ where
 //     B: Send,
 // {
 //     type Item = B;
-//     type Array = <I as LocalIterator>::Array;
+//     type Array = I::Array;
 //     fn init(&self, start_i: usize, cnt: usize) -> MapIndexed<I, F> {
 //         MapIndexed::new(self.iter.init(start_i, cnt), self.f.clone())
 //     }

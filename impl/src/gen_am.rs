@@ -381,7 +381,7 @@ pub(crate) fn create_am_struct(
     ser: &proc_macro2::TokenStream, 
     des: &proc_macro2::TokenStream, 
     lamellar: &proc_macro2::TokenStream,
-    local: bool,) -> (proc_macro2::TokenStream, proc_macro2::TokenStream) {
+    _local: bool,) -> (proc_macro2::TokenStream, proc_macro2::TokenStream) {
     let (impl_generics, _ty_generics, where_clause) = generics.split_for_impl();
     
     let the_struct =  quote! {

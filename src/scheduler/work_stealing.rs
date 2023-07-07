@@ -10,7 +10,7 @@ use lamellar_prof::*;
 use tracing::*;
 
 use core_affinity::CoreId;
-use crossbeam::deque::{Steal,Worker};
+use crossbeam::deque::{Worker};
 use futures::Future;
 use futures_lite::FutureExt;
 // use parking_lot::RwLock;

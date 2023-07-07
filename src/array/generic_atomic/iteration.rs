@@ -71,7 +71,7 @@ impl<T: Dist> std::fmt::Debug for GenericAtomicLocalIter<T> {
 //     pub fn for_each_async<F, Fut>(&self, op: F) -> DistIterForEachHandle
 //     where
 //         F: Fn(GenericAtomicElement<T>) -> Fut + SyncSend + Clone + 'static,
-//         Fut: Future<Output = ()> + SyncSend + Clone + 'static,
+//         Fut: Future<Output = ()> + Send + 'static,
 //     {
 //         self.data.clone().for_each_async(self, op)
 //     }
@@ -251,7 +251,7 @@ impl<T: Dist> DistIteratorLauncher for GenericAtomicArray<T> {
     where
         I: DistributedIterator + 'static,
         F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
-        Fut: Future<Output = ()> + SyncSend + Clone + 'static,
+        Fut: Future<Output = ()> + Send + 'static,
     {
         self.array.for_each_async(iter, op)
     }
@@ -264,7 +264,7 @@ impl<T: Dist> DistIteratorLauncher for GenericAtomicArray<T> {
     where
         I: DistributedIterator + 'static,
         F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
-        Fut: Future<Output = ()> + SyncSend + Clone + 'static,
+        Fut: Future<Output = ()> + Send + 'static,
     {
         self.array.for_each_async_with_schedule(sched, iter, op)
     }
@@ -273,23 +273,31 @@ impl<T: Dist> DistIteratorLauncher for GenericAtomicArray<T> {
     where
         I: DistributedIterator + 'static,
         I::Item: Dist + ArrayOps,
-        A: From<UnsafeArray<I::Item>> + SyncSend + Clone + 'static,
+        A: for<'a>  TeamFrom<(&'a Vec<I::Item>,Distribution)> + SyncSend + Clone + 'static,
     {
         self.array.collect(iter, d)
     }
-    fn collect_async<I, A, B>(
-        &self,
-        iter: &I,
-        d: Distribution,
-    ) -> Pin<Box<dyn Future<Output = A> + Send>>
+    fn collect_with_schedule<I, A>(&self,sched: Schedule, iter: &I, d: Distribution) -> Pin<Box<dyn Future<Output = A> + Send>>
     where
         I: DistributedIterator + 'static,
-        I::Item: Future<Output = B> + SyncSend + Clone + 'static,
-        B: Dist + ArrayOps,
-        A: From<UnsafeArray<B>> + SyncSend  + Clone +  'static,
+        I::Item: Dist + ArrayOps,
+        A: for<'a>  TeamFrom<(&'a Vec<I::Item>,Distribution)> + SyncSend + Clone + 'static,
     {
-        self.array.collect_async(iter, d)
+        self.array.collect_with_schedule(sched, iter, d)
     }
+    // fn collect_async<I, A, B>(
+    //     &self,
+    //     iter: &I,
+    //     d: Distribution,
+    // ) -> Pin<Box<dyn Future<Output = A> + Send>>
+    // where
+    //     I: DistributedIterator + 'static,
+    //     I::Item: Future<Output = B> + SyncSend + Clone + 'static,
+    //     B: Dist + ArrayOps,
+    //     A: From<UnsafeArray<B>> + SyncSend  + Clone +  'static,
+    // {
+    //     self.array.collect_async(iter, d)
+    // }
     fn team(&self) -> Pin<Arc<LamellarTeamRT>> {
         self.array.team_rt().clone()
     }
@@ -332,7 +340,7 @@ impl<T: Dist> LocalIteratorLauncher for GenericAtomicArray<T> {
     where
         I: LocalIterator + 'static,
         F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
-        Fut: Future<Output = ()> + SyncSend + Clone + 'static,
+        Fut: Future<Output = ()> + Send + 'static,
     {
         self.array.local_for_each_async(iter, op)
     }
@@ -345,7 +353,7 @@ impl<T: Dist> LocalIteratorLauncher for GenericAtomicArray<T> {
     where
         I: LocalIterator + 'static,
         F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
-        Fut: Future<Output = ()> + SyncSend + Clone + 'static,
+        Fut: Future<Output = ()> + Send + 'static,
     {
         self.array
             .local_for_each_async_with_schedule(sched, iter, op)

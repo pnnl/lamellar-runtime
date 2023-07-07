@@ -1,17 +1,17 @@
 pub(crate) mod collect;
-pub(crate) mod count;
+// // pub(crate) mod count;
 pub(crate) mod for_each;
-pub(crate) mod reduce;
+// pub(crate) mod reduce;
 
 pub(crate) use collect::*;
-pub(crate) use count::*;
+// pub(crate) use count::*;
 pub(crate) use for_each::*;
-pub(crate) use reduce::*;
+// pub(crate) use reduce::*;
 
 // use crate::active_messaging::LamellarArcLocalAm;
 // use crate::lamellar_request::LamellarRequest;
 // use crate::lamellar_team::LamellarTeamRT;
-// use crate::array::iterator::local_iterator::{LocalIterator,IterRequest,Monotonic};
+// use crate::array::iterator::distributed_iterator::{DistributedIterator,IterRequest,Monotonic};
 
 // use std::sync::Arc;
 // use std::sync::atomic::{AtomicUsize,Ordering};
@@ -72,7 +72,7 @@ pub(crate) use reduce::*;
 // }
 
 // impl IterSchedule {
-//     fn init_iter<I: LocalIterator>(&self, iter: I) -> IterScheduleIter<I> {
+//     fn init_iter<I: DistributedIterator>(&self, iter: I) -> IterScheduleIter<I> {
 //         match self {
 //             IterSchedule::Static( start, end) => {
 //                 IterScheduleIter::Static(iter.init(*start,end-start))
@@ -89,7 +89,7 @@ pub(crate) use reduce::*;
 //             }
 //         }
 //     }
-//     fn monotonic_iter<I: LocalIterator>(&self, iter: I) -> IterScheduleIter<Monotonic<I>> {
+//     fn monotonic_iter<I: DistributedIterator>(&self, iter: I) -> IterScheduleIter<Monotonic<I>> {
 //         match self {
 //             IterSchedule::Static(start, end) => {
 //                 IterScheduleIter::Static(iter.monotonic().init(*start,end-start))

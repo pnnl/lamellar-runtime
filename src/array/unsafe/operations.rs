@@ -6,7 +6,6 @@ use crate::lamellar_request::LamellarRequest;
 // use crate::memregion::Dist;
 use std::any::TypeId;
 use std::collections::HashMap;
-use std::collections::BTreeMap;
 // use itertools::Itertools;
 
 type BufFn = fn(UnsafeByteArrayWeak) -> Arc<dyn BufferOp>;

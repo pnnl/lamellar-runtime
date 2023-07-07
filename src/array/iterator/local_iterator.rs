@@ -36,35 +36,24 @@ use zip::*;
 pub(crate) use consumer::*;
 
 use crate::array::iterator::one_sided_iterator::OneSidedIterator;
-use crate::array::iterator::Schedule;
-use crate::array::{AtomicArray, Distribution, LamellarArray, LamellarArrayPut, UnsafeArray,operations::ArrayOps, TeamFrom};
+use crate::array::iterator::{Schedule,IterRequest};
+use crate::array::{AtomicArray, Distribution, LamellarArray, LamellarArrayPut,operations::ArrayOps, TeamFrom};
 use crate::lamellar_request::LamellarRequest;
 use crate::memregion::Dist;
 use crate::LamellarTeamRT;
 
 use crate::active_messaging::SyncSend;
 
-use async_trait::async_trait;
 use enum_dispatch::enum_dispatch;
 use futures::Future;
 use std::marker::PhantomData;
 use std::pin::Pin;
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
-use parking_lot::Mutex;
 use rand::seq::SliceRandom;
-use rand::thread_rng;
 
 
 
-#[doc(hidden)]
-#[async_trait]
-pub trait LocalIterRequest {
-    type Output;
-    async fn into_future(mut self: Box<Self>) -> Self::Output;
-    fn wait(self: Box<Self>) -> Self::Output;
-}
 
 
 
@@ -96,7 +85,7 @@ pub trait LocalIteratorLauncher {
     where
         I: LocalIterator + 'static,
         F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
-        Fut: Future<Output = ()> + SyncSend + Clone + 'static;
+        Fut: Future<Output = ()> + Send + 'static,;
 
     fn local_for_each_async_with_schedule<I, F, Fut>(
         &self,
@@ -107,7 +96,7 @@ pub trait LocalIteratorLauncher {
     where
         I: LocalIterator + 'static,
         F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
-        Fut: Future<Output = ()> + SyncSend + Clone + 'static;
+        Fut: Future<Output = ()> + Send + 'static,;
     
     fn local_reduce<I, F>(&self, iter: &I, op: F) -> Pin<Box<dyn Future<Output = Option<I::Item>> + Send>>
     where
@@ -193,7 +182,7 @@ pub trait LocalIteratorLauncher {
 /// The functions in this trait are available on all local iterators.
 /// Additonaly functionality can be found in the [IndexedLocalIterator] trait:
 /// these methods are only available for local iterators where the number of elements is known in advance (e.g. after invoking `filter` these methods would be unavailable)
-pub trait LocalIterator: SyncSend + Clone + 'static {
+pub trait LocalIterator:  SyncSend + Clone + 'static {
     /// The type of item this distributed iterator produces
     type Item: Send;
 
@@ -441,7 +430,7 @@ pub trait LocalIterator: SyncSend + Clone + 'static {
     fn for_each_async<F, Fut>(&self, op: F) -> Pin<Box<dyn Future<Output = ()> + Send>>
     where
         F: Fn(Self::Item) -> Fut + SyncSend + Clone + 'static,
-        Fut: Future<Output = ()> + SyncSend + Clone + 'static,
+        Fut: Future<Output = ()> + Send + 'static,
     {
         self.array().local_for_each_async(self, op)
     }
@@ -475,7 +464,7 @@ pub trait LocalIterator: SyncSend + Clone + 'static {
     ) -> Pin<Box<dyn Future<Output = ()> + Send>>
     where
         F: Fn(Self::Item) -> Fut + SyncSend + Clone + 'static,
-        Fut: Future<Output = ()> + SyncSend + Clone + 'static,
+        Fut: Future<Output = ()> + Send + 'static,
     {
         self.array()
             .local_for_each_async_with_schedule(sched, self, op)

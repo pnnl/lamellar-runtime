@@ -1,6 +1,6 @@
 use crate::array::iterator::consumer::*;
 use crate::array::iterator::IterRequest;
-use crate::array::iterator::local_iterator::{LocalIterator};
+use crate::array::iterator::distributed_iterator::{DistributedIterator};
 use crate::active_messaging::{SyncSend,LamellarArcLocalAm};
 use crate::lamellar_request::LamellarRequest;
 use crate::lamellar_team::LamellarTeamRT;
@@ -14,7 +14,7 @@ use std::sync::Arc;
 #[derive(Clone, Debug)]
 pub struct ForEach<I,F> 
 where
-    I: LocalIterator + 'static,
+    I: DistributedIterator + 'static,
     F: Fn(I::Item) + SyncSend + Clone + 'static,
 {
     pub(crate) iter: I,
@@ -23,7 +23,7 @@ where
 
 impl<I,F> IterConsumer for ForEach<I,F>
 where
-    I: LocalIterator + 'static,
+    I: DistributedIterator + 'static,
     F: Fn(I::Item) + SyncSend + Clone + 'static,
     {
     type AmOutput = ();
@@ -43,7 +43,7 @@ where
         })
     }
     fn create_handle(self, team: Pin<Arc<LamellarTeamRT>>, reqs: Vec<Box<dyn LamellarRequest<Output = Self::AmOutput>>>) -> Box<dyn IterRequest<Output = Self::Output>>{
-        Box::new(LocalIterForEachHandle {
+        Box::new(DistIterForEachHandle {
             reqs
         })
     }
@@ -55,7 +55,7 @@ where
 #[derive(Debug)]
 pub struct ForEachAsync<I,F,Fut> 
 where
-    I: LocalIterator + 'static,
+    I: DistributedIterator + 'static,
     F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
     Fut: Future<Output = ()> + Send + 'static,
 {
@@ -66,9 +66,9 @@ where
 
 impl<I,F,Fut> IterConsumer for ForEachAsync<I,F, Fut>
 where
-    I: LocalIterator + 'static,
-    F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
-    Fut: Future<Output = ()> + Send + 'static,
+I: DistributedIterator + 'static,
+F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
+Fut: Future<Output = ()> + Send + 'static,
     {
     type AmOutput = ();
     type Output = ();
@@ -80,6 +80,7 @@ where
         self.next()
     }
     fn into_am(&self, schedule: IterSchedule) -> LamellarArcLocalAm{
+
         Arc::new(ForEachAsyncAm{
             iter: self.clone(),
             op: self.op.clone(),
@@ -88,18 +89,21 @@ where
         })
     }
     fn create_handle(self, team: Pin<Arc<LamellarTeamRT>>, reqs: Vec<Box<dyn LamellarRequest<Output = Self::AmOutput>>>) -> Box<dyn IterRequest<Output = Self::Output>>{
-        Box::new(LocalIterForEachHandle {
+        Box::new(DistIterForEachHandle {
             reqs
         })
     }
     fn max_elems(&self, in_elems: usize) -> usize{
         self.iter.elems(in_elems)
     }
+    // fn clone(&self) -> Self{
+        
+    // }
 }
 
 impl<I,F,Fut> Clone for ForEachAsync<I,F, Fut>
 where
-I: LocalIterator + 'static,
+I: DistributedIterator + 'static,
 F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
 Fut: Future<Output = ()> + Send + 'static, 
 {
@@ -111,14 +115,15 @@ Fut: Future<Output = ()> + Send + 'static,
     }
 }
 
+
 #[doc(hidden)]
-pub struct LocalIterForEachHandle {
+pub struct DistIterForEachHandle {
     pub(crate) reqs: Vec<Box<dyn LamellarRequest<Output = ()>>>,
 }
 
 #[doc(hidden)]
 #[async_trait]
-impl IterRequest for LocalIterForEachHandle {
+impl IterRequest for DistIterForEachHandle {
     type Output = ();
     async fn into_future(mut self: Box<Self>) -> Self::Output {
         for req in self.reqs.drain(..) {
@@ -135,7 +140,7 @@ impl IterRequest for LocalIterForEachHandle {
 #[lamellar_impl::AmLocalDataRT(Clone)]
 pub(crate) struct ForEachAm<I,F>
 where
-    I: LocalIterator + 'static,
+    I: DistributedIterator + 'static,
     F: Fn(I::Item) + SyncSend + Clone + 'static,
 {
     pub(crate) op: F,
@@ -148,7 +153,7 @@ where
 #[lamellar_impl::rt_am_local]
 impl<I, F> LamellarAm for ForEachAm<I, F>
 where
-    I: LocalIterator + 'static,
+    I: DistributedIterator  + 'static,
     F: Fn(I::Item) + SyncSend + Clone + 'static,
 {
     async fn exec(&self) {
@@ -163,7 +168,7 @@ where
 #[lamellar_impl::AmLocalDataRT(Clone)]
 pub(crate) struct ForEachAsyncAm<I, F, Fut>
 where
-    I: LocalIterator + 'static,
+    I: DistributedIterator + 'static,
     F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
     Fut: Future<Output = ()> + Send + 'static,
 {
@@ -176,7 +181,7 @@ where
 #[lamellar_impl::rt_am_local]
 impl<I, F, Fut> LamellarAm for ForEachAsyncAm<I, F, Fut>
 where
-    I: LocalIterator  + 'static,
+    I: DistributedIterator  + 'static,
     F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
     Fut: Future<Output = ()> + Send + 'static,
 {
@@ -191,7 +196,7 @@ where
 // #[lamellar_impl::AmLocalDataRT(Clone)]
 // pub(crate) struct ForEachStatic<I, F>
 // where
-//     I: LocalIterator,
+//     I: DistributedIterator,
 //     F: Fn(I::Item),
 // {
 //     pub(crate) op: F,
@@ -203,7 +208,7 @@ where
 // #[lamellar_impl::rt_am_local]
 // impl<I, F> LamellarAm for ForEachStatic<I, F>
 // where
-//     I: LocalIterator + 'static,
+//     I: DistributedIterator + 'static,
 //     F: Fn(I::Item) + SyncSend + 'static,
 // {
 //     async fn exec(&self) {
@@ -221,7 +226,7 @@ where
 // #[lamellar_impl::AmLocalDataRT(Clone, Debug)]
 // pub(crate) struct ForEachDynamic<I, F>
 // where
-//     I: LocalIterator,
+//     I: DistributedIterator,
 //     F: Fn(I::Item),
 // {
 //     pub(crate) op: F,
@@ -233,7 +238,7 @@ where
 // #[lamellar_impl::rt_am_local]
 // impl<I, F> LamellarAm for ForEachDynamic<I, F>
 // where
-//     I: LocalIterator + 'static,
+//     I: DistributedIterator + 'static,
 //     F: Fn(I::Item) + SyncSend + 'static,
 // {
 //     async fn exec(&self) {
@@ -255,7 +260,7 @@ where
 // #[lamellar_impl::AmLocalDataRT(Clone, Debug)]
 // pub(crate) struct ForEachChunk<I, F>
 // where
-//     I: LocalIterator,
+//     I: DistributedIterator,
 //     F: Fn(I::Item),
 // {
 //     pub(crate) op: F,
@@ -267,7 +272,7 @@ where
 // #[lamellar_impl::rt_am_local]
 // impl<I, F> LamellarAm for ForEachChunk<I, F>
 // where
-//     I: LocalIterator + 'static,
+//     I: DistributedIterator + 'static,
 //     F: Fn(I::Item) + SyncSend + 'static,
 // {
 //     async fn exec(&self) {
@@ -292,7 +297,7 @@ where
 // #[lamellar_impl::AmLocalDataRT(Clone, Debug)]
 // pub(crate) struct ForEachWorkStealing<I, F>
 // where
-//     I: LocalIterator,
+//     I: DistributedIterator,
 //     F: Fn(I::Item),
 // {
 //     pub(crate) op: F,
@@ -305,7 +310,7 @@ where
 // #[lamellar_impl::rt_am_local]
 // impl<I, F> LamellarAm for ForEachWorkStealing<I, F>
 // where
-//     I: LocalIterator + 'static,
+//     I: DistributedIterator + 'static,
 //     F: Fn(I::Item) + SyncSend + 'static,
 // {
 //     async fn exec(&self) {
@@ -348,7 +353,7 @@ where
 // #[lamellar_impl::AmLocalDataRT(Clone)]
 // pub(crate) struct ForEachAsyncStatic<I, F, Fut>
 // where
-//     I: LocalIterator,
+//     I: DistributedIterator,
 //     F: Fn(I::Item) -> Fut + SyncSend + Clone,
 //     Fut: Future<Output = ()> + Send,
 // {
@@ -360,7 +365,7 @@ where
 
 // impl<I, F, Fut> std::fmt::Debug for ForEachAsyncStatic<I, F, Fut>
 // where
-//     I: LocalIterator,
+//     I: DistributedIterator,
 //     F: Fn(I::Item) -> Fut + SyncSend + Clone,
 //     Fut: Future<Output = ()> + Send,
 // {
@@ -376,7 +381,7 @@ where
 // #[lamellar_impl::rt_am_local]
 // impl<I, F, Fut> LamellarAm for ForEachAsyncStatic<I, F, Fut>
 // where
-//     I: LocalIterator + 'static,
+//     I: DistributedIterator + 'static,
 //     F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
 //     Fut: Future<Output = ()> + Send + 'static,
 // {
@@ -391,7 +396,7 @@ where
 // #[lamellar_impl::AmLocalDataRT(Clone, Debug)]
 // pub(crate) struct ForEachAsyncDynamic<I, F, Fut>
 // where
-//     I: LocalIterator,
+//     I: DistributedIterator,
 //     F: Fn(I::Item) -> Fut + SyncSend + Clone,
 //     Fut: Future<Output = ()> + Send,
 // {
@@ -404,7 +409,7 @@ where
 // #[lamellar_impl::rt_am_local]
 // impl<I, F, Fut> LamellarAm for ForEachAsyncDynamic<I, F, Fut>
 // where
-//     I: LocalIterator + 'static,
+//     I: DistributedIterator + 'static,
 //     F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
 //     Fut: Future<Output = ()> + Send + 'static,
 // {
@@ -427,7 +432,7 @@ where
 // #[lamellar_impl::AmLocalDataRT(Clone, Debug)]
 // pub(crate) struct ForEachAsyncChunk<I, F, Fut>
 // where
-//     I: LocalIterator,
+//     I: DistributedIterator,
 //     F: Fn(I::Item) -> Fut + SyncSend + Clone,
 //     Fut: Future<Output = ()> + Send,
 // {
@@ -440,7 +445,7 @@ where
 // #[lamellar_impl::rt_am_local]
 // impl<I, F, Fut> LamellarAm for ForEachAsyncChunk<I, F, Fut>
 // where
-//     I: LocalIterator + 'static,
+//     I: DistributedIterator + 'static,
 //     F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
 //     Fut: Future<Output = ()> + Send + 'static,
 // {
@@ -463,7 +468,7 @@ where
 // #[lamellar_impl::AmLocalDataRT(Clone, Debug)]
 // pub(crate) struct ForEachAsyncWorkStealing<I, F, Fut>
 // where
-//     I: LocalIterator,
+//     I: DistributedIterator,
 //     F: Fn(I::Item) -> Fut + SyncSend + Clone,
 //     Fut: Future<Output = ()> + Send,
 // {
@@ -475,7 +480,7 @@ where
 // #[lamellar_impl::rt_am_local]
 // impl<I, F, Fut> LamellarAm for ForEachAsyncWorkStealing<I, F, Fut>
 // where
-//     I: LocalIterator + 'static,
+//     I: DistributedIterator + 'static,
 //     F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
 //     Fut: Future<Output = ()> + Send + 'static,
 // {

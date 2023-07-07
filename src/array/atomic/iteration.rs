@@ -248,7 +248,7 @@ impl<T: Dist> LamellarArrayMutIterators<T> for AtomicArray<T> {
 //     where
 //         I: DistributedIterator + 'static,
 //         I::Item: Dist + ArrayOps,
-//         A: From<UnsafeArray<I::Item>> + SyncSend + Clone + 'static,
+//         A: for<'a>  TeamFrom<(&'a Vec<I::Item>,Distribution)> + SyncSend + Clone + 'static,
 //     {
 //         self.data.collect(iter, d)
 //     }
@@ -324,7 +324,7 @@ impl<T: Dist> LamellarArrayMutIterators<T> for AtomicArray<T> {
 //     // where
 //     //     I: LocalIterator + 'static,
 //     //     I::Item: Dist + ArrayOps,
-//     //     A: From<UnsafeArray<I::Item>> + SyncSend + Clone + 'static,
+//     //     A: for<'a>  TeamFrom<(&'a Vec<I::Item>,Distribution)> + SyncSend + Clone + 'static,
 //     // {
 //     //     self.data.local_collect(iter, d)
 //     // }

@@ -30,7 +30,7 @@ where
 //     pub fn for_each_async<G, Fut>(&self, op: G)
 //     where
 //         G: Fn(B) -> Fut + SyncSend  + Clone + 'static,
-//         Fut: Future<Output = ()> + SyncSend + Clone + 'static,
+//         Fut: Future<Output = ()> + Send + 'static,
 //     {
 //         self.iter.array().for_each_async(self, op);
 //     }

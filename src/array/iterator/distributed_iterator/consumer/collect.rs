@@ -1,6 +1,6 @@
 use crate::array::iterator::consumer::*;
 use crate::array::iterator::IterRequest;
-use crate::array::iterator::local_iterator::{LocalIterator,Monotonic};
+use crate::array::iterator::distributed_iterator::{DistributedIterator,Monotonic};
 use crate::array::iterator::one_sided_iterator::OneSidedIterator;
 use crate::array::{LamellarArray,Distribution,TeamFrom,TeamInto};
 use crate::array::operations::ArrayOps; 
@@ -23,7 +23,7 @@ pub struct Collect<I,A>{
 
 impl<I,A> IterConsumer for Collect<I,A> 
 where
-    I: LocalIterator,
+    I: DistributedIterator,
     I::Item: Dist + ArrayOps,
     A: for<'a> TeamFrom<(&'a Vec<I::Item>,Distribution)> + SyncSend  + Clone +  'static,{
     type AmOutput = Vec<(usize,I::Item)>;
@@ -32,7 +32,6 @@ where
     fn init(&self, start: usize, cnt: usize) -> Self{
         self.init(start,cnt)
     }
-   
     fn next(&mut self) -> Option<Self::Item> {
         self.next()
     }
@@ -43,7 +42,7 @@ where
         })
     }
     fn create_handle(self, team: Pin<Arc<LamellarTeamRT>>, reqs: Vec<Box<dyn LamellarRequest<Output = Self::AmOutput>>>) -> Box<dyn IterRequest<Output = Self::Output>> {
-        Box::new(LocalIterCollectHandle {
+        Box::new(DistIterCollectHandle {
             reqs,
             distribution: self.distribution,
             team,
@@ -57,7 +56,7 @@ where
 
 // impl<I,A> MonotonicIterConsumer for Collect<I,A> 
 // where
-//     I: LocalIterator,
+//     I: DistributedIterator,
 //     I::Item: Dist + ArrayOps,
 //     A: for<'a> TeamFrom<(&'a Vec<I::Item>,Distribution)> + SyncSend  + Clone +  'static,{
 //     fn monotonic<J: IterConsumer>(&self) -> J {
@@ -68,7 +67,6 @@ where
 //         }
 //     }
 // }
-   
 
 // #[derive(Clone,Debug)]
 // pub struct CollectAsync<I,A,B>{
@@ -79,7 +77,7 @@ where
 
 // impl<I,A,B> IterConsumer for CollectAsync<I,A,B> 
 // where
-//     I: LocalIterator,
+//     I: DistributedIterator,
 //     I::Item: Future<Output = B> + SyncSend + Clone + 'static,
 //     B: Dist + ArrayOps,
 //     A: From<UnsafeArray<B>> + SyncSend + Clone + 'static,{
@@ -105,14 +103,14 @@ where
 // }
 
 #[doc(hidden)]
-pub struct LocalIterCollectHandle<T: Dist + ArrayOps, A: for<'a>  TeamFrom<(&'a Vec<T>,Distribution)> + SyncSend> {
+pub struct DistIterCollectHandle<T: Dist + ArrayOps, A: for<'a>  TeamFrom<(&'a Vec<T>,Distribution)> + SyncSend> {
     pub(crate) reqs: Vec<Box<dyn LamellarRequest<Output = Vec<(usize,T)>>>>,
     pub(crate) distribution: Distribution,
     pub(crate) team: Pin<Arc<LamellarTeamRT>>,
     pub(crate) _phantom: PhantomData<A>,
 }
 
-impl<T: Dist + ArrayOps, A: for<'a>  TeamFrom<(&'a Vec<T>,Distribution)>  + SyncSend> LocalIterCollectHandle<T, A> {
+impl<T: Dist + ArrayOps, A: for<'a>  TeamFrom<(&'a Vec<T>,Distribution)>  + SyncSend> DistIterCollectHandle<T, A> {
     fn create_array(&self, local_vals: &Vec<T>) -> A {
         let input = (local_vals, self.distribution);
         input.team_into(&self.team)
@@ -120,7 +118,7 @@ impl<T: Dist + ArrayOps, A: for<'a>  TeamFrom<(&'a Vec<T>,Distribution)>  + Sync
 }
 #[async_trait]
 impl<T: Dist + ArrayOps, A: for<'a>  TeamFrom<(&'a Vec<T>,Distribution)> + SyncSend> IterRequest
-    for LocalIterCollectHandle<T, A>
+    for DistIterCollectHandle<T, A>
 {
     type Output = A;
     async fn into_future(mut self: Box<Self>) -> Self::Output {
@@ -157,11 +155,11 @@ pub(crate) struct CollectAm<I,A>
 #[lamellar_impl::rt_am_local]
 impl<I,A> LamellarAm for CollectAm<I,A>
 where
-    I: LocalIterator,
+    I: DistributedIterator,
     I::Item: Dist + ArrayOps,
     A: for<'a> TeamFrom<(&'a Vec<I::Item>,Distribution)> + SyncSend  + Clone +  'static,
 {
-    async fn exec(&self) -> Vec<I::Item>  {
+    async fn exec(&self) -> Vec<I::Item> {
         let mut iter = self.schedule.init_iter(self.iter.clone());
         iter.collect::<Vec<_>>()
     }
@@ -170,7 +168,7 @@ where
 // #[lamellar_impl::AmLocalDataRT(Clone)]
 // pub(crate) struct CollectAsyncAm<I>
 // where
-//     I: LocalIterator,
+//     I: DistributedIterator,
 // {
 //     pub(crate) iter: I,
 //     pub(crate) schedule: IterSchedule,
@@ -180,7 +178,7 @@ where
 // #[lamellar_impl::rt_am_local]
 // impl<I> LamellarAm for CollectAsyncAm<I>
 // where
-//     I: LocalIterator + 'static,
+//     I: DistributedIterator + 'static,
 //     I::Item: Sync,
 // {
 //     async fn exec(&self) -> Vec<(usize,I::Item)> {
