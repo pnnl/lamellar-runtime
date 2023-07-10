@@ -44,6 +44,7 @@ use std::ops::{
 pub enum AtomicElement<T: Dist> {
     NativeAtomicElement(NativeAtomicElement<T>),
     GenericAtomicElement(GenericAtomicElement<T>),
+    LocalGenericAtomicElement(LocalGenericAtomicElement<T>),
 }
 
 impl<T: Dist> AtomicElement<T> {
@@ -69,6 +70,7 @@ impl<T: Dist> AtomicElement<T> {
         match self {
             AtomicElement::NativeAtomicElement(array) => array.load(),
             AtomicElement::GenericAtomicElement(array) => array.load(),
+            AtomicElement::LocalGenericAtomicElement(array) = array.load(),
         }
     }
 
@@ -94,6 +96,7 @@ impl<T: Dist> AtomicElement<T> {
         match self {
             AtomicElement::NativeAtomicElement(array) => array.store(val),
             AtomicElement::GenericAtomicElement(array) => array.store(val),
+            AtomicElement::LocalGenericAtomicElement(array) = array.
         }
     }
 
@@ -119,6 +122,7 @@ impl<T: Dist> AtomicElement<T> {
         match self {
             AtomicElement::NativeAtomicElement(array) => array.swap(val),
             AtomicElement::GenericAtomicElement(array) => array.swap(val),
+            AtomicElement::LocalGenericAtomicElement(array) = array.
         }
     }
 }
@@ -146,6 +150,7 @@ impl<T: ElementArithmeticOps> AtomicElement<T> {
         match self {
             AtomicElement::NativeAtomicElement(array) => array.fetch_add(val),
             AtomicElement::GenericAtomicElement(array) => array.fetch_add(val),
+            AtomicElement::LocalGenericAtomicElement(array) = array.
         }
     }
     /// Atomically subtracts `val` from the current value, returning the previous value
@@ -170,6 +175,7 @@ impl<T: ElementArithmeticOps> AtomicElement<T> {
         match self {
             AtomicElement::NativeAtomicElement(array) => array.fetch_sub(val),
             AtomicElement::GenericAtomicElement(array) => array.fetch_sub(val),
+            AtomicElement::LocalGenericAtomicElement(array) = array.
         }
     }
 
@@ -195,6 +201,7 @@ impl<T: ElementArithmeticOps> AtomicElement<T> {
         match self {
             AtomicElement::NativeAtomicElement(array) => array.fetch_mul(val),
             AtomicElement::GenericAtomicElement(array) => array.fetch_mul(val),
+            AtomicElement::LocalGenericAtomicElement(array) = array.
         }
     }
 
@@ -220,6 +227,7 @@ impl<T: ElementArithmeticOps> AtomicElement<T> {
         match self {
             AtomicElement::NativeAtomicElement(array) => array.fetch_div(val),
             AtomicElement::GenericAtomicElement(array) => array.fetch_div(val),
+            AtomicElement::LocalGenericAtomicElement(array) = array.
         }
     }
 }
@@ -246,6 +254,7 @@ impl<T: Dist + std::cmp::Eq> AtomicElement<T> {
         match self {
             AtomicElement::NativeAtomicElement(array) => array.compare_exchange(current, new),
             AtomicElement::GenericAtomicElement(array) => array.compare_exchange(current, new),
+            AtomicElement::LocalGenericAtomicElement(array) = array.
         }
     }
 }
@@ -284,6 +293,7 @@ impl<T: Dist + std::cmp::PartialEq + std::cmp::PartialOrd + std::ops::Sub<Output
             AtomicElement::GenericAtomicElement(array) => {
                 array.compare_exchange_epsilon(current, new, eps)
             }
+            AtomicElement::LocalGenericAtomicElement(array) = array.
         }
     }
 }
@@ -307,6 +317,7 @@ impl<T: ElementBitWiseOps + 'static> AtomicElement<T> {
         match self {
             AtomicElement::NativeAtomicElement(array) => array.fetch_and(val),
             AtomicElement::GenericAtomicElement(array) => array.fetch_and(val),
+            AtomicElement::LocalGenericAtomicElement(array) = array.
         }
     }
     /// Atomically performs a bitwise and of `val` and the current value, returning the previous value
@@ -327,6 +338,7 @@ impl<T: ElementBitWiseOps + 'static> AtomicElement<T> {
         match self {
             AtomicElement::NativeAtomicElement(array) => array.fetch_or(val),
             AtomicElement::GenericAtomicElement(array) => array.fetch_or(val),
+            AtomicElement::LocalGenericAtomicElement(array) = array.
         }
     }
 }
@@ -350,6 +362,7 @@ impl<T: ElementShiftOps + 'static> AtomicElement<T> {
         match self {
             AtomicElement::NativeAtomicElement(array) => array.fetch_shl(val),
             AtomicElement::GenericAtomicElement(array) => array.fetch_shl(val),
+            AtomicElement::LocalGenericAtomicElement(array) = array.
         }
     }
     /// Atomically performs a right shift of `val` bits with the current value, returning the previous value
@@ -370,6 +383,7 @@ impl<T: ElementShiftOps + 'static> AtomicElement<T> {
         match self {
             AtomicElement::NativeAtomicElement(array) => array.fetch_shr(val),
             AtomicElement::GenericAtomicElement(array) => array.fetch_shr(val),
+            AtomicElement::LocalGenericAtomicElement(array) = array.
         }
     }
 }
@@ -379,6 +393,7 @@ impl<T: Dist + ElementArithmeticOps> AddAssign<T> for AtomicElement<T> {
         match self {
             AtomicElement::NativeAtomicElement(array) => array.add_assign(val),
             AtomicElement::GenericAtomicElement(array) => array.add_assign(val),
+            AtomicElement::LocalGenericAtomicElement(array) = array.
         }
     }
 }
@@ -388,6 +403,7 @@ impl<T: Dist + ElementArithmeticOps> SubAssign<T> for AtomicElement<T> {
         match self {
             AtomicElement::NativeAtomicElement(array) => array.sub_assign(val),
             AtomicElement::GenericAtomicElement(array) => array.sub_assign(val),
+            AtomicElement::LocalGenericAtomicElement(array) = array.
         }
     }
 }
@@ -397,6 +413,7 @@ impl<T: Dist + ElementArithmeticOps> MulAssign<T> for AtomicElement<T> {
         match self {
             AtomicElement::NativeAtomicElement(array) => array.mul_assign(val),
             AtomicElement::GenericAtomicElement(array) => array.mul_assign(val),
+            AtomicElement::LocalGenericAtomicElement(array) = array.
         }
     }
 }
@@ -406,6 +423,7 @@ impl<T: Dist + ElementArithmeticOps> DivAssign<T> for AtomicElement<T> {
         match self {
             AtomicElement::NativeAtomicElement(array) => array.div_assign(val),
             AtomicElement::GenericAtomicElement(array) => array.div_assign(val),
+            AtomicElement::LocalGenericAtomicElement(array) = array.
         }
     }
 }
@@ -415,6 +433,7 @@ impl<T: Dist + ElementArithmeticOps> RemAssign<T> for AtomicElement<T> {
         match self {
             AtomicElement::NativeAtomicElement(array) => array.rem_assign(val),
             AtomicElement::GenericAtomicElement(array) => array.rem_assign(val),
+            AtomicElement::LocalGenericAtomicElement(array) = array.
         }
     }
 }
@@ -424,6 +443,7 @@ impl<T: Dist + ElementBitWiseOps> BitAndAssign<T> for AtomicElement<T> {
         match self {
             AtomicElement::NativeAtomicElement(array) => array.bitand_assign(val),
             AtomicElement::GenericAtomicElement(array) => array.bitand_assign(val),
+            AtomicElement::LocalGenericAtomicElement(array) = array.
         }
     }
 }
@@ -433,6 +453,7 @@ impl<T: Dist + ElementBitWiseOps> BitOrAssign<T> for AtomicElement<T> {
         match self {
             AtomicElement::NativeAtomicElement(array) => array.bitor_assign(val),
             AtomicElement::GenericAtomicElement(array) => array.bitor_assign(val),
+            AtomicElement::LocalGenericAtomicElement(array) = array.
         }
     }
 }
@@ -442,6 +463,7 @@ impl<T: Dist + ElementBitWiseOps> BitXorAssign<T> for AtomicElement<T> {
         match self {
             AtomicElement::NativeAtomicElement(array) => array.bitxor_assign(val),
             AtomicElement::GenericAtomicElement(array) => array.bitxor_assign(val),
+            AtomicElement::LocalGenericAtomicElement(array) = array.
         }
     }
 }
@@ -451,6 +473,7 @@ impl<T: Dist + ElementShiftOps> ShlAssign<T> for AtomicElement<T> {
         match self {
             AtomicElement::NativeAtomicElement(array) => array.shl_assign(val),
             AtomicElement::GenericAtomicElement(array) => array.shl_assign(val),
+            AtomicElement::LocalGenericAtomicElement(array) = array.
         }
     }
 }
@@ -460,6 +483,7 @@ impl<T: Dist + ElementShiftOps> ShrAssign<T> for AtomicElement<T> {
         match self {
             AtomicElement::NativeAtomicElement(array) => array.shr_assign(val),
             AtomicElement::GenericAtomicElement(array) => array.shr_assign(val),
+            AtomicElement::LocalGenericAtomicElement(array) = array.
         }
     }
 }
@@ -469,7 +493,14 @@ impl<T: Dist + std::fmt::Debug> std::fmt::Debug for AtomicElement<T> {
         match self {
             AtomicElement::NativeAtomicElement(array) => array.fmt(f),
             AtomicElement::GenericAtomicElement(array) => array.fmt(f),
+            AtomicElement::LocalGenericAtomicElement(array) = array.
         }
+    }
+}
+
+impl <T: Dist + std::fmt::Debug + std::iter::Sum> std::iter::Sum<AtomicElement<T>> for T {
+    fn sum<I>(iter: I) -> Self{
+        iter.map(|e| e.load()).sum()
     }
 }
 

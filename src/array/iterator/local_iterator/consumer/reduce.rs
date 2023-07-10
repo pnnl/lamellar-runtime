@@ -138,13 +138,15 @@ where
 {
     async fn exec(&self) -> Option<I::Item> {
         let mut iter = self.schedule.init_iter(self.iter.clone());
-        let mut accum = iter.next();
-        while let Some(elem) = iter.next() {
-            accum = Some((self.op)(accum.unwrap(), elem));
-            // cnt += 1;
+        match iter.next(){
+            Some(mut accum) =>{
+                while let Some(elem) = iter.next() {
+                    accum = (self.op)(accum, elem);
+                }
+                Some(accum)
+            }
+            None => None,
         }
-        accum
-        // println!("thread {:?} elems processed {:?}",std::thread::current().id(), cnt);
     }
 }
 

@@ -279,14 +279,14 @@ impl<T: Dist> LamellarArrayMutIterators<T> for AtomicArray<T> {
 //         self.data.local_subarray_index_from_local(index, chunk_size)
 //     }
 
-//     fn local_for_each<I, F>(&self, iter: &I, op: F) -> Pin<Box<dyn Future<Output = ()> + Send>>
+//     fn for_each<I, F>(&self, iter: &I, op: F) -> Pin<Box<dyn Future<Output = ()> + Send>>
 //     where
 //         I: LocalIterator + 'static,
 //         F: Fn(I::Item) + SyncSend + Clone + 'static,
 //     {
-//         self.data.local_for_each(iter, op)
+//         self.data.for_each(iter, op)
 //     }
-//     fn local_for_each_with_schedule<I, F>(
+//     fn for_each_with_schedule<I, F>(
 //         &self,
 //         sched: Schedule,
 //         iter: &I,
@@ -296,17 +296,17 @@ impl<T: Dist> LamellarArrayMutIterators<T> for AtomicArray<T> {
 //         I: LocalIterator + 'static,
 //         F: Fn(I::Item) + SyncSend + Clone + 'static,
 //     {
-//         self.data.local_for_each_with_schedule(sched, iter, op)
+//         self.data.for_each_with_schedule(sched, iter, op)
 //     }
-//     fn local_for_each_async<I, F, Fut>(&self, iter: &I, op: F) -> Pin<Box<dyn Future<Output = ()> + Send>>
+//     fn for_each_async<I, F, Fut>(&self, iter: &I, op: F) -> Pin<Box<dyn Future<Output = ()> + Send>>
 //     where
 //         I: LocalIterator + 'static,
 //         F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
 //         Fut: Future<Output = ()> + Send + 'static,
 //     {
-//         self.data.local_for_each_async(iter, op)
+//         self.data.for_each_async(iter, op)
 //     }
-//     fn local_for_each_async_with_schedule<I, F, Fut>(
+//     fn for_each_async_with_schedule<I, F, Fut>(
 //         &self,
 //         sched: Schedule,
 //         iter: &I,
@@ -317,18 +317,18 @@ impl<T: Dist> LamellarArrayMutIterators<T> for AtomicArray<T> {
 //         F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
 //         Fut: Future<Output = ()> + Send + 'static,
 //     {
-//         self.data.local_for_each_async_with_schedule(sched, iter, op)
+//         self.data.for_each_async_with_schedule(sched, iter, op)
 //     }
 
-//     // fn local_collect<I, A>(&self, iter: &I, d: Distribution) -> Pin<Box<dyn Future<Output = A> + Send>>
+//     // fn collect<I, A>(&self, iter: &I, d: Distribution) -> Pin<Box<dyn Future<Output = A> + Send>>
 //     // where
 //     //     I: LocalIterator + 'static,
 //     //     I::Item: Dist + ArrayOps,
 //     //     A: for<'a>  TeamFrom<(&'a Vec<I::Item>,Distribution)> + SyncSend + Clone + 'static,
 //     // {
-//     //     self.data.local_collect(iter, d)
+//     //     self.data.collect(iter, d)
 //     // }
-//     // fn local_collect_async<I, A, B>(
+//     // fn collect_async<I, A, B>(
 //     //     &self,
 //     //     iter: &I,
 //     //     d: Distribution,
@@ -339,7 +339,7 @@ impl<T: Dist> LamellarArrayMutIterators<T> for AtomicArray<T> {
 //     //     B: Dist + ArrayOps,
 //     //     A: From<UnsafeArray<B>> + SyncSend  + Clone +  'static,
 //     // {
-//     //     self.data.local_collect_async(iter, d)
+//     //     self.data.collect_async(iter, d)
 //     // }
 
 //     fn team(&self) -> Pin<Arc<LamellarTeamRT>> {

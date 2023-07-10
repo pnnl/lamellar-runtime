@@ -807,3 +807,200 @@ impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static> LamellarArrayCompa
         self.reduce("min")
     }
 }
+
+
+#[doc(hidden)]
+pub struct LocalGenericAtomicElement<T> {
+    val: Mutex<T>,
+}
+
+
+impl<T: Dist> From<LocalGenericAtomicElement<T>> for AtomicElement<T> {
+    fn from(element: LocalGenericAtomicElement<T>) -> AtomicElement<T> {
+        AtomicElement::LocalGenericAtomicElement(element)
+    }
+}
+
+impl<T: Dist> LocalGenericAtomicElement<T> {
+    pub fn load(&self) -> T {
+        *self.val.lock()
+    }
+    pub fn store(&self, val: T) {
+        *self.val.lock() = val
+    }
+    pub fn swap(&self, val: T) -> T {
+        let old = *self.val.lock();
+        *self.val.lock() = val;
+        old
+    }
+}
+impl<T: ElementArithmeticOps> LocalGenericAtomicElement<T> {
+    pub fn fetch_add(&self, val: T) -> T {
+            let old = *self.val.lock();
+            *self.val.lock() += val;
+            old
+    }
+    pub fn fetch_sub(&self, val: T) -> T {
+            let old = *self.val.lock();
+            *self.val.lock() -= val;
+            old
+    }
+    pub fn fetch_mul(&self, val: T) -> T {
+        
+            let old = *self.val.lock();
+            *self.val.lock() *= val;
+            old
+    }
+    pub fn fetch_div(&self, val: T) -> T {
+        
+            let old = *self.val.lock();
+            *self.val.lock() /= val;
+            old
+    }
+    pub fn fetch_rem(&self, val: T) -> T {
+        
+            let old = *self.val.lock();
+            *self.val.lock() %= val;
+            old
+    }
+}
+
+impl<T: Dist + std::cmp::Eq> LocalGenericAtomicElement<T> {
+    pub fn compare_exchange(&self, current: T, new: T) -> Result<T, T> {
+        let _lock = self.array.lock_index(self.local_index);
+        let current_val = unsafe { *self.val.lock() };
+        if current_val == current {
+            unsafe {
+                *self.val.lock() = new;
+            }
+            Ok(current_val)
+        } else {
+            Err(current_val)
+        
+    }
+}
+impl<T: Dist + std::cmp::PartialEq + std::cmp::PartialOrd + std::ops::Sub<Output = T>>
+    LocalGenericAtomicElement<T>
+{
+    pub fn compare_exchange_epsilon(&self, current: T, new: T, eps: T) -> Result<T, T> {
+        let _lock = self.array.lock_index(self.local_index);
+        let current_val = unsafe { *self.val.lock() };
+        let same = if current_val > current {
+            current_val - current < eps
+        } else {
+            current - current_val < eps
+        };
+        if same {
+            unsafe {
+                *self.val.lock() = new;
+            }
+            Ok(current_val)
+        } else {
+            Err(current_val)
+        
+    }
+}
+
+impl<T: ElementBitWiseOps + 'static> LocalGenericAtomicElement<T> {
+    pub fn fetch_and(&self, val: T) -> T {
+        
+            let old = *self.val.lock();
+            *self.val.lock() &= val;
+            old
+    }
+    pub fn fetch_or(&self, val: T) -> T {
+        
+            let old = *self.val.lock();
+            *self.val.lock() |= val;
+            ol\
+    }
+    pub fn fetch_xor(&self, val: T) -> T {
+        
+            let old = *self.val.lock();
+            *self.val.lock() ^= val;
+            old
+    }
+}
+
+impl<T: ElementShiftOps + 'static> LocalGenericAtomicElement<T> {
+    pub fn fetch_shl(&self, val: T) -> T {
+        
+            let old = *self.val.lock();
+            *self.val.lock() <<= val;
+            old
+    }
+    pub fn fetch_shr(&self, val: T) -> T {
+        
+            let old = *self.val.lock();
+            *self.val.lock() >>= val;
+            old
+    }
+}
+
+impl<T: Dist + ElementArithmeticOps> AddAssign<T> for LocalGenericAtomicElement<T> {
+    fn add_assign(&mut self, val: T) {
+        // self.add(val)
+         *self.val.lock() += val 
+    }
+}
+
+impl<T: Dist + ElementArithmeticOps> SubAssign<T> for LocalGenericAtomicElement<T> {
+    fn sub_assign(&mut self, val: T) {
+         *self.val.lock() -= val 
+    }
+}
+
+impl<T: Dist + ElementArithmeticOps> MulAssign<T> for LocalGenericAtomicElement<T> {
+    fn mul_assign(&mut self, val: T) {
+         *self.val.lock() *= val 
+    }
+}
+
+impl<T: Dist + ElementArithmeticOps> DivAssign<T> for LocalGenericAtomicElement<T> {
+    fn div_assign(&mut self, val: T) {
+         *self.val.lock() /= val 
+    }
+}
+
+impl<T: Dist + ElementArithmeticOps> RemAssign<T> for LocalGenericAtomicElement<T> {
+    fn rem_assign(&mut self, val: T) {
+         *self.val.lock() %= val 
+    }
+}
+
+impl<T: Dist + ElementBitWiseOps> BitAndAssign<T> for LocalGenericAtomicElement<T> {
+    fn bitand_assign(&mut self, val: T) {
+         *self.val.lock() &= val 
+    }
+}
+
+impl<T: Dist + ElementBitWiseOps> BitOrAssign<T> for LocalGenericAtomicElement<T> {
+    fn bitor_assign(&mut self, val: T) {
+         *self.val.lock() |= val 
+    }
+}
+
+impl<T: Dist + ElementBitWiseOps> BitXorAssign<T> for LocalGenericAtomicElement<T> {
+    fn bitxor_assign(&mut self, val: T) {
+         *self.val.lock() ^= val 
+    }
+}
+
+impl<T: Dist + ElementShiftOps> ShlAssign<T> for LocalGenericAtomicElement<T> {
+    fn shl_assign(&mut self, val: T) {
+         *self.val.lock().shl_assign(val) 
+    }
+}
+
+impl<T: Dist + ElementShiftOps> ShrAssign<T> for LocalGenericAtomicElement<T> {
+    fn shr_assign(&mut self, val: T) {
+         *self.val.lock().shr_assign(val) 
+    }
+}
+
+impl<T: Dist + std::fmt::Debug> std::fmt::Debug for LocalGenericAtomicElement<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let current_val = unsafe { *self.val.lock() };
+        write!(f, "{current_val:?}")
+    }
+}
