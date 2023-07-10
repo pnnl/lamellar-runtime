@@ -102,4 +102,10 @@ fn main() {
     count_with_schedule(Schedule::Guided, &block_array, thread_cnts.clone());
     count_with_schedule(Schedule::WorkStealing, &block_array, thread_cnts.clone());
 
+    sum_with_schedule(Schedule::Static, &block_array, thread_cnts.clone());
+    sum_with_schedule(Schedule::Dynamic, &block_array, thread_cnts.clone());
+    sum_with_schedule(Schedule::Chunk(10), &block_array, thread_cnts.clone());
+    sum_with_schedule(Schedule::Guided, &block_array, thread_cnts.clone());
+    sum_with_schedule(Schedule::WorkStealing, &block_array, thread_cnts.clone());
+
 }
