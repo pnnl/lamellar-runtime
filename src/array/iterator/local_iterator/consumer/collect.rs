@@ -30,11 +30,15 @@ where
     type Output = A;
     type Item = (usize,I::Item);
     fn init(&self, start: usize, cnt: usize) -> Self{
-        self.init(start,cnt)
+        Collect{
+            iter: self.iter.init(start,cnt),
+            distribution: self.distribution.clone(),
+            _phantom: self._phantom.clone(),
+        }
     }
    
     fn next(&mut self) -> Option<Self::Item> {
-        self.next()
+        self.iter.next()
     }
     fn into_am(&self, schedule: IterSchedule) -> LamellarArcLocalAm {
         Arc::new(CollectAm{
@@ -80,7 +84,7 @@ where
 // impl<I,A,B> IterConsumer for CollectAsync<I,A,B> 
 // where
 //     I: LocalIterator,
-//     I::Item: Future<Output = B> + SyncSend + Clone + 'static,
+//    I::Item: Future<Output = B> + Send  + 'static,
 //     B: Dist + ArrayOps,
 //     A: From<UnsafeArray<B>> + SyncSend + Clone + 'static,{
 //     type AmOutput = Vec<(usize,B)>;

@@ -10,6 +10,7 @@ use crate::lamellar_request::LamellarRequest;
 use crate::lamellar_team::LamellarTeamRT;
 
 use async_trait::async_trait;
+use futures::Future;
 use core::marker::PhantomData;
 use std::pin::Pin;
 use std::sync::Arc;
@@ -30,10 +31,14 @@ where
     type Output = A;
     type Item = (usize,I::Item);
     fn init(&self, start: usize, cnt: usize) -> Self{
-        self.init(start,cnt)
+        Collect{
+            iter: self.iter.init(start,cnt),
+            distribution: self.distribution.clone(),
+            _phantom: self._phantom.clone(),
+        }
     }
     fn next(&mut self) -> Option<Self::Item> {
-        self.next()
+        self.iter.next()
     }
     fn into_am(&self, schedule: IterSchedule) -> LamellarArcLocalAm {
         Arc::new(CollectAm{
@@ -54,53 +59,66 @@ where
     }
 }
 
-// impl<I,A> MonotonicIterConsumer for Collect<I,A> 
-// where
-//     I: DistributedIterator,
-//     I::Item: Dist + ArrayOps,
-//     A: for<'a> TeamFrom<(&'a Vec<I::Item>,Distribution)> + SyncSend  + Clone +  'static,{
-//     fn monotonic<J: IterConsumer>(&self) -> J {
-//         Collect{
-//             iter: self.iter.monotonic(),
-//             distribution: self.distribution.clone(),
-//             _phantom: self._phantom.clone(),
-//         }
-//     }
-// }
+#[derive(Debug)]
+pub struct CollectAsync<I,A,B>{
+    pub(crate) iter: Monotonic<I>,
+    pub(crate) distribution: Distribution,
+    pub(crate) _phantom: PhantomData<(A,B)>
+}
 
-// #[derive(Clone,Debug)]
-// pub struct CollectAsync<I,A,B>{
-//     pub(crate) iter: I,
-//     pub(crate) distribution: Distribution,
-//     pub(crate) _phantom: PhantomData<(A,B)>
-// }
+impl<I,A,B> IterConsumer for CollectAsync<I,A,B> 
+where
+    I: DistributedIterator,
+   I::Item: Future<Output = B> + Send  + 'static,
+    B: Dist + ArrayOps,
+    A: for<'a> TeamFrom<(&'a Vec<B>,Distribution)> + SyncSend  + Clone +  'static,
+    {
+    type AmOutput = Vec<(usize,B)>;
+    type Output = A;
+    type Item = (usize,I::Item);
+    fn init(&self, start: usize, cnt: usize) -> Self{
+        CollectAsync{
+            iter: self.iter.init(start,cnt),
+            distribution: self.distribution.clone(),
+            _phantom: self._phantom.clone(),
+        }
+    }
+    fn next(&mut self) -> Option<Self::Item> {
+        self.iter.next()
+    }
+    fn into_am(&self, schedule: IterSchedule) -> LamellarArcLocalAm {
+        Arc::new(CollectAsyncAm{
+            iter: self.clone(),
+            schedule
+        })
+    }
+    fn create_handle(self, team: Pin<Arc<LamellarTeamRT>>, reqs: Vec<Box<dyn LamellarRequest<Output = Self::AmOutput>>>) -> Box<dyn IterRequest<Output = Self::Output>> {
+        Box::new(DistIterCollectHandle {
+            reqs,
+            distribution: self.distribution,
+            team,
+            _phantom: PhantomData,
+        })
+    }
+    fn max_elems(&self, in_elems: usize) -> usize{
+        self.iter.elems(in_elems)
+    }
+}
 
-// impl<I,A,B> IterConsumer for CollectAsync<I,A,B> 
-// where
-//     I: DistributedIterator,
-//     I::Item: Future<Output = B> + SyncSend + Clone + 'static,
-//     B: Dist + ArrayOps,
-//     A: From<UnsafeArray<B>> + SyncSend + Clone + 'static,{
-//     type AmOutput = Vec<(usize,B)>;
-//     type Output = A;
-//     fn into_am(self, schedule: IterSchedule) -> LamellarArcLocalAm {
-//         Arc::new(CollectAsyncAm{
-//             iter: self.iter,
-//             schedule
-//         })
-//     }
-//     fn create_handle(self, team: Pin<Arc<LamellarTeamRT>>, reqs: Vec<Box<dyn LamellarRequest<Output = Self::AmOutput>>>) -> Box<dyn IterRequest<Output = Self::Output>> {
-//         Box::new(LocalIterCollectHandle {
-//             reqs,
-//             distribution: self.distribution,
-//             team,
-//             _phantom: PhantomData,
-//         })
-//     }
-//     fn max_elems(&self, in_elems: usize) -> usize{
-//         self.iter.elems(in_elems)
-//     }
-// }
+impl<I,A,B> Clone for CollectAsync<I,A,B> 
+where
+    I: DistributedIterator,
+   I::Item: Future<Output = B> + Send  + 'static,
+    B: Dist + ArrayOps,
+    A: for<'a> TeamFrom<(&'a Vec<B>,Distribution)> + SyncSend  + Clone +  'static,{
+    fn clone(&self) -> Self {
+        CollectAsync{
+            iter: self.iter.clone(),
+            distribution: self.distribution.clone(),
+            _phantom: self._phantom.clone(),
+        }
+    }
+}
 
 #[doc(hidden)]
 pub struct DistIterCollectHandle<T: Dist + ArrayOps, A: for<'a>  TeamFrom<(&'a Vec<T>,Distribution)> + SyncSend> {
@@ -165,31 +183,36 @@ where
     }
 }
 
-// #[lamellar_impl::AmLocalDataRT(Clone)]
-// pub(crate) struct CollectAsyncAm<I>
-// where
-//     I: DistributedIterator,
-// {
-//     pub(crate) iter: I,
-//     pub(crate) schedule: IterSchedule,
-// }
+#[lamellar_impl::AmLocalDataRT(Clone)]
+pub(crate) struct CollectAsyncAm<I, A, B>
+where
+    I: DistributedIterator,
+   I::Item: Future<Output = B> + Send  + 'static,
+    B: Dist + ArrayOps,
+    A: for<'a> TeamFrom<(&'a Vec<B>,Distribution)> + SyncSend  + Clone +  'static,
+{
+    pub(crate) iter: CollectAsync<I,A,B>,
+    pub(crate) schedule: IterSchedule,
+}
 
 
-// #[lamellar_impl::rt_am_local]
-// impl<I> LamellarAm for CollectAsyncAm<I>
-// where
-//     I: DistributedIterator + 'static,
-//     I::Item: Sync,
-// {
-//     async fn exec(&self) -> Vec<(usize,I::Item)> {
-//         let mut iter = self.schedule.monotonic_iter(self.iter.clone());
-//         let mut res = vec![];
-//         while let Some(elem) = iter.next(){
-//             res.push(elem.await);
-//         }
-//         res
-//     }
-// }
+#[lamellar_impl::rt_am_local]
+impl<I, A, B> LamellarAm for CollectAsyncAm<I, A, B>
+where
+    I: DistributedIterator,
+   I::Item: Future<Output = B> + Send  + 'static,
+    B: Dist + ArrayOps,
+    A: for<'a> TeamFrom<(&'a Vec<B>,Distribution)> + SyncSend  + Clone +  'static,
+{
+    async fn exec(&self) -> Vec<(usize,B)> {
+        let mut iter = self.schedule.init_iter(self.iter.clone());
+        let mut res = vec![];
+        while let Some((index,elem)) = iter.next(){
+            res.push((index,elem.await));
+        }
+        res
+    }
+}
 
 
 

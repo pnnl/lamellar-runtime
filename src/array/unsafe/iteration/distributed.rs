@@ -133,19 +133,45 @@ impl<T: Dist> DistIteratorLauncher for UnsafeArray<T> {
         }
     }
 
-    // fn collect_async<I, A, B>(
-    //     &self,
-    //     iter: &I,
-    //     d: Distribution,
-    // ) -> Pin<Box<dyn Future<Output = A> + Send>>
-    // where
-    //     I: DistributedIterator + 'static,
-    //     I::Item: Future<Output = B> + SyncSend + Clone + 'static,
-    //     B: Dist + ArrayOps,
-    //     A: From<UnsafeArray<B>> + SyncSend  + Clone +  'static,
-    // {
-        
-    // }
+    fn collect_async<I, A, B>(
+        &self,
+        iter: &I,
+        d: Distribution,
+    ) -> Pin<Box<dyn Future<Output = A> + Send>>
+    where
+        I: DistributedIterator,
+       I::Item: Future<Output = B> + Send  + 'static,
+        B: Dist + ArrayOps,
+        A: for<'a> TeamFrom<(&'a Vec<B>,Distribution)> + SyncSend  + Clone +  'static,
+    {
+        self.collect_async_with_schedule(Schedule::Static,iter,d)
+    }
+
+    fn collect_async_with_schedule<I, A, B>(
+        &self,
+        sched: Schedule,
+        iter: &I,
+        d: Distribution,
+    ) -> Pin<Box<dyn Future<Output = A> + Send>>
+    where
+        I: DistributedIterator,
+       I::Item: Future<Output = B> + Send  + 'static,
+        B: Dist + ArrayOps,
+        A: for<'a> TeamFrom<(&'a Vec<B>,Distribution)> + SyncSend  + Clone +  'static,
+    {
+        let collect = CollectAsync{
+            iter: iter.clone().monotonic(),
+            distribution: d,
+            _phantom: PhantomData,
+        };
+        match sched {
+            Schedule::Static => self.sched_static(collect ),
+            Schedule::Dynamic => self.sched_dynamic(collect),
+            Schedule::Chunk(size) => self.sched_chunk(collect, size),
+            Schedule::Guided => self.sched_guided(collect),
+            Schedule::WorkStealing => self.sched_work_stealing(collect),
+        }
+    }
 
     fn team(&self) -> Pin<Arc<LamellarTeamRT>> {
         self.inner.data.team.clone()

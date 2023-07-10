@@ -30,10 +30,16 @@ where
     type Output = ();
     type Item = I::Item;
     fn init(&self, start: usize, cnt: usize) -> Self{
-        self.init(start,cnt)
+        // println!("ForEach before init start {:?} cnt {:?}", start,cnt);
+        let iter = ForEach{
+            iter: self.iter.init(start,cnt),
+            op: self.op.clone(),
+        };
+        // println!("ForEach after init start {:?} cnt {:?}", start,cnt);
+        iter
     }
     fn next(&mut self) -> Option<Self::Item> {
-        self.next()
+        self.iter.next()
     }
     fn into_am(&self, schedule: IterSchedule) -> LamellarArcLocalAm{
         Arc::new(ForEachAm{
@@ -74,10 +80,13 @@ where
     type Output = ();
     type Item = I::Item;
     fn init(&self, start: usize, cnt: usize) -> Self{
-        self.init(start,cnt)
+        ForEachAsync{
+            iter: self.iter.init(start,cnt),
+            op: self.op.clone(),
+        }
     }
     fn next(&mut self) -> Option<Self::Item> {
-        self.next()
+        self.iter.next()
     }
     fn into_am(&self, schedule: IterSchedule) -> LamellarArcLocalAm{
         Arc::new(ForEachAsyncAm{

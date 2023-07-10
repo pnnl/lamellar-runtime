@@ -190,7 +190,7 @@ impl<T: Dist> LocalIteratorLauncher for UnsafeArray<T> {
     // fn local_collect_async<I, A, B>(&self, iter: &I, d: Distribution) -> Pin<Box<dyn Future<Output = A> + Send>>
     // where
     //     I:  LocalIterator + 'static,
-    //     I::Item: Future<Output = B> + SyncSend + Clone + 'static,
+    //    I::Item: Future<Output = B> + Send  + 'static,
     //     B: Dist + ArrayOps,
     //     A: From<UnsafeArray<B>> + SyncSend  + Clone +  'static,
     // {
@@ -200,7 +200,7 @@ impl<T: Dist> LocalIteratorLauncher for UnsafeArray<T> {
     // fn local_collect_async_with_schedule<I, A, B>(&self, sched: Schedule, iter: &I, d: Distribution) -> Pin<Box<dyn Future<Output = A> + Send>>
     // where
     //     I:  LocalIterator + 'static,
-    //     I::Item: Future<Output = B> + SyncSend + Clone + 'static,
+    //    I::Item: Future<Output = B> + Send  + 'static,
     //     B: Dist + ArrayOps,
     //     A: From<UnsafeArray<B>> + SyncSend  + Clone +  'static,
     // {

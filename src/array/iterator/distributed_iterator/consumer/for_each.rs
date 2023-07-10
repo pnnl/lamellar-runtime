@@ -30,10 +30,13 @@ where
     type Output = ();
     type Item = I::Item;
     fn init(&self, start: usize, cnt: usize) -> Self{
-        self.init(start,cnt)
+        ForEach{
+            iter: self.iter.init(start,cnt),
+            op: self.op.clone(),
+        }
     }
     fn next(&mut self) -> Option<Self::Item> {
-        self.next()
+        self.iter.next()
     }
     fn into_am(&self, schedule: IterSchedule) -> LamellarArcLocalAm{
         Arc::new(ForEachAm{
@@ -74,10 +77,13 @@ Fut: Future<Output = ()> + Send + 'static,
     type Output = ();
     type Item = I::Item;
     fn init(&self, start: usize, cnt: usize) -> Self{
-        self.init(start,cnt)
+        ForEachAsync{
+            iter: self.iter.init(start,cnt),
+            op: self.op.clone(),
+        }
     }
     fn next(&mut self) -> Option<Self::Item> {
-        self.next()
+        self.iter.next()
     }
     fn into_am(&self, schedule: IterSchedule) -> LamellarArcLocalAm{
 

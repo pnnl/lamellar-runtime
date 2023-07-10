@@ -125,8 +125,11 @@ pub trait CompareExchangeOps<T: ElementCompareEqOps>: private::LamellarArrayPriv
         current: T,
         new: T,
     ) -> Pin<Box<dyn Future<Output = Result<T, T>> + Send>> {
-        self.inner_array()
-            .initiate_result_op(new, index, ArrayOpCmd::CompareExchange(current))
+        let result = self.inner_array()
+            .initiate_batch_result_op_2(new, index, ArrayOpCmd2::CompareExchange(current), self.as_lamellar_byte_array());
+            Box::pin(async move{
+                result.await[0]
+            })
     }
 
     /// This call performs a batched vesion of the [compare_exchange][CompareExchangeOps::compare_exchange] function,
@@ -290,11 +293,14 @@ pub trait CompareExchangeEpsilonOps<T: ElementComparePartialEqOps>:
         new: T,
         eps: T,
     ) -> Pin<Box<dyn Future<Output = Result<T, T>> + Send>> {
-        self.inner_array().initiate_result_op(
+        let result = self.inner_array().initiate_batch_result_op_2(
             new,
             index,
-            ArrayOpCmd::CompareExchangeEps(current, eps),
-        )
+            ArrayOpCmd2::CompareExchangeEps(current, eps), 
+            self.as_lamellar_byte_array());
+        Box::pin(async move{
+            result.await[0]
+        })
     }
 
     /// This call performs a batched vesion of the [compare_exchange_epsilon][CompareExchangeEpsilonOps::compare_exchange_epsilon] function,

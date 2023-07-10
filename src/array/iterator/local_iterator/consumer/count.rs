@@ -22,10 +22,12 @@ where
     type Output = usize;
     type Item = I::Item;
     fn init(&self, start: usize, cnt: usize) -> Self{
-        self.init(start,cnt)
+        Count{
+            iter: self.iter.init(start,cnt),
+        }
     }
     fn next(&mut self) -> Option<Self::Item> {
-        self.next()
+        self.iter.next()
     }
     fn into_am(&self, schedule: IterSchedule) -> LamellarArcLocalAm{
         Arc::new(CountAm{

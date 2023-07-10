@@ -259,7 +259,7 @@ impl<T: Dist> LamellarArrayMutIterators<T> for AtomicArray<T> {
 //     ) -> Pin<Box<dyn Future<Output = A> + Send>>
 //     where
 //         I: DistributedIterator + 'static,
-//         I::Item: Future<Output = B> + SyncSend + Clone + 'static,
+//        I::Item: Future<Output = B> + Send  + 'static,
 //         B: Dist + ArrayOps,
 //         A: From<UnsafeArray<B>> + SyncSend  + Clone +  'static,
 //     {
@@ -335,7 +335,7 @@ impl<T: Dist> LamellarArrayMutIterators<T> for AtomicArray<T> {
 //     // ) -> Pin<Box<dyn Future<Output = A> + Send>>
 //     // where
 //     //     I: LocalIterator + 'static,
-//     //     I::Item: Future<Output = B> + SyncSend + Clone + 'static,
+//     //    I::Item: Future<Output = B> + Send  + 'static,
 //     //     B: Dist + ArrayOps,
 //     //     A: From<UnsafeArray<B>> + SyncSend  + Clone +  'static,
 //     // {

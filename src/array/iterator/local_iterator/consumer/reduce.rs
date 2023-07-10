@@ -27,10 +27,13 @@ where
     type Output = Option<I::Item>;
     type Item = I::Item;
     fn init(&self, start: usize, cnt: usize) -> Self{
-        self.init(start,cnt)
+        Reduce{
+            iter: self.iter.init(start,cnt),
+            op: self.op.clone(),
+        }
     }
     fn next(&mut self) -> Option<Self::Item> {
-        self.next()
+        self.iter.next()
     }
     fn into_am(&self, schedule: IterSchedule) -> LamellarArcLocalAm {
         Arc::new(ReduceAm {

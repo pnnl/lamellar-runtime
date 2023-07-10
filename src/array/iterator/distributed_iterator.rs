@@ -271,16 +271,28 @@ pub trait DistIteratorLauncher {
         I::Item: Dist + ArrayOps,
         A: for<'a>  TeamFrom<(&'a Vec<I::Item>,Distribution)> + SyncSend + Clone + 'static;
 
-    // fn collect_async<I, A, B>(
-    //     &self,
-    //     iter: &I,
-    //     d: Distribution,
-    // ) -> Pin<Box<dyn Future<Output = A> + Send>>
-    // where
-    //     I: DistributedIterator + 'static,
-    //     I::Item: Future<Output = B> + SyncSend + Clone + 'static,
-    //     B: Dist + ArrayOps,
-    //     A: From<UnsafeArray<B>> + SyncSend  + Clone +  'static;
+    fn collect_async<I, A, B>(
+        &self,
+        iter: &I,
+        d: Distribution,
+    ) -> Pin<Box<dyn Future<Output = A> + Send>>
+    where
+        I: DistributedIterator,
+       I::Item: Future<Output = B> + Send  + 'static,
+        B: Dist + ArrayOps,
+        A: for<'a> TeamFrom<(&'a Vec<B>,Distribution)> + SyncSend  + Clone +  'static;
+
+    fn collect_async_with_schedule<I, A, B>(
+            &self,
+            sched: Schedule,
+            iter: &I,
+            d: Distribution,
+        ) -> Pin<Box<dyn Future<Output = A> + Send>>
+        where
+            I: DistributedIterator,
+           I::Item: Future<Output = B> + Send  + 'static,
+            B: Dist + ArrayOps,
+            A: for<'a> TeamFrom<(&'a Vec<B>,Distribution)> + SyncSend  + Clone +  'static;
 
     #[doc(hidden)]
     fn global_index_from_local(&self, index: usize, chunk_size: usize) -> Option<usize>;
@@ -567,51 +579,51 @@ pub trait DistributedIterator: SyncSend + Clone + 'static {
         self.array().collect(self, d)
     }
 
-    // /// Collects the awaited elements of the distributed iterator into a new LamellarArray
-    // ///
-    // /// Calling this function invokes an implicit barrier across all PEs in the Array.
-    // ///
-    // /// Each element from the iterator must return a Future
-    // ///
-    // /// Each thread will only drive a single future at a time.
-    // ///
-    // /// This function returns a future which needs to be driven to completion to retrieve the new LamellarArray.
-    // /// Calling await on the future will invoke an implicit barrier (allocating the resources for a new array).
-    // ///
-    // /// Creating the new array potentially results in data transfers depending on the distribution mode and the fact there is no gaurantee
-    // /// that each PE will contribute an equal number of elements to the new array, and currently LamellarArrays
-    // /// distribute data across the PEs as evenly as possible.
-    // ///
-    // /// # Examples
-    // ///```
-    // /// use lamellar::array::prelude::*;
-    // /// // initialize a world and an atomic array
-    // /// let world = LamellarWorldBuilder::new().build();
-    // /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Block);
-    // ///
-    // /// // clone the array; this doesn't duplicate the underlying
-    // /// // data but it does create a second pointer that we can
-    // /// // discard when necessary
-    // /// let array_clone = array.clone();
-    // ///
-    // /// // run collect
-    // /// let req
-    // ///     = array_clone.dist_iter().map(
-    // ///         move |elem|  
-    // ///         array_clone
-    // ///             .fetch_add(elem.load(),1000))
-    // ///             .collect_async::<ReadOnlyArray<usize>,_>(Distribution::Cyclic);
-    // /// let _new_array = array.block_on(req);
-    // ///```
-    // fn collect_async<A, T>(&self, d: Distribution) -> Pin<Box<dyn Future<Output = A> + Send>>
-    // where
-    //     // &'static Self: DistributedIterator + 'static,
-    //     T: Dist + ArrayOps,
-    //     Self::Item: Future<Output = T> + SyncSend + Clone + 'static,
-    //     A: for<'a> TeamFrom<(&'a Vec<Self::Item>,Distribution)> + SyncSend + Clone + 'static,
-    // {
-    //     self.array().collect_async(self, d)
-    // }
+    /// Collects the awaited elements of the distributed iterator into a new LamellarArray
+    ///
+    /// Calling this function invokes an implicit barrier across all PEs in the Array.
+    ///
+    /// Each element from the iterator must return a Future
+    ///
+    /// Each thread will only drive a single future at a time.
+    ///
+    /// This function returns a future which needs to be driven to completion to retrieve the new LamellarArray.
+    /// Calling await on the future will invoke an implicit barrier (allocating the resources for a new array).
+    ///
+    /// Creating the new array potentially results in data transfers depending on the distribution mode and the fact there is no gaurantee
+    /// that each PE will contribute an equal number of elements to the new array, and currently LamellarArrays
+    /// distribute data across the PEs as evenly as possible.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    /// // initialize a world and an atomic array
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Block);
+    ///
+    /// // clone the array; this doesn't duplicate the underlying
+    /// // data but it does create a second pointer that we can
+    /// // discard when necessary
+    /// let array_clone = array.clone();
+    ///
+    /// // run collect
+    /// let req
+    ///     = array_clone.dist_iter().map(
+    ///         move |elem|  
+    ///         array_clone
+    ///             .fetch_add(elem.load(),1000))
+    ///             .collect_async::<ReadOnlyArray<usize>,_>(Distribution::Cyclic);
+    /// let _new_array = array.block_on(req);
+    ///```
+    fn collect_async<A, T>(&self, d: Distribution) -> Pin<Box<dyn Future<Output = A> + Send>>
+    where
+        // &'static Self: DistributedIterator + 'static,
+        T: Dist + ArrayOps,
+        Self::Item: Future<Output = T> + Send + 'static,
+        A: for<'a> TeamFrom<(&'a Vec<T>,Distribution)> + SyncSend + Clone + 'static,
+    {
+        self.array().collect_async(self, d)
+    }
 }
 
 /// An interface for dealing with distributed iterators which are indexable, meaning it returns an iterator of known length

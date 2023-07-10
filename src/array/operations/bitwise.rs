@@ -105,7 +105,7 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
     ///```
     #[tracing::instrument(skip_all)]
     fn bit_and<'a>(&self, index: usize, val: T) -> Pin<Box<dyn Future<Output = ()> + Send>> {
-        self.inner_array().initiate_op(val, index, ArrayOpCmd::And)
+        self.inner_array().initiate_batch_op(val, index, ArrayOpCmd2::And,self.as_lamellar_byte_array())
     }
 
     /// This call performs a batched vesion of the [bit_and][BitWiseOps::bit_and] function,
@@ -169,8 +169,11 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
     ///```
     #[tracing::instrument(skip_all)]
     fn fetch_bit_and<'a>(&self, index: usize, val: T) -> Pin<Box<dyn Future<Output = T> + Send>> {
-        self.inner_array()
-            .initiate_fetch_op(val, index, ArrayOpCmd::FetchAnd)
+        let result = self.inner_array()
+            .initiate_batch_fetch_op_2(val, index, ArrayOpCmd2::FetchAnd,self.as_lamellar_byte_array());
+            Box::pin(async move{
+                result.await[0]
+            })
     }
 
     /// This call performs a batched vesion of the [fetch_bit_and][BitWiseOps::fetch_bit_and] function,
@@ -234,7 +237,7 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
     ///```
     #[tracing::instrument(skip_all)]
     fn bit_or<'a>(&self, index: usize, val: T) -> Pin<Box<dyn Future<Output = ()> + Send>> {
-        self.inner_array().initiate_op(val, index, ArrayOpCmd::Or)
+        self.inner_array().initiate_batch_op(val, index, ArrayOpCmd2::Or,self.as_lamellar_byte_array())
     }
 
     /// This call performs a batched vesion of the [bit_or][BitWiseOps::bit_or] function,
@@ -298,8 +301,11 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
     ///```
     #[tracing::instrument(skip_all)]
     fn fetch_bit_or<'a>(&self, index: usize, val: T) -> Pin<Box<dyn Future<Output = T> + Send>> {
-        self.inner_array()
-            .initiate_fetch_op(val, index, ArrayOpCmd::FetchOr)
+        let result = self.inner_array()
+            .initiate_batch_fetch_op_2(val, index, ArrayOpCmd2::FetchOr,self.as_lamellar_byte_array());
+            Box::pin(async move{
+                result.await[0]
+            })
     }
 
     /// This call performs a batched vesion of the [fetch_bit_or][BitWiseOps::fetch_bit_or] function,
@@ -363,7 +369,7 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
     ///```
     #[tracing::instrument(skip_all)]
     fn bit_xor<'a>(&self, index: usize, val: T) -> Pin<Box<dyn Future<Output = ()> + Send>> {
-        self.inner_array().initiate_op(val, index, ArrayOpCmd::Xor)
+        self.inner_array().initiate_batch_op(val, index, ArrayOpCmd2::Xor,self.as_lamellar_byte_array())
     }
 
     /// This call performs a batched vesion of the [bit_xor][BitWiseOps::bit_xor] function,
@@ -427,8 +433,11 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
     ///```
     #[tracing::instrument(skip_all)]
     fn fetch_bit_xor<'a>(&self, index: usize, val: T) -> Pin<Box<dyn Future<Output = T> + Send>> {
-        self.inner_array()
-            .initiate_fetch_op(val, index, ArrayOpCmd::FetchXor)
+        let result = self.inner_array()
+            .initiate_batch_fetch_op_2(val, index, ArrayOpCmd2::FetchXor,self.as_lamellar_byte_array());
+            Box::pin(async move{
+                result.await[0]
+            })
     }
 
     /// This call performs a batched vesion of the [fetch_bit_xor][BitWiseOps::fetch_bit_xor] function,

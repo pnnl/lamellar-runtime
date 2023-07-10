@@ -438,19 +438,35 @@ impl<T: Dist> DistIteratorLauncher for LocalLockArray<T> {
     {
         self.array.collect_with_schedule(sched, iter, d)
     }
-    // fn collect_async<I, A, B>(
-    //     &self,
-    //     iter: &I,
-    //     d: Distribution,
-    // ) -> Pin<Box<dyn Future<Output = A> + Send>>
-    // where
-    //     I: DistributedIterator + 'static,
-    //     I::Item: Future<Output = B> + SyncSend + Clone + 'static,
-    //     B: Dist + ArrayOps,
-    //     A: From<UnsafeArray<B>> + SyncSend  + Clone +  'static,
-    // {
-    //     self.array.collect_async(iter, d)
-    // }
+    fn collect_async<I, A, B>(
+        &self,
+        iter: &I,
+        d: Distribution,
+    ) -> Pin<Box<dyn Future<Output = A> + Send>>
+    where
+        I: DistributedIterator,
+       I::Item: Future<Output = B> + Send  + 'static,
+        B: Dist + ArrayOps,
+        A: for<'a> TeamFrom<(&'a Vec<B>,Distribution)> + SyncSend  + Clone +  'static,
+    {
+        self.array.collect_async(iter, d)
+    }
+
+    fn collect_async_with_schedule<I, A, B>(
+        &self,
+        sched: Schedule,
+        iter: &I,
+        d: Distribution,
+    ) -> Pin<Box<dyn Future<Output = A> + Send>>
+    where
+        I: DistributedIterator,
+       I::Item: Future<Output = B> + Send  + 'static,
+        B: Dist + ArrayOps,
+        A: for<'a> TeamFrom<(&'a Vec<B>,Distribution)> + SyncSend  + Clone +  'static,
+    {
+        self.array.collect_async_with_schedule(sched,iter, d)
+    }
+
     fn team(&self) -> Pin<Arc<LamellarTeamRT>> {
         self.array.team_rt().clone()
     }
@@ -575,7 +591,7 @@ impl<T: Dist> LocalIteratorLauncher for LocalLockArray<T> {
     // ) -> Pin<Box<dyn Future<Output = A> + Send>>
     // where
     //     I: LocalIterator + 'static,
-    //     I::Item: Future<Output = B> + SyncSend + Clone + 'static,
+    //    I::Item: Future<Output = B> + Send  + 'static,
     //     B: Dist + ArrayOps,
     //     A: From<UnsafeArray<B>> + SyncSend  + Clone +  'static,
     // {
@@ -590,7 +606,7 @@ impl<T: Dist> LocalIteratorLauncher for LocalLockArray<T> {
     // ) -> Pin<Box<dyn Future<Output = A> + Send>>
     // where
     //     I: LocalIterator + 'static,
-    //     I::Item: Future<Output = B> + SyncSend + Clone + 'static,
+    //    I::Item: Future<Output = B> + Send  + 'static,
     //     B: Dist + ArrayOps,
     //     A: From<UnsafeArray<B>> + SyncSend  + Clone +  'static,
     // {

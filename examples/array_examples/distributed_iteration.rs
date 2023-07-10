@@ -123,7 +123,7 @@ fn main() {
         .map(move |(i, elem)| {
             let barray = barray.clone();
             println!(
-                "[pe({:?})-{:?}] i: {:?} {:?}",
+                "[pe({:?})-{:?}] map i: {:?} {:?}",
                 my_pe,
                 std::thread::current().id(),
                 i,
@@ -133,7 +133,7 @@ fn main() {
         })
         .for_each_async(move |i| async move {
             println!(
-                "[pe({:?})-{:?}] {:?}",
+                "[pe({:?})-{:?}] for each {:?}",
                 my_pe,
                 std::thread::current().id(),
                 i.await
@@ -143,25 +143,25 @@ fn main() {
     cyclic_array.barrier();
     block_array.print();
 
-    // println!("--------------------------------------------------------");
-    // println!("cyclic enumerate map async collect");
-    // let barray = block_array.clone();
-    // let new_array = world.block_on(
-    //     cyclic_array
-    //         .dist_iter()
-    //         .enumerate()
-    //         .map(move |(i, elem)| {
-    //             let barray = barray.clone();
-    //             async move {
-    //                 barray.add(i, elem.load()).await;
-    //                 barray.fetch_sub(i, elem.load()).await
-    //             }
-    //         })
-    //         .collect_async::<ReadOnlyArray<usize>, _>(Distribution::Block),
-    // );
-    // cyclic_array.barrier();
-    // new_array.print();
-    // block_array.print();
+    println!("--------------------------------------------------------");
+    println!("cyclic enumerate map async collect");
+    let barray = block_array.clone();
+    let new_array = world.block_on(
+        cyclic_array
+            .dist_iter()
+            .enumerate()
+            .map(move |(i, elem)| {
+                let barray = barray.clone();
+                async move {
+                    barray.add(i, elem.load()).await;
+                    barray.fetch_sub(i, elem.load()).await
+                }
+            })
+            .collect_async::<ReadOnlyArray<usize>, _>(Distribution::Block),
+    );
+    cyclic_array.barrier();
+    new_array.print();
+    block_array.print();
 
     println!("--------------------------------------------------------");
     println!("block enumerate filter");
@@ -204,17 +204,19 @@ fn main() {
         });
     block_array.wait_all();
     block_array.barrier();
-    // println!("--------------------------------------------------------");
-    // println!("filter_map collect");
-    // let new_block_array = block_array.dist_iter().filter_map(| elem| {
-    //     if *elem % 8 == 0 {
-    //         Some(*elem as f32)
-    //     }
-    //     else{
-    //         None
-    //     }
-    // }).collect::<ReadOnlyArray<f32>>(Distribution::Block).wait(); //todo fix me
-    // new_block_array.print();
+    println!("--------------------------------------------------------");
+    println!("filter_map collect");
+    let new_block_array = block_array.block_on(block_array.dist_iter().filter_map(| elem| {
+        let e = elem.load();
+        if e % 8 == 0 {
+            Some(e as f32)
+        }
+        else{
+            None
+        }
+    }).collect::<ReadOnlyArray<f32>>(Distribution::Block));
+
+    new_block_array.print();
 
     println!("--------------------------------------------------------");
     println!("block skip enumerate");

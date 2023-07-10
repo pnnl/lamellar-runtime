@@ -143,7 +143,7 @@ pub trait LocalIteratorLauncher {
     // ) -> Pin<Box<dyn Future<Output = A> + Send>>
     // where
     //     I: LocalIterator + 'static,
-    //     I::Item: Future<Output = B> + SyncSend + Clone + 'static,
+    //    I::Item: Future<Output = B> + Send  + 'static,
     //     B: Dist + ArrayOps,
     //     A: From<UnsafeArray<B>> + SyncSend  + Clone +  'static;
     
@@ -155,7 +155,7 @@ pub trait LocalIteratorLauncher {
     //     ) -> Pin<Box<dyn Future<Output = A> + Send>>
     //     where
     //         I: LocalIterator + 'static,
-    //         I::Item: Future<Output = B> + SyncSend + Clone + 'static,
+    //        I::Item: Future<Output = B> + Send  + 'static,
     //         B: Dist + ArrayOps,
     //         A: From<UnsafeArray<B>> + SyncSend  + Clone +  'static;
 
