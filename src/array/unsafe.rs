@@ -146,8 +146,10 @@ impl<T: Dist + ArrayOps + 'static> UnsafeArray<T> {
         let task_group = LamellarTaskGroup::new(team.clone());
         let my_pe = team.team_pe_id().unwrap();
         let num_pes = team.num_pes();
-        let elem_per_pe = array_size as f64 / num_pes as f64;
-        let per_pe_size = (array_size as f64 / num_pes as f64).ceil() as usize; //we do ceil to ensure enough space an each pe
+        let full_array_size = std::cmp::max(array_size,num_pes);
+
+        let elem_per_pe = full_array_size as f64 / num_pes as f64;
+        let per_pe_size = (full_array_size as f64 / num_pes as f64).ceil() as usize; //we do ceil to ensure enough space an each pe
                                                                                 // println!("new unsafe array {:?} {:?} {:?}", elem_per_pe, num_elems_local, per_pe_size);
         let rmr = MemoryRegion::new(
             per_pe_size * std::mem::size_of::<T>(),
@@ -188,7 +190,7 @@ impl<T: Dist + ArrayOps + 'static> UnsafeArray<T> {
                 orig_elem_per_pe: elem_per_pe,
                 elem_size: std::mem::size_of::<T>(),
                 offset: 0,        //relative to size of T
-                size: array_size, //relative to size of T
+                size: full_array_size, //relative to size of T
             },
             phantom: PhantomData,
         };
@@ -200,9 +202,16 @@ impl<T: Dist + ArrayOps + 'static> UnsafeArray<T> {
         // }
         // array.inner.data.print();
         array.create_buffered_ops();
+        if full_array_size != array_size{
+            println!("WARNING: Array size {array_size} is less than number of pes {full_array_size}, each PE will not contain data");
+            array.sub_array(0..array_size)
+        }
+        else{
+            array
+        }
         // println!("after buffered ops");
         // array.inner.data.print();
-        array
+        
     }
 
     
@@ -594,6 +603,7 @@ impl<T: Dist + ArrayOps > TeamFrom<(Vec<T>,Distribution)> for UnsafeArray<T> {
 impl<T: Dist + ArrayOps> TeamFrom<(&Vec<T>,Distribution)> for UnsafeArray<T> {
     fn team_from(input: (&Vec<T>,Distribution), team: &Pin<Arc<LamellarTeamRT>>) -> Self {
         let (local_vals, distribution) = input;
+        println!("local_vals len: {:?}",local_vals.len());
         team.barrier();
         let local_sizes =
             UnsafeArray::<usize>::new(team.clone(), team.num_pes, Distribution::Block);
@@ -601,7 +611,7 @@ impl<T: Dist + ArrayOps> TeamFrom<(&Vec<T>,Distribution)> for UnsafeArray<T> {
             local_sizes.local_as_mut_slice()[0] = local_vals.len();
         }
         local_sizes.barrier();
-        // local_sizes.print();
+        local_sizes.print();
         let mut size = 0;
         let mut my_start = 0;
         let my_pe = team.team_pe.expect("pe not part of team");
@@ -612,15 +622,21 @@ impl<T: Dist + ArrayOps> TeamFrom<(&Vec<T>,Distribution)> for UnsafeArray<T> {
                 .into_iter()
                 .enumerate()
                 .for_each(|(i, local_size)| {
+                    println!("i: {:?} local_size{:?}", i,local_size);
                     size += local_size;
                     if i < my_pe {
                         my_start += local_size;
                     }
                 });
         }
-        // println!("my_start {} size {}", my_start, size);
+        println!("my_start {} size {} local_vals {}", my_start, size, local_vals.len());
         let array = UnsafeArray::<T>::new(team.clone(), size, distribution);
-        unsafe { array.put(my_start, local_vals) };
+        if local_vals.len() > 0 { 
+            unsafe { array.put(my_start, local_vals) };
+        }
+        array.wait_all();
+        array.barrier();
+        // array.print();
         array
     }
 }

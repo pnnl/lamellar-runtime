@@ -209,6 +209,7 @@ fn main() {
     let new_block_array = block_array.block_on(block_array.dist_iter().filter_map(| elem| {
         let e = elem.load();
         if e % 8 == 0 {
+            println!("e: {:?}",e);
             Some(e as f32)
         }
         else{
