@@ -37,10 +37,10 @@ use take::*;
 pub(crate) use consumer::*;
 
 use crate::array::iterator::one_sided_iterator::OneSidedIterator;
-use crate::array::iterator::{IterRequest,Schedule};
+use crate::array::iterator::{IterRequest, Schedule};
 use crate::array::{
-    AtomicArray, Distribution, GenericAtomicArray, LamellarArray, LamellarArrayPut,
-    NativeAtomicArray, UnsafeArray, operations::ArrayOps, TeamFrom
+    operations::ArrayOps, AtomicArray, Distribution, GenericAtomicArray, LamellarArray,
+    LamellarArrayPut, NativeAtomicArray, TeamFrom, UnsafeArray,
 };
 use crate::lamellar_request::LamellarRequest;
 use crate::memregion::Dist;
@@ -54,8 +54,6 @@ use futures::Future;
 use std::marker::PhantomData;
 use std::pin::Pin;
 use std::sync::Arc;
-
-use rand::seq::SliceRandom;
 
 #[lamellar_impl::AmLocalDataRT(Clone)]
 pub(crate) struct Collect<I>
@@ -126,8 +124,6 @@ where
         vec
     }
 }
-
-
 
 #[doc(hidden)]
 pub struct DistIterForEachHandle {
@@ -200,7 +196,9 @@ impl<T: Dist + ArrayOps, A: From<UnsafeArray<T>> + SyncSend> DistIterCollectHand
     }
 }
 #[async_trait]
-impl<T: Dist + ArrayOps, A: From<UnsafeArray<T>> + SyncSend> IterRequest for DistIterCollectHandle<T, A> {
+impl<T: Dist + ArrayOps, A: From<UnsafeArray<T>> + SyncSend> IterRequest
+    for DistIterCollectHandle<T, A>
+{
     type Output = A;
     async fn into_future(mut self: Box<Self>) -> Self::Output {
         let mut local_vals = vec![];
@@ -246,7 +244,7 @@ pub trait DistIteratorLauncher {
     where
         I: DistributedIterator + 'static,
         F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
-        Fut: Future<Output = ()> + Send + 'static,;
+        Fut: Future<Output = ()> + Send + 'static;
 
     fn for_each_async_with_schedule<I, F, Fut>(
         &self,
@@ -257,19 +255,24 @@ pub trait DistIteratorLauncher {
     where
         I: DistributedIterator + 'static,
         F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
-        Fut: Future<Output = ()> + Send + 'static,;
+        Fut: Future<Output = ()> + Send + 'static;
 
     fn collect<I, A>(&self, iter: &I, d: Distribution) -> Pin<Box<dyn Future<Output = A> + Send>>
     where
         I: DistributedIterator + 'static,
         I::Item: Dist + ArrayOps,
-        A: for<'a>  TeamFrom<(&'a Vec<I::Item>,Distribution)> + SyncSend + Clone + 'static;
+        A: for<'a> TeamFrom<(&'a Vec<I::Item>, Distribution)> + SyncSend + Clone + 'static;
 
-    fn collect_with_schedule<I, A>(&self, sched: Schedule, iter: &I, d: Distribution) -> Pin<Box<dyn Future<Output = A> + Send>>
+    fn collect_with_schedule<I, A>(
+        &self,
+        sched: Schedule,
+        iter: &I,
+        d: Distribution,
+    ) -> Pin<Box<dyn Future<Output = A> + Send>>
     where
         I: DistributedIterator + 'static,
         I::Item: Dist + ArrayOps,
-        A: for<'a>  TeamFrom<(&'a Vec<I::Item>,Distribution)> + SyncSend + Clone + 'static;
+        A: for<'a> TeamFrom<(&'a Vec<I::Item>, Distribution)> + SyncSend + Clone + 'static;
 
     fn collect_async<I, A, B>(
         &self,
@@ -278,21 +281,21 @@ pub trait DistIteratorLauncher {
     ) -> Pin<Box<dyn Future<Output = A> + Send>>
     where
         I: DistributedIterator,
-       I::Item: Future<Output = B> + Send  + 'static,
+        I::Item: Future<Output = B> + Send + 'static,
         B: Dist + ArrayOps,
-        A: for<'a> TeamFrom<(&'a Vec<B>,Distribution)> + SyncSend  + Clone +  'static;
+        A: for<'a> TeamFrom<(&'a Vec<B>, Distribution)> + SyncSend + Clone + 'static;
 
     fn collect_async_with_schedule<I, A, B>(
-            &self,
-            sched: Schedule,
-            iter: &I,
-            d: Distribution,
-        ) -> Pin<Box<dyn Future<Output = A> + Send>>
-        where
-            I: DistributedIterator,
-           I::Item: Future<Output = B> + Send  + 'static,
-            B: Dist + ArrayOps,
-            A: for<'a> TeamFrom<(&'a Vec<B>,Distribution)> + SyncSend  + Clone +  'static;
+        &self,
+        sched: Schedule,
+        iter: &I,
+        d: Distribution,
+    ) -> Pin<Box<dyn Future<Output = A> + Send>>
+    where
+        I: DistributedIterator,
+        I::Item: Future<Output = B> + Send + 'static,
+        B: Dist + ArrayOps,
+        A: for<'a> TeamFrom<(&'a Vec<B>, Distribution)> + SyncSend + Clone + 'static;
 
     #[doc(hidden)]
     fn global_index_from_local(&self, index: usize, chunk_size: usize) -> Option<usize>;
@@ -444,7 +447,7 @@ pub trait DistributedIterator: SyncSend + Clone + 'static {
 
     /// Similar to the Enumerate iterator (which can only be applied to `IndexedLocalIterators`), but the yielded indicies are only
     /// guaranteed to be unique and monotonically increasing, they should not be considered to have any relation to the underlying
-    /// location of data in the local array. 
+    /// location of data in the local array.
     ///
     /// # Examples
     ///```
@@ -472,9 +475,8 @@ pub trait DistributedIterator: SyncSend + Clone + 'static {
     /// PE: 2 j: 0 i: 0 elem: 2.0
     /// PE: 2 j: 1 i: 1 elem: 2.0
     ///```
-    fn monotonic(self) -> Monotonic<Self>
-    {
-        Monotonic::new(self,0)
+    fn monotonic(self) -> Monotonic<Self> {
+        Monotonic::new(self, 0)
     }
 
     /// Calls a closure on each element of a Distributed Iterator in parallel and distributed on each PE (which owns data of the iterated array).
@@ -574,7 +576,7 @@ pub trait DistributedIterator: SyncSend + Clone + 'static {
     where
         // &'static Self: DistributedIterator + 'static,
         Self::Item: Dist + ArrayOps,
-        A: for<'a> TeamFrom<(&'a Vec<Self::Item>,Distribution)>+ SyncSend + Clone + 'static,
+        A: for<'a> TeamFrom<(&'a Vec<Self::Item>, Distribution)> + SyncSend + Clone + 'static,
     {
         self.array().collect(self, d)
     }
@@ -620,7 +622,7 @@ pub trait DistributedIterator: SyncSend + Clone + 'static {
         // &'static Self: DistributedIterator + 'static,
         T: Dist + ArrayOps,
         Self::Item: Future<Output = T> + Send + 'static,
-        A: for<'a> TeamFrom<(&'a Vec<T>,Distribution)> + SyncSend + Clone + 'static,
+        A: for<'a> TeamFrom<(&'a Vec<T>, Distribution)> + SyncSend + Clone + 'static,
     {
         self.array().collect_async(self, d)
     }
@@ -720,8 +722,6 @@ pub trait IndexedDistributedIterator: DistributedIterator + SyncSend + Clone + '
     fn enumerate(self) -> Enumerate<Self> {
         Enumerate::new(self, 0)
     }
-
-    
 
     /// An iterator that skips the first `n` elements
     ///

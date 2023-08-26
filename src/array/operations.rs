@@ -2,7 +2,6 @@ use crate::array::atomic::*;
 use crate::array::generic_atomic::*;
 use crate::array::local_lock_atomic::*;
 use crate::array::native_atomic::*;
-use crate::array::r#unsafe::*;
 
 use crate::array::*;
 
@@ -39,8 +38,7 @@ use std::u8;
 #[doc(hidden)]
 pub static OPS_BUFFER_SIZE: usize = 10_000_000;
 
-
-/// A marker trait for types that can be used as an array 
+/// A marker trait for types that can be used as an array
 /// Users should not implement this directly, rather they should use the [macro@ArrayOps] derive macro
 /// by passing it as an argument to the [macro@AmData] attribute macro to automatically derive this trait.
 ///
@@ -79,8 +77,8 @@ pub trait ArrayOps {}
     Debug,
     Copy,
 )]
-#[serde(bound = "T: Dist + serde::Serialize + serde::de::DeserializeOwned")]
-pub enum ArrayOpCmd<T: Dist> {
+#[serde(bound = "T: AmDist + serde::Serialize + serde::de::DeserializeOwned")]
+pub enum ArrayOpCmd<T: AmDist> {
     Add,
     FetchAdd,
     Sub,
@@ -110,371 +108,99 @@ pub enum ArrayOpCmd<T: Dist> {
     FetchShr,
 }
 
-#[doc(hidden)]
-#[derive(
-    serde::Serialize,
-    serde::Deserialize,
-    Hash,
-    std::cmp::PartialEq,
-    std::cmp::Eq,
-    Clone,
-    Debug,
-    Copy,
-)]
-#[serde(bound = "T: AmDist + serde::Serialize + serde::de::DeserializeOwned")]
-pub enum ArrayOpCmd2<T: AmDist> {
-    Add,
-    FetchAdd,
-    Sub,
-    FetchSub,
-    Mul,
-    FetchMul,
-    Div,
-    FetchDiv,
-    Rem,
-    FetchRem,
-    And,
-    FetchAnd,
-    Or,
-    FetchOr,
-    Xor,
-    FetchXor,
-    Store,
-    Load,
-    Swap,
-    Put,
-    Get,
-    CompareExchange(T),
-    CompareExchangeEps(T,T),
-    Shl,
-    FetchShl,
-    Shr,
-    FetchShr,
-}
-
-impl<T: Dist> From<ArrayOpCmd2<T>> for ArrayOpCmd2<Vec<u8>> {
-    fn from(cmd: ArrayOpCmd2<T>) -> Self {
+impl<T: Dist> From<ArrayOpCmd<T>> for ArrayOpCmd<Vec<u8>> {
+    fn from(cmd: ArrayOpCmd<T>) -> Self {
         match cmd {
-            ArrayOpCmd2::Add => ArrayOpCmd2::Add,
-            ArrayOpCmd2::FetchAdd => ArrayOpCmd2::FetchAdd,
-            ArrayOpCmd2::Sub => ArrayOpCmd2::Sub,
-            ArrayOpCmd2::FetchSub => ArrayOpCmd2::FetchSub,
-            ArrayOpCmd2::Mul => ArrayOpCmd2::Mul,
-            ArrayOpCmd2::FetchMul => ArrayOpCmd2::FetchMul,
-            ArrayOpCmd2::Div => ArrayOpCmd2::Div,
-            ArrayOpCmd2::FetchDiv => ArrayOpCmd2::FetchDiv,
-            ArrayOpCmd2::Rem => ArrayOpCmd2::Rem,
-            ArrayOpCmd2::FetchRem => ArrayOpCmd2::FetchRem,
-            ArrayOpCmd2::And => ArrayOpCmd2::And,
-            ArrayOpCmd2::FetchAnd => ArrayOpCmd2::FetchAnd,
-            ArrayOpCmd2::Or => ArrayOpCmd2::Or,
-            ArrayOpCmd2::FetchOr => ArrayOpCmd2::FetchOr,
-            ArrayOpCmd2::Xor => ArrayOpCmd2::Xor,
-            ArrayOpCmd2::FetchXor => ArrayOpCmd2::FetchXor,
-            ArrayOpCmd2::Store => ArrayOpCmd2::Store,
-            ArrayOpCmd2::Load => ArrayOpCmd2::Load,
-            ArrayOpCmd2::Swap => ArrayOpCmd2::Swap,
-            ArrayOpCmd2::Put => ArrayOpCmd2::Put,
-            ArrayOpCmd2::Get => ArrayOpCmd2::Get,
-            ArrayOpCmd2::CompareExchange(old) => {
+            ArrayOpCmd::Add => ArrayOpCmd::Add,
+            ArrayOpCmd::FetchAdd => ArrayOpCmd::FetchAdd,
+            ArrayOpCmd::Sub => ArrayOpCmd::Sub,
+            ArrayOpCmd::FetchSub => ArrayOpCmd::FetchSub,
+            ArrayOpCmd::Mul => ArrayOpCmd::Mul,
+            ArrayOpCmd::FetchMul => ArrayOpCmd::FetchMul,
+            ArrayOpCmd::Div => ArrayOpCmd::Div,
+            ArrayOpCmd::FetchDiv => ArrayOpCmd::FetchDiv,
+            ArrayOpCmd::Rem => ArrayOpCmd::Rem,
+            ArrayOpCmd::FetchRem => ArrayOpCmd::FetchRem,
+            ArrayOpCmd::And => ArrayOpCmd::And,
+            ArrayOpCmd::FetchAnd => ArrayOpCmd::FetchAnd,
+            ArrayOpCmd::Or => ArrayOpCmd::Or,
+            ArrayOpCmd::FetchOr => ArrayOpCmd::FetchOr,
+            ArrayOpCmd::Xor => ArrayOpCmd::Xor,
+            ArrayOpCmd::FetchXor => ArrayOpCmd::FetchXor,
+            ArrayOpCmd::Store => ArrayOpCmd::Store,
+            ArrayOpCmd::Load => ArrayOpCmd::Load,
+            ArrayOpCmd::Swap => ArrayOpCmd::Swap,
+            ArrayOpCmd::Put => ArrayOpCmd::Put,
+            ArrayOpCmd::Get => ArrayOpCmd::Get,
+            ArrayOpCmd::CompareExchange(old) => {
                 let old_u8 = &old as *const T as *const u8;
-                let old_u8_vec = unsafe { std::slice::from_raw_parts(old_u8, std::mem::size_of::<T>()).to_vec() };
-                ArrayOpCmd2::CompareExchange(old_u8_vec)
-            },
-            ArrayOpCmd2::CompareExchangeEps(old,eps) => {
+                let old_u8_vec = unsafe {
+                    std::slice::from_raw_parts(old_u8, std::mem::size_of::<T>()).to_vec()
+                };
+                ArrayOpCmd::CompareExchange(old_u8_vec)
+            }
+            ArrayOpCmd::CompareExchangeEps(old, eps) => {
                 let old_u8 = &old as *const T as *const u8;
-                let old_u8_vec = unsafe { std::slice::from_raw_parts(old_u8, std::mem::size_of::<T>()).to_vec() };
+                let old_u8_vec = unsafe {
+                    std::slice::from_raw_parts(old_u8, std::mem::size_of::<T>()).to_vec()
+                };
                 let eps_u8 = &eps as *const T as *const u8;
-                let eps_u8_vec = unsafe { std::slice::from_raw_parts(eps_u8, std::mem::size_of::<T>()).to_vec() };
-                ArrayOpCmd2::CompareExchangeEps(old_u8_vec,eps_u8_vec)
-
+                let eps_u8_vec = unsafe {
+                    std::slice::from_raw_parts(eps_u8, std::mem::size_of::<T>()).to_vec()
+                };
+                ArrayOpCmd::CompareExchangeEps(old_u8_vec, eps_u8_vec)
             }
-            ArrayOpCmd2::Shl => ArrayOpCmd2::Shl,
-            ArrayOpCmd2::FetchShl => ArrayOpCmd2::FetchShl,
-            ArrayOpCmd2::Shr => ArrayOpCmd2::Shr,
-            ArrayOpCmd2::FetchShr => ArrayOpCmd2::FetchShr,
-
+            ArrayOpCmd::Shl => ArrayOpCmd::Shl,
+            ArrayOpCmd::FetchShl => ArrayOpCmd::FetchShl,
+            ArrayOpCmd::Shr => ArrayOpCmd::Shr,
+            ArrayOpCmd::FetchShr => ArrayOpCmd::FetchShr,
         }
     }
 }
 
-impl<T: Dist> From<ArrayOpCmd2<Vec<u8>>> for ArrayOpCmd2<T> {
-    fn from(cmd: ArrayOpCmd2<Vec<u8>>) -> Self {
+impl<T: Dist> From<ArrayOpCmd<Vec<u8>>> for ArrayOpCmd<T> {
+    fn from(cmd: ArrayOpCmd<Vec<u8>>) -> Self {
         match cmd {
-            ArrayOpCmd2::Add => ArrayOpCmd2::Add,
-            ArrayOpCmd2::FetchAdd => ArrayOpCmd2::FetchAdd,
-            ArrayOpCmd2::Sub => ArrayOpCmd2::Sub,
-            ArrayOpCmd2::FetchSub => ArrayOpCmd2::FetchSub,
-            ArrayOpCmd2::Mul => ArrayOpCmd2::Mul,
-            ArrayOpCmd2::FetchMul => ArrayOpCmd2::FetchMul,
-            ArrayOpCmd2::Div => ArrayOpCmd2::Div,
-            ArrayOpCmd2::FetchDiv => ArrayOpCmd2::FetchDiv,
-            ArrayOpCmd2::Rem => ArrayOpCmd2::Rem,
-            ArrayOpCmd2::FetchRem => ArrayOpCmd2::FetchRem,
-            ArrayOpCmd2::And => ArrayOpCmd2::And,
-            ArrayOpCmd2::FetchAnd => ArrayOpCmd2::FetchAnd,
-            ArrayOpCmd2::Or => ArrayOpCmd2::Or,
-            ArrayOpCmd2::FetchOr => ArrayOpCmd2::FetchOr,
-            ArrayOpCmd2::Xor => ArrayOpCmd2::Xor,
-            ArrayOpCmd2::FetchXor => ArrayOpCmd2::FetchXor,
-            ArrayOpCmd2::Store => ArrayOpCmd2::Store,
-            ArrayOpCmd2::Load => ArrayOpCmd2::Load,
-            ArrayOpCmd2::Swap => ArrayOpCmd2::Swap,
-            ArrayOpCmd2::Put => ArrayOpCmd2::Put,
-            ArrayOpCmd2::Get => ArrayOpCmd2::Get,
-            ArrayOpCmd2::CompareExchange(old) => {
-                let old_t = unsafe { std::slice::from_raw_parts(old.as_ptr() as *const T, std::mem::size_of::<T>()) };
-                ArrayOpCmd2::CompareExchange(old_t[0])
-            },
-            ArrayOpCmd2::CompareExchangeEps(old,eps) => {
-                let old_t = unsafe { std::slice::from_raw_parts(old.as_ptr() as *const T, std::mem::size_of::<T>()) };
-                let eps_t = unsafe { std::slice::from_raw_parts(eps.as_ptr() as *const T, std::mem::size_of::<T>()) };
-                ArrayOpCmd2::CompareExchangeEps(old_t[0],eps_t[0])
-            },
-            ArrayOpCmd2::Shl => ArrayOpCmd2::Shl,
-            ArrayOpCmd2::FetchShl => ArrayOpCmd2::FetchShl,
-            ArrayOpCmd2::Shr => ArrayOpCmd2::Shr,
-            ArrayOpCmd2::FetchShr => ArrayOpCmd2::FetchShr,
-        }
-    }
-}
-
-impl<T: Dist> ArrayOpCmd<T> {
-    #[tracing::instrument(skip_all)]
-    pub fn result_size(&self) -> usize {
-        match self {
-            ArrayOpCmd::CompareExchange(_) | ArrayOpCmd::CompareExchangeEps(_, _) => {
-                std::mem::size_of::<T>() + 1
-            } //plus one to indicate this requires a result (0 for okay, 1 for error)
-            ArrayOpCmd::FetchAdd
-            | ArrayOpCmd::FetchSub
-            | ArrayOpCmd::FetchMul
-            | ArrayOpCmd::FetchDiv
-            | ArrayOpCmd::FetchRem
-            | ArrayOpCmd::FetchAnd
-            | ArrayOpCmd::FetchOr
-            | ArrayOpCmd::FetchXor
-            | ArrayOpCmd::FetchShl
-            | ArrayOpCmd::FetchShr
-            | ArrayOpCmd::Load
-            | ArrayOpCmd::Swap
-            | ArrayOpCmd::Get => std::mem::size_of::<T>(), //just return value, assume never fails
-            ArrayOpCmd::Add
-            | ArrayOpCmd::Sub
-            | ArrayOpCmd::Mul
-            | ArrayOpCmd::Div
-            | ArrayOpCmd::Rem
-            | ArrayOpCmd::And
-            | ArrayOpCmd::Or
-            | ArrayOpCmd::Xor
-            | ArrayOpCmd::Shl
-            | ArrayOpCmd::Shr
-            | ArrayOpCmd::Store
-            | ArrayOpCmd::Put => 0, //we dont return anything
-        }
-    }
-
-    pub fn to_bytes(&self, buf: &mut [u8]) -> usize {
-        match self {
-            ArrayOpCmd::Add => {
-                buf[0] = 0;
-                1
+            ArrayOpCmd::Add => ArrayOpCmd::Add,
+            ArrayOpCmd::FetchAdd => ArrayOpCmd::FetchAdd,
+            ArrayOpCmd::Sub => ArrayOpCmd::Sub,
+            ArrayOpCmd::FetchSub => ArrayOpCmd::FetchSub,
+            ArrayOpCmd::Mul => ArrayOpCmd::Mul,
+            ArrayOpCmd::FetchMul => ArrayOpCmd::FetchMul,
+            ArrayOpCmd::Div => ArrayOpCmd::Div,
+            ArrayOpCmd::FetchDiv => ArrayOpCmd::FetchDiv,
+            ArrayOpCmd::Rem => ArrayOpCmd::Rem,
+            ArrayOpCmd::FetchRem => ArrayOpCmd::FetchRem,
+            ArrayOpCmd::And => ArrayOpCmd::And,
+            ArrayOpCmd::FetchAnd => ArrayOpCmd::FetchAnd,
+            ArrayOpCmd::Or => ArrayOpCmd::Or,
+            ArrayOpCmd::FetchOr => ArrayOpCmd::FetchOr,
+            ArrayOpCmd::Xor => ArrayOpCmd::Xor,
+            ArrayOpCmd::FetchXor => ArrayOpCmd::FetchXor,
+            ArrayOpCmd::Store => ArrayOpCmd::Store,
+            ArrayOpCmd::Load => ArrayOpCmd::Load,
+            ArrayOpCmd::Swap => ArrayOpCmd::Swap,
+            ArrayOpCmd::Put => ArrayOpCmd::Put,
+            ArrayOpCmd::Get => ArrayOpCmd::Get,
+            ArrayOpCmd::CompareExchange(old) => {
+                let old_t = unsafe {
+                    std::slice::from_raw_parts(old.as_ptr() as *const T, std::mem::size_of::<T>())
+                };
+                ArrayOpCmd::CompareExchange(old_t[0])
             }
-            ArrayOpCmd::FetchAdd => {
-                buf[0] = 1;
-                1
+            ArrayOpCmd::CompareExchangeEps(old, eps) => {
+                let old_t = unsafe {
+                    std::slice::from_raw_parts(old.as_ptr() as *const T, std::mem::size_of::<T>())
+                };
+                let eps_t = unsafe {
+                    std::slice::from_raw_parts(eps.as_ptr() as *const T, std::mem::size_of::<T>())
+                };
+                ArrayOpCmd::CompareExchangeEps(old_t[0], eps_t[0])
             }
-            ArrayOpCmd::Sub => {
-                buf[0] = 2;
-                1
-            }
-            ArrayOpCmd::FetchSub => {
-                buf[0] = 3;
-                1
-            }
-            ArrayOpCmd::Mul => {
-                buf[0] = 4;
-                1
-            }
-            ArrayOpCmd::FetchMul => {
-                buf[0] = 5;
-                1
-            }
-            ArrayOpCmd::Div => {
-                buf[0] = 6;
-                1
-            }
-            ArrayOpCmd::FetchDiv => {
-                buf[0] = 7;
-                1
-            }
-            ArrayOpCmd::Rem => {
-                buf[0] = 8;
-                1
-            }
-            ArrayOpCmd::FetchRem => {
-                buf[0] = 9;
-                1
-            }
-            ArrayOpCmd::And => {
-                buf[0] = 10;
-                1
-            }
-            ArrayOpCmd::FetchAnd => {
-                buf[0] = 11;
-                1
-            }
-            ArrayOpCmd::Or => {
-                buf[0] = 12;
-                1
-            }
-            ArrayOpCmd::FetchOr => {
-                buf[0] = 13;
-                1
-            }
-            ArrayOpCmd::Xor => {
-                buf[0] = 14;
-                1
-            }
-            ArrayOpCmd::FetchXor => {
-                buf[0] = 15;
-                1
-            }
-            ArrayOpCmd::Store => {
-                buf[0] = 16;
-                1
-            }
-            ArrayOpCmd::Load => {
-                buf[0] = 17;
-                1
-            }
-            ArrayOpCmd::Swap => {
-                buf[0] = 18;
-                1
-            }
-            ArrayOpCmd::Put => {
-                buf[0] = 19;
-                1
-            }
-            ArrayOpCmd::Get => {
-                buf[0] = 20;
-                1
-            }
-            ArrayOpCmd::CompareExchange(val) => {
-                buf[0] = 21;
-                unsafe {
-                    std::ptr::copy_nonoverlapping(val as *const T, buf[1..].as_ptr() as *mut T, 1);
-                }
-                1 + std::mem::size_of::<T>()
-            }
-            ArrayOpCmd::CompareExchangeEps(val, eps) => {
-                buf[0] = 22;
-                let t_size = std::mem::size_of::<T>();
-                unsafe {
-                    std::ptr::copy_nonoverlapping(val as *const T, buf[1..].as_ptr() as *mut T, 1);
-                    std::ptr::copy_nonoverlapping(
-                        eps as *const T,
-                        buf[(1 + t_size)..].as_ptr() as *mut T,
-                        1,
-                    );
-                }
-                1 + 2 * std::mem::size_of::<T>()
-            }
-            ArrayOpCmd::Shl => {
-                buf[0] = 23;
-                1
-            }
-            ArrayOpCmd::FetchShl => {
-                buf[0] = 24;
-                1
-            }
-            ArrayOpCmd::Shr => {
-                buf[0] = 25;
-                1
-            }
-            ArrayOpCmd::FetchShr => {
-                buf[0] = 26;
-                1
-            }
-        }
-    }
-
-    pub fn num_bytes(&self) -> usize {
-        match self {
-            ArrayOpCmd::Add => 1,
-            ArrayOpCmd::FetchAdd => 1,
-            ArrayOpCmd::Sub => 1,
-            ArrayOpCmd::FetchSub => 1,
-            ArrayOpCmd::Mul => 1,
-            ArrayOpCmd::FetchMul => 1,
-            ArrayOpCmd::Div => 1,
-            ArrayOpCmd::FetchDiv => 1,
-            ArrayOpCmd::Rem => 1,
-            ArrayOpCmd::FetchRem => 1,
-            ArrayOpCmd::And => 1,
-            ArrayOpCmd::FetchAnd => 1,
-            ArrayOpCmd::Or => 1,
-            ArrayOpCmd::FetchOr => 1,
-            ArrayOpCmd::Xor => 1,
-            ArrayOpCmd::FetchXor => 1,
-            ArrayOpCmd::Store => 1,
-            ArrayOpCmd::Load => 1,
-            ArrayOpCmd::Swap => 1,
-            ArrayOpCmd::Put => 1,
-            ArrayOpCmd::Get => 1,
-            ArrayOpCmd::CompareExchange(_val) => 1 + std::mem::size_of::<T>(),
-            ArrayOpCmd::CompareExchangeEps(_val, _eps) => 1 + 2 * std::mem::size_of::<T>(),
-            ArrayOpCmd::Shl => 1,
-            ArrayOpCmd::FetchShl => 1,
-            ArrayOpCmd::Shr => 1,
-            ArrayOpCmd::FetchShr => 1,
-        }
-    }
-
-    pub fn from_bytes(buf: &[u8]) -> (Self, usize) {
-        let variant = buf[0];
-        match variant {
-            0 => (ArrayOpCmd::Add, 1),
-            1 => (ArrayOpCmd::FetchAdd, 1),
-            2 => (ArrayOpCmd::Sub, 1),
-            3 => (ArrayOpCmd::FetchSub, 1),
-            4 => (ArrayOpCmd::Mul, 1),
-            5 => (ArrayOpCmd::FetchMul, 1),
-            6 => (ArrayOpCmd::Div, 1),
-            7 => (ArrayOpCmd::FetchDiv, 1),
-            8 => (ArrayOpCmd::Div, 1),
-            9 => (ArrayOpCmd::FetchDiv, 1),
-            10 => (ArrayOpCmd::And, 1),
-            11 => (ArrayOpCmd::FetchAnd, 1),
-            12 => (ArrayOpCmd::Or, 1),
-            13 => (ArrayOpCmd::FetchOr, 1),
-            14 => (ArrayOpCmd::Or, 1),
-            15 => (ArrayOpCmd::FetchOr, 1),
-            16 => (ArrayOpCmd::Store, 1),
-            17 => (ArrayOpCmd::Load, 1),
-            18 => (ArrayOpCmd::Swap, 1),
-            19 => (ArrayOpCmd::Put, 1),
-            20 => (ArrayOpCmd::Get, 1),
-            21 => {
-                let val = unsafe { *(buf[1..].as_ptr() as *const T) };
-                (
-                    ArrayOpCmd::CompareExchange(val),
-                    1 + std::mem::size_of::<T>(),
-                )
-            }
-            22 => {
-                let t_size = std::mem::size_of::<T>();
-                let val = unsafe { *(buf[1..].as_ptr() as *const T) };
-                let eps = unsafe { *(buf[(1 + t_size)..].as_ptr() as *const T) };
-                (ArrayOpCmd::CompareExchangeEps(val, eps), 1 + 2 * t_size)
-            }
-            23 => (ArrayOpCmd::Shl, 1),
-            24 => (ArrayOpCmd::FetchShl, 1),
-            25 => (ArrayOpCmd::Shr, 1),
-            26 => (ArrayOpCmd::FetchShr, 1),
-            _ => {
-                panic!("unrecognized Array Op Type");
-            }
+            ArrayOpCmd::Shl => ArrayOpCmd::Shl,
+            ArrayOpCmd::FetchShl => ArrayOpCmd::FetchShl,
+            ArrayOpCmd::Shr => ArrayOpCmd::Shr,
+            ArrayOpCmd::FetchShr => ArrayOpCmd::FetchShr,
         }
     }
 }
@@ -482,357 +208,345 @@ impl<T: Dist> ArrayOpCmd<T> {
 #[doc(hidden)]
 #[repr(C)] //required as we reinterpret as bytes
 #[lamellar_impl::AmLocalDataRT]
-pub struct IdxVal<T>{
-    pub index: usize,
+pub struct IdxVal<I, T> {
+    pub index: I,
     pub val: T,
 }
 
-impl<T> IdxVal<T> {
+impl<I, T> IdxVal<I, T> {
     pub fn as_bytes(&self) -> &[u8] {
-        unsafe { std::slice::from_raw_parts(self as *const Self as *const u8, std::mem::size_of::<Self>()) }
-    }
-}
-
-#[doc(hidden)]
-#[derive(serde::Serialize, Clone, Debug)]
-pub enum InputToValue<'a, T: Dist> {
-    OneToOne(usize, T),
-    OneToMany(usize, OpInputEnum<'a, T>),
-    ManyToOne(OpInputEnum<'a, usize>, T),
-    ManyToMany(OpInputEnum<'a, usize>, OpInputEnum<'a, T>),
-}
-
-impl<'a, T: Dist> InputToValue<'a, T> {
-    #[tracing::instrument(skip_all)]
-    pub(crate) fn len(&self) -> usize {
-        match self {
-            InputToValue::OneToOne(_, _) => 1,
-            InputToValue::OneToMany(_, vals) => vals.len(),
-            InputToValue::ManyToOne(indices, _) => indices.len(),
-            InputToValue::ManyToMany(indices, _) => indices.len(),
-        }
-    }
-    // fn num_bytes(&self) -> usize{
-    //     match self{
-    //         InputToValue::OneToOne(_,_) => std::mem::size_of::<(usize,T)>(),
-    //         InputToValue::OneToMany(_,vals) => std::mem::size_of::<usize>()+ vals.len() * std::mem::size_of::<T>(),
-    //         InputToValue::ManyToOne(indices,_) => indices.len() * std::mem::size_of::<usize>() + std::mem::size_of::<T>(),
-    //         InputToValue::ManyToMany(indices,vals) => indices.len() * std::mem::size_of::<usize>() +  vals.len() * std::mem::size_of::<T>(),
-    //     }
-    // }
-    #[tracing::instrument(skip_all)]
-    pub(crate) fn to_pe_offsets(
-        self,
-        array: &UnsafeArray<T>,
-    ) -> (
-        HashMap<usize, InputToValue<'a, T>>,
-        HashMap<usize, Vec<usize>>,
-        usize,
-    ) {
-        let mut pe_offsets = HashMap::new();
-        let mut req_ids = HashMap::new();
-        match self {
-            InputToValue::OneToOne(index, value) => {
-                let (pe, local_index) = array
-                    .pe_and_offset_for_global_index(index)
-                    .expect("array index out of bounds");
-                pe_offsets.insert(pe, InputToValue::OneToOne(local_index, value));
-                req_ids.insert(pe, vec![0]);
-                (pe_offsets, req_ids, 1)
-            }
-            InputToValue::OneToMany(index, values) => {
-                let (pe, local_index) = array
-                    .pe_and_offset_for_global_index(index)
-                    .expect("array index out of bounds");
-                let vals_len = values.len();
-                req_ids.insert(pe, (0..vals_len).collect());
-                pe_offsets.insert(pe, InputToValue::OneToMany(local_index, values));
-
-                (pe_offsets, req_ids, vals_len)
-            }
-            InputToValue::ManyToOne(indices, value) => {
-                let mut temp_pe_offsets = HashMap::new();
-                let mut req_cnt = 0;
-                for index in indices.iter() {
-                    let (pe, local_index) = array
-                        .pe_and_offset_for_global_index(index)
-                        .expect("array index out of bounds");
-                    temp_pe_offsets
-                        .entry(pe)
-                        .or_insert(vec![])
-                        .push(local_index);
-                    req_ids.entry(pe).or_insert(vec![]).push(req_cnt);
-                    req_cnt += 1;
-                }
-
-                for (pe, local_indices) in temp_pe_offsets {
-                    pe_offsets.insert(
-                        pe,
-                        InputToValue::ManyToOne(OpInputEnum::Vec(local_indices), value),
-                    );
-                }
-
-                (pe_offsets, req_ids, indices.len())
-            }
-            InputToValue::ManyToMany(indices, values) => {
-                let mut temp_pe_offsets = HashMap::new();
-                let mut req_cnt = 0;
-                for (index, val) in indices.iter().zip(values.iter()) {
-                    let (pe, local_index) = array
-                        .pe_and_offset_for_global_index(index)
-                        .expect("array index out of bounds");
-                    let data = temp_pe_offsets.entry(pe).or_insert((vec![], vec![]));
-                    data.0.push(local_index);
-                    data.1.push(val);
-                    req_ids.entry(pe).or_insert(vec![]).push(req_cnt);
-                    req_cnt += 1;
-                }
-                for (pe, (local_indices, vals)) in temp_pe_offsets {
-                    pe_offsets.insert(
-                        pe,
-                        InputToValue::ManyToMany(
-                            OpInputEnum::Vec(local_indices),
-                            OpInputEnum::Vec(vals),
-                        ),
-                    );
-                }
-                (pe_offsets, req_ids, indices.len())
-            }
-        }
-    }
-}
-impl<'a, T: Dist + serde::Serialize + serde::de::DeserializeOwned> InputToValue<'a, T> {
-    #[tracing::instrument(skip_all)]
-    pub fn as_op_am_input(&self) -> OpAmInputToValue<T> {
-        match self {
-            InputToValue::OneToOne(index, value) => OpAmInputToValue::OneToOne(*index, *value),
-            InputToValue::OneToMany(index, values) => {
-                OpAmInputToValue::OneToMany(*index, values.iter().collect())
-            }
-            InputToValue::ManyToOne(indices, value) => {
-                OpAmInputToValue::ManyToOne(indices.iter().collect(), *value)
-            }
-            InputToValue::ManyToMany(indices, values) => {
-                OpAmInputToValue::ManyToMany(indices.iter().collect(), values.iter().collect())
-            }
-        }
-    }
-}
-
-impl<T: Dist> OpAmInputToValue<T> {
-    #[tracing::instrument(skip_all)]
-    pub fn len(&self) -> usize {
-        match self {
-            OpAmInputToValue::OneToOne(_, _) => 1,
-            OpAmInputToValue::OneToMany(_, vals) => vals.len(),
-            OpAmInputToValue::ManyToOne(indices, _) => indices.len(),
-            OpAmInputToValue::ManyToMany(indices, _) => indices.len(),
-        }
-    }
-}
-
-#[doc(hidden)]
-#[derive(serde::Serialize, serde::Deserialize, Debug)]
-#[serde(bound = "T: Dist + serde::Serialize + serde::de::DeserializeOwned")]
-pub enum OpAmInputToValue<T: Dist> {
-    OneToOne(usize, T),
-    OneToMany(usize, Vec<T>),
-    ManyToOne(Vec<usize>, T),
-    ManyToMany(Vec<usize>, Vec<T>),
-}
-
-impl<T: Dist> OpAmInputToValue<T> {
-    pub fn embed_vec<U>(data: &Vec<U>, buf: &mut [u8]) -> usize {
-        let mut size = 0;
-        // embed the data length
-        let len = data.len();
         unsafe {
-            std::ptr::copy_nonoverlapping(
-                &len as *const usize,
-                buf[size..].as_ptr() as *mut usize,
-                1,
+            std::slice::from_raw_parts(
+                self as *const Self as *const u8,
+                std::mem::size_of::<Self>(),
             )
-        };
-        size += std::mem::size_of::<usize>();
-        // ---- end data length ----
-        // embed the data
-        unsafe {
-            std::ptr::copy_nonoverlapping(data.as_ptr(), buf[size..].as_ptr() as *mut U, len)
-        };
-        size += len * std::mem::size_of::<U>();
-        // ---- end data ====
-        size
-    }
-    pub fn embed_single_val<U>(val: U, buf: &mut [u8]) -> usize {
-        // embed the val
-        unsafe { std::ptr::copy_nonoverlapping(&val as *const U, buf.as_ptr() as *mut U, 1) };
-        std::mem::size_of::<U>()
-        // ---- end val ----
-    }
-    pub fn to_bytes(self, buf: &mut [u8]) -> usize {
-        match self {
-            OpAmInputToValue::OneToOne(idx, val) => {
-                // embed the enum type
-                let mut size = 0;
-                buf[size] = 0;
-                size += 1;
-                // ----- end type -----
-                // embed the index
-                size += OpAmInputToValue::<usize>::embed_single_val(idx, &mut buf[size..]);
-                // ---- end index ----
-                // embed the value
-                size += OpAmInputToValue::<T>::embed_single_val(val, &mut buf[size..]);
-                // -- end value --
-                size
-            }
-            OpAmInputToValue::OneToMany(idx, vals) => {
-                // embed the enum type
-                let mut size = 0;
-                buf[size] = 1;
-                size += 1;
-                // ----- end type -----
-                // embed the index
-                size += OpAmInputToValue::<usize>::embed_single_val(idx, &mut buf[size..]);
-                // ---- end index ----
-                // embed the vals
-                size += OpAmInputToValue::<T>::embed_vec(&vals, &mut buf[size..]);
-                // ---- end vals ----
-                size
-            }
-            OpAmInputToValue::ManyToOne(idxs, val) => {
-                // embed the enum type
-                let mut size = 0;
-                buf[size] = 2;
-                size += 1;
-                // ----- end type -----
-                // embed the indices
-                size += OpAmInputToValue::<usize>::embed_vec(&idxs, &mut buf[size..]);
-                // ---- end indices ----
-                // embed the val
-                size += OpAmInputToValue::<T>::embed_single_val(val, &mut buf[size..]);
-                // ---- end val ----
-                size
-            }
-            OpAmInputToValue::ManyToMany(idxs, vals) => {
-                // embed the enum type
-                let mut size = 0;
-                buf[size] = 3;
-                size += 1;
-                // ----- end type -----
-                // embed the indices
-                size += OpAmInputToValue::<usize>::embed_vec(&idxs, &mut buf[size..]);
-                // ---- end indices ----
-                // embed the vals
-                size += OpAmInputToValue::<T>::embed_vec(&vals, &mut buf[size..]);
-                // ---- end vals ----
-                size
-            }
-        }
-    }
-    pub fn vec_size<U>(data: &Vec<U>) -> usize {
-        let mut size = 0;
-        let len = data.len();
-        size += std::mem::size_of::<usize>(); //the length
-        size += len * std::mem::size_of::<U>();
-        size
-    }
-    pub fn single_val_size<U>(_val: U) -> usize {
-        std::mem::size_of::<U>()
-    }
-    pub fn num_bytes(&self) -> usize {
-        match self {
-            OpAmInputToValue::OneToOne(idx, val) => {
-                let mut size = 0;
-                size += 1;
-                size += OpAmInputToValue::<usize>::single_val_size(idx);
-                size += OpAmInputToValue::<T>::single_val_size(val);
-                size
-            }
-            OpAmInputToValue::OneToMany(idx, vals) => {
-                let mut size = 0;
-                size += 1;
-                size += OpAmInputToValue::<usize>::single_val_size(idx);
-                size += OpAmInputToValue::<T>::vec_size(&vals);
-                size
-            }
-            OpAmInputToValue::ManyToOne(idxs, val) => {
-                let mut size = 0;
-                size += 1;
-                size += OpAmInputToValue::<usize>::vec_size(&idxs);
-                size += OpAmInputToValue::<T>::single_val_size(val);
-                size
-            }
-            OpAmInputToValue::ManyToMany(idxs, vals) => {
-                let mut size = 0;
-                size += 1;
-                size += OpAmInputToValue::<usize>::vec_size(&idxs);
-                size += OpAmInputToValue::<T>::vec_size(&vals);
-                size
-            }
         }
     }
 }
 
-#[doc(hidden)]
-pub enum RemoteOpAmInputToValue<'a, T: Dist> {
-    OneToOne(&'a usize, &'a T),
-    OneToMany(&'a usize, &'a [T]),
-    ManyToOne(&'a [usize], &'a T),
-    ManyToMany(&'a [usize], &'a [T]),
-}
+// #[doc(hidden)]
+// #[derive(serde::Serialize, Clone, Debug)]
+// pub enum InputToValue<'a, T: Dist> {
+//     OneToOne(usize, T),
+//     OneToMany(usize, OpInputEnum<'a, T>),
+//     ManyToOne(OpInputEnum<'a, usize>, T),
+//     ManyToMany(OpInputEnum<'a, usize>, OpInputEnum<'a, T>),
+// }
 
-impl<'a, T: Dist> RemoteOpAmInputToValue<'a, T> {
-    pub fn unpack_slice<U>(buf: &[u8]) -> (&[U], usize) {
-        let mut size = 0;
-        let len = unsafe { &*(buf[size..].as_ptr() as *const usize) };
-        size += std::mem::size_of::<usize>();
-        let vals = unsafe { std::slice::from_raw_parts(buf[size..].as_ptr() as *const U, *len) };
-        size += len * std::mem::size_of::<T>();
-        (vals, size)
-    }
-    pub fn from_bytes(buf: &'a [u8]) -> (Self, usize) {
-        let mut size = 0;
-        let variant = buf[size];
-        size += 1;
-        match variant {
-            0 => {
-                let idx = unsafe { &*(buf[size..].as_ptr() as *const usize) };
-                size += std::mem::size_of::<usize>();
-                let val = unsafe { &*(buf[size..].as_ptr() as *const T) };
-                size += std::mem::size_of::<T>();
-                (RemoteOpAmInputToValue::OneToOne(idx, val), size)
-            }
-            1 => {
-                let idx = unsafe { &*(buf[size..].as_ptr() as *const usize) };
-                size += std::mem::size_of::<usize>();
-                let (vals, vals_bytes) = RemoteOpAmInputToValue::<T>::unpack_slice(&buf[size..]);
-                size += vals_bytes;
-                (RemoteOpAmInputToValue::OneToMany(idx, vals), size)
-            }
-            2 => {
-                let (idxs, idxs_bytes) =
-                    RemoteOpAmInputToValue::<usize>::unpack_slice(&buf[size..]);
-                size += idxs_bytes;
-                let val = unsafe { &*(buf[size..].as_ptr() as *const T) };
-                size += std::mem::size_of::<T>();
+// impl<'a, T: Dist> InputToValue<'a, T> {
+//     #[tracing::instrument(skip_all)]
+//     pub(crate) fn len(&self) -> usize {
+//         match self {
+//             InputToValue::OneToOne(_, _) => 1,
+//             InputToValue::OneToMany(_, vals) => vals.len(),
+//             InputToValue::ManyToOne(indices, _) => indices.len(),
+//             InputToValue::ManyToMany(indices, _) => indices.len(),
+//         }
+//     }
+//     // fn num_bytes(&self) -> usize{
+//     //     match self{
+//     //         InputToValue::OneToOne(_,_) => std::mem::size_of::<(usize,T)>(),
+//     //         InputToValue::OneToMany(_,vals) => std::mem::size_of::<usize>()+ vals.len() * std::mem::size_of::<T>(),
+//     //         InputToValue::ManyToOne(indices,_) => indices.len() * std::mem::size_of::<usize>() + std::mem::size_of::<T>(),
+//     //         InputToValue::ManyToMany(indices,vals) => indices.len() * std::mem::size_of::<usize>() +  vals.len() * std::mem::size_of::<T>(),
+//     //     }
+//     // }
+//     #[tracing::instrument(skip_all)]
+//     pub(crate) fn to_pe_offsets(
+//         self,
+//         array: &UnsafeArray<T>,
+//     ) -> (
+//         HashMap<usize, InputToValue<'a, T>>,
+//         HashMap<usize, Vec<usize>>,
+//         usize,
+//     ) {
+//         let mut pe_offsets = HashMap::new();
+//         let mut req_ids = HashMap::new();
+//         match self {
+//             InputToValue::OneToOne(index, value) => {
+//                 let (pe, local_index) = array
+//                     .pe_and_offset_for_global_index(index)
+//                     .expect("array index out of bounds");
+//                 pe_offsets.insert(pe, InputToValue::OneToOne(local_index, value));
+//                 req_ids.insert(pe, vec![0]);
+//                 (pe_offsets, req_ids, 1)
+//             }
+//             InputToValue::OneToMany(index, values) => {
+//                 let (pe, local_index) = array
+//                     .pe_and_offset_for_global_index(index)
+//                     .expect("array index out of bounds");
+//                 let vals_len = values.len();
+//                 req_ids.insert(pe, (0..vals_len).collect());
+//                 pe_offsets.insert(pe, InputToValue::OneToMany(local_index, values));
 
-                (RemoteOpAmInputToValue::ManyToOne(idxs, val), size)
-            }
-            3 => {
-                let (idxs, idxs_bytes) =
-                    RemoteOpAmInputToValue::<usize>::unpack_slice(&buf[size..]);
-                size += idxs_bytes;
-                let (vals, vals_bytes) = RemoteOpAmInputToValue::<T>::unpack_slice(&buf[size..]);
-                size += vals_bytes;
+//                 (pe_offsets, req_ids, vals_len)
+//             }
+//             InputToValue::ManyToOne(indices, value) => {
+//                 let mut temp_pe_offsets = HashMap::new();
+//                 let mut req_cnt = 0;
+//                 for index in indices.iter() {
+//                     let (pe, local_index) = array
+//                         .pe_and_offset_for_global_index(index)
+//                         .expect("array index out of bounds");
+//                     temp_pe_offsets
+//                         .entry(pe)
+//                         .or_insert(vec![])
+//                         .push(local_index);
+//                     req_ids.entry(pe).or_insert(vec![]).push(req_cnt);
+//                     req_cnt += 1;
+//                 }
 
-                (RemoteOpAmInputToValue::ManyToMany(idxs, vals), size)
-            }
-            _ => {
-                panic!("unrecognized OpAmInputToValue Type");
-            }
-        }
-    }
-}
+//                 for (pe, local_indices) in temp_pe_offsets {
+//                     pe_offsets.insert(
+//                         pe,
+//                         InputToValue::ManyToOne(OpInputEnum::Vec(local_indices), value),
+//                     );
+//                 }
+
+//                 (pe_offsets, req_ids, indices.len())
+//             }
+//             InputToValue::ManyToMany(indices, values) => {
+//                 let mut temp_pe_offsets = HashMap::new();
+//                 let mut req_cnt = 0;
+//                 for (index, val) in indices.iter().zip(values.iter()) {
+//                     let (pe, local_index) = array
+//                         .pe_and_offset_for_global_index(index)
+//                         .expect("array index out of bounds");
+//                     let data = temp_pe_offsets.entry(pe).or_insert((vec![], vec![]));
+//                     data.0.push(local_index);
+//                     data.1.push(val);
+//                     req_ids.entry(pe).or_insert(vec![]).push(req_cnt);
+//                     req_cnt += 1;
+//                 }
+//                 for (pe, (local_indices, vals)) in temp_pe_offsets {
+//                     pe_offsets.insert(
+//                         pe,
+//                         InputToValue::ManyToMany(
+//                             OpInputEnum::Vec(local_indices),
+//                             OpInputEnum::Vec(vals),
+//                         ),
+//                     );
+//                 }
+//                 (pe_offsets, req_ids, indices.len())
+//             }
+//         }
+//     }
+// }
+
+// impl<T: Dist> OpAmInputToValue<T> {
+//     #[tracing::instrument(skip_all)]
+//     pub fn len(&self) -> usize {
+//         match self {
+//             OpAmInputToValue::OneToOne(_, _) => 1,
+//             OpAmInputToValue::OneToMany(_, vals) => vals.len(),
+//             OpAmInputToValue::ManyToOne(indices, _) => indices.len(),
+//             OpAmInputToValue::ManyToMany(indices, _) => indices.len(),
+//         }
+//     }
+// }
+
+// #[doc(hidden)]
+// #[derive(serde::Serialize, serde::Deserialize, Debug)]
+// #[serde(bound = "T: Dist + serde::Serialize + serde::de::DeserializeOwned")]
+// pub enum OpAmInputToValue<T: Dist> {
+//     OneToOne(usize, T),
+//     OneToMany(usize, Vec<T>),
+//     ManyToOne(Vec<usize>, T),
+//     ManyToMany(Vec<usize>, Vec<T>),
+// }
+
+// impl<T: Dist> OpAmInputToValue<T> {
+//     pub fn embed_vec<U>(data: &Vec<U>, buf: &mut [u8]) -> usize {
+//         let mut size = 0;
+//         // embed the data length
+//         let len = data.len();
+//         unsafe {
+//             std::ptr::copy_nonoverlapping(
+//                 &len as *const usize,
+//                 buf[size..].as_ptr() as *mut usize,
+//                 1,
+//             )
+//         };
+//         size += std::mem::size_of::<usize>();
+//         // ---- end data length ----
+//         // embed the data
+//         unsafe {
+//             std::ptr::copy_nonoverlapping(data.as_ptr(), buf[size..].as_ptr() as *mut U, len)
+//         };
+//         size += len * std::mem::size_of::<U>();
+//         // ---- end data ====
+//         size
+//     }
+//     pub fn embed_single_val<U>(val: U, buf: &mut [u8]) -> usize {
+//         // embed the val
+//         unsafe { std::ptr::copy_nonoverlapping(&val as *const U, buf.as_ptr() as *mut U, 1) };
+//         std::mem::size_of::<U>()
+//         // ---- end val ----
+//     }
+//     pub fn to_bytes(self, buf: &mut [u8]) -> usize {
+//         match self {
+//             OpAmInputToValue::OneToOne(idx, val) => {
+//                 // embed the enum type
+//                 let mut size = 0;
+//                 buf[size] = 0;
+//                 size += 1;
+//                 // ----- end type -----
+//                 // embed the index
+//                 size += OpAmInputToValue::<usize>::embed_single_val(idx, &mut buf[size..]);
+//                 // ---- end index ----
+//                 // embed the value
+//                 size += OpAmInputToValue::<T>::embed_single_val(val, &mut buf[size..]);
+//                 // -- end value --
+//                 size
+//             }
+//             OpAmInputToValue::OneToMany(idx, vals) => {
+//                 // embed the enum type
+//                 let mut size = 0;
+//                 buf[size] = 1;
+//                 size += 1;
+//                 // ----- end type -----
+//                 // embed the index
+//                 size += OpAmInputToValue::<usize>::embed_single_val(idx, &mut buf[size..]);
+//                 // ---- end index ----
+//                 // embed the vals
+//                 size += OpAmInputToValue::<T>::embed_vec(&vals, &mut buf[size..]);
+//                 // ---- end vals ----
+//                 size
+//             }
+//             OpAmInputToValue::ManyToOne(idxs, val) => {
+//                 // embed the enum type
+//                 let mut size = 0;
+//                 buf[size] = 2;
+//                 size += 1;
+//                 // ----- end type -----
+//                 // embed the indices
+//                 size += OpAmInputToValue::<usize>::embed_vec(&idxs, &mut buf[size..]);
+//                 // ---- end indices ----
+//                 // embed the val
+//                 size += OpAmInputToValue::<T>::embed_single_val(val, &mut buf[size..]);
+//                 // ---- end val ----
+//                 size
+//             }
+//             OpAmInputToValue::ManyToMany(idxs, vals) => {
+//                 // embed the enum type
+//                 let mut size = 0;
+//                 buf[size] = 3;
+//                 size += 1;
+//                 // ----- end type -----
+//                 // embed the indices
+//                 size += OpAmInputToValue::<usize>::embed_vec(&idxs, &mut buf[size..]);
+//                 // ---- end indices ----
+//                 // embed the vals
+//                 size += OpAmInputToValue::<T>::embed_vec(&vals, &mut buf[size..]);
+//                 // ---- end vals ----
+//                 size
+//             }
+//         }
+//     }
+//     pub fn vec_size<U>(data: &Vec<U>) -> usize {
+//         let mut size = 0;
+//         let len = data.len();
+//         size += std::mem::size_of::<usize>(); //the length
+//         size += len * std::mem::size_of::<U>();
+//         size
+//     }
+//     pub fn single_val_size<U>(_val: U) -> usize {
+//         std::mem::size_of::<U>()
+//     }
+//     pub fn num_bytes(&self) -> usize {
+//         match self {
+//             OpAmInputToValue::OneToOne(idx, val) => {
+//                 let mut size = 0;
+//                 size += 1;
+//                 size += OpAmInputToValue::<usize>::single_val_size(idx);
+//                 size += OpAmInputToValue::<T>::single_val_size(val);
+//                 size
+//             }
+//             OpAmInputToValue::OneToMany(idx, vals) => {
+//                 let mut size = 0;
+//                 size += 1;
+//                 size += OpAmInputToValue::<usize>::single_val_size(idx);
+//                 size += OpAmInputToValue::<T>::vec_size(&vals);
+//                 size
+//             }
+//             OpAmInputToValue::ManyToOne(idxs, val) => {
+//                 let mut size = 0;
+//                 size += 1;
+//                 size += OpAmInputToValue::<usize>::vec_size(&idxs);
+//                 size += OpAmInputToValue::<T>::single_val_size(val);
+//                 size
+//             }
+//             OpAmInputToValue::ManyToMany(idxs, vals) => {
+//                 let mut size = 0;
+//                 size += 1;
+//                 size += OpAmInputToValue::<usize>::vec_size(&idxs);
+//                 size += OpAmInputToValue::<T>::vec_size(&vals);
+//                 size
+//             }
+//         }
+//     }
+// }
+
+// #[doc(hidden)]
+// pub enum RemoteOpAmInputToValue<'a, T: Dist> {
+//     OneToOne(&'a usize, &'a T),
+//     OneToMany(&'a usize, &'a [T]),
+//     ManyToOne(&'a [usize], &'a T),
+//     ManyToMany(&'a [usize], &'a [T]),
+// }
+
+// impl<'a, T: Dist> RemoteOpAmInputToValue<'a, T> {
+//     pub fn unpack_slice<U>(buf: &[u8]) -> (&[U], usize) {
+//         let mut size = 0;
+//         let len = unsafe { &*(buf[size..].as_ptr() as *const usize) };
+//         size += std::mem::size_of::<usize>();
+//         let vals = unsafe { std::slice::from_raw_parts(buf[size..].as_ptr() as *const U, *len) };
+//         size += len * std::mem::size_of::<T>();
+//         (vals, size)
+//     }
+//     pub fn from_bytes(buf: &'a [u8]) -> (Self, usize) {
+//         let mut size = 0;
+//         let variant = buf[size];
+//         size += 1;
+//         match variant {
+//             0 => {
+//                 let idx = unsafe { &*(buf[size..].as_ptr() as *const usize) };
+//                 size += std::mem::size_of::<usize>();
+//                 let val = unsafe { &*(buf[size..].as_ptr() as *const T) };
+//                 size += std::mem::size_of::<T>();
+//                 (RemoteOpAmInputToValue::OneToOne(idx, val), size)
+//             }
+//             1 => {
+//                 let idx = unsafe { &*(buf[size..].as_ptr() as *const usize) };
+//                 size += std::mem::size_of::<usize>();
+//                 let (vals, vals_bytes) = RemoteOpAmInputToValue::<T>::unpack_slice(&buf[size..]);
+//                 size += vals_bytes;
+//                 (RemoteOpAmInputToValue::OneToMany(idx, vals), size)
+//             }
+//             2 => {
+//                 let (idxs, idxs_bytes) =
+//                     RemoteOpAmInputToValue::<usize>::unpack_slice(&buf[size..]);
+//                 size += idxs_bytes;
+//                 let val = unsafe { &*(buf[size..].as_ptr() as *const T) };
+//                 size += std::mem::size_of::<T>();
+
+//                 (RemoteOpAmInputToValue::ManyToOne(idxs, val), size)
+//             }
+//             3 => {
+//                 let (idxs, idxs_bytes) =
+//                     RemoteOpAmInputToValue::<usize>::unpack_slice(&buf[size..]);
+//                 size += idxs_bytes;
+//                 let (vals, vals_bytes) = RemoteOpAmInputToValue::<T>::unpack_slice(&buf[size..]);
+//                 size += vals_bytes;
+
+//                 (RemoteOpAmInputToValue::ManyToMany(idxs, vals), size)
+//             }
+//             _ => {
+//                 panic!("unrecognized OpAmInputToValue Type");
+//             }
+//         }
+//     }
+// }
 
 #[doc(hidden)]
 #[derive(Clone, serde::Serialize, Debug)]
@@ -915,54 +629,7 @@ impl<'a, T: Dist> OpInputEnum<'_, T> {
     }
 
     // #[tracing::instrument(skip_all)]
-    // pub(crate) fn as_vec_chunks(&self, chunk_size: usize) -> Vec<Vec<T>> {
-        
-    //     match self {
-    //         OpInputEnum::Val(v) => vec![vec![*v]],
-    //         OpInputEnum::Slice(s) => s.chunks(chunk_size).map(|chunk| chunk.to_vec()).collect(),
-    //         OpInputEnum::Vec(v) => v.chunks(chunk_size).map(|chunk| chunk.to_vec()).collect(),
-    //         OpInputEnum::NativeAtomicLocalData(a) => {
-    //             let mut vecs = vec![];
-    //             let mut data = Vec::with_capacity(chunk_size);
-    //             for elem in a.iter() {
-    //                 data.push(elem.load());
-    //                 if data.len() == chunk_size {
-    //                     vecs.push(data);
-    //                     data = Vec::with_capacity(chunk_size);
-    //                 }
-    //             }
-    //             if !data.is_empty() {
-    //                 vecs.push(data);
-    //             }
-    //             vecs
-    //         },
-    //         OpInputEnum::GenericAtomicLocalData(a) => {
-    //             let mut vecs = vec![];
-    //             let mut data = Vec::with_capacity(chunk_size);
-    //             for elem in a.iter() {
-    //                 data.push(elem.load());
-    //                 if data.len() == chunk_size {
-    //                     vecs.push(data);
-    //                     data = Vec::with_capacity(chunk_size);
-    //                 }
-    //             }
-    //             if !data.is_empty() {
-    //                 vecs.push(data);
-    //             }
-    //             vecs
-    //         },
-    //         OpInputEnum::LocalLockLocalData(a) =>   a.data.chunks(chunk_size).map(|chunk| chunk.to_vec()).collect(),
-    //         OpInputEnum::GlobalLockLocalData(a) =>   a.data.chunks(chunk_size).map(|chunk| chunk.to_vec()).collect(),
-    //         // OpInputEnum::MemoryRegion(mr) => *unsafe { mr.as_slice() }
-    //         //     .expect("memregion not local")
-    //         //     .first()
-    //         //     .expect("memregion is empty"),
-    //     }
-    // }
-
-    // #[tracing::instrument(skip_all)]
     pub(crate) fn as_vec_chunks(&self, chunk_size: usize) -> Box<dyn Iterator<Item = Vec<T>> + '_> {
-        
         match self {
             OpInputEnum::Val(v) => Box::new(vec![vec![*v]].into_iter()),
             OpInputEnum::Slice(s) => Box::new(s.chunks(chunk_size).map(|chunk| chunk.to_vec())),
@@ -970,35 +637,37 @@ impl<'a, T: Dist> OpInputEnum<'_, T> {
             OpInputEnum::NativeAtomicLocalData(a) => {
                 let mut data = Vec::with_capacity(chunk_size);
 
-                Box::new(a.iter().enumerate().filter_map(move |(i,elem)| {
+                Box::new(a.iter().enumerate().filter_map(move |(i, elem)| {
                     data.push(elem.load());
                     if data.len() == chunk_size || i == a.len() - 1 {
                         let mut new_data = Vec::with_capacity(chunk_size);
                         std::mem::swap(&mut data, &mut new_data);
                         Some(new_data)
-                    }
-                    else {
+                    } else {
                         None
                     }
                 }))
-            },
+            }
             OpInputEnum::GenericAtomicLocalData(a) => {
                 let mut data = Vec::with_capacity(chunk_size);
 
-                Box::new(a.iter().enumerate().filter_map(move |(i,elem)| {
+                Box::new(a.iter().enumerate().filter_map(move |(i, elem)| {
                     data.push(elem.load());
                     if data.len() == chunk_size || i == a.len() - 1 {
                         let mut new_data = Vec::with_capacity(chunk_size);
                         std::mem::swap(&mut data, &mut new_data);
                         Some(new_data)
-                    }
-                    else {
+                    } else {
                         None
                     }
                 }))
-            },
-            OpInputEnum::LocalLockLocalData(a) =>   Box::new(a.data.chunks(chunk_size).map(|chunk| chunk.to_vec())),
-            OpInputEnum::GlobalLockLocalData(a) =>   Box::new(a.data.chunks(chunk_size).map(|chunk| chunk.to_vec())),
+            }
+            OpInputEnum::LocalLockLocalData(a) => {
+                Box::new(a.data.chunks(chunk_size).map(|chunk| chunk.to_vec()))
+            }
+            OpInputEnum::GlobalLockLocalData(a) => {
+                Box::new(a.data.chunks(chunk_size).map(|chunk| chunk.to_vec()))
+            }
             // OpInputEnum::MemoryRegion(mr) => *unsafe { mr.as_slice() }
             //     .expect("memregion not local")
             //     .first()
@@ -1091,20 +760,19 @@ impl<'a, T: Dist> OpInput<'a, T> for &'a [T] {
         //     Err(_) => 10000,                      //+ 1 to account for main thread
         // };
         // let num = len / num_per_batch;
-        let num = if len <1000 {
+        let num = if len < 1000 {
             1
-        } 
-        else {
-            match std::env::var("LAMELLAR_BATCH_OP_THREADS"){
+        } else {
+            match std::env::var("LAMELLAR_BATCH_OP_THREADS") {
                 Ok(n) => n.parse::<usize>().unwrap(),
                 Err(_) => {
                     match std::env::var("LAMELLAR_THREADS") {
-                        Ok(n) => std::cmp::max(1,(n.parse::<usize>().unwrap() + 1)/4), //+ 1 to account for main thread
-                        Err(_) => 4,                      //+ 1 to account for main thread
+                        Ok(n) => std::cmp::max(1, (n.parse::<usize>().unwrap() + 1) / 4), //+ 1 to account for main thread
+                        Err(_) => 4, //+ 1 to account for main thread
                     }
                 }
             }
-        }; 
+        };
         let num_per_batch = len / num;
         for i in 0..num {
             let temp = &self[(i * num_per_batch)..((i + 1) * num_per_batch)];
@@ -1119,7 +787,7 @@ impl<'a, T: Dist> OpInput<'a, T> for &'a [T] {
     }
 }
 
-impl<'a, T: Dist> OpInput<'a, T> for &'a mut dyn Iterator<Item = T>  {
+impl<'a, T: Dist> OpInput<'a, T> for &'a mut dyn Iterator<Item = T> {
     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
         self.collect::<Vec<_>>().as_op_input()
     }
@@ -1156,14 +824,13 @@ impl<'a, T: Dist> OpInput<'a, T> for &'a mut [T] {
 
         let num = if len < 1000 {
             1
-        }
-        else {    
-            match std::env::var("LAMELLAR_BATCH_OP_THREADS"){
+        } else {
+            match std::env::var("LAMELLAR_BATCH_OP_THREADS") {
                 Ok(n) => n.parse::<usize>().unwrap(),
                 Err(_) => {
                     match std::env::var("LAMELLAR_THREADS") {
-                        Ok(n) => std::cmp::max(1,(n.parse::<usize>().unwrap() + 1)/4), //+ 1 to account for main thread
-                        Err(_) => 4,                      //+ 1 to account for main thread
+                        Ok(n) => std::cmp::max(1, (n.parse::<usize>().unwrap() + 1) / 4), //+ 1 to account for main thread
+                        Err(_) => 4, //+ 1 to account for main thread
                     }
                 }
             }
@@ -1235,14 +902,13 @@ impl<'a, T: Dist> OpInput<'a, T> for Vec<T> {
         // let num = len / num_per_batch;
         let num = if len < 1000 {
             1
-        }
-        else {    
-            match std::env::var("LAMELLAR_BATCH_OP_THREADS"){
+        } else {
+            match std::env::var("LAMELLAR_BATCH_OP_THREADS") {
                 Ok(n) => n.parse::<usize>().unwrap(),
                 Err(_) => {
                     match std::env::var("LAMELLAR_THREADS") {
-                        Ok(n) => std::cmp::max(1,(n.parse::<usize>().unwrap() + 1)/4), //+ 1 to account for main thread
-                        Err(_) => 4,                      //+ 1 to account for main thread
+                        Ok(n) => std::cmp::max(1, (n.parse::<usize>().unwrap() + 1) / 4), //+ 1 to account for main thread
+                        Err(_) => 4, //+ 1 to account for main thread
                     }
                 }
             }
@@ -1366,14 +1032,13 @@ impl<'a, T: Dist> OpInput<'a, T> for &'a LocalLockLocalData<'_, T> {
             // let num = len / num_per_batch;
             let num = if len < 1000 {
                 1
-            }
-            else {    
-                match std::env::var("LAMELLAR_BATCH_OP_THREADS"){
+            } else {
+                match std::env::var("LAMELLAR_BATCH_OP_THREADS") {
                     Ok(n) => n.parse::<usize>().unwrap(),
                     Err(_) => {
                         match std::env::var("LAMELLAR_THREADS") {
-                            Ok(n) => std::cmp::max(1,(n.parse::<usize>().unwrap() + 1)/4), //+ 1 to account for main thread
-                            Err(_) => 4,                      //+ 1 to account for main thread
+                            Ok(n) => std::cmp::max(1, (n.parse::<usize>().unwrap() + 1) / 4), //+ 1 to account for main thread
+                            Err(_) => 4, //+ 1 to account for main thread
                         }
                     }
                 }
@@ -1390,9 +1055,7 @@ impl<'a, T: Dist> OpInput<'a, T> for &'a LocalLockLocalData<'_, T> {
             let rem = len % num_per_batch;
             if rem > 0 {
                 // let sub_array = self.sub_array((start_index+(num*num_per_batch))..(start_index+(num*num_per_batch) + rem));
-                let sub_data = self
-                    .clone()
-                    .into_sub_data(num * num_per_batch, len);
+                let sub_data = self.clone().into_sub_data(num * num_per_batch, len);
                 iters.push(OpInputEnum::LocalLockLocalData(sub_data));
             }
         }
@@ -1418,14 +1081,13 @@ impl<'a, T: Dist> OpInput<'a, T> for &'a GlobalLockLocalData<'_, T> {
             // let num = len / num_per_batch;
             let num = if len < 1000 {
                 1
-            }
-            else {    
-                match std::env::var("LAMELLAR_BATCH_OP_THREADS"){
+            } else {
+                match std::env::var("LAMELLAR_BATCH_OP_THREADS") {
                     Ok(n) => n.parse::<usize>().unwrap(),
                     Err(_) => {
                         match std::env::var("LAMELLAR_THREADS") {
-                            Ok(n) => std::cmp::max(1,(n.parse::<usize>().unwrap() + 1)/4), //+ 1 to account for main thread
-                            Err(_) => 4,                      //+ 1 to account for main thread
+                            Ok(n) => std::cmp::max(1, (n.parse::<usize>().unwrap() + 1) / 4), //+ 1 to account for main thread
+                            Err(_) => 4, //+ 1 to account for main thread
                         }
                     }
                 }
@@ -1442,9 +1104,7 @@ impl<'a, T: Dist> OpInput<'a, T> for &'a GlobalLockLocalData<'_, T> {
             let rem = len % num_per_batch;
             if rem > 0 {
                 // let sub_array = self.sub_array((start_index+(num*num_per_batch))..(start_index+(num*num_per_batch) + rem));
-                let sub_data = self
-                    .clone()
-                    .into_sub_data(num * num_per_batch, len);
+                let sub_data = self.clone().into_sub_data(num * num_per_batch, len);
                 iters.push(OpInputEnum::GlobalLockLocalData(sub_data));
             }
         }
@@ -1502,14 +1162,13 @@ impl<'a, T: Dist + ElementOps> OpInput<'a, T> for &GenericAtomicLocalData<T> {
             // let num = len / num_per_batch;
             let num = if len < 1000 {
                 1
-            }
-            else {    
-                match std::env::var("LAMELLAR_BATCH_OP_THREADS"){
+            } else {
+                match std::env::var("LAMELLAR_BATCH_OP_THREADS") {
                     Ok(n) => n.parse::<usize>().unwrap(),
                     Err(_) => {
                         match std::env::var("LAMELLAR_THREADS") {
-                            Ok(n) => std::cmp::max(1,(n.parse::<usize>().unwrap() + 1)/4), //+ 1 to account for main thread
-                            Err(_) => 4,                      //+ 1 to account for main thread
+                            Ok(n) => std::cmp::max(1, (n.parse::<usize>().unwrap() + 1) / 4), //+ 1 to account for main thread
+                            Err(_) => 4, //+ 1 to account for main thread
                         }
                     }
                 }
@@ -1523,8 +1182,7 @@ impl<'a, T: Dist + ElementOps> OpInput<'a, T> for &GenericAtomicLocalData<T> {
             let rem = len % num_per_batch;
             if rem > 0 {
                 // let sub_array = self.sub_array((start_index+(num*num_per_batch))..(start_index+(num*num_per_batch) + rem));
-                let sub_data =
-                    local_data.sub_data(num * num_per_batch, len);
+                let sub_data = local_data.sub_data(num * num_per_batch, len);
                 iters.push(OpInputEnum::GenericAtomicLocalData(sub_data));
             }
         }
@@ -1557,14 +1215,13 @@ impl<'a, T: Dist + ElementOps> OpInput<'a, T> for &NativeAtomicLocalData<T> {
             // let num = len / num_per_batch;
             let num = if len < 1000 {
                 1
-            }
-            else {    
-                match std::env::var("LAMELLAR_BATCH_OP_THREADS"){
+            } else {
+                match std::env::var("LAMELLAR_BATCH_OP_THREADS") {
                     Ok(n) => n.parse::<usize>().unwrap(),
                     Err(_) => {
                         match std::env::var("LAMELLAR_THREADS") {
-                            Ok(n) => std::cmp::max(1,(n.parse::<usize>().unwrap() + 1)/4), //+ 1 to account for main thread
-                            Err(_) => 4,                      //+ 1 to account for main thread
+                            Ok(n) => std::cmp::max(1, (n.parse::<usize>().unwrap() + 1) / 4), //+ 1 to account for main thread
+                            Err(_) => 4, //+ 1 to account for main thread
                         }
                     }
                 }
@@ -1582,8 +1239,7 @@ impl<'a, T: Dist + ElementOps> OpInput<'a, T> for &NativeAtomicLocalData<T> {
             let rem = len % num_per_batch;
             if rem > 0 {
                 // let sub_array = self.sub_array((start_index+(num*num_per_batch))..(start_index+(num*num_per_batch) + rem));
-                let sub_data =
-                    local_data.sub_data(num * num_per_batch, len);
+                let sub_data = local_data.sub_data(num * num_per_batch, len);
                 iters.push(OpInputEnum::NativeAtomicLocalData(sub_data));
             }
         }

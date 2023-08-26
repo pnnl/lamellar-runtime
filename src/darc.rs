@@ -922,8 +922,8 @@ impl<T: 'static> LamellarAM for DroppedWaitAM<T> {
                         To view backtrace set RUST_LIB_BACKTRACE=1\n\
                         {}",
                         mode_refs,
-                        unsafe {wrapped.inner.as_ref().local_cnt.load(Ordering::SeqCst)},
-                        unsafe {wrapped.inner.as_ref().dist_cnt.load(Ordering::SeqCst)},
+                        wrapped.inner.as_ref().local_cnt.load(Ordering::SeqCst),
+                        wrapped.inner.as_ref().dist_cnt.load(Ordering::SeqCst),
                         *crate::DEADLOCK_TIMEOUT,
                         std::backtrace::Backtrace::capture()
                     );
@@ -991,8 +991,8 @@ impl<T: 'static> LamellarAM for DroppedWaitAM<T> {
                         To view backtrace set RUST_LIB_BACKTRACE=1\n\
                         {}",
                         mode_refs,
-                        unsafe {wrapped.inner.as_ref().local_cnt.load(Ordering::SeqCst)},
-                        unsafe {wrapped.inner.as_ref().dist_cnt.load(Ordering::SeqCst)},
+                        wrapped.inner.as_ref().local_cnt.load(Ordering::SeqCst),
+                        wrapped.inner.as_ref().dist_cnt.load(Ordering::SeqCst),
                         *crate::DEADLOCK_TIMEOUT,
                         std::backtrace::Backtrace::capture()
                     );

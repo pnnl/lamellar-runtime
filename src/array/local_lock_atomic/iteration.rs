@@ -1,8 +1,12 @@
-use crate::array::local_lock_atomic::*;
-use crate::array::iterator::distributed_iterator::{DistIter,DistIteratorLauncher,IndexedDistributedIterator,DistributedIterator};
-use crate::array::iterator::local_iterator::{LocalIter,LocalIteratorLauncher,IndexedLocalIterator,LocalIterator};
+use crate::array::iterator::distributed_iterator::{
+    DistIteratorLauncher, DistributedIterator, IndexedDistributedIterator,
+};
+use crate::array::iterator::local_iterator::{
+    IndexedLocalIterator, LocalIterator, LocalIteratorLauncher,
+};
 use crate::array::iterator::one_sided_iterator::OneSidedIter;
 use crate::array::iterator::{LamellarArrayIterators, LamellarArrayMutIterators, Schedule};
+use crate::array::local_lock_atomic::*;
 use crate::array::private::LamellarArrayPrivate;
 use crate::array::*;
 use crate::memregion::Dist;
@@ -366,7 +370,6 @@ impl<T: Dist> LamellarArrayMutIterators<T> for LocalLockArray<T> {
     }
 }
 
-
 impl<T: Dist> DistIteratorLauncher for LocalLockArray<T> {
     fn global_index_from_local(&self, index: usize, chunk_size: usize) -> Option<usize> {
         self.array.global_index_from_local(index, chunk_size)
@@ -405,7 +408,7 @@ impl<T: Dist> DistIteratorLauncher for LocalLockArray<T> {
         F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
         Fut: Future<Output = ()> + Send + 'static,
     {
-        DistIteratorLauncher::for_each_async(&self.array,iter, op)
+        DistIteratorLauncher::for_each_async(&self.array, iter, op)
     }
     fn for_each_async_with_schedule<I, F, Fut>(
         &self,
@@ -425,16 +428,21 @@ impl<T: Dist> DistIteratorLauncher for LocalLockArray<T> {
     where
         I: DistributedIterator + 'static,
         I::Item: Dist + ArrayOps,
-        A: for<'a>  TeamFrom<(&'a Vec<I::Item>,Distribution)> + SyncSend + Clone + 'static,
+        A: for<'a> TeamFrom<(&'a Vec<I::Item>, Distribution)> + SyncSend + Clone + 'static,
     {
         DistIteratorLauncher::collect(&self.array, iter, d)
     }
 
-    fn collect_with_schedule<I, A>(&self,sched: Schedule, iter: &I, d: Distribution) -> Pin<Box<dyn Future<Output = A> + Send>>
+    fn collect_with_schedule<I, A>(
+        &self,
+        sched: Schedule,
+        iter: &I,
+        d: Distribution,
+    ) -> Pin<Box<dyn Future<Output = A> + Send>>
     where
         I: DistributedIterator + 'static,
         I::Item: Dist + ArrayOps,
-        A: for<'a>  TeamFrom<(&'a Vec<I::Item>,Distribution)> + SyncSend + Clone + 'static,
+        A: for<'a> TeamFrom<(&'a Vec<I::Item>, Distribution)> + SyncSend + Clone + 'static,
     {
         DistIteratorLauncher::collect_with_schedule(&self.array, sched, iter, d)
     }
@@ -445,9 +453,9 @@ impl<T: Dist> DistIteratorLauncher for LocalLockArray<T> {
     ) -> Pin<Box<dyn Future<Output = A> + Send>>
     where
         I: DistributedIterator,
-        I::Item: Future<Output = B> + Send  + 'static,
+        I::Item: Future<Output = B> + Send + 'static,
         B: Dist + ArrayOps,
-        A: for<'a> TeamFrom<(&'a Vec<B>,Distribution)> + SyncSend  + Clone +  'static,
+        A: for<'a> TeamFrom<(&'a Vec<B>, Distribution)> + SyncSend + Clone + 'static,
     {
         DistIteratorLauncher::collect_async(&self.array, iter, d)
     }
@@ -460,11 +468,11 @@ impl<T: Dist> DistIteratorLauncher for LocalLockArray<T> {
     ) -> Pin<Box<dyn Future<Output = A> + Send>>
     where
         I: DistributedIterator,
-        I::Item: Future<Output = B> + Send  + 'static,
+        I::Item: Future<Output = B> + Send + 'static,
         B: Dist + ArrayOps,
-        A: for<'a> TeamFrom<(&'a Vec<B>,Distribution)> + SyncSend  + Clone +  'static,
+        A: for<'a> TeamFrom<(&'a Vec<B>, Distribution)> + SyncSend + Clone + 'static,
     {
-        DistIteratorLauncher::collect_async_with_schedule(&self.array, sched,iter, d)
+        DistIteratorLauncher::collect_async_with_schedule(&self.array, sched, iter, d)
     }
     fn team(&self) -> Pin<Arc<LamellarTeamRT>> {
         self.array.team_rt().clone()
@@ -486,7 +494,7 @@ impl<T: Dist> LocalIteratorLauncher for LocalLockArray<T> {
         I: LocalIterator + 'static,
         F: Fn(I::Item) + SyncSend + Clone + 'static,
     {
-        LocalIteratorLauncher::for_each(&self.array,iter, op)
+        LocalIteratorLauncher::for_each(&self.array, iter, op)
     }
     fn for_each_with_schedule<I, F>(
         &self,
@@ -498,19 +506,15 @@ impl<T: Dist> LocalIteratorLauncher for LocalLockArray<T> {
         I: LocalIterator + 'static,
         F: Fn(I::Item) + SyncSend + Clone + 'static,
     {
-        LocalIteratorLauncher::for_each_with_schedule(&self.array,sched, iter, op)
+        LocalIteratorLauncher::for_each_with_schedule(&self.array, sched, iter, op)
     }
-    fn for_each_async<I, F, Fut>(
-        &self,
-        iter: &I,
-        op: F,
-    ) -> Pin<Box<dyn Future<Output = ()> + Send>>
+    fn for_each_async<I, F, Fut>(&self, iter: &I, op: F) -> Pin<Box<dyn Future<Output = ()> + Send>>
     where
         I: LocalIterator + 'static,
         F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
         Fut: Future<Output = ()> + Send + 'static,
     {
-        LocalIteratorLauncher::for_each_async(&self.array,iter, op)
+        LocalIteratorLauncher::for_each_async(&self.array, iter, op)
     }
     fn for_each_async_with_schedule<I, F, Fut>(
         &self,
@@ -535,7 +539,12 @@ impl<T: Dist> LocalIteratorLauncher for LocalLockArray<T> {
         LocalIteratorLauncher::reduce(&self.array, iter, op)
     }
 
-    fn reduce_with_schedule<I, F>(&self, sched: Schedule, iter: &I, op: F) -> Pin<Box<dyn Future<Output = Option<I::Item>> + Send>>
+    fn reduce_with_schedule<I, F>(
+        &self,
+        sched: Schedule,
+        iter: &I,
+        op: F,
+    ) -> Pin<Box<dyn Future<Output = Option<I::Item>> + Send>>
     where
         I: LocalIterator + 'static,
         I::Item: SyncSend,
@@ -568,21 +577,26 @@ impl<T: Dist> LocalIteratorLauncher for LocalLockArray<T> {
     where
         I: LocalIterator + 'static,
         I::Item: Dist + ArrayOps,
-        A: for<'a>  TeamFrom<(&'a Vec<I::Item>,Distribution)> + SyncSend + Clone + 'static,
+        A: for<'a> TeamFrom<(&'a Vec<I::Item>, Distribution)> + SyncSend + Clone + 'static,
     {
         LocalIteratorLauncher::collect(&self.array, iter, d)
     }
 
-    fn collect_with_schedule<I, A>(&self, sched: Schedule, iter: &I, d: Distribution) -> Pin<Box<dyn Future<Output = A> + Send>>
+    fn collect_with_schedule<I, A>(
+        &self,
+        sched: Schedule,
+        iter: &I,
+        d: Distribution,
+    ) -> Pin<Box<dyn Future<Output = A> + Send>>
     where
         I: LocalIterator + 'static,
         I::Item: Dist + ArrayOps,
-        A: for<'a>  TeamFrom<(&'a Vec<I::Item>,Distribution)> + SyncSend + Clone + 'static,
+        A: for<'a> TeamFrom<(&'a Vec<I::Item>, Distribution)> + SyncSend + Clone + 'static,
     {
         LocalIteratorLauncher::collect_with_schedule(&self.array, sched, iter, d)
     }
 
-// fn collect_async<I, A, B>(
+    // fn collect_async<I, A, B>(
     //     &self,
     //     iter: &I,
     //     d: Distribution,
@@ -613,14 +627,18 @@ impl<T: Dist> LocalIteratorLauncher for LocalLockArray<T> {
 
     fn count<I>(&self, iter: &I) -> Pin<Box<dyn Future<Output = usize> + Send>>
     where
-        I: LocalIterator + 'static
+        I: LocalIterator + 'static,
     {
         LocalIteratorLauncher::count(&self.array, iter)
     }
-    
-    fn count_with_schedule<I>(&self, sched: Schedule, iter: &I) -> Pin<Box<dyn Future<Output = usize> + Send>>
+
+    fn count_with_schedule<I>(
+        &self,
+        sched: Schedule,
+        iter: &I,
+    ) -> Pin<Box<dyn Future<Output = usize> + Send>>
     where
-        I: LocalIterator + 'static
+        I: LocalIterator + 'static,
     {
         LocalIteratorLauncher::count_with_schedule(&self.array, sched, iter)
     }
@@ -632,8 +650,12 @@ impl<T: Dist> LocalIteratorLauncher for LocalLockArray<T> {
     {
         LocalIteratorLauncher::sum(&self.array, iter)
     }
-    
-    fn sum_with_schedule<I>(&self, sched: Schedule, iter: &I) -> Pin<Box<dyn Future<Output = I::Item> + Send>>
+
+    fn sum_with_schedule<I>(
+        &self,
+        sched: Schedule,
+        iter: &I,
+    ) -> Pin<Box<dyn Future<Output = I::Item> + Send>>
     where
         I: LocalIterator + 'static,
         I::Item: SyncSend + std::iter::Sum,
@@ -645,4 +667,3 @@ impl<T: Dist> LocalIteratorLauncher for LocalLockArray<T> {
         self.array.team_rt().clone()
     }
 }
-

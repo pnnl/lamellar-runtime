@@ -4,7 +4,7 @@ pub(crate) mod operations;
 mod rdma;
 
 use crate::active_messaging::*;
-use crate::array::r#unsafe::operations::BUFOPS;
+// use crate::array::r#unsafe::operations::BUFOPS;
 use crate::array::*;
 use crate::array::{LamellarRead, LamellarWrite};
 use crate::darc::{Darc, DarcMode, WeakDarc};
@@ -14,8 +14,6 @@ use crate::memregion::{Dist, MemoryRegion};
 use crate::scheduler::SchedulerQueue;
 use crate::LamellarTaskGroup;
 use core::marker::PhantomData;
-use parking_lot::RwLock;
-use std::any::TypeId;
 use std::ops::Bound;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -29,7 +27,6 @@ pub(crate) struct UnsafeArrayData {
     pub(crate) task_group: Arc<LamellarTaskGroup>,
     pub(crate) my_pe: usize,
     pub(crate) num_pes: usize,
-    pub(crate) op_buffers: RwLock<Vec<Arc<dyn BufferOp>>>,
     req_cnt: Arc<AtomicUsize>,
 }
 
@@ -146,11 +143,11 @@ impl<T: Dist + ArrayOps + 'static> UnsafeArray<T> {
         let task_group = LamellarTaskGroup::new(team.clone());
         let my_pe = team.team_pe_id().unwrap();
         let num_pes = team.num_pes();
-        let full_array_size = std::cmp::max(array_size,num_pes);
+        let full_array_size = std::cmp::max(array_size, num_pes);
 
         let elem_per_pe = full_array_size as f64 / num_pes as f64;
         let per_pe_size = (full_array_size as f64 / num_pes as f64).ceil() as usize; //we do ceil to ensure enough space an each pe
-                                                                                // println!("new unsafe array {:?} {:?} {:?}", elem_per_pe, num_elems_local, per_pe_size);
+                                                                                     // println!("new unsafe array {:?} {:?} {:?}", elem_per_pe, num_elems_local, per_pe_size);
         let rmr = MemoryRegion::new(
             per_pe_size * std::mem::size_of::<T>(),
             team.lamellae.clone(),
@@ -171,15 +168,10 @@ impl<T: Dist + ArrayOps + 'static> UnsafeArray<T> {
                 task_group: Arc::new(task_group),
                 my_pe: my_pe,
                 num_pes: num_pes,
-                // op_buffers: Mutex::new(HashMap::new()),
-                op_buffers: RwLock::new(Vec::new()),
                 req_cnt: Arc::new(AtomicUsize::new(0)),
             },
             crate::darc::DarcMode::UnsafeArray,
-            Some(|data: &mut UnsafeArrayData| {
-                // // println!("unsafe array data dropping2");
-                data.op_buffers.write().clear();
-            }),
+            None,
         )
         .expect("trying to create array on non team member");
         let array = UnsafeArray {
@@ -189,7 +181,7 @@ impl<T: Dist + ArrayOps + 'static> UnsafeArray<T> {
                 // wait: wait,
                 orig_elem_per_pe: elem_per_pe,
                 elem_size: std::mem::size_of::<T>(),
-                offset: 0,        //relative to size of T
+                offset: 0,             //relative to size of T
                 size: full_array_size, //relative to size of T
             },
             phantom: PhantomData,
@@ -201,34 +193,17 @@ impl<T: Dist + ArrayOps + 'static> UnsafeArray<T> {
         //     println!("pe: {:?} {:?}",i,array.inner.num_elems_pe(i));
         // }
         // array.inner.data.print();
-        array.create_buffered_ops();
-        if full_array_size != array_size{
+        if full_array_size != array_size {
             println!("WARNING: Array size {array_size} is less than number of pes {full_array_size}, each PE will not contain data");
             array.sub_array(0..array_size)
-        }
-        else{
+        } else {
             array
         }
         // println!("after buffered ops");
         // array.inner.data.print();
-        
     }
-
-    
 }
 impl<T: Dist + 'static> UnsafeArray<T> {
-
-    // This is called when constructing a new array to setup the operation buffers
-    fn create_buffered_ops(&self) {
-        if let Some(func) = BUFOPS.get(&TypeId::of::<T>()) {
-            let mut op_bufs = self.inner.data.op_buffers.write();
-            let bytearray: UnsafeByteArray = self.clone().into();
-            for _pe in 0..self.inner.data.num_pes {
-                op_bufs.push(func(UnsafeByteArray::downgrade(&bytearray)))
-            }
-        }
-    }
-
     #[doc(alias("One-sided", "onesided"))]
     /// Change the distribution this array handle uses to index into the data of the array.
     ///
@@ -392,8 +367,7 @@ impl<T: Dist + 'static> UnsafeArray<T> {
         self.wait_all();
         // println!("block on outstanding");
         // self.inner.data.print();
-        self.inner.data.block_on_outstanding(mode, 0); //self.inner.data.op_buffers.read().len());
-        self.inner.data.op_buffers.write().clear();
+        self.inner.data.block_on_outstanding(mode, 0);
         // self.inner.data.print();
     }
 
@@ -592,18 +566,18 @@ impl<T: Dist + 'static> UnsafeArray<T> {
 //     }
 // }
 
-impl<T: Dist + ArrayOps > TeamFrom<(Vec<T>,Distribution)> for UnsafeArray<T> {
-    fn team_from(input: (Vec<T>,Distribution), team: &Pin<Arc<LamellarTeamRT>>) -> Self {
+impl<T: Dist + ArrayOps> TeamFrom<(Vec<T>, Distribution)> for UnsafeArray<T> {
+    fn team_from(input: (Vec<T>, Distribution), team: &Pin<Arc<LamellarTeamRT>>) -> Self {
         let (vals, distribution) = input;
         let input = (&vals, distribution);
         input.team_into(team)
     }
 }
 
-impl<T: Dist + ArrayOps> TeamFrom<(&Vec<T>,Distribution)> for UnsafeArray<T> {
-    fn team_from(input: (&Vec<T>,Distribution), team: &Pin<Arc<LamellarTeamRT>>) -> Self {
+impl<T: Dist + ArrayOps> TeamFrom<(&Vec<T>, Distribution)> for UnsafeArray<T> {
+    fn team_from(input: (&Vec<T>, Distribution), team: &Pin<Arc<LamellarTeamRT>>) -> Self {
         let (local_vals, distribution) = input;
-        println!("local_vals len: {:?}",local_vals.len());
+        println!("local_vals len: {:?}", local_vals.len());
         team.barrier();
         let local_sizes =
             UnsafeArray::<usize>::new(team.clone(), team.num_pes, Distribution::Block);
@@ -622,16 +596,21 @@ impl<T: Dist + ArrayOps> TeamFrom<(&Vec<T>,Distribution)> for UnsafeArray<T> {
                 .into_iter()
                 .enumerate()
                 .for_each(|(i, local_size)| {
-                    println!("i: {:?} local_size{:?}", i,local_size);
+                    println!("i: {:?} local_size{:?}", i, local_size);
                     size += local_size;
                     if i < my_pe {
                         my_start += local_size;
                     }
                 });
         }
-        println!("my_start {} size {} local_vals {}", my_start, size, local_vals.len());
+        println!(
+            "my_start {} size {} local_vals {}",
+            my_start,
+            size,
+            local_vals.len()
+        );
         let array = UnsafeArray::<T>::new(team.clone(), size, distribution);
-        if local_vals.len() > 0 { 
+        if local_vals.len() > 0 {
             unsafe { array.put(my_start, local_vals) };
         }
         array.wait_all();
@@ -657,8 +636,6 @@ impl<T: Dist> From<NativeAtomicArray<T>> for UnsafeArray<T> {
         // println!("unsafe from native atomic");
         // let array = array.into_data();
         array.array.block_on_outstanding(DarcMode::UnsafeArray);
-        array.array.inner.data.op_buffers.write().clear();
-        array.array.create_buffered_ops();
         array.array
     }
 }
@@ -668,8 +645,6 @@ impl<T: Dist> From<GenericAtomicArray<T>> for UnsafeArray<T> {
         // println!("unsafe from generic atomic");
         // let array = array.into_data();
         array.array.block_on_outstanding(DarcMode::UnsafeArray);
-        array.array.inner.data.op_buffers.write().clear();
-        array.array.create_buffered_ops();
         array.array
     }
 }
@@ -678,8 +653,6 @@ impl<T: Dist> From<LocalLockArray<T>> for UnsafeArray<T> {
     fn from(array: LocalLockArray<T>) -> Self {
         // println!("unsafe from local lock atomic");
         array.array.block_on_outstanding(DarcMode::UnsafeArray);
-        array.array.inner.data.op_buffers.write().clear();
-        array.array.create_buffered_ops();
         array.array
     }
 }
@@ -688,28 +661,14 @@ impl<T: Dist> From<GlobalLockArray<T>> for UnsafeArray<T> {
     fn from(array: GlobalLockArray<T>) -> Self {
         // println!("unsafe from global lock atomic");
         array.array.block_on_outstanding(DarcMode::UnsafeArray);
-        array.array.inner.data.op_buffers.write().clear();
-        array.array.create_buffered_ops();
         array.array
     }
 }
-
-// impl<T: Dist> From<LocalOnlyArray<T>> for UnsafeArray<T> {
-//     fn from(array: LocalOnlyArray<T>) -> Self {
-//         // println!("unsafe from local only");
-//         array.array.block_on_outstanding(DarcMode::UnsafeArray);
-//         array.array.inner.data.op_buffers.write().clear();
-//         array.array.create_buffered_ops();
-//         array.array
-//     }
-// }
 
 impl<T: Dist> From<ReadOnlyArray<T>> for UnsafeArray<T> {
     fn from(array: ReadOnlyArray<T>) -> Self {
         // println!("unsafe from read only");
         array.array.block_on_outstanding(DarcMode::UnsafeArray);
-        array.array.inner.data.op_buffers.write().clear();
-        array.array.create_buffered_ops();
         array.array
     }
 }
@@ -740,7 +699,9 @@ impl<T: Dist> From<UnsafeArray<T>> for UnsafeByteArray {
 
 impl<T: Dist> From<&UnsafeArray<T>> for UnsafeByteArray {
     fn from(array: &UnsafeArray<T>) -> Self {
-        UnsafeByteArray { inner: array.inner.clone() }
+        UnsafeByteArray {
+            inner: array.inner.clone(),
+        }
     }
 }
 
@@ -751,11 +712,10 @@ impl<T: Dist> From<UnsafeArray<T>> for LamellarByteArray {
 }
 
 impl<T: Dist> From<LamellarByteArray> for UnsafeArray<T> {
-    fn from(array:LamellarByteArray) -> Self {
+    fn from(array: LamellarByteArray) -> Self {
         if let LamellarByteArray::UnsafeArray(array) = array {
             array.into()
-        }
-        else {
+        } else {
             panic!("Expected LamellarByteArray::UnsafeArray")
         }
     }

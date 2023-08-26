@@ -28,7 +28,7 @@ rand = "0.8.5"
 parking_lot = {version = "0.12.1", features = ["arc_lock", "send_guard", "serde"] }
 indexmap = "1.9.1" #lamellar_alloc
 core_affinity = "0.5.10"
-log = "0.4.17"
+log = "0.4.19"
 simple_logger = "4.0.0"
 async-task = "4.3.0"
 async-trait = "0.1.58"

@@ -1,7 +1,7 @@
+use crate::active_messaging::{LamellarArcLocalAm, SyncSend};
 use crate::array::iterator::consumer::*;
+use crate::array::iterator::distributed_iterator::DistributedIterator;
 use crate::array::iterator::IterRequest;
-use crate::array::iterator::distributed_iterator::{DistributedIterator};
-use crate::active_messaging::{SyncSend,LamellarArcLocalAm};
 use crate::lamellar_request::LamellarRequest;
 use crate::lamellar_team::LamellarTeamRT;
 
@@ -10,9 +10,8 @@ use futures::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 
-
 #[derive(Clone, Debug)]
-pub struct ForEach<I,F> 
+pub struct ForEach<I, F>
 where
     I: DistributedIterator + 'static,
     F: Fn(I::Item) + SyncSend + Clone + 'static,
@@ -21,42 +20,44 @@ where
     pub(crate) op: F,
 }
 
-impl<I,F> IterConsumer for ForEach<I,F>
+impl<I, F> IterConsumer for ForEach<I, F>
 where
     I: DistributedIterator + 'static,
     F: Fn(I::Item) + SyncSend + Clone + 'static,
-    {
+{
     type AmOutput = ();
     type Output = ();
     type Item = I::Item;
-    fn init(&self, start: usize, cnt: usize) -> Self{
-        ForEach{
-            iter: self.iter.init(start,cnt),
+    fn init(&self, start: usize, cnt: usize) -> Self {
+        ForEach {
+            iter: self.iter.init(start, cnt),
             op: self.op.clone(),
         }
     }
     fn next(&mut self) -> Option<Self::Item> {
         self.iter.next()
     }
-    fn into_am(&self, schedule: IterSchedule) -> LamellarArcLocalAm{
-        Arc::new(ForEachAm{
+    fn into_am(&self, schedule: IterSchedule) -> LamellarArcLocalAm {
+        Arc::new(ForEachAm {
             iter: self.clone(),
             op: self.op.clone(),
-            schedule
+            schedule,
         })
     }
-    fn create_handle(self, team: Pin<Arc<LamellarTeamRT>>, reqs: Vec<Box<dyn LamellarRequest<Output = Self::AmOutput>>>) -> Box<dyn IterRequest<Output = Self::Output>>{
-        Box::new(DistIterForEachHandle {
-            reqs
-        })
+    fn create_handle(
+        self,
+        _team: Pin<Arc<LamellarTeamRT>>,
+        reqs: Vec<Box<dyn LamellarRequest<Output = Self::AmOutput>>>,
+    ) -> Box<dyn IterRequest<Output = Self::Output>> {
+        Box::new(DistIterForEachHandle { reqs })
     }
-    fn max_elems(&self, in_elems: usize) -> usize{
+    fn max_elems(&self, in_elems: usize) -> usize {
         self.iter.elems(in_elems)
     }
 }
 
 #[derive(Debug)]
-pub struct ForEachAsync<I,F,Fut> 
+pub struct ForEachAsync<I, F, Fut>
 where
     I: DistributedIterator + 'static,
     F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
@@ -67,51 +68,52 @@ where
     // pub(crate) _phantom: PhantomData<Fut>,
 }
 
-impl<I,F,Fut> IterConsumer for ForEachAsync<I,F, Fut>
+impl<I, F, Fut> IterConsumer for ForEachAsync<I, F, Fut>
 where
-I: DistributedIterator + 'static,
-F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
-Fut: Future<Output = ()> + Send + 'static,
-    {
+    I: DistributedIterator + 'static,
+    F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
+    Fut: Future<Output = ()> + Send + 'static,
+{
     type AmOutput = ();
     type Output = ();
     type Item = I::Item;
-    fn init(&self, start: usize, cnt: usize) -> Self{
-        ForEachAsync{
-            iter: self.iter.init(start,cnt),
+    fn init(&self, start: usize, cnt: usize) -> Self {
+        ForEachAsync {
+            iter: self.iter.init(start, cnt),
             op: self.op.clone(),
         }
     }
     fn next(&mut self) -> Option<Self::Item> {
         self.iter.next()
     }
-    fn into_am(&self, schedule: IterSchedule) -> LamellarArcLocalAm{
-
-        Arc::new(ForEachAsyncAm{
+    fn into_am(&self, schedule: IterSchedule) -> LamellarArcLocalAm {
+        Arc::new(ForEachAsyncAm {
             iter: self.clone(),
             op: self.op.clone(),
             schedule,
             // _phantom: self._phantom.clone(),
         })
     }
-    fn create_handle(self, team: Pin<Arc<LamellarTeamRT>>, reqs: Vec<Box<dyn LamellarRequest<Output = Self::AmOutput>>>) -> Box<dyn IterRequest<Output = Self::Output>>{
-        Box::new(DistIterForEachHandle {
-            reqs
-        })
+    fn create_handle(
+        self,
+        _team: Pin<Arc<LamellarTeamRT>>,
+        reqs: Vec<Box<dyn LamellarRequest<Output = Self::AmOutput>>>,
+    ) -> Box<dyn IterRequest<Output = Self::Output>> {
+        Box::new(DistIterForEachHandle { reqs })
     }
-    fn max_elems(&self, in_elems: usize) -> usize{
+    fn max_elems(&self, in_elems: usize) -> usize {
         self.iter.elems(in_elems)
     }
     // fn clone(&self) -> Self{
-        
+
     // }
 }
 
-impl<I,F,Fut> Clone for ForEachAsync<I,F, Fut>
+impl<I, F, Fut> Clone for ForEachAsync<I, F, Fut>
 where
-I: DistributedIterator + 'static,
-F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
-Fut: Future<Output = ()> + Send + 'static, 
+    I: DistributedIterator + 'static,
+    F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
+    Fut: Future<Output = ()> + Send + 'static,
 {
     fn clone(&self) -> Self {
         ForEachAsync {
@@ -120,7 +122,6 @@ Fut: Future<Output = ()> + Send + 'static,
         }
     }
 }
-
 
 #[doc(hidden)]
 pub struct DistIterForEachHandle {
@@ -144,28 +145,26 @@ impl IterRequest for DistIterForEachHandle {
 }
 
 #[lamellar_impl::AmLocalDataRT(Clone)]
-pub(crate) struct ForEachAm<I,F>
+pub(crate) struct ForEachAm<I, F>
 where
     I: DistributedIterator + 'static,
     F: Fn(I::Item) + SyncSend + Clone + 'static,
 {
     pub(crate) op: F,
-    pub(crate) iter: ForEach<I,F>,
-    pub(crate) schedule: IterSchedule
+    pub(crate) iter: ForEach<I, F>,
+    pub(crate) schedule: IterSchedule,
 }
-
-
 
 #[lamellar_impl::rt_am_local]
 impl<I, F> LamellarAm for ForEachAm<I, F>
 where
-    I: DistributedIterator  + 'static,
+    I: DistributedIterator + 'static,
     F: Fn(I::Item) + SyncSend + Clone + 'static,
 {
     async fn exec(&self) {
         // println!("foreacham: {:?}", std::thread::current().id());
         let mut iter = self.schedule.init_iter(self.iter.clone());
-        while let Some(elem) = iter.next(){
+        while let Some(elem) = iter.next() {
             (&self.op)(elem);
         }
     }
@@ -179,7 +178,7 @@ where
     Fut: Future<Output = ()> + Send + 'static,
 {
     pub(crate) op: F,
-    pub(crate) iter: ForEachAsync<I,F,Fut>,
+    pub(crate) iter: ForEachAsync<I, F, Fut>,
     pub(crate) schedule: IterSchedule,
     // pub(crate) _phantom: PhantomData<Fut>
 }
@@ -187,13 +186,13 @@ where
 #[lamellar_impl::rt_am_local]
 impl<I, F, Fut> LamellarAm for ForEachAsyncAm<I, F, Fut>
 where
-    I: DistributedIterator  + 'static,
+    I: DistributedIterator + 'static,
     F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
     Fut: Future<Output = ()> + Send + 'static,
 {
     async fn exec(&self) {
         let mut iter = self.schedule.init_iter(self.iter.clone());
-        while let Some(elem) = iter.next(){
+        while let Some(elem) = iter.next() {
             (&self.op)(elem).await;
         }
     }
@@ -296,9 +295,6 @@ where
 //         // println!("done in for each");
 //     }
 // }
-
-
-
 
 // #[lamellar_impl::AmLocalDataRT(Clone, Debug)]
 // pub(crate) struct ForEachWorkStealing<I, F>

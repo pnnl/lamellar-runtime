@@ -8,20 +8,17 @@
 // pub(crate) use for_each::*;
 // pub(crate) use reduce::*;
 
+use crate::active_messaging::{LamellarArcLocalAm, SyncSend};
 use crate::array::iterator::IterRequest;
-use crate::array::iterator::local_iterator::LocalIterator;
-use crate::active_messaging::{SyncSend,LamellarArcLocalAm};
 use crate::lamellar_request::LamellarRequest;
 use crate::lamellar_team::LamellarTeamRT;
 
-
-use std::sync::Arc;
-use std::sync::atomic::{AtomicUsize,Ordering};
-use std::pin::Pin;
 use parking_lot::Mutex;
-use rand::thread_rng;
 use rand::prelude::SliceRandom;
-
+use rand::thread_rng;
+use std::pin::Pin;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
 
 // trait Consumer{
 //     type Item;
@@ -29,7 +26,6 @@ use rand::prelude::SliceRandom;
 //     fn monotonic(&self) -> Self;
 //     fn next(&self) -> Self::Item;
 // }
-
 
 #[derive(Clone, Debug)]
 pub(crate) struct IterWorkStealer {
@@ -53,10 +49,10 @@ impl IterWorkStealer {
             None
         }
     }
-    fn set_done(&self) {
-        let mut range = self.range.lock();
-        range.0 = range.1;
-    }
+    // fn set_done(&self) {
+    //     let mut range = self.range.lock();
+    //     range.0 = range.1;
+    // }
 
     fn steal(&self) -> Option<(usize, usize)> {
         let mut range = self.range.lock();
@@ -73,28 +69,32 @@ impl IterWorkStealer {
 }
 
 #[derive(Clone, Debug)]
-pub(crate) enum IterSchedule{
-    Static(usize,usize),
-    Dynamic(Arc<AtomicUsize>,usize),
-    Chunk(Vec<(usize, usize)>, Arc<AtomicUsize>,),
-    WorkStealing(IterWorkStealer, Vec<IterWorkStealer>)
+pub(crate) enum IterSchedule {
+    Static(usize, usize),
+    Dynamic(Arc<AtomicUsize>, usize),
+    Chunk(Vec<(usize, usize)>, Arc<AtomicUsize>),
+    WorkStealing(IterWorkStealer, Vec<IterWorkStealer>),
 }
 
 impl IterSchedule {
     pub(crate) fn init_iter<I: IterConsumer>(&self, iter: I) -> IterScheduleIter<I> {
         match self {
-            IterSchedule::Static( start, end) => {
-                IterScheduleIter::Static(iter.init(*start,end-start))
+            IterSchedule::Static(start, end) => {
+                IterScheduleIter::Static(iter.init(*start, end - start))
             }
             IterSchedule::Dynamic(cur_i, max_i) => {
                 IterScheduleIter::Dynamic(iter, cur_i.clone(), *max_i)
             }
             IterSchedule::Chunk(ranges, range_i) => {
-                IterScheduleIter::Chunk(iter.init(0,0), ranges.clone(),range_i.clone())
+                IterScheduleIter::Chunk(iter.init(0, 0), ranges.clone(), range_i.clone())
             }
-            IterSchedule::WorkStealing( range, siblings) => {
+            IterSchedule::WorkStealing(range, siblings) => {
                 let (start, end) = *range.range.lock();
-                IterScheduleIter::WorkStealing(iter.init(start, end-start), range.clone(), siblings.clone())
+                IterScheduleIter::WorkStealing(
+                    iter.init(start, end - start),
+                    range.clone(),
+                    siblings.clone(),
+                )
             }
         }
     }
@@ -116,25 +116,23 @@ impl IterSchedule {
     // }
 }
 
-pub(crate) enum IterScheduleIter<I: IterConsumer>{
+pub(crate) enum IterScheduleIter<I: IterConsumer> {
     Static(I),
-    Dynamic(I,Arc<AtomicUsize>,usize),
-    Chunk(I,Vec<(usize, usize)>, Arc<AtomicUsize>),
-    WorkStealing(I,IterWorkStealer, Vec<IterWorkStealer>)
+    Dynamic(I, Arc<AtomicUsize>, usize),
+    Chunk(I, Vec<(usize, usize)>, Arc<AtomicUsize>),
+    WorkStealing(I, IterWorkStealer, Vec<IterWorkStealer>),
 }
 
 impl<I: IterConsumer> Iterator for IterScheduleIter<I> {
     type Item = I::Item;
     fn next(&mut self) -> Option<Self::Item> {
         match self {
-            IterScheduleIter::Static(iter) => {
-                iter.next()
-            }
+            IterScheduleIter::Static(iter) => iter.next(),
             IterScheduleIter::Dynamic(iter, cur_i, max_i) => {
                 let mut ci = cur_i.fetch_add(1, Ordering::Relaxed);
                 while ci < *max_i {
                     // println!("ci {:?} maxi {:?} {:?}", ci, *max_i, std::thread::current().id());
-                    *iter = iter.init(ci,1);
+                    *iter = iter.init(ci, 1);
                     if let Some(elem) = iter.next() {
                         return Some(elem);
                     }
@@ -145,20 +143,20 @@ impl<I: IterConsumer> Iterator for IterScheduleIter<I> {
             IterScheduleIter::Chunk(iter, ranges, range_i) => {
                 let mut next = iter.next();
                 // println!("next {:?} {:?}", next.is_none(), std::thread::current().id());
-                if next.is_none(){
+                if next.is_none() {
                     let ri = range_i.fetch_add(1, Ordering::Relaxed);
                     // println!("range {:?} {:?}", ri, std::thread::current().id());
                     if ri < ranges.len() {
-                        *iter = iter.init(ranges[ri].0, ranges[ri].1-ranges[ri].0);
+                        *iter = iter.init(ranges[ri].0, ranges[ri].1 - ranges[ri].0);
                         next = iter.next();
                     }
                 }
                 next
             }
             IterScheduleIter::WorkStealing(iter, range, siblings) => {
-                let mut inner_next = |iter: &mut I| {
-                    while let Some(ri) = range.next(){
-                        *iter = iter.init(ri,1);
+                let inner_next = |iter: &mut I| {
+                    while let Some(ri) = range.next() {
+                        *iter = iter.init(ri, 1);
                         if let Some(elem) = iter.next() {
                             return Some(elem);
                         }
@@ -167,7 +165,7 @@ impl<I: IterConsumer> Iterator for IterScheduleIter<I> {
                         // }
                     }
                     None
-                };  
+                };
                 let mut next = inner_next(iter);
                 if next.is_none() {
                     let mut rng = thread_rng();
@@ -187,8 +185,6 @@ impl<I: IterConsumer> Iterator for IterScheduleIter<I> {
     }
 }
 
-
-
 pub(crate) trait IterConsumer: SyncSend {
     type AmOutput;
     type Output;
@@ -196,15 +192,14 @@ pub(crate) trait IterConsumer: SyncSend {
     fn init(&self, start: usize, cnt: usize) -> Self;
     fn next(&mut self) -> Option<Self::Item>;
     fn into_am(&self, schedule: IterSchedule) -> LamellarArcLocalAm;
-    fn create_handle(self, team: Pin<Arc<LamellarTeamRT>>, reqs: Vec<Box<dyn LamellarRequest<Output = Self::AmOutput>>>) -> Box<dyn IterRequest<Output = Self::Output>>;
+    fn create_handle(
+        self,
+        team: Pin<Arc<LamellarTeamRT>>,
+        reqs: Vec<Box<dyn LamellarRequest<Output = Self::AmOutput>>>,
+    ) -> Box<dyn IterRequest<Output = Self::Output>>;
     fn max_elems(&self, in_elems: usize) -> usize;
-    
 }
 
 // pub(crate) trait MonotonicIterConsumer: IterConsumer{
 //     fn monotonic<I: IterConsumer>(&self) -> I;
 // }
-
-
-
-

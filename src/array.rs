@@ -76,11 +76,11 @@ use crate::{active_messaging::*, LamellarTeamRT};
 use async_trait::async_trait;
 use enum_dispatch::enum_dispatch;
 use futures_lite::Future;
-use parking_lot::{Mutex, RwLock};
+use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::pin::Pin;
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
 // use serde::de::DeserializeOwned;
@@ -111,10 +111,17 @@ pub mod prelude;
 
 pub(crate) mod r#unsafe;
 pub use r#unsafe::{
-    operations::{UnsafeArrayOpBuf,MultiValMultiIdxOps,MultiValSingleIdxOps,SingleValMultiIdxOps,BatchReturnType}, UnsafeArray, UnsafeByteArray, UnsafeByteArrayWeak,
+    operations::{
+        BatchReturnType, MultiValMultiIdxOps, MultiValSingleIdxOps, SingleValMultiIdxOps,
+    },
+    UnsafeArray, UnsafeByteArray, UnsafeByteArrayWeak,
 };
 pub(crate) mod read_only;
-pub use read_only::{ReadOnlyArray, ReadOnlyArrayOpBuf, /*ReadOnlyArrayMultiMultiOps, ReadOnlyArrayMultiSingleOps,*/ ReadOnlyByteArray, ReadOnlyByteArrayWeak};
+pub use read_only::{
+    ReadOnlyArray, ReadOnlyArrayOpBuf,
+    /*ReadOnlyArrayMultiMultiOps, ReadOnlyArrayMultiSingleOps,*/ ReadOnlyByteArray,
+    ReadOnlyByteArrayWeak,
+};
 
 // pub(crate) mod local_only;
 // pub use local_only::LocalOnlyArray;
@@ -130,26 +137,24 @@ pub use atomic::{
 
 pub(crate) mod generic_atomic;
 pub use generic_atomic::{
-    operations::{GenericAtomicArrayOpBuf, /*GenericAtomicArrayMultiMultiOps, GenericAtomicArrayMultiSingleOps*/}, GenericAtomicArray, GenericAtomicByteArray,
-    GenericAtomicByteArrayWeak, GenericAtomicLocalData,
+    GenericAtomicArray, GenericAtomicByteArray, GenericAtomicByteArrayWeak, GenericAtomicLocalData,
 };
 
 pub(crate) mod native_atomic;
 pub use native_atomic::{
-    operations::{NativeAtomicArrayOpBuf,/*NativeAtomicArrayMultiMultiOps, NativeAtomicArrayMultiSingleOps*/}, NativeAtomicArray, NativeAtomicByteArray,
-    NativeAtomicByteArrayWeak, NativeAtomicLocalData,
+    NativeAtomicArray, NativeAtomicByteArray, NativeAtomicByteArrayWeak, NativeAtomicLocalData,
 };
 
 pub(crate) mod local_lock_atomic;
 pub use local_lock_atomic::{
-    operations::{LocalLockArrayOpBuf,/*LocalLockArrayMultiMultiOps, LocalLockArrayMultiSingleOps*/}, LocalLockArray, LocalLockByteArray, LocalLockByteArrayWeak,
-    LocalLockLocalData, LocalLockMutLocalData,
+    LocalLockArray, LocalLockByteArray, LocalLockByteArrayWeak, LocalLockLocalData,
+    LocalLockMutLocalData,
 };
 
 pub(crate) mod global_lock_atomic;
 pub use global_lock_atomic::{
-    operations::{GlobalLockArrayOpBuf,/*GlobalLockArrayMultiMultiOps, GlobalLockArrayMultiSingleOps*/}, GlobalLockArray, GlobalLockByteArray,
-    GlobalLockByteArrayWeak, GlobalLockLocalData, GlobalLockMutLocalData,
+    GlobalLockArray, GlobalLockByteArray, GlobalLockByteArrayWeak, GlobalLockLocalData,
+    GlobalLockMutLocalData,
 };
 
 pub mod iterator;
@@ -189,8 +194,6 @@ crate::inventory::collect!(ReduceKey);
 // lamellar_impl::generate_reductions_for_type_rt!(true, u8,usize);
 // lamellar_impl::generate_ops_for_type_rt!(true, true, u8,usize);
 // impl Dist for bool {}
-
-
 
 lamellar_impl::generate_reductions_for_type_rt!(true, u8, u16, u32, u64, usize);
 lamellar_impl::generate_reductions_for_type_rt!(false, u128);
@@ -402,8 +405,8 @@ impl<T: Dist> TeamFrom<&LamellarArrayRdmaOutput<T>> for LamellarArrayRdmaOutput<
     }
 }
 
-impl <T: Clone> TeamFrom<(&Vec<T>,Distribution)> for Vec<T> {
-    fn team_from(vals: (&Vec<T>,Distribution), _team: &Pin<Arc<LamellarTeamRT>>) -> Self {
+impl<T: Clone> TeamFrom<(&Vec<T>, Distribution)> for Vec<T> {
+    fn team_from(vals: (&Vec<T>, Distribution), _team: &Pin<Arc<LamellarTeamRT>>) -> Self {
         vals.0.to_vec()
     }
 }
@@ -434,14 +437,18 @@ pub enum LamellarByteArray {
     GlobalLockArray(GlobalLockByteArray),
 }
 
-impl LamellarByteArray{
+impl LamellarByteArray {
     pub fn type_id(&self) -> std::any::TypeId {
-        match self{
+        match self {
             LamellarByteArray::UnsafeArray(_) => std::any::TypeId::of::<UnsafeByteArray>(),
             LamellarByteArray::ReadOnlyArray(_) => std::any::TypeId::of::<ReadOnlyByteArray>(),
             LamellarByteArray::AtomicArray(_) => std::any::TypeId::of::<AtomicByteArray>(),
-            LamellarByteArray::NativeAtomicArray(_) => std::any::TypeId::of::<NativeAtomicByteArray>(),
-            LamellarByteArray::GenericAtomicArray(_) => std::any::TypeId::of::<GenericAtomicByteArray>(),
+            LamellarByteArray::NativeAtomicArray(_) => {
+                std::any::TypeId::of::<NativeAtomicByteArray>()
+            }
+            LamellarByteArray::GenericAtomicArray(_) => {
+                std::any::TypeId::of::<GenericAtomicByteArray>()
+            }
             LamellarByteArray::LocalLockArray(_) => std::any::TypeId::of::<LocalLockByteArray>(),
             LamellarByteArray::GlobalLockArray(_) => std::any::TypeId::of::<GlobalLockByteArray>(),
         }
@@ -615,8 +622,8 @@ impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static> LamellarArrayCompa
 pub(crate) mod private {
     use crate::active_messaging::*;
     use crate::array::{
-        AtomicArray, GlobalLockArray,
-        /*NativeAtomicArray, GenericAtomicArray,*/ LamellarReadArray, LamellarWriteArray, LamellarByteArray,
+        AtomicArray, GlobalLockArray, LamellarByteArray,
+        /*NativeAtomicArray, GenericAtomicArray,*/ LamellarReadArray, LamellarWriteArray,
         LocalLockArray, ReadOnlyArray, UnsafeArray,
     };
     use crate::lamellar_request::{LamellarMultiRequest, LamellarRequest};

@@ -2,7 +2,6 @@ pub(crate) mod iteration;
 pub(crate) mod operations;
 mod rdma;
 use crate::array::atomic::AtomicElement;
-use crate::array::native_atomic::operations::BUFOPS;
 use crate::array::private::LamellarArrayPrivate;
 use crate::array::r#unsafe::{UnsafeByteArray, UnsafeByteArrayWeak};
 use crate::array::*;
@@ -11,9 +10,6 @@ use crate::darc::DarcMode;
 use crate::lamellar_team::{IntoLamellarTeam, LamellarTeamRT};
 use crate::memregion::Dist;
 use serde::ser::SerializeSeq;
-// use parking_lot::{
-//     Mutex,MutexGuard
-// };
 use std::any::TypeId;
 use std::ops::{
     AddAssign, BitAndAssign, BitOrAssign, BitXorAssign, DivAssign, MulAssign, RemAssign, ShlAssign,
@@ -173,7 +169,7 @@ macro_rules! slice_as_atomic{
 macro_rules! as_type{
     {  $val:ident,$A:ty  } => {
         {
-            *(&$val as *const T as *mut $A)
+            *(&$val as *const T as *const $A)
         }
     }
 }
@@ -915,7 +911,7 @@ impl<T: Dist> Iterator for NativeAtomicLocalDataIter<T> {
     }
 }
 
-impl<T: Dist  + ArrayOps + std::default::Default> NativeAtomicArray<T> {
+impl<T: Dist + ArrayOps + std::default::Default> NativeAtomicArray<T> {
     // Send + Copy  == Dist
     pub(crate) fn new_internal<U: Clone + Into<IntoLamellarTeam>>(
         team: U,
@@ -925,17 +921,6 @@ impl<T: Dist  + ArrayOps + std::default::Default> NativeAtomicArray<T> {
         // println!("new native atomic array 1");
         let array = UnsafeArray::new(team.clone(), array_size, distribution);
         array.block_on_outstanding(DarcMode::NativeAtomicArray);
-        if let Some(func) = BUFOPS.get(&TypeId::of::<T>()) {
-            let mut op_bufs = array.inner.data.op_buffers.write();
-            let bytearray = NativeAtomicByteArray {
-                array: array.clone().into(),
-                orig_t: NativeAtomicType::from::<T>(),
-            };
-
-            for _pe in 0..array.num_pes() {
-                op_bufs.push(func(NativeAtomicByteArray::downgrade(&bytearray)));
-            }
-        }
 
         NativeAtomicArray {
             array: array,
@@ -1006,8 +991,8 @@ impl<T: Dist> NativeAtomicArray<T> {
     }
 }
 
-impl<T: Dist + ArrayOps> TeamFrom<(Vec<T>,Distribution)> for NativeAtomicArray<T> {
-    fn team_from(input: (Vec<T>,Distribution), team: &Pin<Arc<LamellarTeamRT>>) -> Self {
+impl<T: Dist + ArrayOps> TeamFrom<(Vec<T>, Distribution)> for NativeAtomicArray<T> {
+    fn team_from(input: (Vec<T>, Distribution), team: &Pin<Arc<LamellarTeamRT>>) -> Self {
         let (vals, distribution) = input;
         let input = (&vals, distribution);
         let array: UnsafeArray<T> = input.team_into(team);
@@ -1020,16 +1005,7 @@ impl<T: Dist> From<UnsafeArray<T>> for NativeAtomicArray<T> {
     fn from(array: UnsafeArray<T>) -> Self {
         // println!("native from unsafe");
         array.block_on_outstanding(DarcMode::NativeAtomicArray);
-        if let Some(func) = BUFOPS.get(&TypeId::of::<T>()) {
-            let bytearray = NativeAtomicByteArray {
-                array: array.clone().into(),
-                orig_t: NativeAtomicType::from::<T>(),
-            };
-            let mut op_bufs = array.inner.data.op_buffers.write();
-            for _pe in 0..array.inner.data.num_pes {
-                op_bufs.push(func(NativeAtomicByteArray::downgrade(&bytearray)))
-            }
-        }
+
         NativeAtomicArray {
             array: array,
             orig_t: NativeAtomicType::from::<T>(),
@@ -1059,11 +1035,10 @@ impl<T: Dist> From<NativeAtomicArray<T>> for LamellarByteArray {
 
 #[doc(hidden)]
 impl<T: Dist> From<LamellarByteArray> for NativeAtomicArray<T> {
-    fn from(array:LamellarByteArray) -> Self {
+    fn from(array: LamellarByteArray) -> Self {
         if let LamellarByteArray::NativeAtomicArray(array) = array {
             array.into()
-        }
-        else {
+        } else {
             panic!("Expected LamellarByteArray::NativeAtomicArray")
         }
     }

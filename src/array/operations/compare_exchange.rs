@@ -125,11 +125,13 @@ pub trait CompareExchangeOps<T: ElementCompareEqOps>: private::LamellarArrayPriv
         current: T,
         new: T,
     ) -> Pin<Box<dyn Future<Output = Result<T, T>> + Send>> {
-        let result = self.inner_array()
-            .initiate_batch_result_op_2(new, index, ArrayOpCmd2::CompareExchange(current), self.as_lamellar_byte_array());
-            Box::pin(async move{
-                result.await[0]
-            })
+        let result = self.inner_array().initiate_batch_result_op_2(
+            new,
+            index,
+            ArrayOpCmd::CompareExchange(current),
+            self.as_lamellar_byte_array(),
+        );
+        Box::pin(async move { result.await[0] })
     }
 
     /// This call performs a batched vesion of the [compare_exchange][CompareExchangeOps::compare_exchange] function,
@@ -170,8 +172,8 @@ pub trait CompareExchangeOps<T: ElementCompareEqOps>: private::LamellarArrayPriv
         self.inner_array().initiate_batch_result_op_2(
             new,
             index,
-            ArrayOpCmd2::CompareExchange(current),
-            self.as_lamellar_byte_array()
+            ArrayOpCmd::CompareExchange(current),
+            self.as_lamellar_byte_array(),
         )
     }
 }
@@ -296,11 +298,10 @@ pub trait CompareExchangeEpsilonOps<T: ElementComparePartialEqOps>:
         let result = self.inner_array().initiate_batch_result_op_2(
             new,
             index,
-            ArrayOpCmd2::CompareExchangeEps(current, eps), 
-            self.as_lamellar_byte_array());
-        Box::pin(async move{
-            result.await[0]
-        })
+            ArrayOpCmd::CompareExchangeEps(current, eps),
+            self.as_lamellar_byte_array(),
+        );
+        Box::pin(async move { result.await[0] })
     }
 
     /// This call performs a batched vesion of the [compare_exchange_epsilon][CompareExchangeEpsilonOps::compare_exchange_epsilon] function,
@@ -343,7 +344,7 @@ pub trait CompareExchangeEpsilonOps<T: ElementComparePartialEqOps>:
         self.inner_array().initiate_batch_result_op_2(
             new,
             index,
-            ArrayOpCmd2::CompareExchangeEps(current, eps),
+            ArrayOpCmd::CompareExchangeEps(current, eps),
             self.as_lamellar_byte_array(),
         )
     }

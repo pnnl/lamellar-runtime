@@ -21,7 +21,6 @@ mod zip;
 
 pub(crate) mod consumer;
 
-
 use chunks::*;
 use enumerate::*;
 use filter::*;
@@ -35,10 +34,8 @@ use zip::*;
 
 pub(crate) use consumer::*;
 
-use crate::array::iterator::one_sided_iterator::OneSidedIterator;
-use crate::array::iterator::{Schedule,IterRequest};
-use crate::array::{AtomicArray, Distribution, LamellarArray, LamellarArrayPut,operations::ArrayOps, TeamFrom};
-use crate::lamellar_request::LamellarRequest;
+use crate::array::iterator::Schedule;
+use crate::array::{operations::ArrayOps, AtomicArray, Distribution, LamellarArray, TeamFrom};
 use crate::memregion::Dist;
 use crate::LamellarTeamRT;
 
@@ -49,8 +46,6 @@ use futures::Future;
 use std::marker::PhantomData;
 use std::pin::Pin;
 use std::sync::Arc;
-
-use rand::seq::SliceRandom;
 
 #[doc(hidden)]
 #[enum_dispatch]
@@ -78,7 +73,7 @@ pub trait LocalIteratorLauncher {
     where
         I: LocalIterator + 'static,
         F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
-        Fut: Future<Output = ()> + Send + 'static,;
+        Fut: Future<Output = ()> + Send + 'static;
 
     fn for_each_async_with_schedule<I, F, Fut>(
         &self,
@@ -89,15 +84,24 @@ pub trait LocalIteratorLauncher {
     where
         I: LocalIterator + 'static,
         F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
-        Fut: Future<Output = ()> + Send + 'static,;
-    
-    fn reduce<I, F>(&self, iter: &I, op: F) -> Pin<Box<dyn Future<Output = Option<I::Item>> + Send>>
+        Fut: Future<Output = ()> + Send + 'static;
+
+    fn reduce<I, F>(
+        &self,
+        iter: &I,
+        op: F,
+    ) -> Pin<Box<dyn Future<Output = Option<I::Item>> + Send>>
     where
         I: LocalIterator + 'static,
         I::Item: SyncSend,
         F: Fn(I::Item, I::Item) -> I::Item + SyncSend + Clone + 'static;
-    
-    fn reduce_with_schedule<I, F>(&self, sched: Schedule, iter: &I, op: F) -> Pin<Box<dyn Future<Output = Option<I::Item>> + Send>>
+
+    fn reduce_with_schedule<I, F>(
+        &self,
+        sched: Schedule,
+        iter: &I,
+        op: F,
+    ) -> Pin<Box<dyn Future<Output = Option<I::Item>> + Send>>
     where
         I: LocalIterator + 'static,
         I::Item: SyncSend,
@@ -109,7 +113,7 @@ pub trait LocalIteratorLauncher {
     //     I::Item: SyncSend,
     //     F: Fn(I::Item, I::Item) -> Fut + SyncSend + Clone + 'static,
     //     Fut: Future<Output = I::Item> + SyncSend + Clone + 'static;
-    
+
     // fn reduce_async_with_schedule<I, F, Fut>(&self, sched: Schedule, iter: &I, op: F) -> Pin<Box<dyn Future<Output = Option<I::Item>> + Send>>
     // where
     //     I: LocalIterator + 'static,
@@ -121,13 +125,18 @@ pub trait LocalIteratorLauncher {
     where
         I: LocalIterator + 'static,
         I::Item: Dist + ArrayOps,
-        A: for<'a>  TeamFrom<(&'a Vec<I::Item>,Distribution)>  + SyncSend + Clone + 'static;
+        A: for<'a> TeamFrom<(&'a Vec<I::Item>, Distribution)> + SyncSend + Clone + 'static;
 
-    fn collect_with_schedule<I, A>(&self, sched: Schedule, iter: &I, d: Distribution) -> Pin<Box<dyn Future<Output = A> + Send>>
+    fn collect_with_schedule<I, A>(
+        &self,
+        sched: Schedule,
+        iter: &I,
+        d: Distribution,
+    ) -> Pin<Box<dyn Future<Output = A> + Send>>
     where
         I: LocalIterator + 'static,
         I::Item: Dist + ArrayOps,
-        A: for<'a>  TeamFrom<(&'a Vec<I::Item>,Distribution)>  + SyncSend + Clone + 'static;
+        A: for<'a> TeamFrom<(&'a Vec<I::Item>, Distribution)> + SyncSend + Clone + 'static;
 
     // fn collect_async<I, A, B>(
     //     &self,
@@ -139,7 +148,7 @@ pub trait LocalIteratorLauncher {
     //    I::Item: Future<Output = B> + Send  + 'static,
     //     B: Dist + ArrayOps,
     //     A: From<UnsafeArray<B>> + SyncSend  + Clone +  'static;
-    
+
     // fn collect_async_with_schedule<I, A, B>(
     //         &self,
     //         sched: Schedule,
@@ -155,8 +164,12 @@ pub trait LocalIteratorLauncher {
     fn count<I>(&self, iter: &I) -> Pin<Box<dyn Future<Output = usize> + Send>>
     where
         I: LocalIterator + 'static;
-    
-    fn count_with_schedule<I>(&self, sched: Schedule, iter: &I) -> Pin<Box<dyn Future<Output = usize> + Send>>
+
+    fn count_with_schedule<I>(
+        &self,
+        sched: Schedule,
+        iter: &I,
+    ) -> Pin<Box<dyn Future<Output = usize> + Send>>
     where
         I: LocalIterator + 'static;
 
@@ -165,7 +178,11 @@ pub trait LocalIteratorLauncher {
         I: LocalIterator + 'static,
         I::Item: SyncSend + std::iter::Sum;
 
-    fn sum_with_schedule<I>(&self, sched: Schedule, iter: &I) -> Pin<Box<dyn Future<Output = I::Item> + Send>>
+    fn sum_with_schedule<I>(
+        &self,
+        sched: Schedule,
+        iter: &I,
+    ) -> Pin<Box<dyn Future<Output = I::Item> + Send>>
     where
         I: LocalIterator + 'static,
         I::Item: SyncSend + std::iter::Sum;
@@ -185,7 +202,7 @@ pub trait LocalIteratorLauncher {
 /// The functions in this trait are available on all local iterators.
 /// Additonaly functionality can be found in the [IndexedLocalIterator] trait:
 /// these methods are only available for local iterators where the number of elements is known in advance (e.g. after invoking `filter` these methods would be unavailable)
-pub trait LocalIterator:  SyncSend + Clone + 'static {
+pub trait LocalIterator: SyncSend + Clone + 'static {
     /// The type of item this distributed iterator produces
     type Item: Send;
 
@@ -278,7 +295,6 @@ pub trait LocalIterator:  SyncSend + Clone + 'static {
         FilterMap::new(self, op)
     }
 
-
     /// Applies `op` to each element producing a new iterator with the results
     ///
     /// # Examples
@@ -313,7 +329,7 @@ pub trait LocalIterator:  SyncSend + Clone + 'static {
 
     /// Similar to the Enumerate iterator (which can only be applied to `IndexedLocalIterators`), but the yielded indicies are only
     /// guaranteed to be unique and monotonically increasing, they should not be considered to have any relation to the underlying
-    /// location of data in the local array. 
+    /// location of data in the local array.
     ///
     /// # Examples
     ///```
@@ -341,11 +357,9 @@ pub trait LocalIterator:  SyncSend + Clone + 'static {
     /// PE: 2 j: 0 i: 0 elem: 2.0
     /// PE: 2 j: 1 i: 1 elem: 2.0
     ///```
-    fn monotonic(self) -> Monotonic<Self>
-    {
-        Monotonic::new(self,0)
+    fn monotonic(self) -> Monotonic<Self> {
+        Monotonic::new(self, 0)
     }
-
 
     /// Calls a closure on each element of a Local Iterator in parallel on the calling PE (the PE must have some local data of the array).
     ///
@@ -374,7 +388,7 @@ pub trait LocalIterator:  SyncSend + Clone + 'static {
         self.array().for_each(self, op)
     }
 
-        /// Calls a closure on each element of a Local Iterator in parallel on the calling PE (the PE must have some local data of the array) using the specififed schedule policy.
+    /// Calls a closure on each element of a Local Iterator in parallel on the calling PE (the PE must have some local data of the array) using the specififed schedule policy.
     ///
     /// This function returns a future which can be used to poll for completion of the iteration.
     /// Note calling this function launches the iteration regardless of if the returned future is used or not.
@@ -438,7 +452,7 @@ pub trait LocalIterator:  SyncSend + Clone + 'static {
         self.array().for_each_async(self, op)
     }
 
-        /// Calls a closure on each element of a Local Iterator in parallel on the calling PE (the PE must have some local data of the array) using the specififed schedule policy.
+    /// Calls a closure on each element of a Local Iterator in parallel on the calling PE (the PE must have some local data of the array) using the specififed schedule policy.
     ///
     /// The supplied closure must return a future.
     ///
@@ -469,11 +483,9 @@ pub trait LocalIterator:  SyncSend + Clone + 'static {
         F: Fn(Self::Item) -> Fut + SyncSend + Clone + 'static,
         Fut: Future<Output = ()> + Send + 'static,
     {
-        self.array()
-            .for_each_async_with_schedule(sched, self, op)
+        self.array().for_each_async_with_schedule(sched, self, op)
     }
 
-    
     /// Reduces the elements of the local iterator using the provided closure
     ///
     /// This function returns a future which needs to be driven to completion to retrieve the new container.
@@ -492,7 +504,7 @@ pub trait LocalIterator:  SyncSend + Clone + 'static {
     where
         // &'static Self: LocalIterator + 'static,
         Self::Item: SyncSend,
-        F: Fn(Self::Item,Self::Item) -> Self::Item + SyncSend + Clone + 'static,
+        F: Fn(Self::Item, Self::Item) -> Self::Item + SyncSend + Clone + 'static,
     {
         self.array().reduce(self, op)
     }
@@ -511,11 +523,15 @@ pub trait LocalIterator:  SyncSend + Clone + 'static {
     /// let req = array.local_iter().reduce(|acc,elem| acc+elem);
     /// let sum = array.block_on(req); //wait on the collect request to get the new array
     ///```
-    fn reduce_with_schedule<F>(&self, sched: Schedule, op: F) -> Pin<Box<dyn Future<Output = Option<Self::Item>> + Send>>
+    fn reduce_with_schedule<F>(
+        &self,
+        sched: Schedule,
+        op: F,
+    ) -> Pin<Box<dyn Future<Output = Option<Self::Item>> + Send>>
     where
         // &'static Self: LocalIterator + 'static,
         Self::Item: SyncSend,
-        F: Fn(Self::Item,Self::Item) -> Self::Item + SyncSend + Clone + 'static,
+        F: Fn(Self::Item, Self::Item) -> Self::Item + SyncSend + Clone + 'static,
     {
         self.array().reduce_with_schedule(sched, self, op)
     }
@@ -544,7 +560,6 @@ pub trait LocalIterator:  SyncSend + Clone + 'static {
     //     self.array().reduce_async(self, op)
     // }
 
-    
     /// Collects the elements of the local iterator into the specified container type
     ///
     /// This function returns a future which needs to be driven to completion to retrieve the new container.
@@ -556,7 +571,7 @@ pub trait LocalIterator:  SyncSend + Clone + 'static {
     where
         // &'static Self: LocalIterator + 'static,
         Self::Item: Dist + ArrayOps,
-        A: for<'a>  TeamFrom<(&'a Vec<Self::Item>,Distribution)> + SyncSend + Clone + 'static,
+        A: for<'a> TeamFrom<(&'a Vec<Self::Item>, Distribution)> + SyncSend + Clone + 'static,
     {
         self.array().collect(self, d)
     }
@@ -568,17 +583,19 @@ pub trait LocalIterator:  SyncSend + Clone + 'static {
     /// # Examples
     ///```
     ///```
-    fn collect_with_schedule<A>(&self,sched: Schedule, d: Distribution) -> Pin<Box<dyn Future<Output = A> + Send>>
+    fn collect_with_schedule<A>(
+        &self,
+        sched: Schedule,
+        d: Distribution,
+    ) -> Pin<Box<dyn Future<Output = A> + Send>>
     where
         // &'static Self: LocalIterator + 'static,
         Self::Item: Dist + ArrayOps,
-        A: for<'a>  TeamFrom<(&'a Vec<Self::Item>,Distribution)> + SyncSend + Clone + 'static,
+        A: for<'a> TeamFrom<(&'a Vec<Self::Item>, Distribution)> + SyncSend + Clone + 'static,
     {
         self.array().collect_with_schedule(sched, self, d)
     }
-    
 
-    
     // /// Collects the elements of the local iterator into the specified container type
     // /// Each element from the iterator must return a Future
     // ///
@@ -606,7 +623,6 @@ pub trait LocalIterator:  SyncSend + Clone + 'static {
     //     self.array().collect_async(self, d)
     // }
 
-
     /// Counts the number of the elements of the local iterator
     ///
     /// This function returns a future which needs to be driven to completion to retrieve the new container.
@@ -621,8 +637,7 @@ pub trait LocalIterator:  SyncSend + Clone + 'static {
     /// let req = array.local_iter().filter(|elem|  elem < 10).collect::<Vec<usize>>(Distribution::Block);
     /// let new_vec = array.block_on(req); //wait on the collect request to get the new array
     ///```
-    fn count(&self) -> Pin<Box<dyn Future<Output = usize> + Send>>
-    {
+    fn count(&self) -> Pin<Box<dyn Future<Output = usize> + Send>> {
         self.array().count(self)
     }
 
@@ -640,15 +655,14 @@ pub trait LocalIterator:  SyncSend + Clone + 'static {
     /// let req = array.local_iter().filter(|elem|  elem < 10).collect::<Vec<usize>>(Distribution::Block);
     /// let new_vec = array.block_on(req); //wait on the collect request to get the new array
     ///```
-    fn count_with_schedule(&self,sched: Schedule) -> Pin<Box<dyn Future<Output = usize> + Send>>
-    {
-        self.array().count_with_schedule(sched,self)
+    fn count_with_schedule(&self, sched: Schedule) -> Pin<Box<dyn Future<Output = usize> + Send>> {
+        self.array().count_with_schedule(sched, self)
     }
 
     /// Sums the elements of the local iterator.
-    /// 
+    ///
     /// Takes each element, adds them together, and returns the result.
-    /// 
+    ///
     /// An empty iterator returns the zero value of the type.
     ///
     /// This function returns a future which needs to be driven to completion to retrieve the sum
@@ -664,9 +678,9 @@ pub trait LocalIterator:  SyncSend + Clone + 'static {
     }
 
     /// Sums the elements of the local iterator, using the specified schedule
-    /// 
+    ///
     /// Takes each element, adds them together, and returns the result.
-    /// 
+    ///
     /// An empty iterator returns the zero value of the type.
     ///
     /// This function returns a future which needs to be driven to completion to retrieve the sum
@@ -678,15 +692,12 @@ pub trait LocalIterator:  SyncSend + Clone + 'static {
     where
         Self::Item: SyncSend + std::iter::Sum,
     {
-        self.array().sum_with_schedule(sched,self)
+        self.array().sum_with_schedule(sched, self)
     }
-
-    
 }
 
 /// An interface for dealing with local iterators which are indexable, meaning it returns an iterator of known length
 pub trait IndexedLocalIterator: LocalIterator + SyncSend + Clone + 'static {
-
     /// yields the local (to the calling PE) index along with each element
     ///
     /// # Examples

@@ -10,8 +10,8 @@ use std::sync::Arc;
 
 type BufFn = fn(ReadOnlyByteArrayWeak) -> Arc<dyn BufferOp>;
 
-// type MultiMultiFn = fn(ReadOnlyByteArray,ArrayOpCmd2,Vec<u8>) -> LamellarArcAm;
-// type MultiSingleFn = fn(ReadOnlyByteArray,ArrayOpCmd2,Vec<u8>,Vec<usize>) -> LamellarArcAm;
+// type MultiMultiFn = fn(ReadOnlyByteArray,ArrayOpCmd,Vec<u8>) -> LamellarArcAm;
+// type MultiSingleFn = fn(ReadOnlyByteArray,ArrayOpCmd,Vec<u8>,Vec<usize>) -> LamellarArcAm;
 
 lazy_static! {
     pub(crate) static ref BUFOPS: HashMap<TypeId, BufFn> = {
@@ -103,7 +103,7 @@ impl ReadOnlyByteArrayWeak {
 /// Thanks to this gaurantee there is the potential for increased performance when ready remote data in this
 /// array type as locking or atomic access is uneeded. For certain operations like `get()` it is possible to
 /// directly do an RDMA transfer.
-impl<T: Dist  + ArrayOps > ReadOnlyArray<T> {
+impl<T: Dist + ArrayOps> ReadOnlyArray<T> {
     #[doc(alias = "Collective")]
     /// Construct a new ReadOnlyArray with a length of `array_size` whose data will be layed out with the provided `distribution` on the PE's specified by the `team`.
     /// `team` is commonly a [LamellarWorld][crate::LamellarWorld] or [LamellarTeam][crate::LamellarTeam] (instance or reference).
@@ -126,16 +126,7 @@ impl<T: Dist  + ArrayOps > ReadOnlyArray<T> {
     ) -> ReadOnlyArray<T> {
         let array = UnsafeArray::new(team, array_size, distribution);
         array.block_on_outstanding(DarcMode::ReadOnlyArray);
-        if let Some(func) = BUFOPS.get(&TypeId::of::<T>()) {
-            let mut op_bufs = array.inner.data.op_buffers.write();
-            let bytearray = ReadOnlyByteArray {
-                array: array.clone().into(),
-            };
 
-            for _pe in 0..array.num_pes() {
-                op_bufs.push(func(ReadOnlyByteArray::downgrade(&bytearray)));
-            }
-        }
         ReadOnlyArray { array: array }
     }
 
@@ -390,8 +381,8 @@ impl<T: Dist + 'static> ReadOnlyArray<T> {
     }
 }
 
-impl<T: Dist + ArrayOps> TeamFrom<(Vec<T>,Distribution)> for ReadOnlyArray<T> {
-    fn team_from(input: (Vec<T>,Distribution), team: &Pin<Arc<LamellarTeamRT>>) -> Self {
+impl<T: Dist + ArrayOps> TeamFrom<(Vec<T>, Distribution)> for ReadOnlyArray<T> {
+    fn team_from(input: (Vec<T>, Distribution), team: &Pin<Arc<LamellarTeamRT>>) -> Self {
         let (vals, distribution) = input;
         let input = (&vals, distribution);
         let array: UnsafeArray<T> = input.team_into(team);
@@ -399,8 +390,8 @@ impl<T: Dist + ArrayOps> TeamFrom<(Vec<T>,Distribution)> for ReadOnlyArray<T> {
     }
 }
 
-impl<T: Dist + ArrayOps> TeamFrom<(&Vec<T>,Distribution)> for ReadOnlyArray<T> {
-    fn team_from(input: (&Vec<T>,Distribution), team: &Pin<Arc<LamellarTeamRT>>) -> Self {
+impl<T: Dist + ArrayOps> TeamFrom<(&Vec<T>, Distribution)> for ReadOnlyArray<T> {
+    fn team_from(input: (&Vec<T>, Distribution), team: &Pin<Arc<LamellarTeamRT>>) -> Self {
         let array: UnsafeArray<T> = input.team_into(team);
         array.into()
     }
@@ -410,15 +401,7 @@ impl<T: Dist> From<UnsafeArray<T>> for ReadOnlyArray<T> {
     fn from(array: UnsafeArray<T>) -> Self {
         // println!("readonly from UnsafeArray");
         array.block_on_outstanding(DarcMode::ReadOnlyArray);
-        if let Some(func) = BUFOPS.get(&TypeId::of::<T>()) {
-            let bytearray = ReadOnlyByteArray {
-                array: array.clone().into(),
-            };
-            let mut op_bufs = array.inner.data.op_buffers.write();
-            for _pe in 0..array.inner.data.num_pes {
-                op_bufs.push(func(ReadOnlyByteArray::downgrade(&bytearray)));
-            }
-        }
+
         ReadOnlyArray { array: array }
     }
 }
@@ -474,11 +457,10 @@ impl<T: Dist> From<ReadOnlyArray<T>> for LamellarByteArray {
 }
 
 impl<T: Dist> From<LamellarByteArray> for ReadOnlyArray<T> {
-    fn from(array:LamellarByteArray) -> Self {
+    fn from(array: LamellarByteArray) -> Self {
         if let LamellarByteArray::ReadOnlyArray(array) = array {
             array.into()
-        }
-        else {
+        } else {
             panic!("Expected LamellarByteArray::ReadOnlyArray")
         }
     }

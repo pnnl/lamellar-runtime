@@ -70,11 +70,14 @@ pub trait ReadOnlyOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
     #[tracing::instrument(skip_all)]
     fn load<'a>(&self, index: usize) -> Pin<Box<dyn Future<Output = T> + Send>> {
         let dummy_val = self.inner_array().dummy_val(); //we dont actually do anything with this except satisfy apis;
-        // let array = self.inner_array();
-        let result = self.inner_array().initiate_batch_fetch_op_2(dummy_val, index, ArrayOpCmd2::Load, self.as_lamellar_byte_array());
-        Box::pin(async move{
-            result.await[0]
-        })
+                                                        // let array = self.inner_array();
+        let result = self.inner_array().initiate_batch_fetch_op_2(
+            dummy_val,
+            index,
+            ArrayOpCmd::Load,
+            self.as_lamellar_byte_array(),
+        );
+        Box::pin(async move { result.await[0] })
     }
 
     /// This call performs a batched vesion of the [load][ReadOnlyOps::load] function,
@@ -111,7 +114,11 @@ pub trait ReadOnlyOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
         index: impl OpInput<'a, usize>,
     ) -> Pin<Box<dyn Future<Output = Vec<T>> + Send>> {
         let dummy_val = self.inner_array().dummy_val(); //we dont actually do anything with this except satisfy apis;
-        self.inner_array()
-            .initiate_batch_fetch_op_2(dummy_val, index, ArrayOpCmd2::Load,self.as_lamellar_byte_array())
+        self.inner_array().initiate_batch_fetch_op_2(
+            dummy_val,
+            index,
+            ArrayOpCmd::Load,
+            self.as_lamellar_byte_array(),
+        )
     }
 }

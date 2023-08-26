@@ -90,8 +90,12 @@ pub trait AccessOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
     ///```
     #[tracing::instrument(skip_all)]
     fn store<'a>(&self, index: usize, val: T) -> Pin<Box<dyn Future<Output = ()> + Send>> {
-       self.inner_array()
-            .initiate_batch_op(val, index, ArrayOpCmd2::Store, self.as_lamellar_byte_array())
+        self.inner_array().initiate_batch_op(
+            val,
+            index,
+            ArrayOpCmd::Store,
+            self.as_lamellar_byte_array(),
+        )
     }
 
     /// This call performs a batched vesion of the [store][AccessOps::store] function,
@@ -125,9 +129,12 @@ pub trait AccessOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
         index: impl OpInput<'a, usize>,
         val: impl OpInput<'a, T>,
     ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
-        // self.inner_array()
-        //     .initiate_op(val, index, ArrayOpCmd::Store)
-            self.inner_array().initiate_batch_op(val, index, ArrayOpCmd2::Store,self.as_lamellar_byte_array())
+        self.inner_array().initiate_batch_op(
+            val,
+            index,
+            ArrayOpCmd::Store,
+            self.as_lamellar_byte_array(),
+        )
     }
 
     /// This call swaps the supplied `val` into the element specified by `index`, returning the old value
@@ -156,11 +163,13 @@ pub trait AccessOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
     ///```
     #[tracing::instrument(skip_all)]
     fn swap<'a>(&self, index: usize, val: T) -> Pin<Box<dyn Future<Output = T> + Send>> {
-        let result = self.inner_array()
-            .initiate_batch_fetch_op_2(val, index, ArrayOpCmd2::Swap,self.as_lamellar_byte_array());
-        Box::pin(async move{
-            result.await[0]
-        })
+        let result = self.inner_array().initiate_batch_fetch_op_2(
+            val,
+            index,
+            ArrayOpCmd::Swap,
+            self.as_lamellar_byte_array(),
+        );
+        Box::pin(async move { result.await[0] })
     }
 
     /// This call performs a batched vesion of the [swap][AccessOps::swap] function,
@@ -195,8 +204,12 @@ pub trait AccessOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
         index: impl OpInput<'a, usize>,
         val: impl OpInput<'a, T>,
     ) -> Pin<Box<dyn Future<Output = Vec<T>> + Send>> {
-        self.inner_array()
-            .initiate_batch_fetch_op_2(val, index, ArrayOpCmd2::Swap,self.as_lamellar_byte_array())
+        self.inner_array().initiate_batch_fetch_op_2(
+            val,
+            index,
+            ArrayOpCmd::Swap,
+            self.as_lamellar_byte_array(),
+        )
     }
 }
 

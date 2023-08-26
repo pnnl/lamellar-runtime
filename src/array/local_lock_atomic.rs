@@ -1,7 +1,6 @@
 mod iteration;
 pub(crate) mod operations;
 mod rdma;
-use crate::array::local_lock_atomic::operations::BUFOPS;
 use crate::array::private::LamellarArrayPrivate;
 use crate::array::r#unsafe::{UnsafeByteArray, UnsafeByteArrayWeak};
 use crate::array::*;
@@ -13,7 +12,6 @@ use parking_lot::{
     lock_api::{ArcRwLockReadGuard, ArcRwLockWriteGuard},
     RawRwLock,
 };
-use std::any::TypeId;
 use std::ops::{Deref, DerefMut};
 
 /// A safe abstraction of a distributed array, providing read/write access protected by locks.
@@ -183,7 +181,7 @@ impl<T: Dist> Deref for LocalLockLocalData<'_, T> {
     }
 }
 
-impl<T: Dist + ArrayOps  + std::default::Default> LocalLockArray<T> {
+impl<T: Dist + ArrayOps + std::default::Default> LocalLockArray<T> {
     #[doc(alias = "Collective")]
     /// Construct a new LocalLockArray with a length of `array_size` whose data will be layed out with the provided `distribution` on the PE's specified by the `team`.
     /// `team` is commonly a [LamellarWorld][crate::LamellarWorld] or [LamellarTeam][crate::LamellarTeam] (instance or reference).
@@ -205,18 +203,6 @@ impl<T: Dist + ArrayOps  + std::default::Default> LocalLockArray<T> {
         let array = UnsafeArray::new(team.clone(), array_size, distribution);
         array.block_on_outstanding(DarcMode::LocalLockArray);
         let lock = LocalRwDarc::new(team, ()).unwrap();
-
-        if let Some(func) = BUFOPS.get(&TypeId::of::<T>()) {
-            let mut op_bufs = array.inner.data.op_buffers.write();
-            let bytearray = LocalLockByteArray {
-                lock: lock.clone(),
-                array: array.clone().into(),
-            };
-
-            for _pe in 0..array.num_pes() {
-                op_bufs.push(func(LocalLockByteArray::downgrade(&bytearray)));
-            }
-        }
 
         LocalLockArray {
             lock: lock,
@@ -574,8 +560,8 @@ impl<T: Dist + 'static> LocalLockArray<T> {
     }
 }
 
-impl<T: Dist + ArrayOps> TeamFrom<(Vec<T>,Distribution)> for LocalLockArray<T> {
-    fn team_from(input: (Vec<T>,Distribution), team: &Pin<Arc<LamellarTeamRT>>) -> Self {
+impl<T: Dist + ArrayOps> TeamFrom<(Vec<T>, Distribution)> for LocalLockArray<T> {
+    fn team_from(input: (Vec<T>, Distribution), team: &Pin<Arc<LamellarTeamRT>>) -> Self {
         let (vals, distribution) = input;
         let input = (&vals, distribution);
         let array: UnsafeArray<T> = input.team_into(team);
@@ -588,16 +574,7 @@ impl<T: Dist> From<UnsafeArray<T>> for LocalLockArray<T> {
         // println!("locallock from unsafe");
         array.block_on_outstanding(DarcMode::LocalLockArray);
         let lock = LocalRwDarc::new(array.team(), ()).unwrap();
-        if let Some(func) = BUFOPS.get(&TypeId::of::<T>()) {
-            let bytearray = LocalLockByteArray {
-                lock: lock.clone(),
-                array: array.clone().into(),
-            };
-            let mut op_bufs = array.inner.data.op_buffers.write();
-            for _pe in 0..array.inner.data.num_pes {
-                op_bufs.push(func(LocalLockByteArray::downgrade(&bytearray)))
-            }
-        }
+
         LocalLockArray {
             lock: lock,
             array: array,
@@ -651,11 +628,10 @@ impl<T: Dist> From<LocalLockArray<T>> for LamellarByteArray {
 }
 
 impl<T: Dist> From<LamellarByteArray> for LocalLockArray<T> {
-    fn from(array:LamellarByteArray) -> Self {
+    fn from(array: LamellarByteArray) -> Self {
         if let LamellarByteArray::LocalLockArray(array) = array {
             array.into()
-        }
-        else {
+        } else {
             panic!("Expected LamellarByteArray::LocalLockArray")
         }
     }

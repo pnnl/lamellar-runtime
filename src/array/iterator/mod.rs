@@ -6,7 +6,6 @@ use local_iterator::LocalIterator;
 pub mod one_sided_iterator;
 use one_sided_iterator::OneSidedIterator;
 pub mod consumer;
-use consumer::IterConsumer;
 
 use crate::memregion::Dist;
 
@@ -19,7 +18,6 @@ pub trait IterRequest {
     async fn into_future(mut self: Box<Self>) -> Self::Output;
     fn wait(self: Box<Self>) -> Self::Output;
 }
-
 
 /// The Schedule type controls how elements of a LamellarArray are distributed to threads when
 /// calling `for_each_with_schedule` on a local or distributed iterator.
