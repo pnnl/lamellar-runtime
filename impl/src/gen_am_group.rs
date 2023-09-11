@@ -1,13 +1,12 @@
 use crate::field_info::FieldInfo;
 use crate::gen_am::*;
-use crate::{ get_impl_method, type_name, AmType};
-use crate::replace::{ReplaceSelf, LamellarDSLReplace};
+use crate::replace::{LamellarDSLReplace, ReplaceSelf};
+use crate::{get_impl_method, type_name, AmType};
 
 use proc_macro2::Span;
 use quote::{format_ident, quote, quote_spanned, ToTokens};
-use syn::spanned::Spanned;
 use syn::fold::Fold;
-
+use syn::spanned::Spanned;
 
 fn impl_am_group_remote_lamellar_active_message_trait(
     generics: &syn::Generics,
@@ -43,7 +42,10 @@ fn impl_am_group_remote_lamellar_active_message_trait(
     }
 }
 
-fn gen_am_group_remote_body2(am_name: &syn::Ident, input: &syn::ItemImpl) -> proc_macro2::TokenStream {
+fn gen_am_group_remote_body2(
+    am_name: &syn::Ident,
+    input: &syn::ItemImpl,
+) -> proc_macro2::TokenStream {
     let mut exec_fn =
         get_impl_method("exec".to_string(), &input.items).expect("unable to extract exec body");
     // exec_fn = replace_lamellar_dsl_new(exec_fn);
@@ -59,7 +61,7 @@ fn gen_am_group_remote_body2(am_name: &syn::Ident, input: &syn::ItemImpl) -> pro
     let mut am_body = quote_spanned! { exec_fn.span()=>  };
 
     for (_, field) in accessed_fields {
-        am_body.extend(quote!{#field});
+        am_body.extend(quote! {#field});
     }
     let stmts = exec_fn.stmts;
 
@@ -71,13 +73,16 @@ fn gen_am_group_remote_body2(am_name: &syn::Ident, input: &syn::ItemImpl) -> pro
     am_body
 }
 
-
 fn gen_am_group_return_stmt(
     am_type: &AmType,
     am_group_return_name: &syn::Ident,
     lamellar: &proc_macro2::TokenStream,
     local: bool,
-) -> (proc_macro2::TokenStream, proc_macro2::TokenStream, proc_macro2::TokenStream) {
+) -> (
+    proc_macro2::TokenStream,
+    proc_macro2::TokenStream,
+    proc_macro2::TokenStream,
+) {
     match am_type {
         AmType::NoReturn => {
             //quote!{#lamellar::active_messaging::LamellarReturn::Unit},
@@ -98,7 +103,7 @@ fn gen_am_group_return_stmt(
                 (
                     quote! {},
                     quote! {},
-                    quote! {#lamellar::active_messaging::LamellarReturn::LocalData(Box::new(())),}   
+                    quote! {#lamellar::active_messaging::LamellarReturn::LocalData(Box::new(())),},
                 )
             }
         }
@@ -116,8 +121,7 @@ fn gen_am_group_return_stmt(
                                 val: __res_vec,
                             })),
                         }
-                    }
-                    
+                    },
                 )
             } else {
                 (
@@ -128,7 +132,6 @@ fn gen_am_group_return_stmt(
                     quote! {
                         #lamellar::active_messaging::LamellarReturn::LocalData(Box::new(__res_vec))
                     },
-                    
                 )
             }
         }
@@ -146,10 +149,10 @@ fn gen_am_group_return_stmt(
                                 __amg.add_am(_e);
                                 let mut new_am_group = Some(__amg);
                                 std::mem::swap(&mut __am_group, &mut new_am_group);
-                                
+
                             }
                         }
-                    }, 
+                    },
                     quote! {
                             match __local{
                             true => #lamellar::active_messaging::LamellarReturn::LocalAm(std::sync::Arc::new (__am_group.unwrap())),
@@ -170,7 +173,7 @@ fn gen_am_group_return_stmt(
                                 std::mem::swap(&mut __am_group, &mut new_am_group);
                             }
                         }
-                    }, 
+                    },
                     quote! {
                         #lamellar::active_messaging::LamellarReturn::LocalAm(std::sync::Arc::new (__am_group.unwrap()))
                     },
@@ -232,7 +235,7 @@ fn impl_am_group_user(
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
 
     let (typed_am_group_result_type, add_all_req_type, single_req_type) = match am_type {
-        AmType::NoReturn => {(
+        AmType::NoReturn => (
             quote! {
                 #lamellar::TypedAmGroupResult::unit(
                     results,
@@ -240,10 +243,10 @@ fn impl_am_group_user(
                     num_pes
                 )
             },
-            quote!{#lamellar::BaseAmGroupReq::AllPeUnit},
-            quote!{#lamellar::BaseAmGroupReq::SinglePeUnit}
-        )},
-        AmType::ReturnData(ref _output) => {(
+            quote! {#lamellar::BaseAmGroupReq::AllPeUnit},
+            quote! {#lamellar::BaseAmGroupReq::SinglePeUnit},
+        ),
+        AmType::ReturnData(ref _output) => (
             quote! {
                 #lamellar::TypedAmGroupResult::val(
                     results,
@@ -251,35 +254,37 @@ fn impl_am_group_user(
                     num_pes
                 )
             },
-            quote!{#lamellar::BaseAmGroupReq::AllPeVal},
-            quote!{#lamellar::BaseAmGroupReq::SinglePeVal}
-        )},
+            quote! {#lamellar::BaseAmGroupReq::AllPeVal},
+            quote! {#lamellar::BaseAmGroupReq::SinglePeVal},
+        ),
         AmType::ReturnAm(ref _am, ref output) => {
-            if output.to_string() == "()"{(
-                quote! {
-                    #lamellar::TypedAmGroupResult::unit(
-                        results,
-                        self.cnt,
-                        num_pes
-                    )
-                },
-                quote!{#lamellar::BaseAmGroupReq::AllPeUnit},
-                quote!{#lamellar::BaseAmGroupReq::SinglePeUnit}
-            )}
-            else {(
-                quote! {
-                    #lamellar::TypedAmGroupResult::val(
-                        results,
-                        self.cnt,
-                        num_pes
-                    )
-                },
-                quote!{#lamellar::BaseAmGroupReq::AllPeVal},
-                quote!{#lamellar::BaseAmGroupReq::SinglePeVal}
-            )}
-        },
+            if output.to_string() == "()" {
+                (
+                    quote! {
+                        #lamellar::TypedAmGroupResult::unit(
+                            results,
+                            self.cnt,
+                            num_pes
+                        )
+                    },
+                    quote! {#lamellar::BaseAmGroupReq::AllPeUnit},
+                    quote! {#lamellar::BaseAmGroupReq::SinglePeUnit},
+                )
+            } else {
+                (
+                    quote! {
+                        #lamellar::TypedAmGroupResult::val(
+                            results,
+                            self.cnt,
+                            num_pes
+                        )
+                    },
+                    quote! {#lamellar::BaseAmGroupReq::AllPeVal},
+                    quote! {#lamellar::BaseAmGroupReq::SinglePeVal},
+                )
+            }
+        }
     };
-
 
     quote! {
         #[doc(hidden)]
@@ -296,7 +301,7 @@ fn impl_am_group_user(
             fn new(team: std::sync::Arc<#lamellar::LamellarTeam>) -> #am_group_name_user #ty_generics{
                 let num_per_batch = match std::env::var("LAMELLAR_OP_BATCH") {
                     Ok(n) => n.parse::<usize>().unwrap(),
-                    Err(_) => 10000,                      
+                    Err(_) => 10000,
                 };
                 #am_group_name_user {
                     team: team,
@@ -313,7 +318,7 @@ fn impl_am_group_user(
                 let req_queue = self.reqs.entry(self.team.num_pes()).or_insert_with(|| {
                     (Vec::with_capacity(self.num_per_batch),#am_group_remote_name::new(&am),1000000)
                 });
-                
+
                 req_queue.0.push(self.cnt);
                 req_queue.1.add_am(am);
                 self.cnt+=1;
@@ -324,7 +329,7 @@ fn impl_am_group_user(
             #[allow(unused)]
             fn add_am_pe(&mut self, pe: usize, am:  #am_name #ty_generics)
             {
-                
+
                 let req_queue = self.reqs.entry(pe).or_insert_with(|| {
                     (Vec::with_capacity(self.num_per_batch),#am_group_remote_name::new(&am),1000000)
                 });
@@ -349,14 +354,14 @@ fn impl_am_group_user(
 
             #[allow(unused)]
             pub async fn exec(mut self) -> #lamellar::TypedAmGroupResult<#inner_ret_type>{
-                
+
                 let timer = std::time::Instant::now();
 
                 for pe in 0..(self.team.num_pes()+1){
                     self.send_pe_buffer(pe);
                 }
 
-                let results = futures::future::join_all(self.pending_reqs.drain(..).map(|req| async { req.into_result().await })).await;
+                let results = #lamellar::futures::future::join_all(self.pending_reqs.drain(..).map(|req| async { req.into_result().await })).await;
                 let num_pes = self.team.num_pes();
                 #typed_am_group_result_type
             }
@@ -373,7 +378,7 @@ pub(crate) fn generate_am_group(
 ) -> proc_macro::TokenStream {
     let name = type_name(&input.self_ty).expect("unable to find name");
     let orig_name = syn::Ident::new(&name, Span::call_site());
-    let am_group_am_name = get_am_group_name(&format_ident!{"{}", &orig_name});
+    let am_group_am_name = get_am_group_name(&format_ident! {"{}", &orig_name});
     let am_group_user_name = get_am_group_user_name(&orig_name);
     let am_group_return_name = get_am_group_return_name(&orig_name);
 
@@ -385,10 +390,9 @@ pub(crate) fn generate_am_group(
             AmType::NoReturn => (quote! {()}, quote! {()}),
             AmType::ReturnData(ref output) => (quote! {Vec<#output>}, quote! {#output}),
             AmType::ReturnAm(ref _am, ref output) => {
-                if output.to_string() == "()"{
-                    (quote! {()},quote!{()})
-                }
-                else {
+                if output.to_string() == "()" {
+                    (quote! {()}, quote! {()})
+                } else {
                     (quote! {Vec<#output>}, quote! {#output})
                 }
             }
@@ -397,7 +401,8 @@ pub(crate) fn generate_am_group(
 
     let am_group_remote_body = gen_am_group_remote_body2(&orig_name, &input);
 
-    let (ret_contatiner,ret_push,ret_stmt) = gen_am_group_return_stmt(&am_type, &am_group_return_name, lamellar, false);
+    let (ret_contatiner, ret_push, ret_stmt) =
+        gen_am_group_return_stmt(&am_type, &am_group_return_name, lamellar, false);
 
     let am_group_remote = impl_am_group_remote(
         &generics,
@@ -492,8 +497,6 @@ fn create_am_group_remote(
     let mut am_group_des = fields.des_as_vecs();
     am_group_des.extend(static_fields.des());
 
-
-
     let (the_struct, the_traits) = create_am_struct(
         generics,
         attributes,
@@ -507,33 +510,38 @@ fn create_am_group_remote(
         lamellar,
         local,
     );
-    
+
     let field_getters = fields.gen_getters(false);
     let static_field_getters = static_fields.gen_getters(true);
 
-    let field_inits = fields.names().iter().fold(quote!{}, |acc,n| quote!{
-        #acc
-        self.#n.push(am.#n);
+    let field_inits = fields.names().iter().fold(quote! {}, |acc, n| {
+        quote! {
+            #acc
+            self.#n.push(am.#n);
+        }
     });
-    let field_news = fields.names().iter().fold(quote!{}, |acc,n| quote!{
-        #acc
-        #n: vec![],
+    let field_news = fields.names().iter().fold(quote! {}, |acc, n| {
+        quote! {
+            #acc
+            #n: vec![],
+        }
     });
 
     let my_len = if fields.names().len() > 0 {
         let f = &fields.names()[0];
-        quote!{
+        quote! {
             self.#f.len()
         }
-    }
-    else {
-        quote!{
+    } else {
+        quote! {
             1
         }
     };
-    let static_field_inits = static_fields.names().iter().fold(quote!{}, |acc,n| quote!{
-        #acc
-        #n: am.#n.clone(),
+    let static_field_inits = static_fields.names().iter().fold(quote! {}, |acc, n| {
+        quote! {
+            #acc
+            #n: am.#n.clone(),
+        }
     });
 
     (
@@ -565,9 +573,6 @@ fn create_am_group_remote(
     )
 }
 
-
-
-
 pub(crate) fn create_am_group_structs(
     generics: &syn::Generics,
     attributes: &proc_macro2::TokenStream,
@@ -580,7 +585,6 @@ pub(crate) fn create_am_group_structs(
     lamellar: &proc_macro2::TokenStream,
     local: bool,
 ) -> (proc_macro2::TokenStream, proc_macro2::TokenStream) {
-
     let (am_group_remote, am_group_remote_traits) = create_am_group_remote(
         generics,
         attributes,

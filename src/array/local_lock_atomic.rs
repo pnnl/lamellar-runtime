@@ -115,6 +115,7 @@ pub struct LocalLockLocalData<'a, T: Dist> {
 
 impl<'a, T: Dist> Clone for LocalLockLocalData<'a, T> {
     fn clone(&self) -> Self {
+        // println!("getting read lock in LocalLockLocalData clone");
         LocalLockLocalData {
             array: self.array.clone(),
             data: self.data,
@@ -124,6 +125,18 @@ impl<'a, T: Dist> Clone for LocalLockLocalData<'a, T> {
         }
     }
 }
+
+// impl<'a,T: Dist> Drop for LocalLockLocalData<'a,T> {
+//     fn drop(&mut self){
+//         println!("dropping read lock");
+//     }
+// }
+
+// impl<'a,T: Dist> Drop for LocalLockMutLocalData<'a,T> {
+//     fn drop(&mut self){
+//         println!("dropping write lock");
+//     }
+// }
 
 impl<'a, T: Dist> LocalLockLocalData<'a, T> {
     /// Convert into a smaller sub range of the local data, the original read lock is transfered to the new sub data to mainitain safety guarantees
@@ -146,8 +159,8 @@ impl<'a, T: Dist> LocalLockLocalData<'a, T> {
             array: self.array.clone(),
             data: &self.data[start..end],
             index: 0,
-            lock: self.lock,
-            _lock_guard: self._lock_guard,
+            lock: self.lock.clone(),
+            _lock_guard: self.lock.read(),
         }
     }
 }
@@ -252,6 +265,7 @@ impl<T: Dist> LocalLockArray<T> {
     /// println!("PE{my_pe} data: {local_data:?}");
     ///```
     pub fn read_local_data(&self) -> LocalLockLocalData<'_, T> {
+        // println!("getting read lock in read_local_local");
         LocalLockLocalData {
             array: self.clone(),
             data: unsafe { self.array.local_as_mut_slice() },
@@ -280,6 +294,7 @@ impl<T: Dist> LocalLockArray<T> {
     /// println!("PE{my_pe} data: {local_data:?}");
     ///```
     pub fn write_local_data(&self) -> LocalLockMutLocalData<'_, T> {
+        // println!("getting write lock in write_local_data");
         let lock = self.lock.write();
         let data = LocalLockMutLocalData {
             data: unsafe { self.array.local_as_mut_slice() },
@@ -292,6 +307,7 @@ impl<T: Dist> LocalLockArray<T> {
 
     // #[doc(hidden)] //todo create a custom macro to emit a warning saying use read_local_slice/write_local_slice intead
     pub(crate) fn local_as_slice(&self) -> LocalLockLocalData<'_, T> {
+        // println!("getting read lock in local_as_slice");
         let lock = LocalLockLocalData {
             array: self.clone(),
             data: unsafe { self.array.local_as_mut_slice() },
@@ -309,6 +325,7 @@ impl<T: Dist> LocalLockArray<T> {
 
     // #[doc(hidden)]
     pub(crate) fn local_as_mut_slice(&self) -> LocalLockMutLocalData<'_, T> {
+        // println!("getting write lock in local_as_mut_slice");
         let the_lock = self.lock.write();
         let lock = LocalLockMutLocalData {
             data: unsafe { self.array.local_as_mut_slice() },
