@@ -1,4 +1,4 @@
-use crate::lamellae::comm::{AllocResult, CommOps};
+use crate::lamellae::comm::{AllocResult, CommOps,CmdQStatus};
 use crate::lamellae::command_queues::CommandQueue;
 use crate::lamellae::rofi::rofi_comm::{RofiComm, RofiData};
 use crate::lamellae::{
@@ -39,26 +39,33 @@ impl LamellaeInit for RofiBuilder {
         let rofi = Rofi::new(self.my_pe, self.num_pes, self.rofi_comm.clone());
         let cq_clone = rofi.cq();
         let cq_clone2 = rofi.cq();
+        let cq_clone3 = rofi.cq();
         let scheduler_clone = scheduler.clone();
         let scheduler_clone2 = scheduler.clone();
-        let active_clone = rofi.active();
-        let active_clone2 = rofi.active();
+        let scheduler_clone3 = scheduler.clone();
 
         let rofi = Arc::new(Lamellae::Rofi(rofi));
         let rofi_clone = rofi.clone();
         scheduler.submit_task(async move {
             cq_clone
-                .recv_data(scheduler_clone.clone(), rofi_clone.clone(), active_clone)
+                .recv_data(scheduler_clone.clone(), rofi_clone.clone())
                 .await;
         });
         scheduler.submit_task(async move {
             cq_clone2
-                .alloc_task(scheduler_clone2.clone(), active_clone2)
+                .alloc_task(scheduler_clone2.clone())
+                .await;
+        });
+        scheduler.submit_task(async move {
+            cq_clone3
+                .panic_task(scheduler_clone3.clone())
                 .await;
         });
         rofi
     }
 }
+
+
 
 pub(crate) struct Rofi {
     my_pe: usize,
@@ -81,17 +88,18 @@ impl std::fmt::Debug for Rofi {
 impl Rofi {
     fn new(my_pe: usize, num_pes: usize, rofi_comm: Arc<Comm>) -> Rofi {
         // println!("my_pe {:?} num_pes {:?}",my_pe,num_pes);
+        let active = Arc::new(AtomicU8::new(CmdQStatus::Active as u8));
         Rofi {
             my_pe: my_pe,
             num_pes: num_pes,
             rofi_comm: rofi_comm.clone(),
-            active: Arc::new(AtomicU8::new(1)),
-            cq: Arc::new(CommandQueue::new(rofi_comm.clone(), my_pe, num_pes)),
+            active: active.clone(),
+            cq: Arc::new(CommandQueue::new(rofi_comm, my_pe, num_pes, active)),
         }
     }
-    fn active(&self) -> Arc<AtomicU8> {
-        self.active.clone()
-    }
+    // fn active(&self) -> Arc<AtomicU8> {
+    //     self.active.clone()
+    // }
     fn cq(&self) -> Arc<CommandQueue> {
         self.cq.clone()
     }
@@ -132,12 +140,25 @@ impl LamellaeComm for Rofi {
     fn print_stats(&self) {}
     fn shutdown(&self) {
         // println!("Rofi Lamellae shuting down");
-        self.active.store(0, Ordering::Relaxed);
+        let _ = self.active.compare_exchange(CmdQStatus::Active as u8, CmdQStatus::ShuttingDown as u8, Ordering::SeqCst, Ordering::SeqCst);
         // println!("set active to 0");
-        while self.active.load(Ordering::SeqCst) != 2 {
+        while self.active.load(Ordering::SeqCst) != CmdQStatus::Finished as u8  && self.active.load(Ordering::SeqCst) != CmdQStatus::Panic as u8{
             std::thread::yield_now();
         }
         // println!("Rofi Lamellae shut down");
+    }
+
+    fn force_shutdown(&self) {
+        if self.active.load(Ordering::SeqCst) != CmdQStatus::Panic as u8 {
+            self.active.store(CmdQStatus::Panic as u8, Ordering::Relaxed);
+            self.cq.send_panic();
+        }
+        
+        
+    }
+        
+    fn force_deinit(&self) {
+        self.rofi_comm.force_shutdown();
     }
 }
 

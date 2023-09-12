@@ -1,4 +1,4 @@
-use crate::lamellae::comm::{AllocResult, CommOps};
+use crate::lamellae::comm::{AllocResult, CommOps, CmdQStatus};
 use crate::lamellae::command_queues::CommandQueue;
 use crate::lamellae::shmem::shmem_comm::*;
 
@@ -40,22 +40,28 @@ impl LamellaeInit for ShmemBuilder {
         let shmem = Shmem::new(self.my_pe, self.num_pes, self.shmem_comm.clone());
         let cq_clone = shmem.cq();
         let cq_clone2 = shmem.cq();
+        let cq_clone3 = shmem.cq();
         let scheduler_clone = scheduler.clone();
         let scheduler_clone2 = scheduler.clone();
-        let active_clone = shmem.active();
-        let active_clone2 = shmem.active();
+        let scheduler_clone3 = scheduler.clone();
 
         let shmem = Arc::new(Lamellae::Shmem(shmem));
         let shmem_clone = shmem.clone();
         scheduler.submit_task(async move {
             cq_clone
-                .recv_data(scheduler_clone.clone(), shmem_clone.clone(), active_clone)
+                .recv_data(scheduler_clone.clone(), shmem_clone.clone())
                 .await;
         });
 
         scheduler.submit_task(async move {
             cq_clone2
-                .alloc_task(scheduler_clone2.clone(), active_clone2)
+                .alloc_task(scheduler_clone2.clone())
+                .await;
+        });
+
+        scheduler.submit_task(async move {
+            cq_clone3
+                .panic_task(scheduler_clone3.clone())
                 .await;
         });
         shmem
@@ -83,17 +89,18 @@ impl std::fmt::Debug for Shmem {
 impl Shmem {
     fn new(my_pe: usize, num_pes: usize, shmem_comm: Arc<Comm>) -> Shmem {
         // println!("my_pe {:?} num_pes {:?}",my_pe,num_pes);
+        let active = Arc::new(AtomicU8::new(CmdQStatus::Active as u8));
         Shmem {
             my_pe: my_pe,
             num_pes: num_pes,
             shmem_comm: shmem_comm.clone(),
-            active: Arc::new(AtomicU8::new(1)),
-            cq: Arc::new(CommandQueue::new(shmem_comm.clone(), my_pe, num_pes)),
+            active: active.clone(),
+            cq: Arc::new(CommandQueue::new(shmem_comm, my_pe, num_pes,active)),
         }
     }
-    fn active(&self) -> Arc<AtomicU8> {
-        self.active.clone()
-    }
+    // fn active(&self) -> Arc<AtomicU8> {
+    //     self.active.clone()
+    // }
     fn cq(&self) -> Arc<CommandQueue> {
         self.cq.clone()
     }
@@ -134,12 +141,20 @@ impl LamellaeComm for Shmem {
     fn print_stats(&self) {}
     fn shutdown(&self) {
         // println!("Shmem Lamellae shuting down");
-        self.active.store(0, Ordering::Relaxed);
+        let _ = self.active.compare_exchange(CmdQStatus::Active as u8, CmdQStatus::ShuttingDown as u8, Ordering::SeqCst, Ordering::SeqCst);
         // println!("set active to 0");
-        while self.active.load(Ordering::SeqCst) != 2 {
+        while self.active.load(Ordering::SeqCst) != CmdQStatus::Finished as u8   && self.active.load(Ordering::SeqCst) != CmdQStatus::Panic as u8{
             std::thread::yield_now();
         }
         // println!("Shmem Lamellae shut down");
+    }
+
+    fn force_shutdown(&self) {
+        self.cq.send_panic();
+        self.active.store(CmdQStatus::Panic as u8, Ordering::Relaxed);
+    }
+    fn force_deinit(&self) {
+        self.shmem_comm.force_shutdown();
     }
 }
 

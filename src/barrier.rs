@@ -3,7 +3,7 @@ use crate::lamellar_arch::LamellarArchRT;
 // use crate::lamellar_memregion::{SharedMemoryRegion,RegisteredMemoryRegion};
 use crate::memregion::MemoryRegion; //, RTMemoryRegionRDMA, RegisteredMemoryRegion};
 use crate::scheduler::{Scheduler, SchedulerQueue};
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicUsize, AtomicU8, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -13,6 +13,7 @@ pub(crate) struct Barrier {
     pub(crate) scheduler: Arc<Scheduler>,
     barrier_cnt: AtomicUsize,
     barrier_buf: Option<SubBufs>,
+    panic: Arc<AtomicU8>,
 }
 
 struct SubBufs {
@@ -28,6 +29,7 @@ impl Barrier {
         lamellae: Arc<Lamellae>,
         arch: Arc<LamellarArchRT>,
         scheduler: Arc<Scheduler>,
+        panic: Arc<AtomicU8>,
     ) -> Barrier {
         let bufs = if let Ok(_my_index) = arch.team_pe(my_pe) {
             let num_pes = arch.num_pes;
@@ -71,6 +73,7 @@ impl Barrier {
             scheduler: scheduler,
             barrier_cnt: AtomicUsize::new(0),
             barrier_buf: bufs,
+            panic: panic,
         };
         // bar.print_bar();
         bar
@@ -88,10 +91,13 @@ impl Barrier {
         }
     }
 
-    fn check_barrier_vals(&self, barrier_id: usize, barrier_buf: &MemoryRegion<usize>) {
+    fn check_barrier_vals(&self, barrier_id: usize, barrier_buf: &MemoryRegion<usize>) -> Result<(), ()> {
         let mut s = Instant::now();
         for pe in barrier_buf.as_slice().unwrap() {
-            while *pe != barrier_id {
+            if self.panic.load(Ordering::SeqCst) != 0{
+                return Err(());
+            }
+            while  *pe != barrier_id  {
                 // std::thread::yield_now();
                 self.scheduler.exec_task();
                 if s.elapsed().as_secs_f64() > *crate::DEADLOCK_TIMEOUT {
@@ -106,8 +112,12 @@ impl Barrier {
                     self.print_bar();
                     s = Instant::now();
                 }
+                if self.panic.load(Ordering::SeqCst) != 0{
+                    return Err(());
+                }
             }
         }
+        Ok(())
     }
 
     fn put_barrier_val(
@@ -115,28 +125,42 @@ impl Barrier {
         my_index: usize,
         barrier_id: &[usize],
         barrier_buf: &MemoryRegion<usize>,
-    ) {
-        for world_pe in self.arch.team_iter() {
-            unsafe {
-                // println!("world_pe {:?} my_index {:?}",world_pe,my_index);
-                barrier_buf.put_slice(world_pe, my_index, barrier_id);
+    ) -> Result<(), ()> {
+        if self.panic.load(Ordering::SeqCst) == 0 {
+            for world_pe in self.arch.team_iter() {
+                unsafe {
+                    // println!("world_pe {:?} my_index {:?}",world_pe,my_index);
+                    barrier_buf.put_slice(world_pe, my_index, barrier_id);
+                }
             }
+            Ok(())
+        }
+        else {
+            Err(())
         }
     }
     pub(crate) fn barrier(&self) {
-        if let Some(bufs) = &self.barrier_buf {
-            if let Ok(my_index) = self.arch.team_pe(self.my_pe) {
-                let mut barrier_id = self.barrier_cnt.fetch_add(1, Ordering::SeqCst);
-                self.check_barrier_vals(barrier_id, &bufs.barrier2);
-                barrier_id += 1;
-                let barrier3_slice = unsafe { bufs.barrier3.as_mut_slice().unwrap() };
-                barrier3_slice[0] = barrier_id;
-                let barrier_slice = &[barrier_id];
-                self.put_barrier_val(my_index, barrier_slice, &bufs.barrier1);
-                self.check_barrier_vals(barrier_id, &bufs.barrier1);
-                barrier3_slice[1] = barrier_id;
-                let barrier_slice = &barrier3_slice[1..2];
-                self.put_barrier_val(my_index, barrier_slice, &bufs.barrier2);
+        if self.panic.load(Ordering::SeqCst) == 0 {
+            if let Some(bufs) = &self.barrier_buf {
+                if let Ok(my_index) = self.arch.team_pe(self.my_pe) {
+                    let mut barrier_id = self.barrier_cnt.fetch_add(1, Ordering::SeqCst);
+                    if self.check_barrier_vals(barrier_id, &bufs.barrier2).is_err(){
+                        return
+                    }
+                    barrier_id += 1;
+                    let barrier3_slice = unsafe { bufs.barrier3.as_mut_slice().unwrap() };
+                    barrier3_slice[0] = barrier_id;
+                    let barrier_slice = &[barrier_id];
+                    if self.put_barrier_val(my_index, barrier_slice, &bufs.barrier1).is_err(){
+                        return
+                    }
+                    if self.check_barrier_vals(barrier_id, &bufs.barrier1).is_err(){
+                        return
+                    }
+                    barrier3_slice[1] = barrier_id;
+                    let barrier_slice = &barrier3_slice[1..2];
+                    let _=self.put_barrier_val(my_index, barrier_slice, &bufs.barrier2);
+                }
             }
         }
     }

@@ -13,10 +13,11 @@ use tracing::*;
 
 use futures::Future;
 use parking_lot::RwLock;
+use pin_weak::sync::PinWeak;
 use std::collections::HashMap;
 use std::pin::Pin;
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::sync::Arc; //, Weak};
+use std::sync::atomic::{AtomicBool, AtomicU8, AtomicUsize, Ordering};
+use std::sync::Arc;
 
 lazy_static! {
     pub(crate) static ref LAMELLAES: RwLock<HashMap<Backend, Arc<Lamellae>>> =
@@ -242,8 +243,10 @@ impl Drop for LamellarWorld {
         let cnt = self.ref_cnt.fetch_sub(1, Ordering::SeqCst);
         if cnt == 1 {
             // println!("[{:?}] world dropping", self.my_pe);
-            self.wait_all();
-            self.barrier();
+            if self.team.panic.load(Ordering::SeqCst) < 2 {
+                self.wait_all();
+                self.barrier();
+            }
 
             self.team_rt.destroy();
             LAMELLAES.write().clear();
@@ -462,6 +465,7 @@ impl LamellarWorldBuilder {
             self.scheduler,
             num_pes,
             self.num_threads,
+            panic.clone(),
             my_pe,
             // teams.clone(),
         ));
@@ -474,6 +478,7 @@ impl LamellarWorldBuilder {
             sched_new.clone(),
             counters.clone(),
             lamellae.clone(),
+            panic.clone(),
             // teams.clone(),
         );
 
@@ -494,6 +499,23 @@ impl LamellarWorldBuilder {
             .write()
             .insert(lamellae.backend(), lamellae.clone());
 
+        let weak_rt = PinWeak::downgrade(team_rt.clone());
+        // let panics = team_rt.panic_info.clone();
+        std::panic::set_hook(Box::new(move |panic_info| {
+            // panics.lock().push(format!("{panic_info}"));
+            // for p in panics.lock().iter(){
+            //     println!("{p}");
+            // }
+            println!("{panic_info}");
+
+            if let Some(rt) = weak_rt.upgrade() {
+                println!("trying to shutdown Lamellar Runtime");
+                rt.force_shutdown();
+            } else {
+                println!("unable to shutdown Lamellar Runtime gracefully");
+            }
+            // std::process::exit(1);
+        }));
         world.barrier();
         world
     }
