@@ -3,7 +3,7 @@ pub(crate) mod operations;
 pub(crate) mod rdma;
 pub use rdma::{AtomicArrayGet, AtomicArrayPut};
 
-use crate::array::generic_atomic::{GenericAtomicElement,LocalGenericAtomicElement};
+use crate::array::generic_atomic::{GenericAtomicElement, LocalGenericAtomicElement};
 use crate::array::native_atomic::NativeAtomicElement;
 use crate::array::private::LamellarArrayPrivate;
 use crate::array::*;
@@ -500,14 +500,15 @@ impl<T: Dist + std::fmt::Debug> std::fmt::Debug for AtomicElement<T> {
     }
 }
 
-impl <T: Dist + std::fmt::Debug + std::iter::Sum> std::iter::Sum for AtomicElement<T> {
+impl<T: Dist + std::fmt::Debug + std::iter::Sum> std::iter::Sum for AtomicElement<T> {
     fn sum<I>(iter: I) -> Self
     where
-    I: Iterator<Item = Self>,
+        I: Iterator<Item = Self>,
     {
-        LocalGenericAtomicElement{
-            val: Mutex::new(iter.map(|e| e.load()).sum())
-        }.into()
+        LocalGenericAtomicElement {
+            val: Mutex::new(iter.map(|e| e.load()).sum()),
+        }
+        .into()
     }
 }
 
@@ -753,7 +754,7 @@ impl<T: Dist> Iterator for AtomicLocalDataIter<T> {
 }
 
 //#[prof]
-impl<T: Dist  + ArrayOps + std::default::Default + 'static> AtomicArray<T> {
+impl<T: Dist + ArrayOps + std::default::Default + 'static> AtomicArray<T> {
     #[doc(alias = "Collective")]
     /// Construct a new AtomicArray with a length of `array_size` whose data will be layed out with the provided `distribution` on the PE's specified by the `team`.
     /// `team` is commonly a [LamellarWorld][crate::LamellarWorld] or [LamellarTeam][crate::LamellarTeam] (instance or reference).
@@ -1074,8 +1075,8 @@ impl<T: Dist> AtomicArray<T> {
     }
 }
 
-impl<T: Dist + ArrayOps> TeamFrom<(Vec<T>,Distribution)> for AtomicArray<T> {
-    fn team_from(input: (Vec<T>,Distribution), team: &Pin<Arc<LamellarTeamRT>>) -> Self {
+impl<T: Dist + ArrayOps> TeamFrom<(Vec<T>, Distribution)> for AtomicArray<T> {
+    fn team_from(input: (Vec<T>, Distribution), team: &Pin<Arc<LamellarTeamRT>>) -> Self {
         let (vals, distribution) = input;
         let input = (&vals, distribution);
         let array: UnsafeArray<T> = input.team_into(team);
@@ -1140,11 +1141,10 @@ impl<T: Dist> From<AtomicArray<T>> for LamellarByteArray {
 }
 
 impl<T: Dist> From<LamellarByteArray> for AtomicArray<T> {
-    fn from(array:LamellarByteArray) -> Self {
+    fn from(array: LamellarByteArray) -> Self {
         if let LamellarByteArray::AtomicArray(array) = array {
             array.into()
-        }
-        else {
+        } else {
             panic!("Expected LamellarByteArray::AtomicArray")
         }
     }

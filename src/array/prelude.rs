@@ -20,11 +20,10 @@ pub use crate::array::iterator::one_sided_iterator::{OneSidedIterator, OneSidedI
 pub use crate::array::iterator::{LamellarArrayIterators, LamellarArrayMutIterators, Schedule};
 
 pub use crate::array::operations::{
-    ArrayOps as _ArrayOps,
-    AccessOps, ArithmeticOps, BitWiseOps, CompareExchangeEpsilonOps, CompareExchangeOps,
-    ElementArithmeticOps, ElementBitWiseOps, ElementCompareEqOps, ElementComparePartialEqOps,
-    ElementOps, ElementShiftOps, LocalArithmeticOps, LocalAtomicOps, LocalBitWiseOps,
-    LocalShiftOps, OpInput, ReadOnlyOps, ShiftOps,
+    AccessOps, ArithmeticOps, ArrayOps as _ArrayOps, BitWiseOps, CompareExchangeEpsilonOps,
+    CompareExchangeOps, ElementArithmeticOps, ElementBitWiseOps, ElementCompareEqOps,
+    ElementComparePartialEqOps, ElementOps, ElementShiftOps, LocalArithmeticOps, LocalAtomicOps,
+    LocalBitWiseOps, LocalShiftOps, OpInput, ReadOnlyOps, ShiftOps,
 };
 // pub use crate::array::operations::*;
 

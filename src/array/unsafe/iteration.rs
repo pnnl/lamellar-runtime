@@ -1,12 +1,11 @@
-mod local;
 mod consumer;
 mod distributed;
+mod local;
 
 use crate::array::r#unsafe::*;
 
-
-use crate::array::iterator::distributed_iterator::{DistIter,DistIterMut};
-use crate::array::iterator::local_iterator::{LocalIter,LocalIterMut};
+use crate::array::iterator::distributed_iterator::{DistIter, DistIterMut};
+use crate::array::iterator::local_iterator::{LocalIter, LocalIterMut};
 use crate::array::iterator::one_sided_iterator::OneSidedIter;
 use crate::array::*;
 use crate::memregion::Dist;
@@ -193,4 +192,3 @@ impl<T: Dist> UnsafeArray<T> {
         )
     }
 }
-

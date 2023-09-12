@@ -15,15 +15,12 @@ mod field_info;
 
 use am_data::derive_am_data;
 
-
-
-
 use proc_macro::TokenStream;
-use proc_macro_error::{abort, proc_macro_error,emit_error};
+use proc_macro_error::{abort, emit_error, proc_macro_error};
 use quote::{quote, quote_spanned, ToTokens};
 use syn::parse_macro_input;
-use syn::spanned::Spanned;
 use syn::punctuated::Punctuated;
+use syn::spanned::Spanned;
 // use syn::Meta;
 // use syn::visit_mut::VisitMut;
 use syn::parse::{Parse, ParseStream, Result};
@@ -93,16 +90,13 @@ fn get_impl_method(name: String, tys: &Vec<syn::ImplItem>) -> Option<syn::Block>
 
 fn get_expr(stmt: &syn::Stmt) -> Option<syn::Expr> {
     let expr = match stmt {
-        syn::Stmt::Expr(expr, semi) => {
-            match expr.clone() {
-                syn::Expr::Return(expr) => Some(*(expr.expr.unwrap())),
-                _=> {
-                    if semi.is_some() {
-                        None
-                    }
-                    else {
-                        Some(expr.clone())
-                    }
+        syn::Stmt::Expr(expr, semi) => match expr.clone() {
+            syn::Expr::Return(expr) => Some(*(expr.expr.unwrap())),
+            _ => {
+                if semi.is_some() {
+                    None
+                } else {
+                    Some(expr.clone())
                 }
             }
         },
@@ -117,7 +111,6 @@ fn get_expr(stmt: &syn::Stmt) -> Option<syn::Expr> {
     expr
 }
 
-
 #[derive(Clone)]
 enum AmType {
     NoReturn,
@@ -125,11 +118,13 @@ enum AmType {
     ReturnAm(syn::Type, proc_macro2::TokenStream),
 }
 
-fn get_return_am_return_type(args: &Punctuated<syn::Meta, syn::Token![,]>) -> Option<(proc_macro2::TokenStream,proc_macro2::TokenStream)> { 
+fn get_return_am_return_type(
+    args: &Punctuated<syn::Meta, syn::Token![,]>,
+) -> Option<(proc_macro2::TokenStream, proc_macro2::TokenStream)> {
     for arg in args.iter() {
         let arg_str = arg.to_token_stream().to_string();
         if arg_str.contains("return_am") {
-            let mut the_am =  arg_str
+            let mut the_am = arg_str
                 .split("return_am")
                 .collect::<Vec<&str>>()
                 .last()
@@ -144,23 +139,25 @@ fn get_return_am_return_type(args: &Punctuated<syn::Meta, syn::Token![,]>) -> Op
                     .expect("error in lamellar::am argument")
                     .trim()
                     .to_string();
-                    the_am = temp[0].trim_matches(&[' ', '"'][..]).to_string();
+                the_am = temp[0].trim_matches(&[' ', '"'][..]).to_string();
             }
             let ret_am_type: syn::Type = syn::parse_str(&the_am).expect("invalid type");
             if return_type.len() > 0 {
                 // let ident = syn::Ident::new(&return_type, Span::call_site());
                 let ret_type: syn::Type = syn::parse_str(&return_type).expect("invalid type");
-                return Some((quote_spanned! {arg.span() => #ret_am_type},quote_spanned! {arg.span() => #ret_type}));
-            }
-            else {
-                return Some((quote!{#ret_am_type},quote! {()}));
+                return Some((
+                    quote_spanned! {arg.span() => #ret_am_type},
+                    quote_spanned! {arg.span() => #ret_type},
+                ));
+            } else {
+                return Some((quote! {#ret_am_type}, quote! {()}));
             }
         }
     }
     None
 }
 
-fn check_for_am_group(args: &Punctuated<syn::Meta, syn::Token![,]>) -> bool { 
+fn check_for_am_group(args: &Punctuated<syn::Meta, syn::Token![,]>) -> bool {
     for arg in args.iter() {
         let t = arg.to_token_stream().to_string();
         if t.contains("AmGroup") {
@@ -192,9 +189,10 @@ fn check_for_am_group(args: &Punctuated<syn::Meta, syn::Token![,]>) -> bool {
 #[proc_macro_error]
 #[proc_macro_attribute]
 pub fn AmData(args: TokenStream, input: TokenStream) -> TokenStream {
-    let args = parse_macro_input!(args with Punctuated<syn::Meta, syn::Token![,]>::parse_terminated);
+    let args =
+        parse_macro_input!(args with Punctuated<syn::Meta, syn::Token![,]>::parse_terminated);
     // println!("here");
-    derive_am_data(input, args, quote!{__lamellar}, false, false, false)
+    derive_am_data(input, args, quote! {__lamellar}, false, false, false)
 }
 
 /// # Examples
@@ -211,16 +209,18 @@ pub fn AmData(args: TokenStream, input: TokenStream) -> TokenStream {
 #[proc_macro_error]
 #[proc_macro_attribute]
 pub fn AmLocalData(args: TokenStream, input: TokenStream) -> TokenStream {
-    let args = parse_macro_input!(args with Punctuated<syn::Meta, syn::Token![,]>::parse_terminated);
-    derive_am_data(input, args, quote!{__lamellar}, true, false, false)
+    let args =
+        parse_macro_input!(args with Punctuated<syn::Meta, syn::Token![,]>::parse_terminated);
+    derive_am_data(input, args, quote! {__lamellar}, true, false, false)
 }
 
 #[allow(non_snake_case)]
 #[proc_macro_error]
 #[proc_macro_attribute]
 pub fn AmGroupData(args: TokenStream, input: TokenStream) -> TokenStream {
-    let args = parse_macro_input!(args with Punctuated<syn::Meta, syn::Token![,]>::parse_terminated);
-    derive_am_data(input, args, quote!{__lamellar}, false, true, false)
+    let args =
+        parse_macro_input!(args with Punctuated<syn::Meta, syn::Token![,]>::parse_terminated);
+    derive_am_data(input, args, quote! {__lamellar}, false, true, false)
 }
 
 #[doc(hidden)]
@@ -228,8 +228,9 @@ pub fn AmGroupData(args: TokenStream, input: TokenStream) -> TokenStream {
 #[proc_macro_error]
 #[proc_macro_attribute]
 pub fn AmDataRT(args: TokenStream, input: TokenStream) -> TokenStream {
-    let args = parse_macro_input!(args with Punctuated<syn::Meta, syn::Token![,]>::parse_terminated);
-    derive_am_data(input, args, quote!{crate}, false, false, true)
+    let args =
+        parse_macro_input!(args with Punctuated<syn::Meta, syn::Token![,]>::parse_terminated);
+    derive_am_data(input, args, quote! {crate}, false, false, true)
 }
 
 #[doc(hidden)]
@@ -237,8 +238,9 @@ pub fn AmDataRT(args: TokenStream, input: TokenStream) -> TokenStream {
 #[proc_macro_error]
 #[proc_macro_attribute]
 pub fn AmLocalDataRT(args: TokenStream, input: TokenStream) -> TokenStream {
-    let args = parse_macro_input!(args with Punctuated<syn::Meta, syn::Token![,]>::parse_terminated);
-    derive_am_data(input, args, quote!{crate}, true, false, true)
+    let args =
+        parse_macro_input!(args with Punctuated<syn::Meta, syn::Token![,]>::parse_terminated);
+    derive_am_data(input, args, quote! {crate}, true, false, true)
 }
 
 fn parse_am(
@@ -248,8 +250,9 @@ fn parse_am(
     rt: bool,
     _am_group: bool,
 ) -> TokenStream {
-    let args = parse_macro_input!(args with Punctuated<syn::Meta, syn::Token![,]>::parse_terminated);
-    
+    let args =
+        parse_macro_input!(args with Punctuated<syn::Meta, syn::Token![,]>::parse_terminated);
+
     // let args = args.to_string();
     // if args.len() > 0 {
     //     if !args.starts_with("return_am") {
@@ -262,10 +265,10 @@ fn parse_am(
 
     let lamellar = if rt {
         // quote::format_ident!("crate")
-        quote!{crate}
+        quote! {crate}
     } else {
         // quote::format_ident!("__lamellar")
-        quote!{__lamellar}
+        quote! {__lamellar}
     };
 
     let am_data_header = if rt {
@@ -290,30 +293,75 @@ fn parse_am(
             let output = get_return_of_method("exec".to_string(), &input.items);
             match output {
                 Some(output) => {
-                    
-                    if let Some((return_am,return_output)) = get_return_am_return_type(&args){
+                    if let Some((return_am, return_output)) = get_return_am_return_type(&args) {
                         if return_am.to_string() != output.to_token_stream().to_string() {
-                            emit_error!(return_am.span(), "am specified in attribute {} does not match return type {}",return_am,output.to_token_stream().to_string());
-                            abort!(output.span(),"am specified in attribute {} does not match return type {}",return_am,output.to_token_stream().to_string());
+                            emit_error!(
+                                return_am.span(),
+                                "am specified in attribute {} does not match return type {}",
+                                return_am,
+                                output.to_token_stream().to_string()
+                            );
+                            abort!(
+                                output.span(),
+                                "am specified in attribute {} does not match return type {}",
+                                return_am,
+                                output.to_token_stream().to_string()
+                            );
                         }
-                        let mut impls = gen_am::generate_am(&input, local, AmType::ReturnAm(output.clone(),return_output.clone()), &lamellar, &am_data_header);
+                        let mut impls = gen_am::generate_am(
+                            &input,
+                            local,
+                            AmType::ReturnAm(output.clone(), return_output.clone()),
+                            &lamellar,
+                            &am_data_header,
+                        );
                         if !rt && !local && create_am_group {
-                            impls.extend(gen_am_group::generate_am_group(&input, local, AmType::ReturnAm(output.clone(),return_output.clone()), &lamellar, &am_group_data_header));
+                            impls.extend(gen_am_group::generate_am_group(
+                                &input,
+                                local,
+                                AmType::ReturnAm(output.clone(), return_output.clone()),
+                                &lamellar,
+                                &am_group_data_header,
+                            ));
                         }
                         impls
                     } else {
-                        let mut impls = gen_am::generate_am(&input, local, AmType::ReturnData(output.clone()), &lamellar, &am_data_header);
+                        let mut impls = gen_am::generate_am(
+                            &input,
+                            local,
+                            AmType::ReturnData(output.clone()),
+                            &lamellar,
+                            &am_data_header,
+                        );
                         if !rt && !local && create_am_group {
-                            impls.extend(gen_am_group::generate_am_group(&input, local,  AmType::ReturnData(output.clone()), &lamellar, &am_group_data_header));
+                            impls.extend(gen_am_group::generate_am_group(
+                                &input,
+                                local,
+                                AmType::ReturnData(output.clone()),
+                                &lamellar,
+                                &am_group_data_header,
+                            ));
                         }
                         impls
                     }
                 }
 
                 None => {
-                    let mut impls = gen_am::generate_am(&input, local, AmType::NoReturn, &lamellar, &am_data_header);
+                    let mut impls = gen_am::generate_am(
+                        &input,
+                        local,
+                        AmType::NoReturn,
+                        &lamellar,
+                        &am_data_header,
+                    );
                     if !rt && !local && create_am_group {
-                        impls.extend(gen_am_group::generate_am_group(&input, local, AmType::NoReturn, &lamellar, &am_group_data_header));
+                        impls.extend(gen_am_group::generate_am_group(
+                            &input,
+                            local,
+                            AmType::NoReturn,
+                            &lamellar,
+                            &am_group_data_header,
+                        ));
                     }
                     impls
                 }

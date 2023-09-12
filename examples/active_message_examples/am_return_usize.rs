@@ -67,7 +67,7 @@ fn main() {
         for i in 0..10 {
             let am = AmReturnUsize {
                 val1: i,
-                val2: "test".to_string()
+                val2: "test".to_string(),
             };
             am_group.add_am_pe(i % num_pes, am.clone());
             am_group.add_am_all(am.clone());
@@ -77,7 +77,4 @@ fn main() {
             println!("PE[{:?}] return result: {:?}", my_pe, r);
         }
     }
-
-    
-
 }

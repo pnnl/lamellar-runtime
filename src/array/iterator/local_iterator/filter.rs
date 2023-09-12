@@ -26,7 +26,7 @@ where
         // println!("{:?} Filter init before {start_i} {cnt}",std::thread::current().id());
         let val = Filter::new(self.iter.init(start_i, cnt), self.f.clone());
         // println!("{:?} Filter init after {start_i} {cnt}",std::thread::current().id());
-        
+
         val
     }
     fn array(&self) -> Self::Array {

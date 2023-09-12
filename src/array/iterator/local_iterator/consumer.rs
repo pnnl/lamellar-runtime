@@ -22,8 +22,6 @@ pub(crate) use sum::*;
 // use rand::thread_rng;
 // use rand::prelude::SliceRandom;
 
-
-
 // #[derive(Clone, Debug)]
 // pub(crate) struct IterWorkStealer {
 //     pub(crate) range: Arc<Mutex<(usize, usize)>>, //start, end
@@ -160,7 +158,7 @@ pub(crate) use sum::*;
 //                         // }
 //                     }
 //                     None
-//                 };  
+//                 };
 //                 let mut next = inner_next(iter);
 //                 if next.is_none() {
 //                     let mut rng = thread_rng();
@@ -180,8 +178,6 @@ pub(crate) use sum::*;
 //     }
 // }
 
-
-
 // pub(crate) trait IterConsumer{
 //     type AmOutput;
 //     type Output;
@@ -198,7 +194,6 @@ pub(crate) use sum::*;
 // //     Reduce(R),
 // // }
 
-
 // // impl<I,A,T,F,R> IterConsumer<I,A,T,F,R> where
 // //     I: LocalIterator + 'static,
 // //     I::Item: SyncSend,
@@ -206,8 +201,8 @@ pub(crate) use sum::*;
 // //     T: Dist + ArrayOps
 // //     F: Fn(I::Item) + SyncSend + Clone + 'static,
 // //     R: Fn(I::Item, I::Item) -> I::Item + SyncSend + Clone + 'static,{
-    
-// //     fn into_am<Am>(self, schedule: IterSchedule<I>) -> Am 
+
+// //     fn into_am<Am>(self, schedule: IterSchedule<I>) -> Am
 // //     where
 // //         A: LamellarActiveMessage + LocalAM + 'static,{
 // //         match self {
@@ -279,6 +274,3 @@ pub(crate) use sum::*;
 // //     T: Dist + ArrayOps
 // //     F: Fn(I::Item) + SyncSend + Clone + 'static,
 // //     R: Fn(I::Item, I::Item) -> I::Item + SyncSend + Clone + 'static,{
-
-
-

@@ -372,35 +372,34 @@ macro_rules! compare_exchange_epsilon_test{
     }
 }
 
-macro_rules! check_input{
-    ($array:ident, $req:ident) =>{
+macro_rules! check_input {
+    ($array:ident, $req:ident) => {
         let mut res = $array.block_on($req);
-        for (i,r) in res.drain(..).enumerate(){
+        for (i, r) in res.drain(..).enumerate() {
             if let Err(val) = r {
                 println!("error i: {i} val: {val:?}");
             }
         }
     };
-    ($array:ident, $req:ident, $array_ty:ident, $num_pes:ident, $my_pe:ident) =>{
+    ($array:ident, $req:ident, $array_ty:ident, $num_pes:ident, $my_pe:ident) => {
         let mut res = $array.block_on($req);
-        for (i,r) in res.drain(..).enumerate(){
-            if i% $num_pes == $my_pe {
-                if let Err(val) = r{
+        for (i, r) in res.drain(..).enumerate() {
+            if i % $num_pes == $my_pe {
+                if let Err(val) = r {
                     println!("error i: {i} val: {val:?}");
                 }
-            }else {
-                match r{
+            } else {
+                match r {
                     Ok(val) => println!("error i: {i} val: {val:?}"),
                     Err(val) => {
-                        if val != i{
+                        if val != i {
                             println!("error i: {i} val: {val:?}");
                         }
                     }
                 }
             }
-            
         }
-    }
+    };
 }
 
 macro_rules! input_test{

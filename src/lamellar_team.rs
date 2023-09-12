@@ -22,7 +22,7 @@ use lamellar_prof::*;
 use parking_lot::{Condvar, Mutex, RwLock};
 use std::collections::HashMap;
 use std::marker::PhantomPinned;
-use std::sync::atomic::{AtomicU8, AtomicUsize,AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, AtomicUsize, Ordering};
 use std::sync::Arc; //, Weak};
 use std::time::{Duration, Instant};
 
@@ -206,7 +206,7 @@ impl LamellarTeam {
     ///```
     #[tracing::instrument(skip_all)]
     pub fn num_threads(&self) -> usize {
-        self.team.scheduler.num_workers() + 1// plus one for the main thread
+        self.team.scheduler.num_workers() + 1 // plus one for the main thread
     }
 
     #[doc(alias("One-sided", "onesided"))]
@@ -714,7 +714,7 @@ impl LamellarTeamRT {
                 lamellae.clone(),
                 arch.clone(),
                 scheduler.clone(),
-                panic.clone()
+                panic.clone(),
             ),
             dropped: MemoryRegion::new(num_pes, lamellae.clone(), alloc.clone()),
             remote_ptr_addr: lamellae
@@ -768,17 +768,20 @@ impl LamellarTeamRT {
 
     pub(crate) fn force_shutdown(&self) {
         // println!("force_shutdown {:?} {:?}",self.tid, std::thread::current().id());
-        let first = self.panic.compare_exchange(0,1,Ordering::SeqCst,Ordering::SeqCst).is_ok();
+        let first = self
+            .panic
+            .compare_exchange(0, 1, Ordering::SeqCst, Ordering::SeqCst)
+            .is_ok();
         if self.tid == std::thread::current().id() {
-            self.panic.store(2,Ordering::SeqCst);
+            self.panic.store(2, Ordering::SeqCst);
         }
         self.scheduler.force_shutdown();
         if first {
             self.lamellae.force_shutdown();
         }
         // if self.panic.compare_exchange(false,true,Ordering::SeqCst,Ordering::SeqCst).is_ok(){
-            // println!("Im first! {:?} {:?}",self.tid, std::thread::current().id());
-            
+        // println!("Im first! {:?} {:?}",self.tid, std::thread::current().id());
+
         if self.tid == std::thread::current().id() {
             // println!("Im main thread!");
             self.mem_regions.write().clear();
@@ -794,20 +797,17 @@ impl LamellarTeamRT {
         //     self.lamellae.force_shutdown();
         //     self.mem_regions.write().clear();
         //     self.sub_teams.write().clear();
-        //     // 
+        //     //
         //     self.lamellae.force_deinit();
         //     std::process::exit(1);
         // }
         // println!("force_shutdown done {:?} {:?}",self.tid, std::thread::current().id());
     }
 
-
     #[tracing::instrument(skip_all)]
     pub(crate) fn destroy(&self) {
         // println!("destroying team? {:?}", self.mem_regions.read().len());
-        if self.panic.load(Ordering::SeqCst) ==0 {
-            
-            
+        if self.panic.load(Ordering::SeqCst) == 0 {
             // println!(
             //     "in team destroy mype: {:?} cnt: {:?} {:?}",
             //     self.world_pe,
@@ -830,10 +830,11 @@ impl LamellarTeamRT {
             // );
             self.wait_all();
         }
-            self.mem_regions.write().clear();
-            self.sub_teams.write().clear(); // not sure this is necessary or should be allowed? sub teams delete themselves from this map when dropped...
-              
-        if  self.panic.load(Ordering::SeqCst) ==0 {// what does it mean if we drop a parent team while a sub_team is valid?
+        self.mem_regions.write().clear();
+        self.sub_teams.write().clear(); // not sure this is necessary or should be allowed? sub teams delete themselves from this map when dropped...
+
+        if self.panic.load(Ordering::SeqCst) == 0 {
+            // what does it mean if we drop a parent team while a sub_team is valid?
             if let None = &self.parent {
                 // println!("shutdown lamellae, going to shutdown scheduler");
                 self.scheduler.shutdown_threads();
@@ -841,22 +842,21 @@ impl LamellarTeamRT {
                 self.drop_barrier();
                 self.lamellae.shutdown();
                 self.scheduler.shutdown();
-                
             }
         }
-            // println!("sechduler_new: {:?}", Arc::strong_count(&self.scheduler));
-            // println!("lamellae: {:?}", Arc::strong_count(&self.lamellae));
-            // println!("arch: {:?}", Arc::strong_count(&self.arch));
-            // println!(
-            //     "world_counters: {:?}",
-            //     Arc::strong_count(&self.world_counters)
-            // );
-            // println!(
-            //     "in team destroy mype: {:?} cnt: {:?} {:?}",
-            //     self.world_pe,
-            //     self.team_counters.send_req_cnt.load(Ordering::SeqCst),
-            //     self.team_counters.outstanding_reqs.load(Ordering::SeqCst),
-            // );
+        // println!("sechduler_new: {:?}", Arc::strong_count(&self.scheduler));
+        // println!("lamellae: {:?}", Arc::strong_count(&self.lamellae));
+        // println!("arch: {:?}", Arc::strong_count(&self.arch));
+        // println!(
+        //     "world_counters: {:?}",
+        //     Arc::strong_count(&self.world_counters)
+        // );
+        // println!(
+        //     "in team destroy mype: {:?} cnt: {:?} {:?}",
+        //     self.world_pe,
+        //     self.team_counters.send_req_cnt.load(Ordering::SeqCst),
+        //     self.team_counters.outstanding_reqs.load(Ordering::SeqCst),
+        // );
         // println!("team destroyed")
     }
     #[allow(dead_code)]
@@ -1005,7 +1005,7 @@ impl LamellarTeamRT {
 
     #[tracing::instrument(skip_all)]
     pub fn num_threads(&self) -> usize {
-        self.scheduler.num_workers() + 1// plus one for the main thread
+        self.scheduler.num_workers() + 1 // plus one for the main thread
     }
 
     #[cfg_attr(test, allow(unreachable_code), allow(unused_variables))]
@@ -1061,7 +1061,7 @@ impl LamellarTeamRT {
 
     #[tracing::instrument(skip_all)]
     fn put_dropped(&self) {
-        if self.panic.load(Ordering::SeqCst) ==0 {
+        if self.panic.load(Ordering::SeqCst) == 0 {
             if let Some(parent) = &self.parent {
                 let temp_slice = unsafe { self.dropped.as_mut_slice().unwrap() };
 
@@ -1102,7 +1102,7 @@ impl LamellarTeamRT {
     #[tracing::instrument(skip_all)]
     fn drop_barrier(&self) {
         let mut s = Instant::now();
-        if self.panic.load(Ordering::SeqCst) ==0 {
+        if self.panic.load(Ordering::SeqCst) == 0 {
             for pe in self.dropped.as_slice().unwrap() {
                 while *pe != 1 {
                     // std::thread::yield_now();
@@ -1160,9 +1160,10 @@ impl LamellarTeamRT {
     #[tracing::instrument(skip_all)]
     fn wait_all(&self) {
         let mut temp_now = Instant::now();
-        while self.panic.load(Ordering::SeqCst) == 0  && (self.team_counters.outstanding_reqs.load(Ordering::SeqCst) > 0
-            || (self.parent.is_none()
-                && self.world_counters.outstanding_reqs.load(Ordering::SeqCst) > 0))
+        while self.panic.load(Ordering::SeqCst) == 0
+            && (self.team_counters.outstanding_reqs.load(Ordering::SeqCst) > 0
+                || (self.parent.is_none()
+                    && self.world_counters.outstanding_reqs.load(Ordering::SeqCst) > 0))
         {
             // std::thread::yield_now();
             self.scheduler.exec_task(); //mmight as well do useful work while we wait
@@ -1463,7 +1464,6 @@ impl LamellarTeamRT {
         })
     }
 
-
     #[tracing::instrument(skip_all)]
     pub(crate) fn exec_arc_am_pe_immediate<F>(
         self: &Pin<Arc<LamellarTeamRT>>,
@@ -1671,7 +1671,7 @@ impl Drop for LamellarTeam {
     #[tracing::instrument(skip_all)]
     fn drop(&mut self) {
         // println!("team handle dropping {:?}", self.team.team_hash);
-        
+
         if self.panic.load(Ordering::SeqCst) == 0 {
             if !self.am_team {
                 //we only care about when the user handle gets dropped (not the team handles that are created for use in an active message)
@@ -1684,18 +1684,18 @@ impl Drop for LamellarTeam {
                     //     self.team.get_pes(),
                     //     self.team.dropped.as_slice()
                     // );
-                    
-                        self.team.wait_all();
-                        // println!("after wait all");
-                        self.team.barrier();
-                        // println!("after barrier");
-                        self.team.put_dropped();
-                        // println!("after put dropped");
-                        // if let Ok(_my_index) = self.team.arch.team_pe(self.team.world_pe) {
-                        if self.team.team_pe.is_ok() {
-                            self.team.drop_barrier();
-                        }
-                    
+
+                    self.team.wait_all();
+                    // println!("after wait all");
+                    self.team.barrier();
+                    // println!("after barrier");
+                    self.team.put_dropped();
+                    // println!("after put dropped");
+                    // if let Ok(_my_index) = self.team.arch.team_pe(self.team.world_pe) {
+                    if self.team.team_pe.is_ok() {
+                        self.team.drop_barrier();
+                    }
+
                     // println!("after drop barrier");
                     // println!("removing {:?} ",self.team.id);
                     parent.sub_teams.write().remove(&self.team.id);
@@ -1721,8 +1721,7 @@ impl Drop for LamellarTeam {
                     Pin::new_unchecked(arc_team); //allows us to drop the inner team
                 }
             }
-        }
-        else{
+        } else {
             assert!(self.panic.load(Ordering::SeqCst) == 2);
         }
         // else{

@@ -1070,7 +1070,9 @@ impl ActiveMessageEngine for ActiveMessageEngineType {
     ) {
         match self {
             ActiveMessageEngineType::RegisteredActiveMessages(remote_am) => {
-                remote_am.process_msg(am, scheduler, stall_mark,immediate).await;
+                remote_am
+                    .process_msg(am, scheduler, stall_mark, immediate)
+                    .await;
             }
         }
     }

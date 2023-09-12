@@ -8,7 +8,6 @@
 ///----------------------------------------------------------------------------------
 use lamellar::array::prelude::*;
 
-
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let elem_per_pe = args
@@ -49,7 +48,6 @@ fn main() {
         }
     });
     c.dist_iter_mut().for_each(|x| x.store(0.0));
-    
 
     world.wait_all();
     world.barrier();
@@ -73,15 +71,15 @@ fn main() {
                 .chunks(n) // chunk by the row size
                 .enumerate()
                 .for_each(move |(i, row)| {
-                    let sum = unsafe{col.iter().zip(row).map(|(&i1, &i2)| i1 * i2).sum::<f32>()}; // dot product using rust iters... but MatrixMultiply is faster
-                    // let _lock = LOCK.lock(); //this lock is to protect writes into c, is c was an AtomicArray or LocalLockArray we could remove this
+                    let sum = unsafe { col.iter().zip(row).map(|(&i1, &i2)| i1 * i2).sum::<f32>() }; // dot product using rust iters... but MatrixMultiply is faster
+                                                                                                     // let _lock = LOCK.lock(); //this lock is to protect writes into c, is c was an AtomicArray or LocalLockArray we could remove this
                     c.mut_local_data().at(j + (i % rows_pe) * m).fetch_add(sum);
                     //we know all updates to c are local so directly update the raw data
                     //we could also use:
                     //c.add(j+i*m,sum) -- but some overheads are introduce from PGAS calculations performed by the runtime, and since its all local updates we can avoid them
                 });
         });
-    
+
     world.wait_all();
     world.barrier();
     let elapsed = start.elapsed().as_secs_f64();

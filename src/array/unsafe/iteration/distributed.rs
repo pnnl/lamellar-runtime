@@ -1,11 +1,11 @@
 use crate::active_messaging::SyncSend;
 use crate::array::iterator::distributed_iterator::*;
 use crate::array::r#unsafe::UnsafeArray;
-use crate::array::{LamellarArray,Distribution,ArrayOps,TeamFrom};
+use crate::array::{ArrayOps, Distribution, LamellarArray, TeamFrom};
 
-use crate::memregion::Dist;
 use crate::array::iterator::Schedule;
 use crate::lamellar_team::LamellarTeamRT;
+use crate::memregion::Dist;
 
 use core::marker::PhantomData;
 use futures::Future;
@@ -56,7 +56,7 @@ impl<T: Dist> DistIteratorLauncher for UnsafeArray<T> {
         I: DistributedIterator + 'static,
         F: Fn(I::Item) + SyncSend + Clone + 'static,
     {
-        let for_each = ForEach{
+        let for_each = ForEach {
             iter: iter.clone(),
             op,
         };
@@ -90,7 +90,7 @@ impl<T: Dist> DistIteratorLauncher for UnsafeArray<T> {
         F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
         Fut: Future<Output = ()> + Send + 'static,
     {
-        let for_each = ForEachAsync{
+        let for_each = ForEachAsync {
             iter: iter.clone(),
             op,
         };
@@ -108,24 +108,29 @@ impl<T: Dist> DistIteratorLauncher for UnsafeArray<T> {
     where
         I: DistributedIterator + 'static,
         I::Item: Dist + ArrayOps,
-        A: for<'a>  TeamFrom<(&'a Vec<I::Item>,Distribution)> + SyncSend + Clone + 'static,
+        A: for<'a> TeamFrom<(&'a Vec<I::Item>, Distribution)> + SyncSend + Clone + 'static,
     {
-        self.collect_with_schedule(Schedule::Static,iter,d)
+        self.collect_with_schedule(Schedule::Static, iter, d)
     }
 
-    fn collect_with_schedule<I, A>(&self, sched: Schedule, iter: &I, d: Distribution) -> Pin<Box<dyn Future<Output = A> + Send>>
+    fn collect_with_schedule<I, A>(
+        &self,
+        sched: Schedule,
+        iter: &I,
+        d: Distribution,
+    ) -> Pin<Box<dyn Future<Output = A> + Send>>
     where
         I: DistributedIterator + 'static,
         I::Item: Dist + ArrayOps,
-        A: for<'a>  TeamFrom<(&'a Vec<I::Item>,Distribution)> + SyncSend + Clone + 'static,
+        A: for<'a> TeamFrom<(&'a Vec<I::Item>, Distribution)> + SyncSend + Clone + 'static,
     {
-        let collect = Collect{
+        let collect = Collect {
             iter: iter.clone().monotonic(),
             distribution: d,
             _phantom: PhantomData,
         };
         match sched {
-            Schedule::Static => self.sched_static(collect ),
+            Schedule::Static => self.sched_static(collect),
             Schedule::Dynamic => self.sched_dynamic(collect),
             Schedule::Chunk(size) => self.sched_chunk(collect, size),
             Schedule::Guided => self.sched_guided(collect),
@@ -140,11 +145,11 @@ impl<T: Dist> DistIteratorLauncher for UnsafeArray<T> {
     ) -> Pin<Box<dyn Future<Output = A> + Send>>
     where
         I: DistributedIterator,
-       I::Item: Future<Output = B> + Send  + 'static,
+        I::Item: Future<Output = B> + Send + 'static,
         B: Dist + ArrayOps,
-        A: for<'a> TeamFrom<(&'a Vec<B>,Distribution)> + SyncSend  + Clone +  'static,
+        A: for<'a> TeamFrom<(&'a Vec<B>, Distribution)> + SyncSend + Clone + 'static,
     {
-        self.collect_async_with_schedule(Schedule::Static,iter,d)
+        self.collect_async_with_schedule(Schedule::Static, iter, d)
     }
 
     fn collect_async_with_schedule<I, A, B>(
@@ -155,17 +160,17 @@ impl<T: Dist> DistIteratorLauncher for UnsafeArray<T> {
     ) -> Pin<Box<dyn Future<Output = A> + Send>>
     where
         I: DistributedIterator,
-       I::Item: Future<Output = B> + Send  + 'static,
+        I::Item: Future<Output = B> + Send + 'static,
         B: Dist + ArrayOps,
-        A: for<'a> TeamFrom<(&'a Vec<B>,Distribution)> + SyncSend  + Clone +  'static,
+        A: for<'a> TeamFrom<(&'a Vec<B>, Distribution)> + SyncSend + Clone + 'static,
     {
-        let collect = CollectAsync{
+        let collect = CollectAsync {
             iter: iter.clone().monotonic(),
             distribution: d,
             _phantom: PhantomData,
         };
         match sched {
-            Schedule::Static => self.sched_static(collect ),
+            Schedule::Static => self.sched_static(collect),
             Schedule::Dynamic => self.sched_dynamic(collect),
             Schedule::Chunk(size) => self.sched_chunk(collect, size),
             Schedule::Guided => self.sched_guided(collect),
@@ -177,5 +182,3 @@ impl<T: Dist> DistIteratorLauncher for UnsafeArray<T> {
         self.inner.data.team.clone()
     }
 }
-
-

@@ -8,8 +8,6 @@ use async_trait::async_trait;
 use enum_dispatch::enum_dispatch;
 use std::sync::Arc;
 
-
-
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum CmdQStatus {

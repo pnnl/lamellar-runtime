@@ -337,7 +337,7 @@ macro_rules! check_results {
         let mut req_cnt=0;
         for (i, req) in $reqs.drain(0..).enumerate() {
             let req =  $array.block_on(req);
-            
+
             for (j, res) in req.iter().enumerate() {
                 let check_val = if $real_val == 0  {
                     req_cnt + $num_pes
@@ -434,7 +434,7 @@ macro_rules! input_test{
             let idx_slice = &idx[..];
             let vals=vec![1;array.len()];
             let vals_slice = &vals[..];
-            
+
             let mut reqs = vec![];
             reqs.push(array.batch_fetch_add(idx_slice,1));
             check_results!($array,array,num_pes,reqs,"&[T]");
@@ -444,7 +444,7 @@ macro_rules! input_test{
             check_results!($array,array,num_pes, real_val,reqs,"&[T]");
             // multi_idx multi_ val
             reqs.push(array.batch_fetch_add(idx_slice,vals_slice));
-            
+
             check_results!($array,array,num_pes,reqs,"&[T]");
             //scoped &[T]------------------------------
             let mut reqs = vec![];

@@ -195,10 +195,11 @@ fn native_atomic_slice(
     }
 }
 
-
-
-
-fn gen_multi_val_multi_idx(op_type: proc_macro2::TokenStream, lock: &proc_macro2::TokenStream, op: proc_macro2::TokenStream) -> proc_macro2::TokenStream{
+fn gen_multi_val_multi_idx(
+    op_type: proc_macro2::TokenStream,
+    lock: &proc_macro2::TokenStream,
+    op: proc_macro2::TokenStream,
+) -> proc_macro2::TokenStream {
     quote! {
         #op_type =>{
             for elem in idx_vals{
@@ -211,7 +212,11 @@ fn gen_multi_val_multi_idx(op_type: proc_macro2::TokenStream, lock: &proc_macro2
     }
 }
 
-fn gen_single_val_multi_idx(op_type: proc_macro2::TokenStream, lock: &proc_macro2::TokenStream, op: proc_macro2::TokenStream) -> proc_macro2::TokenStream{
+fn gen_single_val_multi_idx(
+    op_type: proc_macro2::TokenStream,
+    lock: &proc_macro2::TokenStream,
+    op: proc_macro2::TokenStream,
+) -> proc_macro2::TokenStream {
     quote! {
         #op_type =>{
             for index in indices.iter(){
@@ -223,7 +228,11 @@ fn gen_single_val_multi_idx(op_type: proc_macro2::TokenStream, lock: &proc_macro
     }
 }
 
-fn gen_multi_val_single_idx(op_type: proc_macro2::TokenStream, lock: &proc_macro2::TokenStream, op: proc_macro2::TokenStream) -> proc_macro2::TokenStream{
+fn gen_multi_val_single_idx(
+    op_type: proc_macro2::TokenStream,
+    lock: &proc_macro2::TokenStream,
+    op: proc_macro2::TokenStream,
+) -> proc_macro2::TokenStream {
     quote! {
         #op_type =>{
             #lock
@@ -283,8 +292,8 @@ fn create_buf_ops2(
     ) = if array_type == "NativeAtomicArray" {
         let (_slice, val) = native_atomic_slice(&typeident, &lamellar);
         (
-            quote! { #val },                                                           //lhs
-            quote! {slice[index].store(val, Ordering::SeqCst)},                        //assign
+            quote! { #val },                                    //lhs
+            quote! {slice[index].store(val, Ordering::SeqCst)}, //assign
             quote! {
                 res.push(slice[index].fetch_add(val, Ordering::SeqCst));
             }, //fetch_add
@@ -326,11 +335,11 @@ fn create_buf_ops2(
             }, //fetch_and
             quote! {
                 res.push(slice[index].fetch_or(val, Ordering::SeqCst));
-            },  //fetch_or
+            }, //fetch_or
             quote! {
                 res.push(slice[index].fetch_xor(val, Ordering::SeqCst));
             }, //fetch_xor
-            quote! {slice[index].load(Ordering::SeqCst)},                              //load
+            quote! {slice[index].load(Ordering::SeqCst)}, //load
             quote! { //swap
                 let mut old = slice[index].load(Ordering::SeqCst);
                 while slice[index].compare_exchange(old, val, Ordering::SeqCst, Ordering::SeqCst).is_err() {
@@ -434,35 +443,35 @@ fn create_buf_ops2(
         )
     } else {
         (
-            quote! {slice[index]},                                           //lhs
-            quote! {slice[index] = val},                                     //assign
+            quote! {slice[index]},       //lhs
+            quote! {slice[index] = val}, //assign
             quote! {
-                res.push(slice[index]); slice[index] += val; 
+                res.push(slice[index]); slice[index] += val;
             }, //fetch_add -- we lock the index before this point so its actually atomic
             quote! {
-                res.push(slice[index]); slice[index] -= val; 
+                res.push(slice[index]); slice[index] -= val;
             }, //fetch_sub --we lock the index before this point so its actually atomic
             quote! {
-                res.push(slice[index]); slice[index] *= val; 
+                res.push(slice[index]); slice[index] *= val;
             }, //fetch_mul --we lock the index before this point so its actually atomic
             quote! {
-                res.push(slice[index]); slice[index] /= val; 
+                res.push(slice[index]); slice[index] /= val;
             }, //fetch_div --we lock the index before this point so its actually atomic
             quote! {
-                res.push(slice[index]); slice[index] %= val; 
+                res.push(slice[index]); slice[index] %= val;
             }, //fetch_rem --we lock the index before this point so its actually atomic
             quote! {
-                res.push(slice[index]); slice[index] &= val; 
+                res.push(slice[index]); slice[index] &= val;
             }, //fetch_and --we lock the index before this point so its actually atomic
             quote! {
-                res.push(slice[index]); slice[index] |= val; 
+                res.push(slice[index]); slice[index] |= val;
             }, //fetch_or --we lock the index before this point so its actually atomic
             quote! {
-                res.push(slice[index]); slice[index] ^= val; 
+                res.push(slice[index]); slice[index] ^= val;
             }, //fetch_xor --we lock the index before this point so its actually atomic
-            quote! {slice[index]},                                           //load
+            quote! {slice[index]},       //load
             quote! {
-                res.push(slice[index]); slice[index] = val; 
+                res.push(slice[index]); slice[index] = val;
             }, //swap we lock the index before this point so its actually atomic
             quote! {  // compare_exchange -- we lock the index before this point so its actually atomic
                  let t_res = if old == slice[index]{
@@ -490,7 +499,7 @@ fn create_buf_ops2(
             },
             quote! { slice[index] <<= val; }, //shl --we lock the index before this point so its actually atomic
             quote! {
-                res.push(slice[index]); slice[index] <<= val; 
+                res.push(slice[index]); slice[index] <<= val;
             }, //fetch_shl --we lock the index before this point so its actually atomic
             quote! { slice[index] >>= val; }, //shr --we lock the index before this point so its actually atomic
             quote! {
@@ -534,35 +543,77 @@ fn create_buf_ops2(
     let multi_val_multi_idx_match_stmts = quote! {};
     let single_val_multi_idx_match_stmts = quote! {};
     let multi_val_single_idx_match_stmts = quote! {};
-    let mut  all_match_stmts: Vec<(proc_macro2::TokenStream, fn(proc_macro2::TokenStream, & proc_macro2::TokenStream, proc_macro2::TokenStream) -> proc_macro2::TokenStream)> = vec![(multi_val_multi_idx_match_stmts,gen_multi_val_multi_idx),(single_val_multi_idx_match_stmts,gen_single_val_multi_idx),(multi_val_single_idx_match_stmts,gen_multi_val_single_idx)];
-    for  (match_stmts, gen_fn) in all_match_stmts.iter_mut() {
+    let mut all_match_stmts: Vec<(
+        proc_macro2::TokenStream,
+        fn(
+            proc_macro2::TokenStream,
+            &proc_macro2::TokenStream,
+            proc_macro2::TokenStream,
+        ) -> proc_macro2::TokenStream,
+    )> = vec![
+        (multi_val_multi_idx_match_stmts, gen_multi_val_multi_idx),
+        (single_val_multi_idx_match_stmts, gen_single_val_multi_idx),
+        (multi_val_single_idx_match_stmts, gen_multi_val_single_idx),
+    ];
+    for (match_stmts, gen_fn) in all_match_stmts.iter_mut() {
         for optype in optypes {
             match optype {
                 OpType::Arithmetic => {
-                    match_stmts.extend(gen_fn(quote! {ArrayOpCmd::Add},&lock,quote!{ #lhs += val; })); 
-                    match_stmts.extend(gen_fn(quote! {ArrayOpCmd::Sub},&lock,quote!{#lhs -= val; })); 
-                    match_stmts.extend(gen_fn(quote! {ArrayOpCmd::Mul},&lock,quote!{#lhs *= val;})); 
-                    match_stmts.extend(gen_fn(quote! {ArrayOpCmd::Div},&lock,quote!{#lhs /= val; })); 
-                    match_stmts.extend(gen_fn(quote! {ArrayOpCmd::Rem},&lock,quote!{#lhs %= val; })); 
-                    match_stmts.extend(gen_fn(quote! {ArrayOpCmd::Put},&lock,assign.clone())); 
+                    match_stmts.extend(gen_fn(
+                        quote! {ArrayOpCmd::Add},
+                        &lock,
+                        quote! { #lhs += val; },
+                    ));
+                    match_stmts.extend(gen_fn(
+                        quote! {ArrayOpCmd::Sub},
+                        &lock,
+                        quote! {#lhs -= val; },
+                    ));
+                    match_stmts.extend(gen_fn(
+                        quote! {ArrayOpCmd::Mul},
+                        &lock,
+                        quote! {#lhs *= val;},
+                    ));
+                    match_stmts.extend(gen_fn(
+                        quote! {ArrayOpCmd::Div},
+                        &lock,
+                        quote! {#lhs /= val; },
+                    ));
+                    match_stmts.extend(gen_fn(
+                        quote! {ArrayOpCmd::Rem},
+                        &lock,
+                        quote! {#lhs %= val; },
+                    ));
+                    match_stmts.extend(gen_fn(quote! {ArrayOpCmd::Put}, &lock, assign.clone()));
                 }
-                ,
                 OpType::Bitwise => {
-                    match_stmts.extend(gen_fn(quote! {ArrayOpCmd::And},&lock,quote!{#lhs &= val; })); 
-                    match_stmts.extend(gen_fn(quote! {ArrayOpCmd::Or},&lock,quote!{#lhs |= val; })); 
-                    match_stmts.extend(gen_fn(quote! {ArrayOpCmd::Xor},&lock,quote!{#lhs ^= val; })); 
-                },
+                    match_stmts.extend(gen_fn(
+                        quote! {ArrayOpCmd::And},
+                        &lock,
+                        quote! {#lhs &= val; },
+                    ));
+                    match_stmts.extend(gen_fn(
+                        quote! {ArrayOpCmd::Or},
+                        &lock,
+                        quote! {#lhs |= val; },
+                    ));
+                    match_stmts.extend(gen_fn(
+                        quote! {ArrayOpCmd::Xor},
+                        &lock,
+                        quote! {#lhs ^= val; },
+                    ));
+                }
                 OpType::Access => {
-                    match_stmts.extend(gen_fn(quote! {ArrayOpCmd::Store},&lock,assign.clone())); 
+                    match_stmts.extend(gen_fn(quote! {ArrayOpCmd::Store}, &lock, assign.clone()));
                 }
                 OpType::Shift => {
-                    match_stmts.extend(gen_fn(quote! {ArrayOpCmd::Shl},&lock,shl.clone()));
-                    match_stmts.extend(gen_fn(quote! {ArrayOpCmd::Shr},&lock,shr.clone()));
-                },
+                    match_stmts.extend(gen_fn(quote! {ArrayOpCmd::Shl}, &lock, shl.clone()));
+                    match_stmts.extend(gen_fn(quote! {ArrayOpCmd::Shr}, &lock, shr.clone()));
+                }
                 _ => {} //for fetch, readonly, and compex ops do nothing
             }
         }
-        match_stmts.extend(quote!{
+        match_stmts.extend(quote! {
             _=> unreachable!("op: {:?} should not be possible in this context", self.op),
         });
     }
@@ -571,44 +622,108 @@ fn create_buf_ops2(
     let single_val_multi_idx_match_stmts = all_match_stmts[1].0.clone();
     let multi_val_single_idx_match_stmts = all_match_stmts[2].0.clone();
 
-    let  multi_val_multi_idx_fetch_match_stmts = quote! {};
-    let  single_val_multi_idx_fetch_match_stmts = quote! {};
-    let  multi_val_single_idx_fetch_match_stmts = quote! {};
-    let mut  all_match_stmts: Vec<(proc_macro2::TokenStream, fn(proc_macro2::TokenStream, & proc_macro2::TokenStream, proc_macro2::TokenStream) -> proc_macro2::TokenStream)> = 
-        vec![(multi_val_multi_idx_fetch_match_stmts,gen_multi_val_multi_idx),
-             (single_val_multi_idx_fetch_match_stmts,gen_single_val_multi_idx),
-             (multi_val_single_idx_fetch_match_stmts,gen_multi_val_single_idx)];
-    for  (match_stmts, gen_fn) in all_match_stmts.iter_mut() {
+    let multi_val_multi_idx_fetch_match_stmts = quote! {};
+    let single_val_multi_idx_fetch_match_stmts = quote! {};
+    let multi_val_single_idx_fetch_match_stmts = quote! {};
+    let mut all_match_stmts: Vec<(
+        proc_macro2::TokenStream,
+        fn(
+            proc_macro2::TokenStream,
+            &proc_macro2::TokenStream,
+            proc_macro2::TokenStream,
+        ) -> proc_macro2::TokenStream,
+    )> = vec![
+        (
+            multi_val_multi_idx_fetch_match_stmts,
+            gen_multi_val_multi_idx,
+        ),
+        (
+            single_val_multi_idx_fetch_match_stmts,
+            gen_single_val_multi_idx,
+        ),
+        (
+            multi_val_single_idx_fetch_match_stmts,
+            gen_multi_val_single_idx,
+        ),
+    ];
+    for (match_stmts, gen_fn) in all_match_stmts.iter_mut() {
         for optype in optypes {
             match optype {
                 OpType::Arithmetic => {
-                    match_stmts.extend(gen_fn(quote! {ArrayOpCmd::FetchAdd},&lock,fetch_add.clone()));
-                    match_stmts.extend(gen_fn(quote! {ArrayOpCmd::FetchSub},&lock,fetch_sub.clone()));
-                    match_stmts.extend(gen_fn(quote! {ArrayOpCmd::FetchMul},&lock,fetch_mul.clone()));
-                    match_stmts.extend(gen_fn(quote! {ArrayOpCmd::FetchDiv},&lock,fetch_div.clone()));
-                    match_stmts.extend(gen_fn(quote! {ArrayOpCmd::FetchRem},&lock,fetch_rem.clone()));
-                    match_stmts.extend(gen_fn(quote! {ArrayOpCmd::Get},&lock,quote!{res.push(#load);}));
-                },
+                    match_stmts.extend(gen_fn(
+                        quote! {ArrayOpCmd::FetchAdd},
+                        &lock,
+                        fetch_add.clone(),
+                    ));
+                    match_stmts.extend(gen_fn(
+                        quote! {ArrayOpCmd::FetchSub},
+                        &lock,
+                        fetch_sub.clone(),
+                    ));
+                    match_stmts.extend(gen_fn(
+                        quote! {ArrayOpCmd::FetchMul},
+                        &lock,
+                        fetch_mul.clone(),
+                    ));
+                    match_stmts.extend(gen_fn(
+                        quote! {ArrayOpCmd::FetchDiv},
+                        &lock,
+                        fetch_div.clone(),
+                    ));
+                    match_stmts.extend(gen_fn(
+                        quote! {ArrayOpCmd::FetchRem},
+                        &lock,
+                        fetch_rem.clone(),
+                    ));
+                    match_stmts.extend(gen_fn(
+                        quote! {ArrayOpCmd::Get},
+                        &lock,
+                        quote! {res.push(#load);},
+                    ));
+                }
                 OpType::Bitwise => {
-                    match_stmts.extend(gen_fn(quote! {ArrayOpCmd::FetchAnd},&lock,fetch_and.clone()));
-                    match_stmts.extend(gen_fn(quote! {ArrayOpCmd::FetchOr},&lock,fetch_or.clone()));
-                    match_stmts.extend(gen_fn(quote! {ArrayOpCmd::FetchXor},&lock,fetch_xor.clone()));
-                },
+                    match_stmts.extend(gen_fn(
+                        quote! {ArrayOpCmd::FetchAnd},
+                        &lock,
+                        fetch_and.clone(),
+                    ));
+                    match_stmts.extend(gen_fn(
+                        quote! {ArrayOpCmd::FetchOr},
+                        &lock,
+                        fetch_or.clone(),
+                    ));
+                    match_stmts.extend(gen_fn(
+                        quote! {ArrayOpCmd::FetchXor},
+                        &lock,
+                        fetch_xor.clone(),
+                    ));
+                }
                 OpType::Access => {
-                    match_stmts.extend(gen_fn(quote! {ArrayOpCmd::Swap},&lock,swap.clone()));
-                },
+                    match_stmts.extend(gen_fn(quote! {ArrayOpCmd::Swap}, &lock, swap.clone()));
+                }
                 OpType::ReadOnly => {
-                    match_stmts.extend(gen_fn(quote! {ArrayOpCmd::Load},&lock,quote!{res.push(#load);}));
-                },
+                    match_stmts.extend(gen_fn(
+                        quote! {ArrayOpCmd::Load},
+                        &lock,
+                        quote! {res.push(#load);},
+                    ));
+                }
                 OpType::Shift => {
-                    match_stmts.extend(gen_fn(quote! {ArrayOpCmd::FetchShl},&lock,fetch_shl.clone()));
-                    match_stmts.extend(gen_fn(quote! {ArrayOpCmd::FetchShr},&lock,fetch_shr.clone()));
-                   
-                },
+                    match_stmts.extend(gen_fn(
+                        quote! {ArrayOpCmd::FetchShl},
+                        &lock,
+                        fetch_shl.clone(),
+                    ));
+                    match_stmts.extend(gen_fn(
+                        quote! {ArrayOpCmd::FetchShr},
+                        &lock,
+                        fetch_shr.clone(),
+                    ));
+                }
                 _ => {} //dont handle result ops (CompEx,CompExEs) here
             }
         }
-        match_stmts.extend(quote!{
+        match_stmts.extend(quote! {
             _=> unreachable!("op: {:?} should not be possible in this context", self.op),
         });
     }
@@ -617,22 +732,47 @@ fn create_buf_ops2(
     let single_val_multi_idx_fetch_match_stmts = all_match_stmts[1].0.clone();
     let multi_val_single_idx_fetch_match_stmts = all_match_stmts[2].0.clone();
 
-    let  multi_val_multi_idx_result_match_stmts = quote! {};
-    let  single_val_multi_idx_result_match_stmts = quote! {};
-    let  multi_val_single_idx_result_match_stmts = quote! {};
-    let mut  all_match_stmts: Vec<(proc_macro2::TokenStream, fn(proc_macro2::TokenStream, & proc_macro2::TokenStream, proc_macro2::TokenStream) -> proc_macro2::TokenStream)> = 
-        vec![(multi_val_multi_idx_result_match_stmts,gen_multi_val_multi_idx),
-             (single_val_multi_idx_result_match_stmts,gen_single_val_multi_idx),
-             (multi_val_single_idx_result_match_stmts,gen_multi_val_single_idx)];
-    for  (match_stmts, gen_fn) in all_match_stmts.iter_mut() {
+    let multi_val_multi_idx_result_match_stmts = quote! {};
+    let single_val_multi_idx_result_match_stmts = quote! {};
+    let multi_val_single_idx_result_match_stmts = quote! {};
+    let mut all_match_stmts: Vec<(
+        proc_macro2::TokenStream,
+        fn(
+            proc_macro2::TokenStream,
+            &proc_macro2::TokenStream,
+            proc_macro2::TokenStream,
+        ) -> proc_macro2::TokenStream,
+    )> = vec![
+        (
+            multi_val_multi_idx_result_match_stmts,
+            gen_multi_val_multi_idx,
+        ),
+        (
+            single_val_multi_idx_result_match_stmts,
+            gen_single_val_multi_idx,
+        ),
+        (
+            multi_val_single_idx_result_match_stmts,
+            gen_multi_val_single_idx,
+        ),
+    ];
+    for (match_stmts, gen_fn) in all_match_stmts.iter_mut() {
         for optype in optypes {
             match optype {
-                OpType::CompEx =>  match_stmts.extend(gen_fn(quote! {ArrayOpCmd::CompareExchange(old)},&lock,compare_exchange.clone())),
-                OpType::CompExEps =>  match_stmts.extend(gen_fn(quote! {ArrayOpCmd::CompareExchangeEps(old,eps)},&lock,compare_exchange_eps.clone())),
+                OpType::CompEx => match_stmts.extend(gen_fn(
+                    quote! {ArrayOpCmd::CompareExchange(old)},
+                    &lock,
+                    compare_exchange.clone(),
+                )),
+                OpType::CompExEps => match_stmts.extend(gen_fn(
+                    quote! {ArrayOpCmd::CompareExchangeEps(old,eps)},
+                    &lock,
+                    compare_exchange_eps.clone(),
+                )),
                 _ => {} //current only ops that return results are CompEx, CompExEps
             }
         }
-        match_stmts.extend(quote!{
+        match_stmts.extend(quote! {
             _=> unreachable!("op: {:?} should not be possible in this context", self.op),
         });
     }
@@ -640,44 +780,103 @@ fn create_buf_ops2(
     let multi_val_multi_idx_result_match_stmts = all_match_stmts[0].0.clone();
     let single_val_multi_idx_result_match_stmts = all_match_stmts[1].0.clone();
     let multi_val_single_idx_result_match_stmts = all_match_stmts[2].0.clone();
-    
 
     // let buf_op_name = quote::format_ident!("{}_{}_op_buf", array_type, type_to_string(&typeident));
-    let multi_val_multi_idx_am_buf_name = quote::format_ident!("{}_{}_multi_val_multi_idx_am_buf", array_type, type_to_string(&typeident));
-    let dist_multi_val_multi_idx_am_buf_name =
-        quote::format_ident!("{}_{}_multi_val_multi_idx_am", array_type, type_to_string(&typeident));
-    let multi_val_multi_idx_am_buf_fetch_name = quote::format_ident!("{}_{}_multi_val_multi_idx_am_buf_fetch", array_type, type_to_string(&typeident));
-    let dist_multi_val_multi_idx_am_buf_fetch_name =
-        quote::format_ident!("{}_{}_multi_val_multi_idx_am_fetch", array_type, type_to_string(&typeident));
-    let multi_val_multi_idx_am_buf_result_name = quote::format_ident!("{}_{}_multi_val_multi_idx_am_buf_result", array_type, type_to_string(&typeident));
-    let dist_multi_val_multi_idx_am_buf_result_name =
-        quote::format_ident!("{}_{}_multi_val_multi_idx_am_result", array_type, type_to_string(&typeident));
+    let multi_val_multi_idx_am_buf_name = quote::format_ident!(
+        "{}_{}_multi_val_multi_idx_am_buf",
+        array_type,
+        type_to_string(&typeident)
+    );
+    let dist_multi_val_multi_idx_am_buf_name = quote::format_ident!(
+        "{}_{}_multi_val_multi_idx_am",
+        array_type,
+        type_to_string(&typeident)
+    );
+    let multi_val_multi_idx_am_buf_fetch_name = quote::format_ident!(
+        "{}_{}_multi_val_multi_idx_am_buf_fetch",
+        array_type,
+        type_to_string(&typeident)
+    );
+    let dist_multi_val_multi_idx_am_buf_fetch_name = quote::format_ident!(
+        "{}_{}_multi_val_multi_idx_am_fetch",
+        array_type,
+        type_to_string(&typeident)
+    );
+    let multi_val_multi_idx_am_buf_result_name = quote::format_ident!(
+        "{}_{}_multi_val_multi_idx_am_buf_result",
+        array_type,
+        type_to_string(&typeident)
+    );
+    let dist_multi_val_multi_idx_am_buf_result_name = quote::format_ident!(
+        "{}_{}_multi_val_multi_idx_am_result",
+        array_type,
+        type_to_string(&typeident)
+    );
     let multi_val_multi_idx_reg_name = quote::format_ident!("MultiValMultiIdxOps");
 
-    let single_val_multi_idx_am_buf_name = quote::format_ident!("{}_{}_single_val_multi_idx_am_buf", array_type, type_to_string(&typeident));
-    let dist_single_val_multi_idx_am_buf_name =
-        quote::format_ident!("{}_{}_single_val_multi_idx_am", array_type, type_to_string(&typeident));
-    let single_val_multi_idx_am_buf_fetch_name = quote::format_ident!("{}_{}_single_val_multi_idx_am_buf_fetch", array_type, type_to_string(&typeident));
-    let dist_single_val_multi_idx_am_buf_fetch_name =
-        quote::format_ident!("{}_{}_single_val_multi_idx_am_fetch", array_type, type_to_string(&typeident));
-    let single_val_multi_idx_am_buf_result_name = quote::format_ident!("{}_{}_single_val_multi_idx_am_buf_result", array_type, type_to_string(&typeident));
-    let dist_single_val_multi_idx_am_buf_result_name =
-        quote::format_ident!("{}_{}_single_val_multi_idx_am_result", array_type, type_to_string(&typeident));
+    let single_val_multi_idx_am_buf_name = quote::format_ident!(
+        "{}_{}_single_val_multi_idx_am_buf",
+        array_type,
+        type_to_string(&typeident)
+    );
+    let dist_single_val_multi_idx_am_buf_name = quote::format_ident!(
+        "{}_{}_single_val_multi_idx_am",
+        array_type,
+        type_to_string(&typeident)
+    );
+    let single_val_multi_idx_am_buf_fetch_name = quote::format_ident!(
+        "{}_{}_single_val_multi_idx_am_buf_fetch",
+        array_type,
+        type_to_string(&typeident)
+    );
+    let dist_single_val_multi_idx_am_buf_fetch_name = quote::format_ident!(
+        "{}_{}_single_val_multi_idx_am_fetch",
+        array_type,
+        type_to_string(&typeident)
+    );
+    let single_val_multi_idx_am_buf_result_name = quote::format_ident!(
+        "{}_{}_single_val_multi_idx_am_buf_result",
+        array_type,
+        type_to_string(&typeident)
+    );
+    let dist_single_val_multi_idx_am_buf_result_name = quote::format_ident!(
+        "{}_{}_single_val_multi_idx_am_result",
+        array_type,
+        type_to_string(&typeident)
+    );
     let single_val_multi_idx_reg_name = quote::format_ident!("SingleValMultiIdxOps");
 
-    let multi_val_single_idx_am_buf_name = quote::format_ident!("{}_{}_multi_val_single_idx_am_buf", array_type, type_to_string(&typeident));
-    let dist_multi_val_single_idx_am_buf_name =
-        quote::format_ident!("{}_{}_multi_val_single_idx_am", array_type, type_to_string(&typeident));
-    let multi_val_single_idx_am_buf_fetch_name = quote::format_ident!("{}_{}_multi_val_single_idx_am_buf_fetch", array_type, type_to_string(&typeident));
-    let dist_multi_val_single_idx_am_buf_fetch_name =
-        quote::format_ident!("{}_{}_multi_val_single_idx_am_fetch", array_type, type_to_string(&typeident));
-    let multi_val_single_idx_am_buf_result_name = quote::format_ident!("{}_{}_multi_val_single_idx_am_buf_result", array_type, type_to_string(&typeident));
-    let dist_multi_val_single_idx_am_buf_result_name =
-        quote::format_ident!("{}_{}_multi_val_single_idx_am_result", array_type, type_to_string(&typeident));
+    let multi_val_single_idx_am_buf_name = quote::format_ident!(
+        "{}_{}_multi_val_single_idx_am_buf",
+        array_type,
+        type_to_string(&typeident)
+    );
+    let dist_multi_val_single_idx_am_buf_name = quote::format_ident!(
+        "{}_{}_multi_val_single_idx_am",
+        array_type,
+        type_to_string(&typeident)
+    );
+    let multi_val_single_idx_am_buf_fetch_name = quote::format_ident!(
+        "{}_{}_multi_val_single_idx_am_buf_fetch",
+        array_type,
+        type_to_string(&typeident)
+    );
+    let dist_multi_val_single_idx_am_buf_fetch_name = quote::format_ident!(
+        "{}_{}_multi_val_single_idx_am_fetch",
+        array_type,
+        type_to_string(&typeident)
+    );
+    let multi_val_single_idx_am_buf_result_name = quote::format_ident!(
+        "{}_{}_multi_val_single_idx_am_buf_result",
+        array_type,
+        type_to_string(&typeident)
+    );
+    let dist_multi_val_single_idx_am_buf_result_name = quote::format_ident!(
+        "{}_{}_multi_val_single_idx_am_result",
+        array_type,
+        type_to_string(&typeident)
+    );
     let multi_val_single_idx_reg_name = quote::format_ident!("MultiValSingleIdxOps");
-
-
-    
 
     if array_type != "ReadOnlyArray" {
         // Updating ops that dont return anything
@@ -693,7 +892,6 @@ fn create_buf_ops2(
             impl LamellarAM for #multi_val_multi_idx_am_buf_name{ //eventually we can return fetchs here too...
                 async fn exec(&self) {
                     #slice
-                    
                     match self.index_size{
                         1 => {
                             let idx_vals = unsafe {std::slice::from_raw_parts(self.idx_vals.as_ptr() as *const IdxVal<u8,#typeident>, self.idx_vals.len()/std::mem::size_of::<IdxVal<u8,#typeident>>())};
@@ -742,7 +940,7 @@ fn create_buf_ops2(
                     id: (std::any::TypeId::of::<#byte_array_type>(),std::any::TypeId::of::<#typeident>(),#lamellar::array::BatchReturnType::None),
                     op: #dist_multi_val_multi_idx_am_buf_name,
                 }
-            }            
+            }
 
             #[#am_data(Debug,AmGroup(false))]
             struct #single_val_multi_idx_am_buf_name{
@@ -758,7 +956,7 @@ fn create_buf_ops2(
                     #slice
                     let val = self.val;
                     match self.index_size{
-                        1 => { 
+                        1 => {
                             let indices = unsafe {std::slice::from_raw_parts(self.indices.as_ptr() as *const u8, self.indices.len()/std::mem::size_of::<u8>())};
                             match self.op {
                                 #single_val_multi_idx_match_stmts
@@ -788,7 +986,6 @@ fn create_buf_ops2(
                                 #single_val_multi_idx_match_stmts
                             }
                         }
-                       
                     }
                 }
             }
@@ -817,7 +1014,6 @@ fn create_buf_ops2(
                 op: #lamellar::array::ArrayOpCmd<#typeident>,
                 vals: Vec<u8>,
                 index: usize,
-                
             }
             #[#am(AmGroup(false))]
             impl LamellarAM for #multi_val_single_idx_am_buf_name{ //eventually we can return fetchs here too...
@@ -848,7 +1044,7 @@ fn create_buf_ops2(
         });
 
         // ops that return a result
-        if optypes.contains(&OpType::CompEx) || optypes.contains(&OpType::CompExEps){
+        if optypes.contains(&OpType::CompEx) || optypes.contains(&OpType::CompExEps) {
             expanded.extend(quote! {
                 #[#am_data(Debug,AmGroup(false))]
                 struct #multi_val_multi_idx_am_buf_result_name{
@@ -928,7 +1124,7 @@ fn create_buf_ops2(
                         let val = self.val;
                         let mut res = Vec::new();
                         match self.index_size{
-                            1 => { 
+                            1 => {
                                 let indices = unsafe {std::slice::from_raw_parts(self.indices.as_ptr() as *const u8, self.indices.len()/std::mem::size_of::<u8>())};
                                 match self.op {
                                     #single_val_multi_idx_result_match_stmts
@@ -958,7 +1154,6 @@ fn create_buf_ops2(
                                     #single_val_multi_idx_result_match_stmts
                                 }
                             }
-                           
                         }
                         res
                     }
@@ -988,7 +1183,6 @@ fn create_buf_ops2(
                     op: #lamellar::array::ArrayOpCmd<#typeident>,
                     vals: Vec<u8>,
                     index: usize,
-                    
                 }
                 #[#am(AmGroup(false))]
                 impl LamellarAM for #multi_val_single_idx_am_buf_result_name{ //eventually we can return fetchs here too...
@@ -1068,7 +1262,6 @@ fn create_buf_ops2(
                         }
                     }
                 };
-                
                 res
             }
         }
@@ -1103,7 +1296,7 @@ fn create_buf_ops2(
                 let val = self.val;
                 let mut res = Vec::new();
                 match self.index_size{
-                    1 => { 
+                    1 => {
                         let indices = unsafe {std::slice::from_raw_parts(self.indices.as_ptr() as *const u8, self.indices.len()/std::mem::size_of::<u8>())};
                         match self.op {
                             #single_val_multi_idx_fetch_match_stmts
@@ -1133,9 +1326,7 @@ fn create_buf_ops2(
                             #single_val_multi_idx_fetch_match_stmts
                         }
                     }
-                   
                 }
-                
                 res
             }
         }
@@ -1164,7 +1355,6 @@ fn create_buf_ops2(
             op: #lamellar::array::ArrayOpCmd<#typeident>,
             vals: Vec<u8>,
             index: usize,
-            
         }
         #[#am(AmGroup(false))]
         impl LamellarAM for #multi_val_single_idx_am_buf_fetch_name{ //eventually we can return fetchs here too...
@@ -1197,8 +1387,6 @@ fn create_buf_ops2(
         }
     });
 
-    
-
     expanded
 }
 
@@ -1219,8 +1407,6 @@ fn create_buffered_ops(
     native: bool,
     rt: bool,
 ) -> proc_macro2::TokenStream {
-    
-
     let mut atomic_array_types: Vec<(syn::Ident, syn::Ident, syn::Ident)> = vec![
         (
             quote::format_ident!("LocalLockArray"),
@@ -1252,7 +1438,6 @@ fn create_buffered_ops(
 
     let ro_optypes = vec![OpType::ReadOnly]; //, vec![OpType::Arithmetic, OpType::Access];
 
-   
     let buf_op_impl = create_buf_ops2(
         typeident.clone(),
         quote::format_ident!("ReadOnlyArray"),
@@ -1283,7 +1468,6 @@ fn create_buffered_ops(
     }
 
     expanded
-    
 }
 
 pub(crate) fn __generate_ops_for_type_rt(item: TokenStream) -> TokenStream {
@@ -1360,7 +1544,7 @@ pub(crate) fn __generate_ops_for_bool_rt() -> TokenStream {
         OpType::ReadOnly,
         OpType::Access,
         OpType::CompEx,
-        OpType::Bitwise
+        OpType::Bitwise,
     ];
 
     // let bool_type = syn::Type::
@@ -1382,13 +1566,12 @@ pub(crate) fn __generate_ops_for_bool_rt() -> TokenStream {
 }
 
 pub(crate) fn __derive_arrayops(input: TokenStream) -> TokenStream {
-
     let input = parse_macro_input!(input as syn::DeriveInput);
     let name = input.ident.clone();
     let the_type: syn::Type = syn::parse_quote!(#name);
 
     let mut op_types = vec![OpType::ReadOnly, OpType::Access];
-    let mut element_wise_trait_impls = quote!{};
+    let mut element_wise_trait_impls = quote! {};
 
     for attr in &input.attrs {
         if attr.path().is_ident("array_ops") {
@@ -1465,12 +1648,7 @@ pub(crate) fn __derive_arrayops(input: TokenStream) -> TokenStream {
             }).unwrap();
         }
     }
-    let buf_ops = create_buffered_ops(
-        the_type.clone(),
-        op_types,
-        false,
-        false,
-    );
+    let buf_ops = create_buffered_ops(the_type.clone(), op_types, false, false);
 
     let output = quote_spanned! {input.span()=>
         const _: () = {
@@ -1508,5 +1686,3 @@ pub(crate) fn __derive_arrayops(input: TokenStream) -> TokenStream {
     };
     TokenStream::from(output)
 }
-
-

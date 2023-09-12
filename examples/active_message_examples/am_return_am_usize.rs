@@ -89,7 +89,7 @@ fn main() {
         assert_eq!(res, (0..num_pes).collect::<Vec<usize>>());
         println!("PE[{:?}] return result: {:?}", my_pe, res);
         println!("---------------------------------------------------------------");
-        let mut am_group = typed_am_group!(InitialAM,world.clone());
+        let mut am_group = typed_am_group!(InitialAM, world.clone());
         for i in 0..10 {
             let am = InitialAM {
                 val1: i,

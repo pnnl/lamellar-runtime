@@ -12,7 +12,6 @@ use lamellar::active_messaging::prelude::*;
 // use tracing_flame::FlameLayer;
 // use tracing_subscriber::{fmt, prelude::*, registry::Registry};
 
-
 //----------------- Active message returning nothing-----------------//
 #[lamellar::AmData(Debug, Clone)]
 struct AmNoReturn {
@@ -22,7 +21,7 @@ struct AmNoReturn {
 }
 
 impl AmNoReturn {
-    fn test_1(&self,temp: usize) -> usize {
+    fn test_1(&self, temp: usize) -> usize {
         10
     }
 }
@@ -70,7 +69,10 @@ fn main() {
     let num_pes = world.num_pes();
     // let _guard = setup_global_subscriber();
     world.barrier();
-    let am = AmNoReturn { my_pe: my_pe, test_var: 1000 };
+    let am = AmNoReturn {
+        my_pe: my_pe,
+        test_var: 1000,
+    };
     if my_pe == 0 {
         println!("---------------------------------------------------------------");
         println!("Testing local am no return");
@@ -103,18 +105,23 @@ fn main() {
 
         let mut am_group = typed_am_group!(AmNoReturn, world.clone());
         for i in 0..10 {
-            am_group.add_am_pe(i % num_pes, AmNoReturn { my_pe: i, test_var: 10*(i as u16) });
-            am_group.add_am_all(AmNoReturn { my_pe: i, test_var: 10*(i as u16) });
+            am_group.add_am_pe(
+                i % num_pes,
+                AmNoReturn {
+                    my_pe: i,
+                    test_var: 10 * (i as u16),
+                },
+            );
+            am_group.add_am_all(AmNoReturn {
+                my_pe: i,
+                test_var: 10 * (i as u16),
+            });
         }
         let res = world.block_on(am_group.exec());
         for r in res.iter() {
             println!("PE[{:?}] return result: {:?}", my_pe, r);
         }
     }
-
-
-
-    
 
     // println!("---------------------------------------------------------------");
     // println!("Testing ring pattern am no return");

@@ -27,7 +27,7 @@ impl LamellarAM for InitialAM {
             &current_hostname
         );
         ReturnAM {
-            val1: lamellar::current_pe+ 100 * self.val1,
+            val1: lamellar::current_pe + 100 * self.val1,
             val2: current_hostname,
         }
     }
@@ -89,7 +89,7 @@ fn main() {
         assert!(res.iter().all(|x| *x == ()));
         println!("PE[{:?}] return result: {:?}", my_pe, res);
         println!("---------------------------------------------------------------");
-        let mut am_group = typed_am_group!(InitialAM,world.clone());
+        let mut am_group = typed_am_group!(InitialAM, world.clone());
         for i in 0..10 {
             let am = InitialAM {
                 val1: i,
@@ -103,6 +103,4 @@ fn main() {
             println!("PE[{:?}] return result: {:?}", my_pe, r);
         }
     }
-
-   
 }

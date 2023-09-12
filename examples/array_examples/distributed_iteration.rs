@@ -206,16 +206,20 @@ fn main() {
     block_array.barrier();
     println!("--------------------------------------------------------");
     println!("filter_map collect");
-    let new_block_array = block_array.block_on(block_array.dist_iter().filter_map(| elem| {
-        let e = elem.load();
-        if e % 8 == 0 {
-            println!("e: {:?}",e);
-            Some(e as f32)
-        }
-        else{
-            None
-        }
-    }).collect::<ReadOnlyArray<f32>>(Distribution::Block));
+    let new_block_array = block_array.block_on(
+        block_array
+            .dist_iter()
+            .filter_map(|elem| {
+                let e = elem.load();
+                if e % 8 == 0 {
+                    println!("e: {:?}", e);
+                    Some(e as f32)
+                } else {
+                    None
+                }
+            })
+            .collect::<ReadOnlyArray<f32>>(Distribution::Block),
+    );
 
     new_block_array.print();
 

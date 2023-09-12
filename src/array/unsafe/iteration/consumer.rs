@@ -1,27 +1,27 @@
 use crate::active_messaging::SyncSend;
-use crate::array::LamellarArray;
 use crate::array::iterator::consumer::*;
 use crate::array::r#unsafe::UnsafeArray;
+use crate::array::LamellarArray;
 
 use crate::memregion::Dist;
 
-use std::pin::Pin;
 use futures::Future;
+use parking_lot::Mutex;
+use std::pin::Pin;
 use std::sync::atomic::AtomicUsize;
 use std::sync::Arc;
-use parking_lot::Mutex;
 
 impl<T: Dist> UnsafeArray<T> {
-    pub(crate) fn sched_static<C,AmO,O,I>(
+    pub(crate) fn sched_static<C, AmO, O, I>(
         &self,
         cons: C,
     ) -> Pin<Box<dyn Future<Output = O> + Send>>
     where
-        C: IterConsumer<AmOutput=AmO, Output=O, Item=I>,
+        C: IterConsumer<AmOutput = AmO, Output = O, Item = I>,
         AmO: SyncSend + 'static,
         O: SyncSend + 'static,
         // I: SyncSend + 'static,
-        {
+    {
         let mut reqs = Vec::new();
         if let Ok(_my_pe) = self.inner.data.team.team_pe_id() {
             let num_workers = self.inner.data.team.num_threads();
@@ -32,26 +32,29 @@ impl<T: Dist> UnsafeArray<T> {
             while ((worker as f64 * elems_per_thread).round() as usize) < num_elems_local {
                 let start_i = (worker as f64 * elems_per_thread).round() as usize;
                 let end_i = ((worker + 1) as f64 * elems_per_thread).round() as usize;
-                reqs.push(self.inner.data.task_group.exec_arc_am_local_inner(
-                    cons.into_am(IterSchedule::Static(start_i,end_i))
-                ));
-                
+                reqs.push(
+                    self.inner.data.task_group.exec_arc_am_local_inner(
+                        cons.into_am(IterSchedule::Static(start_i, end_i)),
+                    ),
+                );
+
                 worker += 1;
             }
         }
-        cons.create_handle(self.inner.data.team.clone(),reqs).into_future()
+        cons.create_handle(self.inner.data.team.clone(), reqs)
+            .into_future()
     }
 
-    pub(crate) fn sched_dynamic<C,AmO,O,I>(
+    pub(crate) fn sched_dynamic<C, AmO, O, I>(
         &self,
         cons: C,
     ) -> Pin<Box<dyn Future<Output = O> + Send>>
     where
-        C: IterConsumer<AmOutput=AmO, Output=O, Item=I>,
+        C: IterConsumer<AmOutput = AmO, Output = O, Item = I>,
         AmO: SyncSend + 'static,
         O: SyncSend + 'static,
         // I: SyncSend + 'static,
-        {
+    {
         let mut reqs = Vec::new();
         if let Ok(_my_pe) = self.inner.data.team.team_pe_id() {
             let num_workers = self.inner.data.team.num_threads();
@@ -62,23 +65,24 @@ impl<T: Dist> UnsafeArray<T> {
             // println!("ranges {:?}", ranges);
             for _ in 0..std::cmp::min(num_workers, num_elems_local) {
                 reqs.push(self.inner.data.task_group.exec_arc_am_local_inner(
-                    cons.into_am(IterSchedule::Dynamic(cur_i.clone(),num_elems_local))
+                    cons.into_am(IterSchedule::Dynamic(cur_i.clone(), num_elems_local)),
                 ));
             }
         }
-        cons.create_handle(self.inner.data.team.clone(),reqs).into_future()
+        cons.create_handle(self.inner.data.team.clone(), reqs)
+            .into_future()
     }
 
-    pub(crate) fn sched_work_stealing<C,AmO,O,I>(
+    pub(crate) fn sched_work_stealing<C, AmO, O, I>(
         &self,
         cons: C,
     ) -> Pin<Box<dyn Future<Output = O> + Send>>
     where
-        C: IterConsumer<AmOutput=AmO, Output=O, Item=I>,
+        C: IterConsumer<AmOutput = AmO, Output = O, Item = I>,
         AmO: SyncSend + 'static,
         O: SyncSend + 'static,
         // I: SyncSend + 'static,
-        {
+    {
         let mut reqs = Vec::new();
         if let Ok(_my_pe) = self.inner.data.team.team_pe_id() {
             let num_workers = self.inner.data.team.num_threads();
@@ -96,24 +100,31 @@ impl<T: Dist> UnsafeArray<T> {
                 worker += 1;
             }
             for sibling in &siblings {
-                reqs.push(self.inner.data.task_group.exec_arc_am_local_inner(
-                    cons.into_am(IterSchedule::WorkStealing(sibling.clone(),siblings.clone()))
-                ))
+                reqs.push(
+                    self.inner
+                        .data
+                        .task_group
+                        .exec_arc_am_local_inner(cons.into_am(IterSchedule::WorkStealing(
+                            sibling.clone(),
+                            siblings.clone(),
+                        ))),
+                )
             }
         }
-        cons.create_handle(self.inner.data.team.clone(),reqs).into_future()
+        cons.create_handle(self.inner.data.team.clone(), reqs)
+            .into_future()
     }
 
-    pub(crate) fn sched_guided<C,AmO,O,I>(
+    pub(crate) fn sched_guided<C, AmO, O, I>(
         &self,
         cons: C,
     ) -> Pin<Box<dyn Future<Output = O> + Send>>
     where
-        C: IterConsumer<AmOutput=AmO, Output=O, Item=I>,
+        C: IterConsumer<AmOutput = AmO, Output = O, Item = I>,
         AmO: SyncSend + 'static,
         O: SyncSend + 'static,
         // I: SyncSend + 'static,
-        {
+    {
         let mut reqs = Vec::new();
         if let Ok(_my_pe) = self.inner.data.team.team_pe_id() {
             let num_workers = self.inner.data.team.num_threads();
@@ -159,24 +170,25 @@ impl<T: Dist> UnsafeArray<T> {
             // println!("ranges {:?}", ranges);
             for _ in 0..std::cmp::min(num_workers, num_elems_local_orig) {
                 reqs.push(self.inner.data.task_group.exec_arc_am_local_inner(
-                    cons.into_am(IterSchedule::Chunk(ranges.clone(),range_i.clone()))
+                    cons.into_am(IterSchedule::Chunk(ranges.clone(), range_i.clone())),
                 ));
             }
         }
-        cons.create_handle(self.inner.data.team.clone(),reqs).into_future()
+        cons.create_handle(self.inner.data.team.clone(), reqs)
+            .into_future()
     }
 
-    pub(crate) fn sched_chunk<C,AmO,O,I>(
+    pub(crate) fn sched_chunk<C, AmO, O, I>(
         &self,
         cons: C,
         chunk_size: usize,
     ) -> Pin<Box<dyn Future<Output = O> + Send>>
     where
-        C: IterConsumer<AmOutput=AmO, Output=O, Item=I>,
+        C: IterConsumer<AmOutput = AmO, Output = O, Item = I>,
         AmO: SyncSend + 'static,
         O: SyncSend + 'static,
         // I: SyncSend + 'static,
-        {
+    {
         let mut reqs = Vec::new();
         if let Ok(_my_pe) = self.inner.data.team.team_pe_id() {
             let num_workers = self.inner.data.team.num_threads();
@@ -196,10 +208,11 @@ impl<T: Dist> UnsafeArray<T> {
             // println!("ranges {:?}", ranges);
             for _ in 0..std::cmp::min(num_workers, num_chunks) {
                 reqs.push(self.inner.data.task_group.exec_arc_am_local_inner(
-                    cons.into_am(IterSchedule::Chunk(ranges.clone(),range_i.clone()))
+                    cons.into_am(IterSchedule::Chunk(ranges.clone(), range_i.clone())),
                 ));
             }
         }
-        cons.create_handle(self.inner.data.team.clone(),reqs).into_future()
+        cons.create_handle(self.inner.data.team.clone(), reqs)
+            .into_future()
     }
 }

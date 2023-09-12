@@ -1,4 +1,4 @@
-use crate::lamellae::comm::{AllocResult, CommOps, CmdQStatus};
+use crate::lamellae::comm::{AllocResult, CmdQStatus, CommOps};
 use crate::lamellae::command_queues::CommandQueue;
 use crate::lamellae::shmem::shmem_comm::*;
 
@@ -54,15 +54,11 @@ impl LamellaeInit for ShmemBuilder {
         });
 
         scheduler.submit_task(async move {
-            cq_clone2
-                .alloc_task(scheduler_clone2.clone())
-                .await;
+            cq_clone2.alloc_task(scheduler_clone2.clone()).await;
         });
 
         scheduler.submit_task(async move {
-            cq_clone3
-                .panic_task(scheduler_clone3.clone())
-                .await;
+            cq_clone3.panic_task(scheduler_clone3.clone()).await;
         });
         shmem
     }
@@ -95,7 +91,7 @@ impl Shmem {
             num_pes: num_pes,
             shmem_comm: shmem_comm.clone(),
             active: active.clone(),
-            cq: Arc::new(CommandQueue::new(shmem_comm, my_pe, num_pes,active)),
+            cq: Arc::new(CommandQueue::new(shmem_comm, my_pe, num_pes, active)),
         }
     }
     // fn active(&self) -> Arc<AtomicU8> {
@@ -141,9 +137,16 @@ impl LamellaeComm for Shmem {
     fn print_stats(&self) {}
     fn shutdown(&self) {
         // println!("Shmem Lamellae shuting down");
-        let _ = self.active.compare_exchange(CmdQStatus::Active as u8, CmdQStatus::ShuttingDown as u8, Ordering::SeqCst, Ordering::SeqCst);
+        let _ = self.active.compare_exchange(
+            CmdQStatus::Active as u8,
+            CmdQStatus::ShuttingDown as u8,
+            Ordering::SeqCst,
+            Ordering::SeqCst,
+        );
         // println!("set active to 0");
-        while self.active.load(Ordering::SeqCst) != CmdQStatus::Finished as u8   && self.active.load(Ordering::SeqCst) != CmdQStatus::Panic as u8{
+        while self.active.load(Ordering::SeqCst) != CmdQStatus::Finished as u8
+            && self.active.load(Ordering::SeqCst) != CmdQStatus::Panic as u8
+        {
             std::thread::yield_now();
         }
         // println!("Shmem Lamellae shut down");
@@ -151,7 +154,8 @@ impl LamellaeComm for Shmem {
 
     fn force_shutdown(&self) {
         self.cq.send_panic();
-        self.active.store(CmdQStatus::Panic as u8, Ordering::Relaxed);
+        self.active
+            .store(CmdQStatus::Panic as u8, Ordering::Relaxed);
     }
     fn force_deinit(&self) {
         self.shmem_comm.force_shutdown();

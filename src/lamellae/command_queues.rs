@@ -625,21 +625,21 @@ impl InnerCQ {
     }
 
     #[tracing::instrument(skip_all)]
-    fn check_panic(&self) -> bool{
+    fn check_panic(&self) -> bool {
         if let Some(panic_buf) = self.panic_buffer.try_lock() {
             let mut paniced = false;
             for pe in 0..self.num_pes {
                 if panic_buf[pe].cmd != Cmd::Clear {
-                    println!("panic_buf {:?}",panic_buf[pe]);
+                    println!("panic_buf {:?}", panic_buf[pe]);
                 }
                 if panic_buf[pe].check_hash() && panic_buf[pe].cmd == Cmd::Panic {
-                    println!("panic_buf passed hash check{:?}",panic_buf[pe]);
+                    println!("panic_buf passed hash check{:?}", panic_buf[pe]);
                     paniced = true;
                     break;
                 }
             }
             if paniced {
-                self.active.store(CmdQStatus::Panic as u8 , Ordering::SeqCst);
+                self.active.store(CmdQStatus::Panic as u8, Ordering::SeqCst);
                 return true;
                 // shutdown
             }
@@ -735,7 +735,7 @@ impl InnerCQ {
             async_std::task::yield_now().await;
         }
         let mut im_waiting = false;
-        while self.active.load(Ordering::SeqCst) != CmdQStatus::Panic as u8{
+        while self.active.load(Ordering::SeqCst) != CmdQStatus::Panic as u8 {
             {
                 let span = trace_span!("send loop 2");
                 let _guard = span.enter();
@@ -858,12 +858,11 @@ impl InnerCQ {
             cmd.calc_hash();
             for pe in 0..self.num_pes {
                 if pe != self.my_pe {
-                    println!("putting panic cmd to pe {:?} {cmd:?}",pe);
+                    println!("putting panic cmd to pe {:?} {cmd:?}", pe);
                     self.comm.iput(pe, cmd.as_bytes(), cmd.as_addr()); // not sure if we need to make this put incase the other PEs are already down
                 }
             }
         }
-        
     }
 
     #[tracing::instrument(skip_all)]
@@ -950,7 +949,9 @@ impl InnerCQ {
         self.comm.iget(src, local_daddr as usize, data_slice);
         // self.get_amt.fetch_add(data_slice.len(),Ordering::Relaxed);
         let mut timer = std::time::Instant::now();
-        while calc_hash(data_slice.as_ptr() as usize, data_slice.len()) != cmd.msg_hash && self.active.load(Ordering::SeqCst) != CmdQStatus::Panic as u8{
+        while calc_hash(data_slice.as_ptr() as usize, data_slice.len()) != cmd.msg_hash
+            && self.active.load(Ordering::SeqCst) != CmdQStatus::Panic as u8
+        {
             async_std::task::yield_now().await;
             if timer.elapsed().as_secs_f64() > 15.0 {
                 println!(
@@ -975,7 +976,9 @@ impl InnerCQ {
         self.comm.iget(src, local_daddr as usize, data_slice);
         // self.get_amt.fetch_add(data_slice.len(),Ordering::Relaxed);
         let mut timer = std::time::Instant::now();
-        while calc_hash(data_slice.as_ptr() as usize, ser_data.len()) != cmd.msg_hash  && self.active.load(Ordering::SeqCst) != CmdQStatus::Panic as u8{
+        while calc_hash(data_slice.as_ptr() as usize, ser_data.len()) != cmd.msg_hash
+            && self.active.load(Ordering::SeqCst) != CmdQStatus::Panic as u8
+        {
             async_std::task::yield_now().await;
             if timer.elapsed().as_secs_f64() > 15.0 {
                 println!(
@@ -1038,7 +1041,7 @@ impl InnerCQ {
     async fn get_cmd_buf(&self, src: usize, cmd: CmdMsg) -> usize {
         let mut data = self.comm.rt_alloc(cmd.dsize as usize);
         let mut timer = std::time::Instant::now();
-        while data.is_err() && self.active.load(Ordering::SeqCst) != CmdQStatus::Panic as u8{
+        while data.is_err() && self.active.load(Ordering::SeqCst) != CmdQStatus::Panic as u8 {
             async_std::task::yield_now().await;
             // println!("cq 871 need to alloc memory {:?}",cmd.dsize);
             self.send_alloc(cmd.dsize);
@@ -1135,7 +1138,12 @@ pub(crate) struct CommandQueue {
 
 impl CommandQueue {
     #[tracing::instrument(skip_all)]
-    pub fn new(comm: Arc<Comm>, my_pe: usize, num_pes: usize,  active: Arc<AtomicU8>,) -> CommandQueue {
+    pub fn new(
+        comm: Arc<Comm>,
+        my_pe: usize,
+        num_pes: usize,
+        active: Arc<AtomicU8>,
+    ) -> CommandQueue {
         let send_buffer_addr = comm
             .rt_alloc(num_pes * std::mem::size_of::<CmdMsg>())
             .unwrap();
@@ -1251,7 +1259,7 @@ impl CommandQueue {
 
     #[tracing::instrument(skip_all)]
     pub async fn alloc_task(&self, scheduler: Arc<Scheduler>) {
-        while scheduler.active() && self.active.load(Ordering::SeqCst) != CmdQStatus::Panic as u8{
+        while scheduler.active() && self.active.load(Ordering::SeqCst) != CmdQStatus::Panic as u8 {
             self.cq.check_alloc();
             async_std::task::yield_now().await;
         }
@@ -1261,7 +1269,7 @@ impl CommandQueue {
     #[tracing::instrument(skip_all)]
     pub async fn panic_task(&self, scheduler: Arc<Scheduler>) {
         let mut panic = false;
-        while scheduler.active() && !panic{
+        while scheduler.active() && !panic {
             panic = self.cq.check_panic();
             async_std::task::yield_now().await;
         }
@@ -1275,15 +1283,14 @@ impl CommandQueue {
     }
 
     #[tracing::instrument(skip_all)]
-    pub async fn recv_data(
-        &self,
-        scheduler: Arc<Scheduler>,
-        lamellae: Arc<Lamellae>,
-    ) {
+    pub async fn recv_data(&self, scheduler: Arc<Scheduler>, lamellae: Arc<Lamellae>) {
         let num_pes = lamellae.num_pes();
         let my_pe = lamellae.my_pe();
         // let mut timer= std::time::Instant::now();
-        while self.active.load(Ordering::SeqCst) == CmdQStatus::Active as u8 || !self.cq.empty() || scheduler.active() {
+        while self.active.load(Ordering::SeqCst) == CmdQStatus::Active as u8
+            || !self.cq.empty()
+            || scheduler.active()
+        {
             for src in 0..num_pes {
                 if src != my_pe {
                     if let Some(cmd_buf_cmd) = self.cq.ready(src) {
@@ -1375,7 +1382,8 @@ impl CommandQueue {
             async_std::task::yield_now().await;
         }
         // println!("leaving recv_data task {:?}", scheduler.active());
-        self.active.store(CmdQStatus::Finished as u8, Ordering::SeqCst);
+        self.active
+            .store(CmdQStatus::Finished as u8, Ordering::SeqCst);
     }
 
     #[tracing::instrument(skip_all)]

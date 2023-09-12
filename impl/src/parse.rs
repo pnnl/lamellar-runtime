@@ -104,8 +104,7 @@ impl Parse for VecArgs {
                 attrs: vec![],
                 lit: first,
             })
-        }
-        else {
+        } else {
             input.parse()?
         };
         if input.peek(Token![,]) {
@@ -117,33 +116,28 @@ impl Parse for VecArgs {
                         attrs: vec![],
                         lit: elem,
                     })
-                }
-                else {
+                } else {
                     input.parse()?
                 };
                 elems.push(elem);
             }
             Ok(VecArgs::List(elems))
-        }
-        else if input.peek(Token![;]) {
+        } else if input.peek(Token![;]) {
             input.parse::<Token![;]>()?;
             let second = if let Ok(second) = input.parse::<syn::Lit>() {
                 syn::Expr::Lit(syn::ExprLit {
                     attrs: vec![],
                     lit: second,
                 })
-            }
-            else {
+            } else {
                 input.parse()?
             };
             Ok(VecArgs::Size((first, second)))
-        }
-        else {
+        } else {
             Err(syn::Error::new(
-                input.span(), "does not appear to be a vec macro",
+                input.span(),
+                "does not appear to be a vec macro",
             ))
         }
     }
 }
-
-

@@ -1,4 +1,4 @@
-use crate::lamellae::comm::{AllocResult, CommOps,CmdQStatus};
+use crate::lamellae::comm::{AllocResult, CmdQStatus, CommOps};
 use crate::lamellae::command_queues::CommandQueue;
 use crate::lamellae::rofi::rofi_comm::{RofiComm, RofiData};
 use crate::lamellae::{
@@ -52,20 +52,14 @@ impl LamellaeInit for RofiBuilder {
                 .await;
         });
         scheduler.submit_task(async move {
-            cq_clone2
-                .alloc_task(scheduler_clone2.clone())
-                .await;
+            cq_clone2.alloc_task(scheduler_clone2.clone()).await;
         });
         scheduler.submit_task(async move {
-            cq_clone3
-                .panic_task(scheduler_clone3.clone())
-                .await;
+            cq_clone3.panic_task(scheduler_clone3.clone()).await;
         });
         rofi
     }
 }
-
-
 
 pub(crate) struct Rofi {
     my_pe: usize,
@@ -140,9 +134,16 @@ impl LamellaeComm for Rofi {
     fn print_stats(&self) {}
     fn shutdown(&self) {
         // println!("Rofi Lamellae shuting down");
-        let _ = self.active.compare_exchange(CmdQStatus::Active as u8, CmdQStatus::ShuttingDown as u8, Ordering::SeqCst, Ordering::SeqCst);
+        let _ = self.active.compare_exchange(
+            CmdQStatus::Active as u8,
+            CmdQStatus::ShuttingDown as u8,
+            Ordering::SeqCst,
+            Ordering::SeqCst,
+        );
         // println!("set active to 0");
-        while self.active.load(Ordering::SeqCst) != CmdQStatus::Finished as u8  && self.active.load(Ordering::SeqCst) != CmdQStatus::Panic as u8{
+        while self.active.load(Ordering::SeqCst) != CmdQStatus::Finished as u8
+            && self.active.load(Ordering::SeqCst) != CmdQStatus::Panic as u8
+        {
             std::thread::yield_now();
         }
         // println!("Rofi Lamellae shut down");
@@ -150,13 +151,12 @@ impl LamellaeComm for Rofi {
 
     fn force_shutdown(&self) {
         if self.active.load(Ordering::SeqCst) != CmdQStatus::Panic as u8 {
-            self.active.store(CmdQStatus::Panic as u8, Ordering::Relaxed);
+            self.active
+                .store(CmdQStatus::Panic as u8, Ordering::Relaxed);
             self.cq.send_panic();
         }
-        
-        
     }
-        
+
     fn force_deinit(&self) {
         self.rofi_comm.force_shutdown();
     }

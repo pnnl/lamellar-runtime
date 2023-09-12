@@ -128,7 +128,7 @@ impl<T: Dist> LocalIterator for AtomicLocalIter<T> {
     }
     fn next(&mut self) -> Option<Self::Item> {
         // println!("{:?} {:?} {:?} {:?}",self.cur_i,self.end_i,self.cur_i < self.end_i,std::thread::current().id());
-    
+
         if self.cur_i < self.end_i {
             self.cur_i += 1;
             self.data.get_element(self.cur_i - 1)

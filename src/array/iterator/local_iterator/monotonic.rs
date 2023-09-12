@@ -31,7 +31,7 @@ where
     }
     fn next(&mut self) -> Option<Self::Item> {
         if let Some(a) = self.iter.next() {
-            let i = self.cur_index; 
+            let i = self.cur_index;
             // println!("{:?} Monotonic next {:?} i: {:?}",std::thread::current().id(),self.cur_index,i);
             self.cur_index += 1;
             Some((i, a))
@@ -51,4 +51,3 @@ where
         self.cur_index += 1;
     }
 }
-

@@ -607,7 +607,7 @@ impl CommOps for RofiComm {
         // println!("[{:?}]-({:?}) iget relative [{:?}] exit",self.my_pe,thread::current().id(),pe);
     }
 
-    fn force_shutdown(&self){
+    fn force_shutdown(&self) {
         let _res = rofi_finit();
     }
 }

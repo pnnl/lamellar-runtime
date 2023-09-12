@@ -26,7 +26,6 @@ impl LamellarAm for DarcAm {
         let temp = *self.darc_tuple.0 + *self.darc_tuple.1;
         println!("temp: {:?}", temp);
     }
-    
 }
 
 #[lamellar::AmData(Clone)]

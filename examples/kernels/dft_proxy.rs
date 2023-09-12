@@ -719,10 +719,10 @@ fn main() {
             //-----------------------------------------------------
 
             world.barrier();
-            ti +=1;
+            ti += 1;
 
-             //--------------lamellar Manual Active Message group with static--------------------------
-             times[ti].push(dft_lamellar_am_group_static(
+            //--------------lamellar Manual Active Message group with static--------------------------
+            times[ti].push(dft_lamellar_am_group_static(
                 &world,
                 my_pe,
                 num_pes,
@@ -748,7 +748,7 @@ fn main() {
             //-----------------------------------------------------
 
             world.barrier();
-            ti +=1;
+            ti += 1;
 
             //--------------lamellar array--------------------------
             unsafe {
@@ -815,7 +815,7 @@ fn main() {
             if my_pe == 0 {
                 println!("ua i: {:?} {:?}", _i, times[ti].last());
             }
-            ti +=1;
+            ti += 1;
 
             //--------------lamellar array--------------------------
             unsafe {
@@ -845,7 +845,7 @@ fn main() {
             // if my_pe == 0 {
             // println!("---------------------");
             // }
-            ti+=1;
+            ti += 1;
         }
         world.barrier();
 
@@ -914,7 +914,7 @@ fn main() {
                 "am group time: {:?}",
                 times[1].iter().sum::<f64>() / times[1].len() as f64
             );
-            println!( 
+            println!(
                 "am group static time: {:?}",
                 times[2].iter().sum::<f64>() / times[2].len() as f64
             );

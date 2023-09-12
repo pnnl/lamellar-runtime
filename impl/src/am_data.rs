@@ -1,27 +1,30 @@
+use crate::field_info::FieldInfo;
 use crate::gen_am::create_am_struct;
 use crate::gen_am_group::create_am_group_structs;
-use crate::field_info::FieldInfo;
 
 use std::collections::HashMap;
-
 
 use proc_macro::TokenStream;
 use quote::{quote, ToTokens};
 use syn::parse_macro_input;
 use syn::punctuated::Punctuated;
 
-
-fn check_attrs(attrs: &Vec<syn::Attribute>) -> (bool,bool,Vec<syn::Attribute>) {
+fn check_attrs(attrs: &Vec<syn::Attribute>) -> (bool, bool, Vec<syn::Attribute>) {
     let mut static_field = false;
-    let attrs = attrs.iter().filter_map(|a| {
-        if a.to_token_stream().to_string().contains("#[AmGroup(static)]") {
-            static_field = true;
-            None
-        }
-        else {
-            Some(a.clone())
-        }
-    }).collect::<Vec<_>>();
+    let attrs = attrs
+        .iter()
+        .filter_map(|a| {
+            if a.to_token_stream()
+                .to_string()
+                .contains("#[AmGroup(static)]")
+            {
+                static_field = true;
+                None
+            } else {
+                Some(a.clone())
+            }
+        })
+        .collect::<Vec<_>>();
 
     let mut darc_iter = false;
     let attrs = attrs
@@ -35,7 +38,7 @@ fn check_attrs(attrs: &Vec<syn::Attribute>) -> (bool,bool,Vec<syn::Attribute>) {
             }
         })
         .collect::<Vec<_>>();
-    (static_field,darc_iter,attrs)
+    (static_field, darc_iter, attrs)
 }
 
 fn process_fields(
@@ -50,52 +53,47 @@ fn process_fields(
     proc_macro2::TokenStream,
     FieldInfo,
     FieldInfo,
-    bool
+    bool,
 ) {
     let mut fields = FieldInfo::new();
     let mut static_fields = FieldInfo::new();
 
     for field in the_fields {
-        
         if let syn::Type::Path(ref ty) = field.ty {
             if let Some(_seg) = ty.path.segments.first() {
                 if local {
-                    fields.add_field(field.clone(),false);
-                } 
-                else {
-                    let (static_field,darc_iter,attrs) = check_attrs(&field.attrs);
+                    fields.add_field(field.clone(), false);
+                } else {
+                    let (static_field, darc_iter, attrs) = check_attrs(&field.attrs);
                     field.attrs = attrs;
-                    if static_field{
-                        static_fields.add_field(field.clone(),darc_iter);
-                    }
-                    else {
-                        fields.add_field(field.clone(),darc_iter);
+                    if static_field {
+                        static_fields.add_field(field.clone(), darc_iter);
+                    } else {
+                        fields.add_field(field.clone(), darc_iter);
                     }
                 }
             }
         } else if let syn::Type::Tuple(ref _ty) = field.ty {
-            let (static_field,darc_iter,attrs) = check_attrs(&field.attrs);
+            let (static_field, darc_iter, attrs) = check_attrs(&field.attrs);
             field.attrs = attrs;
-            if static_field{
-                static_fields.add_field(field.clone(),darc_iter);
-            }
-            else {
-                fields.add_field(field.clone(),darc_iter);
+            if static_field {
+                static_fields.add_field(field.clone(), darc_iter);
+            } else {
+                fields.add_field(field.clone(), darc_iter);
             }
         } else if let syn::Type::Reference(ref _ty) = field.ty {
             if !local {
                 panic!("references are not supported in Remote Active Messages");
             } else {
-                fields.add_field(field.clone(),false);
+                fields.add_field(field.clone(), false);
             }
         } else {
             if !local {
                 panic!("unsupported type in Remote Active Message {:?}", field.ty);
             }
-            fields.add_field(field.clone(),false);
+            fields.add_field(field.clone(), false);
         }
     }
-;
     let mut lamellar = lamellar.clone();
     if lamellar.to_string() == "__lamellar" {
         lamellar = quote! {lamellar};
@@ -119,8 +117,6 @@ fn process_fields(
     let mut trait_strs = HashMap::new();
     let mut group_trait_strs = HashMap::new();
     let mut attr_strs = HashMap::new();
-
-
 
     let mut create_am_group = true;
 
@@ -159,7 +155,7 @@ fn process_fields(
             trait_strs
                 .entry(String::from("Clone"))
                 .or_insert(quote! {Clone});
-        }  else if t.contains("AmGroup") {
+        } else if t.contains("AmGroup") {
             if t.contains("(") {
                 let attrs = &t[t.find("(").unwrap()
                     ..t.find(")")
@@ -169,7 +165,7 @@ fn process_fields(
                     create_am_group = false;
                 }
             }
-        }else if !t.contains("serde::Serialize")
+        } else if !t.contains("serde::Serialize")
             && !t.contains("serde::Deserialize")
             && t.trim().len() > 0
         {
@@ -210,7 +206,15 @@ fn process_fields(
         };
     }
     let group_attrs = quote! {#serde_temp_2};
-    (traits, group_traits, attrs, group_attrs, fields, static_fields, create_am_group)
+    (
+        traits,
+        group_traits,
+        attrs,
+        group_attrs,
+        fields,
+        static_fields,
+        create_am_group,
+    )
 }
 
 pub(crate) fn derive_am_data(
@@ -228,9 +232,9 @@ pub(crate) fn derive_am_data(
         let name = &data.ident;
         let generics = data.generics.clone();
 
-        let (traits, group_traits, attrs, group_attrs, fields, static_fields,create_am_group) =
+        let (traits, group_traits, attrs, group_attrs, fields, static_fields, create_am_group) =
             process_fields(args, &mut data.fields, &lamellar, local);
-            
+
         let vis = data.vis.to_token_stream();
         let mut attributes = quote!();
         for attr in data.attrs {
@@ -238,13 +242,13 @@ pub(crate) fn derive_am_data(
             attributes.extend(quote! {#tokens});
         }
 
-        let full_fields = quote!{
+        let full_fields = quote! {
             #fields
             #static_fields
         };
 
-        let mut full_ser = quote!{};
-        let mut full_des = quote!{};
+        let mut full_ser = quote! {};
+        let mut full_des = quote! {};
         if !local {
             full_ser.extend(fields.ser());
             full_ser.extend(static_fields.ser());
@@ -252,25 +256,45 @@ pub(crate) fn derive_am_data(
             full_des.extend(static_fields.des());
         }
 
-
-        let (orig_am,orig_am_traits) = create_am_struct(&generics, &attributes, &traits, &attrs, &vis, &name, &full_fields, &full_ser, &full_des, &lamellar, local);
-        let (am_group_structs, am_group_traits) = if !local && !rt && !group && create_am_group{
-            
-            create_am_group_structs(&generics, &attributes, &group_traits, &group_attrs, &vis, &name, &fields, &static_fields, &lamellar, local)
+        let (orig_am, orig_am_traits) = create_am_struct(
+            &generics,
+            &attributes,
+            &traits,
+            &attrs,
+            &vis,
+            &name,
+            &full_fields,
+            &full_ser,
+            &full_des,
+            &lamellar,
+            local,
+        );
+        let (am_group_structs, am_group_traits) = if !local && !rt && !group && create_am_group {
+            create_am_group_structs(
+                &generics,
+                &attributes,
+                &group_traits,
+                &group_attrs,
+                &vis,
+                &name,
+                &fields,
+                &static_fields,
+                &lamellar,
+                local,
+            )
         } else {
-            (quote!{},quote!{})
+            (quote! {}, quote! {})
         };
 
         if rt {
-            output.extend(quote!{
+            output.extend(quote! {
                 #orig_am
                 #am_group_structs
                 #orig_am_traits
                 #am_group_traits
             });
-        }
-        else {  
-            output.extend(quote!{
+        } else {
+            output.extend(quote! {
                 #orig_am
                 #am_group_structs
                 const _: () = {
@@ -281,7 +305,6 @@ pub(crate) fn derive_am_data(
                 };
 
             });
-            
         }
     }
     TokenStream::from(output)
