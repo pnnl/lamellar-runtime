@@ -460,7 +460,7 @@ impl LamellarWorldBuilder {
         // let teams = Arc::new(RwLock::new(HashMap::new()));
         let mut lamellae_builder = create_lamellae(self.primary_lamellae);
         let (my_pe, num_pes) = lamellae_builder.init_fabric();
-
+        let panic = Arc::new(AtomicU8::new(0));
         let sched_new = Arc::new(create_scheduler(
             self.scheduler,
             num_pes,

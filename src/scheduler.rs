@@ -5,8 +5,8 @@ use enum_dispatch::enum_dispatch;
 use futures::Future;
 #[cfg(feature = "enable-prof")]
 use lamellar_prof::*;
-use std::sync::Arc;
 use std::sync::atomic::AtomicU8;
+use std::sync::Arc;
 
 pub(crate) mod work_stealing;
 use work_stealing::{WorkStealing, WorkStealingInner};
@@ -137,7 +137,7 @@ pub(crate) fn create_scheduler(
         SchedulerType::WorkStealing => Scheduler::WorkStealing(work_stealing::WorkStealing::new(
             num_pes,
             num_workers,
-            panic
+            panic,
             my_pe,
         )), // SchedulerType::NumaWorkStealing => {
             //     Scheduler::NumaWorkStealing(numa_work_stealing::NumaWorkStealing::new(num_pes))

@@ -62,7 +62,7 @@ impl WorkStealingThread {
                 let mut timer = std::time::Instant::now();
                 // let mut cur_tasks = num_tasks.load(Ordering::SeqCst);
                 while worker.panic.load(Ordering::SeqCst) == 0
-                    && (worker.active.load(Ordering::SeqCst)
+                    && (worker.active.load(Ordering::SeqCst) == ACTIVE
                         || !(worker.work_q.is_empty()
                             && worker.work_inj.is_empty()
                             && worker.imm_inj.is_empty())
