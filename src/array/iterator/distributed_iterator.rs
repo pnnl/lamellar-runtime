@@ -55,75 +55,75 @@ use std::marker::PhantomData;
 use std::pin::Pin;
 use std::sync::Arc;
 
-#[lamellar_impl::AmLocalDataRT(Clone)]
-pub(crate) struct Collect<I>
-where
-    I: DistributedIterator,
-{
-    pub(crate) data: I,
-    pub(crate) start_i: usize,
-    pub(crate) end_i: usize,
-}
+// #[lamellar_impl::AmLocalDataRT(Clone)]
+// pub(crate) struct Collect<I>
+// where
+//     I: DistributedIterator,
+// {
+//     pub(crate) data: I,
+//     pub(crate) start_i: usize,
+//     pub(crate) end_i: usize,
+// }
 
-impl<I> std::fmt::Debug for Collect<I>
-where
-    I: DistributedIterator,
-{
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "Collect {{   start_i: {:?}, end_i: {:?} }}",
-            self.start_i, self.end_i
-        )
-    }
-}
+// impl<I> std::fmt::Debug for Collect<I>
+// where
+//     I: DistributedIterator,
+// {
+//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+//         write!(
+//             f,
+//             "Collect {{   start_i: {:?}, end_i: {:?} }}",
+//             self.start_i, self.end_i
+//         )
+//     }
+// }
 
-#[lamellar_impl::rt_am_local]
-impl<I> LamellarAm for Collect<I>
-where
-    I: DistributedIterator + 'static,
-    I::Item: Sync,
-{
-    async fn exec(&self) -> Vec<I::Item> {
-        let mut iter = self.data.init(self.start_i, self.end_i - self.start_i);
-        let mut vec = Vec::new();
-        while let Some(elem) = iter.next() {
-            vec.push(elem);
-        }
-        vec
-    }
-}
+// #[lamellar_impl::rt_am_local]
+// impl<I> LamellarAm for Collect<I>
+// where
+//     I: DistributedIterator + 'static,
+//     I::Item: Sync,
+// {
+//     async fn exec(&self) -> Vec<I::Item> {
+//         let mut iter = self.data.init(self.start_i, self.end_i - self.start_i);
+//         let mut vec = Vec::new();
+//         while let Some(elem) = iter.next() {
+//             vec.push(elem);
+//         }
+//         vec
+//     }
+// }
 
-#[lamellar_impl::AmLocalDataRT(Clone, Debug)]
-pub(crate) struct CollectAsync<I, T>
-where
-    I: DistributedIterator,
-    I::Item: Future<Output = T>,
-    T: Dist,
-{
-    pub(crate) data: I,
-    pub(crate) start_i: usize,
-    pub(crate) end_i: usize,
-    pub(crate) _phantom: PhantomData<T>,
-}
+// #[lamellar_impl::AmLocalDataRT(Clone, Debug)]
+// pub(crate) struct CollectAsync<I, T>
+// where
+//     I: DistributedIterator,
+//     I::Item: Future<Output = T>,
+//     T: Dist,
+// {
+//     pub(crate) data: I,
+//     pub(crate) start_i: usize,
+//     pub(crate) end_i: usize,
+//     pub(crate) _phantom: PhantomData<T>,
+// }
 
-#[lamellar_impl::rt_am_local]
-impl<I, T> LamellarAm for CollectAsync<I, T, Fut>
-where
-    I: DistributedIterator + 'static,
-    I::Item: Future<Output = T> + Send,
-    T: Dist,
-{
-    async fn exec(&self) -> Vec<<I::Item as Future>::Output> {
-        let mut iter = self.data.init(self.start_i, self.end_i - self.start_i);
-        let mut vec = Vec::new();
-        while let Some(elem) = iter.next() {
-            let res = elem.await;
-            vec.push(res);
-        }
-        vec
-    }
-}
+// #[lamellar_impl::rt_am_local]
+// impl<I, T> LamellarAm for CollectAsync<I, T, Fut>
+// where
+//     I: DistributedIterator + 'static,
+//     I::Item: Future<Output = T> + Send,
+//     T: Dist,
+// {
+//     async fn exec(&self) -> Vec<<I::Item as Future>::Output> {
+//         let mut iter = self.data.init(self.start_i, self.end_i - self.start_i);
+//         let mut vec = Vec::new();
+//         while let Some(elem) = iter.next() {
+//             let res = elem.await;
+//             vec.push(res);
+//         }
+//         vec
+//     }
+// }
 
 #[doc(hidden)]
 pub struct DistIterForEachHandle {

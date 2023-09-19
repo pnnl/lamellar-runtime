@@ -155,21 +155,12 @@ impl<T: Dist + ArrayOps, A: for<'a> TeamFrom<(&'a Vec<T>, Distribution)> + SyncS
     type Output = A;
     async fn into_future(mut self: Box<Self>) -> Self::Output {
         let mut temp_vals = vec![];
-        println!("num collect reqs: {:?}", self.reqs.len());
         for req in self.reqs.drain(0..) {
             let v = req.into_future().await;
-            println!("num vals in req: {:?}", v.len());
             temp_vals.extend(v);
         }
         temp_vals.sort_by(|a, b| a.0.cmp(&b.0));
-        let local_vals = temp_vals
-            .into_iter()
-            .map(|v| {
-                println!("local_val idx: {:?}", v.0);
-                v.1
-            })
-            .collect::<Vec<_>>();
-        println!("local_val len {:?}", local_vals.len());
+        let local_vals = temp_vals.into_iter().map(|v| v.1).collect::<Vec<_>>();
         self.create_array(&local_vals)
     }
     fn wait(mut self: Box<Self>) -> Self::Output {

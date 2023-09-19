@@ -998,12 +998,12 @@ impl AmGroup {
 
             reqs_pes.push(pe);
         }
-        println!(
-            "launch time: {:?} cnt: {:?} {:?}",
-            timer.elapsed().as_secs_f64(),
-            reqs.len(),
-            reqs_all.len()
-        );
+        // println!(
+        //     "launch time: {:?} cnt: {:?} {:?}",
+        //     timer.elapsed().as_secs_f64(),
+        //     reqs.len(),
+        //     reqs_all.len()
+        // );
         futures::future::join_all(reqs).await;
         futures::future::join_all(reqs_all).await;
         // if let Some(req) = all_req{

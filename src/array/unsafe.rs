@@ -577,7 +577,7 @@ impl<T: Dist + ArrayOps> TeamFrom<(Vec<T>, Distribution)> for UnsafeArray<T> {
 impl<T: Dist + ArrayOps> TeamFrom<(&Vec<T>, Distribution)> for UnsafeArray<T> {
     fn team_from(input: (&Vec<T>, Distribution), team: &Pin<Arc<LamellarTeamRT>>) -> Self {
         let (local_vals, distribution) = input;
-        println!("local_vals len: {:?}", local_vals.len());
+        // println!("local_vals len: {:?}", local_vals.len());
         team.barrier();
         let local_sizes =
             UnsafeArray::<usize>::new(team.clone(), team.num_pes, Distribution::Block);
@@ -585,37 +585,26 @@ impl<T: Dist + ArrayOps> TeamFrom<(&Vec<T>, Distribution)> for UnsafeArray<T> {
             local_sizes.local_as_mut_slice()[0] = local_vals.len();
         }
         local_sizes.barrier();
-        local_sizes.print();
         let mut size = 0;
         let mut my_start = 0;
         let my_pe = team.team_pe.expect("pe not part of team");
-        // local_sizes.print();
         unsafe {
             local_sizes
-                .onesided_iter()
+                .buffered_onesided_iter(team.num_pes)
                 .into_iter()
                 .enumerate()
                 .for_each(|(i, local_size)| {
-                    println!("i: {:?} local_size{:?}", i, local_size);
                     size += local_size;
                     if i < my_pe {
                         my_start += local_size;
                     }
                 });
         }
-        println!(
-            "my_start {} size {} local_vals {}",
-            my_start,
-            size,
-            local_vals.len()
-        );
         let array = UnsafeArray::<T>::new(team.clone(), size, distribution);
         if local_vals.len() > 0 {
-            unsafe { array.put(my_start, local_vals) };
+            array.block_on(unsafe { array.put(my_start, local_vals) });
         }
-        array.wait_all();
         array.barrier();
-        // array.print();
         array
     }
 }
