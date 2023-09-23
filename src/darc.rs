@@ -44,9 +44,9 @@
 //!     assert_eq!(darc_counter.load(Ordering::SeqCst),num_pes+my_pe); //NOTE: the value of darc_counter will be different on each PE
 //! }
 ///```
+use async_lock::RwLock;
 use core::marker::PhantomData;
 use futures::Future;
-use parking_lot::RwLock;
 use serde::{Deserialize, Deserializer};
 use std::cmp::PartialEq;
 use std::fmt;

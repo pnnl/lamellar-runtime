@@ -8,7 +8,7 @@ use crate::array::iterator::{LamellarArrayIterators, LamellarArrayMutIterators, 
 use crate::array::*;
 use crate::memregion::Dist;
 // use parking_lot::{
-//     lock_api::{ArcRwLockReadGuard, ArcRwLockWriteGuard},
+//     lock_api::{RwLockReadGuardArc, RwLockWriteGuardArc},
 //     RawRwLock,
 // };
 

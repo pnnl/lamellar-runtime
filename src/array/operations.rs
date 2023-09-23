@@ -767,7 +767,7 @@ impl<'a, T: Dist> OpInput<'a, T> for &'a [T] {
                 Ok(n) => n.parse::<usize>().unwrap(),
                 Err(_) => {
                     match std::env::var("LAMELLAR_THREADS") {
-                        Ok(n) => std::cmp::max(1, (n.parse::<usize>().unwrap() + 1) / 4), //+ 1 to account for main thread
+                        Ok(n) => std::cmp::max(1, (n.parse::<usize>().unwrap()) / 4),
                         Err(_) => 4, //+ 1 to account for main thread
                     }
                 }
@@ -829,7 +829,7 @@ impl<'a, T: Dist> OpInput<'a, T> for &'a mut [T] {
                 Ok(n) => n.parse::<usize>().unwrap(),
                 Err(_) => {
                     match std::env::var("LAMELLAR_THREADS") {
-                        Ok(n) => std::cmp::max(1, (n.parse::<usize>().unwrap() + 1) / 4), //+ 1 to account for main thread
+                        Ok(n) => std::cmp::max(1, (n.parse::<usize>().unwrap()) / 4), //+ 1 to account for main thread
                         Err(_) => 4, //+ 1 to account for main thread
                     }
                 }
@@ -907,7 +907,7 @@ impl<'a, T: Dist> OpInput<'a, T> for Vec<T> {
                 Ok(n) => n.parse::<usize>().unwrap(),
                 Err(_) => {
                     match std::env::var("LAMELLAR_THREADS") {
-                        Ok(n) => std::cmp::max(1, (n.parse::<usize>().unwrap() + 1) / 4), //+ 1 to account for main thread
+                        Ok(n) => std::cmp::max(1, (n.parse::<usize>().unwrap()) / 4), //+ 1 to account for main thread
                         Err(_) => 4, //+ 1 to account for main thread
                     }
                 }
@@ -1017,6 +1017,7 @@ impl<'a, T: Dist> OpInput<'a, T> for Vec<T> {
 impl<'a, T: Dist> OpInput<'a, T> for &'a LocalLockLocalData<'_, T> {
     #[tracing::instrument(skip_all)]
     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
+        // println!("op input local lock local data");
         // let slice=unsafe{self.__local_as_slice()};
         // let slice = self.read_local_data();
         // let slice = self.clone();
@@ -1037,7 +1038,7 @@ impl<'a, T: Dist> OpInput<'a, T> for &'a LocalLockLocalData<'_, T> {
                     Ok(n) => n.parse::<usize>().unwrap(),
                     Err(_) => {
                         match std::env::var("LAMELLAR_THREADS") {
-                            Ok(n) => std::cmp::max(1, (n.parse::<usize>().unwrap() + 1) / 4), //+ 1 to account for main thread
+                            Ok(n) => std::cmp::max(1, (n.parse::<usize>().unwrap()) / 4), //+ 1 to account for main thread
                             Err(_) => 4, //+ 1 to account for main thread
                         }
                     }

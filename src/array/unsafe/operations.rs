@@ -471,7 +471,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         index: usize,
         op: ArrayOpCmd<T>,
         ret: BatchReturnType,
-        index_size: IndexSize,
+        _index_size: IndexSize,
     ) -> Pin<Box<dyn Future<Output = Vec<(R, Vec<usize>)>> + Send>> {
         let num_per_batch = match std::env::var("LAMELLAR_OP_BATCH") {
             Ok(n) => n.parse::<usize>().unwrap(), //+ 1 to account for main thread
@@ -569,7 +569,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         let futures = Arc::new(Mutex::new(Vec::new()));
         let num_reqs = vals.len();
 
-        // println!("num_reqs {:?}",num_reqs);
+        // println!("num_reqs {:?}", num_reqs);
         let mut start_i = 0;
 
         for (_i, (index, val)) in indices.drain(..).zip(vals.drain(..)).enumerate() {
@@ -577,11 +577,13 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
             let futures2 = futures.clone();
             let byte_array2 = byte_array.clone();
             let len = index.len();
+            // println!("trying to submit immediate task");
             self.inner
                 .data
                 .team
                 .scheduler
                 .submit_immediate_task2(async move {
+                    // println!("in immediate task");
                     let mut buffs = vec![Vec::with_capacity(bytes_per_batch); num_pes];
                     let mut res_buffs = vec![Vec::with_capacity(num_per_batch); num_pes];
                     let mut reqs: Vec<Pin<Box<dyn Future<Output = (R, Vec<usize>)> + Send>>> =
@@ -688,8 +690,9 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         while cnt.load(Ordering::SeqCst) < num_reqs {
             self.inner.data.team.scheduler.exec_task();
         }
+        // println!("futures len {:?}", futures.lock().len());
         Box::pin(async move {
-            // println!("futures len: {:?}",futures.lock().len());
+            // println!("futures len: {:?}", futures.lock().len());
             futures::future::join_all(futures.lock().drain(..)).await
         })
     }

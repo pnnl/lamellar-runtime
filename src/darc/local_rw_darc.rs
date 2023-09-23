@@ -1,7 +1,8 @@
-use parking_lot::{
-    lock_api::{ArcRwLockReadGuard, ArcRwLockWriteGuard},
-    RawRwLock, RwLock,
-};
+// use parking_lot::{
+//     lock_api::{ArcRwLockReadGuard, RwLockWriteGuardArc},
+//     RawRwLock, RwLock,
+// };
+use async_lock::{RwLock, RwLockReadGuardArc, RwLockWriteGuardArc};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt;
 use std::sync::atomic::Ordering;
@@ -12,6 +13,7 @@ use crate::darc::global_rw_darc::{DistRwLock, GlobalRwDarc};
 use crate::darc::{Darc, DarcInner, DarcMode, __NetworkDarc};
 use crate::lamellae::LamellaeRDMA;
 use crate::lamellar_team::IntoLamellarTeam;
+use crate::scheduler::SchedulerQueue;
 use crate::IdError;
 
 /// A local read-write `Darc`
@@ -143,8 +145,70 @@ impl<T> LocalRwDarc<T> {
     /// let guard = counter.read();
     /// println!("the current counter value on pe {} main thread = {}",my_pe,*guard);
     ///```
-    pub fn read(&self) -> ArcRwLockReadGuard<RawRwLock, Box<T>> {
-        self.darc.read_arc()
+    pub fn read(&self) -> RwLockReadGuardArc<Box<T>> {
+        // println!("trying to get read lock");
+        match self.darc.try_read_arc() {
+            Some(guard) => {
+                // println!("got read lock");
+                guard
+            }
+            None => {
+                // println!("did not get read lock");
+                let _lock_fut = self.darc.read_arc();
+                self.darc.team().scheduler.block_on(async move {
+                    // println!("async trying to get read lock");
+                    _lock_fut.await
+                })
+            }
+        }
+    }
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// TODO: UPDATE
+    /// Aquires a reader lock of this LocalRwDarc local to this PE.
+    ///
+    /// The current THREAD will be blocked until the lock has been acquired.
+    ///
+    /// This function will not return while any writer currentl has access to the lock
+    ///
+    /// Returns an RAII guard which will drop the read access of the wrlock when dropped
+    ///
+    /// # One-sided Operation
+    /// The calling PE is only aware of its own local lock and does not require coordination with other PEs
+    ///
+    /// # Note
+    /// the aquired lock is only with respect to this PE, the locks on the other PEs will be in their own states
+    ///
+    /// # Examples
+    ///
+    ///```
+    /// use lamellar::darc::prelude::*;
+    /// use lamellar::active_messaging::prelude::*;
+    /// #[lamellar::AmData(Clone)]
+    /// struct DarcAm {
+    ///     counter: LocalRwDarc<usize>, //each pe has a local atomicusize
+    /// }
+    ///
+    /// #[lamellar::am]
+    /// impl LamellarAm for DarcAm {
+    ///     async fn exec(self) {
+    ///         let counter = self.counter.read(); //block until we get the write lock
+    ///         println!("the current counter value on pe {} = {}",lamellar::current_pe,counter);
+    ///     }
+    ///  }
+    /// //-------------
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let counter = LocalRwDarc::new(&world, 0).unwrap();
+    /// world.exec_am_all(DarcAm {counter: counter.clone()});
+    /// let guard = counter.read();
+    /// println!("the current counter value on pe {} main thread = {}",my_pe,*guard);
+    ///```
+    pub async fn async_read(&self) -> RwLockReadGuardArc<Box<T>> {
+        // println!("async trying to get read lock");
+        let lock = self.darc.read_arc().await;
+        // println!("got async read lock");
+        lock
     }
 
     #[doc(alias("One-sided", "onesided"))]
@@ -187,8 +251,70 @@ impl<T> LocalRwDarc<T> {
     /// let mut guard = counter.write();
     /// **guard += my_pe;
     ///```
-    pub fn write(&self) -> ArcRwLockWriteGuard<RawRwLock, Box<T>> {
-        self.darc.write_arc()
+    pub fn write(&self) -> RwLockWriteGuardArc<Box<T>> {
+        // println!("trying to get write lock");
+        match self.darc.try_write_arc() {
+            Some(guard) => {
+                // println!("got write lock");
+                guard
+            }
+            None => {
+                // println!("did not get write lock");
+                let lock_fut = self.darc.write_arc();
+                self.darc.team().scheduler.block_on(async move {
+                    // println!("async trying to get write lock");
+                    lock_fut.await
+                })
+            }
+        }
+    }
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// TODO: UPDATE
+    /// Aquires the writer lock of this LocalRwDarc local to this PE.
+    ///
+    /// The current THREAD will be blocked until the lock has been acquired.
+    ///
+    /// This function will not return while another writer or any readers currently have access to the lock
+    ///
+    /// Returns an RAII guard which will drop the write access of the wrlock when dropped
+    ///
+    /// # One-sided Operation
+    /// The calling PE is only aware of its own local lock and does not require coordination with other PEs
+    ///
+    /// # Note
+    /// the aquired lock is only with respect to this PE, the locks on the other PEs will be in their own states
+    ///
+    /// # Examples
+    ///
+    ///```
+    /// use lamellar::darc::prelude::*;
+    /// use lamellar::active_messaging::prelude::*;
+    /// #[lamellar::AmData(Clone)]
+    /// struct DarcAm {
+    ///     counter: LocalRwDarc<usize>, //each pe has a local atomicusize
+    /// }
+    ///
+    /// #[lamellar::am]
+    /// impl LamellarAm for DarcAm {
+    ///     async fn exec(self) {
+    ///         let mut counter = self.counter.write(); //block until we get the write lock
+    ///         **counter += 1;
+    ///     }
+    ///  }
+    /// //-------------
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let counter = LocalRwDarc::new(&world, 0).unwrap();
+    /// world.exec_am_all(DarcAm {counter: counter.clone()});
+    /// let mut guard = counter.write();
+    /// **guard += my_pe;
+    ///```
+    pub async fn async_write(&self) -> RwLockWriteGuardArc<Box<T>> {
+        // println!("async trying to get write lock");
+        let lock = self.darc.write_arc().await;
+        // println!("got async write lock");
+        lock
     }
 }
 

@@ -9,7 +9,7 @@ use crate::array::native_atomic::*;
 use crate::array::*;
 use crate::memregion::Dist;
 // use parking_lot::{
-//     lock_api::{ArcRwLockReadGuard, ArcRwLockWriteGuard},
+//     lock_api::{RwLockReadGuardArc, RwLockWriteGuardArc},
 //     RawRwLock,
 // };
 

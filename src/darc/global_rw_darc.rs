@@ -1,5 +1,5 @@
+use async_lock::RwLock;
 use core::marker::PhantomData;
-use parking_lot::RwLock;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt;
 use std::ops::{Deref, DerefMut};

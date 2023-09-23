@@ -899,7 +899,7 @@ impl AmGroup {
     }
 
     pub async fn exec(&mut self) {
-        let timer = std::time::Instant::now();
+        // let _timer = std::time::Instant::now();
         let mut reqs = vec![];
         let mut reqs_all = vec![];
         // let mut all_req = None;

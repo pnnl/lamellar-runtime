@@ -355,7 +355,7 @@ impl<T: Dist + 'static> UnsafeArray<T> {
     // / let sub_array = array.sub_array(25..75);
     // / assert_eq!(sub_array.sub_array_range(),(25..75));
     // /```
-    pub(crate) fn sub_array_range(&self) -> std::ops::Range<usize> {
+    pub fn sub_array_range(&self) -> std::ops::Range<usize> {
         self.inner.offset..(self.inner.offset + self.inner.size)
     }
 

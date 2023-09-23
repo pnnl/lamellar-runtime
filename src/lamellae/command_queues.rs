@@ -137,7 +137,7 @@ impl CmdBuf {
         if daddr == 0 || dsize == 0 {
             panic!("this shouldnt happen! {:?} {:?}", daddr, dsize);
         }
-        let mut cmd = unsafe { self.buf.get_unchecked_mut(self.index) };
+        let cmd = unsafe { self.buf.get_unchecked_mut(self.index) };
         cmd.daddr = daddr;
         cmd.dsize = dsize;
         cmd.cmd = Cmd::Tx;
@@ -410,7 +410,7 @@ struct InnerCQ {
     num_pes: usize,
     send_waiting: Vec<Arc<AtomicBool>>,
     pending_cmds: Arc<AtomicUsize>,
-    active_cnt: Arc<AtomicUsize>,
+    _active_cnt: Arc<AtomicUsize>,
     sent_cnt: Arc<AtomicUsize>,
     recv_cnt: Arc<AtomicUsize>,
     put_amt: Arc<AtomicUsize>,
@@ -555,7 +555,7 @@ impl InnerCQ {
             num_pes: num_pes,
             send_waiting: send_waiting,
             pending_cmds: Arc::new(AtomicUsize::new(0)),
-            active_cnt: Arc::new(AtomicUsize::new(0)),
+            _active_cnt: Arc::new(AtomicUsize::new(0)),
             sent_cnt: Arc::new(AtomicUsize::new(0)),
             recv_cnt: Arc::new(AtomicUsize::new(0)),
             put_amt: Arc::new(AtomicUsize::new(0)),

@@ -181,7 +181,9 @@ impl LamellaeRDMA for Local {
     fn rt_free(&self, addr: usize) {
         let mut allocs = self.allocs.lock();
         if let Some(data_ptr) = allocs.remove(&addr) {
-            unsafe { Box::from_raw(data_ptr.ptr) }; //it will free when dropping from scope
+            unsafe {
+                let _ = Box::from_raw(data_ptr.ptr);
+            }; //it will free when dropping from scope
         }
     }
     fn alloc(&self, size: usize, _alloc: AllocationType) -> AllocResult<usize> {
@@ -195,7 +197,9 @@ impl LamellaeRDMA for Local {
     fn free(&self, addr: usize) {
         let mut allocs = self.allocs.lock();
         if let Some(data_ptr) = allocs.remove(&addr) {
-            unsafe { Box::from_raw(data_ptr.ptr) }; //it will free when dropping from scope
+            unsafe {
+                let _ = Box::from_raw(data_ptr.ptr);
+            }; //it will free when dropping from scope
         }
     }
     fn base_addr(&self) -> usize {
