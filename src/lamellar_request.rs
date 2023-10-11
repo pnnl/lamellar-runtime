@@ -56,11 +56,12 @@ impl LamellarRequestResult {
     #[tracing::instrument(skip_all)]
     pub(crate) fn add_result(&self, pe: usize, sub_id: usize, data: InternalResult) -> bool {
         let mut added = false;
+
         if self.req.user_held() {
-            //if the user has dropped the handle, no need to actually do anything with the returned data
             self.req.add_result(pe as usize, sub_id, data);
             added = true;
         } else {
+            // if the user dopped the handle we still need to handle if Darcs are returned
             if let InternalResult::Remote(_, darcs) = data {
                 // we need to appropraiately set the reference counts if the returned data contains any Darcs
                 // we "cheat" in that we dont actually care what the Darc wraps (hence the cast to ()) we just care
@@ -131,7 +132,11 @@ impl LamellarRequestAddResult for LamellarRequestHandleInner {
     fn update_counters(&self) {
         let _team_reqs = self.team_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
         let _world_req = self.world_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
-        // println!("update counter team {} world {}",_team_reqs-1,_world_req-1);
+        // println!(
+        //     "update counter team {} world {}",
+        //     _team_reqs - 1,
+        //     _world_req - 1
+        // );
         if let Some(tg_outstanding_reqs) = self.tg_outstanding_reqs.clone() {
             tg_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
         }

@@ -315,29 +315,22 @@ fn impl_am_group_user(
             #[allow(unused)]
             fn add_am_all(&mut self, am:  #am_name #ty_generics)
             {
-                let req_queue = self.reqs.entry(self.team.num_pes()).or_insert_with(|| {
-                    (Vec::with_capacity(self.num_per_batch),#am_group_remote_name::new(&am),1000000)
-                });
-
-                req_queue.0.push(self.cnt);
-                req_queue.1.add_am(am);
-                self.cnt+=1;
-                if self.cnt % self.num_per_batch == 0 {
-                    self.send_pe_buffer(self.team.num_pes());
-                }
+                self.add_am_pe(self.team.num_pes(),am);
             }
             #[allow(unused)]
             fn add_am_pe(&mut self, pe: usize, am:  #am_name #ty_generics)
             {
 
                 let req_queue = self.reqs.entry(pe).or_insert_with(|| {
-                    (Vec::with_capacity(self.num_per_batch),#am_group_remote_name::new(&am),1000000)
+                    (Vec::with_capacity(self.num_per_batch),#am_group_remote_name::new(&am),0)
                 });
                 req_queue.0.push(self.cnt);
+                self.cnt+= #lamellar::serialized_size(&am,false);
                 req_queue.1.add_am(am);
-                self.cnt+=1;
-                if self.cnt % self.num_per_batch == 0 {
+
+                if self.cnt >= self.num_per_batch  {
                     self.send_pe_buffer(pe);
+                    self.cnt = 0;
                 }
             }
 
@@ -361,6 +354,7 @@ fn impl_am_group_user(
                     self.send_pe_buffer(pe);
                 }
 
+                // println!("{} pending reqs", self.pending_reqs.len());
                 let results = #lamellar::futures::future::join_all(self.pending_reqs.drain(..).map(|req| async { req.into_result().await })).await;
                 let num_pes = self.team.num_pes();
                 #typed_am_group_result_type
