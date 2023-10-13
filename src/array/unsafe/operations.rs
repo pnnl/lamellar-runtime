@@ -374,6 +374,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
             let futures2 = futures.clone();
             let byte_array2 = byte_array.clone();
             let len = index.len();
+            self.inner.data.array_counters.add_send_req(1);
             // println!("num_reqs {:?}",num_reqs);
             self.inner
                 .data
@@ -447,6 +448,11 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
                     // println!("reqs len {:?}",reqs.len());
                     futures2.lock().extend(reqs);
                     cnt2.fetch_add(1, Ordering::SeqCst);
+                    self.inner
+                        .data
+                        .array_counters
+                        .outstanding_reqs
+                        .fetch_sub(1, Ordering::SeqCst);
                 });
             start_i += len;
         }
@@ -490,6 +496,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
             let futures2 = futures.clone();
             let byte_array2 = byte_array.clone();
             let len = val.len();
+            self.inner.data.array_counters.add_send_req(1);
             self.inner
                 .data
                 .team
@@ -530,6 +537,11 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
                     // println!("reqs len {:?}",reqs.len());
                     futures2.lock().extend(reqs);
                     cnt2.fetch_add(1, Ordering::SeqCst);
+                    self.inner
+                        .data
+                        .array_counters
+                        .outstanding_reqs
+                        .fetch_sub(1, Ordering::SeqCst);
                 });
             start_i += len;
         }
@@ -577,6 +589,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
             let futures2 = futures.clone();
             let byte_array2 = byte_array.clone();
             let len = index.len();
+            self.inner.data.array_counters.add_send_req(1);
             // println!("trying to submit immediate task");
             self.inner
                 .data
@@ -684,6 +697,11 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
                     }
                     futures2.lock().extend(reqs);
                     cnt2.fetch_add(1, Ordering::SeqCst);
+                    self.inner
+                        .data
+                        .array_counters
+                        .outstanding_reqs
+                        .fetch_sub(1, Ordering::SeqCst);
                 });
             start_i += len;
         }

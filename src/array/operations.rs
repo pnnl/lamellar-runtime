@@ -224,330 +224,6 @@ impl<I, T> IdxVal<I, T> {
     }
 }
 
-// #[doc(hidden)]
-// #[derive(serde::Serialize, Clone, Debug)]
-// pub enum InputToValue<'a, T: Dist> {
-//     OneToOne(usize, T),
-//     OneToMany(usize, OpInputEnum<'a, T>),
-//     ManyToOne(OpInputEnum<'a, usize>, T),
-//     ManyToMany(OpInputEnum<'a, usize>, OpInputEnum<'a, T>),
-// }
-
-// impl<'a, T: Dist> InputToValue<'a, T> {
-//     #[tracing::instrument(skip_all)]
-//     pub(crate) fn len(&self) -> usize {
-//         match self {
-//             InputToValue::OneToOne(_, _) => 1,
-//             InputToValue::OneToMany(_, vals) => vals.len(),
-//             InputToValue::ManyToOne(indices, _) => indices.len(),
-//             InputToValue::ManyToMany(indices, _) => indices.len(),
-//         }
-//     }
-//     // fn num_bytes(&self) -> usize{
-//     //     match self{
-//     //         InputToValue::OneToOne(_,_) => std::mem::size_of::<(usize,T)>(),
-//     //         InputToValue::OneToMany(_,vals) => std::mem::size_of::<usize>()+ vals.len() * std::mem::size_of::<T>(),
-//     //         InputToValue::ManyToOne(indices,_) => indices.len() * std::mem::size_of::<usize>() + std::mem::size_of::<T>(),
-//     //         InputToValue::ManyToMany(indices,vals) => indices.len() * std::mem::size_of::<usize>() +  vals.len() * std::mem::size_of::<T>(),
-//     //     }
-//     // }
-//     #[tracing::instrument(skip_all)]
-//     pub(crate) fn to_pe_offsets(
-//         self,
-//         array: &UnsafeArray<T>,
-//     ) -> (
-//         HashMap<usize, InputToValue<'a, T>>,
-//         HashMap<usize, Vec<usize>>,
-//         usize,
-//     ) {
-//         let mut pe_offsets = HashMap::new();
-//         let mut req_ids = HashMap::new();
-//         match self {
-//             InputToValue::OneToOne(index, value) => {
-//                 let (pe, local_index) = array
-//                     .pe_and_offset_for_global_index(index)
-//                     .expect("array index out of bounds");
-//                 pe_offsets.insert(pe, InputToValue::OneToOne(local_index, value));
-//                 req_ids.insert(pe, vec![0]);
-//                 (pe_offsets, req_ids, 1)
-//             }
-//             InputToValue::OneToMany(index, values) => {
-//                 let (pe, local_index) = array
-//                     .pe_and_offset_for_global_index(index)
-//                     .expect("array index out of bounds");
-//                 let vals_len = values.len();
-//                 req_ids.insert(pe, (0..vals_len).collect());
-//                 pe_offsets.insert(pe, InputToValue::OneToMany(local_index, values));
-
-//                 (pe_offsets, req_ids, vals_len)
-//             }
-//             InputToValue::ManyToOne(indices, value) => {
-//                 let mut temp_pe_offsets = HashMap::new();
-//                 let mut req_cnt = 0;
-//                 for index in indices.iter() {
-//                     let (pe, local_index) = array
-//                         .pe_and_offset_for_global_index(index)
-//                         .expect("array index out of bounds");
-//                     temp_pe_offsets
-//                         .entry(pe)
-//                         .or_insert(vec![])
-//                         .push(local_index);
-//                     req_ids.entry(pe).or_insert(vec![]).push(req_cnt);
-//                     req_cnt += 1;
-//                 }
-
-//                 for (pe, local_indices) in temp_pe_offsets {
-//                     pe_offsets.insert(
-//                         pe,
-//                         InputToValue::ManyToOne(OpInputEnum::Vec(local_indices), value),
-//                     );
-//                 }
-
-//                 (pe_offsets, req_ids, indices.len())
-//             }
-//             InputToValue::ManyToMany(indices, values) => {
-//                 let mut temp_pe_offsets = HashMap::new();
-//                 let mut req_cnt = 0;
-//                 for (index, val) in indices.iter().zip(values.iter()) {
-//                     let (pe, local_index) = array
-//                         .pe_and_offset_for_global_index(index)
-//                         .expect("array index out of bounds");
-//                     let data = temp_pe_offsets.entry(pe).or_insert((vec![], vec![]));
-//                     data.0.push(local_index);
-//                     data.1.push(val);
-//                     req_ids.entry(pe).or_insert(vec![]).push(req_cnt);
-//                     req_cnt += 1;
-//                 }
-//                 for (pe, (local_indices, vals)) in temp_pe_offsets {
-//                     pe_offsets.insert(
-//                         pe,
-//                         InputToValue::ManyToMany(
-//                             OpInputEnum::Vec(local_indices),
-//                             OpInputEnum::Vec(vals),
-//                         ),
-//                     );
-//                 }
-//                 (pe_offsets, req_ids, indices.len())
-//             }
-//         }
-//     }
-// }
-
-// impl<T: Dist> OpAmInputToValue<T> {
-//     #[tracing::instrument(skip_all)]
-//     pub fn len(&self) -> usize {
-//         match self {
-//             OpAmInputToValue::OneToOne(_, _) => 1,
-//             OpAmInputToValue::OneToMany(_, vals) => vals.len(),
-//             OpAmInputToValue::ManyToOne(indices, _) => indices.len(),
-//             OpAmInputToValue::ManyToMany(indices, _) => indices.len(),
-//         }
-//     }
-// }
-
-// #[doc(hidden)]
-// #[derive(serde::Serialize, serde::Deserialize, Debug)]
-// #[serde(bound = "T: Dist + serde::Serialize + serde::de::DeserializeOwned")]
-// pub enum OpAmInputToValue<T: Dist> {
-//     OneToOne(usize, T),
-//     OneToMany(usize, Vec<T>),
-//     ManyToOne(Vec<usize>, T),
-//     ManyToMany(Vec<usize>, Vec<T>),
-// }
-
-// impl<T: Dist> OpAmInputToValue<T> {
-//     pub fn embed_vec<U>(data: &Vec<U>, buf: &mut [u8]) -> usize {
-//         let mut size = 0;
-//         // embed the data length
-//         let len = data.len();
-//         unsafe {
-//             std::ptr::copy_nonoverlapping(
-//                 &len as *const usize,
-//                 buf[size..].as_ptr() as *mut usize,
-//                 1,
-//             )
-//         };
-//         size += std::mem::size_of::<usize>();
-//         // ---- end data length ----
-//         // embed the data
-//         unsafe {
-//             std::ptr::copy_nonoverlapping(data.as_ptr(), buf[size..].as_ptr() as *mut U, len)
-//         };
-//         size += len * std::mem::size_of::<U>();
-//         // ---- end data ====
-//         size
-//     }
-//     pub fn embed_single_val<U>(val: U, buf: &mut [u8]) -> usize {
-//         // embed the val
-//         unsafe { std::ptr::copy_nonoverlapping(&val as *const U, buf.as_ptr() as *mut U, 1) };
-//         std::mem::size_of::<U>()
-//         // ---- end val ----
-//     }
-//     pub fn to_bytes(self, buf: &mut [u8]) -> usize {
-//         match self {
-//             OpAmInputToValue::OneToOne(idx, val) => {
-//                 // embed the enum type
-//                 let mut size = 0;
-//                 buf[size] = 0;
-//                 size += 1;
-//                 // ----- end type -----
-//                 // embed the index
-//                 size += OpAmInputToValue::<usize>::embed_single_val(idx, &mut buf[size..]);
-//                 // ---- end index ----
-//                 // embed the value
-//                 size += OpAmInputToValue::<T>::embed_single_val(val, &mut buf[size..]);
-//                 // -- end value --
-//                 size
-//             }
-//             OpAmInputToValue::OneToMany(idx, vals) => {
-//                 // embed the enum type
-//                 let mut size = 0;
-//                 buf[size] = 1;
-//                 size += 1;
-//                 // ----- end type -----
-//                 // embed the index
-//                 size += OpAmInputToValue::<usize>::embed_single_val(idx, &mut buf[size..]);
-//                 // ---- end index ----
-//                 // embed the vals
-//                 size += OpAmInputToValue::<T>::embed_vec(&vals, &mut buf[size..]);
-//                 // ---- end vals ----
-//                 size
-//             }
-//             OpAmInputToValue::ManyToOne(idxs, val) => {
-//                 // embed the enum type
-//                 let mut size = 0;
-//                 buf[size] = 2;
-//                 size += 1;
-//                 // ----- end type -----
-//                 // embed the indices
-//                 size += OpAmInputToValue::<usize>::embed_vec(&idxs, &mut buf[size..]);
-//                 // ---- end indices ----
-//                 // embed the val
-//                 size += OpAmInputToValue::<T>::embed_single_val(val, &mut buf[size..]);
-//                 // ---- end val ----
-//                 size
-//             }
-//             OpAmInputToValue::ManyToMany(idxs, vals) => {
-//                 // embed the enum type
-//                 let mut size = 0;
-//                 buf[size] = 3;
-//                 size += 1;
-//                 // ----- end type -----
-//                 // embed the indices
-//                 size += OpAmInputToValue::<usize>::embed_vec(&idxs, &mut buf[size..]);
-//                 // ---- end indices ----
-//                 // embed the vals
-//                 size += OpAmInputToValue::<T>::embed_vec(&vals, &mut buf[size..]);
-//                 // ---- end vals ----
-//                 size
-//             }
-//         }
-//     }
-//     pub fn vec_size<U>(data: &Vec<U>) -> usize {
-//         let mut size = 0;
-//         let len = data.len();
-//         size += std::mem::size_of::<usize>(); //the length
-//         size += len * std::mem::size_of::<U>();
-//         size
-//     }
-//     pub fn single_val_size<U>(_val: U) -> usize {
-//         std::mem::size_of::<U>()
-//     }
-//     pub fn num_bytes(&self) -> usize {
-//         match self {
-//             OpAmInputToValue::OneToOne(idx, val) => {
-//                 let mut size = 0;
-//                 size += 1;
-//                 size += OpAmInputToValue::<usize>::single_val_size(idx);
-//                 size += OpAmInputToValue::<T>::single_val_size(val);
-//                 size
-//             }
-//             OpAmInputToValue::OneToMany(idx, vals) => {
-//                 let mut size = 0;
-//                 size += 1;
-//                 size += OpAmInputToValue::<usize>::single_val_size(idx);
-//                 size += OpAmInputToValue::<T>::vec_size(&vals);
-//                 size
-//             }
-//             OpAmInputToValue::ManyToOne(idxs, val) => {
-//                 let mut size = 0;
-//                 size += 1;
-//                 size += OpAmInputToValue::<usize>::vec_size(&idxs);
-//                 size += OpAmInputToValue::<T>::single_val_size(val);
-//                 size
-//             }
-//             OpAmInputToValue::ManyToMany(idxs, vals) => {
-//                 let mut size = 0;
-//                 size += 1;
-//                 size += OpAmInputToValue::<usize>::vec_size(&idxs);
-//                 size += OpAmInputToValue::<T>::vec_size(&vals);
-//                 size
-//             }
-//         }
-//     }
-// }
-
-// #[doc(hidden)]
-// pub enum RemoteOpAmInputToValue<'a, T: Dist> {
-//     OneToOne(&'a usize, &'a T),
-//     OneToMany(&'a usize, &'a [T]),
-//     ManyToOne(&'a [usize], &'a T),
-//     ManyToMany(&'a [usize], &'a [T]),
-// }
-
-// impl<'a, T: Dist> RemoteOpAmInputToValue<'a, T> {
-//     pub fn unpack_slice<U>(buf: &[u8]) -> (&[U], usize) {
-//         let mut size = 0;
-//         let len = unsafe { &*(buf[size..].as_ptr() as *const usize) };
-//         size += std::mem::size_of::<usize>();
-//         let vals = unsafe { std::slice::from_raw_parts(buf[size..].as_ptr() as *const U, *len) };
-//         size += len * std::mem::size_of::<T>();
-//         (vals, size)
-//     }
-//     pub fn from_bytes(buf: &'a [u8]) -> (Self, usize) {
-//         let mut size = 0;
-//         let variant = buf[size];
-//         size += 1;
-//         match variant {
-//             0 => {
-//                 let idx = unsafe { &*(buf[size..].as_ptr() as *const usize) };
-//                 size += std::mem::size_of::<usize>();
-//                 let val = unsafe { &*(buf[size..].as_ptr() as *const T) };
-//                 size += std::mem::size_of::<T>();
-//                 (RemoteOpAmInputToValue::OneToOne(idx, val), size)
-//             }
-//             1 => {
-//                 let idx = unsafe { &*(buf[size..].as_ptr() as *const usize) };
-//                 size += std::mem::size_of::<usize>();
-//                 let (vals, vals_bytes) = RemoteOpAmInputToValue::<T>::unpack_slice(&buf[size..]);
-//                 size += vals_bytes;
-//                 (RemoteOpAmInputToValue::OneToMany(idx, vals), size)
-//             }
-//             2 => {
-//                 let (idxs, idxs_bytes) =
-//                     RemoteOpAmInputToValue::<usize>::unpack_slice(&buf[size..]);
-//                 size += idxs_bytes;
-//                 let val = unsafe { &*(buf[size..].as_ptr() as *const T) };
-//                 size += std::mem::size_of::<T>();
-
-//                 (RemoteOpAmInputToValue::ManyToOne(idxs, val), size)
-//             }
-//             3 => {
-//                 let (idxs, idxs_bytes) =
-//                     RemoteOpAmInputToValue::<usize>::unpack_slice(&buf[size..]);
-//                 size += idxs_bytes;
-//                 let (vals, vals_bytes) = RemoteOpAmInputToValue::<T>::unpack_slice(&buf[size..]);
-//                 size += vals_bytes;
-
-//                 (RemoteOpAmInputToValue::ManyToMany(idxs, vals), size)
-//             }
-//             _ => {
-//                 panic!("unrecognized OpAmInputToValue Type");
-//             }
-//         }
-//     }
-// }
-
 #[doc(hidden)]
 #[derive(Clone, serde::Serialize, Debug)]
 pub enum OpInputEnum<'a, T: Dist> {
@@ -755,11 +431,6 @@ impl<'a, T: Dist> OpInput<'a, T> for &'a [T] {
     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
         let len = self.len();
         let mut iters = vec![];
-        // let num_per_batch = match std::env::var("LAMELLAR_OP_BATCH") {
-        //     Ok(n) => n.parse::<usize>().unwrap(), //+ 1 to account for main thread
-        //     Err(_) => 10000,                      //+ 1 to account for main thread
-        // };
-        // let num = len / num_per_batch;
         let num = if len < 1000 {
             1
         } else {
@@ -816,11 +487,6 @@ impl<'a, T: Dist> OpInput<'a, T> for &'a mut [T] {
     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
         let len = self.len();
         let mut iters = vec![];
-        // let num_per_batch = match std::env::var("LAMELLAR_OP_BATCH") {
-        //     Ok(n) => n.parse::<usize>().unwrap(), //+ 1 to account for main thread
-        //     Err(_) => 10000,                      //+ 1 to account for main thread
-        // };
-        // let num = len / num_per_batch;
 
         let num = if len < 1000 {
             1
@@ -894,12 +560,6 @@ impl<'a, T: Dist> OpInput<'a, T> for Vec<T> {
     #[tracing::instrument(skip_all)]
     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
         let len = self.len();
-        // let mut iters = vec![];
-        // let num_per_batch = match std::env::var("LAMELLAR_OP_BATCH") {
-        //     Ok(n) => n.parse::<usize>().unwrap(), //+ 1 to account for main thread
-        //     Err(_) => 10000,                      //+ 1 to account for main thread
-        // };
-        // let num = len / num_per_batch;
         let num = if len < 1000 {
             1
         } else {
@@ -1017,20 +677,10 @@ impl<'a, T: Dist> OpInput<'a, T> for Vec<T> {
 impl<'a, T: Dist> OpInput<'a, T> for &'a LocalLockLocalData<'_, T> {
     #[tracing::instrument(skip_all)]
     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
-        // println!("op input local lock local data");
-        // let slice=unsafe{self.__local_as_slice()};
-        // let slice = self.read_local_data();
-        // let slice = self.clone();
         let len = self.len();
         let mut iters = vec![];
         let my_pe = self.array.my_pe();
         if let Some(_start_index) = self.array.array.inner.start_index_for_pe(my_pe) {
-            //just to check that the array is local
-            // let num_per_batch = match std::env::var("LAMELLAR_OP_BATCH") {
-            //     Ok(n) => n.parse::<usize>().unwrap(), //+ 1 to account for main thread
-            //     Err(_) => 10000,                      //+ 1 to account for main thread
-            // };
-            // let num = len / num_per_batch;
             let num = if len < 1000 {
                 1
             } else {
@@ -1067,19 +717,10 @@ impl<'a, T: Dist> OpInput<'a, T> for &'a LocalLockLocalData<'_, T> {
 impl<'a, T: Dist> OpInput<'a, T> for &'a GlobalLockLocalData<'_, T> {
     #[tracing::instrument(skip_all)]
     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
-        // let slice=unsafe{self.__local_as_slice()};
-        // let slice = self.read_local_data();
-        // let slice = self.clone();
         let len = self.len();
         let mut iters = vec![];
         let my_pe = self.array.my_pe();
         if let Some(_start_index) = self.array.array.inner.start_index_for_pe(my_pe) {
-            //just to check that the array is local
-            // let num_per_batch = match std::env::var("LAMELLAR_OP_BATCH") {
-            //     Ok(n) => n.parse::<usize>().unwrap(), //+ 1 to account for main thread
-            //     Err(_) => 10000,                      //+ 1 to account for main thread
-            // };
-            // let num = len / num_per_batch;
             let num = if len < 1000 {
                 1
             } else {
@@ -1155,12 +796,6 @@ impl<'a, T: Dist + ElementOps> OpInput<'a, T> for &GenericAtomicLocalData<T> {
         let mut iters = vec![];
         let my_pe = self.array.my_pe();
         if let Some(_start_index) = self.array.array.inner.start_index_for_pe(my_pe) {
-            //just to check that the array is local
-            // let num_per_batch = match std::env::var("LAMELLAR_OP_BATCH") {
-            //     Ok(n) => n.parse::<usize>().unwrap(), //+ 1 to account for main thread
-            //     Err(_) => 10000,                      //+ 1 to account for main thread
-            // };
-            // let num = len / num_per_batch;
             let num = if len < 1000 {
                 1
             } else {
@@ -1208,12 +843,6 @@ impl<'a, T: Dist + ElementOps> OpInput<'a, T> for &NativeAtomicLocalData<T> {
         let mut iters = vec![];
         let my_pe = self.array.my_pe();
         if let Some(_start_index) = self.array.array.inner.start_index_for_pe(my_pe) {
-            //just to check that the array is local
-            // let num_per_batch = match std::env::var("LAMELLAR_OP_BATCH") {
-            //     Ok(n) => n.parse::<usize>().unwrap(), //+ 1 to account for main thread
-            //     Err(_) => 10000,                      //+ 1 to account for main thread
-            // };
-            // let num = len / num_per_batch;
             let num = if len < 1000 {
                 1
             } else {
