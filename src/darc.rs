@@ -347,6 +347,7 @@ impl<T> DarcInner<T> {
     fn block_on_outstanding(&self, state: DarcMode, extra_cnt: usize) {
         self.wait_all();
         let mut timer = std::time::Instant::now();
+        let team = self.team();
         while self.dist_cnt.load(Ordering::SeqCst) > 0
             || self.local_cnt.load(Ordering::SeqCst) > 1 + extra_cnt
             || unsafe { self.any_ref_cnt() }
@@ -355,9 +356,10 @@ impl<T> DarcInner<T> {
                 self.send_finished();
             }
             if timer.elapsed().as_secs_f64() > *crate::DEADLOCK_TIMEOUT {
+                let ref_cnts_slice = unsafe { std::slice::from_raw_parts_mut(self.ref_cnt_addr as *mut usize, self.num_pes) };
                 println!("[WARNING] - Potential deadlock detected.\n\
                     The runtime is currently waiting for all remaining references to this distributed object to be dropped.\n\
-                    This objected is likely a {:?} with {:?} remaining local references and {:?} remaining remote references\n\
+                    This objected is likely a {:?} with {:?} remaining local references and {:?} remaining remote references, ref cnts by pe {ref_cnts_slice:?}\n\
                     An example where this can occur can be found at https://docs.rs/lamellar/latest/lamellar/array/struct.ReadOnlyArray.html#method.into_local_lock\n\
                     The deadlock timeout can be set via the LAMELLAR_DEADLOCK_TIMEOUT environment variable, the current timeout is {} seconds\n\
                     To view backtrace set RUST_LIB_BACKTRACE=1\n\
@@ -382,9 +384,8 @@ impl<T> DarcInner<T> {
                 // );
                 timer = std::time::Instant::now();
             }
-            std::thread::yield_now();
+           team.scheduler.exec_task();
         }
-        let team = self.team();
         let mode_refs =
             unsafe { std::slice::from_raw_parts_mut(self.mode_addr as *mut u8, self.num_pes) };
         unsafe {
@@ -406,9 +407,10 @@ impl<T> DarcInner<T> {
                     self.send_finished();
                 }
                 if timer.elapsed().as_secs_f64() > *crate::DEADLOCK_TIMEOUT {
+                    let ref_cnts_slice = unsafe { std::slice::from_raw_parts_mut(self.ref_cnt_addr as *mut usize, self.num_pes) };
                     println!("[WARNING] -- Potential deadlock detected.\n\
                     The runtime is currently waiting for all remaining references to this distributed object to be dropped.\n\
-                    This objected is likely a {:?} with {:?} remaining local references and {:?} remaining remote references\n\
+                    This objected is likely a {:?} with {:?} remaining local references and {:?} remaining remote references, ref cnts by pe {ref_cnts_slice:?}\n\
                     An example where this can occur can be found at https://docs.rs/lamellar/latest/lamellar/array/struct.ReadOnlyArray.html#method.into_local_lock\n\
                     The deadlock timeout can be set via the LAMELLAR_DEADLOCK_TIMEOUT environment variable, the current timeout is {} seconds\n\
                     To view backtrace set RUST_LIB_BACKTRACE=1\n\
@@ -423,7 +425,7 @@ impl<T> DarcInner<T> {
                 );
                     timer = std::time::Instant::now();
                 }
-                std::thread::yield_now();
+                team.scheduler.exec_task();
             }
         }
         while self.dist_cnt.load(Ordering::SeqCst) != 0
@@ -434,9 +436,10 @@ impl<T> DarcInner<T> {
                 self.send_finished();
             }
             if timer.elapsed().as_secs_f64() > *crate::DEADLOCK_TIMEOUT {
+                let ref_cnts_slice = unsafe { std::slice::from_raw_parts_mut(self.ref_cnt_addr as *mut usize, self.num_pes) };
                 println!("[WARNING] --- Potential deadlock detected.\n\
                     The runtime is currently waiting for all remaining references to this distributed object to be dropped.\n\
-                    This objected is likely a {:?} with {:?} remaining local references and {:?} remaining remote references\n\
+                    This objected is likely a {:?} with {:?} remaining local references and {:?} remaining remote references, ref cnts by pe {ref_cnts_slice:?}\n\
                     An example where this can occur can be found at https://docs.rs/lamellar/latest/lamellar/array/struct.ReadOnlyArray.html#method.into_local_lock\n\
                     The deadlock timeout can be set via the LAMELLAR_DEADLOCK_TIMEOUT environment variable, the current timeout is {} seconds\n\
                     To view backtrace set RUST_LIB_BACKTRACE=1\n\
@@ -451,7 +454,7 @@ impl<T> DarcInner<T> {
                 );
                 timer = std::time::Instant::now();
             }
-            std::thread::yield_now();
+            team.scheduler.exec_task();
         }
         // println!("{:?}",self);
         self.team().barrier();
@@ -465,7 +468,7 @@ impl<T> DarcInner<T> {
         while am_counters.outstanding_reqs.load(Ordering::SeqCst) > 0 {
             // std::thread::yield_now();
             team.scheduler.exec_task(); //mmight as well do useful work while we wait
-            if temp_now.elapsed() > Duration::new(600, 0) {
+            if temp_now.elapsed().as_secs_f64() > *crate::DEADLOCK_TIMEOUT {
                 //|| first{
                 println!(
                     "in darc wait_all mype: {:?} cnt: {:?} {:?}",
@@ -915,9 +918,11 @@ impl<T: 'static> LamellarAM for DroppedWaitAM<T> {
                     wrapped.inner.as_ref().send_finished();
                 }
                 if timeout.elapsed().as_secs_f64() > *crate::DEADLOCK_TIMEOUT {
+                    let ref_cnts_slice = unsafe { std::slice::from_raw_parts_mut(wrapped.inner.as_ref().ref_cnt_addr as *mut usize, wrapped.inner.as_ref().num_pes) };
+
                     println!("[WARNING] - Potential deadlock detected when trying to free distributed object.\n\
                         The runtime is currently waiting for all remaining references to this distributed object to be dropped.\n\
-                        The current status of the object on each pe is {:?} with {:?} remaining local references and {:?} remaining remote references\n\
+                        The current status of the object on each pe is {:?} with {:?} remaining local references and {:?} remaining remote references, ref cnts by pe {ref_cnts_slice:?}\n\
                         the deadlock timeout can be set via the LAMELLAR_DEADLOCK_TIMEOUT environment variable, the current timeout is {} seconds\n\
                         To view backtrace set RUST_LIB_BACKTRACE=1\n\
                         {}",
@@ -952,9 +957,11 @@ impl<T: 'static> LamellarAM for DroppedWaitAM<T> {
                     }
                 }
                 if timeout.elapsed().as_secs_f64() > *crate::DEADLOCK_TIMEOUT {
+                    let ref_cnts_slice = unsafe { std::slice::from_raw_parts_mut(wrapped.inner.as_ref().ref_cnt_addr as *mut usize, wrapped.inner.as_ref().num_pes) };
+
                     println!("[WARNING] -- Potential deadlock detected when trying to free distributed object.\n\
                         The runtime is currently waiting for all remaining references to this distributed object to be dropped.\n\
-                        The current status of the object on each pe is {:?} with {:?} remaining local references and {:?} remaining remote references\n\
+                        The current status of the object on each pe is {:?} with {:?} remaining local references and {:?} remaining remote references, ref cnts by pe {ref_cnts_slice:?}\n\
                         the deadlock timeout can be set via the LAMELLAR_DEADLOCK_TIMEOUT environment variable, the current timeout is {} seconds\n\
                         To view backtrace set RUST_LIB_BACKTRACE=1\n\
                         {}",
@@ -984,9 +991,11 @@ impl<T: 'static> LamellarAM for DroppedWaitAM<T> {
                     wrapped.inner.as_ref().send_finished();
                 }
                 if timeout.elapsed().as_secs_f64() > *crate::DEADLOCK_TIMEOUT {
+                    let ref_cnts_slice = unsafe { std::slice::from_raw_parts_mut(wrapped.inner.as_ref().ref_cnt_addr as *mut usize, wrapped.inner.as_ref().num_pes) };
+
                     println!("[WARNING] --- Potential deadlock detected when trying to free distributed object.\n\
                         The runtime is currently waiting for all remaining references to this distributed object to be dropped.\n\
-                        The current status of the object on each pe is {:?} with {:?} remaining local references and {:?} remaining remote references\n\
+                        The current status of the object on each pe is {:?} with {:?} remaining local references and {:?} remaining remote references, ref cnts by pe {ref_cnts_slice:?}\n\
                         the deadlock timeout can be set via the LAMELLAR_DEADLOCK_TIMEOUT environment variable, the current timeout is {} seconds\n\
                         To view backtrace set RUST_LIB_BACKTRACE=1\n\
                         {}",
