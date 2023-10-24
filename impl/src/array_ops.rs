@@ -1,5 +1,6 @@
 use proc_macro::TokenStream;
 // use proc_macro_error::abort;
+use proc_macro2::Ident;
 use quote::{quote, quote_spanned};
 use syn::parse_macro_input;
 use syn::spanned::Spanned;
@@ -244,6 +245,36 @@ fn gen_multi_val_single_idx(
     }
 }
 
+fn gen_array_names(
+    array_type: &Ident,
+    typeident: &syn::Type,
+    val_type: &str,
+    idx_type: &str,
+) -> (Ident, Ident, Ident, Ident, Ident, Ident, Ident, Ident) {
+    let base = quote::format_ident!(
+        "{array_type}_{}_{val_type}_val_{idx_type}_idx",
+        type_to_string(&typeident)
+    );
+
+    let am_buf_name = quote::format_ident!("{base}_am_buf");
+    let dist_am_buf_name = quote::format_ident!("{base}_am");
+    let am_buf_fetch_name = quote::format_ident!("{base}_am_buf_fetch");
+    let dist_am_buf_fetch_name = quote::format_ident!("{base}_am_fetch");
+    let am_buf_result_name = quote::format_ident!("{base}_am_buf_result");
+    let dist_am_buf_result_name = quote::format_ident!("{base}_am_result");
+    let reg_name = quote::format_ident!("{val_type}_val_{idx_type}_idx_ops");
+    let id_gen_name = quote::format_ident!("{base}_id");
+    (
+        am_buf_name,
+        dist_am_buf_name,
+        am_buf_fetch_name,
+        dist_am_buf_fetch_name,
+        am_buf_result_name,
+        dist_am_buf_result_name,
+        reg_name,
+        id_gen_name,
+    )
+}
 fn create_buf_ops2(
     typeident: syn::Type,
     array_type: syn::Ident,
@@ -781,102 +812,38 @@ fn create_buf_ops2(
     let single_val_multi_idx_result_match_stmts = all_match_stmts[1].0.clone();
     let multi_val_single_idx_result_match_stmts = all_match_stmts[2].0.clone();
 
-    // let buf_op_name = quote::format_ident!("{}_{}_op_buf", array_type, type_to_string(&typeident));
-    let multi_val_multi_idx_am_buf_name = quote::format_ident!(
-        "{}_{}_multi_val_multi_idx_am_buf",
-        array_type,
-        type_to_string(&typeident)
-    );
-    let dist_multi_val_multi_idx_am_buf_name = quote::format_ident!(
-        "{}_{}_multi_val_multi_idx_am",
-        array_type,
-        type_to_string(&typeident)
-    );
-    let multi_val_multi_idx_am_buf_fetch_name = quote::format_ident!(
-        "{}_{}_multi_val_multi_idx_am_buf_fetch",
-        array_type,
-        type_to_string(&typeident)
-    );
-    let dist_multi_val_multi_idx_am_buf_fetch_name = quote::format_ident!(
-        "{}_{}_multi_val_multi_idx_am_fetch",
-        array_type,
-        type_to_string(&typeident)
-    );
-    let multi_val_multi_idx_am_buf_result_name = quote::format_ident!(
-        "{}_{}_multi_val_multi_idx_am_buf_result",
-        array_type,
-        type_to_string(&typeident)
-    );
-    let dist_multi_val_multi_idx_am_buf_result_name = quote::format_ident!(
-        "{}_{}_multi_val_multi_idx_am_result",
-        array_type,
-        type_to_string(&typeident)
-    );
-    let multi_val_multi_idx_reg_name = quote::format_ident!("MultiValMultiIdxOps");
+    let (
+        multi_val_multi_idx_am_buf_name,
+        dist_multi_val_multi_idx_am_buf_name,
+        multi_val_multi_idx_am_buf_fetch_name,
+        dist_multi_val_multi_idx_am_buf_fetch_name,
+        multi_val_multi_idx_am_buf_result_name,
+        dist_multi_val_multi_idx_am_buf_result_name,
+        multi_val_multi_idx_reg_name,
+        multi_val_multi_idx_id,
+    ) = gen_array_names(&array_type, &typeident, "multi", "multi");
 
-    let single_val_multi_idx_am_buf_name = quote::format_ident!(
-        "{}_{}_single_val_multi_idx_am_buf",
-        array_type,
-        type_to_string(&typeident)
-    );
-    let dist_single_val_multi_idx_am_buf_name = quote::format_ident!(
-        "{}_{}_single_val_multi_idx_am",
-        array_type,
-        type_to_string(&typeident)
-    );
-    let single_val_multi_idx_am_buf_fetch_name = quote::format_ident!(
-        "{}_{}_single_val_multi_idx_am_buf_fetch",
-        array_type,
-        type_to_string(&typeident)
-    );
-    let dist_single_val_multi_idx_am_buf_fetch_name = quote::format_ident!(
-        "{}_{}_single_val_multi_idx_am_fetch",
-        array_type,
-        type_to_string(&typeident)
-    );
-    let single_val_multi_idx_am_buf_result_name = quote::format_ident!(
-        "{}_{}_single_val_multi_idx_am_buf_result",
-        array_type,
-        type_to_string(&typeident)
-    );
-    let dist_single_val_multi_idx_am_buf_result_name = quote::format_ident!(
-        "{}_{}_single_val_multi_idx_am_result",
-        array_type,
-        type_to_string(&typeident)
-    );
-    let single_val_multi_idx_reg_name = quote::format_ident!("SingleValMultiIdxOps");
+    let (
+        single_val_multi_idx_am_buf_name,
+        dist_single_val_multi_idx_am_buf_name,
+        single_val_multi_idx_am_buf_fetch_name,
+        dist_single_val_multi_idx_am_buf_fetch_name,
+        single_val_multi_idx_am_buf_result_name,
+        dist_single_val_multi_idx_am_buf_result_name,
+        single_val_multi_idx_reg_name,
+        single_val_multi_idx_id,
+    ) = gen_array_names(&array_type, &typeident, "single", "multi");
 
-    let multi_val_single_idx_am_buf_name = quote::format_ident!(
-        "{}_{}_multi_val_single_idx_am_buf",
-        array_type,
-        type_to_string(&typeident)
-    );
-    let dist_multi_val_single_idx_am_buf_name = quote::format_ident!(
-        "{}_{}_multi_val_single_idx_am",
-        array_type,
-        type_to_string(&typeident)
-    );
-    let multi_val_single_idx_am_buf_fetch_name = quote::format_ident!(
-        "{}_{}_multi_val_single_idx_am_buf_fetch",
-        array_type,
-        type_to_string(&typeident)
-    );
-    let dist_multi_val_single_idx_am_buf_fetch_name = quote::format_ident!(
-        "{}_{}_multi_val_single_idx_am_fetch",
-        array_type,
-        type_to_string(&typeident)
-    );
-    let multi_val_single_idx_am_buf_result_name = quote::format_ident!(
-        "{}_{}_multi_val_single_idx_am_buf_result",
-        array_type,
-        type_to_string(&typeident)
-    );
-    let dist_multi_val_single_idx_am_buf_result_name = quote::format_ident!(
-        "{}_{}_multi_val_single_idx_am_result",
-        array_type,
-        type_to_string(&typeident)
-    );
-    let multi_val_single_idx_reg_name = quote::format_ident!("MultiValSingleIdxOps");
+    let (
+        multi_val_single_idx_am_buf_name,
+        dist_multi_val_single_idx_am_buf_name,
+        multi_val_single_idx_am_buf_fetch_name,
+        dist_multi_val_single_idx_am_buf_fetch_name,
+        multi_val_single_idx_am_buf_result_name,
+        dist_multi_val_single_idx_am_buf_result_name,
+        multi_val_single_idx_reg_name,
+        multi_val_single_idx_id,
+    ) = gen_array_names(&array_type, &typeident, "multi", "single");
 
     if array_type != "ReadOnlyArray" {
         // Updating ops that dont return anything
@@ -937,7 +904,8 @@ fn create_buf_ops2(
             }
             inventory::submit! {
                 #lamellar::array::#multi_val_multi_idx_reg_name{
-                    id: (std::any::TypeId::of::<#byte_array_type>(),std::any::TypeId::of::<#typeident>(),#lamellar::array::BatchReturnType::None),
+                    id: #multi_val_multi_idx_id,
+                    batch_type: #lamellar::array::BatchReturnType::None,
                     op: #dist_multi_val_multi_idx_am_buf_name,
                 }
             }
@@ -1001,9 +969,11 @@ fn create_buf_ops2(
                         index_size: index_size,
                     })
             }
+            
             inventory::submit! {
                 #lamellar::array::#single_val_multi_idx_reg_name{
-                    id: (std::any::TypeId::of::<#byte_array_type>(),std::any::TypeId::of::<#typeident>(),#lamellar::array::BatchReturnType::None),
+                    id: #single_val_multi_idx_id,
+                    batch_type: #lamellar::array::BatchReturnType::None,
                     op: #dist_single_val_multi_idx_am_buf_name,
                 }
             }
@@ -1035,9 +1005,11 @@ fn create_buf_ops2(
                         index: index,
                     })
             }
+            
             inventory::submit! {
                 #lamellar::array::#multi_val_single_idx_reg_name{
-                    id: (std::any::TypeId::of::<#byte_array_type>(),std::any::TypeId::of::<#typeident>(),#lamellar::array::BatchReturnType::None),
+                    id: #multi_val_single_idx_id,
+                    batch_type: #lamellar::array::BatchReturnType::None,
                     op: #dist_multi_val_single_idx_am_buf_name,
                 }
             }
@@ -1104,7 +1076,8 @@ fn create_buf_ops2(
                 }
                 inventory::submit! {
                     #lamellar::array::#multi_val_multi_idx_reg_name{
-                        id: (std::any::TypeId::of::<#byte_array_type>(),std::any::TypeId::of::<#typeident>(),#lamellar::array::BatchReturnType::Result),
+                        id: #multi_val_multi_idx_id,
+                        batch_type: #lamellar::array::BatchReturnType::Result,
                         op: #dist_multi_val_multi_idx_am_buf_result_name,
                     }
                 }
@@ -1172,7 +1145,8 @@ fn create_buf_ops2(
                 }
                 inventory::submit! {
                     #lamellar::array::#single_val_multi_idx_reg_name{
-                        id: (std::any::TypeId::of::<#byte_array_type>(),std::any::TypeId::of::<#typeident>(),#lamellar::array::BatchReturnType::Result),
+                        id: #single_val_multi_idx_id,
+                        batch_type: #lamellar::array::BatchReturnType::Result,
                         op: #dist_single_val_multi_idx_am_buf_result_name,
                     }
                 }
@@ -1208,7 +1182,8 @@ fn create_buf_ops2(
                 }
                 inventory::submit! {
                     #lamellar::array::#multi_val_single_idx_reg_name{
-                        id: (std::any::TypeId::of::<#byte_array_type>(),std::any::TypeId::of::<#typeident>(),#lamellar::array::BatchReturnType::Result),
+                        id: #multi_val_single_idx_id,
+                        batch_type: #lamellar::array::BatchReturnType::Result,
                         op: #dist_multi_val_single_idx_am_buf_result_name,
                     }
                 }
@@ -1265,6 +1240,9 @@ fn create_buf_ops2(
                 res
             }
         }
+        fn #multi_val_multi_idx_id (batch_type:  #lamellar::array::BatchReturnType) -> (std::any::TypeId,std::any::TypeId,#lamellar::array::BatchReturnType) {
+            (std::any::TypeId::of::<#byte_array_type>(),std::any::TypeId::of::<#typeident>(),batch_type)
+        }
         #[allow(non_snake_case)]
         fn #dist_multi_val_multi_idx_am_buf_fetch_name(array: #lamellar::array::LamellarByteArray, op: #lamellar::array::ArrayOpCmd<Vec<u8>>, idx_vals: Vec<u8>,index_usize: u8) -> Arc<dyn RemoteActiveMessage + Sync + Send>{
                 Arc::new(#multi_val_multi_idx_am_buf_fetch_name{
@@ -1276,7 +1254,8 @@ fn create_buf_ops2(
         }
         inventory::submit! {
             #lamellar::array::#multi_val_multi_idx_reg_name{
-                id: (std::any::TypeId::of::<#byte_array_type>(),std::any::TypeId::of::<#typeident>(),#lamellar::array::BatchReturnType::Vals),
+                id: #multi_val_multi_idx_id,
+                batch_type: #lamellar::array::BatchReturnType::Vals,
                 op: #dist_multi_val_multi_idx_am_buf_fetch_name,
             }
         }
@@ -1342,9 +1321,13 @@ fn create_buf_ops2(
                     index_size: index_size,
                 })
         }
+        fn #single_val_multi_idx_id (batch_type:  #lamellar::array::BatchReturnType) -> (std::any::TypeId,std::any::TypeId, #lamellar::array::BatchReturnType) {
+            (std::any::TypeId::of::<#byte_array_type>(),std::any::TypeId::of::<#typeident>(),batch_type)
+        }
         inventory::submit! {
             #lamellar::array::#single_val_multi_idx_reg_name{
-                id: (std::any::TypeId::of::<#byte_array_type>(),std::any::TypeId::of::<#typeident>(),#lamellar::array::BatchReturnType::Vals),
+                id: #single_val_multi_idx_id,
+                batch_type: #lamellar::array::BatchReturnType::Vals,
                 op: #dist_single_val_multi_idx_am_buf_fetch_name,
             }
         }
@@ -1379,9 +1362,13 @@ fn create_buf_ops2(
                     index: index,
                 })
         }
+        fn #multi_val_single_idx_id (batch_type:  #lamellar::array::BatchReturnType) -> (std::any::TypeId,std::any::TypeId, #lamellar::array::BatchReturnType) {
+            (std::any::TypeId::of::<#byte_array_type>(),std::any::TypeId::of::<#typeident>(),batch_type)
+        }
         inventory::submit! {
             #lamellar::array::#multi_val_single_idx_reg_name{
-                id: (std::any::TypeId::of::<#byte_array_type>(),std::any::TypeId::of::<#typeident>(),#lamellar::array::BatchReturnType::Vals),
+                id: #multi_val_single_idx_id,
+                batch_type: #lamellar::array::BatchReturnType::Vals,
                 op: #dist_multi_val_single_idx_am_buf_fetch_name,
             }
         }

@@ -290,6 +290,7 @@ fn impl_am_group_user(
         #[doc(hidden)]
         struct #am_group_name_user #impl_generics #where_clause{
             team: std::sync::Arc<#lamellar::LamellarTeam>,
+            batch_cnt: usize,
             cnt: usize,
             reqs: std::collections::BTreeMap<usize,(Vec<usize>, #am_group_remote_name #ty_generics,usize)>,
             num_per_batch: usize,
@@ -305,6 +306,7 @@ fn impl_am_group_user(
                 };
                 #am_group_name_user {
                     team: team,
+                    batch_cnt: 0,
                     cnt: 0,
                     reqs: std::collections::BTreeMap::new(),
                     num_per_batch: num_per_batch,
@@ -325,12 +327,13 @@ fn impl_am_group_user(
                     (Vec::with_capacity(self.num_per_batch),#am_group_remote_name::new(&am),0)
                 });
                 req_queue.0.push(self.cnt);
-                self.cnt+= #lamellar::serialized_size(&am,false);
+                self.cnt += 1;
+                self.batch_cnt += 1;
                 req_queue.1.add_am(am);
 
-                if self.cnt >= self.num_per_batch  {
+                if self.batch_cnt >= self.num_per_batch  {
                     self.send_pe_buffer(pe);
-                    self.cnt = 0;
+                    self.batch_cnt = 0;
                 }
             }
 
@@ -348,7 +351,7 @@ fn impl_am_group_user(
             #[allow(unused)]
             pub async fn exec(mut self) -> #lamellar::TypedAmGroupResult<#inner_ret_type>{
 
-                let timer = std::time::Instant::now();
+                // let timer = std::time::Instant::now();
 
                 for pe in 0..(self.team.num_pes()+1){
                     self.send_pe_buffer(pe);
