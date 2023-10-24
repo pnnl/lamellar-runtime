@@ -37,7 +37,7 @@ fn main() {
     let mut rng: StdRng = SeedableRng::seed_from_u64(10);
 
     if my_pe == 0 {
-        let num_ams = 1_000_000;
+        let num_ams = 1000000;
         // println!("---------------------------------------------------------------");
         // println!("Testing local am");
         // let res = world.block_on(world.exec_am_pe(my_pe, am.clone()));
@@ -67,8 +67,10 @@ fn main() {
             }
             check.push((pe, i));
         }
+        // println!("check: {check:?}");
         let results = world.block_on(ams.exec());
         for (pe, i) in check {
+            // println!("{:?}", results.at(i));
             match results.at(i) {
                 AmGroupResult::Pe(the_pe, val) => {
                     assert_eq!(pe, the_pe);

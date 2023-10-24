@@ -1160,8 +1160,9 @@ impl<'a, T> Iterator for TypedAmGroupResultIter<'a, T> {
     type Item = AmGroupResult<'a, T>;
     fn next(&mut self) -> Option<Self::Item> {
         if self.index < self.results.len() {
+            let index = self.index;
             self.index += 1;
-            Some(self.results.at(self.index - 1))
+            Some(self.results.at(index))
         } else {
             None
         }
@@ -1234,7 +1235,12 @@ impl<T> TypedAmGroupValResult<T> {
         TypedAmGroupValResult { reqs, cnt, num_pes }
     }
     pub fn at(&self, index: usize) -> AmGroupResult<'_, T> {
-        assert!(index < self.cnt, "AmGroupResult index out of bounds");
+        assert!(
+            index < self.cnt,
+            "AmGroupResult index out of bounds index = {}  len = {}",
+            index,
+            self.cnt
+        );
         for req in self.reqs.iter() {
             if let Ok(idx) = req.ids.binary_search(&index) {
                 match &req.reqs {
@@ -1272,7 +1278,12 @@ impl<T> TypedAmGroupUnitResult<T> {
         TypedAmGroupUnitResult { reqs, cnt, num_pes }
     }
     pub fn at(&self, index: usize) -> AmGroupResult<'_, T> {
-        assert!(index < self.cnt, "AmGroupResult index out of bounds");
+        assert!(
+            index < self.cnt,
+            "AmGroupResult index out of bounds index = {}  len = {}",
+            index,
+            self.cnt
+        );
         for req in self.reqs.iter() {
             if let Ok(_idx) = req.ids.binary_search(&index) {
                 match &req.reqs {

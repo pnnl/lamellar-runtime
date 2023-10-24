@@ -20,12 +20,6 @@ struct AmNoReturn {
     test_var: u16,
 }
 
-impl AmNoReturn {
-    fn test_1(&self, temp: usize) -> usize {
-        10
-    }
-}
-
 #[lamellar::am]
 impl LamellarAM for AmNoReturn {
     async fn exec(self) {
@@ -36,8 +30,6 @@ impl LamellarAM for AmNoReturn {
             lamellar::num_pes,
             hostname::get().unwrap()
         );
-        // let y = self.my_pe + self.test_var as usize;
-        // let x = self.test_1(self.my_pe);
         println!("\t{:?} {:?} leaving", self.my_pe, self.test_var);
     }
 }

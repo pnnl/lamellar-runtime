@@ -18,23 +18,23 @@ lazy_static! {
 
     pub(crate) static ref MULTI_VAL_MULTI_IDX_OPS: HashMap<(TypeId,TypeId,BatchReturnType), MultiValMultiIdxFn> = {
         let mut map = HashMap::new();
-        for op in crate::inventory::iter::<MultiValMultiIdxOps> {
-            map.insert(op.id.clone(), op.op);
+        for op in crate::inventory::iter::<multi_val_multi_idx_ops> {
+            map.insert((op.id)(op.batch_type), op.op);
         }
         map
     };
     pub(crate) static ref SINGLE_VAL_MULTI_IDX_OPS: HashMap<(TypeId,TypeId,BatchReturnType), SingleValMultiIdxFn> = {
         let mut map = HashMap::new();
-        for op in crate::inventory::iter::<SingleValMultiIdxOps> {
+        for op in crate::inventory::iter::<single_val_multi_idx_ops> {
             // println!("{:?}",op.id.clone());
-            map.insert(op.id.clone(), op.op);
+            map.insert((op.id)(op.batch_type), op.op);
         }
         map
     };
     pub(crate) static ref MULTI_VAL_SINGLE_IDX_OPS: HashMap<(TypeId,TypeId,BatchReturnType), MultiValSingleIdxFn> = {
         let mut map = HashMap::new();
-        for op in crate::inventory::iter::<MultiValSingleIdxOps> {
-            map.insert(op.id.clone(), op.op);
+        for op in crate::inventory::iter::<multi_val_single_idx_ops> {
+            map.insert((op.id)(op.batch_type), op.op);
         }
         map
     };
@@ -95,27 +95,35 @@ impl IndexSize {
         }
     }
 }
+
+type IdGen = fn(BatchReturnType) -> (TypeId, TypeId, BatchReturnType);
 #[doc(hidden)]
-pub struct MultiValMultiIdxOps {
-    pub id: (TypeId, TypeId, BatchReturnType),
+#[allow(non_camel_case_types)]
+pub struct multi_val_multi_idx_ops {
+    pub id: IdGen,
+    pub batch_type: BatchReturnType,
     pub op: MultiValMultiIdxFn,
 }
 
 #[doc(hidden)]
-pub struct SingleValMultiIdxOps {
-    pub id: (TypeId, TypeId, BatchReturnType),
+#[allow(non_camel_case_types)]
+pub struct single_val_multi_idx_ops {
+    pub id: IdGen,
+    pub batch_type: BatchReturnType,
     pub op: SingleValMultiIdxFn,
 }
 
 #[doc(hidden)]
-pub struct MultiValSingleIdxOps {
-    pub id: (TypeId, TypeId, BatchReturnType),
+#[allow(non_camel_case_types)]
+pub struct multi_val_single_idx_ops {
+    pub id: IdGen,
+    pub batch_type: BatchReturnType,
     pub op: MultiValSingleIdxFn,
 }
 
-crate::inventory::collect!(MultiValMultiIdxOps);
-crate::inventory::collect!(SingleValMultiIdxOps);
-crate::inventory::collect!(MultiValSingleIdxOps);
+crate::inventory::collect!(multi_val_multi_idx_ops);
+crate::inventory::collect!(single_val_multi_idx_ops);
+crate::inventory::collect!(multi_val_single_idx_ops);
 
 impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
     pub(crate) fn dummy_val(&self) -> T {

@@ -33,6 +33,7 @@ fn create_reduction(
     };
     let reduction = quote::format_ident!("{:}", reduction);
     let reduction_gen = quote::format_ident!("{:}_{:}_reduction_gen", typeident, reduction);
+    let reduction_id_gen = quote::format_ident!("{:}_{:}_reduction_id", typeident, reduction);
 
     let mut gen_match_stmts = quote! {};
     let mut array_impls = quote! {};
@@ -113,10 +114,15 @@ fn create_reduction(
 
         }
 
+        fn  #reduction_id_gen () -> std::any::TypeId{
+            std::any::TypeId::of::<#typeident>()
+        }
+
+
         #lamellar::inventory::submit! {
             // #![crate = #lamellar]
             #lamellar::array::ReduceKey{
-                id: std::any::TypeId::of::<#typeident>(),
+                id: #reduction_id_gen,
                 name: stringify!(#reduction),//.to_string(),
                 gen: #reduction_gen
             }

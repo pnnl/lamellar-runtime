@@ -112,7 +112,8 @@ pub mod prelude;
 pub(crate) mod r#unsafe;
 pub use r#unsafe::{
     operations::{
-        BatchReturnType, MultiValMultiIdxOps, MultiValSingleIdxOps, SingleValMultiIdxOps,
+        multi_val_multi_idx_ops, multi_val_single_idx_ops, single_val_multi_idx_ops,
+        BatchReturnType,
     },
     UnsafeArray, UnsafeByteArray, UnsafeByteArrayWeak,
 };
@@ -175,7 +176,7 @@ lazy_static! {
         let mut temp = HashMap::new();
         for reduction_type in crate::inventory::iter::<ReduceKey> {
             temp.insert(
-                (reduction_type.id.clone(), reduction_type.name.clone()),
+                ((reduction_type.id)(), reduction_type.name.clone()),
                 reduction_type.gen,
             );
         }
@@ -183,9 +184,10 @@ lazy_static! {
     };
 }
 
+type ReduceIdGen = fn() -> std::any::TypeId;
 #[doc(hidden)]
 pub struct ReduceKey {
-    pub id: std::any::TypeId,
+    pub id: ReduceIdGen,
     pub name: &'static str,
     pub gen: ReduceGen,
 }
