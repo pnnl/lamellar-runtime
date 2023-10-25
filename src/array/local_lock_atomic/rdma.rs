@@ -118,7 +118,7 @@ impl<T: Dist + 'static> LamellarAm for InitGetAm<T> {
                     }
                 }
                 Distribution::Cyclic => {
-                    let buf_slice = self.buf.as_mut_slice().unwrap();
+                    let buf_slice = self.buf.as_mut_slice().expect("array data should be on PE");
                     let num_pes = reqs.len();
                     for (start_index, req) in reqs.drain(..).enumerate() {
                         let data = req.await;
@@ -202,7 +202,7 @@ impl<T: Dist + 'static> LamellarAm for InitPutAm<T> {
                                 array: self.array.clone().into(), //inner of the indices we need to place data into
                                 start_index: self.index,
                                 len: self.buf.len(),
-                                data: u8_buf.as_slice().unwrap()
+                                data: u8_buf.as_slice().expect("array data should be on PE")
                                     [cur_index..(cur_index + u8_buf_len)]
                                     .to_vec(),
                             };
@@ -217,7 +217,7 @@ impl<T: Dist + 'static> LamellarAm for InitPutAm<T> {
                     let num_pes = ArrayExecAm::team(&self.array).num_pes();
                     let mut pe_u8_vecs: HashMap<usize, Vec<u8>> = HashMap::new();
                     let mut pe_t_slices: HashMap<usize, &mut [T]> = HashMap::new();
-                    let buf_slice = self.buf.as_slice().unwrap();
+                    let buf_slice = self.buf.as_slice().expect("array data should be on PE");
                     for pe in self
                         .array
                         .array
@@ -240,7 +240,10 @@ impl<T: Dist + 'static> LamellarAm for InitPutAm<T> {
                     for (buf_index, index) in
                         (self.index..(self.index + self.buf.len())).enumerate()
                     {
-                        let pe = self.array.array.pe_for_dist_index(index).unwrap() % num_pes;
+                        let pe = match self.array.array.pe_for_dist_index(index){
+                            Some(pe) => pe % num_pes,
+                            None => panic!("Index: {index} is out of bounds for array of length: {:?}",self.array.array.inner.size),
+                        };
                         // println!("pe {:?} tslice index {:?} buf_index {:?}",pe,buf_index/num_pes,buf_index);
                         pe_t_slices.get_mut(&pe).unwrap()[buf_index / num_pes] =
                             buf_slice[buf_index];

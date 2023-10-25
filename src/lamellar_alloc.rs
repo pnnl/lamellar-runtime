@@ -495,11 +495,11 @@ mod tests {
                     } else {
                         let index = rng.gen_range(0..addrs.len());
                         let addr = addrs.remove(index);
-                        alloc_clone.free(addr).unwrap();
+                        alloc_clone.free(addr).expect("Address should have been found and freed");
                     }
                 }
                 for addr in addrs {
-                    alloc_clone.free(addr).unwrap();
+                    alloc_clone.free(addr).expect("Address should have been found and freed");
                 }
             });
             threads.push(t);

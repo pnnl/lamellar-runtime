@@ -288,13 +288,13 @@ impl<T: Dist> LamellarArrayRequest for ArrayRdmaAtHandle<T> {
         for req in self.reqs.drain(0..) {
             req.into_future().await;
         }
-        unsafe { self.buf.as_slice().unwrap()[0] }
+        unsafe { self.buf.as_slice().expect("Data should exist on PE")[0] }
     }
     fn wait(mut self: Box<Self>) -> Self::Output {
         for req in self.reqs.drain(0..) {
             req.get();
         }
-        unsafe { self.buf.as_slice().unwrap()[0] }
+        unsafe { self.buf.as_slice().expect("Data should exist on PE")[0] }
     }
 }
 
@@ -338,7 +338,7 @@ impl<T: Dist> TeamFrom<&T> for LamellarArrayRdmaInput<T> {
     fn team_from(val: &T, team: &Pin<Arc<LamellarTeamRT>>) -> Self {
         let buf: OneSidedMemoryRegion<T> = team.alloc_one_sided_mem_region(1);
         unsafe {
-            buf.as_mut_slice().unwrap()[0] = val.clone();
+            buf.as_mut_slice().expect("Data should exist on PE")[0] = val.clone();
         }
         LamellarArrayRdmaInput::LocalMemRegion(buf)
     }
@@ -349,7 +349,7 @@ impl<T: Dist> TeamFrom<T> for LamellarArrayRdmaInput<T> {
     fn team_from(val: T, team: &Pin<Arc<LamellarTeamRT>>) -> Self {
         let buf: OneSidedMemoryRegion<T> = team.alloc_one_sided_mem_region(1);
         unsafe {
-            buf.as_mut_slice().unwrap()[0] = val;
+            buf.as_mut_slice().expect("Data should exist on PE")[0] = val;
         }
         LamellarArrayRdmaInput::LocalMemRegion(buf)
     }
@@ -360,7 +360,7 @@ impl<T: Dist> TeamFrom<Vec<T>> for LamellarArrayRdmaInput<T> {
     fn team_from(vals: Vec<T>, team: &Pin<Arc<LamellarTeamRT>>) -> Self {
         let buf: OneSidedMemoryRegion<T> = team.alloc_one_sided_mem_region(vals.len());
         unsafe {
-            std::ptr::copy_nonoverlapping(vals.as_ptr(), buf.as_mut_ptr().unwrap(), vals.len());
+            std::ptr::copy_nonoverlapping(vals.as_ptr(), buf.as_mut_ptr().expect("Data should exist on PE"), vals.len());
         }
         LamellarArrayRdmaInput::LocalMemRegion(buf)
     }
@@ -370,7 +370,7 @@ impl<T: Dist> TeamFrom<&Vec<T>> for LamellarArrayRdmaInput<T> {
     fn team_from(vals: &Vec<T>, team: &Pin<Arc<LamellarTeamRT>>) -> Self {
         let buf: OneSidedMemoryRegion<T> = team.alloc_one_sided_mem_region(vals.len());
         unsafe {
-            std::ptr::copy_nonoverlapping(vals.as_ptr(), buf.as_mut_ptr().unwrap(), vals.len());
+            std::ptr::copy_nonoverlapping(vals.as_ptr(), buf.as_mut_ptr().expect("Data should exist on PE"), vals.len());
         }
         LamellarArrayRdmaInput::LocalMemRegion(buf)
     }

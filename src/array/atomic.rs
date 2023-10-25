@@ -679,7 +679,7 @@ impl<T: Dist> AtomicLocalData<T> {
     ///
     /// let local_data = array.local_data();
     ///
-    /// let first_local_val = local_data.get_mut(0).unwrap(); //local data length is 25
+    /// let first_local_val = local_data.get_mut(0).expect("data should exist on pe"); //local data length is 25
     ///```
     pub fn get_mut(&self, index: usize) -> Option<AtomicElement<T>> {
         self.array.get_element(index)

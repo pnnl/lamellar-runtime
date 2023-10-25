@@ -728,7 +728,7 @@ impl LamellarTeamRT {
 
         // println!("team addr {:x}",team.remote_ptr_addr);
         unsafe {
-            for e in team.dropped.as_mut_slice().unwrap().iter_mut() {
+            for e in team.dropped.as_mut_slice().expect("data should exist on pe").iter_mut() {
                 *e = 0;
             }
         }
@@ -906,7 +906,7 @@ impl LamellarTeamRT {
                 parent.lamellae.clone(),
                 AllocationType::Local,
             );
-            let temp_array_slice = unsafe { temp_array.as_mut_slice().unwrap() };
+            let temp_array_slice = unsafe { temp_array.as_mut_slice().expect("data should exist on pe") };
             for e in temp_array_slice.iter_mut() {
                 *e = 0;
             }
@@ -971,7 +971,7 @@ impl LamellarTeamRT {
                 _pin: PhantomPinned,
             };
             unsafe {
-                for e in team.dropped.as_mut_slice().unwrap().iter_mut() {
+                for e in team.dropped.as_mut_slice().expect("data should exist on pe").iter_mut() {
                     *e = 0;
                 }
             }
@@ -1016,13 +1016,13 @@ impl LamellarTeamRT {
 
         let mut s = Instant::now();
         let mut cnt = 0;
-        for pe in hash_buf.as_slice().unwrap() {
+        for pe in hash_buf.as_slice().expect("data should exist on pe") {
             while *pe == 0 {
                 std::thread::yield_now();
                 if s.elapsed().as_secs_f64() > *crate::DEADLOCK_TIMEOUT {
                     let status = hash_buf
                         .as_slice()
-                        .unwrap()
+                        .expect("data should exist on pe")
                         .iter()
                         .enumerate()
                         .map(|(i, elem)| (i, *elem == hash))
@@ -1048,7 +1048,7 @@ impl LamellarTeamRT {
                     "[{:?}] ({:?})  hash: {:?}",
                     self.world_pe,
                     hash,
-                    hash_buf.as_slice().unwrap()
+                    hash_buf.as_slice().expect("data should exist on pe")
                 );
                 panic!("team creating mismatch! Ensure teams are constructed in same order on every pe");
             } else {
@@ -1063,7 +1063,7 @@ impl LamellarTeamRT {
     fn put_dropped(&self) {
         if self.panic.load(Ordering::SeqCst) == 0 {
             if let Some(parent) = &self.parent {
-                let temp_slice = unsafe { self.dropped.as_mut_slice().unwrap() };
+                let temp_slice = unsafe { self.dropped.as_mut_slice().expect("data should exist on pe") };
 
                 let my_index = parent
                     .arch
@@ -1082,7 +1082,7 @@ impl LamellarTeamRT {
                     }
                 }
             } else {
-                let temp_slice = unsafe { self.dropped.as_mut_slice().unwrap() };
+                let temp_slice = unsafe { self.dropped.as_mut_slice().expect("data should exist on pe") };
                 temp_slice[self.world_pe] = 1;
                 for world_pe in self.arch.team_iter() {
                     if world_pe != self.world_pe {
@@ -1103,7 +1103,7 @@ impl LamellarTeamRT {
     fn drop_barrier(&self) {
         let mut s = Instant::now();
         if self.panic.load(Ordering::SeqCst) == 0 {
-            for pe in self.dropped.as_slice().unwrap() {
+            for pe in self.dropped.as_slice().expect("data should exist on pe") {
                 while *pe != 1 {
                     // std::thread::yield_now();
                     if s.elapsed().as_secs_f64() > *crate::DEADLOCK_TIMEOUT {
@@ -1155,6 +1155,16 @@ impl LamellarTeamRT {
         println!("-------------------------------------------------");
     }
     // }
+
+    pub(crate) fn inc_counters(&self,cnt: usize) {
+        self.team_counters.add_send_req(cnt);
+        self.world_counters.add_send_req(cnt);
+    }
+
+    pub(crate) fn dec_counters(&self,cnt: usize) {
+        self.team_counters.outstanding_reqs.fetch_sub(cnt,Ordering::SeqCst);
+        self.world_counters.outstanding_reqs.fetch_sub(cnt,Ordering::SeqCst);
+    }
 
     // // #[prof]
     #[tracing::instrument(skip_all)]

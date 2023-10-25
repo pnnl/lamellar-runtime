@@ -97,7 +97,7 @@ impl<T: Dist> UnsafeArray<T> {
                                     buf.sub_region(buf_index..(buf_index + len))
                                         .to_base::<u8>()
                                         .as_slice()
-                                        .unwrap()
+                                        .expect("array data to exist on PE")
                                         .to_vec()
                                 },
                             };
@@ -219,7 +219,7 @@ impl<T: Dist> UnsafeArray<T> {
                                     .to_base::<u8>()
                                     .to_base::<u8>()
                                     .as_slice()
-                                    .unwrap()
+                                    .expect("array data to exist on PE")
                                     .to_vec()
                             },
                         };
@@ -809,8 +809,14 @@ impl UnsafeArrayInner {
         len: usize,
     ) -> Option<(&mut [u8], Box<dyn Iterator<Item = usize>>)> {
         let my_pe = self.data.my_pe;
-        let start_pe = self.pe_for_dist_index(index).unwrap();
-        let end_pe = self.pe_for_dist_index(index + len - 1).unwrap();
+        let start_pe = match self.pe_for_dist_index(index){
+            Some(pe) => pe,
+            None => panic!("Index: {index} out of bounds for array of len {:?}",self.size),
+        };
+        let end_pe = match  self.pe_for_dist_index(index + len - 1){
+            Some(pe) => pe,
+            None => panic!("Index: {:?} out of bounds for array of len {:?}",index + len - 1,self.size),
+        };
 
         // println!("i {:?} len {:?} spe {:?} epe {:?}  ",index,len,start_pe,end_pe);
         match self.distribution {
@@ -820,7 +826,7 @@ impl UnsafeArrayInner {
                     //starts and ends before this pe, or starts (and ends) after this pe... no local elements
                     return None;
                 }
-                let subarray_start_index = self.start_index_for_pe(my_pe).unwrap(); //passed the above if statement;
+                let subarray_start_index = self.start_index_for_pe(my_pe).expect("array data exists on PE"); //passed the above if statement;
                 let (start_index, rem_elem) = if my_pe == start_pe {
                     (index - subarray_start_index, len)
                 } else {
@@ -884,8 +890,14 @@ impl UnsafeArrayInner {
         index: usize,
         len: usize,
     ) -> Option<usize> {
-        let start_pe = self.pe_for_dist_index(index).unwrap();
-        let end_pe = self.pe_for_dist_index(index + len - 1).unwrap();
+        let start_pe = match self.pe_for_dist_index(index){
+            Some(pe) => pe,
+            None => panic!("Index: {index} out of bounds for array of len {:?}",self.size),
+        };
+        let end_pe = match  self.pe_for_dist_index(index + len - 1){
+            Some(pe) => pe,
+            None => panic!("Index: {:?} out of bounds for array of len {:?}",index + len - 1,self.size),
+        };
 
         // println!("i {:?} len {:?} pe {:?} spe {:?} epe {:?}  ",index,len,pe,start_pe,end_pe);
         match self.distribution {
@@ -895,7 +907,7 @@ impl UnsafeArrayInner {
                     //starts and ends before this pe, or starts (and ends) after this pe... no local elements
                     return None;
                 }
-                let subarray_start_index = self.start_index_for_pe(pe).unwrap(); //passed the above if statement;
+                let subarray_start_index = self.start_index_for_pe(pe).expect("array data exists on PE"); //passed the above if statement;
                 let (start_index, rem_elem) = if pe == start_pe {
                     (index - subarray_start_index, len)
                 } else {
@@ -1039,7 +1051,7 @@ impl<T: Dist + 'static> LamellarAm for InitSmallGetAm<T> {
                     }
                 }
                 Distribution::Cyclic => {
-                    let buf_slice = self.buf.as_mut_slice().unwrap();
+                    let buf_slice = self.buf.as_mut_slice().expect("array data exists on PE");
                     let num_pes = reqs.len();
                     for (start_index, req) in reqs.drain(..).enumerate() {
                         let data = req.await;

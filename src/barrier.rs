@@ -46,13 +46,13 @@ impl Barrier {
                 let barrier2 = MemoryRegion::new(num_pes, lamellae.clone(), alloc.clone());
                 let barrier3 = MemoryRegion::new(3, lamellae.clone(), alloc);
                 unsafe {
-                    for elem in barrier1.as_mut_slice().unwrap() {
+                    for elem in barrier1.as_mut_slice().expect("Data should exist on PE") {
                         *elem = 0;
                     }
-                    for elem in barrier2.as_mut_slice().unwrap() {
+                    for elem in barrier2.as_mut_slice().expect("Data should exist on PE") {
                         *elem = 0;
                     }
-                    for elem in barrier3.as_mut_slice().unwrap() {
+                    for elem in barrier3.as_mut_slice().expect("Data should exist on PE") {
                         *elem = 0;
                     }
                 }
@@ -97,7 +97,7 @@ impl Barrier {
         barrier_buf: &MemoryRegion<usize>,
     ) -> Result<(), ()> {
         let mut s = Instant::now();
-        for pe in barrier_buf.as_slice().unwrap() {
+        for pe in barrier_buf.as_slice().expect("Data should exist on PE") {
             if self.panic.load(Ordering::SeqCst) != 0 {
                 return Err(());
             }
@@ -151,7 +151,7 @@ impl Barrier {
                         return;
                     }
                     barrier_id += 1;
-                    let barrier3_slice = unsafe { bufs.barrier3.as_mut_slice().unwrap() };
+                    let barrier3_slice = unsafe { bufs.barrier3.as_mut_slice().expect("Data should exist on PE") };
                     barrier3_slice[0] = barrier_id;
                     let barrier_slice = &[barrier_id];
                     if self

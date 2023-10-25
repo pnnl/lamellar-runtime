@@ -54,7 +54,7 @@ use std::ops::Deref;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, AtomicU8, AtomicUsize, Ordering};
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::{Instant};
 
 // use tracing::*;
 
@@ -918,7 +918,7 @@ impl<T: 'static> LamellarAM for DroppedWaitAM<T> {
                     wrapped.inner.as_ref().send_finished();
                 }
                 if timeout.elapsed().as_secs_f64() > *crate::DEADLOCK_TIMEOUT {
-                    let ref_cnts_slice = unsafe { std::slice::from_raw_parts_mut(wrapped.inner.as_ref().ref_cnt_addr as *mut usize, wrapped.inner.as_ref().num_pes) };
+                    let ref_cnts_slice = std::slice::from_raw_parts_mut(wrapped.inner.as_ref().ref_cnt_addr as *mut usize, wrapped.inner.as_ref().num_pes) ;
 
                     println!("[WARNING] - Potential deadlock detected when trying to free distributed object.\n\
                         The runtime is currently waiting for all remaining references to this distributed object to be dropped.\n\
@@ -991,7 +991,7 @@ impl<T: 'static> LamellarAM for DroppedWaitAM<T> {
                     wrapped.inner.as_ref().send_finished();
                 }
                 if timeout.elapsed().as_secs_f64() > *crate::DEADLOCK_TIMEOUT {
-                    let ref_cnts_slice = unsafe { std::slice::from_raw_parts_mut(wrapped.inner.as_ref().ref_cnt_addr as *mut usize, wrapped.inner.as_ref().num_pes) };
+                    let ref_cnts_slice =  std::slice::from_raw_parts_mut(wrapped.inner.as_ref().ref_cnt_addr as *mut usize, wrapped.inner.as_ref().num_pes) ;
 
                     println!("[WARNING] --- Potential deadlock detected when trying to free distributed object.\n\
                         The runtime is currently waiting for all remaining references to this distributed object to be dropped.\n\

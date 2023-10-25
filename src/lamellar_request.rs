@@ -197,7 +197,7 @@ impl<T: AmDist> LamellarRequest for LamellarRequestHandle<T> {
         while !self.inner.ready.load(Ordering::SeqCst) {
             async_std::task::yield_now().await;
         }
-        self.process_result(self.inner.data.replace(None).unwrap())
+        self.process_result(self.inner.data.replace(None).expect("result should exist"))
     }
     #[tracing::instrument(skip_all)]
     fn get(&self) -> T {
@@ -205,7 +205,7 @@ impl<T: AmDist> LamellarRequest for LamellarRequestHandle<T> {
             // std::thread::yield_now();
             self.inner.scheduler.exec_task();
         }
-        self.process_result(self.inner.data.replace(None).unwrap())
+        self.process_result(self.inner.data.replace(None).expect("result should exist"))
     }
 }
 
@@ -319,7 +319,7 @@ impl<T: AmDist> LamellarMultiRequest for LamellarMultiRequestHandle<T> {
         let mut data = self.inner.data.lock();
         // println!("data len{:?}", data.len());
         for pe in 0..data.len() {
-            res.push(self.process_result(data.remove(&pe).unwrap()));
+            res.push(self.process_result(data.remove(&pe).expect("result should exist")));
         }
         res
     }
@@ -332,7 +332,7 @@ impl<T: AmDist> LamellarMultiRequest for LamellarMultiRequestHandle<T> {
         let mut res = vec![];
         let mut data = self.inner.data.lock();
         for pe in 0..data.len() {
-            res.push(self.process_result(data.remove(&pe).unwrap()));
+            res.push(self.process_result(data.remove(&pe).expect("result should exist")));
         }
         res
     }
@@ -421,7 +421,7 @@ impl<T: SyncSend + 'static> LamellarRequest for LamellarLocalRequestHandle<T> {
         while !*self.inner.ready.0.lock() {
             async_std::task::yield_now().await;
         }
-        self.process_result(self.inner.data.replace(None).unwrap())
+        self.process_result(self.inner.data.replace(None).expect("result should exist"))
     }
     #[tracing::instrument(skip_all)]
     fn get(&self) -> T {
@@ -432,6 +432,6 @@ impl<T: SyncSend + 'static> LamellarRequest for LamellarLocalRequestHandle<T> {
             // self.inner.ready.1.wait(&mut ready_lock);
             self.inner.scheduler.exec_task();
         }
-        self.process_result(self.inner.data.replace(None).unwrap())
+        self.process_result(self.inner.data.replace(None).expect("result should exist"))
     }
 }

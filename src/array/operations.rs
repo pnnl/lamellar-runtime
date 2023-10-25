@@ -439,7 +439,7 @@ impl<'a, T: Dist> OpInput<'a, T> for &'a [T] {
                 Err(_) => {
                     match std::env::var("LAMELLAR_THREADS") {
                         Ok(n) => std::cmp::max(1, (n.parse::<usize>().unwrap()) / 4),
-                        Err(_) => 4, //+ 1 to account for main thread
+                        Err(_) => 4,
                     }
                 }
             }
@@ -495,7 +495,7 @@ impl<'a, T: Dist> OpInput<'a, T> for &'a mut [T] {
                 Ok(n) => n.parse::<usize>().unwrap(),
                 Err(_) => {
                     match std::env::var("LAMELLAR_THREADS") {
-                        Ok(n) => std::cmp::max(1, (n.parse::<usize>().unwrap()) / 4), //+ 1 to account for main thread
+                        Ok(n) => std::cmp::max(1, (n.parse::<usize>().unwrap()) / 4),
                         Err(_) => 4, //+ 1 to account for main thread
                     }
                 }
@@ -567,7 +567,7 @@ impl<'a, T: Dist> OpInput<'a, T> for Vec<T> {
                 Ok(n) => n.parse::<usize>().unwrap(),
                 Err(_) => {
                     match std::env::var("LAMELLAR_THREADS") {
-                        Ok(n) => std::cmp::max(1, (n.parse::<usize>().unwrap()) / 4), //+ 1 to account for main thread
+                        Ok(n) => std::cmp::max(1, (n.parse::<usize>().unwrap()) / 4), 
                         Err(_) => 4, //+ 1 to account for main thread
                     }
                 }
@@ -728,7 +728,7 @@ impl<'a, T: Dist> OpInput<'a, T> for &'a GlobalLockLocalData<'_, T> {
                     Ok(n) => n.parse::<usize>().unwrap(),
                     Err(_) => {
                         match std::env::var("LAMELLAR_THREADS") {
-                            Ok(n) => std::cmp::max(1, (n.parse::<usize>().unwrap() + 1) / 4), //+ 1 to account for main thread
+                            Ok(n) => std::cmp::max(1, (n.parse::<usize>().unwrap()) / 4), //+ 1 to account for main thread
                             Err(_) => 4, //+ 1 to account for main thread
                         }
                     }
@@ -803,7 +803,7 @@ impl<'a, T: Dist + ElementOps> OpInput<'a, T> for &GenericAtomicLocalData<T> {
                     Ok(n) => n.parse::<usize>().unwrap(),
                     Err(_) => {
                         match std::env::var("LAMELLAR_THREADS") {
-                            Ok(n) => std::cmp::max(1, (n.parse::<usize>().unwrap() + 1) / 4), //+ 1 to account for main thread
+                            Ok(n) => std::cmp::max(1, (n.parse::<usize>().unwrap()) / 4), 
                             Err(_) => 4, //+ 1 to account for main thread
                         }
                     }
@@ -850,7 +850,7 @@ impl<'a, T: Dist + ElementOps> OpInput<'a, T> for &NativeAtomicLocalData<T> {
                     Ok(n) => n.parse::<usize>().unwrap(),
                     Err(_) => {
                         match std::env::var("LAMELLAR_THREADS") {
-                            Ok(n) => std::cmp::max(1, (n.parse::<usize>().unwrap() + 1) / 4), //+ 1 to account for main thread
+                            Ok(n) => std::cmp::max(1, (n.parse::<usize>().unwrap()) / 4), 
                             Err(_) => 4, //+ 1 to account for main thread
                         }
                     }

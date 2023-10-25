@@ -18,7 +18,7 @@ use std::ops::Bound;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::{Instant};
 
 pub(crate) struct UnsafeArrayData {
     mem_region: MemoryRegion<u8>,
@@ -92,7 +92,7 @@ pub(crate) struct UnsafeArrayInner {
     orig_elem_per_pe: f64,
     elem_size: usize, //for bytes array will be size of T, for T array will be 1
     offset: usize,    //relative to size of T
-    size: usize,      //relative to size of T
+    pub(crate) size: usize,      //relative to size of T
 }
 
 #[lamellar_impl::AmLocalDataRT(Clone, Debug)]
@@ -154,7 +154,7 @@ impl<T: Dist + ArrayOps + 'static> UnsafeArray<T> {
             AllocationType::Global,
         );
         unsafe {
-            for elem in rmr.as_mut_slice().unwrap() {
+            for elem in rmr.as_mut_slice().expect("data should exist on pe") {
                 *elem = 0;
             }
         }
@@ -1261,8 +1261,14 @@ impl UnsafeArrayInner {
             }
             Distribution::Cyclic => {
                 let num_pes = self.data.num_pes;
-                let start_pe = self.pe_for_dist_index(0).unwrap();
-                let end_pe = self.pe_for_dist_index(self.size - 1).unwrap();
+                let start_pe = match self.pe_for_dist_index(0){
+                    Some(i) => i,
+                    None => panic!("index 0 out of bounds for array of length {:?}",self.size)
+                };
+                let end_pe = match self.pe_for_dist_index(self.size - 1){
+                    Some(i) => i,
+                    None => panic!("index {:?} out of bounds for array of length {:?}",self.size-1,self.size)
+                };
 
                 let mut num_elems = self.size / num_pes;
                 // println!("{:?} {:?} {:?} {:?}",num_pes,start_pe,end_pe,num_elems);
@@ -1379,7 +1385,7 @@ impl UnsafeArrayInner {
         self.start_index_for_pe(pe)?;
         match self.distribution {
             Distribution::Block => {
-                if pe == self.pe_for_dist_index(self.size - 1).unwrap() {
+                if pe == self.pe_for_dist_index(self.size - 1)? {
                     Some(self.size - 1)
                 } else {
                     Some(self.start_index_for_pe(pe + 1)? - 1)
@@ -1417,7 +1423,10 @@ impl UnsafeArrayInner {
             Distribution::Cyclic => {
                 let num_pes = self.data.num_pes;
                 if let Some(start_pe) = self.pe_for_dist_index(0) {
-                    let end_pe = self.pe_for_dist_index(self.size - 1).unwrap(); //inclusive
+                    let end_pe = match self.pe_for_dist_index(self.size - 1){
+                        Some(i) => i,
+                        None => panic!("index {:?} out of bounds for array of length {:?}",self.size-1,self.size)
+                    }; //inclusive
                     let mut num_elems = self.size / num_pes;
                     if self.size % num_pes != 0 {
                         //we have left over elements
@@ -1457,7 +1466,7 @@ impl UnsafeArrayInner {
         let num_elems_local = self.num_elems_local();
         match self.distribution {
             Distribution::Block => {
-                let start_pe = self.pe_for_dist_index(0).unwrap(); //index is relative to inner
+                let start_pe = self.pe_for_dist_index(0).expect("array len should be greater than 0"); //index is relative to inner
                                                                    // let end_pe = self.pe_for_dist_index(len-1).unwrap();
                                                                    // println!("spe {:?} epe {:?}",start_pe,end_pe);
                 let start_index = if my_pe == start_pe {
@@ -1498,7 +1507,7 @@ impl UnsafeArrayInner {
         // let num_elems_local = self.num_elems_local();
         match self.distribution {
             Distribution::Block => {
-                let start_pe = self.pe_for_dist_index(0).unwrap(); //index is relative to inner
+                let start_pe = self.pe_for_dist_index(0).expect("array len should be greater than 0"); //index is relative to inner
                                                                    // let end_pe = self.pe_for_dist_index(len-1).unwrap();
                                                                    // println!("spe {:?} epe {:?}",start_pe,end_pe);
                 let start_index = if my_pe == start_pe {

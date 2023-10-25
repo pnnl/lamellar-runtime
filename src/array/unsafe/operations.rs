@@ -127,7 +127,7 @@ crate::inventory::collect!(multi_val_single_idx_ops);
 
 impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
     pub(crate) fn dummy_val(&self) -> T {
-        let slice = self.inner.data.mem_region.as_slice().unwrap();
+        let slice = self.inner.data.mem_region.as_slice().expect("array data should be on PE");
         unsafe {
             std::slice::from_raw_parts(
                 slice.as_ptr() as *const T,
@@ -383,6 +383,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
             let byte_array2 = byte_array.clone();
             let len = index.len();
             self.inner.data.array_counters.add_send_req(1);
+           self.inner.data.team.inc_counters(1);
             // println!("num_reqs {:?}",num_reqs);
             self.inner
                 .data
@@ -397,7 +398,10 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
                     // let mut res_index = 0;
                     for (ii, idx) in index.iter().enumerate() {
                         let j = ii + start_i;
-                        let (pe, local_index) = self.pe_and_offset_for_global_index(idx).unwrap();
+                        let (pe, local_index) = match self.pe_and_offset_for_global_index(idx){
+                            Some((pe,local_index)) => (pe,local_index),
+                            None => panic!("Index: {idx} out of bounds for array of len: {:?}", self.inner.size),
+                        };
                         buffs[pe].extend_from_slice(index_size.as_bytes(&local_index));
                         res_buffs[pe].push(j);
                         if buffs[pe].len() >= num_per_batch {
@@ -461,6 +465,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
                         .array_counters
                         .outstanding_reqs
                         .fetch_sub(1, Ordering::SeqCst);
+                   self.inner.data.team.dec_counters(1);
                 });
             start_i += len;
         }
@@ -495,7 +500,10 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         // let num_pes = self.inner.data.team.num_pes();
         let cnt = Arc::new(AtomicUsize::new(0));
         let futures = Arc::new(Mutex::new(Vec::new()));
-        let (pe, local_index) = self.pe_and_offset_for_global_index(index).unwrap();
+        let (pe, local_index) = match self.pe_and_offset_for_global_index(index){
+            Some((pe,local_index)) => (pe,local_index),
+            None => panic!("Index: {index} out of bounds for array of len: {:?}", self.inner.size),
+        };
         let num_reqs = vals.len();
         // println!("num_reqs {:?}",num_reqs);
         let mut start_i = 0;
@@ -505,6 +513,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
             let byte_array2 = byte_array.clone();
             let len = val.len();
             self.inner.data.array_counters.add_send_req(1);
+           self.inner.data.team.inc_counters(1);
             self.inner
                 .data
                 .team
@@ -550,6 +559,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
                         .array_counters
                         .outstanding_reqs
                         .fetch_sub(1, Ordering::SeqCst);
+                   self.inner.data.team.dec_counters(1);
                 });
             start_i += len;
         }
@@ -598,6 +608,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
             let byte_array2 = byte_array.clone();
             let len = index.len();
             self.inner.data.array_counters.add_send_req(1);
+           self.inner.data.team.inc_counters(1);
             // println!("trying to submit immediate task");
             self.inner
                 .data
@@ -612,7 +623,10 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
                     // let mut res_index = 0;
                     for (ii, (idx, val)) in index.iter().zip(val.iter()).enumerate() {
                         let j = ii + start_i;
-                        let (pe, local_index) = self.pe_and_offset_for_global_index(idx).unwrap();
+                        let (pe, local_index) = match self.pe_and_offset_for_global_index(idx){
+                            Some((pe,local_index)) => (pe,local_index),
+                            None => panic!("Index: {idx} out of bounds for array of len: {:?}", self.inner.size),
+                        };
                         match index_size {
                             IndexSize::U8 => buffs[pe].extend_from_slice(
                                 IdxVal {
@@ -710,6 +724,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
                         .array_counters
                         .outstanding_reqs
                         .fetch_sub(1, Ordering::SeqCst);
+                   self.inner.data.team.dec_counters(1);
                 });
             start_i += len;
         }
@@ -731,7 +746,10 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         op: ArrayOpCmd<T>,
         ret: BatchReturnType,
     ) -> Pin<Box<dyn Future<Output = Vec<(R, Vec<usize>)>> + Send>> {
-        let (pe, local_index) = self.pe_and_offset_for_global_index(index).unwrap();
+        let (pe, local_index) = match self.pe_and_offset_for_global_index(index){
+            Some((pe,local_index)) => (pe,local_index),
+            None => panic!("Index: {index} out of bounds for array of len: {:?}", self.inner.size),
+        };
         let mut buff = Vec::new();
         buff.extend_from_slice(
             IdxVal {

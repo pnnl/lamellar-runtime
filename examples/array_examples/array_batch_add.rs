@@ -42,6 +42,7 @@ fn main() {
         if my_pe == 0 {
             println!("{:?}", timer.elapsed());
         }
+        //check that world wait all works
         world.wait_all();
         world.barrier();
         if my_pe == 0 {
@@ -49,6 +50,21 @@ fn main() {
         }
         println!("{:?}", world.block_on(array.sum()));
         world.barrier();
+
+        array.barrier();
+        let mut timer = std::time::Instant::now();
+        array.batch_add(indices.clone(), 1);
+        if my_pe == 0 {
+            println!("{:?}", timer.elapsed());
+        }
+        //check that array wait all works
+        array.wait_all();
+        array.barrier();
+        if my_pe == 0 {
+            println!("{:?}", timer.elapsed());
+        }
+        println!("{:?}", world.block_on(array.sum()));
+        array.barrier();
         timer = std::time::Instant::now();
         let mut bufs = vec![Vec::with_capacity(num_per_batch); num_pes];
         for i in indices.iter() {
