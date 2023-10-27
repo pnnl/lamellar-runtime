@@ -98,7 +98,7 @@ where
     I: IndexedDistributedIterator,
 {
     fn iterator_index(&self, index: usize) -> Option<usize> {
-        let Some(i_index) = self.iter.iterator_index(index+self.skip_index) else {
+        let Some(i_index) = self.iter.iterator_index(index + self.skip_index) else {
             // println!("{:?} \t Skip iterator index  {index} {} None",std::thread::current().id(),self.skip_index);
             return None;
         };

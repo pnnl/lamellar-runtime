@@ -2,6 +2,7 @@ use crate::active_messaging::*;
 use crate::barrier::Barrier;
 use crate::lamellae::{AllocationType, Lamellae, LamellaeComm, LamellaeRDMA};
 use crate::lamellar_arch::{GlobalArch, IdError, LamellarArch, LamellarArchEnum, LamellarArchRT};
+use crate::lamellar_env::LamellarEnv;
 use crate::lamellar_request::*;
 use crate::lamellar_world::LamellarWorld;
 use crate::memregion::{
@@ -101,6 +102,7 @@ impl LamellarTeam {
         //     println!{"new lam team: {:?} {:?} {:?} {:?}",&team_ptr,team_ptr, (team.remote_ptr_addr as *mut (*const LamellarTeamRT)).as_ref(), (*(team.remote_ptr_addr as *mut (*const LamellarTeamRT))).as_ref()};
 
         // }
+        // team.print_cnt();
         let panic = team.panic.clone();
         let the_team = Arc::new(LamellarTeam {
             world,
@@ -109,6 +111,7 @@ impl LamellarTeam {
             am_team,
             panic,
         });
+        // the_team.print_cnt();
         // unsafe{
         //     let pinned_team = Pin::into_inner_unchecked(the_team.team.clone()).clone();
         //     let team_ptr = Arc::into_raw(pinned_team);
@@ -116,6 +119,10 @@ impl LamellarTeam {
 
         // }
         the_team
+    }
+
+    pub fn print_cnt(&self) {
+        self.team.print_cnt();
     }
 
     #[doc(alias("One-sided", "onesided"))]
@@ -181,7 +188,7 @@ impl LamellarTeam {
         self.team.arch.num_pes()
     }
 
-    #[doc(alias("One-sided", "onesided"))]
+    // #[doc(alias("One-sided", "onesided"))]
     /// Returns nummber of threads on this PE (including the main thread)
     ///
     /// # One-sided Operation
@@ -205,7 +212,7 @@ impl LamellarTeam {
     /// assert_eq!((num_pes as f64 / 2.0).ceil() as usize,even_pes.num_pes());
     ///```
     #[tracing::instrument(skip_all)]
-    pub fn num_threads(&self) -> usize {
+    pub fn num_threads_per_pe(&self) -> usize {
         self.team.scheduler.num_workers() + 1 // plus one for the main thread
     }
 
@@ -395,6 +402,33 @@ impl LamellarTeam {
         F: RemoteActiveMessage + LamellarAM + crate::Serialize + 'static,
     {
         self.team.exec_am_all_tg(am, None).into_future()
+    }
+}
+
+impl LamellarEnv for Arc<LamellarTeam> {
+    fn my_pe(&self) -> usize {
+        self.team
+            .arch
+            .team_pe(self.team.world_pe)
+            .expect("PE is apart of team")
+    }
+    fn num_pes(&self) -> usize {
+        self.team.num_pes()
+    }
+    fn num_threads_per_pe(&self) -> usize {
+        self.team.num_threads()
+    }
+    fn world(&self) -> Arc<LamellarTeam> {
+        println!("LamellarTeam world");
+        if let Some(world) = &self.world {
+            world.clone()
+        } else {
+            self.clone()
+        }
+    }
+    fn team(&self) -> Arc<LamellarTeam> {
+        println!("LamellarTeam team");
+        self.clone()
     }
 }
 
@@ -652,6 +686,45 @@ pub struct LamellarTeamRT {
     _pin: std::marker::PhantomPinned,
 }
 
+impl LamellarEnv for Pin<Arc<LamellarTeamRT>> {
+    fn my_pe(&self) -> usize {
+        self.arch
+            .team_pe(self.world_pe)
+            .expect("PE is apart of team")
+    }
+    fn num_pes(&self) -> usize {
+        self.num_pes
+    }
+    fn num_threads_per_pe(&self) -> usize {
+        self.num_threads()
+    }
+    fn world(&self) -> Arc<LamellarTeam> {
+        // println!("LamellarTeamRT world");
+        // self.print_cnt();
+        let world = if let Some(world) = self.world.clone() {
+            world
+        } else {
+            // self.print_cnt();
+            self.clone()
+        };
+        let world = LamellarTeam::new(None, world, false);
+        // self.print_cnt();
+        world
+    }
+    fn team(&self) -> Arc<LamellarTeam> {
+        // println!("LamellarTeamRT team");
+        // self.print_cnt();
+        let world = if self.world.is_some() {
+            Some(self.world())
+        } else {
+            None
+        };
+        let team = LamellarTeam::new(world, self.clone(), false);
+        // self.print_cnt();
+        team
+    }
+}
+
 impl std::fmt::Debug for LamellarTeamRT {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
@@ -728,7 +801,12 @@ impl LamellarTeamRT {
 
         // println!("team addr {:x}",team.remote_ptr_addr);
         unsafe {
-            for e in team.dropped.as_mut_slice().expect("data should exist on pe").iter_mut() {
+            for e in team
+                .dropped
+                .as_mut_slice()
+                .expect("data should exist on pe")
+                .iter_mut()
+            {
                 *e = 0;
             }
         }
@@ -857,6 +935,12 @@ impl LamellarTeamRT {
         //     self.team_counters.send_req_cnt.load(Ordering::SeqCst),
         //     self.team_counters.outstanding_reqs.load(Ordering::SeqCst),
         // );
+        let team_ptr = self.remote_ptr_addr as *mut *const LamellarTeamRT;
+        unsafe {
+            let arc_team = Arc::from_raw(*team_ptr);
+            // println!("arc_team: {:?}", Arc::strong_count(&arc_team));
+            Pin::new_unchecked(arc_team); //allows us to get rid of the extra reference created in new
+        }
         // println!("team destroyed")
     }
     #[allow(dead_code)]
@@ -906,7 +990,8 @@ impl LamellarTeamRT {
                 parent.lamellae.clone(),
                 AllocationType::Local,
             );
-            let temp_array_slice = unsafe { temp_array.as_mut_slice().expect("data should exist on pe") };
+            let temp_array_slice =
+                unsafe { temp_array.as_mut_slice().expect("data should exist on pe") };
             for e in temp_array_slice.iter_mut() {
                 *e = 0;
             }
@@ -971,7 +1056,12 @@ impl LamellarTeamRT {
                 _pin: PhantomPinned,
             };
             unsafe {
-                for e in team.dropped.as_mut_slice().expect("data should exist on pe").iter_mut() {
+                for e in team
+                    .dropped
+                    .as_mut_slice()
+                    .expect("data should exist on pe")
+                    .iter_mut()
+                {
                     *e = 0;
                 }
             }
@@ -1063,7 +1153,11 @@ impl LamellarTeamRT {
     fn put_dropped(&self) {
         if self.panic.load(Ordering::SeqCst) == 0 {
             if let Some(parent) = &self.parent {
-                let temp_slice = unsafe { self.dropped.as_mut_slice().expect("data should exist on pe") };
+                let temp_slice = unsafe {
+                    self.dropped
+                        .as_mut_slice()
+                        .expect("data should exist on pe")
+                };
 
                 let my_index = parent
                     .arch
@@ -1082,7 +1176,11 @@ impl LamellarTeamRT {
                     }
                 }
             } else {
-                let temp_slice = unsafe { self.dropped.as_mut_slice().expect("data should exist on pe") };
+                let temp_slice = unsafe {
+                    self.dropped
+                        .as_mut_slice()
+                        .expect("data should exist on pe")
+                };
                 temp_slice[self.world_pe] = 1;
                 for world_pe in self.arch.team_iter() {
                     if world_pe != self.world_pe {
@@ -1156,14 +1254,18 @@ impl LamellarTeamRT {
     }
     // }
 
-    pub(crate) fn inc_counters(&self,cnt: usize) {
+    pub(crate) fn inc_counters(&self, cnt: usize) {
         self.team_counters.add_send_req(cnt);
         self.world_counters.add_send_req(cnt);
     }
 
-    pub(crate) fn dec_counters(&self,cnt: usize) {
-        self.team_counters.outstanding_reqs.fetch_sub(cnt,Ordering::SeqCst);
-        self.world_counters.outstanding_reqs.fetch_sub(cnt,Ordering::SeqCst);
+    pub(crate) fn dec_counters(&self, cnt: usize) {
+        self.team_counters
+            .outstanding_reqs
+            .fetch_sub(cnt, Ordering::SeqCst);
+        self.world_counters
+            .outstanding_reqs
+            .fetch_sub(cnt, Ordering::SeqCst);
     }
 
     // // #[prof]
@@ -1661,6 +1763,11 @@ impl LamellarTeamRT {
         }
         lmr.expect("out of memory")
     }
+
+    pub(crate) fn print_cnt(self: &Pin<Arc<LamellarTeamRT>>) {
+        let team_rt = unsafe { Pin::into_inner_unchecked(self.clone()) };
+        println!("team_rt: {:?}", Arc::strong_count(&team_rt));
+    }
 }
 
 //#[prof]
@@ -1676,7 +1783,6 @@ impl Drop for LamellarTeamRT {
         //     Arc::strong_count(&self.world_counters)
         // );
         // println!("removing {:?} ", self.team_hash);
-        // self.teams.write().remove(&(self.remote_ptr_addr as u64));
         self.lamellae.free(self.remote_ptr_addr);
         // println!("LamellarTeamRT dropped {:?}", self.team_hash);
     }
@@ -1687,7 +1793,8 @@ impl Drop for LamellarTeam {
     #[tracing::instrument(skip_all)]
     fn drop(&mut self) {
         // println!("team handle dropping {:?}", self.team.team_hash);
-
+        // println!("arch: {:?}", Arc::strong_count(&self.team.arch));
+        // self.team.print_cnt();
         if self.panic.load(Ordering::SeqCst) == 0 {
             if !self.am_team {
                 //we only care about when the user handle gets dropped (not the team handles that are created for use in an active message)
@@ -1713,8 +1820,14 @@ impl Drop for LamellarTeam {
                     }
 
                     // println!("after drop barrier");
-                    // println!("removing {:?} ",self.team.id);
+                    // println!("removing {:?} ", self.team.id);
                     parent.sub_teams.write().remove(&self.team.id);
+                    let team_ptr = self.team.remote_ptr_addr as *mut *const LamellarTeamRT;
+                    unsafe {
+                        let arc_team = Arc::from_raw(*team_ptr);
+                        // println!("arc_team: {:?}", Arc::strong_count(&arc_team));
+                        Pin::new_unchecked(arc_team); //allows us to drop the inner team
+                    }
                 }
 
                 // else {
@@ -1730,12 +1843,7 @@ impl Drop for LamellarTeam {
                 //     Arc::strong_count(&self.team.world_counters)
                 // );
                 // println!("removing {:?} ", self.team.team_hash);
-                let team_ptr = self.team.remote_ptr_addr as *mut *const LamellarTeamRT;
-                unsafe {
-                    let arc_team = Arc::from_raw(*team_ptr);
-                    // println!("arc_team: {:?}", Arc::strong_count(&arc_team));
-                    Pin::new_unchecked(arc_team); //allows us to drop the inner team
-                }
+                // self.team.print_cnt();
             }
         } else {
             assert!(self.panic.load(Ordering::SeqCst) == 2);
@@ -1755,7 +1863,7 @@ impl Drop for LamellarTeam {
         // if let Some(world) = &self.world{
         //     println!("world: {:?}", Arc::strong_count(world));
         // }
-        // println!("team: {:?}",Arc::strong_count(&self.team));
+        // println!("team: {:?}", Arc::strong_count(&self.team));
         // for (k,tes"team handle dropped");
         // println!(
         //     "[{:?}] {:?} team handle dropped {:?} {:?}",

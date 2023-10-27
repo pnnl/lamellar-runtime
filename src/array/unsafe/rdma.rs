@@ -809,13 +809,20 @@ impl UnsafeArrayInner {
         len: usize,
     ) -> Option<(&mut [u8], Box<dyn Iterator<Item = usize>>)> {
         let my_pe = self.data.my_pe;
-        let start_pe = match self.pe_for_dist_index(index){
+        let start_pe = match self.pe_for_dist_index(index) {
             Some(pe) => pe,
-            None => panic!("Index: {index} out of bounds for array of len {:?}",self.size),
+            None => panic!(
+                "Index: {index} out of bounds for array of len {:?}",
+                self.size
+            ),
         };
-        let end_pe = match  self.pe_for_dist_index(index + len - 1){
+        let end_pe = match self.pe_for_dist_index(index + len - 1) {
             Some(pe) => pe,
-            None => panic!("Index: {:?} out of bounds for array of len {:?}",index + len - 1,self.size),
+            None => panic!(
+                "Index: {:?} out of bounds for array of len {:?}",
+                index + len - 1,
+                self.size
+            ),
         };
 
         // println!("i {:?} len {:?} spe {:?} epe {:?}  ",index,len,start_pe,end_pe);
@@ -826,7 +833,9 @@ impl UnsafeArrayInner {
                     //starts and ends before this pe, or starts (and ends) after this pe... no local elements
                     return None;
                 }
-                let subarray_start_index = self.start_index_for_pe(my_pe).expect("array data exists on PE"); //passed the above if statement;
+                let subarray_start_index = self
+                    .start_index_for_pe(my_pe)
+                    .expect("array data exists on PE"); //passed the above if statement;
                 let (start_index, rem_elem) = if my_pe == start_pe {
                     (index - subarray_start_index, len)
                 } else {
@@ -890,13 +899,20 @@ impl UnsafeArrayInner {
         index: usize,
         len: usize,
     ) -> Option<usize> {
-        let start_pe = match self.pe_for_dist_index(index){
+        let start_pe = match self.pe_for_dist_index(index) {
             Some(pe) => pe,
-            None => panic!("Index: {index} out of bounds for array of len {:?}",self.size),
+            None => panic!(
+                "Index: {index} out of bounds for array of len {:?}",
+                self.size
+            ),
         };
-        let end_pe = match  self.pe_for_dist_index(index + len - 1){
+        let end_pe = match self.pe_for_dist_index(index + len - 1) {
             Some(pe) => pe,
-            None => panic!("Index: {:?} out of bounds for array of len {:?}",index + len - 1,self.size),
+            None => panic!(
+                "Index: {:?} out of bounds for array of len {:?}",
+                index + len - 1,
+                self.size
+            ),
         };
 
         // println!("i {:?} len {:?} pe {:?} spe {:?} epe {:?}  ",index,len,pe,start_pe,end_pe);
@@ -907,7 +923,9 @@ impl UnsafeArrayInner {
                     //starts and ends before this pe, or starts (and ends) after this pe... no local elements
                     return None;
                 }
-                let subarray_start_index = self.start_index_for_pe(pe).expect("array data exists on PE"); //passed the above if statement;
+                let subarray_start_index = self
+                    .start_index_for_pe(pe)
+                    .expect("array data exists on PE"); //passed the above if statement;
                 let (start_index, rem_elem) = if pe == start_pe {
                     (index - subarray_start_index, len)
                 } else {

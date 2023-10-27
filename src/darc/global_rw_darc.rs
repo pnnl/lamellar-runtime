@@ -11,7 +11,7 @@ use crate::darc::local_rw_darc::LocalRwDarc;
 use crate::darc::{Darc, DarcInner, DarcMode, __NetworkDarc};
 use crate::lamellae::LamellaeRDMA;
 use crate::lamellar_team::{IntoLamellarTeam, LamellarTeamRT};
-use crate::IdError;
+use crate::{IdError, LamellarEnv, LamellarTeam};
 
 #[derive(serde::Serialize, serde::Deserialize, Debug)]
 enum LockType {
@@ -394,6 +394,24 @@ pub struct GlobalRwDarc<T: 'static> {
 
 unsafe impl<T: Send> Send for GlobalRwDarc<T> {}
 unsafe impl<T: Sync> Sync for GlobalRwDarc<T> {}
+
+impl<T> LamellarEnv for GlobalRwDarc<T> {
+    fn my_pe(&self) -> usize {
+        self.darc.my_pe()
+    }
+    fn num_pes(&self) -> usize {
+        self.darc.num_pes()
+    }
+    fn num_threads_per_pe(&self) -> usize {
+        self.darc.num_threads_per_pe()
+    }
+    fn world(&self) -> Arc<LamellarTeam> {
+        self.darc.world()
+    }
+    fn team(&self) -> Arc<LamellarTeam> {
+        self.darc.team().team()
+    }
+}
 
 impl<T> crate::active_messaging::DarcSerde for GlobalRwDarc<T> {
     fn ser(&self, num_pes: usize, darcs: &mut Vec<RemotePtr>) {

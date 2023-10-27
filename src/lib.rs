@@ -266,6 +266,8 @@ pub use darc::prelude::*;
 mod lamellae;
 mod lamellar_alloc;
 mod lamellar_arch;
+pub mod lamellar_env;
+pub use lamellar_env::LamellarEnv;
 mod lamellar_request;
 mod lamellar_task_group;
 mod lamellar_team;

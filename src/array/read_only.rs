@@ -528,15 +528,15 @@ impl<T: Dist> private::LamellarArrayPrivate<T> for ReadOnlyArray<T> {
 }
 
 impl<T: Dist> LamellarArray<T> for ReadOnlyArray<T> {
-    fn team(&self) -> Pin<Arc<LamellarTeamRT>> {
+    fn team_rt(&self) -> Pin<Arc<LamellarTeamRT>> {
         self.array.team_rt().clone()
     }
-    fn my_pe(&self) -> usize {
-        self.array.my_pe()
-    }
-    fn num_pes(&self) -> usize {
-        self.array.num_pes()
-    }
+    // fn my_pe(&self) -> usize {
+    //     LamellarArray::my_pe(&self.array)
+    // }
+    // fn num_pes(&self) -> usize {
+    //     LamellarArray::num_pes(&self.array)
+    // }
     fn len(&self) -> usize {
         self.array.len()
     }
@@ -566,6 +566,26 @@ impl<T: Dist> LamellarArray<T> for ReadOnlyArray<T> {
 
     fn last_global_index_for_pe(&self, pe: usize) -> Option<usize> {
         self.array.last_global_index_for_pe(pe)
+    }
+}
+
+impl<T: Dist> LamellarEnv for ReadOnlyArray<T> {
+    fn my_pe(&self) -> usize {
+        LamellarEnv::my_pe(&self.array)
+    }
+
+    fn num_pes(&self) -> usize {
+        LamellarEnv::num_pes(&self.array)
+    }
+
+    fn num_threads_per_pe(&self) -> usize {
+        self.array.team_rt().num_threads()
+    }
+    fn world(&self) -> Arc<LamellarTeam> {
+        self.array.team_rt().world()
+    }
+    fn team(&self) -> Arc<LamellarTeam> {
+        self.array.team_rt().team()
     }
 }
 

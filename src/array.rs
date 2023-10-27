@@ -63,6 +63,7 @@
 //! // export to Vec<usize>
 //! let vec = array.local_data().to_vec();
 //! ```
+use crate::lamellar_env::LamellarEnv;
 use crate::lamellar_request::LamellarRequest;
 use crate::memregion::{
     one_sided::OneSidedMemoryRegion,
@@ -71,7 +72,7 @@ use crate::memregion::{
     LamellarMemoryRegion,
     RegisteredMemoryRegion, // RemoteMemoryRegion,
 };
-use crate::{active_messaging::*, LamellarTeamRT};
+use crate::{active_messaging::*, LamellarTeam, LamellarTeamRT};
 // use crate::Darc;
 use async_trait::async_trait;
 use enum_dispatch::enum_dispatch;
@@ -80,7 +81,7 @@ use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::pin::Pin;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
 // use serde::de::DeserializeOwned;
@@ -360,7 +361,11 @@ impl<T: Dist> TeamFrom<Vec<T>> for LamellarArrayRdmaInput<T> {
     fn team_from(vals: Vec<T>, team: &Pin<Arc<LamellarTeamRT>>) -> Self {
         let buf: OneSidedMemoryRegion<T> = team.alloc_one_sided_mem_region(vals.len());
         unsafe {
-            std::ptr::copy_nonoverlapping(vals.as_ptr(), buf.as_mut_ptr().expect("Data should exist on PE"), vals.len());
+            std::ptr::copy_nonoverlapping(
+                vals.as_ptr(),
+                buf.as_mut_ptr().expect("Data should exist on PE"),
+                vals.len(),
+            );
         }
         LamellarArrayRdmaInput::LocalMemRegion(buf)
     }
@@ -370,7 +375,11 @@ impl<T: Dist> TeamFrom<&Vec<T>> for LamellarArrayRdmaInput<T> {
     fn team_from(vals: &Vec<T>, team: &Pin<Arc<LamellarTeamRT>>) -> Self {
         let buf: OneSidedMemoryRegion<T> = team.alloc_one_sided_mem_region(vals.len());
         unsafe {
-            std::ptr::copy_nonoverlapping(vals.as_ptr(), buf.as_mut_ptr().expect("Data should exist on PE"), vals.len());
+            std::ptr::copy_nonoverlapping(
+                vals.as_ptr(),
+                buf.as_mut_ptr().expect("Data should exist on PE"),
+                vals.len(),
+            );
         }
         LamellarArrayRdmaInput::LocalMemRegion(buf)
     }
@@ -703,39 +712,39 @@ pub trait LamellarArray<T: Dist>: private::LamellarArrayPrivate<T> {
     ///
     /// let a_team = array.team();
     ///```
-    fn team(&self) -> Pin<Arc<LamellarTeamRT>>; //todo turn this into Arc<LamellarTeam>
+    fn team_rt(&self) -> Pin<Arc<LamellarTeamRT>>; //todo turn this into Arc<LamellarTeam>
 
-    #[doc(alias("One-sided", "onesided"))]
-    /// Return the current PE of the calling thread
-    ///
-    /// # One-sided Operation
-    /// the result is returned only on the calling PE
-    ///
-    /// # Examples
-    ///```
-    /// use lamellar::array::prelude::*;
-    /// let world = LamellarWorldBuilder::new().build();
-    /// let array: LocalLockArray<usize> = LocalLockArray::new(&world,100,Distribution::Cyclic);
-    ///
-    /// assert_eq!(world.my_pe(),array.my_pe());
-    ///```
-    fn my_pe(&self) -> usize;
+    // #[doc(alias("One-sided", "onesided"))]
+    // /// Return the current PE of the calling thread
+    // ///
+    // /// # One-sided Operation
+    // /// the result is returned only on the calling PE
+    // ///
+    // /// # Examples
+    // ///```
+    // /// use lamellar::array::prelude::*;
+    // /// let world = LamellarWorldBuilder::new().build();
+    // /// let array: LocalLockArray<usize> = LocalLockArray::new(&world,100,Distribution::Cyclic);
+    // ///
+    // /// assert_eq!(world.my_pe(),array.my_pe());
+    // ///```
+    // fn my_pe(&self) -> usize;
 
-    #[doc(alias("One-sided", "onesided"))]
-    /// Return the number of PEs containing data for this array
-    ///
-    /// # One-sided Operation
-    /// the result is returned only on the calling PE
-    ///
-    /// # Examples
-    ///```
-    /// use lamellar::array::prelude::*;
-    /// let world = LamellarWorldBuilder::new().build();
-    /// let array: LocalLockArray<usize> = LocalLockArray::new(&world,100,Distribution::Cyclic);
-    ///
-    /// assert_eq!(world.num_pes(),array.num_pes());
-    ///```
-    fn num_pes(&self) -> usize;
+    // #[doc(alias("One-sided", "onesided"))]
+    // /// Return the number of PEs containing data for this array
+    // ///
+    // /// # One-sided Operation
+    // /// the result is returned only on the calling PE
+    // ///
+    // /// # Examples
+    // ///```
+    // /// use lamellar::array::prelude::*;
+    // /// let world = LamellarWorldBuilder::new().build();
+    // /// let array: LocalLockArray<usize> = LocalLockArray::new(&world,100,Distribution::Cyclic);
+    // ///
+    // /// assert_eq!(world.num_pes(),array.num_pes());
+    // ///```
+    // fn num_pes(&self) -> usize;
 
     #[doc(alias("One-sided", "onesided"))]
     /// Return the total number of elements in this array

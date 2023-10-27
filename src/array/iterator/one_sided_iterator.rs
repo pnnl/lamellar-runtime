@@ -329,7 +329,12 @@ impl<'a, T: Dist + 'static, A: LamellarArrayInternalGet<T>> OneSidedIter<'a, T, 
         // potentially unsafe depending on the array type (i.e. UnsafeArray - which requries unsafe to construct an iterator),
         // but safe with respect to the buf_0 as this is the only reference
         unsafe { array.internal_get(0, &buf_0).wait() };
-        let ptr = unsafe { SendNonNull(NonNull::new(buf_0.as_mut_ptr().expect("data should be local")).expect("ptr is non null")) };
+        let ptr = unsafe {
+            SendNonNull(
+                NonNull::new(buf_0.as_mut_ptr().expect("data should be local"))
+                    .expect("ptr is non null"),
+            )
+        };
         let iter = OneSidedIter {
             array: array,
             buf_0: buf_0,

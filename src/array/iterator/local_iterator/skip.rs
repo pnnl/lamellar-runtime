@@ -69,7 +69,7 @@ where
     I: IndexedLocalIterator,
 {
     fn iterator_index(&self, index: usize) -> Option<usize> {
-        let Some(i_index) = self.iter.iterator_index(index+self.skip_offset) else {
+        let Some(i_index) = self.iter.iterator_index(index + self.skip_offset) else {
             // println!("{:?} \t Skip iterator index  {index} {} None",std::thread::current().id(),self.skip_offset);
             return None;
         };

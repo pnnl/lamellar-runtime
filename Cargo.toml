@@ -435,6 +435,10 @@ path="examples/kernels/safe_parallel_blocked_array_gemm.rs"
 name="simple_ptp"
 path="examples/misc/simple_ptp.rs"
 
+[[example]]
+name="lamellar_env"
+path="examples/misc/lamellar_env.rs"
+
 
 ##------------ Darc examples ------------------##
 [[example]]

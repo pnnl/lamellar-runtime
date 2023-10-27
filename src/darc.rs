@@ -54,7 +54,7 @@ use std::ops::Deref;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, AtomicU8, AtomicUsize, Ordering};
 use std::sync::Arc;
-use std::time::{Instant};
+use std::time::Instant;
 
 // use tracing::*;
 
@@ -63,7 +63,7 @@ use crate::lamellae::{AllocationType, Backend, LamellaeComm, LamellaeRDMA};
 use crate::lamellar_team::{IntoLamellarTeam, LamellarTeamRT};
 use crate::lamellar_world::LAMELLAES;
 use crate::scheduler::SchedulerQueue;
-use crate::IdError;
+use crate::{IdError, LamellarEnv, LamellarTeam};
 
 #[doc(hidden)]
 pub mod prelude;
@@ -104,6 +104,7 @@ impl LamellarAM for FinishedAm {
     async fn exec() {
         // println!("in finished! {:?}",self);
         let inner = unsafe { &*(self.inner_addr as *mut DarcInner<()>) }; //we dont actually care about the "type" we wrap here, we just need access to the meta data for the darc
+                                                                          // inner.team().print_cnt();
         inner.dist_cnt.fetch_sub(self.cnt, Ordering::SeqCst);
     }
 }
@@ -181,6 +182,26 @@ pub struct Darc<T: 'static> {
 }
 unsafe impl<T: Send> Send for Darc<T> {}
 unsafe impl<T: Sync> Sync for Darc<T> {}
+
+impl<T> LamellarEnv for Darc<T> {
+    fn my_pe(&self) -> usize {
+        self.inner().my_pe
+    }
+    fn num_pes(&self) -> usize {
+        self.inner().num_pes
+    }
+    fn num_threads_per_pe(&self) -> usize {
+        self.inner().team().num_threads_per_pe()
+    }
+    fn world(&self) -> Arc<LamellarTeam> {
+        // println!("Darc world");
+        self.inner().team().world()
+    }
+    fn team(&self) -> Arc<LamellarTeam> {
+        // println!("Darc team");
+        self.inner().team().team()
+    }
+}
 
 impl<T: 'static> serde::Serialize for Darc<T> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
@@ -356,7 +377,9 @@ impl<T> DarcInner<T> {
                 self.send_finished();
             }
             if timer.elapsed().as_secs_f64() > *crate::DEADLOCK_TIMEOUT {
-                let ref_cnts_slice = unsafe { std::slice::from_raw_parts_mut(self.ref_cnt_addr as *mut usize, self.num_pes) };
+                let ref_cnts_slice = unsafe {
+                    std::slice::from_raw_parts_mut(self.ref_cnt_addr as *mut usize, self.num_pes)
+                };
                 println!("[WARNING] - Potential deadlock detected.\n\
                     The runtime is currently waiting for all remaining references to this distributed object to be dropped.\n\
                     This objected is likely a {:?} with {:?} remaining local references and {:?} remaining remote references, ref cnts by pe {ref_cnts_slice:?}\n\
@@ -384,7 +407,7 @@ impl<T> DarcInner<T> {
                 // );
                 timer = std::time::Instant::now();
             }
-           team.scheduler.exec_task();
+            team.scheduler.exec_task();
         }
         let mode_refs =
             unsafe { std::slice::from_raw_parts_mut(self.mode_addr as *mut u8, self.num_pes) };
@@ -407,7 +430,12 @@ impl<T> DarcInner<T> {
                     self.send_finished();
                 }
                 if timer.elapsed().as_secs_f64() > *crate::DEADLOCK_TIMEOUT {
-                    let ref_cnts_slice = unsafe { std::slice::from_raw_parts_mut(self.ref_cnt_addr as *mut usize, self.num_pes) };
+                    let ref_cnts_slice = unsafe {
+                        std::slice::from_raw_parts_mut(
+                            self.ref_cnt_addr as *mut usize,
+                            self.num_pes,
+                        )
+                    };
                     println!("[WARNING] -- Potential deadlock detected.\n\
                     The runtime is currently waiting for all remaining references to this distributed object to be dropped.\n\
                     This objected is likely a {:?} with {:?} remaining local references and {:?} remaining remote references, ref cnts by pe {ref_cnts_slice:?}\n\
@@ -436,7 +464,9 @@ impl<T> DarcInner<T> {
                 self.send_finished();
             }
             if timer.elapsed().as_secs_f64() > *crate::DEADLOCK_TIMEOUT {
-                let ref_cnts_slice = unsafe { std::slice::from_raw_parts_mut(self.ref_cnt_addr as *mut usize, self.num_pes) };
+                let ref_cnts_slice = unsafe {
+                    std::slice::from_raw_parts_mut(self.ref_cnt_addr as *mut usize, self.num_pes)
+                };
                 println!("[WARNING] --- Potential deadlock detected.\n\
                     The runtime is currently waiting for all remaining references to this distributed object to be dropped.\n\
                     This objected is likely a {:?} with {:?} remaining local references and {:?} remaining remote references, ref cnts by pe {ref_cnts_slice:?}\n\
@@ -633,10 +663,12 @@ impl<T> Darc<T> {
         // println!("creating new darc after barrier");
         let addr = team_rt.lamellae.alloc(size, alloc).expect("out of memory");
         // let temp_team = team_rt.clone();
+        // team_rt.print_cnt();
         let team_ptr = unsafe {
             let pinned_team = Pin::into_inner_unchecked(team_rt.clone());
             Arc::into_raw(pinned_team)
         };
+        // team_rt.print_cnt();
         let am_counters = Arc::new(AMCounters::new());
         let am_counters_ptr = Arc::into_raw(am_counters);
         let darc_temp = DarcInner {
@@ -669,6 +701,7 @@ impl<T> Darc<T> {
         // println!("created new darc");
         // d.print();
         team_rt.barrier();
+        // team_rt.print_cnt();
         Ok(d)
     }
 
@@ -805,6 +838,7 @@ macro_rules! launch_drop {
     ($mode:ty, $inner:ident, $inner_addr:expr) => {
         // println!("launching drop task as {}", stringify!($mode));
         let team = $inner.team();
+        // team.print_cnt();
         team.exec_am_local(DroppedWaitAM {
             inner_addr: $inner_addr as *const u8 as usize,
             mode_addr: $inner.mode_addr,
@@ -918,7 +952,10 @@ impl<T: 'static> LamellarAM for DroppedWaitAM<T> {
                     wrapped.inner.as_ref().send_finished();
                 }
                 if timeout.elapsed().as_secs_f64() > *crate::DEADLOCK_TIMEOUT {
-                    let ref_cnts_slice = std::slice::from_raw_parts_mut(wrapped.inner.as_ref().ref_cnt_addr as *mut usize, wrapped.inner.as_ref().num_pes) ;
+                    let ref_cnts_slice = std::slice::from_raw_parts_mut(
+                        wrapped.inner.as_ref().ref_cnt_addr as *mut usize,
+                        wrapped.inner.as_ref().num_pes,
+                    );
 
                     println!("[WARNING] - Potential deadlock detected when trying to free distributed object.\n\
                         The runtime is currently waiting for all remaining references to this distributed object to be dropped.\n\
@@ -957,7 +994,12 @@ impl<T: 'static> LamellarAM for DroppedWaitAM<T> {
                     }
                 }
                 if timeout.elapsed().as_secs_f64() > *crate::DEADLOCK_TIMEOUT {
-                    let ref_cnts_slice = unsafe { std::slice::from_raw_parts_mut(wrapped.inner.as_ref().ref_cnt_addr as *mut usize, wrapped.inner.as_ref().num_pes) };
+                    let ref_cnts_slice = unsafe {
+                        std::slice::from_raw_parts_mut(
+                            wrapped.inner.as_ref().ref_cnt_addr as *mut usize,
+                            wrapped.inner.as_ref().num_pes,
+                        )
+                    };
 
                     println!("[WARNING] -- Potential deadlock detected when trying to free distributed object.\n\
                         The runtime is currently waiting for all remaining references to this distributed object to be dropped.\n\
@@ -991,7 +1033,10 @@ impl<T: 'static> LamellarAM for DroppedWaitAM<T> {
                     wrapped.inner.as_ref().send_finished();
                 }
                 if timeout.elapsed().as_secs_f64() > *crate::DEADLOCK_TIMEOUT {
-                    let ref_cnts_slice =  std::slice::from_raw_parts_mut(wrapped.inner.as_ref().ref_cnt_addr as *mut usize, wrapped.inner.as_ref().num_pes) ;
+                    let ref_cnts_slice = std::slice::from_raw_parts_mut(
+                        wrapped.inner.as_ref().ref_cnt_addr as *mut usize,
+                        wrapped.inner.as_ref().num_pes,
+                    );
 
                     println!("[WARNING] --- Potential deadlock detected when trying to free distributed object.\n\
                         The runtime is currently waiting for all remaining references to this distributed object to be dropped.\n\
@@ -1024,6 +1069,7 @@ impl<T: 'static> LamellarAM for DroppedWaitAM<T> {
                 async_std::task::yield_now().await;
             }
             let _team = Arc::from_raw(wrapped.inner.as_ref().team); //return to rust to drop appropriately
+                                                                    // println!("team cnt: {:?}", Arc::strong_count(&_team));
                                                                     // println!("Darc freed! {:x} {:?}",self.inner_addr,mode_refs);
             let _am_counters = Arc::from_raw(wrapped.inner.as_ref().am_counters);
             self.team.lamellae.free(self.inner_addr);

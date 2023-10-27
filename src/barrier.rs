@@ -41,7 +41,7 @@ impl Barrier {
                     pes.sort();
                     AllocationType::Sub(pes)
                 };
-                // println!("creating barrier {:?}",alloc);
+                // println!("creating barrier {:?}", alloc);
                 let barrier1 = MemoryRegion::new(num_pes, lamellae.clone(), alloc.clone());
                 let barrier2 = MemoryRegion::new(num_pes, lamellae.clone(), alloc.clone());
                 let barrier3 = MemoryRegion::new(3, lamellae.clone(), alloc);
@@ -151,7 +151,11 @@ impl Barrier {
                         return;
                     }
                     barrier_id += 1;
-                    let barrier3_slice = unsafe { bufs.barrier3.as_mut_slice().expect("Data should exist on PE") };
+                    let barrier3_slice = unsafe {
+                        bufs.barrier3
+                            .as_mut_slice()
+                            .expect("Data should exist on PE")
+                    };
                     barrier3_slice[0] = barrier_id;
                     let barrier_slice = &[barrier_id];
                     if self

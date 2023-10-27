@@ -1,6 +1,7 @@
 use crate::active_messaging::*;
 use crate::lamellae::{create_lamellae, Backend, Lamellae, LamellaeComm, LamellaeInit};
 use crate::lamellar_arch::LamellarArch;
+use crate::lamellar_env::LamellarEnv;
 use crate::lamellar_team::{LamellarTeam, LamellarTeamRT};
 use crate::memregion::{
     one_sided::OneSidedMemoryRegion, shared::SharedMemoryRegion, Dist, RemoteMemoryRegion,
@@ -214,10 +215,30 @@ impl LamellarWorld {
     /// use lamellar::active_messaging::prelude::*;
     ///
     /// let world = LamellarWorldBuilder::new().build();
-    /// let num_threads = world.num_threads();
+    /// let num_threads = world.num_threads_per_pe();
     ///```
-    pub fn num_threads(&self) -> usize {
-        self.team.num_threads()
+    pub fn num_threads_per_pe(&self) -> usize {
+        self.team.num_threads_per_pe()
+    }
+}
+
+impl LamellarEnv for LamellarWorld {
+    fn my_pe(&self) -> usize {
+        self.my_pe
+    }
+    fn num_pes(&self) -> usize {
+        self.num_pes
+    }
+    fn num_threads_per_pe(&self) -> usize {
+        self.team.num_threads_per_pe()
+    }
+    fn world(&self) -> Arc<LamellarTeam> {
+        println!("LamellarWorld world");
+        self.team.clone()
+    }
+    fn team(&self) -> Arc<LamellarTeam> {
+        println!("LamellarWorld team");
+        self.team.clone()
     }
 }
 
@@ -243,24 +264,71 @@ impl Drop for LamellarWorld {
         let cnt = self.ref_cnt.fetch_sub(1, Ordering::SeqCst);
         if cnt == 1 {
             // println!("[{:?}] world dropping", self.my_pe);
+            // println!(
+            //     "in team destroy mype: {:?} cnt: {:?} {:?}",
+            //     self.my_pe,
+            //     self._counters.send_req_cnt.load(Ordering::SeqCst),
+            //     self._counters.outstanding_reqs.load(Ordering::SeqCst),
+            // );
+            // let team_rt = unsafe {Pin::into_inner_unchecked(self.team_rt.clone())};
+            // println!(
+            //     "team: {:?} team_rt: {:?}",
+            //     Arc::strong_count(&self.team),
+            //     unsafe { Arc::strong_count(&team_rt) }
+            // );
+            // let team_rt = unsafe {Pin::into_inner_unchecked(self.team_rt.clone())};
+            // println!(
+            //     "team: {:?} team_rt: {:?}",
+            //     Arc::strong_count(&self.team),
+            //     unsafe { Arc::strong_count(&team_rt) }
+            // );
             if self.team.panic.load(Ordering::SeqCst) < 2 {
+                // println!("wait for all ams to complete");
+                // println!(
+                //     "in team destroy mype: {:?} cnt: {:?} {:?}",
+                //     self.my_pe,
+                //     self._counters.send_req_cnt.load(Ordering::SeqCst),
+                //     self._counters.outstanding_reqs.load(Ordering::SeqCst),
+                // );
                 self.wait_all();
+                // println!(
+                //     "in team destroy mype: {:?} cnt: {:?} {:?}",
+                //     self.my_pe,
+                //     self._counters.send_req_cnt.load(Ordering::SeqCst),
+                //     self._counters.outstanding_reqs.load(Ordering::SeqCst),
+                // );
+                // println!("team_rt {:?}",Arc::strong_count(&team_rt));
+                // println!("wait for everyone else to finish");
                 self.barrier();
+                // println!(
+                //     "in team destroy mype: {:?} cnt: {:?} {:?}",
+                //     self.my_pe,
+                //     self._counters.send_req_cnt.load(Ordering::SeqCst),
+                //     self._counters.outstanding_reqs.load(Ordering::SeqCst),
+                // );
             }
-
+            // println!(
+            //     "in team destroy mype: {:?} cnt: {:?} {:?}",
+            //     self.my_pe,
+            //     self._counters.send_req_cnt.load(Ordering::SeqCst),
+            //     self._counters.outstanding_reqs.load(Ordering::SeqCst),
+            // );
+            // println!("destroy team");
             self.team_rt.destroy();
             LAMELLAES.write().clear();
-
-            // println!("team: {:?} ", Arc::strong_count(&self.team));
             // println!(
-            //     "team_rt: {:?} {:?}",
-            //     &self.team_rt.team_hash,
-            //     Arc::strong_count(&self.team_rt)
+            //     "in team destroy mype: {:?} cnt: {:?} {:?}",
+            //     self.my_pe,
+            //     self._counters.send_req_cnt.load(Ordering::SeqCst),
+            //     self._counters.outstanding_reqs.load(Ordering::SeqCst),
             // );
-            // let teams = self.teams.read();
-            // for (k, team) in teams.iter() {
-            // println!("team map: {:?} {:?}", k, Weak::strong_count(&team));
-            // }
+
+            // println!(
+            //     "team: {:?} team_rt: {:?}",
+            //     Arc::strong_count(&self.team),
+            //     unsafe { Arc::strong_count(&team_rt) }
+            // );
+
             // println!("counters: {:?}", Arc::strong_count(&self._counters));
 
             fini_prof!();

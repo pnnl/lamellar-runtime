@@ -1,8 +1,18 @@
-use crate::array::global_lock_atomic::*;
-use crate::array::private::ArrayExecAm;
-use crate::array::LamellarWrite;
-use crate::array::*;
-use crate::memregion::{AsBase, Dist, RTMemoryRegionRDMA, RegisteredMemoryRegion, SubRegion};
+use crate::array::global_lock_atomic::{GlobalLockArray, GlobalLockByteArray};
+use crate::array::private::{ArrayExecAm, LamellarArrayPrivate};
+use crate::array::{
+    ArrayRdmaAtHandle, ArrayRdmaHandle, Distribution, LamellarArrayGet, LamellarArrayInternalGet,
+    LamellarArrayInternalPut, LamellarArrayPut, LamellarArrayRdmaInput, LamellarArrayRdmaOutput,
+    LamellarArrayRequest, LamellarEnv, LamellarRead, LamellarWrite, TeamInto,
+};
+use crate::memregion::{
+    AsBase, Dist, LamellarMemoryRegion, OneSidedMemoryRegion, RTMemoryRegionRDMA,
+    RegisteredMemoryRegion, SubRegion,
+};
+
+use futures::Future;
+use std::collections::HashMap;
+use std::pin::Pin;
 
 impl<T: Dist> LamellarArrayInternalGet<T> for GlobalLockArray<T> {
     // fn iget<U: TeamInto<LamellarArrayRdmaOutput<T>> + LamellarWrite>(&self, index: usize, buf: U) {
@@ -254,9 +264,12 @@ impl<T: Dist + 'static> LamellarAm for InitPutAm<T> {
                     for (buf_index, index) in
                         (self.index..(self.index + self.buf.len())).enumerate()
                     {
-                        let pe = match self.array.array.pe_for_dist_index(index){
+                        let pe = match self.array.array.pe_for_dist_index(index) {
                             Some(pe) => pe % num_pes,
-                            None => panic!("Index: {index} is out of bounds for array of length: {:?}",self.array.array.inner.size),
+                            None => panic!(
+                                "Index: {index} is out of bounds for array of length: {:?}",
+                                self.array.array.inner.size
+                            ),
                         };
                         // println!("pe {:?} tslice index {:?} buf_index {:?}",pe,buf_index/num_pes,buf_index);
                         pe_t_slices.get_mut(&pe).unwrap()[buf_index / num_pes] =

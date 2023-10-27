@@ -969,7 +969,6 @@ fn create_buf_ops2(
                         index_size: index_size,
                     })
             }
-            
             inventory::submit! {
                 #lamellar::array::#single_val_multi_idx_reg_name{
                     id: #single_val_multi_idx_id,
@@ -1005,7 +1004,6 @@ fn create_buf_ops2(
                         index: index,
                     })
             }
-            
             inventory::submit! {
                 #lamellar::array::#multi_val_single_idx_reg_name{
                     id: #multi_val_single_idx_id,

@@ -9,3 +9,4 @@ pub use crate::lamellar_team::LamellarTeam;
 pub use crate::lamellar_team::LamellarTeamRT;
 pub use crate::lamellar_world::LamellarWorld;
 pub use crate::lamellar_world::LamellarWorldBuilder;
+pub use crate::LamellarEnv;

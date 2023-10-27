@@ -227,10 +227,23 @@ impl<T: AmDist> LamellarMultiRequest for TaskGroupMultiRequestHandle<T> {
         while !self.inner.data.lock().contains_key(&self.sub_id) {
             async_std::task::yield_now().await;
         }
-        while self.inner.data.lock().get(&self.sub_id).expect("req sub id should exist").len() < self.inner.arch.num_pes() {
+        while self
+            .inner
+            .data
+            .lock()
+            .get(&self.sub_id)
+            .expect("req sub id should exist")
+            .len()
+            < self.inner.arch.num_pes()
+        {
             async_std::task::yield_now().await;
         }
-        let mut sub_id_map = self.inner.data.lock().remove(&self.sub_id).expect("req sub id should exist");
+        let mut sub_id_map = self
+            .inner
+            .data
+            .lock()
+            .remove(&self.sub_id)
+            .expect("req sub id should exist");
         let mut res = Vec::new();
         for pe in 0..sub_id_map.len() {
             res.push(self.process_result(sub_id_map.remove(&pe).unwrap()));
@@ -243,11 +256,24 @@ impl<T: AmDist> LamellarMultiRequest for TaskGroupMultiRequestHandle<T> {
             self.inner.scheduler.exec_task();
             // std::thread::yield_now();
         }
-        while self.inner.data.lock().get(&self.sub_id).expect("req sub id should exist").len() < self.inner.arch.num_pes() {
+        while self
+            .inner
+            .data
+            .lock()
+            .get(&self.sub_id)
+            .expect("req sub id should exist")
+            .len()
+            < self.inner.arch.num_pes()
+        {
             self.inner.scheduler.exec_task();
             // std::thread::yield_now();
         }
-        let mut sub_id_map = self.inner.data.lock().remove(&self.sub_id).expect("req sub id should exist");
+        let mut sub_id_map = self
+            .inner
+            .data
+            .lock()
+            .remove(&self.sub_id)
+            .expect("req sub id should exist");
         let mut res = Vec::new();
         for pe in 0..sub_id_map.len() {
             res.push(self.process_result(sub_id_map.remove(&pe).unwrap()));

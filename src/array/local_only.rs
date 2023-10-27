@@ -158,7 +158,10 @@ impl<T: Dist> private::LamellarArrayPrivate<T> for LocalOnlyArray<T> {
 
 impl<T: Dist> LamellarArray<T> for LocalOnlyArray<T> {
     fn my_pe(&self) -> usize {
-        self.array.my_pe()
+        LamellarArray::my_pe(&self.array)
+    }
+    fn num_pes(&self) -> usize {
+        LamellarArray::num_pes(&self.array)
     }
     fn team(&self) -> Pin<Arc<LamellarTeamRT>> {
         self.array.team().clone()
@@ -178,6 +181,26 @@ impl<T: Dist> LamellarArray<T> for LocalOnlyArray<T> {
     }
     fn pe_and_offset_for_global_index(&self, index: usize) -> Option<(usize, usize)> {
         self.array.pe_and_offset_for_global_index(index)
+    }
+}
+
+impl<T: Dist> LamellarEnv for LocalOnlyArray<T> {
+    fn my_pe(&self) -> usize {
+        LamellarEnv::my_pe(&self.array)
+    }
+
+    fn num_pes(&self) -> usize {
+        LamellarEnv::num_pes(&self.array)
+    }
+
+    fn num_threads_per_pe(&self) -> usize {
+        self.array.team_rt().num_threads()
+    }
+    fn world(&self) -> Arc<LamellarTeam> {
+        self.array.team_rt().world()
+    }
+    fn team(&self) -> Arc<LamellarTeam> {
+        self.array.team_rt().team()
     }
 }
 

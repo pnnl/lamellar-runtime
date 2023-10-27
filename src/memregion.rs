@@ -10,7 +10,8 @@ use crate::array::{
     LamellarArrayRdmaInput, LamellarArrayRdmaOutput, LamellarRead, LamellarWrite, TeamFrom,
 };
 use crate::lamellae::{AllocationType, Backend, Lamellae, LamellaeComm, LamellaeRDMA};
-use crate::lamellar_team::LamellarTeamRT;
+use crate::lamellar_team::{LamellarTeam, LamellarTeamRT};
+use crate::LamellarEnv;
 use core::marker::PhantomData;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
@@ -61,7 +62,7 @@ pub trait Dist:
 // }
 
 #[doc(hidden)]
-#[enum_dispatch(RegisteredMemoryRegion<T>, MemRegionId, AsBase, MemoryRegionRDMA<T>, RTMemoryRegionRDMA<T>)]
+#[enum_dispatch(RegisteredMemoryRegion<T>, MemRegionId, AsBase, MemoryRegionRDMA<T>, RTMemoryRegionRDMA<T>, LamellarEnv)]
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
 #[serde(bound = "T: Dist + serde::Serialize + serde::de::DeserializeOwned")]
 pub enum LamellarMemoryRegion<T: Dist> {
@@ -690,7 +691,10 @@ impl<T: Dist> MemoryRegion<T> {
         lamellae: Arc<Lamellae>,
         alloc: AllocationType,
     ) -> Result<MemoryRegion<T>, anyhow::Error> {
-        // println!("creating new lamellar memory region {:?}",size * std::mem::size_of::<T>());
+        // println!(
+        //     "creating new lamellar memory region {:?}",
+        //     size * std::mem::size_of::<T>()
+        // );
         let mut mode = Mode::Shared;
         let addr = if size > 0 {
             if let AllocationType::Local = alloc {

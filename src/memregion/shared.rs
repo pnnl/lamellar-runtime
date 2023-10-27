@@ -2,7 +2,7 @@ use crate::active_messaging::RemotePtr;
 use crate::array::{LamellarRead, LamellarWrite};
 use crate::darc::Darc;
 use crate::lamellae::AllocationType;
-use crate::memregion::*;
+use crate::{memregion::*, LamellarEnv, LamellarTeam};
 
 // use crate::active_messaging::AmDist;
 use core::marker::PhantomData;
@@ -46,6 +46,24 @@ pub struct SharedMemoryRegion<T: Dist> {
     sub_region_offset: usize,
     sub_region_size: usize,
     phantom: PhantomData<T>,
+}
+
+impl<T: Dist> LamellarEnv for SharedMemoryRegion<T> {
+    fn my_pe(&self) -> usize {
+        self.mr.team().my_pe()
+    }
+    fn num_pes(&self) -> usize {
+        self.mr.team().num_pes()
+    }
+    fn num_threads_per_pe(&self) -> usize {
+        self.mr.team().num_threads_per_pe()
+    }
+    fn world(&self) -> Arc<LamellarTeam> {
+        self.mr.team().world()
+    }
+    fn team(&self) -> Arc<LamellarTeam> {
+        self.mr.team().team()
+    }
 }
 
 impl<T: Dist> crate::active_messaging::DarcSerde for SharedMemoryRegion<T> {

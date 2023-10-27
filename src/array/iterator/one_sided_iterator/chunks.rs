@@ -38,7 +38,7 @@ where
 
     fn get_buffer(&self, size: usize) -> OneSidedMemoryRegion<<I as OneSidedIterator>::ElemType> {
         let mem_region: OneSidedMemoryRegion<<I as OneSidedIterator>::ElemType> =
-            self.array().team().alloc_one_sided_mem_region(size);
+            self.array().team_rt().alloc_one_sided_mem_region(size);
         // potentially unsafe depending on the array type (i.e. UnsafeArray - which requries unsafe to construct an iterator),
         // but safe with respect to the mem_region as this is the only reference
         unsafe {

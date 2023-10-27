@@ -1,12 +1,13 @@
+use crate::active_messaging::LamellarArcAm;
 use crate::array::atomic::*;
 use crate::array::generic_atomic::*;
+use crate::array::global_lock_atomic::*;
 use crate::array::local_lock_atomic::*;
 use crate::array::native_atomic::*;
-
-use crate::array::*;
-
+use crate::array::{AmDist, Dist, LamellarArrayRequest, LamellarEnv, LamellarWriteArray};
 use crate::lamellar_request::LamellarRequest;
 use crate::scheduler::{Scheduler, SchedulerQueue};
+use crate::LamellarTeamRT;
 
 pub(crate) mod access;
 pub use access::{AccessOps, LocalAtomicOps};
@@ -22,15 +23,12 @@ pub(crate) mod read_only;
 pub use read_only::ReadOnlyOps;
 pub(crate) mod shift;
 pub use shift::{ElementShiftOps, LocalShiftOps, ShiftOps};
-// use crate::memregion::{
-//     one_sided::OneSidedMemoryRegion, Dist,
-// };
-// use crate::Darc;
+
 use async_trait::async_trait;
 use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::marker::PhantomData;
-// use std::slice::Chunks;g
+use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::u8;
@@ -436,12 +434,10 @@ impl<'a, T: Dist> OpInput<'a, T> for &'a [T] {
         } else {
             match std::env::var("LAMELLAR_BATCH_OP_THREADS") {
                 Ok(n) => n.parse::<usize>().unwrap(),
-                Err(_) => {
-                    match std::env::var("LAMELLAR_THREADS") {
-                        Ok(n) => std::cmp::max(1, (n.parse::<usize>().unwrap()) / 4),
-                        Err(_) => 4,
-                    }
-                }
+                Err(_) => match std::env::var("LAMELLAR_THREADS") {
+                    Ok(n) => std::cmp::max(1, (n.parse::<usize>().unwrap()) / 4),
+                    Err(_) => 4,
+                },
             }
         };
         let num_per_batch = len / num;
@@ -567,7 +563,7 @@ impl<'a, T: Dist> OpInput<'a, T> for Vec<T> {
                 Ok(n) => n.parse::<usize>().unwrap(),
                 Err(_) => {
                     match std::env::var("LAMELLAR_THREADS") {
-                        Ok(n) => std::cmp::max(1, (n.parse::<usize>().unwrap()) / 4), 
+                        Ok(n) => std::cmp::max(1, (n.parse::<usize>().unwrap()) / 4),
                         Err(_) => 4, //+ 1 to account for main thread
                     }
                 }
@@ -803,7 +799,7 @@ impl<'a, T: Dist + ElementOps> OpInput<'a, T> for &GenericAtomicLocalData<T> {
                     Ok(n) => n.parse::<usize>().unwrap(),
                     Err(_) => {
                         match std::env::var("LAMELLAR_THREADS") {
-                            Ok(n) => std::cmp::max(1, (n.parse::<usize>().unwrap()) / 4), 
+                            Ok(n) => std::cmp::max(1, (n.parse::<usize>().unwrap()) / 4),
                             Err(_) => 4, //+ 1 to account for main thread
                         }
                     }
@@ -850,7 +846,7 @@ impl<'a, T: Dist + ElementOps> OpInput<'a, T> for &NativeAtomicLocalData<T> {
                     Ok(n) => n.parse::<usize>().unwrap(),
                     Err(_) => {
                         match std::env::var("LAMELLAR_THREADS") {
-                            Ok(n) => std::cmp::max(1, (n.parse::<usize>().unwrap()) / 4), 
+                            Ok(n) => std::cmp::max(1, (n.parse::<usize>().unwrap()) / 4),
                             Err(_) => 4, //+ 1 to account for main thread
                         }
                     }

@@ -303,6 +303,7 @@ impl CommOps for RofiComm {
 
     #[tracing::instrument(skip_all)]
     fn free(&self, addr: usize) {
+        // println!("free {:x}", addr);
         let _lock = self.comm_mutex.lock();
         rofi_release(addr);
     }

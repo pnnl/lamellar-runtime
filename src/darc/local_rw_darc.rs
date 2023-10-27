@@ -14,7 +14,7 @@ use crate::darc::{Darc, DarcInner, DarcMode, __NetworkDarc};
 use crate::lamellae::LamellaeRDMA;
 use crate::lamellar_team::IntoLamellarTeam;
 use crate::scheduler::SchedulerQueue;
-use crate::IdError;
+use crate::{IdError, LamellarEnv, LamellarTeam};
 
 /// A local read-write `Darc`
 ///
@@ -38,6 +38,24 @@ pub struct LocalRwDarc<T: 'static> {
 
 unsafe impl<T: Send> Send for LocalRwDarc<T> {}
 unsafe impl<T: Sync> Sync for LocalRwDarc<T> {}
+
+impl<T> LamellarEnv for LocalRwDarc<T> {
+    fn my_pe(&self) -> usize {
+        self.darc.my_pe()
+    }
+    fn num_pes(&self) -> usize {
+        self.darc.num_pes()
+    }
+    fn num_threads_per_pe(&self) -> usize {
+        self.darc.num_threads_per_pe()
+    }
+    fn world(&self) -> Arc<LamellarTeam> {
+        self.darc.world()
+    }
+    fn team(&self) -> Arc<LamellarTeam> {
+        self.darc.team().team()
+    }
+}
 
 impl<T> crate::active_messaging::DarcSerde for LocalRwDarc<T> {
     fn ser(&self, num_pes: usize, darcs: &mut Vec<RemotePtr>) {

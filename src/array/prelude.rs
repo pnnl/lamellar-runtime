@@ -36,3 +36,4 @@ pub use crate::lamellar_team::LamellarTeamRT;
 pub use crate::lamellar_world::LamellarWorld;
 pub use crate::lamellar_world::LamellarWorldBuilder;
 pub use crate::memregion::{Dist, RegisteredMemoryRegion};
+pub use crate::LamellarEnv;
