@@ -143,9 +143,9 @@ pub struct GlobalLockLocalData<'a, T: Dist> {
     lock_guard: GlobalRwDarcReadGuard<()>,
 }
 
-impl<'a, T: Dist> std::fmt::Debug for GlobalLockLocalData<'a, T> {
+impl<'a, T: Dist + std::fmt::Debug> std::fmt::Debug for GlobalLockLocalData<'a, T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", data)
+        write!(f, "{:?}", self.data)
     }
 }
 

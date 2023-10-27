@@ -55,76 +55,6 @@ use std::marker::PhantomData;
 use std::pin::Pin;
 use std::sync::Arc;
 
-// #[lamellar_impl::AmLocalDataRT(Clone)]
-// pub(crate) struct Collect<I>
-// where
-//     I: DistributedIterator,
-// {
-//     pub(crate) data: I,
-//     pub(crate) start_i: usize,
-//     pub(crate) end_i: usize,
-// }
-
-// impl<I> std::fmt::Debug for Collect<I>
-// where
-//     I: DistributedIterator,
-// {
-//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-//         write!(
-//             f,
-//             "Collect {{   start_i: {:?}, end_i: {:?} }}",
-//             self.start_i, self.end_i
-//         )
-//     }
-// }
-
-// #[lamellar_impl::rt_am_local]
-// impl<I> LamellarAm for Collect<I>
-// where
-//     I: DistributedIterator + 'static,
-//     I::Item: Sync,
-// {
-//     async fn exec(&self) -> Vec<I::Item> {
-//         let mut iter = self.data.init(self.start_i, self.end_i - self.start_i);
-//         let mut vec = Vec::new();
-//         while let Some(elem) = iter.next() {
-//             vec.push(elem);
-//         }
-//         vec
-//     }
-// }
-
-// #[lamellar_impl::AmLocalDataRT(Clone, Debug)]
-// pub(crate) struct CollectAsync<I, T>
-// where
-//     I: DistributedIterator,
-//     I::Item: Future<Output = T>,
-//     T: Dist,
-// {
-//     pub(crate) data: I,
-//     pub(crate) start_i: usize,
-//     pub(crate) end_i: usize,
-//     pub(crate) _phantom: PhantomData<T>,
-// }
-
-// #[lamellar_impl::rt_am_local]
-// impl<I, T> LamellarAm for CollectAsync<I, T, Fut>
-// where
-//     I: DistributedIterator + 'static,
-//     I::Item: Future<Output = T> + Send,
-//     T: Dist,
-// {
-//     async fn exec(&self) -> Vec<<I::Item as Future>::Output> {
-//         let mut iter = self.data.init(self.start_i, self.end_i - self.start_i);
-//         let mut vec = Vec::new();
-//         while let Some(elem) = iter.next() {
-//             let res = elem.await;
-//             vec.push(res);
-//         }
-//         vec
-//     }
-// }
-
 #[doc(hidden)]
 pub struct DistIterForEachHandle {
     pub(crate) reqs: Vec<Box<dyn LamellarRequest<Output = ()>>>,
@@ -256,6 +186,27 @@ pub trait DistIteratorLauncher {
         I: DistributedIterator + 'static,
         F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
         Fut: Future<Output = ()> + Send + 'static;
+
+    fn reduce<I, F>(
+        &self,
+        iter: &I,
+        op: F,
+    ) -> Pin<Box<dyn Future<Output = Option<I::Item>> + Send>>
+    where
+        I: DistributedIterator + 'static,
+        I::Item: Dist + ArrayOps,
+        F: Fn(I::Item, I::Item) -> I::Item + SyncSend + Clone + 'static;
+
+    fn reduce_with_schedule<I, F>(
+        &self,
+        sched: Schedule,
+        iter: &I,
+        op: F,
+    ) -> Pin<Box<dyn Future<Output = Option<I::Item>> + Send>>
+    where
+        I: DistributedIterator + 'static,
+        I::Item: Dist + ArrayOps,
+        F: Fn(I::Item, I::Item) -> I::Item + SyncSend + Clone + 'static;
 
     fn collect<I, A>(&self, iter: &I, d: Distribution) -> Pin<Box<dyn Future<Output = A> + Send>>
     where
@@ -512,8 +463,6 @@ pub trait DistributedIterator: SyncSend + Clone + 'static {
     ///
     /// Calling this function invokes an implicit barrier across all PEs in the Array
     ///
-    /// This call utilizes the [Schedule::Static][crate::array::iterator::Schedule] policy.
-    ///
     /// The supplied closure must return a future.
     ///
     /// Each thread will only drive a single future at a time.
@@ -548,6 +497,58 @@ pub trait DistributedIterator: SyncSend + Clone + 'static {
         self.array().for_each_async(self, op)
     }
 
+    /// Reduces the elements of the dist iterator using the provided closure
+    ///
+    /// This function returns a future which needs to be driven to completion to retrieve the new container.
+    ///
+    /// This call utilizes the [Schedule::Static][crate::array::iterator::Schedule] policy.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block);
+    ///
+    /// let req = array.dist_iter().reduce(|acc,elem| acc+elem);
+    /// let sum = array.block_on(req); //wait on the collect request to get the new array
+    ///```
+    fn reduce<F>(&self, op: F) -> Pin<Box<dyn Future<Output = Option<Self::Item>> + Send>>
+    where
+        // &'static Self: LocalIterator + 'static,
+        Self::Item: Dist + ArrayOps,
+        F: Fn(Self::Item, Self::Item) -> Self::Item + SyncSend + Clone + 'static,
+    {
+        self.array().reduce(self, op)
+    }
+
+    /// Reduces the elements of the dist iterator using the provided closure
+    ///
+    /// This function returns a future which needs to be driven to completion to retrieve the new container.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block);
+    ///
+    /// let req = array.dist_iter().reduce(|acc,elem| acc+elem);
+    /// let sum = array.block_on(req); //wait on the collect request to get the new array
+    ///```
+    fn reduce_with_schedule<F>(
+        &self,
+        sched: Schedule,
+        op: F,
+    ) -> Pin<Box<dyn Future<Output = Option<Self::Item>> + Send>>
+    where
+        // &'static Self: LocalIterator + 'static,
+        Self::Item: Dist + ArrayOps,
+        F: Fn(Self::Item, Self::Item) -> Self::Item + SyncSend + Clone + 'static,
+    {
+        self.array().reduce_with_schedule(sched, self, op)
+    }
+
     /// Collects the elements of the distributed iterator into a new LamellarArray
     ///
     /// Calling this function invokes an implicit barrier across all PEs in the Array.
@@ -558,6 +559,8 @@ pub trait DistributedIterator: SyncSend + Clone + 'static {
     /// Creating the new array potentially results in data transfers depending on the distribution mode and the fact there is no gaurantee
     /// that each PE will contribute an equal number of elements to the new array, and currently LamellarArrays
     /// distribute data across the PEs as evenly as possible.
+    ///
+    /// This call utilizes the [Schedule::Static][crate::array::iterator::Schedule] policy.
     ///
     /// # Examples
     ///```

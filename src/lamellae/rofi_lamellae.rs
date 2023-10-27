@@ -231,11 +231,11 @@ impl LamellaeRDMA for Rofi {
     fn iget(&self, pe: usize, src: usize, dst: &mut [u8]) {
         self.rofi_comm.iget(pe, src, dst);
     }
-    fn rt_alloc(&self, size: usize) -> AllocResult<usize> {
-        self.rofi_comm.rt_alloc(size)
+    fn rt_alloc(&self, size: usize, align: usize) -> AllocResult<usize> {
+        self.rofi_comm.rt_alloc(size, align)
     }
-    fn rt_check_alloc(&self, size: usize) -> bool {
-        self.rofi_comm.rt_check_alloc(size)
+    fn rt_check_alloc(&self, size: usize, align: usize) -> bool {
+        self.rofi_comm.rt_check_alloc(size, align)
     }
     fn rt_free(&self, addr: usize) {
         self.rofi_comm.rt_free(addr)

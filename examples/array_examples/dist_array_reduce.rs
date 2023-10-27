@@ -110,6 +110,21 @@ fn main() {
         let cyclic_min = world.block_on(unsafe { block_array.reduce("my_min") });
         println!("block min: {:?} cyclic min: {:?}", block_min, cyclic_min);
     }
+
+    let cyclic_sum = world.block_on(unsafe {
+        cyclic_array
+            .dist_iter()
+            .map(|val| *val)
+            .reduce(|sum, val| sum + val)
+    });
+    let block_sum = world.block_on(unsafe {
+        block_array
+            .dist_iter()
+            .map(|val| *val)
+            .reduce(|sum, val| sum + val)
+    });
+
+    println!("cyclic_sum {cyclic_sum:?} block_sum {block_sum:?}");
     // for i in 0..total_len {
     //     block_array.add(i, 10);
     // }

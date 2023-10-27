@@ -132,7 +132,8 @@ impl LamellaeAM for Local {
 }
 
 struct MyPtr {
-    ptr: *mut [u8],
+    ptr: *mut u8,
+    layout: std::alloc::Layout,
 }
 // unsafe impl Sync for MyPtr {}
 unsafe impl Send for MyPtr {}
@@ -166,15 +167,23 @@ impl LamellaeRDMA for Local {
         }
     }
 
-    fn rt_alloc(&self, size: usize) -> AllocResult<usize> {
-        let data = vec![0u8; size].into_boxed_slice();
-        let data_ptr = Box::into_raw(data);
-        let data_addr = data_ptr as *const u8 as usize;
+    fn rt_alloc(&self, size: usize, align: usize) -> AllocResult<usize> {
+        let layout = std::alloc::Layout::from_size_align(size, align).unwrap();
+        let data_ptr = unsafe { std::alloc::alloc(layout) };
+        // let data = vec![0u8; size].into_boxed_slice();
+        // let data_ptr = Box::into_raw(data);
+        let data_addr = data_ptr as usize;
         let mut allocs = self.allocs.lock();
-        allocs.insert(data_addr, MyPtr { ptr: data_ptr });
+        allocs.insert(
+            data_addr,
+            MyPtr {
+                ptr: data_ptr,
+                layout,
+            },
+        );
         Ok(data_addr)
     }
-    fn rt_check_alloc(&self, _size: usize) -> bool {
+    fn rt_check_alloc(&self, _size: usize, _align: usize) -> bool {
         true
     }
 
@@ -182,23 +191,33 @@ impl LamellaeRDMA for Local {
         let mut allocs = self.allocs.lock();
         if let Some(data_ptr) = allocs.remove(&addr) {
             unsafe {
-                let _ = Box::from_raw(data_ptr.ptr);
+                std::alloc::dealloc(data_ptr.ptr, data_ptr.layout);
+                // let _ = Box::from_raw(data_ptr.ptr);
             }; //it will free when dropping from scope
         }
     }
     fn alloc(&self, size: usize, _alloc: AllocationType) -> AllocResult<usize> {
-        let data = vec![0u8; size].into_boxed_slice();
-        let data_ptr = Box::into_raw(data);
-        let data_addr = data_ptr as *const u8 as usize;
+        let layout = std::alloc::Layout::from_size_align(size, std::mem::align_of::<u8>()).unwrap();
+        let data_ptr = unsafe { std::alloc::alloc(layout) };
+        // let data = vec![0u8; size].into_boxed_slice();
+        // let data_ptr = Box::into_raw(data);
+        let data_addr = data_ptr as usize;
         let mut allocs = self.allocs.lock();
-        allocs.insert(data_addr, MyPtr { ptr: data_ptr });
+        allocs.insert(
+            data_addr,
+            MyPtr {
+                ptr: data_ptr as *mut u8,
+                layout: layout,
+            },
+        );
         Ok(data_addr)
     }
     fn free(&self, addr: usize) {
         let mut allocs = self.allocs.lock();
         if let Some(data_ptr) = allocs.remove(&addr) {
             unsafe {
-                let _ = Box::from_raw(data_ptr.ptr);
+                std::alloc::dealloc(data_ptr.ptr, data_ptr.layout);
+                // let _ = Box::from_raw(data_ptr.ptr as *mut [u8]);
             }; //it will free when dropping from scope
         }
     }

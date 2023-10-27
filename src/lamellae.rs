@@ -193,8 +193,8 @@ pub(crate) trait LamellaeRDMA: Send + Sync {
     fn put_all(&self, src: &[u8], dst: usize);
     fn get(&self, pe: usize, src: usize, dst: &mut [u8]);
     fn iget(&self, pe: usize, src: usize, dst: &mut [u8]);
-    fn rt_alloc(&self, size: usize) -> AllocResult<usize>;
-    fn rt_check_alloc(&self, size: usize) -> bool;
+    fn rt_alloc(&self, size: usize, align: usize) -> AllocResult<usize>;
+    fn rt_check_alloc(&self, size: usize, align: usize) -> bool;
     fn rt_free(&self, addr: usize);
     fn alloc(&self, size: usize, alloc: AllocationType) -> AllocResult<usize>;
     fn free(&self, addr: usize);

@@ -786,7 +786,10 @@ impl InnerCQ {
     fn send_alloc(&self, min_size: usize) {
         let prev_cnt = self.comm.num_pool_allocs();
         let mut alloc_buf = self.alloc_buffer.lock();
-        if !self.comm.rt_check_alloc(min_size) {
+        if !self
+            .comm
+            .rt_check_alloc(min_size, std::mem::align_of::<CmdMsg>())
+        {
             // println!(" {:?} {:?}",prev_cnt,self.comm.num_pool_allocs());
             if prev_cnt == self.comm.num_pool_allocs() {
                 println!("im responsible for the new alloc");
@@ -1010,7 +1013,8 @@ impl InnerCQ {
                 println!(
                     "get cmd stuck waiting for alloc {:?} {:?}",
                     cmd.dsize,
-                    self.comm.rt_check_alloc(cmd.dsize)
+                    self.comm
+                        .rt_check_alloc(cmd.dsize, std::mem::align_of::<u8>())
                 );
                 self.comm.print_pools();
                 timer = std::time::Instant::now();
@@ -1039,13 +1043,17 @@ impl InnerCQ {
 
     #[tracing::instrument(skip_all)]
     async fn get_cmd_buf(&self, src: usize, cmd: CmdMsg) -> usize {
-        let mut data = self.comm.rt_alloc(cmd.dsize as usize);
+        let mut data = self
+            .comm
+            .rt_alloc(cmd.dsize as usize, std::mem::align_of::<u8>());
         let mut timer = std::time::Instant::now();
         while data.is_err() && self.active.load(Ordering::SeqCst) != CmdQStatus::Panic as u8 {
             async_std::task::yield_now().await;
             // println!("cq 871 need to alloc memory {:?}",cmd.dsize);
             self.send_alloc(cmd.dsize);
-            data = self.comm.rt_alloc(cmd.dsize as usize);
+            data = self
+                .comm
+                .rt_alloc(cmd.dsize as usize, std::mem::align_of::<u8>());
             // println!("cq 874 data {:?}",data.is_ok());
             if timer.elapsed().as_secs_f64() > 15.0 {
                 println!("get cmd buf stuck waiting for alloc");
@@ -1145,42 +1153,75 @@ impl CommandQueue {
         active: Arc<AtomicU8>,
     ) -> CommandQueue {
         let send_buffer_addr = comm
-            .rt_alloc(num_pes * std::mem::size_of::<CmdMsg>())
+            .rt_alloc(
+                num_pes * std::mem::size_of::<CmdMsg>(),
+                std::mem::align_of::<CmdMsg>(),
+            )
             .unwrap();
         // + comm.base_addr();
         // println!("send_buffer_addr{:x} {:x}",send_buffer_addr,send_buffer_addr-comm.base_addr());
         let recv_buffer_addr = comm
-            .rt_alloc(num_pes * std::mem::size_of::<CmdMsg>())
+            .rt_alloc(
+                num_pes * std::mem::size_of::<CmdMsg>(),
+                std::mem::align_of::<CmdMsg>(),
+            )
             .unwrap();
         // + comm.base_addr();
         // println!("recv_buffer_addr {:x} {:x}",recv_buffer_addr,recv_buffer_addr-comm.base_addr());
         let free_buffer_addr = comm
-            .rt_alloc(num_pes * std::mem::size_of::<CmdMsg>())
+            .rt_alloc(
+                num_pes * std::mem::size_of::<CmdMsg>(),
+                std::mem::align_of::<CmdMsg>(),
+            )
             .unwrap();
         // + comm.base_addr();
         // println!("free_buffer_addr {:x} {:x}",recv_buffer_addr,recv_buffer_addr-comm.base_addr());
         let alloc_buffer_addr = comm
-            .rt_alloc(num_pes * std::mem::size_of::<CmdMsg>())
+            .rt_alloc(
+                num_pes * std::mem::size_of::<CmdMsg>(),
+                std::mem::align_of::<CmdMsg>(),
+            )
             .unwrap();
         // println!("alloc_buffer_addr {:x}",alloc_buffer_addr);
         let panic_buffer_addr = comm
-            .rt_alloc(num_pes * std::mem::size_of::<CmdMsg>())
+            .rt_alloc(
+                num_pes * std::mem::size_of::<CmdMsg>(),
+                std::mem::align_of::<CmdMsg>(),
+            )
             .unwrap();
         // println!("panic_buffer_addr {:x}",panic_buffer_addr);
-        let release_cmd_addr = comm.rt_alloc(std::mem::size_of::<CmdMsg>()).unwrap(); // + comm.base_addr();
-                                                                                      // println!("release_cmd_addr {:x}",release_cmd_addr-comm.base_addr());
+        let release_cmd_addr = comm
+            .rt_alloc(
+                std::mem::size_of::<CmdMsg>(),
+                std::mem::align_of::<CmdMsg>(),
+            )
+            .unwrap(); // + comm.base_addr();
+                       // println!("release_cmd_addr {:x}",release_cmd_addr-comm.base_addr());
 
-        let clear_cmd_addr = comm.rt_alloc(std::mem::size_of::<CmdMsg>()).unwrap(); // + comm.base_addr();
-                                                                                    // println!("clear_cmd_addr {:x}",clear_cmd_addr-comm.base_addr());
-        let free_cmd_addr = comm.rt_alloc(std::mem::size_of::<CmdMsg>()).unwrap(); // + comm.base_addr();
-                                                                                   // println!("free_cmd_addr {:x}",free_cmd_addr-comm.base_addr());
+        let clear_cmd_addr = comm
+            .rt_alloc(
+                std::mem::size_of::<CmdMsg>(),
+                std::mem::align_of::<CmdMsg>(),
+            )
+            .unwrap(); // + comm.base_addr();
+                       // println!("clear_cmd_addr {:x}",clear_cmd_addr-comm.base_addr());
+        let free_cmd_addr = comm
+            .rt_alloc(
+                std::mem::size_of::<CmdMsg>(),
+                std::mem::align_of::<CmdMsg>(),
+            )
+            .unwrap(); // + comm.base_addr();
+                       // println!("free_cmd_addr {:x}",free_cmd_addr-comm.base_addr());
 
         let mut cmd_buffers_addrs = vec![];
         for _pe in 0..num_pes {
             let mut addrs = vec![];
             for _i in 0..CMD_BUFS_PER_PE {
                 let addr = comm
-                    .rt_alloc(CMD_BUF_LEN * std::mem::size_of::<CmdMsg>() + 1)
+                    .rt_alloc(
+                        CMD_BUF_LEN * std::mem::size_of::<CmdMsg>() + 1,
+                        std::mem::align_of::<CmdMsg>(),
+                    )
                     .unwrap(); //+ comm.base_addr();
                                // println!("{:x} {:x} {:x}",_pe,_i,addr,);
                 addrs.push(addr);

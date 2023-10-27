@@ -104,6 +104,39 @@ impl<T: Dist> DistIteratorLauncher for UnsafeArray<T> {
         }
     }
 
+    fn reduce<I, F>(&self, iter: &I, op: F) -> Pin<Box<dyn Future<Output = Option<I::Item>> + Send>>
+    where
+        I: DistributedIterator + 'static,
+        I::Item: Dist + ArrayOps,
+        F: Fn(I::Item, I::Item) -> I::Item + SyncSend + Clone + 'static,
+    {
+        self.reduce_with_schedule(Schedule::Static, iter, op)
+    }
+
+    fn reduce_with_schedule<I, F>(
+        &self,
+        sched: Schedule,
+        iter: &I,
+        op: F,
+    ) -> Pin<Box<dyn Future<Output = Option<I::Item>> + Send>>
+    where
+        I: DistributedIterator + 'static,
+        I::Item: Dist + ArrayOps,
+        F: Fn(I::Item, I::Item) -> I::Item + SyncSend + Clone + 'static,
+    {
+        let reduce = Reduce {
+            iter: iter.clone(),
+            op,
+        };
+        match sched {
+            Schedule::Static => self.sched_static(reduce),
+            Schedule::Dynamic => self.sched_dynamic(reduce),
+            Schedule::Chunk(size) => self.sched_chunk(reduce, size),
+            Schedule::Guided => self.sched_guided(reduce),
+            Schedule::WorkStealing => self.sched_work_stealing(reduce),
+        }
+    }
+
     fn collect<I, A>(&self, iter: &I, d: Distribution) -> Pin<Box<dyn Future<Output = A> + Send>>
     where
         I: DistributedIterator + 'static,

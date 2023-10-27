@@ -229,11 +229,11 @@ impl LamellaeRDMA for Shmem {
     fn iget(&self, pe: usize, src: usize, dst: &mut [u8]) {
         self.shmem_comm.get(pe, src, dst);
     }
-    fn rt_alloc(&self, size: usize) -> AllocResult<usize> {
-        self.shmem_comm.rt_alloc(size)
+    fn rt_alloc(&self, size: usize, align: usize) -> AllocResult<usize> {
+        self.shmem_comm.rt_alloc(size, align)
     }
-    fn rt_check_alloc(&self, size: usize) -> bool {
-        self.shmem_comm.rt_check_alloc(size)
+    fn rt_check_alloc(&self, size: usize, align: usize) -> bool {
+        self.shmem_comm.rt_check_alloc(size, align)
     }
     fn rt_free(&self, addr: usize) {
         self.shmem_comm.rt_free(addr)

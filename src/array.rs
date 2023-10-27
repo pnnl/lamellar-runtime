@@ -213,6 +213,8 @@ lamellar_impl::generate_ops_for_type_rt!(false, false, false, f32, f64);
 
 lamellar_impl::generate_ops_for_bool_rt!();
 
+impl<T: Dist + ArrayOps> Dist for Option<T> {}
+impl<T: Dist + ArrayOps> ArrayOps for Option<T> {}
 /// Specifies the distributed data layout of a LamellarArray
 ///
 /// Block: The indicies of the elements on each PE are sequential

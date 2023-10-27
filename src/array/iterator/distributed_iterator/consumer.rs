@@ -1,12 +1,12 @@
 pub(crate) mod collect;
 // // pub(crate) mod count;
 pub(crate) mod for_each;
-// pub(crate) mod reduce;
+pub(crate) mod reduce;
 
 pub(crate) use collect::*;
 // pub(crate) use count::*;
 pub(crate) use for_each::*;
-// pub(crate) use reduce::*;
+pub(crate) use reduce::*;
 
 // use crate::active_messaging::LamellarArcLocalAm;
 // use crate::lamellar_request::LamellarRequest;

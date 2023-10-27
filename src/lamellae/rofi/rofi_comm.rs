@@ -258,13 +258,13 @@ impl CommOps for RofiComm {
         }
     }
     #[tracing::instrument(skip_all)]
-    fn rt_alloc(&self, size: usize) -> AllocResult<usize> {
+    fn rt_alloc(&self, size: usize, align: usize) -> AllocResult<usize> {
         // let size = size + size%8;
         let allocs = self.alloc.read();
         for alloc in allocs.iter() {
             // println!("size: {:?} remaining {:?} occupied {:?} len {:?}",size, alloc.space_avail(),alloc.occupied(),allocs.len());
 
-            if let Some(addr) = alloc.try_malloc(size) {
+            if let Some(addr) = alloc.try_malloc(size, align) {
                 return Ok(addr);
             }
             // println!("size: {:?} remaining {:?} occupied {:?} len {:?}",size, alloc.space_avail(),alloc.occupied(),allocs.len());
@@ -272,10 +272,10 @@ impl CommOps for RofiComm {
         Err(AllocError::OutOfMemoryError(size))
     }
     #[tracing::instrument(skip_all)]
-    fn rt_check_alloc(&self, size: usize) -> bool {
+    fn rt_check_alloc(&self, size: usize, align: usize) -> bool {
         let allocs = self.alloc.read();
         for alloc in allocs.iter() {
-            if alloc.fake_malloc(size) {
+            if alloc.fake_malloc(size, align) {
                 // println!("fake alloc passes");
                 return true;
             }
@@ -507,7 +507,7 @@ impl CommOps for RofiComm {
             }
             if rem_bytes > 0 {
                 loop {
-                    if let Ok(addr) = self.rt_alloc(rem_bytes) {
+                    if let Ok(addr) = self.rt_alloc(rem_bytes, std::mem::size_of::<u8>()) {
                         unsafe {
                             let temp_dst_addr = &mut dst_addr[0..rem_bytes];
                             let buf1 = std::slice::from_raw_parts_mut(
@@ -650,7 +650,7 @@ impl Drop for RofiComm {
 
 #[derive(Debug)]
 pub(crate) struct RofiData {
-    pub(crate) addr: usize,          // process space address
+    pub(crate) addr: usize,          // process space address)
     pub(crate) relative_addr: usize, //address allocated from rofi
     pub(crate) len: usize,
     pub(crate) data_start: usize,
@@ -664,7 +664,7 @@ impl RofiData {
     pub fn new(rofi_comm: Arc<Comm>, size: usize) -> Result<RofiData, anyhow::Error> {
         let ref_cnt_size = std::mem::size_of::<AtomicUsize>();
         let alloc_size = size + ref_cnt_size; //+  std::mem::size_of::<u64>();
-        let relative_addr = rofi_comm.rt_alloc(alloc_size)?;
+        let relative_addr = rofi_comm.rt_alloc(alloc_size, std::mem::align_of::<AtomicUsize>())?;
         let addr = relative_addr; // + rofi_comm.base_addr();
         unsafe {
             let ref_cnt = addr as *const AtomicUsize;

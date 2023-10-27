@@ -1,6 +1,5 @@
 use core::marker::PhantomData;
 use indexmap::IndexSet;
-use lamellar_prof::*;
 // use log::trace;
 use parking_lot::{Condvar, Mutex};
 use std::collections::BTreeMap;
@@ -10,9 +9,9 @@ use std::sync::Arc;
 pub(crate) trait LamellarAlloc {
     fn new(id: String) -> Self;
     fn init(&mut self, start_addr: usize, size: usize); //size in bytes
-    fn malloc(&self, size: usize) -> usize;
-    fn try_malloc(&self, size: usize) -> Option<usize>;
-    fn fake_malloc(&self, size: usize) -> bool;
+    fn malloc(&self, size: usize, align: usize) -> usize;
+    fn try_malloc(&self, size: usize, align: usize) -> Option<usize>;
+    fn fake_malloc(&self, size: usize, align: usize) -> bool;
     fn free(&self, addr: usize) -> Result<(), usize>;
     fn space_avail(&self) -> usize;
     fn occupied(&self) -> usize;
@@ -21,6 +20,7 @@ pub(crate) trait LamellarAlloc {
 #[derive(Debug)]
 struct Vma {
     addr: usize,
+    padding: usize,
     size: usize,
 }
 
@@ -34,7 +34,6 @@ pub(crate) struct LinearAlloc {
     free_space: Arc<AtomicUsize>,
 }
 
-#[prof]
 impl LamellarAlloc for LinearAlloc {
     fn new(id: String) -> LinearAlloc {
         // trace!("new linear alloc: {:?}", id);
@@ -55,81 +54,87 @@ impl LamellarAlloc for LinearAlloc {
         self.free_space.store(size, Ordering::SeqCst);
     }
 
-    fn malloc(&self, size: usize) -> usize {
-        let mut val = self.try_malloc(size);
+    fn malloc(&self, size: usize, align: usize) -> usize {
+        let mut val = self.try_malloc(size, align);
         while let None = val {
-            val = self.try_malloc(size);
+            val = self.try_malloc(size, align);
         }
         val.unwrap()
     }
 
-    fn try_malloc(&self, size: usize) -> Option<usize> {
+    fn try_malloc(&self, size: usize, align: usize) -> Option<usize> {
         let &(ref lock, ref cvar) = &*self.entries;
         let mut entries = lock.lock();
 
         if entries.len() > 0 {
+            // let padding = align - (self.start_addr % align);
+            // let mut prev_end = self.start_addr + padding;
             let mut prev_end = self.start_addr;
+            let mut padding = align - (prev_end % align);
             let mut idx = 0;
             for i in 0..entries.len() {
-                if entries[i].addr - prev_end >= size {
+                if entries[i].addr - prev_end >= size + padding {
                     break;
                 }
-                prev_end = entries[i].addr + entries[i].size;
+                prev_end = entries[i].addr + entries[i].size + entries[i].padding;
+                padding = align - (prev_end % align);
                 idx = i + 1;
             }
 
-            if prev_end + size <= self.start_addr + self.max_size {
+            if prev_end + size + padding <= self.start_addr + self.max_size {
                 let n_vma = Vma {
                     addr: prev_end,
+                    padding: padding,
                     size: size,
                 };
                 entries.insert(idx, n_vma);
-                self.free_space.fetch_sub(size, Ordering::SeqCst);
-                return Some(prev_end);
+                self.free_space.fetch_sub(size + padding, Ordering::SeqCst);
+                return Some(prev_end + padding);
             } else {
-                prof_start!(waiting);
                 cvar.wait_for(&mut entries, std::time::Duration::from_millis(1));
-                prof_end!(waiting);
                 return None;
             }
         } else {
-            if size <= self.start_addr + self.max_size {
+            let padding = align - (self.start_addr % align);
+            if size + padding <= self.start_addr + self.max_size {
                 let n_vma = Vma {
                     addr: self.start_addr,
+                    padding: padding,
                     size: size,
                 };
                 entries.push(n_vma);
-                self.free_space.fetch_sub(size, Ordering::SeqCst);
-                return Some(self.start_addr);
+                self.free_space.fetch_sub(size + padding, Ordering::SeqCst);
+                return Some(self.start_addr + padding);
             } else {
-                prof_start!(waiting);
                 cvar.wait_for(&mut entries, std::time::Duration::from_millis(1));
-                prof_end!(waiting);
                 return None;
             }
         }
     }
 
-    fn fake_malloc(&self, size: usize) -> bool {
+    fn fake_malloc(&self, size: usize, align: usize) -> bool {
         let &(ref lock, ref _cvar) = &*self.entries;
         let entries = lock.lock();
 
         if entries.len() > 0 {
             let mut prev_end = self.start_addr;
+            let mut padding = align - (prev_end % align);
             for i in 0..entries.len() {
-                if entries[i].addr - prev_end >= size {
+                if entries[i].addr - prev_end >= size + padding {
                     break;
                 }
-                prev_end = entries[i].addr + entries[i].size;
+                prev_end = entries[i].addr + entries[i].size + entries[i].padding;
+                padding = align - (prev_end % align);
             }
 
-            if prev_end + size <= self.start_addr + self.max_size {
+            if prev_end + size + padding <= self.start_addr + self.max_size {
                 return true;
             } else {
                 return false;
             }
         } else {
-            if size <= self.start_addr + self.max_size {
+            let padding = align - (self.start_addr % align);
+            if size + padding <= self.start_addr + self.max_size {
                 return true;
             } else {
                 return false;
@@ -141,8 +146,9 @@ impl LamellarAlloc for LinearAlloc {
         let &(ref lock, ref cvar) = &*self.entries;
         let mut entries = lock.lock();
         for i in 0..entries.len() {
-            if addr as usize == entries[i].addr as usize {
-                self.free_space.fetch_add(entries[i].size, Ordering::SeqCst);
+            if addr - entries[i].padding as usize == entries[i].addr as usize {
+                self.free_space
+                    .fetch_add(entries[i].size + entries[i].padding, Ordering::SeqCst);
                 entries.remove(i);
                 let last_idx = self.last_idx.load(Ordering::SeqCst);
                 if last_idx >= entries.len() && last_idx != 0 {
@@ -166,7 +172,7 @@ impl LamellarAlloc for LinearAlloc {
 #[derive(Clone, Debug)]
 struct FreeEntries {
     sizes: BTreeMap<usize, IndexSet<usize>>, //<size,<Vec<addr>>
-    addrs: BTreeMap<usize, usize>,           //<addr,size>
+    addrs: BTreeMap<usize, (usize, usize)>,  //<addr,(size,padding)>
 }
 //#[prof]
 impl FreeEntries {
@@ -181,14 +187,13 @@ impl FreeEntries {
 #[derive(Clone, Debug)]
 pub(crate) struct BTreeAlloc {
     free_entries: Arc<(Mutex<FreeEntries>, Condvar)>,
-    allocated_addrs: Arc<(Mutex<BTreeMap<usize, usize>>, Condvar)>, //<addr,size>
+    allocated_addrs: Arc<(Mutex<BTreeMap<usize, (usize, usize)>>, Condvar)>, //<addr,(size,padding)>
     pub(crate) start_addr: usize,
     pub(crate) max_size: usize,
     id: String,
     free_space: Arc<AtomicUsize>,
 }
 
-#[prof]
 impl LamellarAlloc for BTreeAlloc {
     fn new(id: String) -> BTreeAlloc {
         // trace!("new BTreeAlloc: {:?}", id);
@@ -210,15 +215,15 @@ impl LamellarAlloc for BTreeAlloc {
         let mut temp = IndexSet::new();
         temp.insert(start_addr);
         free_entries.sizes.insert(size, temp);
-        free_entries.addrs.insert(start_addr, size);
+        free_entries.addrs.insert(start_addr, (size, 0));
         self.free_space.store(size, Ordering::SeqCst);
     }
 
-    fn malloc(&self, size: usize) -> usize {
-        let mut val = self.try_malloc(size);
+    fn malloc(&self, size: usize, align: usize) -> usize {
+        let mut val = self.try_malloc(size, align);
         let mut timer = std::time::Instant::now();
         while let None = val {
-            val = self.try_malloc(size);
+            val = self.try_malloc(size, align);
             if timer.elapsed().as_secs_f64() > *crate::DEADLOCK_TIMEOUT {
                 println!("[WARNING]  Potential deadlock detected when trying to allocate more memory.\n\
                 The deadlock timeout can be set via the LAMELLAR_DEADLOCK_TIMEOUT environment variable, the current timeout is {} seconds\n\
@@ -230,15 +235,14 @@ impl LamellarAlloc for BTreeAlloc {
         val.unwrap()
     }
 
-    fn try_malloc(&self, size: usize) -> Option<usize> {
-        prof_start!(locking);
+    fn try_malloc(&self, size: usize, align: usize) -> Option<usize> {
         let &(ref lock, ref cvar) = &*self.free_entries;
         let mut free_entries = lock.lock();
-        prof_end!(locking);
         let mut addr: Option<usize> = None;
         let mut remove_size: Option<usize> = None;
-        //find smallest memory segment greater than or equal to size
-        if let Some((free_size, addrs)) = free_entries.sizes.range_mut(size..).next() {
+        let upper_size = size + align - 1; //max size we would need
+                                           //find smallest memory segment greater than or equal to size
+        if let Some((free_size, addrs)) = free_entries.sizes.range_mut(upper_size..).next() {
             //the actual size, and list of addrs with that size
             addr = addrs.pop(); // get the first addr
 
@@ -248,47 +252,49 @@ impl LamellarAlloc for BTreeAlloc {
             }
 
             if let Some(a) = addr {
-                if let Some(fsize) = free_entries.addrs.remove(&a) {
+                let padding = align - (a % align);
+                if let Some((fsize, fpadding)) = free_entries.addrs.remove(&a) {
                     // remove the address from free_entries address map
-                    if fsize != size {
-                        let remaining = fsize - size;
-                        let new_addr = a + size;
+                    if fsize + fpadding != size + padding {
+                        let remaining = fsize - (size + padding);
+                        let new_addr = a + (size + padding);
                         free_entries
                             .sizes
                             .entry(remaining)
                             .or_insert(IndexSet::new()) //insert new entry of remaining size if not already present
                             .insert(new_addr); //insert address into size map
-                        free_entries.addrs.insert(new_addr, remaining);
+                        free_entries.addrs.insert(new_addr, (remaining, 0));
                     }
                 } else {
                     panic!("{:?} addr {:?} not found in free_entries", self.id, a);
                 }
             }
         } else {
-            prof_start!(waiting);
             cvar.wait_for(&mut free_entries, std::time::Duration::from_millis(1));
-            prof_end!(waiting);
         }
         if let Some(rsize) = remove_size {
             free_entries.sizes.remove(&rsize);
         }
         drop(free_entries);
-        if let Some(a) = addr {
+        addr = if let Some(a) = addr {
+            let padding = align - (a % align);
             let &(ref lock, ref _cvar) = &*self.allocated_addrs;
             let mut allocated_addrs = lock.lock();
-            allocated_addrs.insert(a, size);
-            self.free_space.fetch_sub(size, Ordering::SeqCst);
-        }
+            allocated_addrs.insert(a + padding, (size, padding));
+            self.free_space.fetch_sub(size + padding, Ordering::SeqCst);
+            Some(a + padding)
+        } else {
+            None
+        };
         addr
     }
 
-    fn fake_malloc(&self, size: usize) -> bool {
-        prof_start!(locking);
+    fn fake_malloc(&self, size: usize, align: usize) -> bool {
         let &(ref lock, ref _cvar) = &*self.free_entries;
         let mut free_entries = lock.lock();
-        prof_end!(locking);
-        //find smallest memory segment greater than or equal to size
-        if let Some((_, _)) = free_entries.sizes.range_mut(size..).next() {
+        let upper_size = size + align - 1; //max size we would need
+                                           //find smallest memory segment greater than or equal to size
+        if let Some((_, _)) = free_entries.sizes.range_mut(upper_size..).next() {
             return true;
         } else {
             return false;
@@ -298,30 +304,35 @@ impl LamellarAlloc for BTreeAlloc {
     fn free(&self, addr: usize) -> Result<(), usize> {
         let &(ref lock, ref _cvar) = &*self.allocated_addrs;
         let mut allocated_addrs = lock.lock();
-        if let Some(size) = allocated_addrs.remove(&addr) {
-            self.free_space.fetch_add(size, Ordering::SeqCst);
+        if let Some((size, padding)) = allocated_addrs.remove(&addr) {
+            self.free_space.fetch_add(size + padding, Ordering::SeqCst);
             drop(allocated_addrs);
-            let mut temp_addr = addr;
-            let mut temp_size = size;
+            let unpadded_addr = addr - padding;
+            let mut temp_addr = unpadded_addr;
+            let mut temp_size = size + padding;
             let mut remove: Vec<(usize, usize)> = vec![];
             let &(ref lock, ref cvar) = &*self.free_entries;
             let mut free_entries = lock.lock();
-            if let Some((faddr, fsize)) = free_entries.addrs.range(..addr).next_back() {
+            if let Some((faddr, (fsize, fpadding))) =
+                free_entries.addrs.range(..unpadded_addr).next_back()
+            {
                 //look at address before addr
-                if faddr + fsize == addr {
+                if faddr + fsize + fpadding == addr {
                     //they are next to eachother...
                     temp_addr = *faddr;
-                    temp_size = fsize + size;
-                    remove.push((faddr.clone(), fsize.clone()));
+                    temp_size = fsize + fpadding + size;
+                    remove.push((faddr.clone(), fsize + fpadding));
                 }
             }
 
-            if let Some((faddr, fsize)) = free_entries.addrs.range(addr..).next() {
+            if let Some((faddr, (fsize, fpadding))) =
+                free_entries.addrs.range(unpadded_addr..).next()
+            {
                 //look at address after addr
                 if temp_addr + temp_size == *faddr {
                     //they are next to eachother...
-                    temp_size += fsize;
-                    remove.push((faddr.clone(), fsize.clone()));
+                    temp_size += fsize + fpadding;
+                    remove.push((faddr.clone(), fsize + fpadding));
                 }
             }
             for (raddr, rsize) in remove {
@@ -337,7 +348,7 @@ impl LamellarAlloc for BTreeAlloc {
                     free_entries.sizes.remove(&rsize);
                 }
             }
-            free_entries.addrs.insert(temp_addr, temp_size);
+            free_entries.addrs.insert(temp_addr, (temp_size, 0));
             free_entries
                 .sizes
                 .entry(temp_size)
@@ -371,7 +382,6 @@ pub(crate) struct ObjAlloc<T: Copy> {
     phantom: PhantomData<T>,
 }
 
-#[prof]
 impl<T: Copy> LamellarAlloc for ObjAlloc<T> {
     fn new(id: String) -> ObjAlloc<T> {
         // trace!("new ObjAlloc: {:?}", id);
@@ -385,51 +395,49 @@ impl<T: Copy> LamellarAlloc for ObjAlloc<T> {
     }
     fn init(&mut self, start_addr: usize, size: usize) {
         // trace!("init: {:?} {:x} {:?}", self.id, start_addr, size);
-        self.start_addr = start_addr;
+        let align = std::mem::align_of::<T>();
+        let padding = align - (start_addr % align);
+        self.start_addr = start_addr + padding;
         self.max_size = size;
         let &(ref lock, ref _cvar) = &*self.free_entries;
         let mut free_entries = lock.lock();
-        *free_entries = (start_addr..(start_addr + size))
+        *free_entries = ((start_addr + padding)..(start_addr + size))
             .step_by(std::mem::size_of::<T>())
             .collect();
     }
 
-    fn malloc(&self, size: usize) -> usize {
-        let mut val = self.try_malloc(size);
+    fn malloc(&self, size: usize, align: usize) -> usize {
+        let mut val = self.try_malloc(size, align);
         while let None = val {
-            val = self.try_malloc(size);
+            val = self.try_malloc(size, align);
         }
         val.unwrap()
     }
 
-    fn try_malloc(&self, size: usize) -> Option<usize> {
+    fn try_malloc(&self, size: usize, _align: usize) -> Option<usize> {
+        //dont need to worry about align here as we handle padding in init
         assert_eq!(
             size, 1,
             "ObjAlloc does not currently support multiobject allocations"
         );
-        prof_start!(locking);
         let &(ref lock, ref cvar) = &*self.free_entries;
         let mut free_entries = lock.lock();
-        prof_end!(locking);
         if let Some(addr) = free_entries.pop() {
             return Some(addr);
         } else {
-            prof_start!(waiting);
             cvar.wait_for(&mut free_entries, std::time::Duration::from_millis(1));
-            prof_end!(waiting);
             return None;
         }
     }
 
-    fn fake_malloc(&self, size: usize) -> bool {
+    fn fake_malloc(&self, size: usize, _align: usize) -> bool {
+        //dont need to worry about align here as we handle padding in init
         assert_eq!(
             size, 1,
             "ObjAlloc does not currently support multiobject allocations"
         );
-        prof_start!(locking);
         let &(ref lock, ref _cvar) = &*self.free_entries;
         let free_entries = lock.lock();
-        prof_end!(locking);
         if free_entries.len() > 1 {
             true
         } else {
@@ -469,11 +477,11 @@ mod tests {
 
         let mut cnt = 0;
         for i in shuffled {
-            assert_eq!(alloc.malloc(i), cnt);
+            assert_eq!(alloc.malloc(i, 1), cnt);
             cnt += i;
         }
         for i in (cnt..100).step_by(5) {
-            assert_eq!(alloc.malloc(5), i);
+            assert_eq!(alloc.malloc(5, 1), i);
         }
     }
 
@@ -488,7 +496,7 @@ mod tests {
                 let mut i = 0;
                 while i < 100000 {
                     if rng.gen_range(0..2) == 0 || addrs.len() == 0 {
-                        if let Some(addr) = alloc_clone.try_malloc(1) {
+                        if let Some(addr) = alloc_clone.try_malloc(1, 1) {
                             addrs.push(addr);
                             i += 1;
                         }
@@ -558,15 +566,15 @@ mod tests {
         let mut alloc = ObjAlloc::<u8>::new("obj_malloc_u8".to_string());
         alloc.init(0, 10);
         for i in 0..10 {
-            assert_eq!(alloc.malloc(1), 9 - i); //object allocator returns last address first...
+            assert_eq!(alloc.malloc(1, 1), 9 - i); //object allocator returns last address first...
         }
 
         let mut alloc = ObjAlloc::<u16>::new("obj_malloc_u16".to_string());
         alloc.init(0, 10); //only 5 slots
         for i in 0..5 {
-            assert_eq!(alloc.malloc(1), 8 - (i * std::mem::size_of::<u16>()));
+            assert_eq!(alloc.malloc(1, 1), 8 - (i * std::mem::size_of::<u16>()));
         }
-        assert_eq!(alloc.try_malloc(1), None);
+        assert_eq!(alloc.try_malloc(1, 1), None);
     }
 
     #[test]

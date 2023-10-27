@@ -425,6 +425,29 @@ impl<T: Dist> DistIteratorLauncher for LocalLockArray<T> {
         DistIteratorLauncher::for_each_async_with_schedule(&self.array, sched, iter, op)
     }
 
+    fn reduce<I, F>(&self, iter: &I, op: F) -> Pin<Box<dyn Future<Output = Option<I::Item>> + Send>>
+    where
+        I: DistributedIterator + 'static,
+        I::Item: Dist + ArrayOps,
+        F: Fn(I::Item, I::Item) -> I::Item + SyncSend + Clone + 'static,
+    {
+        DistIteratorLauncher::reduce(&self.array, iter, op)
+    }
+
+    fn reduce_with_schedule<I, F>(
+        &self,
+        sched: Schedule,
+        iter: &I,
+        op: F,
+    ) -> Pin<Box<dyn Future<Output = Option<I::Item>> + Send>>
+    where
+        I: DistributedIterator + 'static,
+        I::Item: Dist + ArrayOps,
+        F: Fn(I::Item, I::Item) -> I::Item + SyncSend + Clone + 'static,
+    {
+        DistIteratorLauncher::reduce_with_schedule(&self.array, sched, iter, op)
+    }
+
     fn collect<I, A>(&self, iter: &I, d: Distribution) -> Pin<Box<dyn Future<Output = A> + Send>>
     where
         I: DistributedIterator + 'static,

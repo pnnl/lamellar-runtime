@@ -699,7 +699,7 @@ impl<T: Dist> MemoryRegion<T> {
         let addr = if size > 0 {
             if let AllocationType::Local = alloc {
                 mode = Mode::Local;
-                lamellae.rt_alloc(size * std::mem::size_of::<T>())?
+                lamellae.rt_alloc(size * std::mem::size_of::<T>(), std::mem::align_of::<T>())?
             } else {
                 lamellae.alloc(size * std::mem::size_of::<T>(), alloc)? //did we call team barrer before this?
             }

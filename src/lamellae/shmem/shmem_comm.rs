@@ -413,10 +413,10 @@ impl CommOps for ShmemComm {
         }
     }
 
-    fn rt_alloc(&self, size: usize) -> AllocResult<usize> {
+    fn rt_alloc(&self, size: usize, align: usize) -> AllocResult<usize> {
         let allocs = self.alloc.read();
         for alloc in allocs.iter() {
-            if let Some(addr) = alloc.try_malloc(size) {
+            if let Some(addr) = alloc.try_malloc(size, align) {
                 return Ok(addr);
             }
             // println!("size: {:?} remaining {:?} occupied {:?} len {:?}",size, alloc.space_avail(),alloc.occupied(),allocs.len());
@@ -430,10 +430,10 @@ impl CommOps for ShmemComm {
         // }
     }
 
-    fn rt_check_alloc(&self, size: usize) -> bool {
+    fn rt_check_alloc(&self, size: usize, align: usize) -> bool {
         let allocs = self.alloc.read();
         for alloc in allocs.iter() {
-            if alloc.fake_malloc(size) {
+            if alloc.fake_malloc(size, align) {
                 return true;
             }
         }
@@ -604,7 +604,7 @@ impl ShmemData {
     pub fn new(shmem_comm: Arc<Comm>, size: usize) -> Result<ShmemData, anyhow::Error> {
         let ref_cnt_size = std::mem::size_of::<AtomicUsize>();
         let alloc_size = size + ref_cnt_size; //+  std::mem::size_of::<u64>();
-        let relative_addr = shmem_comm.rt_alloc(alloc_size)?;
+        let relative_addr = shmem_comm.rt_alloc(alloc_size, std::mem::align_of::<AtomicUsize>())?;
         // println!("addr: {:?} rel_addr {:?} base{:?}",relative_addr + shmem_comm.base_addr(),relative_addr ,shmem_comm.base_addr());
         let addr = relative_addr; //+ shmem_comm.base_addr();
         unsafe {

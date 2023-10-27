@@ -104,8 +104,8 @@ pub(crate) trait CommOps {
     fn num_pool_allocs(&self) -> usize;
     fn print_pools(&self);
     fn alloc_pool(&self, min_size: usize);
-    fn rt_alloc(&self, size: usize) -> AllocResult<usize>;
-    fn rt_check_alloc(&self, size: usize) -> bool;
+    fn rt_alloc(&self, size: usize, align: usize) -> AllocResult<usize>;
+    fn rt_check_alloc(&self, size: usize, align: usize) -> bool;
     fn rt_free(&self, addr: usize);
     fn alloc(&self, size: usize, alloc: AllocationType) -> AllocResult<usize>;
     fn free(&self, addr: usize);
