@@ -135,13 +135,18 @@ impl<T: Dist> DerefMut for GlobalLockCollectiveMutLocalData<'_, T> {
 /// (allowing for the safe deref into `&[T]`), preventing any local or remote write access.
 ///
 /// When the instance is dropped the lock is released.
-#[derive(Debug)]
 pub struct GlobalLockLocalData<'a, T: Dist> {
     pub(crate) array: GlobalLockArray<T>,
     pub(crate) data: &'a [T],
     index: usize,
     lock: GlobalRwDarc<()>,
     lock_guard: GlobalRwDarcReadGuard<()>,
+}
+
+impl<'a, T: Dist> std::fmt::Debug for GlobalLockLocalData<'a, T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", data)
+    }
 }
 
 impl<'a, T: Dist> Clone for GlobalLockLocalData<'a, T> {
