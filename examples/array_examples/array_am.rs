@@ -12,7 +12,7 @@ const ARRAY_LEN: usize = 100;
 
 #[lamellar::AmData(Clone)]
 struct RdmaAM {
-    array: UnsafeArray<u8>,
+    array: UnsafeArray<u16>,
     orig_pe: usize,
     index: usize,
 }
@@ -32,13 +32,13 @@ impl LamellarAM for RdmaAM {
         });
 
         //get the original nodes data
-        let local = lamellar::world.alloc_one_sided_mem_region::<u8>(ARRAY_LEN);
+        let local = lamellar::world.alloc_one_sided_mem_region::<u16>(ARRAY_LEN);
         let local_slice = unsafe { local.as_mut_slice().unwrap() };
-        local_slice[ARRAY_LEN - 1] = num_pes as u8;
+        local_slice[ARRAY_LEN - 1] = num_pes as u16;
         unsafe {
             self.array.get(0, &local).await;
         }
-        // while local_slice[ARRAY_LEN - 1] == num_pes as u8 {
+        // while local_slice[ARRAY_LEN - 1] == num_pes as u16 {
         //     async_std::task::yield_now().await;
         // }
 
@@ -46,7 +46,7 @@ impl LamellarAM for RdmaAM {
         println!("\tcurrent view of remote segment on pe {:?}: {:?}..{:?}\n\tpe: {:?} updating index {:?} on pe  {:?}", self.orig_pe, &local_slice[0..max_i], &local_slice[local_slice.len()-max_i..],lamellar::current_pe, my_index, self.orig_pe);
 
         //update an element on the original node
-        local_slice[0] = lamellar::current_pe as u8;
+        local_slice[0] = lamellar::current_pe as u16;
         unsafe {
             self.array.put(my_index, &local.sub_region(0..=0)).await;
         }
@@ -65,15 +65,15 @@ fn main() {
     let my_pe = world.my_pe();
     let num_pes = world.num_pes();
     println!("creating array");
-    let array = UnsafeArray::<u8>::new(world.team(), ARRAY_LEN, Distribution::Block);
+    let array = UnsafeArray::<u16>::new(world.team(), ARRAY_LEN, Distribution::Block);
     println!("creating memregion");
-    let local_mem_region = world.alloc_one_sided_mem_region::<u8>(ARRAY_LEN);
+    let local_mem_region = world.alloc_one_sided_mem_region::<u16>(ARRAY_LEN);
     println!("about to initialize array");
     array.print();
     if my_pe == 0 {
         unsafe {
             for i in local_mem_region.as_mut_slice().unwrap() {
-                *i = 255_u8;
+                *i = 255_u16;
             }
         }
         world.block_on(unsafe { array.put(0, &local_mem_region) });
@@ -81,7 +81,7 @@ fn main() {
     println!("here!!! {:?}", my_pe);
     array.print();
     for i in unsafe { array.local_as_slice() } {
-        while *i != 255_u8 {
+        while *i != 255_u16 {
             std::thread::yield_now();
         }
     }

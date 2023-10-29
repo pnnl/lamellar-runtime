@@ -111,20 +111,27 @@ fn main() {
         println!("block min: {:?} cyclic min: {:?}", block_min, cyclic_min);
     }
 
+    let mut timer = Instant::now();
     let cyclic_sum = world.block_on(unsafe {
         cyclic_array
             .dist_iter()
             .map(|val| *val)
             .reduce(|sum, val| sum + val)
     });
+    let cyclic_dist_time = timer.elapsed().as_secs_f64();
+    timer = Instant::now();
     let block_sum = world.block_on(unsafe {
         block_array
             .dist_iter()
             .map(|val| *val)
             .reduce(|sum, val| sum + val)
     });
+    let block_dist_time = timer.elapsed().as_secs_f64();
 
-    println!("cyclic_sum {cyclic_sum:?} block_sum {block_sum:?}");
+    println!(
+        "cyclic_sum {:?} cyclic time {:?}, block_sum {:?} block time {:?}",
+        cyclic_sum, cyclic_dist_time, block_sum, block_dist_time
+    );
     // for i in 0..total_len {
     //     block_array.add(i, 10);
     // }

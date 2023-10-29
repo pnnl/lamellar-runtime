@@ -34,6 +34,15 @@ pub(crate) struct LinearAlloc {
     free_space: Arc<AtomicUsize>,
 }
 
+fn calc_padding(addr: usize, align: usize) -> usize {
+    let rem = addr % align;
+    if rem == 0 {
+        0
+    } else {
+        align - rem
+    }
+}
+
 impl LamellarAlloc for LinearAlloc {
     fn new(id: String) -> LinearAlloc {
         // trace!("new linear alloc: {:?}", id);
@@ -70,14 +79,14 @@ impl LamellarAlloc for LinearAlloc {
             // let padding = align - (self.start_addr % align);
             // let mut prev_end = self.start_addr + padding;
             let mut prev_end = self.start_addr;
-            let mut padding = align - (prev_end % align);
+            let mut padding = calc_padding(prev_end, align);
             let mut idx = 0;
             for i in 0..entries.len() {
                 if entries[i].addr - prev_end >= size + padding {
                     break;
                 }
                 prev_end = entries[i].addr + entries[i].size + entries[i].padding;
-                padding = align - (prev_end % align);
+                padding = calc_padding(prev_end, align);
                 idx = i + 1;
             }
 
@@ -95,7 +104,7 @@ impl LamellarAlloc for LinearAlloc {
                 return None;
             }
         } else {
-            let padding = align - (self.start_addr % align);
+            let padding = calc_padding(self.start_addr, align);
             if size + padding <= self.start_addr + self.max_size {
                 let n_vma = Vma {
                     addr: self.start_addr,
@@ -118,13 +127,13 @@ impl LamellarAlloc for LinearAlloc {
 
         if entries.len() > 0 {
             let mut prev_end = self.start_addr;
-            let mut padding = align - (prev_end % align);
+            let mut padding = calc_padding(prev_end, align);
             for i in 0..entries.len() {
                 if entries[i].addr - prev_end >= size + padding {
                     break;
                 }
                 prev_end = entries[i].addr + entries[i].size + entries[i].padding;
-                padding = align - (prev_end % align);
+                padding = calc_padding(prev_end, align);
             }
 
             if prev_end + size + padding <= self.start_addr + self.max_size {
@@ -133,7 +142,7 @@ impl LamellarAlloc for LinearAlloc {
                 return false;
             }
         } else {
-            let padding = align - (self.start_addr % align);
+            let padding = calc_padding(self.start_addr, align);
             if size + padding <= self.start_addr + self.max_size {
                 return true;
             } else {
@@ -194,6 +203,21 @@ pub(crate) struct BTreeAlloc {
     free_space: Arc<AtomicUsize>,
 }
 
+impl BTreeAlloc {
+    fn remove_size(&self, free_entries: &mut FreeEntries, addr: usize, size: usize) {
+        let mut remove_size = false;
+        if let Some(addrs) = free_entries.sizes.get_mut(&size) {
+            addrs.remove(&addr);
+            if addrs.is_empty() {
+                remove_size = true;
+            }
+        }
+        if remove_size {
+            free_entries.sizes.remove(&size);
+        }
+    }
+}
+
 impl LamellarAlloc for BTreeAlloc {
     fn new(id: String) -> BTreeAlloc {
         // trace!("new BTreeAlloc: {:?}", id);
@@ -238,6 +262,7 @@ impl LamellarAlloc for BTreeAlloc {
     fn try_malloc(&self, size: usize, align: usize) -> Option<usize> {
         let &(ref lock, ref cvar) = &*self.free_entries;
         let mut free_entries = lock.lock();
+        // println!("before: {:?}", free_entries);
         let mut addr: Option<usize> = None;
         let mut remove_size: Option<usize> = None;
         let upper_size = size + align - 1; //max size we would need
@@ -252,12 +277,17 @@ impl LamellarAlloc for BTreeAlloc {
             }
 
             if let Some(a) = addr {
-                let padding = align - (a % align);
+                let padding = calc_padding(a, align);
+                let full_size = size + padding;
+
                 if let Some((fsize, fpadding)) = free_entries.addrs.remove(&a) {
                     // remove the address from free_entries address map
-                    if fsize + fpadding != size + padding {
-                        let remaining = fsize - (size + padding);
-                        let new_addr = a + (size + padding);
+                    // if full_size > fsize {
+                    //     println!("{full_size} {fsize} {size} {align} {padding}  {fpadding}");
+                    // }
+                    if fsize + fpadding != full_size {
+                        let remaining = (fsize + fpadding) - full_size;
+                        let new_addr = a + full_size;
                         free_entries
                             .sizes
                             .entry(remaining)
@@ -266,6 +296,9 @@ impl LamellarAlloc for BTreeAlloc {
                         free_entries.addrs.insert(new_addr, (remaining, 0));
                     }
                 } else {
+                    // println!("{full_size}  {size} {align} {padding}");
+                    // println!("{:?}", free_entries.sizes);
+                    // println!("{:?}", free_entries.addrs);
                     panic!("{:?} addr {:?} not found in free_entries", self.id, a);
                 }
             }
@@ -275,17 +308,27 @@ impl LamellarAlloc for BTreeAlloc {
         if let Some(rsize) = remove_size {
             free_entries.sizes.remove(&rsize);
         }
+        // println!("after: free_entries: {:?}", free_entries);
         drop(free_entries);
         addr = if let Some(a) = addr {
-            let padding = align - (a % align);
+            let padding = calc_padding(a, align);
+            let full_size = size + padding;
             let &(ref lock, ref _cvar) = &*self.allocated_addrs;
             let mut allocated_addrs = lock.lock();
             allocated_addrs.insert(a + padding, (size, padding));
-            self.free_space.fetch_sub(size + padding, Ordering::SeqCst);
+            // println!("allocated_addrs: {:?}", allocated_addrs);
+            self.free_space.fetch_sub(full_size, Ordering::SeqCst);
+            // println!(
+            //     "alloc addr {:?} = {a:?} + padding {padding} (size: {size}, align: {align}) {:?}",
+            //     a + padding,
+            //     self.free_space.load(Ordering::SeqCst)
+            // );
+
             Some(a + padding)
         } else {
             None
         };
+
         addr
     }
 
@@ -304,49 +347,47 @@ impl LamellarAlloc for BTreeAlloc {
     fn free(&self, addr: usize) -> Result<(), usize> {
         let &(ref lock, ref _cvar) = &*self.allocated_addrs;
         let mut allocated_addrs = lock.lock();
+
         if let Some((size, padding)) = allocated_addrs.remove(&addr) {
-            self.free_space.fetch_add(size + padding, Ordering::SeqCst);
+            // println!("allocated_addrs: {:?}", allocated_addrs);
+            let full_size = size + padding;
+            self.free_space.fetch_add(full_size, Ordering::SeqCst);
             drop(allocated_addrs);
             let unpadded_addr = addr - padding;
+            let full_size = size + padding;
             let mut temp_addr = unpadded_addr;
-            let mut temp_size = size + padding;
-            let mut remove: Vec<(usize, usize)> = vec![];
+            let mut temp_size = full_size;
+            let mut remove = Vec::new();
             let &(ref lock, ref cvar) = &*self.free_entries;
             let mut free_entries = lock.lock();
-            if let Some((faddr, (fsize, fpadding))) =
-                free_entries.addrs.range(..unpadded_addr).next_back()
+            while let Some((faddr, (fsize, fpadding))) =
+                free_entries.addrs.range(..temp_addr).next_back()
             {
                 //look at address before addr
                 if faddr + fsize + fpadding == addr {
                     //they are next to eachother...
                     temp_addr = *faddr;
-                    temp_size = fsize + fpadding + size;
-                    remove.push((faddr.clone(), fsize + fpadding));
+                    temp_size += fsize + fpadding;
+                    remove.push((*faddr, *fsize, *fpadding));
+                } else {
+                    break;
                 }
             }
 
-            if let Some((faddr, (fsize, fpadding))) =
-                free_entries.addrs.range(unpadded_addr..).next()
-            {
+            while let Some((faddr, (fsize, fpadding))) = free_entries.addrs.range(addr..).next() {
                 //look at address after addr
                 if temp_addr + temp_size == *faddr {
                     //they are next to eachother...
                     temp_size += fsize + fpadding;
-                    remove.push((faddr.clone(), fsize + fpadding));
+                    remove.push((*faddr, *fsize, *fpadding));
+                } else {
+                    break;
                 }
             }
-            for (raddr, rsize) in remove {
+            for (raddr, rsize, rpadding) in remove {
+                let rfull_size = rsize + rpadding;
                 free_entries.addrs.remove(&raddr);
-                let mut remove_size = false;
-                if let Some(addrs) = free_entries.sizes.get_mut(&rsize) {
-                    addrs.remove(&raddr);
-                    if addrs.is_empty() {
-                        remove_size = true;
-                    }
-                }
-                if remove_size {
-                    free_entries.sizes.remove(&rsize);
-                }
+                self.remove_size(&mut free_entries, raddr, rfull_size);
             }
             free_entries.addrs.insert(temp_addr, (temp_size, 0));
             free_entries
@@ -354,13 +395,49 @@ impl LamellarAlloc for BTreeAlloc {
                 .entry(temp_size)
                 .or_insert(IndexSet::new())
                 .insert(temp_addr);
+
+            // free_entries.addrs.insert(unpadded_addr, (full_size, 0));
+            // free_entries
+            //     .sizes
+            //     .entry(full_size)
+            //     .or_insert(IndexSet::new())
+            //     .insert(unpadded_addr);
+
+            // println!("before: {:?}", free_entries);
+
+            // let mut i = 0;
+            // while i < free_entries.addrs.len() - 1 {
+            //     let (faddr, (fsize, fpadding)) = free_entries.addrs.pop_first().unwrap();
+            //     let (naddr, (nsize, npadding)) = free_entries.addrs.pop_first().unwrap();
+            //     if faddr + fsize + fpadding == naddr {
+            //         //merge
+            //         let new_size = fsize + nsize;
+            //         let new_padding = fpadding + npadding;
+            //         assert!(new_padding == 0);
+            //         let new_addr = faddr;
+            //         self.remove_size(&mut free_entries, naddr, nsize);
+            //         self.remove_size(&mut free_entries, faddr, fsize);
+            //         free_entries.addrs.insert(new_addr, (new_size, new_padding));
+            //         free_entries
+            //             .sizes
+            //             .entry(new_size)
+            //             .or_insert(IndexSet::new())
+            //             .insert(new_addr);
+            //     } else {
+            //         free_entries.addrs.insert(faddr, (fsize, fpadding));
+            //         free_entries.addrs.insert(naddr, (nsize, npadding));
+            //         i += 1;
+            //     }
+            // }
+
+            // println!("after: free_entries: {:?}", free_entries);
             cvar.notify_all();
             Ok(())
         } else {
-            // panic!(
+            // println!(
             //     "{:?} illegal free, addr not currently allocated: {:?}",
             //     self.id, addr
-            // )
+            // );
             Err(addr)
         }
     }
@@ -396,7 +473,7 @@ impl<T: Copy> LamellarAlloc for ObjAlloc<T> {
     fn init(&mut self, start_addr: usize, size: usize) {
         // trace!("init: {:?} {:x} {:?}", self.id, start_addr, size);
         let align = std::mem::align_of::<T>();
-        let padding = align - (start_addr % align);
+        let padding = calc_padding(start_addr, align);
         self.start_addr = start_addr + padding;
         self.max_size = size;
         let &(ref lock, ref _cvar) = &*self.free_entries;

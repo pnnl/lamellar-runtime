@@ -1572,8 +1572,10 @@ pub(crate) fn __derive_arrayops(input: TokenStream) -> TokenStream {
     let mut op_types = vec![OpType::ReadOnly, OpType::Access];
     let mut opt_op_types = vec![OpType::ReadOnly, OpType::Access];
     let mut element_wise_trait_impls = quote! {
-        impl Dist for Option<#the_type> {}
-        impl __lamellar::array::operations::ArrayOps for Option< #the_type > {}
+
+        // impl Dist for Option<#the_type> {} // only traits defined in the current crate can be implemented for types defined outside of the crate
+                                              // so trying to implement for Option<#the_type> fails cause its in the users crate and not actually in lamellar
+                                              // need to research if there is a way around this...
     };
 
     for attr in &input.attrs {
@@ -1594,7 +1596,6 @@ pub(crate) fn __derive_arrayops(input: TokenStream) -> TokenStream {
                     element_wise_trait_impls.extend(
                         quote! {
                             impl __lamellar::ElementComparePartialEqOps for #the_type {}
-                            impl __lamellar::ElementComparePartialEqOps for Option< #the_type > {}
                         }
                     );
                     Ok(())
@@ -1605,7 +1606,7 @@ pub(crate) fn __derive_arrayops(input: TokenStream) -> TokenStream {
                     element_wise_trait_impls.extend(
                         quote! {
                             impl __lamellar::ElementCompareEqOps for #the_type {}
-                            impl __lamellar::ElementCompareEqOps for Option< #the_type > {}
+                            // impl __lamellar::ElementCompareEqOps for Option< #the_type > {} //see note above why we cant do this
                         }
                     );
                     Ok(())
@@ -1635,8 +1636,8 @@ pub(crate) fn __derive_arrayops(input: TokenStream) -> TokenStream {
                     op_types.push(OpType::Bitwise);
                     op_types.push(OpType::Shift);
 
-                    opt_op_types.push(OpType::CompEx);
-                    opt_op_types.push(OpType::CompExEps);
+                    // opt_op_types.push(OpType::CompEx); //see note above why we cant do this
+                    // opt_op_types.push(OpType::CompExEps); //see note above why we cant do this
 
                     element_wise_trait_impls.extend(
                         quote! {
@@ -1646,8 +1647,8 @@ pub(crate) fn __derive_arrayops(input: TokenStream) -> TokenStream {
                             impl __lamellar::ElementBitWiseOps for #the_type {}
                             impl __lamellar::ElementShiftOps for #the_type {}
 
-                            impl __lamellar::ElementComparePartialEqOps for Option< #the_type > {}
-                            impl __lamellar::ElementCompareEqOps for Option< #the_type > {}
+                            // impl __lamellar::ElementComparePartialEqOps for Option< #the_type > {} //see note above why we cant do this
+                            // impl __lamellar::ElementCompareEqOps for Option< #the_type > {} //see note above why we cant do this
 
                         }
                     );
@@ -1665,8 +1666,8 @@ pub(crate) fn __derive_arrayops(input: TokenStream) -> TokenStream {
         }
     }
     let buf_ops = create_buffered_ops(the_type.clone(), op_types, false, false);
-    let opt_type = syn::parse_quote!("Option< #the_type >");
-    let opt_buf_opt = create_buffered_ops(opt_type, opt_op_types, false, false);
+    // let opt_type = syn::parse_str(&format!("Option<{}>", the_type.to_token_stream())).unwrap(); //see note above why we cant do this
+    // let opt_buf_opt = create_buffered_ops(opt_type, opt_op_types, false, false); //see note above why we cant do this
 
     let output = quote_spanned! {input.span()=>
         const _: () = {
@@ -1698,9 +1699,10 @@ pub(crate) fn __derive_arrayops(input: TokenStream) -> TokenStream {
             use std::pin::Pin;
 
             impl __lamellar::_ArrayOps for #the_type {}
+            // impl __lamellar::_ArrayOps for Option< #the_type > {} //see note above why we cant do this
             #element_wise_trait_impls
             #buf_ops
-            #opt_buf_opt
+            // #opt_buf_opt //see note above why we cant do this
         };
     };
     TokenStream::from(output)
