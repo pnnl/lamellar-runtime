@@ -191,6 +191,45 @@ impl FreeEntries {
             addrs: BTreeMap::new(),
         }
     }
+
+    fn merge(&mut self) {
+        let mut i = 0;
+        while i < self.addrs.len() - 1 {
+            let (faddr, (fsize, fpadding)) = self.addrs.pop_first().unwrap();
+            let (naddr, (nsize, npadding)) = self.addrs.pop_first().unwrap();
+            if faddr + fsize + fpadding == naddr {
+                //merge
+                let new_size = fsize + nsize;
+                let new_padding = fpadding + npadding;
+                assert!(new_padding == 0);
+                let new_addr = faddr;
+                self.remove_size(naddr, nsize);
+                self.remove_size(faddr, fsize);
+                self.addrs.insert(new_addr, (new_size, new_padding));
+                self.sizes
+                    .entry(new_size)
+                    .or_insert(IndexSet::new())
+                    .insert(new_addr);
+            } else {
+                self.addrs.insert(faddr, (fsize, fpadding));
+                self.addrs.insert(naddr, (nsize, npadding));
+                i += 1;
+            }
+        }
+    }
+
+    fn remove_size(&mut self, addr: usize, size: usize) {
+        let mut remove_size = false;
+        if let Some(addrs) = self.sizes.get_mut(&size) {
+            addrs.remove(&addr);
+            if addrs.is_empty() {
+                remove_size = true;
+            }
+        }
+        if remove_size {
+            self.sizes.remove(&size);
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -203,20 +242,7 @@ pub(crate) struct BTreeAlloc {
     free_space: Arc<AtomicUsize>,
 }
 
-impl BTreeAlloc {
-    fn remove_size(&self, free_entries: &mut FreeEntries, addr: usize, size: usize) {
-        let mut remove_size = false;
-        if let Some(addrs) = free_entries.sizes.get_mut(&size) {
-            addrs.remove(&addr);
-            if addrs.is_empty() {
-                remove_size = true;
-            }
-        }
-        if remove_size {
-            free_entries.sizes.remove(&size);
-        }
-    }
-}
+impl BTreeAlloc {}
 
 impl LamellarAlloc for BTreeAlloc {
     fn new(id: String) -> BTreeAlloc {
@@ -266,45 +292,56 @@ impl LamellarAlloc for BTreeAlloc {
         let mut addr: Option<usize> = None;
         let mut remove_size: Option<usize> = None;
         let upper_size = size + align - 1; //max size we would need
-                                           //find smallest memory segment greater than or equal to size
-        if let Some((free_size, addrs)) = free_entries.sizes.range_mut(upper_size..).next() {
-            //the actual size, and list of addrs with that size
-            addr = addrs.pop(); // get the first addr
 
-            //if no more address exist with this size, mark it as removable from the free_entries size map
-            if addrs.is_empty() {
-                remove_size = Some(free_size.clone());
-            }
+        let mut try_again = true;
 
-            if let Some(a) = addr {
-                let padding = calc_padding(a, align);
-                let full_size = size + padding;
+        while try_again {
+            //find smallest memory segment greater than or equal to size
+            if let Some((free_size, addrs)) = free_entries.sizes.range_mut(upper_size..).next() {
+                //the actual size, and list of addrs with that size
+                addr = addrs.pop(); // get the first addr
 
-                if let Some((fsize, fpadding)) = free_entries.addrs.remove(&a) {
-                    // remove the address from free_entries address map
-                    // if full_size > fsize {
-                    //     println!("{full_size} {fsize} {size} {align} {padding}  {fpadding}");
-                    // }
-                    if fsize + fpadding != full_size {
-                        let remaining = (fsize + fpadding) - full_size;
-                        let new_addr = a + full_size;
-                        free_entries
-                            .sizes
-                            .entry(remaining)
-                            .or_insert(IndexSet::new()) //insert new entry of remaining size if not already present
-                            .insert(new_addr); //insert address into size map
-                        free_entries.addrs.insert(new_addr, (remaining, 0));
+                //if no more address exist with this size, mark it as removable from the free_entries size map
+                if addrs.is_empty() {
+                    remove_size = Some(free_size.clone());
+                }
+
+                if let Some(a) = addr {
+                    let padding = calc_padding(a, align);
+                    let full_size = size + padding;
+
+                    if let Some((fsize, fpadding)) = free_entries.addrs.remove(&a) {
+                        // remove the address from free_entries address map
+                        // if full_size > fsize {
+                        //     println!("{full_size} {fsize} {size} {align} {padding}  {fpadding}");
+                        // }
+                        if fsize + fpadding != full_size {
+                            let remaining = (fsize + fpadding) - full_size;
+                            let new_addr = a + full_size;
+                            free_entries
+                                .sizes
+                                .entry(remaining)
+                                .or_insert(IndexSet::new()) //insert new entry of remaining size if not already present
+                                .insert(new_addr); //insert address into size map
+                            free_entries.addrs.insert(new_addr, (remaining, 0));
+                        }
+                    } else {
+                        // println!("{full_size}  {size} {align} {padding}");
+                        // println!("{:?}", free_entries.sizes);
+                        // println!("{:?}", free_entries.addrs);
+                        panic!("{:?} addr {:?} not found in free_entries", self.id, a);
                     }
-                } else {
-                    // println!("{full_size}  {size} {align} {padding}");
-                    // println!("{:?}", free_entries.sizes);
-                    // println!("{:?}", free_entries.addrs);
-                    panic!("{:?} addr {:?} not found in free_entries", self.id, a);
+                }
+                try_again = false;
+            } else {
+                cvar.wait_for(&mut free_entries, std::time::Duration::from_millis(1));
+                free_entries.merge();
+                if free_entries.sizes.range_mut(upper_size..).next().is_none() {
+                    try_again = false;
                 }
             }
-        } else {
-            cvar.wait_for(&mut free_entries, std::time::Duration::from_millis(1));
         }
+
         if let Some(rsize) = remove_size {
             free_entries.sizes.remove(&rsize);
         }
@@ -340,6 +377,10 @@ impl LamellarAlloc for BTreeAlloc {
         if let Some((_, _)) = free_entries.sizes.range_mut(upper_size..).next() {
             return true;
         } else {
+            free_entries.merge();
+            if let Some((_, _)) = free_entries.sizes.range_mut(upper_size..).next() {
+                return true;
+            }
             return false;
         }
     }
@@ -360,7 +401,7 @@ impl LamellarAlloc for BTreeAlloc {
             let mut remove = Vec::new();
             let &(ref lock, ref cvar) = &*self.free_entries;
             let mut free_entries = lock.lock();
-            while let Some((faddr, (fsize, fpadding))) =
+            if let Some((faddr, (fsize, fpadding))) =
                 free_entries.addrs.range(..temp_addr).next_back()
             {
                 //look at address before addr
@@ -369,25 +410,27 @@ impl LamellarAlloc for BTreeAlloc {
                     temp_addr = *faddr;
                     temp_size += fsize + fpadding;
                     remove.push((*faddr, *fsize, *fpadding));
-                } else {
-                    break;
                 }
+                // else {
+                //     break;
+                // }
             }
 
-            while let Some((faddr, (fsize, fpadding))) = free_entries.addrs.range(addr..).next() {
+            if let Some((faddr, (fsize, fpadding))) = free_entries.addrs.range(addr..).next() {
                 //look at address after addr
                 if temp_addr + temp_size == *faddr {
                     //they are next to eachother...
                     temp_size += fsize + fpadding;
                     remove.push((*faddr, *fsize, *fpadding));
-                } else {
-                    break;
                 }
+                // else {
+                //     break;
+                // }
             }
             for (raddr, rsize, rpadding) in remove {
                 let rfull_size = rsize + rpadding;
                 free_entries.addrs.remove(&raddr);
-                self.remove_size(&mut free_entries, raddr, rfull_size);
+                free_entries.remove_size(raddr, rfull_size);
             }
             free_entries.addrs.insert(temp_addr, (temp_size, 0));
             free_entries
