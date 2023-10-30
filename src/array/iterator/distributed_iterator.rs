@@ -248,6 +248,18 @@ pub trait DistIteratorLauncher {
         B: Dist + ArrayOps,
         A: for<'a> TeamFrom<(&'a Vec<B>, Distribution)> + SyncSend + Clone + 'static;
 
+    fn count<I>(&self, iter: &I) -> Pin<Box<dyn Future<Output = usize> + Send>>
+    where
+        I: DistributedIterator + 'static;
+
+    fn count_with_schedule<I>(
+        &self,
+        sched: Schedule,
+        iter: &I,
+    ) -> Pin<Box<dyn Future<Output = usize> + Send>>
+    where
+        I: DistributedIterator + 'static;
+
     #[doc(hidden)]
     fn global_index_from_local(&self, index: usize, chunk_size: usize) -> Option<usize>;
 
@@ -497,6 +509,72 @@ pub trait DistributedIterator: SyncSend + Clone + 'static {
         self.array().for_each_async(self, op)
     }
 
+    /// Calls a closure on each element of a Distributed Iterator in parallel and distributed on each PE (which owns data of the iterated array) using the specififed schedule policy.
+    ///
+    /// Calling this function invokes an implicit barrier across all PEs in the Array
+    ///
+    /// This function returns a future which can be used to poll for completion of the iteration.
+    /// Note calling this function launches the iteration regardless of if the returned future is used or not.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block);
+    ///
+    /// array.dist_iter().for_each_with_schedule(Schedule::WorkStealing, |elem| println!("{:?} {elem}",std::thread::current().id()));
+    /// array.wait_all();
+    ///```
+    fn for_each_with_schedule<F>(
+        &self,
+        sched: Schedule,
+        op: F,
+    ) -> Pin<Box<dyn Future<Output = ()> + Send>>
+    where
+        F: Fn(Self::Item) + SyncSend + Clone + 'static,
+    {
+        self.array().for_each_with_schedule(sched, self, op)
+    }
+
+    /// Calls a closure and immediately awaits the result on each element of a Distributed Iterator in parallel and distributed on each PE (which owns data of the iterated array).
+    ///
+    /// Calling this function invokes an implicit barrier across all PEs in the Array, after this barrier no further communication is performed
+    /// as each PE will only process elements local to itself
+    ///
+    /// The supplied closure must return a future.
+    ///
+    /// Each thread will only drive a single future at a time.
+    ///
+    /// This function returns a future which can be used to poll for completion of the iteration.
+    /// Note calling this function launches the iteration regardless of if the returned future is used or not.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block);
+    ///
+    /// array.dist_iter().for_each_async_with_schedule(Schedule::Chunk(10),|elem| async move {
+    ///     async_std::task::yield_now().await;
+    ///     println!("{:?} {elem}",std::thread::current().id())
+    /// });
+    /// array.wait_all();
+    ///```
+    fn for_each_async_with_schedule<F, Fut>(
+        &self,
+        sched: Schedule,
+        op: F,
+    ) -> Pin<Box<dyn Future<Output = ()> + Send>>
+    where
+        F: Fn(Self::Item) -> Fut + SyncSend + Clone + 'static,
+        Fut: Future<Output = ()> + Send + 'static,
+    {
+        self.array().for_each_async_with_schedule(sched, self, op)
+    }
+
+
     /// Reduces the elements of the dist iterator using the provided closure
     ///
     /// This function returns a future which needs to be driven to completion to retrieve the new container.
@@ -629,75 +707,47 @@ pub trait DistributedIterator: SyncSend + Clone + 'static {
     {
         self.array().collect_async(self, d)
     }
+
+    /// Counts the number of the elements of the local iterator
+    ///
+    /// This function returns a future which needs to be driven to completion to retrieve the new container.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block);
+    ///
+    /// let req = array.local_iter().filter(|elem|  elem < 10).collect::<Vec<usize>>(Distribution::Block);
+    /// let new_vec = array.block_on(req); //wait on the collect request to get the new array
+    ///```
+    fn count(&self) -> Pin<Box<dyn Future<Output = usize> + Send>> {
+        self.array().count(self)
+    }
+
+    /// Counts the number of the elements of the local iterator
+    ///
+    /// This function returns a future which needs to be driven to completion to retrieve the new container.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block);
+    ///
+    /// let req = array.local_iter().filter(|elem|  elem < 10).collect::<Vec<usize>>(Distribution::Block);
+    /// let new_vec = array.block_on(req); //wait on the collect request to get the new array
+    ///```
+    fn count_with_schedule(&self, sched: Schedule) -> Pin<Box<dyn Future<Output = usize> + Send>> {
+        self.array().count_with_schedule(sched, self)
+    }
 }
 
 /// An interface for dealing with distributed iterators which are indexable, meaning it returns an iterator of known length
 pub trait IndexedDistributedIterator: DistributedIterator + SyncSend + Clone + 'static {
-    /// Calls a closure on each element of a Distributed Iterator in parallel and distributed on each PE (which owns data of the iterated array) using the specififed schedule policy.
-    ///
-    /// Calling this function invokes an implicit barrier across all PEs in the Array
-    ///
-    /// This function returns a future which can be used to poll for completion of the iteration.
-    /// Note calling this function launches the iteration regardless of if the returned future is used or not.
-    ///
-    /// # Examples
-    ///```
-    /// use lamellar::array::prelude::*;
-    ///
-    /// let world = LamellarWorldBuilder::new().build();
-    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block);
-    ///
-    /// array.dist_iter().for_each_with_schedule(Schedule::WorkStealing, |elem| println!("{:?} {elem}",std::thread::current().id()));
-    /// array.wait_all();
-    ///```
-    fn for_each_with_schedule<F>(
-        &self,
-        sched: Schedule,
-        op: F,
-    ) -> Pin<Box<dyn Future<Output = ()> + Send>>
-    where
-        F: Fn(Self::Item) + SyncSend + Clone + 'static,
-    {
-        self.array().for_each_with_schedule(sched, self, op)
-    }
-
-    /// Calls a closure and immediately awaits the result on each element of a Distributed Iterator in parallel and distributed on each PE (which owns data of the iterated array).
-    ///
-    /// Calling this function invokes an implicit barrier across all PEs in the Array, after this barrier no further communication is performed
-    /// as each PE will only process elements local to itself
-    ///
-    /// The supplied closure must return a future.
-    ///
-    /// Each thread will only drive a single future at a time.
-    ///
-    /// This function returns a future which can be used to poll for completion of the iteration.
-    /// Note calling this function launches the iteration regardless of if the returned future is used or not.
-    ///
-    /// # Examples
-    ///```
-    /// use lamellar::array::prelude::*;
-    ///
-    /// let world = LamellarWorldBuilder::new().build();
-    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block);
-    ///
-    /// array.dist_iter().for_each_async_with_schedule(Schedule::Chunk(10),|elem| async move {
-    ///     async_std::task::yield_now().await;
-    ///     println!("{:?} {elem}",std::thread::current().id())
-    /// });
-    /// array.wait_all();
-    ///```
-    fn for_each_async_with_schedule<F, Fut>(
-        &self,
-        sched: Schedule,
-        op: F,
-    ) -> Pin<Box<dyn Future<Output = ()> + Send>>
-    where
-        F: Fn(Self::Item) -> Fut + SyncSend + Clone + 'static,
-        Fut: Future<Output = ()> + Send + 'static,
-    {
-        self.array().for_each_async_with_schedule(sched, self, op)
-    }
-
+    
     /// yields the global array index along with each element
     ///
     /// # Examples

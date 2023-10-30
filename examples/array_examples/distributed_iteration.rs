@@ -304,4 +304,12 @@ fn main() {
     block_array.barrier();
 
     println!("--------------------------------------------------------");
+    println!("block filter count");
+    let count = block_array.block_on(block_array
+        .dist_iter()
+        .filter(|e| e.load() %2 == 0)
+        .count());
+    println!("result: {count}");
+
+    println!("--------------------------------------------------------");
 }

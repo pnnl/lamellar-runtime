@@ -319,6 +319,25 @@ impl<T: Dist> DistIteratorLauncher for NativeAtomicArray<T> {
     {
         DistIteratorLauncher::collect_async_with_schedule(&self.array, sched, iter, d)
     }
+
+    fn count<I>(&self, iter: &I) -> Pin<Box<dyn Future<Output = usize> + Send>>
+    where
+        I: DistributedIterator + 'static,
+    {
+        DistIteratorLauncher::count(&self.array, iter)
+    }
+
+    fn count_with_schedule<I>(
+        &self,
+        sched: Schedule,
+        iter: &I,
+    ) -> Pin<Box<dyn Future<Output = usize> + Send>>
+    where
+        I: DistributedIterator + 'static,
+    {
+        DistIteratorLauncher::count_with_schedule(&self.array, sched, iter)
+    }
+    
     fn team(&self) -> Pin<Arc<LamellarTeamRT>> {
         self.array.team_rt().clone()
     }
