@@ -362,6 +362,26 @@ impl<T: Dist> DistIteratorLauncher for GenericAtomicArray<T> {
         DistIteratorLauncher::count_with_schedule(&self.array, sched, iter)
     }
 
+    fn sum<I>(&self, iter: &I) -> Pin<Box<dyn Future<Output = I::Item> + Send>>
+    where
+        I: DistributedIterator + 'static,
+        I::Item: Dist + ArrayOps + std::iter::Sum,
+    {
+        DistIteratorLauncher::sum(&self.array, iter)
+    }
+
+    fn sum_with_schedule<I>(
+        &self,
+        sched: Schedule,
+        iter: &I,
+    ) -> Pin<Box<dyn Future<Output = I::Item> + Send>>
+    where
+        I: DistributedIterator + 'static,
+        I::Item: Dist + ArrayOps + std::iter::Sum,
+    {
+        DistIteratorLauncher::sum_with_schedule(&self.array, sched, iter)
+    }
+
     fn team(&self) -> Pin<Arc<LamellarTeamRT>> {
         self.array.team_rt().clone()
     }

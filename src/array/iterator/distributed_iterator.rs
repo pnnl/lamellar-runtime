@@ -260,6 +260,20 @@ pub trait DistIteratorLauncher {
     where
         I: DistributedIterator + 'static;
 
+    fn sum<I>(&self, iter: &I) -> Pin<Box<dyn Future<Output = I::Item> + Send>>
+    where
+        I: DistributedIterator + 'static,
+        I::Item:  Dist + ArrayOps + std::iter::Sum;
+
+    fn sum_with_schedule<I>(
+        &self,
+        sched: Schedule,
+        iter: &I,
+    ) -> Pin<Box<dyn Future<Output = I::Item> + Send>>
+    where
+        I: DistributedIterator + 'static,
+        I::Item:  Dist + ArrayOps + std::iter::Sum;
+
     #[doc(hidden)]
     fn global_index_from_local(&self, index: usize, chunk_size: usize) -> Option<usize>;
 
@@ -742,6 +756,42 @@ pub trait DistributedIterator: SyncSend + Clone + 'static {
     ///```
     fn count_with_schedule(&self, sched: Schedule) -> Pin<Box<dyn Future<Output = usize> + Send>> {
         self.array().count_with_schedule(sched, self)
+    }
+
+    /// Sums the elements of the local iterator.
+    ///
+    /// Takes each element, adds them together, and returns the result.
+    ///
+    /// An empty iterator returns the zero value of the type.
+    ///
+    /// This function returns a future which needs to be driven to completion to retrieve the sum
+    ///
+    /// # Examples
+    ///```
+    ///```
+    fn sum(&self) -> Pin<Box<dyn Future<Output = Self::Item> + Send>>
+    where
+        Self::Item:  Dist + ArrayOps + std::iter::Sum,
+    {
+        self.array().sum(self)
+    }
+
+    /// Sums the elements of the local iterator, using the specified schedule
+    ///
+    /// Takes each element, adds them together, and returns the result.
+    ///
+    /// An empty iterator returns the zero value of the type.
+    ///
+    /// This function returns a future which needs to be driven to completion to retrieve the sum
+    ///
+    /// # Examples
+    ///```
+    ///```
+    fn sum_with_schedule(&self, sched: Schedule) -> Pin<Box<dyn Future<Output = Self::Item> + Send>>
+    where
+        Self::Item:  Dist + ArrayOps + std::iter::Sum,
+    {
+        self.array().sum_with_schedule(sched, self)
     }
 }
 

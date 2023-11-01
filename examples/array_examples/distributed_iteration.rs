@@ -36,6 +36,23 @@ fn main() {
     block_array.print();
     cyclic_array.print();
 
+    println!("--------------------------------------------------------");
+    println!("block sum");
+    let sum = block_array.block_on(block_array
+        .dist_iter().map(|e|e.load())
+        .sum());
+    println!("result: {sum}");
+    world.barrier();
+    println!("--------------------------------------------------------");
+    println!("--------------------------------------------------------");
+    println!("cyclic sum");
+    let sum = cyclic_array.block_on(cyclic_array
+        .dist_iter().map(|e|e.load())
+        .sum());
+    println!("result: {sum}");
+    world.barrier();
+    println!("--------------------------------------------------------");
+
     // our plan is to support a number of iterator extenders/operators similar to tradition rust iters
     // currently we offer Enumurator,
 
@@ -311,5 +328,5 @@ fn main() {
         .count());
     println!("result: {count}");
 
-    println!("--------------------------------------------------------");
+    
 }

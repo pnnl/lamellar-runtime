@@ -236,6 +236,34 @@ impl<T: Dist> DistIteratorLauncher for UnsafeArray<T> {
         }
     }
 
+    fn sum<I>(&self, iter: &I) -> Pin<Box<dyn Future<Output = I::Item> + Send>>
+    where
+        I: DistributedIterator + 'static,
+        I::Item: Dist + ArrayOps + std::iter::Sum,
+    {
+        self.sum_with_schedule(Schedule::Static, iter)
+    }
+
+    fn sum_with_schedule<I>(
+        &self,
+        sched: Schedule,
+        iter: &I,
+    ) -> Pin<Box<dyn Future<Output = I::Item> + Send>>
+    where
+        I: DistributedIterator + 'static,
+        I::Item: Dist + ArrayOps + std::iter::Sum,
+    {
+        let sum = Sum { iter: iter.clone() };
+        match sched {
+            Schedule::Static => self.sched_static(sum),
+            Schedule::Dynamic => self.sched_dynamic(sum),
+            Schedule::Chunk(size) => self.sched_chunk(sum, size),
+            Schedule::Guided => self.sched_guided(sum),
+            Schedule::WorkStealing => self.sched_work_stealing(sum),
+        }
+    }
+
+
     fn team(&self) -> Pin<Arc<LamellarTeamRT>> {
         self.inner.data.team.clone()
     }

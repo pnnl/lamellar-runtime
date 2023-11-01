@@ -4,6 +4,7 @@ use crate::array::iterator::distributed_iterator::DistributedIterator;
 use crate::array::iterator::IterRequest;
 use crate::lamellar_request::LamellarRequest;
 use crate::lamellar_team::LamellarTeamRT;
+use crate::scheduler::SchedulerQueue;
 use crate::Darc;
 
 use async_trait::async_trait;
@@ -42,7 +43,7 @@ where
         team: Pin<Arc<LamellarTeamRT>>,
         reqs: Vec<Box<dyn LamellarRequest<Output = Self::AmOutput>>>,
     ) -> Box<dyn IterRequest<Output = Self::Output>> {
-        Box::new(LocalIterCountHandle { reqs, team })
+        Box::new(RemoteIterCountHandle { reqs, team })
     }
     fn max_elems(&self, in_elems: usize) -> usize {
         self.iter.elems(in_elems)
@@ -50,7 +51,7 @@ where
 }
 
 #[doc(hidden)]
-pub struct LocalIterCountHandle {
+pub struct RemoteIterCountHandle {
     pub(crate) reqs: Vec<Box<dyn LamellarRequest<Output = usize>>>,
     team: Pin<Arc<LamellarTeamRT>>,
 }
@@ -68,7 +69,7 @@ impl LamellarAm for UpdateCntAm{
     }
 }
 
-impl LocalIterCountHandle
+impl RemoteIterCountHandle
 {
     async fn reduce_remote_counts(&self, local_cnt: usize, cnt: Darc<AtomicUsize>) -> usize {
         self.team.exec_am_all(UpdateCntAm{remote_cnt: local_cnt, cnt: cnt.clone()}).into_future().await;
@@ -79,7 +80,7 @@ impl LocalIterCountHandle
 
 #[doc(hidden)]
 #[async_trait]
-impl IterRequest for LocalIterCountHandle {
+impl IterRequest for RemoteIterCountHandle {
     type Output = usize;
     async fn into_future(mut self: Box<Self>) -> Self::Output {
         self.team.barrier();
@@ -93,11 +94,14 @@ impl IterRequest for LocalIterCountHandle {
         self.reduce_remote_counts(count,cnt).await
     }
     fn wait(mut self: Box<Self>) -> Self::Output {
-        self.reqs
+        self.team.barrier();
+        let cnt = Darc::new(&self.team,AtomicUsize::new(0)).unwrap();
+        let count = self.reqs
             .drain(..)
             .map(|req| req.get())
             .into_iter()
-            .sum::<usize>()
+            .sum::<usize>();
+        self.team.scheduler.block_on(self.reduce_remote_counts(count,cnt))
     }
 }
 
