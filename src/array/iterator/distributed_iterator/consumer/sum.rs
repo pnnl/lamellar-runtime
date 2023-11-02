@@ -121,7 +121,7 @@ where
     I::Item: Dist + ArrayOps + std::iter::Sum,
 {
     async fn exec(&self) -> I::Item {
-        let mut iter = self.schedule.init_iter(self.iter.clone());
+        let  iter = self.schedule.init_iter(self.iter.clone());
         iter.sum::<I::Item>()
     }
 }
