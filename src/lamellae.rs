@@ -40,9 +40,12 @@ lazy_static! {
     serde::Serialize, serde::Deserialize, Debug, PartialEq, Eq, Ord, PartialOrd, Hash, Clone, Copy,
 )]
 pub enum Backend {
+    #[doc(hidden)]
     #[cfg(feature = "enable-rofi")]
     Rofi,
+    #[doc(hidden)]
     Local,
+    #[doc(hidden)]
     Shmem,
 }
 

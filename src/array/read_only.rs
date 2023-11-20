@@ -602,6 +602,23 @@ impl<T: Dist> SubArray<T> for ReadOnlyArray<T> {
 }
 
 impl<T: Dist + std::fmt::Debug> ReadOnlyArray<T> {
+    #[doc(alias = "Collective")]
+    /// Print the data within a lamellar array
+    ///
+    /// # Collective Operation
+    /// Requires all PEs associated with the array to enter the print call otherwise deadlock will occur (i.e. barriers are being called internally)
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let block_array = ReadOnlyArray::<usize>::new(&world,100,Distribution::Block);
+    /// let cyclic_array = ReadOnlyArray::<usize>::new(&world,100,Distribution::Block);
+    ///
+    /// block_array.print();
+    /// println!();
+    /// cyclic_array.print();
+    ///```
     pub fn print(&self) {
         self.array.print()
     }

@@ -526,7 +526,9 @@ impl<T: Dist + std::fmt::Debug + std::iter::Sum> std::iter::Sum for AtomicElemen
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
 #[serde(bound = "T: Dist + serde::Serialize + serde::de::DeserializeOwned + 'static")]
 pub enum AtomicArray<T: Dist> {
+    /// an array containing native atomic types. i.e. AtomicU8, AtomicUsize, etc.
     NativeAtomicArray(NativeAtomicArray<T>),
+    /// an array containing generic types, each protected by a mutex
     GenericAtomicArray(GenericAtomicArray<T>),
 }
 
@@ -1205,6 +1207,23 @@ impl<T: Dist> LamellarWrite for AtomicArray<T> {}
 impl<T: Dist> LamellarRead for AtomicArray<T> {}
 
 impl<T: Dist + std::fmt::Debug> AtomicArray<T> {
+    #[doc(alias = "Collective")]
+    /// Print the data within a lamellar array
+    ///
+    /// # Collective Operation
+    /// Requires all PEs associated with the array to enter the print call otherwise deadlock will occur (i.e. barriers are being called internally)
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let block_array = AtomicArray::<usize>::new(&world,100,Distribution::Block);
+    /// let cyclic_array = AtomicArray::<usize>::new(&world,100,Distribution::Block);
+    ///
+    /// block_array.print();
+    /// println!();
+    /// cyclic_array.print();
+    ///```
     pub fn print(&self) {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.print(),

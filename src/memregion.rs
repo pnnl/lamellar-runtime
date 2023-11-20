@@ -38,6 +38,7 @@ use enum_dispatch::enum_dispatch;
 #[derive(Debug, Clone)]
 pub struct MemNotLocalError;
 
+/// A Result type for LamellarMemoryRegion Operations
 pub type MemResult<T> = Result<T, MemNotLocalError>;
 
 impl std::fmt::Display for MemNotLocalError {

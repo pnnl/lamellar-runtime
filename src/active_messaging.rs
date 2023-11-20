@@ -639,6 +639,7 @@ pub trait LocalAM: SyncSend {
 pub trait LamellarAM {
     /// The type of the output returned by the active message
     type Output: AmDist;
+    /// The function representing the work done by the active message
     async fn exec(self) -> Self::Output;
 }
 

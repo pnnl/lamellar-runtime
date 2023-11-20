@@ -32,19 +32,27 @@ pub trait IterRequest {
 /// - WorkStealing: Intially allocated the same range as static, but allows idle threads to steal work from busy threads
 #[derive(Debug, Clone)]
 pub enum Schedule {
+    /// local_data.len()/number of threads elements per thread
     Static,
-    Dynamic,      //single element
-    Chunk(usize), //dynamic but with multiple elements
-    Guided,       // chunks that get smaller over time
-    WorkStealing, // static initially but other threads can steal
+    ///single element at a time
+    Dynamic,
+    ///dynamic but with multiple elements
+    Chunk(usize),
+    /// chunks that get smaller over time
+    Guided,
+    /// static initially but other threads can steal
+    WorkStealing,
 }
 
 /// The interface for creating the various lamellar array iterator types
 ///
 /// This is only implemented for Safe Array types, [UnsafeArray][crate::array::UnsafeArray] directly provides unsafe versions of the same functions
 pub trait LamellarArrayIterators<T: Dist> {
+    /// The [DistributedIterator][crate::array::DistributedIterator] type
     type DistIter: DistributedIterator;
+    /// The [LocalIterator][crate::array::LocalIterator] type
     type LocalIter: LocalIterator;
+    /// The [OneSidedIterator][crate::array::OneSidedIterator] type
     type OnesidedIter: OneSidedIterator;
 
     #[doc(alias = "Collective")]
@@ -141,9 +149,9 @@ pub trait LamellarArrayIterators<T: Dist> {
 ///
 /// This is only implemented for Safe Array types, [UnsafeArray][crate::array::UnsafeArray] directly provides unsafe versions of the same functions
 pub trait LamellarArrayMutIterators<T: Dist> {
-    /// Reference to the array being iterated
-    // type Array: LamellarArray<T>;
+    /// The [DistributedIterator][crate::array::DistributedIterator] type
     type DistIter: DistributedIterator;
+    /// The [LocalIterator][crate::array::LocalIterator] type
     type LocalIter: LocalIterator;
 
     #[doc(alias = "Collective")]

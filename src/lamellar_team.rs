@@ -121,9 +121,9 @@ impl LamellarTeam {
         the_team
     }
 
-    pub fn print_cnt(&self) {
-        self.team.print_cnt();
-    }
+    // pub fn print_cnt(&self) {
+    //     self.team.print_cnt();
+    // }
 
     #[doc(alias("One-sided", "onesided"))]
     /// Return a list of (world-based) pe ids representing the members of the team
@@ -534,6 +534,7 @@ impl RemoteMemoryRegion for Arc<LamellarTeam> {
     }
 }
 
+/// wrapper struct around an internal runtime handle to a lamellar team
 #[derive(Debug)]
 pub struct IntoLamellarTeam {
     pub(crate) team: Pin<Arc<LamellarTeamRT>>,

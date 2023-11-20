@@ -1,3 +1,4 @@
+//! A trait for accessing various data about the current lamellar envrionment
 use crate::AtomicArray;
 use crate::Dist;
 use crate::LamellarTeam;

@@ -37,8 +37,8 @@ use std::u8;
 pub static OPS_BUFFER_SIZE: usize = 10_000_000;
 
 /// A marker trait for types that can be used as an array
-/// Users should not implement this directly, rather they should use the [macro@ArrayOps] derive macro
-/// by passing it as an argument to the [macro@AmData] attribute macro to automatically derive this trait.
+/// Users should not implement this directly, rather they should use the [trait@ArrayOps] derive macro
+/// by passing it as an argument to the [macro@crate::active_messaging::AmData] attribute macro to automatically derive this trait.
 ///
 /// # Examples
 ///

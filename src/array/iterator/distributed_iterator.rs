@@ -263,7 +263,7 @@ pub trait DistIteratorLauncher {
     fn sum<I>(&self, iter: &I) -> Pin<Box<dyn Future<Output = I::Item> + Send>>
     where
         I: DistributedIterator + 'static,
-        I::Item:  Dist + ArrayOps + std::iter::Sum;
+        I::Item: Dist + ArrayOps + std::iter::Sum;
 
     fn sum_with_schedule<I>(
         &self,
@@ -272,7 +272,7 @@ pub trait DistIteratorLauncher {
     ) -> Pin<Box<dyn Future<Output = I::Item> + Send>>
     where
         I: DistributedIterator + 'static,
-        I::Item:  Dist + ArrayOps + std::iter::Sum;
+        I::Item: Dist + ArrayOps + std::iter::Sum;
 
     #[doc(hidden)]
     fn global_index_from_local(&self, index: usize, chunk_size: usize) -> Option<usize>;
@@ -442,7 +442,7 @@ pub trait DistributedIterator: SyncSend + Clone + 'static {
     ///                             if *e%2 == 0{ Some((i,*e as f32)) }
     ///                             else { None }
     ///                         })
-    ///                        .monotonic());
+    ///                        .monotonic();
     /// world.block_on(filter_iter.for_each(move|(j,(i,e))| println!("PE: {my_pe} j: {j} i: {i} elem: {e}")));
     ///```
     /// Possible output on a 4 PE (1 thread/PE) execution (ordering is likey to be random with respect to PEs)
@@ -588,7 +588,6 @@ pub trait DistributedIterator: SyncSend + Clone + 'static {
         self.array().for_each_async_with_schedule(sched, self, op)
     }
 
-
     /// Reduces the elements of the dist iterator using the provided closure
     ///
     /// This function returns a future which needs to be driven to completion to retrieve the new container.
@@ -625,7 +624,7 @@ pub trait DistributedIterator: SyncSend + Clone + 'static {
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block);
     ///
-    /// let req = array.dist_iter().reduce(|acc,elem| acc+elem);
+    /// let req = array.dist_iter().reduce_with_schedule(Schedule::Static,|acc,elem| acc+elem);
     /// let sum = array.block_on(req); //wait on the collect request to get the new array
     ///```
     fn reduce_with_schedule<F>(
@@ -733,8 +732,8 @@ pub trait DistributedIterator: SyncSend + Clone + 'static {
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block);
     ///
-    /// let req = array.local_iter().filter(|elem|  elem < 10).collect::<Vec<usize>>(Distribution::Block);
-    /// let new_vec = array.block_on(req); //wait on the collect request to get the new array
+    /// let req = array.dist_iter().filter(|elem|  elem < 10).count();
+    /// let cnt = array.block_on(req); //wait on the collect request to get the new array
     ///```
     fn count(&self) -> Pin<Box<dyn Future<Output = usize> + Send>> {
         self.array().count(self)
@@ -751,8 +750,8 @@ pub trait DistributedIterator: SyncSend + Clone + 'static {
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block);
     ///
-    /// let req = array.local_iter().filter(|elem|  elem < 10).collect::<Vec<usize>>(Distribution::Block);
-    /// let new_vec = array.block_on(req); //wait on the collect request to get the new array
+    /// let req = array.dist_iter().filter(|elem|  elem < 10).count_with_schedule(Schedule::Dynamic);
+    /// let cnt = array.block_on(req); //wait on the collect request to get the new array
     ///```
     fn count_with_schedule(&self, sched: Schedule) -> Pin<Box<dyn Future<Output = usize> + Send>> {
         self.array().count_with_schedule(sched, self)
@@ -768,10 +767,17 @@ pub trait DistributedIterator: SyncSend + Clone + 'static {
     ///
     /// # Examples
     ///```
+    /// use lamellar::array::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block);
+    ///
+    /// let req = array.dist_iter().sum();
+    /// let sum = array.block_on(req); //wait on the collect request to get the new array
     ///```
     fn sum(&self) -> Pin<Box<dyn Future<Output = Self::Item> + Send>>
     where
-        Self::Item:  Dist + ArrayOps + std::iter::Sum,
+        Self::Item: Dist + ArrayOps + std::iter::Sum,
     {
         self.array().sum(self)
     }
@@ -786,10 +792,17 @@ pub trait DistributedIterator: SyncSend + Clone + 'static {
     ///
     /// # Examples
     ///```
+    /// use lamellar::array::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block);
+    ///
+    /// let req = array.dist_iter().sum_with_schedule(Schedule::Guided);
+    /// let sum = array.block_on(req); //wait on the collect request to get the new array
     ///```
     fn sum_with_schedule(&self, sched: Schedule) -> Pin<Box<dyn Future<Output = Self::Item> + Send>>
     where
-        Self::Item:  Dist + ArrayOps + std::iter::Sum,
+        Self::Item: Dist + ArrayOps + std::iter::Sum,
     {
         self.array().sum_with_schedule(sched, self)
     }
@@ -797,7 +810,6 @@ pub trait DistributedIterator: SyncSend + Clone + 'static {
 
 /// An interface for dealing with distributed iterators which are indexable, meaning it returns an iterator of known length
 pub trait IndexedDistributedIterator: DistributedIterator + SyncSend + Clone + 'static {
-    
     /// yields the global array index along with each element
     ///
     /// # Examples

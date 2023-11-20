@@ -25,7 +25,9 @@ pub trait LamellarArch: Send + Sync {
 /// An error that occurs when trying to access a PE that does not exist on a team/subteam
 #[derive(Debug, Clone, Copy)]
 pub struct IdError {
+    #[doc(hidden)]
     pub parent_pe: usize,
+    #[doc(hidden)]
     pub team_pe: usize,
 }
 

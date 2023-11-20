@@ -160,11 +160,11 @@ pub use global_lock_atomic::{
 };
 
 pub mod iterator;
-#[doc(hidden)]
+// #[doc(hidden)]
 pub use iterator::distributed_iterator::DistributedIterator;
-#[doc(hidden)]
+// #[doc(hidden)]
 pub use iterator::local_iterator::LocalIterator;
-#[doc(hidden)]
+// #[doc(hidden)]
 pub use iterator::one_sided_iterator::OneSidedIterator;
 
 pub(crate) mod operations;
@@ -239,7 +239,9 @@ impl<T: Dist + ArrayOps> ArrayOps for Option<T> {}
 ///```
 #[derive(serde::Serialize, serde::Deserialize, Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Distribution {
+    /// The indicies of the elements on each PE are sequential
     Block,
+    /// The indicies of the elements on each PE have a stride equal to the number of PEs associated with the array
     Cyclic,
 }
 
@@ -305,8 +307,11 @@ impl<T: Dist> LamellarArrayRequest for ArrayRdmaAtHandle<T> {
 // #[enum_dispatch(RegisteredMemoryRegion<T>, SubRegion<T>, TeamFrom<T>,MemoryRegionRDMA<T>,AsBase)]
 #[derive(Clone, Debug)]
 pub enum LamellarArrayRdmaInput<T: Dist> {
+    /// Variant contiaining a memory region whose local data can be used as an input buffer
     LamellarMemRegion(LamellarMemoryRegion<T>),
+    /// Variant contiaining a shared memory region whose local data can be used as an input buffer
     SharedMemRegion(SharedMemoryRegion<T>), //when used as input/output we are only using the local data
+    /// Variant contiaining a onessided memory region that can be used as an input buffer
     LocalMemRegion(OneSidedMemoryRegion<T>),
     // UnsafeArray(UnsafeArray<T>),
 }
@@ -316,8 +321,11 @@ impl<T: Dist> LamellarRead for LamellarArrayRdmaOutput<T> {}
 // #[enum_dispatch(RegisteredMemoryRegion<T>, SubRegion<T>, TeamFrom<T>,MemoryRegionRDMA<T>,AsBase)]
 #[derive(Clone, Debug)]
 pub enum LamellarArrayRdmaOutput<T: Dist> {
+    /// Variant contiaining a memory region whose local data can be used as an output buffer
     LamellarMemRegion(LamellarMemoryRegion<T>),
+    /// Variant contiaining a shared memory region whose local data can be used as an output buffer
     SharedMemRegion(SharedMemoryRegion<T>), //when used as input/output we are only using the local data
+    /// Variant contiaining a onessided memory region that can be used as an output buffer
     LocalMemRegion(OneSidedMemoryRegion<T>),
     // UnsafeArray(UnsafeArray<T>),
 }
@@ -387,13 +395,14 @@ impl<T: Dist> TeamFrom<&Vec<T>> for LamellarArrayRdmaInput<T> {
     }
 }
 
-// #[doc(hidden)]
+/// Provides the same abstraction as the `From` trait in the standard language, but with a `team` parameter so that lamellar memory regions can be allocated
 pub trait TeamFrom<T: ?Sized> {
+    /// Converts to this type from the input type
     fn team_from(val: T, team: &Pin<Arc<LamellarTeamRT>>) -> Self;
 }
-
-// #[doc(hidden)]
+/// Provides the same abstraction as the `Into` trait in the standard language, but with a `team` parameter so that lamellar memory regions can be allocated
 pub trait TeamInto<T: ?Sized> {
+    /// converts this type into the (usually inferred) input type
     fn team_into(self, team: &Pin<Arc<LamellarTeamRT>>) -> T;
 }
 
@@ -429,10 +438,15 @@ impl<T: Clone> TeamFrom<(&Vec<T>, Distribution)> for Vec<T> {
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 #[serde(bound = "T: Dist + serde::Serialize + serde::de::DeserializeOwned + 'static")]
 pub enum LamellarReadArray<T: Dist + 'static> {
+    #[doc(hidden)]
     UnsafeArray(UnsafeArray<T>),
+    #[doc(hidden)]
     ReadOnlyArray(ReadOnlyArray<T>),
+    #[doc(hidden)]
     AtomicArray(AtomicArray<T>),
+    #[doc(hidden)]
     LocalLockArray(LocalLockArray<T>),
+    #[doc(hidden)]
     GlobalLockArray(GlobalLockArray<T>),
 }
 
@@ -441,12 +455,19 @@ pub enum LamellarReadArray<T: Dist + 'static> {
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 pub enum LamellarByteArray {
     //we intentially do not include "byte" in the variant name to ease construciton in the proc macros
+    #[doc(hidden)]
     UnsafeArray(UnsafeByteArray),
+    #[doc(hidden)]
     ReadOnlyArray(ReadOnlyByteArray),
+    #[doc(hidden)]
     AtomicArray(AtomicByteArray),
+    #[doc(hidden)]
     NativeAtomicArray(NativeAtomicByteArray),
+    #[doc(hidden)]
     GenericAtomicArray(GenericAtomicByteArray),
+    #[doc(hidden)]
     LocalLockArray(LocalLockByteArray),
+    #[doc(hidden)]
     GlobalLockArray(GlobalLockByteArray),
 }
 
@@ -496,9 +517,13 @@ impl<T: Dist + 'static> crate::active_messaging::DarcSerde for LamellarReadArray
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 #[serde(bound = "T: Dist + serde::Serialize + serde::de::DeserializeOwned")]
 pub enum LamellarWriteArray<T: Dist> {
+    #[doc(hidden)]
     UnsafeArray(UnsafeArray<T>),
+    #[doc(hidden)]
     AtomicArray(AtomicArray<T>),
+    #[doc(hidden)]
     LocalLockArray(LocalLockArray<T>),
+    #[doc(hidden)]
     GlobalLockArray(GlobalLockArray<T>),
 }
 
@@ -1006,6 +1031,7 @@ pub trait LamellarArray<T: Dist>: private::LamellarArrayPrivate<T> {
 ///
 /// There can exist mutliple subarrays to the same parent array and creating sub arrays are onesided operations
 pub trait SubArray<T: Dist>: LamellarArray<T> {
+    #[doc(hidden)]
     type Array: LamellarArray<T>;
     #[doc(alias("One-sided", "onesided"))]
     /// Create a sub array of this UnsafeArray which consists of the elements specified by the range

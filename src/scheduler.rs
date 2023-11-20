@@ -36,6 +36,7 @@ pub(crate) struct ReqId {
 /// The available worker thread scheduling algorithms
 #[derive(Debug)]
 pub enum SchedulerType {
+    /// The default (and currently only) scheduler, performs workstealing across all worker threads
     WorkStealing,
     // NumaWorkStealing,
     // NumaWorkStealing2,

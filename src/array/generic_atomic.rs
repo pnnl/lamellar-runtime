@@ -457,6 +457,7 @@ impl<T: Dist> GenericAtomicArray<T> {
     //     self.array.num_elems_local()
     // }
 
+    #[doc(hidden)]
     pub fn use_distribution(self, distribution: Distribution) -> Self {
         GenericAtomicArray {
             locks: self.locks.clone(),
@@ -486,6 +487,7 @@ impl<T: Dist> GenericAtomicArray<T> {
     //     self.array.len()
     // }
 
+    #[doc(hidden)]
     pub fn local_data(&self) -> GenericAtomicLocalData<T> {
         GenericAtomicLocalData {
             array: self.clone(),
@@ -494,6 +496,7 @@ impl<T: Dist> GenericAtomicArray<T> {
         }
     }
 
+    #[doc(hidden)]
     pub fn mut_local_data(&self) -> GenericAtomicLocalData<T> {
         GenericAtomicLocalData {
             array: self.clone(),
@@ -518,26 +521,25 @@ impl<T: Dist> GenericAtomicArray<T> {
     //     }
     // }
 
+    #[doc(hidden)]
     pub fn into_unsafe(self) -> UnsafeArray<T> {
         // println!("generic into_unsafe");
         self.array.into()
     }
 
-    // pub fn into_local_only(self) -> LocalOnlyArray<T> {
-    //     // println!("generic into_local_only");
-    //     self.array.into()
-    // }
-
+    #[doc(hidden)]
     pub fn into_read_only(self) -> ReadOnlyArray<T> {
         // println!("generic into_read_only");
         self.array.into()
     }
 
+    #[doc(hidden)]
     pub fn into_local_lock(self) -> LocalLockArray<T> {
         // println!("generic into_local_lock");
         self.array.into()
     }
 
+    #[doc(hidden)]
     pub fn into_global_lock(self) -> GlobalLockArray<T> {
         // println!("generic into_local_lock");
         self.array.into()
@@ -567,6 +569,7 @@ impl<T: Dist> GenericAtomicArray<T> {
 }
 
 impl<T: Dist + 'static> GenericAtomicArray<T> {
+    #[doc(hidden)]
     pub fn into_atomic(self) -> GenericAtomicArray<T> {
         // println!("generic into_atomic");
         self.array.into()
@@ -763,6 +766,23 @@ impl<T: Dist> SubArray<T> for GenericAtomicArray<T> {
 }
 
 impl<T: Dist + std::fmt::Debug> GenericAtomicArray<T> {
+    #[doc(alias = "Collective")]
+    /// Print the data within a lamellar array
+    ///
+    /// # Collective Operation
+    /// Requires all PEs associated with the array to enter the print call otherwise deadlock will occur (i.e. barriers are being called internally)
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let block_array = AtomicArray::<f32>::new(&world,100,Distribution::Block);
+    /// let cyclic_array = AtomicArray::<f32>::new(&world,100,Distribution::Block);
+    ///
+    /// block_array.print();
+    /// println!();
+    /// cyclic_array.print();
+    ///```
     pub fn print(&self) {
         self.array.print();
     }

@@ -883,6 +883,8 @@ impl LamellarSerde for AmGroupAmReturn {
 
 impl LamellarResultDarcSerde for AmGroupAmReturn {}
 
+/// A group of active messages that can be executed in parallel
+/// the active messages do not need the be the same type, but they must all return the same type
 #[doc(hidden)]
 pub struct AmGroup {
     team: Pin<Arc<LamellarTeamRT>>,
@@ -1038,9 +1040,12 @@ impl AmGroup {
     }
 }
 
+/// Contains the Result of an AM Group Request
 #[derive(Clone)]
 pub enum AmGroupResult<'a, T> {
+    /// Contains the result from a single PE
     Pe(usize, &'a T),
+    /// Contains the result from all PEs
     All(TypedAmAllIter<'a, T>),
 }
 
@@ -1053,6 +1058,7 @@ impl<'a, T: std::fmt::Debug> std::fmt::Debug for AmGroupResult<'a, T> {
     }
 }
 
+/// An iterator over the results of an individual AM in a Typed AM Group that executed on all PEs
 #[derive(Clone)]
 pub enum TypedAmAllIter<'a, T> {
     Unit(TypedAmAllUnitIter<'a, T>),
@@ -1078,6 +1084,7 @@ impl<'a, T> Iterator for TypedAmAllIter<'a, T> {
     }
 }
 
+/// An iterator over the unit values of an individual AM in a Typed AM group that executed on all PEs
 #[derive(Clone)]
 pub struct TypedAmAllUnitIter<'a, T> {
     all: &'a Vec<T>,
@@ -1108,6 +1115,7 @@ impl<'a, T> Iterator for TypedAmAllUnitIter<'a, T> {
     }
 }
 
+/// An iterator over the values of an individual AM in a Typed AM group that executed on all PEs
 #[derive(Clone)]
 pub struct TypedAmAllValIter<'a, T> {
     all: &'a Vec<Vec<T>>,
@@ -1139,21 +1147,27 @@ impl<'a, T> Iterator for TypedAmAllValIter<'a, T> {
     }
 }
 
+/// Hold the results from a Typed AM group request
 #[derive(Clone)]
 pub enum TypedAmGroupResult<T> {
+    /// the Ams within the group return unit values
     Unit(TypedAmGroupUnitResult<T>),
+    /// the Ams within the group return values of type T
     Val(TypedAmGroupValResult<T>),
 }
 
 impl<T> TypedAmGroupResult<T> {
+    /// creates a new Unit result
     pub fn unit(reqs: Vec<TypedAmGroupBatchResult<T>>, cnt: usize, num_pes: usize) -> Self {
         TypedAmGroupResult::Unit(TypedAmGroupUnitResult::new(reqs, cnt, num_pes))
     }
 
+    /// creates a new Val result
     pub fn val(reqs: Vec<TypedAmGroupBatchResult<T>>, cnt: usize, num_pes: usize) -> Self {
         TypedAmGroupResult::Val(TypedAmGroupValResult::new(reqs, cnt, num_pes))
     }
 
+    /// returns the result at index i
     pub fn at(&self, i: usize) -> AmGroupResult<'_, T> {
         match self {
             TypedAmGroupResult::Unit(res) => res.at(i),
@@ -1161,6 +1175,7 @@ impl<T> TypedAmGroupResult<T> {
         }
     }
 
+    /// returns the number of results in the AM group request
     pub fn len(&self) -> usize {
         match self {
             TypedAmGroupResult::Unit(res) => res.len(),
@@ -1168,6 +1183,7 @@ impl<T> TypedAmGroupResult<T> {
         }
     }
 
+    /// returns an iterator over the results of the Typed Am group
     pub fn iter(&self) -> TypedAmGroupResultIter<'_, T> {
         TypedAmGroupResultIter {
             index: 0,
@@ -1176,6 +1192,7 @@ impl<T> TypedAmGroupResult<T> {
     }
 }
 
+/// An iterator over the results of an AM group request
 #[derive(Clone)]
 pub struct TypedAmGroupResultIter<'a, T> {
     index: usize,
@@ -1195,10 +1212,15 @@ impl<'a, T> Iterator for TypedAmGroupResultIter<'a, T> {
     }
 }
 
+/// This enum is used to specify the type of AmGroup request
 pub enum BaseAmGroupReq<T> {
+    /// This request will execute on a single PE  and return the unit value
     SinglePeUnit(std::pin::Pin<Box<dyn std::future::Future<Output = T> + Send>>),
+    /// This request will return a single value of type T from a single PE
     SinglePeVal(std::pin::Pin<Box<dyn std::future::Future<Output = Vec<T>> + Send>>),
+    /// This request will execute on all PEs and return a vec of unit values
     AllPeUnit(std::pin::Pin<Box<dyn std::future::Future<Output = Vec<T>> + Send>>),
+    /// This request will execute on all PEs and return a vec of values of type T for each PE
     AllPeVal(std::pin::Pin<Box<dyn std::future::Future<Output = Vec<Vec<T>>> + Send>>),
 }
 
@@ -1213,21 +1235,28 @@ impl<T> BaseAmGroupReq<T> {
     }
 }
 
+/// This enum is used to hold the results of a TypedAmGroup request
 #[derive(Clone)]
 pub enum BaseAmGroupResult<T> {
     // T here should be the inner most return type
+    /// AmGroup executed on a single PE, and does not return any value
     SinglePeUnit(T),
+    /// AmGroup executed on a single PE, and returns a Vec of T
     SinglePeVal(Vec<T>),
+    /// AmGroup executed on all PEs, and does not return any value
     AllPeUnit(Vec<T>),
+    /// AmGroup executed on all PEs, and returns a vec of T for each PE
     AllPeVal(Vec<Vec<T>>),
 }
 
+/// A struct to hold the requests for a TypedAmGroup request corresponding to a single PE
 pub struct TypedAmGroupBatchReq<T> {
     pe: usize,
     ids: Vec<usize>,
     reqs: BaseAmGroupReq<T>,
 }
 
+/// A struct to hold the results of a TypedAmGroup request corresponding to a single PE
 #[derive(Clone)]
 pub struct TypedAmGroupBatchResult<T> {
     pe: usize,
@@ -1236,10 +1265,12 @@ pub struct TypedAmGroupBatchResult<T> {
 }
 
 impl<T> TypedAmGroupBatchReq<T> {
+    /// Create a new TypedAmGroupBatchReq for PE with the assoicated IDs and individual Requests
     pub fn new(pe: usize, ids: Vec<usize>, reqs: BaseAmGroupReq<T>) -> Self {
         Self { pe, ids, reqs }
     }
 
+    /// Convert this TypedAmGroupBatchReq into a TypedAmGroupBatchResult
     pub async fn into_result(self) -> TypedAmGroupBatchResult<T> {
         TypedAmGroupBatchResult {
             pe: self.pe,

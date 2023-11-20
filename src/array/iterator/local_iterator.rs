@@ -347,7 +347,7 @@ pub trait LocalIterator: SyncSend + Clone + 'static {
     ///                             if *e%2 == 0{ Some((i,*e as f32)) }
     ///                             else { None }
     ///                         })
-    ///                        .monotonic());
+    ///                        .monotonic();
     /// world.block_on(filter_iter.for_each(move|(j,(i,e))| println!("PE: {my_pe} j: {j} i: {i} elem: {e}")));
     ///```
     /// Possible output on a 4 PE (1 thread/PE) execution (ordering is likey to be random with respect to PEs)
@@ -566,6 +566,14 @@ pub trait LocalIterator: SyncSend + Clone + 'static {
     ///
     /// # Examples
     ///```
+    /// use lamellar::array::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Block);
+    ///
+    /// let array_clone = array.clone();
+    /// let req = array.local_iter().map(elem.load()).filter(|elem| elem % 2 == 0).collect::<ReadOnlyArray<usize>>(Distribution::Cyclic);
+    /// let new_array = array.block_on(req);
     ///```
     fn collect<A>(&self, d: Distribution) -> Pin<Box<dyn Future<Output = A> + Send>>
     where
@@ -582,6 +590,14 @@ pub trait LocalIterator: SyncSend + Clone + 'static {
     ///
     /// # Examples
     ///```
+    /// use lamellar::array::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Block);
+    ///
+    /// let array_clone = array.clone();
+    /// let req = array.local_iter().map(elem.load()).filter(|elem| elem % 2 == 0).collect_with_schedule::<ReadOnlyArray<usize>>(Scheduler::WorkStealing,Distribution::Cyclic);
+    /// let new_array = array.block_on(req);
     ///```
     fn collect_with_schedule<A>(
         &self,
@@ -634,8 +650,8 @@ pub trait LocalIterator: SyncSend + Clone + 'static {
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block);
     ///
-    /// let req = array.local_iter().filter(|elem|  elem < 10).collect::<Vec<usize>>(Distribution::Block);
-    /// let new_vec = array.block_on(req); //wait on the collect request to get the new array
+    /// let req = array.local_iter().count();
+    /// let cnt = array.block_on(req);
     ///```
     fn count(&self) -> Pin<Box<dyn Future<Output = usize> + Send>> {
         self.array().count(self)
@@ -652,8 +668,8 @@ pub trait LocalIterator: SyncSend + Clone + 'static {
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block);
     ///
-    /// let req = array.local_iter().filter(|elem|  elem < 10).collect::<Vec<usize>>(Distribution::Block);
-    /// let new_vec = array.block_on(req); //wait on the collect request to get the new array
+    /// let req = array.local_iter().count_with_schedule(Scheduler::Dynamic);
+    /// let cnt = array.block_on(req);
     ///```
     fn count_with_schedule(&self, sched: Schedule) -> Pin<Box<dyn Future<Output = usize> + Send>> {
         self.array().count_with_schedule(sched, self)
@@ -669,6 +685,13 @@ pub trait LocalIterator: SyncSend + Clone + 'static {
     ///
     /// # Examples
     ///```
+    /// use lamellar::array::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block);
+    ///
+    /// let req = array.local_iter().sum();
+    /// let sum = array.block_on(req); //wait on the collect request to get the new array
     ///```
     fn sum(&self) -> Pin<Box<dyn Future<Output = Self::Item> + Send>>
     where
@@ -687,6 +710,13 @@ pub trait LocalIterator: SyncSend + Clone + 'static {
     ///
     /// # Examples
     ///```
+    /// use lamellar::array::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block);
+    ///
+    /// let req = array.local_iter().sum_with_schedule(Schedule::Guided);
+    /// let sum = array.block_on(req);
     ///```
     fn sum_with_schedule(&self, sched: Schedule) -> Pin<Box<dyn Future<Output = Self::Item> + Send>>
     where

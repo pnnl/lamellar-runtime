@@ -1,12 +1,6 @@
-// pub(crate) mod collect;
-// pub(crate) mod count;
-// pub(crate) mod for_each;
-// pub(crate) mod reduce;
-
-// pub(crate) use collect::*;
-// pub(crate) use count::*;
-// pub(crate) use for_each::*;
-// pub(crate) use reduce::*;
+//! Represents iterators that consume the elements.
+//! Iterator Consumers are what end up "driving" the iterator
+//!
 
 use crate::active_messaging::{LamellarArcLocalAm, SyncSend};
 use crate::array::iterator::IterRequest;

@@ -341,20 +341,20 @@ impl<T: Dist + 'static> UnsafeArray<T> {
         u8_ptr as *mut T
     }
 
-    // / Return the index range with respect to the original array over which this array handle represents)
-    // /
-    // / # Examples
-    // /```
-    // / use lamellar::array::prelude::*;
-    // / let world = LamellarWorldBuilder::new().build();
-    // / let my_pe = world.my_pe();
-    // / let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic);
-    // /
-    // / assert_eq!(array.sub_array_range(),(0..100));
-    // /
-    // / let sub_array = array.sub_array(25..75);
-    // / assert_eq!(sub_array.sub_array_range(),(25..75));
-    // /```
+    /// Return the index range with respect to the original array over which this array handle represents)
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic);
+    ///
+    /// assert_eq!(array.sub_array_range(),(0..100));
+    ///
+    /// let sub_array = array.sub_array(25..75);
+    /// assert_eq!(sub_array.sub_array_range(),(25..75));
+    ///```
     pub fn sub_array_range(&self) -> std::ops::Range<usize> {
         self.inner.offset..(self.inner.offset + self.inner.size)
     }
@@ -889,6 +889,27 @@ impl<T: Dist> SubArray<T> for UnsafeArray<T> {
 }
 
 impl<T: Dist + std::fmt::Debug> UnsafeArray<T> {
+    #[doc(alias = "Collective")]
+    /// Print the data within a lamellar array
+    ///
+    /// # Collective Operation
+    /// Requires all PEs associated with the array to enter the print call otherwise deadlock will occur (i.e. barriers are being called internally)
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let block_array = UnsafeArray::<usize>::new(&world,100,Distribution::Block);
+    /// let cyclic_array = UnsafeArray::<usize>::new(&world,100,Distribution::Block);
+    ///
+    /// block_array.dist_iter().zip(cyclic_array.dist_iter()).enumerate().for_each(move |i,(a,b)| {
+    ///     a.store(i);
+    ///     b.store(i);
+    /// });
+    /// block_array.print();
+    /// println!();
+    /// cyclic_array.print();
+    ///```
     pub fn print(&self) {
         <UnsafeArray<T> as ArrayPrint<T>>::print(&self);
     }
