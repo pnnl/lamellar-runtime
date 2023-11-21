@@ -180,10 +180,6 @@ name="am_bw"
 path="examples/bandwidths/am_bw.rs"
 
 [[example]]
-name="am_bw_future"
-path="examples/bandwidths/am_bw_future.rs"
-
-[[example]]
 name="task_group_am_bw"
 path="examples/bandwidths/task_group_am_bw.rs"
 
