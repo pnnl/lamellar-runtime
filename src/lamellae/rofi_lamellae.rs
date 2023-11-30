@@ -240,7 +240,7 @@ impl LamellaeRDMA for Rofi {
     fn rt_free(&self, addr: usize) {
         self.rofi_comm.rt_free(addr)
     }
-    fn alloc(&self, size: usize, alloc: AllocationType) -> AllocResult<usize> {
+    fn alloc(&self, size: usize, alloc: AllocationType, align: usize) -> AllocResult<usize> {
         self.rofi_comm.alloc(size, alloc)
     }
     fn free(&self, addr: usize) {

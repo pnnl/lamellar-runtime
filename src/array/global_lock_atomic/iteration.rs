@@ -301,7 +301,7 @@ impl<T: Dist> LamellarArrayIterators<T> for GlobalLockArray<T> {
     type OnesidedIter = OneSidedIter<'static, T, Self>;
 
     fn dist_iter(&self) -> Self::DistIter {
-        let lock = self.array.block_on(self.lock.async_read());
+        let lock = self.array.block_on(self.lock.read());
         self.barrier();
         GlobalLockDistIter {
             data: self.clone(),
@@ -313,9 +313,10 @@ impl<T: Dist> LamellarArrayIterators<T> for GlobalLockArray<T> {
     }
 
     fn local_iter(&self) -> Self::LocalIter {
+        let lock = self.array.block_on(self.lock.read());
         GlobalLockLocalIter {
             data: self.clone(),
-            lock: self.lock.read(),
+            lock: lock,
             cur_i: 0,
             end_i: 0,
             _marker: PhantomData,
@@ -340,7 +341,7 @@ impl<T: Dist> LamellarArrayMutIterators<T> for GlobalLockArray<T> {
     type LocalIter = GlobalLockLocalIterMut<T>;
 
     fn dist_iter_mut(&self) -> Self::DistIter {
-        let lock = Arc::new(self.lock.collective_write());
+        let lock = Arc::new(self.array.block_on(self.lock.collective_write()));
         self.barrier();
         // println!("dist_iter thread {:?} got lock",std::thread::current().id());
         GlobalLockDistIterMut {
@@ -353,7 +354,7 @@ impl<T: Dist> LamellarArrayMutIterators<T> for GlobalLockArray<T> {
     }
 
     fn local_iter_mut(&self) -> Self::LocalIter {
-        let lock = Arc::new(self.lock.write());
+        let lock = Arc::new(self.array.block_on(self.lock.write()));
         GlobalLockLocalIterMut {
             data: self.clone(),
             lock: lock,
@@ -508,7 +509,7 @@ impl<T: Dist> DistIteratorLauncher for GlobalLockArray<T> {
         I: DistributedIterator + 'static,
     {
         DistIteratorLauncher::count_with_schedule(&self.array, sched, iter)
-    } 
+    }
 
     fn sum<I>(&self, iter: &I) -> Pin<Box<dyn Future<Output = I::Item> + Send>>
     where

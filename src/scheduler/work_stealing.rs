@@ -55,7 +55,7 @@ impl WorkStealingThread {
                 // println!("TestSchdulerWorker thread running {:?} core: {:?}", std::thread::current().id(), id);
                 // let mut num_task_executed = 0;
                 let _span = trace_span!("WorkStealingThread::run");
-                core_affinity::set_for_current(id);
+                // core_affinity::set_for_current(id);
                 active_cnt.fetch_add(1, Ordering::SeqCst);
                 let mut rng = rand::thread_rng();
                 let t = rand::distributions::Uniform::from(0..worker.work_stealers.len());
@@ -561,7 +561,12 @@ impl WorkStealingInner {
             orig_hook(panic_info);
             process::exit(1);
         }));
-        let core_ids = core_affinity::get_core_ids().unwrap();
+        let core_ids = match core_affinity::get_core_ids(){
+            Some(core_ids) => core_ids,
+            None => {
+                vec![core_affinity::CoreId{id:0}]
+            }
+        };
         // println!("core_ids: {:?}",core_ids);
         for i in 0..num_workers {
             let work_worker = work_workers.pop().unwrap();

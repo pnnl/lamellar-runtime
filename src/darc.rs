@@ -661,7 +661,10 @@ impl<T> Darc<T> {
         // println!("creating new darc");
         team_rt.barrier();
         // println!("creating new darc after barrier");
-        let addr = team_rt.lamellae.alloc(size, alloc).expect("out of memory");
+        let addr = team_rt
+            .lamellae
+            .alloc(size, alloc, std::mem::align_of::<DarcInner<T>>())
+            .expect("out of memory");
         // let temp_team = team_rt.clone();
         // team_rt.print_cnt();
         let team_ptr = unsafe {

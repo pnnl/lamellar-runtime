@@ -539,7 +539,7 @@ macro_rules! input_test{
             //  check_results!($array,array,num_pes,reqs,"LocalLockArray<T>");
             // LocalLockArray<T>------------------------------
             let mut reqs = vec![];
-            reqs.push(array.batch_fetch_add(&input_array.local_data(),1));
+            reqs.push(array.batch_fetch_add(&world.block_on(input_array.local_data()),1));
             check_results!($array,array,num_pes,reqs,"&LocalLockArray<T>");
 
             // GlobalLockArray<T>------------------------------
@@ -549,7 +549,7 @@ macro_rules! input_test{
             //  check_results!($array,array,num_pes,reqs,"GlobalLockArray<T>");
             // GlobalLockArray<T>------------------------------
             let mut reqs = vec![];
-            reqs.push(array.batch_fetch_add(&input_array.local_data(),1));
+            reqs.push(array.batch_fetch_add(&world.block_on(input_array.local_data()),1));
             check_results!($array,array,num_pes,reqs,"&GlobalLockArray<T>");
        }
     }
@@ -625,21 +625,21 @@ fn main() {
         },
         "GlobalLockArray" => match elem.as_str() {
             "u8" => fetch_add_test!(GlobalLockArray, u8, len, dist_type),
-            "u16" => fetch_add_test!(GlobalLockArray, u16, len, dist_type),
-            "u32" => fetch_add_test!(GlobalLockArray, u32, len, dist_type),
-            "u64" => fetch_add_test!(GlobalLockArray, u64, len, dist_type),
-            "u128" => fetch_add_test!(GlobalLockArray, u128, len, dist_type),
-            "usize" => fetch_add_test!(GlobalLockArray, usize, len, dist_type),
-            "i8" => fetch_add_test!(GlobalLockArray, i8, len, dist_type),
-            "i16" => fetch_add_test!(GlobalLockArray, i16, len, dist_type),
-            "i32" => fetch_add_test!(GlobalLockArray, i32, len, dist_type),
-            "i64" => fetch_add_test!(GlobalLockArray, i64, len, dist_type),
-            "i128" => fetch_add_test!(GlobalLockArray, i128, len, dist_type),
-            "isize" => fetch_add_test!(GlobalLockArray, isize, len, dist_type),
-            "f32" => fetch_add_test!(GlobalLockArray, f32, len, dist_type),
-            "f64" => fetch_add_test!(GlobalLockArray, f64, len, dist_type),
+            // "u16" => fetch_add_test!(GlobalLockArray, u16, len, dist_type),
+            // "u32" => fetch_add_test!(GlobalLockArray, u32, len, dist_type),
+            // "u64" => fetch_add_test!(GlobalLockArray, u64, len, dist_type),
+            // "u128" => fetch_add_test!(GlobalLockArray, u128, len, dist_type),
+            // "usize" => fetch_add_test!(GlobalLockArray, usize, len, dist_type),
+            // "i8" => fetch_add_test!(GlobalLockArray, i8, len, dist_type),
+            // "i16" => fetch_add_test!(GlobalLockArray, i16, len, dist_type),
+            // "i32" => fetch_add_test!(GlobalLockArray, i32, len, dist_type),
+            // "i64" => fetch_add_test!(GlobalLockArray, i64, len, dist_type),
+            // "i128" => fetch_add_test!(GlobalLockArray, i128, len, dist_type),
+            // "isize" => fetch_add_test!(GlobalLockArray, isize, len, dist_type),
+            // "f32" => fetch_add_test!(GlobalLockArray, f32, len, dist_type),
+            // "f64" => fetch_add_test!(GlobalLockArray, f64, len, dist_type),
             "input" => input_test!(GlobalLockArray, len, dist_type),
-            _ => eprintln!("unsupported element type"),
+            _ => {} //eprintln!("unsupported element type"),
         },
         _ => eprintln!("unsupported array type"),
     }

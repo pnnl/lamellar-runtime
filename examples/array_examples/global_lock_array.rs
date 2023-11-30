@@ -9,7 +9,7 @@ fn main() {
     let array = GlobalLockArray::<usize>::new(&world, 100, Distribution::Block);
 
     let s = Instant::now();
-    let local_data = array.read_local_data();
+    let local_data = array.block_on(array.read_local_data());
     println!(
         "PE{my_pe} time: {:?} {:?}",
         s.elapsed().as_secs_f64(),
@@ -19,7 +19,7 @@ fn main() {
     drop(local_data); //release the lock
 
     world.barrier();
-    let mut local_data = array.write_local_data();
+    let mut local_data = array.block_on(array.write_local_data());
     println!(
         "PE{my_pe} time: {:?} got write lock",
         s.elapsed().as_secs_f64()
@@ -31,7 +31,7 @@ fn main() {
     array.print();
     println!("PE{my_pe} time: {:?} done", s.elapsed().as_secs_f64());
 
-    let mut local_data = array.collective_write_local_data();
+    let mut local_data = array.block_on(array.collective_write_local_data());
     println!(
         "PE{my_pe} time: {:?} got collective write lock",
         s.elapsed().as_secs_f64()

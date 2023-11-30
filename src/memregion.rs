@@ -702,7 +702,11 @@ impl<T: Dist> MemoryRegion<T> {
                 mode = Mode::Local;
                 lamellae.rt_alloc(size * std::mem::size_of::<T>(), std::mem::align_of::<T>())?
             } else {
-                lamellae.alloc(size * std::mem::size_of::<T>(), alloc)? //did we call team barrer before this?
+                lamellae.alloc(
+                    size * std::mem::size_of::<T>(),
+                    alloc,
+                    std::mem::align_of::<T>(),
+                )? //did we call team barrer before this?
             }
         } else {
             return Err(anyhow::anyhow!("cant have negative sized memregion"));

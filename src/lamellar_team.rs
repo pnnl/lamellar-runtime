@@ -756,14 +756,49 @@ impl LamellarTeamRT {
         panic: Arc<AtomicU8>,
         // teams: Arc<RwLock<HashMap<u64, Weak<LamellarTeamRT>>>>,
     ) -> Pin<Arc<LamellarTeamRT>> {
+        // let mut start = std::time::Instant::now();
         let arch = Arc::new(LamellarArchRT {
             parent: None,
             arch: LamellarArchEnum::GlobalArch(GlobalArch::new(num_pes)),
             num_pes: num_pes,
         });
+        // println!("arch {:?}", start.elapsed().as_secs_f64());
+        // start = std::time::Instant::now();
         lamellae.barrier();
+        // println!("lamellae barrier {:?}", start.elapsed().as_secs_f64());
 
+        // start = std::time::Instant::now();
+        let barrier = Barrier::new(
+            world_pe,
+            num_pes,
+            lamellae.clone(),
+            arch.clone(),
+            scheduler.clone(),
+            panic.clone(),
+        );
+        // println!("barrier init{:?}", start.elapsed().as_secs_f64());
+        // start = std::time::Instant::now();
+        // lamellae.barrier();
+        // println!("lamellae barrier {:?}", start.elapsed().as_secs_f64());
+        // start = std::time::Instant::now();
         let alloc = AllocationType::Global;
+        let dropped = MemoryRegion::new(num_pes, lamellae.clone(), alloc.clone());
+        // println!("dropped {:?}", start.elapsed().as_secs_f64());
+        // start = std::time::Instant::now();
+        // lamellae.barrier();
+        // println!("lamellae barrier {:?}", start.elapsed().as_secs_f64());
+        // start = std::time::Instant::now();
+        let remote_ptr_addr = lamellae
+            .alloc(
+                std::mem::size_of::<*const LamellarTeamRT>(),
+                alloc,
+                std::mem::align_of::<*const LamellarTeamRT>(),
+            )
+            .unwrap();
+        // println!("remote_ptr_addr {:?}", start.elapsed().as_secs_f64());
+
+        // start = std::time::Instant::now();
+
         let team = LamellarTeamRT {
             world: None,
             parent: None,
@@ -782,18 +817,9 @@ impl LamellarTeamRT {
             id: 0,
             team_hash: 0, //easy id to look up for global
             sub_team_id_cnt: AtomicUsize::new(0),
-            barrier: Barrier::new(
-                world_pe,
-                num_pes,
-                lamellae.clone(),
-                arch.clone(),
-                scheduler.clone(),
-                panic.clone(),
-            ),
-            dropped: MemoryRegion::new(num_pes, lamellae.clone(), alloc.clone()),
-            remote_ptr_addr: lamellae
-                .alloc(std::mem::size_of::<*const LamellarTeamRT>(), alloc)
-                .unwrap(),
+            barrier: barrier,
+            dropped: dropped,
+            remote_ptr_addr: remote_ptr_addr,
             panic: panic.clone(),
             tid: std::thread::current().id(),
             // panic_info: Arc::new(Mutex::new(Vec::new())),
@@ -811,8 +837,13 @@ impl LamellarTeamRT {
                 *e = 0;
             }
         }
+        // println!("team {:?}", start.elapsed().as_secs_f64());
+
+        // start = std::time::Instant::now();
         // lamellae.get_am().barrier(); //this is a noop currently
-        lamellae.barrier();
+        // lamellae.barrier();
+        // println!("barrier {:?}", start.elapsed().as_secs_f64());
+        // start = std::time::Instant::now();
         let team = Arc::pin(team);
         // let team_ptr = Arc::into_raw(team.clone()); //*const Arc<LamellarTeamRT>
         // let team_ptr = &team as *const Pin<Arc<LamellarTeamRT>>;
@@ -833,6 +864,11 @@ impl LamellarTeamRT {
             // println!{"{:?} {:?} {:?} {:?}",&team_ptr,team_ptr, (team.remote_ptr_addr as *mut (*const LamellarTeamRT)).as_ref(), (*(team.remote_ptr_addr as *mut (*const LamellarTeamRT))).as_ref()};
         }
 
+        // println!("team pin{:?}", start.elapsed().as_secs_f64());
+        // start = std::time::Instant::now();
+        // lamellae.barrier();
+        // println!("lamellae barrier {:?}", start.elapsed().as_secs_f64());
+
         // println!("sechduler_new: {:?}", Arc::strong_count(&team.scheduler));
         // println!("lamellae: {:?}", Arc::strong_count(&team.lamellae));
         // println!("arch: {:?}", Arc::strong_count(&team.arch));
@@ -841,7 +877,15 @@ impl LamellarTeamRT {
         //     Arc::strong_count(&team.world_counters)
         // );
 
+        // start = std::time::Instant::now();
         team.barrier.barrier();
+        // println!("team barrier {:?}", start.elapsed().as_secs_f64());
+        // start = std::time::Instant::now();
+        // lamellae.barrier();
+        // println!("lamellae barrier {:?}", start.elapsed().as_secs_f64());
+        // // start = std::time::Instant::now();
+        // team.barrier.barrier();
+        // println!("team barrier 2 {:?}", start.elapsed().as_secs_f64());
         team
     }
 
@@ -1014,7 +1058,11 @@ impl LamellarTeamRT {
 
             let remote_ptr_addr = parent
                 .lamellae
-                .alloc(std::mem::size_of::<*const LamellarTeamRT>(), parent_alloc)
+                .alloc(
+                    std::mem::size_of::<*const LamellarTeamRT>(),
+                    parent_alloc,
+                    std::mem::align_of::<*const LamellarTeamRT>(),
+                )
                 .unwrap();
             // ------------------------------------------------------------------------------------------------- //
 

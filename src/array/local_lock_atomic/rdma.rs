@@ -283,7 +283,7 @@ struct LocalLockRemotePutAm {
 impl LamellarAm for LocalLockRemotePutAm {
     async fn exec(self) {
         // println!("in remote put {:?} {:?} {:?}",self.start_index,self.len,self.data);
-        let _lock = self.array.lock.async_write().await;
+        let _lock = self.array.lock.write().await;
         unsafe {
             match self
                 .array

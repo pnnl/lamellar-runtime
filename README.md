@@ -178,7 +178,7 @@ fn main(){
 Lamellar is capable of running on single node workstations as well as distributed HPC systems.
 For a workstation, simply copy the following to the dependency section of you Cargo.toml file:
 
-``` lamellar = "0.5" ```
+``` lamellar = "0.6" ```
 
 If planning to use within a distributed HPC system a few more steps may be necessary (this also works on single workstations):
 
@@ -188,7 +188,7 @@ If planning to use within a distributed HPC system a few more steps may be neces
     * include
 3. copy the following to your Cargo.toml file:
 
-```lamellar = { version = "0.5", features = ["enable-rofi"]}```
+```lamellar = { version = "0.6", features = ["enable-rofi"]}```
 
 
 For both environments, build your application as normal
@@ -230,6 +230,7 @@ Lamellar exposes a number of environment variables that can used to control appl
 
 NEWS
 ----
+* November 2023: Alpha release -- v0.6
 * January 2023: Alpha release -- v0.5
 * March 2022: Alpha release -- v0.4
 * April 2021: Alpha release -- v0.3
@@ -291,6 +292,31 @@ Note: we do an explicit build instead of `cargo run --examples` as they are inte
 
 HISTORY
 -------
+- version 0.6
+  - LamellarArrays
+    - additional iterator methods
+      - count
+      - sum
+      - reduce
+    - additional element-wise operations
+      - remainder
+      - xor
+      - shl, shr
+    - Backend operation batching improvements
+    - variable sized array indices
+    - initial implementation of GlobalLockArray
+    - 'ArrayOps' trait for enabling user defined element types
+  - AM Groups - Runtime provided aggregation of AMs
+    - Generic 'AmGroup'
+    - 'TypedAmGroup'
+        - 'static' group members
+  - Miscellaneous
+    - added LAMELLLAR_DEADLOCK_TIMEOUT to help with stalled applications
+    - better error handling and exiting on panic and critical failure detection
+    - backend threading improvements
+    - LamellarEnv trait for accessing various info about the current lamellar envrionment
+    - additional examples
+    - updated documentation
 - version 0.5
   - Vastly improved documentation (i.e. it exists now ;))
   - 'Asyncified' the API - most remote operations now return Futures

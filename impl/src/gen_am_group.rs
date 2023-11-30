@@ -298,8 +298,7 @@ fn impl_am_group_user(
         }
 
         impl #impl_generics #am_group_name_user #ty_generics #where_clause{
-            #[allow(unused)]
-            fn new(team: std::sync::Arc<#lamellar::LamellarTeam>) -> #am_group_name_user #ty_generics{
+            pub fn new(team: std::sync::Arc<#lamellar::LamellarTeam>) -> #am_group_name_user #ty_generics{
                 let num_per_batch = match std::env::var("LAMELLAR_OP_BATCH") {
                     Ok(n) => n.parse::<usize>().unwrap(),
                     Err(_) => 10000,
@@ -314,13 +313,12 @@ fn impl_am_group_user(
                 }
             }
 
-            #[allow(unused)]
-            fn add_am_all(&mut self, am:  #am_name #ty_generics)
+            pub fn add_am_all(&mut self, am:  #am_name #ty_generics)
             {
                 self.add_am_pe(self.team.num_pes(),am);
             }
-            #[allow(unused)]
-            fn add_am_pe(&mut self, pe: usize, am:  #am_name #ty_generics)
+
+            pub fn add_am_pe(&mut self, pe: usize, am:  #am_name #ty_generics)
             {
 
                 let req_queue = self.reqs.entry(pe).or_insert_with(|| {
@@ -348,7 +346,6 @@ fn impl_am_group_user(
                 }
             }
 
-            #[allow(unused)]
             pub async fn exec(mut self) -> #lamellar::TypedAmGroupResult<#inner_ret_type>{
 
                 // let timer = std::time::Instant::now();

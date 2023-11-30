@@ -615,10 +615,10 @@ impl InnerCQ {
                 }
             }
             if do_alloc {
-                println!(
-                    "need to alloc new pool {:?}",
-                    std::backtrace::Backtrace::capture()
-                );
+                // println!(
+                //     "need to alloc new pool {:?}",
+                //     std::backtrace::Backtrace::capture()
+                // );
                 self.send_alloc_inner(&mut alloc_buf, min_size);
             }
         }
@@ -792,7 +792,7 @@ impl InnerCQ {
         {
             // println!(" {:?} {:?}",prev_cnt,self.comm.num_pool_allocs());
             if prev_cnt == self.comm.num_pool_allocs() {
-                println!("im responsible for the new alloc");
+                // println!("im responsible for the new alloc");
                 self.send_alloc_inner(&mut alloc_buf, min_size);
             }
         }
@@ -815,7 +815,7 @@ impl InnerCQ {
             cmd.calc_hash();
             for pe in 0..self.num_pes {
                 if pe != self.my_pe {
-                    println!("putting alloc cmd to pe {:?}", pe);
+                    // println!("putting alloc cmd to pe {:?}", pe);
                     self.comm.put(pe, cmd.as_bytes(), cmd.as_addr());
                 }
             }
@@ -824,7 +824,7 @@ impl InnerCQ {
             while !alloc_buf[pe].check_hash() || alloc_buf[pe].cmd != Cmd::Alloc {
                 std::thread::yield_now();
             }
-            println!(" pe {:?} ready to alloc", pe);
+            // println!(" pe {:?} ready to alloc", pe);
         }
         // panic!("exiting");
 
@@ -837,7 +837,7 @@ impl InnerCQ {
         cmd.calc_hash();
         for pe in 0..self.num_pes {
             if pe != self.my_pe {
-                println!("putting clear cmd to pe {:?}", pe);
+                // println!("putting clear cmd to pe {:?}", pe);
                 self.comm.put(pe, cmd.as_bytes(), cmd.as_addr());
             }
         }
@@ -845,9 +845,9 @@ impl InnerCQ {
             while !alloc_buf[pe].check_hash() || alloc_buf[pe].cmd != Cmd::Clear {
                 std::thread::yield_now();
             }
-            println!(" pe {:?} has alloced", pe);
+            // println!(" pe {:?} has alloced", pe);
         }
-        println!("created new alloc pool");
+        // println!("created new alloc pool");
     }
 
     #[tracing::instrument(skip_all)]

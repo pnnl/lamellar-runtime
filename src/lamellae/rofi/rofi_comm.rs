@@ -296,6 +296,7 @@ impl CommOps for RofiComm {
     }
     #[tracing::instrument(skip_all)]
     fn alloc(&self, size: usize, alloc: AllocationType) -> AllocResult<usize> {
+        //memory segments are aligned on page boundaries so no need to pass in alignment constraint
         // let size = size + size%8;
         let _lock = self.comm_mutex.lock();
         Ok(rofi_alloc(size, alloc) as usize)

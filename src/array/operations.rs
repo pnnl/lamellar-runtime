@@ -348,6 +348,18 @@ impl<'a, T: Dist> OpInputEnum<'_, T> {
             //     .expect("memregion is empty"),
         }
     }
+
+    pub(crate) fn to_vec(self) -> Vec<T> {
+        match self {
+            OpInputEnum::Val(v) => vec![v],
+            OpInputEnum::Slice(s) => s.to_vec(),
+            OpInputEnum::Vec(v) => v,
+            OpInputEnum::NativeAtomicLocalData(a) => a.iter().map(|elem| elem.load()).collect(),
+            OpInputEnum::GenericAtomicLocalData(a) => a.iter().map(|elem| elem.load()).collect(),
+            OpInputEnum::LocalLockLocalData(a) => a.to_vec(),
+            OpInputEnum::GlobalLockLocalData(a) => a.to_vec(),
+        }
+    }
 }
 
 // impl<'a, T: Dist> From<&T> for OpInputEnum<'a, T> {

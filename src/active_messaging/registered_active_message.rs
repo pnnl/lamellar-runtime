@@ -21,7 +21,7 @@ lazy_static! {
     pub(crate) static ref AMS_IDS: HashMap<&'static str, AmId> = {
         let mut ams = vec![];
         for am in crate::inventory::iter::<RegisteredAm> {
-            ams.push(am.name.clone());
+            ams.push(am.name);
         }
         ams.sort();
         let mut cnt = AM_ID_START;
@@ -30,7 +30,7 @@ lazy_static! {
         for am in ams {
             if !temp.contains_key(&am) {
                 // println!("{:?}", am);
-                temp.insert(am.clone(), cnt);
+                temp.insert(am, cnt);
                 cnt += 1;
             } else {
                 duplicates.push(am);

@@ -552,12 +552,12 @@ fn create_buf_ops2(
     } else if array_type == "LocalLockArray" {
         (
             quote! {}, //no explicit lock since the slice handle is a lock guard
-            quote! {let mut slice = self.data.async_write_local_data().await;}, //this is the lock
+            quote! {let mut slice = self.data.write_local_data().await;}, //this is the lock
         )
     } else if array_type == "GlobalLockArray" {
         (
             quote! {}, //no explicit lock since the slice handle is a lock guard
-            quote! {let mut slice = self.data.async_write_local_data().await;}, //this is the lock
+            quote! {let mut slice = self.data.write_local_data().await;}, //this is the lock
         )
     } else if array_type == "ReadOnlyArray" {
         (

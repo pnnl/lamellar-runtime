@@ -393,6 +393,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
             let len = index.len();
             self.inner.data.array_counters.add_send_req(1);
             self.inner.data.team.inc_counters(1);
+            let index_vec = index.to_vec();
             // println!("num_reqs {:?}",num_reqs);
             self.inner
                 .data
@@ -405,9 +406,9 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
                     let mut reqs: Vec<Pin<Box<dyn Future<Output = (R, Vec<usize>)> + Send>>> =
                         Vec::new();
                     // let mut res_index = 0;
-                    for (ii, idx) in index.iter().enumerate() {
+                    for (ii, idx) in index_vec.iter().enumerate() {
                         let j = ii + start_i;
-                        let (pe, local_index) = match self.pe_and_offset_for_global_index(idx) {
+                        let (pe, local_index) = match self.pe_and_offset_for_global_index(*idx) {
                             Some((pe, local_index)) => (pe, local_index),
                             None => panic!(
                                 "Index: {idx} out of bounds for array of len: {:?}",
@@ -529,6 +530,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
             let len = val.len();
             self.inner.data.array_counters.add_send_req(1);
             self.inner.data.team.inc_counters(1);
+            let val_chunks = val.as_vec_chunks(num_per_batch);
             self.inner
                 .data
                 .team
@@ -539,33 +541,32 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
                     let mut inner_start_i = start_i;
                     let mut reqs: Vec<Pin<Box<dyn Future<Output = (R, Vec<usize>)> + Send>>> =
                         Vec::new();
-                    val.as_vec_chunks(num_per_batch)
-                        .into_iter()
-                        .for_each(|val| {
-                            let val_len = val.len();
-                            let am = MultiValSingleIndex::new_with_vec(
-                                byte_array2.clone(),
-                                op,
-                                local_index,
-                                val,
+                    // val.as_vec_chunks(num_per_batch)
+                    val_chunks.into_iter().for_each(|val| {
+                        let val_len = val.len();
+                        let am = MultiValSingleIndex::new_with_vec(
+                            byte_array2.clone(),
+                            op,
+                            local_index,
+                            val,
+                        )
+                        .into_am::<T>(ret);
+                        let req = self
+                            .inner
+                            .data
+                            .team
+                            .exec_arc_am_pe::<R>(
+                                pe,
+                                am,
+                                Some(self.inner.data.array_counters.clone()),
                             )
-                            .into_am::<T>(ret);
-                            let req = self
-                                .inner
-                                .data
-                                .team
-                                .exec_arc_am_pe::<R>(
-                                    pe,
-                                    am,
-                                    Some(self.inner.data.array_counters.clone()),
-                                )
-                                .into_future();
-                            // println!("start_i: {:?} inner_start_i {:?} val_len: {:?}",start_i,inner_start_i,val_len);
-                            let res_buffer =
-                                (inner_start_i..inner_start_i + val_len).collect::<Vec<usize>>();
-                            reqs.push(Box::pin(async move { (req.await, res_buffer) }));
-                            inner_start_i += val_len;
-                        });
+                            .into_future();
+                        // println!("start_i: {:?} inner_start_i {:?} val_len: {:?}",start_i,inner_start_i,val_len);
+                        let res_buffer =
+                            (inner_start_i..inner_start_i + val_len).collect::<Vec<usize>>();
+                        reqs.push(Box::pin(async move { (req.await, res_buffer) }));
+                        inner_start_i += val_len;
+                    });
                     // println!("reqs len {:?}",reqs.len());
                     futures2.lock().extend(reqs);
                     cnt2.fetch_add(1, Ordering::SeqCst);
@@ -624,6 +625,8 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
             let len = index.len();
             self.inner.data.array_counters.add_send_req(1);
             self.inner.data.team.inc_counters(1);
+            let index_vec = index.to_vec();
+            let vals_vec = val.to_vec();
             // println!("trying to submit immediate task");
             self.inner
                 .data
@@ -636,9 +639,9 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
                     let mut reqs: Vec<Pin<Box<dyn Future<Output = (R, Vec<usize>)> + Send>>> =
                         Vec::new();
                     // let mut res_index = 0;
-                    for (ii, (idx, val)) in index.iter().zip(val.iter()).enumerate() {
+                    for (ii, (idx, val)) in index_vec.iter().zip(vals_vec.iter()).enumerate() {
                         let j = ii + start_i;
-                        let (pe, local_index) = match self.pe_and_offset_for_global_index(idx) {
+                        let (pe, local_index) = match self.pe_and_offset_for_global_index(*idx) {
                             Some((pe, local_index)) => (pe, local_index),
                             None => panic!(
                                 "Index: {idx} out of bounds for array of len: {:?}",

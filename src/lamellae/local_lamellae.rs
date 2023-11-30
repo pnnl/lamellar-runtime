@@ -196,8 +196,8 @@ impl LamellaeRDMA for Local {
             }; //it will free when dropping from scope
         }
     }
-    fn alloc(&self, size: usize, _alloc: AllocationType) -> AllocResult<usize> {
-        let layout = std::alloc::Layout::from_size_align(size, std::mem::align_of::<u8>()).unwrap();
+    fn alloc(&self, size: usize, _alloc: AllocationType, align: usize) -> AllocResult<usize> {
+        let layout = std::alloc::Layout::from_size_align(size, align).unwrap();
         let data_ptr = unsafe { std::alloc::alloc(layout) };
         // let data = vec![0u8; size].into_boxed_slice();
         // let data_ptr = Box::into_raw(data);

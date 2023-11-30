@@ -51,12 +51,14 @@ fn main() {
     //     .with_max_level(Level::TRACE)
     //     .init();
     // let _guard = setup_global_subscriber();
+    let start = std::time::Instant::now();
     let world = LamellarWorldBuilder::new()
         //.with_lamellae(Default::default()) //if enable-rofi feature is active default is rofi, otherwise local
         //.with_lamellae( Backend::Rofi ) //explicity set the lamellae backend to rofi, with the default provider
         //.with_lamellae( Backend::Local )
         // .with_scheduler(lamellar::SchedulerType::WorkStealing) //currently the only type of thread scheduler
         .build();
+    println!("World built in {:?}", start.elapsed());
     let my_pe = world.my_pe();
     let num_pes = world.num_pes();
     // let _guard = setup_global_subscriber();

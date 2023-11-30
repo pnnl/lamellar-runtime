@@ -162,7 +162,7 @@ impl LamellarAm for GlobalLockRemoteGetAm {
     //because we need to guarantee the put operation is atomic (maybe iput would work?)
     async fn exec(self) -> Vec<u8> {
         // println!("in remotegetam {:?} {:?}",self.start_index,self.len);
-        let _lock = self.array.lock.async_read().await;
+        let _lock = self.array.lock.read().await;
         unsafe {
             match self
                 .array
@@ -308,7 +308,7 @@ struct GlobalLockRemotePutAm {
 impl LamellarAm for GlobalLockRemotePutAm {
     async fn exec(self) {
         // println!("in remote put {:?} {:?} {:?}",self.start_index,self.len,self.data);
-        let _lock = self.array.lock.async_write().await;
+        let _lock = self.array.lock.write().await;
         unsafe {
             match self
                 .array
@@ -337,7 +337,7 @@ struct GlobalLockRemoteSmallPutAm {
 impl LamellarAm for GlobalLockRemoteSmallPutAm {
     async fn exec(self) {
         // println!("in remote put {:?} {:?} {:?}",self.start_index,self.len,self.data);
-        let _lock = self.array.lock.async_write().await;
+        let _lock = self.array.lock.write().await;
         unsafe {
             match self
                 .array

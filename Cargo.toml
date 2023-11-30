@@ -1,6 +1,6 @@
 [package]
 name = "lamellar"
-version = "0.5.0"
+version = "0.6.0"
 authors = ["Ryan D. Friese <ryan.friese@pnnl.gov>",  "Roberto Gioiosa <roberto.gioiosa@pnnl.gov>", "Joseph Cottam <joseph.cottam@pnnl.gov>","Greg Roek <gregory.roek@pnnl.gov>","Erdal Mutlu <erdal.mutlu@pnnl.gov>"]
 edition = "2021"
 description = "Lamellar is an asynchronous tasking runtime for HPC systems developed in RUST."
@@ -12,7 +12,7 @@ keywords = ["hpc","runtime","pgas","distributed","asynchronous"]
 categories = ["asynchronous","concurrency", "network-programming","science"]
 
 [dependencies]
-lamellar-impl = { version = "0.5.0", path = "impl" }
+lamellar-impl = { version = "0.6.0", path = "impl" }
 lamellar-prof = { version = "0.1.0", path = "lamellar-prof" }
 rofisys = { version ="0.2", optional = true }
 inventory = "0.3" 

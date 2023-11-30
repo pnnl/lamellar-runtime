@@ -450,6 +450,7 @@ impl CommOps for ShmemComm {
     }
 
     fn alloc(&self, size: usize, alloc_type: AllocationType) -> AllocResult<usize> {
+        //shared memory segments are aligned on page boundaries so no need to pass in alignment constraint
         let mut alloc = self.alloc_lock.write();
         let (ret, index, remote_addrs) = match alloc_type {
             AllocationType::Sub(pes) => {

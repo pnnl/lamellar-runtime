@@ -238,7 +238,7 @@ impl LamellaeRDMA for Shmem {
     fn rt_free(&self, addr: usize) {
         self.shmem_comm.rt_free(addr)
     }
-    fn alloc(&self, size: usize, alloc: AllocationType) -> AllocResult<usize> {
+    fn alloc(&self, size: usize, alloc: AllocationType, _align: usize) -> AllocResult<usize> {
         self.shmem_comm.alloc(size, alloc)
     }
     fn free(&self, addr: usize) {

@@ -199,7 +199,7 @@ pub(crate) trait LamellaeRDMA: Send + Sync {
     fn rt_alloc(&self, size: usize, align: usize) -> AllocResult<usize>;
     fn rt_check_alloc(&self, size: usize, align: usize) -> bool;
     fn rt_free(&self, addr: usize);
-    fn alloc(&self, size: usize, alloc: AllocationType) -> AllocResult<usize>;
+    fn alloc(&self, size: usize, alloc: AllocationType, align: usize) -> AllocResult<usize>;
     fn free(&self, addr: usize);
     fn base_addr(&self) -> usize;
     fn local_addr(&self, remote_pe: usize, remote_addr: usize) -> usize;

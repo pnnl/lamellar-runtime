@@ -10,7 +10,7 @@ struct StringDarcAm {
 #[lamellar::am]
 impl LamellarAm for StringDarcAm {
     async fn exec(self) {
-        let mut data = self.data.write();
+        let mut data = self.data.write().await;
         data.clear();
         data.push_str(self.new_data.as_str());
     }
@@ -21,7 +21,7 @@ fn main() {
     let my_pe = world.my_pe();
     let string_data = LocalRwDarc::new(&world, format!("Orig String on PE: {}", my_pe)).unwrap();
 
-    println!("[PE: {}] {}", my_pe, string_data.read());
+    println!("[PE: {}] {}", my_pe, world.block_on(string_data.read()));
 
     if my_pe == 0 {
         world.block_on(world.exec_am_pe(
@@ -33,5 +33,5 @@ fn main() {
         ));
     }
     world.barrier();
-    println!("[PE: {}] {}", my_pe, string_data.read());
+    println!("[PE: {}] {}", my_pe, world.block_on(string_data.read()));
 }

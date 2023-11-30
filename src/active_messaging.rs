@@ -4,13 +4,15 @@
 //!
 //! Lamellar is built upon asynchronous active messages, and provides users with an interface to construct their own active messages.
 //!
-//! This interface is exposed through multiple Rust procedural macros.
+//! This interface is exposed through multiple Rust procedural macros and APIS.
 //! - [AmData]
 //! - [am]
 //! - [AmLocalData]
 //! - [local_am]
+//! - [AmGroup]
+//! - [typed_am_group]
 //!
-//! Further details are provided in the documentation for each macro but at a high level to implement and active message we need to
+//! Further details are provided in the documentation for each macro but at a high level to implement an active message we need to
 //! define the data to be transfered in a message and then define what to do with that data when we arrive at the destination.
 //!
 //! The following examples will cover the following topics
@@ -21,6 +23,10 @@
 //!     - returning active messages
 //!     - returning active messages that reutrn data
 //! - Nested Active Messages
+//! - Active Message Groups
+//!     - Generic Active Message Groups
+//!     - 'Typed' Active Message Groups
+//!         - static members
 //!
 //! # Examples
 //! Let's implement a simple active message below:
@@ -460,6 +466,150 @@
 //! PE 2 [2,1,0,3]
 //! PE 3 [3,2,1,0]
 //!```
+//! # Active Message Groups
+//! Up until now, we have seen two extremes with respect to the granularity with which active messages can be awaited.
+//! Either awaiting all outstanding active messages in the system via `wait_all()`, or awaiting an individual active message e.g. `req.await`.
+//! Lamellar also supports active message groups, which is a collection of active messages that can be awaited together.
+//! Conceptually, an active message group can be represented as a meta active message that contains a list of the actual active messages we want to execute,
+//! as illustrated in the pseudocode below:
+//! ```no_run
+//! #[AmData(Debug,Clone)]
+//! struct MetaAm{
+//!     ams: Vec<impl LamellarAm>
+//! }
+//! #[lamellar::am]
+//! impl LamellarAm for MetaAm{
+//!     async fn exec(self) {
+//!         for am in self.ams{
+//!             am.exec().await
+//!         }
+//!     }
+//! }
+//! ```
+//!
+//! There are two flavors of active message groups discussed in the following sections:
+//!
+//! ## Generic Active Message Groups
+//! The first Active Message Group is called [AMGroup] which can include any AM `AM: impl LamellarAm<Output=()>`.
+//! That is, the active messages in the group can consists of different underlying types as long as they all return `()`.
+//! Future implementations will relax this restriction, so that they only need to return the same type.
+//! ```
+//! use lamellar::active_messaging::prelude::*;
+//! #[AmData(Debug,Clone)]
+//! struct Am1 {
+//!    foo: usize,
+//! }
+//! #[lamellar::am]
+//! impl LamellarAm for RingAm{
+//!     async fn exec(self) -> Vec<usize>{
+//!         println!("in am1 {:?} on PE{:?}",self.foo,  lamellar::current_pe);
+//!     }
+//! }
+//!
+//! #[AmData(Debug,Clone)]
+//! struct Am2 {
+//!    bar: String,
+//! }
+//! #[lamellar::am]
+//! impl LamellarAm for RingAm{
+//!     async fn exec(self) -> Vec<usize>{
+//!         println!("in am2 {:?} on PE{:?}",self.bar,lamellar::current_pe);
+//!     }
+//! }
+//!
+//! fn main(){
+//!     let world = lamellar::LamellarWorldBuilder::new().build();
+//!     let my_pe = world.my_pe();
+//!     let num_pes = world.num_pes();
+//!
+//!     let am1 = Am1{foo: 1};
+//!     let am2 = Am2{bar: "hello".to_string()};
+//!     //create a new AMGroup
+//!     let am_group = AMGroup::new(&world);
+//!     // add the AMs to the group
+//!     // we can specify individual PEs to execute on or all PEs
+//!     am_group.add_am_pe(0,am1.clone());
+//!     am_group.add_am_pe(1,am1.clone());
+//!     am_group.add_am_pe(0,am2.clone());
+//!     am_group.add_am_pe(1,am2.clone());
+//!     am_group.add_am_all(am1.clone());
+//!     am_group.add_am_all(am2.clone());
+//!
+//!     //execute and await the completion of all AMs in the group
+//!     world.block_on(am_group.exec());
+//! }
+//!```
+//! Expected output on each PE:
+//! ```text
+//! in am1 1 on PE0
+//! in am2 hello on PE0
+//! in am1 1 on PE0
+//! in am2 hello on PE0
+//! in am1 1 on PE1
+//! in am2 hello on PE1
+//! in am1 1 on PE1
+//! in am2 hello on PE1
+//! ```
+//!  ## Typed Active Message Groups
+//! The second Active Message Group is called [TypedAmGroup] which can only include AMs of a specific type (but this type can return data).
+//! Data is returned in the same order as the AMs were added
+//! (You can think of this as similar to `Vec<T>`)
+//! Typed Am Groups are instatiated use the [typed_am_group] macro which expects to parameters, the first being the type (name) of the AM and the second being a reference to a lamellar team.
+//! ```
+//! use lamellar::active_messaging::prelude::*;
+//! use lamellar::darc::prelude::*;
+//! use std::sync::atomic::AtomicUsize;
+//! #[AmData(Debug,Clone)]
+//! struct ExampleAm {
+//!    cnt: Darc<AtomicUsize>,
+//! }
+//! #[lamellar::am]
+//! impl LamellarAm for ExampleAm{
+//!     async fn exec(self) -> usize{
+//!         self.cnt.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+//!     }
+//! }
+//!
+//! fn main(){
+//!     let world = lamellar::LamellarWorldBuilder::new().build();
+//!     let my_pe = world.my_pe();
+//!     let num_pes = world.num_pes();
+//!
+//!     if my_pe == 0 { // we only want to run this on PE0 for sake of illustration
+//!         let am_group = typed_am_group!{ExampleAm,&world};
+//!         let am = ExampleAm{cnt: 0};
+//!         // add the AMs to the group
+//!         // we can specify individual PEs to execute on or all PEs
+//!         am_group.add_am_pe(0,am.clone());
+//!         am_group.add_am_all(am.clone());
+//!         am_group.add_am_pe(1,am.clone());
+//!         am_group.add_am_all(am.clone());
+//!
+//!         //execute and await the completion of all AMs in the group
+//!         let results = world.block_on(am_group.exec()); // we want to process the returned data
+//!         //we can index into the results
+//!         if let AmGroupResult::Pe((pe,val)) = results.at(2){
+//!             assert_eq!(pe, 1); //the third add_am_* call in the group was to execute on PE1
+//!             assert_eq!(val, 1); // this was the second am to execute on PE1 so the fetched value is 1
+//!         }
+//!         //or we can iterate over the results
+//!         for res in results{
+//!             match res{
+//!                 AmGroupResult::Pe((pe,val)) => { println!("{} from PE{}",val,pe)},
+//!                 AmGroupResult::All(val) => { println!("{} on all PEs",val)},
+//!             }
+//!         }
+//!     }
+//! }
+//!```
+//! Expected output on each PE1:
+//! ```text
+//! 0 from PE0
+//! [1,0] on all PEs
+//! 1 from PE1
+//! [2,2] on all PEs
+//! ```
+
 use crate::darc::__NetworkDarc;
 use crate::lamellae::{Lamellae, LamellaeRDMA, SerializedData};
 use crate::lamellar_arch::IdError;
@@ -472,17 +622,17 @@ use lamellar_prof::*;
 // use log::trace;
 use async_trait::async_trait;
 use futures::Future;
-use parking_lot::Mutex; //, RwLock};
+use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::Arc; //, Weak};
+use std::sync::Arc;
 
 #[doc(hidden)]
 pub mod prelude;
 
 pub(crate) mod registered_active_message;
-use registered_active_message::RegisteredActiveMessages; //, AMS_EXECS};
+use registered_active_message::RegisteredActiveMessages;
 #[doc(hidden)]
 pub use registered_active_message::RegisteredAm;
 

@@ -884,8 +884,65 @@ impl LamellarSerde for AmGroupAmReturn {
 impl LamellarResultDarcSerde for AmGroupAmReturn {}
 
 /// A group of active messages that can be executed in parallel
-/// the active messages do not need the be the same type, but they must all return the same type
-#[doc(hidden)]
+/// the active messages do not need the be the same type, but they must all return the unit type i.e. `()`
+///Future implementations will relax this restriction, so that they only need to return the same type.
+/// ```
+/// use lamellar::active_messaging::prelude::*;
+/// #[AmData(Debug,Clone)]
+/// struct Am1 {
+///    foo: usize,
+/// }
+/// #[lamellar::am]
+/// impl LamellarAm for RingAm{
+///     async fn exec(self) -> Vec<usize>{
+///         println!("in am1 {:?} on PE{:?}",self.foo,  lamellar::current_pe);
+///     }
+/// }
+///
+/// #[AmData(Debug,Clone)]
+/// struct Am2 {
+///    bar: String,
+/// }
+/// #[lamellar::am]
+/// impl LamellarAm for RingAm{
+///     async fn exec(self) -> Vec<usize>{
+///         println!("in am2 {:?} on PE{:?}",self.bar,lamellar::current_pe);
+///     }
+/// }
+///
+/// fn main(){
+///     let world = lamellar::LamellarWorldBuilder::new().build();
+///     let my_pe = world.my_pe();
+///     let num_pes = world.num_pes();
+///
+///     let am1 = Am1{foo: 1};
+///     let am2 = Am2{bar: "hello".to_string()};
+///     //create a new AMGroup
+///     let am_group = AMGroup::new(&world);
+///     // add the AMs to the group
+///     // we can specify individual PEs to execute on or all PEs
+///     am_group.add_am_pe(0,am1.clone());
+///     am_group.add_am_pe(1,am1.clone());
+///     am_group.add_am_pe(0,am2.clone());
+///     am_group.add_am_pe(1,am2.clone());
+///     am_group.add_am_all(am1.clone());
+///     am_group.add_am_all(am2.clone());
+///
+///     //execute and await the completion of all AMs in the group
+///     world.block_on(am_group.exec());
+/// }
+///```
+/// Expected output on each PE:
+/// ```text
+/// in am1 1 on PE0
+/// in am2 hello on PE0
+/// in am1 1 on PE0
+/// in am2 hello on PE0
+/// in am1 1 on PE1
+/// in am2 hello on PE1
+/// in am1 1 on PE1
+/// in am2 hello on PE1
+/// ```
 pub struct AmGroup {
     team: Pin<Arc<LamellarTeamRT>>,
     cnt: usize,
@@ -893,6 +950,17 @@ pub struct AmGroup {
 }
 
 impl AmGroup {
+    /// create a new AMGroup associated with the given team
+    /// # Example
+    /// ```
+    /// use lamellar::active_messaging::prelude::*;
+    /// fn main(){
+    ///     let world = lamellar::LamellarWorldBuilder::new().build();
+    ///     let my_pe = world.my_pe();
+    ///     let num_pes = world.num_pes();
+    ///     let am_group = AMGroup::new(&world);
+    /// }
+    /// ```
     pub fn new<U: Into<IntoLamellarTeam>>(team: U) -> AmGroup {
         AmGroup {
             team: team.into().team.clone(),
@@ -900,6 +968,48 @@ impl AmGroup {
             reqs: BTreeMap::new(),
         }
     }
+
+    /// add an active message to the group which will execute on all PEs
+    /// # Example
+    /// ```
+    /// use lamellar::active_messaging::prelude::*;
+    /// #[AmData(Debug,Clone)]
+    /// struct Am1 {
+    ///    foo: usize,
+    /// }
+    /// #[lamellar::am]
+    /// impl LamellarAm for RingAm{
+    ///     async fn exec(self) -> Vec<usize>{
+    ///         println!("in am1 {:?} on PE{:?}",self.foo,  lamellar::current_pe);
+    ///     }
+    /// }
+    ///
+    /// #[AmData(Debug,Clone)]
+    /// struct Am2 {
+    ///    bar: String,
+    /// }
+    /// #[lamellar::am]
+    /// impl LamellarAm for RingAm{
+    ///     async fn exec(self) -> Vec<usize>{
+    ///         println!("in am2 {:?} on PE{:?}",self.bar,lamellar::current_pe);
+    ///     }
+    /// }
+    ///
+    /// fn main(){
+    ///     let world = lamellar::LamellarWorldBuilder::new().build();
+    ///     let my_pe = world.my_pe();
+    ///     let num_pes = world.num_pes();
+    ///
+    ///     let am1 = Am1{foo: 1};
+    ///     let am2 = Am2{bar: "hello".to_string()};
+    ///     //create a new AMGroup
+    ///     let am_group = AMGroup::new(&world);
+    ///     // add the AMs to the group
+    ///     // we can specify individual PEs to execute on or all PEs
+    ///     am_group.add_am_all(am1.clone());
+    ///     am_group.add_am_all(am2.clone());
+    /// }
+    /// ```
     pub fn add_am_all<F>(&mut self, am: F)
     where
         F: RemoteActiveMessage + LamellarAM + Serde + AmDist,
@@ -915,6 +1025,47 @@ impl AmGroup {
         self.cnt += 1;
     }
 
+    /// add an active message to the group which will execute on the given PE
+    /// # Example
+    /// ```
+    /// use lamellar::active_messaging::prelude::*;
+    /// #[AmData(Debug,Clone)]
+    /// struct Am1 {
+    ///    foo: usize,
+    /// }
+    /// #[lamellar::am]
+    /// impl LamellarAm for RingAm{
+    ///     async fn exec(self) -> Vec<usize>{
+    ///         println!("in am1 {:?} on PE{:?}",self.foo,  lamellar::current_pe);
+    ///     }
+    /// }
+    ///
+    /// #[AmData(Debug,Clone)]
+    /// struct Am2 {
+    ///    bar: String,
+    /// }
+    /// #[lamellar::am]
+    /// impl LamellarAm for RingAm{
+    ///     async fn exec(self) -> Vec<usize>{
+    ///         println!("in am2 {:?} on PE{:?}",self.bar,lamellar::current_pe);
+    ///     }
+    /// }
+    ///
+    /// fn main(){
+    ///     let world = lamellar::LamellarWorldBuilder::new().build();
+    ///     let my_pe = world.my_pe();
+    ///     let num_pes = world.num_pes();
+    ///
+    ///     let am1 = Am1{foo: 1};
+    ///     let am2 = Am2{bar: "hello".to_string()};
+    ///     //create a new AMGroup
+    ///     let am_group = AMGroup::new(&world);
+    ///     // add the AMs to the group
+    ///     // we can specify individual PEs to execute on or all PEs
+    ///     am_group.add_am_pe(0,am1.clone());
+    ///     am_group.add_am_pe(1,am2.clone());
+    /// }
+    /// ```
     pub fn add_am_pe<F>(&mut self, pe: usize, am: F)
     where
         F: RemoteActiveMessage + LamellarAM + Serde + AmDist,
@@ -926,6 +1077,50 @@ impl AmGroup {
         self.cnt += 1;
     }
 
+    /// execute the active messages that have been added to the group
+    /// # Example
+    /// ```
+    /// use lamellar::active_messaging::prelude::*;
+    /// #[AmData(Debug,Clone)]
+    /// struct Am1 {
+    ///    foo: usize,
+    /// }
+    /// #[lamellar::am]
+    /// impl LamellarAm for RingAm{
+    ///     async fn exec(self) -> Vec<usize>{
+    ///         println!("in am1 {:?} on PE{:?}",self.foo,  lamellar::current_pe);
+    ///     }
+    /// }
+    ///
+    /// #[AmData(Debug,Clone)]
+    /// struct Am2 {
+    ///    bar: String,
+    /// }
+    /// #[lamellar::am]
+    /// impl LamellarAm for RingAm{
+    ///     async fn exec(self) -> Vec<usize>{
+    ///         println!("in am2 {:?} on PE{:?}",self.bar,lamellar::current_pe);
+    ///     }
+    /// }
+    ///
+    /// fn main(){
+    ///     let world = lamellar::LamellarWorldBuilder::new().build();
+    ///     let my_pe = world.my_pe();
+    ///     let num_pes = world.num_pes();
+    ///
+    ///     let am1 = Am1{foo: 1};
+    ///     let am2 = Am2{bar: "hello".to_string()};
+    ///     //create a new AMGroup
+    ///     let am_group = AMGroup::new(&world);
+    ///     // add the AMs to the group
+    ///     // we can specify individual PEs to execute on or all PEs
+    ///     am_group.add_am_pe(0,am1.clone());
+    ///     am_group.add_am_pe(1,am1.clone());
+    ///     am_group.add_am_all(am2.clone());
+    ///     //execute and await the completion of all AMs in the group
+    ///     world.block_on(am_group.exec());
+    /// }
+    /// ```
     pub async fn exec(&mut self) {
         // let _timer = std::time::Instant::now();
         let mut reqs = vec![];

@@ -61,6 +61,12 @@ fn create_reduction(
             quote! {.copied()}
         };
 
+        let data_slice = if array_type == "LocalLockArray" || array_type == "GlobalLockArray" {
+            quote! {self.data.local_data().await}
+        } else {
+            quote! {self.data.local_data()}
+        };
+
         array_impls.extend(quote! {
             #[allow(non_camel_case_types)]
             #[#am_data(Clone,Debug)]
@@ -78,7 +84,7 @@ fn create_reduction(
                         // println!("[{:?}] root {:?} {:?}",__lamellar_current_pe,self.start_pe, self.end_pe);
                         let timer = std::time::Instant::now();
                         #[allow(unused_unsafe)]
-                        let data_slice = unsafe {self.data.local_data()};
+                        let data_slice = unsafe { #data_slice};
                         // let first = data_slice.first().unwrap().clone();
                         // let res = data_slice[1..].iter().fold(first, #op );
                         let res = data_slice.iter()#iter_chain.reduce(#op).unwrap();

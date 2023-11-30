@@ -177,7 +177,7 @@ lazy_static! {
         let mut temp = HashMap::new();
         for reduction_type in crate::inventory::iter::<ReduceKey> {
             temp.insert(
-                ((reduction_type.id)(), reduction_type.name.clone()),
+                ((reduction_type.id)(), reduction_type.name),
                 reduction_type.gen,
             );
         }

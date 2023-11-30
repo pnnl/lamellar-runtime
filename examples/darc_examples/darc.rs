@@ -20,9 +20,9 @@ impl LamellarAm for DarcAm {
     async fn exec(self) {
         println!("in darc am!!");
         self.darc.fetch_add(1, Ordering::SeqCst); //this only updates atomic on the executing pe
-        println!("lrw: {:?} ", self.lrw_darc.read());
-        println!("global w: {:?}", self.global_darc.async_write().await);
-        println!("global r: {:?}", self.global_darc.async_read().await);
+        println!("lrw: {:?} ", self.lrw_darc.read().await);
+        println!("global w: {:?}", self.global_darc.write().await);
+        println!("global r: {:?}", self.global_darc.read().await);
         let temp = *self.darc_tuple.0 + *self.darc_tuple.1;
         println!("temp: {:?}", temp);
     }
@@ -60,10 +60,10 @@ fn main() {
 
     let global_darc = GlobalRwDarc::new(world.team(), 0).unwrap();
     // println!("here 2");
-    let read_lock = global_darc.read();
+    let read_lock = world.block_on(global_darc.read());
     println!("I have the read lock!!!! {:?}", my_pe);
     drop(read_lock);
-    let write_lock = global_darc.write();
+    let write_lock = world.block_on(global_darc.write());
     println!("I have the write lock!!!! {:?}", my_pe);
     std::thread::sleep(std::time::Duration::from_secs(2));
     drop(write_lock);
@@ -110,7 +110,7 @@ fn main() {
             // println!("here 8");
         } else {
             // println!("here");
-            *(*local_darc.write()) += 1;
+            *(*world.block_on(local_darc.write())) += 1;
         }
     }
     //--------
