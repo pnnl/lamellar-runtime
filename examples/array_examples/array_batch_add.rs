@@ -31,13 +31,13 @@ fn main() {
         let array = AtomicArray::<usize>::new(world.clone(), array_size, Distribution::Block); //non intrinsic atomic, non bitwise
                                                                                                //create vec of random indices between 0 & 1000000
         let mut rng = rand::thread_rng();
-        let mut indices = (0..10_000_000)
+        let indices = (0..10_000_000)
             .map(|_| rng.gen_range(0..array_size))
             .collect::<Vec<_>>();
-        let vals = vec![1; 10_000_000];
+        // let _vals = vec![1; 10_000_000];
 
         array.barrier();
-        let mut timer = std::time::Instant::now();
+        let timer = std::time::Instant::now();
         array.batch_add(indices.clone(), 1);
         if my_pe == 0 {
             println!("{:?}", timer.elapsed());

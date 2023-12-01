@@ -849,7 +849,7 @@ fn main() {
         }
         world.barrier();
 
-        let ti_temp = ti;
+        let _ti_temp = ti;
 
         // full_spectrum_array
         //     .dist_iter_mut()

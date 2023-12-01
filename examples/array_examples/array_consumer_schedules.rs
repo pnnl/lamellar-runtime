@@ -36,7 +36,7 @@ fn reduce_with_schedule(
     thread_cnts: Arc<Mutex<HashMap<ThreadId, usize>>>,
 ) {
     let timer = Instant::now();
-    let tc = thread_cnts.clone();
+    let _tc = thread_cnts.clone();
     let result = array.block_on(
         array
             .local_iter()
@@ -55,7 +55,7 @@ fn collect_with_schedule(
     thread_cnts: Arc<Mutex<HashMap<ThreadId, usize>>>,
 ) {
     let timer = Instant::now();
-    let tc = thread_cnts.clone();
+    let _tc = thread_cnts.clone();
     let result = array.block_on(
         array
             .local_iter()
@@ -74,7 +74,7 @@ fn count_with_schedule(
     thread_cnts: Arc<Mutex<HashMap<ThreadId, usize>>>,
 ) {
     let timer = Instant::now();
-    let tc = thread_cnts.clone();
+    let _tc = thread_cnts.clone();
     let result = array.block_on(
         array
             .local_iter()
@@ -92,7 +92,7 @@ fn sum_with_schedule(
     thread_cnts: Arc<Mutex<HashMap<ThreadId, usize>>>,
 ) {
     let timer = Instant::now();
-    let tc = thread_cnts.clone();
+    let _tc = thread_cnts.clone();
     let result = array.block_on(
         array
             .local_iter()
@@ -107,7 +107,7 @@ fn sum_with_schedule(
 fn main() {
     let world = lamellar::LamellarWorldBuilder::new().build();
     let _my_pe = world.my_pe();
-    let num_pes = world.num_pes();
+    let _num_pes = world.num_pes();
     let block_array = AtomicArray::<usize>::new(world.team(), ARRAY_LEN, Distribution::Block);
     block_array
         .dist_iter_mut()

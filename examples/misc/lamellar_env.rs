@@ -2,7 +2,6 @@
 use lamellar::array::prelude::*;
 use lamellar::darc::prelude::*;
 use lamellar::lamellar_env::LamellarEnv;
-use lamellar::memregion::prelude::*;
 
 fn print_env<T: LamellarEnv>(env: &T) {
     println!("my_pe: {}", env.my_pe());
