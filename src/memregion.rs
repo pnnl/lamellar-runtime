@@ -625,7 +625,6 @@ pub(crate) trait RTMemoryRegionRDMA<T: Dist> {
     unsafe fn blocking_get_slice(&self, pe: usize, index: usize, data: &mut [T]);
 }
 
-//#[prof]
 impl<T: Dist> Hash for LamellarMemoryRegion<T> {
     #[tracing::instrument(skip_all)]
     fn hash<H: Hasher>(&self, state: &mut H) {
@@ -633,7 +632,6 @@ impl<T: Dist> Hash for LamellarMemoryRegion<T> {
     }
 }
 
-//#[prof]
 impl<T: Dist> PartialEq for LamellarMemoryRegion<T> {
     #[tracing::instrument(skip_all)]
     fn eq(&self, other: &LamellarMemoryRegion<T>) -> bool {
@@ -641,7 +639,6 @@ impl<T: Dist> PartialEq for LamellarMemoryRegion<T> {
     }
 }
 
-//#[prof]
 impl<T: Dist> Eq for LamellarMemoryRegion<T> {}
 
 impl<T: Dist> LamellarWrite for LamellarMemoryRegion<T> {}
@@ -770,7 +767,6 @@ impl<T: Dist> MemoryRegion<T> {
 
     // }
 
-    //#[prof]
     // impl<T: AmDist+ 'static> MemoryRegionRDMA<T> for MemoryRegion<T> {
     /// copy data from local memory location into a remote memory location
     ///
@@ -1184,7 +1180,6 @@ impl<T: Dist> Drop for MemoryRegion<T> {
     }
 }
 
-// #[prof]
 impl<T: Dist> std::fmt::Debug for MemoryRegion<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         // write!(f, "{:?}", slice)

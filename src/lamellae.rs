@@ -54,7 +54,6 @@ pub(crate) enum AllocationType {
     Sub(Vec<usize>),
 }
 
-//#[prof]
 impl Default for Backend {
     fn default() -> Self {
         default_backend()
@@ -208,7 +207,7 @@ pub(crate) trait LamellaeRDMA: Send + Sync {
 }
 
 #[allow(unused_variables)]
-//#[prof]
+
 pub(crate) fn create_lamellae(backend: Backend) -> LamellaeBuilder {
     match backend {
         #[cfg(feature = "enable-rofi")]

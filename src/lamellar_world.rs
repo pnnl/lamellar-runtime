@@ -42,7 +42,6 @@ pub struct LamellarWorld {
     ref_cnt: Arc<AtomicUsize>,
 }
 
-//#[prof]
 impl ActiveMessaging for LamellarWorld {
     #[tracing::instrument(skip_all)]
     fn exec_am_all<F>(&self, am: F) -> Pin<Box<dyn Future<Output = Vec<F::Output>> + Send>>
@@ -83,7 +82,6 @@ impl ActiveMessaging for LamellarWorld {
     }
 }
 
-//#[prof]
 impl RemoteMemoryRegion for LamellarWorld {
     #[tracing::instrument(skip_all)]
     fn alloc_shared_mem_region<T: Dist>(&self, size: usize) -> SharedMemoryRegion<T> {
@@ -97,7 +95,6 @@ impl RemoteMemoryRegion for LamellarWorld {
     }
 }
 
-//#[prof]
 impl LamellarWorld {
     #[doc(alias("One-sided", "onesided"))]
     /// Returns the id of this PE (roughly equivalent to MPI Rank)
@@ -240,7 +237,7 @@ impl Clone for LamellarWorld {
         }
     }
 }
-//#[prof]
+
 impl Drop for LamellarWorld {
     #[tracing::instrument(skip_all)]
     fn drop(&mut self) {
@@ -347,7 +344,6 @@ pub struct LamellarWorldBuilder {
     num_threads: usize,
 }
 
-//#[prof]
 impl LamellarWorldBuilder {
     #[doc(alias = "Collective")]
     /// Construct a new lamellar world builder

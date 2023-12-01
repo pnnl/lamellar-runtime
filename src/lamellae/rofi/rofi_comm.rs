@@ -48,7 +48,6 @@ pub(crate) struct RofiComm {
     // alloc_mutex: Arc<Mutex<()>>,
 }
 
-//#[prof]
 impl RofiComm {
     #[tracing::instrument(skip_all)]
     pub(crate) fn new(provider: &str) -> RofiComm {
@@ -612,7 +611,6 @@ impl CommOps for RofiComm {
     }
 }
 
-//#[prof]
 impl Drop for RofiComm {
     #[tracing::instrument(skip_all)]
     fn drop(&mut self) {

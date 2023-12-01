@@ -175,14 +175,23 @@ fn check_for_am_group(args: &Punctuated<syn::Meta, syn::Token![,]>) -> bool {
     true
 }
 
+/// An attribute macro used to specify the data type of an AM
+/// When defining a struct to be used in a active message,
+/// it must be applied to the top of the struct definition.
+///
+/// Optionally, it can be applied to individual members of the struct
+/// to specify that the given member is static with respect to a typed active message group ([typed_am_group]).
 /// # Examples
 ///
 ///```
 /// use lamellar::active_messaging::prelude::*;
+/// use lamellar::darc::prelude::*;
 ///
 /// #[AmData(Debug,Clone)]
 /// struct HelloWorld {
 ///    originial_pe: usize,
+///    #[AmData(static)]
+///    msg: Darc<String>,
 /// }
 ///```
 #[allow(non_snake_case)]
@@ -759,6 +768,86 @@ impl Parse for AmGroups {
     }
 }
 
+/// The macro used to create an new instance of a `TypedAmGroup` which is an Active Message Group that can only include AMs of a specific type (but this type can return data).
+/// Data is returned in the same order as the AMs were added
+/// (You can think of this as similar to `Vec<T>`)
+/// This macro which expects two parameters, the first being the type (name) of the AM and the second being a reference to a lamellar team.
+/// ```
+/// use lamellar::active_messaging::prelude::*;
+/// use lamellar::darc::prelude::*;
+/// use std::sync::atomic::AtomicUsize;
+/// #[AmData(Debug,Clone)]
+/// struct ExampleAm {
+///    cnt: Darc<AtomicUsize>,
+/// }
+/// #[lamellar::am]
+/// impl LamellarAm for ExampleAm{
+///     async fn exec(self) -> usize{
+///         self.cnt.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+///     }
+/// }
+///
+/// fn main(){
+///     let world = lamellar::LamellarWorldBuilder::new().build();
+///     let my_pe = world.my_pe();
+///     let num_pes = world.num_pes();
+///
+///     if my_pe == 0 { // we only want to run this on PE0 for sake of illustration
+///         let am_group = typed_am_group!{ExampleAm,&world};
+///         let am = ExampleAm{cnt: 0};
+///         // add the AMs to the group
+///         // we can specify individual PEs to execute on or all PEs
+///         am_group.add_am_pe(0,am.clone());
+///         am_group.add_am_all(am.clone());
+///         am_group.add_am_pe(1,am.clone());
+///         am_group.add_am_all(am.clone());
+///
+///         //execute and await the completion of all AMs in the group
+///         let results = world.block_on(am_group.exec()); // we want to process the returned data
+///         //we can index into the results
+///         if let AmGroupResult::Pe((pe,val)) = results.at(2){
+///             assert_eq!(pe, 1); //the third add_am_* call in the group was to execute on PE1
+///             assert_eq!(val, 1); // this was the second am to execute on PE1 so the fetched value is 1
+///         }
+///         //or we can iterate over the results
+///         for res in results{
+///             match res{
+///                 AmGroupResult::Pe((pe,val)) => { println!("{} from PE{}",val,pe)},
+///                 AmGroupResult::All(val) => { println!("{} on all PEs",val)},
+///             }
+///         }
+///     }
+/// }
+///```
+/// Expected output on each PE1:
+/// ```text
+/// 0 from PE0
+/// [1,0] on all PEs
+/// 1 from PE1
+/// [2,2] on all PEs
+/// ```
+/// /// ### Static Members
+/// In the above code, the `ExampleAm` stuct contains a member that is a [crate::darc::Darc](Darc) (Distributed Arc).
+/// In order to properly calculate distributed reference counts Darcs implements specialized Serialize and Deserialize operations.
+/// While, the cost to any single serialization/deserialization operation is small, doing this for every active message containing
+/// a Darc can become expensive.
+///
+/// In certain cases Typed Am Groups can avoid the repeated serialization/deserialization of Darc members if the user guarantees
+/// that every Active Message in the group is using a reference to the same Darc. In this case, we simply would only need
+/// to serialize the Darc once for each PE it gets sent to.
+///
+/// This can be accomplished by using the [AmData] attribute macro with the `static` keyword passed in as an argument as illustrated below:
+/// ```
+/// use lamellar::active_messaging::prelude::*;
+/// use lamellar::darc::prelude::*;
+/// use std::sync::atomic::AtomicUsize;
+/// #[AmData(Debug,Clone)]
+/// struct ExampleAm {
+///    #[AmData(static)]
+///    cnt: Darc<AtomicUsize>,
+/// }
+///```
+/// Other than the addition of `#[AmData(static)]` the rest of the code as the previous example would be the same.
 #[proc_macro_error]
 #[proc_macro]
 pub fn typed_am_group(input: TokenStream) -> TokenStream {

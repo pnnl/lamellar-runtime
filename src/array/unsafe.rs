@@ -118,7 +118,6 @@ pub(crate) struct UnsafeArrayInnerWeak {
 //     }
 // }
 
-//#[prof]
 impl<T: Dist + ArrayOps + 'static> UnsafeArray<T> {
     #[doc(alias = "Collective")]
     /// Construct a new UnsafeArray with a length of `array_size` whose data will be layed out with the provided `distribution` on the PE's specified by the `team`.

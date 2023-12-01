@@ -14,7 +14,7 @@ pub struct LocalOnlyArray<T: Dist + 'static> {
                                                 // either wrap the localonlyarray in a mutex/rwlock or use a localRwArray
 }
 
-//#[prof]
+
 impl<T: Dist> LocalOnlyArray<T> {
     pub fn new<U: Into<IntoLamellarTeam>>(
         team: U,

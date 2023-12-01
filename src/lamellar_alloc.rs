@@ -183,7 +183,7 @@ struct FreeEntries {
     sizes: BTreeMap<usize, IndexSet<usize>>, //<size,<Vec<addr>>
     addrs: BTreeMap<usize, (usize, usize)>,  //<addr,(size,padding)>
 }
-//#[prof]
+
 impl FreeEntries {
     fn new() -> FreeEntries {
         FreeEntries {

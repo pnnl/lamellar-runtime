@@ -224,7 +224,6 @@ impl<T: Dist> AsBase for SharedMemoryRegion<T> {
     }
 }
 
-//#[prof]
 impl<T: Dist> MemoryRegionRDMA<T> for SharedMemoryRegion<T> {
     unsafe fn put<U: Into<LamellarMemoryRegion<T>>>(&self, pe: usize, index: usize, data: U) {
         self.mr.put(pe, self.sub_region_offset + index, data);
@@ -313,7 +312,6 @@ impl<T: Dist> TeamFrom<&SharedMemoryRegion<T>> for LamellarArrayRdmaInput<T> {
     }
 }
 
-//#[prof]
 // impl<T: Dist> Drop for SharedMemoryRegion<T> {
 //     fn drop(&mut self) {
 //         println!("dropping shared memory region");

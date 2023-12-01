@@ -37,7 +37,6 @@ pub(crate) struct WorkStealingThread {
     panic: Arc<AtomicU8>,
 }
 
-//#[prof]
 impl WorkStealingThread {
     #[tracing::instrument(skip_all)]
     fn run(
@@ -430,7 +429,6 @@ impl AmeSchedulerQueue for WorkStealingInner {
     }
 }
 
-//#[prof]
 impl SchedulerQueue for WorkStealing {
     fn submit_am(
         //unserialized request
@@ -514,7 +512,6 @@ impl SchedulerQueue for WorkStealing {
     }
 }
 
-//#[prof]
 impl WorkStealingInner {
     #[tracing::instrument(skip_all)]
     pub(crate) fn new(
@@ -640,7 +637,6 @@ impl WorkStealing {
     }
 }
 
-//#[prof]
 impl Drop for WorkStealingInner {
     //when is this called with respect to world?
     #[tracing::instrument(skip_all)]

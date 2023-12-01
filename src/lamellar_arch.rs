@@ -31,7 +31,6 @@ pub struct IdError {
 
 type ArchResult<T> = Result<T, IdError>;
 
-#[prof]
 impl std::fmt::Display for IdError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(
@@ -42,7 +41,6 @@ impl std::fmt::Display for IdError {
     }
 }
 
-#[prof]
 impl std::error::Error for IdError {}
 
 #[derive(Clone)] //, Hash)]
@@ -85,7 +83,7 @@ impl LamellarArchEnum {
 }
 // It might be worth using the enum_dispatch crate for this?
 // https://gitlab.com/antonok/enum_dispatch
-#[prof]
+
 impl LamellarArch for LamellarArchEnum {
     fn num_pes(&self) -> usize {
         match self {
@@ -212,7 +210,7 @@ pub(crate) struct LamellarArchRTiter {
     cur_pe: usize, //pe in team based ids
     single: bool,
 }
-#[prof]
+
 impl Iterator for LamellarArchRTiter {
     type Item = usize;
     fn next(&mut self) -> Option<usize> {
@@ -246,7 +244,6 @@ impl GlobalArch {
     }
 }
 
-#[prof]
 impl LamellarArch for GlobalArch {
     fn num_pes(&self) -> usize {
         self.num_pes
@@ -304,7 +301,6 @@ pub struct StridedArch {
     pub(crate) stride: usize, //this is with respect to the parent arch, if all arches were stided that this is multiplicative...(possibly an avenue for optiization)
 }
 
-#[prof]
 impl StridedArch {
     /// Construct a new StrideArch using a starting PE, the stride length, and the number of PEs to include in the Block
     ///
@@ -333,7 +329,6 @@ impl StridedArch {
     }
 }
 
-#[prof]
 impl LamellarArch for StridedArch {
     fn num_pes(&self) -> usize {
         self.num_pes
@@ -402,7 +397,6 @@ pub struct BlockedArch {
     pub(crate) end_pe: usize,   //this is with respect to the parent arch (inclusive)
 }
 
-#[prof]
 impl BlockedArch {
     /// Construct a new Block using a starting PE and the number of PEs to include in the Block
     ///
@@ -425,7 +419,6 @@ impl BlockedArch {
     }
 }
 
-#[prof]
 impl LamellarArch for BlockedArch {
     fn num_pes(&self) -> usize {
         self.num_pes

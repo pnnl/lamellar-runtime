@@ -9,7 +9,7 @@
 //! - [am]
 //! - [AmLocalData]
 //! - [local_am]
-//! - [AmGroup]
+//! - [AmGroup](crate::lamellar_task_group::AmGroup)
 //! - [typed_am_group]
 //!
 //! Further details are provided in the documentation for each macro but at a high level to implement an active message we need to
@@ -39,7 +39,7 @@
 //! }
 //!```
 //! This looks like a pretty normal (if simple) struct, we next have to let the runtime know we would like this data
-//! to be used in an active message, so we need to apply the [AmData] macro, this is done by replacing the `derive` macro:
+//! to be used in an active message, so we need to apply the [AmGroup](crate::lamellar_task_group::AmGroup) macro, this is done by replacing the `derive` macro:
 //!```
 //! use lamellar::active_messaging::prelude::*;
 //! #[AmData(Debug,Clone)]
@@ -490,7 +490,7 @@
 //! There are two flavors of active message groups discussed in the following sections:
 //!
 //! ## Generic Active Message Groups
-//! The first Active Message Group is called [AMGroup] which can include any AM `AM: impl LamellarAm<Output=()>`.
+//! The first Active Message Group is called [AmGroup](crate::lamellar_task_group::AmGroup) which can include any AM `AM: impl LamellarAm<Output=()>`.
 //! That is, the active messages in the group can consists of different underlying types as long as they all return `()`.
 //! Future implementations will relax this restriction, so that they only need to return the same type.
 //! ```
@@ -551,10 +551,10 @@
 //! in am2 hello on PE1
 //! ```
 //!  ## Typed Active Message Groups
-//! The second Active Message Group is called [TypedAmGroup] which can only include AMs of a specific type (but this type can return data).
+//! The second Active Message Group is called `TypedAmGroup` which can only include AMs of a specific type (but this type can return data).
 //! Data is returned in the same order as the AMs were added
 //! (You can think of this as similar to `Vec<T>`)
-//! Typed Am Groups are instatiated use the [typed_am_group] macro which expects to parameters, the first being the type (name) of the AM and the second being a reference to a lamellar team.
+//! Typed Am Groups are instatiated use the [typed_am_group] macro which expects two parameters, the first being the type (name) of the AM and the second being a reference to a lamellar team.
 //! ```
 //! use lamellar::active_messaging::prelude::*;
 //! use lamellar::darc::prelude::*;
@@ -610,7 +610,7 @@
 //! [2,2] on all PEs
 //! ```
 //! //! ### Static Members
-//! In the above code, the `ExampleAm` stuct contains a member that is a [Darc] (Distributed Arc).
+//! In the above code, the `ExampleAm` stuct contains a member that is a [Darc](crate::darc::Darc) (Distributed Arc).
 //! In order to properly calculate distributed reference counts Darcs implements specialized Serialize and Deserialize operations.
 //! While, the cost to any single serialization/deserialization operation is small, doing this for every active message containing
 //! a Darc can become expensive.
@@ -922,7 +922,6 @@ pub(crate) struct AMCounters {
     pub(crate) send_req_cnt: AtomicUsize,
 }
 
-//#[prof]
 impl AMCounters {
     pub(crate) fn new() -> AMCounters {
         AMCounters {

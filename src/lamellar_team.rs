@@ -86,7 +86,6 @@ pub struct LamellarTeam {
     pub(crate) panic: Arc<AtomicU8>,
 }
 
-//#[prof]
 impl LamellarTeam {
     #[tracing::instrument(skip_all)]
     pub(crate) fn new(
@@ -441,7 +440,6 @@ impl std::fmt::Debug for LamellarTeam {
     }
 }
 
-// #[prof]
 impl ActiveMessaging for Arc<LamellarTeam> {
     #[tracing::instrument(skip_all)]
     fn exec_am_all<F>(&self, am: F) -> Pin<Box<dyn Future<Output = Vec<F::Output>> + Send>>
@@ -735,14 +733,12 @@ impl std::fmt::Debug for LamellarTeamRT {
     }
 }
 
-//#[prof]
 impl Hash for LamellarTeamRT {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.team_hash.hash(state);
     }
 }
 
-//#[prof]
 impl LamellarTeamRT {
     #[tracing::instrument(skip_all)]
     pub(crate) fn new(
@@ -1276,7 +1272,6 @@ impl LamellarTeamRT {
             .fetch_sub(cnt, Ordering::SeqCst);
     }
 
-    // // #[prof]
     #[tracing::instrument(skip_all)]
     fn wait_all(&self) {
         let mut temp_now = Instant::now();
@@ -1407,7 +1402,6 @@ impl LamellarTeamRT {
         F: RemoteActiveMessage + LamellarAM + crate::Serialize + 'static,
     {
         // println!("team exec am pe tg");
-        prof_start!(pre);
         let tg_outstanding_reqs = match task_group_cnts {
             Some(task_group_cnts) => {
                 task_group_cnts.add_send_req(1);
@@ -1523,7 +1517,7 @@ impl LamellarTeamRT {
             team_addr: self.remote_ptr_addr,
         };
         self.scheduler.submit_am(Am::All(req_data, am));
-        prof_end!(sub);
+
         Box::new(LamellarMultiRequestHandle {
             inner: req,
             _phantom: PhantomData,
@@ -1583,7 +1577,7 @@ impl LamellarTeamRT {
             team_addr: self.remote_ptr_addr,
         };
         self.scheduler.submit_am(Am::Remote(req_data, am));
-        prof_end!(sub);
+
         Box::new(LamellarRequestHandle {
             inner: req,
             _phantom: PhantomData,
@@ -1643,7 +1637,7 @@ impl LamellarTeamRT {
             team_addr: self.remote_ptr_addr,
         };
         self.scheduler.submit_am_immediate(Am::Remote(req_data, am));
-        prof_end!(sub);
+
         Box::new(LamellarRequestHandle {
             inner: req,
             _phantom: PhantomData,
@@ -1671,9 +1665,6 @@ impl LamellarTeamRT {
         F: LamellarActiveMessage + LocalAM + 'static,
     {
         // println!("team exec am local");
-        prof_start!(pre);
-        prof_end!(pre);
-        prof_start!(req);
         let tg_outstanding_reqs = match task_group_cnts {
             Some(task_group_cnts) => {
                 task_group_cnts.add_send_req(1);
@@ -1696,17 +1687,13 @@ impl LamellarTeamRT {
             id: req_ptr as usize,
             sub_id: 0,
         };
-        prof_end!(req);
 
-        prof_start!(counters);
         self.world_counters.add_send_req(1);
         self.team_counters.add_send_req(1);
         // println!("cnts: t: {} w: {} tg: {:?}",self.team_counters.outstanding_reqs.load(Ordering::Relaxed),self.world_counters.outstanding_reqs.load(Ordering::Relaxed), tg_outstanding_reqs.as_ref().map(|x| x.load(Ordering::Relaxed)));
-        prof_end!(counters);
-        prof_start!(any);
+
         let func: LamellarArcLocalAm = Arc::new(am);
-        prof_end!(any);
-        prof_start!(sub);
+
         let world = if let Some(world) = &self.world {
             world.clone()
         } else {
@@ -1722,7 +1709,7 @@ impl LamellarTeamRT {
             team_addr: self.remote_ptr_addr,
         };
         self.scheduler.submit_am(Am::Local(req_data, func));
-        prof_end!(sub);
+
         Box::new(LamellarLocalRequestHandle {
             inner: req,
             _phantom: PhantomData,
@@ -1778,7 +1765,6 @@ impl LamellarTeamRT {
     }
 }
 
-//#[prof]
 impl Drop for LamellarTeamRT {
     #[tracing::instrument(skip_all)]
     fn drop(&mut self) {
@@ -1796,7 +1782,6 @@ impl Drop for LamellarTeamRT {
     }
 }
 
-//#[prof]
 impl Drop for LamellarTeam {
     #[tracing::instrument(skip_all)]
     fn drop(&mut self) {

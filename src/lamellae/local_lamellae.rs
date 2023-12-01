@@ -58,7 +58,6 @@ impl SerializedDataOps for LocalData {
     }
 }
 
-//#[prof]
 impl Local {
     pub(crate) fn new() -> Local {
         Local {
@@ -94,7 +93,6 @@ impl LamellaeInit for Local {
     }
 }
 
-//#[prof]
 impl LamellaeComm for Local {
     fn my_pe(&self) -> usize {
         0
@@ -116,7 +114,6 @@ impl LamellaeComm for Local {
     fn force_deinit(&self) {}
 }
 
-//#[prof]
 #[async_trait]
 impl LamellaeAM for Local {
     async fn send_to_pe_async(&self, _pe: usize, _data: SerializedData) {}
@@ -136,7 +133,6 @@ struct MyPtr {
 // unsafe impl Sync for MyPtr {}
 unsafe impl Send for MyPtr {}
 
-//#[prof]
 impl LamellaeRDMA for Local {
     fn put(&self, _pe: usize, src: &[u8], dst: usize) {
         unsafe {
@@ -238,7 +234,6 @@ impl LamellaeRDMA for Local {
     fn alloc_pool(&self, _min_size: usize) {}
 }
 
-//#[prof]
 // impl Drop for Local {
 //     fn drop(&mut self) {
 //         trace!("[{:?}] RofiLamellae Dropping", 0);

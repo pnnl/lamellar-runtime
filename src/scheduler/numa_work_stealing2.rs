@@ -30,7 +30,6 @@ pub(crate) struct NumaWorkStealing2Thread {
     active: Arc<AtomicBool>,
 }
 
-//#[prof]
 impl NumaWorkStealing2Thread {
     fn run(
         worker: NumaWorkStealing2Thread,
@@ -272,7 +271,6 @@ impl AmeSchedulerQueue for NumaWorkStealing2Inner {
     }
 }
 
-//#[prof]
 impl SchedulerQueue for NumaWorkStealing2 {
     fn submit_am(
         //unserialized request
@@ -361,7 +359,6 @@ impl SchedulerQueue for NumaWorkStealing2 {
     }
 }
 
-//#[prof]
 impl NumaWorkStealing2Inner {
     pub(crate) fn new(
         stall_mark: Arc<AtomicUsize>,
@@ -555,7 +552,6 @@ impl NumaWorkStealing2 {
     }
 }
 
-//#[prof]
 impl Drop for NumaWorkStealing2Inner {
     //when is this called with respect to world?
     fn drop(&mut self) {
