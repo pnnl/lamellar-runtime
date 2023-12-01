@@ -175,12 +175,6 @@ fn check_for_am_group(args: &Punctuated<syn::Meta, syn::Token![,]>) -> bool {
     true
 }
 
-/// An attribute macro used to specify the data type of an AM
-/// When defining a struct to be used in a active message,
-/// it must be applied to the top of the struct definition.
-///
-/// Optionally, it can be applied to individual members of the struct
-/// to specify that the given member is static with respect to a typed active message group ([typed_am_group]).
 /// # Examples
 ///
 ///```
@@ -826,7 +820,7 @@ impl Parse for AmGroups {
 /// 1 from PE1
 /// [2,2] on all PEs
 /// ```
-/// /// ### Static Members
+/// ### Static Members
 /// In the above code, the `ExampleAm` stuct contains a member that is a [crate::darc::Darc](Darc) (Distributed Arc).
 /// In order to properly calculate distributed reference counts Darcs implements specialized Serialize and Deserialize operations.
 /// While, the cost to any single serialization/deserialization operation is small, doing this for every active message containing

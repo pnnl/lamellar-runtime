@@ -554,7 +554,7 @@
 //! The second Active Message Group is called `TypedAmGroup` which can only include AMs of a specific type (but this type can return data).
 //! Data is returned in the same order as the AMs were added
 //! (You can think of this as similar to `Vec<T>`)
-//! Typed Am Groups are instatiated use the [typed_am_group] macro which expects two parameters, the first being the type (name) of the AM and the second being a reference to a lamellar team.
+//! Typed Am Groups are instantiated using the [typed_am_group] macro which expects two parameters, the first being the type (name) of the AM and the second being a reference to a lamellar team.
 //! ```
 //! use lamellar::active_messaging::prelude::*;
 //! use lamellar::darc::prelude::*;
@@ -609,7 +609,7 @@
 //! 1 from PE1
 //! [2,2] on all PEs
 //! ```
-//! //! ### Static Members
+//! ### Static Members
 //! In the above code, the `ExampleAm` stuct contains a member that is a [Darc](crate::darc::Darc) (Distributed Arc).
 //! In order to properly calculate distributed reference counts Darcs implements specialized Serialize and Deserialize operations.
 //! While, the cost to any single serialization/deserialization operation is small, doing this for every active message containing
@@ -675,6 +675,10 @@ pub(crate) const BATCH_AM_SIZE: usize = 100_000;
 /// Generally this is paired with the [lamellar::am][am] macro on an implementation of the [LamellarAM], to associate a remote function with this data.
 /// (if you simply want this type to able to be included in other active messages, implementing [LamellarAM] can be omitted )
 ///
+/// When used to specify the data type of an AMit must be applied to the top of the struct definition.
+///
+/// Optionally, it can be applied to individual members of the struct
+/// to specify that the given member is static with respect to a typed active message group ( [typed_am_group] ).
 pub use lamellar_impl::AmData;
 
 /// This macro is used to setup the attributed type so that it can be used within local active messages.
