@@ -38,17 +38,13 @@ fn main() {
 
     println!("--------------------------------------------------------");
     println!("block sum");
-    let sum = block_array.block_on(block_array
-        .dist_iter().map(|e|e.load())
-        .sum());
+    let sum = block_array.block_on(block_array.dist_iter().map(|e| e.load()).sum());
     println!("result: {sum}");
     world.barrier();
     println!("--------------------------------------------------------");
     println!("--------------------------------------------------------");
     println!("cyclic sum");
-    let sum = cyclic_array.block_on(cyclic_array
-        .dist_iter().map(|e|e.load())
-        .sum());
+    let sum = cyclic_array.block_on(cyclic_array.dist_iter().map(|e| e.load()).sum());
     println!("result: {sum}");
     world.barrier();
     println!("--------------------------------------------------------");
@@ -322,11 +318,11 @@ fn main() {
 
     println!("--------------------------------------------------------");
     println!("block filter count");
-    let count = block_array.block_on(block_array
-        .dist_iter()
-        .filter(|e| e.load() %2 == 0)
-        .count());
+    let count = block_array.block_on(
+        block_array
+            .dist_iter()
+            .filter(|e| e.load() % 2 == 0)
+            .count(),
+    );
     println!("result: {count}");
-
-    
 }

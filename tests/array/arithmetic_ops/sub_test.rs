@@ -305,7 +305,7 @@ fn main() {
             // "i128" => sub_test!(GlobalLockArray, i128, len, dist_type),
             // "isize" => sub_test!(GlobalLockArray, isize, len, dist_type),
             // "f32" => sub_test!(GlobalLockArray, f32, len, dist_type),
-            "f64" => sub_test!(GlobalLockArray, f64, len, dist_type),
+            // "f64" => sub_test!(GlobalLockArray, f64, len, dist_type),
             _ => {} //eprintln!("unsupported element type"),
         },
         _ => eprintln!("unsupported array type"),

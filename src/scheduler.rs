@@ -3,8 +3,6 @@ use crate::lamellae::{Lamellae, SerializedData};
 
 use enum_dispatch::enum_dispatch;
 use futures::Future;
-#[cfg(feature = "enable-prof")]
-use lamellar_prof::*;
 use std::sync::atomic::AtomicU8;
 use std::sync::Arc;
 

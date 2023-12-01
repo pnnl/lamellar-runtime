@@ -282,10 +282,6 @@ mod utils;
 #[doc(hidden)]
 pub use utils::*;
 
-#[doc(hidden)]
-use lamellar_prof::init_prof;
-init_prof!();
-
 pub use crate::lamellae::Backend;
 pub use crate::lamellar_arch::{BlockedArch, IdError, LamellarArch, StridedArch};
 #[doc(hidden)]

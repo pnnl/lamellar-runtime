@@ -609,6 +609,28 @@
 //! 1 from PE1
 //! [2,2] on all PEs
 //! ```
+//! //! ### Static Members
+//! In the above code, the `ExampleAm` stuct contains a member that is a [Darc] (Distributed Arc).
+//! In order to properly calculate distributed reference counts Darcs implements specialized Serialize and Deserialize operations.
+//! While, the cost to any single serialization/deserialization operation is small, doing this for every active message containing
+//! a Darc can become expensive.
+//!
+//! In certain cases Typed Am Groups can avoid the repeated serialization/deserialization of Darc members if the user guarantees
+//! that every Active Message in the group is using a reference to the same Darc. In this case, we simply would only need
+//! to serialize the Darc once for each PE it gets sent to.
+//!
+//! This can be accomplished by using the [AmData] attribute macro with the `static` keyword passed in as an argument as illustrated below:
+//! ```
+//! use lamellar::active_messaging::prelude::*;
+//! use lamellar::darc::prelude::*;
+//! use std::sync::atomic::AtomicUsize;
+//! #[AmData(Debug,Clone)]
+//! struct ExampleAm {
+//!    #[AmData(static)]
+//!    cnt: Darc<AtomicUsize>,
+//! }
+//!```
+//! Other than the addition of `#[AmData(static)]` the rest of the code as the previous example would be the same.
 
 use crate::darc::__NetworkDarc;
 use crate::lamellae::{Lamellae, LamellaeRDMA, SerializedData};
@@ -617,8 +639,6 @@ use crate::lamellar_request::{InternalResult, LamellarRequestResult};
 use crate::lamellar_team::{LamellarTeam, LamellarTeamRT};
 use crate::memregion::one_sided::NetMemRegionHandle;
 use crate::scheduler::{ReqId, SchedulerQueue};
-#[cfg(feature = "enable-prof")]
-use lamellar_prof::*;
 // use log::trace;
 use async_trait::async_trait;
 use futures::Future;

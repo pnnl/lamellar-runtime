@@ -5,7 +5,6 @@ use crate::scheduler::batching::team_am_batcher::TeamAmBatcher;
 use crate::scheduler::batching::BatcherType;
 use crate::scheduler::registered_active_message::RegisteredActiveMessages;
 use crate::scheduler::{AmeScheduler, AmeSchedulerQueue, SchedulerQueue};
-use lamellar_prof::*;
 // use log::trace;
 use core_affinity::CoreId;
 use crossbeam::deque::Worker;
@@ -119,7 +118,6 @@ impl NumaWorkStealingThread {
                 //     timer = std::time::Instant::now()
                 // }
             }
-            fini_prof!();
             active_cnt.fetch_sub(1, Ordering::SeqCst);
             // println!("TestSchdulerWorker thread shutting down");
         })
@@ -392,7 +390,7 @@ impl NumaWorkStealingInner {
 
     fn init(&mut self) {
         let num_workers = match std::env::var("LAMELLAR_THREADS") {
-            Ok(n) => n.parse::<usize>().unwrap()-1,
+            Ok(n) => n.parse::<usize>().unwrap() - 1,
             Err(_) => 4,
         };
         let core_ids = core_affinity::get_core_ids().unwrap();

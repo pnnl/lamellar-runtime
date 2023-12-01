@@ -8,8 +8,6 @@ use crate::lamellae::{
 
 use crate::scheduler::SchedulerQueue;
 use async_recursion::async_recursion;
-#[cfg(feature = "enable-prof")]
-use lamellar_prof::*;
 // use log::trace;
 use std::sync::Arc;
 

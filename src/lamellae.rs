@@ -1,8 +1,6 @@
 use crate::active_messaging::Msg;
 use crate::lamellar_arch::LamellarArchRT;
 use crate::scheduler::Scheduler;
-#[cfg(feature = "enable-prof")]
-use lamellar_prof::*;
 use std::sync::Arc;
 
 use async_trait::async_trait;

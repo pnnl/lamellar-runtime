@@ -13,8 +13,7 @@ categories = ["asynchronous","concurrency", "network-programming","science"]
 
 [dependencies]
 lamellar-impl = { version = "0.6.0", path = "impl" }
-lamellar-prof = { version = "0.1.0", path = "lamellar-prof" }
-rofisys = { version ="0.2", optional = true }
+rofisys = { version ="0.2.6", optional = true }
 inventory = "0.3" 
 serde = { version = "1.0.147", features = ["derive"] }
 serde_bytes = "0.11.7"
@@ -74,7 +73,6 @@ members = ["impl"]
 #features are strictly additive.... can't have mutual exclusitivity
 [features]
 enable-rofi=["rofisys", "libc"]
-enable-prof=["lamellar-prof/enable-prof"]
 slurm-test=[]
 default=[]
 

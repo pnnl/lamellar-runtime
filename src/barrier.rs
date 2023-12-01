@@ -149,13 +149,11 @@ impl Barrier {
         if self.panic.load(Ordering::SeqCst) == 0 {
             if let Some(bufs) = &self.barrier_buf {
                 if let Ok(my_index) = self.arch.team_pe(self.my_pe) {
-                    // let mut start = std::time::Instant::now();
                     let mut barrier_id = self.barrier_cnt.fetch_add(1, Ordering::SeqCst);
                     if self.check_barrier_vals(barrier_id, &bufs.barrier2).is_err() {
                         return;
                     }
-                    // println!("\tbarrier check_barrier_vals_1 took {:?}", start.elapsed());
-                    // start = std::time::Instant::now();
+
                     barrier_id += 1;
                     let barrier3_slice = unsafe {
                         bufs.barrier3
@@ -163,8 +161,7 @@ impl Barrier {
                             .expect("Data should exist on PE")
                     };
                     barrier3_slice[0] = barrier_id;
-                    // println!("\tbarrier barrier_3 local slice took {:?}", start.elapsed());
-                    // start = std::time::Instant::now();
+
                     let barrier_slice = &[barrier_id];
                     if self
                         .put_barrier_val(my_index, barrier_slice, &bufs.barrier1)
@@ -172,23 +169,14 @@ impl Barrier {
                     {
                         return;
                     }
-                    // println!(
-                    //     "\tbarrier barrier_1 put_barrier_val took {:?}",
-                    //     start.elapsed()
-                    // );
-                    // start = std::time::Instant::now();
+
                     if self.check_barrier_vals(barrier_id, &bufs.barrier1).is_err() {
                         return;
                     }
-                    // println!("\tbarrier check_barrier_vals_2 took {:?}", start.elapsed());
-                    // start = std::time::Instant::now();
+
                     barrier3_slice[1] = barrier_id;
                     let barrier_slice = &barrier3_slice[1..2];
                     let _ = self.put_barrier_val(my_index, barrier_slice, &bufs.barrier2);
-                    // println!(
-                    //     "\tbarrier barrier_2 put_barrier_val took {:?}",
-                    //     start.elapsed()
-                    // );
                 }
             }
         }

@@ -6,8 +6,6 @@ use crate::lamellae::{
     SERIALIZE_HEADER_LEN,
 };
 use crate::lamellar_alloc::{BTreeAlloc, LamellarAlloc};
-#[cfg(feature = "enable-prof")]
-use lamellar_prof::*;
 // use log::trace;
 use parking_lot::{Mutex, RwLock};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};

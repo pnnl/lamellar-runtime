@@ -5,7 +5,6 @@ use crate::scheduler::batching::team_am_batcher::TeamAmBatcher;
 use crate::scheduler::batching::BatcherType;
 use crate::scheduler::registered_active_message::RegisteredActiveMessages;
 use crate::scheduler::{AmeScheduler, AmeSchedulerQueue, SchedulerQueue};
-use lamellar_prof::*;
 
 use tracing::*;
 
@@ -55,7 +54,7 @@ impl WorkStealingThread {
                 // println!("TestSchdulerWorker thread running {:?} core: {:?}", std::thread::current().id(), id);
                 // let mut num_task_executed = 0;
                 let _span = trace_span!("WorkStealingThread::run");
-                // core_affinity::set_for_current(id);
+                core_affinity::set_for_current(id);
                 active_cnt.fetch_add(1, Ordering::SeqCst);
                 let mut rng = rand::thread_rng();
                 let t = rand::distributions::Uniform::from(0..worker.work_stealers.len());
@@ -140,7 +139,6 @@ impl WorkStealingThread {
                     // }
                     std::thread::yield_now();
                 }
-                fini_prof!();
                 active_cnt.fetch_sub(1, Ordering::SeqCst);
                 // println!("TestSchdulerWorker thread shutting down");
             })
@@ -561,10 +559,10 @@ impl WorkStealingInner {
             orig_hook(panic_info);
             process::exit(1);
         }));
-        let core_ids = match core_affinity::get_core_ids(){
+        let core_ids = match core_affinity::get_core_ids() {
             Some(core_ids) => core_ids,
             None => {
-                vec![core_affinity::CoreId{id:0}]
+                vec![core_affinity::CoreId { id: 0 }]
             }
         };
         // println!("core_ids: {:?}",core_ids);

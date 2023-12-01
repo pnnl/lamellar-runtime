@@ -6,8 +6,6 @@ use crate::{memregion::*, LamellarEnv, LamellarTeam};
 
 // use crate::active_messaging::AmDist;
 use core::marker::PhantomData;
-#[cfg(feature = "enable-prof")]
-use lamellar_prof::*;
 // use serde::ser::Serialize;
 use std::pin::Pin;
 use std::sync::Arc;

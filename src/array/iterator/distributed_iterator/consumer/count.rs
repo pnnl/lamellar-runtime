@@ -9,8 +9,10 @@ use crate::Darc;
 
 use async_trait::async_trait;
 use std::pin::Pin;
-use std::sync::{Arc,atomic::{AtomicUsize,Ordering}};
-
+use std::sync::{
+    atomic::{AtomicUsize, Ordering},
+    Arc,
+};
 
 #[derive(Clone, Debug)]
 pub struct Count<I> {
@@ -57,22 +59,27 @@ pub struct RemoteIterCountHandle {
 }
 
 #[lamellar_impl::AmDataRT]
-struct UpdateCntAm{
+struct UpdateCntAm {
     remote_cnt: usize,
     cnt: Darc<AtomicUsize>,
 }
 
 #[lamellar_impl::rt_am]
-impl LamellarAm for UpdateCntAm{
+impl LamellarAm for UpdateCntAm {
     async fn exec(self) {
         self.cnt.fetch_add(self.remote_cnt, Ordering::Relaxed);
     }
 }
 
-impl RemoteIterCountHandle
-{
+impl RemoteIterCountHandle {
     async fn reduce_remote_counts(&self, local_cnt: usize, cnt: Darc<AtomicUsize>) -> usize {
-        self.team.exec_am_all(UpdateCntAm{remote_cnt: local_cnt, cnt: cnt.clone()}).into_future().await;
+        self.team
+            .exec_am_all(UpdateCntAm {
+                remote_cnt: local_cnt,
+                cnt: cnt.clone(),
+            })
+            .into_future()
+            .await;
         self.team.barrier();
         cnt.load(Ordering::SeqCst)
     }
@@ -84,28 +91,29 @@ impl IterRequest for RemoteIterCountHandle {
     type Output = usize;
     async fn into_future(mut self: Box<Self>) -> Self::Output {
         self.team.barrier();
-        let cnt = Darc::new(&self.team,AtomicUsize::new(0)).unwrap();
+        let cnt = Darc::new(&self.team, AtomicUsize::new(0)).unwrap();
         // all the requests should have already been launched, and we are just awaiting the results
         let count = futures::future::join_all(self.reqs.drain(..).map(|req| req.into_future()))
             .await
             .into_iter()
             .sum::<usize>();
         // println!("count: {} {:?}", count, std::thread::current().id());
-        self.reduce_remote_counts(count,cnt).await
+        self.reduce_remote_counts(count, cnt).await
     }
     fn wait(mut self: Box<Self>) -> Self::Output {
         self.team.barrier();
-        let cnt = Darc::new(&self.team,AtomicUsize::new(0)).unwrap();
-        let count = self.reqs
+        let cnt = Darc::new(&self.team, AtomicUsize::new(0)).unwrap();
+        let count = self
+            .reqs
             .drain(..)
             .map(|req| req.get())
             .into_iter()
             .sum::<usize>();
-        self.team.scheduler.block_on(self.reduce_remote_counts(count,cnt))
+        self.team
+            .scheduler
+            .block_on(self.reduce_remote_counts(count, cnt))
     }
 }
-
-
 
 #[lamellar_impl::AmLocalDataRT(Clone)]
 pub(crate) struct CountAm<I> {
