@@ -704,8 +704,8 @@ impl<T> Darc<T> {
         for elem in d.mode_as_mut_slice() {
             *elem = state;
         }
-        println!("created new darc");
-        d.print();
+        // println!("created new darc");
+        // d.print();
         team_rt.barrier();
         // team_rt.print_cnt();
         Ok(d)
@@ -860,19 +860,19 @@ impl<T: 'static> Drop for Darc<T> {
     fn drop(&mut self) {
         let inner = self.inner();
         let cnt = inner.local_cnt.fetch_sub(1, Ordering::SeqCst);
-        println! {"darc dropped {:?} {:?}",self.inner,self.inner().local_cnt.load(Ordering::SeqCst)};
+        // println! {"darc dropped {:?} {:?}",self.inner,self.inner().local_cnt.load(Ordering::SeqCst)};
         if cnt == 1 {
             //we are currently the last local ref, if it increases again it must mean someone else has come in and we can probably let them worry about cleaning up...
             let pe_ref_cnts = self.ref_cnts_as_mut_slice();
-            println!("Last local ref... for now! {:?}", pe_ref_cnts);
-            self.print();
+            // println!("Last local ref... for now! {:?}", pe_ref_cnts);
+            // self.print();
             if pe_ref_cnts.iter().any(|&x| x > 0) {
                 //if we have received and accesses from remote pes, send we are finished
                 inner.send_finished();
             }
         }
-        println!("in drop");
-        self.print();
+        // println!("in drop");
+        // self.print();
         if inner.local_cnt.load(Ordering::SeqCst) == 0 {
             // we have no more current local references so lets try to launch our garbage collecting am
 
