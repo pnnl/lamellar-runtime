@@ -179,7 +179,7 @@ fn check_for_am_group(args: &Punctuated<syn::Meta, syn::Token![,]>) -> bool {
 ///
 ///```
 /// use lamellar::active_messaging::prelude::*;
-/// use lamellar::darc::prelude::*;
+/// use lamellar::darc::prelude*;
 ///
 /// #[AmData(Debug,Clone)]
 /// struct HelloWorld {
@@ -187,6 +187,34 @@ fn check_for_am_group(args: &Punctuated<syn::Meta, syn::Token![,]>) -> bool {
 ///    #[AmData(static)]
 ///    msg: Darc<String>,
 /// }
+///
+/// #[lamellar::am]
+/// impl LamellarAM for HelloWorld {
+///     async fn exec(self) {
+///         println!(
+///             "{:?}}  on PE {:?} of {:?} using thread {:?}, received from PE {:?}",
+///             self.msg,
+///             lamellar::current_pe,
+///             lamellar::num_pes,
+///             std::thread::current().id(),
+///             self.originial_pe.lock(),
+///         );
+///     }
+/// }
+/// fn main() {
+///     let world = lamellar::LamellarWorldBuilder::new().build();
+///     let my_pe = world.my_pe();
+///     world.barrier();
+///     let msg = Darc::<String>::new(&world, "Hello World".to_string());
+///     //Send a Hello World Active Message to all pes
+///     let request = world.exec_am_all(HelloWorld {
+///         originial_pe: my_pe,
+///         msg: msg,
+///     });
+///
+///     //wait for the request to complete
+///     world.block_on(request);
+/// } //when world drops there is an implicit world.barrier() that occurs
 ///```
 #[allow(non_snake_case)]
 #[proc_macro_error]
@@ -198,15 +226,38 @@ pub fn AmData(args: TokenStream, input: TokenStream) -> TokenStream {
     derive_am_data(input, args, quote! {__lamellar}, false, false, false)
 }
 
-/// # Examples
-///
 ///```
 /// use lamellar::active_messaging::prelude::*;
 ///
 /// #[AmLocalData(Debug,Clone)]
 /// struct HelloWorld {
-///    originial_pe: Arc<Mutex<usize>>, //lamellar disallows serializing/deserializing Arc and Mutex
+///     originial_pe: Arc<Mutex<usize>>, //This would not be allowed in a non-local AM as Arc<Mutex<<>> is not (de)serializable
 /// }
+///
+/// #[lamellar::local_am]
+/// impl LamellarAM for HelloWorld {
+///     async fn exec(self) {
+///         println!(
+///             "Hello World  on PE {:?} of {:?} using thread {:?}, received from PE {:?}",
+///             lamellar::current_pe,
+///             lamellar::num_pes,
+///             std::thread::current().id(),
+///             self.originial_pe.lock(),
+///         );
+///     }
+/// }
+/// fn main() {
+///     let world = lamellar::LamellarWorldBuilder::new().build();
+///     let my_pe = Arc::new(Mutex::new(world.my_pe()));
+///     world.barrier();
+///
+///     let request = world.exec_am_local(HelloWorld {
+///         originial_pe: my_pe,
+///     });
+///
+///     //wait for the request to complete
+///     world.block_on(request);
+/// } //when world drops there is an implicit world.barrier() that occurs
 ///```
 #[allow(non_snake_case)]
 #[proc_macro_error]
@@ -383,17 +434,21 @@ fn parse_am(
 ///
 ///```
 /// use lamellar::active_messaging::prelude::*;
+/// use lamellar::darc::prelude::*;
 ///
 /// #[AmData(Debug,Clone)]
 /// struct HelloWorld {
-///    originial_pe: Arc<Mutex<usize>>,
+///    originial_pe: usize,
+///    #[AmData(static)]
+///    msg: Darc<String>,
 /// }
 ///
 /// #[lamellar::am]
 /// impl LamellarAM for HelloWorld {
 ///     async fn exec(self) {
 ///         println!(
-///             "Hello World  on PE {:?} of {:?} using thread {:?}, received from PE {:?}",
+///             "{:?}}  on PE {:?} of {:?} using thread {:?}, received from PE {:?}",
+///             self.msg,
 ///             lamellar::current_pe,
 ///             lamellar::num_pes,
 ///             std::thread::current().id(),
@@ -405,10 +460,11 @@ fn parse_am(
 ///     let world = lamellar::LamellarWorldBuilder::new().build();
 ///     let my_pe = world.my_pe();
 ///     world.barrier();
-///
+///     let msg = Darc::<String>::new(&world, "Hello World".to_string());
 ///     //Send a Hello World Active Message to all pes
 ///     let request = world.exec_am_all(HelloWorld {
-///         originial_pe: Arc::new(Mutex::new(my_pe)),
+///         originial_pe: my_pe,
+///         msg: msg,
 ///     });
 ///
 ///     //wait for the request to complete
@@ -433,12 +489,12 @@ pub fn am_group(args: TokenStream, input: TokenStream) -> TokenStream {
 ///```
 /// use lamellar::active_messaging::prelude::*;
 ///
-/// #[AmData(Debug,Clone)]
+/// #[AmLocalData(Debug,Clone)]
 /// struct HelloWorld {
-///    originial_pe: usize,
+///     originial_pe: Arc<Mutex<usize>>, //This would not be allowed in a non-local AM as Arc<Mutex<<>> is not (de)serializable
 /// }
 ///
-/// #[lamellar::am]
+/// #[lamellar::local_am]
 /// impl LamellarAM for HelloWorld {
 ///     async fn exec(self) {
 ///         println!(
@@ -446,17 +502,16 @@ pub fn am_group(args: TokenStream, input: TokenStream) -> TokenStream {
 ///             lamellar::current_pe,
 ///             lamellar::num_pes,
 ///             std::thread::current().id(),
-///             self.originial_pe,
+///             self.originial_pe.lock(),
 ///         );
 ///     }
 /// }
 /// fn main() {
 ///     let world = lamellar::LamellarWorldBuilder::new().build();
-///     let my_pe = world.my_pe();
+///     let my_pe = Arc::new(Mutex::new(world.my_pe()));
 ///     world.barrier();
 ///
-///     //Send a Hello World Active Message to all pes
-///     let request = world.exec_am_all(HelloWorld {
+///     let request = world.exec_am_local(HelloWorld {
 ///         originial_pe: my_pe,
 ///     });
 ///
