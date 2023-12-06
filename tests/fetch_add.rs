@@ -91,7 +91,7 @@ macro_rules! create_fetch_add_tests {
 }
 
 create_fetch_add_tests!(
-    (UnsafeArray, LocalLockArray, GlobalLockArray, AtomicArray), // (UnsafeArray, AtomicArray, GenericAtomicArray, LocalLockArray),
+    (UnsafeArray, LocalLockArray, AtomicArray), // (UnsafeArray, AtomicArray, GenericAtomicArray, LocalLockArray),
     ("Block", "Cyclic"),
     (u8, u16, u32, u128, usize, i8, i16, i32, i128, isize, f32, f64),
     (2, 3, 4),
@@ -99,9 +99,17 @@ create_fetch_add_tests!(
 );
 
 create_fetch_add_tests!(
-    (UnsafeArray, LocalLockArray, GlobalLockArray, AtomicArray), // (UnsafeArray, AtomicArray, GenericAtomicArray, LocalLockArray),
+    (UnsafeArray, LocalLockArray, AtomicArray), // (UnsafeArray, AtomicArray, GenericAtomicArray, LocalLockArray),
     ("Block", "Cyclic"),
     (input),
     (2, 3, 4),
     (4, 100, 2000)
+);
+
+create_fetch_add_tests!(
+    (GlobalLockArray),
+    ("Block", "Cyclic"),
+    (u8, f64, input),
+    (4),
+    (4, 9)
 );

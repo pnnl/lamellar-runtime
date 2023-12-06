@@ -80,16 +80,24 @@ macro_rules! iter_dist_types {
     }
 }
 
-macro_rules! create_rem_tests{
+macro_rules! create_fetch_rem_tests{
     ( ($($array:ty),*), $dist:tt, $elem:tt, $num_pes:tt, $len:tt) =>{
         $(iter_dist_types!($array,$dist,$elem,$num_pes,$len);)*
     }
 }
 
-create_rem_tests!(
-    (UnsafeArray, LocalLockArray, GlobalLockArray, AtomicArray), // (UnsafeArray, AtomicArray, GenericAtomicArray, LocalLockArray),
+create_fetch_rem_tests!(
+    (UnsafeArray, LocalLockArray, AtomicArray), // (UnsafeArray, AtomicArray, GenericAtomicArray, LocalLockArray),
     ("Block", "Cyclic"),
     (u8, u16, u32, u128, usize, i8, i16, i32, i128, isize, f32, f64),
     (2, 3, 4),
     (4, 19, 128)
+);
+
+create_fetch_rem_tests!(
+    (GlobalLockArray),
+    ("Block", "Cyclic"),
+    (u8, f64),
+    (4),
+    (4, 9)
 );

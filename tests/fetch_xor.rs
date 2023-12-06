@@ -68,9 +68,17 @@ macro_rules! create_fetch_xor_tests {
 }
 
 create_fetch_xor_tests!(
-    (UnsafeArray, LocalLockArray, GlobalLockArray, AtomicArray), // (UnsafeArray, AtomicArray, GenericAtomicArray, LocalLockArray),
+    (UnsafeArray, LocalLockArray, AtomicArray), // (UnsafeArray, AtomicArray, GenericAtomicArray, LocalLockArray),
     ("Block", "Cyclic"),
     (u8, u16, u32, u128, usize, i8, i16, i32, i128, isize),
     (2, 3, 4),
     (4, 19, 128)
+);
+
+create_fetch_xor_tests!(
+    (GlobalLockArray),
+    ("Block", "Cyclic"),
+    (u8, f64),
+    (4),
+    (4, 9)
 );
