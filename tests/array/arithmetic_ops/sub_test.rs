@@ -52,8 +52,8 @@ macro_rules! check_val {
 
 macro_rules! max_updates {
     ($t:ty,$num_pes:ident) => {
-        if <$t>::MAX as u128 > 10000 as u128 {
-            10000 / $num_pes
+        if <$t>::MAX as u128 > 1000 as u128 {
+            1000 / $num_pes
         } else {
             <$t>::MAX as usize / $num_pes
         }
@@ -79,18 +79,18 @@ macro_rules! sub_test{
             let init_val = max_val as $t;
             #[allow(unused)]
             let zero = 0 as $t;
-            initialize_array!($array, array, init_val);
+                        initialize_array!($array, array, init_val);
             array.wait_all();
             array.barrier();
 
-            for idx in 0..array.len(){
+                        for idx in 0..array.len(){
                 for _i in 0..(pe_max_val as usize){
                     array.sub(idx,1 as $t);
                 }
             }
             array.wait_all();
             array.barrier();
-            #[allow(unused_unsafe)]
+                        #[allow(unused_unsafe)]
             for (i,elem) in unsafe{array.onesided_iter().into_iter().enumerate()}{
                 let val = *elem;
                 check_val!($array,val,zero,success);
@@ -99,19 +99,19 @@ macro_rules! sub_test{
                 }
             }
             array.barrier();
-            let num_updates=max_updates!($t,num_pes);
+                        let num_updates=max_updates!($t,num_pes);
             let tot_updates = (num_updates*num_pes) as $t;
             initialize_array!($array, array, tot_updates);
             array.wait_all();
             array.barrier();
 
-            for _i in 0..num_updates  as usize{
+                        for _i in 0..num_updates  as usize{
                 let idx = rand_idx.sample(&mut rng);
                 array.sub(idx,1 as $t);
             }
             array.wait_all();
             array.barrier();
-            #[allow(unused_unsafe)]
+                        #[allow(unused_unsafe)]
             let sum = unsafe{array.onesided_iter().into_iter().fold(0,|acc,x| acc+ *x as usize)};
             let calced_sum = tot_updates as usize  * (array.len()-1);
             check_val!($array,sum,calced_sum,success);
@@ -120,17 +120,17 @@ macro_rules! sub_test{
             }
             world.wait_all();
             world.barrier();
-            initialize_array!($array, array, init_val);
+                        initialize_array!($array, array, init_val);
 
 
 
-            let half_len = array_total_len/2;
+                        let half_len = array_total_len/2;
             let start_i = half_len/2;
             let end_i = start_i + half_len;
             let rand_idx = Uniform::from(0..half_len);
             let sub_array = array.sub_array(start_i..end_i);
             sub_array.barrier();
-            // sub_array.print();
+                        // sub_array.print();
             for idx in 0..sub_array.len(){
                 for _i in 0..(pe_max_val as usize){
                     sub_array.sub(idx,1 as $t);
@@ -138,7 +138,7 @@ macro_rules! sub_test{
             }
             sub_array.wait_all();
             sub_array.barrier();
-            #[allow(unused_unsafe)]
+                        #[allow(unused_unsafe)]
             for (i,elem) in unsafe{sub_array.onesided_iter().into_iter().enumerate()}{
                 let val = *elem;
                 check_val!($array,val,zero,success);
@@ -147,19 +147,19 @@ macro_rules! sub_test{
                 }
             }
             sub_array.barrier();
-            let num_updates=max_updates!($t,num_pes);
+                        let num_updates=max_updates!($t,num_pes);
             let tot_updates = (num_updates*num_pes) as $t;
             initialize_array!($array, array, tot_updates);
             sub_array.wait_all();
             sub_array.barrier();
 
-            for _i in 0..num_updates as usize{
+                        for _i in 0..num_updates as usize{
                 let idx = rand_idx.sample(&mut rng);
                 sub_array.sub(idx,1 as $t);
             }
             sub_array.wait_all();
             sub_array.barrier();
-            #[allow(unused_unsafe)]
+                        #[allow(unused_unsafe)]
             let sum = unsafe {sub_array.onesided_iter().into_iter().fold(0,|acc,x| acc+ *x as usize)};
             let calced_sum = tot_updates as usize  * (sub_array.len()-1);
             check_val!($array,sum,calced_sum,success);
@@ -168,7 +168,7 @@ macro_rules! sub_test{
             }
             sub_array.wait_all();
             sub_array.barrier();
-            initialize_array!($array, array, init_val);
+                        initialize_array!($array, array, init_val);
 
 
             let pe_len = array_total_len/num_pes;
@@ -177,16 +177,16 @@ macro_rules! sub_test{
                 let start_i = (pe*pe_len)+ len/2;
                 let end_i = start_i+len;
                 let rand_idx = Uniform::from(0..len);
-                let sub_array = array.sub_array(start_i..end_i);
+                                let sub_array = array.sub_array(start_i..end_i);
                 sub_array.barrier();
-                for idx in 0..sub_array.len(){
+                                for idx in 0..sub_array.len(){
                     for _i in 0..(pe_max_val as usize){
                         sub_array.sub(idx,1 as $t);
                     }
                 }
                 sub_array.wait_all();
                 sub_array.barrier();
-                #[allow(unused_unsafe)]
+                                #[allow(unused_unsafe)]
                 for (i,elem) in unsafe{sub_array.onesided_iter().into_iter().enumerate()}{
                     let val = *elem;
                     check_val!($array,val,zero,success);
@@ -195,19 +195,19 @@ macro_rules! sub_test{
                     }
                 }
                 sub_array.barrier();
-                let num_updates=max_updates!($t,num_pes);
+                                let num_updates=max_updates!($t,num_pes);
                 let tot_updates = (num_updates*num_pes) as $t;
                 initialize_array!($array, array, tot_updates);
                 sub_array.wait_all();
                 sub_array.barrier();
 
-                for _i in 0..num_updates as usize{
+                                for _i in 0..num_updates as usize{
                     let idx = rand_idx.sample(&mut rng);
                     sub_array.sub(idx,1 as $t);
                 }
                 sub_array.wait_all();
                 sub_array.barrier();
-                #[allow(unused_unsafe)]
+                                #[allow(unused_unsafe)]
                 let sum = unsafe{sub_array.onesided_iter().into_iter().fold(0,|acc,x| acc+ *x as usize)};
                 let calced_sum = tot_updates as usize  * (sub_array.len()-1);
                 check_val!($array,sum,calced_sum,success);
@@ -216,8 +216,8 @@ macro_rules! sub_test{
                 }
                 sub_array.wait_all();
                 sub_array.barrier();
-                initialize_array!($array, array, init_val);
-            }
+                                initialize_array!($array, array, init_val);
+                            }
 
             if !success{
                 eprintln!("failed");
@@ -293,19 +293,19 @@ fn main() {
         },
         "GlobalLockArray" => match elem.as_str() {
             "u8" => sub_test!(GlobalLockArray, u8, len, dist_type),
-            // "u16" => sub_test!(GlobalLockArray, u16, len, dist_type),
-            // "u32" => sub_test!(GlobalLockArray, u32, len, dist_type),
-            // "u64" => sub_test!(GlobalLockArray, u64, len, dist_type),
-            // "u128" => sub_test!(GlobalLockArray, u128, len, dist_type),
-            // "usize" => sub_test!(GlobalLockArray, usize, len, dist_type),
-            // "i8" => sub_test!(GlobalLockArray, i8, len, dist_type),
-            // "i16" => sub_test!(GlobalLockArray, i16, len, dist_type),
-            // "i32" => sub_test!(GlobalLockArray, i32, len, dist_type),
-            // "i64" => sub_test!(GlobalLockArray, i64, len, dist_type),
-            // "i128" => sub_test!(GlobalLockArray, i128, len, dist_type),
-            // "isize" => sub_test!(GlobalLockArray, isize, len, dist_type),
-            // "f32" => sub_test!(GlobalLockArray, f32, len, dist_type),
-            // "f64" => sub_test!(GlobalLockArray, f64, len, dist_type),
+            "u16" => sub_test!(GlobalLockArray, u16, len, dist_type),
+            "u32" => sub_test!(GlobalLockArray, u32, len, dist_type),
+            "u64" => sub_test!(GlobalLockArray, u64, len, dist_type),
+            "u128" => sub_test!(GlobalLockArray, u128, len, dist_type),
+            "usize" => sub_test!(GlobalLockArray, usize, len, dist_type),
+            "i8" => sub_test!(GlobalLockArray, i8, len, dist_type),
+            "i16" => sub_test!(GlobalLockArray, i16, len, dist_type),
+            "i32" => sub_test!(GlobalLockArray, i32, len, dist_type),
+            "i64" => sub_test!(GlobalLockArray, i64, len, dist_type),
+            "i128" => sub_test!(GlobalLockArray, i128, len, dist_type),
+            "isize" => sub_test!(GlobalLockArray, isize, len, dist_type),
+            "f32" => sub_test!(GlobalLockArray, f32, len, dist_type),
+            "f64" => sub_test!(GlobalLockArray, f64, len, dist_type),
             _ => {} //eprintln!("unsupported element type"),
         },
         _ => eprintln!("unsupported array type"),
