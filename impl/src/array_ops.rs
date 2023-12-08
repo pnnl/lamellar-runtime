@@ -848,6 +848,7 @@ fn create_buf_ops2(
     if array_type != "ReadOnlyArray" {
         // Updating ops that dont return anything
         expanded.extend(quote! {
+            #[allow(non_camel_case_types)]
             #[#am_data(Debug,AmGroup(false))]
             struct #multi_val_multi_idx_am_buf_name{
                 data: #lamellar::array::#array_type<#typeident>,
@@ -910,6 +911,7 @@ fn create_buf_ops2(
                 }
             }
 
+            #[allow(non_camel_case_types)]
             #[#am_data(Debug,AmGroup(false))]
             struct #single_val_multi_idx_am_buf_name{
                 data: #lamellar::array::#array_type<#typeident>,
@@ -977,6 +979,7 @@ fn create_buf_ops2(
                 }
             }
 
+            #[allow(non_camel_case_types)]
             #[#am_data(Debug,AmGroup(false))]
             struct #multi_val_single_idx_am_buf_name{
                 data: #lamellar::array::#array_type<#typeident>,
@@ -1016,6 +1019,7 @@ fn create_buf_ops2(
         // ops that return a result
         if optypes.contains(&OpType::CompEx) || optypes.contains(&OpType::CompExEps) {
             expanded.extend(quote! {
+                #[allow(non_camel_case_types)]
                 #[#am_data(Debug,AmGroup(false))]
                 struct #multi_val_multi_idx_am_buf_result_name{
                     data: #lamellar::array::#array_type<#typeident>,
@@ -1080,6 +1084,7 @@ fn create_buf_ops2(
                     }
                 }
 
+                #[allow(non_camel_case_types)]
                 #[#am_data(Debug,AmGroup(false))]
                 struct #single_val_multi_idx_am_buf_result_name{
                     data: #lamellar::array::#array_type<#typeident>,
@@ -1149,6 +1154,7 @@ fn create_buf_ops2(
                     }
                 }
 
+                #[allow(non_camel_case_types)]
                 #[#am_data(Debug,AmGroup(false))]
                 struct #multi_val_single_idx_am_buf_result_name{
                     data: #lamellar::array::#array_type<#typeident>,
@@ -1191,6 +1197,7 @@ fn create_buf_ops2(
     //ops that return a value
 
     expanded.extend(quote! {
+        #[allow(non_camel_case_types)]
         #[#am_data(Debug,AmGroup(false))]
         struct #multi_val_multi_idx_am_buf_fetch_name{
             data: #lamellar::array::#array_type<#typeident>,
@@ -1258,6 +1265,7 @@ fn create_buf_ops2(
             }
         }
 
+        #[allow(non_camel_case_types)]
         #[#am_data(Debug,AmGroup(false))]
         struct #single_val_multi_idx_am_buf_fetch_name{
             data: #lamellar::array::#array_type<#typeident>,
@@ -1330,6 +1338,7 @@ fn create_buf_ops2(
             }
         }
 
+        #[allow(non_camel_case_types)]
         #[#am_data(Debug,AmGroup(false))]
         struct #multi_val_single_idx_am_buf_fetch_name{
             data: #lamellar::array::#array_type<#typeident>,
