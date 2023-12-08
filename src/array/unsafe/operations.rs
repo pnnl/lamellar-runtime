@@ -639,9 +639,9 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
                     let mut reqs: Vec<Pin<Box<dyn Future<Output = (R, Vec<usize>)> + Send>>> =
                         Vec::new();
                     // let mut res_index = 0;
-                    for (ii, (idx, val)) in index_vec.iter().zip(vals_vec.iter()).enumerate() {
+                    for (ii, (idx, val)) in index_vec.into_iter().zip(vals_vec.into_iter()).enumerate() {
                         let j = ii + start_i;
-                        let (pe, local_index) = match self.pe_and_offset_for_global_index(*idx) {
+                        let (pe, local_index) = match self.pe_and_offset_for_global_index(idx) {
                             Some((pe, local_index)) => (pe, local_index),
                             None => panic!(
                                 "Index: {idx} out of bounds for array of len: {:?}",
@@ -650,35 +650,35 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
                         };
                         match index_size {
                             IndexSize::U8 => buffs[pe].extend_from_slice(
-                                IdxVal {
+                                IdxVal::<u8, T> {
                                     index: local_index as u8,
                                     val: val,
                                 }
                                 .as_bytes(),
                             ),
                             IndexSize::U16 => buffs[pe].extend_from_slice(
-                                IdxVal {
+                                IdxVal::<u16, T> {
                                     index: local_index as u16,
                                     val: val,
                                 }
                                 .as_bytes(),
                             ),
                             IndexSize::U32 => buffs[pe].extend_from_slice(
-                                IdxVal {
+                                IdxVal::<u32, T> {
                                     index: local_index as u32,
                                     val: val,
                                 }
                                 .as_bytes(),
                             ),
                             IndexSize::U64 => buffs[pe].extend_from_slice(
-                                IdxVal {
+                                IdxVal::<u64, T> {
                                     index: local_index as u64,
                                     val: val,
                                 }
                                 .as_bytes(),
                             ),
                             IndexSize::Usize => buffs[pe].extend_from_slice(
-                                IdxVal {
+                                IdxVal::<usize, T> {
                                     index: local_index as usize,
                                     val: val,
                                 }
