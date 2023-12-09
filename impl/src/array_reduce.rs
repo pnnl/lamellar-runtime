@@ -62,7 +62,7 @@ fn create_reduction(
         };
 
         let data_slice = if array_type == "LocalLockArray" || array_type == "GlobalLockArray" {
-            quote! {self.data.local_data().await}
+            quote! {self.data.read_local_data().await}
         } else {
             quote! {self.data.local_data()}
         };
