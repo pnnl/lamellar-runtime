@@ -216,6 +216,9 @@ impl Ser for Rofi {
 
 #[allow(dead_code, unused_variables)]
 impl LamellaeRDMA for Rofi {
+    fn flush(&self) {
+        self.rofi_comm.flush();
+    }
     fn put(&self, pe: usize, src: &[u8], dst: usize) {
         self.rofi_comm.put(pe, src, dst);
     }

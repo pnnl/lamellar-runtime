@@ -501,11 +501,20 @@ impl LamellarWorldBuilder {
     ///```
     #[tracing::instrument(skip_all)]
     pub fn build(self) -> LamellarWorld {
+        // let mut timer = std::time::Instant::now();
         assert_eq!(INIT.fetch_or(true, Ordering::SeqCst), false, "ERROR: Building more than one world is not allowed, you may want to consider cloning or creating a reference to first instance");
         // let teams = Arc::new(RwLock::new(HashMap::new()));
+        // println!("{:?}: INIT", timer.elapsed());
 
+        // timer = std::time::Instant::now();
         let mut lamellae_builder = create_lamellae(self.primary_lamellae);
+        // println!("{:?}: init_lamellae", timer.elapsed());
+
+        // timer = std::time::Instant::now();
         let (my_pe, num_pes) = lamellae_builder.init_fabric();
+        // println!("{:?}: init_fabric", timer.elapsed());
+
+        // timer = std::time::Instant::now();
         let panic = Arc::new(AtomicU8::new(0));
         let sched_new = Arc::new(create_scheduler(
             self.scheduler,
@@ -515,9 +524,21 @@ impl LamellarWorldBuilder {
             my_pe,
             // teams.clone(),
         ));
+        // println!("{:?}: create_scheduler", timer.elapsed());
+
+        // timer = std::time::Instant::now();
         let lamellae = lamellae_builder.init_lamellae(sched_new.clone());
+        // println!("{:?}: init_lamellae", timer.elapsed());
+
+        // timer = std::time::Instant::now();
         let counters = Arc::new(AMCounters::new());
+        // println!("{:?}: init_counters", timer.elapsed());
+
+        // timer = std::time::Instant::now();
         lamellae.barrier();
+        // println!("{:?}: lamellae barrier", timer.elapsed());
+
+        // timer = std::time::Instant::now();
         let team_rt = LamellarTeamRT::new(
             num_pes,
             my_pe,
@@ -527,6 +548,9 @@ impl LamellarWorldBuilder {
             panic.clone(),
             // teams.clone(),
         );
+        // println!("{:?}: init_team_rt", timer.elapsed());
+
+        // timer = std::time::Instant::now();
         let world = LamellarWorld {
             team: LamellarTeam::new(None, team_rt.clone(), false),
             team_rt: team_rt.clone(),
@@ -536,16 +560,19 @@ impl LamellarWorldBuilder {
             num_pes: num_pes,
             ref_cnt: Arc::new(AtomicUsize::new(1)),
         };
-        // world
-        //     .teams
-        //     .write()
-        //     .insert(world.team_rt.team_hash, Arc::downgrade(&team_rt));
+        // println!("{:?}: init_world", timer.elapsed());
+
+        // timer = std::time::Instant::now();
         LAMELLAES
             .write()
             .insert(lamellae.backend(), lamellae.clone());
+        // println!("{:?}: insert lamellae", timer.elapsed());
 
+        // timer = std::time::Instant::now();
         let weak_rt = PinWeak::downgrade(team_rt.clone());
+        // println!("{:?}: weak_rt", timer.elapsed());
 
+        // timer = std::time::Instant::now();
         std::panic::set_hook(Box::new(move |panic_info| {
             // panics.lock().push(format!("{panic_info}"));
             // for p in panics.lock().iter(){
@@ -561,7 +588,11 @@ impl LamellarWorldBuilder {
             }
             // std::process::exit(1);
         }));
+        // println!("{:?}: set_hook", timer.elapsed());
+
+        // timer = std::time::Instant::now();
         world.barrier();
+        // println!("{:?}: world barrier", timer.elapsed());
         world
     }
 }

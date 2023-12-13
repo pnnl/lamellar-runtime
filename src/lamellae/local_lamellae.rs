@@ -134,6 +134,7 @@ struct MyPtr {
 unsafe impl Send for MyPtr {}
 
 impl LamellaeRDMA for Local {
+    fn flush(&self) {}
     fn put(&self, _pe: usize, src: &[u8], dst: usize) {
         unsafe {
             std::ptr::copy_nonoverlapping(src.as_ptr(), dst as *mut u8, src.len());

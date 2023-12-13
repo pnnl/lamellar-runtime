@@ -517,6 +517,8 @@ impl CommOps for ShmemComm {
         }
         panic!("not sure i should be here...means address not found");
     }
+
+    fn flush(&self) {}
     fn put<T: Remote>(&self, pe: usize, src_addr: &[T], dst_addr: usize) {
         let alloc = self.alloc_lock.read();
         for (addr, (shmem, size, addrs)) in alloc.0.iter() {

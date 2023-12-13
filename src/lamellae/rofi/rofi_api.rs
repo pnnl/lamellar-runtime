@@ -102,6 +102,10 @@ pub(crate) fn rofi_remote_addr(pe: usize, local_addr: usize) -> usize {
     addr as usize
 }
 
+pub(crate) fn rofi_flush() -> i32 {
+    unsafe { rofisys::rofi_flush() as i32 }
+}
+
 // data is a reference, user must ensure lifetime is valid until underlying put is complete, thus is unsafe
 pub(crate) unsafe fn rofi_put<T>(src: &[T], dst: usize, pe: usize) -> Result<c_ulong, i32> {
     let src_addr = src.as_ptr() as *mut std::ffi::c_void;

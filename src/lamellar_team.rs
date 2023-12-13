@@ -766,6 +766,7 @@ impl LamellarTeamRT {
             scheduler.clone(),
             panic.clone(),
         );
+        // println!("barrier created");
 
         let alloc = AllocationType::Global;
 
@@ -840,7 +841,10 @@ impl LamellarTeamRT {
         //     Arc::strong_count(&team.world_counters)
         // );
 
-        team.barrier.barrier();
+        // println!("entering lamellae barrier");
+        lamellae.barrier(); // need to make sure barriers are done before we return
+                            // println!("entering team barrier");
+                            // team.barrier.barrier();
         team
     }
 
@@ -1281,6 +1285,7 @@ impl LamellarTeamRT {
                     && self.world_counters.outstanding_reqs.load(Ordering::SeqCst) > 0))
         {
             // std::thread::yield_now();
+            self.flush();
             self.scheduler.exec_task(); //mmight as well do useful work while we wait
             if temp_now.elapsed() > Duration::new(600, 0) {
                 println!(
@@ -1297,6 +1302,10 @@ impl LamellarTeamRT {
     #[tracing::instrument(skip_all)]
     pub(crate) fn barrier(&self) {
         self.barrier.barrier();
+    }
+
+    pub(crate) fn flush(&self) {
+        self.lamellae.flush();
     }
 
     #[tracing::instrument(skip_all)]

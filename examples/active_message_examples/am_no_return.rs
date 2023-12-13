@@ -61,8 +61,11 @@ fn main() {
     println!("World built in {:?}", start.elapsed());
     let my_pe = world.my_pe();
     let num_pes = world.num_pes();
-    // let _guard = setup_global_subscriber();
     world.barrier();
+    // let _guard = setup_global_subscriber();
+    let start = std::time::Instant::now();
+    world.barrier();
+    println!("World barriered in {:?}", start.elapsed());
     let am = AmNoReturn {
         my_pe: my_pe,
         test_var: 1000,

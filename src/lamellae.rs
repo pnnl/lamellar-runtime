@@ -188,6 +188,7 @@ pub(crate) trait LamellaeAM: Send {
 
 #[enum_dispatch]
 pub(crate) trait LamellaeRDMA: Send + Sync {
+    fn flush(&self);
     fn put(&self, pe: usize, src: &[u8], dst: usize);
     fn iput(&self, pe: usize, src: &[u8], dst: usize);
     fn put_all(&self, src: &[u8], dst: usize);

@@ -780,6 +780,7 @@ impl<T: Dist> LamellarArray<T> for UnsafeArray<T> {
             || self.inner.data.req_cnt.load(Ordering::SeqCst) > 0
         {
             // std::thread::yield_now();
+            self.inner.data.team.flush();
             self.inner.data.team.scheduler.exec_task(); //mmight as well do useful work while we wait
             if temp_now.elapsed().as_secs_f64() > *crate::DEADLOCK_TIMEOUT {
                 //|| first{

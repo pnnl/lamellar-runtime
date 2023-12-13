@@ -112,6 +112,7 @@ pub(crate) trait CommOps {
     fn base_addr(&self) -> usize;
     fn local_addr(&self, remote_pe: usize, remote_addr: usize) -> usize;
     fn remote_addr(&self, pe: usize, local_addr: usize) -> usize;
+    fn flush(&self);
     fn put<T: Remote>(&self, pe: usize, src_addr: &[T], dst_addr: usize);
     fn iput<T: Remote>(&self, pe: usize, src_addr: &[T], dst_addr: usize);
     fn put_all<T: Remote>(&self, src_addr: &[T], dst_addr: usize);

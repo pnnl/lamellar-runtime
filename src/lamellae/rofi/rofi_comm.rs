@@ -323,6 +323,13 @@ impl CommOps for RofiComm {
     }
 
     #[tracing::instrument(skip_all)]
+    fn flush(&self) {
+        if rofi_flush() != 0 {
+            println!("rofi flush error");
+        }
+    }
+
+    #[tracing::instrument(skip_all)]
     fn put<T: Remote>(&self, pe: usize, src_addr: &[T], dst_addr: usize) {
         //-> RofiReq {
         // let mut req = RofiReq{

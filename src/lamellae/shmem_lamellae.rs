@@ -214,6 +214,7 @@ impl Ser for Shmem {
 
 #[allow(dead_code, unused_variables)]
 impl LamellaeRDMA for Shmem {
+    fn flush(&self) {}
     fn put(&self, pe: usize, src: &[u8], dst: usize) {
         self.shmem_comm.put(pe, src, dst);
     }

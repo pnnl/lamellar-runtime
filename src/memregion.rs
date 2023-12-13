@@ -403,7 +403,7 @@ pub trait MemoryRegionRDMA<T: Dist> {
     /// "Puts" (copies) data from a local memory location into a remote memory location on the specified PE
     ///
     /// The data buffer may not be safe to upon return from this call, currently the user is responsible for completion detection,
-    /// or you may use the similar iput call (with a potential performance penalty);
+    /// or you may use the similar blocking_put call (with a potential performance penalty);
     ///
     /// # Safety
     /// This call is always unsafe as mutual exclusitivity is not enforced, i.e. many other reader/writers can exist simultaneously.

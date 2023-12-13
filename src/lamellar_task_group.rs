@@ -538,6 +538,7 @@ impl LamellarTaskGroup {
     fn wait_all(&self) {
         let mut temp_now = Instant::now();
         while self.counters.outstanding_reqs.load(Ordering::SeqCst) > 0 {
+            self.team.flush();
             self.team.scheduler.exec_task();
             if temp_now.elapsed() > Duration::new(600, 0) {
                 println!(
