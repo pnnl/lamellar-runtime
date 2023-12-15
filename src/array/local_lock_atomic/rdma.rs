@@ -5,7 +5,7 @@ use crate::array::*;
 use crate::memregion::{AsBase, Dist, RTMemoryRegionRDMA, RegisteredMemoryRegion};
 
 impl<T: Dist> LamellarArrayInternalGet<T> for LocalLockArray<T> {
-    // fn iget<U: TeamInto<LamellarArrayRdmaOutput<T>> + LamellarWrite>(&self, index: usize, buf: U) {
+    // fn iget<U: TeamTryInto<LamellarArrayRdmaOutput<T>> + LamellarWrite>(&self, index: usize, buf: U) {
     //     self.iget(index, buf)
     // }
     unsafe fn internal_get<U: Into<LamellarMemoryRegion<T>>>(
@@ -35,13 +35,15 @@ impl<T: Dist> LamellarArrayInternalGet<T> for LocalLockArray<T> {
 }
 
 impl<T: Dist> LamellarArrayGet<T> for LocalLockArray<T> {
-    unsafe fn get<U: TeamInto<LamellarArrayRdmaOutput<T>> + LamellarWrite>(
+    unsafe fn get<U: TeamTryInto<LamellarArrayRdmaOutput<T>> + LamellarWrite>(
         &self,
         index: usize,
         buf: U,
     ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
-        self.internal_get(index, buf.team_into(&self.array.team_rt()))
-            .into_future()
+        match buf.team_try_into(&self.array.team_rt()) {
+            Ok(buf) => self.internal_get(index, buf).into_future(),
+            Err(_) => Box::pin(async move { () }),
+        }
     }
     fn at(&self, index: usize) -> Pin<Box<dyn Future<Output = T> + Send>> {
         unsafe { self.internal_at(index).into_future() }
@@ -64,14 +66,14 @@ impl<T: Dist> LamellarArrayInternalPut<T> for LocalLockArray<T> {
 }
 
 impl<T: Dist> LamellarArrayPut<T> for LocalLockArray<T> {
-    unsafe fn put<U: TeamInto<LamellarArrayRdmaInput<T>> + LamellarRead>(
+    unsafe fn put<U: TeamTryInto<LamellarArrayRdmaInput<T>> + LamellarRead>(
         &self,
         index: usize,
         buf: U,
     ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
-        unsafe {
-            self.internal_put(index, buf.team_into(&self.array.team_rt()))
-                .into_future()
+        match buf.team_try_into(&self.array.team_rt()) {
+            Ok(buf) => self.internal_put(index, buf).into_future(),
+            Err(_) => Box::pin(async move { () }),
         }
     }
 }
@@ -197,7 +199,14 @@ impl<T: Dist + 'static> LamellarAm for InitPutAm<T> {
                             self.buf.len(),
                         ) {
                             let u8_buf_len = len * std::mem::size_of::<T>();
-                            // println!("pe {:?} index: {:?} len {:?} buflen {:?} putting {:?}",pe,self.index,len, self.buf.len(),&u8_buf.as_slice().unwrap()[cur_index..(cur_index+u8_buf_len)]);
+                            // println!(
+                            //     "pe {:?} index: {:?} len {:?} buflen {:?} putting {:?}",
+                            //     pe,
+                            //     self.index,
+                            //     len,
+                            //     self.buf.len(),
+                            //     &u8_buf.as_slice().unwrap()[cur_index..(cur_index + u8_buf_len)]
+                            // );
                             let remote_am = LocalLockRemotePutAm {
                                 array: self.array.clone().into(), //inner of the indices we need to place data into
                                 start_index: self.index,
@@ -282,8 +291,12 @@ struct LocalLockRemotePutAm {
 #[lamellar_impl::rt_am]
 impl LamellarAm for LocalLockRemotePutAm {
     async fn exec(self) {
-        // println!("in remote put {:?} {:?} {:?}",self.start_index,self.len,self.data);
+        // println!(
+        //     "in remote put {:?} {:?} {:?}",
+        //     self.start_index, self.len, self.data
+        // );
         let _lock = self.array.lock.write().await;
+        // println!("got write lock");
         unsafe {
             match self
                 .array
@@ -301,6 +314,6 @@ impl LamellarAm for LocalLockRemotePutAm {
                 None => {}
             }
         }
-        // println!("done remote put");
+        // println!("done remote put dropping write lock");
     }
 }

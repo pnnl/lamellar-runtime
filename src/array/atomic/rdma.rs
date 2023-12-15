@@ -41,7 +41,7 @@ lazy_static! {
 }
 
 impl<T: Dist> LamellarArrayGet<T> for AtomicArray<T> {
-    unsafe fn get<U: TeamInto<LamellarArrayRdmaOutput<T>> + LamellarWrite>(
+    unsafe fn get<U: TeamTryInto<LamellarArrayRdmaOutput<T>> + LamellarWrite>(
         &self,
         index: usize,
         buf: U,
@@ -60,7 +60,7 @@ impl<T: Dist> LamellarArrayGet<T> for AtomicArray<T> {
 }
 
 impl<T: Dist> LamellarArrayPut<T> for AtomicArray<T> {
-    unsafe fn put<U: TeamInto<LamellarArrayRdmaInput<T>> + LamellarRead>(
+    unsafe fn put<U: TeamTryInto<LamellarArrayRdmaInput<T>> + LamellarRead>(
         &self,
         index: usize,
         buf: U,

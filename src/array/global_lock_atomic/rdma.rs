@@ -3,7 +3,7 @@ use crate::array::private::{ArrayExecAm, LamellarArrayPrivate};
 use crate::array::{
     ArrayRdmaAtHandle, ArrayRdmaHandle, Distribution, LamellarArrayGet, LamellarArrayInternalGet,
     LamellarArrayInternalPut, LamellarArrayPut, LamellarArrayRdmaInput, LamellarArrayRdmaOutput,
-    LamellarArrayRequest, LamellarEnv, LamellarRead, LamellarWrite, TeamInto,
+    LamellarArrayRequest, LamellarEnv, LamellarRead, LamellarWrite, TeamTryInto,
 };
 use crate::memregion::{
     AsBase, Dist, LamellarMemoryRegion, OneSidedMemoryRegion, RTMemoryRegionRDMA,
@@ -15,7 +15,7 @@ use std::collections::HashMap;
 use std::pin::Pin;
 
 impl<T: Dist> LamellarArrayInternalGet<T> for GlobalLockArray<T> {
-    // fn iget<U: TeamInto<LamellarArrayRdmaOutput<T>> + LamellarWrite>(&self, index: usize, buf: U) {
+    // fn iget<U: TeamTryInto<LamellarArrayRdmaOutput<T>> + LamellarWrite>(&self, index: usize, buf: U) {
     //     self.iget(index, buf)
     // }
     unsafe fn internal_get<U: Into<LamellarMemoryRegion<T>>>(
@@ -45,13 +45,15 @@ impl<T: Dist> LamellarArrayInternalGet<T> for GlobalLockArray<T> {
 }
 
 impl<T: Dist> LamellarArrayGet<T> for GlobalLockArray<T> {
-    unsafe fn get<U: TeamInto<LamellarArrayRdmaOutput<T>> + LamellarWrite>(
+    unsafe fn get<U: TeamTryInto<LamellarArrayRdmaOutput<T>> + LamellarWrite>(
         &self,
         index: usize,
         buf: U,
     ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
-        self.internal_get(index, buf.team_into(&self.array.team_rt()))
-            .into_future()
+        match buf.team_try_into(&self.array.team_rt()) {
+            Ok(buf) => self.internal_get(index, buf).into_future(),
+            Err(_) => Box::pin(async move { () }),
+        }
     }
     fn at(&self, index: usize) -> Pin<Box<dyn Future<Output = T> + Send>> {
         unsafe { self.internal_at(index).into_future() }
@@ -74,14 +76,14 @@ impl<T: Dist> LamellarArrayInternalPut<T> for GlobalLockArray<T> {
 }
 
 impl<T: Dist> LamellarArrayPut<T> for GlobalLockArray<T> {
-    unsafe fn put<U: TeamInto<LamellarArrayRdmaInput<T>> + LamellarRead>(
+    unsafe fn put<U: TeamTryInto<LamellarArrayRdmaInput<T>> + LamellarRead>(
         &self,
         index: usize,
         buf: U,
     ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
-        unsafe {
-            self.internal_put(index, buf.team_into(&self.array.team_rt()))
-                .into_future()
+        match buf.team_try_into(&self.array.team_rt()) {
+            Ok(buf) => self.internal_put(index, buf).into_future(),
+            Err(_) => Box::pin(async move { () }),
         }
     }
 }

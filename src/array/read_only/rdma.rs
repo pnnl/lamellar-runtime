@@ -117,7 +117,7 @@ impl<T: Dist> ReadOnlyArray<T> {
     /// PE3: buf data [12,12,12,12,12,12,12,12,12,12,12,12]
     /// PE0: buf data  [0,0,0,0,0,0,0,0,0,0,0,0] //we only did the "get" on PE0, also likely to be printed last since the other PEs do not wait for PE0 in this example
     ///```
-    pub unsafe fn blocking_get<U: TeamInto<LamellarArrayRdmaOutput<T>> + LamellarWrite>(
+    pub unsafe fn blocking_get<U: TeamTryInto<LamellarArrayRdmaOutput<T>> + LamellarWrite>(
         &self,
         index: usize,
         buf: U,
@@ -140,7 +140,7 @@ impl<T: Dist + 'static> LamellarArrayInternalGet<T> for ReadOnlyArray<T> {
 }
 
 impl<T: Dist + 'static> LamellarArrayGet<T> for ReadOnlyArray<T> {
-    unsafe fn get<U: TeamInto<LamellarArrayRdmaOutput<T>> + LamellarWrite>(
+    unsafe fn get<U: TeamTryInto<LamellarArrayRdmaOutput<T>> + LamellarWrite>(
         &self,
         index: usize,
         buf: U,

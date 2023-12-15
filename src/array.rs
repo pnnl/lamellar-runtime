@@ -395,26 +395,6 @@ impl<T: Dist> TeamFrom<&Vec<T>> for LamellarArrayRdmaInput<T> {
     }
 }
 
-/// Provides the same abstraction as the `From` trait in the standard language, but with a `team` parameter so that lamellar memory regions can be allocated
-pub trait TeamFrom<T: ?Sized> {
-    /// Converts to this type from the input type
-    fn team_from(val: T, team: &Pin<Arc<LamellarTeamRT>>) -> Self;
-}
-/// Provides the same abstraction as the `Into` trait in the standard language, but with a `team` parameter so that lamellar memory regions can be allocated
-pub trait TeamInto<T: ?Sized> {
-    /// converts this type into the (usually inferred) input type
-    fn team_into(self, team: &Pin<Arc<LamellarTeamRT>>) -> T;
-}
-
-impl<T, U> TeamInto<U> for T
-where
-    U: TeamFrom<T>,
-{
-    fn team_into(self, team: &Pin<Arc<LamellarTeamRT>>) -> U {
-        U::team_from(self, team)
-    }
-}
-
 impl<T: Dist> TeamFrom<&LamellarArrayRdmaInput<T>> for LamellarArrayRdmaInput<T> {
     fn team_from(lai: &LamellarArrayRdmaInput<T>, _team: &Pin<Arc<LamellarTeamRT>>) -> Self {
         lai.clone()
@@ -430,6 +410,113 @@ impl<T: Dist> TeamFrom<&LamellarArrayRdmaOutput<T>> for LamellarArrayRdmaOutput<
 impl<T: Clone> TeamFrom<(&Vec<T>, Distribution)> for Vec<T> {
     fn team_from(vals: (&Vec<T>, Distribution), _team: &Pin<Arc<LamellarTeamRT>>) -> Self {
         vals.0.to_vec()
+    }
+}
+
+impl<T: Dist> TeamTryFrom<&T> for LamellarArrayRdmaInput<T> {
+    fn team_try_from(val: &T, team: &Pin<Arc<LamellarTeamRT>>) -> Result<Self, anyhow::Error> {
+        Ok(LamellarArrayRdmaInput::team_from(val, team))
+    }
+}
+
+impl<T: Dist> TeamTryFrom<T> for LamellarArrayRdmaInput<T> {
+    fn team_try_from(val: T, team: &Pin<Arc<LamellarTeamRT>>) -> Result<Self, anyhow::Error> {
+        Ok(LamellarArrayRdmaInput::team_from(val, team))
+    }
+}
+
+impl<T: Dist> TeamTryFrom<Vec<T>> for LamellarArrayRdmaInput<T> {
+    fn team_try_from(val: Vec<T>, team: &Pin<Arc<LamellarTeamRT>>) -> Result<Self, anyhow::Error> {
+        if val.len() == 0 {
+            Err(anyhow::anyhow!(
+                "Trying to create an empty LamellarArrayRdmaInput"
+            ))
+        } else {
+            Ok(LamellarArrayRdmaInput::team_from(val, team))
+        }
+    }
+}
+
+impl<T: Dist> TeamTryFrom<&Vec<T>> for LamellarArrayRdmaInput<T> {
+    fn team_try_from(val: &Vec<T>, team: &Pin<Arc<LamellarTeamRT>>) -> Result<Self, anyhow::Error> {
+        if val.len() == 0 {
+            Err(anyhow::anyhow!(
+                "Trying to create an empty LamellarArrayRdmaInput"
+            ))
+        } else {
+            Ok(LamellarArrayRdmaInput::team_from(val, team))
+        }
+    }
+}
+
+impl<T: Dist> TeamTryFrom<&LamellarArrayRdmaInput<T>> for LamellarArrayRdmaInput<T> {
+    fn team_try_from(
+        lai: &LamellarArrayRdmaInput<T>,
+        _team: &Pin<Arc<LamellarTeamRT>>,
+    ) -> Result<Self, anyhow::Error> {
+        Ok(lai.clone())
+    }
+}
+
+impl<T: Dist> TeamTryFrom<&LamellarArrayRdmaOutput<T>> for LamellarArrayRdmaOutput<T> {
+    fn team_try_from(
+        lao: &LamellarArrayRdmaOutput<T>,
+        _team: &Pin<Arc<LamellarTeamRT>>,
+    ) -> Result<Self, anyhow::Error> {
+        Ok(lao.clone())
+    }
+}
+
+impl<T: Clone> TeamTryFrom<(&Vec<T>, Distribution)> for Vec<T> {
+    fn team_try_from(
+        vals: (&Vec<T>, Distribution),
+        _team: &Pin<Arc<LamellarTeamRT>>,
+    ) -> Result<Self, anyhow::Error> {
+        Ok(vals.0.to_vec())
+    }
+}
+
+/// Provides the same abstraction as the `From` trait in the standard language, but with a `team` parameter so that lamellar memory regions can be allocated
+pub trait TeamFrom<T: ?Sized> {
+    /// Converts to this type from the input type
+    fn team_from(val: T, team: &Pin<Arc<LamellarTeamRT>>) -> Self;
+}
+
+/// Provides the same abstraction as the `TryFrom` trait in the standard language, but with a `team` parameter so that lamellar memory regions can be allocated
+pub trait TeamTryFrom<T: ?Sized> {
+    /// Trys to convert to this type from the input type
+    fn team_try_from(val: T, team: &Pin<Arc<LamellarTeamRT>>) -> Result<Self, anyhow::Error>
+    where
+        Self: Sized;
+}
+/// Provides the same abstraction as the `Into` trait in the standard language, but with a `team` parameter so that lamellar memory regions can be allocated
+pub trait TeamInto<T: ?Sized> {
+    /// converts this type into the (usually inferred) input type
+    fn team_into(self, team: &Pin<Arc<LamellarTeamRT>>) -> T;
+}
+
+/// Provides the same abstraction as the `TryInto` trait in the standard language, but with a `team` parameter so that lamellar memory regions can be allocated
+
+pub trait TeamTryInto<T>: Sized {
+    /// Trys to convert this type into the (usually inferred) input type
+    fn team_try_into(self, team: &Pin<Arc<LamellarTeamRT>>) -> Result<T, anyhow::Error>;
+}
+
+impl<T, U> TeamInto<U> for T
+where
+    U: TeamFrom<T>,
+{
+    fn team_into(self, team: &Pin<Arc<LamellarTeamRT>>) -> U {
+        U::team_from(self, team)
+    }
+}
+
+impl<T, U> TeamTryInto<U> for T
+where
+    U: TeamTryFrom<T>,
+{
+    fn team_try_into(self, team: &Pin<Arc<LamellarTeamRT>>) -> Result<U, anyhow::Error> {
+        U::team_try_from(self, team)
     }
 }
 
@@ -1144,7 +1231,7 @@ pub trait LamellarArrayGet<T: Dist>: LamellarArrayInternalGet<T> {
     /// PE3: buf data [12,12,12,12,12,12,12,12,12,12,12,12]
     /// PE0: buf data [0,1,2,3,4,5,6,7,8,9,10,11] //we only did the "get" on PE0, also likely to be printed last since the other PEs do not wait for PE0 in this example
     ///```
-    unsafe fn get<U: TeamInto<LamellarArrayRdmaOutput<T>> + LamellarWrite>(
+    unsafe fn get<U: TeamTryInto<LamellarArrayRdmaOutput<T>> + LamellarWrite>(
         &self,
         index: usize,
         dst: U,
@@ -1288,7 +1375,7 @@ pub trait LamellarArrayPut<T: Dist>: LamellarArrayInternalPut<T> {
     /// PE2: array data [6,7,8]
     /// PE3: array data [9,10,11]
     ///```
-    unsafe fn put<U: TeamInto<LamellarArrayRdmaInput<T>> + LamellarRead>(
+    unsafe fn put<U: TeamTryInto<LamellarArrayRdmaInput<T>> + LamellarRead>(
         &self,
         index: usize,
         src: U,

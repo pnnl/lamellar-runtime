@@ -1,5 +1,5 @@
 use crate::active_messaging::RemotePtr;
-use crate::array::{LamellarRead, LamellarWrite};
+use crate::array::{LamellarRead, LamellarWrite, TeamTryFrom};
 use crate::darc::Darc;
 use crate::lamellae::AllocationType;
 use crate::{memregion::*, LamellarEnv, LamellarTeam};
@@ -309,6 +309,24 @@ impl<T: Dist> From<&SharedMemoryRegion<T>> for LamellarArrayRdmaInput<T> {
 impl<T: Dist> TeamFrom<&SharedMemoryRegion<T>> for LamellarArrayRdmaInput<T> {
     fn team_from(smr: &SharedMemoryRegion<T>, _team: &std::pin::Pin<Arc<LamellarTeamRT>>) -> Self {
         LamellarArrayRdmaInput::SharedMemRegion(smr.clone())
+    }
+}
+
+impl<T: Dist> TeamTryFrom<&SharedMemoryRegion<T>> for LamellarArrayRdmaOutput<T> {
+    fn team_try_from(
+        smr: &SharedMemoryRegion<T>,
+        _team: &std::pin::Pin<Arc<LamellarTeamRT>>,
+    ) -> Result<Self, anyhow::Error> {
+        Ok(LamellarArrayRdmaOutput::SharedMemRegion(smr.clone()))
+    }
+}
+
+impl<T: Dist> TeamTryFrom<&SharedMemoryRegion<T>> for LamellarArrayRdmaInput<T> {
+    fn team_try_from(
+        smr: &SharedMemoryRegion<T>,
+        _team: &std::pin::Pin<Arc<LamellarTeamRT>>,
+    ) -> Result<Self, anyhow::Error> {
+        Ok(LamellarArrayRdmaInput::SharedMemRegion(smr.clone()))
     }
 }
 

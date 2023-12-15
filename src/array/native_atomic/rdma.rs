@@ -31,13 +31,15 @@ impl<T: Dist> LamellarArrayInternalGet<T> for NativeAtomicArray<T> {
     }
 }
 impl<T: Dist> LamellarArrayGet<T> for NativeAtomicArray<T> {
-    unsafe fn get<U: TeamInto<LamellarArrayRdmaOutput<T>> + LamellarWrite>(
+    unsafe fn get<U: TeamTryInto<LamellarArrayRdmaOutput<T>> + LamellarWrite>(
         &self,
         index: usize,
         buf: U,
     ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
-        self.internal_get(index, buf.team_into(&self.array.team_rt()))
-            .into_future()
+        match buf.team_try_into(&self.array.team_rt()) {
+            Ok(buf) => self.internal_get(index, buf).into_future(),
+            Err(_) => Box::pin(async move { () }),
+        }
     }
     fn at(&self, index: usize) -> Pin<Box<dyn Future<Output = T> + Send>> {
         unsafe { self.internal_at(index).into_future() }
@@ -60,14 +62,14 @@ impl<T: Dist> LamellarArrayInternalPut<T> for NativeAtomicArray<T> {
 }
 
 impl<T: Dist> LamellarArrayPut<T> for NativeAtomicArray<T> {
-    unsafe fn put<U: TeamInto<LamellarArrayRdmaInput<T>> + LamellarRead>(
+    unsafe fn put<U: TeamTryInto<LamellarArrayRdmaInput<T>> + LamellarRead>(
         &self,
         index: usize,
         buf: U,
     ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
-        unsafe {
-            self.internal_put(index, buf.team_into(&self.array.team_rt()))
-                .into_future()
+        match buf.team_try_into(&self.array.team_rt()) {
+            Ok(buf) => self.internal_put(index, buf).into_future(),
+            Err(_) => Box::pin(async move { () }),
         }
     }
 }

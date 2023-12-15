@@ -1,5 +1,5 @@
 use crate::active_messaging::RemotePtr;
-use crate::array::{LamellarRead, LamellarWrite};
+use crate::array::{LamellarRead, LamellarWrite, TeamTryFrom};
 use crate::lamellae::{AllocationType, Lamellae};
 use crate::lamellar_team::LamellarTeamRemotePtr;
 use crate::IdError;
@@ -990,6 +990,42 @@ impl<T: Dist> TeamFrom<&OneSidedMemoryRegion<T>> for LamellarArrayRdmaOutput<T> 
 impl<T: Dist> TeamFrom<OneSidedMemoryRegion<T>> for LamellarArrayRdmaOutput<T> {
     fn team_from(smr: OneSidedMemoryRegion<T>, _team: &Pin<Arc<LamellarTeamRT>>) -> Self {
         LamellarArrayRdmaOutput::LocalMemRegion(smr)
+    }
+}
+
+impl<T: Dist> TeamTryFrom<&OneSidedMemoryRegion<T>> for LamellarArrayRdmaInput<T> {
+    fn team_try_from(
+        smr: &OneSidedMemoryRegion<T>,
+        _team: &Pin<Arc<LamellarTeamRT>>,
+    ) -> Result<Self, anyhow::Error> {
+        Ok(LamellarArrayRdmaInput::LocalMemRegion(smr.clone()))
+    }
+}
+
+impl<T: Dist> TeamTryFrom<OneSidedMemoryRegion<T>> for LamellarArrayRdmaInput<T> {
+    fn team_try_from(
+        smr: OneSidedMemoryRegion<T>,
+        _team: &Pin<Arc<LamellarTeamRT>>,
+    ) -> Result<Self, anyhow::Error> {
+        Ok(LamellarArrayRdmaInput::LocalMemRegion(smr))
+    }
+}
+
+impl<T: Dist> TeamTryFrom<&OneSidedMemoryRegion<T>> for LamellarArrayRdmaOutput<T> {
+    fn team_try_from(
+        smr: &OneSidedMemoryRegion<T>,
+        _team: &Pin<Arc<LamellarTeamRT>>,
+    ) -> Result<Self, anyhow::Error> {
+        Ok(LamellarArrayRdmaOutput::LocalMemRegion(smr.clone()))
+    }
+}
+
+impl<T: Dist> TeamTryFrom<OneSidedMemoryRegion<T>> for LamellarArrayRdmaOutput<T> {
+    fn team_try_from(
+        smr: OneSidedMemoryRegion<T>,
+        _team: &Pin<Arc<LamellarTeamRT>>,
+    ) -> Result<Self, anyhow::Error> {
+        Ok(LamellarArrayRdmaOutput::LocalMemRegion(smr))
     }
 }
 

@@ -549,24 +549,24 @@ impl<T: Dist> UnsafeArray<T> {
     /// PE3: buf data [12,12,12,12,12,12,12,12,12,12,12,12]
     /// PE0: buf data [0,1,2,3,4,5,6,7,8,9,10,11] //we only did the "get" on PE0, also likely to be printed last since the other PEs do not wait for PE0 in this example
     ///```
-    pub unsafe fn blocking_get<U: TeamInto<LamellarArrayRdmaOutput<T>>>(
+    pub unsafe fn blocking_get<U: TeamTryInto<LamellarArrayRdmaOutput<T>>>(
         &self,
         index: usize,
         buf: U,
     ) {
         // println!("unsafe iget {:?}",index);
-        match self.inner.distribution {
-            Distribution::Block => self.block_op(
-                ArrayRdmaCmd::Get(true),
-                index,
-                buf.team_into(&self.inner.data.team),
-            ),
-            Distribution::Cyclic => self.cyclic_op(
-                ArrayRdmaCmd::Get(true),
-                index,
-                buf.team_into(&self.inner.data.team),
-            ),
-        };
+        if let Ok(buf) = buf.team_try_into(&self.inner.data.team) {
+            match self.inner.distribution {
+                Distribution::Block => {
+                    self.block_op(ArrayRdmaCmd::Get(true), index, buf)
+                }
+                Distribution::Cyclic => self.cyclic_op(
+                    ArrayRdmaCmd::Get(true),
+                    index,
+                    buf,
+                ),
+            };
+        }
     }
 
     #[doc(alias("One-sided", "onesided"))]
@@ -623,10 +623,14 @@ impl<T: Dist> UnsafeArray<T> {
     ///```
     pub unsafe fn get<U>(&self, index: usize, buf: U) -> Pin<Box<dyn Future<Output = ()> + Send>>
     where
-        U: TeamInto<LamellarArrayRdmaOutput<T>>,
+        U: TeamTryInto<LamellarArrayRdmaOutput<T>>,
     {
-        self.internal_get(index, buf.team_into(&self.inner.data.team))
-            .into_future()
+        match buf.team_try_into(&self.team_rt()) {
+            Ok(buf) => self
+                .internal_get(index, buf)
+                .into_future(),
+            Err(_) => Box::pin(async move { () }),
+        }
     }
 
     pub(crate) unsafe fn internal_at(
@@ -692,7 +696,7 @@ impl<T: Dist> UnsafeArray<T> {
 
 /// We dont implement this because "at" is actually same for all but UnsafeArray so we just implement those directly
 // impl<T: Dist > LamellarArrayGet<T> for UnsafeArray<T> {
-//     fn get<U: TeamInto<LamellarArrayRdmaOutput<T>> + LamellarWrite>(
+//     fn get<U: TeamTryInto<LamellarArrayRdmaOutput<T>> + LamellarWrite>(
 //         &self,
 //         index: usize,
 //         dst: U,
@@ -749,13 +753,17 @@ impl<T: Dist> LamellarArrayInternalPut<T> for UnsafeArray<T> {
 }
 
 impl<T: Dist> LamellarArrayPut<T> for UnsafeArray<T> {
-    unsafe fn put<U: TeamInto<LamellarArrayRdmaInput<T>> + LamellarRead>(
+    unsafe fn put<U: TeamTryInto<LamellarArrayRdmaInput<T>> + LamellarRead>(
         &self,
         index: usize,
         buf: U,
     ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
-        self.internal_put(index, buf.team_into(&self.inner.data.team))
-            .into_future()
+        match buf.team_try_into(&self.team_rt()) {
+            Ok(buf) => self
+                .internal_put(index, buf)
+                .into_future(),
+            Err(_) => Box::pin(async move { () }),
+        }
     }
 }
 

@@ -8,6 +8,7 @@
 use crate::active_messaging::{AmDist, RemotePtr};
 use crate::array::{
     LamellarArrayRdmaInput, LamellarArrayRdmaOutput, LamellarRead, LamellarWrite, TeamFrom,
+    TeamTryFrom,
 };
 use crate::lamellae::{AllocationType, Backend, Lamellae, LamellaeComm, LamellaeRDMA};
 use crate::lamellar_team::{LamellarTeam, LamellarTeamRT};
@@ -193,6 +194,26 @@ impl<T: Dist> TeamFrom<LamellarMemoryRegion<T>> for LamellarArrayRdmaInput<T> {
     }
 }
 
+impl<T: Dist> TeamTryFrom<&LamellarMemoryRegion<T>> for LamellarArrayRdmaInput<T> {
+    #[tracing::instrument(skip_all)]
+    fn team_try_from(
+        mr: &LamellarMemoryRegion<T>,
+        _team: &std::pin::Pin<Arc<LamellarTeamRT>>,
+    ) -> Result<Self, anyhow::Error> {
+        Ok(LamellarArrayRdmaInput::LamellarMemRegion(mr.clone()))
+    }
+}
+
+impl<T: Dist> TeamTryFrom<LamellarMemoryRegion<T>> for LamellarArrayRdmaInput<T> {
+    #[tracing::instrument(skip_all)]
+    fn team_try_from(
+        mr: LamellarMemoryRegion<T>,
+        _team: &std::pin::Pin<Arc<LamellarTeamRT>>,
+    ) -> Result<Self, anyhow::Error> {
+        Ok(LamellarArrayRdmaInput::LamellarMemRegion(mr))
+    }
+}
+
 impl<T: Dist> From<&LamellarMemoryRegion<T>> for LamellarArrayRdmaOutput<T> {
     #[tracing::instrument(skip_all)]
     fn from(mr: &LamellarMemoryRegion<T>) -> Self {
@@ -214,6 +235,25 @@ impl<T: Dist> TeamFrom<LamellarMemoryRegion<T>> for LamellarArrayRdmaOutput<T> {
     }
 }
 
+impl<T: Dist> TeamTryFrom<&LamellarMemoryRegion<T>> for LamellarArrayRdmaOutput<T> {
+    #[tracing::instrument(skip_all)]
+    fn team_try_from(
+        mr: &LamellarMemoryRegion<T>,
+        _team: &std::pin::Pin<Arc<LamellarTeamRT>>,
+    ) -> Result<Self, anyhow::Error> {
+        Ok(LamellarArrayRdmaOutput::LamellarMemRegion(mr.clone()))
+    }
+}
+
+impl<T: Dist> TeamTryFrom<LamellarMemoryRegion<T>> for LamellarArrayRdmaOutput<T> {
+    #[tracing::instrument(skip_all)]
+    fn team_try_from(
+        mr: LamellarMemoryRegion<T>,
+        _team: &std::pin::Pin<Arc<LamellarTeamRT>>,
+    ) -> Result<Self, anyhow::Error> {
+        Ok(LamellarArrayRdmaOutput::LamellarMemRegion(mr))
+    }
+}
 /// An  abstraction for a memory region that has been registered with the underlying lamellae (network provider)
 /// allowing for RDMA operations.
 ///
@@ -706,6 +746,11 @@ impl<T: Dist> MemoryRegion<T> {
                 )? //did we call team barrer before this?
             }
         } else {
+            println!(
+                "cant have zero sized memregion {:?}",
+                std::backtrace::Backtrace::capture()
+            );
+            panic!("cant have zero sized memregion");
             return Err(anyhow::anyhow!("cant have negative sized memregion"));
         };
         let temp = MemoryRegion {
