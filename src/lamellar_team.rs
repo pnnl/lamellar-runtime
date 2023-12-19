@@ -380,26 +380,25 @@ impl LamellarTeam {
     }
 
     #[doc(hidden)]
-    pub fn exec_am_group_pe<F>(
+    pub fn exec_am_group_pe<F, O>(
         &self,
         pe: usize,
         am: F,
-    ) -> Pin<Box<dyn Future<Output = F::Output> + Send>>
+    ) -> Pin<Box<dyn Future<Output = O> + Send>>
     where
         F: RemoteActiveMessage + LamellarAM + crate::Serialize + 'static,
+        O: AmDist + 'static,
     {
-        self.team.exec_am_pe_tg(pe, am, None).into_future()
+        self.team.am_group_exec_am_pe_tg(pe, am, None).into_future()
     }
 
     #[doc(hidden)]
-    pub fn exec_am_group_all<F>(
-        &self,
-        am: F,
-    ) -> Pin<Box<dyn Future<Output = Vec<F::Output>> + Send>>
+    pub fn exec_am_group_all<F, O>(&self, am: F) -> Pin<Box<dyn Future<Output = Vec<O>> + Send>>
     where
         F: RemoteActiveMessage + LamellarAM + crate::Serialize + 'static,
+        O: AmDist + 'static,
     {
-        self.team.exec_am_all_tg(am, None).into_future()
+        self.team.am_group_exec_am_all_tg(am, None).into_future()
     }
 }
 
@@ -522,6 +521,11 @@ impl RemoteMemoryRegion for Arc<LamellarTeam> {
         let mut lmr = OneSidedMemoryRegion::try_new(size, &self.team, self.team.lamellae.clone());
         while let Err(_err) = lmr {
             std::thread::yield_now();
+            // println!(
+            //     "out of Lamellar mem trying to alloc new pool {:?} {:?}",
+            //     size,
+            //     std::mem::size_of::<T>()
+            // );
             self.team
                 .lamellae
                 .alloc_pool(size * std::mem::size_of::<T>());
@@ -979,16 +983,18 @@ impl LamellarTeamRT {
             arch.hash(&mut hasher);
             let hash = hasher.finish();
             let archrt = Arc::new(LamellarArchRT::new(parent.arch.clone(), arch));
-            // println!("arch: {:?}",archrt);
+            // println!("arch: {:?}", archrt);
             parent.barrier();
             // ------ ensure team is being constructed synchronously and in order across all pes in parent ------ //
             let parent_alloc = AllocationType::Sub(parent.arch.team_iter().collect::<Vec<usize>>());
+            // println!("allocating temp_buf");
             let temp_buf = MemoryRegion::<usize>::new(
                 parent.num_pes,
                 parent.lamellae.clone(),
                 parent_alloc.clone(),
             );
 
+            // println!("allocating temp_array");
             let temp_array = MemoryRegion::<usize>::new(
                 parent.num_pes,
                 parent.lamellae.clone(),
@@ -1004,16 +1010,22 @@ impl LamellarTeamRT {
             }
             let s = Instant::now();
             parent.barrier();
+            // println!("barrier done in {:?}", s.elapsed());
             let timeout = Instant::now() - s;
             temp_array_slice[0] = hash as usize;
+            // println!("putting hash vals");
             if let Ok(parent_world_pe) = parent.arch.team_pe(parent.world_pe) {
                 for world_pe in parent.arch.team_iter() {
-                    unsafe {
-                        temp_buf.put_slice(world_pe, parent_world_pe, &temp_array_slice[0..1]);
+                    if world_pe != parent.world_pe {
+                        unsafe {
+                            temp_buf.put_slice(world_pe, parent_world_pe, &temp_array_slice[0..1]);
+                        }
                     }
                 }
             }
+            // println!("done putting hash, now gonna check hash vals");
             parent.check_hash_vals(hash as usize, &temp_buf, timeout);
+            // println!("passed check hash vals");
 
             let remote_ptr_addr = parent
                 .lamellae
@@ -1024,12 +1036,13 @@ impl LamellarTeamRT {
                 )
                 .unwrap();
             // ------------------------------------------------------------------------------------------------- //
-
+            // println!("passed remote_ptr_addr");
             for e in temp_array_slice.iter_mut() {
                 *e = 0;
             }
             let num_pes = archrt.num_pes();
             parent.barrier();
+            // println!("passed barrier, creating RT team");
             let team = LamellarTeamRT {
                 world: Some(world.clone()),
                 parent: Some(parent.clone()),
@@ -1084,6 +1097,7 @@ impl LamellarTeamRT {
                     1,
                 );
             }
+            // println!("team created in {:?}", s.elapsed());
 
             let mut sub_teams = parent.sub_teams.write();
             sub_teams.insert(team.id, team.clone());
@@ -1114,44 +1128,53 @@ impl LamellarTeamRT {
 
         let mut s = Instant::now();
         let mut cnt = 0;
-        for pe in hash_buf.as_slice().expect("data should exist on pe") {
-            while *pe == 0 {
-                std::thread::yield_now();
-                if s.elapsed().as_secs_f64() > *crate::DEADLOCK_TIMEOUT {
-                    let status = hash_buf
-                        .as_slice()
-                        .expect("data should exist on pe")
-                        .iter()
-                        .enumerate()
-                        .map(|(i, elem)| (i, *elem == hash))
-                        .collect::<Vec<_>>();
-                    println!("[WARNING]  Potential deadlock detected when trying construct a new LamellarTeam.\n\
+
+        for (pe, hash_val) in hash_buf
+            .as_slice()
+            .expect("data should exist on pe")
+            .iter()
+            .enumerate()
+        {
+            if pe != self.team_pe.unwrap() {
+                while *hash_val == 0 {
+                    self.flush();
+                    std::thread::yield_now();
+                    if s.elapsed().as_secs_f64() > *crate::DEADLOCK_TIMEOUT {
+                        let status = hash_buf
+                            .as_slice()
+                            .expect("data should exist on pe")
+                            .iter()
+                            .enumerate()
+                            .map(|(i, elem)| (i, *elem == hash))
+                            .collect::<Vec<_>>();
+                        println!("[WARNING]  Potential deadlock detected when trying construct a new LamellarTeam.\n\
                         Creating a team is a collective operation requiring all PEs associated with the Parent Team (or LamellarWorld) to enter the call, not just the PEs that will be part of the new team.\n\
                         The following indicates which PEs have not entered the call: {:?}\n\
                         The deadlock timeout can be set via the LAMELLAR_DEADLOCK_TIMEOUT environment variable, the current timeout is {} seconds\n\
                         To view backtrace set RUST_LIB_BACKTRACE=1\n\
                         {}",status,*crate::DEADLOCK_TIMEOUT,std::backtrace::Backtrace::capture()
                     );
-                    // println!(
-                    //     "[{:?}] ({:?})  hash: {:?}",
-                    //     self.world_pe,
-                    //     hash,
-                    //     hash_buf.as_slice().unwrap()
-                    // );
-                    s = Instant::now();
+                        // println!(
+                        //     "[{:?}] ({:?})  hash: {:?}",
+                        //     self.world_pe,
+                        //     hash,
+                        //     hash_buf.as_slice().unwrap()
+                        // );
+                        s = Instant::now();
+                    }
                 }
-            }
-            if *pe != hash && Instant::now() - s > timeout {
-                println!(
-                    "[{:?}] ({:?})  hash: {:?}",
-                    self.world_pe,
-                    hash,
-                    hash_buf.as_slice().expect("data should exist on pe")
-                );
-                panic!("team creating mismatch! Ensure teams are constructed in same order on every pe");
-            } else {
-                std::thread::yield_now();
-                cnt = cnt + 1;
+                if *hash_val != hash && Instant::now() - s > timeout {
+                    println!(
+                        "[{:?}] ({:?})  hash: {:?}",
+                        self.world_pe,
+                        hash,
+                        hash_buf.as_slice().expect("data should exist on pe")
+                    );
+                    panic!("team creating mismatch! Ensure teams are constructed in same order on every pe");
+                } else {
+                    std::thread::yield_now();
+                    cnt = cnt + 1;
+                }
             }
         }
         // println!("{:?} {:?}", hash,hash_buf.as_slice().unwrap());
@@ -1285,7 +1308,7 @@ impl LamellarTeamRT {
                     && self.world_counters.outstanding_reqs.load(Ordering::SeqCst) > 0))
         {
             // std::thread::yield_now();
-            self.flush();
+            // self.flush();
             self.scheduler.exec_task(); //mmight as well do useful work while we wait
             if temp_now.elapsed() > Duration::new(600, 0) {
                 println!(
@@ -1389,6 +1412,76 @@ impl LamellarTeamRT {
     }
 
     #[tracing::instrument(skip_all)]
+    pub(crate) fn am_group_exec_am_all_tg<F, O>(
+        self: &Pin<Arc<LamellarTeamRT>>,
+        am: F,
+        task_group_cnts: Option<Arc<AMCounters>>,
+    ) -> Box<dyn LamellarMultiRequest<Output = O>>
+    where
+        F: RemoteActiveMessage + LamellarAM + crate::Serialize + 'static,
+        O: AmDist + 'static,
+    {
+        // println!("team exec am all num_pes {:?}", self.num_pes);
+        // trace!("[{:?}] team exec am all request", self.world_pe);
+        // event!(Level::TRACE, "team exec am all request");
+        let tg_outstanding_reqs = match task_group_cnts {
+            Some(task_group_cnts) => {
+                task_group_cnts.add_send_req(self.num_pes);
+                Some(task_group_cnts.outstanding_reqs.clone())
+            }
+            None => None,
+        };
+        let req = Arc::new(LamellarMultiRequestHandleInner {
+            cnt: AtomicUsize::new(self.num_pes),
+            arch: self.arch.clone(),
+            data: Mutex::new(HashMap::new()),
+            team_outstanding_reqs: self.team_counters.outstanding_reqs.clone(),
+            world_outstanding_reqs: self.world_counters.outstanding_reqs.clone(),
+            tg_outstanding_reqs: tg_outstanding_reqs.clone(),
+            user_handle: AtomicBool::new(true),
+            scheduler: self.scheduler.clone(),
+        });
+        let req_result = Arc::new(LamellarRequestResult { req: req.clone() });
+        let req_ptr = Arc::into_raw(req_result);
+        for _ in 0..(self.num_pes - 1) {
+            // -1 because of the arc we turned into raw
+            unsafe { Arc::increment_strong_count(req_ptr) } //each pe will return a result (which we turn back into an arc)
+        }
+        // println!("strong count recv: {:?} ",Arc::strong_count(&req));
+        let id = ReqId {
+            id: req_ptr as usize,
+            sub_id: 0,
+        };
+
+        self.world_counters.add_send_req(self.num_pes);
+        self.team_counters.add_send_req(self.num_pes);
+        // println!("cnts: t: {} w: {} tg: {:?}",self.team_counters.outstanding_reqs.load(Ordering::Relaxed),self.world_counters.outstanding_reqs.load(Ordering::Relaxed), tg_outstanding_reqs.as_ref().map(|x| x.load(Ordering::Relaxed)));
+
+        // println!("team counter: {:?}", self.team_counters.outstanding_reqs);
+        let func: LamellarArcAm = Arc::new(am);
+        let world = if let Some(world) = &self.world {
+            world.clone()
+        } else {
+            self.clone()
+        };
+        let req_data = ReqMetaData {
+            src: self.world_pe,
+            dst: None,
+            id: id,
+            lamellae: self.lamellae.clone(),
+            world: world,
+            team: self.clone(),
+            team_addr: self.remote_ptr_addr,
+        };
+        // event!(Level::TRACE, "submitting request to scheduler");
+        self.scheduler.submit_am(Am::All(req_data, func));
+        Box::new(LamellarMultiRequestHandle {
+            inner: req,
+            _phantom: PhantomData,
+        })
+    }
+
+    #[tracing::instrument(skip_all)]
     pub fn exec_am_pe<F>(
         self: &Pin<Arc<LamellarTeamRT>>,
         pe: usize,
@@ -1409,6 +1502,77 @@ impl LamellarTeamRT {
     ) -> Box<dyn LamellarRequest<Output = F::Output>>
     where
         F: RemoteActiveMessage + LamellarAM + crate::Serialize + 'static,
+    {
+        // println!("team exec am pe tg");
+        let tg_outstanding_reqs = match task_group_cnts {
+            Some(task_group_cnts) => {
+                task_group_cnts.add_send_req(1);
+                Some(task_group_cnts.outstanding_reqs.clone())
+            }
+            None => None,
+        };
+        assert!(pe < self.arch.num_pes());
+
+        let req = Arc::new(LamellarRequestHandleInner {
+            ready: AtomicBool::new(false),
+            data: Cell::new(None),
+            team_outstanding_reqs: self.team_counters.outstanding_reqs.clone(),
+            world_outstanding_reqs: self.world_counters.outstanding_reqs.clone(),
+            tg_outstanding_reqs: tg_outstanding_reqs.clone(),
+            user_handle: AtomicBool::new(true),
+            scheduler: self.scheduler.clone(),
+        });
+        let req_result = Arc::new(LamellarRequestResult { req: req.clone() });
+        let req_ptr = Arc::into_raw(req_result);
+        // Arc::increment_strong_count(req_ptr); //we would need to do this for the exec_all command
+        let id = ReqId {
+            id: req_ptr as usize,
+            sub_id: 0,
+        };
+        self.world_counters.add_send_req(1);
+        self.team_counters.add_send_req(1);
+        // println!(
+        //     "req_id: {:?} tc: {:?} wc: {:?}",
+        //     id,
+        //     self.team_counters.outstanding_reqs.load(Ordering::Relaxed),
+        //     self.world_counters.outstanding_reqs.load(Ordering::Relaxed)
+        // );
+        // println!("cnts: t: {} w: {} tg: {:?}",self.team_counters.outstanding_reqs.load(Ordering::Relaxed),self.world_counters.outstanding_reqs.load(Ordering::Relaxed), tg_outstanding_reqs.as_ref().map(|x| x.load(Ordering::Relaxed)));
+
+        // println!("req_id: {:?}", id);
+        let world = if let Some(world) = &self.world {
+            world.clone()
+        } else {
+            self.clone()
+        };
+        let func: LamellarArcAm = Arc::new(am);
+        let req_data = ReqMetaData {
+            src: self.world_pe,
+            dst: Some(self.arch.world_pe(pe).expect("pe not member of team")),
+            id: id,
+            lamellae: self.lamellae.clone(),
+            world: world,
+            team: self.clone(),
+            team_addr: self.remote_ptr_addr,
+        };
+        self.scheduler.submit_am(Am::Remote(req_data, func));
+
+        Box::new(LamellarRequestHandle {
+            inner: req,
+            _phantom: PhantomData,
+        })
+    }
+
+    #[tracing::instrument(skip_all)]
+    pub(crate) fn am_group_exec_am_pe_tg<F, O>(
+        self: &Pin<Arc<LamellarTeamRT>>,
+        pe: usize,
+        am: F,
+        task_group_cnts: Option<Arc<AMCounters>>,
+    ) -> Box<dyn LamellarRequest<Output = O>>
+    where
+        F: RemoteActiveMessage + LamellarAM + crate::Serialize + 'static,
+        O: AmDist + 'static,
     {
         // println!("team exec am pe tg");
         let tg_outstanding_reqs = match task_group_cnts {
@@ -1762,6 +1926,11 @@ impl LamellarTeamRT {
         let mut lmr = OneSidedMemoryRegion::try_new(size, self, self.lamellae.clone());
         while let Err(_err) = lmr {
             std::thread::yield_now();
+            // println!(
+            //     "out of Lamellar mem trying to alloc new pool {:?} {:?}",
+            //     size,
+            //     std::mem::size_of::<T>()
+            // );
             self.lamellae.alloc_pool(size * std::mem::size_of::<T>());
             lmr = OneSidedMemoryRegion::try_new(size, self, self.lamellae.clone());
         }

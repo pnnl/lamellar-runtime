@@ -229,10 +229,27 @@ fn impl_am_group_user(
     am_name: &syn::Ident,
     am_group_remote_name: &syn::Ident,
     am_group_name_user: &syn::Ident,
-    inner_ret_type: &proc_macro2::TokenStream,
+    _inner_ret_type: &proc_macro2::TokenStream,
     lamellar: &proc_macro2::TokenStream,
 ) -> proc_macro2::TokenStream {
-    let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
+    let mut am_user_generics = generics.clone();
+    am_user_generics.params.push(syn::GenericParam::Type(
+        syn::parse_str(&format!("Am: {}::active_messaging::LamellarAM", lamellar)).unwrap(),
+    ));
+    let mut typed_am_group_result_return_type = format!("{}::TypedAmGroupResult<", lamellar);
+    am_user_generics.type_params_mut().for_each(|tp| {
+        if tp.ident == "Am" {
+            typed_am_group_result_return_type += "Am::Output,";
+        } else {
+            typed_am_group_result_return_type += &format!("{},", tp.ident);
+        }
+    });
+    typed_am_group_result_return_type += ">";
+    let typed_am_group_result_return_type: syn::Type =
+        syn::parse_str(&typed_am_group_result_return_type).unwrap();
+    let (am_user_impl_generics, am_user_ty_generics, am_user_where_clause) =
+        am_user_generics.split_for_impl();
+    let (_impl_generics, ty_generics, _where_clause) = generics.split_for_impl();
 
     let (typed_am_group_result_type, add_all_req_type, single_req_type) = match am_type {
         AmType::NoReturn => (
@@ -286,19 +303,19 @@ fn impl_am_group_user(
         }
     };
 
+    // quote! {
+    //     #[doc(hidden)]
+    //     pub struct #am_group_name_user #impl_generics #where_clause{
+    //         team: std::sync::Arc<#lamellar::LamellarTeam>,
+    //         batch_cnt: usize,
+    //         cnt: usize,
+    //         reqs: std::collections::BTreeMap<usize,(Vec<usize>, #am_group_remote_name #ty_generics,usize)>,
+    //         num_per_batch: usize,
+    //         pending_reqs: Vec<#lamellar::TypedAmGroupBatchReq<#inner_ret_type>>,
+    //     }
     quote! {
-        #[doc(hidden)]
-        struct #am_group_name_user #impl_generics #where_clause{
-            team: std::sync::Arc<#lamellar::LamellarTeam>,
-            batch_cnt: usize,
-            cnt: usize,
-            reqs: std::collections::BTreeMap<usize,(Vec<usize>, #am_group_remote_name #ty_generics,usize)>,
-            num_per_batch: usize,
-            pending_reqs: Vec<#lamellar::TypedAmGroupBatchReq<#inner_ret_type>>,
-        }
-
-        impl #impl_generics #am_group_name_user #ty_generics #where_clause{
-            pub fn new(team: std::sync::Arc<#lamellar::LamellarTeam>) -> #am_group_name_user #ty_generics{
+        impl #am_user_impl_generics #am_group_name_user #am_user_ty_generics #am_user_where_clause{
+            pub fn new(team: std::sync::Arc<#lamellar::LamellarTeam>) -> Self {
                 let num_per_batch = match std::env::var("LAMELLAR_OP_BATCH") {
                     Ok(n) => n.parse::<usize>().unwrap(),
                     Err(_) => 10000,
@@ -346,7 +363,7 @@ fn impl_am_group_user(
                 }
             }
 
-            pub async fn exec(mut self) -> #lamellar::TypedAmGroupResult<#inner_ret_type>{
+            pub async fn exec(mut self) -> #typed_am_group_result_return_type{
 
                 // let timer = std::time::Instant::now();
 
@@ -359,6 +376,34 @@ fn impl_am_group_user(
                 let num_pes = self.team.num_pes();
                 #typed_am_group_result_type
             }
+        }
+    }
+}
+
+fn generate_am_group_user_struct(
+    generics: &syn::Generics,
+    vis: &proc_macro2::TokenStream,
+    am_group_name_user: &syn::Ident,
+    am_group_remote_name: &syn::Ident,
+) -> proc_macro2::TokenStream {
+    let mut am_user_generics = generics.clone();
+    am_user_generics.params.push(syn::GenericParam::Type(
+        syn::parse_str("Am: lamellar::active_messaging::LamellarAM").unwrap(),
+    ));
+    let (am_user_impl_generics, _am_user_ty_generics, am_user_where_clause) =
+        am_user_generics.split_for_impl();
+
+    let (_impl_generics, ty_generics, _where_clause) = generics.split_for_impl();
+
+    quote! {
+        #[doc(hidden)]
+        #vis struct #am_group_name_user #am_user_impl_generics #am_user_where_clause{
+            team: std::sync::Arc<lamellar::LamellarTeam>,
+            batch_cnt: usize,
+            cnt: usize,
+            reqs: std::collections::BTreeMap<usize,(Vec<usize>, #am_group_remote_name #ty_generics,usize)>,
+            num_per_batch: usize,
+            pending_reqs: Vec<lamellar::TypedAmGroupBatchReq<Am::Output>>,
         }
     }
 }
@@ -429,9 +474,33 @@ pub(crate) fn generate_am_group(
         &lamellar,
     );
 
+    let mut am_user_generics = generics.clone();
+    am_user_generics.params.push(syn::GenericParam::Type(
+        syn::parse_str(&format!("Am: {}::active_messaging::LamellarAM", lamellar)).unwrap(),
+    ));
+    let mut am_group_user_type = format!("{}<", am_group_user_name);
+    am_user_generics.type_params_mut().for_each(|tp| {
+        if tp.ident == "Am" {
+            am_group_user_type += "Self,";
+        } else {
+            am_group_user_type += &format!("{},", tp.ident);
+        }
+    });
+    am_group_user_type += ">";
+    let am_group_user_type: syn::Type = syn::parse_str(&am_group_user_type).unwrap();
+    // let (_am_user_impl_generics, _am_user_ty_generics, _am_user_where_clause) =
+    //     am_user_generics.split_for_impl();
+
+    let mut create_am_user_generics = generics.clone();
+    create_am_user_generics.params.push(syn::GenericParam::Type(
+        syn::parse_str(&format!("U: Into<{}::ArcLamellarTeam>", lamellar)).unwrap(),
+    ));
+    let (create_am_user_impl_generics, _create_am_user_ty_generics, _create_am_user_where_clause) =
+        create_am_user_generics.split_for_impl();
+
     let expanded = quote! {
         impl #impl_generics #orig_name #ty_generics #where_clause{
-            fn create_am_group<U: Into<#lamellar::ArcLamellarTeam>>(team: U) -> #am_group_user_name #impl_generics {
+            pub fn create_am_group #create_am_user_impl_generics (team: U) -> #am_group_user_type{
                 #am_group_user_name::new(team.into().team.clone())
             }
         }
@@ -546,18 +615,18 @@ fn create_am_group_remote(
                 #field_getters
                 #static_field_getters
 
-                fn new(am: &#name) -> Self {
+                 fn new(am: &#name) -> Self {
                     #am_group_name {
                         #field_news
                         #static_field_inits
                     }
                 }
 
-                fn add_am(&mut self, am: #name) {
+                 fn add_am(&mut self, am: #name) {
                     #field_inits
                 }
 
-                fn len(&self) -> usize {
+                 fn len(&self) -> usize {
                     #my_len
                 }
             }
@@ -579,6 +648,13 @@ pub(crate) fn create_am_group_structs(
     lamellar: &proc_macro2::TokenStream,
     local: bool,
 ) -> (proc_macro2::TokenStream, proc_macro2::TokenStream) {
+    let am_group_user_struct = generate_am_group_user_struct(
+        generics,
+        vis,
+        &get_am_group_user_name(&name),
+        &get_am_group_name(&format_ident!("{}", name)),
+    );
+
     let (am_group_remote, am_group_remote_traits) = create_am_group_remote(
         generics,
         attributes,
@@ -594,6 +670,7 @@ pub(crate) fn create_am_group_structs(
 
     (
         quote! {
+            #am_group_user_struct
             #am_group_remote
         },
         quote! {
