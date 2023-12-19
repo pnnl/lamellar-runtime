@@ -415,6 +415,7 @@ struct InnerCQ {
     recv_cnt: Arc<AtomicUsize>,
     put_amt: Arc<AtomicUsize>,
     get_amt: Arc<AtomicUsize>,
+    alloc_id: Arc<AtomicUsize>,
     active: Arc<AtomicU8>,
 }
 
@@ -560,6 +561,7 @@ impl InnerCQ {
             recv_cnt: Arc::new(AtomicUsize::new(0)),
             put_amt: Arc::new(AtomicUsize::new(0)),
             get_amt: Arc::new(AtomicUsize::new(0)),
+            alloc_id: Arc::new(AtomicUsize::new(0)),
             active: active,
         }
     }
@@ -616,8 +618,8 @@ impl InnerCQ {
             }
             if do_alloc {
                 // println!(
-                //     "need to alloc new pool {:?}",
-                //     std::backtrace::Backtrace::capture()
+                    //     "need to alloc new pool {:?}",
+                    //     std::backtrace::Backtrace::capture()
                 // );
                 self.send_alloc_inner(&mut alloc_buf, min_size);
             }
@@ -804,51 +806,69 @@ impl InnerCQ {
         self.send_panic_inner(&mut panic_buf);
     }
 
+    // need to include  a "barrier" count...
     #[tracing::instrument(skip_all)]
     fn send_alloc_inner(&self, alloc_buf: &mut Box<[CmdMsg]>, min_size: usize) {
-        if alloc_buf[self.my_pe].hash() == self.clear_cmd.hash() {
+        let mut new_alloc = true;
+        while new_alloc {
+            new_alloc = false;
+            let alloc_id = self.alloc_id.fetch_add(1, Ordering::SeqCst);
+            // need to loop incase a new alloc comes in aftet this one, but recursion and mut& T dont play nicely...
+            if alloc_buf[self.my_pe].hash() == self.clear_cmd.hash() {
+                let cmd = &mut alloc_buf[self.my_pe];
+                cmd.daddr = alloc_id;
+                cmd.dsize = min_size;
+                cmd.cmd = Cmd::Alloc;
+                cmd.msg_hash = 0;
+                cmd.calc_hash();
+                for pe in 0..self.num_pes {
+                    if pe != self.my_pe {
+                        // println!("putting alloc cmd to pe {:?}", pe);
+                        self.comm.put(pe, cmd.as_bytes(), cmd.as_addr());
+                    }
+                }
+            }
+            let mut start = std::time::Instant::now();
+            for pe in 0..self.num_pes {
+                while !alloc_buf[pe].check_hash() || alloc_buf[pe].cmd != Cmd::Alloc {
+                    self.comm.flush();
+                    std::thread::yield_now();
+                    if start.elapsed().as_secs_f64() > 60.0 {
+                        println!("waiting to alloc: {:?} {:?}", alloc_buf, alloc_id);
+                        start = std::time::Instant::now();
+                    }
+                }
+                // println!(" pe {:?} ready to alloc {:?} {:?}", pe, alloc_id, min_size);
+            }
+            // panic!("exiting");
+
+            self.comm.alloc_pool(min_size);
             let cmd = &mut alloc_buf[self.my_pe];
             cmd.daddr = 0;
-            cmd.dsize = min_size;
-            cmd.cmd = Cmd::Alloc;
+            cmd.dsize = 0;
+            cmd.cmd = Cmd::Clear;
             cmd.msg_hash = 0;
             cmd.calc_hash();
             for pe in 0..self.num_pes {
                 if pe != self.my_pe {
-                    // println!("putting alloc cmd to pe {:?}", pe);
+                    // println!("putting clear cmd to pe {:?}", pe);
                     self.comm.put(pe, cmd.as_bytes(), cmd.as_addr());
                 }
             }
-        }
-        for pe in 0..self.num_pes {
-            while !alloc_buf[pe].check_hash() || alloc_buf[pe].cmd != Cmd::Alloc {
-                std::thread::yield_now();
+            for pe in 0..self.num_pes {
+                while !alloc_buf[pe].check_hash() || alloc_buf[pe].cmd != Cmd::Clear {
+                    if alloc_buf[pe].cmd == Cmd::Alloc {
+                        if alloc_buf[pe].daddr > alloc_id {
+                            new_alloc = true;
+                            break;
+                        }
+                    }
+                    std::thread::yield_now();
+                }
+                // println!(" pe {:?} has alloced", pe);
             }
-            // println!(" pe {:?} ready to alloc", pe);
-        }
-        // panic!("exiting");
-
-        self.comm.alloc_pool(min_size);
-        let cmd = &mut alloc_buf[self.my_pe];
-        cmd.daddr = 0;
-        cmd.dsize = 0;
-        cmd.cmd = Cmd::Clear;
-        cmd.msg_hash = 0;
-        cmd.calc_hash();
-        for pe in 0..self.num_pes {
-            if pe != self.my_pe {
-                // println!("putting clear cmd to pe {:?}", pe);
-                self.comm.put(pe, cmd.as_bytes(), cmd.as_addr());
+            // println!("created new alloc pool");
             }
-        }
-        for pe in 0..self.num_pes {
-            while !alloc_buf[pe].check_hash() || alloc_buf[pe].cmd != Cmd::Clear {
-                std::thread::yield_now();
-            }
-            // println!(" pe {:?} has alloced", pe);
-        }
-        // println!("created new alloc pool");
-    }
 
     #[tracing::instrument(skip_all)]
     fn send_panic_inner(&self, panic_buf: &mut Box<[CmdMsg]>) {
