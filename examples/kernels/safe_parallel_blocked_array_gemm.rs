@@ -189,7 +189,7 @@ fn main() {
                         );
                     }
 
-                    let mut c_slice = c.block_on(c.mut_local_data()); //this locks the array
+                    let mut c_slice = c.block_on(c.write_local_data()); //this locks the array
 
                     for row in 0..blocksize {
                         let row_offset = (i_blk * blocksize + row) * n;

@@ -213,6 +213,6 @@ fn main() {
         3,                                      //block size
         (num_pes as f64 / 3.0).ceil() as usize, //num pes in team
     );
-    let blk_stride_team = world.create_team_from_arch(arch);
+        let blk_stride_team = world.create_team_from_arch(arch);
     test_team(&world, blk_stride_team, "blk stride team");
 }
