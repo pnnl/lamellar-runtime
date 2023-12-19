@@ -2,8 +2,8 @@ use crate::lamellae::{AllocationType, Lamellae, LamellaeRDMA};
 use crate::lamellar_arch::LamellarArchRT;
 // use crate::lamellar_memregion::{SharedMemoryRegion,RegisteredMemoryRegion};
 use crate::memregion::MemoryRegion; //, RTMemoryRegionRDMA, RegisteredMemoryRegion};
-use crate::scheduler::{Scheduler, SchedulerQueue};
-use rand::prelude::SliceRandom;
+use crate::scheduler::Scheduler;
+// use rand::prelude::SliceRandom;
 use std::sync::atomic::{AtomicU8, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
@@ -16,7 +16,7 @@ pub(crate) struct Barrier {
     n: usize, // dissemination factor
     num_rounds: usize,
     pub(crate) arch: Arc<LamellarArchRT>,
-    pub(crate) scheduler: Arc<Scheduler>,
+    pub(crate) _scheduler: Arc<Scheduler>,
     lamellae: Arc<Lamellae>,
     barrier_cnt: AtomicUsize,
     barrier_buf: Vec<MemoryRegion<usize>>,
@@ -34,13 +34,14 @@ impl Barrier {
         panic: Arc<AtomicU8>,
     ) -> Barrier {
         let num_pes = arch.num_pes;
-        let n = std::env::var("LAMELLAR_BARRIER_DISSEMNATION_FACTOR")
+        let mut n = std::env::var("LAMELLAR_BARRIER_DISSEMNATION_FACTOR")
             .unwrap_or(DISSEMINATION_FACTOR.to_string())
             .parse::<usize>()
             .unwrap();
-        let num_rounds = if n > 1 {
+        let num_rounds = if n > 1 && num_pes > 2 {
             ((num_pes as f64).log2() / (n as f64).log2()).ceil() as usize
         } else {
+            n = 1;
             (num_pes as f64).log2() as usize
         };
         let (buffs, send_buf) = if let Ok(_my_index) = arch.team_pe(my_pe) {
@@ -88,7 +89,7 @@ impl Barrier {
             n: n,
             num_rounds: num_rounds,
             arch: arch,
-            scheduler: scheduler,
+            _scheduler: scheduler,
             lamellae: lamellae,
             barrier_cnt: AtomicUsize::new(1),
             barrier_buf: buffs,
@@ -135,11 +136,12 @@ impl Barrier {
                         for i in 1..=self.n {
                             let team_send_pe =
                                 (my_index + i * (self.n + 1).pow(round as u32)) % self.num_pes;
-                            if team_send_pe != self.my_pe {
+                            if team_send_pe != my_index {
                                 let send_pe = self.arch.single_iter(team_send_pe).next().unwrap();
                                 // println!(
-                                //     "[ {:?} ] round: {:?}  i: {:?} sending to [{:?} ({:?}) ] id: {:?} buf {:?}",
+                                //     "[ {:?} {:?}] round: {:?}  i: {:?} sending to [{:?} ({:?}) ] id: {:?} buf {:?}",
                                 //     self.my_pe,
+                                //     my_index,
                                 //     round,
                                 //     i,
                                 //     send_pe,
@@ -162,31 +164,35 @@ impl Barrier {
                             }
                         }
                         for i in 1..=self.n {
-                            let team_recv_pe =
-                                (my_index - i * (self.n + 1).pow(round as u32)) % self.num_pes;
-                            let recv_pe = self.arch.single_iter(team_recv_pe).next().unwrap();
-
-                            // println!(
-                            //     "[{:?} ] recv from [{:?} ({:?}) ] id: {:?} buf {:?}",
-                            //     self.my_pe,
-                            //     recv_pe,
-                            //     team_recv_pe,
-                            //     send_buf_slice,
-                            //     unsafe {
-                            //         self.barrier_buf[i - 1]
-                            //             .as_mut_slice()
-                            //             .expect("Data should exist on PE")
-                            //     }
-                            // );
-                            unsafe {
-                                //safe as  each pe is only capable of writing to its own index
-                                while self.barrier_buf[i - 1]
-                                    .as_mut_slice()
-                                    .expect("Data should exist on PE")[round]
-                                    < barrier_id
-                                {
-                                    if s.elapsed().as_secs_f64() > *crate::DEADLOCK_TIMEOUT {
-                                        println!("[WARNING] Potential deadlock detected.\n\
+                            let team_recv_pe = ((my_index as isize
+                                - (i as isize * (self.n as isize + 1).pow(round as u32) as isize))
+                                as isize)
+                                .rem_euclid(self.num_pes as isize)
+                                as isize;
+                            let recv_pe =
+                                self.arch.single_iter(team_recv_pe as usize).next().unwrap();
+                            if team_recv_pe as usize != my_index {
+                                // println!(
+                                //     "[{:?} ] recv from [{:?} ({:?}) ] id: {:?} buf {:?}",
+                                //     self.my_pe,
+                                //     recv_pe,
+                                //     team_recv_pe,
+                                //     send_buf_slice,
+                                //     unsafe {
+                                //         self.barrier_buf[i - 1]
+                                //             .as_mut_slice()
+                                //             .expect("Data should exist on PE")
+                                //     }
+                                // );
+                                unsafe {
+                                    //safe as  each pe is only capable of writing to its own index
+                                    while self.barrier_buf[i - 1]
+                                        .as_mut_slice()
+                                        .expect("Data should exist on PE")[round]
+                                        < barrier_id
+                                    {
+                                        if s.elapsed().as_secs_f64() > *crate::DEADLOCK_TIMEOUT {
+                                            println!("[WARNING] Potential deadlock detected.\n\
                                         Barrier is a collective operation requiring all PEs associated with the distributed object to enter the barrier call.\n\
                                         Please refer to https://docs.rs/lamellar/latest/lamellar/index.html?search=barrier for more information\n\
                                         Note that barriers are often called internally for many collective operations, including constructing new LamellarTeams, LamellarArrays, and Darcs, as well as distributed iteration\n\
@@ -195,19 +201,23 @@ impl Barrier {
                                         To view backtrace set RUST_LIB_BACKTRACE=1\n\
                                         {}",*crate::DEADLOCK_TIMEOUT,std::backtrace::Backtrace::capture());
 
-                                        println!(
-                                            "round: {:?} i: {:?} send_pe: {:?} recv_pe: {:?}",
-                                            round,
-                                            i,
-                                            (my_index + i * (self.n + 1).pow(round as u32))
-                                                % self.num_pes,
-                                            recv_pe
-                                        );
-                                        self.print_bar();
-                                        s = Instant::now();
+                                            println!(
+                                                "[{:?}, {:?}] round: {:?} i: {:?} teamsend_pe: {:?} team_recv_pe: {:?} recv_pe: {:?}",
+                                                self.my_pe,
+                                                my_index,
+                                                round,
+                                                i,
+                                                (my_index + i * (self.n + 1).pow(round as u32))
+                                                    % self.num_pes,
+                                                team_recv_pe,
+                                                recv_pe
+                                            );
+                                            self.print_bar();
+                                            s = Instant::now();
+                                        }
+                                        self.lamellae.flush();
+                                        std::thread::yield_now();
                                     }
-                                    self.lamellae.flush();
-                                    std::thread::yield_now();
                                 }
                             }
                         }

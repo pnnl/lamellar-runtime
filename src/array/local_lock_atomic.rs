@@ -79,8 +79,8 @@ pub struct LocalLockMutLocalData<'a, T: Dist> {
     _lock_guard: RwLockWriteGuardArc<Box<()>>,
 }
 
-// impl<T: Dist> Drop for LocalLockMutLocalData<'_, T>{
-//     fn drop(&mut self){
+// impl<T: Dist> Drop for LocalLockMutLocalData<'_, T> {
+//     fn drop(&mut self) {
 //         // println!("release lock! {:?} {:?}",std::thread::current().id(),std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH));
 //     }
 // }
@@ -425,7 +425,7 @@ impl<T: Dist> LocalLockArray<T> {
     //     self.local_as_slice()
     // }
 
-    // /// Return the calling PE's local data as a [LocalLockLocalData], which allows safe immutable access to local elements.   
+    // /// Return the calling PE's local data as a [LocalLockLocalData], which allows safe immutable access to local elements.
     // ///
     // /// Calling this function will result in a local read lock being captured on the array
     // ///
@@ -473,7 +473,7 @@ impl<T: Dist> LocalLockArray<T> {
     // }
 
     // /// TODO: UPDATE
-    // /// Return the calling PE's local data as a [LocalLockMutLocalData], which allows safe immutable access to local elements.   
+    // /// Return the calling PE's local data as a [LocalLockMutLocalData], which allows safe immutable access to local elements.
     // ///
     // /// Calling this function will result in a local read lock being captured on the array
     // ///

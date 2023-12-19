@@ -494,7 +494,7 @@ impl<T> DarcInner<T> {
         let mut temp_now = Instant::now();
         // let mut first = true;
         let team = self.team();
-        team.flush();
+        // team.flush();
         let am_counters = self.am_counters();
         while am_counters.outstanding_reqs.load(Ordering::SeqCst) > 0 {
             // std::thread::yield_now();
