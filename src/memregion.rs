@@ -751,7 +751,7 @@ impl<T: Dist> MemoryRegion<T> {
                 std::backtrace::Backtrace::capture()
             );
             panic!("cant have zero sized memregion");
-            return Err(anyhow::anyhow!("cant have negative sized memregion"));
+            // return Err(anyhow::anyhow!("cant have negative sized memregion"));
         };
         let temp = MemoryRegion {
             addr: addr,

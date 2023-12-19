@@ -55,6 +55,7 @@ pub(crate) fn rofi_alloc(size: usize, alloc: AllocationType) -> *mut u8 {
         };
 
         if ret != 0 {
+            println!("bt: {:?}", std::backtrace::Backtrace::capture());
             panic!("unable to allocate memory region");
         }
     }
