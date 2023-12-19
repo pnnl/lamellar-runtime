@@ -868,7 +868,9 @@ impl InnerCQ {
                 // println!(" pe {:?} has alloced", pe);
             }
             // println!("created new alloc pool");
-            }
+            
+        }
+    }
 
     #[tracing::instrument(skip_all)]
     fn send_panic_inner(&self, panic_buf: &mut Box<[CmdMsg]>) {
