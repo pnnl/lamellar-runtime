@@ -1,5 +1,7 @@
 use crate::lamellae::comm::*;
-use crate::lamellae::{Des, Lamellae, LamellaeComm, SerializedData, SerializedDataOps};
+use crate::lamellae::{
+    Des, Lamellae, LamellaeComm, LamellaeRDMA, SerializedData, SerializedDataOps,
+};
 use crate::scheduler::{Scheduler, SchedulerQueue};
 
 use parking_lot::Mutex;
@@ -618,8 +620,8 @@ impl InnerCQ {
             }
             if do_alloc {
                 // println!(
-                    //     "need to alloc new pool {:?}",
-                    //     std::backtrace::Backtrace::capture()
+                //     "need to alloc new pool {:?}",
+                //     std::backtrace::Backtrace::capture()
                 // );
                 self.send_alloc_inner(&mut alloc_buf, min_size);
             }
@@ -868,7 +870,6 @@ impl InnerCQ {
                 // println!(" pe {:?} has alloced", pe);
             }
             // println!("created new alloc pool");
-            
         }
     }
 
@@ -1442,6 +1443,7 @@ impl CommandQueue {
             //         self.cq.empty()
             //     );
             // }
+            lamellae.flush();
             async_std::task::yield_now().await;
         }
         // println!("leaving recv_data task {:?}", scheduler.active());
