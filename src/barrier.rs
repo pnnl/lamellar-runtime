@@ -1,5 +1,6 @@
 use crate::lamellae::{AllocationType, Lamellae, LamellaeRDMA};
 use crate::lamellar_arch::LamellarArchRT;
+// use crate::scheduler::SchedulerQueue;
 // use crate::lamellar_memregion::{SharedMemoryRegion,RegisteredMemoryRegion};
 use crate::memregion::MemoryRegion; //, RTMemoryRegionRDMA, RegisteredMemoryRegion};
 use crate::scheduler::Scheduler;
@@ -108,16 +109,65 @@ impl Barrier {
                 .map(|b| b.as_slice().unwrap())
                 .collect::<Vec<_>>();
             println!(
-                "[{:?}] [LAMELLAR BARRIER] {:?} {:?} {:?}",
+                "[{:?}][{:?}] [LAMELLAR BARRIER {:x}] {:?} {:?} {:?}",
+                std::thread::current().id(),
                 self.my_pe,
+                self.barrier_buf[0].addr().unwrap(),
                 buffs,
                 send_buf.as_slice().expect("Data should exist on PE"),
                 self.barrier_cnt.load(Ordering::SeqCst)
             );
         }
     }
-    pub(crate) fn barrier(&self) {
+
+    fn barrier_timeout(
+        &self,
+        s: &mut Instant,
+        my_index: usize,
+        round: usize,
+        i: usize,
+        team_recv_pe: isize,
+        recv_pe: usize,
+        send_buf_slice: &[usize],
+    ) {
+        if s.elapsed().as_secs_f64() > *crate::DEADLOCK_TIMEOUT {
+            println!("[{:?}][WARNING] Potential deadlock detected.\n\
+            Barrier is a collective operation requiring all PEs associated with the distributed object to enter the barrier call.\n\
+            Please refer to https://docs.rs/lamellar/latest/lamellar/index.html?search=barrier for more information\n\
+            Note that barriers are often called internally for many collective operations, including constructing new LamellarTeams, LamellarArrays, and Darcs, as well as distributed iteration\n\
+            A full list of collective operations is found at https://docs.rs/lamellar/latest/lamellar/index.html?search=collective\n\
+            The deadlock timeout can be set via the LAMELLAR_DEADLOCK_TIMEOUT environment variable, the current timeout is {} seconds\n\
+            To view backtrace set RUST_LIB_BACKTRACE=1\n\
+        {}",
+        std::thread::current().id()
+        ,*crate::DEADLOCK_TIMEOUT,std::backtrace::Backtrace::capture());
+
+            println!(
+                "[{:?}][{:?}, {:?}] round: {:?} i: {:?} teamsend_pe: {:?} team_recv_pe: {:?} recv_pe: {:?} id: {:?} buf {:?}",
+                std::thread::current().id(),
+                self.my_pe,
+                my_index,
+                round,
+                i,
+                (my_index + i * (self.n + 1).pow(round as u32))
+                    % self.num_pes,
+                team_recv_pe,
+                recv_pe,
+                send_buf_slice,
+                    unsafe {
+                        self.barrier_buf[i - 1]
+                            .as_mut_slice()
+                            .expect("Data should exist on PE")
+                    }
+            );
+            self.print_bar();
+            *s = Instant::now();
+        }
+    }
+
+    fn barrier_internal<F: Fn()>(&self, wait_func: F) {
         // println!("in barrier");
+        // self.print_bar();
         let mut s = Instant::now();
         if self.panic.load(Ordering::SeqCst) == 0 {
             if let Some(send_buf) = &self.send_buf {
@@ -130,7 +180,11 @@ impl Barrier {
                     let barrier_id = self.barrier_cnt.fetch_add(1, Ordering::SeqCst);
                     send_buf_slice[0] = barrier_id;
                     let barrier_slice = &[barrier_id];
-                    // println!("barrier_id = {:?}", barrier_id);
+                    // println!(
+                    //     "[{:?}] barrier_id = {:?}",
+                    //     std::thread::current().id(),
+                    //     barrier_id
+                    // );
 
                     for round in 0..self.num_rounds {
                         for i in 1..=self.n {
@@ -139,7 +193,8 @@ impl Barrier {
                             if team_send_pe != my_index {
                                 let send_pe = self.arch.single_iter(team_send_pe).next().unwrap();
                                 // println!(
-                                //     "[ {:?} {:?}] round: {:?}  i: {:?} sending to [{:?} ({:?}) ] id: {:?} buf {:?}",
+                                //     "[{:?}][ {:?} {:?}] round: {:?}  i: {:?} sending to [{:?} ({:?}) ] id: {:?} buf {:?}",
+                                //     std::thread::current().id(),
                                 //     self.my_pe,
                                 //     my_index,
                                 //     round,
@@ -173,7 +228,8 @@ impl Barrier {
                                 self.arch.single_iter(team_recv_pe as usize).next().unwrap();
                             if team_recv_pe as usize != my_index {
                                 // println!(
-                                //     "[{:?} ] recv from [{:?} ({:?}) ] id: {:?} buf {:?}",
+                                //     "[{:?}][{:?} ] recv from [{:?} ({:?}) ] id: {:?} buf {:?}",
+                                //     std::thread::current().id(),
                                 //     self.my_pe,
                                 //     recv_pe,
                                 //     team_recv_pe,
@@ -191,32 +247,134 @@ impl Barrier {
                                         .expect("Data should exist on PE")[round]
                                         < barrier_id
                                     {
-                                        if s.elapsed().as_secs_f64() > *crate::DEADLOCK_TIMEOUT {
-                                            println!("[WARNING] Potential deadlock detected.\n\
-                                        Barrier is a collective operation requiring all PEs associated with the distributed object to enter the barrier call.\n\
-                                        Please refer to https://docs.rs/lamellar/latest/lamellar/index.html?search=barrier for more information\n\
-                                        Note that barriers are often called internally for many collective operations, including constructing new LamellarTeams, LamellarArrays, and Darcs, as well as distributed iteration\n\
-                                        A full list of collective operations is found at https://docs.rs/lamellar/latest/lamellar/index.html?search=collective\n\
-                                        The deadlock timeout can be set via the LAMELLAR_DEADLOCK_TIMEOUT environment variable, the current timeout is {} seconds\n\
-                                        To view backtrace set RUST_LIB_BACKTRACE=1\n\
-                                        {}",*crate::DEADLOCK_TIMEOUT,std::backtrace::Backtrace::capture());
-
-                                            println!(
-                                                "[{:?}, {:?}] round: {:?} i: {:?} teamsend_pe: {:?} team_recv_pe: {:?} recv_pe: {:?}",
-                                                self.my_pe,
-                                                my_index,
-                                                round,
-                                                i,
-                                                (my_index + i * (self.n + 1).pow(round as u32))
-                                                    % self.num_pes,
-                                                team_recv_pe,
-                                                recv_pe
-                                            );
-                                            self.print_bar();
-                                            s = Instant::now();
-                                        }
+                                        self.barrier_timeout(
+                                            &mut s,
+                                            my_index,
+                                            round,
+                                            i,
+                                            team_recv_pe,
+                                            recv_pe,
+                                            send_buf_slice,
+                                        );
                                         self.lamellae.flush();
-                                        std::thread::yield_now();
+                                        wait_func();
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        // self.lamellae.flush();
+    }
+
+    pub(crate) fn barrier(&self) {
+        self.barrier_internal(|| {
+            std::thread::yield_now();
+        });
+    }
+
+    // typically we want to block on the barrier and  spin on the barrier flags so that we can quick resume
+    // but for the case of Darcs, or any case where the barrier is being called in a worker thread
+    // we actually want to be able to process other tasks while the barrier is active
+    // pub(crate) fn tasking_barrier(&self) {
+    //     self.barrier_internal(|| {
+    //         self.scheduler.exec_task();
+    //     });
+    // }
+
+    pub(crate) async fn async_barrier(&self) {
+        let mut s = Instant::now();
+        if self.panic.load(Ordering::SeqCst) == 0 {
+            if let Some(send_buf) = &self.send_buf {
+                if let Ok(my_index) = self.arch.team_pe(self.my_pe) {
+                    let send_buf_slice = unsafe {
+                        // im the only thread (remote or local) that can write to this buff
+                        send_buf.as_mut_slice().expect("Data should exist on PE")
+                    };
+
+                    let barrier_id = self.barrier_cnt.fetch_add(1, Ordering::SeqCst);
+                    send_buf_slice[0] = barrier_id;
+                    let barrier_slice = &[barrier_id];
+                    // println!(
+                    //     "[{:?}] barrier_id = {:?}",
+                    //     std::thread::current().id(),
+                    //     barrier_id
+                    // );
+
+                    for round in 0..self.num_rounds {
+                        for i in 1..=self.n {
+                            let team_send_pe =
+                                (my_index + i * (self.n + 1).pow(round as u32)) % self.num_pes;
+                            if team_send_pe != my_index {
+                                let send_pe = self.arch.single_iter(team_send_pe).next().unwrap();
+                                // println!(
+                                //     "[{:?}][ {:?} {:?}] round: {:?}  i: {:?} sending to [{:?} ({:?}) ] id: {:?} buf {:?}",
+                                //     std::thread::current().id(),
+                                //     self.my_pe,
+                                //     my_index,
+                                //     round,
+                                //     i,
+                                //     send_pe,
+                                //     team_send_pe,
+                                //     send_buf_slice,
+                                //     unsafe {
+                                //         self.barrier_buf[i - 1]
+                                //             .as_mut_slice()
+                                //             .expect("Data should exist on PE")
+                                //     }
+                                // );
+                                unsafe {
+                                    self.barrier_buf[i - 1].put_slice(
+                                        send_pe,
+                                        round,
+                                        barrier_slice,
+                                    );
+                                    //safe as we are the only ones writing to our index
+                                }
+                            }
+                        }
+                        for i in 1..=self.n {
+                            let team_recv_pe = ((my_index as isize
+                                - (i as isize * (self.n as isize + 1).pow(round as u32) as isize))
+                                as isize)
+                                .rem_euclid(self.num_pes as isize)
+                                as isize;
+                            let recv_pe =
+                                self.arch.single_iter(team_recv_pe as usize).next().unwrap();
+                            if team_recv_pe as usize != my_index {
+                                // println!(
+                                //     "[{:?}][{:?} ] recv from [{:?} ({:?}) ] id: {:?} buf {:?}",
+                                //     std::thread::current().id(),
+                                //     self.my_pe,
+                                //     recv_pe,
+                                //     team_recv_pe,
+                                //     send_buf_slice,
+                                //     unsafe {
+                                //         self.barrier_buf[i - 1]
+                                //             .as_mut_slice()
+                                //             .expect("Data should exist on PE")
+                                //     }
+                                // );
+                                unsafe {
+                                    //safe as  each pe is only capable of writing to its own index
+                                    while self.barrier_buf[i - 1]
+                                        .as_mut_slice()
+                                        .expect("Data should exist on PE")[round]
+                                        < barrier_id
+                                    {
+                                        self.barrier_timeout(
+                                            &mut s,
+                                            my_index,
+                                            round,
+                                            i,
+                                            team_recv_pe,
+                                            recv_pe,
+                                            send_buf_slice,
+                                        );
+                                        self.lamellae.flush();
+                                        async_std::task::yield_now().await;
                                     }
                                 }
                             }

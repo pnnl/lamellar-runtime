@@ -213,11 +213,11 @@ impl LamellarEnv for LamellarWorld {
         self.team.num_threads_per_pe()
     }
     fn world(&self) -> Arc<LamellarTeam> {
-        println!("LamellarWorld world");
+        // println!("LamellarWorld world");
         self.team.clone()
     }
     fn team(&self) -> Arc<LamellarTeam> {
-        println!("LamellarWorld team");
+        // println!("LamellarWorld team");
         self.team.clone()
     }
 }
@@ -574,11 +574,13 @@ impl LamellarWorldBuilder {
 
         // timer = std::time::Instant::now();
         std::panic::set_hook(Box::new(move |panic_info| {
+            let backtrace = std::backtrace::Backtrace::capture();
             // panics.lock().push(format!("{panic_info}"));
             // for p in panics.lock().iter(){
             //     println!("{p}");
             // }
             println!("{panic_info}");
+            println!("{backtrace:#?}");
 
             if let Some(rt) = weak_rt.upgrade() {
                 println!("trying to shutdown Lamellar Runtime");

@@ -3,12 +3,13 @@ use core::marker::PhantomData;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt;
 use std::ops::{Deref, DerefMut};
+use std::ptr::NonNull;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
 use crate::active_messaging::RemotePtr;
 use crate::darc::local_rw_darc::LocalRwDarc;
-use crate::darc::{Darc, DarcInner, DarcMode, __NetworkDarc};
+use crate::darc::{Darc, DarcInner, DarcMode, WrappedInner, __NetworkDarc};
 use crate::lamellae::LamellaeRDMA;
 use crate::lamellar_team::{IntoLamellarTeam, LamellarTeamRT};
 use crate::{IdError, LamellarEnv, LamellarTeam};
@@ -73,7 +74,12 @@ impl<T> DistRwLock<T> {
             self.readers.fetch_sub(1, Ordering::SeqCst);
             // println!("\t{:?} writers exist dec read count {:?} {:?}",pe,self.readers.load(Ordering::SeqCst),self.writer.load(Ordering::SeqCst));
         }
-        // println!("\t{:?} read locked {:?} {:?}",_pe,self.readers.load(Ordering::SeqCst),self.writer.load(Ordering::SeqCst));
+        // println!(
+        //     "\t{:?} read locked {:?} {:?}",
+        //     _pe,
+        //     self.readers.load(Ordering::SeqCst),
+        //     self.writer.load(Ordering::SeqCst)
+        // );
     }
     async fn async_writer_lock(&self, pe: usize) {
         while let Err(_) =
@@ -86,7 +92,12 @@ impl<T> DistRwLock<T> {
         while self.readers.load(Ordering::SeqCst) != 0 {
             async_std::task::yield_now().await;
         }
-        // println!("\t{:?} write locked {:?} {:?}",pe,self.readers.load(Ordering::SeqCst),self.writer.load(Ordering::SeqCst));
+        // println!(
+        //     "\t{:?} write locked {:?} {:?}",
+        //     pe,
+        //     self.readers.load(Ordering::SeqCst),
+        //     self.writer.load(Ordering::SeqCst)
+        // );
     }
 
     async fn async_collective_writer_lock(&self, pe: usize, collective_cnt: usize) {
@@ -116,15 +127,30 @@ impl<T> DistRwLock<T> {
     ///
     /// The lock must be held when calling this method.
     unsafe fn reader_unlock(&self, _pe: usize) {
-        // println!("\t{:?} reader unlocking  {:?} {:?}",pe,self.readers.load(Ordering::SeqCst),self.writer.load(Ordering::SeqCst));
+        // println!(
+        //     "\t{:?} reader unlocking  {:?} {:?}",
+        //     _pe,
+        //     self.readers.load(Ordering::SeqCst),
+        //     self.writer.load(Ordering::SeqCst)
+        // );
         self.readers.fetch_sub(1, Ordering::SeqCst);
-        // println!("\t{:?} reader unlocked  {:?} {:?}",pe,self.readers.load(Ordering::SeqCst),self.writer.load(Ordering::SeqCst));
+        // println!(
+        //     "\t{:?} reader unlocked  {:?} {:?}",
+        //     _pe,
+        //     self.readers.load(Ordering::SeqCst),
+        //     self.writer.load(Ordering::SeqCst)
+        // );
     }
     /// # Safety
     ///
     /// The lock must be held when calling this method.
     unsafe fn writer_unlock(&self, pe: usize) {
-        // println!("\t{:?} writer unlocking {:?} {:?}",pe,self.readers.load(Ordering::SeqCst),self.writer.load(Ordering::SeqCst));
+        // println!(
+        //     "\t{:?} writer unlocking {:?} {:?}",
+        //     pe,
+        //     self.readers.load(Ordering::SeqCst),
+        //     self.writer.load(Ordering::SeqCst)
+        // );
         if let Err(val) =
             self.writer
                 .compare_exchange(pe, self.team.num_pes, Ordering::SeqCst, Ordering::SeqCst)
@@ -134,7 +160,12 @@ impl<T> DistRwLock<T> {
                 pe, val
             );
         }
-        // println!("\t{:?} writer unlocked {:?} {:?}",pe,self.readers.load(Ordering::SeqCst),self.writer.load(Ordering::SeqCst));
+        // println!(
+        //     "\t{:?} writer unlocked {:?} {:?}",
+        //     pe,
+        //     self.readers.load(Ordering::SeqCst),
+        //     self.writer.load(Ordering::SeqCst)
+        // );
     }
 
     async unsafe fn collective_writer_unlock(&self, pe: usize, collective_cnt: usize) {
@@ -207,7 +238,7 @@ struct UnlockAm {
 #[lamellar_impl::rt_am]
 impl LamellarAM for UnlockAm {
     async fn exec() {
-        // println!("In unlock am {:?}",self);
+        // println!("In unlock am {:?}", self);
         let rwlock = unsafe { &*(self.rwlock_addr as *mut DarcInner<DistRwLock<()>>) }.item(); //we dont actually care about the "type" we wrap here, we just need access to the meta data for the darc
         unsafe {
             match self.lock_type {
@@ -543,6 +574,7 @@ impl<T> GlobalRwDarc<T> {
         )
         .into_future()
         .await;
+        // println!("TID: {:?} async got read lock", std::thread::current().id());
         GlobalRwDarcReadGuard {
             rwlock: self.darc.clone(),
             marker: PhantomData,
@@ -939,7 +971,14 @@ impl<T> GlobalRwDarc<T> {
         let inner = self.inner();
         // println!("into_darc");
         // self.print();
-        inner.block_on_outstanding(DarcMode::Darc, 0);
+        inner.team().block_on(DarcInner::block_on_outstanding(
+            WrappedInner {
+                inner: NonNull::new(self.darc.inner as *mut DarcInner<T>)
+                    .expect("invalid darc pointer"),
+            },
+            DarcMode::Darc,
+            0,
+        ));
         inner.local_cnt.fetch_add(1, Ordering::SeqCst); //we add this here because to account for moving inner into d
         let item = unsafe { Box::from_raw(inner.item as *mut DistRwLock<T>).into_inner() };
         let d = Darc {
@@ -975,7 +1014,14 @@ impl<T> GlobalRwDarc<T> {
         let inner = self.inner();
         // println!("into_localrw");
         // self.print();
-        inner.block_on_outstanding(DarcMode::LocalRw, 0);
+        inner.team().block_on(DarcInner::block_on_outstanding(
+            WrappedInner {
+                inner: NonNull::new(self.darc.inner as *mut DarcInner<T>)
+                    .expect("invalid darc pointer"),
+            },
+            DarcMode::LocalRw,
+            0,
+        ));
         inner.local_cnt.fetch_add(1, Ordering::SeqCst); //we add this here because to account for moving inner into d
         let item = unsafe { Box::from_raw(inner.item as *mut DistRwLock<T>).into_inner() };
         let d = Darc {

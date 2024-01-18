@@ -5,12 +5,13 @@
 use async_lock::{RwLock, RwLockReadGuardArc, RwLockWriteGuardArc};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt;
+use std::ptr::NonNull;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
 use crate::active_messaging::RemotePtr;
 use crate::darc::global_rw_darc::{DistRwLock, GlobalRwDarc};
-use crate::darc::{Darc, DarcInner, DarcMode, __NetworkDarc};
+use crate::darc::{Darc, DarcInner, DarcMode, WrappedInner, __NetworkDarc};
 use crate::lamellae::LamellaeRDMA;
 use crate::lamellar_team::IntoLamellarTeam;
 use crate::scheduler::SchedulerQueue;
@@ -400,7 +401,14 @@ impl<T> LocalRwDarc<T> {
         let inner = self.inner();
         // println!("into_darc");
         // self.print();
-        inner.block_on_outstanding(DarcMode::Darc, 0);
+        inner.team().block_on(DarcInner::block_on_outstanding(
+            WrappedInner {
+                inner: NonNull::new(self.darc.inner as *mut DarcInner<T>)
+                    .expect("invalid darc pointer"),
+            },
+            DarcMode::Darc,
+            0,
+        ));
         // println!("after block on outstanding");
         inner.local_cnt.fetch_add(1, Ordering::SeqCst); //we add this here because to account for moving inner into d
                                                         // let item = unsafe { Box::from_raw(inner.item as *mut Arc<RwLock<T>>).into_inner() };
@@ -446,7 +454,14 @@ impl<T> LocalRwDarc<T> {
         let inner = self.inner();
         // println!("into_darc");
         // self.print();
-        inner.block_on_outstanding(DarcMode::GlobalRw, 0);
+        inner.team().block_on(DarcInner::block_on_outstanding(
+            WrappedInner {
+                inner: NonNull::new(self.darc.inner as *mut DarcInner<T>)
+                    .expect("invalid darc pointer"),
+            },
+            DarcMode::GlobalRw,
+            0,
+        ));
         // println!("after block on outstanding");
         inner.local_cnt.fetch_add(1, Ordering::SeqCst); //we add this here because to account for moving inner into d
         let mut arc_item =

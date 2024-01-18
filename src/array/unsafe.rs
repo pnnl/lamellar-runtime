@@ -366,7 +366,8 @@ impl<T: Dist + 'static> UnsafeArray<T> {
         self.wait_all();
         // println!("block on outstanding");
         // self.inner.data.print();
-        self.inner.data.block_on_outstanding(mode, 0);
+        self.team_rt()
+            .block_on(self.inner.data.block_on_outstanding(mode, 0));
         // self.inner.data.print();
     }
 

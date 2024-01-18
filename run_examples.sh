@@ -2,7 +2,8 @@
 
 
 target_dir=/home/scratch/$USER
-target_dir=$PWD/target
+output_dir=/home/scratch/$USER
+# target_dir=$PWD/target
 root=$PWD
 . $root/../junction-prep.rc
 
@@ -66,7 +67,10 @@ root=$PWD
 # done
 
 ### test using rofi verbs lamellae
-mkdir -p rofiverbs_lamellae
+rm -r ${output_dir}/rofiverbs_lamellae
+rm -r rofiverbs_lamellae
+mkdir -p ${output_dir}/rofiverbs_lamellae
+ln -s ${output_dir}/rofiverbs_lamellae rofiverbs_lamellae
 cd rofiverbs_lamellae
 for toolchain in stable; do #nightly; do
   features=""

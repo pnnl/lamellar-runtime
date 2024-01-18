@@ -345,6 +345,7 @@ pub(crate) fn impl_return_struct(
 
     let generic_phantoms = generics.type_params().fold(quote! {}, |acc, t| {
         let name = quote::format_ident!("_phantom_{}", t.ident.to_string().to_lowercase());
+        let t = &t.ident;
         quote! {#acc
         #name: std::marker::PhantomData<#t>,}
     });

@@ -106,7 +106,7 @@ impl ActiveMessageEngine for RegisteredActiveMessages {
         stall_mark: usize,
         immediate: bool,
     ) {
-        // println!("{am:?}");
+        // println!("[{:?}] {am:?}", std::thread::current().id());
         match am {
             Am::All(req_data, am) => {
                 // println!("{:?}",am.get_id());

@@ -20,7 +20,7 @@ use std::marker::PhantomData;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 #[derive(Debug)]
 pub(crate) struct TaskGroupRequestHandleInner {
@@ -540,7 +540,7 @@ impl LamellarTaskGroup {
         while self.counters.outstanding_reqs.load(Ordering::SeqCst) > 0 {
             // self.team.flush();
             self.team.scheduler.exec_task();
-            if temp_now.elapsed() > Duration::new(600, 0) {
+            if temp_now.elapsed().as_secs_f64() > *crate::DEADLOCK_TIMEOUT {
                 println!(
                     "in task group wait_all mype: {:?} cnt: {:?} {:?}",
                     self.team.world_pe,
@@ -593,6 +593,7 @@ impl LamellarTaskGroup {
             team: self.team.clone(),
             team_addr: self.team.remote_ptr_addr,
         };
+        // println!("[{:?}] task group am all", std::thread::current().id());
         self.team.scheduler.submit_am(Am::All(req_data, func));
         Box::new(TaskGroupMultiRequestHandle {
             inner: self.multi_req.clone(),
@@ -636,6 +637,7 @@ impl LamellarTaskGroup {
             team: self.team.clone(),
             team_addr: self.team.remote_ptr_addr,
         };
+        // println!("[{:?}] task group am pe", std::thread::current().id());
         self.team.scheduler.submit_am(Am::Remote(req_data, func));
         Box::new(TaskGroupRequestHandle {
             inner: self.req.clone(),
@@ -684,6 +686,7 @@ impl LamellarTaskGroup {
             team: self.team.clone(),
             team_addr: self.team.remote_ptr_addr,
         };
+        // println!("[{:?}] task group am local", std::thread::current().id());
         self.team.scheduler.submit_am(Am::Local(req_data, func));
         Box::new(TaskGroupLocalRequestHandle {
             inner: self.local_req.clone(),

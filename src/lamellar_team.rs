@@ -416,7 +416,7 @@ impl LamellarEnv for Arc<LamellarTeam> {
         self.team.num_threads()
     }
     fn world(&self) -> Arc<LamellarTeam> {
-        println!("LamellarTeam world");
+        // println!("LamellarTeam world");
         if let Some(world) = &self.world {
             world.clone()
         } else {
@@ -424,7 +424,7 @@ impl LamellarEnv for Arc<LamellarTeam> {
         }
     }
     fn team(&self) -> Arc<LamellarTeam> {
-        println!("LamellarTeam team");
+        // println!("LamellarTeam team");
         self.clone()
     }
 }
@@ -1310,7 +1310,7 @@ impl LamellarTeamRT {
             // std::thread::yield_now();
             // self.flush();
             self.scheduler.exec_task(); //mmight as well do useful work while we wait
-            if temp_now.elapsed() > Duration::new(600, 0) {
+            if temp_now.elapsed().as_secs_f64() > *crate::DEADLOCK_TIMEOUT {
                 println!(
                     "in team wait_all mype: {:?} cnt: {:?} {:?}",
                     self.world_pe,
@@ -1320,6 +1320,15 @@ impl LamellarTeamRT {
                 temp_now = Instant::now();
             }
         }
+    }
+
+    pub(crate) fn block_on<F>(&self, f: F) -> F::Output
+    where
+        F: Future,
+    {
+        assert!(self.panic.load(Ordering::SeqCst) == 0);
+
+        self.scheduler.block_on(f)
     }
 
     #[tracing::instrument(skip_all)]
@@ -1404,6 +1413,7 @@ impl LamellarTeamRT {
             team_addr: self.remote_ptr_addr,
         };
         // event!(Level::TRACE, "submitting request to scheduler");
+        // println!("[{:?}] team exec all", std::thread::current().id());
         self.scheduler.submit_am(Am::All(req_data, func));
         Box::new(LamellarMultiRequestHandle {
             inner: req,
@@ -1474,6 +1484,7 @@ impl LamellarTeamRT {
             team_addr: self.remote_ptr_addr,
         };
         // event!(Level::TRACE, "submitting request to scheduler");
+        // println!("[{:?}] team am group exec all", std::thread::current().id());
         self.scheduler.submit_am(Am::All(req_data, func));
         Box::new(LamellarMultiRequestHandle {
             inner: req,
@@ -1555,6 +1566,8 @@ impl LamellarTeamRT {
             team: self.clone(),
             team_addr: self.remote_ptr_addr,
         };
+
+        // println!("[{:?}] team exec am pe tg", std::thread::current().id());
         self.scheduler.submit_am(Am::Remote(req_data, func));
 
         Box::new(LamellarRequestHandle {
@@ -1626,6 +1639,11 @@ impl LamellarTeamRT {
             team: self.clone(),
             team_addr: self.remote_ptr_addr,
         };
+
+        // println!(
+        //     "[{:?}] team am group exec am pe tg",
+        //     std::thread::current().id()
+        // );
         self.scheduler.submit_am(Am::Remote(req_data, func));
 
         Box::new(LamellarRequestHandle {
@@ -1689,6 +1707,11 @@ impl LamellarTeamRT {
             team: self.clone(),
             team_addr: self.remote_ptr_addr,
         };
+
+        // println!(
+        //     "[{:?}] team arc exec am all tg",
+        //     std::thread::current().id()
+        // );
         self.scheduler.submit_am(Am::All(req_data, am));
 
         Box::new(LamellarMultiRequestHandle {
@@ -1749,6 +1772,8 @@ impl LamellarTeamRT {
             team: self.clone(),
             team_addr: self.remote_ptr_addr,
         };
+
+        // println!("[{:?}] team arc exec am pe", std::thread::current().id());
         self.scheduler.submit_am(Am::Remote(req_data, am));
 
         Box::new(LamellarRequestHandle {
@@ -1809,6 +1834,11 @@ impl LamellarTeamRT {
             team: self.clone(),
             team_addr: self.remote_ptr_addr,
         };
+
+        // println!(
+        //     "[{:?}] team arc exec am pe immediate",
+        //     std::thread::current().id()
+        // );
         self.scheduler.submit_am_immediate(Am::Remote(req_data, am));
 
         Box::new(LamellarRequestHandle {
@@ -1881,6 +1911,7 @@ impl LamellarTeamRT {
             team: self.clone(),
             team_addr: self.remote_ptr_addr,
         };
+        // println!("[{:?}] team exec am local", std::thread::current().id());
         self.scheduler.submit_am(Am::Local(req_data, func));
 
         Box::new(LamellarLocalRequestHandle {

@@ -25,6 +25,7 @@ impl LamellarAm for DarcAm {
         println!("global r: {:?}", self.global_darc.read().await);
         let temp = *self.darc_tuple.0 + *self.darc_tuple.1;
         println!("temp: {:?}", temp);
+        self.darc.print();
     }
 }
 
@@ -48,7 +49,7 @@ fn main() {
     let my_pe = world.my_pe();
     let num_pes = world.num_pes();
 
-    // println!("here 0");
+    println!("here 0");
 
     let even_team = world.create_team_from_arch(StridedArch::new(
         0,                                      // start pe
@@ -56,18 +57,18 @@ fn main() {
         (num_pes as f64 / 2.0).ceil() as usize, //num pes in team
     ));
 
-    // println!("here 1");
+    println!("here 1");
 
     let global_darc = GlobalRwDarc::new(world.team(), 0).unwrap();
-    // println!("here 2");
+    println!("here 2");
     let read_lock = world.block_on(global_darc.read());
     println!("I have the read lock!!!! {:?}", my_pe);
     drop(read_lock);
     let write_lock = world.block_on(global_darc.write());
     println!("I have the write lock!!!! {:?}", my_pe);
-    std::thread::sleep(std::time::Duration::from_secs(2));
+    std::thread::sleep(std::time::Duration::from_secs(1));
     drop(write_lock);
-    // println!("here3");
+    println!("here3");
     //----
     let local_darc = LocalRwDarc::new(world.team(), 10).unwrap();
     println!("created new local rw");
@@ -88,10 +89,11 @@ fn main() {
     if let Some(team) = even_team {
         let team_darc = Darc::new(team.clone(), AtomicUsize::new(10));
         let mut tg = typed_am_group!(DarcAm, team.clone());
-        println!("created team darc");
+        println!("{:?} created team darc", std::thread::current().id());
         if let Ok(team_darc) = team_darc {
             let test = team_darc.clone();
             test.fetch_add(1, Ordering::Relaxed);
+            println!("after team darc fetch add");
             let darc_am = DarcAm {
                 darc: team_darc,
                 lrw_darc: local_darc.clone(),
@@ -101,20 +103,20 @@ fn main() {
                 darc_tuple: (darc1.clone(), darc2.clone()),
                 my_arc: Darc::new(team.clone(), Arc::new(0)).unwrap(),
             };
-            // println!("here 7");
+            println!("here 7");
             team.exec_am_pe(0, darc_am.clone());
             team.exec_am_all(darc_am.clone());
             tg.add_am_pe(0, darc_am.clone());
-            tg.add_am_all(darc_am.clone());
+            tg.add_am_all(darc_am);
             team.block_on(tg.exec());
-            // println!("here 8");
+            println!("here 8");
         } else {
             // println!("here");
             *(*world.block_on(local_darc.write())) += 1;
         }
     }
-    //--------
-    // println!("here 9");
+    // --------
+    println!("here 9");
 
     // drop(darc1);
     // drop(darc2);

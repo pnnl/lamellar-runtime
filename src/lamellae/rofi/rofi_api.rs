@@ -84,8 +84,9 @@ pub(crate) fn rofi_local_addr(remote_pe: usize, remote_addr: usize) -> usize {
             remote_pe as u32,
         ) as usize
     };
-    // println!("local addr: {:x}",addr);
+
     if addr == 0 {
+        println!("remote_pe: {remote_pe:?} {remote_addr:x}");
         panic!("unable to locate local memory addr");
     }
     addr
@@ -177,7 +178,16 @@ pub(crate) fn rofi_iget<T>(src: usize, dst: &mut [T], pe: usize) -> Result<c_ulo
     let dst_addr = dst.as_ptr() as *mut std::ffi::c_void;
     let size = dst.len() * std::mem::size_of::<T>();
     let txid: c_ulong = 0;
-    //println!("[{:?}] ({:?}{:?}) rofi_iget src: {:x} dst: {:?} pe: {:?} size: {:?}",rofi_get_id(),file!(),line!(),src, dst.as_ptr(),pe, size);
+    // println!(
+    //     "[{:?}] ({:?}{:?}) rofi_iget src: {:x} dst: {:?} pe: {:?} size: {:?}",
+    //     rofi_get_id(),
+    //     file!(),
+    //     line!(),
+    //     src,
+    //     dst.as_ptr(),
+    //     pe,
+    //     size
+    // );
     let mut ret = unsafe { rofisys::rofi_iget(dst_addr, src_addr, size, pe as u32, 0) }; //, &mut txid) };
     while ret == -11 {
         std::thread::yield_now();

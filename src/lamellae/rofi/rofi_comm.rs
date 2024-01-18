@@ -7,7 +7,7 @@ use crate::lamellae::{
 };
 use crate::lamellar_alloc::{BTreeAlloc, LamellarAlloc};
 // use log::trace;
-use parking_lot::{Mutex, RwLock};
+use parking_lot::RwLock;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 
@@ -42,7 +42,7 @@ pub(crate) struct RofiComm {
     pub(crate) put_cnt: Arc<AtomicUsize>,
     pub(crate) get_amt: Arc<AtomicUsize>,
     pub(crate) get_cnt: Arc<AtomicUsize>,
-    comm_mutex: Arc<Mutex<()>>,
+    // comm_mutex: Arc<RwLock<()>>,
     // drop_set: Arc<Mutex<Vec<std::os::raw::c_ulong>>>,
     // any_dropped: Arc<AtomicBool>,
     // alloc_mutex: Arc<Mutex<()>>,
@@ -76,7 +76,7 @@ impl RofiComm {
             put_cnt: Arc::new(AtomicUsize::new(0)),
             get_amt: Arc::new(AtomicUsize::new(0)),
             get_cnt: Arc::new(AtomicUsize::new(0)),
-            comm_mutex: Arc::new(Mutex::new(())),
+            // comm_mutex: Arc::new(RwLock::new(())),
             // drop_set: Arc::new(Mutex::new(Vec::new())),
             // any_dropped: Arc::new(AtomicBool::new(false)),
             // alloc_mutex: Arc::new(Mutex::new(())),
@@ -104,7 +104,7 @@ impl RofiComm {
     #[tracing::instrument(skip_all)]
     fn init_buffer<T>(&self, dst_addr: &mut [T]) {
         let bytes_len = dst_addr.len() * std::mem::size_of::<T>();
-        // println!("{:?} {:?}",dst_addr.as_ptr(),bytes_len);
+        // println!("{:?} {:?}", dst_addr.as_ptr(), bytes_len);
         unsafe {
             if bytes_len % std::mem::size_of::<u64>() == 0 {
                 self.fill_buffer(dst_addr, ROFI_MAGIC_8);
@@ -173,7 +173,8 @@ impl RofiComm {
     }
     #[tracing::instrument(skip_all)]
     fn iget_data<T: Remote>(&self, pe: usize, src_addr: usize, dst_addr: &mut [T]) {
-        let _lock = self.comm_mutex.lock();
+        // println!("iget_data {:?} {:x} {:?}", pe, src_addr, dst_addr.as_ptr());
+        // let _lock = self.comm_mutex.write();
         match rofi_iget(src_addr, dst_addr, pe) {
             //.expect("error in rofi get")
             Err(ret) => {
@@ -211,6 +212,7 @@ impl CommOps for RofiComm {
 
     #[tracing::instrument(skip_all)]
     fn barrier(&self) {
+        // let _lock = self.comm_mutex.write();
         rofi_barrier();
     }
 
@@ -295,14 +297,14 @@ impl CommOps for RofiComm {
     fn alloc(&self, size: usize, alloc: AllocationType) -> AllocResult<usize> {
         //memory segments are aligned on page boundaries so no need to pass in alignment constraint
         // let size = size + size%8;
-        let _lock = self.comm_mutex.lock();
+        // let _lock = self.comm_mutex.write();
         Ok(rofi_alloc(size, alloc) as usize)
     }
 
     #[tracing::instrument(skip_all)]
     fn free(&self, addr: usize) {
         // println!("free {:x}", addr);
-        let _lock = self.comm_mutex.lock();
+        // let _lock = self.comm_mutex.write();
         rofi_release(addr);
     }
 
@@ -314,16 +316,19 @@ impl CommOps for RofiComm {
 
     #[tracing::instrument(skip_all)]
     fn local_addr(&self, remote_pe: usize, remote_addr: usize) -> usize {
+        // let _lock = self.comm_mutex.read();
         rofi_local_addr(remote_pe, remote_addr)
     }
 
     #[tracing::instrument(skip_all)]
     fn remote_addr(&self, pe: usize, local_addr: usize) -> usize {
+        // let _lock = self.comm_mutex.read();
         rofi_remote_addr(pe, local_addr)
     }
 
     #[tracing::instrument(skip_all)]
     fn flush(&self) {
+        // let _lock = self.comm_mutex.write();
         if rofi_flush() != 0 {
             println!("rofi flush error");
         }
@@ -338,7 +343,7 @@ impl CommOps for RofiComm {
         //     _any_dropped: self.any_dropped.clone(),
         // };
         if pe != self.my_pe {
-            let _lock = self.comm_mutex.lock();
+            // let _lock = self.comm_mutex.write();
             // println!("[{:?}]-({:?}) put [{:?}] entry",self.my_pe,0,pe);
 
             let _txid = unsafe { rofi_put(src_addr, dst_addr, pe).expect("error in rofi put") };
@@ -373,7 +378,7 @@ impl CommOps for RofiComm {
         //     _any_dropped: self.any_dropped.clone(),
         // };
         if pe != self.my_pe {
-            let _lock = self.comm_mutex.lock();
+            // let _lock = self.comm_mutex.write();
             let _txid = rofi_iput(src_addr, dst_addr, pe).expect("error in rofi put");
             self.put_amt
                 .fetch_add(src_addr.len() * std::mem::size_of::<T>(), Ordering::SeqCst);
@@ -406,20 +411,20 @@ impl CommOps for RofiComm {
         //     _drop_set: self.drop_set.clone(),
         //     _any_dropped: self.any_dropped.clone(),
         // };
+        // let lock = self.comm_mutex.write();
         for pe in 0..self.my_pe {
-            let _lock = self.comm_mutex.lock();
             let _txid = unsafe { rofi_put(src_addr, dst_addr, pe).expect("error in rofi put") };
             // if txid != 0 {
             //     req.txids.push(txid);
             // }
         }
         for pe in self.my_pe + 1..self.num_pes {
-            let _lock = self.comm_mutex.lock();
             let _txid = unsafe { rofi_put(src_addr, dst_addr, pe).expect("error in rofi put") };
             // if txid != 0 {
             //     req.txids.push(txid);
             // }
         }
+        // drop(lock);
         unsafe {
             std::ptr::copy_nonoverlapping(src_addr.as_ptr(), dst_addr as *mut T, src_addr.len());
         }
@@ -444,7 +449,7 @@ impl CommOps for RofiComm {
         // };
         if pe != self.my_pe {
             // unsafe {
-            let _lock = self.comm_mutex.lock();
+            // let _lock = self.comm_mutex.write();
             match rofi_iget(src_addr, dst_addr, pe) {
                 //not using rofi_get due to lost requests (TODO: implement better resource management in rofi)
                 Err(ret) => {
@@ -501,7 +506,13 @@ impl CommOps for RofiComm {
             // );
             self.get_cnt.fetch_add(1, Ordering::SeqCst);
             let rem_bytes = bytes_len % std::mem::size_of::<u64>();
-            // println!("{:x} {:?} {:?} {:?}",src_addr,dst_addr.as_ptr(),bytes_len,rem_bytes);
+            // println!(
+            //     "{:x} {:?} {:?} {:?}",
+            //     src_addr,
+            //     dst_addr.as_ptr(),
+            //     bytes_len,
+            //     rem_bytes
+            // );
             if bytes_len >= std::mem::size_of::<u64>() {
                 let temp_dst_addr = &mut dst_addr[rem_bytes..];
                 self.init_buffer(temp_dst_addr);
@@ -534,7 +545,7 @@ impl CommOps for RofiComm {
                                 while buf0[i] != buf1[i] {
                                     std::thread::yield_now();
                                     if timer.elapsed().as_secs_f64() > 1.0 {
-                                        println!("iget {:?} {:?} {:?}", i, buf0[i], buf1[i]);
+                                        // println!("iget {:?} {:?} {:?}", i, buf0[i], buf1[i]);
                                         self.iget_data(pe, src_addr, temp_dst_addr);
                                         self.iget_data(pe, src_addr, buf1);
                                         timer = std::time::Instant::now();
@@ -571,7 +582,7 @@ impl CommOps for RofiComm {
         // };
         if pe != self.my_pe {
             // unsafe {
-            let _lock = self.comm_mutex.lock();
+            // let _lock = self.comm_mutex.write();
             // println!("[{:?}]-({:?}) iget_relative [{:?}] entry",self.my_pe,thread::current().id(),pe);
 
             match rofi_iget(*self.rofi_base_address.read() + src_addr, dst_addr, pe) {
@@ -632,6 +643,7 @@ impl Drop for RofiComm {
         if self.alloc.read().len() > 1 {
             println!("[LAMELLAR INFO] {:?} additional rt memory pools were allocated, performance may be increased using a larger initial pool, set using the LAMELLAR_MEM_SIZE envrionment variable. Current initial size = {:?}",self.alloc.read().len()-1, ROFI_MEM.load(Ordering::SeqCst));
         }
+        // let _lock = self.comm_mutex.write();
         rofi_barrier();
         // std::thread::sleep(std::time::Duration::from_millis(1000));
         // //we can probably do a final "put" to each node where we specify we we are done, then once all nodes have done this no further communication amongst them occurs...
