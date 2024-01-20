@@ -13,7 +13,8 @@ categories = ["asynchronous","concurrency", "network-programming","science"]
 
 [dependencies]
 lamellar-impl = { version = "0.6.0", path = "impl" }
-rofisys = { version ="0.2.7", optional = true }
+#rofisys = { version ="0.2.7", optional = true }
+rofisys = { path = "../rofi-sys-junction", optional = true }
 inventory = "0.3" 
 serde = { version = "1.0.147", features = ["derive"] }
 serde_bytes = "0.11.7"

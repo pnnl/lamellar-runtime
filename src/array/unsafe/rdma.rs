@@ -47,7 +47,7 @@ impl<T: Dist> UnsafeArray<T> {
                 // println!("pe {:?} offset {:?} range: {:?}-{:?} dist_index {:?} pe_start_index {:?} num_elems {:?} len {:?}", pe, offset, buf_index, buf_index+len, dist_index, pe_start_index, num_elems_on_pe, len);
                 match op {
                     ArrayRdmaCmd::Put => unsafe {
-                        self.inner.data.mem_region.put(
+                        self.inner.data.mem_region.blocking_put(
                             pe,
                             offset,
                             buf.sub_region(buf_index..(buf_index + len)),
@@ -348,7 +348,7 @@ impl<T: Dist> UnsafeArray<T> {
     ///
     /// # Safety
     /// This call is always unsafe as mutual exclusitivity is not enforced, i.e. many other reader/writers can exist simultaneously.
-    /// Additionally, when this call returns the underlying fabric provider may or may not have already copied the data buffer
+    /// Additionally, when this call returns the data buffer is safe to reuse, but the data may or may not have been delivered to the remote memory
     ///
     /// # One-sided Operation
     /// the calling PE initaites the remote transfer
@@ -400,22 +400,21 @@ impl<T: Dist> UnsafeArray<T> {
     /// PE2: array data [6,7,8]
     /// PE3: array data [9,10,11]
     ///```
-    pub unsafe fn put_unchecked<U: TeamInto<LamellarArrayRdmaInput<T>>>(
+    pub unsafe fn put_unchecked<U: TeamTryInto<LamellarArrayRdmaInput<T>> + LamellarRead>(
         &self,
         index: usize,
         buf: U,
     ) {
-        match self.inner.distribution {
-            Distribution::Block => self.block_op(
-                ArrayRdmaCmd::Put,
-                index,
-                buf.team_into(&self.inner.data.team),
-            ),
-            Distribution::Cyclic => self.cyclic_op(
-                ArrayRdmaCmd::Put,
-                index,
-                buf.team_into(&self.inner.data.team),
-            ),
+        match buf.team_try_into(&self.inner.data.team) {
+            Ok(buf) => match self.inner.distribution {
+                Distribution::Block => {
+                    self.block_op(ArrayRdmaCmd::Put, index, buf);
+                }
+                Distribution::Cyclic => {
+                    self.cyclic_op(ArrayRdmaCmd::Put, index, buf);
+                }
+            },
+            Err(_) => {}
         };
     }
 
@@ -478,23 +477,22 @@ impl<T: Dist> UnsafeArray<T> {
     /// PE3: buf data [12,12,12,12,12,12,12,12,12,12,12,12]
     /// PE0: buf data [0,1,2,3,4,5,6,7,8,9,10,11] //we only did the "get" on PE0, also likely to be printed last since the other PEs do not wait for PE0 in this example
     ///```
-    pub unsafe fn get_unchecked<U: TeamInto<LamellarArrayRdmaOutput<T>>>(
+    pub unsafe fn get_unchecked<U: TeamTryInto<LamellarArrayRdmaOutput<T>>>(
         &self,
         index: usize,
         buf: U,
     ) {
-        match self.inner.distribution {
-            Distribution::Block => self.block_op(
-                ArrayRdmaCmd::Get(false),
-                index,
-                buf.team_into(&self.inner.data.team),
-            ),
-            Distribution::Cyclic => self.cyclic_op(
-                ArrayRdmaCmd::Get(false),
-                index,
-                buf.team_into(&self.inner.data.team),
-            ),
-        };
+        match buf.team_try_into(&self.inner.data.team) {
+            Ok(buf) => match self.inner.distribution {
+                Distribution::Block => {
+                    self.block_op(ArrayRdmaCmd::Get(false), index, buf);
+                }
+                Distribution::Cyclic => {
+                    self.cyclic_op(ArrayRdmaCmd::Get(false), index, buf);
+                }
+            },
+            Err(_) => {}
+        }
     }
 
     #[doc(alias("One-sided", "onesided"))]
@@ -557,14 +555,8 @@ impl<T: Dist> UnsafeArray<T> {
         // println!("unsafe iget {:?}",index);
         if let Ok(buf) = buf.team_try_into(&self.inner.data.team) {
             match self.inner.distribution {
-                Distribution::Block => {
-                    self.block_op(ArrayRdmaCmd::Get(true), index, buf)
-                }
-                Distribution::Cyclic => self.cyclic_op(
-                    ArrayRdmaCmd::Get(true),
-                    index,
-                    buf,
-                ),
+                Distribution::Block => self.block_op(ArrayRdmaCmd::Get(true), index, buf),
+                Distribution::Cyclic => self.cyclic_op(ArrayRdmaCmd::Get(true), index, buf),
             };
         }
     }
@@ -626,9 +618,7 @@ impl<T: Dist> UnsafeArray<T> {
         U: TeamTryInto<LamellarArrayRdmaOutput<T>>,
     {
         match buf.team_try_into(&self.team_rt()) {
-            Ok(buf) => self
-                .internal_get(index, buf)
-                .into_future(),
+            Ok(buf) => self.internal_get(index, buf).into_future(),
             Err(_) => Box::pin(async move { () }),
         }
     }
@@ -759,9 +749,7 @@ impl<T: Dist> LamellarArrayPut<T> for UnsafeArray<T> {
         buf: U,
     ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
         match buf.team_try_into(&self.team_rt()) {
-            Ok(buf) => self
-                .internal_put(index, buf)
-                .into_future(),
+            Ok(buf) => self.internal_put(index, buf).into_future(),
             Err(_) => Box::pin(async move { () }),
         }
     }

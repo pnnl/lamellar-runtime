@@ -343,6 +343,7 @@ impl<T: Dist> LamellarRead for &T {}
 
 impl<T: Dist> LamellarRead for Vec<T> {}
 impl<T: Dist> LamellarRead for &Vec<T> {}
+impl<T: Dist> LamellarRead for &[T] {}
 
 impl<T: Dist> TeamFrom<&T> for LamellarArrayRdmaInput<T> {
     /// Constructs a single element [OneSidedMemoryRegion][crate::memregion::OneSidedMemoryRegion] and copies `val` into it
@@ -383,6 +384,20 @@ impl<T: Dist> TeamFrom<Vec<T>> for LamellarArrayRdmaInput<T> {
 impl<T: Dist> TeamFrom<&Vec<T>> for LamellarArrayRdmaInput<T> {
     /// Constructs a [OneSidedMemoryRegion][crate::memregion::OneSidedMemoryRegion] equal in length to `vals` and copies `vals` into it
     fn team_from(vals: &Vec<T>, team: &Pin<Arc<LamellarTeamRT>>) -> Self {
+        let buf: OneSidedMemoryRegion<T> = team.alloc_one_sided_mem_region(vals.len());
+        unsafe {
+            std::ptr::copy_nonoverlapping(
+                vals.as_ptr(),
+                buf.as_mut_ptr().expect("Data should exist on PE"),
+                vals.len(),
+            );
+        }
+        LamellarArrayRdmaInput::LocalMemRegion(buf)
+    }
+}
+impl<T:Dist> TeamFrom<&[T]> for LamellarArrayRdmaInput<T> {
+    /// Constructs a [OneSidedMemoryRegion][crate::memregion::OneSidedMemoryRegion] equal in length to `vals` and copies `vals` into it
+    fn team_from(vals: &[T], team: &Pin<Arc<LamellarTeamRT>>) -> Self {
         let buf: OneSidedMemoryRegion<T> = team.alloc_one_sided_mem_region(vals.len());
         unsafe {
             std::ptr::copy_nonoverlapping(
@@ -439,6 +454,18 @@ impl<T: Dist> TeamTryFrom<Vec<T>> for LamellarArrayRdmaInput<T> {
 
 impl<T: Dist> TeamTryFrom<&Vec<T>> for LamellarArrayRdmaInput<T> {
     fn team_try_from(val: &Vec<T>, team: &Pin<Arc<LamellarTeamRT>>) -> Result<Self, anyhow::Error> {
+        if val.len() == 0 {
+            Err(anyhow::anyhow!(
+                "Trying to create an empty LamellarArrayRdmaInput"
+            ))
+        } else {
+            Ok(LamellarArrayRdmaInput::team_from(val, team))
+        }
+    }
+}
+
+impl<T: Dist> TeamTryFrom<&[T]> for LamellarArrayRdmaInput<T> {
+    fn team_try_from(val: &[T], team: &Pin<Arc<LamellarTeamRT>>) -> Result<Self, anyhow::Error> {
         if val.len() == 0 {
             Err(anyhow::anyhow!(
                 "Trying to create an empty LamellarArrayRdmaInput"

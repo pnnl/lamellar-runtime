@@ -940,6 +940,10 @@ impl AMCounters {
     }
 }
 
+// pub trait LamellarExecutor {
+//     fn spawn_task<F: Future>(&self, future: F) -> F::Output;
+// }
+
 /// The interface for launching, executing, and managing Lamellar Active Messages .
 pub trait ActiveMessaging {
     #[doc(alias("One-sided", "onesided"))]

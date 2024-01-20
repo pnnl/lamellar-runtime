@@ -61,7 +61,7 @@ impl<T: Dist> ReadOnlyArray<T> {
     /// PE3: buf data [12,12,12,12,12,12,12,12,12,12,12,12]
     /// PE0: buf data [0,0,0,0,0,0,0,0,0,0,0,0] //we only did the "get" on PE0, also likely to be printed last since the other PEs do not wait for PE0 in this example
     ///```
-    pub unsafe fn get_unchecked<U: TeamInto<LamellarArrayRdmaOutput<T>> + LamellarWrite>(
+    pub unsafe fn get_unchecked<U: TeamTryInto<LamellarArrayRdmaOutput<T>> + LamellarWrite>(
         &self,
         index: usize,
         buf: U,

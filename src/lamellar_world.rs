@@ -23,6 +23,7 @@ lazy_static! {
     pub(crate) static ref LAMELLAES: RwLock<HashMap<Backend, Arc<Lamellae>>> =
         RwLock::new(HashMap::new());
     pub(crate) static ref INIT: AtomicBool = AtomicBool::new(false);
+    pub(crate) static ref MAIN_THREAD: std::thread::ThreadId = std::thread::current().id();
 }
 
 /// An abstraction representing all the PE's (processing elements) within a given distributed execution.
@@ -505,6 +506,8 @@ impl LamellarWorldBuilder {
         assert_eq!(INIT.fetch_or(true, Ordering::SeqCst), false, "ERROR: Building more than one world is not allowed, you may want to consider cloning or creating a reference to first instance");
         // let teams = Arc::new(RwLock::new(HashMap::new()));
         // println!("{:?}: INIT", timer.elapsed());
+
+        assert!(std::thread::current().id() == *MAIN_THREAD);
 
         // timer = std::time::Instant::now();
         let mut lamellae_builder = create_lamellae(self.primary_lamellae);

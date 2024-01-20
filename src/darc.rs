@@ -632,7 +632,7 @@ impl<T> DarcInner<T> {
                 );
                     timer = std::time::Instant::now();
                 }
-                team.scheduler.exec_task();
+                async_std::task::yield_now().await;
             }
         }
 

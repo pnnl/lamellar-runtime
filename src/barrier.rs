@@ -1,6 +1,6 @@
 use crate::lamellae::{AllocationType, Lamellae, LamellaeRDMA};
 use crate::lamellar_arch::LamellarArchRT;
-// use crate::scheduler::SchedulerQueue;
+use crate::scheduler::SchedulerQueue;
 // use crate::lamellar_memregion::{SharedMemoryRegion,RegisteredMemoryRegion};
 use crate::memregion::MemoryRegion; //, RTMemoryRegionRDMA, RegisteredMemoryRegion};
 use crate::scheduler::Scheduler;
@@ -109,7 +109,7 @@ impl Barrier {
                 .map(|b| b.as_slice().unwrap())
                 .collect::<Vec<_>>();
             println!(
-                "[{:?}][{:?}] [LAMELLAR BARRIER {:x}] {:?} {:?} {:?}",
+                " [LAMELLAR BARRIER][{:?}][{:?}][{:x}] {:?} {:?} {:?}",
                 std::thread::current().id(),
                 self.my_pe,
                 self.barrier_buf[0].addr().unwrap(),
@@ -131,10 +131,11 @@ impl Barrier {
         send_buf_slice: &[usize],
     ) {
         if s.elapsed().as_secs_f64() > *crate::DEADLOCK_TIMEOUT {
-            println!("[{:?}][WARNING] Potential deadlock detected.\n\
+            println!("[LAMELLAR WARNING][{:?}] Potential deadlock detected.\n\
             Barrier is a collective operation requiring all PEs associated with the distributed object to enter the barrier call.\n\
             Please refer to https://docs.rs/lamellar/latest/lamellar/index.html?search=barrier for more information\n\
             Note that barriers are often called internally for many collective operations, including constructing new LamellarTeams, LamellarArrays, and Darcs, as well as distributed iteration\n\
+            You may be seeing this message if you have called barrier within an async context (meaning it was executed on a worker thread).\n\
             A full list of collective operations is found at https://docs.rs/lamellar/latest/lamellar/index.html?search=collective\n\
             The deadlock timeout can be set via the LAMELLAR_DEADLOCK_TIMEOUT environment variable, the current timeout is {} seconds\n\
             To view backtrace set RUST_LIB_BACKTRACE=1\n\
@@ -270,19 +271,31 @@ impl Barrier {
     }
 
     pub(crate) fn barrier(&self) {
-        self.barrier_internal(|| {
-            std::thread::yield_now();
-        });
+        if std::thread::current().id() == *crate::MAIN_THREAD {
+            self.barrier_internal(|| {
+                // std::thread::yield_now();
+                self._scheduler.exec_task();
+            });
+        } else {
+            if let Ok(val) = std::env::var("LAMELLAR_BARRIER_WARNING") {
+                if val != "0" && val != "false" && val != "no" && val != "off" {
+                    println!("[LAMELLAR WARNING] You are calling barrier from within the main thread (aka from a synchronous context), this is experimental and may result in deadlock! Set LAMELLAR_BARRIER_WARNING=0 to disable this warning");
+                }
+            } else {
+                println!("[LAMELLAR WARNING] You are calling barrier from within a worker thread (aka within an async context), this is experimental and may result in deadlock! Set  LAMELLAR_BARRIER_WARNING=0 to disable this warning");
+            }
+            self.tasking_barrier()
+        }
     }
 
     // typically we want to block on the barrier and  spin on the barrier flags so that we can quick resume
     // but for the case of Darcs, or any case where the barrier is being called in a worker thread
     // we actually want to be able to process other tasks while the barrier is active
-    // pub(crate) fn tasking_barrier(&self) {
-    //     self.barrier_internal(|| {
-    //         self.scheduler.exec_task();
-    //     });
-    // }
+    pub(crate) fn tasking_barrier(&self) {
+        self.barrier_internal(|| {
+            self._scheduler.exec_task();
+        });
+    }
 
     pub(crate) async fn async_barrier(&self) {
         let mut s = Instant::now();
