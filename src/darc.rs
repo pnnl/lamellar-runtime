@@ -64,7 +64,7 @@ use crate::barrier::Barrier;
 use crate::lamellae::{AllocationType, Backend, LamellaeComm, LamellaeRDMA};
 use crate::lamellar_team::{IntoLamellarTeam, LamellarTeamRT};
 use crate::lamellar_world::LAMELLAES;
-use crate::scheduler::SchedulerQueue;
+// use crate::scheduler::SchedulerQueue;
 use crate::{IdError, LamellarEnv, LamellarTeam};
 
 #[doc(hidden)]
@@ -423,7 +423,7 @@ impl<T> DarcInner<T> {
             unsafe { std::slice::from_raw_parts_mut(inner.mode_addr as *mut u8, inner.num_pes) };
         let mut prev_ref_cnts = vec![0usize; inner.num_pes];
         let mut barrier_id = 1usize;
-       
+
         let barrier_ref_cnt_slice = unsafe {
             std::slice::from_raw_parts_mut(inner.mode_ref_cnt_addr as *mut usize, inner.num_pes)
         };
@@ -487,7 +487,7 @@ impl<T> DarcInner<T> {
                     );
                     // dist_cnts_changed = true;
                     outstanding_refs = true;
-                    barrier_id = 0; 
+                    barrier_id = 0;
                 }
             }
             rdma.flush();
@@ -531,7 +531,7 @@ impl<T> DarcInner<T> {
             // }
             if outstanding_refs {
                 // println!("reseting barrier_id");
-                barrier_id = 0; 
+                barrier_id = 0;
             }
             rdma.flush();
             let barrier_fut = unsafe { inner.barrier.as_ref().unwrap().async_barrier() };
@@ -847,7 +847,7 @@ impl<T> Darc<T> {
             + team_rt.num_pes * std::mem::size_of::<usize>();
         // println!("creating new darc");
 
-        team_rt.barrier();
+        team_rt.tasking_barrier();
         // println!("creating new darc after barrier");
         let addr = team_rt
             .lamellae
@@ -933,7 +933,7 @@ impl<T> Darc<T> {
         //     DARC_ID.load(Ordering::Relaxed)
         // );
         // d.print();
-        team_rt.barrier();
+        team_rt.tasking_barrier();
         // team_rt.print_cnt();
         Ok(d)
     }

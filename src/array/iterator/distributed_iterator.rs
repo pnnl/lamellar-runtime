@@ -92,7 +92,7 @@ pub struct DistIterCollectHandle<T: Dist + ArrayOps, A: From<UnsafeArray<T>> + S
 
 impl<T: Dist + ArrayOps, A: From<UnsafeArray<T>> + SyncSend> DistIterCollectHandle<T, A> {
     fn create_array(&self, local_vals: &Vec<T>) -> A {
-        self.team.barrier();
+        self.team.tasking_barrier();
         let local_sizes =
             UnsafeArray::<usize>::new(self.team.clone(), self.team.num_pes, Distribution::Block);
         unsafe {

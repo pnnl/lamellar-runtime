@@ -79,7 +79,7 @@ where
 {
     type Output = T;
     async fn into_future(mut self: Box<Self>) -> Self::Output {
-        self.team.barrier();
+        self.team.async_barrier().await;
         let local_sums = UnsafeArray::<T>::new(&self.team, self.team.num_pes, Distribution::Block);
         let local_sum = futures::future::join_all(self.reqs.drain(..).map(|req| req.into_future()))
             .await

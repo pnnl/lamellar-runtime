@@ -1336,6 +1336,14 @@ impl LamellarTeamRT {
         self.barrier.barrier();
     }
 
+    #[tracing::instrument(skip_all)]
+    pub(crate) fn tasking_barrier(&self) {
+        self.barrier.tasking_barrier();
+    }
+    pub(crate) async fn async_barrier(&self) {
+        self.barrier.async_barrier().await;
+    }
+
     pub(crate) fn flush(&self) {
         self.lamellae.flush();
     }

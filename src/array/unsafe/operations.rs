@@ -581,6 +581,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         }
         while cnt.load(Ordering::SeqCst) < num_reqs {
             self.inner.data.team.scheduler.exec_task();
+            // async_std::task::yield_now().await;
         }
         // println!("futures len {:?}",futures.lock().len());
         Box::pin(async move {
@@ -639,7 +640,9 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
                     let mut reqs: Vec<Pin<Box<dyn Future<Output = (R, Vec<usize>)> + Send>>> =
                         Vec::new();
                     // let mut res_index = 0;
-                    for (ii, (idx, val)) in index_vec.into_iter().zip(vals_vec.into_iter()).enumerate() {
+                    for (ii, (idx, val)) in
+                        index_vec.into_iter().zip(vals_vec.into_iter()).enumerate()
+                    {
                         let j = ii + start_i;
                         let (pe, local_index) = match self.pe_and_offset_for_global_index(idx) {
                             Some((pe, local_index)) => (pe, local_index),
@@ -751,6 +754,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         }
         while cnt.load(Ordering::SeqCst) < num_reqs {
             self.inner.data.team.scheduler.exec_task();
+            // async_std::task::yield_now().await;
         }
         // println!("futures len {:?}", futures.lock().len());
         Box::pin(async move {

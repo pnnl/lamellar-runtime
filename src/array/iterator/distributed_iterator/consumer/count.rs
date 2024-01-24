@@ -80,7 +80,7 @@ impl RemoteIterCountHandle {
             })
             .into_future()
             .await;
-        self.team.barrier();
+        self.team.async_barrier().await;
         cnt.load(Ordering::SeqCst)
     }
 }
@@ -90,7 +90,7 @@ impl RemoteIterCountHandle {
 impl IterRequest for RemoteIterCountHandle {
     type Output = usize;
     async fn into_future(mut self: Box<Self>) -> Self::Output {
-        self.team.barrier();
+        self.team.async_barrier().await;
         let cnt = Darc::new(&self.team, AtomicUsize::new(0)).unwrap();
         // all the requests should have already been launched, and we are just awaiting the results
         let count = futures::future::join_all(self.reqs.drain(..).map(|req| req.into_future()))
@@ -101,7 +101,7 @@ impl IterRequest for RemoteIterCountHandle {
         self.reduce_remote_counts(count, cnt).await
     }
     fn wait(mut self: Box<Self>) -> Self::Output {
-        self.team.barrier();
+        self.team.tasking_barrier();
         let cnt = Darc::new(&self.team, AtomicUsize::new(0)).unwrap();
         let count = self
             .reqs

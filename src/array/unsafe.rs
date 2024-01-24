@@ -138,7 +138,7 @@ impl<T: Dist + ArrayOps + 'static> UnsafeArray<T> {
         distribution: Distribution,
     ) -> UnsafeArray<T> {
         let team = team.into().team.clone();
-        team.barrier();
+        team.tasking_barrier();
         let task_group = LamellarTaskGroup::new(team.clone());
         let my_pe = team.team_pe_id().unwrap();
         let num_pes = team.num_pes();
@@ -578,7 +578,7 @@ impl<T: Dist + ArrayOps> TeamFrom<(&Vec<T>, Distribution)> for UnsafeArray<T> {
     fn team_from(input: (&Vec<T>, Distribution), team: &Pin<Arc<LamellarTeamRT>>) -> Self {
         let (local_vals, distribution) = input;
         // println!("local_vals len: {:?}", local_vals.len());
-        team.barrier();
+        team.tasking_barrier();
         let local_sizes =
             UnsafeArray::<usize>::new(team.clone(), team.num_pes, Distribution::Block);
         unsafe {
@@ -765,7 +765,7 @@ impl<T: Dist> LamellarArray<T> for UnsafeArray<T> {
     }
 
     fn barrier(&self) {
-        self.inner.data.team.barrier();
+        self.inner.data.team.tasking_barrier();
     }
 
     fn wait_all(&self) {
@@ -918,9 +918,9 @@ impl<T: Dist + std::fmt::Debug> UnsafeArray<T> {
 
 impl<T: Dist + std::fmt::Debug> ArrayPrint<T> for UnsafeArray<T> {
     fn print(&self) {
-        self.inner.data.team.barrier(); //TODO: have barrier accept a string so we can print where we are stalling.
+        self.inner.data.team.tasking_barrier(); //TODO: have barrier accept a string so we can print where we are stalling.
         for pe in 0..self.inner.data.team.num_pes() {
-            self.inner.data.team.barrier();
+            self.inner.data.team.tasking_barrier();
             if self.inner.data.my_pe == pe {
                 println!("[pe {:?} data] {:?}", pe, unsafe { self.local_as_slice() });
             }
