@@ -53,7 +53,7 @@ pin-project = "1.0.12"
 serde_with = "3.0.0"
 pin-weak = "1.1.0"
 async-lock = "2.8.0"
-itertools = "0.12.1"
+tokio = { version = "1.35.1", features = ["full"] , optional = true}
 
 
 [dev-dependencies]
@@ -75,13 +75,14 @@ members = ["impl"]
 #features are strictly additive.... can't have mutual exclusitivity
 [features]
 enable-rofi=["rofisys", "libc"]
+tokio-executor=["tokio"]
 slurm-test=[]
 default=[]
 
 
 [profile.release]
 opt-level=3
-lto=true
+lto=false
 codegen-units=1
 debug = true   
 

@@ -4,7 +4,6 @@ use crate::array::iterator::distributed_iterator::DistributedIterator;
 use crate::array::iterator::{private::*, IterRequest};
 use crate::lamellar_request::LamellarRequest;
 use crate::lamellar_team::LamellarTeamRT;
-use crate::scheduler::SchedulerQueue;
 use crate::Darc;
 
 use async_trait::async_trait;
@@ -80,7 +79,7 @@ impl LamellarAm for UpdateCntAm {
 }
 
 impl RemoteIterCountHandle {
-    async fn reduce_remote_counts(&self, local_cnt: usize, cnt: Darc<AtomicUsize>) -> usize {
+    async fn reduce_remote_counts(self, local_cnt: usize, cnt: Darc<AtomicUsize>) -> usize {
         self.team
             .exec_am_all(UpdateCntAm {
                 remote_cnt: local_cnt,
@@ -119,6 +118,7 @@ impl IterRequest for RemoteIterCountHandle {
             .sum::<usize>();
         self.team
             .scheduler
+            .clone()
             .block_on(self.reduce_remote_counts(count, cnt))
     }
 }

@@ -81,7 +81,7 @@ where
     F: Fn(T, T) -> T + SyncSend + Clone + 'static,
 {
     fn reduce_remote_vals(&self, local_val: Option<T>) -> Option<T> {
-        self.team.barrier();
+        self.team.tasking_barrier();
         let local_vals =
             UnsafeArray::<Option<T>>::new(&self.team, self.team.num_pes, Distribution::Block);
         unsafe {

@@ -6,7 +6,6 @@ use crate::lamellae::{
     SerializedData, SubData,
 };
 
-use crate::scheduler::SchedulerQueue;
 use async_recursion::async_recursion;
 // use log::trace;
 use std::sync::Arc;
@@ -62,7 +61,7 @@ pub struct RegisteredAm {
 }
 crate::inventory::collect!(RegisteredAm);
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) struct RegisteredActiveMessages {
     batcher: BatcherType,
 }
@@ -100,9 +99,9 @@ pub(crate) struct UnitHeader {
 impl ActiveMessageEngine for Arc<RegisteredActiveMessages> {
     //#[tracing::instrument(skip_all)]
     async fn process_msg(
-        &self,
+        self,
         am: Am,
-        scheduler: impl SchedulerQueue + Sync + Send + Clone + std::fmt::Debug + 'static,
+        executor: Arc<Executor>,
         stall_mark: usize,
         immediate: bool,
     ) {
@@ -118,14 +117,15 @@ impl ActiveMessageEngine for Arc<RegisteredActiveMessages> {
                 {
                     // println!(" {} {} {}, {}, {}",req_data.team.lamellae.backend() != Backend::Local,req_data.team.num_pes() > 1, req_data.team.team_pe_id().is_err(),(req_data.team.num_pes() > 1 || req_data.team.team_pe_id().is_err()),req_data.team.lamellae.backend() != Backend::Local && (req_data.team.num_pes() > 1 || req_data.team.team_pe_id().is_err()) );
                     if am_size < crate::active_messaging::BATCH_AM_SIZE && !immediate {
-                        self.batcher.add_remote_am_to_batch(
-                            req_data.clone(),
-                            am.clone(),
-                            am_id,
-                            am_size,
-                            scheduler,
-                            stall_mark,
-                        );
+                        self.batcher
+                            .add_remote_am_to_batch(
+                                req_data.clone(),
+                                am.clone(),
+                                am_id,
+                                am_size,
+                                stall_mark,
+                            )
+                            .await;
                     } else {
                         self.send_am(req_data.clone(), am.clone(), am_id, am_size, Cmd::Am)
                             .await;
@@ -150,9 +150,9 @@ impl ActiveMessageEngine for Arc<RegisteredActiveMessages> {
                     let am_id = *(AMS_IDS.get(&am.get_id()).unwrap());
                     let am_size = am.serialized_size();
                     if am_size < crate::active_messaging::BATCH_AM_SIZE && !immediate {
-                        self.batcher.add_remote_am_to_batch(
-                            req_data, am, am_id, am_size, scheduler, stall_mark,
-                        );
+                        self.batcher
+                            .add_remote_am_to_batch(req_data, am, am_id, am_size, stall_mark)
+                            .await;
                     } else {
                         self.send_am(req_data, am, am_id, am_size, Cmd::Am).await;
                     }
@@ -168,9 +168,9 @@ impl ActiveMessageEngine for Arc<RegisteredActiveMessages> {
                 let am_id = *(AMS_IDS.get(&am.get_id()).unwrap());
                 let am_size = am.serialized_size();
                 if am_size < crate::active_messaging::BATCH_AM_SIZE && !immediate {
-                    self.batcher.add_return_am_to_batch(
-                        req_data, am, am_id, am_size, scheduler, stall_mark,
-                    );
+                    self.batcher
+                        .add_return_am_to_batch(req_data, am, am_id, am_size, stall_mark)
+                        .await;
                 } else {
                     self.send_am(req_data, am, am_id, am_size, Cmd::ReturnAm)
                         .await;
@@ -181,7 +181,8 @@ impl ActiveMessageEngine for Arc<RegisteredActiveMessages> {
                 let data_size = data.serialized_size();
                 if data_size < crate::active_messaging::BATCH_AM_SIZE && !immediate {
                     self.batcher
-                        .add_data_am_to_batch(req_data, data, data_size, scheduler, stall_mark);
+                        .add_data_am_to_batch(req_data, data, data_size, stall_mark)
+                        .await;
                 } else {
                     self.send_data_am(req_data, data, data_size).await;
                 }
@@ -189,60 +190,31 @@ impl ActiveMessageEngine for Arc<RegisteredActiveMessages> {
             Am::Unit(req_data) => {
                 if *UNIT_HEADER_LEN < crate::active_messaging::BATCH_AM_SIZE && !immediate {
                     self.batcher
-                        .add_unit_am_to_batch(req_data, scheduler, stall_mark);
+                        .add_unit_am_to_batch(req_data, stall_mark)
+                        .await;
                 } else {
                     self.send_unit_am(req_data).await;
                 }
-            }
-            Am::_BatchedReturn(_req_data, _func, _batch_id) => {
-                // let func_id = *(AMS_IDS.get(&func.get_id()).unwrap());
-                // let func_size = func.serialized_size();
-                // if func_size <= crate::active_messaging::BATCH_AM_SIZE {
-                //     self.batcher
-                //         .add_batched_return_am_to_batch(
-                //             req_data, func, func_id, func_size, batch_id, scheduler,stall_mark
-                //         )
-                //         .await;
-                // } else {
-                //     self.send_batched_return_am(
-                //         req_data, func, func_id, func_size, batch_id, scheduler,
-                //     )
-                //     .await;
-                // }
-            }
-            Am::_BatchedData(_req_data, _data, _batch_id) => {
-                // let data_size = data.serialized_size();
-                // if data_size <= crate::active_messaging::BATCH_AM_SIZE {
-                //     self.add_batched_data_am_to_batch(
-                //         req_data, data, data_size, batch_id, scheduler,stall_mark
-                //     )
-                //     .await;
-                // } else {
-                //     self.send_batched_data_am(req_data, data, data_size, batch_id, scheduler)
-                //         .await;
-                // }
-            }
-            Am::_BatchedUnit(_req_data, _batch_id) => {
-                // self.add_batched_unit_am_to_batch(req_data, batch_id, scheduler,stall_mark)
-                //     .await;
             }
         }
     }
 
     //#[tracing::instrument(skip_all)]
     async fn exec_msg(
-        &self,
+        self,
         msg: Msg,
         ser_data: SerializedData,
         lamellae: Arc<Lamellae>,
-        scheduler: impl SchedulerQueue + Sync + Send + Clone + std::fmt::Debug + 'static,
+        executor: Arc<Executor>,
     ) {
         // println!("exec_msg");
         let data = ser_data.data_as_bytes();
         let mut i = 0;
         match msg.cmd {
             Cmd::Am => {
-                self.exec_am(&msg, data, &mut i, &lamellae, scheduler).await;
+                let return_am = self.exec_am(&msg, data, &mut i, &lamellae).await;
+                let process_task = self.process_msg(return_am, executor.clone(), 0, false);
+                executor.submit_task(process_task);
             }
             Cmd::ReturnAm => {
                 self.exec_return_am(&msg, data, &mut i, &lamellae).await;
@@ -254,9 +226,15 @@ impl ActiveMessageEngine for Arc<RegisteredActiveMessages> {
                 self.exec_unit_am(&msg, data, &mut i).await;
             }
             Cmd::BatchedMsg => {
-                self.batcher
-                    .exec_batched_msg(msg, ser_data, lamellae, scheduler, self)
+                let ams = self
+                    .batcher
+                    .exec_batched_msg(msg, ser_data, lamellae, &self)
                     .await;
+                let am_tasks = futures::stream::FuturesUnordered::new();
+                for am in ams.into_iter() {
+                    am_tasks.push(self.clone().process_msg(am, executor.clone(), 0, false));
+                }
+                executor.submit_task(futures::future::join_all(am_tasks));
             }
         }
     }
@@ -459,8 +437,7 @@ impl RegisteredActiveMessages {
         data: &[u8],
         i: &mut usize,
         lamellae: &Arc<Lamellae>,
-        scheduler: impl SchedulerQueue + Sync + Send + Clone + std::fmt::Debug + 'static,
-    ) {
+    ) -> Am {
         // println!("exec_am");
         let am_header: AmHeader =
             crate::deserialize(&data[*i..*i + *AM_HEADER_LEN], false).unwrap();
@@ -498,9 +475,8 @@ impl RegisteredActiveMessages {
                 panic!("Should not be returning local data or AM from remote  am");
             }
         };
-        self.process_msg(am, scheduler, 0, false).await; //0 just means we will force a stall_count loop
-                                                         // scheduler.submit_am(am);
-                                                         //TODO: compare against: scheduler.submit_am(ame, am).await;
+        am
+        // self.process_msg(am, 0, false).await; //0 just means we will force a stall_count loop
     }
 
     //#[tracing::instrument(skip_all)]

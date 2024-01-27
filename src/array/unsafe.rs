@@ -12,7 +12,6 @@ use crate::darc::{Darc, DarcMode, WeakDarc};
 use crate::lamellae::AllocationType;
 use crate::lamellar_team::{IntoLamellarTeam, LamellarTeamRT};
 use crate::memregion::{Dist, MemoryRegion};
-use crate::scheduler::SchedulerQueue;
 use crate::LamellarTaskGroup;
 use core::marker::PhantomData;
 use std::ops::Bound;
@@ -369,9 +368,10 @@ impl<T: Dist + 'static> UnsafeArray<T> {
         self.wait_all();
         // println!("block on outstanding");
         // self.inner.data.print();
+        // let the_array: UnsafeArray<T> = self.clone();
+        let array_darc = self.inner.data.clone();
         self.team_rt()
-            .block_on(self.inner.data.block_on_outstanding(mode, 0));
-        // self.inner.data.print();
+            .block_on(array_darc.block_on_outstanding(mode, 1)); //one for this instance of the array
     }
 
     #[doc(alias = "Collective")]
@@ -811,10 +811,7 @@ impl<T: Dist> LamellarArray<T> for UnsafeArray<T> {
         // println!("done in wait all {:?}",std::time::SystemTime::now());
     }
 
-    fn block_on<F>(&self, f: F) -> F::Output
-    where
-        F: Future,
-    {
+    fn block_on<F: Future>(&self, f: F) -> F::Output {
         self.inner.data.team.scheduler.block_on(f)
     }
 
@@ -999,7 +996,7 @@ impl<T: Dist + AmDist + 'static> UnsafeArray<T> {
     /// let sum = array.block_on(array.reduce("sum")); // equivalent to calling array.sum()
     /// //assert_eq!(array.len()*num_pes,sum); // may or may not fail
     ///```
-    pub unsafe fn reduce(&self, op: &str) -> Pin<Box<dyn Future<Output = T>>> {
+    pub unsafe fn reduce(&self, op: &str) -> Pin<Box<dyn Future<Output = T> + Send>> {
         self.reduce_data(op, self.clone().into()).into_future()
     }
 
@@ -1035,7 +1032,7 @@ impl<T: Dist + AmDist + 'static> UnsafeArray<T> {
     /// let sum = array.block_on(unsafe{array.sum()}); //Safe in this instance as we have ensured no updates are currently happening
     /// // assert_eq!(array.len()*num_pes,sum);//this may or may not fail
     ///```
-    pub unsafe fn sum(&self) -> Pin<Box<dyn Future<Output = T>>> {
+    pub unsafe fn sum(&self) -> Pin<Box<dyn Future<Output = T> + Send>> {
         self.reduce("sum")
     }
 
@@ -1072,7 +1069,7 @@ impl<T: Dist + AmDist + 'static> UnsafeArray<T> {
     /// let prod =  array.block_on(array.prod());
     /// assert_eq!((1..=array.len()).product::<usize>(),prod);
     ///```
-    pub unsafe fn prod(&self) -> Pin<Box<dyn Future<Output = T>>> {
+    pub unsafe fn prod(&self) -> Pin<Box<dyn Future<Output = T> + Send>> {
         self.reduce("prod")
     }
 
@@ -1103,7 +1100,7 @@ impl<T: Dist + AmDist + 'static> UnsafeArray<T> {
     /// let max = array.block_on(max_req);
     /// assert_eq!((array.len()-1)*2,max);
     ///```
-    pub unsafe fn max(&self) -> Pin<Box<dyn Future<Output = T>>> {
+    pub unsafe fn max(&self) -> Pin<Box<dyn Future<Output = T> + Send>> {
         self.reduce("max")
     }
 
@@ -1134,7 +1131,7 @@ impl<T: Dist + AmDist + 'static> UnsafeArray<T> {
     /// let min = array.block_on(min_req);
     /// assert_eq!(0,min);
     ///```
-    pub unsafe fn min(&self) -> Pin<Box<dyn Future<Output = T>>> {
+    pub unsafe fn min(&self) -> Pin<Box<dyn Future<Output = T> + Send>> {
         self.reduce("min")
     }
 }

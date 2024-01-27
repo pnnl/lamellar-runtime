@@ -52,7 +52,7 @@ impl SimpleBatcherInner {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) struct SimpleBatcher {
     batched_ams: Arc<Vec<SimpleBatcherInner>>,
     stall_mark: Arc<AtomicUsize>,
@@ -60,14 +60,13 @@ pub(crate) struct SimpleBatcher {
 
 #[async_trait]
 impl Batcher for SimpleBatcher {
-    //#[tracing::instrument(skip_all)]
-    fn add_remote_am_to_batch(
+    // #[tracing::instrument(skip_all)]
+    async fn add_remote_am_to_batch(
         &self,
         req_data: ReqMetaData,
         am: LamellarArcAm,
         am_id: AmId,
         am_size: usize,
-        scheduler: impl SchedulerQueue + Sync + Send + Clone + std::fmt::Debug + 'static,
         mut stall_mark: usize,
     ) {
         // println!("add_remote_am_to_batch");
@@ -93,37 +92,34 @@ impl Batcher for SimpleBatcher {
             //     "[{:?}] add_remote_am_to_batch submit task",
             //     std::thread::current().id()
             // );
-            scheduler.submit_task(async move {
-                while stall_mark != cur_stall_mark.load(Ordering::SeqCst)
-                    && batch.size.load(Ordering::SeqCst) < MAX_BATCH_SIZE
-                    && batch_id == batch.batch_id.load(Ordering::SeqCst)
-                {
-                    stall_mark = cur_stall_mark.load(Ordering::Relaxed);
-                    async_std::task::yield_now().await;
-                }
-                if batch_id == batch.batch_id.load(Ordering::SeqCst) {
-                    //this batch is still valid
-                    SimpleBatcher::create_tx_task(batch).await;
-                }
-            });
+            while stall_mark != cur_stall_mark.load(Ordering::SeqCst)
+                && batch.size.load(Ordering::SeqCst) < MAX_BATCH_SIZE
+                && batch_id == batch.batch_id.load(Ordering::SeqCst)
+            {
+                stall_mark = cur_stall_mark.load(Ordering::Relaxed);
+                async_std::task::yield_now().await;
+            }
+            if batch_id == batch.batch_id.load(Ordering::SeqCst) {
+                //this batch is still valid
+                SimpleBatcher::create_tx_task(batch).await;
+            }
         } else if size >= MAX_BATCH_SIZE {
             // println!("remote size: {:?} {dst:?}",size);
             // println!(
             //     "[{:?}] add_remote_am_to_batch submit imm task",
             //     std::thread::current().id()
             // );
-            scheduler.submit_immediate_task(SimpleBatcher::create_tx_task(batch));
+            SimpleBatcher::create_tx_task(batch).await;
         }
     }
 
-    //#[tracing::instrument(skip_all)]
-    fn add_return_am_to_batch(
+    // #[tracing::instrument(skip_all)]
+    async fn add_return_am_to_batch(
         &self,
         req_data: ReqMetaData,
         am: LamellarArcAm,
         am_id: AmId,
         am_size: usize,
-        scheduler: impl SchedulerQueue + Sync + Send + Clone + std::fmt::Debug + 'static,
         mut stall_mark: usize,
     ) {
         // println!("add_return_am_to_batch");
@@ -149,36 +145,33 @@ impl Batcher for SimpleBatcher {
             //     "[{:?}] add_rerturn_am_to_batch submit task",
             //     std::thread::current().id()
             // );
-            scheduler.submit_task(async move {
-                while stall_mark != cur_stall_mark.load(Ordering::SeqCst)
-                    && batch.size.load(Ordering::SeqCst) < MAX_BATCH_SIZE
-                    && batch_id == batch.batch_id.load(Ordering::SeqCst)
-                {
-                    stall_mark = cur_stall_mark.load(Ordering::Relaxed);
-                    async_std::task::yield_now().await;
-                }
-                if batch_id == batch.batch_id.load(Ordering::SeqCst) {
-                    //this batch is still valid
-                    SimpleBatcher::create_tx_task(batch).await;
-                }
-            });
+            while stall_mark != cur_stall_mark.load(Ordering::SeqCst)
+                && batch.size.load(Ordering::SeqCst) < MAX_BATCH_SIZE
+                && batch_id == batch.batch_id.load(Ordering::SeqCst)
+            {
+                stall_mark = cur_stall_mark.load(Ordering::Relaxed);
+                async_std::task::yield_now().await;
+            }
+            if batch_id == batch.batch_id.load(Ordering::SeqCst) {
+                //this batch is still valid
+                SimpleBatcher::create_tx_task(batch).await;
+            }
         } else if size >= MAX_BATCH_SIZE {
             // println!("return size: {:?} {dst:?}",size);
             // println!(
             //     "[{:?}] add_return_am_to_batch submit imm task",
             //     std::thread::current().id()
             // );
-            scheduler.submit_immediate_task(SimpleBatcher::create_tx_task(batch));
+            SimpleBatcher::create_tx_task(batch).await;
         }
     }
 
-    //#[tracing::instrument(skip_all)]
-    fn add_data_am_to_batch(
+    // #[tracing::instrument(skip_all)]
+    async fn add_data_am_to_batch(
         &self,
         req_data: ReqMetaData,
         data: LamellarResultArc,
         data_size: usize,
-        scheduler: impl SchedulerQueue + Sync + Send + Clone + std::fmt::Debug + 'static,
         mut stall_mark: usize,
     ) {
         // println!("add_data_am_to_batch");
@@ -207,36 +200,29 @@ impl Batcher for SimpleBatcher {
             //     "[{:?}] add_data_am_to_batch submit task",
             //     std::thread::current().id()
             // );
-            scheduler.submit_task(async move {
-                while stall_mark != cur_stall_mark.load(Ordering::SeqCst)
-                    && batch.size.load(Ordering::SeqCst) < MAX_BATCH_SIZE
-                    && batch_id == batch.batch_id.load(Ordering::SeqCst)
-                {
-                    stall_mark = cur_stall_mark.load(Ordering::Relaxed);
-                    async_std::task::yield_now().await;
-                }
-                if batch_id == batch.batch_id.load(Ordering::SeqCst) {
-                    //this batch is still valid
-                    SimpleBatcher::create_tx_task(batch).await;
-                }
-            });
+            while stall_mark != cur_stall_mark.load(Ordering::SeqCst)
+                && batch.size.load(Ordering::SeqCst) < MAX_BATCH_SIZE
+                && batch_id == batch.batch_id.load(Ordering::SeqCst)
+            {
+                stall_mark = cur_stall_mark.load(Ordering::Relaxed);
+                async_std::task::yield_now().await;
+            }
+            if batch_id == batch.batch_id.load(Ordering::SeqCst) {
+                //this batch is still valid
+                SimpleBatcher::create_tx_task(batch).await;
+            }
         } else if size >= MAX_BATCH_SIZE {
             // println!("data size: {:?} {dst:?}",size);
             // println!(
             //     "[{:?}] add_data_am_to_batch submit imm task",
             //     std::thread::current().id()
             // );
-            scheduler.submit_immediate_task(SimpleBatcher::create_tx_task(batch));
+            SimpleBatcher::create_tx_task(batch).await;
         }
     }
 
-    //#[tracing::instrument(skip_all)]
-    fn add_unit_am_to_batch(
-        &self,
-        req_data: ReqMetaData,
-        scheduler: impl SchedulerQueue + Sync + Send + Clone + std::fmt::Debug + 'static,
-        mut stall_mark: usize,
-    ) {
+    // #[tracing::instrument(skip_all)]
+    async fn add_unit_am_to_batch(&self, req_data: ReqMetaData, mut stall_mark: usize) {
         // println!("add_unit_am_to_batch");
         //let dst =req_data.dst;
         let batch = match req_data.dst {
@@ -256,26 +242,24 @@ impl Batcher for SimpleBatcher {
             //     "[{:?}] add_unit_am_to_batch submit task",
             //     std::thread::current().id()
             // );
-            scheduler.submit_task(async move {
-                while stall_mark != cur_stall_mark.load(Ordering::SeqCst)
-                    && batch.size.load(Ordering::SeqCst) < MAX_BATCH_SIZE
-                    && batch_id == batch.batch_id.load(Ordering::SeqCst)
-                {
-                    stall_mark = cur_stall_mark.load(Ordering::Relaxed);
-                    async_std::task::yield_now().await;
-                }
-                if batch_id == batch.batch_id.load(Ordering::SeqCst) {
-                    //this batch is still valid
-                    SimpleBatcher::create_tx_task(batch).await;
-                }
-            });
+            while stall_mark != cur_stall_mark.load(Ordering::SeqCst)
+                && batch.size.load(Ordering::SeqCst) < MAX_BATCH_SIZE
+                && batch_id == batch.batch_id.load(Ordering::SeqCst)
+            {
+                stall_mark = cur_stall_mark.load(Ordering::Relaxed);
+                async_std::task::yield_now().await;
+            }
+            if batch_id == batch.batch_id.load(Ordering::SeqCst) {
+                //this batch is still valid
+                SimpleBatcher::create_tx_task(batch).await;
+            }
         } else if size >= MAX_BATCH_SIZE {
             // println!("unit size: {:?} {dst:?}",size);
             // println!(
             //     "[{:?}] add_unit_am_to_batch submit imm task",
             //     std::thread::current().id()
             // );
-            scheduler.submit_immediate_task(SimpleBatcher::create_tx_task(batch));
+            SimpleBatcher::create_tx_task(batch).await;
         }
     }
 
@@ -285,28 +269,29 @@ impl Batcher for SimpleBatcher {
         msg: Msg,
         ser_data: SerializedData,
         lamellae: Arc<Lamellae>,
-        scheduler: impl SchedulerQueue + Sync + Send + Clone + std::fmt::Debug + 'static,
-        ame: &Arc<RegisteredActiveMessages>,
-    ) {
+        ame: &RegisteredActiveMessages,
+    ) -> Vec<Am> {
         let data = ser_data.data_as_bytes();
         let mut i = 0;
         // println!("executing batched msg {:?}", data.len());
-
+        let mut return_ams = Vec::new();
         while i < data.len() {
             let cmd: Cmd = crate::deserialize(&data[i..i + *CMD_LEN], false).unwrap();
             i += *CMD_LEN;
             // let temp_i = i;
             // println!("cmd {:?}", cmd);
             match cmd {
-                Cmd::Am => self.exec_am(&msg, data, &mut i, &lamellae, scheduler.clone(), ame),
+                Cmd::Am => return_ams.push(self.exec_am(&msg, data, &mut i, &lamellae, ame).await),
                 Cmd::ReturnAm => {
-                    self.exec_return_am(&msg, data, &mut i, &lamellae, scheduler.clone(), ame)
+                    self.exec_return_am(&msg, data, &mut i, &lamellae, ame)
+                        .await
                 }
                 Cmd::Data => ame.exec_data_am(&msg, data, &mut i, &ser_data).await,
                 Cmd::Unit => ame.exec_unit_am(&msg, data, &mut i).await,
                 Cmd::BatchedMsg => panic!("should not recieve a batched msg within a batched msg"),
             }
         }
+        return_ams
     }
 }
 
@@ -520,16 +505,15 @@ impl SimpleBatcher {
         data.unwrap()
     }
 
-    //#[tracing::instrument(skip_all)]
-    fn exec_am(
+    // #[tracing::instrument(skip_all)]
+    async fn exec_am(
         &self,
         msg: &Msg,
         data: &[u8],
         i: &mut usize,
         lamellae: &Arc<Lamellae>,
-        scheduler: impl SchedulerQueue + Sync + Send + Clone + std::fmt::Debug + 'static,
-        ame: &Arc<RegisteredActiveMessages>,
-    ) {
+        ame: &RegisteredActiveMessages,
+    ) -> Am {
         // println!("exec_am");
         let am_header: AmHeader =
             crate::deserialize(&data[*i..*i + *AM_HEADER_LEN], false).unwrap();
@@ -550,39 +534,35 @@ impl SimpleBatcher {
             team_addr: team.team.remote_ptr_addr,
         };
         // println!("[{:?}] exec_am submit task", std::thread::current().id());
-        let scheduler_clone = scheduler.clone();
-        let ame_clone = ame.clone();
-        scheduler.submit_task(async move {
-            let am = match am
-                .exec(
-                    team.team.world_pe,
-                    team.team.num_world_pes,
-                    false,
-                    world.clone(),
-                    team.clone(),
-                )
-                .await
-            {
-                LamellarReturn::Unit => Am::Unit(req_data),
-                LamellarReturn::RemoteData(data) => Am::Data(req_data, data),
-                LamellarReturn::RemoteAm(am) => Am::Return(req_data, am),
-                LamellarReturn::LocalData(_) | LamellarReturn::LocalAm(_) => {
-                    panic!("Should not be returning local data or AM from remote  am");
-                }
-            };
-            ame_clone.process_msg(am, scheduler_clone, 0, false).await;
-        });
+        let am = match am
+            .exec(
+                team.team.world_pe,
+                team.team.num_world_pes,
+                false,
+                world.clone(),
+                team.clone(),
+            )
+            .await
+        {
+            LamellarReturn::Unit => Am::Unit(req_data),
+            LamellarReturn::RemoteData(data) => Am::Data(req_data, data),
+            LamellarReturn::RemoteAm(am) => Am::Return(req_data, am),
+            LamellarReturn::LocalData(_) | LamellarReturn::LocalAm(_) => {
+                panic!("Should not be returning local data or AM from remote  am");
+            }
+        };
+        // ame.process_msg(am, 0, false).await;
+        am
     }
 
-    //#[tracing::instrument(skip_all)]
-    fn exec_return_am(
+    // #[tracing::instrument(skip_all)]
+    async fn exec_return_am(
         &self,
         msg: &Msg,
         data: &[u8],
         i: &mut usize,
         lamellae: &Arc<Lamellae>,
-        scheduler: impl SchedulerQueue + Sync + Send + Clone + std::fmt::Debug + 'static,
-        ame: &Arc<RegisteredActiveMessages>,
+        ame: &RegisteredActiveMessages,
     ) {
         // println!("exec_return_am");
         let am_header: AmHeader =
@@ -606,9 +586,8 @@ impl SimpleBatcher {
         //     "[{:?}] exec_return_am submit task",
         //     std::thread::current().id()
         // );
-        scheduler.submit_task(
-            ame.clone()
-                .exec_local_am(req_data, am.as_local(), world, team),
-        );
+        ame.clone()
+            .exec_local_am(req_data, am.as_local(), world, team)
+            .await;
     }
 }

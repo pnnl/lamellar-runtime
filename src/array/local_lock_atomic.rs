@@ -74,27 +74,26 @@ impl LocalLockByteArrayWeak {
 ///
 /// When the instance is dropped the lock is released.
 #[derive(Debug)]
-pub struct LocalLockMutLocalData<'a, T: Dist> {
-    data: &'a mut [T],
-    _index: usize,
-    _lock_guard: RwLockWriteGuardArc<Box<()>>,
+pub struct LocalLockMutLocalData<T: Dist> {
+    array: LocalLockArray<T>,
+    _lock_guard: RwLockWriteGuardArc<()>,
 }
 
-// impl<T: Dist> Drop for LocalLockMutLocalData<'_, T> {
+// impl<T: Dist> Drop for LocalLockMutLocalData<T> {
 //     fn drop(&mut self) {
 //         // println!("release lock! {:?} {:?}",std::thread::current().id(),std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH));
 //     }
 // }
 
-impl<T: Dist> Deref for LocalLockMutLocalData<'_, T> {
+impl<T: Dist> Deref for LocalLockMutLocalData<T> {
     type Target = [T];
     fn deref(&self) -> &Self::Target {
-        self.data
+        unsafe { self.array.array.local_as_mut_slice() }
     }
 }
-impl<T: Dist> DerefMut for LocalLockMutLocalData<'_, T> {
+impl<T: Dist> DerefMut for LocalLockMutLocalData<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        self.data
+        unsafe { self.array.array.local_as_mut_slice() }
     }
 }
 
@@ -107,28 +106,24 @@ impl<T: Dist> DerefMut for LocalLockMutLocalData<'_, T> {
 ///
 /// When the instance is dropped the lock is released.
 #[derive(Debug)]
-pub struct LocalLockLocalData<'a, T: Dist> {
+pub struct LocalLockLocalData<T: Dist> {
     pub(crate) array: LocalLockArray<T>,
-    pub(crate) data: &'a [T],
-    index: usize,
     lock: LocalRwDarc<()>,
-    lock_guard: Arc<RwLockReadGuardArc<Box<()>>>,
+    lock_guard: Arc<RwLockReadGuardArc<()>>,
 }
 
-impl<'a, T: Dist> Clone for LocalLockLocalData<'a, T> {
+impl<'a, T: Dist> Clone for LocalLockLocalData<T> {
     fn clone(&self) -> Self {
         // println!("getting read lock in LocalLockLocalData clone");
         LocalLockLocalData {
             array: self.array.clone(),
-            data: self.data,
-            index: self.index,
             lock: self.lock.clone(),
             lock_guard: self.lock_guard.clone(),
         }
     }
 }
 
-// impl<'a, T: Dist> Drop for LocalLockLocalData<'a, T> {
+// impl<'a, T: Dist> Drop for LocalLockLocalData<T> {
 //     fn drop(&mut self) {
 //         println!(
 //             "dropping read lock {:?}",
@@ -137,13 +132,13 @@ impl<'a, T: Dist> Clone for LocalLockLocalData<'a, T> {
 //     }
 // }
 
-// impl<'a, T: Dist> Drop for LocalLockMutLocalData<'a, T> {
+// impl<'a, T: Dist> Drop for LocalLockMutLocalData<T> {
 //     fn drop(&mut self) {
 //         println!("dropping write lock");
 //     }
 // }
 
-impl<'a, T: Dist> LocalLockLocalData<'a, T> {
+impl<'a, T: Dist> LocalLockLocalData<T> {
     /// Convert into a smaller sub range of the local data, the original read lock is transfered to the new sub data to mainitain safety guarantees
     ///
     /// # Examples
@@ -159,27 +154,30 @@ impl<'a, T: Dist> LocalLockLocalData<'a, T> {
     /// let sub_data = local_data.clone().into_sub_data(10,20); // clone() essentially increases the references to the read lock by 1.
     /// assert_eq!(local_data[10],sub_data[0]);
     ///```
-    pub fn into_sub_data(self, start: usize, end: usize) -> LocalLockLocalData<'a, T> {
+    pub fn into_sub_data(self, start: usize, end: usize) -> LocalLockLocalData<T> {
         LocalLockLocalData {
-            array: self.array.clone(),
-            data: &self.data[start..end],
-            index: 0,
+            array: self.array.sub_array(start..end),
             lock: self.lock.clone(),
             lock_guard: self.lock_guard.clone(),
         }
     }
 }
 
-impl<'a, T: Dist + serde::Serialize> serde::Serialize for LocalLockLocalData<'a, T> {
+impl<'a, T: Dist + serde::Serialize> serde::Serialize for LocalLockLocalData<T> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
     {
-        self.data.serialize(serializer)
+        unsafe { self.array.array.local_as_mut_slice() }.serialize(serializer)
     }
 }
 
-impl<'a, T: Dist> Iterator for LocalLockLocalData<'a, T> {
+pub struct LocalLockLocalDataIter<'a, T: Dist> {
+    data: &'a [T],
+    index: usize,
+}
+
+impl<'a, T: Dist> Iterator for LocalLockLocalDataIter<'a, T> {
     type Item = &'a T;
     fn next(&mut self) -> Option<Self::Item> {
         if self.index < self.data.len() {
@@ -191,11 +189,22 @@ impl<'a, T: Dist> Iterator for LocalLockLocalData<'a, T> {
     }
 }
 
-impl<T: Dist> Deref for LocalLockLocalData<'_, T> {
+impl<'a, T: Dist> IntoIterator for &'a LocalLockLocalData<T> {
+    type Item = &'a T;
+    type IntoIter = LocalLockLocalDataIter<'a, T>;
+    fn into_iter(self) -> Self::IntoIter {
+        LocalLockLocalDataIter {
+            data: unsafe { self.array.array.local_as_mut_slice() },
+            index: 0,
+        }
+    }
+}
+
+impl<T: Dist> Deref for LocalLockLocalData<T> {
     type Target = [T];
 
     fn deref(&self) -> &Self::Target {
-        self.data
+        unsafe { self.array.array.local_as_mut_slice() }
     }
 }
 
@@ -251,34 +260,35 @@ impl<T: Dist> LocalLockArray<T> {
         }
     }
 
-    // #[doc(alias("One-sided", "onesided"))]
-    // /// Return the calling PE's local data as a [LocalLockLocalData], which allows safe immutable access to local elements.
-    // ///
-    // /// Calling this function will result in a local read lock being captured on the array
-    // ///
-    // /// # One-sided Operation
-    // /// Only returns local data on the calling PE
-    // ///
-    // /// # Examples
-    // ///```
-    // /// use lamellar::array::prelude::*;
-    // /// let world = LamellarWorldBuilder::new().build();
-    // /// let my_pe = world.my_pe();
-    // /// let array: LocalLockArray<usize> = LocalLockArray::new(&world,100,Distribution::Cyclic);
-    // ///
-    // /// let local_data = array.read_local_data();
-    // /// println!("PE{my_pe} data: {local_data:?}");
-    // ///```
-    // pub fn read_local_data(&self) -> LocalLockLocalData<'_, T> {
-    //     // println!("getting read lock in read_local_local");
-    //     LocalLockLocalData {
-    //         array: self.clone(),
-    //         data: unsafe { self.array.local_as_mut_slice() },
-    //         index: 0,
-    //         lock: self.lock.clone(),
-    //         lock_guard: Arc::new(self.lock.read()),
-    //     }
-    // }
+    #[doc(alias("One-sided", "onesided"))]
+    /// Return the calling PE's local data as a [LocalLockLocalData], which allows safe immutable access to local elements.
+    ///
+    /// Calling this function will result in a local read lock being captured on the array
+    ///
+    /// # One-sided Operation
+    /// Only returns local data on the calling PE
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let array: LocalLockArray<usize> = LocalLockArray::new(&world,100,Distribution::Cyclic);
+    ///
+    /// let local_data = array.blocking_read_local_data();
+    /// println!("PE{my_pe} data: {local_data:?}");
+    ///```
+    pub fn blocking_read_local_data(&self) -> LocalLockLocalData<T> {
+        // println!("getting read lock in read_local_local");
+        let self_clone: LocalLockArray<T> = self.clone();
+        self.block_on(async move {
+            LocalLockLocalData {
+                array: self_clone.clone(),
+                lock: self_clone.lock.clone(),
+                lock_guard: Arc::new(self_clone.lock.read().await),
+            }
+        })
+    }
 
     /// TODO: UPDATE
     /// Return the calling PE's local data as a [LocalLockLocalData], which allows safe immutable access to local elements.   
@@ -293,51 +303,53 @@ impl<T: Dist> LocalLockArray<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: LocalLockArray<usize> = LocalLockArray::new(&world,100,Distribution::Cyclic);
+    /// world.clone().block_on(async move {
+    ///     let array: LocalLockArray<usize> = LocalLockArray::new(&world,100,Distribution::Cyclic);
     ///
-    /// let local_data = array.block_on(array.read_local_data());
-    /// println!("PE{my_pe} data: {local_data:?}");
+    ///     let local_data = array.read_local_data().await;
+    ///     println!("PE{my_pe} data: {local_data:?}");
+    /// });
     ///```
-    pub async fn read_local_data(&self) -> LocalLockLocalData<'_, T> {
+    pub async fn read_local_data(&self) -> LocalLockLocalData<T> {
         // println!("getting read lock in read_local_local");
         LocalLockLocalData {
             array: self.clone(),
-            data: unsafe { self.array.local_as_mut_slice() },
-            index: 0,
             lock: self.lock.clone(),
             lock_guard: Arc::new(self.lock.read().await),
         }
     }
 
-    // #[doc(alias("One-sided", "onesided"))]
-    // /// Return the calling PE's local data as a [LocalLockMutLocalData], which allows safe mutable access to local elements.
-    // ///
-    // /// Calling this function will result in the local write lock being captured on the array
-    // ///
-    // /// # One-sided Operation
-    // /// Only returns (mutable) local data on the calling PE
-    // ///
-    // /// # Examples
-    // ///```
-    // /// use lamellar::array::prelude::*;
-    // /// let world = LamellarWorldBuilder::new().build();
-    // /// let my_pe = world.my_pe();
-    // /// let array: LocalLockArray<usize> = LocalLockArray::new(&world,100,Distribution::Cyclic);
-    // ///
-    // /// let local_data = array.write_local_data();
-    // /// println!("PE{my_pe} data: {local_data:?}");
-    // ///```
-    // pub fn write_local_data(&self) -> LocalLockMutLocalData<'_, T> {
-    //     // println!("getting write lock in write_local_data");
-    //     let lock = self.lock.write();
-    //     let data = LocalLockMutLocalData {
-    //         data: unsafe { self.array.local_as_mut_slice() },
-    //         _index: 0,
-    //         _lock_guard: lock,
-    //     };
-    //     // println!("got lock! {:?} {:?}",std::thread::current().id(),std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH));
-    //     data
-    // }
+    #[doc(alias("One-sided", "onesided"))]
+    /// Return the calling PE's local data as a [LocalLockMutLocalData], which allows safe mutable access to local elements.
+    ///
+    /// Calling this function will result in the local write lock being captured on the array
+    ///
+    /// # One-sided Operation
+    /// Only returns (mutable) local data on the calling PE
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let array: LocalLockArray<usize> = LocalLockArray::new(&world,100,Distribution::Cyclic);
+    ///
+    /// let local_data = array.blocking_write_local_data();
+    /// println!("PE{my_pe} data: {local_data:?}");
+    ///```
+    pub fn blocking_write_local_data(&self) -> LocalLockMutLocalData<T> {
+        // println!("getting write lock in write_local_data");
+        let self_clone: LocalLockArray<T> = self.clone();
+        self.block_on(async move {
+            let lock = self_clone.lock.write().await;
+            let data = LocalLockMutLocalData {
+                array: self_clone,
+                _lock_guard: lock,
+            };
+            // println!("got lock! {:?} {:?}",std::thread::current().id(),std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH));
+            data
+        })
+    }
 
     #[doc(alias("One-sided", "onesided"))]
     /// TODO: UPDATE
@@ -353,149 +365,23 @@ impl<T: Dist> LocalLockArray<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: LocalLockArray<usize> = LocalLockArray::new(&world,100,Distribution::Cyclic);
+    /// world.clone().block_on(async move {
+    ///     let array: LocalLockArray<usize> = LocalLockArray::new(&world,100,Distribution::Cyclic);
     ///
-    /// let local_data = array.block_on(array.write_local_data());
-    /// println!("PE{my_pe} data: {local_data:?}");
+    ///     let local_data = array.write_local_data().await;
+    ///     println!("PE{my_pe} data: {local_data:?}");
+    /// });
     ///```
-    pub async fn write_local_data(&self) -> LocalLockMutLocalData<'_, T> {
+    pub async fn write_local_data(&self) -> LocalLockMutLocalData<T> {
         // println!("getting write lock in write_local_data");
         let lock = self.lock.write().await;
         let data = LocalLockMutLocalData {
-            data: unsafe { self.array.local_as_mut_slice() },
-            _index: 0,
+            array: self.clone(),
             _lock_guard: lock,
         };
         // println!("got lock! {:?} {:?}",std::thread::current().id(),std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH));
         data
     }
-
-    // #[doc(hidden)] //todo create a custom macro to emit a warning saying use read_local_slice/write_local_slice intead
-    // pub(crate) async fn local_as_slice(&self) -> LocalLockLocalData<'_, T> {
-    //     // println!("getting read lock in local_as_slice");
-    //     let lock = LocalLockLocalData {
-    //         array: self.clone(),
-    //         data: unsafe { self.array.local_as_mut_slice() },
-    //         index: 0,
-    //         lock: self.lock.clone(),
-    //         lock_guard: Arc::new(self.lock.read().await),
-    //     };
-    //     // println!("got read lock! {:?} {:?}",std::thread::current().id(),std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH));
-    //     lock
-    // }
-    // #[doc(hidden)]
-    // pub unsafe fn local_as_mut_slice(&self) -> &mut [T] {
-    //     self.array.local_as_mut_slice()
-    // }
-
-    // #[doc(hidden)]
-    // pub(crate) async fn local_as_mut_slice(&self) -> LocalLockMutLocalData<'_, T> {
-    //     // println!("getting write lock in local_as_mut_slice");
-    //     let the_lock = self.lock.write().await;
-    //     let lock = LocalLockMutLocalData {
-    //         data: unsafe { self.array.local_as_mut_slice() },
-    //         _index: 0,
-    //         _lock_guard: the_lock,
-    //     };
-    //     // println!("have lla write lock");
-    //     // println!("got write lock! {:?} {:?}",std::thread::current().id(),std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH));
-    //     lock
-    // }
-
-    // #[doc(alias("One-sided", "onesided"))]
-    // /// Return the calling PE's local data as a [LocalLockLocalData], which allows safe immutable access to local elements.
-    // ///
-    // /// Calling this function will result in a local read lock being captured on the array
-    // ///
-    // /// While this call is safe, it may be more clear to use the [read_local_data()][LocalLockArray::read_local_data] function.
-    // ///
-    // /// # One-sided Operation
-    // /// Only returns local data on the calling PE
-    // ///
-    // /// # Examples
-    // ///```
-    // /// use lamellar::array::prelude::*;
-    // /// let world = LamellarWorldBuilder::new().build();
-    // /// let my_pe = world.my_pe();
-    // /// let array: LocalLockArray<usize> = LocalLockArray::new(&world,100,Distribution::Cyclic);
-    // ///
-    // /// let local_data = array.local_data();
-    // /// println!("PE{my_pe} data: {local_data:?}");
-    // ///```
-    // pub fn local_data(&self) -> LocalLockLocalData<'_, T> {
-    //     self.local_as_slice()
-    // }
-
-    // /// Return the calling PE's local data as a [LocalLockLocalData], which allows safe immutable access to local elements.
-    // ///
-    // /// Calling this function will result in a local read lock being captured on the array
-    // ///
-    // /// While this call is safe, it may be more clear to use the [read_local_data()][LocalLockArray::read_local_data] function.
-    // ///
-    // /// # One-sided Operation
-    // /// Only returns local data on the calling PE
-    // ///
-    // /// # Examples
-    // ///```
-    // /// use lamellar::array::prelude::*;
-    // /// let world = LamellarWorldBuilder::new().build();
-    // /// let my_pe = world.my_pe();
-    // /// let array: LocalLockArray<usize> = LocalLockArray::new(&world,100,Distribution::Cyclic);
-    // ///
-    // /// let local_data = array.block_on(array.local_data());
-    // /// println!("PE{my_pe} data: {local_data:?}");
-    // ///```
-    // pub async fn local_data(&self) -> LocalLockLocalData<'_, T> {
-    //     self.read_local_data().await
-    // }
-
-    // #[doc(alias("One-sided", "onesided"))]
-    // /// Return the calling PE's local data as a [LocalLockMutLocalData], which allows safe immutable access to local elements.
-    // ///
-    // /// Calling this function will result in a local read lock being captured on the array
-    // ///
-    // /// While this call is safe, it may be more clear to use the [write_local_data()][LocalLockArray::write_local_data] function.
-    // ///
-    // /// # One-sided Operation
-    // /// Only returns local data on the calling PE
-    // ///
-    // /// # Examples
-    // ///```
-    // /// use lamellar::array::prelude::*;
-    // /// let world = LamellarWorldBuilder::new().build();
-    // /// let my_pe = world.my_pe();
-    // /// let array: LocalLockArray<usize> = LocalLockArray::new(&world,100,Distribution::Cyclic);
-    // ///
-    // /// let local_data = array.mut_local_data();
-    // /// println!("PE{my_pe} data: {local_data:?}");
-    // ///```
-    // pub fn mut_local_data(&self) -> LocalLockMutLocalData<'_, T> {
-    //     self.local_as_mut_slice()
-    // }
-
-    // /// TODO: UPDATE
-    // /// Return the calling PE's local data as a [LocalLockMutLocalData], which allows safe immutable access to local elements.
-    // ///
-    // /// Calling this function will result in a local read lock being captured on the array
-    // ///
-    // /// While this call is safe, it may be more clear to use the [write_local_data()][LocalLockArray::write_local_data] function.
-    // ///
-    // /// # One-sided Operation
-    // /// Only returns local data on the calling PE
-    // ///
-    // /// # Examples
-    // ///```
-    // /// use lamellar::array::prelude::*;
-    // /// let world = LamellarWorldBuilder::new().build();
-    // /// let my_pe = world.my_pe();
-    // /// let array: LocalLockArray<usize> = LocalLockArray::new(&world,100,Distribution::Cyclic);
-    // ///
-    // /// let local_data = array.block_on(array.mut_local_data());
-    // /// println!("PE{my_pe} data: {local_data:?}");
-    // ///```
-    // pub async fn mut_local_data(&self) -> LocalLockMutLocalData<'_, T> {
-    //     self.write_local_data().await
-    // }
 
     #[doc(hidden)]
     pub unsafe fn __local_as_slice(&self) -> &[T] {
@@ -831,10 +717,7 @@ impl<T: Dist> LamellarArray<T> for LocalLockArray<T> {
         self.array.wait_all()
         // println!("done in wait all {:?}",std::time::SystemTime::now());
     }
-    fn block_on<F>(&self, f: F) -> F::Output
-    where
-        F: Future,
-    {
+    fn block_on<F: Future>(&self, f: F) -> F::Output {
         self.array.block_on(f)
     }
     fn pe_and_offset_for_global_index(&self, index: usize) -> Option<(usize, usize)> {
@@ -917,7 +800,7 @@ impl<T: Dist + std::fmt::Debug> ArrayPrint<T> for LocalLockArray<T> {
 #[doc(hidden)]
 pub struct LocalLockArrayReduceHandle<T: Dist + AmDist> {
     req: Box<dyn LamellarRequest<Output = T>>,
-    _lock_guard: RwLockReadGuardArc<Box<()>>,
+    _lock_guard: RwLockReadGuardArc<()>,
 }
 
 #[async_trait]
@@ -932,8 +815,9 @@ impl<T: Dist + AmDist> LamellarRequest for LocalLockArrayReduceHandle<T> {
 }
 
 impl<T: Dist + AmDist + 'static> LamellarArrayReduce<T> for LocalLockArray<T> {
-    fn reduce(&self, op: &str) -> Pin<Box<dyn Future<Output = T>>> {
-        let lock = self.array.block_on(self.lock.read());
+    fn reduce(&self, op: &str) -> Pin<Box<dyn Future<Output = T> + Send>> {
+        let lock: LocalRwDarc<()> = self.lock.clone();
+        let lock = self.array.block_on(async move { lock.read().await });
         Box::new(LocalLockArrayReduceHandle {
             req: self.array.reduce_data(op, self.clone().into()),
             _lock_guard: lock,
@@ -944,20 +828,20 @@ impl<T: Dist + AmDist + 'static> LamellarArrayReduce<T> for LocalLockArray<T> {
 impl<T: Dist + AmDist + ElementArithmeticOps + 'static> LamellarArrayArithmeticReduce<T>
     for LocalLockArray<T>
 {
-    fn sum(&self) -> Pin<Box<dyn Future<Output = T>>> {
+    fn sum(&self) -> Pin<Box<dyn Future<Output = T> + Send>> {
         self.reduce("sum")
     }
-    fn prod(&self) -> Pin<Box<dyn Future<Output = T>>> {
+    fn prod(&self) -> Pin<Box<dyn Future<Output = T> + Send>> {
         self.reduce("prod")
     }
 }
 impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static> LamellarArrayCompareReduce<T>
     for LocalLockArray<T>
 {
-    fn max(&self) -> Pin<Box<dyn Future<Output = T>>> {
+    fn max(&self) -> Pin<Box<dyn Future<Output = T> + Send>> {
         self.reduce("max")
     }
-    fn min(&self) -> Pin<Box<dyn Future<Output = T>>> {
+    fn min(&self) -> Pin<Box<dyn Future<Output = T> + Send>> {
         self.reduce("min")
     }
 }

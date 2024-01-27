@@ -1,7 +1,5 @@
 use crate::array::iterator::one_sided_iterator::*;
 use crate::array::LamellarArrayRequest;
-// use crate::LamellarArray;
-// use crate::scheduler::SchedulerQueue;
 use crate::memregion::OneSidedMemoryRegion;
 use std::collections::VecDeque;
 use std::ops::Deref;
@@ -90,8 +88,6 @@ impl<U> Deref for BufferedItem<U> {
         &self.item
     }
 }
-
-
 
 impl<I> OneSidedIterator for Buffered<I>
 where

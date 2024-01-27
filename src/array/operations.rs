@@ -6,7 +6,7 @@ use crate::array::local_lock_atomic::*;
 use crate::array::native_atomic::*;
 use crate::array::{AmDist, Dist, LamellarArrayRequest, LamellarEnv, LamellarWriteArray};
 use crate::lamellar_request::LamellarRequest;
-use crate::scheduler::{Scheduler, SchedulerQueue};
+use crate::scheduler::Scheduler;
 use crate::LamellarTeamRT;
 
 pub(crate) mod access;
@@ -230,8 +230,8 @@ pub enum OpInputEnum<'a, T: Dist> {
     Vec(Vec<T>),
     NativeAtomicLocalData(NativeAtomicLocalData<T>),
     GenericAtomicLocalData(GenericAtomicLocalData<T>),
-    LocalLockLocalData(LocalLockLocalData<'a, T>),
-    GlobalLockLocalData(GlobalLockLocalData<'a, T>),
+    LocalLockLocalData(LocalLockLocalData<T>),
+    GlobalLockLocalData(GlobalLockLocalData<T>),
     // Iter(Box<dyn Iterator<Item = T> + 'a>),
 
     // while it would be convienient to directly use the following, doing so
@@ -305,52 +305,47 @@ impl<'a, T: Dist> OpInputEnum<'_, T> {
     // //#[tracing::instrument(skip_all)]
     pub(crate) fn into_vec_chunks(self, chunk_size: usize) -> Vec<Vec<T>> {
         match self {
-            OpInputEnum::Val(v) => vec![vec![v]],
+            OpInputEnum::Val(v) =>vec![vec![v]],
             OpInputEnum::Slice(s) => s.chunks(chunk_size).map(|chunk| chunk.to_vec()).collect(),
             OpInputEnum::Vec(v) => v.chunks(chunk_size).map(|chunk| chunk.to_vec()).collect(),
             OpInputEnum::NativeAtomicLocalData(a) => {
                 let mut data = Vec::with_capacity(chunk_size);
 
-                a.iter()
-                    .enumerate()
-                    .filter_map(move |(i, elem)| {
-                        data.push(elem.load());
-                        if data.len() == chunk_size || i == a.len() - 1 {
-                            let mut new_data = Vec::with_capacity(chunk_size);
-                            std::mem::swap(&mut data, &mut new_data);
-                            Some(new_data)
-                        } else {
-                            None
-                        }
-                    })
-                    .collect()
+                a.iter().enumerate().filter_map(move |(i, elem)| {
+                    data.push(elem.load());
+                    if data.len() == chunk_size || i == a.len() - 1 {
+                        let mut new_data = Vec::with_capacity(chunk_size);
+                        std::mem::swap(&mut data, &mut new_data);
+                        Some(new_data)
+                    } else {
+                        None
+                    }
+                }).collect()
             }
             OpInputEnum::GenericAtomicLocalData(a) => {
                 let mut data = Vec::with_capacity(chunk_size);
 
-                a.iter()
-                    .enumerate()
-                    .filter_map(move |(i, elem)| {
-                        data.push(elem.load());
-                        if data.len() == chunk_size || i == a.len() - 1 {
-                            let mut new_data = Vec::with_capacity(chunk_size);
-                            std::mem::swap(&mut data, &mut new_data);
-                            Some(new_data)
-                        } else {
-                            None
-                        }
-                    })
-                    .collect()
+                a.iter().enumerate().filter_map(move |(i, elem)| {
+                    data.push(elem.load());
+                    if data.len() == chunk_size || i == a.len() - 1 {
+                        let mut new_data = Vec::with_capacity(chunk_size);
+                        std::mem::swap(&mut data, &mut new_data);
+                        Some(new_data)
+                    } else {
+                        None
+                    }
+                }).collect()
             }
             OpInputEnum::LocalLockLocalData(a) => {
                 a.chunks(chunk_size).map(|chunk| chunk.to_vec()).collect()
             }
             OpInputEnum::GlobalLockLocalData(a) => {
                 a.chunks(chunk_size).map(|chunk| chunk.to_vec()).collect()
-            } // OpInputEnum::MemoryRegion(mr) => *unsafe { mr.as_slice() }
-              //     .expect("memregion not local")
-              //     .first()
-              //     .expect("memregion is empty"),
+            }
+            // OpInputEnum::MemoryRegion(mr) => *unsafe { mr.as_slice() }
+            //     .expect("memregion not local")
+            //     .first()
+            //     .expect("memregion is empty"),
         }
     }
 
@@ -687,8 +682,8 @@ impl<'a, T: Dist> OpInput<'a, T> for Vec<T> {
 //     }
 // }
 
-impl<'a, T: Dist> OpInput<'a, T> for &'a LocalLockLocalData<'_, T> {
-    //#[tracing::instrument(skip_all)]
+impl<'a, T: Dist> OpInput<'a, T> for &'a LocalLockLocalData<T> {
+    // #[tracing::instrument(skip_all)]
     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
         let len = self.len();
         let mut iters = vec![];
@@ -727,8 +722,8 @@ impl<'a, T: Dist> OpInput<'a, T> for &'a LocalLockLocalData<'_, T> {
     }
 }
 
-impl<'a, T: Dist> OpInput<'a, T> for &'a GlobalLockLocalData<'_, T> {
-    //#[tracing::instrument(skip_all)]
+impl<'a, T: Dist> OpInput<'a, T> for &'a GlobalLockLocalData<T> {
+    // #[tracing::instrument(skip_all)]
     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
         let len = self.len();
         let mut iters = vec![];

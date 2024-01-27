@@ -9,7 +9,7 @@ use crate::memregion::{
     one_sided::OneSidedMemoryRegion, shared::SharedMemoryRegion, Dist, LamellarMemoryRegion,
     MemoryRegion, RemoteMemoryRegion,
 };
-use crate::scheduler::{ReqId, Scheduler, SchedulerQueue};
+use crate::scheduler::{ReqId, Scheduler};
 #[cfg(feature = "nightly")]
 use crate::utils::ser_closure;
 
@@ -485,10 +485,7 @@ impl ActiveMessaging for Arc<LamellarTeam> {
         self.team.barrier();
     }
 
-    fn block_on<F>(&self, f: F) -> F::Output
-    where
-        F: Future,
-    {
+    fn block_on<F: Future>(&self, f: F) -> F::Output {
         assert!(self.panic.load(Ordering::SeqCst) == 0);
 
         // trace_span!("block_on").in_scope(||
@@ -925,7 +922,7 @@ impl LamellarTeamRT {
             // what does it mean if we drop a parent team while a sub_team is valid?
             if let None = &self.parent {
                 // println!("shutdown lamellae, going to shutdown scheduler");
-                self.scheduler.shutdown_threads();
+                self.scheduler.begin_shutdown();
                 self.put_dropped();
                 self.drop_barrier();
                 self.lamellae.shutdown();
@@ -1326,7 +1323,8 @@ impl LamellarTeamRT {
 
     pub(crate) fn block_on<F>(&self, f: F) -> F::Output
     where
-        F: Future,
+        F: Future + Send + 'static,
+        F::Output: Send,
     {
         assert!(self.panic.load(Ordering::SeqCst) == 0);
 

@@ -61,10 +61,10 @@ fn main() {
 
     let global_darc = GlobalRwDarc::new(world.team(), 0).unwrap();
     println!("here 2");
-    let read_lock = world.block_on(global_darc.read());
+    let read_lock = global_darc.blocking_read();
     println!("I have the read lock!!!! {:?}", my_pe);
     drop(read_lock);
-    let write_lock = world.block_on(global_darc.write());
+    let write_lock = global_darc.blocking_write();
     println!("I have the write lock!!!! {:?}", my_pe);
     std::thread::sleep(std::time::Duration::from_secs(1));
     drop(write_lock);
@@ -112,7 +112,7 @@ fn main() {
             println!("here 8");
         } else {
             // println!("here");
-            *(*world.block_on(local_darc.write())) += 1;
+            *local_darc.blocking_write() += 1;
         }
     }
     // --------

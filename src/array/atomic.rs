@@ -1160,7 +1160,7 @@ impl<T: Dist> From<AtomicByteArray> for AtomicArray<T> {
 }
 
 impl<T: Dist + AmDist + 'static> LamellarArrayReduce<T> for AtomicArray<T> {
-    fn reduce(&self, reduction: &str) -> Pin<Box<dyn Future<Output = T>>> {
+    fn reduce(&self, reduction: &str) -> Pin<Box<dyn Future<Output = T> + Send>> {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.reduce(reduction),
             AtomicArray::GenericAtomicArray(array) => array.reduce(reduction),
@@ -1171,13 +1171,13 @@ impl<T: Dist + AmDist + 'static> LamellarArrayReduce<T> for AtomicArray<T> {
 impl<T: Dist + AmDist + ElementArithmeticOps + 'static> LamellarArrayArithmeticReduce<T>
     for AtomicArray<T>
 {
-    fn sum(&self) -> Pin<Box<dyn Future<Output = T>>> {
+    fn sum(&self) -> Pin<Box<dyn Future<Output = T> + Send>> {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.sum(),
             AtomicArray::GenericAtomicArray(array) => array.sum(),
         }
     }
-    fn prod(&self) -> Pin<Box<dyn Future<Output = T>>> {
+    fn prod(&self) -> Pin<Box<dyn Future<Output = T> + Send>> {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.prod(),
             AtomicArray::GenericAtomicArray(array) => array.prod(),
@@ -1187,13 +1187,13 @@ impl<T: Dist + AmDist + ElementArithmeticOps + 'static> LamellarArrayArithmeticR
 impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static> LamellarArrayCompareReduce<T>
     for AtomicArray<T>
 {
-    fn max(&self) -> Pin<Box<dyn Future<Output = T>>> {
+    fn max(&self) -> Pin<Box<dyn Future<Output = T> + Send>> {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.max(),
             AtomicArray::GenericAtomicArray(array) => array.max(),
         }
     }
-    fn min(&self) -> Pin<Box<dyn Future<Output = T>>> {
+    fn min(&self) -> Pin<Box<dyn Future<Output = T> + Send>> {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.min(),
             AtomicArray::GenericAtomicArray(array) => array.min(),
