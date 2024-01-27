@@ -244,29 +244,29 @@ pub enum OpInputEnum<'a, T: Dist> {
     // AtomicArray(AtomicArray<T>),
 }
 
-impl<'a, T: Dist> OpInputEnum<'_, T> {
-    //#[tracing::instrument(skip_all)]
-    // pub(crate) fn iter(&self) -> Box<dyn Iterator<Item = T> + '_> {
-    //     match self {
-    //         OpInputEnum::Val(v) => Box::new(std::iter::repeat(v).map(|elem| *elem)),
-    //         OpInputEnum::Slice(s) => Box::new(s.iter().map(|elem| *elem)),
-    //         OpInputEnum::Vec(v) => Box::new(v.iter().map(|elem| *elem)),
-    //         OpInputEnum::NativeAtomicLocalData(a) => Box::new(a.iter().map(|elem| elem.load())),
-    //         OpInputEnum::GenericAtomicLocalData(a) => Box::new(a.iter().map(|elem| elem.load())),
-    //         OpInputEnum::LocalLockLocalData(a) => Box::new(a.iter().map(|elem| *elem)),
-    //         OpInputEnum::GlobalLockLocalData(a) => Box::new(a.iter().map(|elem| *elem)),
-    //         // OpInputEnum::MemoryRegion(mr) => Box::new(
-    //         //     unsafe { mr.as_slice() }
-    //         //         .expect("memregion not local")
-    //         //         .iter()
-    //         //         .map(|elem| *elem),
-    //         // ),
-    //         // OpInputEnum::UnsafeArray(a) => Box::new(unsafe{a.local_data()}.iter().map(|elem| *elem)),
-    //         // OpInputEnum::ReadOnlyArray(a) => Box::new(a.local_data().iter().map(|elem| *elem)),
-    //         // OpInputEnum::AtomicArray(a) => Box::new(a.local_data().iter().map(|elem| elem.load())),
-    //     }
-    // }
-    //#[tracing::instrument(skip_all)]
+impl<'a, T: Dist> OpInputEnum<'a, T> {
+    #[tracing::instrument(skip_all)]
+    pub(crate) fn iter(&self) -> Box<dyn Iterator<Item = T> + '_> {
+        match self {
+            OpInputEnum::Val(v) => Box::new(std::iter::repeat(v).map(|elem| *elem)),
+            OpInputEnum::Slice(s) => Box::new(s.iter().map(|elem| *elem)),
+            OpInputEnum::Vec(v) => Box::new(v.iter().map(|elem| *elem)),
+            OpInputEnum::NativeAtomicLocalData(a) => Box::new(a.iter().map(|elem| elem.load())),
+            OpInputEnum::GenericAtomicLocalData(a) => Box::new(a.iter().map(|elem| elem.load())),
+            OpInputEnum::LocalLockLocalData(a) => Box::new(a.iter().map(|elem| *elem)),
+            OpInputEnum::GlobalLockLocalData(a) => Box::new(a.iter().map(|elem| *elem)),
+            // OpInputEnum::MemoryRegion(mr) => Box::new(
+            //     unsafe { mr.as_slice() }
+            //         .expect("memregion not local")
+            //         .iter()
+            //         .map(|elem| *elem),
+            // ),
+            // OpInputEnum::UnsafeArray(a) => Box::new(unsafe{a.local_data()}.iter().map(|elem| *elem)),
+            // OpInputEnum::ReadOnlyArray(a) => Box::new(a.local_data().iter().map(|elem| *elem)),
+            // OpInputEnum::AtomicArray(a) => Box::new(a.local_data().iter().map(|elem| elem.load())),
+        }
+    }
+    #[tracing::instrument(skip_all)]
     pub(crate) fn len(&self) -> usize {
         match self {
             OpInputEnum::Val(_) => 1,
