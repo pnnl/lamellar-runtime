@@ -1,10 +1,7 @@
 use crate::lamellae::{AllocationType, Lamellae, LamellaeRDMA};
 use crate::lamellar_arch::LamellarArchRT;
-use crate::scheduler::SchedulerQueue;
-// use crate::lamellar_memregion::{SharedMemoryRegion,RegisteredMemoryRegion};
-use crate::memregion::MemoryRegion; //, RTMemoryRegionRDMA, RegisteredMemoryRegion};
+use crate::memregion::MemoryRegion;
 use crate::scheduler::Scheduler;
-// use rand::prelude::SliceRandom;
 use std::sync::atomic::{AtomicU8, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
@@ -17,7 +14,7 @@ pub(crate) struct Barrier {
     n: usize, // dissemination factor
     num_rounds: usize,
     pub(crate) arch: Arc<LamellarArchRT>,
-    pub(crate) _scheduler: Arc<Scheduler>,
+    pub(crate) scheduler: Arc<Scheduler>,
     lamellae: Arc<Lamellae>,
     barrier_cnt: AtomicUsize,
     barrier_buf: Vec<MemoryRegion<usize>>,
@@ -85,17 +82,17 @@ impl Barrier {
         };
 
         let bar = Barrier {
-            my_pe: my_pe,
-            num_pes: num_pes,
-            n: n,
-            num_rounds: num_rounds,
-            arch: arch,
-            _scheduler: scheduler,
-            lamellae: lamellae,
+            my_pe,
+            num_pes,
+            n,
+            num_rounds,
+            arch,
+            scheduler,
+            lamellae,
             barrier_cnt: AtomicUsize::new(1),
             barrier_buf: buffs,
-            send_buf: send_buf,
-            panic: panic,
+            send_buf,
+            panic,
         };
         // bar.print_bar();
         bar
@@ -274,7 +271,7 @@ impl Barrier {
         if std::thread::current().id() == *crate::MAIN_THREAD {
             self.barrier_internal(|| {
                 // std::thread::yield_now();
-                self._scheduler.exec_task();
+                self.scheduler.exec_task();
             });
         } else {
             if let Ok(val) = std::env::var("LAMELLAR_BARRIER_WARNING") {
@@ -293,7 +290,7 @@ impl Barrier {
     // we actually want to be able to process other tasks while the barrier is active
     pub(crate) fn tasking_barrier(&self) {
         self.barrier_internal(|| {
-            self._scheduler.exec_task();
+            self.scheduler.exec_task();
         });
     }
 

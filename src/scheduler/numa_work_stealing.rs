@@ -235,10 +235,7 @@ impl AmeSchedulerQueue for NumaWorkStealingInner {
         task.detach();
     }
 
-    fn block_on<F>(&self, future: F) -> F::Output
-    where
-        F: Future,
-    {
+    fn block_on<F: Future>(&self, future: F) -> F::Output {
         let work_inj = self.work_inj[self
             .local_work_inj
             .get_or(|| AtomicUsize::new(0))
@@ -503,7 +500,7 @@ impl NumaWorkStealingInner {
 
 #[derive(Debug)]
 pub(crate) struct NumaWorkStealing {
-    inner: Arc<AmeScheduler>,
+    inner: &(impl SchedulerQueue + Sync + std::fmt::Debug),
     ame: Arc<ActiveMessageEngineType>,
 }
 impl NumaWorkStealing {

@@ -395,7 +395,7 @@ impl<T: Dist> TeamFrom<&Vec<T>> for LamellarArrayRdmaInput<T> {
         LamellarArrayRdmaInput::LocalMemRegion(buf)
     }
 }
-impl<T:Dist> TeamFrom<&[T]> for LamellarArrayRdmaInput<T> {
+impl<T: Dist> TeamFrom<&[T]> for LamellarArrayRdmaInput<T> {
     /// Constructs a [OneSidedMemoryRegion][crate::memregion::OneSidedMemoryRegion] equal in length to `vals` and copies `vals` into it
     fn team_from(vals: &[T], team: &Pin<Arc<LamellarTeamRT>>) -> Self {
         let buf: OneSidedMemoryRegion<T> = team.alloc_one_sided_mem_region(vals.len());
@@ -663,7 +663,7 @@ impl<T: Dist + 'static> crate::active_messaging::DarcSerde for LamellarWriteArra
 }
 
 impl<T: Dist + AmDist + 'static> LamellarArrayReduce<T> for LamellarReadArray<T> {
-    fn reduce(&self, reduction: &str) -> Pin<Box<dyn Future<Output = T>>> {
+    fn reduce(&self, reduction: &str) -> Pin<Box<dyn Future<Output = T> + Send>> {
         match self {
             LamellarReadArray::UnsafeArray(array) => unsafe { array.reduce(reduction) },
             LamellarReadArray::AtomicArray(array) => array.reduce(reduction),
@@ -677,7 +677,7 @@ impl<T: Dist + AmDist + 'static> LamellarArrayReduce<T> for LamellarReadArray<T>
 impl<T: Dist + AmDist + ElementArithmeticOps + 'static> LamellarArrayArithmeticReduce<T>
     for LamellarReadArray<T>
 {
-    fn sum(&self) -> Pin<Box<dyn Future<Output = T>>> {
+    fn sum(&self) -> Pin<Box<dyn Future<Output = T> + Send>> {
         match self {
             LamellarReadArray::UnsafeArray(array) => unsafe { array.sum() },
             LamellarReadArray::AtomicArray(array) => array.sum(),
@@ -686,7 +686,7 @@ impl<T: Dist + AmDist + ElementArithmeticOps + 'static> LamellarArrayArithmeticR
             LamellarReadArray::ReadOnlyArray(array) => array.sum(),
         }
     }
-    fn prod(&self) -> Pin<Box<dyn Future<Output = T>>> {
+    fn prod(&self) -> Pin<Box<dyn Future<Output = T> + Send>> {
         match self {
             LamellarReadArray::UnsafeArray(array) => unsafe { array.prod() },
             LamellarReadArray::AtomicArray(array) => array.prod(),
@@ -699,7 +699,7 @@ impl<T: Dist + AmDist + ElementArithmeticOps + 'static> LamellarArrayArithmeticR
 impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static> LamellarArrayCompareReduce<T>
     for LamellarReadArray<T>
 {
-    fn max(&self) -> Pin<Box<dyn Future<Output = T>>> {
+    fn max(&self) -> Pin<Box<dyn Future<Output = T> + Send>> {
         match self {
             LamellarReadArray::UnsafeArray(array) => unsafe { array.max() },
             LamellarReadArray::AtomicArray(array) => array.max(),
@@ -708,7 +708,7 @@ impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static> LamellarArrayCompa
             LamellarReadArray::ReadOnlyArray(array) => array.max(),
         }
     }
-    fn min(&self) -> Pin<Box<dyn Future<Output = T>>> {
+    fn min(&self) -> Pin<Box<dyn Future<Output = T> + Send>> {
         match self {
             LamellarReadArray::UnsafeArray(array) => unsafe { array.min() },
             LamellarReadArray::AtomicArray(array) => array.min(),
@@ -720,7 +720,7 @@ impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static> LamellarArrayCompa
 }
 
 impl<T: Dist + AmDist + 'static> LamellarArrayReduce<T> for LamellarWriteArray<T> {
-    fn reduce(&self, reduction: &str) -> Pin<Box<dyn Future<Output = T>>> {
+    fn reduce(&self, reduction: &str) -> Pin<Box<dyn Future<Output = T> + Send>> {
         match self {
             LamellarWriteArray::UnsafeArray(array) => unsafe { array.reduce(reduction) },
             LamellarWriteArray::AtomicArray(array) => array.reduce(reduction),
@@ -732,7 +732,7 @@ impl<T: Dist + AmDist + 'static> LamellarArrayReduce<T> for LamellarWriteArray<T
 impl<T: Dist + AmDist + ElementArithmeticOps + 'static> LamellarArrayArithmeticReduce<T>
     for LamellarWriteArray<T>
 {
-    fn sum(&self) -> Pin<Box<dyn Future<Output = T>>> {
+    fn sum(&self) -> Pin<Box<dyn Future<Output = T> + Send>> {
         match self {
             LamellarWriteArray::UnsafeArray(array) => unsafe { array.sum() },
             LamellarWriteArray::AtomicArray(array) => array.sum(),
@@ -740,7 +740,7 @@ impl<T: Dist + AmDist + ElementArithmeticOps + 'static> LamellarArrayArithmeticR
             LamellarWriteArray::GlobalLockArray(array) => array.sum(),
         }
     }
-    fn prod(&self) -> Pin<Box<dyn Future<Output = T>>> {
+    fn prod(&self) -> Pin<Box<dyn Future<Output = T> + Send>> {
         match self {
             LamellarWriteArray::UnsafeArray(array) => unsafe { array.prod() },
             LamellarWriteArray::AtomicArray(array) => array.prod(),
@@ -753,7 +753,7 @@ impl<T: Dist + AmDist + ElementArithmeticOps + 'static> LamellarArrayArithmeticR
 impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static> LamellarArrayCompareReduce<T>
     for LamellarWriteArray<T>
 {
-    fn max(&self) -> Pin<Box<dyn Future<Output = T>>> {
+    fn max(&self) -> Pin<Box<dyn Future<Output = T> + Send>> {
         match self {
             LamellarWriteArray::UnsafeArray(array) => unsafe { array.max() },
             LamellarWriteArray::AtomicArray(array) => array.max(),
@@ -761,7 +761,7 @@ impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static> LamellarArrayCompa
             LamellarWriteArray::GlobalLockArray(array) => array.max(),
         }
     }
-    fn min(&self) -> Pin<Box<dyn Future<Output = T>>> {
+    fn min(&self) -> Pin<Box<dyn Future<Output = T> + Send>> {
         match self {
             LamellarWriteArray::UnsafeArray(array) => unsafe { array.min() },
             LamellarWriteArray::AtomicArray(array) => array.min(),
@@ -991,9 +991,7 @@ pub trait LamellarArray<T: Dist>: private::LamellarArrayPrivate<T> {
     /// let result = array.block_on(request); //block until am has executed
     /// // we also could have used world.block_on() or team.block_on()
     ///```
-    fn block_on<F>(&self, f: F) -> F::Output
-    where
-        F: Future;
+    fn block_on<F: Future>(&self, f: F) -> F::Output;
 
     #[doc(alias("One-sided", "onesided"))]
     /// Given a global index, calculate the PE and offset on that PE where the element actually resides.
@@ -1610,7 +1608,7 @@ where
     /// let sum = array.block_on(array.reduce("sum")); // equivalent to calling array.sum()
     /// assert_eq!(array.len()*num_pes,sum);
     ///```
-    fn reduce(&self, reduction: &str) -> Pin<Box<dyn Future<Output = T>>>;
+    fn reduce(&self, reduction: &str) -> Pin<Box<dyn Future<Output = T> + Send>>;
 }
 
 /// Interface for common arithmetic based reductions
@@ -1643,7 +1641,7 @@ where
     /// let sum = array.block_on(array.sum());
     /// assert_eq!(array.len()*num_pes,sum);
     ///```
-    fn sum(&self) -> Pin<Box<dyn Future<Output = T>>>;
+    fn sum(&self) -> Pin<Box<dyn Future<Output = T> + Send>>;
 
     #[doc(alias("One-sided", "onesided"))]
     /// Perform a production reduction on the entire distributed array, returning the value to the calling PE.
@@ -1668,7 +1666,7 @@ where
     /// let prod =  array.block_on(array.prod());
     /// assert_eq!((1..=array.len()).product::<usize>(),prod);
     ///```
-    fn prod(&self) -> Pin<Box<dyn Future<Output = T>>>;
+    fn prod(&self) -> Pin<Box<dyn Future<Output = T> + Send>>;
 }
 
 /// Interface for common compare based reductions
@@ -1696,7 +1694,7 @@ where
     /// let max = array.block_on(array.max());
     /// assert_eq!((array.len()-1)*2,max);
     ///```
-    fn max(&self) -> Pin<Box<dyn Future<Output = T>>>;
+    fn max(&self) -> Pin<Box<dyn Future<Output = T> + Send>>;
 
     #[doc(alias("One-sided", "onesided"))]
     /// Find the min element in the entire destributed array, returning to the calling PE
@@ -1718,7 +1716,7 @@ where
     /// let min = array.block_on(array.min());
     /// assert_eq!(0,min);
     ///```
-    fn min(&self) -> Pin<Box<dyn Future<Output = T>>>;
+    fn min(&self) -> Pin<Box<dyn Future<Output = T> + Send>>;
 }
 
 /// This procedural macro is used to enable the execution of user defined reductions on LamellarArrays.

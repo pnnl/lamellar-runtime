@@ -539,7 +539,7 @@ macro_rules! input_test{
             //  check_results!($array,array,num_pes,reqs,"LocalLockArray<T>");
             // LocalLockArray<T>------------------------------
             let mut reqs = vec![];
-            reqs.push(array.batch_fetch_add(&world.block_on(input_array.read_local_data()),1));
+            reqs.push(array.batch_fetch_add(&input_array.blocking_read_local_data(),1));
             check_results!($array,array,num_pes,reqs,"&LocalLockArray<T>");
 
             // GlobalLockArray<T>------------------------------
@@ -549,7 +549,7 @@ macro_rules! input_test{
             //  check_results!($array,array,num_pes,reqs,"GlobalLockArray<T>");
             // GlobalLockArray<T>------------------------------
             let mut reqs = vec![];
-            reqs.push(array.batch_fetch_add(&world.block_on(input_array.read_local_data()),1));
+            reqs.push(array.batch_fetch_add(&input_array.blocking_read_local_data(),1));
             check_results!($array,array,num_pes,reqs,"&GlobalLockArray<T>");
        }
     }

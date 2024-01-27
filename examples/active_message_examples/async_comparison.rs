@@ -93,7 +93,9 @@ fn main() {
         for _i in 0..10 {
             std_am_group.add_am_all(std_am.clone()); //launch multiple tasks asyncronously
         }
-        world.block_on(std_am_group.exec());
+        world.block_on(async move {
+            std_am_group.exec().await;
+        });
         println!(
             "time for std sleep tasks: {:?}",
             timer.elapsed().as_secs_f64()
@@ -106,7 +108,9 @@ fn main() {
         for _i in 0..10 {
             async_am_group.add_am_all(async_am.clone()); //launch multiple tasks asyncronously
         }
-        world.block_on(async_am_group.exec());
+        world.block_on(async move {
+            async_am_group.exec().await;
+        });
         println!(
             "time for async sleep tasks: {:?}",
             timer.elapsed().as_secs_f64()

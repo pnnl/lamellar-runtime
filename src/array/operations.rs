@@ -6,7 +6,7 @@ use crate::array::local_lock_atomic::*;
 use crate::array::native_atomic::*;
 use crate::array::{AmDist, Dist, LamellarArrayRequest, LamellarEnv, LamellarWriteArray};
 use crate::lamellar_request::LamellarRequest;
-use crate::scheduler::{Scheduler, SchedulerQueue};
+use crate::scheduler::Scheduler;
 use crate::LamellarTeamRT;
 
 pub(crate) mod access;
@@ -230,8 +230,8 @@ pub enum OpInputEnum<'a, T: Dist> {
     Vec(Vec<T>),
     NativeAtomicLocalData(NativeAtomicLocalData<T>),
     GenericAtomicLocalData(GenericAtomicLocalData<T>),
-    LocalLockLocalData(LocalLockLocalData<'a, T>),
-    GlobalLockLocalData(GlobalLockLocalData<'a, T>),
+    LocalLockLocalData(LocalLockLocalData<T>),
+    GlobalLockLocalData(GlobalLockLocalData<T>),
     // Iter(Box<dyn Iterator<Item = T> + 'a>),
 
     // while it would be convienient to directly use the following, doing so
@@ -244,7 +244,7 @@ pub enum OpInputEnum<'a, T: Dist> {
     // AtomicArray(AtomicArray<T>),
 }
 
-impl<'a, T: Dist> OpInputEnum<'_, T> {
+impl<'a, T: Dist> OpInputEnum<'a, T> {
     #[tracing::instrument(skip_all)]
     pub(crate) fn iter(&self) -> Box<dyn Iterator<Item = T> + '_> {
         match self {
@@ -303,15 +303,15 @@ impl<'a, T: Dist> OpInputEnum<'_, T> {
     }
 
     // #[tracing::instrument(skip_all)]
-    pub(crate) fn as_vec_chunks(&self, chunk_size: usize) -> Box<dyn Iterator<Item = Vec<T>> + '_> {
+    pub(crate) fn into_vec_chunks(self, chunk_size: usize) -> Vec<Vec<T>> {
         match self {
-            OpInputEnum::Val(v) => Box::new(vec![vec![*v]].into_iter()),
-            OpInputEnum::Slice(s) => Box::new(s.chunks(chunk_size).map(|chunk| chunk.to_vec())),
-            OpInputEnum::Vec(v) => Box::new(v.chunks(chunk_size).map(|chunk| chunk.to_vec())),
+            OpInputEnum::Val(v) =>vec![vec![v]],
+            OpInputEnum::Slice(s) => s.chunks(chunk_size).map(|chunk| chunk.to_vec()).collect(),
+            OpInputEnum::Vec(v) => v.chunks(chunk_size).map(|chunk| chunk.to_vec()).collect(),
             OpInputEnum::NativeAtomicLocalData(a) => {
                 let mut data = Vec::with_capacity(chunk_size);
 
-                Box::new(a.iter().enumerate().filter_map(move |(i, elem)| {
+                a.iter().enumerate().filter_map(move |(i, elem)| {
                     data.push(elem.load());
                     if data.len() == chunk_size || i == a.len() - 1 {
                         let mut new_data = Vec::with_capacity(chunk_size);
@@ -320,12 +320,12 @@ impl<'a, T: Dist> OpInputEnum<'_, T> {
                     } else {
                         None
                     }
-                }))
+                }).collect()
             }
             OpInputEnum::GenericAtomicLocalData(a) => {
                 let mut data = Vec::with_capacity(chunk_size);
 
-                Box::new(a.iter().enumerate().filter_map(move |(i, elem)| {
+                a.iter().enumerate().filter_map(move |(i, elem)| {
                     data.push(elem.load());
                     if data.len() == chunk_size || i == a.len() - 1 {
                         let mut new_data = Vec::with_capacity(chunk_size);
@@ -334,13 +334,13 @@ impl<'a, T: Dist> OpInputEnum<'_, T> {
                     } else {
                         None
                     }
-                }))
+                }).collect()
             }
             OpInputEnum::LocalLockLocalData(a) => {
-                Box::new(a.data.chunks(chunk_size).map(|chunk| chunk.to_vec()))
+                a.chunks(chunk_size).map(|chunk| chunk.to_vec()).collect()
             }
             OpInputEnum::GlobalLockLocalData(a) => {
-                Box::new(a.data.chunks(chunk_size).map(|chunk| chunk.to_vec()))
+                a.chunks(chunk_size).map(|chunk| chunk.to_vec()).collect()
             }
             // OpInputEnum::MemoryRegion(mr) => *unsafe { mr.as_slice() }
             //     .expect("memregion not local")
@@ -682,7 +682,7 @@ impl<'a, T: Dist> OpInput<'a, T> for Vec<T> {
 //     }
 // }
 
-impl<'a, T: Dist> OpInput<'a, T> for &'a LocalLockLocalData<'_, T> {
+impl<'a, T: Dist> OpInput<'a, T> for &'a LocalLockLocalData<T> {
     #[tracing::instrument(skip_all)]
     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
         let len = self.len();
@@ -722,7 +722,7 @@ impl<'a, T: Dist> OpInput<'a, T> for &'a LocalLockLocalData<'_, T> {
     }
 }
 
-impl<'a, T: Dist> OpInput<'a, T> for &'a GlobalLockLocalData<'_, T> {
+impl<'a, T: Dist> OpInput<'a, T> for &'a GlobalLockLocalData<T> {
     #[tracing::instrument(skip_all)]
     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
         let len = self.len();

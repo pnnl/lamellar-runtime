@@ -431,7 +431,7 @@ thread_local! {
 
 #[derive(Debug)]
 pub(crate) struct NumaWorkStealing2 {
-    inners: Vec<Arc<AmeScheduler>>,
+    inners: Vec<&(impl SchedulerQueue + Sync + std::fmt::Debug)>,
     ames: Vec<Arc<ActiveMessageEngineType>>,
     node_mask: usize,
 }

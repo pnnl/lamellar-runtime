@@ -2,7 +2,6 @@ use crate::active_messaging::LamellarArcAm;
 use crate::array::operations::*;
 use crate::array::r#unsafe::UnsafeArray;
 use crate::array::{AmDist, Dist, LamellarArray, LamellarByteArray, LamellarEnv};
-use crate::scheduler::SchedulerQueue;
 use futures::Future;
 use parking_lot::Mutex;
 use std::any::TypeId;
@@ -394,12 +393,13 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
             self.inner.data.array_counters.add_send_req(1);
             self.inner.data.team.inc_counters(1);
             let index_vec = index.to_vec();
+            let the_array: UnsafeArray<T> = self.clone();
             // println!("num_reqs {:?}",num_reqs);
             self.inner
                 .data
                 .team
                 .scheduler
-                .submit_immediate_task2(async move {
+                .submit_immediate_task(async move {
                     let mut buffs =
                         vec![Vec::with_capacity(num_per_batch * index_size.len()); num_pes];
                     let mut res_buffs = vec![Vec::with_capacity(num_per_batch); num_pes];
@@ -408,11 +408,12 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
                     // let mut res_index = 0;
                     for (ii, idx) in index_vec.iter().enumerate() {
                         let j = ii + start_i;
-                        let (pe, local_index) = match self.pe_and_offset_for_global_index(*idx) {
+                        let (pe, local_index) = match the_array.pe_and_offset_for_global_index(*idx)
+                        {
                             Some((pe, local_index)) => (pe, local_index),
                             None => panic!(
                                 "Index: {idx} out of bounds for array of len: {:?}",
-                                self.inner.size
+                                the_array.inner.size
                             ),
                         };
                         buffs[pe].extend_from_slice(index_size.as_bytes(&local_index));
@@ -432,14 +433,14 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
                                 index_size,
                             )
                             .into_am::<T>(ret);
-                            let req = self
+                            let req = the_array
                                 .inner
                                 .data
                                 .team
                                 .exec_arc_am_pe::<R>(
                                     pe,
                                     am,
-                                    Some(self.inner.data.array_counters.clone()),
+                                    Some(the_array.inner.data.array_counters.clone()),
                                 )
                                 .into_future();
                             reqs.push(Box::pin(async move { (req.await, new_res_buffer) }));
@@ -457,14 +458,14 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
                                 index_size,
                             )
                             .into_am::<T>(ret);
-                            let req = self
+                            let req = the_array
                                 .inner
                                 .data
                                 .team
                                 .exec_arc_am_pe::<R>(
                                     pe,
                                     am,
-                                    Some(self.inner.data.array_counters.clone()),
+                                    Some(the_array.inner.data.array_counters.clone()),
                                 )
                                 .into_future();
                             reqs.push(Box::pin(async move { (req.await, res_buff) }));
@@ -473,22 +474,23 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
                     // println!("reqs len {:?}",reqs.len());
                     futures2.lock().extend(reqs);
                     cnt2.fetch_add(1, Ordering::SeqCst);
-                    self.inner
+                    the_array
+                        .inner
                         .data
                         .array_counters
                         .outstanding_reqs
                         .fetch_sub(1, Ordering::SeqCst);
-                    self.inner.data.team.dec_counters(1);
+                    the_array.inner.data.team.dec_counters(1);
                 });
             start_i += len;
         }
 
+        // We need this loop so that we ensure all the internal AMs have launched so calls like wait_all work properly
+        while cnt.load(Ordering::SeqCst) < num_reqs {
+            self.inner.data.team.scheduler.exec_task();
+        }
         // println!("futures len {:?}",futures.lock().len());
         Box::pin(async move {
-            while cnt.load(Ordering::SeqCst) < num_reqs {
-                // self.inner.data.team.scheduler.exec_task();
-                async_std::task::yield_now().await;
-            }
             // println!("futures len {:?}",futures.lock().len());
             futures::future::join_all(futures.lock().drain(..)).await
         })
@@ -523,6 +525,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         let num_reqs = vals.len();
         // println!("num_reqs {:?}",num_reqs);
         let mut start_i = 0;
+        let scheduler = self.inner.data.team.scheduler.clone();
         for val in vals.drain(..) {
             let cnt2 = cnt.clone();
             let futures2 = futures.clone();
@@ -530,58 +533,54 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
             let len = val.len();
             self.inner.data.array_counters.add_send_req(1);
             self.inner.data.team.inc_counters(1);
-            let val_chunks = val.as_vec_chunks(num_per_batch);
-            self.inner
-                .data
-                .team
-                .scheduler
-                .submit_immediate_task2(async move {
-                    // let mut buffs = vec![Vec::with_capacity(num_per_batch); num_pes];
-                    // let val_slice = val.as_slice();
-                    let mut inner_start_i = start_i;
-                    let mut reqs: Vec<Pin<Box<dyn Future<Output = (R, Vec<usize>)> + Send>>> =
-                        Vec::new();
-                    // val.as_vec_chunks(num_per_batch)
-                    val_chunks.into_iter().for_each(|val| {
-                        let val_len = val.len();
-                        let am = MultiValSingleIndex::new_with_vec(
-                            byte_array2.clone(),
-                            op,
-                            local_index,
-                            val,
-                        )
-                        .into_am::<T>(ret);
-                        let req = self
-                            .inner
-                            .data
-                            .team
-                            .exec_arc_am_pe::<R>(
-                                pe,
-                                am,
-                                Some(self.inner.data.array_counters.clone()),
-                            )
-                            .into_future();
-                        // println!("start_i: {:?} inner_start_i {:?} val_len: {:?}",start_i,inner_start_i,val_len);
-                        let res_buffer =
-                            (inner_start_i..inner_start_i + val_len).collect::<Vec<usize>>();
-                        reqs.push(Box::pin(async move { (req.await, res_buffer) }));
-                        inner_start_i += val_len;
-                    });
-                    // println!("reqs len {:?}",reqs.len());
-                    futures2.lock().extend(reqs);
-                    cnt2.fetch_add(1, Ordering::SeqCst);
-                    self.inner
+            let the_array: UnsafeArray<T> = self.clone();
+            let val_chunks = val.into_vec_chunks(num_per_batch);
+            scheduler.submit_immediate_task(async move {
+                let mut inner_start_i = start_i;
+                let mut reqs: Vec<Pin<Box<dyn Future<Output = (R, Vec<usize>)> + Send>>> =
+                    Vec::new();
+                val_chunks.into_iter().for_each(|val| {
+                    let val_len = val.len();
+                    let am = MultiValSingleIndex::new_with_vec(
+                        byte_array2.clone(),
+                        op,
+                        local_index,
+                        val,
+                    )
+                    .into_am::<T>(ret);
+                    let req = the_array
+                        .inner
                         .data
-                        .array_counters
-                        .outstanding_reqs
-                        .fetch_sub(1, Ordering::SeqCst);
-                    self.inner.data.team.dec_counters(1);
+                        .team
+                        .exec_arc_am_pe::<R>(
+                            pe,
+                            am,
+                            Some(the_array.inner.data.array_counters.clone()),
+                        )
+                        .into_future();
+                    // println!("start_i: {:?} inner_start_i {:?} val_len: {:?}",start_i,inner_start_i,val_len);
+                    let res_buffer =
+                        (inner_start_i..inner_start_i + val_len).collect::<Vec<usize>>();
+                    reqs.push(Box::pin(async move { (req.await, res_buffer) }));
+                    inner_start_i += val_len;
                 });
+                // println!("reqs len {:?}",reqs.len());
+                futures2.lock().extend(reqs);
+                cnt2.fetch_add(1, Ordering::SeqCst);
+                the_array
+                    .inner
+                    .data
+                    .array_counters
+                    .outstanding_reqs
+                    .fetch_sub(1, Ordering::SeqCst);
+                the_array.inner.data.team.dec_counters(1);
+            });
             start_i += len;
         }
+
+        // We need this loop so that we ensure all the internal AMs have launched so calls like wait_all work properly
         while cnt.load(Ordering::SeqCst) < num_reqs {
             self.inner.data.team.scheduler.exec_task();
-            // async_std::task::yield_now().await;
         }
         // println!("futures len {:?}",futures.lock().len());
         Box::pin(async move {
@@ -628,12 +627,13 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
             self.inner.data.team.inc_counters(1);
             let index_vec = index.to_vec();
             let vals_vec = val.to_vec();
+            let the_array: UnsafeArray<T> = self.clone();
             // println!("trying to submit immediate task");
             self.inner
                 .data
                 .team
                 .scheduler
-                .submit_immediate_task2(async move {
+                .submit_immediate_task(async move {
                     // println!("in immediate task");
                     let mut buffs = vec![Vec::with_capacity(bytes_per_batch); num_pes];
                     let mut res_buffs = vec![Vec::with_capacity(num_per_batch); num_pes];
@@ -644,11 +644,12 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
                         index_vec.into_iter().zip(vals_vec.into_iter()).enumerate()
                     {
                         let j = ii + start_i;
-                        let (pe, local_index) = match self.pe_and_offset_for_global_index(idx) {
+                        let (pe, local_index) = match the_array.pe_and_offset_for_global_index(idx)
+                        {
                             Some((pe, local_index)) => (pe, local_index),
                             None => panic!(
                                 "Index: {idx} out of bounds for array of len: {:?}",
-                                self.inner.size
+                                the_array.inner.size
                             ),
                         };
                         match index_size {
@@ -703,14 +704,14 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
                                 index_size,
                             )
                             .into_am::<T>(ret);
-                            let req = self
+                            let req = the_array
                                 .inner
                                 .data
                                 .team
                                 .exec_arc_am_pe::<R>(
                                     pe,
                                     am,
-                                    Some(self.inner.data.array_counters.clone()),
+                                    Some(the_array.inner.data.array_counters.clone()),
                                 )
                                 .into_future();
                             reqs.push(Box::pin(async move { (req.await, new_res_buffer) }));
@@ -728,14 +729,14 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
                                 index_size,
                             )
                             .into_am::<T>(ret);
-                            let req = self
+                            let req = the_array
                                 .inner
                                 .data
                                 .team
                                 .exec_arc_am_pe::<R>(
                                     pe,
                                     am,
-                                    Some(self.inner.data.array_counters.clone()),
+                                    Some(the_array.inner.data.array_counters.clone()),
                                 )
                                 .into_future();
                             reqs.push(Box::pin(async move { (req.await, res_buff) }));
@@ -743,18 +744,19 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
                     }
                     futures2.lock().extend(reqs);
                     cnt2.fetch_add(1, Ordering::SeqCst);
-                    self.inner
+                    the_array
+                        .inner
                         .data
                         .array_counters
                         .outstanding_reqs
                         .fetch_sub(1, Ordering::SeqCst);
-                    self.inner.data.team.dec_counters(1);
+                    the_array.inner.data.team.dec_counters(1);
                 });
             start_i += len;
         }
+        // We need this loop so that we ensure all the internal AMs have launched so calls like wait_all work properly
         while cnt.load(Ordering::SeqCst) < num_reqs {
             self.inner.data.team.scheduler.exec_task();
-            // async_std::task::yield_now().await;
         }
         // println!("futures len {:?}", futures.lock().len());
         Box::pin(async move {
