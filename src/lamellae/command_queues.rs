@@ -2,7 +2,7 @@ use crate::lamellae::comm::*;
 use crate::lamellae::{
     Des, Lamellae, LamellaeComm, LamellaeRDMA, SerializedData, SerializedDataOps,
 };
-use crate::scheduler::{Scheduler, SchedulerQueue};
+use crate::scheduler::Scheduler;
 
 use parking_lot::Mutex;
 
@@ -1434,7 +1434,8 @@ impl CommandQueue {
                                                 //     "[{:?}] recv_data submitting work",
                                                 //     std::thread::current().id(),
                                                 // );
-                                                scheduler2.submit_work(work_data, lamellae.clone());
+                                                scheduler2
+                                                    .submit_remote_am(work_data, lamellae.clone());
                                                 if cmd_cnt_clone.fetch_sub(1, Ordering::SeqCst) == 1
                                                 {
                                                     cq.send_free(src, cmd_buf_cmd);

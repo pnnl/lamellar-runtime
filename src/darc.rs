@@ -64,7 +64,6 @@ use crate::barrier::Barrier;
 use crate::lamellae::{AllocationType, Backend, LamellaeComm, LamellaeRDMA};
 use crate::lamellar_team::{IntoLamellarTeam, LamellarTeamRT};
 use crate::lamellar_world::LAMELLAES;
-// use crate::scheduler::SchedulerQueue;
 use crate::{IdError, LamellarEnv, LamellarTeam};
 
 #[doc(hidden)]
@@ -137,8 +136,8 @@ pub struct DarcInner<T> {
     drop: Option<fn(&mut T)>,
     valid: AtomicBool,
 }
-unsafe impl<T: Send> Send for DarcInner<T> {}
-unsafe impl<T: Sync> Sync for DarcInner<T> {}
+unsafe impl<T> Send for DarcInner<T> {} //we cant create DarcInners without going through the Darc interface which enforces  Sync+Send
+unsafe impl<T> Sync for DarcInner<T> {} //we cant create DarcInners without going through the Darc interface which enforces  Sync+Send
 
 /// Distributed atomic reference counter
 ///
@@ -192,8 +191,8 @@ pub struct Darc<T: 'static> {
     inner: *mut DarcInner<T>,
     src_pe: usize,
 }
-unsafe impl<T: Send> Send for Darc<T> {}
-unsafe impl<T: Sync> Sync for Darc<T> {}
+unsafe impl<T: Sync + Send> Send for Darc<T> {}
+unsafe impl<T: Sync + Send> Sync for Darc<T> {}
 
 impl<T> LamellarEnv for Darc<T> {
     fn my_pe(&self) -> usize {
@@ -956,15 +955,11 @@ impl<T> Darc<T> {
         Ok(d)
     }
 
-    pub(crate) async fn block_on_outstanding(&self, state: DarcMode, extra_cnt: usize) {
-        DarcInner::block_on_outstanding(
-            WrappedInner {
-                inner: NonNull::new(self.inner as *mut DarcInner<T>).expect("invalid darc pointer"),
-            },
-            state,
-            extra_cnt,
-        )
-        .await;
+    pub(crate) async fn block_on_outstanding(self, state: DarcMode, extra_cnt: usize) {
+        let wrapped = WrappedInner {
+            inner: NonNull::new(self.inner as *mut DarcInner<T>).expect("invalid darc pointer"),
+        };
+        DarcInner::block_on_outstanding(wrapped, state, extra_cnt).await;
     }
 
     #[doc(alias = "Collective")]
@@ -1000,9 +995,10 @@ impl<T> Darc<T> {
         inner.local_cnt.fetch_add(1, Ordering::SeqCst); //we add this here because to account for moving inner into d
         inner.total_local_cnt.fetch_add(1, Ordering::SeqCst);
         // println! {"[{:?}] darc[{:?}] into_localrw {:?} {:?} {:?}",std::thread::current().id(),self.inner().id,self.inner,self.inner().local_cnt.load(Ordering::SeqCst),self.inner().total_local_cnt.load(Ordering::SeqCst)};
-        let item = unsafe { Box::from_raw(inner.item as *mut T) };
+        let item = unsafe { *Box::from_raw(inner.item as *mut T) };
+
         let d = Darc {
-            inner: self.inner as *mut DarcInner<Arc<RwLock<Box<T>>>>,
+            inner: self.inner as *mut DarcInner<Arc<RwLock<T>>>,
             src_pe: self.src_pe,
         };
         d.inner_mut()

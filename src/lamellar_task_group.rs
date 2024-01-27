@@ -4,7 +4,7 @@ use crate::lamellar_arch::LamellarArchRT;
 use crate::lamellar_request::*;
 use crate::lamellar_team::{IntoLamellarTeam, LamellarTeam, LamellarTeamRT};
 use crate::memregion::one_sided::MemRegionHandleInner;
-use crate::scheduler::{ReqId, Scheduler, SchedulerQueue};
+use crate::scheduler::{ReqId, Scheduler};
 use crate::Darc;
 
 use crate::active_messaging::registered_active_message::{AmId, AMS_EXECS, AMS_IDS, AM_ID_START};
@@ -463,10 +463,7 @@ impl ActiveMessaging for LamellarTaskGroup {
         self.exec_am_local_inner(am).into_future()
     }
 
-    fn block_on<F>(&self, f: F) -> F::Output
-    where
-        F: Future,
-    {
+    fn block_on<F: Future>(&self, f: F) -> F::Output {
         tracing::trace_span!("block_on").in_scope(|| self.team.scheduler.block_on(f))
     }
 }

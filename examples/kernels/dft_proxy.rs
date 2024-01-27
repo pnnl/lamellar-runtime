@@ -203,6 +203,7 @@ fn dft_lamellar_am_group(
             );
         }
         let spec = spectrum.clone();
+        let world_clone = world.clone();
         pe_groups.push_back(async move {
             let res = local_sum_group.exec().await;
             let vec = (0..local_len)
@@ -214,7 +215,7 @@ fn dft_lamellar_am_group(
                     }
                 })
                 .collect::<Vec<_>>();
-            world
+            world_clone
                 .exec_am_pe(
                     pe,
                     RemoteSumAM {
@@ -225,7 +226,7 @@ fn dft_lamellar_am_group(
                 .await;
         });
     }
-    world.block_on(pe_groups.collect::<Vec<_>>());
+    world.block_on(async move { pe_groups.collect::<Vec<_>>().await });
 
     world.barrier();
     let time = timer.elapsed().as_secs_f64();
@@ -261,6 +262,7 @@ fn dft_lamellar_am_group_static(
             );
         }
         let spec = spectrum.clone();
+        let world_clone = world.clone();
         pe_groups.push_back(async move {
             let res = local_sum_group.exec().await;
             let vec = (0..local_len)
@@ -272,7 +274,7 @@ fn dft_lamellar_am_group_static(
                     }
                 })
                 .collect::<Vec<_>>();
-            world
+            world_clone
                 .exec_am_pe(
                     pe,
                     RemoteSumAM {
@@ -283,7 +285,9 @@ fn dft_lamellar_am_group_static(
                 .await;
         });
     }
-    world.block_on(pe_groups.collect::<Vec<_>>());
+    world.block_on(async move {
+        pe_groups.collect::<Vec<_>>().await;
+    });
 
     world.barrier();
     let time = timer.elapsed().as_secs_f64();

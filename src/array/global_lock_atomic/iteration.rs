@@ -301,7 +301,8 @@ impl<T: Dist> LamellarArrayIterators<T> for GlobalLockArray<T> {
     type OnesidedIter = OneSidedIter<'static, T, Self>;
 
     fn dist_iter(&self) -> Self::DistIter {
-        let lock = self.array.block_on(self.lock.read());
+        let lock: GlobalRwDarc<()> = self.lock.clone();
+        let lock = self.array.block_on(async move { lock.read().await });
         self.barrier();
         GlobalLockDistIter {
             data: self.clone(),
@@ -313,7 +314,8 @@ impl<T: Dist> LamellarArrayIterators<T> for GlobalLockArray<T> {
     }
 
     fn local_iter(&self) -> Self::LocalIter {
-        let lock = self.array.block_on(self.lock.read());
+        let lock: GlobalRwDarc<()> = self.lock.clone();
+        let lock = self.array.block_on(async move { lock.read().await });
         GlobalLockLocalIter {
             data: self.clone(),
             lock: lock,
@@ -341,7 +343,11 @@ impl<T: Dist> LamellarArrayMutIterators<T> for GlobalLockArray<T> {
     type LocalIter = GlobalLockLocalIterMut<T>;
 
     fn dist_iter_mut(&self) -> Self::DistIter {
-        let lock = Arc::new(self.array.block_on(self.lock.collective_write()));
+        let lock: GlobalRwDarc<()> = self.lock.clone();
+        let lock = Arc::new(
+            self.array
+                .block_on(async move { lock.collective_write().await }),
+        );
         self.barrier();
         // println!("dist_iter thread {:?} got lock",std::thread::current().id());
         GlobalLockDistIterMut {
@@ -354,7 +360,8 @@ impl<T: Dist> LamellarArrayMutIterators<T> for GlobalLockArray<T> {
     }
 
     fn local_iter_mut(&self) -> Self::LocalIter {
-        let lock = Arc::new(self.array.block_on(self.lock.write()));
+        let lock: GlobalRwDarc<()> = self.lock.clone();
+        let lock = Arc::new(self.array.block_on(async move { lock.write().await }));
         GlobalLockLocalIterMut {
             data: self.clone(),
             lock: lock,

@@ -66,9 +66,8 @@ fn main() {
         array.barrier();
         let cur_t = timer.elapsed().as_secs_f64();
         if my_pe == 0 {
-            // let array_slice = unsafe { array.read_local_data() }; //unlike for unsafe arrays, accessing the local data captures a read lock, this would prevent any writes from happening.
             for j in (0..2_u64.pow(exp) as usize).step_by(num_bytes as usize) {
-                let local_data = array.block_on(array.read_local_data());
+                let local_data = array.blocking_read_local_data();
                 while *(&local_data[(j + num_bytes as usize) - 1]) == 255 as u8 {
                     println!(
                         "this should not happen {:?}",

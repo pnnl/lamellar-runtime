@@ -6,7 +6,7 @@ use crate::lamellae::{
     LamellaeRDMA, Ser, SerializeHeader, SerializedData, SerializedDataOps, SERIALIZE_HEADER_LEN,
 };
 use crate::lamellar_arch::LamellarArchRT;
-use crate::scheduler::{Scheduler, SchedulerQueue};
+use crate::scheduler::Scheduler;
 use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::Arc;
 

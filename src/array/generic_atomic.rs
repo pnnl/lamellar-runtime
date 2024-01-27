@@ -712,10 +712,7 @@ impl<T: Dist> LamellarArray<T> for GenericAtomicArray<T> {
         self.array.wait_all()
         // println!("done in wait all {:?}",std::time::SystemTime::now());
     }
-    fn block_on<F>(&self, f: F) -> F::Output
-    where
-        F: Future,
-    {
+    fn block_on<F: Future>(&self, f: F) -> F::Output {
         self.array.block_on(f)
     }
     fn pe_and_offset_for_global_index(&self, index: usize) -> Option<(usize, usize)> {
@@ -795,7 +792,7 @@ impl<T: Dist + std::fmt::Debug> ArrayPrint<T> for GenericAtomicArray<T> {
 }
 
 impl<T: Dist + AmDist + 'static> LamellarArrayReduce<T> for GenericAtomicArray<T> {
-    fn reduce(&self, op: &str) -> Pin<Box<dyn Future<Output = T>>> {
+    fn reduce(&self, op: &str) -> Pin<Box<dyn Future<Output = T> + Send>> {
         self.array
             .reduce_data(op, self.clone().into())
             .into_future()
@@ -804,20 +801,20 @@ impl<T: Dist + AmDist + 'static> LamellarArrayReduce<T> for GenericAtomicArray<T
 impl<T: Dist + AmDist + ElementArithmeticOps + 'static> LamellarArrayArithmeticReduce<T>
     for GenericAtomicArray<T>
 {
-    fn sum(&self) -> Pin<Box<dyn Future<Output = T>>> {
+    fn sum(&self) -> Pin<Box<dyn Future<Output = T> + Send>> {
         self.reduce("sum")
     }
-    fn prod(&self) -> Pin<Box<dyn Future<Output = T>>> {
+    fn prod(&self) -> Pin<Box<dyn Future<Output = T> + Send>> {
         self.reduce("prod")
     }
 }
 impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static> LamellarArrayCompareReduce<T>
     for GenericAtomicArray<T>
 {
-    fn max(&self) -> Pin<Box<dyn Future<Output = T>>> {
+    fn max(&self) -> Pin<Box<dyn Future<Output = T> + Send>> {
         self.reduce("max")
     }
-    fn min(&self) -> Pin<Box<dyn Future<Output = T>>> {
+    fn min(&self) -> Pin<Box<dyn Future<Output = T> + Send>> {
         self.reduce("min")
     }
 }

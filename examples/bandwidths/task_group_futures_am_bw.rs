@@ -64,7 +64,7 @@ fn main() {
                 cnt += 1;
             }
             println!("issue time: {:?}", timer.elapsed().as_secs_f64() - sub_time);
-            world.block_on(task_group.exec());
+            world.block_on(async move { task_group.exec().await });
         }
 
         world.barrier();

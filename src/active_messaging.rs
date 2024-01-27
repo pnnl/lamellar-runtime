@@ -638,7 +638,7 @@ use crate::lamellar_arch::IdError;
 use crate::lamellar_request::{InternalResult, LamellarRequestResult};
 use crate::lamellar_team::{LamellarTeam, LamellarTeamRT};
 use crate::memregion::one_sided::NetMemRegionHandle;
-use crate::scheduler::{ReqId, SchedulerQueue};
+use crate::scheduler::{Executor, LamellarExecutor, ReqId};
 // use log::trace;
 use async_trait::async_trait;
 use futures::Future;
@@ -856,9 +856,6 @@ pub(crate) enum Am {
     Return(ReqMetaData, LamellarArcAm), //req data, am to return and execute
     Data(ReqMetaData, LamellarResultArc), //req data, data to return
     Unit(ReqMetaData),                  //req data
-    _BatchedReturn(ReqMetaData, LamellarArcAm, ReqId), //req data, am to return and execute, batch id
-    _BatchedData(ReqMetaData, LamellarResultArc, ReqId), //req data, data to return, batch id
-    _BatchedUnit(ReqMetaData, ReqId),                  //req data, batch id
 }
 
 impl std::fmt::Debug for Am {
@@ -870,9 +867,6 @@ impl std::fmt::Debug for Am {
             Am::Return(_, _) => write!(f, "Return"),
             Am::Data(_, _) => write!(f, "Data"),
             Am::Unit(_) => write!(f, "Unit"),
-            Am::_BatchedReturn(_, _, _) => write!(f, "BatchedReturn"),
-            Am::_BatchedData(_, _, _) => write!(f, "BatchedData"),
-            Am::_BatchedUnit(_, _) => write!(f, "BatchedUnit"),
         }
     }
 }
@@ -1178,27 +1172,25 @@ pub trait ActiveMessaging {
     ///     world_clone.exec_am_all(Am{val: buf[0] as usize}).await;
     /// });
     ///```
-    fn block_on<F>(&self, f: F) -> F::Output
-    where
-        F: Future;
+    fn block_on<F: Future>(&self, f: F) -> F::Output;
 }
 
 #[async_trait]
 pub(crate) trait ActiveMessageEngine {
     async fn process_msg(
-        &self,
+        self,
         am: Am,
-        scheduler: impl SchedulerQueue + Sync + Send + Clone + std::fmt::Debug + 'static,
+        scheduler: Arc<Executor>,
         stall_mark: usize,
         immediate: bool,
     );
 
     async fn exec_msg(
-        &self,
+        self,
         msg: Msg,
         ser_data: SerializedData,
         lamellae: Arc<Lamellae>,
-        scheduler: impl SchedulerQueue + Sync + Send + Clone + std::fmt::Debug + 'static,
+        scheduler: Arc<Executor>,
     );
 
     fn get_team_and_world(
@@ -1232,39 +1224,39 @@ pub(crate) trait ActiveMessageEngine {
     }
 }
 
-#[derive(Debug)]
-pub(crate) enum ActiveMessageEngineType {
-    RegisteredActiveMessages(Arc<RegisteredActiveMessages>),
-}
+// #[derive(Debug)]
+// pub(crate) enum ActiveMessageEngineType {
+//     RegisteredActiveMessages(RegisteredActiveMessages),
+// }
 
-#[async_trait]
-impl ActiveMessageEngine for ActiveMessageEngineType {
-    async fn process_msg(
-        &self,
-        am: Am,
-        scheduler: impl SchedulerQueue + Sync + Send + Clone + std::fmt::Debug + 'static,
-        stall_mark: usize,
-        immediate: bool,
-    ) {
-        match self {
-            ActiveMessageEngineType::RegisteredActiveMessages(remote_am) => {
-                remote_am
-                    .process_msg(am, scheduler, stall_mark, immediate)
-                    .await;
-            }
-        }
-    }
-    async fn exec_msg(
-        &self,
-        msg: Msg,
-        ser_data: SerializedData,
-        lamellae: Arc<Lamellae>,
-        scheduler: impl SchedulerQueue + Sync + Send + Clone + std::fmt::Debug + 'static,
-    ) {
-        match self {
-            ActiveMessageEngineType::RegisteredActiveMessages(remote_am) => {
-                remote_am.exec_msg(msg, ser_data, lamellae, scheduler).await;
-            }
-        }
-    }
-}
+// #[async_trait]
+// impl ActiveMessageEngine for ActiveMessageEngineType {
+//     async fn process_msg(
+//         self,
+//         am: Am,
+//         executor: Arc<Executor>,
+//         stall_mark: usize,
+//         immediate: bool,
+//     ) {
+//         match self {
+//             ActiveMessageEngineType::RegisteredActiveMessages(remote_am) => {
+//                 remote_am
+//                     .process_msg(am, executor, stall_mark, immediate)
+//                     .await;
+//             }
+//         }
+//     }
+//     async fn exec_msg(
+//         self,
+//         msg: Msg,
+//         ser_data: SerializedData,
+//         lamellae: Arc<Lamellae>,
+//         executor: Arc<Executor>,
+//     ) {
+//         match self {
+//             ActiveMessageEngineType::RegisteredActiveMessages(remote_am) => {
+//                 remote_am.exec_msg(msg, ser_data, lamellae, executor).await;
+//             }
+//         }
+//     }
+// }

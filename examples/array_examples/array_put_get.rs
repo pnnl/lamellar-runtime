@@ -20,7 +20,7 @@ fn initialize_mem_region(memregion: &LamellarMemoryRegion<usize>) {
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let world = lamellar::LamellarWorldBuilder::new().build();
-    world.block_on(async {
+    world.clone().block_on(async move {
         let _num_pes = world.num_pes();
         let my_pe = world.my_pe();
         let total_len = args
