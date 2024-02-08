@@ -2,7 +2,7 @@ use crate::active_messaging::SyncSend;
 use crate::array::iterator::distributed_iterator::*;
 use crate::array::iterator::private::*;
 use crate::array::r#unsafe::UnsafeArray;
-use crate::array::{ArrayOps, Distribution, LamellarArray, TeamFrom};
+use crate::array::{ArrayOps, AsyncTeamFrom, AsyncTeamInto, Distribution, LamellarArray, TeamFrom};
 
 use crate::array::iterator::Schedule;
 use crate::lamellar_team::LamellarTeamRT;
@@ -142,7 +142,7 @@ impl<T: Dist> DistIteratorLauncher for UnsafeArray<T> {
     where
         I: DistributedIterator + 'static,
         I::Item: Dist + ArrayOps,
-        A: for<'a> TeamFrom<(&'a Vec<I::Item>, Distribution)> + SyncSend + Clone + 'static,
+        A: AsyncTeamFrom<(Vec<I::Item>, Distribution)> + SyncSend + Clone + 'static,
     {
         self.collect_with_schedule(Schedule::Static, iter, d)
     }
@@ -156,7 +156,7 @@ impl<T: Dist> DistIteratorLauncher for UnsafeArray<T> {
     where
         I: DistributedIterator + 'static,
         I::Item: Dist + ArrayOps,
-        A: for<'a> TeamFrom<(&'a Vec<I::Item>, Distribution)> + SyncSend + Clone + 'static,
+        A: AsyncTeamFrom<(Vec<I::Item>, Distribution)> + SyncSend + Clone + 'static,
     {
         let collect = Collect {
             iter: iter.iter_clone(Sealed).monotonic(),
@@ -181,7 +181,7 @@ impl<T: Dist> DistIteratorLauncher for UnsafeArray<T> {
         I: DistributedIterator,
         I::Item: Future<Output = B> + Send + 'static,
         B: Dist + ArrayOps,
-        A: for<'a> TeamFrom<(&'a Vec<B>, Distribution)> + SyncSend + Clone + 'static,
+        A: AsyncTeamFrom<(Vec<B>, Distribution)> + SyncSend + Clone + 'static,
     {
         self.collect_async_with_schedule(Schedule::Static, iter, d)
     }
@@ -196,7 +196,7 @@ impl<T: Dist> DistIteratorLauncher for UnsafeArray<T> {
         I: DistributedIterator,
         I::Item: Future<Output = B> + Send + 'static,
         B: Dist + ArrayOps,
-        A: for<'a> TeamFrom<(&'a Vec<B>, Distribution)> + SyncSend + Clone + 'static,
+        A: AsyncTeamFrom<(Vec<B>, Distribution)> + SyncSend + Clone + 'static,
     {
         let collect = CollectAsync {
             iter: iter.iter_clone(Sealed).monotonic(),

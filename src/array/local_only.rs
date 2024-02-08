@@ -99,6 +99,17 @@ impl<T: Dist> From<UnsafeArray<T>> for LocalOnlyArray<T> {
     }
 }
 
+#[async_trait]
+impl<T: Dist> AsyncFrom<UnsafeArray<T>> for LocalOnlyArray<T> {
+    async fn async_from(array: UnsafeArray<T>) -> Self {
+        array.await_on_outstanding(DarcMode::LocalOnlyArray).await;
+        LocalOnlyArray {
+            array: array,
+            _unsync: PhantomData,
+        }
+    }
+}
+
 impl<T: Dist> From<ReadOnlyArray<T>> for LocalOnlyArray<T> {
     fn from(array: ReadOnlyArray<T>) -> Self {
         unsafe { array.into_inner().into() }

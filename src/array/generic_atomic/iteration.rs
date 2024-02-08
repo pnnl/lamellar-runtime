@@ -293,7 +293,7 @@ impl<T: Dist> DistIteratorLauncher for GenericAtomicArray<T> {
     where
         I: DistributedIterator + 'static,
         I::Item: Dist + ArrayOps,
-        A: for<'a> TeamFrom<(&'a Vec<I::Item>, Distribution)> + SyncSend + Clone + 'static,
+        A: AsyncTeamFrom<(Vec<I::Item>, Distribution)> + SyncSend + Clone + 'static,
     {
         DistIteratorLauncher::collect(&self.array, iter, d)
     }
@@ -307,7 +307,7 @@ impl<T: Dist> DistIteratorLauncher for GenericAtomicArray<T> {
     where
         I: DistributedIterator + 'static,
         I::Item: Dist + ArrayOps,
-        A: for<'a> TeamFrom<(&'a Vec<I::Item>, Distribution)> + SyncSend + Clone + 'static,
+        A: AsyncTeamFrom<(Vec<I::Item>, Distribution)> + SyncSend + Clone + 'static,
     {
         DistIteratorLauncher::collect_with_schedule(&self.array, sched, iter, d)
     }
@@ -320,7 +320,7 @@ impl<T: Dist> DistIteratorLauncher for GenericAtomicArray<T> {
         I: DistributedIterator,
         I::Item: Future<Output = B> + Send + 'static,
         B: Dist + ArrayOps,
-        A: for<'a> TeamFrom<(&'a Vec<B>, Distribution)> + SyncSend + Clone + 'static,
+        A: AsyncTeamFrom<(Vec<B>, Distribution)> + SyncSend + Clone + 'static,
     {
         DistIteratorLauncher::collect_async(&self.array, iter, d)
     }
@@ -335,7 +335,7 @@ impl<T: Dist> DistIteratorLauncher for GenericAtomicArray<T> {
         I: DistributedIterator,
         I::Item: Future<Output = B> + Send + 'static,
         B: Dist + ArrayOps,
-        A: for<'a> TeamFrom<(&'a Vec<B>, Distribution)> + SyncSend + Clone + 'static,
+        A: AsyncTeamFrom<(Vec<B>, Distribution)> + SyncSend + Clone + 'static,
     {
         DistIteratorLauncher::collect_async_with_schedule(&self.array, sched, iter, d)
     }
@@ -481,7 +481,7 @@ impl<T: Dist> LocalIteratorLauncher for GenericAtomicArray<T> {
     where
         I: LocalIterator + 'static,
         I::Item: Dist + ArrayOps,
-        A: for<'a> TeamFrom<(&'a Vec<I::Item>, Distribution)> + SyncSend + Clone + 'static,
+        A: AsyncTeamFrom<(Vec<I::Item>, Distribution)> + SyncSend + Clone + 'static,
     {
         LocalIteratorLauncher::collect(&self.array, iter, d)
     }
@@ -495,7 +495,7 @@ impl<T: Dist> LocalIteratorLauncher for GenericAtomicArray<T> {
     where
         I: LocalIterator + 'static,
         I::Item: Dist + ArrayOps,
-        A: for<'a> TeamFrom<(&'a Vec<I::Item>, Distribution)> + SyncSend + Clone + 'static,
+        A: AsyncTeamFrom<(Vec<I::Item>, Distribution)> + SyncSend + Clone + 'static,
     {
         LocalIteratorLauncher::collect_with_schedule(&self.array, sched, iter, d)
     }

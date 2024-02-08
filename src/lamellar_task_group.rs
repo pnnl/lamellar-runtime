@@ -557,6 +557,27 @@ impl LamellarTaskGroup {
         }
     }
 
+    pub(crate) async fn await_all(&self) {
+        let mut temp_now = Instant::now();
+        while self.counters.outstanding_reqs.load(Ordering::SeqCst) > 0 {
+            // self.team.flush();
+            // self.team.scheduler.exec_task();
+            async_std::task::yield_now().await;
+            if temp_now.elapsed().as_secs_f64() > *crate::DEADLOCK_TIMEOUT {
+                println!(
+                    "in task group wait_all mype: {:?} cnt: {:?} {:?}",
+                    self.team.world_pe,
+                    self.team.team_counters.send_req_cnt.load(Ordering::SeqCst),
+                    self.team
+                        .team_counters
+                        .outstanding_reqs
+                        .load(Ordering::SeqCst),
+                );
+                temp_now = Instant::now();
+            }
+        }
+    }
+
     pub(crate) fn exec_am_all_inner<F>(
         &self,
         am: F,
