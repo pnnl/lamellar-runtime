@@ -202,6 +202,76 @@ impl<T: Dist + ArrayOps + 'static> UnsafeArray<T> {
         // println!("after buffered ops");
         // array.inner.data.print();
     }
+
+    async fn async_new<U: Into<IntoLamellarTeam>>(
+        team: U,
+        array_size: usize,
+        distribution: Distribution,
+    ) -> UnsafeArray<T> {
+        let team = team.into().team.clone();
+        team.async_barrier().await;
+        let task_group = LamellarTaskGroup::new(team.clone());
+        let my_pe = team.team_pe_id().unwrap();
+        let num_pes = team.num_pes();
+        let full_array_size = std::cmp::max(array_size, num_pes);
+
+        let elem_per_pe = full_array_size as f64 / num_pes as f64;
+        let per_pe_size = (full_array_size as f64 / num_pes as f64).ceil() as usize; //we do ceil to ensure enough space an each pe
+                                                                                     // println!("new unsafe array {:?} {:?} {:?}", elem_per_pe, num_elems_local, per_pe_size);
+        let rmr = MemoryRegion::new(
+            per_pe_size * std::mem::size_of::<T>(),
+            team.lamellae.clone(),
+            AllocationType::Global,
+        );
+        unsafe {
+            for elem in rmr.as_mut_slice().expect("data should exist on pe") {
+                *elem = 0;
+            }
+        }
+
+        let data = Darc::try_new_with_drop(
+            team.clone(),
+            UnsafeArrayData {
+                mem_region: rmr,
+                array_counters: Arc::new(AMCounters::new()),
+                team: team.clone(),
+                task_group: Arc::new(task_group),
+                my_pe: my_pe,
+                num_pes: num_pes,
+                req_cnt: Arc::new(AtomicUsize::new(0)),
+            },
+            crate::darc::DarcMode::UnsafeArray,
+            None,
+        )
+        .expect("trying to create array on non team member");
+        let array = UnsafeArray {
+            inner: UnsafeArrayInner {
+                data: data,
+                distribution: distribution.clone(),
+                // wait: wait,
+                orig_elem_per_pe: elem_per_pe,
+                elem_size: std::mem::size_of::<T>(),
+                offset: 0,             //relative to size of T
+                size: full_array_size, //relative to size of T
+            },
+            phantom: PhantomData,
+        };
+        // println!("new unsafe");
+        // unsafe {println!("size {:?} bytes {:?}",array.inner.size, array.inner.data.mem_region.as_mut_slice().unwrap().len())};
+        // println!("elem per pe {:?}", elem_per_pe);
+        // for i in 0..num_pes{
+        //     println!("pe: {:?} {:?}",i,array.inner.num_elems_pe(i));
+        // }
+        // array.inner.data.print();
+        if full_array_size != array_size {
+            println!("WARNING: Array size {array_size} is less than number of pes {full_array_size}, each PE will not contain data");
+            array.sub_array(0..array_size)
+        } else {
+            array
+        }
+        // println!("after buffered ops");
+        // array.inner.data.print();
+    }
 }
 impl<T: Dist + 'static> UnsafeArray<T> {
     #[doc(alias("One-sided", "onesided"))]
@@ -363,6 +433,47 @@ impl<T: Dist + 'static> UnsafeArray<T> {
         self.inner.data.team.clone()
     }
 
+    pub(crate) async fn await_all(&self) {
+        let mut temp_now = Instant::now();
+        // let mut first = true;
+        while self
+            .inner
+            .data
+            .array_counters
+            .outstanding_reqs
+            .load(Ordering::SeqCst)
+            > 0
+            || self.inner.data.req_cnt.load(Ordering::SeqCst) > 0
+        {
+            // std::thread::yield_now();
+            // self.inner.data.team.flush();
+            // self.inner.data.team.scheduler.exec_task(); //mmight as well do useful work while we wait
+            async_std::task::yield_now().await;
+            if temp_now.elapsed().as_secs_f64() > *crate::DEADLOCK_TIMEOUT {
+                //|| first{
+                println!(
+                    "in array await_all mype: {:?} cnt: {:?} {:?} {:?}",
+                    self.inner.data.team.world_pe,
+                    self.inner
+                        .data
+                        .array_counters
+                        .send_req_cnt
+                        .load(Ordering::SeqCst),
+                    self.inner
+                        .data
+                        .array_counters
+                        .outstanding_reqs
+                        .load(Ordering::SeqCst),
+                    self.inner.data.req_cnt.load(Ordering::SeqCst)
+                );
+                temp_now = Instant::now();
+                // first = false;
+            }
+        }
+        self.inner.data.task_group.await_all().await;
+        // println!("done in wait all {:?}",std::time::SystemTime::now());
+    }
+
     pub(crate) fn block_on_outstanding(&self, mode: DarcMode) {
         self.wait_all();
         // println!("block on outstanding");
@@ -371,6 +482,15 @@ impl<T: Dist + 'static> UnsafeArray<T> {
         let array_darc = self.inner.data.clone();
         self.team_rt()
             .block_on(array_darc.block_on_outstanding(mode, 1)); //one for this instance of the array
+    }
+
+    pub(crate) async fn await_on_outstanding(&self, mode: DarcMode) {
+        self.await_all().await;
+        // println!("block on outstanding");
+        // self.inner.data.print();
+        // let the_array: UnsafeArray<T> = self.clone();
+        let array_darc = self.inner.data.clone();
+        array_darc.block_on_outstanding(mode, 1).await;
     }
 
     #[doc(alias = "Collective")]
@@ -572,7 +692,44 @@ impl<T: Dist + ArrayOps> TeamFrom<(Vec<T>, Distribution)> for UnsafeArray<T> {
     fn team_from(input: (Vec<T>, Distribution), team: &Pin<Arc<LamellarTeamRT>>) -> Self {
         let (vals, distribution) = input;
         let input = (&vals, distribution);
-        input.team_into(team)
+        TeamInto::team_into(input, team)
+    }
+}
+
+#[async_trait]
+impl<T: Dist + ArrayOps> AsyncTeamFrom<(Vec<T>, Distribution)> for UnsafeArray<T> {
+    async fn team_from(input: (Vec<T>, Distribution), team: &Pin<Arc<LamellarTeamRT>>) -> Self {
+        let (local_vals, distribution) = input;
+        // println!("local_vals len: {:?}", local_vals.len());
+        team.async_barrier().await;
+        let local_sizes =
+            UnsafeArray::<usize>::async_new(team.clone(), team.num_pes, Distribution::Block).await;
+        unsafe {
+            local_sizes.local_as_mut_slice()[0] = local_vals.len();
+        }
+        team.async_barrier().await;
+        // local_sizes.barrier();
+        let mut size = 0;
+        let mut my_start = 0;
+        let my_pe = team.team_pe.expect("pe not part of team");
+        unsafe {
+            local_sizes
+                .buffered_onesided_iter(team.num_pes)
+                .into_iter()
+                .enumerate()
+                .for_each(|(i, local_size)| {
+                    size += local_size;
+                    if i < my_pe {
+                        my_start += local_size;
+                    }
+                });
+        }
+        let array = UnsafeArray::<T>::async_new(team.clone(), size, distribution).await;
+        if local_vals.len() > 0 {
+            unsafe { array.put(my_start, local_vals).await };
+        }
+        team.async_barrier().await;
+        array
     }
 }
 
@@ -613,8 +770,6 @@ impl<T: Dist + ArrayOps> TeamFrom<(&Vec<T>, Distribution)> for UnsafeArray<T> {
 
 impl<T: Dist> From<AtomicArray<T>> for UnsafeArray<T> {
     fn from(array: AtomicArray<T>) -> Self {
-        // println!("unsafe from atomic");
-        // array.into_unsafe()
         match array {
             AtomicArray::NativeAtomicArray(array) => UnsafeArray::<T>::from(array),
             AtomicArray::GenericAtomicArray(array) => UnsafeArray::<T>::from(array),
@@ -624,8 +779,6 @@ impl<T: Dist> From<AtomicArray<T>> for UnsafeArray<T> {
 
 impl<T: Dist> From<NativeAtomicArray<T>> for UnsafeArray<T> {
     fn from(array: NativeAtomicArray<T>) -> Self {
-        // println!("unsafe from native atomic");
-        // let array = array.into_data();
         array.array.block_on_outstanding(DarcMode::UnsafeArray);
         array.array
     }
@@ -633,8 +786,6 @@ impl<T: Dist> From<NativeAtomicArray<T>> for UnsafeArray<T> {
 
 impl<T: Dist> From<GenericAtomicArray<T>> for UnsafeArray<T> {
     fn from(array: GenericAtomicArray<T>) -> Self {
-        // println!("unsafe from generic atomic");
-        // let array = array.into_data();
         array.array.block_on_outstanding(DarcMode::UnsafeArray);
         array.array
     }
@@ -642,7 +793,6 @@ impl<T: Dist> From<GenericAtomicArray<T>> for UnsafeArray<T> {
 
 impl<T: Dist> From<LocalLockArray<T>> for UnsafeArray<T> {
     fn from(array: LocalLockArray<T>) -> Self {
-        // println!("unsafe from local lock atomic");
         array.array.block_on_outstanding(DarcMode::UnsafeArray);
         array.array
     }
@@ -650,7 +800,6 @@ impl<T: Dist> From<LocalLockArray<T>> for UnsafeArray<T> {
 
 impl<T: Dist> From<GlobalLockArray<T>> for UnsafeArray<T> {
     fn from(array: GlobalLockArray<T>) -> Self {
-        // println!("unsafe from global lock atomic");
         array.array.block_on_outstanding(DarcMode::UnsafeArray);
         array.array
     }
@@ -658,7 +807,6 @@ impl<T: Dist> From<GlobalLockArray<T>> for UnsafeArray<T> {
 
 impl<T: Dist> From<ReadOnlyArray<T>> for UnsafeArray<T> {
     fn from(array: ReadOnlyArray<T>) -> Self {
-        // println!("unsafe from read only");
         array.array.block_on_outstanding(DarcMode::UnsafeArray);
         array.array
     }

@@ -503,10 +503,61 @@ impl<T: Clone> TeamTryFrom<(&Vec<T>, Distribution)> for Vec<T> {
     }
 }
 
+#[async_trait]
+/// Provides the same abstraction as the `From` trait in the standard language, but with a `team` parameter so that lamellar memory regions can be allocated
+/// and to be used within an async context
+pub(crate) trait AsyncInto<T>: Sized {
+    async fn async_into(self) -> T;
+}
+
+#[async_trait]
+/// Provides the same abstraction as the `From` trait in the standard language, but with a `team` parameter so that lamellar memory regions can be allocated
+/// and to be used within an async context
+pub(crate) trait AsyncFrom<T>: Sized {
+    async fn async_from(val: T) -> Self;
+}
+
+// AsyncFrom implies AsyncInto
+#[async_trait]
+impl<T, U> AsyncInto<U> for T
+where
+    T: Send,
+    U: AsyncFrom<T>,
+{
+    /// Calls `U::from(self).await`.
+    ///
+    /// That is, this conversion is whatever the implementation of
+    /// <code>[AsyncFrom]&lt;T&gt; for U</code> chooses to do.
+    #[inline]
+    async fn async_into(self) -> U {
+        U::async_from(self).await
+    }
+}
+
+// AsyncFrom (and thus Into) is reflexive
+// #[async_trait]
+// impl<T> AsyncFrom<T> for T
+// where
+//     T: Send,
+// {
+//     /// Returns the argument unchanged.
+//     #[inline(always)]
+//     async fn async_from(t: T) -> T {
+//         t
+//     }
+// }
+
 /// Provides the same abstraction as the `From` trait in the standard language, but with a `team` parameter so that lamellar memory regions can be allocated
 pub trait TeamFrom<T: ?Sized> {
     /// Converts to this type from the input type
     fn team_from(val: T, team: &Pin<Arc<LamellarTeamRT>>) -> Self;
+}
+
+#[async_trait]
+/// Provides the same abstraction as the `From` trait in the standard language, but with a `team` parameter so that lamellar memory regions can be allocated
+/// and to be used within an async context
+pub trait AsyncTeamFrom<T: ?Sized>: TeamFrom<T> {
+    async fn team_from(val: T, team: &Pin<Arc<LamellarTeamRT>>) -> Self;
 }
 
 /// Provides the same abstraction as the `TryFrom` trait in the standard language, but with a `team` parameter so that lamellar memory regions can be allocated
@@ -522,6 +573,13 @@ pub trait TeamInto<T: ?Sized> {
     fn team_into(self, team: &Pin<Arc<LamellarTeamRT>>) -> T;
 }
 
+/// Provides the same abstraction as the `Into` trait in the standard language, but with a `team` parameter so that lamellar memory regions can be allocated to be used within an async context
+#[async_trait]
+pub trait AsyncTeamInto<T: ?Sized> {
+    /// converts this type into the (usually inferred) input type
+    async fn team_into(self, team: &Pin<Arc<LamellarTeamRT>>) -> T;
+}
+
 /// Provides the same abstraction as the `TryInto` trait in the standard language, but with a `team` parameter so that lamellar memory regions can be allocated
 
 pub trait TeamTryInto<T>: Sized {
@@ -535,6 +593,16 @@ where
 {
     fn team_into(self, team: &Pin<Arc<LamellarTeamRT>>) -> U {
         U::team_from(self, team)
+    }
+}
+
+#[async_trait]
+impl<T: Send, U> AsyncTeamInto<U> for T
+where
+    U: AsyncTeamFrom<T>,
+{
+    async fn team_into(self, team: &Pin<Arc<LamellarTeamRT>>) -> U {
+        <U as AsyncTeamFrom<T>>::team_from(self, team).await
     }
 }
 

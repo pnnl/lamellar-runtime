@@ -3,7 +3,7 @@ use crate::array::iterator::consumer::*;
 use crate::array::iterator::local_iterator::{LocalIterator, Monotonic};
 use crate::array::iterator::IterRequest;
 use crate::array::operations::ArrayOps;
-use crate::array::{Distribution, TeamFrom, TeamInto};
+use crate::array::{AsyncTeamFrom, AsyncTeamInto, Distribution, TeamFrom, TeamInto};
 use crate::lamellar_request::LamellarRequest;
 use crate::lamellar_team::LamellarTeamRT;
 use crate::memregion::Dist;
@@ -24,7 +24,7 @@ impl<I, A> IterConsumer for Collect<I, A>
 where
     I: LocalIterator,
     I::Item: Dist + ArrayOps,
-    A: for<'a> TeamFrom<(&'a Vec<I::Item>, Distribution)> + SyncSend + Clone + 'static,
+    A: AsyncTeamFrom<(Vec<I::Item>, Distribution)> + SyncSend + Clone + 'static,
 {
     type AmOutput = Vec<(usize, I::Item)>;
     type Output = A;
@@ -114,7 +114,7 @@ where
 #[doc(hidden)]
 pub struct LocalIterCollectHandle<
     T: Dist + ArrayOps,
-    A: for<'a> TeamFrom<(&'a Vec<T>, Distribution)> + SyncSend,
+    A: AsyncTeamFrom<(Vec<T>, Distribution)> + SyncSend,
 > {
     pub(crate) reqs: Vec<Box<dyn LamellarRequest<Output = Vec<(usize, T)>>>>,
     pub(crate) distribution: Distribution,
@@ -122,16 +122,20 @@ pub struct LocalIterCollectHandle<
     pub(crate) _phantom: PhantomData<A>,
 }
 
-impl<T: Dist + ArrayOps, A: for<'a> TeamFrom<(&'a Vec<T>, Distribution)> + SyncSend>
+impl<T: Dist + ArrayOps, A: AsyncTeamFrom<(Vec<T>, Distribution)> + SyncSend>
     LocalIterCollectHandle<T, A>
 {
-    fn create_array(&self, local_vals: &Vec<T>) -> A {
+    async fn async_create_array(&self, local_vals: Vec<T>) -> A {
         let input = (local_vals, self.distribution);
-        input.team_into(&self.team)
+        AsyncTeamInto::team_into(input, &self.team).await
+    }
+    fn create_array(&self, local_vals: Vec<T>) -> A {
+        let input = (local_vals, self.distribution);
+        TeamInto::team_into(input, &self.team)
     }
 }
 #[async_trait]
-impl<T: Dist + ArrayOps, A: for<'a> TeamFrom<(&'a Vec<T>, Distribution)> + SyncSend> IterRequest
+impl<T: Dist + ArrayOps, A: AsyncTeamFrom<(Vec<T>, Distribution)> + SyncSend> IterRequest
     for LocalIterCollectHandle<T, A>
 {
     type Output = A;
@@ -143,7 +147,7 @@ impl<T: Dist + ArrayOps, A: for<'a> TeamFrom<(&'a Vec<T>, Distribution)> + SyncS
         }
         temp_vals.sort_by(|a, b| a.0.cmp(&b.0));
         let local_vals = temp_vals.into_iter().map(|v| v.1).collect();
-        self.create_array(&local_vals)
+        self.async_create_array(local_vals).await
     }
     fn wait(mut self: Box<Self>) -> Self::Output {
         // let mut num_local_vals = 0;
@@ -154,7 +158,7 @@ impl<T: Dist + ArrayOps, A: for<'a> TeamFrom<(&'a Vec<T>, Distribution)> + SyncS
         }
         temp_vals.sort_by(|a, b| a.0.cmp(&b.0));
         let local_vals = temp_vals.into_iter().map(|v| v.1).collect();
-        self.create_array(&local_vals)
+        self.create_array(local_vals)
     }
 }
 
@@ -169,7 +173,7 @@ impl<I, A> LamellarAm for CollectAm<I, A>
 where
     I: LocalIterator,
     I::Item: Dist + ArrayOps,
-    A: for<'a> TeamFrom<(&'a Vec<I::Item>, Distribution)> + SyncSend + Clone + 'static,
+    A: AsyncTeamFrom<(Vec<I::Item>, Distribution)> + SyncSend + Clone + 'static,
 {
     async fn exec(&self) -> Vec<I::Item> {
         let iter = self.schedule.init_iter(self.iter.clone());

@@ -14,9 +14,9 @@ pub(crate) mod work_stealing;
 use work_stealing::WorkStealing;
 
 #[cfg(feature = "tokio-executor")]
-pub(crate) mod tokio;
+pub(crate) mod tokio_executor;
 #[cfg(feature = "tokio-executor")]
-use tokio::TokioRt;
+use tokio_executor::TokioRt;
 
 // ACTIVE ENUM
 // since atomic enums would be another dependecy
@@ -223,6 +223,12 @@ impl Scheduler {
     }
 
     pub(crate) fn block_on<F: Future>(&self, task: F) -> F::Output {
+        if std::thread::current().id() != *crate::MAIN_THREAD {
+            println!(
+                "trying to call block on within a worker thread {:?}",
+                std::backtrace::Backtrace::capture()
+            )
+        }
         self.executor.block_on(task)
     }
 

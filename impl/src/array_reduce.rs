@@ -49,7 +49,7 @@ fn create_reduction(
 
         gen_match_stmts.extend(quote!{
             #lamellar::array::LamellarByteArray::#array_type(inner) => std::sync::Arc::new(#reduction_name{
-                data: unsafe {inner.clone().into()} , start_pe: 0, end_pe: num_pes-1}),
+                data: unsafe {Into::into(inner.clone())} , start_pe: 0, end_pe: num_pes-1}),
         });
 
         let iter_chain = if array_type == "AtomicArray"

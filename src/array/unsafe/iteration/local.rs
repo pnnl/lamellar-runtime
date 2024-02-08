@@ -1,7 +1,7 @@
 use crate::active_messaging::SyncSend;
 use crate::array::iterator::local_iterator::*;
 use crate::array::r#unsafe::UnsafeArray;
-use crate::array::{ArrayOps, Distribution, TeamFrom};
+use crate::array::{ArrayOps, AsyncTeamFrom, Distribution};
 
 use crate::array::iterator::Schedule;
 use crate::lamellar_team::LamellarTeamRT;
@@ -162,7 +162,7 @@ impl<T: Dist> LocalIteratorLauncher for UnsafeArray<T> {
     where
         I: LocalIterator + 'static,
         I::Item: Dist + ArrayOps,
-        A: for<'a> TeamFrom<(&'a Vec<I::Item>, Distribution)> + SyncSend + Clone + 'static,
+        A: AsyncTeamFrom<(Vec<I::Item>, Distribution)> + SyncSend + Clone + 'static,
     {
         self.collect_with_schedule(Schedule::Static, iter, d)
     }
@@ -176,7 +176,7 @@ impl<T: Dist> LocalIteratorLauncher for UnsafeArray<T> {
     where
         I: LocalIterator + 'static,
         I::Item: Dist + ArrayOps,
-        A: for<'a> TeamFrom<(&'a Vec<I::Item>, Distribution)> + SyncSend + Clone + 'static,
+        A: AsyncTeamFrom<(Vec<I::Item>, Distribution)> + SyncSend + Clone + 'static,
     {
         let collect = Collect {
             iter: iter.clone().monotonic(),
