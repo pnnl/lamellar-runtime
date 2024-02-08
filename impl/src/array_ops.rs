@@ -897,7 +897,7 @@ fn create_buf_ops2(
             #[allow(non_snake_case)]
             fn #dist_multi_val_multi_idx_am_buf_name(array: #lamellar::array::LamellarByteArray, op: #lamellar::array::ArrayOpCmd<Vec<u8>>, idx_vals: Vec<u8>, index_size: u8) -> Arc<dyn RemoteActiveMessage + Sync + Send>{
                     Arc::new(#multi_val_multi_idx_am_buf_name{
-                        data: array.into(),
+                        data: Into::into(array),
                         op: op.into(),
                         idx_vals: idx_vals,
                         index_size: index_size,
@@ -964,7 +964,7 @@ fn create_buf_ops2(
                     let val_slice = unsafe {std::slice::from_raw_parts(val.as_ptr() as *const #typeident, std::mem::size_of::<#typeident>())};
                     let val = val_slice[0];
                     Arc::new(#single_val_multi_idx_am_buf_name{
-                        data: array.into(),
+                        data: Into::into(array),
                         op: op.into(),
                         val: val,
                         indices: indicies,
@@ -1001,7 +1001,7 @@ fn create_buf_ops2(
             #[allow(non_snake_case)]
             fn #dist_multi_val_single_idx_am_buf_name(array: #lamellar::array::LamellarByteArray, op: #lamellar::array::ArrayOpCmd<Vec<u8>>, vals: Vec<u8>, index: usize) -> Arc<dyn RemoteActiveMessage + Sync + Send>{
                     Arc::new(#multi_val_single_idx_am_buf_name{
-                        data: array.into(),
+                        data: Into::into(array),
                         op: op.into(),
                         vals: vals,
                         index: index,
@@ -1070,7 +1070,7 @@ fn create_buf_ops2(
                 #[allow(non_snake_case)]
                 fn #dist_multi_val_multi_idx_am_buf_result_name(array: #lamellar::array::LamellarByteArray, op: #lamellar::array::ArrayOpCmd<Vec<u8>>, idx_vals: Vec<u8>, index_size: u8) -> Arc<dyn RemoteActiveMessage + Sync + Send>{
                         Arc::new(#multi_val_multi_idx_am_buf_result_name{
-                            data: array.into(),
+                            data: Into::into(array),
                             op: op.into(),
                             idx_vals: idx_vals,
                             index_size: index_size,
@@ -1139,7 +1139,7 @@ fn create_buf_ops2(
                         let val_slice = unsafe {std::slice::from_raw_parts(val.as_ptr() as *const #typeident, std::mem::size_of::<#typeident>())};
                         let val = val_slice[0];
                         Arc::new(#single_val_multi_idx_am_buf_result_name{
-                            data: array.into(),
+                            data: Into::into(array),
                             op: op.into(),
                             val: val,
                             indices: indicies,
@@ -1178,7 +1178,7 @@ fn create_buf_ops2(
                 #[allow(non_snake_case)]
                 fn #dist_multi_val_single_idx_am_buf_result_name(array: #lamellar::array::LamellarByteArray, op: #lamellar::array::ArrayOpCmd<Vec<u8>>, vals: Vec<u8>, index: usize) -> Arc<dyn RemoteActiveMessage + Sync + Send>{
                         Arc::new(#multi_val_single_idx_am_buf_result_name{
-                            data: array.into(),
+                            data: Into::into(array),
                             op: op.into(),
                             vals: vals,
                             index: index,
@@ -1251,7 +1251,7 @@ fn create_buf_ops2(
         #[allow(non_snake_case)]
         fn #dist_multi_val_multi_idx_am_buf_fetch_name(array: #lamellar::array::LamellarByteArray, op: #lamellar::array::ArrayOpCmd<Vec<u8>>, idx_vals: Vec<u8>,index_usize: u8) -> Arc<dyn RemoteActiveMessage + Sync + Send>{
                 Arc::new(#multi_val_multi_idx_am_buf_fetch_name{
-                    data: array.into(),
+                    data: Into::into(array),
                     op: op.into(),
                     idx_vals: idx_vals,
                     index_size: index_usize,
@@ -1320,7 +1320,7 @@ fn create_buf_ops2(
                 let val_slice = unsafe {std::slice::from_raw_parts(val.as_ptr() as *const #typeident, std::mem::size_of::<#typeident>())};
                 let val = val_slice[0];
                 Arc::new(#single_val_multi_idx_am_buf_fetch_name{
-                    data: array.into(),
+                    data: Into::into(array),
                     op: op.into(),
                     val: val,
                     indices: indicies,
@@ -1363,7 +1363,7 @@ fn create_buf_ops2(
         #[allow(non_snake_case)]
         fn #dist_multi_val_single_idx_am_buf_fetch_name(array: #lamellar::array::LamellarByteArray, op: #lamellar::array::ArrayOpCmd<Vec<u8>>, vals: Vec<u8>, index: usize) -> Arc<dyn RemoteActiveMessage + Sync + Send>{
                 Arc::new(#multi_val_single_idx_am_buf_fetch_name{
-                    data: array.into(),
+                    data: Into::into(array),
                     op: op.into(),
                     vals: vals,
                     index: index,

@@ -416,204 +416,213 @@ impl<T> DarcInner<T> {
     // }
 
     async fn block_on_outstanding(inner: WrappedInner<T>, state: DarcMode, extra_cnt: usize) {
-        let mut outstanding_refs = true;
         let team = inner.team();
-        let mode_refs =
-            unsafe { std::slice::from_raw_parts_mut(inner.mode_addr as *mut u8, inner.num_pes) };
-        let mut prev_ref_cnts = vec![0usize; inner.num_pes];
-        let mut barrier_id = 1usize;
-
-        let barrier_ref_cnt_slice = unsafe {
-            std::slice::from_raw_parts_mut(inner.mode_ref_cnt_addr as *mut usize, inner.num_pes)
-        };
-        let barrier_slice = unsafe {
-            std::slice::from_raw_parts_mut(inner.mode_barrier_addr as *mut usize, inner.num_pes)
-        };
-
-        let ref_cnts_slice = unsafe {
-            std::slice::from_raw_parts_mut(inner.total_ref_cnt_addr as *mut usize, inner.num_pes)
-        };
-
-        // let rel_addr = inner.inner.as_ptr() as *const _ as usize - team.lamellae.base_addr();
-
-        // println!(
-        //     "[{:?}] entering initial block_on barrier()",
-        //     std::thread::current().id()
-        // );
-        let barrier_fut = unsafe { inner.barrier.as_ref().unwrap().async_barrier() };
-        barrier_fut.await;
-        // println!(
-        //     "[{:?}] leaving initial block_on barrier()",
-        //     std::thread::current().id()
-        // );
-
-        while outstanding_refs {
-            outstanding_refs = false;
-            let old_barrier_id = barrier_id; //we potentially will set barrier_id to 0 but want to maintiain the previously highest value
+        if team.num_pes() == 1 {
             while inner.local_cnt.load(Ordering::SeqCst) > 1 + extra_cnt {
                 async_std::task::yield_now().await;
             }
-            inner.send_finished();
+        } else {
+            let mut outstanding_refs = true;
+            let mode_refs = unsafe {
+                std::slice::from_raw_parts_mut(inner.mode_addr as *mut u8, inner.num_pes)
+            };
+            let mut prev_ref_cnts = vec![0usize; inner.num_pes];
+            let mut barrier_id = 1usize;
 
-            let mut old_ref_cnts = ref_cnts_slice.to_vec();
-            let old_local_cnt = inner.total_local_cnt.load(Ordering::SeqCst);
-            let old_dist_cnt = inner.total_dist_cnt.load(Ordering::SeqCst);
+            let barrier_ref_cnt_slice = unsafe {
+                std::slice::from_raw_parts_mut(inner.mode_ref_cnt_addr as *mut usize, inner.num_pes)
+            };
+            let barrier_slice = unsafe {
+                std::slice::from_raw_parts_mut(inner.mode_barrier_addr as *mut usize, inner.num_pes)
+            };
 
-            let rdma = &team.lamellae;
-            // let mut dist_cnts_changed = false;
-            for pe in 0..inner.num_pes {
-                let ref_cnt_u8 = unsafe {
-                    std::slice::from_raw_parts_mut(
-                        &mut old_ref_cnts[pe] as *mut usize as *mut u8,
-                        std::mem::size_of::<usize>(),
-                    )
-                };
-                if prev_ref_cnts[pe] != old_ref_cnts[pe] {
-                    let send_pe = team.arch.single_iter(pe).next().unwrap();
-                    // println!(
-                    //     "[{:?}] {rel_addr:x} sending {:?} to pe {:?} at {:x} + {:?} ({:x}) ",
-                    //     std::thread::current().id(),
-                    //     old_ref_cnts[pe],
-                    //     pe,
-                    //     inner.mode_ref_cnt_addr,
-                    //     inner.my_pe * std::mem::size_of::<usize>(),
-                    //     inner.mode_ref_cnt_addr + inner.my_pe * std::mem::size_of::<usize>()
-                    // );
-                    rdma.put(
-                        send_pe,
-                        ref_cnt_u8,
-                        inner.mode_ref_cnt_addr + inner.my_pe * std::mem::size_of::<usize>(), //this is barrier_ref_cnt_slice
-                    );
-                    // dist_cnts_changed = true;
-                    outstanding_refs = true;
-                    barrier_id = 0;
-                }
-            }
-            rdma.flush();
+            let ref_cnts_slice = unsafe {
+                std::slice::from_raw_parts_mut(
+                    inner.total_ref_cnt_addr as *mut usize,
+                    inner.num_pes,
+                )
+            };
+
+            // let rel_addr = inner.inner.as_ptr() as *const _ as usize - team.lamellae.base_addr();
+
+            // println!(
+            //     "[{:?}] entering initial block_on barrier()",
+            //     std::thread::current().id()
+            // );
             let barrier_fut = unsafe { inner.barrier.as_ref().unwrap().async_barrier() };
             barrier_fut.await;
-            outstanding_refs |= old_local_cnt != inner.total_local_cnt.load(Ordering::SeqCst);
-            // if outstanding_refs {
-            //     println!(
-            //         "[{:?}] {rel_addr:x}  total local cnt changed",
-            //         std::thread::current().id()
-            //     );
-            // }
-            outstanding_refs |= old_dist_cnt != inner.total_dist_cnt.load(Ordering::SeqCst);
-            // if outstanding_refs {
-            //     println!(
-            //         "[{:?}] {rel_addr:x}  total dist cnt changed",
-            //         std::thread::current().id()
-            //     );
-            // }
+            // println!(
+            //     "[{:?}] leaving initial block_on barrier()",
+            //     std::thread::current().id()
+            // );
 
-            let mut barrier_sum = 0;
-            for pe in 0..inner.num_pes {
-                outstanding_refs |= old_ref_cnts[pe] != ref_cnts_slice[pe];
+            while outstanding_refs {
+                outstanding_refs = false;
+                let old_barrier_id = barrier_id; //we potentially will set barrier_id to 0 but want to maintiain the previously highest value
+                while inner.local_cnt.load(Ordering::SeqCst) > 1 + extra_cnt {
+                    async_std::task::yield_now().await;
+                }
+                inner.send_finished();
+
+                let mut old_ref_cnts = ref_cnts_slice.to_vec();
+                let old_local_cnt = inner.total_local_cnt.load(Ordering::SeqCst);
+                let old_dist_cnt = inner.total_dist_cnt.load(Ordering::SeqCst);
+
+                let rdma = &team.lamellae;
+                // let mut dist_cnts_changed = false;
+                for pe in 0..inner.num_pes {
+                    let ref_cnt_u8 = unsafe {
+                        std::slice::from_raw_parts_mut(
+                            &mut old_ref_cnts[pe] as *mut usize as *mut u8,
+                            std::mem::size_of::<usize>(),
+                        )
+                    };
+                    if prev_ref_cnts[pe] != old_ref_cnts[pe] {
+                        let send_pe = team.arch.single_iter(pe).next().unwrap();
+                        // println!(
+                        //     "[{:?}] {rel_addr:x} sending {:?} to pe {:?} at {:x} + {:?} ({:x}) ",
+                        //     std::thread::current().id(),
+                        //     old_ref_cnts[pe],
+                        //     pe,
+                        //     inner.mode_ref_cnt_addr,
+                        //     inner.my_pe * std::mem::size_of::<usize>(),
+                        //     inner.mode_ref_cnt_addr + inner.my_pe * std::mem::size_of::<usize>()
+                        // );
+                        rdma.put(
+                            send_pe,
+                            ref_cnt_u8,
+                            inner.mode_ref_cnt_addr + inner.my_pe * std::mem::size_of::<usize>(), //this is barrier_ref_cnt_slice
+                        );
+                        // dist_cnts_changed = true;
+                        outstanding_refs = true;
+                        barrier_id = 0;
+                    }
+                }
+                rdma.flush();
+                let barrier_fut = unsafe { inner.barrier.as_ref().unwrap().async_barrier() };
+                barrier_fut.await;
+                outstanding_refs |= old_local_cnt != inner.total_local_cnt.load(Ordering::SeqCst);
                 // if outstanding_refs {
                 //     println!(
-                //         "[{:?}] {rel_addr:x}  refs changed for pe {pe}",
+                //         "[{:?}] {rel_addr:x}  total local cnt changed",
                 //         std::thread::current().id()
                 //     );
                 // }
-                // dist_cnts_changed |= old_ref_cnts[pe] != ref_cnts_slice[pe];
-                barrier_sum += barrier_ref_cnt_slice[pe];
-            }
-            outstanding_refs |= barrier_sum != old_dist_cnt;
-            // if outstanding_refs {
-            //     println!(
-            //         "[{:?}] {rel_addr:x}  sum of cnts != dist ref cnt {:?} {:?}",
-            //         std::thread::current().id(),
-            //         barrier_ref_cnt_slice,
-            //         old_ref_cnts
-            //     );
-            // }
-            if outstanding_refs {
-                // println!("reseting barrier_id");
-                barrier_id = 0;
-            }
-            rdma.flush();
-            let barrier_fut = unsafe { inner.barrier.as_ref().unwrap().async_barrier() };
-            barrier_fut.await;
+                outstanding_refs |= old_dist_cnt != inner.total_dist_cnt.load(Ordering::SeqCst);
+                // if outstanding_refs {
+                //     println!(
+                //         "[{:?}] {rel_addr:x}  total dist cnt changed",
+                //         std::thread::current().id()
+                //     );
+                // }
 
-            for pe in 0..inner.num_pes {
-                let send_pe = team.arch.single_iter(pe).next().unwrap();
-                // println!(
-                //     "[{:?}] {rel_addr:x} sending {barrier_id} ({barrier_id_slice:?}) to pe {pe} ",
-                //     std::thread::current().id(),
-                // );
-                let barrier_id_slice = unsafe {
-                    std::slice::from_raw_parts_mut(
-                        &mut barrier_id as *mut usize as *mut u8,
-                        std::mem::size_of::<usize>(),
-                    )
-                };
-                rdma.put(
-                    send_pe,
-                    barrier_id_slice,
-                    inner.mode_barrier_addr + inner.my_pe * std::mem::size_of::<usize>(),
-                );
-            }
-            rdma.flush();
-            let barrier_fut = unsafe { inner.barrier.as_ref().unwrap().async_barrier() };
-            barrier_fut.await;
-            for id in &*barrier_slice {
-                outstanding_refs |= *id == 0;
-            }
-            // if outstanding_refs {
-            //     println!("[{:?}] {rel_addr:x}  not all pes ready mode_refs: {mode_refs:?} prev_ref_cnts: {prev_ref_cnts:?} barrier_id: {barrier_id:?} barrier_id_slice: {barrier_id_slice:?} barrier_ref_cnt_slice: {barrier_ref_cnt_slice:?}
-            //     barrier_slice: {barrier_slice:?} ref_cnts_slice: {ref_cnts_slice:?} old_ref_cnts: {old_ref_cnts:?} old_local_cnt: {old_local_cnt:?} local_cnt: {:?} old_dist_cnt: {old_dist_cnt:?} dist_cnt: {:?}
-            //     dist_cnts_changed: {dist_cnts_changed:?} barrier_sum: {barrier_sum:?} old_barrier_id: {old_barrier_id:?} ", std::thread::current().id(),inner.total_local_cnt.load(Ordering::SeqCst), inner.total_dist_cnt.load(Ordering::SeqCst));
-            // }
-            // if dist_cnts_changed || !outstanding_refs {
-            //     println!("[{:?}] {rel_addr:x}  mode_refs: {mode_refs:?} prev_ref_cnts: {prev_ref_cnts:?} barrier_id: {barrier_id:?} barrier_id_slice: {barrier_id_slice:?} barrier_ref_cnt_slice: {barrier_ref_cnt_slice:?}
-            //     barrier_slice: {barrier_slice:?} ref_cnts_slice: {ref_cnts_slice:?} old_ref_cnts: {old_ref_cnts:?} old_local_cnt: {old_local_cnt:?} local_cnt: {:?} old_dist_cnt: {old_dist_cnt:?} dist_cnt: {:?}
-            //     dist_cnts_changed: {dist_cnts_changed:?} barrier_sum: {barrier_sum:?} old_barrier_id: {old_barrier_id:?} ", std::thread::current().id(), inner.total_local_cnt.load(Ordering::SeqCst), inner.total_dist_cnt.load(Ordering::SeqCst));
-            // }
-            barrier_id = old_barrier_id + 1;
-            if outstanding_refs {
-                // println!(
-                //     "[{:?}] still outstanding, exec a task!",
-                //     std::thread::current().id()
-                // );
-                // team.scheduler.exec_task();
-                async_std::task::yield_now().await;
-            }
-            prev_ref_cnts = old_ref_cnts;
-        }
-        // println!(
-        //     "[{:?}] {rel_addr:x}  all outstanding refs are resolved",
-        //     std::thread::current().id()
-        // );
-        // inner.debug_print();
-        // println!("[{:?}] {:?}", std::thread::current().id(), inner);
-
-        unsafe {
-            (*(((&mut mode_refs[inner.my_pe]) as *mut u8) as *mut AtomicU8)) //this should be fine given that DarcMode uses Repr(u8)
-                .store(state as u8, Ordering::SeqCst)
-        };
-        let rdma = &team.lamellae;
-        for pe in team.arch.team_iter() {
-            rdma.put(
-                pe,
-                &mode_refs[inner.my_pe..=inner.my_pe],
-                inner.mode_addr + inner.my_pe * std::mem::size_of::<DarcMode>(),
-            );
-        }
-        for pe in mode_refs.iter() {
-            let mut timer = std::time::Instant::now();
-            while *pe != state as u8 {
-                if inner.local_cnt.load(Ordering::SeqCst) == 1 + extra_cnt {
-                    inner.send_finished();
+                let mut barrier_sum = 0;
+                for pe in 0..inner.num_pes {
+                    outstanding_refs |= old_ref_cnts[pe] != ref_cnts_slice[pe];
+                    // if outstanding_refs {
+                    //     println!(
+                    //         "[{:?}] {rel_addr:x}  refs changed for pe {pe}",
+                    //         std::thread::current().id()
+                    //     );
+                    // }
+                    // dist_cnts_changed |= old_ref_cnts[pe] != ref_cnts_slice[pe];
+                    barrier_sum += barrier_ref_cnt_slice[pe];
                 }
-                if timer.elapsed().as_secs_f64() > *crate::DEADLOCK_TIMEOUT {
-                    let ref_cnts_slice = unsafe {
+                outstanding_refs |= barrier_sum != old_dist_cnt;
+                // if outstanding_refs {
+                //     println!(
+                //         "[{:?}] {rel_addr:x}  sum of cnts != dist ref cnt {:?} {:?}",
+                //         std::thread::current().id(),
+                //         barrier_ref_cnt_slice,
+                //         old_ref_cnts
+                //     );
+                // }
+                if outstanding_refs {
+                    // println!("reseting barrier_id");
+                    barrier_id = 0;
+                }
+                rdma.flush();
+                let barrier_fut = unsafe { inner.barrier.as_ref().unwrap().async_barrier() };
+                barrier_fut.await;
+
+                for pe in 0..inner.num_pes {
+                    let send_pe = team.arch.single_iter(pe).next().unwrap();
+                    // println!(
+                    //     "[{:?}] {rel_addr:x} sending {barrier_id} ({barrier_id_slice:?}) to pe {pe} ",
+                    //     std::thread::current().id(),
+                    // );
+                    let barrier_id_slice = unsafe {
                         std::slice::from_raw_parts_mut(
-                            inner.ref_cnt_addr as *mut usize,
-                            inner.num_pes,
+                            &mut barrier_id as *mut usize as *mut u8,
+                            std::mem::size_of::<usize>(),
                         )
                     };
-                    println!("[{:?}][WARNING] -- Potential deadlock detected.\n\
+                    rdma.put(
+                        send_pe,
+                        barrier_id_slice,
+                        inner.mode_barrier_addr + inner.my_pe * std::mem::size_of::<usize>(),
+                    );
+                }
+                rdma.flush();
+                let barrier_fut = unsafe { inner.barrier.as_ref().unwrap().async_barrier() };
+                barrier_fut.await;
+                for id in &*barrier_slice {
+                    outstanding_refs |= *id == 0;
+                }
+                // if outstanding_refs {
+                //     println!("[{:?}] {rel_addr:x}  not all pes ready mode_refs: {mode_refs:?} prev_ref_cnts: {prev_ref_cnts:?} barrier_id: {barrier_id:?} barrier_id_slice: {barrier_id_slice:?} barrier_ref_cnt_slice: {barrier_ref_cnt_slice:?}
+                //     barrier_slice: {barrier_slice:?} ref_cnts_slice: {ref_cnts_slice:?} old_ref_cnts: {old_ref_cnts:?} old_local_cnt: {old_local_cnt:?} local_cnt: {:?} old_dist_cnt: {old_dist_cnt:?} dist_cnt: {:?}
+                //     dist_cnts_changed: {dist_cnts_changed:?} barrier_sum: {barrier_sum:?} old_barrier_id: {old_barrier_id:?} ", std::thread::current().id(),inner.total_local_cnt.load(Ordering::SeqCst), inner.total_dist_cnt.load(Ordering::SeqCst));
+                // }
+                // if dist_cnts_changed || !outstanding_refs {
+                //     println!("[{:?}] {rel_addr:x}  mode_refs: {mode_refs:?} prev_ref_cnts: {prev_ref_cnts:?} barrier_id: {barrier_id:?} barrier_id_slice: {barrier_id_slice:?} barrier_ref_cnt_slice: {barrier_ref_cnt_slice:?}
+                //     barrier_slice: {barrier_slice:?} ref_cnts_slice: {ref_cnts_slice:?} old_ref_cnts: {old_ref_cnts:?} old_local_cnt: {old_local_cnt:?} local_cnt: {:?} old_dist_cnt: {old_dist_cnt:?} dist_cnt: {:?}
+                //     dist_cnts_changed: {dist_cnts_changed:?} barrier_sum: {barrier_sum:?} old_barrier_id: {old_barrier_id:?} ", std::thread::current().id(), inner.total_local_cnt.load(Ordering::SeqCst), inner.total_dist_cnt.load(Ordering::SeqCst));
+                // }
+                barrier_id = old_barrier_id + 1;
+                if outstanding_refs {
+                    // println!(
+                    //     "[{:?}] still outstanding, exec a task!",
+                    //     std::thread::current().id()
+                    // );
+                    // team.scheduler.exec_task();
+                    async_std::task::yield_now().await;
+                }
+                prev_ref_cnts = old_ref_cnts;
+            }
+            // println!(
+            //     "[{:?}] {rel_addr:x}  all outstanding refs are resolved",
+            //     std::thread::current().id()
+            // );
+            // inner.debug_print();
+            // println!("[{:?}] {:?}", std::thread::current().id(), inner);
+
+            unsafe {
+                (*(((&mut mode_refs[inner.my_pe]) as *mut u8) as *mut AtomicU8)) //this should be fine given that DarcMode uses Repr(u8)
+                    .store(state as u8, Ordering::SeqCst)
+            };
+            let rdma = &team.lamellae;
+            for pe in team.arch.team_iter() {
+                rdma.put(
+                    pe,
+                    &mode_refs[inner.my_pe..=inner.my_pe],
+                    inner.mode_addr + inner.my_pe * std::mem::size_of::<DarcMode>(),
+                );
+            }
+            for pe in mode_refs.iter() {
+                let mut timer = std::time::Instant::now();
+                while *pe != state as u8 {
+                    if inner.local_cnt.load(Ordering::SeqCst) == 1 + extra_cnt {
+                        inner.send_finished();
+                    }
+                    if timer.elapsed().as_secs_f64() > *crate::DEADLOCK_TIMEOUT {
+                        let ref_cnts_slice = unsafe {
+                            std::slice::from_raw_parts_mut(
+                                inner.ref_cnt_addr as *mut usize,
+                                inner.num_pes,
+                            )
+                        };
+                        println!("[{:?}][WARNING] -- Potential deadlock detected.\n\
                     The runtime is currently waiting for all remaining references to this distributed object to be dropped.\n\
                     The object is likely a {:?} with {:?} remaining local references and {:?} remaining remote references, ref cnts by pe {ref_cnts_slice:?}\n\
                     An example where this can occur can be found at https://docs.rs/lamellar/latest/lamellar/array/struct.ReadOnlyArray.html#method.into_local_lock\n\
@@ -629,16 +638,17 @@ impl<T> DarcInner<T> {
                     *crate::DEADLOCK_TIMEOUT,
                     std::backtrace::Backtrace::capture()
                 );
-                    timer = std::time::Instant::now();
+                        timer = std::time::Instant::now();
+                    }
+                    async_std::task::yield_now().await;
                 }
-                async_std::task::yield_now().await;
             }
-        }
 
-        // self.debug_print();
-        // println!("{rel_addr:x}  {:?}", self);
-        let barrier_fut = unsafe { inner.barrier.as_ref().unwrap().async_barrier() };
-        barrier_fut.await;
+            // self.debug_print();
+            // println!("{rel_addr:x}  {:?}", self);
+            let barrier_fut = unsafe { inner.barrier.as_ref().unwrap().async_barrier() };
+            barrier_fut.await;
+        }
 
         // self.debug_print();
     }

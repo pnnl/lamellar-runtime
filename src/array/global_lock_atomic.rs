@@ -664,8 +664,16 @@ impl<T: Dist + ArrayOps> TeamFrom<(Vec<T>, Distribution)> for GlobalLockArray<T>
     fn team_from(input: (Vec<T>, Distribution), team: &Pin<Arc<LamellarTeamRT>>) -> Self {
         let (vals, distribution) = input;
         let input = (&vals, distribution);
-        let array: UnsafeArray<T> = input.team_into(team);
+        let array: UnsafeArray<T> = TeamInto::team_into(input, team);
         array.into()
+    }
+}
+
+#[async_trait]
+impl<T: Dist + ArrayOps> AsyncTeamFrom<(Vec<T>, Distribution)> for GlobalLockArray<T> {
+    async fn team_from(input: (Vec<T>, Distribution), team: &Pin<Arc<LamellarTeamRT>>) -> Self {
+        let array: UnsafeArray<T> = AsyncTeamInto::team_into(input, team).await;
+        array.async_into().await
     }
 }
 
@@ -673,6 +681,20 @@ impl<T: Dist> From<UnsafeArray<T>> for GlobalLockArray<T> {
     fn from(array: UnsafeArray<T>) -> Self {
         // println!("GlobalLock from unsafe");
         array.block_on_outstanding(DarcMode::GlobalLockArray);
+        let lock = GlobalRwDarc::new(array.team_rt(), ()).unwrap();
+
+        GlobalLockArray {
+            lock: lock,
+            array: array,
+        }
+    }
+}
+
+#[async_trait]
+impl<T: Dist> AsyncFrom<UnsafeArray<T>> for GlobalLockArray<T> {
+    async fn async_from(array: UnsafeArray<T>) -> Self {
+        // println!("GlobalLock from unsafe");
+        array.await_on_outstanding(DarcMode::GlobalLockArray).await;
         let lock = GlobalRwDarc::new(array.team_rt(), ()).unwrap();
 
         GlobalLockArray {

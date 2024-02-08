@@ -35,7 +35,7 @@ use zip::*;
 pub(crate) use consumer::*;
 
 use crate::array::iterator::Schedule;
-use crate::array::{operations::ArrayOps, AtomicArray, Distribution, LamellarArray, TeamFrom};
+use crate::array::{operations::ArrayOps, AsyncTeamFrom, AtomicArray, Distribution, LamellarArray};
 use crate::memregion::Dist;
 use crate::LamellarTeamRT;
 
@@ -125,7 +125,7 @@ pub trait LocalIteratorLauncher {
     where
         I: LocalIterator + 'static,
         I::Item: Dist + ArrayOps,
-        A: for<'a> TeamFrom<(&'a Vec<I::Item>, Distribution)> + SyncSend + Clone + 'static;
+        A: AsyncTeamFrom<(Vec<I::Item>, Distribution)> + SyncSend + Clone + 'static;
 
     fn collect_with_schedule<I, A>(
         &self,
@@ -136,7 +136,7 @@ pub trait LocalIteratorLauncher {
     where
         I: LocalIterator + 'static,
         I::Item: Dist + ArrayOps,
-        A: for<'a> TeamFrom<(&'a Vec<I::Item>, Distribution)> + SyncSend + Clone + 'static;
+        A: AsyncTeamFrom<(Vec<I::Item>, Distribution)> + SyncSend + Clone + 'static;
 
     // fn collect_async<I, A, B>(
     //     &self,
@@ -579,7 +579,7 @@ pub trait LocalIterator: SyncSend + Clone + 'static {
     where
         // &'static Self: LocalIterator + 'static,
         Self::Item: Dist + ArrayOps,
-        A: for<'a> TeamFrom<(&'a Vec<Self::Item>, Distribution)> + SyncSend + Clone + 'static,
+        A: AsyncTeamFrom<(Vec<Self::Item>, Distribution)> + SyncSend + Clone + 'static,
     {
         self.array().collect(self, d)
     }
@@ -607,7 +607,7 @@ pub trait LocalIterator: SyncSend + Clone + 'static {
     where
         // &'static Self: LocalIterator + 'static,
         Self::Item: Dist + ArrayOps,
-        A: for<'a> TeamFrom<(&'a Vec<Self::Item>, Distribution)> + SyncSend + Clone + 'static,
+        A: AsyncTeamFrom<(Vec<Self::Item>, Distribution)> + SyncSend + Clone + 'static,
     {
         self.array().collect_with_schedule(sched, self, d)
     }
